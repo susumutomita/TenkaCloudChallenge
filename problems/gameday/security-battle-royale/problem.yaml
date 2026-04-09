@@ -1,0 +1,79 @@
+# TenkaCloud 統一問題フォーマット
+id: security-battle-royale
+title: Security Battle Royale
+type: gameday
+category: security
+difficulty: expert
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-04-09"
+  updatedAt: "2026-04-09"
+  tags: [gameday, attack-defense, ec2, rds, s3, iam, ssm, secrets-manager]
+  license: MIT
+
+description:
+  overview: |
+    Unicorn.Rentals でセキュリティインシデントが発生した。
+    参加者は自チームの環境を防御しながら、他チームの脆弱な API を攻撃して
+    スコアを競う攻防一体型の GameDay シナリオである。
+  objectives:
+    - Website と API の可用性を維持する
+    - SQLi, SSRF, RCE を含む脆弱性を修正する
+    - 他チームの脆弱性を攻撃してポイントを獲得する
+  hints:
+    - SQL クエリの組み立てを見直す
+    - 外部 URL フェッチは厳密に制限する
+    - shell 実行ルートは無効化する
+  prerequisites:
+    - Flask API の基本
+    - MySQL の基本
+    - AWS ネットワークとインスタンス運用の基本
+  estimatedTime: 240
+
+deployment:
+  providers: [aws, local]
+  templates:
+    aws:
+      type: cloudformation
+      path: ./gameday/security-battle-royale/cloudformation/team-stack.yaml
+      parameters:
+        DBPassword: adminadmin
+    local:
+      type: docker-compose
+      path: ./gameday/security-battle-royale/local/docker-compose.yaml
+      parameters:
+        DB_PASSWORD: adminadmin
+        REGION: local
+  regions:
+    aws: [us-east-1]
+    local: [local]
+  timeout: 60
+
+scoring:
+  type: api
+  path: ./gameday/security-battle-royale/api/api.py
+  criteria:
+    - name: Website availability
+      description: Frontend page is reachable
+      weight: 25
+      maxPoints: 100
+    - name: API availability
+      description: API health endpoint returns success
+      weight: 25
+      maxPoints: 100
+    - name: Database availability
+      description: Database connectivity remains healthy
+      weight: 25
+      maxPoints: 100
+    - name: Attack surface hardening
+      description: Vulnerabilities are mitigated
+      weight: 25
+      maxPoints: 100
+  timeoutMinutes: 5
+  intervalMinutes: 1
+
+resources:
+  documentation:
+    - path: ./gameday/security-battle-royale/README.md

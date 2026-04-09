@@ -19,13 +19,29 @@ logging.basicConfig(filename="/api/output.log",
                     datefmt='%H:%M:%S',
                     level=logging.INFO)
 
-TOKEN=IMDSFetcher()._fetch_metadata_token()
-REGION=IMDSFetcher()._get_request("/latest/meta-data/placement/region", None, TOKEN).text
+LOCAL_DEV = os.environ.get("LOCAL_DEV") == "1"
+
+
+def detect_region():
+    if LOCAL_DEV:
+        return os.environ.get("REGION", "local")
+
+    try:
+        token = IMDSFetcher()._fetch_metadata_token()
+        return IMDSFetcher()._get_request(
+            "/latest/meta-data/placement/region", None, token
+        ).text
+    except Exception as error:
+        logger.warning("Failed to detect region from IMDS: %s", error)
+        return os.environ.get("REGION", "us-east-1")
+
+
+REGION = detect_region()
 
 app = flask.Flask(__name__)
 app.config["DEBUG"] = True
 
-ssm = boto3.client('ssm', region_name=REGION)
+ssm = None if LOCAL_DEV else boto3.client('ssm', region_name=REGION)
 
 def get_secret(secret_name):
 
@@ -53,10 +69,15 @@ def get_db_connection(password=None):
     # Database user
     dbuser = "admin"
 
-    # Get database endpoint from SSM Parameter Store
-    # CAVS_SSM_PARAM_NAME allows multiple teams to run in the same AWS account
-    ssm_param_name = os.environ.get('CAVS_SSM_PARAM_NAME', 'CAVS_DB_ENDPOINT')
-    db_endpoint = ssm.get_parameter(Name=ssm_param_name, WithDecryption=True)['Parameter']['Value']
+    db_endpoint = os.environ.get('DB_HOST')
+    if not db_endpoint:
+        if LOCAL_DEV:
+            db_endpoint = os.environ.get('CAVS_DB_ENDPOINT', 'mysql')
+        else:
+            # Get database endpoint from SSM Parameter Store
+            # CAVS_SSM_PARAM_NAME allows multiple teams to run in the same AWS account
+            ssm_param_name = os.environ.get('CAVS_SSM_PARAM_NAME', 'CAVS_DB_ENDPOINT')
+            db_endpoint = ssm.get_parameter(Name=ssm_param_name, WithDecryption=True)['Parameter']['Value']
 
     if password:
         dbpass = password # This is needed by our auditing tool - DO NOT REMOVE
@@ -70,6 +91,7 @@ def get_db_connection(password=None):
                 user=dbuser,
                 passwd=dbpass,
                 database="cavsdb",
+                port=int(os.environ.get("DB_PORT", "3306")),
                 connect_timeout=5
                 )
         logger.debug("Connected to MySQL database")
