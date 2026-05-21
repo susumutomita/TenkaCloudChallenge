@@ -1,0 +1,131 @@
+# ADR-003 Phase 2.x / Problem catalog payload publish workflow。
+#
+# main branch への push で `problems/{battles,challenges}/**` が変わったら、
+# 変わった問題ディレクトリを zip 化して TenkaCloud platform 側の S3 bucket に push する。
+# `_legacy/` 配下は対象外 (= 旧 GameDay/JAM 構造の退避場所、 Phase 1 で削除予定)。
+#
+# 前提:
+#   - GitHub repo Secrets: `AWS_CHALLENGE_PUBLISH_ROLE_ARN`
+#       = TenkaCloud platform 側 CDK (ChallengePayloadStack) が emit する OIDC trust IAM Role
+#         (= `repo:susumutomita/TenkaCloudChallenge:ref:refs/heads/main` のみ AssumeRole 許可)
+#   - secret が未 bind の段階では workflow は配信されず CI 上で失敗する。 まずは
+#     "skeleton merged but disabled" の状態で受け入れる。
+#
+# 動作:
+#   1. checkout
+#   2. AWS OIDC で AssumeRole (= 短命 token、 long-lived key 不要)
+#   3. 変更があった problem dir を zip 化 (`zip -X -r` で timestamp を decoder)
+#   4. S3 (= `tc-challenges-${env}/<problemId>/<gitSha>.zip`) にアップロード
+#   5. 同 prefix の `latest.zip` も更新 (= 競技中 pin したいときは latest 更新を抑止する設計に切替予定)
+
+name: publish
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "problems/battles/**"
+      - "problems/challenges/**"
+      - "problems/SCHEMA.json"
+      - ".github/workflows/publish.yml"
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: "publish 先 environment (development / production)"
+        required: true
+        default: "development"
+        type: choice
+        options:
+          - development
+          - production
+
+permissions:
+  contents: read
+  id-token: write # OIDC AssumeRole で必須
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      AWS_REGION: ap-northeast-1
+      BUCKET_PREFIX: tc-challenges-
+    steps:
+      - name: Checkout
+        # actions/checkout v4.3.1 (= TenkaCloud 本体 CI と pin 揃え)
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Configure AWS credentials via OIDC
+        # aws-actions/configure-aws-credentials v4.0.2
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502
+        with:
+          role-to-assume: ${{ secrets.AWS_CHALLENGE_PUBLISH_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: tenkacloud-challenge-publish-${{ github.sha }}
+
+      - name: Determine target environment
+        id: env
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "name=${{ github.event.inputs.target_environment }}" >> "$GITHUB_OUTPUT"
+          else
+            # main push は default で development。 production publish は dispatch 限定
+            echo "name=development" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Detect changed problem directories
+        id: changed
+        run: |
+          # main 直前 commit との diff から問題 dir を抽出 (battles / challenges のみ)。
+          # workflow_dispatch は全 publish。 _legacy/ は明示的に除外。
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            mapfile -t dirs < <(find problems/battles problems/challenges \
+              -mindepth 1 -maxdepth 1 -type d 2>/dev/null \
+              | grep -vE '/(\\.gitkeep|_legacy)$' || true)
+          else
+            mapfile -t dirs < <(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" \
+              | grep -E '^problems/(battles|challenges)/[^/]+/' \
+              | awk -F/ '{print $1"/"$2"/"$3}' \
+              | sort -u)
+          fi
+          if [[ ${#dirs[@]} -eq 0 ]]; then
+            echo "no problem dirs changed; skipping"
+            echo "list=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          printf 'changed problem dirs:\n'
+          printf '  %s\n' "${dirs[@]}"
+          {
+            echo "list<<EOF"
+            printf '%s\n' "${dirs[@]}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Zip and upload each problem
+        if: steps.changed.outputs.list != ''
+        run: |
+          set -euo pipefail
+          BUCKET="${BUCKET_PREFIX}${{ steps.env.outputs.name }}"
+          SHA_SHORT=$(echo "${{ github.sha }}" | cut -c1-12)
+          while IFS= read -r dir; do
+            [[ -z "$dir" ]] && continue
+            problem_id=$(basename "$dir")
+            zip_path="/tmp/${problem_id}-${SHA_SHORT}.zip"
+            echo "::group::publish ${problem_id}"
+            # -X: extra-field を削る (= timestamp drift で diff が出ないよう決定論)
+            # -r: recursive, -q: quiet
+            (cd "$dir" && zip -X -q -r "$zip_path" .)
+            aws s3 cp "$zip_path" "s3://${BUCKET}/${problem_id}/${SHA_SHORT}.zip" \
+              --no-progress --content-type application/zip
+            aws s3 cp "$zip_path" "s3://${BUCKET}/${problem_id}/latest.zip" \
+              --no-progress --content-type application/zip
+            rm -f "$zip_path"
+            echo "::endgroup::"
+          done <<< "${{ steps.changed.outputs.list }}"
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "publish target environment: ${{ steps.env.outputs.name }}"
+          echo "changed problem dirs:"
+          echo "${{ steps.changed.outputs.list }}"
