@@ -19,17 +19,7 @@ TenkaCloud runs head-to-head **Battles** and self-paced **Challenges** on real A
 - **Schema-validated in CI.** Every problem is checked against [`SCHEMA.json`](./SCHEMA.json) on every push and PR.
 - **Open by design.** This repo holds the **base problem set** that ships under MIT. Spoiler-bearing private problems get a separate private repo via the ADR-008 S3 path.
 
-## 📦 Current catalog
-
-| Problem                                                                                                  | Category  | Difficulty | Estimated | Scoring          |
-| -------------------------------------------------------------------------------------------------------- | --------- | ---------- | --------- | ---------------- |
-| [`hello-world`](./challenges/hello-world/)                                                               | Challenge | ⭐         | 1 min     | `flag`           |
-| [`hello-world-battle`](./battles/hello-world-battle/)                                                    | Battle    | ⭐         | 30 min    | `uptime`         |
-| [`security-battle-royale`](./battles/security-battle-royale/)                                            | Battle    | ⭐⭐⭐     | 60–90 min | `uptime-multi`   |
-| [`microservice-migration-battle`](./battles/microservice-migration-battle/)                              | Battle    | ⭐⭐⭐⭐   | 90–120 min | `phased-polling` |
-| [`stackstack`](./battles/stackstack/)                                                                    | Battle    | ⭐⭐⭐⭐   | 90–120 min | `phased-polling` |
-
-Each problem ships with a per-problem README (English primary, Japanese mirror) describing the story, the solve path, and the learning goals.
+Each problem ships with a per-problem README (English primary, Japanese mirror) describing the story, the solve path, and the learning goals. Browse [`battles/`](./battles/) and [`challenges/`](./challenges/) for the live catalog.
 
 ## 🚀 Quick start
 
@@ -110,12 +100,14 @@ These ADRs live in the [platform repo](https://github.com/susumutomita/TenkaClou
 
 PRs are welcome — especially new problems, schema fixes, and English-doc polish.
 
+**Read [`AGENT.md`](./AGENT.md) before opening your first PR** — it documents the invariants the validator enforces and the footguns that have bitten this repo before. If you use Claude Code, the `/new-problem` skill (in `.claude/skills/new-problem/`) walks through scaffolding.
+
 - Run `bun run validate` locally before opening a PR.
 - Keep `metadata.json` Japanese at the top level and English under `i18n.en` (the platform's locale fallback chain is `en → ja → top-level`). README files are English-primary with `README.ja.md` mirrors.
 - One problem per PR keeps reviews tractable.
 - Discuss new problem ideas in an Issue first if they need new scoring kinds or portal slots — those touch the platform repo.
 
-See [`CATALOG.md`](./CATALOG.md) for the full authoring contract.
+See [`CATALOG.md`](./CATALOG.md) for the full schema walkthrough.
 
 ## 📜 License
 

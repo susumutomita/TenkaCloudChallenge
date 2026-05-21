@@ -19,17 +19,7 @@ TenkaCloud は実 AWS で動くリアルタイム **Battle** と個別演習 **C
 - **CI で schema 検証**。 push / PR ごとに [`SCHEMA.json`](./SCHEMA.json) で全問題を validate。
 - **OSS 前提**。 本 repo は MIT で配布する **ベース問題セット**。 答え / spoiler を含む問題は別 private repo に置いて ADR-008 の S3 経路で配信する。
 
-## 📦 現在のカタログ
-
-| 問題                                                                                                     | カテゴリ  | 難易度     | 所要時間  | Scoring          |
-| -------------------------------------------------------------------------------------------------------- | --------- | ---------- | --------- | ---------------- |
-| [`hello-world`](./challenges/hello-world/)                                                               | Challenge | ⭐         | 1 分      | `flag`           |
-| [`hello-world-battle`](./battles/hello-world-battle/)                                                    | Battle    | ⭐         | 30 分     | `uptime`         |
-| [`security-battle-royale`](./battles/security-battle-royale/)                                            | Battle    | ⭐⭐⭐     | 60–90 分  | `uptime-multi`   |
-| [`microservice-migration-battle`](./battles/microservice-migration-battle/)                              | Battle    | ⭐⭐⭐⭐   | 90–120 分 | `phased-polling` |
-| [`stackstack`](./battles/stackstack/)                                                                    | Battle    | ⭐⭐⭐⭐   | 90–120 分 | `phased-polling` |
-
-各問題は per-problem README (英語 primary + 日本語 mirror) を持ち、 ストーリー / 解き方 / 学習目的が書いてある。
+各問題は per-problem README (英語 primary + 日本語 mirror) を持ち、 ストーリー / 解き方 / 学習目的が書いてある。 ライブカタログは [`battles/`](./battles/) と [`challenges/`](./challenges/) を参照。
 
 ## 🚀 クイックスタート
 
@@ -110,12 +100,14 @@ platform repo の maintainer が submodule pointer を更新すると、 次の 
 
 PR 歓迎 — 特に新問題 / schema 修正 / 英語ドキュメント整備。
 
+**初めて PR を出す前に [`AGENT.md`](./AGENT.md) を読んでください** — validator が強制する invariants と、 過去にこの repo で踏み抜かれてきた footgun が網羅されている。 Claude Code を使う場合は `/new-problem` skill (`.claude/skills/new-problem/`) が scaffold を対話で誘導する。
+
 - PR を出す前にローカルで `bun run validate` が green になることを確認。
 - `metadata.json` は top-level を日本語、 英語は `i18n.en` に置く (= platform の locale fallback chain は `en → ja → top-level`)。 README は英語 primary + `README.ja.md` mirror。
 - 1 PR = 1 問題が review しやすい。
 - 新しい scoring kind / portal slot を導入する問題は、 platform 側に変更が必要になるので先に Issue で相談。
 
-詳しい authoring 契約は [`CATALOG.md`](./CATALOG.md) を参照。
+Schema 詳解は [`CATALOG.md`](./CATALOG.md) を参照。
 
 ## 📜 ライセンス
 
