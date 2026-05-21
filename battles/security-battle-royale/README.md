@@ -1,54 +1,54 @@
 # Security Battle Royale
 
-> English version: [README.en.md](./README.en.md)
+> 日本語版: [README.ja.md](./README.ja.md)
 
-意図的に脆弱性を仕込んだ EC サイト風 Web アプリ「Unicorn.Rentals」を、 攻撃側と防御側に分かれて競う Battle。 SQL injection / RCE / SSRF / IMDS 露出が同居した状態でデプロイされ、 防御側はサービスを止めずに塞ぐ、 攻撃側は他チームの公開エンドポイントを巡回して得点リソースを奪う。
+A Battle around an e-commerce-style web app, "Unicorn.Rentals," deliberately seeded with vulnerabilities. Players take attacker or defender roles: attackers sweep other teams' public endpoints to capture scoring resources, defenders patch holes without taking the app offline. SQL injection / RCE / SSRF / IMDS exposure coexist by design.
 
-| 項目         | 値                                          |
-| ------------ | ------------------------------------------- |
-| カテゴリ     | Battle (リアルタイム対戦)                   |
-| 難易度       | 3 / 5                                       |
-| 想定時間     | 60〜90 分                                   |
-| status       | `draft`                                     |
-| 採点方式     | `uptime-multi` (`pointsAllOk`: 100)         |
+| Field          | Value                                  |
+| -------------- | -------------------------------------- |
+| Category       | Battle (real-time PvP)                 |
+| Difficulty     | 3 / 5                                  |
+| Estimated time | 60–90 min                              |
+| status         | `draft`                                |
+| Scoring        | `uptime-multi` (`pointsAllOk`: 100)    |
 
-## 何をする問題か
+## What you do
 
-- **攻撃側**: 他チームの `FrontendUrl` / `ApiUrl` を巡回し、 仕込まれた SQLi / RCE / SSRF / IMDS 露出を突いて得点を奪う。
-- **防御側**: 自チームのアプリを **動かしたまま** 脆弱性を順次塞ぐ。 アプリを止めれば確かに守れるが、 uptime probe が落ちて加点も止まる。
+- **Attackers** sweep other teams' `FrontendUrl` / `ApiUrl` and exploit the seeded SQLi / RCE / SSRF / IMDS exposure to steal scoring resources.
+- **Defenders** patch vulnerabilities **without shutting the app down**. Killing the service technically protects you, but the uptime probe stops paying out.
 
-このトレードオフ (= 可用性を保ちつつ守る) が問題の核。
+That trade-off (= harden while staying available) is the core of the problem.
 
-## デプロイされるもの
+## What gets deployed
 
 ```
-┌── EC2 1 台 (Amazon Linux 2023, t3.small) docker-compose ──┐
-│                                                            │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐                  │
-│  │  nginx   │  │  Flask   │  │  mysql   │                  │
-│  │  :80     │  │  :8080   │  │  :3306   │                  │
-│  └──────────┘  └──────────┘  └──────────┘                  │
-│       │              │              │                      │
-│  FrontendUrl     ApiUrl         (private)                  │
-└────────────────────────────────────────────────────────────┘
+┌── single EC2 (Amazon Linux 2023, t3.small) docker-compose ──┐
+│                                                              │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐                    │
+│  │  nginx   │  │  Flask   │  │  mysql   │                    │
+│  │  :80     │  │  :8080   │  │  :3306   │                    │
+│  └──────────┘  └──────────┘  └──────────┘                    │
+│       │              │              │                        │
+│  FrontendUrl     ApiUrl         (private)                    │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-- 専用 VPC + 公開 subnet + IGW
-- 公開ポート: 80 (frontend) / 8080 (api)、 `AllowedCidr` で絞れる
-- `DbPassword` は CFn parameter (NoEcho)、 deploy chain が `__RANDOM_PASSWORD__` で生成
+- Dedicated VPC + public subnet + IGW
+- Public ports: 80 (frontend) / 8080 (api); restrictable via `AllowedCidr`
+- `DbPassword` is a CFn parameter (NoEcho); the deploy chain generates it from `__RANDOM_PASSWORD__`
 
-## 採点
+## Scoring
 
-1 分ごとに 2 endpoint を probe し、 両方 200 で +100 pt。
+Every minute, both endpoints are probed; if both return 200, +100 pt.
 
-| 状態                                                    | 1 cycle |
-| ------------------------------------------------------- | ------- |
-| `FrontendUrl /` と `ApiUrl /healthz` が両方 200          | +100 pt |
-| いずれかが 200 以外 / timeout                           | 0 pt    |
+| State                                                  | Per cycle |
+| ------------------------------------------------------ | --------- |
+| `FrontendUrl /` and `ApiUrl /healthz` both return 200  | +100 pt   |
+| Either non-200 / times out                             | 0 pt      |
 
-詳細は [`metadata.json`](./metadata.json) の `scoring` フィールド参照。
+See the `scoring` field in [`metadata.json`](./metadata.json) for the full spec.
 
-## ローカル開発
+## Local development
 
 ```bash
 cd problems/battles/security-battle-royale/local
@@ -57,27 +57,27 @@ docker compose up --build
 # api:      http://localhost:8080/healthz
 ```
 
-`local/docker-compose.yaml` + `local/mysql-init.sql` で本番と同じ 3 コンテナ構成を再現できる。 `api/api.py` と `frontend/index.html` が脆弱性を含む本体。
+`local/docker-compose.yaml` + `local/mysql-init.sql` reproduce the same 3-container stack as production. `api/api.py` and `frontend/index.html` contain the vulnerabilities themselves.
 
-## 含まれる脆弱性 (= 仕込みネタバレ注意)
+## Seeded vulnerabilities (= spoilers)
 
-- **SQL injection** — `api.py` の検索クエリで raw 文字列連結
-- **RCE** — debug endpoint に `eval` / shell-out 系
-- **SSRF** — 任意 URL の取得を試せる helper endpoint
-- **IMDS exposure** — IMDSv1 enabled、 SSRF と組み合わせて IAM Role の credential が抜ける
+- **SQL injection** — raw string concatenation in `api.py` search queries.
+- **RCE** — `eval` / shell-out style helpers behind a debug endpoint.
+- **SSRF** — a helper endpoint that fetches an arbitrary URL.
+- **IMDS exposure** — IMDSv1 enabled; chained with SSRF, IAM Role credentials can be exfiltrated.
 
-> ADR-008 (= 問題実装の private repo 化、 issue #574) が ship するまで、 仕掛けは事前に読まれる可能性がある。
+> Until ADR-008 (= moving problem implementations to a private repo, issue #574) ships, these can be read ahead in the public repo.
 
-## 学習目的
+## Learning goals
 
-- 意図的な SQL injection / RCE / SSRF を発見・修正する一連の手順を体験する
-- EC2 IMDS / IAM Role の露出経路と、 それを塞ぐベストプラクティスを理解する
-- 競技中に同居する攻撃者と防御者のトレードオフ (可用性を保ちつつ守る) を体験する
+- Walk through the workflow of discovering and patching intentional SQL injection / RCE / SSRF.
+- Understand the EC2 IMDS / IAM Role exposure path and the best practices to close it.
+- Experience the attacker / defender trade-off (keep availability while hardening) in real time.
 
-## 関連ファイル
+## Related files
 
-- [`metadata.json`](./metadata.json) — 問題メタデータ
-- [`template.yaml`](./template.yaml) — CFn ペライチ (competitor account に deploy する本体)
-- [`api/api.py`](./api/api.py) — Flask API (脆弱性本体)
-- [`frontend/index.html`](./frontend/index.html) — nginx が serve する静的ページ
-- [`local/docker-compose.yaml`](./local/docker-compose.yaml) — ローカル再現用
+- [`metadata.json`](./metadata.json) — problem metadata
+- [`template.yaml`](./template.yaml) — one-page CFn template deployed into the competitor account
+- [`api/api.py`](./api/api.py) — Flask API (where the vulnerabilities live)
+- [`frontend/index.html`](./frontend/index.html) — static page served by nginx
+- [`local/docker-compose.yaml`](./local/docker-compose.yaml) — local reproduction
