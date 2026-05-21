@@ -16,9 +16,14 @@ import { dirname, join, relative } from "node:path";
 import Ajv2020 from "ajv";
 import addFormats from "ajv-formats";
 
+// このリポジトリは TenkaCloud 本体の `problems/` 配下に git submodule として mount
+// される設計のため、 catalog アセット (battles/ challenges/ SCHEMA.json) は repo
+// ルート直下に置く。 validation は battles + challenges のみ対象とし、 node_modules /
+// .git 等のサブツリーは見ない。
 const REPO_ROOT = new URL("..", import.meta.url).pathname;
-const PROBLEMS_DIR = join(REPO_ROOT, "problems");
-const SCHEMA_PATH = join(PROBLEMS_DIR, "SCHEMA.json");
+const PROBLEMS_DIR = REPO_ROOT;
+const SCHEMA_PATH = join(REPO_ROOT, "SCHEMA.json");
+const CATEGORY_DIRS = ["battles", "challenges"] as const;
 type Metadata = Record<string, unknown>;
 type ValidationError = string;
 
@@ -133,7 +138,14 @@ function checkDashboardSlotFiles(meta: Metadata, dir: string): ValidationError[]
 
 function main(): void {
   const validate = createSchemaValidator();
-  const metadataFiles = findMetadataFiles(PROBLEMS_DIR);
+  const metadataFiles = CATEGORY_DIRS.flatMap((cat) => {
+    const dir = join(PROBLEMS_DIR, cat);
+    try {
+      return findMetadataFiles(dir);
+    } catch {
+      return [];
+    }
+  });
   assertMetadataFilesExist(metadataFiles);
   const failed = validateMetadataFiles(metadataFiles, validate);
   reportResult(failed, metadataFiles.length);
