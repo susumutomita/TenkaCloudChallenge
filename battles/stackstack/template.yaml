@@ -68,6 +68,8 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${NamePrefix}-subnet"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
 
   Igw:
     Type: AWS::EC2::InternetGateway
@@ -75,6 +77,8 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${NamePrefix}-igw"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
 
   IgwAttach:
     Type: AWS::EC2::VPCGatewayAttachment
@@ -89,6 +93,8 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${NamePrefix}-rt"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
 
   RtRoute:
     Type: AWS::EC2::Route
@@ -119,6 +125,8 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${NamePrefix}-sg"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
 
   # ----- IAM (SSM Session Manager + scoped console viewer for ops debug) -----
   ParticipantViewerRole:
