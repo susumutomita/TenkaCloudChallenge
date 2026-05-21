@@ -43,6 +43,12 @@ Resources:
               StringEquals:
                 sts:ExternalId: !Ref ExternalId
       MaxSessionDuration: 3600
+      # `aws login` (2025-11) OAuth2 flow returns HTTP 400 unless the assumed
+      # role can call signin:* on its own oauth2/public-client/{localhost,remote}
+      # resources. SignInLocalDevelopmentAccess is the AWS-managed policy that
+      # scopes those permissions narrowly (= the minimal set AWS endorses).
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
       Policies:
         - PolicyName: ProblemSpecific
           PolicyDocument:
@@ -63,6 +69,24 @@ Resources:
                   # GetParametersByPath is resource-scopable via path-prefix ARN.
                   - ssm:GetParametersByPath
                 Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              # CloudShell session lifecycle. Deliberately narrower than the
+              # AWS-managed AWSCloudShellFullAccess (which grants cloudshell:*):
+              # only the actions an interactive open / use / close cycle calls,
+              # plus credential rotation. File upload / download
+              # (cloudshell:GetFile{Upload,Download}Urls) is omitted -- the
+              # problem doesn't need it. CloudShell environments are per-identity
+              # so resource:* is the only practical scope for these actions.
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
 
   HelloParameter:
     Type: AWS::SSM::Parameter
@@ -85,13 +109,16 @@ Outputs:
   # ssm:DescribeParameters to prevent cross-tenant name leakage), while still
   # letting competitors land on their own parameter in one click. The detail
   # page uses ssm:GetParameter, which the Role IS scoped to grant.
-  # `%2F` is the URL-encoded `/` in the parameter name `/${NamePrefix}/hello`.
+  # Console SSM router accepts literal slashes in the path (the leading `/` of
+  # the param name is dropped, internal slashes stay literal); the URL-encoded
+  # `%2F` variant returns HTTP 400.
   ParameterConsoleUrl:
     Description: AWS Console deep link to this stack's SSM Parameter detail page.
-    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/systems-manager/parameters/%2F${NamePrefix}%2Fhello/description?region=${AWS::Region}&tab=Table"
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/systems-manager/parameters/${NamePrefix}/hello/description?region=${AWS::Region}&tab=Table"
   NamePrefix:
     Description: Common resource prefix that this stack used.
     Value: !Ref NamePrefix
   ParticipantViewerRoleArn:
     Description: Role ARN that competitors AssumeRole to access their own stack via AWS Console.
     Value: !GetAtt ParticipantViewerRole.Arn
+
