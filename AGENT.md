@@ -117,7 +117,19 @@ The catalog leans into SRE-day-in-the-life narration: Kato-san (the predecessor 
 
 Two paragraphs of setup, then a clear "what you do" line. Avoid stamping the migration target or scoring numbers into `shortDescription`.
 
-## How to add a problem in 6 steps
+## How to add a problem
+
+### TL;DR — Claude Code users
+
+Type one of these slash commands and follow the prompts:
+
+- **`/new-problem challenge`** — scaffold a self-paced, single-flag problem (= Challenge).
+- **`/new-problem battle`** — scaffold a real-time PvP / uptime-scoring problem (= Battle); the skill asks which scoring kind next.
+- **`/new-problem`** — no argument; the skill asks Challenge or Battle first.
+
+The skill (`.claude/skills/new-problem/SKILL.md`) walks the 6 steps below, dropping in the IAM baseline, the required tags, and the URL-registration gate boilerplate so you don't reconstruct them from scratch.
+
+### The 6 steps (manual / non-Claude-Code path)
 
 1. **Pick a starter.** Copy the closest existing problem directory:
    - Challenge (`flag` scoring) → `challenges/hello-world`
@@ -139,8 +151,6 @@ Two paragraphs of setup, then a clear "what you do" line. Avoid stamping the mig
    - `scoring.flagOutputKey="X" not found` → typo between metadata and the `Outputs:` key in the template.
 
 6. **Open a PR.** One problem per PR. Conventional commits: `feat(<slug>): add <name> Challenge` or `Battle`. The PR triggers schema + cross-ref CI; merge after it passes.
-
-The skill at `.claude/skills/new-problem/SKILL.md` automates the dialog and the boilerplate copy for steps 1–5.
 
 ## Extending the platform contract
 
