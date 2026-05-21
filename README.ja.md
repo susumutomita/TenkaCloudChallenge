@@ -100,7 +100,7 @@ platform repo の maintainer が submodule pointer を更新すると、 次の 
 
 PR 歓迎 — 特に新問題 / schema 修正 / 英語ドキュメント整備。
 
-**初めて PR を出す前に [`AGENT.md`](./AGENT.md) を読んでください** — validator が強制する invariants と、 過去にこの repo で踏み抜かれてきた footgun が網羅されている。 Claude Code を使う場合は `/new-problem` skill (`.claude/skills/new-problem/`) が scaffold を対話で誘導する。
+**初めて PR を出す前に [`AGENT.md`](./AGENT.md) を読んでください** — validator が強制する invariants と、 過去にこの repo で踏み抜かれてきた footgun が網羅されている。 Claude Code を使う場合は **`/new-problem challenge`** または **`/new-problem battle`** を叩けば skill (`.claude/skills/new-problem/`) が scaffold を対話で誘導する。
 
 - PR を出す前にローカルで `bun run validate` が green になることを確認。
 - `metadata.json` は top-level を日本語、 英語は `i18n.en` に置く (= platform の locale fallback chain は `en → ja → top-level`)。 README は英語 primary + `README.ja.md` mirror。

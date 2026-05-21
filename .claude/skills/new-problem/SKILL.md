@@ -1,28 +1,40 @@
 ---
 name: new-problem
-description: Scaffold a new problem (Challenge or Battle) in the TenkaCloudChallenge catalog. Use when the user wants to add a new problem, create a new Battle/Challenge, or asks how to start a problem from scratch. Walks through picking a starter, filling metadata.json, writing template.yaml with the required participant-role baseline and tag-based scoping, validating, and opening a PR. Does NOT use this skill for edits to existing problems — for those, read AGENT.md and edit directly.
+description: Scaffold a new TenkaCloudChallenge problem. Invoked via `/new-problem challenge` (self-paced single-flag) or `/new-problem battle` (real-time PvP / uptime). With no argument, the skill asks which category. Also triggers on natural-language requests like "add a new problem", "create a new Battle/Challenge", or "scaffold a new problem". Walks through picking a starter, filling metadata.json, writing template.yaml with the required participant-role baseline and tag-based scoping, validating, and opening a PR. NOT for edits to existing problems — read AGENT.md and edit directly for those.
 ---
 
 # new-problem — scaffold a TenkaCloudChallenge problem
 
 Use this skill when the user wants to add a brand-new problem. For edits to an existing problem, read `AGENT.md` instead and edit in place.
 
+## Modes (slash-command form)
+
+| Invocation | Behavior |
+| --- | --- |
+| `/new-problem challenge` | Skip the category question. Use `challenges/hello-world` as the starter. Scoring kind defaults to `flag`; ask the user to confirm. |
+| `/new-problem battle` | Skip the category question. Then ask for scoring kind (`uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection`) before picking the starter. |
+| `/new-problem` (no arg) | Ask "Challenge or Battle?" first. Everything else as below. |
+
+Natural-language invocations ("add a new problem", "create a Battle") behave like the no-arg form.
+
 ## Step 0 — read the contract
 
 Open `AGENT.md` at the repo root before writing files. The required invariants there are not negotiable; the validator will reject the PR if any are missed.
 
-## Step 1 — gather 5 inputs from the user
+## Step 1 — gather inputs from the user
 
-Ask once, with `AskUserQuestion` when running interactively, then proceed. Required:
+If the invocation was `/new-problem challenge` or `/new-problem battle`, **Category is already set** — skip that question. Otherwise ask. Then gather the rest with `AskUserQuestion` when running interactively. Required inputs:
 
-1. **Category** — `challenges/` (self-paced, single submission) or `battles/` (real-time PvP / continuous scoring).
+1. **Category** — `challenges/` (self-paced, single submission) or `battles/` (real-time PvP / continuous scoring). Provided as arg or asked.
 2. **Slug** — kebab-case, alphanumeric + hyphens, lowercase. Becomes the directory name and the `tc-<slug>-<teamSlug>` resource prefix.
 3. **Scoring kind** — one of:
-   - `flag` — submit a string, scored once.
+   - `flag` — submit a string, scored once. **Challenge default.**
    - `uptime-flat` — N endpoints probed independently, points per healthy probe.
    - `uptime-multi` — N endpoints, AND condition; one bonus when all are up.
    - `phased-polling` — score rules change at scheduled phase boundaries.
    - `attack-detection` — counter from a stats endpoint converts to points.
+
+   For `challenge` mode default to `flag` and ask only to confirm. For `battle` mode the 4 uptime/polling/attack kinds are the relevant choices — ask which.
 4. **Concept** — one or two sentences in the user's own words. The skill weaves this into the story-style `shortDescription` later; raw mechanics are not the player-facing voice.
 5. **Difficulty** 1–5 and rough **estimatedDuration** (e.g. "30 分").
 
