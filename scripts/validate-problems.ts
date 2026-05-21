@@ -70,7 +70,59 @@ function checkCrossRefs(metaPath: string, meta: Metadata): ValidationError[] {
     ...checkEndpointOutputRefs(meta, yaml, cfnTemplate),
     ...checkDashboardSlotFiles(meta, dir),
     ...checkParticipantBaseline(yaml, cfnTemplate),
+    ...checkResourceTagging(yaml, cfnTemplate),
   ];
+}
+
+/**
+ * ADR-021 per-tenant scoping は IAM policy 側の
+ * `Condition: aws:ResourceTag/TenkaCloud:NamePrefix == ${NamePrefix}` で実装される。
+ * これが効くためには、 deploy される per-team な EC2 系リソースに同じ tag が
+ * 必ず付いていないと、 condition がマッチせず 「自分のリソースなのに Console に
+ * 出ない」という UX バグになる (= leak ではないが problem solvable 性を壊す)。
+ * テンプレ作成者が tag を忘れないよう deploy 前に止める。
+ */
+function checkResourceTagging(yaml: string, cfnTemplate: string): ValidationError[] {
+  const errors: ValidationError[] = [];
+  const taggableTypes = new Set([
+    "AWS::EC2::VPC",
+    "AWS::EC2::Subnet",
+    "AWS::EC2::InternetGateway",
+    "AWS::EC2::RouteTable",
+    "AWS::EC2::SecurityGroup",
+    "AWS::EC2::Instance",
+  ]);
+  const lines = yaml.split("\n");
+  type ResourceStart = { lineIdx: number; type: string; logicalId: string };
+  const starts: ResourceStart[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^(\s+)Type:\s+(\S+)/);
+    if (!m) continue;
+    const typeIndent = m[1].length;
+    const type = m[2];
+    let logicalId = "?";
+    for (let k = i - 1; k >= 0; k--) {
+      const km = lines[k].match(/^(\s+)(\S+):\s*$/);
+      if (km && km[1].length === typeIndent - 2) {
+        logicalId = km[2];
+        break;
+      }
+      if (lines[k].trim().length === 0) continue;
+    }
+    starts.push({ lineIdx: i, type, logicalId });
+  }
+  for (let ri = 0; ri < starts.length; ri++) {
+    const r = starts[ri];
+    if (!taggableTypes.has(r.type)) continue;
+    const blockEnd = ri + 1 < starts.length ? starts[ri + 1].lineIdx : lines.length;
+    const block = lines.slice(r.lineIdx, blockEnd).join("\n");
+    if (!/^\s*-\s+Key:\s+TenkaCloud:NamePrefix\b/m.test(block)) {
+      errors.push(
+        `${cfnTemplate}: ${r.type} ${r.logicalId} missing TenkaCloud:NamePrefix tag (ADR-021 per-team scoping via aws:ResourceTag IAM Condition)`,
+      );
+    }
+  }
+  return errors;
 }
 
 /**
