@@ -100,8 +100,7 @@
     "shortDescription": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 200,
-      "description": "カード表示用の 1 行サマリ (200 文字以内目安)。"
+      "description": "カード表示用のサマリ。 多くは 1〜2 行に収めるが、 ストーリー導入が必要な問題では複数段落でも可 (UI 側で折り畳む)。"
     },
     "description": {
       "type": "string",

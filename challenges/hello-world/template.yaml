@@ -80,15 +80,15 @@ Outputs:
   ParameterValue:
     Description: SSM Parameter value (echoed in Outputs for smoke test verification).
     Value: !Sub "Hello from ${NamePrefix}"
-  # AWS Console home (region-scoped). Competitors land here and navigate to
-  # SSM Parameter Store themselves -- this is a learning problem, not a
-  # spoon-fed deep link. The Parameter Store list view stays empty by design
-  # (ADR-021: participant Role lacks ssm:DescribeParameters), so the intended
-  # solve path is CLI (`aws ssm get-parameter --name /<NamePrefix>/hello`) or
-  # typing the parameter name in Console directly.
+  # AWS Console deep link to THIS stack's parameter detail page. Avoids the
+  # empty Parameter Store list view (ADR-021: participant Role lacks
+  # ssm:DescribeParameters to prevent cross-tenant name leakage), while still
+  # letting competitors land on their own parameter in one click. The detail
+  # page uses ssm:GetParameter, which the Role IS scoped to grant.
+  # `%2F` is the URL-encoded `/` in the parameter name `/${NamePrefix}/hello`.
   ParameterConsoleUrl:
-    Description: AWS Console home (region-scoped). Navigate to SSM Parameter Store from here.
-    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/console/home?region=${AWS::Region}#"
+    Description: AWS Console deep link to this stack's SSM Parameter detail page.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/systems-manager/parameters/%2F${NamePrefix}%2Fhello/description?region=${AWS::Region}&tab=Table"
   NamePrefix:
     Description: Common resource prefix that this stack used.
     Value: !Ref NamePrefix

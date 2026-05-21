@@ -20,8 +20,6 @@ Sasaki-san, the CTO, says: "I think he left it for smoke testing... probably." D
 
 Your mission: open AWS Console or CLI, read the value at `/{NamePrefix}/hello`, and paste it into the Participant Portal flag-submission box. Correct match → +100 pt.
 
-The canonical worldbuilding lives in [`docs/lore/world.html`](../../../docs/lore/world.html).
-
 ## What gets deployed
 
 - `AWS::SSM::Parameter` (`/{NamePrefix}/hello`, Standard tier, value `Hello from {NamePrefix}`)
@@ -33,15 +31,14 @@ No EC2 / VPC / public endpoint is created. SSM Standard tier is free.
 
 ## How to solve
 
+Open the `ParameterConsoleUrl` output from the Participant Portal — it is a **deep link** that lands directly on this stack's SSM Parameter detail page in the AWS Console. The value is visible in the **Value** field. Or use the CLI:
+
 ```bash
-# Via CLI
 aws ssm get-parameter --name /{NamePrefix}/hello --query Parameter.Value --output text
 # → "Hello from {NamePrefix}"
 ```
 
-Or open the `ParameterConsoleUrl` output (= region-scoped AWS Console home) from the Participant Portal and navigate to SSM Parameter Store yourself. Type the parameter name (`ParameterName` output) into Parameter Store search, or read it via the CLI.
-
-> The Parameter Store **list** page in Console requires `ssm:DescribeParameters`, which `ParticipantViewerRole` intentionally lacks to prevent cross-tenant leakage (ADR-021). Listing from the console is deliberately blocked, so the CLI path (`aws ssm get-parameter --name ...`) is the recommended solve.
+> The Parameter Store **list** page in Console requires `ssm:DescribeParameters`, which `ParticipantViewerRole` intentionally lacks to prevent cross-tenant leakage (ADR-021). Listing from the console is deliberately blocked, so we ship a deep link to the specific parameter instead — `ssm:GetParameter` (granted on the per-stack prefix) is enough for the detail page to load.
 
 Paste the value into the Participant Portal flag submission box and submit. Correct → +100 pt. Wrong → -5 pt.
 
@@ -49,7 +46,7 @@ Paste the value into the Participant Portal flag submission box and submit. Corr
 
 | hint   | Content                                                                                                            | Penalty |
 | ------ | ------------------------------------------------------------------------------------------------------------------ | ------- |
-| hint-1 | Read the value via AWS Console (SSM Parameter Store) or `aws ssm get-parameter --name /{NamePrefix}/hello`.        | -10     |
+| hint-1 | Click the `ParameterConsoleUrl` Output for a deep link to the parameter detail page, or run `aws ssm get-parameter --name /{NamePrefix}/hello`. | -10     |
 | hint-2 | The value follows the form `Hello from tc-...` and includes the stack-name prefix (= the value of NamePrefix).     | -20     |
 
 ## Scoring
