@@ -2,19 +2,28 @@
 
 > 日本語版: [README.ja.md](./README.ja.md)
 
-The **minimal sample** for Battle uptime scoring. Deploys nginx (frontend) and Python `http.server` (api) on a single EC2 instance; a 1-minute health probe awards +100 points per cycle while both endpoints return 200.
+The **minimal sample** for Battle uptime scoring. Deploys nginx (frontend) and Python `http.server` (api) on a single EC2 -- but the `FrontendUrl` / `ApiUrl` Outputs are emitted **empty**. The Health Check Lambda only starts probing once the competitor pastes their stack's URLs into the override fields in the Participant Portal. While both return 200, +100 pt per minute.
 
-| Field          | Value                                  |
-| -------------- | -------------------------------------- |
-| Category       | Battle (real-time PvP)                 |
-| Difficulty     | 1 / 5 (beginner)                       |
-| Estimated time | 30 min                                 |
-| status         | `ready`                                |
-| Scoring        | `uptime` (`pointsPerSuccess`: 100)     |
+| Field          | Value                                       |
+| -------------- | ------------------------------------------- |
+| Category       | Battle (real-time PvP)                      |
+| Difficulty     | 1 / 5 (beginner)                            |
+| Estimated time | 30 min                                      |
+| status         | `ready`                                     |
+| Scoring        | `uptime-flat` (`pointsPerSuccess`: 100)     |
 
 ## What you do
 
-As the new SRE on duty, defend the two endpoints (`FrontendUrl` / `ApiUrl`) deployed at start, and restore service via SSM Session Manager whenever attackers knock something down. A probe runs every minute; +100 pt accrues only on cycles where both endpoints return 200.
+Day two at TenkaCloud Inc. You inherited Kato-san's little production web stack (nginx + Python `/healthz` on one EC2) -- except other teams' SREs share the same account and are taking each other's services down.
+
+Your job:
+
+1. After deploy, copy the `Ec2HostHint` Output (= the EC2 public DNS name).
+2. In the Participant Portal, paste `http://<host>` into the `frontend` slot override and `http://<host>:8080` into the `api` slot override.
+3. From that point on, the Health Check Lambda probes every minute; +100 pt accrues per cycle where both endpoints return 200.
+4. When attackers knock you down, restore service via SSM Session Manager (no SSH).
+
+**Deploying earns nothing.** The Battle only begins the moment you register the URLs in the portal.
 
 - **Attackers** tamper with the shared EC2 / Security Group to bring frontend or API down (e.g. `systemctl stop nginx`).
 - **Defenders** connect via SSM Session Manager (no SSH) and restart the service.
@@ -25,11 +34,12 @@ All operations stay inside one EC2, so there is no cross-tenant impact.
 
 ```
 ┌─────── EC2 t3.micro (Amazon Linux 2023, public IP) ───────┐
-│  nginx          :80   → /  (FrontendUrl)                  │
-│  python3 http.server :8080 → /healthz (ApiUrl)            │
+│  nginx          :80   → /                                 │
+│  python3 http.server :8080 → /healthz                     │
 └────────────────────────────────────────────────────────────┘
        ▲
-       │ Health Check Lambda probes every 1 minute
+       │ FrontendUrl / ApiUrl Outputs are EMPTY
+       │ Competitor overrides URL in portal → probe starts
        │ Both 200 → +100 pt / cycle
 ```
 
