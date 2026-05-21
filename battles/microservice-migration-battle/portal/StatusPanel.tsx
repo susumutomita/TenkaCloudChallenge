@@ -1,9 +1,12 @@
 /**
  * ADR-012 Phase 5: microservice-migration-battle 専用 StatusPanel plugin。
  *
- * 自チームの 3 slot (users / orders / catalog) の effective URL と、 phase / disruption
- * の予告 countdown を 1 panel にまとめて表示する。 portal の標準 StatusPanel ではなく
- * 本 plugin が render される (= metadata.dashboard.slots.StatusPanel で指名済)。
+ * 自チームの 3 slot (users / orders / catalog) の effective URL を 1 panel にまとめて表示する。
+ * portal の標準 StatusPanel ではなく本 plugin が render される (= metadata.dashboard.slots.StatusPanel で指名済)。
+ *
+ * phases / disruptions の predicted timing は競技上 spoiler なので、 metadata 側で
+ * publicHint=false にしてあり、 props.phases / props.disruptions は通常空配列で渡される。
+ * 念のため `.length > 0` ガードで section ごと出さない構造にしている (belt-and-suspenders)。
  *
  * 設計判断: Cloudscape は使わない (= Phase 5 MVP は plugin bundle が
  * peer-dep を持たない build-time integration、 Cloudscape import は portal 本体側で発生する
@@ -25,7 +28,7 @@ export default function StatusPanel(props: PortalSlotProps) {
     >
       <h3 style={{ margin: "0 0 12px 0", fontSize: "16px" }}>Microservice Migration — Status</h3>
       <p style={{ margin: "0 0 16px 0", color: "#5f6b7a" }}>
-        users / orders / catalog の 3 endpoint の現在 routing 先と、 残り時間予告を表示します。
+        users / orders / catalog の 3 endpoint の現在 routing 先を表示します。
         endpoint を override 登録すると、 platform の scoring engine が新 URL を probe します。
       </p>
 

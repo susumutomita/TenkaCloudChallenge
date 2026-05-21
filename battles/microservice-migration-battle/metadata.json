@@ -7,8 +7,8 @@
   "visibility": "public",
   "difficulty": 4,
   "estimatedDuration": "90〜120 分",
-  "shortDescription": "EC2 1 台に同居する 3 サービス (users / orders / catalog) を Lambda + API Gateway / ECS Fargate / App Runner の 3 種ホスティングに分割するレース。",
-  "description": "EC2 1 台に同居する 3 サービス (users / orders / catalog) のモノリスを、競技時間内に Lambda + API Gateway / Amazon ECS (Fargate) / AWS App Runner の 3 種類の異なるホスティングへマイクロサービスとして分割していく Battle。\n\nDeploy 完了後、各チームには EC2 上で動くモノリスのベース URL が払い出される。3 つのスコア対象エンドポイント (`/users/score` / `/orders/score` / `/catalog/score`) を運営側スコアエンジンが 1 分毎に polling し、レスポンスに応じてポイントを加減算する。\n\n## 学習目的\n\n- モノリスからマイクロサービスへの段階的移行 (strangler fig パターン) を実体験する\n- Lambda function / managed container (App Runner) / orchestrated container (ECS Fargate) の 3 段階を比較する\n- どのサービスから分離すべきかをスコア最大化の観点で判断する\n- コード内に意図的に仕込まれた「遅延コードパス」を読み解いて取り除く\n\n## アーキテクチャ (Phase 1 = この PR の deploy 範囲)\n\n```\n┌─────────────── EC2 (t3.small) ───────────────┐\n│  nginx :80  →  /users/* → users:3001           │\n│              →  /orders/* → orders:3002        │\n│              →  /catalog/* → catalog:3003      │\n│         docker compose で 3 サービス + nginx │\n└──────────────────────────────────────────────┘\n         ↑ Score Engine が 1 分毎 polling\n```\n\n各サービスは Node.js 20 + Hono の最小 HTTP サーバーで、`GET /meta` (= platform 自己申告) と `GET /score` を公開する。Dockerfile は Lambda / App Runner / ECS Fargate のいずれにもそのまま乗せ替え可能。\n\n## 採点ルール (Phase 2 で score engine を実装)\n\n| 状態                                       | 1 check あたり |\n| ------------------------------------------ | -------------- |\n| 未登録 / 200 以外 / timeout                | -100           |\n| EC2 上のレスポンス (劣化前)                | +100           |\n| EC2 上のレスポンス (劣化後 = 開始 60 分後) | +10            |\n| Lambda + API GW にホスティング済           | +1,000         |\n| ECS Fargate にホスティング済               | +1,000         |\n| App Runner にホスティング済                | +1,000         |\n| 3 サービス全て分離完了                     | +5,000 (1 回)  |\n\n## フェーズタイムライン\n\n- 0 分: deploy 完了 → 競技開始\n- 60 分: EC2 劣化 (`tc qdisc` 注入予定 / Phase 2)\n- 90 分: スコアエンジンが `/score` → `/score?legacy=true` へ切替 → 各サービスコードに仕込まれた遅延コードパスを取り除いて再デプロイする必要あり\n\n## 制約 / 既知の制限\n\n- 遅延コードパス (`?legacy=true` で 2 秒 sleep) は本リポジトリ内で公開されているため、ADR-008 (= 問題実装の private repo 化) が ship するまで仕掛けは事前に読まれる可能性がある。Phase 2 ship までに ADR-008 を解決する。\n- Phase 1 では score engine / endpoint 登録 UI / EC2 劣化 cron / フェーズ進行 logic は未実装 (= Phase 2 / Phase 3 で追加)。",
+  "shortDescription": "天下クラウド株式会社、 入社 1 ヶ月。 加藤さんが残した EC2 1 台同居のモノリス (users / orders / catalog の 3 サービスを nginx reverse proxy が path で振り分け) を引き継いだ。 佐々木 CTO 曰く 『そろそろマネージドに分けてくれない? Lambda でも ECS でも App Runner でも、 サービスごとに違う hosting でいい』。\n\nあなたの仕事: 各サービスを切り出して別 hosting に移し、 切り出した URL を Participant Portal の override に登録する。 score engine は登録された URL を 1 分ごとに probe し、 hosting の種類によって配点が変わる。\n\n```\n  [初期 (deploy 直後)]                    [移行ゴール]\n  ┌── EC2 (t3.small) ──┐                  ┌── Service Router ──┐\n  │ nginx :80          │                  │  (API GW / ALB)    │\n  │  /users  → :3001   │  ───migrate───>  └──┬─────┬─────┬─────┘\n  │  /orders → :3002   │                     │     │     │\n  │  /catalog→ :3003   │                     ▼     ▼     ▼\n  └────────────────────┘                  ┌──────┐┌────┐┌──────────┐\n                                          │Lambda││ECS ││App Runner│\n                                          │users ││ord ││catalog   │\n                                          └──────┘└────┘└──────────┘\n```\n\n3 サービスの hosting 先は自由に組み替えてよい (上の絵は一例)。 deploy しただけでは EC2 routing のまま、 自分で切り出すまで点数は伸びない。",
+  "description": "Battle problem: 加藤さんから引き継いだ EC2 モノリス (users / orders / catalog 3 サービスを 1 台に同居) を、 マネージドな hosting に少しずつ切り出していく。\n\n## 初期状態 (deploy 直後)\n\n```\n[Score Engine]──probe──>┌─── EC2 (t3.small) ────────────────┐\n                        │  nginx :80 (service router)        │\n                        │    /users   → users   :3001 (Hono) │\n                        │    /orders  → orders  :3002 (Hono) │\n                        │    /catalog → catalog :3003 (Hono) │\n                        │   docker compose で 3 サービス     │\n                        └────────────────────────────────────┘\n```\n\n- 3 サービスは Node.js 20 + Hono の最小 HTTP サーバー、 `GET /meta` (platform 自己申告) と `GET /score` を公開\n- Dockerfile は Lambda / App Runner / ECS Fargate のいずれにもそのまま載せ替え可能\n- Score engine は 3 slot の effective URL (= override ?? default) を 1 分ごと probe\n\n## やること\n\n1. **切り出す**: 1 サービスを選び、 Lambda + API Gateway / ECS Fargate / App Runner のいずれかに deploy\n2. **登録する**: 新しい URL を Participant Portal の override 欄に貼る (slot 単位)\n3. **次へ**: 残り 2 サービスも別 hosting に切り出す (3 サービス → 3 hosting でフルマーク想定)\n\nどのサービスから切り出すか・どの hosting に振るかは自由。 EC2 routing のまま放置すると徐々に状況が悪化していくので、 早めに動くほど良い。\n\n## 学習目的\n\n- モノリス → マイクロサービスの段階的移行 (strangler fig パターン) を実体験する\n- Lambda (serverless) / App Runner (managed container) / ECS Fargate (orchestrated container) のトレードオフを実機で比較する\n- 移行優先順位を score 観点で判断する\n\n## ノート\n\n- 各チームの AWS リソースは ${NamePrefix} prefix で完全分離される (= 他チームの Lambda / ECS を覗けない)\n- 切り出した hosting の deploy には別途 IAM 権限が必要 (= follow-up PR で role 拡張予定)",
   "tags": ["microservices", "migration", "lambda", "ecs", "apprunner", "ec2", "docker"],
   "exposedPorts": [
     {
@@ -19,21 +19,19 @@
   "learningGoals": [
     "モノリスから 3 ホスティング (Lambda / ECS Fargate / App Runner) へのマイクロサービス分割を体験する",
     "サーバレス / マネージドコンテナ / オーケストレーションのトレードオフを実機で比較する",
-    "EC2 劣化と遅延コードパスというスコア制約下で、移行優先順位を判断する",
-    "意図的に仕込まれた遅延コードパスを読み解いて取り除く"
+    "Score 観点でどのサービスから切り出すかの優先順位を判断する"
   ],
   "cfnTemplate": "template.yaml",
   "cfnParameters": {},
   "i18n": {
     "en": {
       "name": "Microservice Migration Battle",
-      "shortDescription": "Race to split a 3-service monolith (users / orders / catalog) on EC2 into Lambda + API Gateway / ECS Fargate / App Runner hosting tiers.",
-      "description": "A Battle problem where teams split a monolith of 3 services (users / orders / catalog) running on a single EC2 into 3 different hosting platforms — Lambda + API Gateway, Amazon ECS (Fargate), and AWS App Runner — within the competition time.\n\nAfter deploy completes, each team receives the base URL of the monolith running on EC2. The operator scoring engine polls the 3 scoring endpoints (`/users/score` / `/orders/score` / `/catalog/score`) every minute and adds/subtracts points based on responses.\n\n## Learning goals\n\n- Experience progressive monolith → microservices migration (strangler fig pattern)\n- Compare Lambda function / managed container (App Runner) / orchestrated container (ECS Fargate)\n- Decide which service to split first to maximize score\n- Find and remove the intentionally-planted slow code path",
+      "shortDescription": "Month one at TenkaCloud Inc. Kato-san left you an EC2 monolith (3 services -- users / orders / catalog -- behind one nginx reverse proxy). CTO Sasaki-san: 'Time to split these out -- Lambda, ECS, App Runner, whatever you want, just give each service its own hosting.'\n\nYour job: peel one service at a time off EC2, deploy it onto a managed runtime, and register the new URL in the Participant Portal override. The score engine probes the registered URL every minute and pays out per hosting tier.\n\n```\n  [Initial (post-deploy)]                  [Migration goal]\n  ┌── EC2 (t3.small) ──┐                   ┌── Service Router ──┐\n  │ nginx :80          │                   │   (API GW / ALB)   │\n  │  /users  → :3001   │  ──migrate──>     └──┬─────┬─────┬─────┘\n  │  /orders → :3002   │                      │     │     │\n  │  /catalog→ :3003   │                      ▼     ▼     ▼\n  └────────────────────┘                   ┌──────┐┌────┐┌──────────┐\n                                           │Lambda││ECS ││App Runner│\n                                           │users ││ord ││catalog   │\n                                           └──────┘└────┘└──────────┘\n```\n\nThe target shape above is just one example -- you choose which hosting tier each service lands on. Deploying alone keeps EC2 routing intact; the score only moves once you start peeling services off.",
+      "description": "Battle problem: take Kato-san's inherited EC2 monolith (3 services -- users / orders / catalog -- colocated on one box) and gradually split it into managed runtimes.\n\n## Initial state (post-deploy)\n\n```\n[Score Engine]──probe──>┌─── EC2 (t3.small) ───────────────────┐\n                        │  nginx :80 (service router)           │\n                        │    /users   → users   :3001 (Hono)    │\n                        │    /orders  → orders  :3002 (Hono)    │\n                        │    /catalog → catalog :3003 (Hono)    │\n                        │   docker compose runs all three       │\n                        └───────────────────────────────────────┘\n```\n\n- Each service is a minimal Node.js 20 + Hono HTTP server exposing `GET /meta` (platform self-report) and `GET /score`.\n- The Dockerfile loads cleanly on Lambda / App Runner / ECS Fargate.\n- The score engine probes each slot's effective URL (`override ?? default`) every minute.\n\n## What you do\n\n1. **Peel a service off**: pick one (users / orders / catalog), deploy it onto Lambda + API Gateway, ECS Fargate, or App Runner.\n2. **Register the new URL** as the slot override in the Participant Portal.\n3. **Move on**: peel the other two services onto different hosting tiers (3 services × 3 hosting tiers is the suggested full-marks shape).\n\nWhich service goes first, and onto which hosting -- up to you. Sitting on EC2 routing gets progressively worse, so moving early helps.\n\n## Learning goals\n\n- Experience progressive monolith → microservices migration (strangler fig pattern).\n- Compare Lambda (serverless) / App Runner (managed container) / ECS Fargate (orchestrated container) trade-offs on real infrastructure.\n- Judge migration priority from a scoring standpoint.\n\n## Notes\n\n- Each team's AWS resources are fully isolated by the `${NamePrefix}` prefix (no cross-tenant access).\n- Deploying the migrated services requires extra IAM permissions on the participant role (= scoped Lambda / ECS / App Runner deploy actions, planned follow-up PR).",
       "learningGoals": [
         "Experience splitting a monolith into 3 hosting tiers (Lambda / ECS Fargate / App Runner)",
         "Compare serverless / managed containers / orchestration tradeoffs on real infrastructure",
-        "Judge migration priority under EC2 degradation and legacy-codepath constraints",
-        "Find and remove the intentionally-planted slow code paths"
+        "Judge migration priority from a scoring standpoint"
       ]
     }
   },
@@ -47,7 +45,7 @@
       },
       "overridable": true,
       "label": "Users service",
-      "description": "初期は EC2 上の nginx reverse proxy 経由。 Lambda / ECS / App Runner に切り出したら override で登録する。"
+      "description": "初期は EC2 同居 (nginx :80 → users :3001)。 切り出したら新 URL をここに登録すると score engine が新 URL を probe する。"
     },
     {
       "slot": "orders",
@@ -58,7 +56,7 @@
       },
       "overridable": true,
       "label": "Orders service",
-      "description": "初期は EC2 上の nginx reverse proxy 経由。 移行先の新 endpoint を override で登録。"
+      "description": "初期は EC2 同居 (nginx :80 → orders :3002)。 切り出したら新 URL をここに登録。"
     },
     {
       "slot": "catalog",
@@ -69,7 +67,7 @@
       },
       "overridable": true,
       "label": "Catalog service",
-      "description": "初期は EC2 上の nginx reverse proxy 経由。 移行先の新 endpoint を override で登録。"
+      "description": "初期は EC2 同居 (nginx :80 → catalog :3003)。 切り出したら新 URL をここに登録。"
     }
   ],
   "scoring": {
@@ -118,7 +116,7 @@
         "switchPlatformToDegraded": ["ec2"]
       },
       "description": "EC2 hosting で稼働を続けているとスコア加算が degraded 値に切り替わる予告フェーズ。",
-      "publicHint": true
+      "publicHint": false
     },
     {
       "name": "legacy",
@@ -127,7 +125,7 @@
         "scorePathOverride": "/score?legacy=true"
       },
       "description": "スコア engine が `/score?legacy=true` に切替わる予告フェーズ。",
-      "publicHint": true
+      "publicHint": false
     }
   ],
   "disruptions": [
@@ -142,7 +140,7 @@
         "device": "eth0"
       },
       "description": "deploy 後 60 分 (default) で EC2 のネットワーク遅延が増加する予告。",
-      "publicHint": true
+      "publicHint": false
     }
   ],
   "dashboard": {
