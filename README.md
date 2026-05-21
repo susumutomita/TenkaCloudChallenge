@@ -3,7 +3,7 @@
 > 日本語版: [README.ja.md](./README.ja.md)
 
 [![CI](https://github.com/susumutomita/TenkaCloudChallenge/actions/workflows/ci.yml/badge.svg)](https://github.com/susumutomita/TenkaCloudChallenge/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/github/license/susumutomita/TenkaCloudChallenge)](./LICENSE)
+[![License: Apache 2.0](https://img.shields.io/github/license/susumutomita/TenkaCloudChallenge)](./LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#contributing)
 [![Bun](https://img.shields.io/badge/Bun-1.3.11-black?logo=bun)](https://bun.sh)
 [![AWS CloudFormation](https://img.shields.io/badge/AWS-CloudFormation-orange?logo=amazonaws)](https://aws.amazon.com/cloudformation/)
@@ -17,7 +17,7 @@ TenkaCloud runs head-to-head **Battles** and self-paced **Challenges** on real A
 - **Authoring without platform context.** Adding a problem requires only `metadata.json` + `template.yaml` (+ optional portal slot UI and side services). Everything else — scoring, portal rendering, disruption scheduling — is driven generically by the platform from your metadata.
 - **One source of truth.** `metadata.json` powers the catalog UI, the scoring engine, and the participant portal wiring. The platform side is a generic dispatcher (ADR-012).
 - **Schema-validated in CI.** Every problem is checked against [`SCHEMA.json`](./SCHEMA.json) on every push and PR.
-- **Open by design.** This repo holds the **base problem set** that ships under MIT. Spoiler-bearing private problems get a separate private repo via the ADR-008 S3 path.
+- **Open by design.** This repo holds the **base problem set** that ships under Apache 2.0 (matching the TenkaCloud platform repo). Spoiler-bearing private problems get a separate private repo via the ADR-008 S3 path.
 
 Each problem ships with a per-problem README (English primary, Japanese mirror) describing the story, the solve path, and the learning goals. Browse [`battles/`](./battles/) and [`challenges/`](./challenges/) for the live catalog.
 
@@ -111,7 +111,7 @@ See [`CATALOG.md`](./CATALOG.md) for the full schema walkthrough.
 
 ## 📜 License
 
-[MIT](./LICENSE) — problems and tooling alike. If you ship problems with spoiler content, host them in a separate private repo and deliver them via the ADR-008 S3 path.
+[Apache License 2.0](./LICENSE) — problems and tooling alike. Matches the [TenkaCloud platform repo](https://github.com/susumutomita/TenkaCloud)'s license so contributions can flow between the two without compatibility friction. If you ship problems with spoiler content, host them in a separate private repo and deliver them via the ADR-008 S3 path.
 
 ## 🔗 Related
 

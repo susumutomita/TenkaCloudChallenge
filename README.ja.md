@@ -3,7 +3,7 @@
 > English: [README.md](./README.md)
 
 [![CI](https://github.com/susumutomita/TenkaCloudChallenge/actions/workflows/ci.yml/badge.svg)](https://github.com/susumutomita/TenkaCloudChallenge/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/github/license/susumutomita/TenkaCloudChallenge)](./LICENSE)
+[![License: Apache 2.0](https://img.shields.io/github/license/susumutomita/TenkaCloudChallenge)](./LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#コントリビュート)
 [![Bun](https://img.shields.io/badge/Bun-1.3.11-black?logo=bun)](https://bun.sh)
 [![AWS CloudFormation](https://img.shields.io/badge/AWS-CloudFormation-orange?logo=amazonaws)](https://aws.amazon.com/cloudformation/)
@@ -17,7 +17,7 @@ TenkaCloud は実 AWS で動くリアルタイム **Battle** と個別演習 **C
 - **platform 知識ゼロでも問題を書ける**。 必要なのは `metadata.json` + `template.yaml` (+ 任意の portal slot UI と side services) だけ。 scoring / portal 表示 / disruption schedule は platform 側が metadata から generic に駆動する。
 - **正本は 1 つ**。 `metadata.json` がカタログ UI、 scoring engine、 portal plugin の wiring を全部駆動する。 platform 側は generic dispatcher (ADR-012)。
 - **CI で schema 検証**。 push / PR ごとに [`SCHEMA.json`](./SCHEMA.json) で全問題を validate。
-- **OSS 前提**。 本 repo は MIT で配布する **ベース問題セット**。 答え / spoiler を含む問題は別 private repo に置いて ADR-008 の S3 経路で配信する。
+- **OSS 前提**。 本 repo は Apache 2.0 で配布する **ベース問題セット** (= TenkaCloud platform 本体と同じライセンス)。 答え / spoiler を含む問題は別 private repo に置いて ADR-008 の S3 経路で配信する。
 
 各問題は per-problem README (英語 primary + 日本語 mirror) を持ち、 ストーリー / 解き方 / 学習目的が書いてある。 ライブカタログは [`battles/`](./battles/) と [`challenges/`](./challenges/) を参照。
 
@@ -111,7 +111,7 @@ Schema 詳解は [`CATALOG.md`](./CATALOG.md) を参照。
 
 ## 📜 ライセンス
 
-[MIT](./LICENSE) — 問題本体も tooling も MIT。 spoiler を含む問題を配信する場合は private repo に置いて ADR-008 の S3 経路で配信する。
+[Apache License 2.0](./LICENSE) — 問題本体も tooling も Apache 2.0。 [TenkaCloud platform 本体](https://github.com/susumutomita/TenkaCloud) と同じライセンスなので、 双方向にコードを流せる。 spoiler を含む問題を配信する場合は private repo に置いて ADR-008 の S3 経路で配信する。
 
 ## 🔗 関連
 
