@@ -88,6 +88,22 @@ jobs:
         working-directory: tenkacloud
         env:
           GH_TOKEN: ${{ secrets.TENKACLOUD_CATALOG_BOT_TOKEN }}
+          PR_BODY: |
+            Auto-generated PR from TenkaCloudChallenge/.github/workflows/catalog-pr.yml.
+
+            ## Source
+
+            - TenkaCloudChallenge commit: `${{ github.sha }}`
+            - Trigger: `${{ github.event_name }}`
+
+            ## Regression analysis
+
+            - Sync target: `problems/{battles,challenges}/**/metadata.json` + `problems/index.json`
+            - No platform deploy path change (= metadata visibility update only)
+
+            ## Physical impact
+
+            - NO-OP on deployed resources.
         run: |
           set -euo pipefail
           BRANCH="bot/catalog-sync-$(date -u +%Y%m%d)"
@@ -100,21 +116,7 @@ jobs:
           if ! gh pr view "$BRANCH" --json number 2>/dev/null; then
             gh pr create \
               --title "chore(catalog): sync from TenkaCloudChallenge@${GITHUB_SHA::12}" \
-              --body "Auto-generated PR from TenkaCloudChallenge/.github/workflows/catalog-pr.yml.
-
-## Source
-
-- TenkaCloudChallenge commit: \`${GITHUB_SHA}\`
-- Trigger: \`${GITHUB_EVENT_NAME}\`
-
-## Regression analysis
-
-- Sync target: \`problems/{battles,challenges}/**/metadata.json\` + \`problems/index.json\`
-- No platform deploy path change (= metadata visibility update only)
-
-## Physical impact
-
-- NO-OP on deployed resources." \
+              --body "$PR_BODY" \
               --base main \
               --head "$BRANCH"
           fi
