@@ -2,7 +2,7 @@
 
 > English: [README.md](./README.md)
 
-Battle uptime scoring の **最小 sample** 問題。 EC2 1 台に nginx (frontend) と Python http.server (api) を起動し、 1 分ごとの health probe で両方が 200 を返す間スコアが +100 加算される。
+Battle uptime scoring の **最小 sample** 問題。 EC2 1 台に nginx (frontend) と Python http.server (api) を起動するが、 デプロイ直後の `FrontendUrl` / `ApiUrl` Output は **空**。 競技者が Participant Portal の override 欄に自分のスタックの URL を貼り付けて初めて Health Check Lambda が probe を開始し、 両方が 200 を返すサイクルごとに +100 pt が入る。
 
 | 項目         | 値                                       |
 | ------------ | ---------------------------------------- |
@@ -10,11 +10,20 @@ Battle uptime scoring の **最小 sample** 問題。 EC2 1 台に nginx (fronte
 | 難易度       | 1 / 5 (入門)                             |
 | 想定時間     | 30 分                                    |
 | status       | `ready`                                  |
-| 採点方式     | `uptime` (`pointsPerSuccess`: 100)       |
+| 採点方式     | `uptime-flat` (`pointsPerSuccess`: 100)  |
 
 ## 何をする問題か
 
-新人 SRE のあなたは、 deploy 直後の 2 つの endpoint (`FrontendUrl` / `ApiUrl`) が落ちないように守りながら、 攻撃側の妨害で stop されたサービスを SSM Session Manager で復旧する。 1 分ごとに probe が走り、 両方が 200 を返すサイクルだけ +100 pt が加算される。
+天下クラウド株式会社、 2 日目。 加藤さんが production に残した小さな web stack (EC2 上で nginx + Python `/healthz`) を引き継いだ ── が、 同じアカウントには他チームの SRE がいて、 互いに相手のサービスを落とし合っている。
+
+あなたの仕事:
+
+1. Deploy 完了後、 Output の `Ec2HostHint` (= EC2 の公開 DNS 名) をコピー。
+2. Participant Portal で `frontend` slot に `http://<host>`、 `api` slot に `http://<host>:8080` を貼り付けて override 保存。
+3. ここから 1 分ごとに Health Check Lambda が probe を始め、 両方 200 を返したサイクル分だけ +100 pt。
+4. 攻撃を受けて落とされたら SSM Session Manager で復旧 (SSH 不要)。
+
+**Deploy しただけでは 1 点も入らない**。 URL を portal に登録した瞬間から Battle が始まる。
 
 - **攻撃側**: 同じ EC2 / Security Group を弄って frontend や API を止める (例: `systemctl stop nginx`)
 - **防御側**: SSM Session Manager で SSH 不要に入り、 サービスを再起動する
@@ -25,11 +34,12 @@ Battle uptime scoring の **最小 sample** 問題。 EC2 1 台に nginx (fronte
 
 ```
 ┌─────── EC2 t3.micro (Amazon Linux 2023, Public IP) ───────┐
-│  nginx          :80   → /  (FrontendUrl)                  │
-│  python3 http.server :8080 → /healthz (ApiUrl)            │
+│  nginx          :80   → /                                 │
+│  python3 http.server :8080 → /healthz                     │
 └────────────────────────────────────────────────────────────┘
        ▲
-       │ 1 分ごとに Health Check Lambda が probe
+       │ FrontendUrl / ApiUrl Output は EMPTY
+       │ 競技者が portal で URL を override すると probe 開始
        │ 両方 200 → +100 pt / cycle
 ```
 

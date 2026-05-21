@@ -7,8 +7,8 @@
   "visibility": "public",
   "difficulty": 1,
   "estimatedDuration": "30 分",
-  "shortDescription": "Battle uptime scoring の最小 sample。EC2 上で nginx (frontend) + Python (API) を起動し、両方が 200 を返す間スコアが 1 分ごとに +100 加算。",
-  "description": "Battle uptime scoring の動作確認用 sample。\n\nDeploy すると競技者の AWS アカウントに次が作られる:\n  - 専用 VPC (10.99.0.0/16) + 公開 subnet + IGW\n  - EC2 t3.micro (Amazon Linux 2023, Public IP)\n    - nginx (port 80) で frontend ページを serve\n    - python3 http.server (port 8080) で `/healthz` API を serve\n\nHealth Check Lambda が 1 分ごとに FrontendUrl + ApiUrl を probe し、両方が 200 を返せば +100 pt 加算。どちらかが落ちている / 改ざんされていれば lastResult=fail として加算停止。\n\n## 攻撃 / 防御 (Battle 形式の体験)\n\n- **攻撃側** が同じ EC2 / Security Group を弄って frontend や API を停止すると、防御側のスコアが止まる\n- **防御側** は SSM Session Manager で SSH 不要で接続し、サービスを復旧する\n- いずれの操作も 1 EC2 内で完結するので、cross-tenant 影響なし (= 自テナント内の競技として安全)\n\n## コスト\n\n- EC2 t3.micro: AWS Free Tier 750 hr/月 (12 ヶ月) 内\n- VPC / IGW / SG: 無料\n- 競技 1 回 (~30 分) のコストは Free Tier 範囲ならゼロ",
+  "shortDescription": "天下クラウド株式会社、 2 日目。 加藤さんが production に残した小さな web stack (EC2 上で nginx + Python `/healthz`) を引き継いだ ── が、 同じアカウントには他チームの SRE がいて、 互いに相手のサービスを落とし合っている。\n\nあなたの仕事: 自分のスタックの 2 つの URL (frontend / API) を Participant Portal に登録 → Health Check Lambda が 1 分ごとに probe を始め、 両方 200 を返した分だけ +100 pt。 落とされたら SSM Session Manager で復旧 (SSH 不要)。\n\nDeploy しただけでは何も起きない。 URL を portal に登録した瞬間から Battle が始まる。",
+  "description": "Battle uptime scoring の動作確認用 sample。\n\nDeploy すると競技者の AWS アカウントに次が作られる:\n  - 専用 VPC (10.99.0.0/16) + 公開 subnet + IGW\n  - EC2 t3.micro (Amazon Linux 2023, Public IP)\n    - nginx (port 80) で frontend ページを serve\n    - python3 http.server (port 8080) で `/healthz` API を serve\n\nただし FrontendUrl / ApiUrl の Output は **空** で出力される。 競技者が Participant Portal の override 欄に自分のスタックの URL を貼り付けて初めて Health Check Lambda が probe を始める (= 'deploy しただけで自動加点される' を防ぐ意図的な設計)。 Ec2HostHint Output に公開 DNS 名が出るので、 `http://<host>` と `http://<host>:8080/healthz` をコピーして 2 slot に貼ればよい。\n\nHealth Check Lambda は登録された URL を 1 分ごとに probe し、 両方が 200 を返した分だけ +100 pt 加算。 どちらかが落ちている / 改ざんされていれば lastResult=fail として加算停止。\n\n## 攻撃 / 防御 (Battle 形式の体験)\n\n- **攻撃側** が同じ EC2 / Security Group を弄って frontend や API を停止すると、 防御側のスコアが止まる\n- **防御側** は SSM Session Manager で SSH 不要で接続し、 サービスを復旧する\n- いずれの操作も 1 EC2 内で完結するので、 cross-tenant 影響なし (= 自テナント内の競技として安全)\n\n## コスト\n\n- EC2 t3.micro: AWS Free Tier 750 hr/月 (12 ヶ月) 内\n- VPC / IGW / SG: 無料\n- 競技 1 回 (~30 分) のコストは Free Tier 範囲ならゼロ",
   "tags": ["sample", "battle", "uptime", "ec2", "nginx"],
   "exposedPorts": [
     {
@@ -30,8 +30,8 @@
   "i18n": {
     "en": {
       "name": "Hello World Battle (Sample)",
-      "shortDescription": "Minimal Battle uptime-scoring sample. Run nginx (frontend) + Python (API) on EC2; while both return 200, score +100 every minute.",
-      "description": "Minimal sample for Battle uptime scoring.\n\nDeploying creates the following in the competitor's AWS account:\n  - Dedicated VPC (10.99.0.0/16) + public subnet + IGW\n  - EC2 t3.micro (Amazon Linux 2023, public IP)\n    - nginx (port 80) serving the frontend page\n    - python3 http.server (port 8080) serving `/healthz` API\n\nHealth Check Lambda probes FrontendUrl + ApiUrl every minute and grants +100 pt when both return 200. If either is down or tampered with, lastResult=fail and scoring halts.\n\n## Attack / defense (Battle experience)\n\n- **Attackers** can tamper with the shared EC2 / Security Group to bring frontend or API down, freezing defender scoring.\n- **Defenders** connect via SSM Session Manager (no SSH required) to restore service.\n- All operations stay inside one EC2, so no cross-tenant impact (= safe within self-tenant scoring).\n\n## Cost\n\n- EC2 t3.micro: within AWS Free Tier 750 hr/month (12 months)\n- VPC / IGW / SG: free\n- Cost per 30-minute session: zero within Free Tier",
+      "shortDescription": "Day two at TenkaCloud Inc. You inherited Kato-san's little production web stack (nginx + Python `/healthz` on one EC2) -- except other teams' SREs share the same account and are taking each other's services down.\n\nYour job: register your stack's two URLs (frontend / API) in the Participant Portal. The Health Check Lambda starts probing every minute and grants +100 pt per minute while both return 200. When you're hit, recover via SSM Session Manager (no SSH).\n\nDeploying alone earns nothing. The Battle begins the moment you register the URLs in the portal.",
+      "description": "Minimal sample for Battle uptime scoring.\n\nDeploying creates the following in the competitor's AWS account:\n  - Dedicated VPC (10.99.0.0/16) + public subnet + IGW\n  - EC2 t3.micro (Amazon Linux 2023, public IP)\n    - nginx (port 80) serving the frontend page\n    - python3 http.server (port 8080) serving `/healthz` API\n\nThe `FrontendUrl` / `ApiUrl` Outputs are emitted **empty** -- competitors must paste their stack's URLs into the override fields in the Participant Portal before scoring begins (= intentional design to prevent 'deploy auto-earns points'). The `Ec2HostHint` Output exposes the public DNS name so you can copy `http://<host>` and `http://<host>:8080/healthz` into the two slots.\n\nOnce registered, the Health Check Lambda probes the URLs every minute and grants +100 pt per minute while both return 200. If either is down or tampered with, lastResult=fail and scoring halts.\n\n## Attack / defense (Battle experience)\n\n- **Attackers** can tamper with the shared EC2 / Security Group to bring frontend or API down, freezing defender scoring.\n- **Defenders** connect via SSM Session Manager (no SSH required) to restore service.\n- All operations stay inside one EC2, so no cross-tenant impact (= safe within self-tenant scoring).\n\n## Cost\n\n- EC2 t3.micro: within AWS Free Tier 750 hr/month (12 months)\n- VPC / IGW / SG: free\n- Cost per 30-minute session: zero within Free Tier",
       "learningGoals": [
         "Verify that TenkaCloud's Battle uptime scoring engine works against real endpoints",
         "Experience a minimal web stack (EC2 + nginx + Python) receiving health-check probes",
@@ -46,9 +46,9 @@
         "from": "cfn-output",
         "key": "FrontendUrl"
       },
-      "overridable": false,
+      "overridable": true,
       "label": "Frontend (nginx)",
-      "description": "EC2 上の nginx (port 80)。 防御側が落とすとスコア停止。"
+      "description": "Ec2HostHint の DNS 名で `http://<host>` を貼り付け。 落とされるとスコア停止。"
     },
     {
       "slot": "api",
@@ -56,21 +56,21 @@
         "from": "cfn-output",
         "key": "ApiUrl"
       },
-      "overridable": false,
+      "overridable": true,
       "label": "API (python http.server)",
-      "description": "EC2 上の python http.server (port 8080)。 `/healthz` で 200 を返す。"
+      "description": "Ec2HostHint の DNS 名で `http://<host>:8080` を貼り付け。 `/healthz` で 200 を返す。"
     }
   ],
   "scoring": {
-    "kind": "uptime",
+    "kind": "uptime-flat",
     "endpoints": [
       {
-        "outputKey": "FrontendUrl",
+        "slot": "frontend",
         "path": "/",
         "expectStatus": [200]
       },
       {
-        "outputKey": "ApiUrl",
+        "slot": "api",
         "path": "/healthz",
         "expectStatus": [200]
       }

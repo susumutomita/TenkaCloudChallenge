@@ -307,12 +307,20 @@ Resources:
           systemctl enable --now tenkacloud-api
 
 Outputs:
+  # FrontendUrl / ApiUrl are intentionally EMPTY by default. Scoring engine
+  # resolves effective URL as `override ?? default`; with default = "" and no
+  # override, the probe fails (= no points). Competitors must register the
+  # URL in the Participant Portal to start the Battle. Ec2HostHint below
+  # gives them the host so they can paste it in.
   FrontendUrl:
-    Description: Participant-facing frontend (nginx) URL. Target of the HealthCheck probe.
-    Value: !Sub "http://${Ec2.PublicDnsName}"
+    Description: Empty by default; competitors register the frontend URL via the Participant Portal to start scoring.
+    Value: ""
   ApiUrl:
-    Description: Participant-facing API (python http.server) URL. /healthz is the probe target.
-    Value: !Sub "http://${Ec2.PublicDnsName}:8080"
+    Description: Empty by default; competitors register the API URL via the Participant Portal to start scoring.
+    Value: ""
+  Ec2HostHint:
+    Description: EC2 public DNS for this stack. Paste as `http://<host>` and `http://<host>:8080/healthz` into FrontendUrl / ApiUrl slots in the portal.
+    Value: !GetAtt Ec2.PublicDnsName
   InstanceId:
     Description: EC2 InstanceId for connecting via SSM Session Manager (no SSH required).
     Value: !Ref Ec2
