@@ -43,6 +43,13 @@ Resources:
               StringEquals:
                 sts:ExternalId: !Ref ExternalId
       MaxSessionDuration: 3600
+      # `aws login` (2025-11) OAuth2 flow returns HTTP 400 unless the assumed
+      # role can call signin:* on its own oauth2/public-client/{localhost,remote}
+      # resources. SignInLocalDevelopmentAccess is the AWS-managed policy that
+      # scopes those permissions narrowly -- no access to SSM / IAM / other
+      # tenants, so ADR-021 multi-tenant isolation is unaffected.
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
       Policies:
         - PolicyName: ProblemSpecific
           PolicyDocument:
