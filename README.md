@@ -24,7 +24,6 @@ problems/
 │   └── <id>/
 │       ├── metadata.json
 │       └── template.yaml
-├── _legacy/                       # 旧 GameDay / JAM 構造 (= Phase 1 で削除予定)
 └── SCHEMA.json                    # 当面は本体 repo からコピー (= ADR-003 完成後は API が validate)
 .github/workflows/
 ├── publish.yml                    # main push で問題 zip を S3 にアップロード
@@ -75,8 +74,8 @@ problems/
 
 | Phase | 内容                                                                      | 本 repo への影響                                                             |
 | ----- | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| 0     | **当 PR**: skeleton (ディレクトリ構造 + workflow 雛形 + SCHEMA コピー)。 | 既存 GameDay / JAM 構造は `_legacy/` に退避済み (= history 残し)。           |
-| 1     | 本体 repo の 5 問題を当 repo に migrate。                                 | `problems/battles/` `problems/challenges/` に 5 問題が入る。                 |
+| 0     | ✅ Skeleton (ディレクトリ構造 + workflow 雛形 + SCHEMA コピー)。           | 完了。 既存 GameDay / JAM 構造を `_legacy/` に退避。                         |
+| 1     | ✅ 本体 repo の 5 問題を migrate + catalog CI (= ajv validation + cross-ref)。 | 完了。 `_legacy/` 削除。 `problems/{battles,challenges}/` に 5 問題が揃った。 |
 | 2     | `ChallengePayloadStack` + OIDC IAM Role を本体 CDK で deploy。            | secret bind により publish.yml が動き始める。                                |
 | 3     | DDB-backed Problems Catalog CRUD API。                                    | catalog-pr.yml の役割が一旦終わる (= API 経由 sync に置換)。                 |
 | 4     | 本体 repo `problems/` 削除 + source.zip 同梱から除外。                    | 物理分離完了。 platform 更新と問題更新が完全に独立。                         |
