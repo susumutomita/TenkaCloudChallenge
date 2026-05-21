@@ -1,0 +1,17 @@
+{
+  "name": "@tenkacloud/challenge-catalog",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TenkaCloud problem catalog. Validates metadata.json against SCHEMA.json and cross-refs template.yaml Outputs + portal slot files.",
+  "type": "module",
+  "scripts": {
+    "validate": "bun run scripts/validate-problems.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.4",
+    "ajv": "8.18.0",
+    "ajv-formats": "^3.0.1",
+    "typescript": "~5.9.3"
+  },
+  "trustedDependencies": []
+}

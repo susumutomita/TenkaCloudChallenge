@@ -1,32 +1,43 @@
 name: ci
 
-# Phase 0 (catalog skeleton) placeholder.
+# Catalog-side CI for TenkaCloudChallenge.
 #
-# The original ci.yml ran TenkaCloud's `make install_ci` + `make before-commit`
-# pipeline, which assumes a Bun workspace + Makefile from the platform repo.
-# This repo (TenkaCloudChallenge) is a problem catalog with no source code or
-# build step, so the platform CI does not apply.
+# Validates every problems/{battles,challenges}/<id>/metadata.json against
+# problems/SCHEMA.json + cross-refs the template.yaml Outputs / portal slot
+# files referenced from metadata. The validator is a verbatim copy of the
+# platform's scripts/validate-problems.ts (= same source of truth).
 #
-# A proper catalog-side CI lands in Phase 1 (= problem migration) and will:
-#   - validate every problems/<category>/<id>/metadata.json against SCHEMA.json
-#   - check template.yaml syntax + presence of ParticipantViewerRole
-#   - run the same cross-ref checks as the platform's tenkacloud-problem CLI
-#
-# Until Phase 1 ships, this workflow stays as a no-op so PR status checks
-# don't block on a non-applicable Makefile target.
+# Phase 2 will additionally check that publish.yml-produced S3 keys exist
+# for the new commit, once the AWS IAM Role is bound.
 
 permissions:
   contents: read
 
 on:
   push:
+  pull_request:
   workflow_dispatch:
 
 jobs:
-  ci:
+  validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CI: "true"
+      npm_config_ignore_scripts: "true"
     steps:
-      - name: Phase 0 placeholder
-        run: |
-          echo "Phase 0 (catalog skeleton). Real catalog CI lands in Phase 1."
-          echo "See README.md for the rollout map."
+      - name: Checkout
+        # actions/checkout v4.3.1 (= pin matches TenkaCloud main repo)
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Setup Bun
+        # oven-sh/setup-bun v2.0.2 (= pin matches TenkaCloud main repo)
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: "1.3.11"
+
+      - name: Install deps
+        run: bun install --ignore-scripts
+
+      - name: Validate problem catalog
+        run: bun run validate
