@@ -46,8 +46,7 @@ Resources:
       # `aws login` (2025-11) OAuth2 flow returns HTTP 400 unless the assumed
       # role can call signin:* on its own oauth2/public-client/{localhost,remote}
       # resources. SignInLocalDevelopmentAccess is the AWS-managed policy that
-      # scopes those permissions narrowly -- no access to SSM / IAM / other
-      # tenants, so ADR-021 multi-tenant isolation is unaffected.
+      # scopes those permissions narrowly (= the minimal set AWS endorses).
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
       Policies:
@@ -70,6 +69,24 @@ Resources:
                   # GetParametersByPath is resource-scopable via path-prefix ARN.
                   - ssm:GetParametersByPath
                 Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              # CloudShell session lifecycle. Deliberately narrower than the
+              # AWS-managed AWSCloudShellFullAccess (which grants cloudshell:*):
+              # only the actions an interactive open / use / close cycle calls,
+              # plus credential rotation. File upload / download
+              # (cloudshell:GetFile{Upload,Download}Urls) is omitted -- the
+              # problem doesn't need it. CloudShell environments are per-identity
+              # so resource:* is the only practical scope for these actions.
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
 
   HelloParameter:
     Type: AWS::SSM::Parameter
