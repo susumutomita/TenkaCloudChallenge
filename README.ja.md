@@ -2,71 +2,127 @@
 
 > English: [README.md](./README.md)
 
-[TenkaCloud](https://github.com/susumutomita/TenkaCloud) プラットフォームの**競技問題ライブラリ**。 platform 本体 repo (CDK / Lambda / 3 SPA) は本 repo を **git submodule として `problems/` 配下に mount** し、 `make deploy` で source.zip に同梱して配信します。 問題作成者はプラットフォーム repo を clone せず、 本 repo だけで問題を追加できます。
+[![CI](https://github.com/susumutomita/TenkaCloudChallenge/actions/workflows/ci.yml/badge.svg)](https://github.com/susumutomita/TenkaCloudChallenge/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/github/license/susumutomita/TenkaCloudChallenge)](./LICENSE)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#コントリビュート)
+[![Bun](https://img.shields.io/badge/Bun-1.3.11-black?logo=bun)](https://bun.sh)
+[![AWS CloudFormation](https://img.shields.io/badge/AWS-CloudFormation-orange?logo=amazonaws)](https://aws.amazon.com/cloudformation/)
 
-> **このリポジトリは現在 public です。** 後続で「答え」「spoiler」 を含む問題を追加するなら、 別の private repo を立てて ChallengePayloadStack の S3 経路で配信する設計を取ってください (= ADR-008 経路)。 本 repo は **ベース問題セット** (= プラットフォームに同梱しても OSS 可能な公開問題) を持ちます。
+> **[TenkaCloud](https://github.com/susumutomita/TenkaCloud) プラットフォーム公式の問題ライブラリ** — 実 AWS アカウント上で動く競技問題 (CTF / SRE / migration) を CloudFormation で deploy する。
 
-## 関連 ADR (platform 側)
+TenkaCloud は実 AWS で動くリアルタイム **Battle** と個別演習 **Challenge** をホストするプラットフォームです。 本 repo は問題本体の OSS カタログで、 1 ディレクトリ = 1 問題。 platform 本体は本 repo を git submodule として mount し、 `source.zip` に同梱して各問題の `template.yaml` を競技者アカウントに deploy します。 **新問題は本 repo の PR だけで追加できます** — platform 本体の repo は触らなくて OK。
 
-- [ADR-008](https://github.com/susumutomita/TenkaCloud/blob/main/docs/architecture/) — private 問題 payload 分離 (= 追加問題向け S3 経路)
-- [ADR-010](https://github.com/susumutomita/TenkaCloud/blob/main/docs/architecture/adr-010-api-first-cli-mcp.html) — operator 経路を API-first に
-- [ADR-012](https://github.com/susumutomita/TenkaCloud/blob/main/docs/architecture/adr-012-problem-plugin-architecture.html) — 1 問題 = plugin (3-asset model: metadata.json + template.yaml + 任意 portal/services)
+## ✨ なぜ本 repo があるか
 
-## ディレクトリ構造
+- **platform 知識ゼロでも問題を書ける**。 必要なのは `metadata.json` + `template.yaml` (+ 任意の portal slot UI と side services) だけ。 scoring / portal 表示 / disruption schedule は platform 側が metadata から generic に駆動する。
+- **正本は 1 つ**。 `metadata.json` がカタログ UI、 scoring engine、 portal plugin の wiring を全部駆動する。 platform 側は generic dispatcher (ADR-012)。
+- **CI で schema 検証**。 push / PR ごとに [`SCHEMA.json`](./SCHEMA.json) で全問題を validate。
+- **OSS 前提**。 本 repo は MIT で配布する **ベース問題セット**。 答え / spoiler を含む問題は別 private repo に置いて ADR-008 の S3 経路で配信する。
 
-本 repo の root が `problems/` 相当 (= 本体 submodule mount 先と一致)。
+## 📦 現在のカタログ
+
+| 問題                                                                                                     | カテゴリ  | 難易度     | 所要時間  | Scoring          |
+| -------------------------------------------------------------------------------------------------------- | --------- | ---------- | --------- | ---------------- |
+| [`hello-world`](./challenges/hello-world/)                                                               | Challenge | ⭐         | 1 分      | `flag`           |
+| [`hello-world-battle`](./battles/hello-world-battle/)                                                    | Battle    | ⭐         | 30 分     | `uptime`         |
+| [`security-battle-royale`](./battles/security-battle-royale/)                                            | Battle    | ⭐⭐⭐     | 60–90 分  | `uptime-multi`   |
+| [`microservice-migration-battle`](./battles/microservice-migration-battle/)                              | Battle    | ⭐⭐⭐⭐   | 90–120 分 | `phased-polling` |
+| [`stackstack`](./battles/stackstack/)                                                                    | Battle    | ⭐⭐⭐⭐   | 90–120 分 | `phased-polling` |
+
+各問題は per-problem README (英語 primary + 日本語 mirror) を持ち、 ストーリー / 解き方 / 学習目的が書いてある。
+
+## 🚀 クイックスタート
+
+```bash
+# 1. Bun を入れる (初回のみ)
+curl -fsSL https://bun.sh/install | bash
+
+# 2. clone + install
+git clone https://github.com/susumutomita/TenkaCloudChallenge.git
+cd TenkaCloudChallenge
+bun install
+
+# 3. 全問題を schema + cross-ref で validate
+bun run validate
+```
+
+これだけで問題作成に必要な環境は揃う。 AWS credentials は **platform** (CDK / Lambda) を動かすときだけ必要で、 本 repo の catalog 作業では不要。
+
+## ➕ 新しい問題を追加する
+
+1. **ディレクトリを作る**。 `<category>/<id>/` (= `<category>` は `battles` / `challenges`、 `<id>` は lowercase kebab-case)。
+2. **`metadata.json` を書く**。 [`SCHEMA.json`](./SCHEMA.json) に準拠。 既存問題が動く reference。 主キー: `id` / `name` / `category` / `difficulty` / `scoring` / `endpoints` / `disruptions`。
+3. **`template.yaml` を書く**。 CFn ペライチ (deploy 本体)。 必須パラメータ (`NamePrefix` / `TenkaCloudAccountId` / `ExternalId`) と必須 IAM Role (`ParticipantViewerRole`) を含める。
+4. **(任意) `portal/<slot>.tsx`** で participant portal に問題固有 UI を差し込み、 **`services/`** で template が pull してくる docker-compose / Lambda code を置く (例: EC2 UserData から fetch)。
+5. **ローカルで `bun run validate`** → PR → レビュー → main マージ。
+
+platform repo の maintainer が submodule pointer を更新すると、 次の `make deploy` で deploy される。
+
+> Schema 詳解と worked example は [`CATALOG.md`](./CATALOG.md) を参照。
+
+## 🏗️ リポジトリ構造
 
 ```
 .
 ├── battles/                       # Battle (リアルタイム対戦)
 │   └── <id>/
-│       ├── metadata.json
-│       ├── template.yaml
-│       ├── portal/                # 任意: <slot>.tsx (= participant portal の差し込み UI)
-│       └── services/              # 任意: 問題固有の実装 (= docker-compose / Lambda code 等)
+│       ├── metadata.json          # 正本 (catalog + scoring + portal wiring)
+│       ├── template.yaml          # CFn ペライチ (deploy 本体)
+│       ├── portal/                # 任意: <slot>.tsx (participant portal UI)
+│       └── services/              # 任意: docker-compose / Lambda code
 ├── challenges/                    # Challenge (個別演習)
 │   └── <id>/
 │       ├── metadata.json
 │       └── template.yaml
-├── SCHEMA.json                    # metadata.json JSON Schema (= 本体 repo と同期)
-├── index.json                     # catalog 一覧 (= 全 metadata から build される)
-├── CATALOG.md / CATALOG.ja.md     # カタログ ドキュメント (= 本体 problems/README.md と同期)
-├── scripts/validate-problems.ts   # ローカル + CI で metadata + cross-ref を validate
-├── package.json + bun.lock        # ajv 等 catalog CI の依存
-└── .github/workflows/ci.yml       # validate を GitHub Actions で走らせる
+├── SCHEMA.json                    # metadata.json の JSON Schema (本体 repo と同期)
+├── index.json                     # カタログ index (全 metadata から build)
+├── CATALOG.md                     # カタログ docs + schema walkthrough
+├── scripts/validate-problems.ts   # local + CI validator
+└── .github/workflows/ci.yml       # schema + cross-ref CI
 ```
 
-1 つの問題ディレクトリは ADR-012 thick metadata DSL で書く。 schema は [`SCHEMA.json`](./SCHEMA.json) (本体 repo と同期)。
-
-## 配信フロー
+## 🔄 配信フロー
 
 ```
-[contributor] PR で battles/<id>/ or challenges/<id>/ を更新
+[contributor] PR で問題を追加 / 更新
        │
        ▼
-[main マージ]
+[main マージ] CI が `bun run validate` を全 metadata.json に対して走らせる
        │
        ▼
-[platform repo (= TenkaCloud) 側で submodule pointer を更新]
+[platform repo (= TenkaCloud) が submodule pointer を更新]
        │   git submodule update --remote problems
-       │   git add problems && git commit
+       │
        ▼
-[make deploy] prepare-source-bundle.sh が `problems/` 配下 (= 本 repo の中身) を
-       source.zip に同梱 → S3 → CodeBuild が local-path で template.yaml を deploy
+[make deploy] prepare-source-bundle.sh が `problems/` を
+       source.zip に同梱 → S3 → CodeBuild が template.yaml を deploy
 ```
 
-submodule pointer 更新は platform repo の maintainer 操作。 自動化したい場合は GitHub Actions で `git submodule update --remote` → PR 経路 (= 旧 `catalog-pr.yml`) を追加で組む。
+## 🧠 アーキテクチャ参照 (platform 側)
 
-## 新しい問題を追加するとき
+これらの ADR は [platform repo](https://github.com/susumutomita/TenkaCloud) にあり、 本 repo が plug-in する runtime 契約を定義する:
 
-1. `<category>/<id>/metadata.json` を [`SCHEMA.json`](./SCHEMA.json) に準拠して書く。
-2. `template.yaml` (CFn ペライチ) を書く。 必須パラメータ (`NamePrefix` / `TenkaCloudAccountId` / `ExternalId`) と必須 IAM Role (`ParticipantViewerRole`) を含める。
-3. 必要なら `portal/<slot>.tsx` / `services/` を追加。
-4. ローカルで `bun run validate` (= 本 repo) で schema + cross-ref を pass。
-5. PR レビュー後 main にマージ → platform repo の maintainer が submodule pointer を更新。
+- **ADR-008** — private 問題 payload 分離 (= spoiler を含む追加問題向け S3 経路)
+- **ADR-010** — operator 経路を API-first に (CLI / MCP)
+- **ADR-012** — 1 問題 = 1 plugin (3-asset model: `metadata.json` + `template.yaml` + 任意 `portal/services`)
 
-雛形生成は本体 repo の `/create-problem` Claude Code skill か `bun run scripts/tenkacloud-problem.ts create <id> --kind <kind>` を使う (= 雛形 CLI は platform 側に残す)。
+## 🤝 コントリビュート
 
-## 関連
+PR 歓迎 — 特に新問題 / schema 修正 / 英語ドキュメント整備。
 
-- 本体 repo: <https://github.com/susumutomita/TenkaCloud>
+- PR を出す前にローカルで `bun run validate` が green になることを確認。
+- `metadata.json` は top-level を日本語、 英語は `i18n.en` に置く (= platform の locale fallback chain は `en → ja → top-level`)。 README は英語 primary + `README.ja.md` mirror。
+- 1 PR = 1 問題が review しやすい。
+- 新しい scoring kind / portal slot を導入する問題は、 platform 側に変更が必要になるので先に Issue で相談。
+
+詳しい authoring 契約は [`CATALOG.md`](./CATALOG.md) を参照。
+
+## 📜 ライセンス
+
+[MIT](./LICENSE) — 問題本体も tooling も MIT。 spoiler を含む問題を配信する場合は private repo に置いて ADR-008 の S3 経路で配信する。
+
+## 🔗 関連
+
+- **Platform repo (CDK / Lambda / 3 SPAs):** <https://github.com/susumutomita/TenkaCloud>
+- **JSON Schema:** [`SCHEMA.json`](./SCHEMA.json)
+- **カタログ詳解:** [`CATALOG.md`](./CATALOG.md)
