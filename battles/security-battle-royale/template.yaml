@@ -162,11 +162,32 @@ Resources:
               StringEquals:
                 sts:ExternalId: !Ref ExternalId
       MaxSessionDuration: 3600
+      # Participant access baseline (same across every problem in this catalog):
+      #   * SignInLocalDevelopmentAccess -- `aws login` (2025-11) OAuth2 flow
+      #     needs signin:* on the role's own oauth2/public-client/{localhost,remote}.
+      #     AWS-managed policy scoped narrowly to exactly that.
+      #   * cloudshell:* allow-list (in ProblemSpecific below) -- browser shell
+      #     with this role's creds. Resource:* is unavoidable (envs are per-identity);
+      #     action set narrowed to the interactive open / use / close + creds-rotation.
+      # Both are validated by scripts/validate-problems.ts; do not remove.
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
       Policies:
         - PolicyName: ProblemSpecific
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
               # Issue #1038 P2 #10: see microservice-migration-battle for full rationale.
               # ec2:Describe* doesn't accept resource ARNs; scope by tag instead.
               - Sid: ConsoleEc2Describe

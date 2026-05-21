@@ -69,7 +69,48 @@ function checkCrossRefs(metaPath: string, meta: Metadata): ValidationError[] {
     ...checkScoringOutputRefs(meta, yaml, cfnTemplate),
     ...checkEndpointOutputRefs(meta, yaml, cfnTemplate),
     ...checkDashboardSlotFiles(meta, dir),
+    ...checkParticipantBaseline(yaml, cfnTemplate),
   ];
+}
+
+/**
+ * 全問題テンプレ共通のアクセス baseline を ParticipantViewerRole が持っていることを検査する。
+ *   - SignInLocalDevelopmentAccess (AWS-managed) — `aws login` (2025-11) OAuth2 用
+ *   - cloudshell の対話セッション系 7 actions — Browser CloudShell 用
+ * 抜けていると参加者が "デプロイ後にアクセスできない" 状態になるので deploy 前に止める。
+ * 各値が YAML list item として実際に使われていることまでチェック (`#` でコメントアウト
+ * した状態を弾く)。 baseline の文言を変えるならこのリストと全テンプレ両方を同時に更新する。
+ */
+function checkParticipantBaseline(yaml: string, cfnTemplate: string): ValidationError[] {
+  const errors: ValidationError[] = [];
+  const signInArn = "arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess";
+  const cloudshellActions = [
+    "cloudshell:CreateEnvironment",
+    "cloudshell:CreateSession",
+    "cloudshell:GetEnvironmentStatus",
+    "cloudshell:StartEnvironment",
+    "cloudshell:StopEnvironment",
+    "cloudshell:DeleteEnvironment",
+    "cloudshell:PutCredentials",
+  ];
+  if (!hasYamlListItem(yaml, signInArn)) {
+    errors.push(
+      `${cfnTemplate}: ParticipantViewerRole.ManagedPolicyArns must include ${signInArn} (= aws login OAuth2)`,
+    );
+  }
+  const missingActions = cloudshellActions.filter((a) => !hasYamlListItem(yaml, a));
+  if (missingActions.length > 0) {
+    errors.push(
+      `${cfnTemplate}: ParticipantViewerRole is missing CloudShell baseline actions: ${missingActions.join(", ")}`,
+    );
+  }
+  return errors;
+}
+
+/** 行頭〜空白 → `- ` → exact value で始まる YAML list item があるかを判定。 */
+function hasYamlListItem(yaml: string, value: string): boolean {
+  const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^\\s*-\\s+${escaped}(\\s|$)`, "m").test(yaml);
 }
 
 function checkScoringOutputRefs(
