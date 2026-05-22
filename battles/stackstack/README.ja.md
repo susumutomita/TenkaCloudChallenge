@@ -2,87 +2,112 @@
 
 > English: [README.md](./README.md)
 
-生成 AI で誰でもアプリを作れる時代の **AI → Production ラストワンマイル** を競技化する Battle。 コードを書く速さでも CTF でもなく、 Platform Team として「速く・安全に・統制下で」社内公開する能力を競う。
+天下クラウド株式会社 Platform Team、 月初の朝会。 加藤さんは先月辞めた。 引き継ぎ書は薄い。 一方で社内 100 人の AI Builder が Claude で量産したアプリが、 Platform チームのキューに積まれている。 5 つの統制軸 (auth / network / rate / audit / ux) はどれも未整備、 EC2 1 台に同居して動いている。
+
+> 佐々木 CTO 曰く: 「これ、 公開していい状態に持っていって。 AI が書いた速さに、 Platform チームが追いつけてない。 他チームの Platform もみんな焦ってる」
+
+君の仕事は次の 90〜120 分。 5 slot を順に managed runtime (Lambda + API GW / ECS Fargate / App Runner) に切り出し、 Participant Portal の Endpoint Override に新 URL を貼って加点を 100 → 1000 pt/cycle に上げていく。 きれいに分割した Platform Team が勝つ。
+
+## 競技概要
 
 | 項目         | 値                                                                                                  |
 | ------------ | --------------------------------------------------------------------------------------------------- |
 | カテゴリ     | Battle (リアルタイム対戦)                                                                           |
 | 難易度       | 4 / 5                                                                                               |
 | 想定時間     | 90〜120 分                                                                                          |
-| status       | `draft`                                                                                             |
-| 採点方式     | `phased-polling` (EC2 = 100pt / managed = 1,000pt / 全 slot managed bonus = +5,000pt one-time)      |
+| 採点方式     | `phased-polling` - EC2 = 100 pt / managed = 1,000 pt / 全 managed 移行 bonus +30,000 pt (1 回)     |
 
-## 何をする問題か
+## 5 統制軸 (= 5 endpoint slot)
 
-参加者は企業の Platform Team として、 社内 100 人の AI Builder が量産する脆弱なアプリを 5 つの統制軸 (Security / Network / Rate / Audit / UX availability) で本番品質に持ち上げる。 単純な速度競争ではなく、 5 軸の総合バランス + ランダム組織イベント (CEO 5000 人デモ要求 / Legal の PII 指摘 / .env 流出 / AI が秘密鍵を commit 等) への対応で勝敗が決まる。
+| slot      | 統制軸                              | 初期状態                            | hardened                                        |
+| --------- | ----------------------------------- | ----------------------------------- | ----------------------------------------------- |
+| `auth`    | Authentication / Authorization      | naive Basic auth (EC2)              | Cognito / SSO via managed runtime               |
+| `network` | Network controls (S3 / WAF / IAM)   | Public S3 + wildcard IAM            | OAC + scoped IAM                                |
+| `rate`    | Rate limit / DoS protection         | 無制限の Flask                      | API GW throttle / Lambda concurrency cap        |
+| `audit`   | Logging / Compliance                | 標準出力のみ                        | CloudTrail + Athena + WORM bucket               |
+| `ux`      | User-facing availability            | EC2 1 台                            | Multi-AZ + ALB + Auto Scaling                   |
 
-## 5 つの統制軸 (= 5 endpoint slot)
+各 slot は `GET /meta` で現在の hosting を自己申告。 初期 deploy では全 slot が `ec2` を返し低スコア (100 pt/cycle/slot)。 managed runtime に再ホストして `/meta` が `lambda` / `ecs` / `apprunner` を返し始めると、 加点が 1000 pt/cycle に上がる。
 
-| slot      | 統制軸                                  | 初期状態                              | hardened 状態                                  |
-| --------- | --------------------------------------- | ------------------------------------- | ---------------------------------------------- |
-| `auth`    | Authentication / Authorization          | EC2 上の naive Basic auth (`ec2`)     | Cognito / SSO 統合 (Lambda+API GW / App Runner / ECS) |
-| `network` | Network controls (S3 / WAF / IAM)       | Public S3 + wildcard IAM (`ec2`)      | Origin Access Control + scoped IAM (managed)   |
-| `rate`    | Rate limit / DoS protection             | 無制限の Flask (`ec2`)                | API GW throttle / Lambda concurrency (managed) |
-| `audit`   | Logging / Compliance                    | 標準出力のみ (`ec2`)                  | CloudTrail + Athena + WORM bucket (managed)    |
-| `ux`      | User-facing availability                | EC2 1 台 (`ec2`)                      | Multi-AZ + ALB + Auto Scaling (managed)        |
+## デプロイされるもの
 
-各 slot は `/meta` で hosting platform を自己申告する。 deploy 直後は全 slot が `"ec2"` を返し低スコア (100 pt/cycle/slot)。 Lambda+API GW / ECS Fargate / App Runner に切り出して endpoint を override 登録すると `/meta` が `"lambda" | "ecs" | "apprunner"` を返し、 加点が 1,000 pt/cycle/slot にジャンプする。
+各チームの AWS アカウントに 1 つの CloudFormation スタック:
+
+```text
+┌── EC2 (Amazon Linux 2023, t3.small) ─────────────────────────────┐
+│  nginx :80                                                       │
+│    │                                                              │
+│    ├─ /auth/*    → 127.0.0.1:8081  (Python systemd、 自己申告 ec2) │
+│    ├─ /network/* → 127.0.0.1:8082  (Python systemd、 自己申告 ec2) │
+│    ├─ /rate/*    → 127.0.0.1:8083  (Python systemd、 自己申告 ec2) │
+│    ├─ /audit/*   → 127.0.0.1:8084  (Python systemd、 自己申告 ec2) │
+│    └─ /ux/*      → 127.0.0.1:8085  (Python systemd、 自己申告 ec2) │
+└──────────────────────────────────────────────────────────────────┘
+        ▲
+        │ Score engine が 1 分毎に /<slot>/meta + /<slot>/score を probe
+        │ slot 毎の effective URL = portal override ?? CFn Output (BaseUrl + /<slot>)
+```
+
+## 競技フロー
+
+1. **Deploy 直後は EC2 同居 5-slot monolith**。 stack Outputs から `BaseUrl` (= EC2 public DNS) を取得。
+2. **5 slot 全てに `BaseUrl` を貼る** (Participant Portal の Endpoint Override パネル)。 score engine が probe 開始 → 加点が始まる。
+3. **1 つの slot を切り出す**。 同じ `/meta` (= `{platform: "lambda"|"ecs"|"apprunner", slot: ...}`) と `/score` (= 200 JSON) を返す最小サービスを書き、 Lambda + API GW / ECS Fargate / App Runner のいずれかに deploy する。
+4. **そ slot の override URL を新 managed endpoint に切替**。 `/meta` の自己申告が変わるので、 score engine が managed tier 加点に切替える。
+5. **時計と勝負する**。 30 分で production-ramp phase、 60 分で compliance-audit、 90 分で incident-response が来る。 5 slot 全部 managed なら +30,000 pt の bonus が 1 回入る。
 
 ## 時間進行 (phases)
 
-| 時刻       | phase                | 内容                                                                                                  |
-| ---------- | -------------------- | ----------------------------------------------------------------------------------------------------- |
-| 0 分       | start                | 全 slot が EC2 上に naive deploy (~500 pt/min ベース)                                                 |
-| 30 分      | production-ramp      | `ux` slot が EC2 のままだと degradedPoints (10 pt) に劣化 (= CEO 5000 人デモに間に合わなかった状態)   |
-| 60 分      | compliance-audit     | `audit` slot が EC2 のままだと degradedPoints (= Legal 監査に間に合わなかった状態)                    |
-| 90 分      | incident-response    | 全 slot で `/score?legacy=true` に切替。 AI Builder が混入させた legacy path を取り除いて再 deploy が必要 |
+| 時刻   | phase              | 内容                                                                                                    |
+| ------ | ------------------ | ------------------------------------------------------------------------------------------------------- |
+| 0 分   | start              | 全 slot が EC2 同居、 baseline ≈ 500 pt/min (= 全 slot 登録済の場合)                                    |
+| 30 分  | production-ramp    | EC2 のまま残っている **全 slot** が degradedPoints (10 pt) に切替。 「公開期限を逃した」 シミュレーション |
+| 60 分  | compliance-audit   | 同じ engine effect が累積。 「Legal の PII 監査に間に合わなかった」 文脈                                |
+| 90 分  | incident-response  | score engine が `/score?legacy=true` を probe。 slow path (= 2 秒 sleep) を取り除いて再 deploy しないと応答時間ペナルティが累積 |
+
+各 phase は EC2 のまま残っている **全 slot に対して** 効く。 「ux だけ移して残り 4 slot は EC2 のまま」 だと 30 分後に 4 slot が一斉に degrade する設計。
 
 ## ランダム組織イベント (disruptions)
 
-operator が任意タイミングで fire できる。
+operator が任意 fire (= 競技者は制御できない):
 
-| id                    | name                              | 影響                                              |
-| --------------------- | --------------------------------- | ------------------------------------------------- |
-| `ceo-5000-users`      | CEO が明日 5000 人デモを要求      | `ux` slot が EC2 上にある間 -500 pt/cycle         |
-| `mfa-mandate`         | Security Team が MFA 必須化       | `auth` slot が ec2 のまま 10 分超 → 失格扱い      |
-| `legal-pii-found`     | Legal が PII 検出                 | `audit` slot が ec2 のまま -500 pt/cycle          |
-| `env-credential-leak` | .env 流出                         | `auth` slot を 5 分間 503 (= failurePenalty 連発) |
-| `ai-committed-secret` | Claude が秘密鍵を Git commit      | `network` + `audit` の 2 slot を 3 分間 503        |
+| id                    | name                              | 影響                                                  |
+| --------------------- | --------------------------------- | ------------------------------------------------------- |
+| `ceo-5000-users`      | CEO が明日 5000 人デモを要求      | `ux` slot が EC2 のまま稼働している cycle に追加減点    |
+| `mfa-mandate`         | Security Team が MFA 必須化       | `auth` slot が EC2 のまま稼働している cycle に追加減点 |
+| `legal-pii-found`     | Legal が PII 検出                 | `audit` slot が EC2 のまま稼働している cycle に追加減点 |
+| `env-credential-leak` | `.env` 流出                       | `auth` slot を 5 分間 503 (= 加点 0 が 5 cycle)        |
+| `ai-committed-secret` | Claude が秘密鍵を git commit      | `network` + `audit` を 3 分間 503                       |
 
-## 全 4 platform 移行ボーナス
+## 全 managed 移行ボーナス
 
-全 5 slot が `lambda` / `ecs` / `apprunner` のいずれかにホスティング済みなら **+5,000 pt one-time bonus** (`"production-ready"` 認定)。 ec2 が 1 つでも残っていれば bonus は付かない。
+5 slot 全てが `lambda` / `ecs` / `apprunner` のいずれかに乗ると **+30,000 pt** が 1 回入る (= 'production-ready' 認定)。 1 つでも EC2 が残っていると bonus は付かない。 部分移行で稼ぐ戦略より、 全 slot 完走を狙った方が点が伸びる設計。
 
-## Phase 1 / Phase 2 スコープ
+## 自分で作るもの
 
-### Phase 1 (= 本 problem の現状)
+`services/` scaffold は意図的に同梱していない。 各 slot の managed runtime 用サービスを書くこと自体が課題の一部 (= AI Builder も scaffold を残してくれない)。 必要な契約は:
 
-- ✅ 個別チームの「naive AI アプリを 5 軸でハードニングする」mechanics は phased-polling kind の既存 engine で動く
-- ✅ ランダム組織イベント catalog は `disruptions[]` で宣言済み (operator fire)
-- ✅ 5 軸 subscore display は `dashboard.slots/StatusPanel.tsx`
+- `GET /meta` → `{ "platform": "lambda" | "ecs" | "apprunner", "slot": "<slot-name>" }`
+- `GET /score` → 任意 JSON で 200
+- score engine から到達可能 (= public URL、 または到達できる private URL)
 
-### Phase 2 (= platform 拡張が必要)
+EC2 上の参照実装は `template.yaml` UserData の Python stub。
 
-以下は今日の platform にプリミティブが無く、 別 ADR / 別 PR で扱う。
+## コスト
 
-- **inter-team coordination plugin** (ADR-022): 問題ごとに他チーム interaction の primitive が違う (microservice-migration の service router / security-battle-royale の同盟 / その他)。 platform にこの coordination 機構を 1 つ hardcode せず、 問題が宣言した primitive を platform が dispatch する plugin 契約を ADR-022 で定義する。 StackStack の inter-team primitive は ADR-022 ship 後に declare する。
-- **AI Agent 利用 / Platform 利用ステータス**: 競技者 portal から trigger する操作系。 portal plugin SDK の拡張が必要。
+- EC2 t3.small × 2h ≈ $0.04
+- 自分で立てる managed runtime: 立てた数に比例。 終了 1 時間以内に削除すれば < $2
+- 通信費: 微小
 
-### やらないこと (= 明示却下)
+`aws cloudformation delete-stack` + 自分で作った Lambda / ECS / App Runner / ECR / API GW を手動 sweep。
 
-- **tenant 横断 shared resource registry** (SSO Proxy 2 slot 先着 / Security Review 待ち行列 / Claude API quota): security 設計の難度が現 platform の整備状況と釣り合わないため Phase 2 計画から外す。
+## operator 向け
 
-Phase 1 だけでも StackStack の中核 (5 軸 + ランダムイベント + 時間進行) は体験できる。
-
-## 学習目的
-
-- AI で量産されたアプリを 5 つの統制軸 (auth / network / rate / audit / ux) で本番化する判断と順序付けを体験する
-- managed services (Lambda / ECS / App Runner) への移行が hardening をどう自動で底上げするかを理解する
-- ランダム組織イベント (CEO 要求 / Legal 監査 / .env 流出) の発火下で優先度を再評価する Platform Team の意思決定を訓練する
-- Phase 2 (inter-team coordination plugin = ADR-022) と Phase 1 (個別チームの hardening) の境界を見極め、 platform 拡張要求を ADR として言語化する
+[OPERATOR.md](./OPERATOR.md) - 発火スケジュール、 deploy smoke test、 6 チーム同時開催の注意点。
 
 ## 関連ファイル
 
-- [`metadata.json`](./metadata.json) — 問題メタデータ (5 slot / scoring / phases / disruptions 正本)
+- [`metadata.json`](./metadata.json) — 問題メタデータ (slot / scoring / phase / disruption の正本)
 - [`template.yaml`](./template.yaml) — CFn ペライチ
-- [`portal/StatusPanel.tsx`](./portal/StatusPanel.tsx) — 5 軸 subscore + phase + disruption を表示する dashboard plugin
+- [`portal/StatusPanel.tsx`](./portal/StatusPanel.tsx) — 5-axis subscore + phase + disruption を可視化する dashboard plugin
+- [`OPERATOR.md`](./OPERATOR.md) — 運用 runbook

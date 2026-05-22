@@ -1,12 +1,12 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
-  TenkaCloud problem -- microservice-migration-battle (Phase 1).
+  TenkaCloud problem -- microservice-migration-battle.
   Single EC2 (Amazon Linux 2023, t3.small) running 3 Node.js + Hono services
   (users / orders / catalog) behind an nginx reverse proxy on port 80. Competitors
-  split this monolith into Lambda + API Gateway / ECS Fargate / App Runner
-  during a timed Battle. Phase 1 ships only the EC2 monolith; Phase 2 adds the
-  score engine + EC2 degradation + legacy switch, and Phase 3 adds the
-  endpoint registration UI.
+  peel each service off the box and re-host it onto Lambda + API Gateway,
+  ECS Fargate, or App Runner during a 90-120 min Battle. The score engine,
+  phase progression, and the EC2 degradation disruption are all driven by
+  metadata.json + this template (no follow-up PR required).
 
   So multiple teams' problem stacks can coexist in the same (Account, Region),
   every resource name is prefixed with ${NamePrefix} (= "tc-{problemSlug}-{teamSlug}",
@@ -42,12 +42,15 @@ Parameters:
     Description: SSM-backed Amazon Linux 2023 AMI (auto-resolved).
   RepoUrl:
     Type: String
-    Default: https://github.com/susumutomita/TenkaCloud.git
-    Description: Problem source origin (assumes a public GitHub repository).
+    Default: https://github.com/susumutomita/TenkaCloudChallenge.git
+    Description: >
+      OSS catalog repo (this repo) that ships the per-service Dockerfiles and
+      docker-compose.yml. The default points at the public catalog so a fresh
+      deploy works without submodule init / private credentials.
   RepoRef:
     Type: String
     Default: main
-    Description: branch / tag / commit to check out.
+    Description: branch / tag / commit to check out from RepoUrl.
   DegradedAfterMinutes:
     Type: Number
     Default: 60
@@ -432,6 +435,139 @@ Resources:
                   - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/apprunner/${NamePrefix}*:*"
                   - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/ecs/${NamePrefix}*"
                   - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/ecs/${NamePrefix}*:*"
+              # ===== ECS Fargate path completion =====
+              # The problem advertises Lambda + API GW / ECS Fargate / App Runner
+              # as the three hosting tiers. ECS Fargate needs a security group
+              # that opens the container port and (typically) an ALB to expose a
+              # stable URL. The grants below close that path.
+              - Sid: CreateOwnSecurityGroup
+                Effect: Allow
+                Action: ec2:CreateSecurityGroup
+                Resource:
+                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*"
+                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:vpc/*"
+                Condition:
+                  StringEquals:
+                    aws:RequestTag/TenkaCloud:NamePrefix: !Ref NamePrefix
+              - Sid: ModifyOwnSecurityGroups
+                Effect: Allow
+                Action:
+                  - ec2:AuthorizeSecurityGroupIngress
+                  - ec2:RevokeSecurityGroupIngress
+                  - ec2:AuthorizeSecurityGroupEgress
+                  - ec2:RevokeSecurityGroupEgress
+                  - ec2:DeleteSecurityGroup
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/TenkaCloud:NamePrefix: !Ref NamePrefix
+              - Sid: TagOwnEc2Resources
+                Effect: Allow
+                Action: ec2:CreateTags
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:RequestTag/TenkaCloud:NamePrefix: !Ref NamePrefix
+              - Sid: ManageOwnLoadBalancers
+                Effect: Allow
+                Action:
+                  - elasticloadbalancing:CreateLoadBalancer
+                  - elasticloadbalancing:DeleteLoadBalancer
+                  - elasticloadbalancing:ModifyLoadBalancerAttributes
+                  - elasticloadbalancing:CreateTargetGroup
+                  - elasticloadbalancing:DeleteTargetGroup
+                  - elasticloadbalancing:ModifyTargetGroup
+                  - elasticloadbalancing:ModifyTargetGroupAttributes
+                  - elasticloadbalancing:RegisterTargets
+                  - elasticloadbalancing:DeregisterTargets
+                  - elasticloadbalancing:CreateListener
+                  - elasticloadbalancing:DeleteListener
+                  - elasticloadbalancing:ModifyListener
+                  - elasticloadbalancing:CreateRule
+                  - elasticloadbalancing:DeleteRule
+                  - elasticloadbalancing:ModifyRule
+                  - elasticloadbalancing:AddTags
+                  - elasticloadbalancing:RemoveTags
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/TenkaCloud:NamePrefix: !Ref NamePrefix
+              - Sid: ReadLoadBalancerState
+                Effect: Allow
+                Action:
+                  - elasticloadbalancing:DescribeLoadBalancers
+                  - elasticloadbalancing:DescribeTargetGroups
+                  - elasticloadbalancing:DescribeListeners
+                  - elasticloadbalancing:DescribeRules
+                  - elasticloadbalancing:DescribeTargetHealth
+                  - elasticloadbalancing:DescribeTags
+                  - elasticloadbalancing:DescribeLoadBalancerAttributes
+                  - elasticloadbalancing:DescribeTargetGroupAttributes
+                  - elasticloadbalancing:DescribeAccountLimits
+                Resource: "*"
+              # ===== Console-navigation list permissions =====
+              # ADR-021 originally forbade list-style actions on Resource:* to keep
+              # cross-tenant resource names private inside a shared account. That
+              # breaks the Console workflow players use during a 90-min Battle
+              # (Lambda / ECS / App Runner consoles all open by listing). For
+              # this problem we accept name visibility as a tradeoff for Console
+              # UX; ACCESS to cross-tenant resources remains blocked by the
+              # ARN-scoped grants above.
+              - Sid: ConsoleListLambda
+                Effect: Allow
+                Action:
+                  - lambda:ListFunctions
+                  - lambda:ListLayers
+                  - lambda:ListFunctionUrlConfigs
+                  - lambda:ListTags
+                Resource: "*"
+              - Sid: ConsoleListEcs
+                Effect: Allow
+                Action:
+                  - ecs:ListClusters
+                  - ecs:ListServices
+                  - ecs:ListTasks
+                  - ecs:ListTaskDefinitions
+                  - ecs:ListTaskDefinitionFamilies
+                  - ecs:ListAccountSettings
+                Resource: "*"
+              - Sid: ConsoleListAppRunner
+                Effect: Allow
+                Action:
+                  - apprunner:ListServices
+                  - apprunner:ListOperations
+                  - apprunner:ListTagsForResource
+                Resource: "*"
+              - Sid: ConsoleListEcr
+                Effect: Allow
+                Action:
+                  - ecr:DescribeRepositories
+                  - ecr:DescribeImages
+                  - ecr:ListImages
+                  - ecr:ListTagsForResource
+                Resource: "*"
+              - Sid: ConsoleListLogs
+                Effect: Allow
+                Action:
+                  - logs:DescribeLogGroups
+                Resource: "*"
+              - Sid: ConsoleListIamRoles
+                # Console role-picker (Lambda / ECS / App Runner) needs ListRoles
+                # to populate.
+                Effect: Allow
+                Action:
+                  - iam:ListRoles
+                  - iam:ListAttachedRolePolicies
+                  - iam:ListRolePolicies
+                  - iam:ListPolicies
+                Resource: "*"
+              - Sid: ConsoleListApiGatewayAccount
+                Effect: Allow
+                Action:
+                  - apigateway:GET
+                Resource:
+                  - !Sub "arn:aws:apigateway:${AWS::Region}::/account"
+                  - !Sub "arn:aws:apigateway:${AWS::Region}::/usage"
 
   InstanceRole:
     Type: AWS::IAM::Role
@@ -491,7 +627,15 @@ Resources:
           git fetch origin "${RepoRef}" || git fetch --all
           git checkout "${RepoRef}" || git checkout FETCH_HEAD
 
-          PROBLEM_ROOT=/opt/tenkacloud/repo/problems/battles/microservice-migration-battle
+          # Locate the problem services dir. When RepoUrl points at the OSS catalog
+          # (= the default), assets live at `battles/microservice-migration-battle/`.
+          # When RepoUrl points at the TenkaCloud platform repo (catalog mounted as a
+          # git submodule under `problems/`), the path is one level deeper. Try both.
+          if [ -d "/opt/tenkacloud/repo/battles/microservice-migration-battle/services" ]; then
+            PROBLEM_ROOT=/opt/tenkacloud/repo/battles/microservice-migration-battle
+          else
+            PROBLEM_ROOT=/opt/tenkacloud/repo/problems/battles/microservice-migration-battle
+          fi
           cd "$PROBLEM_ROOT/services"
 
           cat > .env <<ENVEOF
@@ -555,6 +699,10 @@ Resources:
           import boto3
 
           # On phases[0]=degraded fire, inject network latency into the EC2.
+          # AL2023 nitro instances commonly name the primary NIC `ens5`, not `eth0`,
+          # and ship without the `tc` binary (= `iproute-tc` is a separate package).
+          # Install on demand and discover the default-route NIC at runtime so the
+          # qdisc lands on the actual interface.
           # `tc qdisc add` fails with EEXIST after the first run so `|| true` swallows it.
           # Scheduler re-fires every N minutes via rate(N min), but it is a no-op after the first fire.
           def handler(event, context):
@@ -565,7 +713,9 @@ Resources:
                   Comment="TenkaCloud microservice-migration: phases[0] degraded fire",
                   Parameters={
                       "commands": [
-                          "tc qdisc add dev eth0 root netem delay 200ms || true",
+                          "command -v tc >/dev/null 2>&1 || dnf install -y iproute-tc",
+                          "DEV=$(ip route show default | awk '{print $5; exit}')",
+                          "tc qdisc add dev \"$DEV\" root netem delay 200ms || true",
                       ],
                   },
               )
@@ -604,18 +754,20 @@ Resources:
         RoleArn: !GetAtt SchedulerInvokeRole.Arn
 
 Outputs:
+  # BaseUrl is intentionally EMPTY (invariant #9 in AGENT.md: a Battle uptime
+  # problem must not start awarding points the instant the deploy completes).
+  # Scoring engine resolves effective URL per slot as `override ?? default`;
+  # with default="" and no override registered, the probe gets an empty URL
+  # and produces no points. Competitors paste their EC2 host (= Ec2HostHint
+  # below) into the Participant Portal Endpoint Override panel to start the
+  # Battle. Once a service is peeled off onto Lambda / ECS / App Runner, the
+  # competitor swaps the override to the new managed URL.
   BaseUrl:
-    Description: Participant-facing nginx reverse proxy URL. The Score Engine probes `/users/score` / `/orders/score` / `/catalog/score`.
-    Value: !Sub "http://${Ec2.PublicDnsName}"
-  UsersScoreUrl:
-    Description: Initial endpoint of the users service (on EC2).
-    Value: !Sub "http://${Ec2.PublicDnsName}/users/score"
-  OrdersScoreUrl:
-    Description: Initial endpoint of the orders service (on EC2).
-    Value: !Sub "http://${Ec2.PublicDnsName}/orders/score"
-  CatalogScoreUrl:
-    Description: Initial endpoint of the catalog service (on EC2).
-    Value: !Sub "http://${Ec2.PublicDnsName}/catalog/score"
+    Description: Empty by default; competitors register their EC2 host (or per-service managed URL) via the Participant Portal Endpoint Override to start scoring.
+    Value: ""
+  Ec2HostHint:
+    Description: EC2 public DNS for this stack. Paste `http://<host>` into each of the 3 slot overrides (users/orders/catalog) to start the Battle on EC2.
+    Value: !GetAtt Ec2.PublicDnsName
   InstanceId:
     Description: EC2 instance ID (used by operators to connect via SSM Session Manager).
     Value: !Ref Ec2

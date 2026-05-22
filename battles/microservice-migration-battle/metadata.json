@@ -3,7 +3,7 @@
   "id": "microservice-migration-battle",
   "name": "Microservice Migration Battle",
   "category": "Battle",
-  "status": "draft",
+  "status": "ready",
   "visibility": "public",
   "difficulty": 4,
   "estimatedDuration": "90〜120 分",
@@ -105,6 +105,28 @@
         "platforms": ["lambda", "ecs", "apprunner"],
         "points": 5000,
         "once": true
+      }
+    ],
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "3 サービスは EC2 上の docker compose で同居しています。 deploy だけでは加点 0 — Participant Portal の Endpoint Override に EC2 host (`http://<Ec2HostHint>`) を 3 slot ぶん貼ると EC2 加点 (= 100 pt/cycle/slot) が始まります。",
+        "penalty": 0
+      },
+      {
+        "id": "hint-2",
+        "content": "1 サービスを Lambda + API GW / ECS Fargate / App Runner のいずれかに切り出して slot override を切替えると加点が 1000 pt/cycle/slot にジャンプします。 `services/<name>/Dockerfile` をそのまま 3 種 hosting に load し直せます。",
+        "penalty": 50
+      },
+      {
+        "id": "hint-3",
+        "content": "3 slot をそれぞれ別 hosting (lambda / ecs / apprunner) に乗せると \"all-slots-on-platforms\" bonus +5000 pt が 1 回入ります。 ec2 が 1 つでも残っていると bonus は付きません。",
+        "penalty": 100
+      },
+      {
+        "id": "hint-4",
+        "content": "EC2 上の挙動だけ深掘りすると後半でスコアが伸び悩む可能性があります。 各 service の `/score` ハンドラに目を通すと、 終盤に効くチューニングポイントが見つかります。",
+        "penalty": 200
       }
     ]
   },

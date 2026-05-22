@@ -1,10 +1,12 @@
 # Microservice Migration Battle
 
 > 日本語版: [README.ja.md](./README.ja.md)
->
-> **Status: Phase 1 (draft)** — Phase 1 only ships the monolith problem files (3 services co-tenant on a single EC2). The score engine / registration UI / EC2 degradation cron / phase progression are added in Phase 2 / Phase 3 (= follow-ups to issue #572).
 
-A Battle problem in which a monolith of three services (`users` / `orders` / `catalog`) co-tenant on a single EC2 must be split out, during a 90–120 minute event, into three different hosting environments: **Lambda + API Gateway**, **Amazon ECS (Fargate)**, and **AWS App Runner**.
+Month one at TenkaCloud Inc. Kato-san — the predecessor who vanished after that handover meeting last quarter — left you an EC2 monolith: three services (`users` / `orders` / `catalog`) co-tenant on one box, dispatched by a tired nginx config.
+
+> Sasaki-san, the CTO: "Time to split these out. Lambda, ECS Fargate, App Runner — give each service its own hosting. I don't care which, just stop running them on one VM. Other teams started yesterday."
+
+This Battle is your migration. You have 90 to 120 minutes, three slots in the Participant Portal, and a score engine that pays out per hosting tier the moment you register a new URL.
 
 ## Overview
 
@@ -13,20 +15,19 @@ A Battle problem in which a monolith of three services (`users` / `orders` / `ca
 - Estimated time: 90 – 120 min
 - Learning goals:
   - Experience an incremental monolith → microservices migration (strangler fig pattern).
-  - Compare the spectrum of Lambda function / managed container / orchestrated container on real infrastructure.
-  - Decide which service to extract first under a score-degradation constraint.
-  - Read the code and remove an intentionally-injected slow code path (`?legacy=true`).
+  - Compare Lambda + API Gateway (function-as-a-service), ECS Fargate (orchestrated containers), and App Runner (managed containers) on real AWS infrastructure.
+  - Decide which service to peel off first under live time pressure.
 
-## Architecture
+## What gets deployed
 
-### Initial state (right after deploy / what Phase 1 ships)
+A single CloudFormation stack lands in your team's AWS account:
 
 ```text
 ┌─────────────── EC2 (t3.small, Amazon Linux 2023) ───────────────┐
 │                                                                  │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐                       │
-│  │  users   │  │  orders  │  │ catalog  │  ← co-tenant via       │
-│  │  :3001   │  │  :3002   │  │  :3003   │     docker compose     │
+│  │  users   │  │  orders  │  │ catalog  │  ← docker compose      │
+│  │  :3001   │  │  :3002   │  │  :3003   │     co-tenancy         │
 │  └──────────┘  └──────────┘  └──────────┘                       │
 │         ▲             ▲             ▲                            │
 │         └─────────────┴─────────────┘                            │
@@ -37,17 +38,26 @@ A Battle problem in which a monolith of three services (`users` / `orders` / `ca
 │  └────────────────────────────────────────────┘                  │
 └──────────────────────────────────────────────────────────────────┘
                        ▲
-                       │ Score Engine polls every 1 minute
-                       │ (implemented in Phase 2)
-                       │ /users/score, /orders/score, /catalog/score
+                       │ Score engine probes /users, /orders, /catalog every minute
+                       │ (URL pulled from the Participant Portal Endpoint Override panel)
 ```
 
-### Target end-state (= what a fully-split competitor produces)
+Each service is isomorphic — same code, only the port and the service name differ:
+
+| service   | port | self-reported platform (`/meta`) | handlers              |
+| --------- | ---- | -------------------------------- | --------------------- |
+| `users`   | 3001 | `ec2`                            | `/meta`, `/score`, `/healthz` |
+| `orders`  | 3002 | `ec2`                            | same                  |
+| `catalog` | 3003 | `ec2`                            | same                  |
+
+`GET /meta` self-reports the hosting platform (`ec2` / `lambda` / `ecs` / `apprunner`). The score engine reads this to decide which tier of points to award.
+
+## Target end-state (one possible split)
 
 ```text
                 ┌────────── Lambda + API Gateway ───────────┐
-                │  /users   → handler (Hono on Lambda)        │
-                └─────────────────────────────────────────────┘
+                │  /users   → handler (Hono on Lambda)       │
+                └────────────────────────────────────────────┘
 
                 ┌────────── ECS Fargate Service ─────────────┐
                 │  /orders  → ALB → Fargate Task (container)  │
@@ -58,110 +68,94 @@ A Battle problem in which a monolith of three services (`users` / `orders` / `ca
                 └─────────────────────────────────────────────┘
 ```
 
-> Which service goes to which hosting target is up to the competitor. With 3! = 6 combinations, the assignment becomes each team's strategic call.
+There are 6 ways to assign 3 services to 3 hosting tiers. The picture above is one — pick your own.
+
+## How to play
+
+1. **Deploy lands you a working monolith.** `BaseUrl` is intentionally empty in the CFn Outputs (invariant #9: the Battle starts when you say it does, not when the deploy completes). Grab `Ec2HostHint` from the stack Outputs.
+2. **Paste `http://<Ec2HostHint>` into all three slot overrides** (`users` / `orders` / `catalog`) in the Participant Portal Endpoint Override panel. The score engine starts probing once a URL is registered and you earn the EC2-tier rate.
+3. **Peel one service off.** Pick the easiest, package it as a container (the `services/<name>/Dockerfile` works as-is), and stand it up on Lambda + API GW, ECS Fargate, or App Runner.
+4. **Swap that slot's override URL** to the new managed endpoint. `GET /meta` reports `lambda` / `ecs` / `apprunner`, the score engine bumps you to the managed-tier rate.
+5. **Keep going.** Get all three services onto three different managed runtimes and the "production-ready" bonus fires once.
+
+The deploy that just sits on EC2 earns a baseline. The deploy that splits gracefully earns the win.
 
 ## Service spec
 
-All three services are isomorphic (Hono on Node.js 20; only port and service name differ).
-
-| service   | port | self-reported platform (`/meta`) | handlers                       |
-| --------- | ---- | -------------------------------- | ------------------------------ |
-| `users`   | 3001 | `ec2`                            | `/meta`, `/score`, `/healthz`  |
-| `orders`  | 3002 | `ec2`                            | same as above                  |
-| `catalog` | 3003 | `ec2`                            | same as above                  |
-
-### Endpoints
-
-Common HTTP routes:
+Common HTTP routes on every service:
 
 - `GET /meta` → `{ "service": "<name>", "platform": "ec2" | "lambda" | "ecs" | "apprunner", "version": "1.0.0" }`
-- `GET /score` → `{ "score": <int> }` (fast path, ~5ms)
-- `GET /score?legacy=true` → same shape, but with an intentional **2-second sleep** (= late-game gimmick; in Phase 2 the score engine switches to this)
+- `GET /score` → `{ "score": <int> }`
 - `GET /healthz` → `{ "ok": true, "service": "<name>" }`
 
 ### Local development
 
 ```bash
-cd problems/battles/microservice-migration-battle/services
+cd battles/microservice-migration-battle/services
 docker compose up --build
 curl http://localhost/users/score
 curl http://localhost/orders/score
 curl http://localhost/catalog/score
 ```
 
-## Scoring rules (spec for the Phase 2 score engine)
+## Scoring (per slot, per 1-minute probe cycle)
 
-| State                                          | Per check | Per hour |
-| ---------------------------------------------- | --------- | -------- |
-| Unregistered / non-200 / timeout               | -100      | -6,000   |
-| EC2 response (pre-degradation)                 | +100      | +6,000   |
-| EC2 response (post-degradation)                | +10       | +600     |
-| Hosted on Lambda + API GW                      | +1,000    | +60,000  |
-| Hosted on ECS Fargate                          | +1,000    | +60,000  |
-| Hosted on App Runner                           | +1,000    | +60,000  |
-| All 3 services fully separated                 | +5,000 (one-time bundle bonus) |        |
-| Slow-endpoint response (>1.5s)                 | +10       | +600     |
+| State                                          | Points        |
+| ---------------------------------------------- | ------------- |
+| URL not registered / non-200 / timeout         | -100          |
+| EC2 (normal)                                   | +100          |
+| EC2 (after the mid-game degradation event)     | +10           |
+| Lambda + API Gateway                           | +1,000        |
+| ECS Fargate                                    | +1,000        |
+| App Runner                                     | +1,000        |
+| Slow response (> 1.5 s)                        | -10           |
+| All 3 slots on managed tiers (one-time bonus)  | +5,000        |
 
-Hosting is identified by the `platform` field returned from `GET /meta` as self-reporting (a Phase 1 design choice).
+Self-reporting via `/meta` decides the tier. The score engine trusts the report; tampering is allowed, but the response time penalty still applies.
 
-## Phase timeline
+## Migration hints
 
-| Time       | Phase              | What happens                                                                                |
-| ---------- | ------------------ | -------------------------------------------------------------------------------------------- |
-| 0 min      | start              | EC2 deploy complete / 3 services up / `BaseUrl` issued                                       |
-| 60 min     | EC2 degradation    | `tc qdisc` injects latency (Phase 2) → EC2 award drops from +100 to +10                      |
-| 90 min     | legacy switch      | Score Engine switches `/score` → `/score?legacy=true` → the slow path becomes visible        |
-| 90–120 min | rewrite + redeploy | Read the code, remove the `legacy` branch, redeploy to each hosting target                   |
-
-## Hints: minimum deploy for each hosting target
-
-> In every case you can reuse this repo's `services/<name>/Dockerfile` as-is.
+The repo ships a Dockerfile for every service. The same image works on all three managed runtimes — only the wiring differs.
 
 ### Lambda + API Gateway
 
 1. Wrap Hono with the `hono/aws-lambda` adapter (export the handler).
-2. Bundle with `npm install -g esbuild`, or run a container image with `npx tsx`.
-3. `aws lambda create-function --package-type Image --code ImageUri=<ECR URI>` to create the function.
-4. In API Gateway HTTP API, point the integration target to the Lambda function.
-5. Set the env var `PLATFORM=lambda`.
+2. Build with esbuild (`npm install -g esbuild`) or ship a container image.
+3. `aws lambda create-function --package-type Image --code ImageUri=<ECR URI>`.
+4. In API Gateway HTTP API, target the Lambda function.
+5. Set the env var `PLATFORM=lambda` so `/meta` self-reports correctly.
 
 ### ECS Fargate
 
 1. `docker build -t <ECR URI>:latest services/orders` → ECR push.
 2. Task Definition (CPU 256 / Memory 512, container port 3002, `PLATFORM=ecs`).
-3. ECS Cluster + Service (1 task), register against the ALB Target Group (port 3002).
-4. Forward `/orders/*` to the Target Group via an ALB Listener Rule.
+3. ECS Cluster + Service (1 task) behind an ALB Target Group on the container port.
+4. Forward `/orders/*` from the ALB listener.
 
 ### App Runner
 
 1. `docker build -t <ECR URI>:latest services/catalog` → ECR push.
 2. Create an App Runner Service (Source = ECR, port 3003, `PLATFORM=apprunner`).
-3. Register the issued App Runner URL directly as the endpoint.
+3. Register the App Runner URL directly into the slot override.
 
-> Minimum IaC examples per target will land under `services/iac-examples/` in Phase 2.
+## Hosting tradeoffs (= why all three at once)
 
-## Retrospective (= why all three hosting flavors at once)
+| Axis             | Lambda + API GW          | ECS Fargate                         | App Runner                          |
+| ---------------- | ------------------------ | ----------------------------------- | ----------------------------------- |
+| Unit             | function (event-driven)  | container + cluster management      | container (managed)                 |
+| Scale            | per-request, cold start  | per-task (Auto Scaling)             | per-request, auto                   |
+| Setup overhead   | light (one HTTP API)     | heavy (VPC / ALB / Service / TaskDef) | medium (one URL, no VPC)          |
+| Main takeaway    | event-driven, async      | orchestration, persistence, network | managed container, source deploy    |
 
-| Axis             | Lambda + API GW          | ECS Fargate                       | App Runner                          |
-| ---------------- | ------------------------ | --------------------------------- | ----------------------------------- |
-| Unit             | function (event-driven)  | container + cluster management    | container (managed)                 |
-| Scale            | per-request, cold start  | per-task (Auto Scaling Group)     | per-request, auto                   |
-| Setup overhead   | light (one HTTP API)     | heavy (VPC / ALB / Service / TaskDef) | medium (one URL, no VPC)        |
-| Main takeaway    | event-driven, async      | orchestration, persistence, network | managed container, source deploy   |
+The whole point is to walk the spectrum from function → managed container → orchestrated container in a single sitting.
 
-The intent is to let competitors experience the spectrum Lambda (function) ↔ App Runner (managed container) ↔ ECS (orchestrated container) in a single competition.
+## Cost
 
-## Not shipped in Phase 1 (= follow-up PRs)
+t3.small EC2 + minimal networking + the disruption Lambda. Per 2-hour battle:
 
-- The score engine (1-minute polling Lambda + EventBridge Scheduler).
-- DDB table for the registration endpoint.
-- Phase progression (`degradationMinutes` / `legacySwitchMinutes`).
-- EC2 degradation cron (`tc qdisc`).
-- The 3-slot endpoint registration UI in `participant-portal`.
-- The phase-timeline card in the Battle Portal.
+- EC2 t3.small: < $0.05
+- Lambda / Scheduler: pennies
+- Egress on the score-engine probes: negligible
+- ECR, Lambda functions, ECS Fargate tasks, App Runner services that you stand up during the battle: scale with what you create; expect < $1 if you tear down within an hour of finishing.
 
-These will be implemented in Phase 2 / Phase 3 follow-up issues.
-
-## Known limitations
-
-- The slow code path (2-second sleep on `?legacy=true`) is publicly visible in this repo. Until ADR-008 (= moving problem implementations to a private repo, issue #574) ships, the gimmick can be read in advance.
+Tear the stack down with `aws cloudformation delete-stack` when the battle ends.
