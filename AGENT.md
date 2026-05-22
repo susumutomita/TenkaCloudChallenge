@@ -61,15 +61,17 @@ The validator's `checkResourceTagging` runs a line-anchored regex; a commented-o
 
 The validator can't catch these. Reviewers will.
 
-### 6. IAM `Resource` ARNs must be NamePrefix-scoped
+### 6. IAM `Resource` ARNs must be NamePrefix-scoped (with a Console-UX carve-out)
 
-Per ADR-021, the participant role never grants broad-resource list operations. Use one of:
+Per ADR-021, the participant role's **write / modify / delete** actions never grant broad-resource scoping. Use one of:
 
 - `arn:aws:<service>:...:<resource>/${NamePrefix}*` (prefix match)
 - `arn:aws:<service>:...:<resource>/${SomeResource}` (per-stack logical-id reference)
 - `Resource: "*"` **only with** a tag-based `Condition` (for actions that don't accept resource ARNs like `ec2:Describe*`) **or** for per-identity actions (CloudShell, `sts:GetCallerIdentity`).
 
-Never grant list-style actions like `ssm:DescribeParameters`, `cloudformation:ListStacks`, or `s3:ListAllMyBuckets` on `Resource: "*"` — those are AWS-wide and would leak other teams' resource names.
+Write-side list-actions (`ssm:DescribeParameters` that returns the parameter store, etc.) on `Resource: "*"` are still forbidden if the leaked metadata enables modification of other teams' resources.
+
+**Console-UX carve-out for read-only `List*` / `Describe*` actions**: when a problem requires players to use the AWS Console to deploy onto Lambda / ECS / App Runner / Cognito / CloudFront / CloudTrail / Athena / etc., grant the corresponding `service:List*` actions on `Resource: "*"`. The Console opens with list views; empty lists break the workflow. Cross-tenant resource NAMES become visible, but cross-tenant resource ACCESS stays blocked by the ARN-scoped write grants. Team identities are already public via the leaderboard, so the marginal privacy cost is small. See `battles/microservice-migration-battle/template.yaml` and `battles/stackstack/template.yaml` for the worked pattern (`ConsoleList*` Sids).
 
 ### 7. AWS Console deep links use literal slashes, not URL-encoded slashes
 

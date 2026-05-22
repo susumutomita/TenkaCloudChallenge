@@ -3,13 +3,13 @@
   "id": "security-battle-royale",
   "name": "Security Battle Royale",
   "category": "Battle",
-  "status": "draft",
+  "status": "ready",
   "visibility": "public",
-  "difficulty": 3,
+  "difficulty": 4,
   "estimatedDuration": "60〜90 分",
-  "shortDescription": "意図的に脆弱性を仕込んだ Web アプリを攻撃 / 防御し、競技アカウント上で生き残るチームを決める。",
-  "description": "ECサイト風の Web アプリ「Unicorn.Rentals」を題材に、SQL injection / リモートコード実行 / SSRF / IMDS 露出を含む複数の脆弱性が仕込まれた状態でデプロイされる。\n\n競技参加者は次のいずれかのロールでプレイする。\n  - **攻撃側**: 他チームの公開エンドポイントを巡回し、得点リソースを奪取する。\n  - **防御側**: 自チームのアプリを継続稼働させたまま、脆弱性を順次塞いでいく。\n\nデプロイ単位は EC2 1 台 + Docker 構成 (mysql / Flask api / nginx frontend)。デプロイ完了後、参加者には Frontend URL と API URL が払い出される。",
-  "tags": ["security", "web", "sql-injection", "rce", "ssrf"],
+  "shortDescription": "天下クラウド株式会社、 ある月曜の朝。 加藤さんが去年買収した EC サイト 'Unicorn.Rentals' (mysql + Flask + nginx を EC2 1 台に同居) を、 引き継ぎ書 無しで継いだ。 監視ダッシュボードは緑、 ただしコードは見ていない。\n\n佐々木 CTO 曰く: 「攻撃が来てる。 他チームのも一緒に来てる。 落とすな、 守れ、 全部直すな」。 君の仕事は frontend / api を 200 で返し続けること - 弱い所から順に塞ぎながら。",
+  "description": "Battle problem: 加藤さんから引き継いだ EC サイト 'Unicorn.Rentals' の運用を、 競技時間中に守り抜く。\n\n## 初期状態 (deploy 直後)\n\n```\n┌── EC2 (Amazon Linux 2023, t3.small) ──────────────────────┐\n│  ┌──────────┐  ┌──────────┐  ┌──────────┐                  │\n│  │  nginx   │  │  Flask   │  │  mysql   │                  │\n│  │  :80     │  │  :8080   │  │  :3306   │  (docker compose)│\n│  └──────────┘  └──────────┘  └──────────┘                  │\n│       ▲              ▲                                      │\n│       │              │                                      │\n│  FrontendUrl      ApiUrl                                    │\n└──────────────────────────────────────────────────────────────┘\n        ▲\n        │ Score engine probes Frontend / API every 1 minute\n        │ (両方が 200 を返した cycle だけ +100 pt が入る)\n```\n\n## やること\n\n1. **Deploy 完了後、 stack Outputs から `Ec2HostHint` をコピー**し、 Participant Portal の Endpoint Override で 2 slot (`frontend` / `api`) に貼る。 `BaseUrl` 系 Output は invariant #9 に従って空 (= deploy しただけでは battle が始まらない)。\n2. **アプリを動かし続ける**。 nginx と Flask の両方が 200 を返している cycle のみ +100 pt。 どちらかが落ちると 0 pt。\n3. **攻撃を受けながら直す**。 operator 側から定期的に攻撃 probe が飛んでくる (= disruption catalog)。 攻撃を成立させない範囲でアプリを修正していく。 アプリを落として 0 pt にするより、 多少漏らしても 200 を返し続ける方が点が伸びる設計。\n\n## ノート\n\n- 各チームの EC2 / VPC は `${NamePrefix}` で完全分離。 cross-tenant 攻撃は IAM 側で塞いである。\n- ただし `AllowedCidr` の default は `0.0.0.0/0` (operator が公開 IP 全開で deploy する想定)。 別チーム / 外部からの probe を絞りたい時は CFn parameter で CIDR を絞る。\n- 連続稼働コストは t3.small × 90 分で < $0.10。 終わったら `aws cloudformation delete-stack`。",
+  "tags": ["security", "web", "incident-response", "uptime"],
   "exposedPorts": [
     {
       "port": 80,
@@ -21,9 +21,9 @@
     }
   ],
   "learningGoals": [
-    "意図的な SQL injection / RCE / SSRF を発見・修正する一連の手順を体験する",
-    "EC2 IMDS / IAM Role の露出経路と、それを塞ぐベストプラクティスを理解する",
-    "競技中に同居する攻撃者と防御者のトレードオフ (可用性を保ちつつ守る) を体験する"
+    "本物の web アプリを 「落とさないまま」 修正していくインシデント対応のリズムを体験する",
+    "EC2 + docker compose で運用されている既存サービスのコードを限られた時間で読み解く",
+    "可用性と修復のトレードオフ - 完璧な修正より 200 を返し続ける運用判断を訓練する"
   ],
   "cfnTemplate": "template.yaml",
   "cfnParameters": {
@@ -32,12 +32,12 @@
   "i18n": {
     "en": {
       "name": "Security Battle Royale",
-      "shortDescription": "Attack/defend a deliberately vulnerable web app on the competitor account. Last team standing wins.",
-      "description": "An e-commerce-style web app, 'Unicorn.Rentals,' is deployed with deliberate vulnerabilities including SQL injection, remote code execution, SSRF, and IMDS exposure.\n\nCompetitors play one of these roles:\n  - **Attackers**: Sweep other teams' public endpoints and capture scoring resources.\n  - **Defenders**: Keep your own app running while progressively patching the vulnerabilities.\n\nDeploy unit: 1 EC2 + Docker (mysql / Flask api / nginx frontend). After deployment, participants receive Frontend URL and API URL.",
+      "shortDescription": "Monday morning at TenkaCloud Inc. Kato-san left you 'Unicorn.Rentals' -- an e-commerce app (mysql + Flask + nginx co-tenant on one EC2) the company acquired last year. The dashboard is green. The codebase is not yet read.\n\nSasaki-san CTO: 'Attacks are coming in. Other teams are getting hit too. Don't take it down, don't fix everything -- just keep it up.' Your job: keep frontend / api returning 200s while you patch the weakest spots first.",
+      "description": "Battle problem: keep Kato-san's inherited 'Unicorn.Rentals' e-commerce stack alive through the competition window.\n\n## Initial state (post-deploy)\n\n```\n┌── EC2 (Amazon Linux 2023, t3.small) ──────────────────────┐\n│  ┌──────────┐  ┌──────────┐  ┌──────────┐                  │\n│  │  nginx   │  │  Flask   │  │  mysql   │                  │\n│  │  :80     │  │  :8080   │  │  :3306   │  (docker compose)│\n│  └──────────┘  └──────────┘  └──────────┘                  │\n│       ▲              ▲                                      │\n│       │              │                                      │\n│  FrontendUrl      ApiUrl                                    │\n└──────────────────────────────────────────────────────────────┘\n        ▲\n        │ Score engine probes frontend / API every 1 minute\n        │ (+100 pt only when BOTH return 200 on a given cycle)\n```\n\n## What you do\n\n1. **Copy `Ec2HostHint` from the stack Outputs** and paste it into both slot overrides (`frontend` / `api`) in the Participant Portal. URL outputs default to empty (invariant #9: the Battle starts when you say it does).\n2. **Keep the app up.** A cycle pays +100 pt only when both nginx and Flask return 200. If either drops, the cycle pays 0.\n3. **Patch under fire.** The operator side fires attack probes on a schedule (= disruption catalog). Letting attacks through is cheap; taking the app down to 'fix' it is expensive. The winning strategy is *graceful* hardening, not perfect hardening.\n\n## Notes\n\n- Each team's EC2 / VPC is fully isolated by `${NamePrefix}`. Cross-tenant attacks are blocked at the IAM layer.\n- `AllowedCidr` defaults to `0.0.0.0/0` (operator-controlled at deploy time). Tighten via the CFn parameter if you want to restrict the public attack surface.\n- Cost: t3.small for 90 min is < $0.10. Tear down with `aws cloudformation delete-stack` when finished.",
       "learningGoals": [
-        "Walk through the workflow of discovering and patching intentional SQL injection / RCE / SSRF",
-        "Understand the EC2 IMDS / IAM Role exposure path and best practices to close it",
-        "Experience the attacker / defender tradeoff (keep availability while hardening)"
+        "Experience the rhythm of incident response: patching a live web app without taking it offline",
+        "Read and reason about an inherited EC2 + docker-compose codebase under time pressure",
+        "Practice the availability-versus-hardening tradeoff -- judgment calls over perfect fixes"
       ]
     }
   },
@@ -60,7 +60,7 @@
       },
       "overridable": true,
       "label": "API (Flask)",
-      "description": "JSON API endpoint。 SQL injection 等の標的。"
+      "description": "Flask の JSON API endpoint。 `/api/v1/apistatus` が 200 を返している cycle にだけ加点が入る。"
     }
   ],
   "scoring": {
@@ -73,40 +73,60 @@
       },
       {
         "slot": "api",
-        "path": "/healthz",
+        "path": "/api/v1/apistatus",
         "expectStatus": [200]
       }
     ],
     "pointsAllOk": 100,
-    "failurePenalty": 0
+    "failurePenalty": 0,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "Deploy 完了直後は加点 0 です。 stack Outputs の `Ec2HostHint` を Participant Portal の `frontend` slot に `http://<host>` 、 `api` slot に `http://<host>:8080` で貼ると score engine が probe を始めます。",
+        "penalty": 0
+      },
+      {
+        "id": "hint-2",
+        "content": "アプリを完璧に直す必要はありません。 score engine は frontend (`/`) と api (`/api/v1/apistatus`) が両方 200 を返す cycle にだけ +100 pt を入れます。 重要なのは 200 を返し続けること。",
+        "penalty": 50
+      },
+      {
+        "id": "hint-3",
+        "content": "api コードを読む順序は `auth → setdbpwd → unicorns → proxy → backdoor`。 認証系の入力検証から手を付けると、 後段の漏洩経路が止まりやすくなります。",
+        "penalty": 150
+      }
+    ]
   },
   "disruptions": [
     {
       "id": "sqli-auth-bypass",
       "name": "Auth bypass attack",
       "eventDetailType": "AttackFired",
+      "defaultAfterMinutes": 15,
       "operatorEditable": ["afterMinutes"],
       "parameters": {
         "probe": "redteam/probes/sqli-auth-bypass.sh"
       },
-      "description": "Operator-fired SQL-injection auth-bypass probe against /api/v1/auth. Defenders who have parameterized the query pass; unpatched defenders leak a row.",
+      "description": "Operator-fired auth-bypass probe against /api/v1/auth. Pass = defender has parameterized the query; fail = defender leaks a row.",
       "publicHint": false
     },
     {
       "id": "sqli-data-exfil",
       "name": "Data exfiltration attempt",
       "eventDetailType": "AttackFired",
+      "defaultAfterMinutes": 35,
       "operatorEditable": ["afterMinutes"],
       "parameters": {
         "probe": "redteam/probes/sqli-data-exfil.sh"
       },
-      "description": "Operator-fired UNION-based SQLi exfil against /api/v1/auth. Same root cause as sqli-auth-bypass; tests for a stricter patch.",
+      "description": "Operator-fired stricter probe against /api/v1/auth. Same root cause as sqli-auth-bypass; tests for a more thorough patch.",
       "publicHint": false
     },
     {
       "id": "availability-flood",
       "name": "Availability stress",
       "eventDetailType": "AttackFired",
+      "defaultAfterMinutes": 55,
       "operatorEditable": ["afterMinutes"],
       "parameters": {
         "probe": "redteam/probes/availability-flood.sh"

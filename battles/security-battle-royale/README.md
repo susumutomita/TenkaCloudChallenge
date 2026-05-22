@@ -2,82 +2,90 @@
 
 > 日本語版: [README.ja.md](./README.ja.md)
 
-A Battle around an e-commerce-style web app, "Unicorn.Rentals," deliberately seeded with vulnerabilities. Players take attacker or defender roles: attackers sweep other teams' public endpoints to capture scoring resources, defenders patch holes without taking the app offline. SQL injection / RCE / SSRF / IMDS exposure coexist by design.
+Monday morning at TenkaCloud Inc. Kato-san — the SRE you keep hearing about and never meeting — left you "Unicorn.Rentals." The company acquired it last year. mysql + Flask + nginx co-tenant on one EC2. The monitoring dashboard is green. The codebase has not been read.
+
+> Sasaki-san, the CTO: "Attacks are coming in. Other teams are getting hit too. Don't take it down, don't try to fix everything — just keep it up. Triage."
+
+This Battle is the next 60 to 90 minutes. The score engine pays you for *every minute both endpoints return 200*, not for elegant fixes. Letting a bad request through is cheap. Taking the app down to harden it is expensive.
+
+## Overview
 
 | Field          | Value                                  |
 | -------------- | -------------------------------------- |
 | Category       | Battle (real-time PvP)                 |
-| Difficulty     | 3 / 5                                  |
+| Difficulty     | 4 / 5                                  |
 | Estimated time | 60–90 min                              |
-| status         | `draft`                                |
-| Scoring        | `uptime-multi` (`pointsAllOk`: 100)    |
-
-## What you do
-
-- **Attackers** sweep other teams' `FrontendUrl` / `ApiUrl` and exploit the seeded SQLi / RCE / SSRF / IMDS exposure to steal scoring resources.
-- **Defenders** patch vulnerabilities **without shutting the app down**. Killing the service technically protects you, but the uptime probe stops paying out.
-
-That trade-off (= harden while staying available) is the core of the problem.
+| Scoring        | `uptime-multi` — both 200s = +100 pt; either down = 0 |
 
 ## What gets deployed
 
-```
-┌── single EC2 (Amazon Linux 2023, t3.small) docker-compose ──┐
+A single CloudFormation stack lands in your team's AWS account:
+
+```text
+┌── EC2 (Amazon Linux 2023, t3.small) — IMDSv2 enforced ──────┐
 │                                                              │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐                    │
-│  │  nginx   │  │  Flask   │  │  mysql   │                    │
+│  │  nginx   │  │  Flask   │  │  mysql   │  ← docker compose  │
 │  │  :80     │  │  :8080   │  │  :3306   │                    │
 │  └──────────┘  └──────────┘  └──────────┘                    │
-│       │              │              │                        │
-│  FrontendUrl     ApiUrl         (private)                    │
+│       ▲              ▲                                       │
+│       │              │                                       │
+│  Ec2HostHint    Ec2HostHint:8080                             │
 └──────────────────────────────────────────────────────────────┘
+        ▲
+        │ Score engine probes both endpoints every 1 minute.
+        │ +100 pt only on cycles where both return 200.
 ```
 
-- Dedicated VPC + public subnet + IGW
-- Public ports: 80 (frontend) / 8080 (api); restrictable via `AllowedCidr`
-- `DbPassword` is a CFn parameter (NoEcho); the deploy chain generates it from `__RANDOM_PASSWORD__`
+- Dedicated VPC + public subnet + IGW per team
+- Public ports: 80 (frontend) / 8080 (api), gated by `AllowedCidr` (default `0.0.0.0/0` — tighten at deploy if you want to restrict the public attack surface)
+- `DbPassword` is a NoEcho CFn parameter; the deploy chain generates a random value
+- IMDSv2 is enforced (`HttpTokens=required`, hop-limit=1) so leaked SSRF cannot exfiltrate instance-role credentials
 
-## Scoring
+## How to play
 
-Every minute, both endpoints are probed; if both return 200, +100 pt.
+1. **Deploy lands you a running app, scoring stopped.** Stack Outputs include `Ec2HostHint` (public DNS). The `FrontendUrl` / `ApiUrl` outputs are empty by design (invariant #9).
+2. **Paste the URLs into the Participant Portal Endpoint Override:**
+   - `frontend` slot ← `http://<Ec2HostHint>`
+   - `api` slot ← `http://<Ec2HostHint>:8080`
+3. **Score engine probes both** (`/` and `/api/v1/apistatus`). +100 pt per cycle while both return 200. Either drops → 0 pt that cycle.
+4. **The operator side fires attack probes** on a schedule. Patch what you can without taking the app offline. Some attacks just need a hardened input; others need rate-limit / horizontal scaling.
 
-| State                                                  | Per cycle |
-| ------------------------------------------------------ | --------- |
-| `FrontendUrl /` and `ApiUrl /healthz` both return 200  | +100 pt   |
-| Either non-200 / times out                             | 0 pt      |
-
-See the `scoring` field in [`metadata.json`](./metadata.json) for the full spec.
+The defender who stays at 200 the longest wins. The one who tries to fix everything to perfection usually does not.
 
 ## Local development
 
 ```bash
-cd problems/battles/security-battle-royale/local
+cd battles/security-battle-royale/local
 docker compose up --build
 # frontend: http://localhost:80
-# api:      http://localhost:8080/healthz
+# api:      http://localhost:8080/api/v1/apistatus
 ```
 
-`local/docker-compose.yaml` + `local/mysql-init.sql` reproduce the same 3-container stack as production. `api/api.py` and `frontend/index.html` contain the vulnerabilities themselves.
+`local/docker-compose.yaml` + `local/mysql-init.sql` reproduce the same 3-container stack as production. `api/api.py` and `frontend/index.html` are exactly what gets deployed.
 
-## Seeded vulnerabilities (= spoilers)
+## Scoring
 
-- **SQL injection** — raw string concatenation in `api.py` search queries.
-- **RCE** — `eval` / shell-out style helpers behind a debug endpoint.
-- **SSRF** — a helper endpoint that fetches an arbitrary URL.
-- **IMDS exposure** — IMDSv1 enabled; chained with SSRF, IAM Role credentials can be exfiltrated.
+```
++100 pt   both endpoints return 200 on a probe cycle (every 60 s)
+   0 pt   either endpoint down / non-200 / timed out
+```
 
-> Until ADR-008 (= moving problem implementations to a private repo, issue #574) ships, these can be read ahead in the public repo.
+See the `scoring` field in [`metadata.json`](./metadata.json) for the full spec including hint penalties.
 
-## Learning goals
+## Cost
 
-- Walk through the workflow of discovering and patching intentional SQL injection / RCE / SSRF.
-- Understand the EC2 IMDS / IAM Role exposure path and the best practices to close it.
-- Experience the attacker / defender trade-off (keep availability while hardening) in real time.
+- EC2 t3.small × 90 min ≈ $0.04
+- VPC / SG / IGW: free
+- Egress: negligible for the operator-side probes
+
+Tear down with `aws cloudformation delete-stack` when the Battle ends.
 
 ## Related files
 
 - [`metadata.json`](./metadata.json) — problem metadata
 - [`template.yaml`](./template.yaml) — one-page CFn template deployed into the competitor account
-- [`api/api.py`](./api/api.py) — Flask API (where the vulnerabilities live)
+- [`api/api.py`](./api/api.py) — Flask API (the codebase you inherit)
 - [`frontend/index.html`](./frontend/index.html) — static page served by nginx
 - [`local/docker-compose.yaml`](./local/docker-compose.yaml) — local reproduction
+- [`redteam/`](./redteam/) — **operator only**. The attack catalog the platform fires against each team. Reading it as a player spoils the Battle.

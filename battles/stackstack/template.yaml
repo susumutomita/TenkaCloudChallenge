@@ -364,6 +364,369 @@ Resources:
                   - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/apprunner/${NamePrefix}*:*"
                   - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/ecs/${NamePrefix}*"
                   - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/ecs/${NamePrefix}*:*"
+              # ===== Hardening permissions =====
+              # The 5 control axes (auth / network / rate / audit / ux) each have a
+              # "hardened state" the player should be able to actually build. ADR-021
+              # tag-scoping pattern is preserved: every grant either uses a
+              # NamePrefix-prefixed ARN, or Resource:* + a tag Condition keyed on
+              # TenkaCloud:NamePrefix. Players who create resources without the tag
+              # cannot manage them afterwards -- which surfaces the missing tag fast.
+              # ----- ECS Fargate / ALB path (closes the missing 3rd hosting tier) -----
+              - Sid: CreateOwnSecurityGroup
+                Effect: Allow
+                Action: ec2:CreateSecurityGroup
+                Resource:
+                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*"
+                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:vpc/*"
+                Condition:
+                  StringEquals:
+                    aws:RequestTag/TenkaCloud:NamePrefix: !Ref NamePrefix
+              - Sid: ModifyOwnSecurityGroups
+                Effect: Allow
+                Action:
+                  - ec2:AuthorizeSecurityGroupIngress
+                  - ec2:RevokeSecurityGroupIngress
+                  - ec2:AuthorizeSecurityGroupEgress
+                  - ec2:RevokeSecurityGroupEgress
+                  - ec2:DeleteSecurityGroup
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/TenkaCloud:NamePrefix: !Ref NamePrefix
+              - Sid: TagOwnEc2Resources
+                Effect: Allow
+                Action: ec2:CreateTags
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:RequestTag/TenkaCloud:NamePrefix: !Ref NamePrefix
+              - Sid: ManageOwnLoadBalancers
+                Effect: Allow
+                Action:
+                  - elasticloadbalancing:CreateLoadBalancer
+                  - elasticloadbalancing:DeleteLoadBalancer
+                  - elasticloadbalancing:ModifyLoadBalancerAttributes
+                  - elasticloadbalancing:CreateTargetGroup
+                  - elasticloadbalancing:DeleteTargetGroup
+                  - elasticloadbalancing:ModifyTargetGroup
+                  - elasticloadbalancing:ModifyTargetGroupAttributes
+                  - elasticloadbalancing:RegisterTargets
+                  - elasticloadbalancing:DeregisterTargets
+                  - elasticloadbalancing:CreateListener
+                  - elasticloadbalancing:DeleteListener
+                  - elasticloadbalancing:ModifyListener
+                  - elasticloadbalancing:CreateRule
+                  - elasticloadbalancing:DeleteRule
+                  - elasticloadbalancing:ModifyRule
+                  - elasticloadbalancing:AddTags
+                  - elasticloadbalancing:RemoveTags
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/TenkaCloud:NamePrefix: !Ref NamePrefix
+              - Sid: ReadLoadBalancerState
+                # elb v2 Describe* actions don't accept resource-level scoping;
+                # scope via tag condition mirrors the ec2:Describe* pattern.
+                Effect: Allow
+                Action:
+                  - elasticloadbalancing:DescribeLoadBalancers
+                  - elasticloadbalancing:DescribeTargetGroups
+                  - elasticloadbalancing:DescribeListeners
+                  - elasticloadbalancing:DescribeRules
+                  - elasticloadbalancing:DescribeTargetHealth
+                  - elasticloadbalancing:DescribeTags
+                  - elasticloadbalancing:DescribeLoadBalancerAttributes
+                  - elasticloadbalancing:DescribeTargetGroupAttributes
+                Resource: "*"
+              # ----- ux slot: Multi-AZ + Auto Scaling -----
+              - Sid: ManageOwnApplicationAutoScaling
+                Effect: Allow
+                Action:
+                  - application-autoscaling:RegisterScalableTarget
+                  - application-autoscaling:DeregisterScalableTarget
+                  - application-autoscaling:DescribeScalableTargets
+                  - application-autoscaling:PutScalingPolicy
+                  - application-autoscaling:DeleteScalingPolicy
+                  - application-autoscaling:DescribeScalingPolicies
+                  - application-autoscaling:DescribeScalingActivities
+                Resource: "*"
+                Condition:
+                  StringLike:
+                    application-autoscaling:resource-id: !Sub "service/${NamePrefix}*"
+              # ----- auth slot: Cognito -----
+              - Sid: ManageOwnCognitoUserPools
+                Effect: Allow
+                Action:
+                  - cognito-idp:CreateUserPool
+                  - cognito-idp:DeleteUserPool
+                  - cognito-idp:DescribeUserPool
+                  - cognito-idp:UpdateUserPool
+                  - cognito-idp:CreateUserPoolClient
+                  - cognito-idp:DeleteUserPoolClient
+                  - cognito-idp:DescribeUserPoolClient
+                  - cognito-idp:UpdateUserPoolClient
+                  - cognito-idp:CreateUserPoolDomain
+                  - cognito-idp:DeleteUserPoolDomain
+                  - cognito-idp:DescribeUserPoolDomain
+                  - cognito-idp:TagResource
+                  - cognito-idp:UntagResource
+                Resource: !Sub "arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/TenkaCloud:NamePrefix: !Ref NamePrefix
+              - Sid: CreateOwnCognitoUserPool
+                # CreateUserPool returns a pool id; tag at create.
+                Effect: Allow
+                Action: cognito-idp:CreateUserPool
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:RequestTag/TenkaCloud:NamePrefix: !Ref NamePrefix
+              # ----- network slot: CloudFront + OAC + S3 -----
+              - Sid: ManageOwnS3Buckets
+                Effect: Allow
+                Action:
+                  - s3:CreateBucket
+                  - s3:DeleteBucket
+                  - s3:PutBucketPolicy
+                  - s3:GetBucketPolicy
+                  - s3:DeleteBucketPolicy
+                  - s3:PutBucketTagging
+                  - s3:GetBucketTagging
+                  - s3:PutBucketVersioning
+                  - s3:PutBucketPublicAccessBlock
+                  - s3:GetBucketPublicAccessBlock
+                  - s3:PutObjectLockConfiguration
+                  - s3:GetObjectLockConfiguration
+                  - s3:PutBucketOwnershipControls
+                  - s3:PutBucketLogging
+                  - s3:PutBucketEncryption
+                  - s3:GetBucketLocation
+                  - s3:ListBucket
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:PutObjectAcl
+                Resource:
+                  - !Sub "arn:aws:s3:::${NamePrefix}*"
+                  - !Sub "arn:aws:s3:::${NamePrefix}*/*"
+              - Sid: ManageOwnCloudFrontDistributions
+                # CloudFront ARNs do not include the AWS::Region (global service);
+                # tag-based scoping applies to all distribution-level actions.
+                Effect: Allow
+                Action:
+                  - cloudfront:CreateDistribution
+                  - cloudfront:UpdateDistribution
+                  - cloudfront:DeleteDistribution
+                  - cloudfront:GetDistribution
+                  - cloudfront:GetDistributionConfig
+                  - cloudfront:CreateOriginAccessControl
+                  - cloudfront:UpdateOriginAccessControl
+                  - cloudfront:DeleteOriginAccessControl
+                  - cloudfront:GetOriginAccessControl
+                  - cloudfront:TagResource
+                  - cloudfront:UntagResource
+                  - cloudfront:ListTagsForResource
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/TenkaCloud:NamePrefix: !Ref NamePrefix
+              - Sid: CreateOwnCloudFront
+                Effect: Allow
+                Action:
+                  - cloudfront:CreateDistributionWithTags
+                  - cloudfront:CreateOriginAccessControl
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:RequestTag/TenkaCloud:NamePrefix: !Ref NamePrefix
+              # ----- rate slot: Lambda concurrency -----
+              # apigateway throttle is already covered by ManageOwnApiGatewayHttpApis.
+              - Sid: ManageOwnLambdaConcurrency
+                Effect: Allow
+                Action:
+                  - lambda:PutFunctionConcurrency
+                  - lambda:DeleteFunctionConcurrency
+                  - lambda:GetFunctionConcurrency
+                  - lambda:PutFunctionEventInvokeConfig
+                  - lambda:DeleteFunctionEventInvokeConfig
+                  - lambda:GetFunctionEventInvokeConfig
+                Resource: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${NamePrefix}*"
+              # ----- audit slot: CloudTrail + Athena + Glue -----
+              # CloudTrail trails are account-region resources. With 6 teams sharing
+              # one account, the per-region trail quota (5 trails / region) may
+              # become tight -- noted in OPERATOR.md. Tag-scoped to NamePrefix.
+              - Sid: ManageOwnCloudTrailTrails
+                Effect: Allow
+                Action:
+                  - cloudtrail:CreateTrail
+                  - cloudtrail:DeleteTrail
+                  - cloudtrail:UpdateTrail
+                  - cloudtrail:GetTrail
+                  - cloudtrail:DescribeTrails
+                  - cloudtrail:StartLogging
+                  - cloudtrail:StopLogging
+                  - cloudtrail:PutEventSelectors
+                  - cloudtrail:GetEventSelectors
+                  - cloudtrail:AddTags
+                  - cloudtrail:RemoveTags
+                  - cloudtrail:ListTags
+                Resource: !Sub "arn:aws:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${NamePrefix}*"
+              - Sid: ManageOwnAthenaWorkgroup
+                Effect: Allow
+                Action:
+                  - athena:CreateWorkGroup
+                  - athena:DeleteWorkGroup
+                  - athena:GetWorkGroup
+                  - athena:UpdateWorkGroup
+                  - athena:StartQueryExecution
+                  - athena:StopQueryExecution
+                  - athena:GetQueryExecution
+                  - athena:GetQueryResults
+                  - athena:TagResource
+                  - athena:UntagResource
+                Resource: !Sub "arn:aws:athena:${AWS::Region}:${AWS::AccountId}:workgroup/${NamePrefix}*"
+              - Sid: ManageOwnGlueCatalog
+                # Glue Data Catalog backs Athena. Database/table ARNs include the
+                # NamePrefix in their name.
+                Effect: Allow
+                Action:
+                  - glue:CreateDatabase
+                  - glue:DeleteDatabase
+                  - glue:GetDatabase
+                  - glue:UpdateDatabase
+                  - glue:CreateTable
+                  - glue:DeleteTable
+                  - glue:GetTable
+                  - glue:UpdateTable
+                  - glue:GetTables
+                  - glue:TagResource
+                  - glue:UntagResource
+                Resource:
+                  - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:catalog"
+                  - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:database/${NamePrefix}*"
+                  - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:table/${NamePrefix}*/*"
+              # ===== Console-navigation list permissions =====
+              # ADR-021 originally forbade list-style actions on Resource:* to keep
+              # other teams' resource names private inside a shared account.
+              # That works for CLI-driven solves (deep-link from the Portal to
+              # specific ARNs). It does NOT work for Console-driven solves: the
+              # Lambda / ECS / App Runner / Cognito / CloudTrail / Athena consoles
+              # all open by listing the account's resources, and empty list views
+              # break the GUI workflow players actually use during a 90-minute
+              # Battle.
+              #
+              # Tradeoff for this problem: grant list-style actions on Resource:*.
+              # Cross-tenant resource NAMES become visible (e.g. another team's
+              # Lambda function names show up in `lambda:ListFunctions`), but
+              # cross-tenant resource ACCESS remains blocked by the ARN-scoped
+              # grants above (CreateFunction / UpdateFunctionCode / etc. only
+              # apply to ${NamePrefix}*). Team identities are already public via
+              # the leaderboard, so the marginal privacy cost is small.
+              - Sid: ConsoleListLambda
+                Effect: Allow
+                Action:
+                  - lambda:ListFunctions
+                  - lambda:ListLayers
+                  - lambda:ListFunctionUrlConfigs
+                  - lambda:ListTags
+                Resource: "*"
+              - Sid: ConsoleListEcs
+                Effect: Allow
+                Action:
+                  - ecs:ListClusters
+                  - ecs:ListServices
+                  - ecs:ListTasks
+                  - ecs:ListTaskDefinitions
+                  - ecs:ListTaskDefinitionFamilies
+                  - ecs:ListAccountSettings
+                Resource: "*"
+              - Sid: ConsoleListAppRunner
+                Effect: Allow
+                Action:
+                  - apprunner:ListServices
+                  - apprunner:ListOperations
+                  - apprunner:ListTagsForResource
+                Resource: "*"
+              - Sid: ConsoleListEcr
+                Effect: Allow
+                Action:
+                  - ecr:DescribeRepositories
+                  - ecr:DescribeImages
+                  - ecr:ListImages
+                  - ecr:ListTagsForResource
+                Resource: "*"
+              - Sid: ConsoleListCognito
+                Effect: Allow
+                Action:
+                  - cognito-idp:ListUserPools
+                  - cognito-idp:ListUserPoolClients
+                  - cognito-idp:ListTagsForResource
+                Resource: "*"
+              - Sid: ConsoleListCloudFront
+                Effect: Allow
+                Action:
+                  - cloudfront:ListDistributions
+                  - cloudfront:ListOriginAccessControls
+                  - cloudfront:ListTagsForResource
+                Resource: "*"
+              - Sid: ConsoleListCloudTrail
+                Effect: Allow
+                Action:
+                  - cloudtrail:ListTrails
+                  - cloudtrail:LookupEvents
+                Resource: "*"
+              - Sid: ConsoleListAthenaGlue
+                Effect: Allow
+                Action:
+                  - athena:ListWorkGroups
+                  - athena:ListQueryExecutions
+                  - athena:ListDatabases
+                  - athena:ListTagsForResource
+                  - glue:GetDatabases
+                  - glue:SearchTables
+                Resource: "*"
+              - Sid: ConsoleListS3
+                Effect: Allow
+                Action:
+                  - s3:ListAllMyBuckets
+                  - s3:GetBucketLocation
+                Resource: "*"
+              - Sid: ConsoleListLoadBalancers
+                # Already granted ELB Describe* above without conditions for the
+                # same reason -- left here as documentation of the broader pattern.
+                Effect: Allow
+                Action:
+                  - elasticloadbalancing:DescribeAccountLimits
+                Resource: "*"
+              - Sid: ConsoleListLogs
+                Effect: Allow
+                Action:
+                  - logs:DescribeLogGroups
+                Resource: "*"
+              - Sid: ConsoleListIamRoles
+                # Console navigation under Lambda / ECS / App Runner asks to pick
+                # an execution role from a list. Without iam:ListRoles, the
+                # role-picker is empty.
+                Effect: Allow
+                Action:
+                  - iam:ListRoles
+                  - iam:ListAttachedRolePolicies
+                  - iam:ListRolePolicies
+                  - iam:ListPolicies
+                Resource: "*"
+              - Sid: ConsoleListApiGateway
+                # apigateway:GET on /apis* is already granted at the resource level;
+                # the Console list view for HTTP APIs uses that endpoint, so no
+                # additional grant needed here. Stage / route navigation also
+                # falls under /apis*/stages, /apis*/routes which the existing
+                # grant covers.
+                Effect: Allow
+                Action:
+                  - apigateway:GET
+                Resource:
+                  - !Sub "arn:aws:apigateway:${AWS::Region}::/account"
+                  - !Sub "arn:aws:apigateway:${AWS::Region}::/usage"
 
   InstanceRole:
     Type: AWS::IAM::Role
