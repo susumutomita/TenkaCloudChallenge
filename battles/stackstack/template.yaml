@@ -207,6 +207,163 @@ Resources:
                 Action:
                   - cloudformation:DescribeStacks
                 Resource: !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${NamePrefix}/*"
+              # ----- Re-hosting deploy permissions -----
+              # The problem statement is "re-host the 5 control-axis slots (auth / network /
+              # rate / audit / ux) onto Lambda+API GW / ECS Fargate / App Runner one at a
+              # time and register the override URL." That requires the participant role to
+              # actually deploy onto those services. Every resource ARN below is scoped to
+              # ${NamePrefix}* so per-team isolation under ADR-021 holds.
+              #
+              # List-style API calls (lambda:ListFunctions, ecs:ListClusters etc.) that
+              # don't accept resource ARNs are intentionally NOT granted -- they would
+              # leak other teams' resource names. Players use AWS Console deep links
+              # / `aws cli get-<x>` against their own ${NamePrefix}* ARNs.
+              - Sid: DeployOwnLambdaFunctions
+                Effect: Allow
+                Action:
+                  - lambda:CreateFunction
+                  - lambda:UpdateFunctionCode
+                  - lambda:UpdateFunctionConfiguration
+                  - lambda:DeleteFunction
+                  - lambda:GetFunction
+                  - lambda:GetFunctionConfiguration
+                  - lambda:GetPolicy
+                  - lambda:AddPermission
+                  - lambda:RemovePermission
+                  - lambda:TagResource
+                  - lambda:UntagResource
+                  - lambda:CreateFunctionUrlConfig
+                  - lambda:UpdateFunctionUrlConfig
+                  - lambda:DeleteFunctionUrlConfig
+                  - lambda:GetFunctionUrlConfig
+                  - lambda:InvokeFunction
+                Resource: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${NamePrefix}*"
+              - Sid: ManageOwnExecutionRoles
+                Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:UpdateRoleDescription
+                  - iam:PutRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:GetRolePolicy
+                  - iam:ListRolePolicies
+                  - iam:ListAttachedRolePolicies
+                  - iam:TagRole
+                  - iam:UntagRole
+                Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/${NamePrefix}*"
+              - Sid: AttachOnlySafeManagedPolicies
+                Effect: Allow
+                Action:
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/${NamePrefix}*"
+                Condition:
+                  ArnEquals:
+                    iam:PolicyARN:
+                      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+                      - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+                      - arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess
+              - Sid: PassExecutionRoleToServiceSelf
+                Effect: Allow
+                Action: iam:PassRole
+                Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/${NamePrefix}*"
+                Condition:
+                  StringEquals:
+                    iam:PassedToService:
+                      - lambda.amazonaws.com
+                      - ecs-tasks.amazonaws.com
+                      - tasks.apprunner.amazonaws.com
+                      - build.apprunner.amazonaws.com
+              - Sid: DeployOwnEcsCluster
+                Effect: Allow
+                Action:
+                  - ecs:CreateCluster
+                  - ecs:DeleteCluster
+                  - ecs:DescribeClusters
+                  - ecs:CreateService
+                  - ecs:UpdateService
+                  - ecs:DeleteService
+                  - ecs:DescribeServices
+                  - ecs:RunTask
+                  - ecs:StopTask
+                  - ecs:DescribeTasks
+                  - ecs:TagResource
+                  - ecs:UntagResource
+                Resource:
+                  - !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:cluster/${NamePrefix}*"
+                  - !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${NamePrefix}*/${NamePrefix}*"
+                  - !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:task/${NamePrefix}*/*"
+              - Sid: ManageOwnTaskDefinitions
+                Effect: Allow
+                Action:
+                  - ecs:RegisterTaskDefinition
+                  - ecs:DeregisterTaskDefinition
+                  - ecs:DescribeTaskDefinition
+                Resource: "*"
+              - Sid: DeployOwnAppRunnerService
+                Effect: Allow
+                Action:
+                  - apprunner:CreateService
+                  - apprunner:UpdateService
+                  - apprunner:DeleteService
+                  - apprunner:DescribeService
+                  - apprunner:PauseService
+                  - apprunner:ResumeService
+                  - apprunner:StartDeployment
+                  - apprunner:TagResource
+                  - apprunner:UntagResource
+                Resource: !Sub "arn:aws:apprunner:${AWS::Region}:${AWS::AccountId}:service/${NamePrefix}*/*"
+              - Sid: ManageOwnApiGatewayHttpApis
+                Effect: Allow
+                Action:
+                  - apigateway:GET
+                  - apigateway:POST
+                  - apigateway:PUT
+                  - apigateway:PATCH
+                  - apigateway:DELETE
+                Resource:
+                  - !Sub "arn:aws:apigateway:${AWS::Region}::/apis*"
+                  - !Sub "arn:aws:apigateway:${AWS::Region}::/v2/apis*"
+                  - !Sub "arn:aws:apigateway:${AWS::Region}::/tags*"
+              - Sid: PushOwnContainerImagesToEcr
+                Effect: Allow
+                Action:
+                  - ecr:CreateRepository
+                  - ecr:DeleteRepository
+                  - ecr:DescribeRepositories
+                  - ecr:PutImage
+                  - ecr:InitiateLayerUpload
+                  - ecr:UploadLayerPart
+                  - ecr:CompleteLayerUpload
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:BatchGetImage
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:TagResource
+                  - ecr:UntagResource
+                Resource: !Sub "arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/${NamePrefix}*"
+              - Sid: EcrAuthForOwnPush
+                Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: "*"
+              - Sid: CreateOwnRuntimeLogGroups
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutRetentionPolicy
+                  - logs:PutLogEvents
+                  - logs:DeleteLogGroup
+                  - logs:DescribeLogStreams
+                  - logs:FilterLogEvents
+                Resource:
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${NamePrefix}*"
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${NamePrefix}*:*"
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/apprunner/${NamePrefix}*"
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/apprunner/${NamePrefix}*:*"
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/ecs/${NamePrefix}*"
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/ecs/${NamePrefix}*:*"
 
   InstanceRole:
     Type: AWS::IAM::Role
