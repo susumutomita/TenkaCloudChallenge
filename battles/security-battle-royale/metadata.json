@@ -79,5 +79,40 @@
     ],
     "pointsAllOk": 100,
     "failurePenalty": 0
-  }
+  },
+  "disruptions": [
+    {
+      "id": "sqli-auth-bypass",
+      "name": "Auth bypass attack",
+      "eventDetailType": "AttackFired",
+      "operatorEditable": ["afterMinutes"],
+      "parameters": {
+        "probe": "redteam/probes/sqli-auth-bypass.sh"
+      },
+      "description": "Operator-fired SQL-injection auth-bypass probe against /api/v1/auth. Defenders who have parameterized the query pass; unpatched defenders leak a row.",
+      "publicHint": false
+    },
+    {
+      "id": "sqli-data-exfil",
+      "name": "Data exfiltration attempt",
+      "eventDetailType": "AttackFired",
+      "operatorEditable": ["afterMinutes"],
+      "parameters": {
+        "probe": "redteam/probes/sqli-data-exfil.sh"
+      },
+      "description": "Operator-fired UNION-based SQLi exfil against /api/v1/auth. Same root cause as sqli-auth-bypass; tests for a stricter patch.",
+      "publicHint": false
+    },
+    {
+      "id": "availability-flood",
+      "name": "Availability stress",
+      "eventDetailType": "AttackFired",
+      "operatorEditable": ["afterMinutes"],
+      "parameters": {
+        "probe": "redteam/probes/availability-flood.sh"
+      },
+      "description": "Operator-fired 30-second request burst against frontend + api. Single Flask process under nginx saturates; defenders rate-limit or scale horizontally to mitigate.",
+      "publicHint": false
+    }
+  ]
 }
