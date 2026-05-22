@@ -140,6 +140,20 @@
       "pattern": "^[A-Za-z0-9._/-]+\\.(yaml|yml|json)$",
       "description": "同一ディレクトリからの相対パスで指す CFn テンプレートファイル (ペライチ)。デプロイ時にこのテンプレートが competitor account の CFn にアップロードされる。"
     },
+    "defaultRegion": {
+      "type": "string",
+      "pattern": "^[a-z]{2,3}-[a-z]+-\\d{1,2}$",
+      "description": "[Issue #1201] 問題作成者が推奨する deploy 先 region (AWS region code、 例 `us-east-1`)。 Event Create wizard が問題追加時の region picker 初期値に採用する。 operator は override 可。 未宣言の場合は wizard global default (= `ap-northeast-1`) にフォールバック。 `supportedRegions` を併設すると validator がこの値が含まれるか整合性チェックする。"
+    },
+    "supportedRegions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z]{2,3}-[a-z]+-\\d{1,2}$"
+      },
+      "description": "[Issue #1201] 問題作成者が動作確認した region 集合。 Event Create wizard が region picker の選択肢をこの集合に絞る (= 未確認 region を operator に選ばせない、 misconfig 予防)。 未宣言の場合は全 region 開放 (= 後方互換)。 宣言する場合は 1 件以上、 かつ `defaultRegion` が宣言されていればこの集合に含まれている必要がある (validator 強制)。"
+    },
     "i18n": {
       "type": "object",
       "additionalProperties": false,
