@@ -138,7 +138,30 @@
     "cfnTemplate": {
       "type": "string",
       "pattern": "^[A-Za-z0-9._/-]+\\.(yaml|yml|json)$",
-      "description": "同一ディレクトリからの相対パスで指す CFn テンプレートファイル (ペライチ)。デプロイ時にこのテンプレートが competitor account の CFn にアップロードされる。"
+      "description": "同一ディレクトリからの相対パスで指す CFn テンプレートファイル (ペライチ)。デプロイ時にこのテンプレートが competitor account の CFn にアップロードされる。 [ADR-023] 新規問題は `runtime.entry` の宣言を推奨。 両方宣言する場合は `runtime.entry === cfnTemplate` でなければ validator が reject する (= 互換期間の整合性制約)。"
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "engine", "entry"],
+      "description": "[ADR-023] 問題が deploy される対象 cloud と engine を宣言する optional field。 現在 executable な組み合わせは `provider=aws` + `engine=cloudformation` のみ。 schema は将来の provider / engine 値を reject せず受理する (= reservation)。 実行可否は CLI validator (= `scripts/tenkacloud-problem.ts validate`) と deploy worker で enforce する。 未宣言の問題は legacy `cfnTemplate` から `{provider:'aws', engine:'cloudformation', entry:cfnTemplate}` に正規化される (= 後方互換)。",
+      "properties": {
+        "provider": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Target cloud provider (例: `aws` / `azure` / `gcp` / `kubernetes`)。 schema は free-form 文字列、 executable subset は CLI validator が enforce する。"
+        },
+        "engine": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Deploy engine (例: `cloudformation` / `bicep` / `arm` / `helm` / `manifest` / `kustomize`)。 schema は free-form 文字列、 executable subset は CLI validator が enforce する。"
+        },
+        "entry": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._/-]+$",
+          "description": "問題ディレクトリ相対 path で指す primary deployable artifact (例: `template.yaml` / `main.bicep` / `chart/`)。 standalone validation 用に provider native tooling で直接 deploy できる単位とする。"
+        }
+      }
     },
     "i18n": {
       "type": "object",
