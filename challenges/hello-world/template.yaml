@@ -69,6 +69,21 @@ Resources:
                   # GetParametersByPath is resource-scopable via path-prefix ARN.
                   - ssm:GetParametersByPath
                 Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              # ssm:DescribeParameters is a metadata-only API that AWS IAM
+              # does NOT accept resource-level permissions or tag-based
+              # Condition keys on. The AWS Console Parameter detail page
+              # calls it to render the sidebar list / breadcrumb, so without
+              # this Sid the hint's `ParameterConsoleUrl` deep link returns
+              # AccessDenied. Under TenkaCloud's per-team dedicated AWS
+              # account model (= one account holds exactly one team's stack),
+              # Resource:"*" here carries no cross-tenant leak risk. Same
+              # allowlist treatment as ConsoleEc2Metadata /
+              # ManageOwnTaskDefinitions / ReadLoadBalancerState on other
+              # problems (see TenkaCloud Issue #1316).
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
               # CloudShell session lifecycle. Deliberately narrower than the
               # AWS-managed AWSCloudShellFullAccess (which grants cloudshell:*):
               # only the actions an interactive open / use / close cycle calls,
@@ -104,11 +119,13 @@ Outputs:
   ParameterValue:
     Description: SSM Parameter value (echoed in Outputs for smoke test verification).
     Value: !Sub "Hello from ${NamePrefix}"
-  # AWS Console deep link to THIS stack's parameter detail page. Avoids the
-  # empty Parameter Store list view (ADR-021: participant Role lacks
-  # ssm:DescribeParameters to prevent cross-tenant name leakage), while still
-  # letting competitors land on their own parameter in one click. The detail
-  # page uses ssm:GetParameter, which the Role IS scoped to grant.
+  # AWS Console deep link to THIS stack's parameter detail page. The detail
+  # page itself reads the value via ssm:GetParameter (scoped to
+  # `arn:aws:ssm:*:*:parameter/${NamePrefix}/*` above), but the Console
+  # navigation chrome (sidebar list, breadcrumb) calls ssm:DescribeParameters
+  # - a metadata-only API that AWS IAM does not allow resource-scoping on.
+  # `DescribeOwnParameters` Sid grants it with Resource:"*" (allowlisted; safe
+  # under per-team dedicated AWS account assumption - see Sid comment above).
   # Console SSM router accepts literal slashes in the path (the leading `/` of
   # the param name is dropped, internal slashes stay literal); the URL-encoded
   # `%2F` variant returns HTTP 400.
