@@ -67,6 +67,40 @@
         "availability"
       ],
       "scoringKind": "phased-polling"
+    },
+    {
+      "id": "public-s3-remediation",
+      "name": "Public S3 Remediation (Draft Example)",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "20〜30 分",
+      "shortDescription": "加藤さんの `kato-onboarding` バケットが Public Access Block off + `Principal: \"*\"` で残っている。 監査メモ (= 同梱の SSM Parameter) からフラグを抜いて Portal に提出。",
+      "tags": ["security", "s3", "remediation", "ccoe", "draft", "example"],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "iam-least-privilege",
+      "name": "IAM Least Privilege (Draft Example)",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "20〜30 分",
+      "shortDescription": "加藤さんの `legacy-batch` Role が Access Analyzer で 'over-privileged' フラグ。 `Action: \"*\" / Resource: \"*\"` を点検し、 監査メモから flag を抜いて提出。",
+      "tags": ["security", "iam", "least-privilege", "ccoe", "draft", "example"],
+      "scoringKind": "flag"
+    }
+  ],
+  "bundles": [
+    {
+      "id": "starter-event",
+      "name": "TenkaCloud Starter Event",
+      "difficulty": "beginner",
+      "estimatedDuration": "60〜90 分",
+      "shortDescription": "TenkaCloud を初めて運用する organizer 向け 'これ流せば 1 イベント' プリセット (Challenge 1 + Battle 2 = 3 問、 60〜90 分)。",
+      "path": "bundles/starter-event.json"
     }
   ]
 }

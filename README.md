@@ -64,12 +64,30 @@ A platform-repo maintainer then bumps the submodule pointer and the next `make d
 │   └── <id>/
 │       ├── metadata.json
 │       └── template.yaml
+├── bundles/                       # Curated problem sets (e.g. starter-event)
+│   └── <id>.json
 ├── SCHEMA.json                    # JSON Schema for metadata.json (synced with platform)
-├── index.json                     # Catalog index (built from every metadata.json)
+├── index.json                     # Catalog index (built from every metadata.json + bundles)
 ├── CATALOG.md                     # Full catalog docs + schema walkthrough
 ├── scripts/validate-problems.ts   # Local + CI validator
 └── .github/workflows/ci.yml       # Schema + cross-ref CI
 ```
+
+## 🎯 Starter catalog (TenkaCloud Issue #1346)
+
+For first-time organizers, the **3 ready + 2 draft** starter catalog plus the **`starter-event` bundle** is the credible answer to *"what do I actually run?"*.
+
+| Status   | Category   | Problem                                                                                                    | Duration  | Difficulty |
+| -------- | ---------- | ---------------------------------------------------------------------------------------------------------- | --------- | ---------- |
+| ready    | Challenge  | [`hello-world`](./challenges/hello-world/)                                                                  | 1 min     | 1          |
+| ready    | Battle     | [`hello-world-battle`](./battles/hello-world-battle/)                                                       | 30 min    | 1          |
+| ready    | Battle     | [`microservice-migration-battle`](./battles/microservice-migration-battle/)                                 | 90-120 min| 4          |
+| ready    | Battle     | [`security-battle-royale`](./battles/security-battle-royale/)                                               | 60-90 min | 4          |
+| ready    | Battle     | [`stackstack`](./battles/stackstack/)                                                                       | 90-120 min| 4          |
+| draft    | Challenge  | [`public-s3-remediation`](./challenges/public-s3-remediation/)                                              | 20-30 min | 2          |
+| draft    | Challenge  | [`iam-least-privilege`](./challenges/iam-least-privilege/)                                                  | 20-30 min | 2          |
+
+Bundle: [`bundles/starter-event.json`](./bundles/starter-event.json) — 1 Challenge + 2 Battles, 60-90 min slot.
 
 ## 🔄 Delivery flow
 
