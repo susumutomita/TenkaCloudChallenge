@@ -7,6 +7,17 @@ Description: >
 
   Cost: IAM Role free, SSM Standard tier free. Within Free Tier for one drill.
 
+Metadata:
+  # This template intentionally deploys an over-privileged `legacy-batch` IAM
+  # Role (`Action: "*" / Resource: "*"` inline policy) so the learner can
+  # observe and remediate it. AssumeRole principal is the EC2 service so
+  # there is no live blast radius -- audit-finding visibility only. Suppresses
+  # the `iam-action-wildcard` / `iam-resource-wildcard` findings from
+  # scripts/check-template-security.ts; reviewers should still inspect the
+  # role manually.
+  tenkacloud:
+    allowIntentionallyVulnerable: true
+
 Parameters:
   NamePrefix:
     Type: String

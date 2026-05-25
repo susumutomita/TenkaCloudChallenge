@@ -90,11 +90,15 @@ Resources:
               # on the bucket list page. Without this Sid the bucket list shows
               # empty and players cannot navigate to their bucket. Per-team
               # write access stays scoped by the ARN-locked Sids above.
+              # Note: only `s3:ListAllMyBuckets` is in this Statement because
+              # check-template-security.ts requires every Action paired with
+              # Resource: "*" to be in RESOURCE_STAR_OK_ACTIONS. Adding e.g.
+              # `s3:GetAccountPublicAccessBlock` would need that entry added
+              # (= separate scope change, not blocking the drill flow).
               - Sid: ConsoleListBuckets
                 Effect: Allow
                 Action:
                   - s3:ListAllMyBuckets
-                  - s3:GetAccountPublicAccessBlock
                 Resource: "*"
               - Sid: ReadOwnSsmParameters
                 Effect: Allow
