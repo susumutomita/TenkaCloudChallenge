@@ -9,8 +9,13 @@
       "visibility": "public",
       "difficulty": 1,
       "estimatedDuration": "1 分",
-      "shortDescription": "新人 SRE のあなた、 まずは加藤さんが残した SSM Parameter の挨拶を読んで Portal に貼り付けて。 100 点。",
-      "tags": ["sample", "challenge", "flag", "ssm"],
+      "shortDescription": "天下クラウド株式会社、 入社初日。 前任 SRE の加藤さんが先週突然退職し、 production には謎の SSM Parameter が 1 つだけ残されている。\n\n佐々木 CTO 曰く 「動作確認のために残したやつ、 たぶん」。 詳細は不明、 Slack の DM 履歴を遡っても何も出てこない。 Notion の引継ぎ書には 『SSM の hello 見といて』 とだけ。\n\nあなたのミッション: 加藤さんが production に残した 隠されたメッセージ を発見せよ。",
+      "tags": [
+        "sample",
+        "challenge",
+        "flag",
+        "ssm"
+      ],
       "scoringKind": "flag"
     },
     {
@@ -21,9 +26,34 @@
       "visibility": "public",
       "difficulty": 1,
       "estimatedDuration": "30 分",
-      "shortDescription": "Battle uptime scoring の最小 sample。EC2 上で nginx (frontend) + Python (API) を起動し、両方が 200 を返す間スコアが 1 分ごとに +100 加算。",
-      "tags": ["sample", "battle", "uptime", "ec2", "nginx"],
-      "scoringKind": "uptime"
+      "shortDescription": "天下クラウド株式会社、 2 日目。 加藤さんが production に残した小さな web stack (EC2 上で nginx + Python `/healthz`) を引き継いだ ── が、 同じアカウントには他チームの SRE がいて、 互いに相手のサービスを落とし合っている。\n\nあなたの仕事: 自分のスタックの 2 つの URL (frontend / API) を Participant Portal に登録 → Health Check Lambda が 1 分ごとに probe を始め、 両方 200 を返した分だけ +100 pt。 落とされたら SSM Session Manager で復旧 (SSH 不要)。\n\nDeploy しただけでは何も起きない。 URL を portal に登録した瞬間から Battle が始まる。",
+      "tags": [
+        "sample",
+        "battle",
+        "uptime",
+        "ec2",
+        "nginx"
+      ],
+      "scoringKind": "uptime-flat"
+    },
+    {
+      "id": "iam-least-privilege",
+      "name": "IAM Least Privilege (Draft Example)",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "20〜30 分",
+      "shortDescription": "天下クラウド株式会社、 入社 4 日目。 加藤さんが書き残した 1 つの IAM Role `legacy-batch` が監査の Access Analyzer で 'over-privileged' フラグを受けた。\n\n佐々木 CTO: 「夜間バッチ用のはず、 たぶん。 でも `*:*` は今どきヤバいので、 必要権限だけに絞ってくれ」。\n\nあなたのミッション: Role が本当に必要としている権限を特定し、 加藤さんが書き残した監査メモ (= 同梱の SSM Parameter) からフラグを抜いて Portal に提出する。",
+      "tags": [
+        "security",
+        "iam",
+        "least-privilege",
+        "ccoe",
+        "draft",
+        "example"
+      ],
+      "scoringKind": "flag"
     },
     {
       "id": "microservice-migration-battle",
@@ -33,9 +63,51 @@
       "visibility": "public",
       "difficulty": 4,
       "estimatedDuration": "90〜120 分",
-      "shortDescription": "EC2 1 台に同居する 3 サービス (users / orders / catalog) を Lambda + API Gateway / ECS Fargate / App Runner の 3 種ホスティングに分割するレース。",
-      "tags": ["microservices", "migration", "lambda", "ecs", "apprunner", "ec2", "docker"],
+      "shortDescription": "天下クラウド株式会社、 入社 1 ヶ月。 加藤さんが残した EC2 1 台同居のモノリス (users / orders / catalog の 3 サービスを nginx reverse proxy が path で振り分け) を引き継いだ。 佐々木 CTO 曰く 『そろそろマネージドに分けてくれない? Lambda でも ECS でも App Runner でも、 サービスごとに違う hosting でいい』。\n\nあなたの仕事: 各サービスを切り出して別 hosting に移し、 切り出した URL を Participant Portal の override に登録する。 score engine は登録された URL を 1 分ごとに probe し、 hosting の種類によって配点が変わる。\n\n```\n  [初期 (deploy 直後)]                    [移行ゴール]\n  ┌── EC2 (t3.small) ──┐                  ┌── Service Router ──┐\n  │ nginx :80          │                  │  (API GW / ALB)    │\n  │  /users  → :3001   │  ───migrate───>  └──┬─────┬─────┬─────┘\n  │  /orders → :3002   │                     │     │     │\n  │  /catalog→ :3003   │                     ▼     ▼     ▼\n  └────────────────────┘                  ┌──────┐┌────┐┌──────────┐\n                                          │Lambda││ECS ││App Runner│\n                                          │users ││ord ││catalog   │\n                                          └──────┘└────┘└──────────┘\n```\n\n3 サービスの hosting 先は自由に組み替えてよい (上の絵は一例)。 deploy しただけでは EC2 routing のまま、 自分で切り出すまで点数は伸びない。",
+      "tags": [
+        "microservices",
+        "migration",
+        "lambda",
+        "ecs",
+        "apprunner",
+        "ec2",
+        "docker"
+      ],
       "scoringKind": "phased-polling"
+    },
+    {
+      "id": "my-first-challenge",
+      "name": "My First Challenge",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "30〜45 分",
+      "shortDescription": "deploy 後に AWS Console / CLI で正解 flag を発見し portal に提出する Challenge (flag 採点)。",
+      "tags": [
+        "sample",
+        "challenge"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "public-s3-remediation",
+      "name": "Public S3 Remediation (Draft Example)",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "20〜30 分",
+      "shortDescription": "天下クラウド株式会社、 入社 3 日目。 加藤さんが残した `kato-onboarding` バケットが、 セキュリティチームのスキャンで 'public read 疑い' のフラグを立てた。\n\n佐々木 CTO: 「中身は使ってないらしい、 たぶん。 ただ public のままだと監査で詰むので、 今日中に締めてくれ」。\n\nあなたのミッション: バケットの Public Access Block / Bucket Policy を点検し、 加藤さんが書き残した監査メモ (= 同梱の SSM Parameter) からフラグを抜いて Portal に提出する。",
+      "tags": [
+        "security",
+        "s3",
+        "remediation",
+        "ccoe",
+        "draft",
+        "example"
+      ],
+      "scoringKind": "flag"
     },
     {
       "id": "security-battle-royale",
@@ -45,8 +117,13 @@
       "visibility": "public",
       "difficulty": 4,
       "estimatedDuration": "60〜90 分",
-      "shortDescription": "加藤さんが残した EC サイト 'Unicorn.Rentals' を、 攻撃を浴びながら 200 を返し続ける Battle。 きれいな修正より 'まず可用性' を訓練するインシデント対応問題。",
-      "tags": ["security", "web", "incident-response", "uptime"],
+      "shortDescription": "天下クラウド株式会社、 ある月曜の朝。 加藤さんが去年買収した EC サイト 'Tenryu.Mart' (mysql + Flask + nginx を EC2 1 台に同居) を、 引き継ぎ書 無しで継いだ。 監視ダッシュボードは緑、 ただしコードは見ていない。\n\n佐々木 CTO 曰く: 「攻撃が来てる。 他チームのも一緒に来てる。 落とすな、 守れ、 全部直すな」。 君の仕事は frontend / api を 200 で返し続けること - 弱い所から順に塞ぎながら。",
+      "tags": [
+        "security",
+        "web",
+        "incident-response",
+        "uptime"
+      ],
       "scoringKind": "uptime-multi"
     },
     {
@@ -57,7 +134,7 @@
       "visibility": "public",
       "difficulty": 4,
       "estimatedDuration": "90〜120 分",
-      "shortDescription": "AI Builder が量産した naive アプリを 5 軸 (auth / network / rate / audit / ux) で本番化する Platform Team の Battle。 managed runtime に切り出して加点を 10× にし、 全 slot 完走で +30,000 bonus。",
+      "shortDescription": "天下クラウド株式会社 Platform Team、 月初の朝会。 加藤さんは先月辞めた。 社内 100 人の AI Builder が Claude で量産したアプリが、 5 軸 (auth / network / rate / audit / ux) どれも未整備のまま EC2 1 台に同居している。\n\n佐々木 CTO 曰く: 「これ、 公開していい状態に持っていって。 AI が書いた速さに、 Platform チームが追いつけてない。 他チームの Platform もみんな焦ってる」\n\n君の仕事: 5 軸の slot を順に managed runtime (Lambda + API GW / ECS / App Runner) に切り出し、 Portal の Endpoint Override に新 URL を貼って加点を 10× に上げていく。 きれいに分割した Platform Team が勝つ。",
       "tags": [
         "platform-engineering",
         "ai-native",
@@ -67,40 +144,6 @@
         "availability"
       ],
       "scoringKind": "phased-polling"
-    },
-    {
-      "id": "public-s3-remediation",
-      "name": "Public S3 Remediation (Draft Example)",
-      "category": "Challenge",
-      "status": "draft",
-      "visibility": "public",
-      "difficulty": 2,
-      "estimatedDuration": "20〜30 分",
-      "shortDescription": "加藤さんの `kato-onboarding` バケットが Public Access Block off + `Principal: \"*\"` で残っている。 監査メモ (= 同梱の SSM Parameter) からフラグを抜いて Portal に提出。",
-      "tags": ["security", "s3", "remediation", "ccoe", "draft", "example"],
-      "scoringKind": "flag"
-    },
-    {
-      "id": "iam-least-privilege",
-      "name": "IAM Least Privilege (Draft Example)",
-      "category": "Challenge",
-      "status": "draft",
-      "visibility": "public",
-      "difficulty": 2,
-      "estimatedDuration": "20〜30 分",
-      "shortDescription": "加藤さんの `legacy-batch` Role が Access Analyzer で 'over-privileged' フラグ。 `Action: \"*\" / Resource: \"*\"` を点検し、 監査メモから flag を抜いて提出。",
-      "tags": ["security", "iam", "least-privilege", "ccoe", "draft", "example"],
-      "scoringKind": "flag"
-    }
-  ],
-  "bundles": [
-    {
-      "id": "starter-event",
-      "name": "TenkaCloud Starter Event",
-      "difficulty": "beginner",
-      "estimatedDuration": "60〜90 分",
-      "shortDescription": "TenkaCloud を初めて運用する organizer 向け 'これ流せば 1 イベント' プリセット (Challenge 1 + Battle 2 = 3 問、 60〜90 分)。",
-      "path": "bundles/starter-event.json"
     }
   ]
 }
