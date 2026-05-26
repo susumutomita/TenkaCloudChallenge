@@ -92,7 +92,7 @@
       },
       {
         "id": "hint-3",
-        "content": "api コードを読む順序は `auth → setdbpwd → unicorns → proxy → backdoor`。 認証系の入力検証から手を付けると、 後段の漏洩経路が止まりやすくなります。",
+        "content": "api コードを読む順序は `auth → setdbpwd → dragons → proxy → backdoor`。 認証系の入力検証から手を付けると、 後段の漏洩経路が止まりやすくなります。",
         "penalty": 150
       }
     ]
