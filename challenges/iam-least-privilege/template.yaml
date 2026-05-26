@@ -1,0 +1,180 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud DRAFT problem (iam-least-privilege). Educational example for the
+  IAM Least Privilege drill: deploys a role with a deliberately over-privileged
+  inline policy (`Action: "*" / Resource: "*"`) for the learner to inspect, plus
+  an SSM Parameter holding the audit-complete flag the player submits.
+
+  Cost: IAM Role free, SSM Standard tier free. Within Free Tier for one drill.
+
+Metadata:
+  # This template intentionally deploys an over-privileged `legacy-batch` IAM
+  # Role (`Action: "*" / Resource: "*"` inline policy) so the learner can
+  # observe and remediate it. AssumeRole principal is the EC2 service so
+  # there is no live blast radius -- audit-finding visibility only. Suppresses
+  # the `iam-action-wildcard` / `iam-resource-wildcard` findings from
+  # scripts/check-template-security.ts; reviewers should still inspect the
+  # role manually.
+  tenkacloud:
+    allowIntentionallyVulnerable: true
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Used to keep per-team stacks
+      from colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+
+Resources:
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-participant-viewer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      # `aws login` (2025-11) OAuth2 flow needs SignInLocalDevelopmentAccess.
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # Read this team's own audit Role (the over-privileged one).
+              # NamePrefix-scoped so cross-tenant role inspection is impossible.
+              - Sid: ReadOwnAuditRole
+                Effect: Allow
+                Action:
+                  - iam:GetRole
+                  - iam:GetRolePolicy
+                  - iam:ListRolePolicies
+                  - iam:ListAttachedRolePolicies
+                  - iam:SimulatePrincipalPolicy
+                Resource: !Sub "arn:aws:iam::*:role/${NamePrefix}-legacy-batch"
+              # Practice remediation (optional path -- not scored).
+              - Sid: RemediateOwnAuditRole
+                Effect: Allow
+                Action:
+                  - iam:PutRolePolicy
+                  - iam:DeleteRolePolicy
+                Resource: !Sub "arn:aws:iam::*:role/${NamePrefix}-legacy-batch"
+              # Console-UX list view (ADR-021 carve-out): the IAM Console opens
+              # on Roles list. Without this Sid the list is empty and the
+              # learner cannot click into their own role. Per-team write access
+              # stays scoped by the ARN-locked Sids above.
+              - Sid: ConsoleListRoles
+                Effect: Allow
+                Action:
+                  - iam:ListRoles
+                  - iam:ListPolicies
+                Resource: "*"
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              # See hello-world template for the rationale: ssm:DescribeParameters
+              # is a metadata-only API AWS IAM does not accept resource-scope on.
+              # Safe under per-team dedicated AWS account assumption.
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+  # Deliberately over-privileged role. The learner inspects it and (optionally)
+  # scopes it down. AssumeRole principal is the EC2 service so it cannot be
+  # assumed by an external account even pre-remediation -- the misconfig has
+  # no live blast radius, only audit-finding visibility.
+  LegacyBatchRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-legacy-batch"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      MaxSessionDuration: 3600
+      Policies:
+        - PolicyName: WildcardWildcardOnEverything
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # This is the over-privileged Statement the learner remediates.
+              # Equivalent to AdministratorAccess; flagged by Access Analyzer
+              # / IAM Access Advisor / any half-decent CCoE check.
+              - Sid: LegacyAllowAll
+                Effect: Allow
+                Action: "*"
+                Resource: "*"
+      Tags:
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  AuditFlagParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/audit-flag"
+      Type: String
+      Value: !Sub "Hello from ${NamePrefix}"
+      Description: !Sub "TenkaCloud iam-least-privilege audit-complete marker for ${NamePrefix}."
+      Tier: Standard
+
+Outputs:
+  RoleName:
+    Description: IAM Role the learner is auditing.
+    Value: !Ref LegacyBatchRole
+  RoleConsoleUrl:
+    Description: AWS Console deep link to the role's detail page.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/iam/home?region=${AWS::Region}#/roles/details/${NamePrefix}-legacy-batch?section=permissions"
+  AuditParameterName:
+    Description: SSM Parameter holding the audit-complete flag the learner submits.
+    Value: !Ref AuditFlagParameter
+  AuditFlag:
+    Description: Flag value the learner submits in the Portal.
+    Value: !Sub "Hello from ${NamePrefix}"
+  NamePrefix:
+    Description: Common resource prefix that this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN that competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn
