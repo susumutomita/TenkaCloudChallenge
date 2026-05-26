@@ -150,8 +150,8 @@ def set_db_password():
     return "Database password updated", 200
 
 
-@app.route("/api/v1/unicorns", methods=["GET"])
-def api_get_unicorns():
+@app.route("/api/v1/dragons", methods=["GET"])
+def api_get_dragons():
     conn = None
 
     if "id" in request.args:
