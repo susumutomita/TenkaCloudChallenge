@@ -2,7 +2,7 @@
 
 > 日本語版: [README.ja.md](./README.ja.md)
 
-Monday morning at TenkaCloud Inc. Kato-san — the SRE you keep hearing about and never meeting — left you "Unicorn.Rentals." The company acquired it last year. mysql + Flask + nginx co-tenant on one EC2. The monitoring dashboard is green. The codebase has not been read.
+Monday morning at TenkaCloud Inc. Kato-san — the SRE you keep hearing about and never meeting — left you "Tenryu.Mart." The company acquired it last year. mysql + Flask + nginx co-tenant on one EC2. The monitoring dashboard is green. The codebase has not been read.
 
 > Sasaki-san, the CTO: "Attacks are coming in. Other teams are getting hit too. Don't take it down, don't try to fix everything — just keep it up. Triage."
 

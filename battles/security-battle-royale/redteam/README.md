@@ -2,7 +2,7 @@
 
 > Operator-facing. These scripts are what the platform fires against each team's deployed stack to create the "battle" pressure. **Not for unauthorized use against systems you do not own.**
 
-The problem ships a deliberately vulnerable web app (Unicorn.Rentals: nginx + Flask API + MySQL on one EC2). Without external pressure, defenders see a passive deploy and learn nothing about patching under fire. This directory holds the **attack catalog** the platform's operator-side attacker invokes on a schedule.
+The problem ships a deliberately vulnerable web app (Tenryu.Mart: nginx + Flask API + MySQL on one EC2). Without external pressure, defenders see a passive deploy and learn nothing about patching under fire. This directory holds the **attack catalog** the platform's operator-side attacker invokes on a schedule.
 
 ## Attack surface (what's vulnerable)
 
