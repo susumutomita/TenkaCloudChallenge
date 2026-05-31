@@ -170,5 +170,11 @@
       "RegistrationPanel": "portal/RegistrationPanel.tsx",
       "StatusPanel": "portal/StatusPanel.tsx"
     }
+  },
+  "interTeamCoordination": {
+    "plugin": "coordination/router.ts",
+    "name": "サービスルーター",
+    "description": "切り出した service の公開 URL を register すると、 全チームの route directory に共有される。 他チームが移行済みの service を呼び出せるようになる簡易 service mesh (= 参加者間 interaction)。",
+    "publicHint": true
   }
 }
