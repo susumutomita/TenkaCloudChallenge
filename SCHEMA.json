@@ -705,6 +705,31 @@
         }
       }
     },
+    "interTeamCoordination": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plugin"],
+      "description": "[ADR-028 / Issue #1420] opt-in の参加者間 coordination 宣言。 platform の dispatcher Lambda が `plugin` の CoordinationPlugin (= @tenkacloud/coordination-plugin-sdk の contract) を実行し、 tenant/event 単位の 1 row state を validate→apply→project で駆動する。 同盟 / ルーティング / 共有資源 queue 等の意味論は問題側 plugin に閉じ、 platform は host のみ (= 問題ごとに差し替え可能、 platform に hardcode しない)。 省略した問題は coordination 無効 (= safe fallback で portal は通常表示)。 aiContext: Battle で「他チームと干渉する遊び」を足す時に使う。",
+      "properties": {
+        "plugin": {
+          "type": "string",
+          "pattern": "^coordination/[A-Za-z0-9._-]+\\.ts$",
+          "description": "問題 dir からの相対 path で CoordinationPlugin module (.ts) を指す。 dashboard.slots の `portal/*.tsx` 規約と同形で、 `coordination/` サブディレクトリに置く。 default export が `CoordinationPlugin<State, Op, Projection>` (SDK の contract)。 dispatcher が S3 から動的 load する想定。"
+        },
+        "name": {
+          "type": "string",
+          "description": "portal / operator UI 表示用の人間可読名 (= 「同盟」「サービスルーティング」等)。"
+        },
+        "description": {
+          "type": "string",
+          "description": "participant 向けの coordination 説明文 (= interaction の遊び方)。 publicHint が true のとき portal に表示される。"
+        },
+        "publicHint": {
+          "type": "boolean",
+          "description": "[disruptions.publicHint と同方針] true で participant-portal に coordination の存在 + description を予告表示する。 default (= undefined / false) では competitive UX を守るため hide。 operator 側 admin-console は publicHint に関わらず表示する想定。"
+        }
+      }
+    },
     "dashboard": {
       "type": "object",
       "additionalProperties": false,
