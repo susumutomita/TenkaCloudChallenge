@@ -701,6 +701,60 @@
                 }
               ]
             }
+          },
+          "action": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "targetRef", "revert"],
+            "description": "[ADR-031 / Issue #1419] operator fire を競技者アカウントへ届けて実際に障害を注入するための宣言的アクション。 executor が AssumeRole 後に kind に応じた API を 1 本叩く。 省略時は Phase A (= 監査のみ、 障害は起きない) のままで後方互換。 障害の中身は問題が所有 (platform は kind を dispatch するだけ)。",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["ssm-run-command", "lambda-invoke", "cfn-stack-update"],
+                "description": "実行種別。 ssm-run-command=ssm:SendCommand / lambda-invoke=lambda:InvokeFunction / cfn-stack-update=cloudformation:UpdateStack。"
+              },
+              "targetRef": {
+                "type": "string",
+                "minLength": 1,
+                "description": "注入対象を解決する stackOutputs (= CFn Output) の key。 任意の resource id を直接書かせず、 deploy が出力した値に限定する。"
+              },
+              "documentName": {
+                "type": "string",
+                "description": "ssm-run-command で使う SSM Document 名 (例: AWS-RunShellScript)。"
+              },
+              "functionRef": {
+                "type": "string",
+                "description": "lambda-invoke で呼ぶ関数名/ARN を解決する stackOutputs key。"
+              },
+              "paramTemplate": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "API 引数のテンプレート。 文字列値中の {{key}} は parameters / operatorEditable で宣言済の key のみ参照可 (= injection 面の縮小、 validate-problems が enforce)。"
+              },
+              "revert": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["afterSeconds"],
+                "description": "[ADR-029 INV-2] 復旧宣言。 「いかなる disruption も永続しない」を保証するため必須。 executor は注入と同時に revert を予約する。",
+                "properties": {
+                  "afterSeconds": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 86400,
+                    "description": "注入から自動復旧までの秒数。 round 終了 / clear API のいずれか早い方でも復旧する。 上限 24h (= 永続障害の禁止)。"
+                  },
+                  "documentName": {
+                    "type": "string",
+                    "description": "復旧用 SSM Document 名 (ssm-run-command のとき)。"
+                  },
+                  "paramTemplate": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "description": "復旧 API 引数テンプレート。 placeholder 規約は action.paramTemplate と同じ。"
+                  }
+                }
+              }
+            }
           }
         }
       }
