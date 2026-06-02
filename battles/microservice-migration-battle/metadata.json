@@ -162,7 +162,25 @@
         "device": "eth0"
       },
       "description": "deploy 後 60 分 (default) で EC2 のネットワーク遅延が増加する予告。",
-      "publicHint": false
+      "publicHint": false,
+      "action": {
+        "kind": "ssm-run-command",
+        "targetRef": "InstanceId",
+        "documentName": "AWS-RunShellScript",
+        "paramTemplate": {
+          "commands": [
+            "command -v tc >/dev/null 2>&1 || dnf install -y iproute-tc",
+            "tc qdisc add dev {{device}} root netem delay {{delayMs}}ms || true"
+          ]
+        },
+        "revert": {
+          "afterSeconds": 600,
+          "documentName": "AWS-RunShellScript",
+          "paramTemplate": {
+            "commands": ["tc qdisc del dev {{device}} root || true"]
+          }
+        }
+      }
     }
   ],
   "dashboard": {
