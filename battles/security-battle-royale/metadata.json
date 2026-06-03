@@ -127,11 +127,31 @@
       "name": "Availability stress",
       "eventDetailType": "AttackFired",
       "defaultAfterMinutes": 55,
-      "operatorEditable": ["afterMinutes"],
+      "operatorEditable": ["afterMinutes", "concurrency"],
       "parameters": {
-        "probe": "redteam/probes/availability-flood.sh"
+        "probe": "redteam/probes/availability-flood.sh",
+        "durationSeconds": 30,
+        "concurrency": 50
       },
-      "description": "Operator-fired 30-second request burst against frontend + api. Single Flask process under nginx saturates; defenders rate-limit or scale horizontally to mitigate.",
+      "action": {
+        "kind": "ssm-run-command",
+        "targetRef": "InstanceId",
+        "documentName": "AWS-RunShellScript",
+        "paramTemplate": {
+          "commands": [
+            "END=$(( $(date +%s) + {{durationSeconds}} ))",
+            "while [ $(date +%s) -lt $END ]; do for i in $(seq 1 {{concurrency}}); do curl -s -o /dev/null --max-time 2 http://localhost:8080/api/v1/apistatus & curl -s -o /dev/null --max-time 2 http://localhost/ & done; wait; done || true"
+          ]
+        },
+        "revert": {
+          "afterSeconds": 90,
+          "documentName": "AWS-RunShellScript",
+          "paramTemplate": {
+            "commands": ["pkill -f 'curl -s -o /dev/null' || true"]
+          }
+        }
+      },
+      "description": "[ADR-034 pattern A] Operator-fired request burst against frontend + api. Realized as a bounded ({{concurrency}}-wide, {{durationSeconds}}s) HTTP flood from the team's own EC2 against localhost; a single Flask process saturates and the uptime-multi scorer detects the slots failing, so the team loses points unless they rate-limit (nginx limit_req) or scale. Revert kills stray load (ADR-029). concurrency tuned live per instance size.",
       "publicHint": false
     }
   ]
