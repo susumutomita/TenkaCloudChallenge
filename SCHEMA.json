@@ -755,6 +755,30 @@
                 }
               }
             }
+          },
+          "effect": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "points", "durationSeconds"],
+            "description": "[ADR-033 / Issue #1665] disruption の採点上の効果 (= 実クラウドへの fault 注入を伴わず、 採点エンジンが active window の間 team の点に直接与える効果)。 action とは別レイヤで実クラウド不要。 省略時は効果なし (後方互換)。",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["penalty"],
+                "description": "効果種別。 penalty=active window の各採点 tick で points を減点する。"
+              },
+              "points": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "active window の 1 採点 tick あたり減点する点数。"
+              },
+              "durationSeconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 3600,
+                "description": "効果の持続秒数。 上限 1h (= ADR-029 いかなる disruption も永続しない)。"
+              }
+            }
           }
         }
       }
