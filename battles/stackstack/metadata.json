@@ -138,7 +138,8 @@
       "defaultAfterMinutes": 30,
       "operatorEditable": ["afterMinutes"],
       "parameters": { "targetSlot": "ux" },
-      "description": "CEO 由来。 ux slot が EC2 のまま稼働している cycle に追加減点。 production-ramp phase と同タイミング fire 想定。"
+      "effect": { "kind": "penalty", "points": 100, "durationSeconds": 300 },
+      "description": "CEO 由来。 ux slot が EC2 のまま稼働している cycle に追加減点。 production-ramp phase と同タイミング fire 想定。 effect: 5 cycle ぶん 1 tick=100 減点 (ADR-033)。"
     },
     {
       "id": "mfa-mandate",
@@ -147,7 +148,8 @@
       "defaultAfterMinutes": 35,
       "operatorEditable": ["afterMinutes"],
       "parameters": { "targetSlot": "auth" },
-      "description": "Security 由来。 auth slot が EC2 のまま稼働している cycle に failurePenalty を累積追加 (= 加点を打ち消す圧力)。 完全失格にはならない設計。"
+      "effect": { "kind": "penalty", "points": 100, "durationSeconds": 300 },
+      "description": "Security 由来。 auth slot が EC2 のまま稼働している cycle に failurePenalty を累積追加 (= 加点を打ち消す圧力)。 完全失格にはならない設計。 effect: 5 cycle ぶん 1 tick=100 減点 (ADR-033)。"
     },
     {
       "id": "legal-pii-found",
@@ -156,7 +158,8 @@
       "defaultAfterMinutes": 45,
       "operatorEditable": ["afterMinutes"],
       "parameters": { "targetSlot": "audit" },
-      "description": "Legal 由来。 audit slot が EC2 のまま稼働している cycle に追加減点。 compliance-audit phase と連動 fire 想定。"
+      "effect": { "kind": "penalty", "points": 100, "durationSeconds": 300 },
+      "description": "Legal 由来。 audit slot が EC2 のまま稼働している cycle に追加減点。 compliance-audit phase と連動 fire 想定。 effect: 5 cycle ぶん 1 tick=100 減点 (ADR-033)。"
     },
     {
       "id": "env-credential-leak",
@@ -165,7 +168,8 @@
       "defaultAfterMinutes": 55,
       "operatorEditable": ["afterMinutes"],
       "parameters": { "targetSlot": "auth", "degradeMinutes": 5 },
-      "description": "auth slot を 5 分間 503 にする (= 5 cycle ぶん加点 0)。 1 競技に 1 回しか fire しない設計。"
+      "effect": { "kind": "penalty", "points": 100, "durationSeconds": 300 },
+      "description": "auth slot を 5 分間 503 にする (= 5 cycle ぶん加点 0)。 1 競技に 1 回しか fire しない設計。 effect: 5 分 = 5 cycle ぶん 1 tick=100 減点 (ADR-033)。"
     },
     {
       "id": "ai-committed-secret",
@@ -174,7 +178,8 @@
       "defaultAfterMinutes": 70,
       "operatorEditable": ["afterMinutes"],
       "parameters": { "targetSlots": ["network", "audit"] },
-      "description": "network + audit の 2 slot を連動で 3 分間 503。 AI Native 組織における二次被害 (= 漏洩 + 監査ログ不整合) シミュレーション。"
+      "effect": { "kind": "penalty", "points": 200, "durationSeconds": 180 },
+      "description": "network + audit の 2 slot を連動で 3 分間 503。 AI Native 組織における二次被害 (= 漏洩 + 監査ログ不整合) シミュレーション。 effect: 2 slot 分 1 tick=200 を 3 cycle 減点 (ADR-033)。"
     }
   ],
   "dashboard": {
