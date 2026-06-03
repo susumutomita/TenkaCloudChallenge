@@ -79,6 +79,24 @@
     ],
     "pointsAllOk": 100,
     "failurePenalty": 0,
+    "attackProbes": [
+      {
+        "slot": "api",
+        "path": "/api/v1/auth",
+        "method": "POST",
+        "body": "{\"username\": \"' OR '1'='1' -- \", \"password\": \"x\"}",
+        "vulnerableStatus": [200],
+        "penalty": 50
+      },
+      {
+        "slot": "api",
+        "path": "/api/v1/auth",
+        "method": "POST",
+        "body": "{\"username\": \"admin' UNION SELECT username FROM username -- \", \"password\": \"x\"}",
+        "vulnerableStatus": [200],
+        "penalty": 50
+      }
+    ],
     "hints": [
       {
         "id": "hint-1",
