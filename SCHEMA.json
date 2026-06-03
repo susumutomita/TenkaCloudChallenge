@@ -417,6 +417,39 @@
               "type": "integer",
               "description": "1 つでも fail が混ざった時の加点 (通常 0 または負値)。省略時 0。"
             },
+            "attackBlocked": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["slot", "path", "pointsPerBlock"],
+              "description": "[ADR-034 / #1666] 任意。 アプリが露出する『攻撃ブロック回数』counter endpoint を採点 tick が live probe し、 前回からの増分に pointsPerBlock を掛けて加点する (= 防御成功の加点)。",
+              "properties": {
+                "slot": { "type": "string", "description": "probe する slot 名 (endpoints[].slot)。" },
+                "path": { "type": "string", "description": "counter (整数) を返す endpoint path。" },
+                "pointsPerBlock": { "type": "integer", "minimum": 1, "description": "1 ブロックあたりの加点。" }
+              }
+            },
+            "attackProbes": {
+              "type": "array",
+              "description": "[ADR-034 / #1666] 任意の防御テスト。 採点側が各 probe へ攻撃 payload を送り、 応答 status が vulnerableStatus に含まれれば (= 防御が破れた) penalty を減点する。 防御できていれば 0、 到達不能も 0。",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["slot", "path", "vulnerableStatus", "penalty"],
+                "properties": {
+                  "slot": { "type": "string", "description": "攻撃を送る slot 名 (endpoints[].slot)。" },
+                  "path": { "type": "string", "description": "攻撃対象の endpoint path。" },
+                  "method": { "type": "string", "enum": ["GET", "POST"], "description": "HTTP method (既定 GET)。" },
+                  "body": { "type": "string", "description": "POST 時に送る攻撃 payload (JSON 文字列)。" },
+                  "vulnerableStatus": {
+                    "type": "array",
+                    "items": { "type": "integer", "minimum": 100, "maximum": 599 },
+                    "minItems": 1,
+                    "description": "防御が破れたとみなす応答 status 群 (例: SQLi auth bypass = 200)。"
+                  },
+                  "penalty": { "type": "integer", "minimum": 1, "description": "脆弱なときに引く点数。" }
+                }
+              }
+            },
             "hints": { "$ref": "#/$defs/progressiveHints" }
           },
           "description": "kind=uptime-multi。example: security-battle-royale (frontend + api 同時生存中だけ加点)。"
