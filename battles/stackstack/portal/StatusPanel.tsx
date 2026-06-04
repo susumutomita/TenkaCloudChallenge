@@ -40,7 +40,7 @@ export default function StatusPanel(props: PortalSlotProps) {
       <p style={{ margin: "0 0 16px 0", color: "#5f6b7a", fontSize: "13px" }}>
         各 slot を managed runtime (Lambda + API GW / ECS Fargate / App Runner) に切り出して
         override 登録すると platform 加点が 100 pt → 1000 pt にジャンプします。 全 5 slot が managed
-        に乗ると <strong>+5000 pt one-time bonus</strong>。
+        に乗ると <strong>+30,000 pt one-time bonus</strong>。
       </p>
 
       <div style={{ marginBottom: "16px" }}>

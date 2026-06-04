@@ -67,17 +67,22 @@ A single CloudFormation stack lands in your team's AWS account:
 
 Each phase applies to **every slot still on EC2**, not just one. Migrating only `ux` and leaving four behind means all four degrade at the 30-minute mark.
 
-## Random org events (disruptions)
+## Red team (random org events / disruptions)
 
-Operator-fired catalog (you do not control these — they fire on the operator's schedule):
+To make the cost of standing still tangible, the operator's red team fires org events on its own schedule (you do not control these). The first three are scoring-side penalties; the last two **inject real faults** into your EC2:
 
-| id                    | name                              | Effect                                                  |
-| --------------------- | --------------------------------- | ------------------------------------------------------- |
-| `ceo-5000-users`      | CEO demands a 5000-user demo      | Extra penalty per cycle while `ux` slot is on EC2       |
-| `mfa-mandate`         | Security Team mandates MFA        | Extra penalty per cycle while `auth` slot is on EC2     |
-| `legal-pii-found`     | Legal finds PII                   | Extra penalty per cycle while `audit` slot is on EC2    |
-| `env-credential-leak` | `.env` leaks                      | `auth` slot returns 503 for 5 min (zero pt for 5 cycles)|
-| `ai-committed-secret` | Claude commits a secret           | `network` + `audit` both return 503 for 3 min           |
+| id                    | name                              | Effect                                                          |
+| --------------------- | --------------------------------- | --------------------------------------------------------------- |
+| `ceo-5000-users`      | CEO demands a 5000-user demo      | Extra penalty per cycle for teams still running `ux` on EC2     |
+| `mfa-mandate`         | Security Team mandates MFA        | Extra penalty per cycle for teams still running `auth` on EC2   |
+| `legal-pii-found`     | Legal finds PII                   | Extra penalty per cycle for teams still running `audit` on EC2  |
+| `env-credential-leak` | `.env` leaks                      | Stops the `auth` service on your EC2 → probe 5xx (zero pt + failurePenalty per cycle) |
+| `ai-committed-secret` | Claude commits a secret           | Stops `network` + `audit` on your EC2 together → both probe 5xx |
+
+Two mitigations for the real faults:
+
+- **Already migrated?** Untouched. The red team never touches your override URL — only the EC2. That asymmetry is the point.
+- **Still on EC2?** SSM into the instance (`SsmStartSessionCommand` stack output) and `sudo systemctl start tenkacloud-slot-<slot>`. The earlier you recover, the smaller the loss. Per ADR-029 an automatic revert is always scheduled, so no fault is permanent.
 
 ## All-managed bonus
 
@@ -111,3 +116,4 @@ See [`OPERATOR.md`](./OPERATOR.md) for a fire-schedule recommendation, a deploy 
 - [`template.yaml`](./template.yaml) — one-page CFn template
 - [`portal/StatusPanel.tsx`](./portal/StatusPanel.tsx) — dashboard plugin that surfaces the 5-axis subscore + phase + disruption state
 - [`OPERATOR.md`](./OPERATOR.md) — operator runbook
+- [`redteam/`](./redteam/) — disruption catalog explainer + pre-event smoke test (operator-facing)

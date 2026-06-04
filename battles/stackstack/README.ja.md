@@ -67,17 +67,22 @@
 
 各 phase は EC2 のまま残っている **全 slot に対して** 効く。 「ux だけ移して残り 4 slot は EC2 のまま」 だと 30 分後に 4 slot が一斉に degrade する設計。
 
-## ランダム組織イベント (disruptions)
+## レッドチーム (ランダム組織イベント / disruptions)
 
-operator が任意 fire (= 競技者は制御できない):
+放置のコストを実感させるため、 運営のレッドチームが任意タイミングで組織イベントを fire する (= 競技者は制御できない)。 前半 3 つは採点側ペナルティ、 後半 2 つは **EC2 への実障害注入**:
 
 | id                    | name                              | 影響                                                  |
 | --------------------- | --------------------------------- | ------------------------------------------------------- |
-| `ceo-5000-users`      | CEO が明日 5000 人デモを要求      | `ux` slot が EC2 のまま稼働している cycle に追加減点    |
-| `mfa-mandate`         | Security Team が MFA 必須化       | `auth` slot が EC2 のまま稼働している cycle に追加減点 |
-| `legal-pii-found`     | Legal が PII 検出                 | `audit` slot が EC2 のまま稼働している cycle に追加減点 |
-| `env-credential-leak` | `.env` 流出                       | `auth` slot を 5 分間 503 (= 加点 0 が 5 cycle)        |
-| `ai-committed-secret` | Claude が秘密鍵を git commit      | `network` + `audit` を 3 分間 503                       |
+| `ceo-5000-users`      | CEO が明日 5000 人デモを要求      | `ux` が EC2 のままのチームに cycle ごと追加減点         |
+| `mfa-mandate`         | Security Team が MFA 必須化       | `auth` が EC2 のままのチームに cycle ごと追加減点       |
+| `legal-pii-found`     | Legal が PII 検出                 | `audit` が EC2 のままのチームに cycle ごと追加減点      |
+| `env-credential-leak` | `.env` 流出                       | EC2 上の `auth` サービスを停止 → probe 5xx (= 加点 0 + failurePenalty 累積) |
+| `ai-committed-secret` | Claude が秘密鍵を git commit      | EC2 上の `network` + `audit` を連動停止 → 両方 5xx     |
+
+実障害系への対策は 2 つ:
+
+- **移行済みなら無傷。** レッドチームが触るのは EC2 だけで、 override 先の URL には手を出さない。 この非対称性こそがゲームの肝。
+- **EC2 に残っていたら** SSM で接続 (`SsmStartSessionCommand` stack output) して `sudo systemctl start tenkacloud-slot-<slot>`。 早く直すほど損失が小さい。 ADR-029 に従い自動復旧が常に予約されるため、 永続障害にはならない。
 
 ## 全 managed 移行ボーナス
 
@@ -111,3 +116,4 @@ EC2 上の参照実装は `template.yaml` UserData の Python stub。
 - [`template.yaml`](./template.yaml) — CFn ペライチ
 - [`portal/StatusPanel.tsx`](./portal/StatusPanel.tsx) — 5-axis subscore + phase + disruption を可視化する dashboard plugin
 - [`OPERATOR.md`](./OPERATOR.md) — 運用 runbook
+- [`redteam/`](./redteam/) — disruption catalog の解説 + 事前 smoke test (operator 向け)
