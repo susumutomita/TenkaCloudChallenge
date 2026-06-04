@@ -8,7 +8,7 @@
   "difficulty": 4,
   "estimatedDuration": "90〜120 分",
   "shortDescription": "天下クラウド株式会社 Platform Team、 月初の朝会。 加藤さんは先月辞めた。 社内 100 人の AI Builder が Claude で量産したアプリが、 5 軸 (auth / network / rate / audit / ux) どれも未整備のまま EC2 1 台に同居している。\n\n佐々木 CTO 曰く: 「これ、 公開していい状態に持っていって。 AI が書いた速さに、 Platform チームが追いつけてない。 他チームの Platform もみんな焦ってる」\n\n君の仕事: 5 軸の slot を順に managed runtime (Lambda + API GW / ECS / App Runner) に切り出し、 Portal の Endpoint Override に新 URL を貼って加点を 10× に上げていく。 きれいに分割した Platform Team が勝つ。",
-  "description": "## 概要\n\n天下クラウド社の Platform Team として、 AI Builder が量産した naive アプリを 5 つの統制軸で本番品質に持ち上げる Battle。 コードを書く速さの競争ではなく、 「速く・安全に・統制下で」 社内公開する Platform 運用力の競争。\n\n## 5 軸 (= 5 endpoint slot)\n\n| slot | 統制軸 | 初期状態 (= EC2 同居 deploy) | hardened (= managed runtime) |\n|------|--------|---------|---------------|\n| `auth` | Authentication / Authorization | naive Basic auth | Cognito / SSO 統合 |\n| `network` | Network controls (S3 / WAF / IAM) | Public S3 + wildcard IAM | OAC + scoped IAM |\n| `rate` | Rate limit / DoS protection | 無制限の Flask | API GW throttle / Lambda concurrency |\n| `audit` | Logging / Compliance | 標準出力のみ | CloudTrail + WORM bucket |\n| `ux` | User-facing availability | EC2 1 台 | Multi-AZ + ALB + Auto Scaling |\n\n各 slot は `/meta` で現 hosting を自己申告する。 初期 deploy では全 slot が `\"ec2\"` を返し低スコア (= 100 pt/cycle/slot)。 Lambda+API GW / ECS Fargate / App Runner に切り出して Portal の Endpoint Override に新 URL を貼ると `/meta` が `\"lambda\" | \"ecs\" | \"apprunner\"` を返すようになり、 加点が 1000 pt/cycle/slot に上がる。\n\n## 時間進行 (phases)\n\n- 0 分: 全 slot が EC2 上に naive deploy (= 500 pt/min ベース)\n- 30 分: **production-ramp** - EC2 のままの slot は degradedPoints (10 pt) に切替 (= 「公開期限に間に合わなかった」 シミュレーション)\n- 60 分: **compliance-audit** - 同じく EC2 のままの slot は degraded (= 監査要件不足の劣化が累積)\n- 90 分: **incident-response** - score engine が `/score?legacy=true` を呼ぶ。 AI Builder が混入させた slow path (= 2 秒 sleep) を取り除いて再 deploy しないと応答時間ペナルティが累積する\n\n各 phase は登録 slot の中で EC2 のまま残っているもの全てに効く。 「ux だけ移して残りは EC2 のまま」 だと 30 分後に 4 slot が一斉に degrade する設計。\n\n## ランダム組織イベント (disruptions)\n\noperator が任意タイミングで fire する catalog:\n\n| id | name | 影響 |\n|----|------|------|\n| `ceo-5000-users` | CEO が明日 5000 人デモを要求 | `ux` slot が EC2 のままだと cycle ごとに追加減点 |\n| `mfa-mandate` | Security Team が MFA 必須化 | `auth` slot が EC2 のままだと cycle ごとに追加減点 (= failurePenalty 累積) |\n| `legal-pii-found` | Legal が PII 検出 | `audit` slot が EC2 のままだと追加減点 |\n| `env-credential-leak` | `.env` 流出 | `auth` slot を 5 分間 503 (= cycle 加点 0) |\n| `ai-committed-secret` | Claude が秘密鍵を git commit | `network` + `audit` を 3 分間 503 |\n\n## 全 managed 移行ボーナス\n\n5 slot 全てが managed runtime (lambda / ecs / apprunner のいずれか) に乗ると **+30,000 pt** が 1 回入る (= 'production-ready' 認定)。 1 つでも EC2 が残っていると bonus は付かない。",
+  "description": "## 概要\n\n天下クラウド社の Platform Team として、 AI Builder が量産した naive アプリを 5 つの統制軸で本番品質に持ち上げる Battle。 コードを書く速さの競争ではなく、 「速く・安全に・統制下で」 社内公開する Platform 運用力の競争。\n\n## 5 軸 (= 5 endpoint slot)\n\n| slot | 統制軸 | 初期状態 (= EC2 同居 deploy) | hardened (= managed runtime) |\n|------|--------|---------|---------------|\n| `auth` | Authentication / Authorization | naive Basic auth | Cognito / SSO 統合 |\n| `network` | Network controls (S3 / WAF / IAM) | Public S3 + wildcard IAM | OAC + scoped IAM |\n| `rate` | Rate limit / DoS protection | 無制限の Flask | API GW throttle / Lambda concurrency |\n| `audit` | Logging / Compliance | 標準出力のみ | CloudTrail + WORM bucket |\n| `ux` | User-facing availability | EC2 1 台 | Multi-AZ + ALB + Auto Scaling |\n\n各 slot は `/meta` で現 hosting を自己申告する。 初期 deploy では全 slot が `\"ec2\"` を返し低スコア (= 100 pt/cycle/slot)。 Lambda+API GW / ECS Fargate / App Runner に切り出して Portal の Endpoint Override に新 URL を貼ると `/meta` が `\"lambda\" | \"ecs\" | \"apprunner\"` を返すようになり、 加点が 1000 pt/cycle/slot に上がる。\n\n## 時間進行 (phases)\n\n- 0 分: 全 slot が EC2 上に naive deploy (= 500 pt/min ベース)\n- 30 分: **production-ramp** - EC2 のままの slot は degradedPoints (10 pt) に切替 (= 「公開期限に間に合わなかった」 シミュレーション)\n- 60 分: **compliance-audit** - 同じく EC2 のままの slot は degraded (= 監査要件不足の劣化が累積)\n- 90 分: **incident-response** - score engine が `/score?legacy=true` を呼ぶ。 AI Builder が混入させた slow path (= 2 秒 sleep) を取り除いて再 deploy しないと応答時間ペナルティが累積する\n\n各 phase は登録 slot の中で EC2 のまま残っているもの全てに効く。 「ux だけ移して残りは EC2 のまま」 だと 30 分後に 4 slot が一斉に degrade する設計。\n\n## レッドチーム (ランダム組織イベント / disruptions)\n\n放置のコストを実感させるため、 運営のレッドチームが任意タイミングで組織イベントを fire する。 前半 3 つは採点側ペナルティ (実障害なし)、 後半 2 つは EC2 への実障害注入:\n\n| id | name | 影響 |\n|----|------|------|\n| `ceo-5000-users` | CEO が明日 5000 人デモを要求 | `ux` が EC2 のままのチームに 5 分間 cycle ごと追加減点 |\n| `mfa-mandate` | Security Team が MFA 必須化 | `auth` が EC2 のままのチームに 5 分間 cycle ごと追加減点 |\n| `legal-pii-found` | Legal が PII 検出 | `audit` が EC2 のままのチームに 5 分間 cycle ごと追加減点 |\n| `env-credential-leak` | `.env` 流出 | EC2 上の `auth` サービスを停止 → 5xx (= 加点 0 + failurePenalty 累積) |\n| `ai-committed-secret` | Claude が秘密鍵を git commit | EC2 上の `network` + `audit` を連動停止 → 5xx |\n\n実障害系への対策は 2 つ。 (1) 対象 slot を managed runtime に移行済みなら無傷 (レッドチームは override 先には触れない)。 (2) EC2 に残っていた場合は SSM Session Manager で接続し `systemctl start tenkacloud-slot-<slot>` で手動復旧する (早いほど損失が小さい)。 ADR-029 に従い自動復旧が常に予約されるため、 永続障害にはならない。\n\n## 全 managed 移行ボーナス\n\n5 slot 全てが managed runtime (lambda / ecs / apprunner のいずれか) に乗ると **+30,000 pt** が 1 回入る (= 'production-ready' 認定)。 1 つでも EC2 が残っていると bonus は付かない。",
   "tags": ["platform-engineering", "ai-native", "ccoe", "security", "governance", "availability"],
   "exposedPorts": [
     { "port": 80, "name": "nginx reverse proxy (auth / network / rate / audit / ux)" }
@@ -24,7 +24,7 @@
     "en": {
       "name": "StackStack — AI to Production Last Mile",
       "shortDescription": "Monday morning standup, TenkaCloud Platform Team. Kato-san resigned last month. 100 internal AI Builders are mass-producing Claude-generated apps with all 5 control axes (auth / network / rate / audit / ux) wide open, co-tenant on one EC2.\n\nSasaki-san CTO: 'Get this to a publishable state. AI is shipping faster than Platform can keep up. Every other team's Platform org is in the same spot.'\n\nYour job: peel each of the 5 slots off EC2 and onto a managed runtime (Lambda + API GW / ECS / App Runner). Register the new URL in the Participant Portal Endpoint Override, and your per-slot payout jumps 10x. The cleanest split wins.",
-      "description": "## Overview\n\nYou are the TenkaCloud Platform Team taking AI-generated apps to production across 5 control axes. The contest is Platform operational quality — fast, safe, governed — not coding speed.\n\n## 5 control axes (= 5 endpoint slots)\n\n| slot | axis | initial state (= EC2 co-tenant) | hardened (= managed runtime) |\n|------|------|---------------------------------|------------------------------|\n| `auth` | Authentication / Authorization | naive Basic auth | Cognito / SSO via managed runtime |\n| `network` | Network controls (S3 / WAF / IAM) | Public S3 + wildcard IAM | OAC + scoped IAM |\n| `rate` | Rate limit / DoS | unthrottled Flask | API GW throttle / Lambda concurrency |\n| `audit` | Logging / Compliance | stdout only | CloudTrail + WORM bucket |\n| `ux` | User-facing availability | single EC2 | Multi-AZ + ALB + Auto Scaling |\n\nEach slot self-reports its hosting platform via `/meta`. The initial deploy puts all five on EC2 (low score: 100 pt/cycle/slot). Hardening = re-hosting to Lambda + API GW / ECS Fargate / App Runner and registering the new URL via the portal override. Once `/meta` returns `lambda` / `ecs` / `apprunner`, that slot pays 1,000 pt/cycle.\n\n## Time-based phases\n\n- 0 min: all slots naive on EC2 (≈ 500 pt/min baseline)\n- 30 min: **production-ramp** — every slot still on EC2 switches to degradedPoints (10 pt). 'You missed the publish deadline' simulation\n- 60 min: **compliance-audit** — same effect (audit gap accumulates as time passes)\n- 90 min: **incident-response** — score engine probes `/score?legacy=true`. The legacy code path planted by the AI Builder (2 s sleep) trips the response-time penalty unless you redeploy without it\n\nEach phase hits every slot still on EC2, not just one. Migrating only `ux` and leaving the other four behind means four slots all degrade at the 30-minute mark.\n\n## Random org events (disruptions)\n\nOperator-fired catalog: CEO 5000-user demand, Security MFA mandate, Legal PII finding, .env credential leak (auth returns 503 for 5 min), AI-committed-secret (network + audit return 503 for 3 min).\n\n## All-managed bonus\n\n5 slots all on managed runtimes (lambda / ecs / apprunner): **+30,000 pt one-time**. A single slot still on EC2 disqualifies the bonus.",
+      "description": "## Overview\n\nYou are the TenkaCloud Platform Team taking AI-generated apps to production across 5 control axes. The contest is Platform operational quality — fast, safe, governed — not coding speed.\n\n## 5 control axes (= 5 endpoint slots)\n\n| slot | axis | initial state (= EC2 co-tenant) | hardened (= managed runtime) |\n|------|------|---------------------------------|------------------------------|\n| `auth` | Authentication / Authorization | naive Basic auth | Cognito / SSO via managed runtime |\n| `network` | Network controls (S3 / WAF / IAM) | Public S3 + wildcard IAM | OAC + scoped IAM |\n| `rate` | Rate limit / DoS | unthrottled Flask | API GW throttle / Lambda concurrency |\n| `audit` | Logging / Compliance | stdout only | CloudTrail + WORM bucket |\n| `ux` | User-facing availability | single EC2 | Multi-AZ + ALB + Auto Scaling |\n\nEach slot self-reports its hosting platform via `/meta`. The initial deploy puts all five on EC2 (low score: 100 pt/cycle/slot). Hardening = re-hosting to Lambda + API GW / ECS Fargate / App Runner and registering the new URL via the portal override. Once `/meta` returns `lambda` / `ecs` / `apprunner`, that slot pays 1,000 pt/cycle.\n\n## Time-based phases\n\n- 0 min: all slots naive on EC2 (≈ 500 pt/min baseline)\n- 30 min: **production-ramp** — every slot still on EC2 switches to degradedPoints (10 pt). 'You missed the publish deadline' simulation\n- 60 min: **compliance-audit** — same effect (audit gap accumulates as time passes)\n- 90 min: **incident-response** — score engine probes `/score?legacy=true`. The legacy code path planted by the AI Builder (2 s sleep) trips the response-time penalty unless you redeploy without it\n\nEach phase hits every slot still on EC2, not just one. Migrating only `ux` and leaving the other four behind means four slots all degrade at the 30-minute mark.\n\n## Red team (random org events / disruptions)\n\nTo make the cost of standing still tangible, the operator's red team fires org events on its own schedule. The first three are scoring-side penalties (no real fault): CEO 5000-user demand (`ux`), Security MFA mandate (`auth`), Legal PII finding (`audit`) — each docks points per cycle for 5 minutes, aimed at teams whose slot is still EC2-resident. The last two inject real faults into the EC2: `.env` credential leak stops the `auth` service; AI-committed-secret stops `network` + `audit` together. A stopped slot probes 5xx — zero points plus failurePenalty per cycle.\n\nTwo mitigations: (1) slots already migrated to managed runtimes are untouched — the red team never touches your override URL; (2) if you are still on EC2, SSM into the instance and run `systemctl start tenkacloud-slot-<slot>` — the earlier you recover, the smaller the loss. Per ADR-029 an automatic revert is always scheduled, so no fault is permanent.\n\n## All-managed bonus\n\n5 slots all on managed runtimes (lambda / ecs / apprunner): **+30,000 pt one-time**. A single slot still on EC2 disqualifies the bonus.",
       "learningGoals": [
         "Practice the judgment and ordering required to take an AI-generated app to production across 5 control axes",
         "Understand how migrating to managed runtimes (Lambda / ECS / App Runner) auto-bootstraps hardening defaults",
@@ -139,7 +139,7 @@
       "operatorEditable": ["afterMinutes"],
       "parameters": { "targetSlot": "ux" },
       "effect": { "kind": "penalty", "points": 100, "durationSeconds": 300 },
-      "description": "CEO 由来。 ux slot が EC2 のまま稼働している cycle に追加減点。 production-ramp phase と同タイミング fire 想定。 effect: 5 cycle ぶん 1 tick=100 減点 (ADR-033)。"
+      "description": "CEO 由来の組織イベント。 採点側 effect のみで実障害は注入しない (ADR-033)。 fire から 5 分間、 採点 tick ごとに -100 pt (= 5 cycle ぶん)。 engine は無条件に減点するため、 operator は ux slot が EC2 のまま残っているチームだけに fire する (移行済みチームには撃たない)。 production-ramp phase と同タイミング fire 想定。"
     },
     {
       "id": "mfa-mandate",
@@ -149,7 +149,7 @@
       "operatorEditable": ["afterMinutes"],
       "parameters": { "targetSlot": "auth" },
       "effect": { "kind": "penalty", "points": 100, "durationSeconds": 300 },
-      "description": "Security 由来。 auth slot が EC2 のまま稼働している cycle に failurePenalty を累積追加 (= 加点を打ち消す圧力)。 完全失格にはならない設計。 effect: 5 cycle ぶん 1 tick=100 減点 (ADR-033)。"
+      "description": "Security 由来の組織イベント。 採点側 effect のみで実障害は注入しない (ADR-033)。 fire から 5 分間、 採点 tick ごとに -100 pt (= 加点を打ち消す圧力、 完全失格にはならない設計)。 engine は無条件に減点するため、 operator は auth slot が EC2 のまま残っているチームだけに fire する。"
     },
     {
       "id": "legal-pii-found",
@@ -159,7 +159,7 @@
       "operatorEditable": ["afterMinutes"],
       "parameters": { "targetSlot": "audit" },
       "effect": { "kind": "penalty", "points": 100, "durationSeconds": 300 },
-      "description": "Legal 由来。 audit slot が EC2 のまま稼働している cycle に追加減点。 compliance-audit phase と連動 fire 想定。 effect: 5 cycle ぶん 1 tick=100 減点 (ADR-033)。"
+      "description": "Legal 由来の組織イベント。 採点側 effect のみで実障害は注入しない (ADR-033)。 fire から 5 分間、 採点 tick ごとに -100 pt。 engine は無条件に減点するため、 operator は audit slot が EC2 のまま残っているチームだけに fire する。 compliance-audit phase と連動 fire 想定。"
     },
     {
       "id": "env-credential-leak",
@@ -168,8 +168,22 @@
       "defaultAfterMinutes": 55,
       "operatorEditable": ["afterMinutes"],
       "parameters": { "targetSlot": "auth", "degradeMinutes": 5 },
-      "effect": { "kind": "penalty", "points": 100, "durationSeconds": 300 },
-      "description": "auth slot を 5 分間 503 にする (= 5 cycle ぶん加点 0)。 1 競技に 1 回しか fire しない設計。 effect: 5 分 = 5 cycle ぶん 1 tick=100 減点 (ADR-033)。"
+      "description": "レッドチーム (operator) が対象チームの EC2 で auth slot の systemd unit を停止する実障害注入 (ADR-031)。 EC2 のままの auth は probe が 5xx になり、 加点 0 + failurePenalty (-100/cycle) が累積する。 競技者は SSM Session Manager で接続し `systemctl start tenkacloud-slot-auth` で復旧する (早く直すほど損失が小さい)。 auth を managed runtime に移行済みのチームは override 先に触れないため無傷。 ADR-029 に従い 300 秒後の自動復旧が安全網として予約される。 1 競技に 1 回しか fire しない設計。",
+      "action": {
+        "kind": "ssm-run-command",
+        "targetRef": "InstanceId",
+        "documentName": "AWS-RunShellScript",
+        "paramTemplate": {
+          "commands": ["systemctl stop tenkacloud-slot-auth || true"]
+        },
+        "revert": {
+          "afterSeconds": 300,
+          "documentName": "AWS-RunShellScript",
+          "paramTemplate": {
+            "commands": ["systemctl start tenkacloud-slot-auth || true"]
+          }
+        }
+      }
     },
     {
       "id": "ai-committed-secret",
@@ -178,8 +192,22 @@
       "defaultAfterMinutes": 70,
       "operatorEditable": ["afterMinutes"],
       "parameters": { "targetSlots": ["network", "audit"] },
-      "effect": { "kind": "penalty", "points": 200, "durationSeconds": 180 },
-      "description": "network + audit の 2 slot を連動で 3 分間 503。 AI Native 組織における二次被害 (= 漏洩 + 監査ログ不整合) シミュレーション。 effect: 2 slot 分 1 tick=200 を 3 cycle 減点 (ADR-033)。"
+      "description": "レッドチーム (operator) が対象チームの EC2 で network + audit の 2 slot を連動停止する実障害注入 (ADR-031)。 AI Native 組織における二次被害 (= 漏洩 + 監査ログ不整合) シミュレーション。 EC2 のままの 2 slot は probe が 5xx になり、 加点 0 + failurePenalty が slot ごとに累積する。 復旧は SSM Session Manager から `systemctl start tenkacloud-slot-network tenkacloud-slot-audit`。 managed runtime に移行済みの slot は無傷。 ADR-029 に従い 180 秒後の自動復旧が安全網として予約される。",
+      "action": {
+        "kind": "ssm-run-command",
+        "targetRef": "InstanceId",
+        "documentName": "AWS-RunShellScript",
+        "paramTemplate": {
+          "commands": ["systemctl stop tenkacloud-slot-network tenkacloud-slot-audit || true"]
+        },
+        "revert": {
+          "afterSeconds": 180,
+          "documentName": "AWS-RunShellScript",
+          "paramTemplate": {
+            "commands": ["systemctl start tenkacloud-slot-network tenkacloud-slot-audit || true"]
+          }
+        }
+      }
     }
   ],
   "dashboard": {

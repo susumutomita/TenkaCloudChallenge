@@ -69,6 +69,27 @@ Must update:
 
 Keep `phases[].publicHint` and `disruptions[].publicHint` set to **`false`** unless the timing is genuinely part of the puzzle. If they default to `true` in the starter, flip them.
 
+## Step 3.5 — disruptions / red team (Battles only)
+
+Skip for Challenges. For Battles, ask the user: "Should an operator-side red team pressure the players during the round?" If yes, every `disruptions[]` entry must declare **how the pressure is delivered** — a description alone does nothing at runtime. Pick one delivery model per disruption:
+
+| Model | Use when | Declare | Worked example |
+| --- | --- | --- | --- |
+| **Scoring-side `effect`** (ADR-033) | Narrative/organizational pressure; no cloud fault needed | `effect: { kind: "penalty", points: ≥1, durationSeconds: ≤3600 }` | `battles/stackstack` (`ceo-5000-users`) |
+| **Real fault `action`** (ADR-031) | The defender must notice, diagnose, and fix something | `action: { kind: "ssm-run-command" \| "lambda-invoke" \| "cfn-stack-update", targetRef: <Outputs key>, paramTemplate, revert: { afterSeconds: ≤86400, ... } }` | `battles/hello-world-battle` (`frontend-down`), `battles/stackstack` (`env-credential-leak`) |
+| **HTTP attack probes** | App-layer attacks (SQLi, floods) against player-patched code | `redteam/probes/*.sh` + `redteam/run-attack-cycle.sh`; disruption `parameters.probe` points at the script | `battles/security-battle-royale` |
+
+Rules the validator and/or reviewers enforce:
+
+- **Never describe a fault the entry doesn't deliver.** "The slot returns 503" requires an `action` (or a probe). An `effect`-only event may only claim score pressure. This mismatch shipped once and broke the battle's promises — don't repeat it.
+- `action.targetRef` / `action.functionRef` must name an existing `template.yaml` `Outputs:` key (validated).
+- `action.revert` is **mandatory** (ADR-029: no disruption is permanent). Match `afterSeconds` to the duration the player-facing text promises. `{{placeholders}}` in `paramTemplate` may only reference declared `parameters` / `operatorEditable` keys (validated).
+- `effect` penalties apply **unconditionally** once fired — any "only hurts teams still on X" conditionality is operator targeting discipline, which belongs in `OPERATOR.md` and `redteam/README.md`.
+- A single self-explanatory `action` can live entirely in the disruption's `description` (see `battles/hello-world-battle`). Anything bigger — multiple disruptions, mixed delivery models, or attack scripts — ships a **`redteam/README.md`** (operator-facing): catalog table (id / delivery / what actually happens), the player recovery path, the targeting rule for effect-only events, and a pre-event smoke test for every real fault (see `battles/stackstack/redteam/smoke-test-attacks.sh`).
+- Explain the red team's *existence and recovery path* in the player-facing `description` (players engage more when the pressure is announced) — but keep exact fire timing and `publicHint: false` unless timing is the gameplay.
+
+Damage from a real fault arrives through the scoring engine on its own: a stopped service fails its probe → `failurePenalty` per cycle. Do **not** stack an `effect` penalty on top of an `action` for the same event — that double-charges and also (unfairly) hits teams that already migrated off the attacked host.
+
 ## Step 4 — edit `template.yaml`
 
 Replace the starter's problem-specific resources with yours. Preserve:
@@ -176,6 +197,8 @@ By following the steps above you avoid:
 - CloudShell refusing to open (= step 4's 7 cloudshell actions).
 - Cross-tenant leakage via list-style IAM actions (= step 4's per-resource ARN scoping).
 - Spoiler in the portal timeline (= step 3's `publicHint: false`).
+- Disruptions that promise faults nothing delivers (= step 3.5's delivery-model table; "returns 503" needs an `action`, not just an `effect`).
+- Permanent faults / unfair double penalties (= step 3.5's mandatory `revert` + no `effect`-on-top-of-`action` rule).
 - AWS Console deep link 400s (= use literal slashes, never `%2F` encoding).
 - Dry, non-engaging problem framing (= step 5's SRE-narration voice).
 

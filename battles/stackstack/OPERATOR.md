@@ -41,17 +41,26 @@ In the platform admin console:
 
 ## During the event
 
+### How the red team fires (mechanics)
+
+The 5 disruptions split into two delivery models — see [`redteam/README.md`](./redteam/README.md) for the full catalog:
+
+- **Scoring-side `effect` (ADR-033)** — `ceo-5000-users` / `mfa-mandate` / `legal-pii-found`. Firing from the admin console records the effect; the scoring engine docks −100 pt per tick for 5 minutes. **No cloud fault is injected**, and the engine deducts unconditionally — so fire these only at teams whose target slot still self-reports `ec2` (check `/<slot>/meta` first). Firing at a migrated team is an unfair hit.
+- **Real fault `action` (ADR-031)** — `env-credential-leak` / `ai-committed-secret`. Firing makes the platform's disruption executor AssumeRole into the team account and run the declared SSM command (`systemctl stop tenkacloud-slot-<slot>`). EC2-resident slots probe 5xx → zero points + failurePenalty per cycle. Slots already migrated to a managed runtime are untouched. The executor schedules the auto-revert (`systemctl start ...`) at fire time per ADR-029 — 300 s for `env-credential-leak`, 180 s for `ai-committed-secret` — so the fault can never outlive the revert even if the room melts down. Defenders can recover earlier via SSM Session Manager.
+
+Smoke-test both real faults before event day with [`redteam/smoke-test-attacks.sh`](./redteam/smoke-test-attacks.sh) (replays the stop/start pairs via `aws ssm send-command` and asserts the 5xx → 200 round trip).
+
 ### Recommended disruption fire schedule
 
 Default `defaultAfterMinutes` in `metadata.json` is set up for a 90-minute battle. For 120-minute, push each fire 15 minutes later. The catalog (5 disruptions) is intentionally spaced so no two events overlap on the same slot.
 
-| Default fire | id                    | Aligns with phase             | Why this timing                           |
-| ------------ | --------------------- | ----------------------------- | ----------------------------------------- |
-| 30 min       | `ceo-5000-users`      | production-ramp (30 min)      | Reinforces "you missed the publish window"|
-| 35 min       | `mfa-mandate`         | (post production-ramp)        | Punishes leaving `auth` on EC2            |
-| 45 min       | `legal-pii-found`     | between phases                | Front-loads audit pressure                |
-| 55 min       | `env-credential-leak` | between phases                | Hits the team that has stalled on `auth`  |
-| 70 min       | `ai-committed-secret` | post compliance-audit         | Compound hit on `network` + `audit`       |
+| Default fire | id                    | Delivery        | Aligns with phase             | Why this timing                           |
+| ------------ | --------------------- | --------------- | ----------------------------- | ----------------------------------------- |
+| 30 min       | `ceo-5000-users`      | effect (score)  | production-ramp (30 min)      | Reinforces "you missed the publish window"|
+| 35 min       | `mfa-mandate`         | effect (score)  | (post production-ramp)        | Punishes leaving `auth` on EC2            |
+| 45 min       | `legal-pii-found`     | effect (score)  | between phases                | Front-loads audit pressure                |
+| 55 min       | `env-credential-leak` | action (real)   | between phases                | Hits the team that has stalled on `auth`  |
+| 70 min       | `ai-committed-secret` | action (real)   | post compliance-audit         | Compound hit on `network` + `audit`       |
 
 Phases (`production-ramp` 30 min, `compliance-audit` 60 min, `incident-response` 90 min) fire automatically from the score engine — operator does not control these.
 
@@ -84,7 +93,8 @@ All 200s = stack is up and probable on EC2. Mixed status = at least one slot is 
 
 ## Known limitations
 
-- `mfa-mandate` description says "extra penalty per cycle." Actual engine effect is the same `failurePenalty` mechanism as the other slot disruptions — there is no "disqualification" path. Communicate this clearly during the briefing so teams don't assume `auth`-only failure ends their run.
+- The three `effect`-only disruptions (`ceo-5000-users` / `mfa-mandate` / `legal-pii-found`) deduct points unconditionally once fired — the engine does not check whether the slot is still on EC2. The "only hurts EC2 holdouts" framing is your targeting discipline, not an engine guarantee. There is no "disqualification" path either way; communicate this clearly during the briefing so teams don't assume `auth`-only failure ends their run.
+- The two `action` disruptions stop systemd units by their fixed names (`tenkacloud-slot-<slot>`). A team that renamed or replaced the unit (allowed — it's their instance) silently no-ops the attack. That's acceptable: such a team has done strictly more hardening work than the attack assumes.
 - Phase 1/2 (production-ramp / compliance-audit) both apply the same `switchPlatformToDegraded: ["ec2"]` effect. After 30 min, every EC2-resident slot is degraded; the 60-min fire is narratively a separate "Legal audit" but functionally a no-op for any slot already degraded. Set team expectations: the 30-min mark is the real deadline.
 
 ## IAM scope (deliberately broad)

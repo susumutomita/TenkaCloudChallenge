@@ -109,6 +109,16 @@ The fields a competitor sees in the portal are:
 
 Goal-style content is fine: "split the monolith into Lambda / ECS / App Runner" is the point of the problem. Surprise mechanics — exact scoring numbers, when disruptions fire, the existence of planted slow code paths — are not. Compare `battles/microservice-migration-battle/metadata.json` (de-spoilered) against an earlier revision for a worked example.
 
+### 11. Disruptions ship their delivery mechanism — and never promise more
+
+A `disruptions[]` entry whose `description` claims an outcome must declare the machinery that produces it. Three delivery models exist:
+
+- **`effect`** (ADR-033) — scoring-side penalty, no cloud fault. May only claim score pressure. Penalties apply unconditionally once fired; "only hurts teams still on EC2" is operator targeting discipline, documented in `OPERATOR.md` / `redteam/README.md`, not an engine guarantee.
+- **`action`** (ADR-031) — real fault injection via the platform executor (`ssm-run-command` / `lambda-invoke` / `cfn-stack-update`). `targetRef` must be a `template.yaml` Output (validated); `revert` is mandatory (ADR-029: nothing is permanent). Score damage arrives via the probe failing (`failurePenalty`) — do **not** stack an `effect` on the same event; it double-charges and hits teams that already migrated off the attacked host.
+- **HTTP attack probes** — `redteam/probes/*.sh` invoked by the operator-side attacker (see `battles/security-battle-royale/redteam/`).
+
+Explain the red team operator-side. A single self-explanatory `action` (like `battles/hello-world-battle`'s `frontend-down`) can live entirely in the disruption's `description`. Anything bigger — multiple disruptions, mixed delivery models, or attack scripts — ships an operator-facing **`redteam/README.md`**: catalog table (id / delivery model / what actually happens), player recovery path, targeting rules, and a pre-event smoke test for real faults. Worked examples: `battles/stackstack/redteam/` (mixed `effect` + `action`), `battles/security-battle-royale/redteam/` (probe catalog).
+
 ## Voice for `shortDescription` / `description`
 
 The catalog leans into SRE-day-in-the-life narration: Kato-san (the predecessor who abruptly resigned), Sasaki-san CTO (gives vague but high-stakes orders), competitor as "the new hire" inheriting a mess. Players engage 2-3× better with story than with dry mechanics. Examples:
