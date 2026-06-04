@@ -36,21 +36,23 @@ ssm_shell() {
   aws ssm wait command-executed --command-id "$command_id" --instance-id "$INSTANCE_ID" 2>/dev/null
 }
 
-probe() {
-  # $1 = slot, $2 = expected ("200" or "5xx")
-  local slot="$1" expected="$2" code
-  code=$(curl -s -o /dev/null -m 10 -w '%{http_code}' "$BASE_URL/$slot/meta" || echo "000")
-  case "$expected" in
-    200) [[ "$code" == "200" ]] ;;
-    5xx) [[ "$code" =~ ^5 || "$code" == "000" ]] ;;
-  esac
-  local ok=$?
-  if [[ $ok -eq 0 ]]; then
-    echo "  OK   /$slot/meta → $code (expected $expected)"
-  else
-    echo "  FAIL /$slot/meta → $code (expected $expected)"
-    FAILURES=$((FAILURES + 1))
-  fi
+probe_until() {
+  # Poll /<slot>/meta until it returns the expected status class or the
+  # deadline passes (= bounded retry; a fixed sleep is flaky under load).
+  # $1 = slot, $2 = expected ("200" or "5xx"), $3 = timeout seconds (default 30)
+  local slot="$1" expected="$2" timeout="${3:-30}" code="000" deadline
+  deadline=$((SECONDS + timeout))
+  while ((SECONDS < deadline)); do
+    code=$(curl -s -o /dev/null -m 10 -w '%{http_code}' "$BASE_URL/$slot/meta" || echo "000")
+    case "$expected" in
+      200) [[ "$code" == "200" ]] && { echo "  OK   /$slot/meta → $code (expected $expected)"; return 0; } ;;
+      5xx) [[ "$code" =~ ^5 || "$code" == "000" ]] && { echo "  OK   /$slot/meta → $code (expected $expected)"; return 0; } ;;
+    esac
+    sleep 2
+  done
+  echo "  FAIL /$slot/meta → $code (expected $expected, waited ${timeout}s)"
+  FAILURES=$((FAILURES + 1))
+  return 1
 }
 
 run_fault() {
@@ -62,13 +64,11 @@ run_fault() {
   echo "=== $id ==="
   echo "  inject: $stop_cmd"
   ssm_shell "$stop_cmd" || { echo "  FAIL ssm send-command (inject)"; FAILURES=$((FAILURES + 1)); return; }
-  sleep 5
-  for slot in "${slots[@]}"; do probe "$slot" 5xx; done
+  for slot in "${slots[@]}"; do probe_until "$slot" 5xx; done
 
   echo "  revert: $start_cmd"
   ssm_shell "$start_cmd" || { echo "  FAIL ssm send-command (revert)"; FAILURES=$((FAILURES + 1)); return; }
-  sleep 5
-  for slot in "${slots[@]}"; do probe "$slot" 200; done
+  for slot in "${slots[@]}"; do probe_until "$slot" 200; done
   echo
 }
 
