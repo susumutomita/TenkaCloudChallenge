@@ -56,23 +56,32 @@ function findMetadataFiles(dir: string): string[] {
  * 実 deploy で CFn が CREATE_COMPLETE しても、 これらの参照が解決できないと
  * scoring engine / portal が壊れるので、 ここで先に止める。
  */
-function checkCrossRefs(metaPath: string, meta: Metadata): ValidationError[] {
+interface CrossRefResult {
+  readonly errors: ValidationError[];
+  readonly warnings: ValidationError[];
+}
+
+function checkCrossRefs(metaPath: string, meta: Metadata): CrossRefResult {
   const dir = dirname(metaPath);
   const cfnTemplate = typeof meta.cfnTemplate === "string" ? meta.cfnTemplate : "template.yaml";
   const templatePath = join(dir, cfnTemplate);
 
   if (!existsSync(templatePath)) {
-    return [`cfnTemplate file "${cfnTemplate}" not found`];
+    return { errors: [`cfnTemplate file "${cfnTemplate}" not found`], warnings: [] };
   }
   const yaml = readFileSync(templatePath, "utf8");
-  return [
-    ...checkScoringOutputRefs(meta, yaml, cfnTemplate),
-    ...checkEndpointOutputRefs(meta, yaml, cfnTemplate),
-    ...checkDashboardSlotFiles(meta, dir),
-    ...checkCoordinationPluginFile(meta, dir),
-    ...checkParticipantBaseline(yaml, cfnTemplate),
-    ...checkResourceTagging(yaml, cfnTemplate),
-  ];
+  return {
+    errors: [
+      ...checkScoringOutputRefs(meta, yaml, cfnTemplate),
+      ...checkEndpointOutputRefs(meta, yaml, cfnTemplate),
+      ...checkDisruptionRefs(meta, yaml, cfnTemplate),
+      ...checkDashboardSlotFiles(meta, dir),
+      ...checkCoordinationPluginFile(meta, dir),
+      ...checkParticipantBaseline(yaml, cfnTemplate),
+      ...checkResourceTagging(yaml, cfnTemplate),
+    ],
+    warnings: [...checkFlagEarnedAdvisory(meta, yaml, cfnTemplate)],
+  };
 }
 
 /**
@@ -213,6 +222,97 @@ function checkEndpointOutputRefs(
   return errors;
 }
 
+/**
+ * [check engine] disruption (= red team) の整合性を deploy 前に検査する。 schema は形だけ見て
+ * 「実際に発火するか」 を見ないため、 ここで「成立しているか」 を機械的に確認する:
+ *   - action.targetRef は template Outputs に存在する (= executor が注入対象を解決できる)
+ *   - operatorEditable は その disruption の parameters か timing 予約語 afterMinutes のみ
+ *   - paramTemplate / revert.paramTemplate の {{placeholder}} は parameters に全て存在する
+ *     (= 置換されず literal `{{x}}` のまま壊れた command が走るのを防ぐ)
+ * これらは AWS に deploy しなくても静的に分かる「赤チームが動かない」 bug。
+ */
+function checkDisruptionRefs(meta: Metadata, yaml: string, cfnTemplate: string): ValidationError[] {
+  const errors: ValidationError[] = [];
+  const disruptions = Array.isArray(meta.disruptions) ? meta.disruptions : [];
+  for (const d of disruptions as Array<Record<string, unknown>>) {
+    const id = String(d.id ?? "?");
+    const action = d.action as Record<string, unknown> | undefined;
+    if (!action || typeof action !== "object") continue; // effect / probe 型は targetRef を持たない
+
+    const targetRef = action.targetRef;
+    if (typeof targetRef === "string" && !yaml.includes(`${targetRef}:`)) {
+      errors.push(
+        `disruption[${id}].action.targetRef="${targetRef}" not found in ${cfnTemplate} Outputs (= executor が注入対象を解決できず赤チームが動かない)`,
+      );
+    }
+
+    const params = d.parameters && typeof d.parameters === "object" ? Object.keys(d.parameters) : [];
+    const editable = Array.isArray(d.operatorEditable) ? (d.operatorEditable as unknown[]) : [];
+    for (const k of editable) {
+      if (typeof k === "string" && k !== "afterMinutes" && !params.includes(k)) {
+        errors.push(
+          `disruption[${id}].operatorEditable "${k}" は parameters にも timing 予約語 afterMinutes にも無い`,
+        );
+      }
+    }
+
+    const tplStr = JSON.stringify(action.paramTemplate ?? {}) + JSON.stringify(
+      (action.revert as Record<string, unknown> | undefined)?.paramTemplate ?? {},
+    );
+    const placeholders = [...tplStr.matchAll(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g)].map((m) => m[1]);
+    for (const ph of new Set(placeholders)) {
+      if (!params.includes(ph)) {
+        errors.push(
+          `disruption[${id}] paramTemplate placeholder "{{${ph}}}" が parameters に無い (= 置換されず壊れた command が走る)`,
+        );
+      }
+    }
+  }
+  return errors;
+}
+
+/**
+ * [check engine / 助言] flag kind の flag 値が `/create-problem` の scaffold プレースホルダー
+ * (例: "Hello from ${NamePrefix}") のまま放置されていないかを警告する。 この値は deploy 直後に
+ * Output に出るため、 課題 (remediation 等) を解かずに submit できてしまい「成立しない問題」 になる。
+ * 静的には「意図的な smoke-test の trivial flag」 と区別できないため error ではなく warning とし、
+ * 作者に「flag を解答に紐付けたか」 を必ず確認させる。
+ */
+function checkFlagEarnedAdvisory(meta: Metadata, yaml: string, cfnTemplate: string): ValidationError[] {
+  const scoring = meta.scoring as Record<string, unknown> | undefined;
+  if (scoring?.kind !== "flag") return [];
+  const flagKey = scoring.flagOutputKey;
+  if (typeof flagKey !== "string") return [];
+  const value = extractOutputValue(yaml, flagKey);
+  if (value === undefined) return [];
+  const SCAFFOLD = [/hello from/i, /\bTODO\b/, /placeholder/i, /change[\s_-]?me/i, /replace[\s_-]?me/i];
+  if (SCAFFOLD.some((re) => re.test(value))) {
+    return [
+      `scoring.flagOutputKey="${flagKey}" の Output 値が scaffold プレースホルダー ("${value.trim()}") のまま。 deploy 直後に Output に出るため、 課題を解かずに submit できる = 問題が成立しない。 flag を解答 (remediation 完了等) に紐付くものに置き換えてください (${cfnTemplate})`,
+    ];
+  }
+  return [];
+}
+
+/** template の `Outputs:` 配下の <name>: ブロックから Value: 行を 1 つ取り出す (= 簡易抽出)。 */
+function extractOutputValue(yaml: string, outputName: string): string | undefined {
+  const lines = yaml.split("\n");
+  const startRe = new RegExp(`^(\\s+)${outputName}:\\s*$`);
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(startRe);
+    if (!m) continue;
+    const indent = m[1].length;
+    for (let k = i + 1; k < lines.length; k++) {
+      const cur = lines[k];
+      const km = cur.match(/^(\s*)(\S+):\s?(.*)$/);
+      if (km && km[1].length <= indent) break; // 次の sibling output に到達
+      const vm = cur.match(/^\s*Value:\s?(.*)$/);
+      if (vm) return vm[1];
+    }
+  }
+  return undefined;
+}
+
 function checkDashboardSlotFiles(meta: Metadata, dir: string): ValidationError[] {
   const errors: ValidationError[] = [];
   const dashboard = meta.dashboard as Record<string, unknown> | undefined;
@@ -289,16 +389,24 @@ function validateMetadataFiles(
       continue;
     }
 
-    const crossRefErrors = checkCrossRefs(file, data);
-    if (crossRefErrors.length > 0) {
+    const { errors, warnings } = checkCrossRefs(file, data);
+    if (warnings.length > 0) printWarnings(file, warnings);
+    if (errors.length > 0) {
       failed += 1;
-      printCrossRefErrors(file, crossRefErrors);
+      printCrossRefErrors(file, errors);
       continue;
     }
 
-    console.log(`OK  ${relative(REPO_ROOT, file)}`);
+    console.log(`OK  ${relative(REPO_ROOT, file)}${warnings.length > 0 ? " (warnings ↑)" : ""}`);
   }
   return failed;
+}
+
+function printWarnings(file: string, warnings: ValidationError[]): void {
+  console.warn(`WARN ${relative(REPO_ROOT, file)}`);
+  for (const w of warnings) {
+    console.warn(`     ⚠ ${w}`);
+  }
 }
 
 function printSchemaErrors(
