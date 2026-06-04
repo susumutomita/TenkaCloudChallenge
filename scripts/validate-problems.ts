@@ -80,8 +80,56 @@ function checkCrossRefs(metaPath: string, meta: Metadata): CrossRefResult {
       ...checkParticipantBaseline(yaml, cfnTemplate),
       ...checkResourceTagging(yaml, cfnTemplate),
     ],
-    warnings: [...checkFlagEarnedAdvisory(meta, yaml, cfnTemplate)],
+    warnings: [
+      ...checkFlagEarnedAdvisory(meta, yaml, cfnTemplate),
+      ...checkDisruptionDeliveryAdvisory(meta, dir),
+    ],
   };
+}
+
+/**
+ * [check engine / 助言] disruption が「届く」 形になっているかの advisory (AGENT.md §11)。
+ *   - action + effect の二重宣言 → 実障害は probe 失敗由来の failurePenalty で既に減点される
+ *     ため二重課金になり、 effect 側は移行済みチームにも無条件で当たる (= 不公平)。
+ *   - description が障害 (503 / 停止 / outage 等) を謳うのに action も parameters.probe も
+ *     無い → 「何も起きない約束」。 stackstack で実際に出荷された bug (#44 で修正)。
+ *   - disruption が複数あるのに redteam/README.md が無い → operator が catalog / 復旧経路 /
+ *     targeting 規律を知る場所が無い。
+ * 文言 match は fuzzy で「意図的な演出」 と区別できないため error ではなく warning とする。
+ */
+function checkDisruptionDeliveryAdvisory(meta: Metadata, dir: string): ValidationError[] {
+  const warnings: ValidationError[] = [];
+  const disruptions = Array.isArray(meta.disruptions)
+    ? (meta.disruptions as Array<Record<string, unknown>>)
+    : [];
+  if (disruptions.length === 0) return warnings;
+
+  const FAULT_CLAIM = /\b50[0-9]\b|5xx|停止|ダウン|不通|outage|service (?:goes )?down/i;
+  for (const d of disruptions) {
+    const id = String(d.id ?? "?");
+    const action = d.action && typeof d.action === "object" ? d.action : undefined;
+    const effect = d.effect && typeof d.effect === "object" ? d.effect : undefined;
+    const params = (d.parameters ?? {}) as Record<string, unknown>;
+    const probe = typeof params.probe === "string" ? params.probe : undefined;
+
+    if (action && effect) {
+      warnings.push(
+        `disruption[${id}] が action と effect を両方宣言。 実障害は probe 失敗 (failurePenalty) で既に減点されるため二重課金になり、 effect は移行済みチームにも無条件で当たる。 どちらか 1 つに絞ってください (AGENT.md §11)`,
+      );
+    }
+    if (!action && !probe && typeof d.description === "string" && FAULT_CLAIM.test(d.description)) {
+      warnings.push(
+        `disruption[${id}] の description が障害 (503 / 停止等) を謳っているが、 action も parameters.probe も無い = 何も起きない約束。 実障害なら action を宣言、 採点圧だけなら description を score 圧の表現に直してください (AGENT.md §11)`,
+      );
+    }
+  }
+
+  if (disruptions.length > 1 && !existsSync(join(dir, "redteam", "README.md"))) {
+    warnings.push(
+      `disruptions が ${disruptions.length} 件あるのに redteam/README.md が無い。 catalog 表 / 復旧経路 / targeting 規律を operator 向けに書いてください (AGENT.md §11)`,
+    );
+  }
+  return warnings;
 }
 
 /**
