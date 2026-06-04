@@ -319,6 +319,11 @@
               "minimum": 1,
               "description": "1 回の health check 成功あたりの獲得ポイント。"
             },
+            "failurePenalty": {
+              "type": "integer",
+              "maximum": 0,
+              "description": "health-check 失敗 tick の score delta (opt-in)。 負値で減点、 省略時 0 (= 従来挙動)。 uptime-flat と同じ。"
+            },
             "hints": { "$ref": "#/$defs/progressiveHints" }
           },
           "description": "kind=uptime (legacy)。 Phase 2 transition 期間中の互換用。 新規問題は kind=uptime-flat を使うこと。"
@@ -371,6 +376,11 @@
               "type": "integer",
               "minimum": 1,
               "description": "1 endpoint 成功あたりの獲得ポイント (= デフォルト値)。endpoints[].pointsPerSuccess で個別上書き可。"
+            },
+            "failurePenalty": {
+              "type": "integer",
+              "maximum": 0,
+              "description": "health-check 失敗 tick の score delta (opt-in)。 負値で減点 (例: -100)、 省略時 0 (= 加点しないだけ、 従来挙動)。 Battle で「落とされたら減点」を有効化したい問題が指定する。 uptime-multi.failurePenalty と同契約。"
             },
             "hints": { "$ref": "#/$defs/progressiveHints" }
           },
