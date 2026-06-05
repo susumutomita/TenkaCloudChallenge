@@ -161,10 +161,14 @@ Resources:
       LogDestinationType: cloud-watch-logs
       LogGroupName: !Ref FlowLogGroup
       DeliverLogsPermissionArn: !GetAtt FlowLogDeliveryRole.Arn
-      LogFormat: >-
-        ${version} ${account-id} ${interface-id} ${srcaddr} ${dstaddr}
-        ${srcport} ${dstport} ${protocol} ${packets} ${bytes}
-        ${start} ${end} ${action} ${log-status}
+      # Flow Log custom format. Each token is a VPC Flow Log field (version,
+      # srcaddr, ...), not a CFn variable, so it is escaped with the
+      # dollar-brace-bang form inside !Sub; CFn emits the literal field token
+      # the Flow Log service expects.
+      LogFormat: !Sub >-
+        ${!version} ${!account-id} ${!interface-id} ${!srcaddr} ${!dstaddr}
+        ${!srcport} ${!dstport} ${!protocol} ${!packets} ${!bytes}
+        ${!start} ${!end} ${!action} ${!log-status}
 
   BriefingParameter:
     Type: AWS::SSM::Parameter
