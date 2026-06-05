@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "saa-nat-gateway-egress",
+  "name": "プライベートサブネットから安全にインターネットへ (SAA NAT Gateway)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "20〜25 分",
+  "shortDescription": "天下クラウド株式会社、 入社 6 週間目。 佐々木 CTO がセキュリティ審査の結果を持ってきた。\n\n「加藤くんのプライベートサブネット構成、 OS アップデートが当たらなくて問題になってる。 外には出たいけど、 外からは入ってこれない ── この一方通行の出口をどう作るか調べてほしい。 Internet Gateway を直接使えばいいという意見もあるが、 それで本当にインバウンドをブロックできるのか?」\n\nシナリオを読んで、 プライベートサブネットの安全な外向き経路を提供するコンポーネントを答えろ。",
+  "description": "## シナリオ\n\n加藤さんが残したネットワーク設計メモが SSM Parameter に保存されている。 要件は以下の通り:\n- プライベートサブネットのインスタンスが **アウトバウンドインターネット** にアクセスしたい (OS アップデート、外部 API 呼び出しなど)\n- インターネットから当該インスタンスへの **インバウンド接続は一切受け付けない**\n- パブリックサブネットに配置し、プライベートサブネットのルートテーブルから参照する\n- 検討中の選択肢:\n  - Internet Gateway (IGW): 双方向通信を許可する → プライベートサブネットには不適切\n  - Egress-Only Internet Gateway: IPv6 専用\n  - NAT Gateway: AWS マネージド、パブリックサブネットに置きプライベートルートが参照\n\nSAA の定番論点: **NAT Gateway はパブリックサブネットに配置し、プライベートサブネットのルートテーブルに 0.0.0.0/0 → NAT Gateway を設定することで、プライベートインスタンスが外に出られるが外から入れない状態を実現する**。\n\n## デプロイされるもの (すべて無料)\n\n- SSM Parameter `/{NamePrefix}/briefing` (ネットワーク要件シナリオ)\n\nNAT Gateway (実稼働では時間課金) は作成しないので **課金は $0**。\n\n## 解き方\n\n1. SSM Parameter `/{NamePrefix}/briefing` を読んで要件を確認する。\n2. IGW・Egress-Only IGW・NAT Gateway の違いを整理する。\n3. 「プライベートサブネットからのアウトバウンドのみ、インバウンド拒否、パブリックサブネットに配置」を満たすコンポーネント名を `TC{...}` 形式で提出。\n   例: `TC{internet-gateway}`\n\n## 採点\n\n- 正解: +200 pt (1 デプロイにつき 1 回)。\n- 不正解: -15 pt/回。 スコアは 0 未満にならない。\n\n## コスト\n\nSSM Parameter のみ。 課金リソースなし。 $0。",
+  "tags": ["saa", "solutions-architect-associate", "nat-gateway", "vpc", "networking", "private-subnet", "egress"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- NAT Gateway scenario only, port unused)" }
+  ],
+  "learningGoals": [
+    "NAT Gateway がプライベートサブネットのアウトバウンド専用経路を提供する仕組みを理解する",
+    "Internet Gateway (双方向) と NAT Gateway (アウトバウンド専用) の違いを説明できる",
+    "Egress-Only Internet Gateway が IPv6 専用である点を区別できる"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Safe outbound internet from a private subnet (SAA NAT Gateway)",
+      "shortDescription": "Week six at TenkaCloud Inc. CTO Sasaki-san brings a security-review finding.\n\n'Kato-kun's private-subnet setup can't reach the internet for OS updates. We need outbound internet access but absolutely no inbound connections from the internet. A colleague says just use an Internet Gateway directly -- does that actually block inbound?'\n\nRead the scenario and name the component that provides a private subnet's safe outbound-only internet path.",
+      "description": "## Scenario\n\nKato-san's network design notes are in an SSM Parameter. Requirements:\n- Private-subnet instances need **outbound internet** access (OS updates, external API calls)\n- The internet must not be able to initiate **inbound connections** to those instances\n- The component is placed in a public subnet; the private-subnet route table references it\n- Options under consideration:\n  - Internet Gateway (IGW): allows bidirectional traffic → not suitable for private subnets\n  - Egress-Only Internet Gateway: IPv6 only\n  - NAT Gateway: AWS-managed, placed in a public subnet, private route table points to it\n\nThe classic SAA point: **A NAT Gateway is placed in a public subnet. By setting 0.0.0.0/0 → NAT Gateway in the private subnet route table, private instances can reach the internet outbound but the internet cannot initiate inbound connections.**\n\n## What gets deployed (all free)\n\n- SSM Parameter `/{NamePrefix}/briefing` (network-requirements scenario)\n\nNo NAT Gateway (hourly billing in production) created. **$0 cost**.\n\n## How to solve\n\n1. Read SSM Parameter `/{NamePrefix}/briefing`.\n2. Distinguish IGW / Egress-Only IGW / NAT Gateway.\n3. Submit the component satisfying 'private-subnet outbound only, no inbound, placed in public subnet' as `TC{...}`.\n   Example: `TC{internet-gateway}`\n\n## Scoring\n\n- Correct: +200 pt (once per deploy).\n- Wrong: -15 pt each. Score never drops below 0.\n\n## Cost\n\nSSM Parameter only. No billable resources. $0.",
+      "learningGoals": [
+        "Understand how NAT Gateway provides outbound-only internet access for private-subnet instances",
+        "Explain the difference between Internet Gateway (bidirectional) and NAT Gateway (outbound-only)",
+        "Distinguish Egress-Only Internet Gateway (IPv6 only) from NAT Gateway (IPv4)"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 15,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "Internet Gateway (IGW) はパブリックサブネットのルートテーブルに追加し、 双方向通信を可能にする。 これをプライベートサブネットから直接使うとインバウンドも許可されてしまう可能性がある。 IPv4 のアウトバウンド専用で、 パブリックサブネットに置いてプライベートのルートから参照するマネージドコンポーネントはどれ?",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "答えは NAT Gateway。 提出形式は `TC{nat-gateway}`。 Egress-Only IGW は IPv6 専用なので IPv4 のプライベートサブネットには使えない。 NAT Gateway はパブリックサブネットに置き、 月額 $32+ かかるが問題内ではデプロイしないため $0。",
+        "penalty": 40
+      }
+    ]
+  }
+}

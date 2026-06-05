@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "pas-sap-sapmnt-efs",
+  "name": "/sapmnt の共有 POSIX ファイルシステムに使うサービスを特定せよ (PAS EFS)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 4,
+  "estimatedDuration": "15〜25 分",
+  "shortDescription": "天下クラウド株式会社、 入社 5 ヶ月目。 佐々木 CTO がストレージ設計書を広げている。\n\n「加藤くんの SAP NetWeaver 設計に問題がある。 複数の ABAP アプリサーバーが /sapmnt を AZ をまたいで共有マウントしなきゃいけないのに、 ストレージの選定が EBS になってる。 EBS は 1 インスタンスにしかアタッチできないんだが……」。\n\nSSM パラメータに SAP ファイルシステム要件と選択肢が入っている。 正しいサービスを特定して TC{...} 形式で提出しろ。",
+  "description": "## シナリオ\n\n加藤さんが設計した SAP NetWeaver 7.5 システムは、 以下のコンポーネントで構成されている:\n\n| コンポーネント | インスタンス数 | AZ      | マウント         |\n|-------------|------------|---------|----------------|\n| ASCS (Enqueue Server) | 1 | AZ-1a   | /sapmnt/SID     |\n| PAS (Primary App Server) | 1 | AZ-1a | /sapmnt/SID     |\n| AAS (Additional App Server) × 3 | 3 | AZ-1c | /sapmnt/SID |\n\n全 5 インスタンスが `/sapmnt/SID` を **同時に読み書き** する必要がある。 この共有ディレクトリには SAP プロファイル・カーネル・トランスポート・インターフェースファイルが格納される。\n\n加藤さんの設計書には「EBS gp3 ボリュームをマウント」と書いてあるが、 EBS は **1 インスタンスにしか同時アタッチできない** (io2 Block Express の Multi-Attach は 1 AZ 限定で NFS セマンティクスを持たない)。\n\n## デプロイされるもの (すべて無料)\n\n- SSM Parameter `/{NamePrefix}/briefing` — SAP ファイルシステム要件 + 4 つのストレージサービスの比較 + 選択肢\n- IAM Role (ParticipantViewerRole) — SSM パラメータの読み取り権限のみ\n\nEC2 / SAP / EFS 実際マウントなし。 **課金 $0**。\n\n## 解き方\n\n1. CloudShell で `aws ssm get-parameter --name \"/{NamePrefix}/briefing\" --query Parameter.Value --output text` を実行。\n2. 5 インスタンス・複数 AZ・同時 POSIX 読み書きという要件を確認する。\n3. EBS は 1 インスタンス専用 (Multi-Attach は同一 AZ 限定)。 FSx for Windows は POSIX 非互換 (NTFS)。\n4. **Amazon EFS (Elastic File System)** は複数インスタンス・複数 AZ からの同時 NFS v4 マウントをサポートし、 SAP の /sapmnt 共有に使われる AWS 推奨サービス。\n5. 答えを `TC{amazon-efs}` の形式で Portal に提出する。\n\n## 採点\n\n- 正解: +200 pt (1 デプロイにつき 1 回)。\n- 不正解: -20 pt/回 (総当たり防止)。 スコアは 0 未満にならない。\n\n## コスト\n\nSSM Parameter / IAM Role は無料。 課金リソースなし。",
+  "tags": ["pas", "sap-on-aws", "sap-netweaver", "efs", "shared-filesystem", "posix", "sapmnt"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- SSM parameter analysis only, port unused)" }
+  ],
+  "learningGoals": [
+    "SAP /sapmnt 共有ディレクトリが複数 AZ にまたがる POSIX 共有 NFS マウントを必要とする理由を理解する",
+    "Amazon EFS が SAP on AWS での /sapmnt 共有ストレージとして推奨される理由 (複数インスタンス同時マウント・NFS v4・マルチ AZ) を説明できる",
+    "PAS-C01 の SAP ストレージ選択問題 (EBS vs EFS vs FSx vs S3) に対する判断軸を身につける"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Identify the shared POSIX filesystem service for SAP /sapmnt (PAS EFS)",
+      "shortDescription": "Five months in at TenkaCloud Inc. CTO Sasaki-san has a storage design doc.\n\n'Kato-kun's SAP NetWeaver design has a problem. Multiple ABAP app servers across AZs all need to mount /sapmnt simultaneously, but the design specifies EBS — which only attaches to one instance at a time.'\n\nThe SSM parameter holds the SAP filesystem requirements and candidate services. Identify the correct one and submit TC{...}.",
+      "description": "## Scenario\n\nKato-san's SAP NetWeaver 7.5 system:\n\n| Component | Count | AZ   | Mount       |\n|-----------|-------|------|-------------|\n| ASCS      |     1 | AZ-1a| /sapmnt/SID |\n| PAS       |     1 | AZ-1a| /sapmnt/SID |\n| AAS       |     3 | AZ-1c| /sapmnt/SID |\n\nAll 5 instances concurrently read and write `/sapmnt/SID` (SAP profiles, kernel, transport files). The design document specifies EBS gp3 — but EBS attaches to only one instance at a time (io2 Multi-Attach is same-AZ only and has no NFS semantics).\n\n## What gets deployed (all free)\n\n- SSM Parameter `/{NamePrefix}/briefing` — SAP filesystem requirements, four storage service comparisons, and candidate options\n- IAM Role (ParticipantViewerRole) — SSM read + CloudShell only\n\nNo EC2 / SAP / EFS mount. **$0 cost**.\n\n## How to solve\n\n1. In CloudShell run `aws ssm get-parameter --name \"/{NamePrefix}/briefing\" --query Parameter.Value --output text`.\n2. Note the 5 instances, cross-AZ, concurrent POSIX read/write requirement.\n3. EBS: single-instance attachment (Multi-Attach is same-AZ). FSx for Windows: NTFS, not POSIX.\n4. Amazon EFS supports concurrent NFS v4 mounts from multiple instances across multiple AZs — the AWS-recommended service for SAP /sapmnt.\n5. Submit `TC{amazon-efs}`.\n\n## Scoring\n\n- Correct: +200 pt (once per deploy).\n- Wrong: -20 pt each. Score never drops below 0.\n\n## Cost\n\nSSM Parameter / IAM Role are free. No billable resources.",
+      "learningGoals": [
+        "Understand why SAP /sapmnt requires a shared POSIX NFS mount spanning multiple AZs",
+        "Explain why Amazon EFS is the recommended service (concurrent multi-AZ NFS v4, POSIX-compatible)",
+        "Apply PAS-C01 storage-selection reasoning (EBS vs EFS vs FSx vs S3)"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 20,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "5 インスタンス・2 AZ・同時 POSIX NFS マウントという要件を確認せよ。 EBS は 1 インスタンスにしかアタッチできない (Multi-Attach は同一 AZ 限定)。 複数インスタンスが AZ をまたいで同時マウントできる AWS マネージドファイルシステムは?",
+        "penalty": 25
+      },
+      {
+        "id": "hint-2",
+        "content": "**Amazon EFS (Elastic File System)** は複数の EC2 インスタンスが AZ をまたいで同時に NFS v4 マウントでき、 POSIX 準拠。 SAP on AWS の /sapmnt 共有ストレージとして AWS が推奨するサービス。 提出形式: `TC{amazon-efs}`。",
+        "penalty": 45
+      }
+    ]
+  }
+}

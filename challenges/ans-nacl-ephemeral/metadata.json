@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "ans-nacl-ephemeral",
+  "name": "NACL の戻りトラフィックが消える謎 (ANS エフェメラルポート)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 4,
+  "estimatedDuration": "20〜30 分",
+  "shortDescription": "天下クラウド株式会社、 障害対応。 佐々木 CTO が叫んだ。\n\n「HTTPS (443) は許可してるのに、 レスポンスが返ってこない! 加藤くんが作った NACL の問題だ。 インバウンドは OK なのにアウトバウンドが何かおかしい」\n\nデプロイされた VPC と NACL を調べ、 応答パケットに必要な **アウトバウンドのエフェメラルポート範囲** を特定しろ。",
+  "description": "## シナリオ\n\n加藤さんが作った Network ACL は インバウンド 443 (HTTPS) を許可しているが、 **アウトバウンドルールにエフェメラルポート範囲が含まれていない**。 Security Group と異なり、 NACL はステートレス ── インバウンドを許可しても戻りのアウトバウンドを別途許可しなければレスポンスは消える。\n\nクライアントはランダムなエフェメラルポート (1024-65535) から接続してくる。 このポート範囲をアウトバウンドで許可しないと、 サーバーからの応答が NACL でドロップされる。\n\n## デプロイされるもの (すべて無料)\n\n- VPC × 1 (10.50.0.0/16)\n- Network ACL × 1 (インバウンド 443 許可 / アウトバウンドはエフェメラル範囲なし)\n- VPC に紐付いたサブネット × 1\n- SSM Parameter × 1 (タスク briefing)\n\nEC2 インスタンス / NAT Gateway / EIP なし。 **課金 $0**。\n\n## 解き方\n\n1. Console (VPC > Network ACLs) か `aws ec2 describe-network-acls` で NACL のインバウンド / アウトバウンドルールを確認。\n2. アウトバウンドに何が **ない** か確認する ── エフェメラルポート範囲の欠如を見つける。\n3. TCP 応答パケットが返るために必要なアウトバウンドポート範囲を特定し `TC{...}` で提出する。\n\n提出形式: `TC{1024-65535}` (例: `TC{1024-65535}`)。\n\n## 採点\n\n- 正解: +200 pt (1 デプロイにつき 1 回)。\n- 不正解: -15 pt/回。 スコアは 0 未満にならない。\n\n## コスト\n\nVPC / NACL / サブネット / SSM Parameter は無料。 課金リソースなし。",
+  "tags": ["ans", "advanced-networking", "nacl", "ephemeral-ports", "stateless", "networking", "security"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- NACL rule analysis only, port unused)" }
+  ],
+  "learningGoals": [
+    "NACL がステートレスであるため、 戻りトラフィック用にアウトバウンドのエフェメラルポート範囲を明示許可する必要があることを理解する",
+    "Security Group (ステートフル) と NACL (ステートレス) の戻りトラフィック処理の違いを整理する",
+    "aws ec2 describe-network-acls のエントリ構造を読み、 ルールの欠落を見つけられるようになる"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Why does NACL drop return traffic? (ANS ephemeral ports)",
+      "shortDescription": "TenkaCloud Inc., incident response. CTO Sasaki-san yelled:\n\n'HTTPS (443) is allowed but responses never arrive! It's Kato-kun's NACL -- inbound is fine but outbound is broken somehow.'\n\nInspect the deployed VPC and NACL, and identify the **outbound ephemeral port range** required for return traffic.",
+      "description": "## Scenario\n\nKato-san's Network ACL allows inbound port 443 (HTTPS) but its **outbound rules do not include the ephemeral port range**. Unlike Security Groups, NACLs are stateless -- allowing inbound traffic does not automatically allow return outbound traffic; each direction must be permitted explicitly.\n\nClients connect from random ephemeral ports (1024-65535). Without allowing this outbound range, the server's response packets are dropped by the NACL.\n\n## What gets deployed (all free)\n\n- 1 VPC (10.50.0.0/16)\n- 1 Network ACL (inbound 443 allowed / outbound lacks the ephemeral range)\n- 1 subnet associated with the NACL\n- 1 SSM Parameter (task briefing)\n\nNo EC2 / NAT Gateway / EIP. **$0 cost**.\n\n## How to solve\n\n1. In the Console (VPC > Network ACLs) or via `aws ec2 describe-network-acls`, inspect the inbound and outbound rules.\n2. Notice what is **missing** in the outbound rules -- find the absent ephemeral port range.\n3. Identify the outbound port range required for TCP return packets and submit as `TC{...}`.\n\nSubmission format: `TC{1024-65535}` (e.g. `TC{1024-65535}`).\n\n## Scoring\n\n- Correct: +200 pt (once per deploy).\n- Wrong: -15 pt each. Score never drops below 0.\n\n## Cost\n\nVPC / NACL / subnet / SSM Parameter are free. No billable resources.",
+      "learningGoals": [
+        "Understand that NACLs are stateless and require explicit outbound rules for the ephemeral port range to allow return traffic",
+        "Distinguish stateful (Security Groups) from stateless (NACL) return-traffic handling",
+        "Read the aws ec2 describe-network-acls entry structure to spot missing rules"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 15,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "`aws ec2 describe-network-acls --filters Name=tag:TenkaCloud:NamePrefix,Values={NamePrefix}` で NACL のルールを確認せよ。 インバウンドに 443 がある一方、 アウトバウンドルールを見ると **1024〜65535 のエフェメラルポート範囲がない**。 NACL はステートレスなので戻りトラフィックを明示的に許可しないとドロップされる。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "クライアントはランダムな **エフェメラルポート (1024-65535)** から接続してくる。 サーバーはこのポートへ応答を返すが、 NACL のアウトバウンドルールにこの範囲がなければ応答はドロップされる。 必要なアウトバウンド範囲は `TC{1024-65535}`。",
+        "penalty": 40
+      }
+    ]
+  }
+}

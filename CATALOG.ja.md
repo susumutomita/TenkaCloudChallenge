@@ -8,6 +8,26 @@ TenkaCloud で配信する問題 (**Battle** / **Challenge**) は 1 ディレク
 
 実装済み問題と次に作る候補を横断して眺めたい場合は [`docs/gallery.md`](../docs/gallery.md)、 30 分でゼロから 1 問書く手順は [`docs/problems/AUTHORING.html`](../docs/problems/AUTHORING.html) を参照。
 
+## AWS 資格対策ドリル
+
+**現行のすべての AWS 認定資格**に対応した 105 問の自己ペース型 `flag` Challenge を収録 (Issue #45)。 各問題は無料枠 ($0) の CloudFormation ラボで、 フラグは**デプロイされた構成を分析して導出する**形式 — 答えは participant role が読めない CFn Output にしか存在しないため、 `aws ssm get-parameter` ではなく推論で点を取る。 資格別の全リストは [`CERTIFICATION-INDEX.md`](./CERTIFICATION-INDEX.md) (`scripts/build-cert-index.ts` で生成)。
+
+| 区分 | 認定資格 | 問題数 |
+| --- | --- | --- |
+| Foundational | Cloud Practitioner (CLF-C02) | 6 |
+| Foundational | AI Practitioner (AIF-C01) | 4 |
+| Associate | Solutions Architect (SAA-C03) | 16 |
+| Associate | Developer (DVA-C02) | 10 |
+| Associate | SysOps Administrator (SOA-C02) | 10 |
+| Associate | Data Engineer (DEA-C01) | 8 |
+| Associate | Machine Learning Engineer (MLA-C01) | 6 |
+| Professional | Solutions Architect (SAP-C02) | 10 |
+| Professional | DevOps Engineer (DOP-C02) | 8 |
+| Specialty | Security (SCS-C02) | 10 |
+| Specialty | Advanced Networking (ANS-C01) | 8 |
+| Specialty | Machine Learning (MLS-C01) | 5 |
+| Specialty | SAP on AWS (PAS-C01) | 4 |
+
 ## ディレクトリ構造
 
 ```

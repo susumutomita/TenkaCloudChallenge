@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "soa-cost-allocation-tag-count",
+  "name": "CostCenter タグが付いたリソースは何個か (SOA コスト配賦タグ監査)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 2,
+  "estimatedDuration": "15〜20 分",
+  "shortDescription": "天下クラウド株式会社、入社 7 週間目。経理部門から苦情が入った。佐々木 CTO が顔を曇らせる。\n\n「加藤くんが作った SSM パラメータ、3 個あるんだけど CostCenter タグが付いてるのはいくつか把握できてないんだ。コスト配賦レポートに必要だから数えてくれる?」。\n\nパラメータのタグを確認して、CostCenter タグが付いているものだけを数えろ。",
+  "description": "## シナリオ\n\n加藤さんが残した 3 つの SSM Parameter のうち、2 つには `CostCenter` タグが付いており、1 つには付いていない。コスト配賦レポートのためにタグ付きリソース数が必要。\n\nSOA-C02 の定番論点: **AWS コスト配賦タグ (Cost Allocation Tag)** の仕組みを理解し、リソースにタグが付いているかどうかを確認する実務的なスキル。\n\n## デプロイされるもの (すべて無料)\n\n- SSM Parameter × 3\n  - `/{NamePrefix}/app-a` — CostCenter=frontend タグ付き\n  - `/{NamePrefix}/app-b` — CostCenter=backend タグ付き\n  - `/{NamePrefix}/app-c` — タグなし (CostCenter なし)\n- SSM Parameter `/{NamePrefix}/briefing` (タスク説明)\n\nEC2 なし。**課金 $0**。\n\n## 解き方\n\n1. AWS Console (Systems Manager > Parameter Store) か `aws ssm list-tags-for-resource` を実行。\n2. `/{NamePrefix}` 配下の各パラメータのタグを確認する。\n3. `CostCenter` キーを持つパラメータの数 N を `TC{N}` 形式で提出 (例: `TC{1}`)。\n\nタスク説明は SSM Parameter `/{NamePrefix}/briefing` にも入っている。\n\n## 採点\n\n- 正解: +200 pt (1 デプロイにつき 1 回)。\n- 不正解: -15 pt/回。スコアは 0 未満にならない。\n\n## コスト\n\nSSM Parameter (標準ティア) は無料。課金リソースなし。",
+  "tags": ["soa", "sysops-administrator", "cost-allocation", "tagging", "ssm", "cost-optimization"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- SSM parameter tag analysis only, port unused)" }
+  ],
+  "learningGoals": [
+    "SSM Parameter のタグを Console と CLI の両方から確認する方法を身につける",
+    "コスト配賦タグ (Cost Allocation Tag) の目的と仕組みを理解する",
+    "aws ssm list-tags-for-resource の出力構造を読めるようになる"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Count resources with the CostCenter tag (SOA cost allocation tag audit)",
+      "shortDescription": "Seven weeks into the job at TenkaCloud Inc. The accounting team complains. CTO Sasaki-san looks concerned.\n\n'Kato-kun created three SSM parameters but we don't know how many have the CostCenter tag. We need the count for the cost allocation report.'\n\nCheck the parameter tags and count only those carrying the CostCenter tag.",
+      "description": "## Scenario\n\nKato-san left three SSM Parameters. Two have a `CostCenter` tag, one does not. The cost allocation report needs the count of tagged resources.\n\nThe classic SOA-C02 point: understanding **AWS Cost Allocation Tags** and verifying which resources carry them — the practical skill of auditing tag coverage.\n\n## What gets deployed (all free)\n\n- 3 SSM Parameters\n  - `/{NamePrefix}/app-a` — tagged with CostCenter=frontend\n  - `/{NamePrefix}/app-b` — tagged with CostCenter=backend\n  - `/{NamePrefix}/app-c` — no CostCenter tag\n- SSM Parameter `/{NamePrefix}/briefing` (task description)\n\nNo EC2. **$0 cost**.\n\n## How to solve\n\n1. In the AWS Console (Systems Manager > Parameter Store) or run `aws ssm list-tags-for-resource`.\n2. Check each parameter under `/{NamePrefix}` for tags.\n3. Submit the count N of parameters carrying the `CostCenter` key as `TC{N}` (e.g. `TC{1}`).\n\nThe task is also in SSM Parameter `/{NamePrefix}/briefing`.\n\n## Scoring\n\n- Correct: +200 pt (once per deploy).\n- Wrong: -15 pt each. Score never drops below 0.\n\n## Cost\n\nSSM Parameters (standard tier) are free. No billable resources.",
+      "learningGoals": [
+        "Check SSM Parameter tags from both Console and CLI",
+        "Understand the purpose and mechanics of AWS Cost Allocation Tags",
+        "Read the output of aws ssm list-tags-for-resource"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 15,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "`aws ssm describe-parameters --filters Key=Name,Option=BeginsWith,Values=/{NamePrefix}` でパラメータ ARN を取得し、各 ARN に対して `aws ssm list-tags-for-resource --resource-type Parameter --resource-id /{NamePrefix}/app-X` を実行してタグを確認する。Console では各パラメータ詳細ページの「Tags」タブを確認する。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "3 つのパラメータのうち 2 つ (app-a と app-b) に CostCenter タグが付いている。app-c にはタグがない。答えは `TC{2}`。",
+        "penalty": 40
+      }
+    ]
+  }
+}

@@ -1,0 +1,164 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (soa-eventbridge-cron-hour). SOA-C02 EventBridge cron drill.
+  Deploys one EventBridge rule with ScheduleExpression cron(0 2 * * ? *) targeting
+  an SNS topic (no subscription, so no messages are delivered). The learner reads
+  the cron expression and identifies the UTC hour it fires. The answer is mirrored
+  only in a CFn Output the participant role cannot read; players derive it.
+
+  Cost: EventBridge rule, SNS topic, and SSM Parameter are all free. No compute,
+  NAT Gateway, or EIP. $0.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks from
+      colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+
+Resources:
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-participant-viewer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      # `aws login` (2025-11) OAuth2 flow needs SignInLocalDevelopmentAccess.
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # EventBridge read APIs do not support tag-based resource filtering
+              # for list/describe. Grant read-only on * (safe in a dedicated account).
+              # No cloudformation:DescribeStacks -- answer must come from the rule.
+              - Sid: EventBridgeRead
+                Effect: Allow
+                Action:
+                  - events:ListRules
+                  - events:DescribeRule
+                  - events:ListTargetsByRule
+                Resource: "*"
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+  # SNS topic used as the rule target. No subscription means no messages are
+  # delivered and no cost is incurred. The topic exists to make the rule valid.
+  ScheduleTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${NamePrefix}-schedule-topic"
+
+  # EventBridge rule: fires at UTC 02:00 every day.
+  # cron(0 2 * * ? *) = minute=0, hour=2, day=any, month=any, weekday=?, year=any
+  ScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "${NamePrefix}-schedule"
+      Description: !Sub "Scheduled rule for ${NamePrefix} -- what UTC hour does this fire?"
+      ScheduleExpression: "cron(0 2 * * ? *)"
+      State: ENABLED
+      Targets:
+        - Id: SnsTopic
+          Arn: !Ref ScheduleTopic
+
+  # Allow EventBridge to publish to the SNS topic.
+  TopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref ScheduleTopic
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sns:Publish
+            Resource: !Ref ScheduleTopic
+
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: >-
+        An EventBridge rule with a cron schedule expression has been deployed.
+        Find the rule whose name starts with your NamePrefix and read its
+        ScheduleExpression. Decode the UTC hour (the second field in the cron
+        expression). Submit it zero-padded as TC{HH}, e.g. TC{07}.
+        Do NOT use CloudFormation DescribeStacks.
+      Description: !Sub "TenkaCloud soa-eventbridge-cron-hour briefing for ${NamePrefix}."
+      Tier: Standard
+
+Outputs:
+  RuleName:
+    Description: The EventBridge rule to inspect.
+    Value: !Ref ScheduleRule
+  EventBridgeConsoleUrl:
+    Description: AWS Console deep link to the EventBridge Rules list.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/events/home?region=${AWS::Region}#/rules"
+  BriefingParameterName:
+    Description: SSM Parameter holding the task briefing.
+    Value: !Ref BriefingParameter
+  # Canonical answer, scoring engine only. No cloudformation:DescribeStacks for player.
+  AnswerFlag:
+    Description: Flag the learner submits after decoding the cron UTC hour.
+    Value: "TC{02}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

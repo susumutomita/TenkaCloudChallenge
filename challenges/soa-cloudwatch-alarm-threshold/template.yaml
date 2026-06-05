@@ -1,0 +1,154 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (soa-cloudwatch-alarm-threshold). SOA-C02 monitoring drill.
+  Deploys one CloudWatch alarm on the CPUUtilization metric with Threshold=80 and
+  EvaluationPeriods=2. No EC2 instance is needed -- CloudWatch alarms referencing
+  a metric dimension that doesn't exist yet are valid (they enter INSUFFICIENT_DATA
+  state, which is fine for a read-only drill). The answer is mirrored only in a CFn
+  Output the participant role cannot read; players derive it from the alarm config.
+
+  Cost: CloudWatch alarm (standard resolution, free tier up to 10) and SSM
+  Parameter are free. No EC2 instance, NAT Gateway, or EIP. $0.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks from
+      colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+
+Resources:
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-participant-viewer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      # `aws login` (2025-11) OAuth2 flow needs SignInLocalDevelopmentAccess.
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # cloudwatch:DescribeAlarms does not accept resource-level ARNs
+              # scoped by tag on DescribeAlarms; grant on * but player can
+              # only see alarms they can enumerate. No cloudformation:DescribeStacks
+              # -- the answer lives in a CFn Output and must be derived from the
+              # alarm configuration, not read.
+              - Sid: ConsoleListAlarms
+                Effect: Allow
+                Action:
+                  - cloudwatch:DescribeAlarms
+                  - cloudwatch:DescribeAlarmsForMetric
+                  - cloudwatch:GetMetricStatistics
+                  - cloudwatch:ListMetrics
+                Resource: "*"
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+  # CloudWatch alarm on CPUUtilization with Threshold=80.
+  # References a fictitious InstanceId dimension so no EC2 is needed.
+  # The alarm enters INSUFFICIENT_DATA state, which is expected and costs $0.
+  CpuAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${NamePrefix}-cpu-high"
+      AlarmDescription: !Sub "CPU utilization alert for ${NamePrefix} -- what is the threshold?"
+      MetricName: CPUUtilization
+      Namespace: AWS/EC2
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 80
+      ComparisonOperator: GreaterThanThreshold
+      # No actual instance -- alarm will be INSUFFICIENT_DATA, which is fine.
+      Dimensions:
+        - Name: InstanceId
+          Value: !Sub "${NamePrefix}-placeholder"
+      TreatMissingData: notBreaching
+
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: >-
+        A CloudWatch alarm monitors CPUUtilization on this account. Find the
+        alarm whose name starts with your NamePrefix and read its Threshold value.
+        Submit the threshold as TC{N}, e.g. TC{90}. Do NOT use CloudFormation
+        DescribeStacks -- derive the answer from the alarm configuration itself.
+      Description: !Sub "TenkaCloud soa-cloudwatch-alarm-threshold briefing for ${NamePrefix}."
+      Tier: Standard
+
+Outputs:
+  AlarmName:
+    Description: The CloudWatch alarm to inspect.
+    Value: !Ref CpuAlarm
+  AlarmConsoleUrl:
+    Description: AWS Console deep link to the CloudWatch Alarms view.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#alarmsV2:"
+  BriefingParameterName:
+    Description: SSM Parameter holding the task briefing.
+    Value: !Ref BriefingParameter
+  # Canonical answer, used by the scoring engine only. The participant role has
+  # no cloudformation:DescribeStacks, so this is not readable by the player.
+  AnswerFlag:
+    Description: Flag the learner submits after reading the alarm threshold.
+    Value: "TC{80}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

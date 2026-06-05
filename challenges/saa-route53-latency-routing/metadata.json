@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "saa-route53-latency-routing",
+  "name": "ユーザーを最も速いリージョンへ (SAA Route 53 レイテンシールーティング)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 2,
+  "estimatedDuration": "15〜20 分",
+  "shortDescription": "天下クラウド株式会社、 入社 3 週間目。 佐々木 CTO がグローバル展開の話を持ってきた。\n\n「加藤くんが立てた ap-northeast-1 だけのシステムを、 us-east-1 と eu-west-1 にも展開する。 ユーザーには自動的に一番速いリージョンへ飛んでもらいたい。 Route 53 のルーティングポリシー、 どれを使えばいいんだ?」\n\nシナリオを読んで、 適切なルーティングポリシーを答えろ。",
+  "description": "## シナリオ\n\n加藤さんが残した Route 53 設計メモが SSM Parameter に保存されている。 要件は以下の通り:\n- 世界 3 リージョン (ap-northeast-1 / us-east-1 / eu-west-1) にサービスをデプロイ\n- 各ユーザーが **自分にとって最もネットワーク遅延が低いリージョン** にルーティングされること\n- ユーザーの物理的な居場所によるルーティングではない\n- 重み付けや均等分散も要件外\n\nSAA の定番論点: Route 53 には複数のルーティングポリシーがある。\n- **レイテンシーベースルーティング**: AWS が測定したリージョン別レイテンシーで最速へ\n- **位置情報 (Geolocation)**: ユーザーの IP 地理情報で振り分ける (≠ 速さ)\n- **加重 (Weighted)**: 設定した重みに従い分散\n- **フェールオーバー**: プライマリ障害時のみスタンバイへ\n\n## デプロイされるもの (すべて無料)\n\n- SSM Parameter `/{NamePrefix}/briefing` (設計要件シナリオ)\n\nRoute 53 ホストゾーン ($0.50/月) は作成しないので **課金は $0**。\n\n## 解き方\n\n1. SSM Parameter `/{NamePrefix}/briefing` を読んで要件を確認する。\n2. Route 53 ルーティングポリシーの違いを思い出す。\n3. 「最も低いレイテンシー」を基準に振り分けるポリシー名を `TC{...}` 形式で提出。\n   例: `TC{weighted}`\n\n## 採点\n\n- 正解: +200 pt (1 デプロイにつき 1 回)。\n- 不正解: -15 pt/回。 スコアは 0 未満にならない。\n\n## コスト\n\nSSM Parameter のみ。 課金リソースなし。 $0。",
+  "tags": ["saa", "solutions-architect-associate", "route53", "dns", "latency", "routing-policy", "global"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- Route 53 routing policy scenario only, port unused)" }
+  ],
+  "learningGoals": [
+    "Route 53 のレイテンシーベースルーティングと位置情報ルーティングの違いを正確に理解する",
+    "「最速リージョンへ」という要件に対してレイテンシーポリシーを選ぶ根拠を説明できる",
+    "SAA-C03 の Route 53 ルーティングポリシー選択問題のパターンを身につける"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Route each user to the fastest region (SAA Route 53 latency routing)",
+      "shortDescription": "Week three at TenkaCloud Inc. CTO Sasaki-san has a global-expansion plan.\n\n'We're rolling out to us-east-1 and eu-west-1 alongside Kato-kun's ap-northeast-1 setup. Users should automatically land in the region with the lowest latency for them. Which Route 53 routing policy does that?'\n\nRead the scenario and name the right routing policy.",
+      "description": "## Scenario\n\nKato-san's Route 53 design notes are in an SSM Parameter. Requirements:\n- Service deployed in three regions (ap-northeast-1 / us-east-1 / eu-west-1)\n- Each user should be routed to the **region with the lowest network latency for them**\n- NOT based on the user's physical location\n- Weighted distribution and equal split are not required\n\nThe classic SAA point: Route 53 has several routing policies.\n- **Latency-based routing**: routes to the region AWS measures as lowest latency\n- **Geolocation**: routes by user IP geography (≠ speed)\n- **Weighted**: distributes by configured weights\n- **Failover**: routes to standby only when primary fails\n\n## What gets deployed (all free)\n\n- SSM Parameter `/{NamePrefix}/briefing` (design-requirements scenario)\n\nNo Route 53 hosted zone ($0.50/mo) created. **$0 cost**.\n\n## How to solve\n\n1. Read SSM Parameter `/{NamePrefix}/briefing`.\n2. Recall Route 53 routing-policy differences.\n3. Submit the policy that routes by lowest latency as `TC{...}`.\n   Example: `TC{weighted}`\n\n## Scoring\n\n- Correct: +200 pt (once per deploy).\n- Wrong: -15 pt each. Score never drops below 0.\n\n## Cost\n\nSSM Parameter only. No billable resources. $0.",
+      "learningGoals": [
+        "Distinguish Route 53 latency-based routing from geolocation routing",
+        "Explain why latency routing is chosen when the requirement is 'route to the fastest region'",
+        "Practice the Route 53 policy-selection question pattern on SAA-C03"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 15,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "要件は「ユーザーにとって最も低いレイテンシーのリージョンへ」。 Route 53 の Geolocation ルーティングはユーザーの**地理的位置**で振り分けるが、 必ずしも最速リージョンとは限らない。 AWS がリージョン間レイテンシーを測定して最速へ向ける専用ポリシーはどれ?",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "答えは Latency-based routing (レイテンシーベースルーティング)。 提出形式は `TC{latency}`。 Geolocation との混同が SAA の定番トラップ。",
+        "penalty": 40
+      }
+    ]
+  }
+}

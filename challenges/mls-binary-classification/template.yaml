@@ -1,0 +1,163 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (mls-binary-classification). MLS-C01 ML problem-type drill.
+  Deploys a single SSM Parameter containing a rich churn-prediction scenario:
+  180,000 customer records with a binary label (churned 0/1). The player must
+  identify the correct ML problem type (binary-classification vs regression /
+  multi-class / clustering). The answer lives only in a CFn Output the
+  participant role cannot read.
+
+  Cost: SSM Parameter and IAM Role are free. No compute, no SageMaker endpoint.
+  $0 for the lifetime of the drill.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks from
+      colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+
+Resources:
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-participant-viewer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      # `aws login` (2025-11) OAuth2 flow needs SignInLocalDevelopmentAccess.
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+  # Rich scenario parameter: full data schema, class distribution, and four
+  # candidate ML problem types with definitions. The correct answer (binary-
+  # classification) is derivable from the label structure -- it is NOT stated
+  # here; it lives only in the AnswerFlag Output below.
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: |
+        === TenkaCloud MLS Challenge: Churn Prediction Problem Framing ===
+
+        DATASET OVERVIEW
+        ----------------
+        Source      : B2C SaaS product (18-month export, Jan 2023 – Jun 2024)
+        Records     : 180,412 customer rows
+        Train split : 144,330 rows  |  Validation: 18,041  |  Test: 18,041
+
+        FEATURE SCHEMA
+        ---------------
+        customer_id          STRING   Unique customer identifier (not a feature)
+        tenure_months        INT      Months since account creation  [1, 84]
+        monthly_charge       FLOAT    USD billed last month  [9.99, 119.99]
+        num_support_tickets  INT      Tickets opened in last 90 days  [0, 47]
+        last_login_days_ago  INT      Days since last product login  [0, 365]
+        contract_type        ENUM     month-to-month | one-year | two-year
+        payment_method       ENUM     credit-card | bank-transfer | invoice
+        churned              INT      TARGET LABEL: 0 = retained, 1 = churned
+
+        CLASS DISTRIBUTION (train split)
+        ----------------------------------
+        churned=0  (retained) : 108,290 rows  (75.0 %)
+        churned=1  (churned)  :  36,040 rows  (25.0 %)
+
+        BUSINESS GOAL
+        -------------
+        Predict whether a customer will cancel within the next 30 days so the
+        retention team can reach out proactively. The output is a per-customer
+        decision: will this customer churn? (yes or no)
+
+        CANDIDATE ML PROBLEM TYPES
+        ---------------------------
+        A. regression         : Predict a continuous numeric value.
+                                Example: forecast next month's revenue per customer.
+        B. binary-classification : Predict one of exactly TWO discrete classes.
+                                Example: will customer churn? (yes / no)
+        C. multi-class        : Predict one of THREE OR MORE discrete classes.
+                                Example: assign customer tier (Bronze/Silver/Gold/Platinum).
+        D. clustering         : Discover natural groupings in UNLABELED data.
+                                Example: segment customers by purchase behavior
+                                without pre-defined labels.
+
+        QUESTION
+        --------
+        Which ML problem type (A/B/C/D) best describes this task?
+        Submit your answer as TC{<type>}  e.g.  TC{regression}
+      Description: !Sub "TenkaCloud mls-binary-classification briefing for ${NamePrefix}."
+      Tier: Standard
+
+Outputs:
+  BriefingParameterName:
+    Description: SSM Parameter holding the task briefing.
+    Value: !Ref BriefingParameter
+  SsmConsoleUrl:
+    Description: AWS Console deep link to the SSM Parameter Store.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/systems-manager/parameters/?region=${AWS::Region}"
+  # Canonical answer, used by the scoring engine only. The participant role has
+  # no cloudformation:DescribeStacks, so this is not readable by the player.
+  AnswerFlag:
+    Description: Flag the learner submits after identifying the ML problem type.
+    Value: "TC{binary-classification}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

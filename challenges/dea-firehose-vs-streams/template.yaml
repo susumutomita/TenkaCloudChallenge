@@ -1,0 +1,124 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (dea-firehose-vs-streams). DEA-C01 Kinesis service selection drill.
+  Models a streaming data delivery scenario via an SSM Parameter. Neither Kinesis
+  Data Firehose nor Data Streams is deployed (both incur costs). The player reads
+  the scenario and selects Kinesis Data Firehose as the fully-managed, no-consumer-
+  code service for buffering and delivering data to S3/Redshift.
+
+  Cost: SSM Parameter (Standard Tier) is free. No Kinesis services deployed. $0.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks from
+      colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+
+Resources:
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-participant-viewer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: >-
+        SCENARIO: A web application emits clickstream events at high throughput.
+        The team wants to collect these events and automatically buffer and deliver
+        them to Amazon S3 (for data lake storage) and Amazon Redshift (for
+        analytics). REQUIREMENT: The solution must be fully managed -- no custom
+        consumer application or shard management code. The team should NOT need
+        to write a Kinesis Consumer Library (KCL) application or a Lambda
+        consumer function. Data should simply flow in and land in S3 / Redshift.
+        OPTIONS: (a) Kinesis Data Streams -- low latency, but requires you to
+                     write and operate your own consumer application (KCL/Lambda)
+                 (b) Kinesis Data Firehose -- fully managed, buffers incoming data
+                     and automatically delivers to S3/Redshift/OpenSearch/Splunk
+                     with no consumer code needed
+        QUESTION: Which Kinesis service requires NO consumer code and
+        automatically delivers buffered data to S3 or Redshift?
+        Submit the service name (lowercase) as TC{service-name}.
+      Description: !Sub "TenkaCloud dea-firehose-vs-streams briefing for ${NamePrefix}."
+      Tier: Standard
+
+Outputs:
+  BriefingParameterName:
+    Description: SSM Parameter holding the Kinesis service selection scenario.
+    Value: !Ref BriefingParameter
+  SsmConsoleUrl:
+    Description: AWS Console deep link to this SSM Parameter.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/systems-manager/parameters/${NamePrefix}/briefing/description?region=${AWS::Region}"
+  # Canonical answer, scoring engine only. No cloudformation:DescribeStacks granted.
+  AnswerFlag:
+    Description: Flag for the fully managed Kinesis delivery service.
+    Value: "TC{firehose}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

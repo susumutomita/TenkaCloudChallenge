@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "saa-asg-target-tracking",
+  "name": "ASG ターゲット追跡ポリシーの目標値を調べろ (SAA Auto Scaling)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "20〜30 分",
+  "shortDescription": "天下クラウド株式会社、 入社 2 ヶ月目。 加藤さんが設定した Auto Scaling グループのスケーリングポリシーを確認するよう指示された。\n\n「CPU 使用率のターゲット追跡スケーリング、 目標値が何パーセントに設定されてるか確認してくれ。 次のキャパシティプランニング会議で使いたい」\n\n実際にデプロイされた ASG のスケーリングポリシーを調べて、 TargetValue を報告しろ。",
+  "description": "## シナリオ\n\n加藤さんが設定した ASG (Auto Scaling Group) には、 CPU 使用率に基づくターゲット追跡スケーリングポリシーが設定されている。 キャパシティプランニングのため目標 CPU 使用率 (TargetValue) を確認する必要がある。\n\nSAA の定番論点: **Target Tracking Scaling Policy** は指定したメトリクス (例: 平均 CPU 使用率) が目標値 (TargetValue) を維持するよう、 EC2 インスタンス数を自動調整する。 スケールアウト / スケールインを自動管理する最もシンプルなスケーリング手法。\n\n**コスト対策**: ASG の DesiredCapacity を 0 に設定しているため、 EC2 インスタンスは一切起動しない。 Launch Template の定義コストは $0。\n\n## デプロイされるもの (すべて無料)\n\n- Launch Template × 1 (インスタンス定義のみ、 起動なし)\n- Auto Scaling Group × 1 (min=0, max=4, desired=0 → インスタンス起動なし)\n- Target Tracking Scaling Policy × 1 (CPU 60% 目標)\n- SSM Parameter × 1 (タスク説明)\n\nDesired=0 のため **EC2 インスタンスは一切起動しない。 課金は $0**。\n\n## 解き方\n\n1. ASG を一覧して `{NamePrefix}` を含む ASG 名を特定する。\n   ```\n   aws autoscaling describe-auto-scaling-groups --query 'AutoScalingGroups[?contains(AutoScalingGroupName, `{NamePrefix}`)].AutoScalingGroupName'\n   ```\n2. スケーリングポリシーを取得する。\n   ```\n   aws autoscaling describe-policies --auto-scaling-group-name <ASG名>\n   ```\n3. `TargetTrackingConfiguration` の `TargetValue` を確認する。\n4. 値を `TC{N}` 形式で提出 (例: `TC{50}`)。\n\n## 採点\n\n- 正解: +200 pt (1 デプロイにつき 1 回)。\n- 不正解: -15 pt/回。 スコアは 0 未満にならない。\n\n## コスト\n\nASG / Launch Template / Scaling Policy の定義は無料。 EC2 インスタンスは DesiredCapacity=0 のため起動なし。 課金は $0。",
+  "tags": ["saa", "solutions-architect-associate", "auto-scaling", "target-tracking", "ec2", "scaling-policy"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- ASG scaling policy inspection only, port unused)" }
+  ],
+  "learningGoals": [
+    "Target Tracking Scaling Policy の TargetValue が ASG スケールアウト / インの基準値であることを理解する",
+    "aws autoscaling describe-policies で TargetTrackingConfiguration を取得する操作を身につける",
+    "DesiredCapacity=0 による EC2 コスト $0 のままインフラ定義を検査できることを確認する"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Find the ASG target-tracking TargetValue (SAA Auto Scaling)",
+      "shortDescription": "Two months in at TenkaCloud Inc. You're asked to verify the Auto Scaling group Kato-san configured.\n\n'What percentage did Kato-kun set for the CPU target-tracking scaling policy? I need it for the capacity planning meeting.'\n\nInspect the deployed ASG's scaling policy and report the TargetValue.",
+      "description": "## Scenario\n\nKato-san's Auto Scaling Group has a target-tracking scaling policy based on average CPU utilization. The team needs the TargetValue for capacity planning.\n\nThe classic SAA point: a **Target Tracking Scaling Policy** automatically adjusts the number of EC2 instances to keep a chosen metric (e.g., average CPU utilization) at a specified TargetValue. It is the simplest way to implement scale-out / scale-in without manual step rules.\n\n**Cost control**: the ASG DesiredCapacity is set to 0, so no EC2 instances are launched. The Launch Template and ASG definition cost $0.\n\n## What gets deployed (all free)\n\n- 1 Launch Template (instance definition only, never launched)\n- 1 Auto Scaling Group (min=0, max=4, desired=0 -- no instances launched)\n- 1 Target Tracking Scaling Policy (targeting 60% average CPU)\n- 1 SSM Parameter (task description)\n\nDesired=0 means **zero EC2 instances are launched. $0 cost**.\n\n## How to solve\n\n1. Find the ASG name with the team prefix.\n   ```\n   aws autoscaling describe-auto-scaling-groups \\\n     --query 'AutoScalingGroups[?contains(AutoScalingGroupName, `{NamePrefix}`)].AutoScalingGroupName'\n   ```\n2. Retrieve the scaling policies for that ASG.\n   ```\n   aws autoscaling describe-policies --auto-scaling-group-name <ASGName>\n   ```\n3. Read the `TargetValue` from `TargetTrackingConfiguration`.\n4. Submit the value as `TC{N}` (e.g. `TC{50}`).\n\n## Scoring\n\n- Correct: +200 pt (once per deploy).\n- Wrong: -15 pt each. Score never drops below 0.\n\n## Cost\n\nASG / Launch Template / Scaling Policy definitions are free. EC2 instances: DesiredCapacity=0, none launched. $0.",
+      "learningGoals": [
+        "Understand that Target Tracking TargetValue is the metric threshold that drives ASG scale-out and scale-in",
+        "Practice retrieving TargetTrackingConfiguration via aws autoscaling describe-policies",
+        "Confirm that DesiredCapacity=0 keeps EC2 cost at $0 while the infrastructure definition is still inspectable"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 15,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "`aws autoscaling describe-policies --auto-scaling-group-name <ASG名>` を実行。 `TargetTrackingConfiguration` オブジェクトを探す。 その中の `TargetValue` フィールドが目標値 (パーセント)。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "TargetTrackingConfiguration の TargetValue は `60.0` (= 60%)。 提出形式は `TC{60}`。",
+        "penalty": 40
+      }
+    ]
+  }
+}

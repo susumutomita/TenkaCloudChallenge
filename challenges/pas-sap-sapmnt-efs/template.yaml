@@ -1,0 +1,192 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (pas-sap-sapmnt-efs). PAS-C01 SAP shared filesystem drill.
+  Deploys a single SSM Parameter describing a SAP NetWeaver 7.5 system with
+  5 instances across 2 AZs that must concurrently mount /sapmnt/SID. The current
+  design incorrectly specifies EBS (single-instance). The player identifies
+  Amazon EFS as the multi-AZ concurrent NFS mount service recommended for SAP
+  /sapmnt. The answer lives only in a CFn Output the participant role cannot read.
+
+  Cost: SSM Parameter and IAM Role are free. No EC2, SAP, or EFS mount. $0.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks from
+      colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+
+Resources:
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-participant-viewer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+  # SAP NetWeaver /sapmnt filesystem requirements with incorrect EBS design and
+  # four candidate storage services. The correct answer (amazon-efs) is NOT
+  # stated here; it lives only in the AnswerFlag Output below.
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: |
+        === TenkaCloud PAS Challenge: SAP /sapmnt Shared Filesystem Selection ===
+
+        SAP NETWEAVER SYSTEM OVERVIEW
+        ------------------------------
+        System        : SAP NetWeaver 7.5 (ABAP stack, Unicode)
+        SID           : TEN  (fictional)
+        Basis version : SAP Basis 7.52
+        OS            : SUSE Linux Enterprise Server 15 SP5
+        Region        : ap-northeast-1 (Tokyo)
+
+        INSTANCE PLACEMENT
+        -------------------
+        Component | Inst. type   | Count | AZ          | Private IP range
+        ----------|--------------|-------|-------------|------------------
+        ASCS/ERS  | r7i.8xlarge  |     2 | AZ-1a/AZ-1c | 10.0.1.0/24
+        PAS       | r7i.16xlarge |     1 | AZ-1a       | 10.0.1.0/24
+        AAS       | r7i.16xlarge |     3 | AZ-1c       | 10.0.3.0/24
+        HANA DB   | u-12tb1.metal|     2 | AZ-1a/AZ-1c | 10.0.5.0/24
+
+        SAPMNT FILESYSTEM REQUIREMENTS
+        --------------------------------
+        Mount path   : /sapmnt/TEN
+        Content      : SAP kernel binaries, instance profiles, transport
+                       configuration, interface definitions, language files
+        Size         : ~120 GB (grows slowly; 20 GB/yr typical)
+        Consumers    : ALL 8 SAP instances (ASCS, ERS, PAS, AAS x3, DB x2)
+        Access mode  : READ by all; WRITE by ASCS on profile changes
+        Concurrency  : Up to 8 simultaneous NFS mounts across 2 AZs
+        Protocol     : POSIX NFS v4 (Linux mount semantics required by SAP)
+        Availability : Must survive single-AZ failure (HA requirement)
+
+        CURRENT DESIGN (INCORRECT)
+        ---------------------------
+        Current spec: "EBS gp3 volume, 200 GB, attached to PAS"
+        Problem 1: EBS is single-instance. Only the PAS can read/write.
+                   The 3 AAS instances in AZ-1c cannot mount it.
+        Problem 2: EBS io2 Multi-Attach allows up to 16 instances but:
+                   - Same AZ only (AZ-1a OR AZ-1c, not both)
+                   - No NFS/POSIX semantics; apps must manage concurrency
+                   - NOT supported by SAP for /sapmnt use
+        Problem 3: EBS in AZ-1a is unavailable if AZ-1a fails.
+
+        AWS STORAGE SERVICE CANDIDATES
+        --------------------------------
+        A. ebs                  : Amazon Elastic Block Store.
+                                  Block storage; attaches to ONE instance at a time.
+                                  io2 Multi-Attach: same AZ, no NFS semantics.
+                                  NOT suitable for shared /sapmnt across AZs.
+
+        B. amazon-efs           : Amazon Elastic File System.
+                                  Fully managed NFS v4 / v4.1 file system.
+                                  Supports THOUSANDS of concurrent mounts from
+                                  EC2 instances across ALL AZs in a region.
+                                  POSIX permissions, uid/gid, hard links supported.
+                                  Multi-AZ HA: data replicated across >= 3 AZs
+                                  (Regional storage class). Scales to petabytes.
+                                  SAP-validated for /sapmnt, /usr/sap/trans.
+
+        C. fsx-for-windows      : Amazon FSx for Windows File Server.
+                                  SMB protocol, NTFS filesystem.
+                                  POSIX semantics NOT supported (Linux SAP requires
+                                  POSIX uid/gid/permissions). Not suitable for Linux
+                                  SAP NetWeaver /sapmnt.
+
+        D. s3                   : Amazon Simple Storage Service.
+                                  Object storage, HTTP/HTTPS API.
+                                  Cannot be mounted as a POSIX NFS filesystem
+                                  natively. s3fs-fuse exists but is NOT supported
+                                  by SAP. Not suitable for /sapmnt.
+
+        QUESTION
+        --------
+        Which AWS storage service (A/B/C/D) provides a fully managed, POSIX-
+        compatible, multi-AZ NFS filesystem that can be mounted concurrently by
+        all 8 SAP instances across 2 AZs, and is validated by AWS for SAP
+        /sapmnt use?
+
+        Submit your answer as TC{<service>}  e.g.  TC{ebs}
+      Description: !Sub "TenkaCloud pas-sap-sapmnt-efs briefing for ${NamePrefix}."
+      Tier: Standard
+
+Outputs:
+  BriefingParameterName:
+    Description: SSM Parameter holding the task briefing.
+    Value: !Ref BriefingParameter
+  SsmConsoleUrl:
+    Description: AWS Console deep link to the SSM Parameter Store.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/systems-manager/parameters/?region=${AWS::Region}"
+  # Canonical answer -- scoring engine only. Participant role has no
+  # cloudformation:DescribeStacks.
+  AnswerFlag:
+    Description: Flag the learner submits after identifying the SAP /sapmnt filesystem service.
+    Value: "TC{amazon-efs}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "mls-missing-data-imputation",
+  "name": "欠損値を前処理で埋める技術を特定せよ (MLS 補完)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 2,
+  "estimatedDuration": "15〜20 分",
+  "shortDescription": "天下クラウド株式会社、 入社 5 週間目。 佐々木 CTO が Jupyter Notebook の画面を見せてくる。\n\n「加藤くんのデータパイプラインが age カラムに 3.2% の欠損値を出してる。 SageMaker に投げる前に前処理で対処が必要なんだが、 その技術の名前が思い出せなくて……」。\n\nSSM パラメータに欠損パターンと選択肢が入っている。 正しい前処理手法を特定して TC{...} 形式で提出しろ。",
+  "description": "## シナリオ\n\n加藤さんのデータパイプラインは医療診断 ML のデータを処理している。 入力 CSV ファイルの `age` カラムに欠損が含まれており、 そのまま SageMaker XGBoost に投入するとエラーになる。\n\nデータの欠損状況:\n- 総レコード数: 45,231 件\n- `age` カラムの欠損数: 1,447 件 (3.2%)\n- 欠損パターン: MCAR (Missing Completely At Random) — 欠損とラベルに相関なし\n- 最小値: 18 歳、 最大値: 87 歳、 中央値: 52 歳、 平均: 51.3 歳\n\nこの欠損値を、 削除せずに「既存の統計量 (平均・中央値・最頻値) で埋める」前処理手法は何か?\n\n## デプロイされるもの (すべて無料)\n\n- SSM Parameter `/{NamePrefix}/briefing` — 欠損データの詳細 + 4 つの手法の定義\n- IAM Role (ParticipantViewerRole) — SSM パラメータの読み取り権限のみ\n\nEC2 / SageMaker / Lambda 実行なし。 **課金 $0**。\n\n## 解き方\n\n1. CloudShell で `aws ssm get-parameter --name \"/{NamePrefix}/briefing\" --query Parameter.Value --output text` を実行。\n2. 欠損値を「削除」ではなく「統計量で埋める」手法を探す。\n3. 平均・中央値・最頻値・回帰予測などで欠損を埋めることを「補完 (imputation)」と呼ぶ。\n4. 答えを `TC{imputation}` の形式で Portal に提出する。\n\n## 採点\n\n- 正解: +200 pt (1 デプロイにつき 1 回)。\n- 不正解: -15 pt/回 (総当たり防止)。 スコアは 0 未満にならない。\n\n## コスト\n\nSSM Parameter / IAM Role は無料。 課金リソースなし。",
+  "tags": ["mls", "ml-specialty", "machine-learning", "missing-data", "imputation", "preprocessing", "feature-engineering"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- SSM parameter analysis only, port unused)" }
+  ],
+  "learningGoals": [
+    "欠損値を統計量で補完する前処理手法を『インピュテーション (imputation)』として正しく命名できる",
+    "平均補完・中央値補完・最頻値補完・多重代入法 (MICE) などの補完戦略の違いを説明できる",
+    "MLS-C01 の特徴量エンジニアリング / 欠損値処理に関する標準的な前処理フローを理解する"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Name the technique that fills missing values before training (MLS imputation)",
+      "shortDescription": "Week five at TenkaCloud Inc. CTO Sasaki-san shows you a Jupyter Notebook.\n\n'Kato-kun's data pipeline has 3.2% missing values in the age column. We need to handle it before feeding to SageMaker, but I can't remember the name of the technique.'\n\nThe SSM parameter has the missing-data profile and candidate options. Identify the correct preprocessing technique and submit TC{...}.",
+      "description": "## Scenario\n\nKato-san's pipeline processes medical-diagnosis ML data. The `age` column in the input CSV has missing values that cause XGBoost to error.\n\nMissing data profile:\n- Total records: 45,231\n- `age` missing: 1,447 (3.2%)\n- Pattern: MCAR (Missing Completely At Random) — no correlation with label\n- Min: 18, Max: 87, Median: 52, Mean: 51.3\n\nWhat is the name of the preprocessing technique that **fills** missing values (rather than dropping rows) using statistics like mean, median, or mode?\n\n## What gets deployed (all free)\n\n- SSM Parameter `/{NamePrefix}/briefing` — missing-data profile, strategy comparison table, and four candidate technique names with definitions\n- IAM Role (ParticipantViewerRole) — SSM read + CloudShell only\n\nNo EC2 / SageMaker / Lambda execution. **$0 cost**.\n\n## How to solve\n\n1. In CloudShell run `aws ssm get-parameter --name \"/{NamePrefix}/briefing\" --query Parameter.Value --output text`.\n2. Find the technique that replaces NaN values with a computed statistic rather than deleting rows.\n3. Filling missing values with mean/median/mode/regression predictions is called 'imputation'.\n4. Submit `TC{imputation}`.\n\n## Scoring\n\n- Correct: +200 pt (once per deploy).\n- Wrong: -15 pt each. Score never drops below 0.\n\n## Cost\n\nSSM Parameter / IAM Role are free. No billable resources.",
+      "learningGoals": [
+        "Correctly name the preprocessing technique that fills missing values as 'imputation'",
+        "Explain mean, median, mode, and MICE imputation strategies and when to use each",
+        "Understand the standard missing-value handling flow for MLS-C01 feature engineering"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 15,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "「行を削除する」ではなく「欠損を統計量 (平均・中央値・最頻値) で埋める」手法を探せ。 SageMaker の `SimpleImputer` や scikit-learn にも同名のクラスがある。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "欠損値を統計量で埋める前処理手法は **インピュテーション (imputation)**。 平均補完・中央値補完・最頻値補完・多重代入法 (MICE) がすべてこのカテゴリに属する。 提出形式: `TC{imputation}`。",
+        "penalty": 35
+      }
+    ]
+  }
+}

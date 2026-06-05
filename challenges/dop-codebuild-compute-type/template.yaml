@@ -1,0 +1,180 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (dop-codebuild-compute-type). DOP-C02 CI/CD drill.
+  Deploys a CodeBuild project (never run) with Environment ComputeType
+  BUILD_GENERAL1_SMALL. The learner reads the project environment config and
+  submits the compute type. The answer is mirrored only in a CFn Output the
+  participant role cannot read.
+
+  Cost: CodeBuild project definition, IAM role, and SSM parameter are all free.
+  No builds are ever executed. $0 for the lifetime of the drill.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks from
+      colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+
+Resources:
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-participant-viewer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # codebuild:BatchGetProjects is not resource-scopable by ARN for
+              # all API calls, so we scope by project name prefix via condition.
+              # No cloudformation:DescribeStacks -- the answer lives in CFn Output.
+              - Sid: CodeBuildReadProject
+                Effect: Allow
+                Action:
+                  - codebuild:BatchGetProjects
+                Resource: !Sub "arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/${NamePrefix}-*"
+              - Sid: CodeBuildListProjects
+                Effect: Allow
+                Action:
+                  - codebuild:ListProjects
+                Resource: "*"
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+  # IAM service role for the CodeBuild project (required by CFn; never used to
+  # actually run a build in this drill).
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-codebuild-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CodeBuildLogs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/${NamePrefix}-*"
+
+  # CodeBuild project -- defined only, never run. ComputeType is the answer.
+  # Source: NO_SOURCE with a trivial buildspec so the project definition is
+  # valid without a real source repository.
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub "${NamePrefix}-build"
+      Description: !Sub "TenkaCloud dop-codebuild-compute-type drill project for ${NamePrefix}. Never run."
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+      Source:
+        Type: NO_SOURCE
+        BuildSpec: |
+          version: 0.2
+          phases:
+            build:
+              commands:
+                - echo "This project is a drill -- never executed."
+      Environment:
+        Type: LINUX_CONTAINER
+        Image: aws/codebuild/standard:7.0
+        ComputeType: BUILD_GENERAL1_SMALL
+      Artifacts:
+        Type: NO_ARTIFACTS
+
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: !Sub >-
+        Check the CodeBuild project named ${NamePrefix}-build. Read its
+        Environment.ComputeType. Convert the value to lower-case with hyphens
+        instead of underscores and submit as TC{...}.
+        Example: if the value were BUILD_GENERAL1_LARGE submit TC{build-general1-large}.
+      Description: !Sub "TenkaCloud dop-codebuild-compute-type briefing for ${NamePrefix}."
+      Tier: Standard
+
+Outputs:
+  CodeBuildProjectName:
+    Description: Name of the CodeBuild project to inspect.
+    Value: !Ref CodeBuildProject
+  CodeBuildConsoleUrl:
+    Description: AWS Console deep link to the CodeBuild project.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/codesuite/codebuild/${AWS::AccountId}/projects/${NamePrefix}-build/details"
+  BriefingParameterName:
+    Description: SSM Parameter holding the task briefing.
+    Value: !Ref BriefingParameter
+  # Canonical answer, scoring engine only. No cloudformation:DescribeStacks
+  # granted to participant role -- must be derived from project config.
+  AnswerFlag:
+    Description: Flag the learner submits after reading the CodeBuild compute type.
+    Value: "TC{build-general1-small}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

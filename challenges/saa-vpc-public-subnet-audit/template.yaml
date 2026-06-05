@@ -1,0 +1,295 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (saa-vpc-public-subnet-audit). SAA-C03 networking drill.
+  Deploys one VPC with an Internet Gateway, five subnets, and two route tables.
+  Two subnets are associated with a route table that has a 0.0.0.0/0 route to the
+  IGW (= public); three are associated with a local-only route table (= private).
+  Subnet Name tags are deliberately misleading so the learner must reason from
+  ROUTING, not names. The answer (how many subnets are truly public) is mirrored
+  only in a CFn Output the participant role cannot read; players derive it.
+
+  Cost: VPC, subnets, route tables, IGW, security groups are all free. No NAT
+  Gateway, no EC2 instance, no Elastic IP. $0 for the lifetime of the drill.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks from
+      colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+
+Resources:
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-participant-viewer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      # `aws login` (2025-11) OAuth2 flow needs SignInLocalDevelopmentAccess.
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # ec2:Describe* does not accept resource-level ARNs, so it is
+              # granted on Resource:"*" but tag-scoped: the call returns only
+              # resources carrying this team's TenkaCloud:NamePrefix tag.
+              # Deliberately NO cloudformation:DescribeStacks -- the answer lives
+              # in a CFn Output and must be derived from the routing, not read.
+              - Sid: ConsoleEc2Describe
+                Effect: Allow
+                Action:
+                  - ec2:Describe*
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/TenkaCloud:NamePrefix: !Ref NamePrefix
+              # Metadata-only EC2 APIs carry no tags; safe account-wide under the
+              # per-team dedicated-account model (return generic AWS info only).
+              - Sid: ConsoleEc2Metadata
+                Effect: Allow
+                Action:
+                  - ec2:DescribeRegions
+                  - ec2:DescribeAvailabilityZones
+                  - ec2:DescribeAccountAttributes
+                Resource: "*"
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              # Metadata-only API AWS IAM does not accept resource-scope on; safe
+              # under the per-team dedicated-account model (see hello-world).
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.20.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-vpc"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-igw"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  IgwAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+  # Route table WITH a default route to the IGW. Subnets associated here are
+  # public by the SAA definition (a subnet is public iff its route table has a
+  # route to an Internet Gateway).
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-rt-public"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  PublicDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: IgwAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  # Route table with NO IGW route (local only). Subnets here are private even if
+  # their Name tag suggests otherwise (the trap).
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-rt-private"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  # --- The five subnets. Two are public (web-a, web-b). Three are private,
+  # one of which is named "dmz-e" to bait name-based counting. ---
+  SubnetWebA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-web-a"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  SubnetWebB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-web-b"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  SubnetAppC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.3.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-app-c"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  SubnetDataD:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.4.0/24
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-data-d"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  # TRAP: named "dmz-e" (sounds internet-facing) but routed via the private
+  # table. A learner counting by name gets 3; counting by routing gets 2.
+  SubnetDmzE:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.5.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-dmz-e"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  AssocWebA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetWebA
+      RouteTableId: !Ref PublicRouteTable
+  AssocWebB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetWebB
+      RouteTableId: !Ref PublicRouteTable
+  AssocAppC:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetAppC
+      RouteTableId: !Ref PrivateRouteTable
+  AssocDataD:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetDataD
+      RouteTableId: !Ref PrivateRouteTable
+  AssocDmzE:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetDmzE
+      RouteTableId: !Ref PrivateRouteTable
+
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: >-
+        Audit the VPC routing. Count how many subnets are PUBLIC (a subnet is
+        public iff its associated route table has a 0.0.0.0/0 route to an
+        Internet Gateway). Ignore the subnet Name tags -- some are misleading.
+        Submit the count as TC{N-public-subnets}, e.g. TC{4-public-subnets}.
+      Description: !Sub "TenkaCloud saa-vpc-public-subnet-audit briefing for ${NamePrefix}."
+      Tier: Standard
+
+Outputs:
+  VpcId:
+    Description: The VPC under audit.
+    Value: !Ref Vpc
+  VpcConsoleUrl:
+    Description: AWS Console deep link to the VPC's Route Tables view.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/vpcconsole/home?region=${AWS::Region}#RouteTables:"
+  BriefingParameterName:
+    Description: SSM Parameter holding the task briefing.
+    Value: !Ref BriefingParameter
+  # Canonical answer, used by the scoring engine only. The participant role has
+  # no cloudformation:DescribeStacks, so this is not readable by the player.
+  AnswerFlag:
+    Description: Flag the learner submits after counting public subnets.
+    Value: "TC{2-public-subnets}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

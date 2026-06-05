@@ -1,0 +1,214 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (saa-availability-zone-spread). SAA-C03 HA VPC design drill.
+  Deploys a VPC with exactly THREE subnets, each in a DISTINCT Availability Zone
+  (using !Select [0/1/2, !GetAZs ""]). The player runs describe-subnets, deduplicates
+  the AvailabilityZone values, and counts the distinct AZs. The answer is stored only
+  in the CFn Output AnswerFlag which the participant role cannot read.
+
+  Cost: VPC, subnets, and route tables are free. No EC2, NAT Gateway, or EIP. $0.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks from
+      colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+
+Resources:
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-participant-viewer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      # `aws login` (2025-11) OAuth2 flow needs SignInLocalDevelopmentAccess.
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # Player inspects subnet AvailabilityZone to count distinct AZs.
+              # Tag-scoped where the API supports it. No cloudformation:DescribeStacks.
+              - Sid: ConsoleEc2Describe
+                Effect: Allow
+                Action:
+                  - ec2:Describe*
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/TenkaCloud:NamePrefix: !Ref NamePrefix
+              - Sid: ConsoleEc2Metadata
+                Effect: Allow
+                Action:
+                  - ec2:DescribeRegions
+                  - ec2:DescribeAvailabilityZones
+                  - ec2:DescribeAccountAttributes
+                Resource: "*"
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.50.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-vpc"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  # Three subnets, each in a DIFFERENT Availability Zone.
+  # !Select [0/1/2, !GetAZs ""] guarantees distinct AZs regardless of region.
+  SubnetAz0:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.50.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-subnet-az0"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  SubnetAz1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.50.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-subnet-az1"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  SubnetAz2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.50.3.0/24
+      AvailabilityZone: !Select [2, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-subnet-az2"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  # Shared route table (local only -- no IGW, no NAT).
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-rt"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  AssocAz0:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetAz0
+      RouteTableId: !Ref RouteTable
+
+  AssocAz1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetAz1
+      RouteTableId: !Ref RouteTable
+
+  AssocAz2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetAz2
+      RouteTableId: !Ref RouteTable
+
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: >-
+        A VPC has been deployed with multiple subnets spread across Availability Zones.
+        List the subnets tagged with TenkaCloud:NamePrefix and read the AvailabilityZone
+        of each. Count the number of DISTINCT (unique) AZs spanned. Submit the count as
+        TC{N-azs} e.g. TC{2-azs}. Note: subnet count and AZ count may differ.
+      Description: !Sub "Task briefing for ${NamePrefix} (saa-availability-zone-spread)."
+      Tier: Standard
+
+Outputs:
+  VpcId:
+    Description: The VPC containing the three subnets to inspect.
+    Value: !Ref Vpc
+  SubnetsConsoleUrl:
+    Description: AWS Console deep link to the Subnets list filtered by VPC.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/vpcconsole/home?region=${AWS::Region}#subnets:"
+  BriefingParameterName:
+    Description: SSM Parameter holding the task briefing.
+    Value: !Ref BriefingParameter
+  # Canonical answer -- scoring engine only. Participant role has no
+  # cloudformation:DescribeStacks, so this Output is never readable by the player.
+  AnswerFlag:
+    Description: Flag the learner submits after counting the distinct AZs spanned.
+    Value: "TC{3-azs}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

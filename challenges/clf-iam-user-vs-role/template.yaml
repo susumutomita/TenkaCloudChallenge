@@ -1,0 +1,192 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (clf-iam-user-vs-role). CLF-C02 IAM identity best
+  practice drill. Deploys an IAM user (anti-pattern) and an IAM role whose
+  trust policy allows ec2.amazonaws.com (correct approach). The player must
+  inspect both identities and determine that an EC2 instance should use the
+  IAM role (never a user's long-lived access key). The answer is stored only
+  in a CFn Output the participant role cannot read.
+
+  Cost: IAM users and roles are free. No EC2, S3, NAT, or EIP. $0.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks from
+      colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+
+Resources:
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-participant-viewer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # Allow the player to inspect the deployed IAM user and role.
+              # Scoped by NamePrefix where the API supports resource-level ARNs.
+              # No cloudformation:DescribeStacks granted -- answer not readable.
+              - Sid: InspectNamedIamEntities
+                Effect: Allow
+                Action:
+                  - iam:GetRole
+                  - iam:GetUser
+                  - iam:ListAttachedRolePolicies
+                Resource:
+                  - !Sub "arn:aws:iam::${AWS::AccountId}:role/${NamePrefix}*"
+                  - !Sub "arn:aws:iam::${AWS::AccountId}:user/${NamePrefix}*"
+              # iam:ListRoles and iam:ListUsers do not support resource-scoped ARNs.
+              # Granted account-wide here (per-team dedicated-account model makes
+              # this safe -- the account is the team's own isolated environment).
+              - Sid: ConsoleListIamRolesUsers
+                Effect: Allow
+                Action:
+                  - iam:ListRoles
+                  - iam:ListUsers
+                Resource: "*"
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+  # ANTI-PATTERN: An IAM user with no access keys issued here, but representing
+  # the kind of identity Kato-san wrongly used (long-lived credentials on EC2).
+  ServiceUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: !Sub "${NamePrefix}-svc-user"
+      Path: "/"
+      Tags:
+        - Key: Purpose
+          Value: Demonstration of anti-pattern (long-lived credentials on EC2 -- do not do this)
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  # CORRECT APPROACH: An IAM role with a trust policy allowing ec2.amazonaws.com.
+  # An EC2 instance profile referencing this role provides temporary, auto-rotating
+  # credentials -- no long-lived key needed, no leakage risk.
+  Ec2S3Role:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-ec2-s3-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      Description: >-
+        EC2 instance role for S3 read access. EC2 assumes this role via an
+        instance profile, obtaining temporary credentials automatically.
+        This is the correct pattern -- never embed an IAM user key on an instance.
+      Tags:
+        - Key: Purpose
+          Value: Correct pattern for EC2-to-S3 access (instance profile role)
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: !Sub >-
+        TASK: Identify the correct IAM identity type for EC2 to call S3.
+        Two IAM identities have been deployed in this account under the prefix ${NamePrefix}.
+        Inspect both and determine which type an EC2 instance SHOULD use to call AWS services.
+        Submit TC{iam-user} or TC{iam-role}.
+
+        IDENTITIES DEPLOYED:
+        1. IAM User: ${NamePrefix}-svc-user
+           - Represents the anti-pattern Kato-san used (long-lived access key on EC2)
+           - To inspect: aws iam get-user --user-name ${NamePrefix}-svc-user
+        2. IAM Role: ${NamePrefix}-ec2-s3-role
+           - Has a trust policy listing a specific AWS service as the principal
+           - To inspect: aws iam get-role --role-name ${NamePrefix}-ec2-s3-role
+
+        QUESTION: Read the trust policy of the IAM role. Note the Principal service.
+        Which identity type should an EC2 instance use to call S3 -- an IAM user
+        (long-lived access key) or an IAM role (temporary credentials via instance profile)?
+        Submit: TC{iam-user} or TC{iam-role}
+      Description: !Sub "TenkaCloud clf-iam-user-vs-role briefing for ${NamePrefix}."
+      Tier: Standard
+
+Outputs:
+  ServiceUserName:
+    Description: The IAM user deployed as an anti-pattern demonstration.
+    Value: !Ref ServiceUser
+  Ec2S3RoleName:
+    Description: The IAM role with ec2.amazonaws.com trust policy (correct pattern).
+    Value: !Ref Ec2S3Role
+  BriefingParameterName:
+    Description: SSM Parameter holding the task briefing.
+    Value: !Ref BriefingParameter
+  IamConsoleUrl:
+    Description: AWS Console deep link to the IAM Roles list.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/iamv2/home?region=${AWS::Region}#/roles"
+  # Canonical answer -- scoring engine only. No cloudformation:DescribeStacks
+  # is granted to the participant role, so this Output is not readable by the player.
+  AnswerFlag:
+    Description: Flag the learner submits after identifying the correct identity type.
+    Value: "TC{iam-role}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

@@ -1,0 +1,195 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (saa-asg-target-tracking). SAA-C03 Auto Scaling drill.
+  Deploys an Auto Scaling Group (min=0, max=4, desired=0) with a Launch Template and
+  a Target Tracking Scaling Policy targeting 60% average CPU. No EC2 instances are
+  launched (desired=0). The player inspects the scaling policy and reports the
+  TargetValue. The answer is stored only in the CFn Output AnswerFlag which the
+  participant role cannot read.
+
+  Cost: ASG / Launch Template / Scaling Policy definitions are free. DesiredCapacity=0
+  means zero EC2 instances. $0.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks from
+      colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+
+Resources:
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-participant-viewer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      # `aws login` (2025-11) OAuth2 flow needs SignInLocalDevelopmentAccess.
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # Player reads ASG and scaling policy details to find the TargetValue.
+              # No cloudformation:DescribeStacks -- the answer lives in the CFn Output only.
+              - Sid: AutoScalingRead
+                Effect: Allow
+                Action:
+                  - autoscaling:DescribeAutoScalingGroups
+                  - autoscaling:DescribePolicies
+                  - autoscaling:DescribeScalingActivities
+                  - autoscaling:DescribeLaunchConfigurations
+                  - autoscaling:DescribeAutoScalingInstances
+                Resource: "*"
+              - Sid: Ec2DescribeLaunchTemplates
+                Effect: Allow
+                Action:
+                  - ec2:DescribeLaunchTemplates
+                  - ec2:DescribeLaunchTemplateVersions
+                  - ec2:DescribeImages
+                  - ec2:DescribeInstanceTypes
+                Resource: "*"
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+  # Launch Template -- instance definition only; no instances are launched.
+  # Uses the latest Amazon Linux 2 AMI parameter to avoid hardcoding an AMI ID.
+  AsgLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub "${NamePrefix}-lt"
+      LaunchTemplateData:
+        # t3.micro for definition purposes; zero instances will run (desired=0).
+        InstanceType: t3.micro
+        # Public SSM parameter for latest Amazon Linux 2 AMI -- no cost to resolve.
+        ImageId: !Sub "{{resolve:ssm:/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2}}"
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub "${NamePrefix}-instance"
+      TagSpecifications:
+        - ResourceType: launch-template
+          Tags:
+            - Key: Name
+              Value: !Sub "${NamePrefix}-lt"
+
+  # Auto Scaling Group: desired=0 so no EC2 instances ever launch.
+  AppAsg:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Sub "${NamePrefix}-asg"
+      MinSize: "0"
+      MaxSize: "4"
+      DesiredCapacity: "0"
+      LaunchTemplate:
+        LaunchTemplateId: !Ref AsgLaunchTemplate
+        Version: !GetAtt AsgLaunchTemplate.LatestVersionNumber
+      AvailabilityZones: !GetAZs ""
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-asg"
+          PropagateAtLaunch: false
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+          PropagateAtLaunch: false
+
+  # Target Tracking Scaling Policy: TargetValue=60 (%) is THE answer.
+  # The value is NOT stored in any SSM parameter or tag; must be derived
+  # from describe-policies TargetTrackingConfiguration.
+  CpuTargetTrackingPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref AppAsg
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: 60.0
+        DisableScaleIn: false
+
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: >-
+        An Auto Scaling Group with a Target Tracking Scaling Policy has been deployed.
+        Inspect the scaling policy to find the TargetValue (the average CPU utilization
+        percentage the ASG is configured to maintain). Submit the integer value as
+        TC{N} e.g. TC{50}. Note: DesiredCapacity=0 so no EC2 instances are running.
+      Description: !Sub "Task briefing for ${NamePrefix} (saa-asg-target-tracking)."
+      Tier: Standard
+
+Outputs:
+  AsgName:
+    Description: Name of the Auto Scaling Group to inspect.
+    Value: !Ref AppAsg
+  AsgConsoleUrl:
+    Description: AWS Console deep link to the Auto Scaling Groups list.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/ec2/home?region=${AWS::Region}#AutoScalingGroups:"
+  BriefingParameterName:
+    Description: SSM Parameter holding the task briefing.
+    Value: !Ref BriefingParameter
+  # Canonical answer -- scoring engine only. Participant role has no
+  # cloudformation:DescribeStacks, so this Output is never readable by the player.
+  AnswerFlag:
+    Description: Flag the learner submits after reading the Target Tracking TargetValue.
+    Value: "TC{60}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

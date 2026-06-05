@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "scs-waf-rate-based",
+  "name": "レートベースの IP ブロックに使う AWS WAF ルールタイプを特定せよ (SCS-C02)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "10〜15 分",
+  "shortDescription": "天下クラウド株式会社、入社 5 ヶ月目。佐々木 CTO から DDoS 対策の依頼が来る。\n\n「加藤くんが残した Web アプリが特定の IP から 1000 req/5min を超えるアクセスを受けてる。AWS WAF で自動的にブロックしたいんだけど、どのルールタイプを使えばいい?」\n\nシナリオを読み、レートを超えた IP を自動ブロックする WAF のルールタイプを特定しろ。",
+  "description": "## シナリオ\n\n加藤さんが残した Web アプリケーションが、特定の IP アドレスから 5 分あたり 1000 リクエストを超えるアクセスを受けている。AWS WAF を使って、このしきい値を超えた送信元 IP を**自動的にブロック**するにはどのルールタイプを使えばよいか?\n\nSCS 頻出論点: **AWS WAF のレートベースルール (rate-based rule)** は、送信元 IP ごとに指定した時間ウィンドウ (5 分) のリクエスト数を追跡し、しきい値を超えた IP を自動的にブロックする。通常の管理ルールとは異なり、しきい値と期間だけを設定すればよい。\n\n## デプロイされるもの (すべて無料)\n\n- SSM Parameter `/${NamePrefix}/briefing`: シナリオとタスク説明 (無料)\n\nWAF WebACL は実リソース不要。シナリオデータで分析する問題。**課金 $0**。\n\n## 解き方\n\n1. SSM Parameter `/${NamePrefix}/briefing` を読んでシナリオを確認。\n2. AWS WAF のルールタイプを確認 (マネージドルールグループ / カスタムルール / レートベースルール)。\n3. 送信元 IP ごとにリクエストレートを追跡してしきい値超えを自動ブロックするルールタイプを特定。\n4. 答えを `TC{rate-based-rule}` 形式で提出。\n\n## 採点\n\n- 正解: +200 pt (1 デプロイにつき 1 回)。\n- 不正解: -15 pt/回 (総当たり防止)。スコアは 0 未満にならない。\n\n## コスト\n\nSSM Parameter は無料。課金リソースなし。",
+  "tags": ["scs", "security-specialty", "waf", "rate-based-rule", "ddos", "ip-blocking", "application-security"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- AWS WAF rule type scenario analysis only, port unused)" }
+  ],
+  "learningGoals": [
+    "AWS WAF のレートベースルールが送信元 IP のリクエストレートを追跡・自動ブロックする仕組みを理解する",
+    "マネージドルールグループ / カスタムルール / レートベースルールの違いを区別できるようになる",
+    "DDoS / brute-force 対策の WAF 設定パターンを SCS 試験の観点で整理する"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Identify the AWS WAF rule type that blocks IPs exceeding a request rate (SCS-C02)",
+      "shortDescription": "Five months at TenkaCloud Inc. CTO Sasaki-san needs DDoS protection.\n\n'Kato-kun's web app is getting hit by a single IP address making over 1000 requests per 5 minutes. Which AWS WAF rule type automatically blocks the source IP when it exceeds that rate?'\n\nRead the scenario and identify the WAF rule type for IP-level rate limiting.",
+      "description": "## Scenario\n\nKato-san's web application is receiving more than 1000 requests per 5 minutes from a specific source IP address. You want AWS WAF to **automatically block** any source IP that exceeds this threshold. Which WAF rule type accomplishes this?\n\nA staple SCS point: **AWS WAF rate-based rules** track the request count per source IP over a 5-minute window and automatically block IPs that exceed the configured threshold. Unlike managed rule groups, you just configure the threshold and evaluation window.\n\n## What gets deployed (all free)\n\n- SSM Parameter `/${NamePrefix}/briefing`: scenario and task description (free)\n\nNo WAF WebACL needed. This is a scenario-analysis challenge. **$0 cost**.\n\n## How to solve\n\n1. Read SSM Parameter `/${NamePrefix}/briefing` for the scenario.\n2. Review AWS WAF rule types: managed rule groups, custom rules, rate-based rules.\n3. Identify the rule type that tracks per-source-IP request rate and auto-blocks on threshold breach.\n4. Submit the answer as `TC{rate-based-rule}`.\n\n## Scoring\n\n- Correct: +200 pt (once per deploy).\n- Wrong: -15 pt each. Score never drops below 0.\n\n## Cost\n\nSSM Parameter is free. No billable resources.",
+      "learningGoals": [
+        "Understand how AWS WAF rate-based rules track per-IP request rate and auto-block on threshold",
+        "Distinguish managed rule groups, custom rules, and rate-based rules in AWS WAF",
+        "Organize DDoS/brute-force mitigation WAF patterns from the SCS exam perspective"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 15,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "AWS WAF のルールには複数タイプがある。送信元 IP ごとのリクエスト数を**追跡**して、しきい値を超えたら自動ブロックする専用のルールタイプがある。マネージドルールグループではなく、時間ウィンドウとしきい値だけを設定するタイプを探そう。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "送信元 IP のリクエストレートを 5 分間隔で追跡してしきい値超えを自動ブロックする WAF ルールタイプは「レートベースルール (rate-based rule)」。答えは `TC{rate-based-rule}`。",
+        "penalty": 40
+      }
+    ]
+  }
+}

@@ -1,0 +1,122 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (scs-macie-pii). SCS-C02 Amazon Macie drill.
+  Stores a scenario briefing in an SSM Parameter: an S3 bucket may contain PII
+  and sensitive data that needs to be automatically discovered and classified.
+  The learner must identify Amazon Macie as the correct service. No real Macie
+  or S3 objects are deployed -- pure scenario analysis.
+
+  Cost: SSM Parameter (String) is free. No Macie, no S3 objects. $0.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks from
+      colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+
+Resources:
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-participant-viewer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      # `aws login` (2025-11) OAuth2 flow needs SignInLocalDevelopmentAccess.
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # The player only needs to read the briefing SSM parameter.
+              # No cloudformation:DescribeStacks -- the answer must be derived
+              # from the scenario, not from the stack Output.
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+  # Scenario briefing: S3 bucket with potential PII, need automatic discovery.
+  # Amazon Macie uses ML to automatically scan S3 and find PII / sensitive data.
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: >-
+        Scenario: An S3 bucket may contain files with PII (Personally Identifiable
+        Information) such as names, email addresses, and credit card numbers uploaded
+        by a former employee. You need to automatically discover and classify sensitive
+        data across the bucket without manually reviewing every object. Which AWS
+        managed service uses machine learning to automatically discover, classify,
+        and report on PII and sensitive data stored in Amazon S3? Decoys: GuardDuty,
+        Inspector, Security Hub. Submit as TC{<service-name>}.
+      Description: !Sub "TenkaCloud scs-macie-pii briefing for ${NamePrefix}."
+      Tier: Standard
+
+Outputs:
+  BriefingParameterName:
+    Description: SSM Parameter holding the Macie PII scenario briefing.
+    Value: !Ref BriefingParameter
+  MacieConsoleUrl:
+    Description: AWS Console deep link to Amazon Macie (reference).
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/macie/home?region=${AWS::Region}"
+  # Canonical answer, scoring engine only (no DescribeStacks granted to player).
+  AnswerFlag:
+    Description: Flag the learner submits after identifying Amazon Macie.
+    Value: "TC{macie}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "mla-sagemaker-serverless",
+  "name": "SageMaker の間欠トラフィック向けエンドポイントタイプを選べ (MLA サーバーレス推論)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "15〜20 分",
+  "shortDescription": "天下クラウド株式会社、ML 推論基盤の設計レビュー。佐々木 CTO が言う。\n\n「加藤くんが設計したモデル、平日昼間だけリクエストがあって夜間はゼロ。リアルタイムエンドポイントをずっと立てておくのはコストの無駄だ。バースト間はゼロにスケールして、推論ごとに課金されるタイプを選んでくれ」。\n\n4 つの選択肢 (real-time / serverless / async / batch) から正しいものを選べ。",
+  "description": "## シナリオ\n\n加藤さんが設計した画像分類モデルは、営業時間中のみリクエストが来る間欠的なトラフィックパターンを持つ。夜間・週末はリクエストがない。常時稼働のリアルタイムエンドポイントを立てておくとインスタンス課金が発生し続ける。\n\nMLA の重要論点: SageMaker エンドポイントのタイプ選択:\n- **Real-time**: 常時起動、低レイテンシー、常時課金 (リクエストがなくても)\n- **Serverless**: **バースト間はゼロスケール、推論リクエストごとに課金**、コールドスタートあり\n- **Async**: キューに入れて非同期処理、長時間推論向け\n- **Batch Transform**: 大量データをオフラインで一括処理、エンドポイントなし\n\n間欠的トラフィック + バースト間ゼロスケール + 推論ごと課金 → **Serverless**。\n\n## デプロイされるもの (すべて無料)\n\n- SSM Parameter × 1 (`/{NamePrefix}/briefing`) — 上記シナリオ\n\nSageMaker エンドポイントは高コストなので**デプロイしない**。**課金 $0**。\n\n## 解き方\n\n1. SSM Parameter `/{NamePrefix}/briefing` を読む。\n2. 4 つのエンドポイントタイプの特性を比較する。\n3. 間欠トラフィック + ゼロスケール + 推論ごと課金 → Serverless を選ぶ。\n4. `TC{serverless}` 形式で Portal に提出。\n\n## 採点\n\n- 正解: +200 pt (1 デプロイにつき 1 回)。\n- 不正解: -20 pt/回。スコアは 0 未満にならない。\n\n## コスト\n\nSSM Parameter は無料。SageMaker エンドポイントは作成しない。課金 $0。",
+  "tags": ["mla", "ml-engineer-associate", "sagemaker", "serverless-inference", "endpoint", "cost-optimization", "inference"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- SageMaker endpoint type scenario, port unused)" }
+  ],
+  "learningGoals": [
+    "SageMaker の 4 つの推論エンドポイントタイプ (real-time / serverless / async / batch) の特性を理解する",
+    "間欠的トラフィックでゼロスケールが必要な場合はサーバーレスエンドポイントが最適であることを説明できる",
+    "SageMaker Serverless Inference のコールドスタートと課金モデルを理解する"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Pick the SageMaker endpoint type for intermittent traffic (MLA serverless inference)",
+      "shortDescription": "ML inference infrastructure design review at TenkaCloud Inc. CTO Sasaki-san says:\n\n'Kato-kun's model only gets requests on weekday daytime -- zero at night. Keeping a real-time endpoint running 24/7 is wasteful. Pick the type that scales to zero between bursts and charges per inference.'\n\nChoose from real-time / serverless / async / batch.",
+      "description": "## Scenario\n\nKato-san's image classification model has an intermittent traffic pattern -- active during business hours, zero at night and weekends. A real-time endpoint would incur instance charges 24/7 even when idle.\n\nThe key MLA concept: SageMaker endpoint types:\n- **Real-time**: always running, low latency, always-on billing (even with no requests)\n- **Serverless**: **scales to zero between bursts, pay-per-inference**, cold start on first request after idle\n- **Async**: queue-based asynchronous processing, for long-running inferences\n- **Batch Transform**: offline bulk processing of large datasets, no persistent endpoint\n\nIntermittent traffic + scale-to-zero + pay-per-inference → **Serverless**.\n\n## What gets deployed (all free)\n\n- 1 SSM Parameter (`/{NamePrefix}/briefing`) -- the scenario\n\nSageMaker endpoints incur significant costs and are **not deployed**. **$0 cost**.\n\n## How to solve\n\n1. Read SSM Parameter `/{NamePrefix}/briefing`.\n2. Compare the four endpoint types.\n3. Intermittent traffic + scale-to-zero + pay-per-inference → Serverless.\n4. Submit as `TC{serverless}`.\n\n## Scoring\n\n- Correct: +200 pt (once per deploy).\n- Wrong: -20 pt each. Score never drops below 0.\n\n## Cost\n\nSSM Parameter is free. No SageMaker endpoint deployed. $0.",
+      "learningGoals": [
+        "Understand the four SageMaker inference endpoint types (real-time / serverless / async / batch)",
+        "Explain why serverless endpoints are optimal for intermittent traffic requiring scale-to-zero",
+        "Understand SageMaker Serverless Inference cold start behavior and pay-per-inference billing"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 20,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "リアルタイムエンドポイントはリクエストがなくてもインスタンス課金が発生する。非同期は長時間処理向き。バッチ変換はオフライン一括処理。「バースト間はゼロスケール」かつ「推論ごと課金」のエンドポイントタイプを探す。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "SageMaker Serverless Inference はバースト間にゼロスケールし、推論リクエストごとにのみ課金される。コールドスタートのレイテンシーは許容できる。提出形式は `TC{serverless}`。",
+        "penalty": 40
+      }
+    ]
+  }
+}

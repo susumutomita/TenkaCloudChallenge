@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "clf-iam-user-vs-role",
+  "name": "EC2 が S3 を呼ぶのは IAM ユーザーか IAM ロールか (CLF 認証情報ベストプラクティス)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 1,
+  "estimatedDuration": "15〜25 分",
+  "shortDescription": "天下クラウド株式会社、入社 2 週間目。セキュリティレビューで問題が発覚した。\n\n「加藤くんが EC2 インスタンスに AWS CLI 用のアクセスキーを直接置いてたんだ。S3 を呼ぶだけなのに。佐々木 CTO が激怒してる。EC2 から S3 を安全に呼ぶには何を使うべきだったのか?」\n\nアカウントに IAM ユーザーと IAM ロール (EC2 用信頼ポリシー付き) の両方がデプロイされている。EC2 インスタンスが AWS サービスを呼び出す際に使うべき ID はどちらかを答えろ。",
+  "description": "## シナリオ\n\n加藤さんが残した EC2 インスタンスには、S3 を呼ぶための IAM ユーザーのアクセスキーが直接埋め込まれていた。これは長期的なクレデンシャルをインスタンスに置くという重大なセキュリティリスク。佐々木 CTO から「正しいやり方を調べて整理しろ」と言われた。\n\nCLF の定番論点: **EC2 インスタンスが AWS サービスを呼び出す際は、長期クレデンシャル (アクセスキー/シークレットキー) を持つ IAM ユーザーではなく、EC2 インスタンスプロファイルを通じた IAM ロールを使う**べき。ロールは一時的な認証情報を自動更新するため、キーの漏洩リスクがない。\n\n## デプロイされるもの (すべて無料)\n\n- IAM User `{NamePrefix}-svc-user`: 長期クレデンシャルを持つユーザー (アンチパターン)\n- IAM Role `{NamePrefix}-ec2-s3-role`: 信頼ポリシーに `ec2.amazonaws.com` を持つロール (正解)\n- IAM Role (ParticipantViewerRole): 調査に必要な最小権限\n\nEC2 インスタンス・NAT Gateway・EIP・S3 バケットは一切作らないので **課金は $0**。\n\n## 解き方\n\n1. AWS Console (IAM) か CloudShell で IAM ユーザーとロールの両方を確認する。\n   - `aws iam get-user --user-name {NamePrefix}-svc-user`\n   - `aws iam get-role --role-name {NamePrefix}-ec2-s3-role`\n2. ロールの信頼ポリシーを確認する: `ec2.amazonaws.com` がプリンシパルになっている = EC2 がこのロールを引き受けられる。\n3. EC2 インスタンスが S3 を安全に呼ぶために使うべき ID タイプを `TC{id-type}` 形式で提出 (例: `TC{iam-user}`)。\n\n## 採点\n\n- 正解: +150 pt (1 デプロイにつき 1 回)。\n- 不正解: -15 pt/回 (総当たり防止)。スコアは 0 未満にならない。\n\n## コスト\n\nIAM ユーザー・IAM ロールは無料。課金リソースなし。",
+  "tags": ["clf", "cloud-practitioner", "iam", "iam-roles", "iam-users", "ec2", "security", "credentials"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- IAM identity analysis only, port unused)" }
+  ],
+  "learningGoals": [
+    "EC2 インスタンスプロファイル経由の IAM ロールが、EC2 から AWS サービスを呼び出す際の推奨方法であることを理解する",
+    "長期クレデンシャル (アクセスキー) をインスタンスに埋め込むことがセキュリティリスクになる理由を説明できるようになる",
+    "IAM ロールの信頼ポリシー (ec2.amazonaws.com) を読んで、EC2 がそのロールを引き受けられることを確認できるようになる"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "IAM User or IAM Role for EC2 to call S3? (CLF credential best practice)",
+      "shortDescription": "Two weeks in at TenkaCloud Inc. A security review uncovers a serious issue.\n\n'Kato-kun embedded an IAM user access key directly on an EC2 instance just to call S3. CTO Sasaki-san is furious. What should have been used instead?'\n\nBoth an IAM User and an IAM Role (with an ec2.amazonaws.com trust policy) are deployed in the account. Identify which identity type an EC2 instance should use to call AWS services.",
+      "description": "## Scenario\n\nKato-san's EC2 instance had an IAM user's access key embedded in it to call S3 — a serious security risk because long-lived credentials can be leaked, stolen, or forgotten. CTO Sasaki-san has asked you to document the correct approach.\n\nThe classic CLF point: **EC2 instances should use IAM Roles via instance profiles** — never a user's long-lived access key. Roles issue temporary credentials that are automatically rotated, eliminating key-leak risk.\n\n## What gets deployed (all free)\n\n- IAM User `{NamePrefix}-svc-user`: a user with long-lived credentials (anti-pattern demonstration)\n- IAM Role `{NamePrefix}-ec2-s3-role`: a role whose trust policy allows `ec2.amazonaws.com` (correct approach)\n- IAM Role (ParticipantViewerRole): minimal permissions to inspect both identities\n\nNo EC2, NAT Gateway, EIP, or S3 bucket — **$0 cost**.\n\n## How to solve\n\n1. In the AWS Console (IAM) or CloudShell, inspect both identities:\n   - `aws iam get-user --user-name {NamePrefix}-svc-user`\n   - `aws iam get-role --role-name {NamePrefix}-ec2-s3-role`\n2. Read the role's trust policy: `ec2.amazonaws.com` is the principal — this means EC2 can assume this role.\n3. Identify which identity type an EC2 instance should use to call AWS services, and submit as `TC{id-type}` (e.g. `TC{iam-user}`).\n\n## Scoring\n\n- Correct: +150 pt (once per deploy).\n- Wrong: -15 pt each (anti-brute-force). Score never drops below 0.\n\n## Cost\n\nIAM users and IAM roles are free. No billable resources.",
+      "learningGoals": [
+        "Understand that EC2 instances should use IAM Roles via instance profiles to call AWS services",
+        "Explain why embedding long-lived access keys on instances creates a security risk",
+        "Read an IAM role trust policy (ec2.amazonaws.com) and confirm that EC2 can assume the role"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 150,
+    "wrongAnswerPenalty": 15,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "`aws iam get-role --role-name {NamePrefix}-ec2-s3-role` を実行して信頼ポリシー (AssumeRolePolicyDocument) を確認。プリンシパルが `ec2.amazonaws.com` になっているのはなぜ? EC2 がこの ID を引き受けられることを意味している。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "EC2 インスタンスが AWS サービスを呼ぶときは、長期クレデンシャルを持つ IAM ユーザーではなく、インスタンスプロファイルを通じた **IAM ロール** を使う。ロールは一時的な認証情報を自動更新するためキー漏洩リスクがない。答えは `TC{iam-role}`。",
+        "penalty": 40
+      }
+    ]
+  }
+}

@@ -1,0 +1,125 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (sap-aurora-global-database). SAP-C02 cross-region DB
+  DR drill. Stores a scenario in SSM: Aurora MySQL in Tokyo needs sub-second
+  RPO and under-1-minute RTO to failover to Singapore. The player identifies
+  Aurora Global Database (storage-level cross-region replication) as the
+  feature that satisfies those SLOs. RDS Multi-AZ and Aurora Read Replica are
+  decoys. Aurora clusters cost money and are NOT deployed; scenario is data.
+
+  Cost: SSM Parameters and IAM roles are free. $0.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks from
+      colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+
+Resources:
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-participant-viewer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: >-
+        SCENARIO: TenkaCloud runs Aurora MySQL in ap-northeast-1 (Tokyo).
+        DR REQUIREMENTS: RPO approximately 1 second (data loss under 1 second
+        on a regional disaster); RTO under 1 minute to promote the secondary
+        to primary; standby in ap-southeast-1 (Singapore).
+        OPTIONS: RDS Multi-AZ = synchronous replication between AZs in the
+        SAME region, RTO under 2 minutes, but cannot span regions; Aurora
+        Read Replica = asynchronous, can be in another region, but promotion
+        takes several minutes and RPO is not sub-second; Aurora Global Database
+        = uses storage-level replication (dedicated replication infrastructure)
+        to achieve RPO under 1 second and RTO under 1 minute for cross-region
+        failover, supports 1 primary + up to 5 secondary regions; DynamoDB
+        Global Tables = NoSQL only, not relational.
+        QUESTION: Which Aurora feature delivers sub-second cross-region
+        replication RPO and fast DR failover for a relational database? Submit
+        as TC{feature-name} e.g. TC{rds-multi-az}.
+      Description: !Sub "TenkaCloud sap-aurora-global-database briefing for ${NamePrefix}."
+      Tier: Standard
+
+Outputs:
+  BriefingParameterName:
+    Description: SSM Parameter holding the Aurora DR scenario.
+    Value: !Ref BriefingParameter
+  SsmConsoleUrl:
+    Description: AWS Console deep link to the SSM Parameter Store.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/systems-manager/parameters/?region=${AWS::Region}"
+  # Canonical answer, scoring engine only (no DescribeStacks granted to player).
+  AnswerFlag:
+    Description: Flag identifying the Aurora cross-region DR feature.
+    Value: "TC{aurora-global-database}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

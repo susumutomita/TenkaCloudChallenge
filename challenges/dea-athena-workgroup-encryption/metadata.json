@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "dea-athena-workgroup-encryption",
+  "name": "Athena クエリ結果の暗号化オプションを特定せよ (DEA Athena WorkGroup 監査)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "20〜30 分",
+  "shortDescription": "天下クラウド株式会社、セキュリティ監査の朝。佐々木 CTO から Slack が来る。\n\n「加藤くんが設定した Athena WorkGroup、クエリ結果が S3 に書き出されるときの暗号化オプションが何なのか、誰も把握していない。コンプライアンス審査が今日の午後なんだが……」。\n\nWorkGroup 名だけでは何もわからない。ResultConfiguration を直接読んで、設定されている EncryptionOption を特定しろ。",
+  "description": "## シナリオ\n\n加藤さんが残した Athena WorkGroup は、クエリ結果を S3 バケットに書き出す設定になっている。コンプライアンス審査チームが「結果ファイルはどの暗号化オプションで保護されているか」を問い合わせてきた。\n\nDEA の重要論点: Athena WorkGroup の結果暗号化は **ResultConfiguration.EncryptionConfiguration.EncryptionOption** で設定される。選択肢は `SSE_S3` (S3 マネージドキー)、`SSE_KMS` (KMS マネージドキー)、`CSE_KMS` (クライアントサイド KMS) の 3 種。コスト $0 で使える SSE_S3 が最もシンプルで、KMS 追加コストが不要。\n\n## デプロイされるもの (すべて無料)\n\n- S3 バケット × 1 (Athena クエリ結果の出力先)\n- Athena WorkGroup × 1 (ResultConfiguration に SSE_S3 を宣言)\n\nEC2・Glue ジョブ・実際のクエリ実行なし。**課金 $0**。\n\n## 解き方\n\n1. AWS Console (Athena > Administration > WorkGroups) または CloudShell で `aws athena get-work-group` を実行。\n2. `WorkGroup.Configuration.ResultConfiguration.EncryptionConfiguration.EncryptionOption` の値を確認する。\n3. EncryptionOption 名を小文字ハイフン区切りに変換して提出形式を作る (例: SSE_S3 → sse-s3)。\n4. `TC{sse-s3}` 形式で Portal に提出。\n\nタスク説明は SSM Parameter `/{NamePrefix}/briefing` にも入っている。\n\n## 採点\n\n- 正解: +200 pt (1 デプロイにつき 1 回)。\n- 不正解: -20 pt/回 (総当たり防止)。スコアは 0 未満にならない。\n\n## コスト\n\nAthena WorkGroup 定義・S3 バケット (空) は無料。クエリ実行なし。課金リソースなし。",
+  "tags": ["dea", "data-engineer-associate", "athena", "workgroup", "encryption", "sse-s3", "s3"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- Athena WorkGroup analysis only, port unused)" }
+  ],
+  "learningGoals": [
+    "Athena WorkGroup の ResultConfiguration から EncryptionOption を読み取る手順を身につける",
+    "SSE_S3 / SSE_KMS / CSE_KMS の 3 種の暗号化オプションの違いを理解する",
+    "aws athena get-work-group の出力構造 (ResultConfiguration / EncryptionConfiguration) を読めるようになる"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Identify Athena query result encryption option (DEA Athena WorkGroup audit)",
+      "shortDescription": "Security audit morning at TenkaCloud Inc. CTO Sasaki-san messages:\n\n'Nobody knows what encryption option Kato-kun set on the Athena WorkGroup for query results written to S3. Compliance review is this afternoon...'\n\nThe WorkGroup name tells you nothing. Read the ResultConfiguration directly and identify the EncryptionOption.",
+      "description": "## Scenario\n\nKato-san left an Athena WorkGroup configured to write query results to an S3 bucket. A compliance team asks: 'What encryption option protects the result files?'\n\nThe key DEA concept: Athena WorkGroup result encryption is controlled by **ResultConfiguration.EncryptionConfiguration.EncryptionOption**. Options are `SSE_S3` (S3-managed key), `SSE_KMS` (KMS-managed), and `CSE_KMS` (client-side KMS). SSE_S3 is the simplest, $0-extra option.\n\n## What gets deployed (all free)\n\n- 1 S3 bucket (Athena query results output)\n- 1 Athena WorkGroup (ResultConfiguration declares SSE_S3)\n\nNo EC2, no Glue job, no actual query runs. **$0 cost**.\n\n## How to solve\n\n1. In the AWS Console (Athena > Administration > WorkGroups) or CloudShell run `aws athena get-work-group`.\n2. Inspect `WorkGroup.Configuration.ResultConfiguration.EncryptionConfiguration.EncryptionOption`.\n3. Convert the EncryptionOption name to lowercase hyphenated form (e.g. SSE_S3 → sse-s3).\n4. Submit as `TC{sse-s3}` in the Portal.\n\nThe task is also stored in SSM Parameter `/{NamePrefix}/briefing`.\n\n## Scoring\n\n- Correct: +200 pt (once per deploy).\n- Wrong: -20 pt each (anti-brute-force). Score never drops below 0.\n\n## Cost\n\nAthena WorkGroup definition and empty S3 bucket are free. No query execution. No billable resources.",
+      "learningGoals": [
+        "Read the EncryptionOption from an Athena WorkGroup ResultConfiguration",
+        "Understand the difference between SSE_S3, SSE_KMS, and CSE_KMS encryption options",
+        "Navigate the ResultConfiguration / EncryptionConfiguration structure in aws athena get-work-group output"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 20,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "`aws athena get-work-group --work-group <name>` を実行し、`Configuration.ResultConfiguration.EncryptionConfiguration` を確認。EncryptionOption フィールドに注目。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "EncryptionOption の値は `SSE_S3` (S3 マネージドキー暗号化)。提出形式は `TC{sse-s3}`。",
+        "penalty": 40
+      }
+    ]
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "mla-automatic-model-tuning",
+  "name": "SageMaker の自動ハイパーパラメータ探索機能を特定せよ (MLA AMT)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 2,
+  "estimatedDuration": "15〜20 分",
+  "shortDescription": "天下クラウド株式会社、ML モデル改善プロジェクト。佐々木 CTO が問う。\n\n「加藤くんが手作業でハイパーパラメータを試してるんだが、何十通りも試すのに時間がかかりすぎる。SageMaker に最適なハイパーパラメータを自動で探索してくれる機能はないか?」\n\n手動グリッドサーチより賢い自動探索機能を特定せよ。",
+  "description": "## シナリオ\n\n加藤さんが XGBoost モデルの学習率・木の深さ・正則化パラメータを手動で調整している。組み合わせが多すぎて、最適なパラメータセットを見つけるのに時間がかかりすぎる。\n\nMLA の重要論点: **SageMaker Automatic Model Tuning (AMT)** はハイパーパラメータの探索空間を定義すると、ベイズ最適化などのアルゴリズムを使って最適な組み合わせを自動探索する。手動グリッドサーチより効率的で、評価指標に基づいて次の試行パラメータを選ぶ。\n\n## デプロイされるもの (すべて無料)\n\n- SSM Parameter × 1 (`/{NamePrefix}/briefing`) — 上記シナリオ\n\nSageMaker チューニングジョブは課金サービスなので**デプロイしない**。**課金 $0**。\n\n## 解き方\n\n1. SSM Parameter `/{NamePrefix}/briefing` を読む。\n2. 自動ハイパーパラメータ探索機能を特定する。\n3. `TC{automatic-model-tuning}` 形式で Portal に提出。\n\n## 採点\n\n- 正解: +150 pt (1 デプロイにつき 1 回)。\n- 不正解: -15 pt/回。スコアは 0 未満にならない。\n\n## コスト\n\nSSM Parameter は無料。SageMaker リソースは作成しない。課金 $0。",
+  "tags": ["mla", "ml-engineer-associate", "sagemaker", "automatic-model-tuning", "hyperparameter-optimization", "bayesian-optimization", "mlops"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- Automatic Model Tuning scenario, port unused)" }
+  ],
+  "learningGoals": [
+    "SageMaker Automatic Model Tuning がベイズ最適化でハイパーパラメータを自動探索する仕組みを理解する",
+    "手動グリッドサーチ・ランダムサーチと AMT の効率の違いを説明できる",
+    "AMT のチューニングジョブ設定 (探索空間定義・目標メトリクス・最大試行数) を知る"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Identify the SageMaker automatic hyperparameter search feature (MLA AMT)",
+      "shortDescription": "ML model improvement project at TenkaCloud Inc. CTO Sasaki-san asks:\n\n'Kato-kun is manually trying dozens of hyperparameter combinations and it takes too long. Is there a SageMaker feature that automatically searches for the best hyperparameters?'\n\nIdentify the SageMaker feature that automates hyperparameter search.",
+      "description": "## Scenario\n\nKato-san is manually tuning learning rate, tree depth, and regularization parameters for an XGBoost model. With dozens of combinations, finding the optimal parameter set takes too long.\n\nThe key MLA concept: **SageMaker Automatic Model Tuning (AMT)** takes a hyperparameter search space definition and uses algorithms such as Bayesian optimization to automatically find the best combination. It is more efficient than manual grid search because it uses evaluation metrics to guide which parameters to try next.\n\n## What gets deployed (all free)\n\n- 1 SSM Parameter (`/{NamePrefix}/briefing`) -- the scenario\n\nSageMaker tuning jobs incur charges and are **not deployed**. **$0 cost**.\n\n## How to solve\n\n1. Read SSM Parameter `/{NamePrefix}/briefing`.\n2. Identify the SageMaker feature for automated hyperparameter search.\n3. Submit as `TC{automatic-model-tuning}`.\n\n## Scoring\n\n- Correct: +150 pt (once per deploy).\n- Wrong: -15 pt each. Score never drops below 0.\n\n## Cost\n\nSSM Parameter is free. No SageMaker resources. $0.",
+      "learningGoals": [
+        "Understand how SageMaker Automatic Model Tuning uses Bayesian optimization to search hyperparameters",
+        "Explain the efficiency advantage of AMT over manual grid search and random search",
+        "Know AMT tuning job configuration: search space, objective metric, max training jobs"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 150,
+    "wrongAnswerPenalty": 15,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "SageMaker には学習ジョブを自動的に複数回実行し、評価指標 (例: validation:auc) が最大化されるハイパーパラメータの組み合わせを探す専用の機能がある。この機能はベイズ最適化を使って探索を効率化する。",
+        "penalty": 15
+      },
+      {
+        "id": "hint-2",
+        "content": "その機能は **SageMaker Automatic Model Tuning (自動モデルチューニング)**。HyperParameterTuningJob を作成し、探索空間と目標メトリクスを指定する。提出形式は `TC{automatic-model-tuning}`。",
+        "penalty": 35
+      }
+    ]
+  }
+}

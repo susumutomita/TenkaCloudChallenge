@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "dva-lambda-env-plaintext-secret",
+  "name": "Lambda 環境変数に埋まった秘密を掘り出せ (DVA Lambda セキュリティ)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 2,
+  "estimatedDuration": "15〜25 分",
+  "shortDescription": "天下クラウド株式会社、入社 3 週間目。佐々木 CTO が険しい顔で言う。\n\n「加藤くんが Lambda の環境変数に何かを直接書いて残していったらしい。Secrets Manager を使うべきところをサボったんだ。SECRET_CONFIG の値を base64 デコードして、中身を確認してくれ」。\n\n関数を呼ばずに設定だけ読み、環境変数の値をデコードして答えを導き出せ。",
+  "description": "## シナリオ\n\n加藤さんが残した Lambda 関数 (絶対に起動されない) の環境変数 `SECRET_CONFIG` に、base64 エンコードされた文字列が埋め込まれている。DVA の鉄則: **シークレットは絶対に環境変数に平文 (またはエンコードのみ) で置いてはいけない。AWS Secrets Manager や SSM Parameter Store SecureString を使え**。\n\n## デプロイされるもの (すべて無料)\n\n- Lambda 実行ロール (最小権限、CloudWatch Logs のみ)\n- Lambda 関数 × 1 (nodejs20.x、inline ZipFile、イベントソース無し = 起動されない)\n  - 環境変数 `SECRET_CONFIG` = base64 エンコード文字列\n\nEC2 / NAT / EIP なし。**課金 $0**。\n\n## 解き方\n\n1. Console (Lambda > 関数) か `aws lambda get-function-configuration --function-name <name>` で関数の環境変数を確認。\n2. `SECRET_CONFIG` の値を base64 デコード (CloudShell で `echo '<値>' | base64 -d`)。\n3. デコード結果が `TC{...}` 形式になっている。そのまま Portal に提出。\n\nタスク説明は SSM Parameter `/{NamePrefix}/briefing` にも入っている。\n\n## 採点\n\n- 正解: +200 pt (1 デプロイにつき 1 回)。\n- 不正解: -15 pt/回 (総当たり防止)。スコアは 0 未満にならない。\n\n## コスト\n\nLambda 関数定義 / IAM ロール / SSM パラメータは無料。起動されないので実行コストも $0。",
+  "tags": ["dva", "developer-associate", "lambda", "security", "secrets-manager", "environment-variables"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- Lambda config analysis only, port unused)" }
+  ],
+  "learningGoals": [
+    "Lambda 環境変数に秘密情報を置くリスクを理解し、Secrets Manager を使うべき理由を説明できる",
+    "aws lambda get-function-configuration で環境変数を読み出す手順を身につける",
+    "base64 エンコードは暗号化ではなく難読化に過ぎないことを体感する"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Dig out the secret buried in Lambda env vars (DVA Lambda security)",
+      "shortDescription": "Week three at TenkaCloud Inc. CTO Sasaki-san looks grim.\n\n'Kato-kun wrote something directly into a Lambda environment variable instead of using Secrets Manager. Read the SECRET_CONFIG env var, base64-decode it, and find out what's inside.'\n\nRead the function config without invoking it and decode the answer.",
+      "description": "## Scenario\n\nKato-san left a Lambda function (never invoked) with an environment variable `SECRET_CONFIG` holding a base64-encoded string. The DVA rule: **never store secrets as plain text (or encoding-only) in environment variables -- use AWS Secrets Manager or SSM Parameter Store SecureString.**\n\n## What gets deployed (all free)\n\n- Lambda execution role (minimal -- CloudWatch Logs only)\n- 1 Lambda function (nodejs20.x, inline ZipFile, no event source mapping = never invoked)\n  - environment variable `SECRET_CONFIG` = base64-encoded string\n\nNo EC2 / NAT / EIP. **$0 cost**.\n\n## How to solve\n\n1. In the Console (Lambda > Functions) or via `aws lambda get-function-configuration --function-name <name>`, read the function environment variables.\n2. Base64-decode the `SECRET_CONFIG` value (in CloudShell: `echo '<value>' | base64 -d`).\n3. The decoded result is in `TC{...}` format. Submit it directly to the Portal.\n\nThe task is also in SSM Parameter `/{NamePrefix}/briefing`.\n\n## Scoring\n\n- Correct: +200 pt (once per deploy).\n- Wrong: -15 pt each (anti-brute-force). Score never drops below 0.\n\n## Cost\n\nLambda function definition / IAM role / SSM parameter are free. Never invoked so no execution cost either -- $0.",
+      "learningGoals": [
+        "Understand the risk of placing secrets in Lambda environment variables and why Secrets Manager should be used instead",
+        "Practice reading environment variables with aws lambda get-function-configuration",
+        "Experience that base64 encoding is obfuscation, not encryption"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 15,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "`aws lambda list-functions` でデプロイされた関数を確認し、`aws lambda get-function-configuration --function-name <FunctionName>` を実行。レスポンスの `Environment.Variables` に `SECRET_CONFIG` キーがある。その値を CloudShell で `echo '<値>' | base64 -d` とデコードせよ。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "base64 デコードすると `TC{...}` 形式の文字列が出てくる。それがそのまま答え。Secrets Manager を使っていれば環境変数に値が露出しないことも確認しよう。",
+        "penalty": 40
+      }
+    ]
+  }
+}

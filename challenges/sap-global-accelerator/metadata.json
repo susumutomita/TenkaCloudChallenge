@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "sap-global-accelerator",
+  "name": "静的 Anycast IP・TCP/UDP ゲームトラフィック・高速フェイルオーバーを実現するサービスを答えろ (SAP Global Accelerator)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 4,
+  "estimatedDuration": "20〜30 分",
+  "shortDescription": "天下クラウド株式会社、 着任 10 ヵ月目。 佐々木 CTO からゲームサービスの設計相談が来る。\n\n「加藤くんが作ったグローバルゲームサービス、 世界中のプレイヤーからの TCP/UDP トラフィックに静的 IP が必要で、 リージョン障害時も数秒でフェイルオーバーしないといけない。 CloudFront では対応できないらしい。 どのサービスを使えばいい?」\n\nシナリオを読んで、 正しい AWS サービスを答えろ。",
+  "description": "## シナリオ\n\n天下クラウドはグローバルなゲームサービスを展開している。 要件:\n\n- クライアントに**静的な Anycast IP アドレス** 2 つを払い出す (IP が変わると SDK のアップデートが必要になる)\n- プロトコル: **TCP / UDP** (ゲームの場合 UDP が必要なことが多い)\n- リージョン障害時: **数秒以内にフェイルオーバー**\n- AWS のグローバルバックボーンネットワークを経由して**低レイテンシー**\n\nSAP-C02 の頻出論点: CloudFront は HTTP/HTTPS (レイヤー 7) に特化しており UDP に対応していない。 **AWS Global Accelerator** は Anycast IP + TCP/UDP (レイヤー 4) + ネットワークエッジフェイルオーバーを提供する。\n\n## デプロイされるもの (すべて無料)\n\n- SSM String Parameter `/{NamePrefix}/briefing` — シナリオ、 要件、 選択肢\n\nGlobal Accelerator 本体は月約 $18 と有料のためデプロイしない。 シナリオをデータとして SSM に格納。 **課金 $0**。\n\n## 解き方\n\n1. SSM Parameter `/{NamePrefix}/briefing` を読んでシナリオを確認する。\n2. 静的 Anycast IP、 TCP/UDP、 高速フェイルオーバーを満たすサービスを特定する。\n3. サービス名を `TC{サービス名}` 形式で提出 (例: `TC{global-accelerator}`)。\n\n## 採点\n\n- 正解: +200 pt。\n- 不正解: -20 pt/回。 スコアは 0 未満にならない。\n\n## コスト\n\nSSM Parameter は無料。 課金リソースなし。",
+  "tags": ["sap", "solutions-architect-professional", "global-accelerator", "networking", "anycast", "gaming"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- Global Accelerator scenario analysis only, port unused)" }
+  ],
+  "learningGoals": [
+    "AWS Global Accelerator が静的 Anycast IP + TCP/UDP + ネットワークレベルフェイルオーバーを提供することを理解する",
+    "CloudFront (HTTP/HTTPS レイヤー 7 キャッシュ) と Global Accelerator (TCP/UDP レイヤー 4) の使い分けを区別する",
+    "ゲームや IoT など UDP が必要なグローバルサービスに Global Accelerator を選ぶ判断力を養う"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Name the service for static Anycast IPs, TCP/UDP game traffic, and fast regional failover (SAP Global Accelerator)",
+      "shortDescription": "Ten months in at TenkaCloud Inc. CTO Sasaki-san brings an architecture question about the gaming service.\n\n'Kato-kun's global gaming service needs static IPs for TCP/UDP traffic from players worldwide, with failover in seconds on a regional outage. CloudFront apparently can't handle this. Which service should we use?'\n\nRead the scenario and name the correct AWS service.",
+      "description": "## Scenario\n\nTenkaCloud operates a global gaming service. Requirements:\n\n- Provide clients with **2 static Anycast IP addresses** (changing IPs forces SDK updates)\n- Protocol: **TCP / UDP** (games often require UDP for low-latency communication)\n- Regional outage: **failover within seconds**\n- Route through **AWS global backbone** for low latency\n\nA classic SAP-C02 topic: CloudFront is HTTP/HTTPS (Layer 7) only and does not support UDP. **AWS Global Accelerator** provides Anycast IPs + TCP/UDP (Layer 4) + network-edge failover.\n\n## What gets deployed (all free)\n\n- SSM String Parameter `/{NamePrefix}/briefing` — scenario, requirements, and options\n\nGlobal Accelerator itself costs ~$18/month and is NOT deployed; the scenario is modeled as data. **$0 cost**.\n\n## How to solve\n\n1. Read SSM Parameter `/{NamePrefix}/briefing`.\n2. Identify the service that provides static Anycast IPs, TCP/UDP, and fast failover.\n3. Submit as `TC{service-name}` (e.g. `TC{global-accelerator}`).\n\n## Scoring\n\n- Correct: +200 pt.\n- Wrong: -20 pt each. Score never drops below 0.\n\n## Cost\n\nSSM Parameters are free. No billable resources.",
+      "learningGoals": [
+        "Understand that Global Accelerator provides static Anycast IPs + TCP/UDP + network-layer failover",
+        "Distinguish CloudFront (Layer 7 HTTP/HTTPS cache) from Global Accelerator (Layer 4 TCP/UDP)",
+        "Know to choose Global Accelerator for gaming and IoT workloads that require UDP"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 20,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "CloudFront は HTTP/HTTPS しか対応しておらず UDP は扱えない。 また IP アドレスも固定ではない。 AWS のグローバルネットワークエッジから静的 Anycast IP を提供し、 TCP/UDP の両方を扱えるサービスを探そう。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "正解は `AWS Global Accelerator`。 静的 Anycast IP 2 つ + TCP/UDP 対応 + AWS グローバルバックボーン経由のルーティング + リージョン障害時の数秒フェイルオーバーを実現する。 CloudFront との使い分けがポイント。 提出形式: `TC{global-accelerator}`。",
+        "penalty": 40
+      }
+    ]
+  }
+}

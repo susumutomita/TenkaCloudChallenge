@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "scs-iam-explicit-deny",
+  "name": "明示的 Deny は最強 — IAM ポリシー優先順位の解読 (SCS-C02)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "15〜25 分",
+  "shortDescription": "天下クラウド株式会社、入社 3 週間目。佐々木 CTO が険しい顔で呼んでくる。\n\n「加藤くんが作った IAM ロール、S3 への権限がぐちゃぐちゃになってる。Allow ポリシーと Deny ポリシーが混在してるんだが、結局 DeleteObject は実行できるのか?」\n\n2 つのインラインポリシーを読んで、IAM の評価ロジックを使い、正しく答えろ。",
+  "description": "## シナリオ\n\n加藤さんが残した IAM ロールには **2 つのインラインポリシー** がある。\n\n- `AllowS3Everything`: `s3:*` を全リソース (`*`) に **Allow**\n- `DenyDeleteObject`: `s3:DeleteObject` を全リソース (`*`) に **Deny**\n\nSCS 超頻出論点: **IAM の明示的 Deny は最強の評価結果**。同じリクエストに対して Allow と Deny の両方が存在する場合、Deny が必ず勝つ。このロールで `s3:DeleteObject` を実行しようとしたら、どうなるか?\n\n## デプロイされるもの (すべて無料)\n\n- IAM ロール × 1 (`${NamePrefix}-target-role`)\n  - インラインポリシー `AllowS3Everything`: `s3:*` on `*` — Allow\n  - インラインポリシー `DenyDeleteObject`: `s3:DeleteObject` on `*` — explicit Deny\n- SSM Parameter `/${NamePrefix}/briefing`: タスク説明\n\nEC2 インスタンス・S3 バケット・課金リソースなし。**課金 $0**。\n\n## 解き方\n\n1. CloudShell または Console (IAM > Roles) で `aws iam list-role-policies --role-name ${NamePrefix}-target-role` を実行。\n2. 各ポリシーを `aws iam get-role-policy` で読む。\n3. `AllowS3Everything` は `s3:*` を Allow → DeleteObject も「一見」許可されている。\n4. `DenyDeleteObject` は `s3:DeleteObject` を **明示的に Deny** → IAM は Allow より Deny を優先する。\n5. したがって、このロールで DeleteObject を呼ぶと **拒否 (Denied)** される。\n6. 答えを `TC{denied}` 形式で Portal に提出。\n\nタスク説明は SSM Parameter `/${NamePrefix}/briefing` にも入っている。\n\n## 採点\n\n- 正解: +200 pt (1 デプロイにつき 1 回)。\n- 不正解: -15 pt/回 (総当たり防止)。スコアは 0 未満にならない。\n\n## コスト\n\nIAM ロール / SSM Parameter は無料。課金リソースなし。",
+  "tags": ["scs", "security-specialty", "iam", "explicit-deny", "policy-evaluation", "least-privilege"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- IAM policy analysis only, port unused)" }
+  ],
+  "learningGoals": [
+    "IAM ポリシー評価ロジック: 明示的 Deny が Allow より必ず優先されることを手を動かして確認する",
+    "複数のインラインポリシーが同一ロールに存在する場合の合算ルールを理解する",
+    "aws iam list-role-policies / get-role-policy でロールのポリシーを読む手順を身につける"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Explicit Deny wins — decode IAM policy evaluation order (SCS-C02)",
+      "shortDescription": "Week three at TenkaCloud Inc. CTO Sasaki-san calls you over with a frown.\n\n'Kato-kun's IAM role has a mess of Allow and Deny policies mixed together. Can it actually execute DeleteObject or not?'\n\nRead the two inline policies, apply IAM evaluation logic, and answer correctly.",
+      "description": "## Scenario\n\nKato-san's IAM role has **two inline policies**:\n\n- `AllowS3Everything`: **Allows** `s3:*` on all resources (`*`)\n- `DenyDeleteObject`: **Denies** `s3:DeleteObject` on all resources (`*`)\n\nA staple SCS exam point: **explicit Deny is the strongest IAM evaluation result**. When both Allow and Deny apply to the same request, Deny always wins. What happens when this role tries to call `s3:DeleteObject`?\n\n## What gets deployed (all free)\n\n- 1 IAM role (`${NamePrefix}-target-role`)\n  - Inline policy `AllowS3Everything`: `s3:*` on `*` — Allow\n  - Inline policy `DenyDeleteObject`: `s3:DeleteObject` on `*` — explicit Deny\n- SSM Parameter `/${NamePrefix}/briefing`: task description\n\nNo EC2, no S3 bucket, no billable resources. **$0 cost**.\n\n## How to solve\n\n1. In CloudShell or the Console (IAM > Roles), run `aws iam list-role-policies --role-name ${NamePrefix}-target-role`.\n2. Fetch each policy with `aws iam get-role-policy`.\n3. `AllowS3Everything` allows `s3:*` → DeleteObject appears permitted at first glance.\n4. `DenyDeleteObject` **explicitly Denies** `s3:DeleteObject` → IAM prioritizes Deny over Allow.\n5. Therefore, calling DeleteObject with this role results in **Denied**.\n6. Submit `TC{denied}` in the Portal.\n\nThe task briefing is also in SSM Parameter `/${NamePrefix}/briefing`.\n\n## Scoring\n\n- Correct: +200 pt (once per deploy).\n- Wrong: -15 pt each (anti-brute-force). Score never drops below 0.\n\n## Cost\n\nIAM role / SSM Parameter are free. No billable resources.",
+      "learningGoals": [
+        "Confirm hands-on that explicit Deny always overrides Allow in IAM policy evaluation",
+        "Understand how multiple inline policies on the same role are combined",
+        "Read a role's inline policies using aws iam list-role-policies / get-role-policy"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 15,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "`aws iam list-role-policies --role-name ${NamePrefix}-target-role` でロールのインラインポリシー名一覧を取得し、各ポリシーを `aws iam get-role-policy` で確認する。Allow と Deny が両方あるとき、どちらが優先されるかを IAM の評価フロー図で確認しよう。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "IAM の評価ルール: 明示的 Deny は最強で、Allow があっても必ず Deny が勝つ。`DenyDeleteObject` ポリシーが `s3:DeleteObject` を Deny しているため、同じロールの `AllowS3Everything` があっても DeleteObject は実行できない。答えは `TC{denied}`。",
+        "penalty": 40
+      }
+    ]
+  }
+}

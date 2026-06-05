@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "saa-vpc-public-subnet-audit",
+  "name": "公開サブネットは何個? (SAA VPC ルーティング監査)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 2,
+  "estimatedDuration": "20〜30 分",
+  "shortDescription": "天下クラウド株式会社、 入社 1 週間目。 佐々木 CTO が外部監査の前に青ざめている。\n\n「加藤くんが残した VPC、 サブネットが 5 つあるんだけど…… どれがインターネットに口を開けてるのか、 誰も把握してない。 監査までに『公開サブネットは何個か』 を答えないといけないんだ」。\n\nサブネット名は当てにならない (加藤さんの命名はいい加減だった)。 ルートテーブルを読んで、 本当にインターネットゲートウェイへ抜けるサブネットだけを数えろ。",
+  "description": "## シナリオ\n\n加藤さんが残した VPC (10.20.0.0/16) には 5 つのサブネットと 2 つのルートテーブルがある。 監査チームは 1 つの問いに答えを求めている: **このうち『パブリックサブネット』 は何個か?**\n\nSAA の定番論点: サブネットがパブリックかどうかは **名前でもタグでもなく、 関連付けられたルートテーブルが Internet Gateway (IGW) への `0.0.0.0/0` ルートを持つか** で決まる。 名前が `dmz-` でもプライベートなことはあるし、 逆もある。\n\n## デプロイされるもの (すべて無料)\n\n- VPC × 1 / Internet Gateway × 1\n- サブネット × 5 (`web-a` / `web-b` / `app-c` / `data-d` / `dmz-e`) ── Name タグは意図的にミスリード\n- ルートテーブル × 2 (パブリック = IGW への default route あり / プライベート = local のみ)\n- サブネットとルートテーブルの関連付け × 5\n\nEC2 インスタンス・NAT Gateway・EIP は一切作らないので **課金は $0**。\n\n## 解き方\n\n1. AWS Console (VPC > Route Tables) か CloudShell で `aws ec2 describe-route-tables` を実行。\n2. 各ルートテーブルの routes を見て、 `0.0.0.0/0 -> igw-...` を持つものを特定。\n3. そのルートテーブルに関連付いた (`Associations`) サブネットを数える。 これがパブリックサブネット数。\n4. サブネット Name に釣られないこと ── 名前ベースで数えると不正解になる罠が仕込んである。\n5. 数 N を `TC{N-public-subnets}` 形式で Portal に提出 (例: `TC{4-public-subnets}`)。\n\nタスク説明は SSM Parameter `/{NamePrefix}/briefing` にも入っている。\n\n## 採点\n\n- 正解: +200 pt (1 デプロイにつき 1 回)。\n- 不正解: -15 pt/回 (総当たり防止)。 スコアは 0 未満にならない。\n\n## コスト\n\nVPC / サブネット / ルートテーブル / IGW / SG は無料。 課金リソースなし。",
+  "tags": ["saa", "solutions-architect-associate", "vpc", "networking", "route-table", "internet-gateway", "ccoe"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- VPC routing analysis only, port unused)" }
+  ],
+  "learningGoals": [
+    "『パブリックサブネット = ルートテーブルに IGW への 0.0.0.0/0 ルートがあるサブネット』 という定義を手を動かして確認する",
+    "サブネット名や CIDR ではなくルーティングからネットワーク到達性を判断する習慣をつける",
+    "aws ec2 describe-route-tables の Associations / Routes 構造を読めるようになる"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "How many public subnets? (SAA VPC routing audit)",
+      "shortDescription": "Week one at TenkaCloud Inc. CTO Sasaki-san has gone pale ahead of an external audit.\n\n'Kato-kun left this VPC with five subnets... and nobody knows which ones are actually open to the internet. The auditors want a number: how many subnets are public?'\n\nThe subnet names are unreliable (Kato-san named things carelessly). Read the route tables and count only the subnets that truly route out through the Internet Gateway.",
+      "description": "## Scenario\n\nKato-san's VPC (10.20.0.0/16) has five subnets and two route tables. The audit team wants one answer: **how many of these are 'public' subnets?**\n\nThe classic SAA point: a subnet is public **not** by its name or tags, but by whether its associated route table has a `0.0.0.0/0` route to an Internet Gateway (IGW). A subnet named `dmz-` can be private, and vice versa.\n\n## What gets deployed (all free)\n\n- 1 VPC / 1 Internet Gateway\n- 5 subnets (`web-a` / `web-b` / `app-c` / `data-d` / `dmz-e`) -- Name tags are deliberately misleading\n- 2 route tables (public = has a default route to the IGW / private = local only)\n- 5 subnet-to-route-table associations\n\nNo EC2 instance, NAT Gateway, or EIP -- **$0 cost**.\n\n## How to solve\n\n1. In the AWS Console (VPC > Route Tables) or CloudShell run `aws ec2 describe-route-tables`.\n2. Find the route table whose routes include `0.0.0.0/0 -> igw-...`.\n3. Count the subnets associated with it (`Associations`). That count is the number of public subnets.\n4. Don't be fooled by subnet Name tags -- counting by name hits a planted trap.\n5. Submit the number N as `TC{N-public-subnets}` in the Portal (e.g. `TC{4-public-subnets}`).\n\nThe task is also stored in SSM Parameter `/{NamePrefix}/briefing`.\n\n## Scoring\n\n- Correct: +200 pt (once per deploy).\n- Wrong: -15 pt each (anti-brute-force). Score never drops below 0.\n\n## Cost\n\nVPC / subnets / route tables / IGW / SG are free. No billable resources.",
+      "learningGoals": [
+        "Confirm hands-on that a 'public subnet' is one whose route table has a 0.0.0.0/0 route to an IGW",
+        "Judge reachability from routing, not from subnet names or CIDR blocks",
+        "Read the Associations / Routes structure of aws ec2 describe-route-tables"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 15,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "サブネットの Name タグは無視。 `aws ec2 describe-route-tables --filters Name=vpc-id,Values=<vpcId>` で各ルートテーブルの Routes を確認し、 `DestinationCidrBlock: 0.0.0.0/0` かつ `GatewayId: igw-...` を持つテーブルを探す。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "IGW への default route を持つルートテーブルの `Associations` に出てくる SubnetId の数がパブリックサブネット数。 メインルートテーブル (関連付けなしのサブネットが暗黙で従う) がどちらかにも注意。 答えは 2 個。 提出形式は `TC{2-public-subnets}`。",
+        "penalty": 40
+      }
+    ]
+  }
+}

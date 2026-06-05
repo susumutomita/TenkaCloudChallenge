@@ -1,0 +1,207 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (saa-vpc-gateway-endpoint-s3). SAA-C03 VPC endpoint drill.
+  Deploys a VPC with a private subnet, a route table, and an S3 Gateway VPC Endpoint
+  (Gateway type -- free). The player inspects the endpoint and reports VpcEndpointType.
+  Gateway endpoints (S3/DynamoDB only) route through the route table at $0 cost.
+  Interface endpoints (PrivateLink) create an ENI and incur hourly charges -- not used here.
+  The answer is stored only in the CFn Output AnswerFlag which the participant role
+  cannot read.
+
+  Cost: VPC, subnet, route table, and Gateway VPC endpoints are all free. No NAT
+  Gateway, no EC2, no EIP. $0.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks from
+      colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+
+Resources:
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-participant-viewer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      # `aws login` (2025-11) OAuth2 flow needs SignInLocalDevelopmentAccess.
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # Player inspects the VPC endpoint to read its VpcEndpointType.
+              # ec2:Describe* is tag-scoped where the API supports it.
+              # No cloudformation:DescribeStacks -- the answer lives in the CFn Output only.
+              - Sid: ConsoleEc2Describe
+                Effect: Allow
+                Action:
+                  - ec2:Describe*
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/TenkaCloud:NamePrefix: !Ref NamePrefix
+              - Sid: ConsoleEc2Metadata
+                Effect: Allow
+                Action:
+                  - ec2:DescribeRegions
+                  - ec2:DescribeAvailabilityZones
+                  - ec2:DescribeAccountAttributes
+                  - ec2:DescribeVpcEndpoints
+                  - ec2:DescribeVpcEndpointServices
+                Resource: "*"
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.40.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-vpc"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  # Private subnet -- no route to IGW. S3 is reached via the Gateway endpoint.
+  PrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.40.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-private"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-rt-private"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  PrivateSubnetAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet
+      RouteTableId: !Ref PrivateRouteTable
+
+  # S3 Gateway VPC Endpoint -- FREE. Adds a route entry to PrivateRouteTable so
+  # the private subnet can reach S3 without a NAT Gateway. VpcEndpointType=Gateway
+  # is THE answer the player must derive by inspecting the endpoint.
+  S3GatewayEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
+      VpcEndpointType: Gateway
+      RouteTableIds:
+        - !Ref PrivateRouteTable
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-s3-endpoint"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: >-
+        A VPC with a private subnet and a VPC endpoint to S3 have been deployed.
+        Inspect the VPC endpoint and report its VpcEndpointType. There are two possible
+        types: Gateway (S3/DynamoDB, route-table based, free) and Interface (PrivateLink,
+        ENI based, hourly charge). Submit your answer as TC{type} e.g. TC{interface}.
+        Note: use lowercase.
+      Description: !Sub "Task briefing for ${NamePrefix} (saa-vpc-gateway-endpoint-s3)."
+      Tier: Standard
+
+Outputs:
+  VpcId:
+    Description: The VPC containing the private subnet and S3 endpoint.
+    Value: !Ref Vpc
+  PrivateSubnetId:
+    Description: The private subnet that uses the endpoint to reach S3.
+    Value: !Ref PrivateSubnet
+  S3EndpointId:
+    Description: The S3 Gateway VPC Endpoint ID to inspect.
+    Value: !Ref S3GatewayEndpoint
+  VpcEndpointsConsoleUrl:
+    Description: AWS Console deep link to the VPC Endpoints list.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/vpcconsole/home?region=${AWS::Region}#Endpoints:"
+  BriefingParameterName:
+    Description: SSM Parameter holding the task briefing.
+    Value: !Ref BriefingParameter
+  # Canonical answer -- scoring engine only. Participant role has no
+  # cloudformation:DescribeStacks, so this Output is never readable by the player.
+  AnswerFlag:
+    Description: Flag the learner submits after identifying the VPC endpoint type.
+    Value: "TC{gateway}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

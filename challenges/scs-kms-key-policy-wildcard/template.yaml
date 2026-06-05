@@ -1,0 +1,156 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (scs-kms-key-policy-wildcard). SCS-C02 KMS key policy drill.
+  Stores a KMS key policy JSON in an SSM Parameter. One Statement allows kms:Decrypt
+  to Principal "*" (wildcard -- world-open). The learner must read the policy and
+  identify the dangerous principal value. No real KMS CMK is deployed (~$1/month);
+  the policy is delivered as data so this challenge is completely free.
+
+  Cost: SSM Parameter (String) is free. No KMS CMK. $0.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks from
+      colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+
+Resources:
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-participant-viewer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      # `aws login` (2025-11) OAuth2 flow needs SignInLocalDevelopmentAccess.
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # The player needs to read the key-policy SSM Parameter.
+              # No cloudformation:DescribeStacks -- the answer must be derived
+              # from reading the policy JSON, not from the stack Output.
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+  # The KMS key policy JSON is delivered as an SSM Parameter (String type, free).
+  # A real KMS CMK costs ~$1/month and is unnecessary for this analysis challenge.
+  # Statement 1: normal admin grant (kms:* to a specific assumed role ARN).
+  # Statement 2: THE MISCONFIG -- kms:Decrypt allowed to Principal "*" (wildcard).
+  # The learner must identify the Principal value in the dangerous Statement.
+  KeyPolicyParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/key-policy"
+      Type: String
+      Value: !Sub |
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "KeyAdministration",
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": "arn:aws:iam::${AWS::AccountId}:role/${NamePrefix}-kms-admin"
+              },
+              "Action": "kms:*",
+              "Resource": "*"
+            },
+            {
+              "Sid": "WorldOpenDecrypt",
+              "Effect": "Allow",
+              "Principal": "*",
+              "Action": "kms:Decrypt",
+              "Resource": "*"
+            }
+          ]
+        }
+      Description: !Sub "TenkaCloud scs-kms-key-policy-wildcard key policy data for ${NamePrefix}."
+      Tier: Standard
+
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: >-
+        Read the KMS key policy JSON stored in the SSM Parameter
+        "/${NamePrefix}/key-policy". Find the single Statement that allows
+        kms:Decrypt to a wildcard Principal ("*") -- that is what makes the key
+        world-decryptable. Report that Statement's "Sid" value exactly as it
+        appears in the JSON, as TC{<Sid>}, e.g. TC{KeyAdministration}.
+      Description: !Sub "TenkaCloud scs-kms-key-policy-wildcard briefing for ${NamePrefix}."
+      Tier: Standard
+
+Outputs:
+  KeyPolicyParameterName:
+    Description: SSM Parameter holding the KMS key policy JSON to analyze.
+    Value: !Ref KeyPolicyParameter
+  SsmConsoleUrl:
+    Description: AWS Console deep link to the SSM Parameter Store.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/systems-manager/parameters?region=${AWS::Region}"
+  BriefingParameterName:
+    Description: SSM Parameter holding the task briefing.
+    Value: !Ref BriefingParameter
+  # Canonical answer, scoring engine only (no DescribeStacks granted to player).
+  AnswerFlag:
+    Description: Flag the learner submits (Sid of the world-open kms:Decrypt statement).
+    Value: "TC{WorldOpenDecrypt}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

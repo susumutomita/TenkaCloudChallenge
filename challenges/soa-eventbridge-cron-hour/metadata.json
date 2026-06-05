@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "soa-eventbridge-cron-hour",
+  "name": "EventBridge の cron 式が発火する UTC 時刻を答えろ (SOA スケジューラ監査)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "15〜25 分",
+  "shortDescription": "天下クラウド株式会社、入社 6 週間目。深夜のアラートが止まらない。佐々木 CTO から電話が来る。\n\n「加藤くんが設定した EventBridge ルール、夜中に何かを実行してるらしい。何時に発火してるか分かる?」。\n\ncron 式を解読して、UTC で何時に発火するのかを答えろ。",
+  "description": "## シナリオ\n\n加藤さんが残した EventBridge ルールのスケジュール式は `cron(0 2 * * ? *)` と設定されている。監査チームは UTC で何時に発火するかを確認したい。\n\nSOA-C02 の定番論点: **EventBridge (CloudWatch Events) の cron 式の読み方** — `cron(分 時 日 月 曜日 年)` の形式で、 `cron(0 2 * * ? *)` は毎日 UTC 02:00 に発火する。\n\n## デプロイされるもの (すべて無料)\n\n- EventBridge ルール × 1 (ScheduleExpression: cron(0 2 * * ? *), ターゲット: SNS トピック)\n- SNS トピック × 1 (ルールのターゲットとして宣言するだけで課金なし)\n- SSM Parameter `/{NamePrefix}/briefing` (タスク説明)\n\nルールは有効だが SNS への実際のメッセージ送信は発生しない (スケジュールが発火するまで課金なし、発火しても SNS は無料枠内)。**課金 $0**。\n\n## 解き方\n\n1. AWS Console (Amazon EventBridge > Rules) か `aws events describe-rule` を実行。\n2. `/{NamePrefix}` に一致するルールを探し、`ScheduleExpression` を確認する。\n3. cron 式の 2 番目のフィールド (時) を 2 桁ゼロパディングで `TC{HH}` 形式で提出 (例: `TC{07}`)。\n\nタスク説明は SSM Parameter `/{NamePrefix}/briefing` にも入っている。\n\n## 採点\n\n- 正解: +200 pt (1 デプロイにつき 1 回)。\n- 不正解: -15 pt/回。スコアは 0 未満にならない。\n\n## コスト\n\nEventBridge ルール / SNS トピック / SSM Parameter は無料。課金リソースなし。",
+  "tags": ["soa", "sysops-administrator", "eventbridge", "cron", "scheduling", "automation"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- EventBridge cron expression analysis only, port unused)" }
+  ],
+  "learningGoals": [
+    "EventBridge cron 式のフィールド順序 (分 時 日 月 曜日 年) を覚える",
+    "cron(0 2 * * ? *) が UTC 02:00 を意味することを確認する",
+    "aws events describe-rule の ScheduleExpression フィールドを読めるようになる"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Decode the UTC hour of the EventBridge cron schedule (SOA scheduler audit)",
+      "shortDescription": "Six weeks into the job at TenkaCloud Inc. Late-night alerts keep firing. CTO Sasaki-san calls.\n\n'Kato-kun's EventBridge rule is running something in the middle of the night. What time does it fire?'\n\nDecode the cron expression and report the UTC hour it fires.",
+      "description": "## Scenario\n\nKato-san's EventBridge rule has `ScheduleExpression: cron(0 2 * * ? *)`. The audit team wants to know the UTC hour it fires.\n\nThe classic SOA-C02 point: reading an **EventBridge cron expression** — `cron(minute hour day month weekday year)`, so `cron(0 2 * * ? *)` fires daily at UTC 02:00.\n\n## What gets deployed (all free)\n\n- 1 EventBridge rule (ScheduleExpression: cron(0 2 * * ? *), target: SNS topic)\n- 1 SNS topic (declared as the rule target only)\n- SSM Parameter `/{NamePrefix}/briefing` (task description)\n\nThe rule is active but the SNS message volume is negligible (within free tier). **$0 cost**.\n\n## How to solve\n\n1. In the AWS Console (Amazon EventBridge > Rules) or run `aws events describe-rule`.\n2. Find the rule matching `/{NamePrefix}` and check `ScheduleExpression`.\n3. Extract the second field (hour) from the cron expression and submit zero-padded as `TC{HH}` (e.g. `TC{07}`).\n\nThe task is also in SSM Parameter `/{NamePrefix}/briefing`.\n\n## Scoring\n\n- Correct: +200 pt (once per deploy).\n- Wrong: -15 pt each. Score never drops below 0.\n\n## Cost\n\nEventBridge rule / SNS topic / SSM Parameter are free. No billable resources.",
+      "learningGoals": [
+        "Memorize the EventBridge cron field order (minute hour day month weekday year)",
+        "Confirm that cron(0 2 * * ? *) means UTC 02:00",
+        "Read the ScheduleExpression field from aws events describe-rule"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 15,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "`aws events describe-rule --name {NamePrefix}-schedule` を実行し `ScheduleExpression` を確認する。EventBridge cron のフィールド順は `cron(分 時 日 月 曜日 年)`。2 番目のフィールドが UTC の時刻。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "`cron(0 2 * * ? *)` の 2 番目フィールドは `2` → UTC 02:00 に発火。答えは `TC{02}`。",
+        "penalty": 40
+      }
+    ]
+  }
+}
