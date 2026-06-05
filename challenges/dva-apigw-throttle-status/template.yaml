@@ -1,0 +1,114 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (dva-apigw-throttle-status). DVA-C02 API Gateway throttle
+  knowledge drill. Deploys only an SSM Parameter holding the scenario. No API
+  Gateway or Lambda is deployed (cost avoidance). The player reads the scenario,
+  applies their API Gateway throttle knowledge, and submits the correct HTTP status
+  code as TC{N}.
+
+  Cost: SSM parameter only. No API Gateway, no Lambda, no EC2. $0.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks from
+      colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+
+Resources:
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-participant-viewer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: >-
+        Scenario: Kato-san configured an API Gateway REST API with a Usage Plan
+        that limits each API key to 10 requests per second (rate) and a burst
+        of 20. A mobile client sends a batch of 50 requests in one second.
+        API Gateway enforces the Usage Plan throttle and rejects the excess
+        requests immediately with an error response. What HTTP status code does
+        API Gateway return to the client for each throttled request?
+        Decoy options: 400 (Bad Request), 403 (Forbidden), 503 (Service Unavailable).
+        Submit the correct status code as TC{N}, e.g. TC{403}.
+      Description: !Sub "TenkaCloud dva-apigw-throttle-status briefing for ${NamePrefix}."
+      Tier: Standard
+
+Outputs:
+  BriefingParameterName:
+    Description: SSM Parameter holding the task briefing.
+    Value: !Ref BriefingParameter
+  # Canonical answer -- scoring engine only. No cloudformation:DescribeStacks granted.
+  AnswerFlag:
+    Description: HTTP status code API Gateway returns on throttle.
+    Value: "TC{429}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

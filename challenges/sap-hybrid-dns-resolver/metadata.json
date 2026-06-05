@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "sap-hybrid-dns-resolver",
+  "name": "オンプレ ↔ VPC の双方向 DNS 解決サービスを答えろ (SAP ハイブリッド DNS)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 4,
+  "estimatedDuration": "20〜30 分",
+  "shortDescription": "天下クラウド株式会社、 着任 5 ヵ月目。 佐々木 CTO が険しい顔で話しかけてくる。\n\n「加藤くんのオンプレ移行計画、 DNS の設計だけ白紙なんだ。 オンプレの DNS サーバーが VPC 内のホスト名を解決できて、 逆に VPC 側からオンプレのホスト名も解けないといけない。 どのサービスを使えばいいんだ?」\n\nシナリオを読んで、 最適な AWS サービスを答えろ。",
+  "description": "## シナリオ\n\n天下クラウドは Direct Connect でオンプレミスと VPC を接続するハイブリッド環境を構築している。 要件は以下の 2 点:\n\n1. **オンプレ → VPC**: オンプレの DNS サーバーが `*.internal.tenkacloud.aws` のような VPC プライベートホスト名を解決できること\n2. **VPC → オンプレ**: VPC 内の EC2 が `*.corp.tenkacloud.local` のようなオンプレのプライベートホスト名を解決できること\n\nSAP-C02 の頻出論点: この双方向 DNS 解決を実現するのが **Route 53 Resolver** の **インバウンド / アウトバウンドエンドポイント**。 Route 53 Hosted Zone や単純な DNS フォワーダーとの違いを理解していることが問われる。\n\n## デプロイされるもの (すべて無料)\n\n- SSM String Parameter `/{NamePrefix}/briefing` — 問題のシナリオと要件\n\nRoute 53 Hosted Zone (月 $0.50) は課金があるため未デプロイ。 シナリオはデータとして SSM に格納。 **課金 $0**。\n\n## 解き方\n\n1. SSM Parameter `/{NamePrefix}/briefing` を読んでシナリオを確認する。\n2. 双方向 DNS 解決の要件 (オンプレ→VPC、 VPC→オンプレ) を整理する。\n3. この要件を満たす AWS サービスを特定し、 `TC{サービス名}` 形式で提出 (例: `TC{route53-resolver}`)。\n\n## 採点\n\n- 正解: +200 pt。\n- 不正解: -20 pt/回。 スコアは 0 未満にならない。\n\n## コスト\n\nSSM Parameter は無料。 課金リソースなし。",
+  "tags": ["sap", "solutions-architect-professional", "route53", "dns", "hybrid", "networking", "direct-connect"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- hybrid DNS scenario analysis only, port unused)" }
+  ],
+  "learningGoals": [
+    "Route 53 Resolver のインバウンド / アウトバウンドエンドポイントがどのユースケースで必要かを理解する",
+    "オンプレ ↔ VPC 間の双方向 DNS 解決の仕組みを把握する",
+    "Route 53 Hosted Zone と Route 53 Resolver の役割の違いを区別できるようになる"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Name the AWS service for bidirectional on-premises ↔ VPC DNS resolution (SAP hybrid DNS)",
+      "shortDescription": "Five months in at TenkaCloud Inc. CTO Sasaki-san approaches with a grim expression.\n\n'Kato-kun's on-prem migration plan left the DNS design blank. We need on-prem DNS servers to resolve VPC private hostnames, and VPC instances to resolve on-prem hostnames. Which service handles this?'\n\nRead the scenario and name the correct AWS service.",
+      "description": "## Scenario\n\nTenkaCloud is building a hybrid environment connecting on-premises to a VPC over Direct Connect. Two requirements:\n\n1. **On-premises → VPC**: on-prem DNS servers must resolve VPC private hostnames like `*.internal.tenkacloud.aws`\n2. **VPC → on-premises**: VPC EC2 instances must resolve on-prem private hostnames like `*.corp.tenkacloud.local`\n\nA classic SAP-C02 topic: this bidirectional DNS resolution is handled by **Route 53 Resolver** with **inbound and outbound endpoints**. The exam tests whether you can distinguish this from a Route 53 Hosted Zone or a simple DNS forwarder.\n\n## What gets deployed (all free)\n\n- SSM String Parameter `/{NamePrefix}/briefing` — scenario and requirements\n\nRoute 53 Hosted Zones cost $0.50/month each and are not deployed. The scenario is stored as data in SSM. **$0 cost**.\n\n## How to solve\n\n1. Read the SSM Parameter `/{NamePrefix}/briefing`.\n2. Identify the bidirectional DNS resolution requirement.\n3. Name the AWS service and submit as `TC{service-name}` (e.g. `TC{route53-resolver}`).\n\n## Scoring\n\n- Correct: +200 pt.\n- Wrong: -20 pt each. Score never drops below 0.\n\n## Cost\n\nSSM Parameters are free. No billable resources.",
+      "learningGoals": [
+        "Understand when Route 53 Resolver inbound/outbound endpoints are needed",
+        "Grasp how bidirectional DNS resolution between on-premises and VPC works",
+        "Distinguish Route 53 Hosted Zones from Route 53 Resolver endpoints"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 20,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "Route 53 の「Hosted Zone」はドメイン管理用で DNS クエリに応答するが、 オンプレの DNS サーバーからのクエリを受け付けるには別のしくみが必要。 AWS が提供する「Resolver」という名前のコンポーネントを探してみよう。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "正解は `Route 53 Resolver`。 インバウンドエンドポイント (オンプレ→VPC の DNS クエリを受け付ける ENI) とアウトバウンドエンドポイント (VPC→オンプレへ DNS クエリを転送するルール) を組み合わせて双方向解決を実現する。 提出形式: `TC{route53-resolver}`。",
+        "penalty": 40
+      }
+    ]
+  }
+}

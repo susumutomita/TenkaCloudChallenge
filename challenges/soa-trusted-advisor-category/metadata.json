@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "soa-trusted-advisor-category",
+  "name": "低稼働 EC2 を検出する Trusted Advisor チェックのカテゴリは何か (SOA コスト最適化)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 2,
+  "estimatedDuration": "15〜20 分",
+  "shortDescription": "天下クラウド株式会社、入社 11 週間目。クラウド費用が爆発していると経営会議で話題になった。佐々木 CTO が慌ててやってくる。\n\n「Trusted Advisor で低稼働・アイドルの EC2 インスタンスを炙り出すのに使うチェックって、どのカテゴリに分類されてるんだっけ? SOA の範囲だし……」。\n\nシナリオを読んで、アイドル/低稼働 EC2 を検出する Trusted Advisor チェックのカテゴリ名を答えろ。",
+  "description": "## シナリオ\n\n加藤さんのメモ: 「Trusted Advisor はいくつかのカテゴリに分かれている: コストの最適化、パフォーマンス、セキュリティ、耐障害性、サービスの制限。低稼働または未使用の EC2 インスタンスを特定して節約提案するチェックは特定のカテゴリに属している」。\n\nSOA-C02 の定番論点: **Trusted Advisor のカテゴリ分類** — Low Utilization Amazon EC2 Instances チェックは 「コストの最適化 (Cost Optimization)」カテゴリ。Security や Performance との混同が試験の罠。\n\n## デプロイされるもの (すべて無料)\n\n- SSM Parameter `/{NamePrefix}/briefing` (シナリオ説明)\n\nEC2 なし。**課金 $0**。\n\n## 解き方\n\n1. SSM Parameter `/{NamePrefix}/briefing` を読んでシナリオを確認する。\n2. Trusted Advisor の 5 つのカテゴリの中から、アイドル/低稼働 EC2 の節約提案チェックが属するカテゴリを特定する。\n3. カテゴリ名をハイフン区切り小文字で `TC{カテゴリ名}` 形式で提出 (例: `TC{security}`)。\n\n## 採点\n\n- 正解: +200 pt (1 デプロイにつき 1 回)。\n- 不正解: -15 pt/回。スコアは 0 未満にならない。\n\n## コスト\n\nSSM Parameter は無料。課金リソースなし。",
+  "tags": ["soa", "sysops-administrator", "trusted-advisor", "cost-optimization", "cost-management"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- Trusted Advisor knowledge scenario only, port unused)" }
+  ],
+  "learningGoals": [
+    "Trusted Advisor の 5 つのカテゴリ (コスト最適化/パフォーマンス/セキュリティ/耐障害性/サービスの制限) を覚える",
+    "Low Utilization EC2 チェックがコスト最適化カテゴリに属することを確認する",
+    "SOA-C02 頻出: Trusted Advisor チェックのカテゴリを問われる場面で迷わずに答えられるようになる"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Identify the Trusted Advisor check category that flags idle/low-utilization EC2 instances (SOA cost optimization)",
+      "shortDescription": "Eleven weeks into the job at TenkaCloud Inc. Cloud costs are a boardroom topic. CTO Sasaki-san rushes over.\n\n'Which Trusted Advisor category does the check for idle / low-utilization EC2 instances fall under? It's on the SOA exam...'\n\nRead the scenario and report the Trusted Advisor check category name.",
+      "description": "## Scenario\n\nKato-san's note: 'Trusted Advisor is divided into categories: Cost Optimization, Performance, Security, Fault Tolerance, Service Limits. The check that identifies low-utilization or idle EC2 instances and suggests savings belongs to a specific category.'\n\nThe classic SOA-C02 point: **Trusted Advisor category classification** — the Low Utilization Amazon EC2 Instances check belongs to the **Cost Optimization** category. Confusing it with Security or Performance is the exam trap.\n\n## What gets deployed (all free)\n\n- SSM Parameter `/{NamePrefix}/briefing` (scenario description)\n\nNo EC2. **$0 cost**.\n\n## How to solve\n\n1. Read SSM Parameter `/{NamePrefix}/briefing` to review the scenario.\n2. From the five Trusted Advisor categories, identify which one contains the idle/low-utilization EC2 check.\n3. Submit the category name hyphen-separated lowercase as `TC{category}` (e.g. `TC{security}`).\n\n## Scoring\n\n- Correct: +200 pt (once per deploy).\n- Wrong: -15 pt each. Score never drops below 0.\n\n## Cost\n\nSSM Parameter is free. No billable resources.",
+      "learningGoals": [
+        "Memorize the 5 Trusted Advisor categories: Cost Optimization, Performance, Security, Fault Tolerance, Service Limits",
+        "Confirm that Low Utilization EC2 Instances belongs to the Cost Optimization category",
+        "SOA-C02 staple: answer Trusted Advisor category questions without hesitation"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 15,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "Trusted Advisor の 5 カテゴリ: Cost Optimization (コスト最適化) / Performance (パフォーマンス) / Security (セキュリティ) / Fault Tolerance (耐障害性) / Service Limits (サービスの制限)。「節約」「低稼働」「アイドル」EC2 の検出提案はどのカテゴリか?",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "Low Utilization Amazon EC2 Instances チェックは Cost Optimization カテゴリに属する。答えは `TC{cost-optimization}`。",
+        "penalty": 40
+      }
+    ]
+  }
+}

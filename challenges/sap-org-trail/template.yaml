@@ -1,0 +1,126 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (sap-org-trail). SAP-C02 centralized audit logging drill.
+  Stores a scenario in SSM: 50 accounts in Organizations need CloudTrail logs
+  centralized in one S3 bucket with one configuration. The player identifies
+  Organization Trail as the CloudTrail feature that automatically covers all
+  member accounts from the management account. AWS Organizations and CloudTrail
+  are NOT deployed (they would cost money or require special setup); the scenario
+  is modeled as data in SSM.
+
+  Cost: SSM Parameters and IAM roles are free. $0.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks from
+      colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+
+Resources:
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-participant-viewer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: >-
+        SCENARIO: TenkaCloud manages 50 AWS accounts through Organizations. Each
+        account currently has its own individual CloudTrail trail logging to its
+        own S3 bucket. REQUIREMENT: (1) centralize all account logs into a single
+        S3 bucket; (2) new accounts added to the org must be automatically covered
+        without additional configuration; (3) manage the setup from the management
+        account only.
+        OPTIONS: Per-account trail = covers only one account, requires 50
+        separate configurations; CloudTrail Lake = new query feature, different
+        purpose; AWS Config aggregator = aggregates Config data, not CloudTrail;
+        Organization Trail = one trail created in the management account with
+        IsOrganizationTrail=true covers all current and future member accounts
+        automatically and centralizes logs in one S3 bucket.
+        QUESTION: Which CloudTrail feature lets the management account create a
+        single trail that automatically covers all member accounts in the org?
+        Submit as TC{feature-name} e.g. TC{cloudwatch-logs}.
+      Description: !Sub "TenkaCloud sap-org-trail briefing for ${NamePrefix}."
+      Tier: Standard
+
+Outputs:
+  BriefingParameterName:
+    Description: SSM Parameter holding the CloudTrail scenario.
+    Value: !Ref BriefingParameter
+  SsmConsoleUrl:
+    Description: AWS Console deep link to the SSM Parameter Store.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/systems-manager/parameters/?region=${AWS::Region}"
+  # Canonical answer, scoring engine only (no DescribeStacks granted to player).
+  AnswerFlag:
+    Description: Flag identifying the CloudTrail organization-wide trail feature.
+    Value: "TC{organization-trail}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

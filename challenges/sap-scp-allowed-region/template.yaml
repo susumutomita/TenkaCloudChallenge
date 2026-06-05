@@ -1,0 +1,149 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (sap-scp-allowed-region). SAP-C02 SCP analysis drill.
+  Deploys an SSM Parameter holding a realistic SCP JSON that uses Deny +
+  StringNotEquals + aws:RequestedRegion to allow exactly one region
+  (ap-northeast-1). The player must parse the Deny condition logic to identify
+  the allowed region. The answer lives only in the CFn Output; the SSM param
+  holds only the SCP data (the question), never the TC{} token.
+
+  Cost: SSM Parameters and IAM roles are free. $0 for the lifetime of the drill.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks from
+      colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+
+Resources:
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-participant-viewer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      # `aws login` (2025-11) OAuth2 flow needs SignInLocalDevelopmentAccess.
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+  # The SCP JSON is stored here. The player reads this to derive the allowed
+  # region. The TC{} token is NEVER stored here -- only in the CFn Output.
+  ScpPolicyParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/scp-policy"
+      Type: String
+      Value: >-
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "DenyAllOutsideAllowedRegions",
+              "Effect": "Deny",
+              "Action": "*",
+              "Resource": "*",
+              "Condition": {
+                "StringNotEquals": {
+                  "aws:RequestedRegion": [
+                    "ap-northeast-1"
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      Description: !Sub "SCP policy document for TenkaCloud sap-scp-allowed-region (${NamePrefix})."
+      Tier: Standard
+
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: >-
+        An SCP is attached to the organization. Read the SCP JSON stored in
+        the SSM parameter at /{NamePrefix}/scp-policy. The policy uses a Deny
+        statement with StringNotEquals on aws:RequestedRegion to block all
+        regions except one. Identify the one allowed region and submit it as
+        TC{region-name} (e.g. TC{us-east-1}).
+      Description: !Sub "TenkaCloud sap-scp-allowed-region briefing for ${NamePrefix}."
+      Tier: Standard
+
+Outputs:
+  ScpPolicyParameterName:
+    Description: SSM Parameter holding the SCP JSON to analyze.
+    Value: !Ref ScpPolicyParameter
+  BriefingParameterName:
+    Description: SSM Parameter holding the task briefing.
+    Value: !Ref BriefingParameter
+  SsmConsoleUrl:
+    Description: AWS Console deep link to the SSM Parameter Store.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/systems-manager/parameters/?region=${AWS::Region}"
+  # Canonical answer, used by the scoring engine only. The participant role has
+  # no cloudformation:DescribeStacks, so this is not readable by the player.
+  AnswerFlag:
+    Description: Flag derived by correctly parsing the SCP Deny condition.
+    Value: "TC{ap-northeast-1}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

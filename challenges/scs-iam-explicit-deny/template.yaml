@@ -1,0 +1,171 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (scs-iam-explicit-deny). SCS-C02 IAM policy evaluation drill.
+  Deploys one IAM role with two inline policies: one broadly Allows s3:* on *, and one
+  explicitly Denies s3:DeleteObject on *. The learner must determine whether DeleteObject
+  is permitted (explicit Deny always wins over Allow -- it is denied). The answer is
+  mirrored only in a CFn Output the participant role cannot read; players derive it from
+  the policy documents.
+
+  Cost: IAM roles and SSM Parameters are free. No S3 bucket, no EC2, no KMS. $0.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks from
+      colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+
+Resources:
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-participant-viewer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      # `aws login` (2025-11) OAuth2 flow needs SignInLocalDevelopmentAccess.
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # Allow reading the target role's inline policies. Scoped to
+              # ${NamePrefix}* roles to avoid listing unrelated roles.
+              # No cloudformation:DescribeStacks -- the answer must be derived
+              # from the policy documents, not read from the stack Output.
+              - Sid: ReadTargetRolePolicies
+                Effect: Allow
+                Action:
+                  - iam:GetRole
+                  - iam:ListRolePolicies
+                  - iam:GetRolePolicy
+                Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/${NamePrefix}*"
+              - Sid: ListRoles
+                Effect: Allow
+                Action:
+                  - iam:ListRoles
+                Resource: "*"
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+  # The target role the learner must analyze. It has two inline policies:
+  # one broadly allowing s3:*, and one explicitly denying s3:DeleteObject.
+  # Per IAM evaluation logic, explicit Deny always wins over Allow.
+  TargetRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-target-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Description: !Sub "TenkaCloud scs-iam-explicit-deny target role for ${NamePrefix}. Analysis only."
+      # Policy 1: broad Allow -- s3:* on everything
+      # Policy 2: explicit Deny -- s3:DeleteObject on everything
+      # IAM evaluation: explicit Deny beats Allow; DeleteObject is denied.
+      Policies:
+        - PolicyName: AllowS3Everything
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: AllowAllS3Actions
+                Effect: Allow
+                Action: "s3:*"
+                Resource: "*"
+        - PolicyName: DenyDeleteObject
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ExplicitDenyDeleteObject
+                Effect: Deny
+                Action: "s3:DeleteObject"
+                Resource: "*"
+
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: >-
+        Examine the IAM role named "${NamePrefix}-target-role". It has two inline
+        policies: AllowS3Everything (allows s3:* on *) and DenyDeleteObject (denies
+        s3:DeleteObject on *). Using IAM policy evaluation logic, determine whether
+        a caller using this role can execute s3:DeleteObject. Submit your answer as
+        TC{allowed} or TC{denied}.
+      Description: !Sub "TenkaCloud scs-iam-explicit-deny briefing for ${NamePrefix}."
+      Tier: Standard
+
+Outputs:
+  TargetRoleName:
+    Description: Name of the IAM role to analyze.
+    Value: !Ref TargetRole
+  IamConsoleUrl:
+    Description: AWS Console deep link to the IAM Roles list.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/iamv2/home?region=${AWS::Region}#/roles"
+  BriefingParameterName:
+    Description: SSM Parameter holding the task briefing.
+    Value: !Ref BriefingParameter
+  # Canonical answer, scoring engine only (no DescribeStacks granted to player).
+  AnswerFlag:
+    Description: Flag the learner submits after reasoning through IAM explicit Deny evaluation.
+    Value: "TC{denied}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

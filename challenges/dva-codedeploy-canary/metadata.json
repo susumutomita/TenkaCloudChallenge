@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "dva-codedeploy-canary",
+  "name": "Lambda 10% → 100% 段階デプロイの CodeDeploy 設定名を答えろ (DVA CodeDeploy)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 2,
+  "estimatedDuration": "10〜20 分",
+  "shortDescription": "天下クラウド株式会社、入社 7 週間目。本番 Lambda を一気に切り替えてロールバックが間に合わなかった経験から、佐々木 CTO が指示する。\n\n「次のリリースは最初の 5 分間は 10% だけ新バージョンにトラフィックを流して、問題なければ残り 100% を切り替える方式にしたい。加藤くんが使っていた CodeDeploy の設定名、どのデプロイスタイルが該当する?」\n\nシナリオを読んで正しいデプロイスタイルを答えろ。",
+  "description": "## シナリオ\n\n加藤さんは Lambda 関数を all-at-once でリリースしていたため、問題発生時のロールバックが遅れた。新しい方針: 最初の 5 分間は 10% のトラフィックを新バージョンに流し (検証)、問題がなければ残り 100% を切り替える。\n\nDVA の頻出: **CodeDeploy の Lambda デプロイ設定で「一定割合のトラフィックを短時間流してから全量切り替え」を行うスタイルはカナリア (Canary)**。線形 (Linear) は一定間隔で段階的に増やす方式、all-at-once は一括切り替え。\n\nSSM パラメータにシナリオが記載されている。正しいデプロイスタイルを特定して `TC{スタイル名}` 形式で提出せよ。\n\n## デプロイされるもの (すべて無料)\n\n- SSM Parameter `/{NamePrefix}/briefing` (シナリオ本文)\n\nCodeDeploy / Lambda は一切デプロイしない (コスト回避)。**課金 $0**。\n\n## 解き方\n\n1. SSM Parameter `/{NamePrefix}/briefing` を読んでシナリオを確認。\n2. CodeDeploy の 3 つの Lambda デプロイスタイル (Canary / Linear / AllAtOnce) の違いを思い出す。\n3. 答えを `TC{スタイル名}` 形式で提出 (例: `TC{linear}`)。\n\n## 採点\n\n- 正解: +150 pt (1 デプロイにつき 1 回)。\n- 不正解: -15 pt/回。スコアは 0 未満にならない。\n\n## コスト\n\nSSM パラメータのみ。課金リソースなし。$0。",
+  "tags": ["dva", "developer-associate", "codedeploy", "canary", "deployment", "lambda", "traffic-shifting"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- CodeDeploy scenario analysis only, port unused)" }
+  ],
+  "learningGoals": [
+    "CodeDeploy の Lambda トラフィックシフト方式 (Canary / Linear / AllAtOnce) の違いを説明できる",
+    "Canary デプロイが「少量のトラフィックで新バージョンを検証してから全量切り替える」パターンであることを理解する",
+    "CodeDeploy + Lambda エイリアスによるトラフィックシフトのメカニズムを理解する"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Which CodeDeploy style shifts 10% traffic for 5 min then 100%? (DVA CodeDeploy)",
+      "shortDescription": "Week seven at TenkaCloud Inc. An all-at-once Lambda release caused a delayed rollback. CTO Sasaki-san directs:\n\n'For the next release, route only 10% of traffic to the new version for 5 minutes, then if all is well shift the remaining 100%. Which CodeDeploy deployment style does this?'\n\nRead the scenario and name the correct deployment style.",
+      "description": "## Scenario\n\nKato-san released Lambda all-at-once, causing slow rollback when issues appeared. The new policy: route 10% of traffic to the new version for 5 minutes (validation window), then shift the remaining 100% if no alarms fire.\n\nThe key DVA fact: **the CodeDeploy Lambda deployment style that shifts a fixed percentage first then shifts the rest is Canary**. Linear shifts traffic in equal increments at fixed intervals. AllAtOnce shifts all traffic instantly.\n\nThe scenario is in the SSM parameter. Identify the correct style and submit as `TC{style-name}`.\n\n## What gets deployed (all free)\n\n- SSM Parameter `/{NamePrefix}/briefing` (scenario text)\n\nNo CodeDeploy / Lambda deployed. **$0 cost**.\n\n## How to solve\n\n1. Read SSM Parameter `/{NamePrefix}/briefing` for the scenario.\n2. Recall the three CodeDeploy Lambda deployment styles: Canary / Linear / AllAtOnce.\n3. Submit as `TC{style-name}` (e.g. `TC{linear}`).\n\n## Scoring\n\n- Correct: +150 pt (once per deploy).\n- Wrong: -15 pt each. Score never drops below 0.\n\n## Cost\n\nSSM parameter only. No billable resources. $0.",
+      "learningGoals": [
+        "Explain the difference between CodeDeploy Lambda traffic-shift styles: Canary, Linear, AllAtOnce",
+        "Understand that Canary validates with a small traffic slice before full cutover",
+        "Understand the CodeDeploy + Lambda alias traffic-shifting mechanism"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 150,
+    "wrongAnswerPenalty": 15,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "CodeDeploy の Lambda デプロイ設定には 3 スタイルある。AllAtOnce は一括。Linear は等間隔で段階増加。もう 1 つは最初に一定割合 (例: 10%) を流して短い検証ウィンドウ後に残り全量 (90%) を切り替える。この 2 ステップのパターンはカナリアリリースの概念と同じ。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "10% 流して 5 分待ち → 残り 100% 切り替えは Canary スタイル (例: CodeDeployDefault.LambdaCanary10Percent5Minutes)。提出形式は `TC{canary}`。",
+        "penalty": 40
+      }
+    ]
+  }
+}

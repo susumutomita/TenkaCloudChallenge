@@ -2,6 +2,864 @@
   "version": "1",
   "problems": [
     {
+      "id": "aif-bedrock-guardrails",
+      "name": "LLM の有害コンテンツと PII を遮断するには (AIF Bedrock Guardrails)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、AI チームで 2 週間が経った。コンプライアンス部門から警告が来た。\n\n「加藤くんが作った社内 LLM チャットボット、ユーザーが個人情報を入力しても LLM にそのまま送っているし、有害なコンテンツが出力されても素通りしてる。Amazon Bedrock のどの機能を使えば LLM の入出力で PII や有害コンテンツをブロックできる?」\n\nSSM パラメータに要件が書かれている。Bedrock のセーフガード機能を答えろ。",
+      "tags": [
+        "aif",
+        "ai-practitioner",
+        "bedrock",
+        "guardrails",
+        "pii",
+        "safety",
+        "responsible-ai",
+        "generative-ai"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "aif-bedrock-rag-knowledge-base",
+      "name": "社内文書に基づく回答を実現するには (AIF Bedrock RAG 機能選択)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、入社 2 ヶ月目。AI チームへの異動後、最初のタスクが来た。\n\n「加藤くんが残した企画書がある。LLM が社内の製品マニュアルや過去の障害レポートを参照して回答できるようにしたい。でもモデルの再トレーニングはしたくない。Amazon Bedrock のどの機能を使えばいい?」\n\nSSM パラメータに要件と選択肢が入っている。RAG の仕組みを理解して、正しい Bedrock 機能を答えろ。",
+      "tags": [
+        "aif",
+        "ai-practitioner",
+        "bedrock",
+        "rag",
+        "knowledge-bases",
+        "generative-ai",
+        "llm"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "aif-genai-vs-classic-ml",
+      "name": "生成 AI に最も向いているタスクはどれか (AIF GenAI vs 従来 ML)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 1,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、AI チーム 2 ヶ月目。プロダクトチームから 4 つの AI 活用案が上がってきた。\n\n「加藤くんのメモに 4 つのタスクが書いてある。予測・分類・クラスタリング・マーケティング文章の生成。このうち従来の機械学習よりも生成 AI が最も得意なのはどれか、整理してくれ」\n\nSSM パラメータに 4 つのタスクが入っている。GenAI と従来 ML の適性を判断して、生成 AI に最も向いているタスクを答えろ。",
+      "tags": [
+        "aif",
+        "ai-practitioner",
+        "generative-ai",
+        "machine-learning",
+        "llm",
+        "classification",
+        "use-cases"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "aif-inference-temperature",
+      "name": "LLM の出力を決定論的にするパラメータは何か (AIF 推論パラメータ)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 1,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、AI チームで 1 ヶ月目。QA チームから不満が上がっている。\n\n「加藤くんが残した LLM ベースの契約書チェックツール、同じ契約書を 2 回入力すると毎回違う結論が出るんだよ。テスト自動化ができない。決定論的で再現性のある出力にするには、推論パラメータのどれを 0 に近づければいい?」\n\nSSM パラメータに要件と候補パラメータが書かれている。推論パラメータの知識を使って答えろ。",
+      "tags": [
+        "aif",
+        "ai-practitioner",
+        "llm",
+        "inference-parameters",
+        "temperature",
+        "generative-ai",
+        "bedrock"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "ans-cidr-subnet-sizing",
+      "name": "500 IP 以上使えるサブネットの最大プレフィックスは? (ANS CIDR 計算)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、 ネットワーク設計。 佐々木 CTO から問われた。\n\n「加藤くんが残した設計に『/16 VPC から、 最低 500 の使用可能 IP が必要なサブネットを切る』 とある。 AWS は 1 サブネットにつき 5 個の IP を予約するから注意して。 ちょうど良い、 **最も小さい (プレフィックスが最大の)** サブネットサイズは何?」\n\nシナリオをよく読んで CIDR 計算をせよ。",
+      "tags": [
+        "ans",
+        "advanced-networking",
+        "cidr",
+        "subnet-sizing",
+        "ip-addressing",
+        "networking-fundamentals"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "ans-direct-connect",
+      "name": "専用線で AWS と一貫低レイテンシー接続 (ANS Direct Connect 設計)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 4,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、 金融系顧客の案件。 佐々木 CTO が言った。\n\n「加藤くんの設計書に『10 Gbps、 インターネット経由は絶対 NG、 一貫した低レイテンシーが必要』 とある。 Site-to-Site VPN じゃ帯域が足りないし、 ベストエフォートだ。 何を使う?」\n\nシナリオを読んで ANS-C01 の正解サービスを特定しろ。",
+      "tags": [
+        "ans",
+        "advanced-networking",
+        "direct-connect",
+        "hybrid-connectivity",
+        "on-premises",
+        "dedicated-line"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "ans-nacl-ephemeral",
+      "name": "NACL の戻りトラフィックが消える謎 (ANS エフェメラルポート)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 4,
+      "estimatedDuration": "20〜30 分",
+      "shortDescription": "天下クラウド株式会社、 障害対応。 佐々木 CTO が叫んだ。\n\n「HTTPS (443) は許可してるのに、 レスポンスが返ってこない! 加藤くんが作った NACL の問題だ。 インバウンドは OK なのにアウトバウンドが何かおかしい」\n\nデプロイされた VPC と NACL を調べ、 応答パケットに必要な **アウトバウンドのエフェメラルポート範囲** を特定しろ。",
+      "tags": [
+        "ans",
+        "advanced-networking",
+        "nacl",
+        "ephemeral-ports",
+        "stateless",
+        "networking",
+        "security"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "ans-peering-nontransitive",
+      "name": "VPC ピアリングの非推移性を確認せよ (ANS ピアリング設計)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 4,
+      "estimatedDuration": "20〜30 分",
+      "shortDescription": "天下クラウド株式会社、 ネットワーク設計レビュー。 佐々木 CTO が困った顔で言った。\n\n「加藤くんが 3 つの VPC を A↔B と B↔C でピアリングして、 A と C は通信できると思い込んで設計してる。 本当に A から C に届くのか、 確認してほしい」\n\n3 つの VPC と 2 本のピアリング接続がデプロイされる。 ピアリングの **非推移性** を自分の目で確かめて答えを出せ。",
+      "tags": [
+        "ans",
+        "advanced-networking",
+        "vpc-peering",
+        "non-transitive",
+        "routing",
+        "transit-gateway"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "ans-privatelink",
+      "name": "VPC 間でサービスを安全に公開 (ANS PrivateLink 設計)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 4,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、 B2B SaaS チームのアーキレビュー。 佐々木 CTO が言った。\n\n「加藤くんが途中まで書いた設計書に『コンシューマー VPC に自社 API を提供したい、 でもピアリングも IGW も使いたくない』 と書いてある。 インターネットを経由せず、 エンドポイントサービスとして提供する技術は何?」\n\nシナリオを読んで ANS-C01 レベルの正解技術名を特定しろ。",
+      "tags": [
+        "ans",
+        "advanced-networking",
+        "privatelink",
+        "vpc-endpoint",
+        "endpoint-service",
+        "private-connectivity"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "ans-route53-failover",
+      "name": "プライマリ障害時に DNS 自動切替 (ANS Route 53 フェイルオーバー)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 4,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、 DR 計画レビュー。 佐々木 CTO が険しい顔で言った。\n\n「加藤くんの設計書、 DR の DNS 切替が書いてない。 プライマリのヘルスチェックが失敗したら、 自動でスタンバイへ DNS を向けたい。 Route 53 のどのルーティングポリシーを使う?」\n\nシナリオを読み、 ANS-C01 で問われるルーティングポリシーを特定しろ。",
+      "tags": [
+        "ans",
+        "advanced-networking",
+        "route53",
+        "failover",
+        "dns",
+        "high-availability",
+        "disaster-recovery"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "ans-transit-gateway",
+      "name": "20 VPC をハブ&スポークで繋ぐには? (ANS Transit Gateway 設計)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 4,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、 新規大規模プロジェクト。 佐々木 CTO から呼ばれた。\n\n「加藤くんが設計途中で辞めてしまってね。 20 個の VPC と 1 つのオンプレを、 集中管理でフルメッシュ接続したい。 VPC ピアリングだと N*(N-1)/2 本になって破綻する。 何を使えばいい?」\n\nシナリオをよく読んで、 ANS-C01 レベルの正解サービスを特定しろ。",
+      "tags": [
+        "ans",
+        "advanced-networking",
+        "transit-gateway",
+        "vpc",
+        "hub-and-spoke",
+        "routing"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "ans-vpn-bgp",
+      "name": "VPN トンネル間の動的ルーティングと自動フェイルオーバー (ANS BGP)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 4,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、 Site-to-Site VPN の設計レビュー。 佐々木 CTO が言った。\n\n「加藤くんの設計では Static ルーティングになってるけど、 2 本のトンネルで自動フェイルオーバーして、 オンプレ側のルーター変更も自動で AWS に伝播させたい。 どのルーティングプロトコルを有効にすればいい?」\n\nシナリオを読み、 ANS-C01 で問われる動的ルーティングプロトコルを特定しろ。",
+      "tags": [
+        "ans",
+        "advanced-networking",
+        "bgp",
+        "site-to-site-vpn",
+        "dynamic-routing",
+        "failover"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "clf-global-vs-regional-service",
+      "name": "リージョナルサービスはどれ? (CLF グローバル vs リージョナル)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 1,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、入社 2 週間目。佐々木 CTO が AWS アーキテクチャ研修の資料を作っていた。\n\n「加藤くんのメモに 4 つの AWS サービスがある。IAM・CloudFront・Route 53・DynamoDB のうち、グローバルサービスじゃなくてリージョナルサービスはどれか、新入りに説明できるか?」\n\nSSM パラメータに 4 つのサービスが入っている。グローバル vs リージョナルの違いを正しく理解して、唯一のリージョナルサービスを答えろ。",
+      "tags": [
+        "clf",
+        "cloud-practitioner",
+        "global-services",
+        "regional-services",
+        "dynamodb",
+        "iam",
+        "cloudfront",
+        "route53"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "clf-iam-user-vs-role",
+      "name": "EC2 が S3 を呼ぶのは IAM ユーザーか IAM ロールか (CLF 認証情報ベストプラクティス)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 1,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、入社 2 週間目。セキュリティレビューで問題が発覚した。\n\n「加藤くんが EC2 インスタンスに AWS CLI 用のアクセスキーを直接置いてたんだ。S3 を呼ぶだけなのに。佐々木 CTO が激怒してる。EC2 から S3 を安全に呼ぶには何を使うべきだったのか?」\n\nアカウントに IAM ユーザーと IAM ロール (EC2 用信頼ポリシー付き) の両方がデプロイされている。EC2 インスタンスが AWS サービスを呼び出す際に使うべき ID はどちらかを答えろ。",
+      "tags": [
+        "clf",
+        "cloud-practitioner",
+        "iam",
+        "iam-roles",
+        "iam-users",
+        "ec2",
+        "security",
+        "credentials"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "clf-pricing-model-pick",
+      "name": "最安の購入オプションを選べ (CLF 料金モデル選択)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 1,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、入社 1 週間目。佐々木 CTO がコスト削減の指示を出してきた。\n\n「加藤くんが設計したバッチ処理があるんだが、締め切りなしで中断されても平気なフォールトトレラントな処理なんだ。オンデマンドで動かすのはもったいない。一番安い EC2 購入オプションは何か調べてくれ」\n\nSSM パラメータにワークロードの条件が書かれている。料金モデルを読んで、最適な購入オプションを答えろ。",
+      "tags": [
+        "clf",
+        "cloud-practitioner",
+        "ec2",
+        "pricing",
+        "spot-instances",
+        "cost-optimization"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "clf-shared-responsibility-audit",
+      "name": "責任共有モデルを分類せよ (CLF セキュリティ監査)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 1,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、入社 3 日目。佐々木 CTO から緊急の Slack が飛んできた。\n\n「コンプライアンス監査チームが『AWS と我々のどちらが責任を持つべきタスク』の一覧を確認したいと言っている。加藤くんが残したメモに 6 つのセキュリティタスクがあるが、どれが顧客責任なのか整理できていない。顧客責任のタスクは何個ある?」\n\nSSM パラメータに 6 つのタスクが入っている。責任共有モデルに基づいて AWS 責任と顧客責任を分類し、顧客責任のタスク数を数えろ。",
+      "tags": [
+        "clf",
+        "cloud-practitioner",
+        "shared-responsibility",
+        "iam",
+        "security",
+        "compliance"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "clf-support-plan-pick",
+      "name": "最安のサポートプランを選べ (CLF サポートプラン選択)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、入社 1 ヶ月目。佐々木 CTO がコスト会議の後に声をかけてきた。\n\n「加藤くんが使っていたサポートプランを見直したい。本番ワークロードがあって、障害時には 1 時間以内の応答が必要だ。ただしインフライベント管理は不要で、専任 TAM もいらない。条件を満たす中で一番安いプランはどれだ?」\n\nSSM パラメータに要件と各プランの仕様が入っている。条件に合う最安プランを答えろ。",
+      "tags": [
+        "clf",
+        "cloud-practitioner",
+        "support-plans",
+        "business-support",
+        "enterprise-support",
+        "cost-optimization"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "clf-well-architected-pillar",
+      "name": "正しい柱を特定せよ (CLF Well-Architected フレームワーク)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、入社 3 週間目。佐々木 CTO が月次のアーキテクチャレビューに向けて資料整理をしている。\n\n「加藤くんが書き残した決定メモがあるんだが、どの Well-Architected 柱に紐づくかが書いていない。インスタンスの右サイジングとアイドルリソースの削除という判断は、5 つの柱のどれに当たる?」\n\nSSM パラメータに決定内容と候補の柱が書かれている。Well-Architected フレームワークの知識を使って正しい柱を答えろ。",
+      "tags": [
+        "clf",
+        "cloud-practitioner",
+        "well-architected",
+        "cost-optimization",
+        "pillars",
+        "framework"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "dea-athena-workgroup-encryption",
+      "name": "Athena クエリ結果の暗号化オプションを特定せよ (DEA Athena WorkGroup 監査)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "20〜30 分",
+      "shortDescription": "天下クラウド株式会社、セキュリティ監査の朝。佐々木 CTO から Slack が来る。\n\n「加藤くんが設定した Athena WorkGroup、クエリ結果が S3 に書き出されるときの暗号化オプションが何なのか、誰も把握していない。コンプライアンス審査が今日の午後なんだが……」。\n\nWorkGroup 名だけでは何もわからない。ResultConfiguration を直接読んで、設定されている EncryptionOption を特定しろ。",
+      "tags": [
+        "dea",
+        "data-engineer-associate",
+        "athena",
+        "workgroup",
+        "encryption",
+        "sse-s3",
+        "s3"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "dea-firehose-vs-streams",
+      "name": "ストリームデータの S3 配信に使う Kinesis サービスを選べ (DEA Firehose vs Streams)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、ログ収集基盤の設計レビュー。佐々木 CTO がシンプルな要件を伝える。\n\n「加藤くんが設計したログパイプライン、コンシューマーコードを書かずに S3 や Redshift へバッファしてデータを届けたい。フルマネージドでコードを書かないでいいやつが欲しい」。\n\nKinesis Data Streams (コンシューマーコードが必要) と混同せずに、正しいサービスを選べ。",
+      "tags": [
+        "dea",
+        "data-engineer-associate",
+        "kinesis",
+        "firehose",
+        "data-streams",
+        "streaming",
+        "s3-delivery"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "dea-glue-job-bookmark",
+      "name": "Glue の増分 ETL 機能を特定せよ (DEA Glue ジョブブックマーク)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、ETL パイプライン障害調査。佐々木 CTO が言う。\n\n「加藤くんが作った Glue ETL ジョブ、毎回フルスキャンしてるせいで時間がかかりすぎる。処理済みデータを追跡して、未処理データだけを再処理する Glue の機能があるはずだ。何という機能か?」\n\n3 つの選択肢から正しいものを選べ。",
+      "tags": [
+        "dea",
+        "data-engineer-associate",
+        "glue",
+        "job-bookmark",
+        "incremental-etl",
+        "etl",
+        "data-processing"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "dea-glue-table-format",
+      "name": "Glue テーブルのデータ形式を特定せよ (DEA Glue Data Catalog 監査)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "20〜30 分",
+      "shortDescription": "天下クラウド株式会社、データ基盤チームへの異動初日。佐々木 CTO が険しい顔で言う。\n\n「加藤くんが作った Glue Data Catalog のテーブル、StorageDescriptor に何の SerDe が設定されているか誰も把握していない。外部の ETL チームが接続する前に確認してくれ」。\n\nテーブル名の説明書きは当てにならない。StorageDescriptor を直接読んで、実際に宣言されているデータフォーマットを特定しろ。",
+      "tags": [
+        "dea",
+        "data-engineer-associate",
+        "glue",
+        "data-catalog",
+        "parquet",
+        "serde",
+        "storage-descriptor"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "dea-kinesis-shard-count",
+      "name": "Kinesis Data Streams の最小シャード数を計算せよ (DEA シャード計算)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、ストリーミング基盤設計レビューの朝。佐々木 CTO がメッセージを送ってくる。\n\n「加藤くんが設計した Kinesis ストリームのシャード数が足りないかもしれない。毎秒 2 MB のデータを取り込む予定で、1 シャードが毎秒 1 MB 処理できる。最低何シャード必要か計算してくれ」。\n\n計算式を使って答えを出し、提出しろ。",
+      "tags": [
+        "dea",
+        "data-engineer-associate",
+        "kinesis",
+        "data-streams",
+        "shards",
+        "throughput",
+        "capacity-planning"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "dea-lake-formation",
+      "name": "S3 データレイクの列・行レベルアクセス制御サービスを特定せよ (DEA Lake Formation)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、データガバナンス強化プロジェクト。佐々木 CTO が緊急要件を伝える。\n\n「加藤くんが S3 に貯めたデータ、全員が全カラムを見られる状態になってる。個人情報カラムは特定チームだけに絞り、Glue カタログ全体に対して中央集権的に行・列レベルで制御できるサービスが必要だ」。\n\nIAM と S3 バケットポリシーだけでは実現できない機能を持つ、AWS の専用サービスを特定せよ。",
+      "tags": [
+        "dea",
+        "data-engineer-associate",
+        "lake-formation",
+        "data-governance",
+        "column-level-security",
+        "row-level-security",
+        "data-lake"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "dea-redshift-distribution-style",
+      "name": "Redshift の最適分散スタイルを選べ (DEA Redshift 分散キー分析)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、データウェアハウス最適化プロジェクト。佐々木 CTO がレビューを依頼してくる。\n\n「加藤くんが設計した大きなファクトテーブル、特定の結合キーで頻繁にディメンションテーブルと JOIN されるんだが、どの分散スタイルを使えば JOIN 時のデータ移動を最小化できるか、答えてくれ」。\n\n3 つの選択肢 (ALL / EVEN / KEY) から正しいものを選び提出しろ。",
+      "tags": [
+        "dea",
+        "data-engineer-associate",
+        "redshift",
+        "distribution-style",
+        "key-distribution",
+        "query-optimization",
+        "data-warehouse"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "dea-s3-lifecycle-transition-day",
+      "name": "S3 ライフサイクルルールの移行日数を特定せよ (DEA S3 ライフサイクル監査)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、コスト削減タスクフォース初日。佐々木 CTO が言う。\n\n「加藤くんが S3 にライフサイクルルールを設定したんだが、いつ GLACIER に移行するのか、誰も把握していない。コスト試算に必要だから今すぐ確認してくれ」。\n\nバケットポリシーや ACL は関係ない。ライフサイクルルールを直接読んで、移行が発生する日数を特定しろ。",
+      "tags": [
+        "dea",
+        "data-engineer-associate",
+        "s3",
+        "lifecycle",
+        "glacier",
+        "storage-class",
+        "cost-optimization"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "dop-blue-green",
+      "name": "ダウンタイムゼロのデプロイ戦略を選べ (DOP Blue/Green)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "10〜20 分",
+      "shortDescription": "天下クラウド株式会社、 入社 1 ヶ月目。 佐々木 CTO からメッセージが届く。\n\n「加藤くんが残した本番デプロイ手順、 ローリングアップデートで毎回 30 秒ダウンしてるんだ。 次のリリースは **ゼロダウンタイム** で、 なにか問題が起きたら **即座にロールバック** できるやつに切り替えたい。 どの戦略にすべき?」\n\nデプロイ戦略の選択は DOP 試験の核心論点。 2 つの環境を同時に持ち、 トラフィックを一瞬で切り替えられる方式を特定しろ。",
+      "tags": [
+        "dop",
+        "devops-professional",
+        "deployment",
+        "blue-green",
+        "ci-cd",
+        "rollback"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "dop-cfn-drift-detection",
+      "name": "手動変更を検出する CloudFormation 機能を答えろ (DOP ドリフト検出)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "10〜20 分",
+      "shortDescription": "天下クラウド株式会社、 入社 5 週間目。 深夜に佐々木 CTO から Slack が届く。\n\n「加藤くんが CloudFormation スタックの外でセキュリティグループを直接コンソール操作してたみたいなんだ……。 スタックとリソースの実態がズレてる可能性がある。 CloudFormation にはそのズレを検出する機能があるはずだ、 なんて言ったっけ?」\n\nIaC の鉄則: リソースはスタック経由でのみ変更せよ。 しかし現実には手動変更が紛れ込む ── それを発見する仕組みを特定しろ。",
+      "tags": [
+        "dop",
+        "devops-professional",
+        "cloudformation",
+        "drift-detection",
+        "iac",
+        "configuration-management"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "dop-codebuild-compute-type",
+      "name": "CodeBuild プロジェクトのコンピュートタイプを読め (DOP CI/CD 監査)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、 入社 3 週間目。 佐々木 CTO が CI コスト削減会議を開いた。\n\n「加藤くんが作った CodeBuild プロジェクト、 どのコンピュートタイプを使ってるか誰も把握してない。 ビルドを走らせる前にまず環境設定を確認してくれ」。\n\nプロジェクトを定義するだけでは課金されない ── でもビルドを動かしたら話が変わる。 コンソールか CLI でプロジェクト設定を読み、 使われているコンピュートタイプを答えろ。",
+      "tags": [
+        "dop",
+        "devops-professional",
+        "codebuild",
+        "ci-cd",
+        "compute-type"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "dop-codedeploy-auto-rollback",
+      "name": "デプロイ中に CloudWatch アラームが発火したら自動で戻る機能 (DOP CodeDeploy)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "10〜20 分",
+      "shortDescription": "天下クラウド株式会社、 入社 2 ヶ月目。 深夜デプロイの事後報告で佐々木 CTO が顔をしかめる。\n\n「加藤くんが書いた CodeDeploy 設定、 デプロイ中に CloudWatch アラームが鳴っても自動で戻らないんだよ。 エラーレート跳ね上がってたのに誰も気づかなかった。 CodeDeploy にはアラームと連携して自動ロールバックする機能があるはずなんだ」。\n\nそのコード名を答えろ。",
+      "tags": [
+        "dop",
+        "devops-professional",
+        "codedeploy",
+        "rollback",
+        "cloudwatch",
+        "ci-cd"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "dop-composite-alarm-children",
+      "name": "コンポジットアラームの子アラーム数を数えろ (DOP CloudWatch 監査)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、 入社 6 週間目。 佐々木 CTO がモニタリング強化を命じる。\n\n「加藤くんが作ったコンポジットアラーム、 子アラームを何個 AND 条件でまとめてるのか誰も把握してない。 ページングノイズ削減のために AND 条件にしたはずなんだが……。 コンソールかコマンドラインで確認して子アラームの数を答えてくれ」。\n\nコンポジットアラームは複数の子アラームを論理演算でまとめる CloudWatch の上位概念 ── AlarmRule を読んで個数を特定しろ。",
+      "tags": [
+        "dop",
+        "devops-professional",
+        "cloudwatch",
+        "composite-alarm",
+        "monitoring",
+        "alarms"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "dop-ecr-scan-on-push",
+      "name": "ECR リポジトリのプッシュ時スキャン設定を読め (DOP コンテナセキュリティ)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、 入社 7 週間目。 佐々木 CTO がコンテナセキュリティ強化を指示する。\n\n「加藤くんが残した ECR リポジトリ、 イメージが push されるたびに CVE スキャンを自動で走らせる設定になってるか確認してほしい。 設定名をそのまま答えてくれ」。\n\nイメージをプッシュした瞬間に脆弱性を検出できれば、 本番到達前に止められる ── その設定項目を特定しろ。",
+      "tags": [
+        "dop",
+        "devops-professional",
+        "ecr",
+        "container",
+        "security",
+        "vulnerability-scanning",
+        "scan-on-push"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "dop-eventbridge-event-source",
+      "name": "EventBridge ルールのイベントソースを読め (DOP CI/CD イベント連携)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、 入社 2 ヶ月目。 佐々木 CTO がパイプライン自動化の棚卸しを命じる。\n\n「加藤くんが作った EventBridge ルール、 どのサービスのイベントをトリガーにしてるのか誰も把握してない。 EventPattern の `source` フィールドを読んで答えてくれ」。\n\nEventBridge は AWS サービスのイベントを `source` フィールドで識別する ── そのルールが何を監視しているか特定しろ。",
+      "tags": [
+        "dop",
+        "devops-professional",
+        "eventbridge",
+        "ci-cd",
+        "codecommit",
+        "event-driven"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "dop-ssm-automation",
+      "name": "パッチ適用＆再起動の多段手順書を SSM で自動化する機能を答えろ (DOP)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "10〜20 分",
+      "shortDescription": "天下クラウド株式会社、 入社 3 ヶ月目。 佐々木 CTO からオペレーション改善の指令が来る。\n\n「加藤くんが作った EC2 のパッチ適用手順、 毎回手動で SSH してコマンドを打ってるんだよ。 パッチ適用・検証・再起動という複数ステップを **文書化して繰り返し実行できる仕組み** にしたい。 Systems Manager にそういう機能があるはずなんだけど」。\n\n運用ドキュメント ≠ Patch Manager ≠ Run Command ── 複数ステップのランブックをコードとして管理する機能名を答えろ。",
+      "tags": [
+        "dop",
+        "devops-professional",
+        "ssm",
+        "automation",
+        "systems-manager",
+        "runbook"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "dva-apigw-throttle-status",
+      "name": "API Gateway スロットリング時の HTTP ステータスを答えろ (DVA API Gateway)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "10〜20 分",
+      "shortDescription": "天下クラウド株式会社、入社 2 週間目。深夜に API のレスポンスが散発する。佐々木 CTO からメッセージが来た。\n\n「加藤くんが設定した Usage Plan、スロットリング上限が低すぎてクライアントが弾かれてる。API Gateway がスロットリングしたとき、クライアントは何番の HTTP ステータスコードを受け取る?」\n\nシナリオを読んで、API Gateway のスロットリング仕様を答えろ。",
+      "tags": [
+        "dva",
+        "developer-associate",
+        "api-gateway",
+        "throttling",
+        "http-status",
+        "usage-plan"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "dva-codedeploy-canary",
+      "name": "Lambda 10% → 100% 段階デプロイの CodeDeploy 設定名を答えろ (DVA CodeDeploy)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "10〜20 分",
+      "shortDescription": "天下クラウド株式会社、入社 7 週間目。本番 Lambda を一気に切り替えてロールバックが間に合わなかった経験から、佐々木 CTO が指示する。\n\n「次のリリースは最初の 5 分間は 10% だけ新バージョンにトラフィックを流して、問題なければ残り 100% を切り替える方式にしたい。加藤くんが使っていた CodeDeploy の設定名、どのデプロイスタイルが該当する?」\n\nシナリオを読んで正しいデプロイスタイルを答えろ。",
+      "tags": [
+        "dva",
+        "developer-associate",
+        "codedeploy",
+        "canary",
+        "deployment",
+        "lambda",
+        "traffic-shifting"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "dva-cognito-identity-pool",
+      "name": "Cognito で AWS 一時認証情報を払い出す構成要素を答えろ (DVA Cognito)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "10〜20 分",
+      "shortDescription": "天下クラウド株式会社、入社 4 週間目。佐々木 CTO が設計図を見せながら言う。\n\n「モバイルアプリのユーザーがログイン後に直接 S3 バケットへアクセスする仕組みが必要だ。加藤くんの設計は Cognito User Pool だけで止まってる。ユーザー認証に加えて、S3 呼び出し用の AWS 一時認証情報を払い出す Cognito のどの機能を使えばいい?」\n\nシナリオを読んで正しい Cognito の構成要素を答えろ。",
+      "tags": [
+        "dva",
+        "developer-associate",
+        "cognito",
+        "identity-pool",
+        "sts",
+        "mobile",
+        "aws-credentials"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "dva-dynamodb-conditional-write",
+      "name": "DynamoDB PutItem の二重書き込みを防ぐ条件式を答えろ (DVA DynamoDB)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "10〜20 分",
+      "shortDescription": "天下クラウド株式会社、入社 5 週間目。佐々木 CTO が設計レビューで止まった。\n\n「加藤くんのコード、PutItem で既存アイテムを上書きしてしまう。同じ主キーがすでに存在していたら書き込みを失敗させたい。どの条件式関数を ConditionExpression に使えばいい?」\n\nシナリオを読んで DynamoDB の条件付き書き込みの正しいアプローチを答えろ。",
+      "tags": [
+        "dva",
+        "developer-associate",
+        "dynamodb",
+        "conditional-write",
+        "attribute-not-exists",
+        "optimistic-locking"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "dva-lambda-env-plaintext-secret",
+      "name": "Lambda 環境変数に埋まった秘密を掘り出せ (DVA Lambda セキュリティ)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、入社 3 週間目。佐々木 CTO が険しい顔で言う。\n\n「加藤くんが Lambda の環境変数に何かを直接書いて残していったらしい。Secrets Manager を使うべきところをサボったんだ。SECRET_CONFIG の値を base64 デコードして、中身を確認してくれ」。\n\n関数を呼ばずに設定だけ読み、環境変数の値をデコードして答えを導き出せ。",
+      "tags": [
+        "dva",
+        "developer-associate",
+        "lambda",
+        "security",
+        "secrets-manager",
+        "environment-variables"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "dva-lambda-iam-overprivilege",
+      "name": "Lambda 実行ロールの過剰権限を特定せよ (DVA IAM 最小権限)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "20〜30 分",
+      "shortDescription": "天下クラウド株式会社、入社 1 ヶ月目。佐々木 CTO が首を振る。\n\n「加藤くんの Lambda、関数の説明には『DynamoDB から 1 件 GetItem するだけ』って書いてあるのに、実行ロールに `dynamodb:*` を `*` で全許可してる。最小権限原則の違反だ。この関数が本当に必要な Action は何 1 つだけか答えてくれ」。\n\nロールのポリシーを読んで、関数説明と照らし合わせ、正しく絞り込んだ Action を答えろ。",
+      "tags": [
+        "dva",
+        "developer-associate",
+        "lambda",
+        "iam",
+        "least-privilege",
+        "dynamodb"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "dva-lambda-reserved-concurrency",
+      "name": "Lambda の予約済み同時実行数を読み取れ (DVA Lambda 同時実行)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、入社 2 ヶ月目。佐々木 CTO が問題を指摘する。\n\n「加藤くんの Lambda、同時実行数に上限を設定してあるはずだ。他のアカウントのワークロードを保護するために ReservedConcurrentExecutions が何件に設定されているか確認してくれ」。\n\n関数の設定を読んで予約済み同時実行数を報告せよ。",
+      "tags": [
+        "dva",
+        "developer-associate",
+        "lambda",
+        "concurrency",
+        "reserved-concurrency",
+        "throttling"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "dva-sqs-visibility-timeout",
+      "name": "SQS キューの Visibility Timeout を読み取れ (DVA SQS)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "10〜20 分",
+      "shortDescription": "天下クラウド株式会社、入社 3 週間目。処理が遅いワーカーがメッセージを二重処理している。佐々木 CTO が苦い顔で言う。\n\n「加藤くんが設定した SQS キュー、Visibility Timeout が短すぎてワーカーが処理完了前にメッセージが再度見えてしまってる。現在の Visibility Timeout は何秒か確認して答えてくれ」。\n\nキューの属性を読んで値を報告せよ。",
+      "tags": [
+        "dva",
+        "developer-associate",
+        "sqs",
+        "visibility-timeout",
+        "messaging",
+        "queue"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "dva-stepfunctions-task-count",
+      "name": "Step Functions ステートマシンの Task ステート数を数えろ (DVA Step Functions)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "20〜30 分",
+      "shortDescription": "天下クラウド株式会社、入社 2 ヶ月半。佐々木 CTO が設計レビュー中に言う。\n\n「加藤くんが作った Step Functions のワークフロー、Task ステートが何個あるか誰も把握してない。Task ステートだけを数えてくれ。Pass / Choice / Wait は含めるな」。\n\nステートマシン定義を読んで Task ステートの数を報告せよ。",
+      "tags": [
+        "dva",
+        "developer-associate",
+        "step-functions",
+        "state-machine",
+        "task-state",
+        "workflow"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "dva-xray-tracing",
+      "name": "マイクロサービスのレイテンシを追跡する AWS サービスを答えろ (DVA X-Ray)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "10〜20 分",
+      "shortDescription": "天下クラウド株式会社、入社 6 週間目。本番で突然レイテンシが高騰した。佐々木 CTO が指示する。\n\n「API Gateway → Lambda → DynamoDB の呼び出し連鎖で、どこが遅いのかまったく見えない。加藤くんはリクエストごとにログを grep する原始的な方法しか残してない。エンドツーエンドで分散トレーシングできる AWS のサービスは何か?」\n\nシナリオを読んで正しいサービス名を答えろ。",
+      "tags": [
+        "dva",
+        "developer-associate",
+        "xray",
+        "tracing",
+        "observability",
+        "microservices",
+        "lambda"
+      ],
+      "scoringKind": "flag"
+    },
+    {
       "id": "hello-world",
       "name": "Hello World (Sample)",
       "category": "Challenge",
@@ -26,7 +884,7 @@
       "visibility": "public",
       "difficulty": 1,
       "estimatedDuration": "30 分",
-      "shortDescription": "天下クラウド株式会社、 2 日目。 加藤さんが production に残した小さな web stack (EC2 上で nginx + Python `/healthz`) を引き継いだ ── が、 同じアカウントには他チームの SRE がいて、 互いに相手のサービスを落とし合っている。\n\nあなたの仕事: 自分のスタックの 2 つの URL (frontend / API) を Participant Portal に登録 → Health Check Lambda が 1 分ごとに probe を始め、 両方 200 を返した分だけ +100 pt。 落とされたら SSM Session Manager で復旧 (SSH 不要)。\n\nDeploy しただけでは何も起きない。 URL を portal に登録した瞬間から Battle が始まる。",
+      "shortDescription": "天下クラウド株式会社、 2 日目。 加藤さんが production に残した小さな web stack (EC2 上で nginx + Python `/healthz`) を引き継いだ ── が、 運営のレッドチームが予告なく障害を注入してくる (例: nginx を停止)。\n\nあなたの仕事: 自分のスタックの 2 つの URL (frontend / API) を Participant Portal に登録 → Health Check Lambda が 1 分ごとに probe を始め、 両方 200 を返した分だけ +100 pt。 落とされたら SSM Session Manager で復旧 (SSH 不要、 早く直すほど損失が小さい)。\n\nDeploy しただけでは何も起きない。 URL を portal に登録した瞬間から Battle が始まる。",
       "tags": [
         "sample",
         "battle",
@@ -63,7 +921,7 @@
       "visibility": "public",
       "difficulty": 4,
       "estimatedDuration": "90〜120 分",
-      "shortDescription": "天下クラウド株式会社、 入社 1 ヶ月。 加藤さんが残した EC2 1 台同居のモノリス (users / orders / catalog の 3 サービスを nginx reverse proxy が path で振り分け) を引き継いだ。 佐々木 CTO 曰く 『そろそろマネージドに分けてくれない? Lambda でも ECS でも App Runner でも、 サービスごとに違う hosting でいい』。\n\nあなたの仕事: 各サービスを切り出して別 hosting に移し、 切り出した URL を Participant Portal の override に登録する。 score engine は登録された URL を 1 分ごとに probe し、 hosting の種類によって配点が変わる。\n\n```\n  [初期 (deploy 直後)]                    [移行ゴール]\n  ┌── EC2 (t3.small) ──┐                  ┌── Service Router ──┐\n  │ nginx :80          │                  │  (API GW / ALB)    │\n  │  /users  → :3001   │  ───migrate───>  └──┬─────┬─────┬─────┘\n  │  /orders → :3002   │                     │     │     │\n  │  /catalog→ :3003   │                     ▼     ▼     ▼\n  └────────────────────┘                  ┌──────┐┌────┐┌──────────┐\n                                          │Lambda││ECS ││App Runner│\n                                          │users ││ord ││catalog   │\n                                          └──────┘└────┘└──────────┘\n```\n\n3 サービスの hosting 先は自由に組み替えてよい (上の絵は一例)。 deploy しただけでは EC2 routing のまま、 自分で切り出すまで点数は伸びない。",
+      "shortDescription": "天下クラウド株式会社、 入社 1 ヶ月。 加藤さんが残した EC2 1 台同居のモノリス (users / orders / catalog の 3 サービスを nginx reverse proxy が path で振り分け) を引き継いだ。 佐々木 CTO 曰く 『そろそろマネージドに分けてくれない? Lambda でも ECS でも App Runner でも、 サービスごとに違う hosting でいい』。\n\nあなたの仕事: 各サービスを切り出して別 hosting に移し、 切り出した URL を Participant Portal の override に登録する。 score engine は登録された URL を 1 分ごとに probe し、 hosting の種類によって配点が変わる。\n\n3 サービスの hosting 先は自由に組み替えてよい。 deploy しただけでは EC2 routing のまま、 自分で切り出すまで点数は伸びない。",
       "tags": [
         "microservices",
         "migration",
@@ -76,17 +934,301 @@
       "scoringKind": "phased-polling"
     },
     {
-      "id": "my-first-challenge",
-      "name": "My First Challenge",
+      "id": "mla-automatic-model-tuning",
+      "name": "SageMaker の自動ハイパーパラメータ探索機能を特定せよ (MLA AMT)",
       "category": "Challenge",
-      "status": "draft",
+      "status": "ready",
       "visibility": "public",
       "difficulty": 2,
-      "estimatedDuration": "30〜45 分",
-      "shortDescription": "deploy 後に AWS Console / CLI で正解 flag を発見し portal に提出する Challenge (flag 採点)。",
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、ML モデル改善プロジェクト。佐々木 CTO が問う。\n\n「加藤くんが手作業でハイパーパラメータを試してるんだが、何十通りも試すのに時間がかかりすぎる。SageMaker に最適なハイパーパラメータを自動で探索してくれる機能はないか?」\n\n手動グリッドサーチより賢い自動探索機能を特定せよ。",
       "tags": [
-        "sample",
-        "challenge"
+        "mla",
+        "ml-engineer-associate",
+        "sagemaker",
+        "automatic-model-tuning",
+        "hyperparameter-optimization",
+        "bayesian-optimization",
+        "mlops"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "mla-batch-transform",
+      "name": "夜間の大量データスコアリング推論モードを選べ (MLA Batch Transform)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、ML パイプライン設計レビュー。佐々木 CTO が言う。\n\n「加藤くんが設計したスコアリングジョブ、毎晩 1000 万レコードをバッチ処理したい。レイテンシー要件はなし、常時エンドポイントを立てるのはコストの無駄。どの推論モードを使えばいい?」\n\nリアルタイムエンドポイントと混同せず、正しい推論モードを選べ。",
+      "tags": [
+        "mla",
+        "ml-engineer-associate",
+        "sagemaker",
+        "batch-transform",
+        "offline-inference",
+        "batch-processing",
+        "inference"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "mla-feature-store-online",
+      "name": "推論時の低レイテンシー特徴量取得モードを選べ (MLA Feature Store)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、リアルタイム推論基盤の設計。佐々木 CTO が要件を伝える。\n\n「加藤くんが SageMaker Feature Store を使うと言っていたが、推論時に数ミリ秒で特徴量を取得しないといけない。Feature Store にはモードが 2 つあるけど、どっちを使えばいい?」\n\nオフラインストア (履歴分析用) と混同しないよう、正しいモードを特定せよ。",
+      "tags": [
+        "mla",
+        "ml-engineer-associate",
+        "sagemaker",
+        "feature-store",
+        "online-store",
+        "real-time-inference",
+        "low-latency"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "mla-model-monitor-drift",
+      "name": "本番データのドリフト検出 SageMaker 機能を特定せよ (MLA Model Monitor)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、ML 本番運用レビュー。佐々木 CTO が問いかける。\n\n「加藤くんが 6 ヶ月前に本番デプロイしたモデル、最近精度が落ちてる気がする。訓練データと本番入力データの分布が乖離していないか自動で検出する SageMaker の機能って何?」\n\nデータドリフト検出に特化した機能を特定せよ。",
+      "tags": [
+        "mla",
+        "ml-engineer-associate",
+        "sagemaker",
+        "model-monitor",
+        "data-drift",
+        "mlops",
+        "model-quality"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "mla-pipeline-register-model",
+      "name": "SageMaker Pipelines でモデルをレジストリに登録するステップを特定せよ (MLA Pipeline)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、MLOps 基盤の構築プロジェクト。佐々木 CTO が言う。\n\n「加藤くんが設計した ML パイプライン、学習後に承認済みモデルをレジストリにバージョン管理して登録するステップが抜けてる。SageMaker Pipelines でその処理を担うステップタイプは何?」\n\nトレーニングステップ・評価ステップと混同せずに、正しいステップタイプを特定せよ。",
+      "tags": [
+        "mla",
+        "ml-engineer-associate",
+        "sagemaker",
+        "pipelines",
+        "model-registry",
+        "mlops",
+        "registermodel"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "mla-sagemaker-serverless",
+      "name": "SageMaker の間欠トラフィック向けエンドポイントタイプを選べ (MLA サーバーレス推論)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、ML 推論基盤の設計レビュー。佐々木 CTO が言う。\n\n「加藤くんが設計したモデル、平日昼間だけリクエストがあって夜間はゼロ。リアルタイムエンドポイントをずっと立てておくのはコストの無駄だ。バースト間はゼロにスケールして、推論ごとに課金されるタイプを選んでくれ」。\n\n4 つの選択肢 (real-time / serverless / async / batch) から正しいものを選べ。",
+      "tags": [
+        "mla",
+        "ml-engineer-associate",
+        "sagemaker",
+        "serverless-inference",
+        "endpoint",
+        "cost-optimization",
+        "inference"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "mls-binary-classification",
+      "name": "チャーン予測の ML 問題型を特定せよ (MLS 二値分類)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、 入社 2 週間目。 佐々木 CTO が深刻な顔をしている。\n\n「加藤くんが構築しかけた ML パイプラインがある。 データは 18 万件の顧客レコードで、 ラベルは『30 日以内に解約した: yes/no』。 どの ML 問題タイプを選ぶべきか、 誰も決めていないんだ」。\n\nSSM パラメータにシナリオとデータの詳細が入っている。 正しい ML 問題型を導いて TC{...} 形式で提出しろ。",
+      "tags": [
+        "mls",
+        "ml-specialty",
+        "machine-learning",
+        "classification",
+        "supervised-learning",
+        "sagemaker"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "mls-feature-scaling",
+      "name": "スケールが違う特徴量を揃える前処理を特定せよ (MLS 正規化)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、 入社 6 週間目。 佐々木 CTO が訝しげな顔をしている。\n\n「加藤くんのモデル、 勾配降下法が収束しないって言ってる。 特徴量の `age` は 0〜100 なのに `annual_income` は 20,000〜500,000 なんだ。 これ、 どう直す?」\n\nSSM パラメータに特徴量のスケール比較と選択肢が入っている。 正しい前処理手法を特定して TC{...} 形式で提出しろ。",
+      "tags": [
+        "mls",
+        "ml-specialty",
+        "machine-learning",
+        "feature-scaling",
+        "normalization",
+        "preprocessing",
+        "gradient-descent"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "mls-imbalanced-metric",
+      "name": "不均衡クラスの正しい評価指標を選べ (MLS F1 スコア)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、 入社 1 ヶ月目。 佐々木 CTO が怒っている。\n\n「加藤くんのモデルが『精度 99.9%』 と言ってたのに、 リリースしたら詐欺を 1 件も検知できなかった。 評価指標の選び方が間違ってるはずだ。 何を使えばよかった?」\n\nSSM パラメータに混同行列とクラス分布が入っている。 正しい指標を特定して TC{...} 形式で提出しろ。",
+      "tags": [
+        "mls",
+        "ml-specialty",
+        "machine-learning",
+        "imbalanced-dataset",
+        "f1-score",
+        "precision-recall",
+        "fraud-detection"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "mls-missing-data-imputation",
+      "name": "欠損値を前処理で埋める技術を特定せよ (MLS 補完)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、 入社 5 週間目。 佐々木 CTO が Jupyter Notebook の画面を見せてくる。\n\n「加藤くんのデータパイプラインが age カラムに 3.2% の欠損値を出してる。 SageMaker に投げる前に前処理で対処が必要なんだが、 その技術の名前が思い出せなくて……」。\n\nSSM パラメータに欠損パターンと選択肢が入っている。 正しい前処理手法を特定して TC{...} 形式で提出しろ。",
+      "tags": [
+        "mls",
+        "ml-specialty",
+        "machine-learning",
+        "missing-data",
+        "imputation",
+        "preprocessing",
+        "feature-engineering"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "mls-overfitting-regularization",
+      "name": "過学習を直せ — バリアンス削減の正解手法 (MLS 正則化)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、 入社 3 週間目。 佐々木 CTO が訓練ログを見せてくる。\n\n「加藤くんのモデル、 訓練精度 99.1% なのに検証精度 72.3% なんだが……。 これ、 直し方が分からなくて止まってるんだ」。\n\nSSM パラメータに訓練ログと学習曲線のデータが入っている。 過学習の根本原因と正しい対処法の『ファミリー』を特定して TC{...} 形式で提出しろ。",
+      "tags": [
+        "mls",
+        "ml-specialty",
+        "machine-learning",
+        "overfitting",
+        "regularization",
+        "deep-learning",
+        "bias-variance"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "pas-hana-high-memory",
+      "name": "SAP HANA に必要なインスタンスファミリーを特定せよ (PAS 高メモリ)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 4,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、 入社 2 ヶ月目。 佐々木 CTO が SAP の資料を広げている。\n\n「加藤くんが AWS への SAP HANA 移行を途中で放置した。 HANA はインメモリ DB だから普通の EC2 では動かない。 SAP 認定の、 何テラバイトもメモリを積んだ専用インスタンスファミリーが必要なんだが……」。\n\nSSM パラメータに HANA の SAP QUICK SIZER の結果と選択肢が入っている。 正しい EC2 インスタンスファミリーを特定して TC{...} 形式で提出しろ。",
+      "tags": [
+        "pas",
+        "sap-on-aws",
+        "sap-hana",
+        "ec2",
+        "high-memory",
+        "sizing",
+        "hana-system-replication"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "pas-sap-backint",
+      "name": "SAP HANA を S3 へ直接バックアップするコンポーネントを特定せよ (PAS Backint)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 4,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、 入社 3 ヶ月目。 佐々木 CTO が深夜に電話してくる。\n\n「加藤くんが設計した SAP HANA の DR 戦略、 バックアップ先が不明なんだ。 HANA を S3 に直接バックアップするための AWS 認定エージェント、 名前がわからなくて……」。\n\nSSM パラメータにバックアップアーキテクチャの設計書と選択肢が入っている。 正しいコンポーネントを特定して TC{...} 形式で提出しろ。",
+      "tags": [
+        "pas",
+        "sap-on-aws",
+        "sap-hana",
+        "backint",
+        "backup",
+        "s3",
+        "disaster-recovery"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "pas-sap-overlay-ip",
+      "name": "SAP HANA HA の仮想 IP を AZ 間で引き継ぐ技術を特定せよ (PAS オーバーレイ IP)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 4,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、 入社 4 ヶ月目。 佐々木 CTO が HA 設計書を広げている。\n\n「加藤くんの SAP HANA HA 設計に穴がある。 プライマリが AZ-1、 セカンダリが AZ-2 なんだが、 フェールオーバー時に仮想 IP を AZ をまたいで引き継ぐ方法が書いていない。 通常のルーティングでは AZ を越えた IP の引き継ぎはできないんだが……」。\n\nSSM パラメータに HA アーキテクチャ図と選択肢が入っている。 正しい技術を特定して TC{...} 形式で提出しろ。",
+      "tags": [
+        "pas",
+        "sap-on-aws",
+        "sap-hana",
+        "high-availability",
+        "overlay-ip",
+        "hana-system-replication",
+        "pacemaker"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "pas-sap-sapmnt-efs",
+      "name": "/sapmnt の共有 POSIX ファイルシステムに使うサービスを特定せよ (PAS EFS)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 4,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、 入社 5 ヶ月目。 佐々木 CTO がストレージ設計書を広げている。\n\n「加藤くんの SAP NetWeaver 設計に問題がある。 複数の ABAP アプリサーバーが /sapmnt を AZ をまたいで共有マウントしなきゃいけないのに、 ストレージの選定が EBS になってる。 EBS は 1 インスタンスにしかアタッチできないんだが……」。\n\nSSM パラメータに SAP ファイルシステム要件と選択肢が入っている。 正しいサービスを特定して TC{...} 形式で提出しろ。",
+      "tags": [
+        "pas",
+        "sap-on-aws",
+        "sap-netweaver",
+        "efs",
+        "shared-filesystem",
+        "posix",
+        "sapmnt"
       ],
       "scoringKind": "flag"
     },
@@ -110,6 +1252,711 @@
       "scoringKind": "flag"
     },
     {
+      "id": "saa-asg-target-tracking",
+      "name": "ASG ターゲット追跡ポリシーの目標値を調べろ (SAA Auto Scaling)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "20〜30 分",
+      "shortDescription": "天下クラウド株式会社、 入社 2 ヶ月目。 加藤さんが設定した Auto Scaling グループのスケーリングポリシーを確認するよう指示された。\n\n「CPU 使用率のターゲット追跡スケーリング、 目標値が何パーセントに設定されてるか確認してくれ。 次のキャパシティプランニング会議で使いたい」\n\n実際にデプロイされた ASG のスケーリングポリシーを調べて、 TargetValue を報告しろ。",
+      "tags": [
+        "saa",
+        "solutions-architect-associate",
+        "auto-scaling",
+        "target-tracking",
+        "ec2",
+        "scaling-policy"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "saa-availability-zone-spread",
+      "name": "サブネットが何 AZ に分散しているか数えろ (SAA 高可用性 VPC 設計)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "20〜30 分",
+      "shortDescription": "天下クラウド株式会社、 入社 4 ヶ月目。 可用性設計のレビューを依頼された。\n\n「加藤くんが作った VPC、 サブネットを複数の AZ に分散してると言ってたけど、 実際に何 AZ にまたがってるか確認してくれ。 HA 要件的に 2 AZ で十分か 3 AZ 必要かを判断したい」\n\nデプロイされたサブネットを調べて、 分散している Availability Zone の数を数えて報告しろ。",
+      "tags": [
+        "saa",
+        "solutions-architect-associate",
+        "vpc",
+        "availability-zone",
+        "high-availability",
+        "multi-az",
+        "networking"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "saa-cloudfront-oac",
+      "name": "CloudFront だけが S3 を読める仕組みは何? (SAA OAC 特定)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "20〜30 分",
+      "shortDescription": "天下クラウド株式会社、 入社 7 週間目。 佐々木 CTO がセキュリティ監査結果を手に怒っている。\n\n「加藤くんが S3 バケットを public にしたまま辞めてしまった……。 CloudFront 経由でしか配信したくないのに、 誰でも S3 URL で直接読める状態だ。 バケットは非公開にして、 CloudFront だけが読めるようにする機能、 OAI の後継は何だっけ?」\n\nデプロイされたプライベートバケットのバケットポリシーを分析して、 この機能名を答えろ。",
+      "tags": [
+        "saa",
+        "solutions-architect-associate",
+        "cloudfront",
+        "s3",
+        "oac",
+        "origin-access-control",
+        "security"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "saa-dr-strategy-pick",
+      "name": "RTO 10 分・RPO 1 分のコスパ最良 DR 戦略は? (SAA DR 選択)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "20〜25 分",
+      "shortDescription": "天下クラウド株式会社、 入社 5 週間目。 佐々木 CTO が DR (ディザスターリカバリー) 計画の策定を急ぐ。\n\n「加藤くんが DR 戦略を検討し始めたまま辞めてしまった。 要件は RTO 10 分、 RPO 1 分、 コストは抑えたい。 スケールダウンしたスタンバイ環境を常時起動しておく案がある。 これ、 4 つの DR 戦略のどれに当てはまる?」\n\nシナリオを読んで、 適切な DR 戦略を答えろ。",
+      "tags": [
+        "saa",
+        "solutions-architect-associate",
+        "disaster-recovery",
+        "rto",
+        "rpo",
+        "warm-standby",
+        "resilience"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "saa-dynamodb-gsi-key",
+      "name": "DynamoDB GSI のパーティションキーを調べろ (SAA NoSQL 設計)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "20〜30 分",
+      "shortDescription": "天下クラウド株式会社、 入社 2.5 ヶ月目。 加藤さんが設計した DynamoDB テーブルに GSI (Global Secondary Index) が設定されているらしい。\n\n「email でユーザーを検索できるようにしてあるはず。 GSI のパーティションキーが何になってるか確認してくれ」\n\n実際にデプロイされた DynamoDB テーブルを調べて、 GSI のキースキーマを報告しろ。",
+      "tags": [
+        "saa",
+        "solutions-architect-associate",
+        "dynamodb",
+        "gsi",
+        "global-secondary-index",
+        "nosql"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "saa-efs-shared-filesystem",
+      "name": "複数 EC2 で同時マウントできる共有ストレージは? (SAA EFS 選択)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、 入社 4 週間目。 佐々木 CTO がファイルサーバー移行の相談にきた。\n\n「加藤くんが置いていったオンプレの NFS サーバー、 AWS に移行したい。 複数の EC2 インスタンスが複数の AZ から同時にマウントして読み書きできるストレージ、 どれを使えばいい? EBS を複数台に繋げばいいんじゃないかと言ってる人もいるんだが……」\n\nシナリオを読んで、 正しいストレージサービスを答えろ。",
+      "tags": [
+        "saa",
+        "solutions-architect-associate",
+        "efs",
+        "storage",
+        "nfs",
+        "shared-filesystem",
+        "multi-az"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "saa-elb-type-pick",
+      "name": "Layer 7 で振り分けるロードバランサーはどれ? (SAA ELB 選択)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、 入社 2 週間目。 佐々木 CTO が新サービスの設計書を手にやってきた。\n\n「加藤くんが途中まで書いた構成図、 ロードバランサーの種類が空白のままなんだ。 URL パス `/api/*` と `/web/*` でバックエンドを振り分けたい、 WebSocket も使う、 HTTP/HTTPS 対応……これ、 どの ELB を選べばいいんだっけ?」\n\nシナリオ情報を分析して、 正しいロードバランサー種別を答えろ。",
+      "tags": [
+        "saa",
+        "solutions-architect-associate",
+        "elb",
+        "alb",
+        "load-balancer",
+        "networking",
+        "layer7"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "saa-nat-gateway-egress",
+      "name": "プライベートサブネットから安全にインターネットへ (SAA NAT Gateway)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "20〜25 分",
+      "shortDescription": "天下クラウド株式会社、 入社 6 週間目。 佐々木 CTO がセキュリティ審査の結果を持ってきた。\n\n「加藤くんのプライベートサブネット構成、 OS アップデートが当たらなくて問題になってる。 外には出たいけど、 外からは入ってこれない ── この一方通行の出口をどう作るか調べてほしい。 Internet Gateway を直接使えばいいという意見もあるが、 それで本当にインバウンドをブロックできるのか?」\n\nシナリオを読んで、 プライベートサブネットの安全な外向き経路を提供するコンポーネントを答えろ。",
+      "tags": [
+        "saa",
+        "solutions-architect-associate",
+        "nat-gateway",
+        "vpc",
+        "networking",
+        "private-subnet",
+        "egress"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "saa-rds-multi-az-vs-read-replica",
+      "name": "RDS 高可用性機能を選べ (SAA Multi-AZ vs リードレプリカ)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、 入社 3 週間目。 深夜に本番 DB がダウンし、 佐々木 CTO から緊急指示が来た。\n\n「加藤くんは RDS をシングル AZ で動かしてた。 AZ 障害が来たら自動フェイルオーバーが要る。 読み取り負荷の分散じゃなくて、 **スタンバイへの自動切り替え** が目的だ。 どっちの機能を有効にすればいい?」\n\n要件を SSM パラメータで確認して、 正しい RDS 機能を特定しろ。",
+      "tags": [
+        "saa",
+        "solutions-architect-associate",
+        "rds",
+        "multi-az",
+        "high-availability",
+        "failover"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "saa-route53-latency-routing",
+      "name": "ユーザーを最も速いリージョンへ (SAA Route 53 レイテンシールーティング)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、 入社 3 週間目。 佐々木 CTO がグローバル展開の話を持ってきた。\n\n「加藤くんが立てた ap-northeast-1 だけのシステムを、 us-east-1 と eu-west-1 にも展開する。 ユーザーには自動的に一番速いリージョンへ飛んでもらいたい。 Route 53 のルーティングポリシー、 どれを使えばいいんだ?」\n\nシナリオを読んで、 適切なルーティングポリシーを答えろ。",
+      "tags": [
+        "saa",
+        "solutions-architect-associate",
+        "route53",
+        "dns",
+        "latency",
+        "routing-policy",
+        "global"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "saa-s3-default-encryption-algo",
+      "name": "S3 デフォルト暗号化アルゴリズムを特定せよ (SAA SSE-S3 監査)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、 入社 8 週間目。 佐々木 CTO がコンプライアンス監査の準備を急ぐ。\n\n「加藤くんが設定した S3 バケット、 デフォルト暗号化は有効になってるんだが、 監査票に『SSEAlgorithm の値を記入せよ』とある。 設定を確認して値を教えてくれないか。 SSE-KMS だとコストがかかる可能性があるので、 安い方の設定になっているはずなんだ」\n\nデプロイされたバケットの暗号化設定を確認して、 SSEAlgorithm の値を答えろ。",
+      "tags": [
+        "saa",
+        "solutions-architect-associate",
+        "s3",
+        "encryption",
+        "sse-s3",
+        "aes256",
+        "security"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "saa-s3-storage-class-pick",
+      "name": "S3 ストレージクラス選択 (SAA アクセスパターン分析)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、 入社 2 週間目。 佐々木 CTO が請求書を見て顔色を変えた。\n\n「加藤くんが全部 S3 Standard に突っ込んでたせいで、 四半期に一度しか触らないデータのストレージ費用がかさんでる。 アーカイブ遅延は絶対に許せない。 正しいストレージクラスに移すコスト試算を出してくれ」\n\nアクセスパターンは SSM パラメータに書いてある。 読んで SAA の知識で最適なクラスを当てろ。",
+      "tags": [
+        "saa",
+        "solutions-architect-associate",
+        "s3",
+        "storage-class",
+        "cost-optimization",
+        "ccoe"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "saa-sns-fanout-count",
+      "name": "SNS ファンアウトのサブスクリプション数を数えろ (SAA メッセージング)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、 入社 6 週間目。 加藤さんが設計した SNS ファンアウトパターンの構成確認を頼まれた。\n\n「注文イベントを複数のキューに同時配信してるはず。 SNS トピックのサブスクリプションがいくつあるか確認してくれ」\n\n実際にデプロイされた SNS トピックを調べて、 SQS キューのサブスクリプション数を数えて報告しろ。",
+      "tags": [
+        "saa",
+        "solutions-architect-associate",
+        "sns",
+        "sqs",
+        "fanout",
+        "messaging",
+        "pub-sub"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "saa-sqs-dlq-redrive",
+      "name": "SQS DLQ の maxReceiveCount を調べろ (SAA メッセージキュー監査)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、 入社 1 ヶ月目。 注文処理キューで処理失敗メッセージが DLQ に溜まり始めた。 佐々木 CTO が聞く。\n\n「加藤くんが設定した maxReceiveCount、 何回に設定してるんだっけ? 閾値を変えるかどうか判断したい」\n\n実際にデプロイされた SQS キューを調べて、 RedrivePolicy の maxReceiveCount を報告しろ。",
+      "tags": [
+        "saa",
+        "solutions-architect-associate",
+        "sqs",
+        "dlq",
+        "dead-letter-queue",
+        "redrive-policy"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "saa-vpc-gateway-endpoint-s3",
+      "name": "S3 への VPC エンドポイントの種類を調べろ (SAA ネットワーク設計)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "20〜30 分",
+      "shortDescription": "天下クラウド株式会社、 入社 3 ヶ月目。 プライベートサブネットから S3 へアクセスするための VPC エンドポイントが設定されている。\n\n「加藤くんが NAT Gateway なしで S3 に繋げたって言ってたけど、 VPC エンドポイントの種類は何を使ってるの? Gateway? Interface?」\n\n実際にデプロイされた VPC エンドポイントを調べて、 その VpcEndpointType を報告しろ。",
+      "tags": [
+        "saa",
+        "solutions-architect-associate",
+        "vpc",
+        "vpc-endpoint",
+        "gateway-endpoint",
+        "s3",
+        "networking"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "saa-vpc-public-subnet-audit",
+      "name": "公開サブネットは何個? (SAA VPC ルーティング監査)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "20〜30 分",
+      "shortDescription": "天下クラウド株式会社、 入社 1 週間目。 佐々木 CTO が外部監査の前に青ざめている。\n\n「加藤くんが残した VPC、 サブネットが 5 つあるんだけど…… どれがインターネットに口を開けてるのか、 誰も把握してない。 監査までに『公開サブネットは何個か』 を答えないといけないんだ」。\n\nサブネット名は当てにならない (加藤さんの命名はいい加減だった)。 ルートテーブルを読んで、 本当にインターネットゲートウェイへ抜けるサブネットだけを数えろ。",
+      "tags": [
+        "saa",
+        "solutions-architect-associate",
+        "vpc",
+        "networking",
+        "route-table",
+        "internet-gateway",
+        "ccoe"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "sap-aurora-global-database",
+      "name": "サブ秒クロスリージョンレプリケーションと高速 DR フェイルオーバーを実現する RDS 機能を答えろ (SAP Aurora Global)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 4,
+      "estimatedDuration": "20〜30 分",
+      "shortDescription": "天下クラウド株式会社、 着任 11 ヵ月目。 佐々木 CTO から DR 設計の相談が来る。\n\n「加藤くんが設計したリレーショナル DB の DR、 RPO 1 秒以下・RTO 数分で別リージョンに切り替えたいんだが……RDS Multi-AZ じゃリージョン間は無理らしい。 サブ秒レプリケーションで高速フェイルオーバーができる Aurora の機能は何だ?」\n\nシナリオを読んで、 正しい Aurora 機能を答えろ。",
+      "tags": [
+        "sap",
+        "solutions-architect-professional",
+        "aurora",
+        "rds",
+        "dr",
+        "cross-region",
+        "database"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "sap-budget-actions",
+      "name": "予算超過時にリソースを自動停止する AWS Budgets 機能を答えろ (SAP コスト制御)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 4,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、 着任 8 ヵ月目。 佐々木 CTO から深刻な話が来る。\n\n「加藤くんが作った開発環境、 誰かが夜間もインスタンスを動かし続けて請求が爆発してる。 予算を超えたら自動で IAM ポリシーを適用してリソースを止めたい。 それができる Budgets の機能は何だ?」\n\nシナリオを読んで、 AWS Budgets の正しい機能を答えろ。",
+      "tags": [
+        "sap",
+        "solutions-architect-professional",
+        "budgets",
+        "cost-management",
+        "automation",
+        "governance"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "sap-control-tower-guardrails",
+      "name": "マルチアカウントのランディングゾーンと予防/検知型ガードレールを提供するサービスを答えろ (SAP Control Tower)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 4,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、 着任 1 年目。 佐々木 CTO から大きなプロジェクトの話が来る。\n\n「これから 100 アカウントを新規に作る。 セキュリティのベースラインを守るために予防型と検知型のガードレールを自動適用したい。 Account Factory も欲しい。 これをまとめてやってくれるサービスは何だ?」\n\nシナリオを読んで、 正しい AWS サービスを答えろ。",
+      "tags": [
+        "sap",
+        "solutions-architect-professional",
+        "control-tower",
+        "organizations",
+        "governance",
+        "landing-zone",
+        "guardrails"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "sap-cross-account-externalid",
+      "name": "クロスアカウントロールの Confused Deputy を防ぐ条件キーを答えろ (SAP ExternalId 監査)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 4,
+      "estimatedDuration": "20〜35 分",
+      "shortDescription": "天下クラウド株式会社、 着任 4 ヵ月目。 佐々木 CTO からセキュリティ監査の依頼が届く。\n\n「加藤くんが作ったクロスアカウントの IAM ロール、 外部アカウントから AssumeRole できるんだけど……Confused Deputy 攻撃を防ぐ条件が本当に入ってるのか確認してくれ」。\n\nロールの信頼ポリシーを読んで、 Confused Deputy 問題を防ぐ条件キーを特定しろ。",
+      "tags": [
+        "sap",
+        "solutions-architect-professional",
+        "iam",
+        "cross-account",
+        "confused-deputy",
+        "security"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "sap-global-accelerator",
+      "name": "静的 Anycast IP・TCP/UDP ゲームトラフィック・高速フェイルオーバーを実現するサービスを答えろ (SAP Global Accelerator)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 4,
+      "estimatedDuration": "20〜30 分",
+      "shortDescription": "天下クラウド株式会社、 着任 10 ヵ月目。 佐々木 CTO からゲームサービスの設計相談が来る。\n\n「加藤くんが作ったグローバルゲームサービス、 世界中のプレイヤーからの TCP/UDP トラフィックに静的 IP が必要で、 リージョン障害時も数秒でフェイルオーバーしないといけない。 CloudFront では対応できないらしい。 どのサービスを使えばいい?」\n\nシナリオを読んで、 正しい AWS サービスを答えろ。",
+      "tags": [
+        "sap",
+        "solutions-architect-professional",
+        "global-accelerator",
+        "networking",
+        "anycast",
+        "gaming"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "sap-hybrid-dns-resolver",
+      "name": "オンプレ ↔ VPC の双方向 DNS 解決サービスを答えろ (SAP ハイブリッド DNS)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 4,
+      "estimatedDuration": "20〜30 分",
+      "shortDescription": "天下クラウド株式会社、 着任 5 ヵ月目。 佐々木 CTO が険しい顔で話しかけてくる。\n\n「加藤くんのオンプレ移行計画、 DNS の設計だけ白紙なんだ。 オンプレの DNS サーバーが VPC 内のホスト名を解決できて、 逆に VPC 側からオンプレのホスト名も解けないといけない。 どのサービスを使えばいいんだ?」\n\nシナリオを読んで、 最適な AWS サービスを答えろ。",
+      "tags": [
+        "sap",
+        "solutions-architect-professional",
+        "route53",
+        "dns",
+        "hybrid",
+        "networking",
+        "direct-connect"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "sap-migration-7rs-rehost",
+      "name": "7 つの R でアプリをコード変更なしに EC2 へ移すのはどれか (SAP 移行戦略)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 4,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、 着任 6 ヵ月目。 佐々木 CTO がホワイトボードの前に立っている。\n\n「加藤くんが書いた移行計画、 ストラテジーの名前が空欄なんだ。 アプリを最短でクラウドに持ってきたい。 コード変更なし、 OS とミドルウェアをそのまま EC2 に載せる作戦だよ」。\n\n7 つの R から正しい移行戦略を答えろ。",
+      "tags": [
+        "sap",
+        "solutions-architect-professional",
+        "migration",
+        "7rs",
+        "lift-and-shift",
+        "strategy"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "sap-org-trail",
+      "name": "全アカウントの CloudTrail を 1 つの設定で集約する機能を答えろ (SAP 組織トレイル)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 4,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、 着任 9 ヵ月目。 佐々木 CTO から監査対応の緊急依頼が来る。\n\n「加藤くんが作った Organizations、 50 アカウントあるのに CloudTrail が個別設定なんだ。 監査チームが 1 つの S3 バケットにまとめろって言ってる。 1 設定で全アカウントをカバーできる CloudTrail の機能は何だ?」\n\nシナリオを読んで、 正しい CloudTrail 機能を答えろ。",
+      "tags": [
+        "sap",
+        "solutions-architect-professional",
+        "cloudtrail",
+        "organizations",
+        "audit",
+        "governance",
+        "logging"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "sap-scp-allowed-region",
+      "name": "SCP の Deny ロジックを読んで許可リージョンを答えろ (SAP SCP 分析)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 4,
+      "estimatedDuration": "20〜35 分",
+      "shortDescription": "天下クラウド株式会社、 着任 3 ヵ月目。 佐々木 CTO から深夜に Slack が届く。\n\n「加藤くんが書いた SCP、 どのリージョンしか使えないのか誰も把握してない。 明朝の監査に間に合わせてくれ。 SSM に Policy を入れておいた」。\n\nSCP の Deny 条件を正しく読み解き、 実際に使えるリージョンを答えろ。",
+      "tags": [
+        "sap",
+        "solutions-architect-professional",
+        "scp",
+        "organizations",
+        "iam",
+        "policy-analysis"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "sap-snowball-vs-network",
+      "name": "500 TB を数日で転送するオフライン転送サービスを答えろ (SAP データ移行)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 4,
+      "estimatedDuration": "20〜30 分",
+      "shortDescription": "天下クラウド株式会社、 着任 7 ヵ月目。 佐々木 CTO から緊急連絡が来る。\n\n「加藤くんのデータセンター閉鎖計画、 500 TB のデータを AWS に移さないといけないんだが……回線が 1 Gbps しかなくて、 期日まで数日しかない。 どうすれば間に合う?」\n\n転送時間を計算して、 オフライン転送サービスを答えろ。",
+      "tags": [
+        "sap",
+        "solutions-architect-professional",
+        "migration",
+        "snowball",
+        "data-transfer",
+        "snow-family"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "scs-guardduty-finding-type",
+      "name": "GuardDuty finding — クリプトマイニングドメインへの通信を分類せよ (SCS-C02)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、入社 2 ヶ月目。GuardDuty のアラートが深夜に鳴り響く。\n\n「EC2 インスタンスが既知のクリプトマイニングドメインに問い合わせを送ってる。加藤くんの環境で何かやらかしたらしい。GuardDuty の finding は何カテゴリになる?」\n\nSSM Parameter のブリーフィングを読み、GuardDuty の finding カテゴリを特定しろ。",
+      "tags": [
+        "scs",
+        "security-specialty",
+        "guardduty",
+        "finding-type",
+        "cryptocurrency",
+        "threat-detection"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "scs-iam-explicit-deny",
+      "name": "明示的 Deny は最強 — IAM ポリシー優先順位の解読 (SCS-C02)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、入社 3 週間目。佐々木 CTO が険しい顔で呼んでくる。\n\n「加藤くんが作った IAM ロール、S3 への権限がぐちゃぐちゃになってる。Allow ポリシーと Deny ポリシーが混在してるんだが、結局 DeleteObject は実行できるのか?」\n\n2 つのインラインポリシーを読んで、IAM の評価ロジックを使い、正しく答えろ。",
+      "tags": [
+        "scs",
+        "security-specialty",
+        "iam",
+        "explicit-deny",
+        "policy-evaluation",
+        "least-privilege"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "scs-kms-key-policy-wildcard",
+      "name": "KMS キーポリシーのワイルドカード Principal を特定せよ (SCS-C02)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 4,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、入社 1 ヶ月目。佐々木 CTO からセキュリティレビューが飛んでくる。\n\n「加藤くんが作った KMS キーポリシー、なんか怪しいんだけど。`kms:Decrypt` を誰でも呼べる状態になってないか確認してほしい」\n\nポリシー JSON を読み、誰でも復号できる危険なプリンシパル値を特定しろ。",
+      "tags": [
+        "scs",
+        "security-specialty",
+        "kms",
+        "key-policy",
+        "principal",
+        "wildcard",
+        "data-protection"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "scs-macie-pii",
+      "name": "S3 の PII を自動検出するサービスを特定せよ (SCS-C02)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "10〜15 分",
+      "shortDescription": "天下クラウド株式会社、入社 4 ヶ月半。佐々木 CTO からデータセキュリティの相談が来る。\n\n「加藤くんが S3 バケットにアップロードしたデータに個人情報 (PII) が含まれているかもしれない。自動でスキャンして分類してくれるサービスがあると聞いたんだが、何だっけ?」\n\nシナリオを読み、S3 の PII / 機密データを自動的に検出・分類するサービスを答えろ。",
+      "tags": [
+        "scs",
+        "security-specialty",
+        "macie",
+        "pii",
+        "s3",
+        "data-classification",
+        "sensitive-data"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "scs-permissions-boundary",
+      "name": "IAM ロールの最大権限を制限する機能を特定せよ (SCS-C02)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 4,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、入社 3 ヶ月目。佐々木 CTO が権限管理の強化を指示してくる。\n\n「開発チームに IAM ロール作成を委任したいんだけど、彼らが自分に管理者権限を付与できないよう制限したい。加藤くんが調べてた機能があるらしいんだけど、名前が分からなくて。このロールに設定されてる IAM 機能を特定してほしい」\n\nロールの設定を読み、最大権限を上限設定する IAM の機能名を答えろ。",
+      "tags": [
+        "scs",
+        "security-specialty",
+        "iam",
+        "permissions-boundary",
+        "least-privilege",
+        "delegation"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "scs-s3-deny-insecure-transport",
+      "name": "S3 バケットポリシーで TLS を強制するコンディションキーを特定せよ (SCS-C02)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、入社 5 週間目。佐々木 CTO から S3 のセキュリティ強化依頼が来る。\n\n「加藤くんが残した S3 バケット、HTTP でアクセスできる状態らしい。バケットポリシーで TLS を強制してる条件キーを確認してほしい」\n\nバケットポリシーを読み、HTTP アクセスを拒否している条件キーを特定しろ。",
+      "tags": [
+        "scs",
+        "security-specialty",
+        "s3",
+        "bucket-policy",
+        "tls",
+        "secure-transport",
+        "data-protection"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "scs-secrets-manager-rotation",
+      "name": "RDS 認証情報の自動ローテーションに使うサービスはどれ? (SCS-C02)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "10〜15 分",
+      "shortDescription": "天下クラウド株式会社、入社 2 ヶ月半。佐々木 CTO から RDS のセキュリティ強化を依頼される。\n\n「加藤くんが RDS のパスワードを SSM Parameter Store に平文で保存してた。30 日ごとに自動ローテーションしたいんだが、SSM じゃ無理らしい。どのサービスを使えばいい?」\n\nシナリオを読み、RDS 認証情報の自動ローテーションに適したサービスを特定しろ。",
+      "tags": [
+        "scs",
+        "security-specialty",
+        "secrets-manager",
+        "rotation",
+        "rds",
+        "credential-management"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "scs-sg-open-port-audit",
+      "name": "世界に開いた管理ポートを探せ (SCS Security Group 監査)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、 入社 10 日目。 深夜に GuardDuty が `UnauthorizedAccess` の High finding を上げ、 佐々木 CTO から電話が鳴る。\n\n「4 つあるセキュリティグループのどれかで、 リモート管理ポートがインターネット全開になってるらしい。 加藤くんが検証で開けて閉め忘れたやつだ……。 どのポートだ?」\n\n80/443 が世界に開いているのは Web 層として正常。 罠はそこじゃない。 ingress ルールを読んで、 本当にヤバい 1 つを特定しろ。",
+      "tags": [
+        "scs",
+        "security-specialty",
+        "saa",
+        "security-group",
+        "networking",
+        "guardduty",
+        "least-exposure"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "scs-vpc-flow-log-reject",
+      "name": "VPC フローログのブロックトラフィックを示す ACTION 値を特定せよ (SCS-C02)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、入社 4 ヶ月目。佐々木 CTO からネットワーク調査の依頼が来る。\n\n「加藤くんの VPC でトラフィックがブロックされてる疑いがある。VPC フローログを有効にしてあるはずなんだが、ブロックされたパケットはフローログ上でどんな ACTION 値になるのか分からなくて」\n\nVPC と CloudWatch フローログが設定された環境を確認し、ブロックトラフィックを示す ACTION フィールド値を答えろ。",
+      "tags": [
+        "scs",
+        "security-specialty",
+        "vpc",
+        "flow-logs",
+        "cloudwatch",
+        "networking",
+        "traffic-analysis"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "scs-waf-rate-based",
+      "name": "レートベースの IP ブロックに使う AWS WAF ルールタイプを特定せよ (SCS-C02)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "10〜15 分",
+      "shortDescription": "天下クラウド株式会社、入社 5 ヶ月目。佐々木 CTO から DDoS 対策の依頼が来る。\n\n「加藤くんが残した Web アプリが特定の IP から 1000 req/5min を超えるアクセスを受けてる。AWS WAF で自動的にブロックしたいんだけど、どのルールタイプを使えばいい?」\n\nシナリオを読み、レートを超えた IP を自動ブロックする WAF のルールタイプを特定しろ。",
+      "tags": [
+        "scs",
+        "security-specialty",
+        "waf",
+        "rate-based-rule",
+        "ddos",
+        "ip-blocking",
+        "application-security"
+      ],
+      "scoringKind": "flag"
+    },
+    {
       "id": "security-battle-royale",
       "name": "Security Battle Royale",
       "category": "Battle",
@@ -125,6 +1972,198 @@
         "uptime"
       ],
       "scoringKind": "uptime-multi"
+    },
+    {
+      "id": "soa-asg-health-check-type",
+      "name": "ALB のヘルスチェック失敗でインスタンスを置き換える ASG の設定を特定せよ (SOA ASG 監査)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "20〜30 分",
+      "shortDescription": "天下クラウド株式会社、入社 10 週間目。サービスが断続的に落ちていると佐々木 CTO から連絡が来る。\n\n「加藤くんの ASG、ロードバランサーのヘルスチェックで落ちたインスタンスを自動置き換えしてるはずなんだけど、HealthCheckType が何になってるか確認してくれる?」\n\nASG の設定を読んで、ELB ヘルスチェック失敗でインスタンスを置き換えるための HealthCheckType を答えろ。",
+      "tags": [
+        "soa",
+        "sysops-administrator",
+        "auto-scaling",
+        "health-check",
+        "elb",
+        "ec2",
+        "high-availability"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "soa-backup-retention",
+      "name": "AWS Backup プランの保持期間を読め (SOA バックアップ監査)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、入社 5 週間目。内部監査チームから質問が飛んでくる。\n\n「加藤くんが設定した AWS Backup プラン、バックアップを何日間保持しているんですか? コンプライアンス要件の確認が必要で……」。\n\n佐々木 CTO に丸投げされた。Backup コンソールかコマンドラインでプラン設定を読み、保持日数を答えろ。",
+      "tags": [
+        "soa",
+        "sysops-administrator",
+        "backup",
+        "aws-backup",
+        "retention",
+        "compliance"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "soa-cloudwatch-alarm-threshold",
+      "name": "CPUUtilization アラームの閾値を読め (SOA CloudWatch 監査)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、入社 2 週間目。佐々木 CTO から緊急 Slack が届く。\n\n「加藤くんが設定した CPU アラーム、何パーセントで発火するか誰も把握してない。監視の基準値を今すぐ確認してくれ」。\n\nアラーム名は意味深だが数字が入っていない。CloudWatch コンソールでアラームの設定を読んで、正確な閾値を答えろ。",
+      "tags": [
+        "soa",
+        "sysops-administrator",
+        "cloudwatch",
+        "monitoring",
+        "alarms",
+        "threshold"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "soa-cost-allocation-tag-count",
+      "name": "CostCenter タグが付いたリソースは何個か (SOA コスト配賦タグ監査)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、入社 7 週間目。経理部門から苦情が入った。佐々木 CTO が顔を曇らせる。\n\n「加藤くんが作った SSM パラメータ、3 個あるんだけど CostCenter タグが付いてるのはいくつか把握できてないんだ。コスト配賦レポートに必要だから数えてくれる?」。\n\nパラメータのタグを確認して、CostCenter タグが付いているものだけを数えろ。",
+      "tags": [
+        "soa",
+        "sysops-administrator",
+        "cost-allocation",
+        "tagging",
+        "ssm",
+        "cost-optimization"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "soa-ec2-recover-alarm",
+      "name": "EC2 自動リカバリアクションが発火するメトリクスを特定せよ (SOA リカバリ監査)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "20〜30 分",
+      "shortDescription": "天下クラウド株式会社、入社 1 か月目。佐々木 CTO が設計レビューを求めてくる。\n\n「加藤くんが EC2 の自動リカバリを仕込んでくれてたけど、何のメトリクスが発火条件なのか分からない。SOA の試験範囲でもあるし、ちゃんと把握しておきたい」。\n\nアラーム設定を読んで、EC2 の自動リカバリアクションをトリガーするメトリクス名を特定しろ。",
+      "tags": [
+        "soa",
+        "sysops-administrator",
+        "cloudwatch",
+        "ec2",
+        "recover",
+        "status-check",
+        "monitoring"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "soa-eventbridge-cron-hour",
+      "name": "EventBridge の cron 式が発火する UTC 時刻を答えろ (SOA スケジューラ監査)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "15〜25 分",
+      "shortDescription": "天下クラウド株式会社、入社 6 週間目。深夜のアラートが止まらない。佐々木 CTO から電話が来る。\n\n「加藤くんが設定した EventBridge ルール、夜中に何かを実行してるらしい。何時に発火してるか分かる?」。\n\ncron 式を解読して、UTC で何時に発火するのかを答えろ。",
+      "tags": [
+        "soa",
+        "sysops-administrator",
+        "eventbridge",
+        "cron",
+        "scheduling",
+        "automation"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "soa-logs-retention",
+      "name": "CloudWatch Logs グループの保持期間を読め (SOA ログ保持監査)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、入社 9 週間目。コンプライアンス担当から突然 Slack が届く。\n\n「加藤くんが作った CloudWatch Log Group、何日間ログを保持しているか確認が必要です。セキュリティポリシーで 90 日以上の保持が義務付けられていて……」。\n\nLog Group の設定を確認して、保持日数を答えろ。",
+      "tags": [
+        "soa",
+        "sysops-administrator",
+        "cloudwatch-logs",
+        "retention",
+        "compliance",
+        "monitoring"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "soa-patch-manager",
+      "name": "SSH なしでフリートを自動パッチする Systems Manager の機能は何か (SOA パッチ管理)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、入社 8 週間目。佐々木 CTO が飛び込んでくる。\n\n「加藤くんのメモに『SSH 不要でフリート全体をスケジュール自動パッチ』と書いてあるんだけど、どの Systems Manager の機能のことか分からなくて……。SOA の試験にも出るし、ちゃんと把握しておきたい」。\n\nシナリオを読んで、SSH なしでパッチベースラインとメンテナンスウィンドウを使って自動パッチを実行する Systems Manager の機能名を答えろ。",
+      "tags": [
+        "soa",
+        "sysops-administrator",
+        "ssm",
+        "patch-manager",
+        "maintenance-window",
+        "automation"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "soa-ssm-securestring",
+      "name": "KMS で暗号化される SSM パラメータ型を当てろ (SOA SecureString 監査)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、入社 3 週間目。佐々木 CTO が顔色を変えてやってくる。\n\n「加藤くんが SSM に 2 種類のパラメータを残してる。片方は平文で、もう片方は KMS で暗号化されてるらしい。セキュリティ監査で『どの Type が暗号化されるか』を今すぐ答えないといけない」。\n\nパラメータ名から答えは分からない。Type フィールドを確認して、KMS 暗号化される型の名前を答えろ。",
+      "tags": [
+        "soa",
+        "sysops-administrator",
+        "ssm",
+        "parameter-store",
+        "securestring",
+        "kms",
+        "encryption"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "soa-trusted-advisor-category",
+      "name": "低稼働 EC2 を検出する Trusted Advisor チェックのカテゴリは何か (SOA コスト最適化)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "15〜20 分",
+      "shortDescription": "天下クラウド株式会社、入社 11 週間目。クラウド費用が爆発していると経営会議で話題になった。佐々木 CTO が慌ててやってくる。\n\n「Trusted Advisor で低稼働・アイドルの EC2 インスタンスを炙り出すのに使うチェックって、どのカテゴリに分類されてるんだっけ? SOA の範囲だし……」。\n\nシナリオを読んで、アイドル/低稼働 EC2 を検出する Trusted Advisor チェックのカテゴリ名を答えろ。",
+      "tags": [
+        "soa",
+        "sysops-administrator",
+        "trusted-advisor",
+        "cost-optimization",
+        "cost-management"
+      ],
+      "scoringKind": "flag"
     },
     {
       "id": "stackstack",

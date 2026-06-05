@@ -1,0 +1,116 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (ans-route53-failover). ANS-C01 DNS routing drill.
+  Deploys an SSM Parameter holding an active-passive DNS failover scenario.
+  The player reads the briefing and identifies Route 53 Failover routing
+  policy as the answer. No Route 53 hosted zone (billable ~$0.50/mo) is
+  created. The answer is only in the CFn Output.
+
+  Cost: SSM Parameter + IAM Role are free. No Route 53 hosted zone. $0.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this
+      value automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks
+      from colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+
+Resources:
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-participant-viewer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: >-
+        SCENARIO: A company runs an active-passive DR architecture. The
+        primary region (ap-northeast-1) serves all traffic normally. If the
+        primary Route 53 health check fails, DNS must automatically redirect
+        traffic to the standby region (ap-southeast-1) with no manual
+        intervention. Recovery must happen automatically when the primary
+        becomes healthy again.
+        QUESTION: Which Route 53 routing policy achieves automatic
+        active-passive DNS switchover driven by health checks?
+        Decoys: weighted (traffic split by ratio), latency (lowest latency
+        region), geolocation (user geographic location).
+        Submit: TC{<policy-name>}, e.g. TC{weighted}.
+      Description: !Sub "TenkaCloud ans-route53-failover briefing for ${NamePrefix}."
+      Tier: Standard
+
+Outputs:
+  BriefingParameterName:
+    Description: SSM Parameter holding the task briefing.
+    Value: !Ref BriefingParameter
+  AnswerFlag:
+    Description: Flag the learner submits after identifying the correct routing policy.
+    Value: "TC{failover}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

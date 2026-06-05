@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "saa-dynamodb-gsi-key",
+  "name": "DynamoDB GSI のパーティションキーを調べろ (SAA NoSQL 設計)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "20〜30 分",
+  "shortDescription": "天下クラウド株式会社、 入社 2.5 ヶ月目。 加藤さんが設計した DynamoDB テーブルに GSI (Global Secondary Index) が設定されているらしい。\n\n「email でユーザーを検索できるようにしてあるはず。 GSI のパーティションキーが何になってるか確認してくれ」\n\n実際にデプロイされた DynamoDB テーブルを調べて、 GSI のキースキーマを報告しろ。",
+  "description": "## シナリオ\n\n加藤さんが残したユーザーテーブルは `userId` をパーティションキーとする DynamoDB テーブルだ。 email によるクエリを可能にするため GSI が設定されているが、 そのパーティションキーを確認する必要がある。\n\nSAA の定番論点: **Global Secondary Index (GSI)** は DynamoDB テーブルとは異なるパーティションキー / ソートキーを持つインデックス。 テーブルの主キー以外の属性でクエリする場合に使う。 GSI は独自のプロビジョニングを持つ。\n\n## デプロイされるもの (すべて無料)\n\n- DynamoDB テーブル × 1 (パーティションキー: `userId`, PROVISIONED 1 RCU / 1 WCU)\n- GSI × 1 (パーティションキー: `email`, PROVISIONED 1 RCU / 1 WCU)\n- SSM Parameter × 1 (タスク説明)\n\nDynamoDB は 25 RCU / 25 WCU まで永久無料枠。 **課金は $0**。\n\n## 解き方\n\n1. DynamoDB テーブルを一覧して `{NamePrefix}` を含むテーブルを特定する。\n   ```\n   aws dynamodb list-tables\n   ```\n2. テーブルの詳細から GSI のキースキーマを確認する。\n   ```\n   aws dynamodb describe-table --table-name <テーブル名>\n   ```\n3. `GlobalSecondaryIndexes[0].KeySchema` で `KeyType: HASH` の `AttributeName` を確認する。\n4. 属性名を `TC{属性名}` 形式で提出 (例: `TC{orderId}`)。\n\n## 採点\n\n- 正解: +200 pt (1 デプロイにつき 1 回)。\n- 不正解: -15 pt/回。 スコアは 0 未満にならない。\n\n## コスト\n\nDynamoDB PROVISIONED 1 RCU / 1 WCU は AWS 無料枠 (25 RCU / 25 WCU) の範囲内。 課金は $0。",
+  "tags": ["saa", "solutions-architect-associate", "dynamodb", "gsi", "global-secondary-index", "nosql"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- DynamoDB table inspection only, port unused)" }
+  ],
+  "learningGoals": [
+    "DynamoDB GSI がテーブルとは異なるパーティションキーを持つインデックスであることを理解する",
+    "aws dynamodb describe-table で GlobalSecondaryIndexes の KeySchema を読む操作を身につける",
+    "GSI を使って主キー以外の属性でクエリする DynamoDB 設計パターンを SAA-C03 に適用できるようになる"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Find the DynamoDB GSI partition key (SAA NoSQL design)",
+      "shortDescription": "Two and a half months into TenkaCloud Inc. Kato-san's DynamoDB table apparently has a Global Secondary Index.\n\n'He set it up so you can query users by email. Can you confirm what the GSI partition key is?'\n\nInspect the deployed DynamoDB table and report the GSI key schema.",
+      "description": "## Scenario\n\nKato-san left a users table in DynamoDB with `userId` as the primary partition key. A GSI was added to enable email-based queries, but the team needs to verify the GSI's partition key.\n\nThe classic SAA point: a **Global Secondary Index (GSI)** has a different partition key (and optional sort key) from the base table. It is used to query on attributes other than the table's primary key. GSIs have their own provisioned capacity.\n\n## What gets deployed (all free)\n\n- 1 DynamoDB table (partition key: `userId`, PROVISIONED 1 RCU / 1 WCU)\n- 1 GSI (partition key: `email`, PROVISIONED 1 RCU / 1 WCU)\n- 1 SSM Parameter (task description)\n\nDynamoDB free tier: 25 RCU / 25 WCU forever. **$0 cost**.\n\n## How to solve\n\n1. List DynamoDB tables and find the one with `{NamePrefix}`.\n   ```\n   aws dynamodb list-tables\n   ```\n2. Describe the table to get the GSI key schema.\n   ```\n   aws dynamodb describe-table --table-name <TableName>\n   ```\n3. Find `GlobalSecondaryIndexes[0].KeySchema` and read the `AttributeName` where `KeyType` is `HASH`.\n4. Submit the attribute name as `TC{attribute-name}` (e.g. `TC{orderId}`).\n\n## Scoring\n\n- Correct: +200 pt (once per deploy).\n- Wrong: -15 pt each. Score never drops below 0.\n\n## Cost\n\nDynamoDB PROVISIONED 1 RCU / 1 WCU is within the AWS free tier (25 RCU / 25 WCU). $0.",
+      "learningGoals": [
+        "Understand that a DynamoDB GSI has a different partition key from the base table",
+        "Practice reading GlobalSecondaryIndexes[].KeySchema from aws dynamodb describe-table",
+        "Apply the GSI query-by-non-primary-key design pattern to SAA-C03 NoSQL questions"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 15,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "`aws dynamodb describe-table --table-name <テーブル名>` を実行。 `Table.GlobalSecondaryIndexes` を探す。 各 GSI の `KeySchema` を確認し、 `KeyType: HASH` の `AttributeName` がそのインデックスのパーティションキー。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "GSI のパーティションキー (`KeyType: HASH`) は `email` 属性。 提出形式は `TC{email}`。",
+        "penalty": 40
+      }
+    ]
+  }
+}

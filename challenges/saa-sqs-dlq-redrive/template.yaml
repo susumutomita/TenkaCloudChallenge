@@ -1,0 +1,158 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (saa-sqs-dlq-redrive). SAA-C03 SQS DLQ drill.
+  Deploys an SQS Standard queue with a RedrivePolicy (maxReceiveCount: 5) pointing
+  to a dead-letter queue. The player inspects the main queue's RedrivePolicy attribute
+  and reports the maxReceiveCount. The answer is stored only in the CFn Output
+  AnswerFlag which the participant role cannot read.
+
+  Cost: SQS free tier covers 1M requests/month; queue definitions only, no messages
+  sent. $0.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks from
+      colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+
+Resources:
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-participant-viewer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      # `aws login` (2025-11) OAuth2 flow needs SignInLocalDevelopmentAccess.
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # Player inspects the SQS queue attributes to find the maxReceiveCount.
+              # No cloudformation:DescribeStacks -- the answer lives in the CFn Output only.
+              - Sid: SqsReadQueues
+                Effect: Allow
+                Action:
+                  - sqs:ListQueues
+                  - sqs:GetQueueAttributes
+                  - sqs:GetQueueUrl
+                  - sqs:ListQueueTags
+                Resource: "*"
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+  # Dead-letter queue -- the target of the RedrivePolicy.
+  OrdersDlq:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${NamePrefix}-orders-dlq"
+      MessageRetentionPeriod: 1209600
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-orders-dlq"
+
+  # Main queue: has a RedrivePolicy pointing to the DLQ.
+  # maxReceiveCount: 5 is THE answer the player must derive by inspecting attributes.
+  # The raw number is NOT stored in any SSM parameter or tag the player can read.
+  OrdersQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${NamePrefix}-orders"
+      VisibilityTimeout: 30
+      MessageRetentionPeriod: 345600
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt OrdersDlq.Arn
+        maxReceiveCount: 5
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-orders"
+
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: >-
+        An SQS Standard queue and a Dead-Letter Queue (DLQ) have been deployed.
+        Inspect the main queue's RedrivePolicy to find the maxReceiveCount --
+        the number of times a message can be received before it is moved to the DLQ.
+        Submit the value as TC{N} e.g. TC{3}.
+      Description: !Sub "Task briefing for ${NamePrefix} (saa-sqs-dlq-redrive)."
+      Tier: Standard
+
+Outputs:
+  OrdersQueueUrl:
+    Description: URL of the main SQS queue to inspect.
+    Value: !Ref OrdersQueue
+  OrdersDlqUrl:
+    Description: URL of the Dead-Letter Queue.
+    Value: !Ref OrdersDlq
+  SqsConsoleUrl:
+    Description: AWS Console deep link to the SQS queue list.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/sqs/v3/home?region=${AWS::Region}#/queues"
+  BriefingParameterName:
+    Description: SSM Parameter holding the task briefing.
+    Value: !Ref BriefingParameter
+  # Canonical answer -- scoring engine only. Participant role has no
+  # cloudformation:DescribeStacks, so this Output is never readable by the player.
+  AnswerFlag:
+    Description: Flag the learner submits after reading the SQS RedrivePolicy maxReceiveCount.
+    Value: "TC{5}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

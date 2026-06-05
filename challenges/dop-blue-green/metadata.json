@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "dop-blue-green",
+  "name": "ダウンタイムゼロのデプロイ戦略を選べ (DOP Blue/Green)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "10〜20 分",
+  "shortDescription": "天下クラウド株式会社、 入社 1 ヶ月目。 佐々木 CTO からメッセージが届く。\n\n「加藤くんが残した本番デプロイ手順、 ローリングアップデートで毎回 30 秒ダウンしてるんだ。 次のリリースは **ゼロダウンタイム** で、 なにか問題が起きたら **即座にロールバック** できるやつに切り替えたい。 どの戦略にすべき?」\n\nデプロイ戦略の選択は DOP 試験の核心論点。 2 つの環境を同時に持ち、 トラフィックを一瞬で切り替えられる方式を特定しろ。",
+  "description": "## シナリオ\n\n加藤さんが設計したデプロイフローはローリングアップデート方式で、 リリースのたびに数十秒のダウンタイムが発生している。 佐々木 CTO の要求は明確だ: **ゼロダウンタイム** かつ **即座のロールバック**。 SSM Parameter にシナリオデータが格納されている。\n\nDOP の超定番: **Blue/Green デプロイ** は Blue (現行) と Green (新バージョン) の 2 環境を同時に保持し、 ロードバランサーのトラフィックを瞬時に切り替える。 問題が起きたら Blue に戻すだけ ── ロールバックが秒単位で完了する。 Rolling は順次入れ替えで途中でロールバックが難しく、 Canary は一部トラフィックを新バージョンに流す段階的方式でゼロダウンタイムだがロールバックに数分かかる。\n\n## デプロイされるもの (すべて無料)\n\n- SSM Parameter × 1 (シナリオ問題文)\n\n## 解き方\n\n1. SSM Parameter `/{NamePrefix}/briefing` を読む。\n2. 「2 つの同一環境を保持し、 トラフィック切り替えで瞬時にロールバックできる戦略」を 3 つの選択肢 (rolling / canary / blue-green) から選ぶ。\n3. `TC{blue-green}` 形式で提出。\n\n## 採点\n\n- 正解: +200 pt (1 デプロイにつき 1 回)。\n- 不正解: -15 pt/回。 スコアは 0 未満にならない。\n\n## コスト\n\nSSM パラメータは無料。 課金リソースなし。",
+  "tags": ["dop", "devops-professional", "deployment", "blue-green", "ci-cd", "rollback"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- deployment strategy analysis only, port unused)" }
+  ],
+  "learningGoals": [
+    "Blue/Green・Rolling・Canary の各デプロイ戦略の違いとトレードオフを理解する",
+    "ゼロダウンタイムと即座ロールバックを同時に達成できる唯一の戦略を識別できるようになる",
+    "CodeDeploy / ECS / Elastic Beanstalk でのデプロイ戦略選択に自信を持てるようになる"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Pick the zero-downtime deployment strategy (DOP Blue/Green)",
+      "shortDescription": "Month one at TenkaCloud Inc. A message from CTO Sasaki-san arrives.\n\n'The rolling-update deploy Kato-kun left causes 30-second downtime every release. For the next release I need zero downtime AND instant rollback if something goes wrong. Which strategy should we switch to?'\n\nDeployment strategy selection is a core DOP exam topic. Identify the approach that keeps two identical environments live and can flip traffic in an instant.",
+      "description": "## Scenario\n\nKato-san's deployment flow uses a rolling update, causing tens of seconds of downtime per release. CTO Sasaki-san's requirements are clear: **zero downtime** and **instant rollback**. Scenario data is stored in an SSM Parameter.\n\nThe classic DOP point: **Blue/Green deployment** keeps two environments live simultaneously (Blue = current, Green = new version) and switches load-balancer traffic instantly. If something goes wrong, flip back to Blue -- rollback completes in seconds. Rolling updates replace instances sequentially (rollback mid-flight is hard), and Canary gradually shifts a fraction of traffic (zero downtime but rollback takes minutes).\n\n## What gets deployed (all free)\n\n- 1 SSM Parameter (scenario question)\n\n## How to solve\n\n1. Read SSM Parameter `/{NamePrefix}/briefing`.\n2. From the three options (rolling / canary / blue-green), pick the strategy that 'keeps two identical environments and flips traffic instantly for immediate rollback'.\n3. Submit as `TC{blue-green}`.\n\n## Scoring\n\n- Correct: +200 pt (once per deploy).\n- Wrong: -15 pt each. Score never drops below 0.\n\n## Cost\n\nSSM parameter is free. No billable resources.",
+      "learningGoals": [
+        "Understand the differences and trade-offs among Blue/Green, Rolling, and Canary deployment strategies",
+        "Identify the one strategy that achieves zero downtime AND instant rollback simultaneously",
+        "Gain confidence in choosing deployment strategies for CodeDeploy / ECS / Elastic Beanstalk"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 15,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "SSM Parameter `/{NamePrefix}/briefing` を読んでシナリオを確認。 「2 つの同一環境を同時に保持し、 ロードバランサーで一瞬にトラフィックを切り替える」戦略はどれか。 Rolling は順次入れ替え、 Canary は段階的シフト ── 即座の切り替えではない。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "2 環境 (Blue/Green) を同時に保持して LB 切り替えでゼロダウンタイム + 即座ロールバックを実現する戦略は **blue-green**。 提出形式は `TC{blue-green}`。",
+        "penalty": 40
+      }
+    ]
+  }
+}

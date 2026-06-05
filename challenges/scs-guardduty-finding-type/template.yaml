@@ -1,0 +1,123 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (scs-guardduty-finding-type). SCS-C02 GuardDuty finding
+  category drill. Stores a scenario briefing in an SSM Parameter: an EC2 instance
+  is querying a known cryptocurrency-mining domain. The learner must identify which
+  GuardDuty finding category this maps to (CryptoCurrency). No real GuardDuty
+  resource or EC2 instance is deployed -- pure scenario analysis.
+
+  Cost: SSM Parameter (String) is free. No EC2, no GuardDuty. $0.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks from
+      colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+
+Resources:
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-participant-viewer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      # `aws login` (2025-11) OAuth2 flow needs SignInLocalDevelopmentAccess.
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # The player only needs to read the briefing SSM parameter.
+              # No cloudformation:DescribeStacks -- the answer must be derived
+              # from the briefing scenario, not read from the stack Output.
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+  # Scenario briefing: EC2 instance querying a known crypto-mining domain.
+  # GuardDuty classifies this as the CryptoCurrency finding category.
+  # Example finding type: CryptoCurrency:EC2/BitcoinTool.B!DNS
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: >-
+        Scenario: GuardDuty has detected that an EC2 instance in your account is
+        sending DNS queries to a domain associated with known cryptocurrency-mining
+        activity (e.g., a Bitcoin mining pool endpoint). GuardDuty generates a
+        finding for this behavior. What is the GuardDuty finding CATEGORY (the
+        prefix before the colon in the finding type, e.g. "UnauthorizedAccess" in
+        "UnauthorizedAccess:EC2/SSHBruteForce") that covers cryptocurrency-mining
+        communications from EC2 instances? Submit as TC{<category>}.
+      Description: !Sub "TenkaCloud scs-guardduty-finding-type briefing for ${NamePrefix}."
+      Tier: Standard
+
+Outputs:
+  BriefingParameterName:
+    Description: SSM Parameter holding the GuardDuty scenario briefing.
+    Value: !Ref BriefingParameter
+  GuardDutyConsoleUrl:
+    Description: AWS Console deep link to GuardDuty findings (reference).
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/guardduty/home?region=${AWS::Region}#/findings"
+  # Canonical answer, scoring engine only (no DescribeStacks granted to player).
+  AnswerFlag:
+    Description: Flag the learner submits after identifying the GuardDuty finding category.
+    Value: "TC{cryptocurrency}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

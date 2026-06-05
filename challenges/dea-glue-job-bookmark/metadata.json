@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "dea-glue-job-bookmark",
+  "name": "Glue の増分 ETL 機能を特定せよ (DEA Glue ジョブブックマーク)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "15〜20 分",
+  "shortDescription": "天下クラウド株式会社、ETL パイプライン障害調査。佐々木 CTO が言う。\n\n「加藤くんが作った Glue ETL ジョブ、毎回フルスキャンしてるせいで時間がかかりすぎる。処理済みデータを追跡して、未処理データだけを再処理する Glue の機能があるはずだ。何という機能か?」\n\n3 つの選択肢から正しいものを選べ。",
+  "description": "## シナリオ\n\n加藤さんが設計した Glue ETL ジョブは、毎回 S3 バケット全体をスキャンして変換処理を実行する。データが増えるにつれ実行時間が伸び、コストも増加している。佐々木 CTO は「処理済みデータを記録して、次回は未処理分だけ処理する仕組みが必要だ」と言う。\n\nDEA の重要論点: AWS Glue の **ジョブブックマーク (Job Bookmark)** は、どこまで処理したかを追跡し、次回実行時に未処理データのみを処理する増分 ETL を実現する機能。誤答の選択肢は「ワークフロー」(依存関係管理) と「クローラー」(スキーマ検出)。\n\n## デプロイされるもの (すべて無料)\n\n- SSM Parameter × 1 (`/{NamePrefix}/briefing`) — 上記シナリオ\n\nGlue ジョブは DPU 課金 ($0.44/DPU-hour) なので**デプロイしない**。シナリオを SSM パラメータで配信する。**課金 $0**。\n\n## 解き方\n\n1. SSM Parameter `/{NamePrefix}/briefing` を読む。\n2. 処理済みデータを追跡して増分処理を実現する Glue 機能を選ぶ。\n3. `TC{job-bookmark}` 形式で Portal に提出。\n\n## 採点\n\n- 正解: +200 pt (1 デプロイにつき 1 回)。\n- 不正解: -20 pt/回。スコアは 0 未満にならない。\n\n## コスト\n\nSSM Parameter は無料。Glue ジョブは作成しない。課金 $0。",
+  "tags": ["dea", "data-engineer-associate", "glue", "job-bookmark", "incremental-etl", "etl", "data-processing"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- Glue job bookmark scenario, port unused)" }
+  ],
+  "learningGoals": [
+    "Glue ジョブブックマークが処理済みデータを追跡して増分 ETL を実現する仕組みを理解する",
+    "ジョブブックマーク / ワークフロー / クローラーの機能の違いを区別できる",
+    "Glue の増分処理設定 (job.bookmark.option) の使い方を知る"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Identify the Glue incremental ETL feature (DEA Glue job bookmark)",
+      "shortDescription": "ETL pipeline incident investigation at TenkaCloud Inc. CTO Sasaki-san says:\n\n'Kato-kun's Glue job full-scans every time and it takes too long. There must be a Glue feature to track what has already been processed and only reprocess new data. What is it called?'\n\nChoose from three options and submit.",
+      "description": "## Scenario\n\nKato-san's Glue ETL job full-scans the entire S3 bucket every run. As data grows, runtime and cost increase. CTO Sasaki-san says: 'We need something that records how far we got and only processes new data next time.'\n\nThe key DEA concept: AWS Glue **Job Bookmarks** track how far a job has processed, so the next run handles only new, unprocessed data -- incremental ETL. Decoys: 'workflows' (dependency orchestration) and 'crawlers' (schema discovery).\n\n## What gets deployed (all free)\n\n- 1 SSM Parameter (`/{NamePrefix}/briefing`) -- the scenario\n\nGlue jobs incur DPU charges ($0.44/DPU-hour) and are **not deployed**. The scenario is delivered via SSM. **$0 cost**.\n\n## How to solve\n\n1. Read SSM Parameter `/{NamePrefix}/briefing`.\n2. Identify the Glue feature that tracks processed data for incremental ETL.\n3. Submit as `TC{job-bookmark}`.\n\n## Scoring\n\n- Correct: +200 pt (once per deploy).\n- Wrong: -20 pt each. Score never drops below 0.\n\n## Cost\n\nSSM Parameter is free. No Glue job. $0.",
+      "learningGoals": [
+        "Understand how Glue Job Bookmarks track processed data to enable incremental ETL",
+        "Distinguish job bookmarks from workflows (dependency management) and crawlers (schema discovery)",
+        "Know the Glue job bookmark option setting (job.bookmark.option)"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 20,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "Glue ワークフローは依存関係を管理する機能。Glue クローラーはスキーマを検出する機能。どちらも「処理済みデータを記録する」わけではない。Glue には処理位置を記録する専用機能がある。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "その機能は「ジョブブックマーク (Job Bookmark)」。`--job-bookmark-option job-bookmark-enable` で有効化し、次回実行時に未処理データのみを処理する。提出形式は `TC{job-bookmark}`。",
+        "penalty": 40
+      }
+    ]
+  }
+}

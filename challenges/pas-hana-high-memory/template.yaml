@@ -1,0 +1,192 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (pas-hana-high-memory). PAS-C01 SAP HANA instance
+  family drill. Deploys a single SSM Parameter with an SAP QUICK SIZER output
+  for a production S/4HANA system (6.2 TB HANA DB memory, 3,200 users,
+  185,000 SAPS). Standard EC2 (max ~1.5 TB) cannot satisfy the requirement.
+  The player identifies the 'High Memory' instance family (u-xTBx.metal).
+  The answer lives only in a CFn Output the participant role cannot read.
+
+  Cost: SSM Parameter and IAM Role are free. No EC2 or SAP workload runs.
+  $0 for the lifetime of the drill.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks from
+      colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+
+Resources:
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-participant-viewer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+  # SAP QUICK SIZER output for a production S/4HANA system requiring 6.2 TB
+  # HANA memory, with four EC2 instance family candidates. The correct answer
+  # (high-memory) is NOT stated here; it lives only in the AnswerFlag Output.
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: |
+        === TenkaCloud PAS Challenge: SAP HANA Instance Family Selection ===
+
+        SAP QUICK SIZER OUTPUT — Production S/4HANA 2023 FPS02
+        ---------------------------------------------------------
+        Customer        : TenkaCloud Manufacturing (fictional)
+        System type     : SAP S/4HANA 2023 (ERP: FI/CO/MM/SD/PP/QM)
+        Sizing date     : 2025-11-14
+        Environment     : Production (3-tier: ASCS + App Servers + DB)
+
+        WORKLOAD PROFILE
+        -----------------
+        Active dialog users        :  3,200
+        Background job load        :  12 % of total
+        Interface load (IDOC/RFC)  :  8  % of total
+        Peak concurrency factor    :  1.8 x
+        Total SAPS required        : 185,000 SAPS
+
+        SAP HANA DATABASE MEMORY SIZING
+        ---------------------------------
+        Component                        | Memory (GB)
+        ---------------------------------|------------
+        Column store (row-level data)    |    3,840 GB
+        Row store (metadata / config)    |      256 GB
+        Working memory (sorting, join)   |    1,280 GB
+        HANA Services (statistics, etc.) |      384 GB
+        System overhead buffer           |      384 GB
+        TOTAL HANA DB MEMORY             |    6,144 GB  (~6.2 TB)
+
+        HIGH AVAILABILITY DESIGN
+        -------------------------
+        Configuration     : 2-node HANA System Replication (HSR) Tier-1
+        Replication mode  : SYNC (zero data loss, RPO=0)
+        Failover manager  : Linux Pacemaker + SAPHanaSR resource agent
+        AZ placement      : Primary in AZ-1, Secondary in AZ-2
+        Takeover time     : < 60 seconds automated
+        Availability SLA  : 99.9% (including planned maintenance)
+
+        CURRENT EC2 INSTANCE MAX MEMORY (standard families, as of Nov 2025)
+        ----------------------------------------------------------------------
+        Instance type      | vCPU | RAM    | Notes
+        -------------------|------|--------|----------------------------
+        r7i.48xlarge       |  192 | 1,536 GB | Memory-optimized, SAP-cert
+        r6i.32xlarge       |  128 | 1,024 GB | Memory-optimized, SAP-cert
+        x2idn.32xlarge     |  128 | 2,048 GB | Extra-large memory, SAP-cert
+        [HANA requirement] |   -- | 6,144 GB | EXCEEDS all above instances
+
+        AWS EC2 INSTANCE FAMILIES FOR SAP (candidate selection)
+        ---------------------------------------------------------
+        A. compute-optimized   : c7i family. High vCPU-to-RAM ratio.
+                                 Used for SAP Application Servers (ASCS, PAS, AAS).
+                                 Max RAM: 192 GB (c7i.48xlarge). NOT suitable for HANA DB.
+
+        B. memory-optimized    : r7i / r6i family. Balanced compute + RAM.
+                                 SAP-certified for HANA up to ~1.5 TB.
+                                 Max RAM: ~2 TB (x2idn.32xlarge). NOT sufficient for
+                                 6.2 TB HANA requirement.
+
+        C. high-memory         : u-xTBx.metal series (bare metal):
+                                   u-6tb1.metal   : 448 vCPU,  6,144 GB ( 6 TB)
+                                   u-9tb1.metal   : 448 vCPU,  9,216 GB ( 9 TB)
+                                   u-12tb1.metal  : 448 vCPU, 12,288 GB (12 TB)
+                                   u-18tb1.metal  : 448 vCPU, 18,432 GB (18 TB)
+                                   u-24tb1.metal  : 448 vCPU, 24,576 GB (24 TB)
+                                 SAP-certified for HANA scale-up to 24 TB.
+                                 Purpose-built; available on request via AWS Sales.
+
+        D. storage-optimized   : im4gn / is4gen family. High local NVMe storage.
+                                 Used for data warehouses, caches with local IO.
+                                 NOT suitable for HANA in-memory workloads.
+
+        QUESTION
+        --------
+        The HANA DB sizing requires 6.2 TB of RAM. Which EC2 instance FAMILY
+        (A/B/C/D) is purpose-built for SAP HANA workloads at this scale,
+        certified by SAP, and available in configurations from 6 TB to 24 TB?
+
+        Submit your answer as TC{<family>}  e.g.  TC{memory-optimized}
+      Description: !Sub "TenkaCloud pas-hana-high-memory briefing for ${NamePrefix}."
+      Tier: Standard
+
+Outputs:
+  BriefingParameterName:
+    Description: SSM Parameter holding the task briefing.
+    Value: !Ref BriefingParameter
+  SsmConsoleUrl:
+    Description: AWS Console deep link to the SSM Parameter Store.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/systems-manager/parameters/?region=${AWS::Region}"
+  # Canonical answer -- scoring engine only. Participant role has no
+  # cloudformation:DescribeStacks.
+  AnswerFlag:
+    Description: Flag the learner submits after identifying the SAP HANA instance family.
+    Value: "TC{high-memory}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

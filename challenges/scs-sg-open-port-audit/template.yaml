@@ -1,0 +1,237 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (scs-sg-open-port-audit). SCS-C02 / SAA security drill.
+  Deploys one VPC and four security groups modeling a typical 3-tier app. Three
+  have defensible ingress (ALB 80/443 from the internet, app tier from the VPC
+  CIDR, bastion SSH from a corporate CIDR). One DB-tier SG wrongly exposes a
+  remote-admin port (RDP 3389) to 0.0.0.0/0 -- the planted misconfiguration the
+  learner must find. The offending port is mirrored only in a CFn Output the
+  participant role cannot read; players derive it from the ingress rules.
+
+  Cost: VPC + security groups are free. No EC2 instance, NAT, or EIP. $0.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks from
+      colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+
+Resources:
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-participant-viewer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      # `aws login` (2025-11) OAuth2 flow needs SignInLocalDevelopmentAccess.
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # ec2:Describe* is tag-scoped (returns only this team's tagged SGs).
+              # No cloudformation:DescribeStacks -- the answer must be derived
+              # from the ingress rules, not read from the stack Output.
+              - Sid: ConsoleEc2Describe
+                Effect: Allow
+                Action:
+                  - ec2:Describe*
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/TenkaCloud:NamePrefix: !Ref NamePrefix
+              - Sid: ConsoleEc2Metadata
+                Effect: Allow
+                Action:
+                  - ec2:DescribeRegions
+                  - ec2:DescribeAvailabilityZones
+                  - ec2:DescribeAccountAttributes
+                Resource: "*"
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.30.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-vpc"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  # Tier 1: ALB. 80/443 open to the internet is EXPECTED for a public web tier.
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "${NamePrefix}-sg-alb"
+      GroupDescription: Public ALB - HTTP/HTTPS from the internet (expected).
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: HTTP from internet
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: HTTPS from internet
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-sg-alb"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  # Tier 2: app. 8080 only from inside the VPC (defensible).
+  AppSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "${NamePrefix}-sg-app"
+      GroupDescription: App tier - 8080 from the VPC CIDR only.
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 10.30.0.0/16
+          Description: App port from within VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-sg-app"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  # Bastion: SSH from a corporate CIDR only (defensible).
+  BastionSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "${NamePrefix}-sg-bastion"
+      GroupDescription: Bastion - SSH from corporate CIDR only.
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 203.0.113.0/24
+          Description: SSH from corp office
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-sg-bastion"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  # DB tier: THE MISCONFIG. RDP (3389) wide open to 0.0.0.0/0 on a database SG.
+  # Remote-admin ports must never face the internet. This is what the learner
+  # must find -- the only world-open administrative port in the stack.
+  DbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "${NamePrefix}-sg-db"
+      GroupDescription: DB tier - PostgreSQL from app + (planted) RDP from world.
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: 10.30.0.0/16
+          Description: PostgreSQL from within VPC (fine)
+        - IpProtocol: tcp
+          FromPort: 3389
+          ToPort: 3389
+          CidrIp: 0.0.0.0/0
+          Description: TODO remove - left open by Kato-san
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-sg-db"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: >-
+        GuardDuty flagged one of the four security groups. Exactly one remote
+        administration port is exposed to 0.0.0.0/0 (the whole internet). Find
+        which TCP port it is. Public web ports (80/443) are expected and are NOT
+        the answer. Submit the port number as TC{port-N}, e.g. TC{port-22}.
+      Description: !Sub "TenkaCloud scs-sg-open-port-audit briefing for ${NamePrefix}."
+      Tier: Standard
+
+Outputs:
+  VpcId:
+    Description: The VPC under audit.
+    Value: !Ref Vpc
+  SecurityGroupsConsoleUrl:
+    Description: AWS Console deep link to the Security Groups list.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/ec2/home?region=${AWS::Region}#SecurityGroups:"
+  BriefingParameterName:
+    Description: SSM Parameter holding the task briefing.
+    Value: !Ref BriefingParameter
+  # Canonical answer, scoring engine only (no DescribeStacks granted to player).
+  AnswerFlag:
+    Description: Flag the learner submits after finding the world-open admin port.
+    Value: "TC{port-3389}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "ans-route53-failover",
+  "name": "プライマリ障害時に DNS 自動切替 (ANS Route 53 フェイルオーバー)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 4,
+  "estimatedDuration": "15〜25 分",
+  "shortDescription": "天下クラウド株式会社、 DR 計画レビュー。 佐々木 CTO が険しい顔で言った。\n\n「加藤くんの設計書、 DR の DNS 切替が書いてない。 プライマリのヘルスチェックが失敗したら、 自動でスタンバイへ DNS を向けたい。 Route 53 のどのルーティングポリシーを使う?」\n\nシナリオを読み、 ANS-C01 で問われるルーティングポリシーを特定しろ。",
+  "description": "## シナリオ\n\nアクティブ-パッシブ構成: プライマリリージョンのヘルスチェックが失敗した瞬間、 Route 53 が自動でスタンバイリージョンへ DNS を切り替える。 ウェイテッド / レイテンシー / ジオロケーションでは要件を満たせない。\n\nSSM Parameter `/{NamePrefix}/briefing` にシナリオ全文が入っている。\n\n## デプロイされるもの (すべて無料)\n\n- SSM Parameter × 1 (シナリオ briefing)\n- IAM Role × 1 (ParticipantViewerRole)\n\nRoute 53 ホストゾーン (≈$0.50/月) は作らないので **課金は $0**。\n\n## 解き方\n\n1. SSM Parameter `/{NamePrefix}/briefing` を読む。\n2. アクティブ-パッシブ DNS 自動切替に対応する Route 53 ルーティングポリシーを特定する。\n3. `TC{...}` 形式で提出する。\n\n提出形式: `TC{failover}` (例: `TC{failover}`)。\n\n## 採点\n\n- 正解: +200 pt (1 デプロイにつき 1 回)。\n- 不正解: -15 pt/回。 スコアは 0 未満にならない。\n\n## コスト\n\nSSM Parameter / IAM Role は無料。 Route 53 ホストゾーンはデプロイしない。 課金 $0。",
+  "tags": ["ans", "advanced-networking", "route53", "failover", "dns", "high-availability", "disaster-recovery"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- data scenario analysis only, port unused)" }
+  ],
+  "learningGoals": [
+    "Route 53 フェイルオーバールーティングポリシーがアクティブ-パッシブ DR に使われる理由を理解する",
+    "ウェイテッド / レイテンシー / ジオロケーション との使い分けを整理する",
+    "ヘルスチェック連動の DNS 自動切替の仕組みを説明できるようになる"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Automatic DNS failover when primary goes down (ANS Route 53 routing)",
+      "shortDescription": "TenkaCloud Inc., DR plan review. CTO Sasaki-san looked grim.\n\n'Kato-kun's design doc is missing the DR DNS switchover. If the primary health check fails, we need Route 53 to automatically point DNS at the standby. Which routing policy do we use?'\n\nRead the scenario and identify the ANS-C01 routing policy.",
+      "description": "## Scenario\n\nActive-passive configuration: the moment the primary region's health check fails, Route 53 must automatically switch DNS to the standby region. Weighted / Latency / Geolocation routing policies do not satisfy this requirement.\n\nThe full scenario is in SSM Parameter `/{NamePrefix}/briefing`.\n\n## What gets deployed (all free)\n\n- 1 SSM Parameter (scenario briefing)\n- 1 IAM Role (ParticipantViewerRole)\n\nNo Route 53 hosted zone (≈$0.50/mo). **$0 cost**.\n\n## How to solve\n\n1. Read SSM Parameter `/{NamePrefix}/briefing`.\n2. Identify the Route 53 routing policy for active-passive automatic DNS switchover.\n3. Submit as `TC{...}`.\n\nSubmission format: `TC{failover}` (e.g. `TC{failover}`).\n\n## Scoring\n\n- Correct: +200 pt (once per deploy).\n- Wrong: -15 pt each. Score never drops below 0.\n\n## Cost\n\nSSM Parameter / IAM Role are free. No Route 53 hosted zone deployed. $0.",
+      "learningGoals": [
+        "Understand why Route 53 Failover routing is used for active-passive DR",
+        "Distinguish Weighted / Latency / Geolocation routing policies from Failover",
+        "Be able to explain health-check-driven automatic DNS switchover"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 15,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "Route 53 の各ルーティングポリシーを比較せよ。 ウェイテッド=トラフィック比率、 レイテンシー=最低遅延リージョン、 ジオロケーション=地理的位置。 **プライマリ障害時に自動でスタンバイへ切り替える** アクティブ-パッシブ構成専用のポリシーはどれか?",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "答えは **フェイルオーバー** ルーティングポリシー。 Route 53 ヘルスチェックとセットで使い、 プライマリが unhealthy になった瞬間にセカンダリへ自動切替する。 提出形式は `TC{failover}`。",
+        "penalty": 40
+      }
+    ]
+  }
+}

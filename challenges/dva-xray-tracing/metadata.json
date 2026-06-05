@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "dva-xray-tracing",
+  "name": "マイクロサービスのレイテンシを追跡する AWS サービスを答えろ (DVA X-Ray)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 2,
+  "estimatedDuration": "10〜20 分",
+  "shortDescription": "天下クラウド株式会社、入社 6 週間目。本番で突然レイテンシが高騰した。佐々木 CTO が指示する。\n\n「API Gateway → Lambda → DynamoDB の呼び出し連鎖で、どこが遅いのかまったく見えない。加藤くんはリクエストごとにログを grep する原始的な方法しか残してない。エンドツーエンドで分散トレーシングできる AWS のサービスは何か?」\n\nシナリオを読んで正しいサービス名を答えろ。",
+  "description": "## シナリオ\n\n3 層のマイクロサービス (API Gateway → Lambda → DynamoDB) でレイテンシスパイクが発生している。各コンポーネントのログは別々で、リクエスト単位の全体像が見えない。DVA の定番: **AWS X-Ray はリクエストをトレースし、サービスマップで API Gateway / Lambda / DynamoDB の呼び出し時間を可視化するエンドツーエンド分散トレーシングサービス**。\n\nSSM パラメータにシナリオが記載されている。正しいサービス名を特定して `TC{サービス名}` 形式で提出せよ。\n\n## デプロイされるもの (すべて無料)\n\n- SSM Parameter `/{NamePrefix}/briefing` (シナリオ本文)\n\nX-Ray / Lambda / DynamoDB は一切デプロイしない (コスト回避)。**課金 $0**。\n\n## 解き方\n\n1. SSM Parameter `/{NamePrefix}/briefing` を読んでシナリオを確認。\n2. エンドツーエンド分散トレーシングを提供する AWS サービスを特定。\n3. 答えを `TC{サービス名}` 形式で提出 (例: `TC{cloudwatch}`)。\n\n## 採点\n\n- 正解: +150 pt (1 デプロイにつき 1 回)。\n- 不正解: -15 pt/回。スコアは 0 未満にならない。\n\n## コスト\n\nSSM パラメータのみ。課金リソースなし。$0。",
+  "tags": ["dva", "developer-associate", "xray", "tracing", "observability", "microservices", "lambda"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- X-Ray scenario analysis only, port unused)" }
+  ],
+  "learningGoals": [
+    "AWS X-Ray がエンドツーエンドの分散トレーシングを提供するサービスであることを理解する",
+    "X-Ray のサービスマップ・セグメント・サブセグメントの概念を整理する",
+    "CloudWatch Logs (ログ集約) と X-Ray (トレーシング) の使い分けを説明できる"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Which AWS service provides end-to-end distributed tracing? (DVA X-Ray)",
+      "shortDescription": "Week six at TenkaCloud Inc. Latency spikes hit production. CTO Sasaki-san directs:\n\n'The API Gateway → Lambda → DynamoDB call chain is opaque -- we cannot see where the slowdown is. Kato-kun left only log-grepping. Which AWS service gives us end-to-end distributed tracing across all three?'\n\nRead the scenario and name the correct AWS service.",
+      "description": "## Scenario\n\nA 3-tier microservice (API Gateway → Lambda → DynamoDB) is experiencing latency spikes. Each component logs separately; there is no end-to-end picture per request. The DVA staple: **AWS X-Ray traces requests and visualizes call time across API Gateway / Lambda / DynamoDB in a service map -- it is the end-to-end distributed tracing service.**\n\nThe scenario is in the SSM parameter. Identify the correct service and submit as `TC{service-name}`.\n\n## What gets deployed (all free)\n\n- SSM Parameter `/{NamePrefix}/briefing` (scenario text)\n\nNo X-Ray / Lambda / DynamoDB deployed. **$0 cost**.\n\n## How to solve\n\n1. Read SSM Parameter `/{NamePrefix}/briefing` for the scenario.\n2. Identify the AWS service for end-to-end distributed tracing.\n3. Submit as `TC{service-name}` (e.g. `TC{cloudwatch}`).\n\n## Scoring\n\n- Correct: +150 pt (once per deploy).\n- Wrong: -15 pt each. Score never drops below 0.\n\n## Cost\n\nSSM parameter only. No billable resources. $0.",
+      "learningGoals": [
+        "Understand that AWS X-Ray provides end-to-end distributed tracing across AWS services",
+        "Organize X-Ray concepts: service map, segments, subsegments, annotations",
+        "Explain when to use CloudWatch Logs (log aggregation) vs X-Ray (request tracing)"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 150,
+    "wrongAnswerPenalty": 15,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "CloudWatch はメトリクス/ログを集約するが、リクエスト単位のトレースは別サービス。Lambda を X-Ray 有効にすると `_X_AMZN_TRACE_ID` ヘッダーが伝播し、サービスマップで呼び出し連鎖が見える。このサービスは名前に有名なコンピュータグラフィックス用語が入っている。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "AWS X-Ray が分散トレーシングのサービス。提出形式は `TC{x-ray}`。",
+        "penalty": 40
+      }
+    ]
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "dop-codebuild-compute-type",
+  "name": "CodeBuild プロジェクトのコンピュートタイプを読め (DOP CI/CD 監査)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "15〜25 分",
+  "shortDescription": "天下クラウド株式会社、 入社 3 週間目。 佐々木 CTO が CI コスト削減会議を開いた。\n\n「加藤くんが作った CodeBuild プロジェクト、 どのコンピュートタイプを使ってるか誰も把握してない。 ビルドを走らせる前にまず環境設定を確認してくれ」。\n\nプロジェクトを定義するだけでは課金されない ── でもビルドを動かしたら話が変わる。 コンソールか CLI でプロジェクト設定を読み、 使われているコンピュートタイプを答えろ。",
+  "description": "## シナリオ\n\n加藤さんが残した CodeBuild プロジェクトがある。 ビルドは一度も実行されておらず課金はゼロだが、 環境設定がどうなっているか誰も知らない。 DOP 試験の定番: **CodeBuild の Environment.ComputeType** を読んで正しいフラグを提出しろ。\n\nCodeBuild のコンピュートタイプは `BUILD_GENERAL1_SMALL` / `BUILD_GENERAL1_MEDIUM` / `BUILD_GENERAL1_LARGE` / `BUILD_GENERAL1_XLARGE` などがある。 コンソールの「編集 > 環境」か `aws codebuild batch-get-projects` で確認できる。\n\n## デプロイされるもの (すべて無料)\n\n- IAM ロール × 1 (CodeBuild サービスロール)\n- CodeBuild プロジェクト × 1 (ソース: NO_SOURCE、 環境: Amazon Linux、 ComputeType は設定済み)\n- SSM Parameter × 1 (ブリーフィング)\n\nビルドは一切実行しないので **課金は $0**。\n\n## 解き方\n\n1. AWS Console (CodeBuild > ビルドプロジェクト) か CloudShell で `aws codebuild batch-get-projects --names <project-name>` を実行。\n2. レスポンスの `environment.computeType` フィールドを確認する。\n3. 値を小文字ハイフン区切りに変換して `TC{...}` 形式で提出。 例: `BUILD_GENERAL1_SMALL` → `TC{build-general1-small}`。\n\nタスク説明は SSM Parameter `/{NamePrefix}/briefing` にもある。\n\n## 採点\n\n- 正解: +200 pt (1 デプロイにつき 1 回)。\n- 不正解: -20 pt/回 (総当たり防止)。 スコアは 0 未満にならない。\n\n## コスト\n\nCodeBuild プロジェクト定義・IAM ロール・SSM パラメータは無料。 ビルドは実行しない。 課金リソースなし。",
+  "tags": ["dop", "devops-professional", "codebuild", "ci-cd", "compute-type"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- CodeBuild project config analysis only, port unused)" }
+  ],
+  "learningGoals": [
+    "aws codebuild batch-get-projects で environment.computeType を読む手順を習得する",
+    "CodeBuild のコンピュートタイプ選択が CI コストに与える影響を理解する",
+    "CodeBuild プロジェクトの環境設定 (ImageId / ComputeType / EnvironmentType) の構造を把握する"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Read the CodeBuild project compute type (DOP CI/CD audit)",
+      "shortDescription": "Week three at TenkaCloud Inc. CTO Sasaki-san convenes a CI cost-reduction meeting.\n\n'Nobody knows which compute type Kato-kun used for the CodeBuild project. Check the environment config before we run any builds.'\n\nJust defining the project incurs no charge -- but running a build is another story. Read the project configuration from the console or CLI and report the compute type.",
+      "description": "## Scenario\n\nKato-san left a CodeBuild project. It has never been built and costs nothing, but nobody knows its environment settings. The classic DOP point: read **CodeBuild's Environment.ComputeType** and submit the correct flag.\n\nCodeBuild compute types include `BUILD_GENERAL1_SMALL` / `BUILD_GENERAL1_MEDIUM` / `BUILD_GENERAL1_LARGE` / `BUILD_GENERAL1_XLARGE`. You can check via the console Edit > Environment or with `aws codebuild batch-get-projects`.\n\n## What gets deployed (all free)\n\n- 1 IAM role (CodeBuild service role)\n- 1 CodeBuild project (source: NO_SOURCE, environment: Amazon Linux, ComputeType: configured)\n- 1 SSM Parameter (briefing)\n\nNo builds are ever run -- **$0 cost**.\n\n## How to solve\n\n1. In the AWS Console (CodeBuild > Build projects) or CloudShell run `aws codebuild batch-get-projects --names <project-name>`.\n2. Inspect the `environment.computeType` field in the response.\n3. Convert the value to lower-case hyphenated form and submit as `TC{...}`. E.g. `BUILD_GENERAL1_SMALL` → `TC{build-general1-small}`.\n\nThe task is also in SSM Parameter `/{NamePrefix}/briefing`.\n\n## Scoring\n\n- Correct: +200 pt (once per deploy).\n- Wrong: -20 pt each (anti-brute-force). Score never drops below 0.\n\n## Cost\n\nCodeBuild project definition, IAM role, and SSM parameter are free. No builds run. No billable resources.",
+      "learningGoals": [
+        "Learn to read environment.computeType with aws codebuild batch-get-projects",
+        "Understand how CodeBuild compute type choices affect CI cost",
+        "Grasp the structure of a CodeBuild project environment (ImageId / ComputeType / EnvironmentType)"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 20,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "CloudShell で `aws codebuild batch-get-projects --names $(aws codebuild list-projects --query 'projects[?contains(@, `'\"'\"'${NamePrefix}'\"'\"')]' --output text)` を実行し、 `environment.computeType` を確認する。 コンソールなら CodeBuild > ビルドプロジェクト > (プロジェクト名) > 編集 > 環境 でも見られる。",
+        "penalty": 25
+      },
+      {
+        "id": "hint-2",
+        "content": "コンピュートタイプは `BUILD_GENERAL1_SMALL`。 提出形式は `TC{build-general1-small}` (アンダースコアをハイフンに、すべて小文字に変換)。",
+        "penalty": 50
+      }
+    ]
+  }
+}

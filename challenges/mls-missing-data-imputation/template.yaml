@@ -1,0 +1,185 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (mls-missing-data-imputation). MLS-C01 preprocessing
+  drill. Deploys a single SSM Parameter with a medical-diagnosis dataset profile:
+  45,231 rows, age column has 3.2% MCAR missing values (mean 51.3, median 52).
+  The player names the preprocessing technique that fills NaN with statistics
+  rather than dropping rows (= imputation). The answer lives only in a CFn
+  Output the participant role cannot read.
+
+  Cost: SSM Parameter and IAM Role are free. No compute. $0 for the lifetime.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks from
+      colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+
+Resources:
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-participant-viewer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+  # Dataset profile with missing-value statistics and four candidate technique
+  # names. The correct answer (imputation) is NOT stated here; it lives only
+  # in the AnswerFlag Output below.
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: |
+        === TenkaCloud MLS Challenge: Missing Value Preprocessing ===
+
+        DATASET OVERVIEW
+        ----------------
+        Domain        : Medical diagnosis (cardiology risk prediction)
+        Total records : 45,231 patients
+        Features      : 14 numeric / 6 categorical
+        Target label  : heart_disease_risk  (0=low, 1=high)
+
+        MISSING VALUE PROFILE
+        ----------------------
+        Column         | Type    | Missing | Pct  | Mechanism
+        ---------------|---------|---------|------|------------------
+        age            | INT     |   1,447 | 3.2% | MCAR (random)
+        cholesterol    | FLOAT   |   2,716 | 6.0% | MAR  (older patients more likely to have value)
+        resting_bp     | FLOAT   |     451 | 1.0% | MCAR
+        fasting_glucose| FLOAT   |   5,428 |12.0% | MNAR (diabetics more likely to skip)
+
+        FOCUS COLUMN: `age`
+        ---------------------
+        Records with age present : 43,784
+        Records with age missing :  1,447  (3.2%)
+        Missing mechanism        : MCAR -- confirmed by Little's test (p=0.41)
+
+        Descriptive stats of `age` where present:
+          Count  : 43,784
+          Min    :     18 years
+          Max    :     87 years
+          Mean   :   51.3 years
+          Median :     52 years
+          Std    :   12.7 years
+          25th pct:    42 years
+          75th pct:    61 years
+
+        CANDIDATE PREPROCESSING STRATEGIES for the `age` column
+        ---------------------------------------------------------
+        A. listwise-deletion  : Drop every row where age is missing.
+                                Reduces dataset to 43,784 rows (-3.2%).
+                                Risk: if missingness is not truly MCAR,
+                                introduces systematic bias.
+
+        B. imputation         : Fill NaN values with a computed statistic or
+                                predicted value. Common strategies:
+                                  - Mean imputation    : fill with 51.3
+                                  - Median imputation  : fill with 52
+                                  - Mode imputation    : fill with most frequent value
+                                  - KNN imputation     : weighted avg of k nearest neighbors
+                                  - MICE / multiple imputation: model-based fill,
+                                    preserves uncertainty
+                                Preserves all 45,231 rows; downstream model
+                                sees no NaN.
+
+        C. one-hot-is-missing : Add a binary indicator column age_is_missing
+                                (1=was missing, 0=present) then fill NaN with 0.
+                                Lets the model learn from the missingness pattern.
+                                Used as a complement to, not replacement for,
+                                imputation.
+
+        D. feature-removal    : Drop the entire `age` column from the feature
+                                matrix. Appropriate only if the feature has
+                                >80% missing OR is provably uninformative.
+
+        QUESTION
+        --------
+        Which preprocessing technique (A/B/C/D) FILLS missing values rather
+        than deleting rows or dropping the column?
+        The technique has a dedicated Transformer class in both scikit-learn
+        (sklearn.impute.SimpleImputer / IterativeImputer) and SageMaker
+        Data Wrangler.
+
+        Submit your answer as TC{<technique>}  e.g.  TC{listwise-deletion}
+      Description: !Sub "TenkaCloud mls-missing-data-imputation briefing for ${NamePrefix}."
+      Tier: Standard
+
+Outputs:
+  BriefingParameterName:
+    Description: SSM Parameter holding the task briefing.
+    Value: !Ref BriefingParameter
+  SsmConsoleUrl:
+    Description: AWS Console deep link to the SSM Parameter Store.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/systems-manager/parameters/?region=${AWS::Region}"
+  # Canonical answer -- scoring engine only. Participant role has no
+  # cloudformation:DescribeStacks.
+  AnswerFlag:
+    Description: Flag the learner submits after naming the missing-value technique.
+    Value: "TC{imputation}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "saa-elb-type-pick",
+  "name": "Layer 7 で振り分けるロードバランサーはどれ? (SAA ELB 選択)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 2,
+  "estimatedDuration": "15〜20 分",
+  "shortDescription": "天下クラウド株式会社、 入社 2 週間目。 佐々木 CTO が新サービスの設計書を手にやってきた。\n\n「加藤くんが途中まで書いた構成図、 ロードバランサーの種類が空白のままなんだ。 URL パス `/api/*` と `/web/*` でバックエンドを振り分けたい、 WebSocket も使う、 HTTP/HTTPS 対応……これ、 どの ELB を選べばいいんだっけ?」\n\nシナリオ情報を分析して、 正しいロードバランサー種別を答えろ。",
+  "description": "## シナリオ\n\n加藤さんが残した設計メモが SSM Parameter に保存されている。 要件は以下の通り:\n- URL パスや Host ヘッダーでバックエンドを振り分けたい (レイヤー 7 ルーティング)\n- HTTP / HTTPS に対応\n- WebSocket をサポート\n- 同僚からは「Network Load Balancer でもいいのでは?」と言われたが……\n\nSAA の定番論点: **ALB (Application Load Balancer) はレイヤー 7 で動作し、URL パス・Host ヘッダー・HTTP メソッドによるルーティング、WebSocket、HTTP/2 をサポートする**。 NLB (Network Load Balancer) はレイヤー 4 (TCP/UDP) で動作し、超低レイテンシが必要な場合や静的 IP が欲しい場合に選ぶ。\n\n## デプロイされるもの (すべて無料)\n\n- SSM Parameter `/{NamePrefix}/briefing` (設計要件シナリオ)\n\nEC2 / NAT / ELB は一切作らないので **課金は $0**。\n\n## 解き方\n\n1. SSM Parameter `/{NamePrefix}/briefing` を読んで要件を確認する。\n2. 各 ELB 種別の特徴を思い出す:\n   - ALB: レイヤー 7、パスベースルーティング、WebSocket 対応\n   - NLB: レイヤー 4、TCP/UDP、静的 IP、超低レイテンシ\n   - CLB: 旧世代、非推奨\n3. 要件に最も合致する ELB 種別名を小文字ハイフン区切りで `TC{...}` 形式で提出。\n   例: `TC{network-load-balancer}`\n\n## 採点\n\n- 正解: +200 pt (1 デプロイにつき 1 回)。\n- 不正解: -15 pt/回。 スコアは 0 未満にならない。\n\n## コスト\n\nSSM Parameter のみ。 課金リソースなし。 $0。",
+  "tags": ["saa", "solutions-architect-associate", "elb", "alb", "load-balancer", "networking", "layer7"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- ELB selection scenario only, port unused)" }
+  ],
+  "learningGoals": [
+    "ALB (レイヤー 7) と NLB (レイヤー 4) の使い分けを正確に理解する",
+    "パスベースルーティング・WebSocket が必要なシナリオで ALB を選ぶ根拠を説明できる",
+    "SAA-C03 の ELB 選択問題のアプローチを身につける"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Which load balancer routes at layer 7? (SAA ELB selection)",
+      "shortDescription": "Week two at TenkaCloud Inc. CTO Sasaki-san arrives with a half-finished architecture doc.\n\n'Kato-kun left the load-balancer type blank. We need to route /api/* and /web/* to different backends, support WebSocket, and handle HTTP/HTTPS. A teammate suggested Network Load Balancer -- but which one is actually right?'\n\nAnalyze the scenario and name the correct load-balancer type.",
+      "description": "## Scenario\n\nKato-san's design notes are stored in an SSM Parameter. The requirements are:\n- Route by URL path and Host header (layer-7 routing)\n- Support HTTP / HTTPS\n- WebSocket support required\n- A colleague suggested NLB, but is that right?\n\nThe classic SAA point: **ALB (Application Load Balancer) operates at layer 7 and supports URL path / host-header routing, WebSocket, and HTTP/2**. NLB (Network Load Balancer) operates at layer 4 (TCP/UDP) and is chosen when ultra-low latency or static IPs are needed.\n\n## What gets deployed (all free)\n\n- SSM Parameter `/{NamePrefix}/briefing` (design-requirements scenario)\n\nNo EC2 / NAT / ELB deployed. **$0 cost**.\n\n## How to solve\n\n1. Read SSM Parameter `/{NamePrefix}/briefing` for the requirements.\n2. Recall the ELB types:\n   - ALB: layer 7, path-based routing, WebSocket support\n   - NLB: layer 4, TCP/UDP, static IPs, ultra-low latency\n   - CLB: legacy, not recommended\n3. Submit the best-fit type as `TC{...}` in lowercase-hyphenated form.\n   Example: `TC{network-load-balancer}`\n\n## Scoring\n\n- Correct: +200 pt (once per deploy).\n- Wrong: -15 pt each. Score never drops below 0.\n\n## Cost\n\nSSM Parameter only. No billable resources. $0.",
+      "learningGoals": [
+        "Understand the difference between ALB (layer 7) and NLB (layer 4) and when to choose each",
+        "Explain why ALB is the right choice for path-based routing and WebSocket scenarios",
+        "Practice the ELB-selection question pattern common on SAA-C03"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 15,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "要件に「URL パスでバックエンドを振り分ける」「WebSocket をサポート」が含まれている。 これはレイヤー 7 (HTTP/HTTPS) の機能。 AWS の 3 種類の ELB のうち、 レイヤー 7 で動作するのはどれ?",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "答えは ALB (Application Load Balancer)。 提出形式は `TC{application-load-balancer}`。 NLB はレイヤー 4 (TCP/UDP) 専門でパスルーティングも WebSocket のネイティブ対応も持たない。",
+        "penalty": 40
+      }
+    ]
+  }
+}

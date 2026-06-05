@@ -1,0 +1,138 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (aif-bedrock-rag-knowledge-base). AIF-C01 Amazon
+  Bedrock RAG capability selection drill. Deploys one SSM String parameter
+  describing a requirement to ground LLM answers in private company documents
+  without retraining the model, with four candidate Bedrock features as decoys
+  (fine-tuning, agents, guardrails). The player must identify Knowledge Bases.
+  The answer is stored only in a CFn Output the participant role cannot read.
+
+  Cost: SSM parameters and IAM roles are free. No EC2, NAT, or EIP. $0.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks from
+      colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+
+Resources:
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-participant-viewer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: >-
+        TASK: Amazon Bedrock Feature Selection for RAG.
+        Read the requirement below and identify the correct Amazon Bedrock feature.
+        Submit TC{feature-name} in lowercase with hyphens.
+        Example: TC{fine-tuning}
+
+        REQUIREMENT:
+        TenkaCloud's AI team wants to build an internal assistant that:
+        - Answers employee questions using the company's own documents:
+          product manuals, incident reports, onboarding guides, and runbooks
+        - The LLM should stay grounded in these private documents -- avoiding
+          hallucinations about company-specific facts that the base model
+          cannot know
+        - Model retraining (fine-tuning) is NOT acceptable: it is too expensive
+          (requires labeled data, compute hours, and ML expertise) and the
+          documents change frequently
+        - The solution must work without re-deploying or updating the model
+          when new documents are added -- just ingest new files into a store
+
+        CANDIDATE BEDROCK FEATURES:
+        A) fine-tuning      -- adapt model weights on a labeled dataset; changes the model itself
+        B) agents           -- orchestrate multi-step tasks across APIs and data sources
+        C) guardrails       -- filter harmful or off-topic content in model input/output
+        D) knowledge-bases  -- ingest documents into a vector store; retrieve relevant passages
+                              at query time and append them to the prompt (RAG pattern)
+
+        Which feature (A/B/C/D) best satisfies the requirement?
+        Submit the feature name: TC{fine-tuning}, TC{agents}, TC{guardrails}, or TC{knowledge-bases}
+      Description: !Sub "TenkaCloud aif-bedrock-rag-knowledge-base briefing for ${NamePrefix}."
+      Tier: Standard
+
+Outputs:
+  BriefingParameterName:
+    Description: SSM Parameter holding the Bedrock feature selection briefing.
+    Value: !Ref BriefingParameter
+  SsmConsoleUrl:
+    Description: AWS Console deep link to SSM Parameter Store.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/systems-manager/parameters?region=${AWS::Region}"
+  # Canonical answer -- scoring engine only. No cloudformation:DescribeStacks
+  # is granted to the participant role, so this Output is not readable by the player.
+  AnswerFlag:
+    Description: Flag the learner submits after identifying the correct Bedrock feature.
+    Value: "TC{knowledge-bases}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

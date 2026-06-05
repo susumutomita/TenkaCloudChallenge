@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "pas-sap-overlay-ip",
+  "name": "SAP HANA HA の仮想 IP を AZ 間で引き継ぐ技術を特定せよ (PAS オーバーレイ IP)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 4,
+  "estimatedDuration": "15〜25 分",
+  "shortDescription": "天下クラウド株式会社、 入社 4 ヶ月目。 佐々木 CTO が HA 設計書を広げている。\n\n「加藤くんの SAP HANA HA 設計に穴がある。 プライマリが AZ-1、 セカンダリが AZ-2 なんだが、 フェールオーバー時に仮想 IP を AZ をまたいで引き継ぐ方法が書いていない。 通常のルーティングでは AZ を越えた IP の引き継ぎはできないんだが……」。\n\nSSM パラメータに HA アーキテクチャ図と選択肢が入っている。 正しい技術を特定して TC{...} 形式で提出しろ。",
+  "description": "## シナリオ\n\n加藤さんの SAP HANA HSR (HANA System Replication) HA 設計:\n- プライマリノード: AZ ap-northeast-1a (サブネット 10.0.1.0/24)\n- セカンダリノード: AZ ap-northeast-1c (サブネット 10.0.3.0/24)\n- 仮想 IP: 10.99.0.1 (SAP アプリサーバーが接続する仮想 DB エンドポイント)\n- フェールオーバー管理: Linux Pacemaker + SAPHanaSR\n\n問題: 仮想 IP 10.99.0.1 はプライマリの AZ に属する IP アドレスでなければならない (通常の VPC ルーティング)。 しかし AZ-1 で障害が発生した際、 この IP を AZ-1 から AZ-1c のインスタンスに引き継ぐことが通常の AWS VPC では不可能。\n\nAWS では AZ をまたいだ仮想 IP のフェールオーバーを実現するために「オーバーレイ IP ルーティング」という技術を用いる。\n\n## デプロイされるもの (すべて無料)\n\n- SSM Parameter `/{NamePrefix}/briefing` — HA アーキテクチャ詳細 + ルーティング問題の説明 + 4 つの技術選択肢\n- IAM Role (ParticipantViewerRole) — SSM パラメータの読み取り権限のみ\n\nEC2 / SAP 実行なし。 **課金 $0**。\n\n## 解き方\n\n1. CloudShell で `aws ssm get-parameter --name \"/{NamePrefix}/briefing\" --query Parameter.Value --output text` を実行。\n2. 仮想 IP 10.99.0.1 が VPC CIDR の外 (10.99.0.0/16) にあることに注目する。\n3. AWS では VPC 外の IP アドレスに対してルートテーブルのカスタムルートを追加し、 フェールオーバー先の EC2 インスタンスに向けることで AZ をまたいだ仮想 IP を実現する — これが「オーバーレイ IP」手法。\n4. 答えを `TC{overlay-ip}` の形式で Portal に提出する。\n\n## 採点\n\n- 正解: +200 pt (1 デプロイにつき 1 回)。\n- 不正解: -20 pt/回 (総当たり防止)。 スコアは 0 未満にならない。\n\n## コスト\n\nSSM Parameter / IAM Role は無料。 課金リソースなし。",
+  "tags": ["pas", "sap-on-aws", "sap-hana", "high-availability", "overlay-ip", "hana-system-replication", "pacemaker"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- SSM parameter analysis only, port unused)" }
+  ],
+  "learningGoals": [
+    "SAP HANA HA でオーバーレイ IP (VPC CIDR 外の仮想 IP + カスタムルート更新) が必要な理由を理解する",
+    "AWS VPC でのオーバーレイ IP ルーティングの仕組み (VPC ルートテーブルのカスタムルート + Pacemaker による更新) を説明できる",
+    "PAS-C01 の SAP HANA HA フェールオーバー設計問題に対する判断軸を身につける"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Identify the technique for cross-AZ virtual IP failover in SAP HANA HA (PAS overlay IP)",
+      "shortDescription": "Four months in at TenkaCloud Inc. CTO Sasaki-san has a HA design document spread out.\n\n'Kato-kun's SAP HANA HA design has a gap. Primary is in AZ-1, secondary in AZ-2, but there's nothing written about how to hand over the virtual IP across AZs during failover. Normal routing can't span AZ boundaries...'\n\nThe SSM parameter holds the HA architecture diagram and candidate techniques. Identify the correct one and submit TC{...}.",
+      "description": "## Scenario\n\nKato-san's SAP HANA HSR HA design:\n- Primary: AZ ap-northeast-1a (subnet 10.0.1.0/24)\n- Secondary: AZ ap-northeast-1c (subnet 10.0.3.0/24)\n- Virtual IP: 10.99.0.1 (SAP app servers connect here)\n- Failover manager: Linux Pacemaker + SAPHanaSR\n\nProblem: In normal AWS VPC routing, 10.99.0.1 must belong to the primary AZ subnet. When AZ-1 fails, there is no native way to 'move' that IP to an instance in AZ-1c.\n\nAWS SAP on AWS reference architecture solves this with 'Overlay IP routing': using an IP address outside the VPC CIDR with a custom VPC route entry pointing to the active node, updated by Pacemaker on failover.\n\n## What gets deployed (all free)\n\n- SSM Parameter `/{NamePrefix}/briefing` — HA architecture detail, routing problem explanation, and four candidate techniques\n- IAM Role (ParticipantViewerRole) — SSM read + CloudShell only\n\nNo EC2 / SAP running. **$0 cost**.\n\n## How to solve\n\n1. In CloudShell run `aws ssm get-parameter --name \"/{NamePrefix}/briefing\" --query Parameter.Value --output text`.\n2. Note that the virtual IP 10.99.0.1 is outside the VPC CIDR — an 'overlay' address.\n3. AWS handles cross-AZ virtual IP failover by updating a custom VPC route table entry pointing to the active HANA node — called the 'overlay IP' technique.\n4. Submit `TC{overlay-ip}`.\n\n## Scoring\n\n- Correct: +200 pt (once per deploy).\n- Wrong: -20 pt each. Score never drops below 0.\n\n## Cost\n\nSSM Parameter / IAM Role are free. No billable resources.",
+      "learningGoals": [
+        "Understand why SAP HANA cross-AZ HA requires overlay IP routing (VPC CIDR boundary problem)",
+        "Explain how overlay IP works: custom route table entry + Pacemaker update on failover",
+        "Apply PAS-C01 SAP HANA HA failover design reasoning"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 20,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "仮想 IP 10.99.0.1 が VPC CIDR (10.0.0.0/8) の外にあることに注目せよ。 通常の VPC ルーティングでは AZ をまたいだ IP 引き継ぎはできない。 AWS SAP on AWS リファレンスアーキテクチャではルートテーブルのカスタムルートを Pacemaker が更新することで実現する — この手法の名前は?",
+        "penalty": 25
+      },
+      {
+        "id": "hint-2",
+        "content": "AWS SAP on AWS のベストプラクティスは **Overlay IP ルーティング**。 VPC CIDR 外の IP アドレスをカスタムルートに登録し、 フェールオーバー時に Pacemaker が VPC ルートテーブルを更新して宛先インスタンスを切り替える。 提出形式: `TC{overlay-ip}`。",
+        "penalty": 45
+      }
+    ]
+  }
+}

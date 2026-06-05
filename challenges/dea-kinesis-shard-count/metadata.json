@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "dea-kinesis-shard-count",
+  "name": "Kinesis Data Streams の最小シャード数を計算せよ (DEA シャード計算)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "15〜20 分",
+  "shortDescription": "天下クラウド株式会社、ストリーミング基盤設計レビューの朝。佐々木 CTO がメッセージを送ってくる。\n\n「加藤くんが設計した Kinesis ストリームのシャード数が足りないかもしれない。毎秒 2 MB のデータを取り込む予定で、1 シャードが毎秒 1 MB 処理できる。最低何シャード必要か計算してくれ」。\n\n計算式を使って答えを出し、提出しろ。",
+  "description": "## シナリオ\n\n加藤さんが設計したリアルタイムデータ取り込み基盤は、毎秒 2 MB のイベントデータを受信する予定だ。Kinesis Data Streams では **1 シャードあたりの取り込み上限は 1 MB/s**。佐々木 CTO は「シャードが足りないとスロットリングが発生する」と心配している。\n\nDEA の重要論点: Kinesis Data Streams のシャード数計算は **必要スループット ÷ 1 シャードあたりのスループット (1 MB/s)** で求まる。端数は切り上げる。\n\n**計算:** 2 MB/s ÷ 1 MB/s per shard = **2 シャード**\n\n## デプロイされるもの (すべて無料)\n\n- SSM Parameter × 1 (`/{NamePrefix}/briefing`) — 上記シナリオと計算問題\n\nKinesis ストリームは高コストなので **デプロイしない** (Kinesis Data Streams は 1 シャード毎時 $0.015 の課金)。シナリオデータを SSM パラメータで配信し、計算問題として解く。**課金 $0**。\n\n## 解き方\n\n1. SSM Parameter `/{NamePrefix}/briefing` を読む。\n2. 公式: `必要シャード数 = CEIL(取り込みレート MB/s ÷ 1 MB/s per shard)`。\n3. `CEIL(2 ÷ 1) = 2`。\n4. `TC{2-shards}` 形式で Portal に提出。\n\n## 採点\n\n- 正解: +200 pt (1 デプロイにつき 1 回)。\n- 不正解: -20 pt/回。スコアは 0 未満にならない。\n\n## コスト\n\nSSM Parameter (Standard Tier、1 KB 以下) は無料。Kinesis ストリームは作成しない。課金 $0。",
+  "tags": ["dea", "data-engineer-associate", "kinesis", "data-streams", "shards", "throughput", "capacity-planning"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- Kinesis shard calculation scenario, port unused)" }
+  ],
+  "learningGoals": [
+    "Kinesis Data Streams のシャード数計算式 (取り込みレート ÷ 1 MB/s per shard) を習得する",
+    "シャードスロットリングが発生する条件と回避法を理解する",
+    "Kinesis Data Streams のスループット制限 (1 MB/s per shard ingest, 2 MB/s per shard read) を覚える"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Calculate minimum Kinesis Data Streams shard count (DEA shard math)",
+      "shortDescription": "Streaming infrastructure design review morning at TenkaCloud Inc. CTO Sasaki-san messages:\n\n'Kato-kun's Kinesis stream design might not have enough shards. The plan is to ingest 2 MB/s; each shard handles 1 MB/s. Calculate the minimum shard count.'\n\nApply the formula and submit.",
+      "description": "## Scenario\n\nKato-san's real-time ingestion pipeline is designed to receive 2 MB/s of event data. Kinesis Data Streams limits **each shard to 1 MB/s ingestion**. CTO Sasaki-san is worried: 'Insufficient shards cause throttling.'\n\nThe key DEA concept: shard count = **required throughput ÷ throughput per shard (1 MB/s)**; round up.\n\n**Calculation:** 2 MB/s ÷ 1 MB/s per shard = **2 shards**\n\n## What gets deployed (all free)\n\n- 1 SSM Parameter (`/{NamePrefix}/briefing`) -- the scenario and calculation problem\n\nKinesis Data Streams costs $0.015/shard-hour and is **not deployed**. The scenario is delivered as SSM data. **$0 cost**.\n\n## How to solve\n\n1. Read SSM Parameter `/{NamePrefix}/briefing`.\n2. Formula: `required shards = CEIL(ingest rate MB/s ÷ 1 MB/s per shard)`.\n3. `CEIL(2 ÷ 1) = 2`.\n4. Submit as `TC{2-shards}`.\n\n## Scoring\n\n- Correct: +200 pt (once per deploy).\n- Wrong: -20 pt each. Score never drops below 0.\n\n## Cost\n\nSSM Parameter (Standard Tier, ≤1 KB) is free. No Kinesis stream deployed. $0.",
+      "learningGoals": [
+        "Master the Kinesis Data Streams shard count formula (ingest rate ÷ 1 MB/s per shard)",
+        "Understand when shard throttling occurs and how to prevent it",
+        "Remember Kinesis throughput limits: 1 MB/s per shard ingest, 2 MB/s per shard read"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 20,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "Kinesis Data Streams の 1 シャードあたりの取り込み上限は **1 MB/s**。必要シャード数 = CEIL(必要スループット ÷ 1 MB/s per shard)。2 MB/s の場合は?",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "CEIL(2 MB/s ÷ 1 MB/s) = 2 シャード。提出形式は `TC{2-shards}`。",
+        "penalty": 40
+      }
+    ]
+  }
+}

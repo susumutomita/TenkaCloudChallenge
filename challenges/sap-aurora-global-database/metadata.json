@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "sap-aurora-global-database",
+  "name": "サブ秒クロスリージョンレプリケーションと高速 DR フェイルオーバーを実現する RDS 機能を答えろ (SAP Aurora Global)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 4,
+  "estimatedDuration": "20〜30 分",
+  "shortDescription": "天下クラウド株式会社、 着任 11 ヵ月目。 佐々木 CTO から DR 設計の相談が来る。\n\n「加藤くんが設計したリレーショナル DB の DR、 RPO 1 秒以下・RTO 数分で別リージョンに切り替えたいんだが……RDS Multi-AZ じゃリージョン間は無理らしい。 サブ秒レプリケーションで高速フェイルオーバーができる Aurora の機能は何だ?」\n\nシナリオを読んで、 正しい Aurora 機能を答えろ。",
+  "description": "## シナリオ\n\n天下クラウドは東京リージョンで Aurora MySQL を運用している。 DR 要件:\n\n- **RPO**: 約 1 秒以下 (サブ秒クロスリージョンレプリケーション)\n- **RTO**: 数分以内の高速リージョン切り替え\n- 別リージョン (例: シンガポール) にスタンバイを持つ\n- RDS Multi-AZ では同一リージョン内の AZ 冗長のみで要件を満たせない\n\nSAP-C02 の頻出論点: **Aurora Global Database** は 1 プライマリリージョン + 最大 5 セカンダリリージョンに対応し、 ストレージレベルのレプリケーションで 1 秒未満の RPO と 1 分以内の RTO を実現する。\n\n## デプロイされるもの (すべて無料)\n\n- SSM String Parameter `/{NamePrefix}/briefing` — シナリオ、 要件、 選択肢\n\nAurora クラスターは高額なため未デプロイ。 シナリオを SSM データとして格納。 **課金 $0**。\n\n## 解き方\n\n1. SSM Parameter `/{NamePrefix}/briefing` を読んでシナリオを確認する。\n2. サブ秒クロスリージョンレプリケーション + 高速 DR フェイルオーバーを満たす Aurora 機能を特定する。\n3. 機能名を `TC{機能名}` 形式で提出 (例: `TC{aurora-global-database}`)。\n\n## 採点\n\n- 正解: +200 pt。\n- 不正解: -20 pt/回。 スコアは 0 未満にならない。\n\n## コスト\n\nSSM Parameter は無料。 課金リソースなし。",
+  "tags": ["sap", "solutions-architect-professional", "aurora", "rds", "dr", "cross-region", "database"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- Aurora Global Database scenario analysis only, port unused)" }
+  ],
+  "learningGoals": [
+    "Aurora Global Database がサブ秒 RPO と 1 分以内 RTO のクロスリージョン DR を実現することを理解する",
+    "RDS Multi-AZ (同一リージョン AZ 冗長) と Aurora Global Database (クロスリージョン) の違いを区別する",
+    "Aurora Read Replica (非同期、フェイルオーバー遅い) と Aurora Global Database (ストレージレベル複製) の差を把握する"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Name the Aurora feature for sub-second cross-region replication and fast DR failover (SAP Aurora Global)",
+      "shortDescription": "Eleven months in at TenkaCloud Inc. CTO Sasaki-san asks for DR architecture advice.\n\n'Kato-kun's relational DB DR design needs sub-second RPO and RTO in minutes to fail over to another region, but RDS Multi-AZ only covers in-region availability. Which Aurora feature gives sub-second cross-region replication and fast failover?'\n\nRead the scenario and name the correct Aurora feature.",
+      "description": "## Scenario\n\nTenkaCloud runs Aurora MySQL in the Tokyo region. DR requirements:\n\n- **RPO**: approximately 1 second (sub-second cross-region replication)\n- **RTO**: fast regional failover within minutes\n- Standby in another region (e.g. Singapore)\n- RDS Multi-AZ only covers same-region AZ redundancy — does not meet requirements\n\nA classic SAP-C02 topic: **Aurora Global Database** supports one primary region + up to 5 secondary regions, with storage-level replication delivering sub-1-second RPO and under-1-minute RTO.\n\n## What gets deployed (all free)\n\n- SSM String Parameter `/{NamePrefix}/briefing` — scenario, requirements, and options\n\nAurora clusters are expensive and NOT deployed; the scenario is modeled as data. **$0 cost**.\n\n## How to solve\n\n1. Read SSM Parameter `/{NamePrefix}/briefing`.\n2. Identify the Aurora feature that provides sub-second cross-region replication and fast DR failover.\n3. Submit as `TC{feature-name}` (e.g. `TC{aurora-global-database}`).\n\n## Scoring\n\n- Correct: +200 pt.\n- Wrong: -20 pt each. Score never drops below 0.\n\n## Cost\n\nSSM Parameters are free. No billable resources.",
+      "learningGoals": [
+        "Understand that Aurora Global Database delivers sub-second RPO and under-1-minute RTO for cross-region DR",
+        "Distinguish RDS Multi-AZ (same-region AZ failover) from Aurora Global Database (cross-region)",
+        "Differentiate Aurora Read Replica (async, slow promotion) from Aurora Global Database (storage-level replication)"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 20,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "RDS Multi-AZ は同一リージョン内の AZ 冗長で、 リージョン間 DR には対応していない。 Aurora には「グローバル」という名前のついた機能があり、 複数リージョンにまたがるレプリケーションを提供している。 Aurora Read Replica との違いも確認しよう。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "正解は `Aurora Global Database`。 ストレージレベルのレプリケーションで 1 秒未満の RPO を達成し、 DR フェイルオーバーは 1 分以内に完了する。 最大 5 つのセカンダリリージョンにスタンバイを持てる。 提出形式: `TC{aurora-global-database}`。",
+        "penalty": 40
+      }
+    ]
+  }
+}

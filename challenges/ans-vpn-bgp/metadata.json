@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "ans-vpn-bgp",
+  "name": "VPN トンネル間の動的ルーティングと自動フェイルオーバー (ANS BGP)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 4,
+  "estimatedDuration": "15〜25 分",
+  "shortDescription": "天下クラウド株式会社、 Site-to-Site VPN の設計レビュー。 佐々木 CTO が言った。\n\n「加藤くんの設計では Static ルーティングになってるけど、 2 本のトンネルで自動フェイルオーバーして、 オンプレ側のルーター変更も自動で AWS に伝播させたい。 どのルーティングプロトコルを有効にすればいい?」\n\nシナリオを読み、 ANS-C01 で問われる動的ルーティングプロトコルを特定しろ。",
+  "description": "## シナリオ\n\nSite-to-Site VPN は 2 本のトンネルを自動生成する。 スタティックルーティングではトンネル障害時の切替に手動操作が必要で、 オンプレ側のルーティング変更も自動伝播しない。 **動的ルーティングプロトコル** を有効化すると、 トンネル間の自動フェイルオーバーとルート伝播が実現できる。\n\nSSM Parameter `/{NamePrefix}/briefing` にシナリオ全文が入っている。\n\n## デプロイされるもの (すべて無料)\n\n- SSM Parameter × 1 (シナリオ briefing)\n- IAM Role × 1 (ParticipantViewerRole)\n\nVPN Gateway や Customer Gateway (課金対象) はデプロイしない。 **課金は $0**。\n\n## 解き方\n\n1. SSM Parameter `/{NamePrefix}/briefing` を読む。\n2. Site-to-Site VPN の動的ルート伝播と自動フェイルオーバーを実現するルーティングプロトコルを特定する。\n3. `TC{...}` 形式で提出する。\n\n提出形式: `TC{bgp}` (例: `TC{bgp}`)。\n\n## 採点\n\n- 正解: +200 pt (1 デプロイにつき 1 回)。\n- 不正解: -15 pt/回。 スコアは 0 未満にならない。\n\n## コスト\n\nSSM Parameter / IAM Role は無料。 VPN Gateway / Customer Gateway はデプロイしない。 課金 $0。",
+  "tags": ["ans", "advanced-networking", "bgp", "site-to-site-vpn", "dynamic-routing", "failover"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- data scenario analysis only, port unused)" }
+  ],
+  "learningGoals": [
+    "AWS Site-to-Site VPN において BGP (Border Gateway Protocol) が動的ルーティングと自動フェイルオーバーを実現する仕組みを理解する",
+    "スタティックルーティングと BGP の違い (手動 vs 動的伝播) を整理する",
+    "ANS-C01 の VPN 設計問題でルーティングプロトコルを選択できるようになる"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Dynamic routing and auto-failover across VPN tunnels (ANS BGP)",
+      "shortDescription": "TenkaCloud Inc., Site-to-Site VPN design review. CTO Sasaki-san said:\n\n'Kato-kun's design uses static routing, but we need automatic failover across the two tunnels and automatic propagation of on-prem route changes to AWS. Which routing protocol do we enable?'\n\nRead the scenario and identify the ANS-C01 dynamic routing protocol.",
+      "description": "## Scenario\n\nSite-to-Site VPN automatically creates two tunnels. Static routing requires manual intervention when a tunnel fails and does not propagate on-prem routing changes automatically. Enabling a **dynamic routing protocol** provides automatic tunnel failover and route propagation.\n\nThe full scenario is in SSM Parameter `/{NamePrefix}/briefing`.\n\n## What gets deployed (all free)\n\n- 1 SSM Parameter (scenario briefing)\n- 1 IAM Role (ParticipantViewerRole)\n\nNo VPN Gateway or Customer Gateway (billable). **$0 cost**.\n\n## How to solve\n\n1. Read SSM Parameter `/{NamePrefix}/briefing`.\n2. Identify the routing protocol that enables dynamic route propagation and auto-failover for Site-to-Site VPN.\n3. Submit as `TC{...}`.\n\nSubmission format: `TC{bgp}` (e.g. `TC{bgp}`).\n\n## Scoring\n\n- Correct: +200 pt (once per deploy).\n- Wrong: -15 pt each. Score never drops below 0.\n\n## Cost\n\nSSM Parameter / IAM Role are free. No VPN/Customer Gateway deployed. $0.",
+      "learningGoals": [
+        "Understand how BGP (Border Gateway Protocol) provides dynamic routing and auto-failover for AWS Site-to-Site VPN",
+        "Distinguish static routing from BGP (manual vs dynamic propagation)",
+        "Select the right routing protocol in ANS-C01 VPN design questions"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 15,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "Site-to-Site VPN は 2 本のトンネルを提供する。 スタティックルーティングの場合、 1 本が落ちても自動で切り替わらない。 **動的にルートを交換し、 トンネル障害を検知して自動フェイルオーバーするプロトコル** はインターネットルーティングの標準である何か?",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "答えは **BGP (Border Gateway Protocol)**。 AWS Site-to-Site VPN で BGP を有効にすると、 Virtual Private Gateway が BGP ピアとなり、 動的ルート広告とトンネル自動フェイルオーバーが実現する。 提出形式は `TC{bgp}`。",
+        "penalty": 40
+      }
+    ]
+  }
+}

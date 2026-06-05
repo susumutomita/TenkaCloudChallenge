@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "sap-snowball-vs-network",
+  "name": "500 TB を数日で転送するオフライン転送サービスを答えろ (SAP データ移行)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 4,
+  "estimatedDuration": "20〜30 分",
+  "shortDescription": "天下クラウド株式会社、 着任 7 ヵ月目。 佐々木 CTO から緊急連絡が来る。\n\n「加藤くんのデータセンター閉鎖計画、 500 TB のデータを AWS に移さないといけないんだが……回線が 1 Gbps しかなくて、 期日まで数日しかない。 どうすれば間に合う?」\n\n転送時間を計算して、 オフライン転送サービスを答えろ。",
+  "description": "## シナリオ\n\n天下クラウドはデータセンターを閉鎖し、 500 TB のデータを AWS に移行する必要がある。 制約:\n\n- 専用回線帯域幅: **1 Gbps**\n- 移行期限: **数日以内**\n- データ量: **500 TB (≒ 500,000 GB)**\n\nSAP-C02 の頻出計算論点: ネットワーク経由で転送するとどれくらいかかるかを計算した上で、 現実的なオフライン転送サービスを選択できるか。\n\n**計算式**: 500 TB = 500 × 1024 × 8 Gbit = 4,096,000 Gbit。 1 Gbps で割ると **4,096,000 秒 ≒ 47 日**。 これでは期日に間に合わない。\n\nAWS Snow ファミリー (Snowball Edge / Snowcone / Snowmobile) を使えば物理デバイスで 数日〜 1 週間でデータを転送できる。\n\n## デプロイされるもの (すべて無料)\n\n- SSM String Parameter `/{NamePrefix}/briefing` — シナリオ、 転送時間の計算式、 選択肢の定義\n\n**課金 $0**。\n\n## 解き方\n\n1. SSM Parameter `/{NamePrefix}/briefing` を読んでシナリオを確認する。\n2. ネットワーク転送に必要な時間を計算する: `500 TB ÷ 1 Gbps`。\n3. 計算結果と期日を比較し、 オフライン転送サービスを特定する。\n4. サービス名を `TC{サービス名}` 形式で提出 (例: `TC{snowball}`)。\n\n## 採点\n\n- 正解: +200 pt。\n- 不正解: -20 pt/回。 スコアは 0 未満にならない。\n\n## コスト\n\nSSM Parameter は無料。 課金リソースなし。",
+  "tags": ["sap", "solutions-architect-professional", "migration", "snowball", "data-transfer", "snow-family"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- data migration scenario analysis only, port unused)" }
+  ],
+  "learningGoals": [
+    "500 TB / 1 Gbps の転送時間計算 (約 47 日) から、 ネットワーク転送では期日に間に合わないと判断できる",
+    "AWS Snow ファミリー (Snowball / Snowcone / Snowmobile) のユースケース区分を把握する",
+    "データ量 × 帯域幅 → 転送日数の計算を SAP 試験レベルで素早く行えるようになる"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Name the offline transfer service to move 500 TB within days (SAP data migration)",
+      "shortDescription": "Seven months in at TenkaCloud Inc. CTO Sasaki-san calls urgently.\n\n'Kato-kun's data-center closure plan has 500 TB to move to AWS, but the link is only 1 Gbps and we have a few days. How do we make the deadline?'\n\nCalculate the transfer time and name the offline transfer service.",
+      "description": "## Scenario\n\nTenkaCloud must close its data center and move 500 TB of data to AWS. Constraints:\n\n- Dedicated bandwidth: **1 Gbps**\n- Deadline: **within a few days**\n- Data volume: **500 TB (≈ 500,000 GB)**\n\nA classic SAP-C02 calculation: compute how long network transfer would take, then choose the appropriate offline service.\n\n**Calculation**: 500 TB = 500 × 1024 × 8 Gbit = 4,096,000 Gbit. At 1 Gbps that is **4,096,000 s ≈ 47 days** — far beyond the deadline.\n\nThe AWS Snow family (Snowball Edge / Snowcone / Snowmobile) ships physical devices that can transfer data in days to a week.\n\n## What gets deployed (all free)\n\n- SSM String Parameter `/{NamePrefix}/briefing` — scenario, calculation, and service options\n\n**$0 cost**.\n\n## How to solve\n\n1. Read SSM Parameter `/{NamePrefix}/briefing`.\n2. Calculate the time to transfer 500 TB at 1 Gbps.\n3. Compare to the deadline; select the offline transfer service.\n4. Submit as `TC{service-name}` (e.g. `TC{snowball}`).\n\n## Scoring\n\n- Correct: +200 pt.\n- Wrong: -20 pt each. Score never drops below 0.\n\n## Cost\n\nSSM Parameters are free. No billable resources.",
+      "learningGoals": [
+        "Calculate 500 TB / 1 Gbps ≈ 47 days and conclude network transfer misses the deadline",
+        "Understand the AWS Snow family (Snowball / Snowcone / Snowmobile) use-case tiers",
+        "Practice data-volume / bandwidth calculations at SAP exam speed"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 20,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "まず転送時間を計算: 500 TB = 500 × 1024 × 8 Gbit ÷ 1 Gbps = 約 4,096,000 秒 ≒ 47 日。 数日で間に合わせるにはネットワーク経由は無理と判断できる。 AWS の「オフライン物理デバイス」で転送するサービスを探そう。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "500 TB 規模のオフライン転送には AWS Snowball Edge (または Snowball ファミリー) が最適。 物理デバイスを発送してデータをロードし、 AWS に返送すれば数日〜1 週間以内に完了できる。 提出形式: `TC{snowball}`。",
+        "penalty": 40
+      }
+    ]
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "clf-shared-responsibility-audit",
+  "name": "責任共有モデルを分類せよ (CLF セキュリティ監査)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 1,
+  "estimatedDuration": "15〜20 分",
+  "shortDescription": "天下クラウド株式会社、入社 3 日目。佐々木 CTO から緊急の Slack が飛んできた。\n\n「コンプライアンス監査チームが『AWS と我々のどちらが責任を持つべきタスク』の一覧を確認したいと言っている。加藤くんが残したメモに 6 つのセキュリティタスクがあるが、どれが顧客責任なのか整理できていない。顧客責任のタスクは何個ある?」\n\nSSM パラメータに 6 つのタスクが入っている。責任共有モデルに基づいて AWS 責任と顧客責任を分類し、顧客責任のタスク数を数えろ。",
+  "description": "## シナリオ\n\n加藤さんが残したメモには 6 つのセキュリティタスクが列挙されている。コンプライアンス監査のため、それぞれが **AWS の責任** か **顧客の責任** かを正しく分類し、顧客責任のタスクが何個あるかを答える必要がある。\n\nCLF の超定番論点: AWS 責任共有モデルでは **「クラウドのセキュリティ」は AWS、「クラウド内のセキュリティ」は顧客**の責任。ゲストOS のパッチ適用・セキュリティグループの設定・クライアントサイドの暗号化・IAM ポリシーの作成は顧客が自分でやること。ハイパーバイザーの管理・物理データセンターのセキュリティは AWS の仕事。\n\n## デプロイされるもの (すべて無料)\n\n- SSM Parameter `/{NamePrefix}/briefing` : 6 つのタスクの一覧と問いかけ\n- IAM Role (ParticipantViewerRole) : SSM パラメータを読む最小権限\n\nEC2 インスタンス・NAT Gateway・EIP は一切作らないので **課金は $0**。\n\n## 解き方\n\n1. AWS CloudShell か `aws ssm get-parameter --name /{NamePrefix}/briefing --query Parameter.Value --output text` でタスク一覧を確認。\n2. 各タスクを責任共有モデルに基づいて AWS 責任 / 顧客責任に分類する。\n   - **AWS 責任**: ハイパーバイザーの管理、物理データセンターのセキュリティ\n   - **顧客責任**: ゲスト OS のパッチ適用、セキュリティグループの設定、クライアントサイドでのデータ暗号化、IAM ユーザーポリシーの作成\n3. 顧客責任に当たるタスクの数 N を `TC{N-customer-tasks}` 形式で Portal に提出 (例: `TC{3-customer-tasks}`)。\n\n## 採点\n\n- 正解: +150 pt (1 デプロイにつき 1 回)。\n- 不正解: -15 pt/回 (総当たり防止)。スコアは 0 未満にならない。\n\n## コスト\n\nSSM パラメータ・IAM ロールは無料。課金リソースなし。",
+  "tags": ["clf", "cloud-practitioner", "shared-responsibility", "iam", "security", "compliance"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- SSM parameter analysis only, port unused)" }
+  ],
+  "learningGoals": [
+    "AWS 責任共有モデルにおける『クラウドのセキュリティ (AWS 責任)』と『クラウド内のセキュリティ (顧客責任)』の境界線を理解する",
+    "ゲスト OS パッチ・SG 設定・クライアント側暗号化・IAM ポリシーが顧客責任であることを確認する",
+    "ハイパーバイザーと物理データセンターの管理が AWS 責任であることを確認する"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Classify the shared responsibility model (CLF security audit)",
+      "shortDescription": "Day three at TenkaCloud Inc. An urgent Slack message from CTO Sasaki-san arrives.\n\n'Our compliance auditors want to know which security tasks belong to AWS vs. us. Kato-kun left a list of six tasks but never classified them. How many are customer responsibilities?'\n\nAn SSM parameter holds six security tasks. Apply the AWS shared responsibility model to classify each one, then count how many are the customer's responsibility.",
+      "description": "## Scenario\n\nKato-san's notes list six security tasks. For a compliance audit you need to classify each as **AWS's responsibility** or **the customer's responsibility**, then report how many fall on the customer side.\n\nThe classic CLF point: under the AWS shared responsibility model, **AWS is responsible 'of' the cloud** (hypervisor, physical data centers) while **customers are responsible 'in' the cloud** (guest OS patching, security group rules, client-side encryption, IAM policies).\n\n## What gets deployed (all free)\n\n- SSM Parameter `/{NamePrefix}/briefing`: the list of six tasks and the question\n- IAM Role (ParticipantViewerRole): minimal permissions to read the SSM parameter\n\nNo EC2, NAT Gateway, or EIP — **$0 cost**.\n\n## How to solve\n\n1. Run `aws ssm get-parameter --name /{NamePrefix}/briefing --query Parameter.Value --output text` in CloudShell to read the task list.\n2. Classify each task using the shared responsibility model.\n   - **AWS responsibility**: managing the hypervisor, physical data-center security\n   - **Customer responsibility**: patching the guest OS, configuring security groups, client-side data encryption, creating IAM user policies\n3. Count the customer-responsibility tasks and submit N as `TC{N-customer-tasks}` (e.g. `TC{3-customer-tasks}`).\n\n## Scoring\n\n- Correct: +150 pt (once per deploy).\n- Wrong: -15 pt each (anti-brute-force). Score never drops below 0.\n\n## Cost\n\nSSM parameters and IAM roles are free. No billable resources.",
+      "learningGoals": [
+        "Understand the boundary between 'security OF the cloud' (AWS) and 'security IN the cloud' (customer) in the shared responsibility model",
+        "Confirm that guest OS patching, SG configuration, client-side encryption, and IAM policies are customer responsibilities",
+        "Confirm that hypervisor management and physical data-center security are AWS responsibilities"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 150,
+    "wrongAnswerPenalty": 15,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "責任共有モデルの鍵は「クラウドの下の層 (物理・仮想化) = AWS、クラウドの上の層 (OS・アプリ・データ・設定) = 顧客」という分け方。`aws ssm get-parameter --name /{NamePrefix}/briefing` でタスク一覧を読んで、それぞれの層を確認しよう。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "6 タスクのうち AWS 責任は「ハイパーバイザーの管理」と「物理データセンターのセキュリティ」の 2 つ。残り 4 つ (ゲスト OS パッチ・SG 設定・クライアント側暗号化・IAM ポリシー作成) がすべて顧客責任。答えは `TC{4-customer-tasks}`。",
+        "penalty": 40
+      }
+    ]
+  }
+}

@@ -1,0 +1,171 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (mls-imbalanced-metric). MLS-C01 evaluation-metric drill.
+  Deploys a single SSM Parameter with a fraud-detection confusion matrix
+  (0.1% positive rate, TP=0, accuracy=99.9%). The player must identify that
+  F1 score -- not accuracy -- is the right metric for imbalanced classes.
+  The answer lives only in a CFn Output the participant role cannot read.
+
+  Cost: SSM Parameter and IAM Role are free. No compute or SageMaker endpoint.
+  $0 for the lifetime of the drill.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks from
+      colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+
+Resources:
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-participant-viewer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+  # Confusion matrix with TP=0 and 0.1% positive rate. Accuracy looks great
+  # (99.9%) but F1=0, revealing the model is useless. The answer (f1-score) is
+  # NOT stated here; it lives only in the AnswerFlag Output below.
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: |
+        === TenkaCloud MLS Challenge: Fraud Detection Metric Selection ===
+
+        BUSINESS CONTEXT
+        ----------------
+        System         : Real-time payment fraud detection
+        Production load: 1,000,000 transactions / day
+        Fraud rate     : 0.1%  (1,000 fraud / 999,000 normal)
+        Cost of miss   : Average $8,400 loss per undetected fraud transaction
+        Cost of FP     : Manual review ~$12 per case (acceptable)
+
+        DATASET (test split: 10,000 samples)
+        ---------------------------------------
+        Class distribution in test set:
+          Normal (Negative) : 9,990  (99.9 %)
+          Fraud  (Positive) :    10  ( 0.1 %)
+
+        CONFUSION MATRIX (model v2.3.1 on test set)
+        ---------------------------------------------
+                           | Predicted: Normal | Predicted: Fraud |
+        -------------------|-------------------|------------------|
+        Actual:  Normal    |       9,990       |         0        |
+        Actual:  Fraud     |          10       |         0        |
+
+        COMPUTED METRICS FROM CONFUSION MATRIX
+        ----------------------------------------
+        TP (True  Positive)  =     0   (fraud correctly flagged)
+        TN (True  Negative)  = 9,990   (normal correctly passed)
+        FP (False Positive)  =     0   (normal wrongly flagged)
+        FN (False Negative)  =    10   (fraud wrongly passed)
+
+        Accuracy   = (TP + TN) / (TP + TN + FP + FN)
+                   = (0 + 9990) / 10000
+                   =  99.9 %   <-- looks great!
+
+        Precision  = TP / (TP + FP) = 0 / 0  → undefined (0 positives predicted)
+        Recall     = TP / (TP + FN) = 0 / 10 = 0.0  (missed all fraud)
+
+        F1 Score   = 2 * Precision * Recall / (Precision + Recall)
+                   = 0  (immediately reveals the model is useless)
+
+        CANDIDATE METRICS
+        -----------------
+        A. accuracy    : (TP+TN) / (total). Simple but blind to class imbalance.
+                         A model that predicts "normal" for everything scores 99.9%.
+        B. f1-score    : Harmonic mean of Precision and Recall. Balances both;
+                         standard choice for imbalanced binary classification.
+        C. mean-squared-error : Regression loss (MSE). Not applicable to
+                         classification tasks.
+        D. r-squared   : Coefficient of determination for regression. Not
+                         applicable to binary classification.
+
+        QUESTION
+        --------
+        Which single metric should replace accuracy to correctly evaluate this
+        fraud detection model on an imbalanced dataset?
+
+        Submit your answer as TC{<metric>}  e.g.  TC{accuracy}
+      Description: !Sub "TenkaCloud mls-imbalanced-metric briefing for ${NamePrefix}."
+      Tier: Standard
+
+Outputs:
+  BriefingParameterName:
+    Description: SSM Parameter holding the task briefing.
+    Value: !Ref BriefingParameter
+  SsmConsoleUrl:
+    Description: AWS Console deep link to the SSM Parameter Store.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/systems-manager/parameters/?region=${AWS::Region}"
+  # Canonical answer -- scoring engine only. Participant role has no
+  # cloudformation:DescribeStacks.
+  AnswerFlag:
+    Description: Flag the learner submits after selecting the correct imbalanced-class metric.
+    Value: "TC{f1-score}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

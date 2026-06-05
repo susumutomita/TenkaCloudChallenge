@@ -1,0 +1,127 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (sap-global-accelerator). SAP-C02 network edge drill.
+  Stores a scenario in SSM: a global gaming service needs static Anycast IPs
+  for TCP/UDP traffic with sub-second regional failover. The player identifies
+  AWS Global Accelerator (not CloudFront, which is HTTP/HTTPS-only Layer 7)
+  as the correct service. Global Accelerator costs ~$18/month and is NOT
+  deployed; the scenario is modeled as data.
+
+  Cost: SSM Parameters and IAM roles are free. $0.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks from
+      colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+
+Resources:
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-participant-viewer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: >-
+        SCENARIO: TenkaCloud operates a global multiplayer game. REQUIREMENTS:
+        (1) Provide players with 2 static IP addresses that never change (SDK
+        bakes the IPs in at build time); (2) support both TCP and UDP protocols
+        (game uses UDP for low-latency state sync); (3) on a regional outage,
+        failover in under 30 seconds; (4) route all traffic through the AWS
+        global private backbone for minimal latency.
+        OPTIONS: CloudFront = HTTP/HTTPS (Layer 7) CDN, no UDP support, IPs
+        change; Route 53 Latency Routing = DNS-level, no static IPs, failover
+        is DNS-TTL-bound (minutes); AWS Global Accelerator = provides 2 static
+        Anycast IPv4 addresses, Layer 4 TCP+UDP, routes over AWS global backbone,
+        regional endpoint failover in seconds; Elastic Load Balancer = regional
+        only, no global Anycast.
+        DECOY: CloudFront is the most common wrong answer because it also uses
+        AWS edge locations, but it does not support UDP or provide static IPs.
+        QUESTION: Which AWS service provides static Anycast IPs, TCP/UDP support,
+        and fast regional failover for non-HTTP global traffic? Submit as
+        TC{service-name} e.g. TC{cloudfront}.
+      Description: !Sub "TenkaCloud sap-global-accelerator briefing for ${NamePrefix}."
+      Tier: Standard
+
+Outputs:
+  BriefingParameterName:
+    Description: SSM Parameter holding the Global Accelerator scenario.
+    Value: !Ref BriefingParameter
+  SsmConsoleUrl:
+    Description: AWS Console deep link to the SSM Parameter Store.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/systems-manager/parameters/?region=${AWS::Region}"
+  # Canonical answer, scoring engine only (no DescribeStacks granted to player).
+  AnswerFlag:
+    Description: Flag identifying the service for static Anycast IP + TCP/UDP global routing.
+    Value: "TC{global-accelerator}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

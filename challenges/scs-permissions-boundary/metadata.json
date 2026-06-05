@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "scs-permissions-boundary",
+  "name": "IAM ロールの最大権限を制限する機能を特定せよ (SCS-C02)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 4,
+  "estimatedDuration": "15〜25 分",
+  "shortDescription": "天下クラウド株式会社、入社 3 ヶ月目。佐々木 CTO が権限管理の強化を指示してくる。\n\n「開発チームに IAM ロール作成を委任したいんだけど、彼らが自分に管理者権限を付与できないよう制限したい。加藤くんが調べてた機能があるらしいんだけど、名前が分からなくて。このロールに設定されてる IAM 機能を特定してほしい」\n\nロールの設定を読み、最大権限を上限設定する IAM の機能名を答えろ。",
+  "description": "## シナリオ\n\n加藤さんが残した IAM ロールには、アタッチされたポリシーとは別に **特別な設定** がされている。この設定により、ロールに直接アタッチされたポリシーがどれだけ広い権限を付与していても、この設定を超えた権限は実際には行使できない。\n\nSCS 頻出論点: **Permissions Boundary (アクセス許可境界)** は IAM エンティティ (ユーザー / ロール) に設定できる上限ポリシー。Permissions Boundary と通常のポリシーの交差 (AND) が実際に使える権限になる。権限委任のセキュリティコントロールとして重要。\n\n## デプロイされるもの (すべて無料)\n\n- IAM ロール × 1 (`${NamePrefix}-bounded-role`)\n  - PermissionsBoundary に `ReadOnlyAccess` AWS 管理ポリシーをアタッチ\n  - インラインポリシー: `s3:*` を Allow (境界を超えることはできない)\n- SSM Parameter `/${NamePrefix}/briefing`: タスク説明\n\nEC2 インスタンス・課金リソースなし。**課金 $0**。\n\n## 解き方\n\n1. CloudShell か Console (IAM > Roles) で `aws iam get-role --role-name ${NamePrefix}-bounded-role` を実行。\n2. 出力の中に通常のポリシーとは別の特別なフィールドを探す。\n3. そのフィールドが表す IAM の機能名を特定する。\n4. 答えを `TC{permissions-boundary}` 形式で Portal に提出。\n\nタスク説明は SSM Parameter `/${NamePrefix}/briefing` にも入っている。\n\n## 採点\n\n- 正解: +200 pt (1 デプロイにつき 1 回)。\n- 不正解: -15 pt/回 (総当たり防止)。スコアは 0 未満にならない。\n\n## コスト\n\nIAM ロール / SSM Parameter は無料。課金リソースなし。",
+  "tags": ["scs", "security-specialty", "iam", "permissions-boundary", "least-privilege", "delegation"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- IAM permissions boundary analysis only, port unused)" }
+  ],
+  "learningGoals": [
+    "IAM Permissions Boundary (アクセス許可境界) の仕組みと効果を理解する",
+    "Permissions Boundary と通常のアタッチポリシーの AND 評価を説明できるようになる",
+    "aws iam get-role でロールの PermissionsBoundary 設定を確認する方法を身につける"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Identify the IAM feature that caps maximum permissions on a role (SCS-C02)",
+      "shortDescription": "Three months at TenkaCloud Inc. CTO Sasaki-san wants to strengthen permission governance.\n\n'We want to delegate IAM role creation to the dev team, but prevent them from granting themselves admin rights. Kato-kun was researching a feature for this — there's something special set on this role. What IAM feature is it?'\n\nRead the role configuration and name the IAM feature that caps the maximum permissions an identity can exercise.",
+      "description": "## Scenario\n\nKato-san's IAM role has a **special configuration** beyond ordinary attached policies. No matter how broad the directly-attached policy is, this configuration acts as a ceiling — the role can never exercise permissions that exceed it.\n\nA staple SCS point: **Permissions Boundary** is a policy attached to an IAM identity (user/role) that sets the maximum permissions it can exercise. The actual effective permissions are the intersection (AND) of the Permissions Boundary and the identity's regular policies. Essential as a security control for delegated permission management.\n\n## What gets deployed (all free)\n\n- 1 IAM role (`${NamePrefix}-bounded-role`)\n  - PermissionsBoundary set to the `ReadOnlyAccess` AWS managed policy\n  - Inline policy: allows `s3:*` (cannot exceed the boundary in practice)\n- SSM Parameter `/${NamePrefix}/briefing`: task description\n\nNo EC2, no billable resources. **$0 cost**.\n\n## How to solve\n\n1. In CloudShell or the Console (IAM > Roles), run `aws iam get-role --role-name ${NamePrefix}-bounded-role`.\n2. Look in the output for a special field separate from ordinary policies.\n3. Identify the IAM feature name that field represents.\n4. Submit the answer as `TC{permissions-boundary}` in the Portal.\n\nThe task briefing is also in SSM Parameter `/${NamePrefix}/briefing`.\n\n## Scoring\n\n- Correct: +200 pt (once per deploy).\n- Wrong: -15 pt each. Score never drops below 0.\n\n## Cost\n\nIAM role / SSM Parameter are free. No billable resources.",
+      "learningGoals": [
+        "Understand how IAM Permissions Boundary works and what it enforces",
+        "Explain the AND-evaluation between a Permissions Boundary and ordinary attached policies",
+        "Verify a role's PermissionsBoundary configuration using aws iam get-role"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 15,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "`aws iam get-role --role-name ${NamePrefix}-bounded-role` の出力を確認。`ManagedPolicies` や `Policies` とは別のフィールドに、権限の上限を設定するポリシー ARN が入っているはず。そのフィールド名から IAM 機能名を特定しよう。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "IAM ロールの `PermissionsBoundary` フィールドに設定されているのが「アクセス許可境界 (Permissions Boundary)」。この機能により、ロールが実行できる権限の上限が制限される。答えは `TC{permissions-boundary}`。",
+        "penalty": 40
+      }
+    ]
+  }
+}

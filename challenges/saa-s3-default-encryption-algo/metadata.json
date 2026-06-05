@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "saa-s3-default-encryption-algo",
+  "name": "S3 デフォルト暗号化アルゴリズムを特定せよ (SAA SSE-S3 監査)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 2,
+  "estimatedDuration": "15〜25 分",
+  "shortDescription": "天下クラウド株式会社、 入社 8 週間目。 佐々木 CTO がコンプライアンス監査の準備を急ぐ。\n\n「加藤くんが設定した S3 バケット、 デフォルト暗号化は有効になってるんだが、 監査票に『SSEAlgorithm の値を記入せよ』とある。 設定を確認して値を教えてくれないか。 SSE-KMS だとコストがかかる可能性があるので、 安い方の設定になっているはずなんだ」\n\nデプロイされたバケットの暗号化設定を確認して、 SSEAlgorithm の値を答えろ。",
+  "description": "## シナリオ\n\n加藤さんが設定した S3 バケットに対し、 デフォルト暗号化が有効化されている。 コンプライアンス監査でバケットの暗号化設定を確認し、 SSEAlgorithm の値を報告する必要がある。\n\nSAA の定番論点: S3 のサーバー側暗号化には 3 種類ある:\n- **SSE-S3 (AES256)**: S3 マネージドキーで暗号化。追加コストなし。デフォルト設定。\n- **SSE-KMS**: KMS キーで暗号化。KMS API 呼び出しごとにコスト発生。\n- **SSE-C**: 顧客提供キーで暗号化。管理は顧客側。\n\nこのバケットには SSE-S3 (SSEAlgorithm: AES256) が設定されている。\n\n## デプロイされるもの (すべて無料)\n\n- S3 バケット (オブジェクトなし) — デフォルト暗号化 SSE-S3 (AES256) 設定付き\n\nオブジェクトのアップロードは一切ないので **課金は $0**。\n\n## 解き方\n\n1. コンソール (S3 > バケット > プロパティ > デフォルト暗号化) か CloudShell で\n   `aws s3api get-bucket-encryption --bucket <BucketName>` を実行する。\n2. JSON の `ServerSideEncryptionConfiguration.Rules[0].ApplyServerSideEncryptionByDefault.SSEAlgorithm` 値を確認する。\n3. その値を小文字で `TC{...}` 形式で提出。\n   例: `TC{aws:kms}`\n\nバケット名は SSM Parameter `/{NamePrefix}/briefing` に記載されている。\n\n## 採点\n\n- 正解: +200 pt (1 デプロイにつき 1 回)。\n- 不正解: -15 pt/回。 スコアは 0 未満にならない。\n\n## コスト\n\nS3 バケット (空) + SSM Parameter は無料。 課金リソースなし。 $0。",
+  "tags": ["saa", "solutions-architect-associate", "s3", "encryption", "sse-s3", "aes256", "security"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- S3 encryption config analysis only, port unused)" }
+  ],
+  "learningGoals": [
+    "S3 のデフォルト暗号化設定 (SSE-S3 / SSE-KMS / SSE-C) の違いを理解する",
+    "aws s3api get-bucket-encryption で SSEAlgorithm 値を確認する手順を身につける",
+    "SSE-S3 (AES256) がコストゼロでデフォルト有効の暗号化であることを確認する"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Identify the S3 default-encryption algorithm (SAA SSE-S3 audit)",
+      "shortDescription": "Week eight at TenkaCloud Inc. CTO Sasaki-san rushes to prepare for a compliance audit.\n\n'Kato-kun enabled default encryption on an S3 bucket, but the audit form asks us to fill in the SSEAlgorithm value. Can you check the setting? It should be the cheaper option, not SSE-KMS which incurs KMS API costs.'\n\nInspect the deployed bucket's encryption configuration and report the SSEAlgorithm value.",
+      "description": "## Scenario\n\nKato-san configured an S3 bucket with default encryption enabled. A compliance audit requires verifying the encryption setting and reporting the SSEAlgorithm value.\n\nThe classic SAA point: S3 server-side encryption has three types:\n- **SSE-S3 (AES256)**: S3-managed keys, no extra cost, default setting.\n- **SSE-KMS**: KMS-key encryption, KMS API-call cost per operation.\n- **SSE-C**: customer-provided keys, customer manages them.\n\nThis bucket has SSE-S3 (SSEAlgorithm: AES256) configured.\n\n## What gets deployed (all free)\n\n- S3 bucket (no objects) with SSE-S3 (AES256) default encryption\n\nNo objects uploaded. **$0 cost**.\n\n## How to solve\n\n1. In the console (S3 > bucket > Properties > Default encryption) or CloudShell, run\n   `aws s3api get-bucket-encryption --bucket <BucketName>`.\n2. Check `ServerSideEncryptionConfiguration.Rules[0].ApplyServerSideEncryptionByDefault.SSEAlgorithm`.\n3. Submit the value in lowercase as `TC{...}`.\n   Example: `TC{aws:kms}`\n\nThe bucket name is in SSM Parameter `/{NamePrefix}/briefing`.\n\n## Scoring\n\n- Correct: +200 pt (once per deploy).\n- Wrong: -15 pt each. Score never drops below 0.\n\n## Cost\n\nS3 bucket (empty) + SSM Parameter are free. No billable resources. $0.",
+      "learningGoals": [
+        "Understand the differences between SSE-S3, SSE-KMS, and SSE-C for S3 default encryption",
+        "Use aws s3api get-bucket-encryption to read the SSEAlgorithm value",
+        "Confirm that SSE-S3 (AES256) is the zero-cost default-encryption option"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 15,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "`aws s3api get-bucket-encryption --bucket <バケット名>` を実行してみよう。 バケット名は SSM Parameter `/{NamePrefix}/briefing` に書いてある。 JSON 出力の `ApplyServerSideEncryptionByDefault` オブジェクトを確認。 SSEAlgorithm が `AES256` か `aws:kms` かのどちらかになっているはず。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "SSEAlgorithm の値は `AES256` (= SSE-S3)。 提出形式は `TC{aes256}`。 これは KMS API コストなしで S3 が自動管理するキーで暗号化する方式で、 新規バケットのデフォルト。",
+        "penalty": 40
+      }
+    ]
+  }
+}

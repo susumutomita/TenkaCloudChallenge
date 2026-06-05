@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "dop-ssm-automation",
+  "name": "パッチ適用＆再起動の多段手順書を SSM で自動化する機能を答えろ (DOP)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "10〜20 分",
+  "shortDescription": "天下クラウド株式会社、 入社 3 ヶ月目。 佐々木 CTO からオペレーション改善の指令が来る。\n\n「加藤くんが作った EC2 のパッチ適用手順、 毎回手動で SSH してコマンドを打ってるんだよ。 パッチ適用・検証・再起動という複数ステップを **文書化して繰り返し実行できる仕組み** にしたい。 Systems Manager にそういう機能があるはずなんだけど」。\n\n運用ドキュメント ≠ Patch Manager ≠ Run Command ── 複数ステップのランブックをコードとして管理する機能名を答えろ。",
+  "description": "## シナリオ\n\n加藤さんが残した EC2 パッチ適用は全て手動 SSH で、 手順がドキュメントにもなっていない。 SSM Parameter にシナリオデータが格納されている。\n\nDOP 試験の重要論点: **AWS Systems Manager Automation** は、 パッチ適用・AMI 作成・インスタンス再起動などの複数ステップの運用手順を「オートメーションドキュメント」として定義し、 繰り返し実行・スケジュール実行できる機能。 Run Command は単一コマンドをフリートに一斉送信する機能、 Patch Manager はパッチベースライン + メンテナンスウィンドウでパッチを管理する機能と役割が異なる。\n\n## デプロイされるもの (すべて無料)\n\n- SSM Parameter × 1 (シナリオ問題文)\n\n## 解き方\n\n1. SSM Parameter `/{NamePrefix}/briefing` を読む。\n2. 「複数ステップの運用手順 (パッチ・検証・再起動) をドキュメントとして定義し繰り返し実行できる Systems Manager 機能」を答える。\n3. `TC{automation}` 形式で提出。\n\n## 採点\n\n- 正解: +200 pt (1 デプロイにつき 1 回)。\n- 不正解: -15 pt/回。 スコアは 0 未満にならない。\n\n## コスト\n\nSSM パラメータは無料。 課金リソースなし。",
+  "tags": ["dop", "devops-professional", "ssm", "automation", "systems-manager", "runbook"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- SSM capability identification only, port unused)" }
+  ],
+  "learningGoals": [
+    "SSM Automation・Run Command・Patch Manager の役割の違いを明確に説明できるようになる",
+    "SSM Automation ドキュメント (runbook) の設計パターンと主要ステップ種別 (aws:runInstances / aws:runCommand 等) を理解する",
+    "反復可能・監査可能なオペレーション手順書を IaC として管理する DOP 的な考え方を習得する"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Name the SSM feature that codifies a multi-step patch-and-reboot runbook (DOP)",
+      "shortDescription": "Month three at TenkaCloud Inc. An operations improvement mandate arrives from CTO Sasaki-san.\n\n'Kato-kun's EC2 patching procedure is all manual SSH. I want to turn those multi-step patch-apply, verify, reboot steps into a documented, repeatable runbook. Systems Manager should have something for that.'\n\nOperations documents ≠ Patch Manager ≠ Run Command -- name the feature that manages multi-step runbooks as code.",
+      "description": "## Scenario\n\nKato-san's EC2 patching was entirely manual SSH with no documented procedure. Scenario data is stored in an SSM Parameter.\n\nA key DOP exam point: **AWS Systems Manager Automation** lets you define multi-step operational procedures (patching, AMI creation, instance reboot, etc.) as 'Automation Documents' and run them repeatedly, on a schedule, or triggered by events. Run Command broadcasts a single command to a fleet. Patch Manager manages patches via baselines and maintenance windows. Their roles are distinct.\n\n## What gets deployed (all free)\n\n- 1 SSM Parameter (scenario question)\n\n## How to solve\n\n1. Read SSM Parameter `/{NamePrefix}/briefing`.\n2. Name the Systems Manager feature that 'defines a multi-step operational runbook (patch / verify / reboot) as a document for repeatable execution'.\n3. Submit as `TC{automation}`.\n\n## Scoring\n\n- Correct: +200 pt (once per deploy).\n- Wrong: -15 pt each. Score never drops below 0.\n\n## Cost\n\nSSM parameter is free. No billable resources.",
+      "learningGoals": [
+        "Clearly explain the role differences among SSM Automation, Run Command, and Patch Manager",
+        "Understand SSM Automation document (runbook) design patterns and key step types (aws:runInstances / aws:runCommand etc.)",
+        "Internalize the DOP principle of managing repeatable, auditable operational procedures as IaC"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 15,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "SSM Parameter `/{NamePrefix}/briefing` を読んでシナリオを確認。 Systems Manager コンソールの左メニューに「自動化」(Automation) がある。 Run Command は単一コマンド、 Patch Manager はパッチ専用、 Automation は複数ステップの手順書 (ランブック) を管理する。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "複数ステップの運用手順をドキュメントとして定義して繰り返し実行できる Systems Manager の機能は **automation** (オートメーション)。 提出形式は `TC{automation}`。",
+        "penalty": 40
+      }
+    ]
+  }
+}

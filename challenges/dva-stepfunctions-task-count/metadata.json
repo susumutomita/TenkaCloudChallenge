@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "dva-stepfunctions-task-count",
+  "name": "Step Functions ステートマシンの Task ステート数を数えろ (DVA Step Functions)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "20〜30 分",
+  "shortDescription": "天下クラウド株式会社、入社 2 ヶ月半。佐々木 CTO が設計レビュー中に言う。\n\n「加藤くんが作った Step Functions のワークフロー、Task ステートが何個あるか誰も把握してない。Task ステートだけを数えてくれ。Pass / Choice / Wait は含めるな」。\n\nステートマシン定義を読んで Task ステートの数を報告せよ。",
+  "description": "## シナリオ\n\n加藤さんが残した Step Functions Standard ステートマシンには複数のステートタイプが混在している。DVA の頻出: **Step Functions では Task / Pass / Choice / Wait / Succeed / Fail / Parallel / Map などのステートタイプがある。Task ステートだけが実際に AWS サービスや Lambda を呼び出す**。\n\nプレイヤーはステートマシン定義を読んで `Type: Task` のステートのみを数え、`TC{数-task-states}` 形式で提出する。\n\n## デプロイされるもの (すべて無料)\n\n- Step Functions 実行ロール (最小権限)\n- Standard ステートマシン × 1 (Task × 3 + Choice × 1 + Wait × 1)\n\nEC2 / NAT / Lambda 実行なし。ステートマシン定義のみ。**課金 $0**。\n\n## 解き方\n\n1. Console (Step Functions > ステートマシン) か `aws stepfunctions describe-state-machine` でステートマシン定義を取得。\n2. `definition` フィールド (JSON) を解析し、`\"Type\": \"Task\"` のステートを数える。Pass / Choice / Wait は除外。\n3. Task ステートの数 N を `TC{N-task-states}` 形式で提出 (例: `TC{2-task-states}`)。\n\nタスク説明は SSM Parameter `/{NamePrefix}/briefing` にも入っている。\n\n## 採点\n\n- 正解: +200 pt (1 デプロイにつき 1 回)。\n- 不正解: -20 pt/回。スコアは 0 未満にならない。\n\n## コスト\n\nStep Functions Standard ステートマシン定義 / IAM ロール / SSM パラメータは無料。実行なし。$0。",
+  "tags": ["dva", "developer-associate", "step-functions", "state-machine", "task-state", "workflow"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- Step Functions definition analysis only, port unused)" }
+  ],
+  "learningGoals": [
+    "Step Functions のステートタイプ (Task / Pass / Choice / Wait 等) を区別できる",
+    "aws stepfunctions describe-state-machine で定義 JSON を取得し Task ステートを数える手順を身につける",
+    "Task ステートだけが実際に AWS サービスを呼び出すことを理解する"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Count the Task states in a Step Functions state machine (DVA Step Functions)",
+      "shortDescription": "Month two and a half at TenkaCloud Inc. CTO Sasaki-san asks during a design review.\n\n'Nobody knows how many Task states Kato-kun's Step Functions workflow has. Count only the Task states -- exclude Pass, Choice, and Wait.'\n\nRead the state machine definition and report the Task state count.",
+      "description": "## Scenario\n\nKato-san's Step Functions Standard state machine contains multiple state types mixed together. The key DVA concept: **Step Functions state types include Task, Pass, Choice, Wait, Succeed, Fail, Parallel, and Map. Only Task states actually invoke AWS services or Lambda functions.**\n\nThe player reads the state machine definition, counts only `Type: Task` states, and submits as `TC{N-task-states}`.\n\n## What gets deployed (all free)\n\n- Step Functions execution role (minimal)\n- 1 Standard state machine (Task × 3 + Choice × 1 + Wait × 1)\n\nNo EC2 / NAT / Lambda invocation. State machine definition only. **$0 cost**.\n\n## How to solve\n\n1. In the Console (Step Functions > State Machines) or via `aws stepfunctions describe-state-machine`, get the definition.\n2. Parse the `definition` JSON and count states with `\"Type\": \"Task\"`. Exclude Pass / Choice / Wait.\n3. Submit the count N as `TC{N-task-states}` (e.g. `TC{2-task-states}`).\n\nThe task is also in SSM Parameter `/{NamePrefix}/briefing`.\n\n## Scoring\n\n- Correct: +200 pt (once per deploy).\n- Wrong: -20 pt each (anti-brute-force). Score never drops below 0.\n\n## Cost\n\nStep Functions Standard state machine definition / IAM role / SSM parameter are free. No executions. $0.",
+      "learningGoals": [
+        "Distinguish Step Functions state types (Task / Pass / Choice / Wait etc.)",
+        "Practice fetching a state machine definition JSON and counting Task states",
+        "Understand that only Task states invoke AWS services or Lambda functions"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 20,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "`aws stepfunctions list-state-machines` でステートマシン ARN を取得し、`aws stepfunctions describe-state-machine --state-machine-arn <ARN>` で定義 JSON を取得。`definition` フィールドを JSON パースして `\"Type\": \"Task\"` の件数を数えよ。`jq` を使うと楽: `... | jq '.definition | fromjson | .States | to_entries | map(select(.value.Type == \"Task\")) | length'`",
+        "penalty": 25
+      },
+      {
+        "id": "hint-2",
+        "content": "ステートマシンには Pass ステート × 1、Choice ステート × 1、Wait ステート × 1、Task ステート × 3 が含まれる。Task の数だけ数えると 3。提出形式は `TC{3-task-states}`。",
+        "penalty": 50
+      }
+    ]
+  }
+}

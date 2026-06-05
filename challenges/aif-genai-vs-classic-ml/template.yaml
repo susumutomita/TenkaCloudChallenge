@@ -1,0 +1,148 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (aif-genai-vs-classic-ml). AIF-C01 generative AI vs
+  classic ML task classification drill. Deploys one SSM String parameter
+  listing four tasks (demand forecasting, churn classification, customer
+  clustering, drafting marketing copy). The player must identify the one task
+  best suited for generative AI (drafting marketing copy) vs classic ML
+  (the other three). The answer is stored only in a CFn Output the participant
+  role cannot read.
+
+  Cost: SSM parameters and IAM roles are free. No EC2, NAT, or EIP. $0.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks from
+      colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+
+Resources:
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-participant-viewer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: >-
+        TASK: Generative AI vs Classic ML Task Classification.
+        Four AI use-case proposals are listed below. THREE are better suited
+        for classic machine learning. ONE is best suited for generative AI.
+        Identify the ONE generative AI task and submit TC{task-name}.
+        The task-name uses hyphens and lowercase exactly as shown below.
+        Example submission format: TC{forecast-demand}
+
+        THE FOUR TASKS:
+
+        Task A -- forecast-demand
+        Predict next month's product demand for 500 SKUs using 3 years of
+        historical sales data, seasonality signals, and promotional calendar.
+        Input: structured time-series CSV. Output: a numeric demand value per SKU.
+        Evaluation: RMSE on held-out months.
+
+        Task B -- classify-churn
+        Given labeled historical data (12 months of customer activity + churn/no-churn
+        label), predict whether a customer will cancel their subscription in the
+        next 90 days. Input: tabular feature vectors. Output: binary yes/no + probability.
+        Evaluation: AUC-ROC on test set.
+
+        Task C -- cluster-customers
+        Group customers into segments based on purchase frequency, average order value,
+        and product category affinity. No labels are available. The segments will
+        be used to personalize email campaigns. Input: structured behavioral data.
+        Output: cluster assignments. Evaluation: silhouette score.
+
+        Task D -- draft-marketing-copy
+        Given a product name, 3 bullet-point features, and the target audience description,
+        produce a 150-word promotional paragraph for use in email campaigns. Input: a
+        short text brief. Output: human-quality promotional text. No ground-truth label
+        or numeric metric -- quality is judged by human reviewers.
+
+        Which ONE task (A/B/C/D) is best suited for GENERATIVE AI?
+        Submit the task-name exactly: TC{forecast-demand}, TC{classify-churn},
+        TC{cluster-customers}, or TC{draft-marketing-copy}
+      Description: !Sub "TenkaCloud aif-genai-vs-classic-ml briefing for ${NamePrefix}."
+      Tier: Standard
+
+Outputs:
+  BriefingParameterName:
+    Description: SSM Parameter holding the GenAI vs classic ML task briefing.
+    Value: !Ref BriefingParameter
+  SsmConsoleUrl:
+    Description: AWS Console deep link to SSM Parameter Store.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/systems-manager/parameters?region=${AWS::Region}"
+  # Canonical answer -- scoring engine only. No cloudformation:DescribeStacks
+  # is granted to the participant role, so this Output is not readable by the player.
+  AnswerFlag:
+    Description: Flag the learner submits after identifying the generative AI task.
+    Value: "TC{draft-marketing-copy}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

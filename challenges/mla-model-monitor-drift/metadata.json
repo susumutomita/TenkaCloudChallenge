@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "mla-model-monitor-drift",
+  "name": "本番データのドリフト検出 SageMaker 機能を特定せよ (MLA Model Monitor)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "15〜20 分",
+  "shortDescription": "天下クラウド株式会社、ML 本番運用レビュー。佐々木 CTO が問いかける。\n\n「加藤くんが 6 ヶ月前に本番デプロイしたモデル、最近精度が落ちてる気がする。訓練データと本番入力データの分布が乖離していないか自動で検出する SageMaker の機能って何?」\n\nデータドリフト検出に特化した機能を特定せよ。",
+  "description": "## シナリオ\n\n加藤さんがデプロイした需要予測モデルは 6 ヶ月前の訓練データで学習している。最近、予測精度が低下している可能性があり、訓練時のデータ分布と現在の本番入力データの分布が乖離 (ドリフト) していると疑われる。\n\nMLA の重要論点: **SageMaker Model Monitor** は本番エンドポイントへのリクエストデータをキャプチャし、**訓練時のベースライン統計と比較して分布の乖離 (データドリフト) を自動検出**する機能。アラートで通知し、再学習のトリガーにできる。\n\n## デプロイされるもの (すべて無料)\n\n- SSM Parameter × 1 (`/{NamePrefix}/briefing`) — 上記シナリオ\n\nSageMaker Model Monitor は課金サービスなので**デプロイしない**。**課金 $0**。\n\n## 解き方\n\n1. SSM Parameter `/{NamePrefix}/briefing` を読む。\n2. 訓練データと本番データの分布乖離を自動検出する SageMaker 機能を特定する。\n3. `TC{model-monitor}` 形式で Portal に提出。\n\n## 採点\n\n- 正解: +200 pt (1 デプロイにつき 1 回)。\n- 不正解: -20 pt/回。スコアは 0 未満にならない。\n\n## コスト\n\nSSM Parameter は無料。SageMaker リソースは作成しない。課金 $0。",
+  "tags": ["mla", "ml-engineer-associate", "sagemaker", "model-monitor", "data-drift", "mlops", "model-quality"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- Model Monitor drift detection scenario, port unused)" }
+  ],
+  "learningGoals": [
+    "SageMaker Model Monitor がデータドリフトを自動検出する仕組みを理解する",
+    "ベースライン統計の生成と本番データのキャプチャ/比較フローを説明できる",
+    "Model Monitor の 4 種のモニタリングタイプ (データ品質 / モデル品質 / バイアス ドリフト / 特徴量アトリビューション) を知る"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Identify the SageMaker feature for production data drift detection (MLA Model Monitor)",
+      "shortDescription": "ML production operations review at TenkaCloud Inc. CTO Sasaki-san asks:\n\n'Kato-kun's model was deployed 6 months ago with old training data. Accuracy seems to be declining. Which SageMaker feature automatically detects when the production input distribution has drifted from training?'\n\nIdentify the feature dedicated to data drift detection.",
+      "description": "## Scenario\n\nKato-san's demand forecasting model was trained on data from 6 months ago. Recent prediction accuracy has declined. The suspected cause: the distribution of production input data has drifted from the training data distribution.\n\nThe key MLA concept: **SageMaker Model Monitor** captures production endpoint request data and **automatically detects distribution drift compared to training-time baseline statistics**. It triggers alerts and can initiate retraining workflows.\n\n## What gets deployed (all free)\n\n- 1 SSM Parameter (`/{NamePrefix}/briefing`) -- the scenario\n\nSageMaker Model Monitor incurs charges and is **not deployed**. **$0 cost**.\n\n## How to solve\n\n1. Read SSM Parameter `/{NamePrefix}/briefing`.\n2. Identify the SageMaker feature that auto-detects production data distribution drift.\n3. Submit as `TC{model-monitor}`.\n\n## Scoring\n\n- Correct: +200 pt (once per deploy).\n- Wrong: -20 pt each. Score never drops below 0.\n\n## Cost\n\nSSM Parameter is free. No SageMaker resources. $0.",
+      "learningGoals": [
+        "Understand how SageMaker Model Monitor automatically detects data drift in production",
+        "Explain the baseline statistics generation and production data capture/comparison flow",
+        "Know Model Monitor's four monitoring types: data quality, model quality, bias drift, feature attribution drift"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 20,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "SageMaker には本番エンドポイントの入力データを自動キャプチャし、訓練時に計算したベースライン統計 (特徴量の分布) と比較して乖離をアラートする専用機能がある。MLflow や Clarify とは異なる機能。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "その機能は **SageMaker Model Monitor**。`create_monitoring_schedule()` でスケジュールを設定し、データキャプチャと定期比較を自動化する。提出形式は `TC{model-monitor}`。",
+        "penalty": 40
+      }
+    ]
+  }
+}

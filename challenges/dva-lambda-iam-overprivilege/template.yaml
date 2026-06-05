@@ -1,0 +1,193 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (dva-lambda-iam-overprivilege). DVA-C02 IAM least-privilege drill.
+  Deploys a Lambda function (never invoked) whose execution role grants dynamodb:* on *,
+  but the function description says it only performs a single DynamoDB GetItem.
+  The player inspects the role policy and names the single correct Action.
+
+  Cost: Lambda function definition, IAM roles, SSM parameter are free. No DynamoDB table,
+  no EC2, no NAT. $0 for the lifetime of the drill.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks from
+      colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+
+Resources:
+  # THE OVER-PRIVILEGED ROLE. The function only needs dynamodb:GetItem on one table,
+  # but Kato-san granted dynamodb:* on * -- a classic least-privilege violation.
+  OverprivilegedExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-overprivileged-exec"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: OverprivilegedDynamoPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # The planted over-privilege: dynamodb:* on *
+              # Should be: dynamodb:GetItem on the specific table only.
+              - Sid: OverprivilegedDynamoAccess
+                Effect: Allow
+                Action:
+                  - dynamodb:*
+                Resource: "*"
+              - Sid: BasicLogging
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:*:*:log-group:/aws/lambda/${NamePrefix}-overprivilege-fn:*"
+
+  # Function description explicitly states the true intent -- only GetItem.
+  # No event source mapping, no schedule -- NEVER invoked during the drill.
+  OverprivilegeFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${NamePrefix}-overprivilege-fn"
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt OverprivilegedExecutionRole.Arn
+      Description: "This function only performs a single DynamoDB GetItem -- nothing else."
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+            // Only needs dynamodb:GetItem on one item.
+            // The execution role grants far more than needed.
+            return { statusCode: 200 };
+          };
+      Timeout: 3
+      MemorySize: 128
+
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-participant-viewer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # IAM read APIs for role + inline policies, scoped to this team's prefix.
+              - Sid: ReadIamRole
+                Effect: Allow
+                Action:
+                  - iam:GetRole
+                  - iam:GetRolePolicy
+                  - iam:ListRolePolicies
+                Resource: !Sub "arn:aws:iam::*:role/${NamePrefix}*"
+              # Lambda read APIs to find role ARN and read function description.
+              - Sid: ReadLambdaConfig
+                Effect: Allow
+                Action:
+                  - lambda:GetFunction
+                  - lambda:GetFunctionConfiguration
+                Resource: !Sub "arn:aws:lambda:*:*:function:${NamePrefix}*"
+              - Sid: ConsoleListLambda
+                Effect: Allow
+                Action:
+                  - lambda:ListFunctions
+                Resource: "*"
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: >-
+        The Lambda function ${NamePrefix}-overprivilege-fn has an execution role
+        that grants dynamodb:* on *, but the function Description says it only
+        performs a single DynamoDB GetItem. Name the single DynamoDB Action the
+        function actually needs and submit it as TC{dynamodb:ActionName},
+        e.g. TC{dynamodb:PutItem}.
+      Description: !Sub "TenkaCloud dva-lambda-iam-overprivilege briefing for ${NamePrefix}."
+      Tier: Standard
+
+Outputs:
+  FunctionName:
+    Description: The Lambda function to inspect.
+    Value: !Ref OverprivilegeFunction
+  ExecutionRoleName:
+    Description: The over-privileged execution role to inspect.
+    Value: !Ref OverprivilegedExecutionRole
+  LambdaConsoleUrl:
+    Description: AWS Console deep link to the Lambda function.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/lambda/home?region=${AWS::Region}#/functions/${NamePrefix}-overprivilege-fn"
+  BriefingParameterName:
+    Description: SSM Parameter holding the task briefing.
+    Value: !Ref BriefingParameter
+  # Canonical answer -- scoring engine only. No cloudformation:DescribeStacks granted.
+  AnswerFlag:
+    Description: The single DynamoDB Action the function actually needs.
+    Value: "TC{dynamodb:GetItem}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "soa-patch-manager",
+  "name": "SSH なしでフリートを自動パッチする Systems Manager の機能は何か (SOA パッチ管理)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "15〜20 分",
+  "shortDescription": "天下クラウド株式会社、入社 8 週間目。佐々木 CTO が飛び込んでくる。\n\n「加藤くんのメモに『SSH 不要でフリート全体をスケジュール自動パッチ』と書いてあるんだけど、どの Systems Manager の機能のことか分からなくて……。SOA の試験にも出るし、ちゃんと把握しておきたい」。\n\nシナリオを読んで、SSH なしでパッチベースラインとメンテナンスウィンドウを使って自動パッチを実行する Systems Manager の機能名を答えろ。",
+  "description": "## シナリオ\n\n加藤さんのメモ: 「SSM エージェント経由でスケジュール実行。パッチベースライン + メンテナンスウィンドウを使って、SSH なしにフリートを自動的にパッチする。どの機能か分かれば SOA は安心」。\n\nSOA-C02 の定番論点: **Systems Manager Patch Manager** — EC2 インスタンスに SSH せずに、パッチベースライン (どのパッチを当てるか) とメンテナンスウィンドウ (いつ当てるか) を組み合わせて自動パッチを実行する Systems Manager の機能。Automation や Run Command との区別が試験の罠。\n\n## デプロイされるもの (すべて無料)\n\n- SSM Parameter `/{NamePrefix}/briefing` (シナリオ説明)\n\nEC2 なし。**課金 $0**。\n\n## 解き方\n\n1. SSM Parameter `/{NamePrefix}/briefing` を読んでシナリオを確認する。\n2. 「SSH 不要」「パッチベースライン」「メンテナンスウィンドウ」「スケジュール自動パッチ」のキーワードから Systems Manager の機能名を特定する。\n3. 機能名をハイフン区切り小文字で `TC{機能名}` 形式で提出 (例: `TC{automation}`)。\n\n## 採点\n\n- 正解: +200 pt (1 デプロイにつき 1 回)。\n- 不正解: -15 pt/回。スコアは 0 未満にならない。\n\n## コスト\n\nSSM Parameter は無料。課金リソースなし。",
+  "tags": ["soa", "sysops-administrator", "ssm", "patch-manager", "maintenance-window", "automation"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- SSM scenario analysis only, port unused)" }
+  ],
+  "learningGoals": [
+    "Systems Manager Patch Manager の役割 (パッチベースライン + メンテナンスウィンドウ) を理解する",
+    "Patch Manager / Automation / Run Command の違いを説明できるようになる",
+    "SSH なしで EC2 フリートにパッチを当てるユースケースを Systems Manager で解決できることを学ぶ"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Name the Systems Manager capability that auto-patches a fleet without SSH (SOA patch management)",
+      "shortDescription": "Eight weeks into the job at TenkaCloud Inc. CTO Sasaki-san rushes in.\n\n'Kato-kun's notes say \"auto-patch the whole fleet on a schedule without SSH\" -- but nobody knows which Systems Manager capability he meant. It's on the SOA exam too.'\n\nRead the scenario and identify the Systems Manager feature that uses a patch baseline and maintenance window to auto-patch instances without SSH.",
+      "description": "## Scenario\n\nKato-san's note: 'Run via SSM agent on a schedule. Use a patch baseline + maintenance window to automatically patch the fleet without SSH. Knowing which feature this is = SOA confidence.'\n\nThe classic SOA-C02 point: **Systems Manager Patch Manager** — the SSM capability that combines a patch baseline (which patches to apply) with a maintenance window (when to apply them) to auto-patch EC2 instances without SSH. Confusing it with Automation or Run Command is the exam trap.\n\n## What gets deployed (all free)\n\n- SSM Parameter `/{NamePrefix}/briefing` (scenario description)\n\nNo EC2. **$0 cost**.\n\n## How to solve\n\n1. Read SSM Parameter `/{NamePrefix}/briefing` to review the scenario.\n2. Identify the Systems Manager feature from the keywords: 'no SSH', 'patch baseline', 'maintenance window', 'scheduled auto-patch'.\n3. Submit the feature name hyphen-separated lowercase as `TC{featurename}` (e.g. `TC{automation}`).\n\n## Scoring\n\n- Correct: +200 pt (once per deploy).\n- Wrong: -15 pt each. Score never drops below 0.\n\n## Cost\n\nSSM Parameter is free. No billable resources.",
+      "learningGoals": [
+        "Understand the role of Systems Manager Patch Manager (patch baseline + maintenance window)",
+        "Explain the difference between Patch Manager, Automation, and Run Command",
+        "Know that Patch Manager patches EC2 fleets via the SSM agent without SSH"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 15,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "Systems Manager の主要機能: Run Command (1 回実行)、Automation (マルチステップ運用ドキュメント)、Patch Manager (パッチベースライン + メンテナンスウィンドウ)、State Manager (設定の継続的適用)。SSH が不要で「スケジュール」「パッチベースライン」「メンテナンスウィンドウ」がキーワードの機能はどれか?",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "SSH なしでフリートを自動パッチする Systems Manager の機能は Patch Manager。提出形式は `TC{patch-manager}`。",
+        "penalty": 40
+      }
+    ]
+  }
+}

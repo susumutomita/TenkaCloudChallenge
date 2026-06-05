@@ -1,0 +1,53 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "scs-secrets-manager-rotation",
+  "name": "RDS 認証情報の自動ローテーションに使うサービスはどれ? (SCS-C02)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "10〜15 分",
+  "shortDescription": "天下クラウド株式会社、入社 2 ヶ月半。佐々木 CTO から RDS のセキュリティ強化を依頼される。\n\n「加藤くんが RDS のパスワードを SSM Parameter Store に平文で保存してた。30 日ごとに自動ローテーションしたいんだが、SSM じゃ無理らしい。どのサービスを使えばいい?」\n\nシナリオを読み、RDS 認証情報の自動ローテーションに適したサービスを特定しろ。",
+  "description": "## シナリオ\n\n加藤さんは RDS の DB 接続パスワードを SSM Parameter Store (String 型) に保存していた。30 日ごとの**自動ローテーション**が要件として追加されたが、SSM Parameter Store にはネイティブな自動ローテーション機能がない。どのサービスを使えばよいか?\n\nSCS 頻出論点: **AWS Secrets Manager** は RDS / Redshift / DocumentDB / その他カスタムシークレットの自動ローテーション機能をネイティブに提供する。Lambda を使わずに組み込みローテーション機能を使える点が SSM Parameter Store との大きな違い。\n\n## デプロイされるもの (すべて無料)\n\n- SSM Parameter `/${NamePrefix}/briefing`: シナリオとタスク説明 (無料)\n\nRDS / Secrets Manager の実リソースは不要。シナリオデータで分析する問題。**課金 $0**。\n\n## 解き方\n\n1. SSM Parameter `/${NamePrefix}/briefing` を読んでシナリオを確認。\n2. AWS のシークレット管理サービスの違いを確認: SSM Parameter Store vs AWS Secrets Manager。\n3. RDS 認証情報の自動ローテーションをネイティブにサポートするサービスを特定。\n4. 答えを `TC{secrets-manager}` 形式で提出。\n\n## 採点\n\n- 正解: +200 pt (1 デプロイにつき 1 回)。\n- 不正解: -15 pt/回 (総当たり防止)。スコアは 0 未満にならない。\n\n## コスト\n\nSSM Parameter は無料。課金リソースなし。",
+  "tags": ["scs", "security-specialty", "secrets-manager", "rotation", "rds", "credential-management"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint -- secrets rotation scenario analysis only, port unused)" }
+  ],
+  "learningGoals": [
+    "AWS Secrets Manager と SSM Parameter Store の違い、特に自動ローテーション機能の有無を理解する",
+    "RDS 認証情報の自動ローテーションには Secrets Manager が適切な理由を説明できるようになる",
+    "認証情報管理のベストプラクティスを SCS 試験の観点で整理する"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Which service handles automatic RDS credential rotation? (SCS-C02)",
+      "shortDescription": "Two and a half months at TenkaCloud Inc. CTO Sasaki-san asks for an RDS security upgrade.\n\n'Kato-kun stored the RDS password in SSM Parameter Store as plaintext. We need auto-rotation every 30 days, but SSM can't do that natively. Which service should we use?'\n\nRead the scenario and identify the right service for automatic RDS credential rotation.",
+      "description": "## Scenario\n\nKato-san stored the RDS DB password in SSM Parameter Store (String type). A new requirement calls for **automatic rotation every 30 days** — but SSM Parameter Store has no native auto-rotation feature. Which AWS service provides this natively for RDS credentials?\n\nA staple SCS point: **AWS Secrets Manager** provides native auto-rotation for RDS, Redshift, DocumentDB, and custom secrets. The built-in rotation functions eliminate the need for custom Lambda code — a key differentiator from SSM Parameter Store.\n\n## What gets deployed (all free)\n\n- SSM Parameter `/${NamePrefix}/briefing`: scenario and task description (free)\n\nNo RDS, no Secrets Manager resources needed. This is a scenario-analysis challenge. **$0 cost**.\n\n## How to solve\n\n1. Read SSM Parameter `/${NamePrefix}/briefing` for the scenario.\n2. Review the difference between SSM Parameter Store and AWS Secrets Manager.\n3. Identify which service natively supports RDS credential auto-rotation.\n4. Submit the answer as `TC{secrets-manager}`.\n\n## Scoring\n\n- Correct: +200 pt (once per deploy).\n- Wrong: -15 pt each. Score never drops below 0.\n\n## Cost\n\nSSM Parameter is free. No billable resources.",
+      "learningGoals": [
+        "Understand the key difference between AWS Secrets Manager and SSM Parameter Store: native auto-rotation",
+        "Explain why Secrets Manager is the right choice for automatic RDS credential rotation",
+        "Organize credential management best practices from the SCS exam perspective"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 15,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "SSM Parameter Store は手動ローテーションのみ (Lambda を自分で書く必要がある)。AWS の 2 大シークレット管理サービスのうち、**ネイティブな自動ローテーション** 機能を持つ方を選ぼう。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "AWS Secrets Manager は RDS / Redshift / DocumentDB の組み込みローテーション Lambda を提供し、設定だけで 30 日ごとの自動ローテーションが動く。答えは `TC{secrets-manager}`。",
+        "penalty": 40
+      }
+    ]
+  }
+}
