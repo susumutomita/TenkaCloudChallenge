@@ -1,0 +1,514 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (net-evo-01-reachability). "History of the Internet" Ep01.
+  ANS / SAA networking lab on inter-subnet reachability.
+
+  Deploys a two-subnet VPC. A bastion `relay` (public subnet, SSM-reachable) must
+  reach a management node `core` (private subnet, no public IP) on TCP 8080, which
+  serves a per-deploy random flag. The Security Group is correct (stateful, return
+  auto-allowed) -- but the private subnet's Network ACL is the planted misconfig:
+  it permits the inbound request (8080) yet omits the outbound ephemeral return
+  range (1024-65535), so the TCP handshake never completes and `curl` HANGS rather
+  than being refused. The learner diagnoses the four reachability layers, then adds
+  ONE outbound NACL entry (a settings change on an existing resource -- no new
+  resource is created) to restore the path and read the flag off `core`.
+
+  Cost: 2x t3.micro for ~45 min ~= $0.02. No NAT Gateway, no EIP. delete-stack
+  removes everything -- nothing is created outside CloudFormation, so no orphans.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks from
+      colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+  FlagSeed:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    MaxLength: 64
+    AllowedPattern: "^[A-Za-z0-9]+$"
+    Description: >
+      Per-deploy random secret injected by the deploy chain (cfnParameters:
+      FlagSeed = __RANDOM_PASSWORD__). Wrapped as TC{...} and served by `core`.
+  AmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-x86_64
+    Description: SSM-backed Amazon Linux 2023 AMI (auto-resolved).
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - t3.micro
+      - t3.small
+    Description: EC2 instance type for both relay and core.
+
+Resources:
+  # ----- VPC + two subnets -----
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.20.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-vpc"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-public-subnet"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  PrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.2.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-private-subnet"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  Igw:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-igw"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  IgwAttach:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref Igw
+
+  PublicRt:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-public-rt"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: IgwAttach
+    Properties:
+      RouteTableId: !Ref PublicRt
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref Igw
+
+  PublicRtAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRt
+      SubnetId: !Ref PublicSubnet
+
+  # Private route table: local route only (no NAT). `core` needs no internet --
+  # it serves a static flag. This is intentionally correct; the route layer is
+  # NOT the planted fault.
+  PrivateRt:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-private-rt"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  PrivateRtAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRt
+      SubnetId: !Ref PrivateSubnet
+
+  # ----- Security Groups (CORRECT -- not the fault) -----
+  RelaySg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "${NamePrefix}-relay-sg"
+      GroupDescription: Bastion relay. No inbound needed (SSM is outbound-only).
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-relay-sg"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  # `core` SG allows 8080 from the relay SG. Being stateful, the reply is
+  # auto-allowed -- so the Security Group layer is correct and is NOT the trap.
+  CoreSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "${NamePrefix}-core-sg"
+      GroupDescription: Core node. 8080 from relay SG (stateful, reply auto-allowed).
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          SourceSecurityGroupId: !Ref RelaySg
+          Description: HTTP 8080 from the relay security group
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-core-sg"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  # ----- Network ACL on the private subnet (THE PLANTED MISCONFIG) -----
+  # A NACL is STATELESS: inbound and outbound are evaluated independently and
+  # return traffic is NOT auto-allowed. This ACL permits the inbound request
+  # (8080 from the relay subnet) but omits the OUTBOUND ephemeral return range
+  # (1024-65535), so core's SYN-ACK to relay's ephemeral port is dropped and the
+  # TCP handshake never completes -- curl HANGS instead of being refused. The
+  # learner restores the path by ADDING one outbound entry (1024-65535 -> relay
+  # subnet). No new resource is created; delete-stack still cleans everything.
+  PrivateNacl:
+    Type: AWS::EC2::NetworkAcl
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-private-nacl"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  PrivateNaclAssoc:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet
+      NetworkAclId: !Ref PrivateNacl
+
+  # Inbound: allow the request from the relay subnet to core:8080. (Correct.)
+  PrivateNaclInboundRequest:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref PrivateNacl
+      RuleNumber: 100
+      Protocol: 6
+      RuleAction: allow
+      Egress: false
+      CidrBlock: 10.20.1.0/24
+      PortRange:
+        From: 8080
+        To: 8080
+
+  # Outbound: a plausible-looking decoy (egress 443 "for updates"). The ephemeral
+  # return range (1024-65535) is deliberately MISSING -- this is the fault. With
+  # no matching outbound allow, the NACL default-denies core's reply to relay.
+  PrivateNaclOutboundDecoy:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref PrivateNacl
+      RuleNumber: 100
+      Protocol: 6
+      RuleAction: allow
+      Egress: true
+      CidrBlock: 0.0.0.0/0
+      PortRange:
+        From: 443
+        To: 443
+
+  # ----- IAM: participant viewer (read + scoped NACL fix) -----
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-participant-viewer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      # Participant access baseline (same across every problem in this catalog).
+      # `aws login` (2025-11) OAuth2 flow needs SignInLocalDevelopmentAccess;
+      # do not remove (validated by scripts/validate-problems.ts).
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # CloudShell baseline -- 7-action allow-list, Resource:* unavoidable
+              # (environments are per-identity). Do not remove (validated).
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+              # ec2:Describe* doesn't accept resource ARNs; scope by tag instead.
+              # Lets the learner read SGs / NACLs / route tables / subnets /
+              # instances for THIS stack only.
+              - Sid: ConsoleEc2Describe
+                Effect: Allow
+                Action:
+                  - ec2:Describe*
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/TenkaCloud:NamePrefix: !Ref NamePrefix
+              - Sid: ConsoleEc2Metadata
+                Effect: Allow
+                Action:
+                  - ec2:DescribeRegions
+                  - ec2:DescribeAvailabilityZones
+                  - ec2:DescribeAccountAttributes
+                  - ec2:DescribeNetworkAcls
+                  - ec2:DescribeInstances
+                Resource: "*"
+              # The flag is baked into core's UserData. Block reading it back via
+              # DescribeInstanceAttribute so the only path to the flag is fixing
+              # the NACL and curling core. Explicit Deny overrides the allow above.
+              - Sid: DenyUserDataReadback
+                Effect: Deny
+                Action:
+                  - ec2:DescribeInstanceAttribute
+                Resource: "*"
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              # SSM Session Manager into the relay bastion (the vantage point from
+              # which to reach core). Account-scoped session document per #42.
+              - Sid: StartSessionToRelay
+                Effect: Allow
+                Action:
+                  - ssm:StartSession
+                Resource:
+                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/${RelayInstance}"
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:document/SSM-SessionManagerRunShell"
+                  - !Sub "arn:aws:ssm:${AWS::Region}::document/SSM-SessionManagerRunShell"
+              - Sid: TerminateOwnSession
+                Effect: Allow
+                Action:
+                  - ssm:TerminateSession
+                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:session/${NamePrefix}*"
+              # THE FIX GRANT: add/replace/delete NACL entries, tag-scoped to this
+              # stack's NACL. This is the "modify settings" action the learner uses
+              # to restore the return path -- not a new top-level resource.
+              - Sid: FixOwnNetworkAcl
+                Effect: Allow
+                Action:
+                  - ec2:CreateNetworkAclEntry
+                  - ec2:ReplaceNetworkAclEntry
+                  - ec2:DeleteNetworkAclEntry
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/TenkaCloud:NamePrefix: !Ref NamePrefix
+              # Deliberately NO cloudformation:DescribeStacks -- the AnswerFlag
+              # Output must not be readable; the flag is earned by reaching core.
+
+  # core needs no AWS API access; relay needs SSM core for Session Manager.
+  RelayInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-relay-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+  RelayInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub "${NamePrefix}-relay-profile"
+      Roles:
+        - !Ref RelayInstanceRole
+
+  # ----- EC2: relay (public, SSM bastion) -----
+  RelayInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref RelayInstanceProfile
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds:
+        - !Ref RelaySg
+      MetadataOptions:
+        HttpTokens: required
+        HttpPutResponseHopLimit: 1
+        HttpEndpoint: enabled
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-relay"
+        - Key: TenkaCloud:Problem
+          Value: net-evo-01-reachability
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  # ----- EC2: core (private, serves the flag on :8080) -----
+  CoreInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref InstanceType
+      SubnetId: !Ref PrivateSubnet
+      SecurityGroupIds:
+        - !Ref CoreSg
+      MetadataOptions:
+        HttpTokens: required
+        HttpPutResponseHopLimit: 1
+        HttpEndpoint: enabled
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-core"
+        - Key: TenkaCloud:Problem
+          Value: net-evo-01-reachability
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euxo pipefail
+          mkdir -p /opt/core
+          printf 'TC{%s}\n' '${FlagSeed}' > /opt/core/flag.txt
+          chmod 600 /opt/core/flag.txt
+          cat > /opt/core/server.py <<'PY'
+          from http.server import BaseHTTPRequestHandler, HTTPServer
+
+          with open("/opt/core/flag.txt") as fh:
+              FLAG = fh.read().strip()
+
+          class Handler(BaseHTTPRequestHandler):
+              def do_GET(self):
+                  body = (
+                      "core management node -- TenkaCloud net-evo-01\n"
+                      "you restored the return path. nice.\n"
+                      "flag: " + FLAG + "\n"
+                  ).encode()
+                  self.send_response(200)
+                  self.send_header("Content-Type", "text/plain")
+                  self.send_header("Content-Length", str(len(body)))
+                  self.end_headers()
+                  self.wfile.write(body)
+
+              def log_message(self, *args):
+                  return
+
+          HTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
+          PY
+          cat > /etc/systemd/system/core.service <<'UNIT'
+          [Unit]
+          Description=TenkaCloud net-evo-01 core node
+          After=network-online.target
+
+          [Service]
+          ExecStart=/usr/bin/python3 /opt/core/server.py
+          Restart=always
+          User=root
+
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+          systemctl daemon-reload
+          systemctl enable --now core.service
+
+  # ----- Briefing -----
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: >-
+        relay (public subnet, SSM-reachable) cannot reach core (private subnet) on
+        TCP 8080 -- curl HANGS rather than being refused. The Security Group is
+        correct. Diagnose the four reachability layers (SG / NACL / route / subnet),
+        find the layer dropping the one-way return path, add ONE rule to fix it
+        (no new resources), then read core's flag TC{...} from relay and submit it.
+      Description: !Sub "TenkaCloud net-evo-01-reachability briefing for ${NamePrefix}."
+      Tier: Standard
+
+Outputs:
+  VpcId:
+    Description: The VPC under repair.
+    Value: !Ref Vpc
+  RelayInstanceId:
+    Description: Bastion instance ID -- connect with `aws ssm start-session --target <this>`.
+    Value: !Ref RelayInstance
+  CorePrivateIp:
+    Description: Private IP of the core node (also discoverable via ec2:DescribeInstances).
+    Value: !GetAtt CoreInstance.PrivateIp
+  PrivateNaclId:
+    Description: The Network ACL on the private subnet (the layer to repair).
+    Value: !Ref PrivateNacl
+  SsmStartSessionCommand:
+    Description: Connect to relay via Session Manager.
+    Value: !Sub "aws ssm start-session --target ${RelayInstance}"
+  BriefingParameterName:
+    Description: SSM Parameter holding the task briefing.
+    Value: !Ref BriefingParameter
+  # Canonical answer, scoring engine only (no DescribeStacks granted to player).
+  AnswerFlag:
+    Description: Flag the learner submits after reaching core over the repaired path.
+    Value: !Sub "TC{${FlagSeed}}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

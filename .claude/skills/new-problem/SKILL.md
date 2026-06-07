@@ -7,6 +7,38 @@ description: Scaffold a new TenkaCloudChallenge problem. Invoked via `/new-probl
 
 Use this skill when the user wants to add a brand-new problem. For edits to an existing problem, read `AGENT.md` instead and edit in place.
 
+## The design bar — make it fun, not a drill (read this first)
+
+The catalog's #1 failure mode is the **exam-drill problem**: a corporate-memo wrapper around a flashcard, where the "flag" is a concept name you type from memory (`TC{standard-ia}`, `TC{port-3389}`) and the same "新人入社 / 加藤の負債 / CTO 激怒" template is stamped on every entry. After three of those it is pure repetition — players feel like they are grinding AWS homework, not playing. A problem is only worth shipping if a player would call it *fun*, not *homework*.
+
+Four properties separate a fun problem from a drill. Aim for all four.
+
+1. **Discovered flag, never a memorized one.** The flag must be a value the player can only obtain by *performing the intended AWS operation* — a random per-deploy secret served by a resource they had to reach, a value reconstructed from logs, an Output that only becomes correct once the fix lands. If the flag can be guessed from studying for the exam, the problem is a flashcard. (Reference: `challenges/net-evo-01-reachability` — the flag lives on a private host you can reach only after repairing the network path.)
+   - Mechanically: pass a per-deploy secret via `cfnParameters: { FlagSeed: "__RANDOM_PASSWORD__" }`, serve/store it *behind* the puzzle, and echo the same value to the `AnswerFlag` Output for the scorer. Do **not** grant the player `cloudformation:DescribeStacks` — they would read the answer straight off the Output. If the flag is baked into EC2 UserData, also `Deny ec2:DescribeInstanceAttribute` so it cannot be read back.
+
+2. **Fix by settings — players never create top-level resources.** If solving requires the player to *create* a Lambda / ECS service / bucket / DB by hand, those resources are **not under CloudFormation** and survive `delete-stack` as orphaned, billable garbage. Instead: **the template creates every base resource (in a broken / unconfigured / misconfigured state), and the solve is to *modify* an existing resource** — a setting, a config value, a data restore, a re-point. A drifted-but-CFn-owned resource is still deleted cleanly on teardown; an out-of-band-created one is not. This is a hard rule, not a preference.
+   - Good solves: add one NACL/SG/route entry; restore data into an existing DB from a pre-staged backup; flip an app config flag; attach a pre-created WAF WebACL; repoint a connection string to a pre-created Aurora.
+   - Bad solves: "stand up a Lambda", "create an ALB", "spin up a new bucket". These orphan resources and break teardown.
+   - The participant role therefore grants **scoped write to modify** the planted resource (e.g. `ec2:CreateNetworkAclEntry` tag-scoped to `${NamePrefix}`), not create-new permissions.
+
+3. **A real "aha", not recall.** The lesson should be a production skill felt viscerally — `curl` that *hangs* vs *refuses* (stateful SG vs stateless NACL), a path traced across four layers, an incident reconstructed from evidence. Naming the service is not the win; *operating* it is.
+
+4. **Story with stakes, without the stamp.** Keep the shared world (天下クラウド, Kato-san's leftovers, Sasaki-san CTO) but vary the framing every time — a fresh incident, a specific symptom, a ticking clock. Never reuse the same "day-N / CTO rage" skeleton verbatim. The story gives the operation stakes; it is not a reskin of the same memo.
+
+### How to incorporate the Battle (PvP) element
+
+A fix-by-settings puzzle is single-player by default. Make it a Battle by adding **continuous scoring + an operator red team that re-breaks what you fixed**:
+
+- The score engine probes a target that is healthy only when the player's configuration is correct (`uptime-flat` / `phased-polling`). Fixing it starts the points; the URL-registration gate (AGENT.md invariant #9) keeps the bare deploy from auto-scoring.
+- The red team fires **reversible** faults (ADR-031 `action` + ADR-029 mandatory revert) that *re-introduce* the misconfiguration — re-deny the NACL, drop the route, stop the service, wipe the data. The player re-diagnoses and re-fixes under time pressure: the incident-response rhythm.
+- **Asymmetry rewards robustness.** A player who hardens beyond the minimum (a redundant path, defense-in-depth, data already on the managed tier) is immune to some attacks — so cumulative uptime, not a single fix, decides the winner. (Reference: `battles/stackstack` — already-migrated slots are untouched by the red team.)
+- Still **no orphans**: the red team mutates pre-created resources and the revert restores them; `delete-stack` cleans everything.
+
+### Two worked archetypes
+
+- **"Internet Evolution" series (networking Challenges).** Each episode re-lives one moment in how the internet evolved by making the player *operate* a TCP/IP layer: Ep01 inter-subnet reachability (SG vs NACL), Ep02 DNS (names over numbers), Ep03 NAT / IPv4 exhaustion, Ep04 TLS, Ep05 the edge (anycast / CDN / QUIC). Discovered flag, fix-by-settings, cheap real resources, each episode standalone in the shared world. Start from `challenges/net-evo-01-reachability`.
+- **"Vibe to Production" battle (AI-native incident response).** The round **opens with hosting a vibe-coded (AI-generated) app** on pre-created compute, then cascades through AI-native incidents — the AI deleted the database (restore from the pre-staged backup), no auth so bots post garbage (enable a pre-created rate-limit / authorizer), insecure code and a SQLite→Aurora move (re-point to the pre-created Aurora and migrate the data). Every beat is fix-by-settings on CFn-owned resources, scored continuously with a red team. This is the orphan-safe successor to the original `battles/stackstack` mechanic, which wrongly had players *create* managed runtimes by hand (they orphaned on teardown).
+
 ## Modes (slash-command form)
 
 | Invocation | Behavior |
