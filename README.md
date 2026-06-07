@@ -75,7 +75,7 @@ A platform-repo maintainer then bumps the submodule pointer and the next `make d
 
 ## 🎯 Starter catalog (TenkaCloud Issue #1346)
 
-For first-time organizers, the **3 ready + 2 draft** starter catalog plus the **`starter-event` bundle** is the credible answer to *"what do I actually run?"*.
+For first-time organizers, the **5 ready** starter catalog plus the **`starter-event` bundle** is the credible answer to *"what do I actually run?"*.
 
 | Status   | Category   | Problem                                                                                                    | Duration  | Difficulty |
 | -------- | ---------- | ---------------------------------------------------------------------------------------------------------- | --------- | ---------- |
@@ -84,8 +84,6 @@ For first-time organizers, the **3 ready + 2 draft** starter catalog plus the **
 | ready    | Battle     | [`microservice-migration-battle`](./battles/microservice-migration-battle/)                                 | 90-120 min| 4          |
 | ready    | Battle     | [`security-battle-royale`](./battles/security-battle-royale/)                                               | 60-90 min | 4          |
 | ready    | Battle     | [`stackstack`](./battles/stackstack/)                                                                       | 90-120 min| 4          |
-| draft    | Challenge  | [`public-s3-remediation`](./challenges/public-s3-remediation/)                                              | 20-30 min | 2          |
-| draft    | Challenge  | [`iam-least-privilege`](./challenges/iam-least-privilege/)                                                  | 20-30 min | 2          |
 
 Bundle: [`bundles/starter-event.json`](./bundles/starter-event.json) — 1 Challenge + 2 Battles, 60-90 min slot.
 
