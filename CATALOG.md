@@ -192,9 +192,9 @@ bun run scripts/tenkacloud-problem.ts validate my-new-problem
 make validate-problems
 
 # 4. (Optional) Smoke deploy
-aws cloudformation deploy \\
-  --template-file problems/battles/my-new-problem/template.yaml \\
-  --stack-name tc-my-new-problem-test \\
+aws cloudformation deploy \
+  --template-file problems/battles/my-new-problem/template.yaml \
+  --stack-name tc-my-new-problem-test \
   --parameter-overrides NamePrefix=tc-my-new-problem-test TenkaCloudAccountId=<id> ExternalId=<jobId>
 ```
 
