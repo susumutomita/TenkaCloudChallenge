@@ -1,0 +1,62 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "net-evo-01-reachability",
+  "name": "インターネット進化史 Ep01 — 届かないパケット",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "30〜45 分",
+  "shortDescription": "天下クラウド株式会社、 ネットワーク班に異動初日。 加藤さんが先月置いていった社内ツールは、 2 つのサブネットに分かれて動いていた ── はずだった。\n\n佐々木 CTO 曰く: 「踏み台 (relay) からは入れる。 でも奥の管理ノード (core) に誰も届かない。 ファイアウォールは開けたって加藤は言ってた。 なのに繋がらない。 エラーすら出ない、 ただ無言で固まる」\n\nインターネットは『バラバラの網を相互接続する (inter-network)』ところから始まった。 君の仕事はまさにそれ。 なぜパケットが片道で消えるのかを 4 つの層から突き止め、 経路を直して core が握っているフラグを取り出せ。",
+  "description": "## シナリオ\n\n天下クラウド社のネットワーク班に異動した初日。 加藤さんが残した VPC には 2 つのサブネットがある:\n\n- **public サブネット**: 踏み台ホスト `relay` (SSM Session Manager で入れる)\n- **private サブネット**: 管理ノード `core` (HTTP :8080 で機密を配っている)\n\n`relay` から `core` の private IP に `curl` しても、 **接続が『拒否』されるのではなく、 ただ無言でハングする**。 加藤さんは「ファイアウォール (Security Group) は開けた」と言い残していて、 実際 SG は正しい。 なのに届かない。\n\nインターネットの語源は inter-network ── バラバラのネットワークを相互接続すること。 そして 2 つのネットワークの間でパケットが通るかどうかは、 AWS では **4 つの層** が同時に許可して初めて成立する。 どこか 1 層でも片道を塞いでいると、 行きは通っても **戻りが消えて TCP ハンドシェイクが完了しない** ── これが『拒否されないのに繋がらない』の正体。\n\n## デプロイされるもの (すべて CFn 管理下)\n\n- VPC × 1 (`10.20.0.0/16`)\n- public サブネット + InternetGateway + ルートテーブル\n- private サブネット + ルートテーブル (NAT なし)\n- 踏み台 EC2 `relay` (t3.micro, public サブネット, SSM 接続)\n- 管理ノード EC2 `core` (t3.micro, private サブネット, public IP なし) ── `:8080` で per-deploy のフラグを配る\n- Security Group × 2, Network ACL × 1 (← 経路を片側だけ塞いでいる)\n\n**新規リソースは一切作らせない。 君がやるのは既存リソースの設定を 1 行直すこと**。 これにより stack を消せば全部きれいに消える (孤児リソースが残らない)。\n\n## 解き方\n\n1. `relay` に SSM Session Manager で接続する (`aws ssm start-session --target <RelayInstanceId>`)。 RelayInstanceId は `aws ec2 describe-instances` で `${NamePrefix}-relay` を探す。\n2. `core` の private IP を `aws ec2 describe-instances` で調べ、 `relay` の中から `curl -v --max-time 5 http://<core-private-ip>:8080` する。 ハングする (タイムアウト) はず。\n3. 到達性の 4 層を 1 枚ずつ剥がす:\n   - **Security Group** (`core` の SG): `:8080` を `relay` から許可しているか? ── これは正しい (ステートフルなので戻りは自動許可)。\n   - **ルートテーブル**: 同一 VPC 内なので local ルートで届く ── 正常。\n   - **サブネット**: `relay` と `core` は同じ VPC ── 正常。\n   - **Network ACL**: ここが怪しい。 `core` 側サブネットの NACL を `aws ec2 describe-network-acls` で読む。\n4. NACL は **ステートレス** ── SG と違って戻り通信を自動では許可しない。 行き (inbound) と戻り (outbound) を別々に許可する必要がある。 片方が抜けていると、 行きは届くが戻りが落ちて `curl` がハングする。\n5. 抜けている方向のルールを **1 つ追加** して経路を開通させる (新規リソースではなく、 既存 NACL へのエントリ追加 = 設定変更)。\n6. もう一度 `relay` から `curl http://<core-private-ip>:8080` ── 今度はフラグ `TC{...}` が返る。 それを Portal に submit。\n\nタスク説明は SSM Parameter `/${NamePrefix}/briefing` にもある。\n\n## 採点\n\n- 正解: +300 pt (1 デプロイにつき 1 回)。\n- 不正解: -15 pt/回。 スコアは 0 未満にならない。\n- フラグは deploy ごとにランダム生成され、 `core` に到達しないと読めない (暗記・推測では解けない)。\n\n## コスト\n\nEC2 t3.micro × 2 台で 45 分 ≈ $0.02。 NAT Gateway / EIP は作らないので追加課金なし。 終わったら `aws cloudformation delete-stack` で全消去 (孤児リソースなし)。",
+  "tags": ["ans", "advanced-networking", "networking", "tcp-ip", "vpc", "connectivity", "internet-evolution"],
+  "exposedPorts": [
+    { "port": 8080, "name": "core management node (private subnet HTTP, reachable only from relay)" }
+  ],
+  "learningGoals": [
+    "AWS の到達性が Security Group / Network ACL / ルートテーブル / サブネットの 4 層で同時に決まることを、 実際にパケットを流して体感する",
+    "ステートフル (Security Group) とステートレス (Network ACL) のパケットフィルタの違いを、 戻り通信が落ちる挙動から理解する",
+    "接続が『拒否 (refused)』ではなく『ハング (timeout)』する時に、 戻りパスの欠落を疑って層を切り分ける手順を身につける",
+    "inter-network (ネットワーク相互接続) というインターネットの原点を、 サブネット間疎通の復旧として追体験する"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {
+    "FlagSeed": "__RANDOM_PASSWORD__"
+  },
+  "i18n": {
+    "en": {
+      "name": "History of the Internet Ep01 — The Packet That Never Arrives",
+      "shortDescription": "Day one on the network team at TenkaCloud Inc. The internal tool Kato-san left behind last month ran across two subnets -- supposedly.\n\nSasaki-san, the CTO: 'You can get into the bastion (relay). But nobody can reach the management node (core) behind it. Kato swore the firewall was open. It still won't connect. No error -- it just hangs, silent.'\n\nThe internet began by inter-networking separate networks. That's exactly your job. Work out why packets vanish one-way across four layers, restore the path, and pull out the flag core is holding.",
+      "description": "## Scenario\n\nFirst day on TenkaCloud's network team. The VPC Kato-san left behind has two subnets:\n\n- **public subnet**: bastion host `relay` (reachable via SSM Session Manager)\n- **private subnet**: management node `core` (serving a secret over HTTP :8080)\n\nFrom `relay`, `curl` to `core`'s private IP does not get *refused* -- it just hangs, silently. Kato left a note saying 'the firewall (Security Group) is open', and indeed the SG is correct. Yet nothing reaches it.\n\nThe word internet comes from inter-network -- connecting separate networks. On AWS, whether a packet crosses between two networks is decided by **four layers** that must all permit it. If even one layer blocks a single direction, the request gets there but the **reply disappears and the TCP handshake never completes** -- which is exactly what 'open but won't connect' looks like.\n\n## What gets deployed (all CFn-managed)\n\n- 1 VPC (`10.20.0.0/16`)\n- public subnet + InternetGateway + route table\n- private subnet + route table (no NAT)\n- bastion EC2 `relay` (t3.micro, public subnet, SSM access)\n- management node EC2 `core` (t3.micro, private subnet, no public IP) -- serves a per-deploy flag on `:8080`\n- 2 Security Groups, 1 Network ACL (which blocks the path one-way)\n\n**You never create new resources. Your job is to fix one line of an existing resource's settings.** That keeps teardown clean -- delete the stack and everything is gone, with no orphaned resources left behind.\n\n## How to solve\n\n1. Connect to `relay` via SSM Session Manager (`aws ssm start-session --target <RelayInstanceId>`). Find RelayInstanceId by `aws ec2 describe-instances` for `${NamePrefix}-relay`.\n2. Find `core`'s private IP via `aws ec2 describe-instances`, then from inside `relay` run `curl -v --max-time 5 http://<core-private-ip>:8080`. It should hang (timeout).\n3. Peel back the four reachability layers one at a time:\n   - **Security Group** (`core`'s SG): does it allow `:8080` from `relay`? It does -- and being stateful, the reply is auto-allowed.\n   - **Route table**: same VPC, so the local route delivers it -- fine.\n   - **Subnet**: `relay` and `core` are in the same VPC -- fine.\n   - **Network ACL**: the suspect. Read the `core` subnet's NACL via `aws ec2 describe-network-acls`.\n4. A NACL is **stateless** -- unlike a Security Group it does not auto-allow return traffic. Inbound and outbound must be permitted separately. If one direction is missing, the request arrives but the reply is dropped and `curl` hangs.\n5. Add **one** rule for the missing direction to open the path (an entry on the existing NACL -- a settings change, not a new resource).\n6. From `relay`, `curl http://<core-private-ip>:8080` again -- this time the flag `TC{...}` comes back. Submit it in the Portal.\n\nThe task is also in SSM Parameter `/${NamePrefix}/briefing`.\n\n## Scoring\n\n- Correct: +300 pt (once per deploy).\n- Wrong: -15 pt each. Score never drops below 0.\n- The flag is randomly generated per deploy and is unreadable unless you reach `core` -- memorizing or guessing won't work.\n\n## Cost\n\nEC2 t3.micro x 2 for 45 min is about $0.02. No NAT Gateway / EIP, so no extra charges. Tear down with `aws cloudformation delete-stack` -- everything is removed, with no orphaned resources.",
+      "learningGoals": [
+        "Feel, by actually pushing packets, that AWS reachability is decided simultaneously by four layers: Security Group / Network ACL / route table / subnet",
+        "Understand the difference between stateful (Security Group) and stateless (Network ACL) packet filtering by watching return traffic get dropped",
+        "Build the instinct to suspect a missing return path -- and bisect the layers -- when a connection hangs (timeout) instead of being refused",
+        "Re-live inter-networking, the origin of the internet, as the act of restoring connectivity between two subnets"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 300,
+    "wrongAnswerPenalty": 15,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "接続が『refused』ではなく『ハング (timeout)』する時は、 行きは届いているが戻りが消えているサイン。 Security Group はステートフルなので戻りは自動許可 ── つまり犯人は SG ではない。 `core` 側サブネットのもう 1 つのファイアウォールを `aws ec2 describe-network-acls` で読んでみよう。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "Network ACL は **ステートレス**。 inbound (relay→core:8080) は許可されているが、 outbound (core→relay の戻り) を見ると、 戻り先のエフェメラルポート範囲 (1024-65535) を許可するルールが無い。 だから SYN-ACK が落ちてハングする。",
+        "penalty": 50
+      },
+      {
+        "id": "hint-3",
+        "content": "`core` サブネットの NACL に **outbound 許可ルールを 1 つ追加**する: TCP / ポート 1024-65535 / 宛先 10.20.1.0/24 (relay サブネット) / allow。 `aws ec2 create-network-acl-entry --network-acl-id <id> --rule-number 110 --protocol 6 --egress --cidr-block 10.20.1.0/24 --port-range From=1024,To=65535 --rule-action allow`。 その後 relay から `curl http://<core-private-ip>:8080` でフラグが返る。",
+        "penalty": 100
+      }
+    ]
+  }
+}
