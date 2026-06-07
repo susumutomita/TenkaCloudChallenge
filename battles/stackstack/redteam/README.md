@@ -2,60 +2,55 @@
 
 > Operator-facing. Reading this as a player spoils the disruption schedule. **Not for unauthorized use against systems you do not own.**
 
-StackStack's pressure comes from "organizational events" — the kind of thing that lands in a Platform Team's lap mid-sprint. Without them, defenders see a passive migration exercise and never feel the cost of leaving a slot on EC2. This directory documents the **disruption catalog** the operator fires and ships a smoke-test script to verify the real-fault injections before event day.
+StackStack's pressure comes from reversible operational drift against a single stack-owned app host. The operator fires a disruption from the admin console, the platform executor AssumeRoles into the team account, and runs the `action` declared in `../metadata.json` through SSM Run Command. There are no standing attack loops and no participant-created resources to discover.
 
-Unlike `security-battle-royale` (HTTP attack probes run by an operator-side attacker), StackStack's red team is delivered through the **platform's disruption executor** (ADR-031): the operator fires a disruption from the admin console, the executor AssumeRoles into the team's account, and runs the `action` declared in `../metadata.json` via SSM Run Command. There are no standing attack loops.
-
-## Catalog (what fires)
+## Catalog
 
 | id | delivery | what actually happens |
 | --- | --- | --- |
-| `ceo-5000-users` | scoring-side `effect` (ADR-033) | −100 pt per scoring tick for 5 min. No cloud fault. |
-| `mfa-mandate` | scoring-side `effect` (ADR-033) | −100 pt per scoring tick for 5 min. No cloud fault. |
-| `legal-pii-found` | scoring-side `effect` (ADR-033) | −100 pt per scoring tick for 5 min. No cloud fault. |
-| `env-credential-leak` | real fault: `action` (ADR-031, ssm-run-command) | `systemctl stop tenkacloud-slot-auth` on the team's EC2. Probe goes 5xx → zero points + failurePenalty per cycle. Auto-revert after 300 s. |
-| `ai-committed-secret` | real fault: `action` (ADR-031, ssm-run-command) | `systemctl stop tenkacloud-slot-network tenkacloud-slot-audit` together. Auto-revert after 180 s. |
+| `ai-wipes-database` | real fault: `action` (ADR-031, ssm-run-command) | Runs `/opt/tenkacloud/vibe/wipe_database.sh`, clearing SQLite and Aurora posts where reachable. Auto-revert runs `/opt/tenkacloud/vibe/restore_database_from_s3.sh` after 300 s. |
+| `auth-setting-removed` | real fault: `action` (ADR-031, ssm-run-command) | Backs up `/etc/tenkacloud-vibe/config.json`, disables auth, restarts the app. Auto-revert restores the backup after 300 s. |
+| `vibe-app-stopped` | real fault: `action` (ADR-031, ssm-run-command) | Stops `tenkacloud-vibe`. Probe goes 5xx, causing failurePenalty. Auto-revert starts it after 180 s. |
 
-Two invariants both delivery models share:
+Shared invariants:
 
-- **Migrated slots are immune.** The red team only touches the EC2; a slot already on Lambda / ECS / App Runner (registered via portal override) takes no damage. That asymmetry *is* the gameplay.
-- **Nothing is permanent** (ADR-029). Real faults carry a `revert` the executor schedules at fire time; effects expire after `durationSeconds`.
+- **All faults target stack-owned resources.** No Lambda / ECS / App Runner / API Gateway / CloudFront discovery is needed.
+- **Nothing is permanent** (ADR-029). Every entry has `action.revert`.
+- **Score damage comes from probe failure or measured posture regression.** Do not add an `effect` to the same disruption; it would double-charge.
 
-## Targeting rule for the effect-only events
+## Player recovery path
 
-The scoring engine applies an `effect` penalty unconditionally once fired at a team — it does not check which platform the slot is on. The "only hurts EC2 holdouts" semantics are **operational**: fire `ceo-5000-users` / `mfa-mandate` / `legal-pii-found` only at teams whose target slot (`ux` / `auth` / `audit`) still self-reports `ec2`. Check before firing:
+For every fault, the defender can recover faster than the auto-revert:
 
 ```bash
-curl -s "$TEAM_BASE_URL/<slot>/meta" | jq -r .platform   # "ec2" → valid target
+aws ssm start-session --target <InstanceId>
+curl -s http://<AppUrlHint host>/posture | jq .
+sudo /opt/tenkacloud/vibe/restore_database_from_s3.sh
+sudo python3 /opt/tenkacloud/vibe/set_auth_required.py true
+sudo systemctl start tenkacloud-vibe
 ```
 
-## Player recovery path (what the defender can do)
-
-For the two real faults, the defender has two outs, both faster than the auto-revert:
-
-1. **Already migrated** — nothing to do; the override URL keeps scoring.
-2. **Still on EC2** — `aws ssm start-session --target <InstanceId>` (the `SsmStartSessionCommand` stack output), then `sudo systemctl start tenkacloud-slot-<slot>`.
-
-Brief this in the pre-event walkthrough; the recovery command is also in the player-facing `description`.
+The exact command depends on which posture key regressed. Brief participants to trust `/posture` over guesses.
 
 ## Pre-event smoke test
 
-`smoke-test-attacks.sh` replays both real-fault actions against a throwaway team stack via `aws ssm send-command` — stop, confirm 5xx, restart, confirm 200 — without going through the platform executor. Run it during the single-team smoke test (see `../OPERATOR.md`):
+`smoke-test-attacks.sh` replays all three action/revert pairs against a throwaway team stack through `aws ssm send-command`, then checks the app-visible result:
 
 ```bash
-INSTANCE_ID=<InstanceId output> BASE_URL=<BaseUrl output> bash redteam/smoke-test-attacks.sh
+INSTANCE_ID=<InstanceId output> BASE_URL=<AppUrlHint output> bash redteam/smoke-test-attacks.sh
 ```
 
-Requires operator-side credentials that can `ssm:SendCommand` against the team account instance (same permission the platform executor uses).
+Requires operator-side credentials that can `ssm:SendCommand` against the team account instance.
 
 ## Adding a new disruption
 
-1. Decide the delivery model: scoring-only pressure → `effect`; a fault the defender must notice and fix → `action` (with `revert`, per ADR-029).
-2. Add the entry to `../metadata.json` `disruptions[]`. For `action`, `targetRef` must name an existing `Outputs:` key in `../template.yaml` (the validator enforces this).
-3. **Never describe a fault the entry doesn't deliver.** "Returns 5xx" requires an `action`; an `effect`-only event may only claim score pressure.
-4. Extend `smoke-test-attacks.sh` so the new fault is covered by the pre-event check.
-5. `bun run validate` from the repo root.
+1. Decide the delivery model. StackStack should prefer `action` with `revert`.
+2. Add the entry to `../metadata.json` `disruptions[]`.
+3. Ensure `action.targetRef` names an existing `Outputs:` key in `../template.yaml`.
+4. Never describe a fault the action does not deliver.
+5. Extend `smoke-test-attacks.sh`.
+6. Run `bun run validate`.
 
 ## Safety
 
-The actions stop/start systemd units on a single stack-owned EC2 instance resolved from CFn Outputs — no host discovery, no lateral movement, no data access. Reverts are mandatory and bounded (≤ 300 s here). Run the smoke test only against stacks you operate.
+The actions only mutate app data/config or the `tenkacloud-vibe` service on one stack-owned EC2 instance. There is no host discovery, lateral movement, or unmanaged resource cleanup path.

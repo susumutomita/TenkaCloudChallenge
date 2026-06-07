@@ -38,6 +38,34 @@ bun run validate
 
 これだけで問題作成に必要な環境は揃う。 AWS credentials は **platform** (CDK / Lambda) を動かすときだけ必要で、 本 repo の catalog 作業では不要。
 
+### Kumo によるローカル CloudFormation smoke
+
+schema / cross-ref より深い template 評価は、 ローカルの [Kumo](https://github.com/sivchari/kumo) で行う。 実 AWS には接続しない。 evaluator は non-local endpoint を拒否し、 dummy credentials を強制する。
+
+```bash
+# http://127.0.0.1:4566 で local AWS emulator を起動。
+# 中身は通常の docker compose:
+#   docker compose -f docker-compose.kumo.yml up -d
+bun run kumo:up
+
+# 1 問題だけローカル評価
+bun run validate:kumo -- battles/stackstack
+
+# metadata validator の後に全問題をローカル評価
+bun run validate:local
+
+# Kumo を停止し、 local emulator state を削除
+# 同等:
+#   docker compose -f docker-compose.kumo.yml down -v
+bun run kumo:down
+```
+
+Kumo の local `validate-template` 相当だけを走らせ、 local emulator stack 作成も避ける場合:
+
+```bash
+bun run validate:kumo -- --template-only
+```
+
 ## ➕ 新しい問題を追加する
 
 1. **ディレクトリを作る**。 `<category>/<id>/` (= `<category>` は `battles` / `challenges`、 `<id>` は lowercase kebab-case)。

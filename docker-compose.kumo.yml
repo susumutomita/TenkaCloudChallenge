@@ -1,0 +1,13 @@
+services:
+  kumo:
+    image: "${KUMO_IMAGE:-ghcr.io/sivchari/kumo:latest}"
+    ports:
+      - "${KUMO_PORT:-4566}:4566"
+    environment:
+      KUMO_LOG_LEVEL: "${KUMO_LOG_LEVEL:-warn}"
+      KUMO_DATA_DIR: /data
+    volumes:
+      - kumo-data:/data
+
+volumes:
+  kumo-data:

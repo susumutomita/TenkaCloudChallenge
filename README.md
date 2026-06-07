@@ -38,6 +38,34 @@ bun run validate
 
 That's all you need for authoring. AWS credentials are only required when running the *platform* (CDK / Lambda) — not for catalog work in this repo.
 
+### Local CloudFormation smoke with Kumo
+
+For template evaluation beyond schema/cross-ref checks, run the catalog against local [Kumo](https://github.com/sivchari/kumo). This never talks to real AWS: the evaluator refuses non-local endpoints and forces dummy credentials.
+
+```bash
+# Start the local AWS emulator on http://127.0.0.1:4566.
+# This is a plain docker compose wrapper:
+#   docker compose -f docker-compose.kumo.yml up -d
+bun run kumo:up
+
+# Evaluate one problem locally
+bun run validate:kumo -- battles/stackstack
+
+# Or evaluate every problem after the metadata validator
+bun run validate:local
+
+# Stop Kumo and clear local emulator state
+# Equivalent:
+#   docker compose -f docker-compose.kumo.yml down -v
+bun run kumo:down
+```
+
+If you only want Kumo's local `validate-template` path without creating local emulator stacks, use:
+
+```bash
+bun run validate:kumo -- --template-only
+```
+
 ## ➕ Add a new problem
 
 1. **Create the directory.** `<category>/<id>/` where `<category>` is `battles` or `challenges` and `<id>` is lowercase kebab-case.

@@ -1,72 +1,46 @@
 {
   "$schema": "../../SCHEMA.json",
   "id": "stackstack",
-  "name": "StackStack — AI → Production ラストワンマイル",
+  "name": "StackStack — Vibe to Production",
   "category": "Battle",
   "status": "ready",
   "visibility": "public",
   "difficulty": 4,
   "estimatedDuration": "90〜120 分",
-  "shortDescription": "天下クラウド株式会社 Platform Team、 月初の朝会。 加藤さんは先月辞めた。 社内 100 人の AI Builder が Claude で量産したアプリが、 5 軸 (auth / network / rate / audit / ux) どれも未整備のまま EC2 1 台に同居している。\n\n佐々木 CTO 曰く: 「これ、 公開していい状態に持っていって。 AI が書いた速さに、 Platform チームが追いつけてない。 他チームの Platform もみんな焦ってる」\n\n君の仕事: 5 軸の slot を順に managed runtime (Lambda + API GW / ECS / App Runner) に切り出し、 Portal の Endpoint Override に新 URL を貼って加点を 10× に上げていく。 きれいに分割した Platform Team が勝つ。",
-  "description": "## 概要\n\n天下クラウド社の Platform Team として、 AI Builder が量産した naive アプリを 5 つの統制軸で本番品質に持ち上げる Battle。 コードを書く速さの競争ではなく、 「速く・安全に・統制下で」 社内公開する Platform 運用力の競争。\n\n## 5 軸 (= 5 endpoint slot)\n\n| slot | 統制軸 | 初期状態 (= EC2 同居 deploy) | hardened (= managed runtime) |\n|------|--------|---------|---------------|\n| `auth` | Authentication / Authorization | naive Basic auth | Cognito / SSO 統合 |\n| `network` | Network controls (S3 / WAF / IAM) | Public S3 + wildcard IAM | OAC + scoped IAM |\n| `rate` | Rate limit / DoS protection | 無制限の Flask | API GW throttle / Lambda concurrency |\n| `audit` | Logging / Compliance | 標準出力のみ | CloudTrail + WORM bucket |\n| `ux` | User-facing availability | EC2 1 台 | Multi-AZ + ALB + Auto Scaling |\n\n各 slot は `/meta` で現 hosting を自己申告する。 初期 deploy では全 slot が `\"ec2\"` を返し低スコア (= 100 pt/cycle/slot)。 Lambda+API GW / ECS Fargate / App Runner に切り出して Portal の Endpoint Override に新 URL を貼ると `/meta` が `\"lambda\" | \"ecs\" | \"apprunner\"` を返すようになり、 加点が 1000 pt/cycle/slot に上がる。\n\n## 時間進行 (phases)\n\n- 0 分: 全 slot が EC2 上に naive deploy (= 500 pt/min ベース)\n- 30 分: **production-ramp** - EC2 のままの slot は degradedPoints (10 pt) に切替 (= 「公開期限に間に合わなかった」 シミュレーション)\n- 60 分: **compliance-audit** - 同じく EC2 のままの slot は degraded (= 監査要件不足の劣化が累積)\n- 90 分: **incident-response** - score engine が `/score?legacy=true` を呼ぶ。 AI Builder が混入させた slow path (= 2 秒 sleep) を取り除いて再 deploy しないと応答時間ペナルティが累積する\n\n各 phase は登録 slot の中で EC2 のまま残っているもの全てに効く。 「ux だけ移して残りは EC2 のまま」 だと 30 分後に 4 slot が一斉に degrade する設計。\n\n## レッドチーム (ランダム組織イベント / disruptions)\n\n放置のコストを実感させるため、 運営のレッドチームが任意タイミングで組織イベントを fire する。 前半 3 つは採点側ペナルティ (実障害なし)、 後半 2 つは EC2 への実障害注入:\n\n| id | name | 影響 |\n|----|------|------|\n| `ceo-5000-users` | CEO が明日 5000 人デモを要求 | `ux` が EC2 のままのチームに 5 分間 cycle ごと追加減点 |\n| `mfa-mandate` | Security Team が MFA 必須化 | `auth` が EC2 のままのチームに 5 分間 cycle ごと追加減点 |\n| `legal-pii-found` | Legal が PII 検出 | `audit` が EC2 のままのチームに 5 分間 cycle ごと追加減点 |\n| `env-credential-leak` | `.env` 流出 | EC2 上の `auth` サービスを停止 → 5xx (= 加点 0 + failurePenalty 累積) |\n| `ai-committed-secret` | Claude が秘密鍵を git commit | EC2 上の `network` + `audit` を連動停止 → 5xx |\n\n実障害系への対策は 2 つ。 (1) 対象 slot を managed runtime に移行済みなら無傷 (レッドチームは override 先には触れない)。 (2) EC2 に残っていた場合は SSM Session Manager で接続し `systemctl start tenkacloud-slot-<slot>` で手動復旧する (早いほど損失が小さい)。 ADR-029 に従い自動復旧が常に予約されるため、 永続障害にはならない。\n\n## 全 managed 移行ボーナス\n\n5 slot 全てが managed runtime (lambda / ecs / apprunner のいずれか) に乗ると **+30,000 pt** が 1 回入る (= 'production-ready' 認定)。 1 つでも EC2 が残っていると bonus は付かない。",
-  "tags": ["platform-engineering", "ai-native", "ccoe", "security", "governance", "availability"],
+  "shortDescription": "天下クラウド株式会社 Platform Team、 月初の朝会。 加藤さんが辞めた直後、 AI Builder が量産した掲示板アプリが社内公開待ちになっている。 動くが、 DB は空、 認証なし、 rate limit なし、 監査なし、 SQLite のまま。\n\n佐々木 CTO 曰く: 「ホスティングしただけじゃ公開できない。 既存の統制リソースを使って、 今日中に本番品質まで持っていって」\n\n君の仕事: stack が作成済みの ALB / EC2 / WAF / S3 backup / S3 audit / Aurora を使い、 新規トップレベルリソースを作らずに hosted → restored → protected → audited → production へ上げていく。",
+  "description": "## 概要\n\n天下クラウド社 Platform Team として、 AI Builder が量産した 1 つの vibe-coded 掲示板アプリを **ホスティングから本番品質まで** 持ち上げる Battle。 速く作る競争ではなく、 既存リソースの設定変更とデータ操作だけで安全に公開できる状態へ持っていく Platform 運用力の競争。\n\n## 初期状態\n\nCloudFormation stack は ALB / EC2 app host / WAF WebACL / S3 backup bucket / S3 audit bucket / Aurora Serverless v2 をすべて作成する。 参加者が Lambda / ECS / App Runner / API Gateway / CloudFront 等を新規作成する必要はない。\n\nDeploy 直後は `RegisteredUrl` Output が空なので加点は始まらない。 `AppUrlHint` を Participant Portal の endpoint override に登録して初めて score engine が `/meta` と `/score` を probe する。\n\n## Production gates\n\nアプリは `/posture` で実状態を返す。 自己申告 toggle ではなく、 app が実際の DB・認証ロジック・WAF association・S3 audit write・Aurora 接続を検査する。\n\n| posture key | 初期状態 | hardened state |\n|-------------|----------|----------------|\n| `db_present` | SQLite は空 | S3 backup dump から既存 DB に復元 |\n| `auth_enabled` | anonymous POST 可 | app auth flag + non-default token で anonymous POST を拒否 |\n| `rate_limited` | ALB に WAF 未紐付け | 既存 WAF WebACL を既存 ALB に associate |\n| `audit_on` | audit write なし | app が既存 S3 audit bucket に audit event を実書き込み |\n| `on_aurora` | SQLite | 既存 Aurora へデータ移行し app 接続先を切替 |\n\n`/meta` はこの posture から `posture-0`〜`posture-4` / `production` を算出する。 各 gate が harden されるたびに 1 分ごとの加点が上がり、 全 gate が true になると production bonus が入る。\n\n## 競技フロー\n\n1. `AppUrlHint` を portal override に登録して hosted 状態を開始。\n2. SSM Session Manager で app host に入り、 `/opt/tenkacloud/vibe/restore_database_from_s3.sh` で S3 backup からデータ復元。\n3. `/opt/tenkacloud/vibe/set_auth_required.py true` で auth token を発行し、 anonymous submit が 401 になることを確認。\n4. `/etc/tenkacloud-vibe/runtime.env` の `WAF_WEB_ACL_ARN` を `ALB_ARN` に `aws wafv2 associate-web-acl` で紐付け。\n5. `/opt/tenkacloud/vibe/set_audit_s3.py true` で audit bucket 書き込みを有効化。\n6. `/opt/tenkacloud/vibe/migrate_to_aurora.sh` で SQLite の投稿を既存 Aurora に移し、 app 接続先を切替。\n\n## レッドチーム\n\n運営は reversible な障害だけを fire する。 どれも stack-owned EC2 上のデータや設定を変更し、 metadata の `action.revert` で自動復旧を宣言する。 参加者は再診断して同じ手順で再修復する。\n\n- `ai-wipes-database`: SQLite / Aurora の投稿を空にする。 revert は backup から再復元。\n- `auth-setting-removed`: app config の auth flag を一時的に false に戻す。 revert は直前 config を戻す。\n- `vibe-app-stopped`: app service を停止する。 revert は service start。\n\n## クリーンアップ\n\n参加者の解法は既存リソースの設定変更とデータ操作だけなので、 競技後は `aws cloudformation delete-stack` だけで ALB / EC2 / WAF / S3 / Aurora / IAM が削除される。 追加の cleanup pass は不要。",
+  "tags": ["platform-engineering", "ai-native", "governance", "waf", "aurora", "incident-response"],
   "exposedPorts": [
-    { "port": 80, "name": "nginx reverse proxy (auth / network / rate / audit / ux)" }
+    { "port": 80, "name": "application load balancer" }
   ],
   "learningGoals": [
-    "AI で量産された naive アプリを 5 統制軸 (auth / network / rate / audit / ux) で本番化する判断と順序付けを体験する",
-    "managed runtime (Lambda / ECS / App Runner) への移行が hardening をどう自動で底上げするかを理解する",
-    "ランダム組織イベント (CEO 要求 / Legal 監査 / .env 流出) の発火下で優先度を再評価する Platform Team の意思決定を訓練する"
+    "AI で量産された naive アプリを、 新規トップレベルリソース作成なしで本番化する判断と順序付けを体験する",
+    "URL 登録ゲート、 backup restore、 WAF association、 audit write、 Aurora migration を実状態チェックで検証する",
+    "revert 付き disruption 下で再診断・再修復する incident response のリズムを訓練する"
   ],
   "cfnTemplate": "template.yaml",
-  "cfnParameters": {},
+  "cfnParameters": {
+    "DbPassword": "__RANDOM_PASSWORD__"
+  },
   "i18n": {
     "en": {
-      "name": "StackStack — AI to Production Last Mile",
-      "shortDescription": "Monday morning standup, TenkaCloud Platform Team. Kato-san resigned last month. 100 internal AI Builders are mass-producing Claude-generated apps with all 5 control axes (auth / network / rate / audit / ux) wide open, co-tenant on one EC2.\n\nSasaki-san CTO: 'Get this to a publishable state. AI is shipping faster than Platform can keep up. Every other team's Platform org is in the same spot.'\n\nYour job: peel each of the 5 slots off EC2 and onto a managed runtime (Lambda + API GW / ECS / App Runner). Register the new URL in the Participant Portal Endpoint Override, and your per-slot payout jumps 10x. The cleanest split wins.",
-      "description": "## Overview\n\nYou are the TenkaCloud Platform Team taking AI-generated apps to production across 5 control axes. The contest is Platform operational quality — fast, safe, governed — not coding speed.\n\n## 5 control axes (= 5 endpoint slots)\n\n| slot | axis | initial state (= EC2 co-tenant) | hardened (= managed runtime) |\n|------|------|---------------------------------|------------------------------|\n| `auth` | Authentication / Authorization | naive Basic auth | Cognito / SSO via managed runtime |\n| `network` | Network controls (S3 / WAF / IAM) | Public S3 + wildcard IAM | OAC + scoped IAM |\n| `rate` | Rate limit / DoS | unthrottled Flask | API GW throttle / Lambda concurrency |\n| `audit` | Logging / Compliance | stdout only | CloudTrail + WORM bucket |\n| `ux` | User-facing availability | single EC2 | Multi-AZ + ALB + Auto Scaling |\n\nEach slot self-reports its hosting platform via `/meta`. The initial deploy puts all five on EC2 (low score: 100 pt/cycle/slot). Hardening = re-hosting to Lambda + API GW / ECS Fargate / App Runner and registering the new URL via the portal override. Once `/meta` returns `lambda` / `ecs` / `apprunner`, that slot pays 1,000 pt/cycle.\n\n## Time-based phases\n\n- 0 min: all slots naive on EC2 (≈ 500 pt/min baseline)\n- 30 min: **production-ramp** — every slot still on EC2 switches to degradedPoints (10 pt). 'You missed the publish deadline' simulation\n- 60 min: **compliance-audit** — same effect (audit gap accumulates as time passes)\n- 90 min: **incident-response** — score engine probes `/score?legacy=true`. The legacy code path planted by the AI Builder (2 s sleep) trips the response-time penalty unless you redeploy without it\n\nEach phase hits every slot still on EC2, not just one. Migrating only `ux` and leaving the other four behind means four slots all degrade at the 30-minute mark.\n\n## Red team (random org events / disruptions)\n\nTo make the cost of standing still tangible, the operator's red team fires org events on its own schedule. The first three are scoring-side penalties (no real fault): CEO 5000-user demand (`ux`), Security MFA mandate (`auth`), Legal PII finding (`audit`) — each docks points per cycle for 5 minutes, aimed at teams whose slot is still EC2-resident. The last two inject real faults into the EC2: `.env` credential leak stops the `auth` service; AI-committed-secret stops `network` + `audit` together. A stopped slot probes 5xx — zero points plus failurePenalty per cycle.\n\nTwo mitigations: (1) slots already migrated to managed runtimes are untouched — the red team never touches your override URL; (2) if you are still on EC2, SSM into the instance and run `systemctl start tenkacloud-slot-<slot>` — the earlier you recover, the smaller the loss. Per ADR-029 an automatic revert is always scheduled, so no fault is permanent.\n\n## All-managed bonus\n\n5 slots all on managed runtimes (lambda / ecs / apprunner): **+30,000 pt one-time**. A single slot still on EC2 disqualifies the bonus.",
+      "name": "StackStack — Vibe to Production",
+      "shortDescription": "Monday morning standup, TenkaCloud Platform Team. Right after Kato-san left, an AI Builder's generated message-board app is waiting for internal launch. It runs, but the DB is empty, auth is off, rate limiting is missing, audit is missing, and it still uses SQLite.\n\nSasaki-san CTO: 'Hosting alone is not production. Use the controls we already provisioned and get it publishable today.'\n\nYour job: use the stack-owned ALB / EC2 / WAF / S3 backup / S3 audit / Aurora resources to move from hosted to production without creating new top-level resources.",
+      "description": "## Overview\n\nYou are the TenkaCloud Platform Team taking one AI-generated message-board app from **hosted** to **production-ready**. The contest is not about creating more infrastructure. It is about using existing, governed resources safely: restore data, enforce auth, associate WAF, turn on audit, and migrate to Aurora.\n\n## Initial state\n\nThe CloudFormation stack creates the ALB, EC2 app host, WAF WebACL, S3 backup bucket, S3 audit bucket, and Aurora Serverless v2 database. Competitors do not need to create Lambda, ECS, App Runner, API Gateway, CloudFront, or any other top-level resources.\n\n`RegisteredUrl` is intentionally empty after deploy. Paste `AppUrlHint` into the Participant Portal endpoint override before scoring starts.\n\n## Production gates\n\nThe app exposes `/posture`. The values are measured from real state: DB contents, app auth behavior, WAF association, S3 audit writes, and Aurora connectivity.\n\n- `db_present`: restore the stack-owned S3 backup dump into the existing DB.\n- `auth_enabled`: enable app auth with a non-default token so anonymous submit is rejected.\n- `rate_limited`: associate the existing WAF WebACL with the existing ALB.\n- `audit_on`: write audit events to the existing S3 audit bucket.\n- `on_aurora`: migrate SQLite data to the existing Aurora database and switch the app connection.\n\n`/meta` maps the measured posture to `posture-0` through `posture-4` or `production`; scoring increases as gates become true.\n\n## Red team\n\nOperators can fire only reversible disruptions: wipe the DB, strip the auth flag, or stop the app service. Each action carries a required revert in metadata, so `delete-stack` cleanup and game recovery stay bounded.",
       "learningGoals": [
-        "Practice the judgment and ordering required to take an AI-generated app to production across 5 control axes",
-        "Understand how migrating to managed runtimes (Lambda / ECS / App Runner) auto-bootstraps hardening defaults",
-        "Train Platform Team decision-making under random organizational events (CEO demand / Legal audit / .env leak)"
+        "Practice taking an AI-generated app to production without creating unmanaged top-level resources",
+        "Verify URL registration, backup restore, WAF association, audit writes, and Aurora migration through real posture checks",
+        "Practice incident response against reversible disruptions"
       ]
     }
   },
   "endpoints": [
     {
-      "slot": "auth",
-      "default": { "from": "cfn-output", "key": "BaseUrl", "appendPath": "/auth" },
+      "slot": "app",
+      "default": { "from": "cfn-output", "key": "RegisteredUrl" },
       "overridable": true,
-      "label": "Auth (Authentication / Authorization)",
-      "description": "初期は EC2 上の naive Basic auth。 Lambda + Cognito / SSO に切り出して override 登録すると hardened 加点。"
-    },
-    {
-      "slot": "network",
-      "default": { "from": "cfn-output", "key": "BaseUrl", "appendPath": "/network" },
-      "overridable": true,
-      "label": "Network (S3 / WAF / IAM scope)",
-      "description": "初期は Public S3 + wildcard IAM。 CloudFront + OAC + scoped IAM に切り出して override 登録すると hardened。"
-    },
-    {
-      "slot": "rate",
-      "default": { "from": "cfn-output", "key": "BaseUrl", "appendPath": "/rate" },
-      "overridable": true,
-      "label": "Rate limit / DoS",
-      "description": "初期は無制限の Flask。 API GW throttle / Lambda concurrency cap に切り出して hardened。"
-    },
-    {
-      "slot": "audit",
-      "default": { "from": "cfn-output", "key": "BaseUrl", "appendPath": "/audit" },
-      "overridable": true,
-      "label": "Audit / Logging",
-      "description": "初期は stdout のみ。 CloudTrail + S3 WORM + Athena に切り出して hardened。"
-    },
-    {
-      "slot": "ux",
-      "default": { "from": "cfn-output", "key": "BaseUrl", "appendPath": "/ux" },
-      "overridable": true,
-      "label": "UX / Availability",
-      "description": "初期は EC2 1 台。 ALB + Multi-AZ + Auto Scaling に切り出して hardened。"
+      "label": "Vibe app",
+      "description": "Deploy 後は空。 Stack Output の AppUrlHint を貼ると score engine が /meta + /score を probe し始める。"
     }
   ],
   "scoring": {
@@ -77,17 +51,21 @@
       "scorePath": "/score"
     },
     "platformRules": {
-      "ec2": { "points": 100, "degradedPoints": 10 },
-      "lambda": { "points": 1000 },
-      "ecs": { "points": 1000 },
-      "apprunner": { "points": 1000 }
+      "posture-0": { "points": 100, "degradedPoints": 25 },
+      "posture-1": { "points": 250, "degradedPoints": 75 },
+      "posture-2": { "points": 400, "degradedPoints": 150 },
+      "posture-3": { "points": 600, "degradedPoints": 250 },
+      "posture-4": { "points": 800, "degradedPoints": 400 },
+      "production": { "points": 1000 }
     },
     "failurePenalty": -100,
-    "responsePenalties": [{ "if": "responseTimeMs > 1500", "points": -10 }],
+    "responsePenalties": [
+      { "if": "responseTimeMs > 1500", "points": -25 }
+    ],
     "bonuses": [
       {
         "kind": "all-slots-on-platforms",
-        "platforms": ["lambda", "ecs", "apprunner"],
+        "platforms": ["production"],
         "points": 30000,
         "once": true
       }
@@ -95,17 +73,17 @@
     "hints": [
       {
         "id": "hint-1",
-        "content": "5 つの slot は nginx reverse proxy + Python systemd 群として EC2 上に同居しています。 Stack Outputs の `BaseUrl` (= EC2 public DNS) を Participant Portal の Endpoint Override で 5 slot 全てに貼ると加点が始まります。 deploy しただけでは 0 pt。",
+        "content": "Deploy だけでは score engine は probe しません。 Stack Output の `AppUrlHint` を `app` endpoint override に登録すると `/meta` と `/score` の polling が始まります。",
         "penalty": 0
       },
       {
         "id": "hint-2",
-        "content": "managed runtime (Lambda+API GW / App Runner / ECS) に切り出して `/meta` の自己申告が `lambda` / `ecs` / `apprunner` のいずれかを返すようになると、 加点が 100 → 1000 pt/cycle/slot に上がります。 phase ごとに EC2 が degrade するので、 phase 境界 (30 / 60 / 90 分) より前に動くほどスコアが伸びる設計。",
+        "content": "SSM Session Manager で app host に入り、 `/opt/tenkacloud/vibe/restore_database_from_s3.sh`、 `set_auth_required.py true`、 `set_audit_s3.py true`、 `migrate_to_aurora.sh` を確認してください。 `/posture` が実状態を教えてくれます。",
         "penalty": 100
       },
       {
         "id": "hint-3",
-        "content": "全 5 slot を managed runtime に乗せると \"production-ready\" bonus +30,000 pt が 1 回入ります。 EC2 が 1 つでも残っていると bonus は付きません。 5 slot を managed にできる時間が無い場合は、 取れる slot だけ集中する方が点が伸びることもあります。",
+        "content": "rate limit は新しい WAF を作るのではなく、 stack が作成済みの `WebAclArn` を `LoadBalancerArn` に associate します。 production は既存リソースの設定変更だけで達成できます。",
         "penalty": 200
       }
     ]
@@ -114,97 +92,94 @@
     {
       "name": "production-ramp",
       "afterMinutes": 30,
-      "effect": { "switchPlatformToDegraded": ["ec2"] },
-      "description": "公開期限 phase: EC2 のまま残っている全 slot が degradedPoints (= 10 pt/cycle) に切替。 'CEO の 5000 人デモに間に合わなかった' という設定。"
-    },
-    {
-      "name": "compliance-audit",
-      "afterMinutes": 60,
-      "effect": { "switchPlatformToDegraded": ["ec2"] },
-      "description": "監査 phase: EC2 のまま残っている slot は degraded を継続。 'Legal の PII 監査に間に合わなかった' という設定 (engine effect は production-ramp と同じだが文脈が積み増し)。"
+      "effect": { "switchPlatformToDegraded": ["posture-0", "posture-1", "posture-2"] },
+      "description": "公開期限 phase: posture が浅いチームの per-cycle points を degraded 値へ切替。",
+      "publicHint": false
     },
     {
       "name": "incident-response",
-      "afterMinutes": 90,
-      "effect": { "scorePathOverride": "/score?legacy=true" },
-      "description": "Incident phase: 全 slot で /score?legacy=true に切替。 AI Builder が混入させた slow path (= 2 秒 sleep) を取り除いて再 deploy しないと応答時間ペナルティが累積する。"
+      "afterMinutes": 75,
+      "effect": { "scorePathOverride": "/score?incident=true" },
+      "description": "Incident phase: production でない app は legacy slow path に入り response penalty を受ける。",
+      "publicHint": false
     }
   ],
   "disruptions": [
     {
-      "id": "ceo-5000-users",
-      "name": "CEO が明日 5000 人デモを要求",
-      "eventDetailType": "StackStackDisruptionFired",
-      "defaultAfterMinutes": 30,
-      "operatorEditable": ["afterMinutes"],
-      "parameters": { "targetSlot": "ux" },
-      "effect": { "kind": "penalty", "points": 100, "durationSeconds": 300 },
-      "description": "CEO 由来の組織イベント。 採点側 effect のみで実障害は注入しない (ADR-033)。 fire から 5 分間、 採点 tick ごとに -100 pt (= 5 cycle ぶん)。 engine は無条件に減点するため、 operator は ux slot が EC2 のまま残っているチームだけに fire する (移行済みチームには撃たない)。 production-ramp phase と同タイミング fire 想定。"
-    },
-    {
-      "id": "mfa-mandate",
-      "name": "Security Team が MFA 必須化",
+      "id": "ai-wipes-database",
+      "name": "AI が DB を再 wipe",
       "eventDetailType": "StackStackDisruptionFired",
       "defaultAfterMinutes": 35,
       "operatorEditable": ["afterMinutes"],
-      "parameters": { "targetSlot": "auth" },
-      "effect": { "kind": "penalty", "points": 100, "durationSeconds": 300 },
-      "description": "Security 由来の組織イベント。 採点側 effect のみで実障害は注入しない (ADR-033)。 fire から 5 分間、 採点 tick ごとに -100 pt (= 加点を打ち消す圧力、 完全失格にはならない設計)。 engine は無条件に減点するため、 operator は auth slot が EC2 のまま残っているチームだけに fire する。"
-    },
-    {
-      "id": "legal-pii-found",
-      "name": "Legal が PII 検出",
-      "eventDetailType": "StackStackDisruptionFired",
-      "defaultAfterMinutes": 45,
-      "operatorEditable": ["afterMinutes"],
-      "parameters": { "targetSlot": "audit" },
-      "effect": { "kind": "penalty", "points": 100, "durationSeconds": 300 },
-      "description": "Legal 由来の組織イベント。 採点側 effect のみで実障害は注入しない (ADR-033)。 fire から 5 分間、 採点 tick ごとに -100 pt。 engine は無条件に減点するため、 operator は audit slot が EC2 のまま残っているチームだけに fire する。 compliance-audit phase と連動 fire 想定。"
-    },
-    {
-      "id": "env-credential-leak",
-      "name": ".env 流出",
-      "eventDetailType": "StackStackDisruptionFired",
-      "defaultAfterMinutes": 55,
-      "operatorEditable": ["afterMinutes"],
-      "parameters": { "targetSlot": "auth", "degradeMinutes": 5 },
-      "description": "レッドチーム (operator) が対象チームの EC2 で auth slot の systemd unit を停止する実障害注入 (ADR-031)。 EC2 のままの auth は probe が 5xx になり、 加点 0 + failurePenalty (-100/cycle) が累積する。 競技者は SSM Session Manager で接続し `systemctl start tenkacloud-slot-auth` で復旧する (早く直すほど損失が小さい)。 auth を managed runtime に移行済みのチームは override 先に触れないため無傷。 ADR-029 に従い 300 秒後の自動復旧が安全網として予約される。 1 競技に 1 回しか fire しない設計。",
+      "parameters": {},
+      "description": "レッドチームが app host 上で SQLite / Aurora の posts を空にする実障害注入。 revert は stack-owned S3 backup から再復元する。",
       "action": {
         "kind": "ssm-run-command",
         "targetRef": "InstanceId",
         "documentName": "AWS-RunShellScript",
         "paramTemplate": {
-          "commands": ["systemctl stop tenkacloud-slot-auth || true"]
+          "commands": ["/opt/tenkacloud/vibe/wipe_database.sh || true"]
         },
         "revert": {
           "afterSeconds": 300,
           "documentName": "AWS-RunShellScript",
           "paramTemplate": {
-            "commands": ["systemctl start tenkacloud-slot-auth || true"]
+            "commands": ["/opt/tenkacloud/vibe/restore_database_from_s3.sh || true"]
           }
         }
       }
     },
     {
-      "id": "ai-committed-secret",
-      "name": "Claude が秘密鍵を git commit",
+      "id": "auth-setting-removed",
+      "name": "認証設定が剥がされた",
       "eventDetailType": "StackStackDisruptionFired",
-      "defaultAfterMinutes": 70,
+      "defaultAfterMinutes": 50,
       "operatorEditable": ["afterMinutes"],
-      "parameters": { "targetSlots": ["network", "audit"] },
-      "description": "レッドチーム (operator) が対象チームの EC2 で network + audit の 2 slot を連動停止する実障害注入 (ADR-031)。 AI Native 組織における二次被害 (= 漏洩 + 監査ログ不整合) シミュレーション。 EC2 のままの 2 slot は probe が 5xx になり、 加点 0 + failurePenalty が slot ごとに累積する。 復旧は SSM Session Manager から `systemctl start tenkacloud-slot-network tenkacloud-slot-audit`。 managed runtime に移行済みの slot は無傷。 ADR-029 に従い 180 秒後の自動復旧が安全網として予約される。",
+      "parameters": {},
+      "description": "レッドチームが auth flag を false に戻す設定ドリフトを注入する。 revert は注入直前の config backup を復元する。",
       "action": {
         "kind": "ssm-run-command",
         "targetRef": "InstanceId",
         "documentName": "AWS-RunShellScript",
         "paramTemplate": {
-          "commands": ["systemctl stop tenkacloud-slot-network tenkacloud-slot-audit || true"]
+          "commands": [
+            "cp /etc/tenkacloud-vibe/config.json /etc/tenkacloud-vibe/config.json.redteam-auth.bak || true",
+            "python3 /opt/tenkacloud/vibe/set_auth_required.py false || true",
+            "systemctl restart tenkacloud-vibe || true"
+          ]
+        },
+        "revert": {
+          "afterSeconds": 300,
+          "documentName": "AWS-RunShellScript",
+          "paramTemplate": {
+            "commands": [
+              "test -f /etc/tenkacloud-vibe/config.json.redteam-auth.bak && mv /etc/tenkacloud-vibe/config.json.redteam-auth.bak /etc/tenkacloud-vibe/config.json || true",
+              "systemctl restart tenkacloud-vibe || true"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "vibe-app-stopped",
+      "name": "vibe app service 停止",
+      "eventDetailType": "StackStackDisruptionFired",
+      "defaultAfterMinutes": 65,
+      "operatorEditable": ["afterMinutes"],
+      "parameters": {},
+      "description": "レッドチームが app service を停止する。 ALB probe は 5xx になり、 revert または参加者の systemctl start まで failurePenalty が入る。",
+      "action": {
+        "kind": "ssm-run-command",
+        "targetRef": "InstanceId",
+        "documentName": "AWS-RunShellScript",
+        "paramTemplate": {
+          "commands": ["systemctl stop tenkacloud-vibe || true"]
         },
         "revert": {
           "afterSeconds": 180,
           "documentName": "AWS-RunShellScript",
           "paramTemplate": {
-            "commands": ["systemctl start tenkacloud-slot-network tenkacloud-slot-audit || true"]
+            "commands": ["systemctl start tenkacloud-vibe || true"]
           }
         }
       }

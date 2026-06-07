@@ -5,13 +5,19 @@
   "description": "TenkaCloud problem catalog. Validates metadata.json against SCHEMA.json and cross-refs template.yaml Outputs + portal slot files.",
   "type": "module",
   "scripts": {
-    "validate": "bun run scripts/validate-problems.ts"
+    "validate": "bun run scripts/validate-problems.ts",
+    "validate:kumo": "bun run scripts/kumo-evaluate-problems.ts",
+    "validate:local": "bun run validate && bun run validate:kumo",
+    "kumo:up": "docker compose -f docker-compose.kumo.yml up -d",
+    "kumo:down": "docker compose -f docker-compose.kumo.yml down -v",
+    "kumo:logs": "docker compose -f docker-compose.kumo.yml logs -f kumo"
   },
   "devDependencies": {
     "@types/node": "^24.12.4",
     "ajv": "8.18.0",
     "ajv-formats": "^3.0.1",
-    "typescript": "~5.9.3"
+    "typescript": "~5.9.3",
+    "yaml": "^2.9.0"
   },
   "trustedDependencies": []
 }
