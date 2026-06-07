@@ -69,7 +69,6 @@ A platform-repo maintainer then bumps the submodule pointer and the next `make d
 ├── SCHEMA.json                    # JSON Schema for metadata.json (synced with platform)
 ├── index.json                     # Catalog index (built from every metadata.json + bundles)
 ├── CATALOG.md                     # Full catalog docs + schema walkthrough
-├── CERTIFICATION-INDEX.md         # AWS-certification drill set, grouped by exam (generated)
 ├── scripts/validate-problems.ts   # Local + CI validator
 └── .github/workflows/ci.yml       # Schema + cross-ref CI
 ```
@@ -87,18 +86,12 @@ Reference implementation: [`challenges/net-evo-01-reachability`](./challenges/ne
 
 ## 🎯 Catalog
 
-The catalog ships two tracks.
-
-### Event problems — Battles + the Internet Evolution Challenges
-
-Built to the design bar above; the curated set an organizer actually runs at an event.
+A small, curated set — **every problem is built to the design bar above**. Quality over quantity: an earlier batch of exam-drill labs was removed, because grinding flashcards is not a game.
 
 | Status | Category  | Problem                                                                                       | Duration   | Difficulty |
 | ------ | --------- | --------------------------------------------------------------------------------------------- | ---------- | ---------- |
 | ready  | Challenge | [`hello-world`](./challenges/hello-world/)                                                     | 1 min      | 1          |
 | draft  | Challenge | [`net-evo-01-reachability`](./challenges/net-evo-01-reachability/) (Internet Evolution Ep01)  | 30-45 min  | 3          |
-| draft  | Challenge | [`public-s3-remediation`](./challenges/public-s3-remediation/)                                 | 20-30 min  | 2          |
-| draft  | Challenge | [`iam-least-privilege`](./challenges/iam-least-privilege/)                                     | 20-30 min  | 2          |
 | ready  | Battle    | [`hello-world-battle`](./battles/hello-world-battle/)                                          | 30 min     | 1          |
 | ready  | Battle    | [`microservice-migration-battle`](./battles/microservice-migration-battle/)                   | 90-120 min | 4          |
 | ready  | Battle    | [`security-battle-royale`](./battles/security-battle-royale/)                                  | 60-90 min  | 4          |
@@ -106,9 +99,7 @@ Built to the design bar above; the curated set an organizer actually runs at an 
 
 Bundle for first-time organizers: [`bundles/starter-event.json`](./bundles/starter-event.json) — 1 Challenge + 2 Battles, 60-90 min slot.
 
-### AWS certification drill set (Issue #45)
-
-**105 self-paced `flag` Challenges** mapped to every active AWS certification — CLF / AIF / SAA / DVA / SOA / DEA / MLA / SAP / DOP / SCS / ANS / MLS / PAS. Each is a free-tier ($0) CloudFormation lab whose flag must be **derived by analyzing the deployed configuration** (the answer lives only in a CFn Output the participant role cannot read), so points come from reasoning rather than recall. Full per-exam listing: [`CERTIFICATION-INDEX.md`](./CERTIFICATION-INDEX.md).
+The **Internet Evolution** Challenge series (`net-evo-*`) is the catalog's spine: each episode re-lives one moment in how the internet evolved by making you *operate* a TCP/IP layer.
 
 ## 🔄 Delivery flow
 
@@ -157,5 +148,4 @@ See [`CATALOG.md`](./CATALOG.md) for the full schema walkthrough.
 - **Platform repo (CDK / Lambda / 3 SPAs):** <https://github.com/susumutomita/TenkaCloud>
 - **JSON Schema:** [`SCHEMA.json`](./SCHEMA.json)
 - **Full catalog docs:** [`CATALOG.md`](./CATALOG.md)
-- **AWS certification drill index:** [`CERTIFICATION-INDEX.md`](./CERTIFICATION-INDEX.md)
 - **Authoring design bar (skill):** [`.claude/skills/new-problem/SKILL.md`](./.claude/skills/new-problem/SKILL.md)
