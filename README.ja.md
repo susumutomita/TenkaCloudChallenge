@@ -38,34 +38,6 @@ bun run validate
 
 これだけで問題作成に必要な環境は揃う。 AWS credentials は **platform** (CDK / Lambda) を動かすときだけ必要で、 本 repo の catalog 作業では不要。
 
-### Kumo によるローカル CloudFormation smoke
-
-schema / cross-ref より深い template 評価は、 ローカルの [Kumo](https://github.com/sivchari/kumo) で行う。 実 AWS には接続しない。 evaluator は non-local endpoint を拒否し、 dummy credentials を強制する。
-
-```bash
-# http://127.0.0.1:4566 で local AWS emulator を起動。
-# 中身は通常の docker compose:
-#   docker compose -f docker-compose.kumo.yml up -d
-bun run kumo:up
-
-# 1 問題だけローカル評価
-bun run validate:kumo -- battles/stackstack
-
-# metadata validator の後に全問題をローカル評価
-bun run validate:local
-
-# Kumo を停止し、 local emulator state を削除
-# 同等:
-#   docker compose -f docker-compose.kumo.yml down -v
-bun run kumo:down
-```
-
-Kumo の local `validate-template` 相当だけを走らせ、 local emulator stack 作成も避ける場合:
-
-```bash
-bun run validate:kumo -- --template-only
-```
-
 ## ➕ 新しい問題を追加する
 
 1. **ディレクトリを作る**。 `<category>/<id>/` (= `<category>` は `battles` / `challenges`、 `<id>` は lowercase kebab-case)。
@@ -95,9 +67,46 @@ platform repo の maintainer が submodule pointer を更新すると、 次の 
 ├── SCHEMA.json                    # metadata.json の JSON Schema (本体 repo と同期)
 ├── index.json                     # カタログ index (全 metadata から build)
 ├── CATALOG.md                     # カタログ docs + schema walkthrough
+├── CERTIFICATION-INDEX.md         # AWS 認定ドリルの exam 別 index (生成物)
 ├── scripts/validate-problems.ts   # local + CI validator
 └── .github/workflows/ci.yml       # schema + cross-ref CI
 ```
+
+## 🎮 設計の基準 — ドリルではなく、面白い問題を
+
+新しい競技問題は 1 つの基準で測る: プレイヤーが「宿題」ではなく **「面白い」** と呼べること。 4 つの性質 — [`new-problem`](./.claude/skills/new-problem/SKILL.md) 作問 skill に成文化:
+
+1. **発見型フラグ**。 フラグは deploy ごとのランダム値で、 意図した AWS 操作をして初めて入手できる — 暗記した概念名ではない。
+2. **設定変更で直す・手で新規作成しない**。 テンプレは壊れた状態でリソースを作り、 解法は既存リソースの *変更*。 トップレベルリソースを手で作らないので `delete-stack` で孤児が残らない。
+3. **本物の「気づき」**。 `curl` が *ハング* するか *拒否* されるか等、 答えを読むのではなくパケットで体得する実運用スキル。
+4. **ストーリーと緊張感**。 共通世界観 (加藤さんの置き土産、 佐々木 CTO) を保ちつつ、 毎回新しい事件で。
+
+リファレンス実装: [`challenges/net-evo-01-reachability`](./challenges/net-evo-01-reachability/) — **インターネット進化史** シリーズ Ep01。 各話はインターネットが進化した 1 場面を、 TCP/IP の層を *操作* して追体験する (Ep01: ステートフル SG vs ステートレス NACL)。
+
+## 🎯 カタログ
+
+カタログは 2 トラック。
+
+### Event 問題 — Battles + インターネット進化史 Challenges
+
+上記の設計基準に沿った、 イベントで実際に回す厳選セット。
+
+| Status | Category  | Problem                                                                                       | Duration   | Difficulty |
+| ------ | --------- | --------------------------------------------------------------------------------------------- | ---------- | ---------- |
+| ready  | Challenge | [`hello-world`](./challenges/hello-world/)                                                     | 1 分       | 1          |
+| draft  | Challenge | [`net-evo-01-reachability`](./challenges/net-evo-01-reachability/) (インターネット進化史 Ep01) | 30-45 分   | 3          |
+| draft  | Challenge | [`public-s3-remediation`](./challenges/public-s3-remediation/)                                 | 20-30 分   | 2          |
+| draft  | Challenge | [`iam-least-privilege`](./challenges/iam-least-privilege/)                                     | 20-30 分   | 2          |
+| ready  | Battle    | [`hello-world-battle`](./battles/hello-world-battle/)                                          | 30 分      | 1          |
+| ready  | Battle    | [`microservice-migration-battle`](./battles/microservice-migration-battle/)                   | 90-120 分  | 4          |
+| ready  | Battle    | [`security-battle-royale`](./battles/security-battle-royale/)                                  | 60-90 分   | 4          |
+| ready  | Battle    | [`stackstack`](./battles/stackstack/)                                                          | 90-120 分  | 4          |
+
+初開催向け bundle: [`bundles/starter-event.json`](./bundles/starter-event.json) — Challenge 1 + Battle 2、 60-90 分枠。
+
+### AWS 認定ドリルセット (Issue #45)
+
+**105 本の self-paced `flag` Challenge** が全現行 AWS 認定 (CLF / AIF / SAA / DVA / SOA / DEA / MLA / SAP / DOP / SCS / ANS / MLS / PAS) に対応。 各問題は free-tier ($0) の CFn lab で、 フラグは **deploy された構成を分析して導く** (答えは participant role が読めない CFn Output にしか無い) ため、 暗記ではなく推論で点が入る。 exam 別の全リストは [`CERTIFICATION-INDEX.md`](./CERTIFICATION-INDEX.md)。
 
 ## 🔄 配信フロー
 
@@ -146,3 +155,5 @@ Schema 詳解は [`CATALOG.md`](./CATALOG.md) を参照。
 - **Platform repo (CDK / Lambda / 3 SPAs):** <https://github.com/susumutomita/TenkaCloud>
 - **JSON Schema:** [`SCHEMA.json`](./SCHEMA.json)
 - **カタログ詳解:** [`CATALOG.md`](./CATALOG.md)
+- **AWS 認定ドリル index:** [`CERTIFICATION-INDEX.md`](./CERTIFICATION-INDEX.md)
+- **作問の設計基準 (skill):** [`.claude/skills/new-problem/SKILL.md`](./.claude/skills/new-problem/SKILL.md)
