@@ -4,9 +4,9 @@
 
 TenkaCloud で配信する問題 (**Battle** / **Challenge**) は 1 ディレクトリ 1 問題の規約で管理する。 `problems/` 配下を見れば、 現在カタログに載っている全問題が分かるのが正本。
 
-問題は ADR-012 の **plugin architecture** で扱う: 1 問題は `metadata.json` + `template.yaml` + 任意の `portal/` slot + 任意の `services/` 実装の 3 〜 4 アセットで完結する。 platform 側 (= `infrastructure/lib/problem-deploy/`) は generic dispatcher として metadata だけを見て scoring / portal / disruption を捧く。 問題固有のコードは問題ディレクトリの中に閉じる。
+問題は ADR-012 の **plugin architecture** で扱う: 1 問題は `metadata.json` + `template.yaml` + 任意の `portal/` slot + 任意の `services/` 実装の 3 〜 4 アセットで完結する。 platform 側 (= `infrastructure/lib/problem-deploy/`) は generic dispatcher として metadata だけを見て scoring / portal / disruption を捌く。 問題固有のコードは問題ディレクトリの中に閉じる。
 
-実装済み問題と次に作る候補を横断して眸めたい場合は [`docs/gallery.md`](../docs/gallery.md)、 30 分でゼロから 1 問書く手順は [`docs/problems/AUTHORING.html`](../docs/problems/AUTHORING.html) を参照。
+実装済み問題と次に作る候補を横断して眺めたい場合は [`docs/gallery.md`](../docs/gallery.md)、 30 分でゼロから 1 問書く手順は [`docs/problems/AUTHORING.html`](../docs/problems/AUTHORING.html) を参照。
 
 新しい競技問題は **「ドリルではなく面白い問題を」という設計基準** (発見型フラグ / 設定変更で直す / 本物の「気づき」 / ストーリーと緊張感) に従う。 [`new-problem`](./.claude/skills/new-problem/SKILL.md) skill に成文化されており、 リファレンス実装は [`challenges/net-evo-01-reachability`](./challenges/net-evo-01-reachability/) (**インターネット進化史** Challenge シリーズ Ep01)。
 
@@ -236,4 +236,4 @@ Claude Code から使う場合は `/create-problem` skill が要件聞き取り 
 - [`docs/problems/AUTHORING.html`](../docs/problems/AUTHORING.html) — 30 分で 1 問書く onboarding (5 kind 決定木 + 4 worked example)
 - [`docs/architecture/adr-012-problem-plugin-architecture.html`](../docs/architecture/adr-012-problem-plugin-architecture.html) — 3-asset model + thick metadata DSL + generic scoring dispatcher の設計
 - [`infrastructure/templates/README.md`](../infrastructure/templates/README.md) — 競技者側 (competitor account) のセットアップ
-- [`docs/gallery.md`](../docs/gallery.md) — 実装済み問題と次の候補を眸めるカタログ
+- [`docs/gallery.md`](../docs/gallery.md) — 実装済み問題と次の候補を眺めるカタログ
