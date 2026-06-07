@@ -67,7 +67,6 @@ platform repo の maintainer が submodule pointer を更新すると、 次の 
 ├── SCHEMA.json                    # metadata.json の JSON Schema (本体 repo と同期)
 ├── index.json                     # カタログ index (全 metadata から build)
 ├── CATALOG.md                     # カタログ docs + schema walkthrough
-├── CERTIFICATION-INDEX.md         # AWS 認定ドリルの exam 別 index (生成物)
 ├── scripts/validate-problems.ts   # local + CI validator
 └── .github/workflows/ci.yml       # schema + cross-ref CI
 ```
@@ -85,18 +84,12 @@ platform repo の maintainer が submodule pointer を更新すると、 次の 
 
 ## 🎯 カタログ
 
-カタログは 2 トラック。
-
-### Event 問題 — Battles + インターネット進化史 Challenges
-
-上記の設計基準に沿った、 イベントで実際に回す厳選セット。
+少数精鋭の厳選セット ── **すべての問題が上記の設計基準に沿う**。 量より質: 暗記ドリルはゲームではないので、 以前の試験対策ラボ群は削除した。
 
 | Status | Category  | Problem                                                                                       | Duration   | Difficulty |
 | ------ | --------- | --------------------------------------------------------------------------------------------- | ---------- | ---------- |
 | ready  | Challenge | [`hello-world`](./challenges/hello-world/)                                                     | 1 分       | 1          |
 | draft  | Challenge | [`net-evo-01-reachability`](./challenges/net-evo-01-reachability/) (インターネット進化史 Ep01) | 30-45 分   | 3          |
-| draft  | Challenge | [`public-s3-remediation`](./challenges/public-s3-remediation/)                                 | 20-30 分   | 2          |
-| draft  | Challenge | [`iam-least-privilege`](./challenges/iam-least-privilege/)                                     | 20-30 分   | 2          |
 | ready  | Battle    | [`hello-world-battle`](./battles/hello-world-battle/)                                          | 30 分      | 1          |
 | ready  | Battle    | [`microservice-migration-battle`](./battles/microservice-migration-battle/)                   | 90-120 分  | 4          |
 | ready  | Battle    | [`security-battle-royale`](./battles/security-battle-royale/)                                  | 60-90 分   | 4          |
@@ -104,9 +97,7 @@ platform repo の maintainer が submodule pointer を更新すると、 次の 
 
 初開催向け bundle: [`bundles/starter-event.json`](./bundles/starter-event.json) — Challenge 1 + Battle 2、 60-90 分枠。
 
-### AWS 認定ドリルセット (Issue #45)
-
-**105 本の self-paced `flag` Challenge** が全現行 AWS 認定 (CLF / AIF / SAA / DVA / SOA / DEA / MLA / SAP / DOP / SCS / ANS / MLS / PAS) に対応。 各問題は free-tier ($0) の CFn lab で、 フラグは **deploy された構成を分析して導く** (答えは participant role が読めない CFn Output にしか無い) ため、 暗記ではなく推論で点が入る。 exam 別の全リストは [`CERTIFICATION-INDEX.md`](./CERTIFICATION-INDEX.md)。
+**インターネット進化史** Challenge シリーズ (`net-evo-*`) がカタログの背骨 ── 各話はインターネットが進化した 1 場面を、 TCP/IP の層を *操作* して追体験する。
 
 ## 🔄 配信フロー
 
@@ -155,5 +146,4 @@ Schema 詳解は [`CATALOG.md`](./CATALOG.md) を参照。
 - **Platform repo (CDK / Lambda / 3 SPAs):** <https://github.com/susumutomita/TenkaCloud>
 - **JSON Schema:** [`SCHEMA.json`](./SCHEMA.json)
 - **カタログ詳解:** [`CATALOG.md`](./CATALOG.md)
-- **AWS 認定ドリル index:** [`CERTIFICATION-INDEX.md`](./CERTIFICATION-INDEX.md)
 - **作問の設計基準 (skill):** [`.claude/skills/new-problem/SKILL.md`](./.claude/skills/new-problem/SKILL.md)
