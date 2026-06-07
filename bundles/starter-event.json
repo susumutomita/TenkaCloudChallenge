@@ -16,10 +16,6 @@
     "battles/security-battle-royale",
     "battles/stackstack"
   ],
-  "draftPreviews": [
-    "challenges/public-s3-remediation",
-    "challenges/iam-least-privilege"
-  ],
   "learningObjectives": [
     "Run TenkaCloud's deploy → flag-submission → score loop once per team (= sanity check the platform)",
     "Practice the Battle uptime probe-and-recover dynamic with one warm-up problem",
