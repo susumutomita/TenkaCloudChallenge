@@ -6,6 +6,10 @@ This repo is the OSS catalog for the [TenkaCloud](https://github.com/susumutomit
 
 You can ship a new problem with a PR to **this repo alone** — no platform-repo changes. But the platform trusts the catalog to follow a small set of invariants. Break them and the participant experience breaks silently. This document is those invariants.
 
+## Before anything: the design bar (fun, not a drill)
+
+A competition problem is only worth shipping if a player would call it *fun*, not homework. Aim for four properties: a **discovered flag** (a random per-deploy value earned by performing the intended AWS operation, never a concept name typed from memory), **fix-by-settings** (the template deploys a broken resource and the solve *modifies* it — players never create top-level resources, so `delete-stack` leaves no orphans), a **real "aha"** (a production skill felt viscerally, like `curl` that hangs vs refuses), and **story with stakes**. Full rationale + two worked archetypes are in the [`new-problem`](./.claude/skills/new-problem/SKILL.md) skill; the reference implementation is [`challenges/net-evo-01-reachability`](./challenges/net-evo-01-reachability/) (Internet Evolution Ep01). The invariants below are the floor; the design bar is the target.
+
 ## The 60-second mental model
 
 ```
@@ -17,16 +21,6 @@ README.md       ── human-facing (English primary, README.ja.md mirror)
 ```
 
 Each team gets their own CFn stack with a `NamePrefix` like `tc-<problemSlug>-<teamSlug>`. **Every per-team resource carries that prefix** in its name and in a tag, so the participant's read-only IAM role can find their own stuff (and only their own stuff) inside a shared AWS account.
-
-## Live AWS safety gate — mandatory
-
-Catalog authoring must not spend a user's AWS budget by surprise. Local validation is the default path.
-
-- Do **not** run live AWS mutation commands unless the user explicitly asks for that exact operation after being told it may create billable resources. This includes `aws cloudformation create-stack`, `deploy`, `update-stack`, `delete-stack`, change-set execution, RDS/EC2/ELB/Lambda/S3 create/update/delete commands, and SSM commands that mutate a live stack.
-- Do **not** create temporary smoke-test stacks from an agent session. Use Kumo/local template validation and repository validators instead. If a live deploy smoke is truly required, stop and ask the user first with the stack name, region, resource classes, expected cost/risk, and cleanup plan.
-- `aws cloudformation validate-template` and read-only AWS inspection may still expose account state or depend on credentials. Prefer local tooling first; run read-only AWS calls only when they are directly requested or needed and are clearly described.
-- If a command fails because the account/plan/region cannot create a resource, do not adapt by trying another billable live deployment. Convert the finding into a local/template change and ask before any further AWS action.
-- When validating CloudFormation locally, use `bun run kumo:up` + `bun run validate:kumo` when available, then `bun run validate`, YAML parsing, template reference checks, and embedded script syntax checks. Do not substitute live stack creation for local validation. The Kumo evaluator is intentionally localhost-only and uses dummy credentials.
 
 ## Required invariants — enforced by `bun run validate`
 
