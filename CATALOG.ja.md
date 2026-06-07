@@ -4,9 +4,31 @@
 
 TenkaCloud で配信する問題 (**Battle** / **Challenge**) は 1 ディレクトリ 1 問題の規約で管理する。 `problems/` 配下を見れば、 現在カタログに載っている全問題が分かるのが正本。
 
-問題は ADR-012 の **plugin architecture** で扱う: 1 問題は `metadata.json` + `template.yaml` + 任意の `portal/` slot + 任意の `services/` 実装の 3 〜 4 アセットで完結する。 platform 側 (= `infrastructure/lib/problem-deploy/`) は generic dispatcher として metadata だけを見て scoring / portal / disruption を捌く。 問題固有のコードは問題ディレクトリの中に閉じる。
+問題は ADR-012 の **plugin architecture** で扱う: 1 問題は `metadata.json` + `template.yaml` + 任意の `portal/` slot + 任意の `services/` 実装の 3 〜 4 アセットで完結する。 platform 側 (= `infrastructure/lib/problem-deploy/`) は generic dispatcher として metadata だけを見て scoring / portal / disruption を捧く。 問題固有のコードは問題ディレクトリの中に閉じる。
 
-実装済み問題と次に作る候補を横断して眺めたい場合は [`docs/gallery.md`](../docs/gallery.md)、 30 分でゼロから 1 問書く手順は [`docs/problems/AUTHORING.html`](../docs/problems/AUTHORING.html) を参照。
+実装済み問題と次に作る候補を横断して眸めたい場合は [`docs/gallery.md`](../docs/gallery.md)、 30 分でゼロから 1 問書く手順は [`docs/problems/AUTHORING.html`](../docs/problems/AUTHORING.html) を参照。
+
+新しい競技問題は **「ドリルではなく面白い問題を」という設計基準** (発見型フラグ / 設定変更で直す / 本物の「気づき」 / ストーリーと緊張感) に従う。 [`new-problem`](./.claude/skills/new-problem/SKILL.md) skill に成文化されており、 リファレンス実装は [`challenges/net-evo-01-reachability`](./challenges/net-evo-01-reachability/) (**インターネット進化史** Challenge シリーズ Ep01)。
+
+## AWS 資格対策ドリル
+
+**現行のすべての AWS 認定資格**に対応した 105 問の自己ペース型 `flag` Challenge を収録 (Issue #45)。 各問題は無料枠 ($0) の CloudFormation ラボで、 フラグは**デプロイされた構成を分析して導出する**形式 — 答えは participant role が読めない CFn Output にしか存在しないため、 `aws ssm get-parameter` ではなく推論で点を取る。 資格別の全リストは [`CERTIFICATION-INDEX.md`](./CERTIFICATION-INDEX.md) (`scripts/build-cert-index.ts` で生成)。
+
+| 区分 | 認定資格 | 問題数 |
+| --- | --- | --- |
+| Foundational | Cloud Practitioner (CLF-C02) | 6 |
+| Foundational | AI Practitioner (AIF-C01) | 4 |
+| Associate | Solutions Architect (SAA-C03) | 16 |
+| Associate | Developer (DVA-C02) | 10 |
+| Associate | SysOps Administrator (SOA-C02) | 10 |
+| Associate | Data Engineer (DEA-C01) | 8 |
+| Associate | Machine Learning Engineer (MLA-C01) | 6 |
+| Professional | Solutions Architect (SAP-C02) | 10 |
+| Professional | DevOps Engineer (DOP-C02) | 8 |
+| Specialty | Security (SCS-C02) | 10 |
+| Specialty | Advanced Networking (ANS-C01) | 8 |
+| Specialty | Machine Learning (MLS-C01) | 5 |
+| Specialty | SAP on AWS (PAS-C01) | 4 |
 
 ## ディレクトリ構造
 
@@ -18,11 +40,16 @@ problems/
 │   ├── security-battle-royale/
 │   └── stackstack/
 ├── challenges/                    # Challenge (個別演習)
-│   └── hello-world/
+│   ├── hello-world/
+│   ├── net-evo-01-reachability/   # インターネット進化史 Ep01 (設計基準のリファレンス)
+│   ├── public-s3-remediation/
+│   ├── iam-least-privilege/
+│   └── <clf-*|saa-*|...>/         # 105 本の AWS 認定ドリル (CERTIFICATION-INDEX.md 参照)
 ├── SCHEMA.json                    # metadata.json の JSON Schema (draft-07、正本)
 ├── index.json                     # 全 metadata から build した catalog 一覧 (= make build-problems-index で生成)
 ├── CATALOG.md                     # English (primary)
 ├── CATALOG.ja.md                  # このファイル (Japanese mirror)
+├── CERTIFICATION-INDEX.md         # AWS 認定ドリルの exam 別 index (生成物)
 └── README.md                      # repo-level の contributor docs (= problems/README.md として mount)
 ```
 
@@ -191,7 +218,6 @@ Claude Code から使う場合は `/create-problem` skill が要件聞き取り 
 | `make check-template-ascii`           | template.yaml が ASCII + Latin-1 範囲内か (IAM Description の安全性)。                            |
 | `make check-template-security`        | IAM / Security Group / S3 / KMS の危険パターン scan (例: `Action: "*"` + `Resource: "*"`)。       |
 | `make check-template-cfn-refs`        | `!Ref` / `!GetAtt` の reference 整合 + `ParticipantViewerRole` 宣言の存在検証。                   |
-| `bun run validate:kumo`               | local Kumo (`http://127.0.0.1:4566`) に dummy credentials で template を評価する。 実 AWS には接続しない。 |
 
 `index.json` は `apps/admin-console` / `apps/application-admin-console` / `apps/participant-portal` の 3 SPA に build 時注入される (= metadata.json が UI 表示の正本)。
 
@@ -210,4 +236,4 @@ Claude Code から使う場合は `/create-problem` skill が要件聞き取り 
 - [`docs/problems/AUTHORING.html`](../docs/problems/AUTHORING.html) — 30 分で 1 問書く onboarding (5 kind 決定木 + 4 worked example)
 - [`docs/architecture/adr-012-problem-plugin-architecture.html`](../docs/architecture/adr-012-problem-plugin-architecture.html) — 3-asset model + thick metadata DSL + generic scoring dispatcher の設計
 - [`infrastructure/templates/README.md`](../infrastructure/templates/README.md) — 競技者側 (competitor account) のセットアップ
-- [`docs/gallery.md`](../docs/gallery.md) — 実装済み問題と次の候補を眺めるカタログ
+- [`docs/gallery.md`](../docs/gallery.md) — 実装済み問題と次の候補を眸めるカタログ
