@@ -2,123 +2,121 @@
 
 > Operator-facing. Reading this as a player spoils the disruption schedule.
 
-This runbook covers what an event-day operator needs to know to run StackStack across 6 competing teams.
+StackStack is now an orphan-safe "Vibe to Production" battle. All top-level resources are CloudFormation-owned; participants only register the app URL, modify app config/data on the EC2 host, associate an existing WAF WebACL to an existing ALB, and migrate data into the existing Aurora database.
 
 ## Before the event
 
 ### Smoke test on a single team stack
 
-Deploy the stack against a throwaway team account, then verify:
+Deploy a throwaway team stack, then collect outputs:
 
 ```bash
-# Replace with stack outputs:
-BASE_URL="http://<EC2 public DNS>"
+APP_URL="http://<AppUrlHint DNS>"
+INSTANCE_ID="<InstanceId>"
 
-for slot in auth network rate audit ux; do
-  echo "=== /$slot/meta ==="
-  curl -s "$BASE_URL/$slot/meta" | jq .
-  echo "=== /$slot/score ==="
-  curl -s "$BASE_URL/$slot/score" | jq .
-done
+curl -s "$APP_URL/healthz" | jq .
+curl -s "$APP_URL/posture" | jq .
+curl -s "$APP_URL/meta" | jq .
+curl -s "$APP_URL/score" | jq .
 ```
 
-Expected for every slot:
+Expected immediately after deploy:
 
 ```json
-{"platform": "ec2", "slot": "<slot-name>"}
-{"ok": true, "slot": "<slot-name>"}
+{"ok": true}
+{
+  "posture": {
+    "db_present": false,
+    "auth_enabled": false,
+    "rate_limited": false,
+    "audit_on": false,
+    "on_aurora": false
+  },
+  "platform": "posture-0"
+}
 ```
 
-If any slot returns a 404 / 502 / non-`ec2` platform, the UserData heredoc failed silently — SSM into the instance and inspect `journalctl -u tenkacloud-slot-<slot>`.
+If `/healthz` is not 200, inspect the app host:
 
-### Verify scoring engine wires
+```bash
+aws ssm start-session --target "$INSTANCE_ID"
+sudo journalctl -u tenkacloud-vibe --no-pager
+sudo journalctl -u nginx --no-pager
+```
+
+Run the red-team smoke test against the same stack:
+
+```bash
+INSTANCE_ID="$INSTANCE_ID" BASE_URL="$APP_URL" bash redteam/smoke-test-attacks.sh
+```
+
+### Verify scoring wires
 
 In the platform admin console:
 
-1. Register the 6 team stacks under the StackStack problem.
-2. Confirm the score engine logs 5 slot probes per team per minute.
-3. Confirm the dashboard `StatusPanel.tsx` renders the 5-axis sub-score.
+1. Confirm the `app` endpoint default is empty from `RegisteredUrl`.
+2. Register `AppUrlHint` as the team override.
+3. Confirm the score engine probes `/meta` and `/score` once per minute.
+4. Confirm the dashboard `StatusPanel.tsx` renders the endpoint and production gates.
 
 ## During the event
 
-### How the red team fires (mechanics)
+### Participant path to brief
 
-The 5 disruptions split into two delivery models — see [`redteam/README.md`](./redteam/README.md) for the full catalog:
+Participants should not create new AWS services. The expected path is:
 
-- **Scoring-side `effect` (ADR-033)** — `ceo-5000-users` / `mfa-mandate` / `legal-pii-found`. Firing from the admin console records the effect; the scoring engine docks −100 pt per tick for 5 minutes. **No cloud fault is injected**, and the engine deducts unconditionally — so fire these only at teams whose target slot still self-reports `ec2` (check `/<slot>/meta` first). Firing at a migrated team is an unfair hit.
-- **Real fault `action` (ADR-031)** — `env-credential-leak` / `ai-committed-secret`. Firing makes the platform's disruption executor AssumeRole into the team account and run the declared SSM command (`systemctl stop tenkacloud-slot-<slot>`). EC2-resident slots probe 5xx → zero points + failurePenalty per cycle. Slots already migrated to a managed runtime are untouched. The executor schedules the auto-revert (`systemctl start ...`) at fire time per ADR-029 — 300 s for `env-credential-leak`, 180 s for `ai-committed-secret` — so the fault can never outlive the revert even if the room melts down. Defenders can recover earlier via SSM Session Manager.
+1. Register `AppUrlHint` in the portal.
+2. Use SSM Session Manager into `InstanceId`.
+3. Run `/opt/tenkacloud/vibe/restore_database_from_s3.sh`.
+4. Run `python3 /opt/tenkacloud/vibe/set_auth_required.py true`.
+5. Source `/etc/tenkacloud-vibe/runtime.env`, then associate `WAF_WEB_ACL_ARN` to `ALB_ARN`.
+6. Run `python3 /opt/tenkacloud/vibe/set_audit_s3.py true`.
+7. Run `/opt/tenkacloud/vibe/migrate_to_aurora.sh`.
+8. Use `/posture` as the source of truth.
 
-Smoke-test both real faults before event day with [`redteam/smoke-test-attacks.sh`](./redteam/smoke-test-attacks.sh) (replays the stop/start pairs via `aws ssm send-command` and asserts the 5xx → 200 round trip).
+### How the red team fires
 
-### Recommended disruption fire schedule
+All disruptions are real-fault `action` deliveries (ADR-031) with mandatory revert (ADR-029). There are no effect-only penalties.
 
-Default `defaultAfterMinutes` in `metadata.json` is set up for a 90-minute battle. For 120-minute, push each fire 15 minutes later. The catalog (5 disruptions) is intentionally spaced so no two events overlap on the same slot.
+| Default fire | id                     | Delivery                       | Revert |
+| ------------ | ---------------------- | ------------------------------ | ------ |
+| 35 min       | `ai-wipes-database`    | SSM command runs wipe script    | 300 s  |
+| 50 min       | `auth-setting-removed` | SSM command edits config        | 300 s  |
+| 65 min       | `vibe-app-stopped`     | SSM command stops app service   | 180 s  |
 
-| Default fire | id                    | Delivery        | Aligns with phase             | Why this timing                           |
-| ------------ | --------------------- | --------------- | ----------------------------- | ----------------------------------------- |
-| 30 min       | `ceo-5000-users`      | effect (score)  | production-ramp (30 min)      | Reinforces "you missed the publish window"|
-| 35 min       | `mfa-mandate`         | effect (score)  | (post production-ramp)        | Punishes leaving `auth` on EC2            |
-| 45 min       | `legal-pii-found`     | effect (score)  | between phases                | Front-loads audit pressure                |
-| 55 min       | `env-credential-leak` | action (real)   | between phases                | Hits the team that has stalled on `auth`  |
-| 70 min       | `ai-committed-secret` | action (real)   | post compliance-audit         | Compound hit on `network` + `audit`       |
-
-Phases (`production-ramp` 30 min, `compliance-audit` 60 min, `incident-response` 90 min) fire automatically from the score engine — operator does not control these.
+The executor AssumeRoles into the team account and targets the `InstanceId` stack output. Revert is scheduled at fire time. Participants can recover earlier through SSM.
 
 ### Watching the room
 
-Adjust fire times if:
-
-- **All teams finished the all-managed split before 60 min**: pull `ai-committed-secret` forward to 55 min for compound pressure on top performers.
-- **Half the teams are still 5-slot EC2 at 50 min**: hold `env-credential-leak` and `ai-committed-secret` until at least one slot is off EC2; otherwise everyone is pinned at 0 and the leaderboard stops moving.
-- **One team is dominating with > 2x the next team's score**: do not fire disruptions out of order to "balance" the field. The scoring is composite enough that a slow second-place team can still catch up via the +30,000 bonus.
-
-### Smoke-test commands during the event
-
-To check a team's stack health without leaving the operator console:
+Use `/posture` to diagnose a team without guessing:
 
 ```bash
-TEAM_BASE=<their BaseUrl>
-for slot in auth network rate audit ux; do
-  curl -s -o /dev/null -w "%{http_code} $slot\n" "$TEAM_BASE/$slot/meta"
-done
+TEAM_APP_URL=<registered AppUrlHint>
+curl -s "$TEAM_APP_URL/posture" | jq .
 ```
 
-All 200s = stack is up and probable on EC2. Mixed status = at least one slot is being migrated (expected). All 5xx = team's stack is broken — page their captain.
+Typical interpretations:
+
+- `platform=posture-0`: hosted but no production work has landed.
+- `db_present=false`: restore script has not run or a DB wipe disruption landed.
+- `auth_enabled=false`: auth flag/token is missing or was stripped.
+- `rate_limited=false`: WAF is not associated to the ALB.
+- `audit_on=false`: audit flag is off or the app cannot write to the audit bucket.
+- `on_aurora=false`: app still uses SQLite or cannot query Aurora.
 
 ## After the event
 
-- Tear down all 6 team stacks: `aws cloudformation delete-stack --stack-name tc-stackstack-<team>`.
-- Sweep any leftover Lambda / ECS clusters / App Runner services / ECR repos / API GW HTTP APIs that teams stood up under their `${NamePrefix}*` namespace; the participant role grants delete on these but teams may have left them running.
-- Review the platform score-engine logs for any cycle where probes failed across all 6 teams simultaneously (= scoring engine outage, not team failure).
+Delete each team stack:
+
+```bash
+aws cloudformation delete-stack --stack-name tc-stackstack-<team>
+```
+
+No extra cleanup pass is expected. If any ALB / WAF / S3 / Aurora / EC2 / IAM resource remains, treat that as a CloudFormation deletion failure and debug the stack events rather than deleting participant-created resources.
 
 ## Known limitations
 
-- The three `effect`-only disruptions (`ceo-5000-users` / `mfa-mandate` / `legal-pii-found`) deduct points unconditionally once fired — the engine does not check whether the slot is still on EC2. The "only hurts EC2 holdouts" framing is your targeting discipline, not an engine guarantee. There is no "disqualification" path either way; communicate this clearly during the briefing so teams don't assume `auth`-only failure ends their run.
-- The two `action` disruptions stop systemd units by their fixed names (`tenkacloud-slot-<slot>`). A team that renamed or replaced the unit (allowed — it's their instance) silently no-ops the attack. That's acceptable: such a team has done strictly more hardening work than the attack assumes.
-- Phase 1/2 (production-ramp / compliance-audit) both apply the same `switchPlatformToDegraded: ["ec2"]` effect. After 30 min, every EC2-resident slot is degraded; the 60-min fire is narratively a separate "Legal audit" but functionally a no-op for any slot already degraded. Set team expectations: the 30-min mark is the real deadline.
-
-## IAM scope (deliberately broad)
-
-The `ParticipantViewerRole` for this problem grants permissions to actually build the "hardened state" each axis claims:
-
-- `auth` → Cognito user pools + clients + domains (tag-scoped to `NamePrefix`)
-- `network` → CloudFront distributions + Origin Access Control + S3 buckets (`NamePrefix`-prefixed)
-- `rate` → API Gateway throttle (already in the deploy grants) + Lambda concurrency
-- `audit` → CloudTrail trails + Athena workgroups + Glue catalog (all `NamePrefix`-scoped)
-- `ux` → elasticloadbalancing v2 + application-autoscaling + ec2 security-group management
-
-ADR-021 (no list-style actions on `Resource: "*"`) is deliberately relaxed for this problem:
-
-- Players use the AWS Console, which opens with list views. Empty list views (= the old ADR-021 stance) break the 90-minute UX.
-- The role grants `lambda:ListFunctions`, `ecs:ListClusters`, `apprunner:ListServices`, `cognito-idp:ListUserPools`, `cloudfront:ListDistributions`, `cloudtrail:ListTrails`, `athena:ListWorkGroups`, `s3:ListAllMyBuckets`, `iam:ListRoles`, etc. on `Resource: "*"`.
-- Other teams' resource NAMES become visible to a team running these list calls. Cross-tenant resource ACCESS remains blocked (CreateFunction / UpdateFunctionCode / DeleteService / etc. all carry `${NamePrefix}*` ARN scoping).
-- Team names are already public on the leaderboard, so name visibility is a small additional disclosure.
-
-## Account quotas to watch
-
-When running 6 teams in one shared account:
-
-- **CloudTrail**: AWS default limit is 5 trails per region. 6 teams creating `audit`-slot trails will exhaust this. Either request a quota bump (`servicequotas` console) before the event, or brief teams that they may need to share trails. The IAM grant is tag-scoped, so quota collisions show up as `CreateTrail` returning `MaximumNumberOfTrailsExceededException`.
-- **CloudFront**: 200 distributions per account, plenty for an event.
-- **App Runner**: 50 services / region, plenty.
-- **Cognito user pools**: 1000 per account, plenty.
+- Aurora Serverless v2 and ALB make this more expensive than the old EC2-only StackStack. Keep event duration short and delete stacks promptly.
+- The WAF posture check verifies WebACL association, not a live flood. The WebACL itself is stack-owned and contains a rate-based rule.
+- The app writes a small S3 object during `/posture` when audit is enabled. The audit bucket has a one-day lifecycle rule to bound object growth.
+- `RegisteredUrl` is intentionally empty. If an operator pre-populates the endpoint override for a team, deploy alone can start scoring; avoid doing that before the participant begins.

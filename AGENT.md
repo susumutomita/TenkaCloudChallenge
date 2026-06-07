@@ -18,6 +18,16 @@ README.md       ── human-facing (English primary, README.ja.md mirror)
 
 Each team gets their own CFn stack with a `NamePrefix` like `tc-<problemSlug>-<teamSlug>`. **Every per-team resource carries that prefix** in its name and in a tag, so the participant's read-only IAM role can find their own stuff (and only their own stuff) inside a shared AWS account.
 
+## Live AWS safety gate — mandatory
+
+Catalog authoring must not spend a user's AWS budget by surprise. Local validation is the default path.
+
+- Do **not** run live AWS mutation commands unless the user explicitly asks for that exact operation after being told it may create billable resources. This includes `aws cloudformation create-stack`, `deploy`, `update-stack`, `delete-stack`, change-set execution, RDS/EC2/ELB/Lambda/S3 create/update/delete commands, and SSM commands that mutate a live stack.
+- Do **not** create temporary smoke-test stacks from an agent session. Use Kumo/local template validation and repository validators instead. If a live deploy smoke is truly required, stop and ask the user first with the stack name, region, resource classes, expected cost/risk, and cleanup plan.
+- `aws cloudformation validate-template` and read-only AWS inspection may still expose account state or depend on credentials. Prefer local tooling first; run read-only AWS calls only when they are directly requested or needed and are clearly described.
+- If a command fails because the account/plan/region cannot create a resource, do not adapt by trying another billable live deployment. Convert the finding into a local/template change and ask before any further AWS action.
+- When validating CloudFormation locally, use `bun run kumo:up` + `bun run validate:kumo` when available, then `bun run validate`, YAML parsing, template reference checks, and embedded script syntax checks. Do not substitute live stack creation for local validation. The Kumo evaluator is intentionally localhost-only and uses dummy credentials.
+
 ## Required invariants — enforced by `bun run validate`
 
 These are not style preferences. The validator rejects PRs that break them.

@@ -1,119 +1,130 @@
-# StackStack — AI to Production Last Mile
+# StackStack — Vibe to Production
 
 > 日本語版: [README.ja.md](./README.ja.md)
 
-Monday morning standup, TenkaCloud Platform Team. Kato-san resigned last month. The handover notes are thin. Meanwhile, 100 internal AI Builders are pushing Claude-generated apps into the team's queue — none of them hardened. All five control axes (auth / network / rate / audit / ux) wide open, all co-tenant on a single EC2.
+Monday morning standup, TenkaCloud Platform Team. Kato-san is gone, and an AI Builder's generated message-board app is waiting for internal launch. It runs, but it is not production: the database is empty, anonymous users can post, there is no rate limiting, audit is off, and the app still uses SQLite.
 
-> Sasaki-san, the CTO: "Get this to a publishable state. AI is shipping faster than Platform can keep up. Every other team's Platform org is in the same spot."
+> Sasaki-san, the CTO: "Hosting alone is not production. Use the controls we already provisioned and get it publishable today."
 
-Your job, over the next 90 to 120 minutes: peel each of the 5 slots off EC2 and onto a managed runtime (Lambda + API GW / ECS Fargate / App Runner). Register the new URL in the Participant Portal Endpoint Override, and that slot's payout jumps from 100 to 1,000 pt per cycle. The cleanest split wins.
+Your job over the next 90 to 120 minutes: take one hosted app to production using only stack-owned resources and data/config changes. Do not create Lambda, ECS, App Runner, API Gateway, CloudFront, or any other unmanaged top-level resource.
 
 ## Overview
 
-| Field          | Value                                                                                       |
-| -------------- | ------------------------------------------------------------------------------------------- |
-| Category       | Battle (real-time PvP)                                                                      |
-| Difficulty     | 4 / 5                                                                                       |
-| Estimated time | 90–120 min                                                                                  |
-| Scoring        | `phased-polling` — EC2 = 100 pt / managed = 1,000 pt / all-managed bonus = +30,000 (once)  |
-
-## 5 control axes (= 5 endpoint slots)
-
-| slot      | axis                                | initial state                       | hardened state                                  |
-| --------- | ----------------------------------- | ----------------------------------- | ----------------------------------------------- |
-| `auth`    | Authentication / Authorization      | naive Basic auth on EC2             | Cognito / SSO via managed runtime               |
-| `network` | Network controls (S3 / WAF / IAM)   | Public S3 + wildcard IAM            | OAC + scoped IAM via managed runtime            |
-| `rate`    | Rate limit / DoS protection         | unthrottled Flask                   | API GW throttle / Lambda concurrency cap        |
-| `audit`   | Logging / Compliance                | stdout only                         | CloudTrail + Athena + WORM bucket               |
-| `ux`      | User-facing availability            | single EC2                          | Multi-AZ + ALB + Auto Scaling                   |
-
-Each slot self-reports its hosting platform via `GET /meta`. The initial deploy puts all five on EC2 (low score: 100 pt/cycle/slot). Hardening means re-hosting to Lambda + API GW / ECS Fargate / App Runner — which automatically brings the managed security defaults — and registering the new URL via the portal override. Once `/meta` returns `lambda` / `ecs` / `apprunner`, that slot pays 1,000 pt/cycle.
+| Field          | Value                                                                 |
+| -------------- | --------------------------------------------------------------------- |
+| Category       | Battle (real-time PvP)                                                |
+| Difficulty     | 4 / 5                                                                 |
+| Estimated time | 90-120 min                                                            |
+| Scoring        | `phased-polling` from `posture-0` to `production`, plus one bonus      |
 
 ## What gets deployed
 
-A single CloudFormation stack lands in your team's AWS account:
+A single CloudFormation stack creates every top-level resource used by the game:
 
 ```text
-┌── EC2 (Amazon Linux 2023, t3.small) ─────────────────────────────┐
-│  nginx :80                                                       │
-│    │                                                              │
-│    ├─ /auth/*    → 127.0.0.1:8081  (Python systemd, self-reports ec2) │
-│    ├─ /network/* → 127.0.0.1:8082  (Python systemd, self-reports ec2) │
-│    ├─ /rate/*    → 127.0.0.1:8083  (Python systemd, self-reports ec2) │
-│    ├─ /audit/*   → 127.0.0.1:8084  (Python systemd, self-reports ec2) │
-│    └─ /ux/*      → 127.0.0.1:8085  (Python systemd, self-reports ec2) │
-└──────────────────────────────────────────────────────────────────┘
-        ▲
-        │ Score engine probes /<slot>/meta + /<slot>/score per slot every 1 minute.
-        │ Effective URL per slot = portal override ?? CFn Output (BaseUrl + /<slot>)
+Score Engine
+   |
+   v
+ALB :80  -- optional association --> WAF rate-limit WebACL
+   |
+   v
+EC2 app host (SSM only, no SSH)
+   |-- /healthz
+   |-- /posture
+   |-- /meta
+   |-- /score
+   |-- SQLite app.db (initially wiped)
+   |-- helper scripts under /opt/tenkacloud/vibe/
+   |
+   |-- S3 backup bucket (seed-sqlite.sql / seed-postgres.sql)
+   |-- S3 audit bucket
+   `-- Aurora Serverless v2 database
 ```
+
+`RegisteredUrl` is intentionally empty. Paste the stack output `AppUrlHint` into the Participant Portal endpoint override before scoring starts.
+
+## Production gates
+
+The app exposes `GET /posture`; those values are measured from actual state, not from a self-report toggle.
+
+| posture key    | Initial state        | Hardened state                                                    |
+| -------------- | -------------------- | ----------------------------------------------------------------- |
+| `db_present`   | SQLite has no posts  | Restore the S3 backup dump into the existing DB                   |
+| `auth_enabled` | Anonymous POST works | Enable the app auth flag with a non-default token                 |
+| `rate_limited` | WAF not associated   | Associate the existing WebACL with the existing ALB               |
+| `audit_on`     | No audit writes      | Enable audit writes to the existing S3 audit bucket               |
+| `on_aurora`    | SQLite               | Migrate posts to the existing Aurora database and switch the app  |
+
+`GET /meta` maps those checks to `posture-0` through `posture-4`, or `production` when all gates are true. Each step raises the per-cycle payout; `production` earns the one-time bonus.
 
 ## How to play
 
-1. **Deploy lands you a 5-slot monolith.** Grab `BaseUrl` from the stack Outputs (= the EC2 public DNS).
-2. **Paste the URL into all 5 slot overrides** in the Participant Portal Endpoint Override panel (`auth` / `network` / `rate` / `audit` / `ux`). Scoring starts.
-3. **Pick a slot, peel it off.** Build a tiny service that returns the same `/meta` (with `platform: "lambda" | "ecs" | "apprunner"`) and `/score` (200 JSON). Stand it up on Lambda + API GW / ECS Fargate / App Runner.
-4. **Swap that slot's override URL** to the new managed endpoint. `/meta` self-reports the new platform; the score engine bumps you to the managed-tier rate.
-5. **Race the clock.** The 30, 60, and 90 minute marks compound pressure on slots that are still EC2-resident — see the "Time-based phases" table below. Get all 5 onto managed runtimes for the +30,000 pt bonus.
+1. Deploy the stack, then copy `AppUrlHint` into the `app` endpoint override in the Participant Portal.
+2. Start an SSM Session Manager shell using the `SsmStartSessionCommand` output.
+3. Restore data:
 
-## Time-based phases
+   ```bash
+   sudo /opt/tenkacloud/vibe/restore_database_from_s3.sh
+   ```
 
-| Time   | phase              | What happens                                                                                                |
-| ------ | ------------------ | ----------------------------------------------------------------------------------------------------------- |
-| 0 min  | start              | All slots naive on EC2 (≈ 500 pt/min baseline once you register URLs)                                       |
-| 30 min | production-ramp    | Every slot still on EC2 switches to degraded (10 pt/cycle). The "publish deadline" simulation               |
-| 60 min | compliance-audit   | Same effect, narrative compounds (Legal review pressure)                                                    |
-| 90 min | incident-response  | Score engine probes `/score?legacy=true`. Slots still serving the planted slow path eat response-time penalty |
+4. Enable auth and keep the printed token for test posts:
 
-Each phase applies to **every slot still on EC2**, not just one. Migrating only `ux` and leaving four behind means all four degrade at the 30-minute mark.
+   ```bash
+   sudo python3 /opt/tenkacloud/vibe/set_auth_required.py true
+   sudo systemctl restart tenkacloud-vibe
+   ```
 
-## Red team (random org events / disruptions)
+5. Associate the existing WAF WebACL to the existing ALB:
 
-To make the cost of standing still tangible, the operator's red team fires org events on its own schedule (you do not control these). The first three are scoring-side penalties; the last two **inject real faults** into your EC2:
+   ```bash
+   source /etc/tenkacloud-vibe/runtime.env
+   aws wafv2 associate-web-acl \
+     --web-acl-arn "$WAF_WEB_ACL_ARN" \
+     --resource-arn "$ALB_ARN" \
+     --region "$AWS_REGION"
+   ```
 
-| id                    | name                              | Effect                                                          |
-| --------------------- | --------------------------------- | --------------------------------------------------------------- |
-| `ceo-5000-users`      | CEO demands a 5000-user demo      | Extra penalty per cycle for teams still running `ux` on EC2     |
-| `mfa-mandate`         | Security Team mandates MFA        | Extra penalty per cycle for teams still running `auth` on EC2   |
-| `legal-pii-found`     | Legal finds PII                   | Extra penalty per cycle for teams still running `audit` on EC2  |
-| `env-credential-leak` | `.env` leaks                      | Stops the `auth` service on your EC2 → probe 5xx (zero pt + failurePenalty per cycle) |
-| `ai-committed-secret` | Claude commits a secret           | Stops `network` + `audit` on your EC2 together → both probe 5xx |
+6. Enable audit writes:
 
-Two mitigations for the real faults:
+   ```bash
+   sudo python3 /opt/tenkacloud/vibe/set_audit_s3.py true
+   sudo systemctl restart tenkacloud-vibe
+   ```
 
-- **Already migrated?** Untouched. The red team never touches your override URL — only the EC2. That asymmetry is the point.
-- **Still on EC2?** SSM into the instance (`SsmStartSessionCommand` stack output) and `sudo systemctl start tenkacloud-slot-<slot>`. The earlier you recover, the smaller the loss. Per ADR-029 an automatic revert is always scheduled, so no fault is permanent.
+7. Migrate from SQLite to Aurora:
 
-## All-managed bonus
+   ```bash
+   sudo /opt/tenkacloud/vibe/migrate_to_aurora.sh
+   ```
 
-Every slot reporting `lambda` / `ecs` / `apprunner` → **+30,000 pt one-time** ("production-ready" certification). A single slot left on EC2 disqualifies the bonus. The bonus is large enough that finishing all 5 beats a 4-of-5 plus extra runtime.
+8. Check `GET /posture` after each step. The score engine uses the same state through `/meta` and `/score`.
 
-## What you build
+## Red team
 
-There is no `services/` scaffold in this repo on purpose. Standing up the per-slot service is part of the challenge — the AI Builder didn't give you one either. Your service just needs:
+Operators can fire reversible disruptions:
 
-- `GET /meta` → `{ "platform": "lambda" | "ecs" | "apprunner", "slot": "<slot-name>" }`
-- `GET /score` → returns 200 with any JSON body
-- Reachable from the score engine (= a public URL, or a private URL the score engine has been told about)
+| id                     | What happens                                 | Revert                         |
+| ---------------------- | -------------------------------------------- | ------------------------------ |
+| `ai-wipes-database`    | Clears posts from SQLite / Aurora             | Restores from S3 backup        |
+| `auth-setting-removed` | Backs up config, then disables auth            | Restores the backed-up config  |
+| `vibe-app-stopped`     | Stops `tenkacloud-vibe`                       | Starts `tenkacloud-vibe`       |
 
-The Python stub running on EC2 is in `template.yaml`'s UserData — read it as a reference for the contract.
+All disruptions are `action` deliveries with a declared `revert`; no effect-only penalty claims a cloud fault.
 
 ## Cost
 
-- EC2 t3.small × 2h ≈ $0.04
-- Any managed runtimes you stand up: pay as you create them; tear down within an hour of finishing for < $2 total
-- Egress: negligible
+The stack pre-creates ALB, EC2, WAF, S3, and Aurora Serverless v2. Expect more than the old EC2-only sample; keep event stacks short-lived and delete them promptly. No participant-created resources should exist outside the stack, so teardown is:
 
-Tear down with `aws cloudformation delete-stack` plus a manual sweep of the Lambda / ECS / App Runner / ECR / API GW resources you created.
+```bash
+aws cloudformation delete-stack --stack-name <stack-name>
+```
 
-## For operators
-
-See [`OPERATOR.md`](./OPERATOR.md) for a fire-schedule recommendation, a deploy smoke test, and what to watch in 6-team rooms.
+No extra cleanup pass is required.
 
 ## Related files
 
-- [`metadata.json`](./metadata.json) — problem metadata (source of truth for slots / scoring / phases / disruptions)
-- [`template.yaml`](./template.yaml) — one-page CFn template
-- [`portal/StatusPanel.tsx`](./portal/StatusPanel.tsx) — dashboard plugin that surfaces the 5-axis subscore + phase + disruption state
+- [`metadata.json`](./metadata.json) — problem metadata, scoring, phases, disruptions
+- [`template.yaml`](./template.yaml) — stack-owned AWS resources and app bootstrap
+- [`portal/StatusPanel.tsx`](./portal/StatusPanel.tsx) — dashboard plugin
 - [`OPERATOR.md`](./OPERATOR.md) — operator runbook
-- [`redteam/`](./redteam/) — disruption catalog explainer + pre-event smoke test (operator-facing)
+- [`redteam/`](./redteam/) — disruption catalog and smoke test

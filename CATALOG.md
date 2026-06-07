@@ -191,6 +191,7 @@ After adding / editing a problem, the following checks make CI green. `make befo
 | `make check-template-ascii`           | Templates stay within ASCII + Latin-1 (safe IAM Description characters).                                           |
 | `make check-template-security`        | Scan for dangerous patterns in IAM / Security Group / S3 / KMS (e.g. `Action: "*"` + `Resource: "*"`).             |
 | `make check-template-cfn-refs`        | Verify `!Ref` / `!GetAtt` reference integrity + presence of the required `ParticipantViewerRole`.                  |
+| `bun run validate:kumo`               | Evaluate templates against local Kumo (`http://127.0.0.1:4566`) with dummy credentials; never talks to real AWS.   |
 
 `index.json` is injected at build time into the three SPAs (`apps/admin-console` / `apps/application-admin-console` / `apps/participant-portal`), making `metadata.json` the single source of truth for catalog display.
 

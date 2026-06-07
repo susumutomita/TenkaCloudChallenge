@@ -191,6 +191,7 @@ Claude Code から使う場合は `/create-problem` skill が要件聞き取り 
 | `make check-template-ascii`           | template.yaml が ASCII + Latin-1 範囲内か (IAM Description の安全性)。                            |
 | `make check-template-security`        | IAM / Security Group / S3 / KMS の危険パターン scan (例: `Action: "*"` + `Resource: "*"`)。       |
 | `make check-template-cfn-refs`        | `!Ref` / `!GetAtt` の reference 整合 + `ParticipantViewerRole` 宣言の存在検証。                   |
+| `bun run validate:kumo`               | local Kumo (`http://127.0.0.1:4566`) に dummy credentials で template を評価する。 実 AWS には接続しない。 |
 
 `index.json` は `apps/admin-console` / `apps/application-admin-console` / `apps/participant-portal` の 3 SPA に build 時注入される (= metadata.json が UI 表示の正本)。
 

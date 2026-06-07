@@ -1,29 +1,23 @@
 /**
- * StackStack portal slot — 5-axis subscore display.
+ * StackStack portal slot — Vibe to Production status display.
  *
- * 5 slot (auth / network / rate / audit / ux) の effective URL と、 phase/disruption
- * の予告 countdown を 1 panel にまとめる。 portal の標準 StatusPanel ではなく本 plugin
- * が render される (= metadata.dashboard.slots.StatusPanel で指名)。
- *
- * Cloudscape は import しない (= plugin bundle が portal 本体と二重化しないよう、
- * plain HTML + inline style で書く / microservice-migration-battle と同じ方針)。
+ * The live posture comes from the app's /posture endpoint; this panel keeps the
+ * participant oriented around URL registration and the five production gates.
  */
 
 import type { PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 
-const AXIS_LABELS: Record<string, { label: string; hint: string }> = {
-  auth: { label: "Auth", hint: "Cognito / SSO + scoped IAM への移行で hardened" },
-  network: { label: "Network", hint: "CloudFront + OAC + scoped IAM への移行で hardened" },
-  rate: { label: "Rate", hint: "API GW throttle / Lambda concurrency への移行で hardened" },
-  audit: { label: "Audit", hint: "CloudTrail + S3 WORM + Athena への移行で hardened" },
-  ux: { label: "UX", hint: "ALB + Multi-AZ + Auto Scaling への移行で hardened" },
-};
+const GATES = [
+  { key: "db_present", label: "DB", hint: "S3 backup restore completed" },
+  { key: "auth_enabled", label: "Auth", hint: "anonymous submit is rejected" },
+  { key: "rate_limited", label: "Rate", hint: "WAF WebACL is associated to the ALB" },
+  { key: "audit_on", label: "Audit", hint: "audit events write to S3" },
+  { key: "on_aurora", label: "Aurora", hint: "app queries the existing Aurora DB" },
+];
 
 export default function StatusPanel(props: PortalSlotProps) {
   const { endpoints, phases, disruptions } = props;
-  const orderedEndpoints = ["auth", "network", "rate", "audit", "ux"]
-    .map((slot) => endpoints.find((ep) => ep.slot === slot))
-    .filter((ep): ep is (typeof endpoints)[number] => ep !== undefined);
+  const app = endpoints.find((ep) => ep.slot === "app");
 
   return (
     <section
@@ -35,60 +29,78 @@ export default function StatusPanel(props: PortalSlotProps) {
       }}
     >
       <h3 style={{ margin: "0 0 8px 0", fontSize: "16px" }}>
-        StackStack — 5-axis hardening status
+        StackStack — Vibe to Production
       </h3>
       <p style={{ margin: "0 0 16px 0", color: "#5f6b7a", fontSize: "13px" }}>
-        各 slot を managed runtime (Lambda + API GW / ECS Fargate / App Runner) に切り出して
-        override 登録すると platform 加点が 100 pt → 1000 pt にジャンプします。 全 5 slot が managed
-        に乗ると <strong>+30,000 pt one-time bonus</strong>。
+        Register the AppUrlHint override, then use <code>/posture</code> as the source of truth.
+        Production earns the one-time bonus only when every gate is true.
       </p>
 
       <div style={{ marginBottom: "16px" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
-          <thead>
-            <tr style={{ borderBottom: "1px solid #d5dbdb", textAlign: "left" }}>
-              <th style={{ padding: "4px 8px" }}>Slot</th>
-              <th style={{ padding: "4px 8px" }}>Effective URL</th>
-              <th style={{ padding: "4px 8px" }}>Override?</th>
-              <th style={{ padding: "4px 8px" }}>Hardening tip</th>
-            </tr>
-          </thead>
           <tbody>
-            {orderedEndpoints.map((ep) => {
-              const axis = AXIS_LABELS[ep.slot];
-              return (
-                <tr key={ep.slot} style={{ borderBottom: "1px solid #eaeded" }}>
-                  <td style={{ padding: "4px 8px", fontWeight: 500 }}>
-                    {axis?.label ?? ep.label ?? ep.slot}
-                  </td>
-                  <td style={{ padding: "4px 8px", fontFamily: "monospace", fontSize: "12px" }}>
-                    {ep.effectiveUrl ?? "—"}
-                  </td>
-                  <td style={{ padding: "4px 8px" }}>
-                    {ep.overrideUrl ? (
-                      <span style={{ color: "#1a7f37", fontWeight: 600 }}>hardened</span>
-                    ) : (
-                      <span style={{ color: "#9a6700" }}>ec2 (naive)</span>
-                    )}
-                  </td>
-                  <td style={{ padding: "4px 8px", color: "#5f6b7a" }}>{axis?.hint ?? ""}</td>
-                </tr>
-              );
-            })}
+            <tr style={{ borderBottom: "1px solid #eaeded" }}>
+              <th style={{ padding: "6px 8px", textAlign: "left", width: "140px" }}>
+                Effective URL
+              </th>
+              <td style={{ padding: "6px 8px", fontFamily: "monospace", fontSize: "12px" }}>
+                {app?.effectiveUrl || "not registered"}
+              </td>
+            </tr>
+            <tr>
+              <th style={{ padding: "6px 8px", textAlign: "left" }}>Override</th>
+              <td style={{ padding: "6px 8px" }}>
+                {app?.overrideUrl ? (
+                  <span style={{ color: "#1a7f37", fontWeight: 600 }}>registered</span>
+                ) : (
+                  <span style={{ color: "#9a6700" }}>waiting for AppUrlHint</span>
+                )}
+              </td>
+            </tr>
           </tbody>
         </table>
+      </div>
+
+      <div style={{ marginBottom: "16px" }}>
+        <h4 style={{ margin: "0 0 8px 0", fontSize: "13px", color: "#414d5c" }}>
+          Production gates
+        </h4>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+            gap: "8px",
+          }}
+        >
+          {GATES.map((gate) => (
+            <div
+              key={gate.key}
+              style={{
+                border: "1px solid #d5dbdb",
+                borderRadius: "6px",
+                padding: "10px",
+                background: "#fff",
+              }}
+            >
+              <div style={{ fontWeight: 600, marginBottom: "4px" }}>{gate.label}</div>
+              <div style={{ color: "#5f6b7a", fontSize: "12px" }}>{gate.hint}</div>
+              <code style={{ display: "block", marginTop: "6px", fontSize: "12px" }}>
+                {gate.key}
+              </code>
+            </div>
+          ))}
+        </div>
       </div>
 
       {phases.length > 0 && (
         <div style={{ marginBottom: "12px" }}>
           <h4 style={{ margin: "0 0 8px 0", fontSize: "13px", color: "#414d5c" }}>
-            Upcoming phases
+            Phases
           </h4>
           <ul style={{ margin: "0", paddingLeft: "20px", fontSize: "13px" }}>
             {phases.map((p) => (
               <li key={p.name}>
-                <strong>+{p.afterMinutes} 分</strong> — {p.name}
-                {p.description && <span style={{ color: "#5f6b7a" }}>: {p.description}</span>}
+                <strong>+{p.afterMinutes} min</strong> — {p.name}
               </li>
             ))}
           </ul>
@@ -98,16 +110,15 @@ export default function StatusPanel(props: PortalSlotProps) {
       {disruptions.length > 0 && (
         <div>
           <h4 style={{ margin: "0 0 8px 0", fontSize: "13px", color: "#d13212" }}>
-            Random org events (operator-fired)
+            Operator-fired disruptions
           </h4>
           <ul style={{ margin: "0", paddingLeft: "20px", fontSize: "13px" }}>
             {disruptions.map((d) => (
               <li key={d.id}>
                 <strong>{d.name}</strong>
                 {typeof d.defaultAfterMinutes === "number" && (
-                  <span style={{ color: "#5f6b7a" }}> (default +{d.defaultAfterMinutes} 分)</span>
+                  <span style={{ color: "#5f6b7a" }}> (+{d.defaultAfterMinutes} min default)</span>
                 )}
-                {d.description && <span style={{ color: "#5f6b7a" }}>: {d.description}</span>}
               </li>
             ))}
           </ul>
