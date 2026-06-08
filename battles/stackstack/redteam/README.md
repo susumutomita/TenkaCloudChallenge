@@ -11,6 +11,8 @@ StackStack's pressure comes from reversible operational drift against a single s
 | `ai-wipes-database` | real fault: `action` (ADR-031, ssm-run-command) | Runs `/opt/tenkacloud/vibe/wipe_database.sh`, clearing SQLite and Aurora posts where reachable. Auto-revert runs `/opt/tenkacloud/vibe/restore_database_from_s3.sh` after 300 s. |
 | `auth-setting-removed` | real fault: `action` (ADR-031, ssm-run-command) | Backs up `/etc/tenkacloud-vibe/config.json`, disables auth, restarts the app. Auto-revert restores the backup after 300 s. |
 | `vibe-app-stopped` | real fault: `action` (ADR-031, ssm-run-command) | Stops `tenkacloud-vibe`. Probe goes 5xx, causing failurePenalty. Auto-revert starts it after 180 s. |
+| `site-defaced` | real fault: `action` (ADR-031, ssm-run-command) | Runs `/opt/tenkacloud/vibe/deface_site.sh` (touch `DEFACED` marker). App serves a PWNED banner and `posture.site_intact` goes false, dropping out of production. Auto-revert runs `restore_site.sh` after 300 s. |
+| `supply-chain-backdoor` | real fault: `action` (ADR-031, ssm-run-command) | Runs `/opt/tenkacloud/vibe/install_backdoor.sh` (drops `BACKDOOR` artifact). `posture.no_backdoor` goes false, dropping out of production. Auto-revert runs `remove_backdoor.sh` after 300 s. |
 
 Shared invariants:
 

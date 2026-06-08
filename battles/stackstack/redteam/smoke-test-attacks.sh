@@ -102,6 +102,20 @@ run_pair "vibe-app-stopped" \
 http_code_until /healthz 200
 echo
 
+run_pair "site-defaced" \
+  "/opt/tenkacloud/vibe/deface_site.sh || true" \
+  "/opt/tenkacloud/vibe/restore_site.sh || true" \
+  posture_until site_intact false
+posture_until site_intact true
+echo
+
+run_pair "supply-chain-backdoor" \
+  "/opt/tenkacloud/vibe/install_backdoor.sh || true" \
+  "/opt/tenkacloud/vibe/remove_backdoor.sh || true" \
+  posture_until no_backdoor false
+posture_until no_backdoor true
+echo
+
 if [[ $FAILURES -gt 0 ]]; then
   echo "=== smoke test FAILED ($FAILURES check(s)) ==="
   exit 1

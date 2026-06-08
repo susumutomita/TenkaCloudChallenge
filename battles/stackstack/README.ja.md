@@ -108,6 +108,8 @@ EC2 app host (SSM only, SSH 不要)
 | `ai-wipes-database`    | SQLite / Aurora の posts を空にする              | S3 backup から復元             |
 | `auth-setting-removed` | config を backup して auth を false に戻す       | backup config を復元           |
 | `vibe-app-stopped`     | `tenkacloud-vibe` を停止                         | `tenkacloud-vibe` を start     |
+| `site-defaced`         | 掲示板を改ざん (PWNED バナー)、 `site_intact`=false | 改ざんマーカーを除去           |
+| `supply-chain-backdoor`| バックドア成果物を混入、 `no_backdoor`=false      | バックドア成果物を除去         |
 
 すべて `action` delivery で、 metadata に `revert` を宣言している。 cloud fault を謳う effect-only disruption はない。
 

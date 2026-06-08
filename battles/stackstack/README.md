@@ -108,6 +108,8 @@ Operators can fire reversible disruptions:
 | `ai-wipes-database`    | Clears posts from SQLite / Aurora             | Restores from S3 backup        |
 | `auth-setting-removed` | Backs up config, then disables auth            | Restores the backed-up config  |
 | `vibe-app-stopped`     | Stops `tenkacloud-vibe`                       | Starts `tenkacloud-vibe`       |
+| `site-defaced`         | Defaces the board (PWNED banner), `site_intact`=false | Removes the deface marker |
+| `supply-chain-backdoor`| Plants a backdoor artifact, `no_backdoor`=false | Removes the backdoor artifact |
 
 All disruptions are `action` deliveries with a declared `revert`; no effect-only penalty claims a cloud fault.
 

@@ -30,7 +30,9 @@ Expected immediately after deploy:
     "auth_enabled": false,
     "rate_limited": false,
     "audit_on": false,
-    "on_aurora": false
+    "on_aurora": false,
+    "site_intact": true,
+    "no_backdoor": true
   },
   "platform": "posture-0"
 }
