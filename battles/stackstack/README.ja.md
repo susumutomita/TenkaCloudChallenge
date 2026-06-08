@@ -41,7 +41,7 @@ EC2 app host (SSM only, SSH 不要)
    `-- Aurora Serverless v2 database
 ```
 
-`RegisteredUrl` は意図的に空。 Stack Output の `AppUrlHint` を Participant Portal の endpoint override に登録して初めて採点が始まる。
+アプリ本体は `~/vibe-app` に **ローカルビルド** として置かれ、 まだ起動していない。 まず `deploy_app.sh` でデプロイして稼働させる。 `RegisteredUrl` は意図的に空で、 Stack Output の `AppUrlHint` を Participant Portal の endpoint override に登録して初めて採点が始まる。
 
 ## Production gates
 
@@ -59,8 +59,8 @@ EC2 app host (SSM only, SSH 不要)
 
 ## 競技フロー
 
-1. Stack Output の `AppUrlHint` を `app` endpoint override に登録する。
-2. `SsmStartSessionCommand` output で SSM Session Manager に入る。
+1. `SsmStartSessionCommand` output で SSM Session Manager に入り、 `sudo /opt/tenkacloud/vibe/deploy_app.sh` でローカルビルドをデプロイ（サービス起動）。
+2. Stack Output の `AppUrlHint` を `app` endpoint override に登録する。
 3. データ復元:
 
    ```bash

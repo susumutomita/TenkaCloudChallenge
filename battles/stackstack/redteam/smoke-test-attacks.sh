@@ -74,6 +74,8 @@ echo "  base url: $BASE_URL"
 echo
 
 echo "=== baseline ==="
+# App ships as a local build and is NOT running until deployed.
+ssm_shell "/opt/tenkacloud/vibe/deploy_app.sh || true"
 http_code_until /healthz 200
 ssm_shell "/opt/tenkacloud/vibe/restore_database_from_s3.sh || true"
 posture_until db_present true

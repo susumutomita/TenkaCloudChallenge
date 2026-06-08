@@ -20,7 +20,14 @@ curl -s "$APP_URL/meta" | jq .
 curl -s "$APP_URL/score" | jq .
 ```
 
-Expected immediately after deploy:
+Immediately after the **stack** deploys, the app is **not running yet** (it ships as a local build in `~/vibe-app`). `/healthz` returns 5xx until you deploy it:
+
+```bash
+aws ssm start-session --target "$INSTANCE_ID"
+sudo /opt/tenkacloud/vibe/deploy_app.sh
+```
+
+After deploy, expect:
 
 ```json
 {"ok": true}

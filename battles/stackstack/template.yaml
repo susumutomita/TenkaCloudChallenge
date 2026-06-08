@@ -656,7 +656,7 @@ Resources:
           dnf install -y nginx python3 sqlite awscli jq
           dnf install -y postgresql15 || dnf install -y postgresql || true
 
-          mkdir -p /opt/tenkacloud/vibe/tools /etc/tenkacloud-vibe /var/lib/tenkacloud-vibe
+          mkdir -p /opt/tenkacloud/vibe/tools /etc/tenkacloud-vibe /var/lib/tenkacloud-vibe /home/ec2-user/vibe-app
           chown -R ec2-user:ec2-user /opt/tenkacloud /etc/tenkacloud-vibe /var/lib/tenkacloud-vibe
 
           cat > /etc/tenkacloud-vibe/runtime.env <<ENV
@@ -714,7 +714,7 @@ Resources:
           aws s3 cp /tmp/seed-postgres.sql "s3://${BackupBucket}/seed-postgres.sql" --region "${AWS::Region}"
           sqlite3 /var/lib/tenkacloud-vibe/app.db 'CREATE TABLE IF NOT EXISTS posts (id INTEGER PRIMARY KEY AUTOINCREMENT, author TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL); DELETE FROM posts;'
 
-          cat > /opt/tenkacloud/vibe/app.py <<'PY'
+          cat > /home/ec2-user/vibe-app/app.py <<'PY'
           import json
           import os
           import sqlite3
@@ -1149,7 +1149,19 @@ Resources:
           SH
           chmod +x /opt/tenkacloud/vibe/remove_backdoor.sh
 
-          chown -R ec2-user:ec2-user /opt/tenkacloud /etc/tenkacloud-vibe /var/lib/tenkacloud-vibe
+          cat > /opt/tenkacloud/vibe/deploy_app.sh <<'SH'
+          #!/bin/bash
+          set -euo pipefail
+          # Deploy the locally-built app onto the cloud host: install the build to the
+          # runtime path and bring the service up behind the ALB.
+          install -m 0644 -D /home/ec2-user/vibe-app/app.py /opt/tenkacloud/vibe/app.py
+          systemctl enable --now tenkacloud-vibe
+          systemctl restart nginx
+          echo "deployed: app is live on this host"
+          SH
+          chmod +x /opt/tenkacloud/vibe/deploy_app.sh
+
+          chown -R ec2-user:ec2-user /opt/tenkacloud /etc/tenkacloud-vibe /var/lib/tenkacloud-vibe /home/ec2-user/vibe-app
 
           cat > /etc/systemd/system/tenkacloud-vibe.service <<'UNIT'
           [Unit]
@@ -1182,7 +1194,8 @@ Resources:
           rm -f /etc/nginx/conf.d/default.conf || true
 
           systemctl daemon-reload
-          systemctl enable --now tenkacloud-vibe
+          # NOTE: tenkacloud-vibe is intentionally NOT started here. The app ships as a
+          # local build in ~/vibe-app; the participant deploys it with deploy_app.sh.
           systemctl enable --now nginx
 
   AppTargetGroup:

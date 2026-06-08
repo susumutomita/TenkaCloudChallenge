@@ -41,7 +41,7 @@ EC2 app host (SSM only, no SSH)
    `-- Aurora Serverless v2 database
 ```
 
-`RegisteredUrl` is intentionally empty. Paste the stack output `AppUrlHint` into the Participant Portal endpoint override before scoring starts.
+The app ships as a **local build** in `~/vibe-app` and is not running yet — deploy it first with `deploy_app.sh`. `RegisteredUrl` is intentionally empty; paste the stack output `AppUrlHint` into the Participant Portal endpoint override before scoring starts.
 
 ## Production gates
 
@@ -59,8 +59,8 @@ The app exposes `GET /posture`; those values are measured from actual state, not
 
 ## How to play
 
-1. Deploy the stack, then copy `AppUrlHint` into the `app` endpoint override in the Participant Portal.
-2. Start an SSM Session Manager shell using the `SsmStartSessionCommand` output.
+1. Start an SSM Session Manager shell (`SsmStartSessionCommand`) and run `sudo /opt/tenkacloud/vibe/deploy_app.sh` to deploy the local build (start the service).
+2. Copy `AppUrlHint` into the `app` endpoint override in the Participant Portal.
 3. Restore data:
 
    ```bash
