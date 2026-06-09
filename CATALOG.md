@@ -8,6 +8,8 @@ Problems are treated as **plugins** per ADR-012: each problem ships in 3–4 ass
 
 For a cross-cutting view of shipped problems + ideas, see [`docs/gallery.md`](../docs/gallery.md). For a 30-minute "author a new problem" onboarding, see [`docs/problems/AUTHORING.html`](../docs/problems/AUTHORING.html).
 
+New competition problems follow a **"fun, not a drill" design bar** (discovered flag / fix-by-settings / a real "aha" / story with stakes), codified in the [`new-problem`](./.claude/skills/new-problem/SKILL.md) skill. The reference implementation is [`challenges/net-evo-01-reachability`](./challenges/net-evo-01-reachability/) — Episode 1 of the **Internet Evolution** Challenge series.
+
 ## Directory layout
 
 ```
@@ -18,7 +20,8 @@ problems/
 │   ├── security-battle-royale/
 │   └── stackstack/
 ├── challenges/                    # Challenge (self-paced, evergreen)
-│   └── hello-world/
+│   ├── hello-world/
+│   └── net-evo-01-reachability/   # Internet Evolution Ep01 (design-bar reference)
 ├── SCHEMA.json                    # JSON Schema (draft-07) — source of truth for metadata.json
 ├── index.json                     # Catalog built from every metadata.json (= `make build-problems-index`)
 ├── CATALOG.md                     # This file (English, primary)
@@ -191,7 +194,6 @@ After adding / editing a problem, the following checks make CI green. `make befo
 | `make check-template-ascii`           | Templates stay within ASCII + Latin-1 (safe IAM Description characters).                                           |
 | `make check-template-security`        | Scan for dangerous patterns in IAM / Security Group / S3 / KMS (e.g. `Action: "*"` + `Resource: "*"`).             |
 | `make check-template-cfn-refs`        | Verify `!Ref` / `!GetAtt` reference integrity + presence of the required `ParticipantViewerRole`.                  |
-| `bun run validate:kumo`               | Evaluate templates against local Kumo (`http://127.0.0.1:4566`) with dummy credentials; never talks to real AWS.   |
 
 `index.json` is injected at build time into the three SPAs (`apps/admin-console` / `apps/application-admin-console` / `apps/participant-portal`), making `metadata.json` the single source of truth for catalog display.
 

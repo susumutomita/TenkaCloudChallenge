@@ -8,6 +8,8 @@ TenkaCloud で配信する問題 (**Battle** / **Challenge**) は 1 ディレク
 
 実装済み問題と次に作る候補を横断して眺めたい場合は [`docs/gallery.md`](../docs/gallery.md)、 30 分でゼロから 1 問書く手順は [`docs/problems/AUTHORING.html`](../docs/problems/AUTHORING.html) を参照。
 
+新しい競技問題は **「ドリルではなく面白い問題を」 という設計基準** (発見型フラグ / 設定変更で直す / 本物の「気づき」 / ストーリーと緊張感) に従う。 [`new-problem`](./.claude/skills/new-problem/SKILL.md) skill に成文化されており、 リファレンス実装は [`challenges/net-evo-01-reachability`](./challenges/net-evo-01-reachability/) (**インターネット進化史** Challenge シリーズ Ep01)。
+
 ## ディレクトリ構造
 
 ```
@@ -18,7 +20,8 @@ problems/
 │   ├── security-battle-royale/
 │   └── stackstack/
 ├── challenges/                    # Challenge (個別演習)
-│   └── hello-world/
+│   ├── hello-world/
+│   └── net-evo-01-reachability/   # インターネット進化史 Ep01 (設計基準のリファレンス)
 ├── SCHEMA.json                    # metadata.json の JSON Schema (draft-07、正本)
 ├── index.json                     # 全 metadata から build した catalog 一覧 (= make build-problems-index で生成)
 ├── CATALOG.md                     # English (primary)
@@ -191,7 +194,6 @@ Claude Code から使う場合は `/create-problem` skill が要件聞き取り 
 | `make check-template-ascii`           | template.yaml が ASCII + Latin-1 範囲内か (IAM Description の安全性)。                            |
 | `make check-template-security`        | IAM / Security Group / S3 / KMS の危険パターン scan (例: `Action: "*"` + `Resource: "*"`)。       |
 | `make check-template-cfn-refs`        | `!Ref` / `!GetAtt` の reference 整合 + `ParticipantViewerRole` 宣言の存在検証。                   |
-| `bun run validate:kumo`               | local Kumo (`http://127.0.0.1:4566`) に dummy credentials で template を評価する。 実 AWS には接続しない。 |
 
 `index.json` は `apps/admin-console` / `apps/application-admin-console` / `apps/participant-portal` の 3 SPA に build 時注入される (= metadata.json が UI 表示の正本)。
 

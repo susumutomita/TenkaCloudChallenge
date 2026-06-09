@@ -38,34 +38,6 @@ bun run validate
 
 That's all you need for authoring. AWS credentials are only required when running the *platform* (CDK / Lambda) — not for catalog work in this repo.
 
-### Local CloudFormation smoke with Kumo
-
-For template evaluation beyond schema/cross-ref checks, run the catalog against local [Kumo](https://github.com/sivchari/kumo). This never talks to real AWS: the evaluator refuses non-local endpoints and forces dummy credentials.
-
-```bash
-# Start the local AWS emulator on http://127.0.0.1:4566.
-# This is a plain docker compose wrapper:
-#   docker compose -f docker-compose.kumo.yml up -d
-bun run kumo:up
-
-# Evaluate one problem locally
-bun run validate:kumo -- battles/stackstack
-
-# Or evaluate every problem after the metadata validator
-bun run validate:local
-
-# Stop Kumo and clear local emulator state
-# Equivalent:
-#   docker compose -f docker-compose.kumo.yml down -v
-bun run kumo:down
-```
-
-If you only want Kumo's local `validate-template` path without creating local emulator stacks, use:
-
-```bash
-bun run validate:kumo -- --template-only
-```
-
 ## ➕ Add a new problem
 
 1. **Create the directory.** `<category>/<id>/` where `<category>` is `battles` or `challenges` and `<id>` is lowercase kebab-case.
@@ -101,19 +73,33 @@ A platform-repo maintainer then bumps the submodule pointer and the next `make d
 └── .github/workflows/ci.yml       # Schema + cross-ref CI
 ```
 
-## 🎯 Starter catalog (TenkaCloud Issue #1346)
+## 🎮 The design bar — fun, not a drill
 
-For first-time organizers, the **5 ready** starter catalog plus the **`starter-event` bundle** is the credible answer to *"what do I actually run?"*.
+New competition problems are held to one bar: a player should call them **fun**, not homework. Four properties — codified in the [`new-problem`](./.claude/skills/new-problem/SKILL.md) authoring skill:
 
-| Status   | Category   | Problem                                                                                                    | Duration  | Difficulty |
-| -------- | ---------- | ---------------------------------------------------------------------------------------------------------- | --------- | ---------- |
-| ready    | Challenge  | [`hello-world`](./challenges/hello-world/)                                                                  | 1 min     | 1          |
-| ready    | Battle     | [`hello-world-battle`](./battles/hello-world-battle/)                                                       | 30 min    | 1          |
-| ready    | Battle     | [`microservice-migration-battle`](./battles/microservice-migration-battle/)                                 | 90-120 min| 4          |
-| ready    | Battle     | [`security-battle-royale`](./battles/security-battle-royale/)                                               | 60-90 min | 4          |
-| ready    | Battle     | [`stackstack`](./battles/stackstack/)                                                                       | 90-120 min| 4          |
+1. **Discovered flag, never a memorized one.** The flag is a random per-deploy value you can only obtain by *performing the intended AWS operation* — never a concept name typed from memory.
+2. **Fix by settings, never create-by-hand.** The template deploys resources in a broken state; the solve is to *modify* an existing resource. Players never create top-level resources, so `delete-stack` leaves no orphaned, billable garbage.
+3. **A real "aha".** A production skill felt viscerally — `curl` that *hangs* vs *refuses*, an incident reconstructed from evidence — not a flashcard.
+4. **Story with stakes.** The shared TenkaCloud world (Kato-san's leftovers, Sasaki-san CTO), with a fresh incident every time.
 
-Bundle: [`bundles/starter-event.json`](./bundles/starter-event.json) — 1 Challenge + 2 Battles, 60-90 min slot.
+Reference implementation: [`challenges/net-evo-01-reachability`](./challenges/net-evo-01-reachability/) — Episode 1 of the **Internet Evolution** series, where each episode re-lives one moment in how the internet evolved by making you *operate* a TCP/IP layer (Ep01: stateful Security Group vs stateless Network ACL).
+
+## 🎯 Catalog
+
+A small, curated set — **every problem is built to the design bar above**. Quality over quantity: an earlier batch of exam-drill labs was removed, because grinding flashcards is not a game.
+
+| Status | Category  | Problem                                                                                       | Duration   | Difficulty |
+| ------ | --------- | --------------------------------------------------------------------------------------------- | ---------- | ---------- |
+| ready  | Challenge | [`hello-world`](./challenges/hello-world/)                                                     | 1 min      | 1          |
+| draft  | Challenge | [`net-evo-01-reachability`](./challenges/net-evo-01-reachability/) (Internet Evolution Ep01)  | 30-45 min  | 3          |
+| ready  | Battle    | [`hello-world-battle`](./battles/hello-world-battle/)                                          | 30 min     | 1          |
+| ready  | Battle    | [`microservice-migration-battle`](./battles/microservice-migration-battle/)                   | 90-120 min | 4          |
+| ready  | Battle    | [`security-battle-royale`](./battles/security-battle-royale/)                                  | 60-90 min  | 4          |
+| ready  | Battle    | [`stackstack`](./battles/stackstack/)                                                          | 90-120 min | 4          |
+
+Bundle for first-time organizers: [`bundles/starter-event.json`](./bundles/starter-event.json) — 1 Challenge + 2 Battles, 60-90 min slot.
+
+The **Internet Evolution** Challenge series (`net-evo-*`) is the catalog's spine: each episode re-lives one moment in how the internet evolved by making you *operate* a TCP/IP layer.
 
 ## 🔄 Delivery flow
 
@@ -162,3 +148,4 @@ See [`CATALOG.md`](./CATALOG.md) for the full schema walkthrough.
 - **Platform repo (CDK / Lambda / 3 SPAs):** <https://github.com/susumutomita/TenkaCloud>
 - **JSON Schema:** [`SCHEMA.json`](./SCHEMA.json)
 - **Full catalog docs:** [`CATALOG.md`](./CATALOG.md)
+- **Authoring design bar (skill):** [`.claude/skills/new-problem/SKILL.md`](./.claude/skills/new-problem/SKILL.md)
