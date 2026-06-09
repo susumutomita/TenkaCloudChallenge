@@ -57,6 +57,111 @@
       "scoringKind": "phased-polling"
     },
     {
+      "id": "net-evo-01-reachability",
+      "name": "インターネット進化史 Ep01 — 届かないパケット",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "30〜45 分",
+      "shortDescription": "天下クラウド株式会社、 ネットワーク班に異動初日。 加藤さんが先月置いていった社内ツールは、 2 つのサブネットに分かれて動いていた ── はずだった。\n\n佐々木 CTO 曰く: 「踏み台 (relay) からは入れる。 でも奥の管理ノード (core) に誰も届かない。 ファイアウォールは開けたって加藤は言ってた。 なのに繋がらない。 エラーすら出ない、 ただ無言で固まる」\n\nインターネットは『バラバラの網を相互接続する (inter-network)』ところから始まった。 君の仕事はまさにそれ。 なぜパケットが片道で消えるのかを 4 つの層から突き止め、 経路を直して core が握っているフラグを取り出せ。",
+      "tags": [
+        "ans",
+        "advanced-networking",
+        "networking",
+        "tcp-ip",
+        "vpc",
+        "connectivity",
+        "internet-evolution"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "net-evo-02-dns",
+      "name": "インターネット進化史 Ep02 — 名前が指す先",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "45〜60 分",
+      "shortDescription": "天下クラウド株式会社、 ネットワーク班に来て数週間。 加藤さんが去り際に「IP 直書きはもうやめた。 これからは名前で繋ぐ」と言い残した社内サービスが、 今朝から繋がらない。\n\n佐々木 CTO 曰く: 「監視ダッシュボードが core を見失ってる。 踏み台 (relay) からは名前で呼んでるはずだ ── `core.internal.tenka.test` だったか。 名前は引けてる、 IP も返ってくる。 なのに繋がらない。 加藤の置き土産が壊れてるのか、 そもそも嘘の名前なのか、 君が見極めてくれ」\n\nインターネットが手書きの hosts.txt から DNS へ進化した瞬間 ── 名前と住所を分離したことで、 住所が変わっても名前はそのままにできるようになった。 だが、 その名前が間違った住所を指していたら? 君の仕事は、 名前が指す先を正しい core に向け直し、 core が握るフラグを取り出すことだ。",
+      "tags": [
+        "ans",
+        "advanced-networking",
+        "networking",
+        "dns",
+        "route53",
+        "private-hosted-zone",
+        "name-resolution",
+        "internet-evolution"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "net-evo-03-egress",
+      "name": "インターネット進化史 Ep03 — 電話できない奥の部屋",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "30〜45 分",
+      "shortDescription": "天下クラウド株式会社、 ネットワーク班 3 日目。 加藤さんが残した監視ジョブは、 private サブネットの管理ノード core から「外」に問い合わせて結果を持ち帰る ── はずだった。\n\n佐々木 CTO 曰く: 「core が外に出られない。 ライセンス確認も、 アップデートも、 何も取りに行けない。 IPv4 が枯れてから NAT で逃がす設計にしたって加藤は言ってた。 踏み台 (relay) は普通に外に出られるのに、 奥の core だけが沈黙してる」\n\nIPv4 アドレスが枯渇し、 世界は private アドレス + NAT で『外に出る』時代へ進化した。 君の仕事はその出口を直すこと。 なぜ core だけ外に出られないのかを突き止め、 出口を開通させて core が握るフラグを取り出せ。",
+      "tags": [
+        "ans",
+        "advanced-networking",
+        "networking",
+        "tcp-ip",
+        "vpc",
+        "nat",
+        "egress",
+        "routing",
+        "internet-evolution"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "net-evo-04-tls",
+      "name": "インターネット進化史 Ep04 — 握手が終わらない",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "30〜45 分",
+      "shortDescription": "天下クラウド株式会社、 ネットワーク班 4 日目。 加藤さんが置いていった社内 HTTPS エンドポイントに、 誰も繋げなくなった。\n\n佐々木 CTO 曰く: 「踏み台 (relay) からアプリ (app) の :443 に curl すると、 TLS の握手 (handshake) でコケる。 証明書が合わないとか何とか。 加藤は『証明書は自動で作る仕組みにした』って言ってた。 仕組みは動いてる。 なのに弾かれる」\n\nインターネットが SSL から TLS 1.3 へ進化した瞬間 ── それは「通信が暗号化されている」だけでなく「相手が本当に名乗った相手か」を握手の中で確かめる仕組みが磨かれた瞬間だった。 君の仕事はその握手を成立させること。 なぜ証明書の名前が食い違うのかを突き止め、 設定を 1 つ直して app が握るフラグを取り出せ。",
+      "tags": [
+        "saa",
+        "networking",
+        "tls",
+        "https",
+        "certificates",
+        "transport-security",
+        "internet-evolution"
+      ],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "net-evo-05-edge",
+      "name": "インターネット進化史 Ep05 — 間違ったエッジ",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "30〜45 分",
+      "shortDescription": "天下クラウド株式会社。 加藤さんが去り、 君は新人のまま最後の砦を任された。\n\n佐々木 CTO 曰く: 「ユーザーに配信されてる中身が古い。 先月のキャッシュだ。 サイト自体は生きてる、 サーバーも全部動いてる。 なのに edge を通すと、 誰のところにも『去年のゴミ』が届く。 加藤が最後に触ったのが配信の交通整理だった ── それ以来だ」\n\nインターネットは『近くの edge から配る』時代に進化した。 CDN / anycast / QUIC ── どこから配信するかを選ぶ層が増えた。 君の仕事は、 edge がなぜ『間違った origin』を選び続けているのかを突き止め、 交通整理をやり直して、 本物の origin が握るフラグを取り出すことだ。",
+      "tags": [
+        "ans",
+        "advanced-networking",
+        "networking",
+        "cdn",
+        "edge",
+        "anycast",
+        "traffic-steering",
+        "origin",
+        "internet-evolution"
+      ],
+      "scoringKind": "flag"
+    },
+    {
       "id": "security-battle-royale",
       "name": "Security Battle Royale",
       "category": "Battle",
@@ -75,20 +180,20 @@
     },
     {
       "id": "stackstack",
-      "name": "StackStack — AI → Production ラストワンマイル",
+      "name": "StackStack — Vibe to Production",
       "category": "Battle",
       "status": "ready",
       "visibility": "public",
       "difficulty": 4,
       "estimatedDuration": "90〜120 分",
-      "shortDescription": "天下クラウド株式会社 Platform Team、 月初の朝会。 加藤さんは先月辞めた。 社内 100 人の AI Builder が Claude で量産したアプリが、 5 軸 (auth / network / rate / audit / ux) どれも未整備のまま EC2 1 台に同居している。\n\n佐々木 CTO 曰く: 「これ、 公開していい状態に持っていって。 AI が書いた速さに、 Platform チームが追いつけてない。 他チームの Platform もみんな焦ってる」\n\n君の仕事: 5 軸の slot を順に managed runtime (Lambda + API GW / ECS / App Runner) に切り出し、 Portal の Endpoint Override に新 URL を貼って加点を 10× に上げていく。 きれいに分割した Platform Team が勝つ。",
+      "shortDescription": "天下クラウド株式会社 Platform Team、 月初の朝会。 加藤さんが辞めた直後、 AI Builder が量産した掲示板アプリが社内公開待ちになっている。 動くが、 DB は空、 認証なし、 rate limit なし、 監査なし、 SQLite のまま。\n\n佐々木 CTO 曰く: 「ホスティングしただけじゃ公開できない。 既存の統制リソースを使って、 今日中に本番品質まで持っていって」\n\n君の仕事: stack が作成済みの ALB / EC2 / WAF / S3 backup / S3 audit / Aurora を使い、 新規トップレベルリソースを作らずに、 ローカルビルドのデプロイ → restored → protected → audited → production へ上げていく。",
       "tags": [
         "platform-engineering",
         "ai-native",
-        "ccoe",
-        "security",
         "governance",
-        "availability"
+        "waf",
+        "aurora",
+        "incident-response"
       ],
       "scoringKind": "phased-polling"
     }

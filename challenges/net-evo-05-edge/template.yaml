@@ -1,0 +1,710 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (net-evo-05-edge). "History of the Internet" Ep05 (series
+  finale). Edge / anycast / CDN-era lab on traffic steering and origin selection.
+  An `edge` reverse-proxy picks its single upstream from an SSM steering parameter
+  (good|stale); the planted fault sets it to "stale", so users get stale garbage and
+  never the flag. The network is healthy -- only the steering config is wrong. The
+  learner flips the steering parameter to "good" (a settings change on an existing
+  resource, no new resource), waits for the edge to repoint, then reads the flag.
+  Cost: 4x t3.micro for ~1h ~= $0.10. No NAT Gateway, no EIP, no CloudFront, no ALB.
+  delete-stack removes everything -- nothing is created outside CloudFormation.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks from
+      colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+  FlagSeed:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    MaxLength: 64
+    AllowedPattern: "^[A-Za-z0-9]+$"
+    Description: >
+      Per-deploy random secret injected by the deploy chain (cfnParameters:
+      FlagSeed = __RANDOM_PASSWORD__). Wrapped as TC{...} and served by origin-good.
+  AmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-x86_64
+    Description: SSM-backed Amazon Linux 2023 AMI (auto-resolved).
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - t3.micro
+      - t3.small
+    Description: EC2 instance type for relay, edge, and both origins.
+
+Resources:
+  # ----- VPC + two subnets -----
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.50.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-vpc"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.50.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-public-subnet"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  PrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.50.2.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-private-subnet"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  Igw:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-igw"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  IgwAttach:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref Igw
+
+  PublicRt:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-public-rt"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: IgwAttach
+    Properties:
+      RouteTableId: !Ref PublicRt
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref Igw
+
+  PublicRtAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRt
+      SubnetId: !Ref PublicSubnet
+
+  # Private route table: local route only (no NAT). The origins serve a static
+  # banner and need no internet -- the route layer is intentionally correct and is
+  # NOT the planted fault.
+  PrivateRt:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-private-rt"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  PrivateRtAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRt
+      SubnetId: !Ref PrivateSubnet
+
+  # ----- Security Groups (all CORRECT -- the network is healthy) -----
+  RelaySg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "${NamePrefix}-relay-sg"
+      GroupDescription: Bastion relay. No inbound needed (SSM is outbound-only).
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-relay-sg"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  # edge proxy: accepts :80 from anywhere inside the VPC (so relay can curl it).
+  EdgeSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "${NamePrefix}-edge-sg"
+      GroupDescription: Edge reverse-proxy. HTTP :80 from inside the VPC.
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 10.50.0.0/16
+          Description: HTTP 80 from anywhere in the VPC (relay reaches the edge here)
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-edge-sg"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  # origins: serve :8080 to the edge AND to the relay (so the learner can inspect
+  # both origins directly to discover which one holds the flag). All correct.
+  OriginSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "${NamePrefix}-origin-sg"
+      GroupDescription: Origin nodes. HTTP :8080 from inside the VPC.
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 10.50.0.0/16
+          Description: HTTP 8080 from anywhere in the VPC (edge upstream + relay probe)
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-origin-sg"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  # ----- Steering config: the edge picks its upstream from THIS parameter -----
+  # THE PLANTED FAULT: value "stale" steers the edge at origin-stale. Everything
+  # else is healthy; flipping this one parameter to "good" repoints the edge.
+  ActiveOriginParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/config/active_origin"
+      Type: String
+      Value: stale
+      Description: !Sub "Edge upstream selector for ${NamePrefix} (good|stale)."
+      Tier: Standard
+
+  # ----- IAM: edge instance role (read the steering parameter only) -----
+  EdgeInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-edge-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: ReadSteeringConfig
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ReadActiveOrigin
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${NamePrefix}/config/*"
+
+  EdgeInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub "${NamePrefix}-edge-profile"
+      Roles:
+        - !Ref EdgeInstanceRole
+
+  # relay needs SSM for Session Manager; origins need no AWS API access.
+  RelayInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-relay-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+  RelayInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub "${NamePrefix}-relay-profile"
+      Roles:
+        - !Ref RelayInstanceRole
+
+  # ----- IAM: participant viewer (read + scoped steering-parameter fix) -----
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-participant-viewer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      # Participant access baseline (same across every problem in this catalog).
+      # `aws login` (2025-11) OAuth2 flow needs SignInLocalDevelopmentAccess;
+      # do not remove (validated by scripts/validate-problems.ts).
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # CloudShell baseline -- 7-action allow-list, Resource:* unavoidable
+              # (environments are per-identity). Do not remove (validated).
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+              # ec2:Describe* doesn't accept resource ARNs; scope by tag instead.
+              # Lets the learner read SGs / route tables / subnets / instances for
+              # THIS stack only.
+              - Sid: ConsoleEc2Describe
+                Effect: Allow
+                Action:
+                  - ec2:Describe*
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/TenkaCloud:NamePrefix: !Ref NamePrefix
+              - Sid: ConsoleEc2Metadata
+                Effect: Allow
+                Action:
+                  - ec2:DescribeRegions
+                  - ec2:DescribeAvailabilityZones
+                  - ec2:DescribeAccountAttributes
+                  - ec2:DescribeInstances
+                Resource: "*"
+              # The flag is baked into origin-good's UserData. Block reading it back
+              # via DescribeInstanceAttribute so the only path to the flag is steering
+              # the edge correctly. Explicit Deny overrides the allow above.
+              - Sid: DenyUserDataReadback
+                Effect: Deny
+                Action:
+                  - ec2:DescribeInstanceAttribute
+                Resource: "*"
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              # Read this stack's parameters (incl. the steering selector + briefing).
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              # THE FIX GRANT: write the steering selector, scoped to this stack's
+              # /config/* path. This is the "modify settings" action the learner uses
+              # to repoint the edge -- not a new top-level resource.
+              - Sid: FixSteeringConfig
+                Effect: Allow
+                Action:
+                  - ssm:PutParameter
+                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${NamePrefix}/config/*"
+              # SSM Session Manager into the relay bastion (the vantage point from
+              # which to inspect both origins and curl the edge). Account-scoped
+              # session document per #42.
+              - Sid: StartSessionToRelay
+                Effect: Allow
+                Action:
+                  - ssm:StartSession
+                Resource:
+                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/${RelayInstance}"
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:document/SSM-SessionManagerRunShell"
+                  - !Sub "arn:aws:ssm:${AWS::Region}::document/SSM-SessionManagerRunShell"
+              - Sid: TerminateOwnSession
+                Effect: Allow
+                Action:
+                  - ssm:TerminateSession
+                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:session/${NamePrefix}*"
+              # Deliberately NO cloudformation:DescribeStacks -- the AnswerFlag
+              # Output must not be readable; the flag is earned by reaching origin-good
+              # through the repointed edge. Also no cloudfront:* -- there is no CDN.
+
+  # ----- EC2: relay (public, SSM bastion / inspection vantage point) -----
+  RelayInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref RelayInstanceProfile
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds:
+        - !Ref RelaySg
+      MetadataOptions:
+        HttpTokens: required
+        HttpPutResponseHopLimit: 1
+        HttpEndpoint: enabled
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-relay"
+        - Key: TenkaCloud:Problem
+          Value: net-evo-05-edge
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  # ----- EC2: origin-good (private, serves the flag on :8080) -----
+  OriginGoodInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref InstanceType
+      SubnetId: !Ref PrivateSubnet
+      SecurityGroupIds:
+        - !Ref OriginSg
+      MetadataOptions:
+        HttpTokens: required
+        HttpPutResponseHopLimit: 1
+        HttpEndpoint: enabled
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-origin-good"
+        - Key: TenkaCloud:Problem
+          Value: net-evo-05-edge
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euxo pipefail
+          mkdir -p /opt/origin
+          printf 'TC{%s}\n' '${FlagSeed}' > /opt/origin/flag.txt
+          chmod 600 /opt/origin/flag.txt
+          cat > /opt/origin/server.py <<'PY'
+          from http.server import BaseHTTPRequestHandler, HTTPServer
+
+          with open("/opt/origin/flag.txt") as fh:
+              FLAG = fh.read().strip()
+
+          class Handler(BaseHTTPRequestHandler):
+              def do_GET(self):
+                  body = (
+                      "X-Origin: good\n"
+                      "edge steering is correct -- you reached the live origin.\n"
+                      "flag: " + FLAG + "\n"
+                  ).encode()
+                  self.send_response(200)
+                  self.send_header("Content-Type", "text/plain")
+                  self.send_header("X-Origin", "good")
+                  self.send_header("Content-Length", str(len(body)))
+                  self.end_headers()
+                  self.wfile.write(body)
+
+              def log_message(self, *args):
+                  return
+
+          HTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
+          PY
+          cat > /etc/systemd/system/origin.service <<'UNIT'
+          [Unit]
+          Description=TenkaCloud net-evo-05 origin-good
+          After=network-online.target
+
+          [Service]
+          ExecStart=/usr/bin/python3 /opt/origin/server.py
+          Restart=always
+          User=root
+
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+          systemctl daemon-reload
+          systemctl enable --now origin.service
+
+  # ----- EC2: origin-stale (private, serves a stale/garbage banner on :8080) -----
+  OriginStaleInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref InstanceType
+      SubnetId: !Ref PrivateSubnet
+      SecurityGroupIds:
+        - !Ref OriginSg
+      MetadataOptions:
+        HttpTokens: required
+        HttpPutResponseHopLimit: 1
+        HttpEndpoint: enabled
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-origin-stale"
+        - Key: TenkaCloud:Problem
+          Value: net-evo-05-edge
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          set -euxo pipefail
+          mkdir -p /opt/origin
+          cat > /opt/origin/server.py <<'PY'
+          from http.server import BaseHTTPRequestHandler, HTTPServer
+
+          class Handler(BaseHTTPRequestHandler):
+              def do_GET(self):
+                  body = (
+                      "X-Origin: stale\n"
+                      "STALE CACHE -- this origin holds last quarter's snapshot.\n"
+                      "flag: TC{this_is_not_the_flag_you_are_looking_for}\n"
+                  ).encode()
+                  self.send_response(200)
+                  self.send_header("Content-Type", "text/plain")
+                  self.send_header("X-Origin", "stale")
+                  self.send_header("Content-Length", str(len(body)))
+                  self.end_headers()
+                  self.wfile.write(body)
+
+              def log_message(self, *args):
+                  return
+
+          HTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
+          PY
+          cat > /etc/systemd/system/origin.service <<'UNIT'
+          [Unit]
+          Description=TenkaCloud net-evo-05 origin-stale
+          After=network-online.target
+
+          [Service]
+          ExecStart=/usr/bin/python3 /opt/origin/server.py
+          Restart=always
+          User=root
+
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+          systemctl daemon-reload
+          systemctl enable --now origin.service
+
+  # ----- EC2: edge (public, reverse-proxy steered by the SSM parameter) -----
+  # Reads /${NamePrefix}/config/active_origin every 15s and points its single
+  # upstream at origin-good or origin-stale. The proxy itself is correct -- it
+  # faithfully serves whichever origin the steering config selects.
+  EdgeInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref EdgeInstanceProfile
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds:
+        - !Ref EdgeSg
+      MetadataOptions:
+        HttpTokens: required
+        HttpPutResponseHopLimit: 1
+        HttpEndpoint: enabled
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-edge"
+        - Key: TenkaCloud:Problem
+          Value: net-evo-05-edge
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euxo pipefail
+          mkdir -p /opt/edge
+          # Bake the two origin IPs, the steering parameter name, and the region into
+          # plain config files. The refresh loop reads these at runtime, so its own
+          # script body needs no boot-time variable expansion (quoted heredoc below).
+          printf '%s\n' '${OriginGoodInstance.PrivateIp}' > /opt/edge/good_ip
+          printf '%s\n' '${OriginStaleInstance.PrivateIp}' > /opt/edge/stale_ip
+          printf '%s\n' '/${NamePrefix}/config/active_origin' > /opt/edge/param_name
+          printf '%s\n' '${AWS::Region}' > /opt/edge/region
+          # Seed the upstream file with the stale origin so the proxy never reads an
+          # empty file before the first refresh tick.
+          cp /opt/edge/stale_ip /opt/edge/upstream
+          # The reverse proxy: a tiny upstream forwarder. It reads the chosen origin
+          # IP from a file the refresh loop keeps current, then forwards GET / to it.
+          cat > /opt/edge/proxy.py <<'PY'
+          import urllib.request
+          from http.server import BaseHTTPRequestHandler, HTTPServer
+
+          UPSTREAM_FILE = "/opt/edge/upstream"
+
+          def upstream():
+              with open(UPSTREAM_FILE) as fh:
+                  return fh.read().strip()
+
+          class Handler(BaseHTTPRequestHandler):
+              def do_GET(self):
+                  target = "http://%s:8080/" % upstream()
+                  try:
+                      with urllib.request.urlopen(target, timeout=5) as r:
+                          body = r.read()
+                          status = r.status
+                  except Exception as exc:
+                      body = ("edge: upstream error: %s\n" % exc).encode()
+                      status = 502
+                  self.send_response(status)
+                  self.send_header("Content-Type", "text/plain")
+                  self.send_header("X-Edge-Upstream", upstream())
+                  self.send_header("Content-Length", str(len(body)))
+                  self.end_headers()
+                  self.wfile.write(body)
+
+              def log_message(self, *args):
+                  return
+
+          HTTPServer(("0.0.0.0", 80), Handler).serve_forever()
+          PY
+          # Refresh loop: read the steering selector from SSM every 15s and rewrite
+          # the upstream file. Flipping the parameter to "good" repoints the edge
+          # within ~15s with no redeploy. Quoted heredoc => nothing expands at write
+          # time; all variables resolve at runtime on the instance.
+          cat > /opt/edge/refresh.sh <<'REFRESH'
+          #!/bin/bash
+          PARAM="$(cat /opt/edge/param_name)"
+          REGION="$(cat /opt/edge/region)"
+          while true; do
+            SEL="$(aws ssm get-parameter --name "$PARAM" --region "$REGION" \
+              --query 'Parameter.Value' --output text 2>/dev/null || echo stale)"
+            if [ "$SEL" = "good" ]; then
+              cp /opt/edge/good_ip /opt/edge/upstream
+            else
+              cp /opt/edge/stale_ip /opt/edge/upstream
+            fi
+            sleep 15
+          done
+          REFRESH
+          chmod +x /opt/edge/refresh.sh
+          cat > /etc/systemd/system/edge-refresh.service <<'UNIT'
+          [Unit]
+          Description=TenkaCloud net-evo-05 edge steering refresh
+          After=network-online.target
+
+          [Service]
+          ExecStart=/opt/edge/refresh.sh
+          Restart=always
+          User=root
+
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+          cat > /etc/systemd/system/edge-proxy.service <<'UNIT'
+          [Unit]
+          Description=TenkaCloud net-evo-05 edge reverse-proxy
+          After=edge-refresh.service
+
+          [Service]
+          ExecStart=/usr/bin/python3 /opt/edge/proxy.py
+          Restart=always
+          User=root
+
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+          systemctl daemon-reload
+          systemctl enable --now edge-refresh.service
+          systemctl enable --now edge-proxy.service
+
+  # ----- Briefing -----
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: >-
+        Users hitting the edge are being served STALE garbage instead of the live
+        content. The network is healthy and every node is up. The edge proxy picks
+        its single upstream from the SSM parameter /<NamePrefix>/config/active_origin
+        (good|stale), currently set to "stale". From the relay, inspect both origins
+        on :8080 to find which one is live, flip the steering parameter to "good"
+        (ssm:PutParameter -- a settings change, no new resources), wait ~15s for the
+        edge to repoint, then curl the edge and submit the flag TC{...} it returns.
+      Description: !Sub "TenkaCloud net-evo-05-edge briefing for ${NamePrefix}."
+      Tier: Standard
+
+Outputs:
+  VpcId:
+    Description: The VPC under repair.
+    Value: !Ref Vpc
+  RelayInstanceId:
+    Description: Bastion instance ID -- connect with `aws ssm start-session --target <this>`.
+    Value: !Ref RelayInstance
+  EdgePrivateIp:
+    Description: Private IP of the edge reverse-proxy (curl it on :80 from relay).
+    Value: !GetAtt EdgeInstance.PrivateIp
+  OriginGoodPrivateIp:
+    Description: Private IP of origin-good (also discoverable via ec2:DescribeInstances).
+    Value: !GetAtt OriginGoodInstance.PrivateIp
+  OriginStalePrivateIp:
+    Description: Private IP of origin-stale (also discoverable via ec2:DescribeInstances).
+    Value: !GetAtt OriginStaleInstance.PrivateIp
+  ActiveOriginParameterName:
+    Description: SSM Parameter that steers the edge upstream (the setting to fix).
+    Value: !Ref ActiveOriginParameter
+  SsmStartSessionCommand:
+    Description: Connect to relay via Session Manager.
+    Value: !Sub "aws ssm start-session --target ${RelayInstance}"
+  BriefingParameterName:
+    Description: SSM Parameter holding the task briefing.
+    Value: !Ref BriefingParameter
+  # Canonical answer, scoring engine only (no DescribeStacks granted to player).
+  AnswerFlag:
+    Description: Flag the learner submits after steering the edge to origin-good.
+    Value: !Sub "TC{${FlagSeed}}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn
