@@ -1,0 +1,63 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "net-evo-05-edge",
+  "name": "インターネット進化史 Ep05 — 間違ったエッジ",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "30〜45 分",
+  "shortDescription": "天下クラウド株式会社。 加藤さんが去り、 君は新人のまま最後の砦を任された。\n\n佐々木 CTO 曰く: 「ユーザーに配信されてる中身が古い。 先月のキャッシュだ。 サイト自体は生きてる、 サーバーも全部動いてる。 なのに edge を通すと、 誰のところにも『去年のゴミ』が届く。 加藤が最後に触ったのが配信の交通整理だった ── それ以来だ」\n\nインターネットは『近くの edge から配る』時代に進化した。 CDN / anycast / QUIC ── どこから配信するかを選ぶ層が増えた。 君の仕事は、 edge がなぜ『間違った origin』を選び続けているのかを突き止め、 交通整理をやり直して、 本物の origin が握るフラグを取り出すことだ。",
+  "description": "## シナリオ\n\n天下クラウド社、 シリーズ最終話。 加藤さんはもういない。 残されたのは、 ユーザーへの配信を 1 台の `edge` (リバースプロキシ) が捌くシンプルな構成 ── のはずだった。\n\n- **public サブネット**: 踏み台 `relay` (SSM 接続) と `edge` (HTTP :80 のリバースプロキシ)\n- **private サブネット**: 2 つの origin。 `origin-good` (本物、 機密フラグを :8080 で配る) と `origin-stale` (先月のキャッシュ、 ゴミ banner を配る)\n\n`edge` はどちらの origin を上流 (upstream) にするかを、 SSM Parameter `/<NamePrefix>/config/active_origin` (`good` または `stale`) から読み、 15 秒ごとに反映している。 ネットワークは健全 ── SG もルートも NACL も全部正しく、 全ノードが生きている。 なのに `edge` を叩くと毎回『去年のゴミ』が返る。 なぜか?\n\nインターネットは『どこから配るか』を選ぶ時代に進化した。 CDN / anycast / QUIC ── 同じコンテンツでも、 どの edge / どの origin を選ぶかで届くものが変わる。 そして加藤さんが最後に触った『交通整理の設定』が、 上流を `origin-stale` に向けたまま固定されていた。 これが『サイトは生きてるのに中身が古い』の正体。\n\n## デプロイされるもの (すべて CFn 管理下)\n\n- VPC × 1 (`10.50.0.0/16`)\n- public サブネット + InternetGateway + ルートテーブル\n- private サブネット + ルートテーブル (NAT なし)\n- 踏み台 EC2 `relay` (t3.micro, public サブネット, SSM 接続)\n- リバースプロキシ EC2 `edge` (t3.micro, public サブネット, :80) ── 上流を SSM パラメータで選ぶ\n- origin EC2 × 2 (t3.micro, private サブネット, public IP なし): `origin-good` (フラグ) と `origin-stale` (ゴミ)\n- SSM Parameter `/<NamePrefix>/config/active_origin` (← 上流を間違った origin に向けている)\n- Security Group × 3 (すべて正常)\n\n**CloudFront / NAT Gateway / EIP / ALB は一切なし。 新規リソースも作らせない**。 君がやるのは既存の交通整理パラメータを 1 つ書き換えること。 stack を消せば全部きれいに消える (孤児リソースなし)。\n\n## 解き方\n\n1. `relay` に SSM Session Manager で接続する (`aws ssm start-session --target <RelayInstanceId>`)。 RelayInstanceId は `aws ec2 describe-instances` で `${NamePrefix}-relay` を探す。\n2. `relay` の中から `edge` を叩いて症状を確認: `curl -v http://<edge-private-ip>:80`。 `X-Origin: stale` のゴミ banner が返るはず (レスポンスヘッダ `X-Edge-Upstream` も見える)。\n3. 2 つの origin を **それぞれ直接** 叩いて、 どちらが本物かを見極める: `curl http://<origin-good-ip>:8080` と `curl http://<origin-stale-ip>:8080`。 一方は `X-Origin: good` + フラグ `TC{...}`、 もう一方は `X-Origin: stale` + ゴミ。 origin の private IP は `aws ec2 describe-instances` の Name タグ (`${NamePrefix}-origin-good` / `-origin-stale`) で分かる。\n4. なぜ edge がゴミを配るのかを突き止める: 交通整理の設定 `aws ssm get-parameter --name /<NamePrefix>/config/active_origin` を読む。 値が `stale` になっている ── これが仕込まれた誤設定。 ネットワークではなく **配信の origin 選択** が間違っている。\n5. 設定を 1 つ書き換えて edge を本物に向け直す (新規リソースではなく、 既存パラメータの値変更 = 設定変更): `aws ssm put-parameter --name /<NamePrefix>/config/active_origin --value good --overwrite`。 約 15 秒で edge の refresh ループが上流を `origin-good` に切り替える。\n6. もう一度 `relay` から `curl http://<edge-private-ip>:80` ── 今度は `X-Origin: good` とフラグ `TC{...}` が返る。 それを Portal に submit。\n\nタスク説明は SSM Parameter `/<NamePrefix>/briefing` にもある。\n\n## 採点\n\n- 正解: +300 pt (1 デプロイにつき 1 回)。\n- 不正解: -15 pt/回。 スコアは 0 未満にならない。\n- フラグは deploy ごとにランダム生成され、 edge を `origin-good` に向け直さないと読めない (暗記・推測では解けない)。\n\n## コスト\n\nEC2 t3.micro × 4 台で 1 時間 ≈ $0.10。 CloudFront / NAT Gateway / EIP / ALB は作らないので追加課金なし。 終わったら `aws cloudformation delete-stack` で全消去 (孤児リソースなし)。",
+  "tags": ["ans", "advanced-networking", "networking", "cdn", "edge", "anycast", "traffic-steering", "origin", "internet-evolution"],
+  "exposedPorts": [
+    { "port": 80, "name": "edge reverse-proxy (public subnet HTTP, reachable from relay)" },
+    { "port": 8080, "name": "origin nodes (private subnet HTTP: origin-good serves the flag, origin-stale serves stale content)" }
+  ],
+  "learningGoals": [
+    "CDN / anycast / edge 時代に増えた『どの origin から配信するか』という steering 層が、 同じネットワーク上でもユーザーに届く中身を変えることを体感する",
+    "ネットワークが完全に健全 (SG / route / NACL すべて正常) でも、 origin 選択の設定 1 つで配信が壊れる ── 障害切り分けで『経路』と『配信先』を分けて疑う視点を身につける",
+    "リバースプロキシの上流選択を宣言的な設定 (SSM Parameter) で駆動し、 再デプロイなしに steering を切り替える運用パターンを操作で理解する",
+    "edge から配信される stale コンテンツの原因を、 origin を個別に検証して特定し、 steering を正す ── CDN 運用の origin 切り戻し作業を追体験する"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {
+    "FlagSeed": "__RANDOM_PASSWORD__"
+  },
+  "i18n": {
+    "en": {
+      "name": "History of the Internet Ep05 — The Wrong Edge",
+      "shortDescription": "TenkaCloud Inc. Kato-san is gone, and you -- still the new hire -- have been handed the last stand.\n\nSasaki-san, the CTO: 'What we're serving users is stale. Last month's cache. The site is up, every server is running. But go through the edge and everyone gets last year's garbage. The last thing Kato touched was the delivery steering -- it's been like this since.'\n\nThe internet evolved into serving from the nearest edge: CDN, anycast, QUIC -- a whole layer that decides *where* content is served from. Your job: work out why the edge keeps picking the *wrong* origin, redo the steering, and pull out the flag the real origin is holding.",
+      "description": "## Scenario\n\nTenkaCloud, the series finale. Kato-san is gone. What's left was supposed to be simple: a single `edge` (reverse proxy) fronting delivery to users.\n\n- **public subnet**: bastion `relay` (SSM access) and `edge` (an HTTP :80 reverse proxy)\n- **private subnet**: two origins. `origin-good` (the real one, serving the secret flag on :8080) and `origin-stale` (last month's cache, serving a garbage banner)\n\nThe `edge` reads which origin to use as its upstream from the SSM Parameter `/<NamePrefix>/config/active_origin` (`good` or `stale`), refreshing every 15 seconds. The network is healthy -- Security Groups, routes, and NACLs are all correct and every node is alive. Yet every hit on the `edge` returns last year's garbage. Why?\n\nThe internet evolved to choose *where* to serve from. CDN / anycast / QUIC -- with the same content, *which* edge or origin you pick changes what arrives. And the 'steering setting' Kato touched last leaves the upstream pinned to `origin-stale`. That is what 'the site is up but the content is stale' actually looks like.\n\n## What gets deployed (all CFn-managed)\n\n- 1 VPC (`10.50.0.0/16`)\n- public subnet + InternetGateway + route table\n- private subnet + route table (no NAT)\n- bastion EC2 `relay` (t3.micro, public subnet, SSM access)\n- reverse-proxy EC2 `edge` (t3.micro, public subnet, :80) -- picks its upstream from an SSM parameter\n- 2 origin EC2 (t3.micro, private subnet, no public IP): `origin-good` (the flag) and `origin-stale` (garbage)\n- SSM Parameter `/<NamePrefix>/config/active_origin` (which steers the upstream at the wrong origin)\n- 3 Security Groups (all correct)\n\n**No CloudFront / NAT Gateway / EIP / ALB at all. You never create new resources.** Your job is to rewrite one existing steering parameter. Delete the stack and everything is gone, with no orphaned resources.\n\n## How to solve\n\n1. Connect to `relay` via SSM Session Manager (`aws ssm start-session --target <RelayInstanceId>`). Find RelayInstanceId by `aws ec2 describe-instances` for `${NamePrefix}-relay`.\n2. From inside `relay`, hit the `edge` to see the symptom: `curl -v http://<edge-private-ip>:80`. You get the `X-Origin: stale` garbage banner (and an `X-Edge-Upstream` response header).\n3. Hit each origin **directly** to tell which one is real: `curl http://<origin-good-ip>:8080` and `curl http://<origin-stale-ip>:8080`. One returns `X-Origin: good` plus the flag `TC{...}`; the other returns `X-Origin: stale` plus garbage. Find the origin private IPs from the Name tags (`${NamePrefix}-origin-good` / `-origin-stale`) via `aws ec2 describe-instances`.\n4. Work out why the edge serves garbage: read the steering setting `aws ssm get-parameter --name /<NamePrefix>/config/active_origin`. Its value is `stale` -- the planted misconfiguration. It's not the network; it's the **origin selection**.\n5. Rewrite one setting to repoint the edge at the real origin (not a new resource -- a value change on an existing parameter = a settings change): `aws ssm put-parameter --name /<NamePrefix>/config/active_origin --value good --overwrite`. Within ~15s the edge refresh loop switches its upstream to `origin-good`.\n6. From `relay`, `curl http://<edge-private-ip>:80` again -- this time you get `X-Origin: good` and the flag `TC{...}`. Submit it in the Portal.\n\nThe task is also in SSM Parameter `/<NamePrefix>/briefing`.\n\n## Scoring\n\n- Correct: +300 pt (once per deploy).\n- Wrong: -15 pt each. Score never drops below 0.\n- The flag is randomly generated per deploy and is unreadable unless you repoint the edge at `origin-good` -- memorizing or guessing won't work.\n\n## Cost\n\nEC2 t3.micro x 4 for 1 hour is about $0.10. No CloudFront / NAT Gateway / EIP / ALB, so no extra charges. Tear down with `aws cloudformation delete-stack` -- everything is removed, with no orphaned resources.",
+      "learningGoals": [
+        "Feel how the steering layer the CDN / anycast / edge era added -- 'which origin do we serve from' -- changes what reaches users even on one healthy network",
+        "Build the instinct to suspect origin selection, not the path, when the network is perfectly healthy (SG / route / NACL all fine) yet delivery is broken from one setting",
+        "Understand, by operating it, the pattern of driving a reverse proxy's upstream choice from declarative config (an SSM Parameter) and switching steering with no redeploy",
+        "Re-live a CDN origin failback: diagnose stale content served from the edge by verifying each origin independently, then correct the steering"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 300,
+    "wrongAnswerPenalty": 15,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "ネットワークは健全 ── SG もルートも NACL も全部正しく、 全ノードが生きている。 疑うべきは『経路』ではなく『どの origin から配信するか』。 まず 2 つの origin (`${NamePrefix}-origin-good` / `-origin-stale`) を relay から直接 `curl http://<ip>:8080` して、 どちらが本物のフラグを持っているか確かめよう。 レスポンスの `X-Origin` ヘッダがヒント。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "edge は上流をハードコードしていない。 SSM Parameter `/<NamePrefix>/config/active_origin` (値 `good` / `stale`) を 15 秒ごとに読んで上流を選んでいる。 `aws ssm get-parameter --name /<NamePrefix>/config/active_origin` で現在値を見ると `stale` ── これが加藤さんの置き土産 (誤設定) で、 edge を `origin-stale` に固定している。",
+        "penalty": 50
+      },
+      {
+        "id": "hint-3",
+        "content": "交通整理を直す: `aws ssm put-parameter --name /<NamePrefix>/config/active_origin --value good --overwrite`。 約 15 秒待つと edge の refresh ループが上流を `origin-good` に切り替える。 その後 relay から `curl http://<edge-private-ip>:80` すると `X-Origin: good` とフラグ `TC{...}` が返る。 NamePrefix と各 IP は `aws ec2 describe-instances` / CFn Outputs から取得。",
+        "penalty": 100
+      }
+    ]
+  }
+}
