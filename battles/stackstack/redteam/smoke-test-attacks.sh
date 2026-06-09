@@ -74,6 +74,8 @@ echo "  base url: $BASE_URL"
 echo
 
 echo "=== baseline ==="
+# App ships as a local build and is NOT running until deployed.
+ssm_shell "/opt/tenkacloud/vibe/deploy_app.sh || true"
 http_code_until /healthz 200
 ssm_shell "/opt/tenkacloud/vibe/restore_database_from_s3.sh || true"
 posture_until db_present true
@@ -100,6 +102,20 @@ run_pair "vibe-app-stopped" \
   "systemctl start tenkacloud-vibe || true" \
   http_code_until /healthz 5xx
 http_code_until /healthz 200
+echo
+
+run_pair "site-defaced" \
+  "/opt/tenkacloud/vibe/deface_site.sh || true" \
+  "/opt/tenkacloud/vibe/restore_site.sh || true" \
+  posture_until site_intact false
+posture_until site_intact true
+echo
+
+run_pair "supply-chain-backdoor" \
+  "/opt/tenkacloud/vibe/install_backdoor.sh || true" \
+  "/opt/tenkacloud/vibe/remove_backdoor.sh || true" \
+  posture_until no_backdoor false
+posture_until no_backdoor true
 echo
 
 if [[ $FAILURES -gt 0 ]]; then

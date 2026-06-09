@@ -41,7 +41,7 @@ EC2 app host (SSM only, SSH 不要)
    `-- Aurora Serverless v2 database
 ```
 
-`RegisteredUrl` は意図的に空。 Stack Output の `AppUrlHint` を Participant Portal の endpoint override に登録して初めて採点が始まる。
+アプリ本体は `~/vibe-app` に **ローカルビルド** として置かれ、 まだ起動していない。 まず `deploy_app.sh` でデプロイして稼働させる。 `RegisteredUrl` は意図的に空で、 Stack Output の `AppUrlHint` を Participant Portal の endpoint override に登録して初めて採点が始まる。
 
 ## Production gates
 
@@ -59,8 +59,8 @@ EC2 app host (SSM only, SSH 不要)
 
 ## 競技フロー
 
-1. Stack Output の `AppUrlHint` を `app` endpoint override に登録する。
-2. `SsmStartSessionCommand` output で SSM Session Manager に入る。
+1. `SsmStartSessionCommand` output で SSM Session Manager に入り、 `sudo /opt/tenkacloud/vibe/deploy_app.sh` でローカルビルドをデプロイ（サービス起動）。
+2. Stack Output の `AppUrlHint` を `app` endpoint override に登録する。
 3. データ復元:
 
    ```bash
@@ -108,6 +108,8 @@ EC2 app host (SSM only, SSH 不要)
 | `ai-wipes-database`    | SQLite / Aurora の posts を空にする              | S3 backup から復元             |
 | `auth-setting-removed` | config を backup して auth を false に戻す       | backup config を復元           |
 | `vibe-app-stopped`     | `tenkacloud-vibe` を停止                         | `tenkacloud-vibe` を start     |
+| `site-defaced`         | 掲示板を改ざん (PWNED バナー)、 `site_intact`=false | 改ざんマーカーを除去           |
+| `supply-chain-backdoor`| バックドア成果物を混入、 `no_backdoor`=false      | バックドア成果物を除去         |
 
 すべて `action` delivery で、 metadata に `revert` を宣言している。 cloud fault を謳う effect-only disruption はない。
 

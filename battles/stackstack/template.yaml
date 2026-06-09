@@ -656,7 +656,7 @@ Resources:
           dnf install -y nginx python3 sqlite awscli jq
           dnf install -y postgresql15 || dnf install -y postgresql || true
 
-          mkdir -p /opt/tenkacloud/vibe/tools /etc/tenkacloud-vibe /var/lib/tenkacloud-vibe
+          mkdir -p /opt/tenkacloud/vibe/tools /etc/tenkacloud-vibe /var/lib/tenkacloud-vibe /home/ec2-user/vibe-app
           chown -R ec2-user:ec2-user /opt/tenkacloud /etc/tenkacloud-vibe /var/lib/tenkacloud-vibe
 
           cat > /etc/tenkacloud-vibe/runtime.env <<ENV
@@ -714,7 +714,7 @@ Resources:
           aws s3 cp /tmp/seed-postgres.sql "s3://${BackupBucket}/seed-postgres.sql" --region "${AWS::Region}"
           sqlite3 /var/lib/tenkacloud-vibe/app.db 'CREATE TABLE IF NOT EXISTS posts (id INTEGER PRIMARY KEY AUTOINCREMENT, author TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL); DELETE FROM posts;'
 
-          cat > /opt/tenkacloud/vibe/app.py <<'PY'
+          cat > /home/ec2-user/vibe-app/app.py <<'PY'
           import json
           import os
           import sqlite3
@@ -904,6 +904,16 @@ Resources:
               except Exception:
                   return False
 
+          PRODUCTION_GATES = ("db_present", "auth_enabled", "rate_limited", "audit_on", "on_aurora")
+          DEFACE_MARKER = "/var/lib/tenkacloud-vibe/DEFACED"
+          BACKDOOR_MARKER = "/var/lib/tenkacloud-vibe/BACKDOOR"
+
+          def site_defaced():
+              return os.path.exists(DEFACE_MARKER)
+
+          def backdoor_present():
+              return os.path.exists(BACKDOOR_MARKER)
+
           def collect_posture():
               config = load_config()
               on_aurora = config.get("database") == "aurora" and aurora_ready()
@@ -914,11 +924,17 @@ Resources:
                   "rate_limited": waf_associated(),
                   "audit_on": audit_on(config),
                   "on_aurora": on_aurora,
+                  "site_intact": not site_defaced(),
+                  "no_backdoor": not backdoor_present(),
               }
               return posture
 
           def platform_for(posture):
-              count = sum(1 for value in posture.values() if value)
+              count = sum(1 for key in PRODUCTION_GATES if posture.get(key))
+              incident = (not posture.get("site_intact", True)) or (not posture.get("no_backdoor", True))
+              if incident:
+                  # active security incident (defacement / backdoor): cannot be production
+                  return f"posture-{min(count, 2)}"
               if count >= 5:
                   return "production"
               return f"posture-{count}"
@@ -931,6 +947,9 @@ Resources:
                       return
                   if parsed.path == "/":
                       config = load_config()
+                      if site_defaced():
+                          self.json_response(200, {"service": "vibe-board", "defaced": True, "message": "PWNED - board replaced by red team", "posts": []})
+                          return
                       self.json_response(200, {"service": "vibe-board", "posts": active_posts(config)})
                       return
                   if parsed.path == "/posture":
@@ -1098,7 +1117,51 @@ Resources:
               f.write("\n")
           PY
 
-          chown -R ec2-user:ec2-user /opt/tenkacloud /etc/tenkacloud-vibe /var/lib/tenkacloud-vibe
+          cat > /opt/tenkacloud/vibe/deface_site.sh <<'SH'
+          #!/bin/bash
+          set -euo pipefail
+          # Red-team: simulated defacement. App serves a PWNED banner and posture
+          # drops out of production until the marker is removed.
+          touch /var/lib/tenkacloud-vibe/DEFACED
+          SH
+          chmod +x /opt/tenkacloud/vibe/deface_site.sh
+
+          cat > /opt/tenkacloud/vibe/restore_site.sh <<'SH'
+          #!/bin/bash
+          set -euo pipefail
+          rm -f /var/lib/tenkacloud-vibe/DEFACED
+          SH
+          chmod +x /opt/tenkacloud/vibe/restore_site.sh
+
+          cat > /opt/tenkacloud/vibe/install_backdoor.sh <<'SH'
+          #!/bin/bash
+          set -euo pipefail
+          # Red-team: simulated supply-chain backdoor artifact dropped on the host.
+          # posture drops out of production until the artifact is removed.
+          touch /var/lib/tenkacloud-vibe/BACKDOOR
+          SH
+          chmod +x /opt/tenkacloud/vibe/install_backdoor.sh
+
+          cat > /opt/tenkacloud/vibe/remove_backdoor.sh <<'SH'
+          #!/bin/bash
+          set -euo pipefail
+          rm -f /var/lib/tenkacloud-vibe/BACKDOOR
+          SH
+          chmod +x /opt/tenkacloud/vibe/remove_backdoor.sh
+
+          cat > /opt/tenkacloud/vibe/deploy_app.sh <<'SH'
+          #!/bin/bash
+          set -euo pipefail
+          # Deploy the locally-built app onto the cloud host: install the build to the
+          # runtime path and bring the service up behind the ALB.
+          install -m 0644 -D /home/ec2-user/vibe-app/app.py /opt/tenkacloud/vibe/app.py
+          systemctl enable --now tenkacloud-vibe
+          systemctl restart nginx
+          echo "deployed: app is live on this host"
+          SH
+          chmod +x /opt/tenkacloud/vibe/deploy_app.sh
+
+          chown -R ec2-user:ec2-user /opt/tenkacloud /etc/tenkacloud-vibe /var/lib/tenkacloud-vibe /home/ec2-user/vibe-app
 
           cat > /etc/systemd/system/tenkacloud-vibe.service <<'UNIT'
           [Unit]
@@ -1131,7 +1194,8 @@ Resources:
           rm -f /etc/nginx/conf.d/default.conf || true
 
           systemctl daemon-reload
-          systemctl enable --now tenkacloud-vibe
+          # NOTE: tenkacloud-vibe is intentionally NOT started here. The app ships as a
+          # local build in ~/vibe-app; the participant deploys it with deploy_app.sh.
           systemctl enable --now nginx
 
   AppTargetGroup:
