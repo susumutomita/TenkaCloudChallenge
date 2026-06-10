@@ -37,7 +37,7 @@ Parameters:
     Type: String
     NoEcho: true
     MinLength: 16
-    Description: Aurora app password. metadata.json passes __RANDOM_PASSWORD__.
+    Description: Database app password. metadata.json passes __RANDOM_PASSWORD__.
   TenkaCloudAccountId:
     Type: String
     AllowedPattern: "^[0-9]{12}$"
@@ -178,13 +178,13 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       VpcId: !Ref Vpc
-      GroupDescription: !Sub "${NamePrefix} Aurora ingress from app host"
+      GroupDescription: !Sub "${NamePrefix} RDS PostgreSQL ingress from app host"
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 5432
           ToPort: 5432
           SourceSecurityGroupId: !Ref AppSg
-          Description: app host to Aurora PostgreSQL
+          Description: app host to RDS PostgreSQL
       SecurityGroupEgress:
         - IpProtocol: -1
           CidrIp: 0.0.0.0/0
@@ -380,7 +380,7 @@ Resources:
   DbSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
-      DBSubnetGroupDescription: !Sub "${NamePrefix} Aurora public-subnet group"
+      DBSubnetGroupDescription: !Sub "${NamePrefix} RDS public-subnet group"
       SubnetIds:
         - !Ref PublicSubnetA
         - !Ref PublicSubnetB
@@ -390,43 +390,32 @@ Resources:
         - Key: TenkaCloud:NamePrefix
           Value: !Ref NamePrefix
 
-  AuroraCluster:
-    Type: AWS::RDS::DBCluster
-    DeletionPolicy: Delete
-    UpdateReplacePolicy: Delete
-    Properties:
-      Engine: aurora-postgresql
-      EngineMode: provisioned
-      DatabaseName: vibeapp
-      MasterUsername: vibeadmin
-      MasterUserPassword: !Ref DbPassword
-      DBSubnetGroupName: !Ref DbSubnetGroup
-      VpcSecurityGroupIds:
-        - !Ref DbSg
-      ServerlessV2ScalingConfiguration:
-        MinCapacity: 0.5
-        MaxCapacity: 1
-      BackupRetentionPeriod: 1
-      DeletionProtection: false
-      StorageEncrypted: true
-      Tags:
-        - Key: Name
-          Value: !Sub "${NamePrefix}-aurora"
-        - Key: TenkaCloud:NamePrefix
-          Value: !Ref NamePrefix
-
-  AuroraInstance:
+  # Free-tier RDS PostgreSQL (db.t3.micro, Single-AZ, 20GB gp2). Plain RDS instead of Aurora
+  # because new AWS "free plan" accounts reject Aurora clusters without WithExpressConfiguration.
+  # db.t3.micro Single-AZ 20GB gp2 is Free-Tier-eligible and the app talks plain PostgreSQL.
+  Database:
     Type: AWS::RDS::DBInstance
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     Properties:
-      DBClusterIdentifier: !Ref AuroraCluster
-      DBInstanceClass: db.serverless
-      Engine: aurora-postgresql
+      Engine: postgres
+      DBInstanceClass: db.t3.micro
+      AllocatedStorage: "20"
+      StorageType: gp2
+      MultiAZ: false
+      DBName: vibeapp
+      MasterUsername: vibeadmin
+      MasterUserPassword: !Ref DbPassword
+      DBSubnetGroupName: !Ref DbSubnetGroup
+      VPCSecurityGroups:
+        - !Ref DbSg
       PubliclyAccessible: false
+      BackupRetentionPeriod: 0
+      DeletionProtection: false
+      StorageEncrypted: true
       Tags:
         - Key: Name
-          Value: !Sub "${NamePrefix}-aurora-instance"
+          Value: !Sub "${NamePrefix}-db"
         - Key: TenkaCloud:NamePrefix
           Value: !Ref NamePrefix
 
@@ -507,7 +496,6 @@ Resources:
                   - elasticloadbalancing:DescribeListeners
                   - elasticloadbalancing:DescribeTargetHealth
                   - elasticloadbalancing:DescribeTags
-                  - rds:DescribeDBClusters
                   - rds:DescribeDBInstances
                 Resource: "*"
               - Sid: ReadOwnAlbWebAclAssociation
@@ -626,7 +614,7 @@ Resources:
   AppInstance:
     Type: AWS::EC2::Instance
     DependsOn:
-      - AuroraInstance
+      - Database
       - BackupBucket
       - AuditBucket
       - EmptyBucketsOnDelete
@@ -665,7 +653,7 @@ Resources:
           AUDIT_BUCKET=${AuditBucket}
           ALB_ARN=${AppLoadBalancer}
           WAF_WEB_ACL_ARN=${RateLimitWebAcl.Arn}
-          DB_ENDPOINT=${AuroraCluster.Endpoint.Address}
+          DB_ENDPOINT=${Database.Endpoint.Address}
           DB_NAME=vibeapp
           DB_USER=vibeadmin
           DB_PASSWORD=${DbPassword}
@@ -1256,14 +1244,14 @@ Outputs:
   AuditBucketName:
     Description: Stack-owned S3 bucket used by the app audit trail.
     Value: !Ref AuditBucket
-  AuroraEndpoint:
-    Description: Existing Aurora Serverless v2 endpoint for the production migration.
-    Value: !GetAtt AuroraCluster.Endpoint.Address
-  AuroraDatabaseName:
-    Description: Existing Aurora database name.
+  DbEndpoint:
+    Description: Free-tier RDS PostgreSQL (db.t3.micro) endpoint for the production migration.
+    Value: !GetAtt Database.Endpoint.Address
+  DbDatabaseName:
+    Description: Application database name.
     Value: vibeapp
-  AuroraUser:
-    Description: Existing Aurora app username.
+  DbUser:
+    Description: Application database username.
     Value: vibeadmin
   WebAclArn:
     Description: Existing WAFv2 WebACL ARN. Associate it with LoadBalancerArn to enable rate limiting.
