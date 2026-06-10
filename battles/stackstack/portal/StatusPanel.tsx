@@ -2,17 +2,33 @@
  * StackStack portal slot — Vibe to Production status display.
  *
  * The live posture comes from the app's /posture endpoint; this panel keeps the
- * participant oriented around URL registration and the five production gates.
+ * participant oriented around URL registration, the five production gates, and
+ * the two integrity checks that a security incident can knock down.
  */
 
 import type { PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 
+// The five gates the app counts toward production. Each becoming true raises the
+// per-minute score; all five true earns the production platform.
 const GATES = [
   { key: "db_present", label: "DB", hint: "S3 backup restore completed" },
   { key: "auth_enabled", label: "Auth", hint: "anonymous submit is rejected" },
   { key: "rate_limited", label: "Rate", hint: "WAF WebACL is associated to the ALB" },
   { key: "audit_on", label: "Audit", hint: "audit events write to S3" },
   { key: "on_aurora", label: "Aurora", hint: "app queries the existing Aurora DB" },
+];
+
+// Integrity posture keys. These are NOT counted toward the five gates, but while
+// either is false the app cannot be production (the red-team defacement and
+// supply-chain backdoor disruptions trip these). Restore the site / remove the
+// backdoor to climb back to production.
+const INTEGRITY = [
+  { key: "site_intact", label: "Site", hint: "board is not defaced (site-defaced disruption)" },
+  {
+    key: "no_backdoor",
+    label: "No backdoor",
+    hint: "no supply-chain artifact present (supply-chain-backdoor disruption)",
+  },
 ];
 
 export default function StatusPanel(props: PortalSlotProps) {
@@ -33,7 +49,9 @@ export default function StatusPanel(props: PortalSlotProps) {
       </h3>
       <p style={{ margin: "0 0 16px 0", color: "#5f6b7a", fontSize: "13px" }}>
         Register the AppUrlHint override, then use <code>/posture</code> as the source of truth.
-        Production earns the one-time bonus only when every gate is true.
+        Production earns the one-time bonus only when every gate is true and the board stays
+        intact — a defacement or supply-chain backdoor drops you out of production until you
+        recover.
       </p>
 
       <div style={{ marginBottom: "16px" }}>
@@ -86,6 +104,37 @@ export default function StatusPanel(props: PortalSlotProps) {
               <div style={{ color: "#5f6b7a", fontSize: "12px" }}>{gate.hint}</div>
               <code style={{ display: "block", marginTop: "6px", fontSize: "12px" }}>
                 {gate.key}
+              </code>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ marginBottom: "16px" }}>
+        <h4 style={{ margin: "0 0 8px 0", fontSize: "13px", color: "#414d5c" }}>
+          Production integrity
+        </h4>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+            gap: "8px",
+          }}
+        >
+          {INTEGRITY.map((check) => (
+            <div
+              key={check.key}
+              style={{
+                border: "1px solid #f0c2a0",
+                borderRadius: "6px",
+                padding: "10px",
+                background: "#fff8f3",
+              }}
+            >
+              <div style={{ fontWeight: 600, marginBottom: "4px" }}>{check.label}</div>
+              <div style={{ color: "#5f6b7a", fontSize: "12px" }}>{check.hint}</div>
+              <code style={{ display: "block", marginTop: "6px", fontSize: "12px" }}>
+                {check.key}
               </code>
             </div>
           ))}
