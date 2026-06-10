@@ -21,7 +21,11 @@ problems/
 │   └── stackstack/
 ├── challenges/                    # Challenge (self-paced, evergreen)
 │   ├── hello-world/
-│   └── net-evo-01-reachability/   # Internet Evolution Ep01 (design-bar reference)
+│   ├── net-evo-01-reachability/   # Internet Evolution Ep01 (design-bar reference)
+│   ├── net-evo-02-dns/            # Internet Evolution Ep02 (DNS)
+│   ├── net-evo-03-egress/         # Internet Evolution Ep03 (NAT egress)
+│   ├── net-evo-04-tls/            # Internet Evolution Ep04 (TLS)
+│   └── net-evo-05-edge/           # Internet Evolution Ep05 (edge)
 ├── SCHEMA.json                    # JSON Schema (draft-07) — source of truth for metadata.json
 ├── index.json                     # Catalog built from every metadata.json (= `make build-problems-index`)
 ├── CATALOG.md                     # This file (English, primary)
