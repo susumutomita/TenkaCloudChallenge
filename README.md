@@ -91,7 +91,11 @@ A small, curated set — **every problem is built to the design bar above**. Qua
 | Status | Category  | Problem                                                                                       | Duration   | Difficulty |
 | ------ | --------- | --------------------------------------------------------------------------------------------- | ---------- | ---------- |
 | ready  | Challenge | [`hello-world`](./challenges/hello-world/)                                                     | 1 min      | 1          |
-| draft  | Challenge | [`net-evo-01-reachability`](./challenges/net-evo-01-reachability/) (Internet Evolution Ep01)  | 30-45 min  | 3          |
+| ready  | Challenge | [`net-evo-01-reachability`](./challenges/net-evo-01-reachability/) (Internet Evolution Ep01)  | 30-45 min  | 3          |
+| ready  | Challenge | [`net-evo-02-dns`](./challenges/net-evo-02-dns/) (Internet Evolution Ep02)                     | 45-60 min  | 3          |
+| ready  | Challenge | [`net-evo-03-egress`](./challenges/net-evo-03-egress/) (Internet Evolution Ep03)               | 30-45 min  | 3          |
+| ready  | Challenge | [`net-evo-04-tls`](./challenges/net-evo-04-tls/) (Internet Evolution Ep04)                     | 30-45 min  | 3          |
+| ready  | Challenge | [`net-evo-05-edge`](./challenges/net-evo-05-edge/) (Internet Evolution Ep05)                   | 30-45 min  | 3          |
 | ready  | Battle    | [`hello-world-battle`](./battles/hello-world-battle/)                                          | 30 min     | 1          |
 | ready  | Battle    | [`microservice-migration-battle`](./battles/microservice-migration-battle/)                   | 90-120 min | 4          |
 | ready  | Battle    | [`security-battle-royale`](./battles/security-battle-royale/)                                  | 60-90 min  | 4          |
