@@ -328,7 +328,7 @@ Outputs:
     Description: Empty by default; competitors register the API URL via the Participant Portal to start scoring.
     Value: ""
   Ec2HostHint:
-    Description: EC2 public DNS for this stack. Paste as `http://<host>` and `http://<host>:8080/healthz` into FrontendUrl / ApiUrl slots in the portal.
+    Description: EC2 public DNS for this stack. Paste `http://<host>` into the FrontendUrl slot and `http://<host>:8080` into the ApiUrl slot in the portal (the api slot already probes /healthz, so do not include the path).
     Value: !GetAtt Ec2.PublicDnsName
   InstanceId:
     Description: EC2 InstanceId for connecting via SSM Session Manager (no SSH required).
