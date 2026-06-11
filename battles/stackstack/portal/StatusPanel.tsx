@@ -15,7 +15,7 @@ const GATES = [
   { key: "auth_enabled", label: "Auth", hint: "anonymous submit is rejected" },
   { key: "rate_limited", label: "Rate", hint: "WAF WebACL is associated to the ALB" },
   { key: "audit_on", label: "Audit", hint: "audit events write to S3" },
-  { key: "on_aurora", label: "Aurora", hint: "app queries the existing Aurora DB" },
+  { key: "on_rds", label: "RDS", hint: "app queries the existing RDS DB" },
 ];
 
 // Integrity posture keys. These are NOT counted toward the five gates, but while

@@ -186,13 +186,13 @@
       "visibility": "public",
       "difficulty": 4,
       "estimatedDuration": "90〜120 分",
-      "shortDescription": "天下クラウド株式会社 Platform Team、 月初の朝会。 加藤さんが辞めた直後、 AI Builder が量産した掲示板アプリが社内公開待ちになっている。 動くが、 DB は空、 認証なし、 rate limit なし、 監査なし、 SQLite のまま。\n\n佐々木 CTO 曰く: 「ホスティングしただけじゃ公開できない。 既存の統制リソースを使って、 今日中に本番品質まで持っていって」\n\n君の仕事: stack が作成済みの ALB / EC2 / WAF / S3 backup / S3 audit / Aurora を使い、 新規トップレベルリソースを作らずに、 ローカルビルドのデプロイ → restored → protected → audited → production へ上げていく。",
+      "shortDescription": "天下クラウド株式会社 Platform Team、 月初の朝会。 加藤さんが辞めた直後、 AI Builder が量産した掲示板アプリが社内公開待ちになっている。 動くが、 DB は空、 認証なし、 rate limit なし、 監査なし、 SQLite のまま。\n\n佐々木 CTO 曰く: 「ホスティングしただけじゃ公開できない。 既存の統制リソースを使って、 今日中に本番品質まで持っていって」\n\n君の仕事: stack が作成済みの ALB / EC2 / WAF / S3 backup / S3 audit / RDS PostgreSQL を使い、 新規トップレベルリソースを作らずに、 ローカルビルドのデプロイ → restored → protected → audited → production へ上げていく。",
       "tags": [
         "platform-engineering",
         "ai-native",
         "governance",
         "waf",
-        "aurora",
+        "rds",
         "incident-response"
       ],
       "scoringKind": "phased-polling"

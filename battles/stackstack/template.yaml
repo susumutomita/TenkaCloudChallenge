@@ -779,7 +779,7 @@ Resources:
                   rows = conn.execute("SELECT id, author, body, created_at FROM posts ORDER BY id DESC LIMIT 20").fetchall()
               return [{"id": r[0], "author": r[1], "body": r[2], "created_at": r[3]} for r in rows]
 
-          def aurora_posts():
+          def rds_posts():
               out = psql_exec("SELECT id, author, body, created_at FROM posts ORDER BY id DESC LIMIT 20")
               if out is None:
                   return []
@@ -791,19 +791,19 @@ Resources:
               return posts
 
           def active_posts(config):
-              if config.get("database") == "aurora":
-                  return aurora_posts()
+              if config.get("database") == "rds":
+                  return rds_posts()
               return sqlite_posts()
 
           def insert_post(config, author, body):
               created_at = now_iso()
-              if config.get("database") == "aurora":
+              if config.get("database") == "rds":
                   sql = (
                       "INSERT INTO posts(author, body, created_at) VALUES "
                       f"({sql_quote(author)}, {sql_quote(body)}, {sql_quote(created_at)})"
                   )
                   if psql_exec(sql) is None:
-                      raise RuntimeError("aurora insert failed")
+                      raise RuntimeError("rds insert failed")
               else:
                   ensure_sqlite()
                   with sqlite3.connect(SQLITE_DB) as conn:
@@ -877,7 +877,7 @@ Resources:
           def audit_on(config):
               return bool(config.get("audit_s3")) and write_audit_event("posture-probe", {"source": "posture"})
 
-          def aurora_ready():
+          def rds_ready():
               out = psql_exec("SELECT COUNT(*) FROM posts")
               if out is None:
                   return False
@@ -892,7 +892,7 @@ Resources:
               except Exception:
                   return False
 
-          PRODUCTION_GATES = ("db_present", "auth_enabled", "rate_limited", "audit_on", "on_aurora")
+          PRODUCTION_GATES = ("db_present", "auth_enabled", "rate_limited", "audit_on", "on_rds")
           DEFACE_MARKER = "/var/lib/tenkacloud-vibe/DEFACED"
           BACKDOOR_MARKER = "/var/lib/tenkacloud-vibe/BACKDOOR"
 
@@ -904,14 +904,14 @@ Resources:
 
           def collect_posture():
               config = load_config()
-              on_aurora = config.get("database") == "aurora" and aurora_ready()
-              db_present = aurora_ready() if config.get("database") == "aurora" else sqlite_ready()
+              on_rds = config.get("database") == "rds" and rds_ready()
+              db_present = rds_ready() if config.get("database") == "rds" else sqlite_ready()
               posture = {
                   "db_present": db_present,
                   "auth_enabled": auth_enabled(config),
                   "rate_limited": waf_associated(),
                   "audit_on": audit_on(config),
-                  "on_aurora": on_aurora,
+                  "on_rds": on_rds,
                   "site_intact": not site_defaced(),
                   "no_backdoor": not backdoor_present(),
               }
@@ -1052,7 +1052,7 @@ Resources:
           SH
           chmod +x /opt/tenkacloud/vibe/wipe_database.sh
 
-          cat > /opt/tenkacloud/vibe/migrate_to_aurora.sh <<'SH'
+          cat > /opt/tenkacloud/vibe/migrate_to_rds.sh <<'SH'
           #!/usr/bin/env bash
           set -euo pipefail
           source /etc/tenkacloud-vibe/runtime.env
@@ -1064,14 +1064,14 @@ Resources:
           path = "/etc/tenkacloud-vibe/config.json"
           with open(path, "r", encoding="utf-8") as f:
               config = json.load(f)
-          config["database"] = "aurora"
+          config["database"] = "rds"
           with open(path, "w", encoding="utf-8") as f:
               json.dump(config, f, indent=2, sort_keys=True)
               f.write("\n")
           PY
           systemctl restart tenkacloud-vibe
           SH
-          chmod +x /opt/tenkacloud/vibe/migrate_to_aurora.sh
+          chmod +x /opt/tenkacloud/vibe/migrate_to_rds.sh
 
           cat > /opt/tenkacloud/vibe/set_auth_required.py <<'PY'
           import json

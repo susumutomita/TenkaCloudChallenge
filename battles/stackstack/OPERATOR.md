@@ -2,7 +2,7 @@
 
 > Operator-facing. Reading this as a player spoils the disruption schedule.
 
-StackStack is now an orphan-safe "Vibe to Production" battle. All top-level resources are CloudFormation-owned; participants only register the app URL, modify app config/data on the EC2 host, associate an existing WAF WebACL to an existing ALB, and migrate data into the existing Aurora database.
+StackStack is now an orphan-safe "Vibe to Production" battle. All top-level resources are CloudFormation-owned; participants only register the app URL, modify app config/data on the EC2 host, associate an existing WAF WebACL to an existing ALB, and migrate data into the existing RDS PostgreSQL database.
 
 ## Before the event
 
@@ -37,7 +37,7 @@ After deploy, expect:
     "auth_enabled": false,
     "rate_limited": false,
     "audit_on": false,
-    "on_aurora": false,
+    "on_rds": false,
     "site_intact": true,
     "no_backdoor": true
   },
@@ -80,7 +80,7 @@ Participants should not create new AWS services. The expected path is:
 4. Run `python3 /opt/tenkacloud/vibe/set_auth_required.py true`.
 5. Source `/etc/tenkacloud-vibe/runtime.env`, then associate `WAF_WEB_ACL_ARN` to `ALB_ARN`.
 6. Run `python3 /opt/tenkacloud/vibe/set_audit_s3.py true`.
-7. Run `/opt/tenkacloud/vibe/migrate_to_aurora.sh`.
+7. Run `/opt/tenkacloud/vibe/migrate_to_rds.sh`.
 8. Use `/posture` as the source of truth.
 
 ### How the red team fires
@@ -111,7 +111,7 @@ Typical interpretations:
 - `auth_enabled=false`: auth flag/token is missing or was stripped.
 - `rate_limited=false`: WAF is not associated to the ALB.
 - `audit_on=false`: audit flag is off or the app cannot write to the audit bucket.
-- `on_aurora=false`: app still uses SQLite or cannot query Aurora.
+- `on_rds=false`: app still uses SQLite or cannot query RDS PostgreSQL.
 
 ## After the event
 
@@ -121,11 +121,11 @@ Delete each team stack:
 aws cloudformation delete-stack --stack-name tc-stackstack-<team>
 ```
 
-No extra cleanup pass is expected. If any ALB / WAF / S3 / Aurora / EC2 / IAM resource remains, treat that as a CloudFormation deletion failure and debug the stack events rather than deleting participant-created resources.
+No extra cleanup pass is expected. If any ALB / WAF / S3 / RDS / EC2 / IAM resource remains, treat that as a CloudFormation deletion failure and debug the stack events rather than deleting participant-created resources.
 
 ## Known limitations
 
-- Aurora Serverless v2 and ALB make this more expensive than the old EC2-only StackStack. Keep event duration short and delete stacks promptly.
+- The RDS PostgreSQL instance (db.t3.micro, Single-AZ, 20GB gp2) is free-tier eligible, so it adds little cost over the old EC2-only StackStack. The ALB still accrues charges, so keep event duration short and delete stacks promptly.
 - The WAF posture check verifies WebACL association, not a live flood. The WebACL itself is stack-owned and contains a rate-based rule.
 - The app writes a small S3 object during `/posture` when audit is enabled. The audit bucket has a one-day lifecycle rule to bound object growth.
 - `RegisteredUrl` is intentionally empty. If an operator pre-populates the endpoint override for a team, deploy alone can start scoring; avoid doing that before the participant begins.
