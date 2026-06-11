@@ -38,7 +38,7 @@ EC2 app host (SSM only, no SSH)
    |
    |-- S3 backup bucket (seed-sqlite.sql / seed-postgres.sql)
    |-- S3 audit bucket
-   `-- Aurora Serverless v2 database
+   `-- RDS PostgreSQL (db.t3.micro, Single-AZ) database
 ```
 
 The app ships as a **local build** in `~/vibe-app` and is not running yet — deploy it first with `deploy_app.sh`. `RegisteredUrl` is intentionally empty; paste the stack output `AppUrlHint` into the Participant Portal endpoint override before scoring starts.
@@ -53,7 +53,7 @@ The app exposes `GET /posture`; those values are measured from actual state, not
 | `auth_enabled` | Anonymous POST works | Enable the app auth flag with a non-default token                 |
 | `rate_limited` | WAF not associated   | Associate the existing WebACL with the existing ALB               |
 | `audit_on`     | No audit writes      | Enable audit writes to the existing S3 audit bucket               |
-| `on_aurora`    | SQLite               | Migrate posts to the existing Aurora database and switch the app  |
+| `on_rds`       | SQLite               | Migrate posts to the existing RDS PostgreSQL database and switch the app |
 
 `GET /meta` maps those checks to `posture-0` through `posture-4`, or `production` when all gates are true. Each step raises the per-cycle payout; `production` earns the one-time bonus.
 
@@ -91,10 +91,10 @@ The app exposes `GET /posture`; those values are measured from actual state, not
    sudo systemctl restart tenkacloud-vibe
    ```
 
-7. Migrate from SQLite to Aurora:
+7. Migrate from SQLite to RDS PostgreSQL:
 
    ```bash
-   sudo /opt/tenkacloud/vibe/migrate_to_aurora.sh
+   sudo /opt/tenkacloud/vibe/migrate_to_rds.sh
    ```
 
 8. Check `GET /posture` after each step. The score engine uses the same state through `/meta` and `/score`.
@@ -105,7 +105,7 @@ Operators can fire reversible disruptions:
 
 | id                     | What happens                                 | Revert                         |
 | ---------------------- | -------------------------------------------- | ------------------------------ |
-| `ai-wipes-database`    | Clears posts from SQLite / Aurora             | Restores from S3 backup        |
+| `ai-wipes-database`    | Clears posts from SQLite / RDS                | Restores from S3 backup        |
 | `auth-setting-removed` | Backs up config, then disables auth            | Restores the backed-up config  |
 | `vibe-app-stopped`     | Stops `tenkacloud-vibe`                       | Starts `tenkacloud-vibe`       |
 | `site-defaced`         | Defaces the board (PWNED banner), `site_intact`=false | Removes the deface marker |
@@ -115,7 +115,7 @@ All disruptions are `action` deliveries with a declared `revert`; no effect-only
 
 ## Cost
 
-The stack pre-creates ALB, EC2, WAF, S3, and Aurora Serverless v2. Expect more than the old EC2-only sample; keep event stacks short-lived and delete them promptly. No participant-created resources should exist outside the stack, so teardown is:
+The stack pre-creates ALB, EC2, WAF, S3, and RDS PostgreSQL (db.t3.micro, Single-AZ). The RDS instance is free-tier eligible (db.t3.micro Single-AZ), so the added cost is small; still, keep event stacks short-lived and delete them promptly. No participant-created resources should exist outside the stack, so teardown is:
 
 ```bash
 aws cloudformation delete-stack --stack-name <stack-name>

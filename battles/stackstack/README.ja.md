@@ -38,7 +38,7 @@ EC2 app host (SSM only, SSH 不要)
    |
    |-- S3 backup bucket (seed-sqlite.sql / seed-postgres.sql)
    |-- S3 audit bucket
-   `-- Aurora Serverless v2 database
+   `-- RDS PostgreSQL (db.t3.micro, Single-AZ) database
 ```
 
 アプリ本体は `~/vibe-app` に **ローカルビルド** として置かれ、 まだ起動していない。 まず `deploy_app.sh` でデプロイして稼働させる。 `RegisteredUrl` は意図的に空で、 Stack Output の `AppUrlHint` を Participant Portal の endpoint override に登録して初めて採点が始まる。
@@ -53,7 +53,7 @@ EC2 app host (SSM only, SSH 不要)
 | `auth_enabled` | anonymous POST 可    | app auth flag + non-default token で anonymous 拒否 |
 | `rate_limited` | WAF 未 associate     | 既存 WebACL を既存 ALB に associate                 |
 | `audit_on`     | audit write なし     | 既存 S3 audit bucket に audit event を実書き込み    |
-| `on_aurora`    | SQLite               | 既存 Aurora に posts を移行し app 接続先を切替      |
+| `on_rds`       | SQLite               | 既存 RDS PostgreSQL に posts を移行し app 接続先を切替 |
 
 `GET /meta` はこの posture から `posture-0`〜`posture-4`、 全 gate true なら `production` を返す。 gate が進むほど 1 cycle ごとの加点が上がり、 `production` で one-time bonus が入る。
 
@@ -91,10 +91,10 @@ EC2 app host (SSM only, SSH 不要)
    sudo systemctl restart tenkacloud-vibe
    ```
 
-7. SQLite から Aurora へ移行:
+7. SQLite から RDS PostgreSQL へ移行:
 
    ```bash
-   sudo /opt/tenkacloud/vibe/migrate_to_aurora.sh
+   sudo /opt/tenkacloud/vibe/migrate_to_rds.sh
    ```
 
 8. 各 step 後に `GET /posture` を確認する。 score engine は同じ状態を `/meta` と `/score` から読む。
@@ -105,7 +105,7 @@ EC2 app host (SSM only, SSH 不要)
 
 | id                     | 何が起きる                                      | revert                         |
 | ---------------------- | ----------------------------------------------- | ------------------------------ |
-| `ai-wipes-database`    | SQLite / Aurora の posts を空にする              | S3 backup から復元             |
+| `ai-wipes-database`    | SQLite / RDS の posts を空にする                 | S3 backup から復元             |
 | `auth-setting-removed` | config を backup して auth を false に戻す       | backup config を復元           |
 | `vibe-app-stopped`     | `tenkacloud-vibe` を停止                         | `tenkacloud-vibe` を start     |
 | `site-defaced`         | 掲示板を改ざん (PWNED バナー)、 `site_intact`=false | 改ざんマーカーを除去           |
@@ -115,7 +115,7 @@ EC2 app host (SSM only, SSH 不要)
 
 ## コスト
 
-ALB / EC2 / WAF / S3 / Aurora Serverless v2 を事前作成するため、 EC2-only sample より費用は高い。 event stack は短時間で削除する。 参加者が CFn 外リソースを作らない設計なので、 teardown はこれだけ:
+ALB / EC2 / WAF / S3 / RDS PostgreSQL (db.t3.micro, Single-AZ) を事前作成する。 RDS は free-tier 対象の db.t3.micro Single-AZ なので追加コストは小さいが、 event stack は短時間で削除する。 参加者が CFn 外リソースを作らない設計なので、 teardown はこれだけ:
 
 ```bash
 aws cloudformation delete-stack --stack-name <stack-name>
