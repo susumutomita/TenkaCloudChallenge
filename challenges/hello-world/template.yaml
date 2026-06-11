@@ -121,7 +121,7 @@ Resources:
       Name: !Sub "/${NamePrefix}/hello"
       Type: String
       # Discovered flag: the per-deploy random FlagSeed wrapped as TC{...}. The
-      # learner must actually read this parameter to obtain it — it is NOT
+      # learner must actually read this parameter to obtain it - it is NOT
       # derivable from the public NamePrefix (the previous "Hello from ${NamePrefix}"
       # value could be reconstructed without reading anything, defeating the flag).
       Value: !Sub "TC{${FlagSeed}}"
@@ -133,7 +133,7 @@ Outputs:
     Description: SSM Parameter name created by this stack.
     Value: !Ref HelloParameter
   # Canonical answer, scoring engine only (the player is not granted
-  # cloudformation:DescribeStacks, so this Output is invisible to them — they
+  # cloudformation:DescribeStacks, so this Output is invisible to them - they
   # must read the SSM Parameter to learn the flag).
   ParameterValue:
     Description: The flag the learner submits after reading the SSM Parameter.
