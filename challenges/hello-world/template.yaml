@@ -26,6 +26,18 @@ Parameters:
     NoEcho: true
     MinLength: 16
     Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+  FlagSeed:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    MaxLength: 64
+    AllowedPattern: "^[A-Za-z0-9]+$"
+    Description: >
+      Per-deploy random secret injected by the deploy chain (cfnParameters:
+      FlagSeed = __RANDOM_PASSWORD__). Wrapped as TC{...} and stored as the SSM
+      Parameter value, so the flag can only be learned by reading the parameter
+      (never derived from the public NamePrefix). Same idiom as
+      challenges/net-evo-01-reachability.
 
 Resources:
   ParticipantViewerRole:
@@ -108,17 +120,24 @@ Resources:
     Properties:
       Name: !Sub "/${NamePrefix}/hello"
       Type: String
-      Value: !Sub "Hello from ${NamePrefix}"
-      Description: !Sub "TenkaCloud smoke test parameter created by hello-world (${NamePrefix})."
+      # Discovered flag: the per-deploy random FlagSeed wrapped as TC{...}. The
+      # learner must actually read this parameter to obtain it — it is NOT
+      # derivable from the public NamePrefix (the previous "Hello from ${NamePrefix}"
+      # value could be reconstructed without reading anything, defeating the flag).
+      Value: !Sub "TC{${FlagSeed}}"
+      Description: !Sub "TenkaCloud hello-world flag parameter (${NamePrefix}). The value is the discovered flag."
       Tier: Standard
 
 Outputs:
   ParameterName:
     Description: SSM Parameter name created by this stack.
     Value: !Ref HelloParameter
+  # Canonical answer, scoring engine only (the player is not granted
+  # cloudformation:DescribeStacks, so this Output is invisible to them — they
+  # must read the SSM Parameter to learn the flag).
   ParameterValue:
-    Description: SSM Parameter value (echoed in Outputs for smoke test verification).
-    Value: !Sub "Hello from ${NamePrefix}"
+    Description: The flag the learner submits after reading the SSM Parameter.
+    Value: !GetAtt HelloParameter.Value
   # AWS Console deep link to THIS stack's parameter detail page. The detail
   # page itself reads the value via ssm:GetParameter (scoped to
   # `arn:aws:ssm:*:*:parameter/${NamePrefix}/*` above), but the Console
