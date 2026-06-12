@@ -99,6 +99,15 @@ The app exposes `GET /posture`; those values are measured from actual state, not
 
 8. Check `GET /posture` after each step. The score engine uses the same state through `/meta` and `/score`.
 
+## Scoreboard
+
+Your score and every other team's score appear on the Participant Portal:
+
+- The **Home** page shows your cumulative score and rank, plus a score timeline chart that overlays every team in the event, so you can watch rivals climb in real time.
+- The **Scoreboard** page ranks all teams in the event (auto-refresh every 5 s; the ranking freezes 30 minutes before the event ends).
+
+Rival scores are **event-scoped**: they appear only when the operator runs StackStack as an Event and each team joins and deploys through it. A standalone deploy (a single team deployed outside an Event) still scores normally, but the portal cannot show other teams.
+
 ## Red team
 
 Operators can fire reversible disruptions:
