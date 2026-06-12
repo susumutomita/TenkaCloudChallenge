@@ -15,7 +15,7 @@ Your job over the next 90 to 120 minutes: take one hosted app to production usin
 | Category       | Battle (real-time PvP)                                                |
 | Difficulty     | 4 / 5                                                                 |
 | Estimated time | 90-120 min                                                            |
-| Scoring        | `phased-polling` engine, flat **+100/min per satisfied gate** (`production` = +500/min) + one-time +30000 |
+| Scoring        | `phased-polling` engine, flat **+100/min per satisfied gate** (`production` = +600/min) + one-time +30000 |
 
 ## What gets deployed
 
@@ -54,8 +54,9 @@ The app exposes `GET /posture`; those values are measured from actual state, not
 | `rate_limited` | WAF not associated   | Associate the existing WebACL with the existing ALB               |
 | `audit_on`     | No audit writes      | Enable audit writes to the existing S3 audit bucket               |
 | `on_rds`       | SQLite               | Migrate posts to the existing RDS PostgreSQL database and switch the app |
+| `ssh_closed`   | tcp/22 open to 0.0.0.0/0 | Discover Kato-san's leftover public SSH rule and revoke it (SSM-only access, nothing breaks) |
 
-`GET /meta` maps those checks to `posture-0` through `posture-4`, or `production` when all gates are true. Scoring is **flat: every satisfied gate is worth +100 points/min**, so closing any one of the five gates is equally rewarding.
+`GET /meta` maps those checks to `posture-0` through `posture-5`, or `production` when all gates are true. Scoring is **flat: every satisfied gate is worth +100 points/min**, so closing any one of the six gates is equally rewarding.
 
 | Platform     | Gates satisfied | Points / min |
 | ------------ | --------------- | ------------ |
@@ -64,9 +65,10 @@ The app exposes `GET /posture`; those values are measured from actual state, not
 | `posture-2`  | 2               | 200          |
 | `posture-3`  | 3               | 300          |
 | `posture-4`  | 4               | 400          |
-| `production` | 5 (all)         | 500          |
+| `posture-5`  | 5               | 500          |
+| `production` | 6 (all)         | 600          |
 
-Reaching `production` (all five gates) also earns a one-time **+30000** bonus. A probe failure costs **-100** per cycle and a slow response (> 1500 ms) costs **-25** — both unchanged by the flat model. After the 30-minute `production-ramp` phase, teams still at `posture-0/1/2` drop to the degraded rate (half: 0 / 50 / 100 per min). If the red team defaces the site or plants a backdoor (`site_intact` / `no_backdoor` false), the app clamps the platform to `posture-2`, capping the team at **200 points/min** until they recover.
+Reaching `production` (all six gates) also earns a one-time **+30000** bonus. A probe failure costs **-100** per cycle and a slow response (> 1500 ms) costs **-25** — both unchanged by the flat model. After the 30-minute `production-ramp` phase, teams still at `posture-0/1/2` drop to the degraded rate (half: 0 / 50 / 100 per min). If the red team defaces the site or plants a backdoor (`site_intact` / `no_backdoor` false), the app clamps the platform to `posture-2`, capping the team at **200 points/min** until they recover.
 
 ## How to play
 
@@ -108,7 +110,18 @@ Reaching `production` (all five gates) also earns a one-time **+30000** bonus. A
    sudo /opt/tenkacloud/vibe/migrate_to_rds.sh
    ```
 
-8. Check `GET /posture` after each step. The score engine uses the same state through `/meta` and `/score`.
+8. Inspect the app host security group (`<NamePrefix>-app-sg`, visible in the EC2 Console with your participant role), find the leftover public SSH rule, and revoke it. Run this with **your participant credentials** (CloudShell or `aws login`), not from the app host — the instance role deliberately cannot modify SGs. All shell access is SSM Session Manager, so closing tcp/22 breaks nothing:
+
+   ```bash
+   APP_SG_ID=$(aws ec2 describe-security-groups \
+     --filters "Name=tag:Name,Values=<NamePrefix>-app-sg" \
+     --query 'SecurityGroups[0].GroupId' --output text)
+   aws ec2 revoke-security-group-ingress \
+     --group-id "$APP_SG_ID" \
+     --protocol tcp --port 22 --cidr 0.0.0.0/0
+   ```
+
+9. Check `GET /posture` after each step. The score engine uses the same state through `/meta` and `/score`.
 
 ## Red team
 

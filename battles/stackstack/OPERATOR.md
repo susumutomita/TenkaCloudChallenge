@@ -112,10 +112,11 @@ Typical interpretations:
 - `rate_limited=false`: WAF is not associated to the ALB.
 - `audit_on=false`: audit flag is off or the app cannot write to the audit bucket.
 - `on_rds=false`: app still uses SQLite or cannot query RDS PostgreSQL.
+- `ssh_closed=false`: the planted public tcp/22 rule is still on the app SG (or the app cannot DescribeSecurityGroups; check the instance role if every team is stuck false).
 
 ## Scoring (flat per-gate)
 
-Each satisfied production gate is worth **+100 points/min**. The five gates are equally weighted, so a team earns the same for closing any one of them — there is no arbitrary per-gate weighting.
+Each satisfied production gate is worth **+100 points/min**. The six gates are equally weighted, so a team earns the same for closing any one of them — there is no arbitrary per-gate weighting.
 
 | Platform     | Gates | Points / min |
 | ------------ | ----- | ------------ |
@@ -124,9 +125,10 @@ Each satisfied production gate is worth **+100 points/min**. The five gates are 
 | `posture-2`  | 2     | 200          |
 | `posture-3`  | 3     | 300          |
 | `posture-4`  | 4     | 400          |
-| `production` | 5     | 500          |
+| `posture-5`  | 5     | 500          |
+| `production` | 6     | 600          |
 
-- **One-time bonus:** reaching `production` (all five gates) earns **+30000** once — kept as the "finish line" incentive.
+- **One-time bonus:** reaching `production` (all six gates) earns **+30000** once — kept as the "finish line" incentive.
 - **Penalties (unchanged by the flatten):** probe failure **-100**/cycle, slow response (> 1500 ms) **-25**.
 - **`production-ramp` (after 30 min):** teams still at `posture-0/1/2` drop to the degraded rate (half: 0 / 50 / 100 per min) — pressure to deepen posture before the deadline.
 - **Incident clamp:** when `site_intact` or `no_backdoor` is false (site defaced / backdoor planted), the app reports `platform ≤ posture-2`, capping the team at **200 points/min** until they remediate. This is measured by the app from real state, not operator-toggled.

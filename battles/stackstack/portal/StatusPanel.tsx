@@ -2,23 +2,24 @@
  * StackStack portal slot — Vibe to Production status display.
  *
  * The live posture comes from the app's /posture endpoint; this panel keeps the
- * participant oriented around URL registration, the five production gates, and
+ * participant oriented around URL registration, the six production gates, and
  * the two integrity checks that a security incident can knock down.
  */
 
 import type { PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 
-// The five gates the app counts toward production. Each becoming true raises the
-// per-minute score; all five true earns the production platform.
+// The six gates the app counts toward production. Each becoming true raises the
+// per-minute score; all six true earns the production platform.
 const GATES = [
   { key: "db_present", label: "DB", hint: "S3 backup restore completed" },
   { key: "auth_enabled", label: "Auth", hint: "anonymous submit is rejected" },
   { key: "rate_limited", label: "Rate", hint: "WAF WebACL is associated to the ALB" },
   { key: "audit_on", label: "Audit", hint: "audit events write to S3" },
   { key: "on_rds", label: "RDS", hint: "app queries the existing RDS DB" },
+  { key: "ssh_closed", label: "SSH", hint: "no public tcp/22 rule remains on the app SG" },
 ];
 
-// Integrity posture keys. These are NOT counted toward the five gates, but while
+// Integrity posture keys. These are NOT counted toward the six gates, but while
 // either is false the app cannot be production (the red-team defacement and
 // supply-chain backdoor disruptions trip these). Restore the site / remove the
 // backdoor to climb back to production.

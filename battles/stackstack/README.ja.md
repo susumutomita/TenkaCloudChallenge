@@ -15,7 +15,7 @@
 | カテゴリ     | Battle (リアルタイム対戦)                                           |
 | 難易度       | 4 / 5                                                               |
 | 想定時間     | 90〜120 分                                                          |
-| 採点方式     | `phased-polling` エンジン、 満たした gate ごとに **+100点/分** のフラット加点 (`production` = +500点/分) + 一度きり +30000 |
+| 採点方式     | `phased-polling` エンジン、 満たした gate ごとに **+100点/分** のフラット加点 (`production` = +600点/分) + 一度きり +30000 |
 
 ## デプロイされるもの
 
@@ -54,8 +54,9 @@ EC2 app host (SSM only, SSH 不要)
 | `rate_limited` | WAF 未 associate     | 既存 WebACL を既存 ALB に associate                 |
 | `audit_on`     | audit write なし     | 既存 S3 audit bucket に audit event を実書き込み    |
 | `on_rds`       | SQLite               | 既存 RDS PostgreSQL に posts を移行し app 接続先を切替 |
+| `ssh_closed`   | tcp/22 が 0.0.0.0/0 に公開 | 加藤さんが残した public SSH ルールを発見して revoke (接続は SSM-only なので壊れない) |
 
-`GET /meta` はこの posture から `posture-0`〜`posture-4`、 全 gate true なら `production` を返す。 採点は **フラット: 満たした gate 1 つにつき +100点/分**。 5 つの gate はどれも等しく価値があり、 どれを閉じても同じだけ加点される。
+`GET /meta` はこの posture から `posture-0`〜`posture-5`、 全 gate true なら `production` を返す。 採点は **フラット: 満たした gate 1 つにつき +100点/分**。 6 つの gate はどれも等しく価値があり、 どれを閉じても同じだけ加点される。
 
 | Platform     | 満たした gate 数 | 点/分 |
 | ------------ | ---------------- | ----- |
@@ -64,9 +65,10 @@ EC2 app host (SSM only, SSH 不要)
 | `posture-2`  | 2                | 200   |
 | `posture-3`  | 3                | 300   |
 | `posture-4`  | 4                | 400   |
-| `production` | 5 (全部)         | 500   |
+| `posture-5`  | 5                | 500   |
+| `production` | 6 (全部)         | 600   |
 
-`production` (全 5 gate) 到達で一度きり **+30000** bonus。 probe 失敗は 1 cycle ごとに **-100**、 応答が遅い (> 1500ms) と **-25**(フラット化後も据え置き)。 30 分の `production-ramp` phase 以降、 `posture-0/1/2` に留まるチームは degraded レート (半分: 0 / 50 / 100 点/分) に落ちる。 レッドチームに site を改ざんされる / backdoor を仕込まれる (`site_intact` / `no_backdoor` が false) と、 app は platform を `posture-2` に clamp し、 復旧するまで **200点/分** が上限になる。
+`production` (全 6 gate) 到達で一度きり **+30000** bonus。 probe 失敗は 1 cycle ごとに **-100**、 応答が遅い (> 1500ms) と **-25**(フラット化後も据え置き)。 30 分の `production-ramp` phase 以降、 `posture-0/1/2` に留まるチームは degraded レート (半分: 0 / 50 / 100 点/分) に落ちる。 レッドチームに site を改ざんされる / backdoor を仕込まれる (`site_intact` / `no_backdoor` が false) と、 app は platform を `posture-2` に clamp し、 復旧するまで **200点/分** が上限になる。
 
 ## 競技フロー
 
@@ -108,7 +110,18 @@ EC2 app host (SSM only, SSH 不要)
    sudo /opt/tenkacloud/vibe/migrate_to_rds.sh
    ```
 
-8. 各 step 後に `GET /posture` を確認する。 score engine は同じ状態を `/meta` と `/score` から読む。
+8. app host の Security Group (`<NamePrefix>-app-sg`、 participant role で EC2 Console から見える) を点検し、 加藤さんが残した public SSH ルールを発見して revoke する。 実行は **participant credential** (CloudShell か `aws login`) で行う — instance role は意図的に SG を変更できない。 接続は SSM Session Manager 経由なので tcp/22 を閉じても何も壊れない:
+
+   ```bash
+   APP_SG_ID=$(aws ec2 describe-security-groups \
+     --filters "Name=tag:Name,Values=<NamePrefix>-app-sg" \
+     --query 'SecurityGroups[0].GroupId' --output text)
+   aws ec2 revoke-security-group-ingress \
+     --group-id "$APP_SG_ID" \
+     --protocol tcp --port 22 --cidr 0.0.0.0/0
+   ```
+
+9. 各 step 後に `GET /posture` を確認する。 score engine は同じ状態を `/meta` と `/score` から読む。
 
 ## レッドチーム
 
