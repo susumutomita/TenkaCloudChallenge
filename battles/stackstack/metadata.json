@@ -51,12 +51,12 @@
       "scorePath": "/score"
     },
     "platformRules": {
-      "posture-0": { "points": 100, "degradedPoints": 25 },
-      "posture-1": { "points": 250, "degradedPoints": 75 },
-      "posture-2": { "points": 400, "degradedPoints": 150 },
-      "posture-3": { "points": 600, "degradedPoints": 250 },
-      "posture-4": { "points": 800, "degradedPoints": 400 },
-      "production": { "points": 1000 }
+      "posture-0": { "points": 0, "degradedPoints": 0 },
+      "posture-1": { "points": 100, "degradedPoints": 50 },
+      "posture-2": { "points": 200, "degradedPoints": 100 },
+      "posture-3": { "points": 300, "degradedPoints": 150 },
+      "posture-4": { "points": 400, "degradedPoints": 200 },
+      "production": { "points": 500 }
     },
     "failurePenalty": -100,
     "responsePenalties": [

@@ -15,7 +15,7 @@
 | カテゴリ     | Battle (リアルタイム対戦)                                           |
 | 難易度       | 4 / 5                                                               |
 | 想定時間     | 90〜120 分                                                          |
-| 採点方式     | `phased-polling`: `posture-0` から `production` へ段階加点 + bonus |
+| 採点方式     | `phased-polling` エンジン、 満たした gate ごとに **+100点/分** のフラット加点 (`production` = +500点/分) + 一度きり +30000 |
 
 ## デプロイされるもの
 
@@ -55,7 +55,18 @@ EC2 app host (SSM only, SSH 不要)
 | `audit_on`     | audit write なし     | 既存 S3 audit bucket に audit event を実書き込み    |
 | `on_rds`       | SQLite               | 既存 RDS PostgreSQL に posts を移行し app 接続先を切替 |
 
-`GET /meta` はこの posture から `posture-0`〜`posture-4`、 全 gate true なら `production` を返す。 gate が進むほど 1 cycle ごとの加点が上がり、 `production` で one-time bonus が入る。
+`GET /meta` はこの posture から `posture-0`〜`posture-4`、 全 gate true なら `production` を返す。 採点は **フラット: 満たした gate 1 つにつき +100点/分**。 5 つの gate はどれも等しく価値があり、 どれを閉じても同じだけ加点される。
+
+| Platform     | 満たした gate 数 | 点/分 |
+| ------------ | ---------------- | ----- |
+| `posture-0`  | 0                | 0     |
+| `posture-1`  | 1                | 100   |
+| `posture-2`  | 2                | 200   |
+| `posture-3`  | 3                | 300   |
+| `posture-4`  | 4                | 400   |
+| `production` | 5 (全部)         | 500   |
+
+`production` (全 5 gate) 到達で一度きり **+30000** bonus。 probe 失敗は 1 cycle ごとに **-100**、 応答が遅い (> 1500ms) と **-25**(フラット化後も据え置き)。 30 分の `production-ramp` phase 以降、 `posture-0/1/2` に留まるチームは degraded レート (半分: 0 / 50 / 100 点/分) に落ちる。 レッドチームに site を改ざんされる / backdoor を仕込まれる (`site_intact` / `no_backdoor` が false) と、 app は platform を `posture-2` に clamp し、 復旧するまで **200点/分** が上限になる。
 
 ## 競技フロー
 
