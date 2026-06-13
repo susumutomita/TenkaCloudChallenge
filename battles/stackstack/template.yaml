@@ -733,354 +733,76 @@ Resources:
           aws s3 cp /tmp/seed-postgres.sql "s3://${BackupBucket}/seed-postgres.sql" --region "${AWS::Region}"
           sqlite3 /var/lib/tenkacloud-vibe/app.db 'CREATE TABLE IF NOT EXISTS posts (id INTEGER PRIMARY KEY AUTOINCREMENT, author TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL); DELETE FROM posts;'
 
-          cat > /home/ec2-user/vibe-app/app.py <<'PY'
-          import json
-          import os
-          import sqlite3
-          import subprocess
-          import tempfile
-          import time
-          import uuid
-          from datetime import datetime, timezone
-          from http.server import BaseHTTPRequestHandler, HTTPServer
-          from urllib.parse import parse_qs, urlparse
-
-          CONFIG_FILE = os.environ.get("CONFIG_FILE", "/etc/tenkacloud-vibe/config.json")
-          SQLITE_DB = os.environ.get("SQLITE_DB", "/var/lib/tenkacloud-vibe/app.db")
-          AWS_REGION = os.environ.get("AWS_REGION", "")
-          AUDIT_BUCKET = os.environ.get("AUDIT_BUCKET", "")
-          ALB_ARN = os.environ.get("ALB_ARN", "")
-          WAF_WEB_ACL_ARN = os.environ.get("WAF_WEB_ACL_ARN", "")
-          APP_SG_ID = os.environ.get("APP_SG_ID", "")
-          DB_ENDPOINT = os.environ.get("DB_ENDPOINT", "")
-          DB_NAME = os.environ.get("DB_NAME", "vibeapp")
-          DB_USER = os.environ.get("DB_USER", "vibeadmin")
-          DB_PASSWORD = os.environ.get("DB_PASSWORD", "")
-
-          def now_iso():
-              return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-
-          def load_config():
-              with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                  return json.load(f)
-
-          def save_config(config):
-              tmp = CONFIG_FILE + ".tmp"
-              with open(tmp, "w", encoding="utf-8") as f:
-                  json.dump(config, f, indent=2, sort_keys=True)
-                  f.write("\n")
-              os.replace(tmp, CONFIG_FILE)
-
-          def psql_bin():
-              for candidate in ("/usr/bin/psql", "psql"):
-                  if subprocess.run(["bash", "-lc", f"command -v {candidate}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
-                      return candidate
-              return None
-
-          def psql_exec(sql, timeout=6):
-              binary = psql_bin()
-              if not binary:
-                  return None
-              env = os.environ.copy()
-              env["PGPASSWORD"] = DB_PASSWORD
-              result = subprocess.run(
-                  [binary, "-h", DB_ENDPOINT, "-U", DB_USER, "-d", DB_NAME, "-At", "-F", "\t", "-c", sql],
-                  env=env,
-                  stdout=subprocess.PIPE,
-                  stderr=subprocess.PIPE,
-                  text=True,
-                  timeout=timeout,
-              )
-              if result.returncode != 0:
-                  return None
-              return result.stdout
-
-          def sql_quote(value):
-              return "'" + str(value).replace("\\", "\\\\").replace("'", "''") + "'"
-
-          def ensure_sqlite():
-              os.makedirs(os.path.dirname(SQLITE_DB), exist_ok=True)
-              with sqlite3.connect(SQLITE_DB) as conn:
-                  conn.execute(
-                      "CREATE TABLE IF NOT EXISTS posts (id INTEGER PRIMARY KEY AUTOINCREMENT, author TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL)"
-                  )
-
-          def sqlite_posts():
-              ensure_sqlite()
-              with sqlite3.connect(SQLITE_DB) as conn:
-                  rows = conn.execute("SELECT id, author, body, created_at FROM posts ORDER BY id DESC LIMIT 20").fetchall()
-              return [{"id": r[0], "author": r[1], "body": r[2], "created_at": r[3]} for r in rows]
-
-          def rds_posts():
-              out = psql_exec("SELECT id, author, body, created_at FROM posts ORDER BY id DESC LIMIT 20")
-              if out is None:
-                  return []
-              posts = []
-              for line in out.splitlines():
-                  parts = line.split("\t")
-                  if len(parts) == 4:
-                      posts.append({"id": int(parts[0]), "author": parts[1], "body": parts[2], "created_at": parts[3]})
-              return posts
-
-          def active_posts(config):
-              if config.get("database") == "rds":
-                  return rds_posts()
-              return sqlite_posts()
-
-          def insert_post(config, author, body):
-              created_at = now_iso()
-              if config.get("database") == "rds":
-                  sql = (
-                      "INSERT INTO posts(author, body, created_at) VALUES "
-                      f"({sql_quote(author)}, {sql_quote(body)}, {sql_quote(created_at)})"
-                  )
-                  if psql_exec(sql) is None:
-                      raise RuntimeError("rds insert failed")
-              else:
-                  ensure_sqlite()
-                  with sqlite3.connect(SQLITE_DB) as conn:
-                      conn.execute(
-                          "INSERT INTO posts(author, body, created_at) VALUES (?, ?, ?)",
-                          (author, body, created_at),
-                      )
-
-          def auth_enabled(config):
-              token = str(config.get("auth_token", ""))
-              return bool(config.get("auth_required")) and token not in ("", "change-me")
-
-          def authorized(config, headers):
-              if not auth_enabled(config):
-                  return True
-              return headers.get("X-Platform-Token") == config.get("auth_token")
-
-          def waf_associated():
-              if not (ALB_ARN and WAF_WEB_ACL_ARN):
-                  return False
-              result = subprocess.run(
-                  [
-                      "aws",
-                      "wafv2",
-                      "get-web-acl-for-resource",
-                      "--resource-arn",
-                      ALB_ARN,
-                      "--region",
-                      AWS_REGION,
-                      "--query",
-                      "WebACL.ARN",
-                      "--output",
-                      "text",
-                  ],
-                  stdout=subprocess.PIPE,
-                  stderr=subprocess.PIPE,
-                  text=True,
-                  timeout=5,
-              )
-              return result.returncode == 0 and result.stdout.strip() == WAF_WEB_ACL_ARN
-
-          def write_audit_event(kind, payload):
-              if not AUDIT_BUCKET:
-                  return False
-              event = {
-                  "kind": kind,
-                  "payload": payload,
-                  "created_at": now_iso(),
-                  "id": str(uuid.uuid4()),
-              }
-              key = f"audit/{event['id']}.json"
-              with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as f:
-                  json.dump(event, f)
-                  f.write("\n")
-                  path = f.name
-              try:
-                  result = subprocess.run(
-                      ["aws", "s3", "cp", path, f"s3://{AUDIT_BUCKET}/{key}", "--region", AWS_REGION],
-                      stdout=subprocess.PIPE,
-                      stderr=subprocess.PIPE,
-                      text=True,
-                      timeout=5,
-                  )
-                  return result.returncode == 0
-              finally:
-                  try:
-                      os.unlink(path)
-                  except FileNotFoundError:
-                      pass
-
-          def audit_on(config):
-              return bool(config.get("audit_s3")) and write_audit_event("posture-probe", {"source": "posture"})
-
-          def ssh_closed():
-              # ssh_closed gate: true only when no SG rule leaves tcp/22 open to
-              # the world. Measured from the real SG state (fail-closed: any
-              # lookup error keeps the gate false rather than gifting points).
-              if not APP_SG_ID:
-                  return False
-              result = subprocess.run(
-                  [
-                      "aws",
-                      "ec2",
-                      "describe-security-groups",
-                      "--group-ids",
-                      APP_SG_ID,
-                      "--region",
-                      AWS_REGION,
-                      "--query",
-                      "SecurityGroups[0].IpPermissions",
-                      "--output",
-                      "json",
-                  ],
-                  stdout=subprocess.PIPE,
-                  stderr=subprocess.PIPE,
-                  text=True,
-                  timeout=5,
-              )
-              if result.returncode != 0:
-                  return False
-              try:
-                  permissions = json.loads(result.stdout or "[]")
-              except ValueError:
-                  return False
-              for perm in permissions or []:
-                  from_port = perm.get("FromPort")
-                  to_port = perm.get("ToPort")
-                  covers_ssh = perm.get("IpProtocol") == "-1" or (
-                      from_port is not None and to_port is not None and from_port <= 22 <= to_port
-                  )
-                  if not covers_ssh:
-                      continue
-                  for ip_range in perm.get("IpRanges", []):
-                      if ip_range.get("CidrIp") == "0.0.0.0/0":
-                          return False
-                  for ip_range in perm.get("Ipv6Ranges", []):
-                      if ip_range.get("CidrIpv6") == "::/0":
-                          return False
-              return True
-
-          def rds_ready():
-              out = psql_exec("SELECT COUNT(*) FROM posts")
-              if out is None:
-                  return False
-              try:
-                  return int(out.strip() or "0") > 0
-              except ValueError:
-                  return False
-
-          def sqlite_ready():
-              try:
-                  return len(sqlite_posts()) > 0
-              except Exception:
-                  return False
-
-          PRODUCTION_GATES = ("db_present", "auth_enabled", "rate_limited", "audit_on", "on_rds", "ssh_closed")
-          DEFACE_MARKER = "/var/lib/tenkacloud-vibe/DEFACED"
-          BACKDOOR_MARKER = "/var/lib/tenkacloud-vibe/BACKDOOR"
-
-          def site_defaced():
-              return os.path.exists(DEFACE_MARKER)
-
-          def backdoor_present():
-              return os.path.exists(BACKDOOR_MARKER)
-
-          def collect_posture():
-              config = load_config()
-              on_rds = config.get("database") == "rds" and rds_ready()
-              db_present = rds_ready() if config.get("database") == "rds" else sqlite_ready()
-              posture = {
-                  "db_present": db_present,
-                  "auth_enabled": auth_enabled(config),
-                  "rate_limited": waf_associated(),
-                  "audit_on": audit_on(config),
-                  "on_rds": on_rds,
-                  "ssh_closed": ssh_closed(),
-                  "site_intact": not site_defaced(),
-                  "no_backdoor": not backdoor_present(),
-              }
-              return posture
-
-          def platform_for(posture):
-              count = sum(1 for key in PRODUCTION_GATES if posture.get(key))
-              incident = (not posture.get("site_intact", True)) or (not posture.get("no_backdoor", True))
-              if incident:
-                  # active security incident (defacement / backdoor): cannot be production
-                  return f"posture-{min(count, 2)}"
-              if count >= 6:
-                  return "production"
-              return f"posture-{count}"
-
-          class Handler(BaseHTTPRequestHandler):
-              def do_GET(self):
-                  parsed = urlparse(self.path)
-                  if parsed.path == "/healthz":
-                      self.json_response(200, {"ok": True})
-                      return
-                  if parsed.path == "/":
-                      config = load_config()
-                      if site_defaced():
-                          self.json_response(200, {"service": "vibe-board", "defaced": True, "message": "PWNED - board replaced by red team", "posts": []})
-                          return
-                      self.json_response(200, {"service": "vibe-board", "posts": active_posts(config)})
-                      return
-                  if parsed.path == "/posture":
-                      posture = collect_posture()
-                      self.json_response(200, {"posture": posture, "platform": platform_for(posture)})
-                      return
-                  if parsed.path == "/meta":
-                      posture = collect_posture()
-                      self.json_response(200, {"platform": platform_for(posture), "posture": posture})
-                      return
-                  if parsed.path == "/score":
-                      posture = collect_posture()
-                      if "incident=true" in parsed.query and platform_for(posture) != "production":
-                          time.sleep(2)
-                      self.json_response(200, {"ok": True, "platform": platform_for(posture), "posture": posture})
-                      return
-                  self.json_response(404, {"error": "not found"})
-
-              def do_POST(self):
-                  parsed = urlparse(self.path)
-                  if parsed.path != "/submit":
-                      self.json_response(404, {"error": "not found"})
-                      return
-                  config = load_config()
-                  if not authorized(config, self.headers):
-                      self.json_response(401, {"error": "auth required"})
-                      return
-                  length = int(self.headers.get("Content-Length", "0") or "0")
-                  raw = self.rfile.read(length).decode("utf-8")
-                  ctype = self.headers.get("Content-Type", "")
-                  if "application/json" in ctype:
-                      data = json.loads(raw or "{}")
-                  else:
-                      form = parse_qs(raw)
-                      data = {k: v[0] for k, v in form.items()}
-                  author = str(data.get("author", "anonymous"))[:80]
-                  body = str(data.get("body", ""))[:1000]
-                  if not body:
-                      self.json_response(400, {"error": "body required"})
-                      return
-                  try:
-                      insert_post(config, author, body)
-                      if config.get("audit_s3"):
-                          write_audit_event("post-submit", {"author": author, "body_length": len(body)})
-                      self.json_response(201, {"ok": True})
-                  except Exception as exc:
-                      self.json_response(500, {"error": str(exc)})
-
-              def json_response(self, status, body):
-                  payload = json.dumps(body).encode("utf-8")
-                  self.send_response(status)
-                  self.send_header("Content-Type", "application/json")
-                  self.send_header("Content-Length", str(len(payload)))
-                  self.end_headers()
-                  self.wfile.write(payload)
-
-              def log_message(self, fmt, *args):
-                  return
-
-          if __name__ == "__main__":
-              ensure_sqlite()
-              HTTPServer(("127.0.0.1", 8080), Handler).serve_forever()
-          PY
+          # vibe app (app.py) is gzip+base64 embedded to keep EC2 UserData under the
+          # 16384-byte limit (Service: Ec2 InvalidRequest on oversized user data).
+          # To edit: pipe the blob below through (base64 decode | gunzip) to recover
+          # app.py, modify, then re-encode with: gzip -9 < app.py | base64
+          base64 -d <<'APPB64' | gunzip > /home/ec2-user/vibe-app/app.py
+          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
+          TCM8fxEuAAA=
+          APPB64
 
           cat > /opt/tenkacloud/vibe/tools/export_sqlite_to_postgres.py <<'PY'
           import os
