@@ -165,6 +165,17 @@ Resources:
           ToPort: 80
           SourceSecurityGroupId: !Ref AlbSg
           Description: ALB to nginx reverse proxy
+        # Intentional misconfiguration (ssh_closed gate): Kato-san's leftover
+        # debug access. Participants must discover this public SSH exposure and
+        # revoke it (the participant role grants RevokeSecurityGroupIngress on
+        # this tag-scoped SG). The app self-measures the gate via
+        # DescribeSecurityGroups; access is SSM-only, so nothing breaks when
+        # the rule is removed.
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+          Description: temporary debug access (kato, before leaving)
       SecurityGroupEgress:
         - IpProtocol: -1
           CidrIp: 0.0.0.0/0
@@ -488,6 +499,17 @@ Resources:
                   - ec2:DescribeAvailabilityZones
                   - ec2:DescribeAccountAttributes
                 Resource: "*"
+              - Sid: RevokeOwnSgIngress
+                # ssh_closed gate: lets the participant remove the planted
+                # public tcp/22 rule. Write action stays tag-scoped to this
+                # team's SGs (ADR-021) -- no authorize/create, revoke only.
+                Effect: Allow
+                Action:
+                  - ec2:RevokeSecurityGroupIngress
+                Resource: !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/TenkaCloud:NamePrefix: !Ref NamePrefix
               - Sid: ConsoleAlbRdsRead
                 Effect: Allow
                 Action:
@@ -573,6 +595,14 @@ Resources:
                 Resource:
                   - !GetAtt AuditBucket.Arn
                   - !Sub "${AuditBucket.Arn}/*"
+              - Sid: PostureSgRead
+                # ssh_closed gate self-measurement: the app inspects its own SG
+                # for a remaining public tcp/22 rule. DescribeSecurityGroups
+                # does not support resource-level ARNs (read-only).
+                Effect: Allow
+                Action:
+                  - ec2:DescribeSecurityGroups
+                Resource: "*"
               - Sid: WafAssociationRead
                 Effect: Allow
                 Action:
@@ -653,6 +683,7 @@ Resources:
           AUDIT_BUCKET=${AuditBucket}
           ALB_ARN=${AppLoadBalancer}
           WAF_WEB_ACL_ARN=${RateLimitWebAcl.Arn}
+          APP_SG_ID=${AppSg.GroupId}
           DB_ENDPOINT=${Database.Endpoint.Address}
           DB_NAME=vibeapp
           DB_USER=vibeadmin
@@ -720,6 +751,7 @@ Resources:
           AUDIT_BUCKET = os.environ.get("AUDIT_BUCKET", "")
           ALB_ARN = os.environ.get("ALB_ARN", "")
           WAF_WEB_ACL_ARN = os.environ.get("WAF_WEB_ACL_ARN", "")
+          APP_SG_ID = os.environ.get("APP_SG_ID", "")
           DB_ENDPOINT = os.environ.get("DB_ENDPOINT", "")
           DB_NAME = os.environ.get("DB_NAME", "vibeapp")
           DB_USER = os.environ.get("DB_USER", "vibeadmin")
@@ -877,6 +909,53 @@ Resources:
           def audit_on(config):
               return bool(config.get("audit_s3")) and write_audit_event("posture-probe", {"source": "posture"})
 
+          def ssh_closed():
+              # ssh_closed gate: true only when no SG rule leaves tcp/22 open to
+              # the world. Measured from the real SG state (fail-closed: any
+              # lookup error keeps the gate false rather than gifting points).
+              if not APP_SG_ID:
+                  return False
+              result = subprocess.run(
+                  [
+                      "aws",
+                      "ec2",
+                      "describe-security-groups",
+                      "--group-ids",
+                      APP_SG_ID,
+                      "--region",
+                      AWS_REGION,
+                      "--query",
+                      "SecurityGroups[0].IpPermissions",
+                      "--output",
+                      "json",
+                  ],
+                  stdout=subprocess.PIPE,
+                  stderr=subprocess.PIPE,
+                  text=True,
+                  timeout=5,
+              )
+              if result.returncode != 0:
+                  return False
+              try:
+                  permissions = json.loads(result.stdout or "[]")
+              except ValueError:
+                  return False
+              for perm in permissions or []:
+                  from_port = perm.get("FromPort")
+                  to_port = perm.get("ToPort")
+                  covers_ssh = perm.get("IpProtocol") == "-1" or (
+                      from_port is not None and to_port is not None and from_port <= 22 <= to_port
+                  )
+                  if not covers_ssh:
+                      continue
+                  for ip_range in perm.get("IpRanges", []):
+                      if ip_range.get("CidrIp") == "0.0.0.0/0":
+                          return False
+                  for ip_range in perm.get("Ipv6Ranges", []):
+                      if ip_range.get("CidrIpv6") == "::/0":
+                          return False
+              return True
+
           def rds_ready():
               out = psql_exec("SELECT COUNT(*) FROM posts")
               if out is None:
@@ -892,7 +971,7 @@ Resources:
               except Exception:
                   return False
 
-          PRODUCTION_GATES = ("db_present", "auth_enabled", "rate_limited", "audit_on", "on_rds")
+          PRODUCTION_GATES = ("db_present", "auth_enabled", "rate_limited", "audit_on", "on_rds", "ssh_closed")
           DEFACE_MARKER = "/var/lib/tenkacloud-vibe/DEFACED"
           BACKDOOR_MARKER = "/var/lib/tenkacloud-vibe/BACKDOOR"
 
@@ -912,6 +991,7 @@ Resources:
                   "rate_limited": waf_associated(),
                   "audit_on": audit_on(config),
                   "on_rds": on_rds,
+                  "ssh_closed": ssh_closed(),
                   "site_intact": not site_defaced(),
                   "no_backdoor": not backdoor_present(),
               }
@@ -923,7 +1003,7 @@ Resources:
               if incident:
                   # active security incident (defacement / backdoor): cannot be production
                   return f"posture-{min(count, 2)}"
-              if count >= 5:
+              if count >= 6:
                   return "production"
               return f"posture-{count}"
 
