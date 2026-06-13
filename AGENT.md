@@ -143,7 +143,7 @@ Type one of these slash commands and follow the prompts:
 - **`/new-problem battle`** — scaffold a real-time PvP / uptime-scoring problem (= Battle); the skill asks which scoring kind next.
 - **`/new-problem`** — no argument; the skill asks Challenge or Battle first.
 
-The skill (`.claude/skills/new-problem/SKILL.md`) walks the 6 steps below, dropping in the IAM baseline, the required tags, and the URL-registration gate boilerplate so you don't reconstruct them from scratch.
+The skill (`.claude/skills/new-problem/SKILL.md`) walks the 6 steps below, dropping in the IAM baseline, the required tags, and the URL-registration gate boilerplate so you don't reconstruct them from scratch. Not using Claude Code? The [skill usage guide](./.claude/skills/new-problem/README.md) explains how to invoke it and the manual / Codex-CLI paths.
 
 ### The 6 steps (manual / non-Claude-Code path)
 

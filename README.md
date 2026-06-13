@@ -134,7 +134,7 @@ These ADRs live in the [platform repo](https://github.com/susumutomita/TenkaClou
 
 PRs are welcome — especially new problems, schema fixes, and English-doc polish.
 
-**Read [`AGENT.md`](./AGENT.md) before opening your first PR** — it documents the invariants the validator enforces and the footguns that have bitten this repo before. If you use Claude Code, type **`/new-problem challenge`** or **`/new-problem battle`** to scaffold a new problem interactively (the skill lives at `.claude/skills/new-problem/`).
+**Read [`AGENT.md`](./AGENT.md) before opening your first PR** — it documents the invariants the validator enforces and the footguns that have bitten this repo before. If you use Claude Code, type **`/new-problem challenge`** or **`/new-problem battle`** to scaffold a new problem interactively (the skill lives at `.claude/skills/new-problem/`). See the [skill usage guide](./.claude/skills/new-problem/README.md) for invocation details and the non–Claude-Code path.
 
 - Run `bun run validate` locally before opening a PR.
 - Keep `metadata.json` Japanese at the top level and English under `i18n.en` (the platform's locale fallback chain is `en → ja → top-level`). README files are English-primary with `README.ja.md` mirrors.
