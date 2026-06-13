@@ -683,7 +683,8 @@ Resources:
   DegradedDisruptionFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Sub "${NamePrefix}-degraded-disruption"
+      # No explicit FunctionName: it overflows the 64-char limit with long
+      # NamePrefix (#1812). Refs use !GetAtt ...Arn, so CFn auto-naming is safe.
       Runtime: python3.12
       Handler: index.handler
       Role: !GetAtt DisruptionFunctionRole.Arn
@@ -740,7 +741,8 @@ Resources:
   DegradedDisruptionSchedule:
     Type: AWS::Scheduler::Schedule
     Properties:
-      Name: !Sub "${NamePrefix}-degraded-disruption"
+      # No explicit Name: Scheduler::Schedule Name has a 64-char limit and
+      # overflows with long NamePrefix (#1812). Nothing references it by name.
       Description: >
         TenkaCloud microservice-migration-battle phases[0]=degraded disruption schedule.
         DegradedAfterMinutes after deploy, injects network latency on the EC2.
