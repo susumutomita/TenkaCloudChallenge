@@ -282,6 +282,56 @@
         {
           "type": "object",
           "additionalProperties": false,
+          "required": ["kind", "flags"],
+          "properties": {
+            "kind": {
+              "const": "multi-flag",
+              "description": "[Issue #1796] 1 問題に N 個の独立 flag を持たせ、各 flag を別々に提出して個別加点する (= ストーリー連作 Challenge を 1 問に統合)。単一 flag kind は不変で温存し、multi-flag は新規 opt-in。"
+            },
+            "flags": {
+              "type": "array",
+              "minItems": 1,
+              "description": "独立した sub-flag 群。各 flag の points 合計が問題の満点になる (= 部分点)。flags[].id と flags[].flagOutputKey は問題内で unique であること (backend parser が重複を reject する)。",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "label", "flagOutputKey", "points"],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "問題内で unique な stable identifier (= 解済 flag id 集合の key、submit-flag request の flagId と一致させる。metadata 順序変更で記録が drift しない)。"
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Portal UI に出す表示名 (例: \"Ep01: Reachability\")。"
+                  },
+                  "flagOutputKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "正解値を引く CFn Output key (= 単一 flag kind の flagOutputKey と同義)。問題内で unique。"
+                  },
+                  "points": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "この flag の正解時の加点。"
+                  },
+                  "wrongAnswerPenalty": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "[Issue #817] この flag の不正解 1 回ごとの減点 (= flag ごとに独立)。0 は減点無し (default)。team score は 0 未満にならない (= clamp)。"
+                  },
+                  "hints": { "$ref": "#/$defs/progressiveHints" }
+                }
+              }
+            }
+          },
+          "description": "kind=multi-flag (= 1 問題 N flag の Challenge)。各 flag を独立に提出して個別加点 (= 部分点)。example: インターネット進化史シリーズ (net-evo 01-05) を 1 問に統合し、各 episode を 1 sub-flag にする。"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
           "required": ["kind", "endpoints", "pointsPerSuccess"],
           "properties": {
             "kind": {
