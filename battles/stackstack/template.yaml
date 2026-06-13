@@ -292,7 +292,13 @@ Resources:
     Type: AWS::Lambda::Function
     DependsOn: BucketCleanupLogGroup
     Properties:
-      FunctionName: !Sub "${NamePrefix}-bucket-cleanup"
+      # No explicit FunctionName: ${NamePrefix}-bucket-cleanup would overflow the
+      # 64-char Lambda FunctionName limit for long team names (#1812). CloudFormation
+      # auto-generates a <=64 name; LoggingConfig keeps logs in the stack-managed
+      # BucketCleanupLogGroup (so retention + teardown cleanup + the logs IAM policy,
+      # which references that log group by name, all stay unchanged).
+      LoggingConfig:
+        LogGroup: !Ref BucketCleanupLogGroup
       Runtime: python3.12
       Handler: index.handler
       Role: !GetAtt BucketCleanupRole.Arn
