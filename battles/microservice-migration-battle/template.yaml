@@ -160,7 +160,6 @@ Resources:
   ParticipantViewerRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "${NamePrefix}-participant-viewer"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -573,7 +572,6 @@ Resources:
   InstanceRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "${NamePrefix}-instance-role"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -663,7 +661,6 @@ Resources:
   DisruptionFunctionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "${NamePrefix}-disruption-fn-role"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -686,7 +683,8 @@ Resources:
   DegradedDisruptionFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Sub "${NamePrefix}-degraded-disruption"
+      # No explicit FunctionName: it overflows the 64-char limit with long
+      # NamePrefix (#1812). Refs use !GetAtt ...Arn, so CFn auto-naming is safe.
       Runtime: python3.12
       Handler: index.handler
       Role: !GetAtt DisruptionFunctionRole.Arn
@@ -725,7 +723,6 @@ Resources:
   SchedulerInvokeRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "${NamePrefix}-scheduler-invoke-role"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -744,7 +741,8 @@ Resources:
   DegradedDisruptionSchedule:
     Type: AWS::Scheduler::Schedule
     Properties:
-      Name: !Sub "${NamePrefix}-degraded-disruption"
+      # No explicit Name: Scheduler::Schedule Name has a 64-char limit and
+      # overflows with long NamePrefix (#1812). Nothing references it by name.
       Description: >
         TenkaCloud microservice-migration-battle phases[0]=degraded disruption schedule.
         DegradedAfterMinutes after deploy, injects network latency on the EC2.

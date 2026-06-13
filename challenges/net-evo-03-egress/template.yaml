@@ -230,7 +230,6 @@ Resources:
   ParticipantViewerRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "${NamePrefix}-participant-viewer"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -350,7 +349,6 @@ Resources:
   RelayInstanceRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "${NamePrefix}-relay-role"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
