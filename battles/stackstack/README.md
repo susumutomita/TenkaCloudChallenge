@@ -15,7 +15,7 @@ Your job over the next 90 to 120 minutes: take one hosted app to production usin
 | Category       | Battle (real-time PvP)                                                |
 | Difficulty     | 4 / 5                                                                 |
 | Estimated time | 90-120 min                                                            |
-| Scoring        | `phased-polling` from `posture-0` to `production`, plus one bonus      |
+| Scoring        | `phased-polling` engine, flat **+100/min per satisfied gate** (`production` = +500/min) + one-time +30000 |
 
 ## What gets deployed
 
@@ -55,7 +55,18 @@ The app exposes `GET /posture`; those values are measured from actual state, not
 | `audit_on`     | No audit writes      | Enable audit writes to the existing S3 audit bucket               |
 | `on_rds`       | SQLite               | Migrate posts to the existing RDS PostgreSQL database and switch the app |
 
-`GET /meta` maps those checks to `posture-0` through `posture-4`, or `production` when all gates are true. Each step raises the per-cycle payout; `production` earns the one-time bonus.
+`GET /meta` maps those checks to `posture-0` through `posture-4`, or `production` when all gates are true. Scoring is **flat: every satisfied gate is worth +100 points/min**, so closing any one of the five gates is equally rewarding.
+
+| Platform     | Gates satisfied | Points / min |
+| ------------ | --------------- | ------------ |
+| `posture-0`  | 0               | 0            |
+| `posture-1`  | 1               | 100          |
+| `posture-2`  | 2               | 200          |
+| `posture-3`  | 3               | 300          |
+| `posture-4`  | 4               | 400          |
+| `production` | 5 (all)         | 500          |
+
+Reaching `production` (all five gates) also earns a one-time **+30000** bonus. A probe failure costs **-100** per cycle and a slow response (> 1500 ms) costs **-25** — both unchanged by the flat model. After the 30-minute `production-ramp` phase, teams still at `posture-0/1/2` drop to the degraded rate (half: 0 / 50 / 100 per min). If the red team defaces the site or plants a backdoor (`site_intact` / `no_backdoor` false), the app clamps the platform to `posture-2`, capping the team at **200 points/min** until they recover.
 
 ## How to play
 
