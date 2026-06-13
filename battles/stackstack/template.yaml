@@ -250,7 +250,6 @@ Resources:
   BucketCleanupRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "${NamePrefix}-bucket-cleanup-role"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -434,7 +433,6 @@ Resources:
   ParticipantViewerRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "${NamePrefix}-participant-viewer"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -562,7 +560,6 @@ Resources:
   InstanceRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "${NamePrefix}-instance-role"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:

@@ -160,7 +160,6 @@ Resources:
   ParticipantViewerRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "${NamePrefix}-participant-viewer"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -573,7 +572,6 @@ Resources:
   InstanceRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "${NamePrefix}-instance-role"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -663,7 +661,6 @@ Resources:
   DisruptionFunctionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "${NamePrefix}-disruption-fn-role"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -725,7 +722,6 @@ Resources:
   SchedulerInvokeRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "${NamePrefix}-scheduler-invoke-role"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
