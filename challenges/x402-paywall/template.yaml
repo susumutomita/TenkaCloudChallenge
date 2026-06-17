@@ -1,0 +1,362 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (x402-paywall). Inspired by AWS WAF's AI Traffic
+  Monetization feature, which charges AI bots for content access via the x402
+  protocol (HTTP 402 Payment Required + a machine-readable price manifest, in USDC).
+
+  A public Lambda Function URL implements the x402 gate: a bot request to a
+  monetized path (/content/*) returns HTTP 402 plus an x402 price manifest. The
+  gate reads its settings from SSM config parameters. Planted fault: pay_to_wallet
+  ships blank, so the manifest's payTo is empty -- the gate demands payment but
+  names no destination, so no bot can pay and revenue stays at 0 USDC.
+
+  The learner corrects pay_to_wallet with ssm:PutParameter (a settings change, not
+  a new resource), then completes the x402 handshake as a bot (GET -> 402 ->
+  resubmit with an X-PAYMENT header). Only a verified test-mode payment releases
+  the per-deploy flag TC{...}. No EC2/VPC, no blockchain; delete-stack removes all.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks from
+      colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+  FlagSeed:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    MaxLength: 64
+    AllowedPattern: "^[A-Za-z0-9]+$"
+    Description: >
+      Per-deploy random secret injected by the deploy chain (cfnParameters:
+      FlagSeed = __RANDOM_PASSWORD__). Wrapped as TC{...} and returned only after a
+      verified x402 payment -- never derivable from the public NamePrefix. Same
+      idiom as challenges/net-evo-04-tls.
+
+Resources:
+  # ----- SSM config (the x402 gate reads ALL settings from here) -----
+  # THE PLANTED FAULT lives in pay_to_wallet: it ships empty. The gate still
+  # returns 402, but the manifest's payTo is blank, so a bot cannot pay to
+  # anywhere and the flag never releases. The fix is ssm:PutParameter to a valid
+  # receiving wallet -- a settings change on this EXISTING parameter, not a new
+  # resource. delete-stack still owns and removes it.
+  PayToWalletParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/config/pay_to_wallet"
+      Type: String
+      # SSM rejects a truly empty String value, so we ship a single space. The gate
+      # trims it and treats blank / non-wallet input as "no destination".
+      Value: " "
+      Description: !Sub "x402 destination wallet (USDC) for ${NamePrefix}. Blank = the planted fault."
+      Tier: Standard
+
+  # Correct decoy: the monetized path pattern already matches the content URL.
+  MonetizedPathParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/config/monetized_path"
+      Type: String
+      Value: "/content/*"
+      Description: !Sub "Glob of paths the x402 gate charges for (${NamePrefix})."
+      Tier: Standard
+
+  # Correct decoy: 'test' currency mode is what a drill should use. Flipping it to
+  # 'real' would demand on-chain mainnet settlement, which is unavailable here, so
+  # the verified-payment path only succeeds in test mode.
+  CurrencyModeParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/config/currency_mode"
+      Type: String
+      Value: "test"
+      Description: !Sub "x402 currency mode test|real (${NamePrefix})."
+      Tier: Standard
+
+  PriceParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/config/price_usdc"
+      Type: String
+      Value: "10000"
+      Description: !Sub "Per-page price in USDC base units (${NamePrefix})."
+      Tier: Standard
+
+  # ----- The x402 gate: a public Lambda Function URL -----
+  GateFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: ReadOwnConfig
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ReadConfig
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${NamePrefix}/config/*"
+
+  GateFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: !Sub "x402 content paywall gate for ${NamePrefix}."
+      Runtime: python3.12
+      Handler: index.handler
+      Timeout: 10
+      MemorySize: 128
+      Role: !GetAtt GateFunctionRole.Arn
+      Environment:
+        Variables:
+          NAME_PREFIX: !Ref NamePrefix
+          # The flag lives only in the function environment. The participant role
+          # is granted NO lambda:* and NO cloudformation:DescribeStacks, so the
+          # only path to this value is a verified x402 payment.
+          FLAG: !Sub "TC{${FlagSeed}}"
+      # Inline code carries no CFn interpolation (config + flag arrive via env),
+      # so this is a literal block -- Python braces need no escaping.
+      Code:
+        ZipFile: |
+          import json, os, base64, re
+          import boto3
+
+          ssm = boto3.client("ssm")
+          PREFIX = os.environ["NAME_PREFIX"]
+          FLAG = os.environ["FLAG"]
+          WALLET = re.compile(r"^0x[0-9a-fA-F]{40}$")
+
+          def cfg(key, default=""):
+              try:
+                  r = ssm.get_parameter(Name="/%s/config/%s" % (PREFIX, key))
+                  return r["Parameter"]["Value"].strip()
+              except Exception:
+                  return default
+
+          def reply(code, obj, extra=None):
+              h = {"Content-Type": "application/json"}
+              if extra:
+                  h.update(extra)
+              return {"statusCode": code, "headers": h, "body": json.dumps(obj)}
+
+          def handler(event, _ctx):
+              path = event.get("rawPath", "/")
+              headers = {k.lower(): v for k, v in (event.get("headers") or {}).items()}
+              monetized = cfg("monetized_path", "/content/*")
+              pay_to = cfg("pay_to_wallet", "")
+              mode = cfg("currency_mode", "test")
+              price = cfg("price_usdc", "10000")
+              network = "base-sepolia" if mode == "test" else "base-mainnet"
+
+              pattern = "^" + re.escape(monetized).replace("\\*", ".*") + "$"
+              if not re.match(pattern, path):
+                  return reply(200, {"free": True, "path": path,
+                                     "note": "this path is not monetized -- bots read it for free"})
+
+              manifest = {"x402Version": 1, "accepts": [{
+                  "scheme": "exact", "network": network, "asset": "USDC",
+                  "maxAmountRequired": price, "payTo": pay_to,
+                  "resource": path, "description": "TenkaCloud premium content"}]}
+
+              token = headers.get("x-payment")
+              if not token:
+                  return reply(402, manifest, {"WWW-Authenticate": "x402"})
+
+              try:
+                  payment = json.loads(base64.b64decode(token))
+              except Exception:
+                  return reply(402, dict(manifest, error="invalid X-PAYMENT encoding"))
+
+              amount = str(payment.get("amount", "0"))
+              paid = (mode == "test"
+                      and bool(WALLET.match(pay_to or ""))
+                      and payment.get("payTo") == pay_to
+                      and payment.get("network") == network
+                      and amount.isdigit()
+                      and int(amount) >= int(price))
+              if not paid:
+                  return reply(402, dict(manifest,
+                               error="payment rejected -- check the manifest payTo / network / amount and that currency mode is 'test'"))
+
+              return reply(200, {"paid": True,
+                                 "content": "PREMIUM ARTICLE -- Kato-san's leftover notes",
+                                 "flag": FLAG})
+
+  # AuthType NONE = intentionally public. This is a web content endpoint behind a
+  # paywall; bots (and the learner) must reach it unauthenticated. The x402 gate,
+  # not network auth, is what gates access.
+  GateFunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !Ref GateFunction
+      AuthType: NONE
+
+  GateFunctionUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref GateFunction
+      Action: lambda:InvokeFunctionUrl
+      Principal: "*"
+      FunctionUrlAuthType: NONE
+
+  # ----- Player-readable pointers (no DescribeStacks granted) -----
+  EndpointParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/endpoint"
+      Type: String
+      Value: !Sub
+        - "${BaseUrl}content/premium-article"
+        - BaseUrl: !GetAtt GateFunctionUrl.FunctionUrl
+      Description: !Sub "Public monetized content URL for ${NamePrefix} (curl it as a bot)."
+      Tier: Standard
+
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: !Sub >-
+        The x402 content gate (URL in /${NamePrefix}/endpoint) returns HTTP 402 to
+        bots but collects 0 USDC. Settings live in /${NamePrefix}/config/*. The gate
+        reads pay_to_wallet, monetized_path (/content/*, correct), currency_mode
+        (test, correct), price_usdc. The fault: pay_to_wallet is blank, so the x402
+        manifest advertises an empty payTo and no bot can pay. Fix it with
+        ssm:PutParameter (no new resources) -- write the company test-net USDC wallet
+        0x00000000000000000000000000000000deadc0de into
+        /${NamePrefix}/config/pay_to_wallet, then complete the x402 handshake as a
+        bot (GET -> 402 + manifest -> resubmit with an X-PAYMENT header; see
+        check_x402.sh in the README). A verified test-mode payment returns the flag
+        TC{...}. Submit it.
+      Description: !Sub "TenkaCloud x402-paywall briefing for ${NamePrefix}."
+      Tier: Standard
+
+  # ----- IAM: participant viewer (read everything + scoped config fix) -----
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      # Participant access baseline (same across every problem in this catalog).
+      # `aws login` (2025-11) OAuth2 flow needs SignInLocalDevelopmentAccess;
+      # do not remove (validated by scripts/validate-problems.ts).
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # CloudShell baseline -- 7-action allow-list, Resource:* unavoidable
+              # (environments are per-identity). Do not remove (validated).
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              # THE FIX GRANT: read AND write the stack's own config parameters.
+              # ssm:PutParameter on /${NamePrefix}/config/* is the "modify settings"
+              # action the learner uses to correct pay_to_wallet -- not a new
+              # top-level resource. delete-stack still owns and removes these
+              # parameters, so PutParameter only mutates an existing value.
+              - Sid: ReadFixOwnConfigParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                  - ssm:PutParameter
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/config/*"
+              # Read the briefing / endpoint pointers (and any other /${NamePrefix}/*
+              # parameter). Read-only; scoped to this stack's path.
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              # ssm:DescribeParameters is metadata-only; AWS IAM does not accept
+              # resource-level scoping on it. The Console Parameter list/detail
+              # chrome calls it. Resource:"*" carries no cross-tenant leak under the
+              # per-team dedicated-account model (same treatment as hello-world).
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              # Deliberately NO cloudformation:DescribeStacks and NO lambda:* --
+              # the AnswerFlag Output and the function's FLAG env var must stay
+              # unreadable; the flag is earned through a verified x402 payment.
+
+Outputs:
+  ContentEndpointUrl:
+    Description: Public monetized content URL (also in SSM /endpoint). curl it as a bot.
+    Value: !Sub
+      - "${BaseUrl}content/premium-article"
+      - BaseUrl: !GetAtt GateFunctionUrl.FunctionUrl
+  ExpectedPayToWallet:
+    Description: Suggested company test-net USDC receiving wallet to wire into pay_to_wallet (any valid 0x... wallet works).
+    Value: "0x00000000000000000000000000000000deadc0de"
+  PayToWalletParameterName:
+    Description: SSM parameter holding the x402 destination wallet (the value to correct).
+    Value: !Ref PayToWalletParameter
+  EndpointParameterName:
+    Description: SSM parameter holding the public content URL.
+    Value: !Ref EndpointParameter
+  BriefingParameterName:
+    Description: SSM Parameter holding the task briefing.
+    Value: !Ref BriefingParameter
+  # Canonical answer, scoring engine only (no DescribeStacks granted to player).
+  AnswerFlag:
+    Description: Flag the learner submits after a verified x402 payment returns it.
+    Value: !Sub "TC{${FlagSeed}}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn
