@@ -6,6 +6,10 @@ Description: >
   solution requires creating top-level Lambda / ECS / App Runner / API Gateway
   / CloudFront resources outside CloudFormation ownership.
 
+Metadata:
+  tenkacloud:
+    allowIntentionallyVulnerable: true
+
 Parameters:
   NamePrefix:
     Type: String
