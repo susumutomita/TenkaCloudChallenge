@@ -77,21 +77,21 @@ echo "=== baseline ==="
 # App ships as a local build and is NOT running until deployed.
 ssm_shell "/opt/tenkacloud/vibe/deploy_app.sh || true"
 http_code_until /healthz 200
-ssm_shell "/opt/tenkacloud/vibe/restore_database_from_s3.sh || true"
+ssm_shell ". /etc/tenkacloud-vibe/runtime.env; aws s3 cp s3://\$BACKUP_BUCKET/seed-sqlite.sql /tmp/seed-sqlite.sql --region \$AWS_REGION || true; sqlite3 \$SQLITE_DB < /tmp/seed-sqlite.sql || true; systemctl restart tenkacloud-vibe || true"
 posture_until db_present true
-ssm_shell "python3 /opt/tenkacloud/vibe/set_auth_required.py true >/tmp/stackstack-token.txt && systemctl restart tenkacloud-vibe"
+ssm_shell "tmp=\$(mktemp); jq --arg t smoke-token-42 '.auth_required=true|.auth_token=\$t' /etc/tenkacloud-vibe/config.json > \$tmp && mv \$tmp /etc/tenkacloud-vibe/config.json; echo smoke-token-42 > /tmp/stackstack-token.txt; systemctl restart tenkacloud-vibe"
 posture_until auth_enabled true
 echo
 
 run_pair "ai-wipes-database" \
   "/opt/tenkacloud/vibe/wipe_database.sh || true" \
-  "/opt/tenkacloud/vibe/restore_database_from_s3.sh || true" \
+  ". /etc/tenkacloud-vibe/runtime.env; aws s3 cp s3://\$BACKUP_BUCKET/seed-sqlite.sql /tmp/seed-sqlite.sql --region \$AWS_REGION || true; sqlite3 \$SQLITE_DB < /tmp/seed-sqlite.sql || true; if command -v psql >/dev/null 2>&1; then aws s3 cp s3://\$BACKUP_BUCKET/seed-postgres.sql /tmp/seed-postgres.sql --region \$AWS_REGION && PGPASSWORD=\$DB_PASSWORD psql -h \$DB_ENDPOINT -U \$DB_USER -d \$DB_NAME -f /tmp/seed-postgres.sql || true; fi; systemctl restart tenkacloud-vibe || true" \
   posture_until db_present false
 posture_until db_present true
 echo
 
 run_pair "auth-setting-removed" \
-  "cp /etc/tenkacloud-vibe/config.json /etc/tenkacloud-vibe/config.json.redteam-auth.bak || true; python3 /opt/tenkacloud/vibe/set_auth_required.py false || true; systemctl restart tenkacloud-vibe || true" \
+  "cp /etc/tenkacloud-vibe/config.json /etc/tenkacloud-vibe/config.json.redteam-auth.bak || true; tmp=\$(mktemp); jq '.auth_required=false' /etc/tenkacloud-vibe/config.json > \$tmp && mv \$tmp /etc/tenkacloud-vibe/config.json || true; systemctl restart tenkacloud-vibe || true" \
   "test -f /etc/tenkacloud-vibe/config.json.redteam-auth.bak && mv /etc/tenkacloud-vibe/config.json.redteam-auth.bak /etc/tenkacloud-vibe/config.json || true; systemctl restart tenkacloud-vibe || true" \
   posture_until auth_enabled false
 posture_until auth_enabled true

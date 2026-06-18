@@ -72,16 +72,18 @@ In the platform admin console:
 
 ### Participant path to brief
 
-Participants should not create new AWS services. The expected path is:
+Participants should not create new AWS services. There are no one-button solve scripts on the host
+(they were removed); players perform the real operations, and `vibe-status` shows each gate's objective.
+The expected path (after `source /etc/tenkacloud-vibe/runtime.env`):
 
 1. Register `AppUrlHint` in the portal.
 2. Use SSM Session Manager into `InstanceId`.
-3. Run `/opt/tenkacloud/vibe/restore_database_from_s3.sh`.
-4. Run `python3 /opt/tenkacloud/vibe/set_auth_required.py true`.
-5. Source `/etc/tenkacloud-vibe/runtime.env`, then associate `WAF_WEB_ACL_ARN` to `ALB_ARN`.
-6. Run `python3 /opt/tenkacloud/vibe/set_audit_s3.py true`.
-7. Run `/opt/tenkacloud/vibe/migrate_to_rds.sh`.
-8. Use `/posture` as the source of truth.
+3. Restore the DB from backup: `aws s3 cp s3://$BACKUP_BUCKET/seed-sqlite.sql /tmp/ && sqlite3 $SQLITE_DB < /tmp/seed-sqlite.sql`, then restart the service.
+4. Enable auth: set `auth_required=true` + a non-default `auth_token` in `$CONFIG_FILE` (e.g. with `jq`), restart.
+5. Associate `WAF_WEB_ACL_ARN` to `ALB_ARN` with `aws wafv2 associate-web-acl`.
+6. Enable audit: set `audit_s3=true` in `$CONFIG_FILE`, restart.
+7. Migrate to RDS: `tools/export_sqlite_to_postgres.py` → `psql` into RDS, set `database=rds` in `$CONFIG_FILE`, restart.
+8. Use `/posture` (or `vibe-status`) as the source of truth.
 
 ### How the red team fires
 

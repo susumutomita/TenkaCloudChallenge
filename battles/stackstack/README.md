@@ -74,17 +74,27 @@ Reaching `production` (all six gates) also earns a one-time **+30000** bonus. A 
 
 1. Start an SSM Session Manager shell (`SsmStartSessionCommand`) and run `sudo /opt/tenkacloud/vibe/deploy_app.sh` to deploy the local build (start the service).
 2. Copy `AppUrlHint` into the `app` endpoint override in the Participant Portal.
-3. Restore data:
+   > There are no one-button solve scripts — you perform the real operations. Run `vibe-status`
+   > any time for the live gate status and the objective for each gap (exact commands are below and,
+   > if you get stuck, in the penalty-gated portal hints). First load the resource vars:
+   > `source /etc/tenkacloud-vibe/runtime.env`.
+
+3. Restore data into the app DB from the backup bucket:
 
    ```bash
-   sudo /opt/tenkacloud/vibe/restore_database_from_s3.sh
+   source /etc/tenkacloud-vibe/runtime.env
+   aws s3 cp "s3://$BACKUP_BUCKET/seed-sqlite.sql" /tmp/seed-sqlite.sql --region "$AWS_REGION"
+   sqlite3 "$SQLITE_DB" < /tmp/seed-sqlite.sql
+   sudo systemctl restart tenkacloud-vibe
    ```
 
-4. Enable auth and keep the printed token for test posts:
+4. Enable auth: set `auth_required=true` and a non-default `auth_token`, then restart. Keep the token for test posts:
 
    ```bash
-   sudo python3 /opt/tenkacloud/vibe/set_auth_required.py true
+   TOKEN="my-secret-$RANDOM"
+   tmp=$(mktemp); jq --arg t "$TOKEN" '.auth_required=true | .auth_token=$t' "$CONFIG_FILE" > "$tmp" && sudo mv "$tmp" "$CONFIG_FILE"
    sudo systemctl restart tenkacloud-vibe
+   echo "token: $TOKEN"
    ```
 
 5. Associate the existing WAF WebACL to the existing ALB:
@@ -97,17 +107,20 @@ Reaching `production` (all six gates) also earns a one-time **+30000** bonus. A 
      --region "$AWS_REGION"
    ```
 
-6. Enable audit writes:
+6. Enable audit writes (set `audit_s3=true`):
 
    ```bash
-   sudo python3 /opt/tenkacloud/vibe/set_audit_s3.py true
+   tmp=$(mktemp); jq '.audit_s3=true' "$CONFIG_FILE" > "$tmp" && sudo mv "$tmp" "$CONFIG_FILE"
    sudo systemctl restart tenkacloud-vibe
    ```
 
-7. Migrate from SQLite to RDS PostgreSQL:
+7. Migrate from SQLite to RDS PostgreSQL: convert with the helper, load with psql, then point the app at RDS:
 
    ```bash
-   sudo /opt/tenkacloud/vibe/migrate_to_rds.sh
+   python3 /opt/tenkacloud/vibe/tools/export_sqlite_to_postgres.py > /tmp/vibe-migrate.sql
+   PGPASSWORD="$DB_PASSWORD" psql -h "$DB_ENDPOINT" -U "$DB_USER" -d "$DB_NAME" -f /tmp/vibe-migrate.sql
+   tmp=$(mktemp); jq '.database="rds"' "$CONFIG_FILE" > "$tmp" && sudo mv "$tmp" "$CONFIG_FILE"
+   sudo systemctl restart tenkacloud-vibe
    ```
 
 8. Inspect the app host security group (`<NamePrefix>-app-sg`, visible in the EC2 Console with your participant role), find the leftover public SSH rule, and revoke it. Run this with **your participant credentials** (CloudShell or `aws login`), not from the app host — the instance role deliberately cannot modify SGs. All shell access is SSM Session Manager, so closing tcp/22 breaks nothing:

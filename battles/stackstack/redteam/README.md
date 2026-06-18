@@ -8,7 +8,7 @@ StackStack's pressure comes from reversible operational drift against a single s
 
 | id | delivery | what actually happens |
 | --- | --- | --- |
-| `ai-wipes-database` | real fault: `action` (ADR-031, ssm-run-command) | Runs `/opt/tenkacloud/vibe/wipe_database.sh`, clearing SQLite and RDS posts where reachable. Auto-revert runs `/opt/tenkacloud/vibe/restore_database_from_s3.sh` after 300 s. |
+| `ai-wipes-database` | real fault: `action` (ADR-031, ssm-run-command) | Runs `/opt/tenkacloud/vibe/wipe_database.sh`, clearing SQLite and RDS posts where reachable. Auto-revert restores the DB from the backup bucket via inlined commands (`aws s3 cp` + `sqlite3`/`psql`) after 300 s. |
 | `auth-setting-removed` | real fault: `action` (ADR-031, ssm-run-command) | Backs up `/etc/tenkacloud-vibe/config.json`, disables auth, restarts the app. Auto-revert restores the backup after 300 s. |
 | `vibe-app-stopped` | real fault: `action` (ADR-031, ssm-run-command) | Stops `tenkacloud-vibe`. Probe goes 5xx, causing failurePenalty. Auto-revert starts it after 180 s. |
 | `site-defaced` | real fault: `action` (ADR-031, ssm-run-command) | Runs `/opt/tenkacloud/vibe/deface_site.sh` (touch `DEFACED` marker). App serves a PWNED banner and `posture.site_intact` goes false, dropping out of production. Auto-revert runs `restore_site.sh` after 300 s. |
@@ -26,13 +26,14 @@ For every fault, the defender can recover faster than the auto-revert:
 
 ```bash
 aws ssm start-session --target <InstanceId>
-curl -s http://<AppUrlHint host>/posture | jq .
-sudo /opt/tenkacloud/vibe/restore_database_from_s3.sh
-sudo python3 /opt/tenkacloud/vibe/set_auth_required.py true
-sudo systemctl start tenkacloud-vibe
+vibe-status                      # shows which gate regressed + the objective
+# then run the matching real operation, e.g. DB restore:
+source /etc/tenkacloud-vibe/runtime.env
+aws s3 cp s3://$BACKUP_BUCKET/seed-sqlite.sql /tmp/ && sqlite3 $SQLITE_DB < /tmp/seed-sqlite.sql
+sudo systemctl restart tenkacloud-vibe
 ```
 
-The exact command depends on which posture key regressed. Brief participants to trust `/posture` over guesses.
+The exact command depends on which posture key regressed. Brief participants to trust `vibe-status` / `/posture` over guesses (exact commands are in the portal hints).
 
 ## Pre-event smoke test
 
