@@ -872,6 +872,26 @@
                 "description": "効果の持続秒数。 上限 1h (= ADR-029 いかなる disruption も永続しない)。"
               }
             }
+          },
+          "recurrence": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["intervalMinutes", "maxFires"],
+            "description": "[ADR-037 Slice 3] triggers[] で条件発火したとき、 1 回で終わらず定期実行する宣言 (= 「スコア一定以上で定期妨害」)。 宣言時、 platform は trigger 成立で recurrence を載せて発火し、 executor が rate(intervalMinutes) schedule を作って maxFires 回くり返した後 自動停止する (= ADR-029 いかなる disruption も永続しない)。 省略時は 1 回だけ発火 (後方互換)。 operator の手動 fire と同じ上限。",
+            "properties": {
+              "intervalMinutes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1440,
+                "description": "再注入の間隔 (分)。 1〜1440 (= 最長 24h)。"
+              },
+              "maxFires": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 60,
+                "description": "最大注入回数 (= always-ends の上限)。 1〜60。"
+              }
+            }
           }
         }
       }
