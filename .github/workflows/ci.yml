@@ -41,3 +41,10 @@ jobs:
 
       - name: Validate problem catalog
         run: bun run validate
+
+      # index.json is the platform-read catalog, regenerated from every
+      # metadata.json by scripts/build-index.ts. --check fails if it is stale
+      # (= a problem was added/edited without rerunning the generator), so a
+      # new problem can never merge while invisible to the catalog.
+      - name: Check index.json is up to date
+        run: bun run scripts/build-index.ts --check
