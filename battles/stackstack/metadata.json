@@ -48,7 +48,8 @@
     "intervalMinutes": 1,
     "probe": {
       "metaPath": "/meta",
-      "scorePath": "/score"
+      "scorePath": "/score",
+      "posturePath": "/posture"
     },
     "platformRules": {
       "posture-0": { "points": 0, "degradedPoints": 0 },

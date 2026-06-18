@@ -540,9 +540,13 @@
                 "scorePath": {
                   "type": "string",
                   "description": "Score 取得 endpoint の path (例: '/score')。phases[].effect.scorePathOverride で動的に切り替え可。"
+                },
+                "posturePath": {
+                  "type": "string",
+                  "description": "任意。participant-facing posture snapshot を取得する endpoint の path (例: '/posture')。返却 body の posture object / platform を portal plugin に公開する。"
                 }
               },
-              "description": "各 slot に対し probe する 2 つの path。"
+              "description": "各 slot に対し probe する path。metaPath / scorePath は採点用、posturePath は portal plugin 向けのlive snapshot用。"
             },
             "platformRules": {
               "type": "object",
