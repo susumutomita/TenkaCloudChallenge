@@ -25,7 +25,8 @@ problems/
 │   ├── net-evo-02-dns/            # Internet Evolution Ep02 (DNS)
 │   ├── net-evo-03-egress/         # Internet Evolution Ep03 (NAT egress)
 │   ├── net-evo-04-tls/            # Internet Evolution Ep04 (TLS)
-│   └── net-evo-05-edge/           # Internet Evolution Ep05 (edge)
+│   ├── net-evo-05-edge/           # Internet Evolution Ep05 (edge)
+│   └── x402-paywall/              # x402 / WAF AI-bot monetization paywall
 ├── SCHEMA.json                    # JSON Schema (draft-07) — source of truth for metadata.json
 ├── index.json                     # Catalog built from every metadata.json (= `make build-problems-index`)
 ├── CATALOG.md                     # This file (English, primary)

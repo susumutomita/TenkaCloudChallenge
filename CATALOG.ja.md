@@ -25,7 +25,8 @@ problems/
 │   ├── net-evo-02-dns/            # インターネット進化史 Ep02 (DNS)
 │   ├── net-evo-03-egress/         # インターネット進化史 Ep03 (NAT egress)
 │   ├── net-evo-04-tls/            # インターネット進化史 Ep04 (TLS)
-│   └── net-evo-05-edge/           # インターネット進化史 Ep05 (edge)
+│   ├── net-evo-05-edge/           # インターネット進化史 Ep05 (edge)
+│   └── x402-paywall/              # x402 / WAF AI bot 課金ペイウォール
 ├── SCHEMA.json                    # metadata.json の JSON Schema (draft-07、正本)
 ├── index.json                     # 全 metadata から build した catalog 一覧 (= make build-problems-index で生成)
 ├── CATALOG.md                     # English (primary)
