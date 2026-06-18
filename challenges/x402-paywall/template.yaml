@@ -1,19 +1,19 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
   TenkaCloud Challenge (x402-paywall). Inspired by AWS WAF's AI Traffic
-  Monetization feature, which charges AI bots for content access via the x402
-  protocol (HTTP 402 Payment Required + a machine-readable price manifest, in USDC).
+  Monetization feature, which charges AI bots for content via the x402 protocol
+  (HTTP 402 Payment Required + a machine-readable price manifest, in USDC).
 
-  A public Lambda Function URL implements the x402 gate: a bot request to a
-  monetized path (/content/*) returns HTTP 402 plus an x402 price manifest. The
-  gate reads its settings from SSM config parameters. Planted fault: pay_to_wallet
-  ships blank, so the manifest's payTo is empty -- the gate demands payment but
-  names no destination, so no bot can pay and revenue stays at 0 USDC.
+  A Lambda is the x402 gate; the player invokes it as the bot client via `aws lambda
+  invoke` (own creds -- no public endpoint, so no public-URL guardrail). A monetized
+  path (/content/*) returns 402 + an x402 manifest, read from SSM config. Planted
+  fault: pay_to_wallet ships blank, so the manifest's payTo is empty -- the gate
+  demands payment but names no destination, so no bot can pay (revenue 0 USDC).
 
-  The learner corrects pay_to_wallet with ssm:PutParameter (a settings change, not
-  a new resource), then completes the x402 handshake as a bot (GET -> 402 ->
-  resubmit with an X-PAYMENT header). Only a verified test-mode payment releases
-  the per-deploy flag TC{...}. No EC2/VPC, no blockchain; delete-stack removes all.
+  The bot-client tool check_x402.sh ships in an S3 bucket the stack creates (download
+  with `aws s3 cp`). The learner fixes pay_to_wallet with ssm:PutParameter (a settings
+  change, not a new resource); the x402 handshake then completes and a verified
+  test-mode payment returns the per-deploy flag TC{...}. delete-stack removes all.
 
 Parameters:
   NamePrefix:
@@ -45,28 +45,25 @@ Parameters:
     Description: >
       Per-deploy random secret injected by the deploy chain (cfnParameters:
       FlagSeed = __RANDOM_PASSWORD__). Wrapped as TC{...} and returned only after a
-      verified x402 payment -- never derivable from the public NamePrefix. Same
-      idiom as challenges/net-evo-04-tls.
+      verified x402 payment -- never derivable from the public NamePrefix.
 
 Resources:
   # ----- SSM config (the x402 gate reads ALL settings from here) -----
-  # THE PLANTED FAULT lives in pay_to_wallet: it ships empty. The gate still
-  # returns 402, but the manifest's payTo is blank, so a bot cannot pay to
-  # anywhere and the flag never releases. The fix is ssm:PutParameter to a valid
-  # receiving wallet -- a settings change on this EXISTING parameter, not a new
-  # resource. delete-stack still owns and removes it.
+  # THE PLANTED FAULT lives in pay_to_wallet: it ships blank (a single space, since
+  # SSM rejects an empty String). The gate trims it and treats blank / non-wallet
+  # input as "no destination", so the 402 manifest's payTo is empty and no bot can
+  # pay. The fix is ssm:PutParameter to a valid wallet -- a settings change on this
+  # EXISTING parameter, not a new resource. delete-stack still owns and removes it.
   PayToWalletParameter:
     Type: AWS::SSM::Parameter
     Properties:
       Name: !Sub "/${NamePrefix}/config/pay_to_wallet"
       Type: String
-      # SSM rejects a truly empty String value, so we ship a single space. The gate
-      # trims it and treats blank / non-wallet input as "no destination".
       Value: " "
       Description: !Sub "x402 destination wallet (USDC) for ${NamePrefix}. Blank = the planted fault."
       Tier: Standard
 
-  # Correct decoy: the monetized path pattern already matches the content URL.
+  # Correct decoy: the monetized path pattern already matches the content path.
   MonetizedPathParameter:
     Type: AWS::SSM::Parameter
     Properties:
@@ -77,8 +74,8 @@ Resources:
       Tier: Standard
 
   # Correct decoy: 'test' currency mode is what a drill should use. Flipping it to
-  # 'real' would demand on-chain mainnet settlement, which is unavailable here, so
-  # the verified-payment path only succeeds in test mode.
+  # 'real' demands on-chain mainnet settlement (unavailable here), so the
+  # verified-payment path only succeeds in test mode.
   CurrencyModeParameter:
     Type: AWS::SSM::Parameter
     Properties:
@@ -97,7 +94,15 @@ Resources:
       Description: !Sub "Per-page price in USDC base units (${NamePrefix})."
       Tier: Standard
 
-  # ----- The x402 gate: a public Lambda Function URL -----
+  # ----- S3 bucket that delivers the bot-client tool to the player -----
+  # Private (IAM-only; Block Public Access stays on by default). The player
+  # downloads check_x402.sh with `aws s3 cp` using their participant role.
+  ToolsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${NamePrefix}-tools-${AWS::AccountId}"
+
+  # ----- The x402 gate (also doubles as the S3-populating custom resource) -----
   GateFunctionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -111,7 +116,7 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
-        - PolicyName: ReadOwnConfig
+        - PolicyName: GateRuntime
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
@@ -121,6 +126,18 @@ Resources:
                   - ssm:GetParameter
                   - ssm:GetParameters
                 Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${NamePrefix}/config/*"
+              # Used only by the custom-resource branch to populate / clean the
+              # tools bucket at deploy / teardown. Bucket ARN constructed by name to
+              # avoid a dependency cycle with ToolsBucket.
+              - Sid: PopulateToolsBucket
+                Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub "arn:aws:s3:::${NamePrefix}-tools-${AWS::AccountId}"
+                  - !Sub "arn:aws:s3:::${NamePrefix}-tools-${AWS::AccountId}/*"
 
   GateFunction:
     Type: AWS::Lambda::Function
@@ -128,24 +145,24 @@ Resources:
       Description: !Sub "x402 content paywall gate for ${NamePrefix}."
       Runtime: python3.12
       Handler: index.handler
-      Timeout: 10
+      Timeout: 15
       MemorySize: 128
       Role: !GetAtt GateFunctionRole.Arn
       Environment:
         Variables:
           NAME_PREFIX: !Ref NamePrefix
           # The flag lives only in the function environment. The participant role
-          # is granted NO lambda:* and NO cloudformation:DescribeStacks, so the
+          # gets NO lambda:GetFunction* and NO cloudformation:DescribeStacks, so the
           # only path to this value is a verified x402 payment.
           FLAG: !Sub "TC{${FlagSeed}}"
-      # Inline code carries no CFn interpolation (config + flag arrive via env),
-      # so this is a literal block -- Python braces need no escaping.
+      # Literal block (config + flag arrive via env / SSM) -- no CFn interpolation.
       Code:
         ZipFile: |
           import json, os, base64, re
           import boto3
 
           ssm = boto3.client("ssm")
+          s3 = boto3.client("s3")
           PREFIX = os.environ["NAME_PREFIX"]
           FLAG = os.environ["FLAG"]
           WALLET = re.compile(r"^0x[0-9a-fA-F]{40}$")
@@ -157,13 +174,12 @@ Resources:
               except Exception:
                   return default
 
-          def reply(code, obj, extra=None):
-              h = {"Content-Type": "application/json"}
-              if extra:
-                  h.update(extra)
-              return {"statusCode": code, "headers": h, "body": json.dumps(obj)}
+          def reply(code, obj):
+              return {"statusCode": code,
+                      "headers": {"content-type": "application/json"},
+                      "body": json.dumps(obj)}
 
-          def handler(event, _ctx):
+          def gate(event):
               path = event.get("rawPath", "/")
               headers = {k.lower(): v for k, v in (event.get("headers") or {}).items()}
               monetized = cfg("monetized_path", "/content/*")
@@ -184,7 +200,7 @@ Resources:
 
               token = headers.get("x-payment")
               if not token:
-                  return reply(402, manifest, {"WWW-Authenticate": "x402"})
+                  return reply(402, manifest)
 
               try:
                   payment = json.loads(base64.b64decode(token))
@@ -206,33 +222,92 @@ Resources:
                                  "content": "PREMIUM ARTICLE -- Kato-san's leftover notes",
                                  "flag": FLAG})
 
-  # AuthType NONE = intentionally public. This is a web content endpoint behind a
-  # paywall; bots (and the learner) must reach it unauthenticated. The x402 gate,
-  # not network auth, is what gates access.
-  GateFunctionUrl:
-    Type: AWS::Lambda::Url
-    Properties:
-      TargetFunctionArn: !Ref GateFunction
-      AuthType: NONE
+          def handler(event, ctx):
+              # CloudFormation custom-resource branch: populate / clean the tools
+              # bucket at deploy / teardown (distinguished by RequestType+ResponseURL,
+              # which a player's `aws lambda invoke` payload never carries).
+              if event.get("RequestType") and event.get("ResponseURL"):
+                  import cfnresponse
+                  try:
+                      p = event.get("ResourceProperties", {})
+                      bucket = p.get("Bucket")
+                      if event["RequestType"] == "Delete":
+                          try:
+                              for o in s3.list_objects_v2(Bucket=bucket).get("Contents", []):
+                                  s3.delete_object(Bucket=bucket, Key=o["Key"])
+                          except Exception:
+                              pass
+                      else:
+                          s3.put_object(Bucket=bucket, Key=p["Key"],
+                                        Body=p["Body"].encode(),
+                                        ContentType="text/x-shellscript")
+                      cfnresponse.send(event, ctx, cfnresponse.SUCCESS, {},
+                                       physicalResourceId=p.get("Key", "tool"))
+                  except Exception as e:
+                      cfnresponse.send(event, ctx, cfnresponse.FAILED, {"error": str(e)})
+                  return
+              # Otherwise: the x402 gate, invoked by the player as the bot client.
+              return gate(event)
 
-  GateFunctionUrlPermission:
-    Type: AWS::Lambda::Permission
+  # Custom resource that writes check_x402.sh into the tools bucket on create and
+  # empties the bucket on delete (so delete-stack leaves no orphan).
+  ToolUpload:
+    Type: AWS::CloudFormation::CustomResource
     Properties:
-      FunctionName: !Ref GateFunction
-      Action: lambda:InvokeFunctionUrl
-      Principal: "*"
-      FunctionUrlAuthType: NONE
+      ServiceToken: !GetAtt GateFunction.Arn
+      Bucket: !Ref ToolsBucket
+      Key: check_x402.sh
+      Body: |
+        #!/usr/bin/env bash
+        # TenkaCloud x402 paywall -- minimal bot client.
+        # Usage: ./check_x402.sh <NamePrefix>   e.g. ./check_x402.sh tc-x402-paywall-yourteam
+        set -uo pipefail
+        NP="${1:?usage: ./check_x402.sh <NamePrefix>  (e.g. tc-x402-paywall-yourteam)}"
+        FN=$(aws ssm get-parameter --name "/$NP/gate_function" --query Parameter.Value --output text 2>/dev/null)
+        if [ -z "$FN" ] || [ "$FN" = "None" ]; then
+          echo "could not resolve the gate function from /$NP/gate_function (check your NamePrefix)" >&2
+          exit 2
+        fi
+        RES="/content/premium-article"
+
+        invoke() { # $1 = JSON payload
+          aws lambda invoke --function-name "$FN" --cli-binary-format raw-in-base64-out \
+            --payload "$1" /tmp/x402_out.json >/dev/null
+          cat /tmp/x402_out.json
+        }
+
+        echo "[1/3] GET $RES  (as a bot, invoking gate $FN)"
+        resp=$(invoke "{\"rawPath\":\"$RES\",\"headers\":{}}")
+        echo "    HTTP $(echo "$resp" | jq -r '.statusCode')"
+        body=$(echo "$resp" | jq -r '.body')
+        echo "$body" | jq .
+        payto=$(echo "$body" | jq -r '.accepts[0].payTo // ""')
+        net=$(echo "$body" | jq -r '.accepts[0].network // ""')
+        amt=$(echo "$body" | jq -r '.accepts[0].maxAmountRequired // ""')
+        if [ -z "$payto" ] || [ "$payto" = "null" ]; then
+          echo "[x] the x402 manifest has no payTo -- the gate demands payment but names no destination." >&2
+          echo "    a bot cannot pay to nowhere. inspect the gate config:" >&2
+          echo "    aws ssm get-parameters-by-path --path /$NP/config --recursive --query 'Parameters[].{Name:Name,Value:Value}' --output table" >&2
+          exit 1
+        fi
+        echo "[2/3] paying: building a test-mode X-PAYMENT to $payto on $net ($amt USDC base units)"
+        xp=$(printf '{"payTo":"%s","network":"%s","amount":"%s","txHash":"test-0xsim"}' "$payto" "$net" "$amt" | base64 -w0)
+        echo "[3/3] resubmitting with X-PAYMENT"
+        resp=$(invoke "{\"rawPath\":\"$RES\",\"headers\":{\"x-payment\":\"$xp\"}}")
+        echo "    HTTP $(echo "$resp" | jq -r '.statusCode')"
+        body=$(echo "$resp" | jq -r '.body')
+        echo "$body" | jq .
+        flag=$(echo "$body" | jq -r '.flag // empty')
+        [ -n "$flag" ] && echo ">> flag: $flag   (submit this in the Participant Portal)"
 
   # ----- Player-readable pointers (no DescribeStacks granted) -----
-  EndpointParameter:
+  GateFunctionNameParameter:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: !Sub "/${NamePrefix}/endpoint"
+      Name: !Sub "/${NamePrefix}/gate_function"
       Type: String
-      Value: !Sub
-        - "${BaseUrl}content/premium-article"
-        - BaseUrl: !GetAtt GateFunctionUrl.FunctionUrl
-      Description: !Sub "Public monetized content URL for ${NamePrefix} (curl it as a bot)."
+      Value: !Ref GateFunction
+      Description: !Sub "Name of the x402 gate Lambda for ${NamePrefix} (the bot client invokes it)."
       Tier: Standard
 
   BriefingParameter:
@@ -241,17 +316,16 @@ Resources:
       Name: !Sub "/${NamePrefix}/briefing"
       Type: String
       Value: !Sub >-
-        The x402 content gate (URL in /${NamePrefix}/endpoint) returns HTTP 402 to
-        bots but collects 0 USDC. Settings live in /${NamePrefix}/config/*. The gate
-        reads pay_to_wallet, monetized_path (/content/*, correct), currency_mode
-        (test, correct), price_usdc. The fault: pay_to_wallet is blank, so the x402
-        manifest advertises an empty payTo and no bot can pay. Fix it with
-        ssm:PutParameter (no new resources) -- write the company test-net USDC wallet
-        0x00000000000000000000000000000000deadc0de into
-        /${NamePrefix}/config/pay_to_wallet, then complete the x402 handshake as a
-        bot (GET -> 402 + manifest -> resubmit with an X-PAYMENT header; see
-        check_x402.sh in the README). A verified test-mode payment returns the flag
-        TC{...}. Submit it.
+        The x402 content gate is the Lambda named in /${NamePrefix}/gate_function;
+        you are a bot client that invokes it. It returns HTTP 402 but collects 0
+        USDC. STEP 1 get the tool: aws s3 cp s3://${NamePrefix}-tools-${AWS::AccountId}/check_x402.sh
+        . && chmod +x check_x402.sh. STEP 2 run it: ./check_x402.sh ${NamePrefix} --
+        it reports the x402 manifest has no payTo (the gate is misconfigured). STEP
+        3 inspect /${NamePrefix}/config/* ; monetized_path and currency_mode are
+        correct, pay_to_wallet is blank. STEP 4 fix it (no new resources): aws ssm
+        put-parameter --name /${NamePrefix}/config/pay_to_wallet --value
+        0x00000000000000000000000000000000deadc0de --overwrite. STEP 5 rerun
+        ./check_x402.sh ${NamePrefix} for HTTP 200 and the flag TC{...}. Submit it.
       Description: !Sub "TenkaCloud x402-paywall briefing for ${NamePrefix}."
       Tier: Standard
 
@@ -298,6 +372,24 @@ Resources:
                 Action:
                   - sts:GetCallerIdentity
                 Resource: "*"
+              # Invoke the x402 gate as the bot client. Scoped to THIS stack's
+              # function ARN. No lambda:GetFunction* -- the FLAG env var stays
+              # unreadable; the flag is earned through a verified x402 payment.
+              - Sid: InvokeGate
+                Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource: !GetAtt GateFunction.Arn
+              # Download the bot-client tool (check_x402.sh) from the stack's bucket.
+              # IAM-scoped read; the bucket itself stays private (no public access).
+              - Sid: DownloadTool
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub "arn:aws:s3:::${NamePrefix}-tools-${AWS::AccountId}"
+                  - !Sub "arn:aws:s3:::${NamePrefix}-tools-${AWS::AccountId}/*"
               # THE FIX GRANT: read AND write the stack's own config parameters.
               # ssm:PutParameter on /${NamePrefix}/config/* is the "modify settings"
               # action the learner uses to correct pay_to_wallet -- not a new
@@ -311,8 +403,8 @@ Resources:
                   - ssm:GetParametersByPath
                   - ssm:PutParameter
                 Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/config/*"
-              # Read the briefing / endpoint pointers (and any other /${NamePrefix}/*
-              # parameter). Read-only; scoped to this stack's path.
+              # Read the briefing / gate_function pointers (and any other
+              # /${NamePrefix}/* parameter). Read-only; scoped to this stack's path.
               - Sid: ReadOwnSsmParameters
                 Effect: Allow
                 Action:
@@ -321,32 +413,30 @@ Resources:
                   - ssm:GetParametersByPath
                 Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
               # ssm:DescribeParameters is metadata-only; AWS IAM does not accept
-              # resource-level scoping on it. The Console Parameter list/detail
-              # chrome calls it. Resource:"*" carries no cross-tenant leak under the
-              # per-team dedicated-account model (same treatment as hello-world).
+              # resource-level scoping on it. Resource:"*" carries no cross-tenant
+              # leak under the per-team dedicated-account model (same treatment as
+              # hello-world).
               - Sid: DescribeOwnParameters
                 Effect: Allow
                 Action: ssm:DescribeParameters
                 Resource: "*"
-              # Deliberately NO cloudformation:DescribeStacks and NO lambda:* --
-              # the AnswerFlag Output and the function's FLAG env var must stay
+              # Deliberately NO cloudformation:DescribeStacks and NO lambda:GetFunction*
+              # -- the AnswerFlag Output and the function's FLAG env var must stay
               # unreadable; the flag is earned through a verified x402 payment.
 
 Outputs:
-  ContentEndpointUrl:
-    Description: Public monetized content URL (also in SSM /endpoint). curl it as a bot.
-    Value: !Sub
-      - "${BaseUrl}content/premium-article"
-      - BaseUrl: !GetAtt GateFunctionUrl.FunctionUrl
+  GateFunctionName:
+    Description: Name of the x402 gate Lambda (also in SSM /gate_function). Invoke it as the bot client.
+    Value: !Ref GateFunction
+  ToolsBucketName:
+    Description: S3 bucket holding the bot-client tool. Download with `aws s3 cp s3://<this>/check_x402.sh .`.
+    Value: !Ref ToolsBucket
   ExpectedPayToWallet:
     Description: Suggested company test-net USDC receiving wallet to wire into pay_to_wallet (any valid 0x... wallet works).
     Value: "0x00000000000000000000000000000000deadc0de"
   PayToWalletParameterName:
     Description: SSM parameter holding the x402 destination wallet (the value to correct).
     Value: !Ref PayToWalletParameter
-  EndpointParameterName:
-    Description: SSM parameter holding the public content URL.
-    Value: !Ref EndpointParameter
   BriefingParameterName:
     Description: SSM Parameter holding the task briefing.
     Value: !Ref BriefingParameter

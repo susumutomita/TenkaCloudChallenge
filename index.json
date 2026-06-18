@@ -215,7 +215,8 @@
         "monetization",
         "ai-bots",
         "ssm",
-        "lambda"
+        "lambda",
+        "s3"
       ],
       "scoringKind": "flag"
     }
