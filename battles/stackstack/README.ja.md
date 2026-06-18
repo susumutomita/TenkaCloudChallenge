@@ -74,17 +74,26 @@ EC2 app host (SSM only, SSH 不要)
 
 1. `SsmStartSessionCommand` output で SSM Session Manager に入り、 `sudo /opt/tenkacloud/vibe/deploy_app.sh` でローカルビルドをデプロイ（サービス起動）。
 2. Stack Output の `AppUrlHint` を `app` endpoint override に登録する。
-3. データ復元:
+   > 1 ボタンの解法スクリプトは無く、 実際の操作を自分で行う。 `vibe-status` を実行すると各 gate の現状と
+   > 目的（関連リソース）が見える（具体コマンドは下、 詰まったら減点付きの portal ヒント）。 先に
+   > `source /etc/tenkacloud-vibe/runtime.env` で変数を読み込む。
+
+3. backup bucket の seed dump を app DB に復元:
 
    ```bash
-   sudo /opt/tenkacloud/vibe/restore_database_from_s3.sh
+   source /etc/tenkacloud-vibe/runtime.env
+   aws s3 cp "s3://$BACKUP_BUCKET/seed-sqlite.sql" /tmp/seed-sqlite.sql --region "$AWS_REGION"
+   sqlite3 "$SQLITE_DB" < /tmp/seed-sqlite.sql
+   sudo systemctl restart tenkacloud-vibe
    ```
 
-4. auth 有効化。 出力された token は test post 用に控える:
+4. auth 有効化: `auth_required=true` と既定値でない `auth_token` を設定して再起動。 token は test post 用に控える:
 
    ```bash
-   sudo python3 /opt/tenkacloud/vibe/set_auth_required.py true
+   TOKEN="my-secret-$RANDOM"
+   tmp=$(mktemp); jq --arg t "$TOKEN" '.auth_required=true | .auth_token=$t' "$CONFIG_FILE" > "$tmp" && sudo mv "$tmp" "$CONFIG_FILE"
    sudo systemctl restart tenkacloud-vibe
+   echo "token: $TOKEN"
    ```
 
 5. 既存 WAF WebACL を既存 ALB に紐付ける:
@@ -97,17 +106,20 @@ EC2 app host (SSM only, SSH 不要)
      --region "$AWS_REGION"
    ```
 
-6. audit write を有効化:
+6. audit write を有効化 (`audit_s3=true`):
 
    ```bash
-   sudo python3 /opt/tenkacloud/vibe/set_audit_s3.py true
+   tmp=$(mktemp); jq '.audit_s3=true' "$CONFIG_FILE" > "$tmp" && sudo mv "$tmp" "$CONFIG_FILE"
    sudo systemctl restart tenkacloud-vibe
    ```
 
-7. SQLite から RDS PostgreSQL へ移行:
+7. SQLite から RDS PostgreSQL へ移行: 変換ツールで dump、 psql で投入、 app の接続先を RDS に切替:
 
    ```bash
-   sudo /opt/tenkacloud/vibe/migrate_to_rds.sh
+   python3 /opt/tenkacloud/vibe/tools/export_sqlite_to_postgres.py > /tmp/vibe-migrate.sql
+   PGPASSWORD="$DB_PASSWORD" psql -h "$DB_ENDPOINT" -U "$DB_USER" -d "$DB_NAME" -f /tmp/vibe-migrate.sql
+   tmp=$(mktemp); jq '.database="rds"' "$CONFIG_FILE" > "$tmp" && sudo mv "$tmp" "$CONFIG_FILE"
+   sudo systemctl restart tenkacloud-vibe
    ```
 
 8. app host の Security Group (`<NamePrefix>-app-sg`、 participant role で EC2 Console から見える) を点検し、 加藤さんが残した public SSH ルールを発見して revoke する。 実行は **participant credential** (CloudShell か `aws login`) で行う — instance role は意図的に SG を変更できない。 接続は SSM Session Manager 経由なので tcp/22 を閉じても何も壊れない:
