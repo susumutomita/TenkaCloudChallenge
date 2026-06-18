@@ -196,6 +196,28 @@
         "incident-response"
       ],
       "scoringKind": "phased-polling"
+    },
+    {
+      "id": "x402-paywall",
+      "name": "x402 課金ゲート — 課金しているのに 0 USDC",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "30 分",
+      "shortDescription": "天下クラウド株式会社。 今月の AI クローラー課金売上は 0 USDC。\n\n前任 SRE の加藤さんは退職前に 「AI Bot からコンテンツ閲覧料を取る」 x402 課金ゲートを立てた。 アクセスログを見ると Bot はちゃんとゲートに弾かれている (HTTP 402 が返っている)。 なのに 1 USDC も入ってこない。\n\n佐々木 CTO 「課金してるのに金が入らないって、 どういう状態だ。 直してくれ」。 あなたのミッション: ゲートの設定ミスを直し、 Bot が正しく支払って初めて出てくる隠しトークンを掴め。",
+      "tags": [
+        "challenge",
+        "flag",
+        "waf",
+        "x402",
+        "http-402",
+        "monetization",
+        "ai-bots",
+        "ssm",
+        "lambda"
+      ],
+      "scoringKind": "flag"
     }
   ]
 }
