@@ -648,6 +648,47 @@ Resources:
         - !Ref InstanceRole
 
   # ----- Application host and ALB -----
+  # Live-status guide for the player, stored in SSM (NOT UserData) to keep the EC2
+  # UserData under the 16 KB limit. UserData fetches it to /usr/local/bin/vibe-status
+  # at boot; the instance role's AmazonSSMManagedInstanceCore grants ssm:GetParameter.
+  # The script sources runtime.env at runtime, so the printed fix commands carry the
+  # real ALB / WAF / SG ARNs -- copy-paste ready.
+  VibeStatusToolParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/vibe-status-tool"
+      Type: String
+      Description: !Sub "vibe-status helper script for ${NamePrefix} (fetched by the app host at boot)."
+      Tier: Standard
+      Value: |
+        #!/usr/bin/env bash
+        # vibe-status -- live production-gate posture + the exact command to fix each gap.
+        set -uo pipefail
+        ENVF=/etc/tenkacloud-vibe/runtime.env
+        [ -f "$ENVF" ] && . "$ENVF"
+        P=$(curl -fsS --max-time 4 http://127.0.0.1:8080/posture 2>/dev/null || true)
+        if [ -z "$P" ]; then
+          echo "the app is not up yet. Deploy the local build first:"
+          echo "    /opt/tenkacloud/vibe/deploy_app.sh"
+          echo "then paste Stack Output 'AppUrlHint' into the Portal (app endpoint) to start scoring."
+          exit 0
+        fi
+        echo "platform: $(echo "$P" | jq -r '.platform')   (all 6 gates -> production)"
+        val(){ echo "$P" | jq -r ".posture.$1"; }
+        gate(){
+          if [ "$(val "$1")" = "true" ]; then printf '  [x] %s\n' "$1"
+          else printf '  [ ] %s\n      fix: %s\n' "$1" "$2"; fi
+        }
+        gate db_present   "/opt/tenkacloud/vibe/restore_database_from_s3.sh"
+        gate auth_enabled "python3 /opt/tenkacloud/vibe/set_auth_required.py true"
+        gate rate_limited "aws wafv2 associate-web-acl --web-acl-arn \"$WAF_WEB_ACL_ARN\" --resource-arn \"$ALB_ARN\" --region \"$AWS_REGION\""
+        gate audit_on     "python3 /opt/tenkacloud/vibe/set_audit_s3.py true"
+        gate on_rds       "/opt/tenkacloud/vibe/migrate_to_rds.sh"
+        gate ssh_closed   "aws ec2 revoke-security-group-ingress --group-id \"$APP_SG_ID\" --protocol tcp --port 22 --cidr 0.0.0.0/0 --region \"$AWS_REGION\""
+        [ "$(val site_intact)" = "false" ] && echo "  [!] INCIDENT: site defaced -> /opt/tenkacloud/vibe/restore_site.sh"
+        [ "$(val no_backdoor)" = "false" ] && echo "  [!] INCIDENT: backdoor present -> /opt/tenkacloud/vibe/remove_backdoor.sh"
+        echo "re-run 'vibe-status' after each fix (gates are measured from real state)."
+
   AppInstance:
     Type: AWS::EC2::Instance
     DependsOn:
@@ -655,6 +696,7 @@ Resources:
       - BackupBucket
       - AuditBucket
       - EmptyBucketsOnDelete
+      - VibeStatusToolParameter
     Properties:
       ImageId: !Ref AmiId
       InstanceType: !Ref InstanceType
@@ -888,7 +930,11 @@ Resources:
           import sys
 
           path = "/etc/tenkacloud-vibe/config.json"
-          enable = sys.argv[1].lower() == "true"
+          arg = (sys.argv[1] if len(sys.argv) > 1 else "true").lower()
+          if arg not in ("true", "false"):
+              print("usage: set_auth_required.py <true|false>  (default: true)", file=sys.stderr)
+              sys.exit(2)
+          enable = arg == "true"
           with open(path, "r", encoding="utf-8") as f:
               config = json.load(f)
           config["auth_required"] = enable
@@ -905,7 +951,11 @@ Resources:
           import sys
 
           path = "/etc/tenkacloud-vibe/config.json"
-          enable = sys.argv[1].lower() == "true"
+          arg = (sys.argv[1] if len(sys.argv) > 1 else "true").lower()
+          if arg not in ("true", "false"):
+              print("usage: set_audit_s3.py <true|false>  (default: true)", file=sys.stderr)
+              sys.exit(2)
+          enable = arg == "true"
           with open(path, "r", encoding="utf-8") as f:
               config = json.load(f)
           config["audit_s3"] = enable
@@ -957,6 +1007,13 @@ Resources:
           echo "deployed: app is live on this host"
           SH
           chmod +x /opt/tenkacloud/vibe/deploy_app.sh
+
+          # On-box guidance: fetch the live-status tool from SSM (kept out of UserData
+          # to respect the 16 KB limit) and add a one-line login banner pointing to it.
+          aws ssm get-parameter --name "/${NamePrefix}/vibe-status-tool" --query Parameter.Value --output text --region ${AWS::Region} > /usr/local/bin/vibe-status 2>/dev/null && chmod +x /usr/local/bin/vibe-status || true
+          cat > /etc/profile.d/stackstack-guide.sh <<'SH'
+          echo "StackStack app host. First: /opt/tenkacloud/vibe/deploy_app.sh then register Stack Output AppUrlHint in the Portal. Then run 'vibe-status' for the production gates + the exact fix command for each."
+          SH
 
           chown -R ec2-user:ec2-user /opt/tenkacloud /etc/tenkacloud-vibe /var/lib/tenkacloud-vibe /home/ec2-user/vibe-app
 
