@@ -2,6 +2,26 @@
   "version": "1",
   "problems": [
     {
+      "id": "clickfix-incident",
+      "name": "ClickFix インシデント — 偽認証からの侵害調査",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "45 分",
+      "shortDescription": "天下クラウドのキャンペーンサイトで、 訪問者から 「認証画面が怪しい」「PC が重くなった」 という問い合わせが続いている。\n\n調べると、 偽の Cloudflare Turnstile / reCAPTCHA 風の画面が出て 「Win+R でこのコマンドを貼って」 と誘導していた ── ErrTraffic 系の ClickFix 攻撃だ。 誰かが実際にコマンドを実行し、 サイトに何かが仕込まれたらしい。\n\n君の仕事: 侵害された web host を調査し、 攻撃者が永続化に使った仕掛けを特定して、 持ち出されている『キャンペーン ID』 を突き止めよ。",
+      "tags": [
+        "security-detection",
+        "incident-response",
+        "web-security",
+        "social-engineering",
+        "clickfix",
+        "wordpress",
+        "forensics"
+      ],
+      "scoringKind": "flag"
+    },
+    {
       "id": "hello-world",
       "name": "Hello World (Sample)",
       "category": "Challenge",
