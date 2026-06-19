@@ -64,9 +64,10 @@ const GATES = [
 ];
 
 // Integrity posture keys. These are NOT counted toward the six gates, but while
-// either is false the app cannot be production (the red-team defacement and
-// supply-chain backdoor disruptions trip these). Restore the site / remove the
-// backdoor to climb back to production.
+// any is false the app cannot be production. The red-team defacement / backdoor
+// disruptions trip site_intact / no_backdoor; the anonymous-spam HTTP attack trips
+// board_clean ONLY when auth is off (auth_enabled repels it). Recover by restoring
+// the site / removing the backdoor / enabling auth + deleting the spam.
 const INTEGRITY = [
   {
     key: "site_intact",
@@ -82,6 +83,14 @@ const INTEGRITY = [
     hint: {
       en: "no supply-chain artifact present (supply-chain-backdoor disruption)",
       ja: "backdoor 成果物が残っていない",
+    },
+  },
+  {
+    key: "board_clean",
+    label: "No spam",
+    hint: {
+      en: "no anonymous spam landed — auth blocks the anonymous-spam attack",
+      ja: "匿名スパムが刺さっていない（auth 有効化が攻撃を弾く）",
     },
   },
 ];

@@ -118,6 +118,17 @@ run_pair "supply-chain-backdoor" \
 posture_until no_backdoor true
 echo
 
+# anonymous-spam is an operator HTTP probe (not an ssm action). It is repelled by
+# auth_enabled, so the result depends on the team's current auth state.
+echo "=== anonymous-spam (HTTP probe; defended by auth) ==="
+if bash "$(dirname "$0")/probes/anon-spam.sh" "$BASE_URL"; then
+  echo "  OK   blocked -- auth is enforced (posture.board_clean stays true)"
+else
+  echo "  NOTE landed -- auth is off; posture.board_clean is now false."
+  echo "       recover on the host: enable auth, then delete author='redteam-spam' posts and restart."
+fi
+echo
+
 if [[ $FAILURES -gt 0 ]]; then
   echo "=== smoke test FAILED ($FAILURES check(s)) ==="
   exit 1
