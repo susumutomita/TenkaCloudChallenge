@@ -1,0 +1,642 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud problem -- stackstack-lite. The entry-level "Vibe to Production":
+  one AI-generated app is hosted on a single stack-owned EC2 host, then players
+  harden three existing controls (restore the data, enable auth, turn on audit).
+  No participant solution creates top-level resources; no ALB / RDS / WAF.
+
+Metadata:
+  tenkacloud:
+    allowIntentionallyVulnerable: true
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 44
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format (lowercase letters / digits / hyphens).
+    Description: Common prefix for every resource name (per-team isolation).
+  AllowedCidr:
+    Type: String
+    Default: 0.0.0.0/0
+    AllowedPattern: "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$"
+    Description: CIDR allowed to reach the public app host (port 80).
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - t3.micro
+      - t3.small
+    Description: EC2 instance type for the stack-owned app host.
+  AmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-x86_64
+    Description: SSM-backed Amazon Linux 2023 AMI (auto-resolved).
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+
+Resources:
+  # ----- VPC + single public subnet (no NAT / ALB idle cost) -----
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.60.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-vpc"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.60.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-public-a"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  Igw:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-igw"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  IgwAttach:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref Igw
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-public-rt"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  PublicDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: IgwAttach
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref Igw
+
+  PublicRouteAssocA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnetA
+
+  # The board is a public web app; the scoring engine probes it over HTTP :80.
+  # Public ingress on 80 is intentional (allowIntentionallyVulnerable). All shell
+  # access is via SSM Session Manager (no inbound SSH).
+  AppSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref Vpc
+      GroupDescription: !Sub "${NamePrefix} public app host (HTTP 80)"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: !Ref AllowedCidr
+          Description: public HTTP to the vibe board (via nginx)
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-app-sg"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  # ----- Stack-owned data stores -----
+  BackupBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-backup"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  AuditBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireShortLivedAuditObjects
+            Status: Enabled
+            ExpirationInDays: 1
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-audit"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  BucketCleanupRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: EmptyStackBuckets
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: WriteOwnedLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${NamePrefix}-bucket-cleanup:*"
+              - Sid: EmptyStackOwnedBuckets
+                Effect: Allow
+                Action:
+                  - s3:ListBucket
+                  - s3:DeleteObject
+                Resource:
+                  - !GetAtt BackupBucket.Arn
+                  - !Sub "${BackupBucket.Arn}/*"
+                  - !GetAtt AuditBucket.Arn
+                  - !Sub "${AuditBucket.Arn}/*"
+      Tags:
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  BucketCleanupLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${NamePrefix}-bucket-cleanup"
+      RetentionInDays: 1
+
+  BucketCleanupFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: BucketCleanupLogGroup
+    Properties:
+      LoggingConfig:
+        LogGroup: !Ref BucketCleanupLogGroup
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt BucketCleanupRole.Arn
+      Timeout: 60
+      Code:
+        ZipFile: |
+          import json
+          import urllib.request
+          import boto3
+
+          s3 = boto3.client("s3")
+
+          def respond(event, context, status, reason="OK"):
+              body = {
+                  "Status": status,
+                  "Reason": reason,
+                  "PhysicalResourceId": event.get("PhysicalResourceId") or context.log_stream_name,
+                  "StackId": event["StackId"],
+                  "RequestId": event["RequestId"],
+                  "LogicalResourceId": event["LogicalResourceId"],
+                  "Data": {},
+              }
+              data = json.dumps(body).encode("utf-8")
+              req = urllib.request.Request(
+                  event["ResponseURL"],
+                  data=data,
+                  method="PUT",
+                  headers={"Content-Type": "", "Content-Length": str(len(data))},
+              )
+              urllib.request.urlopen(req, timeout=10)
+
+          def empty_bucket(bucket):
+              token = None
+              while True:
+                  kwargs = {"Bucket": bucket}
+                  if token:
+                      kwargs["ContinuationToken"] = token
+                  page = s3.list_objects_v2(**kwargs)
+                  objects = [{"Key": obj["Key"]} for obj in page.get("Contents", [])]
+                  if objects:
+                      s3.delete_objects(Bucket=bucket, Delete={"Objects": objects, "Quiet": True})
+                  if not page.get("IsTruncated"):
+                      break
+                  token = page.get("NextContinuationToken")
+
+          def handler(event, context):
+              try:
+                  if event.get("RequestType") == "Delete":
+                      for bucket in event.get("ResourceProperties", {}).get("Buckets", []):
+                          empty_bucket(bucket)
+                  respond(event, context, "SUCCESS")
+              except Exception as exc:
+                  respond(event, context, "FAILED", str(exc))
+      Tags:
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  EmptyBucketsOnDelete:
+    Type: Custom::EmptyStackBuckets
+    Properties:
+      ServiceToken: !GetAtt BucketCleanupFunction.Arn
+      Buckets:
+        - !Ref BackupBucket
+        - !Ref AuditBucket
+
+  # ----- IAM (participant access + app host data access) -----
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      # Participant access baseline (validated): SignInLocalDevelopmentAccess for
+      # the `aws login` OAuth2 flow + the 7-action CloudShell allow-list below.
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - Sid: DescribeOwnStack
+                Effect: Allow
+                Action:
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DescribeStackResources
+                  - cloudformation:ListStackResources
+                Resource: !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${NamePrefix}/*"
+              - Sid: ConsoleEc2Describe
+                Effect: Allow
+                Action:
+                  - ec2:Describe*
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/TenkaCloud:NamePrefix: !Ref NamePrefix
+              - Sid: ConsoleEc2Metadata
+                Effect: Allow
+                Action:
+                  - ec2:DescribeRegions
+                  - ec2:DescribeAvailabilityZones
+                  - ec2:DescribeAccountAttributes
+                Resource: "*"
+              - Sid: ReadStackOwnedBuckets
+                Effect: Allow
+                Action:
+                  - s3:GetBucketLocation
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt BackupBucket.Arn
+                  - !GetAtt AuditBucket.Arn
+              - Sid: ReadStackOwnedObjects
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource:
+                  - !Sub "${BackupBucket.Arn}/*"
+                  - !Sub "${AuditBucket.Arn}/*"
+              - Sid: StartSessionToOwnInstance
+                Effect: Allow
+                Action:
+                  - ssm:StartSession
+                Resource:
+                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/${AppInstance}"
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:document/SSM-SessionManagerRunShell"
+                  - !Sub "arn:aws:ssm:${AWS::Region}::document/SSM-SessionManagerRunShell"
+              - Sid: TerminateOwnSession
+                Effect: Allow
+                Action:
+                  - ssm:TerminateSession
+                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:session/${NamePrefix}*"
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: AppDataAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: BackupRead
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt BackupBucket.Arn
+                  - !Sub "${BackupBucket.Arn}/*"
+              - Sid: AuditWrite
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt AuditBucket.Arn
+                  - !Sub "${AuditBucket.Arn}/*"
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub "${NamePrefix}-instance-profile"
+      Roles:
+        - !Ref InstanceRole
+
+  # Live-status guide, stored in SSM (not UserData) and fetched at boot. The
+  # instance role's AmazonSSMManagedInstanceCore grants ssm:GetParameter.
+  VibeStatusToolParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/vibe-status-tool"
+      Type: String
+      Description: !Sub "vibe-status helper for ${NamePrefix} (fetched by the app host at boot)."
+      Tier: Standard
+      Value: |
+        #!/usr/bin/env bash
+        # vibe-status -- live production-gate posture + the objective for each gap.
+        set -uo pipefail
+        ENVF=/etc/tenkacloud-vibe/runtime.env
+        [ -f "$ENVF" ] && . "$ENVF"
+        P=$(curl -fsS --max-time 4 http://127.0.0.1:8080/posture 2>/dev/null || true)
+        if [ -z "$P" ]; then
+          echo "the app is not up yet. Deploy the local build first:"
+          echo "    /opt/tenkacloud/vibe/deploy_app.sh"
+          echo "then paste Stack Output 'AppUrlHint' into the Portal (app endpoint) to start scoring."
+          exit 0
+        fi
+        echo "platform: $(echo "$P" | jq -r '.platform')   (all 3 gates -> production)"
+        val(){ echo "$P" | jq -r ".posture.$1"; }
+        gate(){
+          if [ "$(val "$1")" = "true" ]; then printf '  [x] %s\n' "$1"
+          else printf '  [ ] %s\n      need: %s\n' "$1" "$2"; fi
+        }
+        gate db_present   "restore the seed dump from s3://$BACKUP_BUCKET into the app DB ($SQLITE_DB), then restart the service. (aws s3 cp + sqlite3)"
+        gate auth_enabled "in $CONFIG_FILE set auth_required=true and a non-default auth_token, then restart."
+        gate audit_on     "in $CONFIG_FILE set audit_s3=true, then restart. (the app writes audit events to $AUDIT_BUCKET)"
+        echo "exact commands are in the portal hints. re-run 'vibe-status' after each change (gates are measured from real state)."
+
+  AppInstance:
+    Type: AWS::EC2::Instance
+    DependsOn:
+      - BackupBucket
+      - AuditBucket
+      - EmptyBucketsOnDelete
+      - VibeStatusToolParameter
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref InstanceProfile
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: 0
+          SubnetId: !Ref PublicSubnetA
+          GroupSet:
+            - !Ref AppSg
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-app"
+        - Key: TenkaCloud:Problem
+          Value: stackstack-lite
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euxo pipefail
+
+          dnf update -y
+          dnf install -y nginx python3 sqlite awscli jq
+
+          mkdir -p /opt/tenkacloud/vibe /etc/tenkacloud-vibe /var/lib/tenkacloud-vibe /home/ec2-user/vibe-app
+          chown -R ec2-user:ec2-user /opt/tenkacloud /etc/tenkacloud-vibe /var/lib/tenkacloud-vibe
+
+          cat > /etc/tenkacloud-vibe/runtime.env <<ENV
+          AWS_REGION=${AWS::Region}
+          BACKUP_BUCKET=${BackupBucket}
+          AUDIT_BUCKET=${AuditBucket}
+          SQLITE_DB=/var/lib/tenkacloud-vibe/app.db
+          CONFIG_FILE=/etc/tenkacloud-vibe/config.json
+          ENV
+
+          cat > /etc/tenkacloud-vibe/config.json <<'JSON'
+          {
+            "auth_required": false,
+            "auth_token": "change-me",
+            "audit_s3": false
+          }
+          JSON
+
+          cat > /tmp/seed-sqlite.sql <<'SQL'
+          CREATE TABLE IF NOT EXISTS posts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            author TEXT NOT NULL,
+            body TEXT NOT NULL,
+            created_at TEXT NOT NULL
+          );
+          DELETE FROM posts;
+          INSERT INTO posts(author, body, created_at) VALUES
+            ('kato', 'handover: the AI app worked on my laptop, then it deleted production data', '2026-06-07T09:00:00Z'),
+            ('sasaki', 'please get this hosted, with auth and an audit trail before the demo', '2026-06-07T09:05:00Z'),
+            ('builder-bot', 'todo: add auth later', '2026-06-07T09:10:00Z');
+          SQL
+          aws s3 cp /tmp/seed-sqlite.sql "s3://${BackupBucket}/seed-sqlite.sql" --region "${AWS::Region}"
+
+          # vibe app (app.py) is gzip+base64 embedded to keep UserData small.
+          base64 -d <<'APPB64' | gunzip > /home/ec2-user/vibe-app/app.py
+          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
+          APPB64
+
+          cat > /opt/tenkacloud/vibe/deploy_app.sh <<'SH'
+          #!/bin/bash
+          set -euo pipefail
+          install -m 0644 -D /home/ec2-user/vibe-app/app.py /opt/tenkacloud/vibe/app.py
+          systemctl enable --now tenkacloud-vibe
+          systemctl restart nginx
+          echo "deployed: app is live on this host"
+          SH
+          chmod +x /opt/tenkacloud/vibe/deploy_app.sh
+
+          # On-box guidance fetched from SSM (kept out of UserData).
+          aws ssm get-parameter --name "/${NamePrefix}/vibe-status-tool" --query Parameter.Value --output text --region ${AWS::Region} > /usr/local/bin/vibe-status 2>/dev/null && chmod +x /usr/local/bin/vibe-status || true
+          cat > /etc/profile.d/stackstack-lite-guide.sh <<'SH'
+          echo "StackStack Lite app host. First: /opt/tenkacloud/vibe/deploy_app.sh then register Stack Output AppUrlHint in the Portal. Then run 'vibe-status' for the 3 production gates + what each needs."
+          SH
+
+          chown -R ec2-user:ec2-user /opt/tenkacloud /etc/tenkacloud-vibe /var/lib/tenkacloud-vibe /home/ec2-user/vibe-app
+
+          cat > /etc/systemd/system/tenkacloud-vibe.service <<'UNIT'
+          [Unit]
+          Description=TenkaCloud StackStack Lite vibe app
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          EnvironmentFile=/etc/tenkacloud-vibe/runtime.env
+          ExecStart=/usr/bin/python3 /opt/tenkacloud/vibe/app.py
+          Restart=always
+          RestartSec=3
+
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+
+          cat > /etc/nginx/conf.d/stackstack-lite.conf <<'NGINX'
+          server {
+              listen 80 default_server;
+              server_name _;
+              location / {
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_pass http://127.0.0.1:8080;
+              }
+          }
+          NGINX
+          rm -f /etc/nginx/conf.d/default.conf || true
+
+          systemctl daemon-reload
+          # The app ships as a local build; the participant deploys it with deploy_app.sh.
+          systemctl enable --now nginx
+
+Outputs:
+  RegisteredUrl:
+    Description: Empty by default; register AppUrlHint in the Participant Portal to start scoring.
+    Value: ""
+  AppUrlHint:
+    Description: Public app URL to paste into the `app` endpoint override (after deploy_app.sh).
+    Value: !Sub "http://${AppInstance.PublicDnsName}"
+  BackupBucketName:
+    Description: Stack-owned S3 bucket holding the seed dump for the DB restore.
+    Value: !Ref BackupBucket
+  AuditBucketName:
+    Description: Stack-owned S3 bucket the app writes audit events to.
+    Value: !Ref AuditBucket
+  InstanceId:
+    Description: App host instance id -- connect with `aws ssm start-session --target <this>`.
+    Value: !Ref AppInstance
+  SsmStartSessionCommand:
+    Description: Connect to the app host via SSM Session Manager.
+    Value: !Sub "aws ssm start-session --target ${AppInstance}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn
