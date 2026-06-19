@@ -198,6 +198,25 @@
       "scoringKind": "phased-polling"
     },
     {
+      "id": "stackstack-lite",
+      "name": "StackStack Lite — Vibe to Production (入門)",
+      "category": "Battle",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "45〜60 分",
+      "shortDescription": "天下クラウド株式会社 Platform Team。 加藤さんが残した AI 製の掲示板アプリを、 まずは社内に出せる最低ラインまで持っていく入門回。 アプリは EC2 に乗っているが、 DB は空、 認証なし、 監査なし。\n\n佐々木 CTO 曰く: 「いきなり全部はいい。 まずデータを戻して、 認証を付けて、 監査ログを出すところまで」\n\n君の仕事: 既存リソースだけを使い、 新規トップレベルリソースを作らずに、 デプロイ → DB 復元 → 認証 → 監査 の 3 つを満たして production に上げる。",
+      "tags": [
+        "platform-engineering",
+        "ai-native",
+        "governance",
+        "beginner",
+        "ec2",
+        "s3"
+      ],
+      "scoringKind": "phased-polling"
+    },
+    {
       "id": "x402-paywall",
       "name": "x402 課金ゲート — 課金しているのに 0 USDC",
       "category": "Challenge",
