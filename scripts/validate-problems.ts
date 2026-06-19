@@ -61,6 +61,25 @@ interface CrossRefResult {
   readonly warnings: ValidationError[];
 }
 
+/**
+ * [contract / AGENT.md §12] 競技者向け `instructions` は必須。 portal は `description` を
+ * 競技者に出さない (fairness contract) ため、 これが無いと competitor には shortDescription
+ * 1 行しか届かず誘導ゼロになる。 top-level (JA) と i18n.en の両方を要求する。
+ */
+function checkInstructionsPresent(meta: Metadata): ValidationError[] {
+  const errors: ValidationError[] = [];
+  const ja = meta.instructions;
+  if (typeof ja !== "string" || ja.trim().length === 0) {
+    errors.push("instructions (player-facing getting-started) is required — see AGENT.md §12");
+  }
+  const i18n = meta.i18n as { en?: { instructions?: unknown } } | undefined;
+  const en = i18n?.en?.instructions;
+  if (typeof en !== "string" || en.trim().length === 0) {
+    errors.push("i18n.en.instructions is required — mirror the JA instructions in English");
+  }
+  return errors;
+}
+
 function checkCrossRefs(metaPath: string, meta: Metadata): CrossRefResult {
   const dir = dirname(metaPath);
   const cfnTemplate = typeof meta.cfnTemplate === "string" ? meta.cfnTemplate : "template.yaml";
@@ -72,6 +91,7 @@ function checkCrossRefs(metaPath: string, meta: Metadata): CrossRefResult {
   const yaml = readFileSync(templatePath, "utf8");
   return {
     errors: [
+      ...checkInstructionsPresent(meta),
       ...checkScoringOutputRefs(meta, yaml, cfnTemplate),
       ...checkEndpointOutputRefs(meta, yaml, cfnTemplate),
       ...checkDisruptionRefs(meta, yaml, cfnTemplate),
