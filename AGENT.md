@@ -106,7 +106,8 @@ See `battles/hello-world-battle/` for the working reference.
 The fields a competitor sees in the portal are:
 
 - `shortDescription` (rendered on the problem card and detail page).
-- `description` (full problem page body).
+- `instructions` (rendered on the problem detail page as the player-facing "Getting started"; see §12).
+- `description` is **author/admin-only** — the portal does **not** show it to competitors (it holds scoring rules / hardened state / spoilers). Put player-facing guidance in `instructions` / `shortDescription`, not here.
 - `endpoints[].label` and `endpoints[].description` (rendered in the registration panel).
 - `scoring.hints[].content` (revealed at penalty).
 - `phases[].description`, `disruptions[].name` / `description` — but only when `publicHint: true`.
@@ -123,7 +124,18 @@ A `disruptions[]` entry whose `description` claims an outcome must declare the m
 
 Explain the red team operator-side. A single self-explanatory `action` (like `battles/hello-world-battle`'s `frontend-down`) can live entirely in the disruption's `description`. Anything bigger — multiple disruptions, mixed delivery models, or attack scripts — ships an operator-facing **`redteam/README.md`**: catalog table (id / delivery model / what actually happens), player recovery path, targeting rules, and a pre-event smoke test for real faults. Worked examples: `battles/stackstack/redteam/` (mixed `effect` + `action`), `battles/security-battle-royale/redteam/` (probe catalog).
 
-## Voice for `shortDescription` / `description`
+### 12. Every problem ships player-facing `instructions` (and ideally a `diagram.svg`)
+
+The portal hides `description` from competitors (fairness contract), so authored steps reach players **only** through `instructions`. A problem without `instructions` gives the player a one-line `shortDescription` and nothing else — the #1 playtest complaint ("誘導がなさすぎ / 何をやればいいかわからない"). So **every problem must set `instructions`** (top-level JA + `i18n.en.instructions`).
+
+- Shape: Markdown with `## はじめに` (one-line framing) → `## 最初の一手` (the concrete first command — `aws ssm start-session …`, read the briefing param, register the URL) → `## ゴール` (what success looks like). Keep it short.
+- **Non-spoiler, same as §10**: no scoring numbers, hardened state, or surprise mechanics — those stay in `description` / penalty-gated `hints`. The first move and the goal are not spoilers.
+- Images render: the portal renders `instructions` through the web-kit Markdown allowlist, so `![alt](https://…)` works.
+- **`diagram.svg`** (optional, recommended for multi-resource problems): drop a `diagram.svg` in the problem directory and the portal renders it as the architecture image on the problem page (globbed by the participant portal; keyed by directory name). Use it to show the "全体像" — the services and the flow. Keep it simple and non-spoiler.
+
+Worked examples: every problem under `challenges/` and `battles/` now carries `instructions`; mirror their JA/EN shape.
+
+## Voice for `shortDescription` / `instructions` / `description`
 
 The catalog leans into SRE-day-in-the-life narration: Kato-san (the predecessor who abruptly resigned), Sasaki-san CTO (gives vague but high-stakes orders), competitor as "the new hire" inheriting a mess. Players engage 2-3× better with story than with dry mechanics. Examples:
 
@@ -155,7 +167,7 @@ The skill (`.claude/skills/new-problem/SKILL.md`) walks the 6 steps below, dropp
 
    `cp -r <starter> <category>/<your-slug>`. Slug is kebab-case, lowercase, alphanumeric + hyphens.
 
-2. **Edit `metadata.json`.** Change `id`, `name`, `shortDescription`, `description`, `tags`, `scoring`, `endpoints`. Keep the JP top-level + `i18n.en` override pattern. Re-read the invariants above before touching `phases` / `disruptions` / `endpoints[].overridable`.
+2. **Edit `metadata.json`.** Change `id`, `name`, `shortDescription`, `instructions` (player-facing getting-started — required, see §12), `description` (author/admin-only), `tags`, `scoring`, `endpoints`. Keep the JP top-level + `i18n.en` override pattern. Optionally add a `diagram.svg` in the problem directory (architecture image, §12). Re-read the invariants above before touching `phases` / `disruptions` / `endpoints[].overridable`.
 
 3. **Edit `template.yaml`.** Add your problem-specific resources. **Do not remove**: `ParticipantViewerRole`'s baseline (managed policy + 7 CloudShell actions), `TenkaCloud:NamePrefix` tags on every EC2 resource, the comment anchors that point back at `scripts/validate-problems.ts`.
 

@@ -93,11 +93,13 @@ Must update:
 - `id` — matches the directory name exactly.
 - `name` — human-readable, EN-ish.
 - `tags` — kebab-case discoverability tags.
-- `shortDescription` / `description` — see "Voice" below.
+- `shortDescription` / `description` — see "Voice" below. (`description` is author/admin-only — the portal hides it from players.)
+- `instructions` — **required** player-facing getting-started (Markdown): `## はじめに` → `## 最初の一手` (the concrete first command) → `## ゴール`. Non-spoiler (no scoring numbers / hardened state). This is the field the portal renders below `shortDescription`; without it the player has no guidance (AGENT.md §12).
 - `learningGoals` — 2–4 bullets, what the player walks away knowing.
 - `endpoints[]` — slot per probeable URL. For Battles, **set `overridable: true`** so the player has to register the URL before scoring starts.
 - `scoring` — match the kind the user chose; cross-check `flagOutputKey` / `endpoints[].slot` against `template.yaml` Outputs.
-- `i18n.en.{name,shortDescription,description,learningGoals}` — mirror EN.
+- `i18n.en.{name,shortDescription,instructions,description,learningGoals}` — mirror EN.
+- Optional: drop a `diagram.svg` in the problem directory — the portal renders it as the architecture image on the problem page (recommended for multi-resource problems; AGENT.md §12).
 
 Keep `phases[].publicHint` and `disruptions[].publicHint` set to **`false`** unless the timing is genuinely part of the puzzle. If they default to `true` in the starter, flip them.
 
