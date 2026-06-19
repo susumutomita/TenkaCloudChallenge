@@ -9,7 +9,7 @@
       "visibility": "public",
       "difficulty": 3,
       "estimatedDuration": "45 分",
-      "shortDescription": "天下クラウドのキャンペーンサイトで、 訪問者から 「認証画面が怪しい」「PC が重くなった」 という問い合わせが続いている。\n\n調べると、 偽の Cloudflare Turnstile / reCAPTCHA 風の画面が出て 「Win+R でこのコマンドを貼って」 と誘導していた ── ErrTraffic 系の ClickFix 攻撃だ。 誰かが実際にコマンドを実行し、 サイトに何かが仕込まれたらしい。\n\n君の仕事: 侵害された web host を調査し、 攻撃者が永続化に使った仕掛けを特定して、 持ち出されている『キャンペーン ID』 を突き止めよ。",
+      "shortDescription": "天下クラウドのキャンペーンサイトで、 訪問者から 「認証画面が怪しい」「PC が重くなった」 という問い合わせが続いている。\n\n調べると、 偽の Cloudflare Turnstile / reCAPTCHA 風の画面が出て 「Win+R でこのコマンドを貼って」 と誘導していた ── ErrTraffic 系の ClickFix 攻撃だ。 誰かが実際にコマンドを実行し、 サイトに何かが仕込まれたらしい。\n\n君の仕事: 侵害された web host を調査し、 攻撃者が永続化に使った仕掛けを特定して、 持ち出されている『キャンペーン ID』 を突き止めよ。\n\n▶ 最初の一手: `aws ssm start-session --target <WebHostInstanceId>` で host に入り、 `/var/log/clickfix/powershell_history.log` から調査開始 (手順は `aws ssm get-parameter --name /<NamePrefix>/briefing`)。",
       "tags": [
         "security-detection",
         "incident-response",
@@ -206,7 +206,7 @@
       "visibility": "public",
       "difficulty": 4,
       "estimatedDuration": "90〜120 分",
-      "shortDescription": "天下クラウド株式会社 Platform Team、 月初の朝会。 加藤さんが辞めた直後、 AI Builder が量産した掲示板アプリが社内公開待ちになっている。 動くが、 DB は空、 認証なし、 rate limit なし、 監査なし、 SQLite のまま。\n\n佐々木 CTO 曰く: 「ホスティングしただけじゃ公開できない。 既存の統制リソースを使って、 今日中に本番品質まで持っていって」\n\n君の仕事: stack が作成済みの ALB / EC2 / WAF / S3 backup / S3 audit / RDS PostgreSQL を使い、 新規トップレベルリソースを作らずに、 ローカルビルドのデプロイ → restored → protected → audited → production へ上げていく。",
+      "shortDescription": "天下クラウド株式会社 Platform Team、 月初の朝会。 加藤さんが辞めた直後、 AI Builder が量産した掲示板アプリが社内公開待ちになっている。 動くが、 DB は空、 認証なし、 rate limit なし、 監査なし、 SQLite のまま。\n\n佐々木 CTO 曰く: 「ホスティングしただけじゃ公開できない。 既存の統制リソースを使って、 今日中に本番品質まで持っていって」\n\n君の仕事: stack が作成済みの ALB / EC2 / WAF / S3 backup / S3 audit / RDS PostgreSQL を使い、 新規トップレベルリソースを作らずに、 ローカルビルドのデプロイ → restored → protected → audited → production へ上げていく。\n\n▶ 最初の一手: `aws ssm start-session --target <InstanceId>` で app host に入り `vibe-status` を実行 (6 つの gate の現状と各 gate の目的が出る)。 `AppUrlHint` を Portal の app endpoint に登録すると採点開始。",
       "tags": [
         "platform-engineering",
         "ai-native",
@@ -225,7 +225,7 @@
       "visibility": "public",
       "difficulty": 2,
       "estimatedDuration": "45〜60 分",
-      "shortDescription": "天下クラウド株式会社 Platform Team。 加藤さんが残した AI 製の掲示板アプリを、 まずは社内に出せる最低ラインまで持っていく入門回。 アプリは EC2 に乗っているが、 DB は空、 認証なし、 監査なし。\n\n佐々木 CTO 曰く: 「いきなり全部はいい。 まずデータを戻して、 認証を付けて、 監査ログを出すところまで」\n\n君の仕事: 既存リソースだけを使い、 新規トップレベルリソースを作らずに、 デプロイ → DB 復元 → 認証 → 監査 の 3 つを満たして production に上げる。",
+      "shortDescription": "天下クラウド株式会社 Platform Team。 加藤さんが残した AI 製の掲示板アプリを、 まずは社内に出せる最低ラインまで持っていく入門回。 アプリは EC2 に乗っているが、 DB は空、 認証なし、 監査なし。\n\n佐々木 CTO 曰く: 「いきなり全部はいい。 まずデータを戻して、 認証を付けて、 監査ログを出すところまで」\n\n君の仕事: 既存リソースだけを使い、 新規トップレベルリソースを作らずに、 デプロイ → DB 復元 → 認証 → 監査 の 3 つを満たして production に上げる。\n\n▶ 最初の一手: `aws ssm start-session --target <InstanceId>` で app host に入り `vibe-status` を実行 (3 つの gate の現状と目的が出る)。 `AppUrlHint` を Portal の app endpoint に登録すると採点開始。",
       "tags": [
         "platform-engineering",
         "ai-native",
@@ -244,7 +244,7 @@
       "visibility": "public",
       "difficulty": 3,
       "estimatedDuration": "30 分",
-      "shortDescription": "天下クラウド株式会社。 今月の AI クローラー課金売上は 0 USDC。\n\n前任 SRE の加藤さんは退職前に 「AI Bot からコンテンツ閲覧料を取る」 x402 課金ゲートを立てた。 アクセスログを見ると Bot はちゃんとゲートに弾かれている (HTTP 402 が返っている)。 なのに 1 USDC も入ってこない。\n\n佐々木 CTO 「課金してるのに金が入らないって、 どういう状態だ。 直してくれ」。 あなたのミッション: ゲートの設定ミスを直し、 Bot が正しく支払って初めて出てくる隠しトークンを掴め。",
+      "shortDescription": "天下クラウド株式会社。 今月の AI クローラー課金売上は 0 USDC。\n\n前任 SRE の加藤さんは退職前に 「AI Bot からコンテンツ閲覧料を取る」 x402 課金ゲートを立てた。 アクセスログを見ると Bot はちゃんとゲートに弾かれている (HTTP 402 が返っている)。 なのに 1 USDC も入ってこない。\n\n佐々木 CTO 「課金してるのに金が入らないって、 どういう状態だ。 直してくれ」。 あなたのミッション: ゲートの設定ミスを直し、 Bot が正しく支払って初めて出てくる隠しトークンを掴め。\n\n▶ 最初の一手: CloudShell で `aws ssm get-parameter --name /<NamePrefix>/briefing --query Parameter.Value --output text` を読む (やる手順が全部書いてある)。",
       "tags": [
         "challenge",
         "flag",
