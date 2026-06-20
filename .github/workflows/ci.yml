@@ -48,3 +48,11 @@ jobs:
       # new problem can never merge while invisible to the catalog.
       - name: Check index.json is up to date
         run: bun run scripts/build-index.ts --check
+
+      # cost-report.json is the static AWS cost / leftover-billing estimate for
+      # every problem (#87 Phase A), regenerated from template.yaml + rate table
+      # by scripts/estimate-cost.ts. --check fails if it is stale (= a template
+      # changed cost-relevant resources without rerunning `bun run cost --write`),
+      # so always-on / billing-risk drift is caught before merge.
+      - name: Check cost-report.json is up to date
+        run: bun run cost:check
