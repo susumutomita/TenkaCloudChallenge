@@ -79,8 +79,7 @@ The source of truth is [`SCHEMA.json`](./SCHEMA.json). Both the frontend catalog
 
 | Key              | Purpose                                                                                                       |
 | ---------------- | ------------------------------------------------------------------------------------------------------------- |
-| `instructions`   | Spoiler-free "getting started" guidance shown **always** to competitors on the problem page (#1929). Unlike `description` (withheld from the portal by the fairness contract #1124), this is rendered as Markdown — numbered steps, code blocks, and images (architecture diagrams via http/https `src`) are allowed. Never put scoring numbers / hardened state / surprise mechanics here. |
-| `i18n.en`        | English overrides for `name` / `shortDescription` / `description` / `instructions` / `learningGoals`. ja stays at top-level; en lives here. Supported locales are **ja + en only** (#1108). |
+| `i18n.en`        | English overrides for `name` / `shortDescription` / `description` / `learningGoals`. ja stays at top-level; en lives here. Supported locales are **ja + en only** (#1108). |
 | `scoring`        | Declares one of 5 builtin kinds (see below). Omit to disable scoring entirely (deploy-only problem).         |
 | `endpoints`      | Endpoint registry for uptime / phased-polling kinds (`slot` / `outputKey` / `path`).                          |
 | `phases`         | For `phased-polling`. Stages in `afterMinutes` order where score rule or endpoint binding flips over time.    |
