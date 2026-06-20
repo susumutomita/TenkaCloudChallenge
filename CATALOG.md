@@ -210,6 +210,8 @@ Each problem's AWS cost is estimated **without deploying** by line-walking its `
 - **`cost-report.json`** — full per-problem breakdown (`bun run cost <id>` / `--all` / `--json`). Regenerate with `bun run cost --write`.
 - **`index.json` `cost`** — the select-time summary the catalog/admin console reads: `perHourUsd`, `perDayIfLeftRunningUsd`, `freeTierEligible`, and **`alwaysOnResources`** (RDS / ALB / NAT / EIP / Route53 HostedZone — these keep billing even when the stack is idle, so they are the "落とし忘れ" risk). Derived from the same estimator, so rerun `bun run scripts/build-index.ts` after a cost-relevant template change.
 
+**Operate-time (`bun run status`)** — a read-only monitor that lists live CloudFormation stacks and annotates each with its estimated `$/day` (matched to a problem by name, sourced from `cost-report.json`) plus any always-on resources, so a forgotten stack is easy to spot. It calls `aws cloudformation list-stacks` once (does not modify anything); offline you can pipe a saved listing with `bun run status --from-json stacks.json`.
+
 ## i18n
 
 Supported locales: **ja + en only** (Issue #1108 deprecated es / zh).
