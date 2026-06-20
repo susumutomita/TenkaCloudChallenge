@@ -199,8 +199,16 @@ After adding / editing a problem, the following checks make CI green. `make befo
 | `make check-template-ascii`           | Templates stay within ASCII + Latin-1 (safe IAM Description characters).                                           |
 | `make check-template-security`        | Scan for dangerous patterns in IAM / Security Group / S3 / KMS (e.g. `Action: "*"` + `Resource: "*"`).             |
 | `make check-template-cfn-refs`        | Verify `!Ref` / `!GetAtt` reference integrity + presence of the required `ParticipantViewerRole`.                  |
+| `bun run cost:check`                   | Verify `cost-report.json` matches the templates (#87 — static AWS cost + leftover-billing estimate). Rebuild via `bun run cost --write`. |
 
 `index.json` is injected at build time into the three SPAs (`apps/admin-console` / `apps/application-admin-console` / `apps/participant-portal`), making `metadata.json` the single source of truth for catalog display.
+
+### Cost visibility (#87)
+
+Each problem's AWS cost is estimated **without deploying** by line-walking its `template.yaml` (`scripts/estimate-cost.ts` + the static rate table in `scripts/lib/cost-rates.ts`). Two generated artifacts hold the result:
+
+- **`cost-report.json`** — full per-problem breakdown (`bun run cost <id>` / `--all` / `--json`). Regenerate with `bun run cost --write`.
+- **`index.json` `cost`** — the select-time summary the catalog/admin console reads: `perHourUsd`, `perDayIfLeftRunningUsd`, `freeTierEligible`, and **`alwaysOnResources`** (RDS / ALB / NAT / EIP / Route53 HostedZone — these keep billing even when the stack is idle, so they are the "落とし忘れ" risk). Derived from the same estimator, so rerun `bun run scripts/build-index.ts` after a cost-relevant template change.
 
 ## i18n
 

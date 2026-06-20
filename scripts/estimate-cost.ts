@@ -51,7 +51,7 @@ interface BillableLine {
   readonly hourlyUsdEach: number;
 }
 
-interface ProblemCost {
+export interface ProblemCost {
   readonly id: string;
   readonly category: string;
   readonly region: Region;
@@ -64,7 +64,7 @@ interface ProblemCost {
   readonly billable: readonly BillableLine[];
 }
 
-interface CostReport {
+export interface CostReport {
   readonly version: string;
   readonly assumptions: string;
   readonly problems: readonly ProblemCost[];
@@ -242,7 +242,7 @@ function groupCount(items: string[]): [string, number][] {
   return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
 }
 
-function buildReport(): CostReport {
+export function buildReport(): CostReport {
   const problems = collectMetadataFiles()
     .map(estimate)
     .sort((a, b) => a.id.localeCompare(b.id));
@@ -326,4 +326,9 @@ function main(): void {
   printTable(selected);
 }
 
-main();
+// 直接実行されたときだけ CLI を動かす。build-index.ts などから import したときは
+// buildReport() だけ使い、main() は走らせない (= index.json と cost を同じ estimator
+// から導出して二重メンテを避ける)。
+if (import.meta.main) {
+  main();
+}
