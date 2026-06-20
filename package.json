@@ -10,6 +10,7 @@
     "validate:local": "bun run validate && bun run validate:kumo",
     "cost": "bun run scripts/estimate-cost.ts",
     "cost:check": "bun run scripts/estimate-cost.ts --check",
+    "status": "bun run scripts/status.ts",
     "kumo:up": "docker compose -f docker-compose.kumo.yml up -d",
     "kumo:down": "docker compose -f docker-compose.kumo.yml down -v",
     "kumo:logs": "docker compose -f docker-compose.kumo.yml logs -f kumo"
