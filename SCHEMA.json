@@ -111,6 +111,11 @@
       "type": "string",
       "description": "[競技者向け] 問題ページに常時表示する『はじめに — 最初の一手・進め方』。 Markdown 可、 画像 (<img>, https URL) も描画される。 ネタバレ厳禁 (採点数値 / hardened state / surprise mechanics は書かない)。 任意。 同ディレクトリに diagram.svg を置くとアーキテクチャ図として併せて表示される。"
     },
+    "instructions": {
+      "type": "string",
+      "minLength": 1,
+      "description": "[Issue #1929] 競技者向けの「最初の一手・進め方」ガイド (ネタバレ禁止)。 fairness contract (#1124) により `description` は portal に embed されない (採点ルール / hardened state 等のネタバレを含むため) のに対し、 本 field は **常に participant portal に表示される**。 採点数値 / hardened state / surprise mechanics は書かない。 platform 側は `<Markdown>` (renderMarkdownToSafeHtml) で描画するため、 番号付き手順・コードブロック・画像 (アーキ図、 src は http/https URL を allowlist) が使える。 省略可。"
+    },
     "tags": {
       "type": "array",
       "items": {
