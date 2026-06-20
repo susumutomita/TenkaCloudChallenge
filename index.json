@@ -19,7 +19,13 @@
         "wordpress",
         "forensics"
       ],
-      "scoringKind": "flag"
+      "scoringKind": "flag",
+      "cost": {
+        "perHourUsd": 0.0136,
+        "perDayIfLeftRunningUsd": 0.33,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
     },
     {
       "id": "hello-world",
@@ -36,7 +42,13 @@
         "flag",
         "ssm"
       ],
-      "scoringKind": "flag"
+      "scoringKind": "flag",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
     },
     {
       "id": "hello-world-battle",
@@ -54,7 +66,13 @@
         "ec2",
         "nginx"
       ],
-      "scoringKind": "uptime-flat"
+      "scoringKind": "uptime-flat",
+      "cost": {
+        "perHourUsd": 0.0136,
+        "perDayIfLeftRunningUsd": 0.33,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
     },
     {
       "id": "microservice-migration-battle",
@@ -74,7 +92,13 @@
         "ec2",
         "docker"
       ],
-      "scoringKind": "phased-polling"
+      "scoringKind": "phased-polling",
+      "cost": {
+        "perHourUsd": 0.0272,
+        "perDayIfLeftRunningUsd": 0.65,
+        "freeTierEligible": false,
+        "alwaysOnResources": []
+      }
     },
     {
       "id": "net-evo-01-reachability",
@@ -94,7 +118,13 @@
         "connectivity",
         "internet-evolution"
       ],
-      "scoringKind": "flag"
+      "scoringKind": "flag",
+      "cost": {
+        "perHourUsd": 0.0272,
+        "perDayIfLeftRunningUsd": 0.65,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
     },
     {
       "id": "net-evo-02-dns",
@@ -115,7 +145,15 @@
         "name-resolution",
         "internet-evolution"
       ],
-      "scoringKind": "flag"
+      "scoringKind": "flag",
+      "cost": {
+        "perHourUsd": 0.0279,
+        "perDayIfLeftRunningUsd": 0.67,
+        "freeTierEligible": false,
+        "alwaysOnResources": [
+          "Route53 HostedZone"
+        ]
+      }
     },
     {
       "id": "net-evo-03-egress",
@@ -137,7 +175,13 @@
         "routing",
         "internet-evolution"
       ],
-      "scoringKind": "flag"
+      "scoringKind": "flag",
+      "cost": {
+        "perHourUsd": 0.0408,
+        "perDayIfLeftRunningUsd": 0.98,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
     },
     {
       "id": "net-evo-04-tls",
@@ -157,7 +201,13 @@
         "transport-security",
         "internet-evolution"
       ],
-      "scoringKind": "flag"
+      "scoringKind": "flag",
+      "cost": {
+        "perHourUsd": 0.0272,
+        "perDayIfLeftRunningUsd": 0.65,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
     },
     {
       "id": "net-evo-05-edge",
@@ -179,7 +229,13 @@
         "origin",
         "internet-evolution"
       ],
-      "scoringKind": "flag"
+      "scoringKind": "flag",
+      "cost": {
+        "perHourUsd": 0.0544,
+        "perDayIfLeftRunningUsd": 1.31,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
     },
     {
       "id": "security-battle-royale",
@@ -196,7 +252,13 @@
         "incident-response",
         "uptime"
       ],
-      "scoringKind": "uptime-multi"
+      "scoringKind": "uptime-multi",
+      "cost": {
+        "perHourUsd": 0.0272,
+        "perDayIfLeftRunningUsd": 0.65,
+        "freeTierEligible": false,
+        "alwaysOnResources": []
+      }
     },
     {
       "id": "stackstack",
@@ -215,7 +277,16 @@
         "rds",
         "incident-response"
       ],
-      "scoringKind": "phased-polling"
+      "scoringKind": "phased-polling",
+      "cost": {
+        "perHourUsd": 0.0775,
+        "perDayIfLeftRunningUsd": 1.86,
+        "freeTierEligible": false,
+        "alwaysOnResources": [
+          "ALB",
+          "RDS"
+        ]
+      }
     },
     {
       "id": "stackstack-lite",
@@ -234,7 +305,13 @@
         "ec2",
         "s3"
       ],
-      "scoringKind": "phased-polling"
+      "scoringKind": "phased-polling",
+      "cost": {
+        "perHourUsd": 0.0136,
+        "perDayIfLeftRunningUsd": 0.33,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
     },
     {
       "id": "x402-paywall",
@@ -257,7 +334,13 @@
         "lambda",
         "s3"
       ],
-      "scoringKind": "flag"
+      "scoringKind": "flag",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
     }
   ]
 }

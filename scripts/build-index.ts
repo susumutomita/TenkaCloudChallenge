@@ -10,19 +10,33 @@
  *
  * Fields mirrored per problem (Japanese top-level, not i18n.en):
  *   id, name, category, status, visibility (default "public"), difficulty,
- *   estimatedDuration, shortDescription, tags, scoringKind (= scoring.kind).
+ *   estimatedDuration, shortDescription, tags, scoringKind (= scoring.kind),
+ *   cost (= #87 Phase B: select-time コスト可視化。estimate-cost.ts が template から
+ *   導出する perHour / 放置時 $/day / free-tier 可否 / always-on リソース)。
  *
  * Usage:
  *   bun run scripts/build-index.ts          # write index.json
  *   bun run scripts/build-index.ts --check  # exit 1 if index.json is stale
+ *
+ * cost は estimate-cost.ts の buildReport() から導出するため、template の課金リソースを
+ * 変えたら `bun run scripts/build-index.ts` を再実行する (CI が --check で drift を止める)。
  */
 
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { buildReport, type ProblemCost } from "./estimate-cost";
 
 const REPO_ROOT = new URL("..", import.meta.url).pathname;
 const CATEGORY_DIRS = ["battles", "challenges"] as const;
 const INDEX_PATH = join(REPO_ROOT, "index.json");
+
+/** index.json に載せる軽量コスト要約 (= select 時にカタログ/管理コンソールが読む)。 */
+interface IndexCost {
+  perHourUsd: number;
+  perDayIfLeftRunningUsd: number;
+  freeTierEligible: boolean;
+  alwaysOnResources: string[];
+}
 
 interface IndexEntry {
   id: string;
@@ -35,6 +49,7 @@ interface IndexEntry {
   shortDescription: string;
   tags: string[];
   scoringKind: string;
+  cost: IndexCost;
 }
 
 function collectMetadataFiles(): string[] {
@@ -59,8 +74,9 @@ function collectMetadataFiles(): string[] {
   return files;
 }
 
-function toEntry(meta: Record<string, unknown>): IndexEntry {
+function toEntry(meta: Record<string, unknown>, costById: Map<string, ProblemCost>): IndexEntry {
   const scoring = (meta.scoring ?? {}) as Record<string, unknown>;
+  const c = costById.get(String(meta.id));
   return {
     id: String(meta.id),
     name: String(meta.name),
@@ -72,12 +88,19 @@ function toEntry(meta: Record<string, unknown>): IndexEntry {
     shortDescription: String(meta.shortDescription),
     tags: Array.isArray(meta.tags) ? (meta.tags as string[]) : [],
     scoringKind: typeof scoring.kind === "string" ? scoring.kind : "none",
+    cost: {
+      perHourUsd: c?.perHourUsd ?? 0,
+      perDayIfLeftRunningUsd: c?.ifLeftRunningUsd.oneDay ?? 0,
+      freeTierEligible: c?.freeTierEligible ?? true,
+      alwaysOnResources: c ? [...c.alwaysOnResources] : [],
+    },
   };
 }
 
 function buildIndex(): { version: string; problems: IndexEntry[] } {
+  const costById = new Map(buildReport().problems.map((p) => [p.id, p] as const));
   const problems = collectMetadataFiles()
-    .map((f) => toEntry(JSON.parse(readFileSync(f, "utf8"))))
+    .map((f) => toEntry(JSON.parse(readFileSync(f, "utf8")), costById))
     .sort((a, b) => a.id.localeCompare(b.id));
   return { version: "1", problems };
 }
