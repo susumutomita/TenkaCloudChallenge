@@ -47,12 +47,16 @@ jobs:
       # (= a problem was added/edited without rerunning the generator), so a
       # new problem can never merge while invisible to the catalog.
       - name: Check index.json is up to date
-        run: bun run scripts/build-index.ts --check
+        run: |
+          bun run scripts/build-index.ts --check \
+            || { echo "::error::index.json is stale. Run 'bun run reindex' and commit (or 'bun run setup' once to enable the auto-reindex hook)."; exit 1; }
 
       # cost-report.json is the static AWS cost / leftover-billing estimate for
       # every problem (#87 Phase A), regenerated from template.yaml + rate table
       # by scripts/estimate-cost.ts. --check fails if it is stale (= a template
-      # changed cost-relevant resources without rerunning `bun run cost --write`),
+      # changed cost-relevant resources without rerunning the generator),
       # so always-on / billing-risk drift is caught before merge.
       - name: Check cost-report.json is up to date
-        run: bun run cost:check
+        run: |
+          bun run cost:check \
+            || { echo "::error::cost-report.json is stale. Run 'bun run reindex' and commit (or 'bun run setup' once to enable the auto-reindex hook)."; exit 1; }

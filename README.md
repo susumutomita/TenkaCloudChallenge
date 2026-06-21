@@ -40,11 +40,24 @@ That's all you need for authoring. AWS credentials are only required when runnin
 
 ## ➕ Add a new problem
 
-1. **Create the directory.** `<category>/<id>/` where `<category>` is `battles` or `challenges` and `<id>` is lowercase kebab-case.
-2. **Write `metadata.json`.** Conform to [`SCHEMA.json`](./SCHEMA.json) — see existing problems for working examples. Key fields: `id`, `name`, `category`, `difficulty`, `scoring`, `endpoints`, `disruptions`.
-3. **Write `template.yaml`.** A single-page CloudFormation template (the deploy body). Must accept `NamePrefix` / `TenkaCloudAccountId` / `ExternalId` parameters and create the required `ParticipantViewerRole`.
-4. **(Optional) Add `portal/<slot>.tsx`** for problem-specific UI in the participant portal, and **`services/`** for any docker-compose / Lambda code your template pulls down (e.g. via EC2 UserData).
-5. **Validate locally** with `bun run validate`, open a PR, get it reviewed and merged.
+```bash
+bun install
+bun run setup                          # one-time: enable the auto-reindex git hook
+bun run new battles my-cool-battle     # scaffold from a working sample (validates immediately)
+```
+
+`bun run new <battles|challenges> <id>` copies a known-good sample (so it passes
+validation from the start) and regenerates the catalog index for you. Then:
+
+1. **Edit `metadata.json`.** Conform to [`SCHEMA.json`](./SCHEMA.json). Key fields: `id`, `name`, `category`, `difficulty`, `scoring`, `endpoints`, `disruptions`. (Use `--from <sampleId>` to start from a closer example.)
+2. **Edit `template.yaml`.** A single-page CloudFormation template (the deploy body). Must accept `NamePrefix` / `TenkaCloudAccountId` / `ExternalId` parameters and create the required `ParticipantViewerRole`.
+3. **(Optional) Add `portal/<slot>.tsx`** for problem-specific UI in the participant portal, and **`services/`** for any docker-compose / Lambda code your template pulls down (e.g. via EC2 UserData).
+4. **`bun run validate`**, set `status` to `ready`, then open a PR.
+
+You never hand-edit `index.json` / `cost-report.json` — `bun run new` regenerates
+them, and after `bun run setup` the pre-commit hook keeps them fresh on every commit.
+(Skipped the hook? Run `bun run reindex` before committing — CI verifies the catalog
+matches your metadata with `--check`.)
 
 A platform-repo maintainer then bumps the submodule pointer and the next `make deploy` ships your problem.
 

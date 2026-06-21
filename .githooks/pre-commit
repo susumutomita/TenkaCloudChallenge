@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Auto-keep the catalog index fresh so contributors never run build-index by hand.
+# Enabled by `bun run setup` (sets core.hooksPath=.githooks). If a staged change
+# touches a problem or the schema, regenerate index.json + cost-report.json and stage
+# them, so the committed catalog always matches metadata.json (CI checks this with --check).
+set -euo pipefail
+
+staged="$(git diff --cached --name-only)"
+if ! grep -qE '^(battles|challenges|bundles)/|^SCHEMA\.json$' <<<"$staged"; then
+  exit 0
+fi
+
+echo "[pre-commit] problem/schema change detected — regenerating catalog index..."
+bun run scripts/build-index.ts
+bun run scripts/estimate-cost.ts --write
+git add index.json cost-report.json
+echo "[pre-commit] index.json + cost-report.json regenerated and staged."
