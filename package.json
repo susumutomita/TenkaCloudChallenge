@@ -5,6 +5,9 @@
   "description": "TenkaCloud problem catalog. Validates metadata.json against SCHEMA.json and cross-refs template.yaml Outputs + portal slot files.",
   "type": "module",
   "scripts": {
+    "new": "bun run scripts/new-problem.ts",
+    "reindex": "bun run scripts/build-index.ts && bun run scripts/estimate-cost.ts --write",
+    "setup": "git config core.hooksPath .githooks && echo 'pre-commit hook enabled (auto-reindex).'",
     "validate": "bun run scripts/validate-problems.ts",
     "validate:kumo": "bun run scripts/kumo-evaluate-problems.ts",
     "validate:local": "bun run validate && bun run validate:kumo",
