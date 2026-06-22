@@ -1,0 +1,75 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "waf-classic-kuyo",
+  "name": "WAF Classic 供養 — 同じルールを WAF v2 で再現する",
+  "category": "Battle",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "45〜60 分",
+  "shortDescription": "天下クラウドの公開プロフィール API は、長らく AWS WAF Classic (WAF v1) の 3 つのルール (IP ブロックリスト / SQLi / レート制限 2000) で守られてきた ── が、WAF Classic は 2025-09-30 にサ終した。もう同じものは作れない。\n\nあなたの仕事: 遺された旧 WAF Classic の ACL ダンプ (deploy 時に渡される) を読み、**まったく同じ 3 ルールを AWS WAF v2 (WAFv2 WebACL) で再現**して API Gateway ステージに紐付ける。運営のレッドチームの攻撃を弾いた数だけ加点 ── 旧ルールを v2 へ移し替えて成仏させよ。\n\nDeploy しただけでは API は丸腰。旧 ACL と等価な WebACL を作って関連付けた瞬間から、ブロックした攻撃の分だけスコアが伸びる。",
+  "instructions": "## 背景 (供養)\nAWS WAF Classic (v1) は 2025-09-30 にサ終。亡骸はもうデプロイできない。残されたのは旧 WebACL の設定ダンプだけ。これと**同じ防御**を生きている AWS WAF v2 で組み直す ── それがこの問題の「供養」。\n\n## 渡されるもの (遺品)\nDeploy 後、旧 WAF Classic の ACL がここから読める:\n- SSM: Output `LegacyWafClassicAclParameterName` の名前 (`aws ssm get-parameter --name <それ>`)\n- 問題リポジトリ: `legacy/waf-classic-acl.json` (注釈つき)\n\n旧 ACL の中身は 3 ルール:\n| # | 旧 (WAF Classic) | 再現先 (WAF v2) |\n| - | --- | --- |\n| 1 | IPSet `bad-ipset` = `203.0.113.0/24`, `198.51.100.7/32` を BLOCK | `IPSet` + `Statement.IPSetReferenceStatement` (Action=Block、同じ CIDR) |\n| 2 | `SqlInjectionMatchSet` (BODY + QUERY_STRING) を BLOCK | `Statement.SqliMatchStatement` (BODY+QUERY_STRING) または `AWSManagedRulesSQLiRuleSet` |\n| 3 | `RateBasedRule` RateKey=IP, RateLimit=2000 | `Statement.RateBasedStatement { Limit: 2000, AggregateKeyType: IP }` |\n\n## 手順\n1. Outputs (`ApiUrl` / `RestApiStageArn` / `WebAclMetricNameHint` / `AttackStatsParameterName` / `LegacyWafClassicAclParameterName`) を控える。\n2. 旧 ACL を読み、上表の通り **3 ルールを 1:1 で** `Scope=REGIONAL` の `AWS::WAFv2::WebACL` に再現する。\n3. `VisibilityConfig.MetricName` は **必ず Output `WebAclMetricNameHint` の値**、`CloudWatchMetricsEnabled: true` にする (採点エンジンがこの metric の `BlockedRequests` を読む)。\n4. `AWS::WAFv2::WebACLAssociation` で `ResourceArn = RestApiStageArn` に紐付ける。\n5. レッドチームの攻撃 (旧ルールが狙っていた 3 種) が v2 にブロックされ始め、ブロック数 × 配点で加点。\n\n## 注意\n- WAF Classic (`AWS::WAF::*` / `AWS::WAFRegional::*`) は API Gateway に付かず、そもそも新規作成も不可 (= サ終)。必ず WAFv2 (`AWS::WAFv2::*`) で再現する。\n- 旧 ACL に無いルールを足すのは自由だが、正常系まで巻き込むと後続フェーズの回帰チェックで減点。",
+  "description": "WAF Classic → WAF v2 の **ルール移行 (契約再現)** を題材にした「サ終供養」型 Battle。`scoring.kind=attack-detection` の初号機。\n\nDeploy すると競技者の AWS アカウントに次が作られる:\n  - Lambda (Node.js) — 旧『プロフィール API』本体 (WAF Classic が守っていた legacy app の役)\n  - API Gateway REST API (regional) + `prod` ステージ — Lambda proxy 統合\n  - SSM Parameter `LegacyWafClassicAclParameter` — **サ終した WAF Classic の WebACL ダンプ (再現すべき 3 ルール)**\n  - SSM Parameter `AttackStatsParameter` — 採点エンジンがブロック数を読む座標\n  - SSM Parameter — ミッション概要 (briefing)\n  - ParticipantViewerRole — wafv2 / cloudwatch / apigateway / ssm 読みを付与し移行を実際に解けるようにする\n\nWebACL は **競技者が作る** (= 移行作業そのもの)。template は丸腰の API + 旧 ACL + 採点座標を払い出し、『旧と同じ 3 ルールを v2 で再現する』ことを求める。死んだサービスは動かさず、その**振る舞い (ルール契約)** を後継で再現することで供養する。\n\n採点 (attack-detection): 運営のレッドチームが IP ブロックリスト該当 / SQLi / レート flood を撃ち、WAF v2 がブロックした件数 (`BlockedRequests`) を `pointsPerAttack` で加点。旧 3 ルールに対応する 3 category (`ip-blocklist` / `sql-injection` / `rate-flood`) を持つ。\n\n## サ終メモ (出典)\nAWS WAF Classic (WAF v1) は 2025-09-30 サポート終了。新規作成も不可のため、本問題は Classic リソースを一切デプロイせず、旧 ACL の契約を WAF v2 上で再現させる。\n\n## コスト\n- Lambda / API Gateway / SSM: 短時間セッションは概ね Free Tier 内\n- WAFv2 WebACL: $5/月/WebACL + $1/rule/月 + $0.60/100万リクエスト (Free Tier 外。45〜60 分なら日割りで数セント、競技後に削除すること)",
+  "tags": [
+    "waf",
+    "waf-v2",
+    "waf-classic",
+    "rule-migration",
+    "security",
+    "saaslifecycle-eol",
+    "kuyo",
+    "attack-detection",
+    "api-gateway"
+  ],
+  "exposedPorts": [{ "port": 443, "name": "https (API Gateway REST, prod stage)" }],
+  "learningGoals": [
+    "サ終した AWS WAF Classic の WebACL ダンプを読み、IPSet / SqlInjectionMatchSet / RateBasedRule の 3 ルールを把握する",
+    "旧 3 ルールを WAF v2 の IPSetReferenceStatement / SqliMatchStatement / RateBasedStatement に 1:1 で移植し、API Gateway REST ステージへ WebACLAssociation する",
+    "WAF の BlockedRequests メトリクスで防御効果を可視化し、誤検知 (正常系ブロック) とのトレードオフを調整する",
+    "『サ終したサービスは動かせない。振る舞い (ルール契約) を後継で再現して供養する』という TenkaCloud の問題作りの型を知る"
+  ],
+  "defaultRegion": "ap-northeast-1",
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "scoring": {
+    "kind": "attack-detection",
+    "statsOutputKey": "AttackStatsParameterName",
+    "pointsPerAttack": 10,
+    "categories": [
+      { "name": "ip-blocklist" },
+      { "name": "sql-injection", "pointsPerAttack": 15 },
+      { "name": "rate-flood" }
+    ],
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "Deploy 直後は WebACL が無いので加点 0。まず Scope=REGIONAL の AWS::WAFv2::WebACL を作り、ResourceArn = Output `RestApiStageArn` で WebACLAssociation する。",
+        "penalty": 0
+      },
+      {
+        "id": "hint-2",
+        "content": "再現すべき旧ルールは Output `LegacyWafClassicAclParameterName` の SSM か repo の `legacy/waf-classic-acl.json` にある。3 ルールを 1:1 で: IPSet→IPSetReferenceStatement / SqlInjectionMatchSet→SqliMatchStatement / RateBasedRule(2000,IP)→RateBasedStatement。",
+        "penalty": 10
+      },
+      {
+        "id": "hint-3",
+        "content": "VisibilityConfig.MetricName を Output `WebAclMetricNameHint` の値にし、CloudWatchMetricsEnabled: true にしないと採点エンジンが BlockedRequests を見つけられず加点されない。WAF Classic (AWS::WAF*) では API Gateway に付かず新規作成も不可 (=サ終の追体験)。",
+        "penalty": 20
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "WAF Classic Requiem — Reproduce the Same Rules on WAF v2",
+      "shortDescription": "TenkaCloud's public profile API was long guarded by three AWS WAF Classic (WAF v1) rules (IP blocklist / SQLi / rate-limit 2000) — but WAF Classic reached end of support on 2025-09-30 and can no longer be created.\n\nYour job: read the exported legacy WAF Classic ACL handed to you on deploy and reproduce the exact same three rules on AWS WAF v2 (a WAFv2 WebACL), then associate it with the API Gateway stage. You score for every attack the WAF blocks — lay the old rules to rest by porting them to v2.\n\nDeploying leaves the API defenseless; scoring begins the moment you create an equivalent WebACL and associate it.",
+      "instructions": "## Background (the requiem)\nAWS WAF Classic (v1) was discontinued on 2025-09-30 — the corpse can no longer be deployed. All that's left is the exported WebACL config. Rebuild the SAME protection on the living AWS WAF v2 — that migration is the 'requiem'.\n\n## What you're given (the relic)\nAfter deploy, the legacy WAF Classic ACL is readable from:\n- SSM: the name in Output `LegacyWafClassicAclParameterName` (`aws ssm get-parameter --name <it>`)\n- The problem repo: `legacy/waf-classic-acl.json` (annotated)\n\nThe legacy ACL has 3 rules:\n| # | Legacy (WAF Classic) | Reproduce on (WAF v2) |\n| - | --- | --- |\n| 1 | IPSet `bad-ipset` = `203.0.113.0/24`, `198.51.100.7/32` → BLOCK | `IPSet` + `Statement.IPSetReferenceStatement` (Action=Block, same CIDRs) |\n| 2 | `SqlInjectionMatchSet` (BODY + QUERY_STRING) → BLOCK | `Statement.SqliMatchStatement` (BODY+QUERY_STRING) or `AWSManagedRulesSQLiRuleSet` |\n| 3 | `RateBasedRule` RateKey=IP, RateLimit=2000 | `Statement.RateBasedStatement { Limit: 2000, AggregateKeyType: IP }` |\n\n## Steps\n1. Note the Outputs (`ApiUrl` / `RestApiStageArn` / `WebAclMetricNameHint` / `AttackStatsParameterName` / `LegacyWafClassicAclParameterName`).\n2. Read the legacy ACL and reproduce the 3 rules 1:1 in a `Scope=REGIONAL` `AWS::WAFv2::WebACL`.\n3. Set `VisibilityConfig.MetricName` to the value of Output `WebAclMetricNameHint` and `CloudWatchMetricsEnabled: true` (the scorer reads BlockedRequests on that metric).\n4. `AWS::WAFv2::WebACLAssociation` with `ResourceArn = RestApiStageArn`.\n5. The red team's attacks (the three the old rules targeted) get blocked by WAF v2 and you score per block.\n\n## Notes\n- WAF Classic (`AWS::WAF::*` / `AWS::WAFRegional::*`) cannot attach to API Gateway and can no longer be created (= end of support). Reproduce on WAFv2 (`AWS::WAFv2::*`).\n- Adding rules beyond the legacy three is fine, but over-blocking legitimate traffic is penalized in the regression phase.",
+      "description": "A 'service-sunset requiem' Battle built on WAF Classic → WAF v2 rule migration (contract reproduction). The first problem of `scoring.kind=attack-detection`.\n\nDeploy creates, in the competitor's account: a Lambda (the legacy profile API WAF Classic used to protect), an API Gateway REST API (regional) + `prod` stage, an SSM Parameter holding the discontinued WAF Classic WebACL dump (the 3 rules to reproduce), an SSM Parameter with the scoring coordinates, a briefing parameter, and a ParticipantViewerRole granting wafv2 / cloudwatch / apigateway / ssm reads.\n\nThe WebACL is created by the competitor (that is the migration). The template hands over the defenseless API + the legacy ACL + scoring coordinates and asks for the SAME 3 rules reproduced on v2. The dead service is never run; it is memorialized by reincarnating its behavior (rule contract) on the successor.\n\nScoring (attack-detection): the red team fires IP-blocklist hits / SQLi / rate-flood and you score the count WAF v2 blocked (BlockedRequests) at `pointsPerAttack`, across 3 categories (`ip-blocklist` / `sql-injection` / `rate-flood`) mirroring the legacy rules.\n\n## EOL note (source)\nAWS WAF Classic (WAF v1) reached end of support on 2025-09-30 and can no longer be created, so this problem deploys no Classic resources and reproduces the legacy ACL's contract on WAF v2.\n\n## Cost\n- Lambda / API Gateway / SSM: mostly within Free Tier for short sessions\n- WAFv2 WebACL: $5/mo/WebACL + $1/rule/mo + $0.60/M requests (not Free Tier; a few cents prorated for a 45–60 min session — delete after the match)",
+      "learningGoals": [
+        "Read a discontinued AWS WAF Classic WebACL dump and identify its IPSet / SqlInjectionMatchSet / RateBasedRule rules",
+        "Port the 3 legacy rules 1:1 to WAF v2 (IPSetReferenceStatement / SqliMatchStatement / RateBasedStatement) and associate the WebACL with an API Gateway REST stage",
+        "Use the WAF BlockedRequests metric to make defense visible and tune the false-positive trade-off",
+        "Learn TenkaCloud's pattern: a discontinued service can't run, so you memorialize it by reproducing its behavior (rule contract) on the successor"
+      ]
+    }
+  }
+}
