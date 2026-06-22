@@ -1,0 +1,244 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  cloudflare-api-security-001 — self-deploy + verify challenge (Issue #1973).
+  Deploys a verifier Lambda exposed via a Function URL. Competitors publish their
+  own app anywhere (e.g. Cloudflare Workers) and call GET <VerifyUrl>/verify?url=...;
+  the Lambda probes that external URL from the outside and returns the per-deploy
+  flag TC{FlagSeed} only when every check passes. The flag exists only inside the
+  Lambda env + the AnswerFlag output (scoring engine reads the output; players do
+  not get DescribeStacks). The platform side just verifies the submitted flag.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: Common prefix attached to all resource names (injected by the deploy chain).
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+  FlagSeed:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    MaxLength: 64
+    AllowedPattern: "^[A-Za-z0-9]+$"
+    Description: >
+      Per-deploy random secret injected by the deploy chain (cfnParameters:
+      FlagSeed = __RANDOM_PASSWORD__). Wrapped as TC{...} and returned only after the
+      external verification passes -- never derivable from the public NamePrefix.
+
+Resources:
+  VerifyFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  VerifyFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: !Sub "External-URL verifier for ${NamePrefix}. Returns the flag only when all checks pass."
+      Runtime: python3.12
+      Handler: index.handler
+      Timeout: 15
+      MemorySize: 128
+      Role: !GetAtt VerifyFunctionRole.Arn
+      Environment:
+        Variables:
+          # The flag lives only here + the AnswerFlag output. Players get no
+          # lambda:GetFunction* / cloudformation:DescribeStacks, so the only path
+          # to it is passing the external verification below.
+          FLAG: !Sub "TC{${FlagSeed}}"
+      # Stdlib only (urllib / socket / ipaddress). Hidden checks live in CHECKS;
+      # add more to harden the challenge without touching the platform.
+      Code:
+        ZipFile: |
+          import json, os, socket, ipaddress
+          import urllib.request
+          from urllib.parse import urlparse
+
+          FLAG = os.environ["FLAG"]
+          MAX_BYTES = 65536
+          TIMEOUT = 5
+
+          # The participant's app must satisfy every check. (path, status, body_includes, description)
+          CHECKS = [
+              ("/healthz", 200, "ok", "GET /healthz returns 200 with \"ok\""),
+          ]
+
+          class _NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, *a, **k):
+                  return None  # SSRF: never follow redirects
+
+          def _public_host(host):
+              # SSRF: resolve and reject private / loopback / link-local (incl. 169.254.169.254) / reserved.
+              try:
+                  infos = socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)
+              except Exception:
+                  return False
+              for info in infos:
+                  ip = ipaddress.ip_address(info[4][0])
+                  if (ip.is_private or ip.is_loopback or ip.is_link_local
+                          or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
+                      return False
+              return bool(infos)
+
+          def _fetch(url):
+              opener = urllib.request.build_opener(_NoRedirect)
+              req = urllib.request.Request(url, method="GET",
+                                           headers={"User-Agent": "tenkacloud-verify"})
+              with opener.open(req, timeout=TIMEOUT) as r:
+                  body = r.read(MAX_BYTES + 1)
+                  return getattr(r, "status", r.getcode()), body[:MAX_BYTES].decode("utf-8", "replace")
+
+          def _reply(code, obj):
+              return {"statusCode": code,
+                      "headers": {"content-type": "application/json"},
+                      "body": json.dumps(obj)}
+
+          def handler(event, ctx):
+              qs = event.get("queryStringParameters") or {}
+              url = (qs.get("url") or "").strip()
+              if not url:
+                  return _reply(400, {"ok": False, "error": "pass ?url=<your https app URL>"})
+              p = urlparse(url)
+              if p.scheme != "https":
+                  return _reply(400, {"ok": False, "error": "https only"})
+              if not p.hostname or not _public_host(p.hostname):
+                  return _reply(400, {"ok": False, "error": "host not allowed (no http / private / loopback / metadata)"})
+
+              base = "https://" + p.netloc
+              results = []
+              for path, status, needle, desc in CHECKS:
+                  try:
+                      st, body = _fetch(base + path)
+                      passed = (st == status) and (needle in body)
+                      detail = "OK" if passed else "unexpected response"
+                  except Exception:
+                      passed, detail = False, "unreachable / timeout"
+                  results.append({"check": desc, "passed": passed, "detail": detail})
+
+              if all(r["passed"] for r in results):
+                  return _reply(200, {"ok": True, "flag": FLAG, "checks": results})
+              # Safe summary only -- never leak the exact expected values.
+              return _reply(200, {"ok": False, "checks": results})
+
+  VerifyFunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !GetAtt VerifyFunction.Arn
+      AuthType: NONE
+
+  VerifyFunctionUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref VerifyFunction
+      Action: lambda:InvokeFunctionUrl
+      Principal: "*"
+      FunctionUrlAuthType: NONE
+
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: !Sub >
+        Publish a profile API (GET /healthz -> 200 with "ok"), then call
+        GET <VerifyUrl>/verify?url=https://<your-app> . Pass every check to get the
+        flag TC{...} and submit it in the Portal.
+      Description: !Sub "TenkaCloud cloudflare-api-security-001 briefing for ${NamePrefix}."
+
+  # Participant access baseline (same across every problem in this catalog). The
+  # competitor AssumeRoles this from the TenkaCloud account to reach their own stack
+  # (e.g. open CloudShell and `curl` the verify endpoint). No DescribeStacks and no
+  # lambda:GetFunction* -- the AnswerFlag output and the FLAG env stay unreadable;
+  # the flag is earned only by passing external verification.
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      # `aws login` (2025-11) OAuth2 flow needs SignInLocalDevelopmentAccess;
+      # do not remove (validated by scripts/validate-problems.ts).
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # CloudShell baseline -- 7-action allow-list, Resource:* unavoidable
+              # (environments are per-identity). Do not remove (validated).
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              # Read this stack's own briefing / pointers. Read-only, scoped to path.
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+
+Outputs:
+  VerifyUrl:
+    Description: Function URL. Competitors call GET <this>verify?url=<their app URL>.
+    Value: !GetAtt VerifyFunctionUrl.FunctionUrl
+  BriefingParameterName:
+    Description: SSM Parameter holding the task briefing.
+    Value: !Ref BriefingParameter
+  # Canonical answer, scoring engine only (no DescribeStacks granted to player).
+  AnswerFlag:
+    Description: Flag the learner submits after the verifier returns it.
+    Value: !Sub "TC{${FlagSeed}}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

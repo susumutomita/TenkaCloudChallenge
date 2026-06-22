@@ -28,6 +28,31 @@
       }
     },
     {
+      "id": "cloudflare-api-security-001",
+      "name": "セルフデプロイ API セキュリティ — 外部 URL を検証する",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "30〜45 分",
+      "shortDescription": "AWS アカウントは要らない。 自分のプロフィール API を Cloudflare Workers など好きな場所に公開し、 その URL を問題の検証エンドポイントに渡す。 検証 Lambda が外から API を叩いてセキュリティ要件を確かめ、 全部通れば flag を返す。",
+      "tags": [
+        "self-deploy",
+        "api-security",
+        "verify",
+        "cloudflare",
+        "no-aws-account",
+        "challenge"
+      ],
+      "scoringKind": "flag",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "hello-world",
       "name": "Hello World (Sample)",
       "category": "Challenge",

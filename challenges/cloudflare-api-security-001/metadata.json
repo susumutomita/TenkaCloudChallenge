@@ -1,0 +1,62 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "cloudflare-api-security-001",
+  "name": "セルフデプロイ API セキュリティ — 外部 URL を検証する",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 2,
+  "estimatedDuration": "30〜45 分",
+  "shortDescription": "AWS アカウントは要らない。 自分のプロフィール API を Cloudflare Workers など好きな場所に公開し、 その URL を問題の検証エンドポイントに渡す。 検証 Lambda が外から API を叩いてセキュリティ要件を確かめ、 全部通れば flag を返す。",
+  "instructions": "## はじめに\n好きなランタイム (Cloudflare Workers / コンテナ / 任意クラウド) にプロフィール API を公開し、 その公開 URL を問題の検証エンドポイント (`VerifyUrl` Output / Portal 表示) に渡す。 検証が全項目通れば `TC{...}` が返るので Portal に提出する。\n\n## 最初の一手\n1. `GET /healthz` が `200` で `{\"status\":\"ok\"}` を返すアプリを公開する\n2. `curl 'https://<VerifyUrl>/verify?url=https://<あなたのアプリ>'` を叩く\n3. 返ってきた失敗理由を読み、 API を直して再デプロイ → 再度 verify\n\n## ゴール\n検証エンドポイントが返す flag (`TC{...}`) を取得し Portal に提出する。 ローカルで API を動かしただけでは flag は得られない (検証は問題側の Lambda が外から実行する)。",
+  "description": "## シナリオ\n\nAWS アカウントを持たない参加者でも「API を公開してセキュリティを通す」体験ができる Challenge。 参加者は自分のプロフィール API を **外部 (Cloudflare Workers 等) に自分でデプロイ**し、 その URL を問題側の **検証 Lambda** に渡す。 検証 Lambda が外部から API を叩いて要件を確かめ、 すべて満たしたときだけ per-deploy のランダム flag (`TC{...}`) を返す。\n\n## 信頼境界\n\n- **検証ロジック・隠しテスト・flag は問題側の検証 Lambda の中だけ**に存在する (参加者リポジトリにも platform にも採点条件を置かない)。\n- platform は flag を検証するだけ (`scoring.kind=flag`)。 参加者に CFn Outputs を読む権限は与えない。\n- 検証 Lambda は参加者 URL を **SSRF ガード付き**で叩く (https のみ・private/loopback/メタデータ IP 拒否・リダイレクト非追従・タイムアウト・本文サイズ上限)。\n\n## デプロイされるもの (すべて CFn 管理下)\n\n- 検証 Lambda `VerifyFunction` (Python, Function URL = `GET /verify?url=...` を公開)\n- その実行ロール (CloudWatch Logs のみ)\n- 出題ブリーフィングを置く SSM Parameter\n\n参加者アプリの実行環境は **AWS では払い出さない** (= 参加者の Cloudflare 等が担う)。 運営の従量コストは検証 Lambda の呼び出しだけ。\n\n## 公開すべき API 契約 (参加者が知ってよい仕様)\n\n- `GET /healthz` → `200` + JSON に `ok` を含む\n- (発展) 入力検証・認可・情報漏えい対策。 詳しい要件は失敗時の検証メッセージで段階的に分かる。\n\n## 採点\n\n- 正解 (検証 Lambda が返した flag を提出): +200 pt (1 deploy につき 1 回)。\n- 不正解: -15 pt/回。 スコアは 0 未満にならない。\n- flag は deploy ごとにランダム生成され、 検証を通さないと得られない (暗記・推測では解けない)。\n\n## コスト\n\nLambda 呼び出しのみ。 EC2 / NAT は作らないので実質ゼロ。 `aws cloudformation delete-stack` で全消去。\n\n> この問題は `create-verify-challenge` skill の「self-deploy + verify」パターンの参照実装。 隠しテストを増やすときは検証 Lambda の `CHECKS` を足すだけで、 platform 側は変更しない。",
+  "tags": ["self-deploy", "api-security", "verify", "cloudflare", "no-aws-account", "challenge"],
+  "exposedPorts": [
+    { "port": 443, "name": "VerifyFunction Function URL (HTTPS) — GET /verify?url=<participant app URL>" }
+  ],
+  "learningGoals": [
+    "自分でアプリを公開し、 外部評価を通すために段階的にセキュリティを直す体験をする",
+    "検証が「問題側」で実行され、 platform は鍵 (flag) を持つだけ、 という信頼境界を理解する",
+    "外部 URL を扱うときの SSRF 対策 (スキーム/ホスト制限・リダイレクト非追従・タイムアウト・サイズ上限) を知る"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {
+    "FlagSeed": "__RANDOM_PASSWORD__"
+  },
+  "runtime": {
+    "provider": "aws",
+    "engine": "cloudformation",
+    "entry": "template.yaml"
+  },
+  "i18n": {
+    "en": {
+      "name": "Self-deploy API Security — Verify an External URL",
+      "shortDescription": "No AWS account needed. Publish your profile API anywhere you like (Cloudflare Workers, a container, any cloud) and hand its URL to the challenge's verify endpoint. A verifier Lambda probes your API from the outside for security requirements and returns a flag once they all pass.",
+      "instructions": "## Getting started\nPublish a profile API on any runtime (Cloudflare Workers / a container / any cloud) and pass its public URL to the challenge's verify endpoint (`VerifyUrl` Output / shown in the Portal). When every check passes you get `TC{...}` -- submit it in the Portal.\n\n## First move\n1. Publish an app where `GET /healthz` returns `200` with `{\"status\":\"ok\"}`\n2. Call `curl 'https://<VerifyUrl>/verify?url=https://<your-app>'`\n3. Read the returned failure reason, fix your API, redeploy, verify again\n\n## Goal\nObtain the flag (`TC{...}`) the verify endpoint returns and submit it in the Portal. Running your API locally is not enough -- the evaluation runs on the problem's Lambda, from the outside.",
+      "description": "## Scenario\n\nA challenge where even participants without an AWS account can experience \"publish an API and pass its security review\". The participant **deploys their own profile API externally (e.g. Cloudflare Workers)** and hands the URL to the problem's **verifier Lambda**. The Lambda probes the API from the outside and only returns a per-deploy random flag (`TC{...}`) once every requirement is met.\n\n## Trust boundary\n\n- The grading logic, hidden tests, and flag live **only inside the problem's verifier Lambda** (no grading conditions in the participant repo or on the platform).\n- The platform only verifies the flag (`scoring.kind=flag`). Participants are not granted permission to read CFn Outputs.\n- The verifier Lambda fetches the participant URL **with SSRF protection** (https only; private/loopback/metadata IPs rejected; redirects not followed; timeout; response size cap).\n\n## What gets deployed (all CFn-managed)\n\n- A verifier Lambda `VerifyFunction` (Python, Function URL exposing `GET /verify?url=...`)\n- Its execution role (CloudWatch Logs only)\n- An SSM Parameter holding the briefing\n\nNo AWS runtime is provisioned for the participant's app (their Cloudflare etc. hosts it). The operator's only usage cost is verifier Lambda invocations.\n\n## API contract you should expose (public spec)\n\n- `GET /healthz` -> `200` with JSON containing `ok`\n- (advanced) input validation / authorization / no information disclosure. Exact requirements surface progressively in the verify failure messages.\n\n## Scoring\n\n- Correct (submit the flag the verifier returned): +200 pt (once per deploy).\n- Wrong: -15 pt each. Score never drops below 0.\n- The flag is randomly generated per deploy and is unobtainable without passing verification.\n\n## Cost\n\nLambda invocations only. No EC2 / NAT, so effectively zero. Tear down with `aws cloudformation delete-stack`.\n\n> This problem is the reference implementation of the `create-verify-challenge` skill's \"self-deploy + verify\" pattern. To add hidden tests, extend the verifier Lambda's `CHECKS` -- the platform side never changes.",
+      "learningGoals": [
+        "Experience publishing your own app and hardening it step by step to pass an external review",
+        "Understand the trust boundary: evaluation runs on the problem side, the platform only holds the key (flag)",
+        "Learn SSRF protection when handling external URLs (scheme/host restrictions, no redirect following, timeout, size cap)"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 200,
+    "wrongAnswerPenalty": 15,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "まず `GET /healthz` が 200 で本文に `ok` を含むかを確かめる。 検証エンドポイントは失敗した項目だけを安全な粒度で返すので、 メッセージを読んで 1 つずつ直す。",
+        "penalty": 10
+      },
+      {
+        "id": "hint-2",
+        "content": "検証 Lambda は外部から HTTPS でしか叩かない。 `http://` や localhost / 127.0.0.1 などの private アドレスを渡しても弾かれる。 公開済みの `https://...workers.dev` のような URL を渡すこと。",
+        "penalty": 20
+      }
+    ]
+  }
+}
