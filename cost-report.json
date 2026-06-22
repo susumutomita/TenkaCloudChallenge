@@ -295,6 +295,29 @@
       ]
     },
     {
+      "id": "waf-classic-kuyo",
+      "category": "Battle",
+      "region": "ap-northeast-1",
+      "estimatedSessionMinutes": 90,
+      "perHourUsd": 0.0272,
+      "perSessionUsd": 0.0408,
+      "ifLeftRunningUsd": {
+        "oneDay": 0.65,
+        "oneWeek": 4.57,
+        "oneMonth": 19.86
+      },
+      "freeTierEligible": false,
+      "alwaysOnResources": [],
+      "billable": [
+        {
+          "resource": "AWS::EC2::Instance",
+          "count": 1,
+          "unit": "t3.small",
+          "hourlyUsdEach": 0.0272
+        }
+      ]
+    },
+    {
       "id": "x402-paywall",
       "category": "Challenge",
       "region": "ap-northeast-1",

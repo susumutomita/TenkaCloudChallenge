@@ -314,6 +314,33 @@
       }
     },
     {
+      "id": "waf-classic-kuyo",
+      "name": "WAF Classic 供養 — WAF v2 で防御を再建する",
+      "category": "Battle",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "45〜60 分",
+      "shortDescription": "天下クラウドの公開プロフィール API は、長らく AWS WAF Classic (WAF v1) に守られてきた ── が、WAF Classic は 2025-09-30 にサービス終了 (サ終) した。守りを失った API に、運営のレッドチームが SQLi・レート flood・bad-bot を撃ち込み始める。\n\nあなたの仕事: 旧 WAF Classic と同等以上の防御を AWS WAF v2 (WAFv2 WebACL) で再建し、API Gateway ステージに紐付ける。攻撃を弾いた数 (BlockedRequests) だけ加点される ── Classic の魂を v2 で成仏させよ。\n\nDeploy しただけでは API は丸腰。WebACL を作って関連付けた瞬間から、ブロックした攻撃の分だけスコアが伸びる。",
+      "tags": [
+        "waf",
+        "waf-v2",
+        "migration",
+        "security",
+        "saaslifecycle-eol",
+        "kuyo",
+        "attack-detection",
+        "api-gateway"
+      ],
+      "scoringKind": "attack-detection",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "x402-paywall",
       "name": "x402 課金ゲート — 課金しているのに 0 USDC",
       "category": "Challenge",
