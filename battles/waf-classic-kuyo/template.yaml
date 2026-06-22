@@ -137,17 +137,37 @@ Resources:
       Value: !Sub |
         {"schema":"tenkacloud.attack-detection.v1","source":"cloudwatch","namespace":"AWS/WAFV2","metricName":"BlockedRequests","webAclDimension":"TenkaCloudWafKuyoBlocked","region":"${AWS::Region}","note":"Scorer sums AWS/WAFV2 BlockedRequests where the WebACL dimension == webAclDimension. Competitor must set their WAFv2 WebACL VisibilityConfig.MetricName to webAclDimension, CloudWatchMetricsEnabled=true, and associate it with RestApiStageArn."}
 
+  # --- The 遺品: the discontinued WAF Classic ACL the competitor must reproduce on v2 ---
+  LegacyWafClassicAclParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/tenkacloud/${NamePrefix}/legacy-waf-classic-acl"
+      Type: String
+      Description: WAF Classic (v1, EOL 2025-09-30) WebACL export. Reproduce these 3 rules on WAF v2.
+      Value: |
+        {"WebACL":{"Name":"tenkacloud-profile-classic","DefaultAction":{"Type":"ALLOW"}},
+         "Rules":[
+           {"Priority":1,"Name":"block-bad-ips","Action":{"Type":"BLOCK"},"Type":"REGULAR","Predicates":[{"Type":"IPMatch","DataId":"bad-ipset"}],"migrateTo":"WAFv2 IPSet + IPSetReferenceStatement (Block)"},
+           {"Priority":2,"Name":"block-sqli","Action":{"Type":"BLOCK"},"Type":"REGULAR","Predicates":[{"Type":"SqlInjectionMatch","DataId":"sqli-body-qs"}],"migrateTo":"WAFv2 SqliMatchStatement (BODY+QUERY_STRING)"},
+           {"Priority":3,"Name":"rate-limit-2000","Action":{"Type":"BLOCK"},"Type":"RATE_BASED","RateKey":"IP","RateLimit":2000,"migrateTo":"WAFv2 RateBasedStatement {Limit:2000,AggregateKeyType:IP}"}
+         ],
+         "Conditions":{
+           "IPSet:bad-ipset":{"IPSetDescriptors":[{"Type":"IPV4","Value":"203.0.113.0/24"},{"Type":"IPV4","Value":"198.51.100.7/32"}]},
+           "SqlInjectionMatchSet:sqli-body-qs":{"SqlInjectionMatchTuples":[{"FieldToMatch":{"Type":"BODY"},"TextTransformation":"URL_DECODE"},{"FieldToMatch":{"Type":"QUERY_STRING"},"TextTransformation":"HTML_ENTITY_DECODE"}]}
+         }}
+
   BriefingParameter:
     Type: AWS::SSM::Parameter
     Properties:
       Name: !Sub "/tenkacloud/${NamePrefix}/briefing"
       Type: String
       Value: >
-        WAF Classic (v1) reached end of support on 2025-09-30. This profile API is now
-        defenseless. Create a Scope=REGIONAL AWS::WAFv2::WebACL (managed SQLi/Common/
-        IpReputation rule groups + a RateBasedStatement), set VisibilityConfig.MetricName
-        to 'TenkaCloudWafKuyoBlocked' with CloudWatchMetricsEnabled=true, then associate it
-        with the REST stage (ResourceArn = RestApiStageArn output). You score per blocked attack.
+        WAF Classic (v1) reached end of support on 2025-09-30. The legacy WebACL that guarded
+        this profile API is exported at SSM /tenkacloud/<NamePrefix>/legacy-waf-classic-acl
+        (3 rules: IP blocklist 203.0.113.0/24 + 198.51.100.7/32, SQLi on BODY+QUERY_STRING,
+        rate-limit 2000/IP). Reproduce the SAME 3 rules on a Scope=REGIONAL AWS::WAFv2::WebACL,
+        set VisibilityConfig.MetricName='TenkaCloudWafKuyoBlocked' (CloudWatchMetricsEnabled=true),
+        and associate it with the REST stage (ResourceArn = RestApiStageArn). Score per blocked attack.
 
   # --- Participant access (platform convention; validated by validate-problems.ts) ---
   ParticipantViewerRole:
@@ -245,3 +265,6 @@ Outputs:
   AttackStatsParameterName:
     Description: SSM Parameter the attack-detection scorer reads (statsOutputKey).
     Value: !Ref AttackStatsParameter
+  LegacyWafClassicAclParameterName:
+    Description: SSM Parameter holding the discontinued WAF Classic ACL to reproduce on WAF v2.
+    Value: !Ref LegacyWafClassicAclParameter
