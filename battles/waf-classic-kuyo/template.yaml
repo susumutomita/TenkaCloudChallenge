@@ -128,15 +128,6 @@ Resources:
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/*/*"
 
-  # --- attack-detection scoring coordinates: where the platform scorer reads BlockedRequests ---
-  AttackStatsParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: !Sub "/tenkacloud/${NamePrefix}/waf-attack-stats"
-      Type: String
-      Value: !Sub |
-        {"schema":"tenkacloud.attack-detection.v1","source":"cloudwatch","namespace":"AWS/WAFV2","metricName":"BlockedRequests","webAclDimension":"TenkaCloudWafKuyoBlocked","region":"${AWS::Region}","note":"Scorer sums AWS/WAFV2 BlockedRequests where the WebACL dimension == webAclDimension. Competitor must set their WAFv2 WebACL VisibilityConfig.MetricName to webAclDimension, CloudWatchMetricsEnabled=true, and associate it with RestApiStageArn."}
-
   # --- The 遺品: the discontinued WAF Classic ACL the competitor must reproduce on v2 ---
   LegacyWafClassicAclParameter:
     Type: AWS::SSM::Parameter
@@ -165,9 +156,9 @@ Resources:
         WAF Classic (v1) reached end of support on 2025-09-30. The legacy WebACL that guarded
         this profile API is exported at SSM /tenkacloud/<NamePrefix>/legacy-waf-classic-acl
         (3 rules: IP blocklist 203.0.113.0/24 + 198.51.100.7/32, SQLi on BODY+QUERY_STRING,
-        rate-limit 2000/IP). Reproduce the SAME 3 rules on a Scope=REGIONAL AWS::WAFv2::WebACL,
-        set VisibilityConfig.MetricName='TenkaCloudWafKuyoBlocked' (CloudWatchMetricsEnabled=true),
-        and associate it with the REST stage (ResourceArn = RestApiStageArn). Score per blocked attack.
+        rate-limit 2000/IP). Reproduce the SAME 3 rules on a Scope=REGIONAL AWS::WAFv2::WebACL and
+        associate it with the REST stage (ResourceArn = RestApiStageArn). The scorer probes GET /
+        (keep it 200) and fires SQLi (must be blocked); score = legit uptime minus un-blocked SQLi.
 
   # --- Participant access (platform convention; validated by validate-problems.ts) ---
   ParticipantViewerRole:
@@ -259,12 +250,6 @@ Outputs:
   RestApiStageArn:
     Description: WAFv2 WebACLAssociation ResourceArn -- associate your WebACL here.
     Value: !Sub "arn:aws:apigateway:${AWS::Region}::/restapis/${RestApi}/stages/prod"
-  WebAclMetricNameHint:
-    Description: Set your WebACL VisibilityConfig.MetricName to exactly this value.
-    Value: TenkaCloudWafKuyoBlocked
-  AttackStatsParameterName:
-    Description: SSM Parameter the attack-detection scorer reads (statsOutputKey).
-    Value: !Ref AttackStatsParameter
   LegacyWafClassicAclParameterName:
     Description: SSM Parameter holding the discontinued WAF Classic ACL to reproduce on WAF v2.
     Value: !Ref LegacyWafClassicAclParameter

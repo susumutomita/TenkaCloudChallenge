@@ -317,11 +317,11 @@
       "id": "waf-classic-kuyo",
       "name": "WAF Classic 供養 — 同じルールを WAF v2 で再現する",
       "category": "Battle",
-      "status": "draft",
+      "status": "ready",
       "visibility": "public",
       "difficulty": 3,
       "estimatedDuration": "45〜60 分",
-      "shortDescription": "天下クラウドの公開プロフィール API は、長らく AWS WAF Classic (WAF v1) の 3 つのルール (IP ブロックリスト / SQLi / レート制限 2000) で守られてきた ── が、WAF Classic は 2025-09-30 にサ終した。もう同じものは作れない。\n\nあなたの仕事: 遺された旧 WAF Classic の ACL ダンプ (deploy 時に渡される) を読み、**まったく同じ 3 ルールを AWS WAF v2 (WAFv2 WebACL) で再現**して API Gateway ステージに紐付ける。運営のレッドチームの攻撃を弾いた数だけ加点 ── 旧ルールを v2 へ移し替えて成仏させよ。\n\nDeploy しただけでは API は丸腰。旧 ACL と等価な WebACL を作って関連付けた瞬間から、ブロックした攻撃の分だけスコアが伸びる。",
+      "shortDescription": "天下クラウドの公開プロフィール API は、長らく AWS WAF Classic (WAF v1) の 3 ルール (IP ブロックリスト / SQLi / レート制限 2000) で守られてきた ── が、WAF Classic は 2025-09-30 にサ終した。もう同じものは作れない。\n\nあなたの仕事: 遺された旧 WAF Classic の ACL ダンプ (deploy 時に渡される) を読み、**まったく同じルールを AWS WAF v2 (WAFv2 WebACL) で再現**して API Gateway ステージに紐付ける。採点エンジンは毎 tick、API に正常リクエストと SQLi を撃つ ── 正常系が 200 を返し続け、かつ SQLi が WAF v2 にブロックされている間だけスコアが伸びる。旧ルールを v2 へ移し替えて成仏させよ。\n\nDeploy しただけでは API は丸腰(SQLi が素通り=減点)。旧 ACL と等価な WebACL を作って関連付けた瞬間から、防御できている分だけ加点される。",
       "tags": [
         "waf",
         "waf-v2",
@@ -330,10 +330,9 @@
         "security",
         "saaslifecycle-eol",
         "kuyo",
-        "attack-detection",
         "api-gateway"
       ],
-      "scoringKind": "attack-detection",
+      "scoringKind": "uptime-multi",
       "cost": {
         "perHourUsd": 0,
         "perDayIfLeftRunningUsd": 0,
