@@ -298,24 +298,17 @@
       "id": "waf-classic-kuyo",
       "category": "Battle",
       "region": "ap-northeast-1",
-      "estimatedSessionMinutes": 90,
-      "perHourUsd": 0.0272,
-      "perSessionUsd": 0.0408,
+      "estimatedSessionMinutes": 60,
+      "perHourUsd": 0,
+      "perSessionUsd": 0,
       "ifLeftRunningUsd": {
-        "oneDay": 0.65,
-        "oneWeek": 4.57,
-        "oneMonth": 19.86
+        "oneDay": 0,
+        "oneWeek": 0,
+        "oneMonth": 0
       },
-      "freeTierEligible": false,
+      "freeTierEligible": true,
       "alwaysOnResources": [],
-      "billable": [
-        {
-          "resource": "AWS::EC2::Instance",
-          "count": 1,
-          "unit": "t3.small",
-          "hourlyUsdEach": 0.0272
-        }
-      ]
+      "billable": []
     },
     {
       "id": "x402-paywall",
