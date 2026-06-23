@@ -13,6 +13,9 @@ fi
 echo "[pre-commit] checking CFn templates are ASCII / Latin-1 (IAM Description safe)..."
 bun run scripts/check-template-ascii.ts
 
+echo "[pre-commit] scanning CFn templates for dangerous IAM/SG/S3/KMS patterns..."
+bun run scripts/check-template-security.ts
+
 echo "[pre-commit] problem/schema change detected -- regenerating catalog index..."
 bun run scripts/build-index.ts
 bun run scripts/estimate-cost.ts --write
