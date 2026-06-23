@@ -6,13 +6,13 @@
 
 天下クラウド株式会社。今月の AI クローラー課金売上は **0 USDC**。
 
-前任 SRE の加藤さんは退職前に **x402 課金ゲート** を立てた ──
+前任の SRE は退職前に **x402 課金ゲート** を立てた ──
 [AWS WAF の新機能 AI Traffic Monetization](https://aws.amazon.com/jp/blogs/news/aws-waf-adds-ai-traffic-monetization-capability-to-help-content-owners-charge-ai-bots-for-content-access/)
 を模したもので、**x402 プロトコル** (HTTP `402 Payment Required` + 機械可読な価格マニフェスト) を使い
 AI Bot からコンテンツ閲覧料を USDC で徴収する。アクセスログを見ると Bot は毎回ゲートに弾かれている
 (`402` が返っている)。なのに 1 USDC も入ってこない。
 
-佐々木 CTO「課金してるのに金が入らないって、どういう状態だ。直してくれ」。
+CTO「課金してるのに金が入らないって、どういう状態だ。直してくれ」。
 
 あなたの仕事: ゲートの設定ミスを 1 つ見つけ、**設定変更で直し** (新しいリソースは作らない)、
 Bot として支払いを完了させて動作を証明する ── 支払いの完了こそが、フラグを出す唯一の方法だ。

@@ -3,9 +3,9 @@
 > 日本語版: [README.ja.md](./README.ja.md)
 > Part of the **History of the Internet** series — each episode re-lives one moment in how the internet evolved, by making you *operate* the TCP/IP layer rather than recall it.
 
-Day four on the network team at TenkaCloud Inc. Suddenly nobody can connect to the internal HTTPS endpoint Kato-san left behind.
+Day four on the network team at TenkaCloud Inc. Suddenly nobody can connect to the internal HTTPS endpoint the previous SRE left behind.
 
-> Sasaki-san, the CTO: "`curl` from the bastion (`relay`) to the app's :443 dies in the TLS handshake. Something about the certificate not matching. Kato swore he wired it to generate the cert automatically. The machinery is running. It still gets rejected."
+> the CTO, the CTO: "`curl` from the bastion (`relay`) to the app's :443 dies in the TLS handshake. Something about the certificate not matching. The previous SRE swore he wired it to generate the cert automatically. The machinery is running. It still gets rejected."
 
 The **SSL → TLS 1.3** moment was when the handshake stopped merely encrypting the channel and got serious about proving the server is *who it claims to be*. Your job is to make that handshake complete. Find why the certificate's name disagrees, fix one setting, and pull out the flag `app` is holding.
 
@@ -54,7 +54,7 @@ No NAT Gateway, no EIP, **no ACM certificate**. Cost ≈ **$0.02** for a 45-minu
    - The name `app` bakes into the cert comes from SSM:
      ```bash
      aws ssm get-parameter --name /<NamePrefix>/config/tls_server_name --query Parameter.Value --output text
-     # -> legacy.kato.example   (Kato-san's leftover — the wrong name)
+     # -> legacy.kato.example   (the previous SRE's leftover — the wrong name)
      ```
    - `tls_min_version` is already `TLSv1.3` — correct. It is a **decoy**; leave it alone.
 4. **Fix the one SSM parameter value** (a settings change on the existing parameter — you create no new resource):

@@ -3,9 +3,9 @@
 > 日本語版: [README.ja.md](./README.ja.md)
 > Part of the **History of the Internet** series — each episode re-lives one moment in how the internet evolved, by making you *operate* the TCP/IP layer rather than recall it.
 
-A few weeks into the network team at TenkaCloud Inc. Before Kato-san left, they said: "No more hard-coded IPs. From now on we connect by name." This morning, the internal service that was rebuilt that way stopped connecting.
+A few weeks into the network team at TenkaCloud Inc. Before the previous SRE left, they said: "No more hard-coded IPs. From now on we connect by name." This morning, the internal service that was rebuilt that way stopped connecting.
 
-> Sasaki-san, the CTO: "The monitoring dashboard lost `core`. The bastion (`relay`) calls it by name — `core.internal.tenka.test`, I think. The name resolves, an IP comes back. And still it won't connect. Is Kato's parting gift broken, or was the name lying all along? Figure it out."
+> the CTO, the CTO: "The monitoring dashboard lost `core`. The bastion (`relay`) calls it by name — `core.internal.tenka.test`, I think. The name resolves, an IP comes back. And still it won't connect. Is the previous SRE's parting gift broken, or was the name lying all along? Figure it out."
 
 The internet evolved from a hand-maintained `hosts.txt` to **DNS** — separating *names* from *addresses*, so an address could change without breaking the name. But what if the name points at the *wrong* address? Your job is to repoint the name at the real `core` and pull out the flag it is holding.
 

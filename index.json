@@ -64,7 +64,7 @@
       "visibility": "public",
       "difficulty": 1,
       "estimatedDuration": "1 分",
-      "shortDescription": "天下クラウド株式会社、 入社初日。 前任 SRE の加藤さんが先週突然退職し、 production には謎の SSM Parameter が 1 つだけ残されている。\n\n佐々木 CTO 曰く 「動作確認のために残したやつ、 たぶん」。 詳細は不明、 Slack の DM 履歴を遡っても何も出てこない。 Notion の引継ぎ書には 『SSM の hello 見といて』 とだけ。\n\nあなたのミッション: 加藤さんが production に残した 隠されたメッセージ を発見せよ。",
+      "shortDescription": "天下クラウド株式会社、 入社初日。 前任の SRE が先週突然退職し、 production には謎の SSM Parameter が 1 つだけ残されている。\n\nCTO 曰く 「動作確認のために残したやつ、 たぶん」。 詳細は不明、 Slack の DM 履歴を遡っても何も出てこない。 Notion の引継ぎ書には 『SSM の hello 見といて』 とだけ。\n\nあなたのミッション: 前任の SRE が production に残した 隠されたメッセージ を発見せよ。",
       "tags": [
         "sample",
         "challenge",
@@ -87,7 +87,7 @@
       "visibility": "public",
       "difficulty": 1,
       "estimatedDuration": "30 分",
-      "shortDescription": "天下クラウド株式会社、 2 日目。 加藤さんが production に残した小さな web stack (EC2 上で nginx + Python `/healthz`) を引き継いだ ── が、 運営のレッドチームが予告なく障害を注入してくる (例: nginx を停止)。\n\nあなたの仕事: 自分のスタックの 2 つの URL (frontend / API) を Participant Portal に登録 → Health Check Lambda が 1 分ごとに probe を始め、 両方 200 を返した分だけ +100 pt。 落とされたら SSM Session Manager で復旧 (SSH 不要、 早く直すほど損失が小さい)。\n\nDeploy しただけでは何も起きない。 URL を portal に登録した瞬間から Battle が始まる。",
+      "shortDescription": "天下クラウド株式会社、 2 日目。 前任の SRE が production に残した小さな web stack (EC2 上で nginx + Python `/healthz`) を引き継いだ ── が、 運営のレッドチームが予告なく障害を注入してくる (例: nginx を停止)。\n\nあなたの仕事: 自分のスタックの 2 つの URL (frontend / API) を Participant Portal に登録 → Health Check Lambda が 1 分ごとに probe を始め、 両方 200 を返した分だけ +100 pt。 落とされたら SSM Session Manager で復旧 (SSH 不要、 早く直すほど損失が小さい)。\n\nDeploy しただけでは何も起きない。 URL を portal に登録した瞬間から Battle が始まる。",
       "tags": [
         "sample",
         "battle",
@@ -111,7 +111,7 @@
       "visibility": "public",
       "difficulty": 4,
       "estimatedDuration": "90〜120 分",
-      "shortDescription": "天下クラウド株式会社、 入社 1 ヶ月。 加藤さんが残した EC2 1 台同居のモノリス (users / orders / catalog の 3 サービスを nginx reverse proxy が path で振り分け) を引き継いだ。 佐々木 CTO 曰く 『そろそろマネージドに分けてくれない? Lambda でも ECS でも App Runner でも、 サービスごとに違う hosting でいい』。\n\nあなたの仕事: 各サービスを切り出して別 hosting に移し、 切り出した URL を Participant Portal の override に登録する。 score engine は登録された URL を 1 分ごとに probe し、 hosting の種類によって配点が変わる。\n\n3 サービスの hosting 先は自由に組み替えてよい。 deploy しただけでは EC2 routing のまま、 自分で切り出すまで点数は伸びない。",
+      "shortDescription": "天下クラウド株式会社、 入社 1 ヶ月。 前任の SRE が残した EC2 1 台同居のモノリス (users / orders / catalog の 3 サービスを nginx reverse proxy が path で振り分け) を引き継いだ。 CTO 曰く 『そろそろマネージドに分けてくれない? Lambda でも ECS でも App Runner でも、 サービスごとに違う hosting でいい』。\n\nあなたの仕事: 各サービスを切り出して別 hosting に移し、 切り出した URL を Participant Portal の override に登録する。 score engine は登録された URL を 1 分ごとに probe し、 hosting の種類によって配点が変わる。\n\n3 サービスの hosting 先は自由に組み替えてよい。 deploy しただけでは EC2 routing のまま、 自分で切り出すまで点数は伸びない。",
       "tags": [
         "microservices",
         "migration",
@@ -137,7 +137,7 @@
       "visibility": "public",
       "difficulty": 3,
       "estimatedDuration": "30〜45 分",
-      "shortDescription": "天下クラウド株式会社、 ネットワーク班に異動初日。 加藤さんが先月置いていった社内ツールは、 2 つのサブネットに分かれて動いていた ── はずだった。\n\n佐々木 CTO 曰く: 「踏み台 (relay) からは入れる。 でも奥の管理ノード (core) に誰も届かない。 ファイアウォールは開けたって加藤は言ってた。 なのに繋がらない。 エラーすら出ない、 ただ無言で固まる」\n\nインターネットは『バラバラの網を相互接続する (inter-network)』ところから始まった。 君の仕事はまさにそれ。 なぜパケットが片道で消えるのかを 4 つの層から突き止め、 経路を直して core が握っているフラグを取り出せ。",
+      "shortDescription": "天下クラウド株式会社、 ネットワーク班に異動初日。 前任の SRE が先月置いていった社内ツールは、 2 つのサブネットに分かれて動いていた ── はずだった。\n\nCTO 曰く: 「踏み台 (relay) からは入れる。 でも奥の管理ノード (core) に誰も届かない。 ファイアウォールは開けたって前任の SRE は言ってた。 なのに繋がらない。 エラーすら出ない、 ただ無言で固まる」\n\nインターネットは『バラバラの網を相互接続する (inter-network)』ところから始まった。 君の仕事はまさにそれ。 なぜパケットが片道で消えるのかを 4 つの層から突き止め、 経路を直して core が握っているフラグを取り出せ。",
       "tags": [
         "ans",
         "advanced-networking",
@@ -163,7 +163,7 @@
       "visibility": "public",
       "difficulty": 3,
       "estimatedDuration": "45〜60 分",
-      "shortDescription": "天下クラウド株式会社、 ネットワーク班に来て数週間。 加藤さんが去り際に「IP 直書きはもうやめた。 これからは名前で繋ぐ」と言い残した社内サービスが、 今朝から繋がらない。\n\n佐々木 CTO 曰く: 「監視ダッシュボードが core を見失ってる。 踏み台 (relay) からは名前で呼んでるはずだ ── `core.internal.tenka.test` だったか。 名前は引けてる、 IP も返ってくる。 なのに繋がらない。 加藤の置き土産が壊れてるのか、 そもそも嘘の名前なのか、 君が見極めてくれ」\n\nインターネットが手書きの hosts.txt から DNS へ進化した瞬間 ── 名前と住所を分離したことで、 住所が変わっても名前はそのままにできるようになった。 だが、 その名前が間違った住所を指していたら? 君の仕事は、 名前が指す先を正しい core に向け直し、 core が握るフラグを取り出すことだ。",
+      "shortDescription": "天下クラウド株式会社、 ネットワーク班に来て数週間。 前任の SRE が去り際に「IP 直書きはもうやめた。 これからは名前で繋ぐ」と言い残した社内サービスが、 今朝から繋がらない。\n\nCTO 曰く: 「監視ダッシュボードが core を見失ってる。 踏み台 (relay) からは名前で呼んでるはずだ ── `core.internal.tenka.test` だったか。 名前は引けてる、 IP も返ってくる。 なのに繋がらない。 前任の SRE の置き土産が壊れてるのか、 そもそも嘘の名前なのか、 君が見極めてくれ」\n\nインターネットが手書きの hosts.txt から DNS へ進化した瞬間 ── 名前と住所を分離したことで、 住所が変わっても名前はそのままにできるようになった。 だが、 その名前が間違った住所を指していたら? 君の仕事は、 名前が指す先を正しい core に向け直し、 core が握るフラグを取り出すことだ。",
       "tags": [
         "ans",
         "advanced-networking",
@@ -192,7 +192,7 @@
       "visibility": "public",
       "difficulty": 3,
       "estimatedDuration": "30〜45 分",
-      "shortDescription": "天下クラウド株式会社、 ネットワーク班 3 日目。 加藤さんが残した監視ジョブは、 private サブネットの管理ノード core から「外」に問い合わせて結果を持ち帰る ── はずだった。\n\n佐々木 CTO 曰く: 「core が外に出られない。 ライセンス確認も、 アップデートも、 何も取りに行けない。 IPv4 が枯れてから NAT で逃がす設計にしたって加藤は言ってた。 踏み台 (relay) は普通に外に出られるのに、 奥の core だけが沈黙してる」\n\nIPv4 アドレスが枯渇し、 世界は private アドレス + NAT で『外に出る』時代へ進化した。 君の仕事はその出口を直すこと。 なぜ core だけ外に出られないのかを突き止め、 出口を開通させて core が握るフラグを取り出せ。",
+      "shortDescription": "天下クラウド株式会社、 ネットワーク班 3 日目。 前任の SRE が残した監視ジョブは、 private サブネットの管理ノード core から「外」に問い合わせて結果を持ち帰る ── はずだった。\n\nCTO 曰く: 「core が外に出られない。 ライセンス確認も、 アップデートも、 何も取りに行けない。 IPv4 が枯れてから NAT で逃がす設計にしたって前任の SRE は言ってた。 踏み台 (relay) は普通に外に出られるのに、 奥の core だけが沈黙してる」\n\nIPv4 アドレスが枯渇し、 世界は private アドレス + NAT で『外に出る』時代へ進化した。 君の仕事はその出口を直すこと。 なぜ core だけ外に出られないのかを突き止め、 出口を開通させて core が握るフラグを取り出せ。",
       "tags": [
         "ans",
         "advanced-networking",
@@ -220,7 +220,7 @@
       "visibility": "public",
       "difficulty": 3,
       "estimatedDuration": "30〜45 分",
-      "shortDescription": "天下クラウド株式会社、 ネットワーク班 4 日目。 加藤さんが置いていった社内 HTTPS エンドポイントに、 誰も繋げなくなった。\n\n佐々木 CTO 曰く: 「踏み台 (relay) からアプリ (app) の :443 に curl すると、 TLS の握手 (handshake) でコケる。 証明書が合わないとか何とか。 加藤は『証明書は自動で作る仕組みにした』って言ってた。 仕組みは動いてる。 なのに弾かれる」\n\nインターネットが SSL から TLS 1.3 へ進化した瞬間 ── それは「通信が暗号化されている」だけでなく「相手が本当に名乗った相手か」を握手の中で確かめる仕組みが磨かれた瞬間だった。 君の仕事はその握手を成立させること。 なぜ証明書の名前が食い違うのかを突き止め、 設定を 1 つ直して app が握るフラグを取り出せ。",
+      "shortDescription": "天下クラウド株式会社、 ネットワーク班 4 日目。 前任の SRE が置いていった社内 HTTPS エンドポイントに、 誰も繋げなくなった。\n\nCTO 曰く: 「踏み台 (relay) からアプリ (app) の :443 に curl すると、 TLS の握手 (handshake) でコケる。 証明書が合わないとか何とか。 前任の SRE は『証明書は自動で作る仕組みにした』って言ってた。 仕組みは動いてる。 なのに弾かれる」\n\nインターネットが SSL から TLS 1.3 へ進化した瞬間 ── それは「通信が暗号化されている」だけでなく「相手が本当に名乗った相手か」を握手の中で確かめる仕組みが磨かれた瞬間だった。 君の仕事はその握手を成立させること。 なぜ証明書の名前が食い違うのかを突き止め、 設定を 1 つ直して app が握るフラグを取り出せ。",
       "tags": [
         "saa",
         "networking",
@@ -246,7 +246,7 @@
       "visibility": "public",
       "difficulty": 3,
       "estimatedDuration": "30〜45 分",
-      "shortDescription": "天下クラウド株式会社。 加藤さんが去り、 君は新人のまま最後の砦を任された。\n\n佐々木 CTO 曰く: 「ユーザーに配信されてる中身が古い。 先月のキャッシュだ。 サイト自体は生きてる、 サーバーも全部動いてる。 なのに edge を通すと、 誰のところにも『去年のゴミ』が届く。 加藤が最後に触ったのが配信の交通整理だった ── それ以来だ」\n\nインターネットは『近くの edge から配る』時代に進化した。 CDN / anycast / QUIC ── どこから配信するかを選ぶ層が増えた。 君の仕事は、 edge がなぜ『間違った origin』を選び続けているのかを突き止め、 交通整理をやり直して、 本物の origin が握るフラグを取り出すことだ。",
+      "shortDescription": "天下クラウド株式会社。 前任の SRE が去り、 君は新人のまま最後の砦を任された。\n\nCTO 曰く: 「ユーザーに配信されてる中身が古い。 先月のキャッシュだ。 サイト自体は生きてる、 サーバーも全部動いてる。 なのに edge を通すと、 誰のところにも『去年のゴミ』が届く。 前任の SRE が最後に触ったのが配信の交通整理だった ── それ以来だ」\n\nインターネットは『近くの edge から配る』時代に進化した。 CDN / anycast / QUIC ── どこから配信するかを選ぶ層が増えた。 君の仕事は、 edge がなぜ『間違った origin』を選び続けているのかを突き止め、 交通整理をやり直して、 本物の origin が握るフラグを取り出すことだ。",
       "tags": [
         "ans",
         "advanced-networking",
@@ -274,7 +274,7 @@
       "visibility": "public",
       "difficulty": 4,
       "estimatedDuration": "60〜90 分",
-      "shortDescription": "天下クラウド株式会社、 ある月曜の朝。 加藤さんが去年買収した EC サイト 'Tenryu.Mart' (mysql + Flask + nginx を EC2 1 台に同居) を、 引き継ぎ書 無しで継いだ。 監視ダッシュボードは緑、 ただしコードは見ていない。\n\n佐々木 CTO 曰く: 「攻撃が来てる。 他チームのも一緒に来てる。 落とすな、 守れ、 全部直すな」。 君の仕事は frontend / api を 200 で返し続けること - 弱い所から順に塞ぎながら。",
+      "shortDescription": "天下クラウド株式会社、 ある月曜の朝。 前任の SRE が去年買収した EC サイト 'Tenryu.Mart' (mysql + Flask + nginx を EC2 1 台に同居) を、 引き継ぎ書 無しで継いだ。 監視ダッシュボードは緑、 ただしコードは見ていない。\n\nCTO 曰く: 「攻撃が来てる。 他チームのも一緒に来てる。 落とすな、 守れ、 全部直すな」。 君の仕事は frontend / api を 200 で返し続けること - 弱い所から順に塞ぎながら。",
       "tags": [
         "security",
         "web",
@@ -297,7 +297,7 @@
       "visibility": "public",
       "difficulty": 4,
       "estimatedDuration": "90〜120 分",
-      "shortDescription": "天下クラウド株式会社 Platform Team、 月初の朝会。 加藤さんが辞めた直後、 AI Builder が量産した掲示板アプリが社内公開待ちになっている。 動くが、 DB は空、 認証なし、 rate limit なし、 監査なし、 SQLite のまま。\n\n佐々木 CTO 曰く: 「ホスティングしただけじゃ公開できない。 既存の統制リソースを使って、 今日中に本番品質まで持っていって」\n\n君の仕事: stack が作成済みの ALB / EC2 / WAF / S3 backup / S3 audit / RDS PostgreSQL を使い、 新規トップレベルリソースを作らずに、 ローカルビルドのデプロイ → restored → protected → audited → production へ上げていく。\n\n▶ 最初の一手: `aws ssm start-session --target <InstanceId>` で app host に入り `vibe-status` を実行 (6 つの gate の現状と各 gate の目的が出る)。 `AppUrlHint` を Portal の app endpoint に登録すると採点開始。",
+      "shortDescription": "天下クラウド株式会社 Platform Team、 月初の朝会。 前任の SRE が辞めた直後、 AI Builder が量産した掲示板アプリが社内公開待ちになっている。 動くが、 DB は空、 認証なし、 rate limit なし、 監査なし、 SQLite のまま。\n\nCTO 曰く: 「ホスティングしただけじゃ公開できない。 既存の統制リソースを使って、 今日中に本番品質まで持っていって」\n\n君の仕事: stack が作成済みの ALB / EC2 / WAF / S3 backup / S3 audit / RDS PostgreSQL を使い、 新規トップレベルリソースを作らずに、 ローカルビルドのデプロイ → restored → protected → audited → production へ上げていく。\n\n▶ 最初の一手: `aws ssm start-session --target <InstanceId>` で app host に入り `vibe-status` を実行 (6 つの gate の現状と各 gate の目的が出る)。 `AppUrlHint` を Portal の app endpoint に登録すると採点開始。",
       "tags": [
         "platform-engineering",
         "ai-native",
@@ -325,7 +325,7 @@
       "visibility": "public",
       "difficulty": 2,
       "estimatedDuration": "45〜60 分",
-      "shortDescription": "天下クラウド株式会社 Platform Team。 加藤さんが残した AI 製の掲示板アプリを、 まずは社内に出せる最低ラインまで持っていく入門回。 アプリは EC2 に乗っているが、 DB は空、 認証なし、 監査なし。\n\n佐々木 CTO 曰く: 「いきなり全部はいい。 まずデータを戻して、 認証を付けて、 監査ログを出すところまで」\n\n君の仕事: 既存リソースだけを使い、 新規トップレベルリソースを作らずに、 デプロイ → DB 復元 → 認証 → 監査 の 3 つを満たして production に上げる。\n\n▶ 最初の一手: `aws ssm start-session --target <InstanceId>` で app host に入り `vibe-status` を実行 (3 つの gate の現状と目的が出る)。 `AppUrlHint` を Portal の app endpoint に登録すると採点開始。",
+      "shortDescription": "天下クラウド株式会社 Platform Team。 前任の SRE が残した AI 製の掲示板アプリを、 まずは社内に出せる最低ラインまで持っていく入門回。 アプリは EC2 に乗っているが、 DB は空、 認証なし、 監査なし。\n\nCTO 曰く: 「いきなり全部はいい。 まずデータを戻して、 認証を付けて、 監査ログを出すところまで」\n\n君の仕事: 既存リソースだけを使い、 新規トップレベルリソースを作らずに、 デプロイ → DB 復元 → 認証 → 監査 の 3 つを満たして production に上げる。\n\n▶ 最初の一手: `aws ssm start-session --target <InstanceId>` で app host に入り `vibe-status` を実行 (3 つの gate の現状と目的が出る)。 `AppUrlHint` を Portal の app endpoint に登録すると採点開始。",
       "tags": [
         "platform-engineering",
         "ai-native",
@@ -377,7 +377,7 @@
       "visibility": "public",
       "difficulty": 3,
       "estimatedDuration": "30 分",
-      "shortDescription": "天下クラウド株式会社。 今月の AI クローラー課金売上は 0 USDC。\n\n前任 SRE の加藤さんは退職前に 「AI Bot からコンテンツ閲覧料を取る」 x402 課金ゲートを立てた。 アクセスログを見ると Bot はちゃんとゲートに弾かれている (HTTP 402 が返っている)。 なのに 1 USDC も入ってこない。\n\n佐々木 CTO 「課金してるのに金が入らないって、 どういう状態だ。 直してくれ」。 あなたのミッション: ゲートの設定ミスを直し、 Bot が正しく支払って初めて出てくる隠しトークンを掴め。\n\n▶ 最初の一手: CloudShell で `aws ssm get-parameter --name /<NamePrefix>/briefing --query Parameter.Value --output text` を読む (やる手順が全部書いてある)。",
+      "shortDescription": "天下クラウド株式会社。 今月の AI クローラー課金売上は 0 USDC。\n\n前任の SRE は退職前に 「AI Bot からコンテンツ閲覧料を取る」 x402 課金ゲートを立てた。 アクセスログを見ると Bot はちゃんとゲートに弾かれている (HTTP 402 が返っている)。 なのに 1 USDC も入ってこない。\n\nCTO 「課金してるのに金が入らないって、 どういう状態だ。 直してくれ」。 あなたのミッション: ゲートの設定ミスを直し、 Bot が正しく支払って初めて出てくる隠しトークンを掴め。\n\n▶ 最初の一手: CloudShell で `aws ssm get-parameter --name /<NamePrefix>/briefing --query Parameter.Value --output text` を読む (やる手順が全部書いてある)。",
       "tags": [
         "challenge",
         "flag",

@@ -3,9 +3,9 @@
 > 日本語版: [README.ja.md](./README.ja.md)
 > Part of the **History of the Internet** series (the finale) — each episode re-lives one moment in how the internet evolved, by making you *operate* the network layer rather than recall it. Ep05 covers the **edge / anycast / CDN era**: the layer that decides *where* content is served from.
 
-TenkaCloud Inc. Kato-san is gone, and you — still the new hire — have been handed the last stand.
+TenkaCloud Inc. The previous SRE is gone, and you — still the new hire — have been handed the last stand.
 
-> Sasaki-san, the CTO: "What we're serving users is stale. Last month's cache. The site is up, every server is running. But go through the edge and everyone gets last year's garbage. The last thing Kato touched was the delivery steering — it's been like this since."
+> the CTO, the CTO: "What we're serving users is stale. Last month's cache. The site is up, every server is running. But go through the edge and everyone gets last year's garbage. The last thing the previous SRE touched was the delivery steering — it's been like this since."
 
 The internet evolved into serving from the nearest edge — CDN, anycast, QUIC — a whole layer that decides *where* content is served from. Your job: work out why the `edge` keeps picking the **wrong origin**, redo the steering, and pull out the flag the real origin is holding.
 

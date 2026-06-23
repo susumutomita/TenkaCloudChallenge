@@ -14,9 +14,9 @@ Challenge / flag-submission の **最小 sample** 問題。 SSM Parameter Store 
 
 ## ストーリー
 
-天下クラウド株式会社へようこそ。 あなたは今日が入社初日。 前任 SRE の加藤さんが先週突然退職し、 production には謎の SSM Parameter が 1 つ残されている。
+天下クラウド株式会社へようこそ。 あなたは今日が入社初日。 前任の SRE が先週突然退職し、 production には謎の SSM Parameter が 1 つ残されている。
 
-佐々木 CTO 曰く、「動作確認のために残したやつ、 たぶん」。 詳細は不明。 Slack の DM 履歴を遡っても何も出てこない。 Notion の引継ぎ書には「SSM の hello 見といて」とだけ書いてある。
+CTO 曰く、「動作確認のために残したやつ、 たぶん」。 詳細は不明。 Slack の DM 履歴を遡っても何も出てこない。 Notion の引継ぎ書には「SSM の hello 見といて」とだけ書いてある。
 
 あなたのミッション: AWS Console または CLI で SSM Parameter Store にアクセスし、 `/{NamePrefix}/hello` の値を読んで Participant Portal の入力欄に貼り付ける。 一致すれば +100 pt。
 

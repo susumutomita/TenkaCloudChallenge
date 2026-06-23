@@ -14,9 +14,9 @@ The **minimal sample** for Challenge / flag submission. Read a value from SSM Pa
 
 ## Story
 
-Welcome to TenkaCloud Inc. Today is your first day. Your predecessor SRE, Kato-san, abruptly resigned last week and left a single mysterious SSM Parameter in production.
+Welcome to TenkaCloud Inc. Today is your first day. Your predecessor SRE, the previous SRE, abruptly resigned last week and left a single mysterious SSM Parameter in production.
 
-Sasaki-san, the CTO, says: "I think he left it for smoke testing... probably." Details unknown. Searching Slack DMs turns up nothing. The Notion handover note just says: "look at SSM `hello`."
+The CTO, the CTO, says: "I think he left it for smoke testing... probably." Details unknown. Searching Slack DMs turns up nothing. The Notion handover note just says: "look at SSM `hello`."
 
 Your mission: open AWS Console or CLI, read the value at `/{NamePrefix}/hello`, and paste it into the Participant Portal flag-submission box. Correct match → +100 pt.
 

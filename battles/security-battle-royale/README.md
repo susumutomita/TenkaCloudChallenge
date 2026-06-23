@@ -2,9 +2,9 @@
 
 > 日本語版: [README.ja.md](./README.ja.md)
 
-Monday morning at TenkaCloud Inc. Kato-san — the SRE you keep hearing about and never meeting — left you "Tenryu.Mart." The company acquired it last year. mysql + Flask + nginx co-tenant on one EC2. The monitoring dashboard is green. The codebase has not been read.
+Monday morning at TenkaCloud Inc. The previous SRE — the SRE you keep hearing about and never meeting — left you "Tenryu.Mart." The company acquired it last year. mysql + Flask + nginx co-tenant on one EC2. The monitoring dashboard is green. The codebase has not been read.
 
-> Sasaki-san, the CTO: "Attacks are coming in. Other teams are getting hit too. Don't take it down, don't try to fix everything — just keep it up. Triage."
+> the CTO, the CTO: "Attacks are coming in. Other teams are getting hit too. Don't take it down, don't try to fix everything — just keep it up. Triage."
 
 This Battle is the next 60 to 90 minutes. The score engine pays you for *every minute both endpoints return 200*, not for elegant fixes. Letting a bad request through is cheap. Taking the app down to harden it is expensive.
 

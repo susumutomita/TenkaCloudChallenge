@@ -2,9 +2,9 @@
 
 > English: [README.md](./README.md)
 
-天下クラウド株式会社、 入社 1 ヶ月目。 先期、 引き継ぎミーティングの翌週に姿を消した前任 SRE の加藤さんが、 EC2 1 台に同居する 3 サービス (`users` / `orders` / `catalog`) のモノリスを残していった。 nginx の config だけが疲弊した顔で path を振り分けている。
+天下クラウド株式会社、 入社 1 ヶ月目。 先期、 引き継ぎミーティングの翌週に姿を消した前任の SRE が、 EC2 1 台に同居する 3 サービス (`users` / `orders` / `catalog`) のモノリスを残していった。 nginx の config だけが疲弊した顔で path を振り分けている。
 
-> 佐々木 CTO 曰く: 「そろそろこれ、 サービスごとに別 hosting に分けてくれない? Lambda でも ECS Fargate でも App Runner でもいい。 とにかく 1 VM 同居をやめて。 他チームは昨日から動いてる」
+> CTO 曰く: 「そろそろこれ、 サービスごとに別 hosting に分けてくれない? Lambda でも ECS Fargate でも App Runner でもいい。 とにかく 1 VM 同居をやめて。 他チームは昨日から動いてる」
 
 この Battle はその移行作業そのもの。 持ち時間 90〜120 分、 Participant Portal に 3 つの slot、 そして登録された URL の hosting platform に応じて加点額が切り替わる score engine が用意されている。
 

@@ -3,9 +3,9 @@
 > 日本語版: [README.ja.md](./README.ja.md)
 > Part of the **History of the Internet** series — each episode re-lives one moment in how the internet evolved, by making you *operate* the TCP/IP layer rather than recall it.
 
-Day one on the network team at TenkaCloud Inc. The internal tool Kato-san left behind ran across two subnets — supposedly.
+Day one on the network team at TenkaCloud Inc. The internal tool the previous SRE left behind ran across two subnets — supposedly.
 
-> Sasaki-san, the CTO: "You can get into the bastion (`relay`). But nobody can reach the management node (`core`) behind it. Kato swore the firewall was open. It still won't connect. No error — it just hangs, silent."
+> the CTO, the CTO: "You can get into the bastion (`relay`). But nobody can reach the management node (`core`) behind it. The previous SRE swore the firewall was open. It still won't connect. No error — it just hangs, silent."
 
 The word *internet* comes from *inter-network*: connecting separate networks. That's your job. Find why packets vanish one-way, restore the path, and pull out the flag `core` is holding.
 
