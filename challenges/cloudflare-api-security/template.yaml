@@ -1,0 +1,558 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (cloudflare-api-security). A self-deploy + external-verify
+  API security drill. The competitor deploys a deliberately vulnerable profile
+  API (broken authorization / IDOR / no input validation / info disclosure) to
+  their OWN free Cloudflare Workers account, fixes it, and submits their
+  *.workers.dev URL.
+
+  Scoring is an Evaluator Lambda deployed here. The competitor invokes it as
+  `{"workerUrl":"https://<you>.workers.dev"}`; it probes the URL from the outside
+  in stages 0-4 (deploy / input-validation / authorization+IDOR / info-disclosure
+  / regression) and returns the per-deploy flag TC{...} only on a full pass. The
+  flag lives only in the function env (no lambda:GetFunction* granted), so it is a
+  discovered flag earned by actually securing the API.
+
+  SSRF defenses (the competitor supplies the URL): https-only, host must be a
+  *.workers.dev subdomain, redirects are NOT followed, connect/read timeouts and a
+  response body size cap are enforced. AWS side is Lambda + S3 + SSM (free tier;
+  delete-stack removes all). The problem runtime is the competitor's free
+  Cloudflare account.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks from
+      colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+  FlagSeed:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    MaxLength: 64
+    AllowedPattern: "^[A-Za-z0-9]+$"
+    Description: >
+      Per-deploy random secret injected by the deploy chain (cfnParameters:
+      FlagSeed = __RANDOM_PASSWORD__). Wrapped as TC{...} and returned only after
+      all scoring stages pass -- never derivable from the public NamePrefix.
+
+Resources:
+  # ----- S3 bucket that delivers the starter to the competitor -----
+  # Private (IAM-only; Block Public Access stays on). The competitor downloads
+  # setup.sh with `aws s3 cp` using their participant role, then `bash setup.sh`.
+  SetupBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${NamePrefix}-tools-${AWS::AccountId}"
+
+  # ----- The Evaluator (also doubles as the S3-populating custom resource) -----
+  EvaluatorFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: EvaluatorRuntime
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # Used only by the custom-resource branch to populate / clean the
+              # setup bucket. Bucket ARN built by name to avoid a dependency cycle.
+              - Sid: PopulateSetupBucket
+                Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub "arn:aws:s3:::${NamePrefix}-tools-${AWS::AccountId}"
+                  - !Sub "arn:aws:s3:::${NamePrefix}-tools-${AWS::AccountId}/*"
+
+  EvaluatorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: !Sub "Cloudflare API security evaluator for ${NamePrefix}."
+      Runtime: python3.12
+      Handler: index.handler
+      Timeout: 30
+      MemorySize: 256
+      Role: !GetAtt EvaluatorFunctionRole.Arn
+      Environment:
+        Variables:
+          # The flag lives only here. The participant role gets NO lambda:GetFunction*,
+          # so the only path to this value is passing every scoring stage.
+          FLAG: !Sub "TC{${FlagSeed}}"
+      # Literal block (flag arrives via env) -- no CFn interpolation in this body.
+      Code:
+        ZipFile: |
+          import json, os
+          import urllib.request, urllib.parse, urllib.error
+
+          FLAG = os.environ["FLAG"]
+          TIMEOUT = 8
+          MAX_BYTES = 65536
+          # demo tokens baked into the starter contract
+          ALICE = {"Authorization": "Bearer token-alice"}
+          BOB = {"Authorization": "Bearer token-bob"}
+          LEAK_MARKERS = ["stack", "Error:", "TypeError", "ReferenceError", "at Object",
+                          "/usr/", "/var/", "node_modules", "token-", "Bearer ",
+                          "SECRET", "Traceback", "syntax error"]
+
+          class _NoRedirect(urllib.request.HTTPRedirectHandler):
+              # SSRF guard: never follow redirects (a Worker could 3xx to an internal URL).
+              def redirect_request(self, req, fp, code, msg, headers, newurl):
+                  return None
+
+          _opener = urllib.request.build_opener(_NoRedirect)
+
+          def validate_url(u):
+              if not isinstance(u, str) or not u:
+                  return "workerUrl is required"
+              p = urllib.parse.urlparse(u)
+              if p.scheme != "https":
+                  return "workerUrl must be https"
+              if "@" in (p.netloc or ""):
+                  return "workerUrl must not contain credentials"
+              host = (p.hostname or "").lower()
+              # host allowlist: only *.workers.dev subdomains (Cloudflare-controlled,
+              # so it cannot resolve to a private/metadata address).
+              if not host.endswith(".workers.dev") or host == "workers.dev" or host.count(".") < 2:
+                  return "workerUrl host must be a <name>.workers.dev subdomain"
+              return None
+
+          def fetch(base, path, headers=None):
+              # returns (status, text). 3xx surfaces as its own status (not followed).
+              url = base.rstrip("/") + path
+              req = urllib.request.Request(url, headers=headers or {}, method="GET")
+              try:
+                  with _opener.open(req, timeout=TIMEOUT) as resp:
+                      return resp.status, resp.read(MAX_BYTES).decode("utf-8", "replace")
+              except urllib.error.HTTPError as e:
+                  try:
+                      body = e.read(MAX_BYTES).decode("utf-8", "replace")
+                  except Exception:
+                      body = ""
+                  return e.code, body
+
+          def as_json(text):
+              try:
+                  return json.loads(text)
+              except Exception:
+                  return None
+
+          def has_leak(text):
+              low = (text or "")
+              return [m for m in LEAK_MARKERS if m in low]
+
+          def stage0_deploy(base):
+              st, body = fetch(base, "/healthz")
+              if st != 200:
+                  return False, "GET /healthz expected 200, got %s" % st
+              j = as_json(body)
+              if not (isinstance(j, dict) and j.get("status") == "ok"):
+                  return False, "GET /healthz must return JSON {\"status\":\"ok\"}"
+              return True, "healthz ok"
+
+          def stage1_input(base):
+              payloads = ["%27%20OR%201%3D1", "..%2F..%2F..%2Fetc%2Fpasswd",
+                          "%3Cscript%3E", "a" * 600]
+              for raw in payloads:
+                  st, body = fetch(base, "/api/profile/" + raw, ALICE)
+                  if st >= 500:
+                      return False, "malformed id caused %s (must reject gracefully, no 5xx)" % st
+                  if st not in (400, 404):
+                      return False, "malformed id returned %s (expected 400/404 reject)" % st
+                  leaks = has_leak(body)
+                  if leaks:
+                      return False, "error body leaked %s" % leaks
+              return True, "malformed input rejected with no leakage"
+
+          def stage2_authz(base):
+              # 1) no token -> 401
+              st, _ = fetch(base, "/api/profile")
+              if st != 401:
+                  return False, "GET /api/profile without token expected 401, got %s" % st
+              # 2) invalid token -> 401
+              st, _ = fetch(base, "/api/profile", {"Authorization": "Bearer nope"})
+              if st != 401:
+                  return False, "invalid token expected 401, got %s" % st
+              # 3) valid token -> own profile
+              st, body = fetch(base, "/api/profile", ALICE)
+              if st != 200:
+                  return False, "valid token GET /api/profile expected 200, got %s" % st
+              j = as_json(body) or {}
+              if j.get("id") not in ("alice", None) and j.get("userId") not in ("alice", None):
+                  return False, "own profile returned someone else's data"
+              # 4) IDOR: alice asking for bob -> 403 (must NOT return bob's data)
+              st, body = fetch(base, "/api/profile/bob", ALICE)
+              if st == 200:
+                  return False, "IDOR: alice could read /api/profile/bob (expected 403)"
+              if st != 403:
+                  return False, "cross-user access expected 403, got %s" % st
+              # 5) own id allowed
+              st, _ = fetch(base, "/api/profile/alice", ALICE)
+              if st != 200:
+                  return False, "alice reading /api/profile/alice expected 200, got %s" % st
+              return True, "authorization enforced and IDOR blocked"
+
+          def stage3_disclosure(base):
+              probes = [("/api/profile", None), ("/api/profile/charlie", ALICE),
+                        ("/api/profile/bob", ALICE)]
+              for path, hdr in probes:
+                  _, body = fetch(base, path, hdr)
+                  leaks = has_leak(body)
+                  if leaks:
+                      return False, "%s leaked %s" % (path, leaks)
+              return True, "no internal details leaked in error responses"
+
+          def stage4_regression(base):
+              for _ in range(3):
+                  st, _ = fetch(base, "/healthz")
+                  if st != 200:
+                      return False, "healthz not consistent (got %s)" % st
+                  st, _ = fetch(base, "/api/profile/bob", ALICE)
+                  if st != 403:
+                      return False, "IDOR guard not consistent (got %s)" % st
+              return True, "behavior consistent under repetition"
+
+          STAGES = [
+              ("0-deploy", stage0_deploy),
+              ("1-input-validation", stage1_input),
+              ("2-authorization-idor", stage2_authz),
+              ("3-info-disclosure", stage3_disclosure),
+              ("4-regression", stage4_regression),
+          ]
+
+          def evaluate(worker_url):
+              err = validate_url(worker_url)
+              if err:
+                  return {"passed": False, "error": err}
+              base = worker_url
+              results = []
+              for name, fn in STAGES:
+                  try:
+                      ok, detail = fn(base)
+                  except urllib.error.URLError as e:
+                      ok, detail = False, "could not reach worker: %s" % getattr(e, "reason", e)
+                  except Exception as e:
+                      ok, detail = False, "evaluator error: %s" % e
+                  results.append({"stage": name, "passed": ok, "detail": detail})
+                  if not ok:
+                      break
+              all_pass = len(results) == len(STAGES) and all(r["passed"] for r in results)
+              out = {"passed": all_pass, "results": results}
+              if all_pass:
+                  out["flag"] = FLAG
+                  out["message"] = "All 5 stages passed. Submit the flag in the Participant Portal."
+              else:
+                  out["message"] = "Fix the failing stage and re-run after `wrangler deploy`."
+              return out
+
+          def handler(event, ctx):
+              # CloudFormation custom-resource branch: populate / clean the setup
+              # bucket at deploy / teardown (distinguished by RequestType+ResponseURL,
+              # which a competitor's `aws lambda invoke` payload never carries).
+              if isinstance(event, dict) and event.get("RequestType") and event.get("ResponseURL"):
+                  import cfnresponse
+                  import boto3
+                  s3 = boto3.client("s3")
+                  try:
+                      p = event.get("ResourceProperties", {})
+                      bucket = p.get("Bucket")
+                      if event["RequestType"] == "Delete":
+                          try:
+                              for o in s3.list_objects_v2(Bucket=bucket).get("Contents", []):
+                                  s3.delete_object(Bucket=bucket, Key=o["Key"])
+                          except Exception:
+                              pass
+                      else:
+                          s3.put_object(Bucket=bucket, Key=p["Key"],
+                                        Body=p["Body"].encode(),
+                                        ContentType="text/x-shellscript")
+                      cfnresponse.send(event, ctx, cfnresponse.SUCCESS, {},
+                                       physicalResourceId=p.get("Key", "setup"))
+                  except Exception as e:
+                      cfnresponse.send(event, ctx, cfnresponse.FAILED, {"error": str(e)})
+                  return
+              # Otherwise: the evaluator, invoked by the competitor with a workerUrl.
+              worker_url = None
+              if isinstance(event, dict):
+                  worker_url = event.get("workerUrl") or event.get("WorkerUrl")
+              return evaluate(worker_url)
+
+  # Custom resource that writes setup.sh into the bucket on create and empties the
+  # bucket on delete (so delete-stack leaves no orphan). setup.sh expands the
+  # starter (vulnerable index.js + wrangler.toml + README + evaluate.sh) locally.
+  SetupUpload:
+    Type: AWS::CloudFormation::CustomResource
+    Properties:
+      ServiceToken: !GetAtt EvaluatorFunction.Arn
+      Bucket: !Ref SetupBucket
+      Key: setup.sh
+      Body: |
+        #!/usr/bin/env bash
+        # TenkaCloud cloudflare-api-security -- starter expander.
+        # Usage: bash setup.sh   (writes ./cloudflare-api-security/*)
+        set -euo pipefail
+        DIR="cloudflare-api-security"
+        mkdir -p "$DIR"
+
+        cat > "$DIR/wrangler.toml" <<'TOML'
+        name = "tenkacloud-profile-api"
+        main = "index.js"
+        compatibility_date = "2025-01-01"
+        TOML
+
+        cat > "$DIR/index.js" <<'JS'
+        // TenkaCloud profile API -- STARTER (deliberately vulnerable).
+        // Fix every `// VULN:` below, then `wrangler deploy` and re-run evaluate.sh.
+        //
+        // Contract the scoring engine checks:
+        //   GET /healthz                      -> 200 {"status":"ok"}
+        //   GET /api/profile                  -> 200 caller's own profile; 401 if no/invalid token
+        //   GET /api/profile/:id              -> 200 if :id is the caller; 403 otherwise (IDOR); 401 if no token
+        //                                        400 if :id is malformed; 404 if unknown
+        //   demo tokens: "token-alice" -> alice, "token-bob" -> bob
+        //   error bodies must NOT leak internals (stack/message/path/token).
+        const USERS = {
+          "token-alice": { userId: "alice" },
+          "token-bob": { userId: "bob" },
+        };
+        const PROFILES = {
+          alice: { id: "alice", name: "Alice", email: "alice@example.com", phone: "555-0001" },
+          bob: { id: "bob", name: "Bob", email: "bob@example.com", phone: "555-0002" },
+        };
+        function json(obj, status = 200) {
+          return new Response(JSON.stringify(obj), {
+            status,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        export default {
+          async fetch(request) {
+            const url = new URL(request.url);
+            const path = url.pathname;
+            try {
+              if (path === "/healthz") return json({ status: "ok" });
+
+              const auth = request.headers.get("authorization") || "";
+              const token = auth.replace(/^Bearer\s+/i, "");
+              const caller = USERS[token]; // may be undefined
+
+              // VULN(authorization): missing/invalid token is not rejected.
+              // FIX: if (!caller) return json({ error: "unauthorized" }, 401);
+
+              if (path === "/api/profile") {
+                // VULN(authorization): defaults to "alice" when caller is missing.
+                const uid = (caller && caller.userId) || "alice";
+                return json(PROFILES[uid]);
+              }
+
+              const m = path.match(/^\/api\/profile\/(.+)$/);
+              if (m) {
+                const id = decodeURIComponent(m[1]);
+                // VULN(input-validation): no shape check on `id`.
+                // FIX: if (!/^[a-z]{1,32}$/.test(id)) return json({ error: "bad request" }, 400);
+                // VULN(idor): no ownership check -- returns ANY id's profile.
+                // FIX: if (!caller || id !== caller.userId) return json({ error: "forbidden" }, 403);
+                const p = PROFILES[id];
+                if (!p) {
+                  // VULN(info-disclosure): leaks known ids and the caller's token.
+                  return json({ error: "profile not found", id, known: Object.keys(PROFILES), token }, 404);
+                }
+                return json(p);
+              }
+              return json({ error: "not found" }, 404);
+            } catch (err) {
+              // VULN(info-disclosure): leaks the stack trace / message.
+              return json({ error: err.message, stack: err.stack }, 500);
+            }
+          },
+        };
+        JS
+
+        cat > "$DIR/evaluate.sh" <<'EVAL'
+        #!/usr/bin/env bash
+        # Invoke the TenkaCloud Evaluator Lambda against your deployed Worker.
+        # Usage: ./evaluate.sh <NamePrefix> https://<you>.workers.dev
+        set -uo pipefail
+        NP="${1:?usage: ./evaluate.sh <NamePrefix> https://<you>.workers.dev}"
+        URL="${2:?usage: ./evaluate.sh <NamePrefix> https://<you>.workers.dev}"
+        FN=$(aws ssm get-parameter --name "/$NP/evaluator_function" --query Parameter.Value --output text 2>/dev/null)
+        if [ -z "$FN" ] || [ "$FN" = "None" ]; then
+          echo "could not resolve the evaluator from /$NP/evaluator_function (check your NamePrefix)" >&2
+          exit 2
+        fi
+        payload=$(printf '{"workerUrl":"%s"}' "$URL")
+        aws lambda invoke --function-name "$FN" --cli-binary-format raw-in-base64-out \
+          --payload "$payload" /tmp/cf_eval_out.json >/dev/null
+        cat /tmp/cf_eval_out.json | jq .
+        flag=$(jq -r '.flag // empty' /tmp/cf_eval_out.json 2>/dev/null)
+        [ -n "$flag" ] && echo ">> flag: $flag   (submit this in the Participant Portal)"
+        EVAL
+        chmod +x "$DIR/evaluate.sh"
+
+        cat > "$DIR/README.md" <<'MD'
+        # cloudflare-api-security -- starter
+
+        1. `npm i -g wrangler` then `wrangler login` (free Cloudflare account).
+        2. `cd cloudflare-api-security && wrangler deploy` -> note your `https://<name>.workers.dev`.
+        3. Fix every `// VULN:` in `index.js`, then `wrangler deploy` again.
+        4. `./evaluate.sh <NamePrefix> https://<name>.workers.dev` -> scores stages 0-4.
+        5. On a full pass the flag `TC{...}` is printed -- submit it in the Participant Portal.
+        MD
+
+        echo "[ok] starter written to ./$DIR  (next: cd $DIR && wrangler login && wrangler deploy)"
+
+  # ----- Competitor-readable pointers (no DescribeStacks granted) -----
+  EvaluatorFunctionNameParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/evaluator_function"
+      Type: String
+      Value: !Ref EvaluatorFunction
+      Description: !Sub "Name of the scoring Evaluator Lambda for ${NamePrefix} (evaluate.sh invokes it)."
+      Tier: Standard
+
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: !Sub >-
+        Cloudflare API security drill. You secure a profile API and the scoring
+        Lambda /${NamePrefix}/evaluator_function probes it from the outside. STEP 1
+        get the starter: aws s3 cp s3://${NamePrefix}-tools-${AWS::AccountId}/setup.sh
+        . && bash setup.sh (writes ./cloudflare-api-security/*). STEP 2 deploy to a
+        FREE Cloudflare account: cd cloudflare-api-security && npm i -g wrangler &&
+        wrangler login && wrangler deploy -- note your https://<name>.workers.dev.
+        STEP 3 fix the 4 //VULN: marks in index.js (authorization, IDOR,
+        input-validation, info-disclosure) and wrangler deploy again. STEP 4 score
+        it: ./evaluate.sh ${NamePrefix} https://<name>.workers.dev -- it runs stages
+        0-4 from the outside. STEP 5 on a full pass it prints TC{...}; submit it.
+      Description: !Sub "TenkaCloud cloudflare-api-security briefing for ${NamePrefix}."
+      Tier: Standard
+
+  # ----- IAM: participant viewer (read everything + invoke the evaluator) -----
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      # Participant access baseline (same across every problem in this catalog).
+      # `aws login` (2025-11) OAuth2 flow needs SignInLocalDevelopmentAccess;
+      # do not remove (validated by scripts/validate-problems.ts).
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # CloudShell baseline -- 7-action allow-list, Resource:* unavoidable
+              # (environments are per-identity). Do not remove (validated).
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              # Invoke the Evaluator as the scorer. Scoped to THIS stack's function
+              # ARN. No lambda:GetFunction* -- the FLAG env var stays unreadable;
+              # the flag is earned by passing every stage.
+              - Sid: InvokeEvaluator
+                Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource: !GetAtt EvaluatorFunction.Arn
+              # Download the starter (setup.sh) from the stack's bucket. IAM-scoped
+              # read; the bucket itself stays private (no public access).
+              - Sid: DownloadStarter
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub "arn:aws:s3:::${NamePrefix}-tools-${AWS::AccountId}"
+                  - !Sub "arn:aws:s3:::${NamePrefix}-tools-${AWS::AccountId}/*"
+              # Read the briefing / evaluator_function pointers (and any other
+              # /${NamePrefix}/* parameter). Read-only; scoped to this stack's path.
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              # ssm:DescribeParameters is metadata-only; AWS IAM does not accept
+              # resource-level scoping on it. Resource:"*" carries no cross-tenant
+              # leak under the per-team dedicated-account model.
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              # Deliberately NO cloudformation:DescribeStacks and NO lambda:GetFunction*
+              # -- the AnswerFlag Output and the function's FLAG env var must stay
+              # unreadable; the flag is earned by passing every scoring stage.
+
+Outputs:
+  EvaluatorFunctionName:
+    Description: Name of the scoring Evaluator Lambda (also in SSM /evaluator_function). evaluate.sh invokes it.
+    Value: !Ref EvaluatorFunction
+  SetupBucketName:
+    Description: S3 bucket holding the starter. Download with `aws s3 cp s3://<this>/setup.sh .`.
+    Value: !Ref SetupBucket
+  BriefingParameterName:
+    Description: SSM Parameter holding the task briefing.
+    Value: !Ref BriefingParameter
+  # Canonical answer, scoring engine only (no DescribeStacks granted to competitor).
+  AnswerFlag:
+    Description: Flag the learner submits after every scoring stage passes.
+    Value: !Sub "TC{${FlagSeed}}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn
