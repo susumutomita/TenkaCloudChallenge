@@ -286,7 +286,7 @@ Resources:
           <p>Cloudflare is checking your connection. To complete verification, press
           <b>Win + R</b>, paste the code below, and press Enter.</p>
           <pre style="background:#f3f3f3;padding:12px;text-align:left">powershell -e &lt;base64&gt;  # "verification token"</pre>
-          <p style="color:#888;font-size:12px">(This is the malicious ClickFix lure — a real reCAPTCHA/Turnstile NEVER asks you to run a command.)</p>
+          <p style="color:#888;font-size:12px">(This is the malicious ClickFix lure -- a real reCAPTCHA/Turnstile NEVER asks you to run a command.)</p>
           </body>
           HTML
           cat > "$WROOT/index.html" <<'HTML'

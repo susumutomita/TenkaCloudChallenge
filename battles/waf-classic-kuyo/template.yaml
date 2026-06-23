@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
-  TenkaCloud problem -- waf-classic-kuyo (WAF Classic 供養 / WAF v2 migration).
+  TenkaCloud problem -- waf-classic-kuyo (WAF Classic kuyo / WAF v2 migration).
   Deploys a DEFENSELESS legacy profile API (Lambda + API Gateway REST, regional) plus the
   attack-detection scoring coordinates (SSM Parameter). The competitor must create a WAFv2
   WebACL and associate it with the REST stage -- WAF Classic (v1) reached end of support on
@@ -128,7 +128,7 @@ Resources:
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/*/*"
 
-  # --- The 遺品: the discontinued WAF Classic ACL the competitor must reproduce on v2 ---
+  # --- The legacy relic: the discontinued WAF Classic ACL the competitor must reproduce on v2 ---
   LegacyWafClassicAclParameter:
     Type: AWS::SSM::Parameter
     Properties:
