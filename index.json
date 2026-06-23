@@ -35,7 +35,7 @@
       "visibility": "public",
       "difficulty": 2,
       "estimatedDuration": "30〜45 分",
-      "shortDescription": "AWS アカウントは要らない。 自分のプロフィール API を Cloudflare Workers など好きな場所に公開し、 その URL を問題の検証エンドポイントに渡す。 検証 Lambda が外から API を叩いてセキュリティ要件を確かめ、 全部通れば flag を返す。",
+      "shortDescription": "天下クラウド株式会社、 セキュリティ班。 CTO 曰く: 「プロフィール API を世に出せ。 ただし穴は 1 つも許さん」。\n\nデプロイ先はどこでもいい ── Cloudflare Workers でも、 コンテナでも、 手元のクラウドでも。 AWS アカウントは要らない。 公開したら、 その URL を問題の検証エンドポイントに渡せ。 検証 Lambda が外から API を叩き、 セキュリティ要件を 1 つずつ確かめる。 全部塞いで初めて flag (`TC{...}`) が出る。 君の仕事は、 自分で建てた API を verify に通しきることだ。",
       "tags": [
         "self-deploy",
         "api-security",
