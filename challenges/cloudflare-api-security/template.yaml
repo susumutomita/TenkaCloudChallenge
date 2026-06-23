@@ -1,23 +1,13 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
-  TenkaCloud Challenge (cloudflare-api-security). A self-deploy + external-verify
-  API security drill. The competitor deploys a deliberately vulnerable profile
-  API (broken authorization / IDOR / no input validation / info disclosure) to
-  their OWN free Cloudflare Workers account, fixes it, and submits their
-  *.workers.dev URL.
-
-  Scoring is an Evaluator Lambda deployed here. The competitor invokes it as
-  `{"workerUrl":"https://<you>.workers.dev"}`; it probes the URL from the outside
-  in stages 0-4 (deploy / input-validation / authorization+IDOR / info-disclosure
-  / regression) and returns the per-deploy flag TC{...} only on a full pass. The
-  flag lives only in the function env (no lambda:GetFunction* granted), so it is a
-  discovered flag earned by actually securing the API.
-
-  SSRF defenses (the competitor supplies the URL): https-only, host must be a
-  *.workers.dev subdomain, redirects are NOT followed, connect/read timeouts and a
-  response body size cap are enforced. AWS side is Lambda + S3 + SSM (free tier;
-  delete-stack removes all). The problem runtime is the competitor's free
-  Cloudflare account.
+  TenkaCloud Challenge (cloudflare-api-security): self-deploy + external-verify API
+  security drill. The competitor deploys a deliberately vulnerable profile API to
+  their own free Cloudflare Workers account, hardens it, and submits the
+  *.workers.dev URL. An Evaluator Lambda (deployed here) probes the URL from the
+  outside in stages 0-4 and returns the per-deploy flag only on a full pass; the
+  flag lives only in the function env (no lambda:GetFunction* granted). SSRF
+  guarded (https-only, *.workers.dev host, no redirect follow, timeouts, body cap).
+  AWS side is Lambda + S3 + SSM (free tier); delete-stack removes all.
 
 Parameters:
   NamePrefix:

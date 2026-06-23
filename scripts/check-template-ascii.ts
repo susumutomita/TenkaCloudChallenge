@@ -49,30 +49,53 @@ const files = TEMPLATE_DIRS.flatMap((d) => {
   }
 });
 
+/**
+ * Length of the top-level template `Description` (folded/literal block or inline).
+ * CloudFormation rejects CreateChangeSet when this exceeds 1024 chars
+ * ("'Description' length is greater than 1024"), so deploy never starts.
+ */
+function topLevelDescriptionLength(content: string): number {
+  const block = content.match(/^Description:[ \t]*(?:[>|][-+0-9]*)?[ \t]*\n((?:[ \t]+.*(?:\n|$))+)/m);
+  if (block) {
+    return block[1]
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .join(" ").length;
+  }
+  const inline = content.match(/^Description:[ \t]*(\S.*)$/m);
+  return inline ? inline[1].trim().length : 0;
+}
+
 for (const file of files) {
-  readFileSync(file, "utf8")
-    .split("\n")
-    .forEach((line, idx) => {
-      for (const ch of line) {
-        const cp = ch.codePointAt(0);
-        if (cp === undefined) continue;
-        if (!isAllowedCharCode(cp)) {
-          const hex = cp.toString(16).toUpperCase().padStart(4, "0");
-          errors.push(`${file}:${idx + 1}: non-Latin1 char U+${hex} (${ch}) -- breaks IAM Description (CREATE_FAILED)`);
-          break;
-        }
+  const content = readFileSync(file, "utf8");
+  // (1) charset: IAM Description allows only ASCII + Latin-1.
+  content.split("\n").forEach((line, idx) => {
+    for (const ch of line) {
+      const cp = ch.codePointAt(0);
+      if (cp === undefined) continue;
+      if (!isAllowedCharCode(cp)) {
+        const hex = cp.toString(16).toUpperCase().padStart(4, "0");
+        errors.push(`${file}:${idx + 1}: non-Latin1 char U+${hex} (${ch}) -- breaks IAM Description (CREATE_FAILED)`);
+        break;
       }
-    });
+    }
+  });
+  // (2) length: top-level Description must be <= 1024 (CFn CreateChangeSet limit).
+  const descLen = topLevelDescriptionLength(content);
+  if (descLen > 1024) {
+    errors.push(`${file}: top-level Description is ${descLen} chars (> 1024) -- CFn rejects CreateChangeSet (deploy never starts)`);
+  }
 }
 
 if (errors.length > 0) {
-  console.error("NG: CFn template(s) contain CJK / non-Latin-1 characters");
+  console.error("NG: CFn template(s) have IAM-Description / length problems");
   for (const e of errors) console.error(`  ${e}`);
   console.error(
-    "\nIAM Role / Policy Description allows only ASCII (0x20-0x7E) + Latin-1 supplement (0xA1-0xFF).\n" +
-      "Replace CJK / Japanese with ASCII English (Descriptions, comments, embedded HTML).",
+    "\nFix: keep Descriptions ASCII (0x20-0x7E) + Latin-1 (0xA1-0xFF), and the\n" +
+      "top-level template Description <= 1024 chars. Put long prose in metadata / README.",
   );
   process.exit(1);
 }
 
-console.log(`OK: ${files.length} CFn template(s) are ASCII + Latin-1 (IAM Description safe)`);
+console.log(`OK: ${files.length} CFn template(s) are ASCII+Latin-1 and Description <= 1024 (deploy-safe)`);
