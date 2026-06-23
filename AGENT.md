@@ -137,7 +137,7 @@ Worked examples: every problem under `challenges/` and `battles/` now carries `i
 
 ## Voice for `shortDescription` / `instructions` / `description`
 
-The catalog leans into SRE-day-in-the-life narration: Kato-san (the predecessor who abruptly resigned), Sasaki-san CTO (gives vague but high-stakes orders), competitor as "the new hire" inheriting a mess. Players engage 2-3× better with story than with dry mechanics. Examples:
+The catalog leans into SRE-day-in-the-life narration: the previous SRE (the predecessor who abruptly resigned), the CTO (gives vague but high-stakes orders), competitor as "the new hire" inheriting a mess. Players engage 2-3× better with story than with dry mechanics. Examples:
 
 - `challenges/hello-world` — first-day, single SSM parameter as the smoking gun.
 - `battles/hello-world-battle` — day two, inherited monolith, other teams already moving.

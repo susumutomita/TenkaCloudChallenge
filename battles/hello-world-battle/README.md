@@ -14,7 +14,7 @@ The **minimal sample** for Battle uptime scoring. Deploys nginx (frontend) and P
 
 ## What you do
 
-Day two at TenkaCloud Inc. You inherited Kato-san's little production web stack (nginx + Python `/healthz` on one EC2) -- except other teams' SREs share the same account and are taking each other's services down.
+Day two at TenkaCloud Inc. You inherited the previous SRE's little production web stack (nginx + Python `/healthz` on one EC2) -- except other teams' SREs share the same account and are taking each other's services down.
 
 Your job:
 

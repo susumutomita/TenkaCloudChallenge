@@ -2,9 +2,9 @@
 
 > English: [README.md](./README.md)
 
-天下クラウド株式会社 Platform Team、 月初の朝会。 加藤さんは辞めた。 AI Builder が生成した掲示板アプリが社内公開待ちになっている。 動くが、 本番品質ではない。 DB は空、 anonymous 投稿可、 rate limit なし、 audit なし、 まだ SQLite のまま。
+天下クラウド株式会社 Platform Team、 月初の朝会。 前任の SRE は辞めた。 AI Builder が生成した掲示板アプリが社内公開待ちになっている。 動くが、 本番品質ではない。 DB は空、 anonymous 投稿可、 rate limit なし、 audit なし、 まだ SQLite のまま。
 
-> 佐々木 CTO 曰く: 「ホスティングしただけじゃ公開できない。 既存の統制リソースを使って、 今日中に本番品質まで持っていって」
+> CTO 曰く: 「ホスティングしただけじゃ公開できない。 既存の統制リソースを使って、 今日中に本番品質まで持っていって」
 
 君の仕事は次の 90〜120 分。 stack が作成済みのリソースとデータ / 設定変更だけを使って、 1 つの hosted app を production に上げる。 Lambda / ECS / App Runner / API Gateway / CloudFront などの CFn 管理外トップレベルリソースは作らない。
 
@@ -54,7 +54,7 @@ EC2 app host (SSM only, SSH 不要)
 | `rate_limited` | WAF 未 associate     | 既存 WebACL を既存 ALB に associate                 |
 | `audit_on`     | audit write なし     | 既存 S3 audit bucket に audit event を実書き込み    |
 | `on_rds`       | SQLite               | 既存 RDS PostgreSQL に posts を移行し app 接続先を切替 |
-| `ssh_closed`   | tcp/22 が 0.0.0.0/0 に公開 | 加藤さんが残した public SSH ルールを発見して revoke (接続は SSM-only なので壊れない) |
+| `ssh_closed`   | tcp/22 が 0.0.0.0/0 に公開 | 前任の SRE が残した public SSH ルールを発見して revoke (接続は SSM-only なので壊れない) |
 
 `GET /meta` はこの posture から `posture-0`〜`posture-5`、 全 gate true なら `production` を返す。 採点は **フラット: 満たした gate 1 つにつき +100点/分**。 6 つの gate はどれも等しく価値があり、 どれを閉じても同じだけ加点される。
 
@@ -122,7 +122,7 @@ EC2 app host (SSM only, SSH 不要)
    sudo systemctl restart tenkacloud-vibe
    ```
 
-8. app host の Security Group (`<NamePrefix>-app-sg`、 participant role で EC2 Console から見える) を点検し、 加藤さんが残した public SSH ルールを発見して revoke する。 実行は **participant credential** (CloudShell か `aws login`) で行う — instance role は意図的に SG を変更できない。 接続は SSM Session Manager 経由なので tcp/22 を閉じても何も壊れない:
+8. app host の Security Group (`<NamePrefix>-app-sg`、 participant role で EC2 Console から見える) を点検し、 前任の SRE が残した public SSH ルールを発見して revoke する。 実行は **participant credential** (CloudShell か `aws login`) で行う — instance role は意図的に SG を変更できない。 接続は SSM Session Manager 経由なので tcp/22 を閉じても何も壊れない:
 
    ```bash
    APP_SG_ID=$(aws ec2 describe-security-groups \

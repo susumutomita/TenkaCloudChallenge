@@ -14,7 +14,7 @@ Battle uptime scoring の **最小 sample** 問題。 EC2 1 台に nginx (fronte
 
 ## 何をする問題か
 
-天下クラウド株式会社、 2 日目。 加藤さんが production に残した小さな web stack (EC2 上で nginx + Python `/healthz`) を引き継いだ ── が、 同じアカウントには他チームの SRE がいて、 互いに相手のサービスを落とし合っている。
+天下クラウド株式会社、 2 日目。 前任の SRE が production に残した小さな web stack (EC2 上で nginx + Python `/healthz`) を引き継いだ ── が、 同じアカウントには他チームの SRE がいて、 互いに相手のサービスを落とし合っている。
 
 あなたの仕事:
 

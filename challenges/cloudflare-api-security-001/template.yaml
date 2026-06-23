@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
-  cloudflare-api-security-001 — self-deploy + verify challenge (Issue #1973).
+  cloudflare-api-security-001 -- self-deploy + verify challenge (Issue #1973).
   Deploys a verifier Lambda exposed via a Function URL. Competitors publish their
   own app anywhere (e.g. Cloudflare Workers) and call GET <VerifyUrl>/verify?url=...;
   the Lambda probes that external URL from the outside and returns the per-deploy

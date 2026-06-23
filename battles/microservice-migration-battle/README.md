@@ -2,9 +2,9 @@
 
 > 日本語版: [README.ja.md](./README.ja.md)
 
-Month one at TenkaCloud Inc. Kato-san — the predecessor who vanished after that handover meeting last quarter — left you an EC2 monolith: three services (`users` / `orders` / `catalog`) co-tenant on one box, dispatched by a tired nginx config.
+Month one at TenkaCloud Inc. The previous SRE — the predecessor who vanished after that handover meeting last quarter — left you an EC2 monolith: three services (`users` / `orders` / `catalog`) co-tenant on one box, dispatched by a tired nginx config.
 
-> Sasaki-san, the CTO: "Time to split these out. Lambda, ECS Fargate, App Runner — give each service its own hosting. I don't care which, just stop running them on one VM. Other teams started yesterday."
+> the CTO, the CTO: "Time to split these out. Lambda, ECS Fargate, App Runner — give each service its own hosting. I don't care which, just stop running them on one VM. Other teams started yesterday."
 
 This Battle is your migration. You have 90 to 120 minutes, three slots in the Participant Portal, and a score engine that pays out per hosting tier the moment you register a new URL.
 

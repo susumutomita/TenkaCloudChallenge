@@ -9,7 +9,7 @@ Use this skill when the user wants to add a brand-new problem. For edits to an e
 
 ## The design bar — make it fun, not a drill (read this first)
 
-The catalog's #1 failure mode is the **exam-drill problem**: a corporate-memo wrapper around a flashcard, where the "flag" is a concept name you type from memory (`TC{standard-ia}`, `TC{port-3389}`) and the same "新人入社 / 加藤の負債 / CTO 激怒" template is stamped on every entry. After three of those it is pure repetition — players feel like they are grinding AWS homework, not playing. A problem is only worth shipping if a player would call it *fun*, not *homework*.
+The catalog's #1 failure mode is the **exam-drill problem**: a corporate-memo wrapper around a flashcard, where the "flag" is a concept name you type from memory (`TC{standard-ia}`, `TC{port-3389}`) and the same "新人入社 / 前任の SRE の負債 / CTO 激怒" template is stamped on every entry. After three of those it is pure repetition — players feel like they are grinding AWS homework, not playing. A problem is only worth shipping if a player would call it *fun*, not *homework*.
 
 Four properties separate a fun problem from a drill. Aim for all four.
 
@@ -23,7 +23,7 @@ Four properties separate a fun problem from a drill. Aim for all four.
 
 3. **A real "aha", not recall.** The lesson should be a production skill felt viscerally — `curl` that *hangs* vs *refuses* (stateful SG vs stateless NACL), a path traced across four layers, an incident reconstructed from evidence. Naming the service is not the win; *operating* it is.
 
-4. **Story with stakes, without the stamp.** Keep the shared world (天下クラウド, Kato-san's leftovers, Sasaki-san CTO) but vary the framing every time — a fresh incident, a specific symptom, a ticking clock. Never reuse the same "day-N / CTO rage" skeleton verbatim. The story gives the operation stakes; it is not a reskin of the same memo.
+4. **Story with stakes, without the stamp.** Keep the shared world (天下クラウド, the previous SRE's leftovers, the CTO) but vary the framing every time — a fresh incident, a specific symptom, a ticking clock. Never reuse the same "day-N / CTO rage" skeleton verbatim. The story gives the operation stakes; it is not a reskin of the same memo.
 
 ### How to incorporate the Battle (PvP) element
 
@@ -179,7 +179,7 @@ For policy `Resource` ARNs, scope by `${NamePrefix}*` or a per-stack resource ID
 
 ## Step 5 — write `README.md` and `README.ja.md`
 
-Sections in order: story (lead with this), what-gets-deployed (diagram if non-trivial), how-to-play / how-to-solve, scoring table, cost, learning goals, related files. EN-primary, JA mirror. Same SRE-day-in-the-life voice as `metadata.json` (Kato-san, Sasaki-san CTO).
+Sections in order: story (lead with this), what-gets-deployed (diagram if non-trivial), how-to-play / how-to-solve, scoring table, cost, learning goals, related files. EN-primary, JA mirror. Same SRE-day-in-the-life voice as `metadata.json` (the previous SRE, the CTO).
 
 ## Step 6 — validate and PR
 
@@ -209,9 +209,9 @@ PR body should cover: what the problem teaches, the player's flow, anything that
 
 The catalog uses SRE-day-in-the-life narration:
 
-- **Kato-san** — your predecessor SRE who abruptly resigned and left an undocumented mess.
-- **Sasaki-san CTO** — vague high-stakes orders ("そろそろマネージドに分けてくれない?").
-- **You** — first day / second day / month one as the new SRE inheriting Kato-san's notes (a single Notion line, a Slack DM history that goes nowhere).
+- **the previous SRE** — your predecessor SRE who abruptly resigned and left an undocumented mess.
+- **the CTO** — vague high-stakes orders ("そろそろマネージドに分けてくれない?").
+- **You** — first day / second day / month one as the new SRE inheriting the previous SRE's notes (a single Notion line, a Slack DM history that goes nowhere).
 
 Two paragraphs of setup, then a clear "your job" line. Avoid stamping the migration target, exact scoring numbers, or hidden mechanics into the player-facing text — those are goals/discoveries, not framing.
 
