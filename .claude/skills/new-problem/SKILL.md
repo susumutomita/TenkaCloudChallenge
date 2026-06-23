@@ -209,11 +209,18 @@ PR body should cover: what the problem teaches, the player's flow, anything that
 
 The catalog uses SRE-day-in-the-life narration:
 
-- **the previous SRE** — your predecessor SRE who abruptly resigned and left an undocumented mess.
+- **the previous SRE** — your predecessor who moved on and left little documentation behind (the inherited *system*, not a person, is the antagonist).
 - **the CTO** — vague high-stakes orders ("そろそろマネージドに分けてくれない?").
 - **You** — first day / second day / month one as the new SRE inheriting the previous SRE's notes (a single Notion line, a Slack DM history that goes nowhere).
 
 Two paragraphs of setup, then a clear "your job" line. Avoid stamping the migration target, exact scoring numbers, or hidden mechanics into the player-facing text — those are goals/discoveries, not framing.
+
+**Hard rules (誰が読んでも不快にしない / keep it reproducible):**
+
+- **No personal surnames.** Characters are roles only — `前任の SRE` / `the previous SRE`, `CTO` / `the CTO`. Real surnames (加藤 / 佐々木 等) map to real people; never name a character.
+- **Keep the predecessor blameless.** The drama is the inherited *system / situation*, never "someone was incompetent." 「引き継いだシステムが壊れている」✅ / 「前任者が無能だった」❌.
+- **Don't reuse AWS GameDay's fictional company names** — that branding is AWS IP. The stage is **天下クラウド株式会社 / TenkaCloud Inc.**
+- **No AI smell.** Cut abstract preambles and empty adjectives (`本問題では〜を学びます` / `昨今` / `堅牢` / `包括的` / `シームレス` / `活用` / `leverage` / `robust` / `seamless` / "In today's…"). Drop the player into the scene with second person + imperative.
 
 Working examples to mirror:
 
