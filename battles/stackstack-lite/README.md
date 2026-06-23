@@ -4,10 +4,10 @@
 
 ## Story
 
-TenkaCloud Platform Team. Kato-san left behind an AI-built message board and resigned. It runs on a
+TenkaCloud Platform Team. The previous SRE left behind an AI-built message board and resigned. It runs on a
 single EC2 host, but the database is empty, there's no auth (anyone can post), and there's no audit trail.
 
-Sasaki-san, the CTO: *"Not everything at once. Just restore the data, turn on auth, and get an audit log
+The CTO, the CTO: *"Not everything at once. Just restore the data, turn on auth, and get an audit log
 going — then it's publishable."*
 
 Your job: using **only existing stack-owned resources** (no new top-level resources), satisfy three gates —

@@ -3,9 +3,9 @@
 > 日本語版: [README.ja.md](./README.ja.md)
 > Part of the **History of the Internet** series — each episode re-lives one moment in how the internet evolved, by making you *operate* the TCP/IP layer rather than recall it.
 
-Day three on the network team at TenkaCloud Inc. The monitoring job Kato-san left behind was supposed to have the management node `core`, deep in a private subnet, reach *out* and bring results back.
+Day three on the network team at TenkaCloud Inc. The monitoring job the previous SRE left behind was supposed to have the management node `core`, deep in a private subnet, reach *out* and bring results back.
 
-> Sasaki-san, the CTO: "core can't get out. License checks, updates — it can't fetch anything. Kato said that once IPv4 ran dry he'd route it out through NAT. The bastion (`relay`) gets out fine. Only `core`, in the back, sits silent."
+> the CTO, the CTO: "core can't get out. License checks, updates — it can't fetch anything. The previous SRE said that once IPv4 ran dry he'd route it out through NAT. The bastion (`relay`) gets out fine. Only `core`, in the back, sits silent."
 
 When IPv4 addresses ran out, the world evolved to **private addresses + NAT** to reach the outside — hiding many hosts behind a single global IP. That's your job: fix the exit. Find why only `core` can't get out, restore egress, and pull out the flag `core` is holding.
 

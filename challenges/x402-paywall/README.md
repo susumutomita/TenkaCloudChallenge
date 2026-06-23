@@ -6,13 +6,13 @@
 
 TenkaCloud Inc. This month's AI-crawler revenue: **0 USDC**.
 
-Before he resigned, your predecessor Kato-san stood up an **x402 paywall** — a take on
+Before he resigned, your predecessor the previous SRE stood up an **x402 paywall** — a take on
 [AWS WAF's new AI Traffic Monetization feature](https://aws.amazon.com/jp/blogs/news/aws-waf-adds-ai-traffic-monetization-capability-to-help-content-owners-charge-ai-bots-for-content-access/),
 which charges AI bots for content access in USDC over the **x402 protocol** (HTTP `402 Payment Required` +
 a machine-readable price manifest). The access logs show bots *are* being stopped at the gate — `402`
 comes back every time. Yet not a single USDC has arrived.
 
-Sasaki-san, the CTO: *"We're charging them but no money shows up. What kind of state is that? Fix it."*
+The CTO, the CTO: *"We're charging them but no money shows up. What kind of state is that? Fix it."*
 
 Your job: find the one misconfiguration in the gate, fix it **by changing a setting** (no new
 resources), then prove it works by completing a bot payment — the only thing that reveals the flag.

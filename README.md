@@ -93,7 +93,7 @@ New competition problems are held to one bar: a player should call them **fun**,
 1. **Discovered flag, never a memorized one.** The flag is a random per-deploy value you can only obtain by *performing the intended AWS operation* — never a concept name typed from memory.
 2. **Fix by settings, never create-by-hand.** The template deploys resources in a broken state; the solve is to *modify* an existing resource. Players never create top-level resources, so `delete-stack` leaves no orphaned, billable garbage.
 3. **A real "aha".** A production skill felt viscerally — `curl` that *hangs* vs *refuses*, an incident reconstructed from evidence — not a flashcard.
-4. **Story with stakes.** The shared TenkaCloud world (Kato-san's leftovers, Sasaki-san CTO), with a fresh incident every time.
+4. **Story with stakes.** The shared TenkaCloud world (the previous SRE's leftovers, the CTO), with a fresh incident every time.
 
 Reference implementation: [`challenges/net-evo-01-reachability`](./challenges/net-evo-01-reachability/) — Episode 1 of the **Internet Evolution** series, where each episode re-lives one moment in how the internet evolved by making you *operate* a TCP/IP layer (Ep01: stateful Security Group vs stateless Network ACL).
 

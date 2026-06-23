@@ -2,9 +2,9 @@
 
 > 日本語版: [README.ja.md](./README.ja.md)
 
-Monday morning standup, TenkaCloud Platform Team. Kato-san is gone, and an AI Builder's generated message-board app is waiting for internal launch. It runs, but it is not production: the database is empty, anonymous users can post, there is no rate limiting, audit is off, and the app still uses SQLite.
+Monday morning standup, TenkaCloud Platform Team. The previous SRE is gone, and an AI Builder's generated message-board app is waiting for internal launch. It runs, but it is not production: the database is empty, anonymous users can post, there is no rate limiting, audit is off, and the app still uses SQLite.
 
-> Sasaki-san, the CTO: "Hosting alone is not production. Use the controls we already provisioned and get it publishable today."
+> the CTO, the CTO: "Hosting alone is not production. Use the controls we already provisioned and get it publishable today."
 
 Your job over the next 90 to 120 minutes: take one hosted app to production using only stack-owned resources and data/config changes. Do not create Lambda, ECS, App Runner, API Gateway, CloudFront, or any other unmanaged top-level resource.
 
@@ -54,7 +54,7 @@ The app exposes `GET /posture`; those values are measured from actual state, not
 | `rate_limited` | WAF not associated   | Associate the existing WebACL with the existing ALB               |
 | `audit_on`     | No audit writes      | Enable audit writes to the existing S3 audit bucket               |
 | `on_rds`       | SQLite               | Migrate posts to the existing RDS PostgreSQL database and switch the app |
-| `ssh_closed`   | tcp/22 open to 0.0.0.0/0 | Discover Kato-san's leftover public SSH rule and revoke it (SSM-only access, nothing breaks) |
+| `ssh_closed`   | tcp/22 open to 0.0.0.0/0 | Discover the previous SRE's leftover public SSH rule and revoke it (SSM-only access, nothing breaks) |
 
 `GET /meta` maps those checks to `posture-0` through `posture-5`, or `production` when all gates are true. Scoring is **flat: every satisfied gate is worth +100 points/min**, so closing any one of the six gates is equally rewarding.
 
