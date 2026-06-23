@@ -28,6 +28,35 @@
       }
     },
     {
+      "id": "cloudflare-api-security",
+      "name": "Cloudflare Workers プロフィール API — 5 段階セキュリティ採点",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "60〜90 分",
+      "shortDescription": "天下クラウド株式会社。 新人 SRE のあなたに、 退職した前任者が残したプロフィール API のセキュリティレビューが回ってきた。\n\nスターターには OWASP 由来の脆弱性 (認可不備・IDOR・入力検証なし・情報漏えい) が仕込まれている。 これを Cloudflare Workers の無料アカウントにデプロイし、 自分で直してから、 採点エンジンに自分の `*.workers.dev` URL を渡す。\n\n採点エンジン (天下クラウド側の Lambda) が段階 0〜4 (デプロイ確認 / 入力検証 / 認可・IDOR / 情報漏えい / 回帰) のセキュリティテストを外から実行し、 全段階を通過したときだけ隠しフラグ `TC{…}` を返す。\n\n▶ 最初の一手: CloudShell で `aws ssm get-parameter --name /<NamePrefix>/briefing --query Parameter.Value --output text` を読む (手順が全部書いてある)。",
+      "tags": [
+        "challenge",
+        "flag",
+        "cloudflare-workers",
+        "api-security",
+        "owasp",
+        "idor",
+        "authorization",
+        "input-validation",
+        "self-deploy",
+        "external-verify"
+      ],
+      "scoringKind": "flag",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "hello-world",
       "name": "Hello World (Sample)",
       "category": "Challenge",

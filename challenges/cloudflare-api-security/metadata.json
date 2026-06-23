@@ -1,0 +1,76 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "cloudflare-api-security",
+  "name": "Cloudflare Workers プロフィール API — 5 段階セキュリティ採点",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "60〜90 分",
+  "shortDescription": "天下クラウド株式会社。 新人 SRE のあなたに、 退職した前任者が残したプロフィール API のセキュリティレビューが回ってきた。\n\nスターターには OWASP 由来の脆弱性 (認可不備・IDOR・入力検証なし・情報漏えい) が仕込まれている。 これを Cloudflare Workers の無料アカウントにデプロイし、 自分で直してから、 採点エンジンに自分の `*.workers.dev` URL を渡す。\n\n採点エンジン (天下クラウド側の Lambda) が段階 0〜4 (デプロイ確認 / 入力検証 / 認可・IDOR / 情報漏えい / 回帰) のセキュリティテストを外から実行し、 全段階を通過したときだけ隠しフラグ `TC{…}` を返す。\n\n▶ 最初の一手: CloudShell で `aws ssm get-parameter --name /<NamePrefix>/briefing --query Parameter.Value --output text` を読む (手順が全部書いてある)。",
+  "instructions": "## はじめに\nスターターの脆弱なプロフィール API を Cloudflare Workers (無料アカウント) にデプロイし、 脆弱性を直し、 採点エンジンに自分の `*.workers.dev` URL を渡して全段階通過で `TC{…}` フラグを取得する。 AWS の課金は発生しない (Cloudflare 無料枠 + 採点 Lambda は無料枠内)。\n\n## 最初の一手\nCloudShell で briefing を読む (手順が全部書いてある):\n```\naws ssm get-parameter --name /<NamePrefix>/briefing --query Parameter.Value --output text\n```\n\n## 流れ\n1. S3 からスターター取得: `aws s3 cp s3://<NamePrefix>-tools-<accountId>/setup.sh . && bash setup.sh` (`SetupBucketName` / briefing にバケット名あり)。\n2. 生成された `cloudflare-api-security/` で無料 Cloudflare アカウントへ `wrangler deploy` (要 `npm i -g wrangler` + `wrangler login`)。\n3. `index.js` の `// VULN:` で示された 4 つの脆弱性 (認可・IDOR・入力検証・情報漏えい) を直して再デプロイ。\n4. `./evaluate.sh <NamePrefix> https://<あなた>.workers.dev` を実行 (= 採点 Lambda を invoke、 段階 0〜4 を外部から検査)。\n5. 全段階 PASS で返る `TC{…}` を Participant Portal に提出。\n\n## ゴール\n全 5 段階を通過し、 採点エンジンが返す `TC{…}` フラグを取得・提出する。 フラグは全段階通過時のみ返り、 NamePrefix からは導出できない (= discovered flag)。",
+  "description": "あなたは天下クラウドの新任 SRE。 退職した前任者が書いたプロフィール API (ユーザーが自分のプロフィールを読む HTTP API) のセキュリティレビューを任された。 スターター実装には OWASP API Security Top 10 由来の脆弱性が意図的に仕込まれている。\n\nこの問題は **self-deploy + external-verify** 型である。 競技者は自分の無料 Cloudflare アカウントにスターターをデプロイし (AWS ではなく Cloudflare Workers が問題ランタイム)、 脆弱性を直す。 採点は天下クラウド側にデプロイされた Evaluator Lambda が担い、 競技者が渡した `*.workers.dev` URL に対して外から HTTP リクエストを撃って段階的に検査する。\n\n最初の一手: AWS CloudShell で briefing を読む — `aws ssm get-parameter --name /{NamePrefix}/briefing --query Parameter.Value --output text`。 スターター配布 S3 から `setup.sh` を落とすと、 脆弱な `index.js` + `wrangler.toml` + 採点呼び出し `evaluate.sh` が展開される。\n\nスターターの脆弱性: (1) 認可不備 — トークン無しでもプロフィールが読める。 (2) IDOR — 他人の id を渡すと他人のプロフィールが読めてしまう。 (3) 入力検証なし — 不正な id で 500 やエラー本文の漏えいが起きる。 (4) 情報漏えい — エラー応答に内部情報 (stack trace / 内部 path / トークン) が混ざる。 競技者はこれらを直して再デプロイする。\n\n採点 (Evaluator Lambda) は段階 0〜4 を実行する。 段階 0: `GET /healthz` が 200 + `{\"status\":\"ok\"}`。 段階 1: 不正入力を 400/404 で graceful に弾き 500 やエラー文字列の漏えいが無い。 段階 2: 認可必須 + IDOR 遮断 (他人の id は 403)。 段階 3: エラー応答に内部情報を漏らさない。 段階 4: 反復で一貫。 全段階通過時のみ Evaluator の env にある `TC{…}` を返す (= lambda:GetFunction* は participant role に無く、 フラグは正解時のみ得られる discovered flag)。\n\nコスト: AWS 側は Lambda + S3 + SSM のみ (無料枠内、 `delete-stack` で全消去)。 問題ランタイムは競技者の無料 Cloudflare アカウント。\n\nセキュリティ (採点 Lambda の SSRF 対策): 競技者が任意 URL を渡すため、 Evaluator は `workerUrl` を https のみ + host が `*.workers.dev` のみ許可、 redirect 非追跡、 connect/read timeout、 レスポンス body サイズ上限を強制する。",
+  "tags": [
+    "challenge",
+    "flag",
+    "cloudflare-workers",
+    "api-security",
+    "owasp",
+    "idor",
+    "authorization",
+    "input-validation",
+    "self-deploy",
+    "external-verify"
+  ],
+  "exposedPorts": [
+    {
+      "port": 443,
+      "name": "competitor が自分の無料 Cloudflare Workers にデプロイする *.workers.dev URL (採点 Lambda が外部検査)"
+    }
+  ],
+  "learningGoals": [
+    "OWASP API Security Top 10 の代表的欠陥 (認可不備 / IDOR / 入力検証なし / 情報漏えい) を、 実際に動く脆弱 API を直す形で体得する",
+    "Cloudflare Workers への deploy フロー (wrangler) と edge ランタイムの基礎を、 無料アカウントで体験する",
+    "外部エンドポイントに対する段階的セキュリティ検査と、 検査側自身の SSRF 対策 (host allowlist / redirect 非追跡 / timeout / size cap) を理解する"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {
+    "FlagSeed": "__RANDOM_PASSWORD__"
+  },
+  "i18n": {
+    "en": {
+      "name": "Cloudflare Workers Profile API — 5-Stage Security Scoring",
+      "shortDescription": "TenkaCloud Inc. As the new SRE, you inherit a security review of a profile API your predecessor left behind.\n\nThe starter ships with OWASP-style vulnerabilities (broken authorization, IDOR, no input validation, information disclosure). Deploy it to a free Cloudflare Workers account, fix it yourself, then hand your `*.workers.dev` URL to the scoring engine.\n\nThe scoring engine (a TenkaCloud-side Lambda) runs stages 0-4 (deploy / input validation / authorization & IDOR / info disclosure / regression) against your URL from the outside, and returns the hidden flag `TC{...}` only when every stage passes.\n\nFirst move: in CloudShell, read `aws ssm get-parameter --name /<NamePrefix>/briefing --query Parameter.Value --output text` (the full steps are there).",
+      "instructions": "## Getting started\nDeploy the vulnerable starter profile API to a free Cloudflare Workers account, fix the planted flaws, then hand your `*.workers.dev` URL to the scoring engine; pass all stages to earn the `TC{...}` flag. No AWS charges (Cloudflare free tier + the scoring Lambda stays within the AWS free tier).\n\n## First move\nIn CloudShell, read the briefing (it has the full steps):\n```\naws ssm get-parameter --name /<NamePrefix>/briefing --query Parameter.Value --output text\n```\n\n## Flow\n1. Get the starter: `aws s3 cp s3://<NamePrefix>-tools-<accountId>/setup.sh . && bash setup.sh` (bucket name is in `SetupBucketName` / the briefing).\n2. In the generated `cloudflare-api-security/`, `wrangler deploy` to a free Cloudflare account (`npm i -g wrangler` + `wrangler login`).\n3. Fix the 4 flaws marked `// VULN:` in `index.js` (authorization / IDOR / input validation / info disclosure) and redeploy.\n4. Run `./evaluate.sh <NamePrefix> https://<you>.workers.dev` (invokes the scoring Lambda, which probes stages 0-4 from the outside).\n5. Submit the `TC{...}` returned on all-stages-pass to the Participant Portal.\n\n## Goal\nPass all 5 stages and submit the `TC{...}` the scoring engine returns. The flag is returned only on a full pass and is not derivable from NamePrefix (= a discovered flag).",
+      "description": "You are TenkaCloud's new SRE, handed a security review of a profile API (an HTTP API where a user reads their own profile) written by a predecessor who has since resigned. The starter implementation deliberately contains OWASP API Security Top 10 flaws.\n\nThis is a self-deploy + external-verify challenge. You deploy the starter to your own free Cloudflare account (Cloudflare Workers, not AWS, is the problem runtime) and fix the flaws. Scoring is done by an Evaluator Lambda deployed on the TenkaCloud side, which probes the `*.workers.dev` URL you provide from the outside over HTTP, stage by stage.\n\nFirst move: read the briefing in AWS CloudShell -- `aws ssm get-parameter --name /{NamePrefix}/briefing --query Parameter.Value --output text`. Pulling `setup.sh` from the starter S3 bucket expands a vulnerable `index.js` + `wrangler.toml` + the scoring helper `evaluate.sh`.\n\nThe planted flaws: (1) broken authorization -- profiles are readable with no token; (2) IDOR -- passing someone else's id returns their profile; (3) no input validation -- malformed ids cause 500s or leak error bodies; (4) info disclosure -- error responses leak internals (stack traces / internal paths / tokens). You fix these and redeploy.\n\nThe Evaluator runs stages 0-4. Stage 0: `GET /healthz` returns 200 + `{\"status\":\"ok\"}`. Stage 1: malformed input is rejected gracefully with 400/404, no 500s and no error-body leakage. Stage 2: authorization required + IDOR blocked (someone else's id returns 403). Stage 3: error responses leak no internals. Stage 4: consistent under repetition. Only a full pass returns the `TC{...}` from the Evaluator's env (the participant role has no lambda:GetFunction*, so the flag is a discovered flag earned only by passing).\n\nCost: the AWS side is Lambda + S3 + SSM only (within the free tier; delete-stack removes everything). The problem runtime is your own free Cloudflare account.\n\nSecurity (the scoring Lambda's SSRF defenses): because you supply an arbitrary URL, the Evaluator enforces https-only + host must be `*.workers.dev`, does not follow redirects, applies connect/read timeouts, and caps the response body size.",
+      "learningGoals": [
+        "Internalize the headline OWASP API Security Top 10 flaws (broken authorization / IDOR / missing input validation / information disclosure) by fixing a real, running vulnerable API",
+        "Experience the Cloudflare Workers deploy flow (wrangler) and edge-runtime basics on a free account",
+        "Understand staged security testing of an external endpoint, and the SSRF defenses the tester itself needs (host allowlist / no redirect follow / timeout / size cap)"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 400,
+    "wrongAnswerPenalty": 0,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "最初の一手は CloudShell で briefing を読むこと: `aws ssm get-parameter --name /{NamePrefix}/briefing --query Parameter.Value --output text`。 要は (1) `aws s3 cp s3://{NamePrefix}-tools-<accountId>/setup.sh . && bash setup.sh` でスターター展開、 (2) 無料 Cloudflare アカウントで `wrangler login && wrangler deploy`、 (3) `./evaluate.sh {NamePrefix} https://<あなた>.workers.dev` で採点。 まず未修正のまま evaluate.sh を撃つと、 どの段階で落ちているかが段階ごとに表示される。",
+        "penalty": 0
+      },
+      {
+        "id": "hint-2",
+        "content": "`index.js` の `// VULN:` コメントが 4 箇所の急所。 段階 2 (認可・IDOR) が本丸: (a) `Authorization: Bearer <token>` が無い/不正なら 401 を返す、 (b) `GET /api/profile/:id` は `:id` が呼び出し元トークンの所有者と一致するときだけ 200、 他人の id は 403。 デモトークンは `token-alice`→alice / `token-bob`→bob。 段階 1 は不正な id (`'`、 `../`、 超長文字列) を 400/404 で弾き 500 を出さないこと。 段階 3 はエラー応答に stack trace / path / token を出さないこと。",
+        "penalty": 50
+      },
+      {
+        "id": "hint-3",
+        "content": "修正の要点: (1) ハンドラ先頭でトークン検証 → 無効なら `json({error:'unauthorized'}, 401)`。 (2) `:id !== caller.userId` なら `json({error:'forbidden'}, 403)` (IDOR 遮断)。 (3) id を allowlist 正規表現 (例 `/^[a-z]{1,32}$/`) で検証し、 外れたら `400`。 (4) catch 節では固定文言 `{error:'internal error'}` のみ返し `err.stack`/`err.message` を出さない。 直して `wrangler deploy` → `./evaluate.sh {NamePrefix} https://<あなた>.workers.dev` で全段階 PASS、 返る `TC{…}` を提出。",
+        "penalty": 100
+      }
+    ]
+  }
+}
