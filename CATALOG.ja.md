@@ -8,7 +8,7 @@ TenkaCloud で配信する問題 (**Battle** / **Challenge**) は 1 ディレク
 
 実装済み問題と次に作る候補を横断して眺めたい場合は [`docs/gallery.md`](../docs/gallery.md)、 30 分でゼロから 1 問書く手順は [`docs/problems/AUTHORING.html`](../docs/problems/AUTHORING.html) を参照。
 
-新しい競技問題は **「ドリルではなく面白い問題を」 という設計基準** (発見型フラグ / 設定変更で直す / 本物の「気づき」 / ストーリーと緊張感) に従う。 [`new-problem`](./.claude/skills/new-problem/SKILL.md) skill に成文化されており、 リファレンス実装は [`challenges/net-evo-01-reachability`](./challenges/net-evo-01-reachability/) (**インターネット進化史** Challenge シリーズ Ep01)。
+新しい競技問題は **「ドリルではなく面白い問題を」 という設計基準** (発見型フラグ / 設定変更で直す / 本物の「気づき」 / ストーリーと緊張感) に従う。 [`new-problem`](./.claude/skills/new-problem/SKILL.md) skill に成文化されており、 リファレンス実装は [`challenges/hello-world`](./challenges/hello-world/)。
 
 ## ディレクトリ構造
 
@@ -21,11 +21,6 @@ problems/
 │   └── stackstack/
 ├── challenges/                    # Challenge (個別演習)
 │   ├── hello-world/
-│   ├── net-evo-01-reachability/   # インターネット進化史 Ep01 (設計基準のリファレンス)
-│   ├── net-evo-02-dns/            # インターネット進化史 Ep02 (DNS)
-│   ├── net-evo-03-egress/         # インターネット進化史 Ep03 (NAT egress)
-│   ├── net-evo-04-tls/            # インターネット進化史 Ep04 (TLS)
-│   ├── net-evo-05-edge/           # インターネット進化史 Ep05 (edge)
 │   └── x402-paywall/              # x402 / WAF AI bot 課金ペイウォール
 ├── SCHEMA.json                    # metadata.json の JSON Schema (draft-07、正本)
 ├── index.json                     # 全 metadata から build した catalog 一覧 (= make build-problems-index で生成)

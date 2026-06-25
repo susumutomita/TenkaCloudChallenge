@@ -80,26 +80,9 @@ platform repo の maintainer が submodule pointer を更新すると、 次の 
 3. **本物の「気づき」**。 `curl` が *ハング* するか *拒否* されるか等、 答えを読むのではなくパケットで体得する実運用スキル。
 4. **ストーリーと緊張感**。 共通世界観 (前任の SRE の置き土産、 CTO) を保ちつつ、 毎回新しい事件で。
 
-リファレンス実装: [`challenges/net-evo-01-reachability`](./challenges/net-evo-01-reachability/) — **インターネット進化史** シリーズ Ep01。 各話はインターネットが進化した 1 場面を、 TCP/IP の層を *操作* して追体験する (Ep01: ステートフル SG vs ステートレス NACL)。
-
 ## 🎯 カタログ
 
-少数精鋭の厳選セット ── **すべての問題が上記の設計基準に沿う**。 量より質: 暗記ドリルはゲームではないので、 以前の試験対策ラボ群は削除した。
-
-| Status | Category  | Problem                                                                                       | Duration   | Difficulty |
-| ------ | --------- | --------------------------------------------------------------------------------------------- | ---------- | ---------- |
-| ready  | Challenge | [`hello-world`](./challenges/hello-world/)                                                     | 1 分       | 1          |
-| ready  | Challenge | [`net-evo-01-reachability`](./challenges/net-evo-01-reachability/) (インターネット進化史 Ep01) | 30-45 分   | 3          |
-| ready  | Challenge | [`net-evo-02-dns`](./challenges/net-evo-02-dns/) (インターネット進化史 Ep02)                    | 45-60 分   | 3          |
-| ready  | Challenge | [`net-evo-03-egress`](./challenges/net-evo-03-egress/) (インターネット進化史 Ep03)              | 30-45 分   | 3          |
-| ready  | Challenge | [`net-evo-04-tls`](./challenges/net-evo-04-tls/) (インターネット進化史 Ep04)                    | 30-45 分   | 3          |
-| ready  | Challenge | [`net-evo-05-edge`](./challenges/net-evo-05-edge/) (インターネット進化史 Ep05)                  | 30-45 分   | 3          |
-| ready  | Battle    | [`hello-world-battle`](./battles/hello-world-battle/)                                          | 30 分      | 1          |
-| ready  | Battle    | [`microservice-migration-battle`](./battles/microservice-migration-battle/)                   | 90-120 分  | 4          |
-| ready  | Battle    | [`security-battle-royale`](./battles/security-battle-royale/)                                  | 60-90 分   | 4          |
-| ready  | Battle    | [`stackstack`](./battles/stackstack/)                                                          | 90-120 分  | 4          |
-
-**インターネット進化史** Challenge シリーズ (`net-evo-*`) がカタログの背骨 ── 各話はインターネットが進化した 1 場面を、 TCP/IP の層を *操作* して追体験する。
+生きたカタログは各問題ディレクトリそのもの: [`challenges/`](./challenges/) と [`battles/`](./battles/) を見る — 1 ディレクトリ = 1 問で、 それぞれが自前の `metadata.json` + `template.yaml` を持つ。 `index.json` は生成物の機械向け index (問題を追加 / 削除したら `bun run reindex` を走らせる。 手で編集しない)。 この README は問題一覧を複製しないので、 カタログがソースからドリフトしない。
 
 ## 🔄 配信フロー
 
