@@ -99,8 +99,6 @@ platform repo の maintainer が submodule pointer を更新すると、 次の 
 | ready  | Battle    | [`security-battle-royale`](./battles/security-battle-royale/)                                  | 60-90 分   | 4          |
 | ready  | Battle    | [`stackstack`](./battles/stackstack/)                                                          | 90-120 分  | 4          |
 
-初開催向け bundle: [`bundles/starter-event.json`](./bundles/starter-event.json) — Challenge 1 + Battle 2、 60-90 分枠。
-
 **インターネット進化史** Challenge シリーズ (`net-evo-*`) がカタログの背骨 ── 各話はインターネットが進化した 1 場面を、 TCP/IP の層を *操作* して追体験する。
 
 ## 🔄 配信フロー

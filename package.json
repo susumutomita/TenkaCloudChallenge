@@ -9,14 +9,9 @@
     "reindex": "bun run scripts/build-index.ts && bun run scripts/estimate-cost.ts --write",
     "setup": "git config core.hooksPath .githooks && echo 'pre-commit hook enabled (auto-reindex).'",
     "validate": "bun run scripts/validate-problems.ts && bun run scripts/check-template-ascii.ts && bun run scripts/check-template-security.ts",
-    "validate:kumo": "bun run scripts/kumo-evaluate-problems.ts",
-    "validate:local": "bun run validate && bun run validate:kumo",
     "cost": "bun run scripts/estimate-cost.ts",
     "cost:check": "bun run scripts/estimate-cost.ts --check",
-    "status": "bun run scripts/status.ts",
-    "kumo:up": "docker compose -f docker-compose.kumo.yml up -d",
-    "kumo:down": "docker compose -f docker-compose.kumo.yml down -v",
-    "kumo:logs": "docker compose -f docker-compose.kumo.yml logs -f kumo"
+    "status": "bun run scripts/status.ts"
   },
   "devDependencies": {
     "@types/node": "^24.12.4",
