@@ -58,6 +58,31 @@
       ]
     },
     {
+      "id": "http-query",
+      "category": "Challenge",
+      "region": "ap-northeast-1",
+      "estimatedSessionMinutes": 45,
+      "perHourUsd": 0.0243,
+      "perSessionUsd": 0.0182,
+      "ifLeftRunningUsd": {
+        "oneDay": 0.58,
+        "oneWeek": 4.08,
+        "oneMonth": 17.74
+      },
+      "freeTierEligible": false,
+      "alwaysOnResources": [
+        "ALB"
+      ],
+      "billable": [
+        {
+          "resource": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+          "count": 1,
+          "unit": "-",
+          "hourlyUsdEach": 0.0243
+        }
+      ]
+    },
+    {
       "id": "microservice-migration-battle",
       "category": "Battle",
       "region": "ap-northeast-1",

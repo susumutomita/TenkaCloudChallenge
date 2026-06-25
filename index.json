@@ -78,6 +78,33 @@
       }
     },
     {
+      "id": "http-query",
+      "name": "QUERY: 誰も知らないメソッド",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "30〜45 分",
+      "shortDescription": "前任の SRE が、 検索 API を新しい HTTP メソッド `QUERY` (RFC 10008) に移したまま、 先週退職した。\n\n顧客から悲鳴が届く。 「検索が 405 で死んでる」。 ところがアプリのコードを読むと、 `QUERY /search` は完璧に実装されている。 ローカルでは動く。 なのに本番の公開 URL を叩くと 405 が返る。\n\nCTO 曰く 「コードは正しいんだろ。 なら、 何が殺してる?」\n\nあなたのミッション: 仕様どおりの API を 405 で殺している犯人を特定し、 `QUERY /search` が本番でも通る状態に戻して、 検索を生き返らせよ。",
+      "tags": [
+        "http",
+        "rfc-10008",
+        "query-method",
+        "alb",
+        "edge-compat",
+        "cors"
+      ],
+      "scoringKind": "flag",
+      "cost": {
+        "perHourUsd": 0.0243,
+        "perDayIfLeftRunningUsd": 0.58,
+        "freeTierEligible": false,
+        "alwaysOnResources": [
+          "ALB"
+        ]
+      }
+    },
+    {
       "id": "microservice-migration-battle",
       "name": "Microservice Migration Battle",
       "category": "Battle",
