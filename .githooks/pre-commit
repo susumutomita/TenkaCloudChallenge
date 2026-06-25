@@ -6,7 +6,7 @@
 set -euo pipefail
 
 staged="$(git diff --cached --name-only)"
-if ! grep -qE '^(battles|challenges|bundles)/|^SCHEMA\.json$' <<<"$staged"; then
+if ! grep -qE '^(battles|challenges)/|^SCHEMA\.json$' <<<"$staged"; then
   exit 0
 fi
 

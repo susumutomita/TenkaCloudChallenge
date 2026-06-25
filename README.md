@@ -77,10 +77,8 @@ A platform-repo maintainer then bumps the submodule pointer and the next `make d
 │   └── <id>/
 │       ├── metadata.json
 │       └── template.yaml
-├── bundles/                       # Curated problem sets (e.g. starter-event)
-│   └── <id>.json
 ├── SCHEMA.json                    # JSON Schema for metadata.json (synced with platform)
-├── index.json                     # Catalog index (built from every metadata.json + bundles)
+├── index.json                     # Catalog index (built from every metadata.json)
 ├── CATALOG.md                     # Full catalog docs + schema walkthrough
 ├── scripts/validate-problems.ts   # Local + CI validator
 └── .github/workflows/ci.yml       # Schema + cross-ref CI
@@ -113,8 +111,6 @@ A small, curated set — **every problem is built to the design bar above**. Qua
 | ready  | Battle    | [`microservice-migration-battle`](./battles/microservice-migration-battle/)                   | 90-120 min | 4          |
 | ready  | Battle    | [`security-battle-royale`](./battles/security-battle-royale/)                                  | 60-90 min  | 4          |
 | ready  | Battle    | [`stackstack`](./battles/stackstack/)                                                          | 90-120 min | 4          |
-
-Bundle for first-time organizers: [`bundles/starter-event.json`](./bundles/starter-event.json) — 1 Challenge + 2 Battles, 60-90 min slot.
 
 The **Internet Evolution** Challenge series (`net-evo-*`) is the catalog's spine: each episode re-lives one moment in how the internet evolved by making you *operate* a TCP/IP layer.
 
