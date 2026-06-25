@@ -8,7 +8,7 @@ Problems are treated as **plugins** per ADR-012: each problem ships in 3–4 ass
 
 For a cross-cutting view of shipped problems + ideas, see [`docs/gallery.md`](../docs/gallery.md). For a 30-minute "author a new problem" onboarding, see [`docs/problems/AUTHORING.html`](../docs/problems/AUTHORING.html).
 
-New competition problems follow a **"fun, not a drill" design bar** (discovered flag / fix-by-settings / a real "aha" / story with stakes), codified in the [`new-problem`](./.claude/skills/new-problem/SKILL.md) skill. The reference implementation is [`challenges/net-evo-01-reachability`](./challenges/net-evo-01-reachability/) — Episode 1 of the **Internet Evolution** Challenge series.
+New competition problems follow a **"fun, not a drill" design bar** (discovered flag / fix-by-settings / a real "aha" / story with stakes), codified in the [`new-problem`](./.claude/skills/new-problem/SKILL.md) skill. The reference implementation is [`challenges/hello-world`](./challenges/hello-world/).
 
 ## Directory layout
 
@@ -21,11 +21,6 @@ problems/
 │   └── stackstack/
 ├── challenges/                    # Challenge (self-paced, evergreen)
 │   ├── hello-world/
-│   ├── net-evo-01-reachability/   # Internet Evolution Ep01 (design-bar reference)
-│   ├── net-evo-02-dns/            # Internet Evolution Ep02 (DNS)
-│   ├── net-evo-03-egress/         # Internet Evolution Ep03 (NAT egress)
-│   ├── net-evo-04-tls/            # Internet Evolution Ep04 (TLS)
-│   ├── net-evo-05-edge/           # Internet Evolution Ep05 (edge)
 │   └── x402-paywall/              # x402 / WAF AI-bot monetization paywall
 ├── SCHEMA.json                    # JSON Schema (draft-07) — source of truth for metadata.json
 ├── index.json                     # Catalog built from every metadata.json (= `make build-problems-index`)
