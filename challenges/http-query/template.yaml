@@ -1,0 +1,570 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (http-query). Deploys a working search backend (a Lambda
+  that correctly implements the RFC 10008 HTTP QUERY method) behind an
+  internet-facing Application Load Balancer. The ALB listener rule is a method
+  allow-list that deliberately OMITS QUERY, so `curl -X QUERY` gets a 405 at the
+  edge even though the app is fine. The player diagnoses that the edge (not the
+  app) blocks the new method, fixes the CFn-owned ListenerRule to allow QUERY,
+  then crafts a spec-compliant QUERY request to make the backend return the flag.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy-battles.sh script auto-injects
+      this value, you do not need to set it manually.
+    Description: >
+      Common prefix attached to all resource names. Used to prevent collisions
+      when multiple teams' stacks coexist in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+  FlagSeed:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    MaxLength: 64
+    AllowedPattern: "^[A-Za-z0-9]+$"
+    Description: >
+      Per-deploy random secret injected by the deploy chain (cfnParameters:
+      FlagSeed = __RANDOM_PASSWORD__). Wrapped as TC{...} and returned only by a
+      reached + well-formed QUERY request, so the flag can only be learned by
+      both unblocking the edge AND crafting a spec-compliant QUERY (never derived
+      from the public NamePrefix). Same idiom as challenges/hello-world.
+
+Resources:
+  # ----- VPC + Networking (ALB needs 2 AZs) -----
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.80.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-vpc"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.80.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-subnet-a"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.80.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-subnet-b"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  Igw:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-igw"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  IgwAttach:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref Igw
+
+  Rt:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-rt"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  RtRoute:
+    Type: AWS::EC2::Route
+    DependsOn: IgwAttach
+    Properties:
+      RouteTableId: !Ref Rt
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref Igw
+
+  RtAssocA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref Rt
+      SubnetId: !Ref PublicSubnetA
+
+  RtAssocB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref Rt
+      SubnetId: !Ref PublicSubnetB
+
+  # ----- Security Group (ALB ingress tcp/80 from the internet) -----
+  AlbSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref Vpc
+      GroupDescription: !Sub "${NamePrefix} http-query ALB (tcp/80 from internet)"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: HTTP (the QUERY-based search API edge)
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-alb-sg"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  # ----- Backend search API (correctly implements RFC 10008 QUERY) -----
+  # ALB Lambda target: receives the ELB target event (event.httpMethod,
+  # event.headers with lowercased keys, event.body, event.isBase64Encoded) and
+  # MUST return the ELB response shape { statusCode, statusDescription,
+  # isBase64Encoded, headers, body }. The app is FINE; the bug is at the edge.
+  SearchFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      # No explicit FunctionName: a long NamePrefix can overflow the 64-char
+      # limit. Refs use !GetAtt ...Arn / !Ref, so CFn auto-naming is safe; the
+      # auto-name begins with the stack name (= NamePrefix), so the log group
+      # /aws/lambda/<auto-name> is covered by the ${NamePrefix}* IAM scope below.
+      Runtime: nodejs22.x
+      Handler: index.handler
+      Role: !GetAtt SearchFunctionRole.Arn
+      Timeout: 10
+      MemorySize: 128
+      Environment:
+        Variables:
+          FLAG: !Sub "TC{${FlagSeed}}"
+      Code:
+        ZipFile: |
+          "use strict";
+
+          // RFC 10008 search backend, fronted by an ALB Lambda target.
+          // The QUERY method is SAFE + IDEMPOTENT and carries the query in the
+          // request BODY (not the URI). This handler implements strict body /
+          // Content-Type handling (no sniffing) and only returns the flag for a
+          // reached + well-formed, spec-compliant QUERY request.
+          const FLAG = process.env.FLAG || "TC{unset}";
+
+          const CORS = {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, HEAD, POST, QUERY, OPTIONS",
+            "Access-Control-Allow-Headers": "content-type",
+          };
+
+          function reply(statusCode, statusDescription, body, extraHeaders) {
+            return {
+              statusCode,
+              statusDescription,
+              isBase64Encoded: false,
+              headers: Object.assign(
+                { "Content-Type": "text/plain; charset=utf-8" },
+                CORS,
+                extraHeaders || {}
+              ),
+              body,
+            };
+          }
+
+          function decodeBody(event) {
+            const raw = event.body == null ? "" : String(event.body);
+            if (event.isBase64Encoded) {
+              return Buffer.from(raw, "base64").toString("utf-8");
+            }
+            return raw;
+          }
+
+          // The search DSL is valid iff it is { "query": { "match": <non-empty string> } }.
+          function isValidSearchDsl(obj) {
+            if (obj == null || typeof obj !== "object" || Array.isArray(obj)) return false;
+            const q = obj.query;
+            if (q == null || typeof q !== "object" || Array.isArray(q)) return false;
+            const m = q.match;
+            return typeof m === "string" && m.length > 0;
+          }
+
+          exports.handler = async (event) => {
+            // ALB lowercases header keys in the target event.
+            const headers = event.headers || {};
+            const method = (event.httpMethod || "GET").toUpperCase();
+
+            if (method === "OPTIONS") {
+              // CORS preflight: a browser fetch({ method: 'QUERY' }) will preflight,
+              // so advertise QUERY in Access-Control-Allow-Methods.
+              return reply(204, "No Content", "", {
+                "Access-Control-Max-Age": "600",
+              });
+            }
+
+            if (method === "GET" || method === "HEAD") {
+              const body =
+                "This is a QUERY-based search API (RFC 10008).\n" +
+                "Send: QUERY /search  with  Content-Type: application/json\n" +
+                'and a JSON body like {"query":{"match":"<text>"}}.\n' +
+                "QUERY is safe + idempotent and carries the query in the request body, not the URI.\n";
+              return reply(200, "OK", method === "HEAD" ? "" : body);
+            }
+
+            if (method === "POST") {
+              return reply(
+                200,
+                "OK",
+                "POST reaches the app, but POST is neither safe nor idempotent.\n" +
+                  "For a read-only, retry-safe search the correct method here is QUERY (RFC 10008).\n" +
+                  "No flag is returned for POST.\n"
+              );
+            }
+
+            if (method === "QUERY") {
+              const ctype = (headers["content-type"] || headers["Content-Type"] || "")
+                .split(";")[0]
+                .trim()
+                .toLowerCase();
+
+              if (!ctype) {
+                return reply(
+                  415,
+                  "Unsupported Media Type",
+                  "415 - QUERY requires Content-Type: application/json. Do not omit it.\n"
+                );
+              }
+              if (ctype !== "application/json") {
+                return reply(
+                  415,
+                  "Unsupported Media Type",
+                  "415 - Unsupported Content-Type '" + ctype + "'. Use application/json.\n"
+                );
+              }
+
+              const text = decodeBody(event);
+              let parsed;
+              try {
+                parsed = JSON.parse(text);
+              } catch (e) {
+                return reply(400, "Bad Request", "400 - request body is not valid JSON.\n");
+              }
+
+              if (!isValidSearchDsl(parsed)) {
+                return reply(
+                  422,
+                  "Unprocessable Entity",
+                  '422 - JSON parsed, but the search DSL is invalid. Expected {"query":{"match":"<non-empty string>"}}.\n'
+                );
+              }
+
+              // Reached + well-formed + spec-compliant QUERY: return the flag.
+              const term = parsed.query.match;
+              return reply(
+                200,
+                "OK",
+                "QUERY /search OK. Matched term: " +
+                  term +
+                  "\nFlag: " +
+                  FLAG +
+                  "\n",
+                {
+                  // Result-resource semantics (RFC 10008 enrichment): the query
+                  // result is addressable.
+                  "Content-Location": "/search?match=" + encodeURIComponent(term),
+                }
+              );
+            }
+
+            // Any other method.
+            return reply(
+              405,
+              "Method Not Allowed",
+              "405 - method '" + method + "' is not supported by this API.\n",
+              { Allow: "GET, HEAD, POST, QUERY, OPTIONS" }
+            );
+          };
+
+  SearchFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: WriteOwnLogs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${NamePrefix}*:*"
+
+  # Allow ELBv2 to invoke the Lambda target. SourceArn is intentionally omitted:
+  # the canonical "SourceArn = target group ARN + TargetGroup DependsOn the
+  # permission" pattern forms a CFn circular dependency (cfn-lint E3004), because
+  # the TargetGroup must exist for !Ref to resolve while ELB needs the invoke
+  # grant before the target registers. Dropping SourceArn breaks the cycle; the
+  # Principal is still the ELB service, and the function is single-purpose (an ALB
+  # Lambda target), so the marginal scope is acceptable. TargetGroup DependsOn this
+  # permission so the grant lands before target registration.
+  SearchFunctionInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt SearchFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: elasticloadbalancing.amazonaws.com
+
+  # NOTE: AWS::ElasticLoadBalancingV2::TargetGroup with TargetType: lambda does
+  # not take VPC/health-check props. It DOES support Tags, but the ListenerRule
+  # below does NOT (CFn schema omits Tags on ListenerRule), so the fix-action IAM
+  # scope below references the rule by its logical-id ARN (!Ref) rather than a tag.
+  SearchTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    DependsOn: SearchFunctionInvokePermission
+    Properties:
+      TargetType: lambda
+      Targets:
+        - Id: !GetAtt SearchFunction.Arn
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-tg"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  Alb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Type: application
+      Scheme: internet-facing
+      IpAddressType: ipv4
+      SecurityGroups:
+        - !Ref AlbSg
+      Subnets:
+        - !Ref PublicSubnetA
+        - !Ref PublicSubnetB
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-alb"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  # HTTP:80 listener. Default action = fixed-response 405: anything that does NOT
+  # match a rule (i.e. a method not in the allow-list rule below) gets a 405 at
+  # the edge -- the app never sees it.
+  AlbListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref Alb
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: fixed-response
+          FixedResponseConfig:
+            StatusCode: "405"
+            ContentType: text/plain
+            MessageBody: >-
+              405 - the edge method allow-list does not include this HTTP method.
+              RFC 10008's QUERY is not permitted by this proxy yet.
+
+  # THE BUG: this rule forwards only GET/HEAD/POST/OPTIONS to the backend. QUERY
+  # is deliberately ABSENT, so QUERY falls through to the listener's default
+  # fixed-response 405. The FIX = add "QUERY" to this rule's http-request-method
+  # Values (elasticloadbalancing:ModifyRule). CFn's ListenerRule resource does NOT
+  # support a Tags property, so the participant role scopes ModifyRule to this
+  # rule's ARN by logical-id reference (!Ref AllowedMethodsRule), not by tag.
+  AllowedMethodsRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref AlbListener
+      Priority: 10
+      Conditions:
+        - Field: http-request-method
+          HttpRequestMethodConfig:
+            Values:
+              - GET
+              - HEAD
+              - POST
+              - OPTIONS
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref SearchTargetGroup
+
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      # Participant access baseline (same across every problem in this catalog):
+      #   * SignInLocalDevelopmentAccess -- `aws login` (2025-11) OAuth2 flow
+      #     returns HTTP 400 unless the assumed role can call signin:* on its own
+      #     oauth2/public-client/{localhost,remote}. AWS-managed, scoped narrowly.
+      #   * cloudshell:* allow-list (in ProblemSpecific below) -- browser shell
+      #     with this role's creds. Resource:* is unavoidable (envs are
+      #     per-identity); action set narrowed to interactive open/use/close +
+      #     creds-rotation.
+      # Both are validated by scripts/validate-problems.ts; do not remove.
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # CloudShell session lifecycle (deliberately narrower than the
+              # AWS-managed AWSCloudShellFullAccess). Envs are per-identity so
+              # Resource:* is the only practical scope.
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+              # Self-identity (= competitors run `aws sts get-caller-identity`).
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              # ec2:Describe* APIs do NOT accept resource-level ARN permissions
+              # (AWS-side constraint), so ADR-021 per-tenant scoping is enforced
+              # via tag-based Condition: only resources tagged with this team's
+              # NamePrefix are returned. Lets the player see their own VPC /
+              # subnets / SG / ALB-attached ENIs in Console/CLI.
+              - Sid: ConsoleEc2Describe
+                Effect: Allow
+                Action:
+                  - ec2:Describe*
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/TenkaCloud:NamePrefix: !Ref NamePrefix
+              # ec2 metadata APIs don't carry tags; safe per-team-account-wide.
+              - Sid: ConsoleEc2Metadata
+                Effect: Allow
+                Action:
+                  - ec2:DescribeRegions
+                  - ec2:DescribeAvailabilityZones
+                  - ec2:DescribeAccountAttributes
+                Resource: "*"
+              # Read-only ELBv2 inventory. ELBv2 Describe* APIs do not give useful
+              # resource-level scoping (no ARN-level perms for the list/describe
+              # discovery flow), so they are granted on Resource:"*" -- the exact
+              # set the battle templates use (microservice-migration-battle
+              # `ReadLoadBalancerState`, stackstack `ConsoleAlbRdsRead`). The
+              # player needs these to see the LB / listener / rules and confirm
+              # which rule blocks QUERY. Mutating access stays tag-scoped below.
+              - Sid: ReadLoadBalancerState
+                Effect: Allow
+                Action:
+                  - elasticloadbalancing:DescribeLoadBalancers
+                  - elasticloadbalancing:DescribeTargetGroups
+                  - elasticloadbalancing:DescribeListeners
+                  - elasticloadbalancing:DescribeRules
+                  - elasticloadbalancing:DescribeTargetHealth
+                  - elasticloadbalancing:DescribeTags
+                  - elasticloadbalancing:DescribeLoadBalancerAttributes
+                  - elasticloadbalancing:DescribeTargetGroupAttributes
+                  - elasticloadbalancing:DescribeAccountLimits
+                Resource: "*"
+              # THE FIX action. microservice-migration-battle scopes its
+              # elasticloadbalancing write verbs on Resource:"*" via a tag-based
+              # Condition (aws:ResourceTag/TenkaCloud:NamePrefix). That pattern
+              # needs the resource to carry the tag, but CFn's ListenerRule does
+              # not support Tags -- so here we use the equally-valid AGENT.md
+              # section 6 alternative: per-stack logical-id ARN scope. !Ref on an
+              # AWS::ElasticLoadBalancingV2::ListenerRule returns the rule's ARN,
+              # so this grants ModifyRule on EXACTLY this team's own rule and
+              # nothing else (tighter than the tag form -- no Condition needed,
+              # and the security gate accepts a concrete ARN). The player adds
+              # "QUERY" to the rule's http-request-method Values.
+              - Sid: ModifyOwnListenerRule
+                Effect: Allow
+                Action:
+                  - elasticloadbalancing:ModifyRule
+                Resource: !Ref AllowedMethodsRule
+              # Read the app logs to confirm the backend is healthy and the edge
+              # is the culprit. FilterLogEvents / GetLogEvents / DescribeLogStreams
+              # accept resource-level ARNs, so scope to this stack's Lambda log
+              # group prefix (auto-named /aws/lambda/${NamePrefix}*).
+              - Sid: ReadOwnLambdaLogs
+                Effect: Allow
+                Action:
+                  - logs:FilterLogEvents
+                  - logs:GetLogEvents
+                  - logs:DescribeLogStreams
+                Resource: !Sub "arn:aws:logs:*:*:log-group:/aws/lambda/${NamePrefix}*:*"
+              # Console log-group list view (the CloudWatch Logs console opens by
+              # listing). Read-only; no ARN-level scoping exists for this verb.
+              - Sid: ConsoleListLogGroups
+                Effect: Allow
+                Action:
+                  - logs:DescribeLogGroups
+                Resource: "*"
+
+Outputs:
+  # Canonical answer, scoring engine only. The player is NOT granted
+  # cloudformation:DescribeStacks, so this Output is invisible to them -- they
+  # must reach a spec-compliant QUERY through the (fixed) edge to learn it.
+  AnswerFlag:
+    Description: The flag the player submits after a successful spec-compliant QUERY.
+    Value: !Sub "TC{${FlagSeed}}"
+  SearchEndpoint:
+    Description: The URL the player sends QUERY /search to (safe to expose).
+    Value: !Sub "http://${Alb.DNSName}/search"
+  # AWS Console deep link to this ALB (edit listener rules here). Literal slashes
+  # in the path (AGENT.md section 7); the ARN goes in the EC2 console hash fragment.
+  ListenerRulesConsoleUrl:
+    Description: AWS Console deep link to this load balancer (edit listener rules here).
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/ec2/home?region=${AWS::Region}#LoadBalancer:loadBalancerArn=${Alb}"
+  NamePrefix:
+    Description: Common resource prefix that this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN that competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

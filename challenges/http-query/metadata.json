@@ -1,0 +1,67 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "http-query",
+  "name": "QUERY: 誰も知らないメソッド",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "30〜45 分",
+  "shortDescription": "前任の SRE が、 検索 API を新しい HTTP メソッド `QUERY` (RFC 10008) に移したまま、 先週退職した。\n\n顧客から悲鳴が届く。 「検索が 405 で死んでる」。 ところがアプリのコードを読むと、 `QUERY /search` は完璧に実装されている。 ローカルでは動く。 なのに本番の公開 URL を叩くと 405 が返る。\n\nCTO 曰く 「コードは正しいんだろ。 なら、 何が殺してる?」\n\nあなたのミッション: 仕様どおりの API を 405 で殺している犯人を特定し、 `QUERY /search` が本番でも通る状態に戻して、 検索を生き返らせよ。",
+  "instructions": "## はじめに\n仕様 (RFC 10008) どおりに実装された `QUERY /search` が、 本番の公開 URL では 405 で死んでいる。 アプリは正しい。 では、 何が殺しているのか。\n\n## 最初の一手\nまず現象を自分の目で見る。 Outputs の `SearchEndpoint` を `<URL>` に入れて叩く:\n\n```\ncurl -i -X QUERY \"<SearchEndpoint>\" \\\n  -H 'content-type: application/json' \\\n  --data '{\"query\":{\"match\":\"hello\"}}'\n```\n\n405 が返るはず。 同じ URL に `GET` を投げると 200 が返る (アプリは生きている)。 この差はどこで生まれているか ── アプリのログと、 リクエストが最初に着く層 (エッジ) の設定を見比べる。\n\n## ゴール\n`QUERY /search` が本番経由で通り、 仕様準拠のリクエスト (正しい `Content-Type` + 妥当な JSON + 妥当な検索 DSL) を送ると、 レスポンス本文に `TC{…}` 形式の flag が返る。 それを提出する。",
+  "description": "RFC 10008 (2026-06 標準化) の HTTP `QUERY` メソッドを題材にした Challenge。 `QUERY` は safe かつ idempotent で、 クエリを URI ではなく request body に載せる新しいメソッド。\n\nテンプレートは、 `QUERY /search` を正しく実装した検索バックエンド (Lambda) を internet-facing な ALB の背後にデプロイする。 仕掛けは ALB の listener rule にある: `http-request-method` の allow-list が GET/HEAD/POST/OPTIONS だけを許可し QUERY を含まないため、 `curl -X QUERY` はエッジで 405 (listener の default fixed-response) を食らう。 アプリ本体は完全に正しい。\n\n解法 (= 想定フロー):\n1. 切り分け: 405 はアプリ由来ではなくエッジ (ALB listener rule) 由来だと特定する。 `GET` は 200 が返ること、 アプリのログ (CloudWatch Logs) に QUERY が一切到達していないことが手がかり。\n2. 修正 (fix-by-settings): CFn が作った既存の listener rule (`${NamePrefix}-allowed-methods-rule`) の `http-request-method` Values に `QUERY` を追加する。 `aws elbv2 modify-rule` または Console。 IAM は `elasticloadbalancing:ModifyRule` を tag (TenkaCloud:NamePrefix) で自分のルールにだけ scope 済み。 トップレベルリソースは作らない (= delete-stack でクリーンに消える)。\n3. flag 取得: エッジが通った後、 仕様準拠の QUERY (`Content-Type: application/json` + 妥当な JSON + `{\"query\":{\"match\":\"<非空文字列>\"}}`) を送ると 200 + 本文に flag (`TC{FlagSeed}`) が返る。\n\nアプリの異常系も RFC 10008 の厳格な body 取り扱いを教える: Content-Type なし → 415、 未対応 Content-Type → 415、 壊れた JSON → 400、 妥当な JSON だが不正な DSL → 422。 content sniffing は一切しない。\n\nscoring: flag kind、 flagOutputKey=AnswerFlag (player は cloudformation:DescribeStacks を持たないので Output から読めない = エッジ修復 + 仕様準拠 QUERY を両方やらないと取れない discovered flag)。 300 pt、 誤答 -15 pt。\n\nコスト: ALB は常時課金 (時間課金 + LCU)。 解き終わったら delete-stack すること。 Lambda / VPC / SG / IGW は実質ゼロ。",
+  "tags": ["http", "rfc-10008", "query-method", "alb", "edge-compat", "cors"],
+  "exposedPorts": [
+    {
+      "port": 80,
+      "name": "ALB HTTP (the QUERY-based search API edge)"
+    }
+  ],
+  "learningGoals": [
+    "本文の有無ではなく HTTP の意味論 (safe / idempotent / state-changing) でメソッドを選ぶ: 読み取り検索は POST ではなく QUERY、 副作用のあるジョブ開始は POST。",
+    "新しい標準メソッドがエッジ / ミドルボックスで割れる理由を体感する: ALB は custom HTTP method を許可リストに入れれば通せるが、 CloudFront は非標準メソッドに 501 を返す。 ブラウザからは CORS preflight が必要になる。",
+    "アプリではなく中間経路 (リバースプロキシ / WAF / API gateway) を疑い、 ログ・HTTP trace で原因を切り分ける observability の型を身につける。",
+    "Content-Type と request body を厳格に扱い (400 / 415 / 422)、 content sniffing に依存しない API を設計する。"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {
+    "FlagSeed": "__RANDOM_PASSWORD__"
+  },
+  "i18n": {
+    "en": {
+      "name": "QUERY: The Method Nobody Knows",
+      "shortDescription": "Your predecessor moved the search API onto the new HTTP `QUERY` method (RFC 10008) and then resigned last week.\n\nNow the screams arrive. Customers: \"Search is dead — it's returning 405.\" But when you read the app code, `QUERY /search` is implemented perfectly. It works locally. Yet hitting the production public URL gives a 405.\n\nthe CTO: \"The code is right, isn't it? So what's killing it?\"\n\nYour mission: find what is returning 405 on a spec-correct API, restore `QUERY /search` so it works through production, and bring search back to life.",
+      "instructions": "## Getting started\nA `QUERY /search` implemented exactly to spec (RFC 10008) is returning 405 on the production public URL. The app is correct. So what is killing it?\n\n## First move\nSee the symptom yourself. Put the `SearchEndpoint` Output into `<URL>` and hit it:\n\n```\ncurl -i -X QUERY \"<SearchEndpoint>\" \\\n  -H 'content-type: application/json' \\\n  --data '{\"query\":{\"match\":\"hello\"}}'\n```\n\nYou should get a 405. A `GET` to the same URL returns 200 (the app is alive). Where does that difference come from? Compare the app logs against the configuration of the layer that receives the request first (the edge).\n\n## Goal\n`QUERY /search` succeeds through production, and a spec-compliant request (correct `Content-Type` + valid JSON + a valid search DSL) returns a `TC{…}` flag in the response body. Submit it.",
+      "description": "A Challenge built on the HTTP `QUERY` method standardized as RFC 10008 (June 2026). `QUERY` is safe and idempotent and carries the query in the request body, not the URI.\n\nThe template deploys a search backend (a Lambda) that correctly implements `QUERY /search`, behind an internet-facing ALB. The trick lives in the ALB listener rule: its `http-request-method` allow-list permits only GET/HEAD/POST/OPTIONS and omits QUERY, so `curl -X QUERY` is met with a 405 (the listener's default fixed-response) at the edge. The app itself is entirely correct.\n\nIntended flow:\n1. Diagnose: the 405 is from the edge (ALB listener rule), not the app. Clues: `GET` returns 200, and the app's CloudWatch Logs show that QUERY never reached the function.\n2. Fix-by-settings: add `QUERY` to the `http-request-method` Values of the existing CFn-owned listener rule (`${NamePrefix}-allowed-methods-rule`) via `aws elbv2 modify-rule` or the Console. IAM scopes `elasticloadbalancing:ModifyRule` to the player's own rule by tag (TenkaCloud:NamePrefix). No top-level resources are created, so delete-stack leaves no orphans.\n3. Get the flag: once the edge allows QUERY, a spec-compliant request (`Content-Type: application/json` + valid JSON + `{\"query\":{\"match\":\"<non-empty string>\"}}`) returns 200 with the flag (`TC{FlagSeed}`) in the body.\n\nThe app's error handling teaches RFC 10008 strict body handling: no Content-Type → 415, unsupported Content-Type → 415, broken JSON → 400, valid JSON but invalid DSL → 422. No content sniffing.\n\nScoring: flag kind, flagOutputKey=AnswerFlag (the player has no cloudformation:DescribeStacks, so the Output is unreadable — the flag is discovered only by fixing the edge AND crafting a spec-compliant QUERY). 300 pts, -15 on wrong answer.\n\nCost: the ALB is an always-on hourly + LCU charge. delete-stack when done. Lambda / VPC / SG / IGW are effectively free.",
+      "learningGoals": [
+        "Choose the HTTP method by semantics (safe / idempotent / state-changing), not by whether it has a body: a read-only search is QUERY, not POST; starting a side-effecting job is POST.",
+        "Feel why a brand-new standard method breaks across edges / middleboxes: ALB can forward a custom HTTP method once it is in the allow-list, but CloudFront returns 501 for non-standard methods, and a browser fetch needs a CORS preflight.",
+        "Suspect the middle of the path (reverse proxy / WAF / API gateway), not the app, and isolate the cause with logs and HTTP traces — an observability habit.",
+        "Handle Content-Type and request body strictly (400 / 415 / 422) and design an API that does not rely on content sniffing."
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "AnswerFlag",
+    "points": 300,
+    "wrongAnswerPenalty": 15,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "アプリは正しい。 同じ URL への `GET` は 200 が返り、 アプリのログ (CloudWatch Logs, /aws/lambda/<NamePrefix>...) には QUERY が一切到達していないはず。 犯人はアプリではなく、 リクエストが最初に着く層 ── エッジ (ALB) を疑え。",
+        "penalty": 15
+      },
+      {
+        "id": "hint-2",
+        "content": "ALB の listener rule には HTTP メソッドの allow-list (`http-request-method` condition) がある。 今のルールは GET/HEAD/POST/OPTIONS だけを許可していて、 QUERY が入っていない。 だから QUERY は listener の default action (fixed-response 405) に落ちている。 `aws elbv2 describe-rules` で確認できる。",
+        "penalty": 25
+      },
+      {
+        "id": "hint-3",
+        "content": "そのルールの Values に QUERY を足す。 `aws elbv2 modify-rule --rule-arn <自分のルール ARN> --conditions Field=http-request-method,HttpRequestMethodConfig='{Values=[GET,HEAD,POST,OPTIONS,QUERY]}'` (Console なら EC2 > Load Balancers > 該当 LB > Listener > Rules を編集)。 その後、 最初の手の curl をもう一度送れば 200 + 本文に flag が返る。",
+        "penalty": 35
+      }
+    ]
+  }
+}
