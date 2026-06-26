@@ -162,6 +162,23 @@ function estimate(metaPath: string): ProblemCost {
   const region: Region = KNOWN_REGIONS.has(String(meta.defaultRegion))
     ? (meta.defaultRegion as Region)
     : DEFAULT_REGION;
+  // [#2054] container (local) problems deploy nothing to AWS — zero cost, no CFn
+  // template to walk.
+  const runtime = meta.runtime as { engine?: unknown } | undefined;
+  if (typeof runtime?.engine === "string" && runtime.engine !== "cloudformation") {
+    return {
+      id,
+      category: String(meta.category),
+      region,
+      estimatedSessionMinutes: parseDurationMinutes(String(meta.estimatedDuration ?? "")),
+      perHourUsd: 0,
+      perSessionUsd: 0,
+      ifLeftRunningUsd: { oneDay: 0, oneWeek: 0, oneMonth: 0 },
+      freeTierEligible: true,
+      alwaysOnResources: [],
+      billable: [],
+    };
+  }
   const cfnTemplate = typeof meta.cfnTemplate === "string" ? meta.cfnTemplate : "template.yaml";
   const yaml = readFileSync(join(metaPath, "..", cfnTemplate), "utf8");
   const params = parseParameterDefaults(yaml);

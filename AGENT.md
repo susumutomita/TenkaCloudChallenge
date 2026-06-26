@@ -135,6 +135,16 @@ The portal hides `description` from competitors (fairness contract), so authored
 
 Worked examples: every problem under `challenges/` and `battles/` now carries `instructions`; mirror their JA/EN shape.
 
+### 13. Container (local-play) problems — `runtime` + `scoring.kind: "verify"`
+
+[#2054] A problem can be delivered as an **AWS-free Docker container** for local play (`make local PROBLEM=<id>` in the platform repo) instead of a CloudFormation stack. It declares a container `runtime` (ADR-023) instead of `cfnTemplate`, and the platform delegates scoring to the container's own `/verify` — so the answer and the hidden tests live **only** inside the container.
+
+- **No `cfnTemplate`.** Declare `runtime: { "provider": "docker", "engine": "compose", "entry": "local/docker-compose.yml", "challengeEndpoints": { "<label>": "http://127.0.0.1:<port>" }, "verifyUrl": "http://127.0.0.1:<port>/verify", "secretEnv": ["FLAG_SEED"] }`. Every URL must be loopback; the validator skips the CFn cross-refs for these.
+- **`scoring.kind: "verify"`** (`points` / `wrongAnswerPenalty` / `hints`, no `flagOutputKey`). The container's `POST /verify` returns `{ "correct": boolean }`; the platform records the verdict and never compares the answer itself.
+- **Per-deploy secret.** Each `secretEnv` name is filled with a fresh random value at deploy; derive the flag and any privileged credential from it inside the container so nothing secret is committed. The compose file must bind every port to `127.0.0.1` only (including `/verify`).
+
+Worked example: [`challenges/sqli-demo`](./challenges/sqli-demo) (IPA "安全なウェブサイトの作り方" §1.1, SQL injection).
+
 ## Voice for `shortDescription` / `instructions` / `description`
 
 The catalog leans into SRE-day-in-the-life narration: the previous SRE (the predecessor who abruptly resigned), the CTO (gives vague but high-stakes orders), competitor as "the new hire" inheriting a mess. Players engage 2-3× better with story than with dry mechanics. Examples:

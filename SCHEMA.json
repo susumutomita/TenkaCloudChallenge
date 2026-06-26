@@ -53,8 +53,11 @@
     "description",
     "tags",
     "exposedPorts",
-    "learningGoals",
-    "cfnTemplate"
+    "learningGoals"
+  ],
+  "anyOf": [
+    { "required": ["cfnTemplate"] },
+    { "required": ["runtime"] }
   ],
   "properties": {
     "$schema": {
@@ -163,7 +166,26 @@
         "entry": {
           "type": "string",
           "pattern": "^[A-Za-z0-9._/-]+$",
-          "description": "問題ディレクトリ相対 path で指す primary deployable artifact (例: `template.yaml` / `main.bicep` / `chart/`)。 standalone validation 用に provider native tooling で直接 deploy できる単位とする。"
+          "description": "問題ディレクトリ相対 path で指す primary deployable artifact (例: `template.yaml` / `main.bicep` / `chart/` / `local/docker-compose.yml`)。 standalone validation 用に provider native tooling で直接 deploy できる単位とする。"
+        },
+        "challengeEndpoints": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^https?://(localhost|127\\.0\\.0\\.1|\\[::1\\])(:[0-9]+)?(/.*)?$"
+          },
+          "description": "[local play / #2054] 参加者が攻略する loopback の challenge URL (label → URL)。 container 配信 (provider=docker) 専用。 loopback (localhost / 127.0.0.1 / [::1]) のみ。"
+        },
+        "verifyUrl": {
+          "type": "string",
+          "pattern": "^https?://(localhost|127\\.0\\.0\\.1|\\[::1\\])(:[0-9]+)?(/.*)?$",
+          "description": "[local play / #2054] 問題コンテナが採点判定を公開する loopback の /verify URL。 platform は提出をここに委譲し、 答えは持たない。 loopback のみ。"
+        },
+        "secretEnv": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "[local play / #2054] deploy ごとにランダム秘密を注入する env 変数名 (例: `FLAG_SEED`)。 フラグ・管理者資格情報はこの seed からコンテナ内で導出する (= 答えは repo に置かない)。"
         }
       }
     },
@@ -283,6 +305,29 @@
             "hints": { "$ref": "#/$defs/progressiveHints" }
           },
           "description": "kind=flag (= Challenge 1 回提出形式)。example: hello-world は SSM Parameter 値を当てて +100 pt。 wrongAnswerPenalty を設定すると不正解 1 回ごとに減点する (= brute-force 防止)。"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "points"],
+          "properties": {
+            "kind": {
+              "const": "verify",
+              "description": "[local play / #2054] container 配信問題。 platform は答えを持たず、 提出を問題コンテナの /verify に委譲して correct を記録する。 runtime.provider=docker と併用する。"
+            },
+            "points": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "正解時の獲得ポイント。"
+            },
+            "wrongAnswerPenalty": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "[Issue #817] 不正解 1 回ごとに減算する値 (default 0、 brute-force 対策)。"
+            },
+            "hints": { "$ref": "#/$defs/progressiveHints" }
+          },
+          "description": "kind=verify (= container 問題、 採点は問題側 /verify に委譲)。 答え・隠しテストはコンテナ内にのみ存在する。"
         },
         {
           "type": "object",

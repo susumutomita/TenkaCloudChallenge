@@ -154,6 +154,30 @@
       }
     },
     {
+      "id": "sqli-demo",
+      "name": "SQL インジェクション — ログインバイパス",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "30 分",
+      "shortDescription": "スタッフ用ログイン画面が SQL インジェクションに対して脆弱だ。 管理者パスワードは分からない。 ログインを SQL インジェクションで突破して `admin` としてサインインし、 表示されるフラグを提出せよ。",
+      "tags": [
+        "web-security",
+        "sql-injection",
+        "ipa",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "stackstack",
       "name": "StackStack — Vibe to Production",
       "category": "Battle",

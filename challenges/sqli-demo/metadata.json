@@ -1,0 +1,57 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "sqli-demo",
+  "name": "SQL インジェクション — ログインバイパス",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 2,
+  "estimatedDuration": "30 分",
+  "shortDescription": "スタッフ用ログイン画面が SQL インジェクションに対して脆弱だ。 管理者パスワードは分からない。 ログインを SQL インジェクションで突破して `admin` としてサインインし、 表示されるフラグを提出せよ。",
+  "instructions": "## はじめに\nIPA「安全なウェブサイトの作り方」§1.1 (SQL インジェクション) を題材にした、 AWS 非依存のローカル CTF 問題。 Docker コンテナ 1 つで完結する (AWS アカウント不要)。\n\n## ゴール\nWeb エンドポイント (`http://127.0.0.1:18080`) のスタッフ用ログインは、 入力を文字列連結で SQL に埋め込んでおり SQL インジェクションに対して脆弱。 管理者パスワードは分からない。 ログインを突破して `admin` としてサインインし、 表示されるフラグ (`TC{...}`) をポータルに提出する。\n\n## 進め方\n1. `make local PROBLEM=sqli-demo` で問題コンテナ + 採点 API + ポータルが起動する\n2. ポータルに任意の非空キーでログイン\n3. challenge URL のログインフォームを SQL インジェクションで突破\n4. 表示されたフラグを提出 (= 問題コンテナの `/verify` が判定する)",
+  "description": "## 概要\n\nIPA「安全なウェブサイトの作り方」§1.1 SQL インジェクションを学ぶための、 意図的に脆弱な Web アプリ。 ローカルプレー (#2054) の container 配信モデルの参照問題でもある。\n\n## 安全方針\n\n意図的に脆弱な訓練用ターゲット。 compose は `127.0.0.1` のみに bind し、 外部公開しない。 フラグと管理者パスワードは deploy ごとのランダム `FLAG_SEED` からコンテナ内で導出されるため、 答えは repo に置かれない。\n\n## デプロイされるもの\n\nNode 製の小さな Web アプリ 1 コンテナ。 ホストの `127.0.0.1:18080` に challenge 表面 (ログインフォーム)、 `127.0.0.1:18081` に採点用の loopback `/verify` を公開する。 platform は答えを持たず、 提出を `/verify` に委譲して判定結果だけ記録する。\n\n## ミッション\n\nログインの SQL 文は `... WHERE username = '<入力>' AND password = '<入力>'` のように文字列連結で組み立てられている。 username に `admin' --` のような入力を与えて WHERE 句を書き換え、 認証を回避して admin としてログインする。 成功すると admin 画面にフラグ (`TC{...}`) が表示される。 それを提出する。\n\n## コスト\n\nローカル Docker のみ。 AWS リソースは作成しない (無料)。",
+  "tags": ["web-security", "sql-injection", "ipa", "local-play", "container"],
+  "exposedPorts": [
+    { "port": 18080, "name": "Web (challenge surface)" },
+    { "port": 18081, "name": "/verify (loopback admin)" }
+  ],
+  "learningGoals": [
+    "文字列連結で組み立てた SQL がなぜ SQL インジェクションに対して脆弱になるかを説明できるようになる",
+    "`admin' --` 等の入力で WHERE 句を書き換え、 認証を回避する手口を再現・理解する",
+    "プレースホルダ (パラメータ化クエリ) による根本対策の必要性を理解する"
+  ],
+  "i18n": {
+    "en": {
+      "name": "SQL Injection — Login Bypass",
+      "shortDescription": "A staff login is vulnerable to SQL injection. You do not know the admin password. Bypass the login with SQL injection to sign in as `admin`, then submit the flag it reveals.",
+      "instructions": "## Overview\nA local, AWS-free CTF based on IPA \"How to Secure Your Website\" §1.1 (SQL injection). It runs entirely in one Docker container — no AWS account.\n\n## Goal\nThe staff login at the Web endpoint (`http://127.0.0.1:18080`) builds its SQL by string concatenation and is vulnerable to SQL injection. You do not know the admin password. Bypass the login to sign in as `admin`, read the flag (`TC{...}`) it reveals, and submit it in the portal.\n\n## Steps\n1. `make local PROBLEM=sqli-demo` starts the container, the scoring API, and the portal\n2. Log in to the portal with any non-empty key\n3. Exploit the SQL injection on the login form at the challenge URL\n4. Submit the flag — the container's `/verify` judges it"
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Web": "http://127.0.0.1:18080"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": ["FLAG_SEED"]
+  },
+  "scoring": {
+    "kind": "verify",
+    "points": 200,
+    "wrongAnswerPenalty": 10,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "ログインは入力をそのまま SQL 文に連結している。 username にシングルクオート (') を 1 つ入れると WHERE 句にどんな影響が出るか考えてみよう。",
+        "penalty": 0
+      },
+      {
+        "id": "hint-2",
+        "content": "定番の認証回避: username を `admin' --` (末尾は SQL コメント) にして、 パスワードは任意。 コメントが後続のパスワード照合を無効化する。",
+        "penalty": 50
+      }
+    ]
+  }
+}
