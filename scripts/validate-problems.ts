@@ -80,8 +80,35 @@ function checkInstructionsPresent(meta: Metadata): ValidationError[] {
   return errors;
 }
 
+/**
+ * [#2054] container 配信問題 (runtime.engine !== cloudformation、 例: docker/compose)。
+ * CFn template を持たないため、 CFn cross-ref ではなく container 固有の整合性だけを検査する。
+ */
+function isContainerProblem(meta: Metadata): boolean {
+  const runtime = meta.runtime as { engine?: unknown } | undefined;
+  return typeof runtime?.engine === "string" && runtime.engine !== "cloudformation";
+}
+
+function checkContainerRefs(dir: string, meta: Metadata): CrossRefResult {
+  const runtime = meta.runtime as { entry?: unknown } | undefined;
+  const errors: ValidationError[] = [...checkInstructionsPresent(meta)];
+  const entry = typeof runtime?.entry === "string" ? runtime.entry : undefined;
+  if (!entry) {
+    errors.push("runtime.entry is required for a container problem");
+  } else if (!existsSync(join(dir, entry))) {
+    errors.push(`runtime.entry "${entry}" not found`);
+  }
+  const scoringKind = (meta.scoring as { kind?: unknown } | undefined)?.kind;
+  if (scoringKind !== "verify") {
+    errors.push('a container problem must use scoring.kind="verify" (evaluation lives in /verify)');
+  }
+  errors.push(...checkDashboardSlotFiles(meta, dir), ...checkCoordinationPluginFile(meta, dir));
+  return { errors, warnings: [] };
+}
+
 function checkCrossRefs(metaPath: string, meta: Metadata): CrossRefResult {
   const dir = dirname(metaPath);
+  if (isContainerProblem(meta)) return checkContainerRefs(dir, meta);
   const cfnTemplate = typeof meta.cfnTemplate === "string" ? meta.cfnTemplate : "template.yaml";
   const templatePath = join(dir, cfnTemplate);
 
