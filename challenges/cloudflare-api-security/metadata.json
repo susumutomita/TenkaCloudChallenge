@@ -47,6 +47,20 @@
         "Internalize the headline OWASP API Security Top 10 flaws (broken authorization / IDOR / missing input validation / information disclosure) by fixing a real, running vulnerable API",
         "Experience the Cloudflare Workers deploy flow (wrangler) and edge-runtime basics on a free account",
         "Understand staged security testing of an external endpoint, and the SSRF defenses the tester itself needs (host allowlist / no redirect follow / timeout / size cap)"
+      ],
+      "hints": [
+        {
+          "id": "hint-1",
+          "content": "The first move is to read the briefing in CloudShell: `aws ssm get-parameter --name /{NamePrefix}/briefing --query Parameter.Value --output text`. In short: (1) expand the starter with `aws s3 cp s3://{NamePrefix}-tools-<accountId>/setup.sh . && bash setup.sh`, (2) `wrangler login && wrangler deploy` to a free Cloudflare account, (3) score it with `./evaluate.sh {NamePrefix} https://<you>.workers.dev`. If you run evaluate.sh first without any fixes, it shows you stage by stage where you are failing."
+        },
+        {
+          "id": "hint-2",
+          "content": "The four `// VULN:` comments in `index.js` mark the weak spots. Stage 2 (authorization & IDOR) is the heart of it: (a) return 401 when `Authorization: Bearer <token>` is missing or invalid; (b) `GET /api/profile/:id` returns 200 only when `:id` matches the owner of the caller's token, and someone else's id returns 403. The demo tokens are `token-alice`→alice / `token-bob`→bob. Stage 1 requires rejecting malformed ids (`'`, `../`, an over-long string) with 400/404 and never emitting a 500. Stage 3 requires that error responses never expose a stack trace / path / token."
+        },
+        {
+          "id": "hint-3",
+          "content": "Key fixes: (1) validate the token at the top of the handler → if invalid, `json({error:'unauthorized'}, 401)`. (2) if `:id !== caller.userId`, `json({error:'forbidden'}, 403)` (blocks IDOR). (3) validate the id against an allowlist regex (e.g. `/^[a-z]{1,32}$/`) and return `400` when it does not match. (4) in the catch block, return only the fixed message `{error:'internal error'}` and never expose `err.stack`/`err.message`. Fix these, `wrangler deploy` → `./evaluate.sh {NamePrefix} https://<you>.workers.dev` for an all-stages PASS, and submit the returned `TC{…}`."
+        }
       ]
     }
   },

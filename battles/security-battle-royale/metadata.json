@@ -40,6 +40,20 @@
         "Experience the rhythm of incident response: patching a live web app without taking it offline",
         "Read and reason about an inherited EC2 + docker-compose codebase under time pressure",
         "Practice the availability-versus-hardening tradeoff -- judgment calls over perfect fixes"
+      ],
+      "hints": [
+        {
+          "id": "hint-1",
+          "content": "Scoring is 0 right after deploy completes. Paste the `Ec2HostHint` from the stack Outputs into the Participant Portal's `frontend` slot as `http://<host>` and the `api` slot as `http://<host>:8080`, and the score engine starts probing."
+        },
+        {
+          "id": "hint-2",
+          "content": "You don't need to fix the app perfectly. The score engine awards +100 pt only on cycles where both frontend (`/`) and api (`/api/v1/apistatus`) return 200. What matters is to keep returning 200."
+        },
+        {
+          "id": "hint-3",
+          "content": "Read the api code in this order: `auth → setdbpwd → dragons → proxy → backdoor`. Starting with input validation in the auth path makes it easier to shut down the downstream leak paths."
+        }
       ]
     }
   },

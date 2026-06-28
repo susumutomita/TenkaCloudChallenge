@@ -28,12 +28,22 @@
   "i18n": {
     "en": {
       "name": "Hello World (Sample)",
-      "shortDescription": "Day one as TenkaCloud's new SRE. Your predecessor the previous SRE resigned abruptly last week, leaving a single mysterious SSM Parameter behind in production.\n\nthe CTO, the CTO: \"I think he left it for smoke testing... probably.\" Details unknown. Slack DM history turns up nothing. The Notion handover note just says: 'check the SSM hello.'\n\nYour mission: uncover the hidden message the previous SRE left behind in production.",
+      "shortDescription": "Day one as TenkaCloud's new SRE. Your predecessor resigned abruptly last week, leaving a single mysterious SSM Parameter behind in production.\n\nThe CTO: \"I think he left it for smoke testing... probably.\" Details unknown. Slack DM history turns up nothing. The Notion handover note just says: 'check the SSM hello.'\n\nYour mission: uncover the hidden message your predecessor left behind in production.",
       "instructions": "## Getting started\nAn intro problem: find the **hidden message** the previous SRE left in production.\n\n## First move\n- Console: open the `ParameterConsoleUrl` Output to land on the SSM Parameter detail\n- CLI: `aws ssm get-parameter --name /<NamePrefix>/hello --query Parameter.Value --output text`\n\n## Goal\nRead the message hidden in the SSM parameter (`TC{…}`) and submit it.",
       "description": "Minimal sample of Challenge / flag-submission form.\n\nDeploying creates a single SSM Parameter `/{NamePrefix}/hello` in the competitor's AWS account. The value is a per-deploy random token `TC{…}` (the braces wrap a random value injected at deploy time — it is NOT derivable from the public NamePrefix, so you must actually read the parameter). Competitors read the parameter from AWS Console / CLI, paste the value into the Participant Portal submission field, and earn +100 points on match.\n\nZero-cost (SSM Standard tier, no EC2 / VPC / public endpoint). Use for sanity-checking problem authoring + scoring engine.",
       "learningGoals": [
         "Experience reading a value from SSM Parameter Store via AWS Console / CLI",
         "Verify that TenkaCloud's deploy → flag-submission → score pipeline works end-to-end"
+      ],
+      "hints": [
+        {
+          "id": "hint-1",
+          "content": "Open the `ParameterConsoleUrl` Output to land directly on the SSM Parameter detail page in the AWS Console. From the CLI: `aws ssm get-parameter --name /{NamePrefix}/hello`."
+        },
+        {
+          "id": "hint-2",
+          "content": "The value is in `TC{…}` form. What is inside the braces is a per-deploy random value that cannot be derived from the NamePrefix — you must read the parameter's actual value and paste everything from `TC{` to `}` verbatim."
+        }
       ]
     }
   },

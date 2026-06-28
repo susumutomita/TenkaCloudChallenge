@@ -24,7 +24,23 @@
     "en": {
       "name": "SQL Injection — Login Bypass",
       "shortDescription": "A staff login is vulnerable to SQL injection. You do not know the admin password. Bypass the login with SQL injection to sign in as `admin`, then submit the flag it reveals.",
-      "instructions": "## Overview\nA local, AWS-free CTF based on IPA \"How to Secure Your Website\" §1.1 (SQL injection). It runs entirely in one Docker container — no AWS account.\n\n## Goal\nThe staff login at the Web endpoint (`http://127.0.0.1:18080`) builds its SQL by string concatenation and is vulnerable to SQL injection. You do not know the admin password. Bypass the login to sign in as `admin`, read the flag (`TC{...}`) it reveals, and submit it in the portal.\n\n## Steps\n1. `make local PROBLEM=sqli-demo` starts the container, the scoring API, and the portal\n2. Log in to the portal with any non-empty key\n3. Exploit the SQL injection on the login form at the challenge URL\n4. Submit the flag — the container's `/verify` judges it"
+      "instructions": "## Overview\nA local, AWS-free CTF based on IPA \"How to Secure Your Website\" §1.1 (SQL injection). It runs entirely in one Docker container — no AWS account.\n\n## Goal\nThe staff login at the Web endpoint (`http://127.0.0.1:18080`) builds its SQL by string concatenation and is vulnerable to SQL injection. You do not know the admin password. Bypass the login to sign in as `admin`, read the flag (`TC{...}`) it reveals, and submit it in the portal.\n\n## Steps\n1. `make local PROBLEM=sqli-demo` starts the container, the scoring API, and the portal\n2. Log in to the portal with any non-empty key\n3. Exploit the SQL injection on the login form at the challenge URL\n4. Submit the flag — the container's `/verify` judges it",
+      "description": "## Overview\n\nAn intentionally vulnerable web app for learning SQL injection (IPA \"How to Secure Your Website\" §1.1). It also serves as the reference problem for the local-play (#2054) container delivery model.\n\n## Safety policy\n\nA deliberately vulnerable training target. The compose stack binds to `127.0.0.1` only and is never exposed externally. The flag and the admin password are derived inside the container from a per-deploy random `FLAG_SEED`, so the answer is never stored in the repo.\n\n## What gets deployed\n\nA single small Node web app container. It exposes the challenge surface (the login form) on the host at `127.0.0.1:18080` and a loopback `/verify` scoring endpoint on `127.0.0.1:18081`. The platform holds no answer; it delegates each submission to `/verify` and only records the verdict.\n\n## Mission\n\nThe login SQL is assembled by string concatenation, e.g. `... WHERE username = '<input>' AND password = '<input>'`. Feed the username an input like `admin' --` to rewrite the WHERE clause, bypass authentication, and sign in as admin. On success the admin screen shows the flag (`TC{...}`). Submit it.\n\n## Cost\n\nLocal Docker only. No AWS resources are created (free).",
+      "learningGoals": [
+        "Be able to explain why SQL built by string concatenation is vulnerable to SQL injection",
+        "Reproduce and understand how inputs like `admin' --` rewrite the WHERE clause to bypass authentication",
+        "Understand why placeholders (parameterized queries) are the root-cause fix"
+      ],
+      "hints": [
+        {
+          "id": "hint-1",
+          "content": "The login concatenates your input directly into the SQL statement. Try putting a single quote (') in the username and think about what it does to the WHERE clause."
+        },
+        {
+          "id": "hint-2",
+          "content": "The classic auth bypass: set the username to `admin' --` (the trailing `--` is a SQL comment) with any password. The comment voids the password check that follows."
+        }
+      ]
     }
   },
   "runtime": {

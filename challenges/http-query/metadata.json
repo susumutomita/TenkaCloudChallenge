@@ -38,6 +38,20 @@
         "Feel why a brand-new standard method breaks across edges / middleboxes: ALB can forward a custom HTTP method once it is in the allow-list, but CloudFront returns 501 for non-standard methods, and a browser fetch needs a CORS preflight.",
         "Suspect the middle of the path (reverse proxy / WAF / API gateway), not the app, and isolate the cause with logs and HTTP traces — an observability habit.",
         "Handle Content-Type and request body strictly (400 / 415 / 422) and design an API that does not rely on content sniffing."
+      ],
+      "hints": [
+        {
+          "id": "hint-1",
+          "content": "The app is correct. A `GET` to the same URL returns 200, and the app's logs (CloudWatch Logs, /aws/lambda/<NamePrefix>...) should show that QUERY never reached it at all. The culprit is not the app — suspect the layer where the request lands first: the edge (ALB)."
+        },
+        {
+          "id": "hint-2",
+          "content": "The ALB listener rule has an HTTP method allow-list (the `http-request-method` condition). The current rule permits only GET/HEAD/POST/OPTIONS and does not include QUERY, so QUERY falls through to the listener's default action (a fixed-response 405). You can confirm this with `aws elbv2 describe-rules`."
+        },
+        {
+          "id": "hint-3",
+          "content": "Add QUERY to that rule's Values: `aws elbv2 modify-rule --rule-arn <your rule ARN> --conditions Field=http-request-method,HttpRequestMethodConfig='{Values=[GET,HEAD,POST,OPTIONS,QUERY]}'` (in the Console, edit EC2 > Load Balancers > the LB > Listener > Rules). Then send the first-move curl again and you get a 200 with the flag in the body."
+        }
       ]
     }
   },
