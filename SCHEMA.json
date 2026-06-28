@@ -4,6 +4,27 @@
   "title": "TenkaCloud Problem Metadata",
   "description": "1 つの問題ディレクトリ (problems/<category>/<id>/) に置く metadata.json の構造を定義する。frontend カタログ表示と backend deploy パイプラインの両方が参照する正本。ADR-012 Phase 2 で thick metadata DSL に拡張済み (endpoints / phases / disruptions / dashboard.slots / scoring.kind 5 種)。Phase 3 で platform 側の generic scoring dispatcher が新 kind を読み始めるまでの間、旧 scoring.kind (flag/uptime) も legacy alias として valid。",
   "$defs": {
+    "localizedHints": {
+      "type": "array",
+      "description": "[Issue #583 / #1108] `scoring.hints[]` の locale 別翻訳。 canonical な hint は top-level `scoring.hints[]` (id + content + penalty)。 本配列は同じ `id` を持つ entry の `content` だけを差し替える (= penalty / 順序は language-neutral なので再宣言しない)。 翻訳が無い id は top-level (= 日本語) に fall back する。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "content"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "翻訳対象の `scoring.hints[].id`。 top-level に同じ id が存在しなければならない。"
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "description": "翻訳済み表示テキスト (markdown 可)。"
+          }
+        }
+      }
+    },
     "progressiveHints": {
       "type": "array",
       "description": "競技者画面に表示するヒント。 Issue #742 Phase 1: v1 (string) と v2 (ProgressiveHint object) の混在を許容する (= 後方互換)。 v2 で `penalty` を指定すると reveal 時にその値が `points` から減算される (= Phase 5 で全 5 builtin kind 共通)。",
@@ -216,7 +237,8 @@
             "shortDescription": { "type": "string" },
             "description": { "type": "string" },
             "instructions": { "type": "string" },
-            "learningGoals": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+            "learningGoals": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+            "hints": { "$ref": "#/$defs/localizedHints" }
           }
         }
       }

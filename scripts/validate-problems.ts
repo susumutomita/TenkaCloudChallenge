@@ -81,6 +81,49 @@ function checkInstructionsPresent(meta: Metadata): ValidationError[] {
 }
 
 /**
+ * [contract / ja-en parity] `scoring.hints[]` (= JA canonical) を持つ問題は、 同じ id の英訳を
+ * `i18n.en.hints[]` に必ず持たなければならない (= portal の locale switcher で英語競技者にヒントが
+ * 日本語のまま残らないようにする)。 翻訳側 id が canonical に無い (= typo / drift) も loud に止める。
+ * `penalty` / 順序は language-neutral なので翻訳側では宣言しない (= localizedHints は id + content)。
+ */
+function checkHintTranslations(meta: Metadata): ValidationError[] {
+  const errors: ValidationError[] = [];
+  const scoring = meta.scoring as { hints?: unknown } | undefined;
+  const rawHints = Array.isArray(scoring?.hints) ? scoring.hints : [];
+  const canonicalIds = new Set<string>();
+  for (const h of rawHints) {
+    if (h && typeof h === "object" && typeof (h as { id?: unknown }).id === "string") {
+      canonicalIds.add((h as { id: string }).id);
+    }
+  }
+  if (canonicalIds.size === 0) return errors;
+
+  const i18n = meta.i18n as { en?: { hints?: unknown } } | undefined;
+  const enHints = Array.isArray(i18n?.en?.hints)
+    ? (i18n.en.hints as Array<Record<string, unknown>>)
+    : [];
+  const translatedIds = new Set<string>();
+  for (const h of enHints) {
+    const id = typeof h.id === "string" ? h.id : undefined;
+    if (id === undefined) continue;
+    translatedIds.add(id);
+    if (!canonicalIds.has(id)) {
+      errors.push(
+        `i18n.en.hints[].id="${id}" は scoring.hints[] に存在しない (= 翻訳の id typo / drift)`,
+      );
+    }
+  }
+  for (const id of canonicalIds) {
+    if (!translatedIds.has(id)) {
+      errors.push(
+        `scoring.hints[].id="${id}" の英訳が i18n.en.hints に無い — mirror the JA hint in English (ja/en parity)`,
+      );
+    }
+  }
+  return errors;
+}
+
+/**
  * [#2054] container 配信問題 (runtime.engine !== cloudformation、 例: docker/compose)。
  * CFn template を持たないため、 CFn cross-ref ではなく container 固有の整合性だけを検査する。
  */
@@ -91,7 +134,10 @@ function isContainerProblem(meta: Metadata): boolean {
 
 function checkContainerRefs(dir: string, meta: Metadata): CrossRefResult {
   const runtime = meta.runtime as { entry?: unknown } | undefined;
-  const errors: ValidationError[] = [...checkInstructionsPresent(meta)];
+  const errors: ValidationError[] = [
+    ...checkInstructionsPresent(meta),
+    ...checkHintTranslations(meta),
+  ];
   const entry = typeof runtime?.entry === "string" ? runtime.entry : undefined;
   if (!entry) {
     errors.push("runtime.entry is required for a container problem");
@@ -119,6 +165,7 @@ function checkCrossRefs(metaPath: string, meta: Metadata): CrossRefResult {
   return {
     errors: [
       ...checkInstructionsPresent(meta),
+      ...checkHintTranslations(meta),
       ...checkScoringOutputRefs(meta, yaml, cfnTemplate),
       ...checkEndpointOutputRefs(meta, yaml, cfnTemplate),
       ...checkDisruptionRefs(meta, yaml, cfnTemplate),

@@ -33,6 +33,20 @@
         "Practice taking an AI-generated app to production without creating unmanaged top-level resources",
         "Verify URL registration, backup restore, WAF association, audit writes, RDS PostgreSQL migration, and public SSH closure through real posture checks",
         "Practice incident response against reversible disruptions"
+      ],
+      "hints": [
+        {
+          "id": "hint-1",
+          "content": "The app is not running yet. SSM into the app host with Session Manager, deploy the local build with `/opt/tenkacloud/vibe/deploy_app.sh`, and register the Stack Output `AppUrlHint` in the `app` endpoint override to start polling of `/meta` and `/score`. As soon as you connect, run `vibe-status`: it shows the current state of the 6 production gates (done / not) and, for each unmet gate, its purpose and related resources ($BACKUP_BUCKET / $WAF_WEB_ACL_ARN / $DB_ENDPOINT, etc.) (it does not print the exact commands ── you assemble them yourself. If you get stuck, hint-2 / hint-3 provide them with a point penalty). Re-run `vibe-status` after each action to make progress."
+        },
+        {
+          "id": "hint-2",
+          "content": "Concrete commands (run in the app host's SSM session; first run `. /etc/tenkacloud-vibe/runtime.env`). DB restore: `aws s3 cp s3://$BACKUP_BUCKET/seed-sqlite.sql /tmp/ && sqlite3 $SQLITE_DB < /tmp/seed-sqlite.sql && sudo systemctl restart tenkacloud-vibe`. Auth: in `$CONFIG_FILE`, set `auth_required` to true and change `auth_token` to something other than `change-me`, then restart (e.g. `tmp=$(mktemp); jq '.auth_required=true|.auth_token=\"my-secret-42\"' $CONFIG_FILE > \"$tmp\" && sudo mv \"$tmp\" $CONFIG_FILE && sudo systemctl restart tenkacloud-vibe`). Audit: likewise rewrite with `jq '.audit_s3=true' $CONFIG_FILE` and restart. Verify the real state with `curl -s localhost/posture | jq` (gates are measured, not self-reported)."
+        },
+        {
+          "id": "hint-3",
+          "content": "Concrete commands for the remaining 3 gates (do not create new resources). WAF: `aws wafv2 associate-web-acl --web-acl-arn $WAF_WEB_ACL_ARN --resource-arn $ALB_ARN --region $AWS_REGION` (associate the existing WebACL with the existing ALB). RDS migration: `python3 /opt/tenkacloud/vibe/tools/export_sqlite_to_postgres.py > /tmp/m.sql && PGPASSWORD=$DB_PASSWORD psql -h $DB_ENDPOINT -U $DB_USER -d $DB_NAME -f /tmp/m.sql`, then `tmp=$(mktemp); jq '.database=\"rds\"' $CONFIG_FILE > \"$tmp\" && sudo mv \"$tmp\" $CONFIG_FILE && sudo systemctl restart tenkacloud-vibe`. SSH closure: `aws ec2 revoke-security-group-ingress --group-id $APP_SG_ID --protocol tcp --port 22 --cidr 0.0.0.0/0 --region $AWS_REGION`."
+        }
       ]
     }
   },

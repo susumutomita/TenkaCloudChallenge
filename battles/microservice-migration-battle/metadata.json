@@ -34,6 +34,24 @@
         "Experience splitting a monolith into 3 hosting tiers (Lambda / ECS Fargate / App Runner)",
         "Compare serverless / managed containers / orchestration tradeoffs on real infrastructure",
         "Judge migration priority from a scoring standpoint"
+      ],
+      "hints": [
+        {
+          "id": "hint-1",
+          "content": "The 3 services are colocated via docker compose on the EC2. Deploying alone scores 0 -- paste the EC2 host (`http://<Ec2HostHint>`) into all 3 slots of the Participant Portal's Endpoint Override to start EC2 scoring (= 100 pt/cycle/slot)."
+        },
+        {
+          "id": "hint-2",
+          "content": "Peel one service off onto Lambda + API GW / ECS Fargate / App Runner and switch the slot override, and the score jumps to 1000 pt/cycle/slot. You can reload `services/<name>/Dockerfile` onto all three hosting tiers as-is."
+        },
+        {
+          "id": "hint-3",
+          "content": "Put each of the 3 slots on a different hosting (lambda / ecs / apprunner) and the \"all-slots-on-platforms\" bonus of +5000 pt lands once. If even one slot is left on ec2, the bonus does not apply."
+        },
+        {
+          "id": "hint-4",
+          "content": "Digging only into the EC2 behavior may leave your score stalling in the later stages. Skim each service's `/score` handler and you will find tuning points that pay off toward the endgame."
+        }
       ]
     }
   },
