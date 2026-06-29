@@ -131,6 +131,34 @@
       }
     },
     {
+      "id": "rls-tenant-isolation",
+      "name": "マルチテナント情報漏洩 — Postgres RLS でテナント境界を守る",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "60〜90 分",
+      "shortDescription": "BtoB SaaS のドキュメント管理アプリでテナント分離が壊れている。 `document_id` を差し替えると他社のドキュメントが読めて書き換えられる。 アプリ側のフィルタだけに頼らず、 Postgres の Row Level Security (RLS) でテナント境界をデータベース層に作って塞げ。",
+      "tags": [
+        "web-security",
+        "multi-tenant",
+        "row-level-security",
+        "postgres",
+        "supabase",
+        "authorization",
+        "idor",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "security-battle-royale",
       "name": "Security Battle Royale",
       "category": "Battle",
