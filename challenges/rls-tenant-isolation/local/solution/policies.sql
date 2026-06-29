@@ -1,0 +1,26 @@
+-- rls-tenant-isolation — YOUR ANSWER GOES HERE.
+--
+-- This file starts empty. While it is empty, the container loads the vulnerable
+-- broken-policies.sql (RLS disabled) and the grader's 7 attack assertions FAIL.
+--
+-- Your task: enforce the tenant boundary at the DATABASE layer with Postgres
+-- Row Level Security, then restart the container. The grader re-runs and all 7
+-- assertions must pass.
+--
+-- The identity helpers you can use are already defined in schema.sql:
+--   app.current_user_id()   -> the signed-in user's id (NULL for the anon client)
+--   app.is_authenticated()  -> true when request.jwt.role = 'authenticated'
+--   app.current_org_ids()   -> the orgs the current user belongs to
+--   app.is_owner_of(org)    -> true when the current user owns that org
+--
+-- Requirements the grader checks (see README threat model):
+--   1. RLS is ENABLED on public.documents.
+--   2. A user can SELECT/INSERT/UPDATE only their own org's documents.
+--   3. DELETE is restricted to org OWNERS.
+--   4. INSERT/UPDATE use WITH CHECK so organization_id cannot be set/reassigned
+--      to another org (no smuggling rows across the boundary).
+--   5. The anon/public client can read nothing.
+--
+-- Hint: `alter table public.documents enable row level security;` then add
+-- explicit `create policy ... for select|insert|update|delete` statements.
+-- A full reference answer lives in ../reference/policies.sql.

@@ -1,0 +1,85 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "rls-tenant-isolation",
+  "name": "マルチテナント情報漏洩 — Postgres RLS でテナント境界を守る",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "60〜90 分",
+  "shortDescription": "BtoB SaaS のドキュメント管理アプリでテナント分離が壊れている。 `document_id` を差し替えると他社のドキュメントが読めて書き換えられる。 アプリ側のフィルタだけに頼らず、 Postgres の Row Level Security (RLS) でテナント境界をデータベース層に作って塞げ。",
+  "instructions": "## はじめに\nSupabase 風 (Postgres + PostgREST) のドキュメント管理 SaaS。 AWS 非依存のローカル問題で Docker 1 コンテナで完結する (AWS アカウント不要)。 2 社 (Acme / Beacon) の組織・メンバー・ドキュメントが seed されている。\n\n## ゴール\n初期状態の API (`http://127.0.0.1:18080`) は `document_id` を URL で差し替えるだけで他社のドキュメントを GET / PATCH できてしまう。 anon (公開) クライアントも一覧を読めてしまう。 これを Postgres の Row Level Security で塞ぎ、 テナント境界を**データベース層**で enforce する。\n\n## 進め方\n1. `make local PROBLEM=rls-tenant-isolation` でコンテナ + 採点 API + ポータルが起動する\n2. ポータルに任意の非空キーでログイン\n3. `x-user-id` ヘッダを付けて attack を再現する (例: `curl -H 'x-user-id: alice-owner' http://127.0.0.1:18080/documents/<他社のID>`)\n4. `local/solution/policies.sql` に RLS ポリシーを書いてコンテナを再起動\n5. ポータルから提出 — コンテナの `/verify` が 7 件の攻撃テストを実行し、 全件 PASS で正解\n\n詳しい脅威モデルと設計判断は `local/README` を参照。",
+  "description": "## 概要\n\nBtoB SaaS のマルチテナント情報漏洩を題材にした、 AWS 非依存のローカル Challenge。 ローカルプレー (#2054) の container 配信モデル + `scoring.kind=verify` の参照問題でもある。\n\n## ドメインモデル\n\n- `organizations(id, name)` — 会社 (Acme / Beacon)\n- `memberships(user_id, organization_id, role)` — role は `owner` / `member`\n- `documents(id, organization_id, title, body, created_by)` — 会社ごとの機密ドキュメント\n\n## 脆弱性\n\n初期状態は RLS が無効で、 API は `app_api` ロールで全社のドキュメントを読み書きできる。 アプリ側は `organization_id` でフィルタしようとしているが、 by-id の GET / PATCH 経路ではフィルタが抜けており、 anon クライアントも一覧を素通しする。 = アプリ側フィルタは bypass 可能で、 最後の砦にならない。\n\n## 正しい対策\n\n`public.documents` に RLS を有効化し、 select / insert / update / delete それぞれに明示的なポリシーを張る。 WITH CHECK で `organization_id` の付け替え (= 他社への所有権移転) を禁止する。 delete は owner のみ。 anon は何も読めない。 これにより、 どの code path から来てもデータベースが行を拒否する。\n\n## 採点 (主評価)\n\nコンテナ内の grader が 7 件の攻撃テストを live Postgres に対して実行する: (1) A ユーザは自社 doc を読める、 (2) A ユーザは B 社 doc を読めない、 (3) A ユーザは B 社 doc を PATCH できない、 (4) A ユーザは B 社 org_id で INSERT できない、 (5) member は delete できない、 (6) owner は自社 doc を delete できる、 (7) anon は documents を読めない。 platform は答えを持たず、 提出を `/verify` に委譲して PASS/FAIL だけ記録する。\n\n## 安全方針\n\n意図的に脆弱な訓練用ターゲット。 compose は `127.0.0.1` のみに bind し外部公開しない。 機密フラグは無く、 課題は構造的 (= 境界が enforce されているか)。\n\n## コスト\n\nローカル Docker のみ。 AWS リソースは作成しない (無料)。",
+  "tags": [
+    "web-security",
+    "multi-tenant",
+    "row-level-security",
+    "postgres",
+    "supabase",
+    "authorization",
+    "idor",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    { "port": 18080, "name": "Documents API (challenge surface)" },
+    { "port": 18081, "name": "/verify (loopback grader)" }
+  ],
+  "learningGoals": [
+    "アプリ側の organization_id フィルタだけではテナント境界が守れない理由を説明できるようになる (param 改ざん / anon クライアント / 経路漏れで bypass される)",
+    "Postgres の Row Level Security で select / insert / update / delete を明示ポリシーで enforce できるようになる",
+    "WITH CHECK で organization_id の付け替えによる所有権移転を防ぐ設計を理解する",
+    "owner / member の role 差をポリシーで表現する方法を理解する"
+  ],
+  "i18n": {
+    "en": {
+      "name": "Multi-Tenant Data Leak — Enforce the Boundary with Postgres RLS",
+      "shortDescription": "A BtoB SaaS document-management app has broken tenant isolation: swapping a `document_id` lets you read and modify another company's documents. Instead of relying on app-side filtering, enforce the tenant boundary at the DATABASE layer with Postgres Row Level Security (RLS).",
+      "instructions": "## Overview\nA Supabase-style (Postgres + PostgREST) document-management SaaS. A local, AWS-free Challenge that runs entirely in one Docker container — no AWS account. Two companies (Acme / Beacon), each with an owner and a member and several documents, are seeded.\n\n## Goal\nThe starter API (`http://127.0.0.1:18080`) lets you GET / PATCH another company's document just by swapping the `document_id` in the URL, and the anon (public) client can list documents. Close this with Postgres Row Level Security so the tenant boundary is enforced in the DATABASE.\n\n## Steps\n1. `make local PROBLEM=rls-tenant-isolation` starts the container, the scoring API, and the portal\n2. Log in to the portal with any non-empty key\n3. Reproduce the attack with the `x-user-id` header (e.g. `curl -H 'x-user-id: alice-owner' http://127.0.0.1:18080/documents/<another-company-id>`)\n4. Write your RLS policies in `local/solution/policies.sql` and restart the container\n5. Submit from the portal — the container's `/verify` runs 7 attack tests; all must pass\n\nSee `local/README` for the full threat model and design notes.",
+      "description": "## Overview\n\nA local, AWS-free Challenge on multi-tenant data leakage in a BtoB SaaS. It is also a reference for the local-play (#2054) container delivery model with `scoring.kind=verify`.\n\n## Domain model\n\n- `organizations(id, name)` — companies (Acme / Beacon)\n- `memberships(user_id, organization_id, role)` — role is `owner` / `member`\n- `documents(id, organization_id, title, body, created_by)` — per-company confidential docs\n\n## Vulnerability\n\nIn the starting state RLS is disabled and the API (running as `app_api`) can read/write every company's documents. The app attempts to filter by `organization_id`, but the by-id GET / PATCH paths forget to, and the anon client lists everything — so app-side filtering is bypassable and is not the last line of defense.\n\n## Correct fix\n\nEnable RLS on `public.documents` and add explicit select / insert / update / delete policies. Use WITH CHECK to forbid changing `organization_id` (reassigning ownership to another org). DELETE is owner-only. The anon client can read nothing. Then the database denies the row no matter which code path reaches it.\n\n## Scoring (primary evaluation)\n\nA grader inside the container runs 7 attack tests against live Postgres: (1) an A-user reads their own doc; (2) an A-user cannot read a B-doc; (3) an A-user cannot PATCH a B-doc; (4) an A-user cannot INSERT with a B org_id; (5) a member cannot delete; (6) an owner can delete their own doc; (7) the anon key cannot read documents. The platform holds no answer; it delegates the submission to `/verify` and records only PASS/FAIL.\n\n## Safety policy\n\nA deliberately vulnerable training target. The compose stack binds to `127.0.0.1` only and is never exposed externally. There is no secret flag; the challenge is structural (is the boundary enforced?).\n\n## Cost\n\nLocal Docker only. No AWS resources are created (free).",
+      "learningGoals": [
+        "Be able to explain why app-side organization_id filtering cannot secure a tenant boundary (bypassed by param tampering, the anon client, or a missed code path)",
+        "Be able to enforce select / insert / update / delete with explicit Postgres Row Level Security policies",
+        "Understand how WITH CHECK prevents reassigning organization_id to move ownership across the boundary",
+        "Understand how to express the owner / member role split in policies"
+      ],
+      "hints": [
+        {
+          "id": "hint-1",
+          "content": "Try `curl -H 'x-user-id: alice-owner' http://127.0.0.1:18080/documents/<a Beacon doc id>`. The by-id path forgets the org filter, so Acme's user reads Beacon's document. App-side filtering is not enough — the fix belongs in the database."
+        },
+        {
+          "id": "hint-2",
+          "content": "Enable RLS (`alter table public.documents enable row level security; ... force row level security;`) and add one policy per operation. For UPDATE/INSERT add `with check (organization_id in (select app.current_org_ids()))` so organization_id cannot be moved to another org. Make DELETE owner-only via `app.is_owner_of(organization_id)`."
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "DocumentsApi": "http://127.0.0.1:18080"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": ["FLAG_SEED"]
+  },
+  "scoring": {
+    "kind": "verify",
+    "points": 300,
+    "wrongAnswerPenalty": 10,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "`curl -H 'x-user-id: alice-owner' http://127.0.0.1:18080/documents/<Beacon の doc id>` を試そう。 by-id 経路は org フィルタが抜けているので、 Acme のユーザが Beacon のドキュメントを読めてしまう。 アプリ側フィルタでは不十分 — 対策はデータベースに置く。",
+        "penalty": 0
+      },
+      {
+        "id": "hint-2",
+        "content": "RLS を有効化し (`alter table public.documents enable row level security; ... force row level security;`)、 操作ごとに 1 つずつポリシーを張る。 UPDATE/INSERT には `with check (organization_id in (select app.current_org_ids()))` を付けて organization_id を他社に移せないようにする。 DELETE は `app.is_owner_of(organization_id)` で owner 限定にする。",
+        "penalty": 50
+      }
+    ]
+  }
+}

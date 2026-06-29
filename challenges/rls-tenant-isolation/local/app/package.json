@@ -1,0 +1,10 @@
+{
+  "name": "rls-tenant-isolation-local",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local-play container for the rls-tenant-isolation Challenge: a document-management SaaS whose tenant boundary must be enforced with Postgres RLS.",
+  "dependencies": {
+    "postgres": "3.4.5"
+  }
+}

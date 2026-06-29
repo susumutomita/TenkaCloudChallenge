@@ -1,0 +1,33 @@
+# Local-play problem container for rls-tenant-isolation.
+# Bound to 127.0.0.1 only: the documents API and /verify never leave the box.
+#
+# The participant edits ./solution/policies.sql on the host (bind-mounted in) and
+# restarts the container to re-grade. Postgres state lives in a named volume so a
+# restart re-applies schema/seed/policies cleanly.
+services:
+  rls-tenant-isolation:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      # Unused by this problem (the challenge is structural, not a discovered
+      # flag) but injected by `make local` for every local-play problem.
+      FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
+    volumes:
+      # Live-edit the RLS policies without rebuilding the image.
+      - "./solution/policies.sql:/app/solution/policies.sql:ro"
+    ports:
+      - "127.0.0.1:18080:8080" # documents API (challenge surface)
+      - "127.0.0.1:18081:8081" # loopback /verify
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: "3s"
+      timeout: "3s"
+      retries: 30
+    restart: "no"
