@@ -1,44 +1,44 @@
 {
   "$schema": "../../SCHEMA.json",
   "id": "api-idor-demo",
-  "name": "IDOR — 権限のないオブジェクトを読む",
+  "name": "管理者のメモ",
   "category": "Challenge",
   "status": "draft",
   "visibility": "public",
   "difficulty": 2,
   "estimatedDuration": "30 分",
-  "shortDescription": "プロフィール API は、 あなたのトークンのまま id を差し替えると 「他人の」 プロフィールまで読めてしまう (IDOR)。 管理者 (id 1) の秘密ノートに隠されたフラグを読み出して提出せよ。",
-  "instructions": "やってみよう\n\n1. `make local PROBLEM=api-idor-demo` で問題コンテナ + 採点 API + ポータルが起動する。\n2. ポータルに任意の非空キーでログインする。\n3. まず自分のプロフィールを読む (正しい使い方):\n\n       curl -H \"Authorization: Bearer token-guest\" http://127.0.0.1:18080/api/profile\n\n   ゲスト自身のプロフィールが返る。\n4. 次に、 トークンはそのままで id だけ管理者 (id 1) に差し替える:\n\n       curl -H \"Authorization: Bearer token-guest\" http://127.0.0.1:18080/api/profile/1\n\n   認証は通っているだけなのに、 他人 (admin) のオブジェクトが丸ごと返り、 その `note` フィールドにフラグ (`TC{...}`) が入っている。 これが IDOR。\n5. その `note` のフラグをポータルに提出する (= コンテナの `/verify` が判定する)。\n\nなぜ起きる・どう直す\n\n原因は 2 つ。 (1) 所有者チェックの欠如: 「その id は本当に呼び出し元のものか」 を確認していない。 (2) 秘密フィールドの過剰露出: レスポンスに `secret_note` のような他人に見せてはいけない値まで載せている。 対策も 2 つ。 要求された id が呼び出し元本人 (または閲覧を許された相手) のものかを検証し、 違えば `403` を返す。 そして、 そもそもプロフィール応答に秘密フィールドを含めない (最小権限)。\n\nさらに学ぶなら: 「IDOR」 「BOLA」 「OWASP API Security Top 10」 などで検索すると体系的な解説が読める (この問題を解くのに外部ページは不要)。",
-  "description": "IDOR (壊れたオブジェクトレベル認可) とは\n\nWeb API は、 「あなたは誰か」 を確かめる 認証 のあとに、 「あなたはこのデータを見てよいか」 を確かめる 認可 をしなければならない。 この 2 つ目 ── 要求されたオブジェクトが本当にその人のものか ── を確認し忘れると、 ログインさえしていれば他人の id を指定して他人のデータを読めてしまう。 これが IDOR (Insecure Direct Object Reference) / BOLA (Broken Object Level Authorization)。 OWASP API Security Top 10 の第 1 位で、 現実の情報漏えい事故で最も多い型の 1 つだ。\n\nこの API の弱点 (仕組み)\n\nプロフィール API には 2 つの入口がある:\n\n    GET /api/profile        ← 提示したトークンの持ち主 「自身」 を返す (正しい)\n    GET /api/profile/<id>   ← <id> のオブジェクトを返す。 ただし……\n\n2 つ目は 「ログインしているか」 は確認するが、 「その <id> が呼び出し元のものか」 は確認していない。 だから自分のトークンのまま id を差し替えるだけで、 他人のオブジェクトが読めてしまう。 管理者は id 1 で、 フラグはその秘密ノートに入っている。 管理者のトークンは分からないが、 その必要はない。\n\nデプロイされるもの・安全方針\n\nNode 製の小さなプロフィール API 1 コンテナ (AWS アカウント不要・ローカル完結)。 ホストの `127.0.0.1:18080` に challenge 表面 (プロフィール API)、 `127.0.0.1:18081` に採点用の loopback `/verify` を公開する。 意図的に脆弱な訓練用ターゲットなので `127.0.0.1` のみに bind し外部公開しない。 フラグと管理者トークンは起動ごとのランダム `FLAG_SEED` からコンテナ内で導出されるため、 答えは repo に置かれない。 platform は答えを持たず、 提出を `/verify` に委譲して判定結果だけ記録する。 コストはローカル Docker のみ (無料)。",
+  "shortDescription": "プロフィール閲覧 API。 自分のプロフィールは読めるが、 管理者だけが持つ秘密のメモに、 隠された合言葉があるらしい。 あなたはゲスト用アカウントしか持っていない。",
+  "instructions": "管理者のメモに書かれた合言葉 (`TC{...}`) を読み出し、 このポータルに提出せよ。\n\n手がかりが欲しくなったら、 下のヒントを開こう (ヒントにはスコアのペナルティが付く)。",
+  "description": "あなたは、 あるサービスのプロフィール閲覧 API のセキュリティ診断を任された (`http://127.0.0.1:18080`)。 このサービスでは、 ログインしたユーザーが自分のプロフィールを読める。\n\nあなたが持っているのは、 権限の低いゲスト用アカウント (`token-guest`) だけ。 一方、 管理者 (admin) のプロフィールには、 管理者だけが見るべき秘密のメモ (`TC{...}`) が書かれているという。\n\nこの API が 「どのプロフィールを返すか」 をどう決めているか ── そこに、 見過ごせない隙があるかもしれない。 ゲストのまま、 管理者のメモを読み出せ。",
   "tags": ["api-security", "idor", "bola", "owasp", "access-control", "local-play", "container"],
   "exposedPorts": [
     { "port": 18080, "name": "Web (profile API)" },
     { "port": 18081, "name": "/verify (loopback admin)" }
   ],
   "learningGoals": [
-    "IDOR / BOLA とは何か (認証はあるが、 要求オブジェクトの所有者チェックという認可が抜けている状態) を、 自分の言葉で説明できるようになる",
-    "自分のトークンのまま id を差し替えて他人のオブジェクトを読み出す手口を、 実際に手を動かして再現・理解する",
+    "権限の低いアカウントのまま、 他人だけが見られるはずのデータに到達できてしまう穴を、 自分で発見できるようになる",
+    "要求されたオブジェクトの所有者を確認しない API がなぜ危険なのかを理解する",
     "オブジェクト所有権の検証と、 レスポンスから秘密フィールドを除く最小権限設計が根本対策であることを理解する"
   ],
   "i18n": {
     "en": {
-      "name": "IDOR — Reading Objects You Shouldn't",
-      "shortDescription": "A profile API lets you read *other people's* profiles by id with your own token (IDOR). Read the flag hidden in the administrator's (id 1) private note and submit it.",
-      "instructions": "Try it\n\n1. `make local PROBLEM=api-idor-demo` starts the container, the scoring API, and the portal.\n2. Log in to the portal with any non-empty key.\n3. First read your own profile (the intended use):\n\n       curl -H \"Authorization: Bearer token-guest\" http://127.0.0.1:18080/api/profile\n\n   You get the guest's own profile.\n4. Now keep the same token but change the id to the admin's (id 1):\n\n       curl -H \"Authorization: Bearer token-guest\" http://127.0.0.1:18080/api/profile/1\n\n   You are merely authenticated, yet the whole admin object comes back, and its `note` field holds the flag (`TC{...}`). That is IDOR.\n5. Submit the flag from that `note` in the portal — the container's `/verify` judges it.\n\nWhy it happens, and how to fix it\n\nTwo causes. (1) Missing ownership check: nothing verifies that the requested id belongs to the caller. (2) Over-exposed fields: the response includes secret values like `secret_note` that others must not see. Two fixes to match: verify the requested id is the caller's own (or one they may view) and return `403` otherwise; and never include secret fields in a profile response in the first place (least privilege).\n\nTo go deeper, search for \"IDOR\", \"BOLA\", or \"OWASP API Security Top 10\" (you do not need any external page to solve this).",
-      "description": "What IDOR (Broken Object Level Authorization) is\n\nA web API must first confirm who you are (authentication) and then confirm whether you may see this particular data (authorization). Forget that second check — whether the requested object is really yours — and anyone who is merely logged in can name someone else's id and read their data. That is IDOR (Insecure Direct Object Reference) / BOLA. It is #1 in the OWASP API Security Top 10 and one of the most common causes of real-world data leaks.\n\nThis API's weakness (the mechanism)\n\nThe profile API has two entry points:\n\n    GET /api/profile        <- returns the owner of the presented token (correct)\n    GET /api/profile/<id>   <- returns the object for <id>. But...\n\nThe second one checks that you are logged in, but not that <id> belongs to you. So keeping your own token and swapping the id lets you read another user's object. The administrator is id 1 and the flag is in their private note. You do not know the admin's token — and you do not need it.\n\nWhat gets deployed / safety policy\n\nA single small Node profile-API container (no AWS account; fully local). It exposes the challenge surface (the profile API) on `127.0.0.1:18080` and a loopback `/verify` on `127.0.0.1:18081`. It is a deliberately vulnerable training target, so it binds to `127.0.0.1` only and is never exposed externally. The flag and the admin token are derived inside the container from a per-deploy random `FLAG_SEED`, so the answer is never stored in the repo. The platform holds no answer; it delegates each submission to `/verify` and records only the verdict. Cost is local Docker only (free).",
+      "name": "The Admin's Note",
+      "shortDescription": "A profile-viewing API. You can read your own profile, but a hidden passphrase is said to live in a private note only the admin has — and you only hold a guest account.",
+      "instructions": "Read the passphrase (`TC{...}`) written in the admin's note and submit it in this portal.\n\nIf you want a nudge, open the hints below (hints carry a score penalty).",
+      "description": "You have been asked to do a security assessment of a service's profile-viewing API (`http://127.0.0.1:18080`). In it, a logged-in user can read their own profile.\n\nAll you hold is a low-privilege guest account (`token-guest`). The administrator's profile, meanwhile, is said to contain a private note only admins should see (`TC{...}`).\n\nHow does this API decide *which* profile to return? There may be an oversight worth a closer look. Staying as the guest, read the admin's note.",
       "learningGoals": [
-        "Be able to explain, in your own words, what IDOR / BOLA is: authentication is present but the object-ownership authorization check is missing",
-        "Reproduce and understand hands-on how swapping the id while keeping your own token reads another user's object",
+        "Learn to discover, yourself, a hole that reaches data only others should see while you hold only a low-privilege account",
+        "Understand why an API that does not check the owner of the requested object is dangerous",
         "Understand that verifying object ownership and stripping secret fields from responses (least privilege) are the root-cause fixes"
       ],
       "hints": [
         {
           "id": "hint-1",
-          "content": "`GET /api/profile` returns *your* profile from your token. `GET /api/profile/<id>` returns the profile for `<id>`. Keep your token but change the id."
+          "content": "You can read your own profile. So how does the API decide which profile to hand back? Try naming a profile that is not yours and see what happens."
         },
         {
           "id": "hint-2",
-          "content": "The admin is id 1: `curl -H \"Authorization: Bearer token-guest\" http://127.0.0.1:18080/api/profile/1`. You are authenticated, but nothing checks that id 1 is yours — the flag is in the returned `note`."
+          "content": "The API returns any profile you name by id but never checks that the id is yours (IDOR). Try `curl -H \"Authorization: Bearer token-guest\" http://127.0.0.1:18080/api/profile/1`: the admin (id 1) object comes back and its `note` holds the flag."
         }
       ]
     }
@@ -60,12 +60,12 @@
     "hints": [
       {
         "id": "hint-1",
-        "content": "`GET /api/profile` はトークンから 「あなた自身」 の profile を返す。 `GET /api/profile/<id>` は `<id>` の profile を返す。 トークンはそのまま、 id だけ変えてみよう。",
+        "content": "自分のプロフィールは読める。 では、 この API は 「どのプロフィールを返すか」 をどうやって決めている? 自分のものではない相手を指定したら何が起きるか、 試してみよう。",
         "penalty": 0
       },
       {
         "id": "hint-2",
-        "content": "管理者は id 1: `curl -H \"Authorization: Bearer token-guest\" http://127.0.0.1:18080/api/profile/1`。 認証は通っているのに 「その id があなたのものか」 を誰も確認していない。 返ってきた `note` にフラグが入っている。",
+        "content": "この API は id を指定して任意のプロフィールを返すのに、 その id が呼び出し元本人かを確認していない (IDOR)。 `curl -H \"Authorization: Bearer token-guest\" http://127.0.0.1:18080/api/profile/1` で管理者 (id 1) のオブジェクトが返り、 `note` フィールドにフラグが入っている。",
         "penalty": 50
       }
     ]
