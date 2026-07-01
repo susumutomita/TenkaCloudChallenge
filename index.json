@@ -9,7 +9,7 @@
       "visibility": "public",
       "difficulty": 2,
       "estimatedDuration": "30 分",
-      "shortDescription": "プロフィール API は、あなたのトークンで「他人の」プロフィールまで id 指定で読めてしまう (IDOR)。 管理者 (id 1) の秘密ノートに隠されたフラグを読み出して提出せよ。",
+      "shortDescription": "プロフィール API は、 あなたのトークンのまま id を差し替えると 「他人の」 プロフィールまで読めてしまう (IDOR)。 管理者 (id 1) の秘密ノートに隠されたフラグを読み出して提出せよ。",
       "tags": [
         "api-security",
         "idor",
@@ -215,10 +215,11 @@
       "visibility": "public",
       "difficulty": 2,
       "estimatedDuration": "30 分",
-      "shortDescription": "スタッフ用ログイン画面が SQL インジェクションに対して脆弱だ。 管理者パスワードは分からない。 ログインを SQL インジェクションで突破して `admin` としてサインインし、 表示されるフラグを提出せよ。",
+      "shortDescription": "スタッフ用ログインが SQL インジェクションに脆弱だ。 管理者のパスワードは分からないが、 入力を工夫してログインを突破し、 admin として表示されるフラグを奪え。",
       "tags": [
         "web-security",
         "sql-injection",
+        "owasp",
         "ipa",
         "local-play",
         "container"
