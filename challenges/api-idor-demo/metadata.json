@@ -1,0 +1,73 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "api-idor-demo",
+  "name": "IDOR — 権限のないオブジェクトを読む",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 2,
+  "estimatedDuration": "30 分",
+  "shortDescription": "プロフィール API は、あなたのトークンで「他人の」プロフィールまで id 指定で読めてしまう (IDOR)。 管理者 (id 1) の秘密ノートに隠されたフラグを読み出して提出せよ。",
+  "instructions": "## はじめに\nOWASP API Security Top 10 の API1:2023 (壊れたオブジェクトレベル認可 / IDOR) を題材にした、 AWS 非依存のローカル CTF 問題。 Docker コンテナ 1 つで完結する (AWS アカウント不要)。\n\n## ゴール\nプロフィール API (`http://127.0.0.1:18080`) は `GET /api/profile/<id>` で任意ユーザーのオブジェクトを返すが、 「その id が本当にあなたのものか」 を確認していない。 あなたのゲスト用トークン (`token-guest`) のまま管理者 (id 1) のオブジェクトを読み出し、 その秘密ノートに入ったフラグ (`TC{...}`) を提出する。\n\n## 進め方\n1. `make local PROBLEM=api-idor-demo` で問題コンテナ + 採点 API + ポータルが起動する\n2. ポータルに任意の非空キーでログイン\n3. `curl -H \"Authorization: Bearer token-guest\" http://127.0.0.1:18080/api/profile/1` で管理者のオブジェクトを読む\n4. `note` フィールドのフラグを提出 (= 問題コンテナの `/verify` が判定する)",
+  "description": "## 概要\n\nOWASP API Security Top 10 の第 1 位 API1:2023 「壊れたオブジェクトレベル認可 (BOLA / IDOR)」 を学ぶための、 意図的に脆弱なプロフィール API。 ローカルプレー (#2054) の container 配信モデルに沿った、 AWS もクラウドアカウントも不要の完全ローカル問題。\n\n## 安全方針\n\n意図的に脆弱な訓練用ターゲット。 compose は `127.0.0.1` のみに bind し、 外部公開しない。 フラグと管理者トークンは deploy ごとのランダム `FLAG_SEED` からコンテナ内で導出されるため、 答えは repo に置かれない。\n\n## デプロイされるもの\n\nNode 製の小さなプロフィール API 1 コンテナ。 ホストの `127.0.0.1:18080` に challenge 表面 (プロフィール API)、 `127.0.0.1:18081` に採点用の loopback `/verify` を公開する。 platform は答えを持たず、 提出を `/verify` に委譲して判定結果だけ記録する。\n\n## ミッション\n\n`GET /api/profile` は、 提示したトークンの持ち主自身のプロフィールを返す (= 正規の動作)。 一方 `GET /api/profile/<id>` は、 ログインさえしていれば `<id>` の指すユーザーのオブジェクトを丸ごと返し、 「その id が本当にあなたのものか」 を確認していない (= IDOR)。 管理者は id 1 で、 フラグはその秘密ノートに入っている。 管理者のトークンは分からないが、 その必要はない。 あなたのゲストトークンのまま id を差し替えて管理者のオブジェクトを読み出し、 フラグを奪う。\n\n## コスト\n\nローカル Docker のみ。 AWS リソースは作成しない (無料)。",
+  "tags": ["api-security", "idor", "bola", "owasp", "access-control", "local-play", "container"],
+  "exposedPorts": [
+    { "port": 18080, "name": "Web (profile API)" },
+    { "port": 18081, "name": "/verify (loopback admin)" }
+  ],
+  "learningGoals": [
+    "壊れたオブジェクトレベル認可 (BOLA / IDOR) が「認証はあるが認可 (所有者チェック) が無い」ときに起きることを説明できるようになる",
+    "自分のトークンのまま id を差し替えて他人のオブジェクトを読み出す手口を再現・理解する",
+    "オブジェクト所有権の検証と、レスポンスから秘密フィールドを除く最小権限設計が根本対策であることを理解する"
+  ],
+  "i18n": {
+    "en": {
+      "name": "IDOR — Reading Objects You Shouldn't",
+      "shortDescription": "A profile API lets you read *other people's* profiles by id with your own token (IDOR). Read the flag hidden in the administrator's (id 1) private note and submit it.",
+      "instructions": "## Overview\nA local, AWS-free CTF based on OWASP API Security Top 10 API1:2023 (Broken Object Level Authorization / IDOR). It runs entirely in one Docker container — no AWS account.\n\n## Goal\nThe profile API (`http://127.0.0.1:18080`) serves any user's object from `GET /api/profile/<id>` but never checks that the id you asked for is your own. Using your guest token (`token-guest`), read the administrator's object (id 1) and submit the flag (`TC{...}`) in their private note.\n\n## Steps\n1. `make local PROBLEM=api-idor-demo` starts the container, the scoring API, and the portal\n2. Log in to the portal with any non-empty key\n3. `curl -H \"Authorization: Bearer token-guest\" http://127.0.0.1:18080/api/profile/1` to read the admin's object\n4. Submit the flag from the `note` field — the container's `/verify` judges it",
+      "description": "## Overview\n\nAn intentionally vulnerable profile API for learning OWASP API Security Top 10 #1, API1:2023 \"Broken Object Level Authorization (BOLA / IDOR)\". A fully local problem — no AWS and no cloud account — following the local-play (#2054) container delivery model.\n\n## Safety policy\n\nA deliberately vulnerable training target. The compose stack binds to `127.0.0.1` only and is never exposed externally. The flag and the admin token are derived inside the container from a per-deploy random `FLAG_SEED`, so the answer is never stored in the repo.\n\n## What gets deployed\n\nA single small Node profile-API container. It exposes the challenge surface (the profile API) on the host at `127.0.0.1:18080` and a loopback `/verify` scoring endpoint on `127.0.0.1:18081`. The platform holds no answer; it delegates each submission to `/verify` and only records the verdict.\n\n## Mission\n\n`GET /api/profile` returns the profile of whoever owns the presented token (the intended behavior). But `GET /api/profile/<id>` returns the whole object for `<id>` as long as you are logged in, without checking that the id is really yours (IDOR). The administrator is id 1 and the flag is in their private note. You do not know the admin's token — and you do not need it. Keep your guest token, change the id, read the admin's object, and take the flag.\n\n## Cost\n\nLocal Docker only. No AWS resources are created (free).",
+      "learningGoals": [
+        "Be able to explain that Broken Object Level Authorization (BOLA / IDOR) happens when there is authentication but no authorization (ownership check)",
+        "Reproduce and understand how swapping the id while keeping your own token reads another user's object",
+        "Understand that verifying object ownership and stripping secret fields from responses (least privilege) are the root-cause fixes"
+      ],
+      "hints": [
+        {
+          "id": "hint-1",
+          "content": "`GET /api/profile` returns *your* profile from your token. `GET /api/profile/<id>` returns the profile for `<id>`. Try keeping your token but changing the id."
+        },
+        {
+          "id": "hint-2",
+          "content": "The admin is id 1: `curl -H \"Authorization: Bearer token-guest\" http://127.0.0.1:18080/api/profile/1`. You are authenticated, but nothing checks that id 1 belongs to you — the flag is in the returned `note`."
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Web": "http://127.0.0.1:18080"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": ["FLAG_SEED"]
+  },
+  "scoring": {
+    "kind": "verify",
+    "points": 200,
+    "wrongAnswerPenalty": 10,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "`GET /api/profile` はトークンから「あなた自身」の profile を返す。 `GET /api/profile/<id>` は `<id>` の profile を返す。 トークンはそのまま、 id だけ変えてみよう。",
+        "penalty": 0
+      },
+      {
+        "id": "hint-2",
+        "content": "管理者は id 1: `curl -H \"Authorization: Bearer token-guest\" http://127.0.0.1:18080/api/profile/1`。 認証は通っているのに 「その id があなたのものか」 を誰も確認していない。 返ってきた `note` にフラグが入っている。",
+        "penalty": 50
+      }
+    ]
+  }
+}

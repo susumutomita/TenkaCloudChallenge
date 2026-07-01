@@ -3,6 +3,22 @@
   "assumptions": "概算 on-demand 価格 (USD/hour, Linux/single-AZ)。厳密な請求額ではなく桁感と落とし忘れリスクの可視化用。EBS root / データ転送 / ALB LCU / S3・Lambda・SSM・CloudWatch の従量分は短時間セッション前提で無視。region は metadata.defaultRegion (未知/未宣言は ap-northeast-1 にフォールバック)。1 template 内の EC2 は単一 InstanceType 前提で解決する。",
   "problems": [
     {
+      "id": "api-idor-demo",
+      "category": "Challenge",
+      "region": "ap-northeast-1",
+      "estimatedSessionMinutes": 30,
+      "perHourUsd": 0,
+      "perSessionUsd": 0,
+      "ifLeftRunningUsd": {
+        "oneDay": 0,
+        "oneWeek": 0,
+        "oneMonth": 0
+      },
+      "freeTierEligible": true,
+      "alwaysOnResources": [],
+      "billable": []
+    },
+    {
       "id": "cloudflare-api-security",
       "category": "Challenge",
       "region": "ap-northeast-1",
