@@ -221,6 +221,25 @@ Working examples to mirror:
 - `battles/hello-world-battle/metadata.json` — day two, inherited monolith, URL-registration gate.
 - `battles/microservice-migration-battle/metadata.json` — month one, monolith → managed split, before/after ASCII diagram.
 
+## Security CTFs (SQLi, IDOR, SSRF, …) — the flaw is the puzzle; never name it
+
+The bar above is written for AWS-ops problems. For a **security CTF** whose challenge is to *find and exploit a vulnerability*, one rule dominates: **discovering the vulnerability IS the competition, so the problem must never reveal what it is or how to exploit it.** Naming the flaw or walking the payload is a spoiler that kills the game ("種明かしした問題を解くなんて興ざめ").
+
+- **`name` (title)** = thematic / in-world (`スタッフ専用ログイン`, `管理者のメモ`). Never the vulnerability class — `SQL Injection — Login Bypass` is wrong.
+- **`description`** = an immersive scenario + the goal (sign in as admin → read the flag), plus at most one *subtle* nudge ("入力の扱いがどこか雑だという噂"). Never write "this is vulnerable to X" and never show the exploit. Do not repeat the challenge URL — the portal already shows it in its access-URL panel.
+- **`instructions`** = minimal: how to submit + "手が止まったらヒントを". **No setup steps** (`make local` / portal login — the reader is already in the portal) and **no exploit walkthrough**. This overrides step 3's `## 最初の一手` template: for a security CTF the first move must not be the exploit.
+- **`hints`** (progressive, penalty-bearing) = where the technique lives. hint-1 = a nudge toward the discovery; hint-2 = the actual payload + the vuln name. The player *chooses* to pay for the answer.
+- **post-solve writeup** = where the teaching goes. After a correct submission, show what the vuln was, the mechanism, and the fix — otherwise there is no learning payoff. (Field TBD — TenkaCloud issue #2191.)
+
+### Local (AWS-free) CTF container format (#2054)
+
+A security CTF can run entirely on the player's machine — no AWS account. Reference: `challenges/sqli-demo`, `challenges/api-idor-demo`.
+
+- `runtime`: `{ provider: "docker", engine: "compose", entry: "local/docker-compose.yml", challengeEndpoints: {...}, verifyUrl: "http://127.0.0.1:18081/verify", secretEnv: ["FLAG_SEED"] }`; `scoring.kind: "verify"` — the platform holds no answer, it delegates each submission to the container's loopback `/verify`.
+- Files: `local/{Dockerfile, docker-compose.yml, app/server.mjs}`. The flag is derived inside the container from a per-deploy random `FLAG_SEED` (never committed). Bind to `127.0.0.1` only.
+- **Attack CTF** (exploit to capture the flag): single container; `FLAG_SEED` in its env is fine because the intended solution is HTTP-only, so a `docker exec` to read the seed is self-cheating (accepted).
+- **Defense CTF** (fix the code): the player has a shell inside the container, so any secret there is trivially readable. Use **two containers** — a `target` the player edits (no secret) and a separate `grader` that holds the flag, probes the target, and releases the flag only when the fix passes.
+
 ## Footguns this skill prevents
 
 By following the steps above you avoid:
