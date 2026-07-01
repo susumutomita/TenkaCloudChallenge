@@ -3,13 +3,13 @@
   "problems": [
     {
       "id": "api-idor-demo",
-      "name": "IDOR — 権限のないオブジェクトを読む",
+      "name": "管理者のメモ",
       "category": "Challenge",
       "status": "draft",
       "visibility": "public",
       "difficulty": 2,
       "estimatedDuration": "30 分",
-      "shortDescription": "プロフィール API は、 あなたのトークンのまま id を差し替えると 「他人の」 プロフィールまで読めてしまう (IDOR)。 管理者 (id 1) の秘密ノートに隠されたフラグを読み出して提出せよ。",
+      "shortDescription": "プロフィール閲覧 API。 自分のプロフィールは読めるが、 管理者だけが持つ秘密のメモに、 隠された合言葉があるらしい。 あなたはゲスト用アカウントしか持っていない。",
       "tags": [
         "api-security",
         "idor",
@@ -209,13 +209,13 @@
     },
     {
       "id": "sqli-demo",
-      "name": "SQL インジェクション — ログインバイパス",
+      "name": "スタッフ専用ログイン",
       "category": "Challenge",
       "status": "draft",
       "visibility": "public",
       "difficulty": 2,
       "estimatedDuration": "30 分",
-      "shortDescription": "スタッフ用ログインが SQL インジェクションに脆弱だ。 管理者のパスワードは分からないが、 入力を工夫してログインを突破し、 admin として表示されるフラグを奪え。",
+      "shortDescription": "社内スタッフ専用のログイン画面。 admin としてサインインできれば、 管理者だけが見られる合言葉が手に入る ── だが管理者のパスワードは誰も知らない。",
       "tags": [
         "web-security",
         "sql-injection",
