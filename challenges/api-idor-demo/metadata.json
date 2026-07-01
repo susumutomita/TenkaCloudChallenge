@@ -9,7 +9,7 @@
   "estimatedDuration": "30 分",
   "shortDescription": "プロフィール閲覧 API。 自分のプロフィールは読めるが、 管理者だけが持つ秘密のメモに、 隠された合言葉があるらしい。 あなたはゲスト用アカウントしか持っていない。",
   "instructions": "管理者のメモに書かれた合言葉 (`TC{...}`) を読み出し、 このポータルに提出せよ。\n\n手がかりが欲しくなったら、 下のヒントを開こう (ヒントにはスコアのペナルティが付く)。",
-  "description": "あなたは、 あるサービスのプロフィール閲覧 API のセキュリティ診断を任された (`http://127.0.0.1:18080`)。 このサービスでは、 ログインしたユーザーが自分のプロフィールを読める。\n\nあなたが持っているのは、 権限の低いゲスト用アカウント (`token-guest`) だけ。 一方、 管理者 (admin) のプロフィールには、 管理者だけが見るべき秘密のメモ (`TC{...}`) が書かれているという。\n\nこの API が 「どのプロフィールを返すか」 をどう決めているか ── そこに、 見過ごせない隙があるかもしれない。 ゲストのまま、 管理者のメモを読み出せ。",
+  "description": "あなたは、 あるサービスのプロフィール閲覧 API のセキュリティ診断を任された。 このサービスでは、 ログインしたユーザーが自分のプロフィールを読める。\n\nあなたが持っているのは、 権限の低いゲスト用アカウント (`token-guest`) だけ。 一方、 管理者 (admin) のプロフィールには、 管理者だけが見るべき秘密のメモ (`TC{...}`) が書かれているという。\n\nこの API が 「どのプロフィールを返すか」 をどう決めているか ── そこに、 見過ごせない隙があるかもしれない。 ゲストのまま、 管理者のメモを読み出せ。",
   "tags": ["api-security", "idor", "bola", "owasp", "access-control", "local-play", "container"],
   "exposedPorts": [
     { "port": 18080, "name": "Web (profile API)" },
@@ -25,7 +25,7 @@
       "name": "The Admin's Note",
       "shortDescription": "A profile-viewing API. You can read your own profile, but a hidden passphrase is said to live in a private note only the admin has — and you only hold a guest account.",
       "instructions": "Read the passphrase (`TC{...}`) written in the admin's note and submit it in this portal.\n\nIf you want a nudge, open the hints below (hints carry a score penalty).",
-      "description": "You have been asked to do a security assessment of a service's profile-viewing API (`http://127.0.0.1:18080`). In it, a logged-in user can read their own profile.\n\nAll you hold is a low-privilege guest account (`token-guest`). The administrator's profile, meanwhile, is said to contain a private note only admins should see (`TC{...}`).\n\nHow does this API decide *which* profile to return? There may be an oversight worth a closer look. Staying as the guest, read the admin's note.",
+      "description": "You have been asked to do a security assessment of a service's profile-viewing API. In it, a logged-in user can read their own profile.\n\nAll you hold is a low-privilege guest account (`token-guest`). The administrator's profile, meanwhile, is said to contain a private note only admins should see (`TC{...}`).\n\nHow does this API decide *which* profile to return? There may be an oversight worth a closer look. Staying as the guest, read the admin's note.",
       "learningGoals": [
         "Learn to discover, yourself, a hole that reaches data only others should see while you hold only a low-privilege account",
         "Understand why an API that does not check the owner of the requested object is dangerous",
