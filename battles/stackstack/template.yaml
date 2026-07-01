@@ -546,6 +546,33 @@ Resources:
                   - !GetAtt BackupBucket.Arn
                   - !GetAtt AuditBucket.Arn
                   - !GetAtt RateLimitWebAcl.Arn
+              - Sid: ListWebAclsForConsole
+                # rate_limited gate from the console (GUI): wafv2:ListWebACLs has
+                # no resource-level scoping, but it is a read-only list the AWS WAF
+                # console page must call to render. No write is granted here.
+                Effect: Allow
+                Action:
+                  - wafv2:ListWebACLs
+                Resource: "*"
+              - Sid: AssociateStackOwnedWebAclFromConsole
+                # Lets the participant attach THIS team's own WAF WebACL to its own
+                # ALB from the console, not only via the instance CLI. Mirrors the
+                # InstanceRole grant and stays scoped to the stack-owned WebACL.
+                Effect: Allow
+                Action:
+                  - wafv2:AssociateWebACL
+                  - wafv2:DisassociateWebACL
+                Resource:
+                  - !GetAtt RateLimitWebAcl.Arn
+              - Sid: UpdateOwnAlbWebAclAssociationFromConsole
+                # AWS WAF requires this ELB dependent action for AssociateWebACL on
+                # an ALB. Scoped to this team's own load balancer; it only creates
+                # the association between two stack-owned resources.
+                Effect: Allow
+                Action:
+                  - elasticloadbalancing:CreateWebACLAssociation
+                  - elasticloadbalancing:DeleteWebACLAssociation
+                Resource: !Ref AppLoadBalancer
               - Sid: ReadStackOwnedObjects
                 Effect: Allow
                 Action:

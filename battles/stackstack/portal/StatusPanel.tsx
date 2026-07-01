@@ -1,152 +1,143 @@
 /**
- * StackStack portal slot — Vibe to Production status display.
+ * StackStack portal slot — production-readiness status for the competitor.
  *
- * The live posture comes from the app's /posture endpoint; this panel keeps the
- * participant oriented around URL registration, the six production gates, and
- * the two integrity checks that a security incident can knock down.
+ * The live state comes from the app's posture measurement. This panel keeps the
+ * competitor oriented around their service URL, the six production checks, and
+ * the three security checks that an incident can knock down. It deliberately
+ * shows competitor-facing language only — no internal field names or scoring
+ * mechanics.
  */
 
 import type { PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 
 type LocalizedText = Readonly<{ en: string; ja: string }>;
 
-// The six gates the app counts toward production. Each becoming true raises the
-// per-minute score; all six true earns the production platform.
+// The six checks the app counts toward production. Each one that turns OK raises
+// the per-minute score; all six OK earns the production bonus. `key` is the
+// internal posture field used only to look up state — it is never shown.
 const GATES = [
   {
     key: "db_present",
-    label: "DB",
+    label: { en: "Database", ja: "データベース" },
     hint: {
-      en: "S3 backup restore completed",
-      ja: "S3 backup dump を復元済み",
+      en: "Restore the S3 backup into the database.",
+      ja: "S3 に置かれたバックアップをデータベースに復元する。",
     },
   },
   {
     key: "auth_enabled",
-    label: "Auth",
+    label: { en: "Sign-in required", ja: "ログイン必須化" },
     hint: {
-      en: "anonymous submit is rejected",
-      ja: "匿名投稿が拒否されている",
+      en: "Require sign-in so anonymous posting is rejected.",
+      ja: "ログインを必須にして、匿名の投稿を拒否する。",
     },
   },
   {
     key: "rate_limited",
-    label: "Rate",
+    label: { en: "Rate limiting", ja: "アクセス制限" },
     hint: {
-      en: "WAF WebACL is associated to the ALB",
-      ja: "WAF WebACL を ALB に関連付け済み",
+      en: "Attach a WAF (a firewall that throttles abusive traffic) to the load balancer.",
+      ja: "WAF (過剰・不正なアクセスを弾くファイアウォール) をロードバランサーに関連付ける。",
     },
   },
   {
     key: "audit_on",
-    label: "Audit",
+    label: { en: "Audit logging", ja: "監査ログ" },
     hint: {
-      en: "audit events write to S3",
-      ja: "監査イベントが S3 に書き込まれる",
+      en: "Make audit events write to storage (S3).",
+      ja: "監査イベントがストレージ (S3) に記録されるようにする。",
     },
   },
   {
     key: "on_rds",
-    label: "RDS",
+    label: { en: "Managed database", ja: "マネージド DB" },
     hint: {
-      en: "app queries the existing RDS DB",
-      ja: "既存 RDS DB を参照している",
+      en: "Point the app at the managed database (RDS) instead of a local one.",
+      ja: "アプリの参照先を、マネージドなデータベース (RDS) に切り替える。",
     },
   },
   {
     key: "ssh_closed",
-    label: "SSH",
+    label: { en: "SSH closed", ja: "SSH を閉じる" },
     hint: {
-      en: "no public tcp/22 rule remains on the app SG",
-      ja: "app SG に public tcp/22 ルールが残っていない",
+      en: "Remove the public SSH rule (tcp/22) from the app's firewall (security group).",
+      ja: "アプリのファイアウォール (セキュリティグループ) から、公開された SSH (tcp/22) の穴を消す。",
     },
   },
 ];
 
-// Integrity posture keys. These are NOT counted toward the six gates, but while
-// any is false the app cannot be production. The red-team defacement / backdoor
-// disruptions trip site_intact / no_backdoor; the anonymous-spam HTTP attack trips
-// board_clean ONLY when auth is off (auth_enabled repels it). Recover by restoring
-// the site / removing the backdoor / enabling auth + deleting the spam.
+// Security checks. These are NOT counted toward the six, but while any is failing
+// the app cannot reach production. Incidents fired during the match can knock
+// them down; recover by restoring the site / removing the planted backdoor /
+// requiring sign-in and deleting the spam.
 const INTEGRITY = [
   {
     key: "site_intact",
-    label: "Site",
+    label: { en: "Site untampered", ja: "サイト無改ざん" },
     hint: {
-      en: "board is not defaced (site-defaced disruption)",
-      ja: "掲示板が改ざんされていない",
+      en: "The board has not been defaced.",
+      ja: "掲示板が改ざんされていない。",
     },
   },
   {
     key: "no_backdoor",
-    label: "No backdoor",
+    label: { en: "No backdoor", ja: "バックドアなし" },
     hint: {
-      en: "no supply-chain artifact present (supply-chain-backdoor disruption)",
-      ja: "backdoor 成果物が残っていない",
+      en: "No planted backdoor artifact remains.",
+      ja: "仕込まれたバックドアが残っていない。",
     },
   },
   {
     key: "board_clean",
-    label: "No spam",
+    label: { en: "No spam", ja: "スパムなし" },
     hint: {
-      en: "no anonymous spam landed — auth blocks the anonymous-spam attack",
-      ja: "匿名スパムが刺さっていない（auth 有効化が攻撃を弾く）",
+      en: "No anonymous spam has landed (requiring sign-in blocks it).",
+      ja: "匿名スパムが刺さっていない (ログイン必須化で防げる)。",
     },
   },
 ];
 
 const COPY = {
   en: {
-    title: "StackStack - Vibe to Production",
-    body:
-      "Register the AppUrlHint override, then use /posture as the source of truth. Production earns the one-time bonus only when every gate is true and the board stays intact.",
-    effectiveUrl: "Effective URL",
-    notRegistered: "not registered",
-    override: "Override",
-    registered: "registered",
-    waitingOverride: "waiting for AppUrlHint",
-    platform: "Measured platform",
-    platformPending: "waiting for probe",
-    nextAction: "Next action",
-    probePending: "Waiting for the next posture probe.",
-    complete: "Production posture is complete.",
-    gates: "Production gates",
-    integrity: "Production integrity",
+    title: "StackStack — Production Readiness",
+    body: "Register your service URL, then work down the checks below — they are measured automatically. You reach the production bonus only when every check is OK and the board stays intact.",
+    serviceUrl: "Service URL",
+    notRegistered: "not registered yet",
+    nextAction: "Next step",
+    probePending: "Measuring… check back in a moment.",
+    complete: "Production readiness is complete.",
+    gates: "Production checks",
+    integrity: "Security checks",
     done: "OK",
-    todo: "TODO",
-    unknown: "unknown",
-    phases: "Phases",
-    disruptions: "Operator-fired disruptions",
+    todo: "to do",
+    unknown: "measuring",
+    phases: "Schedule",
+    disruptions: "Incidents the operator can trigger",
   },
   ja: {
-    title: "StackStack - 本番化ステータス",
-    body:
-      "AppUrlHint を override に登録し、/posture の実測値を見ながら本番化を進めます。全 gate が true で、かつ掲示板が正常なときだけ production bonus に到達します。",
-    effectiveUrl: "有効 URL",
+    title: "StackStack — 本番化ステータス",
+    body: "自分のサービスの URL を登録したら、下のチェック項目を一つずつ満たしていきます (状態は自動で測定されます)。 すべての項目が OK になり、 掲示板が正常なときだけ本番化ボーナスに到達します。",
+    serviceUrl: "サービス URL",
     notRegistered: "未登録",
-    override: "Override",
-    registered: "登録済み",
-    waitingOverride: "AppUrlHint 待ち",
-    platform: "実測 platform",
-    platformPending: "probe 待ち",
     nextAction: "次の一手",
-    probePending: "次回の posture probe を待っています。",
-    complete: "本番化 posture は完了しています。",
-    gates: "Production gate",
-    integrity: "Production integrity",
+    probePending: "測定中… 少し待ってから見てください。",
+    complete: "本番化は完了しています。",
+    gates: "本番化チェック",
+    integrity: "セキュリティチェック",
     done: "OK",
     todo: "未達",
-    unknown: "未測定",
-    phases: "Phase",
-    disruptions: "運営が発火する障害",
+    unknown: "測定中",
+    phases: "スケジュール",
+    disruptions: "運営が起こす障害",
   },
 } as const;
 
 export default function StatusPanel(props: PortalSlotProps) {
-  const { endpoints, phases, disruptions, platform, posture } = props;
+  const { endpoints, phases, disruptions, posture } = props;
   const locale = props.locale === "ja" ? "ja" : "en";
   const copy = COPY[locale];
   const app = endpoints.find((ep) => ep.slot === "app");
+  const serviceUrl = app?.effectiveUrl || app?.overrideUrl || "";
   const next = [...GATES, ...INTEGRITY].find((check) => posture?.[check.key] === false);
 
   return (
@@ -159,35 +150,21 @@ export default function StatusPanel(props: PortalSlotProps) {
       }}
     >
       <h3 style={{ margin: "0 0 8px 0", fontSize: "16px" }}>{copy.title}</h3>
-      <p style={{ margin: "0 0 16px 0", color: "#5f6b7a", fontSize: "13px" }}>
-        {copy.body}
-      </p>
+      <p style={{ margin: "0 0 16px 0", color: "#5f6b7a", fontSize: "13px" }}>{copy.body}</p>
 
       <div style={{ marginBottom: "16px" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
           <tbody>
-            <tr style={{ borderBottom: "1px solid #eaeded" }}>
+            <tr>
               <th style={{ padding: "6px 8px", textAlign: "left", width: "140px" }}>
-                {copy.effectiveUrl}
+                {copy.serviceUrl}
               </th>
               <td style={{ padding: "6px 8px", fontFamily: "monospace", fontSize: "12px" }}>
-                {app?.effectiveUrl || copy.notRegistered}
-              </td>
-            </tr>
-            <tr style={{ borderBottom: "1px solid #eaeded" }}>
-              <th style={{ padding: "6px 8px", textAlign: "left" }}>{copy.override}</th>
-              <td style={{ padding: "6px 8px" }}>
-                {app?.overrideUrl ? (
-                  <span style={{ color: "#1a7f37", fontWeight: 600 }}>{copy.registered}</span>
+                {serviceUrl ? (
+                  serviceUrl
                 ) : (
-                  <span style={{ color: "#9a6700" }}>{copy.waitingOverride}</span>
+                  <span style={{ color: "#9a6700" }}>{copy.notRegistered}</span>
                 )}
-              </td>
-            </tr>
-            <tr>
-              <th style={{ padding: "6px 8px", textAlign: "left" }}>{copy.platform}</th>
-              <td style={{ padding: "6px 8px", fontFamily: "monospace", fontSize: "12px" }}>
-                {platform ?? copy.platformPending}
               </td>
             </tr>
           </tbody>
@@ -208,15 +185,13 @@ export default function StatusPanel(props: PortalSlotProps) {
           {!posture
             ? copy.probePending
             : next
-              ? `${next.label}: ${text(next.hint, locale)}`
+              ? `${text(next.label, locale)} — ${text(next.hint, locale)}`
               : copy.complete}
         </div>
       </div>
 
       <div style={{ marginBottom: "16px" }}>
-        <h4 style={{ margin: "0 0 8px 0", fontSize: "13px", color: "#414d5c" }}>
-          {copy.gates}
-        </h4>
+        <h4 style={{ margin: "0 0 8px 0", fontSize: "13px", color: "#414d5c" }}>{copy.gates}</h4>
         <div
           style={{
             display: "grid",
@@ -225,7 +200,13 @@ export default function StatusPanel(props: PortalSlotProps) {
           }}
         >
           {GATES.map((gate) => (
-            <PostureCard key={gate.key} check={gate} copy={copy} locale={locale} posture={posture} />
+            <PostureCard
+              key={gate.key}
+              check={gate}
+              copy={copy}
+              locale={locale}
+              posture={posture}
+            />
           ))}
         </div>
       </div>
@@ -256,9 +237,7 @@ export default function StatusPanel(props: PortalSlotProps) {
 
       {phases.length > 0 && (
         <div style={{ marginBottom: "12px" }}>
-          <h4 style={{ margin: "0 0 8px 0", fontSize: "13px", color: "#414d5c" }}>
-            {copy.phases}
-          </h4>
+          <h4 style={{ margin: "0 0 8px 0", fontSize: "13px", color: "#414d5c" }}>{copy.phases}</h4>
           <ul style={{ margin: "0", paddingLeft: "20px", fontSize: "13px" }}>
             {phases.map((p) => (
               <li key={p.name}>
@@ -297,15 +276,14 @@ function PostureCard({
   posture,
   warning = false,
 }: {
-  check: { key: string; label: string; hint: LocalizedText };
+  check: { key: string; label: LocalizedText; hint: LocalizedText };
   copy: (typeof COPY)["en"];
   locale: keyof typeof COPY;
   posture: Readonly<Record<string, boolean>> | undefined;
   warning?: boolean;
 }) {
   const state = posture?.[check.key];
-  const status =
-    state === true ? copy.done : state === false ? copy.todo : copy.unknown;
+  const status = state === true ? copy.done : state === false ? copy.todo : copy.unknown;
   const border =
     state === true ? "#b7dfc5" : state === false ? "#f0c2a0" : warning ? "#f0c2a0" : "#d5dbdb";
   const background =
@@ -322,11 +300,10 @@ function PostureCard({
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", gap: "8px" }}>
-        <div style={{ fontWeight: 600, marginBottom: "4px" }}>{check.label}</div>
+        <div style={{ fontWeight: 600, marginBottom: "4px" }}>{text(check.label, locale)}</div>
         <div style={{ color: statusColor, fontSize: "12px", fontWeight: 700 }}>{status}</div>
       </div>
       <div style={{ color: "#5f6b7a", fontSize: "12px" }}>{text(check.hint, locale)}</div>
-      <code style={{ display: "block", marginTop: "6px", fontSize: "12px" }}>{check.key}</code>
     </div>
   );
 }
