@@ -67,23 +67,23 @@
   "scoring": {
     "kind": "flag",
     "flagOutputKey": "AnswerFlag",
-    "points": 400,
-    "wrongAnswerPenalty": 0,
+    "points": 200,
+    "wrongAnswerPenalty": 10,
     "hints": [
       {
         "id": "hint-1",
         "content": "最初の一手は CloudShell で briefing を読むこと: `aws ssm get-parameter --name /{NamePrefix}/briefing --query Parameter.Value --output text`。 要は (1) `aws s3 cp s3://{NamePrefix}-tools-<accountId>/setup.sh . && bash setup.sh` でスターター展開、 (2) 無料 Cloudflare アカウントで `wrangler login && wrangler deploy`、 (3) `./evaluate.sh {NamePrefix} https://<あなた>.workers.dev` で採点。 まず未修正のまま evaluate.sh を撃つと、 どの段階で落ちているかが段階ごとに表示される。",
-        "penalty": 0
+        "penalty": 20
       },
       {
         "id": "hint-2",
         "content": "`index.js` の `// VULN:` コメントが 4 箇所の急所。 段階 2 (認可・IDOR) が本丸: (a) `Authorization: Bearer <token>` が無い/不正なら 401 を返す、 (b) `GET /api/profile/:id` は `:id` が呼び出し元トークンの所有者と一致するときだけ 200、 他人の id は 403。 デモトークンは `token-alice`→alice / `token-bob`→bob。 段階 1 は不正な id (`'`、 `../`、 超長文字列) を 400/404 で弾き 500 を出さないこと。 段階 3 はエラー応答に stack trace / path / token を出さないこと。",
-        "penalty": 50
+        "penalty": 30
       },
       {
         "id": "hint-3",
         "content": "修正の要点: (1) ハンドラ先頭でトークン検証 → 無効なら `json({error:'unauthorized'}, 401)`。 (2) `:id !== caller.userId` なら `json({error:'forbidden'}, 403)` (IDOR 遮断)。 (3) id を allowlist 正規表現 (例 `/^[a-z]{1,32}$/`) で検証し、 外れたら `400`。 (4) catch 節では固定文言 `{error:'internal error'}` のみ返し `err.stack`/`err.message` を出さない。 直して `wrangler deploy` → `./evaluate.sh {NamePrefix} https://<あなた>.workers.dev` で全段階 PASS、 返る `TC{…}` を提出。",
-        "penalty": 100
+        "penalty": 50
       }
     ]
   }

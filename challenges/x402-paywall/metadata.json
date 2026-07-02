@@ -67,23 +67,23 @@
   "scoring": {
     "kind": "flag",
     "flagOutputKey": "AnswerFlag",
-    "points": 300,
-    "wrongAnswerPenalty": 15,
+    "points": 200,
+    "wrongAnswerPenalty": 10,
     "hints": [
       {
         "id": "hint-1",
         "content": "最初の一手は CloudShell で briefing を読むこと: `aws ssm get-parameter --name /{NamePrefix}/briefing --query Parameter.Value --output text`。 手順が全部書いてある。 要は (1) S3 からツールを取得 `aws s3 cp s3://{NamePrefix}-tools-<accountId>/check_x402.sh . && chmod +x check_x402.sh` (バケット名は briefing と `ToolsBucketName` Output にある)、 (2) `./check_x402.sh {NamePrefix}` を実行。 ツールが Bot として課金ゲート (Lambda) を `aws lambda invoke` で叩いてくれる。",
-        "penalty": 0
+        "penalty": 20
       },
       {
         "id": "hint-2",
         "content": "`./check_x402.sh` は 『x402 マニフェストに payTo が無い ＝ ゲートは課金を要求しているのに振込先が無い』 と報告する。 設定を見る: `aws ssm get-parameters-by-path --path /{NamePrefix}/config --recursive`。 `monetized_path` (`/content/*`) と `currency_mode` (`test`) は正しい (おとり ── `real` に変えると逆に決済できなくなる)。 空なのは `pay_to_wallet`: 前任の SRE が放置していた。 会社のテストネット USDC 受取ウォレットは briefing と `ExpectedPayToWallet` Output に載っている (`0x…deadc0de`。 形式が正しい 0x ウォレットなら何でも良い)。",
-        "penalty": 50
+        "penalty": 30
       },
       {
         "id": "hint-3",
         "content": "直し方 (新規リソース作成ではなく既存パラメータの上書き): `aws ssm put-parameter --name /{NamePrefix}/config/pay_to_wallet --value 0x00000000000000000000000000000000deadc0de --overwrite`。 ゲートの Lambda は毎呼び出しで config を読み直すので即反映。 `./check_x402.sh {NamePrefix}` を再実行すると GET → 402 → マニフェストから payTo を読み取り X-PAYMENT を組んで再送、 までを自動でやってくれて、 HTTP 200 と共に `flag: TC{…}` が返る。 その値を提出。",
-        "penalty": 100
+        "penalty": 50
       }
     ]
   }
