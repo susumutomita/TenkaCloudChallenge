@@ -1,0 +1,69 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "hello-multicloud",
+  "name": "Hello Multicloud (Sample)",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 1,
+  "estimatedDuration": "10 分",
+  "shortDescription": "天下クラウド株式会社、 マルチクラウド元年。 CTO が突然 Google Cloud の契約書を机に置いていった — 「hello くらい両方のクラウドから返せないと、 マルチクラウドとは言えないでしょ」。\n\n前任の SRE の引継ぎメモにはただ一行: 『hello は両方から』。 デプロイは 1 回。 裏側では AWS と Google Cloud に 1 つずつ hello エンドポイントが立ち上がる。\n\nあなたのミッション: 両方のクラウドの hello が生きていることを確かめよ。",
+  "instructions": "## はじめに\nComposite Runtime の入門問題。 1 回のデプロイで AWS (Lambda Function URL) と Google Cloud (Cloud Run) の 2 つの hello エンドポイントが立ち上がる。\n\n## 最初の一手\n- デプロイ詳細の target 一覧で `aws-hello` と `gcp-hello` の両方が COMPLETE になるのを待つ\n- 各 target の outputs にある URL を `curl` する — どちらも 200 で hello が返る\n\n## ゴール\n両方のクラウドの hello エンドポイントが 200 を返していること。 採点 (composite-probe) は両方が健康なときだけ加点する — 片方が落ちていれば 0 点。",
+  "description": "Composite Runtime (TenkaCloud#2058) の smoke-test 用サンプル。 1 つの問題定義から AWS target (Lambda Function URL) と GCP target (Cloud Run, scale-to-zero) が展開され、 composite-probe が両方の URL に 200 を要求する。 deploy fan-out / target 別 status / 名前空間化 outputs / 採点 / teardown の基本機能確認が目的。 コスト: AWS 側は $0 (Lambda 無料枠)、 GCP 側も Cloud Run 無料枠内 (scale-to-zero、 max instance 1)。 GCP 側の前提: per-team WIF credential (wifAudience / serviceAccountEmail / projectId / location) の登録、 runtime-config の nonAwsRuntime feature flag、 gcp/terraform の GCS staging (platform は entry を Infra Manager の gcsSource にそのまま渡すため、 ライブ実行時は gs:// URI へ差し替える — 手順は問題ディレクトリの gcp/terraform/main.tf ヘッダと platform 側 docs を参照)。 また allUsers invoker を使うため domain-restricted sharing の org policy 下では動かない。",
+  "tags": ["sample", "multicloud", "composite", "smoke-test", "gcp"],
+  "exposedPorts": [
+    { "port": 443, "name": "hello endpoints (AWS Lambda Function URL / Google Cloud Run)" }
+  ],
+  "learningGoals": [
+    "1 つの問題定義 (runtime.kind=composite) が複数クラウドへ展開される流れを体験する",
+    "target ごとの status / outputs / 採点 (composite-probe) の親子構造を確認する"
+  ],
+  "runtime": {
+    "kind": "composite",
+    "targets": [
+      {
+        "id": "aws-hello",
+        "provider": "aws",
+        "engine": "cloudformation",
+        "entry": "template.yaml"
+      },
+      {
+        "id": "gcp-hello",
+        "provider": "gcp",
+        "engine": "infra-manager",
+        "entry": "gcp/terraform"
+      }
+    ]
+  },
+  "scoring": {
+    "kind": "composite-probe",
+    "success": "all",
+    "pointsAllOk": 100,
+    "targets": [
+      {
+        "targetId": "aws-hello",
+        "probe": "https",
+        "outputKey": "AwsHelloUrl",
+        "expectStatus": [200]
+      },
+      {
+        "targetId": "gcp-hello",
+        "probe": "https",
+        "outputKey": "GcpHelloUrl",
+        "expectStatus": [200]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Hello Multicloud (Sample)",
+      "shortDescription": "Year one of Tenka Cloud Inc.'s multicloud era. The CTO dropped a Google Cloud contract on your desk — 'if we cannot even say hello from both clouds, we cannot call it multicloud'.\n\nThe previous SRE's handover note is a single line: 'hello must answer from BOTH'. One deploy; behind it, one hello endpoint on AWS and one on Google Cloud.\n\nYour mission: confirm both hellos are alive.",
+      "instructions": "## Getting started\nAn intro problem for Composite Runtime. One deploy stands up two hello endpoints: AWS (Lambda Function URL) and Google Cloud (Cloud Run).\n\n## First move\n- Wait for both `aws-hello` and `gcp-hello` targets to reach COMPLETE in the deployment detail\n- `curl` the URL in each target's outputs — both answer 200 with a hello\n\n## Goal\nBoth cloud hello endpoints answer 200. Scoring (composite-probe) awards points only while both are healthy — one cloud down means zero.",
+      "description": "Smoke-test sample for Composite Runtime (TenkaCloud#2058). One problem definition fans out an AWS target (Lambda Function URL) and a GCP target (Cloud Run, scale-to-zero); composite-probe requires 200 from both URLs. Purpose: verify deploy fan-out, per-target status, namespaced outputs, scoring, and teardown. Cost: $0 on AWS (Lambda free tier) and inside the Cloud Run free tier on GCP (scale-to-zero, max 1 instance). GCP prerequisites: a per-team WIF credential (wifAudience / serviceAccountEmail / projectId / location), the nonAwsRuntime feature flag, and GCS staging of gcp/terraform (the platform passes the entry verbatim as Infra Manager's gcsSource, so live runs point the entry at a gs:// URI — see gcp/terraform/main.tf header and the platform docs). The allUsers invoker also requires an org policy that permits public Cloud Run access.",
+      "learningGoals": [
+        "Experience one problem definition (runtime.kind=composite) fanning out to multiple clouds",
+        "Verify the parent/target structure of per-target status, outputs, and composite-probe scoring"
+      ]
+    }
+  }
+}
