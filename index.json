@@ -311,31 +311,6 @@
       }
     },
     {
-      "id": "stackstack-lite",
-      "name": "StackStack Lite — Vibe to Production (入門)",
-      "category": "Battle",
-      "status": "ready",
-      "visibility": "public",
-      "difficulty": 2,
-      "estimatedDuration": "45〜60 分",
-      "shortDescription": "天下クラウド株式会社 Platform Team。 前任の SRE が残した AI 製の掲示板アプリを、 まずは社内に出せる最低ラインまで持っていく入門回。 アプリは EC2 に乗っているが、 DB は空、 認証なし、 監査なし。\n\nCTO 曰く: 「いきなり全部はいい。 まずデータを戻して、 認証を付けて、 監査ログを出すところまで」\n\n君の仕事: 既存リソースだけを使い、 新規トップレベルリソースを作らずに、 デプロイ → DB 復元 → 認証 → 監査 の 3 つを満たして production に上げる。\n\n▶ 最初の一手: `aws ssm start-session --target <InstanceId>` で app host に入り `vibe-status` を実行 (3 つの gate の現状と目的が出る)。 `AppUrlHint` を Portal の app endpoint に登録すると採点開始。",
-      "tags": [
-        "platform-engineering",
-        "ai-native",
-        "governance",
-        "beginner",
-        "ec2",
-        "s3"
-      ],
-      "scoringKind": "phased-polling",
-      "cost": {
-        "perHourUsd": 0.0136,
-        "perDayIfLeftRunningUsd": 0.33,
-        "freeTierEligible": true,
-        "alwaysOnResources": []
-      }
-    },
-    {
       "id": "wix-exposure-audit",
       "name": "消し忘れた共有リンク",
       "category": "Challenge",

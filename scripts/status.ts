@@ -81,7 +81,7 @@ export function buildCostIndex(reportJson: string): Map<string, CostInfo> {
 
 /**
  * stack 名に含まれる問題 id を推定する。 複数該当時は **最長一致** を採る
- * (例 "tc-stackstack-lite-x" は "stackstack" ではなく "stackstack-lite")。
+ * (例 "tc-hello-world-battle-x" は "hello-world" ではなく "hello-world-battle")。
  */
 export function matchProblemId(stackName: string, ids: readonly string[]): string | null {
   const hits = ids.filter((id) => stackName.includes(id));
