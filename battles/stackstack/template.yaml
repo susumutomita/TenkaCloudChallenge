@@ -533,19 +533,28 @@ Resources:
                 Action:
                   - elasticloadbalancing:GetLoadBalancerWebACL
                 Resource: !Ref AppLoadBalancer
-              - Sid: ReadStackOwnedS3AndWaf
+              - Sid: ReadStackOwnedS3
                 Effect: Allow
                 Action:
                   - s3:GetBucketLocation
                   - s3:GetBucketPublicAccessBlock
                   - s3:GetBucketPolicy
                   - s3:ListBucket
-                  - wafv2:GetWebACL
-                  - wafv2:GetWebACLForResource
                 Resource:
                   - !GetAtt BackupBucket.Arn
                   - !GetAtt AuditBucket.Arn
-                  - !GetAtt RateLimitWebAcl.Arn
+              - Sid: WafAssociationReadFromConsole
+                # GetWebACLForResource is checked by AWS WAF against a fixed
+                # regional/webacl/*/* pattern, never the specific WebACL ARN --
+                # scoping Resource to !GetAtt RateLimitWebAcl.Arn always denies
+                # (confirmed via CloudTrail + AWS WAF Developer Guide "New
+                # Permission Setting" for Application Load Balancer). Mirrors
+                # the InstanceRole grant.
+                Effect: Allow
+                Action:
+                  - wafv2:GetWebACL
+                  - wafv2:GetWebACLForResource
+                Resource: !Sub "arn:aws:wafv2:${AWS::Region}:${AWS::AccountId}:regional/webacl/*/*"
               - Sid: ListWebAclsForConsole
                 # rate_limited gate from the console (GUI): wafv2:ListWebACLs has
                 # no resource-level scoping, but it is a read-only list the AWS WAF
@@ -652,11 +661,16 @@ Resources:
                   - ec2:DescribeSecurityGroups
                 Resource: "*"
               - Sid: WafAssociationRead
+                # GetWebACLForResource is checked by AWS WAF against a fixed
+                # regional/webacl/*/* pattern, never the specific WebACL ARN --
+                # scoping Resource to !GetAtt RateLimitWebAcl.Arn always denies
+                # (confirmed via CloudTrail + AWS WAF Developer Guide "New
+                # Permission Setting" for Application Load Balancer).
                 Effect: Allow
                 Action:
                   - wafv2:GetWebACL
                   - wafv2:GetWebACLForResource
-                Resource: !GetAtt RateLimitWebAcl.Arn
+                Resource: !Sub "arn:aws:wafv2:${AWS::Region}:${AWS::AccountId}:regional/webacl/*/*"
               - Sid: AlbWebAclAssociationRead
                 # AWS WAF GetWebACLForResource on an ALB also checks this
                 # protected-resource permission.
