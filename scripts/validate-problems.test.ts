@@ -191,14 +191,64 @@ describe("multi-verify (TenkaCloud#2252)", () => {
   });
 
   it("checkMultiVerifyStructure: 空 checks / 重複 id / 不正 id / 非正整数 points を止める", () => {
-    expect(checkMultiVerifyStructure(meta([]))[0]).toMatch(/non-empty/);
+    expect(checkMultiVerifyStructure(meta([]))[0]).toMatch(/2–8 entries/);
     expect(checkMultiVerifyStructure(meta([check(), check()])).join()).toMatch(/duplicated/);
-    expect(checkMultiVerifyStructure(meta([check({ id: "Bad_ID" })])).join()).toMatch(
+    expect(checkMultiVerifyStructure(meta([check({ id: "Bad_ID" }), check({ id: "b" })])).join()).toMatch(
       /must match/,
     );
-    expect(checkMultiVerifyStructure(meta([check({ points: 12.5 })])).join()).toMatch(
-      /positive integer/,
-    );
+    expect(
+      checkMultiVerifyStructure(meta([check({ points: 12.5 }), check({ id: "b" })])).join(),
+    ).toMatch(/positive integer/);
+  });
+
+  it("checkMultiVerifyStructure: 2〜8 件の範囲を強制する (1 件 / 9 件を止める)", () => {
+    expect(checkMultiVerifyStructure(meta([check()])).join()).toMatch(/2–8 entries/);
+    const nine = Array.from({ length: 9 }, (_, i) => check({ id: `c${i}`, label: `第${i}` }));
+    expect(checkMultiVerifyStructure(meta(nine)).join()).toMatch(/2–8 entries/);
+  });
+
+  it("checkMultiVerifyStructure: id 先頭ハイフン / 64 文字超 / label 80 文字超を止める", () => {
+    expect(
+      checkMultiVerifyStructure(meta([check({ id: "-lead" }), check({ id: "ok" })])).join(),
+    ).toMatch(/must match/);
+    expect(
+      checkMultiVerifyStructure(
+        meta([check({ id: "a".repeat(65) }), check({ id: "ok" })]),
+      ).join(),
+    ).toMatch(/must match/);
+    expect(
+      checkMultiVerifyStructure(
+        meta([check({ label: "あ".repeat(81) }), check({ id: "b" })]),
+      ).join(),
+    ).toMatch(/80 characters or fewer/);
+  });
+
+  it("checkMultiVerifyStructure: wrongAnswerPenalty > points を止める", () => {
+    expect(
+      checkMultiVerifyStructure(
+        meta([check({ points: 100, wrongAnswerPenalty: 150 }), check({ id: "b" })]),
+      ).join(),
+    ).toMatch(/must not exceed the check points/);
+  });
+
+  it("checkMultiVerifyStructure: 1 check 内の hint 減点合計が check の 50% 超を止める", () => {
+    expect(
+      checkMultiVerifyStructure(
+        meta([
+          check({ points: 100, hints: [{ id: "h1", content: "a", penalty: 60 }] }),
+          check({ id: "b" }),
+        ]),
+      ).join(),
+    ).toMatch(/exceed 50% of the check points/);
+    // 50% ちょうどは通す (points 100, penalty 50)
+    expect(
+      checkMultiVerifyStructure(
+        meta([
+          check({ points: 100, hints: [{ id: "h1", content: "a", penalty: 50 }] }),
+          check({ id: "b" }),
+        ]),
+      ),
+    ).toEqual([]);
   });
 
   it("checkMultiVerifyStructure: hint id の check 跨ぎ衝突を止める (reveal route は hintId 単独キー)", () => {

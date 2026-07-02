@@ -42,21 +42,22 @@ services:
       WORDPRESS_DB_USER: wordpress
       WORDPRESS_DB_PASSWORD: wordpress
       WORDPRESS_DB_NAME: wordpress
-      # Per-deploy random secret injected by `make local`; the flag baked into the
-      # neglected backup file is derived from it inside the container.
+      # Per-deploy random secret injected by `make local`; the four checkpoint
+      # flags are derived from it inside the container.
       FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
     volumes:
       - wp_data:/var/www/html
     ports:
       - "127.0.0.1:18080:80" # WordPress site (challenge surface)
     healthcheck:
-      # Ready = Apache is serving AND the neglected backup file is present.
+      # Ready = Apache is serving AND all four leftover surfaces are reachable
+      # (the last one, /internal/, also proves directory listing is on).
       test:
         [
           "CMD",
           "php",
           "-r",
-          "exit(@file_get_contents('http://127.0.0.1/wp-content/backups/db-backup.sql')===false?1:0);",
+          "exit((@file_get_contents('http://127.0.0.1/wp-content/backups/db-backup.sql')!==false&&@file_get_contents('http://127.0.0.1/wp-config.php.bak')!==false&&@file_get_contents('http://127.0.0.1/wp-content/debug.log')!==false&&@file_get_contents('http://127.0.0.1/internal/')!==false)?0:1);",
         ]
       interval: "5s"
       timeout: "5s"
