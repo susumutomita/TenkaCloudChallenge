@@ -152,6 +152,16 @@ Worked examples: every problem under `challenges/` and `battles/` now carries `i
 
 Worked example: [`challenges/sqli-demo`](./challenges/sqli-demo) (IPA "安全なウェブサイトの作り方" §1.1, SQL injection).
 
+### 14. Challenge scoring follows the tier regulation (enforced) — [SCORING.md](./SCORING.md)
+
+A Challenge's `points`, `wrongAnswerPenalty`, and hint penalties are **not free-form**. They are unified by difficulty tier and enforced by `bun run validate` (`checkScoringRegulation`):
+
+- **Points by tier**: Easy (difficulty 1–2) = 100, Medium (3) = 200, Hard (4–5) = 300. For `multi-flag` / `multi-verify` the total is the sum of `flags[].points` / `checks[].points`.
+- **`wrongAnswerPenalty` = 5 % of the base** (Easy 5 / Medium 10 / Hard 15).
+- **Hint penalties**: the sum of every hint penalty in the problem must be **≤ 50 % of the base**, distributed progressively (recommended: 2 hints = 20 % / 30 %, 3 hints = 10 % / 15 % / 25 %). Opening every hint still leaves at least half the score.
+
+Battles (uptime / phased / attack-detection — no fixed total) are exempt from the point table; see SCORING.md for the battle-hint guideline. When you change a problem's difficulty, update its points to the new tier or the validator will fail. Full ruleset and rationale: [SCORING.md](./SCORING.md).
+
 ## Voice for `shortDescription` / `instructions` / `description`
 
 The catalog leans into SRE-day-in-the-life narration: the previous SRE (the predecessor who abruptly resigned), the CTO (gives vague but high-stakes orders), competitor as "the new hire" inheriting a mess. Players engage 2-3× better with story than with dry mechanics. Examples:

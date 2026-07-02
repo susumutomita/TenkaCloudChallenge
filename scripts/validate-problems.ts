@@ -150,6 +150,76 @@ function checkHintTranslations(meta: Metadata): ValidationError[] {
 }
 
 /**
+ * [scoring regulation / SCORING.md, AGENT.md §14] Challenge の固定点採点 (flag / verify /
+ * multi-flag / multi-verify) を難易度ティアに統一する:
+ *   - 満点 (flat points、 または flags[]/checks[] の points 合計) == ティア標準点
+ *     (Easy=100 / Medium=200 / Hard=300)
+ *   - flat wrongAnswerPenalty == ティアの 5% (5 / 10 / 15)
+ *   - 全ヒント減点 (scoring.hints[] + flags[]/checks[].hints[]) の合計 <= 満点の 50%
+ * Battle (uptime/phased 採点、 固定 points 無し) は対象外。 固定点が判定できない Challenge も skip。
+ */
+function checkScoringRegulation(meta: Metadata): ValidationError[] {
+  const errors: ValidationError[] = [];
+  if (meta.category !== "Challenge") return errors;
+  const scoring = meta.scoring as Record<string, unknown> | undefined;
+  if (!scoring) return errors;
+
+  const flat = typeof scoring.points === "number" ? scoring.points : undefined;
+  const groups = Array.isArray(scoring.flags)
+    ? (scoring.flags as Array<Record<string, unknown>>)
+    : Array.isArray(scoring.checks)
+      ? (scoring.checks as Array<Record<string, unknown>>)
+      : undefined;
+  let total = flat;
+  if (total === undefined && groups) {
+    total = groups.reduce((s, g) => s + (typeof g.points === "number" ? g.points : 0), 0);
+  }
+  if (typeof total !== "number") return errors; // 固定点が無い (= battle 相当) → skip
+
+  const difficulty = typeof meta.difficulty === "number" ? meta.difficulty : 0;
+  const tier =
+    difficulty <= 2
+      ? { name: "Easy", points: 100, waP: 5 }
+      : difficulty === 3
+        ? { name: "Medium", points: 200, waP: 10 }
+        : { name: "Hard", points: 300, waP: 15 };
+
+  if (total !== tier.points) {
+    errors.push(
+      `scoring total points=${total} != ${tier.name} tier standard ${tier.points} (difficulty ${difficulty}) — see SCORING.md`,
+    );
+  }
+  if (
+    flat !== undefined &&
+    typeof scoring.wrongAnswerPenalty === "number" &&
+    scoring.wrongAnswerPenalty !== tier.waP
+  ) {
+    errors.push(
+      `scoring.wrongAnswerPenalty=${scoring.wrongAnswerPenalty} != ${tier.name} tier standard ${tier.waP} (= 5% of ${tier.points}) — see SCORING.md`,
+    );
+  }
+
+  const penalties: number[] = [];
+  const collect = (hints: unknown) => {
+    if (!Array.isArray(hints)) return;
+    for (const h of hints) {
+      const p = (h as { penalty?: unknown }).penalty;
+      if (typeof p === "number") penalties.push(p);
+    }
+  };
+  collect(scoring.hints);
+  if (groups) for (const g of groups) collect(g.hints);
+  const sum = penalties.reduce((a, b) => a + b, 0);
+  const cap = total * 0.5;
+  if (sum > cap) {
+    errors.push(
+      `sum of hint penalties=${sum} exceeds 50% of points (${cap}) — see SCORING.md`,
+    );
+  }
+  return errors;
+}
+
+/**
  * [Composite Runtime / TenkaCloud#2058] 複合 runtime 問題 (runtime.kind === "composite")。
  * target ごとに entry の実在と AWS target の CFn 整合性を検査する。
  */
@@ -162,6 +232,7 @@ function checkCompositeRefs(dir: string, meta: Metadata): CrossRefResult {
   const errors: ValidationError[] = [
     ...checkInstructionsPresent(meta),
     ...checkHintTranslations(meta),
+    ...checkScoringRegulation(meta),
     ...checkDashboardSlotFiles(meta, dir),
     ...checkCoordinationPluginFile(meta, dir),
   ];
@@ -255,6 +326,7 @@ function checkContainerRefs(dir: string, meta: Metadata): CrossRefResult {
   const errors: ValidationError[] = [
     ...checkInstructionsPresent(meta),
     ...checkHintTranslations(meta),
+    ...checkScoringRegulation(meta),
   ];
   const entry = typeof runtime?.entry === "string" ? runtime.entry : undefined;
   if (!entry) {
@@ -285,6 +357,7 @@ function checkCrossRefs(metaPath: string, meta: Metadata): CrossRefResult {
     errors: [
       ...checkInstructionsPresent(meta),
       ...checkHintTranslations(meta),
+      ...checkScoringRegulation(meta),
       ...checkScoringOutputRefs(meta, yaml, cfnTemplate),
       ...checkEndpointOutputRefs(meta, yaml, cfnTemplate),
       ...checkDisruptionRefs(meta, yaml, cfnTemplate),

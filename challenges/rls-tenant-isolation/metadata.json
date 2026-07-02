@@ -67,18 +67,18 @@
   },
   "scoring": {
     "kind": "verify",
-    "points": 300,
+    "points": 200,
     "wrongAnswerPenalty": 10,
     "hints": [
       {
         "id": "hint-1",
         "content": "`curl -H 'x-user-id: alice-owner' http://127.0.0.1:18080/documents/<Beacon の doc id>` を試そう。 by-id 経路は org フィルタが抜けているので、 Acme のユーザが Beacon のドキュメントを読めてしまう。 アプリ側フィルタでは不十分 — 対策はデータベースに置く。",
-        "penalty": 0
+        "penalty": 40
       },
       {
         "id": "hint-2",
         "content": "RLS を有効化し (`alter table public.documents enable row level security; ... force row level security;`)、 操作ごとに 1 つずつポリシーを張る。 UPDATE/INSERT には `with check (organization_id in (select app.current_org_ids()))` を付けて organization_id を他社に移せないようにする。 DELETE は `app.is_owner_of(organization_id)` で owner 限定にする。",
-        "penalty": 50
+        "penalty": 60
       }
     ]
   }

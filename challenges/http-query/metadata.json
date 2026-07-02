@@ -58,23 +58,23 @@
   "scoring": {
     "kind": "flag",
     "flagOutputKey": "AnswerFlag",
-    "points": 300,
-    "wrongAnswerPenalty": 15,
+    "points": 200,
+    "wrongAnswerPenalty": 10,
     "hints": [
       {
         "id": "hint-1",
         "content": "アプリは正しい。 同じ URL への `GET` は 200 が返り、 アプリのログ (CloudWatch Logs, /aws/lambda/<NamePrefix>...) には QUERY が一切到達していないはず。 犯人はアプリではなく、 リクエストが最初に着く層 ── エッジ (ALB) を疑え。",
-        "penalty": 15
+        "penalty": 20
       },
       {
         "id": "hint-2",
         "content": "ALB の listener rule には HTTP メソッドの allow-list (`http-request-method` condition) がある。 今のルールは GET/HEAD/POST/OPTIONS だけを許可していて、 QUERY が入っていない。 だから QUERY は listener の default action (fixed-response 405) に落ちている。 `aws elbv2 describe-rules` で確認できる。",
-        "penalty": 25
+        "penalty": 30
       },
       {
         "id": "hint-3",
         "content": "そのルールの Values に QUERY を足す。 `aws elbv2 modify-rule --rule-arn <自分のルール ARN> --conditions Field=http-request-method,HttpRequestMethodConfig='{Values=[GET,HEAD,POST,OPTIONS,QUERY]}'` (Console なら EC2 > Load Balancers > 該当 LB > Listener > Rules を編集)。 その後、 最初の手の curl をもう一度送れば 200 + 本文に flag が返る。",
-        "penalty": 35
+        "penalty": 50
       }
     ]
   }

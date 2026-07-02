@@ -57,6 +57,32 @@
       }
     },
     {
+      "id": "festivalgate-terminal-api",
+      "name": "入場端末の裏口",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "40 分",
+      "shortDescription": "イベント会社 FestivalGate の入場端末 API。 端末が使う機能は普通に動くが、 「社内ネットワークからしか叩けない」 はずの運営用エンドポイントに、 運営の機密が眠っているらしい。 あなたは外部から診断する立場だ。",
+      "tags": [
+        "api-security",
+        "broken-authentication",
+        "trust-boundary",
+        "least-privilege",
+        "owasp",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "hello-multicloud",
       "name": "Hello Multicloud (Sample)",
       "category": "Challenge",
@@ -305,6 +331,32 @@
       "cost": {
         "perHourUsd": 0.0136,
         "perDayIfLeftRunningUsd": 0.33,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "wix-exposure-audit",
+      "name": "消し忘れた共有リンク",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 1,
+      "estimatedDuration": "30 分",
+      "shortDescription": "SaaS で作った小さなお店のサイト。 公開されているのは会社案内とお問い合わせフォームだけ ── のはずだが、 制作を頼んだ会社が残したある設定のせいで、 お客さまの個人情報が第三者に見えてしまっているらしい。",
+      "tags": [
+        "saas-security",
+        "misconfiguration",
+        "data-exposure",
+        "privacy",
+        "operations",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
         "freeTierEligible": true,
         "alwaysOnResources": []
       }

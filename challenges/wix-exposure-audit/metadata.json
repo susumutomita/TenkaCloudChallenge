@@ -1,0 +1,81 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "wix-exposure-audit",
+  "name": "消し忘れた共有リンク",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 1,
+  "estimatedDuration": "30 分",
+  "shortDescription": "SaaS で作った小さなお店のサイト。 公開されているのは会社案内とお問い合わせフォームだけ ── のはずだが、 制作を頼んだ会社が残したある設定のせいで、 お客さまの個人情報が第三者に見えてしまっているらしい。",
+  "instructions": "## はじめに\n\n制作会社から引き継いだ SaaS サイトで、お問い合わせ情報の共有範囲が整理されていない。一般の訪問者と同じ目線で公開状態を監査しよう。\n\n## 最初の一手\n\n`http://127.0.0.1:18080/` を開き、ブラウザの「ページのソースを表示」で制作会社が残したメモを探す。\n\n## ゴール\n\n漏えいしている受信箱の合言葉 (`TC{...}`) を提出する。発見後は README の対策を読み、共有リンクと共同編集者権限の見直し方を説明できる状態にする。",
+  "description": "あなたは、 デザインスタジオ 「Aoi Design Studio」 のサイト運用を引き継いだ。 サイトは SaaS のサイトビルダーで作られていて、 公開されているのは会社案内とお問い合わせフォームだけのはずだ。\n\nところが、 このサイトの制作は外部の制作会社に任せていて、 公開後もその会社との連携や共有設定が整理されないまま放置されている。 その結果、 お問い合わせフォームに届いたお客さまの個人情報 (氏名・メール・相談内容) が、 本来見えてはいけない相手にも見えてしまっている ── という指摘が入った。\n\nコードの脆弱性ではなく、 「誰に・どこまで見えているか」 という公開設定と運用の問題だ。 公開されているサイトを利用者の目線で調べ、 意図せず外に漏れている受信箱にたどり着け。 そこには監査用の合言葉 (`TC{...}`) が置かれている。",
+  "tags": [
+    "saas-security",
+    "misconfiguration",
+    "data-exposure",
+    "privacy",
+    "operations",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    { "port": 18080, "name": "Web (published site)" },
+    { "port": 18081, "name": "/verify (loopback admin)" }
+  ],
+  "learningGoals": [
+    "SaaS でサイトを作っていても、 公開範囲・共有リンク・共同編集者や制作会社の権限は利用者の責任として残ることを理解する",
+    "「非公開のつもり」 の共有リンクが、 実は誰でも到達できる状態で放置されていないかを、 自分で確かめられるようになる",
+    "フォームで集めた個人情報の公開範囲を見直し、 退職者・制作会社・古い共有リンクのアクセスを失効させることが対策であることを理解する"
+  ],
+  "i18n": {
+    "en": {
+      "name": "The Forgotten Share Link",
+      "shortDescription": "A small shop's site built with a SaaS site builder. All that should be public is the company info and a contact form — but a setting the production agency left behind means customers' personal data is visible to strangers.",
+      "instructions": "## Introduction\n\nThe SaaS site inherited from the production agency still has unreviewed sharing settings around customer inquiries. Audit it from the perspective of an ordinary visitor.\n\n## First step\n\nOpen `http://127.0.0.1:18080/`, use your browser's View Page Source command, and look for a note left by the agency.\n\n## Goal\n\nSubmit the passphrase (`TC{...}`) from the exposed inbox. Then read the README remediation guidance and be able to explain how to review share links and collaborator access.",
+      "description": "You have taken over running the site for a design studio, 'Aoi Design Studio'. The site was built with a SaaS site builder, and the only things that should be public are the company info and a contact form.\n\nBut the site was built by an outside production agency, and after launch the collaboration and sharing settings with that agency were never cleaned up. As a result — someone has warned you — the personal data submitted through the contact form (names, emails, messages) is visible to people who should never see it.\n\nThis is not a code vulnerability; it is a publishing-and-operations problem of 'who can see how much'. Look at the published site the way a visitor would, and reach the inbox that is unintentionally leaking to the outside. An audit passphrase (`TC{...}`) is waiting there.",
+      "learningGoals": [
+        "Understand that even when you build with a SaaS tool, the publish scope, share links, and collaborator/agency permissions remain your responsibility",
+        "Learn to check, yourself, whether a share link you thought was private is actually reachable by anyone",
+        "Understand that reviewing where form submissions are exposed and revoking access for departed staff, agencies, and old share links is the fix"
+      ],
+      "hints": [
+        {
+          "id": "hint-1",
+          "content": "The visible pages look harmless. But production agencies often leave leftovers behind — a preview link, an internal note — that never got cleaned up before launch. Look past what is rendered: view the page's source (View Source), and check for a link the agency left in it."
+        },
+        {
+          "id": "hint-2",
+          "content": "The published page's HTML source has an agency note it forgot to delete, containing a live share link to the contact-form inbox: `/admin/inbox?share=...`. Open it and the inbox — with every customer's name, email, and message — is shown to anyone with the link. The audit row's message is the flag. The fix: revoke the share link and remove the agency's leftover access."
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Web": "http://127.0.0.1:18080"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": ["FLAG_SEED"]
+  },
+  "scoring": {
+    "kind": "verify",
+    "points": 100,
+    "wrongAnswerPenalty": 5,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "目に見えるページは無害そうに見える。 だが制作会社は、 公開前に消し忘れた 「痕跡」 ── プレビュー用のリンクや社内メモ ── を残していることがよくある。 表示されている内容の裏を見よう: ページのソース (View Source / ページのソースを表示) を開き、 制作会社が残したリンクがないか探そう。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "公開ページの HTML ソースに、 制作会社が消し忘れた社内メモがあり、 お問い合わせ受信箱への 「生きている」 共有リンク `/admin/inbox?share=...` が書かれている。 これを開くと、 お客さま全員の氏名・メール・相談内容が、 リンクを知る誰にでも表示される。 監査行のメッセージがフラグだ。 対策は、 この共有リンクを失効させ、 制作会社に残ったアクセス権を削除すること。",
+        "penalty": 30
+      }
+    ]
+  }
+}
