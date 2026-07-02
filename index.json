@@ -338,13 +338,13 @@
     },
     {
       "id": "wp-exposed-backup",
-      "name": "前任者のバックアップ",
+      "name": "前任者の忘れ物",
       "category": "Challenge",
       "status": "draft",
       "visibility": "public",
-      "difficulty": 2,
-      "estimatedDuration": "30 分",
-      "shortDescription": "普通に動いている会社の WordPress サイト。 だが前任の担当者が 「テスト用に」 公開フォルダへ置いたまま消し忘れたファイルのせいで、 サイトの中身が丸ごと外から読めてしまっているらしい。",
+      "difficulty": 3,
+      "estimatedDuration": "45 分",
+      "shortDescription": "普通に動いている会社の WordPress サイト。 だが前任の担当者が移行のときに公開フォルダへ置いたまま消し忘れた 「忘れ物」 が複数あり、 サイトの中身や設定が外から読めてしまっているらしい。 一つずつ見つけよう。",
       "tags": [
         "wordpress",
         "misconfiguration",
@@ -352,9 +352,10 @@
         "backup-exposure",
         "operations",
         "local-play",
-        "container"
+        "container",
+        "multi-verify"
       ],
-      "scoringKind": "verify",
+      "scoringKind": "multi-verify",
       "cost": {
         "perHourUsd": 0,
         "perDayIfLeftRunningUsd": 0,
