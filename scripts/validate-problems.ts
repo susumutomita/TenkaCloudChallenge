@@ -11,7 +11,7 @@
  * 失敗時は exit code 1 + エラー内容を stderr に出す。CI / pre-commit で実行する想定。
  */
 
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import Ajv2020 from "ajv";
 import addFormats from "ajv-formats";
@@ -26,6 +26,7 @@ const SCHEMA_PATH = join(REPO_ROOT, "SCHEMA.json");
 const CATEGORY_DIRS = ["battles", "challenges"] as const;
 type Metadata = Record<string, unknown>;
 type ValidationError = string;
+const REQUIRED_READMES = ["README.md", "README.ja.md"] as const;
 
 function findMetadataFiles(dir: string): string[] {
   const found: string[] = [];
@@ -76,6 +77,31 @@ function checkInstructionsPresent(meta: Metadata): ValidationError[] {
   const en = i18n?.en?.instructions;
   if (typeof en !== "string" || en.trim().length === 0) {
     errors.push("i18n.en.instructions is required — mirror the JA instructions in English");
+  }
+  return errors;
+}
+
+/**
+ * [contract / AGENT.md §How to add a problem] Every problem ships an English
+ * primary README and a Japanese mirror. This is a release artifact, not an
+ * optional review preference, so fail CI before a metadata-only PR can merge.
+ */
+export function checkRequiredReadmes(dir: string): ValidationError[] {
+  const errors: ValidationError[] = [];
+  for (const filename of REQUIRED_READMES) {
+    const path = join(dir, filename);
+    try {
+      const stat = lstatSync(path);
+      if (!stat.isFile()) {
+        errors.push(`${filename} must be a regular file — see AGENT.md authoring step 4`);
+        continue;
+      }
+      if (stat.size === 0 || readFileSync(path, "utf8").trim().length === 0) {
+        errors.push(`${filename} must not be empty — mirror the problem guide in both languages`);
+      }
+    } catch {
+      errors.push(`${filename} is required — add the English primary and Japanese mirror`);
+    }
   }
   return errors;
 }
@@ -531,7 +557,9 @@ function validateMetadataFiles(
       continue;
     }
 
-    const { errors, warnings } = checkCrossRefs(file, data);
+    const crossRefs = checkCrossRefs(file, data);
+    const errors = [...checkRequiredReadmes(dirname(file)), ...crossRefs.errors];
+    const { warnings } = crossRefs;
     if (warnings.length > 0) printWarnings(file, warnings);
     if (errors.length > 0) {
       failed += 1;
@@ -583,4 +611,4 @@ function reportResult(failed: number, total: number): void {
   console.log(`\n${total} 件の metadata.json はすべて有効です`);
 }
 
-main();
+if (import.meta.main) main();
