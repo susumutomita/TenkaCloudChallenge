@@ -247,29 +247,6 @@
       ]
     },
     {
-      "id": "stackstack-lite",
-      "category": "Battle",
-      "region": "ap-northeast-1",
-      "estimatedSessionMinutes": 60,
-      "perHourUsd": 0.0136,
-      "perSessionUsd": 0.0136,
-      "ifLeftRunningUsd": {
-        "oneDay": 0.33,
-        "oneWeek": 2.28,
-        "oneMonth": 9.93
-      },
-      "freeTierEligible": true,
-      "alwaysOnResources": [],
-      "billable": [
-        {
-          "resource": "AWS::EC2::Instance",
-          "count": 1,
-          "unit": "t3.micro",
-          "hourlyUsdEach": 0.0136
-        }
-      ]
-    },
-    {
       "id": "wix-exposure-audit",
       "category": "Challenge",
       "region": "ap-northeast-1",
