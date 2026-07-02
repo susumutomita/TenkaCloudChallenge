@@ -30,6 +30,13 @@ These are not style preferences. The validator rejects PRs that break them.
 
 JSON Schema validation. The schema's `description` fields explain each property; read them. Keep top-level fields in Japanese and put English under `i18n.en` (the platform's locale fallback chain is `en → ja → top-level`).
 
+### 1a. Every problem ships both README files
+
+Each directory containing `metadata.json` must also contain non-empty regular files named
+exactly `README.md` (English primary) and `README.ja.md` (Japanese mirror). The validator
+rejects missing, empty, directory, or symbolic-link placeholders. Keep the two documents
+equivalent in story, deployment model, play/solve flow, scoring, remediation, and cost.
+
 ### 2. CFn Outputs referenced by `metadata.json` actually exist
 
 `scoring.flagOutputKey`, `scoring.statsOutputKey`, every `endpoints[].default.key` must appear as a key under `Outputs:` in `template.yaml`. Typos here look fine until the scoring engine silently produces zero points.
