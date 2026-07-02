@@ -313,6 +313,29 @@ Resources:
           systemctl daemon-reload
           systemctl enable --now tenkacloud-api
 
+          # ----- 1-1 in-host next-step banner (printed on every SSM login) -----
+          # Turns "I'm in the shell, now what?" into a guided beat: names the
+          # exact next action (register this host's URL in the portal) and the
+          # success signal (scoring starts). ASCII-only (check-template-ascii);
+          # the Japanese walkthrough lives in metadata.instructions / README.
+          IMDS_TOKEN=$(curl -sX PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 300" || true)
+          PUB_HOST=$(curl -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/public-hostname || echo "<this-host>")
+          cat > /etc/profile.d/tenkacloud-hello.sh <<PROFILE
+          #!/bin/sh
+          echo "=================================================================="
+          echo " Hello World Battle (1-1) -- connected via SSM.  [OK]"
+          echo "------------------------------------------------------------------"
+          echo " NEXT: register this host's URL in the Participant Portal to start"
+          echo "       scoring. You stay at 0 points until you do:"
+          echo "   FrontendUrl slot  <-  http://$PUB_HOST"
+          echo "   ApiUrl slot       <-  http://$PUB_HOST:8080"
+          echo " The moment you register, a probe runs every minute and points"
+          echo " start accruing. If a service goes down, recover with:"
+          echo "   sudo systemctl restart nginx tenkacloud-api"
+          echo "=================================================================="
+          PROFILE
+          chmod 0644 /etc/profile.d/tenkacloud-hello.sh
+
 Outputs:
   # FrontendUrl / ApiUrl are intentionally EMPTY by default. Scoring engine
   # resolves effective URL as `override ?? default`; with default = "" and no
