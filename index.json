@@ -286,6 +286,32 @@
       }
     },
     {
+      "id": "wix-exposure-audit",
+      "name": "消し忘れた共有リンク",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 1,
+      "estimatedDuration": "30 分",
+      "shortDescription": "SaaS で作った小さなお店のサイト。 公開されているのは会社案内とお問い合わせフォームだけ ── のはずだが、 制作を頼んだ会社が残したある設定のせいで、 お客さまの個人情報が第三者に見えてしまっているらしい。",
+      "tags": [
+        "saas-security",
+        "misconfiguration",
+        "data-exposure",
+        "privacy",
+        "operations",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "x402-paywall",
       "name": "x402 課金ゲート — 課金しているのに 0 USDC",
       "category": "Challenge",
