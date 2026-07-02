@@ -83,6 +83,30 @@
       }
     },
     {
+      "id": "hello-multicloud",
+      "name": "Hello Multicloud (Sample)",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 1,
+      "estimatedDuration": "10 分",
+      "shortDescription": "天下クラウド株式会社、 マルチクラウド元年。 CTO が突然 Google Cloud の契約書を机に置いていった — 「hello くらい両方のクラウドから返せないと、 マルチクラウドとは言えないでしょ」。\n\n前任の SRE の引継ぎメモにはただ一行: 『hello は両方から』。 デプロイは 1 回。 裏側では AWS と Google Cloud に 1 つずつ hello エンドポイントが立ち上がる。\n\nあなたのミッション: 両方のクラウドの hello が生きていることを確かめよ。",
+      "tags": [
+        "sample",
+        "multicloud",
+        "composite",
+        "smoke-test",
+        "gcp"
+      ],
+      "scoringKind": "composite-probe",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "hello-world",
       "name": "Hello World (Sample)",
       "category": "Challenge",
