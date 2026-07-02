@@ -63,18 +63,18 @@
   },
   "scoring": {
     "kind": "verify",
-    "points": 200,
-    "wrongAnswerPenalty": 10,
+    "points": 100,
+    "wrongAnswerPenalty": 5,
     "hints": [
       {
         "id": "hint-1",
         "content": "サイト自体は普通に動いている。 だから WordPress を攻めるのではない。 運用者が公開フォルダにうっかり置き忘れるもの ── データベースのダンプや設定ファイル ── を考えよう。 よくあるファイル名は backup.sql / db-backup.sql など。 それと /robots.txt も見てみよう。 「隠したつもり」 のフォルダが書かれていることがよくある (= かえって場所を教えてしまう)。",
-        "penalty": 0
+        "penalty": 20
       },
       {
         "id": "hint-2",
         "content": "前任者がデータベースのダンプを公開領域に置き忘れている (= 機密ファイル / バックアップの露出)。 `/robots.txt` が `/wp-content/backups/` を Disallow にしていて、 ダンプは `http://127.0.0.1:18080/wp-content/backups/db-backup.sql` にある。 開いて `maintenance_notes` の行を読むと、 監査用の合言葉がフラグだ。 対策は、 このファイルを削除し、 バックアップを Web から届く場所に置かないこと。",
-        "penalty": 50
+        "penalty": 30
       }
     ]
   }
