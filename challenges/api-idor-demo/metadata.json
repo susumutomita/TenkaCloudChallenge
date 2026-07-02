@@ -55,18 +55,18 @@
   },
   "scoring": {
     "kind": "verify",
-    "points": 200,
-    "wrongAnswerPenalty": 10,
+    "points": 100,
+    "wrongAnswerPenalty": 5,
     "hints": [
       {
         "id": "hint-1",
         "content": "自分のプロフィールは読める。 では、 この API は 「どのプロフィールを返すか」 をどうやって決めている? 自分のものではない相手を指定したら何が起きるか、 試してみよう。",
-        "penalty": 0
+        "penalty": 20
       },
       {
         "id": "hint-2",
         "content": "この API は id を指定して任意のプロフィールを返すのに、 その id が呼び出し元本人かを確認していない (IDOR)。 `curl -H \"Authorization: Bearer token-guest\" http://127.0.0.1:18080/api/profile/1` で管理者 (id 1) のオブジェクトが返り、 `note` フィールドにフラグが入っている。",
-        "penalty": 50
+        "penalty": 30
       }
     ]
   }

@@ -56,12 +56,12 @@
       {
         "id": "hint-1",
         "content": "Outputs の `ParameterConsoleUrl` を開くと AWS Console の SSM Parameter 詳細ページに直接着地します。 CLI 派は `aws ssm get-parameter --name /{NamePrefix}/hello`。",
-        "penalty": 10
+        "penalty": 20
       },
       {
         "id": "hint-2",
         "content": "値は `TC{…}` 形式。 中括弧の中身は deploy ごとのランダム値で、NamePrefix からは導出できない ── 必ず Parameter の実値を読んで、`TC{` から `}` までをそのまま貼り付けること。",
-        "penalty": 20
+        "penalty": 30
       }
     ]
   }
