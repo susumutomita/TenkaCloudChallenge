@@ -353,14 +353,19 @@ function checkContainerRefs(dir: string, meta: Metadata): CrossRefResult {
 
 /**
  * [TenkaCloud#2252] multi-verify の構造検査 (platform parser / SDK と同じ契約):
- *   - checks は 1 件以上
- *   - checks[].id は `^[a-z0-9-]+$` かつ問題内 unique (= verify request の checkpointId)
- *   - checks[].label 非空、 checks[].points 正整数、 wrongAnswerPenalty は 0 以上整数
+ *   - checks は 2〜8 件 (engine の許容範囲、 教材は原則 4〜6)
+ *   - checks[].id は `^[a-z0-9][a-z0-9-]{0,63}$` かつ問題内 unique (= verify request の checkpointId)
+ *   - checks[].label 非空・80 文字以下、 checks[].points 正整数
+ *   - wrongAnswerPenalty は 0 以上整数、 当該 check の points 以下
+ *   - 1 check 内の hint 減点合計は当該 check points の 50% 以下 (問題全体 50% は checkScoringRegulation)
  *   - hints[].id は **問題全体で unique** (portal の reveal route が hintId 単独キーのため、
  *     check 跨ぎの衝突は reveal を曖昧にする)
- * 満点 = ティア標準点 / ヒント減点 50% cap は checkScoringRegulation が検査する。
+ * 満点 = ティア標準点 / 問題全体のヒント減点 50% cap は checkScoringRegulation が検査する。
  */
-const CHECK_ID_RE = /^[a-z0-9-]+$/;
+const CHECK_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const CHECK_LABEL_MAX = 80;
+const MIN_CHECKS = 2;
+const MAX_CHECKS = 8;
 
 export function checkMultiVerifyStructure(meta: Metadata): ValidationError[] {
   const errors: ValidationError[] = [];
@@ -368,16 +373,18 @@ export function checkMultiVerifyStructure(meta: Metadata): ValidationError[] {
   const checks = Array.isArray(scoring?.checks)
     ? (scoring.checks as Array<Record<string, unknown>>)
     : [];
-  if (checks.length === 0) {
-    errors.push("scoring.checks must be a non-empty array (multi-verify)");
-    return errors;
+  if (checks.length < MIN_CHECKS || checks.length > MAX_CHECKS) {
+    errors.push(
+      `scoring.checks must have ${MIN_CHECKS}–${MAX_CHECKS} entries (multi-verify), got ${checks.length}`,
+    );
+    if (checks.length === 0) return errors;
   }
   const seenCheckIds = new Set<string>();
   const seenHintIds = new Set<string>();
   checks.forEach((check, index) => {
     const id = typeof check.id === "string" ? check.id : undefined;
     if (!id || !CHECK_ID_RE.test(id)) {
-      errors.push(`scoring.checks[${index}].id must match ^[a-z0-9-]+$`);
+      errors.push(`scoring.checks[${index}].id must match ^[a-z0-9][a-z0-9-]{0,63}$`);
     } else if (seenCheckIds.has(id)) {
       errors.push(`scoring.checks[${index}].id "${id}" is duplicated`);
     } else {
@@ -385,24 +392,29 @@ export function checkMultiVerifyStructure(meta: Metadata): ValidationError[] {
     }
     if (typeof check.label !== "string" || check.label.trim().length === 0) {
       errors.push(`scoring.checks[${index}].label must be a non-empty string`);
+    } else if (check.label.length > CHECK_LABEL_MAX) {
+      errors.push(`scoring.checks[${index}].label must be ${CHECK_LABEL_MAX} characters or fewer`);
     }
-    if (
-      typeof check.points !== "number" ||
-      !Number.isInteger(check.points) ||
-      check.points <= 0
-    ) {
+    const points = check.points;
+    const pointsValid = typeof points === "number" && Number.isInteger(points) && points > 0;
+    if (!pointsValid) {
       errors.push(`scoring.checks[${index}].points must be a positive integer`);
     }
-    if (
-      check.wrongAnswerPenalty !== undefined &&
-      (typeof check.wrongAnswerPenalty !== "number" ||
-        !Number.isInteger(check.wrongAnswerPenalty) ||
-        check.wrongAnswerPenalty < 0)
-    ) {
-      errors.push(`scoring.checks[${index}].wrongAnswerPenalty must be a non-negative integer`);
+    const waP = check.wrongAnswerPenalty;
+    if (waP !== undefined) {
+      if (typeof waP !== "number" || !Number.isInteger(waP) || waP < 0) {
+        errors.push(`scoring.checks[${index}].wrongAnswerPenalty must be a non-negative integer`);
+      } else if (pointsValid && waP > (points as number)) {
+        errors.push(
+          `scoring.checks[${index}].wrongAnswerPenalty=${waP} must not exceed the check points (${points})`,
+        );
+      }
     }
     const hints = Array.isArray(check.hints) ? (check.hints as Array<Record<string, unknown>>) : [];
+    let hintPenaltySum = 0;
     for (const hint of hints) {
+      const penalty = (hint as { penalty?: unknown }).penalty;
+      if (typeof penalty === "number") hintPenaltySum += penalty;
       const hintId = typeof hint.id === "string" ? hint.id : undefined;
       if (hintId === undefined) continue;
       if (seenHintIds.has(hintId)) {
@@ -411,6 +423,11 @@ export function checkMultiVerifyStructure(meta: Metadata): ValidationError[] {
         );
       }
       seenHintIds.add(hintId);
+    }
+    if (pointsValid && hintPenaltySum > (points as number) * 0.5) {
+      errors.push(
+        `scoring.checks[${index}] hint penalties=${hintPenaltySum} exceed 50% of the check points (${(points as number) * 0.5}) — see SCORING.md`,
+      );
     }
   });
   return errors;

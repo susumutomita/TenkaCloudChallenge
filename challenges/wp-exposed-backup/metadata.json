@@ -1,15 +1,15 @@
 {
   "$schema": "../../SCHEMA.json",
   "id": "wp-exposed-backup",
-  "name": "前任者のバックアップ",
+  "name": "前任者の忘れ物",
   "category": "Challenge",
   "status": "draft",
   "visibility": "public",
-  "difficulty": 2,
-  "estimatedDuration": "30 分",
-  "shortDescription": "普通に動いている会社の WordPress サイト。 だが前任の担当者が 「テスト用に」 公開フォルダへ置いたまま消し忘れたファイルのせいで、 サイトの中身が丸ごと外から読めてしまっているらしい。",
-  "instructions": "## はじめに\n\n前任者から引き継いだ WordPress サイトに、公開してはいけない運用ファイルが残っている。外部の利用者と同じ目線で調査しよう。\n\n## 最初の一手\n\nブラウザで `http://127.0.0.1:18080/robots.txt` を開き、公開サイトが案内しているパスを確認する。\n\n## ゴール\n\n外から読めるバックアップ内の合言葉 (`TC{...}`) を提出する。発見後は README の対策を読み、同じ事故を防ぐ運用を説明できる状態にする。",
-  "description": "あなたは、 ある会社のコーポレートサイト (WordPress) の運用を引き継いだ。 サイトは現行の WordPress と MySQL 系 DB で普通に動いている。\n\nところが前任の担当者は、 サイト移行のときに 「テスト用」 としてデータベースのバックアップを公開フォルダ (Web からアクセスできる場所) に置いたまま、 消し忘れていた。 その結果、 会社のデータが丸ごと外部から読み取れる状態で放置されている ── という指摘が入った。\n\nこれは WordPress 本体の脆弱性でも、 意図的に書かれた危険なコードでもない。 「初期設定・運用の不備」 ── 公開してはいけない場所に、 公開してはいけないファイルが残っている、 という問題だ。 サイトを外から調べ、 置き忘れられたバックアップにたどり着け。 その中には監査用の合言葉 (`TC{...}`) が書かれている。",
+  "difficulty": 3,
+  "estimatedDuration": "45 分",
+  "shortDescription": "普通に動いている会社の WordPress サイト。 だが前任の担当者が移行のときに公開フォルダへ置いたまま消し忘れた 「忘れ物」 が複数あり、 サイトの中身や設定が外から読めてしまっているらしい。 一つずつ見つけよう。",
+  "instructions": "## はじめに\n\n前任者から引き継いだ WordPress サイトに、公開してはいけない運用ファイルが複数残っている。外部の利用者と同じ目線で、一つずつ調査しよう。\n\n## この問題は 4 つのチェックポイントに分かれている\n\n前任者が公開フォルダに残した 「忘れ物」 は 1 つではない。 それぞれ別の合言葉 (`TC{...}`) が入っていて、 見つけた合言葉を対応するチェックポイントに個別に提出する。 4 つすべてを提出すると満点になる (部分点あり)。\n\n1. 公開フォルダのバックアップ\n2. 設定ファイルの控え\n3. 本番に残ったログ\n4. 中身が見える内部フォルダ\n\n## 最初の一手\n\nブラウザで `http://127.0.0.1:18080/robots.txt` を開き、公開サイトが 「隠したつもり」 で案内しているパスを確認する。\n\n## ゴール\n\n4 つの忘れ物それぞれの合言葉を、 対応するチェックポイントに提出する。 発見後は README の対策を読み、 同じ事故を防ぐ運用を説明できる状態にする。",
+  "description": "あなたは、 ある会社のコーポレートサイト (WordPress) の運用を引き継いだ。 サイトは現行の WordPress と MySQL 系 DB で普通に動いている。\n\nところが前任の担当者は、 サイト移行のときに 「テスト用」 「あとで消す」 と言いながら、 いくつもの運用ファイルを公開フォルダ (Web からアクセスできる場所) に置いたまま消し忘れていた。 その結果、 会社のデータ・DB 接続情報・内部メモが、 外部から読み取れる状態で放置されている ── という指摘が入った。\n\nこれは WordPress 本体の脆弱性でも、 意図的に書かれた危険なコードでもない。 「初期設定・運用の不備」 ── 公開してはいけない場所に、 公開してはいけないファイルが複数残っている、 という問題だ。 サイトを外から調べ、 前任者が残した 4 つの忘れ物 (バックアップ・設定ファイルの控え・デバッグログ・中身が見える内部フォルダ) にたどり着け。 それぞれに監査用の合言葉 (`TC{...}`) が書かれている。",
   "tags": [
     "wordpress",
     "misconfiguration",
@@ -17,7 +17,8 @@
     "backup-exposure",
     "operations",
     "local-play",
-    "container"
+    "container",
+    "multi-verify"
   ],
   "exposedPorts": [
     { "port": 18080, "name": "Web (WordPress site)" },
@@ -25,28 +26,60 @@
   ],
   "learningGoals": [
     "WordPress は PHP・DB・認証・設定の上で動いていて、 デフォルトや初期設定を放置すると何が守れなくなるかを、 実際の環境で体感できるようになる",
-    "バックアップや設定ファイルを公開領域に置き忘れると、 サイトが普通に動いていてもデータが丸ごと漏れることを、 自分で確かめられるようになる",
-    "公開領域に置くファイルの見直し・不要ファイルの削除・アクセス制限が、 コードを触らずにできる基本の対策であることを理解する"
+    "バックアップ・設定ファイルの控え・デバッグログ・ディレクトリ一覧など、 別々の運用不備が同じ 「公開領域への置き忘れ」 から生まれることを、 自分で確かめられるようになる",
+    "公開領域に置くファイルの見直し・不要ファイルの削除・ディレクトリ一覧の無効化・デバッグ出力の停止が、 コードを触らずにできる基本の対策であることを理解する"
   ],
   "i18n": {
     "en": {
-      "name": "The Predecessor's Backup",
-      "shortDescription": "A company's WordPress site, running normally. But a file the previous operator left in the public folder 'just for testing' means the whole site's data can be read from the outside.",
-      "instructions": "## Introduction\n\nThe inherited WordPress site still contains an operations file that must not be public. Investigate it from the same perspective as an external visitor.\n\n## First step\n\nOpen `http://127.0.0.1:18080/robots.txt` in your browser and inspect the path advertised by the public site.\n\n## Goal\n\nSubmit the passphrase (`TC{...}`) found in the externally readable backup. Then read the README remediation guidance and be able to explain how to prevent the same incident.",
-      "description": "You have taken over running a company's corporate site (WordPress). It runs normally on current WordPress and a MySQL-family database.\n\nBut the previous operator, during the site migration, left a database backup in a public folder (somewhere reachable from the web) 'just for testing' and never removed it. As a result — someone has warned you — the company's data can be read wholesale from the outside.\n\nThis is not a vulnerability in WordPress itself, nor deliberately dangerous code. It is an initial-setup / operations mistake: a file that must not be public is sitting somewhere that is public. Investigate the site from the outside and reach the forgotten backup. An audit passphrase (`TC{...}`) is written inside it.",
+      "name": "The Predecessor's Leftovers",
+      "shortDescription": "A company's WordPress site, running normally. But the previous operator left several files in the public folder during the migration, so the site's data and settings can be read from the outside. Find them one by one.",
+      "instructions": "## Introduction\n\nThe inherited WordPress site still contains several operations files that must not be public. Investigate them one by one, from the same perspective as an external visitor.\n\n## This problem has 4 checkpoints\n\nThe previous operator left more than one thing in the public folder. Each leftover carries its own passphrase (`TC{...}`); submit each one to its matching checkpoint. Clearing all four gives full marks (partial credit applies).\n\n1. Backup in a public folder\n2. A copy of the config file\n3. A log left on in production\n4. A browsable internal folder\n\n## First step\n\nOpen `http://127.0.0.1:18080/robots.txt` in your browser and inspect the paths the public site is 'hiding' (and thereby advertising).\n\n## Goal\n\nSubmit each leftover's passphrase to its matching checkpoint. Then read the README remediation guidance and be able to explain how to prevent the same incident.",
+      "description": "You have taken over running a company's corporate site (WordPress). It runs normally on current WordPress and a MySQL-family database.\n\nBut the previous operator, during the site migration, left several operations files in a public folder (reachable from the web) 'just for testing' / 'to delete later' and never removed them. As a result — someone has warned you — the company's data, DB connection details, and internal notes can be read from the outside.\n\nThis is not a vulnerability in WordPress itself, nor deliberately dangerous code. It is an initial-setup / operations mistake: several files that must not be public are sitting somewhere that is public. Investigate the site from the outside and reach the four leftovers the previous operator forgot (a backup, a copy of the config file, a debug log, and a browsable internal folder). Each has an audit passphrase (`TC{...}`) written inside it.",
       "learningGoals": [
         "Feel, in a real environment, that WordPress runs on PHP, a DB, auth, and settings — and what stops being protected when defaults and initial setup are left alone",
-        "Learn to confirm, yourself, that leaving a backup or config file in a public folder leaks the whole dataset even while the site runs fine",
-        "Understand that reviewing what you put in public folders, deleting unneeded files, and restricting access are the basic fixes — no code changes required"
+        "Confirm, yourself, that separate operational mistakes — a backup, a config copy, a debug log, a directory listing — all grow from the same 'left it in the public area' habit",
+        "Understand that reviewing what goes in public folders, deleting unneeded files, turning off directory listing, and stopping debug output are the basic, code-free fixes"
       ],
-      "hints": [
+      "checks": [
         {
-          "id": "hint-1",
-          "content": "The site itself works fine, so don't attack WordPress. Think about what an operator carelessly leaves in a public folder — a database dump, a config file. Common names include backup.sql / db-backup.sql. And check /robots.txt: people often 'hide' a folder there, which really just points at it."
+          "id": "public-backup",
+          "label": "Backup in a public folder",
+          "hints": [
+            {
+              "id": "hint-public-backup",
+              "content": "The site works fine, so don't attack WordPress. Think about what an operator leaves in a public folder — a database dump. `/robots.txt` disallows `/wp-content/backups/`, which just points at it: `http://127.0.0.1:18080/wp-content/backups/db-backup.sql`. Read the `maintenance_notes` line."
+            }
+          ]
         },
         {
-          "id": "hint-2",
-          "content": "The previous operator left a database dump in the public web root (sensitive file / backup exposure). `/robots.txt` disallows `/wp-content/backups/`, and the dump sits at `http://127.0.0.1:18080/wp-content/backups/db-backup.sql`. Open it and read the `maintenance_notes` line — the audit passphrase is the flag. The fix: delete the file (and never place backups in a web-reachable folder)."
+          "id": "exposed-config",
+          "label": "A copy of the config file",
+          "hints": [
+            {
+              "id": "hint-exposed-config",
+              "content": "Editors save a backup before you edit (`wp-config.php.bak`, `.save`, `~`). Apache serves `.bak` as plain text — PHP only runs `.php` — so `http://127.0.0.1:18080/wp-config.php.bak` leaks the file verbatim, including an 'ops handoff token'."
+            }
+          ]
+        },
+        {
+          "id": "debug-log",
+          "label": "A log left on in production",
+          "hints": [
+            {
+              "id": "hint-debug-log",
+              "content": "WP_DEBUG_LOG writes to `wp-content/debug.log`. Left on in production, the log is world-readable at `http://127.0.0.1:18080/wp-content/debug.log`. One line is an internal ops note carrying the passphrase."
+            }
+          ]
+        },
+        {
+          "id": "dir-listing",
+          "label": "A browsable internal folder",
+          "hints": [
+            {
+              "id": "hint-dir-listing",
+              "content": "`/robots.txt` also disallows `/internal/`. That folder was left with Apache directory listing on, so `http://127.0.0.1:18080/internal/` shows its contents — open the handover note it lists."
+            }
+          ]
         }
       ]
     }
@@ -62,19 +95,59 @@
     "secretEnv": ["FLAG_SEED"]
   },
   "scoring": {
-    "kind": "verify",
-    "points": 100,
-    "wrongAnswerPenalty": 5,
-    "hints": [
+    "kind": "multi-verify",
+    "checks": [
       {
-        "id": "hint-1",
-        "content": "サイト自体は普通に動いている。 だから WordPress を攻めるのではない。 運用者が公開フォルダにうっかり置き忘れるもの ── データベースのダンプや設定ファイル ── を考えよう。 よくあるファイル名は backup.sql / db-backup.sql など。 それと /robots.txt も見てみよう。 「隠したつもり」 のフォルダが書かれていることがよくある (= かえって場所を教えてしまう)。",
-        "penalty": 20
+        "id": "public-backup",
+        "label": "公開フォルダのバックアップ",
+        "points": 60,
+        "wrongAnswerPenalty": 3,
+        "hints": [
+          {
+            "id": "hint-public-backup",
+            "content": "サイトは普通に動いている。 だから WordPress を攻めるのではない。 運用者が公開フォルダに置き忘れるもの ── データベースのダンプ ── を考えよう。 `/robots.txt` が `/wp-content/backups/` を Disallow にしていて、 それがかえって場所を教えている: `http://127.0.0.1:18080/wp-content/backups/db-backup.sql`。 `maintenance_notes` の行を読む。",
+            "penalty": 20
+          }
+        ]
       },
       {
-        "id": "hint-2",
-        "content": "前任者がデータベースのダンプを公開領域に置き忘れている (= 機密ファイル / バックアップの露出)。 `/robots.txt` が `/wp-content/backups/` を Disallow にしていて、 ダンプは `http://127.0.0.1:18080/wp-content/backups/db-backup.sql` にある。 開いて `maintenance_notes` の行を読むと、 監査用の合言葉がフラグだ。 対策は、 このファイルを削除し、 バックアップを Web から届く場所に置かないこと。",
-        "penalty": 30
+        "id": "exposed-config",
+        "label": "設定ファイルの控え",
+        "points": 60,
+        "wrongAnswerPenalty": 3,
+        "hints": [
+          {
+            "id": "hint-exposed-config",
+            "content": "エディタは編集前に控えを作る (`wp-config.php.bak` / `.save` / `~`)。 Apache は `.bak` を PHP として実行せずそのまま返す ── PHP は `.php` しか実行しない ── ので `http://127.0.0.1:18080/wp-config.php.bak` が中身を丸ごと漏らす。 「ops handoff token」 の行を読む。",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "debug-log",
+        "label": "本番に残ったログ",
+        "points": 40,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "hint-debug-log",
+            "content": "WP_DEBUG_LOG は `wp-content/debug.log` に書き出す。 本番で付けっぱなしだと `http://127.0.0.1:18080/wp-content/debug.log` が誰でも読める。 1 行だけ内部向けの運用メモがあり、 そこに合言葉が入っている。",
+            "penalty": 15
+          }
+        ]
+      },
+      {
+        "id": "dir-listing",
+        "label": "中身が見える内部フォルダ",
+        "points": 40,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "hint-dir-listing",
+            "content": "`/robots.txt` は `/internal/` も Disallow にしている。 そのフォルダは Apache のディレクトリ一覧 (Indexes) が有効なまま残されていて、 `http://127.0.0.1:18080/internal/` を開くと中身が一覧表示される。 並んでいる引き継ぎメモを開こう。",
+            "penalty": 15
+          }
+        ]
       }
     ]
   }
