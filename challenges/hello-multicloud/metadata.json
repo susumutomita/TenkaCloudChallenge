@@ -3,7 +3,7 @@
   "id": "hello-multicloud",
   "name": "Hello Multicloud (Sample)",
   "category": "Challenge",
-  "status": "ready",
+  "status": "draft",
   "visibility": "public",
   "difficulty": 1,
   "estimatedDuration": "10 分",
