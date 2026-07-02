@@ -1,52 +1,97 @@
 {
   "$schema": "../../SCHEMA.json",
   "id": "festivalgate-terminal-api",
-  "name": "入場端末の裏口",
+  "name": "入場端末の信頼境界",
   "category": "Challenge",
   "status": "draft",
   "visibility": "public",
   "difficulty": 3,
-  "estimatedDuration": "40 分",
-  "shortDescription": "イベント会社 FestivalGate の入場端末 API。 端末が使う機能は普通に動くが、 「社内ネットワークからしか叩けない」 はずの運営用エンドポイントに、 運営の機密が眠っているらしい。 あなたは外部から診断する立場だ。",
-  "instructions": "## はじめに\n\nFestivalGate の入場端末 API は「社内ネットワークからしか届かない」という前提で運営機能を守っている。外部の診断者として、その信頼境界を検証しよう。\n\n## 最初の一手\n\n`curl http://127.0.0.1:18080/internal/ops/summary` を実行し、拒否レスポンスからサーバーが呼び出し元をどう判定しているか考える。\n\n## ゴール\n\n運営機密内の合言葉 (`TC{...}`) を提出する。発見後は README の対策を読み、認証・最小権限・データ分離をどう適用するか説明できる状態にする。",
-  "description": "あなたは、 架空のイベント運営会社 FestivalGate の API のセキュリティ診断を任された。 会場の入場端末は、 この API を叩いてチケットの照会と入場処理をしている。\n\n端末が使う機能 (チケット照会・入場処理) は端末トークンで守られ、 普通に動く。 一方で運営用のエンドポイント `GET /internal/ops/summary` は 「社内ネットワークからしか到達しない」 前提で作られており、 外部からのアクセスは拒否される ── ことになっている。 その内側には、 運営の設定と機密 (`TC{...}` を含む) が置かれているという。\n\nこの API は 「呼び出し元が社内かどうか」 を何を根拠に判断しているのか。 そして端末が使う DB 接続は、 本当に端末の仕事に必要な範囲だけに閉じているのか。 外部の立場のまま、 運営用エンドポイントの機密にたどり着け。",
+  "estimatedDuration": "60 分",
+  "shortDescription": "FestivalGateの入場端末APIを、信頼境界、response最小化、端末identityのdata権限、繰り返し試行の4面から診断し、所有者設定で防御を再構成する。",
+  "instructions": "## はじめに\n\nFestivalGateの入場端末APIは、会場network、端末token、短いstaff PINを信頼して運営機能を守っている。外部診断者として、各境界が本当に独立して機能するか検証しよう。\n\n## この問題は5つのチェックポイントに分かれている\n\n1. 運営endpointが呼び出し元を信頼する根拠\n2. 運営responseが目的以上のdataを返していないか\n3. 端末identityがticket処理以外のdataへ到達できないか\n4. 短いstaff PINの繰り返し試行が制御されるか\n5. すべての防御設定を是正した後の再検証\n\n最初の4つは別々の合言葉 (`TC{...}`) を提出する。最後は設定をすべて直してから `VERIFY` を提出する。防御設定を先に有効化すると証跡へ届かなくなるため、4つの合言葉を先に集める。\n\n## 最初の一手\n\n`curl http://127.0.0.1:18080/internal/ops/status`を実行し、拒否responseからserverが何を根拠に「内部」と判断しているか考える。top pageには診断用のlow-privilege端末tokenと公開API仕様がある。\n\n## ゴール\n\n4つの異なるcontrol gapを個別提出し、`http://127.0.0.1:18080/owner/security`でclient header trust、過剰response、端末data権限、PIN試行制御、secret分離をすべて是正する。最後に防御設定の再検証へ`VERIFY`を提出する。",
+  "description": "あなたは架空のevent運営会社FestivalGateの入場端末APIを診断する。端末はticket照会と入場処理だけを担当するが、実装は「内部networkなら信頼する」「端末tokenがあれば同じDBのdataを読める」「短いPINでも試行回数は問題にならない」という複数の仮定に依存している。\n\n診断対象は1つの裏口ではない。clientが指定できるproxy headerをidentityとして扱う境界、運営summaryの過剰data、terminal identityの過剰data scope、PIN endpointの試行制御欠如を別々に確認する。証跡を集めた後、所有者の正規設定面から各controlを閉じ、hidden testで防御状態を再検証する。",
   "tags": [
     "api-security",
-    "broken-authentication",
     "trust-boundary",
     "least-privilege",
+    "data-minimization",
+    "rate-limiting",
+    "remediation",
     "owasp",
     "local-play",
-    "container"
+    "container",
+    "multi-verify"
   ],
   "exposedPorts": [
-    { "port": 18080, "name": "Web (terminal API)" },
+    { "port": 18080, "name": "Web (terminal API and owner security)" },
     { "port": 18081, "name": "/verify (loopback admin)" }
   ],
   "learningGoals": [
-    "「内部API」「端末向けAPI」であっても、 到達範囲と認証が曖昧なら重要な攻撃面になることを、 自分で確かめられるようになる",
-    "境界 (ネットワーク) の信頼を認証の代わりにしてはいけない ── 呼び出し元が自由に決められる情報を根拠にした判定がなぜ破れるのかを理解する",
-    "端末用の DB 接続を最小権限に絞り、 運営・顧客・認証系のデータを分離することが根本対策であることを理解する"
+    "clientが変更できるnetwork情報をauthenticationの代わりに使うと、内部APIという名称だけでは境界を守れないと理解する",
+    "API responseとservice accountのdata accessを業務目的に必要な最小範囲へ分ける理由を、実際の過剰dataから説明できるようになる",
+    "短いcredentialには試行制御が必要であり、認証、data分離、rate controlを重ねて修正後の状態を再検証できるようになる"
   ],
   "i18n": {
     "en": {
-      "name": "The Terminal's Back Door",
-      "shortDescription": "FestivalGate's entrance-terminal API. The terminal functions work fine, but an operations endpoint that is supposed to be reachable 'only from the internal network' is said to hold the ops secrets — and you are auditing it from the outside.",
-      "instructions": "## Introduction\n\nFestivalGate protects its operations functions with the assumption that only the internal network can reach them. As an external assessor, test that trust boundary.\n\n## First step\n\nRun `curl http://127.0.0.1:18080/internal/ops/summary`, inspect the rejection, and consider how the server decides where the caller came from.\n\n## Goal\n\nSubmit the passphrase (`TC{...}`) from the operations secrets. Then read the README remediation guidance and be able to explain how authentication, least privilege, and data separation should be applied.",
-      "description": "You have been asked to do a security assessment of the API for a fictional event company, FestivalGate. Entrance terminals at the venue call this API to look up and check in tickets.\n\nThe terminal functions (ticket lookup, check-in) are guarded by a terminal token and work normally. The operations endpoint `GET /internal/ops/summary`, however, was built on the assumption that it is 'only reachable from the internal network', so requests from outside are refused — in theory. Inside it live the operations config and secrets (including `TC{...}`).\n\nWhat does this API rely on to decide whether a caller is 'internal'? And is the DB connection the terminal uses really scoped to just what the terminal needs? Staying on the outside, reach the secrets behind the operations endpoint.",
+      "name": "Trust Boundaries at the Entrance Terminal",
+      "shortDescription": "Assess FestivalGate's terminal API across trust, response minimization, terminal data scope, and repeated attempts, then rebuild the defenses through owner settings.",
+      "instructions": "## Introduction\n\nFestivalGate's entrance-terminal API relies on the venue network, a terminal token, and a short staff PIN. As an external assessor, verify whether those boundaries work independently.\n\n## This problem has 5 checkpoints\n\n1. What evidence the operations endpoint trusts about its caller\n2. Whether the operations response returns more data than its purpose requires\n3. Whether the terminal identity can reach data outside ticket processing\n4. Whether repeated attempts against the short staff PIN are controlled\n5. Re-verify the full defensive configuration after remediation\n\nThe first four checkpoints each have a separate passphrase (`TC{...}`). For the last checkpoint, correct every setting and submit `VERIFY`. The fixes intentionally make the evidence inaccessible, so collect all four passphrases first.\n\n## First step\n\nRun `curl http://127.0.0.1:18080/internal/ops/status`. Use the rejection to reason about how the server decides that a caller is internal. The home page provides the assigned low-privilege terminal token and the public API documentation.\n\n## Goal\n\nSubmit the four distinct control gaps, then use `http://127.0.0.1:18080/owner/security` to stop client-header trust, minimize the operations response, restrict terminal data access, enable PIN attempt control, and separate secrets. Submit `VERIFY` to the remediation checkpoint.",
+      "description": "You are assessing the entrance-terminal API for the fictional event operator FestivalGate. A terminal should only look up tickets and check people in, but the implementation depends on several assumptions: an internal network is trusted, a terminal token can use the same broad data connection, and a short PIN is safe without attempt controls.\n\nThere is no single back door. Assess four separate control gaps: treating a client-supplied proxy header as identity, returning excessive operations data, giving the terminal identity excessive data scope, and omitting attempt controls on a PIN endpoint. After collecting evidence, close each control through the legitimate owner settings and let the hidden test verify the resulting defensive state.",
       "learningGoals": [
-        "Learn to confirm, yourself, that an 'internal' / 'terminal-facing' API is still a major attack surface when its reach and authentication are vague",
-        "Understand why trusting the network boundary as a substitute for authentication breaks — a decision based on values the caller controls is no decision at all",
-        "Understand that scoping the terminal's DB connection to least privilege and separating ops / customer / auth data are the root-cause fixes"
+        "Understand that an internal-API label cannot protect a boundary when client-controlled network data substitutes for authentication",
+        "Explain why API responses and service-account data access must be limited to the minimum required for their business purpose",
+        "Apply layered fixes for authentication, data separation, and attempt control, then re-verify the corrected state"
       ],
-      "hints": [
+      "checks": [
         {
-          "id": "hint-1",
-          "content": "The ops endpoint refuses you because you are 'not internal'. But how does the server know you are not internal? It only sees your HTTP request. Look for a value in the request that decides 'internal vs external' — and ask who gets to set that value."
+          "id": "proxy-boundary",
+          "label": "Inspect the operations boundary",
+          "hints": [
+            {
+              "id": "hint-proxy-boundary",
+              "content": "The server only sees the HTTP request. Try supplying an internal-looking first hop yourself: `curl -H \"X-Forwarded-For: 10.0.0.9\" http://127.0.0.1:18080/internal/ops/status`."
+            }
+          ]
         },
         {
-          "id": "hint-2",
-          "content": "The server decides 'internal' from the `X-Forwarded-For` header, which the client fully controls (trusting a client-supplied network signal as authentication). Send an internal-looking hop: `curl -H \"X-Forwarded-For: 10.0.0.9\" http://127.0.0.1:18080/internal/ops/summary`. The response's `opsSecrets.gate_master_note` is the flag — and note it also exposes customer counts and API keys, because the terminal's DB access was never scoped down."
+          "id": "response-scope",
+          "label": "Inventory the response scope",
+          "hints": [
+            {
+              "id": "hint-response-scope",
+              "content": "Use the same boundary observation against `/internal/ops/summary`. Compare what an operations summary needs with the customer count, live-looking keys, reset token, and audit marker it actually returns."
+            }
+          ]
+        },
+        {
+          "id": "terminal-data-scope",
+          "label": "Inspect the terminal identity's data scope",
+          "hints": [
+            {
+              "id": "hint-terminal-data-scope",
+              "content": "The documented terminal identity should handle tickets only. Probe the neighboring `/api/terminal/customers/<id>` collection with the supplied terminal token and enumerate the small integer IDs."
+            }
+          ]
+        },
+        {
+          "id": "attempt-throttling",
+          "label": "Test resistance to repeated attempts",
+          "hints": [
+            {
+              "id": "hint-attempt-throttling",
+              "content": "The home page documents a three-digit `/api/terminal/staff-unlock?pin=000` workflow. With the terminal token, test whether a loop over `000` through `999` is ever slowed or blocked."
+            }
+          ]
+        },
+        {
+          "id": "security-remediation",
+          "label": "Re-verify the defensive settings",
+          "hints": [
+            {
+              "id": "hint-security-remediation",
+              "content": "After collecting all four passphrases, open `/owner/security` and correct every row: header trust, response scope, terminal data access, PIN throttling, and secret separation. Then submit `VERIFY`."
+            }
+          ]
         }
       ]
     }
@@ -62,19 +107,72 @@
     "secretEnv": ["FLAG_SEED"]
   },
   "scoring": {
-    "kind": "verify",
-    "points": 200,
-    "wrongAnswerPenalty": 10,
-    "hints": [
+    "kind": "multi-verify",
+    "checks": [
       {
-        "id": "hint-1",
-        "content": "運営用エンドポイントは 「あなたが社内ではない」 という理由で拒否する。 では、 サーバーは何を見て 「社内ではない」 と判断している? サーバーに届くのはあなたの HTTP リクエストだけだ。 リクエストの中に 「社内か社外か」 を決めている値がないか探し、 その値を誰が決められるのかを考えよう。",
-        "penalty": 40
+        "id": "proxy-boundary",
+        "label": "運営境界の確認",
+        "points": 40,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "hint-proxy-boundary",
+            "content": "serverに届くのはHTTP requestだけである。内部らしいfirst hopを自分で指定してみる: `curl -H \"X-Forwarded-For: 10.0.0.9\" http://127.0.0.1:18080/internal/ops/status`。",
+            "penalty": 20
+          }
+        ]
       },
       {
-        "id": "hint-2",
-        "content": "サーバーは `X-Forwarded-For` ヘッダを見て 「社内かどうか」 を判定している。 これは呼び出し元が自由に設定できる (= クライアント任せのネットワーク情報を認証代わりに使っている)。 社内らしい IP を送りつけよう: `curl -H \"X-Forwarded-For: 10.0.0.9\" http://127.0.0.1:18080/internal/ops/summary`。 レスポンスの `opsSecrets.gate_master_note` がフラグだ。 ついでに顧客数や API キーまで返ってくる ── 端末用の DB 接続の権限が絞られていないからだ。",
-        "penalty": 60
+        "id": "response-scope",
+        "label": "response範囲の棚卸し",
+        "points": 40,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "hint-response-scope",
+            "content": "同じ境界の観察結果を`/internal/ops/summary`へ使う。運営summaryに必要な情報と、実際に返るcustomer数、live風key、reset token、監査markerを比較する。",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "terminal-data-scope",
+        "label": "端末identityのdata範囲",
+        "points": 40,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "hint-terminal-data-scope",
+            "content": "公開仕様上、端末identityの仕事はticket処理だけである。配布済みterminal tokenで隣接する`/api/terminal/customers/<id>`を調べ、小さな整数IDを列挙する。",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "attempt-throttling",
+        "label": "繰り返し試行への耐性",
+        "points": 40,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "hint-attempt-throttling",
+            "content": "top pageに3桁PINの`/api/terminal/staff-unlock?pin=000`が記載されている。terminal tokenを付け、`000`から`999`までのloopが遅延・遮断されるか確認する。",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "security-remediation",
+        "label": "防御設定の再検証",
+        "points": 40,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "hint-security-remediation",
+            "content": "4つの合言葉を集めてから`/owner/security`を開き、header trust、response範囲、端末data access、PIN試行制御、secret分離の全rowを是正する。その後`VERIFY`を提出する。",
+            "penalty": 20
+          }
+        ]
       }
     ]
   }
