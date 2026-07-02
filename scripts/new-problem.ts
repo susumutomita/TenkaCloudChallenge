@@ -16,7 +16,7 @@
  * it fresh on every commit).
  */
 
-import { cpSync, existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -60,6 +60,34 @@ export function rewriteMetadata(raw: string, id: string): string {
   return `${JSON.stringify(meta, null, 2)}\n`;
 }
 
+/**
+ * Copy a starter problem into a fresh `<category>/<id>` and rewrite its
+ * metadata into a draft skeleton. Pure filesystem step (no reindex, no
+ * process.exit) so it is unit-testable: pass `destRoot` to scaffold into a
+ * scratch dir and assert the copied artifacts (e.g. both READMEs — #135) land.
+ * Throws on a pre-existing destination or a missing starter; `main` turns those
+ * into the CLI's error+exit. Returns the created problem directory.
+ */
+export function scaffoldProblem(
+  args: Args,
+  { srcRoot = REPO_ROOT, destRoot = REPO_ROOT }: { srcRoot?: string; destRoot?: string } = {},
+): string {
+  const dest = join(destRoot, args.category, args.id);
+  const src = join(srcRoot, args.category, args.from);
+  if (existsSync(dest)) {
+    throw new Error(`${args.category}/${args.id} already exists.`);
+  }
+  if (!existsSync(src)) {
+    const available = readdirSync(join(srcRoot, args.category)).join(", ");
+    throw new Error(`sample ${args.category}/${args.from} not found. Available: ${available}`);
+  }
+  mkdirSync(dirname(dest), { recursive: true }); // no-op under REPO_ROOT; needed for scratch destRoots.
+  cpSync(src, dest, { recursive: true });
+  const metaPath = join(dest, "metadata.json");
+  writeFileSync(metaPath, rewriteMetadata(readFileSync(metaPath, "utf8"), args.id));
+  return dest;
+}
+
 function reindex(io: { log: (m: string) => void }): void {
   for (const [script, args] of [
     ["scripts/build-index.ts", []],
@@ -78,22 +106,12 @@ function main(): void {
     process.exit(1);
   }
   const { category, id, from } = parsed;
-  const dest = join(REPO_ROOT, category, id);
-  const src = join(REPO_ROOT, category, from);
-  if (existsSync(dest)) {
-    console.error(`[new-problem] ${category}/${id} already exists.`);
+  try {
+    scaffoldProblem(parsed);
+  } catch (error) {
+    console.error(`[new-problem] ${(error as Error).message}`);
     process.exit(1);
   }
-  if (!existsSync(src)) {
-    console.error(
-      `[new-problem] sample ${category}/${from} not found. Available: ${readdirSync(join(REPO_ROOT, category)).join(", ")}`,
-    );
-    process.exit(1);
-  }
-
-  cpSync(src, dest, { recursive: true });
-  const metaPath = join(dest, "metadata.json");
-  writeFileSync(metaPath, rewriteMetadata(readFileSync(metaPath, "utf8"), id));
   console.log(`[new-problem] created ${category}/${id} (copied from ${from}).`);
 
   reindex({ log: console.log });
