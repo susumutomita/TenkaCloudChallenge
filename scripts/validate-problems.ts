@@ -158,7 +158,7 @@ function checkHintTranslations(meta: Metadata): ValidationError[] {
  *   - 全ヒント減点 (scoring.hints[] + flags[]/checks[].hints[]) の合計 <= 満点の 50%
  * Battle (uptime/phased 採点、 固定 points 無し) は対象外。 固定点が判定できない Challenge も skip。
  */
-function checkScoringRegulation(meta: Metadata): ValidationError[] {
+export function checkScoringRegulation(meta: Metadata): ValidationError[] {
   const errors: ValidationError[] = [];
   if (meta.category !== "Challenge") return errors;
   const scoring = meta.scoring as Record<string, unknown> | undefined;
