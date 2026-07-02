@@ -1,0 +1,52 @@
+{
+  "$comment": "Shared bilingual-README contract (TenkaCloudChallenge#135). SINGLE SOURCE OF TRUTH for how checkRequiredReadmes() must behave. The catalog runs scripts/readme-contract.test.ts against its own validate-problems.ts; the platform mirror (TenkaCloud#2254) ships this identical file plus the same test against ITS verbatim copy. If either copy of the validator drifts from these cases, that repo's CI fails; if this file itself differs between repos, the mirror/sync check catches it. Keep expectErrorSubstrings ASCII (the real messages contain an em dash after the substring).",
+  "cases": [
+    {
+      "name": "valid English + Japanese",
+      "files": {
+        "README.md": { "type": "file", "content": "# English\n" },
+        "README.ja.md": { "type": "file", "content": "# 日本語\n" }
+      },
+      "expectErrorSubstrings": []
+    },
+    {
+      "name": "missing English README",
+      "files": {
+        "README.ja.md": { "type": "file", "content": "# 日本語\n" }
+      },
+      "expectErrorSubstrings": ["README.md is required"]
+    },
+    {
+      "name": "missing Japanese README",
+      "files": {
+        "README.md": { "type": "file", "content": "# English\n" }
+      },
+      "expectErrorSubstrings": ["README.ja.md is required"]
+    },
+    {
+      "name": "empty English README (whitespace only)",
+      "files": {
+        "README.md": { "type": "file", "content": " \n" },
+        "README.ja.md": { "type": "file", "content": "# 日本語\n" }
+      },
+      "expectErrorSubstrings": ["README.md must not be empty"]
+    },
+    {
+      "name": "English README is a directory",
+      "files": {
+        "README.md": { "type": "dir" },
+        "README.ja.md": { "type": "file", "content": "# 日本語\n" }
+      },
+      "expectErrorSubstrings": ["README.md must be a regular file"]
+    },
+    {
+      "name": "English README is a symlink (not a real file)",
+      "files": {
+        "source.md": { "type": "file", "content": "# Shared\n" },
+        "README.md": { "type": "symlink", "target": "source.md" },
+        "README.ja.md": { "type": "file", "content": "# 日本語\n" }
+      },
+      "expectErrorSubstrings": ["README.md must be a regular file"]
+    }
+  ]
+}
