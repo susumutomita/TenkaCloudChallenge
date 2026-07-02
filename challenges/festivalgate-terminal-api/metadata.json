@@ -63,18 +63,18 @@
   },
   "scoring": {
     "kind": "verify",
-    "points": 250,
+    "points": 200,
     "wrongAnswerPenalty": 10,
     "hints": [
       {
         "id": "hint-1",
         "content": "運営用エンドポイントは 「あなたが社内ではない」 という理由で拒否する。 では、 サーバーは何を見て 「社内ではない」 と判断している? サーバーに届くのはあなたの HTTP リクエストだけだ。 リクエストの中に 「社内か社外か」 を決めている値がないか探し、 その値を誰が決められるのかを考えよう。",
-        "penalty": 0
+        "penalty": 40
       },
       {
         "id": "hint-2",
         "content": "サーバーは `X-Forwarded-For` ヘッダを見て 「社内かどうか」 を判定している。 これは呼び出し元が自由に設定できる (= クライアント任せのネットワーク情報を認証代わりに使っている)。 社内らしい IP を送りつけよう: `curl -H \"X-Forwarded-For: 10.0.0.9\" http://127.0.0.1:18080/internal/ops/summary`。 レスポンスの `opsSecrets.gate_master_note` がフラグだ。 ついでに顧客数や API キーまで返ってくる ── 端末用の DB 接続の権限が絞られていないからだ。",
-        "penalty": 50
+        "penalty": 60
       }
     ]
   }
