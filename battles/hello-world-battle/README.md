@@ -12,6 +12,23 @@ The **minimal sample** for Battle uptime scoring. Deploys nginx (frontend) and P
 | status         | `ready`                                     |
 | Scoring        | `uptime-flat` (`pointsPerSuccess`: 100)     |
 
+## First connection (start here if AWS is new to you)
+
+This is TenkaCloud's **1-1**: it teaches the whole Battle loop with no setup beyond signing in. You never create resources by hand — you connect, register a URL, and watch scoring start.
+
+1. **Get AWS credentials for your stack** — any one of:
+   - **CloudShell (nothing to install)** — open CloudShell in the AWS Console; the AWS CLI + Session Manager plugin are already there. Easiest if you have no local tooling.
+   - **`aws login` / SSO** — if the organizer gave you an IAM Identity Center (SSO) sign-in, run `aws sso login` (or `aws login`) locally to get temporary credentials.
+   - **Access keys** — export the participant credentials you were issued as `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN`.
+2. **Connect to the app host** with the `SsmStartSessionCommand` Stack Output — no SSH, no key pair:
+   ```
+   aws ssm start-session --target <InstanceId>
+   ```
+   Local use needs the [Session Manager plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html); CloudShell has it built in.
+3. **Follow the banner.** On connect, the shell prints your next step (register the URL). Do that in the portal and scoring starts — that is the success moment.
+
+> `ssm start-session` is the one genuinely new command here. Everything after it is guided in-shell and in-portal, so you are never left wondering "now what?".
+
 ## What you do
 
 Day two at TenkaCloud Inc. You inherited the previous SRE's little production web stack (nginx + Python `/healthz` on one EC2) -- except other teams' SREs share the same account and are taking each other's services down.

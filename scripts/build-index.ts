@@ -44,6 +44,7 @@ interface IndexEntry {
   category: string;
   status: string;
   visibility: string;
+  onboardingOrder?: number;
   difficulty: number;
   estimatedDuration: string;
   shortDescription: string;
@@ -83,6 +84,9 @@ function toEntry(meta: Record<string, unknown>, costById: Map<string, ProblemCos
     category: String(meta.category),
     status: String(meta.status),
     visibility: typeof meta.visibility === "string" ? meta.visibility : "public",
+    // Optional onboarding-track position (getting-started rail); omitted from
+    // the entry when unset so only track members carry it.
+    onboardingOrder: typeof meta.onboardingOrder === "number" ? meta.onboardingOrder : undefined,
     difficulty: Number(meta.difficulty),
     estimatedDuration: String(meta.estimatedDuration),
     shortDescription: String(meta.shortDescription),

@@ -12,6 +12,23 @@ Battle uptime scoring の **最小 sample** 問題。 EC2 1 台に nginx (fronte
 | status       | `ready`                                  |
 | 採点方式     | `uptime-flat` (`pointsPerSuccess`: 100)  |
 
+## はじめての接続 (AWS が久しぶり / 初めてならここから)
+
+これは天下クラウドの **1-1**。 サインイン以外の事前準備なしで Battle の基本ループを体験できるよう作られています。 リソースを手で作ることはありません ── 接続して、 URL を登録して、 加点が始まるのを見るだけ。
+
+1. **自分のスタック用の AWS 資格情報を用意する** ── いずれか 1 つ:
+   - **CloudShell (インストール不要)** ── AWS コンソールで CloudShell を開く。 AWS CLI と Session Manager plugin が最初から入っています。 手元にツールが無いならこれが一番楽。
+   - **`aws login` / SSO** ── 運営から IAM Identity Center (SSO) のサインインが渡されているなら、 手元で `aws sso login` (または `aws login`) を実行して一時資格情報を取得。
+   - **アクセスキー** ── 配布された参加者資格情報を `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` としてエクスポート。
+2. **app host に接続する** ── Stack Output の `SsmStartSessionCommand` を使う。 SSH も鍵ペアも不要:
+   ```
+   aws ssm start-session --target <InstanceId>
+   ```
+   手元で使う場合は [Session Manager plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html) が必要 (CloudShell には同梱)。
+3. **バナーに従う。** 接続すると、 シェルに次の一手 (URL 登録) の案内が出ます。 それをポータルで行うと採点が始まる ── これが成功体験です。
+
+> 本当に新しいのは `ssm start-session` の 1 コマンドだけ。 その後はシェル内とポータル内で「次はこれ」と案内されるので、 手が止まりません。
+
 ## 何をする問題か
 
 天下クラウド株式会社、 2 日目。 前任の SRE が production に残した小さな web stack (EC2 上で nginx + Python `/healthz`) を引き継いだ ── が、 同じアカウントには他チームの SRE がいて、 互いに相手のサービスを落とし合っている。

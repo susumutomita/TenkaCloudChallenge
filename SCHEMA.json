@@ -133,6 +133,11 @@
       "enum": ["public", "private"],
       "description": "[ADR-008] 問題実装の公開境界。 public = 本体 repo 内に template.yaml / api / frontend を持つ教材用 (= 答えが open でも成立する問題、 hello-world 系)。 private = TenkaCloudChallenges 別 private repo に payload を置き S3 + 15min presigned URL で配信する本格競技用 (= 答えが open だと成立しない microservice-migration-battle 系)。 省略時 public (= 既存 metadata との互換)。 Phase 1 では UI 表示のみ、 Phase 3 で Worker Lambda の S3 fetch 分岐を入れる。"
     },
+    "onboardingOrder": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "任意。 はじめての参加者向けオンボーディング track (「マリオ 1-1」的な導入列) における並び順。 設定された問題だけが track の一員で、 この値の昇順に並ぶ (1 = 最初の一問)。 未設定なら track に含めない。 描画は portal 側。"
+    },
     "difficulty": {
       "type": "integer",
       "minimum": 1,
