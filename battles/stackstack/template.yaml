@@ -592,7 +592,21 @@ Resources:
                 Effect: Allow
                 Action:
                   - ssm:TerminateSession
-                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:session/${NamePrefix}*"
+                  - ssm:ResumeSession
+                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:session/*"
+                Condition:
+                  # Session Manager names each session after the caller's
+                  # role-session-name (set by the credential-vending chain, e.g.
+                  # `stackstack-<ULID>`), never after NamePrefix, so scoping the
+                  # ARN by ${NamePrefix} can never match - it always denied
+                  # Terminate/ResumeSession on exit. Match the
+                  # aws:ssmmessages:session-id tag SSM applies to every session
+                  # (value = role-id:role-session-name = ${aws:userid}) - AWS's
+                  # documented federated/assumed-role pattern, restricting each
+                  # caller to their own sessions.
+                  StringLike:
+                    ssm:resourceTag/aws:ssmmessages:session-id:
+                      - "${aws:userid}"
 
   InstanceRole:
     Type: AWS::IAM::Role
