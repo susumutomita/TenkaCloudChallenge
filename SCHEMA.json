@@ -25,6 +25,28 @@
         }
       }
     },
+    "localizedChecks": {
+      "type": "array",
+      "description": "[TenkaCloud#2252] `scoring.checks[]` の locale 別翻訳。 canonical は top-level `scoring.checks[]`。 本配列は同じ `id` の `label` と `hints[].content` だけを差し替える (= points / id / penalty は language-neutral なので再宣言しない)。 multi-verify 問題では全 check の英訳が必須 (ja/en parity)。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "label"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "翻訳対象の `scoring.checks[].id`。 top-level に同じ id が存在しなければならない。"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "description": "翻訳済み表示名 (非スポイラー)。"
+          },
+          "hints": { "$ref": "#/$defs/localizedHints" }
+        }
+      }
+    },
     "progressiveHints": {
       "type": "array",
       "description": "競技者画面に表示するヒント。 Issue #742 Phase 1: v1 (string) と v2 (ProgressiveHint object) の混在を許容する (= 後方互換)。 v2 で `penalty` を指定すると reveal 時にその値が `points` から減算される (= Phase 5 で全 5 builtin kind 共通)。",
@@ -288,7 +310,8 @@
             "description": { "type": "string" },
             "instructions": { "type": "string" },
             "learningGoals": { "type": "array", "items": { "type": "string", "minLength": 1 } },
-            "hints": { "$ref": "#/$defs/localizedHints" }
+            "hints": { "$ref": "#/$defs/localizedHints" },
+            "checks": { "$ref": "#/$defs/localizedChecks" }
           }
         }
       }
@@ -400,6 +423,52 @@
             "hints": { "$ref": "#/$defs/progressiveHints" }
           },
           "description": "kind=verify (= container 問題、 採点は問題側 /verify に委譲)。 答え・隠しテストはコンテナ内にのみ存在する。"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "checks"],
+          "properties": {
+            "kind": {
+              "const": "multi-verify",
+              "description": "[TenkaCloud#2252] container 問題の複数チェックポイント版。 各 check の提出を問題コンテナの /verify に checkpointId 付きで委譲し、 check 単位で部分加点する。 runtime.provider=docker と併用する (CFn 問題では使えない)。 配点の正本は metadata (= container の points override は無効)。",
+              "aiContext": "checks[].label と hints は競技者に見える。 脆弱性名 (SQLi / XSS 等) を書かない (= AGENT.md §10 非スポイラー)。「公開バックアップ」のように現象・対象で書く。"
+            },
+            "checks": {
+              "type": "array",
+              "minItems": 1,
+              "description": "独立チェックポイント群。 points 合計が問題の満点 (= SCORING.md のティア標準点に一致させる)。 checks[].id は問題内 unique、 hints[].id は問題全体で unique (portal の reveal route が hintId 単独キーのため)。",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "label", "points"],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9-]+$",
+                    "description": "問題内で unique な stable identifier。 submit-flag request の flagId / verify request の checkpointId と一致する。"
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Portal に出す表示名 (非スポイラー。 例: \"公開バックアップ\")。 英訳は i18n.en.checks[] へ。"
+                  },
+                  "points": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "この check 正解時の獲得ポイント (1 回まで)。"
+                  },
+                  "wrongAnswerPenalty": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "この check への不正解 1 回ごとの減点 (default 0)。"
+                  },
+                  "hints": { "$ref": "#/$defs/progressiveHints" }
+                }
+              }
+            }
+          },
+          "description": "kind=multi-verify (= container 問題の複数チェックポイント、 TenkaCloud#2252)。 採点は check ごとに問題側 /verify (checkpointId 必須 echo) に委譲する。"
         },
         {
           "type": "object",

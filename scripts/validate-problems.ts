@@ -335,11 +335,186 @@ function checkContainerRefs(dir: string, meta: Metadata): CrossRefResult {
     errors.push(`runtime.entry "${entry}" not found`);
   }
   const scoringKind = (meta.scoring as { kind?: unknown } | undefined)?.kind;
-  if (scoringKind !== "verify") {
-    errors.push('a container problem must use scoring.kind="verify" (evaluation lives in /verify)');
+  // [TenkaCloud#2252] container 問題の採点はコンテナ /verify への委譲のみ:
+  // 単一判定の "verify" か、 check 単位部分点の "multi-verify"。
+  if (scoringKind !== "verify" && scoringKind !== "multi-verify") {
+    errors.push(
+      'a container problem must use scoring.kind="verify" or "multi-verify" (evaluation lives in /verify)',
+    );
+  }
+  const warnings: ValidationError[] = [];
+  if (scoringKind === "multi-verify") {
+    errors.push(...checkMultiVerifyStructure(meta), ...checkMultiVerifyTranslations(meta));
+    warnings.push(...checkCheckLabelSpoilerAdvisory(meta));
   }
   errors.push(...checkDashboardSlotFiles(meta, dir), ...checkCoordinationPluginFile(meta, dir));
-  return { errors, warnings: [] };
+  return { errors, warnings };
+}
+
+/**
+ * [TenkaCloud#2252] multi-verify の構造検査 (platform parser / SDK と同じ契約):
+ *   - checks は 1 件以上
+ *   - checks[].id は `^[a-z0-9-]+$` かつ問題内 unique (= verify request の checkpointId)
+ *   - checks[].label 非空、 checks[].points 正整数、 wrongAnswerPenalty は 0 以上整数
+ *   - hints[].id は **問題全体で unique** (portal の reveal route が hintId 単独キーのため、
+ *     check 跨ぎの衝突は reveal を曖昧にする)
+ * 満点 = ティア標準点 / ヒント減点 50% cap は checkScoringRegulation が検査する。
+ */
+const CHECK_ID_RE = /^[a-z0-9-]+$/;
+
+export function checkMultiVerifyStructure(meta: Metadata): ValidationError[] {
+  const errors: ValidationError[] = [];
+  const scoring = meta.scoring as { checks?: unknown } | undefined;
+  const checks = Array.isArray(scoring?.checks)
+    ? (scoring.checks as Array<Record<string, unknown>>)
+    : [];
+  if (checks.length === 0) {
+    errors.push("scoring.checks must be a non-empty array (multi-verify)");
+    return errors;
+  }
+  const seenCheckIds = new Set<string>();
+  const seenHintIds = new Set<string>();
+  checks.forEach((check, index) => {
+    const id = typeof check.id === "string" ? check.id : undefined;
+    if (!id || !CHECK_ID_RE.test(id)) {
+      errors.push(`scoring.checks[${index}].id must match ^[a-z0-9-]+$`);
+    } else if (seenCheckIds.has(id)) {
+      errors.push(`scoring.checks[${index}].id "${id}" is duplicated`);
+    } else {
+      seenCheckIds.add(id);
+    }
+    if (typeof check.label !== "string" || check.label.trim().length === 0) {
+      errors.push(`scoring.checks[${index}].label must be a non-empty string`);
+    }
+    if (
+      typeof check.points !== "number" ||
+      !Number.isInteger(check.points) ||
+      check.points <= 0
+    ) {
+      errors.push(`scoring.checks[${index}].points must be a positive integer`);
+    }
+    if (
+      check.wrongAnswerPenalty !== undefined &&
+      (typeof check.wrongAnswerPenalty !== "number" ||
+        !Number.isInteger(check.wrongAnswerPenalty) ||
+        check.wrongAnswerPenalty < 0)
+    ) {
+      errors.push(`scoring.checks[${index}].wrongAnswerPenalty must be a non-negative integer`);
+    }
+    const hints = Array.isArray(check.hints) ? (check.hints as Array<Record<string, unknown>>) : [];
+    for (const hint of hints) {
+      const hintId = typeof hint.id === "string" ? hint.id : undefined;
+      if (hintId === undefined) continue;
+      if (seenHintIds.has(hintId)) {
+        errors.push(
+          `scoring.checks[${index}].hints id "${hintId}" is duplicated (hint ids must be unique across the problem — the reveal route is keyed on hintId alone)`,
+        );
+      }
+      seenHintIds.add(hintId);
+    }
+  });
+  return errors;
+}
+
+/**
+ * [TenkaCloud#2252 / ja-en parity] multi-verify の checks[].label / hints は競技者に見えるため、
+ * `i18n.en.checks[]` に同じ id の英訳 (label 必須 + hint content) を必ず持つ。 翻訳側にしか無い
+ * id (typo / drift) も loud に止める。 points / id は language-neutral なので翻訳側では宣言しない。
+ */
+export function checkMultiVerifyTranslations(meta: Metadata): ValidationError[] {
+  const errors: ValidationError[] = [];
+  const scoring = meta.scoring as { checks?: unknown } | undefined;
+  const checks = Array.isArray(scoring?.checks)
+    ? (scoring.checks as Array<Record<string, unknown>>)
+    : [];
+  if (checks.length === 0) return errors;
+
+  const i18n = meta.i18n as { en?: { checks?: unknown } } | undefined;
+  const enChecks = Array.isArray(i18n?.en?.checks)
+    ? (i18n.en.checks as Array<Record<string, unknown>>)
+    : [];
+  const enById = new Map<string, Record<string, unknown>>();
+  for (const entry of enChecks) {
+    if (typeof entry.id === "string") enById.set(entry.id, entry);
+  }
+  const canonicalIds = new Set(
+    checks.map((check) => check.id).filter((id): id is string => typeof id === "string"),
+  );
+  for (const id of enById.keys()) {
+    if (!canonicalIds.has(id)) {
+      errors.push(
+        `i18n.en.checks[].id="${id}" は scoring.checks[] に存在しない (= 翻訳の id typo / drift)`,
+      );
+    }
+  }
+  for (const check of checks) {
+    const id = typeof check.id === "string" ? check.id : undefined;
+    if (id === undefined) continue;
+    const en = enById.get(id);
+    if (!en || typeof en.label !== "string" || en.label.trim().length === 0) {
+      errors.push(
+        `scoring.checks[].id="${id}" の英訳 label が i18n.en.checks に無い — mirror the JA label in English (ja/en parity)`,
+      );
+      continue;
+    }
+    // per-check hints parity: canonical hint id ⊆/⊇ en hint id
+    const hintIds = (Array.isArray(check.hints) ? check.hints : [])
+      .map((h) => (h as { id?: unknown }).id)
+      .filter((v): v is string => typeof v === "string");
+    const enHintIds = new Set(
+      (Array.isArray(en.hints) ? en.hints : [])
+        .map((h) => (h as { id?: unknown }).id)
+        .filter((v): v is string => typeof v === "string"),
+    );
+    for (const hintId of hintIds) {
+      if (!enHintIds.has(hintId)) {
+        errors.push(
+          `scoring.checks[].id="${id}" hints[].id="${hintId}" の英訳が i18n.en.checks に無い (ja/en parity)`,
+        );
+      }
+    }
+    for (const enHintId of enHintIds) {
+      if (!hintIds.includes(enHintId)) {
+        errors.push(
+          `i18n.en.checks[].id="${id}" hints[].id="${enHintId}" は scoring.checks の hints に存在しない (= 翻訳の id typo / drift)`,
+        );
+      }
+    }
+  }
+  return errors;
+}
+
+/**
+ * [TenkaCloud#2252 / AGENT.md §10] checks[].label は競技者に見える。 脆弱性名を書くと
+ * 「何を探すか」 の種明かしになる (security-CTF ルール: 「公開バックアップ」 は可、
+ * 「SQLi bypass」 は不可)。 文言 match は演出と区別できないため error ではなく warning
+ * (= checkDisruptionDeliveryAdvisory と同方針)。
+ */
+const SPOILER_TERMS =
+  /\b(sqli|sql injection|xss|csrf|ssrf|rce|idor|path traversal|prototype pollution|deserialization)\b|インジェクション|ディレクトリトラバーサル/i;
+
+export function checkCheckLabelSpoilerAdvisory(meta: Metadata): ValidationError[] {
+  const warnings: ValidationError[] = [];
+  const scoring = meta.scoring as { checks?: unknown } | undefined;
+  const checks = Array.isArray(scoring?.checks)
+    ? (scoring.checks as Array<Record<string, unknown>>)
+    : [];
+  const i18n = meta.i18n as { en?: { checks?: unknown } } | undefined;
+  const enChecks = Array.isArray(i18n?.en?.checks)
+    ? (i18n.en.checks as Array<Record<string, unknown>>)
+    : [];
+  const labels = [
+    ...checks.map((c) => [c.id, c.label] as const),
+    ...enChecks.map((c) => [c.id, c.label] as const),
+  ];
+  for (const [id, label] of labels) {
+    if (typeof label === "string" && SPOILER_TERMS.test(label)) {
+      warnings.push(
+        `scoring.checks id="${String(id)}" label "${label}" looks like a vulnerability-name spoiler — name the symptom/asset instead (AGENT.md §10)`,
+      );
+    }
+  }
+  return warnings;
 }
 
 function checkCrossRefs(metaPath: string, meta: Metadata): CrossRefResult {
@@ -353,8 +528,18 @@ function checkCrossRefs(metaPath: string, meta: Metadata): CrossRefResult {
     return { errors: [`cfnTemplate file "${cfnTemplate}" not found`], warnings: [] };
   }
   const yaml = readFileSync(templatePath, "utf8");
+  // [TenkaCloud#2252] verify / multi-verify はコンテナ委譲採点 (= runtime.provider=docker
+  // 専用)。 CFn 配信問題に書かれた場合は組み合わせ違反として loud に止める。
+  const cfnScoringKind = (meta.scoring as { kind?: unknown } | undefined)?.kind;
+  const containerOnlyKindErrors: ValidationError[] =
+    cfnScoringKind === "verify" || cfnScoringKind === "multi-verify"
+      ? [
+          `scoring.kind="${cfnScoringKind}" is container-only (runtime.provider=docker) — CFn problems must use flag / multi-flag / uptime* / phased-polling / attack-detection`,
+        ]
+      : [];
   return {
     errors: [
+      ...containerOnlyKindErrors,
       ...checkInstructionsPresent(meta),
       ...checkHintTranslations(meta),
       ...checkScoringRegulation(meta),
