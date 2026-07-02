@@ -57,6 +57,32 @@
       }
     },
     {
+      "id": "festivalgate-terminal-api",
+      "name": "入場端末の裏口",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "40 分",
+      "shortDescription": "イベント会社 FestivalGate の入場端末 API。 端末が使う機能は普通に動くが、 「社内ネットワークからしか叩けない」 はずの運営用エンドポイントに、 運営の機密が眠っているらしい。 あなたは外部から診断する立場だ。",
+      "tags": [
+        "api-security",
+        "broken-authentication",
+        "trust-boundary",
+        "least-privilege",
+        "owasp",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "hello-world",
       "name": "Hello World (Sample)",
       "category": "Challenge",

@@ -1,0 +1,81 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "festivalgate-terminal-api",
+  "name": "入場端末の裏口",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "40 分",
+  "shortDescription": "イベント会社 FestivalGate の入場端末 API。 端末が使う機能は普通に動くが、 「社内ネットワークからしか叩けない」 はずの運営用エンドポイントに、 運営の機密が眠っているらしい。 あなたは外部から診断する立場だ。",
+  "instructions": "運営用エンドポイントが握っている機密の中から、 合言葉 (`TC{...}`) を読み出し、 このポータルに提出せよ。\n\n手がかりが欲しくなったら、 下のヒントを開こう (ヒントにはスコアのペナルティが付く)。",
+  "description": "あなたは、 架空のイベント運営会社 FestivalGate の API のセキュリティ診断を任された。 会場の入場端末は、 この API を叩いてチケットの照会と入場処理をしている。\n\n端末が使う機能 (チケット照会・入場処理) は端末トークンで守られ、 普通に動く。 一方で運営用のエンドポイント `GET /internal/ops/summary` は 「社内ネットワークからしか到達しない」 前提で作られており、 外部からのアクセスは拒否される ── ことになっている。 その内側には、 運営の設定と機密 (`TC{...}` を含む) が置かれているという。\n\nこの API は 「呼び出し元が社内かどうか」 を何を根拠に判断しているのか。 そして端末が使う DB 接続は、 本当に端末の仕事に必要な範囲だけに閉じているのか。 外部の立場のまま、 運営用エンドポイントの機密にたどり着け。",
+  "tags": [
+    "api-security",
+    "broken-authentication",
+    "trust-boundary",
+    "least-privilege",
+    "owasp",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    { "port": 18080, "name": "Web (terminal API)" },
+    { "port": 18081, "name": "/verify (loopback admin)" }
+  ],
+  "learningGoals": [
+    "「内部API」「端末向けAPI」であっても、 到達範囲と認証が曖昧なら重要な攻撃面になることを、 自分で確かめられるようになる",
+    "境界 (ネットワーク) の信頼を認証の代わりにしてはいけない ── 呼び出し元が自由に決められる情報を根拠にした判定がなぜ破れるのかを理解する",
+    "端末用の DB 接続を最小権限に絞り、 運営・顧客・認証系のデータを分離することが根本対策であることを理解する"
+  ],
+  "i18n": {
+    "en": {
+      "name": "The Terminal's Back Door",
+      "shortDescription": "FestivalGate's entrance-terminal API. The terminal functions work fine, but an operations endpoint that is supposed to be reachable 'only from the internal network' is said to hold the ops secrets — and you are auditing it from the outside.",
+      "instructions": "Read the passphrase (`TC{...}`) among the secrets the operations endpoint holds and submit it in this portal.\n\nIf you want a nudge, open the hints below (hints carry a score penalty).",
+      "description": "You have been asked to do a security assessment of the API for a fictional event company, FestivalGate. Entrance terminals at the venue call this API to look up and check in tickets.\n\nThe terminal functions (ticket lookup, check-in) are guarded by a terminal token and work normally. The operations endpoint `GET /internal/ops/summary`, however, was built on the assumption that it is 'only reachable from the internal network', so requests from outside are refused — in theory. Inside it live the operations config and secrets (including `TC{...}`).\n\nWhat does this API rely on to decide whether a caller is 'internal'? And is the DB connection the terminal uses really scoped to just what the terminal needs? Staying on the outside, reach the secrets behind the operations endpoint.",
+      "learningGoals": [
+        "Learn to confirm, yourself, that an 'internal' / 'terminal-facing' API is still a major attack surface when its reach and authentication are vague",
+        "Understand why trusting the network boundary as a substitute for authentication breaks — a decision based on values the caller controls is no decision at all",
+        "Understand that scoping the terminal's DB connection to least privilege and separating ops / customer / auth data are the root-cause fixes"
+      ],
+      "hints": [
+        {
+          "id": "hint-1",
+          "content": "The ops endpoint refuses you because you are 'not internal'. But how does the server know you are not internal? It only sees your HTTP request. Look for a value in the request that decides 'internal vs external' — and ask who gets to set that value."
+        },
+        {
+          "id": "hint-2",
+          "content": "The server decides 'internal' from the `X-Forwarded-For` header, which the client fully controls (trusting a client-supplied network signal as authentication). Send an internal-looking hop: `curl -H \"X-Forwarded-For: 10.0.0.9\" http://127.0.0.1:18080/internal/ops/summary`. The response's `opsSecrets.gate_master_note` is the flag — and note it also exposes customer counts and API keys, because the terminal's DB access was never scoped down."
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Web": "http://127.0.0.1:18080"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": ["FLAG_SEED"]
+  },
+  "scoring": {
+    "kind": "verify",
+    "points": 250,
+    "wrongAnswerPenalty": 10,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "運営用エンドポイントは 「あなたが社内ではない」 という理由で拒否する。 では、 サーバーは何を見て 「社内ではない」 と判断している? サーバーに届くのはあなたの HTTP リクエストだけだ。 リクエストの中に 「社内か社外か」 を決めている値がないか探し、 その値を誰が決められるのかを考えよう。",
+        "penalty": 0
+      },
+      {
+        "id": "hint-2",
+        "content": "サーバーは `X-Forwarded-For` ヘッダを見て 「社内かどうか」 を判定している。 これは呼び出し元が自由に設定できる (= クライアント任せのネットワーク情報を認証代わりに使っている)。 社内らしい IP を送りつけよう: `curl -H \"X-Forwarded-For: 10.0.0.9\" http://127.0.0.1:18080/internal/ops/summary`。 レスポンスの `opsSecrets.gate_master_note` がフラグだ。 ついでに顧客数や API キーまで返ってくる ── 端末用の DB 接続の権限が絞られていないからだ。",
+        "penalty": 50
+      }
+    ]
+  }
+}
