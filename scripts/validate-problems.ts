@@ -11,7 +11,7 @@
  * 失敗時は exit code 1 + エラー内容を stderr に出す。CI / pre-commit で実行する想定。
  */
 
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import Ajv2020 from "ajv";
 import addFormats from "ajv-formats";
@@ -26,6 +26,7 @@ const SCHEMA_PATH = join(REPO_ROOT, "SCHEMA.json");
 const CATEGORY_DIRS = ["battles", "challenges"] as const;
 type Metadata = Record<string, unknown>;
 type ValidationError = string;
+const REQUIRED_READMES = ["README.md", "README.ja.md"] as const;
 
 function findMetadataFiles(dir: string): string[] {
   const found: string[] = [];
@@ -76,6 +77,31 @@ function checkInstructionsPresent(meta: Metadata): ValidationError[] {
   const en = i18n?.en?.instructions;
   if (typeof en !== "string" || en.trim().length === 0) {
     errors.push("i18n.en.instructions is required — mirror the JA instructions in English");
+  }
+  return errors;
+}
+
+/**
+ * [contract / AGENT.md §How to add a problem] Every problem ships an English
+ * primary README and a Japanese mirror. This is a release artifact, not an
+ * optional review preference, so fail CI before a metadata-only PR can merge.
+ */
+export function checkRequiredReadmes(dir: string): ValidationError[] {
+  const errors: ValidationError[] = [];
+  for (const filename of REQUIRED_READMES) {
+    const path = join(dir, filename);
+    try {
+      const stat = lstatSync(path);
+      if (!stat.isFile()) {
+        errors.push(`${filename} must be a regular file — see AGENT.md authoring step 4`);
+        continue;
+      }
+      if (stat.size === 0 || readFileSync(path, "utf8").trim().length === 0) {
+        errors.push(`${filename} must not be empty — mirror the problem guide in both languages`);
+      }
+    } catch {
+      errors.push(`${filename} is required — add the English primary and Japanese mirror`);
+    }
   }
   return errors;
 }
@@ -194,6 +220,99 @@ function checkScoringRegulation(meta: Metadata): ValidationError[] {
 }
 
 /**
+ * [Composite Runtime / TenkaCloud#2058] 複合 runtime 問題 (runtime.kind === "composite")。
+ * target ごとに entry の実在と AWS target の CFn 整合性を検査する。
+ */
+function isCompositeProblem(meta: Metadata): boolean {
+  const runtime = meta.runtime as { kind?: unknown } | undefined;
+  return runtime?.kind === "composite";
+}
+
+function checkCompositeRefs(dir: string, meta: Metadata): CrossRefResult {
+  const errors: ValidationError[] = [
+    ...checkInstructionsPresent(meta),
+    ...checkHintTranslations(meta),
+    ...checkScoringRegulation(meta),
+    ...checkDashboardSlotFiles(meta, dir),
+    ...checkCoordinationPluginFile(meta, dir),
+  ];
+  const runtime = meta.runtime as { targets?: unknown } | undefined;
+  const targets = Array.isArray(runtime?.targets)
+    ? (runtime.targets as Array<Record<string, unknown>>)
+    : [];
+  const scoring = meta.scoring as Record<string, unknown> | undefined;
+
+  // 単一 row 前提の kind (flag 等) は composite の親 deployment に stackOutputs が無く成立しない。
+  if (scoring !== undefined && scoring.kind !== "composite-probe") {
+    errors.push(
+      'a composite problem must use scoring.kind="composite-probe" (single-row kinds cannot read per-target outputs)',
+    );
+  }
+
+  const targetIds = new Set<string>();
+  for (const t of targets) {
+    const id = typeof t.id === "string" ? t.id : "?";
+    targetIds.add(id);
+    const entry = typeof t.entry === "string" ? t.entry : undefined;
+    if (!entry) continue; // 形は schema が enforce 済み
+    if (!existsSync(join(dir, entry))) {
+      errors.push(`runtime.targets[${id}].entry "${entry}" not found`);
+      continue;
+    }
+    if (t.provider === "aws" && t.engine === "cloudformation") {
+      // ライブ CFn 経路 (CodeBuild deploy-battles.sh) は常に <problemDir>/template.yaml を
+      // deploy し target entry を読まないため、 AWS target の entry は root 固定。
+      if (entry !== "template.yaml") {
+        errors.push(
+          `runtime.targets[${id}].entry must be "template.yaml" (the live CFn path always deploys the problem-root template.yaml)`,
+        );
+        continue;
+      }
+      const yaml = readFileSync(join(dir, entry), "utf8");
+      errors.push(
+        ...checkParticipantBaseline(yaml, entry),
+        ...checkResourceTagging(yaml, entry),
+        ...checkCompositeProbeOutputRefs(scoring, id, yaml, entry),
+      );
+    }
+  }
+
+  // 採点対象の targetId が runtime.targets に実在すること (typo / drift を deploy 前に止める)。
+  if (scoring?.kind === "composite-probe" && Array.isArray(scoring.targets)) {
+    for (const st of scoring.targets as Array<Record<string, unknown>>) {
+      const tid = typeof st.targetId === "string" ? st.targetId : "?";
+      if (!targetIds.has(tid)) {
+        errors.push(
+          `scoring.targets[].targetId="${tid}" は runtime.targets[].id に存在しない (= scorer が target を解決できない)`,
+        );
+      }
+    }
+  }
+  return { errors, warnings: [] };
+}
+
+/** AWS target の CFn Outputs に composite-probe の outputKey が存在するかを cross-check する。 */
+function checkCompositeProbeOutputRefs(
+  scoring: Record<string, unknown> | undefined,
+  targetId: string,
+  yaml: string,
+  cfnTemplate: string,
+): ValidationError[] {
+  if (scoring?.kind !== "composite-probe" || !Array.isArray(scoring.targets)) return [];
+  const errors: ValidationError[] = [];
+  for (const st of scoring.targets as Array<Record<string, unknown>>) {
+    if (st.targetId !== targetId) continue;
+    const key = st.outputKey;
+    if (typeof key === "string" && !yaml.includes(`${key}:`)) {
+      errors.push(
+        `scoring.targets[targetId=${targetId}].outputKey="${key}" not found in ${cfnTemplate} Outputs (= scorer が probe URL を引けない)`,
+      );
+    }
+  }
+  return errors;
+}
+
+/**
  * [#2054] container 配信問題 (runtime.engine !== cloudformation、 例: docker/compose)。
  * CFn template を持たないため、 CFn cross-ref ではなく container 固有の整合性だけを検査する。
  */
@@ -225,6 +344,7 @@ function checkContainerRefs(dir: string, meta: Metadata): CrossRefResult {
 
 function checkCrossRefs(metaPath: string, meta: Metadata): CrossRefResult {
   const dir = dirname(metaPath);
+  if (isCompositeProblem(meta)) return checkCompositeRefs(dir, meta);
   if (isContainerProblem(meta)) return checkContainerRefs(dir, meta);
   const cfnTemplate = typeof meta.cfnTemplate === "string" ? meta.cfnTemplate : "template.yaml";
   const templatePath = join(dir, cfnTemplate);
@@ -603,7 +723,9 @@ function validateMetadataFiles(
       continue;
     }
 
-    const { errors, warnings } = checkCrossRefs(file, data);
+    const crossRefs = checkCrossRefs(file, data);
+    const errors = [...checkRequiredReadmes(dirname(file)), ...crossRefs.errors];
+    const { warnings } = crossRefs;
     if (warnings.length > 0) printWarnings(file, warnings);
     if (errors.length > 0) {
       failed += 1;
@@ -655,4 +777,4 @@ function reportResult(failed: number, total: number): void {
   console.log(`\n${total} 件の metadata.json はすべて有効です`);
 }
 
-main();
+if (import.meta.main) main();

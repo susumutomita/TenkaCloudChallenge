@@ -169,46 +169,96 @@
       "description": "同一ディレクトリからの相対パスで指す CFn テンプレートファイル (ペライチ)。デプロイ時にこのテンプレートが competitor account の CFn にアップロードされる。 [ADR-023] 新規問題は `runtime.entry` の宣言を推奨。 両方宣言する場合は `runtime.entry === cfnTemplate` でなければ validator が reject する (= 互換期間の整合性制約)。"
     },
     "runtime": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["provider", "engine", "entry"],
-      "description": "[ADR-023] 問題が deploy される対象 cloud と engine を宣言する optional field。 現在 executable な組み合わせは `provider=aws` + `engine=cloudformation` のみ。 schema は将来の provider / engine 値を reject せず受理する (= reservation)。 実行可否は CLI validator (= `scripts/tenkacloud-problem.ts validate`) と deploy worker で enforce する。 未宣言の問題は legacy `cfnTemplate` から `{provider:'aws', engine:'cloudformation', entry:cfnTemplate}` に正規化される (= 後方互換)。",
-      "properties": {
-        "provider": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Target cloud provider (例: `aws` / `azure` / `gcp` / `kubernetes`)。 schema は free-form 文字列、 executable subset は CLI validator が enforce する。"
-        },
-        "engine": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Deploy engine (例: `cloudformation` / `bicep` / `arm` / `helm` / `manifest` / `kustomize`)。 schema は free-form 文字列、 executable subset は CLI validator が enforce する。"
-        },
-        "entry": {
-          "type": "string",
-          "pattern": "^[A-Za-z0-9._/-]+$",
-          "description": "問題ディレクトリ相対 path で指す primary deployable artifact (例: `template.yaml` / `main.bicep` / `chart/` / `local/docker-compose.yml`)。 standalone validation 用に provider native tooling で直接 deploy できる単位とする。"
-        },
-        "challengeEndpoints": {
+      "description": "[ADR-023 / Composite Runtime (TenkaCloud#2058)] 問題が deploy される対象 cloud と engine を宣言する optional field。 単一 provider 形式 (`{provider, engine, entry}`) と複合形式 (`{kind:'composite', targets:[...]}`) の oneOf。 単一形式で現在 executable な組み合わせは `provider=aws` + `engine=cloudformation` と `provider=docker` + `engine=compose` (local play)。 schema は将来の provider / engine 値を reject せず受理する (= reservation)。 実行可否は CLI validator (= `scripts/tenkacloud-problem.ts validate`) と deploy worker で enforce する。 未宣言の問題は legacy `cfnTemplate` から `{provider:'aws', engine:'cloudformation', entry:cfnTemplate}` に正規化される (= 後方互換)。",
+      "oneOf": [
+        {
           "type": "object",
-          "minProperties": 1,
-          "additionalProperties": {
-            "type": "string",
-            "pattern": "^https?://(localhost|127\\.0\\.0\\.1|\\[::1\\])(:[0-9]+)?(/.*)?$"
-          },
-          "description": "[local play / #2054] 参加者が攻略する loopback の challenge URL (label → URL)。 container 配信 (provider=docker) 専用。 loopback (localhost / 127.0.0.1 / [::1]) のみ。"
+          "additionalProperties": false,
+          "required": ["provider", "engine", "entry"],
+          "description": "単一 provider runtime。従来形式 (= 後方互換のまま)。",
+          "properties": {
+            "provider": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Target cloud provider (例: `aws` / `azure` / `gcp` / `kubernetes`)。 schema は free-form 文字列、 executable subset は CLI validator が enforce する。"
+            },
+            "engine": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Deploy engine (例: `cloudformation` / `bicep` / `arm` / `helm` / `manifest` / `kustomize`)。 schema は free-form 文字列、 executable subset は CLI validator が enforce する。"
+            },
+            "entry": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._/-]+$",
+              "description": "問題ディレクトリ相対 path で指す primary deployable artifact (例: `template.yaml` / `main.bicep` / `chart/` / `local/docker-compose.yml`)。 standalone validation 用に provider native tooling で直接 deploy できる単位とする。"
+            },
+            "challengeEndpoints": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": {
+                "type": "string",
+                "pattern": "^https?://(localhost|127\\.0\\.0\\.1|\\[::1\\])(:[0-9]+)?(/.*)?$"
+              },
+              "description": "[local play / #2054] 参加者が攻略する loopback の challenge URL (label → URL)。 container 配信 (provider=docker) 専用。 loopback (localhost / 127.0.0.1 / [::1]) のみ。"
+            },
+            "verifyUrl": {
+              "type": "string",
+              "pattern": "^https?://(localhost|127\\.0\\.0\\.1|\\[::1\\])(:[0-9]+)?(/.*)?$",
+              "description": "[local play / #2054] 問題コンテナが採点判定を公開する loopback の /verify URL。 platform は提出をここに委譲し、 答えは持たない。 loopback のみ。"
+            },
+            "secretEnv": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "description": "[local play / #2054] deploy ごとにランダム秘密を注入する env 変数名 (例: `FLAG_SEED`)。 フラグ・管理者資格情報はこの seed からコンテナ内で導出する (= 答えは repo に置かない)。"
+            }
+          }
         },
-        "verifyUrl": {
-          "type": "string",
-          "pattern": "^https?://(localhost|127\\.0\\.0\\.1|\\[::1\\])(:[0-9]+)?(/.*)?$",
-          "description": "[local play / #2054] 問題コンテナが採点判定を公開する loopback の /verify URL。 platform は提出をここに委譲し、 答えは持たない。 loopback のみ。"
-        },
-        "secretEnv": {
-          "type": "array",
-          "items": { "type": "string", "minLength": 1 },
-          "description": "[local play / #2054] deploy ごとにランダム秘密を注入する env 変数名 (例: `FLAG_SEED`)。 フラグ・管理者資格情報はこの seed からコンテナ内で導出する (= 答えは repo に置かない)。"
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "targets"],
+          "description": "[Composite Runtime / TenkaCloud#2058] 1 つの問題を複数 cloud provider へ展開する複合 runtime。 親 deployment が問題全体を、 target ごとの子 deployment が各 provider の環境を表す。 制約 (2〜8 target / id 一意 / nest 禁止) は platform の `@tenkacloud/problem-runtime` validateCompositeRuntime と同値。",
+          "properties": {
+            "kind": {
+              "const": "composite",
+              "description": "複合 runtime の判別子。"
+            },
+            "targets": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 8,
+              "description": "展開先 target の宣言順リスト (= deploy の ordinal 順)。 各 target の outputs は targetId で名前空間化され、 採点 (composite-probe) は targetId で参照する。",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "provider", "engine", "entry"],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9-]{0,31}$",
+                    "description": "問題内で一意な target id (例: `aws-hello` / `gcp-worker`)。 出力参照・採点対象・アクセス導線の識別に使う。"
+                  },
+                  "provider": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Target cloud provider (`aws` / `gcp` / `azure` / `sakura`)。 executable subset は deploy worker が enforce する。"
+                  },
+                  "engine": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Deploy engine (例: `cloudformation` / `infra-manager` / `bicep` / `apprun`)。"
+                  },
+                  "entry": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._/-]+$",
+                    "description": "問題ディレクトリ相対 path の deployable artifact。 aws/cloudformation target はライブ CFn 経路の制約により root の `template.yaml` 固定 (validator が enforce)。"
+                  }
+                }
+              }
+            }
+          }
         }
-      }
+      ]
     },
     "defaultRegion": {
       "type": "string",
@@ -728,6 +778,63 @@
             "hints": { "$ref": "#/$defs/progressiveHints" }
           },
           "description": "kind=attack-detection。example: security-battle-royale の攻撃検知部 (= 防御側が WAF/IAM で塞ぐと検知数が頭打ちする設計)。"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "success", "pointsAllOk", "targets"],
+          "properties": {
+            "kind": {
+              "const": "composite-probe",
+              "description": "[Composite Runtime / TenkaCloud#2058] 複合 runtime 専用。 target ごとの名前空間化された outputs から URL を引き、 宣言した全 target の probe が通ったときだけ加点する。 platform の `@tenkacloud/problem-sdk` CompositeProbeScoringMetadata と同値。"
+            },
+            "success": {
+              "const": "all",
+              "description": "成功条件。 現在は all (= 宣言した全 target の probe が成功) のみ。"
+            },
+            "pointsAllOk": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "全 target の probe が成功したときの加点。"
+            },
+            "targets": {
+              "type": "array",
+              "minItems": 1,
+              "description": "probe 対象の宣言。 targetId は runtime.targets[].id、 outputKey はその target の outputs 内の生 (非名前空間) key を指す。",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["targetId", "probe", "outputKey"],
+                "properties": {
+                  "targetId": {
+                    "type": "string",
+                    "description": "runtime.targets[].id への参照。 validator が存在を cross-check する。"
+                  },
+                  "probe": {
+                    "const": "https",
+                    "description": "probe 種別。 現在は https GET のみ。"
+                  },
+                  "outputKey": {
+                    "type": "string",
+                    "description": "target の outputs 内で probe base URL を持つ output 名 (生 key、 targetId prefix は付けない)。"
+                  },
+                  "path": {
+                    "type": "string",
+                    "pattern": "^/",
+                    "description": "base URL に追加する path (任意、 `/` 始まり)。"
+                  },
+                  "expectStatus": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": { "type": "integer" },
+                    "description": "成功とみなす HTTP status の集合 (省略時は 200)。"
+                  }
+                }
+              }
+            },
+            "hints": { "$ref": "#/$defs/progressiveHints" }
+          },
+          "description": "kind=composite-probe (= Composite Runtime 用)。 example: hello-multicloud は AWS Lambda Function URL と Google Cloud Run の両方が 200 を返すときだけ +100 pt。"
         }
       ]
     },
