@@ -150,6 +150,13 @@ Worked examples: every problem under `challenges/` and `battles/` now carries `i
 - **`scoring.kind: "verify"`** (`points` / `wrongAnswerPenalty` / `hints`, no `flagOutputKey`). The container's `POST /verify` returns `{ "correct": boolean }`; the platform records the verdict and never compares the answer itself.
 - **Per-deploy secret.** Each `secretEnv` name is filled with a fresh random value at deploy; derive the flag and any privileged credential from it inside the container so nothing secret is committed. The compose file must bind every port to `127.0.0.1` only (including `/verify`).
 
+**Multiple checkpoints (`scoring.kind: "multi-verify"`, [TenkaCloud#2252]).** To score several independent findings in one scenario with partial points, use `multi-verify` instead of `verify`:
+
+- **`scoring.checks[]`** — each check is `{ "id": "<slug>", "label": "<player-facing>", "points": <int>, "wrongAnswerPenalty"?: <int>, "hints"?: [...] }`. `id` matches `^[a-z0-9-]+$` and is unique; hint `id`s are unique **across the whole problem** (the portal reveal route is keyed on `hintId` alone). The `checks[].points` **sum** is the problem total and must equal the tier standard (§14). Points are the platform's source of truth — a `points` field in the container verdict is ignored for `multi-verify`.
+- **Non-spoiler labels.** `checks[].label` / hints are shown to the competitor: name the symptom or asset ("公開バックアップ"), never the vulnerability class ("SQLi bypass"). The validator warns on vulnerability-name labels (§10).
+- **English parity is required.** Provide `i18n.en.checks[]` (`id` + `label` + per-check `hints`) for every check; the validator fails on a missing or drifted translation (do not repeat `points`/`id` in the overlay).
+- **`/verify` gains `checkpointId`.** The request is `{ "checkpointId": "<check id>", "submission": "...", "context": {...} }` and the container **must echo** `checkpointId` in its response — the platform fails closed on a missing/mismatched echo (never mis-credits another checkpoint). Scoring is idempotent per `(problemId, checkpointId)`.
+
 Worked example: [`challenges/sqli-demo`](./challenges/sqli-demo) (IPA "安全なウェブサイトの作り方" §1.1, SQL injection).
 
 ### 14. Challenge scoring follows the tier regulation (enforced) — [SCORING.md](./SCORING.md)

@@ -2,7 +2,13 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "bun:test";
-import { checkRequiredReadmes, checkScoringRegulation } from "./validate-problems";
+import {
+  checkCheckLabelSpoilerAdvisory,
+  checkMultiVerifyStructure,
+  checkMultiVerifyTranslations,
+  checkRequiredReadmes,
+  checkScoringRegulation,
+} from "./validate-problems";
 
 const temporaryDirectories: string[] = [];
 
@@ -153,5 +159,104 @@ describe("checkScoringRegulation", () => {
   it("skips Challenges with no determinable point total (e.g. composite-probe)", () => {
     const meta = challenge(1, { kind: "composite-probe" });
     expect(checkScoringRegulation(meta)).toEqual([]);
+  });
+});
+
+describe("multi-verify (TenkaCloud#2252)", () => {
+  const check = (over: Record<string, unknown> = {}) => ({
+    id: "public-backup",
+    label: "公開バックアップ",
+    points: 100,
+    ...over,
+  });
+  const enCheck = (over: Record<string, unknown> = {}) => ({
+    id: "public-backup",
+    label: "Public backup",
+    ...over,
+  });
+  const meta = (checks: unknown[], enChecks?: unknown[]) =>
+    ({
+      category: "Challenge",
+      difficulty: 3,
+      scoring: { kind: "multi-verify", checks },
+      ...(enChecks ? { i18n: { en: { checks: enChecks } } } : {}),
+    }) as never;
+
+  it("checkMultiVerifyStructure: 正常な checks は通す", () => {
+    expect(
+      checkMultiVerifyStructure(
+        meta([check(), check({ id: "weak-admin-pw", label: "弱い管理者パスワード" })]),
+      ),
+    ).toEqual([]);
+  });
+
+  it("checkMultiVerifyStructure: 空 checks / 重複 id / 不正 id / 非正整数 points を止める", () => {
+    expect(checkMultiVerifyStructure(meta([]))[0]).toMatch(/non-empty/);
+    expect(checkMultiVerifyStructure(meta([check(), check()])).join()).toMatch(/duplicated/);
+    expect(checkMultiVerifyStructure(meta([check({ id: "Bad_ID" })])).join()).toMatch(
+      /must match/,
+    );
+    expect(checkMultiVerifyStructure(meta([check({ points: 12.5 })])).join()).toMatch(
+      /positive integer/,
+    );
+  });
+
+  it("checkMultiVerifyStructure: hint id の check 跨ぎ衝突を止める (reveal route は hintId 単独キー)", () => {
+    const errors = checkMultiVerifyStructure(
+      meta([
+        check({ hints: [{ id: "shared", content: "a", penalty: 0 }] }),
+        check({
+          id: "second",
+          label: "第二",
+          hints: [{ id: "shared", content: "b", penalty: 0 }],
+        }),
+      ]),
+    );
+    expect(errors.join()).toMatch(/unique across the problem/);
+  });
+
+  it("checkMultiVerifyTranslations: en parity (label + per-check hints) を双方向で強制する", () => {
+    // 英訳なし → error
+    expect(checkMultiVerifyTranslations(meta([check()])).join()).toMatch(/英訳 label/);
+    // 完全 parity → ok
+    expect(
+      checkMultiVerifyTranslations(
+        meta(
+          [check({ hints: [{ id: "h1", content: "ヒント", penalty: 0 }] })],
+          [enCheck({ hints: [{ id: "h1", content: "Hint" }] })],
+        ),
+      ),
+    ).toEqual([]);
+    // 翻訳側にしか無い id → drift error
+    expect(
+      checkMultiVerifyTranslations(
+        meta([check()], [enCheck(), enCheck({ id: "ghost" })]),
+      ).join(),
+    ).toMatch(/存在しない/);
+    // hint の片側欠落 → error
+    expect(
+      checkMultiVerifyTranslations(
+        meta([check({ hints: [{ id: "h1", content: "ヒント", penalty: 0 }] })], [enCheck()]),
+      ).join(),
+    ).toMatch(/hints\[\]\.id="h1" の英訳/);
+  });
+
+  it("checkCheckLabelSpoilerAdvisory: 脆弱性名 label を warning にする (非スポイラー §10)", () => {
+    const warnings = checkCheckLabelSpoilerAdvisory(
+      meta([check({ label: "SQLi bypass" })], [enCheck({ label: "XSS on login" })]),
+    );
+    expect(warnings).toHaveLength(2);
+    expect(warnings[0]).toMatch(/spoiler/);
+    // 現象・対象で書いた label は通す
+    expect(checkCheckLabelSpoilerAdvisory(meta([check()], [enCheck()]))).toEqual([]);
+  });
+
+  it("checkScoringRegulation: multi-verify の checks 合計もティア標準点と照合される (既存挙動の確認)", () => {
+    // difficulty 3 = Medium 200。 合計 100 は違反。
+    const errors = checkScoringRegulation(meta([check()]));
+    expect(errors.join()).toMatch(/!= Medium tier standard 200/);
+    expect(
+      checkScoringRegulation(meta([check(), check({ id: "second", label: "第二" })])),
+    ).toEqual([]);
   });
 });
