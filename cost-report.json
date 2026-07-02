@@ -250,7 +250,7 @@
       "id": "wix-exposure-audit",
       "category": "Challenge",
       "region": "ap-northeast-1",
-      "estimatedSessionMinutes": 30,
+      "estimatedSessionMinutes": 40,
       "perHourUsd": 0,
       "perSessionUsd": 0,
       "ifLeftRunningUsd": {

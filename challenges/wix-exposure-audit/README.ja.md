@@ -1,65 +1,86 @@
-# 消し忘れた共有リンク — SaaSでも設定は利用者の責任
+# 公開設定の置き土産
 
-> TenkaCloud Challenge · `challenges/wix-exposure-audit` · 難易度 1 · 約30分 · `verify` 採点
+> TenkaCloud Challenge · `wix-exposure-audit` · 難易度1 · 約40分 · `multi-verify`
 
-WixやSTUDIOなどのSaaSサイトビルダーを使う非エンジニア、デザイナー、PM向けの
-ブラウザ完結教材です。実際のWixアカウントや実データは使わず、制作会社が問い合わせ受信箱の
-共有リンクを失効し忘れた運用不備を1つのDockerコンテナで再現します。
+SaaSで作った模擬business siteをbrowserだけで監査する、AWS不要の教材です。実際のWixなどの
+SaaSには接続せず、実在する顧客dataも使いません。3つの独立した公開・権限不備と、設定変更後の
+再検証を4つのcheckpointとして採点します。
 
-## 起動するもの
+## runtimeと安全境界
 
-| 場所 | 内容 |
+| address | 用途 |
 | --- | --- |
-| `127.0.0.1:18080` | 公開中の模擬ビジネスサイト |
-| `127.0.0.1:18081` | TenkaCloudが利用する`/verify` |
+| `127.0.0.1:18080` | 公開siteと、所有者が使う正規設定画面 |
+| `127.0.0.1:18081` | loopback限定の`/verify` |
 
-フラグと共有tokenはデプロイごとの`FLAG_SEED`からコンテナ内で導出します。正解や実在する
-個人情報は保存せず、portはループバックだけに公開します。
+両portはDockerでloopbackだけにbindします。flagとcapability tokenはデプロイごとの
+`FLAG_SEED`から導出し、正解をrepositoryへ保存しません。
 
-## ストーリーとミッション
+## scenario
 
-小さなデザインスタジオのサイト運用を制作会社から引き継ぎました。公開されるのは会社案内と
-お問い合わせフォームだけのはずですが、制作会社との共有設定が整理されておらず、顧客の氏名、
-メール、相談内容が第三者にも見えるという指摘を受けました。
+Aoi Design Studioは外部制作会社からsiteを引き継ぎました。site builder自体は正常ですが、
+次の3つの管理境界が整理されていません。
 
-公開サイトを一般の訪問者と同じ目線で監査し、漏えいしている受信箱から`TC{...}`を見つけます。
+1. 顧客確認用pageが公開`sitemap.xml`へ残っている。
+2. 「linkを知る全員」が読める受信箱URLが公開HTML sourceへ残っている。
+3. 契約終了済み制作会社のSite manager権限が有効なままである。
 
-## 攻略手順
+これは公開範囲、capability URL、collaborator lifecycleという別々のcontrolです。最後の
+checkpointでは、所有者が3つをすべて是正した実状態を採点します。
 
-1. `make local PROBLEM=wix-exposure-audit`で問題とPortalを起動します。
-2. <http://127.0.0.1:18080/> を開きます。
-3. ブラウザの「ページのソースを表示」を使い、制作会社が残したHTMLコメントを探します。
-4. コメント内の共有URLを開きます。
+## checkpoint
 
-   ```text
-   http://127.0.0.1:18080/admin/inbox?share=<見つけたtoken>
+| ID | 証跡 | 点 |
+| --- | --- | ---: |
+| `preview-indexing` | `sitemap.xml`から到達できるreview pageの合言葉 | 20 |
+| `shared-inbox` | 漏れたshare URLから読める顧客受信箱の合言葉 | 20 |
+| `stale-collaborator` | 有効なままの制作会社access pageの合言葉 | 20 |
+| `settings-remediation` | 3つの所有者設定を是正した後のhidden state検査 | 40 |
+
+設定を閉じると証跡へ到達できなくなるため、先に3つの合言葉を集めます。
+
+## 監査手順
+
+1. 問題を起動します。
+
+   ```sh
+   make local PROBLEM=wix-exposure-audit
    ```
 
-5. 監査用問い合わせに含まれるフラグをPortalへ提出します。
+2. `http://127.0.0.1:18080/robots.txt`と、そこから案内される`sitemap.xml`を確認し、
+   想定外の顧客確認pageへ進みます。
+3. `/`のHTML sourceを表示します。制作会社のcommentに
+   `/admin/inbox?share=...`が残っています。
+4. `/humans.txt`を確認します。運用引き継ぎ記録から制作会社のaccess URLへ進みます。
+5. 各`TC{...}`を対応するPortal checkpointへ提出します。
+6. 所有者として`http://127.0.0.1:18080/owner/settings`を開き、次を実行します。
 
-| リクエスト | 結果 |
-| --- | --- |
-| tokenなし・誤りで`GET /admin/inbox` | `403` |
-| 正しい共有token付き | 顧客情報とフラグを`200`で表示 |
+   - previewの検索公開を停止する。
+   - 受信箱のshare linkを失効する。
+   - 制作会社collaboratorを削除する。
 
-## 根本原因と対策
+7. `settings-remediation`へ`VERIFY`を提出します。
 
-サイトビルダーが壊れたのではなく、「リンクを知る全員に共有」という設定が公開後も有効な
-ままでした。共有URLは失効するまで権限そのものとして働きます。
+## 是正後に確認できること
 
-- 用途を終えた共有リンクを失効する。
-- 制作会社、退職者、不要な共同編集者の権限を削除する。
-- フォーム送信先と閲覧可能な主体を定期的に棚卸しする。
-- 公開前に、公開ページ、非公開ページ、共有設定、埋め込みコードを確認する。
-- 「URLを知られないこと」をアクセス制御の代わりにしない。
+3設定を直すと、次の状態になります。
 
-## 初期化とコスト
+- `sitemap.xml`からreview pageが消え、直接accessも`404`になる。
+- 古い受信箱share URLは`403`になる。
+- 古い制作会社access URLは`403`になる。
+- `/verify`は是正checkpointの`VERIFY`を成功として判定する。
 
-`make local-down`でコンテナを削除すると初期状態へ戻ります。ローカルDockerのみで、
-AWSリソースや料金は発生しません。
+containerを再起動すると、意図的に不備を持つ初期状態へ戻り、新しいflagが生成されます。
 
-## 関連ファイル
+## なぜ重要か
 
-- `local/app/server.mjs` — 公開サイト、受信箱、採点
-- `local/docker-compose.yml` / `local/Dockerfile` — ループバック限定runtime
-- `metadata.json` — 問題文、採点、ヒント
+managed SaaSが減らすのはinfrastructure作業であり、access governanceの責任ではありません。
+capability URLは失効するまで権限として働き、検索engineはsitemapに載せたpageをたどり、
+外部collaboratorは削除するまで権限を持ち続けます。公開前確認では3つを別々に棚卸しする
+必要があります。
+
+## 関連file
+
+- `local/app/server.mjs` — 公開不備、所有者control、採点
+- `local/docker-compose.yml` / `local/Dockerfile` — loopback限定runtime
+- `metadata.json` — 日英checkpoint label、hint、採点

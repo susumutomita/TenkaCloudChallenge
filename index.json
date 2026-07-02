@@ -313,23 +313,25 @@
     },
     {
       "id": "wix-exposure-audit",
-      "name": "消し忘れた共有リンク",
+      "name": "公開設定の置き土産",
       "category": "Challenge",
       "status": "draft",
       "visibility": "public",
       "difficulty": 1,
-      "estimatedDuration": "30 分",
-      "shortDescription": "SaaS で作った小さなお店のサイト。 公開されているのは会社案内とお問い合わせフォームだけ ── のはずだが、 制作を頼んだ会社が残したある設定のせいで、 お客さまの個人情報が第三者に見えてしまっているらしい。",
+      "estimatedDuration": "40 分",
+      "shortDescription": "制作会社から引き継いだSaaSサイト。公開ページ、共有link、共同編集者権限が整理されず、顧客情報と制作中情報が想定外の相手から見える。証跡を集め、所有者設定から是正しよう。",
       "tags": [
         "saas-security",
         "misconfiguration",
         "data-exposure",
         "privacy",
-        "operations",
+        "access-review",
+        "remediation",
         "local-play",
-        "container"
+        "container",
+        "multi-verify"
       ],
-      "scoringKind": "verify",
+      "scoringKind": "multi-verify",
       "cost": {
         "perHourUsd": 0,
         "perDayIfLeftRunningUsd": 0,

@@ -1,99 +1,92 @@
-# The Forgotten Share Link — Your SaaS Settings Are Still Your Responsibility
+# Publishing Settings Left Behind
 
-> TenkaCloud Challenge · `challenges/wix-exposure-audit` · difficulty 1 · ~30 min · `verify` scoring
+> TenkaCloud Challenge · `wix-exposure-audit` · difficulty 1 · ~40 min · `multi-verify`
 
-A local, **AWS-free**, **browser-completable** teaching problem for non-engineers,
-designers, and PMs who build sites with SaaS tools (Wix, STUDIO, etc.). It runs entirely
-in one Docker container and does **not** use any real Wix account, real site, or real
-data — it is a small mock of a SaaS-built business site that reproduces one very common
-operational-neglect scenario.
+An AWS-free, browser-completable audit of a mock SaaS-built business site. It
+does not contact Wix or any other real SaaS and contains no real customer data.
+The exercise covers four checkpoints: three independent exposure paths and one
+stateful remediation check.
 
-This is the SaaS-side companion to the WordPress operational-neglect problem: same
-message ("the tool is safe; your settings and operations are what leak"), aimed at people
-who never touch code.
+## Runtime and safety boundary
 
-## What gets deployed
-
-| Where | What |
+| Address | Purpose |
 | --- | --- |
-| **Your machine (Docker)** | A small mock business site — the problem runtime |
-| `127.0.0.1:18080` | Challenge surface (the published site) |
-| `127.0.0.1:18081` | Loopback `/verify` the TenkaCloud scorer delegates to |
+| `127.0.0.1:18080` | Published site and authorized owner settings |
+| `127.0.0.1:18081` | Loopback-only `/verify` endpoint |
 
-The flag and the stale share token are derived inside the container from a per-deploy
-random `FLAG_SEED`, so the answer is never stored in this repo. The compose stack binds to
-`127.0.0.1` only and is never exposed off loopback.
+Docker binds both ports to loopback. Per-deploy flags and capability tokens are
+derived from `FLAG_SEED`; no answer is committed to the repository.
 
-## The story
+## Scenario
 
-You have taken over running the site for a small design studio. It was built with a SaaS
-site builder by an outside production agency, and only the company info and a contact form
-are supposed to be public. But the collaboration and sharing settings with that agency
-were never cleaned up after launch — and someone has warned you that customers' contact-
-form submissions (names, emails, messages) are visible to people who shouldn't see them.
+Aoi Design Studio inherited its site from an outside production agency. The
+managed site builder is functioning correctly, but three controls were never
+cleaned up:
 
-This is **not** a code vulnerability. It is a publishing/operations problem: *who can see
-how much.* That responsibility stays with the site owner even on a fully managed SaaS.
+1. A client-review page remains in the public sitemap.
+2. An "anyone with the link" customer-inbox URL remains in public HTML source.
+3. The agency's Site manager access remains active after the contract ended.
 
-## Mission
+These are separate control boundaries: publication scope, capability URLs, and
+collaborator lifecycle. The final checkpoint verifies that the owner corrected
+all three settings.
 
-Audit the published site the way a visitor would, and reach the inbox that is leaking to
-the outside. An audit passphrase (`TC{...}`) is waiting in it.
+## Checkpoints
 
-- `GET /` — the public business site. Looks harmless.
-- `GET /admin/inbox?share=<token>` — the contact-form inbox. It should be private, but a
-  live share link the agency left behind still opens it for anyone who has the link.
+| ID | Evidence | Points |
+| --- | --- | ---: |
+| `preview-indexing` | Passphrase on the review page exposed by `sitemap.xml` | 20 |
+| `shared-inbox` | Passphrase in the customer inbox reached through the leaked share URL | 20 |
+| `stale-collaborator` | Passphrase on the still-active agency access page | 20 |
+| `settings-remediation` | Hidden state check after all three owner settings are corrected | 40 |
 
-## Steps
+Collect the first three passphrases before remediation. Closing the settings
+intentionally removes access to their evidence.
 
-1. `make local PROBLEM=wix-exposure-audit` starts the container, the scoring API, and the portal.
-2. Log in to the portal with any non-empty key.
-3. Open the site at `http://127.0.0.1:18080/` and **view the page source** (right-click →
-   "View Page Source"). Production agencies often leave leftovers in the HTML.
-4. You will find an agency note that was never deleted, containing a live share link to
-   the contact-form inbox. Open it:
+## Audit path
+
+1. Start the problem:
+
+   ```sh
+   make local PROBLEM=wix-exposure-audit
    ```
-   http://127.0.0.1:18080/admin/inbox?share=<the-token-from-the-source>
-   ```
-   The inbox — every customer's name, email, and message — is shown to anyone with the
-   link. The audit row's message contains the flag (`TC{...}`).
-5. Submit the flag in the portal — the container's `/verify` judges it.
 
-| Request | Response |
-| --- | --- |
-| `GET /admin/inbox` (no / wrong `share`) | `403` invalid share link |
-| `GET /admin/inbox?share=<correct>` | `200` **full inbox incl. customer PII and the flag** ← the leak |
+2. Inspect `http://127.0.0.1:18080/robots.txt`, then the referenced
+   `sitemap.xml`. Follow the unexpected client-review URL.
+3. View the HTML source of `/`. The production-agency comment contains a live
+   `/admin/inbox?share=...` URL.
+4. Inspect `/humans.txt`. Its handoff record points to the agency access URL.
+5. Submit each `TC{...}` value to its matching Portal checkpoint.
+6. Open `http://127.0.0.1:18080/owner/settings` as the authorized owner and:
 
-## The root-cause fix (why this is a bug)
+   - disable preview indexing;
+   - revoke the inbox share link;
+   - remove the agency collaborator.
 
-The site builder did exactly what it was told: it made a shareable link and it kept
-honoring it. Nobody attacked anything — the settings were left open. The fixes are all
-operational:
+7. Submit `VERIFY` to `settings-remediation`.
 
-- **Revoke share links after they've served their purpose**, and treat any "anyone with
-  the link" URL as public.
-- **Remove collaborator/agency access when the engagement ends** (the departed-agency /
-  departed-employee problem).
-- **Know where form submissions go** and who can read them, and review that on a schedule.
-- **Do a pre-launch check**: what is actually public, what is genuinely private.
+## Expected remediation behavior
 
-Because a "share link" is capability-based, anyone who ever saw it — or found it left in
-the page source — keeps that capability until you revoke it.
+After all settings are corrected:
 
-## Learning goals
+- `sitemap.xml` no longer lists the review page, and the review route returns
+  `404`;
+- the old inbox share URL returns `403`;
+- the old agency access URL returns `403`;
+- `/verify` accepts `VERIFY` only for the remediation checkpoint.
 
-- Even on a managed SaaS, publish scope, share links, and collaborator/agency permissions
-  are the owner's responsibility.
-- A share link you assumed was private may be reachable by anyone.
-- Reviewing where form submissions are exposed and revoking access for departed staff,
-  agencies, and old share links is the fix.
+Restarting the container restores the deliberately vulnerable initial state and
+generates a new set of flags.
 
-## Cost
+## Why this matters
 
-Local Docker only. No AWS resources are created (free).
+A managed SaaS removes infrastructure work, not the owner's responsibility for
+access governance. Capability URLs remain valid until revoked, search engines
+follow what a sitemap publishes, and outside collaborators retain their rights
+until someone removes them. A pre-launch checklist must cover all three.
 
 ## Related files
 
-- `local/app/server.mjs` — the mock site, the leaked inbox, and the loopback `/verify`.
-- `local/docker-compose.yml`, `local/Dockerfile` — the loopback-only runtime.
-- `metadata.json` — catalog entry, scoring, progressive hints.
+- `local/app/server.mjs` — vulnerable surfaces, owner controls, and verifier
+- `local/docker-compose.yml` / `local/Dockerfile` — loopback-only runtime
+- `metadata.json` — bilingual checkpoint labels, hints, and scoring
