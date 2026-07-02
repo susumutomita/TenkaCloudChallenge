@@ -6,8 +6,8 @@ services:
       context: .
       dockerfile: Dockerfile
     environment:
-      # Per-deploy random secret injected by `make local`; the flag and the
-      # terminal token are derived from it inside the container.
+      # Per-deploy random secret injected by `make local`; all checkpoint flags,
+      # the terminal token, and the staff PIN are derived inside the container.
       FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
     ports:
       - "127.0.0.1:18080:8080" # terminal API (challenge surface)

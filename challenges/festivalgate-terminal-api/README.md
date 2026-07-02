@@ -1,110 +1,106 @@
-# The Terminal's Back Door — "Internal Only" Is Not Authentication
+# Trust Boundaries at the Entrance Terminal
 
-> TenkaCloud Challenge · `challenges/festivalgate-terminal-api` · difficulty 3 · ~40 min · `verify` scoring
+> TenkaCloud Challenge · `festivalgate-terminal-api` · difficulty 3 · ~60 min · `multi-verify`
 
-A local, **AWS-free** CTF for junior–intermediate engineers about the design and
-operational risk of **terminal-facing / "internal" APIs**. It runs entirely in one
-Docker container: no AWS, no Cloudflare, no cloud account. This is the engineer-track
-sequel to the non-engineer WordPress / Wix problems — same "your settings still matter"
-theme, aimed one level up at people who build and run APIs.
+An AWS-free local API-security exercise covering four independent control gaps
+and one stateful remediation checkpoint. The service is fictional, uses only
+synthetic records, and runs in one Docker container.
 
-Inspired by the class of incident where an API that "could only be reached internally"
-turned out to be reachable, and trusted, from the outside (see
-[ian.sh/frontgate](https://ian.sh/frontgate)).
+## Runtime and safety boundary
 
-## What gets deployed
-
-| Where | What |
+| Address | Purpose |
 | --- | --- |
-| **Your machine (Docker)** | A small Node **terminal API** — the problem runtime |
-| `127.0.0.1:18080` | Challenge surface (the FestivalGate terminal API) |
-| `127.0.0.1:18081` | Loopback `/verify` the TenkaCloud scorer delegates to |
+| `127.0.0.1:18080` | Terminal API and authorized owner-security settings |
+| `127.0.0.1:18081` | Loopback-only `/verify` endpoint |
 
-The flag and the terminal token are derived inside the container from a per-deploy
-random `FLAG_SEED`, so the answer is never stored in this repo. The compose stack binds
-to `127.0.0.1` only and is never exposed off loopback.
+Docker exposes both listeners only on loopback. The terminal credential, staff
+PIN, and checkpoint flags are derived from a fresh `FLAG_SEED` on every deploy.
 
-## The story
+## Scenario
 
-FestivalGate runs entrance terminals at event venues. Each terminal calls this API to
-look up tickets and check attendees in. The terminal functions are guarded by a terminal
-token and work fine. The **operations endpoint** (`GET /internal/ops/summary`) was built
-on one load-bearing assumption: *"only the internal network can reach it."* Inside it are
-the venue's ops config and secrets. You are auditing the service from the outside.
+FestivalGate terminals should only look up tickets and check attendees in. The
+implementation nevertheless relies on four unsafe assumptions:
 
-## Mission
+1. a client-supplied proxy header proves that a request is internal;
+2. an operations summary may return customer counts and secrets "for
+   convenience";
+3. the terminal identity may use the same broad data connection as operations;
+4. a three-digit support PIN is safe without an attempt limit.
 
-The terminal endpoints behave correctly:
+The exercise scores these as separate findings. The final checkpoint verifies
+the corrected server state, not a self-reported answer.
 
-- `GET /api/terminal/tickets/<code>` — ticket status (needs the terminal token). Intended.
-- `POST /api/terminal/checkin` — check a ticket in (needs the terminal token). Intended.
+## Checkpoints
 
-The operations endpoint is where the two design flaws meet:
+| ID | Evidence | Points |
+| --- | --- | ---: |
+| `proxy-boundary` | Audit marker returned after bypassing the claimed internal boundary | 40 |
+| `response-scope` | Audit marker among excessive operations-summary fields | 40 |
+| `terminal-data-scope` | Audit marker in a customer record reachable by the terminal identity | 40 |
+| `attempt-throttling` | Audit marker returned after an unthrottled PIN search | 40 |
+| `security-remediation` | Hidden check of all five defensive settings | 40 |
 
-- `GET /internal/ops/summary` refuses "external" callers — but it decides *internal vs
-  external* from a value the caller controls. That is the boundary flaw.
-- When you do reach it, it hands back the **ops/auth secrets and customer data**, not
-  just terminal-relevant fields. That is the least-privilege / data-separation flaw: the
-  terminal path's DB access was never scoped down.
+Collect the first four passphrases before remediation; the fixes intentionally
+remove those access paths.
 
-The flag lives in `opsSecrets.gate_master_note`.
+## Audit path
 
-## Steps
+1. Start the problem:
 
-1. `make local PROBLEM=festivalgate-terminal-api` starts the container, the scoring API, and the portal.
-2. Log in to the portal with any non-empty key.
-3. Try the ops endpoint from the outside — it refuses you:
+   ```sh
+   make local PROBLEM=festivalgate-terminal-api
    ```
-   curl http://127.0.0.1:18080/internal/ops/summary
-   # {"error":"forbidden","detail":"This endpoint is restricted to the internal operations network."}
-   ```
-4. Ask *how* it decides you are external, and forge an internal-looking hop:
-   ```
-   curl -H "X-Forwarded-For: 10.0.0.9" http://127.0.0.1:18080/internal/ops/summary
-   ```
-   `opsSecrets.gate_master_note` holds the flag (`TC{...}`).
-5. Submit the flag in the portal — the container's `/verify` judges it.
 
-| Request | Response |
-| --- | --- |
-| `GET /internal/ops/summary` (no header) | `403` forbidden |
-| `GET /internal/ops/summary` (`X-Forwarded-For: 10.0.0.9`) | `200` **ops secrets, incl. the flag** ← the bug |
-| `GET /api/terminal/tickets/TG-1001` (terminal token) | `200` ticket status (intended) |
+2. Open `http://127.0.0.1:18080/`. It provides the assigned low-privilege
+   terminal token and the documented ticket operations.
+3. Call `/internal/ops/status` without special headers. From the `403`, determine
+   what request value the server might use for its internal/external decision.
+4. Test a client-supplied internal-looking first hop against both
+   `/internal/ops/status` and `/internal/ops/summary`. The latter returns far
+   more than an operational status needs.
+5. With the terminal token, probe the neighboring
+   `/api/terminal/customers/<id>` collection. The small integer IDs are
+   enumerable.
+6. Test the documented three-digit
+   `/api/terminal/staff-unlock?pin=000` workflow. Before remediation, repeated
+   wrong attempts are never throttled.
+7. Submit the four `TC{...}` values to their matching Portal rows.
+8. Open `/owner/security` and correct every row:
 
-## The root-cause fix (why this is a bug)
+   - stop treating a client header as identity;
+   - minimize the operations response;
+   - remove customer-data access from the terminal identity;
+   - enable PIN attempt control;
+   - separate operations secrets from the terminal service.
 
-Two independent lessons, both real:
+9. Submit `VERIFY` to `security-remediation`.
 
-- **A network boundary is not authentication.** "Only internal callers can reach this"
-  is an assumption about your topology, not a property the request proves. Deciding
-  "internal" from `X-Forwarded-For` (or any client-supplied header/IP) lets anyone claim
-  it. Authenticate every request on its own merits — a terminal credential the server can
-  verify (mTLS, a signed token), checked *per endpoint* — and treat the boundary as
-  defense-in-depth, never as the gate.
-- **Least privilege and data separation.** The entrance terminals need `tickets` and
-  nothing else. Give the terminal path a DB user (or database) scoped to exactly that, and
-  keep operations config, customer PII, and auth/reset secrets behind their own
-  identities. Then even a broken boundary check can't turn "read a ticket" into "read the
-  master secret."
+## Expected remediation behavior
 
-Boundary defense (WAF, private networking) is a useful *supplement* — it is not a
-substitute for authentication, authorization, and least-privilege data access.
+After the owner applies all controls:
 
-## Learning goals
+- forged `X-Forwarded-For` values no longer open either operations endpoint;
+- the terminal customer-data endpoint returns `403`;
+- three wrong PIN attempts cause later attempts to return `429`;
+- operations secrets are separated from the summary's data path;
+- the remediation checkpoint accepts `VERIFY`.
 
-- An "internal" / "terminal-facing" API is still a major attack surface when its reach
-  and authentication are vague.
-- Trusting the network boundary as a stand-in for authentication breaks the moment the
-  signal is client-controlled.
-- Scoping the terminal's DB connection to least privilege and separating ops / customer /
-  auth data are the root-cause fixes.
+Restarting the container restores the deliberately vulnerable initial state and
+rotates every generated credential and flag.
 
-## Cost
+## Root-cause lessons
 
-Local Docker only. No AWS resources are created (free).
+- A network boundary is defense in depth, not authentication. Trust only proxy
+  metadata established by a controlled hop, and authenticate each endpoint.
+- Return only fields required by the operation. A successful authorization
+  decision is not permission to disclose an entire backing record.
+- Give a terminal service identity access only to ticket operations. Keep
+  customer and operations secrets behind separate identities and data stores.
+- Low-entropy credentials require rate limits, lockout policy, monitoring, and a
+  stronger primary authentication mechanism.
 
 ## Related files
 
-- `local/app/server.mjs` — the terminal API + the loopback `/verify`.
-- `local/docker-compose.yml`, `local/Dockerfile` — the loopback-only runtime.
-- `metadata.json` — catalog entry, scoring, progressive hints.
+- `local/app/server.mjs` — API surfaces, owner controls, SQLite data, verifier
+- `local/docker-compose.yml` / `local/Dockerfile` — loopback-only runtime
+- `metadata.json` — bilingual checkpoint labels, hints, and scoring

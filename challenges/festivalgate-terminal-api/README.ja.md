@@ -1,75 +1,92 @@
-# 入場端末の裏口 — 「社内限定」は認証ではない
+# 入場端末の信頼境界
 
-> TenkaCloud Challenge · `challenges/festivalgate-terminal-api` · 難易度 3 · 約40分 · `verify` 採点
+> TenkaCloud Challenge · `festivalgate-terminal-api` · 難易度3 · 約60分 · `multi-verify`
 
-初中級エンジニア向けの、AWS不要なローカルAPIセキュリティ教材です。架空のイベント会社
-FestivalGateの入場端末APIを使い、「内部API」の信頼境界、認証、DB最小権限、機密情報分離を
-扱います。1つのDockerコンテナで動き、外部サービスへ接続しません。
+4つの独立したcontrol gapと、設定変更後のhidden state検査を扱う、AWS不要のlocal
+API-security教材です。架空serviceと合成dataだけを使い、1つのDocker containerで動きます。
 
-## 起動するもの
+## runtimeと安全境界
 
-| 場所 | 内容 |
+| address | 用途 |
 | --- | --- |
-| `127.0.0.1:18080` | FestivalGate入場端末API |
-| `127.0.0.1:18081` | TenkaCloudが利用する`/verify` |
+| `127.0.0.1:18080` | 端末APIと、所有者が使う正規security設定 |
+| `127.0.0.1:18081` | loopback限定の`/verify` |
 
-フラグと端末tokenはデプロイごとの`FLAG_SEED`から導出し、リポジトリには保存しません。
-portはすべてループバック限定です。
+両listenerはloopbackだけに公開します。端末credential、staff PIN、各checkpoint flagは、
+デプロイごとの新しい`FLAG_SEED`から導出します。
 
-## ストーリーとミッション
+## scenario
 
-会場端末はチケット照会と入場処理にAPIを使います。端末用機能はtokenで保護されていますが、
-`GET /internal/ops/summary`は「社内ネットワークからしか到達しない」という前提だけで運営情報を
-守っています。外部の診断者として、その判定根拠と影響範囲を検証してください。
+FestivalGateの入場端末はticket照会と入場処理だけを担当するはずですが、実装は次の4つの
+危険な仮定に依存しています。
 
-運営endpointには次の2つの設計不備があります。
+1. clientが送るproxy headerで「内部request」だと証明できる。
+2. 運営summaryは利便性のためcustomer数やsecretを返してよい。
+3. 端末identityは運営serviceと同じ広いdata接続を使ってよい。
+4. 3桁support PINでも試行回数を制御しなくてよい。
 
-- 呼び出し元が設定できる情報で「社内」を判定する。
-- 端末系と運営・顧客・認証データの権限分離がなく、機密まで応答する。
+4つを別々の発見として採点し、最後に自己申告ではなくserverの実状態から防御設定を検査します。
 
-フラグは`opsSecrets.gate_master_note`にあります。
+## checkpoint
 
-## 攻略手順
+| ID | 証跡 | 点 |
+| --- | --- | ---: |
+| `proxy-boundary` | 「内部限定」境界を越えた後に返る監査marker | 40 |
+| `response-scope` | 過剰な運営summary field内の監査marker | 40 |
+| `terminal-data-scope` | 端末identityから読めるcustomer record内の監査marker | 40 |
+| `attempt-throttling` | 制御されないPIN探索後に返る監査marker | 40 |
+| `security-remediation` | 5つの防御設定をhidden stateで検査 | 40 |
 
-1. `make local PROBLEM=festivalgate-terminal-api`で問題とPortalを起動します。
-2. 運営endpointへ通常アクセスし、`403`を確認します。
+是正すると証跡へのaccess pathが閉じるため、先に4つの合言葉を集めます。
 
-   ```bash
-   curl http://127.0.0.1:18080/internal/ops/summary
+## 監査手順
+
+1. 問題を起動します。
+
+   ```sh
+   make local PROBLEM=festivalgate-terminal-api
    ```
 
-3. サーバーが何を根拠に「外部」と判断しているか考え、内部らしいhopを送ります。
+2. `http://127.0.0.1:18080/`を開き、割り当てられたlow-privilege端末tokenと公開仕様を確認します。
+3. `/internal/ops/status`を通常requestして`403`を確認します。serverがrequest中のどの値で
+   内部・外部を判断しているか考えます。
+4. client自身が指定した内部らしいfirst hopを`/internal/ops/status`と
+   `/internal/ops/summary`の両方へ試します。summaryは目的以上のfieldを返します。
+5. 端末tokenで隣接する`/api/terminal/customers/<id>`を調べます。小さな整数IDは列挙可能です。
+6. top pageにある3桁`/api/terminal/staff-unlock?pin=000`を調べます。初期状態では誤答を
+   繰り返しても試行制御が発動しません。
+7. 4つの`TC{...}`を対応するPortal rowへ提出します。
+8. `/owner/security`を開き、全rowを是正します。
 
-   ```bash
-   curl -H "X-Forwarded-For: 10.0.0.9" \
-     http://127.0.0.1:18080/internal/ops/summary
-   ```
+   - client headerをidentityとして信頼しない。
+   - 運営responseを最小化する。
+   - 端末identityからcustomer dataへのaccessを削除する。
+   - PIN試行制御を有効化する。
+   - 運営secretを端末serviceのdata pathから分離する。
 
-4. 応答の`opsSecrets.gate_master_note`をPortalへ提出します。
+9. `security-remediation`へ`VERIFY`を提出します。
 
-| リクエスト | 結果 |
-| --- | --- |
-| headerなしの運営summary | `403` |
-| 内部IPを名乗る`X-Forwarded-For`付き | 運営機密を`200`で返す |
-| 正しい端末tokenでチケット照会 | 必要なチケット情報だけを`200`で返す |
+## 是正後に確認できること
 
-## 根本原因と対策
+- 偽装した`X-Forwarded-For`では運営endpointを開けない。
+- 端末からcustomer data endpointを呼ぶと`403`になる。
+- 3回PINを誤ると後続requestは`429`になる。
+- 運営secretがsummaryのdata pathから分離される。
+- 是正checkpointの`VERIFY`が成功する。
 
-- ネットワーク境界は認証ではない。各endpointで署名tokenやmTLSなど検証可能な資格情報を
-  認証・認可し、private networkやWAFは補助防御として扱う。
-- proxyが付与する転送headerを使う場合は、信頼するproxyからの値だけを受け入れ、外部入力を
-  そのまま信頼しない。
-- 端末用DB userは`tickets`に必要な操作だけを許可する。
-- 運営設定、顧客PII、認証・reset情報を用途別のidentityやdatabaseへ分離する。
-- rate limit、監査ログ、異常検知を組み合わせる。
+containerを再起動すると意図的に脆弱な初期状態へ戻り、credentialとflagがすべてrotateします。
 
-## 初期化とコスト
+## 根本原因から学ぶこと
 
-`make local-down`でコンテナを削除すると初期状態へ戻ります。ローカルDockerのみで、
-クラウド料金は発生しません。
+- network boundaryは補助防御でありauthenticationではない。管理されたproxyが確立した
+  metadataだけを信頼し、各endpointでidentityを検証する。
+- 認可に成功しても、backing record全体を返してよいわけではない。業務目的に必要なfieldだけを返す。
+- terminal service identityはticket操作だけに限定し、customer dataと運営secretを別identity・
+  data storeへ分ける。
+- entropyの低いcredentialにはrate limit、lockout、監視、より強いprimary authenticationが必要である。
 
-## 関連ファイル
+## 関連file
 
-- `local/app/server.mjs` — 端末APIと`/verify`
-- `local/docker-compose.yml` / `local/Dockerfile` — ループバック限定runtime
-- `metadata.json` — 問題文、採点、ヒント
+- `local/app/server.mjs` — API surface、所有者control、SQLite data、採点
+- `local/docker-compose.yml` / `local/Dockerfile` — loopback限定runtime
+- `metadata.json` — 日英checkpoint label、hint、採点

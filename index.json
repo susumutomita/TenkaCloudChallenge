@@ -58,23 +58,26 @@
     },
     {
       "id": "festivalgate-terminal-api",
-      "name": "入場端末の裏口",
+      "name": "入場端末の信頼境界",
       "category": "Challenge",
       "status": "draft",
       "visibility": "public",
       "difficulty": 3,
-      "estimatedDuration": "40 分",
-      "shortDescription": "イベント会社 FestivalGate の入場端末 API。 端末が使う機能は普通に動くが、 「社内ネットワークからしか叩けない」 はずの運営用エンドポイントに、 運営の機密が眠っているらしい。 あなたは外部から診断する立場だ。",
+      "estimatedDuration": "60 分",
+      "shortDescription": "FestivalGateの入場端末APIを、信頼境界、response最小化、端末identityのdata権限、繰り返し試行の4面から診断し、所有者設定で防御を再構成する。",
       "tags": [
         "api-security",
-        "broken-authentication",
         "trust-boundary",
         "least-privilege",
+        "data-minimization",
+        "rate-limiting",
+        "remediation",
         "owasp",
         "local-play",
-        "container"
+        "container",
+        "multi-verify"
       ],
-      "scoringKind": "verify",
+      "scoringKind": "multi-verify",
       "cost": {
         "perHourUsd": 0,
         "perDayIfLeftRunningUsd": 0,

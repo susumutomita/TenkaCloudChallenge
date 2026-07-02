@@ -38,7 +38,7 @@
       "id": "festivalgate-terminal-api",
       "category": "Challenge",
       "region": "ap-northeast-1",
-      "estimatedSessionMinutes": 40,
+      "estimatedSessionMinutes": 60,
       "perHourUsd": 0,
       "perSessionUsd": 0,
       "ifLeftRunningUsd": {
