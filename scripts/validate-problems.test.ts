@@ -1,4 +1,11 @@
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "bun:test";
@@ -56,7 +63,9 @@ describe("checkRequiredReadmes", () => {
 
     const errors = checkRequiredReadmes(directory);
     expect(errors).toContainEqual(expect.stringContaining("README.md must not be empty"));
-    expect(errors).toContainEqual(expect.stringContaining("README.ja.md must be a regular file"));
+    expect(errors).toContainEqual(
+      expect.stringContaining("README.ja.md must be a regular file and not a symlink"),
+    );
   });
 
   it("should reject a symbolic link in place of a required README", () => {
@@ -66,7 +75,51 @@ describe("checkRequiredReadmes", () => {
     writeFileSync(join(directory, "README.ja.md"), "# 日本語\n");
 
     expect(checkRequiredReadmes(directory)).toContainEqual(
-      expect.stringContaining("README.md must be a regular file"),
+      expect.stringContaining("README.md must be a regular file and not a symlink"),
+    );
+  });
+
+  it("should reject case-mismatched filenames", () => {
+    const directory = problemDirectory();
+    writeFileSync(join(directory, "readme.md"), "# English\n");
+    writeFileSync(join(directory, "README.JA.md"), "# 日本語\n");
+
+    const errors = checkRequiredReadmes(directory);
+    expect(errors).toContainEqual(expect.stringContaining("README.md is required with this exact case"));
+    expect(errors).toContainEqual(
+      expect.stringContaining("README.ja.md is required with this exact case"),
+    );
+  });
+
+  it("should reject a broken symbolic link", () => {
+    const directory = problemDirectory();
+    symlinkSync(join(directory, "missing.md"), join(directory, "README.md"));
+    writeFileSync(join(directory, "README.ja.md"), "# 日本語\n");
+
+    expect(checkRequiredReadmes(directory)).toContainEqual(
+      expect.stringContaining("README.md must be a regular file and not a symlink"),
+    );
+  });
+
+  it("should reject invalid UTF-8", () => {
+    const directory = problemDirectory();
+    writeFileSync(join(directory, "README.md"), Uint8Array.from([0xc3, 0x28]));
+    writeFileSync(join(directory, "README.ja.md"), "# 日本語\n");
+
+    expect(checkRequiredReadmes(directory)).toContainEqual(
+      expect.stringContaining("README.md must be valid UTF-8 text"),
+    );
+  });
+
+  it("should reject an unreadable regular file", () => {
+    const directory = problemDirectory();
+    const readme = join(directory, "README.md");
+    writeFileSync(readme, "# English\n");
+    chmodSync(readme, 0o000);
+    writeFileSync(join(directory, "README.ja.md"), "# 日本語\n");
+
+    expect(checkRequiredReadmes(directory)).toContainEqual(
+      expect.stringContaining("README.md cannot be read"),
     );
   });
 });
