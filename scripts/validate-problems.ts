@@ -88,19 +88,62 @@ function checkInstructionsPresent(meta: Metadata): ValidationError[] {
  */
 export function checkRequiredReadmes(dir: string): ValidationError[] {
   const errors: ValidationError[] = [];
+  let exactEntries: ReadonlySet<string>;
+  try {
+    exactEntries = new Set(readdirSync(dir));
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    return [
+      `problem directory cannot be read (${code ?? "unknown error"}) — fix its permissions before validating READMEs`,
+    ];
+  }
   for (const filename of REQUIRED_READMES) {
+    if (!exactEntries.has(filename)) {
+      errors.push(
+        `${filename} is required with this exact case — add the English primary and Japanese mirror`,
+      );
+      continue;
+    }
     const path = join(dir, filename);
+    let stat;
     try {
-      const stat = lstatSync(path);
-      if (!stat.isFile()) {
-        errors.push(`${filename} must be a regular file — see AGENT.md authoring step 4`);
-        continue;
-      }
-      if (stat.size === 0 || readFileSync(path, "utf8").trim().length === 0) {
-        errors.push(`${filename} must not be empty — mirror the problem guide in both languages`);
-      }
+      stat = lstatSync(path);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      errors.push(
+        code === "ENOENT"
+          ? `${filename} is required with this exact case — add the English primary and Japanese mirror`
+          : `${filename} cannot be inspected (${code ?? "unknown error"}) — ensure it is a readable regular file`,
+      );
+      continue;
+    }
+    if (!stat.isFile()) {
+      errors.push(
+        `${filename} must be a regular file and not a symlink — see AGENT.md authoring step 4`,
+      );
+      continue;
+    }
+
+    let bytes: Buffer;
+    try {
+      bytes = readFileSync(path);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      errors.push(
+        `${filename} cannot be read (${code ?? "unknown error"}) — fix its permissions and encoding`,
+      );
+      continue;
+    }
+
+    let text: string;
+    try {
+      text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
     } catch {
-      errors.push(`${filename} is required — add the English primary and Japanese mirror`);
+      errors.push(`${filename} must be valid UTF-8 text — re-save it as UTF-8`);
+      continue;
+    }
+    if (text.trim().length === 0) {
+      errors.push(`${filename} must not be empty — mirror the problem guide in both languages`);
     }
   }
   return errors;
