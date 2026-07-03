@@ -74,16 +74,17 @@
       "posture-3": { "points": 300, "degradedPoints": 150 },
       "posture-4": { "points": 400, "degradedPoints": 200 },
       "posture-5": { "points": 500, "degradedPoints": 250 },
-      "production": { "points": 600 }
+      "production": { "points": 600 },
+      "production-optimized": { "points": 800 }
     },
     "failurePenalty": -100,
     "responsePenalties": [
-      { "if": "responseTimeMs > 1500", "points": -25 }
+      { "if": "responseTimeMs > 5000", "points": -25 }
     ],
     "bonuses": [
       {
         "kind": "all-slots-on-platforms",
-        "platforms": ["production"],
+        "platforms": ["production", "production-optimized"],
         "points": 30000,
         "once": true
       }

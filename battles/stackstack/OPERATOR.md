@@ -129,10 +129,13 @@ Each satisfied production gate is worth **+100 points/min**. The six gates are e
 | `posture-4`  | 4     | 400          |
 | `posture-5`  | 5     | 500          |
 | `production` | 6     | 600          |
+| `production-optimized` | 6 + fast | 800 |
 
 - **One-time bonus:** reaching `production` (all six gates) earns **+30000** once — kept as the "finish line" incentive.
-- **Penalties (unchanged by the flatten):** probe failure **-100**/cycle, slow response (> 1500 ms) **-25**.
+- **Hidden optimization tier (operator/author knowledge — do NOT hint to players):** `config.json` ships with an undocumented `request_delay_ms: 1500` that the app applies to every `/score`. It is *not* mentioned in any player hint or README. A competitor who profiles `/score` (slow even at `production`) and inspects `config.json` / the app source finds it, sets `request_delay_ms` to `0`, and restarts — the app then reports `platform=production-optimized` (all six gates **and** the throttle removed), worth **+800/min** instead of 600. The throttle is well under the response-penalty threshold, so while it is present it costs the bonus but does **not** incur a penalty. Fix a stuck team by checking `jq .request_delay_ms $CONFIG_FILE`.
+- **Penalties:** probe failure **-100**/cycle, slow response (**> 5000 ms**) **-25**. The threshold was raised from 1500 ms so real resource latency (and the 1500 ms hidden throttle) never falsely penalizes; only a genuinely broken or deliberately delayed app trips it.
 - **`production-ramp` (after 30 min):** teams still at `posture-0/1/2` drop to the degraded rate (half: 0 / 50 / 100 per min) — pressure to deepen posture before the deadline.
+- **`incident-response` (after 75 min):** the scoring engine probes `/score?incident=true`; a non-production app takes a deliberate **6 s** legacy-path delay (> 5000 ms → penalty). Production / production-optimized apps skip it.
 - **Incident clamp:** when `site_intact` or `no_backdoor` is false (site defaced / backdoor planted), the app reports `platform ≤ posture-2`, capping the team at **200 points/min** until they remediate. This is measured by the app from real state, not operator-toggled.
 
 ## After the event
