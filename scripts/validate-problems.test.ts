@@ -112,6 +112,8 @@ describe("checkRequiredReadmes", () => {
   });
 
   it("should reject an unreadable regular file", () => {
+    // chmod cannot deny reads to root, and Windows does not reliably apply POSIX read bits.
+    if (process.getuid?.() === 0 || process.platform === "win32") return;
     const directory = problemDirectory();
     const readme = join(directory, "README.md");
     writeFileSync(readme, "# English\n");
