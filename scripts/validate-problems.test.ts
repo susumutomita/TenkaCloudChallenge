@@ -15,6 +15,7 @@ import {
   checkMultiVerifyTranslations,
   checkRequiredReadmes,
   checkScoringRegulation,
+  checkWriteupTranslations,
 } from "./validate-problems";
 
 const temporaryDirectories: string[] = [];
@@ -123,6 +124,27 @@ describe("checkRequiredReadmes", () => {
     expect(checkRequiredReadmes(directory)).toContainEqual(
       expect.stringContaining("README.md cannot be read"),
     );
+  });
+});
+
+describe("checkWriteupTranslations (#2191)", () => {
+  it("accepts no writeup or a complete ja/en pair", () => {
+    expect(checkWriteupTranslations({})).toEqual([]);
+    expect(
+      checkWriteupTranslations({
+        writeup: "脆弱性と対策",
+        i18n: { en: { writeup: "Vulnerability and remediation" } },
+      }),
+    ).toEqual([]);
+  });
+
+  it("rejects a writeup present in only one language", () => {
+    expect(checkWriteupTranslations({ writeup: "日本語のみ" }).join()).toMatch(
+      /i18n\.en\.writeup/,
+    );
+    expect(
+      checkWriteupTranslations({ i18n: { en: { writeup: "English only" } } }).join(),
+    ).toMatch(/top-level writeup/);
   });
 });
 

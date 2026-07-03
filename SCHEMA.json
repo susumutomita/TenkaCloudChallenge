@@ -158,6 +158,11 @@
       "minLength": 1,
       "description": "[管理者/作者向け] 採点ルール / hardened state / 段階詳細などネタバレを含む長文。 fairness contract (platform #1124) によりポータルでは競技者に表示されない。 競技者向けの導線は instructions / shortDescription に書く。"
     },
+    "writeup": {
+      "type": "string",
+      "minLength": 1,
+      "description": "[TenkaCloud#2191] 正解後の学習用解説。脆弱性の仕組み、攻撃が成立した理由、根本対策を含める。競技中は配信せず、クラウドでは競技終了後かつ正解済み、ローカルドリルでは正解後にのみ表示する。"
+    },
     "instructions": {
       "type": "string",
       "description": "[競技者向け] 問題ページに常時表示する『はじめに — 最初の一手・進め方』。 Markdown 可、 画像 (<img>, https URL) も描画される。 ネタバレ厳禁 (採点数値 / hardened state / surprise mechanics は書かない)。 任意。 同ディレクトリに diagram.svg を置くとアーキテクチャ図として併せて表示される。"
@@ -313,6 +318,7 @@
             "name": { "type": "string" },
             "shortDescription": { "type": "string" },
             "description": { "type": "string" },
+            "writeup": { "type": "string", "minLength": 1 },
             "instructions": { "type": "string" },
             "learningGoals": { "type": "array", "items": { "type": "string", "minLength": 1 } },
             "hints": { "$ref": "#/$defs/localizedHints" },

@@ -82,6 +82,20 @@ function checkInstructionsPresent(meta: Metadata): ValidationError[] {
 }
 
 /**
+ * [TenkaCloud#2191] writeup は optional だが、追加する場合は JA canonical と EN override を
+ * 必ず対にする。片言語だけの種明かしを出荷すると競技終了後の学習体験が locale で欠落する。
+ */
+export function checkWriteupTranslations(meta: Metadata): ValidationError[] {
+  const ja = typeof meta.writeup === "string" && meta.writeup.trim().length > 0;
+  const i18n = meta.i18n as { en?: { writeup?: unknown } } | undefined;
+  const en = typeof i18n?.en?.writeup === "string" && i18n.en.writeup.trim().length > 0;
+  if (ja === en) return [];
+  return ja
+    ? ["i18n.en.writeup is required when top-level writeup is present (ja/en parity)"]
+    : ["top-level writeup is required when i18n.en.writeup is present (ja/en parity)"];
+}
+
+/**
  * [contract / AGENT.md §How to add a problem] Every problem ships an English
  * primary README and a Japanese mirror. This is a release artifact, not an
  * optional review preference, so fail CI before a metadata-only PR can merge.
@@ -274,6 +288,7 @@ function isCompositeProblem(meta: Metadata): boolean {
 function checkCompositeRefs(dir: string, meta: Metadata): CrossRefResult {
   const errors: ValidationError[] = [
     ...checkInstructionsPresent(meta),
+    ...checkWriteupTranslations(meta),
     ...checkHintTranslations(meta),
     ...checkScoringRegulation(meta),
     ...checkDashboardSlotFiles(meta, dir),
@@ -368,6 +383,7 @@ function checkContainerRefs(dir: string, meta: Metadata): CrossRefResult {
   const runtime = meta.runtime as { entry?: unknown } | undefined;
   const errors: ValidationError[] = [
     ...checkInstructionsPresent(meta),
+    ...checkWriteupTranslations(meta),
     ...checkHintTranslations(meta),
     ...checkScoringRegulation(meta),
   ];
@@ -601,6 +617,7 @@ function checkCrossRefs(metaPath: string, meta: Metadata): CrossRefResult {
     errors: [
       ...containerOnlyKindErrors,
       ...checkInstructionsPresent(meta),
+      ...checkWriteupTranslations(meta),
       ...checkHintTranslations(meta),
       ...checkScoringRegulation(meta),
       ...checkScoringOutputRefs(meta, yaml, cfnTemplate),
