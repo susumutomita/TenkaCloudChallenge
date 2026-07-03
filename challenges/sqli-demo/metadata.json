@@ -10,6 +10,7 @@
   "shortDescription": "社内スタッフ専用のログイン画面。 admin としてサインインできれば、 管理者だけが見られる合言葉が手に入る ── だが管理者のパスワードは誰も知らない。",
   "instructions": "admin としてサインインに成功すると、 画面に合言葉 (`TC{...}`) が表示される。 それをこのポータルに提出せよ。\n\n手がかりが欲しくなったら、 下のヒントを開こう (ヒントにはスコアのペナルティが付く)。",
   "description": "あなたは、 ある会社のセキュリティ診断を任された。 対象は、 スタッフだけが使う社内ログイン画面。\n\n管理者 (admin) としてサインインできれば、 管理者だけが見られる合言葉 (`TC{...}`) が表示される。 だが、 管理者のパスワードは誰も知らない。\n\nこのログイン画面は前任のエンジニアが急ごしらえで作ったもので、 入力の扱いがどこか雑だという噂がある。 正規のパスワードを知らないまま、 admin としてサインインする方法を見つけ出せ。",
+  "writeup": "## 何が起きていたか\n\nログイン処理は、入力されたユーザー名とパスワードをSQL文へ直接文字列連結していた。ユーザー名に `admin' --` を入れると、クオートで文字列を閉じ、`--` 以降のパスワード条件をコメント化できる。その結果、正しいパスワードを知らなくても admin の行が一致した。\n\nこれは SQL インジェクションであり、入力値が「データ」ではなくSQL構文として解釈されたことが根本原因である。入力のエスケープだけでは、DBや文字コード、将来のクエリ変更で抜け道が生まれやすい。\n\n## 直し方\n\nSQL文と値を分離し、プレースホルダーを使ったパラメータ化クエリにする。たとえば `WHERE username = ? AND password_hash = ?` の値をDBドライバへ別引数で渡す。パスワードは平文で保存せず、Argon2idやbcrypt等でハッシュ化し、一般利用のDBユーザーには必要最小限の権限だけを与える。あわせて、異常なログイン試行の監視と回帰テストを追加する。",
   "tags": ["web-security", "sql-injection", "owasp", "ipa", "local-play", "container"],
   "exposedPorts": [
     { "port": 18080, "name": "Web (challenge surface)" },
@@ -26,6 +27,7 @@
       "shortDescription": "An internal staff-only login screen. Sign in as the administrator and you get a passphrase only admins can see — but nobody knows the admin's password.",
       "instructions": "When you sign in as the administrator, the screen shows a passphrase (`TC{...}`). Submit it in this portal.\n\nIf you want a nudge, open the hints below (hints carry a score penalty).",
       "description": "You have been asked to do a security assessment of a company. The target is an internal login screen used only by staff.\n\nIf you can sign in as the administrator (admin), a passphrase only admins can see is revealed (`TC{...}`). But nobody knows the admin's password.\n\nThe login was thrown together in a hurry by a previous engineer, and rumor has it that it is careless about how it handles input. Find a way to sign in as admin without knowing the real password.",
+      "writeup": "## What happened\n\nThe login handler concatenated the supplied username and password directly into an SQL statement. Entering `admin' --` as the username closes the quoted value and turns the password predicate into a comment. The admin row therefore matches without the real password.\n\nThis is SQL injection: untrusted input was interpreted as SQL syntax instead of data. Escaping alone is brittle because database dialects, encodings, and later query changes can reopen bypasses.\n\n## How to fix it\n\nSeparate SQL from values by using a parameterized query, such as `WHERE username = ? AND password_hash = ?`, and pass values through the database driver. Store passwords with a modern password hash such as Argon2id or bcrypt, give the application database user least privilege, monitor anomalous login attempts, and keep a regression test for this bypass.",
       "learningGoals": [
         "Learn to discover, yourself, a classic hole that lets you bypass a login without valid credentials",
         "Understand why concatenating user input straight into a back-end query is dangerous",
