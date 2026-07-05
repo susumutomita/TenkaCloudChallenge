@@ -47,6 +47,10 @@
         }
       }
     },
+    "hintRevealMode": {
+      "enum": ["sequential", "flat"],
+      "description": "[TenkaCloud] ヒントの公開順。 省略時は `sequential` (= 既定): ヒント N はヒント 1..N-1 を公開後にのみ開ける (progressive gate、 段階的減点が意味を持つ)。 `flat`: 全ヒントを任意順で独立に公開できる (順序ゲート無し)。 問題全体に適用され、 multi-verify では全 check の hint 群に効く。"
+    },
     "progressiveHints": {
       "type": "array",
       "description": "競技者画面に表示するヒント。 Issue #742 Phase 1: v1 (string) と v2 (ProgressiveHint object) の混在を許容する (= 後方互換)。 v2 で `penalty` を指定すると reveal 時にその値が `points` から減算される (= Phase 5 で全 5 builtin kind 共通)。",
@@ -408,9 +412,10 @@
               "minimum": 0,
               "description": "[Issue #817] 不正解 1 回ごとに score から減算する値 (= brute-force 対策)。 0 は減点無し (default)。 team score は 0 未満にならない (= clamp)。"
             },
-            "hints": { "$ref": "#/$defs/progressiveHints" }
+            "hints": { "$ref": "#/$defs/progressiveHints" },
+            "hintReveal": { "$ref": "#/$defs/hintRevealMode" }
           },
-          "description": "kind=flag (= Challenge 1 回提出形式)。example: hello-world は SSM Parameter 値を当てて +100 pt。 wrongAnswerPenalty を設定すると不正解 1 回ごとに減点する (= brute-force 防止)。"
+          "description": "kind=flag (= Challenge 1 回提出形式)。example: hello-world は SSM Parameter 値を当てて +100 pt。 wrongAnswerPenalty を設定すると不正解 1 回ごとに減点する (= brute-force 防止)。 hintReveal=\"flat\" で hint を任意順に開けられる (既定 sequential)。"
         },
         {
           "type": "object",
@@ -431,9 +436,10 @@
               "minimum": 0,
               "description": "[Issue #817] 不正解 1 回ごとに減算する値 (default 0、 brute-force 対策)。"
             },
-            "hints": { "$ref": "#/$defs/progressiveHints" }
+            "hints": { "$ref": "#/$defs/progressiveHints" },
+            "hintReveal": { "$ref": "#/$defs/hintRevealMode" }
           },
-          "description": "kind=verify (= container 問題、 採点は問題側 /verify に委譲)。 答え・隠しテストはコンテナ内にのみ存在する。"
+          "description": "kind=verify (= container 問題、 採点は問題側 /verify に委譲)。 答え・隠しテストはコンテナ内にのみ存在する。 hintReveal=\"flat\" で hint を任意順に開けられる (既定 sequential)。"
         },
         {
           "type": "object",
@@ -479,9 +485,10 @@
                   "hints": { "$ref": "#/$defs/progressiveHints" }
                 }
               }
-            }
+            },
+            "hintReveal": { "$ref": "#/$defs/hintRevealMode" }
           },
-          "description": "kind=multi-verify (= container 問題の複数チェックポイント、 TenkaCloud#2252)。 採点は check ごとに問題側 /verify (checkpointId 必須 echo) に委譲する。"
+          "description": "kind=multi-verify (= container 問題の複数チェックポイント、 TenkaCloud#2252)。 採点は check ごとに問題側 /verify (checkpointId 必須 echo) に委譲する。 hintReveal=\"flat\" で全 check の hint を任意順に開けられる (既定 sequential)。"
         },
         {
           "type": "object",
