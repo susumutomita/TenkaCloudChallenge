@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "bun:test";
 import {
   checkCheckLabelSpoilerAdvisory,
+  checkContainerWriteupAdvisory,
   checkMultiVerifyStructure,
   checkMultiVerifyTranslations,
   checkRequiredReadmes,
@@ -145,6 +146,25 @@ describe("checkWriteupTranslations (#2191)", () => {
     expect(
       checkWriteupTranslations({ i18n: { en: { writeup: "English only" } } }).join(),
     ).toMatch(/top-level writeup/);
+  });
+});
+
+describe("checkContainerWriteupAdvisory (#2393)", () => {
+  it("warns when a local-play problem ships without any writeup", () => {
+    const warnings = checkContainerWriteupAdvisory({});
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/writeup/);
+  });
+
+  it("stays silent once a writeup exists in either language", () => {
+    expect(checkContainerWriteupAdvisory({ writeup: "解説" })).toEqual([]);
+    expect(
+      checkContainerWriteupAdvisory({ i18n: { en: { writeup: "Explanation" } } }),
+    ).toEqual([]);
+  });
+
+  it("treats a blank writeup as missing (whitespace is not a writeup)", () => {
+    expect(checkContainerWriteupAdvisory({ writeup: "   " })).toHaveLength(1);
   });
 });
 

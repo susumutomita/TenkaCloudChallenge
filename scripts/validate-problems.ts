@@ -96,6 +96,24 @@ export function checkWriteupTranslations(meta: Metadata): ValidationError[] {
 }
 
 /**
+ * [TenkaCloud#2393] Local-play (container) 問題は本番 (Battle / Challenge) に向けた
+ * ドリル / 学習の場であり、 解答後に portal へ即出る writeup が「解いた」を「理解した」に
+ * 変える摩擦ゼロの導線になる。 container 問題が writeup を 1 つも持たずに出荷されると
+ * その導線が空になるため warning を出す (= ソフト必須)。 writeup は schema 上 optional の
+ * ままで CI は落とさない — writeup の hard error は ja/en parity (checkWriteupTranslations)
+ * だけに保つ。
+ */
+export function checkContainerWriteupAdvisory(meta: Metadata): ValidationError[] {
+  const ja = typeof meta.writeup === "string" && meta.writeup.trim().length > 0;
+  const i18n = meta.i18n as { en?: { writeup?: unknown } } | undefined;
+  const en = typeof i18n?.en?.writeup === "string" && i18n.en.writeup.trim().length > 0;
+  if (ja || en) return [];
+  return [
+    "local-play (container) problem has no writeup — add a post-solve writeup (top-level ja + i18n.en.writeup) so the drill teaches after the solve, not just scores (TenkaCloud#2393)",
+  ];
+}
+
+/**
  * [contract / AGENT.md §How to add a problem] Every problem ships an English
  * primary README and a Japanese mirror. This is a release artifact, not an
  * optional review preference, so fail CI before a metadata-only PR can merge.
@@ -401,7 +419,7 @@ function checkContainerRefs(dir: string, meta: Metadata): CrossRefResult {
       'a container problem must use scoring.kind="verify" or "multi-verify" (evaluation lives in /verify)',
     );
   }
-  const warnings: ValidationError[] = [];
+  const warnings: ValidationError[] = [...checkContainerWriteupAdvisory(meta)];
   if (scoringKind === "multi-verify") {
     errors.push(...checkMultiVerifyStructure(meta), ...checkMultiVerifyTranslations(meta));
     warnings.push(...checkCheckLabelSpoilerAdvisory(meta));
