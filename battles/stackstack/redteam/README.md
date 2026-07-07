@@ -39,7 +39,7 @@ The exact command depends on which posture key regressed. Brief participants to 
 
 ## Pre-event smoke test
 
-`smoke-test-attacks.sh` replays all three action/revert pairs against a throwaway team stack through `aws ssm send-command`, then checks the app-visible result:
+`smoke-test-attacks.sh` replays all five action/revert pairs against a throwaway team stack through `aws ssm send-command` (and separately exercises the `anonymous-spam` HTTP probe), then checks the app-visible result:
 
 ```bash
 INSTANCE_ID=<InstanceId output> BASE_URL=<AppUrlHint output> bash redteam/smoke-test-attacks.sh

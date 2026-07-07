@@ -706,8 +706,8 @@ Resources:
   # Live-status guide for the player, stored in SSM (NOT UserData) to keep the EC2
   # UserData under the 16 KB limit. UserData fetches it to /usr/local/bin/vibe-status
   # at boot; the instance role's AmazonSSMManagedInstanceCore grants ssm:GetParameter.
-  # The script sources runtime.env at runtime, so the printed fix commands carry the
-  # real ALB / WAF / SG ARNs -- copy-paste ready.
+  # The script sources runtime.env at runtime, so the printed gate objectives reference
+  # the real ALB / WAF / SG ARNs (exact commands live in the penalty-gated portal hints).
   VibeStatusToolParameter:
     Type: AWS::SSM::Parameter
     Properties:
@@ -717,7 +717,7 @@ Resources:
       Tier: Standard
       Value: |
         #!/usr/bin/env bash
-        # vibe-status -- live production-gate posture + the exact command to fix each gap.
+        # vibe-status -- live production-gate posture + the objective (not the exact command) for each gap.
         set -uo pipefail
         ENVF=/etc/tenkacloud-vibe/runtime.env
         [ -f "$ENVF" ] && . "$ENVF"
@@ -1034,7 +1034,7 @@ Resources:
           # to respect the 16 KB limit) and add a one-line login banner pointing to it.
           aws ssm get-parameter --name "/${NamePrefix}/vibe-status-tool" --query Parameter.Value --output text --region ${AWS::Region} > /usr/local/bin/vibe-status 2>/dev/null && chmod +x /usr/local/bin/vibe-status || true
           cat > /etc/profile.d/stackstack-guide.sh <<'SH'
-          echo "StackStack app host. First: /opt/tenkacloud/vibe/deploy_app.sh then register Stack Output AppUrlHint in the Portal. Then run 'vibe-status' for the production gates + the exact fix command for each."
+          echo "StackStack app host. First: /opt/tenkacloud/vibe/deploy_app.sh then register Stack Output AppUrlHint in the Portal. Then run 'vibe-status' for the production gates + the objective for each (exact commands are in the portal hints)."
           SH
 
           chown -R ec2-user:ec2-user /opt/tenkacloud /etc/tenkacloud-vibe /var/lib/tenkacloud-vibe /home/ec2-user/vibe-app

@@ -68,7 +68,7 @@ EC2 app host (SSM only, SSH 不要)
 | `posture-5`  | 5                | 500   |
 | `production` | 6 (全部)         | 600   |
 
-`production` (全 6 gate) 到達で一度きり **+30000** bonus。 probe 失敗は 1 cycle ごとに **-100**、 応答が遅い (> 1500ms) と **-25**(フラット化後も据え置き)。 30 分の `production-ramp` phase 以降、 `posture-0/1/2` に留まるチームは degraded レート (半分: 0 / 50 / 100 点/分) に落ちる。 レッドチームに site を改ざんされる / backdoor を仕込まれる (`site_intact` / `no_backdoor` が false) と、 app は platform を `posture-2` に clamp し、 復旧するまで **200点/分** が上限になる。
+`production` (全 6 gate) 到達で一度きり **+30000** bonus。 probe 失敗は 1 cycle ごとに **-100**、 応答が遅い (> 5000ms) と **-25**(フラット化後も据え置き)。 30 分の `production-ramp` phase 以降、 `posture-0/1/2` に留まるチームは degraded レート (半分: 0 / 50 / 100 点/分) に落ちる。 レッドチームに site を改ざんされる / backdoor を仕込まれる / auth 未設定のまま匿名スパムが刺さる (`site_intact` / `no_backdoor` / `board_clean` が false) と、 app は platform を `posture-2` に clamp し、 復旧するまで **200点/分** が上限になる (スパムは auth 有効化で弾き、 `author=redteam-spam` の投稿を削除して復旧)。
 
 ## 競技フロー
 
@@ -148,15 +148,16 @@ EC2 app host (SSM only, SSH 不要)
 
 運営は reversible な disruption だけを fire する。
 
-| id                     | 何が起きる                                      | revert                         |
-| ---------------------- | ----------------------------------------------- | ------------------------------ |
-| `ai-wipes-database`    | SQLite / RDS の posts を空にする                 | S3 backup から復元             |
-| `auth-setting-removed` | config を backup して auth を false に戻す       | backup config を復元           |
-| `vibe-app-stopped`     | `tenkacloud-vibe` を停止                         | `tenkacloud-vibe` を start     |
-| `site-defaced`         | 掲示板を改ざん (PWNED バナー)、 `site_intact`=false | 改ざんマーカーを除去           |
-| `supply-chain-backdoor`| バックドア成果物を混入、 `no_backdoor`=false      | バックドア成果物を除去         |
+| id                     | delivery                       | 何が起きる                                      | 復旧 / revert                  |
+| ---------------------- | ------------------------------ | ----------------------------------------------- | ------------------------------ |
+| `anonymous-spam`       | HTTP 攻撃 probe (`redteam/probes/anon-spam.sh`) | auth トークン無しで `/submit` に marker スパムを投稿。 auth 未設定だと刺さり `board_clean`=false | auth を有効化 (probe は 401 で弾かれる) し、 `author=redteam-spam` の投稿を削除 |
+| `ai-wipes-database`    | SSM `action`                   | SQLite / RDS の posts を空にする                 | S3 backup から復元             |
+| `auth-setting-removed` | SSM `action`                   | config を backup して auth を false に戻す       | backup config を復元           |
+| `vibe-app-stopped`     | SSM `action`                   | `tenkacloud-vibe` を停止                         | `tenkacloud-vibe` を start     |
+| `site-defaced`         | SSM `action`                   | 掲示板を改ざん (PWNED バナー)、 `site_intact`=false | 改ざんマーカーを除去           |
+| `supply-chain-backdoor`| SSM `action`                   | バックドア成果物を混入、 `no_backdoor`=false      | バックドア成果物を除去         |
 
-すべて `action` delivery で、 metadata に `revert` を宣言している。 cloud fault を謳う effect-only disruption はない。
+SSM 系 5 件は `action` delivery で metadata に `revert` を宣言している (cloud fault を謳う effect-only disruption はない)。 `anonymous-spam` は server 側 revert の無い HTTP 攻撃 probe で、 正しく認証を設定した掲示板が 401 で弾く＝堅牢化そのものが "revert" になる。
 
 ## コスト
 
