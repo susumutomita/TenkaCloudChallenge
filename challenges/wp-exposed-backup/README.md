@@ -22,10 +22,10 @@ never learns the answers, it only holds the points.
 
 | Checkpoint | Attack surface (how it is found) | Points |
 | --- | --- | ---: |
-| `public-backup` | A DB dump left in the web root: `/wp-content/backups/db-backup.sql` (advertised by `robots.txt`). | 40 |
-| `exposed-config` | An editor backup `wp-config.php.bak` served as **plain text** (PHP only runs `.php`), leaking DB creds + an ops token. | 50 |
-| `debug-log` | `WP_DEBUG_LOG` left on in production: `wp-content/debug.log` is world-readable and captured an internal note. | 50 |
-| `dir-listing` | Apache **directory listing** left on for `/internal/`, so its handover memo is browsable. | 60 |
+| `public-backup` | A DB dump left in the web root: `/wp-content/backups/db-backup.sql` (advertised by `robots.txt`). | 60 |
+| `exposed-config` | An editor backup `wp-config.php.bak` served as **plain text** (PHP only runs `.php`), leaking DB creds + an ops token. | 60 |
+| `debug-log` | `WP_DEBUG_LOG` left on in production: `wp-content/debug.log` is world-readable and captured an internal note. | 40 |
+| `dir-listing` | Apache **directory listing** left on for `/internal/`, so its handover memo is browsable. | 40 |
 
 All four grow from the same habit — *leaving things in the public area* — which is exactly
 the lesson: they are distinct controls, not one bug split four ways.
