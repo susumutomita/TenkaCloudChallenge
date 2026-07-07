@@ -158,6 +158,33 @@
       }
     },
     {
+      "id": "hollow-invite",
+      "name": "Operation \"Hollow Invite\"",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "90〜120 分",
+      "shortDescription": "独立系エンジニアリング会社 Kestrel Dynamics のセキュリティ対応チーム。 従業員から 「取引先を名乗るメールが届いたが、 心当たりがない」 と相談が来た。 件名はスレッド返信、 送信者は米国のコワーキング事業者を名乗り、 Google Meet が使えないからと別ツールの会議ページへ誘導している。\n\n認証は通っている。 だが本当に安全か? メールと証跡から事実だけで判定し、 危険なら手口・影響範囲・攻撃者インフラを突き止めて封じ込めと通報まで持っていく。",
+      "tags": [
+        "incident-response",
+        "phishing",
+        "social-engineering",
+        "email-authentication",
+        "osint",
+        "gameday",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "http-query",
       "name": "QUERY: 誰も知らないメソッド",
       "category": "Challenge",

@@ -1,0 +1,19 @@
+HOLLOW-INVITE :: BENIGN TRAINING MARKER
+========================================
+
+This file stands in for the "desktop helper" the fake Vela Meet page would
+serve. In this isolated exercise it is a harmless text marker only.
+
+There is NO executable, NO installer, NO EICAR sample, and NO real payload
+anywhere in this problem. The mock download endpoint only ever hands back a URL
+to this in-tenant marker (and, for a non-matching client OS, nothing at all —
+`payload: "none"`).
+
+Teaching point (BONUS-3b): seeing `payload: "none"` — or receiving only this
+benign marker — is NOT proof the campaign is safe. The attacker infrastructure
+serves builds conditionally (by OS / by client), so "nothing landed on my
+machine right now" says nothing about what a different, matching victim
+receives. Judge the funnel, not the single sample you happened to pull.
+
+If this file reached a real host outside the exercise tenant, the safety
+harness has failed — stop and report it.
