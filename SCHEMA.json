@@ -808,7 +808,7 @@
                 "properties": {
                   "kind": {
                     "type": "string",
-                    "description": "bonus 種別。 example: 'all-slots-on-platforms' (= 全 slot が指定 platform に乗ったら付与)。"
+                    "description": "bonus 種別。 'all-slots-on-platforms' (= 全 slot が platforms 集合の platform に乗ったら付与、 membership)。 'all-slots-distinct-platforms' (= 全 slot が platforms 集合に乗り、 かつ全 slot 互いに異なる platform のとき付与、 'one each')。 いずれも hosting tier は登録 URL の host から検証される (自己申告の /meta は不可、 platform TenkaCloud#2420)。"
                   },
                   "points": { "type": "integer", "description": "獲得ポイント。" },
                   "once": {
@@ -818,7 +818,7 @@
                   "platforms": {
                     "type": "array",
                     "items": { "type": "string" },
-                    "description": "kind='all-slots-on-platforms' の時、全 slot が乗っている必要のある platform 群。"
+                    "description": "kind='all-slots-on-platforms' / 'all-slots-distinct-platforms' の時、 全 slot が乗っている必要のある platform 群 (= 許可集合)。 distinct 版は加えて全 slot が互いに異なる platform であることを要求する。"
                   }
                 }
               }
