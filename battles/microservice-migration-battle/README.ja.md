@@ -73,10 +73,10 @@
 ## 競技フロー
 
 1. **Deploy 直後はモノリスが動いている。** `BaseUrl` は invariant #9 に従って空文字 (= deploy しただけでは加点が始まらない)。 stack の Outputs から `Ec2HostHint` (EC2 public DNS) をコピー。
-2. **3 slot 全てに `http://<Ec2HostHint>` を貼る** (`users` / `orders` / `catalog`) - Participant Portal の Endpoint Override から。 URL が登録された slot から score engine が probe を始め、 EC2 加点が入り始める。
+2. **各 slot にパス付き URL を貼る** — `users` に `http://<Ec2HostHint>/users`、 `orders` に `http://<Ec2HostHint>/orders`、 `catalog` に `http://<Ec2HostHint>/catalog` — Participant Portal の Endpoint Override から。 (nginx は `/users/` `/orders/` `/catalog/` しかルートしないので、 素の `http://<host>` を貼ると `/meta` probe が 404 になり slot ごとに −100 減点。) URL が登録された slot から score engine が probe を始め、 EC2 加点が入り始める。
 3. **1 サービスを切り出す。** 一番ラクな service を選び、 `services/<name>/Dockerfile` をそのまま container image にして Lambda + API GW / ECS Fargate / App Runner のいずれかに上げる。
 4. **slot override の URL を新 managed endpoint に切替える。** `/meta` が `lambda` / `ecs` / `apprunner` を返すので、 score engine が managed tier 加点に切替える。
-5. **残り 2 サービスも別 hosting に切り出す。** 3 slot がそれぞれ別 managed tier に乗ると "production-ready" bonus が 1 回だけ入る。
+5. **残り 2 サービスも managed に切り出す。** 3 slot を全て EC2 から managed tier に乗せると (Lambda / ECS / App Runner の組み合わせは自由。 1 種ずつが推奨形) "production-ready" bonus が 1 回だけ入る。
 
 EC2 のまま放置すれば baseline。 きれいに分けたチームが勝つ設計。
 
@@ -111,7 +111,7 @@ curl http://localhost/catalog/score
 | 遅延応答 (> 1.5 秒)                        | -10           |
 | 全 3 slot を managed tier に載せた瞬間     | +5,000 (一回のみ) |
 
-hosting tier は `GET /meta` の自己申告。 score engine は自己申告を信用する (= ec2 を残したまま lambda と申告してもよい)。 ただし応答時間ペナルティは別途加算される。
+hosting tier は `GET /meta` の申告で決まり、 score engine はこれを読んで加点する。 実際に稼働している hosting を申告すること — EC2 に残したまま managed tier を騙るのは正当な戦略ではない。 応答時間ペナルティは tier に関係なく加算される。
 
 ## 各 hosting への移行ヒント
 
@@ -151,10 +151,9 @@ Lambda (関数) ↔ App Runner (managed container) ↔ ECS (orchestrated contain
 
 ## コスト
 
-t3.small EC2 + 最小ネットワーク + disruption 用 Lambda。 2 時間の競技あたり:
+t3.small EC2 + 最小ネットワーク。 2 時間の競技あたり:
 
 - EC2 t3.small: < $0.05
-- Lambda / Scheduler: 数セント
 - score engine の probe 通信費: 微小
 - 競技中に立てる ECR / Lambda 関数 / ECS Fargate task / App Runner service: 作った量に比例。 競技終了 1 時間以内に削除すれば < $1。
 
