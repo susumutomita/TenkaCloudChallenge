@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Availability stress — short burst against frontend + api endpoints.
 # Single Flask process under nginx; sustained traffic saturates the worker
-# pool and `/healthz` drops below 200. The defender's uptime-multi score
-# stops accruing while saturation lasts; rate limiting / horizontal scaling
-# is the defender's path to mitigate.
+# pool and the scored endpoints (`/` and `/api/v1/apistatus`) drop below 200.
+# The defender's uptime-multi score stops accruing while saturation lasts;
+# rate limiting / horizontal scaling is the defender's path to mitigate.
 #
 # Deliberately tiny scale (= ~600 reqs total over 30s) so it can't be used
 # as an actual DoS. Run only against stacks you operate.

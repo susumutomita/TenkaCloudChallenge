@@ -4,7 +4,7 @@
 
 Monday morning at TenkaCloud Inc. The previous SRE — the SRE you keep hearing about and never meeting — left you "Tenryu.Mart." The company acquired it last year. mysql + Flask + nginx co-tenant on one EC2. The monitoring dashboard is green. The codebase has not been read.
 
-> the CTO, the CTO: "Attacks are coming in. Other teams are getting hit too. Don't take it down, don't try to fix everything — just keep it up. Triage."
+> The CTO: "Attacks are coming in. Other teams are getting hit too. Don't take it down, don't try to fix everything — just keep it up. Triage."
 
 This Battle is the next 60 to 90 minutes. The score engine pays you for *every minute both endpoints return 200*, not for elegant fixes. Letting a bad request through is cheap. Taking the app down to harden it is expensive.
 
@@ -57,7 +57,7 @@ The defender who stays at 200 the longest wins. The one who tries to fix everyth
 
 ```bash
 cd battles/security-battle-royale/local
-docker compose up --build
+docker compose up
 # frontend: http://localhost:80
 # api:      http://localhost:8080/api/v1/apistatus
 ```
@@ -70,6 +70,8 @@ docker compose up --build
 +100 pt   both endpoints return 200 on a probe cycle (every 60 s)
    0 pt   either endpoint down / non-200 / timed out
 ```
+
+Attack probes also fire continuously: each unpatched vulnerability that still lands docks points from that cycle, so a green-but-unpatched app scores **less** than a green-and-patched one — yet still more than a downed one. Patch the weakest spots to recover the full +100.
 
 See the `scoring` field in [`metadata.json`](./metadata.json) for the full spec including hint penalties.
 

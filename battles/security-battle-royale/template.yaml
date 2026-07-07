@@ -33,7 +33,7 @@ Parameters:
     Type: String
     Default: 0.0.0.0/0
     AllowedPattern: "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$"
-    Description: CIDR allowed to access frontend (80) / api (8080).
+    Description: CIDR allowed to reach frontend (80) / api (8080). In a multi-team event scope this to the score-engine + operator-attacker source ranges -- with 0.0.0.0/0 another team can reach the intentionally-vulnerable endpoints (e.g. the unauthenticated /backdoor RCE) and take your app down cross-tenant. Never leave 0.0.0.0/0 in a multi-team run.
   InstanceType:
     Type: String
     Default: t3.small

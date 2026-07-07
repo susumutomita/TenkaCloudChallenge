@@ -57,7 +57,7 @@
 
 ```bash
 cd battles/security-battle-royale/local
-docker compose up --build
+docker compose up
 # frontend: http://localhost:80
 # api:      http://localhost:8080/api/v1/apistatus
 ```
@@ -70,6 +70,8 @@ docker compose up --build
 +100 pt   frontend と api の両方が 200 を返した 1 cycle (= 60 秒)
    0 pt   片方でも 200 以外 / timeout / 未登録
 ```
+
+さらに攻撃 probe が常時飛んでおり、 未修正の脆弱性が刺さり続けている cycle は加点が目減りする。 つまり緑でも未修正のアプリは緑かつ修正済みのアプリより点が低い — ただし落ちているアプリよりは高い。 弱い所から塞ぐと満点 (+100) に戻る。
 
 詳細は [`metadata.json`](./metadata.json) の `scoring` フィールド参照 (hint penalty 含む)。
 

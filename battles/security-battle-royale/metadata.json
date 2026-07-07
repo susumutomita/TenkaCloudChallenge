@@ -9,7 +9,7 @@
   "estimatedDuration": "60〜90 分",
   "shortDescription": "天下クラウド株式会社、 ある月曜の朝。 前任の SRE が去年買収した EC サイト 'Tenryu.Mart' (mysql + Flask + nginx を EC2 1 台に同居) を、 引き継ぎ書 無しで継いだ。 監視ダッシュボードは緑、 ただしコードは見ていない。\n\nCTO 曰く: 「攻撃が来てる。 他チームのも一緒に来てる。 落とすな、 守れ、 全部直すな」。 君の仕事は frontend / api を 200 で返し続けること - 弱い所から順に塞ぎながら。",
   "instructions": "## はじめに\n脆弱なアプリ (frontend / api 同居) を引き継ぎ、 攻撃を受けながら **200 を返し続ける** バトル。 弱い所から順に塞ぐ。 deploy 直後は加点 0。\n\n## 最初の一手\n1. `Ec2HostHint` を Portal の `frontend` slot に `http://<host>`、 `api` slot に `http://<host>:8080` で **登録**\n2. 登録すると score engine が probe 開始\n3. 弱点を順に塞ぎながら両 slot を 200 に保つ\n\n## ゴール\nfrontend / api を 200 で返し続け、 攻撃に耐えながら弱点を塞ぐ。",
-  "description": "Battle problem: 前任の SRE から引き継いだ EC サイト 'Tenryu.Mart' の運用を、 競技時間中に守り抜く。\n\n## 初期状態 (deploy 直後)\n\n```\n┌── EC2 (Amazon Linux 2023, t3.small) ──────────────────────┐\n│  ┌──────────┐  ┌──────────┐  ┌──────────┐                  │\n│  │  nginx   │  │  Flask   │  │  mysql   │                  │\n│  │  :80     │  │  :8080   │  │  :3306   │  (docker compose)│\n│  └──────────┘  └──────────┘  └──────────┘                  │\n│       ▲              ▲                                      │\n│       │              │                                      │\n│  FrontendUrl      ApiUrl                                    │\n└──────────────────────────────────────────────────────────────┘\n        ▲\n        │ Score engine probes Frontend / API every 1 minute\n        │ (両方が 200 を返した cycle だけ +100 pt が入る)\n```\n\n## やること\n\n1. **Deploy 完了後、 stack Outputs から `Ec2HostHint` をコピー**し、 Participant Portal の Endpoint Override で 2 slot (`frontend` / `api`) に貼る。 `BaseUrl` 系 Output は invariant #9 に従って空 (= deploy しただけでは battle が始まらない)。\n2. **アプリを動かし続ける**。 nginx と Flask の両方が 200 を返している cycle のみ +100 pt。 どちらかが落ちると 0 pt。\n3. **攻撃を受けながら直す**。 operator 側から定期的に攻撃 probe が飛んでくる (= disruption catalog)。 攻撃を成立させない範囲でアプリを修正していく。 アプリを落として 0 pt にするより、 多少漏らしても 200 を返し続ける方が点が伸びる設計。\n\n## ノート\n\n- 各チームの EC2 / VPC は `${NamePrefix}` で完全分離。 cross-tenant 攻撃は IAM 側で塞いである。\n- ただし `AllowedCidr` の default は `0.0.0.0/0` (operator が公開 IP 全開で deploy する想定)。 別チーム / 外部からの probe を絞りたい時は CFn parameter で CIDR を絞る。\n- 連続稼働コストは t3.small × 90 分で < $0.10。 終わったら `aws cloudformation delete-stack`。",
+  "description": "Battle problem: 前任の SRE から引き継いだ EC サイト 'Tenryu.Mart' の運用を、 競技時間中に守り抜く。\n\n## 初期状態 (deploy 直後)\n\n```\n┌── EC2 (Amazon Linux 2023, t3.small) ──────────────────────┐\n│  ┌──────────┐  ┌──────────┐  ┌──────────┐                  │\n│  │  nginx   │  │  Flask   │  │  mysql   │                  │\n│  │  :80     │  │  :8080   │  │  :3306   │  (docker compose)│\n│  └──────────┘  └──────────┘  └──────────┘                  │\n│       ▲              ▲                                      │\n│       │              │                                      │\n│  FrontendUrl      ApiUrl                                    │\n└──────────────────────────────────────────────────────────────┘\n        ▲\n        │ Score engine probes Frontend / API every 1 minute\n        │ (両方が 200 を返した cycle だけ +100 pt が入る)\n```\n\n## やること\n\n1. **Deploy 完了後、 stack Outputs から `Ec2HostHint` をコピー**し、 Participant Portal の Endpoint Override で 2 slot (`frontend` / `api`) に貼る。 `BaseUrl` 系 Output は invariant #9 に従って空 (= deploy しただけでは battle が始まらない)。\n2. **アプリを動かし続ける**。 nginx と Flask の両方が 200 を返している cycle のみ +100 pt。 どちらかが落ちると 0 pt。\n3. **攻撃を受けながら直す**。 operator 側から定期的に攻撃 probe が飛んでくる (= disruption catalog)。 攻撃を成立させない範囲でアプリを修正していく。 アプリを落として 0 pt にするより、 多少漏らしても 200 を返し続ける方が点が伸びる設計。\n\n## ノート\n\n- 各チームの EC2 / VPC は `${NamePrefix}` で分離されるが、 これは AWS コントロールプレーン (IAM / リソースアクセス) の話。 アプリの公開ポート (80 / 8080) は `AllowedCidr` の範囲内なら誰でも到達でき、 未認証の `/backdoor` 等を突かれると他チームからでもアプリを落とせる (= app データプレーンは IAM では守られない)。\n- `AllowedCidr` の default は `0.0.0.0/0`。 マルチチーム開催では operator が score engine / operator-attacker の送信元 CIDR に必ず絞ること (OPERATOR.md 参照)。 全開のまま放置しない。\n- 連続稼働コストは t3.small × 90 分で < $0.10。 終わったら `aws cloudformation delete-stack`。",
   "tags": ["security", "web", "incident-response", "uptime"],
   "exposedPorts": [
     {
@@ -35,7 +35,7 @@
       "name": "Security Battle Royale",
       "shortDescription": "Monday morning at TenkaCloud Inc. The previous SRE left you 'Tenryu.Mart' -- an e-commerce app (mysql + Flask + nginx co-tenant on one EC2) the company acquired last year. The dashboard is green. The codebase is not yet read.\n\nthe CTO: 'Attacks are coming in. Other teams are getting hit too. Don't take it down, don't fix everything -- just keep it up.' Your job: keep frontend / api returning 200s while you patch the weakest spots first.",
       "instructions": "## Getting started\nYou inherit a vulnerable app (frontend / api co-located) and must **keep returning 200 while under attack**, sealing the weakest holes first. Scoring is 0 right after deploy.\n\n## First move\n1. Register `Ec2HostHint` into the Portal's `frontend` slot as `http://<host>` and the `api` slot as `http://<host>:8080`\n2. Registration starts the score engine's probes\n3. Seal weaknesses in order while keeping both slots at 200\n\n## Goal\nKeep frontend / api returning 200 under attack while closing the vulnerabilities.",
-      "description": "Battle problem: keep the previous SRE's inherited 'Tenryu.Mart' e-commerce stack alive through the competition window.\n\n## Initial state (post-deploy)\n\n```\n┌── EC2 (Amazon Linux 2023, t3.small) ──────────────────────┐\n│  ┌──────────┐  ┌──────────┐  ┌──────────┐                  │\n│  │  nginx   │  │  Flask   │  │  mysql   │                  │\n│  │  :80     │  │  :8080   │  │  :3306   │  (docker compose)│\n│  └──────────┘  └──────────┘  └──────────┘                  │\n│       ▲              ▲                                      │\n│       │              │                                      │\n│  FrontendUrl      ApiUrl                                    │\n└──────────────────────────────────────────────────────────────┘\n        ▲\n        │ Score engine probes frontend / API every 1 minute\n        │ (+100 pt only when BOTH return 200 on a given cycle)\n```\n\n## What you do\n\n1. **Copy `Ec2HostHint` from the stack Outputs** and paste it into both slot overrides (`frontend` / `api`) in the Participant Portal. URL outputs default to empty (invariant #9: the Battle starts when you say it does).\n2. **Keep the app up.** A cycle pays +100 pt only when both nginx and Flask return 200. If either drops, the cycle pays 0.\n3. **Patch under fire.** The operator side fires attack probes on a schedule (= disruption catalog). Letting attacks through is cheap; taking the app down to 'fix' it is expensive. The winning strategy is *graceful* hardening, not perfect hardening.\n\n## Notes\n\n- Each team's EC2 / VPC is fully isolated by `${NamePrefix}`. Cross-tenant attacks are blocked at the IAM layer.\n- `AllowedCidr` defaults to `0.0.0.0/0` (operator-controlled at deploy time). Tighten via the CFn parameter if you want to restrict the public attack surface.\n- Cost: t3.small for 90 min is < $0.10. Tear down with `aws cloudformation delete-stack` when finished.",
+      "description": "Battle problem: keep the previous SRE's inherited 'Tenryu.Mart' e-commerce stack alive through the competition window.\n\n## Initial state (post-deploy)\n\n```\n┌── EC2 (Amazon Linux 2023, t3.small) ──────────────────────┐\n│  ┌──────────┐  ┌──────────┐  ┌──────────┐                  │\n│  │  nginx   │  │  Flask   │  │  mysql   │                  │\n│  │  :80     │  │  :8080   │  │  :3306   │  (docker compose)│\n│  └──────────┘  └──────────┘  └──────────┘                  │\n│       ▲              ▲                                      │\n│       │              │                                      │\n│  FrontendUrl      ApiUrl                                    │\n└──────────────────────────────────────────────────────────────┘\n        ▲\n        │ Score engine probes frontend / API every 1 minute\n        │ (+100 pt only when BOTH return 200 on a given cycle)\n```\n\n## What you do\n\n1. **Copy `Ec2HostHint` from the stack Outputs** and paste it into both slot overrides (`frontend` / `api`) in the Participant Portal. URL outputs default to empty (invariant #9: the Battle starts when you say it does).\n2. **Keep the app up.** A cycle pays +100 pt only when both nginx and Flask return 200. If either drops, the cycle pays 0.\n3. **Patch under fire.** The operator side fires attack probes on a schedule (= disruption catalog). Letting attacks through is cheap; taking the app down to 'fix' it is expensive. The winning strategy is *graceful* hardening, not perfect hardening.\n\n## Notes\n\n- Each team's EC2 / VPC is isolated by `${NamePrefix}`, but that isolation is at the AWS **control plane** (IAM / resource access). The app's public ports (80 / 8080) are reachable by anyone inside `AllowedCidr`, so an unauthenticated sink like `/backdoor` lets another team take your app down (the app data plane is not protected by IAM).\n- `AllowedCidr` defaults to `0.0.0.0/0`. In a multi-team event the operator must scope it to the score-engine / operator-attacker source CIDRs (see OPERATOR.md); never leave it wide open.\n- Cost: t3.small for 90 min is < $0.10. Tear down with `aws cloudformation delete-stack` when finished.",
       "learningGoals": [
         "Experience the rhythm of incident response: patching a live web app without taking it offline",
         "Read and reason about an inherited EC2 + docker-compose codebase under time pressure",
@@ -48,7 +48,7 @@
         },
         {
           "id": "hint-2",
-          "content": "You don't need to fix the app perfectly. The score engine awards +100 pt only on cycles where both frontend (`/`) and api (`/api/v1/apistatus`) return 200. What matters is to keep returning 200."
+          "content": "You don't need to fix the app perfectly. The score engine awards +100 pt only on cycles where both frontend (`/`) and api (`/api/v1/apistatus`) return 200. What matters is to keep returning 200. But cycles where an unpatched vulnerability (SQLi) still lands score less — a green app that hasn't sealed the hole won't earn full marks."
         },
         {
           "id": "hint-3",
@@ -102,7 +102,7 @@
         "method": "POST",
         "body": "{\"username\": \"' OR '1'='1' -- \", \"password\": \"x\"}",
         "vulnerableStatus": [200],
-        "penalty": 50
+        "penalty": 20
       },
       {
         "slot": "api",
@@ -110,7 +110,7 @@
         "method": "POST",
         "body": "{\"username\": \"admin' UNION SELECT username FROM username -- \", \"password\": \"x\"}",
         "vulnerableStatus": [200],
-        "penalty": 50
+        "penalty": 20
       }
     ],
     "hints": [
@@ -121,13 +121,13 @@
       },
       {
         "id": "hint-2",
-        "content": "アプリを完璧に直す必要はありません。 score engine は frontend (`/`) と api (`/api/v1/apistatus`) が両方 200 を返す cycle にだけ +100 pt を入れます。 重要なのは 200 を返し続けること。",
-        "penalty": 50
+        "content": "アプリを完璧に直す必要はありません。 score engine は frontend (`/`) と api (`/api/v1/apistatus`) が両方 200 を返す cycle にだけ +100 pt を入れます。 重要なのは 200 を返し続けること。 ただし未修正の脆弱性 (SQLi) が刺さり続けている cycle は加点が目減りします — 緑でも塞げていないと満点になりません。",
+        "penalty": 20
       },
       {
         "id": "hint-3",
         "content": "api コードを読む順序は `auth → setdbpwd → dragons → proxy → backdoor`。 認証系の入力検証から手を付けると、 後段の漏洩経路が止まりやすくなります。",
-        "penalty": 150
+        "penalty": 40
       }
     ]
   },
@@ -141,19 +141,19 @@
       "parameters": {
         "probe": "redteam/probes/sqli-auth-bypass.sh"
       },
-      "description": "Operator-fired auth-bypass probe against /api/v1/auth. Pass = defender has parameterized the query; fail = defender leaks a row.",
+      "description": "Operator-fired auth-bypass visibility probe against /api/v1/auth (HTTP 200 = a row matched = still vulnerable; 403 = parameterized = patched). Note: SQLi scoring pressure is continuous via scoring.attackProbes from registration, not gated on this fire — this operator probe only lets you observe/demonstrate the current state.",
       "publicHint": false
     },
     {
       "id": "sqli-data-exfil",
-      "name": "Data exfiltration attempt",
+      "name": "Auth bypass (UNION payload)",
       "eventDetailType": "AttackFired",
       "defaultAfterMinutes": 35,
       "operatorEditable": ["afterMinutes"],
       "parameters": {
         "probe": "redteam/probes/sqli-data-exfil.sh"
       },
-      "description": "Operator-fired stricter probe against /api/v1/auth. Same root cause as sqli-auth-bypass; tests for a more thorough patch.",
+      "description": "Operator-fired auth-bypass visibility probe using a UNION payload against /api/v1/auth (HTTP 200 = injection matched = still vulnerable; 403 = patched). Same root cause as sqli-auth-bypass -- not a real data-exfil path, since the endpoint only returns true/false. Verifies a thorough parameterization. SQLi scoring is continuous via scoring.attackProbes, not gated on this fire.",
       "publicHint": false
     },
     {
