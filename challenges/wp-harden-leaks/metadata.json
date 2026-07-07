@@ -1,0 +1,229 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "wp-harden-leaks",
+  "name": "後任の大掃除",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "約40分",
+  "shortDescription": "前任者が公開領域に残した漏れが複数ある WordPress サイト。 あなたは後任担当として、 サーバに入り、 外部スキャナが 「クリーン」 と言うまで穴を一つずつ塞ぐ。 ただし、 表面的に消しただけでは塞がらない穴もある。",
+  "description": "あなたは Aoi Corp のコーポレートサイト (WordPress) の運用を引き継いだ後任担当だ。 サイトは現行の WordPress と MySQL 系 DB で普通に動いている。 だが前任の担当者が移行のときに 「テスト用」 「あとで消す」 と言いながら、 いくつもの運用ファイルや設定を公開領域 (Web から届く場所) に残したまま消し忘れていた。 その結果、 会社のデータ・DB 接続情報・内部メモが外部から読める状態になっている。\n\nこれは WordPress 本体の脆弱性ではない。 「初期設定・運用の不備」 だ。 あなたの仕事は攻撃ではなく是正 ── サーバに入り、 外部スキャナが 「クリーン」 と判定するまで、 前任者が残した漏れ (公開バックアップ・設定ファイルの控え・本番のデバッグ出力・中身が見える内部フォルダ) を一つずつ塞ぐこと。\n\nこれは discovery 版 『前任者の忘れ物』 (wp-exposed-backup) の是正編にあたる。 4 つのチェックポイントは外部スキャナ (verify コンテナが実サイトを HTTP で叩く) が状態で判定するので、 合言葉やごまかしは通用しない ── 実際に外から届かなくなって初めて加点される。 うち 1 つ (デバッグ出力) は表面のファイルを消すだけでは再生成され、 発生源の設定を止めない限り塞がらない。",
+  "instructions": "## 状況\n\nAoi Corp のコーポレートサイト (WordPress) の運用を引き継いだ。 サイト自体は普通に動いているが、 前任者が移行のときに公開領域へ残した運用ファイルや設定が複数あり、 外部から中身や設定が読める状態になっている。\n\n## ゴール\n\nサーバに入り、 **外部スキャナが 「クリーン」 と言うまで、 漏れを一つずつ塞ぐ**。 各チェックポイントは外部スキャナが実際にサイトを叩いて判定する ── 塞げていなければ通らないし、 ごまかしも効かない。\n\n## 進め方\n\n- サーバに入る: `docker compose exec wordpress bash` (公開ディレクトリは `/var/www/html`)。\n- どこが漏れているか・どう塞ぐかは、 外から見える状態と中の状態を突き合わせて自分で見極める。\n- 塞いだと思ったら、 各チェックポイントの提出欄に任意の合図 (例: `done`) を送って再スキャンする。 塞がっていれば加点、 まだなら 「まだ外から届く」 と返る。 何度でも再スキャンしてよい (減点なし)。\n- 手が止まったら各チェックポイントのヒントを開く (最初のヒントは無料、 考え方から順に出る)。\n\n> 注意: 表面的に消しただけでは再び検知される穴もある。 「なぜまだ塞がらないのか」 を再スキャンで確かめながら進めよう。",
+  "writeup": "## 何をしたか\n\nWordPress 本体には手を入れていない。 やったのは 「公開領域に置きっぱなしだった運用ファイルと設定を、 外から届かない状態にする」 是正だけだ。\n\n- **公開バックアップ** ── 移行時の DB ダンプ `/wp-content/backups/db-backup.sql` を docroot から削除した。 バックアップは Web から届く場所に置かない。\n- **設定ファイルの控え** ── `wp-config.php.bak` を削除した。 `.bak` は PHP として実行されず平文で配信されるため、 DB 接続情報が丸見えだった。 控えはサーバの外で管理し、 漏れた認証情報はローテーションする。\n- **内部フォルダの一覧** ── `/internal/` の Apache ディレクトリ一覧 (Indexes) を無効化した (または `index.html` を置く / フォルダを消す)。 一覧可能なフォルダは中身をすべて晒す。\n- **本番のデバッグ出力 (歯応えのある穴)** ── `wp-content/debug.log` は消すだけでは塞がらなかった。 `WP_DEBUG` が本番で有効なままだと、 リクエストのたびにログが再生成されるからだ。 `wp-config.php` で `WP_DEBUG` を無効化して 「発生源」 を止め、 それからファイルを消して初めて塞がった。 **症状 (ファイル) ではなく原因 (設定) を止める**のが正しい是正だ。\n\n## なぜこれが学びになるか\n\n是正は 「動いているものを壊さずに、 余計なものを閉じる」 作業だ。 4 つのうち 3 つは不要ファイルの削除やディレクトリ一覧の無効化で閉じるが、 デバッグログのように 「消しても再発する」 穴は、 表面を消すのではなく発生源の設定を止めない限り閉じない。 どんなサービスでも、 公開領域に何があるかを定期的に棚卸しし、 バックアップ・設定・ログ・作業メモを公開ルートから隔離し、 デバッグ出力を本番で止めておくのが基本の守りになる。 攻撃者は `robots.txt` や推測しやすいファイル名から探しに来るので、 「隠す」 よりも 「そもそも置かない・消す・止める」 ことが確実な対策になる。",
+  "tags": [
+    "wordpress",
+    "misconfiguration",
+    "remediation",
+    "hardening",
+    "operations",
+    "local-play",
+    "container",
+    "multi-verify"
+  ],
+  "exposedPorts": [
+    { "port": 18080, "name": "Web (WordPress site)" },
+    { "port": 18081, "name": "/verify (loopback admin)" }
+  ],
+  "learningGoals": [
+    "「動いているサイトを安全にする」 とは、 コードを書くことではなく運用の是正 (不要ファイルの削除・設定の無効化) であることを、 実際に手を動かして体得する",
+    "表面 (ファイル) を消すだけでは塞がらず、 発生源 (デバッグ設定) を止めて初めて閉じる穴があることを、 外部スキャナの再判定で自分で確かめられるようになる",
+    "公開領域に置くファイルの棚卸し・ディレクトリ一覧の無効化・デバッグ出力の停止という、 コードを触らない基本の是正を自分で適用できるようになる"
+  ],
+  "i18n": {
+    "en": {
+      "name": "The Successor's Cleanup",
+      "shortDescription": "A WordPress site with several leaks the previous operator left in the public area. As the new operator, you enter the server and close each hole one by one until an external scanner reports \"clean\" — but some holes are not closed by simply deleting a file.",
+      "description": "You have taken over running Aoi Corp's corporate site (WordPress). It runs normally on current WordPress and a MySQL-family database. But the previous operator, during the migration, left several operations files and settings in the public area (reachable from the web) 'just for testing' / 'to delete later' and never removed them — so the company's data, DB credentials, and internal notes can be read from the outside.\n\nThis is not a vulnerability in WordPress itself; it is an initial-setup / operations mistake. Your job is not to attack but to remediate: enter the server and close each leak the previous operator left (a public backup, a copy of the config file, production debug output, and a browsable internal folder) until an external scanner judges the site 'clean'.\n\nThis is the remediation companion to the discovery problem 'The Predecessor's Leftovers' (wp-exposed-backup). The four checkpoints are judged by STATE — an external scanner (the verify container HTTP-probing the live site) — so passphrases and shortcuts do not work; you only score when the resource is genuinely no longer reachable from outside. One of them (the debug output) regenerates if you only delete the file: it does not close until you stop the setting that produces it.",
+      "instructions": "## Situation\n\nYou have inherited Aoi Corp's WordPress site. It runs fine, but the previous operator left several operations files and settings in the public area during the migration, so the site's data and settings can be read from the outside.\n\n## Goal\n\nEnter the server and **close each leak, one by one, until the external scanner reports 'clean'**. Every checkpoint is judged by an external scanner that actually probes the site — if it is not closed it will not pass, and there is no faking it.\n\n## How to work\n\n- Enter the server: `docker compose exec wordpress bash` (the public directory is `/var/www/html`).\n- Figure out yourself where the leaks are and how to close them, by comparing what is visible from outside with what is on disk.\n- When you think a hole is closed, send any trigger (e.g. `done`) to that checkpoint's submission box to re-scan. If it is closed you score; if not it returns 'still reachable from outside'. Re-scan as many times as you like (no penalty).\n- If you get stuck, open a checkpoint's hints (the first hint is free; they progress from approach to answer).\n\n> Note: some holes are detected again even after you delete something. Use the re-scan to work out 'why is this still open?'.",
+      "writeup": "## What you did\n\nYou did not touch WordPress's code. All you did was remediate: put the operations files and settings that were sitting in the public area into a state where they can no longer be reached from outside.\n\n- **Public backup** — deleted the migration DB dump `/wp-content/backups/db-backup.sql` from the docroot. Never keep backups where the web server can serve them.\n- **Config copy** — deleted `wp-config.php.bak`. A `.bak` is not executed as PHP; Apache serves it as plain text, so the DB credentials were exposed. Keep such copies off the server, and rotate any leaked credential.\n- **Internal folder listing** — disabled the Apache directory listing (Indexes) on `/internal/` (or add an `index.html` / remove the folder). A listable folder exposes everything in it.\n- **Production debug output (the one with teeth)** — `wp-content/debug.log` did not close by deleting it. With `WP_DEBUG` still on in production, the log is regenerated on every request. Only after turning `WP_DEBUG` off in `wp-config.php` to stop the source, and then removing the file, did it close. **Fix the cause (the setting), not the symptom (the file).**\n\n## Why this teaches something\n\nRemediation is 'closing what shouldn't be open without breaking what works'. Three of the four close by deleting an unneeded file or disabling directory listing, but a hole like the debug log — one that 'comes back after you delete it' — does not close until you stop the setting that produces it, not the file. For any service, the basic defense is to periodically inventory what lives in the public area, keep backups / configs / logs / working notes out of the public root, and turn debug output off in production. Attackers probe `robots.txt` and guessable filenames first, so 'don't place it / delete it / turn it off' is a far more reliable control than trying to 'hide' it.",
+      "learningGoals": [
+        "Experience, hands-on, that 'making a running site safe' is not writing code but operational remediation — deleting unneeded files and disabling settings",
+        "Confirm for yourself, via the external scanner's re-judgement, that some holes do not close by deleting the file (symptom) and only close once you stop the source (a debug setting)",
+        "Be able to apply the basic, code-free remediations yourself: inventory what is in public folders, disable directory listing, and stop debug output"
+      ],
+      "checks": [
+        {
+          "id": "close-backup",
+          "label": "Close the public backup",
+          "hints": [
+            {
+              "id": "backup-1",
+              "content": "The external scanner still detects 'a backup placed in the public area'. First enter the server and walk the docroot (`/var/www/html`), looking for a backup-like file that should not be reachable from the web."
+            },
+            {
+              "id": "backup-2",
+              "content": "During a migration operators often dump the whole database to a backup file (`.sql`) and leave it in a public folder. Look inside `/var/www/html/wp-content/backups/`. Reachable from the web = deleting it makes it 404 from outside."
+            },
+            {
+              "id": "backup-3",
+              "content": "`docker compose exec wordpress rm /var/www/html/wp-content/backups/db-backup.sql`, then re-scan. Backups should never sit where the web server can serve them."
+            }
+          ]
+        },
+        {
+          "id": "close-config",
+          "label": "Close the config copy",
+          "hints": [
+            {
+              "id": "config-1",
+              "content": "The config file `wp-config.php` itself runs as PHP, so its contents aren't visible. But a copy saved under a NON-executed extension, left in the public area, is served as plain text. Hunt for that copy."
+            },
+            {
+              "id": "config-2",
+              "content": "Editors often leave a copy like `wp-config.php.bak`, `.save`, or `wp-config.php~`. Check the docroot root. If present, the DB credentials are leaking in plain text."
+            },
+            {
+              "id": "config-3",
+              "content": "`docker compose exec wordpress rm /var/www/html/wp-config.php.bak`, then re-scan. Keep such copies off the server, and rotate any credential that leaked."
+            }
+          ]
+        },
+        {
+          "id": "close-listing",
+          "label": "Stop the browsable internal folder",
+          "hints": [
+            {
+              "id": "listing-1",
+              "content": "Sometimes you don't even need a filename — opening a folder lists every file in it. Look at the other folder `robots.txt` was worried about, and open it from outside to see what happens."
+            },
+            {
+              "id": "listing-2",
+              "content": "`/internal/` has Apache directory listing (Indexes) left on, so its contents are browsable. Three ways to stop it — disable the listing / drop an `index.html` / remove the folder. Any state where 'no listing appears' works."
+            },
+            {
+              "id": "listing-3",
+              "content": "e.g. `docker compose exec wordpress a2disconf zz-internal-autoindex && docker compose exec wordpress apachectl graceful`, or `docker compose exec wordpress rm -r /var/www/html/internal`. Re-scan (give the reload a moment); it passes once the listing is gone."
+            }
+          ]
+        },
+        {
+          "id": "close-debug",
+          "label": "Stop the production debug output",
+          "hints": [
+            {
+              "id": "debug-1",
+              "content": "This log is detected again even after you 'delete' it. Suspect the setting that produces it, not the file itself."
+            },
+            {
+              "id": "debug-2",
+              "content": "WordPress has an output you enable during development and forget to turn off in production (debug logging). While that setting is alive, the log is regenerated every time the site gets a request. Stop the setting first, then delete the file — order matters."
+            },
+            {
+              "id": "debug-3",
+              "content": "In production the right fix is to turn `WP_DEBUG` itself off. Set it to false in `wp-config.php`, e.g. `docker compose exec wordpress sed -i \"s/define( 'WP_DEBUG', .*/define( 'WP_DEBUG', false );/\" /var/www/html/wp-config.php`, then `docker compose exec wordpress rm /var/www/html/wp-content/debug.log`. Deleting it while debug is on regenerates it, so order matters. Re-scan to pass."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Web": "http://127.0.0.1:18080"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": ["FLAG_SEED"]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "hintReveal": "flat",
+    "checks": [
+      {
+        "id": "close-backup",
+        "label": "公開領域のバックアップを塞ぐ",
+        "points": 40,
+        "wrongAnswerPenalty": 0,
+        "hints": [
+          {
+            "id": "backup-1",
+            "content": "外部スキャナは 「公開領域に置かれたバックアップ」 をまだ検知している。 まずサーバの中に入り、 Web から届く場所 (`/var/www/html` の下) に、 本来置いてはいけないバックアップ的なファイルが残っていないか歩いて確認しよう。",
+            "penalty": 0
+          },
+          {
+            "id": "backup-2",
+            "content": "サイト移行時に取ったデータベースのダンプ (`.sql`) が公開フォルダに残っているのが典型。 `/var/www/html/wp-content/backups/` の中を見てみよう。 Web から届く=消せば外から 404 になる。",
+            "penalty": 4
+          },
+          {
+            "id": "backup-3",
+            "content": "`docker compose exec wordpress rm /var/www/html/wp-content/backups/db-backup.sql` で削除し、 再スキャンする。 バックアップはそもそも Web から届く場所に置かない。",
+            "penalty": 8
+          }
+        ]
+      },
+      {
+        "id": "close-config",
+        "label": "設定ファイルの控えを塞ぐ",
+        "points": 40,
+        "wrongAnswerPenalty": 0,
+        "hints": [
+          {
+            "id": "config-1",
+            "content": "設定ファイル本体 `wp-config.php` は PHP として実行されるので中身は見えない。 だが 「実行されない拡張子」 で保存された控えが公開領域に残ると、 平文で配信されてしまう。 そういう控えを探そう。",
+            "penalty": 0
+          },
+          {
+            "id": "config-2",
+            "content": "エディタは編集前に `wp-config.php.bak` / `.save` / `wp-config.php~` のような控えを作りがち。 docroot 直下に残っていないか確認しよう。 あれば認証情報が平文で漏れている。",
+            "penalty": 4
+          },
+          {
+            "id": "config-3",
+            "content": "`docker compose exec wordpress rm /var/www/html/wp-config.php.bak` で削除し、 再スキャンする。 控えはサーバの外で管理し、 漏れた認証情報はローテーションする。",
+            "penalty": 8
+          }
+        ]
+      },
+      {
+        "id": "close-listing",
+        "label": "内部フォルダの丸見えを止める",
+        "points": 50,
+        "wrongAnswerPenalty": 0,
+        "hints": [
+          {
+            "id": "listing-1",
+            "content": "ファイル名を知らなくても、 フォルダを開くだけで中のファイルが一覧表示されてしまう状態がある。 `robots.txt` が気にしていたもう一つのフォルダを、 外から開くとどうなるか見てみよう。",
+            "penalty": 0
+          },
+          {
+            "id": "listing-2",
+            "content": "`/internal/` に Apache のディレクトリ一覧 (Indexes) が有効なままで、 中身が丸見えになっている。 止め方は 3 つ ── 一覧を無効化する / `index.html` を置く / フォルダごと消す。 どれでも 「一覧が出ない」 状態になればよい。",
+            "penalty": 5
+          },
+          {
+            "id": "listing-3",
+            "content": "例: `docker compose exec wordpress a2disconf zz-internal-autoindex && docker compose exec wordpress apachectl graceful`。 または `docker compose exec wordpress rm -r /var/www/html/internal`。 再スキャンで一覧が消えていれば通る (reload に少し時間がかかることがある)。",
+            "penalty": 10
+          }
+        ]
+      },
+      {
+        "id": "close-debug",
+        "label": "本番のデバッグ出力を止める",
+        "points": 70,
+        "wrongAnswerPenalty": 0,
+        "hints": [
+          {
+            "id": "debug-1",
+            "content": "このログは 「消しても」 スキャナがまた検知する。 ファイルそのものより、 それを生み出している設定を疑おう。",
+            "penalty": 0
+          },
+          {
+            "id": "debug-2",
+            "content": "WordPress には開発中に有効化して本番で切り忘れる出力設定がある (デバッグログ)。 その設定が生きている限り、 サイトにリクエストが来るたびにログが再生成される。 まず設定を止め、 それからファイルを消すのが順序だ。",
+            "penalty": 7
+          },
+          {
+            "id": "debug-3",
+            "content": "本番では `WP_DEBUG` 自体を切るのが正しい。 `wp-config.php` の `WP_DEBUG` を false にする。 例: `docker compose exec wordpress sed -i \"s/define( 'WP_DEBUG', .*/define( 'WP_DEBUG', false );/\" /var/www/html/wp-config.php` → その後 `docker compose exec wordpress rm /var/www/html/wp-content/debug.log`。 有効なまま消すと再生成されるので順序が重要。 再スキャンで通る。",
+            "penalty": 14
+          }
+        ]
+      }
+    ]
+  }
+}
