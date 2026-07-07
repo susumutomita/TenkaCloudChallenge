@@ -38,8 +38,10 @@ After deploy, expect:
     "rate_limited": false,
     "audit_on": false,
     "on_rds": false,
+    "ssh_closed": false,
     "site_intact": true,
-    "no_backdoor": true
+    "no_backdoor": true,
+    "board_clean": true
   },
   "platform": "posture-0"
 }
@@ -83,19 +85,23 @@ The expected path (after `source /etc/tenkacloud-vibe/runtime.env`):
 5. Associate `WAF_WEB_ACL_ARN` to `ALB_ARN` with `aws wafv2 associate-web-acl`.
 6. Enable audit: set `audit_s3=true` in `$CONFIG_FILE`, restart.
 7. Migrate to RDS: `tools/export_sqlite_to_postgres.py` → `psql` into RDS, set `database=rds` in `$CONFIG_FILE`, restart.
-8. Use `/posture` (or `vibe-status`) as the source of truth.
+8. Close SSH: revoke the leftover public tcp/22 rule on the app SG (`$APP_SG_ID`) with `aws ec2 revoke-security-group-ingress` — run from participant credentials (CloudShell / `aws login`), since the instance role cannot modify SGs; SSM access is unaffected.
+9. Use `/posture` (or `vibe-status`) as the source of truth.
 
 ### How the red team fires
 
-All disruptions are real-fault `action` deliveries (ADR-031) with mandatory revert (ADR-029). There are no effect-only penalties.
+Five disruptions are real-fault `action` deliveries (ADR-031) with mandatory revert (ADR-029); `anonymous-spam` is an HTTP attack probe (`redteam/probes/anon-spam.sh`) with no server-side revert — a correctly authenticated board rejects it (401), so hardening is what neutralizes it. No effect-only penalties.
 
-| Default fire | id                     | Delivery                       | Revert |
-| ------------ | ---------------------- | ------------------------------ | ------ |
-| 35 min       | `ai-wipes-database`    | SSM command runs wipe script    | 300 s  |
-| 50 min       | `auth-setting-removed` | SSM command edits config        | 300 s  |
-| 65 min       | `vibe-app-stopped`     | SSM command stops app service   | 180 s  |
+| Default fire | id                      | Delivery                        | Revert |
+| ------------ | ----------------------- | ------------------------------- | ------ |
+| 35 min       | `ai-wipes-database`     | SSM command runs wipe script    | 300 s  |
+| 45 min       | `anonymous-spam`        | HTTP probe posts marker spam    | none (auth repels it; delete `author=redteam-spam` posts) |
+| 50 min       | `auth-setting-removed`  | SSM command edits config        | 300 s  |
+| 55 min       | `site-defaced`          | SSM command defaces the board   | 300 s  |
+| 65 min       | `vibe-app-stopped`      | SSM command stops app service   | 180 s  |
+| 70 min       | `supply-chain-backdoor` | SSM command plants backdoor     | 300 s  |
 
-The executor AssumeRoles into the team account and targets the `InstanceId` stack output. Revert is scheduled at fire time. Participants can recover earlier through SSM.
+The executor AssumeRoles into the team account and targets the `InstanceId` stack output for the SSM `action` disruptions; `anonymous-spam` is fired by the operator-side attacker against the registered app URL. Revert is scheduled at fire time. Participants can recover earlier through SSM.
 
 ### Watching the room
 
@@ -136,7 +142,7 @@ Each satisfied production gate is worth **+100 points/min**. The six gates are e
 - **Penalties:** probe failure **-100**/cycle, slow response (**> 5000 ms**) **-25**. The threshold was raised from 1500 ms so real resource latency (and the 1500 ms hidden throttle) never falsely penalizes; only a genuinely broken or deliberately delayed app trips it.
 - **`production-ramp` (after 30 min):** teams still at `posture-0/1/2` drop to the degraded rate (half: 0 / 50 / 100 per min) — pressure to deepen posture before the deadline.
 - **`incident-response` (after 75 min):** the scoring engine probes `/score?incident=true`; a non-production app takes a deliberate **6 s** legacy-path delay (> 5000 ms → penalty). Production / production-optimized apps skip it.
-- **Incident clamp:** when `site_intact` or `no_backdoor` is false (site defaced / backdoor planted), the app reports `platform ≤ posture-2`, capping the team at **200 points/min** until they remediate. This is measured by the app from real state, not operator-toggled.
+- **Incident clamp:** when `site_intact`, `no_backdoor`, or `board_clean` is false (site defaced / backdoor planted / anonymous spam landed on an unauthenticated board), the app reports `platform ≤ posture-2`, capping the team at **200 points/min** until they remediate. This is measured by the app from real state, not operator-toggled. For `board_clean`, remediation is enabling auth (which repels the probe) and deleting the `author=redteam-spam` posts.
 
 ## After the event
 

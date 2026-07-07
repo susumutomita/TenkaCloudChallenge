@@ -68,7 +68,7 @@ The app exposes `GET /posture`; those values are measured from actual state, not
 | `posture-5`  | 5               | 500          |
 | `production` | 6 (all)         | 600          |
 
-Reaching `production` (all six gates) also earns a one-time **+30000** bonus. A probe failure costs **-100** per cycle and a slow response (> 1500 ms) costs **-25** — both unchanged by the flat model. After the 30-minute `production-ramp` phase, teams still at `posture-0/1/2` drop to the degraded rate (half: 0 / 50 / 100 per min). If the red team defaces the site or plants a backdoor (`site_intact` / `no_backdoor` false), the app clamps the platform to `posture-2`, capping the team at **200 points/min** until they recover.
+Reaching `production` (all six gates) also earns a one-time **+30000** bonus. A probe failure costs **-100** per cycle and a slow response (> 5000 ms) costs **-25** — both unchanged by the flat model. After the 30-minute `production-ramp` phase, teams still at `posture-0/1/2` drop to the degraded rate (half: 0 / 50 / 100 per min). If the red team defaces the site, plants a backdoor, or lands anonymous spam on a board with auth still off (`site_intact` / `no_backdoor` / `board_clean` false), the app clamps the platform to `posture-2`, capping the team at **200 points/min** until they recover (for spam: enable auth to repel it, then delete the `author=redteam-spam` posts).
 
 ## How to play
 
@@ -149,15 +149,16 @@ Rival scores are **event-scoped**: they appear only when the operator runs Stack
 
 Operators can fire reversible disruptions:
 
-| id                     | What happens                                 | Revert                         |
-| ---------------------- | -------------------------------------------- | ------------------------------ |
-| `ai-wipes-database`    | Clears posts from SQLite / RDS                | Restores from S3 backup        |
-| `auth-setting-removed` | Backs up config, then disables auth            | Restores the backed-up config  |
-| `vibe-app-stopped`     | Stops `tenkacloud-vibe`                       | Starts `tenkacloud-vibe`       |
-| `site-defaced`         | Defaces the board (PWNED banner), `site_intact`=false | Removes the deface marker |
-| `supply-chain-backdoor`| Plants a backdoor artifact, `no_backdoor`=false | Removes the backdoor artifact |
+| id                     | Delivery                       | What happens                                 | Recovery / revert              |
+| ---------------------- | ------------------------------ | -------------------------------------------- | ------------------------------ |
+| `anonymous-spam`       | HTTP attack probe (`redteam/probes/anon-spam.sh`) | Posts marker spam to `/submit` with no auth token; if auth is off it lands and `board_clean`=false | Enable auth (the probe is rejected 401), then delete the `author=redteam-spam` posts |
+| `ai-wipes-database`    | SSM `action`                   | Clears posts from SQLite / RDS                | Restores from S3 backup        |
+| `auth-setting-removed` | SSM `action`                   | Backs up config, then disables auth            | Restores the backed-up config  |
+| `vibe-app-stopped`     | SSM `action`                   | Stops `tenkacloud-vibe`                       | Starts `tenkacloud-vibe`       |
+| `site-defaced`         | SSM `action`                   | Defaces the board (PWNED banner), `site_intact`=false | Removes the deface marker |
+| `supply-chain-backdoor`| SSM `action`                   | Plants a backdoor artifact, `no_backdoor`=false | Removes the backdoor artifact |
 
-All disruptions are `action` deliveries with a declared `revert`; no effect-only penalty claims a cloud fault.
+The five SSM disruptions are `action` deliveries with a declared `revert` (no effect-only penalty claims a cloud fault). `anonymous-spam` is an HTTP attack probe with no server-side revert — a correctly authenticated board simply rejects it (401), so hardening is what "reverts" it.
 
 ## Cost
 
