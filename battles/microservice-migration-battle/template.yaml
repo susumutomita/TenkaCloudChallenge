@@ -51,17 +51,6 @@ Parameters:
     Type: String
     Default: main
     Description: branch / tag / commit to check out from RepoUrl.
-  DegradedAfterMinutes:
-    Type: Number
-    Default: 60
-    MinValue: 1
-    MaxValue: 720
-    Description: >
-      [ADR-012 Phase 4 Disruption] Firing time of the self-triggered Scheduler that, N
-      minutes after deploy, injects `tc qdisc` network latency (200ms) on the EC2.
-      Assumed to match `phases[0].afterMinutes` in metadata.json (= the score engine
-      switches ec2 platform points to degradedPoints at the same time).
-      Operator can override at deploy time.
   TenkaCloudAccountId:
     Type: String
     AllowedPattern: "^[0-9]{12}$"
@@ -269,11 +258,6 @@ Resources:
                 Action:
                   - lambda:GetFunction
                 Resource: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${NamePrefix}*"
-              - Sid: InspectOwnSchedule
-                Effect: Allow
-                Action:
-                  - scheduler:GetSchedule
-                Resource: !Sub "arn:aws:scheduler:${AWS::Region}:${AWS::AccountId}:schedule/default/${NamePrefix}*"
               - Sid: FilterOwnLambdaLogs
                 Effect: Allow
                 Action:
@@ -657,113 +641,13 @@ Resources:
 
           docker compose up -d --build
 
-  # ----- Disruption pattern (ADR-012 Phase 4) -----
-  # Self-triggered Scheduler aligned with phases[0] (degraded). DegradedAfterMinutes
-  # after deploy it issues an SSM RunCommand, injecting 200ms of network latency on
-  # the EC2's eth0 via `tc qdisc`. At the same moment the platform-side score engine
-  # switches ec2 points to degradedPoints (= 10) (= driven separately from
-  # metadata.phases). The portal displays a countdown from metadata.disruptions[]
-  # (= predict).
-  #
-  # Design choice: passing `rate(N minutes)` to Scheduler fires N minutes after deploy
-  # for the first time, and every N minutes thereafter. `tc qdisc add` fails with EEXIST
-  # so subsequent runs are no-op (= idempotent). For an exactly-once firing you would
-  # need a CustomResource that constructs an `at()` expression from deploy time + offset,
-  # but the Phase 1 reference impl prioritizes simplicity and uses rate() + an idempotent
-  # Lambda.
-  DisruptionFunctionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal: { Service: lambda.amazonaws.com }
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-      Policies:
-        - PolicyName: SendCommandToOwnInstance
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action: ssm:SendCommand
-                Resource:
-                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/${Ec2}"
-                  - !Sub "arn:aws:ssm:${AWS::Region}::document/AWS-RunShellScript"
-
-  DegradedDisruptionFunction:
-    Type: AWS::Lambda::Function
-    Properties:
-      # No explicit FunctionName: it overflows the 64-char limit with long
-      # NamePrefix (#1812). Refs use !GetAtt ...Arn, so CFn auto-naming is safe.
-      Runtime: python3.12
-      Handler: index.handler
-      Role: !GetAtt DisruptionFunctionRole.Arn
-      Timeout: 30
-      Environment:
-        Variables:
-          INSTANCE_ID: !Ref Ec2
-      Code:
-        ZipFile: |
-          import os
-          import boto3
-
-          # On phases[0]=degraded fire, inject network latency into the EC2.
-          # AL2023 nitro instances commonly name the primary NIC `ens5`, not `eth0`,
-          # and ship without the `tc` binary (= `iproute-tc` is a separate package).
-          # Install on demand and discover the default-route NIC at runtime so the
-          # qdisc lands on the actual interface.
-          # `tc qdisc add` fails with EEXIST after the first run so `|| true` swallows it.
-          # Scheduler re-fires every N minutes via rate(N min), but it is a no-op after the first fire.
-          def handler(event, context):
-              ssm = boto3.client("ssm")
-              ssm.send_command(
-                  InstanceIds=[os.environ["INSTANCE_ID"]],
-                  DocumentName="AWS-RunShellScript",
-                  Comment="TenkaCloud microservice-migration: phases[0] degraded fire",
-                  Parameters={
-                      "commands": [
-                          "command -v tc >/dev/null 2>&1 || dnf install -y iproute-tc",
-                          "DEV=$(ip route show default | awk '{print $5; exit}')",
-                          "tc qdisc add dev \"$DEV\" root netem delay 200ms || true",
-                      ],
-                  },
-              )
-              return {"ok": True}
-
-  SchedulerInvokeRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal: { Service: scheduler.amazonaws.com }
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: InvokeDisruptionFunction
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action: lambda:InvokeFunction
-                Resource: !GetAtt DegradedDisruptionFunction.Arn
-
-  DegradedDisruptionSchedule:
-    Type: AWS::Scheduler::Schedule
-    Properties:
-      # No explicit Name: Scheduler::Schedule Name has a 64-char limit and
-      # overflows with long NamePrefix (#1812). Nothing references it by name.
-      Description: >
-        TenkaCloud microservice-migration-battle phases[0]=degraded disruption schedule.
-        DegradedAfterMinutes after deploy, injects network latency on the EC2.
-      FlexibleTimeWindow: { Mode: "OFF" }
-      ScheduleExpression: !Sub "rate(${DegradedAfterMinutes} minutes)"
-      Target:
-        Arn: !GetAtt DegradedDisruptionFunction.Arn
-        RoleArn: !GetAtt SchedulerInvokeRole.Arn
+  # ----- Disruption delivery (ADR-031) -----
+  # The EC2 network-latency fault is delivered solely by the platform executor via
+  # metadata.json disruptions[].action (ssm-run-command on InstanceId, with a mandatory
+  # revert per ADR-029), matching the battles/hello-world-battle reference. No in-template
+  # self-firing Scheduler/Lambda -- that duplicated the delivery, never reverted, and
+  # re-fired on rate(). The action discovers the default NIC (ens5 on AL2023 nitro) at
+  # runtime, so it lands on the real interface.
 
 Outputs:
   # BaseUrl is intentionally EMPTY (invariant #9 in AGENT.md: a Battle uptime
@@ -778,7 +662,7 @@ Outputs:
     Description: Empty by default; competitors register their EC2 host (or per-service managed URL) via the Participant Portal Endpoint Override to start scoring.
     Value: ""
   Ec2HostHint:
-    Description: EC2 public DNS for this stack. Paste `http://<host>` into each of the 3 slot overrides (users/orders/catalog) to start the Battle on EC2.
+    Description: EC2 public DNS for this stack. Paste the per-service path URL into each slot override -- http://<host>/users into users, http://<host>/orders into orders, http://<host>/catalog into catalog -- to start the Battle on EC2. nginx only routes /users /orders /catalog, so a bare http://<host> override 404s the /meta probe (-100/slot).
     Value: !GetAtt Ec2.PublicDnsName
   InstanceId:
     Description: EC2 instance ID (used by operators to connect via SSM Session Manager).

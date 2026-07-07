@@ -8,7 +8,7 @@
   "difficulty": 4,
   "estimatedDuration": "90〜120 分",
   "shortDescription": "天下クラウド株式会社、 入社 1 ヶ月。 前任の SRE が残した EC2 1 台同居のモノリス (users / orders / catalog の 3 サービスを nginx reverse proxy が path で振り分け) を引き継いだ。 CTO 曰く 『そろそろマネージドに分けてくれない? Lambda でも ECS でも App Runner でも、 サービスごとに違う hosting でいい』。\n\nあなたの仕事: 各サービスを切り出して別 hosting に移し、 切り出した URL を Participant Portal の override に登録する。 score engine は登録された URL を 1 分ごとに probe し、 hosting の種類によって配点が変わる。\n\n3 サービスの hosting 先は自由に組み替えてよい。 deploy しただけでは EC2 routing のまま、 自分で切り出すまで点数は伸びない。",
-  "instructions": "## はじめに\nEC2 に同居する 3 サービス (users / orders / catalog) を、 hosting を組み替えて **マネージドに分ける** ほど配点が上がるバトル。 deploy だけでは EC2 routing のまま加点 0。\n\n## 最初の一手\n1. Portal の Endpoint Override に EC2 host (`http://<Ec2HostHint>`) を **3 slot ぶん登録** すると EC2 加点開始\n2. その後、 各サービスの hosting 先を組み替えてマネージド配点を狙う\n3. score engine は 1 分ごとに登録 URL を probe\n\n## ゴール\n3 サービスを段階的にマネージドへ移し、 配点を伸ばし続ける。",
+  "instructions": "## はじめに\nEC2 に同居する 3 サービス (users / orders / catalog) を、 hosting を組み替えて **マネージドに分ける** ほど配点が上がるバトル。 deploy だけでは EC2 routing のまま加点 0。\n\n## 最初の一手\n1. Portal の Endpoint Override に EC2 host を **slot ごとにパス付きで登録** (`http://<Ec2HostHint>/users` → users、 `http://<Ec2HostHint>/orders` → orders、 `http://<Ec2HostHint>/catalog` → catalog) すると EC2 加点開始 (素の `http://<host>` だと `/meta` probe が 404 になり減点)\n2. その後、 各サービスの hosting 先を組み替えてマネージド配点を狙う\n3. score engine は 1 分ごとに登録 URL を probe\n\n## ゴール\n3 サービスを段階的にマネージドへ移し、 配点を伸ばし続ける。",
   "description": "Battle problem: 前任の SRE から引き継いだ EC2 モノリス (users / orders / catalog 3 サービスを 1 台に同居) を、 マネージドな hosting に少しずつ切り出していく。\n\n## 初期状態 (deploy 直後)\n\n```\n[Score Engine]──probe──>┌─── EC2 (t3.small) ────────────────┐\n                        │  nginx :80 (service router)        │\n                        │    /users   → users   :3001 (Hono) │\n                        │    /orders  → orders  :3002 (Hono) │\n                        │    /catalog → catalog :3003 (Hono) │\n                        │   docker compose で 3 サービス     │\n                        └────────────────────────────────────┘\n```\n\n- 3 サービスは Node.js 20 + Hono の最小 HTTP サーバー、 `GET /meta` (platform 自己申告) と `GET /score` を公開\n- Dockerfile は Lambda / App Runner / ECS Fargate のいずれにもそのまま載せ替え可能\n- Score engine は 3 slot の effective URL (= override ?? default) を 1 分ごと probe\n\n## やること\n\n1. **切り出す**: 1 サービスを選び、 Lambda + API Gateway / ECS Fargate / App Runner のいずれかに deploy\n2. **登録する**: 新しい URL を Participant Portal の override 欄に貼る (slot 単位)\n3. **次へ**: 残り 2 サービスも別 hosting に切り出す (3 サービス → 3 hosting でフルマーク想定)\n\nどのサービスから切り出すか・どの hosting に振るかは自由。 EC2 routing のまま放置すると徐々に状況が悪化していくので、 早めに動くほど良い。\n\n## レッドチーム (時間経過で悪化)\n\n放置のコストを実感させるため、 運営のレッドチームが 1 つの障害を仕込んでいる:\n\n- **EC2 ネットワーク遅延注入**: deploy から 60 分後 (operator が調整可) に、 EC2 (t3.small) の network へ `tc netem` で +200ms の遅延が注入される。 EC2 に残ったままのサービスは probe latency が悪化し、 加点が鈍る。\n- **対策**: 該当サービスを Lambda / App Runner / ECS Fargate へ切り出して EC2 から逃がせば影響を受けない。 早く移行するほど被害が小さい。\n- **安全網**: ADR-029 に従い、 注入は afterSeconds 後 (既定 10 分) に自動復旧する (= 永続障害にはならない)。\n\n## 学習目的\n\n- モノリス → マイクロサービスの段階的移行 (strangler fig パターン) を実体験する\n- Lambda (serverless) / App Runner (managed container) / ECS Fargate (orchestrated container) のトレードオフを実機で比較する\n- 移行優先順位を score 観点で判断する\n\n## ノート\n\n- 各チームの AWS リソースは ${NamePrefix} prefix で完全分離される (= 他チームの Lambda / ECS を覗けない)\n- 切り出した hosting の deploy には別途 IAM 権限が必要 (= follow-up PR で role 拡張予定)",
   "tags": ["microservices", "migration", "lambda", "ecs", "apprunner", "ec2", "docker"],
   "exposedPorts": [
@@ -27,8 +27,8 @@
   "i18n": {
     "en": {
       "name": "Microservice Migration Battle",
-      "shortDescription": "Month one at TenkaCloud Inc. The previous SRE left you an EC2 monolith (3 services -- users / orders / catalog -- behind one nginx reverse proxy). CTO the CTO: 'Time to split these out -- Lambda, ECS, App Runner, whatever you want, just give each service its own hosting.'\n\nYour job: peel one service at a time off EC2, deploy it onto a managed runtime, and register the new URL in the Participant Portal override. The score engine probes the registered URL every minute and pays out per hosting tier.\n\nYou choose which hosting tier each service lands on. Deploying alone keeps EC2 routing intact; the score only moves once you start peeling services off.",
-      "instructions": "## Getting started\nThree services (users / orders / catalog) share one EC2 box; the more you **split them onto managed hosting**, the higher the points. On deploy it stays EC2-routed and scores 0.\n\n## First move\n1. Register the EC2 host (`http://<Ec2HostHint>`) into the Portal's Endpoint Override for **all 3 slots** to start EC2 scoring\n2. Then re-host each service to chase the managed-tier points\n3. The score engine probes the registered URLs every minute\n\n## Goal\nMigrate the 3 services to managed hosting step by step and keep growing the score.",
+      "shortDescription": "Month one at TenkaCloud Inc. The previous SRE left you an EC2 monolith (3 services -- users / orders / catalog -- behind one nginx reverse proxy). The CTO: 'Time to split these out -- Lambda, ECS, App Runner, whatever you want, just give each service its own hosting.'\n\nYour job: peel one service at a time off EC2, deploy it onto a managed runtime, and register the new URL in the Participant Portal override. The score engine probes the registered URL every minute and pays out per hosting tier.\n\nYou choose which hosting tier each service lands on. Deploying alone keeps EC2 routing intact; the score only moves once you start peeling services off.",
+      "instructions": "## Getting started\nThree services (users / orders / catalog) share one EC2 box; the more you **split them onto managed hosting**, the higher the points. On deploy it stays EC2-routed and scores 0.\n\n## First move\n1. Register the EC2 host with its per-service path into each slot override (`http://<Ec2HostHint>/users` → users, `http://<Ec2HostHint>/orders` → orders, `http://<Ec2HostHint>/catalog` → catalog) to start EC2 scoring (a bare `http://<host>` 404s the `/meta` probe and bleeds points)\n2. Then re-host each service to chase the managed-tier points\n3. The score engine probes the registered URLs every minute\n\n## Goal\nMigrate the 3 services to managed hosting step by step and keep growing the score.",
       "description": "Battle problem: take the previous SRE's inherited EC2 monolith (3 services -- users / orders / catalog -- colocated on one box) and gradually split it into managed runtimes.\n\n## Initial state (post-deploy)\n\n```\n[Score Engine]──probe──>┌─── EC2 (t3.small) ───────────────────┐\n                        │  nginx :80 (service router)           │\n                        │    /users   → users   :3001 (Hono)    │\n                        │    /orders  → orders  :3002 (Hono)    │\n                        │    /catalog → catalog :3003 (Hono)    │\n                        │   docker compose runs all three       │\n                        └───────────────────────────────────────┘\n```\n\n- Each service is a minimal Node.js 20 + Hono HTTP server exposing `GET /meta` (platform self-report) and `GET /score`.\n- The Dockerfile loads cleanly on Lambda / App Runner / ECS Fargate.\n- The score engine probes each slot's effective URL (`override ?? default`) every minute.\n\n## What you do\n\n1. **Peel a service off**: pick one (users / orders / catalog), deploy it onto Lambda + API Gateway, ECS Fargate, or App Runner.\n2. **Register the new URL** as the slot override in the Participant Portal.\n3. **Move on**: peel the other two services onto different hosting tiers (3 services × 3 hosting tiers is the suggested full-marks shape).\n\nWhich service goes first, and onto which hosting -- up to you. Sitting on EC2 routing gets progressively worse, so moving early helps.\n\n## Red team (degrades over time)\n\nTo make the cost of standing still tangible, the operator's red team plants one fault:\n\n- **EC2 network latency injection**: 60 minutes after deploy (operator-adjustable), +200 ms of network latency is injected on the EC2 (t3.small) via `tc netem`. Any service still on the EC2 sees its probe latency degrade and earns more slowly.\n- **Mitigation**: move the service off the EC2 to Lambda / App Runner / ECS Fargate and it is unaffected. The earlier you migrate, the smaller the hit.\n- **Safety net**: per ADR-029, the injection auto-reverts after `afterSeconds` (10 min default), so it never becomes a permanent fault.\n\n## Learning goals\n\n- Experience progressive monolith → microservices migration (strangler fig pattern).\n- Compare Lambda (serverless) / App Runner (managed container) / ECS Fargate (orchestrated container) trade-offs on real infrastructure.\n- Judge migration priority from a scoring standpoint.\n\n## Notes\n\n- Each team's AWS resources are fully isolated by the `${NamePrefix}` prefix (no cross-tenant access).\n- Deploying the migrated services requires extra IAM permissions on the participant role (= scoped Lambda / ECS / App Runner deploy actions, planned follow-up PR).",
       "learningGoals": [
         "Experience splitting a monolith into 3 hosting tiers (Lambda / ECS Fargate / App Runner)",
@@ -38,7 +38,7 @@
       "hints": [
         {
           "id": "hint-1",
-          "content": "The 3 services are colocated via docker compose on the EC2. Deploying alone scores 0 -- paste the EC2 host (`http://<Ec2HostHint>`) into all 3 slots of the Participant Portal's Endpoint Override to start EC2 scoring (= 100 pt/cycle/slot)."
+          "content": "The 3 services are colocated via docker compose on the EC2. Deploying alone scores 0 -- paste the EC2 host with its per-service path into each slot of the Participant Portal's Endpoint Override (`http://<Ec2HostHint>/users`, `/orders`, `/catalog`) to start EC2 scoring (= 100 pt/cycle/slot). nginx only routes /users /orders /catalog, so a bare `http://<host>` override 404s the /meta probe."
         },
         {
           "id": "hint-2",
@@ -46,7 +46,7 @@
         },
         {
           "id": "hint-3",
-          "content": "Put each of the 3 slots on a different hosting (lambda / ecs / apprunner) and the \"all-slots-on-platforms\" bonus of +5000 pt lands once. If even one slot is left on ec2, the bonus does not apply."
+          "content": "Get all 3 slots off EC2 onto managed tiers (lambda / ecs / apprunner -- any mix; one each is the suggested shape) and the \"all-slots-on-platforms\" bonus of +5000 pt lands once. If even one slot is left on ec2, the bonus does not apply."
         },
         {
           "id": "hint-4",
@@ -130,7 +130,7 @@
     "hints": [
       {
         "id": "hint-1",
-        "content": "3 サービスは EC2 上の docker compose で同居しています。 deploy だけでは加点 0 — Participant Portal の Endpoint Override に EC2 host (`http://<Ec2HostHint>`) を 3 slot ぶん貼ると EC2 加点 (= 100 pt/cycle/slot) が始まります。",
+        "content": "3 サービスは EC2 上の docker compose で同居しています。 deploy だけでは加点 0 — Participant Portal の Endpoint Override に EC2 host を slot ごとにパス付きで貼る (`http://<Ec2HostHint>/users`、 `/orders`、 `/catalog`) と EC2 加点 (= 100 pt/cycle/slot) が始まります。 nginx は /users /orders /catalog しかルートしないので、 素の `http://<host>` を貼ると /meta probe が 404 になります。",
         "penalty": 0
       },
       {
@@ -140,7 +140,7 @@
       },
       {
         "id": "hint-3",
-        "content": "3 slot をそれぞれ別 hosting (lambda / ecs / apprunner) に乗せると \"all-slots-on-platforms\" bonus +5000 pt が 1 回入ります。 ec2 が 1 つでも残っていると bonus は付きません。",
+        "content": "3 slot を全て EC2 から managed tier (lambda / ecs / apprunner -- 組み合わせは自由。 1 種ずつが推奨形) に乗せると \"all-slots-on-platforms\" bonus +5000 pt が 1 回入ります。 ec2 が 1 つでも残っていると bonus は付きません。",
         "penalty": 100
       },
       {
@@ -164,7 +164,8 @@
       "name": "legacy",
       "afterMinutes": 90,
       "effect": {
-        "scorePathOverride": "/score?legacy=true"
+        "scorePathOverride": "/score?legacy=true",
+        "switchPlatformToDegraded": ["ec2"]
       },
       "description": "スコア engine が `/score?legacy=true` に切替わる予告フェーズ。",
       "publicHint": false
@@ -178,8 +179,7 @@
       "defaultAfterMinutes": 60,
       "operatorEditable": ["afterMinutes"],
       "parameters": {
-        "delayMs": 200,
-        "device": "eth0"
+        "delayMs": 200
       },
       "description": "deploy 後 60 分 (default) で EC2 のネットワーク遅延が増加する予告。",
       "publicHint": false,
@@ -190,14 +190,14 @@
         "paramTemplate": {
           "commands": [
             "command -v tc >/dev/null 2>&1 || dnf install -y iproute-tc",
-            "tc qdisc add dev {{device}} root netem delay {{delayMs}}ms || true"
+            "DEV=$(ip route show default | awk '{print $5; exit}'); tc qdisc add dev \"$DEV\" root netem delay {{delayMs}}ms || true"
           ]
         },
         "revert": {
           "afterSeconds": 600,
           "documentName": "AWS-RunShellScript",
           "paramTemplate": {
-            "commands": ["tc qdisc del dev {{device}} root || true"]
+            "commands": ["DEV=$(ip route show default | awk '{print $5; exit}'); tc qdisc del dev \"$DEV\" root || true"]
           }
         }
       }

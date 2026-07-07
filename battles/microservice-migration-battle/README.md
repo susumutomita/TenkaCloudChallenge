@@ -4,7 +4,7 @@
 
 Month one at TenkaCloud Inc. The previous SRE — the predecessor who vanished after that handover meeting last quarter — left you an EC2 monolith: three services (`users` / `orders` / `catalog`) co-tenant on one box, dispatched by a tired nginx config.
 
-> the CTO, the CTO: "Time to split these out. Lambda, ECS Fargate, App Runner — give each service its own hosting. I don't care which, just stop running them on one VM. Other teams started yesterday."
+> The CTO: "Time to split these out. Lambda, ECS Fargate, App Runner — give each service its own hosting. I don't care which, just stop running them on one VM. Other teams started yesterday."
 
 This Battle is your migration. You have 90 to 120 minutes, three slots in the Participant Portal, and a score engine that pays out per hosting tier the moment you register a new URL.
 
@@ -73,10 +73,10 @@ There are 6 ways to assign 3 services to 3 hosting tiers. The picture above is o
 ## How to play
 
 1. **Deploy lands you a working monolith.** `BaseUrl` is intentionally empty in the CFn Outputs (invariant #9: the Battle starts when you say it does, not when the deploy completes). Grab `Ec2HostHint` from the stack Outputs.
-2. **Paste `http://<Ec2HostHint>` into all three slot overrides** (`users` / `orders` / `catalog`) in the Participant Portal Endpoint Override panel. The score engine starts probing once a URL is registered and you earn the EC2-tier rate.
+2. **Paste the per-service URL into each slot override** — `http://<Ec2HostHint>/users` into `users`, `http://<Ec2HostHint>/orders` into `orders`, `http://<Ec2HostHint>/catalog` into `catalog` — in the Participant Portal Endpoint Override panel. (nginx only routes `/users/` `/orders/` `/catalog/`, so a bare `http://<host>` override makes the `/meta` probe 404 and bleeds −100/slot.) The score engine starts probing once a URL is registered and you earn the EC2-tier rate.
 3. **Peel one service off.** Pick the easiest, package it as a container (the `services/<name>/Dockerfile` works as-is), and stand it up on Lambda + API GW, ECS Fargate, or App Runner.
 4. **Swap that slot's override URL** to the new managed endpoint. `GET /meta` reports `lambda` / `ecs` / `apprunner`, the score engine bumps you to the managed-tier rate.
-5. **Keep going.** Get all three services onto three different managed runtimes and the "production-ready" bonus fires once.
+5. **Keep going.** Get all three services off EC2 onto managed runtimes (any mix of Lambda / ECS / App Runner — one each is the suggested shape) and the "production-ready" bonus fires once.
 
 The deploy that just sits on EC2 earns a baseline. The deploy that splits gracefully earns the win.
 
@@ -111,7 +111,7 @@ curl http://localhost/catalog/score
 | Slow response (> 1.5 s)                        | -10           |
 | All 3 slots on managed tiers (one-time bonus)  | +5,000        |
 
-Self-reporting via `/meta` decides the tier. The score engine trusts the report; tampering is allowed, but the response time penalty still applies.
+`GET /meta` reports each service's hosting tier and the score engine reads it to award points. Report the tier where the service **actually** runs — standing a service up on EC2 and self-reporting a managed tier is not a legitimate strategy. Response-time penalties apply regardless of tier.
 
 ## Migration hints
 
@@ -151,10 +151,9 @@ The whole point is to walk the spectrum from function → managed container → 
 
 ## Cost
 
-t3.small EC2 + minimal networking + the disruption Lambda. Per 2-hour battle:
+t3.small EC2 + minimal networking. Per 2-hour battle:
 
 - EC2 t3.small: < $0.05
-- Lambda / Scheduler: pennies
 - Egress on the score-engine probes: negligible
 - ECR, Lambda functions, ECS Fargate tasks, App Runner services that you stand up during the battle: scale with what you create; expect < $1 if you tear down within an hour of finishing.
 
