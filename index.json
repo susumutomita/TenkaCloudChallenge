@@ -370,6 +370,33 @@
       }
     },
     {
+      "id": "wp-harden-leaks",
+      "name": "後任の大掃除",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "約40分",
+      "shortDescription": "前任者が公開領域に残した漏れが複数ある WordPress サイト。 あなたは後任担当として、 サーバに入り、 外部スキャナが 「クリーン」 と言うまで穴を一つずつ塞ぐ。 ただし、 表面的に消しただけでは塞がらない穴もある。",
+      "tags": [
+        "wordpress",
+        "misconfiguration",
+        "remediation",
+        "hardening",
+        "operations",
+        "local-play",
+        "container",
+        "multi-verify"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "x402-paywall",
       "name": "x402 課金ゲート — 課金しているのに 0 USDC",
       "category": "Challenge",
