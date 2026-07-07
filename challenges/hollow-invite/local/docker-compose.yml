@@ -1,0 +1,29 @@
+# Local-play container for the "Hollow Invite" IR GameDay.
+# Bound to 127.0.0.1 only: the investigation surface and /verify never leave the
+# box, and the app itself makes no outbound connections (no external egress).
+services:
+  hollow-invite:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      # Per-deploy random secret injected by `make local`. FLAG-1 (the sender
+      # domain's registration date, served by the mock RDAP) is derived from it.
+      FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
+    # No outbound network is needed; drop egress to enforce the safety invariant.
+    # (Loopback host port bindings below still work.)
+    ports:
+      - "127.0.0.1:18080:8080" # investigation surface (artifacts + mock APIs + clone)
+      - "127.0.0.1:18081:8081" # loopback /verify
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: "2s"
+      timeout: "3s"
+      retries: 20
+    restart: "no"

@@ -1,0 +1,158 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "hollow-invite",
+  "name": "Operation \"Hollow Invite\"",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "90〜120 分",
+  "shortDescription": "独立系エンジニアリング会社 Kestrel Dynamics のセキュリティ対応チーム。 従業員から 「取引先を名乗るメールが届いたが、 心当たりがない」 と相談が来た。 件名はスレッド返信、 送信者は米国のコワーキング事業者を名乗り、 Google Meet が使えないからと別ツールの会議ページへ誘導している。\n\n認証は通っている。 だが本当に安全か? メールと証跡から事実だけで判定し、 危険なら手口・影響範囲・攻撃者インフラを突き止めて封じ込めと通報まで持っていく。",
+  "instructions": "## はじめに\nKestrel Dynamics のセキュリティ対応チームとして、 従業員が報告した不審メールを **事実で** 調査する。 認証が通っている・見た目が自然、 だけでは安全の証明にならない。 危険性を証拠で判定せよ。\n\n## 最初の一手\n1. 配布された `hollow-invite.eml` (生ヘッダ付き) を開いて読む\n2. 隔離テナントのモックで裏取りする ── 例: 送信元ドメインを RDAP で照会 (`GET /rdap/domain/<name>`)、 取得済みの会議ページクローンの JS を静的解析する\n3. 見つけた事実を、 対応する各チェックポイントに提出する\n\n## ゴール\n4 つの事実 ── 送信元ドメインの登録日 / DKIM 署名ドメイン (d=) / 偽会議アプリの配布エンドポイント / 詐称された人物 ── を証拠から特定して提出する。 手が止まったらヒントを開こう (ヒントには減点が付く)。",
+  "description": "チーム型のインシデント対応 GameDay (架空エンティティのみ、 隔離テナント内で完結)。 実在風企業の失効/再取得ドメインを攻撃者が握り、 SPF / DKIM / DMARC を正しく通したメールで自然な商談を装い、 偽会議ページ (Vela Meet クローン) へ誘導してウォレット・認証情報・端末操作を狙う多層ソーシャルエンジニアリングを題材にする。\n\n## 配布物 (隔離テナント内のみ)\n\n- `hollow-invite.eml` ── 報告されたメール本体 (生ヘッダ付き)。 Authentication-Results は SPF / DKIM / DMARC すべて pass。\n- 偽会議ページの取得済みクローン (`clone/`。 全 URL はテナント内モックへ書換済み、 外部通信なし)。\n- `proxylog.jsonl` ── T+45 で配布するネットワーク観測ログ。\n- モック RDAP / 会議 API / 配布エンドポイント (投下物は無害な `benign-marker.txt` の URL のみ。 実行可能ファイル・EICAR・実ペイロードは一切無い)。\n\n## ポータル自動採点 (このメタデータ) と GameDay ルーブリック (別) の関係\n\nポータルは 4 つの発見フラグ (multi-verify の 4 チェックポイント、 各 50 点) を container の `/verify` で自動採点する (FLAG-1 の登録日は FLAG_SEED から deploy ごとに生成)。 一方、 issue の 100 点ルーブリック (ドメイン乗っ取りの論証・認証の限界の言語化・影響範囲判定・IOC/通報成果物・IC 運営、 および `curl:none` だけで無害と断定する等の減点トラップ) は **ファシリテーターが人手で採点** する ── 詳細・アンサーキー・進行台本は `FACILITATOR.md` を参照。\n\n## 安全不変条件\n\n`.example` と `*.tenka.local` 以外は使わない / 外部 egress なし / クローンに外部 URL・実在組織名・実マルウェア・実バイナリを含めない。 `node local/safety-check.mjs` (= `make harness` 相当) で検査する。",
+  "writeup": "## 何が起きていたか\n\n攻撃者は、 実在風企業 Northgate Cowork の **失効/再取得ドメイン** `northgate-cowork.example` を取得し、 自前の DKIM 鍵を発行して SPF / DKIM / DMARC を **正しく pass** させた。 メールはスレッド返信の体裁で、 過去に受信者が書いたように見える偽の引用まで付いていた。 認証・実名・自然な文面・TLS がすべて揃っていても、 それは 「このドメインを現在支配している誰かが送った」 ことしか保証しない ── いま支配しているのは攻撃者である。\n\n誘導先の Vela Meet クローンは、 (1) `velameet-join://` のカスタムプロトコルで native クライアント起動を試み、 (2) `/api/heartbeat` に周期ビーコンを送り、 (3) `POST /meetings/{id}/download` で **配布 URL を動的発行** (JS に直書きしない) し、 (4) OS 判定で配り分ける。 観測時に自分の OS 向けの build が無く `payload: \"none\"` だったこと、 手元に無害物しか落ちなかったことは、 **安全の証明にはならない** ── 別の OS・別の被害者には実物が渡る。\n\n## 判定の要点\n\n- ドメイン登録日 (RDAP) が最近であることと、 企業が長く続いていると称することの矛盾 → 再取得/乗っ取り仮説。\n- SPF / DKIM / DMARC pass は 「ドメイン支配者からの送信」 を保証するだけで、 「正規企業の意思」 を保証しない。\n- 主動線 (偽アプリ/悪性配布) と二次動線 (ウォレット/認証窃取) を分けて評価する。\n\n## 直し方 / 教訓\n\n商談の信頼性と、 会議・ログイン・ダウンロード・署名を要求する URL の信頼性は **別に** 評価する。 未知のリンクは踏まず、 既知の独立経路 (公式サイト記載の連絡先・電話) で本人確認する。 認証結果は 「なりすまし立証」 の材料にはなるが、 「正規性の十分条件」 ではない。",
+  "tags": [
+    "incident-response",
+    "phishing",
+    "social-engineering",
+    "email-authentication",
+    "osint",
+    "gameday",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    { "port": 18080, "name": "Investigation surface (evidence + mock APIs + clone)" },
+    { "port": 18081, "name": "/verify (loopback admin)" }
+  ],
+  "learningGoals": [
+    "SPF / DKIM / DMARC が pass でも 「正規企業の意思」 を保証しないこと ── 認証が保証する範囲と保証しない範囲を切り分けられるようになる",
+    "RDAP でドメイン登録日を取り、 企業実態との矛盾から再取得/乗っ取り仮説を立てられるようになる",
+    "偽会議ページの JS を静的解析し、 カスタムプロトコル・周期ビーコン・動的配布・OS 配り分けといった動線を読み解けるようになる",
+    "IOC を整理し、 なりすまし立証・封じ込め・社内周知・外部通報まで運べるようになる"
+  ],
+  "i18n": {
+    "en": {
+      "name": "Operation \"Hollow Invite\"",
+      "shortDescription": "You are the security response team at Kestrel Dynamics, an independent engineering consultancy. An employee forwards a message: a company they don't recall reached out, the subject looks like a reply thread, and the sender — a US coworking operator — is steering them off Google Meet onto a different meeting page.\n\nThe email authenticates cleanly. But is it safe? Judge it on facts from the message and the evidence, and if it is dangerous, pin down the method, the blast radius, and the attacker infrastructure — through to containment and reporting.",
+      "instructions": "## Getting started\nAs the Kestrel Dynamics response team, investigate a reported suspicious email **on the facts**. \"It authenticates\" and \"it looks natural\" are not proof of safety. Decide the danger from evidence.\n\n## First move\n1. Open and read the distributed `hollow-invite.eml` (raw, with headers)\n2. Corroborate in the isolated mock tenant — e.g. query the sender domain via RDAP (`GET /rdap/domain/<name>`), and statically analyse the JS of the captured meeting-page clone\n3. Submit each fact you recover to its checkpoint\n\n## Goal\nRecover and submit four facts — the sender domain's registration date, the DKIM signing domain (d=), the fake meeting app's distribution endpoint, and the impersonated person. Stuck? Open a hint (hints carry a penalty).",
+      "description": "A team-based incident-response GameDay (fictional entities only, fully inside an isolated tenant). An attacker holds a lapsed/re-registered look-alike company domain, sends an SPF/DKIM/DMARC-passing message that mimics a natural business conversation, and steers the target onto a fake meeting page (a Vela Meet clone) whose funnel targets wallets, credentials, and device control.\n\n## Distributed artifacts (isolated tenant only)\n\n- `hollow-invite.eml` — the reported message (raw headers). Authentication-Results shows SPF / DKIM / DMARC all pass.\n- A captured clone of the fake meeting page (`clone/`; all URLs rewritten to the in-tenant mock, no external traffic).\n- `proxylog.jsonl` — a network-observation log released at T+45.\n- Mock RDAP / meeting API / download endpoint (only ever hands back a URL to the harmless `benign-marker.txt`; no executable, EICAR, or real payload anywhere).\n\n## Portal auto-scoring (this metadata) vs the GameDay rubric (separate)\n\nThe portal auto-scores four discovery flags (four multi-verify checkpoints, 50 pts each) via the container's `/verify` (FLAG-1, the registration date, is generated per deploy from FLAG_SEED). The issue's 100-point rubric (arguing the domain takeover, articulating the limits of authentication, judging blast radius, the IOC/reporting deliverables, and the deduction traps such as calling `curl:none` proof of safety) is **scored by a human facilitator** — see `FACILITATOR.md` for the answer key and run-of-show.\n\n## Safety invariants\n\nOnly `.example` and `*.tenka.local`; no external egress; the clone contains no external URL, real org name, real malware, or real binary. Checked by `node local/safety-check.mjs` (the `make harness` equivalent).",
+      "writeup": "## What happened\n\nThe attacker acquired the **lapsed/re-registered** look-alike domain `northgate-cowork.example`, published their own DKIM key, and made SPF / DKIM / DMARC **pass cleanly**. The message wore a reply-thread costume, complete with a fabricated quote that looked like the recipient's earlier words. Authentication, a real name, natural prose, and TLS together only prove the message came from *whoever controls that domain right now* — and that is the attacker.\n\nThe Vela Meet clone it steered to: (1) tries to launch a native client via the `velameet-join://` custom protocol, (2) beacons periodically to `/api/heartbeat`, (3) issues the download URL **dynamically** via `POST /meetings/{id}/download` (never hardcoded in the JS), and (4) differentiates by OS. Observing `payload: \"none\"` for your OS, or pulling only a harmless marker, is **not** proof of safety — a different OS or victim receives the real build.\n\n## The core judgments\n\n- A recent RDAP registration date contradicting a company that claims to be long-established → re-registration / takeover hypothesis.\n- SPF / DKIM / DMARC pass guarantees \"sent by whoever controls the domain,\" not \"the legitimate company's intent.\"\n- Separate the primary funnel (fake app / malicious delivery) from the secondary funnel (wallet / credential theft).\n\n## How to fix it / the lesson\n\nEvaluate the trust of a business conversation and the trust of a URL that asks you to meet, log in, download, or sign **separately**. Do not click unknown links; verify identity over a known independent channel (contact details from the company's own site, a phone call). Authentication results help you *prove impersonation* — they are never sufficient proof of *legitimacy*.",
+      "learningGoals": [
+        "Learn that passing SPF / DKIM / DMARC does not guarantee a legitimate company's intent — separate what authentication does and does not guarantee",
+        "Use RDAP to read a domain's registration date and build a re-registration/takeover hypothesis from the contradiction with the claimed company",
+        "Statically analyse a fake meeting page's JS to read its funnel: custom protocol, periodic beacon, dynamic delivery, OS-based differentiation",
+        "Organize IOCs and carry the response through impersonation proof, containment, internal notice, and external reporting"
+      ],
+      "checks": [
+        {
+          "id": "domain-age",
+          "label": "Sender domain registration date",
+          "hints": [
+            {
+              "id": "h-domain-age",
+              "content": "The company claims to be established, but when was the sending domain actually registered? Query the mock RDAP: `GET /rdap/domain/northgate-cowork.example` and read the `registration` event date."
+            }
+          ]
+        },
+        {
+          "id": "dkim-domain",
+          "label": "DKIM signing domain (d=)",
+          "hints": [
+            {
+              "id": "h-dkim",
+              "content": "Open the raw `.eml` and read the `DKIM-Signature` header (and `Authentication-Results`). The `d=` tag names the domain whose key signed the message — that is what DKIM `pass` actually vouches for."
+            }
+          ]
+        },
+        {
+          "id": "download-path",
+          "label": "Fake meeting app's distribution endpoint",
+          "hints": [
+            {
+              "id": "h-download",
+              "content": "Read `clone/app.js`. The download URL is not hardcoded — it is issued dynamically. Find the request the page makes to obtain the 'desktop helper' and submit that endpoint pattern (use `{id}` for the room/meeting id)."
+            }
+          ]
+        },
+        {
+          "id": "impersonator",
+          "label": "The impersonated person",
+          "hints": [
+            {
+              "id": "h-impersonator",
+              "content": "Who does the message claim to be from? Check the `From` display name and the signature block of the `.eml` (and the meeting organizer in `GET /api/meetings/<id>`)."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Investigation": "http://127.0.0.1:18080"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": ["FLAG_SEED"]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "domain-age",
+        "label": "送信元ドメインの登録日",
+        "points": 50,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "h-domain-age",
+            "content": "会社は長く続いていると称しているが、 送信元ドメインは実際いつ登録された? モック RDAP で照会する: `GET /rdap/domain/northgate-cowork.example` の `registration` イベント日付を読む。",
+            "penalty": 15
+          }
+        ]
+      },
+      {
+        "id": "dkim-domain",
+        "label": "DKIM 署名ドメイン (d=)",
+        "points": 50,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "h-dkim",
+            "content": "生の `.eml` の `DKIM-Signature` ヘッダ (と `Authentication-Results`) を読む。 `d=` タグが、 その鍵で署名したドメインを示す ── DKIM の `pass` が保証しているのはそこだけ。",
+            "penalty": 15
+          }
+        ]
+      },
+      {
+        "id": "download-path",
+        "label": "偽会議アプリの配布エンドポイント",
+        "points": 50,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "h-download",
+            "content": "`clone/app.js` を読む。 ダウンロード URL は直書きされておらず、 動的に発行される。 ページが 「desktop helper」 を得るために送るリクエスト先を見つけ、 その **エンドポイントのパターン** を提出する (room/meeting id は `{id}` と表記)。",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "impersonator",
+        "label": "詐称された人物",
+        "points": 50,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "h-impersonator",
+            "content": "メールは誰を名乗っている? `.eml` の `From` 表示名と署名ブロック (および `GET /api/meetings/<id>` の organizer) を確認する。",
+            "penalty": 10
+          }
+        ]
+      }
+    ]
+  }
+}

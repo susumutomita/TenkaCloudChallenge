@@ -1,0 +1,60 @@
+<!doctype html>
+<!--
+  Vela Meet room — SANITIZED clone captured for the "Hollow Invite" IR exercise.
+  Original lure: https://velameet-07.example/room/qrt-mkbd-zol
+  All URLs rewritten to the in-tenant mock; no external resources are loaded.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Vela Meet — Join room</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 40rem;
+        margin: 3rem auto;
+        line-height: 1.6;
+        color: #1b2733;
+        background: #f5f7fa;
+      }
+      .card {
+        background: #fff;
+        border: 1px solid #d9e0e7;
+        border-radius: 12px;
+        padding: 1.5rem 1.75rem;
+      }
+      button {
+        font-size: 1rem;
+        padding: 0.6rem 1.1rem;
+        border-radius: 8px;
+        border: 0;
+        cursor: pointer;
+        margin-right: 0.5rem;
+      }
+      #join { background: #2f6feb; color: #fff; }
+      #helper { background: #eef1f5; color: #1b2733; }
+      code { background: #eef1f5; padding: 0.1rem 0.35rem; border-radius: 4px; }
+      .muted { color: #647184; font-size: 0.9rem; }
+    </style>
+  </head>
+  <body data-room="qrt-mkbd-zol">
+    <div class="card">
+      <h1>Vela Meet</h1>
+      <p>You are joining room <code>qrt-mkbd-zol</code>.</p>
+      <p>
+        If your browser does not open the meeting automatically, use the buttons
+        below.
+      </p>
+      <p>
+        <button id="join" type="button">Open in Vela Meet</button>
+        <button id="helper" type="button">Download desktop helper</button>
+      </p>
+      <p id="status" class="muted">Connecting…</p>
+      <p class="muted">
+        Having trouble? The desktop helper improves screen sharing and audio.
+      </p>
+    </div>
+    <script src="app.js"></script>
+  </body>
+</html>
