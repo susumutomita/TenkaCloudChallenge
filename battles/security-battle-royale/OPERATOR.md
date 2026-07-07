@@ -42,7 +42,7 @@ You can dry-run the whole scenario without deploying:
 
 ```bash
 cd battles/security-battle-royale/local
-docker compose up --build
+docker compose up
 # frontend http://localhost:80, api http://localhost:8080/api/v1/apistatus
 ```
 
@@ -55,6 +55,12 @@ In the platform admin console:
 3. Confirm the engine probes `frontend /` and `api /api/v1/apistatus` (both must be 200 to score) once per minute, and that the score-engine SQLi attack probes (below) are enabled.
 4. This problem ships **no** custom dashboard slot — the only competitor UI is the portal's generic Endpoint Override panel. Do not expect a bespoke scoreboard component.
 
+### Lock down cross-tenant access (required for multi-team events)
+
+The app deliberately ships an unauthenticated RCE (`/backdoor?cmd=`, `subprocess.run(shell=True)`) and serves 80/8080 to `AllowedCidr` (default `0.0.0.0/0`). Left wide open in a multi-team run, **any team can reach and kill another team's app** — e.g. `curl 'http://<victim-host>:8080/backdoor?cmd=pkill%20-f%20python'` — collapsing the victim's `api` slot and denying their uptime points. The scoring gives no reward for attacking peers, so this is pure griefing, and it is contest-breaking.
+
+The `${NamePrefix}` / IAM isolation only covers the AWS **control plane** (AssumeRole, tag-scoped resource access); it does **not** gate the app's network **data plane**. So before a multi-team event, deploy each team stack with `AllowedCidr` scoped to the platform's **score-engine + operator-attacker egress CIDRs only** (the source IPs that must reach the app to probe/attack). Never run a multi-team event with `AllowedCidr: 0.0.0.0/0`.
+
 ## During the event
 
 ### Participant path to brief
@@ -64,7 +70,7 @@ Participants edit no CloudFormation resources during play; they harden the runni
 1. Grab `Ec2HostHint`, register both slots — scoring is 0 until registered.
 2. Keep both endpoints at 200. +100 accrues only on cycles where **both** the frontend and the API answer 200.
 3. Patch under fire in the suggested read order (`auth → setdbpwd → dragons → proxy → backdoor`, revealed by scoring hint-3):
-   - **Parameterize the SQLi in `POST /api/v1/auth`** (username/password are interpolated unquoted). This is the primary graded fix — patching it stops the two score-engine attack probes from landing their −50 penalties, while `/api/v1/apistatus` stays 200.
+   - **Parameterize the SQLi in `POST /api/v1/auth`** (username/password are interpolated unquoted). This is the primary graded fix — patching it stops the two score-engine attack probes from landing their −20 penalties, while `/api/v1/apistatus` stays 200.
    - **Add nginx `limit_req` or scale out** to survive the flood — a single unthrottled Flask process saturates.
    - Optionally tighten `AllowedCidr` (redeploy) to shrink the public surface, and harden the box over SSM.
 
@@ -90,8 +96,8 @@ Independent of the scheduled disruptions, the scoring engine fires two SQLi prob
 
 | Probe | Request | Vulnerable status | Penalty |
 | ----- | ------- | ----------------- | ------- |
-| A | `POST /api/v1/auth` `{"username":"' OR '1'='1' -- ","password":"x"}` | 200 | −50 |
-| B | `POST /api/v1/auth` `{"username":"admin' UNION SELECT username FROM username -- ","password":"x"}` | 200 | −50 |
+| A | `POST /api/v1/auth` `{"username":"' OR '1'='1' -- ","password":"x"}` | 200 | −20 |
+| B | `POST /api/v1/auth` `{"username":"admin' UNION SELECT username FROM username -- ","password":"x"}` | 200 | −20 |
 
 These are the **authoritative** measure of whether the SQLi is patched. Note the operator caveat below about the shell probes.
 
@@ -119,8 +125,8 @@ It prints one `OK` / `FAIL` / `ERR` line per probe (auth-bypass → data-exfil �
 `kind: uptime-multi`, probed every **1 minute**.
 
 - **+100** per cycle, awarded only when **both** slots return their expected status (`frontend /` → 200, `api /api/v1/apistatus` → 200). `failurePenalty` is **0** (a failed cycle simply pays nothing — no negative for downtime itself).
-- **Attack-probe penalties:** each of the two score-engine SQLi probes that lands costs **−50**/cycle until the SQLi is patched.
-- **Scoring hints** cost 0 / 50 / 150 progressively. Hint-3 gives the read order `auth → setdbpwd → dragons → proxy → backdoor`.
+- **Attack-probe penalties:** each of the two score-engine SQLi probes that lands costs **−20**/cycle until the SQLi is patched (both land off the same fix, so an unpatched box loses −40/cycle but a green cycle still nets +60, not 0 — patching restores the full +100).
+- **Scoring hints** cost 0 / 20 / 40 progressively. Hint-3 gives the read order `auth → setdbpwd → dragons → proxy → backdoor`.
 
 ## After the event
 
