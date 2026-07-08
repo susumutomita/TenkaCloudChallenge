@@ -135,6 +135,19 @@ PRs are welcome — especially new problems, schema fixes, and English-doc polis
 
 See [`CATALOG.md`](./CATALOG.md) for the full schema walkthrough.
 
+## 🏢 Enterprise / internal training
+
+If you are considering TenkaCloud (and this problem catalog) for enterprise or
+internal training use — hands-on security/operations drills, evaluation or
+onboarding exercises, custom/private problem sets, or instructor-led workshops —
+please feel free to reach out via the
+[contact form](https://forms.gle/djVprYmq3hFgJA7P9) or
+[GitHub Discussions](https://github.com/susumutomita/TenkaCloud/discussions).
+
+TenkaCloud is open source, but we would love to learn more about real-world
+training needs, custom exercise requirements, and how organizations want to run
+hands-on operations/security drills.
+
 ## 📜 License
 
 [Apache License 2.0](./LICENSE) — problems and tooling alike. Matches the [TenkaCloud platform repo](https://github.com/susumutomita/TenkaCloud)'s license so contributions can flow between the two without compatibility friction. If you ship problems with spoiler content, host them in a separate private repo and deliver them via the ADR-008 S3 path.
