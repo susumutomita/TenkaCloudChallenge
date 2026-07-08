@@ -1,0 +1,229 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "wp-midnight-admin",
+  "name": "深夜の管理者",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "45 分",
+  "shortDescription": "デザイン事務所 「さくらデザイン」 の WordPress サイトを引き継いだ翌朝、監視ツールから 「見覚えのない管理者アカウントが夜間に増えた」 という通知が届いた。 攻撃するのではなく、外から見える手がかりだけで 「誰が・どうやって・何を残したか」 を突き止めよう。",
+  "instructions": "## はじめに\n\nさくらデザインの WordPress サイトを引き継いだ翌朝、 監視ツールから 「見覚えのない管理者アカウントが夜間に増えた」 という通知が届いた。 これは攻撃を仕掛ける問題ではなく、 インシデント (事故) の調査だ。 ログインする必要も、 脆弱性を突く必要もない ── 手がかりはすべて、 外から見える形で残っている。\n\n## 調査の進め方\n\n4 つの独立した手がかりを、 外部の利用者と同じ目線で一つずつ確かめる。 それぞれ別の合言葉 (`TC{...}`) が入っていて、 見つけた合言葉を対応するチェックポイントに個別に提出する。 4 つすべてを提出すると満点になる (部分点あり)。 どれから解いてもよいが、 「誰が」 → 「どうやって」 → 「何を残したか」 の順に追うと物語として読みやすい。\n\n- WordPress は、 公開投稿を書いた利用者の一覧を外部に見せてしまうことがある。 まず 「今このサイトに誰がいるのか」 を確認しよう。\n- サーバのアクセスの記録 (ログ) が公開領域に残っていないか。 失敗の山と 1 回の成功が読み取れる。\n- サイトに入っている拡張機能 (プラグイン) を棚卸しする。 放置されたものはそれ自体がリスクだ。\n- 公開されている投稿の一覧を眺め、 書いた覚えのないものが紛れていないか確かめる。\n\n## ゴール\n\n4 つの手がかりそれぞれの合言葉を、 対応するチェックポイントに提出する。 4 つすべてで満点になる。 解き終えたら README の対策 (アカウント削除・資格情報のローテーション・MFA と最小権限・不要プラグインの削除・利用者一覧の公開制限) を読み、 同じ事故を防ぐ運用を説明できる状態にする。",
+  "description": "あなたは、 デザイン事務所 「さくらデザイン」 のコーポレートサイト (WordPress) の運用を引き継いだ。 サイトは現行の WordPress と MariaDB で普通に動いている。\n\n引き継いだ翌朝、 監視ツールから 「深夜に管理者アカウントが 1 つ増えた」 という通知が届く。 これは WordPress 本体の脆弱性でも、 意図的に仕込まれた危険なコードでもない。 弱い / 使い回しの管理者パスワードが総当たりで破られ、 侵入者が新しい管理者アカウントを作り、 SEO スパム投稿を残していった ── という 「アカウント侵害インシデント」 だ。 さらに調査の過程で、 長年放置されたプラグインという別のリスクも見つかる。\n\n手がかりは 4 つとも外から観測できる:\n\n1. rogue-admin ── `GET /wp-json/wp/v2/users` (REST の利用者一覧) に、 誰も追加していない管理者 `media-sync` が現れる。 その bio (description) に合言葉が入っている。\n2. login-trail ── 公開領域に残ったアクセスログ `/server-logs/access.log` に、 `203.0.113.66` からのログイン失敗の山と 1 回の成功 (302 で `/wp-admin/` へ) が残り、 その直後の `[tripwire]` 注記行に合言葉がある。\n3. orphan-plugin ── 放置プラグインの世界公開 readme `/wp-content/plugins/legacy-contact-form/readme.txt` の NOTE 行に合言葉がある。\n4. spam-post ── 侵入者の SEO スパム投稿 (`GET /wp-json/wp/v2/posts` と画面に表示) の本文 HTML コメントに合言葉が隠れている。\n\nいずれも 「設定・運用の不備」 から生まれた実在のインシデント signal であり、 WordPress のコードの欠陥や CVE ではない。",
+  "writeup": "## 何が起きていたか\n\n夜間に管理者アカウントが 1 つ増えたのは、 WordPress 本体の脆弱性のせいではない。 弱い / 使い回しの管理者パスワードが `wp-login.php` への総当たり (ブルートフォース) で破られ、 侵入者が新しい管理者 `media-sync` を作り、 SEO スパム投稿を残していった ── 典型的なアカウント侵害インシデントだ。\n\n重要なのは、 この一連の出来事が 「ログインも攻撃もせずに、 外から」 ほぼ読み解けることだ。 (1) 「誰が」 ── WordPress の REST API は、 公開投稿を書いた利用者の一覧を匿名でも返す (`/wp-json/wp/v2/users`)。 正規の担当者に混じって、 身に覚えのない管理者 `media-sync` が並び、 その bio に監査用の合言葉が入っていた。 (2) 「どうやって」 ── 運用者が公開領域に置き忘れたアクセスログに、 `203.0.113.66` からのログイン失敗の山と、 最後の 1 回の成功 (302 で `/wp-admin/` へ) がそのまま残っていた。 (3) 調査中に見つかった別のリスク ── 長年更新の止まった放置プラグインの readme が世界公開のまま残り、 `Tested up to: 4.9` という古さを露呈していた。 (4) 「何を残したか」 ── 侵入者のスパム投稿が公開され、 本文の HTML コメントに痕跡が隠れていた。\n\n## 直し方\n\nどれもコードを触らずに直せる。 まず乗っ取りへの直接対応として、 身に覚えのない管理者アカウント (`media-sync`) を削除し、 全管理者を棚卸しする。 破られた管理者の資格情報を必ずローテーションし、 多要素認証 (MFA) と最小権限を徹底する。 ログイン試行は監視・制限し (回数制限・IP 制限)、 アクセスログは公開領域の外へ出す。 調査で見つかった放置プラグインは削除するか最新に保つ。 侵入者のスパム投稿は削除する。\n\nもう一歩進んだ守りとして、 REST API の利用者一覧の外部公開は、 必要がなければ制限・監視する。 ただし最大の教訓はこれだ ── 予期しない管理者アカウントはインシデントの最重要シグナルであり、 その多くは、 ログインする前に 「外から」 気づける。 日頃から利用者・ログ・プラグイン・公開投稿を棚卸ししておけば、 事故は早く見つかる。",
+  "tags": [
+    "wordpress",
+    "incident-response",
+    "account-compromise",
+    "log-analysis",
+    "operations",
+    "local-play",
+    "container",
+    "multi-verify"
+  ],
+  "exposedPorts": [
+    { "port": 18080, "name": "Web (WordPress site)" },
+    { "port": 18081, "name": "/verify (loopback scorer)" }
+  ],
+  "learningGoals": [
+    "予期しない管理者アカウントがインシデントの最重要シグナルであることを、 実際の環境で体感できるようになる",
+    "WordPress が REST API で利用者一覧を外部公開しうること・ アクセスログからブルートフォースと成功ログインを読み分けられること・ 入っているプラグインを棚卸しできることを、 自分で確かめられるようになる",
+    "コードを触らずにできる是正 (アカウント削除・資格情報のローテーション・MFA / 最小権限・不要プラグインの削除・利用者一覧の公開制限) を説明できるようになる"
+  ],
+  "i18n": {
+    "en": {
+      "name": "The Midnight Admin",
+      "shortDescription": "The morning after you inherit the design studio Sakura Design's WordPress site, a monitoring alert says an administrator account you don't recognize appeared overnight. Don't attack it — using only what is visible from outside, work out WHO, HOW, and WHAT they left behind.",
+      "instructions": "## Introduction\n\nThe morning after you inherit Sakura Design's WordPress site, a monitoring alert says an administrator account you don't recognize appeared overnight. This is not a problem where you attack anything — it is an incident investigation. You never need to log in or exploit a vulnerability — every clue is left in plain sight, visible from outside.\n\n## How to investigate\n\nConfirm four independent clues one by one, from the same perspective as an external visitor. Each carries its own passphrase (`TC{...}`); submit each one to its matching checkpoint. Clearing all four gives full marks (partial credit applies). Solve them in any order, but WHO → HOW → WHAT-they-left reads best as a story.\n\n- WordPress can expose a list of the users who authored published posts. Start by confirming who is on this site right now.\n- Check whether the server's access record (log) was left in the public area — you can read a wall of failures and a single success.\n- Take inventory of the plugins installed on the site. An abandoned one is a risk in itself.\n- Look over the list of published posts and check whether one you never wrote has slipped in.\n\n## Goal\n\nSubmit each of the four clues' passphrases to its matching checkpoint; all four is full marks. When you're done, read the README remediation (delete the account, rotate credentials, enforce MFA and least privilege, remove abandoned plugins, restrict public user listing) and be able to explain how to prevent the same incident.",
+      "description": "You have taken over running the corporate site (WordPress) of the design studio Sakura Design. It runs normally on current WordPress and MariaDB.\n\nThe morning after you take over, a monitoring alert says one administrator account appeared overnight. This is not a vulnerability in WordPress itself, nor deliberately planted dangerous code. It is an account-compromise incident: a weak / reused admin password was brute-forced, the intruder created a new administrator account, and left an SEO-spam post behind. During the investigation you also find a separate risk — a plugin left abandoned for years.\n\nAll four clues are observable from outside:\n\n1. rogue-admin — `GET /wp-json/wp/v2/users` (the REST user listing) shows an administrator `media-sync` that nobody added; its bio (description) holds the passphrase.\n2. login-trail — an access log left in the public area, `/server-logs/access.log`, has a wall of failed logins from `203.0.113.66` and one success (302 to `/wp-admin/`), with the passphrase on the `[tripwire]` annotation line right after it.\n3. orphan-plugin — the abandoned plugin's world-readable readme `/wp-content/plugins/legacy-contact-form/readme.txt` carries the passphrase on its NOTE line.\n4. spam-post — the intruder's SEO-spam post (visible via `GET /wp-json/wp/v2/posts` and on the site) hides the passphrase in an HTML comment in the body.\n\nAll four are real incident signals born of setup / operations mistakes — not a flaw in WordPress's code and not a CVE.",
+      "writeup": "## What happened\n\nThe extra administrator that appeared overnight was not caused by a vulnerability in WordPress itself. A weak / reused admin password was brute-forced against `wp-login.php`, the intruder created a new administrator `media-sync`, and left an SEO-spam post behind — a textbook account-compromise incident.\n\nWhat matters is that this whole sequence can be reconstructed 'from outside, without logging in or attacking anything'. (1) WHO — WordPress's REST API returns, even to anonymous callers, the list of users who authored published posts (`/wp-json/wp/v2/users`). Among the legitimate staff sat an unfamiliar administrator `media-sync`, with the audit passphrase in its bio. (2) HOW — an access log the operator left in the public area still held the wall of failed logins from `203.0.113.66` and the single final success (302 to `/wp-admin/`). (3) A separate risk found during triage — an abandoned plugin's readme was left world-readable, revealing how old it was (`Tested up to: 4.9`). (4) WHAT they left — the intruder's spam post was published, with its trace hidden in an HTML comment in the body.\n\n## How to fix\n\nNone of this requires touching code. As the direct response to the takeover, delete the administrator account nobody added (`media-sync`) and audit every admin. Rotate the compromised admin's credentials without fail, and enforce multi-factor authentication (MFA) and least privilege. Monitor and rate-limit login attempts (attempt limits, IP limits), and move the access log out of the public area. Delete or update the abandoned plugin found during triage. Delete the intruder's spam post.\n\nAs a further hardening step, restrict and monitor the REST API's public user listing when you don't need it. But the biggest lesson is this: an unexpected administrator account is a top incident signal, and most of it you can spot 'from outside' before you even log in. Routinely inventorying your users, logs, plugins, and published posts is what lets you catch an incident early.",
+      "learningGoals": [
+        "Feel, in a real environment, that an unexpected administrator account is a top incident signal",
+        "Confirm, yourself, that WordPress can expose the user list through the REST API, that you can tell a brute-force burst from the one successful login in an access log, and that you can take inventory of the installed plugins",
+        "Be able to explain the code-free fixes — delete the account, rotate credentials, MFA / least privilege, remove abandoned plugins, and restrict the public user listing"
+      ],
+      "checks": [
+        {
+          "id": "rogue-admin",
+          "label": "The admin nobody added",
+          "hints": [
+            {
+              "id": "rogue-admin-1",
+              "content": "The first question in any incident is WHO. Start by confirming how many users (authors) this site has right now and whether each one looks familiar. WordPress can expose that list to the outside."
+            },
+            {
+              "id": "rogue-admin-2",
+              "content": "The WordPress REST API can return, even to anonymous callers, the list of users who authored a published post. Open `/wp-json/wp/v2/users` and look over the names and profiles (bio / description). If pretty permalinks aren't on, `/?rest_route=/wp/v2/users` returns the same."
+            },
+            {
+              "id": "rogue-admin-3",
+              "content": "Open `http://127.0.0.1:18080/wp-json/wp/v2/users` — an administrator `media-sync` nobody added is mixed in, and the passphrase is written in its `description` (bio). Fix: delete any suspicious administrator immediately and audit every admin account."
+            }
+          ]
+        },
+        {
+          "id": "login-trail",
+          "label": "How they got in",
+          "hints": [
+            {
+              "id": "login-trail-1",
+              "content": "After WHO comes HOW they got in. The intruder came in from somewhere. If you can read the record of access the server keeps (a log), you'll see a wall of failures and one success."
+            },
+            {
+              "id": "login-trail-2",
+              "content": "Operators sometimes leave a log in a public folder. Open the access log (`access.log`) under `/server-logs/` and look for the 'brute-force' trail — the same IP failing `POST /wp-login.php` over and over."
+            },
+            {
+              "id": "login-trail-3",
+              "content": "Open `http://127.0.0.1:18080/server-logs/access.log`: logins from `203.0.113.66` fail repeatedly, then succeed exactly once (a `302` to `/wp-admin/`). The passphrase is on the monitoring annotation line (`[tripwire]`) right after it. Fix: stop using weak / reused passwords, monitor and rate-limit login attempts, and rotate the credential."
+            }
+          ]
+        },
+        {
+          "id": "orphan-plugin",
+          "label": "The plugin left to rot",
+          "hints": [
+            {
+              "id": "orphan-plugin-1",
+              "content": "While you're tracing the way in, take inventory of the extensions (plugins) installed on the site. A plugin left un-updated for years is a breeding ground for risk in its own right."
+            },
+            {
+              "id": "orphan-plugin-2",
+              "content": "A WordPress plugin exposes a description file at `/wp-content/plugins/<name>/readme.txt`. Its `Stable tag` and `Tested up to` lines tell you how long ago its updates stopped."
+            },
+            {
+              "id": "orphan-plugin-3",
+              "content": "Open `http://127.0.0.1:18080/wp-content/plugins/legacy-contact-form/readme.txt` — it's an old plugin (`Tested up to: 4.9`), and the passphrase is on the ops NOTE line. Fix: remove unused / abandoned plugins and keep the ones you keep up to date."
+            }
+          ]
+        },
+        {
+          "id": "spam-post",
+          "label": "A post you never wrote",
+          "hints": [
+            {
+              "id": "spam-post-1",
+              "content": "The last question is WHAT the intruder did. Whoever hijacks an admin usually leaves a trace — a post, a link. Look over the published posts and check whether you wrote each one."
+            },
+            {
+              "id": "spam-post-2",
+              "content": "You can pull the post list over REST too: `/wp-json/wp/v2/posts`. Look for an unfamiliar advertising (spam) post, then peek at the 'raw HTML' of its body (the page source). A passphrase can hide where it isn't displayed."
+            },
+            {
+              "id": "spam-post-3",
+              "content": "A spam post titled '＼激安／ ブランド品 …' was published by `media-sync`. The passphrase is hidden in an HTML comment (`<!-- ... -->`) in its body (visible in the `content.rendered` of `/wp-json/wp/v2/posts` or in the page source). Fix: delete the malicious post, rotate the hijacked admin's credentials, and enforce MFA and least privilege."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Web": "http://127.0.0.1:18080"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": ["FLAG_SEED"]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "hintReveal": "flat",
+    "checks": [
+      {
+        "id": "rogue-admin",
+        "label": "身に覚えのない管理者",
+        "points": 50,
+        "wrongAnswerPenalty": 3,
+        "hints": [
+          {
+            "id": "rogue-admin-1",
+            "content": "インシデントで最初に確かめるのは 「誰が」 だ。 まず、 今このサイトに何人の利用者 (投稿者) がいて、 それぞれ身に覚えがあるかを確認しよう。 WordPress はその一覧を外部に見せてしまうことがある。",
+            "penalty": 0
+          },
+          {
+            "id": "rogue-admin-2",
+            "content": "WordPress の REST API は、 公開投稿を書いた利用者の一覧を匿名でも返すことがある。 `/wp-json/wp/v2/users` を開いて、 並んでいる名前とプロフィール (bio / description) を眺めよう。 permalink がプレーンなら `/?rest_route=/wp/v2/users` でも同じ結果が得られる。",
+            "penalty": 6
+          },
+          {
+            "id": "rogue-admin-3",
+            "content": "`http://127.0.0.1:18080/wp-json/wp/v2/users` を開くと、 誰も追加していない管理者 `media-sync` が混じっている。 その `description` (bio) に監査用の合言葉が書かれている。 対策: 不審な管理者アカウントは即削除し、 全管理者を棚卸しする。",
+            "penalty": 12
+          }
+        ]
+      },
+      {
+        "id": "login-trail",
+        "label": "破られた入口",
+        "points": 50,
+        "wrongAnswerPenalty": 3,
+        "hints": [
+          {
+            "id": "login-trail-1",
+            "content": "「誰が」 の次は 「どうやって入ったか」 だ。 侵入者はどこかから入っている。 サーバが記録しているアクセスの記録 (ログ) を読めば、 失敗の山と 1 回の成功が見える。",
+            "penalty": 0
+          },
+          {
+            "id": "login-trail-2",
+            "content": "運用者がログを公開フォルダに置き忘れていることがある。 `/server-logs/` の下のアクセスログ (`access.log`) を開き、 同じ IP から `POST /wp-login.php` が何度も失敗している 「総当たり」 の跡を探そう。",
+            "penalty": 6
+          },
+          {
+            "id": "login-trail-3",
+            "content": "`http://127.0.0.1:18080/server-logs/access.log` を開くと、 `203.0.113.66` からのログイン失敗が連続し、 最後に 1 回だけ成功 (`302` で `/wp-admin/` へ) している。 その直後の監視用の注記 (`[tripwire]`) の行に合言葉がある。 対策: 弱い / 使い回しのパスワードをやめ、 ログイン試行を監視・制限し、 資格情報をローテーションする。",
+            "penalty": 12
+          }
+        ]
+      },
+      {
+        "id": "orphan-plugin",
+        "label": "放置されたプラグイン",
+        "points": 50,
+        "wrongAnswerPenalty": 3,
+        "hints": [
+          {
+            "id": "orphan-plugin-1",
+            "content": "侵入経路を調べるついでに、 サイトに入っている拡張機能 (プラグイン) を棚卸ししよう。 長年更新されていない放置プラグインは、 それ自体がリスクの温床だ。",
+            "penalty": 0
+          },
+          {
+            "id": "orphan-plugin-2",
+            "content": "WordPress のプラグインは `/wp-content/plugins/<名前>/readme.txt` という説明ファイルを公開している。 中の `Stable tag` や `Tested up to` を見れば、 いつから更新が止まっているかがわかる。",
+            "penalty": 6
+          },
+          {
+            "id": "orphan-plugin-3",
+            "content": "`http://127.0.0.1:18080/wp-content/plugins/legacy-contact-form/readme.txt` を開くと、 `Tested up to: 4.9` という古いプラグインで、 運用メモ (NOTE) の行に合言葉がある。 対策: 使っていない / 放置されたプラグインは削除し、 残すものは最新に保つ。",
+            "penalty": 12
+          }
+        ]
+      },
+      {
+        "id": "spam-post",
+        "label": "見知らぬ投稿",
+        "points": 50,
+        "wrongAnswerPenalty": 3,
+        "hints": [
+          {
+            "id": "spam-post-1",
+            "content": "最後は 「侵入者が何をしたか」 だ。 管理者を乗っ取った相手は、 たいてい痕跡 (投稿・リンク) を残す。 公開されている投稿の一覧を、 書いた覚えがあるか眺めよう。",
+            "penalty": 0
+          },
+          {
+            "id": "spam-post-2",
+            "content": "投稿の一覧も REST で取れる: `/wp-json/wp/v2/posts`。 見知らぬ宣伝 (スパム) 投稿が混じっていないか探し、 その本文の 「元の HTML」 (ページのソース) まで覗こう。 合言葉は表示されない場所に隠れていることがある。",
+            "penalty": 6
+          },
+          {
+            "id": "spam-post-3",
+            "content": "「＼激安／ ブランド品 …」 というスパム投稿が `media-sync` によって公開されている。 その本文の HTML コメント (`<!-- ... -->`) に合言葉が隠されている (`/wp-json/wp/v2/posts` の `content.rendered` かページのソースで見える)。 対策: 不正な投稿を削除し、 乗っ取られた管理者の資格情報をローテーションし、 MFA と最小権限を徹底する。",
+            "penalty": 12
+          }
+        ]
+      }
+    ]
+  }
+}

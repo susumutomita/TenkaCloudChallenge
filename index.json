@@ -424,6 +424,33 @@
       }
     },
     {
+      "id": "wp-midnight-admin",
+      "name": "深夜の管理者",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "45 分",
+      "shortDescription": "デザイン事務所 「さくらデザイン」 の WordPress サイトを引き継いだ翌朝、監視ツールから 「見覚えのない管理者アカウントが夜間に増えた」 という通知が届いた。 攻撃するのではなく、外から見える手がかりだけで 「誰が・どうやって・何を残したか」 を突き止めよう。",
+      "tags": [
+        "wordpress",
+        "incident-response",
+        "account-compromise",
+        "log-analysis",
+        "operations",
+        "local-play",
+        "container",
+        "multi-verify"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "x402-paywall",
       "name": "x402 課金ゲート — 課金しているのに 0 USDC",
       "category": "Challenge",
