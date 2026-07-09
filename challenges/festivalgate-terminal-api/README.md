@@ -58,9 +58,11 @@ remove those access paths.
 4. Test a client-supplied internal-looking first hop against both
    `/internal/ops/status` and `/internal/ops/summary`. The latter returns far
    more than an operational status needs.
-5. With the terminal token, probe the neighboring
-   `/api/terminal/customers/<id>` collection. The small integer IDs are
-   enumerable.
+5. Following the profile entry point noted in the problem instructions, open a
+   customer record by id with the terminal token (for example
+   `/api/terminal/customers/1`). The small integer IDs on the neighboring
+   `/api/terminal/customers/<id>` collection are enumerable — compare each
+   record's name and role to find the one that stands out.
 6. Test the documented three-digit
    `/api/terminal/staff-unlock?pin=000` workflow. Before remediation, repeated
    wrong attempts are never throttled.
