@@ -57,6 +57,31 @@
       }
     },
     {
+      "id": "csrf-demo",
+      "name": "報告されたリンクの罠",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "30 分",
+      "shortDescription": "セキュリティ担当への「怪しいページの通報」窓口。担当が信じ込んで開いたページに、担当の権限で操作を実行させろ。",
+      "tags": [
+        "web-security",
+        "csrf",
+        "owasp",
+        "ipa",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "festivalgate-terminal-api",
       "name": "入場端末の信頼境界",
       "category": "Challenge",
