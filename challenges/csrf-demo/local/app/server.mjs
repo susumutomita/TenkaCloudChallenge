@@ -31,15 +31,19 @@ let changedViaForgery = false;
 const reports = [];
 
 function extractAttr(tag, name) {
-  const match = new RegExp(`${name}\\s*=\\s*["']([^"']*)["']`, "i").exec(tag);
+  // (?<![\w-]) requires a non-word/hyphen boundary before the name, so
+  // "data-action" doesn't get matched as a substring while looking for
+  // "action" (which would silently extract the wrong attribute's value).
+  const match = new RegExp(`(?<![\\w-])${name}\\s*=\\s*["']([^"']*)["']`, "i").exec(tag);
   return match ? match[1] : undefined;
 }
 
 /**
  * The vulnerability's counterpart: a plain, dependency-free extraction of the
  * first <form>'s action/method and its <input name=.. value=..> pairs. No
- * script execution is needed for CSRF — a classic auto-submitting form (or
- * even a bare <img>) is already enough, which is the whole point.
+ * script execution is needed for CSRF in general, and this challenge's
+ * mechanic specifically only recognizes an auto-submitting <form> targeting
+ * POST /settings/email — a GET-based <img> report does nothing here.
  */
 function extractFirstForm(html) {
   const formMatch = /<form([^>]*)>([\s\S]*?)<\/form>/i.exec(html);

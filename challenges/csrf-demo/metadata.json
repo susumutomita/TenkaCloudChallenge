@@ -58,7 +58,7 @@
         },
         {
           "id": "hint-2",
-          "content": "Report a page containing an auto-submitting form targeting `/settings/email`, method `POST`, with a hidden `email` input set to any value. When the reviewer's session opens it, their browser submits it using their own session — check the review status afterward."
+          "content": "Report a page containing an auto-submitting form targeting `/settings/email`, method `POST`. When the reviewer's session opens it, their browser submits it using their own session — check the review status afterward to see what field name the form needs."
         }
       ]
     }
@@ -87,7 +87,7 @@
       },
       {
         "id": "hint-2",
-        "content": "`/settings/email` 宛、 method は `POST`、 隠しinputの `email` に任意の値を仕込んだ自動送信フォームを含むページを通報してみよう。 担当のセッションがそれを開くと、 担当自身のセッションでそのフォームが送信される ── その後、 レビューの状態を確認しよう。",
+        "content": "`/settings/email` 宛、 method は `POST` の自動送信フォームを含むページを通報してみよう。 担当のセッションがそれを開くと、 担当自身のセッションでそのフォームが送信される ── その後、 レビューの状態を確認すると、 フォームに必要な input 名がわかるはずだ。",
         "penalty": 30
       }
     ]
