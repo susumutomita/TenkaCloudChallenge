@@ -1,0 +1,95 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "csrf-demo",
+  "name": "報告されたリンクの罠",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 2,
+  "estimatedDuration": "30 分",
+  "track": {
+    "id": "ipa-web-security",
+    "order": 2,
+    "chapter": "IPA §1.6 CSRF"
+  },
+  "shortDescription": "セキュリティ担当への「怪しいページの通報」窓口。担当が信じ込んで開いたページに、担当の権限で操作を実行させろ。",
+  "instructions": "「通報」に投稿した内容を、 後でセキュリティ担当が確認する。 担当がそれを確認した瞬間に手に入る合言葉 (`TC{...}`) をこのポータルに提出せよ。\n\n手がかりが欲しくなったら、 下のヒントを開こう (ヒントにはスコアのペナルティが付く)。",
+  "description": "あなたは、 ある会社のセキュリティ診断を任された。 対象は、 スタッフが「怪しいページを見つけたら通報する」ための窓口。\n\n通報された内容は、 セキュリティ担当が自分のアカウントでサインインしたまま定期的に目を通す。 担当は、 通報ページの見た目をそのまま信じて開く。\n\nこの会社の設定画面は前任のエンジニアが急ごしらえで作ったもので、 「サインイン済みかどうか」しか見ておらず、 「その操作が本当に本人の意思で送られたものか」までは確認していないという噂がある。 担当のセッションを乗っ取ることなく、 担当に操作を実行させられないか探ってみよう。",
+  "writeup": "## 何が起きていたか\n\n設定変更エンドポイントは、 有効なセッションが付いているかどうかしか確認していなかった。 ブラウザは同じサイト宛のリクエストに Cookie を自動で添付するため、 担当が (攻撃者の用意した) 自動送信フォームを含むページを開いただけで、 担当のセッションを使った POST リクエストがそのまま送信されてしまう。\n\nこれは CSRF (クロスサイト・リクエスト・フォージェリ) であり、 サーバーが「有効なセッションか」だけを見て「そのリクエストが自分のアプリの画面から、 利用者本人の意思で送られたものか」を確認していないことが根本原因である。\n\n## 直し方\n\n状態を変更する操作には CSRF トークンを発行し、 フォーム送信時にサーバー側で検証する。 加えて Cookie に `SameSite=Lax` (または `Strict`) を設定し、 他サイト起点のリクエストへ Cookie が自動添付されないようにする。 `Origin` / `Referer` ヘッダーを検証するのも有効な追加対策である。 また、 状態を変更する操作は GET のような安全なメソッドに乗せない (GET は副作用を持たないという前提を壊さない) のが原則である。",
+  "tags": [
+    "web-security",
+    "csrf",
+    "owasp",
+    "ipa",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18080,
+      "name": "Web (challenge surface)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback admin)"
+    }
+  ],
+  "learningGoals": [
+    "「サインイン済みか」だけを見て「本人の意思による送信か」を見ていない実装が、 なぜ危険なのかを理解する",
+    "格納型 XSS とは異なり、 スクリプトを一切実行しなくても他人の権限で操作を実行させられることを体感する",
+    "CSRF トークン・SameSite Cookie・Origin 検証という多層防御の役割を理解する"
+  ],
+  "i18n": {
+    "en": {
+      "name": "The Reported Link Trap",
+      "shortDescription": "A \"report a suspicious page\" inbox for the security team. Get the reviewer, who trusts what they open, to run an action with their own privileges.",
+      "instructions": "Whatever you submit to the report inbox, a security reviewer checks it later. The moment the reviewer opens it, you can capture a passphrase (`TC{...}`). Submit it in this portal.\n\nIf you want a nudge, open the hints below (hints carry a score penalty).",
+      "description": "You have been asked to do a security assessment of a company. The target is an inbox where staff report suspicious pages they come across.\n\nReported pages are reviewed periodically by a security reviewer who stays signed in to their own account. The reviewer trusts what a reported page looks like and simply opens it.\n\nThe company's settings screen was thrown together in a hurry by a previous engineer, and rumor has it that it only checks \"is this request signed in\" — never \"did the signed-in user actually intend to send this.\" Find a way to make the reviewer perform an action, without ever hijacking their session.",
+      "writeup": "## What happened\n\nThe settings-change endpoint only checked whether a valid session was attached to the request. Browsers attach cookies automatically to same-site requests, so the moment the reviewer opened a page containing an auto-submitting form, their browser silently fired a POST carrying their own session — no session theft required.\n\nThis is CSRF (cross-site request forgery): the server verified \"is this session valid\" but never \"did this request genuinely originate from this app's own page, with the user's actual intent.\"\n\n## How to fix it\n\nIssue a CSRF token for state-changing operations and verify it server-side on submission. Set cookies with `SameSite=Lax` (or `Strict`) so they are not automatically attached to cross-site requests. Validating the `Origin`/`Referer` header is a useful additional check. As a general principle, never put a state-changing operation behind a safe method like GET — that breaks the assumption that GET has no side effects.",
+      "learningGoals": [
+        "Understand why checking only \"is this session valid\" — never \"was this genuinely intended by the user\" — is dangerous",
+        "See, hands-on, that (unlike stored XSS) no script execution at all is needed to make someone else perform an action with their own privileges",
+        "Understand the layered defense of CSRF tokens, SameSite cookies, and Origin validation"
+      ],
+      "hints": [
+        {
+          "id": "hint-1",
+          "content": "The settings-change request only needs a valid session — nothing in it proves the request came from this app's own page. What if a page hosted somewhere else quietly sent that same request on the reviewer's behalf?"
+        },
+        {
+          "id": "hint-2",
+          "content": "Report a page containing an auto-submitting form targeting `/settings/email`, method `POST`. When the reviewer's session opens it, their browser submits it using their own session — check the review status afterward to see what field name the form needs."
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Web": "http://127.0.0.1:18080"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "verify",
+    "points": 100,
+    "wrongAnswerPenalty": 5,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "設定変更のリクエストは、 有効なセッションさえあれば通ってしまう ── そのリクエストが本当にこのアプリの画面から送られたことを示すものは何もない。 どこか別の場所にあるページが、 担当のかわりに黙ってその同じリクエストを送ったらどうなるだろうか。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "`/settings/email` 宛、 method は `POST` の自動送信フォームを含むページを通報してみよう。 担当のセッションがそれを開くと、 担当自身のセッションでそのフォームが送信される ── その後、 レビューの状態を確認すると、 フォームに必要な input 名がわかるはずだ。",
+        "penalty": 30
+      }
+    ]
+  }
+}

@@ -81,6 +81,7 @@ The source of truth is [`SCHEMA.json`](./SCHEMA.json). Both the frontend catalog
 | `disruptions`    | In-Battle disruption events. Triggers: `after-deploy` / `team-score-above` / `phase-entered`.                 |
 | `dashboard.slots`| Slots for problem-specific React components (`portal/<slot>.tsx`) injected into the participant portal.       |
 | `cfnParameters`  | Hints for CFn parameters the operator inputs at deploy time.                                                  |
+| `track`          | Position within a systematic curriculum (`{id, order, chapter}`). See [Curriculum tracks](#curriculum-tracks) below. Independent of `onboardingOrder` (a single first-time-onboarding sequence) and `tags` (free-text filters). |
 
 ### Scoring kinds
 
@@ -99,6 +100,16 @@ The legacy `uptime` kind is an alias for `uptime-flat`. New problems should use 
 ### Hints (progressive, shared by all 5 kinds)
 
 `scoring.hints[]` accepts `{id, content, penalty}` entries. Each reveal in the portal deducts `penalty` from `points` (flag) / `pointsPerSuccess` (uptime kinds) / cumulative score (phased-polling / attack-detection) — Issue #742 Phase 5.
+
+## Curriculum tracks
+
+`track` (optional, `{id, order, chapter}`) places a problem inside a systematic curriculum instead of a flat, tag-filtered list — e.g. working through IPA "安全なウェブサイトの作り方" chapter by chapter. A problem with no `track` is not part of any curriculum; existing problems are not retroactively migrated (Issue #177).
+
+| Track ID            | Curriculum                                                             | Problems (in `order`)                          |
+| -------------------- | ----------------------------------------------------------------------- | ----------------------------------------------- |
+| `ipa-web-security`   | IPA "安全なウェブサイトの作り方" (<https://www.ipa.go.jp/security/vuln/websecurity/about.html>), one chapter per problem | 1. `xss-demo` (§1.5 XSS)                        |
+
+Planned (not yet authored, tracked in Issue #177's Phase 2/3): remaining `ipa-web-security` chapters (CSRF §1.6, OS command injection §1.2, path traversal §1.3, session management §1.4), a `twelve-factor` track (<https://12factor.net/ja/>), and a `well-architected` track scoped to pillars that a Docker-only local drill can honestly reproduce (operational excellence, reliability, performance efficiency — cost optimization and least-privilege security are excluded from the local track since they need a real AWS billing/IAM model to teach honestly).
 
 ## template.yaml
 
