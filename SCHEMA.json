@@ -142,6 +142,27 @@
       "minimum": 1,
       "description": "任意。 はじめての参加者向けオンボーディング track (「マリオ 1-1」的な導入列) における並び順。 設定された問題だけが track の一員で、 この値の昇順に並ぶ (1 = 最初の一問)。 未設定なら track に含めない。 描画は portal 側。"
     },
+    "track": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "カリキュラムの識別子。 例: ipa-web-security, twelve-factor, well-architected。"
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "同一 track 内の並び順 (1 = 最初の一問)。"
+        },
+        "chapter": {
+          "type": "string",
+          "description": "この問題が対応する章/節。 例: IPA §1.5 XSS, 12Factor III. Config。"
+        }
+      },
+      "required": ["id", "order", "chapter"],
+      "description": "任意。 IPA/12 Factor App/AWS Well-Architected 等、体系立てたカリキュラム内でのこの問題の位置づけ。 未設定の既存問題はどの track にも属さない (= 遡及的な移行は不要)。 onboardingOrder / tags とは独立: track はカリキュラム内の位置づけ、 onboardingOrder は初回参加者向けの単一導入列、 tags は横断フィルタ。"
+    },
     "difficulty": {
       "type": "integer",
       "minimum": 1,

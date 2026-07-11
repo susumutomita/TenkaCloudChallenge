@@ -1,0 +1,95 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "xss-demo",
+  "name": "社内掲示板の忍び込み",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 2,
+  "estimatedDuration": "30 分",
+  "track": {
+    "id": "ipa-web-security",
+    "order": 1,
+    "chapter": "IPA §1.5 XSS"
+  },
+  "shortDescription": "スタッフ専用の社内掲示板。投稿を見たセキュリティ担当が持つ合言葉を、投稿の中身だけで奪い取れ。",
+  "instructions": "掲示板に投稿すると、 後でセキュリティ担当がその投稿を確認しに来る。 担当が確認した瞬間に手に入る合言葉 (`TC{...}`) をこのポータルに提出せよ。\n\n手がかりが欲しくなったら、 下のヒントを開こう (ヒントにはスコアのペナルティが付く)。",
+  "description": "あなたは、 ある会社のセキュリティ診断を任された。 対象は、 スタッフ専用の社内掲示板。\n\n投稿は誰でもできるが、 中身の閲覧や承認は「セキュリティ担当」が定期的に巡回して行う。 担当は自分のセッション情報 (ログイン状態) を持ったまま、 新しい投稿に目を通す。\n\nこの掲示板は前任のエンジニアが急ごしらえで作ったもので、 投稿内容の扱いがどこか雑だという噂がある。 担当のセッション情報を、 投稿の中身だけで奪い取れないか探ってみよう。",
+  "writeup": "## 何が起きていたか\n\n掲示板は、 投稿された `message` をエスケープせず、 そのまま HTML に埋め込んで表示していた。 そこに `<script>` を含む投稿を送ると、 その投稿を閲覧した人 (ここではセキュリティ担当) のブラウザ上でスクリプトがそのまま実行される。\n\nこれは XSS (クロスサイト・スクリプティング) であり、 利用者の入力が「表示するデータ」ではなく「実行可能なコード」として解釈されたことが根本原因である。 スクリプトは閲覧者の権限で動くため、 閲覧者のセッション情報 (Cookie) を読み取り、 攻撃者の管理するサーバーへ送信 (exfiltration) できてしまう。\n\n## 直し方\n\n利用者が入力した文字列を HTML に埋め込む前に、 必ず HTML エスケープ (`<` → `&lt;` 等) する。 テンプレートエンジンの多くはデフォルトでこれを行うので、 生の文字列連結を避け、 エスケープ機構を無効化しない。 加えて Cookie に `HttpOnly` 属性を付けると、 たとえ XSS が起きてもスクリプトから Cookie を読めなくなる (多層防御)。 Content-Security-Policy でインラインスクリプトの実行自体を制限するのも有効な追加対策である。",
+  "tags": [
+    "web-security",
+    "xss",
+    "owasp",
+    "ipa",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18080,
+      "name": "Web (challenge surface)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback admin)"
+    }
+  ],
+  "learningGoals": [
+    "利用者の入力をエスケープせずに画面へ埋め込む実装が、 なぜ危険なのかを理解する",
+    "格納型 XSS が「投稿者本人」ではなく「別の閲覧者」の権限を奪う攻撃であることを体感する",
+    "HTML エスケープ・HttpOnly Cookie・CSP という多層防御の役割を理解する"
+  ],
+  "i18n": {
+    "en": {
+      "name": "Breaking Into the Staff Bulletin Board",
+      "shortDescription": "A staff-only bulletin board. A security reviewer checks new posts — steal the passphrase they hold, using nothing but a post's contents.",
+      "instructions": "After you post to the board, a security reviewer checks it later. The moment the reviewer checks your post, you can capture a passphrase (`TC{...}`). Submit it in this portal.\n\nIf you want a nudge, open the hints below (hints carry a score penalty).",
+      "description": "You have been asked to do a security assessment of a company. The target is a staff-only internal bulletin board.\n\nAnyone can post, but a \"security reviewer\" periodically reviews new posts. The reviewer carries their own session (their logged-in state) while reading posts.\n\nThe board was thrown together in a hurry by a previous engineer, and rumor has it that it is careless about how it handles post content. Find a way to steal the reviewer's session using nothing but a post's contents.",
+      "writeup": "## What happened\n\nThe board spliced a post's `message` straight into the HTML it rendered, with no escaping. Submitting a post containing a `<script>` tag meant that script ran, unmodified, in the browser of whoever viewed that post next (here, the security reviewer).\n\nThis is XSS (cross-site scripting): untrusted input was interpreted as executable code instead of data to display. Because the script runs with the *viewer's* privileges, it can read the viewer's session (cookie) and exfiltrate it to a server the attacker controls.\n\n## How to fix it\n\nAlways HTML-escape user input (`<` → `&lt;`, etc.) before splicing it into a page. Most template engines do this by default — avoid raw string concatenation, and never disable the engine's escaping. Layer on `HttpOnly` for session cookies so a script cannot read them even if an XSS bug exists, and use a Content-Security-Policy to restrict inline script execution as further defense in depth.",
+      "learningGoals": [
+        "Understand why splicing unescaped user input into a page is dangerous",
+        "See, hands-on, that stored XSS steals a *different viewer's* privileges, not the poster's own",
+        "Understand the layered defense of HTML escaping, HttpOnly cookies, and CSP"
+      ],
+      "hints": [
+        {
+          "id": "hint-1",
+          "content": "Look at what happens to your post's text once it's on the page. If a symbol you typed — like `<` — comes back untouched instead of turned into `&lt;`, the page is not escaping your input."
+        },
+        {
+          "id": "hint-2",
+          "content": "Post a message containing a `<script>` tag. Whatever JavaScript is inside it will run in the reviewer's session when they check the board — including code that reads `document.cookie` and sends it somewhere. Check the reviewer's monitoring log afterward to see what got sent."
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Web": "http://127.0.0.1:18080"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "verify",
+    "points": 100,
+    "wrongAnswerPenalty": 5,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "自分の投稿がページ上でどう表示されるかをよく見てみよう。 `<` のような記号を入力したのに、 `&lt;` に変換されず そのまま出てくるなら、 その画面は入力をエスケープしていない。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "`<script>` タグを含むメッセージを投稿してみよう。 中の JavaScript は、 セキュリティ担当が掲示板を確認したときに 担当のセッションの中で実行される ── `document.cookie` を読み取ってどこかへ送るコードも含めて。 その後、 担当側の監視ログを確認すると、 何が送信されたかが見える。",
+        "penalty": 30
+      }
+    ]
+  }
+}

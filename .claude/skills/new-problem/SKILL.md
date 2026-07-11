@@ -61,12 +61,14 @@ If the invocation was `/new-problem challenge` or `/new-problem battle`, **Categ
 2. **Slug** — kebab-case, alphanumeric + hyphens, lowercase. Becomes the directory name and the `tc-<slug>-<teamSlug>` resource prefix.
 3. **Scoring kind** — one of:
    - `flag` — submit a string, scored once. **Challenge default.**
+   - `verify` — submission is delegated to a container's loopback `/verify` (no AWS; see "Local (AWS-free) CTF container format" below). Single check.
+   - `multi-verify` — like `verify`, but 2–8 named checkpoints; `/verify` echoes back `checkpointId`.
    - `uptime-flat` — N endpoints probed independently, points per healthy probe.
    - `uptime-multi` — N endpoints, AND condition; one bonus when all are up.
    - `phased-polling` — score rules change at scheduled phase boundaries.
    - `attack-detection` — counter from a stats endpoint converts to points.
 
-   For `challenge` mode default to `flag` and ask only to confirm. For `battle` mode the 4 uptime/polling/attack kinds are the relevant choices — ask which.
+   For `challenge` mode default to `flag` and ask only to confirm (offer `verify`/`multi-verify` if the user wants an AWS-free local-play problem). For `battle` mode the 4 uptime/polling/attack kinds are the relevant choices — ask which.
 4. **Concept** — one or two sentences in the user's own words. The skill weaves this into the story-style `shortDescription` later; raw mechanics are not the player-facing voice.
 5. **Difficulty** 1–5 and rough **estimatedDuration** (e.g. "30 分").
 
@@ -75,13 +77,22 @@ If the invocation was `/new-problem challenge` or `/new-problem battle`, **Categ
 | Inputs | Starter directory |
 | --- | --- |
 | Challenge + `flag` | `challenges/hello-world` |
+| Challenge + `verify` (local/container, no AWS) | `challenges/sqli-demo` (single check) |
+| Challenge + `multi-verify` (local/container, no AWS) | `challenges/wp-exposed-backup` (multiple checkpoints) |
 | Battle + `uptime-flat` | `battles/hello-world-battle` |
 | Battle + `phased-polling` | `battles/microservice-migration-battle` or `battles/stackstack` |
 | Battle + `uptime-multi` + `attack-detection` | `battles/security-battle-royale` |
 
 ```bash
+# CFn-based problems: plain copy
 cp -r <starter> <category>/<slug>
 cd <category>/<slug>
+
+# Local/container problems: use the scaffolder so index.json/cost-report.json
+# stay in sync — it copies the starter's local/ directory (Dockerfile,
+# docker-compose.yml, app/) along with metadata.json.
+bun run new <category> <slug> --from sqli-demo          # single-check verify
+bun run new <category> <slug> --from wp-exposed-backup   # multi-verify
 ```
 
 The starter ships with the required IAM baseline, the right tag set, the standard parameters (`NamePrefix`, `TenkaCloudAccountId`, `ExternalId`), and a working `ParticipantViewerRole`. Do **not** delete those — adapt them.
@@ -233,12 +244,13 @@ The bar above is written for AWS-ops problems. For a **security CTF** whose chal
 
 ### Local (AWS-free) CTF container format (#2054)
 
-A security CTF can run entirely on the player's machine — no AWS account. Reference: `challenges/sqli-demo`, `challenges/api-idor-demo`.
+A security CTF can run entirely on the player's machine — no AWS account. Reference: `challenges/sqli-demo` (single check, `scoring.kind: "verify"`), `challenges/wp-exposed-backup` (multiple checkpoints, `scoring.kind: "multi-verify"`), `challenges/api-idor-demo`.
 
-- `runtime`: `{ provider: "docker", engine: "compose", entry: "local/docker-compose.yml", challengeEndpoints: {...}, verifyUrl: "http://127.0.0.1:18081/verify", secretEnv: ["FLAG_SEED"] }`; `scoring.kind: "verify"` — the platform holds no answer, it delegates each submission to the container's loopback `/verify`.
+- `runtime`: `{ provider: "docker", engine: "compose", entry: "local/docker-compose.yml", challengeEndpoints: {...}, verifyUrl: "http://127.0.0.1:18081/verify", secretEnv: ["FLAG_SEED"] }`; `scoring.kind: "verify"` (single check) or `"multi-verify"` (2–8 named checkpoints — `/verify` must echo back `checkpointId`, and `i18n.en.checks[]` is required) — the platform holds no answer, it delegates each submission to the container's loopback `/verify`.
 - Files: `local/{Dockerfile, docker-compose.yml, app/server.mjs}`. The flag is derived inside the container from a per-deploy random `FLAG_SEED` (never committed). Bind to `127.0.0.1` only.
 - **Attack CTF** (exploit to capture the flag): single container; `FLAG_SEED` in its env is fine because the intended solution is HTTP-only, so a `docker exec` to read the seed is self-cheating (accepted).
 - **Defense CTF** (fix the code): the player has a shell inside the container, so any secret there is trivially readable. Use **two containers** — a `target` the player edits (no secret) and a separate `grader` that holds the flag, probes the target, and releases the flag only when the fix passes.
+- If the new problem is part of a systematic curriculum (e.g. working through IPA "安全なウェブサイトの作り方" chapter by chapter), set the optional `track: {id, order, chapter}` field (see `CATALOG.md`'s "Curriculum tracks" section) — omit it entirely for a standalone problem.
 
 ## Footguns this skill prevents
 
