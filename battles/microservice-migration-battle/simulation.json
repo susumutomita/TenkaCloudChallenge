@@ -9,17 +9,19 @@
       "operation": "CreateFunction",
       "fidelity": "L1",
       "plane": "participant"
-    },
+    }
+  ],
+  "workloads": [
     {
+      "id": "migration-gateway",
       "targetId": "default",
-      "service": "runtime",
-      "resourceType": "Runtime::Workload",
-      "operation": "Materialize",
-      "fidelity": "L4",
-      "plane": "workload",
+      "resourceRef": "BaseUrl",
+      "image": "ghcr.io/susumutomita/tenkacloud-challenge-microservice-migration@sha256:96c7ca29de82b7d0c041e98f9cd9494de283102509134e5fb524d6e89da27cf2",
+      "containerPort": 8080,
+      "healthPath": "/healthz",
       "artifact": {
-        "path": "services/docker-compose.yml",
-        "sha256": "4eface91a30659ceed5212cf58f7eca2a064a62bc2fdc3355c61156d1e5c468d"
+        "path": "services/simulator/Dockerfile",
+        "sha256": "ed10e2eaf7dab95da26bdc131f88371d1c1e2383286f8db530c48bba72c788ce"
       }
     }
   ]
