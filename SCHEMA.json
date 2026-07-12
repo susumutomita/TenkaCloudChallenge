@@ -317,6 +317,22 @@
         }
       ]
     },
+    "simulationOverlay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "entry"],
+      "description": "[TenkaCloud Issue 2574] IaC/IAM/metadata から導出できない Simulator workload または data-plane requirement だけを補う versioned overlay 参照。採点条件・答え・secret は overlay に移さない。詳細は SIMULATION.md。",
+      "properties": {
+        "schemaVersion": {
+          "const": "1",
+          "description": "SIMULATION_SCHEMA.json の major contract version。"
+        },
+        "entry": {
+          "const": "simulation.json",
+          "description": "Problem directory 直下の overlay。固定名により unreferenced file を validator が検出できる。"
+        }
+      }
+    },
     "defaultRegion": {
       "type": "string",
       "pattern": "^[a-z]{2,3}-[a-z]+-\\d{1,2}$",

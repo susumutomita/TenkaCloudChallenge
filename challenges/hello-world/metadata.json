@@ -64,5 +64,9 @@
         "penalty": 30
       }
     ]
+  },
+  "simulationOverlay": {
+    "schemaVersion": "1",
+    "entry": "simulation.json"
   }
 }

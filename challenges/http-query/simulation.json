@@ -1,0 +1,38 @@
+{
+  "$schema": "../../SIMULATION_SCHEMA.json",
+  "schemaVersion": "1",
+  "requirements": [
+    {
+      "targetId": "default",
+      "service": "elasticloadbalancing",
+      "resourceType": "*",
+      "operation": "DescribeRules",
+      "fidelity": "L3",
+      "plane": "participant"
+    },
+    {
+      "targetId": "default",
+      "service": "elasticloadbalancing",
+      "resourceType": "*",
+      "operation": "ModifyRule",
+      "fidelity": "L3",
+      "plane": "participant"
+    },
+    {
+      "targetId": "default",
+      "service": "logs",
+      "resourceType": "*",
+      "operation": "FilterLogEvents",
+      "fidelity": "L1",
+      "plane": "participant"
+    },
+    {
+      "targetId": "default",
+      "service": "http",
+      "resourceType": "HTTP::Endpoint",
+      "operation": "Request",
+      "fidelity": "L4",
+      "plane": "participant"
+    }
+  ]
+}

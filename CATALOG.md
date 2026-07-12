@@ -23,13 +23,14 @@ problems/
 │   ├── hello-world/
 │   └── x402-paywall/              # x402 / WAF AI-bot monetization paywall
 ├── SCHEMA.json                    # JSON Schema (draft-07) — source of truth for metadata.json
+├── SIMULATION_SCHEMA.json         # Optional versioned Simulator overlay contract
 ├── index.json                     # Catalog built from every metadata.json (= `make build-problems-index`)
 ├── CATALOG.md                     # This file (English, primary)
 ├── CATALOG.ja.md                  # Japanese mirror
 └── README.md                      # Repo-level contributor docs (also mounted as problems/README.md)
 ```
 
-A single problem directory is made up of the following four assets (ADR-012).
+A single problem directory is made up of the following assets (ADR-012).
 
 | Asset                       | Required | Purpose                                                                                          |
 | --------------------------- | -------- | ------------------------------------------------------------------------------------------------ |
@@ -38,6 +39,7 @@ A single problem directory is made up of the following four assets (ADR-012).
 | `template.yaml`             | ✓        | A single-page CFn template (the deploy body). Pushed into the competitor account via `create-stack`. |
 | `portal/<slot>.tsx`         | -        | Problem-specific participant portal UI, referenced from `dashboard.slots`.                       |
 | `services/`                 | -        | Problem-specific implementation (docker-compose / Lambda code / etc; pulled by EC2 UserData).    |
+| `simulation.json`           | -        | Gap-only Simulator requirements/workloads, referenced by `simulationOverlay`; never scoring or answers. |
 
 ## Categories
 
@@ -82,6 +84,18 @@ The source of truth is [`SCHEMA.json`](./SCHEMA.json). Both the frontend catalog
 | `dashboard.slots`| Slots for problem-specific React components (`portal/<slot>.tsx`) injected into the participant portal.       |
 | `cfnParameters`  | Hints for CFn parameters the operator inputs at deploy time.                                                  |
 | `track`          | Position within a systematic curriculum (`{id, order, chapter}`). See [Curriculum tracks](#curriculum-tracks) below. Independent of `onboardingOrder` (a single first-time-onboarding sequence) and `tags` (free-text filters). |
+| `simulationOverlay` | Versioned reference to `simulation.json` when binding IaC/probe/disruption sources cannot express an actual Simulator invocation. IAM is authorization inventory, not invocation evidence. See [`SIMULATION.md`](./SIMULATION.md). |
+
+### Simulator overlay
+
+Do not add Simulator metadata by default. The compatibility scanner derives binding
+requirements from provider-native IaC, endpoints, scoring probes, and disruptions, while IAM
+actions remain non-blocking authorization inventory. Only a concrete execution-evidence gap may
+use `simulationOverlay`; the referenced file is validated
+against [`SIMULATION_SCHEMA.json`](./SIMULATION_SCHEMA.json). It cannot contain scoring,
+answers, flags, secrets, credentials, environment variables, host mounts, or unpinned OCI
+images. The complete contract and current nine-problem audit are in
+[`SIMULATION.md`](./SIMULATION.md).
 
 ### Scoring kinds
 

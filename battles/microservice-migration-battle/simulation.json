@@ -1,0 +1,26 @@
+{
+  "$schema": "../../SIMULATION_SCHEMA.json",
+  "schemaVersion": "1",
+  "requirements": [
+    {
+      "targetId": "default",
+      "service": "lambda",
+      "resourceType": "*",
+      "operation": "CreateFunction",
+      "fidelity": "L1",
+      "plane": "participant"
+    },
+    {
+      "targetId": "default",
+      "service": "runtime",
+      "resourceType": "Runtime::Workload",
+      "operation": "Materialize",
+      "fidelity": "L4",
+      "plane": "workload",
+      "artifact": {
+        "path": "services/docker-compose.yml",
+        "sha256": "4eface91a30659ceed5212cf58f7eca2a064a62bc2fdc3355c61156d1e5c468d"
+      }
+    }
+  ]
+}

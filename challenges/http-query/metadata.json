@@ -24,6 +24,10 @@
     "Content-Type と request body を厳格に扱い (400 / 415 / 422)、 content sniffing に依存しない API を設計する。"
   ],
   "cfnTemplate": "template.yaml",
+  "simulationOverlay": {
+    "schemaVersion": "1",
+    "entry": "simulation.json"
+  },
   "cfnParameters": {
     "FlagSeed": "__RANDOM_PASSWORD__"
   },

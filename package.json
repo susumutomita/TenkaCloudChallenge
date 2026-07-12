@@ -8,7 +8,9 @@
     "new": "bun run scripts/new-problem.ts",
     "reindex": "bun run scripts/build-index.ts && bun run scripts/estimate-cost.ts --write",
     "setup": "git config core.hooksPath .githooks && echo 'pre-commit hook enabled (auto-reindex).'",
-    "validate": "bun test scripts/validate-problems.test.ts scripts/new-problem.test.ts scripts/readme-contract.test.ts && bun run scripts/validate-problems.ts && bun run scripts/check-template-ascii.ts && bun run scripts/check-template-security.ts",
+    "validate": "bun test scripts/validate-problems.test.ts scripts/validate-simulation-overlay.test.ts scripts/check-simulator-compatibility.test.ts scripts/new-problem.test.ts scripts/readme-contract.test.ts && bun run scripts/validate-problems.ts && bun run scripts/check-template-ascii.ts && bun run scripts/check-template-security.ts && bun run validate:simulator-workload",
+    "validate:simulator-workload": "bun run --cwd battles/microservice-migration-battle/services test && bun run --cwd battles/microservice-migration-battle/services typecheck",
+    "simulator:compatibility": "bun run scripts/check-simulator-compatibility.ts",
     "cost": "bun run scripts/estimate-cost.ts",
     "cost:check": "bun run scripts/estimate-cost.ts --check",
     "status": "bun run scripts/status.ts"

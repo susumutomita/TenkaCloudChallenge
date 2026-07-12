@@ -23,6 +23,10 @@
     "Score 観点でどのサービスから切り出すかの優先順位を判断する"
   ],
   "cfnTemplate": "template.yaml",
+  "simulationOverlay": {
+    "schemaVersion": "1",
+    "entry": "simulation.json"
+  },
   "cfnParameters": {},
   "i18n": {
     "en": {

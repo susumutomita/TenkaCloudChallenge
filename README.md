@@ -17,6 +17,7 @@ TenkaCloud runs head-to-head **Battles** and self-paced **Challenges** on real A
 - **Authoring without platform context.** Adding a problem requires only `metadata.json` + `template.yaml` (+ optional portal slot UI and side services). Everything else — scoring, portal rendering, disruption scheduling — is driven generically by the platform from your metadata.
 - **One source of truth.** `metadata.json` powers the catalog UI, the scoring engine, and the participant portal wiring. The platform side is a generic dispatcher (ADR-012).
 - **Schema-validated in CI.** Every problem is checked against [`SCHEMA.json`](./SCHEMA.json) on every push and PR.
+- **Simulator compatibility is explicit.** Cloud problems are checked against a pinned TenkaCloudSimulator capability manifest; only behavior that IaC/metadata cannot express goes in a versioned [`simulation.json` overlay](./SIMULATION.md).
 - **Open by design.** This repo holds the **base problem set** that ships under Apache 2.0 (matching the TenkaCloud platform repo). Spoiler-bearing private problems get a separate private repo via the ADR-008 S3 path.
 
 Each problem ships with a per-problem README (English primary, Japanese mirror) describing the story, the solve path, and the learning goals. Browse [`battles/`](./battles/) and [`challenges/`](./challenges/) for the live catalog.
@@ -78,6 +79,7 @@ A platform-repo maintainer then bumps the submodule pointer and the next `make d
 │       ├── metadata.json
 │       └── template.yaml
 ├── SCHEMA.json                    # JSON Schema for metadata.json (synced with platform)
+├── SIMULATION_SCHEMA.json         # Versioned optional Simulator overlay contract
 ├── index.json                     # Catalog index (built from every metadata.json)
 ├── CATALOG.md                     # Full catalog docs + schema walkthrough
 ├── scripts/validate-problems.ts   # Local + CI validator
@@ -156,5 +158,6 @@ hands-on operations/security drills.
 
 - **Platform repo (CDK / Lambda / 3 SPAs):** <https://github.com/susumutomita/TenkaCloud>
 - **JSON Schema:** [`SCHEMA.json`](./SCHEMA.json)
+- **Simulator overlay contract:** [`SIMULATION.md`](./SIMULATION.md)
 - **Full catalog docs:** [`CATALOG.md`](./CATALOG.md)
 - **Authoring design bar (skill):** [`.claude/skills/new-problem/SKILL.md`](./.claude/skills/new-problem/SKILL.md)

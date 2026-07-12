@@ -169,6 +169,23 @@ A Challenge's `points`, `wrongAnswerPenalty`, and hint penalties are **not free-
 
 Battles (uptime / phased / attack-detection — no fixed total) are exempt from the point table; see SCORING.md for the battle-hint guideline. When you change a problem's difficulty, update its points to the new tier or the validator will fail. Full ruleset and rationale: [SCORING.md](./SCORING.md).
 
+### 15. Simulator overlay is gap-only and contains no answers
+
+Cloud problems normally need no Simulator-specific metadata: the catalog scanner reads IaC,
+endpoints, probes, and disruptions, and inventories IAM separately. Add `simulationOverlay` only
+when those binding sources cannot identify a workload or data-plane behavior, and follow
+[`SIMULATION.md`](./SIMULATION.md).
+The referenced `simulation.json` is versioned and validator-enforced. It must not contain scoring,
+answers, flags, secrets, credentials, environment variables, host mounts, or unpinned images.
+Do not copy an overlay to a new problem without a concrete scanner gap.
+
+An IAM `Allow` is an authorization ceiling, not proof that the problem invokes every allowed API.
+The compatibility report may retain IAM actions as non-blocking audit inventory, but only IaC
+relationships, executable metadata (`scoring` / `disruptions`), or an exact overlay requirement may
+make an operation blocking. When a documented participant/workload flow depends on one action from
+a broader allow-list, promote only that proven action in `simulation.json`; never copy the whole
+policy into the overlay merely to satisfy coverage.
+
 ## Voice for `shortDescription` / `instructions` / `description`
 
 The catalog leans into SRE-day-in-the-life narration: the previous SRE (the predecessor who abruptly resigned), the CTO (gives vague but high-stakes orders), competitor as "the new hire" inheriting a mess. Players engage 2-3× better with story than with dry mechanics. Examples:

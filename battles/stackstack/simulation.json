@@ -1,0 +1,46 @@
+{
+  "$schema": "../../SIMULATION_SCHEMA.json",
+  "schemaVersion": "1",
+  "requirements": [
+    {
+      "targetId": "default",
+      "service": "s3",
+      "resourceType": "*",
+      "operation": "GetObject",
+      "fidelity": "L4",
+      "plane": "participant"
+    },
+    {
+      "targetId": "default",
+      "service": "ssm",
+      "resourceType": "AWS::SSM::Session",
+      "operation": "StartSession",
+      "fidelity": "L4",
+      "plane": "participant"
+    },
+    {
+      "targetId": "default",
+      "service": "wafv2",
+      "resourceType": "*",
+      "operation": "AssociateWebACL",
+      "fidelity": "L3",
+      "plane": "participant"
+    },
+    {
+      "targetId": "default",
+      "service": "ec2",
+      "resourceType": "*",
+      "operation": "DescribeSecurityGroups",
+      "fidelity": "L3",
+      "plane": "participant"
+    },
+    {
+      "targetId": "default",
+      "service": "ec2",
+      "resourceType": "*",
+      "operation": "RevokeSecurityGroupIngress",
+      "fidelity": "L3",
+      "plane": "participant"
+    }
+  ]
+}

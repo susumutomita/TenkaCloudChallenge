@@ -1,0 +1,67 @@
+name: simulator-compatibility
+
+permissions:
+  contents: read
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  # Full immutable commit. Update this only after the corresponding Simulator
+  # release passes its own gates; never point compatibility CI at a moving branch.
+  TENKACLOUD_SIMULATOR_REF: "950406d5f4f14bf25c4b1f2b5ad9952b532b1dc8"
+
+jobs:
+  catalog-coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: "true"
+      npm_config_ignore_scripts: "true"
+    steps:
+      - name: Checkout challenge catalog
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          path: catalog
+
+      - name: Checkout pinned TenkaCloudSimulator
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: susumutomita/TenkaCloudSimulator
+          ref: ${{ env.TENKACLOUD_SIMULATOR_REF }}
+          path: simulator
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: "1.3.11"
+
+      - name: Install catalog dependencies
+        working-directory: catalog
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Install pinned Simulator dependencies
+        working-directory: simulator
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Verify immutable Simulator revision
+        working-directory: simulator
+        run: test "$(git rev-parse HEAD)" = "$TENKACLOUD_SIMULATOR_REF"
+
+      - name: Check current catalog capability coverage
+        working-directory: catalog
+        run: >-
+          bun run simulator:compatibility
+          --simulator ../simulator
+          --output reports/simulator-coverage.json
+
+      - name: Upload deterministic coverage report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: simulator-coverage-${{ github.sha }}
+          path: catalog/reports/simulator-coverage.json
+          if-no-files-found: error
+          retention-days: 14

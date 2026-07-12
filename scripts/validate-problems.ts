@@ -15,6 +15,7 @@ import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from "node
 import { dirname, join, relative } from "node:path";
 import Ajv2020 from "ajv";
 import addFormats from "ajv-formats";
+import { checkSimulationOverlay } from "./validate-simulation-overlay";
 
 // このリポジトリは TenkaCloud 本体の `problems/` 配下に git submodule として mount
 // される設計のため、 catalog アセット (battles/ challenges/ SCHEMA.json) は repo
@@ -613,13 +614,23 @@ export function checkCheckLabelSpoilerAdvisory(meta: Metadata): ValidationError[
 
 function checkCrossRefs(metaPath: string, meta: Metadata): CrossRefResult {
   const dir = dirname(metaPath);
-  if (isCompositeProblem(meta)) return checkCompositeRefs(dir, meta);
-  if (isContainerProblem(meta)) return checkContainerRefs(dir, meta);
+  const simulationErrors = checkSimulationOverlay(metaPath, meta);
+  if (isCompositeProblem(meta)) {
+    const result = checkCompositeRefs(dir, meta);
+    return { ...result, errors: [...simulationErrors, ...result.errors] };
+  }
+  if (isContainerProblem(meta)) {
+    const result = checkContainerRefs(dir, meta);
+    return { ...result, errors: [...simulationErrors, ...result.errors] };
+  }
   const cfnTemplate = typeof meta.cfnTemplate === "string" ? meta.cfnTemplate : "template.yaml";
   const templatePath = join(dir, cfnTemplate);
 
   if (!existsSync(templatePath)) {
-    return { errors: [`cfnTemplate file "${cfnTemplate}" not found`], warnings: [] };
+    return {
+      errors: [...simulationErrors, `cfnTemplate file "${cfnTemplate}" not found`],
+      warnings: [],
+    };
   }
   const yaml = readFileSync(templatePath, "utf8");
   // [TenkaCloud#2252] verify / multi-verify はコンテナ委譲採点 (= runtime.provider=docker
@@ -633,6 +644,7 @@ function checkCrossRefs(metaPath: string, meta: Metadata): CrossRefResult {
       : [];
   return {
     errors: [
+      ...simulationErrors,
       ...containerOnlyKindErrors,
       ...checkInstructionsPresent(meta),
       ...checkWriteupTranslations(meta),

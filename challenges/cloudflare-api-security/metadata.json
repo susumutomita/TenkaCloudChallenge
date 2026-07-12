@@ -34,6 +34,10 @@
     "外部エンドポイントに対する段階的セキュリティ検査と、 検査側自身の SSRF 対策 (host allowlist / redirect 非追跡 / timeout / size cap) を理解する"
   ],
   "cfnTemplate": "template.yaml",
+  "simulationOverlay": {
+    "schemaVersion": "1",
+    "entry": "simulation.json"
+  },
   "cfnParameters": {
     "FlagSeed": "__RANDOM_PASSWORD__"
   },

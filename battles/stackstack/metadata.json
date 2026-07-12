@@ -271,5 +271,9 @@
     "slots": {
       "StatusPanel": "portal/StatusPanel.tsx"
     }
+  },
+  "simulationOverlay": {
+    "schemaVersion": "1",
+    "entry": "simulation.json"
   }
 }

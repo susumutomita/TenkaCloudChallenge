@@ -1,0 +1,38 @@
+{
+  "$schema": "../../SIMULATION_SCHEMA.json",
+  "schemaVersion": "1",
+  "requirements": [
+    {
+      "targetId": "default",
+      "service": "s3",
+      "resourceType": "*",
+      "operation": "GetObject",
+      "fidelity": "L4",
+      "plane": "participant"
+    },
+    {
+      "targetId": "default",
+      "service": "ssm",
+      "resourceType": "*",
+      "operation": "GetParameter",
+      "fidelity": "L2",
+      "plane": "participant"
+    },
+    {
+      "targetId": "default",
+      "service": "lambda",
+      "resourceType": "*",
+      "operation": "InvokeFunction",
+      "fidelity": "L4",
+      "plane": "participant"
+    },
+    {
+      "targetId": "default",
+      "service": "http",
+      "resourceType": "HTTP::Endpoint",
+      "operation": "Probe",
+      "fidelity": "L4",
+      "plane": "scoring"
+    }
+  ]
+}
