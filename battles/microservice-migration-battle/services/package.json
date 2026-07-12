@@ -1,0 +1,10 @@
+{
+  "name": "tenkacloud-microservice-migration-services",
+  "private": true,
+  "workspaces": ["users", "orders", "catalog", "simulator"],
+  "scripts": {
+    "test": "bun test simulator/src/index.test.ts",
+    "typecheck": "bun run --filter '*' typecheck"
+  },
+  "trustedDependencies": []
+}

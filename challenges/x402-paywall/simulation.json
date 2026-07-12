@@ -1,0 +1,54 @@
+{
+  "$schema": "../../SIMULATION_SCHEMA.json",
+  "schemaVersion": "1",
+  "requirements": [
+    {
+      "targetId": "default",
+      "service": "s3",
+      "resourceType": "*",
+      "operation": "GetObject",
+      "fidelity": "L4",
+      "plane": "participant"
+    },
+    {
+      "targetId": "default",
+      "service": "ssm",
+      "resourceType": "*",
+      "operation": "GetParameter",
+      "fidelity": "L2",
+      "plane": "participant"
+    },
+    {
+      "targetId": "default",
+      "service": "ssm",
+      "resourceType": "*",
+      "operation": "GetParametersByPath",
+      "fidelity": "L2",
+      "plane": "participant"
+    },
+    {
+      "targetId": "default",
+      "service": "ssm",
+      "resourceType": "*",
+      "operation": "PutParameter",
+      "fidelity": "L2",
+      "plane": "participant"
+    },
+    {
+      "targetId": "default",
+      "service": "sts",
+      "resourceType": "*",
+      "operation": "GetCallerIdentity",
+      "fidelity": "L2",
+      "plane": "participant"
+    },
+    {
+      "targetId": "default",
+      "service": "lambda",
+      "resourceType": "*",
+      "operation": "InvokeFunction",
+      "fidelity": "L4",
+      "plane": "participant"
+    }
+  ]
+}

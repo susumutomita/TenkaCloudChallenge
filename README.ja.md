@@ -17,6 +17,7 @@ TenkaCloud は実 AWS で動くリアルタイム **Battle** と個別演習 **C
 - **platform 知識ゼロでも問題を書ける**。 必要なのは `metadata.json` + `template.yaml` (+ 任意の portal slot UI と side services) だけ。 scoring / portal 表示 / disruption schedule は platform 側が metadata から generic に駆動する。
 - **正本は 1 つ**。 `metadata.json` がカタログ UI、 scoring engine、 portal plugin の wiring を全部駆動する。 platform 側は generic dispatcher (ADR-012)。
 - **CI で schema 検証**。 push / PR ごとに [`SCHEMA.json`](./SCHEMA.json) で全問題を validate。
+- **Simulator compatibility を明示**。cloud 問題は pin した TenkaCloudSimulator capability manifest と照合し、IaC/metadata で表せない挙動だけを versioned [`simulation.json` overlay](./SIMULATION.ja.md) に置く。
 - **OSS 前提**。 本 repo は Apache 2.0 で配布する **ベース問題セット** (= TenkaCloud platform 本体と同じライセンス)。 答え / spoiler を含む問題は別 private repo に置いて ADR-008 の S3 経路で配信する。
 
 各問題は per-problem README (英語 primary + 日本語 mirror) を持ち、 ストーリー / 解き方 / 学習目的が書いてある。 ライブカタログは [`battles/`](./battles/) と [`challenges/`](./challenges/) を参照。
@@ -65,6 +66,7 @@ platform repo の maintainer が submodule pointer を更新すると、 次の 
 │       ├── metadata.json
 │       └── template.yaml
 ├── SCHEMA.json                    # metadata.json の JSON Schema (本体 repo と同期)
+├── SIMULATION_SCHEMA.json         # optional Simulator overlay の versioned contract
 ├── index.json                     # カタログ index (全 metadata から build)
 ├── CATALOG.md                     # カタログ docs + schema walkthrough
 ├── scripts/validate-problems.ts   # local + CI validator
@@ -136,5 +138,6 @@ TenkaCloud はオープンソースとして公開していますが、実際の
 
 - **Platform repo (CDK / Lambda / 3 SPAs):** <https://github.com/susumutomita/TenkaCloud>
 - **JSON Schema:** [`SCHEMA.json`](./SCHEMA.json)
+- **Simulator overlay 契約:** [`SIMULATION.ja.md`](./SIMULATION.ja.md)
 - **カタログ詳解:** [`CATALOG.md`](./CATALOG.md)
 - **作問の設計基準 (skill):** [`.claude/skills/new-problem/SKILL.md`](./.claude/skills/new-problem/SKILL.md)

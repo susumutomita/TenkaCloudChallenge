@@ -1,0 +1,14 @@
+{
+  "$schema": "../../SIMULATION_SCHEMA.json",
+  "schemaVersion": "1",
+  "requirements": [
+    {
+      "targetId": "default",
+      "service": "ssm",
+      "resourceType": "*",
+      "operation": "GetParameter",
+      "fidelity": "L2",
+      "plane": "participant"
+    }
+  ]
+}
