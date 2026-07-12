@@ -101,6 +101,9 @@ The compatibility workflow checks out a pinned TenkaCloudSimulator revision,
 generates the Simulator capability manifest, and scans this checkout. Missing,
 insufficient, or invalid requirements fail loudly before a simulation world is
 created. The report is deterministic and does not contain credentials or answers.
+`bun run validate` also installs the catalog-owned workload workspace from its
+frozen lockfile with lifecycle scripts disabled before running its test and strict
+typecheck, so a fresh clone cannot rely on residual nested dependencies.
 
 ## Current cloud-catalog audit
 

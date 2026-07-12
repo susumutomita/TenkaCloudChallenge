@@ -95,6 +95,9 @@ compatibility workflow は pin した TenkaCloudSimulator revision を checkout 
 capability manifest を生成してこの checkout を scan します。missing、insufficient、invalid
 requirement は simulation world 作成前に loud に失敗します。report は決定論的で、credential
 や答えを含みません。
+`bun run validate` は catalog 所有 workload workspace も lifecycle script 無効の
+frozen lockfile から install してから test と strict typecheck を実行します。そのため、
+fresh clone が残存する nested dependency に依存しません。
 
 ## 現行 cloud catalog の監査
 
