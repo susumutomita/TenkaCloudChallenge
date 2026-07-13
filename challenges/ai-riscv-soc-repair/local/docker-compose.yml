@@ -1,0 +1,32 @@
+# Local-only RTL repair lab. No host devices, privileged mode, or FPGA are used.
+services:
+  ai-riscv-soc-repair:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
+    volumes:
+      # The inherited RTL is the only participant-owned live input. Recreate the
+      # container after editing; the grader compiles this exact mounted file.
+      - "./solution:/workspace/solution:ro"
+    tmpfs:
+      - "/workspace/build:rw,exec,size=512m,uid=10001,gid=10001"
+    ports:
+      - "127.0.0.1:18080:8080"
+      - "127.0.0.1:18081:8081"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python3",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=2)",
+        ]
+      interval: "3s"
+      timeout: "3s"
+      retries: 40
+    cpus: "2.0"
+    mem_limit: "2g"
+    pids_limit: 256
+    restart: "no"

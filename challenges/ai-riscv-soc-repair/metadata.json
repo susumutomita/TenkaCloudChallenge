@@ -1,0 +1,205 @@
+{
+	"$schema": "../../SCHEMA.json",
+	"id": "ai-riscv-soc-repair",
+	"name": "AI製RISC-V SoCを起動せよ",
+	"category": "Challenge",
+	"status": "ready",
+	"visibility": "public",
+	"difficulty": 4,
+	"estimatedDuration": "90〜120 分",
+	"shortDescription": "生成AIが残したRV32I SoCはビルドできるのに起動しない。仕様、回帰テスト、UART出力を証拠にRTLの判断を修復し、ファームウェアから起動フラグを取り戻せ。実FPGAは不要。",
+	"instructions": "## はじめに\n生成AIが実装した小型RV32I SoCを引き継いだ。RTLはコンパイルできるが、boot firmwareはUARTへ到達しない。コードの見た目ではなく、ISA仕様と実行証拠で直す。\n\n## 最初の一手\n`problems/challenges/ai-riscv-soc-repair` へ移動して `make test` を実行する。最初は失敗する。`artifacts/` の仕様と設計ログを読み、`local/solution/rv32i_cpu.sv` を編集して再実行する。Codespacesでも同じコマンドでよい。\n\n## ゴール\n全回帰テストを通し、UARTに現れる `TENKACLOUD{...}` をポータルへ提出する。DockerとVerilatorだけで完結し、実FPGAは使わない。",
+	"description": "## 作者向け設計\n\nLevel 1の自己完結型local-play Challenge。単一cycleのRV32I subset、4 KiB instruction ROM、4 KiB data RAM、UART、GPIO、TOHOSTをVerilatorで実行する。firmwareはreset vector、JAL link、signed LBを順に自己検査し、成功時だけseed由来のUART flagとGPIO markerを出す。\n\n開始状態はintegration wrapperの3判断が誤っている: reset vector=4、JAL link=pc+8、LB zero-extension。golden wrapperは0、pc+4、sign-extension。`make test`は開始状態で失敗し、`make reference-test`は全成功する。`POST /verify`はmounted participant RTLを再compileし、simulation成功と提出flagの両方を検証する。",
+	"writeup": "## 何が壊れていたか\n\n生成AIのwrapperには、個別には小さく見える3つの仕様違反があった。\n\n1. reset時のPCが `0x00000004` だった。仕様書とlinker scriptのreset vectorは `0x00000000` で、firmware先頭のjumpを飛ばすとguard loopへ入る。\n2. `JAL` がrdへ `pc + 8` を書いていた。RV32Iでは圧縮命令を使わないこの設計でもreturn addressは常にJAL命令の次、つまり `pc + 4` である。誤ったlinkはcallから戻る際に1命令を飛ばした。\n3. `LB` がbit 7を符号拡張せずzero-extendしていた。`0x80` はsigned byteでは `-128` なので、上位24 bitは1でなければならない。`LBU`だけがzero-extendする。\n\n## どう直すか\n\n`local/solution/rv32i_cpu.sv` の3 parameterを、architecture/memory-mapとRV32I仕様に一致させる。reset vectorを0、JAL link offsetを4、LB sign extensionを有効にする。修正後、firmware self-testはUARTへ `Hello from RISC-V` とdeployごとのflagを出し、GPIOへ `0xA5`、TOHOSTへ1を書く。\n\n## 一般化\n\nRTLがlintやcompileを通ることは、ISAに適合する証明ではない。control-flow、符号、resetのような境界契約を、小さなexecutable testと観測可能なI/Oで固定する。生成AIの出力も同じで、会話ログより仕様と反例を信頼する。",
+	"tags": [
+		"risc-v",
+		"rv32i",
+		"systemverilog",
+		"verilator",
+		"soc",
+		"firmware",
+		"hardware-verification",
+		"local-play",
+		"container"
+	],
+	"exposedPorts": [
+		{ "port": 18080, "name": "Simulation lab" },
+		{ "port": 18081, "name": "/verify (loopback grader)" }
+	],
+	"learningGoals": [
+		"RV32Iのreset、control-flow、load semanticsを仕様と実行結果から検証できる",
+		"CPU、instruction ROM、data RAM、UART、GPIOをmemory-mapped SoCとして切り分けられる",
+		"Verilator回帰テストとUART/GPIO/TOHOSTの観測からAI生成RTLの不具合を特定できる",
+		"firmwareとRTLの境界を跨いで原因を切り分け、修正を回帰テストで証明できる"
+	],
+	"nodes": {
+		"learning_objectives": [
+			{
+				"id": "lo.ai-riscv-soc-repair.verify-rv32i-contracts",
+				"description": "RV32Iのreset、jump、signed load契約を実行証拠で検証できる"
+			},
+			{
+				"id": "lo.ai-riscv-soc-repair.debug-hardware-software-boundary",
+				"description": "firmwareとRTLの境界を跨いで起動不良を切り分けられる"
+			}
+		],
+		"concepts": [
+			{
+				"id": "concept.rv32i-instruction-set",
+				"description": "32 bit基本整数命令セットの命令意味と実行規約"
+			},
+			{
+				"id": "concept.memory-mapped-io",
+				"description": "UARTやGPIOをCPUのload/store address spaceへ配置する設計"
+			},
+			{
+				"id": "concept.rtl-verification",
+				"description": "simulation、assertion、waveformでRTLの振る舞いを検証する技法"
+			}
+		],
+		"assessment_criteria": [
+			{
+				"id": "assessment.ai-riscv-soc-repair.boots-firmware",
+				"description": "修正後のSoCがfirmware self-testを完走してUART flagを出力する"
+			},
+			{
+				"id": "assessment.ai-riscv-soc-repair.explains-spec-violations",
+				"description": "3つの不具合をRV32I仕様と観測結果に結び付けて説明できる"
+			}
+		],
+		"misconceptions": [
+			{
+				"id": "misconception.rtl-compiles-means-correct",
+				"description": "RTLがcompileできればhardware仕様にも適合しているという誤解"
+			}
+		],
+		"audiences": [
+			{
+				"id": "audience.embedded-engineer",
+				"description": "firmwareとSoCの境界を扱う組み込みエンジニア"
+			},
+			{
+				"id": "audience.hardware-engineer",
+				"description": "RTLと検証環境を設計するハードウェアエンジニア"
+			}
+		]
+	},
+	"relations": [
+		{
+			"type": "teaches",
+			"source": "problem.ai-riscv-soc-repair",
+			"target": "lo.ai-riscv-soc-repair.verify-rv32i-contracts"
+		},
+		{
+			"type": "teaches",
+			"source": "problem.ai-riscv-soc-repair",
+			"target": "lo.ai-riscv-soc-repair.debug-hardware-software-boundary"
+		},
+		{
+			"type": "covers",
+			"source": "problem.ai-riscv-soc-repair",
+			"target": "concept.rv32i-instruction-set"
+		},
+		{
+			"type": "covers",
+			"source": "problem.ai-riscv-soc-repair",
+			"target": "concept.memory-mapped-io"
+		},
+		{
+			"type": "covers",
+			"source": "problem.ai-riscv-soc-repair",
+			"target": "concept.rtl-verification"
+		},
+		{
+			"type": "requires",
+			"source": "lo.ai-riscv-soc-repair.debug-hardware-software-boundary",
+			"target": "concept.rv32i-instruction-set"
+		},
+		{
+			"type": "assesses",
+			"source": "problem.ai-riscv-soc-repair",
+			"target": "assessment.ai-riscv-soc-repair.boots-firmware"
+		},
+		{
+			"type": "assesses",
+			"source": "problem.ai-riscv-soc-repair",
+			"target": "assessment.ai-riscv-soc-repair.explains-spec-violations"
+		},
+		{
+			"type": "related_to",
+			"source": "problem.ai-riscv-soc-repair",
+			"target": "misconception.rtl-compiles-means-correct"
+		},
+		{
+			"type": "related_to",
+			"source": "problem.ai-riscv-soc-repair",
+			"target": "audience.embedded-engineer"
+		},
+		{
+			"type": "related_to",
+			"source": "problem.ai-riscv-soc-repair",
+			"target": "audience.hardware-engineer"
+		}
+	],
+	"i18n": {
+		"en": {
+			"name": "Boot the AI-Built RISC-V SoC",
+			"shortDescription": "An AI-generated RV32I SoC compiles but never boots. Use the specification, regression evidence, and UART behavior to repair its RTL decisions and recover the firmware flag. No physical FPGA is required.",
+			"instructions": "## Getting started\nYou inherited a small AI-generated RV32I SoC. Its RTL compiles, but the boot firmware never reaches UART. Repair it from ISA evidence, not from how plausible the code looks.\n\n## First move\nChange into `problems/challenges/ai-riscv-soc-repair` and run `make test`. It fails initially. Read the specifications and design log in `artifacts/`, edit `local/solution/rv32i_cpu.sv`, and run it again. The same command works in Codespaces.\n\n## Goal\nPass the complete regression and submit the `TENKACLOUD{...}` string printed on UART. The exercise runs entirely in Docker and Verilator; no physical FPGA is used.",
+			"description": "## Author design\n\nA self-contained Level 1 local-play Challenge. Verilator runs a single-cycle RV32I subset with a 4 KiB instruction ROM, 4 KiB data RAM, UART, GPIO, and TOHOST. Firmware checks the reset vector, JAL link value, and signed LB behavior before printing a seed-derived UART flag and GPIO marker.\n\nThe inherited integration wrapper makes three wrong decisions: reset vector 4, JAL link pc+8, and zero-extended LB. The golden wrapper uses 0, pc+4, and sign extension. `make test` fails at the start; `make reference-test` passes. `POST /verify` recompiles the mounted participant RTL and requires both a passing simulation and the submitted per-run flag.",
+			"writeup": "## What was broken\n\nThe AI-generated wrapper contained three small-looking ISA violations.\n\n1. Reset loaded PC with `0x00000004`. The linker and architecture specify a reset vector of `0x00000000`; skipping the first firmware jump entered a guard loop.\n2. `JAL` wrote `pc + 8` to rd. In this non-compressed RV32I design the return address is the instruction immediately after JAL, always `pc + 4`. The wrong link skipped one instruction on return.\n3. `LB` zero-extended bit 7. The byte `0x80` is `-128`, so its upper 24 bits must be ones. Only `LBU` zero-extends.\n\n## Repair\n\nAlign the three parameters in `local/solution/rv32i_cpu.sv` with the architecture, memory map, and RV32I specification: reset at zero, a four-byte JAL link offset, and signed extension for LB. The repaired firmware prints `Hello from RISC-V` and the per-deploy flag, writes `0xA5` to GPIO, and writes 1 to TOHOST.\n\n## General lesson\n\nLinting or compiling RTL is not proof of ISA compliance. Pin boundary contracts such as control flow, signedness, and reset behavior with small executable tests and observable I/O. Treat AI output the same way: trust the specification and counterexamples over a convincing design conversation.",
+			"learningGoals": [
+				"Verify RV32I reset, control-flow, and load semantics from the specification and runtime evidence",
+				"Separate CPU, instruction ROM, data RAM, UART, and GPIO faults in a memory-mapped SoC",
+				"Locate defects in AI-generated RTL using Verilator regressions and UART/GPIO/TOHOST observations",
+				"Debug across the firmware/RTL boundary and prove the repair with regression tests"
+			],
+			"hints": [
+				{
+					"id": "hint-1",
+					"content": "Start at time zero. The linker places `_start` at address 0, and the first instruction jumps over a guard loop. Compare that contract with the PC loaded when reset is released."
+				},
+				{
+					"id": "hint-2",
+					"content": "The call probe returns one instruction too far. RV32I JAL writes the address of the next instruction to rd. With 32-bit instructions and no compressed extension, calculate that offset from the current PC."
+				},
+				{
+					"id": "hint-3",
+					"content": "The signed-byte probe loads `0x80` and compares it with `-128`. `LB` must copy bit 7 through the upper 24 bits; `LBU` is the separate zero-extending instruction."
+				}
+			]
+		}
+	},
+	"runtime": {
+		"provider": "docker",
+		"engine": "compose",
+		"entry": "local/docker-compose.yml",
+		"challengeEndpoints": {
+			"Lab": "http://127.0.0.1:18080"
+		},
+		"verifyUrl": "http://127.0.0.1:18081/verify",
+		"secretEnv": ["FLAG_SEED"]
+	},
+	"scoring": {
+		"kind": "verify",
+		"points": 300,
+		"wrongAnswerPenalty": 15,
+		"hints": [
+			{
+				"id": "hint-1",
+				"content": "時刻0から追う。linkerは `_start` をaddress 0に置き、先頭命令はguard loopを飛び越える。reset解除時にPCへ入る値を、この契約と比較する。",
+				"penalty": 30
+			},
+			{
+				"id": "hint-2",
+				"content": "call probeは戻り先を1命令飛ばしている。RV32IのJALは次の命令addressをrdへ書く。圧縮命令なしの32 bit instructionなので、現在PCからのoffsetを計算する。",
+				"penalty": 45
+			},
+			{
+				"id": "hint-3",
+				"content": "signed byte probeは `0x80` をloadして `-128` と比較する。`LB` はbit 7を上位24 bitへ複製しなければならない。zero-extensionは別命令 `LBU` の仕事。",
+				"penalty": 75
+			}
+		]
+	}
+}

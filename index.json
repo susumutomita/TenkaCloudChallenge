@@ -2,6 +2,34 @@
   "version": "1",
   "problems": [
     {
+      "id": "ai-riscv-soc-repair",
+      "name": "AI製RISC-V SoCを起動せよ",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 4,
+      "estimatedDuration": "90〜120 分",
+      "shortDescription": "生成AIが残したRV32I SoCはビルドできるのに起動しない。仕様、回帰テスト、UART出力を証拠にRTLの判断を修復し、ファームウェアから起動フラグを取り戻せ。実FPGAは不要。",
+      "tags": [
+        "risc-v",
+        "rv32i",
+        "systemverilog",
+        "verilator",
+        "soc",
+        "firmware",
+        "hardware-verification",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "api-idor-demo",
       "name": "管理者のメモ",
       "category": "Challenge",
