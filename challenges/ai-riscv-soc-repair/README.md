@@ -20,8 +20,8 @@ The Level 1 MVP is intentionally bounded and works without an FPGA:
 - a loopback lab page plus TenkaCloud `/verify` endpoint.
 
 The executable subset is `LUI`, `AUIPC`, `JAL`, `JALR`, conditional branches,
-`LB/LH/LW/LBU/LHU`, `SB/SH/SW`, and the RV32I integer ALU operations. There are no
-compressed instructions, CSRs, interrupts, atomics, multiply/divide, caches,
+`LB/LH/LW/LBU/LHU`, `SB/SH/SW`, and the RV32I integer ALU operations. There are
+no compressed instructions, CSRs, interrupts, atomics, multiply/divide, caches,
 MMU, or privilege modes in Level 1.
 
 ## Run the failing baseline
