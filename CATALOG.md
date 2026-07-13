@@ -85,6 +85,8 @@ The source of truth is [`SCHEMA.json`](./SCHEMA.json). Both the frontend catalog
 | `cfnParameters`  | Hints for CFn parameters the operator inputs at deploy time.                                                  |
 | `track`          | Position within a systematic curriculum (`{id, order, chapter}`). See [Curriculum tracks](#curriculum-tracks) below. Independent of `onboardingOrder` (a single first-time-onboarding sequence) and `tags` (free-text filters). |
 | `simulationOverlay` | Versioned reference to `simulation.json` when binding IaC/probe/disruption sources cannot express an actual Simulator invocation. IAM is authorization inventory, not invocation evidence. See [`SIMULATION.md`](./SIMULATION.md). |
+| `nodes`          | Educational knowledge-graph nodes: learning objectives, concepts, assessment criteria, misconceptions, and audiences. Problem nodes are implicit. |
+| `relations`      | Directed knowledge-graph edges. The MVP types are `teaches`, `covers`, `requires`, `assesses`, and `related_to`. |
 
 ### Simulator overlay
 
@@ -96,6 +98,79 @@ against [`SIMULATION_SCHEMA.json`](./SIMULATION_SCHEMA.json). It cannot contain 
 answers, flags, secrets, credentials, environment variables, host mounts, or unpinned OCI
 images. The complete contract and current nine-problem audit are in
 [`SIMULATION.md`](./SIMULATION.md).
+
+### Educational knowledge graph
+
+`nodes` and `relations` add explicit learning dependencies without replacing the existing
+flat `tags` or human-facing `learningGoals`. Both graph fields are optional, so existing
+problems remain valid. The graph is catalog-wide: a relation may target another problem or a
+node declared in another metadata file. Every node ID must therefore be unique across the
+catalog.
+
+Problem nodes are created implicitly from metadata IDs as `problem.<problem-id>`. Declare all
+other nodes under the collection that defines their type:
+
+| Node type | Collection | ID convention |
+| --------- | ---------- | ------------- |
+| Problem | implicit | `problem.<problem-id>` |
+| Learning Objective | `nodes.learning_objectives` | `lo.<problem-id>.<kebab-slug>` |
+| Concept | `nodes.concepts` | `concept.<kebab-slug>` |
+| Assessment Criterion | `nodes.assessment_criteria` | `assessment.<problem-id>.<kebab-slug>` |
+| Misconception | `nodes.misconceptions` | `misconception.<kebab-slug>` |
+| Audience / Role | `nodes.audiences` | `audience.<kebab-slug>` |
+
+Learning-objective and assessment IDs are problem-scoped. Concept, misconception, and audience
+IDs are shared vocabulary: declare each shared node once, then reference that ID from other
+problems.
+
+| Relation | Allowed endpoints |
+| -------- | ----------------- |
+| `teaches` | Problem → Learning Objective |
+| `covers` | Problem → Concept |
+| `requires` | Problem, Learning Objective, or Concept → Problem, Learning Objective, or Concept |
+| `assesses` | Problem → Assessment Criterion |
+| `related_to` | Any declared node → any declared node |
+
+`requires` is directional: `source` depends on `target`. It can express both concept
+prerequisites and problem-to-problem learning order. CI rejects missing `source` / `target`
+nodes, duplicate node IDs, invalid endpoint combinations, and every `requires` cycle. It reports
+the concrete cycle path so the author can remove or redirect an edge.
+
+```json
+{
+  "tags": ["api-security", "idor"],
+  "learningGoals": ["認証と認可の違いを理解する"],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.api-idor-demo.detect-object-authorization-gap",
+        "description": "API のオブジェクト単位の認可不備を発見できる"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.authorization",
+        "description": "呼び出し元が対象を操作できるか判断する仕組み"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.api-idor-demo",
+      "target": "lo.api-idor-demo.detect-object-authorization-gap"
+    },
+    {
+      "type": "requires",
+      "source": "lo.api-idor-demo.detect-object-authorization-gap",
+      "target": "concept.authorization"
+    }
+  ]
+}
+```
+
+See [`challenges/api-idor-demo/metadata.json`](./challenges/api-idor-demo/metadata.json) for a
+complete example containing all node collections and all five MVP relation types.
 
 ### Scoring kinds
 

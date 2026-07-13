@@ -15,6 +15,10 @@ import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from "node
 import { dirname, join, relative } from "node:path";
 import Ajv2020 from "ajv";
 import addFormats from "ajv-formats";
+import {
+  type KnowledgeGraphCatalogEntry,
+  validateKnowledgeGraphCatalog,
+} from "./knowledge-graph";
 import { checkSimulationOverlay } from "./validate-simulation-overlay";
 
 // このリポジトリは TenkaCloud 本体の `problems/` 配下に git submodule として mount
@@ -1006,17 +1010,46 @@ function validateMetadataFiles(
   metadataFiles: string[],
   validate: ReturnType<Ajv2020["compile"]>,
 ): number {
+  const parsed = metadataFiles.map((file) => ({
+    file,
+    data: JSON.parse(readFileSync(file, "utf8")) as Metadata,
+  }));
+  const schemaErrors = new Map<
+    string,
+    NonNullable<ReturnType<Ajv2020["compile"]>["errors"]>
+  >();
+  const graphCatalog: KnowledgeGraphCatalogEntry[] = [];
+
+  for (const { file, data } of parsed) {
+    if (validate(data)) {
+      graphCatalog.push({ file: relative(REPO_ROOT, file), metadata: data });
+    } else {
+      schemaErrors.set(file, [...(validate.errors ?? [])]);
+    }
+  }
+
+  const graphErrors = new Map<string, ValidationError[]>();
+  for (const diagnostic of validateKnowledgeGraphCatalog(graphCatalog)) {
+    const errors = graphErrors.get(diagnostic.file) ?? [];
+    errors.push(`${diagnostic.path}: ${diagnostic.message}`);
+    graphErrors.set(diagnostic.file, errors);
+  }
+
   let failed = 0;
-  for (const file of metadataFiles) {
-    const data = JSON.parse(readFileSync(file, "utf8"));
-    if (!validate(data)) {
+  for (const { file, data } of parsed) {
+    const invalidSchema = schemaErrors.get(file);
+    if (invalidSchema) {
       failed += 1;
-      printSchemaErrors(file, data, validate.errors ?? []);
+      printSchemaErrors(file, data, invalidSchema);
       continue;
     }
 
     const crossRefs = checkCrossRefs(file, data);
-    const errors = [...checkRequiredReadmes(dirname(file)), ...crossRefs.errors];
+    const errors = [
+      ...checkRequiredReadmes(dirname(file)),
+      ...crossRefs.errors,
+      ...(graphErrors.get(relative(REPO_ROOT, file)) ?? []),
+    ];
     const { warnings } = crossRefs;
     if (warnings.length > 0) printWarnings(file, warnings);
     if (errors.length > 0) {

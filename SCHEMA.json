@@ -85,6 +85,195 @@
           }
         ]
       }
+    },
+    "educationalNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "description"],
+      "properties": {
+        "id": { "type": "string" },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "description": "教材生成・検索・可視化で使う、人間可読のノード説明。"
+        }
+      }
+    },
+    "learningObjectiveNode": {
+      "allOf": [
+        { "$ref": "#/$defs/educationalNode" },
+        {
+          "properties": {
+            "id": {
+              "pattern": "^lo\\.[a-z0-9][a-z0-9-]{1,30}[a-z0-9]\\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+            }
+          }
+        }
+      ],
+      "description": "Learning Objective。 ID は lo.<problem-id>.<kebab-slug>。"
+    },
+    "conceptNode": {
+      "allOf": [
+        { "$ref": "#/$defs/educationalNode" },
+        {
+          "properties": {
+            "id": {
+              "pattern": "^concept\\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+            }
+          }
+        }
+      ],
+      "description": "Concept。 カタログ全体で共有する ID は concept.<kebab-slug>。"
+    },
+    "assessmentCriterionNode": {
+      "allOf": [
+        { "$ref": "#/$defs/educationalNode" },
+        {
+          "properties": {
+            "id": {
+              "pattern": "^assessment\\.[a-z0-9][a-z0-9-]{1,30}[a-z0-9]\\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+            }
+          }
+        }
+      ],
+      "description": "Assessment Criterion。 ID は assessment.<problem-id>.<kebab-slug>。"
+    },
+    "misconceptionNode": {
+      "allOf": [
+        { "$ref": "#/$defs/educationalNode" },
+        {
+          "properties": {
+            "id": {
+              "pattern": "^misconception\\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+            }
+          }
+        }
+      ],
+      "description": "Misconception。 カタログ全体で共有する ID は misconception.<kebab-slug>。"
+    },
+    "audienceNode": {
+      "allOf": [
+        { "$ref": "#/$defs/educationalNode" },
+        {
+          "properties": {
+            "id": {
+              "pattern": "^audience\\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+            }
+          }
+        }
+      ],
+      "description": "Audience / Role。 カタログ全体で共有する ID は audience.<kebab-slug>。"
+    },
+    "problemNodeId": {
+      "type": "string",
+      "pattern": "^problem\\.[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$"
+    },
+    "learningObjectiveNodeId": {
+      "type": "string",
+      "pattern": "^lo\\.[a-z0-9][a-z0-9-]{1,30}[a-z0-9]\\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+    },
+    "conceptNodeId": {
+      "type": "string",
+      "pattern": "^concept\\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+    },
+    "assessmentCriterionNodeId": {
+      "type": "string",
+      "pattern": "^assessment\\.[a-z0-9][a-z0-9-]{1,30}[a-z0-9]\\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+    },
+    "misconceptionNodeId": {
+      "type": "string",
+      "pattern": "^misconception\\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+    },
+    "audienceNodeId": {
+      "type": "string",
+      "pattern": "^audience\\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+    },
+    "requiresNodeId": {
+      "oneOf": [
+        { "$ref": "#/$defs/problemNodeId" },
+        { "$ref": "#/$defs/learningObjectiveNodeId" },
+        { "$ref": "#/$defs/conceptNodeId" }
+      ]
+    },
+    "anyEducationalNodeId": {
+      "oneOf": [
+        { "$ref": "#/$defs/problemNodeId" },
+        { "$ref": "#/$defs/learningObjectiveNodeId" },
+        { "$ref": "#/$defs/conceptNodeId" },
+        { "$ref": "#/$defs/assessmentCriterionNodeId" },
+        { "$ref": "#/$defs/misconceptionNodeId" },
+        { "$ref": "#/$defs/audienceNodeId" }
+      ]
+    },
+    "relationBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "source", "target"],
+      "properties": {
+        "type": { "type": "string" },
+        "source": { "type": "string" },
+        "target": { "type": "string" }
+      }
+    },
+    "teachesRelation": {
+      "allOf": [
+        { "$ref": "#/$defs/relationBase" },
+        {
+          "properties": {
+            "type": { "const": "teaches" },
+            "source": { "$ref": "#/$defs/problemNodeId" },
+            "target": { "$ref": "#/$defs/learningObjectiveNodeId" }
+          }
+        }
+      ]
+    },
+    "coversRelation": {
+      "allOf": [
+        { "$ref": "#/$defs/relationBase" },
+        {
+          "properties": {
+            "type": { "const": "covers" },
+            "source": { "$ref": "#/$defs/problemNodeId" },
+            "target": { "$ref": "#/$defs/conceptNodeId" }
+          }
+        }
+      ]
+    },
+    "requiresRelation": {
+      "allOf": [
+        { "$ref": "#/$defs/relationBase" },
+        {
+          "properties": {
+            "type": { "const": "requires" },
+            "source": { "$ref": "#/$defs/requiresNodeId" },
+            "target": { "$ref": "#/$defs/requiresNodeId" }
+          }
+        }
+      ]
+    },
+    "assessesRelation": {
+      "allOf": [
+        { "$ref": "#/$defs/relationBase" },
+        {
+          "properties": {
+            "type": { "const": "assesses" },
+            "source": { "$ref": "#/$defs/problemNodeId" },
+            "target": { "$ref": "#/$defs/assessmentCriterionNodeId" }
+          }
+        }
+      ]
+    },
+    "relatedToRelation": {
+      "allOf": [
+        { "$ref": "#/$defs/relationBase" },
+        {
+          "properties": {
+            "type": { "const": "related_to" },
+            "source": { "$ref": "#/$defs/anyEducationalNodeId" },
+            "target": { "$ref": "#/$defs/anyEducationalNodeId" }
+          }
+        }
+      ]
     }
   },
   "type": "object",
@@ -219,6 +408,53 @@
       "items": { "type": "string", "minLength": 1 },
       "minItems": 1,
       "description": "問題作者が想定する学習目的の箇条書き。"
+    },
+    "nodes": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "learning_objectives": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/learningObjectiveNode" }
+        },
+        "concepts": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/conceptNode" }
+        },
+        "assessment_criteria": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/assessmentCriterionNode" }
+        },
+        "misconceptions": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/misconceptionNode" }
+        },
+        "audiences": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/audienceNode" }
+        }
+      },
+      "description": "[TenkaCloud#2604] 任意の教育ナレッジグラフ node 定義。 Problem node は metadata.id から problem.<id> として暗黙に生成される。 tags / learningGoals は従来どおり保持し、本 field は学習順序・推薦・影響分析向けの明示的な graph を追加する。"
+    },
+    "relations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "oneOf": [
+          { "$ref": "#/$defs/teachesRelation" },
+          { "$ref": "#/$defs/coversRelation" },
+          { "$ref": "#/$defs/requiresRelation" },
+          { "$ref": "#/$defs/assessesRelation" },
+          { "$ref": "#/$defs/relatedToRelation" }
+        ]
+      },
+      "description": "[TenkaCloud#2604] node 間の有向 edge。 MVP は teaches / covers / requires / assesses / related_to のみ。 source / target の実在、 node ID の重複、 requires cycle は catalog-wide validator が検査する。"
     },
     "cfnTemplate": {
       "type": "string",
