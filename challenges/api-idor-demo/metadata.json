@@ -21,6 +21,133 @@
     "要求されたオブジェクトの所有者を確認しない API がなぜ危険なのかを理解する",
     "オブジェクト所有権の検証と、 レスポンスから秘密フィールドを除く最小権限設計が根本対策であることを理解する"
   ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.api-idor-demo.distinguish-authentication-authorization",
+        "description": "認証とオブジェクト単位の認可の違いを説明できる"
+      },
+      {
+        "id": "lo.api-idor-demo.detect-object-authorization-gap",
+        "description": "API のオブジェクト単位の認可不備を発見できる"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.authentication",
+        "description": "呼び出し元が誰であるかを確認する仕組み"
+      },
+      {
+        "id": "concept.authorization",
+        "description": "呼び出し元が対象を操作できるか判断する仕組み"
+      },
+      {
+        "id": "concept.broken-object-level-authorization",
+        "description": "オブジェクト単位の認可判定が欠落または不十分な状態"
+      },
+      {
+        "id": "concept.least-privilege",
+        "description": "必要な主体に必要最小限の権限とデータだけを与える原則"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.api-idor-demo.identify-object-authorization-failure",
+        "description": "低権限の認証情報で他者のオブジェクトへ到達できることを実証できる"
+      },
+      {
+        "id": "assessment.api-idor-demo.explain-root-cause-remediation",
+        "description": "所有権検証と最小権限レスポンスが根本対策である理由を説明できる"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.authenticated-means-authorized",
+        "description": "ログイン済みなら任意のオブジェクトへアクセスしてよいという誤解"
+      },
+      {
+        "id": "misconception.unpredictable-id-fixes-authorization",
+        "description": "連番 ID を推測しにくい ID へ変えれば認可不備も直るという誤解"
+      }
+    ],
+    "audiences": [
+      {
+        "id": "audience.software-engineer",
+        "description": "API を設計・実装するソフトウェアエンジニア"
+      },
+      {
+        "id": "audience.security-engineer",
+        "description": "API の認証・認可を評価するセキュリティエンジニア"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.api-idor-demo",
+      "target": "lo.api-idor-demo.distinguish-authentication-authorization"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.api-idor-demo",
+      "target": "lo.api-idor-demo.detect-object-authorization-gap"
+    },
+    {
+      "type": "covers",
+      "source": "problem.api-idor-demo",
+      "target": "concept.broken-object-level-authorization"
+    },
+    {
+      "type": "covers",
+      "source": "problem.api-idor-demo",
+      "target": "concept.least-privilege"
+    },
+    {
+      "type": "requires",
+      "source": "lo.api-idor-demo.detect-object-authorization-gap",
+      "target": "concept.authentication"
+    },
+    {
+      "type": "requires",
+      "source": "lo.api-idor-demo.detect-object-authorization-gap",
+      "target": "concept.authorization"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.api-idor-demo",
+      "target": "assessment.api-idor-demo.identify-object-authorization-failure"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.api-idor-demo",
+      "target": "assessment.api-idor-demo.explain-root-cause-remediation"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.api-idor-demo",
+      "target": "problem.rls-tenant-isolation"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.api-idor-demo",
+      "target": "misconception.authenticated-means-authorized"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.api-idor-demo",
+      "target": "misconception.unpredictable-id-fixes-authorization"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.api-idor-demo",
+      "target": "audience.software-engineer"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.api-idor-demo",
+      "target": "audience.security-engineer"
+    }
+  ],
   "i18n": {
     "en": {
       "name": "The Admin's Note",

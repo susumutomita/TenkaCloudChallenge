@@ -37,6 +37,14 @@ exactly `README.md` (English primary) and `README.ja.md` (Japanese mirror). The 
 rejects missing, empty, directory, or symbolic-link placeholders. Keep the two documents
 equivalent in story, deployment model, play/solve flow, scoring, remediation, and cost.
 
+### 1b. Educational knowledge-graph references are globally consistent
+
+Optional `nodes` / `relations` do not replace `tags` or `learningGoals`. When a problem declares
+them, every node ID must be unique across the catalog, each relation endpoint must exist and match
+the type matrix in `CATALOG.md`, and `requires` must remain acyclic. Problem nodes are implicit as
+`problem.<metadata.id>`. The validator reports missing references, duplicate IDs, invalid endpoint
+types, and the concrete path of a prerequisite cycle.
+
 ### 2. CFn Outputs referenced by `metadata.json` actually exist
 
 `scoring.flagOutputKey`, `scoring.statsOutputKey`, every `endpoints[].default.key` must appear as a key under `Outputs:` in `template.yaml`. Typos here look fine until the scoring engine silently produces zero points.
@@ -218,7 +226,7 @@ The skill (`.claude/skills/new-problem/SKILL.md`) walks the 6 steps below, dropp
 
    `cp -r <starter> <category>/<your-slug>`. Slug is kebab-case, lowercase, alphanumeric + hyphens.
 
-2. **Edit `metadata.json`.** Change `id`, `name`, `shortDescription`, `instructions` (player-facing getting-started — required, see §12), `description` (author/admin-only), `tags`, `scoring`, `endpoints`. Keep the JP top-level + `i18n.en` override pattern. Optionally add a `diagram.svg` in the problem directory (architecture image, §12). Re-read the invariants above before touching `phases` / `disruptions` / `endpoints[].overridable`.
+2. **Edit `metadata.json`.** Change `id`, `name`, `shortDescription`, `instructions` (player-facing getting-started — required, see §12), `description` (author/admin-only), `tags`, `scoring`, `endpoints`. Keep the JP top-level + `i18n.en` override pattern. Optionally add `nodes` / `relations` following the ID and endpoint matrix in `CATALOG.md`; keep the flat `tags` and `learningGoals` fields when you do. Optionally add a `diagram.svg` in the problem directory (architecture image, §12). Re-read the invariants above before touching `phases` / `disruptions` / `endpoints[].overridable`.
 
 3. **Edit `template.yaml`.** Add your problem-specific resources. **Do not remove**: `ParticipantViewerRole`'s baseline (managed policy + 7 CloudShell actions), `TenkaCloud:NamePrefix` tags on every EC2 resource, the comment anchors that point back at `scripts/validate-problems.ts`.
 
@@ -228,6 +236,8 @@ The skill (`.claude/skills/new-problem/SKILL.md`) walks the 6 steps below, dropp
    - `... missing TenkaCloud:NamePrefix tag` → add the tag block to the named resource.
    - `ParticipantViewerRole is missing CloudShell baseline actions` → restore the 7-action statement.
    - `scoring.flagOutputKey="X" not found` → typo between metadata and the `Outputs:` key in the template.
+   - `source node "X" does not exist` → declare the node once or fix the relation ID.
+   - `requires cycle detected: A -> B -> A` → remove or redirect one prerequisite edge.
 
 6. **Open a PR.** One problem per PR. Conventional commits: `feat(<slug>): add <name> Challenge` or `Battle`. The PR triggers schema + cross-ref CI; merge after it passes.
 
