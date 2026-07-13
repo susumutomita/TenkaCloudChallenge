@@ -1,0 +1,252 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "ai-riscv-screen-repair",
+  "name": "AI製RISC-V画面を復旧せよ",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 5,
+  "estimatedDuration": "120〜150 分",
+  "shortDescription": "起動したRV32I SoCに画面を増設したが、映像は崩れ、同期も信用できない。先行仕様とsimulation証拠からCDC、raster timing、framebuffer書き込みを修復し、firmwareのtest patternを取り戻せ。",
+  "instructions": "## はじめに\nLevel 1で復旧したRV32I coreを使う小型game-console SoCに、別pixel clockで動く画面controllerが追加された。RTLはcompileできるが、frame timingとpixel artifactは仕様に一致しない。\n\n## 最初の一手\n`problems/challenges/ai-riscv-screen-repair`へ移動し、`make test`を実行する。最初は失敗する。RTLより先に書かれた`artifacts/architecture.md`と`artifacts/memory-map.md`を読み、`local/solution/video_controller.sv`を編集して再実行する。\n\n## ゴール\nCDC protocol、horizontal/vertical timing、framebuffer byte writeの全assertionを通し、deterministicな`build/frame.ppm`を生成する。ポータルには`VERIFY`を提出する。DockerとVerilatorだけで完結し、実FPGAやdisplayは使わない。",
+  "description": "Level 2の自己完結型local-play Challenge。Level 1の修復済みRV32I coreを固定部品として再利用し、firmwareが16×12 framebufferへtest patternを書き、memory-mapped CONTROLをrequest/acknowledge toggleでpixel domainへ渡す。開始状態には、1段CDC、horizontal/vertical totalのoff-by-one、byte write strobe無視の3種類のdefectがある。\n\n`make test`は開始状態をcompileした上で3 defect classをそれぞれstate-based assertionで検出する。`make reference-test`はcatalog外のmaintainer fixtureをmountし、全assertionと固定SHA-256のPPM artifactを成功させる。`POST /verify`はmounted participant RTLを再compileし、simulation stateとartifact digestが成功した場合だけ`VERIFY`を受け入れる。",
+  "writeup": "## 何が壊れていたか\n\n1. CONTROL requestをpixel domainへ1段だけで渡していた。digital simulationでmetastabilityそのものは再現できないが、この設計contractは2段同期後にrequest toggleを受け取り、acknowledge toggleを返す。1段版はprotocol assertionが定める最短latencyより早く状態を反映した。\n2. horizontalとvertical counterのterminal countを1小さくしていた。仕様はactive、front porch、sync、back porchの個数を足したexclusive totalを使う。inclusiveな最後のindexと総clock数を混同するとlineとframeが短くなる。\n3. framebufferのbyte write strobeを無視して32 bit word全体を更新していた。RV32Iの`SB`は対象laneだけを変更するため、他の3 pixelを保持しなければならない。\n\n## 直し方\n\n`local/solution/video_controller.sv`でCDC同期段数を2、H/V total調整を0、write strobe尊重を有効にする。修復後はCONTROL requestが2段同期とacknowledgeを経て反映され、22 pixel clock×16 lineのframeを生成し、firmwareがbyte storeで書いた16×12 test patternが`frame.ppm`へ決定的に保存される。\n\n## 一般化\n\ncompile成功はclock domain間protocol、counter境界、bus byte enableの正しさを証明しない。仕様をRTLより先に固定し、source textではなく外部から観測できるlatency、sync pulse、pixel stateで検証する。simulationの証明範囲を超えるHDMI電気特性やplace-and-route timingはhardware verificationへ明示的に引き渡す。",
+  "tags": [
+    "risc-v",
+    "rv32i",
+    "systemverilog",
+    "verilator",
+    "video-controller",
+    "clock-domain-crossing",
+    "framebuffer",
+    "hardware-verification",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    { "port": 18200, "name": "Screen repair lab" },
+    { "port": 18201, "name": "/verify (loopback grader)" }
+  ],
+  "learningGoals": [
+    "pixel timingをactive、porch、sync、totalのexclusive countとして検証できる",
+    "request/acknowledge toggleと2段同期を用いたCDC contractをsimulation assertionで検証できる",
+    "RV32I byte storeのwrite strobeをframebuffer lane更新へ正しく反映できる",
+    "firmware、memory-mapped register、pixel domainを跨ぐ不具合をdeterministic frame artifactから切り分けられる"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.ai-riscv-screen-repair.verify-video-timing",
+        "description": "raster videoのhorizontal/vertical timingを独立counterとassertionで検証できる"
+      },
+      {
+        "id": "lo.ai-riscv-screen-repair.repair-cdc-protocol",
+        "description": "reset順序とrequest/acknowledge toggleを含むCDC protocolを修復できる"
+      },
+      {
+        "id": "lo.ai-riscv-screen-repair.preserve-byte-lanes",
+        "description": "memory-mapped framebufferでbyte write strobe外のpixelを保持できる"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.raster-video-timing",
+        "description": "active領域、porch、sync pulse、total countで構成するraster scan timing"
+      },
+      {
+        "id": "concept.clock-domain-crossing",
+        "description": "異なるclock domain間で状態を安全に転送する同期protocol"
+      },
+      {
+        "id": "concept.framebuffer-byte-enables",
+        "description": "bus write strobeに対応するframebuffer byte laneだけを更新する規約"
+      },
+      {
+        "id": "concept.reset-domain-crossing",
+        "description": "複数clock domainでasynchronous assertとsynchronous deassertを行うreset sequencing"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.ai-riscv-screen-repair.cdc-latency",
+        "description": "CONTROL更新が2段同期とacknowledgeを経てpixel domainへ反映される"
+      },
+      {
+        "id": "assessment.ai-riscv-screen-repair.frame-timing",
+        "description": "lineとframeのperiodおよびsync pulseが先行仕様に一致する"
+      },
+      {
+        "id": "assessment.ai-riscv-screen-repair.frame-artifact",
+        "description": "firmware test patternが隣接byteを壊さずdeterministic PPMへ出力される"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.digital-simulation-proves-metastability-safety",
+        "description": "digital simulationがmetastabilityの確率や電気的収束まで証明できるという誤解"
+      },
+      {
+        "id": "misconception.last-index-equals-cycle-count",
+        "description": "counterの最後のindexとinterval内のclock数が同じ値だという誤解"
+      }
+    ],
+    "audiences": [
+      {
+        "id": "audience.fpga-video-engineer",
+        "description": "memory-mapped video pathとCDCを設計するFPGA engineer"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "requires",
+      "source": "problem.ai-riscv-screen-repair",
+      "target": "problem.ai-riscv-soc-repair"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ai-riscv-screen-repair",
+      "target": "lo.ai-riscv-screen-repair.verify-video-timing"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ai-riscv-screen-repair",
+      "target": "lo.ai-riscv-screen-repair.repair-cdc-protocol"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ai-riscv-screen-repair",
+      "target": "lo.ai-riscv-screen-repair.preserve-byte-lanes"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ai-riscv-screen-repair",
+      "target": "concept.raster-video-timing"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ai-riscv-screen-repair",
+      "target": "concept.clock-domain-crossing"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ai-riscv-screen-repair",
+      "target": "concept.framebuffer-byte-enables"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ai-riscv-screen-repair",
+      "target": "concept.reset-domain-crossing"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ai-riscv-screen-repair.verify-video-timing",
+      "target": "concept.raster-video-timing"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ai-riscv-screen-repair.repair-cdc-protocol",
+      "target": "concept.clock-domain-crossing"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ai-riscv-screen-repair.repair-cdc-protocol",
+      "target": "concept.reset-domain-crossing"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ai-riscv-screen-repair.preserve-byte-lanes",
+      "target": "concept.framebuffer-byte-enables"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ai-riscv-screen-repair",
+      "target": "assessment.ai-riscv-screen-repair.cdc-latency"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ai-riscv-screen-repair",
+      "target": "assessment.ai-riscv-screen-repair.frame-timing"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ai-riscv-screen-repair",
+      "target": "assessment.ai-riscv-screen-repair.frame-artifact"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ai-riscv-screen-repair",
+      "target": "misconception.digital-simulation-proves-metastability-safety"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ai-riscv-screen-repair",
+      "target": "misconception.last-index-equals-cycle-count"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ai-riscv-screen-repair",
+      "target": "audience.fpga-video-engineer"
+    }
+  ],
+  "i18n": {
+    "en": {
+      "name": "Repair the AI-Built RISC-V Screen",
+      "shortDescription": "A screen was added to the repaired RV32I SoC, but its video is corrupt and its synchronization cannot be trusted. Repair CDC, raster timing, and framebuffer writes from the prior specification and simulation evidence, then recover the firmware test pattern.",
+      "instructions": "## Getting started\nA second pixel-clock domain and a screen controller were added to the repaired Level 1 RV32I core. The RTL compiles, but its frame timing and pixel artifact violate the specification.\n\n## First move\nChange into `problems/challenges/ai-riscv-screen-repair` and run `make test`. It fails initially. Read the pre-RTL contracts in `artifacts/architecture.md` and `artifacts/memory-map.md`, edit `local/solution/video_controller.sv`, and run it again.\n\n## Goal\nPass every CDC protocol, horizontal/vertical timing, and framebuffer byte-write assertion, producing the deterministic `build/frame.ppm`. Submit `VERIFY` in the portal. Everything runs in Docker and Verilator without a physical FPGA or display.",
+      "description": "A self-contained Level 2 local-play Challenge. The repaired Level 1 RV32I core is a fixed component. Firmware writes a test pattern into a 16×12 framebuffer and transfers a memory-mapped CONTROL update into the pixel domain through a request/acknowledge toggle. The inherited state has three defect classes: one-stage CDC, off-by-one horizontal/vertical totals, and ignored byte write strobes.\n\n`make test` compiles the inherited state, then detects every defect class through state-based assertions. `make reference-test` mounts a maintainer fixture outside the catalog problem and passes every assertion plus a fixed-SHA-256 PPM artifact. `POST /verify` recompiles the mounted participant RTL and accepts `VERIFY` only when the simulation state and artifact digest pass.",
+      "writeup": "## What was broken\n\n1. CONTROL crossed into the pixel domain through one stage. Digital simulation cannot reproduce analog metastability, but this design contract requires a two-stage synchronization before accepting a request toggle and returning an acknowledge toggle. The one-stage version changed state earlier than the protocol assertion permits.\n2. The horizontal and vertical terminal counts were each one too small. The specification treats total as the exclusive sum of active, front porch, sync, and back porch lengths. Confusing the inclusive final index with the number of clocks shortens lines and frames.\n3. Framebuffer writes ignored byte strobes and replaced an entire 32-bit word. RV32I `SB` must update only its addressed lane while preserving the other three pixels.\n\n## Repair\n\nSet the CDC synchronizer depth to two, both H/V total adjustments to zero, and byte-strobe handling on in `local/solution/video_controller.sv`. The repaired CONTROL path passes through two synchronization stages and an acknowledge. The controller emits a 22-pixel-clock by 16-line frame, and the firmware's byte stores create the deterministic 16×12 `frame.ppm` test pattern.\n\n## General lesson\n\nA successful compile does not prove a clock-domain protocol, a counter boundary, or bus byte enables. Freeze the contract before RTL, then verify observable latency, sync pulses, and pixels instead of source text. Hand electrical HDMI behavior and place-and-route timing explicitly to hardware verification rather than claiming simulation proves them.",
+      "learningGoals": [
+        "Verify pixel timing as exclusive counts of active, porch, sync, and total intervals",
+        "Verify a CDC contract built from two-stage synchronization and a request/acknowledge toggle",
+        "Map RV32I byte-store strobes to the correct framebuffer lane without modifying neighbors",
+        "Debug firmware, memory-mapped registers, and a pixel domain through a deterministic frame artifact"
+      ],
+      "hints": [
+        {
+          "id": "hint-1",
+          "content": "Observe when CONTROL changes relative to pixel-clock edges. The contract permits the pixel domain to consume a request only after two synchronizer stages, then requires an acknowledge toggle."
+        },
+        {
+          "id": "hint-2",
+          "content": "Add active, front porch, sync, and back porch lengths as counts. Compare that exclusive total with the terminal index used by each counter."
+        },
+        {
+          "id": "hint-3",
+          "content": "Firmware fills the framebuffer with `SB`. For each 32-bit word, only the lane selected by `wstrb` may change; the other three bytes must retain their previous pixels."
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Lab": "http://127.0.0.1:18200"
+    },
+    "verifyUrl": "http://127.0.0.1:18201/verify"
+  },
+  "scoring": {
+    "kind": "verify",
+    "points": 300,
+    "wrongAnswerPenalty": 15,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "CONTROLが変化するpixel clock edgeを観測する。contractではrequestを2段同期後にだけ受理し、その後acknowledge toggleを返す。",
+        "penalty": 30
+      },
+      {
+        "id": "hint-2",
+        "content": "active、front porch、sync、back porchの長さをclock数として加算し、そのexclusive totalを各counterのterminal indexと比較する。",
+        "penalty": 45
+      },
+      {
+        "id": "hint-3",
+        "content": "firmwareは`SB`でframebufferを埋める。32 bit wordでは`wstrb`が選んだlaneだけを変え、残り3 byteのpixelを保持しなければならない。",
+        "penalty": 75
+      }
+    ]
+  }
+}

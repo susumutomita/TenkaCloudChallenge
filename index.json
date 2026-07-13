@@ -2,6 +2,35 @@
   "version": "1",
   "problems": [
     {
+      "id": "ai-riscv-screen-repair",
+      "name": "AI製RISC-V画面を復旧せよ",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 5,
+      "estimatedDuration": "120〜150 分",
+      "shortDescription": "起動したRV32I SoCに画面を増設したが、映像は崩れ、同期も信用できない。先行仕様とsimulation証拠からCDC、raster timing、framebuffer書き込みを修復し、firmwareのtest patternを取り戻せ。",
+      "tags": [
+        "risc-v",
+        "rv32i",
+        "systemverilog",
+        "verilator",
+        "video-controller",
+        "clock-domain-crossing",
+        "framebuffer",
+        "hardware-verification",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "ai-riscv-soc-repair",
       "name": "AI製RISC-V SoCを起動せよ",
       "category": "Challenge",

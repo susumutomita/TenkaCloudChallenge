@@ -1,0 +1,4 @@
+build
+solution/*.bak
+**/__pycache__
+**/*.pyc

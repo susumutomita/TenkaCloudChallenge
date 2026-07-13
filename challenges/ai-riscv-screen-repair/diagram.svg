@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="360" viewBox="0 0 960 360" role="img" aria-labelledby="title desc">
+  <title id="title">RISC-V screen-controller simulation architecture</title>
+  <desc id="desc">Firmware writes a framebuffer and control register in the CPU clock domain. A request and acknowledge toggle crosses to a raster controller in the pixel clock domain, producing a deterministic frame artifact.</desc>
+  <rect width="960" height="360" rx="24" fill="#f8fafc"/>
+  <rect x="40" y="55" width="370" height="250" rx="18" fill="#e0f2fe" stroke="#0369a1" stroke-width="3"/>
+  <text x="225" y="88" text-anchor="middle" font-family="system-ui" font-size="22" font-weight="700" fill="#0c4a6e">CPU clock domain</text>
+  <rect x="75" y="120" width="135" height="70" rx="12" fill="#ffffff" stroke="#0284c7" stroke-width="2"/>
+  <text x="142" y="150" text-anchor="middle" font-family="system-ui" font-size="17" fill="#0f172a">RV32I</text>
+  <text x="142" y="174" text-anchor="middle" font-family="system-ui" font-size="14" fill="#475569">firmware</text>
+  <rect x="245" y="120" width="130" height="70" rx="12" fill="#ffffff" stroke="#0284c7" stroke-width="2"/>
+  <text x="310" y="150" text-anchor="middle" font-family="system-ui" font-size="16" fill="#0f172a">CONTROL</text>
+  <text x="310" y="174" text-anchor="middle" font-family="system-ui" font-size="14" fill="#475569">request toggle</text>
+  <rect x="155" y="220" width="180" height="58" rx="12" fill="#ffffff" stroke="#0284c7" stroke-width="2"/>
+  <text x="245" y="255" text-anchor="middle" font-family="system-ui" font-size="16" fill="#0f172a">16 × 12 framebuffer</text>
+  <path d="M210 155 H245" stroke="#0f172a" stroke-width="3" marker-end="url(#arrow)"/>
+  <path d="M142 190 V249 H155" fill="none" stroke="#0f172a" stroke-width="3" marker-end="url(#arrow)"/>
+  <rect x="550" y="55" width="370" height="250" rx="18" fill="#ede9fe" stroke="#6d28d9" stroke-width="3"/>
+  <text x="735" y="88" text-anchor="middle" font-family="system-ui" font-size="22" font-weight="700" fill="#4c1d95">Pixel clock domain</text>
+  <rect x="590" y="120" width="145" height="70" rx="12" fill="#ffffff" stroke="#7c3aed" stroke-width="2"/>
+  <text x="662" y="150" text-anchor="middle" font-family="system-ui" font-size="16" fill="#0f172a">2-flop sync</text>
+  <text x="662" y="174" text-anchor="middle" font-family="system-ui" font-size="14" fill="#475569">ack toggle</text>
+  <rect x="770" y="120" width="115" height="70" rx="12" fill="#ffffff" stroke="#7c3aed" stroke-width="2"/>
+  <text x="827" y="150" text-anchor="middle" font-family="system-ui" font-size="16" fill="#0f172a">Raster</text>
+  <text x="827" y="174" text-anchor="middle" font-family="system-ui" font-size="14" fill="#475569">timing</text>
+  <rect x="645" y="220" width="180" height="58" rx="12" fill="#ffffff" stroke="#7c3aed" stroke-width="2"/>
+  <text x="735" y="255" text-anchor="middle" font-family="system-ui" font-size="16" fill="#0f172a">deterministic frame.ppm</text>
+  <path d="M410 155 H590" stroke="#0f172a" stroke-width="3" marker-end="url(#arrow)"/>
+  <path d="M735 155 H770" stroke="#0f172a" stroke-width="3" marker-end="url(#arrow)"/>
+  <path d="M827 190 V220" stroke="#0f172a" stroke-width="3" marker-end="url(#arrow)"/>
+  <path d="M335 249 C470 320 545 320 645 249" fill="none" stroke="#0f172a" stroke-width="3" stroke-dasharray="8 6" marker-end="url(#arrow)"/>
+  <text x="485" y="325" text-anchor="middle" font-family="system-ui" font-size="14" fill="#475569">dual-port pixel read</text>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#0f172a"/>
+    </marker>
+  </defs>
+</svg>
