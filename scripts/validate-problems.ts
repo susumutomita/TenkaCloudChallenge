@@ -308,6 +308,59 @@ function isCompositeProblem(meta: Metadata): boolean {
   return runtime?.kind === "composite";
 }
 
+const PINNED_APPRUN_IMAGE =
+  /^(?:ghcr\.io|docker\.io|index\.docker\.io|registry\.sakura\.ad\.jp)\/[A-Za-z0-9._/-]+@sha256:[a-f0-9]{64}$/;
+
+function jsonRecord(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+/**
+ * Composite-only AppRun contract. A descriptor remains a repository artifact,
+ * while every executable component is fixed to a registry and manifest digest
+ * understood by the Simulator/AppRun adapters.
+ */
+export function checkCompositeAppRunDescriptor(
+  dir: string,
+  targetId: string,
+  entry: string,
+): ValidationError[] {
+  const path = join(dir, entry);
+  try {
+    const stat = lstatSync(path);
+    if (!stat.isFile() || stat.isSymbolicLink()) {
+      return [`runtime.targets[${targetId}].entry must be a non-symlink regular AppRun JSON file`];
+    }
+    const value: unknown = JSON.parse(readFileSync(path, "utf8"));
+    const descriptor = jsonRecord(value);
+    if (descriptor === undefined) {
+      return [`runtime.targets[${targetId}].entry must contain a valid JSON object`];
+    }
+    const components = descriptor.components;
+    if (!Array.isArray(components) || components.length === 0) {
+      return [`runtime.targets[${targetId}].entry must declare at least one AppRun component`];
+    }
+    const errors: ValidationError[] = [];
+    for (const [index, component] of components.entries()) {
+      const source = jsonRecord(jsonRecord(component)?.deploy_source);
+      const registry = jsonRecord(source?.container_registry);
+      const image = registry?.image;
+      if (typeof image !== "string" || !PINNED_APPRUN_IMAGE.test(image)) {
+        errors.push(
+          `runtime.targets[${targetId}].entry components[${index}] image must be digest-pinned from a supported AppRun registry`,
+        );
+      }
+    }
+    return errors;
+  } catch (error) {
+    return [
+      `runtime.targets[${targetId}].entry must contain valid JSON: ${error instanceof Error ? error.message : String(error)}`,
+    ];
+  }
+}
+
 function checkCompositeRefs(dir: string, meta: Metadata): CrossRefResult {
   const errors: ValidationError[] = [
     ...checkInstructionsPresent(meta),
@@ -339,6 +392,9 @@ function checkCompositeRefs(dir: string, meta: Metadata): CrossRefResult {
     if (!existsSync(join(dir, entry))) {
       errors.push(`runtime.targets[${id}].entry "${entry}" not found`);
       continue;
+    }
+    if (t.provider === "sakura" && t.engine === "apprun") {
+      errors.push(...checkCompositeAppRunDescriptor(dir, id, entry));
     }
     if (t.provider === "aws" && t.engine === "cloudformation") {
       // ライブ CFn 経路 (CodeBuild deploy-battles.sh) は常に <problemDir>/template.yaml を

@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import {
   checkCheckLabelSpoilerAdvisory,
   checkContainerWriteupAdvisory,
+  checkCompositeAppRunDescriptor,
   checkMultiVerifyStructure,
   checkMultiVerifyTranslations,
   checkRequiredReadmes,
@@ -31,6 +32,45 @@ afterEach(() => {
   for (const directory of temporaryDirectories.splice(0)) {
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+describe("composite Sakura AppRun descriptor", () => {
+  it("should require every component image to use a supported immutable digest", () => {
+    const directory = problemDirectory();
+    const descriptor = join(directory, "application.json");
+    const application = (image: string) => ({
+      name: "hello",
+      timeout_seconds: 60,
+      port: 8080,
+      min_scale: 0,
+      max_scale: 1,
+      components: [
+        {
+          name: "hello",
+          max_cpu: "0.5",
+          max_memory: "1Gi",
+          deploy_source: { container_registry: { image } },
+        },
+      ],
+    });
+    writeFileSync(
+      descriptor,
+      `${JSON.stringify(application(`ghcr.io/example/hello@sha256:${"a".repeat(64)}`))}\n`,
+    );
+    expect(checkCompositeAppRunDescriptor(directory, "sakura-hello", "application.json")).toEqual(
+      [],
+    );
+
+    writeFileSync(descriptor, `${JSON.stringify(application("ghcr.io/example/hello:latest"))}\n`);
+    expect(
+      checkCompositeAppRunDescriptor(directory, "sakura-hello", "application.json").join("\n"),
+    ).toMatch(/digest-pinned/);
+
+    writeFileSync(descriptor, "{\n");
+    expect(
+      checkCompositeAppRunDescriptor(directory, "sakura-hello", "application.json").join("\n"),
+    ).toMatch(/valid JSON/);
+  });
 });
 
 describe("checkRequiredReadmes", () => {
