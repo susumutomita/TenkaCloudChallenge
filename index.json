@@ -321,6 +321,35 @@
       }
     },
     {
+      "id": "secure-ota-rollback",
+      "name": "Northstar OTA復旧任務",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 4,
+      "estimatedDuration": "90〜120 分",
+      "shortDescription": "量産直前の仮想車両で、OTA更新が順序違反、改ざん受け入れ、二重適用、起動失敗を起こしている。1 TCUと2 ECUの責任境界を追い、安全な更新へ立て直す。",
+      "tags": [
+        "automotive-security",
+        "ota",
+        "ecu",
+        "ed25519",
+        "rollback",
+        "idempotency",
+        "audit",
+        "local-play",
+        "container",
+        "multi-verify"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "security-battle-royale",
       "name": "Security Battle Royale",
       "category": "Battle",

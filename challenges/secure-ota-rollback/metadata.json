@@ -1,0 +1,554 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "secure-ota-rollback",
+  "name": "Northstar OTA復旧任務",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "track": {
+    "id": "automotive-security",
+    "order": 1,
+    "chapter": "署名付き更新・再開・A/B rollback"
+  },
+  "difficulty": 4,
+  "estimatedDuration": "90〜120 分",
+  "shortDescription": "量産直前の仮想車両で、OTA更新が順序違反、改ざん受け入れ、二重適用、起動失敗を起こしている。1 TCUと2 ECUの責任境界を追い、安全な更新へ立て直す。",
+  "instructions": "## はじめに\n\n量産判定を明日に控えたNorthstar車両で、ECU更新の順序、受け入れ判定、再開、起動後の復旧、監査証跡が信用できない。前任者が残したcontrolを、観測した事実から立て直そう。\n\n## 最初の一手\n\n`curl -s http://127.0.0.1:18100/api/state`でTCUと2つのECUのcontrol、A/B slot、bus logを確認する。次に`curl -s -X POST http://127.0.0.1:18100/run -H 'content-type: application/json' -d '{\"scenario\":\"signed-ordered\"}'`で、正規更新がどの順序で届くか観察する。\n\n## ゴール\n\n`PATCH /api/config`でTCUとECUのcontrolを是正し、`/run`の各scenarioで正常系と異常系を再検証する。各checkpointには`VERIFY`を提出し、署名付き順序更新、受け入れ境界、中断再開、known-good復旧、相関した監査traceを成立させる。`POST /reset`はいつでも最初の壊れた状態へ戻す。",
+  "description": "架空のNorthstar OTA量産判定環境。Docker内部networkだけで、signing、OTA/workshop、user-space bus、TCU、ECU A、ECU Bを動かす。初期controlは意図的に不十分で、TCUは受信順配信、checkpointを使わない再開、過大なretry上限、component別correlation IDを使う。ECUはpayload hashだけを確認し、versionとdependencyを強制せず、health failure後も失敗slotをactiveにする。\n\n学習者は`/api/state`と`/run`で結果を観測し、`PATCH /api/config`で既存controlを修正する。hidden verifierは設定値だけを信用せず、Ed25519署名、tamper/unsigned/downgrade、dependency順序、bus切断、persistent fault、A/B health failure、6 componentのauditを実行して判定する。実機、production cloud、外部accountは使わない。",
+  "writeup": "## 何が起きていたか\n\n前任の設定は、更新の真正性、順序、再開、復旧、証跡を別々の責任として扱わず、happy pathが一度動くことだけを見ていた。\n\n1. ECUはpayload hashの一致だけを見ていた。hashは破損検出には使えるが、攻撃者も計算し直せるため発行者の真正性を証明しない。署名が無いpackageや、manifestとpayloadを一緒に改ざんしたpackageも通った。\n2. TCUはpackageの受信順で配信し、ECU Bが要求するECU AのversionをECU自身も検査していなかった。\n3. bus切断後にcampaignを先頭からやり直し、完了済みECUへ同じ更新を再適用した。retry上限も障害の長さに対して大きすぎた。\n4. health check失敗後も新slotをactiveにしたため、known-goodへ戻れなかった。\n5. componentごとに別のcorrelation IDを生成し、1回のcampaignをend-to-endで再構成できなかった。\n\n## 直し方\n\nECUの`signatureMode`を`ed25519`、`versionPolicy`を`monotonic`、`dependencyCheck`を`true`、`rollbackOnHealthFailure`を`true`にする。Ed25519のprivate keyはsigning serviceだけが持つ。このlabではECUが起動時にinternal endpointからpublic keyを取得してcanonical manifestを検証し、productionのtrust anchor provisioningは範囲外とする。payload hash、signature、version、dependencyの全条件を満たして初めてinactive slotへ書く。起動後のhealth checkに失敗したらactive slotをknown-goodへ戻す。\n\nTCUの`dependencyOrder`と`resumeFromCheckpoint`を`true`、`maxRetries`を`2`、`auditCorrelation`を`true`にする。TCUはdependency graphでECU AからECU Bへ配信し、durableな完了集合から再開する。同じroot correlation IDをsigning、OTA、TCU、bus、両ECUへ渡す。\n\n## 一般化\n\nこの教材はUptane適合を主張する実装ではないが、発行者と配信者の責任分離、署名metadata、ECU dependency、bounded retry、known-good recoveryを縮小モデルで示す。productionではkey rotation、revocation、secure boot、hardware root of trust、電力・storage条件、owner通知、supplier handoffも受入条件へ加える。",
+  "tags": [
+    "automotive-security",
+    "ota",
+    "ecu",
+    "ed25519",
+    "rollback",
+    "idempotency",
+    "audit",
+    "local-play",
+    "container",
+    "multi-verify"
+  ],
+  "exposedPorts": [
+    { "port": 18100, "name": "OTA recovery workshop" },
+    { "port": 18101, "name": "/verify (loopback admin)" }
+  ],
+  "learningGoals": [
+    "payload hashと発行者署名の役割を区別し、unsigned、tamper、downgrade packageをslot/install state変更なしで拒否できる",
+    "2 ECUのversion dependencyを満たす順序と、bus切断後に完了済みECUを再適用しないbounded resumeを設計できる",
+    "A/B slotのhealth failureからknown-goodへ戻し、1つのcorrelation IDで責任境界を越えたtimelineを説明できる"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.secure-ota-rollback.install-authentic-update",
+        "description": "署名された互換packageをECU dependency順にinstallできる"
+      },
+      {
+        "id": "lo.secure-ota-rollback.reject-invalid-package",
+        "description": "unsigned、tamper、downgrade packageをslot/install state変更なしで拒否できる"
+      },
+      {
+        "id": "lo.secure-ota-rollback.resume-idempotently",
+        "description": "通信断後に完了checkpointからboundedかつidempotentに再開できる"
+      },
+      {
+        "id": "lo.secure-ota-rollback.recover-known-good",
+        "description": "health failure後にknown-good slotへrollbackできる"
+      },
+      {
+        "id": "lo.secure-ota-rollback.explain-audit-responsibility",
+        "description": "相関した監査traceからcomponentの責任境界を説明できる"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.digital-signature",
+        "description": "Ed25519を例に、update manifestの発行者と改変有無を検証するdigital signature"
+      },
+      {
+        "id": "concept.version-metadata",
+        "description": "ECU、version、dependency、payload hashを結ぶupdate metadata"
+      },
+      {
+        "id": "concept.ecu-dependency-order",
+        "description": "ECU間の互換性を満たすupdate順序"
+      },
+      {
+        "id": "concept.idempotency",
+        "description": "完了checkpointを保持したbounded retry"
+      },
+      {
+        "id": "concept.safe-state",
+        "description": "inactive slotへinstallしhealth failure時にknown-goodへ戻すsafe state"
+      },
+      {
+        "id": "concept.audit-trail",
+        "description": "責任境界を越えて1つの操作を再構成できる監査trace"
+      },
+      {
+        "id": "concept.linux-process-observation",
+        "description": "process、HTTP endpoint、resource上限をlocal環境で観測するLinux基礎"
+      },
+      {
+        "id": "concept.service-network-observability",
+        "description": "複数service間のrequest、fault、state transitionを追跡するnetwork観測"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.secure-ota-rollback.ordered-install",
+        "description": "ECU AからECU Bの順で署名付きupdateがactiveになる"
+      },
+      {
+        "id": "assessment.secure-ota-rollback.package-rejection",
+        "description": "unsigned、tamper、downgradeでECU slot/install stateが変わらない"
+      },
+      {
+        "id": "assessment.secure-ota-rollback.idempotent-resume",
+        "description": "切断後も完了済みECUを再installせずretry上限で停止する"
+      },
+      {
+        "id": "assessment.secure-ota-rollback.known-good-recovery",
+        "description": "起動失敗したslotをactiveにせずknown-goodへ戻る"
+      },
+      {
+        "id": "assessment.secure-ota-rollback.audit-correlation",
+        "description": "6 componentのeventが1つのcorrelation IDで再構成できる"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.hash-equality-proves-authenticity",
+        "description": "payload hashが一致すれば正規発行者のpackageだという誤解"
+      },
+      {
+        "id": "misconception.encryption-implies-authenticity",
+        "description": "通信やpayloadを暗号化すれば発行者の真正性も自動的に証明できるという誤解"
+      },
+      {
+        "id": "misconception.rollback-always-safe",
+        "description": "古いversionへ戻すだけで常に安全に復旧できるという誤解"
+      }
+    ],
+    "audiences": [
+      {
+        "id": "audience.oem-architect",
+        "description": "車両全体のupdate責任境界を設計するOEM architect"
+      },
+      {
+        "id": "audience.ecu-supplier-engineer",
+        "description": "ECUの受け入れ判定とboot recoveryを実装するsupplier engineer"
+      },
+      {
+        "id": "audience.ota-operator",
+        "description": "campaign、target、retry、監査を運用するOTA operator"
+      },
+      {
+        "id": "audience.soc-analyst",
+        "description": "更新異常のtimelineと影響範囲を調査するSOC analyst"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.secure-ota-rollback",
+      "target": "lo.secure-ota-rollback.install-authentic-update"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.secure-ota-rollback",
+      "target": "lo.secure-ota-rollback.reject-invalid-package"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.secure-ota-rollback",
+      "target": "lo.secure-ota-rollback.resume-idempotently"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.secure-ota-rollback",
+      "target": "lo.secure-ota-rollback.recover-known-good"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.secure-ota-rollback",
+      "target": "lo.secure-ota-rollback.explain-audit-responsibility"
+    },
+    {
+      "type": "covers",
+      "source": "problem.secure-ota-rollback",
+      "target": "concept.digital-signature"
+    },
+    {
+      "type": "covers",
+      "source": "problem.secure-ota-rollback",
+      "target": "concept.version-metadata"
+    },
+    {
+      "type": "covers",
+      "source": "problem.secure-ota-rollback",
+      "target": "concept.ecu-dependency-order"
+    },
+    {
+      "type": "covers",
+      "source": "problem.secure-ota-rollback",
+      "target": "concept.idempotency"
+    },
+    {
+      "type": "covers",
+      "source": "problem.secure-ota-rollback",
+      "target": "concept.safe-state"
+    },
+    {
+      "type": "covers",
+      "source": "problem.secure-ota-rollback",
+      "target": "concept.audit-trail"
+    },
+    {
+      "type": "requires",
+      "source": "problem.secure-ota-rollback",
+      "target": "concept.linux-process-observation"
+    },
+    {
+      "type": "requires",
+      "source": "problem.secure-ota-rollback",
+      "target": "concept.service-network-observability"
+    },
+    {
+      "type": "requires",
+      "source": "lo.secure-ota-rollback.install-authentic-update",
+      "target": "concept.digital-signature"
+    },
+    {
+      "type": "requires",
+      "source": "lo.secure-ota-rollback.install-authentic-update",
+      "target": "concept.version-metadata"
+    },
+    {
+      "type": "requires",
+      "source": "lo.secure-ota-rollback.install-authentic-update",
+      "target": "concept.ecu-dependency-order"
+    },
+    {
+      "type": "requires",
+      "source": "lo.secure-ota-rollback.reject-invalid-package",
+      "target": "concept.version-metadata"
+    },
+    {
+      "type": "requires",
+      "source": "lo.secure-ota-rollback.resume-idempotently",
+      "target": "concept.idempotency"
+    },
+    {
+      "type": "requires",
+      "source": "lo.secure-ota-rollback.resume-idempotently",
+      "target": "concept.service-network-observability"
+    },
+    {
+      "type": "requires",
+      "source": "lo.secure-ota-rollback.recover-known-good",
+      "target": "concept.safe-state"
+    },
+    {
+      "type": "requires",
+      "source": "lo.secure-ota-rollback.explain-audit-responsibility",
+      "target": "concept.audit-trail"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.secure-ota-rollback",
+      "target": "assessment.secure-ota-rollback.ordered-install"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.secure-ota-rollback",
+      "target": "assessment.secure-ota-rollback.package-rejection"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.secure-ota-rollback",
+      "target": "assessment.secure-ota-rollback.idempotent-resume"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.secure-ota-rollback",
+      "target": "assessment.secure-ota-rollback.known-good-recovery"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.secure-ota-rollback",
+      "target": "assessment.secure-ota-rollback.audit-correlation"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.secure-ota-rollback",
+      "target": "misconception.hash-equality-proves-authenticity"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.secure-ota-rollback",
+      "target": "misconception.encryption-implies-authenticity"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.secure-ota-rollback",
+      "target": "misconception.rollback-always-safe"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.secure-ota-rollback",
+      "target": "audience.oem-architect"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.secure-ota-rollback",
+      "target": "audience.ecu-supplier-engineer"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.secure-ota-rollback",
+      "target": "audience.ota-operator"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.secure-ota-rollback",
+      "target": "audience.soc-analyst"
+    }
+  ],
+  "i18n": {
+    "en": {
+      "name": "Northstar OTA Recovery Mission",
+      "shortDescription": "A pre-production virtual vehicle is installing ECUs out of order, accepting altered updates, duplicating work after disconnects, and staying on failed boots. Trace the boundaries across one TCU and two ECUs, then make updates safe.",
+      "instructions": "## Introduction\n\nNorthstar's production review is tomorrow, but nobody trusts the ECU update order, acceptance boundary, resume behavior, boot recovery, or audit evidence. Rebuild the controls from observed behavior.\n\n## First step\n\nRun `curl -s http://127.0.0.1:18100/api/state` to inspect the TCU controls, both ECU A/B slots, and the bus log. Then run `curl -s -X POST http://127.0.0.1:18100/run -H 'content-type: application/json' -d '{\"scenario\":\"signed-ordered\"}'` and observe the order in which an authentic update arrives.\n\n## Goal\n\nCorrect the TCU and ECU controls through `PATCH /api/config`, then re-run the normal and failure scenarios through `/run`. Submit `VERIFY` to each checkpoint and establish authentic ordered installation, a safe acceptance boundary, interruption-safe resume, known-good recovery, and a correlated audit trace. `POST /reset` always restores the original broken state.",
+      "description": "A fictional Northstar OTA production-review environment. Six services run only on a Docker-internal network: signing, OTA/workshop, a user-space bus, one TCU, ECU A, and ECU B. The starting controls deliberately deliver in arrival order, restart without checkpoints, allow excessive retries, fragment correlation IDs, check only payload hashes, accept any version, ignore dependencies, and keep a failed slot active.\n\nThe learner observes `/api/state` and `/run`, then repairs existing controls through `PATCH /api/config`. The hidden verifier checks behavior rather than trusting flags: Ed25519 signatures, altered/unsigned/downgrade packages, dependency order, bus disconnects, persistent faults, A/B health failures, and audit events across all six components. No hardware, production cloud, or external account is required.",
+      "writeup": "## What happened\n\nThe inherited configuration treated authenticity, ordering, resume, recovery, and evidence as one happy-path concern. Payload hashes detected accidental corruption but did not authenticate the issuer, packages were delivered in arrival order, retries restarted completed work, failed boots remained active, and every component minted a different correlation ID.\n\n## How to fix it\n\nSet each ECU to `signatureMode: ed25519`, `versionPolicy: monotonic`, `dependencyCheck: true`, and `rollbackOnHealthFailure: true`. The signing service alone holds the Ed25519 private key. In this lab, ECUs fetch the public key from its internal endpoint at startup and verify the canonical manifest; production trust-anchor provisioning is out of scope. They then check payload hash, version, and dependencies before writing the inactive slot. A failed health check returns the active pointer to known-good.\n\nSet the TCU to `dependencyOrder: true`, `resumeFromCheckpoint: true`, `maxRetries: 2`, and `auditCorrelation: true`. Deliver ECU A before ECU B, retain durable completion, bound retry, and carry one root correlation ID through signing, OTA, TCU, bus, and both ECUs.\n\n## Generalization\n\nThis teaching model does not claim Uptane conformance. Production acceptance must also cover key rotation and revocation, secure boot and hardware roots of trust, power/storage gates, owner notification, and long-term supplier handoff.",
+      "learningGoals": [
+        "Distinguish payload integrity from issuer authenticity and reject unsigned, altered, and downgrade packages without changing ECU slot/install state",
+        "Design dependency-ordered delivery and bounded, idempotent resume that does not reinstall a completed ECU after a bus disconnect",
+        "Recover an A/B ECU to known-good after a health failure and explain responsibility boundaries from one correlated timeline"
+      ],
+      "checks": [
+        {
+          "id": "signed-ordered-install",
+          "label": "Delivery order and terminal state",
+          "hints": [
+            {
+              "id": "hint-order-observe",
+              "content": "Run the `signed-ordered` scenario and inspect `state.bus.deliveries`. Compare arrival order with each manifest's `dependsOn` field."
+            },
+            {
+              "id": "hint-order-diagnose",
+              "content": "The TCU currently preserves input order, while ECU B also treats its dependency as advisory. Both the planner and the receiver need an enforceable boundary."
+            },
+            {
+              "id": "hint-order-fix",
+              "content": "Derive a dependency order before delivery and independently reject an unmet manifest dependency at the receiving ECU. Re-run the scenario and compare both controls."
+            }
+          ]
+        },
+        {
+          "id": "package-rejection",
+          "label": "Update acceptance boundary",
+          "hints": [
+            {
+              "id": "hint-rejection-observe",
+              "content": "Compare the `tampered`, `unsigned`, and `downgrade` scenarios. A payload hash answers a different question from a publisher signature."
+            },
+            {
+              "id": "hint-rejection-diagnose",
+              "content": "An attacker can recompute a hash after changing both payload and manifest. The ECU also needs issuer authentication and a monotonic version rule."
+            },
+            {
+              "id": "hint-rejection-fix",
+              "content": "Require a publisher-authenticated canonical manifest and a monotonic version decision before writing the inactive slot. Every rejection must leave both slots unchanged."
+            }
+          ]
+        },
+        {
+          "id": "idempotent-resume",
+          "label": "Resume after interruption",
+          "hints": [
+            {
+              "id": "hint-resume-observe",
+              "content": "Run `resume`, then inspect both ECU `installCount` values and the repeated bus attempts after ECU B disconnects once."
+            },
+            {
+              "id": "hint-resume-diagnose",
+              "content": "Retrying a whole campaign is not idempotent. Persist which ECU completed, and decide how many transient failures are acceptable."
+            },
+            {
+              "id": "hint-resume-fix",
+              "content": "Persist completed ECU work across a transient retry and choose a finite retry budget that stops before the verifier's longer outage clears."
+            }
+          ]
+        },
+        {
+          "id": "known-good-rollback",
+          "label": "Recovery from a failed boot",
+          "hints": [
+            {
+              "id": "hint-rollback-observe",
+              "content": "Run `health-failure` and compare `activeSlot`, `knownGoodSlot`, and the health of the newly written inactive slot."
+            },
+            {
+              "id": "hint-rollback-diagnose",
+              "content": "Writing an inactive slot is only half the design. Promotion needs a health gate and an atomic path back to the previous known-good slot."
+            },
+            {
+              "id": "hint-rollback-fix",
+              "content": "Make slot promotion conditional on post-boot health and atomically restore the previous known-good pointer when that gate fails. Preserve the failed image as evidence."
+            }
+          ]
+        },
+        {
+          "id": "correlated-audit",
+          "label": "End-to-end audit timeline",
+          "hints": [
+            {
+              "id": "hint-audit-observe",
+              "content": "Run `audit-trace`, fetch `/api/audit`, and group events by `correlationId` and `component`."
+            },
+            {
+              "id": "hint-audit-diagnose",
+              "content": "Local IDs are useful, but they cannot replace the root operation ID needed to join signing, delivery, installation, and recovery."
+            },
+            {
+              "id": "hint-audit-fix",
+              "content": "Propagate one root operation ID through every responsibility boundary while retaining component/action/result details needed to reconstruct the timeline."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Workshop": "http://127.0.0.1:18100"
+    },
+    "verifyUrl": "http://127.0.0.1:18101/verify"
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "signed-ordered-install",
+        "label": "配信順序と到達状態",
+        "points": 60,
+        "wrongAnswerPenalty": 3,
+        "hints": [
+          {
+            "id": "hint-order-observe",
+            "content": "`signed-ordered`scenarioを実行し、`state.bus.deliveries`を確認する。受信順と各manifestの`dependsOn`を比較しよう。",
+            "penalty": 6
+          },
+          {
+            "id": "hint-order-diagnose",
+            "content": "TCUは入力順を維持し、ECU Bもdependencyを参考情報として扱っている。plannerとreceiverの両方に強制可能な境界が必要である。",
+            "penalty": 9
+          },
+          {
+            "id": "hint-order-fix",
+            "content": "配信前にdependency順を導出し、受信ECUでもmanifestの未充足dependencyを独立に拒否する。scenarioを再実行して2つのcontrolを比較する。",
+            "penalty": 15
+          }
+        ]
+      },
+      {
+        "id": "package-rejection",
+        "label": "更新の受け入れ境界",
+        "points": 60,
+        "wrongAnswerPenalty": 3,
+        "hints": [
+          {
+            "id": "hint-rejection-observe",
+            "content": "`tampered`、`unsigned`、`downgrade`scenarioを比較する。payload hashと発行者署名は別の問いに答える。",
+            "penalty": 6
+          },
+          {
+            "id": "hint-rejection-diagnose",
+            "content": "攻撃者はpayloadとmanifestを変更してhashを計算し直せる。ECUには発行者認証とmonotonic version ruleも必要である。",
+            "penalty": 9
+          },
+          {
+            "id": "hint-rejection-fix",
+            "content": "inactive slotへ書く前に、canonical manifestの正規発行者と単調増加versionを必須にする。すべての拒否で両slotを変えない。",
+            "penalty": 15
+          }
+        ]
+      },
+      {
+        "id": "idempotent-resume",
+        "label": "中断後の再開",
+        "points": 60,
+        "wrongAnswerPenalty": 3,
+        "hints": [
+          {
+            "id": "hint-resume-observe",
+            "content": "`resume`を実行し、ECU Bが1回切断した後の両ECUの`installCount`とbus attemptを確認する。",
+            "penalty": 6
+          },
+          {
+            "id": "hint-resume-diagnose",
+            "content": "campaign全体をやり直す処理はidempotentではない。完了ECUを保持し、許容する一時障害回数を決める。",
+            "penalty": 9
+          },
+          {
+            "id": "hint-resume-fix",
+            "content": "一時retryをまたいで完了ECUを保持し、verifierの長い切断が解消する前に停止する有限のretry budgetを選ぶ。",
+            "penalty": 15
+          }
+        ]
+      },
+      {
+        "id": "known-good-rollback",
+        "label": "起動失敗からの復旧",
+        "points": 60,
+        "wrongAnswerPenalty": 3,
+        "hints": [
+          {
+            "id": "hint-rollback-observe",
+            "content": "`health-failure`を実行し、`activeSlot`、`knownGoodSlot`、新しいinactive slotのhealthを比較する。",
+            "penalty": 6
+          },
+          {
+            "id": "hint-rollback-diagnose",
+            "content": "inactive slotへの書き込みだけでは不十分である。promotionにはhealth gateと以前のknown-goodへ戻すatomicな経路が必要になる。",
+            "penalty": 9
+          },
+          {
+            "id": "hint-rollback-fix",
+            "content": "slot promotionをboot後healthの成功条件にし、失敗時は以前のknown-good pointerへatomicに戻す。失敗imageは証拠として保持する。",
+            "penalty": 15
+          }
+        ]
+      },
+      {
+        "id": "correlated-audit",
+        "label": "監査timelineの相関",
+        "points": 60,
+        "wrongAnswerPenalty": 3,
+        "hints": [
+          {
+            "id": "hint-audit-observe",
+            "content": "`audit-trace`を実行し、`/api/audit`のeventを`correlationId`と`component`でgroup化する。",
+            "penalty": 6
+          },
+          {
+            "id": "hint-audit-diagnose",
+            "content": "local IDだけでは、署名、配信、install、復旧を結合できない。root operation IDを責任境界の先へ渡す必要がある。",
+            "penalty": 9
+          },
+          {
+            "id": "hint-audit-fix",
+            "content": "1つのroot operation IDを全責任境界へ伝播し、timeline再構成に必要なcomponent/action/result detailも保持する。",
+            "penalty": 15
+          }
+        ]
+      }
+    ]
+  }
+}
