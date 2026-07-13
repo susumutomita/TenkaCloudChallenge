@@ -1,0 +1,155 @@
+# Six-service, AWS-free OTA lab. Only the workshop and verifier are published,
+# and both are bound to loopback. The internal network has no external egress.
+x-service-defaults: &service-defaults
+  build:
+    context: .
+    dockerfile: Dockerfile
+  read_only: true
+  tmpfs:
+    - '/tmp:rw,noexec,nosuid,size=16m'
+  cap_drop:
+    - ALL
+  security_opt:
+    - 'no-new-privileges:true'
+  pids_limit: 64
+  mem_limit: '96m'
+  cpus: 0.50
+  restart: 'no'
+  networks:
+    - ota-lab
+
+x-healthcheck: &healthcheck
+  interval: '2s'
+  timeout: '2s'
+  retries: 30
+  start_period: '2s'
+
+services:
+  signing:
+    <<: *service-defaults
+    environment:
+      SERVICE_ROLE: signing
+    healthcheck:
+      <<: *healthcheck
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+
+  ecu-a:
+    <<: *service-defaults
+    environment:
+      SERVICE_ROLE: ecu-a
+      SIGNING_URL: http://signing:8080
+    depends_on:
+      signing:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+
+  ecu-b:
+    <<: *service-defaults
+    environment:
+      SERVICE_ROLE: ecu-b
+      SIGNING_URL: http://signing:8080
+      ECU_A_URL: http://ecu-a:8080
+    depends_on:
+      signing:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+
+  bus:
+    <<: *service-defaults
+    environment:
+      SERVICE_ROLE: bus
+      ECU_A_URL: http://ecu-a:8080
+      ECU_B_URL: http://ecu-b:8080
+    depends_on:
+      ecu-a:
+        condition: service_healthy
+      ecu-b:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+
+  tcu:
+    <<: *service-defaults
+    environment:
+      SERVICE_ROLE: tcu
+      BUS_URL: http://bus:8080
+    depends_on:
+      bus:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+
+  ota:
+    <<: *service-defaults
+    networks:
+      - ota-lab
+      - workshop-host
+    environment:
+      SERVICE_ROLE: ota
+      SIGNING_URL: http://signing:8080
+      TCU_URL: http://tcu:8080
+      BUS_URL: http://bus:8080
+      ECU_A_URL: http://ecu-a:8080
+      ECU_B_URL: http://ecu-b:8080
+    depends_on:
+      signing:
+        condition: service_healthy
+      tcu:
+        condition: service_healthy
+    ports:
+      - '127.0.0.1:18100:8080'
+      - '127.0.0.1:18101:8081'
+    healthcheck:
+      <<: *healthcheck
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "Promise.all([8080,8081].map(p=>fetch('http://127.0.0.1:'+p+'/healthz'))).then(rs=>process.exit(rs.every(r=>r.ok)?0:1)).catch(()=>process.exit(1))",
+        ]
+
+networks:
+  ota-lab:
+    internal: true
+  workshop-host:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: 'false'
+      com.docker.network.bridge.host_binding_ipv4: '127.0.0.1'
