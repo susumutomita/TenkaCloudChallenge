@@ -9,6 +9,19 @@ interface Arguments {
   readonly simulator: string;
   readonly output: string;
 }
+
+interface SimulatorPackage {
+  readonly name: string;
+  readonly version: string;
+}
+
+interface PublicCoverageSummary {
+  readonly total: number;
+  readonly covered: number;
+  readonly missing: number;
+  readonly insufficient: number;
+  readonly invalid: number;
+}
 const HELP = `Usage: bun run simulator:compatibility --simulator <TenkaCloudSimulator checkout> --output <report.json>
 
 Generates the checked-out Simulator capability manifest and scans this catalog.
@@ -64,30 +77,141 @@ function runBun(script: string, args: readonly string[], cwd: string): number {
   return result.status ?? 2;
 }
 
-function printSummary(output: string): void {
-  let report: unknown;
-  try {
-    report = JSON.parse(readFileSync(output, "utf8"));
-  } catch {
-    return;
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function nonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function nonNegativeInteger(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+function runGit(checkout: string, args: readonly string[]): string {
+  const result = spawnSync("git", ["-C", checkout, ...args], {
+    encoding: "utf8",
+    maxBuffer: 1024 * 1024,
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(
+      `Git provenance inspection failed: ${result.stderr.trim() || `exit ${String(result.status)}`}`,
+    );
   }
-  if (report === null || typeof report !== "object" || Array.isArray(report)) return;
-  const summary = Reflect.get(report, "summary");
-  const status = Reflect.get(report, "status");
-  if (summary === null || typeof summary !== "object" || Array.isArray(summary)) return;
-  const fields = [
-    "problems",
-    "targets",
-    "requirements",
-    "covered",
-    "missing",
-    "insufficient",
-    "invalid",
+  return result.stdout.trim();
+}
+
+function resolveCleanCheckoutCommit(checkout: string, label: string): string {
+  const commit = runGit(checkout, ["rev-parse", "--verify", "HEAD"]);
+  if (!/^[0-9a-f]{40}$/.test(commit)) {
+    throw new Error(`${label} HEAD is not an immutable 40-character Git SHA: ${commit}`);
+  }
+  const status = runGit(checkout, [
+    "status",
+    "--porcelain=v1",
+    "--untracked-files=all",
+    "--ignore-submodules=none",
+    "--",
+    ".",
+  ]);
+  if (status.length > 0) throw new Error(`${label} checkout must be clean before scanning`);
+  return commit;
+}
+
+export function resolveCleanCatalogCommit(catalog: string): string {
+  return resolveCleanCheckoutCommit(catalog, "catalog");
+}
+
+export function resolveCleanSimulatorCommit(simulator: string): string {
+  return resolveCleanCheckoutCommit(simulator, "Simulator");
+}
+
+function readJsonObject(path: string, label: string): Record<string, unknown> {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
+    const record = objectRecord(parsed);
+    if (record === null) throw new Error("expected a JSON object");
+    return record;
+  } catch (error) {
+    throw new Error(
+      `${label} must contain valid JSON: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+function simulatorPackage(path: string): SimulatorPackage {
+  const packageJson = readJsonObject(path, "Simulator package.json");
+  const name = nonEmptyString(packageJson.name);
+  const version = nonEmptyString(packageJson.version);
+  if (name !== "tenkacloud-simulator" || version === null) {
+    throw new Error(`--simulator is not a TenkaCloudSimulator checkout: ${dirname(path)}`);
+  }
+  return { name, version };
+}
+
+export function resolveSimulatorVersion(
+  capabilitiesPath: string,
+  packageVersion: string,
+  simulatorCommit: string,
+): string {
+  const manifest = readJsonObject(capabilitiesPath, "Simulator capability manifest");
+  const version = nonEmptyString(manifest.version);
+  if (version === null) {
+    throw new Error("Simulator capability manifest.version must be a non-empty string");
+  }
+  const expected = `tenkacloud-simulator-${packageVersion}+git.${simulatorCommit}`;
+  if (version !== expected) {
+    throw new Error(`Simulator capability manifest version ${version} does not match ${expected}`);
+  }
+  return version;
+}
+
+export function formatCompatibilitySummary(report: unknown): string | null {
+  const record = objectRecord(report);
+  if (record === null || typeof record.supported !== "boolean") return null;
+  const rawSummary = objectRecord(record.summary);
+  if (rawSummary === null) return null;
+  const fields = ["total", "covered", "missing", "insufficient", "invalid"] as const;
+  const values = Object.fromEntries(
+    fields.map((field) => [field, nonNegativeInteger(rawSummary[field])]),
+  ) as Record<keyof PublicCoverageSummary, number | null>;
+  if (fields.some((field) => values[field] === null)) return null;
+  return `Simulator compatibility: supported=${String(record.supported)} ${fields
+    .map((field) => `${field}=${String(values[field])}`)
+    .join(" ")}`;
+}
+
+function printSummary(output: string): void {
+  try {
+    const summary = formatCompatibilitySummary(JSON.parse(readFileSync(output, "utf8")));
+    if (summary !== null) console.log(summary);
+  } catch {
+    // Scanner exit status remains authoritative when no valid summary was written.
+  }
+}
+
+export function catalogScannerArguments(identity: {
+  readonly capabilities: string;
+  readonly catalog: string;
+  readonly catalogCommit: string;
+  readonly output: string;
+  readonly simulatorVersion: string;
+}): readonly string[] {
+  return [
+    "--catalog",
+    identity.catalog,
+    "--catalog-commit",
+    identity.catalogCommit,
+    "--capabilities",
+    identity.capabilities,
+    "--simulator-version",
+    identity.simulatorVersion,
+    "--output",
+    identity.output,
   ];
-  const rendered = fields
-    .map((field) => `${field}=${String(Reflect.get(summary, field))}`)
-    .join(" ");
-  console.log(`Simulator compatibility: status=${String(status)} ${rendered}`);
 }
 
 export function runCompatibilityCheck(args: Arguments): 0 | 1 | 2 {
@@ -97,20 +221,34 @@ export function runCompatibilityCheck(args: Arguments): 0 | 1 | 2 {
   requiredRegularFile(packagePath, "Simulator package.json");
   requiredRegularFile(manifestTool, "Simulator capability manifest tool");
   requiredRegularFile(scannerTool, "Simulator catalog scanner tool");
-  const packageJson = JSON.parse(readFileSync(packagePath, "utf8"));
-  if (packageJson?.name !== "tenkacloud-simulator") {
-    throw new Error(`--simulator is not a TenkaCloudSimulator checkout: ${args.simulator}`);
-  }
+  const packageJson = simulatorPackage(packagePath);
+  const catalogCommit = resolveCleanCatalogCommit(CATALOG_ROOT);
+  const simulatorCommit = resolveCleanSimulatorCommit(args.simulator);
 
   mkdirSync(dirname(args.output), { recursive: true });
   const temporary = mkdtempSync(join(tmpdir(), "tenkacloud-simulator-compatibility-"));
   const capabilities = join(temporary, "capabilities.json");
   try {
-    const manifestExit = runBun(manifestTool, ["--output", capabilities], args.simulator);
+    const manifestExit = runBun(
+      manifestTool,
+      ["--source-commit", simulatorCommit, "--output", capabilities],
+      args.simulator,
+    );
     if (manifestExit !== 0) return 2;
+    const simulatorVersion = resolveSimulatorVersion(
+      capabilities,
+      packageJson.version,
+      simulatorCommit,
+    );
     const scannerExit = runBun(
       scannerTool,
-      ["--catalog", CATALOG_ROOT, "--capabilities", capabilities, "--output", args.output],
+      catalogScannerArguments({
+        catalog: CATALOG_ROOT,
+        catalogCommit,
+        capabilities,
+        simulatorVersion,
+        output: args.output,
+      }),
       args.simulator,
     );
     printSummary(args.output);
