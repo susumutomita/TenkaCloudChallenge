@@ -108,7 +108,7 @@ describe("ai-riscv-screen-repair catalog contract", () => {
 		expect(reference).toContain(".RESPECT_WRITE_STROBES(1'b1)");
 	});
 
-	it("should bind published ports to loopback and mount only participant RTL", () => {
+	it("should publish loopback ports without opening lab egress and mount only participant RTL", () => {
 		const compose = read("local/docker-compose.yml");
 		expect(compose).toContain('"127.0.0.1:18200:8080"');
 		expect(compose).toContain('"127.0.0.1:18201:8081"');
@@ -121,7 +121,14 @@ describe("ai-riscv-screen-repair catalog contract", () => {
 		expect(compose).toContain("read_only: true");
 		expect(compose).toContain("no-new-privileges:true");
 		expect(compose).toContain("cap_drop:");
+		expect(compose).toContain("- workshop-host");
 		expect(compose).toContain("internal: true");
+		expect(compose).toContain(
+			'com.docker.network.bridge.enable_ip_masquerade: "false"',
+		);
+		expect(compose).toContain(
+			'com.docker.network.bridge.host_binding_ipv4: "127.0.0.1"',
+		);
 		const dockerfile = read("local/Dockerfile");
 		expect(dockerfile).not.toContain("reference");
 		expect(dockerfile).toContain("debian:bookworm-slim@sha256:");

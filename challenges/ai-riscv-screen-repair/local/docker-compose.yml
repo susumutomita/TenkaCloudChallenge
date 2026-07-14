@@ -1,4 +1,6 @@
 # Local-only screen-controller repair lab. No host device, FPGA, or display is used.
+# The lab network has no external egress; workshop-host exists only so Docker can
+# publish the UI and verifier to host loopback without masquerading container traffic.
 services:
   ai-riscv-screen-repair:
     build:
@@ -34,8 +36,14 @@ services:
       - "no-new-privileges:true"
     networks:
       - lab
+      - workshop-host
     restart: "no"
 
 networks:
   lab:
     internal: true
+  workshop-host:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+      com.docker.network.bridge.host_binding_ipv4: "127.0.0.1"
