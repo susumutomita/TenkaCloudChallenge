@@ -86,7 +86,7 @@ function checkInstructionsPresent(meta: Metadata): ValidationError[] {
   return errors;
 }
 
-/** 参加者に実際に届く自由文 field。 `description` は運営側なので入らない (下記参照)。 */
+/** 参加者に実際に届く自由文 field。 `description` は運営向けなので入らない。 */
 const PARTICIPANT_VISIBLE_TEXT_FIELDS = ["instructions", "shortDescription"] as const;
 
 /** 参加者に届く自由文を (field 名, 本文) で列挙する。 未設定 / 非文字列は落とす。 */
@@ -98,31 +98,15 @@ function participantVisibleFields(meta: Metadata): Array<readonly [string, strin
   ].filter((entry): entry is readonly [string, string] => typeof entry[1] === "string");
 }
 
-/**
- * 突き合わせ前の正規化。 大小文字 / 全角半角 / 空白の揺れだけでゲートを素通りさせない
- * (例: en name "AI wipes the database" を見出しで "AI Wipes The Database" と書く、 全角 "ＡＩ" で書く)。
- * 想定は悪意ある回避ではなく、 文頭の大文字化や Title Case で善意の作者が普通に踏むこと。
- */
+/** 大小文字 / 全角半角 / 空白の揺れを吸収してから突き合わせる。 */
 function normalizeForSpoilerMatch(text: string): string {
   return text.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
 }
 
 /**
- * 正規化済みの本文が tell を「その語として」含むか。 両者とも normalizeForSpoilerMatch 済み前提。
- *
- * ASCII だけの tell は前後に ASCII 英数字が来ないことを要求する。 素の部分一致のままだと
- * name="AI" が "available" の中に埋まって **hard error** を出してしまい、 無関係な文章で CI が
- * 止まる (実測で踏んだ)。 日本語文に直付けされた ASCII (「障害 ai-wipes-database が発生」/
- * 「障害ai-wipes-databaseが発生」) は前後が非 ASCII なので引き続き検出できる。
- *
- * CJK を含む tell は語境界の概念が無い (「スパムが来る」のように助詞が直結する) ため部分一致で見る。
- *
- * 後端は複数形 (`-s` / `-es`) を許す。 許さないと name="AI outage" が "AI outages happen" を
- * 素通りさせてしまう (実測で踏んだ) —— 普通の英文で起きる。 逆に `-d` / `-ed` まで許すと
- * tell="AI" が "first aid kit" に一致して誤検知が復活するため、 そこは許さない。
- *
- * 限界 (意図的): 捕まえるのは *機械的な tell* (逐語・複数形) だけ。 言い換え
- * (「データベースが消されることがあります」) は静的な文字列検査では原理的に届かない。
+ * 正規化済みの本文が tell を「その語として」含むか。
+ * ASCII の tell は語境界を要求する (無いと "AI" が "available" に当たる)。 CJK は語境界の概念が
+ * 無い (「スパムが来る」) ので部分一致。 後端の複数形だけ許す (`-d` まで許すと "aid" に当たる)。
  */
 function mentionsTell(haystack: string, tell: string): boolean {
   if (!/^[\x20-\x7e]+$/.test(tell)) return haystack.includes(tell);
@@ -138,25 +122,6 @@ function surpriseDisruptions(meta: Metadata): Array<Record<string, unknown>> {
   return disruptions.filter((d) => d.publicHint !== true);
 }
 
-/**
- * [Issue #192] 競技者視点のネタバラシ検査。
- *
- * SCHEMA は `instructions` を「[競技者向け] ネタバレ厳禁 (採点数値 / hardened state /
- * surprise mechanics は書かない)」と定義しているが、それを機械で確かめるゲートが無かった。
- * 参加者に実際に届く field が `publicHint !== true` の disruption (= サプライズ) を
- * id / name で名指ししていないか検査する。
- *
- * `publicHint: true` の disruption は作者が意図して予告しているので許可する
- * (battles/hello-world-battle は frontend-down を予告し、 初心者に障害と復旧を教えるのが狙い)。
- *
- * ネタバレの正しい置き場は `description` — SCHEMA が [管理者/作者向け] と定義し、 fairness
- * contract (platform #1124) により競技者のポータルには出ない。 よって description は検査
- * 対象に含めない (そこに書くのが正解であり、 移動先でもある)。
- *
- * severity は warning 一本 ({@link checkParticipantVisibleSpoilerAdvisory} に理由)。
- * 症状を語りたい著者には出口が 2 つある — `description` に書く / `publicHint: true` を宣言して
- * 意図的に予告する。
- */
 interface SpoilerMention {
   readonly field: string;
   readonly tell: string;
@@ -189,31 +154,16 @@ function findSpoilerMentions(
 }
 
 /**
- * [Issue #192] 競技者視点のネタバラシ **advisory** (= warning)。
+ * [Issue #192] 参加者に届く field (instructions / shortDescription と i18n.en) が、
+ * `publicHint !== true` の disruption を id / name で名指ししていないか著者に知らせる。
  *
- * 参加者に届く field (instructions / shortDescription と i18n.en) が、 `publicHint !== true` の
- * disruption (= サプライズ) を id / name で名指ししていないか見る。 当たったら著者に知らせる。
+ * warning であって gate ではない。 作者が tell も散文も書く以上、 文字列一致は誤検知を避けられない
+ * (`id: "read-only"` は SCHEMA 上 valid で "The bucket is read-only." に当たる)。 honest な文章で
+ * CI を止めると作者は検査を迂回する。 漏洩を実際に止めるのは platform 側の fairness projection
+ * (TenkaCloud#2642) で、 言い換えは人のレビューが見る。
  *
- * **なぜ hard error にしないか (9 回の反例で確定した)**
- * 作者が tell (id / name) も散文も両方書く以上、 文字列一致で誤検知ゼロの gate は原理的に作れない。
- * 実測した誤検知:
- *   - name は散文       : name="log" が "Check the log for errors." に当たる
- *   - 単語 1 つの id     : id="down" が "If the site is down, restart it." に当たる
- *   - 複合語の id ですら : id="read-only" が "The bucket is read-only." に当たる
- *     (SCHEMA の id pattern `^[a-z0-9][a-z0-9-]*$` はこれらをすべて許す)
- * 一致を厳しくすれば普通の複数形を取り逃し、 緩めれば普通の文で落ちる —— どちらに振っても
- * 反例が出る。 honest な文章で CI を止めると、 作者は迂回 (障害を改名 / 検査を無効化) を学ぶ。
- *
- * **では機械のゲートはどこか**: 実際の事故 (運営向け description が競技者に見えていた) を止める
- * ゲートは platform 側に既にある —— TenkaCloud#2642 の fairness projection が `description` を
- * 参加者 API から落とし、 回帰テストで固定している。 セッションやエージェントがリセットされても
- * それは残る。 本 check の役目はその手前の **著者への助言** であり、 言い換え
- * (「データベースが消されることがあります」) まで含む保証は人のレビューが担う。
- *
- * ネタバレの正しい置き場は `description` — SCHEMA が [管理者/作者向け] と定義し、 fairness
- * contract により競技者には出ない。 よって description は検査対象に含めない (移動先でもある)。
- * `publicHint: true` の disruption は作者が意図して予告しているので対象外
- * (battles/hello-world-battle は frontend-down を予告して初心者に障害と復旧を教える)。
+ * 検査しないもの: `description` (= [管理者/作者向け]。 fairness contract により競技者に出ない。
+ * ネタバレの正しい置き場であり、 本 advisory の移動先)、 `publicHint: true` (= 作者が意図した予告)。
  */
 export function checkParticipantVisibleSpoilerAdvisory(meta: Metadata): ValidationError[] {
   return findSpoilerMentions(meta, (disruption) => [
