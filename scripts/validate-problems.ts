@@ -86,7 +86,7 @@ function checkInstructionsPresent(meta: Metadata): ValidationError[] {
   return errors;
 }
 
-/** 参加者に実際に届く自由文 field。 `description` は運営側なので入らない (下記参照)。 */
+/** 参加者に実際に届く自由文 field。 `description` は運営向けなので入らない。 */
 const PARTICIPANT_VISIBLE_TEXT_FIELDS = ["instructions", "shortDescription"] as const;
 
 /** 参加者に届く自由文を (field 名, 本文) で列挙する。 未設定 / 非文字列は落とす。 */
@@ -98,6 +98,22 @@ function participantVisibleFields(meta: Metadata): Array<readonly [string, strin
   ].filter((entry): entry is readonly [string, string] => typeof entry[1] === "string");
 }
 
+/** 大小文字 / 全角半角 / 空白の揺れを吸収してから突き合わせる。 */
+function normalizeForSpoilerMatch(text: string): string {
+  return text.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+/**
+ * 正規化済みの本文が tell を「その語として」含むか。
+ * ASCII の tell は語境界を要求する (無いと "AI" が "available" に当たる)。 CJK は語境界の概念が
+ * 無い (「スパムが来る」) ので部分一致。 後端の複数形だけ許す (`-d` まで許すと "aid" に当たる)。
+ */
+function mentionsTell(haystack: string, tell: string): boolean {
+  if (!/^[\x20-\x7e]+$/.test(tell)) return haystack.includes(tell);
+  const escaped = tell.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<![a-z0-9])${escaped}(?:e?s)?(?![a-z0-9])`, "u").test(haystack);
+}
+
 /** 参加者に予告していない disruption (= サプライズ)。 publicHint: true は作者が意図して公開している。 */
 function surpriseDisruptions(meta: Metadata): Array<Record<string, unknown>> {
   const disruptions = Array.isArray(meta.disruptions)
@@ -106,77 +122,62 @@ function surpriseDisruptions(meta: Metadata): Array<Record<string, unknown>> {
   return disruptions.filter((d) => d.publicHint !== true);
 }
 
-/**
- * [Issue #192] 競技者視点のネタバラシ検査。
- *
- * SCHEMA は `instructions` を「[競技者向け] ネタバレ厳禁 (採点数値 / hardened state /
- * surprise mechanics は書かない)」と定義しているが、それを機械で確かめるゲートが無かった。
- * 参加者に実際に届く field が `publicHint !== true` の disruption (= サプライズ) を id で
- * 名指ししていないか検査する。
- *
- * `publicHint: true` の disruption は作者が意図して予告しているので許可する
- * (battles/hello-world-battle は frontend-down を予告し、 初心者に障害と復旧を教えるのが狙い)。
- *
- * ネタバレの正しい置き場は `description` — SCHEMA が [管理者/作者向け] と定義し、 fairness
- * contract (platform #1124) により競技者のポータルには出ない。 よって description は検査
- * 対象に含めない (そこに書くのが正解であり、 移動先でもある)。
- *
- * 判定は id の exact match のみ。 id は kebab-case で一意なので誤検知が無く error にできる。
- * disruption の `name` は散文で演出と区別できないため、 ここでは見ない (必要なら
- * checkCheckLabelSpoilerAdvisory と同じ warning 方針で別途足す)。
- */
-export function checkParticipantVisibleSpoilers(meta: Metadata): ValidationError[] {
-  const surprises = surpriseDisruptions(meta)
-    .map((d) => d.id)
-    .filter((id): id is string => typeof id === "string" && id.length > 0);
-  if (surprises.length === 0) return [];
-
-  const errors: ValidationError[] = [];
-  for (const [field, value] of participantVisibleFields(meta)) {
-    for (const id of surprises) {
-      if (!value.includes(id)) continue;
-      errors.push(
-        `${field} names the surprise disruption "${id}" — participant-facing text must not spoil it. ` +
-          "Move it to `description` (= [管理者/作者向け]; the fairness contract keeps that field off the " +
-          "competitor's portal), or declare `disruptions[].publicHint: true` to announce it on purpose.",
-      );
-    }
-  }
-  return errors;
+interface SpoilerMention {
+  readonly field: string;
+  readonly tell: string;
+  readonly id: string;
 }
 
-/**
- * [Issue #192] {@link checkParticipantVisibleSpoilers} の `name` 版。 **warning** に留める。
- *
- * id と違い disruption の `name` は散文なので、 参加者向け文との一致がネタバレなのか、 単なる
- * 症状・演出の記述なのかを機械では判別できない (例: name="nginx 停止" と instructions の
- * 「nginx が停止したら復旧する」)。 よって著者に判断させる warning にする
- * (= checkCheckLabelSpoilerAdvisory / checkDisruptionDeliveryAdvisory と同方針)。
- * 誤検知が無い id の exact match だけが hard error。
- *
- * これが無いと「id は書かないが name をそのまま書く」でゲートを素通りできてしまう。
- */
-export function checkParticipantVisibleSpoilerNameAdvisory(meta: Metadata): ValidationError[] {
-  const fields = participantVisibleFields(meta);
-  const warnings: ValidationError[] = [];
+const spoilerText = (value: unknown): string | undefined =>
+  typeof value === "string" && value.trim().length > 0 ? value : undefined;
+
+/** サプライズ障害の tell が参加者向け field に出ている箇所を列挙する。 */
+function findSpoilerMentions(
+  meta: Metadata,
+  tellsOf: (disruption: Record<string, unknown>) => Array<string | undefined>,
+): SpoilerMention[] {
+  const fields = participantVisibleFields(meta).map(
+    ([field, value]) => [field, normalizeForSpoilerMatch(value)] as const,
+  );
+  const mentions: SpoilerMention[] = [];
   for (const disruption of surpriseDisruptions(meta)) {
-    const id = typeof disruption.id === "string" ? disruption.id : "(unknown)";
-    const enName = (disruption.i18n as { en?: { name?: unknown } } | undefined)?.en?.name;
-    const names = [disruption.name, enName].filter(
-      (name): name is string => typeof name === "string" && name.trim().length > 0,
-    );
-    for (const [field, value] of fields) {
-      for (const name of names) {
-        if (!value.includes(name)) continue;
-        warnings.push(
-          `${field} repeats the surprise disruption name "${name}" (id="${id}") — if that is a spoiler, ` +
-            "move it to `description` or set `disruptions[].publicHint: true`; if it is only " +
-            "symptom / flavour wording, ignore this.",
-        );
+    const id = spoilerText(disruption.id) ?? "(unknown)";
+    for (const tell of tellsOf(disruption)) {
+      if (tell === undefined) continue;
+      for (const [field, haystack] of fields) {
+        if (!mentionsTell(haystack, normalizeForSpoilerMatch(tell))) continue;
+        mentions.push({ field, tell, id });
       }
     }
   }
-  return warnings;
+  return mentions;
+}
+
+/**
+ * [Issue #192] 参加者に届く field (instructions / shortDescription と i18n.en) が、
+ * `publicHint !== true` の disruption を id / name で名指ししていないか著者に知らせる。
+ *
+ * warning であって gate ではない。 作者が tell も散文も書く以上、 文字列一致は誤検知を避けられない
+ * (`id: "read-only"` は SCHEMA 上 valid で "The bucket is read-only." に当たる)。 honest な文章で
+ * CI を止めると作者は検査を迂回する。 言い換えは人のレビューが見る。
+ *
+ * 検査しないもの: `description` (= [管理者/作者向け]。 fairness contract (TenkaCloud#2642) が
+ * **ポータルには**出さないので、 本 advisory の移動先。 ただし repo が public なら catalog を
+ * 読めば見えるので「移せば秘密」ではない —— 答えを伏せる境界は `visibility: private` (ADR-008) が
+ * 担う)、 `publicHint: true` (= 作者が意図した予告)。
+ */
+export function checkParticipantVisibleSpoilerAdvisory(meta: Metadata): ValidationError[] {
+  return findSpoilerMentions(meta, (disruption) => [
+    spoilerText(disruption.id),
+    spoilerText(disruption.name),
+    spoilerText((disruption.i18n as { en?: { name?: unknown } } | undefined)?.en?.name),
+  ]).map(
+    ({ field, tell, id }) =>
+      `${field} names the surprise disruption "${tell}" (id="${id}") — if that spoils it, move it ` +
+      "to `description` (= [管理者/作者向け]; the fairness contract keeps that field off the " +
+      "competitor's portal), or set `disruptions[].publicHint: true` to announce it on purpose; " +
+      "if it is only symptom / flavour wording, ignore this.",
+  );
 }
 
 /**
@@ -457,7 +458,6 @@ export function checkCompositeAppRunDescriptor(
 function checkCompositeRefs(dir: string, meta: Metadata): CrossRefResult {
   const errors: ValidationError[] = [
     ...checkInstructionsPresent(meta),
-    ...checkParticipantVisibleSpoilers(meta),
     ...checkWriteupTranslations(meta),
     ...checkHintTranslations(meta),
     ...checkScoringRegulation(meta),
@@ -519,7 +519,7 @@ function checkCompositeRefs(dir: string, meta: Metadata): CrossRefResult {
       }
     }
   }
-  return { errors, warnings: checkParticipantVisibleSpoilerNameAdvisory(meta) };
+  return { errors, warnings: checkParticipantVisibleSpoilerAdvisory(meta) };
 }
 
 /** AWS target の CFn Outputs に composite-probe の outputKey が存在するかを cross-check する。 */
@@ -556,7 +556,6 @@ function checkContainerRefs(dir: string, meta: Metadata): CrossRefResult {
   const runtime = meta.runtime as { entry?: unknown } | undefined;
   const errors: ValidationError[] = [
     ...checkInstructionsPresent(meta),
-    ...checkParticipantVisibleSpoilers(meta),
     ...checkWriteupTranslations(meta),
     ...checkHintTranslations(meta),
     ...checkScoringRegulation(meta),
@@ -577,7 +576,7 @@ function checkContainerRefs(dir: string, meta: Metadata): CrossRefResult {
   }
   const warnings: ValidationError[] = [
     ...checkContainerWriteupAdvisory(meta),
-    ...checkParticipantVisibleSpoilerNameAdvisory(meta),
+    ...checkParticipantVisibleSpoilerAdvisory(meta),
   ];
   if (scoringKind === "multi-verify") {
     errors.push(...checkMultiVerifyStructure(meta), ...checkMultiVerifyTranslations(meta));
@@ -805,7 +804,6 @@ function checkCrossRefs(metaPath: string, meta: Metadata): CrossRefResult {
       ...simulationErrors,
       ...containerOnlyKindErrors,
       ...checkInstructionsPresent(meta),
-      ...checkParticipantVisibleSpoilers(meta),
       ...checkWriteupTranslations(meta),
       ...checkHintTranslations(meta),
       ...checkScoringRegulation(meta),
@@ -820,7 +818,7 @@ function checkCrossRefs(metaPath: string, meta: Metadata): CrossRefResult {
     warnings: [
       ...checkFlagEarnedAdvisory(meta, yaml, cfnTemplate),
       ...checkDisruptionDeliveryAdvisory(meta, dir),
-      ...checkParticipantVisibleSpoilerNameAdvisory(meta),
+      ...checkParticipantVisibleSpoilerAdvisory(meta),
     ],
   };
 }

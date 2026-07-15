@@ -15,8 +15,7 @@ import {
   checkCompositeAppRunDescriptor,
   checkMultiVerifyStructure,
   checkMultiVerifyTranslations,
-  checkParticipantVisibleSpoilerNameAdvisory,
-  checkParticipantVisibleSpoilers,
+  checkParticipantVisibleSpoilerAdvisory,
   checkRequiredReadmes,
   checkScoringRegulation,
   checkWriteupTranslations,
@@ -450,7 +449,7 @@ describe("multi-verify (TenkaCloud#2252)", () => {
   });
 });
 
-describe("checkParticipantVisibleSpoilers", () => {
+describe("checkParticipantVisibleSpoilerAdvisory (id)", () => {
   const withDisruption = (
     disruption: Record<string, unknown>,
     visible: Record<string, unknown>,
@@ -460,7 +459,7 @@ describe("checkParticipantVisibleSpoilers", () => {
   const announced = { id: "frontend-down", name: "nginx 停止", publicHint: true };
 
   it("accepts a problem without disruptions", () => {
-    expect(checkParticipantVisibleSpoilers({ instructions: "SSM で入る。" })).toEqual([]);
+    expect(checkParticipantVisibleSpoilerAdvisory({ instructions: "SSM で入る。" })).toEqual([]);
   });
 
   it("accepts a publicHint disruption named in participant-facing text", () => {
@@ -471,14 +470,14 @@ describe("checkParticipantVisibleSpoilers", () => {
       shortDescription: "frontend-down からの復旧を学ぶ。",
       i18n: { en: { instructions: "The red team may fire frontend-down." } },
     });
-    expect(checkParticipantVisibleSpoilers(meta)).toEqual([]);
+    expect(checkParticipantVisibleSpoilerAdvisory(meta)).toEqual([]);
   });
 
   it("keeps the surprise out of instructions", () => {
     const meta = withDisruption(surprise, {
       instructions: "まず ai-wipes-database に備えて backup を取る。",
     });
-    const errors = checkParticipantVisibleSpoilers(meta);
+    const errors = checkParticipantVisibleSpoilerAdvisory(meta);
     expect(errors).toHaveLength(1);
     expect(errors[0]).toMatch(/ai-wipes-database/);
     expect(errors[0]).toMatch(/instructions/);
@@ -486,12 +485,12 @@ describe("checkParticipantVisibleSpoilers", () => {
 
   it("keeps the surprise out of shortDescription and the en overlay", () => {
     expect(
-      checkParticipantVisibleSpoilers(
+      checkParticipantVisibleSpoilerAdvisory(
         withDisruption(surprise, { shortDescription: "ai-wipes-database に耐える。" }),
       ),
     ).toHaveLength(1);
     expect(
-      checkParticipantVisibleSpoilers(
+      checkParticipantVisibleSpoilerAdvisory(
         withDisruption(surprise, {
           i18n: { en: { instructions: "Survive ai-wipes-database." } },
         }),
@@ -506,52 +505,140 @@ describe("checkParticipantVisibleSpoilers", () => {
       description: "## レッドチーム\n- `ai-wipes-database`: 投稿を空にする。revert は復元。",
       instructions: "vibe-status を実行して不足 gate を確認する。",
     });
-    expect(checkParticipantVisibleSpoilers(meta)).toEqual([]);
+    expect(checkParticipantVisibleSpoilerAdvisory(meta)).toEqual([]);
   });
 });
 
-describe("checkParticipantVisibleSpoilerNameAdvisory", () => {
+describe("checkParticipantVisibleSpoilerAdvisory (誤検知で CI を止めない)", () => {
+  it("does not hard-error on a single-word id that reads as ordinary prose", () => {
+    // SCHEMA の id pattern `^[a-z0-9][a-z0-9-]*$` はハイフンを要求しないので id="down" は valid。
+    // それを hard error にすると "If the site is down" で CI が壊れる。 複合語だけを gate する。
+    const meta = {
+      disruptions: [{ id: "down", name: "ダミー" }],
+      instructions: "If the site is down, restart it.",
+    };
+    // hard error は出さない (CI を止めない) が、 助言としては拾う。
+    expect(checkParticipantVisibleSpoilerAdvisory(meta)).toHaveLength(1);
+  });
+
+  it("still hard-errors on a compound id, which cannot occur in prose", () => {
+    expect(
+      checkParticipantVisibleSpoilerAdvisory({
+        disruptions: [{ id: "ai-wipes-database", name: "DB 消去" }],
+        instructions: "注意: ai-wipes-database が起きます。",
+      }),
+    ).toHaveLength(1);
+  });
+});
+
+describe("checkParticipantVisibleSpoilerAdvisory (name / i18n.en.name)", () => {
   const surprise = { id: "ai-wipes-database", name: "AI がデータを消す", i18n: { en: { name: "AI wipes the database" } } };
 
-  it("stays silent when the name is absent from participant-facing text", () => {
+  it("accepts text that does not name the surprise", () => {
     expect(
-      checkParticipantVisibleSpoilerNameAdvisory({
+      checkParticipantVisibleSpoilerAdvisory({
         disruptions: [surprise],
         instructions: "vibe-status を実行する。",
       }),
     ).toEqual([]);
   });
 
-  it("warns when a surprise name is repeated to the participant", () => {
-    const warnings = checkParticipantVisibleSpoilerNameAdvisory({
+  it("fails when a surprise name is repeated to the participant", () => {
+    const errors = checkParticipantVisibleSpoilerAdvisory({
       disruptions: [surprise],
       instructions: "AI がデータを消す ことがあります。",
     });
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toMatch(/ai-wipes-database/);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(/ai-wipes-database/);
   });
 
-  it("warns on the en name in the en overlay too", () => {
+  it("fails on the en name in the en overlay too", () => {
     expect(
-      checkParticipantVisibleSpoilerNameAdvisory({
+      checkParticipantVisibleSpoilerAdvisory({
         disruptions: [surprise],
         i18n: { en: { instructions: "AI wipes the database without warning." } },
       }),
     ).toHaveLength(1);
   });
 
-  it("stays silent for a publicHint disruption the author announces on purpose", () => {
+  it("accepts a publicHint disruption the author announces on purpose", () => {
     expect(
-      checkParticipantVisibleSpoilerNameAdvisory({
+      checkParticipantVisibleSpoilerAdvisory({
         disruptions: [{ id: "frontend-down", name: "nginx 停止", publicHint: true }],
         instructions: "nginx 停止 が起きたら復旧する。",
       }),
     ).toEqual([]);
   });
 
+  it("catches an ordinary plural of the name", () => {
+    // 後端境界を厳格にすると "AI outages" が素通りする (実測で踏んだ)。 普通の英文で起きる。
+    expect(
+      checkParticipantVisibleSpoilerAdvisory({
+        disruptions: [{ id: "ai-outage", name: "AI outage" }],
+        instructions: "AI outages may happen.",
+      }),
+    ).toHaveLength(1);
+  });
+
+  it("does not let the plural suffix reopen the embedded-word false positive", () => {
+    // `-s`/`-es` までは許すが `-d` は許さない — 許すと "first aid kit" が name="AI" に一致する。
+    for (const instructions of ["Bring a first aid kit.", "Check the air flow and aim."]) {
+      expect(
+        checkParticipantVisibleSpoilerAdvisory({
+          disruptions: [{ id: "ai-outage", name: "AI" }],
+          instructions,
+        }),
+      ).toEqual([]);
+    }
+  });
+
+  it("does not fire on an unrelated word that merely embeds a short name", () => {
+    // name="AI" を素の部分一致で見ると "available" の中の "ai" で hard error になり、
+    // 無関係な文章で CI が止まる。 ASCII の tell は語境界を要求する。
+    expect(
+      checkParticipantVisibleSpoilerAdvisory({
+        disruptions: [{ id: "ai-outage", name: "AI" }],
+        instructions: "The dashboard is available at /health. Keep it maintained.",
+      }),
+    ).toEqual([]);
+  });
+
+  it("still flags a short name used as a word", () => {
+    expect(
+      checkParticipantVisibleSpoilerAdvisory({
+        disruptions: [{ id: "ai-outage", name: "AI" }],
+        instructions: "AI が予告なく落ちます。",
+      }),
+    ).toHaveLength(1);
+  });
+
+  it("leaves the hard error to the id check", () => {
+    // 日本語に直付けされた ASCII id (助詞が直結) は error 側が捕まえる。
+    const meta = {
+      disruptions: [{ id: "ai-wipes-database", name: "DB 消去" }],
+      instructions: "障害ai-wipes-databaseが発生します。",
+    };
+    expect(checkParticipantVisibleSpoilerAdvisory(meta)).toHaveLength(1);
+  });
+
+  it("is not fooled by case, width, or spacing drift", () => {
+    // 善意の作者が見出しで Title Case にする / 全角で書く / 空白が揺れる、で素通りさせない。
+    const cases = [
+      "AI WIPES THE DATABASE may happen.",
+      "AI Wipes The Database may happen.",
+      "ＡＩ wipes the database may happen.",
+      "AI  wipes   the database may happen.",
+    ];
+    for (const instructions of cases) {
+      expect(
+        checkParticipantVisibleSpoilerAdvisory({ disruptions: [surprise], i18n: { en: { instructions } } }),
+      ).toHaveLength(1);
+    }
+  });
+
   it("allows the name in description, the operator's field", () => {
     expect(
-      checkParticipantVisibleSpoilerNameAdvisory({
+      checkParticipantVisibleSpoilerAdvisory({
         disruptions: [surprise],
         description: "## レッドチーム\n- AI がデータを消す。",
         instructions: "vibe-status を実行する。",
