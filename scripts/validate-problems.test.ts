@@ -15,7 +15,6 @@ import {
   checkCompositeAppRunDescriptor,
   checkMultiVerifyStructure,
   checkMultiVerifyTranslations,
-  checkParticipantVisibleSpoilerNameAdvisory,
   checkParticipantVisibleSpoilers,
   checkRequiredReadmes,
   checkScoringRegulation,
@@ -510,39 +509,39 @@ describe("checkParticipantVisibleSpoilers", () => {
   });
 });
 
-describe("checkParticipantVisibleSpoilerNameAdvisory", () => {
+describe("checkParticipantVisibleSpoilers (name / i18n.en.name も error)", () => {
   const surprise = { id: "ai-wipes-database", name: "AI がデータを消す", i18n: { en: { name: "AI wipes the database" } } };
 
-  it("stays silent when the name is absent from participant-facing text", () => {
+  it("accepts text that does not name the surprise", () => {
     expect(
-      checkParticipantVisibleSpoilerNameAdvisory({
+      checkParticipantVisibleSpoilers({
         disruptions: [surprise],
         instructions: "vibe-status を実行する。",
       }),
     ).toEqual([]);
   });
 
-  it("warns when a surprise name is repeated to the participant", () => {
-    const warnings = checkParticipantVisibleSpoilerNameAdvisory({
+  it("fails when a surprise name is repeated to the participant", () => {
+    const errors = checkParticipantVisibleSpoilers({
       disruptions: [surprise],
       instructions: "AI がデータを消す ことがあります。",
     });
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toMatch(/ai-wipes-database/);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(/ai-wipes-database/);
   });
 
-  it("warns on the en name in the en overlay too", () => {
+  it("fails on the en name in the en overlay too", () => {
     expect(
-      checkParticipantVisibleSpoilerNameAdvisory({
+      checkParticipantVisibleSpoilers({
         disruptions: [surprise],
         i18n: { en: { instructions: "AI wipes the database without warning." } },
       }),
     ).toHaveLength(1);
   });
 
-  it("stays silent for a publicHint disruption the author announces on purpose", () => {
+  it("accepts a publicHint disruption the author announces on purpose", () => {
     expect(
-      checkParticipantVisibleSpoilerNameAdvisory({
+      checkParticipantVisibleSpoilers({
         disruptions: [{ id: "frontend-down", name: "nginx 停止", publicHint: true }],
         instructions: "nginx 停止 が起きたら復旧する。",
       }),
@@ -551,7 +550,7 @@ describe("checkParticipantVisibleSpoilerNameAdvisory", () => {
 
   it("allows the name in description, the operator's field", () => {
     expect(
-      checkParticipantVisibleSpoilerNameAdvisory({
+      checkParticipantVisibleSpoilers({
         disruptions: [surprise],
         description: "## レッドチーム\n- AI がデータを消す。",
         instructions: "vibe-status を実行する。",
