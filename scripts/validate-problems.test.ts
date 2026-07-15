@@ -510,6 +510,29 @@ describe("checkParticipantVisibleSpoilers", () => {
   });
 });
 
+describe("checkParticipantVisibleSpoilers (hard error は複合語の tell だけ)", () => {
+  it("does not hard-error on a single-word id that reads as ordinary prose", () => {
+    // SCHEMA の id pattern `^[a-z0-9][a-z0-9-]*$` はハイフンを要求しないので id="down" は valid。
+    // それを hard error にすると "If the site is down" で CI が壊れる。 複合語だけを gate する。
+    const meta = {
+      disruptions: [{ id: "down", name: "ダミー" }],
+      instructions: "If the site is down, restart it.",
+    };
+    expect(checkParticipantVisibleSpoilers(meta)).toEqual([]);
+    // 取りこぼしはしない — advisory 側が拾う。
+    expect(checkParticipantVisibleSpoilerNameAdvisory(meta)).toHaveLength(1);
+  });
+
+  it("still hard-errors on a compound id, which cannot occur in prose", () => {
+    expect(
+      checkParticipantVisibleSpoilers({
+        disruptions: [{ id: "ai-wipes-database", name: "DB 消去" }],
+        instructions: "注意: ai-wipes-database が起きます。",
+      }),
+    ).toHaveLength(1);
+  });
+});
+
 describe("checkParticipantVisibleSpoilerNameAdvisory (name は warning)", () => {
   const surprise = { id: "ai-wipes-database", name: "AI がデータを消す", i18n: { en: { name: "AI wipes the database" } } };
 

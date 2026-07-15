@@ -171,6 +171,26 @@ interface SpoilerMention {
 const spoilerText = (value: unknown): string | undefined =>
   typeof value === "string" && value.trim().length > 0 ? value : undefined;
 
+/**
+ * hard error に使ってよい tell か。
+ *
+ * 判定の根拠は「id かどうか」ではなく **複合語 (kebab の連結) かどうか**。 SCHEMA の
+ * disruptions[].id は `^[a-z0-9][a-z0-9-]*$` で **ハイフンを要求していない** ので、
+ * `id: "down"` は schema 上 valid — その場合 "If the site is down, restart it." が hard error に
+ * なってしまう (実測で踏んだ)。 誤検知が無いのは `ai-wipes-database` のように語が連結されていて
+ * 通常文に現れ得ないから。 単語 1 つの id は name と同じく散文と区別できないので advisory に回す。
+ */
+const compoundTell = (value: unknown): string | undefined => {
+  const tell = spoilerText(value);
+  return tell?.includes("-") ? tell : undefined;
+};
+
+/** 複合語でない (= 通常文と区別できない) tell。 hard error にはできないので advisory 行き。 */
+const ambiguousTell = (value: unknown): string | undefined => {
+  const tell = spoilerText(value);
+  return tell !== undefined && !tell.includes("-") ? tell : undefined;
+};
+
 /** サプライズ障害の tell が参加者向け field に出ている箇所を列挙する。 */
 function findSpoilerMentions(
   meta: Metadata,
@@ -194,17 +214,18 @@ function findSpoilerMentions(
 }
 
 /**
- * hard error は **id の一致だけ**。
+ * hard error は **複合語の id の一致だけ** ({@link compoundTell})。
  *
- * id は kebab-case の複合語で問題固有なので、 通常文と衝突しない (実カタログの disruption id
- * 11 件はすべて複合語、 単語 1 つの id は 0 件)。 だから誤検知ゼロで CI を止められる ——
- * ゲートとして成立する唯一の信号。 現実の事故も「作者が description に障害を id で列挙した」
- * 形だったので、 起きうる失敗はこれで捕まる。
+ * `ai-wipes-database` のように語が連結された id は通常文に現れ得ないので、 誤検知ゼロで CI を
+ * 止められる —— ゲートとして成立する唯一の信号。 現実の事故も「作者が description に障害を
+ * id で列挙した」形だったので、 起きうる失敗はこれで捕まる (実カタログの id 11 件はすべて複合語)。
+ * 単語 1 つの id は schema 上ありえる (`^[a-z0-9][a-z0-9-]*$`) が、 通常文と区別できないので
+ * advisory に回す。
  *
  * `name` を hard error にしないのは {@link checkParticipantVisibleSpoilerNameAdvisory} 参照。
  */
 export function checkParticipantVisibleSpoilers(meta: Metadata): ValidationError[] {
-  return findSpoilerMentions(meta, (disruption) => [spoilerText(disruption.id)]).map(
+  return findSpoilerMentions(meta, (disruption) => [compoundTell(disruption.id)]).map(
     ({ field, tell, id }) =>
       `${field} gives away the surprise disruption "${tell}" (id="${id}") — participant-facing ` +
       "text must not spoil it. Move it to `description` (= [管理者/作者向け]; the fairness " +
@@ -231,6 +252,9 @@ export function checkParticipantVisibleSpoilerNameAdvisory(meta: Metadata): Vali
   return findSpoilerMentions(meta, (disruption) => [
     spoilerText(disruption.name),
     spoilerText((disruption.i18n as { en?: { name?: unknown } } | undefined)?.en?.name),
+    // 単語 1 つの id は複合語でないので hard error にできない (compoundTell 参照)。 取りこぼさず
+    // ここで拾う。
+    ambiguousTell(disruption.id),
   ]).map(
     ({ field, tell, id }) =>
       `${field} repeats the surprise disruption name "${tell}" (id="${id}") — if that is a spoiler, ` +
