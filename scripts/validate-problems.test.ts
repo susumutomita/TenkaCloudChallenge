@@ -15,6 +15,7 @@ import {
   checkCompositeAppRunDescriptor,
   checkMultiVerifyStructure,
   checkMultiVerifyTranslations,
+  checkParticipantVisibleSpoilers,
   checkRequiredReadmes,
   checkScoringRegulation,
   checkWriteupTranslations,
@@ -445,5 +446,65 @@ describe("multi-verify (TenkaCloud#2252)", () => {
     expect(
       checkScoringRegulation(meta([check(), check({ id: "second", label: "第二" })])),
     ).toEqual([]);
+  });
+});
+
+describe("checkParticipantVisibleSpoilers", () => {
+  const withDisruption = (
+    disruption: Record<string, unknown>,
+    visible: Record<string, unknown>,
+  ) => ({ disruptions: [disruption], ...visible });
+
+  const surprise = { id: "ai-wipes-database", name: "AI がデータを消す" };
+  const announced = { id: "frontend-down", name: "nginx 停止", publicHint: true };
+
+  it("accepts a problem without disruptions", () => {
+    expect(checkParticipantVisibleSpoilers({ instructions: "SSM で入る。" })).toEqual([]);
+  });
+
+  it("accepts a publicHint disruption named in participant-facing text", () => {
+    // battles/hello-world-battle pattern: the author opted in with publicHint,
+    // so telling the participant about the fault is the intended lesson.
+    const meta = withDisruption(announced, {
+      instructions: "運営のレッドチームが予告なく frontend-down を起こします。",
+      shortDescription: "frontend-down からの復旧を学ぶ。",
+      i18n: { en: { instructions: "The red team may fire frontend-down." } },
+    });
+    expect(checkParticipantVisibleSpoilers(meta)).toEqual([]);
+  });
+
+  it("keeps the surprise out of instructions", () => {
+    const meta = withDisruption(surprise, {
+      instructions: "まず ai-wipes-database に備えて backup を取る。",
+    });
+    const errors = checkParticipantVisibleSpoilers(meta);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(/ai-wipes-database/);
+    expect(errors[0]).toMatch(/instructions/);
+  });
+
+  it("keeps the surprise out of shortDescription and the en overlay", () => {
+    expect(
+      checkParticipantVisibleSpoilers(
+        withDisruption(surprise, { shortDescription: "ai-wipes-database に耐える。" }),
+      ),
+    ).toHaveLength(1);
+    expect(
+      checkParticipantVisibleSpoilers(
+        withDisruption(surprise, {
+          i18n: { en: { instructions: "Survive ai-wipes-database." } },
+        }),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("allows the surprise in description, which is the operator's field", () => {
+    // SCHEMA: description is [管理者/作者向け] and the fairness contract keeps it
+    // off the competitor's portal, so the red-team playbook belongs there.
+    const meta = withDisruption(surprise, {
+      description: "## レッドチーム\n- `ai-wipes-database`: 投稿を空にする。revert は復元。",
+      instructions: "vibe-status を実行して不足 gate を確認する。",
+    });
+    expect(checkParticipantVisibleSpoilers(meta)).toEqual([]);
   });
 });
