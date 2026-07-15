@@ -159,11 +159,12 @@ function findSpoilerMentions(
  *
  * warning であって gate ではない。 作者が tell も散文も書く以上、 文字列一致は誤検知を避けられない
  * (`id: "read-only"` は SCHEMA 上 valid で "The bucket is read-only." に当たる)。 honest な文章で
- * CI を止めると作者は検査を迂回する。 漏洩を実際に止めるのは platform 側の fairness projection
- * (TenkaCloud#2642) で、 言い換えは人のレビューが見る。
+ * CI を止めると作者は検査を迂回する。 言い換えは人のレビューが見る。
  *
- * 検査しないもの: `description` (= [管理者/作者向け]。 fairness contract により競技者に出ない。
- * ネタバレの正しい置き場であり、 本 advisory の移動先)、 `publicHint: true` (= 作者が意図した予告)。
+ * 検査しないもの: `description` (= [管理者/作者向け]。 fairness contract (TenkaCloud#2642) が
+ * **ポータルには**出さないので、 本 advisory の移動先。 ただし repo が public なら catalog を
+ * 読めば見えるので「移せば秘密」ではない —— 答えを伏せる境界は `visibility: private` (ADR-008) が
+ * 担う)、 `publicHint: true` (= 作者が意図した予告)。
  */
 export function checkParticipantVisibleSpoilerAdvisory(meta: Metadata): ValidationError[] {
   return findSpoilerMentions(meta, (disruption) => [
