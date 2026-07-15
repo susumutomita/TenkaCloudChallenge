@@ -196,9 +196,9 @@ The legacy `uptime` kind is an alias for `uptime-flat`. New problems should use 
 
 | Track ID            | Curriculum                                                             | Problems (in `order`)                          |
 | -------------------- | ----------------------------------------------------------------------- | ----------------------------------------------- |
-| `ipa-web-security`   | IPA "安全なウェブサイトの作り方" (<https://www.ipa.go.jp/security/vuln/websecurity/about.html>), one chapter per problem | 1. `xss-demo` (§1.5 XSS)                        |
+| `ipa-web-security`   | IPA "安全なウェブサイトの作り方" (<https://www.ipa.go.jp/security/vuln/websecurity/about.html>), one chapter per problem | 1. `xss-demo` (§1.5 XSS)<br>2. `csrf-demo` (§1.6 CSRF) |
 
-Planned (not yet authored, tracked in Issue #177's Phase 2/3): remaining `ipa-web-security` chapters (CSRF §1.6, OS command injection §1.2, path traversal §1.3, session management §1.4), a `twelve-factor` track (<https://12factor.net/ja/>), and a `well-architected` track scoped to pillars that a Docker-only local drill can honestly reproduce (operational excellence, reliability, performance efficiency — cost optimization and least-privilege security are excluded from the local track since they need a real AWS billing/IAM model to teach honestly).
+Planned (not yet authored, tracked in Issue #177's Phase 2/3): remaining `ipa-web-security` chapters (OS command injection §1.2, path traversal §1.3, session management §1.4), a `twelve-factor` track (<https://12factor.net/ja/>), and a `well-architected` track scoped to pillars that a Docker-only local drill can honestly reproduce (operational excellence, reliability, performance efficiency — cost optimization and least-privilege security are excluded from the local track since they need a real AWS billing/IAM model to teach honestly).
 
 ## template.yaml
 
