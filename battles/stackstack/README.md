@@ -70,6 +70,27 @@ The app exposes `GET /posture`; those values are measured from actual state, not
 
 Reaching `production` (all six gates) also earns a one-time **+30000** bonus. A probe failure costs **-100** per cycle and a slow response (> 5000 ms) costs **-25** — both unchanged by the flat model. After the 30-minute `production-ramp` phase, teams still at `posture-0/1/2` drop to the degraded rate (half: 0 / 50 / 100 per min). If the red team defaces the site, plants a backdoor, or lands anonymous spam on a board with auth still off (`site_intact` / `no_backdoor` / `board_clean` false), the app clamps the platform to `posture-2`, capping the team at **200 points/min** until they recover (for spam: enable auth to repel it, then delete the `author=redteam-spam` posts).
 
+## Reaching the app host
+
+Every remediation step runs from a shell on the EC2 app host, and there is **no SSH and no key pair** — access is always AWS Systems Manager Session Manager. The target is the stack Output `InstanceId`; the stack also emits a ready-to-run `SsmStartSessionCommand` Output, so `<InstanceId>` in the instructions is never something you invent — read it from your deployment's stack Outputs.
+
+- **Real AWS.** Use the `SsmStartSessionCommand` Output as-is:
+
+  ```bash
+  aws ssm start-session --target <InstanceId>
+  ```
+
+  From **CloudShell** the Session Manager plugin is already installed. Locally you need the [Session Manager plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html) plus credentials from `aws sso login` (or the organizer's IAM Identity Center sign-in).
+
+- **Local (TenkaCloud Simulator).** The simulator serves the same `ssm StartSession` capability declared in [`simulation.json`](./simulation.json), so you do not need real AWS or the debug SSH rule. Read `InstanceId` from your deployment's stack Outputs, then run the identical command with `--endpoint-url` pointed at your simulator origin (e.g. `http://127.0.0.1:7777`) and simulator credentials:
+
+  ```bash
+  aws ssm start-session --target <InstanceId> \
+    --endpoint-url "$TENKACLOUD_SIMULATOR_ORIGIN" --no-cli-pager
+  ```
+
+  Local play exercises the declared cloud control operations at the simulator's fidelity: restoring the S3 backup dump (`s3 GetObject`), associating the WAF WebACL (`wafv2 AssociateWebACL`), and finding and revoking the leftover public SSH rule (`ec2 DescribeSecurityGroups` / `RevokeSecurityGroupIngress`). The full interactive in-shell remediation that drives every `vibe-status` gate (the auth/audit config flags and the SQLite→RDS migration) is the real-AWS experience.
+
 ## How to play
 
 1. Start an SSM Session Manager shell (`SsmStartSessionCommand`) and run `sudo /opt/tenkacloud/vibe/deploy_app.sh` to deploy the local build (start the service).

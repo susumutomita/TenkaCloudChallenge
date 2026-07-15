@@ -70,6 +70,27 @@ EC2 app host (SSM only, SSH 不要)
 
 `production` (全 6 gate) 到達で一度きり **+30000** bonus。 probe 失敗は 1 cycle ごとに **-100**、 応答が遅い (> 5000ms) と **-25**(フラット化後も据え置き)。 30 分の `production-ramp` phase 以降、 `posture-0/1/2` に留まるチームは degraded レート (半分: 0 / 50 / 100 点/分) に落ちる。 レッドチームに site を改ざんされる / backdoor を仕込まれる / auth 未設定のまま匿名スパムが刺さる (`site_intact` / `no_backdoor` / `board_clean` が false) と、 app は platform を `posture-2` に clamp し、 復旧するまで **200点/分** が上限になる (スパムは auth 有効化で弾き、 `author=redteam-spam` の投稿を削除して復旧)。
 
+## app host への接続
+
+各修復ステップは EC2 app host 上のシェルで実行する。 **SSH も鍵ペアも無い** — アクセスは常に AWS Systems Manager Session Manager 経由。 接続先は Stack Output の `InstanceId`。 Stack はすぐ実行できる `SsmStartSessionCommand` Output も出すので、 手順中の `<InstanceId>` は自分で考える値ではなく、 デプロイの Stack Outputs から読む。
+
+- **実 AWS。** `SsmStartSessionCommand` Output をそのまま使う。
+
+  ```bash
+  aws ssm start-session --target <InstanceId>
+  ```
+
+  **CloudShell** なら Session Manager plugin は導入済み。 ローカルでは [Session Manager plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html) と、 `aws sso login`（または主催者の IAM Identity Center サインイン）で得た認証情報が要る。
+
+- **ローカル（TenkaCloud Simulator）。** simulator は [`simulation.json`](./simulation.json) で宣言した `ssm StartSession` capability を同じ形で提供するので、 実 AWS もデバッグ用 SSH ルールも不要。 デプロイの Stack Outputs から `InstanceId` を読み、 同じコマンドに `--endpoint-url`（simulator origin、 例 `http://127.0.0.1:7777`）と simulator の認証情報を付けて実行する。
+
+  ```bash
+  aws ssm start-session --target <InstanceId> \
+    --endpoint-url "$TENKACLOUD_SIMULATOR_ORIGIN" --no-cli-pager
+  ```
+
+  ローカル実行では、 宣言済みのクラウド制御操作を simulator の fidelity で練習できる: S3 バックアップの復元（`s3 GetObject`）、 WAF WebACL の関連付け（`wafv2 AssociateWebACL`）、 残置された public SSH ルールの発見と revoke（`ec2 DescribeSecurityGroups` / `RevokeSecurityGroupIngress`）。 `vibe-status` の各 gate を進めるシェル内の対話的修復（auth/audit の config フラグ、 SQLite→RDS 移行）は実 AWS での体験。
+
 ## 競技フロー
 
 1. `SsmStartSessionCommand` output で SSM Session Manager に入り、 `sudo /opt/tenkacloud/vibe/deploy_app.sh` でローカルビルドをデプロイ（サービス起動）。
