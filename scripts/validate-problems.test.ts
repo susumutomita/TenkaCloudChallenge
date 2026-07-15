@@ -548,6 +548,28 @@ describe("checkParticipantVisibleSpoilers (name / i18n.en.name も error)", () =
     ).toEqual([]);
   });
 
+  it("catches an ordinary plural of the name", () => {
+    // 後端境界を厳格にすると "AI outages" が素通りする (実測で踏んだ)。 普通の英文で起きる。
+    expect(
+      checkParticipantVisibleSpoilers({
+        disruptions: [{ id: "ai-outage", name: "AI outage" }],
+        instructions: "AI outages may happen.",
+      }),
+    ).toHaveLength(1);
+  });
+
+  it("does not let the plural suffix reopen the embedded-word false positive", () => {
+    // `-s`/`-es` までは許すが `-d` は許さない — 許すと "first aid kit" が name="AI" に一致する。
+    for (const instructions of ["Bring a first aid kit.", "Check the air flow and aim."]) {
+      expect(
+        checkParticipantVisibleSpoilers({
+          disruptions: [{ id: "ai-outage", name: "AI" }],
+          instructions,
+        }),
+      ).toEqual([]);
+    }
+  });
+
   it("does not fire on an unrelated word that merely embeds a short name", () => {
     // name="AI" を素の部分一致で見ると "available" の中の "ai" で hard error になり、
     // 無関係な文章で CI が止まる。 ASCII の tell は語境界を要求する。

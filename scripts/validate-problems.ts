@@ -116,11 +116,19 @@ function normalizeForSpoilerMatch(text: string): string {
  * 「障害ai-wipes-databaseが発生」) は前後が非 ASCII なので引き続き検出できる。
  *
  * CJK を含む tell は語境界の概念が無い (「スパムが来る」のように助詞が直結する) ため部分一致で見る。
+ *
+ * 後端は複数形 (`-s` / `-es`) を許す。 許さないと name="AI outage" が "AI outages happen" を
+ * 素通りさせてしまう (実測で踏んだ) —— 普通の英文で起きる。 逆に `-d` / `-ed` まで許すと
+ * tell="AI" が "first aid kit" に一致して誤検知が復活するため、 そこは許さない。
+ *
+ * 限界 (意図的): これは *機械的な tell* (id / name の逐語・複数形) を捕まえる gate であり、
+ * 言い換え (「データベースが消されることがあります」) は静的検査では届かない。 確実な芯は
+ * id の一致で、 name は補助。 言い換えまで含めた保証は人のレビューが担う。
  */
 function mentionsTell(haystack: string, tell: string): boolean {
   if (!/^[\x20-\x7e]+$/.test(tell)) return haystack.includes(tell);
   const escaped = tell.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(?<![a-z0-9])${escaped}(?![a-z0-9])`, "u").test(haystack);
+  return new RegExp(`(?<![a-z0-9])${escaped}(?:e?s)?(?![a-z0-9])`, "u").test(haystack);
 }
 
 /** 参加者に予告していない disruption (= サプライズ)。 publicHint: true は作者が意図して公開している。 */
