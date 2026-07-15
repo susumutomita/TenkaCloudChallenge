@@ -548,6 +548,21 @@ describe("checkParticipantVisibleSpoilers (name / i18n.en.name も error)", () =
     ).toEqual([]);
   });
 
+  it("is not fooled by case, width, or spacing drift", () => {
+    // 善意の作者が見出しで Title Case にする / 全角で書く / 空白が揺れる、で素通りさせない。
+    const cases = [
+      "AI WIPES THE DATABASE may happen.",
+      "AI Wipes The Database may happen.",
+      "ＡＩ wipes the database may happen.",
+      "AI  wipes   the database may happen.",
+    ];
+    for (const instructions of cases) {
+      expect(
+        checkParticipantVisibleSpoilers({ disruptions: [surprise], i18n: { en: { instructions } } }),
+      ).toHaveLength(1);
+    }
+  });
+
   it("allows the name in description, the operator's field", () => {
     expect(
       checkParticipantVisibleSpoilers({

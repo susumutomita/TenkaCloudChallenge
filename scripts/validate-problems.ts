@@ -98,6 +98,15 @@ function participantVisibleFields(meta: Metadata): Array<readonly [string, strin
   ].filter((entry): entry is readonly [string, string] => typeof entry[1] === "string");
 }
 
+/**
+ * 突き合わせ前の正規化。 大小文字 / 全角半角 / 空白の揺れだけでゲートを素通りさせない
+ * (例: en name "AI wipes the database" を見出しで "AI Wipes The Database" と書く、 全角 "ＡＩ" で書く)。
+ * 想定は悪意ある回避ではなく、 文頭の大文字化や Title Case で善意の作者が普通に踏むこと。
+ */
+function normalizeForSpoilerMatch(text: string): string {
+  return text.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
 /** 参加者に予告していない disruption (= サプライズ)。 publicHint: true は作者が意図して公開している。 */
 function surpriseDisruptions(meta: Metadata): Array<Record<string, unknown>> {
   const disruptions = Array.isArray(meta.disruptions)
@@ -145,8 +154,9 @@ export function checkParticipantVisibleSpoilers(meta: Metadata): ValidationError
       (tell): tell is string => typeof tell === "string" && tell.trim().length > 0,
     );
     for (const [field, value] of fields) {
+      const haystack = normalizeForSpoilerMatch(value);
       for (const tell of tells) {
-        if (!value.includes(tell)) continue;
+        if (!haystack.includes(normalizeForSpoilerMatch(tell))) continue;
         errors.push(
           `${field} gives away the surprise disruption "${tell}" (id="${id}") — participant-facing ` +
             "text must not spoil it. Move it to `description` (= [管理者/作者向け]; the fairness " +
