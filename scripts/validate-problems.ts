@@ -153,12 +153,7 @@ function surpriseDisruptions(meta: Metadata): Array<Record<string, unknown>> {
  * contract (platform #1124) により競技者のポータルには出ない。 よって description は検査
  * 対象に含めない (そこに書くのが正解であり、 移動先でもある)。
  *
- * severity は tell の信頼度で分ける (実測に基づく):
- *   - **id → error** ({@link checkParticipantVisibleSpoilers})。 kebab-case の複合語で問題固有、
- *     通常文と衝突しない。
- *   - **name → warning** ({@link checkParticipantVisibleSpoilerNameAdvisory})。 散文なので
- *     ありふれた語が来ると通常文に一致する。
- *
+ * severity は warning 一本 ({@link checkParticipantVisibleSpoilerAdvisory} に理由)。
  * 症状を語りたい著者には出口が 2 つある — `description` に書く / `publicHint: true` を宣言して
  * 意図的に予告する。
  */
@@ -170,26 +165,6 @@ interface SpoilerMention {
 
 const spoilerText = (value: unknown): string | undefined =>
   typeof value === "string" && value.trim().length > 0 ? value : undefined;
-
-/**
- * hard error に使ってよい tell か。
- *
- * 判定の根拠は「id かどうか」ではなく **複合語 (kebab の連結) かどうか**。 SCHEMA の
- * disruptions[].id は `^[a-z0-9][a-z0-9-]*$` で **ハイフンを要求していない** ので、
- * `id: "down"` は schema 上 valid — その場合 "If the site is down, restart it." が hard error に
- * なってしまう (実測で踏んだ)。 誤検知が無いのは `ai-wipes-database` のように語が連結されていて
- * 通常文に現れ得ないから。 単語 1 つの id は name と同じく散文と区別できないので advisory に回す。
- */
-const compoundTell = (value: unknown): string | undefined => {
-  const tell = spoilerText(value);
-  return tell?.includes("-") ? tell : undefined;
-};
-
-/** 複合語でない (= 通常文と区別できない) tell。 hard error にはできないので advisory 行き。 */
-const ambiguousTell = (value: unknown): string | undefined => {
-  const tell = spoilerText(value);
-  return tell !== undefined && !tell.includes("-") ? tell : undefined;
-};
 
 /** サプライズ障害の tell が参加者向け field に出ている箇所を列挙する。 */
 function findSpoilerMentions(
@@ -214,52 +189,43 @@ function findSpoilerMentions(
 }
 
 /**
- * hard error は **複合語の id の一致だけ** ({@link compoundTell})。
+ * [Issue #192] 競技者視点のネタバラシ **advisory** (= warning)。
  *
- * `ai-wipes-database` のように語が連結された id は通常文に現れ得ないので、 誤検知ゼロで CI を
- * 止められる —— ゲートとして成立する唯一の信号。 現実の事故も「作者が description に障害を
- * id で列挙した」形だったので、 起きうる失敗はこれで捕まる (実カタログの id 11 件はすべて複合語)。
- * 単語 1 つの id は schema 上ありえる (`^[a-z0-9][a-z0-9-]*$`) が、 通常文と区別できないので
- * advisory に回す。
+ * 参加者に届く field (instructions / shortDescription と i18n.en) が、 `publicHint !== true` の
+ * disruption (= サプライズ) を id / name で名指ししていないか見る。 当たったら著者に知らせる。
  *
- * `name` を hard error にしないのは {@link checkParticipantVisibleSpoilerNameAdvisory} 参照。
+ * **なぜ hard error にしないか (9 回の反例で確定した)**
+ * 作者が tell (id / name) も散文も両方書く以上、 文字列一致で誤検知ゼロの gate は原理的に作れない。
+ * 実測した誤検知:
+ *   - name は散文       : name="log" が "Check the log for errors." に当たる
+ *   - 単語 1 つの id     : id="down" が "If the site is down, restart it." に当たる
+ *   - 複合語の id ですら : id="read-only" が "The bucket is read-only." に当たる
+ *     (SCHEMA の id pattern `^[a-z0-9][a-z0-9-]*$` はこれらをすべて許す)
+ * 一致を厳しくすれば普通の複数形を取り逃し、 緩めれば普通の文で落ちる —— どちらに振っても
+ * 反例が出る。 honest な文章で CI を止めると、 作者は迂回 (障害を改名 / 検査を無効化) を学ぶ。
+ *
+ * **では機械のゲートはどこか**: 実際の事故 (運営向け description が競技者に見えていた) を止める
+ * ゲートは platform 側に既にある —— TenkaCloud#2642 の fairness projection が `description` を
+ * 参加者 API から落とし、 回帰テストで固定している。 セッションやエージェントがリセットされても
+ * それは残る。 本 check の役目はその手前の **著者への助言** であり、 言い換え
+ * (「データベースが消されることがあります」) まで含む保証は人のレビューが担う。
+ *
+ * ネタバレの正しい置き場は `description` — SCHEMA が [管理者/作者向け] と定義し、 fairness
+ * contract により競技者には出ない。 よって description は検査対象に含めない (移動先でもある)。
+ * `publicHint: true` の disruption は作者が意図して予告しているので対象外
+ * (battles/hello-world-battle は frontend-down を予告して初心者に障害と復旧を教える)。
  */
-export function checkParticipantVisibleSpoilers(meta: Metadata): ValidationError[] {
-  return findSpoilerMentions(meta, (disruption) => [compoundTell(disruption.id)]).map(
-    ({ field, tell, id }) =>
-      `${field} gives away the surprise disruption "${tell}" (id="${id}") — participant-facing ` +
-      "text must not spoil it. Move it to `description` (= [管理者/作者向け]; the fairness " +
-      "contract keeps that field off the competitor's portal), or declare " +
-      "`disruptions[].publicHint: true` to announce it on purpose.",
-  );
-}
-
-/**
- * `name` / `i18n.en.name` は **warning**。
- *
- * name は散文で、 ありふれた語が来る (実測: name="log" は "Check the log for errors." に、
- * name="cache" は "Warm the caches" に一致する)。 衝突は語彙的でなく意味的なので、 語境界や
- * 接尾辞の調整では消えない —— 一致を厳しくすれば普通の複数形を取り逃し、 緩めれば普通の文で
- * 落ちる。 hard error にすると **honest な文章で CI が止まり**、 作者はゲートを迂回する
- * (障害を改名する / 検査を切る) ようになり、 確実な id ゲートまで一緒に壊れる。
- *
- * よって著者に判断させる warning に留める (= checkCheckLabelSpoilerAdvisory と同方針)。
- * 「warning はゲートではない」はそのとおりで、 それが正しい —— **散文はゲートできない**。
- * ゲートは id が担い、 name は助言、 言い換え (「データベースが消されることがあります」) は
- * 人のレビューが担う。 この線を引かないと、 誤検知と取りこぼしの間で振動し続ける。
- */
-export function checkParticipantVisibleSpoilerNameAdvisory(meta: Metadata): ValidationError[] {
+export function checkParticipantVisibleSpoilerAdvisory(meta: Metadata): ValidationError[] {
   return findSpoilerMentions(meta, (disruption) => [
+    spoilerText(disruption.id),
     spoilerText(disruption.name),
     spoilerText((disruption.i18n as { en?: { name?: unknown } } | undefined)?.en?.name),
-    // 単語 1 つの id は複合語でないので hard error にできない (compoundTell 参照)。 取りこぼさず
-    // ここで拾う。
-    ambiguousTell(disruption.id),
   ]).map(
     ({ field, tell, id }) =>
-      `${field} repeats the surprise disruption name "${tell}" (id="${id}") — if that is a spoiler, ` +
-      "move it to `description` or set `disruptions[].publicHint: true`; if it is only " +
-      "symptom / flavour wording, ignore this.",
+      `${field} names the surprise disruption "${tell}" (id="${id}") — if that spoils it, move it ` +
+      "to `description` (= [管理者/作者向け]; the fairness contract keeps that field off the " +
+      "competitor's portal), or set `disruptions[].publicHint: true` to announce it on purpose; " +
+      "if it is only symptom / flavour wording, ignore this.",
   );
 }
 
@@ -541,7 +507,6 @@ export function checkCompositeAppRunDescriptor(
 function checkCompositeRefs(dir: string, meta: Metadata): CrossRefResult {
   const errors: ValidationError[] = [
     ...checkInstructionsPresent(meta),
-    ...checkParticipantVisibleSpoilers(meta),
     ...checkWriteupTranslations(meta),
     ...checkHintTranslations(meta),
     ...checkScoringRegulation(meta),
@@ -603,7 +568,7 @@ function checkCompositeRefs(dir: string, meta: Metadata): CrossRefResult {
       }
     }
   }
-  return { errors, warnings: checkParticipantVisibleSpoilerNameAdvisory(meta) };
+  return { errors, warnings: checkParticipantVisibleSpoilerAdvisory(meta) };
 }
 
 /** AWS target の CFn Outputs に composite-probe の outputKey が存在するかを cross-check する。 */
@@ -640,7 +605,6 @@ function checkContainerRefs(dir: string, meta: Metadata): CrossRefResult {
   const runtime = meta.runtime as { entry?: unknown } | undefined;
   const errors: ValidationError[] = [
     ...checkInstructionsPresent(meta),
-    ...checkParticipantVisibleSpoilers(meta),
     ...checkWriteupTranslations(meta),
     ...checkHintTranslations(meta),
     ...checkScoringRegulation(meta),
@@ -661,7 +625,7 @@ function checkContainerRefs(dir: string, meta: Metadata): CrossRefResult {
   }
   const warnings: ValidationError[] = [
     ...checkContainerWriteupAdvisory(meta),
-    ...checkParticipantVisibleSpoilerNameAdvisory(meta),
+    ...checkParticipantVisibleSpoilerAdvisory(meta),
   ];
   if (scoringKind === "multi-verify") {
     errors.push(...checkMultiVerifyStructure(meta), ...checkMultiVerifyTranslations(meta));
@@ -889,7 +853,6 @@ function checkCrossRefs(metaPath: string, meta: Metadata): CrossRefResult {
       ...simulationErrors,
       ...containerOnlyKindErrors,
       ...checkInstructionsPresent(meta),
-      ...checkParticipantVisibleSpoilers(meta),
       ...checkWriteupTranslations(meta),
       ...checkHintTranslations(meta),
       ...checkScoringRegulation(meta),
@@ -904,7 +867,7 @@ function checkCrossRefs(metaPath: string, meta: Metadata): CrossRefResult {
     warnings: [
       ...checkFlagEarnedAdvisory(meta, yaml, cfnTemplate),
       ...checkDisruptionDeliveryAdvisory(meta, dir),
-      ...checkParticipantVisibleSpoilerNameAdvisory(meta),
+      ...checkParticipantVisibleSpoilerAdvisory(meta),
     ],
   };
 }
