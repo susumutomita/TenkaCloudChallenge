@@ -15,6 +15,7 @@ import {
   checkCompositeAppRunDescriptor,
   checkMultiVerifyStructure,
   checkMultiVerifyTranslations,
+  checkParticipantVisibleSpoilerNameAdvisory,
   checkParticipantVisibleSpoilers,
   checkRequiredReadmes,
   checkScoringRegulation,
@@ -506,5 +507,55 @@ describe("checkParticipantVisibleSpoilers", () => {
       instructions: "vibe-status を実行して不足 gate を確認する。",
     });
     expect(checkParticipantVisibleSpoilers(meta)).toEqual([]);
+  });
+});
+
+describe("checkParticipantVisibleSpoilerNameAdvisory", () => {
+  const surprise = { id: "ai-wipes-database", name: "AI がデータを消す", i18n: { en: { name: "AI wipes the database" } } };
+
+  it("stays silent when the name is absent from participant-facing text", () => {
+    expect(
+      checkParticipantVisibleSpoilerNameAdvisory({
+        disruptions: [surprise],
+        instructions: "vibe-status を実行する。",
+      }),
+    ).toEqual([]);
+  });
+
+  it("warns when a surprise name is repeated to the participant", () => {
+    const warnings = checkParticipantVisibleSpoilerNameAdvisory({
+      disruptions: [surprise],
+      instructions: "AI がデータを消す ことがあります。",
+    });
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/ai-wipes-database/);
+  });
+
+  it("warns on the en name in the en overlay too", () => {
+    expect(
+      checkParticipantVisibleSpoilerNameAdvisory({
+        disruptions: [surprise],
+        i18n: { en: { instructions: "AI wipes the database without warning." } },
+      }),
+    ).toHaveLength(1);
+  });
+
+  it("stays silent for a publicHint disruption the author announces on purpose", () => {
+    expect(
+      checkParticipantVisibleSpoilerNameAdvisory({
+        disruptions: [{ id: "frontend-down", name: "nginx 停止", publicHint: true }],
+        instructions: "nginx 停止 が起きたら復旧する。",
+      }),
+    ).toEqual([]);
+  });
+
+  it("allows the name in description, the operator's field", () => {
+    expect(
+      checkParticipantVisibleSpoilerNameAdvisory({
+        disruptions: [surprise],
+        description: "## レッドチーム\n- AI がデータを消す。",
+        instructions: "vibe-status を実行する。",
+      }),
+    ).toEqual([]);
   });
 });

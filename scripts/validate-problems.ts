@@ -89,6 +89,23 @@ function checkInstructionsPresent(meta: Metadata): ValidationError[] {
 /** 参加者に実際に届く自由文 field。 `description` は運営側なので入らない (下記参照)。 */
 const PARTICIPANT_VISIBLE_TEXT_FIELDS = ["instructions", "shortDescription"] as const;
 
+/** 参加者に届く自由文を (field 名, 本文) で列挙する。 未設定 / 非文字列は落とす。 */
+function participantVisibleFields(meta: Metadata): Array<readonly [string, string]> {
+  const en = (meta.i18n as { en?: Record<string, unknown> } | undefined)?.en;
+  return [
+    ...PARTICIPANT_VISIBLE_TEXT_FIELDS.map((f) => [f, meta[f]] as const),
+    ...PARTICIPANT_VISIBLE_TEXT_FIELDS.map((f) => [`i18n.en.${f}`, en?.[f]] as const),
+  ].filter((entry): entry is readonly [string, string] => typeof entry[1] === "string");
+}
+
+/** 参加者に予告していない disruption (= サプライズ)。 publicHint: true は作者が意図して公開している。 */
+function surpriseDisruptions(meta: Metadata): Array<Record<string, unknown>> {
+  const disruptions = Array.isArray(meta.disruptions)
+    ? (meta.disruptions as Array<Record<string, unknown>>)
+    : [];
+  return disruptions.filter((d) => d.publicHint !== true);
+}
+
 /**
  * [Issue #192] 競技者視点のネタバラシ検査。
  *
@@ -109,24 +126,13 @@ const PARTICIPANT_VISIBLE_TEXT_FIELDS = ["instructions", "shortDescription"] as 
  * checkCheckLabelSpoilerAdvisory と同じ warning 方針で別途足す)。
  */
 export function checkParticipantVisibleSpoilers(meta: Metadata): ValidationError[] {
-  const disruptions = Array.isArray(meta.disruptions)
-    ? (meta.disruptions as Array<Record<string, unknown>>)
-    : [];
-  const surprises = disruptions
-    .filter((d) => d.publicHint !== true)
+  const surprises = surpriseDisruptions(meta)
     .map((d) => d.id)
     .filter((id): id is string => typeof id === "string" && id.length > 0);
   if (surprises.length === 0) return [];
 
-  const en = (meta.i18n as { en?: Record<string, unknown> } | undefined)?.en;
-  const fields: Array<readonly [string, unknown]> = [
-    ...PARTICIPANT_VISIBLE_TEXT_FIELDS.map((f) => [f, meta[f]] as const),
-    ...PARTICIPANT_VISIBLE_TEXT_FIELDS.map((f) => [`i18n.en.${f}`, en?.[f]] as const),
-  ];
-
   const errors: ValidationError[] = [];
-  for (const [field, value] of fields) {
-    if (typeof value !== "string") continue;
+  for (const [field, value] of participantVisibleFields(meta)) {
     for (const id of surprises) {
       if (!value.includes(id)) continue;
       errors.push(
@@ -137,6 +143,40 @@ export function checkParticipantVisibleSpoilers(meta: Metadata): ValidationError
     }
   }
   return errors;
+}
+
+/**
+ * [Issue #192] {@link checkParticipantVisibleSpoilers} の `name` 版。 **warning** に留める。
+ *
+ * id と違い disruption の `name` は散文なので、 参加者向け文との一致がネタバレなのか、 単なる
+ * 症状・演出の記述なのかを機械では判別できない (例: name="nginx 停止" と instructions の
+ * 「nginx が停止したら復旧する」)。 よって著者に判断させる warning にする
+ * (= checkCheckLabelSpoilerAdvisory / checkDisruptionDeliveryAdvisory と同方針)。
+ * 誤検知が無い id の exact match だけが hard error。
+ *
+ * これが無いと「id は書かないが name をそのまま書く」でゲートを素通りできてしまう。
+ */
+export function checkParticipantVisibleSpoilerNameAdvisory(meta: Metadata): ValidationError[] {
+  const fields = participantVisibleFields(meta);
+  const warnings: ValidationError[] = [];
+  for (const disruption of surpriseDisruptions(meta)) {
+    const id = typeof disruption.id === "string" ? disruption.id : "(unknown)";
+    const enName = (disruption.i18n as { en?: { name?: unknown } } | undefined)?.en?.name;
+    const names = [disruption.name, enName].filter(
+      (name): name is string => typeof name === "string" && name.trim().length > 0,
+    );
+    for (const [field, value] of fields) {
+      for (const name of names) {
+        if (!value.includes(name)) continue;
+        warnings.push(
+          `${field} repeats the surprise disruption name "${name}" (id="${id}") — if that is a spoiler, ` +
+            "move it to `description` or set `disruptions[].publicHint: true`; if it is only " +
+            "symptom / flavour wording, ignore this.",
+        );
+      }
+    }
+  }
+  return warnings;
 }
 
 /**
@@ -479,7 +519,7 @@ function checkCompositeRefs(dir: string, meta: Metadata): CrossRefResult {
       }
     }
   }
-  return { errors, warnings: [] };
+  return { errors, warnings: checkParticipantVisibleSpoilerNameAdvisory(meta) };
 }
 
 /** AWS target の CFn Outputs に composite-probe の outputKey が存在するかを cross-check する。 */
@@ -535,7 +575,10 @@ function checkContainerRefs(dir: string, meta: Metadata): CrossRefResult {
       'a container problem must use scoring.kind="verify" or "multi-verify" (evaluation lives in /verify)',
     );
   }
-  const warnings: ValidationError[] = [...checkContainerWriteupAdvisory(meta)];
+  const warnings: ValidationError[] = [
+    ...checkContainerWriteupAdvisory(meta),
+    ...checkParticipantVisibleSpoilerNameAdvisory(meta),
+  ];
   if (scoringKind === "multi-verify") {
     errors.push(...checkMultiVerifyStructure(meta), ...checkMultiVerifyTranslations(meta));
     warnings.push(...checkCheckLabelSpoilerAdvisory(meta));
@@ -777,6 +820,7 @@ function checkCrossRefs(metaPath: string, meta: Metadata): CrossRefResult {
     warnings: [
       ...checkFlagEarnedAdvisory(meta, yaml, cfnTemplate),
       ...checkDisruptionDeliveryAdvisory(meta, dir),
+      ...checkParticipantVisibleSpoilerNameAdvisory(meta),
     ],
   };
 }
