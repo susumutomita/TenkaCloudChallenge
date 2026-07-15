@@ -107,6 +107,22 @@ function normalizeForSpoilerMatch(text: string): string {
   return text.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
 }
 
+/**
+ * 正規化済みの本文が tell を「その語として」含むか。 両者とも normalizeForSpoilerMatch 済み前提。
+ *
+ * ASCII だけの tell は前後に ASCII 英数字が来ないことを要求する。 素の部分一致のままだと
+ * name="AI" が "available" の中に埋まって **hard error** を出してしまい、 無関係な文章で CI が
+ * 止まる (実測で踏んだ)。 日本語文に直付けされた ASCII (「障害 ai-wipes-database が発生」/
+ * 「障害ai-wipes-databaseが発生」) は前後が非 ASCII なので引き続き検出できる。
+ *
+ * CJK を含む tell は語境界の概念が無い (「スパムが来る」のように助詞が直結する) ため部分一致で見る。
+ */
+function mentionsTell(haystack: string, tell: string): boolean {
+  if (!/^[\x20-\x7e]+$/.test(tell)) return haystack.includes(tell);
+  const escaped = tell.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<![a-z0-9])${escaped}(?![a-z0-9])`, "u").test(haystack);
+}
+
 /** 参加者に予告していない disruption (= サプライズ)。 publicHint: true は作者が意図して公開している。 */
 function surpriseDisruptions(meta: Metadata): Array<Record<string, unknown>> {
   const disruptions = Array.isArray(meta.disruptions)
@@ -156,7 +172,7 @@ export function checkParticipantVisibleSpoilers(meta: Metadata): ValidationError
     for (const [field, value] of fields) {
       const haystack = normalizeForSpoilerMatch(value);
       for (const tell of tells) {
-        if (!haystack.includes(normalizeForSpoilerMatch(tell))) continue;
+        if (!mentionsTell(haystack, normalizeForSpoilerMatch(tell))) continue;
         errors.push(
           `${field} gives away the surprise disruption "${tell}" (id="${id}") — participant-facing ` +
             "text must not spoil it. Move it to `description` (= [管理者/作者向け]; the fairness " +

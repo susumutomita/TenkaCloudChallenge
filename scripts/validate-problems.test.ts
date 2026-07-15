@@ -548,6 +548,33 @@ describe("checkParticipantVisibleSpoilers (name / i18n.en.name も error)", () =
     ).toEqual([]);
   });
 
+  it("does not fire on an unrelated word that merely embeds a short name", () => {
+    // name="AI" を素の部分一致で見ると "available" の中の "ai" で hard error になり、
+    // 無関係な文章で CI が止まる。 ASCII の tell は語境界を要求する。
+    expect(
+      checkParticipantVisibleSpoilers({
+        disruptions: [{ id: "ai-outage", name: "AI" }],
+        instructions: "The dashboard is available at /health. Keep it maintained.",
+      }),
+    ).toEqual([]);
+  });
+
+  it("still catches a short name used as a word, and ASCII tells glued to Japanese", () => {
+    expect(
+      checkParticipantVisibleSpoilers({
+        disruptions: [{ id: "ai-outage", name: "AI" }],
+        instructions: "AI が予告なく落ちます。",
+      }),
+    ).toHaveLength(1);
+    // 日本語に直付けされた ASCII id (助詞が直結) も逃さない。
+    expect(
+      checkParticipantVisibleSpoilers({
+        disruptions: [{ id: "ai-wipes-database", name: "DB 消去" }],
+        instructions: "障害ai-wipes-databaseが発生します。",
+      }),
+    ).toHaveLength(1);
+  });
+
   it("is not fooled by case, width, or spacing drift", () => {
     // 善意の作者が見出しで Title Case にする / 全角で書く / 空白が揺れる、で素通りさせない。
     const cases = [
