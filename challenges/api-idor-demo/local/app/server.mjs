@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { DatabaseSync } from "node:sqlite";
+import { listProfilesFor, profileOf } from "./authorization.mjs";
 
 /**
  * api-idor-demo — a DELIBERATELY VULNERABLE profile API for TenkaCloud local
@@ -38,19 +39,11 @@ seed.run(3, "guest", "token-guest", "user", "Welcome! This is your demo account.
 
 const userByToken = db.prepare("SELECT * FROM users WHERE token = ?");
 const userById = db.prepare("SELECT * FROM users WHERE id = ?");
+const allUsers = db.prepare("SELECT * FROM users");
 
 function bearer(request) {
   const header = request.headers.authorization ?? "";
   return header.startsWith("Bearer ") ? header.slice(7).trim() : "";
-}
-
-/**
- * The API over-exposes the record: it returns the private note alongside the
- * public fields. Combined with the missing ownership check on /api/profile/:id,
- * that turns "read another user's object" into a secret leak.
- */
-function profileOf(row) {
-  return { id: row.id, username: row.username, role: row.role, note: row.secret_note };
 }
 
 function readBody(request) {
@@ -83,7 +76,10 @@ const HOME = `<!doctype html>
 <p>You are signed in as <code>guest</code>. Your API token is <code>token-guest</code>.</p>
 <h2>Read your profile</h2>
 <pre>curl -H "Authorization: Bearer token-guest" http://127.0.0.1:18080/api/profile
+curl -H "Authorization: Bearer token-guest" http://127.0.0.1:18080/api/profiles
 curl -H "Authorization: Bearer token-guest" http://127.0.0.1:18080/api/profile/3</pre>
+<p><code>/api/profiles</code> lists the profiles you are authorized to see — as a
+guest, just your own. Notice the shape: <code>id</code> is a small integer.</p>
 <p>The administrator is <b>user id 1</b> (<code>root</code>), and the flag lives in
 their <i>private note</i>. You do <b>not</b> know the admin's token, so you cannot
 sign in as them. Find another way to read their object.</p>
@@ -107,6 +103,21 @@ const challenge = createServer(async (request, response) => {
       return send(response, 401, "application/json", JSON.stringify({ error: "unauthorized" }));
     }
     return send(response, 200, "application/json", JSON.stringify(profileOf(me)));
+  }
+
+  // Intended discovery endpoint: list the profiles you are authorized to see.
+  // Unlike /api/profile/:id below, this one enforces both an ownership/role
+  // check AND a least-privilege response shape (see authorization.mjs) — a
+  // guest only ever sees their own {id, username, role}, never secret_note.
+  // It exists so recon looks like a real API walk (see the shape, notice `id`
+  // is a small integer) rather than a blind guess at id=1.
+  if (method === "GET" && url.pathname === "/api/profiles") {
+    const me = userByToken.get(bearer(request));
+    if (!me) {
+      return send(response, 401, "application/json", JSON.stringify({ error: "unauthorized" }));
+    }
+    const profiles = listProfilesFor(allUsers.all(), me);
+    return send(response, 200, "application/json", JSON.stringify({ profiles }));
   }
 
   // VULNERABLE: read any profile by id. It requires a valid token, but never
