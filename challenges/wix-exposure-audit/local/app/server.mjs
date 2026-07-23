@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
+import {
+  checkpointCorrect,
+  remediationStatus,
+  reverify,
+} from "./remediation.mjs";
 
 /**
  * A browser-completable mock of a SaaS-built business site. It deliberately
@@ -10,9 +15,11 @@ import { createServer } from "node:http";
  * 3. a production-agency collaborator still has a live access link.
  *
  * The owner settings page is an authorized remediation surface. The final
- * checkpoint asks the participant to disable all three settings and lets the
- * verifier inspect server state. Both listeners are exposed only on loopback by
- * docker-compose.
+ * checkpoint is an order-gated re-verification: only after all three controls
+ * are closed does `/owner/settings/reverify` emit the per-deploy confirmation
+ * flag. Running the re-verification early just reports "N of 3 closed" and stays
+ * retryable, so a wrong order can never soft-lock the problem. Both listeners are
+ * exposed only on loopback by docker-compose.
  */
 
 const FLAG_SEED = process.env.FLAG_SEED ?? "local-dev-seed";
@@ -24,6 +31,8 @@ const FLAGS = {
   "preview-indexing": flagFor("preview-indexing", "wixpreview"),
   "shared-inbox": flagFor("shared-inbox", "wixinbox"),
   "stale-collaborator": flagFor("stale-collaborator", "wixagency"),
+  // Emitted by /owner/settings/reverify only once all three controls are closed.
+  "settings-remediation": flagFor("settings-remediation", "wixverify"),
 };
 const SHARE_TOKEN = `share-${sha256(`share:${FLAG_SEED}`).slice(0, 16)}`;
 const AGENCY_TOKEN = `agency-${sha256(`agency:${FLAG_SEED}`).slice(0, 16)}`;
@@ -171,7 +180,28 @@ ${row("preview pageの検索公開", controls.searchIndexing, "/owner/settings/d
 ${row("問い合わせ受信箱の共有link", controls.inboxShareActive, "/owner/settings/revoke-inbox-share", "共有linkを失効")}
 ${row("制作会社の共同編集権限", controls.agencyCollaboratorActive, "/owner/settings/remove-agency", "制作会社を削除")}
 </table>
-<p>3項目の対応後、Portalの「設定の是正確認」に <code>VERIFY</code> と入力します。</p>
+<p>3項目をすべて閉じたら、外部視点での再検証を実行してください。全て閉じているときだけ、是正確認用の合言葉 (<code>TC{...}</code>) が表示されます。まだ閉じていない項目があれば「あと何件」を伝えるだけで、何度でも再実行できます。</p>
+<p><a href="/owner/settings/reverify">設定の是正を再検証する →</a></p>
+</body></html>`;
+}
+
+function reverifyPage() {
+  const result = reverify(controls, FLAGS["settings-remediation"]);
+  const remainingRows = result.remaining
+    .map((step) => `<li>${step.label}（まだ有効）</li>`)
+    .join("");
+  const body = result.allClosed
+    ? `<p>3件すべて閉じられていることを外部視点で再検証しました。</p>
+<p>是正確認の合言葉: <code>${result.flag}</code></p>
+<p>この合言葉を Portal の「設定の是正確認」チェックポイントに提出してください。</p>`
+    : `<p>まだ ${result.closedCount} / ${result.total} 件しか閉じられていません。残りを閉じてから、この再検証をもう一度実行してください（何度でも再実行できます）。</p>
+<ul>${remainingRows}</ul>
+<p><a href="/owner/settings">所有者設定へ戻る</a></p>`;
+  return `<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><title>Re-verify Remediation</title></head>
+<body style="font-family:system-ui;max-width:50rem;margin:2rem auto;line-height:1.7">
+<h1>設定の是正 再検証</h1>
+${body}
 </body></html>`;
 }
 
@@ -242,6 +272,12 @@ const challenge = createServer(async (request, response) => {
     controls.agencyCollaboratorActive = false;
     return send(response, 200, "text/html; charset=utf-8", ownerSettingsPage());
   }
+  // Read-only, idempotent re-verification. Emits the confirmation flag only when
+  // all three controls are closed; otherwise reports progress. Never mutates
+  // state, so it is safe to run early and any number of times (no soft-lock).
+  if (method === "GET" && url.pathname === "/owner/settings/reverify") {
+    return send(response, 200, "text/html; charset=utf-8", reverifyPage());
+  }
   return sendJson(response, 404, { error: "not_found" });
 });
 
@@ -256,8 +292,9 @@ const verify = createServer(async (request, response) => {
   const body = await readJson(request);
   if (!body) return sendJson(response, 400, { error: "invalid_json" });
   const checkpointId = typeof body.checkpointId === "string" ? body.checkpointId : "";
-  const known = [...Object.keys(FLAGS), "settings-remediation"];
-  if (!known.includes(checkpointId)) {
+  // FLAGS now includes "settings-remediation", so its keys are the full set of
+  // known checkpoints.
+  if (!Object.prototype.hasOwnProperty.call(FLAGS, checkpointId)) {
     return sendJson(response, 400, { error: "unknown_checkpoint" });
   }
   const submission = typeof body.submission === "string" ? body.submission.trim() : "";
@@ -265,21 +302,16 @@ const verify = createServer(async (request, response) => {
     return sendJson(response, 400, { checkpointId, error: "invalid_submission" });
   }
 
-  const remediated =
-    !controls.searchIndexing &&
-    !controls.inboxShareActive &&
-    !controls.agencyCollaboratorActive;
-  const correct =
-    checkpointId === "settings-remediation"
-      ? submission.toUpperCase() === "VERIFY" && remediated
-      : submission === FLAGS[checkpointId];
+  const correct = checkpointCorrect(checkpointId, submission, controls, FLAGS);
+  const remediationPending =
+    checkpointId === "settings-remediation" && !remediationStatus(controls).allClosed;
   return sendJson(response, 200, {
     checkpointId,
     correct,
     message: correct
       ? "Checkpoint cleared."
-      : checkpointId === "settings-remediation"
-        ? "The owner settings are not fully remediated yet."
+      : remediationPending
+        ? "The owner settings are not fully remediated yet. Close all three, then run the re-verification to get the confirmation passphrase."
         : "That is not the passphrase for this checkpoint.",
   });
 });
