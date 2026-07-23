@@ -35,9 +35,11 @@ checkpointでは、所有者が3つをすべて是正した実状態を採点し
 | `preview-indexing` | `sitemap.xml`から到達できるreview pageの合言葉 | 20 |
 | `shared-inbox` | 漏れたshare URLから読める顧客受信箱の合言葉 | 20 |
 | `stale-collaborator` | 有効なままの制作会社access pageの合言葉 | 20 |
-| `settings-remediation` | 3つの所有者設定を是正した後のhidden state検査 | 40 |
+| `settings-remediation` | 3つを閉じた後の再検証が表示する是正確認の合言葉 | 40 |
 
-設定を閉じると証跡へ到達できなくなるため、先に3つの合言葉を集めます。
+設定を閉じると証跡へ到達できなくなるため、先に3つの合言葉を集めます。最後のcheckpointは
+順序ゲート付きで、3つすべてを閉じたときだけ再検証が是正確認用の合言葉を表示します。閉じきる前に
+再検証・提出しても詰まらず(何度でもリトライ可能)、閉じきる前に合言葉で通過することもできません。
 
 ## 監査手順
 
@@ -59,7 +61,10 @@ checkpointでは、所有者が3つをすべて是正した実状態を採点し
    - 受信箱のshare linkを失効する。
    - 制作会社collaboratorを削除する。
 
-7. `settings-remediation`へ`VERIFY`を提出します。
+7. 3つすべてを閉じたら、`http://127.0.0.1:18080/owner/settings/reverify`(所有者設定の
+   「設定の是正を再検証する」link)を実行し、表示された是正確認用の合言葉`TC{...}`を
+   `settings-remediation`へ提出します。まだ閉じていない項目があれば「あと何件」と表示されるだけで、
+   何度でも再実行できます。
 
 ## 是正後に確認できること
 
@@ -68,7 +73,8 @@ checkpointでは、所有者が3つをすべて是正した実状態を採点し
 - `sitemap.xml`からreview pageが消え、直接accessも`404`になる。
 - 古い受信箱share URLは`403`になる。
 - 古い制作会社access URLは`403`になる。
-- `/verify`は是正checkpointの`VERIFY`を成功として判定する。
+- `/owner/settings/reverify`が3件すべての是正を確認し、是正確認用の合言葉を表示する。閉じきる前は
+  「あと何件」と表示するだけで(リトライ可能)、`/verify`はその合言葉を成功として判定する。
 
 containerを再起動すると、意図的に不備を持つ初期状態へ戻り、新しいflagが生成されます。
 

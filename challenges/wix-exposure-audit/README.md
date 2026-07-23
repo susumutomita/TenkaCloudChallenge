@@ -38,10 +38,14 @@ all three settings.
 | `preview-indexing` | Passphrase on the review page exposed by `sitemap.xml` | 20 |
 | `shared-inbox` | Passphrase in the customer inbox reached through the leaked share URL | 20 |
 | `stale-collaborator` | Passphrase on the still-active agency access page | 20 |
-| `settings-remediation` | Hidden state check after all three owner settings are corrected | 40 |
+| `settings-remediation` | Confirmation passphrase the re-verification reveals after all three settings close | 40 |
 
 Collect the first three passphrases before remediation. Closing the settings
-intentionally removes access to their evidence.
+intentionally removes access to their evidence. The final checkpoint is
+order-gated: only once all three settings are closed does the re-verification
+reveal a confirmation passphrase. Re-verifying or submitting before you finish
+never gets you stuck (it is fully retryable), and no passphrase passes the
+checkpoint until all three are genuinely closed.
 
 ## Audit path
 
@@ -63,7 +67,11 @@ intentionally removes access to their evidence.
    - revoke the inbox share link;
    - remove the agency collaborator.
 
-7. Submit `VERIFY` to `settings-remediation`.
+7. Once all three are closed, run
+   `http://127.0.0.1:18080/owner/settings/reverify` (the owner-settings
+   "re-verify" link) and submit the `TC{...}` confirmation passphrase it reveals
+   to `settings-remediation`. If something is still open it just reports how many
+   remain, so you can re-run it any number of times.
 
 ## Expected remediation behavior
 
@@ -73,7 +81,9 @@ After all settings are corrected:
   `404`;
 - the old inbox share URL returns `403`;
 - the old agency access URL returns `403`;
-- `/verify` accepts `VERIFY` only for the remediation checkpoint.
+- `/owner/settings/reverify` confirms all three and reveals the confirmation
+  passphrase (before that it only reports how many remain, and stays retryable),
+  and `/verify` accepts that passphrase for the remediation checkpoint.
 
 Restarting the container restores the deliberately vulnerable initial state and
 generates a new set of flags.
