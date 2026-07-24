@@ -63,6 +63,11 @@ artifactは`local/build/frame.ppm`。browser labから再実行して同じframe
 mounted participant RTLが通った後にだけ、TenkaCloudへ`VERIFY`を提出する。`/verify`はRTLを
 再compileし、live stateからverdictを委譲する。
 
+**seedもflagもない。** Level 1の`FLAG_SEED`由来flagと異なり、このChallengeにper-deploy
+secretはなく、`runtime`は`secretEnv`を宣言しない。`VERIFY`は固定の文字列であり、どのmachine
+で何度containerを再buildしても常に同じ単語になる。提出が拒否されるとしたら原因は失敗した
+assertionか古い`build/frame.ppm`であり、seedの不一致では絶対にない。
+
 ## DockerとCodespaces
 
 TenkaCloud platform rootから`make local PROBLEM=ai-riscv-screen-repair`を実行するとbrowser labが開く。

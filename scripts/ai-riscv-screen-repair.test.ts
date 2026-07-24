@@ -71,10 +71,35 @@ describe("ai-riscv-screen-repair catalog contract", () => {
 			verifyUrl: "http://127.0.0.1:18201/verify",
 		});
 		expect(metadata.scoring.kind).toBe("verify");
+		expect(metadata.runtime.secretEnv).toBeUndefined();
 		expect(metadata.instructions).toContain("make test");
 		expect(metadata.i18n.en.instructions).toContain("make test");
 		expect(metadata.writeup).toContain("CDC");
 		expect(metadata.i18n.en.writeup).toContain("CDC");
+	});
+
+	it("should tell the player plainly that there is no per-deploy seed or flag, unlike Level 1", () => {
+		// Issue #200 play-test report: a solver believed the submission was a
+		// per-deploy secret (like Level 1's FLAG_SEED-derived flag) and never
+		// converged because this problem has no seed at all — the token is the
+		// fixed literal "VERIFY". Guard every player-facing surface so that
+		// misconception cannot recur silently.
+		const metadata = JSON.parse(read("metadata.json"));
+		expect(metadata.instructions).toContain("seedやflagはない");
+		expect(metadata.instructions).toContain("固定の文字列`VERIFY`");
+		expect(metadata.i18n.en.instructions).toContain("no per-deploy seed or flag");
+		expect(metadata.i18n.en.instructions).toContain("fixed literal string `VERIFY`");
+
+		const readmeEn = read("README.md");
+		const readmeJa = read("README.ja.md");
+		expect(readmeEn).toContain("No seed, no flag");
+		expect(readmeEn).toContain("fixed literal");
+		expect(readmeJa).toContain("seedもflagもない");
+		expect(readmeJa).toContain("固定の文字列");
+
+		const labServer = read("local/tools/server.py");
+		expect(labServer).toContain("No seed, no flag");
+		expect(labServer).toContain("VERIFY");
 	});
 
 	it("should prove all three defect classes red before the golden design passes", () => {
