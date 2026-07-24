@@ -564,6 +564,62 @@
       }
     },
     {
+      "id": "wp2shell-friday-night-patch",
+      "name": "金曜深夜のパッチ当て",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 4,
+      "estimatedDuration": "75 分",
+      "shortDescription": "金曜 17:30。 監視から、 本番の WordPress 風サイトへの不審な REST API トラフィックの通知が届く。 事業からの要求はひとつ ── サイトを止めずに、 今すぐ食い止め、 きれいに片付け、 再発しないようにすること。",
+      "tags": [
+        "wordpress",
+        "incident-response",
+        "waf",
+        "rest-api",
+        "aws",
+        "credential-rotation",
+        "evidence-preservation",
+        "serverless"
+      ],
+      "scoringKind": "multi-flag",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "wp2shell-local-lab",
+      "name": "予行演習",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 4,
+      "estimatedDuration": "90 分",
+      "shortDescription": "ある朝、 セキュリティベンダーから一通の勧告が届く。 『まとめ処理 (バッチ) の経路解決と、 データ問い合わせの組み方の間に、 認証をすり抜けられる抜け道がある』 という。 CTO の指示は明快だ ── 本番を触る前に、 同じ構成を再現した自分専用の使い捨てラボで、 抜け道を実際にたどり、 直し方を証明してから来い。",
+      "tags": [
+        "wordpress",
+        "rest-api",
+        "batch-processing",
+        "query-construction",
+        "privilege-escalation",
+        "incident-response",
+        "remediation",
+        "local-play",
+        "container",
+        "multi-verify"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "x402-paywall",
       "name": "x402 課金ゲート — 課金しているのに 0 USDC",
       "category": "Challenge",
