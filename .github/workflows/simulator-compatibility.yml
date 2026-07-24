@@ -11,7 +11,7 @@ on:
 env:
   # Full immutable commit. Update this only after the corresponding Simulator
   # release passes its own gates; never point compatibility CI at a moving branch.
-  TENKACLOUD_SIMULATOR_REF: "463c7a1650925b1d5177d67540b2399c86783916"
+  TENKACLOUD_SIMULATOR_REF: "339da9f6d80d7fa0b788df4469e16480d7e310bd"
 
 jobs:
   catalog-coverage:
