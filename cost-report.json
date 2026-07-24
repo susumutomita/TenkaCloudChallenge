@@ -391,6 +391,38 @@
       "billable": []
     },
     {
+      "id": "wp2shell-friday-night-patch",
+      "category": "Challenge",
+      "region": "ap-northeast-1",
+      "estimatedSessionMinutes": 75,
+      "perHourUsd": 0,
+      "perSessionUsd": 0,
+      "ifLeftRunningUsd": {
+        "oneDay": 0,
+        "oneWeek": 0,
+        "oneMonth": 0
+      },
+      "freeTierEligible": true,
+      "alwaysOnResources": [],
+      "billable": []
+    },
+    {
+      "id": "wp2shell-local-lab",
+      "category": "Challenge",
+      "region": "ap-northeast-1",
+      "estimatedSessionMinutes": 90,
+      "perHourUsd": 0,
+      "perSessionUsd": 0,
+      "ifLeftRunningUsd": {
+        "oneDay": 0,
+        "oneWeek": 0,
+        "oneMonth": 0
+      },
+      "freeTierEligible": true,
+      "alwaysOnResources": [],
+      "billable": []
+    },
+    {
       "id": "x402-paywall",
       "category": "Challenge",
       "region": "ap-northeast-1",
