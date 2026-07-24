@@ -19,10 +19,12 @@ make local PROBLEM=csrf-demo   # from the TenkaCloud repo root
   Suspicious Page" inbox.
 - **Goal:** the settings endpoint (`POST /settings/email`) checks only that a
   valid admin session is attached — never that the request was actually
-  intended by the admin. Report a page containing an auto-submitting form
-  targeting that endpoint; when the simulated reviewer (already signed in)
-  "opens" your report via `POST /admin/review-reports`, their session submits
-  it for you. Read the flag from `GET /admin/notification-status`.
+  intended by the admin. `POST /report` takes an auto-submitting form's HTML
+  directly as a string (its `html` field) — you do not need to host anything
+  externally. Report a form targeting `/settings/email`, then trigger the
+  simulated reviewer (already signed in) to "open" it via
+  `POST /admin/review-reports`; their session submits it for you. Read the
+  flag from `GET /admin/notification-status`.
 
 ## How scoring works
 

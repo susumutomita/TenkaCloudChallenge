@@ -19,10 +19,11 @@ make local PROBLEM=csrf-demo
 - 攻略対象: <http://127.0.0.1:18080> の「Acme Security — 怪しいページの通報」窓口
 - ゴール: 設定変更エンドポイント (`POST /settings/email`) は有効な管理者セッションが
   付いているかしか確認していない ── 本人の意思による送信かは見ていない。
-  そのエンドポイントを狙う自動送信フォームを含むページを通報し、
-  疑似セキュリティ担当 (サインイン済み) に `POST /admin/review-reports` で
-  「開かせる」と、 担当自身のセッションでそのフォームが送信される。
-  `GET /admin/notification-status` からフラグを読み取る
+  `POST /report` は自動送信フォームの HTML をそのまま文字列 (`html` フィールド) として
+  受け取る窓口で、 どこかに外部ホストする必要はない。 `/settings/email` を狙う
+  フォームを通報し、 疑似セキュリティ担当 (サインイン済み) に
+  `POST /admin/review-reports` で「開かせる」と、 担当自身のセッションでそのフォームが
+  送信される。 `GET /admin/notification-status` からフラグを読み取る
 
 ## 採点の仕組み
 
