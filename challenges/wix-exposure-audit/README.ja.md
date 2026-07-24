@@ -35,9 +35,14 @@ checkpointでは、所有者が3つをすべて是正した実状態を採点し
 | `preview-indexing` | `sitemap.xml`から到達できるreview pageの合言葉 | 20 |
 | `shared-inbox` | 漏れたshare URLから読める顧客受信箱の合言葉 | 20 |
 | `stale-collaborator` | 有効なままの制作会社access pageの合言葉 | 20 |
-| `settings-remediation` | 3つの所有者設定を是正した後のhidden state検査 | 40 |
+| `settings-remediation` | `/owner/settings`の再検証実行が、3設定を実際に是正した後にのみ返す合言葉 | 40 |
 
-設定を閉じると証跡へ到達できなくなるため、先に3つの合言葉を集めます。
+設定を閉じるとその証跡へ到達できなくなるため、先に3つの合言葉を集めます。
+先に閉じてしまった場合も、`/owner/settings`に同じ設定を再度有効化する操作が
+あるため、やり直しは常に可能です。再度有効化して証跡を集め、改めて閉じてから
+「再検証を実行」してください。4つ目の合言葉は固定の単語ではなく、実際に3設定
+すべてを閉じた状態で再検証したときにのみ現れます。設定がまだ開いている間に
+再検証を実行しても何も明かさず、状態も変えないため、いつでも安全にやり直せます。
 
 ## 監査手順
 
@@ -59,7 +64,14 @@ checkpointでは、所有者が3つをすべて是正した実状態を採点し
    - 受信箱のshare linkを失効する。
    - 制作会社collaboratorを削除する。
 
-7. `settings-remediation`へ`VERIFY`を提出します。
+7. `http://127.0.0.1:18080/owner/settings`の「再検証を実行」を押します。3設定
+   すべての是正が確認できると`settings-remediation`の合言葉が表示されるので、
+   それをcheckpointへ提出します。
+
+   証跡を集める前に設定を閉じてしまった場合や、再検証を早まって実行した場合
+   でも失うものはありません。`/owner/settings`の該当行から再度有効化し、合言葉
+   を集め直し、改めて閉じてから再検証をやり直してください。設定が開いている
+   間の再検証は何も明かさず、状態も変わりません。
 
 ## 是正後に確認できること
 
@@ -68,7 +80,8 @@ checkpointでは、所有者が3つをすべて是正した実状態を採点し
 - `sitemap.xml`からreview pageが消え、直接accessも`404`になる。
 - 古い受信箱share URLは`403`になる。
 - 古い制作会社access URLは`403`になる。
-- `/verify`は是正checkpointの`VERIFY`を成功として判定する。
+- `/owner/settings`の再検証実行が`settings-remediation`の合言葉を返し、
+  `/verify`はその合言葉だけをcheckpointの正解として判定する。
 
 containerを再起動すると、意図的に不備を持つ初期状態へ戻り、新しいflagが生成されます。
 

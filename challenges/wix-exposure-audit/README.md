@@ -38,10 +38,16 @@ all three settings.
 | `preview-indexing` | Passphrase on the review page exposed by `sitemap.xml` | 20 |
 | `shared-inbox` | Passphrase in the customer inbox reached through the leaked share URL | 20 |
 | `stale-collaborator` | Passphrase on the still-active agency access page | 20 |
-| `settings-remediation` | Hidden state check after all three owner settings are corrected | 40 |
+| `settings-remediation` | Passphrase revealed by the `/owner/settings` re-audit action, only once all three settings are genuinely corrected | 40 |
 
-Collect the first three passphrases before remediation. Closing the settings
-intentionally removes access to their evidence.
+Collect the first three passphrases before remediation. Closing a setting
+removes access to its evidence; if you close one too early, `/owner/settings`
+also offers a reopen action for that same setting, so the run always stays
+recoverable — reopen it, collect the passphrase, then close it again for
+real. The fourth passphrase is not a fixed word: it only exists once the
+re-audit action confirms, against live state, that all three settings are
+closed. Running the re-audit while any setting is still open reveals
+nothing and changes no state, so it is always safe to retry.
 
 ## Audit path
 
@@ -63,7 +69,16 @@ intentionally removes access to their evidence.
    - revoke the inbox share link;
    - remove the agency collaborator.
 
-7. Submit `VERIFY` to `settings-remediation`.
+7. Click "Run re-audit" on `/owner/settings`. Once it confirms all three
+   settings are closed, it reveals the `settings-remediation` passphrase;
+   submit that to the checkpoint.
+
+   If you closed a setting before harvesting its passphrase, or ran the
+   re-audit too early, nothing is lost: reopen that setting from
+   `/owner/settings` (each row now offers both directions), collect the
+   passphrase, close it again for real, and re-run the re-audit — it never
+   reveals anything, and never changes state, while any setting is still
+   open.
 
 ## Expected remediation behavior
 
@@ -73,7 +88,8 @@ After all settings are corrected:
   `404`;
 - the old inbox share URL returns `403`;
 - the old agency access URL returns `403`;
-- `/verify` accepts `VERIFY` only for the remediation checkpoint.
+- the `/owner/settings` re-audit action reveals the `settings-remediation`
+  passphrase, and `/verify` accepts only that passphrase for the checkpoint.
 
 Restarting the container restores the deliberately vulnerable initial state and
 generates a new set of flags.
