@@ -140,6 +140,7 @@ class LabHandler(BaseHTTPRequestHandler):
 <h1>AI RISC-V Screen Repair Lab</h1>
 <p>The video RTL compiles, but CDC, raster timing, and framebuffer writes violate the prior specification.</p>
 <p>Edit <code>local/solution/video_controller.sv</code>, recreate the problem, and run the state-based regression.</p>
+<p><strong>No seed, no flag:</strong> this problem has no per-deploy secret, unlike Level 1's <code>FLAG_SEED</code>-derived flag. Once every assertion and the frame digest pass, submit the literal word <code>VERIFY</code> in the TenkaCloud portal &mdash; the same fixed string every run, on every machine.</p>
 <button id=\"run\">Run simulation</button> <button id=\"frame\">Capture deterministic frame</button><pre id=\"output\">No run yet.</pre>
 <script>const o=document.querySelector('#output');document.querySelector('#run').onclick=async()=>{o.textContent='Running...';const r=await fetch('/run',{method:'POST'});const j=await r.json();o.textContent=j.output;};document.querySelector('#frame').onclick=async()=>{o.textContent='Capturing...';const r=await fetch('/frame',{method:'POST'});if(!r.ok){const j=await r.json();o.textContent=j.error;return;}const a=document.createElement('a');a.href=URL.createObjectURL(await r.blob());a.download='ai-riscv-screen.ppm';a.click();URL.revokeObjectURL(a.href);o.textContent='Deterministic PPM downloaded.';};</script>
 </html>"""

@@ -68,6 +68,13 @@ The artifact is `local/build/frame.ppm`. The browser lab can rerun and download
 the same frame. Submit `VERIFY` in TenkaCloud only after the mounted participant
 RTL passes; `/verify` recompiles it and delegates the verdict from live state.
 
+**No seed, no flag.** Unlike Level 1's `FLAG_SEED`-derived flag, this Challenge
+has no per-deploy secret and its `runtime` declares no `secretEnv`. `VERIFY` is
+a fixed literal — the exact same word every time, on every machine, no matter
+how many times the container rebuilds. If your submission is ever rejected, the
+cause is a failing assertion or a stale `build/frame.ppm`, never a mismatched
+seed.
+
 ## Docker and Codespaces
 
 Use `make local PROBLEM=ai-riscv-screen-repair` from the TenkaCloud platform root
