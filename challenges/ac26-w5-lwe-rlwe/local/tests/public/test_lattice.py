@@ -57,20 +57,23 @@ def check_a_product_that_never_wraps() -> str:
 
 
 def check_an_lwe_round_trip_with_no_noise() -> str:
+    """Message 1, not the seed's, so a stub returning 0 cannot pass by coincidence."""
     par = params(SEED)
     case = lwe_case(par, SEED, "public", 0)
-    ciphertext = submission.lwe_encrypt(par, case["secret"], case["message"], case["mask"], 0)
-    if submission.lwe_decrypt(par, case["secret"], ciphertext) != case["message"]:
-        return f"a noiseless LWE ciphertext did not decrypt to {case['message']}"
+    ciphertext = submission.lwe_encrypt(par, case["secret"], 1, case["mask"], 0)
+    if submission.lwe_decrypt(par, case["secret"], ciphertext) != 1:
+        return "a noiseless LWE ciphertext did not decrypt to 1"
     return ""
 
 
 def check_an_rlwe_round_trip_with_no_noise() -> str:
+    """Likewise: at least one coefficient is non-zero, whatever the seed drew."""
     par = params(SEED)
     case = rlwe_case(par, SEED, "public", 0)
     zero = tuple(0 for _ in range(par["degree"]))
-    ciphertext = submission.rlwe_encrypt(par, case["secret"], case["message"], case["mask"], zero)
-    if tuple(submission.rlwe_decrypt(par, case["secret"], ciphertext)) != tuple(case["message"]):
+    message = tuple(1 if index == 0 else m for index, m in enumerate(case["message"]))
+    ciphertext = submission.rlwe_encrypt(par, case["secret"], message, case["mask"], zero)
+    if tuple(submission.rlwe_decrypt(par, case["secret"], ciphertext)) != message:
         return "a noiseless RLWE ciphertext did not decrypt to its messages"
     return ""
 

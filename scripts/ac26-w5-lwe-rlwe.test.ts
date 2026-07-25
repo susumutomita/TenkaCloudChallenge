@@ -359,6 +359,39 @@ describe("ac26-w5-lwe-rlwe: the problem is solvable and actually fails", () => {
     expect(result.stdout).toContain("failed");
   });
 
+  // Not just "some check failed". A stub returning 0 passed the LWE round trip on any seed
+  // that happened to draw message 0, so the public set reported `ok` for a function the
+  // learner had not written. Every public check must fail against the shipped starter.
+  it("should have no public check that a stub can pass by coincidence", () => {
+    const result = python(["tests/public/test_lattice.py"]);
+    expect(result.stdout).not.toContain("ok   ");
+  });
+
+  // TEMPLATE.md: the public tests must not be sufficient. This is the sharpest case —
+  // a submission in the WRONG RING passes all four, because the encrypt and decrypt paths
+  // use the same wrong product and it cancels out of the phase. Nothing in the public set
+  // reaches past degree N, which is where the whole problem lives.
+  it("should let a fully cyclic implementation pass every public test", () => {
+    const cyclic = bundle("reference")
+      .replace("            raw[i + j] += a * b", "            raw[(i + j) % len(left)] += a * b")
+      .replace("        sign = -1 if (index // n) % 2 else 1", "        sign = 1");
+    const script = [
+      "import os, shutil, subprocess, sys, tempfile",
+      "work = tempfile.mkdtemp()",
+      "shutil.copytree('.', os.path.join(work, 'p'), ignore=shutil.ignore_patterns('__pycache__'))",
+      "open(os.path.join(work, 'p', 'starter', 'lattice.py'), 'w').write(sys.argv[1])",
+      "run = subprocess.run([sys.executable, 'tests/public/test_lattice.py'],",
+      "                     cwd=os.path.join(work, 'p'), capture_output=True, text=True)",
+      "print(run.returncode)",
+    ].join("\n");
+    const result = python(["-c", script, cyclic]);
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim().split("\n").at(-1)).toBe("0");
+    // ...and the hidden tests catch it, so the teeth are in the right place.
+    expect(evaluate("normalize", cyclic)).toBe(false);
+    expect(evaluate("ring", cyclic)).toBe(false);
+  }, 120_000);
+
   it("should kill every intended defect in the mutation suite", () => {
     const result = python(["mutation.py"]);
     expect(result.stdout).toContain("PASS reference implementation passes the hidden tests");
