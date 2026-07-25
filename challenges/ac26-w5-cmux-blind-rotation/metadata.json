@@ -1,0 +1,547 @@
+{
+  "id": "ac26-w5-cmux-blind-rotation",
+  "name": "誰も知らない角度で回す",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "advanced-cryptography-2026",
+    "order": 540,
+    "chapter": "Week 5 / CMUX and Blind Rotation"
+  },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 5,
+    "role": "mechanism",
+    "spoilerPolicy": "independent-reimplementation",
+    "sources": [
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        "path": "week5/README.md",
+        "kind": "lecture"
+      },
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        "path": "week5/problems/tfhe-toy-python/README.md",
+        "kind": "assignment"
+      }
+    ]
+  },
+  "difficulty": 4,
+  "estimatedDuration": "75-105 分",
+  "shortDescription": "暗号化されたビットで 2 つの暗号文から一方を選び、 それを繰り返して暗号化された量だけ多項式を回す。 回転量はループの中の誰も知らない。",
+  "description": "Week 5 の 4 問目。 CMUX と単項式回転を実装し、 その 2 つを鎖にして blind rotation を完成させる。\n\n環・RLWE・RGSW・external product は支給される。 それらは ac26-w5-lwe-rlwe と ac26-w5-rgsw-external の成果物で、 この問題は選択そのものと、 その選択が積み上がる先。\n\nCMUX は `ct0 + ExternalProduct(c, ct1 - ct0)` の 1 行。 selector 0 なら ct0、 1 なら ct1 の平文になり、 分岐は存在しない。 両方の候補を毎回計算するのは無駄ではなく機構そのもので、 片方だけ計算するにはどちらが要るかを知る必要がある。\n\n平文 modulus は 4 にしてある。 これは判定を担う。 negacyclic な回転は degree N を跨ぐたびに係数を反転させるが、 平文 modulus が 2 だと `-delta == delta (mod q)` で符号反転が**見えない**。 `X^N = -1` を完全に無視した実装が満点を取れてしまう。 4 なら反転は `m -> (-m) mod 4` として平文に出る。\n\n回転の指数は 2N を法として正規化する。 `X^(2N) = 1` だから N ではなく 2N であり、 N で割った余りを取ると失われるのはちょうど符号。 それが circular shift との差。\n\nblind rotation は LWE sample `(mask, body)` を Z_(2N) の上で受け取り、 `phase = body - <mask, secret>` の指数へ辿り着く。 secret は渡らない。 body は公開値なので最初の offset 回転に CMUX は要らず、 残りは bootstrapping key の各行が担う。\n\n採点の設計として、 回転方向をすべての場所で一貫して逆にした実装は自分自身とは完全に整合し、 ループを自分の部品と突き合わせても通る。 だから blind rotation は phase から平文で計算した別モデルと比較する。 そのモデルは submission の関数を 1 つも呼ばない。\n\nこれは安全ではない。 パラメータは全列挙でき、 secret は線形代数で復元できる。",
+  "instructions": "## はじめに\n\n暗号化されたビットで 2 つの暗号文のどちらかを選びます。 それを繰り返して、 **誰も知らない量**だけ多項式を回します。\n\n```text\nCMUX(c, ct0, ct1) = ct0 + ExternalProduct(c, ct1 - ct0)\n```\n\n規約は固定です。\n\n```text\nplaintext_modulus = 4        delta = q // 4\nX^(2N) = 1                   指数は N ではなく 2N を法として正規化する\nX^N   = -1                   1 回巻けば符号が反転し、 2 回で戻る\nphase = (body - sum(mask[i] * secret[i])) mod 2N\n```\n\n## 最初の一手\n\n```bash\nmake inspect\nmake inspect CASE=0\n```\n\n`(1, 0, ...)` を 1 周させた回転表、 CMUX 1 回、 blind rotation の全ステップが出ます。 `X^N` の行で係数が `q-1` になっているのを確かめてから、 コードを書いてください。\n\n次に `local/starter/cmux.py` を編集します。\n\n## ゴール\n\n8 つの checkpoint を独立に通します。 hidden test は blind rotation を、 submission の関数を 1 つも呼ばずに平文で組んだモデルと比較します。 自分の部品同士を突き合わせるテストは、 一貫して逆な実装を捕まえません。",
+  "writeup": "## 両方計算することが機構\n\nCMUX は `ct0 + ExternalProduct(c, ct1 - ct0)`。 external product が `RLWE(0) + mu * (ct1 - ct0)` を返すので、 和は mu が 0 なら ct0、 1 なら ct1 になる。 どちらの場合も fresh noise が乗るため出力は新しい暗号文であり、 入力のどちらでもない。\n\n必要な候補だけ計算する実装は、 どちらが必要かを知っていなければ書けない。 両方計算するのは無駄ではなく、 暗号化されたまま選べる理由そのもの。\n\n## 平文 modulus 4 は判定を担う\n\nnegacyclic な回転は degree を跨ぐたびに係数を反転する。 平文 modulus が 2 だと `-delta` と `delta` が mod q で同じ値なので、 この反転は平文に出ない。 `X^N = -1` を無視して circular shift を書いた実装が全部通ってしまう。 4 にすると反転は `m -> (-m) mod 4` として現れ、 1 と 3 が動く。\n\n## 2N であって N ではない\n\n`X^(2N) = 1` なので指数の法は 2N。 N で割った余りを取ると、 落ちるのはちょうど「何回巻いたか」の偶奇 — つまり符号。 circular shift との差は全部そこにある。\n\n## 一貫して逆な実装は自分では捕まらない\n\n`monomial_rotate` の方向とループの方向を両方逆にすると、 ループを自分の `conditional_rotate` と突き合わせるテストは通る。 public test の最後の 1 つがまさにそれで、 何も証明していない。\n\nだから hidden test は phase から平文で回転を計算した別モデルと比較する。 そのモデルは submission の関数を 1 つも呼ばない。\n\n## 候補が一致する退化ケース\n\nmask の係数が 0 のとき 2 つの候補は同じ暗号文になり、 差はゼロ、 その桁もゼロ、 external product はゼロ暗号文そのものになる。 出力は候補と bit 単位で一致する。 これは平文分岐ではなく、 分岐する対象が最初から無かったということ。 mask の係数は Z_(2N) から引くので、 これは 2N 回に 1 回起きる。\n\n## body は公開値\n\nsecret は LWE の秘密ビットだけで、 body は違う。 だから最初の offset 回転に CMUX は要らない。 trace の step 0 が `phase-offset` なのはそれを示すためで、 公開部分と暗号化された部分の境目がそこにある。\n\n## 対象外\n\nsample extraction と key switching (次の問題)、 programmable bootstrapping と HomNAND (その次)、 modulus switching、 constant-time 保証、 最適化された blind rotation。\n\n## これは安全ではない\n\nパラメータは全列挙でき、 secret は線形代数で復元できる。 機構の toy であって困難性の toy ではない。",
+  "tags": [
+    "advanced-cryptography-2026",
+    "week5",
+    "fhe",
+    "tfhe",
+    "cmux",
+    "blind-rotation",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18110,
+      "name": "/verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "CMUX を external product の 1 行として実装できる",
+    "selector 0 / 1 で選ばれる分岐が切り替わることを確認できる",
+    "単項式の積が negacyclic な回転になることを説明できる",
+    "回転の指数を 2N を法として正規化できる",
+    "暗号化されたビットで回転するか保持するかを選べる",
+    "LWE mask を使った conditional rotation を積み重ねられる",
+    "blind rotation の結果を平文の参照モデルと突き合わせられる",
+    "toy 実装と production の blind rotation の差を明記できる"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.ac26-w5-cmux-blind-rotation.ciphertext-arithmetic",
+        "description": "RLWE 暗号文の加算と減算を両方の半分について実装できる。"
+      },
+      {
+        "id": "lo.ac26-w5-cmux-blind-rotation.cmux",
+        "description": "CMUX を external product の上に実装し、 selector ごとの意味を説明できる。"
+      },
+      {
+        "id": "lo.ac26-w5-cmux-blind-rotation.constant-path",
+        "description": "両方の候補を計算することが暗号化された選択の条件であると示せる。"
+      },
+      {
+        "id": "lo.ac26-w5-cmux-blind-rotation.negacyclic-rotation",
+        "description": "単項式の積が符号付きの回転になることを実装から確認できる。"
+      },
+      {
+        "id": "lo.ac26-w5-cmux-blind-rotation.exponent-normalization",
+        "description": "回転の指数を 2N を法として正規化し、 N との違いを説明できる。"
+      },
+      {
+        "id": "lo.ac26-w5-cmux-blind-rotation.blind-rotation-loop",
+        "description": "bootstrapping key と LWE mask から blind rotation のループを組める。"
+      },
+      {
+        "id": "lo.ac26-w5-cmux-blind-rotation.reference-model",
+        "description": "ループの結果を平文で組んだ別モデルと突き合わせられる。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.cmux",
+        "description": "暗号化されたビットで 2 つの暗号文から一方を選ぶ演算。 分岐ではなく 1 本の算術式として書ける。"
+      },
+      {
+        "id": "concept.blind-rotation",
+        "description": "暗号化された量だけ accumulator を回す手続き。 回転量は手続きの中に平文として現れない。"
+      },
+      {
+        "id": "concept.encrypted-control-flow",
+        "description": "秘密の分岐を平文の if ではなく算術で実現する考え方。 両方の枝を計算することが条件になる。"
+      },
+      {
+        "id": "concept.negacyclic-rotation",
+        "description": "`X^N = -1` の環での単項式の積。 巻き戻る係数は符号が反転し、 指数の法は 2N になる。"
+      },
+      {
+        "id": "concept.accumulator-polynomial",
+        "description": "回転の対象になる多項式を載せた暗号文。 noise を使い切らないよう trivial 暗号文から始める。"
+      },
+      {
+        "id": "concept.bootstrapping-key",
+        "description": "LWE の秘密ビットを 1 ビットずつ RGSW にした鍵。 ループの選択を暗号化されたまま行わせる。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.ac26-w5-cmux-blind-rotation.combine",
+        "description": "暗号文の和と差が両方の半分について正しく、 短い係数列も環の元に揃えた。"
+      },
+      {
+        "id": "assessment.ac26-w5-cmux-blind-rotation.cmux",
+        "description": "selector 0 / 1 で選ばれる分岐が切り替わり、 再暗号化しても選択が変わらなかった。"
+      },
+      {
+        "id": "assessment.ac26-w5-cmux-blind-rotation.constant",
+        "description": "両方の候補を計算し、 鍵を全行読み、 出力が入力のいずれとも一致しなかった。"
+      },
+      {
+        "id": "assessment.ac26-w5-cmux-blind-rotation.rotate",
+        "description": "単項式回転が符号付きで、 指数を 2N を法として正規化し、 暗号文の両方の半分を回した。"
+      },
+      {
+        "id": "assessment.ac26-w5-cmux-blind-rotation.conditional",
+        "description": "暗号化されたビットで回転と保持を切り替え、 候補の順序を取り違えなかった。"
+      },
+      {
+        "id": "assessment.ac26-w5-cmux-blind-rotation.blind",
+        "description": "ループの結果が平文の参照モデルと一致し、 鍵を変えれば行き先も変わった。"
+      },
+      {
+        "id": "assessment.ac26-w5-cmux-blind-rotation.trace",
+        "description": "step ごとの記録が積み上がり、 最後が blind rotation そのものになった。"
+      },
+      {
+        "id": "assessment.ac26-w5-cmux-blind-rotation.transfer",
+        "description": "見たことのない degree・dimension・base で全性質が成立した。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.cmux-decrypts-the-selector",
+        "description": "CMUX が selector を復号してから選ぶという誤解。 secret は渡らず、 両方の枝は同じ算術。"
+      },
+      {
+        "id": "misconception.encrypted-control-flow-is-a-secret-if-statement",
+        "description": "暗号化された分岐が「秘密の if」だという誤解。 実際は両方の枝を計算し、 算術で混ぜる。"
+      },
+      {
+        "id": "misconception.polynomial-rotation-is-a-circular-shift",
+        "description": "多項式の回転が配列の circular shift だという誤解。 degree を跨ぐ係数は符号が反転する。"
+      },
+      {
+        "id": "misconception.blind-rotation-reveals-the-lwe-phase",
+        "description": "blind rotation の途中で phase が現れるという誤解。 phase は最後まで暗号文の中にしかない。"
+      },
+      {
+        "id": "misconception.one-cmux-is-programmable-bootstrapping",
+        "description": "CMUX を 1 回書けば programmable bootstrapping だという誤解。 sample extraction と key switching が残る。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-cmux-blind-rotation",
+      "target": "lo.ac26-w5-cmux-blind-rotation.ciphertext-arithmetic"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-cmux-blind-rotation",
+      "target": "lo.ac26-w5-cmux-blind-rotation.cmux"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-cmux-blind-rotation",
+      "target": "lo.ac26-w5-cmux-blind-rotation.constant-path"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-cmux-blind-rotation",
+      "target": "lo.ac26-w5-cmux-blind-rotation.negacyclic-rotation"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-cmux-blind-rotation",
+      "target": "lo.ac26-w5-cmux-blind-rotation.exponent-normalization"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-cmux-blind-rotation",
+      "target": "lo.ac26-w5-cmux-blind-rotation.blind-rotation-loop"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-cmux-blind-rotation",
+      "target": "lo.ac26-w5-cmux-blind-rotation.reference-model"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-cmux-blind-rotation",
+      "target": "concept.cmux"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-cmux-blind-rotation",
+      "target": "concept.blind-rotation"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-cmux-blind-rotation",
+      "target": "concept.encrypted-control-flow"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-cmux-blind-rotation",
+      "target": "concept.negacyclic-rotation"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-cmux-blind-rotation",
+      "target": "concept.accumulator-polynomial"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-cmux-blind-rotation",
+      "target": "concept.bootstrapping-key"
+    },
+    {
+      "type": "requires",
+      "source": "problem.ac26-w5-cmux-blind-rotation",
+      "target": "problem.ac26-w5-rgsw-external"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w5-cmux-blind-rotation.cmux",
+      "target": "concept.external-product"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w5-cmux-blind-rotation.cmux",
+      "target": "concept.rgsw"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w5-cmux-blind-rotation.ciphertext-arithmetic",
+      "target": "concept.rlwe"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w5-cmux-blind-rotation.negacyclic-rotation",
+      "target": "concept.negacyclic-polynomial-ring"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w5-cmux-blind-rotation.blind-rotation-loop",
+      "target": "concept.noise-budget"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-cmux-blind-rotation",
+      "target": "assessment.ac26-w5-cmux-blind-rotation.combine"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-cmux-blind-rotation",
+      "target": "assessment.ac26-w5-cmux-blind-rotation.cmux"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-cmux-blind-rotation",
+      "target": "assessment.ac26-w5-cmux-blind-rotation.constant"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-cmux-blind-rotation",
+      "target": "assessment.ac26-w5-cmux-blind-rotation.rotate"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-cmux-blind-rotation",
+      "target": "assessment.ac26-w5-cmux-blind-rotation.conditional"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-cmux-blind-rotation",
+      "target": "assessment.ac26-w5-cmux-blind-rotation.blind"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-cmux-blind-rotation",
+      "target": "assessment.ac26-w5-cmux-blind-rotation.trace"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-cmux-blind-rotation",
+      "target": "assessment.ac26-w5-cmux-blind-rotation.transfer"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w5-cmux-blind-rotation",
+      "target": "misconception.cmux-decrypts-the-selector"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w5-cmux-blind-rotation",
+      "target": "misconception.encrypted-control-flow-is-a-secret-if-statement"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w5-cmux-blind-rotation",
+      "target": "misconception.polynomial-rotation-is-a-circular-shift"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w5-cmux-blind-rotation",
+      "target": "misconception.blind-rotation-reveals-the-lwe-phase"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w5-cmux-blind-rotation",
+      "target": "misconception.one-cmux-is-programmable-bootstrapping"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18110/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "combine",
+        "label": "暗号文を足し引きする",
+        "points": 25,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "combine-hint-1",
+            "content": "a と b の両方。 RLWE が加法準同型なのは mask も一緒に足されるからで、 b だけ足した暗号文は noise に復号される。",
+            "penalty": 12
+          }
+        ]
+      },
+      {
+        "id": "cmux",
+        "label": "暗号化されたビットで選ぶ",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "cmux-hint-1",
+            "content": "external_product は `RLWE(0) + mu * ciphertext` を返す。 `ct0 + ExternalProduct(c, ct1 - ct0)` に代入して、 mu = 0 と mu = 1 で何が出るかを書き下す。",
+            "penalty": 22
+          }
+        ]
+      },
+      {
+        "id": "constant",
+        "label": "平文で分岐していないことを示す",
+        "points": 35,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "constant-hint-1",
+            "content": "出力が ct0 でも ct1 でもないことが条件。 external product は両方の経路で fresh noise を足すので、 正しい CMUX は必ず新しい暗号文を返す。",
+            "penalty": 17
+          }
+        ]
+      },
+      {
+        "id": "rotate",
+        "label": "単項式で回す",
+        "points": 40,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "rotate-hint-1",
+            "content": "指数の法は 2N。 N で割ると落ちるのはちょうど符号。 `normalize` は任意長の係数列に negacyclic 則を適用するので、 右に shift して渡せば済む。",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "conditional",
+        "label": "回すか保つかを選ぶ",
+        "points": 35,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "conditional-hint-1",
+            "content": "候補 0 が「保つ」、 候補 1 が「回す」。 順序を取り違えると 0 と 1 の意味が入れ替わり、 両方通らない。",
+            "penalty": 17
+          }
+        ]
+      },
+      {
+        "id": "blind",
+        "label": "誰も知らない量だけ回す",
+        "points": 55,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "blind-hint-1",
+            "content": "公開されているものから始める。 body は秘密ではないので offset 回転に CMUX は要らない。 残りは各 mask 係数を鍵の対応する行で条件付きに掛けるだけ。",
+            "penalty": 27
+          }
+        ]
+      },
+      {
+        "id": "trace",
+        "label": "積み上がりを見せる",
+        "points": 35,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "trace-hint-1",
+            "content": "記録は dimension + 1 個。 step 0 は公開 offset で、 候補が 2 つとも同じ暗号文になる唯一の step。 `mask` は渡された値、 `exponent` はそれを正規化した値。",
+            "penalty": 17
+          }
+        ]
+      },
+      {
+        "id": "transfer",
+        "label": "見たことのない設定で成立させる",
+        "points": 30,
+        "wrongAnswerPenalty": 15
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Turn it by an angle nobody knows",
+      "shortDescription": "Pick one of two ciphertexts with an encrypted bit, then chain that into rotating a polynomial by an encrypted amount. Nothing inside the loop knows the angle.",
+      "description": "The fourth Week 5 problem. Build CMUX and monomial rotation, then chain the two into blind rotation.\n\nThe ring, RLWE, RGSW and the external product are supplied -- they are ac26-w5-lwe-rlwe's and ac26-w5-rgsw-external's output, and this problem is the selection itself and what it accumulates into.\n\nCMUX is one line: `ct0 + ExternalProduct(c, ct1 - ct0)`. Selector 0 gives ct0's plaintext, selector 1 gives ct1's, and there is no branch. Computing both candidates every time is not waste; it is the mechanism, because computing only the one you need requires knowing which one that is.\n\nThe plaintext modulus is 4, and that is load-bearing. Negacyclic rotation negates a coefficient every time it wraps past degree N, and modulo 2 that flip is **invisible** -- `-delta == delta (mod q)` -- so an implementation that ignored `X^N = -1` entirely would score full marks. Modulo 4 the flip shows up in the plaintext as `m -> (-m) mod 4`.\n\nRotation exponents are normalized modulo 2N. `X^(2N) = 1` is why it is 2N rather than N, and reducing modulo N instead loses exactly the sign -- which is the whole difference from a circular shift.\n\nBlind rotation takes an LWE sample `(mask, body)` over `Z_(2N)` and lands on the exponent `phase = body - <mask, secret>`. No secret is passed. `body` is public, so the opening offset rotation needs no CMUX; the rest is carried by the rows of the bootstrapping key.\n\nOn scoring: an implementation whose rotation direction is reversed everywhere is perfectly consistent with itself and passes any test that compares the loop against its own parts. So the blind rotation is compared against a separate model computed in the clear from the phase, which calls none of the submission's functions.\n\nNone of this is secure. The parameters are small enough to enumerate and the secret falls to linear algebra.",
+      "instructions": "## Start here\n\nPick one of two ciphertexts with an encrypted bit. Then repeat that until you have rotated a polynomial by an amount **nobody knows**.\n\n```text\nCMUX(c, ct0, ct1) = ct0 + ExternalProduct(c, ct1 - ct0)\n```\n\nThe conventions are fixed:\n\n```text\nplaintext_modulus = 4        delta = q // 4\nX^(2N) = 1                   exponents normalize modulo 2N, not N\nX^N   = -1                   one wrap flips the sign, two restore it\nphase = (body - sum(mask[i] * secret[i])) mod 2N\n```\n\n## First move\n\n```bash\nmake inspect\nmake inspect CASE=0\n```\n\nThat prints `(1, 0, ...)` rotated through a full turn, one CMUX, and every step of a blind rotation. Check that the `X^N` row came back as `q-1` before writing any code.\n\nThen edit `local/starter/cmux.py`.\n\n## Goal\n\nClear eight independently scored checkpoints. The hidden tests compare the blind rotation against a model built in the clear that calls none of your functions -- a test that checks your parts against each other does not catch an implementation that is wrong consistently.",
+      "writeup": "## Computing both is the mechanism\n\nCMUX is `ct0 + ExternalProduct(c, ct1 - ct0)`. The external product returns `RLWE(0) + mu * (ct1 - ct0)`, so the sum is ct0 when mu is 0 and ct1 when mu is 1. Fresh noise lands on both paths, so the output is a new ciphertext either way and never one of the inputs.\n\nAn implementation that computed only the candidate it needs cannot be written without knowing which one that is. Computing both is not waste -- it is the reason an encrypted bit can steer anything.\n\n## A plaintext modulus of 4 is what makes the sign visible\n\nNegacyclic rotation negates a coefficient every time it wraps past the degree. Modulo 2, `-delta` and `delta` are the same value, so that flip never reaches the plaintext and an implementation that wrote an ordinary circular shift passes everything. Modulo 4 it appears as `m -> (-m) mod 4`, which moves 1 and 3.\n\n## 2N, not N\n\n`X^(2N) = 1`, so exponents reduce modulo 2N. Reducing modulo N instead drops the parity of how many times the coefficient wrapped -- that is, the sign. The entire difference between this and a circular shift lives there.\n\n## A consistently reversed implementation cannot catch itself\n\nReverse the direction in `monomial_rotate` and in the loop together, and a test that compares the loop against your own `conditional_rotate` still passes. The last public test is exactly that test, and it proves nothing.\n\nSo the hidden tests compare against a model that computes the rotation in the clear from the phase and calls none of your functions.\n\n## The degenerate case where the candidates coincide\n\nWhen a mask coefficient is zero the two candidates are the same ciphertext: the difference is zero, its digits are zero, and the external product is exactly the zero ciphertext. The output matches the candidate bit for bit. That is not a plaintext branch -- there was nothing to branch on. Mask coefficients are drawn from `Z_(2N)`, so this happens one time in 2N, not rarely.\n\n## body is public\n\nThe secret is the LWE bits; the body is not. That is why the opening offset rotation needs no CMUX, and why step 0 of the trace is labelled `phase-offset` -- it marks where the public part of the phase ends and the encrypted part begins.\n\n## Not in scope\n\nSample extraction and key switching (the next problem), programmable bootstrapping and HomNAND (the one after), modulus switching, constant-time guarantees, optimized blind rotation.\n\n## This is not secure\n\nThe parameters are small enough to enumerate and the secret falls to linear algebra. A toy of the mechanism, not of the hardness.",
+      "learningGoals": [
+        "Implement CMUX as one line on top of the external product",
+        "Confirm that selector 0 and 1 switch which branch is selected",
+        "Explain why multiplying by a monomial is a negacyclic rotation",
+        "Normalize a rotation exponent modulo 2N",
+        "Rotate or hold a ciphertext according to an encrypted bit",
+        "Chain conditional rotations driven by an LWE mask",
+        "Check a blind rotation against a plaintext reference model",
+        "State plainly how the toy differs from a production blind rotation"
+      ],
+      "checks": [
+        {
+          "id": "combine",
+          "label": "Add and subtract ciphertexts",
+          "hints": [
+            {
+              "id": "combine-hint-1",
+              "content": "Both halves. RLWE is additively homomorphic because the masks are added too, and a ciphertext with only `b` summed decrypts to noise."
+            }
+          ]
+        },
+        {
+          "id": "cmux",
+          "label": "Select with an encrypted bit",
+          "hints": [
+            {
+              "id": "cmux-hint-1",
+              "content": "`external_product` returns `RLWE(0) + mu * ciphertext`. Substitute that into `ct0 + ExternalProduct(c, ct1 - ct0)` and write out what comes back for mu = 0 and mu = 1."
+            }
+          ]
+        },
+        {
+          "id": "constant",
+          "label": "Show you did not branch in the clear",
+          "hints": [
+            {
+              "id": "constant-hint-1",
+              "content": "The output must be neither ct0 nor ct1. The external product adds fresh noise on both paths, so a correct CMUX always returns a new ciphertext."
+            }
+          ]
+        },
+        {
+          "id": "rotate",
+          "label": "Turn by a monomial",
+          "hints": [
+            {
+              "id": "rotate-hint-1",
+              "content": "The exponent's modulus is 2N. Reducing modulo N loses exactly the sign. `normalize` applies the negacyclic rule to a coefficient list of any length, so shifting right and handing it over is enough."
+            }
+          ]
+        },
+        {
+          "id": "conditional",
+          "label": "Choose between turning and holding",
+          "hints": [
+            {
+              "id": "conditional-hint-1",
+              "content": "Candidate 0 holds, candidate 1 turns. Swap them and the meanings of 0 and 1 swap with them, so neither passes."
+            }
+          ]
+        },
+        {
+          "id": "blind",
+          "label": "Turn by an amount nobody knows",
+          "hints": [
+            {
+              "id": "blind-hint-1",
+              "content": "Start from what is public. `body` is not a secret, so the offset rotation needs no CMUX. The rest is each mask coefficient applied conditionally through the matching key row."
+            }
+          ]
+        },
+        {
+          "id": "trace",
+          "label": "Show the accumulation",
+          "hints": [
+            {
+              "id": "trace-hint-1",
+              "content": "`dimension + 1` records. Step 0 is the public offset and the only step whose two candidates are the same ciphertext. `mask` is what you were handed; `exponent` is that normalized."
+            }
+          ]
+        },
+        {
+          "id": "transfer",
+          "label": "Hold up in a setting you have not seen"
+        }
+      ]
+    }
+  }
+}
