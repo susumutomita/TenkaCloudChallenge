@@ -60,6 +60,24 @@ function evaluate(checkpointId: string, submission: string): boolean {
   return JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "null") === true;
 }
 
+/**
+ * Every checkpoint in one interpreter. Scoring one submission per checkpoint is sixteen
+ * process spawns for the two blocks below, and the spawn dominates the work now that the
+ * enumeration is cheap. The catalog's CI budget is shared with forty-odd other problems.
+ */
+function evaluateAll(submission: string): Record<string, boolean> {
+  const script = [
+    "import json, sys",
+    "sys.path.insert(0, '.')",
+    "from verifier.server import CHECKPOINTS, evaluate",
+    "source = sys.argv[1]",
+    "print(json.dumps({c: evaluate(c, source) for c in CHECKPOINTS}))",
+  ].join("\n");
+  const result = python(["-c", script, submission]);
+  expect(result.status).toBe(0);
+  return JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "null");
+}
+
 /** Run a snippet against the problem's fixtures and reference, and return its stdout. */
 function probe(lines: string[]): string {
   const script = [
@@ -235,21 +253,15 @@ describe("ac26-w7-capstone-demo: the problem is solvable and actually fails", ()
 });
 
 describe("ac26-w7-capstone-demo: /verify contract", () => {
-  it.each(CHECKPOINTS)(
-    "should accept the reference submission on %s",
-    (checkpoint) => {
-      expect(evaluate(checkpoint, bundle("reference"))).toBe(true);
-    },
-    300_000,
-  );
+  it("should accept the reference submission on every checkpoint", () => {
+    const scored = evaluateAll(bundle("reference"));
+    expect(scored).toEqual(Object.fromEntries(CHECKPOINTS.map((name) => [name, true])));
+  }, 300_000);
 
-  it.each(CHECKPOINTS)(
-    "should reject the starter submission on %s",
-    (checkpoint) => {
-      expect(evaluate(checkpoint, bundle("starter"))).toBe(false);
-    },
-    300_000,
-  );
+  it("should reject the starter submission on every checkpoint", () => {
+    const scored = evaluateAll(bundle("starter"));
+    expect(scored).toEqual(Object.fromEntries(CHECKPOINTS.map((name) => [name, false])));
+  }, 300_000);
 
   // Each of these computes the right sum. None of them is a correct capstone.
   it("should reject a protocol that opens raw shares instead of partial sums", () => {

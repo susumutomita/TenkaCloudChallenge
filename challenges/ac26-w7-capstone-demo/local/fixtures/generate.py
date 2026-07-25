@@ -103,9 +103,21 @@ def hidden_settings(seed: str) -> list[Setting]:
     return settings
 
 
-#: Small enough that every randomness can be enumerated: 3 parties over F_5 is 5^6 = 15625
+#: Small enough that every randomness can be enumerated: 3 parties over F_3 is 3^6 = 729
 #: runs, which is the whole probability space, not a sample. Privacy is checked exactly.
-TINY = Setting(parties=3, modulus=5, inputs=(1, 2, 3))
+#:
+#: The field is this small for a reason that is not cryptographic. `detects` runs the whole
+#: enumeration once per candidate protocol, and the hidden suite hands it ten of them across
+#: three coalitions and two settings, so the space is multiplied by sixty before anything
+#: else happens. At F_5 that is 937,500 protocol runs and the catalog's ten-minute CI budget
+#: is gone; at F_3 it is 43,740. The experiment is exactly as exact either way — the whole
+#: space is the whole space.
+#:
+#: The sum is deliberately not zero. At a sum of zero, a transcript with every value doubled
+#: still totals the same thing, so the consistency check that catches a faked transcript
+#: stops firing — a whole class of breakage would become invisible because of the fixture
+#: rather than because of the protocol.
+TINY = Setting(parties=3, modulus=3, inputs=(1, 2, 1))
 
 
 def tiny_settings() -> list[Setting]:
@@ -114,8 +126,11 @@ def tiny_settings() -> list[Setting]:
     This pair is the privacy experiment: a coalition's view must be distributed identically
     across them. If it is not, the view depends on more than the output, and something the
     coalition should not learn is reaching it.
+
+    Party 0 holds the same input in both, so it is the coalition whose view is compared; what
+    moves is what the *honest* parties hold, with the sum held fixed.
     """
-    return [TINY, Setting(parties=3, modulus=5, inputs=(1, 0, 0))]
+    return [TINY, Setting(parties=3, modulus=3, inputs=(1, 0, 0))]
 
 
 def randomness_space(setting: Setting) -> Iterator[tuple[int, ...]]:

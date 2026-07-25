@@ -21,7 +21,17 @@ on:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Raised from 10 when the AC26 track pushed the suite past it. The cap is a runaway
+    # guard, not a budget: `bun run validate` runs each container problem's starter,
+    # reference, mutation suite, and /verify contract for real, so it grows with the
+    # catalog. It was ~5 min at 13 problems and ~8 min at 43, and Weeks 5 and 6 will add a
+    # dozen more.
+    #
+    # A cancelled run reads as a red X with no failing assertion, which is the worst
+    # possible signal: it looks like flake. If this cap is reached again, find out which
+    # problem got slow before raising it further — the usual cause is a hidden test
+    # enumerating a space that a smaller parameter would cover just as exactly.
+    timeout-minutes: 25
     env:
       CI: "true"
       npm_config_ignore_scripts: "true"
