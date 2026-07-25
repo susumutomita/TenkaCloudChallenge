@@ -265,9 +265,16 @@ each challenge pins `week4/README.md` as `kind: "placeholder"`.
 
 | Order | Problem id | Role | Teaches | Issue |
 | --- | --- | --- | --- | --- |
-| 410 | `ac26-w4-arithmetization` | `mechanism` | `concept.arithmetization` | #230 |
-| 420 | `ac26-w4-commit-open` | `mechanism` | `concept.polynomial-commitment`, `concept.binding`, `concept.challenge-ordering` | #231 |
-| 430 | `ac26-w4-proof-pipeline` | `transfer` | `concept.proof-pipeline` | #232 |
+| 410 | `ac26-w4-arithmetization` | `transfer` | `concept.arithmetization`, `concept.execution-trace`, `concept.transition-constraint`, `concept.boundary-constraint`, `concept.evaluation-domain` | #230 |
+| 420 | `ac26-w4-commit-open` | `transfer` | `concept.merkle-commitment`, `concept.commitment-binding`, `concept.challenge-ordering`, `concept.authentication-path` | #231 |
+| 430 | `ac26-w4-proof-pipeline` | `transfer` | `concept.proof-pipeline-stage`, `concept.artifact-flow`, `concept.stage-contract`, `concept.trusted-setup`, `concept.transparent-setup`, `concept.succinctness` | #232 |
+
+All three shipped as `transfer` rather than the `mechanism` this table originally
+planned. GOVERNANCE.md §6 permits only `diagnostic` or `transfer` for a week whose
+material is unpublished, and `transfer` is also what these three are: they carry Week 1's
+constraints, Week 3's field, and Week 3's Fiat–Shamir into a new setting rather than
+reconstructing a mechanism the course has taught. The role reverts to a claim about the
+official material only when #229 confirms what Week 4 actually covers.
 
 ### Week 5 — TFHE
 
