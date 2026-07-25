@@ -32,8 +32,11 @@ inspect: build
 	$(RUN) python show.py
 
 reset:
-	git checkout -- local/starter/recover.py
-	@echo "starter/recover.py restored to its shipped state."
+	# The whole directory, not a named file: a problem may ship more than one
+	# starter, and a filename here goes stale the moment a problem is scaffolded
+	# from another one. Checking out the directory restores every tracked starter.
+	git checkout -- local/starter/
+	@echo "starter/ restored to its shipped state."
 
 reference-test: build
 	docker run --rm -e FLAG_SEED=$(FLAG_SEED) $(IMAGE) python mutation.py
