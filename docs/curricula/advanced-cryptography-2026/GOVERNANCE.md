@@ -178,8 +178,14 @@ this track was designed. Alignment must therefore be pinned, never floating.
    exercise was revised, retired, or replaced).
 4. A pin is not a claim that TenkaCloud content was derived from that commit. It
    records which version of the course the alignment was checked against.
+5. A week that was unpublished when its companion was authored is pinned with
+   `kind: "placeholder"`, so that when the material appears the check reports a
+   publication rather than an edit. Reading new material can mean re-scoping the
+   companion, not just moving the SHA.
 
-Run the drift check with `bun run course:drift`.
+Run the drift check with `bun run course:drift`. The operating procedure — how to
+read each marker, when the check runs, and how a pin is moved — is
+[`SYNC.md`](./SYNC.md).
 
 ## 6. Open items
 

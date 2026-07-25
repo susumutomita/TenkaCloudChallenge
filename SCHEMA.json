@@ -544,9 +544,10 @@
                   "test",
                   "slide",
                   "roadmap",
+                  "placeholder",
                   "other"
                 ],
-                "description": "参照している教材の種別。"
+                "description": "参照している教材の種別。 placeholder = pin した時点でまだ教材が公開されていない状態そのものの記録 (例: 「準備中」と書かれた週 README)。 placeholder の pin が動いたら course:drift は編集ではなく material-published として報告する。"
               }
             },
             "required": [
