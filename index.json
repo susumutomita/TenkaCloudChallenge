@@ -835,6 +835,57 @@
       }
     },
     {
+      "id": "ac26-w5-rgsw-external",
+      "name": "誰にも読めないビットを掛ける",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "advanced-cryptography-2026",
+        "order": 530,
+        "chapter": "Week 5 / RGSW and the External Product"
+      },
+      "courseAlignment": {
+        "courseId": "advanced-cryptography-program",
+        "edition": "2026",
+        "week": 5,
+        "role": "mechanism",
+        "sources": [
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "path": "week5/README.md",
+            "kind": "lecture"
+          },
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "path": "week5/problems/tfhe-toy-python/README.md",
+            "kind": "assignment"
+          }
+        ]
+      },
+      "difficulty": 4,
+      "estimatedDuration": "75-105 分",
+      "shortDescription": "メッセージを載せた RLWE 暗号文と暗号化されたビットを掛ける。 selector 0 でゼロ、 1 でメッセージ、そして算術はどちらでも同一なので結果からどちらかは分からない。",
+      "tags": [
+        "advanced-cryptography-2026",
+        "week5",
+        "fhe",
+        "rgsw",
+        "gadget-decomposition",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "ac26-w7-capstone-demo",
       "name": "主張と、それを反証できる実験",
       "category": "Challenge",

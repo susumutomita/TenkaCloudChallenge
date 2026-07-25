@@ -1,0 +1,523 @@
+{
+  "id": "ac26-w5-rgsw-external",
+  "name": "誰にも読めないビットを掛ける",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "advanced-cryptography-2026",
+    "order": 530,
+    "chapter": "Week 5 / RGSW and the External Product"
+  },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 5,
+    "role": "mechanism",
+    "spoilerPolicy": "independent-reimplementation",
+    "sources": [
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        "path": "week5/README.md",
+        "kind": "lecture"
+      },
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        "path": "week5/problems/tfhe-toy-python/README.md",
+        "kind": "assignment"
+      }
+    ]
+  },
+  "difficulty": 4,
+  "estimatedDuration": "75-105 分",
+  "shortDescription": "メッセージを載せた RLWE 暗号文と暗号化されたビットを掛ける。 selector 0 でゼロ、 1 でメッセージ、そして算術はどちらでも同一なので結果からどちらかは分からない。",
+  "description": "Week 5 の 3 問目。 TFHE で encrypted control bit を RLWE 暗号文へ作用させる土台として、 gadget decomposition・gadget vector・toy RGSW・external product を順に実装する。\n\n環と RLWE は支給される。 それらは ac26-w5-lwe-rlwe の成果物で、 この問題は gadget と積そのもの。\n\n分解の規約は固定してある。 q = base**levels、 unsigned、 LSB 先頭、 桁数はちょうど levels、 gadget は (1, B, B^2, ...)。 q = base**levels が復元を厳密にしており、 それが何を買っていたかは failure checkpoint で分かる。 実装は本来 approximate な gadget を使い誤差と付き合う。\n\nRGSW は 2L 行を持ち、 前半が gadget 項を a スロットへ、 後半が b スロットへ入れる。 external product は暗号文の両方の半分を分解して長さ 2L の digit ベクトルにし、 この行列へ掛ける。 d . G が (a, b) をちょうど組み立て直すので、 結果は RLWE(0) + mu*(a, b) になる。 gadget 項を片方のスロットに集めると、 積はほとんど正しく見えるものへ復号される。\n\nexternal_product に secret は渡らない。 selector を復号できず、 する必要もない。 両方の分岐が同じ算術になることが、 暗号化されたまま分岐できる理由そのもの。\n\n採点の設計として、 digit の順序と gadget vector を両方逆にしても往復は通り、 RGSW の行レイアウトを逆にして同じく逆な product で掛けても selector 1 はメッセージを返す。 だから gadget vector は直接採点し、 RGSW の検査はすべて交差させる。 fixture が作った行を submission の product へ、 submission の行を fixture の product へ通す。\n\nこれは安全ではない。 パラメータは全列挙でき、 secret は線形代数で復元できる。",
+  "instructions": "## はじめに\n\nメッセージを載せた RLWE 暗号文と、 **暗号化された**ビットがあります。 これを掛けます。 selector が 0 なら暗号文はゼロの暗号文になり、 1 ならメッセージはそのまま残ります。 どちらでも算術は同一です。\n\n規約は固定です。\n\n```text\nq = base ** levels           unsigned、 LSB 先頭、 桁数はちょうど levels\ngadget = (1, B, B^2, ..., B^(L-1))\n```\n\n## 最初の一手\n\n```bash\nmake inspect\nmake inspect CASE=0\n```\n\ngadget、 1 つの分解、 RGSW の行レイアウト、 そして 2L 行にわたる累積が出ます。 `d . G` がなぜ `(a, b)` を組み立て直すのかを、 コードを書く前に確かめてください。\n\n次に `local/starter/rgsw.py` を編集します。\n\n## ゴール\n\n8 つの checkpoint を独立に通します。 hidden test は RGSW の検査を交差させます。 自分で作った行を自分の product へ通すテストは、 ほとんど何の保証にもなりません。",
+  "writeup": "## 分割こそが要点\n\nRGSW の 2L 行は、 前半が gadget 項を a スロットへ、 後半が b スロットへ入れる。 external product が暗号文の両方の半分を分解して連結するのは、 `d . G` が `(a, b)` をちょうど組み立て直すため。 gadget 項を片方に集めると、 積は 「ほとんど正しい」 ものへ復号される。 ほとんど正しいは、 この文脈では間違い。\n\n## 自己整合的な間違いは交差させないと見えない\n\ndigit の順序と gadget vector を両方逆にすれば往復は通る。 RGSW の行レイアウトを逆にして、 同じく逆な product で掛ければ selector 1 はメッセージを返す。 どちらも自分自身とは完全に整合している。\n\nだから gadget vector は往復からではなく直接採点し、 RGSW の検査はすべて交差させる。 fixture が作った行を submission の product へ通し、 submission の行を fixture の product へ通す。\n\n## secret を渡さないことが仕様\n\nexternal_product に secret は渡らない。 selector を復号できず、 する必要もない。 両方の分岐が同じ算術になることが、 暗号化されたまま分岐できる理由そのもの。 どちらのビットか知りたくなったら、 設計が何かを教えようとしている。\n\n## q = base**levels は選択である\n\nそれが復元を厳密にしている。 level が modulus に届かなくなると、 decompose は文句を言わずに切り捨て、 recompose は自信を持って間違う。 最小の失敗値は base**levels そのもの。 float の logarithm で level 数を数えると、 厳密な冪でずれる — (5, 125) と (6, 216) がその例。\n\n## 対象外\n\nproduction の noise 解析、 最適化された分解や FFT、 RGSW の security proof、 bootstrapping key の圧縮。\n\n## これは安全ではない\n\nパラメータは全列挙でき、 secret は線形代数で復元できる。 機構の toy であって困難性の toy ではない。",
+  "tags": [
+    "advanced-cryptography-2026",
+    "week5",
+    "fhe",
+    "rgsw",
+    "gadget-decomposition",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18109,
+      "name": "/verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "base B と level 数 L による gadget decomposition を実装できる",
+    "decomposition digits から元の値を mod q で再構成できる",
+    "多項式の係数ごとの decomposition を実装できる",
+    "gadget vector と digit vector の内積の意味を説明できる",
+    "toy RGSW が encrypted selector として働く構造を追跡できる",
+    "external product で selector に応じて RLWE を保持・ゼロ化できる",
+    "decomposition 誤差と parameter 不足の関係を反例で示せる",
+    "toy 実装と production RGSW の差を明記できる"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.ac26-w5-rgsw-external.gadget-decomposition",
+        "description": "base B と level 数 L による gadget decomposition を実装し、桁から元の値を復元できる。"
+      },
+      {
+        "id": "lo.ac26-w5-rgsw-external.polynomial-decomposition",
+        "description": "多項式を係数ごとに分解し、 level ごとの環の元として並べられる。"
+      },
+      {
+        "id": "lo.ac26-w5-rgsw-external.gadget-vector",
+        "description": "gadget vector と digit vector の内積が何を意味するかを説明できる。"
+      },
+      {
+        "id": "lo.ac26-w5-rgsw-external.rgsw-structure",
+        "description": "toy RGSW が encrypted selector として働く 2L 行の構造を追える。"
+      },
+      {
+        "id": "lo.ac26-w5-rgsw-external.external-product",
+        "description": "external product で selector に応じて RLWE を保持・ゼロ化できる。"
+      },
+      {
+        "id": "lo.ac26-w5-rgsw-external.level-contribution",
+        "description": "各 level・各行がどの値へ寄与したかを trace できる。"
+      },
+      {
+        "id": "lo.ac26-w5-rgsw-external.decomposition-error",
+        "description": "level 不足で recomposition が壊れる最小の反例を作れる。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.gadget-decomposition",
+        "description": "値を base B の桁へ分け、 gadget との内積で戻す表現。 積の noise を小さく保つために使う。"
+      },
+      {
+        "id": "concept.gadget-vector",
+        "description": "digit vector と対になる重みの列。 桁の順序と一致していなければ復元できない。"
+      },
+      {
+        "id": "concept.rgsw",
+        "description": "2L 行の gadget 構造を持つ暗号文型。 RLWE へ掛けられるのはこの構造があるから。"
+      },
+      {
+        "id": "concept.external-product",
+        "description": "RGSW と RLWE を掛けて RLWE を返す演算。 selector を復号せずに作用させる。"
+      },
+      {
+        "id": "concept.encrypted-selector",
+        "description": "暗号化されたまま分岐に使えるビット。 両方の分岐が同じ算術になるのが要点。"
+      },
+      {
+        "id": "concept.decomposition-error",
+        "description": "level 数が modulus に届かないときに生じる復元誤差。 分解は黙って切り捨てる。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.ac26-w5-rgsw-external.decompose",
+        "description": "桁数・範囲・順序が規約どおりで、往復が成立した。"
+      },
+      {
+        "id": "assessment.ac26-w5-rgsw-external.gadget",
+        "description": "gadget vector が昇順で、桁との内積が値を復元した。"
+      },
+      {
+        "id": "assessment.ac26-w5-rgsw-external.polynomial",
+        "description": "level ごとに環の元を返し、係数順序を保った。"
+      },
+      {
+        "id": "assessment.ac26-w5-rgsw-external.rgsw",
+        "description": "2L 行を正しいスロットで構成し、ビット以外の selector を拒否した。"
+      },
+      {
+        "id": "assessment.ac26-w5-rgsw-external.external",
+        "description": "selector 0 でゼロ、 1 でメッセージになり、交差検査を通った。"
+      },
+      {
+        "id": "assessment.ac26-w5-rgsw-external.trace",
+        "description": "行ごとの寄与を記録し、最後が product と一致した。"
+      },
+      {
+        "id": "assessment.ac26-w5-rgsw-external.failure",
+        "description": "必要な level 数と最小の失敗値を特定できた。"
+      },
+      {
+        "id": "assessment.ac26-w5-rgsw-external.transfer",
+        "description": "見たことのないパラメータで全性質が成立した。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.gadget-decomposition-ignores-modulus",
+        "description": "gadget decomposition は単なる基数変換だという誤解。 modulus と level 数が表現できる範囲を決める。"
+      },
+      {
+        "id": "misconception.more-levels-only-cost-performance",
+        "description": "level を増やすのは性能の話だけだという誤解。足りなければ復元そのものが壊れる。"
+      },
+      {
+        "id": "misconception.rgsw-is-renamed-rlwe",
+        "description": "RGSW は名前を変えた RLWE だという誤解。 2L 行の gadget 構造が external product を可能にしている。"
+      },
+      {
+        "id": "misconception.external-product-multiplies-plaintexts",
+        "description": "external product が 2 つの平文を直接掛けるという誤解。片方は暗号化されたままの selector。"
+      },
+      {
+        "id": "misconception.selector-ciphertext-reveals-its-bit",
+        "description": "selector の暗号文を見ればビットが分かるという誤解。両方の分岐が同じ算術になる。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-rgsw-external",
+      "target": "lo.ac26-w5-rgsw-external.gadget-decomposition"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-rgsw-external",
+      "target": "lo.ac26-w5-rgsw-external.polynomial-decomposition"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-rgsw-external",
+      "target": "lo.ac26-w5-rgsw-external.gadget-vector"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-rgsw-external",
+      "target": "lo.ac26-w5-rgsw-external.rgsw-structure"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-rgsw-external",
+      "target": "lo.ac26-w5-rgsw-external.external-product"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-rgsw-external",
+      "target": "lo.ac26-w5-rgsw-external.level-contribution"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-rgsw-external",
+      "target": "lo.ac26-w5-rgsw-external.decomposition-error"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-rgsw-external",
+      "target": "concept.gadget-vector"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-rgsw-external",
+      "target": "concept.encrypted-selector"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-rgsw-external",
+      "target": "concept.decomposition-error"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-rgsw-external",
+      "target": "concept.gadget-decomposition"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-rgsw-external",
+      "target": "concept.rgsw"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-rgsw-external",
+      "target": "concept.external-product"
+    },
+    {
+      "type": "requires",
+      "source": "problem.ac26-w5-rgsw-external",
+      "target": "problem.ac26-w5-lwe-rlwe"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w5-rgsw-external.rgsw-structure",
+      "target": "concept.rlwe"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w5-rgsw-external.external-product",
+      "target": "concept.negacyclic-polynomial-ring"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w5-rgsw-external.decomposition-error",
+      "target": "concept.noise-budget"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-rgsw-external",
+      "target": "assessment.ac26-w5-rgsw-external.decompose"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-rgsw-external",
+      "target": "assessment.ac26-w5-rgsw-external.gadget"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-rgsw-external",
+      "target": "assessment.ac26-w5-rgsw-external.polynomial"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-rgsw-external",
+      "target": "assessment.ac26-w5-rgsw-external.rgsw"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-rgsw-external",
+      "target": "assessment.ac26-w5-rgsw-external.external"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-rgsw-external",
+      "target": "assessment.ac26-w5-rgsw-external.trace"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-rgsw-external",
+      "target": "assessment.ac26-w5-rgsw-external.failure"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-rgsw-external",
+      "target": "assessment.ac26-w5-rgsw-external.transfer"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w5-rgsw-external",
+      "target": "misconception.gadget-decomposition-ignores-modulus"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w5-rgsw-external",
+      "target": "misconception.more-levels-only-cost-performance"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w5-rgsw-external",
+      "target": "misconception.rgsw-is-renamed-rlwe"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w5-rgsw-external",
+      "target": "misconception.external-product-multiplies-plaintexts"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w5-rgsw-external",
+      "target": "misconception.selector-ciphertext-reveals-its-bit"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18109/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "decompose",
+        "label": "値を桁へ分解する",
+        "points": 35,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "decompose-hint-1",
+            "content": "桁は LSB 先頭でちょうど levels 個。 q = base**levels なので、ちょうど L 桁取ることが剰余そのものになる。",
+            "penalty": 15
+          }
+        ]
+      },
+      {
+        "id": "gadget",
+        "label": "gadget vector を書く",
+        "points": 30,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "gadget-hint-1",
+            "content": "decompose と順序が一致していなければならない。両方を逆にすると往復は通るので、ここは直接採点される。",
+            "penalty": 14
+          }
+        ]
+      },
+      {
+        "id": "polynomial",
+        "label": "係数ごとに分解する",
+        "points": 30,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "polynomial-hint-1",
+            "content": "level ごとに 1 つの環の元。係数ごとの桁のタプルではない。 levels == degree のとき転置は同じ形になる。",
+            "penalty": 14
+          }
+        ]
+      },
+      {
+        "id": "rgsw",
+        "label": "selector を暗号化する",
+        "points": 40,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "rgsw-hint-1",
+            "content": "2L 行。前半は gadget 項が a、後半は b。 gadget 項は定数係数へ足すスカラーであってシフトではない。",
+            "penalty": 18
+          }
+        ]
+      },
+      {
+        "id": "external",
+        "label": "ビットを掛ける",
+        "points": 50,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "external-hint-1",
+            "content": "d = decompose(a) ++ decompose(b) で長さ 2L。 d . G が (a, b) を組み立て直すことを確かめてから書く。",
+            "penalty": 24
+          }
+        ]
+      },
+      {
+        "id": "trace",
+        "label": "積み上がりを見せる",
+        "points": 35,
+        "wrongAnswerPenalty": 15
+      },
+      {
+        "id": "failure",
+        "label": "level が足りなくなる点",
+        "points": 40,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "failure-hint-1",
+            "content": "float の logarithm は厳密な冪でずれる。数えたほうが安全。最小の失敗値は base**levels そのもの。",
+            "penalty": 18
+          }
+        ]
+      },
+      {
+        "id": "transfer",
+        "label": "見たことのない設定で成立させる",
+        "points": 40,
+        "wrongAnswerPenalty": 15
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Multiply by a bit nobody can read",
+      "shortDescription": "Multiply an RLWE ciphertext by an encrypted bit. Selector 0 gives an encryption of zero, selector 1 gives the message back, and the arithmetic is identical either way — so the result says nothing about which it was.",
+      "description": "The third Week 5 problem. As the groundwork for applying an encrypted control bit to an RLWE ciphertext, build gadget decomposition, the gadget vector, a toy RGSW, and the external product in that order.\n\nThe ring and RLWE are supplied -- they are ac26-w5-lwe-rlwe's output, and this problem is the gadget and the product itself.\n\nThe decomposition convention is fixed: q = base**levels, unsigned, LSB-first, exactly `levels` digits, gadget (1, B, B^2, ...). That q makes recomposition exact, and the `failure` checkpoint is where you find out what it was buying -- a real implementation uses an approximate gadget and lives with the error.\n\nRGSW has 2L rows: the first half puts the gadget term in the a slot, the second in b. The external product decomposes both halves of the ciphertext into one digit vector of length 2L and multiplies it into that matrix. `d . G` reassembles (a, b) exactly, so the result is RLWE(0) + mu*(a, b). Collect every gadget term into one slot and the product decrypts to something that looks almost right.\n\n`external_product` is not given the secret. It cannot decrypt the selector and must not need to: both branches being the same arithmetic is exactly what makes encrypted branching possible.\n\nOn scoring: reversing the digit order and the gadget vector together leaves every round trip passing, and building the RGSW rows backwards then multiplying them with a product that is backwards the same way still returns the message. So the gadget vector is graded directly, and every RGSW check is crossed -- fixture rows through the submission's product, and the submission's rows through the fixtures'.\n\nNone of this is secure. The parameters are small enough to enumerate and the secret falls to linear algebra.",
+      "instructions": "## Start here\n\nYou have an RLWE ciphertext carrying a message and an **encrypted** bit. Multiply them: selector 0 turns the ciphertext into an encryption of zero, selector 1 leaves the message alone, and the arithmetic is identical either way.\n\nThe convention is fixed:\n\n```text\nq = base ** levels           unsigned, LSB-first, exactly `levels` digits\ngadget = (1, B, B^2, ..., B^(L-1))\n```\n\n## First move\n\n```bash\nmake inspect\nmake inspect CASE=0\n```\n\nThat prints the gadget, one decomposition, the RGSW row layout, and the accumulation across all 2L rows. Work out why `d . G` reassembles `(a, b)` before writing any code.\n\nThen edit `local/starter/rgsw.py`.\n\n## Goal\n\nClear eight independently scored checkpoints. The hidden tests cross every RGSW check. A test that runs your own rows through your own product guarantees almost nothing.",
+      "writeup": "## The split is the point\n\nRGSW's 2L rows put the gadget term in the a slot for the first half and the b slot for the second. The external product decomposes both halves of the ciphertext and concatenates them because that is what makes `d . G` reassemble `(a, b)` exactly. Collect the gadget terms into one slot and the product decrypts to something almost right -- which, here, is wrong.\n\n## Self-consistent mistakes need a crossed test\n\nReverse the digit order and the gadget vector together and every round trip still passes. Build the RGSW rows with the layout backwards, multiply them with a product that is backwards the same way, and selector 1 still returns the message. Both are perfectly consistent with themselves.\n\nSo the gadget vector is graded directly rather than through a round trip, and every RGSW check is crossed: fixture-built rows through the submission's product, and the submission's rows through the fixtures'.\n\n## Withholding the secret is the specification\n\n`external_product` is not given the secret. It cannot decrypt the selector and does not need to. Both branches being the same arithmetic is exactly what makes encrypted branching possible -- if you want to know which bit it is, the design is telling you something.\n\n## q = base**levels is a choice\n\nIt is what makes recomposition exact. Once the levels stop reaching the modulus, `decompose` truncates without complaining and `recompose` is confidently wrong. The smallest failing value is `base**levels` itself. Counting the levels beats a float logarithm, which is off at an exact power -- `(5, 125)` and `(6, 216)` are the cases that show it.\n\n## Not in scope\n\nProduction noise analysis, optimized decomposition or FFT, an RGSW security proof, bootstrapping key compression.\n\n## This is not secure\n\nThe parameters are small enough to enumerate and the secret falls to linear algebra. A toy of the mechanism, not of the hardness.",
+      "learningGoals": [
+        "Implement gadget decomposition for a base B and level count L",
+        "Recompose the original value from its digits modulo q",
+        "Decompose a polynomial coefficient by coefficient",
+        "Explain what the gadget vector and digit vector's inner product means",
+        "Follow the structure that makes a toy RGSW act as an encrypted selector",
+        "Keep or zero an RLWE ciphertext by external product, according to the selector",
+        "Show by counterexample how decomposition error follows from insufficient parameters",
+        "State plainly how the toy differs from production RGSW"
+      ],
+      "checks": [
+        {
+          "id": "decompose",
+          "label": "Break a value into digits",
+          "hints": [
+            {
+              "id": "decompose-hint-1",
+              "content": "Digits are LSB-first and exactly `levels` of them. Since q = base**levels, taking exactly L digits is the reduction."
+            }
+          ]
+        },
+        {
+          "id": "gadget",
+          "label": "Write the gadget vector",
+          "hints": [
+            {
+              "id": "gadget-hint-1",
+              "content": "It has to agree with `decompose`. Reversing both leaves the round trip working, which is why this is graded directly."
+            }
+          ]
+        },
+        {
+          "id": "polynomial",
+          "label": "Decompose per coefficient",
+          "hints": [
+            {
+              "id": "polynomial-hint-1",
+              "content": "One ring element per level, not a tuple of per-coefficient digits. A transpose has the same shape when levels == degree."
+            }
+          ]
+        },
+        {
+          "id": "rgsw",
+          "label": "Encrypt the selector",
+          "hints": [
+            {
+              "id": "rgsw-hint-1",
+              "content": "2L rows: the first half puts the gadget term in `a`, the second in `b`. It is a scalar added to the constant coefficient, not a shift."
+            }
+          ]
+        },
+        {
+          "id": "external",
+          "label": "Multiply by the bit",
+          "hints": [
+            {
+              "id": "external-hint-1",
+              "content": "d = decompose(a) ++ decompose(b), length 2L. Check that d . G reassembles (a, b) before writing it."
+            }
+          ]
+        },
+        {
+          "id": "trace",
+          "label": "Show the accumulation"
+        },
+        {
+          "id": "failure",
+          "label": "Where the levels run out",
+          "hints": [
+            {
+              "id": "failure-hint-1",
+              "content": "A float logarithm is off at an exact power. Counting is safer. The smallest failing value is base**levels itself."
+            }
+          ]
+        },
+        {
+          "id": "transfer",
+          "label": "Hold up in a setting you have not seen"
+        }
+      ]
+    }
+  }
+}
