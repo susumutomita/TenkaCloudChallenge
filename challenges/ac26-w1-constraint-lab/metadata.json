@@ -1,0 +1,358 @@
+{
+  "id": "ac26-w1-constraint-lab",
+  "name": "0 になるべき式の集まり",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "advanced-cryptography-2026",
+    "order": 110,
+    "chapter": "Week 1 / Arithmetic Circuits"
+  },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 1,
+    "role": "mechanism",
+    "spoilerPolicy": "independent-reimplementation",
+    "sources": [
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        "path": "week1/README.md",
+        "kind": "lecture"
+      },
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        "path": "week1/problems/proof-of-exploit/README.md",
+        "kind": "assignment"
+      }
+    ]
+  },
+  "difficulty": 3,
+  "estimatedDuration": "45-60 分",
+  "shortDescription": "新しい policy engine は if 文ではなく算術回路でアクセス判断を表す。だが monitor は pass/fail しか出さない。residual を見えるようにして、witness を診断できるようにする。",
+  "description": "Week 1 の mechanism 問題。 公式課題はアクセス制御回路の構築と underconstraint exploit を扱うが、 本問題はその前段として「回路とは 0 になるべき constraint の集合であり、 witness とは各 signal へ入れる値である」 ことを中間値から理解させる。 公式課題の式・fixture・solution は転載しない (GOVERNANCE.md の independent-reimplementation)。\n\nparticipant が編集するのは field.py / circuit.py / gadgets.py の 3 ファイル。 5 checkpoint を独立採点する。 residuals (45) は hidden field 3 つで normalize・trace・順序非依存・signal 欠落を検査する。 first-broken (40) は壊れた witness の最初の違反 constraint id。 boolean (40) と membership (35) は participant の gadget を field 全体で総当たりし、 許す値の集合が厳密に一致することを要求する。 transfer (40) は別 seed の field・circuit・順序で全体を再実行する。\n\nboolean checkpoint は field の全要素を走査する。 名前が flag だから boolean、 という誤解 (misconception.boolean-name-implies-boolean-value) は 2 だけを試す test では落ちないため、 総当たりで「許す集合がちょうど {0,1}」を要求している。\n\n壊れた witness の混入位置は c2 か c3 で、 c0 は選ばない。 先頭を答えれば当たる状態にしないため。",
+  "instructions": "## はじめに\n\nアクセス判断を算術回路で表す policy engine の監査ツールを完成させます。 monitor は pass/fail しか出さないので、 どの constraint が壊れたのか分かりません。\n\n## 最初の一手\n\n```bash\nmake inspect\n```\n\n自分の field、 circuit、 正しい witness と壊れた witness が出ます。 正しい witness の residual がすべて 0 になることを、 走らせる前に確認してください。\n\n次に `local/starter/field.py`、 `local/starter/circuit.py`、 `local/starter/gadgets.py` を編集します。\n\n## ゴール\n\nresidual を正しく計算し、 壊れた witness の最初の違反箇所を特定し、 boolean と membership の gadget が許す値の集合をちょうど狙いどおりにします。",
+  "writeup": "## constraint は if 文ではない\n\n`if flag in (0,1)` は実行時の分岐だが、 constraint は 「この式は 0 でなければならない」という宣言で、 witness 全体に対して同時に課される。 `b*(b-1)` が 0 になるのは b が 0 か 1 のときだけで、 これが boolean 制約の全内容になる。\n\n## 名前は制約ではない\n\nsignal を flag と名付けても値は縛られない。 制約を書いて初めて縛られる。 この問題の boolean checkpoint が field の全要素を走査するのはそのためで、 2 だけを試す test なら「b < 2 を検査する」実装でも通ってしまう。\n\n## residual は field の元\n\n-1 と p-1 は同じ元であり、 どちらも 0 ではない。 normalize を忘れた実装は 公開例では動き、 負の中間値が出た瞬間に壊れる。\n\n## 1 例では soundness は示せない\n\n正しい witness で全 residual が 0 になっても、 制約が足りない回路は他の witness も通してしまう。 membership gadget で allowed[0] だけを const 制約にすると、 公開例が allowed[0] のときは通り、 他の許可値で落ちる。 「1 つの valid example が soundness を証明する」という誤解はここで折れる。\n\n## 公式課題への接続\n\n公式課題は underconstraint を突く。 その前提は「どの条件がどの式になっているか」 を読めることで、 それがこの問題で作った trace そのものになる。",
+  "tags": [
+    "advanced-cryptography-2026",
+    "week1",
+    "arithmetic-circuit",
+    "constraint-system",
+    "witness",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18093,
+      "name": "/verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "signal、witness、constraint を区別できる",
+    "constraint を residual == 0 として評価できる",
+    "program の条件を有限体上の多項式制約へ変換できる",
+    "boolean constraint b(b-1)=0 の意味を反例で確認できる",
+    "membership の補助制約が必要な理由を説明できる",
+    "valid witness と invalid witness を trace から判定できる"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.ac26-w1-constraint-lab.evaluate-residuals",
+        "description": "constraint を residual として評価し、 0 かどうかで充足を判定できる。"
+      },
+      {
+        "id": "lo.ac26-w1-constraint-lab.translate-condition",
+        "description": "program の条件を有限体上の多項式制約へ変換できる。"
+      },
+      {
+        "id": "lo.ac26-w1-constraint-lab.diagnose-witness",
+        "description": "trace から最初に壊れた constraint を特定できる。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.arithmetic-circuit",
+        "description": "計算を有限体上の加算と乗算の集まりとして表したもの。 実行順ではなく同時に成り立つべき関係の集合。"
+      },
+      {
+        "id": "concept.boolean-constraint",
+        "description": "b*(b-1)=0 により signal を {0,1} に縛る制約。 名前ではなく制約が値を縛る。"
+      },
+      {
+        "id": "concept.membership-constraint",
+        "description": "許可集合への所属を、 各許可値との差の積が 0 になることで表す制約。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.ac26-w1-constraint-lab.residuals",
+        "description": "複数の field で residual と trace を正しく計算できた。"
+      },
+      {
+        "id": "assessment.ac26-w1-constraint-lab.first-broken",
+        "description": "壊れた witness の最初の違反 constraint を特定できた。"
+      },
+      {
+        "id": "assessment.ac26-w1-constraint-lab.boolean",
+        "description": "boolean gadget が許す値の集合がちょうど {0,1} になった。"
+      },
+      {
+        "id": "assessment.ac26-w1-constraint-lab.membership",
+        "description": "membership gadget が許す値の集合が allowed と厳密に一致した。"
+      },
+      {
+        "id": "assessment.ac26-w1-constraint-lab.transfer",
+        "description": "未知の field・circuit・順序でも同じ判定が成立した。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.constraint-is-an-if-statement",
+        "description": "constraint を実行時の分岐だと思う誤解。 constraint は witness 全体へ同時に課される宣言。"
+      },
+      {
+        "id": "misconception.witness-is-the-proof",
+        "description": "witness を proof と同一視する誤解。 witness は値の割当であって、 それ自体は何も証明しない。"
+      },
+      {
+        "id": "misconception.boolean-name-implies-boolean-value",
+        "description": "signal を flag と名付ければ boolean になるという誤解。 縛るのは制約だけ。"
+      },
+      {
+        "id": "misconception.one-valid-example-proves-soundness",
+        "description": "正しい witness が 1 つ通れば回路は正しいという誤解。 制約不足は他の witness で露見する。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w1-constraint-lab",
+      "target": "lo.ac26-w1-constraint-lab.evaluate-residuals"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w1-constraint-lab",
+      "target": "lo.ac26-w1-constraint-lab.translate-condition"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w1-constraint-lab",
+      "target": "lo.ac26-w1-constraint-lab.diagnose-witness"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w1-constraint-lab",
+      "target": "concept.arithmetic-circuit"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w1-constraint-lab",
+      "target": "concept.boolean-constraint"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w1-constraint-lab",
+      "target": "concept.membership-constraint"
+    },
+    {
+      "type": "requires",
+      "source": "problem.ac26-w1-constraint-lab",
+      "target": "concept.experimental-method"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w1-constraint-lab.evaluate-residuals",
+      "target": "concept.arithmetic-circuit"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w1-constraint-lab.translate-condition",
+      "target": "concept.boolean-constraint"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w1-constraint-lab",
+      "target": "assessment.ac26-w1-constraint-lab.residuals"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w1-constraint-lab",
+      "target": "assessment.ac26-w1-constraint-lab.first-broken"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w1-constraint-lab",
+      "target": "assessment.ac26-w1-constraint-lab.boolean"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w1-constraint-lab",
+      "target": "assessment.ac26-w1-constraint-lab.membership"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w1-constraint-lab",
+      "target": "assessment.ac26-w1-constraint-lab.transfer"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w1-constraint-lab",
+      "target": "misconception.constraint-is-an-if-statement"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w1-constraint-lab",
+      "target": "misconception.witness-is-the-proof"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w1-constraint-lab",
+      "target": "misconception.boolean-name-implies-boolean-value"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w1-constraint-lab",
+      "target": "misconception.one-valid-example-proves-soundness"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18093/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "residuals",
+        "label": "residual を計算して trace を出す",
+        "points": 45,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "residuals-hint-1",
+            "content": "residual は field の元だ。 -1 と p-1 は同じ元で、 どちらも 0 ではない。 引き算の結果をそのまま返していないか。",
+            "penalty": 15
+          }
+        ]
+      },
+      {
+        "id": "first-broken",
+        "label": "壊れた witness の最初の違反箇所を言う",
+        "points": 40,
+        "wrongAnswerPenalty": 10
+      },
+      {
+        "id": "boolean",
+        "label": "signal を 0 か 1 だけに縛る",
+        "points": 40,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "boolean-hint-1",
+            "content": "0 のときと 1 のときだけ 0 になり、 それ以外では 0 にならない式を 1 本書く。 積が使える。",
+            "penalty": 15
+          }
+        ]
+      },
+      {
+        "id": "membership",
+        "label": "許可された値だけを通す",
+        "points": 35,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "membership-hint-1",
+            "content": "boolean 制約は {0,1} 版の同じ形をしている。 許可値が増えたら、 掛ける因子を増やす。",
+            "penalty": 10
+          }
+        ]
+      },
+      {
+        "id": "transfer",
+        "label": "見たことのない回路でも成立させる",
+        "points": 40,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "transfer-hint-1",
+            "content": "constraint の並び順に依存していないか。 trace は circuit の順を保ち、 residual は順序に依存しない。",
+            "penalty": 10
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "A set of things that must be zero",
+      "shortDescription": "The new policy engine expresses access decisions as an arithmetic circuit instead of if-statements. The monitor only prints pass or fail. Make the residuals visible so a witness can be diagnosed.",
+      "instructions": "## Start here\n\nYou are finishing the audit tooling for a policy engine that expresses access decisions as an arithmetic circuit. The monitor only prints pass or fail, so nobody can see which constraint broke.\n\n## First move\n\n```bash\nmake inspect\n```\n\nThat prints your field, your circuit, an honest witness and a broken one. Predict that every residual of the honest witness is zero before you run your trace.\n\nThen edit `local/starter/field.py`, `local/starter/circuit.py` and `local/starter/gadgets.py`.\n\n## Goal\n\nCompute residuals correctly, name the first violated constraint in the broken witness, and make the boolean and membership gadgets admit exactly the intended set of values.",
+      "writeup": "## A constraint is not an if-statement\n\n`if flag in (0, 1)` is a runtime branch. A constraint is a declaration that an expression must be zero, imposed on the whole witness at once. `b*(b-1)` is zero exactly when b is 0 or 1, and that is the entire content of a boolean constraint.\n\n## A name is not a constraint\n\nCalling a signal `flag` does not bind its value; writing a constraint does. That is why this problem's boolean checkpoint sweeps the entire field — a test that only tries 2 would pass an implementation that merely checks `b < 2`.\n\n## Residuals are field elements\n\n-1 and p-1 are the same element, and neither is zero. An implementation that skips normalization works on the visible example and breaks the moment an intermediate value goes negative.\n\n## One valid example proves nothing about soundness\n\nAn under-constrained circuit still gives every residual zero on an honest witness. Pinning only `allowed[0]` with a const constraint passes whenever the visible example happens to use that value, and fails on the others. That is where 'one valid example proves soundness' breaks.\n\n## Where this leads\n\nThe official exercise attacks underconstraint. Doing that requires reading which condition became which expression — which is exactly the trace you built here.",
+      "learningGoals": [
+        "Tell signals, witnesses and constraints apart",
+        "Evaluate a constraint as residual == 0",
+        "Translate a program condition into a polynomial constraint over a finite field",
+        "Confirm what b(b-1)=0 means by counterexample",
+        "Explain why a membership gadget needs its own constraints",
+        "Diagnose a valid versus an invalid witness from a trace"
+      ],
+      "checks": [
+        {
+          "id": "residuals",
+          "label": "Compute residuals and emit a trace",
+          "hints": [
+            {
+              "id": "residuals-hint-1",
+              "content": "A residual is a field element. -1 and p-1 are the same element and neither is zero. Are you returning the raw subtraction?"
+            }
+          ]
+        },
+        {
+          "id": "first-broken",
+          "label": "Name the first violated constraint"
+        },
+        {
+          "id": "boolean",
+          "label": "Bind a signal to 0 or 1 only",
+          "hints": [
+            {
+              "id": "boolean-hint-1",
+              "content": "Write one expression that is zero at 0 and at 1, and non-zero everywhere else. A product will do it."
+            }
+          ]
+        },
+        {
+          "id": "membership",
+          "label": "Admit only the allowed values",
+          "hints": [
+            {
+              "id": "membership-hint-1",
+              "content": "The boolean constraint is the {0,1} case of the same shape. More allowed values means more factors."
+            }
+          ]
+        },
+        {
+          "id": "transfer",
+          "label": "Hold up on circuits you have not seen",
+          "hints": [
+            {
+              "id": "transfer-hint-1",
+              "content": "Are you depending on constraint order? The trace preserves circuit order, but no residual depends on it."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
