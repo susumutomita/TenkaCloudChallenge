@@ -67,6 +67,22 @@
       "billable": []
     },
     {
+      "id": "ac26-w2-linear-shares",
+      "category": "Challenge",
+      "region": "ap-northeast-1",
+      "estimatedSessionMinutes": 50,
+      "perHourUsd": 0,
+      "perSessionUsd": 0,
+      "ifLeftRunningUsd": {
+        "oneDay": 0,
+        "oneWeek": 0,
+        "oneMonth": 0
+      },
+      "freeTierEligible": true,
+      "alwaysOnResources": [],
+      "billable": []
+    },
+    {
       "id": "ac26-w2-secret-sharing",
       "category": "Challenge",
       "region": "ap-northeast-1",
