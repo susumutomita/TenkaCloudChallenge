@@ -136,13 +136,61 @@ describe("scaffold", () => {
       "Makefile",
       "local/docker-compose.yml",
       "local/Dockerfile",
-      "local/starter/counter.py",
-      "local/reference/counter.py",
+      "local/starter/exercise.py",
+      "local/reference/exercise.py",
+      "local/tests/public/test_exercise.py",
+      "local/tests/hidden/check_exercise.py",
       "local/verifier/server.py",
       "local/mutation.py",
     ]) {
       expect(existsSync(join(target, path))).toBe(true);
     }
+  });
+
+  // The template's exercise is renamed, not copied alongside a new one. "Replace counter.py
+  // with your own file" invited authors to add rather than rename, and a leftover counter.py
+  // -- plus its dead test and check modules -- reached main that way once already.
+  it("should rename the template exercise rather than leaving it behind", () => {
+    const challenges = isolatedChallengesDir();
+    const target = scaffold("ac26-w3-field-inverse", challenges);
+
+    for (const path of [
+      "local/starter/counter.py",
+      "local/reference/counter.py",
+      "local/tests/public/test_counter.py",
+      "local/tests/hidden/check_counter.py",
+    ]) {
+      expect(existsSync(join(target, path))).toBe(false);
+    }
+  });
+
+  it("should repoint every reference at the renamed exercise", () => {
+    const challenges = isolatedChallengesDir();
+    const target = scaffold("ac26-w3-field-inverse", challenges);
+
+    const makefile = readFileSync(join(target, "Makefile"), "utf8");
+    expect(makefile).toContain("tests/public/test_exercise.py");
+    expect(makefile).toContain("local/starter/exercise.py");
+    expect(makefile).not.toContain("counter.py");
+
+    const verifier = readFileSync(join(target, "local/verifier/server.py"), "utf8");
+    expect(verifier).toContain("from tests.hidden.check_exercise import run");
+    expect(verifier).toContain("from exercise import advance");
+    expect(verifier).not.toContain("counter.py");
+
+    const mutation = readFileSync(join(target, "local/mutation.py"), "utf8");
+    expect(mutation).toContain("from tests.hidden.check_exercise import run");
+    expect(mutation).not.toContain("counter.py");
+  });
+
+  // The template prose talks about counterexamples; a blind counter -> exercise sweep would
+  // have mangled that into "exampleexamples".
+  it("should leave words that merely contain the template exercise name alone", () => {
+    const challenges = isolatedChallengesDir();
+    const target = scaffold("ac26-w3-field-inverse", challenges);
+
+    expect(readFileSync(join(target, "local/mutation.py"), "utf8")).not.toContain("exampleexample");
+    expect(readFileSync(join(target, "README.md"), "utf8")).not.toContain("exampleexample");
   });
 
   it("should retarget the image name in the Makefile so two problems cannot collide", () => {

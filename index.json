@@ -310,6 +310,51 @@
       }
     },
     {
+      "id": "ac26-w2-private-aggregate",
+      "name": "掛け算は 5 回、通信は 1 回",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "advanced-cryptography-2026",
+        "order": 250,
+        "chapter": "Week 2 / Private Aggregation Synthesis"
+      },
+      "courseAlignment": {
+        "courseId": "advanced-cryptography-program",
+        "edition": "2026",
+        "week": 2,
+        "role": "synthesis",
+        "sources": [
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "path": "week2/README.md",
+            "kind": "placeholder"
+          }
+        ]
+      },
+      "difficulty": 5,
+      "estimatedDuration": "75-105 分",
+      "shortDescription": "複数組織が件数と深刻度を出さずに加重リスクスコアだけを得る。Week 2 の 4 問を 1 つの application へ束ねる。乗算の数と round の数は同じではない。",
+      "tags": [
+        "advanced-cryptography-2026",
+        "week2",
+        "mpc",
+        "beaver-triple",
+        "synthesis",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "ac26-w2-secret-sharing",
       "name": "分けても、まだ何も分からない",
       "category": "Challenge",
