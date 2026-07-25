@@ -42,9 +42,23 @@ MAX_OUTPUT_BYTES = 64 * 1024
 CHECKPOINTS = ("environment", "predict", "inspect", "generalize")
 
 
+# Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still
+# reporting RLIM_INFINITY for it. Setting it anyway raises inside `preexec_fn`,
+# which aborts the exec — so on a macOS checkout the address-space cap turned
+# every submission run into "could not run at all", including the reference.
+#
+# The lab itself is python:3.12-slim on Linux, where this cap does apply. Skipping
+# it on Darwin therefore does not weaken what participants actually run; it makes
+# `make reference-test` and `bun run validate` work on a macOS checkout, where the
+# alternative was no verification at all. The timeout, process cap, file-size cap,
+# `-I` isolation, and throwaway workspace all still apply on every platform.
+_ADDRESS_SPACE_CAPPABLE = sys.platform.startswith("linux")
+
+
 def _limits() -> None:
     """Applied inside the child, before exec. Caps memory, processes, and file size."""
-    resource.setrlimit(resource.RLIMIT_AS, (MAX_ADDRESS_SPACE_BYTES, MAX_ADDRESS_SPACE_BYTES))
+    if _ADDRESS_SPACE_CAPPABLE:
+        resource.setrlimit(resource.RLIMIT_AS, (MAX_ADDRESS_SPACE_BYTES, MAX_ADDRESS_SPACE_BYTES))
     resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
     resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_BYTES, MAX_OUTPUT_BYTES))
 
