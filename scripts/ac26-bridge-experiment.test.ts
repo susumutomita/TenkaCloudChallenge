@@ -143,6 +143,55 @@ describe("ac26-bridge-experiment: the problem is actually solvable and actually 
   });
 });
 
+describe("ac26-bridge-experiment: resource caps", () => {
+  /**
+   * `preexec_fn` runs in the child between fork and exec, so anything it raises
+   * aborts the exec and the submission never runs at all — the verifier reports a
+   * failure for code that was never executed, including the reference.
+   *
+   * Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it while still
+   * reporting RLIM_INFINITY, which is exactly that situation on a macOS checkout.
+   * These two assertions pin both halves: the caps must apply where the lab runs,
+   * and applying them must never be what breaks verification.
+   */
+  it("should cap address space on Linux, where the lab actually runs", () => {
+    const result = python([
+      "-c",
+      [
+        "import sys",
+        "sys.path.insert(0, '.')",
+        "from verifier.server import _ADDRESS_SPACE_CAPPABLE",
+        "print(_ADDRESS_SPACE_CAPPABLE == sys.platform.startswith('linux'))",
+      ].join("\n"),
+    ]);
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim().split("\n").at(-1)).toBe("True");
+  });
+
+  it("should apply its limits without raising on this platform", () => {
+    // A raise here is invisible in normal runs: it surfaces as every checkpoint
+    // failing, which reads as a broken problem rather than a broken cap.
+    const result = python([
+      "-c",
+      [
+        "import os, sys",
+        "sys.path.insert(0, '.')",
+        "from verifier.server import _limits",
+        "pid = os.fork()",
+        "if pid == 0:",
+        "    try:",
+        "        _limits()",
+        "        os._exit(0)",
+        "    except Exception:",
+        "        os._exit(3)",
+        "print(os.waitpid(pid, 0)[1] == 0)",
+      ].join("\n"),
+    ]);
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim().split("\n").at(-1)).toBe("True");
+  });
+});
+
 describe("ac26-bridge-experiment: /verify contract", () => {
   it("should accept the reference implementation on the generalize checkpoint", () => {
     expect(evaluate("generalize", read("local/reference/counter.py"))).toBe(true);
