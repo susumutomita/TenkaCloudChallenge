@@ -1,0 +1,461 @@
+{
+  "id": "ac26-w5-encoding-noise",
+  "name": "どこまで押せるか",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "advanced-cryptography-2026",
+    "order": 510,
+    "chapter": "Week 5 / Encoding and Noise"
+  },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 5,
+    "role": "mechanism",
+    "spoilerPolicy": "independent-reimplementation",
+    "sources": [
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        "path": "week5/README.md",
+        "kind": "lecture"
+      },
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        "path": "week5/problems/tfhe-toy-python/README.md",
+        "kind": "assignment"
+      }
+    ]
+  },
+  "difficulty": 3,
+  "estimatedDuration": "45-60 分",
+  "shortDescription": "準同型暗号の暗号文はメッセージを環の上に置いて押しずらす。復号は「どの点に一番近かったか」で、正しさの問いはすべて「どこまで押せるか」に帰着する。その距離を実行前に計算する。",
+  "description": "Week 5 の 1 問目。 Week 5 は依存の鎖がトラック中で最も長く、 ここでの noise 予算が LWE から PBS まで全部の土台になる。\n\nモデルは 4 行で、 隠していることは何もない。 メッセージ m は [0, p) にあり、 scaling factor D が p 個のメッセージを環 q = p*D の上に広げ、 encode(m) = (m*D) mod q、 decode は c が一番近い encoding point のメッセージ。 p・D・q は checkpoint ごとに変わるので、 決め打ちしたものはどこかで外れる。\n\n本当に難しいのは 3 つ。 1 つ目は同点の扱いで、 2 点のちょうど中間は切り上げると決めた時点で、 耐えられる noise 区間は対称ではなくなる。 delta が偶数なら中間点が存在して上端が 1 点分を失い、 奇数なら中間点が無いので対称になる。 同じ式から両方が出てくるので、 偶奇で分岐しないのが正しい書き方になる。\n\n2 つ目は負の noise。 Python の % は正の法に対して非負を返すので特別扱いは要らず、 abs を取るのは別の関数になる。 3 つ目は巻き戻りで、 最後のメッセージの次の点は p ではなく 0。 p 個のうち 2 個だけがこれに気づく。\n\n採点の設計として、 success_interval はパラメータに対して採点し、 participant 自身の decoder に対しては採点しない。 全 noise を試して測った区間は decoder が何をしていようとそれに一致するので、 間違った decoder と間違った区間が一緒に通ってしまう。 hidden test は両方を fixture から計算し、 decoder を区間に対して、 区間を decoder に対して、 別々に検査する。\n\nこれは安全ではない。 p と q は手で全列挙できる大きさで、 境界が見えるのはそのおかげだけ。 toy の正しさと production の安全性は別の主張で、 この問題は前者しか主張しない。",
+  "instructions": "## はじめに\n\n準同型暗号の暗号文は、 メッセージを環の上のどこかに置き、 そこから押しずらすことで隠します。 復号は 「これはどの点に一番近かったか」 です。\n\nモデルは 4 行です。\n\n```text\nmessage      m   は [0, p) の範囲\nscaling      D   が p 個のメッセージを環全体に広げる\nring         q = p * D\nencode       encode(m) = (m * D) mod q\ndecode       c が一番近い encoding point のメッセージ。 同点は切り上げ\n```\n\n## 最初の一手\n\n```bash\nmake inspect\n```\n\n環、 全 encoding point、 耐えられる noise 区間、 そして境界を跨がせた 1 メッセージが出ます。 区間が対称かどうかを、 表を見る前に自分で予測してください。\n\n次に `local/starter/encoding.py` を編集します。\n\n## ゴール\n\n7 つの checkpoint を独立に通します。 `p`・`D`・`q` は checkpoint ごとに変わるので、 決め打ちしたものはどこかで外れます。",
+  "writeup": "## 区間は対称ではない\n\n2 点のちょうど中間の値をどちらに丸めるかは決めなければならない選択で、 この問題では切り上げに固定してある。 決めた時点で、 耐えられる noise 区間は対称ではなくなる。\n\ndelta が偶数なら中間点がちょうど存在し、 そこは切り上げられて隣のメッセージになるので、 上端は delta//2 ではなく delta//2 - 1 になる。 delta が奇数なら中間点が存在しないので区間は対称になる。 `(-(delta // 2), delta - delta // 2 - 1)` は両方を同じ式で出す。 偶奇で分岐する実装は、 片方の parity でしかテストしていないことを自白している。\n\n## 測った区間は decoder に一致してしまう\n\nsuccess_interval を全 noise 値の試行で測ると、 decoder が何をしていようと測定結果はそれに一致する。 間違った decoder と間違った区間が矛盾なく揃うので、 両方が通ってしまう。 だから区間はパラメータから導き、 hidden test は decoder を fixture 由来の区間に対して、 区間を fixture 由来の decoder に対して、 別々に検査する。 予測と実測を別の checkpoint に分けてあるのも同じ理由。\n\n## 負の noise は特別扱いを必要としない\n\nPython の `%` は正の法に対して非負を返すので、 `(c + e) % q` は e が負でもそのまま正しい。 `abs(e)` を取るのは 「noise を足す」 とは別の関数で、 exact な点から始めた往復テストでは絶対に見えない。\n\n## 巻き戻りに気づくのは 2 メッセージだけ\n\n最後のメッセージの上に noise を足すと 0 に、 メッセージ 0 の下に足すと p-1 になる。 first_failure が `m+1` / `m-1` を返す実装は、 p 個のうち p-2 個で正しい。 残り 2 個が全部。\n\n## noise は padding ではない\n\nnoise は安全性が依拠する対象であり、 正しさが消費する対象。 1 単位足すごとに困難性を買い、 余裕を払う。 「多いほど安全でコストは無い」 も 「ランダムな詰め物」 も、 どちらもこの二重の役割を落としている。 ここで計算する区間が、 Week 5 の残りが使っていく予算そのものになる。\n\n## これは安全ではない\n\np と q は手で全列挙できる。 実運用のパラメータは格子問題の裏にメッセージを隠すが、 これは何の裏にも隠していない。 ここで correctness が確認できたことを production の security の証拠として読むのは、 この問題が教えようとしていることの正反対。\n\n## 出典との対応\n\nWeek 5 の教材は公開済みなので、 courseAlignment は `week5/README.md` を lecture、 `week5/problems/tfhe-toy-python/README.md` を assignment として pin してある。 spoilerPolicy は independent-reimplementation で、 パラメータは seed から生成し encoding rule は問題文に全部書いてあるため、 公式課題の fixture や solution.py からは何も写していない。",
+  "tags": [
+    "advanced-cryptography-2026",
+    "week5",
+    "fhe",
+    "encoding",
+    "noise",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18107,
+      "name": "/verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "message space・plaintext modulus p・ciphertext modulus q・scaling factor Δ を区別できる",
+    "toy encoding / decoding を実装できる",
+    "noise が encoded point を動かすことを環の上で説明できる",
+    "centered representative と modular representative を往復できる",
+    "rounding boundary を計算し、 decode 成功範囲を実行前に予測できる",
+    "noise が境界を越えると correctness が失われることを反例で示せる",
+    "toy parameter が security を持たないことを明示できる"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.ac26-w5-encoding-noise.parameter-roles",
+        "description": "p・q・Δ の役割を区別し、 q = p*Δ が何を保証しているかを説明できる。"
+      },
+      {
+        "id": "lo.ac26-w5-encoding-noise.encode-decode",
+        "description": "toy encoding と nearest-rounding decoding を実装できる。"
+      },
+      {
+        "id": "lo.ac26-w5-encoding-noise.centered-representation",
+        "description": "modular 表現と centered 表現を、 同じ同点規約のもとで往復できる。"
+      },
+      {
+        "id": "lo.ac26-w5-encoding-noise.noise-budget",
+        "description": "耐えられる noise 区間をパラメータから予測し、 測定に頼らない。"
+      },
+      {
+        "id": "lo.ac26-w5-encoding-noise.boundary-failure",
+        "description": "境界を最初に越える noise と、 そのとき何に化けるかを特定できる。"
+      },
+      {
+        "id": "lo.ac26-w5-encoding-noise.parameter-validation",
+        "description": "使えないパラメータ集合を決定的に reject できる。"
+      },
+      {
+        "id": "lo.ac26-w5-encoding-noise.toy-is-not-secure",
+        "description": "toy の correctness と production の security を別の主張として扱える。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.plaintext-encoding",
+        "description": "メッセージを環の上の点へ写す規則。 点の間隔がそのまま耐えられる noise の量になる。"
+      },
+      {
+        "id": "concept.scaling-factor",
+        "description": "メッセージ空間を暗号文空間へ広げる倍率。 大きいほど noise に耐えるが、 環も同じだけ大きくなる。"
+      },
+      {
+        "id": "concept.noise-budget",
+        "description": "復号が壊れるまでに許される noise の総量。 安全性が依拠し、 正しさが消費する同一の量。"
+      },
+      {
+        "id": "concept.rounding-boundary",
+        "description": "2 つの encoding point の中間。 同点をどちらへ倒すかの規約が、 区間の対称性を決める。"
+      },
+      {
+        "id": "concept.centered-representative",
+        "description": "[0,q) の値を負を含む範囲へ写した表現。 noise の符号を見るために要る。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.ac26-w5-encoding-noise.encode",
+        "description": "encoding point が相異なり環内に収まり、 範囲外メッセージが正規化された。"
+      },
+      {
+        "id": "assessment.ac26-w5-encoding-noise.noise",
+        "description": "centered 表現が往復し、 負および q を超える noise が正しく環へ落ちた。"
+      },
+      {
+        "id": "assessment.ac26-w5-encoding-noise.decode",
+        "description": "環の全値が正しく復号され、 +q で不変で、 中間点が切り上げられた。"
+      },
+      {
+        "id": "assessment.ac26-w5-encoding-noise.interval",
+        "description": "耐えられる noise 区間を、 delta の偶奇の両方でパラメータから予測できた。"
+      },
+      {
+        "id": "assessment.ac26-w5-encoding-noise.first-failure",
+        "description": "各方向で最初に失敗する noise と、 mod p で巻き戻った復号結果を特定できた。"
+      },
+      {
+        "id": "assessment.ac26-w5-encoding-noise.transfer",
+        "description": "見たことのない seed 由来のパラメータで全性質が成立した。"
+      },
+      {
+        "id": "assessment.ac26-w5-encoding-noise.validate",
+        "description": "使えないパラメータ集合を reject し、 delta = 1 を含む使える集合は通した。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.noise-is-random-padding",
+        "description": "noise は暗号文を埋める乱数だという誤解。 安全性が依拠し正しさが消費する量そのもの。"
+      },
+      {
+        "id": "misconception.more-noise-is-free-security",
+        "description": "noise を増やせばコスト無しで安全になるという誤解。 増やした分だけ correctness の余裕が減る。"
+      },
+      {
+        "id": "misconception.rounding-details-do-not-matter",
+        "description": "丸めの細部は correctness に影響しないという誤解。 同点規約が区間の端を 1 つ動かす。"
+      },
+      {
+        "id": "misconception.toy-parameters-show-security",
+        "description": "toy パラメータで動いたことが production の security の証拠になるという誤解。"
+      },
+      {
+        "id": "misconception.modular-value-has-one-distance",
+        "description": "環の上の値には整数距離が一意に定まるという誤解。 centered 表現を取って初めて符号が決まる。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-encoding-noise",
+      "target": "lo.ac26-w5-encoding-noise.parameter-roles"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-encoding-noise",
+      "target": "lo.ac26-w5-encoding-noise.encode-decode"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-encoding-noise",
+      "target": "lo.ac26-w5-encoding-noise.centered-representation"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-encoding-noise",
+      "target": "lo.ac26-w5-encoding-noise.noise-budget"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-encoding-noise",
+      "target": "lo.ac26-w5-encoding-noise.boundary-failure"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-encoding-noise",
+      "target": "lo.ac26-w5-encoding-noise.parameter-validation"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-encoding-noise",
+      "target": "lo.ac26-w5-encoding-noise.toy-is-not-secure"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-encoding-noise",
+      "target": "concept.plaintext-encoding"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-encoding-noise",
+      "target": "concept.scaling-factor"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-encoding-noise",
+      "target": "concept.noise-budget"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-encoding-noise",
+      "target": "concept.rounding-boundary"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-encoding-noise",
+      "target": "concept.centered-representative"
+    },
+    {
+      "type": "requires",
+      "source": "problem.ac26-w5-encoding-noise",
+      "target": "problem.ac26-w3-field-inverse"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w5-encoding-noise.parameter-roles",
+      "target": "concept.modular-arithmetic"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w5-encoding-noise.centered-representation",
+      "target": "concept.canonical-representative"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-encoding-noise",
+      "target": "assessment.ac26-w5-encoding-noise.encode"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-encoding-noise",
+      "target": "assessment.ac26-w5-encoding-noise.noise"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-encoding-noise",
+      "target": "assessment.ac26-w5-encoding-noise.decode"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-encoding-noise",
+      "target": "assessment.ac26-w5-encoding-noise.interval"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-encoding-noise",
+      "target": "assessment.ac26-w5-encoding-noise.first-failure"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-encoding-noise",
+      "target": "assessment.ac26-w5-encoding-noise.transfer"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-encoding-noise",
+      "target": "assessment.ac26-w5-encoding-noise.validate"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w5-encoding-noise",
+      "target": "misconception.noise-is-random-padding"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w5-encoding-noise",
+      "target": "misconception.more-noise-is-free-security"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w5-encoding-noise",
+      "target": "misconception.rounding-details-do-not-matter"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w5-encoding-noise",
+      "target": "misconception.toy-parameters-show-security"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w5-encoding-noise",
+      "target": "misconception.modular-value-has-one-distance"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18107/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "encode",
+        "label": "メッセージを環の上に置く",
+        "points": 25,
+        "wrongAnswerPenalty": 10
+      },
+      {
+        "id": "noise",
+        "label": "押しずらして、 符号を見る",
+        "points": 30,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "noise-hint-1",
+            "content": "Python の % は正の法に対して非負を返す。 負の noise に特別扱いは要らない。 abs を取るのは別の関数。",
+            "penalty": 12
+          }
+        ]
+      },
+      {
+        "id": "decode",
+        "label": "一番近い点を選ぶ",
+        "points": 30,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "decode-hint-1",
+            "content": "整数だけで nearest rounding を書く。 切り捨てと nearest は、 ちょうど中間の値でだけ違う。",
+            "penalty": 12
+          }
+        ]
+      },
+      {
+        "id": "interval",
+        "label": "耐えられる幅を先に言う",
+        "points": 30,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "interval-hint-1",
+            "content": "同点を切り上げると決めた。 delta が偶数のとき、 その中間点はどちらのメッセージに属するか。",
+            "penalty": 15
+          }
+        ]
+      },
+      {
+        "id": "first-failure",
+        "label": "最初に壊れる noise を見つける",
+        "points": 30,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "first-failure-hint-1",
+            "content": "p 個のメッセージのうち 2 個だけ、 化ける先が m±1 にならない。 それがどれかを考える。",
+            "penalty": 14
+          }
+        ]
+      },
+      {
+        "id": "transfer",
+        "label": "見たことのないパラメータで成立させる",
+        "points": 25,
+        "wrongAnswerPenalty": 10
+      },
+      {
+        "id": "validate",
+        "label": "使えないパラメータを断る",
+        "points": 30,
+        "wrongAnswerPenalty": 10
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "How far can it be pushed",
+      "shortDescription": "A homomorphic ciphertext puts a message on a ring and pushes it off the spot. Decryption is \"which spot was it nearest to\", so every correctness question reduces to how far it can be pushed — a distance you can compute before running anything.",
+      "instructions": "## Start here\n\nA homomorphic ciphertext hides a message by putting it somewhere on a ring and then pushing it off that spot. Decryption is \"which spot was this nearest to\".\n\nThe model is four lines:\n\n```text\nmessage      m   in [0, p)\nscaling      D   spreads p messages across the ring\nring         q = p * D\nencode       encode(m) = (m * D) mod q\ndecode       the message whose encoding point c is nearest to, ties rounding up\n```\n\n## First move\n\n```bash\nmake inspect\n```\n\nThat prints the ring, every encoding point, the tolerated noise interval, and one message walked across its boundary. Predict whether the interval is symmetric before you look at the table.\n\nThen edit `local/starter/encoding.py`.\n\n## Goal\n\nClear seven independently scored checkpoints. `p`, `D`, and `q` change between checkpoints, so anything you hardcode is wrong somewhere.",
+      "writeup": "## The interval is not symmetric\n\nWhich way an exact half-way value rounds is a decision that has to be made, and this problem fixes it as rounding up. Once it is made, the tolerated noise interval stops being symmetric.\n\nWith `delta` even there is an exact half-way point; it rounds up onto the next message, so the upper end is `delta // 2 - 1` rather than `delta // 2`. With `delta` odd there is no half-way point and the interval is symmetric. `(-(delta // 2), delta - delta // 2 - 1)` produces both from one expression. An implementation that branches on the parity is admitting it only tested one of them.\n\n## A measured interval agrees with whatever the decoder does\n\nMeasure `success_interval` by trying every noise value and the measurement matches the decoder, whatever the decoder does -- a wrong decoder and a wrong interval agree with each other and both pass. So the interval is derived from the parameters, and the hidden tests check the decoder against a fixture-derived interval and the interval against a fixture-derived decoder, separately. Splitting prediction and measurement into two checkpoints is the same idea.\n\n## Negative noise needs no special case\n\nPython's `%` returns a non-negative result for a positive modulus, so `(c + e) % q` is already right when `e` is negative. Taking `abs(e)` is a different function, and a round-trip test starting from exact points can never see the difference.\n\n## Only two messages notice the wrap\n\nNoise above the largest message lands on 0; noise below message 0 lands on p - 1. A `first_failure` that reports `m + 1` and `m - 1` is right for p - 2 of the p messages. The other two are the whole point.\n\n## Noise is not padding\n\nNoise is what the security rests on and what the correctness spends. Every unit buys hardness and costs headroom. \"More is safer and free\" and \"random filler\" both drop one half of that. The interval computed here is the budget the rest of Week 5 spends.\n\n## This is not secure\n\np and q are small enough to enumerate by hand. A real parameter set hides the message behind a lattice problem; this one hides it behind nothing. Reading correctness here as evidence of production security is the opposite of what the problem teaches.\n\n## Source alignment\n\nWeek 5's material is published upstream, so `courseAlignment` pins `week5/README.md` as `lecture` and `week5/problems/tfhe-toy-python/README.md` as `assignment`. `spoilerPolicy` is `independent-reimplementation`: the parameters are generated from the seed and the encoding rule is stated in full in the problem text, so nothing is copied from the official exercise's fixtures or its `solution.py`.",
+      "learningGoals": [
+        "Tell the message space, plaintext modulus p, ciphertext modulus q and scaling factor apart",
+        "Implement a toy encoding and decoding",
+        "Explain on the ring how noise moves an encoded point",
+        "Move between the centered and the modular representative",
+        "Compute the rounding boundary and predict the decoding range before running it",
+        "Show by counterexample that correctness is lost once noise crosses the boundary",
+        "State plainly that toy parameters carry no security"
+      ],
+      "checks": [
+        {
+          "id": "encode",
+          "label": "Put the message on the ring"
+        },
+        {
+          "id": "noise",
+          "label": "Push it off, and read the sign",
+          "hints": [
+            {
+              "id": "noise-hint-1",
+              "content": "Python's % returns a non-negative result for a positive modulus. Negative noise needs no special case, and abs() is a different function."
+            }
+          ]
+        },
+        {
+          "id": "decode",
+          "label": "Pick the nearest point",
+          "hints": [
+            {
+              "id": "decode-hint-1",
+              "content": "Write nearest-rounding with integers only. Flooring and nearest differ on exactly the half-way values."
+            }
+          ]
+        },
+        {
+          "id": "interval",
+          "label": "Say the tolerated width first",
+          "hints": [
+            {
+              "id": "interval-hint-1",
+              "content": "Ties round up. When delta is even, which message does that exact half-way point belong to?"
+            }
+          ]
+        },
+        {
+          "id": "first-failure",
+          "label": "Find the first noise that breaks it",
+          "hints": [
+            {
+              "id": "first-failure-hint-1",
+              "content": "For two of the p messages the wrong answer is not m plus or minus one. Work out which two."
+            }
+          ]
+        },
+        {
+          "id": "transfer",
+          "label": "Hold up under parameters you have not seen"
+        },
+        {
+          "id": "validate",
+          "label": "Refuse an unusable parameter set"
+        }
+      ]
+    }
+  }
+}
