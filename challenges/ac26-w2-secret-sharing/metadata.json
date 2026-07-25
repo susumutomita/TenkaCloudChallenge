@@ -1,0 +1,297 @@
+{
+  "id": "ac26-w2-secret-sharing",
+  "name": "分けても、まだ何も分からない",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "advanced-cryptography-2026",
+    "order": 210,
+    "chapter": "Week 2 / Additive Secret Sharing"
+  },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 2,
+    "role": "mechanism",
+    "spoilerPolicy": "independent-reimplementation"
+  },
+  "difficulty": 3,
+  "estimatedDuration": "40-60 分",
+  "shortDescription": "秘密を n 個に分けて配る。足せば戻る。それだけなら暗号ではない。n-1 個を持っていても何も分からないことを、証拠で示す。",
+  "description": "Week 2 の mechanism 問題。 加法的秘密分散を F_p 上で実装する。 足し算で戻ることは数行で書けるので、 checkpoint はそこではなく「n-1 個では何も分からない」という性質を実行可能な形で示させることに置く。\n\nhides-the-secret checkpoint は participant の complete_shares を field の全要素に対して回す。 同じ n-1 個の share から、 どの秘密に対しても辻褄の合う最後の 1 個を作れるなら、 その n-1 個は秘密について 何の証拠でもない。 これが「漏れない」の実行可能な定義になる。\n\nthreshold checkpoint は必要数を答えるだけでは通らない。 同じ n-1 個と両立する相異なる 2 つの秘密を 提出させる。 数を当てるのは推測でできるが、 2 つの証人は理解がないと作れない。\n\nhidden test は starter の自明な分割 (party 0 に秘密をそのまま渡す) を明示的に落とす。 round trip だけを見る test はこれを通してしまい、 それは分散になっていない。\n\nWeek 2 の教材は pinned commit 時点で未公開のため courseAlignment.sources は持たない (schema は この場合のために sources を任意にしている)。 #219 が公開を検出した時点で対応づけを確定する。 status は draft のままにする。",
+  "instructions": "## はじめに\n\n秘密を n 人に分けて配ります。 全員分を足せば戻ります。 それだけなら暗号ではありません。\n\n## 最初の一手\n\n```bash\nmake inspect\n```\n\n自分の設定 (modulus と人数) と、 n-1 人が互いに見せ合ったときに 見えるものが出ます。 走らせる前に「この値と辻褄の合う秘密はどれか」を書き留めてください。\n\n次に `local/starter/sharing.py` を編集します。\n\n## ゴール\n\n分割と復元を実装し、 n-1 個では何も分からないことを実際に示し、 秘密を変えずに share を入れ替えられるようにします。",
+  "writeup": "## 足せば戻ることは、まだ何でもない\n\n加法的秘密分散の算術は数行で終わる。 価値があるのは「n-1 個では秘密について何も分からない」ほうで、 これは主張ではなく示すものだ。\n\n## 「漏れない」の実行可能な定義\n\n同じ n-1 個の share から、 field のどの秘密に対しても辻褄の合う 最後の 1 個を作れるなら、 その n-1 個は秘密の証拠になっていない。 complete_shares が全要素で成功する ことがそのまま証明になる。 これが Week 6 の over-opening (途中で share を開けてしまう) を 「なぜまずいか」で語れるようになる土台になる。\n\n## 自明な分割は分散ではない\n\nparty 0 に秘密をそのまま渡し、 残りを 0 にすれば足し算は合う。 round trip test は通る。 だが party 0 は最初から全部知っている。 hidden test がこれを明示的に落とすのは、 「テストが通る」と「性質が成り立つ」の差がこの問題でも同じ形で現れるからだ。\n\n## rerandomize\n\n和が 0 になる offset を足すと、 秘密は変わらないまま share は全部動く。 実プロトコルでは、 同じ share 集合がラウンドを跨いで結び付けられないようにするために使う。 固定の期待値ではなく「秘密が保たれ、 かつ全要素が動いた」という関係で検査している。",
+  "tags": [
+    "advanced-cryptography-2026",
+    "week2",
+    "mpc",
+    "secret-sharing",
+    "privacy",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18095,
+      "name": "/verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "加法的秘密分散を有限体上で実装できる",
+    "全 share を集めたときだけ秘密が戻ることを確認できる",
+    "n-1 個の share が秘密について何の情報も持たないことを実際に示せる",
+    "自明な分割が分散になっていない理由を説明できる",
+    "秘密を変えずに share を入れ替えられる"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.ac26-w2-secret-sharing.split-and-recover",
+        "description": "秘密を分割し、全 share から復元できる。"
+      },
+      {
+        "id": "lo.ac26-w2-secret-sharing.show-independence",
+        "description": "n-1 個の share がどの秘密とも両立することを構成して示せる。"
+      },
+      {
+        "id": "lo.ac26-w2-secret-sharing.rerandomize",
+        "description": "秘密を保ったまま share を入れ替えられる。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.additive-secret-sharing",
+        "description": "秘密を、和が秘密に一致する n 個の値へ分ける方式。 部分集合からは何も分からない。"
+      },
+      {
+        "id": "concept.share-reconstruction",
+        "description": "share を集めて秘密を復元する操作。 必要数に満たない集合では成立しない。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.ac26-w2-secret-sharing.share-and-reconstruct",
+        "description": "複数の設定で分割と復元が成立し、自明な分割を使っていない。"
+      },
+      {
+        "id": "assessment.ac26-w2-secret-sharing.hides-the-secret",
+        "description": "同じ n-1 個から、field の全ての秘密へ辻褄を合わせられた。"
+      },
+      {
+        "id": "assessment.ac26-w2-secret-sharing.threshold",
+        "description": "必要数と、n-1 個と両立する相異なる 2 つの秘密を提出できた。"
+      },
+      {
+        "id": "assessment.ac26-w2-secret-sharing.rerandomize",
+        "description": "秘密を保ったまま全 share を動かせた。"
+      },
+      {
+        "id": "assessment.ac26-w2-secret-sharing.transfer",
+        "description": "未知の modulus と人数でも同じ性質が成立した。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.sum-is-enough",
+        "description": "足して戻れば秘密分散だという誤解。 自明な分割も足せば戻る。"
+      },
+      {
+        "id": "misconception.partial-shares-narrow-the-secret",
+        "description": "share を集めるほど秘密が絞れるという誤解。 必要数に達するまで分布は変わらない。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w2-secret-sharing",
+      "target": "lo.ac26-w2-secret-sharing.split-and-recover"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w2-secret-sharing",
+      "target": "lo.ac26-w2-secret-sharing.show-independence"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w2-secret-sharing",
+      "target": "lo.ac26-w2-secret-sharing.rerandomize"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w2-secret-sharing",
+      "target": "concept.additive-secret-sharing"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w2-secret-sharing",
+      "target": "concept.share-reconstruction"
+    },
+    {
+      "type": "requires",
+      "source": "problem.ac26-w2-secret-sharing",
+      "target": "concept.experimental-method"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w2-secret-sharing.show-independence",
+      "target": "concept.additive-secret-sharing"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w2-secret-sharing",
+      "target": "assessment.ac26-w2-secret-sharing.share-and-reconstruct"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w2-secret-sharing",
+      "target": "assessment.ac26-w2-secret-sharing.hides-the-secret"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w2-secret-sharing",
+      "target": "assessment.ac26-w2-secret-sharing.threshold"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w2-secret-sharing",
+      "target": "assessment.ac26-w2-secret-sharing.rerandomize"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w2-secret-sharing",
+      "target": "assessment.ac26-w2-secret-sharing.transfer"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w2-secret-sharing",
+      "target": "misconception.sum-is-enough"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w2-secret-sharing",
+      "target": "misconception.partial-shares-narrow-the-secret"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18095/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "share-and-reconstruct",
+        "label": "分けて、集めて、戻す",
+        "points": 50,
+        "wrongAnswerPenalty": 10
+      },
+      {
+        "id": "hides-the-secret",
+        "label": "足りない集合からは何も言えないことを示す",
+        "points": 45,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "hides-hint-1",
+            "content": "同じ n-1 個を持ったまま、 狙った秘密になるよう最後の 1 個を選べるか。 選べるなら、 その n-1 個は秘密を絞っていない。",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "threshold",
+        "label": "必要数を、証人つきで答える",
+        "points": 45,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "threshold-hint-1",
+            "content": "数を答えるだけでは通らない。 同じ n-1 個と両立する、 相異なる 2 つの秘密を実際に作る。",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "rerandomize",
+        "label": "秘密を変えずに share を入れ替える",
+        "points": 30,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "rerandomize-hint-1",
+            "content": "和が 0 になる値の組を足せば、 総和は動かない。",
+            "penalty": 15
+          }
+        ]
+      },
+      {
+        "id": "transfer",
+        "label": "見たことのない設定でも成立させる",
+        "points": 30,
+        "wrongAnswerPenalty": 10
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Split it, and still nobody knows",
+      "shortDescription": "Split a secret across n parties. Add them up and it comes back. If that were all, it would not be cryptography. Show, with evidence, that holding n-1 of them tells you nothing.",
+      "instructions": "## Start here\n\nYou split a secret across n parties. Add every share and the secret comes back. If that were all it did, it would not be cryptography.\n\n## First move\n\n```bash\nmake inspect\n```\n\nThat prints your setting and what n-1 parties would see between them. Before running anything, write down which secrets are consistent with those values.\n\nThen edit `local/starter/sharing.py`.\n\n## Goal\n\nImplement splitting and reconstruction, actually demonstrate that n-1 shares tell you nothing, and refresh the shares without moving the secret.",
+      "writeup": "## Adding up to the secret is not yet anything\n\nThe arithmetic of additive sharing takes a few lines. What makes it worth anything is that n-1 shares carry no information about the secret — and that is something to demonstrate, not assert.\n\n## An executable definition of 'it does not leak'\n\nIf, holding the same n-1 shares, you can produce a consistent final share for *every* secret in the field, then those n-1 shares are not evidence about the secret. `complete_shares` succeeding across the whole field is the proof. That is the footing for talking about Week 6's over-opening in terms of why it is bad, rather than as a rule.\n\n## A trivial split is not a sharing\n\nHand the secret to party 0 and give everyone else zero: the sum still works and the round-trip test still passes. Party 0 knew everything from the start. The hidden tests reject that case explicitly, because the gap between 'the test passes' and 'the property holds' shows up here in the same shape as everywhere else in this track.\n\n## Rerandomizing\n\nAdd a set of offsets summing to zero and the secret is unchanged while every share moves. Real protocols use this so a set of shares cannot be linked across rounds. It is checked as a relation — secret preserved, every element moved — not against a fixed expected list.",
+      "learningGoals": [
+        "Implement additive secret sharing over a finite field",
+        "Confirm the secret returns only when every share is present",
+        "Actually demonstrate that n-1 shares carry no information about the secret",
+        "Explain why a trivial split is not a sharing",
+        "Refresh the shares without changing the secret"
+      ],
+      "checks": [
+        {
+          "id": "share-and-reconstruct",
+          "label": "Split it, collect it, get it back"
+        },
+        {
+          "id": "hides-the-secret",
+          "label": "Show that a short set says nothing",
+          "hints": [
+            {
+              "id": "hides-hint-1",
+              "content": "Holding the same n-1 shares, can you choose a final share that lands on any secret you like? If you can, those n-1 shares narrow nothing."
+            }
+          ]
+        },
+        {
+          "id": "threshold",
+          "label": "Answer how many are needed, with witnesses",
+          "hints": [
+            {
+              "id": "threshold-hint-1",
+              "content": "The number alone does not pass. Build two different secrets that are both consistent with the same n-1 shares."
+            }
+          ]
+        },
+        {
+          "id": "rerandomize",
+          "label": "Refresh the shares without moving the secret",
+          "hints": [
+            {
+              "id": "rerandomize-hint-1",
+              "content": "Add a set of values that sums to zero and the total does not move."
+            }
+          ]
+        },
+        {
+          "id": "transfer",
+          "label": "Hold up in settings you have not seen"
+        }
+      ]
+    }
+  }
+}
