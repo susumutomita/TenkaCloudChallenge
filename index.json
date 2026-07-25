@@ -733,6 +733,58 @@
       }
     },
     {
+      "id": "ac26-w5-cmux-blind-rotation",
+      "name": "誰も知らない角度で回す",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "advanced-cryptography-2026",
+        "order": 540,
+        "chapter": "Week 5 / CMUX and Blind Rotation"
+      },
+      "courseAlignment": {
+        "courseId": "advanced-cryptography-program",
+        "edition": "2026",
+        "week": 5,
+        "role": "mechanism",
+        "sources": [
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "path": "week5/README.md",
+            "kind": "lecture"
+          },
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "path": "week5/problems/tfhe-toy-python/README.md",
+            "kind": "assignment"
+          }
+        ]
+      },
+      "difficulty": 4,
+      "estimatedDuration": "75-105 分",
+      "shortDescription": "暗号化されたビットで 2 つの暗号文から一方を選び、 それを繰り返して暗号化された量だけ多項式を回す。 回転量はループの中の誰も知らない。",
+      "tags": [
+        "advanced-cryptography-2026",
+        "week5",
+        "fhe",
+        "tfhe",
+        "cmux",
+        "blind-rotation",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "ac26-w5-encoding-noise",
       "name": "どこまで押せるか",
       "category": "Challenge",
