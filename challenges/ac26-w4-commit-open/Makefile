@@ -9,7 +9,7 @@
 # FLAG_SEED is injected by the platform at deploy. The default below exists only so an
 # author can run the problem straight out of a checkout.
 FLAG_SEED ?= local-dev-seed
-IMAGE := ac26-w4-arithmetization
+IMAGE := ac26-w4-commit-open
 
 # starter/ is bind-mounted read-only: the learner edits their checkout, the container
 # reads it. reference/ and tests/hidden/ stay inside the image and are never mounted.
@@ -22,11 +22,11 @@ build:
 	docker build -t $(IMAGE) local
 
 test: build
-	$(RUN) python tests/public/test_air.py
+	$(RUN) python tests/public/test_commit.py
 
 test-one: build
 	@test -n "$(ID)" || (echo "usage: make test-one ID=<test name substring>" && exit 1)
-	$(RUN) python tests/public/test_air.py --only $(ID)
+	$(RUN) python tests/public/test_commit.py --only $(ID)
 
 inspect: build
 	$(RUN) python show.py
