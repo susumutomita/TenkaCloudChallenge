@@ -38,6 +38,43 @@
       }
     },
     {
+      "id": "ac26-bridge-properties",
+      "name": "満たす性質、破る性質",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "advanced-cryptography-2026",
+        "order": 20,
+        "chapter": "Bridge 0 / Security Properties"
+      },
+      "courseAlignment": {
+        "courseId": "advanced-cryptography-program",
+        "edition": "2026",
+        "week": 1,
+        "role": "diagnostic"
+      },
+      "difficulty": 3,
+      "estimatedDuration": "30-45 分",
+      "shortDescription": "監査に持ち込まれた 3 つの toy verifier。どれも正常系テストは通る。壊れ方が違うだけだ。反例を作って、何を満たし何を破るのかを分類する。",
+      "tags": [
+        "advanced-cryptography-2026",
+        "bridge",
+        "security-properties",
+        "soundness",
+        "privacy",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "ai-riscv-screen-repair",
       "name": "AI製RISC-V画面を復旧せよ",
       "category": "Challenge",

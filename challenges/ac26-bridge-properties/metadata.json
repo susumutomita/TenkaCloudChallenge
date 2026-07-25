@@ -1,0 +1,347 @@
+{
+  "id": "ac26-bridge-properties",
+  "name": "満たす性質、破る性質",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "advanced-cryptography-2026",
+    "order": 20,
+    "chapter": "Bridge 0 / Security Properties"
+  },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 1,
+    "role": "diagnostic",
+    "spoilerPolicy": "independent-reimplementation"
+  },
+  "difficulty": 3,
+  "estimatedDuration": "30-45 分",
+  "shortDescription": "監査に持ち込まれた 3 つの toy verifier。どれも正常系テストは通る。壊れ方が違うだけだ。反例を作って、何を満たし何を破るのかを分類する。",
+  "description": "Bridge 0 の 2 問目。 Week 1 以降で completeness / soundness / privacy / zero-knowledge が 暗黙の前提になる前に、 定義の暗記ではなく反例で区別できる状態にする。\n\n題材は a*w + b == c (mod p) かつ lo <= w <= hi という小さな整数関係だけで、 本物の ZKP は実装しない。 3 つの verifier は次のように壊してある。 P1 は range の下限が strict なため valid な witness を reject する (complete でない)。 P2 は range check 自体が無く、 範囲外の witness を accept する (sound でない)。 P3 は accept/reject は正しいが transcript へ witness を書き込む (private でない)。\n\n採点の要は「ラベルだけでは通さない」こと。 matrix で False と書いた性質は、 対応する checkpoint で 実際に成立する反例を提出しない限り閉じられない。 transfer checkpoint は participant 自身の classify.py / counterexamples.py を hidden seed の別 instance に対して実行する。\n\nP1 の不完全性は、 witness が range の内側にある instance では観測できない (その場合 P1 は正しい verifier と同一の挙動になる)。 そのため incompleteness checkpoint だけは witness が lo に一致する boundary instance を使う。 反例が到達可能でなければ、 その性質は学習者に示せない。",
+  "instructions": "## はじめに\n\n監査に持ち込まれた 3 つの toy verifier を分類します。 どれも正常系は通ります。 壊れ方が違うだけです。\n\n## 最初の一手\n\n```bash\nmake inspect\n```\n\n自分の statement、 3 つの verifier が 何を検査しているか、 P3 の transcript が出ます。\n\n次に `local/starter/classify.py` と `local/starter/counterexamples.py` を編集します。 `make test` は答えの形だけを見ます。 正しいかどうかは hidden verifier が見ます。\n\n## ゴール\n\ncomplete / sound / private を 3 つの verifier について分類し、 False と書いた性質すべてについて実際に成立する反例を提出します。 ラベルだけでは通りません。",
+  "writeup": "## 3 つの性質は独立している\n\ncompleteness は「正しい statement が受理される」、 soundness は「偽の statement が受理されない」、 privacy は「transcript から witness が漏れない」。 3 つは互いに 独立で、 protocol は任意の部分集合を満たしうる。 この問題の 3 つはそれぞれ 1 つだけを破っている。\n\n## なぜラベルだけでは足りないか\n\nP2 を unsound と書くのは簡単だが、 範囲外で accept される witness を 実際に作れて初めて理解したと言える。 hidden test は matrix の False と反例を突き合わせる。 範囲内の witness で「反例」と主張しても通らない。\n\n## security property と implementation bug\n\n3 つはどれも「バグ」だが、 壊している性質が違う。 P1 を「正しい入力を弾くバグ」と呼ぶだけでは、 なぜ soundness は無傷なのかを説明できない。 性質の言葉で言えるようになると、 Week 1 の underconstraint (soundness が壊れる) と Week 2 の over-opening (privacy が壊れる) が別の話だと分かる。\n\n## 反例が到達可能であること\n\nP1 の不完全性は、 witness が range の内側にある instance では観測できない。 boundary instance を用意して初めて示せる。 性質が壊れていることと、 それを示せることは別問題で、 後者は作問側の責任になる。 Week 4 以降で「この test は本当にその欠陥を落とせるか」を問うときに戻ってくる。",
+  "tags": [
+    "advanced-cryptography-2026",
+    "bridge",
+    "security-properties",
+    "soundness",
+    "privacy",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18092,
+      "name": "/verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "correctness / completeness を「正しい入力が受理される性質」として実験できる",
+    "soundness を「偽の statement を受理させにくい性質」として反例で確認できる",
+    "privacy / zero-knowledge が correctness や soundness と独立であることを説明できる",
+    "同じ protocol が一つの性質を満たし別の性質を破る例を作れる",
+    "security property を implementation bug と混同しない"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.ac26-bridge-properties.observe-completeness",
+        "description": "正しい witness が reject される様子を反例で示せる。"
+      },
+      {
+        "id": "lo.ac26-bridge-properties.break-soundness",
+        "description": "偽の statement を受理させる反例を構成できる。"
+      },
+      {
+        "id": "lo.ac26-bridge-properties.detect-leak",
+        "description": "transcript から witness を復元し privacy 侵害を示せる。"
+      },
+      {
+        "id": "lo.ac26-bridge-properties.separate-properties",
+        "description": "3 性質が独立であることを protocol ごとの組合せで説明できる。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.correctness",
+        "description": "正しい入力に対して期待どおりの結果を返す性質。 completeness の日常的な言い換え。"
+      },
+      {
+        "id": "concept.soundness",
+        "description": "偽の statement を受理させにくい性質。 攻撃者側の自由度で測る。"
+      },
+      {
+        "id": "concept.privacy",
+        "description": "protocol の出力・transcript から秘密が漏れない性質。 正しさとは独立。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.ac26-bridge-properties.incompleteness",
+        "description": "valid かつ P1 が reject する witness を提出できた。"
+      },
+      {
+        "id": "assessment.ac26-bridge-properties.unsoundness",
+        "description": "範囲外かつ P2 が accept する witness を提出できた。"
+      },
+      {
+        "id": "assessment.ac26-bridge-properties.privacy-leak",
+        "description": "transcript から witness を復元できた。"
+      },
+      {
+        "id": "assessment.ac26-bridge-properties.property-matrix",
+        "description": "3 protocol × 3 性質の分類が反例と矛盾しない。"
+      },
+      {
+        "id": "assessment.ac26-bridge-properties.transfer",
+        "description": "未知の instance でも同じ分類と反例生成が成立した。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.accepts-valid-means-secure",
+        "description": "正しい入力を受理すれば安全、 という誤解。 soundness と privacy は別に壊れる。"
+      },
+      {
+        "id": "misconception.soundness-implies-privacy",
+        "description": "偽物を弾ければ秘密も守られる、 という誤解。 P3 が反例になる。"
+      },
+      {
+        "id": "misconception.zero-knowledge-means-encryption",
+        "description": "zero-knowledge を暗号化と同一視する誤解。 暗号化しなくても漏れない構成はある。"
+      },
+      {
+        "id": "misconception.failed-test-equals-broken-definition",
+        "description": "テストが落ちたのだから定義が間違っている、 という誤解。 落ちたのは実装であって性質ではない。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.ac26-bridge-properties",
+      "target": "lo.ac26-bridge-properties.observe-completeness"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-bridge-properties",
+      "target": "lo.ac26-bridge-properties.break-soundness"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-bridge-properties",
+      "target": "lo.ac26-bridge-properties.detect-leak"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-bridge-properties",
+      "target": "lo.ac26-bridge-properties.separate-properties"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-bridge-properties",
+      "target": "concept.correctness"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-bridge-properties",
+      "target": "concept.soundness"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-bridge-properties",
+      "target": "concept.privacy"
+    },
+    {
+      "type": "requires",
+      "source": "problem.ac26-bridge-properties",
+      "target": "concept.experimental-method"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-bridge-properties.break-soundness",
+      "target": "concept.soundness"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-bridge-properties.detect-leak",
+      "target": "concept.privacy"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-bridge-properties",
+      "target": "assessment.ac26-bridge-properties.incompleteness"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-bridge-properties",
+      "target": "assessment.ac26-bridge-properties.unsoundness"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-bridge-properties",
+      "target": "assessment.ac26-bridge-properties.privacy-leak"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-bridge-properties",
+      "target": "assessment.ac26-bridge-properties.property-matrix"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-bridge-properties",
+      "target": "assessment.ac26-bridge-properties.transfer"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-bridge-properties",
+      "target": "misconception.accepts-valid-means-secure"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-bridge-properties",
+      "target": "misconception.soundness-implies-privacy"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-bridge-properties",
+      "target": "misconception.zero-knowledge-means-encryption"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-bridge-properties",
+      "target": "misconception.failed-test-equals-broken-definition"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18092/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "incompleteness",
+        "label": "正しい入力が弾かれる場面を作る",
+        "points": 40,
+        "wrongAnswerPenalty": 10
+      },
+      {
+        "id": "unsoundness",
+        "label": "主張の範囲外を通してしまう例を作る",
+        "points": 45,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "unsoundness-hint-1",
+            "content": "P2 が検査しているのは合同式だけだ。 その合同式は p を法とする。 法が同じなら、 解はひとつではない。",
+            "penalty": 15
+          }
+        ]
+      },
+      {
+        "id": "privacy-leak",
+        "label": "transcript から秘密を取り出す",
+        "points": 40,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "privacy-hint-1",
+            "content": "P3 の accept/reject は正しい。 見るべきは判定ではなく、 判定のついでに記録されている内容のほうだ。",
+            "penalty": 15
+          }
+        ]
+      },
+      {
+        "id": "property-matrix",
+        "label": "3 つの verifier を性質で分類する",
+        "points": 35,
+        "wrongAnswerPenalty": 10
+      },
+      {
+        "id": "transfer",
+        "label": "見たことのない instance でも成立させる",
+        "points": 40,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "transfer-hint-1",
+            "content": "statement から witness を求める式は、 3 つの checkpoint すべてで同じものが使える。 固定値ではなく式で書く。",
+            "penalty": 12
+          },
+          {
+            "id": "transfer-hint-2",
+            "content": "incompleteness の instance は witness が range の端にある。 端であることを利用せず、 合同式から解いて構わない。",
+            "penalty": 8
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "What it holds, what it breaks",
+      "shortDescription": "Three toy verifiers arrive for audit. All of them pass the happy-path tests. They are broken in different ways. Build counterexamples and classify what each one holds and what it breaks.",
+      "instructions": "## Start here\n\nYou are auditing three toy verifiers. All of them pass the happy path. They differ in how they are broken.\n\n## First move\n\n```bash\nmake inspect\n```\n\nThat prints your statement, what each verifier checks, and a P3 transcript.\n\nThen edit `local/starter/classify.py` and `local/starter/counterexamples.py`. `make test` only checks the shape of your answers; whether they are right is the hidden verifier's job.\n\n## Goal\n\nClassify complete / sound / private for all three verifiers, and for every property you mark False, submit a counterexample that actually holds. Labels alone do not pass.",
+      "writeup": "## The three properties are independent\n\nCompleteness means a true statement is accepted; soundness means a false statement is not; privacy means the transcript does not reveal the witness. A protocol can satisfy any subset. Each of the three here breaks exactly one.\n\n## Why a label is not enough\n\nCalling P2 unsound is easy. You have understood it when you can produce a witness outside the range that P2 accepts. The hidden tests cross-check every False in your matrix against the matching counterexample, so an in-range value submitted as a 'counterexample' fails.\n\n## Security property versus implementation bug\n\nAll three are bugs, but they break different properties. Calling P1 'a bug that rejects valid input' does not explain why its soundness is untouched. Once you can say it in property terms, Week 1's underconstraint (soundness) and Week 2's over-opening (privacy) stop looking like the same thing.\n\n## Counterexamples have to be reachable\n\nP1's incompleteness cannot be observed on an instance whose witness sits strictly inside the range — there, P1 behaves exactly like a correct verifier. It takes a boundary instance to show it. A property being broken and a property being demonstrable are different things, and the second one is the author's responsibility. That distinction returns in Week 4, when the question becomes whether a test can actually fail the defect it claims to catch.",
+      "learningGoals": [
+        "Experiment with correctness / completeness as 'a true statement is accepted'",
+        "Confirm soundness by counterexample as 'a false statement is hard to get accepted'",
+        "Explain that privacy / zero-knowledge is independent of correctness and soundness",
+        "Build an example where one protocol holds one property and breaks another",
+        "Avoid confusing a security property with an implementation bug"
+      ],
+      "checks": [
+        {
+          "id": "incompleteness",
+          "label": "Make a valid input get rejected"
+        },
+        {
+          "id": "unsoundness",
+          "label": "Get something outside the claim accepted",
+          "hints": [
+            {
+              "id": "unsoundness-hint-1",
+              "content": "P2 only checks the congruence, and the congruence is modulo p. Same modulus, more than one solution."
+            }
+          ]
+        },
+        {
+          "id": "privacy-leak",
+          "label": "Pull the secret out of a transcript",
+          "hints": [
+            {
+              "id": "privacy-hint-1",
+              "content": "P3's accept/reject is correct. Look not at the verdict but at what gets recorded alongside it."
+            }
+          ]
+        },
+        {
+          "id": "property-matrix",
+          "label": "Classify the three verifiers by property"
+        },
+        {
+          "id": "transfer",
+          "label": "Hold up on instances you have not seen",
+          "hints": [
+            {
+              "id": "transfer-hint-1",
+              "content": "The expression that solves the statement for its witness is the same in all three checkpoints. Write the expression, not the value."
+            },
+            {
+              "id": "transfer-hint-2",
+              "content": "The incompleteness instance has its witness at the edge of the range. You do not need to exploit that — solving the congruence is enough."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
