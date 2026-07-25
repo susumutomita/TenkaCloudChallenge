@@ -1,0 +1,289 @@
+{
+  "id": "ac26-bridge-experiment",
+  "name": "予測してから走らせる",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "advanced-cryptography-2026",
+    "order": 10,
+    "chapter": "Bridge 0 / Experimental Workflow"
+  },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 1,
+    "role": "diagnostic",
+    "spoilerPolicy": "independent-reimplementation"
+  },
+  "difficulty": 1,
+  "estimatedDuration": "20-30 分",
+  "shortDescription": "暗号の前に、実験の作法を一度だけ。剰余カウンタを題材に、予測してから走らせる・trace から最初に壊れた場所を特定する・見えないパラメータでも通る一般解を書く、を体験する。",
+  "description": "AC26 companion track の入口。 暗号 primitive は一切扱わない。 後続の全問題が要求する操作 (local-play の起動・reset、 public test と hidden verifier の役割の違い、 実行前予測、 trace 読解、 seed 由来 fixture) を、 暗号の負荷が無い題材で一度だけ通す。\n\n採点は 4 checkpoint 独立。 environment (20) は container が実際に起動したことの確認、 predict (25) は実行前に紙で解いた値、 inspect (25) は 1 round だけ剰余適用が抜けた trace の最初の破綻位置、 generalize (30) は participant の counter.py を hidden seed の複数 modulus・負の step・zero step・start >= modulus・zero rounds に対して検証する。\n\n公開 test は正の step の 1 fixture しか使わないので、 剰余を最後に 1 回だけ適用する実装でも通る。 hidden test はそこを落とす。 これが misconception.public-tests-are-complete の実演であり、 この問題の主目的。\n\nmutation suite (local/mutation.py) が hidden test の有効性を CI で担保する。 等価変異 (末尾一括剰余 / start 未正規化) は Python の floored % の下で数学的に同値なため意図的に除外してある — 詳細は mutation.py の冒頭コメント。",
+  "instructions": "## はじめに\n\n剰余カウンタを完成させます。 暗号の知識は要りません。 後続問題で環境操作が学習の邪魔にならないよう、 ここで作法だけ通します。\n\n## 最初の一手\n\n```bash\nmake inspect\n```\n\n自分の fixture (start / step / rounds / modulus) と health token が出ます。 fixture は deploy ごとに変わるので、 他の人の数値は使えません。\n\n次に `local/starter/counter.py` を開き、 `advance` を完成させます。 `make test` で公開テスト、 `make reset` で元に戻せます。\n\n## ゴール\n\n4 つの checkpoint を独立に通します。 予測は実行前に提出してください — 走らせてから写すと、 この問題で得るものが無くなります。",
+  "writeup": "## 何を確認したか\n\npublic test は「形」を教えるが「正しさ」は証明しない。 この問題の公開テストは正の step の 1 fixture しか使わないため、 剰余を最後に 1 回だけ適用する実装でも、 負の step を正規化しない実装でも通ってしまう。\n\nhidden test が落とすのはこの 2 つ。 複数 modulus・負の step・zero step・start >= modulus・zero rounds を回し、 さらに metamorphic property (start や step を modulus の整数倍だけずらしても trace は変わらない) を検査する。 固定の期待値ではなく関係を検査するので、 1 回の出力を丸暗記しても通らない。\n\n## mutation suite\n\nhidden test 自体が有効かは、 reference をわざと壊して各欠陥が検出されることで担保する (`make reference-test`)。 ここで学ぶべきは「通ったテスト」ではなく「落とせるテスト」。\n\n等価変異には注意が要る。 末尾で一括剰余を取る実装と start を事前正規化しない実装は、 Python の floored `%` の下で round ごとの剰余と数学的に同値であり、 正しいテストでは区別できない。 これらを mutation 一覧に入れると永久に survived が出て、 suite 自体が無視されるようになる。\n\n## 後続問題への接続\n\n以降の全 AC26 問題は `concept.experimental-method` を前提に置く。 予測してから走らせる、 trace の最初の破綻位置を言う、 見えないパラメータで一般化する — この 3 つは Week 1 の constraint residual、 Week 3 の group law 境界、 Week 5 の noise budget でそのまま使う。",
+  "tags": [
+    "advanced-cryptography-2026",
+    "bridge",
+    "experimental-method",
+    "modular-arithmetic",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18091,
+      "name": "/verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "local-play challenge を起動・停止・reset できる",
+    "public test と hidden verifier の役割を区別できる",
+    "実行前の予測を記録し、実測と比較できる",
+    "trace から最初に不変条件が崩れた箇所を特定できる",
+    "公開 fixture の固定値を hard-code しても一般解にならないことを説明できる"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.ac26-bridge-experiment.run-local-play",
+        "description": "local-play challenge を起動し、 fixture を確認し、 starter を初期状態へ戻せる。"
+      },
+      {
+        "id": "lo.ac26-bridge-experiment.predict-before-run",
+        "description": "実行前に結果を予測して提出し、 実測と突き合わせられる。"
+      },
+      {
+        "id": "lo.ac26-bridge-experiment.read-trace",
+        "description": "trace を辿り、 不変条件が最初に崩れた index を特定できる。"
+      },
+      {
+        "id": "lo.ac26-bridge-experiment.generalize",
+        "description": "公開 fixture に依存しない一般解を書き、 未知のパラメータでも成立させられる。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.experimental-method",
+        "description": "観察・予測・検証のループ。 走らせる前に何が起きるかを述べ、 実測との差から理解の欠落を特定する作法。"
+      },
+      {
+        "id": "concept.invariant",
+        "description": "計算の各段階で常に成り立つべき性質。 崩れた最初の地点が欠陥の位置を指す。"
+      },
+      {
+        "id": "concept.modular-arithmetic",
+        "description": "剰余環上の演算。 負数の正規化と、 剰余をいつ適用するかが結果を変える。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.ac26-bridge-experiment.environment",
+        "description": "container を実際に起動し、 seed 由来の health token を提出できた。"
+      },
+      {
+        "id": "assessment.ac26-bridge-experiment.predict",
+        "description": "実行前に最終値を正しく予測できた。"
+      },
+      {
+        "id": "assessment.ac26-bridge-experiment.inspect",
+        "description": "壊れた trace の最初の破綻 index を特定できた。"
+      },
+      {
+        "id": "assessment.ac26-bridge-experiment.generalize",
+        "description": "未知の modulus・負の step・zero step・zero rounds すべてで成立する実装を書けた。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.public-tests-are-complete",
+        "description": "公開テストが通れば実装は正しい、 という誤解。 公開テストは形を示すだけで、 パラメータ空間を覆っていない。"
+      },
+      {
+        "id": "misconception.correct-equals-secure",
+        "description": "正常系が動けば安全、 という誤解。 境界値と異常系を通さない限り何も保証されない。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.ac26-bridge-experiment",
+      "target": "lo.ac26-bridge-experiment.run-local-play"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-bridge-experiment",
+      "target": "lo.ac26-bridge-experiment.predict-before-run"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-bridge-experiment",
+      "target": "lo.ac26-bridge-experiment.read-trace"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-bridge-experiment",
+      "target": "lo.ac26-bridge-experiment.generalize"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-bridge-experiment",
+      "target": "concept.experimental-method"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-bridge-experiment",
+      "target": "concept.invariant"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-bridge-experiment",
+      "target": "concept.modular-arithmetic"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-bridge-experiment.read-trace",
+      "target": "concept.invariant"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-bridge-experiment.generalize",
+      "target": "concept.modular-arithmetic"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-bridge-experiment",
+      "target": "assessment.ac26-bridge-experiment.environment"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-bridge-experiment",
+      "target": "assessment.ac26-bridge-experiment.predict"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-bridge-experiment",
+      "target": "assessment.ac26-bridge-experiment.inspect"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-bridge-experiment",
+      "target": "assessment.ac26-bridge-experiment.generalize"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-bridge-experiment",
+      "target": "misconception.public-tests-are-complete"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-bridge-experiment",
+      "target": "misconception.correct-equals-secure"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18091/verify",
+    "secretEnv": ["FLAG_SEED"]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "environment",
+        "label": "環境が動いていることを確認する",
+        "points": 20,
+        "wrongAnswerPenalty": 5
+      },
+      {
+        "id": "predict",
+        "label": "実行前に最終値を予測する",
+        "points": 25,
+        "wrongAnswerPenalty": 5
+      },
+      {
+        "id": "inspect",
+        "label": "trace が最初に崩れた位置を特定する",
+        "points": 25,
+        "wrongAnswerPenalty": 5,
+        "hints": [
+          {
+            "id": "inspect-hint-1",
+            "content": "trace の各要素は 0 以上 modulus 未満のはずだ。 先頭から順に、 その範囲を最初に外れたのはどこか。",
+            "penalty": 10
+          }
+        ]
+      },
+      {
+        "id": "generalize",
+        "label": "見えないパラメータでも成立させる",
+        "points": 30,
+        "wrongAnswerPenalty": 5,
+        "hints": [
+          {
+            "id": "generalize-hint-1",
+            "content": "公開テストは正の step しか使っていない。 step が負のとき、 あなたの実装は 0 以上 modulus 未満の値を返しているか。",
+            "penalty": 10
+          },
+          {
+            "id": "generalize-hint-2",
+            "content": "剰余は round ごとに取る。 start も loop に入る前に一度正規化しておくと、 start が modulus 以上のときも同じ経路で扱える。",
+            "penalty": 5
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Predict, then run",
+      "shortDescription": "Before any cryptography, the experimental habits. Using a modular counter: predict before you run, find where a trace first breaks, and write a solution that survives parameters you cannot see.",
+      "instructions": "## Start here\n\nYou will finish a modular counter. No cryptography knowledge is needed. This exists so that in later problems, operating the environment is not what you are struggling with.\n\n## First move\n\n```bash\nmake inspect\n```\n\nThat prints your fixture (start / step / rounds / modulus) and your health token. Fixtures are derived from a per-deploy seed, so someone else's numbers will not help you.\n\nThen open `local/starter/counter.py` and finish `advance`. `make test` runs the public tests; `make reset` restores the starter.\n\n## Goal\n\nClear four independently scored checkpoints. Submit the prediction *before* you run — copying it out of your own output removes the only thing this checkpoint measures.",
+      "writeup": "## What this checked\n\nPublic tests show you the shape of an answer; they do not prove it correct. The public tests here use one fixture with a positive step, so an implementation that reduces only at the end, or one that never normalizes a negative step, sails straight through.\n\nThe hidden tests are what catch those. They run several moduli, a negative step, a zero step, start >= modulus, and zero rounds, and they check metamorphic properties rather than fixed expected values: shifting start or step by a whole multiple of the modulus must leave the trace unchanged. Memorizing one run's output cannot satisfy a relation.\n\n## The mutation suite\n\nWhether the hidden tests are any good is itself checked, by breaking the reference on purpose and asserting each defect is caught (`make reference-test`). The thing worth learning is not \"the tests passed\" but \"the tests can fail the wrong answer\".\n\nEquivalent mutants need care. Reducing once at the end, and leaving `start` unnormalized before the loop, are mathematically identical to round-by-round reduction under Python's floored `%` — no correct test can tell them apart. Listing them as mutations would produce a permanent \"survived\" and train everyone to ignore the suite.\n\n## What carries forward\n\nEvery later AC26 problem assumes `concept.experimental-method`. Predict before running, name where a trace first breaks, generalize past the parameters you were shown — you will use all three on Week 1's constraint residuals, Week 3's group-law edge cases, and Week 5's noise budget.",
+      "learningGoals": [
+        "Start, stop, and reset a local-play challenge",
+        "Tell the role of the public tests apart from the hidden verifier",
+        "Record a prediction before running and compare it against the measurement",
+        "Follow a trace and name where the invariant first broke",
+        "Explain why hard-coding the public fixture is not a general solution"
+      ],
+      "checks": [
+        {
+          "id": "environment",
+          "label": "Confirm the environment is running"
+        },
+        {
+          "id": "predict",
+          "label": "Predict the final value before running"
+        },
+        {
+          "id": "inspect",
+          "label": "Locate where the trace first breaks",
+          "hints": [
+            {
+              "id": "inspect-hint-1",
+              "content": "Every entry should sit in [0, modulus). Reading from the start, which one first leaves that range?"
+            }
+          ]
+        },
+        {
+          "id": "generalize",
+          "label": "Hold up under parameters you cannot see",
+          "hints": [
+            {
+              "id": "generalize-hint-1",
+              "content": "The public tests only ever use a positive step. When the step is negative, does your implementation still return values in [0, modulus)?"
+            },
+            {
+              "id": "generalize-hint-2",
+              "content": "Reduce every round, not once at the end. Normalizing `start` before the loop lets start >= modulus take the same path as everything else."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

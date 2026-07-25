@@ -130,3 +130,7 @@ dist
 .pnp.*
 
 .DS_Store
+
+# Python bytecode from local-play problem containers
+__pycache__/
+*.pyc
