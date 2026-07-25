@@ -1,0 +1,534 @@
+{
+  "id": "ac26-w4-proof-pipeline",
+  "name": "9 層ある 1 個の箱",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "advanced-cryptography-2026",
+    "order": 430,
+    "chapter": "Week 4 / Proof System Pipeline"
+  },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 4,
+    "role": "transfer",
+    "spoilerPolicy": "independent-reimplementation",
+    "sources": [
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        "path": "week4/README.md",
+        "kind": "placeholder"
+      }
+    ]
+  },
+  "difficulty": 4,
+  "estimatedDuration": "60-90 分",
+  "shortDescription": "「SNARK」「STARK」はプロトコル名ではなく族の名前。 2 つの toy pipeline を stage graph として読み、層ごとの contract を書き、1 つだけ壊れた run から最初に破れた層を特定して直す。",
+  "description": "Week 4 の 3 問目。 proof system を 1 個のブラックボックスとして扱うと、 「succinct だから速い」 「transparent だから何も仮定しない」 という文が出てくる。 どちらも別々の軸を混同している。 この問題は proof system を作らず、 2 つを stage graph として渡して壊す。\n\npipeline A は circuit 指向で回路ごとの trusted setup を持ち、 B は trace 指向で transparent。 どちらも実在 scheme の実装ではなく、 実在 scheme の名前も付けていない。 重要なのは 2 つが同じ形ではないことで、 stage 数も stage 名も層の順序も query の下限も違い、 B には A に無い low-degree 層が opening と verifier の間に入る。 A から決め打ちしたものは B で外れ、 hidden check はすべて両方に対して走る。\n\nrun は 1 回の実行の記録であって proof ではない。 何を commit したか、 challenge を引く前に何を吸収したか、 verifier が実際にどの opening を検証したか。 participant は層ごとに contract を書き、 そのうち 1 つだけが壊れた run を診断する。\n\n中心にある罠が `commitment_ok` で、 これはこの問題のすべての run で True。 正常な run でも、 未充足の制約を抱えたまま accept した run でも。 commitment が成功したという事実は prover が何かに commit したことしか言わない。 これを読む contract は public test を通り、 constraints checkpoint で落ちる。\n\n診断は最悪の層ではなく最初の層を返す。 input boundary が 1 つ壊れれば下流はすべて壊れて見えるので、 opening を指す診断は正しく仕事をしていた stage を直しに人を送る。 修復は fault が壊したフィールド 1 つだけを変えてよい。 正常な run を組み直せばすべての contract を満たしたうえで証拠が消え、 verdict を reject にすればすべての contract が一度に黙る。 その制約の例外が 1 つだけあり、 それがどれで、 なぜ例外なのかを言えることが diagnose checkpoint の大部分になる。",
+  "instructions": "## はじめに\n\n「SNARK」 「STARK」 はプロトコル名ではなく族の名前です。 1 個のブラックボックスとして扱うと、 別々の軸を混同した文が出てきます。\n\nこの問題は proof system を作りません。 2 つを stage graph として渡します。\n\n```text\ninput-boundary → arithmetization → polynomial → commitment\n               → transcript → opening → [low-degree] → verifier\n```\n\n## 最初の一手\n\n```bash\nmake inspect\n```\n\n2 つの pipeline 定義、 正常な run 1 つ、 壊れた run 1 つ、 そして仕分ける claim 一覧が出ます。 壊れた run がどの層で最初に契約違反したかを、 コードを書く前に自分で当ててください。\n\n次に `local/starter/pipeline.py` を編集します。\n\n## ゴール\n\n8 つの checkpoint を独立に通します。 `run[\"commitment_ok\"]` はすべての run で True です。 それが何を意味し、 何を意味しないかが `constraints` checkpoint の全部です。",
+  "writeup": "## commitment の成功は制約の充足ではない\n\nこの問題のすべての run で `commitment_ok` は True。 未充足の制約を抱えたまま accept した run でもそうなっている。 commitment が成功したという事実は、 prover が何かに commit したことを言う。 commit した中身が制約系を満たすかは別の主張で、 別の検査が要る。\n\nそして commitment には第 2 の仕事がある。 commit stage が受け取った artifact のうち commit されなかったものは、 その後 prover が自由に差し替えられる。 setup material だけが例外で、 これは run より前に公開・固定されているので commit しても新しく縛るものが無い。 名指しで特例にするのではなく、 なぜ例外なのかを言えるようにする。\n\n## transparent は setup の性質である\n\nB は transparent で、 かつ衝突困難ハッシュと random oracle に依拠している。 A は trusted setup を持ち、 SRS が残らないことと pairing の困難性に依拠している。 どちらの仮定リストも空ではない。 transparency は setup が何を必要とするかについての性質であって、 仮定の有無についての性質ではない。\n\n同じ混同が cost 側にもある。 succinct は proof size と verifier 時間の話で、 prover のコストとは別の軸。 A の proof は定数サイズだが prover は superlinear で、 この 2 つは矛盾していない。\n\n## 最初の層を返す\n\ninput boundary が壊れると、 opening も transcript も verifier も壊れて見える。 診断が返すのは最初の層でなければならない。 opening を指す診断は、 正しく仕事をしていた stage を直しに人を送り出す。 層の順序は definition の stage 列から読む。 A の順序を書き写すと、 B の low-degree 層を落とすか置き場所を間違える。\n\n## 修復はフィールド 1 つ\n\n修復が変えてよいのは fault が壊したフィールドだけ。 これがなければ 2 つの近道が通ってしまう。 definition から正常な run を組み直せばすべての contract を満たしたうえで証拠が消え、 verdict を reject にすればすべての contract が一度に黙る。\n\n例外は 1 つある。 未充足の制約は記録を編集しても充足にはならないので、 そこでの正しい修復は verifier が reject することそのものになる。 例外が 1 つだけであることと、 なぜそこだけなのかが、 この checkpoint の核心。\n\n## 2 つの pipeline が同じ形ではないこと\n\nstage 数、 stage 名、 層の順序、 query の下限、 存在する artifact — すべて違う。 B には low-degree 層があり、 A には無い。 A に無い層の契約を A に適用すると、 正常な A の run が全部落ちる。 契約を書くときは 「この pipeline がこの stage を持つなら」 から始める。\n\n## 対象外\n\nGroth16 / PLONK / STARK の完全実装、 benchmark の実測値、 setup ceremony、 proof generation service。 ここでのコストはすべて宣言されたクラスであって測定値ではない。\n\n## Week 4 の対応づけ\n\nWeek 4 の教材は pin した commit 時点で未公開。 courseAlignment は `week4/README.md` を `kind: \"placeholder\"` で pin し、 role は transfer にしてある。 GOVERNANCE.md §6 が未公開週の companion に許す 2 つの role のうちの 1 つで、 Week 4 の arithmetization と commitment を新しい設定 (pipeline 診断) へ転用しているので transfer が正確でもある。 公式課題が何を要求するかについては何も主張していない。",
+  "tags": [
+    "advanced-cryptography-2026",
+    "week4",
+    "zkp",
+    "proof-system",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18106,
+      "name": "/verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "statement・public input・witness・trace を区別できる",
+    "pipeline を artifact graph として読み、 stage 間の境界を説明できる",
+    "commitment の成功と制約の充足を混同しない",
+    "challenge を引く時点と transcript の束縛が健全性に効くことを説明できる",
+    "verifier が検証していない opening / query を指摘できる",
+    "trusted / transparent setup を security assumption として分類できる",
+    "succinctness・proof size・prover cost を別の軸として比較できる",
+    "下流に波及した failure から最初の fault 層を特定して直せる"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.ac26-w4-proof-pipeline.artifact-graph",
+        "description": "pipeline 定義から artifact の producer と consumer の対応を構築できる。"
+      },
+      {
+        "id": "lo.ac26-w4-proof-pipeline.input-boundary",
+        "description": "public input と witness の境界を、 run の自己申告ではなく定義から判定できる。"
+      },
+      {
+        "id": "lo.ac26-w4-proof-pipeline.commitment-is-not-satisfaction",
+        "description": "commitment の成功が制約の充足を含意しないことを、 検査として書き分けられる。"
+      },
+      {
+        "id": "lo.ac26-w4-proof-pipeline.transcript-binding",
+        "description": "challenge が依存する artifact が引く前に吸収されているかを検査できる。"
+      },
+      {
+        "id": "lo.ac26-w4-proof-pipeline.opening-coverage",
+        "description": "必要な opening が件数ではなく名前で検証されたかを確認できる。"
+      },
+      {
+        "id": "lo.ac26-w4-proof-pipeline.setup-assumptions",
+        "description": "setup の種別と依拠する仮定を別の軸として分類できる。"
+      },
+      {
+        "id": "lo.ac26-w4-proof-pipeline.cost-axes",
+        "description": "proof size・verifier 時間・prover コストを独立した軸として比較できる。"
+      },
+      {
+        "id": "lo.ac26-w4-proof-pipeline.first-fault",
+        "description": "下流へ波及した failure から最初の fault 層を特定し、 最小の修復を当てられる。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.proof-pipeline-stage",
+        "description": "artifact を消費し artifact を生成する 1 つの段。 pipeline は段の並びであって単一の箱ではない。"
+      },
+      {
+        "id": "concept.artifact-flow",
+        "description": "どの段がどの artifact を生み、 どの段が消費するかの対応。 producer の無い artifact は型が通っていない。"
+      },
+      {
+        "id": "concept.stage-contract",
+        "description": "1 つの段が満たすべき条件。 破れた段より下流はすべて壊れて見えるので、 最初に破れた段を指す必要がある。"
+      },
+      {
+        "id": "concept.trusted-setup",
+        "description": "回路ごとに信頼される材料を必要とする setup。 材料が残らないことが security assumption になる。"
+      },
+      {
+        "id": "concept.transparent-setup",
+        "description": "信頼される材料を必要としない setup。 仮定が無いという意味ではない。"
+      },
+      {
+        "id": "concept.succinctness",
+        "description": "proof size と verifier 時間についての性質。 prover のコストについては何も言わない。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.ac26-w4-proof-pipeline.graph",
+        "description": "setup を含めた artifact graph を構築し、 producer の無い artifact を検出できた。"
+      },
+      {
+        "id": "assessment.ac26-w4-proof-pipeline.wiring",
+        "description": "verifier の入力と prover 専用 artifact の境界を、 run の自己申告に依らず判定できた。"
+      },
+      {
+        "id": "assessment.ac26-w4-proof-pipeline.constraints",
+        "description": "未充足の制約を抱えたまま accept した run を検出し、 commitment が束縛すべき artifact を判定できた。"
+      },
+      {
+        "id": "assessment.ac26-w4-proof-pipeline.transcript",
+        "description": "challenge が消費する artifact の吸収漏れを検出できた。"
+      },
+      {
+        "id": "assessment.ac26-w4-proof-pipeline.opening",
+        "description": "opening を名前で照合し、 pipeline ごとの query 下限を適用できた。"
+      },
+      {
+        "id": "assessment.ac26-w4-proof-pipeline.assumptions",
+        "description": "setup 種別と仮定リストを分けて表にし、 transparent を仮定ゼロと同一視しなかった。"
+      },
+      {
+        "id": "assessment.ac26-w4-proof-pipeline.cost",
+        "description": "宣言された cost クラスの順序に基づき、 支持されない claim だけを落とせた。"
+      },
+      {
+        "id": "assessment.ac26-w4-proof-pipeline.diagnose",
+        "description": "9 種類の fault で最初の層を特定し、 壊れたフィールドだけを直す修復を返せた。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.snark-and-stark-are-single-protocols",
+        "description": "SNARK / STARK が固定の 1 プロトコルだという誤解。 どちらも族の名前で、 性質は個々の構成ごとに違う。"
+      },
+      {
+        "id": "misconception.commitment-proves-satisfaction",
+        "description": "commitment が成功すれば制約が充足されているという誤解。 commitment は commit した事実しか言わない。"
+      },
+      {
+        "id": "misconception.transparent-means-no-assumptions",
+        "description": "transparent なら暗号的仮定が無いという誤解。 transparency は setup の性質であって仮定の有無ではない。"
+      },
+      {
+        "id": "misconception.succinct-means-fast-prover",
+        "description": "succinct なら prover も速いという誤解。 proof size と prover コストは別の軸。"
+      },
+      {
+        "id": "misconception.downstream-failure-is-the-fault",
+        "description": "最後に落ちた段が原因だという誤解。 上流が壊れれば下流はすべて壊れて見える。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w4-proof-pipeline",
+      "target": "lo.ac26-w4-proof-pipeline.artifact-graph"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w4-proof-pipeline",
+      "target": "lo.ac26-w4-proof-pipeline.input-boundary"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w4-proof-pipeline",
+      "target": "lo.ac26-w4-proof-pipeline.commitment-is-not-satisfaction"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w4-proof-pipeline",
+      "target": "lo.ac26-w4-proof-pipeline.transcript-binding"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w4-proof-pipeline",
+      "target": "lo.ac26-w4-proof-pipeline.opening-coverage"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w4-proof-pipeline",
+      "target": "lo.ac26-w4-proof-pipeline.setup-assumptions"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w4-proof-pipeline",
+      "target": "lo.ac26-w4-proof-pipeline.cost-axes"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w4-proof-pipeline",
+      "target": "lo.ac26-w4-proof-pipeline.first-fault"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w4-proof-pipeline",
+      "target": "concept.proof-pipeline-stage"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w4-proof-pipeline",
+      "target": "concept.artifact-flow"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w4-proof-pipeline",
+      "target": "concept.stage-contract"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w4-proof-pipeline",
+      "target": "concept.trusted-setup"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w4-proof-pipeline",
+      "target": "concept.transparent-setup"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w4-proof-pipeline",
+      "target": "concept.succinctness"
+    },
+    {
+      "type": "requires",
+      "source": "problem.ac26-w4-proof-pipeline",
+      "target": "problem.ac26-w4-arithmetization"
+    },
+    {
+      "type": "requires",
+      "source": "problem.ac26-w4-proof-pipeline",
+      "target": "problem.ac26-w4-commit-open"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w4-proof-pipeline.commitment-is-not-satisfaction",
+      "target": "concept.commitment-binding"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w4-proof-pipeline.transcript-binding",
+      "target": "concept.fiat-shamir"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w4-proof-pipeline.artifact-graph",
+      "target": "concept.arithmetization"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w4-proof-pipeline",
+      "target": "assessment.ac26-w4-proof-pipeline.graph"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w4-proof-pipeline",
+      "target": "assessment.ac26-w4-proof-pipeline.wiring"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w4-proof-pipeline",
+      "target": "assessment.ac26-w4-proof-pipeline.constraints"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w4-proof-pipeline",
+      "target": "assessment.ac26-w4-proof-pipeline.transcript"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w4-proof-pipeline",
+      "target": "assessment.ac26-w4-proof-pipeline.opening"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w4-proof-pipeline",
+      "target": "assessment.ac26-w4-proof-pipeline.assumptions"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w4-proof-pipeline",
+      "target": "assessment.ac26-w4-proof-pipeline.cost"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w4-proof-pipeline",
+      "target": "assessment.ac26-w4-proof-pipeline.diagnose"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w4-proof-pipeline",
+      "target": "misconception.snark-and-stark-are-single-protocols"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w4-proof-pipeline",
+      "target": "misconception.commitment-proves-satisfaction"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w4-proof-pipeline",
+      "target": "misconception.transparent-means-no-assumptions"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w4-proof-pipeline",
+      "target": "misconception.succinct-means-fast-prover"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w4-proof-pipeline",
+      "target": "misconception.downstream-failure-is-the-fault"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w4-proof-pipeline",
+      "target": "misconception.the-trace-is-the-proof"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18106/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "graph",
+        "label": "artifact の流れを図にする",
+        "points": 30,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "graph-hint-1",
+            "content": "setup も artifact を生む。 stage の並びだけを歩くと、 setup material に producer が付かない。",
+            "penalty": 12
+          }
+        ]
+      },
+      {
+        "id": "wiring",
+        "label": "誰が何を見てよいかを決める",
+        "points": 35,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "wiring-hint-1",
+            "content": "run が申告する secret は監査対象の記録の一部。 prover 専用の artifact は definition から導く。",
+            "penalty": 15
+          }
+        ]
+      },
+      {
+        "id": "constraints",
+        "label": "commit できたことと正しいことを分ける",
+        "points": 40,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "constraints-hint-1",
+            "content": "commitment_ok はすべての run で True。 未充足の制約を検出した run が reject していれば、 それは仕事をしている。",
+            "penalty": 18
+          }
+        ]
+      },
+      {
+        "id": "transcript",
+        "label": "challenge を引く前に何を吸収したか",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "transcript-hint-1",
+            "content": "吸収すべき集合は challenge stage の consumes そのもの。 名前を書き写すと 3 本目の pipeline で外れる。",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "opening",
+        "label": "検証されなかった opening を見つける",
+        "points": 40,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "opening-hint-1",
+            "content": "件数の一致は集合の一致ではない。 query の下限は pipeline ごとに違い、 0 だけが下限割れではない。",
+            "penalty": 18
+          }
+        ]
+      },
+      {
+        "id": "assumptions",
+        "label": "setup と仮定を別の欄にする",
+        "points": 30,
+        "wrongAnswerPenalty": 15
+      },
+      {
+        "id": "cost",
+        "label": "支持されない主張だけを落とす",
+        "points": 30,
+        "wrongAnswerPenalty": 15
+      },
+      {
+        "id": "diagnose",
+        "label": "最初に破れた層を指して直す",
+        "points": 50,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "diagnose-hint-1",
+            "content": "層の順序は definition の stage 列から読む。 修復が変えてよいのはフィールド 1 つで、 verdict を倒してよい fault は 1 つだけ。",
+            "penalty": 25
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "One box with nine layers",
+      "shortDescription": "\"SNARK\" and \"STARK\" name families, not protocols. Read two toy pipelines as stage graphs, write one contract per layer, and find the first layer that broke in runs where exactly one thing is wrong.",
+      "instructions": "## Start here\n\n\"SNARK\" and \"STARK\" name families, not protocols. Treated as single black boxes they produce sentences that confuse two different axes.\n\nThis problem does not build a proof system. It gives you two, as stage graphs.\n\n```text\ninput-boundary -> arithmetization -> polynomial -> commitment\n               -> transcript -> opening -> [low-degree] -> verifier\n```\n\n## First move\n\n```bash\nmake inspect\n```\n\nThat prints both pipeline definitions, one honest run, one broken run, and the claims to sort. Work out which layer the broken run first violated before you write any code.\n\nThen edit `local/starter/pipeline.py`.\n\n## Goal\n\nClear eight independently scored checkpoints. `run[\"commitment_ok\"]` is True in every run in this problem. What that means, and what it does not mean, is the whole of the `constraints` checkpoint.",
+      "writeup": "## A successful commitment is not a satisfied constraint\n\n`commitment_ok` is True in every run here, including the ones that accepted with an unsatisfied constraint. A commitment succeeding says the prover committed to something. Whether what they committed to satisfies the constraint system is a separate claim and needs a separate check.\n\nThe commitment has a second job as well. Any artifact the commit stage was handed but did not commit to is free for the prover to change afterwards. Setup material is the one exception, because it is public and fixed before the run, so committing to it would bind nothing that is not already bound. Be able to say why it is an exception rather than special-casing it by name.\n\n## Transparent is a property of the setup\n\nB is transparent and rests on a collision-resistant hash and a random oracle. A has a trusted setup and rests on the SRS not being retained and on pairing hardness. Neither assumption list is empty. Transparency is about what the setup requires, not about whether there are assumptions.\n\nThe same confusion shows up on the cost side. Succinctness is about proof size and verifier time; it says nothing about prover cost. A's proof is constant size and A's prover is superlinear, and those two facts do not contradict each other.\n\n## Report the earliest layer\n\nA broken input boundary makes the openings, the transcript, and the verifier all look wrong. The diagnosis has to name the earliest layer, because pointing at the openings sends somebody to repair a stage that was doing its job. Read the layer order off the definition's stage list -- copying A's order either drops B's low-degree layer or puts it in the wrong place.\n\n## A repair changes one field\n\nA repair may change only the field the fault damaged. Without that, two shortcuts pass everything: rebuilding a clean run from the definition satisfies every contract while destroying the evidence, and setting the verdict to `reject` silences every contract at once.\n\nThere is one exception. An unsatisfied constraint cannot be made satisfied by editing the record, so there the correct repair *is* for the verifier to reject. That the exception is exactly one, and why it is that one, is the core of the checkpoint.\n\n## The two pipelines are not the same shape\n\nStage count, stage names, layer order, query minimum, which artifacts exist -- all different. B has a low-degree layer and A does not. Applying a contract for a layer A does not have fails every honest A run. Write each contract starting from \"if this pipeline has this stage\".\n\n## Not in scope\n\nNo Groth16, PLONK, or STARK implementation; no benchmark numbers; no setup ceremony; no proof-generation service. Every cost here is a declared class rather than a measurement.\n\n## Week 4 alignment\n\nWeek 4's material was not published upstream at the pinned commit. `courseAlignment` pins `week4/README.md` with `kind: \"placeholder\"` and takes the `transfer` role -- one of the two GOVERNANCE.md section 6 permits for an unpublished week, and accurate besides, since the problem transfers Week 4's arithmetization and commitment into a new setting. It asserts nothing about what the official exercise will require.",
+      "learningGoals": [
+        "Tell a statement, a public input, a witness and a trace apart",
+        "Read a pipeline as an artifact graph and explain the boundaries between stages",
+        "Keep commitment success and constraint satisfaction separate",
+        "Explain how challenge timing and transcript binding bear on soundness",
+        "Point at openings and queries the verifier never checked",
+        "Classify trusted and transparent setups as security assumptions",
+        "Compare succinctness, proof size and prover cost as separate axes",
+        "Find the first faulty layer behind a cascade of downstream failures and repair it"
+      ],
+      "checks": [
+        {
+          "id": "graph",
+          "label": "Map the artifact flow",
+          "hints": [
+            {
+              "id": "graph-hint-1",
+              "content": "The setup produces artifacts too. Walking only the stage list leaves the setup material without a producer."
+            }
+          ]
+        },
+        {
+          "id": "wiring",
+          "label": "Decide who may see what",
+          "hints": [
+            {
+              "id": "wiring-hint-1",
+              "content": "The secrets a run declares are part of the record you are auditing. Derive the prover-only artifacts from the definition."
+            }
+          ]
+        },
+        {
+          "id": "constraints",
+          "label": "Separate committed from correct",
+          "hints": [
+            {
+              "id": "constraints-hint-1",
+              "content": "commitment_ok is True in every run. A run that noticed an unsatisfied constraint and rejected is doing its job."
+            }
+          ]
+        },
+        {
+          "id": "transcript",
+          "label": "What was absorbed before the challenge",
+          "hints": [
+            {
+              "id": "transcript-hint-1",
+              "content": "The set to absorb is the challenge stage's own consumes list. Writing the names down breaks on a third pipeline."
+            }
+          ]
+        },
+        {
+          "id": "opening",
+          "label": "Find the opening nobody checked",
+          "hints": [
+            {
+              "id": "opening-hint-1",
+              "content": "Matching counts is not matching sets. The query minimum differs per pipeline, and zero is not the only value below it."
+            }
+          ]
+        },
+        {
+          "id": "assumptions",
+          "label": "Put setup and assumptions in different columns"
+        },
+        {
+          "id": "cost",
+          "label": "Reject only the unsupported claims"
+        },
+        {
+          "id": "diagnose",
+          "label": "Name the first broken layer and fix it",
+          "hints": [
+            {
+              "id": "diagnose-hint-1",
+              "content": "Read the layer order off the definition's stages. A repair changes one field, and exactly one fault is repaired by flipping the verdict."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
