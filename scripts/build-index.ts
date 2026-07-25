@@ -38,6 +38,30 @@ interface IndexCost {
   alwaysOnResources: string[];
 }
 
+/** Curriculum position, mirrored from `track` when the problem declares one. */
+interface IndexTrack {
+  id: string;
+  order: number;
+  chapter: string;
+}
+
+/**
+ * [#211] The participant-safe half of `courseAlignment`.
+ *
+ * `spoilerPolicy` is deliberately absent: it describes how the content was
+ * produced, which is authoring metadata, and an `embargoed` problem is dropped
+ * from the projection entirely rather than shipped carrying a label that says so.
+ * `sources` is kept, because a learner already enrolled in the course benefits
+ * from a pinned pointer to the material a challenge sits beside.
+ */
+interface IndexCourseAlignment {
+  courseId: string;
+  edition: string;
+  week: number;
+  role: string;
+  sources?: Array<{ repository: string; ref: string; path: string; kind: string }>;
+}
+
 interface IndexEntry {
   id: string;
   name: string;
@@ -45,6 +69,8 @@ interface IndexEntry {
   status: string;
   visibility: string;
   onboardingOrder?: number;
+  track?: IndexTrack;
+  courseAlignment?: IndexCourseAlignment;
   difficulty: number;
   estimatedDuration: string;
   shortDescription: string;
@@ -75,6 +101,41 @@ function collectMetadataFiles(): string[] {
   return files;
 }
 
+function toTrack(meta: Record<string, unknown>): IndexTrack | undefined {
+  const track = meta.track as Record<string, unknown> | undefined;
+  if (!track) return undefined;
+  return { id: String(track.id), order: Number(track.order), chapter: String(track.chapter) };
+}
+
+/**
+ * [#211] Project only the participant-safe fields of `courseAlignment`.
+ *
+ * An `embargoed` problem projects nothing at all: the catalog index is read by
+ * the participant portal, so "not yet releasable" must mean absent, not hidden
+ * behind a flag the client could ignore.
+ */
+export function toCourseAlignment(
+  meta: Record<string, unknown>,
+): IndexCourseAlignment | undefined {
+  const alignment = meta.courseAlignment as Record<string, unknown> | undefined;
+  if (!alignment || alignment.spoilerPolicy === "embargoed") return undefined;
+  const sources = Array.isArray(alignment.sources)
+    ? (alignment.sources as Array<Record<string, unknown>>).map((s) => ({
+        repository: String(s.repository),
+        ref: String(s.ref),
+        path: String(s.path),
+        kind: String(s.kind),
+      }))
+    : undefined;
+  return {
+    courseId: String(alignment.courseId),
+    edition: String(alignment.edition),
+    week: Number(alignment.week),
+    role: String(alignment.role),
+    ...(sources && sources.length > 0 ? { sources } : {}),
+  };
+}
+
 function toEntry(meta: Record<string, unknown>, costById: Map<string, ProblemCost>): IndexEntry {
   const scoring = (meta.scoring ?? {}) as Record<string, unknown>;
   const c = costById.get(String(meta.id));
@@ -87,6 +148,10 @@ function toEntry(meta: Record<string, unknown>, costById: Map<string, ProblemCos
     // Optional onboarding-track position (getting-started rail); omitted from
     // the entry when unset so only track members carry it.
     onboardingOrder: typeof meta.onboardingOrder === "number" ? meta.onboardingOrder : undefined,
+    // Curriculum position + course alignment; both omitted when the problem
+    // declares neither, so untracked problems keep their existing entry shape.
+    track: toTrack(meta),
+    courseAlignment: toCourseAlignment(meta),
     difficulty: Number(meta.difficulty),
     estimatedDuration: String(meta.estimatedDuration),
     shortDescription: String(meta.shortDescription),
@@ -125,4 +190,5 @@ function main(): void {
   console.log(`Wrote index.json with ${index.problems.length} problems.`);
 }
 
-main();
+// CLI 実行時のみ index.json を書く (test から import しても副作用が起きないように)。
+if (import.meta.main) main();

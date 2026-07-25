@@ -10,7 +10,10 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "content"],
+        "required": [
+          "id",
+          "content"
+        ],
         "properties": {
           "id": {
             "type": "string",
@@ -31,7 +34,10 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "label"],
+        "required": [
+          "id",
+          "label"
+        ],
         "properties": {
           "id": {
             "type": "string",
@@ -43,12 +49,17 @@
             "minLength": 1,
             "description": "翻訳済み表示名 (非スポイラー)。"
           },
-          "hints": { "$ref": "#/$defs/localizedHints" }
+          "hints": {
+            "$ref": "#/$defs/localizedHints"
+          }
         }
       }
     },
     "hintRevealMode": {
-      "enum": ["sequential", "flat"],
+      "enum": [
+        "sequential",
+        "flat"
+      ],
       "description": "[TenkaCloud] ヒントの公開順。 省略時は `sequential` (= 既定): ヒント N はヒント 1..N-1 を公開後にのみ開ける (progressive gate、 段階的減点が意味を持つ)。 `flat`: 全ヒントを任意順で独立に公開できる (順序ゲート無し)。 問題全体に適用され、 multi-verify では全 check の hint 群に効く。"
     },
     "progressiveHints": {
@@ -63,7 +74,11 @@
           {
             "type": "object",
             "additionalProperties": false,
-            "required": ["id", "content", "penalty"],
+            "required": [
+              "id",
+              "content",
+              "penalty"
+            ],
             "properties": {
               "id": {
                 "type": "string",
@@ -89,9 +104,14 @@
     "educationalNode": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "description"],
+      "required": [
+        "id",
+        "description"
+      ],
       "properties": {
-        "id": { "type": "string" },
+        "id": {
+          "type": "string"
+        },
         "description": {
           "type": "string",
           "minLength": 1,
@@ -101,7 +121,9 @@
     },
     "learningObjectiveNode": {
       "allOf": [
-        { "$ref": "#/$defs/educationalNode" },
+        {
+          "$ref": "#/$defs/educationalNode"
+        },
         {
           "properties": {
             "id": {
@@ -114,7 +136,9 @@
     },
     "conceptNode": {
       "allOf": [
-        { "$ref": "#/$defs/educationalNode" },
+        {
+          "$ref": "#/$defs/educationalNode"
+        },
         {
           "properties": {
             "id": {
@@ -127,7 +151,9 @@
     },
     "assessmentCriterionNode": {
       "allOf": [
-        { "$ref": "#/$defs/educationalNode" },
+        {
+          "$ref": "#/$defs/educationalNode"
+        },
         {
           "properties": {
             "id": {
@@ -140,7 +166,9 @@
     },
     "misconceptionNode": {
       "allOf": [
-        { "$ref": "#/$defs/educationalNode" },
+        {
+          "$ref": "#/$defs/educationalNode"
+        },
         {
           "properties": {
             "id": {
@@ -153,7 +181,9 @@
     },
     "audienceNode": {
       "allOf": [
-        { "$ref": "#/$defs/educationalNode" },
+        {
+          "$ref": "#/$defs/educationalNode"
+        },
         {
           "properties": {
             "id": {
@@ -190,87 +220,155 @@
     },
     "requiresNodeId": {
       "oneOf": [
-        { "$ref": "#/$defs/problemNodeId" },
-        { "$ref": "#/$defs/learningObjectiveNodeId" },
-        { "$ref": "#/$defs/conceptNodeId" }
+        {
+          "$ref": "#/$defs/problemNodeId"
+        },
+        {
+          "$ref": "#/$defs/learningObjectiveNodeId"
+        },
+        {
+          "$ref": "#/$defs/conceptNodeId"
+        }
       ]
     },
     "anyEducationalNodeId": {
       "oneOf": [
-        { "$ref": "#/$defs/problemNodeId" },
-        { "$ref": "#/$defs/learningObjectiveNodeId" },
-        { "$ref": "#/$defs/conceptNodeId" },
-        { "$ref": "#/$defs/assessmentCriterionNodeId" },
-        { "$ref": "#/$defs/misconceptionNodeId" },
-        { "$ref": "#/$defs/audienceNodeId" }
+        {
+          "$ref": "#/$defs/problemNodeId"
+        },
+        {
+          "$ref": "#/$defs/learningObjectiveNodeId"
+        },
+        {
+          "$ref": "#/$defs/conceptNodeId"
+        },
+        {
+          "$ref": "#/$defs/assessmentCriterionNodeId"
+        },
+        {
+          "$ref": "#/$defs/misconceptionNodeId"
+        },
+        {
+          "$ref": "#/$defs/audienceNodeId"
+        }
       ]
     },
     "relationBase": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "source", "target"],
+      "required": [
+        "type",
+        "source",
+        "target"
+      ],
       "properties": {
-        "type": { "type": "string" },
-        "source": { "type": "string" },
-        "target": { "type": "string" }
+        "type": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        }
       }
     },
     "teachesRelation": {
       "allOf": [
-        { "$ref": "#/$defs/relationBase" },
+        {
+          "$ref": "#/$defs/relationBase"
+        },
         {
           "properties": {
-            "type": { "const": "teaches" },
-            "source": { "$ref": "#/$defs/problemNodeId" },
-            "target": { "$ref": "#/$defs/learningObjectiveNodeId" }
+            "type": {
+              "const": "teaches"
+            },
+            "source": {
+              "$ref": "#/$defs/problemNodeId"
+            },
+            "target": {
+              "$ref": "#/$defs/learningObjectiveNodeId"
+            }
           }
         }
       ]
     },
     "coversRelation": {
       "allOf": [
-        { "$ref": "#/$defs/relationBase" },
+        {
+          "$ref": "#/$defs/relationBase"
+        },
         {
           "properties": {
-            "type": { "const": "covers" },
-            "source": { "$ref": "#/$defs/problemNodeId" },
-            "target": { "$ref": "#/$defs/conceptNodeId" }
+            "type": {
+              "const": "covers"
+            },
+            "source": {
+              "$ref": "#/$defs/problemNodeId"
+            },
+            "target": {
+              "$ref": "#/$defs/conceptNodeId"
+            }
           }
         }
       ]
     },
     "requiresRelation": {
       "allOf": [
-        { "$ref": "#/$defs/relationBase" },
+        {
+          "$ref": "#/$defs/relationBase"
+        },
         {
           "properties": {
-            "type": { "const": "requires" },
-            "source": { "$ref": "#/$defs/requiresNodeId" },
-            "target": { "$ref": "#/$defs/requiresNodeId" }
+            "type": {
+              "const": "requires"
+            },
+            "source": {
+              "$ref": "#/$defs/requiresNodeId"
+            },
+            "target": {
+              "$ref": "#/$defs/requiresNodeId"
+            }
           }
         }
       ]
     },
     "assessesRelation": {
       "allOf": [
-        { "$ref": "#/$defs/relationBase" },
+        {
+          "$ref": "#/$defs/relationBase"
+        },
         {
           "properties": {
-            "type": { "const": "assesses" },
-            "source": { "$ref": "#/$defs/problemNodeId" },
-            "target": { "$ref": "#/$defs/assessmentCriterionNodeId" }
+            "type": {
+              "const": "assesses"
+            },
+            "source": {
+              "$ref": "#/$defs/problemNodeId"
+            },
+            "target": {
+              "$ref": "#/$defs/assessmentCriterionNodeId"
+            }
           }
         }
       ]
     },
     "relatedToRelation": {
       "allOf": [
-        { "$ref": "#/$defs/relationBase" },
+        {
+          "$ref": "#/$defs/relationBase"
+        },
         {
           "properties": {
-            "type": { "const": "related_to" },
-            "source": { "$ref": "#/$defs/anyEducationalNodeId" },
-            "target": { "$ref": "#/$defs/anyEducationalNodeId" }
+            "type": {
+              "const": "related_to"
+            },
+            "source": {
+              "$ref": "#/$defs/anyEducationalNodeId"
+            },
+            "target": {
+              "$ref": "#/$defs/anyEducationalNodeId"
+            }
           }
         }
       ]
@@ -292,8 +390,16 @@
     "learningGoals"
   ],
   "anyOf": [
-    { "required": ["cfnTemplate"] },
-    { "required": ["runtime"] }
+    {
+      "required": [
+        "cfnTemplate"
+      ]
+    },
+    {
+      "required": [
+        "runtime"
+      ]
+    }
   ],
   "properties": {
     "$schema": {
@@ -313,17 +419,27 @@
     },
     "category": {
       "type": "string",
-      "enum": ["Battle", "Challenge"],
+      "enum": [
+        "Battle",
+        "Challenge"
+      ],
       "description": "問題カテゴリ。Battle = リアルタイム対戦、Challenge = 個別演習・常設チャレンジ。"
     },
     "status": {
       "type": "string",
-      "enum": ["ready", "draft", "deprecated"],
+      "enum": [
+        "ready",
+        "draft",
+        "deprecated"
+      ],
       "description": "公開ステータス。ready = 参加者向けデプロイ可能 / draft = 開発中 / deprecated = 廃止予定。"
     },
     "visibility": {
       "type": "string",
-      "enum": ["public", "private"],
+      "enum": [
+        "public",
+        "private"
+      ],
       "description": "[ADR-008] 問題実装の公開境界。 public = 本体 repo 内に template.yaml / api / frontend を持つ教材用 (= 答えが open でも成立する問題、 hello-world 系)。 private = TenkaCloudChallenges 別 private repo に payload を置き S3 + 15min presigned URL で配信する本格競技用 (= 答えが open だと成立しない microservice-migration-battle 系)。 省略時 public (= 既存 metadata との互換)。 Phase 1 では UI 表示のみ、 Phase 3 で Worker Lambda の S3 fetch 分岐を入れる。"
     },
     "onboardingOrder": {
@@ -349,8 +465,107 @@
           "description": "この問題が対応する章/節。 例: IPA §1.5 XSS, 12Factor III. Config。"
         }
       },
-      "required": ["id", "order", "chapter"],
+      "required": [
+        "id",
+        "order",
+        "chapter"
+      ],
       "description": "任意。 IPA/12 Factor App/AWS Well-Architected 等、体系立てたカリキュラム内でのこの問題の位置づけ。 未設定の既存問題はどの track にも属さない (= 遡及的な移行は不要)。 onboardingOrder / tags とは独立: track はカリキュラム内の位置づけ、 onboardingOrder は初回参加者向けの単一導入列、 tags は横断フィルタ。"
+    },
+    "courseAlignment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "courseId": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "description": "edition を跨いで安定する講座 ID。 例: advanced-cryptography-program。"
+        },
+        "edition": {
+          "type": "string",
+          "pattern": "^[0-9]{4}$",
+          "description": "講座の版 (西暦4桁)。 例: 2026。"
+        },
+        "week": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "対応する講座週 (1 起算)。 0 以下は不正。"
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "diagnostic",
+            "mechanism",
+            "assignment-companion",
+            "transfer",
+            "synthesis"
+          ],
+          "description": "公式課題との距離。 diagnostic = 講義前の前提確認 / mechanism = 内部を小さく観察 / assignment-companion = 公式課題の理解を補助するが解答は与えない / transfer = 異なる設定への転用 / synthesis = 複数週の統合。"
+        },
+        "spoilerPolicy": {
+          "type": "string",
+          "enum": [
+            "public-reference",
+            "independent-reimplementation",
+            "approved-derivative",
+            "embargoed"
+          ],
+          "description": "素材の由来と公開可否。 public-reference = 出典参照のみ / independent-reimplementation = 同じ概念を独自実装 (既定) / approved-derivative = 明示的許諾のもとでの派生 / embargoed = まだ参加者へ出せない。 embargoed は participant-facing projection から除外される。"
+        },
+        "sources": {
+          "type": "array",
+          "minItems": 1,
+          "description": "対応する講座教材の位置。 未公開週など、 指せる一次情報が無い場合は省略する。",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "repository": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$",
+                "description": "GitHub の owner/name。 URL ではない。"
+              },
+              "ref": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$",
+                "description": "40 桁の commit SHA。 branch 名 / tag は不可 (upstream の変更に黙って追随しないため)。"
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]*$",
+                "description": "repository 内の相対 path。 先頭 / と .. と URL escape は不可。"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "lecture",
+                  "assignment",
+                  "test",
+                  "slide",
+                  "roadmap",
+                  "other"
+                ],
+                "description": "参照している教材の種別。"
+              }
+            },
+            "required": [
+              "repository",
+              "ref",
+              "path",
+              "kind"
+            ]
+          }
+        }
+      },
+      "required": [
+        "courseId",
+        "edition",
+        "week",
+        "role",
+        "spoilerPolicy"
+      ],
+      "description": "任意。 外部講座と連携する問題が、 どの講座のどの週のどの教材版に対応し、 公式課題からどれだけ離れているかを表す。 学習順序は relations.type=requires、 track 内の並びは track.order が正本であり、 ここでは重複定義しない。 未設定の既存問題は影響を受けない。"
     },
     "difficulty": {
       "type": "integer",
@@ -395,17 +610,30 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["port", "name"],
+        "required": [
+          "port",
+          "name"
+        ],
         "properties": {
-          "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
-          "name": { "type": "string", "minLength": 1 }
+          "port": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       },
       "description": "deploy 後に参加者へ払い出されるエンドポイントのポート / 用途名。"
     },
     "learningGoals": {
       "type": "array",
-      "items": { "type": "string", "minLength": 1 },
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
       "minItems": 1,
       "description": "問題作者が想定する学習目的の箇条書き。"
     },
@@ -417,27 +645,37 @@
         "learning_objectives": {
           "type": "array",
           "minItems": 1,
-          "items": { "$ref": "#/$defs/learningObjectiveNode" }
+          "items": {
+            "$ref": "#/$defs/learningObjectiveNode"
+          }
         },
         "concepts": {
           "type": "array",
           "minItems": 1,
-          "items": { "$ref": "#/$defs/conceptNode" }
+          "items": {
+            "$ref": "#/$defs/conceptNode"
+          }
         },
         "assessment_criteria": {
           "type": "array",
           "minItems": 1,
-          "items": { "$ref": "#/$defs/assessmentCriterionNode" }
+          "items": {
+            "$ref": "#/$defs/assessmentCriterionNode"
+          }
         },
         "misconceptions": {
           "type": "array",
           "minItems": 1,
-          "items": { "$ref": "#/$defs/misconceptionNode" }
+          "items": {
+            "$ref": "#/$defs/misconceptionNode"
+          }
         },
         "audiences": {
           "type": "array",
           "minItems": 1,
-          "items": { "$ref": "#/$defs/audienceNode" }
+          "items": {
+            "$ref": "#/$defs/audienceNode"
+          }
         }
       },
       "description": "[TenkaCloud#2604] 任意の教育ナレッジグラフ node 定義。 Problem node は metadata.id から problem.<id> として暗黙に生成される。 tags / learningGoals は従来どおり保持し、本 field は学習順序・推薦・影響分析向けの明示的な graph を追加する。"
@@ -447,11 +685,21 @@
       "minItems": 1,
       "items": {
         "oneOf": [
-          { "$ref": "#/$defs/teachesRelation" },
-          { "$ref": "#/$defs/coversRelation" },
-          { "$ref": "#/$defs/requiresRelation" },
-          { "$ref": "#/$defs/assessesRelation" },
-          { "$ref": "#/$defs/relatedToRelation" }
+          {
+            "$ref": "#/$defs/teachesRelation"
+          },
+          {
+            "$ref": "#/$defs/coversRelation"
+          },
+          {
+            "$ref": "#/$defs/requiresRelation"
+          },
+          {
+            "$ref": "#/$defs/assessesRelation"
+          },
+          {
+            "$ref": "#/$defs/relatedToRelation"
+          }
         ]
       },
       "description": "[TenkaCloud#2604] node 間の有向 edge。 MVP は teaches / covers / requires / assesses / related_to のみ。 source / target の実在、 node ID の重複、 requires cycle は catalog-wide validator が検査する。"
@@ -467,7 +715,11 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["provider", "engine", "entry"],
+          "required": [
+            "provider",
+            "engine",
+            "entry"
+          ],
           "description": "単一 provider runtime。従来形式 (= 後方互換のまま)。",
           "properties": {
             "provider": {
@@ -501,7 +753,10 @@
             },
             "secretEnv": {
               "type": "array",
-              "items": { "type": "string", "minLength": 1 },
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
               "description": "[local play / #2054] deploy ごとにランダム秘密を注入する env 変数名 (例: `FLAG_SEED`)。 フラグ・管理者資格情報はこの seed からコンテナ内で導出する (= 答えは repo に置かない)。"
             }
           }
@@ -509,7 +764,10 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "targets"],
+          "required": [
+            "kind",
+            "targets"
+          ],
           "description": "[Composite Runtime / TenkaCloud#2058] 1 つの問題を複数 cloud provider へ展開する複合 runtime。 親 deployment が問題全体を、 target ごとの子 deployment が各 provider の環境を表す。 制約 (2〜8 target / id 一意 / nest 禁止) は platform の `@tenkacloud/problem-runtime` validateCompositeRuntime と同値。",
           "properties": {
             "kind": {
@@ -524,7 +782,12 @@
               "items": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["id", "provider", "engine", "entry"],
+                "required": [
+                  "id",
+                  "provider",
+                  "engine",
+                  "entry"
+                ],
                 "properties": {
                   "id": {
                     "type": "string",
@@ -556,7 +819,10 @@
     "simulationOverlay": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "entry"],
+      "required": [
+        "schemaVersion",
+        "entry"
+      ],
       "description": "[TenkaCloud Issue 2574] IaC/IAM/metadata から導出できない Simulator workload または data-plane requirement だけを補う versioned overlay 参照。採点条件・答え・secret は overlay に移さない。詳細は SIMULATION.md。",
       "properties": {
         "schemaVersion": {
@@ -592,21 +858,44 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "name": { "type": "string" },
-            "shortDescription": { "type": "string" },
-            "description": { "type": "string" },
-            "writeup": { "type": "string", "minLength": 1 },
-            "instructions": { "type": "string" },
-            "learningGoals": { "type": "array", "items": { "type": "string", "minLength": 1 } },
-            "hints": { "$ref": "#/$defs/localizedHints" },
-            "checks": { "$ref": "#/$defs/localizedChecks" }
+            "name": {
+              "type": "string"
+            },
+            "shortDescription": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "writeup": {
+              "type": "string",
+              "minLength": 1
+            },
+            "instructions": {
+              "type": "string"
+            },
+            "learningGoals": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "hints": {
+              "$ref": "#/$defs/localizedHints"
+            },
+            "checks": {
+              "$ref": "#/$defs/localizedChecks"
+            }
           }
         }
       }
     },
     "cfnParameters": {
       "type": "object",
-      "additionalProperties": { "type": "string" },
+      "additionalProperties": {
+        "type": "string"
+      },
       "description": "CFn template の Parameters に渡す値を {ParameterName: value} で宣言する。`NamePrefix` は script が自動注入するので含めない。`__RANDOM_PASSWORD__` を value にすると、deploy ごとに 32 桁ランダム英数字を生成して渡す (DbPassword 等の secret 用途)。省略可 (Parameters 全部に default が付いているテンプレートでは不要)。"
     },
     "endpoints": {
@@ -615,7 +904,10 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["slot", "default"],
+        "required": [
+          "slot",
+          "default"
+        ],
         "properties": {
           "slot": {
             "type": "string",
@@ -625,11 +917,16 @@
           "default": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["from", "key"],
+            "required": [
+              "from",
+              "key"
+            ],
             "properties": {
               "from": {
                 "type": "string",
-                "enum": ["cfn-output"],
+                "enum": [
+                  "cfn-output"
+                ],
                 "description": "default URL の供給源。現状は cfn-output のみサポート (= deploy 後の CFn Outputs から OutputKey で取得)。"
               },
               "key": {
@@ -665,7 +962,11 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "flagOutputKey", "points"],
+          "required": [
+            "kind",
+            "flagOutputKey",
+            "points"
+          ],
           "properties": {
             "kind": {
               "const": "flag",
@@ -685,15 +986,22 @@
               "minimum": 0,
               "description": "[Issue #817] 不正解 1 回ごとに score から減算する値 (= brute-force 対策)。 0 は減点無し (default)。 team score は 0 未満にならない (= clamp)。"
             },
-            "hints": { "$ref": "#/$defs/progressiveHints" },
-            "hintReveal": { "$ref": "#/$defs/hintRevealMode" }
+            "hints": {
+              "$ref": "#/$defs/progressiveHints"
+            },
+            "hintReveal": {
+              "$ref": "#/$defs/hintRevealMode"
+            }
           },
           "description": "kind=flag (= Challenge 1 回提出形式)。example: hello-world は SSM Parameter 値を当てて +100 pt。 wrongAnswerPenalty を設定すると不正解 1 回ごとに減点する (= brute-force 防止)。 hintReveal=\"flat\" で hint を任意順に開けられる (既定 sequential)。"
         },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "points"],
+          "required": [
+            "kind",
+            "points"
+          ],
           "properties": {
             "kind": {
               "const": "verify",
@@ -709,15 +1017,22 @@
               "minimum": 0,
               "description": "[Issue #817] 不正解 1 回ごとに減算する値 (default 0、 brute-force 対策)。"
             },
-            "hints": { "$ref": "#/$defs/progressiveHints" },
-            "hintReveal": { "$ref": "#/$defs/hintRevealMode" }
+            "hints": {
+              "$ref": "#/$defs/progressiveHints"
+            },
+            "hintReveal": {
+              "$ref": "#/$defs/hintRevealMode"
+            }
           },
           "description": "kind=verify (= container 問題、 採点は問題側 /verify に委譲)。 答え・隠しテストはコンテナ内にのみ存在する。 hintReveal=\"flat\" で hint を任意順に開けられる (既定 sequential)。"
         },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "checks"],
+          "required": [
+            "kind",
+            "checks"
+          ],
           "properties": {
             "kind": {
               "const": "multi-verify",
@@ -732,7 +1047,11 @@
               "items": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["id", "label", "points"],
+                "required": [
+                  "id",
+                  "label",
+                  "points"
+                ],
                 "properties": {
                   "id": {
                     "type": "string",
@@ -755,18 +1074,25 @@
                     "minimum": 0,
                     "description": "この check への不正解 1 回ごとの減点 (default 0)。"
                   },
-                  "hints": { "$ref": "#/$defs/progressiveHints" }
+                  "hints": {
+                    "$ref": "#/$defs/progressiveHints"
+                  }
                 }
               }
             },
-            "hintReveal": { "$ref": "#/$defs/hintRevealMode" }
+            "hintReveal": {
+              "$ref": "#/$defs/hintRevealMode"
+            }
           },
           "description": "kind=multi-verify (= container 問題の複数チェックポイント、 TenkaCloud#2252)。 採点は check ごとに問題側 /verify (checkpointId 必須 echo) に委譲する。 hintReveal=\"flat\" で全 check の hint を任意順に開けられる (既定 sequential)。"
         },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "flags"],
+          "required": [
+            "kind",
+            "flags"
+          ],
           "properties": {
             "kind": {
               "const": "multi-flag",
@@ -779,7 +1105,12 @@
               "items": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["id", "label", "flagOutputKey", "points"],
+                "required": [
+                  "id",
+                  "label",
+                  "flagOutputKey",
+                  "points"
+                ],
                 "properties": {
                   "id": {
                     "type": "string",
@@ -806,7 +1137,9 @@
                     "minimum": 0,
                     "description": "[Issue #817] この flag の不正解 1 回ごとの減点 (= flag ごとに独立)。0 は減点無し (default)。team score は 0 未満にならない (= clamp)。"
                   },
-                  "hints": { "$ref": "#/$defs/progressiveHints" }
+                  "hints": {
+                    "$ref": "#/$defs/progressiveHints"
+                  }
                 }
               }
             }
@@ -816,7 +1149,11 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "endpoints", "pointsPerSuccess"],
+          "required": [
+            "kind",
+            "endpoints",
+            "pointsPerSuccess"
+          ],
           "properties": {
             "kind": {
               "const": "uptime",
@@ -829,7 +1166,11 @@
               "items": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["outputKey", "path", "expectStatus"],
+                "required": [
+                  "outputKey",
+                  "path",
+                  "expectStatus"
+                ],
                 "properties": {
                   "outputKey": {
                     "type": "string",
@@ -841,7 +1182,11 @@
                   },
                   "expectStatus": {
                     "type": "array",
-                    "items": { "type": "integer", "minimum": 100, "maximum": 599 },
+                    "items": {
+                      "type": "integer",
+                      "minimum": 100,
+                      "maximum": 599
+                    },
                     "minItems": 1,
                     "description": "期待する HTTP status code 群 (例: [200, 204])。"
                   }
@@ -858,14 +1203,20 @@
               "maximum": 0,
               "description": "health-check 失敗 tick の score delta (opt-in)。 負値で減点、 省略時 0 (= 従来挙動)。 uptime-flat と同じ。"
             },
-            "hints": { "$ref": "#/$defs/progressiveHints" }
+            "hints": {
+              "$ref": "#/$defs/progressiveHints"
+            }
           },
           "description": "kind=uptime (legacy)。 Phase 2 transition 期間中の互換用。 新規問題は kind=uptime-flat を使うこと。"
         },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "endpoints", "pointsPerSuccess"],
+          "required": [
+            "kind",
+            "endpoints",
+            "pointsPerSuccess"
+          ],
           "properties": {
             "kind": {
               "const": "uptime-flat",
@@ -878,7 +1229,10 @@
               "items": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["path", "expectStatus"],
+                "required": [
+                  "path",
+                  "expectStatus"
+                ],
                 "properties": {
                   "slot": {
                     "type": "string",
@@ -894,7 +1248,11 @@
                   },
                   "expectStatus": {
                     "type": "array",
-                    "items": { "type": "integer", "minimum": 100, "maximum": 599 },
+                    "items": {
+                      "type": "integer",
+                      "minimum": 100,
+                      "maximum": 599
+                    },
                     "minItems": 1,
                     "description": "期待する HTTP status code 群 (例: [200, 204])。"
                   },
@@ -916,14 +1274,20 @@
               "maximum": 0,
               "description": "health-check 失敗 tick の score delta (opt-in)。 負値で減点 (例: -100)、 省略時 0 (= 加点しないだけ、 従来挙動)。 Battle で「落とされたら減点」を有効化したい問題が指定する。 uptime-multi.failurePenalty と同契約。"
             },
-            "hints": { "$ref": "#/$defs/progressiveHints" }
+            "hints": {
+              "$ref": "#/$defs/progressiveHints"
+            }
           },
           "description": "kind=uptime-flat。example: hello-world-battle (FrontendUrl + ApiUrl を独立に probe)。"
         },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "probedSlots", "pointsAllOk"],
+          "required": [
+            "kind",
+            "probedSlots",
+            "pointsAllOk"
+          ],
           "properties": {
             "kind": {
               "const": "uptime-multi",
@@ -936,16 +1300,27 @@
               "items": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["slot", "path", "expectStatus"],
+                "required": [
+                  "slot",
+                  "path",
+                  "expectStatus"
+                ],
                 "properties": {
                   "slot": {
                     "type": "string",
                     "description": "metadata.endpoints[].slot 名と一致させる。"
                   },
-                  "path": { "type": "string", "description": "endpoint URL に追加する path。" },
+                  "path": {
+                    "type": "string",
+                    "description": "endpoint URL に追加する path。"
+                  },
                   "expectStatus": {
                     "type": "array",
-                    "items": { "type": "integer", "minimum": 100, "maximum": 599 },
+                    "items": {
+                      "type": "integer",
+                      "minimum": 100,
+                      "maximum": 599
+                    },
                     "minItems": 1,
                     "description": "期待する HTTP status code 群。"
                   }
@@ -964,12 +1339,26 @@
             "attackBlocked": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["slot", "path", "pointsPerBlock"],
+              "required": [
+                "slot",
+                "path",
+                "pointsPerBlock"
+              ],
               "description": "[ADR-034 / #1666] 任意。 アプリが露出する『攻撃ブロック回数』counter endpoint を採点 tick が live probe し、 前回からの増分に pointsPerBlock を掛けて加点する (= 防御成功の加点)。",
               "properties": {
-                "slot": { "type": "string", "description": "probe する slot 名 (endpoints[].slot)。" },
-                "path": { "type": "string", "description": "counter (整数) を返す endpoint path。" },
-                "pointsPerBlock": { "type": "integer", "minimum": 1, "description": "1 ブロックあたりの加点。" }
+                "slot": {
+                  "type": "string",
+                  "description": "probe する slot 名 (endpoints[].slot)。"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "counter (整数) を返す endpoint path。"
+                },
+                "pointsPerBlock": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "1 ブロックあたりの加点。"
+                }
               }
             },
             "attackProbes": {
@@ -978,30 +1367,66 @@
               "items": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["slot", "path", "vulnerableStatus", "penalty"],
+                "required": [
+                  "slot",
+                  "path",
+                  "vulnerableStatus",
+                  "penalty"
+                ],
                 "properties": {
-                  "slot": { "type": "string", "description": "攻撃を送る slot 名 (endpoints[].slot)。" },
-                  "path": { "type": "string", "description": "攻撃対象の endpoint path。" },
-                  "method": { "type": "string", "enum": ["GET", "POST"], "description": "HTTP method (既定 GET)。" },
-                  "body": { "type": "string", "description": "POST 時に送る攻撃 payload (JSON 文字列)。" },
+                  "slot": {
+                    "type": "string",
+                    "description": "攻撃を送る slot 名 (endpoints[].slot)。"
+                  },
+                  "path": {
+                    "type": "string",
+                    "description": "攻撃対象の endpoint path。"
+                  },
+                  "method": {
+                    "type": "string",
+                    "enum": [
+                      "GET",
+                      "POST"
+                    ],
+                    "description": "HTTP method (既定 GET)。"
+                  },
+                  "body": {
+                    "type": "string",
+                    "description": "POST 時に送る攻撃 payload (JSON 文字列)。"
+                  },
                   "vulnerableStatus": {
                     "type": "array",
-                    "items": { "type": "integer", "minimum": 100, "maximum": 599 },
+                    "items": {
+                      "type": "integer",
+                      "minimum": 100,
+                      "maximum": 599
+                    },
                     "minItems": 1,
                     "description": "防御が破れたとみなす応答 status 群 (例: SQLi auth bypass = 200)。"
                   },
-                  "penalty": { "type": "integer", "minimum": 1, "description": "脆弱なときに引く点数。" }
+                  "penalty": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "脆弱なときに引く点数。"
+                  }
                 }
               }
             },
-            "hints": { "$ref": "#/$defs/progressiveHints" }
+            "hints": {
+              "$ref": "#/$defs/progressiveHints"
+            }
           },
           "description": "kind=uptime-multi。example: security-battle-royale (frontend + api 同時生存中だけ加点)。"
         },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "intervalMinutes", "probe", "platformRules"],
+          "required": [
+            "kind",
+            "intervalMinutes",
+            "probe",
+            "platformRules"
+          ],
           "properties": {
             "kind": {
               "const": "phased-polling",
@@ -1015,7 +1440,10 @@
             "probe": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["metaPath", "scorePath"],
+              "required": [
+                "metaPath",
+                "scorePath"
+              ],
               "properties": {
                 "metaPath": {
                   "type": "string",
@@ -1037,7 +1465,9 @@
               "additionalProperties": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["points"],
+                "required": [
+                  "points"
+                ],
                 "properties": {
                   "points": {
                     "type": "integer",
@@ -1061,13 +1491,19 @@
               "items": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["if", "points"],
+                "required": [
+                  "if",
+                  "points"
+                ],
                 "properties": {
                   "if": {
                     "type": "string",
                     "description": "条件式 (DSL 文字列)。Phase 3 で parser を decide。 例: 'responseTimeMs > 1500'。"
                   },
-                  "points": { "type": "integer", "description": "条件成立時の加点。" }
+                  "points": {
+                    "type": "integer",
+                    "description": "条件成立時の加点。"
+                  }
                 }
               }
             },
@@ -1077,33 +1513,47 @@
               "items": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["kind", "points"],
+                "required": [
+                  "kind",
+                  "points"
+                ],
                 "properties": {
                   "kind": {
                     "type": "string",
                     "description": "bonus 種別。 'all-slots-on-platforms' (= 全 slot が platforms 集合の platform に乗ったら付与、 membership)。 'all-slots-distinct-platforms' (= 全 slot が platforms 集合に乗り、 かつ全 slot 互いに異なる platform のとき付与、 'one each')。 いずれも hosting tier は登録 URL の host から検証される (自己申告の /meta は不可、 platform TenkaCloud#2420)。"
                   },
-                  "points": { "type": "integer", "description": "獲得ポイント。" },
+                  "points": {
+                    "type": "integer",
+                    "description": "獲得ポイント。"
+                  },
                   "once": {
                     "type": "boolean",
                     "description": "true なら 1 deploy につき 1 回。 false / 省略時は条件成立中ずっと加点。"
                   },
                   "platforms": {
                     "type": "array",
-                    "items": { "type": "string" },
+                    "items": {
+                      "type": "string"
+                    },
                     "description": "kind='all-slots-on-platforms' / 'all-slots-distinct-platforms' の時、 全 slot が乗っている必要のある platform 群 (= 許可集合)。 distinct 版は加えて全 slot が互いに異なる platform であることを要求する。"
                   }
                 }
               }
             },
-            "hints": { "$ref": "#/$defs/progressiveHints" }
+            "hints": {
+              "$ref": "#/$defs/progressiveHints"
+            }
           },
           "description": "kind=phased-polling。example: microservice-migration-battle (EC2 vs Lambda/ECS/App Runner の hosting platform 分類 + 60 分劣化 + 90 分 legacy 切替)。"
         },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "statsOutputKey", "pointsPerAttack"],
+          "required": [
+            "kind",
+            "statsOutputKey",
+            "pointsPerAttack"
+          ],
           "properties": {
             "kind": {
               "const": "attack-detection",
@@ -1124,7 +1574,9 @@
               "items": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["name"],
+                "required": [
+                  "name"
+                ],
                 "properties": {
                   "name": {
                     "type": "string",
@@ -1137,14 +1589,21 @@
                 }
               }
             },
-            "hints": { "$ref": "#/$defs/progressiveHints" }
+            "hints": {
+              "$ref": "#/$defs/progressiveHints"
+            }
           },
           "description": "kind=attack-detection。example: security-battle-royale の攻撃検知部 (= 防御側が WAF/IAM で塞ぐと検知数が頭打ちする設計)。"
         },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "success", "pointsAllOk", "targets"],
+          "required": [
+            "kind",
+            "success",
+            "pointsAllOk",
+            "targets"
+          ],
           "properties": {
             "kind": {
               "const": "composite-probe",
@@ -1166,7 +1625,11 @@
               "items": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["targetId", "probe", "outputKey"],
+                "required": [
+                  "targetId",
+                  "probe",
+                  "outputKey"
+                ],
                 "properties": {
                   "targetId": {
                     "type": "string",
@@ -1188,13 +1651,17 @@
                   "expectStatus": {
                     "type": "array",
                     "minItems": 1,
-                    "items": { "type": "integer" },
+                    "items": {
+                      "type": "integer"
+                    },
                     "description": "成功とみなす HTTP status の集合 (省略時は 200)。"
                   }
                 }
               }
             },
-            "hints": { "$ref": "#/$defs/progressiveHints" }
+            "hints": {
+              "$ref": "#/$defs/progressiveHints"
+            }
           },
           "description": "kind=composite-probe (= Composite Runtime 用)。 example: hello-multicloud は AWS Lambda Function URL と Google Cloud Run の両方が 200 を返すときだけ +100 pt。"
         }
@@ -1206,7 +1673,11 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["name", "afterMinutes", "effect"],
+        "required": [
+          "name",
+          "afterMinutes",
+          "effect"
+        ],
         "properties": {
           "name": {
             "type": "string",
@@ -1228,7 +1699,9 @@
               },
               "switchPlatformToDegraded": {
                 "type": "array",
-                "items": { "type": "string" },
+                "items": {
+                  "type": "string"
+                },
                 "description": "指定 platform を degraded 状態に切替 (= platformRules.degradedPoints を適用)。"
               }
             },
@@ -1251,7 +1724,11 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "name", "eventDetailType"],
+        "required": [
+          "id",
+          "name",
+          "eventDetailType"
+        ],
         "properties": {
           "id": {
             "type": "string",
@@ -1269,7 +1746,9 @@
           },
           "operatorEditable": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "description": "operator が deploy 時に上書きできる parameter キーの allow-list。 default は editable なし。"
           },
           "parameters": {
@@ -1297,7 +1776,10 @@
                 {
                   "type": "object",
                   "additionalProperties": false,
-                  "required": ["kind", "afterMinutes"],
+                  "required": [
+                    "kind",
+                    "afterMinutes"
+                  ],
                   "properties": {
                     "kind": {
                       "const": "after-deploy",
@@ -1313,19 +1795,28 @@
                 {
                   "type": "object",
                   "additionalProperties": false,
-                  "required": ["kind", "threshold"],
+                  "required": [
+                    "kind",
+                    "threshold"
+                  ],
                   "properties": {
                     "kind": {
                       "const": "team-score-above",
                       "description": "team の累計 score が threshold を上回ったら発火 (= 強チームへの handicap、 ゲームバランス調整用)。"
                     },
-                    "threshold": { "type": "integer", "minimum": 0 }
+                    "threshold": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
                   }
                 },
                 {
                   "type": "object",
                   "additionalProperties": false,
-                  "required": ["kind", "phaseName"],
+                  "required": [
+                    "kind",
+                    "phaseName"
+                  ],
                   "properties": {
                     "kind": {
                       "const": "phase-entered",
@@ -1343,12 +1834,20 @@
           "action": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["kind", "targetRef", "revert"],
+            "required": [
+              "kind",
+              "targetRef",
+              "revert"
+            ],
             "description": "[ADR-031 / Issue #1419] operator fire を競技者アカウントへ届けて実際に障害を注入するための宣言的アクション。 executor が AssumeRole 後に kind に応じた API を 1 本叩く。 省略時は Phase A (= 監査のみ、 障害は起きない) のままで後方互換。 障害の中身は問題が所有 (platform は kind を dispatch するだけ)。",
             "properties": {
               "kind": {
                 "type": "string",
-                "enum": ["ssm-run-command", "lambda-invoke", "cfn-stack-update"],
+                "enum": [
+                  "ssm-run-command",
+                  "lambda-invoke",
+                  "cfn-stack-update"
+                ],
                 "description": "実行種別。 ssm-run-command=ssm:SendCommand / lambda-invoke=lambda:InvokeFunction / cfn-stack-update=cloudformation:UpdateStack。"
               },
               "targetRef": {
@@ -1372,7 +1871,9 @@
               "revert": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["afterSeconds"],
+                "required": [
+                  "afterSeconds"
+                ],
                 "description": "[ADR-029 INV-2] 復旧宣言。 「いかなる disruption も永続しない」を保証するため必須。 executor は注入と同時に revert を予約する。",
                 "properties": {
                   "afterSeconds": {
@@ -1397,12 +1898,18 @@
           "effect": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["kind", "points", "durationSeconds"],
+            "required": [
+              "kind",
+              "points",
+              "durationSeconds"
+            ],
             "description": "[ADR-033 / Issue #1665] disruption の採点上の効果 (= 実クラウドへの fault 注入を伴わず、 採点エンジンが active window の間 team の点に直接与える効果)。 action とは別レイヤで実クラウド不要。 省略時は効果なし (後方互換)。",
             "properties": {
               "kind": {
                 "type": "string",
-                "enum": ["penalty"],
+                "enum": [
+                  "penalty"
+                ],
                 "description": "効果種別。 penalty=active window の各採点 tick で points を減点する。"
               },
               "points": {
@@ -1421,7 +1928,10 @@
           "recurrence": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["intervalMinutes", "maxFires"],
+            "required": [
+              "intervalMinutes",
+              "maxFires"
+            ],
             "description": "[ADR-037 Slice 3] triggers[] で条件発火したとき、 1 回で終わらず定期実行する宣言 (= 「スコア一定以上で定期妨害」)。 宣言時、 platform は trigger 成立で recurrence を載せて発火し、 executor が rate(intervalMinutes) schedule を作って maxFires 回くり返した後 自動停止する (= ADR-029 いかなる disruption も永続しない)。 省略時は 1 回だけ発火 (後方互換)。 operator の手動 fire と同じ上限。",
             "properties": {
               "intervalMinutes": {
@@ -1444,7 +1954,9 @@
     "interTeamCoordination": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["plugin"],
+      "required": [
+        "plugin"
+      ],
       "description": "[ADR-028 / Issue #1420] opt-in の参加者間 coordination 宣言。 platform の dispatcher Lambda が `plugin` の CoordinationPlugin (= @tenkacloud/coordination-plugin-sdk の contract) を実行し、 tenant/event 単位の 1 row state を validate→apply→project で駆動する。 同盟 / ルーティング / 共有資源 queue 等の意味論は問題側 plugin に閉じ、 platform は host のみ (= 問題ごとに差し替え可能、 platform に hardcode しない)。 省略した問題は coordination 無効 (= safe fallback で portal は通常表示)。 aiContext: Battle で「他チームと干渉する遊び」を足す時に使う。",
       "properties": {
         "plugin": {
@@ -1479,7 +1991,11 @@
             "description": "問題 dir からの相対 path で portal component (.tsx) を指す。 plugin loader (= apps/participant-portal/src/plugins/loader.ts) の glob が `problems/<category>/<id>/portal/*.tsx` のみ discover するため、 `portal/<file>.tsx` 形式に限定する。"
           },
           "propertyNames": {
-            "enum": ["StatusPanel", "RegistrationPanel", "HelpDrawer"]
+            "enum": [
+              "StatusPanel",
+              "RegistrationPanel",
+              "HelpDrawer"
+            ]
           },
           "description": "slot 名 → component path の map。 slot 名は portal が予約した literal (= StatusPanel / RegistrationPanel / HelpDrawer) のみ valid。 unknown slot 名は plugin loader が iterate しない (= 黙って drop) ので SCHEMA で reject する。 SDK の `PORTAL_SLOT_NAMES` literal と同期。"
         }

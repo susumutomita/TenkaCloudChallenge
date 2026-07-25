@@ -241,6 +241,72 @@ The skill (`.claude/skills/new-problem/SKILL.md`) walks the 6 steps below, dropp
 
 6. **Open a PR.** One problem per PR. Conventional commits: `feat(<slug>): add <name> Challenge` or `Battle`. The PR triggers schema + cross-ref CI; merge after it passes.
 
+## Aligning a problem with an external course (`courseAlignment`)
+
+Optional. Only for problems written to accompany a course that lives outside this
+repository. Existing problems are unaffected — omit the field and nothing changes.
+
+`track` already says *where in a curriculum* a problem sits. `courseAlignment`
+says *which external material it accompanies, at which version, and how close it
+comes to that material's own exercise*.
+
+```json
+{
+  "track": {
+    "id": "advanced-cryptography-2026",
+    "order": 330,
+    "chapter": "Week 3 / Elliptic Curves / Group Law"
+  },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 3,
+    "role": "assignment-companion",
+    "spoilerPolicy": "independent-reimplementation",
+    "sources": [
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        "path": "week3/problems/schnorr-from-scratch/README.md",
+        "kind": "assignment"
+      }
+    ]
+  }
+}
+```
+
+Rules the validator enforces:
+
+- **`ref` is a 40-hex commit SHA.** A branch or tag is rejected, so alignment can
+  never silently follow upstream's moving `main`.
+- **`path` has no `..` segment, no leading `/`, and no URL escape.**
+- **No two `sources[]` entries pin the same file at the same commit.**
+- **A course-bound `track.id` requires a matching `courseId` / `edition`**, and a
+  problem on such a track must declare `courseAlignment` at all. The binding table
+  is `TRACK_COURSE_BINDING` in `scripts/validate-problems.ts`.
+- **`spoilerPolicy: "embargoed"` cannot ship with `status: "ready"`.** Embargoed
+  content stays a draft until it is released.
+
+What reaches participants: `index.json` projects `courseId`, `edition`, `week`,
+`role`, and `sources` — and projects **nothing at all** for an embargoed problem.
+`spoilerPolicy` is authoring metadata and is never projected.
+
+`role` places the problem relative to the course's own exercise:
+`diagnostic` (before the lecture) · `mechanism` (observe the internals) ·
+`assignment-companion` (build the understanding the exercise assumes, **without**
+giving away its answer) · `transfer` (apply it in a changed setting) ·
+`synthesis` (combine several weeks).
+
+Reuse, attribution, and spoiler rules for a given course live in
+`docs/curricula/<track-id>/GOVERNANCE.md`; the week-by-week mapping lives in
+`curriculum.md` beside it. **Adding a course-aligned problem means adding its row
+to that curriculum map in the same PR** — an unmapped problem cannot be reviewed
+for order or spoiler risk.
+
+Run `bun run course:drift` (also weekly in CI) to see whether a pinned source has
+changed upstream. It never re-pins for you: a changed exercise may mean "re-pin",
+or may mean "the exercise was revised and this companion is now wrong".
+
 ## Extending the platform contract
 
 Anything outside what's documented here — a new `scoring.kind`, a new `dashboard.slot` name, a new `phases[].effect` field — requires a parallel change in the [platform repo](https://github.com/susumutomita/TenkaCloud) (`SCHEMA.json` is shared between the two). Open an issue describing the new mechanic before writing the problem; otherwise the validator and the scoring engine will diverge.

@@ -1,0 +1,69 @@
+name: course-drift
+
+# [#214] Weekly check that every `courseAlignment.sources[]` pin still matches the
+# upstream course material it was reviewed against.
+#
+# The pin is a record of "which version of the course this alignment was checked
+# against" (docs/curricula/<track>/GOVERNANCE.md §5). Upstream keeps moving, so
+# without this the pin quietly becomes a claim nobody has re-verified.
+#
+# This workflow never re-pins anything. Drift can mean "re-pin, the alignment
+# still holds" or "the exercise was revised and our companion is now wrong", and
+# only a human can tell those apart. It reports and stops.
+
+permissions:
+  contents: read
+
+on:
+  schedule:
+    # Mondays 01:23 UTC — offset from submodule-sync so the two never contend.
+    - cron: "23 1 * * 1"
+  workflow_dispatch:
+  pull_request:
+    # Re-check whenever a pin or the checker itself changes, so a bad SHA is
+    # caught in review rather than by the next weekly run.
+    paths:
+      - "battles/*/metadata.json"
+      - "challenges/*/metadata.json"
+      - "scripts/check-course-drift.ts"
+      - ".github/workflows/course-drift.yml"
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CI: "true"
+      npm_config_ignore_scripts: "true"
+    steps:
+      - name: Checkout
+        # actions/checkout v4.3.1 (= pin matches ci.yml)
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Setup Bun
+        # oven-sh/setup-bun v2.0.2 (= pin matches ci.yml)
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: "1.3.11"
+
+      - name: Install deps
+        run: bun install --ignore-scripts
+
+      - name: Check course source drift
+        id: drift
+        # GITHUB_TOKEN only raises the anonymous rate limit; the source
+        # repositories are public and are read with contents:read.
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: bun run course:drift | tee "$RUNNER_TEMP/drift.txt"
+
+      - name: Summarize
+        if: always()
+        run: |
+          {
+            echo "## Course source drift"
+            echo
+            echo '```text'
+            cat "$RUNNER_TEMP/drift.txt" 2>/dev/null || echo "(no report produced)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

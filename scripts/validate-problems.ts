@@ -769,23 +769,103 @@ export function checkCheckLabelSpoilerAdvisory(meta: Metadata): ValidationError[
   return warnings;
 }
 
+/**
+ * [TenkaCloudChallenge#211] course alignment の cross-field 検証。
+ *
+ * SCHEMA.json は 1 field ずつの形しか見られないので、 field をまたぐ規律はここで見る。
+ *   - path traversal (schema の pattern を抜ける `a/../b` のような途中セグメント)
+ *   - 同一 source entry の重複 (= 同じ教材版を二重に指す)
+ *   - track.id と courseId / edition の不整合 (= track だけ直して alignment を直し忘れ)
+ *   - embargoed なのに参加者へ配信可能 (status=ready) という組み合わせ
+ *
+ * 学習順序 (relations.type=requires) と track 内の並び (track.order) は正本が別にあるので、
+ * ここでは重複定義も検証もしない。
+ */
+const TRACK_COURSE_BINDING: Readonly<Record<string, { courseId: string; edition: string }>> = {
+  "advanced-cryptography-2026": {
+    courseId: "advanced-cryptography-program",
+    edition: "2026",
+  },
+};
+
+export function checkCourseAlignment(meta: Metadata): ValidationError[] {
+  const alignment = meta.courseAlignment as Record<string, unknown> | undefined;
+  const track = meta.track as { id?: unknown } | undefined;
+  const trackId = typeof track?.id === "string" ? track.id : undefined;
+  const binding = trackId ? TRACK_COURSE_BINDING[trackId] : undefined;
+
+  if (alignment === undefined) {
+    // track が講座に束縛されているのに alignment が無い = 対応表から辿れない問題。
+    return binding
+      ? [
+          `track.id="${trackId}" requires courseAlignment (courseId="${binding.courseId}", edition="${binding.edition}") — see docs/curricula/${trackId}/curriculum.md`,
+        ]
+      : [];
+  }
+
+  const errors: ValidationError[] = [];
+  if (binding) {
+    if (alignment.courseId !== binding.courseId) {
+      errors.push(
+        `courseAlignment.courseId must be "${binding.courseId}" for track.id="${trackId}", got ${JSON.stringify(alignment.courseId)}`,
+      );
+    }
+    if (alignment.edition !== binding.edition) {
+      errors.push(
+        `courseAlignment.edition must be "${binding.edition}" for track.id="${trackId}", got ${JSON.stringify(alignment.edition)}`,
+      );
+    }
+  }
+
+  if (alignment.spoilerPolicy === "embargoed" && meta.status === "ready") {
+    errors.push(
+      'courseAlignment.spoilerPolicy="embargoed" cannot ship with status="ready" — an embargoed problem must not reach participants (keep status="draft" until it is released)',
+    );
+  }
+
+  const sources = Array.isArray(alignment.sources)
+    ? (alignment.sources as Array<Record<string, unknown>>)
+    : [];
+  const seen = new Set<string>();
+  sources.forEach((source, i) => {
+    const sourcePath = typeof source.path === "string" ? source.path : "";
+    // schema の pattern は先頭 / と % を弾くが、 途中の `..` セグメントは通る。
+    if (sourcePath.split("/").includes("..")) {
+      errors.push(
+        `courseAlignment.sources[${i}].path must not contain a ".." segment: ${sourcePath}`,
+      );
+    }
+    const key = `${String(source.repository)}@${String(source.ref)}:${sourcePath}`;
+    if (seen.has(key)) {
+      errors.push(`courseAlignment.sources[${i}] duplicates an earlier entry: ${key}`);
+    }
+    seen.add(key);
+  });
+
+  return errors;
+}
+
 function checkCrossRefs(metaPath: string, meta: Metadata): CrossRefResult {
   const dir = dirname(metaPath);
-  const simulationErrors = checkSimulationOverlay(metaPath, meta);
+  // runtime (CFn / container / composite) に関係なく全問題へ効く検証。
+  const runtimeAgnosticErrors = [
+    ...checkSimulationOverlay(metaPath, meta),
+    ...checkCourseAlignment(meta),
+  ];
   if (isCompositeProblem(meta)) {
     const result = checkCompositeRefs(dir, meta);
-    return { ...result, errors: [...simulationErrors, ...result.errors] };
+    return { ...result, errors: [...runtimeAgnosticErrors, ...result.errors] };
   }
   if (isContainerProblem(meta)) {
     const result = checkContainerRefs(dir, meta);
-    return { ...result, errors: [...simulationErrors, ...result.errors] };
+    return { ...result, errors: [...runtimeAgnosticErrors, ...result.errors] };
   }
   const cfnTemplate = typeof meta.cfnTemplate === "string" ? meta.cfnTemplate : "template.yaml";
   const templatePath = join(dir, cfnTemplate);
 
   if (!existsSync(templatePath)) {
     return {
-      errors: [...simulationErrors, `cfnTemplate file "${cfnTemplate}" not found`],
+      errors: [...runtimeAgnosticErrors, `cfnTemplate file "${cfnTemplate}" not found`],
       warnings: [],
     };
   }
@@ -801,7 +881,7 @@ function checkCrossRefs(metaPath: string, meta: Metadata): CrossRefResult {
       : [];
   return {
     errors: [
-      ...simulationErrors,
+      ...runtimeAgnosticErrors,
       ...containerOnlyKindErrors,
       ...checkInstructionsPresent(meta),
       ...checkWriteupTranslations(meta),
