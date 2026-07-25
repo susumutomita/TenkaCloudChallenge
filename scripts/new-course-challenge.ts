@@ -116,7 +116,9 @@ const EXERCISE_REFERENCES: ReadonlyArray<readonly [string, string]> = [
   ["tests/public/test_counter.py", "tests/public/test_exercise.py"],
   ["tests.hidden.check_counter", "tests.hidden.check_exercise"],
   ["starter.counter", "starter.exercise"],
-  ["local/starter/counter.py", "local/starter/exercise.py"],
+  // `make reset` restores the whole `local/starter/` directory, so no Makefile
+  // rule names a starter file for this to repoint. Kept out deliberately: a rewrite
+  // rule for a reference that no longer exists is the next thing to rot.
   ["starter/counter.py", "starter/exercise.py"],
   ['"reference" / "counter.py"', '"reference" / "exercise.py"'],
   ["from counter import", "from exercise import"],
