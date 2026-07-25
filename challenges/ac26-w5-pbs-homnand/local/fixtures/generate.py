@@ -341,14 +341,25 @@ def lwe_decrypt(par: dict, secret, sample: dict) -> int:
     return decode(par, lwe_phase(par, secret, sample))
 
 
-def lwe_encrypt(seed: str, par: dict, secret, message: int, label: str, extra_noise: int = 0) -> dict:
-    """A fresh LWE encryption. `extra_noise` widens the drawn error, for the refresh demo."""
+def lwe_encrypt(
+    seed: str,
+    par: dict,
+    secret,
+    message: int,
+    label: str,
+    error: int | None = None,
+) -> dict:
+    """A fresh LWE encryption.
+
+    `error` forces an exact error rather than drawing one, which is what the refresh
+    demonstration needs: an input carrying a chosen amount of noise, bootstrapped, and the
+    output measured against a bound that does not mention it.
+    """
     s = _stream(seed, f"lwe:{label}")
-    width = NOISE_RANGE + extra_noise
     mask = tuple(_pick(s, 2 * i, 0, par["modulus"] - 1) for i in range(par["dimension"]))
-    error = _pick(s, 300, -width, width)
+    drawn = _pick(s, 300, -NOISE_RANGE, NOISE_RANGE) if error is None else error
     body = (
-        sum(a * x for a, x in zip(mask, secret)) + encode(par, message) + error
+        sum(a * x for a, x in zip(mask, secret)) + encode(par, message) + drawn
     ) % par["modulus"]
     return {"mask": mask, "body": body, "keyId": key_id(seed, "lwe"), "kind": "lwe"}
 
@@ -494,11 +505,13 @@ def digest(values) -> str:
     return hashlib.sha256(":".join(str(v) for v in values).encode()).hexdigest()[:12]
 
 
-def _lwe_digest(sample: dict) -> str:
+def lwe_digest(sample: dict) -> str:
+    """Mask then body, in order. Supplied so a trace row's digest is not a guessing game."""
     return digest((*sample["mask"], sample["body"]))
 
 
-def _rlwe_digest(par: dict, ciphertext: dict) -> str:
+def rlwe_digest(par: dict, ciphertext: dict) -> str:
+    """`a` then `b`, both padded to the degree. Same reason."""
     return digest((*_pad(par, ciphertext["a"]), *_pad(par, ciphertext["b"])))
 
 
@@ -521,30 +534,84 @@ def pipeline_trace(par: dict, key, switch: dict, sample: dict, table: dict) -> t
 
     source, target = switch["sourceKeyId"], switch["targetKeyId"]
     return (
-        _row("input", "lwe", target, par["dimension"], par["modulus"],
-             correctness_bound(par), _lwe_digest(sample)),
-        _row("rotation-domain", "lwe", target, par["dimension"], rotated_sample["modulus"],
-             (par["dimension"] + 1) // 2, _lwe_digest(rotated_sample)),
-        _row("accumulator", "rlwe", source, par["degree"], par["modulus"],
-             0, _rlwe_digest(par, accumulator)),
-        _row("blind-rotation", "rlwe", source, par["degree"], par["modulus"],
-             blind_rotation_noise(par), _rlwe_digest(par, rotated)),
-        _row("extraction", "lwe", source, par["degree"], par["modulus"],
-             blind_rotation_noise(par), _lwe_digest(extracted)),
-        _row("key-switch", "lwe", target, par["dimension"], par["modulus"],
-             output_noise_bound(par), _lwe_digest(switched)),
+        _row(par, "input", "lwe", target, par["dimension"], par["modulus"],
+             correctness_bound(par), MESSAGE_SEMANTICS["input"], lwe_digest(sample)),
+        _row(par, "rotation-domain", "lwe", target, par["dimension"], rotated_sample["modulus"],
+             (par["dimension"] + 1) // 2, MESSAGE_SEMANTICS["rotation-domain"],
+             lwe_digest(rotated_sample)),
+        _row(par, "accumulator", "rlwe", source, par["degree"], par["modulus"],
+             0, MESSAGE_SEMANTICS["accumulator"], rlwe_digest(par, accumulator)),
+        _row(par, "blind-rotation", "rlwe", source, par["degree"], par["modulus"],
+             blind_rotation_noise(par), MESSAGE_SEMANTICS["blind-rotation"],
+             rlwe_digest(par, rotated)),
+        _row(par, "extraction", "lwe", source, par["degree"], par["modulus"],
+             blind_rotation_noise(par), MESSAGE_SEMANTICS["extraction"], lwe_digest(extracted)),
+        _row(par, "key-switch", "lwe", target, par["dimension"], par["modulus"],
+             output_noise_bound(par), MESSAGE_SEMANTICS["key-switch"], lwe_digest(switched)),
     )
 
 
-def _row(stage: str, kind: str, key: str, dimension: int, modulus: int, bound: int, fingerprint: str) -> dict:
+#: What each artifact *means*, which is not the same question as what shape it has. Three
+#: assertions rather than a sentence, so they can be checked: whether the artifact carries
+#: the message at all, which message, and where in the artifact it sits.
+#:
+#: The accumulator is the one row carrying no message -- it carries the *function* -- and
+#: after the rotation `f(m)` sits at a single coefficient rather than throughout the
+#: polynomial. Both are read off this column instead of inferred from the final answer
+#: happening to be right.
+MESSAGE_SEMANTICS = {
+    "input": {"carriesMessage": True, "messageIs": "m", "located": "whole"},
+    "rotation-domain": {"carriesMessage": True, "messageIs": "m", "located": "whole"},
+    "accumulator": {"carriesMessage": False, "messageIs": None, "located": None},
+    "blind-rotation": {"carriesMessage": True, "messageIs": "f(m)", "located": "coefficient-0"},
+    "extraction": {"carriesMessage": True, "messageIs": "f(m)", "located": "whole"},
+    "key-switch": {"carriesMessage": True, "messageIs": "f(m)", "located": "whole"},
+}
+
+#: Every stage runs on ciphertexts and public keys alone. Neither secret is passed to any
+#: stage, which is why no row can name one.
+PUBLIC_INPUTS = ("ciphertexts", "bootstrapping key", "switching key", "parameters")
+WITHHELD = ("lwe secret", "ring secret")
+
+
+def _row(
+    par: dict, stage: str, kind: str, key: str, dimension: int, modulus: int,
+    bound: int, semantic: dict, fingerprint: str,
+) -> dict:
     return {
         "stage": stage,
         "kind": kind,
         "keyId": key,
         "dimension": dimension,
         "modulus": modulus,
+        "parameterSetId": par["parameterSetId"],
         "noiseBound": bound,
+        **semantic,
         "digest": fingerprint,
+    }
+
+
+#: The fields a trace row is graded on, in the order they read.
+ROW_FIELDS = (
+    "stage", "kind", "keyId", "dimension", "modulus", "parameterSetId",
+    "noiseBound", "carriesMessage", "messageIs", "located", "digest",
+)
+
+
+def refresh_report(par: dict, input_noise: int) -> dict:
+    """What the correctness contract says about one input, and what comes out regardless.
+
+    `outputNoiseBound` does not mention `input_noise` and does not vary with it. That is the
+    refresh stated as an equation rather than as a paragraph: read it twice with different
+    inputs and the number is the same, which is exactly why a bootstrapped ciphertext can be
+    bootstrapped again. `secondPassFits` says whether it actually can, at these parameters.
+    """
+    return {
+        "inputNoise": input_noise,
+        "correctnessBound": correctness_bound(par),
+        "outputNoiseBound": output_noise_bound(par),
+        "withinContract": abs(input_noise) <= correctness_bound(par),
+        "secondPassFits": 2 * output_noise_bound(par) <= correctness_bound(par),
     }
 
 

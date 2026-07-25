@@ -1,0 +1,650 @@
+{
+  "id": "ac26-w5-pbs-homnand",
+  "name": "暗号文のまま関数を引き、鍵を新品に戻す",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "advanced-cryptography-2026",
+    "order": 560,
+    "chapter": "Week 5 / Programmable Bootstrapping and HomNAND"
+  },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 5,
+    "role": "synthesis",
+    "spoilerPolicy": "independent-reimplementation",
+    "sources": [
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        "path": "week5/README.md",
+        "kind": "lecture"
+      },
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        "path": "week5/problems/tfhe-toy-python/README.md",
+        "kind": "assignment"
+      }
+    ]
+  },
+  "difficulty": 5,
+  "estimatedDuration": "105-150 分",
+  "shortDescription": "Week 5 の 5 問が作った部品を 1 本の Programmable Bootstrapping につなぎ、 最後に暗号文のまま NAND を評価する。 復号は 1 回も起きない。",
+  "description": "Week 5 の総合問題。 encoding/noise・LWE/RLWE・RGSW/external product・CMUX/blind rotation・sample extraction/key switching の 5 問が作った部品はすべて支給され、 この問題はそれらをつなぐ pipeline そのものと、 その上で 1 つのゲートを評価する部分を書く。\n\nbootstrapping を「noise を消す処理」とだけ覚えると、 なぜ関数が引けるのかも、 なぜ引ける関数に条件があるのかも説明できない。 実際に起きているのは、 暗号化された phase に対して lookup 関数を評価し、 出力を新しい鍵と domain へ戻す一連の変換で、 出てくる暗号文の noise が入力の noise を一切含まないことが「refresh」の中身。\n\nencoding が前問までと変わる。 `encode(1) = +q/8`、 `encode(0) = -q/8` の balanced encoding では復号が符号判定そのものになり、 符号判定は negacyclic rotation が `X^N = -1` によって無料で計算してくれる。 「PBS は任意の関数を評価できるわけではない」の具体的な中身はここにある。\n\nlookup table の上半分には `f(0)` ではなく `1 - f(0)` を書く。 rotation の巻き戻りが係数 0 に負号を付けて渡すからで、 balanced encoding では `-encode(x)` が `encode(1 - x)` になる。 これを間違えると 4 つの unary 関数のうち出力が定数でないものが `m = 0` 側だけ反転し、 真理値表の半分だけが壊れる。\n\n各 stage は数値だけでなく「その数値がどこに属するか」も返す。 kind・keyId・dimension・modulus・parameterSetId・noiseBound の 6 つで、 うち 2 つは pipeline の途中で変わる。 extraction は暗号文を ring secret の側 (次元 degree) へ移し、 key switching が元へ戻す。 正しい数値に間違ったラベルを付けた stage は、 次の stage が合わない暗号文と黙って結合する材料を作る。\n\nHomNAND は前処理が本体になる。 `(0, q/8) - c1 - c2` という 1 回の線形結合で、 4 通りの入力に対する phase が `3q/8, q/8, q/8, -q/8` になり、 `(1,1)` のときだけ負になる。 あとは identity table で 1 回 bootstrap するだけ。 平文の NAND はどこにも現れず、 lookup table の中にゲートは無い。\n\n採点の設計として、 この問題は 37 個の壊れた実装を同梱していて、 そのうち **21 個は真理値表が完全に通る**。 全 unary 関数・両 message・NAND 全 4 行を、 全 parameter set で。 それでも 21 個とも壊れた pipeline のままで、 内訳は「数値は正しいがラベルが違う」「答えは正しいが自己申告が嘘」「たまたま当たっている」の 3 種。 最終ビットを見るテストにはどれも見えない。 だから採点は最終ビットではなく stage をその場で見て、 trace は artifact の digest で照合する。 pipeline の stage は 10 個で hidden test は 10 個すべてを別々に採点し、 scored checkpoint はそのうち結び付きの強い 2 組をまとめた 8 個 (multi-verify 契約の上限)。\n\nこれは安全ではない。 パラメータは全列挙でき、 両方の secret は線形代数で復元できる。",
+  "instructions": "## はじめに\n\nWeek 5 の 5 問が作った部品はすべて支給されます。 環と encoding、 LWE と RLWE、 gadget と external product、 CMUX と monomial rotation、 sample extraction と key switching。 どれも再実装しません。\n\n足りないのは、 それらが部品だったところの本体です。\n\n```text\nLWE(次元 n, 鍵 s_lwe)\n  -> rotation domain      2N/q 倍して丸める\n  -> LUT accumulator      trivial な RLWE 暗号文。 mask も noise も message も持たない\n  -> blind rotation       X^(-phase) 倍。 phase は最後まで計算されない\n  -> RLWE(ring 鍵)\n  -> sample extraction    係数 0 を、 次元 N の ring 鍵の下で取り出す\n  -> key switching        次元 n の s_lwe へ戻す\n  -> LWE(次元 n, 鍵 s_lwe)\n```\n\n出力の鍵は**入力の鍵**です。 これが one-way な評価ではなく bootstrapping である理由で、 hidden test は bootstrap の出力をもう一度 bootstrap します。\n\n## encoding が変わっています\n\n```text\nencode(1) =  q/8        encode(0) = -q/8        decode(c) = centered(c) > 0\n```\n\n`m * delta` ではなく balanced。 この下では復号が符号判定そのものになり、 符号判定は negacyclic rotation が無料で計算します。\n\n## 最初の一手\n\n```bash\nmake inspect\nmake inspect F=always-one\nmake inspect F=always-one M=0\n```\n\n既定の `F=identity` は**いちばん情報の少ない**実行です。 負号は「どの関数が面白いか」を反転させていて、 `identity` と `negate` は `f(0) + f(1) = 1` を満たす**全単射**なので table の両半分が一致し、 accumulator が定数になります。 定数多項式は rotation がどこに着地したかを何も見せません。 2 値の table を持つのは `always-zero` と `always-one`、 つまり**定数関数**のほうです。\n\nそのあと `local/starter/pipeline.py` を編集します。\n\n## ゴール\n\n8 個の checkpoint を独立に通します。 pipeline の stage は 10 個あり hidden test は 10 個すべてを別々に採点しますが、 scored checkpoint は結び付きの強い 2 組 (extraction と key switch、 線形結合とゲート) をまとめた 8 個です。 hidden test は最終ビットではなく stage ごとの artifact を採点し、 trace は digest で照合し、 真理値表は 4 行すべてを回します。",
+  "writeup": "## 真理値表が通っても、 通っただけ\n\nこの問題は 37 個の壊れた実装を同梱しています。 そのうち **21 個は真理値表が完全に通ります**。 全 unary 関数、 両 message、 NAND の全 4 行を、 全 parameter set で。 それでも 21 個とも壊れた pipeline です。 `make reference-test` は毎回この数を測り、 動いたら落ちます。\n\n内訳は 3 つ。 **数値は正しいがラベルが違う** (extraction が入力の keyId を残す、 次元を入力側で報告する、 出力を RLWE と名乗る)。 **答えは正しいが自己申告が嘘** (trace の noise が全部 0、 accumulator が message を持つと主張、 出力 bound が入力 noise とともに増える)。 **たまたま当たっている** (係数 1 を取り出しても lookup table が半分ごとに定数なので大抵同じ値、 切り捨てても correctness budget が吸収する)。\n\nstage 単位の checkpoint を 10 個も置いているのは、 この 21 という実測値が理由です。 22 個目 — `nand_combine` の `q/8` 落ち — は seed によって見えたり見えなかったりするので、 固定の数には入れていません。\n\n## identity table は何も見せない\n\n`f = identity` の lookup table は下半分が `encode(f(1)) = encode(1)`、 上半分が `encode(1 - f(0)) = encode(1)` で、 全係数が同じ値になります。 定数多項式は rotation がどこに着地したかを区別できないので、 半分の入れ替えも、 取り出す係数の間違いも、 丸めではなく切り捨ても、 すべて通ります。 public test が全部 identity なのはそれを見せるためです。\n\n## refresh は「noise が減ること」ではない\n\n出力の noise bound は blind rotation の分と key switch の分の和で、 入力の noise は項として現れません。 減るのではなく**入力に依存しなくなる**。 だから出力をもう一度 bootstrap できて、 だから回路が組めます。 trace の noise 列を上から読むと、 どの行で入力への依存が切れるかが見えます。\n\n## 正解を返しても domain が違えば壊れている\n\nextraction が入力の keyId をそのまま残すと、 数値は正しいのにラベルが違う暗号文ができます。 その switching key がたまたま合っているので pipeline は端から端まで動き、 回路の中で別の暗号文と結合された瞬間に壊れます。 artifact の envelope はこの種の欠陥のために存在していて、 真理値表からは見えません。\n\n## ゲートは lookup table の中に無い\n\nHomNAND の lookup table は identity です。 4 通りの入力すべてで同じ table を使い、 4 行を分けているのは前処理の線形結合が作った phase の符号だけ。 bootstrap は符号を新しい暗号文に変換しているだけで、 ゲートそのものは `(0, q/8) - c1 - c2` の側にあります。\n\nこの `q/8` を落とすと `(0,1)` と `(1,0)` の phase がちょうど 0 になり、 答えが noise の転び方で決まります。 40 seed で測ると、 この 2 行への 80 回の試行のうち 12 回が誤り、 残り 2 行は 1 度も間違いません。 7 回に 1 回落ちる定数の書き忘れは、 バグではなく flakiness に見えます。\n\n## 3 行で正しいのは正しさではない\n\nNAND の 4 行のうち 0 を返すのは `(1,1)` だけなので、 定数 1 を返す実装は 75% 正しい。 hidden test が毎回 4 行すべてを回すのはそのためです。\n\n## correctness bound を超えたときに起きること\n\n入力の noise が bound を超えると bootstrap は劣化しません。 **逆のビット**を、 自信を持って、 新しい小さな noise とともに返します。 壊れた暗号文ではなく、 間違った答えの正しい暗号文が出てくる。 FHE の failure mode として覚えておく価値があるのはこちらです。\n\n## toy と production の差\n\nここで書いたものは機構の toy です。 production の TFHE は FFT/NTT で多項式積を回し、 bootstrapping key を圧縮し、 パラメータは lattice reduction に対する安全性から逆算します。 この問題のパラメータは全列挙でき、 両方の secret は線形代数で復元できます。 gate 1 回あたりの計算量も、 実用的な bootstrapping key のサイズも、 任意の多ゲート回路のコンパイルも対象外です。\n\n## 対象外\n\nproduction TFHE の security / performance、 最適化された FFT / NTT / SIMD、 bootstrapping key のサイズ最適化、 任意の multi-gate circuit compiler。",
+  "tags": [
+    "advanced-cryptography-2026",
+    "week5",
+    "fhe",
+    "tfhe",
+    "programmable-bootstrapping",
+    "homomorphic-nand",
+    "capstone",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18112,
+      "name": "/verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "input LWE ciphertext の phase と lookup accumulator の対応を説明できる",
+    "target function を accumulator polynomial へ encode できる",
+    "blind rotation で暗号化された入力に応じた lookup 位置を選択できる",
+    "sample extraction と key switching で output LWE へ戻せる",
+    "PBS 前後で message function f(m) が正しく評価されることを確認できる",
+    "toy noise metric で input noise と output noise を比較できる",
+    "bootstrapping が復号ではないことを説明できる",
+    "HomNAND の前処理・PBS lookup・decode を一続きで構成できる",
+    "全 4 入力と未知のパラメータで一般化できる",
+    "toy implementation の省略点と production TFHE との差を明示できる"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.ac26-w5-pbs-homnand.lut-encoding",
+        "description": "public な関数 f と message encoding から、 blind rotation 後に対象値が抽出される accumulator polynomial を構成できる。"
+      },
+      {
+        "id": "lo.ac26-w5-pbs-homnand.phase-normalization",
+        "description": "LWE の mask/body を rotation domain へ移し、 丸めの規約とその誤差の大きさを説明できる。"
+      },
+      {
+        "id": "lo.ac26-w5-pbs-homnand.blind-rotation-integration",
+        "description": "供給された CMUX primitive を用いて、 暗号化された phase に従う回転を組める。"
+      },
+      {
+        "id": "lo.ac26-w5-pbs-homnand.stage-contract",
+        "description": "各 stage の artifact が属する kind・鍵・次元・modulus・parameter set を stamp し、 不整合を silent に通さない。"
+      },
+      {
+        "id": "lo.ac26-w5-pbs-homnand.programmable-evaluation",
+        "description": "任意の unary lookup 関数について Dec(PBS_f(Enc(m))) = f(m) を成立させられる。"
+      },
+      {
+        "id": "lo.ac26-w5-pbs-homnand.noise-refresh",
+        "description": "出力の noise bound が入力の noise を含まないことを示し、 correctness boundary を説明できる。"
+      },
+      {
+        "id": "lo.ac26-w5-pbs-homnand.homnand-composition",
+        "description": "線形結合 1 回と bootstrap 1 回で NAND を構成し、 平文ゲートを使わないことを説明できる。"
+      },
+      {
+        "id": "lo.ac26-w5-pbs-homnand.toy-vs-production",
+        "description": "この toy が省いたものと production TFHE との差を明示できる。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.programmable-bootstrapping",
+        "description": "暗号文の noise を入力に依存しない量へ戻すと同時に、 任意の unary 関数を評価する変換。"
+      },
+      {
+        "id": "concept.lookup-table-evaluation",
+        "description": "関数を多項式の係数として書き、 暗号化された位置から 1 係数を取り出すことで評価する方式。"
+      },
+      {
+        "id": "concept.noise-refresh",
+        "description": "出力の noise が入力の noise に依存しなくなること。 減ることではなく、 依存が切れること。"
+      },
+      {
+        "id": "concept.homomorphic-nand",
+        "description": "線形結合 1 回と bootstrap 1 回で構成される暗号文上の NAND。 ゲートは lookup table の中に無い。"
+      },
+      {
+        "id": "concept.ciphertext-pipeline",
+        "description": "表現・鍵・次元・modulus を段ごとに移す変換の連なり。 各段の artifact は自分の所属を持つ。"
+      },
+      {
+        "id": "concept.fhe-correctness-bound",
+        "description": "bootstrap が耐えられる入力 noise の上限。 超えると壊れるのではなく、 逆のビットが正しく暗号化されて返る。"
+      },
+      {
+        "id": "concept.tfhe",
+        "description": "LWE/RLWE/RGSW と blind rotation を組み合わせ、 ゲートごとに bootstrap する FHE 方式。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.ac26-w5-pbs-homnand.lut",
+        "description": "4 つの unary 関数すべてで accumulator を構成し、 上半分の負号を正しく打ち消した。"
+      },
+      {
+        "id": "assessment.ac26-w5-pbs-homnand.domain",
+        "description": "Z_2N へ丸めて移し、 丸め誤差を noise bound として報告した。"
+      },
+      {
+        "id": "assessment.ac26-w5-pbs-homnand.rotate",
+        "description": "係数 0 が f(m) に復号され、 body の符号と CMUX の引数順が正しかった。"
+      },
+      {
+        "id": "assessment.ac26-w5-pbs-homnand.extract",
+        "description": "係数 0 を取り出し、 ring 鍵と次元 degree へ正しく付け替えた。"
+      },
+      {
+        "id": "assessment.ac26-w5-pbs-homnand.switch",
+        "description": "入力と同じ鍵へ戻し、 合わない switching key を拒否した。"
+      },
+      {
+        "id": "assessment.ac26-w5-pbs-homnand.evaluate",
+        "description": "未知の lookup 関数を含む全 unary 関数で成立し、 出力をもう一度 bootstrap できた。"
+      },
+      {
+        "id": "assessment.ac26-w5-pbs-homnand.refresh",
+        "description": "stage ごとの artifact を digest で記録し、 出力 bound が入力 noise に依存しないことを示した。"
+      },
+      {
+        "id": "assessment.ac26-w5-pbs-homnand.combine",
+        "description": "offset を含む線形結合を構成し、 phase の符号が NAND と一致した。"
+      },
+      {
+        "id": "assessment.ac26-w5-pbs-homnand.nand",
+        "description": "全 4 行の真理値表が成立し、 bootstrap 済みビット同士でも成立した。"
+      },
+      {
+        "id": "assessment.ac26-w5-pbs-homnand.transfer",
+        "description": "見たことのない parameter set・鍵・lookup table・入力ビットで全性質が成立した。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.bootstrapping-simply-removes-noise",
+        "description": "bootstrapping が noise を消す処理だという誤解。 起きているのは入力への依存が切れることで、 同時に関数が評価される。"
+      },
+      {
+        "id": "misconception.pbs-decrypts-then-runs-the-function",
+        "description": "PBS が内部で復号してから関数を適用しているという誤解。 どの stage にも secret は渡らない。"
+      },
+      {
+        "id": "misconception.pbs-can-evaluate-any-program-without-encoding",
+        "description": "PBS が任意のプログラムを評価できるという誤解。 関数は accumulator の係数として書ける形でなければならない。"
+      },
+      {
+        "id": "misconception.homnand-is-plaintext-nand-followed-by-encryption",
+        "description": "HomNAND が平文 NAND の後に暗号化する処理だという誤解。 ゲートは前処理の線形結合の側にある。"
+      },
+      {
+        "id": "misconception.toy-pbs-parameters-have-production-security",
+        "description": "この toy のパラメータに安全性があるという誤解。 全列挙でき、 secret は線形代数で復元できる。"
+      },
+      {
+        "id": "misconception.successful-truth-table-proves-all-stage-contracts",
+        "description": "真理値表が通れば全 stage が正しいという誤解。 符号の誤りは 2 つ揃うと相殺し、 最終ビットには現れない。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "lo.ac26-w5-pbs-homnand.lut-encoding"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "lo.ac26-w5-pbs-homnand.phase-normalization"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "lo.ac26-w5-pbs-homnand.blind-rotation-integration"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "lo.ac26-w5-pbs-homnand.stage-contract"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "lo.ac26-w5-pbs-homnand.programmable-evaluation"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "lo.ac26-w5-pbs-homnand.noise-refresh"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "lo.ac26-w5-pbs-homnand.homnand-composition"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "lo.ac26-w5-pbs-homnand.toy-vs-production"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "concept.programmable-bootstrapping"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "concept.lookup-table-evaluation"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "concept.noise-refresh"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "concept.homomorphic-nand"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "concept.ciphertext-pipeline"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "concept.fhe-correctness-bound"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "concept.tfhe"
+    },
+    {
+      "type": "requires",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "problem.ac26-w5-encoding-noise"
+    },
+    {
+      "type": "requires",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "problem.ac26-w5-lwe-rlwe"
+    },
+    {
+      "type": "requires",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "problem.ac26-w5-rgsw-external"
+    },
+    {
+      "type": "requires",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "problem.ac26-w5-cmux-blind-rotation"
+    },
+    {
+      "type": "requires",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "problem.ac26-w5-extract-key-switch"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w5-pbs-homnand.lut-encoding",
+      "target": "concept.negacyclic-rotation"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w5-pbs-homnand.blind-rotation-integration",
+      "target": "concept.blind-rotation"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w5-pbs-homnand.blind-rotation-integration",
+      "target": "concept.cmux"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w5-pbs-homnand.stage-contract",
+      "target": "concept.sample-extraction"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w5-pbs-homnand.stage-contract",
+      "target": "concept.key-switching"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w5-pbs-homnand.stage-contract",
+      "target": "concept.ciphertext-domain"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w5-pbs-homnand.noise-refresh",
+      "target": "concept.noise-budget"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w5-pbs-homnand.programmable-evaluation",
+      "target": "concept.ciphertext-phase"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "assessment.ac26-w5-pbs-homnand.lut"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "assessment.ac26-w5-pbs-homnand.domain"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "assessment.ac26-w5-pbs-homnand.rotate"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "assessment.ac26-w5-pbs-homnand.extract"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "assessment.ac26-w5-pbs-homnand.switch"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "assessment.ac26-w5-pbs-homnand.evaluate"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "assessment.ac26-w5-pbs-homnand.refresh"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "assessment.ac26-w5-pbs-homnand.combine"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "assessment.ac26-w5-pbs-homnand.nand"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "assessment.ac26-w5-pbs-homnand.transfer"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "misconception.bootstrapping-simply-removes-noise"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "misconception.pbs-decrypts-then-runs-the-function"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "misconception.pbs-can-evaluate-any-program-without-encoding"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "misconception.homnand-is-plaintext-nand-followed-by-encryption"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "misconception.toy-pbs-parameters-have-production-security"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w5-pbs-homnand",
+      "target": "misconception.successful-truth-table-proves-all-stage-contracts"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18112/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "lut",
+        "label": "関数を多項式に書く",
+        "points": 30,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "lut-hint-1",
+            "content": "`+-q/8` の bit は rotation 位置 N/4 と 7N/4 に着地する。 片方は下半分、 もう片方は上半分で、 上半分は係数 0 へ**負号付き**で渡る。 balanced encoding では `-encode(x)` が何になるかを書き下すと、 上半分に何を書くべきかが出る。",
+            "penalty": 15
+          }
+        ]
+      },
+      {
+        "id": "domain",
+        "label": "回転の単位へ移す",
+        "points": 25,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "domain-hint-1",
+            "content": "回転の指数は `[0, 2N)` の整数でなければならない。 切り捨てではなく最近接へ丸める。 丸めは mask の各係数と body に 1 回ずつ起きて、 それがこの stage の noise 寄与のすべて。",
+            "penalty": 12
+          }
+        ]
+      },
+      {
+        "id": "rotate",
+        "label": "暗号化されたまま回す",
+        "points": 40,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "rotate-hint-1",
+            "content": "body の分を先に効かせてから mask を歩く。 各段は「そのままにする」と「a_i だけ回す」の暗号化された二択で、 `cmux(params, rgsw, ct0, ct1)` は selector が 0 のとき ct0 を返す。 回っていない側がどちらの引数かと、 body の符号の 2 つが逆になりやすい。",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "relabel",
+        "label": "鍵の所属を付け替える",
+        "points": 50,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "extract-hint-1",
+            "content": "回転は `-phase` 方向だったので、 目的の値がどの係数に来ているかは 1 つに決まる。 そして出てきた sample の secret は ring secret を vector として読んだもので、 次元も入力とは違う。 keyId をそのままにすると次の stage が別の鍵用の key を当てる。",
+            "penalty": 12
+          },
+          {
+            "id": "switch-hint-1",
+            "content": "`key_switch` は支給されている。 この stage の仕事は、 合わない鍵 (次元・パラメータ・sample の keyId) を適用せず拒否することと、 結果がどの domain に属するかを stamp すること。 target が入力の鍵であることが、 出力を再投入できる理由。",
+            "penalty": 12
+          }
+        ]
+      },
+      {
+        "id": "evaluate",
+        "label": "暗号文のまま関数を引く",
+        "points": 40,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "evaluate-hint-1",
+            "content": "4 つの stage を 1 つの順序で並べるだけ。 accumulator の keyId は switching key の **source** で、 そこが rotation の起きる domain。 出力は入力と同じ鍵・同じ次元なので、 そのまま次の bootstrap の入力になる。",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "refresh",
+        "label": "何が起きたかを記録する",
+        "points": 30,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "refresh-hint-1",
+            "content": "6 行、 pipeline の順。 `input` 行の bound は「実際に載っている量」ではなく `correctness_bound`、 つまり許される上限。 measuring には鍵が要るから。 noise 列を上から読んで入力への依存が切れる行を探すと、 それが refresh。 digest は `lwe_digest` / `rlwe_digest` で取る。",
+            "penalty": 15
+          }
+        ]
+      },
+      {
+        "id": "nand",
+        "label": "ゲートを組んで真理値表をそろえる",
+        "points": 60,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "combine-hint-1",
+            "content": "`q/8` 単位で 4 通りの phase を書き出して、 NAND が 1 のときだけ正になる組み合わせを探す。 定数項 1 つと引き算 2 つ。 定数を落とすと `(0,1)` と `(1,0)` の phase がちょうど 0 になり、 答えが noise の転び方で決まる。",
+            "penalty": 12
+          },
+          {
+            "id": "nand-hint-1",
+            "content": "前処理がすでに何を済ませたかを考えると、 bootstrap に残っている仕事は 1 つしかない。 使う lookup table は 4 通りの入力すべてで同じもので、 見た目より短い。 ゲートは lookup の中に無い。",
+            "penalty": 17
+          }
+        ]
+      },
+      {
+        "id": "transfer",
+        "label": "見たことのない設定で成立させる",
+        "points": 25,
+        "wrongAnswerPenalty": 15
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Look up a function on a ciphertext, and hand back a fresh key",
+      "shortDescription": "Chain what Week 5's five problems built into one Programmable Bootstrapping pipeline, then evaluate a NAND on ciphertexts. Nothing is decrypted at any step.",
+      "description": "Week 5's capstone. Everything the five earlier problems built is supplied -- encoding and noise, LWE and RLWE, RGSW and the external product, CMUX and blind rotation, sample extraction and key switching. What you write is the pipeline that chains them, and the gate it evaluates.\n\nRemember bootstrapping as \"the thing that removes noise\" and you can explain neither why a function comes out of it nor why only some functions do. What actually happens is a chain of transformations that evaluates a lookup function against an encrypted phase and returns the result under a fresh key and domain -- and the noise the output carries does not mention the input's at all. That absence is the refresh.\n\nThe encoding changes here. Under balanced encoding, `encode(1) = +q/8` and `encode(0) = -q/8`, decoding **is** a sign test -- and a sign test is what negacyclic rotation computes for free, because `X^N = -1` negates whatever wraps past the degree. If you have ever wondered why PBS cannot evaluate any function you like, this is the concrete answer.\n\nThe lookup table's upper half holds `1 - f(0)`, not `f(0)`, because the wrap hands coefficient 0 its value negated and `-encode(x)` is `encode(1 - x)`. Get it wrong and every non-constant unary function comes out inverted for `m = 0`: exactly half the truth table, which looks like a sign bug anywhere else in the pipeline.\n\nEach stage returns its numbers **and** where they live -- kind, keyId, dimension, modulus, parameterSetId, noiseBound. Two of those change mid-pipeline: extraction moves the ciphertext to the ring secret at dimension `degree`, and the key switch moves it back. A stage that returns the right numbers under the wrong label has produced something the next stage will silently combine with a ciphertext it does not match.\n\nHomNAND turns out to be mostly pre-processing. One linear combination, `(0, q/8) - c1 - c2`, gives the four input pairs phases of `3q/8, q/8, q/8, -q/8` -- negative only for `(1,1)`. Then one bootstrap with the identity table. There is no plaintext NAND anywhere, and no gate inside the lookup.\n\nOn scoring: this problem ships 37 deliberately broken implementations, and **21 of them produce a perfect truth table** -- every unary function, both messages, all four NAND rows, at every parameter set. All 21 are broken pipelines anyway: right numbers under the wrong label, a right answer with a false account of itself, or a right answer by luck. A final-answer test sees none of them. So grading happens stage by stage rather than end to end, and the trace is matched by artifact digest. The pipeline has ten stages and the hidden tests grade all ten separately; the eight scored checkpoints are those ten with the two most closely coupled pairs merged, which is the multi-verify contract's cap.\n\nNone of this is secure. The parameters are small enough to enumerate and both secrets fall to linear algebra.",
+      "instructions": "## Start here\n\nEverything Week 5's five problems built is supplied: the ring and the encoding, LWE and RLWE, the gadget and the external product, CMUX and monomial rotation, sample extraction and key switching. You rebuild none of it.\n\nWhat is missing is the thing they were pieces of.\n\n```text\nLWE(dimension n, key s_lwe)\n  -> rotation domain      scale by 2N/q and round\n  -> LUT accumulator      a trivial RLWE ciphertext: no mask, no noise, no message\n  -> blind rotation       X^(-phase), and the phase is never computed\n  -> RLWE(ring key)\n  -> sample extraction    coefficient 0, at dimension N under the ring key\n  -> key switching        back to dimension n under s_lwe\n  -> LWE(dimension n, key s_lwe)\n```\n\nThe output key is the **input** key. That is what makes this bootstrapping rather than a one-way evaluation, and the hidden tests bootstrap the output of a bootstrap.\n\n## The encoding changed\n\n```text\nencode(1) =  q/8        encode(0) = -q/8        decode(c) = centered(c) > 0\n```\n\nBalanced, not `m * delta`. Under it decoding is a sign test, and a sign test is what negacyclic rotation computes for free.\n\n## First move\n\n```bash\nmake inspect\nmake inspect F=always-one\nmake inspect F=always-one M=0\n```\n\nThe default `F=identity` is the **least** informative run. The negation inverts which functions are interesting: `identity` and `negate` satisfy `f(0) + f(1) = 1`, so both halves of the table are the same number and the accumulator is constant -- and a constant polynomial cannot show you where the rotation landed. The two-valued tables belong to `always-zero` and `always-one`, the two **constant** functions.\n\nThen edit `local/starter/pipeline.py`.\n\n## Goal\n\nClear eight independently scored checkpoints. The pipeline has ten stages and the hidden tests grade all ten separately -- `relabel` covers extraction and the key switch, `nand` covers the combination and the gate. They grade each stage's own artifact rather than the final bit, match the trace by digest, and run the whole truth table every time.",
+      "writeup": "## A correct truth table proves less than it looks\n\nThis problem ships 37 deliberately broken implementations, and **21 of them produce a perfect truth table** -- every unary function, both messages, all four NAND rows, at every parameter set. Every one of the 21 is still a broken pipeline, and `make reference-test` re-measures the count on every run.\n\nThey split three ways. **Right numbers, wrong label**: extraction that keeps the input's keyId, reports the input's dimension instead of the ring's, or calls its output an RLWE ciphertext. **Right answer, wrong account of it**: a trace whose noise bounds are all zero, an accumulator row claiming to carry the message, an output bound that grows with the input's. **Right answer by luck**: extracting coefficient 1 works because the table is constant across each half of the ring, and truncating instead of rounding works because the correctness budget absorbs it at these parameters.\n\nTen stage-level checkpoints are expensive. That measured 21 is what pays for them. A twenty-second -- the dropped `q/8` offset -- is blind on most seeds and caught on the one the suite fixes, so it is left out of the count rather than papered over.\n\n## The identity table shows you nothing\n\nFor `f = identity` the lower half is `encode(f(1)) = encode(1)` and the upper half is `encode(1 - f(0)) = encode(1)`. Every coefficient is the same number. A constant polynomial cannot distinguish where the rotation landed, so swapped halves, the wrong extracted coefficient, and truncation instead of rounding all pass. Every public test uses it, on purpose.\n\n## The refresh is not \"the noise gets smaller\"\n\nThe output's noise bound is blind rotation's contribution plus the key switch's. The input's noise is not a term. It does not shrink -- it stops being **depended on**. That is why the output can be bootstrapped again, and why circuits are possible at all. Read the trace's noise column down and you can see which row the dependency ends at.\n\n## The right answer under the wrong label is still broken\n\nAn extraction that keeps the input's `keyId` produces the correct numbers with the wrong domain stamped on them. The pipeline works end to end because the switching key happens to be the matching one, and it breaks the moment anything else in a circuit reads that label to decide what the ciphertext may be combined with. The artifact envelope exists for this class, and a truth table cannot see it.\n\n## The gate is not in the lookup table\n\nHomNAND's lookup table is the identity. All four input pairs use the same table; what separates the rows is the sign of the phase the pre-processing produced. The bootstrap only turns that sign into a fresh ciphertext. The gate lives in `(0, q/8) - c1 - c2`.\n\nDrop that `q/8` and `(0,1)` and `(1,0)` have a phase of exactly zero, so the answer is settled by whichever way the noise fell. Measured over 40 seeds, 12 of the 80 attempts at those two rows came out wrong and the other two rows never did -- a missing constant that fails one row in seven reads as flakiness rather than as a bug.\n\n## Three rows out of four is not correct\n\n`(1,1)` is the only NAND row that returns 0, so an implementation that returns a constant 1 is 75% right. That is why the hidden tests run all four rows every time.\n\n## What happens past the correctness bound\n\nAn input noisier than the bound does not degrade the bootstrap. It returns the **other** bit, confidently, with a fresh small noise -- a correct-looking ciphertext of the wrong answer rather than a broken one. That is the FHE failure mode worth remembering.\n\n## Toy versus production\n\nThis is a toy of the mechanism. Production TFHE runs the polynomial products through FFT or NTT, compresses the bootstrapping key, and derives its parameters from security against lattice reduction. Here the parameters are small enough to enumerate and both secrets fall to linear algebra. Per-gate cost, realistic bootstrapping-key size, and compiling arbitrary multi-gate circuits are all out of scope.\n\n## Not in scope\n\nProduction TFHE security and performance, optimized FFT / NTT / SIMD, bootstrapping-key size optimization, an arbitrary multi-gate circuit compiler.",
+      "learningGoals": [
+        "Relate an input LWE ciphertext's phase to a position in the lookup accumulator",
+        "Encode a target function into an accumulator polynomial",
+        "Select the lookup position from an encrypted input using blind rotation",
+        "Return to an output LWE via sample extraction and key switching",
+        "Confirm that f(m) is evaluated correctly across the whole pipeline",
+        "Compare input and output noise on the toy metric",
+        "Explain why bootstrapping is not decryption",
+        "Compose HomNAND from pre-processing, one PBS lookup, and a decode",
+        "Generalize to all four inputs and to parameters you have not seen",
+        "State what this toy omits and how it differs from production TFHE"
+      ],
+      "checks": [
+        {
+          "id": "lut",
+          "label": "Write the function into a polynomial",
+          "hints": [
+            {
+              "id": "lut-hint-1",
+              "content": "A bit encoded as `+-q/8` lands at rotation position N/4 or 7N/4. One is in the lower half, the other in the upper -- and the upper half reaches coefficient 0 **negated**. Write down what `-encode(x)` is under a balanced encoding and the upper half follows."
+            }
+          ]
+        },
+        {
+          "id": "domain",
+          "label": "Move to the units of rotation",
+          "hints": [
+            {
+              "id": "domain-hint-1",
+              "content": "A rotation exponent has to be an integer in `[0, 2N)`. Round to nearest, not down. There is one rounding per mask coefficient and one for the body, and that total is this stage's entire noise contribution."
+            }
+          ]
+        },
+        {
+          "id": "rotate",
+          "label": "Turn it while it stays encrypted",
+          "hints": [
+            {
+              "id": "rotate-hint-1",
+              "content": "Account for the body first, then walk the mask. Each step is an encrypted choice between leaving the accumulator alone and turning it by `a_i`; `cmux(params, rgsw, ct0, ct1)` returns `ct0` when the selector is 0. Which argument is the unturned one, and the sign on the body, are the two things that go backwards."
+            }
+          ]
+        },
+        {
+          "id": "relabel",
+          "label": "Move it between key domains",
+          "hints": [
+            {
+              "id": "extract-hint-1",
+              "content": "The rotation was by `-phase`, so exactly one coefficient now holds the value you want. And the sample that comes out has the ring secret read as a vector for its key, at a different dimension. Leave the input's keyId on it and the next stage applies a key built for another secret."
+            },
+            {
+              "id": "switch-hint-1",
+              "content": "`key_switch` is supplied. This stage's job is refusing a key that does not match -- dimension, parameters, or the sample's keyId -- and stamping which domain the result belongs to. The target being the input's key is what makes the output feedable back in."
+            }
+          ]
+        },
+        {
+          "id": "evaluate",
+          "label": "Look up a function on a ciphertext",
+          "hints": [
+            {
+              "id": "evaluate-hint-1",
+              "content": "Four of your stages in one order. The accumulator's keyId is the switching key's **source**, because that is the domain the rotation happens in. The output is under the same key at the same dimension as the input, so it is already a valid input to the next bootstrap."
+            }
+          ]
+        },
+        {
+          "id": "refresh",
+          "label": "Record what actually happened",
+          "hints": [
+            {
+              "id": "refresh-hint-1",
+              "content": "Six rows in pipeline order. The `input` row's bound is `correctness_bound` -- the most it is allowed to carry, not what it does carry, because measuring that takes a key. Read the noise column down to find where the dependency on the input ends. Digests come from `lwe_digest` / `rlwe_digest`."
+            }
+          ]
+        },
+        {
+          "id": "nand",
+          "label": "Build the gate and complete the truth table",
+          "hints": [
+            {
+              "id": "combine-hint-1",
+              "content": "Write out the four phases you want in units of `q/8` and find the combination that is positive exactly when NAND is 1. One constant term and two subtractions. Leave the constant out and `(0,1)` and `(1,0)` sit at exactly zero, where the noise decides."
+            },
+            {
+              "id": "nand-hint-1",
+              "content": "Think about what the pre-processing has already done and what is left for the bootstrap to decide. The table is the same for all four input pairs and is shorter than it looks. The gate is not in the lookup."
+            }
+          ]
+        },
+        {
+          "id": "transfer",
+          "label": "Hold up in a setting you have not seen"
+        }
+      ]
+    }
+  }
+}
