@@ -400,6 +400,56 @@
       }
     },
     {
+      "id": "ac26-w3-field-inverse",
+      "name": "曲線の前に、体を作る",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "advanced-cryptography-2026",
+        "order": 310,
+        "chapter": "Week 3 / Finite Fields"
+      },
+      "courseAlignment": {
+        "courseId": "advanced-cryptography-program",
+        "edition": "2026",
+        "week": 3,
+        "role": "mechanism",
+        "sources": [
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "path": "week3/README.md",
+            "kind": "lecture"
+          },
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "path": "week3/problems/schnorr-from-scratch/README.md",
+            "kind": "assignment"
+          }
+        ]
+      },
+      "difficulty": 3,
+      "estimatedDuration": "45-60 分",
+      "shortDescription": "楕円曲線の式に入る前に、その下の有限体を手で作る。正規化、四則、そして拡張 Euclid による逆元。素数でない法では逆元が存在しない要素があり、それを見落とす実装がある。",
+      "tags": [
+        "advanced-cryptography-2026",
+        "week3",
+        "finite-field",
+        "modular-inverse",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "ai-riscv-screen-repair",
       "name": "AI製RISC-V画面を復旧せよ",
       "category": "Challenge",

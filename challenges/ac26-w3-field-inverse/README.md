@@ -1,0 +1,103 @@
+# Build the field before the curve
+
+> This track is an independent, unofficial companion to the Advanced Cryptography Program 2026.
+> It is not affiliated with or endorsed by the course or its operators. All problem statements,
+> code, fixtures, and figures here are written independently. Questions about this track go to
+> the TenkaCloud repository, not to the course operators.
+
+**Track:** `advanced-cryptography-2026` · **Order:** 310 · **Chapter:** Week 3 / Finite Fields
+· **Role:** `mechanism` · **Time:** 45–60 minutes · **Points:** 200
+
+## The story
+
+Every elliptic-curve slide starts with an equation over `F_p` and moves on within a minute,
+because the field is assumed. This problem is that minute, taken seriously: you build `F_p` from
+normalization up, and the last piece — the multiplicative inverse — is the one with real content.
+
+## What you implement
+
+```python
+class Field:
+    modulus: int
+    def element(self, value: int) -> FieldElement: ...
+
+class FieldElement:
+    def __add__, __sub__, __mul__, __truediv__
+    def inverse(self) -> FieldElement: ...
+
+def egcd(a, b) -> (g, s, t)          # a*s + b*t == g == gcd(a, b)
+def egcd_trace(a, b) -> [ {q, r, s, t}, ... ]
+def non_invertible_element(modulus) -> int
+```
+
+Elements of two different moduli never combine silently.
+
+## How to play
+
+```bash
+make inspect              # your moduli, and a worked trace
+make inspect A=17 P=101   # a trace for any pair you like
+make test                 # public tests
+make reset                # restore starter/field.py
+```
+
+You edit one file, `local/starter/field.py`.
+
+## Scoring
+
+Seven checkpoints, scored independently. Wrong answers cost 10 points each.
+
+| Checkpoint | Points | What is checked |
+|---|---:|---|
+| `normalize` | 25 | Negatives, values past the modulus, idempotence, equality |
+| `arithmetic` | 30 | Add/sub/mul, identities, distributivity, commutativity, associativity |
+| `egcd-trace` | 35 | The step sequence, row by row, against the algorithm's own |
+| `inverse` | 35 | Every non-zero element of the prime field, plus `a / b * b == a` |
+| `errors` | 25 | Zero, division by zero, and mixing two moduli |
+| `composite` | 25 | The smallest non-invertible element — and none over a prime |
+| `axioms` | 25 | The axioms over a prime you have not been shown |
+
+Hints on four of the seven, each inside that checkpoint's 50% cap.
+
+## Two distinctions this problem insists on
+
+**An integer is not a field element.** `-5` and `p - 5` name the same element; `-5` is not a
+canonical representative of it. Normalizing at construction means a negative input and an input
+past the modulus take the same path afterwards.
+
+**`pow(a, p - 2, p)` is not "the inverse".** It is an inverse when `p` is prime. Over a composite
+`n` it still returns a number — just not an inverse, and nothing tells you unless you check. The
+extended Euclidean algorithm returns the gcd alongside the coefficients, so it can say *there is
+no inverse*. The first mutation in this problem's suite is exactly the Fermat version: it passes
+every prime checkpoint and fails the composite one.
+
+## Why the trace is compared row by row
+
+The trace checkpoint first checked only that each row satisfies `a*s + p*t = r` and that the last
+row matches the gcd and the inverse. A mutation returning **only the last row** survived that — a
+one-row table satisfies all of it.
+
+It now compares the step count and each row's `(q, r, s, t)` against the reference sequence. Floor
+division makes that sequence deterministic, so there is exactly one right answer.
+
+## Exhaustive, not sampled
+
+`inverse` runs every non-zero element of the prime field, not a sample, so special-casing a few
+values is not a strategy. `axioms` additionally checks that inversion is a **bijection** on the
+non-zero elements: in a field the inverse is unique, and two elements never share one.
+
+## The trace is not constant-time
+
+The trace `make inspect` prints branches on its inputs, and its step count depends on them. In
+code handling a real key that property is itself a side channel. It is here to make the algorithm
+legible, not as a model for production.
+
+## Cost
+
+Zero. No cloud account, no AWS resources.
+
+## For authors
+
+`make reference-test` runs the mutation suite: eight broken implementations. The Fermat-inverse
+one passes every prime checkpoint, and the last-row-only trace survived the original checkpoint
+and is why it now compares the whole sequence.

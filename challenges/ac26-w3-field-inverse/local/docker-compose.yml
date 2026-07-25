@@ -1,0 +1,19 @@
+# Every port binds to 127.0.0.1 only. This problem has no network surface for the
+# learner to attack; the whole challenge is local reasoning.
+services:
+  verifier:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      FLAG_SEED: ${FLAG_SEED:?FLAG_SEED must be provided by the platform}
+      VERIFY_PORT: "18100"
+    ports:
+      - "127.0.0.1:18100:18100"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
