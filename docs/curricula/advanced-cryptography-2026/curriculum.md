@@ -222,7 +222,9 @@ Prerequisite for: every `ac26-*` challenge.
 
 Companion challenges are authored from the publicly stated theme alone and make
 no claim about what the official exercise will require. Confirmation is tracked
-by #219, with a 2026-09-30 review cutoff.
+by #219, with a 2026-09-30 review cutoff. Each pins `week2/README.md` with
+`kind: "placeholder"`, so the day the material appears the drift check reports it
+as a publication rather than an edit — see [`SYNC.md`](./SYNC.md) §2.
 
 | Order | Problem id | Role | Teaches | Issue |
 | --- | --- | --- | --- | --- |
@@ -258,7 +260,8 @@ by #219, with a 2026-09-30 review cutoff.
 - **State**: not published, identical in form to Week 2.
 - **Known only**: the theme is ZKP, with SNARK and STARK in scope.
 
-Confirmation is tracked by #229, with a 2026-09-30 review cutoff.
+Confirmation is tracked by #229, with a 2026-09-30 review cutoff. As with Week 2,
+each challenge pins `week4/README.md` as `kind: "placeholder"`.
 
 | Order | Problem id | Role | Teaches | Issue |
 | --- | --- | --- | --- | --- |
@@ -340,7 +343,8 @@ in [`ASSESSMENT.md`](./ASSESSMENT.md), which also fixes the rule that any
 
 ## Maintenance
 
-- Re-pin the source commit only through the drift review in `GOVERNANCE.md` §5.
+- Re-pin the source commit only through the drift review in `GOVERNANCE.md` §5,
+  following the runbook in [`SYNC.md`](./SYNC.md).
 - Adding a challenge means adding its row here in the same pull request. A
   challenge whose `courseAlignment.week` has no row is an unmapped challenge.
 - Adding a concept id means adding it to the registry above. Ids are referenced

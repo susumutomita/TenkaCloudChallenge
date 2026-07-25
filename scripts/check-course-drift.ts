@@ -36,7 +36,24 @@ interface PinnedSource {
   readonly kind: string;
 }
 
-type DriftStatus = "in-sync" | "drifted" | "missing-upstream" | "unreachable";
+type DriftStatus =
+  | "in-sync"
+  | "drifted"
+  | "material-published"
+  | "missing-upstream"
+  | "unreachable";
+
+/**
+ * A `placeholder` pin records the *absence* of material: at the pinned commit,
+ * Week 2 and Week 4 ship a README saying preparation is under way and a
+ * `problems/` directory holding only `.gitkeep`, so their companion challenges are
+ * authored from the publicly stated theme alone (see `curriculum.md`).
+ *
+ * When such a pin moves, that is not an edit to an exercise somebody already read
+ * — it is the exercise arriving. The response differs (read the new material, then
+ * decide whether the companion still holds), so the status differs too.
+ */
+const PLACEHOLDER_KIND = "placeholder";
 
 interface DriftRow {
   readonly problemId: string;
@@ -116,6 +133,35 @@ async function defaultBranch(repository: string): Promise<string> {
   return typeof body.default_branch === "string" ? body.default_branch : "main";
 }
 
+/**
+ * Classify one pin from the two blob ids alone. Kept free of network access so
+ * every branch — including the publication event, which cannot be reproduced on
+ * demand against a live repository — is pinned by a test.
+ */
+function classify(
+  kind: string,
+  pinned: string | undefined,
+  current: string | undefined,
+): { status: DriftStatus; detail?: string } {
+  // A pin that no longer resolves says nothing about upstream, so it is reported
+  // before anything is claimed about the current content.
+  if (pinned === undefined) {
+    return { status: "unreachable", detail: "pinned commit no longer serves this path" };
+  }
+  if (current === undefined) {
+    return { status: "missing-upstream", detail: "path was removed or renamed upstream" };
+  }
+  if (pinned === current) return { status: "in-sync" };
+  if (kind === PLACEHOLDER_KIND) {
+    return {
+      status: "material-published",
+      detail:
+        "the pin recorded this path as not-yet-published; upstream has now replaced its content",
+    };
+  }
+  return { status: "drifted" };
+}
+
 async function inspect(source: PinnedSource, branch: string): Promise<DriftRow> {
   const base = {
     problemId: source.problemId,
@@ -128,15 +174,9 @@ async function inspect(source: PinnedSource, branch: string): Promise<DriftRow> 
       blobShaAt(source.repository, source.ref, source.path),
       blobShaAt(source.repository, branch, source.path),
     ]);
-    if (pinned === undefined) {
-      return { ...base, status: "unreachable", detail: "pinned commit no longer serves this path" };
-    }
-    if (current === undefined) {
-      return { ...base, status: "missing-upstream", detail: "path was removed or renamed upstream" };
-    }
-    return pinned === current
-      ? { ...base, status: "in-sync", upstreamRef: current }
-      : { ...base, status: "drifted", upstreamRef: current };
+    const verdict = classify(source.kind, pinned, current);
+    // upstreamRef is only meaningful once the current content resolved.
+    return current === undefined ? { ...base, ...verdict } : { ...base, ...verdict, upstreamRef: current };
   } catch (error) {
     return { ...base, status: "unreachable", detail: (error as Error).message };
   }
@@ -144,6 +184,7 @@ async function inspect(source: PinnedSource, branch: string): Promise<DriftRow> 
 
 function report(rows: readonly DriftRow[]): void {
   const bySeverity: Record<DriftStatus, DriftRow[]> = {
+    "material-published": [],
     drifted: [],
     "missing-upstream": [],
     unreachable: [],
@@ -151,6 +192,13 @@ function report(rows: readonly DriftRow[]): void {
   };
   for (const row of rows) bySeverity[row.status].push(row);
 
+  // Publication comes first: a week going live changes what companion content is
+  // even supposed to be, which outranks an edit to material already read.
+  for (const row of bySeverity["material-published"]) {
+    console.log(`PUBLISHED  ${row.problemId}  ${row.repository}:${row.path}`);
+    console.log(`           ${row.detail}`);
+    console.log(`           pinned ${row.pinnedRef} -> upstream content is now ${row.upstreamRef}`);
+  }
   for (const row of bySeverity.drifted) {
     console.log(`DRIFT      ${row.problemId}  ${row.repository}:${row.path}`);
     console.log(`           pinned ${row.pinnedRef} -> upstream content is now ${row.upstreamRef}`);
@@ -163,9 +211,17 @@ function report(rows: readonly DriftRow[]): void {
   }
   console.log(
     `\n${bySeverity["in-sync"].length} in sync, ${bySeverity.drifted.length} drifted, ` +
+      `${bySeverity["material-published"].length} newly published, ` +
       `${bySeverity["missing-upstream"].length} removed upstream, ` +
       `${bySeverity.unreachable.length} unreachable.`,
   );
+  if (bySeverity["material-published"].length > 0) {
+    console.log(
+      "\nA placeholder pin moved: material that did not exist when the companion was " +
+        "authored is now published. Read it before touching the pin — the companion may " +
+        "need re-scoping, not just a new SHA. See docs/curricula/<track>/SYNC.md §3.",
+    );
+  }
   if (bySeverity.drifted.length > 0 || bySeverity["missing-upstream"].length > 0) {
     console.log(
       "\nDo not auto-update the pin. Re-read the changed source, then either re-pin the SHA " +
@@ -173,6 +229,19 @@ function report(rows: readonly DriftRow[]): void {
         "See docs/curricula/<track>/GOVERNANCE.md §5.",
     );
   }
+}
+
+/**
+ * Whether a human has to look. `unreachable` is excluded on purpose: it means the
+ * check could not answer the question (rate limit, network), and failing on it
+ * would train people to re-run until green. `material-published` is included —
+ * a week going live is the most actionable outcome there is.
+ */
+function isActionable(rows: readonly DriftRow[]): boolean {
+  return rows.some(
+    (r) =>
+      r.status === "drifted" || r.status === "missing-upstream" || r.status === "material-published",
+  );
 }
 
 async function main(): Promise<void> {
@@ -205,11 +274,10 @@ async function main(): Promise<void> {
     report(rows);
   }
 
-  const actionable = rows.some((r) => r.status === "drifted" || r.status === "missing-upstream");
-  if (actionable && !process.argv.includes("--no-fail")) process.exit(1);
+  if (isActionable(rows) && !process.argv.includes("--no-fail")) process.exit(1);
 }
 
 if (import.meta.main) await main();
 
-export { collectPinnedSources, inspect, report };
+export { classify, collectPinnedSources, inspect, isActionable, report };
 export type { DriftRow, DriftStatus, PinnedSource };

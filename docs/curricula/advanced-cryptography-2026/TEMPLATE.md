@@ -127,7 +127,10 @@ comment.
 - `track.id: "advanced-cryptography-2026"`, plus `track.order` from the band table in
   [`curriculum.md`](./curriculum.md) and `track.chapter`.
 - `courseAlignment` with a **real** 40-hex upstream commit SHA. Never invent one: if you do not
-  have a SHA, omit the block and note why, as the Bridge 0 problem does.
+  have a SHA, omit the block and note why, as the Bridge 0 problem does. For a companion written
+  against a week whose material is not published yet (Week 2, Week 4), pin the placeholder with
+  `kind: "placeholder"` so the day it is published is reported as a publication rather than as an
+  edit — see [`SYNC.md`](./SYNC.md) §2, which is also the procedure for moving a pin.
 - `learningGoals`, and `nodes` covering `learning_objectives`, `concepts`,
   `assessment_criteria`, `misconceptions`.
 - `relations`: `teaches` / `covers` / `requires` / `assesses`. Concept IDs come from the shared
