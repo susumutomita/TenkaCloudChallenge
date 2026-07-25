@@ -1,0 +1,437 @@
+{
+  "id": "ac26-w2-privacy-audit",
+  "name": "答えは合っている。それだけだ",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "advanced-cryptography-2026",
+    "order": 240,
+    "chapter": "Week 2 / Privacy Audit"
+  },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 2,
+    "role": "transfer",
+    "spoilerPolicy": "independent-reimplementation",
+    "sources": [
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        "path": "week2/README.md",
+        "kind": "placeholder"
+      }
+    ]
+  },
+  "difficulty": 4,
+  "estimatedDuration": "60-75 分",
+  "shortDescription": "7 つの実装がすべて正しい合計を返す。うち 4 つは途中で何かを漏らしている。correctness test は全部通る。監査器を書いて、最初の違反を特定する。",
+  "description": "Week 2 の 4 問目、 role は transfer。 correctness と privacy は別の性質であり、 前者の test をいくら足しても後者は保証されない、 を実装で確認する。\n\n題材は 3 party の加重合計 MPC。 program は Python source ではなく操作列 (op list) として与えられ、 runtime が実行して観測可能な event 列を出す。 これが本問題の設計上の要で、 `reconstruct` という語を grep する監査器は rename・wrapper・helper で破れるが、 実際に実行された操作を読む監査器は破れない。 program を code ではなく data にしたことで、 その違いを採点できる。\n\n7 実装すべてが正しい合計を返す。 4 つが違反 (secret の open / 他 party の share 読み取り / log への raw 値 / error message への secret) を持ち、 3 つは clean。 clean 側には偽陽性の罠を 2 つ置いてある — 仕様上 public な値を log に出す実装と、 自分自身の slot を読む party。 「全部怪しい」 と言う監査器は本物を全部見つけた上で不合格になる。\n\ncheckpoint は 7 つ。 allowed open 集合の導出、 3 種類の違反検出、 transcript からの秘密復元 (counterexample)、 修復、 rename + 並べ替え + 未知 seed での再監査。 修復は 「消せば漏れない」 を排除するため、 仕様が許す観測がすべて残っていることまで検査する。\n\nthreat model は honest-but-curious、 collusion なし。 実運用の security 主張はせず、 toy simulator で観測できる leakage contract だけを評価する。\n\nWeek 2 の教材は pinned commit 時点で未公開のため sources は placeholder pin であり、 status は draft のままにする (#219 が公開を検出した時点で確定する)。",
+  "instructions": "## はじめに\n\n3 チームが同じ private risk score を実装しました。 全実装が正しい合計を返します。 privacy review の結果は同じではありません。\n\n## 最初の一手\n\n```bash\nmake inspect\n```\n\n仕様 (どの label を公開してよいか) と、 clean な 1 実行の event 列が出ます。 漏れている実装は表示しません — 見つけるのが問題です。\n\n次に `local/starter/auditor.py` を編集します。 `make test` で公開テスト、 `make reset` で元に戻せます。\n\n## ゴール\n\n7 つの checkpoint を独立に通します。 出力は全実装で同じなので、 出力を見ても何も分かりません。 最初に違反した event の位置と種類を答えてください。\n\n偽陽性は偽陰性と同じだけ失点します。 log に出ている値が仕様上 public なら、 それは漏洩ではありません。",
+  "writeup": "## correctness test では捕まらないもの\n\n7 実装すべてが正しい合計を返す。 correctness test を何本足しても、 このうちどれが安全かは 1 ビットも分からない。 privacy は出力の性質ではなく、 計算の途中に何が観測可能になったかの性質だから。\n\n## 4 種類の違反\n\n- **opened-a-secret**: 中間値 (部分和) を open する。 mask が掛かっていないので、 transcript を読んだ者はその値を知る。\n- **cross-party-read**: ある party が別の party の raw share slot を読む。 何も open されず transcript は綺麗なので、 access trace を見ない限り分からない。\n- **leaked-in-log**: log 行に raw な private 値が入る。 log は threat model の外ではない。\n- **leaked-in-error**: error path が secret を含む。 正常系は完全に綺麗で、 だからこそ correctness review を通過する。\n\n## 偽陽性の 2 つ\n\n「怪しいものは全部挙げる」 監査器は、 本物の違反を全部見つけた上で不合格になる。 clean な実装のうち 1 つは仕様上 public な weight を log に出し、 もう 1 つは party が自分自身の slot を読む。 どちらも違反ではない。 何が公開されてよいかは仕様が決めるのであって、 操作の種類が決めるのではない。\n\n## なぜ program が code ではなく data なのか\n\n`reconstruct` という語を grep する監査器は、 rename・wrapper・helper 経由の呼び出しで破れる。 本問題の program は操作列として与えられ、 runtime が実行した操作そのものが観測対象になる。 mutation checkpoint は全 label を rename し、 独立な open を並べ替え、 未知の seed で回す。 protocol は変わっていないので判定も変わってはならない。 label の文字列や event の index を覚えた監査器は、 ここで自分自身と矛盾する。\n\n## counterexample が要る理由\n\n「余計に open している」 と指摘するだけでは、 それが害だったことを示していない。 transcript には部分和と合計の両方があり、 差は最後の party の加重寄与で、 weight は公開かつ可逆。 引き算 1 回と逆元 1 回で、 その party の private 値がそのまま出る。 漏洩の主張は、 復元して初めて主張になる。\n\n## 修復の条件\n\n「観測を全部消す」 も漏れないし、 合計も返る。 それを修復と呼ばないために、 採点は仕様が許す観測がすべて残っていることまで見る。 修復とは、 違反だけをちょうど取り除くこと。\n\n## threat model\n\nここでは honest-but-curious、 collusion なしを仮定している。 同じ view でも、 collusion を許した瞬間に安全性の判定は変わる。 判定は仮定に対して行うものであって、 コードに対して行うものではない。\n\n## 次につながるところ\n\nこの分離 — 正しい出力と、 途中の観測可能性 — は Week 6 の co-SNARK privacy audit でそのまま使う。",
+  "tags": [
+    "advanced-cryptography-2026",
+    "week2",
+    "mpc",
+    "privacy",
+    "audit",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18098,
+      "name": "/verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "correctness test だけでは privacy を保証できないことを実装で確認できる",
+    "protocol 仕様から公開してよい値の集合を導ける",
+    "secret の open、cross-party read、log / error への漏洩を区別して検出できる",
+    "仕様上 public な値の露出を違反と誤判定しない",
+    "transcript から秘密を復元して漏洩の害を示せる",
+    "違反だけを取り除き、正当な観測を残したまま修復できる",
+    "同じ view でも threat model の仮定が変われば判定が変わることを説明できる"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.ac26-w2-privacy-audit.derive-allowed-opens",
+        "description": "protocol 仕様から、 公開してよい label の集合を導ける。"
+      },
+      {
+        "id": "lo.ac26-w2-privacy-audit.detect-violations",
+        "description": "secret の open、 cross-party read、 log / error 経由の漏洩を、 種類と位置まで特定できる。"
+      },
+      {
+        "id": "lo.ac26-w2-privacy-audit.avoid-false-positives",
+        "description": "仕様上公開されている値の露出を違反と誤判定しない。"
+      },
+      {
+        "id": "lo.ac26-w2-privacy-audit.demonstrate-harm",
+        "description": "transcript から秘密を復元し、 過剰な open が実害であることを示せる。"
+      },
+      {
+        "id": "lo.ac26-w2-privacy-audit.repair-minimally",
+        "description": "違反だけを取り除き、 仕様が許す観測と出力を保ったまま修復できる。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.over-opening",
+        "description": "protocol が仕様の許す範囲を超えて値を公開すること。 出力の正しさには一切影響しない。"
+      },
+      {
+        "id": "concept.threat-model",
+        "description": "誰が何を観測でき、 誰が結託しうるかの仮定。 同じ実装でも仮定が変われば安全性の判定が変わる。"
+      },
+      {
+        "id": "concept.party-view",
+        "description": "1 つの party が protocol 実行を通じて観測できるものの総体。 transcript、 log、 error、 自分の share を含む。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.ac26-w2-privacy-audit.allowed-opens",
+        "description": "仕様から公開可能な label 集合を正しく導けた。"
+      },
+      {
+        "id": "assessment.ac26-w2-privacy-audit.opened-secret",
+        "description": "中間 secret の open を検出し、 clean な実装を誤判定しなかった。"
+      },
+      {
+        "id": "assessment.ac26-w2-privacy-audit.cross-party",
+        "description": "他 party の share 読み取りを検出し、 自分の slot の読み取りと区別できた。"
+      },
+      {
+        "id": "assessment.ac26-w2-privacy-audit.log-leak",
+        "description": "log と error path への漏洩を検出し、 public 値の log 出力を誤判定しなかった。"
+      },
+      {
+        "id": "assessment.ac26-w2-privacy-audit.transcript",
+        "description": "transcript から特定 party の private 値を復元できた。"
+      },
+      {
+        "id": "assessment.ac26-w2-privacy-audit.repair",
+        "description": "違反だけを取り除き、 出力と仕様上の観測を保ったまま修復できた。"
+      },
+      {
+        "id": "assessment.ac26-w2-privacy-audit.mutation",
+        "description": "label rename、 操作並べ替え、 未知 seed でも同じ判定を出せた。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.correct-output-means-private",
+        "description": "出力が正しければ privacy も保たれているという誤解。 両者は独立で、 correctness test は privacy を一切検査しない。"
+      },
+      {
+        "id": "misconception.logs-are-outside-the-threat-model",
+        "description": "log や error message は protocol の外だから漏洩に数えないという誤解。 観測できる以上 view の一部である。"
+      },
+      {
+        "id": "misconception.every-disclosure-is-a-leak",
+        "description": "公開された値はすべて漏洩だという誤解。 何が公開されてよいかは仕様が決める。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w2-privacy-audit",
+      "target": "lo.ac26-w2-privacy-audit.derive-allowed-opens"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w2-privacy-audit",
+      "target": "lo.ac26-w2-privacy-audit.detect-violations"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w2-privacy-audit",
+      "target": "lo.ac26-w2-privacy-audit.avoid-false-positives"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w2-privacy-audit",
+      "target": "lo.ac26-w2-privacy-audit.demonstrate-harm"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w2-privacy-audit",
+      "target": "lo.ac26-w2-privacy-audit.repair-minimally"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w2-privacy-audit",
+      "target": "concept.over-opening"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w2-privacy-audit",
+      "target": "concept.threat-model"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w2-privacy-audit",
+      "target": "concept.party-view"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w2-privacy-audit",
+      "target": "concept.privacy"
+    },
+    {
+      "type": "requires",
+      "source": "problem.ac26-w2-privacy-audit",
+      "target": "problem.ac26-w2-beaver-mul"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w2-privacy-audit.derive-allowed-opens",
+      "target": "concept.additive-secret-sharing"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w2-privacy-audit.demonstrate-harm",
+      "target": "concept.privacy"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w2-privacy-audit",
+      "target": "assessment.ac26-w2-privacy-audit.allowed-opens"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w2-privacy-audit",
+      "target": "assessment.ac26-w2-privacy-audit.opened-secret"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w2-privacy-audit",
+      "target": "assessment.ac26-w2-privacy-audit.cross-party"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w2-privacy-audit",
+      "target": "assessment.ac26-w2-privacy-audit.log-leak"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w2-privacy-audit",
+      "target": "assessment.ac26-w2-privacy-audit.transcript"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w2-privacy-audit",
+      "target": "assessment.ac26-w2-privacy-audit.repair"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w2-privacy-audit",
+      "target": "assessment.ac26-w2-privacy-audit.mutation"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w2-privacy-audit",
+      "target": "misconception.correct-output-means-private"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w2-privacy-audit",
+      "target": "misconception.logs-are-outside-the-threat-model"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w2-privacy-audit",
+      "target": "misconception.every-disclosure-is-a-leak"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w2-privacy-audit",
+      "target": "misconception.soundness-implies-privacy"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18098/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "allowed-opens",
+        "label": "仕様から公開してよい値を挙げる",
+        "points": 35,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "allowed-opens-hint-1",
+            "content": "仕様には 3 種類の label が出てくる。 そのうち公開してよいのはどれとどれか。 「中間値」 はどれにも入っていない。",
+            "penalty": 15
+          }
+        ]
+      },
+      {
+        "id": "opened-secret",
+        "label": "公開してよくない値の公開を見つける",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "opened-secret-hint-1",
+            "content": "open された label を 1 つずつ、 許可集合に入っているか照合する。 clean な実装も混ざっているので、 何も見つからない実行が正解の場合がある。",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "cross-party",
+        "label": "他人の手元を覗いた場所を見つける",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "cross-party-hint-1",
+            "content": "party が自分の slot を読むのは普通の動作。 読み手と持ち主が違うときだけが問題。",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "log-leak",
+        "label": "log と失敗経路から漏れた値を見つける",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "log-leak-hint-1",
+            "content": "log 行そのものが問題なのではない。 その行に載っている値が仕様上公開されているかどうかが問題。",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "transcript",
+        "label": "漏れた transcript から秘密を復元する",
+        "points": 40,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "transcript-hint-1",
+            "content": "transcript には部分和と合計の両方がある。 その差は誰の寄与か。 weight は公開されていて、 p は素数。",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "repair",
+        "label": "漏れだけを取り除く",
+        "points": 50,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "repair-hint-1",
+            "content": "観測を全部消せば漏れないが、 それは修復ではない。 clean な実装が出す transcript と 1 行ずつ突き合わせる。",
+            "penalty": 25
+          }
+        ]
+      },
+      {
+        "id": "mutation",
+        "label": "名前を変えられても同じ判定を出す",
+        "points": 40,
+        "wrongAnswerPenalty": 15
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "The answer is right. That is all it is",
+      "shortDescription": "Seven implementations all return the correct total. Four of them leak something on the way. Every correctness test passes. Write the auditor that finds the first violation.",
+      "instructions": "## Start here\n\nThree teams shipped the same private risk score. All of them return the right total. Their privacy reviews did not come back the same.\n\n## First move\n\n```bash\nmake inspect\n```\n\nThat prints the specification — which labels this protocol may reveal — and the events of one clean run. It does not show you a leaking implementation; finding those is the exercise.\n\nThen edit `local/starter/auditor.py`. `make test` runs the public tests; `make reset` restores the starter.\n\n## Goal\n\nClear seven independently scored checkpoints. The output is identical across every implementation, so looking at it tells you nothing. Name the kind and the position of the first violating event.\n\nA false positive costs exactly what a miss costs. If the value in a log line is public by specification, that is not a leak.",
+      "writeup": "## What correctness tests cannot catch\n\nAll seven implementations return the right total. No number of correctness tests tells you which of them is safe, because privacy is not a property of the output — it is a property of what became observable along the way.\n\n## The four violations\n\n- **opened-a-secret**: an intermediate value (a partial sum) is opened. Nothing masks it, so anyone reading the transcript learns it.\n- **cross-party-read**: one party reads another party's raw share slot. Nothing is opened and the transcript is spotless; only the access trace shows it.\n- **leaked-in-log**: a log line carries a raw private value. Logs are not outside the threat model.\n- **leaked-in-error**: the error path carries a secret. The happy path is perfectly clean, which is exactly why a correctness review passes it.\n\n## The two false positives\n\nAn auditor that flags everything suspicious finds every real violation and still fails. One clean implementation logs a weight that is public by specification; another has a party read its own slot. Neither is a violation. What may be revealed is decided by the specification, not by the kind of operation.\n\n## Why the programs are data, not code\n\nAn auditor that greps for the word `reconstruct` is defeated by a rename, a wrapper, or a call through a helper. Here a program is an operation list, and what gets audited is the operations a run actually performed. The mutation checkpoint renames every label, moves the independent openings, and runs under a seed you have never seen. The protocol is unchanged, so the verdict must be unchanged. An auditor keyed on label text, or on where a violation sat last time, contradicts itself there.\n\n## Why a counterexample is required\n\nPointing at an extra opening does not show that it hurt. The transcript holds both the partial sum and the total; the difference is the last party's weighted contribution, and the weight is public and invertible. One subtraction and one inverse hand you that party's private input. A leak claim becomes a claim when you recover the value.\n\n## What counts as a repair\n\nDeleting every observable operation also stops the leak, and still returns the total. So the grading checks that everything the specification permits to be observed is still observed afterwards. A repair removes the violation and nothing else.\n\n## Threat model\n\nThis assumes honest-but-curious parties and no collusion. The same view, judged under a model that permits collusion, yields a different verdict. A safety judgement is made against assumptions, not against code.\n\n## Where this leads\n\nThis separation — a correct output, and what was observable while producing it — is used directly in Week 6's co-SNARK privacy audit.",
+      "learningGoals": [
+        "Confirm in code that correctness tests cannot establish privacy",
+        "Derive the set of values a protocol may reveal from its specification",
+        "Tell opened secrets, cross-party reads, and log or error leaks apart",
+        "Avoid reporting a violation on a value the specification publishes",
+        "Recover a secret from a transcript to show the leak did harm",
+        "Remove the violation while keeping every legitimate observation",
+        "Explain how the same view yields a different verdict under a different threat model"
+      ],
+      "checks": [
+        {
+          "id": "allowed-opens",
+          "label": "Name what the specification allows to be revealed",
+          "hints": [
+            {
+              "id": "allowed-opens-hint-1",
+              "content": "The specification names three kinds of label. Which of them may be revealed? 'Intermediate value' is not one of them."
+            }
+          ]
+        },
+        {
+          "id": "opened-secret",
+          "label": "Find a value that should not have been revealed",
+          "hints": [
+            {
+              "id": "opened-secret-hint-1",
+              "content": "Check each opened label against the allowed set. Clean implementations are mixed in, so finding nothing is sometimes the right answer."
+            }
+          ]
+        },
+        {
+          "id": "cross-party",
+          "label": "Find where somebody looked at another's slot",
+          "hints": [
+            {
+              "id": "cross-party-hint-1",
+              "content": "A party reading its own slot is ordinary. Only a reader who is not the owner is a problem."
+            }
+          ]
+        },
+        {
+          "id": "log-leak",
+          "label": "Find what escaped through a log or a failure",
+          "hints": [
+            {
+              "id": "log-leak-hint-1",
+              "content": "The log line is not the problem. Whether the value on it is published by the specification is the problem."
+            }
+          ]
+        },
+        {
+          "id": "transcript",
+          "label": "Recover a secret from the leaking transcript",
+          "hints": [
+            {
+              "id": "transcript-hint-1",
+              "content": "The transcript holds both a partial sum and the total. Whose contribution is the difference? The weights are public and p is prime."
+            }
+          ]
+        },
+        {
+          "id": "repair",
+          "label": "Take out the leak and nothing else",
+          "hints": [
+            {
+              "id": "repair-hint-1",
+              "content": "Deleting every observation stops the leak but is not a repair. Compare line by line against the transcript a clean implementation produces."
+            }
+          ]
+        },
+        {
+          "id": "mutation",
+          "label": "Hold the same verdict when the names change"
+        }
+      ]
+    }
+  }
+}
