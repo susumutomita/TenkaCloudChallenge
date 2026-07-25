@@ -1,0 +1,523 @@
+{
+  "id": "ac26-w7-capstone-demo",
+  "name": "主張と、それを反証できる実験",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "advanced-cryptography-2026",
+    "order": 720,
+    "chapter": "Week 7 / Capstone Build"
+  },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 7,
+    "role": "synthesis",
+    "spoilerPolicy": "independent-reimplementation",
+    "sources": [
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        "path": "README.md",
+        "kind": "roadmap"
+      }
+    ]
+  },
+  "difficulty": 5,
+  "estimatedDuration": "180-360 分",
+  "shortDescription": "複数 party が和だけを得る protocol を実装する。 難しいのは実装ではなく、 privacy を主張ではなく確率空間の全数え上げとして測ること、 そして見たことのない壊れ方を捕まえる test suite を書くこと。",
+  "description": "Week 7 の 2 問目、 role は synthesis。 #246 で選定した primitive を、 実際に走る toy 実装と、 主張ごとに対応する実験の束へ落とす。\n\n**randomness を明示的な tuple で受け取らせる**のが設計の芯。 `random` を呼ばせないので確率空間が有限かつ列挙可能になり、 privacy を 「同じ和・異なる honest 入力の 2 世界で coalition の view 分布が一致するか」 として **測定** できる。 標本ではなく全数え上げ (toy field で 3^6 = 729/世界/coalition) を要求する。 場は小さいが、 全空間は全空間であり、 実験の厳密さは変わらない。\n\n**最大の落とし穴は coalition を 1 つしか調べないこと**。 randomness を一切引かない protocol は party 0 に対して完全に private でありながら party 2 に全入力を平文で渡す。 全 party に同じ randomness を配る変種も同じ形で抜ける。 hidden test は閾値未満の全 coalition を掃くので両方落ちる。\n\n**mutation 21 件のうち 9 件は正しい和を返す**。 出力が合っていて transcript が漏らすもの、 両方まともに見えて transcript が実際の run と食い違うもの (公開値が受信の和でない / 総和が出力と一致しない) を含む。 `transcript` checkpoint はこの内部整合性を見る。\n\n**閾値 (parties-1) は protocol の欠陥ではなく関数の限界**。 和から自分たちの入力を引けば残り 1 人分が出る。 scope に書かせ、 defect として扱わせない。\n\n**`detect` は学習者の test suite 自体を採点する**。 hidden test は学習者自身の `run` を包んだ 9 種の broken protocol を渡す。 既知の悪い例を並べた関数では通らない。",
+  "instructions": "## はじめに\n\nWeek 7 の設計問題は選定で終わりました。これはその実装です。\n\n複数の party がそれぞれ数を 1 つ持っていて、和が欲しい。誰も自分の数を他人に渡さない。protocol を実装し、 そのうえで **それが主張どおりのことをして、 それ以上はしていない証拠** を出します。\n\n```bash\nmake inspect\n```\n\n自分の setting と、 privacy がどう測られるかが出ます。\n\n## randomness の契約\n\n`run` は randomness を明示的な tuple で受け取ります。 `random` を呼びません。これは作法ではなく、 **privacy を測れるようにするため** です。randomness が固定長で有限なら、 toy field の確率空間を全数え上げして、 同じ和を持つ 2 つの入力で coalition の見え方を比較できます。`random` の呼び出しは数え上げられません。\n\n## ゴール\n\n8 つの checkpoint を独立に通します。`detect` は自分の test suite そのものが採点対象で、 **見たことのない壊れた protocol** を渡されます。\n",
+  "writeup": "## 正しい答えは、正しい protocol の証拠ではない\n\n出力が合っている実装はいくらでも壊れていられます。この問題の mutation のうち半分近くは、 和を正しく返します。\n\n`transcript` checkpoint が見ているのはそこです。公開された値が、 その party が実際に受け取ったものの和になっているか。公開値の総和が、 報告された出力と一致するか。この 2 つを見ないと、 「出力だけ正しく返して transcript は別の run を記述している」実装が通ります。実装が結果を捏造する形として、 これはいちばんありふれています。\n\n## privacy は測れる\n\nprivacy を「設計上そうなっている」と書くのは主張です。ここでは測ります。\n\n同じ和を持ち、 honest な入力が違う 2 つの setting を用意する。randomness を全部数え上げて、 coalition の view を両方で集める。2 つの多重集合が一致すれば、 view は出力だけの関数です。これは近似ではなく定義そのものです。\n\n数え上げが成立するのは randomness が明示的だからで、 だから契約が `random` を禁じています。標本では「全部の randomness について」を主張できません。\n\n## 1 つの coalition は全部の coalition ではない\n\nいちばん大事な失敗はここです。\n\nrandomness を一切引かない protocol を考えます。各 party の share は `[0, ..., 0, x]` になり、 最後の 1 人が全員の入力をそのまま受け取ります。party 0 から見ると受信は全部 0 で、 公開値も 2 つの世界で同じ。**party 0 に対しては完全に private です。** party 2 は全部知っています。\n\ncoalition を 1 つだけ調べる実験は、 この protocol を private だと報告します。全部の party に randomness を使い回す protocol も同じ形で抜けます。掃かないと捕まりません。\n\n## 閾値は欠陥ではない\n\n`parties - 1` 人が結託すると、 残り 1 人の入力が出ます。これは protocol の穴ではありません。**出力そのものが決めている限界** です。和から自分たちの入力を引けば、 残るのは 1 人分だけです。和を計算するどんな protocol もこれより良くはできません。\n\nだから閾値は defect list ではなく scope に書きます。直せないものを直せるかのように書くほうが、 書かないより悪いです。\n\n## 自分の suite が採点される\n\n`detect` は、 見たことのない壊れた protocol を渡します。既知の悪い例を並べた関数は通りません。\n\n壊れ方は 3 系統あって、 1 つの検査では 3 つとも捕まりません。出力が違う。出力は合っていて transcript が漏らす。両方まともに見えて transcript が実際の run と食い違う。3 番目を落とすのがいちばん多い。\n\n## 次につながるところ\n\nこれが 7 週間の終点です。Week 1 の constraint から Week 6 の stack composition まで、 通して効いているのは 1 つ: **主張は、 それを反証できる実験と対にして初めて主張になる**。\n",
+  "tags": [
+    "advanced-cryptography-2026",
+    "week7",
+    "capstone",
+    "secure-aggregation",
+    "adversarial-validation",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18120,
+      "name": "/verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "設計で選んだ primitive を、 動く toy 実装へ落とせる。",
+    "randomness を明示的に受け取る形にし、 確率空間を数え上げ可能にできる。",
+    "privacy を主張ではなく、 2 つの世界の view 分布の一致として測れる。",
+    "1 つの coalition ではなく、 閾値未満の全 coalition を掃く必要を説明できる。",
+    "関数そのものが持つ限界 (閾値) を、 実装の欠陥と区別して書ける。",
+    "見たことのない壊れ方を捕まえる test suite を書ける。",
+    "各主張を、 実行された実験と限界へ 1 対 1 で対応づけられる。"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.ac26-w7-capstone-demo.build-from-a-design",
+        "description": "設計で選んだ primitive を、 動く toy 実装へ落とせる。"
+      },
+      {
+        "id": "lo.ac26-w7-capstone-demo.explicit-randomness",
+        "description": "randomness を明示的に受け取る形にし、 確率空間を数え上げ可能にできる。"
+      },
+      {
+        "id": "lo.ac26-w7-capstone-demo.measure-privacy",
+        "description": "privacy を主張ではなく、 2 つの世界の view 分布の一致として測れる。"
+      },
+      {
+        "id": "lo.ac26-w7-capstone-demo.sweep-coalitions",
+        "description": "1 つの coalition ではなく、 閾値未満の全 coalition を掃く必要を説明できる。"
+      },
+      {
+        "id": "lo.ac26-w7-capstone-demo.state-the-limit",
+        "description": "関数そのものが持つ限界 (閾値) を、 実装の欠陥と区別して書ける。"
+      },
+      {
+        "id": "lo.ac26-w7-capstone-demo.suite-that-generalizes",
+        "description": "見たことのない壊れ方を捕まえる test suite を書ける。"
+      },
+      {
+        "id": "lo.ac26-w7-capstone-demo.evidence-bundle",
+        "description": "各主張を、 実行された実験と限界へ 1 対 1 で対応づけられる。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.reproducible-experiment",
+        "description": "randomness を明示的に受け取り、 同じ入力で同じ観測を再現できる実験の形。 確率空間の数え上げを可能にする。"
+      },
+      {
+        "id": "concept.adversarial-validation",
+        "description": "happy path ではなく、 壊れ方の仮説を実行可能な test へ変えて検証すること。"
+      },
+      {
+        "id": "concept.public-evidence-bundle",
+        "description": "各 property を、 実行された実験・その判定・限界へ 1 対 1 で対応づけた成果物。 秘密を含まない。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.ac26-w7-capstone-demo.scope",
+        "description": "提供しない性質を主張せず、 その理由を書けた。"
+      },
+      {
+        "id": "assessment.ac26-w7-capstone-demo.correctness",
+        "description": "見せていない party 数・法・入力で正しい和を出せた。"
+      },
+      {
+        "id": "assessment.ac26-w7-capstone-demo.transcript",
+        "description": "公開値が受信の和と一致し、 出力へ再構成される transcript を出せた。"
+      },
+      {
+        "id": "assessment.ac26-w7-capstone-demo.privacy",
+        "description": "確率空間を全数え上げし、 閾値未満の全 coalition で view 分布が一致することを示せた。"
+      },
+      {
+        "id": "assessment.ac26-w7-capstone-demo.threshold",
+        "description": "隠せなくなる coalition の大きさを言い当て、 それ未満では None を返せた。"
+      },
+      {
+        "id": "assessment.ac26-w7-capstone-demo.detect",
+        "description": "見たことのない broken protocol を、 自分の suite で捕まえられた。"
+      },
+      {
+        "id": "assessment.ac26-w7-capstone-demo.measure",
+        "description": "実 transcript と一致する計測を、 単位と環境つきで出せた。"
+      },
+      {
+        "id": "assessment.ac26-w7-capstone-demo.evidence",
+        "description": "主張ごとに実行済み実験と限界を対応づけ、 非目標も省略しなかった。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.right-answer-means-right-protocol",
+        "description": "出力が正しければ protocol も正しいという誤解。 出力を正しく返しながら transcript が別の run を記述していることがある。"
+      },
+      {
+        "id": "misconception.privacy-can-be-asserted",
+        "description": "privacy は設計上の主張だという誤解。 有限の確率空間なら測れる。"
+      },
+      {
+        "id": "misconception.one-adversary-is-every-adversary",
+        "description": "1 つの coalition に対して安全なら全体に安全という誤解。"
+      },
+      {
+        "id": "misconception.threshold-is-a-protocol-defect",
+        "description": "閾値は protocol の欠陥だという誤解。 出力そのものが決めている限界である。"
+      },
+      {
+        "id": "misconception.working-demo-equals-secure-system",
+        "description": "動く demo は安全な系だという誤解。 happy path は脅威モデルを検証しない。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w7-capstone-demo",
+      "target": "lo.ac26-w7-capstone-demo.build-from-a-design"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w7-capstone-demo",
+      "target": "lo.ac26-w7-capstone-demo.explicit-randomness"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w7-capstone-demo",
+      "target": "lo.ac26-w7-capstone-demo.measure-privacy"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w7-capstone-demo",
+      "target": "lo.ac26-w7-capstone-demo.sweep-coalitions"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w7-capstone-demo",
+      "target": "lo.ac26-w7-capstone-demo.state-the-limit"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w7-capstone-demo",
+      "target": "lo.ac26-w7-capstone-demo.suite-that-generalizes"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w7-capstone-demo",
+      "target": "lo.ac26-w7-capstone-demo.evidence-bundle"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w7-capstone-demo",
+      "target": "concept.additive-secret-sharing"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w7-capstone-demo",
+      "target": "concept.share-reconstruction"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w7-capstone-demo",
+      "target": "concept.local-linear-operation"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w7-capstone-demo",
+      "target": "concept.privacy"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w7-capstone-demo",
+      "target": "concept.correctness"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w7-capstone-demo",
+      "target": "concept.threat-model"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w7-capstone-demo",
+      "target": "concept.security-property-matrix"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w7-capstone-demo",
+      "target": "concept.design-assumption"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w7-capstone-demo",
+      "target": "concept.reproducible-experiment"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w7-capstone-demo",
+      "target": "concept.adversarial-validation"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w7-capstone-demo",
+      "target": "concept.public-evidence-bundle"
+    },
+    {
+      "type": "requires",
+      "source": "problem.ac26-w7-capstone-demo",
+      "target": "problem.ac26-w7-capstone-design"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w7-capstone-demo.measure-privacy",
+      "target": "concept.reproducible-experiment"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w7-capstone-demo.build-from-a-design",
+      "target": "concept.additive-secret-sharing"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w7-capstone-demo.evidence-bundle",
+      "target": "concept.public-evidence-bundle"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w7-capstone-demo",
+      "target": "assessment.ac26-w7-capstone-demo.scope"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w7-capstone-demo",
+      "target": "assessment.ac26-w7-capstone-demo.correctness"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w7-capstone-demo",
+      "target": "assessment.ac26-w7-capstone-demo.transcript"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w7-capstone-demo",
+      "target": "assessment.ac26-w7-capstone-demo.privacy"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w7-capstone-demo",
+      "target": "assessment.ac26-w7-capstone-demo.threshold"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w7-capstone-demo",
+      "target": "assessment.ac26-w7-capstone-demo.detect"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w7-capstone-demo",
+      "target": "assessment.ac26-w7-capstone-demo.measure"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w7-capstone-demo",
+      "target": "assessment.ac26-w7-capstone-demo.evidence"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w7-capstone-demo",
+      "target": "misconception.right-answer-means-right-protocol"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w7-capstone-demo",
+      "target": "misconception.privacy-can-be-asserted"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w7-capstone-demo",
+      "target": "misconception.one-adversary-is-every-adversary"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w7-capstone-demo",
+      "target": "misconception.threshold-is-a-protocol-defect"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w7-capstone-demo",
+      "target": "misconception.working-demo-equals-secure-system"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18120/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "scope",
+        "label": "作ったものが何を保証しないかを書く",
+        "points": 30,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "scope-hint-1",
+            "content": "足りない 2 つのうち片方は、 参加者が自分の入力について嘘をついても誰も照合しないから。 もう片方は、 1 人黙ると run が終わらないから。",
+            "penalty": 12
+          }
+        ]
+      },
+      {
+        "id": "correctness",
+        "label": "見せていないパラメータで和が出る",
+        "points": 30,
+        "wrongAnswerPenalty": 15
+      },
+      {
+        "id": "transcript",
+        "label": "transcript が自分の出力を再構成する",
+        "points": 40,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "transcript-hint-1",
+            "content": "出力が正しいことと、 transcript が正しいことは別。 公開された値は、 その party が実際に 受け取ったものの和になっているか。",
+            "penalty": 15
+          }
+        ]
+      },
+      {
+        "id": "privacy",
+        "label": "見えるものが出力だけで決まると測る",
+        "points": 55,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "privacy-hint-1",
+            "content": "randomness を 1 つずつ試すのではなく、 全部数え上げる。 toy field なら空間は有限で、 標本ではなく全体を見られる。",
+            "penalty": 12
+          },
+          {
+            "id": "privacy-hint-2",
+            "content": "party 0 に対して完全に安全で、 party 2 に全部渡す protocol が書ける。 coalition を 1 つ だけ調べる実験は、 それを private だと報告する。",
+            "penalty": 15
+          }
+        ]
+      },
+      {
+        "id": "threshold",
+        "label": "どこから隠せなくなるかを言う",
+        "points": 40,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "threshold-hint-1",
+            "content": "protocol の弱点を探さない。 出力そのものから、 自分たちの入力を引くと何が残るかを考える。",
+            "penalty": 18
+          }
+        ]
+      },
+      {
+        "id": "detect",
+        "label": "見たことのない壊れ方を捕まえる",
+        "points": 55,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "detect-hint-1",
+            "content": "3 つ別のことが壊れる。 出力が違う、 出力は合っていて transcript が漏らす、 両方まともに 見えて transcript が実際の run と食い違う。 1 つの検査では 3 つとも捕まらない。",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "measure",
+        "label": "実際の run から数える",
+        "points": 25,
+        "wrongAnswerPenalty": 15
+      },
+      {
+        "id": "evidence",
+        "label": "主張と実験を 1 対 1 で結ぶ",
+        "points": 25,
+        "wrongAnswerPenalty": 15
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "A claim, and the experiment that could refute it",
+      "shortDescription": "Implement a protocol that gives several parties the sum and nothing else. The hard part is not the protocol: it is measuring privacy by enumerating the whole probability space, and writing a suite that catches breakage it has not seen.",
+      "instructions": "## Start here\n\nWeek 7's design problem ended with a selection. This is the build.\n\nSeveral parties each hold one number and want the sum. Nobody hands their number to anybody.\nYou implement the protocol, and then produce the **evidence that it does what you say it does,\nand only that**.\n\n```bash\nmake inspect\n```\n\nThat prints your setting, and how privacy is measured.\n\n## The randomness contract\n\n`run` receives its randomness as an explicit tuple. It never calls `random`. That is not\nstyle — it is what makes privacy *measurable*. With the randomness fixed and finite, the whole\nprobability space of a toy field can be enumerated and compared across two inputs with the\nsame sum. A call to `random` cannot be enumerated.\n\n## Goal\n\nClear eight independently scored checkpoints. `detect` grades your own test suite: it is\nhanded **broken protocols you have never seen**.\n",
+      "writeup": "## A right answer is not evidence of a right protocol\n\nAn implementation that returns the correct output can be broken in any number of ways. Close\nto half the mutations in this problem compute the sum perfectly.\n\nThat is what the `transcript` checkpoint is for. Is each opened value the sum of what that\nparty actually received? Do the opened values add up to the reported output? Without both, an\nimplementation that returns the right number while its transcript describes an entirely\ndifferent run passes — and that is the most ordinary shape a faked result takes.\n\n## Privacy can be measured\n\nWriting that privacy \"holds by design\" is an assertion. Here it is measured.\n\nTake two settings with the same sum and different honest inputs. Enumerate every randomness\nand collect what the coalition sees in both. If the two multisets agree, the view is a\nfunction of the output alone. That is not an approximation of the definition; it is the\ndefinition.\n\nThe enumeration is only possible because the randomness is explicit, which is why the contract\nforbids `random`. A sample cannot support a claim about *every* randomness.\n\n## One coalition is not every coalition\n\nThis is the failure worth the most.\n\nConsider a protocol that draws no randomness at all. Every party's shares become\n`[0, ..., 0, x]`, and the last party receives everybody's input in the clear. From party 0's\nseat, every received value is zero and the opened values match across both worlds: **against\nparty 0 it is perfectly private.** Party 2 knows everything.\n\nAn experiment that only asks one coalition reports that protocol as private. So does a\nprotocol that reuses one party's randomness for everybody. Neither is caught without the\nsweep.\n\n## The threshold is not a defect\n\nWith `parties - 1` colluding, the remaining input falls out. That is not a hole in the\nprotocol — it is a limit **the output itself imposes**. Subtract your own inputs from the sum\nand one party's worth is left. No protocol computing this function does better.\n\nSo the threshold belongs in the scope statement, not in a defect list. Writing an unfixable\nlimit as though it were fixable is worse than not writing it at all.\n\n## Your suite is what gets graded\n\n`detect` hands you broken protocols you have never seen. A function listing known-bad cases\ndoes not pass.\n\nBreakage comes in three families and no single check finds all three: the output is wrong; the\noutput is right and the transcript leaks; both look right and the transcript disagrees with\nthe run that happened. The third is the one most often missed.\n\n## Where this ends\n\nThis is the end of seven weeks. From Week 1's constraints to Week 6's stack composition, one\nthing has been running underneath: **a claim becomes a claim only when it is paired with an\nexperiment that could have refuted it.**\n",
+      "learningGoals": [
+        "Turn the primitive a design selected into a working toy implementation.",
+        "Take randomness explicitly, so the probability space can be enumerated.",
+        "Measure privacy as agreement between two worlds' view distributions, not as an assertion.",
+        "Explain why every coalition below the threshold has to be swept, not just one.",
+        "State the limit the function itself has, and distinguish it from a defect in the build.",
+        "Write a test suite that catches breakage it has not been shown.",
+        "Map each claim one-to-one onto an experiment that ran, and onto its limitation."
+      ],
+      "checks": [
+        {
+          "id": "scope",
+          "label": "Say what the build does not guarantee",
+          "hints": [
+            {
+              "id": "scope-hint-1",
+              "content": "One of the two missing properties is missing because nothing ever checks a party's input against anything. The other because one party going quiet ends the run."
+            }
+          ]
+        },
+        {
+          "id": "correctness",
+          "label": "Produce the sum on parameters you were not shown"
+        },
+        {
+          "id": "transcript",
+          "label": "Make the transcript reconstruct its own output",
+          "hints": [
+            {
+              "id": "transcript-hint-1",
+              "content": "The output being right and the transcript being right are different claims. Is each opened value the sum of what that party actually received?"
+            }
+          ]
+        },
+        {
+          "id": "privacy",
+          "label": "Measure that what is seen is fixed by the output alone",
+          "hints": [
+            {
+              "id": "privacy-hint-1",
+              "content": "Do not sample the randomness; enumerate it. On a toy field the space is finite, so the whole of it is available rather than a sample."
+            },
+            {
+              "id": "privacy-hint-2",
+              "content": "A protocol can be perfectly private against party 0 and hand party 2 everything. An experiment that only ever asks one coalition reports that protocol as private."
+            }
+          ]
+        },
+        {
+          "id": "threshold",
+          "label": "Say where it stops being able to hide",
+          "hints": [
+            {
+              "id": "threshold-hint-1",
+              "content": "Do not look for a weakness in the protocol. Take the output itself and subtract what the coalition already knows; ask what is left."
+            }
+          ]
+        },
+        {
+          "id": "detect",
+          "label": "Catch breakage you have not seen",
+          "hints": [
+            {
+              "id": "detect-hint-1",
+              "content": "Three separate things go wrong: the output is wrong; the output is right and the transcript leaks; both look right and the transcript disagrees with the run that happened. No single check finds all three."
+            }
+          ]
+        },
+        {
+          "id": "measure",
+          "label": "Count it off a run that happened"
+        },
+        {
+          "id": "evidence",
+          "label": "Tie every claim to an experiment that ran"
+        }
+      ]
+    }
+  }
+}

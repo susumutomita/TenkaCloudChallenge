@@ -784,6 +784,96 @@
       }
     },
     {
+      "id": "ac26-w7-capstone-demo",
+      "name": "主張と、それを反証できる実験",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "advanced-cryptography-2026",
+        "order": 720,
+        "chapter": "Week 7 / Capstone Build"
+      },
+      "courseAlignment": {
+        "courseId": "advanced-cryptography-program",
+        "edition": "2026",
+        "week": 7,
+        "role": "synthesis",
+        "sources": [
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "path": "README.md",
+            "kind": "roadmap"
+          }
+        ]
+      },
+      "difficulty": 5,
+      "estimatedDuration": "180-360 分",
+      "shortDescription": "複数 party が和だけを得る protocol を実装する。 難しいのは実装ではなく、 privacy を主張ではなく確率空間の全数え上げとして測ること、 そして見たことのない壊れ方を捕まえる test suite を書くこと。",
+      "tags": [
+        "advanced-cryptography-2026",
+        "week7",
+        "capstone",
+        "secure-aggregation",
+        "adversarial-validation",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "ac26-w7-capstone-design",
+      "name": "道具から決めない",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "advanced-cryptography-2026",
+        "order": 710,
+        "chapter": "Week 7 / Capstone Design"
+      },
+      "courseAlignment": {
+        "courseId": "advanced-cryptography-program",
+        "edition": "2026",
+        "week": 7,
+        "role": "synthesis",
+        "sources": [
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "path": "README.md",
+            "kind": "roadmap"
+          }
+        ]
+      },
+      "difficulty": 5,
+      "estimatedDuration": "120-180 分",
+      "shortDescription": "brief には actor と asset と信頼関係しか書いていない。 primitive の名前は 1 つも出てこない。 そこから必要な性質を導き、 必要な分だけ選び、 境界に型をつけ、 前提が動いた brief にもう一度答える。",
+      "tags": [
+        "advanced-cryptography-2026",
+        "week7",
+        "capstone",
+        "threat-model",
+        "primitive-selection",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "ai-riscv-screen-repair",
       "name": "AI製RISC-V画面を復旧せよ",
       "category": "Challenge",
