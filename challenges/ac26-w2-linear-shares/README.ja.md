@@ -80,10 +80,10 @@ hidden test は `n ≥ 2` の 4 設定を回し、`x + n*c` という値を名�
 
 ## Week 2 の対応づけ
 
-Week 2 の教材は `curriculum.md` が記録している commit の時点で未公開のため、`courseAlignment` は
-week と role を持ちますが **`sources[]` を持ちません**。`status` は `draft` のままです。commit SHA は
-捏造しておらず、その不在をテストが検査しています。`bun run course:drift` が公開を報告し、#219 が
-対応づけを確定してから draft を外します。
+Week 2 の教材は `curriculum.md` が記録している commit の時点で未公開です。`courseAlignment` は
+`week2/README.md` を `kind: "placeholder"` で pin し、`status` は `draft` のままです。この pin は対応づけではなく、その commit 時点で教材が存在しなかったという事実を記録します。
+これにより `bun run course:drift` は教材公開の日に `PUBLISHED` を報告できます。#219 が対応づけを
+確定してから draft を外します。
 
 ## コスト
 

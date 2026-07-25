@@ -177,6 +177,50 @@
       }
     },
     {
+      "id": "ac26-w2-beaver-mul",
+      "name": "掛け算だけが話を必要とする",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "advanced-cryptography-2026",
+        "order": 230,
+        "chapter": "Week 2 / Beaver Triples"
+      },
+      "courseAlignment": {
+        "courseId": "advanced-cryptography-program",
+        "edition": "2026",
+        "week": 2,
+        "role": "mechanism",
+        "sources": [
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "path": "week2/README.md",
+            "kind": "placeholder"
+          }
+        ]
+      },
+      "difficulty": 3,
+      "estimatedDuration": "40-60 分",
+      "shortDescription": "shared 値同士の掛け算だけは手元で終わらない。前処理で作った三つ組を使って、通信を 1 round に押し込む。最後の項が他の 3 つと違う扱いを要求する。",
+      "tags": [
+        "advanced-cryptography-2026",
+        "week2",
+        "mpc",
+        "beaver-triple",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "ac26-w2-linear-shares",
       "name": "誰とも話さずにできること",
       "category": "Challenge",
@@ -191,7 +235,15 @@
         "courseId": "advanced-cryptography-program",
         "edition": "2026",
         "week": 2,
-        "role": "mechanism"
+        "role": "mechanism",
+        "sources": [
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "path": "week2/README.md",
+            "kind": "placeholder"
+          }
+        ]
       },
       "difficulty": 3,
       "estimatedDuration": "35-50 分",
@@ -227,7 +279,15 @@
         "courseId": "advanced-cryptography-program",
         "edition": "2026",
         "week": 2,
-        "role": "mechanism"
+        "role": "mechanism",
+        "sources": [
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "path": "week2/README.md",
+            "kind": "placeholder"
+          }
+        ]
       },
       "difficulty": 3,
       "estimatedDuration": "40-60 分",

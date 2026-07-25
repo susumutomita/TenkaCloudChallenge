@@ -5,16 +5,17 @@ import { describe, expect, it } from "bun:test";
 import { parse as parseYaml } from "yaml";
 
 /**
- * ac26-w2-linear-shares is the first Week 1 problem. The interesting assertions run its
+ * ac26-w2-beaver-mul is the third Week 2 problem. The interesting assertions run its
  * Python for real — the starter fails, the reference passes every checkpoint, the mutation
- * suite kills every intended defect, and /verify holds its security contract — rather than
- * reading source text. Python 3 is on ubuntu-latest and the problem is stdlib-only.
+ * suite kills every intended defect, and the near-miss answer that folds the public scalar
+ * into every share is rejected — rather than reading source text. Python 3 is on
+ * ubuntu-latest and the problem is stdlib-only.
  */
 
-const ROOT = join(import.meta.dir, "..", "challenges", "ac26-w2-linear-shares");
+const ROOT = join(import.meta.dir, "..", "challenges", "ac26-w2-beaver-mul");
 const LOCAL = join(ROOT, "local");
 const SEED = "ci-fixed-seed";
-const SUBMITTED = ["linear.py"] as const;
+const CHECKPOINTS = ["mask", "open", "combine", "protocol", "transfer"] as const;
 
 function read(relativePath: string): string {
   return readFileSync(join(ROOT, relativePath), "utf8");
@@ -30,7 +31,7 @@ function python(args: string[], cwd = LOCAL) {
 }
 
 function bundle(dir: "starter" | "reference"): string {
-  return read(`local/${dir}/linear.py`);
+  return read(`local/${dir}/beaver.py`);
 }
 
 function evaluate(checkpointId: string, submission: string): boolean {
@@ -45,7 +46,7 @@ function evaluate(checkpointId: string, submission: string): boolean {
   return JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "null") === true;
 }
 
-describe("ac26-w2-linear-shares: participant contract", () => {
+describe("ac26-w2-beaver-mul: participant contract", () => {
   it("should ship every file the AC26 template requires", () => {
     for (const path of [
       "Makefile",
@@ -57,11 +58,11 @@ describe("ac26-w2-linear-shares: participant contract", () => {
       "local/show.py",
       "local/mutation.py",
       "local/fixtures/generate.py",
-      "local/tests/public/test_linear.py",
-      "local/tests/hidden/check_linear.py",
+      "local/tests/public/test_beaver.py",
+      "local/tests/hidden/check_beaver.py",
       "local/verifier/server.py",
-      "local/starter/linear.py",
-      "local/reference/linear.py",
+      "local/starter/beaver.py",
+      "local/reference/beaver.py",
     ]) {
       expect(existsSync(join(ROOT, path))).toBe(true);
     }
@@ -82,7 +83,7 @@ describe("ac26-w2-linear-shares: participant contract", () => {
   });
 });
 
-describe("ac26-w2-linear-shares: container safety", () => {
+describe("ac26-w2-beaver-mul: container safety", () => {
   it("should publish every port on loopback only", () => {
     const compose = parseYaml(read("local/docker-compose.yml")) as {
       services: Record<string, { ports?: string[] }>;
@@ -108,8 +109,8 @@ describe("ac26-w2-linear-shares: container safety", () => {
   });
 });
 
-describe("ac26-w2-linear-shares: fixtures are seed-derived", () => {
-  it("should produce different circuits for different seeds", () => {
+describe("ac26-w2-beaver-mul: fixtures are seed-derived", () => {
+  it("should produce different settings for different seeds", () => {
     const script = [
       "import json, sys",
       "sys.path.insert(0, '.')",
@@ -135,13 +136,46 @@ describe("ac26-w2-linear-shares: fixtures are seed-derived", () => {
     const counts = new Set(python(["-c", script]).stdout.trim().split(","));
     expect(counts.size).toBeGreaterThan(2);
   });
+
+  // If d or e were zero, d*e would vanish and folding the public scalar into every share
+  // would be indistinguishable from folding it into one. The generator forces both
+  // non-zero; asserting it here stops a later "simplification" from silently reopening
+  // the hole, because the wrong answer would then grade as correct.
+  it("should never generate a setting where the masked difference vanishes", () => {
+    const script = [
+      "import sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import setting",
+      "bad = 0",
+      "for i in range(200):",
+      "    cfg = setting('s%d' % i)",
+      "    p = cfg['p']",
+      "    if (cfg['x'] - cfg['a']) % p == 0 or (cfg['y'] - cfg['b']) % p == 0:",
+      "        bad += 1",
+      "print(bad)",
+    ].join("\n");
+    expect(python(["-c", script]).stdout.trim()).toBe("0");
+  });
+
+  it("should hold the triple invariant c = a*b in every generated setting", () => {
+    const script = [
+      "import sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import setting",
+      "bad = [i for i in range(200)",
+      "       if setting('s%d' % i)['c'] != (setting('s%d' % i)['a'] * setting('s%d' % i)['b'])",
+      "       % setting('s%d' % i)['p']]",
+      "print(len(bad))",
+    ].join("\n");
+    expect(python(["-c", script]).stdout.trim()).toBe("0");
+  });
 });
 
-describe("ac26-w2-linear-shares: the problem is solvable and actually fails", () => {
+describe("ac26-w2-beaver-mul: the problem is solvable and actually fails", () => {
   it("should fail the public tests in the shipped starter state", () => {
-    const result = python(["tests/public/test_linear.py"]);
+    const result = python(["tests/public/test_beaver.py"]);
     expect(result.status).not.toBe(0);
-    expect(result.stdout).toContain("FAIL");
+    expect(result.stdout).toContain("failed");
   });
 
   it("should kill every intended defect in the mutation suite", () => {
@@ -152,8 +186,8 @@ describe("ac26-w2-linear-shares: the problem is solvable and actually fails", ()
   });
 });
 
-describe("ac26-w2-linear-shares: /verify contract", () => {
-  it.each(["add-shares", "add-constant", "mul-constant", "transfer"])(
+describe("ac26-w2-beaver-mul: /verify contract", () => {
+  it.each(CHECKPOINTS)(
     "should accept the reference submission on %s",
     (checkpoint) => {
       expect(evaluate(checkpoint, bundle("reference"))).toBe(true);
@@ -161,7 +195,7 @@ describe("ac26-w2-linear-shares: /verify contract", () => {
     120_000,
   );
 
-  it.each(["add-shares", "add-constant", "mul-constant", "transfer"])(
+  it.each(CHECKPOINTS)(
     "should reject the starter submission on %s",
     (checkpoint) => {
       expect(evaluate(checkpoint, bundle("starter"))).toBe(false);
@@ -169,47 +203,69 @@ describe("ac26-w2-linear-shares: /verify contract", () => {
     120_000,
   );
 
+  // The near miss this whole problem is built around: correct in every respect except
+  // that the public scalar d*e is folded into every share, giving x*y + (n-1)*d*e.
+  it("should reject a combine that folds the public scalar into every share", () => {
+    const source = bundle("reference")
+      .replace("out[0] = (out[0] + d * e) % p", "out = [(v + d * e) % p for v in out]")
+      .replace("    return out", "    return out");
+    expect(source).toContain("(v + d * e)");
+    expect(evaluate("combine", source)).toBe(false);
+  }, 120_000);
+
+  // Preprocessing moves work offline; it does not remove the round. A submission that is
+  // otherwise perfect must still fail the checkpoint that asks for the round count.
+  it("should reject a protocol answer claiming a Beaver multiplication is silent", () => {
+    const source = bundle("reference").replace("    return 1", "    return 0");
+    expect(source).toContain("return 0");
+    expect(evaluate("protocol", source)).toBe(false);
+  }, 120_000);
+
+  // `transfer` runs the whole suite under a seed the participant has never been shown, so
+  // an answer that hard-codes the setting it was handed cannot survive it.
+  it("should reject a submission hard-coded to one setting on transfer", () => {
+    const script = [
+      "import json, sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import setting",
+      "cfg = setting(sys.argv[1])",
+      "print(json.dumps({'p': cfg['p'], 'n': cfg['n']}))",
+    ].join("\n");
+    const parse = (seed: string) =>
+      JSON.parse(python(["-c", script, seed]).stdout.trim()) as { p: number; n: number };
+    const { p, n } = parse(SEED);
+    // The seed is fixed, so this is a deterministic precondition rather than a chance
+    // one: if the transfer setting happened to match, the submission below would not be
+    // hard-coded to anything and the assertion would pass vacuously.
+    expect(parse(`${SEED}:transfer`)).not.toEqual({ p, n });
+    const source = [
+      "def mask(value_shares, mask_shares, p):",
+      `    return [(v - m) % ${p} for v, m in zip(value_shares, mask_shares)]`,
+      "def open_value(shares, p):",
+      `    return sum(shares) % ${p}`,
+      "def combine(c_shares, a_shares, b_shares, d, e, p):",
+      `    out = [(c + d * b + e * a) % ${p}`,
+      "           for c, a, b in zip(c_shares, a_shares, b_shares)]",
+      `    out[0] = (out[0] + d * e) % ${p}`,
+      `    return out[:${n}]`,
+      "def rounds():",
+      "    return 1",
+    ].join("\n");
+    expect(evaluate("transfer", source)).toBe(false);
+  }, 120_000);
+
   it("should reject a submission that hangs, rather than hanging itself", () => {
     expect(
-      evaluate("add-shares", "def add_shares(a, b, p):\n    while True:\n        pass\n"),
+      evaluate("mask", "def mask(a, b, p):\n    while True:\n        pass\n"),
     ).toBe(false);
+  }, 60_000);
+
+  it("should reject a submission that cannot even be imported", () => {
+    expect(evaluate("mask", "def mask(:\n")).toBe(false);
   }, 60_000);
 
   it("should reject an unknown checkpoint id instead of crediting it", () => {
     expect(evaluate("finish-week2", bundle("reference"))).toBe(false);
-  });
-
-  it("should reject a partial operation table", () => {
-    expect(
-      evaluate(
-        "no-communication",
-        '{"add-shared": 0, "add-constant": 0, "mul-constant": 0}',
-      ),
-    ).toBe(false);
-  });
-
-  // The whole point of the classification: multiplying two shared values is the one
-  // operation that cannot be done locally.
-  it("should reject a table claiming multiplication of two sharings is local", () => {
-    expect(
-      evaluate(
-        "no-communication",
-        '{"add-shared": 0, "add-constant": 0, "mul-constant": 0, "mul-shared": 0}',
-      ),
-    ).toBe(false);
-  });
-
-  // Graded on zero versus non-zero, because the round count of a multiplication
-  // protocol is protocol-dependent while the need to communicate is not.
-  it("should accept any positive round count for multiplying two sharings", () => {
-    for (const rounds of [1, 2, 3]) {
-      expect(
-        evaluate(
-          "no-communication",
-          `{"add-shared": 0, "add-constant": 0, "mul-constant": 0, "mul-shared": ${rounds}}`,
-        ),
-      ).toBe(true);
-    }
   });
 
   it("should echo the checkpointId so the platform can fail closed", () => {
@@ -219,7 +275,7 @@ describe("ac26-w2-linear-shares: /verify contract", () => {
   });
 });
 
-describe("ac26-w2-linear-shares: metadata contracts", () => {
+describe("ac26-w2-beaver-mul: metadata contracts", () => {
   function metadata() {
     return JSON.parse(read("metadata.json")) as {
       difficulty: number;
@@ -227,7 +283,7 @@ describe("ac26-w2-linear-shares: metadata contracts", () => {
       courseAlignment: { week: number; role: string; sources?: Array<{ ref: string }> };
       scoring: {
         kind: string;
-        checks: Array<{ points: number; hints?: Array<{ penalty: number }> }>;
+        checks: Array<{ id: string; points: number; hints?: Array<{ penalty: number }> }>;
       };
     };
   }
@@ -237,10 +293,16 @@ describe("ac26-w2-linear-shares: metadata contracts", () => {
     expect(meta.scoring.kind).toBe("multi-verify");
     expect(meta.difficulty).toBe(3);
     expect(meta.scoring.checks.reduce((sum, check) => sum + check.points, 0)).toBe(200);
-    const hintPenalty = meta.scoring.checks
-      .flatMap((check) => check.hints ?? [])
-      .reduce((sum, hint) => sum + hint.penalty, 0);
-    expect(hintPenalty).toBeLessThanOrEqual(100);
+    // SCORING.md caps hints per checkpoint, not across the problem: no single checkpoint
+    // may be worth less than half its points once every hint on it is opened.
+    for (const check of meta.scoring.checks) {
+      const penalty = (check.hints ?? []).reduce((sum, hint) => sum + hint.penalty, 0);
+      expect(penalty).toBeLessThanOrEqual(check.points / 2);
+    }
+  });
+
+  it("should score exactly the checkpoints the verifier implements", () => {
+    expect(metadata().scoring.checks.map((check) => check.id)).toEqual([...CHECKPOINTS]);
   });
 
   // Week 2 had no material at the recorded commit, so the pin records that absence

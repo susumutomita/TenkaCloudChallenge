@@ -68,12 +68,12 @@ knows everything from the start. The hidden tests reject that case by name.
 ## Week 2 alignment
 
 Week 2's material was **not published upstream** at the commit `curriculum.md` records. This
-problem therefore carries `courseAlignment` with a week and a role but **no `sources[]`** — the
-schema makes `sources` optional precisely for unpublished weeks, and no commit SHA has been
-invented to fill the gap. `status` stays `draft`.
+problem therefore pins `week2/README.md` with `kind: "placeholder"` — a record of the *absence* of
+material at that commit, not an alignment to it. `status` stays `draft`.
 
-When `bun run course:drift` reports Week 2 material published, the Week 2 course-sync issue
-reconciles the planned row and this problem's alignment before it leaves draft.
+That pin is what lets `bun run course:drift` report `PUBLISHED` rather than `DRIFT` the day the
+material appears; the Week 2 course-sync issue then reconciles the planned row and this problem's
+alignment before it leaves draft.
 
 ## Cost
 
