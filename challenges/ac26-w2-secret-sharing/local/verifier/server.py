@@ -44,8 +44,18 @@ CHECKPOINTS = (
 )
 
 
+# Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still
+# reporting RLIM_INFINITY for it. Setting it anyway raises inside `preexec_fn` and
+# aborts the exec, so on a macOS checkout every submission run failed — including
+# the reference. The lab runs on Linux, where the cap does apply, so skipping it on
+# Darwin does not change what participants run. See the same note in
+# ac26-bridge-experiment's verifier.
+_ADDRESS_SPACE_CAPPABLE = sys.platform.startswith("linux")
+
+
 def _limits() -> None:
-    resource.setrlimit(resource.RLIMIT_AS, (MAX_ADDRESS_SPACE_BYTES, MAX_ADDRESS_SPACE_BYTES))
+    if _ADDRESS_SPACE_CAPPABLE:
+        resource.setrlimit(resource.RLIMIT_AS, (MAX_ADDRESS_SPACE_BYTES, MAX_ADDRESS_SPACE_BYTES))
     resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
     resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_BYTES, MAX_OUTPUT_BYTES))
 
