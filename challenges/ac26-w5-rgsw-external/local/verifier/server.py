@@ -10,8 +10,8 @@ Security contract (docs/curricula/advanced-cryptography-2026/TEMPLATE.md §/veri
     checkpoint instead of the verifier.
   - No learner input is ever concatenated into a shell command; the subprocess is
     invoked with an argument list and `shell=False`.
-  - Responses carry `correct` and, at most, a property name. Never the hidden test
-    names, the expected values, or reference output.
+  - Responses carry `correct` and nothing else. Never the hidden test names, the
+    expected values, or reference output.
   - Malformed input produces a failed checkpoint, never a crashed process.
 """
 
@@ -32,38 +32,31 @@ ROOT = Path(__file__).resolve().parents[1]
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 MAX_BODY_BYTES = 256 * 1024
-RUN_TIMEOUT_SECONDS = 20
+RUN_TIMEOUT_SECONDS = 30
 MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
 MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
 #: Wall clock for reading a request body, so a stalled client cannot pin the server.
 REQUEST_TIMEOUT_SECONDS = 15
 
-# Every checkpoint runs the learner's auditor.py; they differ in which hidden phases
-# they run. `mutation` additionally runs under a seed the learner has never been shown,
-# so the renamed programs it audits are built from parameters it cannot have memorized.
 CODE_CHECKPOINTS = {
-    "allowed-opens": ("check_allowed",),
-    "opened-secret": ("check_opened_secret",),
-    "cross-party": ("check_cross_party",),
-    "log-leak": ("check_log_leak",),
-    "transcript": ("check_transcript",),
-    "repair": ("check_repair",),
-    "mutation": ("check_mutation",),
+    "decompose": ("check_decompose",),
+    "gadget": ("check_gadget",),
+    "polynomial": ("check_polynomial",),
+    "rgsw": ("check_rgsw",),
+    "external": ("check_external",),
+    "trace": ("check_trace",),
+    "failure": ("check_failure",),
+    "transfer": ("check_transfer",),
 }
 CHECKPOINTS = tuple(CODE_CHECKPOINTS)
 
 
 # Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still
-# reporting RLIM_INFINITY for it. Setting it anyway raises inside `preexec_fn`,
-# which aborts the exec -- so on a macOS checkout the address-space cap turned
-# every submission run into "could not run at all", including the reference.
-#
-# The lab itself runs on Linux, where this cap does apply. Skipping it on Darwin
-# therefore does not weaken what participants actually run; it makes
-# `make reference-test` and `bun run validate` work on a macOS checkout, where the
-# alternative was no verification at all. The timeout, process cap, file-size cap,
-# `-I` isolation, and throwaway workspace all still apply on every platform.
+# reporting RLIM_INFINITY for it. Setting it anyway raises inside `preexec_fn`, which
+# aborts the exec -- so on a macOS checkout every submission run failed, including the
+# reference. The lab runs on Linux, where the cap does apply, so skipping it on Darwin
+# does not change what participants run.
 _ADDRESS_SPACE_CAPPABLE = sys.platform.startswith("linux")
 
 
@@ -79,16 +72,20 @@ RUNNER = """
 import json, os, sys
 sys.path.insert(0, {root!r})
 sys.path.insert(0, {workspace!r})
-from tests.hidden import check_auditor
+from tests.hidden import check_rgsw
 try:
-    import auditor
+    import rgsw
 except Exception as error:
     print(json.dumps({{"failures": ["submission could not be imported: " + type(error).__name__]}}))
     sys.stdout.flush()
     os._exit(0)
-failures = []
-for name in {phases!r}:
-    failures.extend(getattr(check_auditor, name)(auditor, {seed!r}))
+phases = {phases!r}
+if phases:
+    failures = []
+    for name in phases:
+        failures.extend(getattr(check_rgsw, name)(rgsw, {seed!r}))
+else:
+    failures = check_rgsw.run(rgsw, {seed!r})
 print(json.dumps({{"failures": failures}}))
 sys.stdout.flush()
 os._exit(0)
@@ -99,13 +96,13 @@ def _run_submission(submission: object, phases: tuple[str, ...], seed: str) -> b
     """Run the named hidden phases against the learner's file in a throwaway workspace."""
     source = submission
     if isinstance(source, dict):
-        source = source.get("auditor.py")
+        source = source.get("rgsw.py")
     if not isinstance(source, str) or not source.strip():
         return False
     if len(source) > MAX_BODY_BYTES:
         return False
     with tempfile.TemporaryDirectory() as workspace:
-        (Path(workspace) / "auditor.py").write_text(source, encoding="utf-8")
+        (Path(workspace) / "rgsw.py").write_text(source, encoding="utf-8")
         script = RUNNER.format(
             root=str(ROOT), workspace=workspace, phases=list(phases), seed=seed
         )
@@ -145,7 +142,9 @@ def _run_submission(submission: object, phases: tuple[str, ...], seed: str) -> b
 
 def evaluate(checkpoint_id: str, submission: object) -> bool:
     if checkpoint_id in CODE_CHECKPOINTS:
-        seed = f"{SEED}:mutation" if checkpoint_id == "mutation" else SEED
+        # `transfer` runs under a derived seed, so its parameter sets are not the ones
+        # any other checkpoint used.
+        seed = f"{SEED}:transfer" if checkpoint_id == "transfer" else SEED
         return _run_submission(submission, CODE_CHECKPOINTS[checkpoint_id], seed)
     return False
 
@@ -185,7 +184,7 @@ class Handler(BaseHTTPRequestHandler):
 
         checkpoint_id = body.get("checkpointId")
         if not isinstance(checkpoint_id, str) or checkpoint_id not in CHECKPOINTS:
-            # Unknown checkpoint is a failed verdict with the id echoed when it is at
+            # An unknown checkpoint is a failed verdict with the id echoed when it is at
             # least a string, so the platform's echo check still holds.
             self._respond(
                 200,
@@ -215,7 +214,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    port = int(os.environ.get("VERIFY_PORT", "18098"))
+    port = int(os.environ.get("VERIFY_PORT", "18109"))
     HTTPServer(("127.0.0.1", port), Handler).serve_forever()
 
 

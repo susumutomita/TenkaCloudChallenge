@@ -88,14 +88,6 @@ Eight checkpoints, scored independently. Wrong answers cost 15 points each.
 
 Hints on five of the eight, each inside that checkpoint's 50% cap.
 
-## A fixture invariant worth naming
-
-The generated secrets are forced to contain at least one `1`. That is not cosmetic: an
-all-zero secret makes the mask term vanish, so `b = encode(m) + e` no matter what the
-implementation did with the secret. **Three separate mutations survived on exactly this**
-before it was forced — the seed drew `(0, 0, 0, 0, 0)` and the whole scheme degenerated
-into "encode the message and add noise", which every wrong sign convention also does.
-
 ## Not in scope
 
 No concrete security parameter selection, no CSPRNG or constant-time work, no NTT or FFT,
@@ -140,3 +132,11 @@ Zero. No cloud account, no AWS resources.
 `make reference-test` runs the mutation suite: twenty-two broken implementations. Most
 encrypt and decrypt their own ciphertexts perfectly and differ from the reference only
 when something else has to agree with them.
+
+### A fixture invariant worth naming
+
+The generated secrets are forced to contain at least one `1`. That is not cosmetic: an
+all-zero secret makes the mask term vanish, so `b = encode(m) + e` no matter what the
+implementation did with the secret. **Three separate mutations survived on exactly this**
+before it was forced — the seed drew `(0, 0, 0, 0, 0)` and the whole scheme degenerated
+into "encode the message and add noise", which every wrong sign convention also does.
