@@ -8,16 +8,28 @@
  * problem beyond the metadata envelope.
  *
  * The template source is a real, working, CI-covered problem — challenges/ac26-bridge-experiment
- * — not a skeleton, so a freshly scaffolded directory passes `bun run validate` and its container
- * runs before the author has written a line. The author then replaces the counter with their
- * cryptography.
+ * — not a skeleton, so a freshly scaffolded directory's container runs, and its tests and
+ * mutation suite pass, before the author has written a line.
+ *
+ * It does NOT pass `bun run validate` yet, and cannot: `concept.*` and `misconception.*` node IDs
+ * are shared vocabulary with no problem id embedded in them, so a copy duplicates whatever the
+ * template declared. That is by design — node IDs are unique catalog-wide — and it resolves as
+ * soon as the author writes their own metadata. Do not "fix" it by renaming the template's
+ * concepts; reference shared ones through `relations` instead of redeclaring them.
  *
  * Usage:
  *   bun run new-course-challenge <problem-id>
  *   bun run new-course-challenge ac26-w3-field-inverse
  */
 
-import { cpSync, existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 
 const REPO_ROOT = new URL("..", import.meta.url).pathname;
@@ -63,8 +75,9 @@ export function retarget(source: string, problemId: string): string {
 }
 
 /**
- * Strip the parts of the template that are specific to the counter exercise, leaving the author a
- * problem that still validates but obviously needs their content.
+ * Strip the parts of the template that are specific to the counter exercise, leaving a problem
+ * that obviously needs the author's content. See the note above on why it does not yet pass
+ * cross-reference validation.
  */
 export function scaffoldMetadata(templateMetadata: string, problemId: string): string {
   const meta = JSON.parse(retarget(templateMetadata, problemId)) as Record<string, unknown>;
@@ -76,7 +89,52 @@ export function scaffoldMetadata(templateMetadata: string, problemId: string): s
   return `${JSON.stringify(meta, null, 2)}\n`;
 }
 
-const SKIP_ENTRIES = new Set([".git", "node_modules"]);
+const SKIP_ENTRIES = new Set([".git", "node_modules", "__pycache__"]);
+
+/**
+ * The template's exercise is a modular counter, and every scaffolded problem replaces it. The
+ * files are RENAMED to a neutral `exercise` rather than left in place, because "replace
+ * counter.py with your own file" is a trap: an author who writes `auditor.py` alongside it ships
+ * a dead `counter.py`, a dead `check_counter.py`, and a dead `test_counter.py` inside their
+ * image. That happened, reached main, and is what `scaffold-leftover-guard.test.ts` now fails on.
+ *
+ * With one neutrally-named module per directory, the natural action is a rename, and a rename
+ * cannot leave a leftover behind.
+ */
+const EXERCISE_RENAMES: ReadonlyArray<readonly [string, string]> = [
+  ["local/starter/counter.py", "local/starter/exercise.py"],
+  ["local/reference/counter.py", "local/reference/exercise.py"],
+  ["local/tests/public/test_counter.py", "local/tests/public/test_exercise.py"],
+  ["local/tests/hidden/check_counter.py", "local/tests/hidden/check_exercise.py"],
+];
+
+/**
+ * Only the identifiers that name those files. A blind `counter` -> `exercise` sweep would also
+ * rewrite `counterexample`, which appears in the template's prose.
+ */
+const EXERCISE_REFERENCES: ReadonlyArray<readonly [string, string]> = [
+  ["tests/public/test_counter.py", "tests/public/test_exercise.py"],
+  ["tests.hidden.check_counter", "tests.hidden.check_exercise"],
+  ["starter.counter", "starter.exercise"],
+  ["local/starter/counter.py", "local/starter/exercise.py"],
+  ["starter/counter.py", "starter/exercise.py"],
+  ['"reference" / "counter.py"', '"reference" / "exercise.py"'],
+  ["from counter import", "from exercise import"],
+  ['Path(workspace) / "counter.py"', 'Path(workspace) / "exercise.py"'],
+];
+
+function renameExerciseFiles(target: string): void {
+  for (const [from, to] of EXERCISE_RENAMES) {
+    const source = join(target, from);
+    if (existsSync(source)) renameSync(source, join(target, to));
+  }
+}
+
+export function retargetExerciseReferences(source: string): string {
+  let out = source;
+  for (const [from, to] of EXERCISE_REFERENCES) out = out.split(from).join(to);
+  return out;
+}
 
 export function scaffold(problemId: string, challengesDir: string = CHALLENGES_DIR): string {
   if (!PROBLEM_ID_PATTERN.test(problemId)) {
@@ -97,12 +155,13 @@ export function scaffold(problemId: string, challengesDir: string = CHALLENGES_D
     recursive: true,
     filter: (source) => !SKIP_ENTRIES.has(source.split("/").at(-1) ?? ""),
   });
+  renameExerciseFiles(target);
 
   for (const file of textFilesUnder(target)) {
     const original = readFileSync(file, "utf8");
     const rewritten = file.endsWith("metadata.json")
       ? scaffoldMetadata(original, problemId)
-      : retarget(original, problemId);
+      : retargetExerciseReferences(retarget(original, problemId));
     if (rewritten !== original) writeFileSync(file, rewritten);
   }
   return target;
@@ -134,7 +193,11 @@ function main(): void {
   console.log(`Scaffolded ${target} from challenges/${TEMPLATE_ID}.`);
   console.log("");
   console.log("Next:");
-  console.log("  1. Replace local/starter, local/reference, local/fixtures and the tests with");
+  console.log("  1. RENAME local/starter/exercise.py, local/reference/exercise.py,");
+  console.log("     local/tests/public/test_exercise.py and local/tests/hidden/check_exercise.py");
+  console.log("     to your exercise's name, then write it. Rename rather than add: a leftover");
+  console.log("     module fails scripts/scaffold-leftover-guard.test.ts.");
+  console.log("  2. Replace local/fixtures and the tests with");
   console.log("     your exercise. Keep the /verify contract and the seed-derived fixtures.");
   console.log("  2. Rewrite metadata.json: name, shortDescription, instructions, description,");
   console.log("     writeup, checks, nodes, relations, track.chapter.");

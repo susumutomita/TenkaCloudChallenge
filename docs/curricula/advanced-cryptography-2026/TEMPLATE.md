@@ -40,13 +40,32 @@ challenges/<id>/
     └── verifier/          POST /verify
 ```
 
-Two naming traps, both hit while building the reference problem:
+The scaffolder hands you one neutrally-named exercise module in each place:
+
+```text
+local/starter/exercise.py
+local/reference/exercise.py
+local/tests/public/test_exercise.py
+local/tests/hidden/check_exercise.py
+```
+
+**Rename those four. Do not add alongside them.** The scaffolder copies a whole working problem,
+so a fifth file named after your exercise leaves the template's four inside your image — dead
+code that ships to participants and, in `reference/`, an answer to a problem that is not yours.
+That reached main once. `scripts/scaffold-leftover-guard.test.ts` now fails the build on it:
+`reference/` must mirror `starter/`, and each problem has exactly one public test entry point and
+exactly one hidden check module.
+
+Three naming traps, all hit while building the reference problem:
 
 - **Do not name a top-level module `inspect.py`.** It shadows the standard library's `inspect`,
   and `dataclasses` imports it — the failure surfaces as a circular-import error somewhere
   unrelated. The template uses `show.py`.
 - **`reference/` ships inside the image** (the mutation suite needs it) **but is never bind-mounted**.
   Mount `starter/` read-only and nothing else, or the answer lands in the learner's checkout.
+- **A scaffolded problem is a full copy, not a link.** Fixes made to the template after you
+  scaffolded do not reach you. The macOS `RLIMIT_AS` fix had to be applied by hand to four
+  problems for exactly this reason; `scripts/verifier-rlimit-guard.test.ts` exists to catch it.
 
 ## Participant contract
 
