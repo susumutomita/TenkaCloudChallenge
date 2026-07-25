@@ -138,8 +138,11 @@ order; `track.order` only sequences presentation.
 | --- | --- |
 | `concept.plaintext-encoding` | Placing a message in the ciphertext's value space |
 | `concept.noise-budget` | The error term, its growth, and the rounding boundary |
+| `concept.negacyclic-polynomial-ring` | `Z_q[X]/(X^N + 1)`, where a coefficient past the top returns negated |
 | `concept.lwe` | Learning With Errors |
 | `concept.rlwe` | The polynomial-ring variant |
+| `concept.ciphertext-phase` | What is left once the secret cancels: the encoded message plus the noise |
+| `concept.toy-cryptography` | Parameters small enough to observe, which show correctness and not security |
 | `concept.gadget-decomposition` | Base-`B` decomposition that keeps products' noise small |
 | `concept.rgsw` | The ciphertext type that multiplies into RLWE |
 | `concept.external-product` | RGSW × RLWE → RLWE |
@@ -187,6 +190,10 @@ Named so a challenge can target one deliberately and assert that it was correcte
 | `misconception.shares-are-encryption` | A single share is "encrypted" and safe to publish |
 | `misconception.linear-ops-need-communication` | Every operation on shares costs a round |
 | `misconception.noise-is-a-bug` | The error term is an implementation defect, not the security basis |
+| `misconception.polynomial-multiplication-is-cyclic-convolution` | Folding indices with `% N` is the ring's product; it is a different ring |
+| `misconception.lwe-ciphertext-is-message-plus-random-bytes` | The mask is padding, rather than something that only acts through the secret |
+| `misconception.rlwe-is-only-lwe-with-longer-vectors` | The N equations in one ciphertext are independent samples, rather than sharing a mask |
+| `misconception.decryption-removes-noise-exactly` | Decryption subtracts the noise, rather than rounding past it while it is small enough |
 | `misconception.bootstrapping-is-only-noise-reset` | Bootstrapping cannot also compute |
 | `misconception.zk-hides-everything` | A ZK proof hides the public inputs too |
 | `misconception.start-with-a-primitive-then-find-a-problem` | Pick the tool first, then look for a problem it fits |

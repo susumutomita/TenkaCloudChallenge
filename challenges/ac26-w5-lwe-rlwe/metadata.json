@@ -1,0 +1,495 @@
+{
+  "id": "ac26-w5-lwe-rlwe",
+  "name": "同じ式を、二度",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "advanced-cryptography-2026",
+    "order": 520,
+    "chapter": "Week 5 / LWE and RLWE"
+  },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 5,
+    "role": "mechanism",
+    "spoilerPolicy": "independent-reimplementation",
+    "sources": [
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        "path": "week5/README.md",
+        "kind": "lecture"
+      },
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        "path": "week5/problems/tfhe-toy-python/README.md",
+        "kind": "assignment"
+      }
+    ]
+  },
+  "difficulty": 3,
+  "estimatedDuration": "75-105 分",
+  "shortDescription": "LWE と RLWE は同じ 1 行を二度書いたものになる。 スカラーが多項式に変わるだけで、 秘密が消えたあとに残るものは両方とも encode(m) + e。 違いは環がどこで折り返すかだけで、 その符号ひとつが全部を決める。",
+  "description": "Week 5 の 2 問目。 510 が 1 つのメッセージを 1 つの環に置いて 「どこまで押せるか」 を計算させたのに対し、 ここではその押しずらされたものを実際に運ぶ 2 つの構成を作る。 そして 2 つは同じ構成である。\n\nLWE は b = <a, s> + encode(m) + e、 RLWE は b = a*s + encode(m) + e。 1 行目のスカラーを全部多項式に置き換えると 2 行目になる。 内積が多項式積に、 1 個のメッセージが N 個に、 1 個の noise が N 個に変わる。 秘密が消えたあとに残る phase はどちらも encode(m) + e で、 それを復号する規則は 510 のものがそのまま使える。 だから 510 の答え (encode / decode / centered / noise_interval) は starter に実装済みで配ってある。 この問題が採点するのはその先だけ。\n\n環は R_q = Z_q[X] / (X^N + 1)。 プラスであることが全部で、 X^N = -1 なので環の上端を越えた係数は符号を反転して戻ってくる。 添字を % N で畳むと別の環になり、 その別の環でも大量のサンプルが正しく復号される。 round-trip テストはこの違いを一度も見ない。\n\n仕掛けは 4 つ。 1 つ目は折り返しの符号が閾値ではなく周期であること。 次数 N は符号反転で 0 に戻るが、 次数 2N は符号が戻って正になる。 環の元同士の積はその次数に決して届かないので、 暗号化の経路をいくら回しても どちらを書いたかは判明しない。 2 つ目は phase が引き算であること。 足し算にしても <a, s> が scaling の倍数のときは正しい答えが出る。 3 つ目は RLWE の N 個の係数がそれぞれ自分のメッセージを運び自分の予算を使うこと。 合計でも平均でもなく最悪の 1 係数が決める。 4 つ目は secret が ternary で本当に負であること。\n\ncorrespondence checkpoint は 「RLWE は長いベクトルの LWE だ」 より強い主張を採点する。 積の係数 k は同じ secret への内積であり、 その係数ベクトルは mask を並べ替えたもの、 ただし次数 N を跨いで来た成分だけ符号が反転している。 マイナスを落とすと mask の巡回シフトになる —— 実在するベクトルで、 実在する等式を満たすが、 環が違う。\n\nこれは安全ではない。 q は手で全列挙できる大きさで secret は総当たりできる長さで、 中間値が印字できるのはそのおかげだけ。",
+  "instructions": "## はじめに\n\n510 では 1 つのメッセージを環の上に置き、 どこまで押せるかを計算しました。 ここではそれを実際に運ぶ 2 つの構成を作ります。\n\n```text\nLWE     secret s は n 個の小さい整数のベクトル\n        b = <a, s> + encode(m) + e                    (mod q)\n\nRLWE    secret s は N 係数の多項式\n        b = a*s   + encode(m) + e                     in R_q\n```\n\n1 行目のスカラーを全部多項式に置き換えると 2 行目になります。 秘密が消えたあとに残る phase はどちらも encode(m) + e で、 復号は 510 の規則そのままです。\n\n環は `R_q = Z_q[X] / (X^N + 1)` です。 **プラス**であることに注意してください。\n\n## 最初の一手\n\n```bash\nmake inspect\n```\n\n環、 LWE のサンプル 1 本、 RLWE のサンプル 1 本、 そして 2 つの掛け算規則が食い違う多項式の組が出ます。 secret は伏せてあります (`make inspect SECRET=1` で開きます)。 一度伏せたまま読んで、 phase がどの量に依存しているかを確かめてください。\n\n次に `local/starter/lattice.py` を編集します。 冒頭の 4 関数は 510 の答えで、 実装済みで配ってあります。 採点対象はその下だけです。\n\n## ゴール\n\n8 つの checkpoint を独立に通します。 `p`・`delta`・`q`・`degree` (N)・`dimension` (n) は checkpoint ごとに変わり、 N と n は普通は違う数です。 決め打ちしたものはどこかで外れます。",
+  "writeup": "## 折り返しの符号は閾値ではなく周期\n\n`X^N = -1` なので次数 N は符号を反転して次数 0 に戻る。 では次数 2N は。 もう一度反転して正に戻る。 `index >= N` で符号を決める実装は 1 周目だけ正しく、 2 周目から間違う。\n\nそして N-1 次同士の積が届く最大次数は 2N-2 で、 2N には決して届かない。 つまり暗号化と復号をいくら回しても、 どちらの規則を書いたかは判明しない。 `normalize` を積の経路だけでテストすると、 この欠陥は永久に見えない。 hidden test が長さ 2N・2N+1・3N の入力を渡すのはそのため。\n\n## cyclic は 「間違った答え」 ではなく 「別の環」\n\n添字を `% N` で畳むと `X^N = +1` の環になる。 これは壊れた実装ではなく、 別の well-defined な環での正しい積で、 だからこそ大量のサンプルで正しく復号される。 反例は 1 つ: `X^(N-1) * X` が -1 になるか +1 になるか。 議論より反例が安いので、 `make inspect` はそれを印字する。\n\n## phase は引き算\n\n`b + <a, s>` は well-defined な数で、 `<a, s>` が scaling の倍数のときは正しいメッセージに復号される。 1 例から書いたテストはそれを通す。\n\n## N 個の係数は N 個の予算\n\nRLWE の暗号文は N 個のメッセージを運び、 各係数が自分の丸め境界までの距離を自分で使う。 合計でも平均でも大きさでもなく、 最悪の 1 係数が決める。 hidden test が渡す 「平均は余裕、 1 係数だけ 1 歩外」 のベクトルは、 sum で採点する実装が必ず取り落とす形になっている。\n\n## correspondence は 「長いベクトル」 より強い\n\n積の係数 k は `sum_j v[j] * s[j]` と書ける。 v は mask の並べ替えで、 `j <= k` の成分は `mask[k-j]`、 `j > k` の成分は `-mask[k+N-j]`。 マイナスが付くのは、 その項が係数 k に到達するために次数 N を跨いだ成分だから。\n\nこれが言っているのは 「1 本の RLWE 暗号文は N 本の LWE 型の式であり、 ただしその N 本は同じ mask を共有している」 ということ。 独立な N サンプルではない。 マイナスを落とすと mask の巡回シフトになる —— 実在するベクトルで、 実在する等式を満たすが、 環が違う。\n\nこの係数ベクトルは 550 (`ac26-w5-extract-key-switch`) が sample extraction で実際の LWE 暗号文を取り出すときの土台になる。 ここで採点するのはベクトルの形だけで、 取り出しと key switching はそちらの問題。\n\n## secret は本当に負\n\n係数は {-1, 0, 1}。 Python の `%` は正の法に対して非負を返すので特別扱いは要らないが、 剰余が飾りではなく仕事をしているという意味ではある。\n\n## これは安全ではない\n\nq は手で全列挙でき secret は総当たりできる。 実運用のパラメータは格子問題の裏に secret を隠すが、 これは何の裏にも隠していない。 `make inspect` が secret を伏せるのは読み方の規律であって、 秘匿の境界ではない。\n\n## 出典との対応\n\nWeek 5 の教材は公開済みなので、 `courseAlignment` は `week5/README.md` を lecture、 `week5/problems/tfhe-toy-python/README.md` を assignment として pin してある。 `spoilerPolicy` は independent-reimplementation で、 API 名もパラメータ生成も独立に決めており、 公式課題の関数名・fixture・solution.py からは何も写していない。",
+  "tags": [
+    "advanced-cryptography-2026",
+    "week5",
+    "fhe",
+    "lwe",
+    "rlwe",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18108,
+      "name": "/verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "R_q = Z_q[X]/(X^N + 1) の元を正規化できる",
+    "negacyclic な加算・減算・乗算を実装できる",
+    "cyclic convolution との違いを実行可能な反例で示せる",
+    "toy LWE の暗号化・復号を実装し、 phase から message と noise を分離できる",
+    "toy RLWE でスカラーが多項式へ置き換わる対応を説明できる",
+    "積の係数 k が同一 secret への内積であることを符号込みで説明できる",
+    "noise 予算が係数ごとに独立に消費されることを説明できる",
+    "暗号文として成立しない対象を決定的に reject できる",
+    "toy の correctness と production の security を混同しない"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.ac26-w5-lwe-rlwe.ring-normalization",
+        "description": "任意長・負係数の整数列を R_q の正準元へ正規化できる。 折り返しの符号が閾値ではなく周期であることを含む。"
+      },
+      {
+        "id": "lo.ac26-w5-lwe-rlwe.negacyclic-product",
+        "description": "negacyclic 積を実装し、 cyclic convolution との違いを実行可能な反例で示せる。"
+      },
+      {
+        "id": "lo.ac26-w5-lwe-rlwe.lwe-round-trip",
+        "description": "toy LWE の暗号化・復号を実装し、 phase から encoded message と noise を分離できる。"
+      },
+      {
+        "id": "lo.ac26-w5-lwe-rlwe.rlwe-round-trip",
+        "description": "toy RLWE の暗号化・復号を実装し、 スカラーが多項式へ置き換わる対応を説明できる。"
+      },
+      {
+        "id": "lo.ac26-w5-lwe-rlwe.vector-polynomial-correspondence",
+        "description": "積の係数 k を同一 secret への内積として書き下し、 次数 N を跨いだ成分の符号を説明できる。"
+      },
+      {
+        "id": "lo.ac26-w5-lwe-rlwe.per-coefficient-budget",
+        "description": "noise 予算が係数ごとに独立に消費され、 最悪の 1 係数が復号の可否を決めることを説明できる。"
+      },
+      {
+        "id": "lo.ac26-w5-lwe-rlwe.ciphertext-wellformedness",
+        "description": "次元・次数・正準性・種別が合わない対象を暗号文として決定的に reject できる。"
+      },
+      {
+        "id": "lo.ac26-w5-lwe-rlwe.toy-is-not-secure",
+        "description": "toy の correctness と production の security を別の主張として扱える。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.negacyclic-polynomial-ring",
+        "description": "Z_q[X]/(X^N + 1)。 X^N = -1 なので、 上端を越えた係数は符号を反転して戻る。"
+      },
+      {
+        "id": "concept.lwe",
+        "description": "Learning With Errors。 秘密との内積に encoded message と noise を足したもの。"
+      },
+      {
+        "id": "concept.rlwe",
+        "description": "LWE の多項式環版。 1 本の暗号文が同じ mask を共有する N 本の式を運ぶ。"
+      },
+      {
+        "id": "concept.ciphertext-phase",
+        "description": "秘密が相殺されたあとに残る量。 encoded message と noise の和であり、 復号はこれを丸める。"
+      },
+      {
+        "id": "concept.toy-cryptography",
+        "description": "中間値が観察できる大きさに落としたパラメータ。 correctness は示せるが security は示せない。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.ac26-w5-lwe-rlwe.normalize",
+        "description": "任意長・負係数の列が正準元になり、 次数 2N の折り返しの符号が正しかった。"
+      },
+      {
+        "id": "assessment.ac26-w5-lwe-rlwe.ring",
+        "description": "加算・減算・negacyclic 積が成立し、 X^(N-1)*X が -1 になった。"
+      },
+      {
+        "id": "assessment.ac26-w5-lwe-rlwe.lwe",
+        "description": "LWE の暗号文が仕様どおりに構成され、 phase が秘密を相殺し、 予算の内外で復号の可否が切り替わった。"
+      },
+      {
+        "id": "assessment.ac26-w5-lwe-rlwe.rlwe",
+        "description": "RLWE の暗号文が環の上で構成され、 N 個のメッセージすべてが往復した。"
+      },
+      {
+        "id": "assessment.ac26-w5-lwe-rlwe.correspondence",
+        "description": "積の係数 k の係数ベクトルが、 任意の secret に対する内積として成立した。"
+      },
+      {
+        "id": "assessment.ac26-w5-lwe-rlwe.boundary",
+        "description": "多項式の生存判定が最悪係数で決まり、 最初に失敗する標本を特定できた。"
+      },
+      {
+        "id": "assessment.ac26-w5-lwe-rlwe.transfer",
+        "description": "見たことのない seed 由来の環・次元・secret で全性質が成立した。"
+      },
+      {
+        "id": "assessment.ac26-w5-lwe-rlwe.validate",
+        "description": "暗号文として成立しない対象を reject し、 正当なものは通した。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.polynomial-multiplication-is-cyclic-convolution",
+        "description": "多項式の積は添字を % N で畳めばよいという誤解。 それは X^N = +1 の別の環。"
+      },
+      {
+        "id": "misconception.lwe-ciphertext-is-message-plus-random-bytes",
+        "description": "LWE の暗号文はメッセージに乱数を足しただけだという誤解。 mask は秘密との内積を通してのみ効く。"
+      },
+      {
+        "id": "misconception.rlwe-is-only-lwe-with-longer-vectors",
+        "description": "RLWE は長いベクトルの LWE だという誤解。 N 本の式は同じ mask を共有しており独立ではない。"
+      },
+      {
+        "id": "misconception.decryption-removes-noise-exactly",
+        "description": "復号が noise をちょうど取り除くという誤解。 取り除いているのではなく、 丸めが吸収できる範囲に収まっているだけ。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-lwe-rlwe",
+      "target": "lo.ac26-w5-lwe-rlwe.ring-normalization"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-lwe-rlwe",
+      "target": "lo.ac26-w5-lwe-rlwe.negacyclic-product"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-lwe-rlwe",
+      "target": "lo.ac26-w5-lwe-rlwe.lwe-round-trip"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-lwe-rlwe",
+      "target": "lo.ac26-w5-lwe-rlwe.rlwe-round-trip"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-lwe-rlwe",
+      "target": "lo.ac26-w5-lwe-rlwe.vector-polynomial-correspondence"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-lwe-rlwe",
+      "target": "lo.ac26-w5-lwe-rlwe.per-coefficient-budget"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-lwe-rlwe",
+      "target": "lo.ac26-w5-lwe-rlwe.ciphertext-wellformedness"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-lwe-rlwe",
+      "target": "lo.ac26-w5-lwe-rlwe.toy-is-not-secure"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-lwe-rlwe",
+      "target": "concept.negacyclic-polynomial-ring"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-lwe-rlwe",
+      "target": "concept.lwe"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-lwe-rlwe",
+      "target": "concept.rlwe"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-lwe-rlwe",
+      "target": "concept.ciphertext-phase"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-lwe-rlwe",
+      "target": "concept.toy-cryptography"
+    },
+    {
+      "type": "requires",
+      "source": "problem.ac26-w5-lwe-rlwe",
+      "target": "problem.ac26-w5-encoding-noise"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w5-lwe-rlwe.ring-normalization",
+      "target": "concept.canonical-representative"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w5-lwe-rlwe.per-coefficient-budget",
+      "target": "concept.noise-budget"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w5-lwe-rlwe.lwe-round-trip",
+      "target": "concept.plaintext-encoding"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-lwe-rlwe",
+      "target": "assessment.ac26-w5-lwe-rlwe.normalize"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-lwe-rlwe",
+      "target": "assessment.ac26-w5-lwe-rlwe.ring"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-lwe-rlwe",
+      "target": "assessment.ac26-w5-lwe-rlwe.lwe"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-lwe-rlwe",
+      "target": "assessment.ac26-w5-lwe-rlwe.rlwe"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-lwe-rlwe",
+      "target": "assessment.ac26-w5-lwe-rlwe.correspondence"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-lwe-rlwe",
+      "target": "assessment.ac26-w5-lwe-rlwe.boundary"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-lwe-rlwe",
+      "target": "assessment.ac26-w5-lwe-rlwe.transfer"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-lwe-rlwe",
+      "target": "assessment.ac26-w5-lwe-rlwe.validate"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w5-lwe-rlwe",
+      "target": "misconception.polynomial-multiplication-is-cyclic-convolution"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w5-lwe-rlwe",
+      "target": "misconception.lwe-ciphertext-is-message-plus-random-bytes"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w5-lwe-rlwe",
+      "target": "misconception.rlwe-is-only-lwe-with-longer-vectors"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w5-lwe-rlwe",
+      "target": "misconception.decryption-removes-noise-exactly"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w5-lwe-rlwe",
+      "target": "misconception.toy-parameters-show-security"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18108/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "normalize",
+        "label": "任意の列を環の元に落とす",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "normalize-hint-1",
+            "content": "次数 N は符号を反転して次数 0 に戻る。 では次数 2N はどこへ、 どの符号で戻るか。 環の元同士の積はその次数に届かないので、 暗号化を回しても答えは出てこない。",
+            "penalty": 10
+          }
+        ]
+      },
+      {
+        "id": "ring",
+        "label": "足して、 引いて、 折り返す",
+        "points": 25,
+        "wrongAnswerPenalty": 10
+      },
+      {
+        "id": "lwe",
+        "label": "秘密を相殺して読む",
+        "points": 25,
+        "wrongAnswerPenalty": 10
+      },
+      {
+        "id": "rlwe",
+        "label": "スカラーを全部多項式に置き換える",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "rlwe-hint-1",
+            "content": "message は N 個ある。 定数項だけ encode したとき、 残りの N-1 係数は何に復号されるか。 1 つ手で確かめると、 何を足し忘れているかが決まる。",
+            "penalty": 10
+          }
+        ]
+      },
+      {
+        "id": "correspondence",
+        "label": "1 本の暗号文の中にある N 本の式",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "correspondence-hint-1",
+            "content": "小さい N で積の係数 k を手で展開する。 s[j] と掛かるのは mask のどの成分か。 そしてそのうちどれが、 係数 k に届くために次数 N を跨いできたか。",
+            "penalty": 12
+          }
+        ]
+      },
+      {
+        "id": "boundary",
+        "label": "予算を N 個に配る",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "boundary-hint-1",
+            "content": "N 個の係数はそれぞれ自分のメッセージを運び、 自分の予算を使う。 平均は余裕なのに 1 係数だけ 1 歩外に出ている多項式は、 復号できるか。",
+            "penalty": 12
+          }
+        ]
+      },
+      {
+        "id": "transfer",
+        "label": "見たことのない環で成立させる",
+        "points": 25,
+        "wrongAnswerPenalty": 10
+      },
+      {
+        "id": "validate",
+        "label": "暗号文でないものを断る",
+        "points": 25,
+        "wrongAnswerPenalty": 10
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "The same line, twice",
+      "shortDescription": "LWE and RLWE are one line written twice. Replace every scalar with a polynomial and the first becomes the second; what is left once the secret cancels is encode(m) + e either way. The only difference is where the ring folds — and that one sign decides everything.",
+      "description": "The second Week 5 problem. Problem 510 put one message on one ring and asked how far it could be pushed. This one builds the two constructions that actually carry a message that way — and the two are the same construction.\n\nLWE is b = <a, s> + encode(m) + e. RLWE is b = a*s + encode(m) + e. Replace every scalar in the first line with a polynomial and you have the second: the inner product becomes a polynomial product, one message becomes N of them, one noise value becomes N. The phase left once the secret cancels is encode(m) + e in both, and decoding it is problem 510's rule unchanged — which is why 510's answer (encode, decode, centered, noise_interval) ships already written in the starter. Only what comes after it is graded.\n\nThe ring is R_q = Z_q[X] / (X^N + 1). The plus is the whole thing: X^N = -1, so a coefficient that walks off the top comes back negated. Folding indices with % N gives a different ring, and that different ring decrypts a great many samples correctly. A round-trip test never sees the difference.\n\nFour things bite. The fold's sign is periodic, not a threshold: degree N lands on degree 0 negated and degree 2N lands back positive — and a product of ring elements never reaches that degree, so no amount of encrypting will tell you which one you wrote. The phase subtracts, and adding instead still decodes correctly whenever the inner product happens to be a multiple of the scaling. Every RLWE coefficient carries its own message and spends its own budget, so the worst coefficient decides and the mean does not. And the secrets are ternary, so they really are negative.\n\nThe correspondence checkpoint grades something stronger than \"RLWE is LWE with longer vectors\": coefficient k of the product is an inner product against the same secret, and its coefficient vector is the mask rearranged — with the entries that crossed degree N to get there negated. Drop the minus and it is a cyclic rotation of the mask: a real vector, satisfying a real identity, in the wrong ring.\n\nNone of this is secure. q is small enough to enumerate and the secret short enough to search, which is the only reason the intermediate values are printable at all.",
+      "instructions": "## Start here\n\nProblem 510 put one message on a ring and asked how far it could be pushed. This one builds the two constructions that carry it.\n\n```text\nLWE     secret s is a vector of n small integers\n        b = <a, s> + encode(m) + e                    (mod q)\n\nRLWE    secret s is a polynomial with N small coefficients\n        b = a*s   + encode(m) + e                     in R_q\n```\n\nReplace every scalar in the first line with a polynomial and you have the second. The phase left once the secret cancels is encode(m) + e either way, and decoding it is 510's rule unchanged.\n\nThe ring is `R_q = Z_q[X] / (X^N + 1)`. **Note the plus.**\n\n## First move\n\n```bash\nmake inspect\n```\n\nThat prints the ring, one LWE sample, one RLWE sample, and a pair of polynomials the two multiplication rules disagree about. The secret is withheld (`make inspect SECRET=1` shows it). Read the trace once without it and work out which quantities the phase actually depends on.\n\nThen edit `local/starter/lattice.py`. The four functions at the top are 510's answer, shipped already written; only what is below them is graded.\n\n## Goal\n\nClear eight independently scored checkpoints. `p`, `delta`, `q`, `degree` (N) and `dimension` (n) change between checkpoints, and N and n are usually different numbers. Anything you hardcode is wrong somewhere.",
+      "writeup": "## The fold's sign is periodic, not a threshold\n\n`X^N = -1`, so degree N comes back to degree 0 negated. And degree 2N? Negated again, which puts it back positive. An implementation that decides the sign with `index >= N` is right for one turn around the ring and wrong for every turn after it.\n\nThe largest degree a product of two degree-(N-1) polynomials reaches is 2N-2. It never reaches 2N. So no amount of encrypting and decrypting will tell you which rule you wrote — testing `normalize` only through the product path leaves the defect permanently invisible. That is why the hidden tests hand it inputs of length 2N, 2N+1 and 3N.\n\n## Cyclic is not a wrong answer, it is a different ring\n\nFolding indices with `% N` gives the ring where `X^N = +1`. That is not a broken implementation; it is a correct product in another well-defined ring, which is exactly why it decrypts so many samples correctly. One counterexample settles it: is `X^(N-1) * X` equal to -1 or +1? A counterexample is cheaper than an argument, so `make inspect` prints that one.\n\n## The phase subtracts\n\n`b + <a, s>` is a perfectly well-defined number, and it decodes to the right message whenever `<a, s>` happens to be a multiple of the scaling. A test written from one worked example passes it.\n\n## N coefficients are N budgets\n\nAn RLWE ciphertext carries N messages, and each coefficient spends its own distance to the rounding boundary. Not the sum, not the mean, not the magnitude: the worst coefficient decides. The hidden tests pass a vector whose mean is comfortable and one of whose coefficients is a single step outside — the shape anything scoring by a total will miss.\n\n## The correspondence says more than \"longer vectors\"\n\nCoefficient k of the product is `sum_j v[j] * s[j]`, where v is the mask rearranged: `mask[k-j]` for `j <= k`, and `-mask[k+N-j]` for `j > k`. The minus is on exactly the entries that had to cross degree N to reach coefficient k.\n\nWhat that says is that one RLWE ciphertext is N LWE-shaped equations **sharing one mask** — not N independent samples. Drop the minus and it becomes a cyclic rotation of the mask: a real vector, satisfying a real identity, in the wrong ring.\n\nThis coefficient vector is what problem 550 (`ac26-w5-extract-key-switch`) builds on when sample extraction pulls an actual LWE ciphertext out of an RLWE one. Only the vector's shape is graded here; the extraction and the key switch belong to that problem.\n\n## The secrets really are negative\n\nCoefficients are in {-1, 0, 1}. Python's `%` returns a non-negative result for a positive modulus so this needs no special case, but it does mean the reduction is load-bearing rather than decorative.\n\n## This is not secure\n\nq is small enough to enumerate and the secret short enough to search. A real parameter set hides the secret behind a lattice problem; this one hides it behind nothing. `make inspect` withholding the secret is a reading discipline, not a boundary.\n\n## Source alignment\n\nWeek 5's material is published upstream, so `courseAlignment` pins `week5/README.md` as `lecture` and `week5/problems/tfhe-toy-python/README.md` as `assignment`. `spoilerPolicy` is `independent-reimplementation`: the API names and the parameter generation were chosen independently, so nothing is taken from the official exercise's function names, fixtures, or `solution.py`.",
+      "learningGoals": [
+        "Normalize an element of R_q = Z_q[X]/(X^N + 1)",
+        "Implement negacyclic addition, subtraction and multiplication",
+        "Show by runnable counterexample how it differs from a cyclic convolution",
+        "Implement toy LWE encryption and decryption, separating the message from the noise in the phase",
+        "Explain the correspondence that replaces every scalar with a polynomial in RLWE",
+        "Explain, signs included, why coefficient k of a product is an inner product against the same secret",
+        "Explain that the noise budget is spent independently by each coefficient",
+        "Reject deterministically anything that is not a well-formed ciphertext",
+        "Keep toy correctness and production security as separate claims"
+      ],
+      "checks": [
+        {
+          "id": "normalize",
+          "label": "Drop any sequence into the ring",
+          "hints": [
+            {
+              "id": "normalize-hint-1",
+              "content": "Degree N comes back to degree 0 negated. Where does degree 2N come back, and with which sign? A product of ring elements never reaches that degree, so encrypting will not tell you."
+            }
+          ]
+        },
+        {
+          "id": "ring",
+          "label": "Add, subtract, and fold"
+        },
+        {
+          "id": "lwe",
+          "label": "Cancel the secret and read"
+        },
+        {
+          "id": "rlwe",
+          "label": "Replace every scalar with a polynomial",
+          "hints": [
+            {
+              "id": "rlwe-hint-1",
+              "content": "There are N messages. If you encode only the constant term, what do the other N-1 coefficients decode to? Work one out by hand and it settles what is missing."
+            }
+          ]
+        },
+        {
+          "id": "correspondence",
+          "label": "The N equations inside one ciphertext",
+          "hints": [
+            {
+              "id": "correspondence-hint-1",
+              "content": "Expand coefficient k of a product by hand for a small N. Which entry of the mask pairs with s[j]? And which of those had to cross degree N to reach coefficient k?"
+            }
+          ]
+        },
+        {
+          "id": "boundary",
+          "label": "Spend the budget N ways",
+          "hints": [
+            {
+              "id": "boundary-hint-1",
+              "content": "Each of the N coefficients carries its own message and spends its own budget. Can a polynomial decrypt when its mean is comfortable but one coefficient is a single step outside?"
+            }
+          ]
+        },
+        {
+          "id": "transfer",
+          "label": "Hold up in a ring you have not seen"
+        },
+        {
+          "id": "validate",
+          "label": "Refuse what is not a ciphertext"
+        }
+      ]
+    }
+  }
+}
