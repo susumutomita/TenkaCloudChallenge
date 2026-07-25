@@ -36,6 +36,8 @@ RUN_TIMEOUT_SECONDS = 25
 MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
 MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
+#: Wall clock for reading a request body, so a stalled client cannot pin the server.
+REQUEST_TIMEOUT_SECONDS = 15
 
 # Correctness, privacy and cost are graded separately on purpose: a submission can be
 # correct and expensive, correct and leaky, or private and wrong, and one verdict for
@@ -109,21 +111,30 @@ def _run_submission(submission: object, phases: tuple[str, ...], seed: str) -> b
             root=str(ROOT), workspace=workspace, phases=list(phases), seed=seed
         )
         try:
-            completed = subprocess.run(  # noqa: S603 - argument list, shell=False
-                [sys.executable, "-I", "-c", script],
-                capture_output=True,
-                text=True,
-                timeout=RUN_TIMEOUT_SECONDS,
-                preexec_fn=_limits,
-                cwd=workspace,
-                env={"PATH": "/usr/local/bin:/usr/bin:/bin"},
-                check=False,
-            )
-        except (subprocess.TimeoutExpired, OSError):
+            # stdout goes to a real file, not a pipe. RLIMIT_FSIZE only bounds writes to
+            # files, so with `capture_output=True` a submission that printed gigabytes
+            # would have them buffered in THIS process before the tail slice threw them
+            # away. Writing to a file inside the workspace makes the cap actually bind:
+            # the child is killed by SIGXFSZ at the limit instead.
+            transcript = Path(workspace) / "stdout"
+            with transcript.open("w", encoding="utf-8") as sink:
+                completed = subprocess.run(  # noqa: S603 - argument list, shell=False
+                    [sys.executable, "-I", "-c", script],
+                    stdout=sink,
+                    stderr=subprocess.DEVNULL,
+                    text=True,
+                    timeout=RUN_TIMEOUT_SECONDS,
+                    preexec_fn=_limits,
+                    cwd=workspace,
+                    env={"PATH": "/usr/local/bin:/usr/bin:/bin"},
+                    check=False,
+                )
+            captured = transcript.read_text(encoding="utf-8", errors="replace")
+        except (subprocess.TimeoutExpired, OSError, ValueError):
             return False
     if completed.returncode != 0:
         return False
-    for line in reversed(completed.stdout[-MAX_OUTPUT_BYTES:].splitlines()):
+    for line in reversed(captured[-MAX_OUTPUT_BYTES:].splitlines()):
         try:
             payload = json.loads(line)
         except json.JSONDecodeError:
@@ -141,6 +152,13 @@ def evaluate(checkpoint_id: str, submission: object) -> bool:
 
 
 class Handler(BaseHTTPRequestHandler):
+    #: `StreamRequestHandler.setup` applies this to the socket before `rfile` is created,
+    #: so it bounds `rfile.read` inside `do_POST` -- which a client that sends a
+    #: content-length and then stops sending would otherwise block on forever, pinning
+    #: this single-threaded server. Setting it here rather than in an overridden `setup`
+    #: is deliberate: `self.connection` does not exist until the base `setup` has run.
+    timeout = REQUEST_TIMEOUT_SECONDS
+
     def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's name
         if self.path.rstrip("/") != "/verify":
             self._respond(404, {"error": "not found"})
@@ -157,6 +175,10 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(length).decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError):
             self._respond(400, {"error": "bad json"})
+            return
+        except (TimeoutError, OSError):
+            # A stalled body read, not a malformed one. Same fail-closed outcome.
+            self._respond(400, {"error": "incomplete body"})
             return
         if not isinstance(body, dict):
             self._respond(400, {"error": "bad json"})
