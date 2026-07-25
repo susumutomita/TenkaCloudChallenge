@@ -119,6 +119,11 @@
       "category": "Challenge",
       "status": "ready",
       "visibility": "public",
+      "track": {
+        "id": "ipa-web-security",
+        "order": 2,
+        "chapter": "IPA §1.6 CSRF"
+      },
       "difficulty": 2,
       "estimatedDuration": "30 分",
       "shortDescription": "セキュリティ担当への「怪しいページの通報」窓口。担当が信じ込んで開いたページに、担当の権限で操作を実行させろ。",
@@ -355,6 +360,11 @@
       "category": "Challenge",
       "status": "ready",
       "visibility": "public",
+      "track": {
+        "id": "automotive-security",
+        "order": 1,
+        "chapter": "署名付き更新・再開・A/B rollback"
+      },
       "difficulty": 4,
       "estimatedDuration": "90〜120 分",
       "shortDescription": "量産直前の仮想車両で、OTA更新が順序違反、改ざん受け入れ、二重適用、起動失敗を起こしている。1 TCUと2 ECUの責任境界を追い、安全な更新へ立て直す。",
@@ -654,6 +664,11 @@
       "category": "Challenge",
       "status": "ready",
       "visibility": "public",
+      "track": {
+        "id": "ipa-web-security",
+        "order": 1,
+        "chapter": "IPA §1.5 XSS"
+      },
       "difficulty": 2,
       "estimatedDuration": "30 分",
       "shortDescription": "スタッフ専用の社内掲示板。投稿を見たセキュリティ担当が持つ合言葉を、投稿の中身だけで奪い取れ。",
