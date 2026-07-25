@@ -106,6 +106,7 @@ order; `track.order` only sequences presentation.
 | `concept.local-linear-operation` | Linear operations on shares need no communication |
 | `concept.beaver-triple` | Preprocessed randomness turning multiplication into one opening round |
 | `concept.over-opening` | Revealing more than the protocol requires, leaking the secret |
+| `concept.threat-model` | Actors, assets, trust boundaries, and what the adversary can do |
 
 ### Week 3 — fields, curves, signatures
 
@@ -160,6 +161,15 @@ order; `track.order` only sequences presentation.
 | `concept.exploit-predicate` | The exact condition a proof of exploit asserts |
 | `concept.stack-composition` | Where ZK, MPC, and FHE meet, and what breaks there |
 
+### Week 7 — capstone design
+
+| Concept id | Meaning |
+| --- | --- |
+| `concept.primitive-selection` | Deriving which primitive to use from the required properties, not the reverse |
+| `concept.non-cryptographic-baseline` | The option that uses none, without which nothing shows what cryptography bought |
+| `concept.security-property-matrix` | Each property tied to the asset, adversary, component, evidence, and limitation |
+| `concept.design-assumption` | What must hold in the world for a primitive's guarantee to apply — and so, what to attack |
+
 ### Misconceptions
 
 Named so a challenge can target one deliberately and assert that it was corrected.
@@ -176,6 +186,11 @@ Named so a challenge can target one deliberately and assert that it was correcte
 | `misconception.noise-is-a-bug` | The error term is an implementation defect, not the security basis |
 | `misconception.bootstrapping-is-only-noise-reset` | Bootstrapping cannot also compute |
 | `misconception.zk-hides-everything` | A ZK proof hides the public inputs too |
+| `misconception.start-with-a-primitive-then-find-a-problem` | Pick the tool first, then look for a problem it fits |
+| `misconception.more-cryptography-is-safer` | Each primitive added makes the design safer, not merely larger |
+| `misconception.fhe-removes-key-management` | Encrypting the computation removes the question of who holds the key |
+| `misconception.mpc-removes-collusion-assumptions` | Multi-party computation removes the collusion assumption rather than relocating it |
+| `misconception.design-document-needs-no-executable-check` | A design cannot be tested, only reviewed |
 
 ## Week-by-week mapping
 
