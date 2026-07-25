@@ -601,6 +601,50 @@
       }
     },
     {
+      "id": "ac26-w4-arithmetization",
+      "name": "多項式にしただけでは証明ではない",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "advanced-cryptography-2026",
+        "order": 410,
+        "chapter": "Week 4 / Arithmetization Bridge"
+      },
+      "courseAlignment": {
+        "courseId": "advanced-cryptography-program",
+        "edition": "2026",
+        "week": 4,
+        "role": "transfer",
+        "sources": [
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "path": "week4/README.md",
+            "kind": "placeholder"
+          }
+        ]
+      },
+      "difficulty": 4,
+      "estimatedDuration": "60-90 分",
+      "shortDescription": "「プログラムを証明する」とき、実行そのものは証明に入らない。小さな状態機械の trace を有限体上の多項式関係へ変換し、変換が何を失わないか、何を保証しないかを確かめる。",
+      "tags": [
+        "advanced-cryptography-2026",
+        "week4",
+        "zkp",
+        "arithmetization",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "ai-riscv-screen-repair",
       "name": "AI製RISC-V画面を復旧せよ",
       "category": "Challenge",

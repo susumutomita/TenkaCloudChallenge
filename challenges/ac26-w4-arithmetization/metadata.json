@@ -1,0 +1,478 @@
+{
+  "id": "ac26-w4-arithmetization",
+  "name": "多項式にしただけでは証明ではない",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "advanced-cryptography-2026",
+    "order": 410,
+    "chapter": "Week 4 / Arithmetization Bridge"
+  },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 4,
+    "role": "transfer",
+    "spoilerPolicy": "independent-reimplementation",
+    "sources": [
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        "path": "week4/README.md",
+        "kind": "placeholder"
+      }
+    ]
+  },
+  "difficulty": 4,
+  "estimatedDuration": "60-90 分",
+  "shortDescription": "「プログラムを証明する」とき、実行そのものは証明に入らない。小さな状態機械の trace を有限体上の多項式関係へ変換し、変換が何を失わないか、何を保証しないかを確かめる。",
+  "description": "Week 4 の 1 問目。 Week 4 の教材は pinned commit 時点で未公開のため、 公開されている主題 (ZKP) だけを手がかりに、 Week 1 の constraint と Week 3 の有限体を新しい設定へ転用する bridge 問題として作ってある。 role は transfer で、 GOVERNANCE.md §6 が未公開週の companion に許す 2 つの role のうちの 1 つ。 公式課題が何を要求するかについては何も主張しない。\n\n題材は 2 列・2 規則の状態機械。 計算そのものは重要ではなく、 「これが走ったことを証明する」 が 「これらの多項式関係が これらの点で消える」 へ変換される過程が主題。\n\n中心にあるのは 2 種類の制約が別の仕事をしていること。 transition 制約は 「各行が前の行から従う」 としか言わない。 boundary 制約が 「どこから始まったか」 を言う。 一方が他方を含意しないので、 boundary を落とした系は同じ機械を別の初期状態から走らせた trace で完全に充足される — 多項式は等しく正しく、 別の文の証明になっている。 underconstrained checkpoint はこの trace を participant に構成させる。\n\nevaluation domain は単位根の冪で、 行と点が順序どおり対応する。 素数は steps が p-1 を割るものだけを選んである。\n\nこれは証明系ではない。 commitment も verifier の乱数も無く、 何に対しても健全ではない。 arithmetization への橋であって、 その先ではない。",
+  "instructions": "## はじめに\n\n「プログラムが走ったことを証明する」 とき、 プログラムは証明の中に入りません。 実行が表になり、 表の規則が多項式関係になり、 主張が 「これらの関係がこれらの点で消える」 になります。\n\n機械は 2 列 2 規則です。\n\n```text\na_{i+1} = a_i + b_i\nb_{i+1} = b_i + weight*a_i     (mod p)\n```\n\n## 最初の一手\n\n```bash\nmake inspect\n```\n\n機械、 trace 全体、 そして各行が対応する domain の点が出ます。 residual が何本になるかを、 書く前に数えてください。\n\n次に `local/starter/air.py` を編集します。\n\n## ゴール\n\n8 つの checkpoint を独立に通します。 制約は 2 種類あり、 別の仕事をしています。 片方だけの系が何を許してしまうかを、 最後に自分で構成します。",
+  "writeup": "## 変換は健全性を足さない\n\ntrace を多項式に補間しても、 それだけでは何も保証されない。 補間は表現を変える操作であって、 検証の力は制約が担っている。 「多項式になったから証明だ」 は、 表を CSV から JSON にしたら正しくなった、 と言うのに近い。\n\n## 2 種類の制約は別の仕事をしている\n\ntransition 制約は 「各行が前の行から従う」 と言う。 boundary 制約は 「どこから始まったか」 と言う。 一方が他方を含意しない。\n\nboundary を落とすと、 系は同じ機械を**別の初期状態から**走らせた trace で完全に充足される。 遷移はすべて成り立ち、 residual はすべて 0 で、 多項式は等しく正しい。 それは別の文の証明である。 underconstrained checkpoint で構成するのはこの trace で、 これが 「制約を 1 本落とす」 の具体的な意味になる。\n\n## residual の本数\n\ntransition residual は隣接する行の対ごとに 1 本なので、 行数より 1 少ない。 行ごとに 1 本作る実装は、 最後の行を存在しない次の行と比べている。 mutation suite の 1 つはこれで、 IndexError で落ちる。\n\n## 違反はどの行に現れるか\n\ni 番目の遷移が作るのは行 i+1 なので、 最初に壊れる行は i+1 である。 i と報告する実装は、 直す場所を 1 行間違えて教える。\n\n行 0 には前の行が無い。 そこで壊れうるのは boundary だけで、 それを transition 違反と呼ぶと、 やはり間違った場所を指す。 だから boundary を先に見る。\n\n## evaluation domain\n\ndomain は単位根の冪で、 行 i が点 g^i に対応する。 隣り合う行が隣り合う点になるので、 遷移制約は 「x での多項式」 と 「次の点での同じ多項式」 の関係として書ける。 素数は steps が p-1 を割るものだけを選んである。 そうでなければ、 その位数の単位根が存在しない。\n\n## これは証明系ではない\n\ncommitment が無く、 verifier の乱数が無く、 したがって何に対しても健全ではない。 arithmetization までの橋であって、 その先ではない。 ここで作ったものを 「小さな SNARK」 と呼ぶのは、 この問題が教えようとしていることの正反対である。\n\n## Week 4 の対応づけ\n\nWeek 4 の教材は pinned commit 時点で未公開。 courseAlignment は `week4/README.md` を `kind: \"placeholder\"` で pin し、 role は transfer にしてある。 GOVERNANCE.md §6 が未公開週の companion に許すのは diagnostic と transfer で、 この問題は Week 1 の constraint と Week 3 の体を新しい設定へ転用しているので transfer が正確でもある。 公式課題が何を要求するかについては何も主張していない。",
+  "tags": [
+    "advanced-cryptography-2026",
+    "week4",
+    "zkp",
+    "arithmetization",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18104,
+      "name": "/verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "決定的な計算から execution trace を生成できる",
+    "状態遷移を隣接行の制約として書ける",
+    "初期状態の固定を boundary 制約として分離できる",
+    "trace の列を有限体上の多項式へ補間できる",
+    "制約違反がどの行・どちらの制約に現れるかを追跡できる",
+    "trace を 1 箇所改ざんした反例を検出できる",
+    "多項式にしただけでは証明にならないことを説明できる"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.ac26-w4-arithmetization.generate-trace",
+        "description": "決定的な計算から execution trace を生成できる。"
+      },
+      {
+        "id": "lo.ac26-w4-arithmetization.transition-constraints",
+        "description": "状態遷移を隣接する行の間の制約として書ける。"
+      },
+      {
+        "id": "lo.ac26-w4-arithmetization.boundary-constraints",
+        "description": "初期状態の固定を遷移制約から分離して扱える。"
+      },
+      {
+        "id": "lo.ac26-w4-arithmetization.interpolate-columns",
+        "description": "trace の列を有限体上の多項式へ補間できる。"
+      },
+      {
+        "id": "lo.ac26-w4-arithmetization.locate-violation",
+        "description": "制約違反がどの行と、 どちらの種類の制約に現れるかを追跡できる。"
+      },
+      {
+        "id": "lo.ac26-w4-arithmetization.underconstrained-system",
+        "description": "制約を 1 本落とすと、 正しい多項式が別の文の証明になることを示せる。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.execution-trace",
+        "description": "計算の各ステップの状態を並べた表。 証明の対象は計算そのものではなくこの表になる。"
+      },
+      {
+        "id": "concept.transition-constraint",
+        "description": "隣接する行の間で成り立つべき関係。 各ステップが正しく取られたことを表す。"
+      },
+      {
+        "id": "concept.boundary-constraint",
+        "description": "特定の行の値を固定する制約。 遷移制約だけでは計算がどこから始まったかを言えない。"
+      },
+      {
+        "id": "concept.evaluation-domain",
+        "description": "多項式を評価する点の集合。 単位根の冪を使うと trace の行と順序が対応する。"
+      },
+      {
+        "id": "concept.arithmetization",
+        "description": "計算を有限体上の多項式関係へ変換すること。 変換自体は健全性を追加しない。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.ac26-w4-arithmetization.trace",
+        "description": "決定的な計算から正しい trace を生成できた。"
+      },
+      {
+        "id": "assessment.ac26-w4-arithmetization.transition",
+        "description": "隣接行ごとに 1 本の residual を作り、 改ざんされた行で最初に非零になった。"
+      },
+      {
+        "id": "assessment.ac26-w4-arithmetization.boundary",
+        "description": "初期状態を固定し、 始点をずらすと非零になることを示せた。"
+      },
+      {
+        "id": "assessment.ac26-w4-arithmetization.interpolate",
+        "description": "列を体上で補間し、 domain 上で列を再現し、 domain 外でも多項式として振る舞った。"
+      },
+      {
+        "id": "assessment.ac26-w4-arithmetization.compose",
+        "description": "多項式を通しても遷移関係が domain 上で消えることを確認できた。"
+      },
+      {
+        "id": "assessment.ac26-w4-arithmetization.locate",
+        "description": "最初に壊れた行と、 制約の種類を正しく特定できた。"
+      },
+      {
+        "id": "assessment.ac26-w4-arithmetization.underconstrained",
+        "description": "遷移制約をすべて満たす別の trace を構成し、 欠けている制約を名指しできた。"
+      },
+      {
+        "id": "assessment.ac26-w4-arithmetization.transfer",
+        "description": "見たことのない体・trace 長・遷移でも全性質が成立した。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.the-trace-is-the-proof",
+        "description": "trace があれば証明だという誤解。 trace は主張の対象であって、 それ自体は何も保証しない。"
+      },
+      {
+        "id": "misconception.interpolation-adds-soundness",
+        "description": "多項式に変換すれば健全になるという誤解。 補間は表現を変えるだけで、 健全性は制約が担う。"
+      },
+      {
+        "id": "misconception.transitions-imply-the-start",
+        "description": "遷移制約があれば初期状態も決まるという誤解。 遷移は相対的な関係しか言わない。"
+      },
+      {
+        "id": "misconception.one-output-check-constrains-everything",
+        "description": "最終出力を 1 回検査すれば全行が拘束されるという誤解。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w4-arithmetization",
+      "target": "lo.ac26-w4-arithmetization.generate-trace"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w4-arithmetization",
+      "target": "lo.ac26-w4-arithmetization.transition-constraints"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w4-arithmetization",
+      "target": "lo.ac26-w4-arithmetization.boundary-constraints"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w4-arithmetization",
+      "target": "lo.ac26-w4-arithmetization.interpolate-columns"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w4-arithmetization",
+      "target": "lo.ac26-w4-arithmetization.locate-violation"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w4-arithmetization",
+      "target": "lo.ac26-w4-arithmetization.underconstrained-system"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w4-arithmetization",
+      "target": "concept.execution-trace"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w4-arithmetization",
+      "target": "concept.transition-constraint"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w4-arithmetization",
+      "target": "concept.boundary-constraint"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w4-arithmetization",
+      "target": "concept.evaluation-domain"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w4-arithmetization",
+      "target": "concept.arithmetization"
+    },
+    {
+      "type": "requires",
+      "source": "problem.ac26-w4-arithmetization",
+      "target": "problem.ac26-w1-constraint-lab"
+    },
+    {
+      "type": "requires",
+      "source": "problem.ac26-w4-arithmetization",
+      "target": "problem.ac26-w3-field-inverse"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w4-arithmetization.interpolate-columns",
+      "target": "concept.modular-inverse"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w4-arithmetization.underconstrained-system",
+      "target": "concept.underconstraint"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w4-arithmetization",
+      "target": "assessment.ac26-w4-arithmetization.trace"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w4-arithmetization",
+      "target": "assessment.ac26-w4-arithmetization.transition"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w4-arithmetization",
+      "target": "assessment.ac26-w4-arithmetization.boundary"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w4-arithmetization",
+      "target": "assessment.ac26-w4-arithmetization.interpolate"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w4-arithmetization",
+      "target": "assessment.ac26-w4-arithmetization.compose"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w4-arithmetization",
+      "target": "assessment.ac26-w4-arithmetization.locate"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w4-arithmetization",
+      "target": "assessment.ac26-w4-arithmetization.underconstrained"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w4-arithmetization",
+      "target": "assessment.ac26-w4-arithmetization.transfer"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w4-arithmetization",
+      "target": "misconception.the-trace-is-the-proof"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w4-arithmetization",
+      "target": "misconception.interpolation-adds-soundness"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w4-arithmetization",
+      "target": "misconception.transitions-imply-the-start"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w4-arithmetization",
+      "target": "misconception.one-output-check-constrains-everything"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w4-arithmetization",
+      "target": "misconception.more-constraints-is-safer"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18104/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "trace",
+        "label": "実行 trace を作る",
+        "points": 30,
+        "wrongAnswerPenalty": 15
+      },
+      {
+        "id": "transition",
+        "label": "隣り合う行の関係を式にする",
+        "points": 40,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "transition-hint-1",
+            "content": "residual は何本あるか。 行数と同じではない。 最後の行の 「次の行」 は存在しない。",
+            "penalty": 15
+          }
+        ]
+      },
+      {
+        "id": "boundary",
+        "label": "どこから始まったかを固定する",
+        "points": 30,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "boundary-hint-1",
+            "content": "transition 制約だけを満たす trace は、 別の初期状態から始めても作れる。 それを禁じているのは何か。",
+            "penalty": 12
+          }
+        ]
+      },
+      {
+        "id": "interpolate",
+        "label": "列を多項式にする",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "interpolate-hint-1",
+            "content": "体の上での補間。 割り算は逆元の乗算で、 点が相異なることが効いてくる。",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "compose",
+        "label": "domain 上で関係が消えることを見る",
+        "points": 40,
+        "wrongAnswerPenalty": 15
+      },
+      {
+        "id": "locate",
+        "label": "最初に壊れた行を特定する",
+        "points": 40,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "locate-hint-1",
+            "content": "行 0 には前の行が無い。 そこで壊れうるのはどちらの制約か。 そして i 番目の transition が壊すのはどの行か。",
+            "penalty": 18
+          }
+        ]
+      },
+      {
+        "id": "underconstrained",
+        "label": "多項式が正しくても文が違う例を作る",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "underconstrained-hint-1",
+            "content": "transition 制約は 「各行が前の行から従う」 としか言っていない。 それを全部満たす別の trace はどう作るか。",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "transfer",
+        "label": "見たことのない設定でも成立させる",
+        "points": 30,
+        "wrongAnswerPenalty": 15
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Turning it into a polynomial is not a proof",
+      "shortDescription": "Proving a program ran does not put the program into the proof. Translate a small state machine's trace into polynomial relations over a finite field, and find out what the translation preserves and what it does not guarantee.",
+      "instructions": "## Start here\n\nProving that a program ran does not put the program into the proof. The execution becomes a table, the table's rules become polynomial relations, and the claim becomes \"these relations vanish on these points\".\n\nThe machine is two columns and two rules:\n\n```text\na_{i+1} = a_i + b_i\nb_{i+1} = b_i + weight*a_i     (mod p)\n```\n\n## First move\n\n```bash\nmake inspect\n```\n\nThat prints the machine, the whole trace, and which domain point each row sits at. Count how many residuals there will be before you write them.\n\nThen edit `local/starter/air.py`.\n\n## Goal\n\nClear eight independently scored checkpoints. There are two kinds of constraint and they do different jobs. At the end you build the trace that shows what a system with only one of them allows.",
+      "writeup": "## The translation adds no soundness\n\nInterpolating a trace into polynomials guarantees nothing by itself. Interpolation changes the representation; the checking power lives in the constraints. \"It is a polynomial now, so it is a proof\" is close to saying a table became correct when it was converted from CSV to JSON.\n\n## The two kinds of constraint do different jobs\n\nTransition constraints say each row follows from the one before it. Boundary constraints say where the machine started. Neither implies the other.\n\nDrop the boundary and the system is perfectly satisfied by a trace of the same machine started from **somewhere else**. Every transition holds, every residual is zero, and the polynomials are just as valid. They are a proof of a different statement. The `underconstrained` checkpoint has you build that trace, which is what \"dropping one constraint\" concretely means.\n\n## How many residuals\n\nOne per adjacent row pair, so one fewer than the number of rows. An implementation with one per row is comparing the last row against a next row that does not exist -- one of the mutations is exactly that, and it dies with an IndexError.\n\n## Which row a violation belongs to\n\nThe i-th transition produces row i+1, so row i+1 is the first row that is wrong. Reporting i sends the reader one row away from the problem.\n\nRow 0 has no predecessor, so the only thing that can break there is the boundary; calling that a transition failure points at the wrong place too. That is why the boundary is checked first.\n\n## The evaluation domain\n\nThe domain is the powers of a root of unity, with row i at point g^i. Consecutive rows are consecutive points, so the transition constraint becomes a relation between a polynomial at x and the same polynomial at the next point. The primes are chosen so that `steps` divides p-1 -- otherwise no root of unity of that order exists.\n\n## This is not a proof system\n\nThere is no commitment, no verifier randomness, and therefore no soundness against anybody. It is a bridge to arithmetization, not past it. Calling what you build here \"a small SNARK\" is the opposite of what the problem is trying to teach.\n\n## Week 4 alignment\n\nWeek 4's material was not published upstream at the pinned commit. `courseAlignment` pins `week4/README.md` with `kind: \"placeholder\"` and takes the `transfer` role -- one of the two GOVERNANCE.md section 6 permits for an unpublished week, and accurate besides, since the problem transfers Week 1's constraints and Week 3's field into a new setting. It asserts nothing about what the official exercise will require.",
+      "learningGoals": [
+        "Generate an execution trace from a deterministic computation",
+        "Write a state transition as a constraint between adjacent rows",
+        "Separate pinning the initial state from the transition rules",
+        "Interpolate a trace column into a polynomial over a finite field",
+        "Track which row, and which kind of constraint, a violation appears in",
+        "Detect a counterexample where one row of the trace was altered",
+        "Explain why turning something into a polynomial is not by itself a proof"
+      ],
+      "checks": [
+        {
+          "id": "trace",
+          "label": "Produce the execution trace"
+        },
+        {
+          "id": "transition",
+          "label": "Turn adjacent rows into a relation",
+          "hints": [
+            {
+              "id": "transition-hint-1",
+              "content": "How many residuals are there? Not one per row -- the last row has no next row."
+            }
+          ]
+        },
+        {
+          "id": "boundary",
+          "label": "Pin where it started",
+          "hints": [
+            {
+              "id": "boundary-hint-1",
+              "content": "A trace satisfying only the transition constraints can start anywhere. What forbids that?"
+            }
+          ]
+        },
+        {
+          "id": "interpolate",
+          "label": "Turn a column into a polynomial",
+          "hints": [
+            {
+              "id": "interpolate-hint-1",
+              "content": "Interpolation over the field. Division is by modular inverse, and the points being distinct is what makes it work."
+            }
+          ]
+        },
+        {
+          "id": "compose",
+          "label": "Watch the relation vanish on the domain"
+        },
+        {
+          "id": "locate",
+          "label": "Locate the first row that breaks",
+          "hints": [
+            {
+              "id": "locate-hint-1",
+              "content": "Row 0 has no predecessor. Which kind of constraint can break there? And which row does the i-th transition break?"
+            }
+          ]
+        },
+        {
+          "id": "underconstrained",
+          "label": "Build a valid proof of the wrong statement",
+          "hints": [
+            {
+              "id": "underconstrained-hint-1",
+              "content": "The transition constraints only say each row follows from the one before. How do you build another trace that satisfies all of them?"
+            }
+          ]
+        },
+        {
+          "id": "transfer",
+          "label": "Hold up in a setting you have not seen"
+        }
+      ]
+    }
+  }
+}
