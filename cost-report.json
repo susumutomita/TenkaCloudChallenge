@@ -147,6 +147,38 @@
       "billable": []
     },
     {
+      "id": "ac26-w3-ec-group",
+      "category": "Challenge",
+      "region": "ap-northeast-1",
+      "estimatedSessionMinutes": 105,
+      "perHourUsd": 0,
+      "perSessionUsd": 0,
+      "ifLeftRunningUsd": {
+        "oneDay": 0,
+        "oneWeek": 0,
+        "oneMonth": 0
+      },
+      "freeTierEligible": true,
+      "alwaysOnResources": [],
+      "billable": []
+    },
+    {
+      "id": "ac26-w3-field-inverse",
+      "category": "Challenge",
+      "region": "ap-northeast-1",
+      "estimatedSessionMinutes": 60,
+      "perHourUsd": 0,
+      "perSessionUsd": 0,
+      "ifLeftRunningUsd": {
+        "oneDay": 0,
+        "oneWeek": 0,
+        "oneMonth": 0
+      },
+      "freeTierEligible": true,
+      "alwaysOnResources": [],
+      "billable": []
+    },
+    {
       "id": "ai-riscv-screen-repair",
       "category": "Challenge",
       "region": "ap-northeast-1",
