@@ -124,7 +124,7 @@ def _check_property_matrix(submission: object) -> bool:
 
 
 RUNNER = """
-import json, sys
+import json, os, sys
 sys.path.insert(0, {root!r})
 sys.path.insert(0, {workspace!r})
 from tests.hidden.check_properties import run
@@ -133,8 +133,11 @@ try:
     import counterexamples
 except Exception as error:
     print(json.dumps({{"failures": ["submission could not be imported: " + type(error).__name__]}}))
-    raise SystemExit(0)
+    sys.stdout.flush()
+    os._exit(0)
 print(json.dumps({{"failures": run(classify, counterexamples, {seed!r})}}))
+sys.stdout.flush()
+os._exit(0)
 """
 
 

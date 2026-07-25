@@ -32,7 +32,7 @@ challenges/<id>/
     ├── show.py            `make inspect`
     ├── mutation.py        proves the hidden tests can fail a wrong answer
     ├── starter/           the only thing the learner edits
-    ├── reference/         inside the image only, never mounted
+    ├── reference/         inside the image, not bind-mounted (see Assurance scope)
     ├── fixtures/          everything derived from FLAG_SEED
     ├── tests/
     │   ├── public/        the learner reads these
@@ -61,8 +61,10 @@ Three naming traps, all hit while building the reference problem:
 - **Do not name a top-level module `inspect.py`.** It shadows the standard library's `inspect`,
   and `dataclasses` imports it — the failure surfaces as a circular-import error somewhere
   unrelated. The template uses `show.py`.
-- **`reference/` ships inside the image** (the mutation suite needs it) **but is never bind-mounted**.
-  Mount `starter/` read-only and nothing else, or the answer lands in the learner's checkout.
+- **`reference/` ships inside the image** (the mutation suite needs it) **but is not bind-mounted**.
+  Mount `starter/` read-only and nothing else, or the answer lands in the learner's checkout as a
+  file they did not go looking for. That is the whole of what the arrangement buys — it is not
+  confidentiality; see [Assurance scope](#assurance-scope).
 - **A scaffolded problem is a full copy, not a link.** Fixes made to the template after you
   scaffolded do not reach you. The macOS `RLIMIT_AS` fix had to be applied by hand to four
   problems for exactly this reason; `scripts/verifier-rlimit-guard.test.ts` exists to catch it.
@@ -79,7 +81,58 @@ make reset            # restore starter/ to its shipped state
 ```
 
 `make reference-test` is authors and CI only. It runs the hidden and mutation suites **inside the
-image**, so the reference implementation never reaches the host.
+image**, so the reference implementation is not written into the learner's working tree.
+
+## Assurance scope
+
+Local mode is **self-paced, honor-system verification**. Everything below follows from one fact:
+
+> The participant owns the machine, the Docker daemon, and the image.
+
+### What the local verifier does guarantee
+
+These are properties of the verifier against a submission, and they hold:
+
+- a submission cannot hang, crash, fork-bomb, or shell-inject the verifier — it fails the
+  checkpoint instead (see the `/verify` security contract below);
+- a checkpoint can only ever credit the id it echoes, so the platform fails closed on a mismatch;
+- responses carry a verdict and at most a property name, so a checkpoint result is not an oracle
+  that dumps expected values;
+- fixtures derive from the per-deploy `FLAG_SEED`, so an answer memorized from one deployment does
+  not carry to another, and a hardcoded constant does not pass.
+
+### What it does not guarantee
+
+State these plainly rather than implying otherwise:
+
+- **`reference/` and `tests/hidden/` are not confidential.** They ship inside the image the
+  participant builds and runs. Not bind-mounting them keeps them out of the git checkout — it does
+  not keep them from someone who wants to look. "Not mounted" is tidiness, not a boundary.
+- **The checker is not tamper-resistant.** The participant controls the image and the process, so
+  they can replace the checker, the fixtures, or the verifier itself.
+- **Submission and checker share a Python module graph.** `/verify` loads both into the same child
+  process, so the submission can reach the checker's namespace.
+
+None of these is a defect in a particular problem. They follow from running the grader on hardware
+the graded party controls, and no amount of care inside the image changes that.
+
+### Which claims local results support
+
+| Use | Supported |
+|---|---|
+| Self-study, practice, and formative feedback | Yes — this is what local mode is for |
+| A learner convincing themselves they understood something | Yes |
+| Competition ranking, examination, completion certification | **No** |
+
+Trusted verification needs a verifier the participant does not administer. Designing that is
+tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271) along with
+separating author-only artifacts out of the participant-facing image and splitting the submission
+from the checker's process. Until that lands, do not let a local `multi-verify` result stand behind
+a claim in the "No" row.
+
+Every AC26 problem README carries a short **Assurance scope** section saying this in participant
+language. `scripts/assurance-scope.test.ts` asserts it is there and that no problem has drifted
+back to claiming confidentiality.
 
 ## Scoring contract
 
@@ -173,4 +226,8 @@ comment.
 - [ ] Changing the seed changes the fixtures.
 - [ ] The mutation suite kills every listed defect, including the verifier mutations.
 - [ ] Neither the writeup nor the hidden tests reach the participant-facing bundle.
+- [ ] Both READMEs carry the **Assurance scope** section, and nothing in the problem claims
+      the reference or the hidden tests are confidential or tamper-resistant.
+      `scripts/assurance-scope.test.ts` checks this; it exists because the whole catalog had
+      drifted into claiming it once already.
 - [ ] A `scripts/<id>.test.ts` runs the above in CI.

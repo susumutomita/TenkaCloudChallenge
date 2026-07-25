@@ -99,7 +99,7 @@ def _check_inspect(submission: object) -> bool:
 
 
 RUNNER = """
-import json, sys
+import json, os, sys
 from pathlib import Path
 sys.path.insert(0, {root!r})
 sys.path.insert(0, {workspace!r})
@@ -108,8 +108,11 @@ try:
     from counter import advance
 except Exception as error:
     print(json.dumps({{"failures": ["submission could not be imported: " + type(error).__name__]}}))
-    raise SystemExit(0)
+    sys.stdout.flush()
+    os._exit(0)
 print(json.dumps({{"failures": run(advance, {seed!r})}}))
+sys.stdout.flush()
+os._exit(0)
 """
 
 

@@ -66,7 +66,7 @@ def _limits() -> None:
 
 
 RUNNER = """
-import json, sys
+import json, os, sys
 sys.path.insert(0, {root!r})
 sys.path.insert(0, {workspace!r})
 from tests.hidden import check_encoding
@@ -74,7 +74,8 @@ try:
     import encoding
 except Exception as error:
     print(json.dumps({{"failures": ["submission could not be imported: " + type(error).__name__]}}))
-    raise SystemExit(0)
+    sys.stdout.flush()
+    os._exit(0)
 phases = {phases!r}
 if phases:
     failures = []
@@ -83,6 +84,8 @@ if phases:
 else:
     failures = check_encoding.run(encoding, {seed!r})
 print(json.dumps({{"failures": failures}}))
+sys.stdout.flush()
+os._exit(0)
 """
 
 
