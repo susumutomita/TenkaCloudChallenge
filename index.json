@@ -939,6 +939,59 @@
       }
     },
     {
+      "id": "ac26-w5-pbs-homnand",
+      "name": "暗号文のまま関数を引き、鍵を新品に戻す",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "advanced-cryptography-2026",
+        "order": 560,
+        "chapter": "Week 5 / Programmable Bootstrapping and HomNAND"
+      },
+      "courseAlignment": {
+        "courseId": "advanced-cryptography-program",
+        "edition": "2026",
+        "week": 5,
+        "role": "synthesis",
+        "sources": [
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "path": "week5/README.md",
+            "kind": "lecture"
+          },
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "path": "week5/problems/tfhe-toy-python/README.md",
+            "kind": "assignment"
+          }
+        ]
+      },
+      "difficulty": 5,
+      "estimatedDuration": "105-150 分",
+      "shortDescription": "Week 5 の 5 問が作った部品を 1 本の Programmable Bootstrapping につなぎ、 最後に暗号文のまま NAND を評価する。 復号は 1 回も起きない。",
+      "tags": [
+        "advanced-cryptography-2026",
+        "week5",
+        "fhe",
+        "tfhe",
+        "programmable-bootstrapping",
+        "homomorphic-nand",
+        "capstone",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "ac26-w5-rgsw-external",
       "name": "誰にも読めないビットを掛ける",
       "category": "Challenge",
