@@ -169,6 +169,9 @@ order; `track.order` only sequences presentation.
 | `concept.non-cryptographic-baseline` | The option that uses none, without which nothing shows what cryptography bought |
 | `concept.security-property-matrix` | Each property tied to the asset, adversary, component, evidence, and limitation |
 | `concept.design-assumption` | What must hold in the world for a primitive's guarantee to apply — and so, what to attack |
+| `concept.reproducible-experiment` | Randomness taken explicitly, so the same inputs give the same observation — and so the space can be enumerated |
+| `concept.adversarial-validation` | Turning a hypothesis about how it breaks into a test that runs, instead of exercising the happy path |
+| `concept.public-evidence-bundle` | Each property mapped one-to-one onto the experiment that ran, its verdict, and its limitation |
 
 ### Misconceptions
 
@@ -191,6 +194,11 @@ Named so a challenge can target one deliberately and assert that it was correcte
 | `misconception.fhe-removes-key-management` | Encrypting the computation removes the question of who holds the key |
 | `misconception.mpc-removes-collusion-assumptions` | Multi-party computation removes the collusion assumption rather than relocating it |
 | `misconception.design-document-needs-no-executable-check` | A design cannot be tested, only reviewed |
+| `misconception.right-answer-means-right-protocol` | Producing the correct output means the protocol that produced it is correct |
+| `misconception.privacy-can-be-asserted` | Privacy is a property of the design, not something a finite space lets you measure |
+| `misconception.one-adversary-is-every-adversary` | Safety against one coalition is safety against all of them |
+| `misconception.threshold-is-a-protocol-defect` | The coalition threshold is a hole in the protocol rather than a limit the output imposes |
+| `misconception.working-demo-equals-secure-system` | A demo that runs is a system that holds; the happy path validates the threat model |
 
 ## Week-by-week mapping
 
