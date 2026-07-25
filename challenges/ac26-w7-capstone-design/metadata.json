@@ -1,0 +1,483 @@
+{
+  "id": "ac26-w7-capstone-design",
+  "name": "道具から決めない",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "advanced-cryptography-2026",
+    "order": 710,
+    "chapter": "Week 7 / Capstone Design"
+  },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 7,
+    "role": "synthesis",
+    "spoilerPolicy": "independent-reimplementation",
+    "sources": [
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        "path": "README.md",
+        "kind": "roadmap"
+      }
+    ]
+  },
+  "difficulty": 5,
+  "estimatedDuration": "120-180 分",
+  "shortDescription": "brief には actor と asset と信頼関係しか書いていない。 primitive の名前は 1 つも出てこない。 そこから必要な性質を導き、 必要な分だけ選び、 境界に型をつけ、 前提が動いた brief にもう一度答える。",
+  "description": "Week 7 の 1 問目、 role は synthesis。 Week 1〜6 の primitive を、 流行や library ではなく problem statement・adversary・公開可能情報・秘密情報・trust assumption から選ぶ設計問題として扱う。\n\n設計を自由記述で書かせて LLM に採点させると、 読める文章と正しい設計の区別がつかない。 そこでこの問題は設計を **コード** として書かせる。 brief を入力に取り、 asset 分類・required property・alternative 比較・selection・typed data flow・attack plan・property matrix を返す 8 つの関数である。 いずれも brief の関数として書ける。\n\n**採点の芯は最後の checkpoint にある**。 前提が 1 つ動いた brief (運営が信用できなくなる / 第三者が結果に依存し始める / 1 者欠けても完了しなければならない) 18 種と、 seed から生成されてどのファイルにも存在しない brief 12 種を渡す。 brief を読んで導出する実装なら 4 回呼ぶだけで通り、 答えを 1 度決めて書き込んだ実装はここだけ動かない。\n\n**選定規則は 3 条件 + 1 優先規則**。 required を被覆する / この brief が用意していない相手を信用しない / 1 つ外すと被覆が壊れる。 そしてその前に、 暗号が不要な brief には暗号を選ばない。 6 つの brief のうち `shift-board` がそれで、 ここで primitive を選ぶ実装は落ちる。\n\n**privacy と zero knowledge を分けてある**。 計算に参加する相手から隠すのが privacy、 自分で計算していない値を信じてもらうのが soundness、 信じてもらう値が隠したい値から導かれるときだけ zero knowledge。 `solvency-claim` は privacy を要求せず zero_knowledge を要求するbrief で、 両者を同一視した実装をここで落とす。\n\n**最小性が満たす組を一意に決めるとは限らない**。 `delegated-scoring` は MPC でも FHE でも通る。 採点は reference の出力と一致するかではなく、 被覆・許容・最小の 3 条件だけを見る。",
+  "instructions": "## はじめに\n\nbrief が 1 つ渡されます。 そこには actor、 asset、 誰が何を知ってよくて誰が知ってはいけないか、 誰が自分で計算していない値を信じるのか、 締切の条件が書いてあります。\n\n**primitive の名前は 1 つも書いてありません。** 道具は最後に決めるものだからです。\n\n```bash\nmake inspect\n```\n\n自分の brief と、 前提が 1 つ動いたあとの同じ brief が出ます。 コードを書く前に、 2 つを手で見比べてください。\n\n## やること\n\n`local/starter/design.py` の 8 つの関数を書きます。 どれも 「渡された brief から答えを導く」 形にします。 そう書けば最後の checkpoint はただで通り、 答えを 1 度決めて書き込むと最後の checkpoint で落ちます。\n\n## ゴール\n\n8 つの checkpoint を独立に通します。 採点は repository にある 6 つの brief、 前提が動いた 18 の変種、 そして seed から生成されて どのファイルにも存在しない 12 の brief に対して行われます。\n",
+  "writeup": "## 道具から始めない\n\n設計を 「ZK を使うか、 MPC を使うか」 から始めると、 その質問には答えが出る。 出た答えが問題に合っているかは、 別の話である。\n\nこの問題の brief は primitive の名前を 1 つも含んでいない。 含んでいるのは、 誰がいて、 何があって、 誰が何を知ってはいけなくて、 誰が自分で計算していない値を信じるか、 だけである。 そこから必要な property が決まり、 property から選択肢が決まる。 順序が逆になった設計は、 だいたい正しく動いて、 だいたい間違ったものを守っている。\n\n## privacy と zero knowledge は別の欄\n\n`balance` を lender に見せたくない。 これは privacy だろうか。\n\nlender は計算に参加しない。 答えを読むだけである。 つまり 「計算する側から隠す」 話ではなく、 「自分で計算していない値を信じてもらう」 話になる。 前者が privacy、 後者が soundness であり、 信じてもらう値が隠したい値から導かれているときに初めて zero knowledge が要る。\n\nsoundness だけなら、 ただの署名でよい。 この 2 つを一緒にすると、 署名で済む場所に証明系を持ち込むことになる。\n\n## 最小性が効く場所\n\n選んだ組から 1 つ外してみて、 まだ全部の要求を満たしているなら、 その 1 つは何もしていない。 何もしていない primitive は無害ではない。 前提が 1 つ増え、 攻撃面が 1 つ増え、 説明すべきことが 1 つ増える。\n\n`shift-board` は暗号を必要としない brief として入れてある。 秘密が無く、 誰も運営を疑っておらず、 誰も他人の計算結果に依存していない。 ここで primitive を選んだ設計は、 問題ではなく道具から始めている。\n\nなお、 満たす最小の組は 1 つとは限らない。 `delegated-scoring` は MPC でも FHE でも通る。 採点は 「必要を満たし、 この brief が用意していない相手を信用せず、 何も余分でない」 かどうかだけを見る。\n\n## non_goals は飾りではない\n\n`PRIMITIVES` の各 option には `non_goals` がある。 FHE は鍵管理を無くさない。 復号鍵を持つ誰かがいて、 その誰かは脅威モデルの登場人物のままである。 MPC は結託の仮定を無くさない。 置き換えるだけである。 ZK は public input を隠さない。\n\nproperty matrix で 「この component が privacy を担う」 と書くとき、 その component が実装している option が本当に privacy を提供するのかを見る。 提供しないものに委ねた設計は、 図の上では完成している。\n\n## 導出した設計と、決めた設計\n\n最後の checkpoint は、 前提が 1 つ動いた brief を渡す。 運営が信用できなくなる、 第三者が結果に依存し始める、 1 者が落ちても完了しなければならない。\n\nbrief を読んで導出する関数を書いていれば、 ここは 4 回呼ぶだけである。 どこか 1 つでも答えを書き込んでいれば、 そこだけが動かない。 設計文書が古くなるのはこれと同じ理由で、 違いは、 文書は自分が古いと言わないことである。\n\n## 次につながるところ\n\nWeek 7 の実装 challenge は、 ここで作った property matrix と attack plan を、 実際に走る実験へ変換する。 evidence の欄に書いた実験 id が、 そこで実行されるものになる。\n",
+  "tags": [
+    "advanced-cryptography-2026",
+    "week7",
+    "capstone",
+    "threat-model",
+    "primitive-selection",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18119,
+      "name": "/verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "問題文を actor・asset・信頼関係へ分解してから道具を考えられる。",
+    "必要な security property を brief から導き、 不要なものを要求しない。",
+    "暗号を使わない案を含めて比較し、 何を買ったのかを言える。",
+    "public / private / ciphertext / share / proof を辺の型として設計できる。",
+    "各 property に責任 component と観測可能な evidence を対応づけられる。",
+    "前提が変わった brief に、 設計を導出し直して答えられる。"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.ac26-w7-capstone-design.frame-before-choosing",
+        "description": "問題文を actor・asset・信頼関係へ分解してから道具を考えられる。"
+      },
+      {
+        "id": "lo.ac26-w7-capstone-design.derive-requirements",
+        "description": "必要な security property を brief から導き、 不要なものを要求しない。"
+      },
+      {
+        "id": "lo.ac26-w7-capstone-design.compare-with-baseline",
+        "description": "暗号を使わない案を含めて比較し、 何を買ったのかを言える。"
+      },
+      {
+        "id": "lo.ac26-w7-capstone-design.type-the-boundary",
+        "description": "public / private / ciphertext / share / proof を辺の型として設計できる。"
+      },
+      {
+        "id": "lo.ac26-w7-capstone-design.evidence-for-claims",
+        "description": "各 property に責任 component と観測可能な evidence を対応づけられる。"
+      },
+      {
+        "id": "lo.ac26-w7-capstone-design.design-that-generalizes",
+        "description": "前提が変わった brief に、 設計を導出し直して答えられる。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.primitive-selection",
+        "description": "必要な property から使う暗号 primitive を導く手続き。 逆順は道具からの出発になる。"
+      },
+      {
+        "id": "concept.non-cryptographic-baseline",
+        "description": "暗号を使わない案。 比較対象が無ければ、 暗号が何を買ったのか言えない。"
+      },
+      {
+        "id": "concept.security-property-matrix",
+        "description": "property ごとに 守る資産・敵・責任 component・観測可能な evidence・限界 を対応づけた表。"
+      },
+      {
+        "id": "concept.design-assumption",
+        "description": "primitive が成立するために world 側で真でなければならないこと。 攻撃対象でもある。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.ac26-w7-capstone-design.assets",
+        "description": "全 asset を所有者と機密区分つきで分類できた。"
+      },
+      {
+        "id": "assessment.ac26-w7-capstone-design.requirements",
+        "description": "必要な property だけを brief から導けた。"
+      },
+      {
+        "id": "assessment.ac26-w7-capstone-design.alternatives",
+        "description": "非暗号案を含む選択肢を、 提供物と前提つきで比較できた。"
+      },
+      {
+        "id": "assessment.ac26-w7-capstone-design.selection",
+        "description": "要求を満たす最小の組を選び、 不要な primitive を足さなかった。"
+      },
+      {
+        "id": "assessment.ac26-w7-capstone-design.architecture",
+        "description": "秘密が平文で相手に届かない typed data flow を書けた。"
+      },
+      {
+        "id": "assessment.ac26-w7-capstone-design.attacks",
+        "description": "必要 property ごとに観測可能な攻撃仮説を立てられた。"
+      },
+      {
+        "id": "assessment.ac26-w7-capstone-design.matrix",
+        "description": "各 property に、 それを実際に提供する component を割り当てられた。"
+      },
+      {
+        "id": "assessment.ac26-w7-capstone-design.revision",
+        "description": "前提が動いた brief へ設計を導出し直せた。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.start-with-a-primitive-then-find-a-problem",
+        "description": "道具を先に決めて、 後から使える問題を探す。 選定は要求から導くものである。"
+      },
+      {
+        "id": "misconception.more-cryptography-is-safer",
+        "description": "primitive を足すほど安全になるという誤解。 足した分だけ前提と攻撃面が増える。"
+      },
+      {
+        "id": "misconception.fhe-removes-key-management",
+        "description": "FHE を使えば鍵管理が要らなくなるという誤解。 復号鍵の持ち主は依然として脅威モデルの登場人物である。"
+      },
+      {
+        "id": "misconception.mpc-removes-collusion-assumptions",
+        "description": "MPC が結託の仮定を無くすという誤解。 無くすのではなく置き換える。"
+      },
+      {
+        "id": "misconception.design-document-needs-no-executable-check",
+        "description": "設計文書は検証できないという誤解。 資産分類・境界・責任対応は機械で検査できる。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w7-capstone-design",
+      "target": "lo.ac26-w7-capstone-design.frame-before-choosing"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w7-capstone-design",
+      "target": "lo.ac26-w7-capstone-design.derive-requirements"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w7-capstone-design",
+      "target": "lo.ac26-w7-capstone-design.compare-with-baseline"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w7-capstone-design",
+      "target": "lo.ac26-w7-capstone-design.type-the-boundary"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w7-capstone-design",
+      "target": "lo.ac26-w7-capstone-design.evidence-for-claims"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w7-capstone-design",
+      "target": "lo.ac26-w7-capstone-design.design-that-generalizes"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w7-capstone-design",
+      "target": "concept.threat-model"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w7-capstone-design",
+      "target": "concept.primitive-selection"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w7-capstone-design",
+      "target": "concept.non-cryptographic-baseline"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w7-capstone-design",
+      "target": "concept.security-property-matrix"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w7-capstone-design",
+      "target": "concept.design-assumption"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w7-capstone-design",
+      "target": "concept.privacy"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w7-capstone-design",
+      "target": "concept.soundness"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w7-capstone-design",
+      "target": "concept.correctness"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w7-capstone-design.derive-requirements",
+      "target": "concept.threat-model"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w7-capstone-design.compare-with-baseline",
+      "target": "concept.non-cryptographic-baseline"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w7-capstone-design.design-that-generalizes",
+      "target": "concept.design-assumption"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w7-capstone-design",
+      "target": "assessment.ac26-w7-capstone-design.assets"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w7-capstone-design",
+      "target": "assessment.ac26-w7-capstone-design.requirements"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w7-capstone-design",
+      "target": "assessment.ac26-w7-capstone-design.alternatives"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w7-capstone-design",
+      "target": "assessment.ac26-w7-capstone-design.selection"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w7-capstone-design",
+      "target": "assessment.ac26-w7-capstone-design.architecture"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w7-capstone-design",
+      "target": "assessment.ac26-w7-capstone-design.attacks"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w7-capstone-design",
+      "target": "assessment.ac26-w7-capstone-design.matrix"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w7-capstone-design",
+      "target": "assessment.ac26-w7-capstone-design.revision"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w7-capstone-design",
+      "target": "misconception.start-with-a-primitive-then-find-a-problem"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w7-capstone-design",
+      "target": "misconception.more-cryptography-is-safer"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w7-capstone-design",
+      "target": "misconception.fhe-removes-key-management"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w7-capstone-design",
+      "target": "misconception.mpc-removes-collusion-assumptions"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w7-capstone-design",
+      "target": "misconception.design-document-needs-no-executable-check"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18119/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "assets",
+        "label": "誰の何を、どこまで隠すのかを並べる",
+        "points": 30,
+        "wrongAnswerPenalty": 15
+      },
+      {
+        "id": "requirements",
+        "label": "brief から必要な性質だけを取り出す",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "requirements-hint-1",
+            "content": "結果を作る側に見せない、 と 出来た答えを読むだけの相手に見せない は同じ要求ではない。 後者は誰かが自分で計算していない値を信じる話であり、 別の欄に入る。",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "alternatives",
+        "label": "使わない場合を含めて並べる",
+        "points": 30,
+        "wrongAnswerPenalty": 15
+      },
+      {
+        "id": "selection",
+        "label": "brief が要求した分だけ選ぶ",
+        "points": 50,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "selection-hint-1",
+            "content": "選んだものを 1 つ外してみる。 まだ全部の要求を満たしているなら、 それは何もしていない。",
+            "penalty": 10
+          },
+          {
+            "id": "selection-hint-2",
+            "content": "6 つの brief のうち 1 つは、 暗号を必要としない。 それを暗号で答えた設計は、 問題ではなく道具から出発している。",
+            "penalty": 15
+          }
+        ]
+      },
+      {
+        "id": "architecture",
+        "label": "何がどの形で境界を越えるかを書く",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "architecture-hint-1",
+            "content": "「見せない」 と書いた資産が、 平文の辺で相手のところへ着いていないか。 図は矛盾を隠すが、 辺の型は隠さない。",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "attacks",
+        "label": "壊れ方を、観測できる形で書く",
+        "points": 35,
+        "wrongAnswerPenalty": 15
+      },
+      {
+        "id": "matrix",
+        "label": "性質ごとに、誰が担うのかを書く",
+        "points": 35,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "matrix-hint-1",
+            "content": "担当だと書いた component が、 その性質を本当に提供する option を実装しているか。 PRIMITIVES の non_goals は、 よく誤って期待されるものを並べてある。",
+            "penalty": 15
+          }
+        ]
+      },
+      {
+        "id": "revision",
+        "label": "前提が 1 つ動いた brief に答える",
+        "points": 30,
+        "wrongAnswerPenalty": 15
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Do not start from the tool",
+      "shortDescription": "The brief names actors, assets, and who trusts whom. It names no primitive. Derive the properties it requires, select exactly that much, type every boundary, then answer the same brief with one fact moved.",
+      "instructions": "## Start here\n\nYou are handed a brief: the actors, the assets, who may know what and who may not, who acts\non a value they did not compute themselves, and what the deadline rules are.\n\n**It names no primitive.** The tool is the last decision, not the first.\n\n```bash\nmake inspect\n```\n\nThat prints your brief, and the same brief after one fact has moved. Compare the two by hand\nbefore writing any code.\n\n## What to do\n\nWrite the eight functions in `local/starter/design.py`. Each one derives its answer from the\nbrief in front of it. Written that way, the last checkpoint costs nothing; write an answer\ndown once instead and the last checkpoint is where that shows.\n\n## Goal\n\nClear eight independently scored checkpoints. You are graded on the six briefs in the\nrepository, on eighteen variants where a fact has moved, and on twelve briefs generated from\nthe seed that exist in no file at all.\n",
+      "writeup": "## Not starting from the tool\n\nBegin a design at \"should this be ZK or MPC\" and you will get an answer. Whether the answer\nfits the problem is a separate question, and it is usually asked too late.\n\nNone of the briefs here names a primitive. They name who is involved, what exists, who must\nnot learn what, and who acts on a value they did not compute. The required properties follow\nfrom that, and the options follow from the properties. A design built the other way round\nusually works, and usually protects the wrong thing.\n\n## Privacy and zero knowledge are different columns\n\nThe lender must not see the `balance`. Is that privacy?\n\nThe lender does not take part in the computation; it only reads the answer. So this is not\n\"hide it from the party doing the work\" — it is \"get somebody to believe a value they did not\ncompute\". The first is privacy. The second is soundness, and zero knowledge is required only\nwhen the value they must believe is derived from the value you are hiding.\n\nSoundness alone is an ordinary signature. Collapse the two and you bring a proof system to a\nplace a signature would have done.\n\n## Where minimality bites\n\nDrop one option from your selection. If the requirements are still covered, that option was\ndoing nothing — and an option that does nothing is not free. It adds an assumption, a surface\nto attack, and something you now have to explain.\n\n`shift-board` is in the set as the brief that needs no cryptography. Nothing is secret,\nnobody distrusts the operator, and nobody depends on somebody else's computation. A design\nthat reaches for a primitive there started from the tool.\n\nNote also that the smallest sufficient combination need not be unique: `delegated-scoring`\npasses with MPC and with FHE. The grading asks only whether the selection covers what is\nrequired, relies on no party this brief does not supply, and contains nothing spare.\n\n## `non_goals` is not decoration\n\nEvery option in `PRIMITIVES` carries a `non_goals` list. FHE does not remove key management:\nsomebody holds the decryption key, and that somebody remains an actor in the threat model.\nMPC does not remove the collusion assumption; it relocates it. A ZK proof does not hide the\npublic inputs.\n\nSo when the property matrix says a component is responsible for privacy, check that the\ncomponent implements an option that actually provides it. A design that delegates a property\nto something which does not provide it is complete on the diagram.\n\n## A derived design and a decided one\n\nThe last checkpoint hands you briefs in which one fact has moved: the operator is no longer\ntrusted, an outside party now depends on the result, the answer must arrive with one party\nunreachable.\n\nIf your functions read the brief, this is four calls. If any of them wrote an answer down,\nthat is the one that does not move. Design documents go stale for exactly this reason — the\ndifference being that a document does not tell you it has.\n\n## Where this leads\n\nWeek 7's implementation challenge turns this property matrix and attack plan into experiments\nthat actually run. The experiment ids you put in the `evidence` column are the ones it\nexecutes.\n",
+      "learningGoals": [
+        "Break a problem statement into actors, assets, and trust before thinking about tools.",
+        "Derive the required security properties from the brief, and require nothing beyond them.",
+        "Compare against the option that uses no cryptography, and say what cryptography bought.",
+        "Design the boundary by typing each edge as plaintext, ciphertext, share, or proof.",
+        "Tie every property to a responsible component and to evidence you could observe.",
+        "Answer a brief whose facts have changed by re-deriving the design."
+      ],
+      "checks": [
+        {
+          "id": "assets",
+          "label": "List what belongs to whom, and how far it is hidden"
+        },
+        {
+          "id": "requirements",
+          "label": "Take from the brief only the properties it asks for",
+          "hints": [
+            {
+              "id": "requirements-hint-1",
+              "content": "Hiding a value from a party that helps produce the result and hiding it from a party that only reads the answer are not the same requirement. The second one is about somebody trusting a value they did not compute, and it belongs in a different column."
+            }
+          ]
+        },
+        {
+          "id": "alternatives",
+          "label": "Lay the options out, including using none of them"
+        },
+        {
+          "id": "selection",
+          "label": "Select as much as the brief asked for, and no more",
+          "hints": [
+            {
+              "id": "selection-hint-1",
+              "content": "Drop one of the options you selected. If the requirements are still covered, that option was doing nothing."
+            },
+            {
+              "id": "selection-hint-2",
+              "content": "One of the six briefs requires no cryptography at all. A design that answers it with a primitive started from the tool rather than from the problem."
+            }
+          ]
+        },
+        {
+          "id": "architecture",
+          "label": "Say what crosses each boundary, and in what form",
+          "hints": [
+            {
+              "id": "architecture-hint-1",
+              "content": "Check whether an asset you called hidden arrives at that party along a plaintext edge. A diagram will hide the contradiction; the type on the edge will not."
+            }
+          ]
+        },
+        {
+          "id": "attacks",
+          "label": "Write down how it breaks, in a form you could observe"
+        },
+        {
+          "id": "matrix",
+          "label": "Say, for each property, which component carries it",
+          "hints": [
+            {
+              "id": "matrix-hint-1",
+              "content": "Check that the component you made responsible actually implements an option that provides that property. The `non_goals` in PRIMITIVES list what each option is routinely, wrongly, expected to give you."
+            }
+          ]
+        },
+        {
+          "id": "revision",
+          "label": "Answer a brief in which one fact has moved"
+        }
+      ]
+    }
+  }
+}
