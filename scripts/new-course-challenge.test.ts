@@ -170,7 +170,10 @@ describe("scaffold", () => {
 
     const makefile = readFileSync(join(target, "Makefile"), "utf8");
     expect(makefile).toContain("tests/public/test_exercise.py");
-    expect(makefile).toContain("local/starter/exercise.py");
+    // The Makefile names no starter file at all: `make reset` restores the directory,
+    // which is why 6 of the first 7 problems shipped with a reset pointing at the
+    // template's `counter.py`. Asserted by scripts/participant-contract.test.ts.
+    expect(makefile).toMatch(/git checkout -- local\/starter\/\s*$/m);
     expect(makefile).not.toContain("counter.py");
 
     const verifier = readFileSync(join(target, "local/verifier/server.py"), "utf8");
