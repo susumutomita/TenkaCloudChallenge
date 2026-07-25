@@ -85,9 +85,10 @@ preprocessing — which is exactly what a Beaver triple does.
 ## Week 2 alignment
 
 Week 2's material was not published upstream at the commit `curriculum.md` records, so
-`courseAlignment` carries a week and role with **no `sources[]`**, and `status` stays `draft`. No
-commit SHA was invented; a test asserts the absence. `bun run course:drift` reports publication,
-and #219 reconciles the row before this leaves draft.
+`courseAlignment` pins `week2/README.md` with `kind: "placeholder"`, and `status` stays `draft`.
+The pin records the *absence* of material at that commit rather than an alignment to it — which is
+what lets `bun run course:drift` report `PUBLISHED` the day the material appears. #219 reconciles
+the row before this leaves draft.
 
 ## Cost
 

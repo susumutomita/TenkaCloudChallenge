@@ -64,13 +64,12 @@ hint は 5 つ中 3 つにあります (20 / 20 / 15)。すべて開いても 20
 
 ## Week 2 の対応づけ
 
-Week 2 の教材は、`curriculum.md` が記録している commit の時点で**未公開**です。そのためこの問題の
-`courseAlignment` は week と role を持ちますが、**`sources[]` を持ちません**。schema はまさに未公開週の
-ために `sources` を任意にしており、穴を埋めるために commit SHA を捏造することはしていません。
-`status` は `draft` のままです。
+Week 2 の教材は、`curriculum.md` が記録している commit の時点で**未公開**です。そのためこの問題は
+`week2/README.md` を `kind: "placeholder"` で pin します。これは対応づけではなく、その commit 時点で
+教材が存在しなかったという事実の記録です。`status` は `draft` のままです。
 
-`bun run course:drift` が Week 2 の教材公開を報告したら、Week 2 の course-sync issue が計画行と
-この問題の対応づけを確定し、その後に draft を外します。
+この pin があることで `bun run course:drift` は教材公開の日に `DRIFT` ではなく `PUBLISHED` を報告
+できます。その後 Week 2 の course-sync issue が計画行とこの問題の対応づけを確定し、draft を外します。
 
 ## コスト
 

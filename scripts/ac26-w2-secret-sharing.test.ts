@@ -260,14 +260,23 @@ describe("ac26-w2-secret-sharing: metadata contracts", () => {
     expect(hintPenalty).toBeLessThanOrEqual(100);
   });
 
-  // Week 2 was unpublished upstream at the recorded commit, so there is nothing to point
-  // at. The absence of `sources` is deliberate; inventing a SHA would fabricate a pin.
-  // Asserted so nobody later "fixes" it with a made-up value.
-  it("should declare the week and role but pin no upstream source", () => {
+  // Week 2 had no material at the recorded commit, so the pin records that absence
+  // rather than an alignment: `kind: "placeholder"`, per SYNC.md section 2. That pin is
+  // what lets `course:drift` report PUBLISHED the day the material appears, which is how
+  // #219 finds out. Dropping it, or promoting the kind without reading the new material,
+  // silently disconnects that signal.
+  it("should pin week 2's placeholder rather than an alignment", () => {
     const { courseAlignment, status } = metadata();
     expect(courseAlignment.week).toBe(2);
     expect(courseAlignment.role).toBe("mechanism");
-    expect(courseAlignment.sources).toBeUndefined();
+    expect(courseAlignment.sources).toEqual([
+      {
+        repository: "zk-tokyo/advanced-cryptography-2026",
+        ref: "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        path: "week2/README.md",
+        kind: "placeholder",
+      },
+    ]);
     expect(status).toBe("draft");
   });
 });
