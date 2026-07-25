@@ -177,6 +177,42 @@
       }
     },
     {
+      "id": "ac26-w2-linear-shares",
+      "name": "誰とも話さずにできること",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "advanced-cryptography-2026",
+        "order": 220,
+        "chapter": "Week 2 / Local Linear Operations"
+      },
+      "courseAlignment": {
+        "courseId": "advanced-cryptography-program",
+        "edition": "2026",
+        "week": 2,
+        "role": "mechanism"
+      },
+      "difficulty": 3,
+      "estimatedDuration": "35-50 分",
+      "shortDescription": "share に対する操作のうち、いくつかは誰とも話さずに各自の手元だけでできる。どれがそうで、どれが違うのか。1 つだけ、素直にやると間違える。",
+      "tags": [
+        "advanced-cryptography-2026",
+        "week2",
+        "mpc",
+        "secret-sharing",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "ac26-w2-secret-sharing",
       "name": "分けても、まだ何も分からない",
       "category": "Challenge",
