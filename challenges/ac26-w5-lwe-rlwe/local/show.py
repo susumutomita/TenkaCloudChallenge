@@ -37,7 +37,9 @@ from fixtures.generate import (
 )
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
-MODE = os.environ.get("MODE", "both").lower()
+# `or` rather than a default argument: the Makefile always passes -e MODE, so an
+# unset MODE arrives as the empty string rather than as an absent variable.
+MODE = (os.environ.get("MODE") or "both").lower()
 
 
 def _ring(par: dict) -> None:

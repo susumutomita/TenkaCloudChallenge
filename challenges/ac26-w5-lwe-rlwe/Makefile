@@ -18,6 +18,11 @@ IMAGE := ac26-w5-lwe-rlwe
 RUN := docker run --rm -e FLAG_SEED=$(FLAG_SEED) \
 	-v $(CURDIR)/local/starter:/problem/starter:ro $(IMAGE)
 
+# `make inspect MODE=lwe` shows one scheme at a time. The env flag has to precede the image
+# name, so this cannot reuse $(RUN) -- docker would read it as the command.
+RUN_INSPECT := docker run --rm -e FLAG_SEED=$(FLAG_SEED) -e MODE=$(MODE) \
+	-v $(CURDIR)/local/starter:/problem/starter:ro $(IMAGE)
+
 .PHONY: build test test-one inspect reset reference-test
 
 build:
@@ -31,7 +36,7 @@ test-one: build
 	$(RUN) python tests/public/test_lwe.py --only $(ID)
 
 inspect: build
-	$(RUN) python show.py
+	$(RUN_INSPECT) python show.py
 
 reset:
 	# The whole directory, not a named file: a problem may ship more than one
