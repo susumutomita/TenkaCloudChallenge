@@ -836,6 +836,58 @@
       }
     },
     {
+      "id": "ac26-w5-extract-key-switch",
+      "name": "同じ数を、別の鍵の言葉で言う",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "advanced-cryptography-2026",
+        "order": 550,
+        "chapter": "Week 5 / Sample Extraction and Key Switching"
+      },
+      "courseAlignment": {
+        "courseId": "advanced-cryptography-program",
+        "edition": "2026",
+        "week": 5,
+        "role": "mechanism",
+        "sources": [
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "path": "week5/README.md",
+            "kind": "lecture"
+          },
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "path": "week5/problems/tfhe-toy-python/README.md",
+            "kind": "assignment"
+          }
+        ]
+      },
+      "difficulty": 4,
+      "estimatedDuration": "75-105 分",
+      "shortDescription": "blind rotation が残した多項式から 1 係数を LWE sample として取り出し、 別の鍵・別の次元へ移す。 どちらの段階でも復号は 1 回も起きない。",
+      "tags": [
+        "advanced-cryptography-2026",
+        "week5",
+        "fhe",
+        "tfhe",
+        "sample-extraction",
+        "key-switching",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "ac26-w5-lwe-rlwe",
       "name": "符号 1 つと、その下流すべて",
       "category": "Challenge",

@@ -1,0 +1,547 @@
+{
+  "id": "ac26-w5-extract-key-switch",
+  "name": "同じ数を、別の鍵の言葉で言う",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "advanced-cryptography-2026",
+    "order": 550,
+    "chapter": "Week 5 / Sample Extraction and Key Switching"
+  },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 5,
+    "role": "mechanism",
+    "spoilerPolicy": "independent-reimplementation",
+    "sources": [
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        "path": "week5/README.md",
+        "kind": "lecture"
+      },
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        "path": "week5/problems/tfhe-toy-python/README.md",
+        "kind": "assignment"
+      }
+    ]
+  },
+  "difficulty": 4,
+  "estimatedDuration": "75-105 分",
+  "shortDescription": "blind rotation が残した多項式から 1 係数を LWE sample として取り出し、 別の鍵・別の次元へ移す。 どちらの段階でも復号は 1 回も起きない。",
+  "description": "Week 5 の 5 問目。 blind rotation が残した RLWE 暗号文から目的の係数を LWE sample として取り出し、 それを別の secret key・別の次元へ key switching で移す。\n\nblind rotation までは支給される。 環・RLWE・RGSW・external product・CMUX・回転ループはすべて前 3 問の成果物で、 この問題はその後の 2 段。\n\nsample extraction は phase 多項式 `b - a*s` の係数 k を、 環の secret の係数を並べた vector に対する LWE phase として書き直す。 `(a*s)_k` に集まる積のうち添字が degree を跨いだものは符号が反転しているので、 mask の該当スロットもその反転を持たなければならない。 これは回転問題の `X^N = -1` を反対側から見たもの。 復号は起きず noise も増えず、 取り出した phase は多項式の係数そのものになる。\n\nそして取り出した sample の secret は環の secret を vector として読んだもの。 これがシステムの他の部分が使う鍵ではないことが、 次の段が必要な理由。\n\nkey switching key は old index j と level l ごとに `LWE_new(B^l * s_old[j])` を持つ。 mask を分解して対応する entry を引くと、 phase から `<mask, s_old>` がちょうど消える。 ここでも復号は起きない。 s_old は switching key の暗号文の中にしか現れず、 s_new はどこにも現れない。 decrypt して re-encrypt する操作ではない。\n\n採点の設計として、 mask のスロットが巻き戻るのはその添字が取り出す index より上のときだけなので、 最後の係数では巻き戻りが起きない。 そこだけ正しい実装は 1 つの index で止まるテストをすべて通る。 だから extraction は全 index で検査する。 また digit の順序と switching key の読み順を両方逆にした実装は自分自身と完全に整合するので、 検査は交差させる。\n\nこれは安全ではない。 パラメータは全列挙でき、 両方の secret は線形代数で復元できる。",
+  "instructions": "## はじめに\n\nblind rotation は RLWE 暗号文を残します。 使えるようになるまでにあと 2 つ。 係数 1 つを LWE sample として取り出すことと、 その sample を別の鍵・別の次元へ移すこと。 **中身を変えずに**。\n\n```text\nphase_k = b_k - sum_j c_j * s_j\nksk[j][l] = LWE_new( B^l * s_old[j] )\n```\n\n分解の規約は ac26-w5-rgsw-external のまま。 `q = base ** levels`、 unsigned、 LSB 先頭、 桁数はちょうど levels。\n\n## 最初の一手\n\n```bash\nmake inspect\nmake inspect INDEX=3\n```\n\nextraction の対応表、 分解、 switch、 そして 3 通りの復号が出ます。 `sign` の列が `INDEX` を変えると変わることを確かめてください。\n\n次に `local/starter/extract.py` を編集します。\n\n## ゴール\n\n8 つの checkpoint を独立に通します。 hidden test は extraction を全 index で検査し、 mask ではなく phase で採点します。 1 つの index だけで確かめたものは、 ほとんど何の保証にもなりません。",
+  "writeup": "## 最後の係数は例外的に易しい\n\nmask のスロットが巻き戻るのは、 その添字が取り出す index より上のとき。 `degree - 1` では上にスロットが無いので巻き戻りが起きず、 符号を完全に無視した実装でも phase が一致してしまう。 index 0 はその逆で、 1 つを除く全スロットが巻き戻る。 public test が 4 つとも最後の係数なのはそれを見せるためで、 hidden test は全 index を回す。\n\n## 何も復号していない\n\nextraction には鍵が渡らない。 key switching にも渡らない。 s_old は switching key の暗号文の中にしか現れず、 s_new はどこにも現れない。 それでも phase は保たれる。 key switching が decrypt して re-encrypt する操作だという理解は、 この導出のどこにも当てはまらない。\n\n## 取り出した鍵は使いたい鍵ではない\n\nextraction の結果の secret は環の secret を vector として読んだもの。 次元は degree で、 システムの他の部分が使う鍵ではない。 だから key switching が要る。 2 段が別々に存在する理由はここにある。\n\n## 交差させないと見えない\n\ndigit の順序と switching key の読み順を両方逆にすると、 自分の分解を自分の switch に通すテストは通る。 だから hidden test は fixture の sample を submission の switch へ、 submission の sample を fixture の switch へ通す。\n\n## compatible は metadata から決める\n\nどちらの secret も手元に無いので、 switch を試して復号できるかで判定することはできない。 できたとしても、 それは secret を最も置いてはならない場所に置くということ。 noise も同じ理由で bound を報告する。 測るには phase が要り、 phase には鍵が要る。\n\n## 対象外\n\nproduction の switching key 生成、 圧縮された switching key、 noise-security パラメータ解析、 multi-key や proxy re-encryption。\n\n## これは安全ではない\n\nパラメータは全列挙でき、 両方の secret は線形代数で復元できる。 機構の toy であって困難性の toy ではない。",
+  "tags": [
+    "advanced-cryptography-2026",
+    "week5",
+    "fhe",
+    "tfhe",
+    "sample-extraction",
+    "key-switching",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18111,
+      "name": "/verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "RLWE ciphertext の指定係数に対応する LWE phase を導出できる",
+    "negacyclic ring の符号を含む extracted mask の並びを実装できる",
+    "extraction の前後で平文の意味が一致することを確認できる",
+    "old-key の LWE mask を digit decomposition できる",
+    "switching key を用いて new-key sample へ変換できる",
+    "鍵と次元だけが変わり message が変わらないことを説明できる",
+    "source key・target key・ring key を取り違えた欠陥を特定できる",
+    "key switching が decrypt と re-encrypt ではないことを説明できる"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.ac26-w5-extract-key-switch.phase-equation",
+        "description": "RLWE の phase 多項式の指定係数を、 extraction が保つべき数として書き下せる。"
+      },
+      {
+        "id": "lo.ac26-w5-extract-key-switch.extraction",
+        "description": "任意の係数 index について LWE mask と body を構成できる。"
+      },
+      {
+        "id": "lo.ac26-w5-extract-key-switch.negacyclic-mapping",
+        "description": "どの mask スロットが degree を跨ぎ符号を反転するかを追える。"
+      },
+      {
+        "id": "lo.ac26-w5-extract-key-switch.mask-decomposition",
+        "description": "old-key の mask を係数ごとに base-B 分解できる。"
+      },
+      {
+        "id": "lo.ac26-w5-extract-key-switch.switching",
+        "description": "switching key の entry を引いて new-key の暗号文を構成できる。"
+      },
+      {
+        "id": "lo.ac26-w5-extract-key-switch.key-domain",
+        "description": "input key・extracted key・target key・次元・modulus を分類できる。"
+      },
+      {
+        "id": "lo.ac26-w5-extract-key-switch.no-decryption",
+        "description": "どちらの段階でも復号が起きないことを導出から説明できる。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.sample-extraction",
+        "description": "RLWE の 1 係数を LWE sample として取り出す操作。 復号せず noise も増やさない。"
+      },
+      {
+        "id": "concept.key-switching",
+        "description": "暗号文を別の secret key の下へ移す操作。 decrypt と re-encrypt ではない。"
+      },
+      {
+        "id": "concept.ciphertext-domain",
+        "description": "暗号文がどの鍵・次元・modulus に属するかという所属。 これが合わないと演算は無意味になる。"
+      },
+      {
+        "id": "concept.key-domain",
+        "description": "鍵そのものの識別。 ring key・source key・target key は別物で、 取り違えは黙って通る。"
+      },
+      {
+        "id": "concept.dimension-switching",
+        "description": "次元の異なる鍵へ移すこと。 extraction の出力次元は環の degree で、 使いたい次元とは限らない。"
+      },
+      {
+        "id": "concept.noise-after-key-switch",
+        "description": "key switching が持ち込む noise。 digit と entry の noise の積を全 index・全 level で足したもの。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.ac26-w5-extract-key-switch.phase",
+        "description": "phase 多項式の係数を全 index で正しく返し、 範囲外を拒否した。"
+      },
+      {
+        "id": "assessment.ac26-w5-extract-key-switch.extract",
+        "description": "全 index で phase を保存し、 最後の係数だけの実装ではなかった。"
+      },
+      {
+        "id": "assessment.ac26-w5-extract-key-switch.trace",
+        "description": "対応と符号を記録し、 wrap の境界が index に一致した。"
+      },
+      {
+        "id": "assessment.ac26-w5-extract-key-switch.decompose",
+        "description": "係数ごとに桁を並べ、 順序と桁数が規約どおりだった。"
+      },
+      {
+        "id": "assessment.ac26-w5-extract-key-switch.switch",
+        "description": "target key の下で message が保たれ、 交差検査を通り、 不整合な鍵を拒否した。"
+      },
+      {
+        "id": "assessment.ac26-w5-extract-key-switch.domains",
+        "description": "鍵と次元を正しく分類し、 整合と不整合を区別した。"
+      },
+      {
+        "id": "assessment.ac26-w5-extract-key-switch.endtoend",
+        "description": "RLWE 係数・extracted・switched の 3 つが同じ message を返した。"
+      },
+      {
+        "id": "assessment.ac26-w5-extract-key-switch.transfer",
+        "description": "見たことのない degree・次元・base で全性質が成立した。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.sample-extraction-is-reading-the-plaintext-coefficient",
+        "description": "extraction が平文の係数を読む操作だという誤解。 読むのは暗号文で、 鍵は渡らない。"
+      },
+      {
+        "id": "misconception.key-switching-decrypts-and-reencrypts",
+        "description": "key switching が復号して再暗号化する操作だという誤解。 導出のどこにも復号は現れない。"
+      },
+      {
+        "id": "misconception.key-switching-changes-the-message",
+        "description": "鍵が変われば message も変わるという誤解。 変わるのは表現と所属だけ。"
+      },
+      {
+        "id": "misconception.all-lwe-secret-vectors-have-the-same-ordering",
+        "description": "LWE の secret vector はどれも同じ並びだという誤解。 extraction の出力は環の secret の並びに固定される。"
+      },
+      {
+        "id": "misconception.noise-is-unchanged-by-key-switching",
+        "description": "key switching は noise を変えないという誤解。 entry の noise が digit 倍で積み上がる。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-extract-key-switch",
+      "target": "lo.ac26-w5-extract-key-switch.phase-equation"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-extract-key-switch",
+      "target": "lo.ac26-w5-extract-key-switch.extraction"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-extract-key-switch",
+      "target": "lo.ac26-w5-extract-key-switch.negacyclic-mapping"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-extract-key-switch",
+      "target": "lo.ac26-w5-extract-key-switch.mask-decomposition"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-extract-key-switch",
+      "target": "lo.ac26-w5-extract-key-switch.switching"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-extract-key-switch",
+      "target": "lo.ac26-w5-extract-key-switch.key-domain"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w5-extract-key-switch",
+      "target": "lo.ac26-w5-extract-key-switch.no-decryption"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-extract-key-switch",
+      "target": "concept.sample-extraction"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-extract-key-switch",
+      "target": "concept.key-switching"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-extract-key-switch",
+      "target": "concept.ciphertext-domain"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-extract-key-switch",
+      "target": "concept.key-domain"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-extract-key-switch",
+      "target": "concept.dimension-switching"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w5-extract-key-switch",
+      "target": "concept.noise-after-key-switch"
+    },
+    {
+      "type": "requires",
+      "source": "problem.ac26-w5-extract-key-switch",
+      "target": "problem.ac26-w5-cmux-blind-rotation"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w5-extract-key-switch.negacyclic-mapping",
+      "target": "concept.negacyclic-rotation"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w5-extract-key-switch.phase-equation",
+      "target": "concept.ciphertext-phase"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w5-extract-key-switch.extraction",
+      "target": "concept.lwe"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w5-extract-key-switch.mask-decomposition",
+      "target": "concept.gadget-decomposition"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w5-extract-key-switch.switching",
+      "target": "concept.noise-budget"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-extract-key-switch",
+      "target": "assessment.ac26-w5-extract-key-switch.phase"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-extract-key-switch",
+      "target": "assessment.ac26-w5-extract-key-switch.extract"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-extract-key-switch",
+      "target": "assessment.ac26-w5-extract-key-switch.trace"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-extract-key-switch",
+      "target": "assessment.ac26-w5-extract-key-switch.decompose"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-extract-key-switch",
+      "target": "assessment.ac26-w5-extract-key-switch.switch"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-extract-key-switch",
+      "target": "assessment.ac26-w5-extract-key-switch.domains"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-extract-key-switch",
+      "target": "assessment.ac26-w5-extract-key-switch.endtoend"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w5-extract-key-switch",
+      "target": "assessment.ac26-w5-extract-key-switch.transfer"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w5-extract-key-switch",
+      "target": "misconception.sample-extraction-is-reading-the-plaintext-coefficient"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w5-extract-key-switch",
+      "target": "misconception.key-switching-decrypts-and-reencrypts"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w5-extract-key-switch",
+      "target": "misconception.key-switching-changes-the-message"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w5-extract-key-switch",
+      "target": "misconception.all-lwe-secret-vectors-have-the-same-ordering"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w5-extract-key-switch",
+      "target": "misconception.noise-is-unchanged-by-key-switching"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18111/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "phase",
+        "label": "保つべき数を書き下す",
+        "points": 30,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "phase-hint-1",
+            "content": "`rlwe_phase(params, secret, ciphertext)` は支給されている。 ここは環の中で計算してよい唯一の場所で、 鍵が渡る唯一の関数でもある。 index の範囲は検査する。",
+            "penalty": 15
+          }
+        ]
+      },
+      {
+        "id": "extract",
+        "label": "1 係数を取り出す",
+        "points": 50,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "extract-hint-1",
+            "content": "secret の添字 j ごとに、 対になる a の係数はちょうど 1 つ。 j <= index なら添字は index - j、 そうでなければ degree を跨ぐ。 跨いだ側に何が起きるかが要点。",
+            "penalty": 25
+          }
+        ]
+      },
+      {
+        "id": "trace",
+        "label": "対応を見せる",
+        "points": 35,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "trace-hint-1",
+            "content": "記録は degree 個。 `wrapped` の列を上から読むと境界は 1 か所だけで、 その位置は偶然ではない。 `value` は符号を適用したあとの mask 係数。",
+            "penalty": 17
+          }
+        ]
+      },
+      {
+        "id": "decompose",
+        "label": "mask を桁へ分解する",
+        "points": 25,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "decompose-hint-1",
+            "content": "level ごとではなく **係数ごと**に 1 タプル。 ac26-w5-rgsw-external とは束ね方が逆で、 そちらは環の元を掛けるためだった。",
+            "penalty": 12
+          }
+        ]
+      },
+      {
+        "id": "switch",
+        "label": "別の鍵へ移す",
+        "points": 55,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "switch-hint-1",
+            "content": "`(0, body)` から始めて引く。 entry 1 つを digit 個だけ引くと phase から何が消えるかを書き下すと、 答えの形が出る。 合わない鍵は適用せず拒否する。",
+            "penalty": 27
+          }
+        ]
+      },
+      {
+        "id": "domains",
+        "label": "どの鍵の話かを分類する",
+        "points": 35,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "domains-hint-1",
+            "content": "source は ring key、 target は別の鍵で、 次元も違う。 どちらかをもう一方から写すと 2 つの値が一致してしまう。 `compatible` は宣言された metadata から決める。",
+            "penalty": 17
+          }
+        ]
+      },
+      {
+        "id": "endtoend",
+        "label": "3 通りが同じ答えになる",
+        "points": 40,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "endtoend-hint-1",
+            "content": "RLWE の係数、 取り出した sample、 移したあとの sample。 3 つとも同じ message で、 かつ最後のものは入力と同じ暗号文であってはならない。",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "transfer",
+        "label": "見たことのない設定で成立させる",
+        "points": 30,
+        "wrongAnswerPenalty": 15
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Say the same number in another key's words",
+      "shortDescription": "Take one coefficient out of what blind rotation left behind as an LWE sample, then move it to a different key and dimension. Nothing is decrypted at either step.",
+      "description": "The fifth Week 5 problem. Take the wanted coefficient out of the RLWE ciphertext blind rotation left behind, as an LWE sample, then move that sample to a different secret key and dimension by key switching.\n\nEverything up to blind rotation is supplied -- the ring, RLWE, RGSW, the external product, CMUX and the rotation loop are the previous three problems' output. This problem is the two steps after.\n\nSample extraction rewrites coefficient k of the phase polynomial `b - a*s` as an LWE phase over the ring secret's own coefficients. Among the products collected into `(a*s)_k`, the ones whose indices crossed the degree arrive negated, so the matching mask slot has to carry that negation -- it is the rotation problem's `X^N = -1` seen from the other side. Nothing is decrypted, no noise is added, and the extracted phase is the polynomial's coefficient exactly.\n\nAnd the extracted sample's secret is the ring secret read as a vector. That being not the key the rest of the system uses is precisely why the second step exists.\n\nThe switching key holds `LWE_new(B^l * s_old[j])` for every old index and level. Decompose the mask, subtract the matching entries, and `<mask, s_old>` cancels out of the phase. Nothing is decrypted here either: `s_old` appears only inside the switching key's ciphertexts and `s_new` appears nowhere. It is not a decrypt followed by a re-encrypt.\n\nOn scoring: a mask slot wraps only when its secret index is above the extracted one, so at the last coefficient nothing wraps and an implementation correct only there passes every test that checks a single index. Extraction is therefore checked at every index. And an implementation that reverses both the digit order and the key's read order agrees with itself completely, so the checks are crossed.\n\nNone of this is secure. The parameters are small enough to enumerate and both secrets fall to linear algebra.",
+      "instructions": "## Start here\n\nBlind rotation leaves an RLWE ciphertext. Two things still have to happen: one coefficient has to come out as an LWE sample, and that sample has to move to a different key and dimension -- **without changing what it says**.\n\n```text\nphase_k = b_k - sum_j c_j * s_j\nksk[j][l] = LWE_new( B^l * s_old[j] )\n```\n\nThe decomposition convention is ac26-w5-rgsw-external's, unchanged: `q = base ** levels`, unsigned, LSB-first, exactly `levels` digits.\n\n## First move\n\n```bash\nmake inspect\nmake inspect INDEX=3\n```\n\nThat prints the extraction mapping, the decomposition, the switch, and the same message decrypted three ways. Check that the `sign` column changes when `INDEX` does.\n\nThen edit `local/starter/extract.py`.\n\n## Goal\n\nClear eight independently scored checkpoints. The hidden tests run extraction at every index and grade it on the phase rather than on the mask. Anything checked at a single index guarantees almost nothing.",
+      "writeup": "## The last coefficient is unfairly easy\n\nA mask slot wraps when its secret index is above the extracted one, so at `degree - 1` nothing wraps at all -- an implementation that ignores the sign completely still preserves the phase there, and only there. Index 0 is the opposite: every slot but one wraps. All four public tests use the last coefficient to make that visible; the hidden tests run every index.\n\n## Nothing was decrypted\n\nExtraction is handed no key. Neither is key switching. `s_old` appears only inside the switching key's ciphertexts and `s_new` appears nowhere at all -- and the phase is still preserved. The picture of key switching as a decrypt followed by a re-encrypt fits no step of that derivation.\n\n## The key you extract is not the key you want\n\nThe extracted sample's secret is the ring secret read as a vector, at dimension `degree`. That is not the key the rest of the system uses, which is why key switching is needed. The two steps exist separately for that reason.\n\n## Crossed, or it proves nothing\n\nReverse the digit order and the key's read order together and a test that runs your decomposition through your switch still passes. So the hidden tests cross them: fixture-built samples through the submission's switch, and the submission's samples through the fixtures'.\n\n## `compatible` is decided from metadata\n\nNeither secret is on hand, so it cannot be settled by trying the switch and seeing whether the result decrypts -- and a system that settled it that way would need the secrets in the one place they must not be. The noise figure is a bound for the same reason: measuring it takes a phase, and a phase takes a key.\n\n## Not in scope\n\nProduction switching-key generation, compressed switching keys, noise-security parameter analysis, multi-key or proxy re-encryption.\n\n## This is not secure\n\nThe parameters are small enough to enumerate and both secrets fall to linear algebra. A toy of the mechanism, not of the hardness.",
+      "learningGoals": [
+        "Derive the LWE phase corresponding to a chosen coefficient of an RLWE ciphertext",
+        "Build the extracted mask including the negacyclic ring's sign",
+        "Confirm that plaintext semantics match on both sides of extraction",
+        "Decompose an old-key LWE mask into base-B digits",
+        "Convert a sample to a new key using a switching key",
+        "Explain why only the key and the dimension change, and not the message",
+        "Identify defects that confuse the source, target and ring keys",
+        "State why key switching is not a decrypt followed by a re-encrypt"
+      ],
+      "checks": [
+        {
+          "id": "phase",
+          "label": "Write down the number to preserve",
+          "hints": [
+            {
+              "id": "phase-hint-1",
+              "content": "`rlwe_phase(params, secret, ciphertext)` is supplied. This is the only place the ring is computed in and the only function given a key. Check the index range."
+            }
+          ]
+        },
+        {
+          "id": "extract",
+          "label": "Take one coefficient out",
+          "hints": [
+            {
+              "id": "extract-hint-1",
+              "content": "For each secret index j there is exactly one coefficient of `a` that pairs with it: `index - j` when `j <= index`, and otherwise a pairing that crosses the degree. What happens on the far side is the point."
+            }
+          ]
+        },
+        {
+          "id": "trace",
+          "label": "Show the mapping",
+          "hints": [
+            {
+              "id": "trace-hint-1",
+              "content": "`degree` records. Reading down `wrapped` shows exactly one boundary, and where it sits is not a coincidence. `value` is the mask coefficient after the sign."
+            }
+          ]
+        },
+        {
+          "id": "decompose",
+          "label": "Break the mask into digits",
+          "hints": [
+            {
+              "id": "decompose-hint-1",
+              "content": "One tuple **per coefficient**, not per level. The grouping is the opposite of ac26-w5-rgsw-external's, where a level had to be a ring element."
+            }
+          ]
+        },
+        {
+          "id": "switch",
+          "label": "Move it to another key",
+          "hints": [
+            {
+              "id": "switch-hint-1",
+              "content": "Start from `(0, body)` and subtract. Write down what subtracting one entry `digit` times removes from the phase and the shape of the answer follows. A key that does not match is refused, not applied."
+            }
+          ]
+        },
+        {
+          "id": "domains",
+          "label": "Classify which key it is about",
+          "hints": [
+            {
+              "id": "domains-hint-1",
+              "content": "The source is the ring key, the target is a different key, and the dimensions differ too. Copying either from the other makes two values agree that should not. Decide `compatible` from the declared metadata."
+            }
+          ]
+        },
+        {
+          "id": "endtoend",
+          "label": "Three routes, one answer",
+          "hints": [
+            {
+              "id": "endtoend-hint-1",
+              "content": "The RLWE coefficient, the extracted sample, the switched sample -- the same message from all three, and the last one must not be the ciphertext it started as."
+            }
+          ]
+        },
+        {
+          "id": "transfer",
+          "label": "Hold up in a setting you have not seen"
+        }
+      ]
+    }
+  }
+}
