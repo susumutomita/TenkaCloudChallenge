@@ -784,6 +784,57 @@
       }
     },
     {
+      "id": "ac26-w5-lwe-rlwe",
+      "name": "符号 1 つと、その下流すべて",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "advanced-cryptography-2026",
+        "order": 520,
+        "chapter": "Week 5 / LWE and RLWE"
+      },
+      "courseAlignment": {
+        "courseId": "advanced-cryptography-program",
+        "edition": "2026",
+        "week": 5,
+        "role": "mechanism",
+        "sources": [
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "path": "week5/README.md",
+            "kind": "lecture"
+          },
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "path": "week5/problems/tfhe-toy-python/README.md",
+            "kind": "assignment"
+          }
+        ]
+      },
+      "difficulty": 4,
+      "estimatedDuration": "75-105 分",
+      "shortDescription": "LWE と RLWE は同じ形で算術だけが違う。 X^N = -1 の符号 1 つが negacyclic と cyclic を分け、cyclic な環も立派な環なので自分の往復テストは全部通る。だから往復を交差させる。",
+      "tags": [
+        "advanced-cryptography-2026",
+        "week5",
+        "fhe",
+        "lwe",
+        "rlwe",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "ac26-w7-capstone-demo",
       "name": "主張と、それを反証できる実験",
       "category": "Challenge",
