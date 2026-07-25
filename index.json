@@ -733,6 +733,57 @@
       }
     },
     {
+      "id": "ac26-w5-encoding-noise",
+      "name": "どこまで押せるか",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "advanced-cryptography-2026",
+        "order": 510,
+        "chapter": "Week 5 / Encoding and Noise"
+      },
+      "courseAlignment": {
+        "courseId": "advanced-cryptography-program",
+        "edition": "2026",
+        "week": 5,
+        "role": "mechanism",
+        "sources": [
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "path": "week5/README.md",
+            "kind": "lecture"
+          },
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "path": "week5/problems/tfhe-toy-python/README.md",
+            "kind": "assignment"
+          }
+        ]
+      },
+      "difficulty": 3,
+      "estimatedDuration": "45-60 分",
+      "shortDescription": "準同型暗号の暗号文はメッセージを環の上に置いて押しずらす。復号は「どの点に一番近かったか」で、正しさの問いはすべて「どこまで押せるか」に帰着する。その距離を実行前に計算する。",
+      "tags": [
+        "advanced-cryptography-2026",
+        "week5",
+        "fhe",
+        "encoding",
+        "noise",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "ac26-w7-capstone-demo",
       "name": "主張と、それを反証できる実験",
       "category": "Challenge",

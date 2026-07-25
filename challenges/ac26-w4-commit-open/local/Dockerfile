@@ -4,8 +4,10 @@ FROM python:3.13-slim@sha256:4efa69bf17cfbd83a9942e60e2642335c3b397448e5b4a1cf1e
 
 WORKDIR /problem
 
-# reference/ ships inside the image (the mutation suite needs it) but is never
-# mounted to the host, so a learner cannot read the answer out of their checkout.
+# reference/ ships inside the image (the mutation suite needs it) and is not bind-mounted,
+# so it does not land in the learner's git checkout as a file they did not go looking for.
+# That is tidiness, not confidentiality: the participant builds and runs this image, so
+# nothing inside it is hidden from them. See TEMPLATE.md "Assurance scope".
 COPY fixtures/ ./fixtures/
 COPY tests/ ./tests/
 COPY verifier/ ./verifier/

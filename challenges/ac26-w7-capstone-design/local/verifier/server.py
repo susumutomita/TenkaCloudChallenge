@@ -68,8 +68,15 @@ def _limits() -> None:
     resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_BYTES, MAX_OUTPUT_BYTES))
 
 
+# The child's stdout is scanned in reverse, so the *last* parseable JSON line wins. Falling
+# off the end of this script runs normal interpreter shutdown, and that dispatches any
+# atexit callback registered while the submission was imported -- two lines at module scope
+# were enough to print a passing verdict after the trusted one and win the scan. Flushing
+# and calling os._exit(0) immediately after the trusted line ends the process before
+# anything the import left behind gets another turn. os._exit skips atexit by design;
+# SystemExit does not, which is why the import-failure path needs it too.
 RUNNER = """
-import json, sys
+import json, os, sys
 sys.path.insert(0, {root!r})
 sys.path.insert(0, {workspace!r})
 from tests.hidden import check_design
@@ -77,11 +84,14 @@ try:
     import design
 except Exception as error:
     print(json.dumps({{"failures": ["submission could not be imported: " + type(error).__name__]}}))
-    raise SystemExit(0)
+    sys.stdout.flush()
+    os._exit(0)
 failures = []
 for name in {phases!r}:
     failures.extend(getattr(check_design, name)(design, {seed!r}))
 print(json.dumps({{"failures": failures}}))
+sys.stdout.flush()
+os._exit(0)
 """
 
 

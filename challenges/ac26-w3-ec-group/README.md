@@ -102,6 +102,21 @@ Double-and-add branches on the scalar's bits, and how many additions it performs
 those bits fall. Against a real key that property is itself a side channel. This exists to make
 the algorithm legible, not as a model for production.
 
+## Assurance scope
+
+Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
+daemon, and the image, so nothing inside that image is hidden from you: `reference/` and
+`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than
+out of reach.
+
+What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
+a checkpoint can only credit the id it echoes, results do not leak expected values, and the
+fixtures come from this deployment's seed so a memorized answer does not carry.
+
+That supports self-study and honest practice. It does **not** support competition ranking,
+examination, or completion certification — those need a verifier the participant does not
+administer, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
+
 ## Cost
 
 Zero. No cloud account, no AWS resources.

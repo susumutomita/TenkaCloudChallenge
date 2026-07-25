@@ -68,6 +68,21 @@ verifier を unsound と書くのは 1 行です。hidden test は matrix の `F
 `transfer` checkpoint は、**あなたの**分類と**あなたの**生成器を、見たことのない seed 由来の instance
 に対して実行します。たまたま通った値は残りませんが、statement を解く式は残ります。
 
+## 保証範囲
+
+ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も
+あなたの管理下にあるので、 image の中身はあなたに対して秘匿されていません。
+`reference/` と `tests/hidden/` を bind-mount しないのは、あなたの git checkout に
+紛れ込ませないためであって、手が届かなくするためではありません。
+
+verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
+ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。
+結果は期待値を漏らしません。 fixture はこのデプロイの seed 由来なので、暗記した答えは持ち越せません。
+
+これは自習と誠実な練習を支えます。競技順位・試験・修了判定は**支えません**。
+それらには participant が管理しない verifier が必要で、
+[#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271) で追跡しています。
+
 ## コスト
 
 ゼロです。クラウドアカウントも AWS リソースも使いません。手元のコンテナだけです。

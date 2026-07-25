@@ -31,8 +31,8 @@ local/
 ├── starter/counter.py    ← the only file you edit
 ├── fixtures/generate.py     every fixture, derived from your per-deploy seed
 ├── tests/public/            the tests you can read
-├── tests/hidden/            the tests the verifier runs (inside the image only)
-├── reference/               the answer (inside the image only, never mounted)
+├── tests/hidden/            the tests the verifier runs (in the image, not mounted)
+├── reference/               the answer (in the image, not mounted -- see Assurance scope)
 ├── verifier/server.py       POST /verify on 127.0.0.1:18091
 └── mutation.py              proves the hidden tests can actually fail a wrong answer
 ```
@@ -85,6 +85,21 @@ That gap between "my tests are green" and "my code is right" is the habit this w
 built on. In Week 1 it will be a constraint that is satisfied but under-specified. In Week 3 it
 will be a curve operation that works everywhere except at infinity. In Week 5 it will be noise
 that stays in budget for the example and blows past it for anything else.
+
+## Assurance scope
+
+Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
+daemon, and the image, so nothing inside that image is hidden from you: `reference/` and
+`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than
+out of reach.
+
+What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
+a checkpoint can only credit the id it echoes, results do not leak expected values, and the
+fixtures come from this deployment's seed so a memorized answer does not carry.
+
+That supports self-study and honest practice. It does **not** support competition ranking,
+examination, or completion certification — those need a verifier the participant does not
+administer, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
 
 ## Cost
 

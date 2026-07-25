@@ -123,6 +123,21 @@ Week 4's material was not published upstream at the pinned commit. `courseAlignm
 `GOVERNANCE.md` §6 permits for an unpublished week. It asserts nothing about what the
 official exercise will require. #229 reconciles the row when the material appears.
 
+## Assurance scope
+
+Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
+daemon, and the image, so nothing inside that image is hidden from you: `reference/` and
+`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than
+out of reach.
+
+What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
+a checkpoint can only credit the id it echoes, results do not leak expected values, and the
+fixtures come from this deployment's seed so a memorized answer does not carry.
+
+That supports self-study and honest practice. It does **not** support competition ranking,
+examination, or completion certification — those need a verifier the participant does not
+administer, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
+
 ## Cost
 
 Zero. No cloud account, no AWS resources.

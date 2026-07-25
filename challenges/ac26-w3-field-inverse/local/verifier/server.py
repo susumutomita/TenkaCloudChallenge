@@ -68,7 +68,7 @@ def _limits() -> None:
 
 
 RUNNER = """
-import json, sys
+import json, os, sys
 sys.path.insert(0, {root!r})
 sys.path.insert(0, {workspace!r})
 from tests.hidden import check_field
@@ -76,11 +76,14 @@ try:
     import field
 except Exception as error:
     print(json.dumps({{"failures": ["submission could not be imported: " + type(error).__name__]}}))
-    raise SystemExit(0)
+    sys.stdout.flush()
+    os._exit(0)
 failures = []
 for name in {phases!r}:
     failures.extend(getattr(check_field, name)(field, {seed!r}))
 print(json.dumps({{"failures": failures}}))
+sys.stdout.flush()
+os._exit(0)
 """
 
 

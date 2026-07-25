@@ -89,7 +89,7 @@ def _check_no_communication(submission: object) -> bool:
 
 
 RUNNER = """
-import json, sys
+import json, os, sys
 sys.path.insert(0, {root!r})
 sys.path.insert(0, {workspace!r})
 from tests.hidden import check_linear
@@ -97,7 +97,8 @@ try:
     import linear
 except Exception as error:
     print(json.dumps({{"failures": ["submission could not be imported: " + type(error).__name__]}}))
-    raise SystemExit(0)
+    sys.stdout.flush()
+    os._exit(0)
 phases = {phases!r}
 if phases:
     failures = []
@@ -106,6 +107,8 @@ if phases:
 else:
     failures = check_linear.run(linear, {seed!r})
 print(json.dumps({{"failures": failures}}))
+sys.stdout.flush()
+os._exit(0)
 """
 
 

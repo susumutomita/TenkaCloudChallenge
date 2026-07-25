@@ -12,7 +12,9 @@ FLAG_SEED ?= local-dev-seed
 IMAGE := ac26-w7-capstone-design
 
 # starter/ is bind-mounted read-only: the learner edits their checkout, the container
-# reads it. reference/ and tests/hidden/ stay inside the image and are never mounted.
+# reads it. reference/ and tests/hidden/ stay inside the image and are not bind-mounted,
+# which keeps them out of the learner's git checkout rather than out of reach -- the
+# participant builds and runs this image. See TEMPLATE.md "Assurance scope".
 RUN := docker run --rm -e FLAG_SEED=$(FLAG_SEED) \
 	-v $(CURDIR)/local/starter:/problem/starter:ro $(IMAGE)
 

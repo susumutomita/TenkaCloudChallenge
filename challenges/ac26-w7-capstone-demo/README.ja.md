@@ -96,6 +96,21 @@ make reset              # starter/capstone.py を戻す
 protocol は semi-honest 前提でもあり、自分の入力について嘘をつく party は検出されず、黙る party が
 いれば run は終わりません。どちらも `scope` の非目標であり、主張すればその checkpoint が落ちます。
 
+## 保証範囲
+
+ローカルモードは **自習向けの honor-system verification** です。マシンも Docker daemon も
+image もあなたのものなので、image の中に隠れているものはありません。`reference/` と
+`tests/hidden/` を bind-mount しないのは、git checkout に紛れ込ませないためであって、
+手が届かないようにするためではありません。
+
+verifier が実際に保証するのは、もっと狭く、そして本物です。提出物が verifier を停止させたり
+落としたりできないこと、checkpoint が echo した id 以外を加点できないこと、応答が期待値を
+漏らさないこと、fixture がこのデプロイの seed 由来なので暗記した答えが通用しないこと。
+
+自習と誠実な練習はこれで支えられます。しかし**競技順位・試験・修了判定は**支えません****。
+それには participant が管理しない verifier が要り、
+[#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271) で追跡しています。
+
 ## コスト
 
 ゼロ。クラウドアカウントも AWS リソースも不要です。
