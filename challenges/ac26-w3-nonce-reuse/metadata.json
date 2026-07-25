@@ -1,0 +1,465 @@
+{
+  "id": "ac26-w3-nonce-reuse",
+  "name": "同じ R が二度出たら、それは鍵である",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "advanced-cryptography-2026",
+    "order": 340,
+    "chapter": "Week 3 / Nonce Reuse and Special Soundness"
+  },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 3,
+    "role": "transfer",
+    "spoilerPolicy": "independent-reimplementation",
+    "sources": [
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        "path": "week3/README.md",
+        "kind": "lecture"
+      },
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        "path": "week3/problems/schnorr-from-scratch/README.md",
+        "kind": "assignment"
+      }
+    ]
+  },
+  "difficulty": 4,
+  "estimatedDuration": "60-90 分",
+  "shortDescription": "署名サービスの audit log には message、public key、R、z がある。秘密鍵は無い。同じ R が二度出ている 1 組を見つければ、秘密鍵は連立方程式を解くだけで出る。",
+  "description": "Week 3 の 4 問目、 role は transfer。 nonce 再利用を 「乱数の品質の問題」 として覚えるのではなく、 Sigma protocol の special soundness そのものとして扱う。\n\nz1 = k + e1*x と z2 = k + e2*x から k が消え、 x = (z1 - z2) * (e1 - e2)^-1 mod n が出る。 これは protocol を proof of knowledge たらしめている性質と同じもので、 「健全性の根拠」 と 「再利用が致命的である理由」 が同一の事実であることを実装で確認する。\n\n題材は noisy な audit log。 malformed な行、 きれいに parse できるが検証を通らない行、 そして**別の signer が同じ R を使っている行**が入れてある。 R の共有は必要条件であって十分条件ではない — 鍵が違えば解くべき未知数が 1 つではない。\n\nnonce generator は 3 種類。 `fixed_nonce` は即死、 `truncated_nonce` は log 上では完全にランダムに見えて birthday bound で衝突する、 `deterministic_nonce` は名前が最も不安に見えて実際には安全。 「ランダムに見える」 は entropy ではない、 が collision checkpoint の主題。\n\n**群位数の扱い**: repair checkpoint は secp256k1 で回す。 toy 群は scalar が 50 個未満しかなく、 60 通の message に 60 個の異なる nonce を割り当てることが鳩の巣原理で不可能だから。 40 元の群に安全な nonce 生成器は存在せず、 群が小さいこと自体が脆弱性である。 不可能なことを assert する test は書かない。\n\n同様に、 nonce space の truncation は 「60 サンプルが全部相異なるか」 では検出できない (16 bit でも 97% の確率で相異なる)。 検出は値域で行う — 256 bit の位数に対して全出力が 2^64 未満になる確率は事実上ゼロ。",
+  "instructions": "## はじめに\n\n署名サービスの audit log が渡されます。 各行には message、 public key、 commitment R、 response z があります。 秘密鍵はありません。 log とはそういうものです。\n\nどこかで、 1 人の signer が同じ commitment を二度使っています。\n\n```text\nz1 = k + e1*x\nz2 = k + e2*x\n```\n\n方程式が 2 本、 未知数が 2 つ。 片方はもう持っています。\n\n## 最初の一手\n\n```bash\nmake inspect\n```\n\nlog 全体と、 二度以上現れた commitment が出ます。 重複がすべて機会とは限りません。\n\n次に `local/starter/recover.py` を編集します。\n\n## ゴール\n\n8 つの checkpoint を独立に通します。 前半は攻撃、 後半は修復です。 攻撃が成功したら、 なぜ成功したのかを nonce generator の性質として説明できる状態になっているはずです。",
+  "writeup": "## これは乱数の話ではない\n\nnonce 再利用は 「弱い乱数生成器を使うと危ない」 として語られることが多い。 それは症状の説明であって、 理由の説明ではない。\n\n理由は special soundness である。 同じ commitment に対して異なる challenge へ 2 回応答すると、 その 2 本の transcript から witness が抽出できる。 これは Sigma protocol が proof of knowledge であることの定義そのもので、 「証明者は本当に x を知っている」 を保証している当の性質だ。 抽出器が存在するから健全であり、 抽出器が存在するから再利用が致命的になる。 同じ 1 つの事実の 2 つの側面である。\n\n## R の共有は十分条件ではない\n\nlog には別の signer が同じ R を使っている行が入れてある。 鍵が違えば、 2 本の transcript は 1 つの未知数についての 2 本の式ではない。 攻撃すると 「誰のものでもない scalar」 が出る。 だから復元は必ず P = xG で確認する。 算術は間違った組に対しても成功する。\n\n同様に、 きれいに parse できるが検証を通らない行も入れてある。 拒否される transcript の中の再利用は何も証明しない。\n\ne1 = e2 のときに逆元が存在しないのは、 同じ challenge への 2 回の応答が同じ式を 2 回書いただけだから。 情報が増えていない。\n\n## 3 つの nonce generator\n\n- `fixed_nonce`: 毎回同じ。 即座に死ぬ。\n- `truncated_nonce`: 本物のハッシュを取り、 数ビットに切り詰める。 **log 上では完全にランダムに見える**。 どの k も違って見え、 すべての署名が検証を通り、 目視では何もおかしくない。 それでも birthday bound で衝突する。\n- `deterministic_nonce`: 秘密鍵と message のハッシュ。 名前が最も不安に見えて、 これが安全なもの。 同じ鍵と同じ message は同じ nonce を生むが、 それは同じ署名を生むだけで新しい情報は漏れない。 異なる message はハッシュ衝突なしには衝突しない。 鍵も入れるのは、 message だけだと 2 人の signer が同じ message で同じ nonce を使ってしまうため。\n\n## 群位数と、書けない test\n\nrepair checkpoint は secp256k1 で回す。 toy 群は scalar が 50 個未満しかなく、 60 通の message に相異なる nonce を割り当てることが鳩の巣原理で**不可能**だから。 40 元の群に安全な nonce 生成器は存在しない。 群が小さいこと自体が脆弱性であって、 生成器の欠陥ではない。 不可能なことを assert する test は、 テストの失敗ではなく設計の失敗である。\n\nnonce space の truncation も、 「60 サンプルが全部相異なるか」 では捕まらない。 16 bit でも 60 draws が全部相異なる確率は約 97% で、 大半の実行をすり抜ける。 検出は値域で行う — 256 bit の位数に対して全出力が 2^64 未満に収まる確率は 2^-11000 程度で、 これは偶然ではなく truncation の証拠になる。\n\n## 次につながるところ\n\nWeek 4 以降の証明系でも 「同じ commitment に 2 つの challenge」 は繰り返し現れる。 そこでは抽出器は攻撃ではなく安全性証明の道具として出てくるが、 中身は同じ引き算である。",
+  "tags": [
+    "advanced-cryptography-2026",
+    "week3",
+    "nonce-reuse",
+    "special-soundness",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18103,
+      "name": "/verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "同じ commitment を持つ 2 本の transcript を log から特定できる",
+    "z1 と z2 の差から秘密鍵を代数的に抽出できる",
+    "e1 - e2 の逆元が必要な理由と、存在しない場合の意味を説明できる",
+    "復元した鍵を P = xG で確認し、確認なしに主張しない",
+    "R の共有が必要条件であって十分条件でないことを説明できる",
+    "「ランダムに見える」ことと entropy が別物であることを実験で示せる",
+    "決定的な nonce 生成が安全である条件を述べられる"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.ac26-w3-nonce-reuse.parse-untrusted-log",
+        "description": "外部由来の log を検証しながら読み、 malformed な行で処理全体を落とさない。"
+      },
+      {
+        "id": "lo.ac26-w3-nonce-reuse.extract-witness",
+        "description": "commitment を共有する 2 本の transcript から witness を代数的に抽出できる。"
+      },
+      {
+        "id": "lo.ac26-w3-nonce-reuse.special-soundness",
+        "description": "抽出可能性が protocol の健全性の根拠と同じ事実であることを説明できる。"
+      },
+      {
+        "id": "lo.ac26-w3-nonce-reuse.confirm-before-claiming",
+        "description": "復元した scalar を公開鍵で確認し、 確認できない結果を主張しない。"
+      },
+      {
+        "id": "lo.ac26-w3-nonce-reuse.nonce-entropy",
+        "description": "見た目のランダムさと entropy を区別し、 安全な nonce 生成の条件を述べられる。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.special-soundness",
+        "description": "同じ commitment に対する 2 つの異なる challenge への応答から witness が抽出できる性質。 proof of knowledge の根拠。"
+      },
+      {
+        "id": "concept.nonce-reuse",
+        "description": "同じ commitment を 2 回使うこと。 special soundness により秘密鍵の抽出を許す。"
+      },
+      {
+        "id": "concept.birthday-bound",
+        "description": "N 通りの値から k 個引くとき、 k が sqrt(N) 程度で衝突が起きる。 見た目のランダムさは空間の広さを保証しない。"
+      },
+      {
+        "id": "concept.deterministic-nonce",
+        "description": "秘密鍵と message のハッシュから nonce を導く方式。 決定的であることが安全性を損なわない。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.ac26-w3-nonce-reuse.parse",
+        "description": "正当な行を読み、 malformed な行を明示的に拒否できた。"
+      },
+      {
+        "id": "assessment.ac26-w3-nonce-reuse.detect",
+        "description": "攻撃可能な組だけを、 検証を通る同一 signer の組として特定できた。"
+      },
+      {
+        "id": "assessment.ac26-w3-nonce-reuse.extract",
+        "description": "2 本の transcript から秘密鍵を復元し、 順序に依存しなかった。"
+      },
+      {
+        "id": "assessment.ac26-w3-nonce-reuse.confirm",
+        "description": "復元した scalar を公開鍵で確認し、 誤った scalar を確認しなかった。"
+      },
+      {
+        "id": "assessment.ac26-w3-nonce-reuse.reject",
+        "description": "e1 = e2、 別 signer、 再利用の無い log をすべて正しく退けられた。"
+      },
+      {
+        "id": "assessment.ac26-w3-nonce-reuse.hunt",
+        "description": "noise を含む log から被害者の鍵を復元し、 誰の鍵かを示せた。"
+      },
+      {
+        "id": "assessment.ac26-w3-nonce-reuse.collision",
+        "description": "切り詰めた生成器の衝突を実測し、 空間の大きさと突き合わせられた。"
+      },
+      {
+        "id": "assessment.ac26-w3-nonce-reuse.repair",
+        "description": "message ごとに衝突せず、 signer ごとに分離され、 空間を切り詰めない生成器を書けた。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.nonce-reuse-only-leaks-the-message",
+        "description": "nonce 再利用で漏れるのは message だという誤解。 漏れるのは秘密鍵そのものである。"
+      },
+      {
+        "id": "misconception.same-message-reuse-is-safe",
+        "description": "同じ message なら再利用してよいという誤解。 同じ message なら challenge も同じで解けないが、 それは安全性ではなく偶然の条件。"
+      },
+      {
+        "id": "misconception.random-looking-means-high-entropy",
+        "description": "ランダムに見えれば entropy があるという誤解。 切り詰めたハッシュ出力は見た目では区別できない。"
+      },
+      {
+        "id": "misconception.deterministic-nonce-is-inherently-unsafe",
+        "description": "決定的な nonce は危険だという誤解。 鍵と message を binding していれば安全であり、 むしろ推奨される。"
+      },
+      {
+        "id": "misconception.sharing-a-commitment-is-enough",
+        "description": "同じ R を持つ 2 本があれば解けるという誤解。 signer が同じで、 かつ両方が検証を通る必要がある。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w3-nonce-reuse",
+      "target": "lo.ac26-w3-nonce-reuse.parse-untrusted-log"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w3-nonce-reuse",
+      "target": "lo.ac26-w3-nonce-reuse.extract-witness"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w3-nonce-reuse",
+      "target": "lo.ac26-w3-nonce-reuse.special-soundness"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w3-nonce-reuse",
+      "target": "lo.ac26-w3-nonce-reuse.confirm-before-claiming"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w3-nonce-reuse",
+      "target": "lo.ac26-w3-nonce-reuse.nonce-entropy"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w3-nonce-reuse",
+      "target": "concept.special-soundness"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w3-nonce-reuse",
+      "target": "concept.nonce-reuse"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w3-nonce-reuse",
+      "target": "concept.birthday-bound"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w3-nonce-reuse",
+      "target": "concept.deterministic-nonce"
+    },
+    {
+      "type": "requires",
+      "source": "problem.ac26-w3-nonce-reuse",
+      "target": "problem.ac26-w3-schnorr"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w3-nonce-reuse.extract-witness",
+      "target": "concept.modular-inverse"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w3-nonce-reuse.special-soundness",
+      "target": "concept.sigma-protocol"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w3-nonce-reuse",
+      "target": "assessment.ac26-w3-nonce-reuse.parse"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w3-nonce-reuse",
+      "target": "assessment.ac26-w3-nonce-reuse.detect"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w3-nonce-reuse",
+      "target": "assessment.ac26-w3-nonce-reuse.extract"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w3-nonce-reuse",
+      "target": "assessment.ac26-w3-nonce-reuse.confirm"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w3-nonce-reuse",
+      "target": "assessment.ac26-w3-nonce-reuse.reject"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w3-nonce-reuse",
+      "target": "assessment.ac26-w3-nonce-reuse.hunt"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w3-nonce-reuse",
+      "target": "assessment.ac26-w3-nonce-reuse.collision"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w3-nonce-reuse",
+      "target": "assessment.ac26-w3-nonce-reuse.repair"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w3-nonce-reuse",
+      "target": "misconception.nonce-reuse-only-leaks-the-message"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w3-nonce-reuse",
+      "target": "misconception.same-message-reuse-is-safe"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w3-nonce-reuse",
+      "target": "misconception.random-looking-means-high-entropy"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w3-nonce-reuse",
+      "target": "misconception.deterministic-nonce-is-inherently-unsafe"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w3-nonce-reuse",
+      "target": "misconception.sharing-a-commitment-is-enough"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18103/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "parse",
+        "label": "外から来た log を読む",
+        "points": 30,
+        "wrongAnswerPenalty": 15
+      },
+      {
+        "id": "detect",
+        "label": "攻撃できる組だけを挙げる",
+        "points": 35,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "detect-hint-1",
+            "content": "R が同じであることは必要条件。 では十分条件は何か。 2 本の式が 1 つの未知数についての式であるために、 他に何が一致していなければならないか。",
+            "penalty": 15
+          }
+        ]
+      },
+      {
+        "id": "extract",
+        "label": "2 本の式から鍵を解く",
+        "points": 50,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "extract-hint-1",
+            "content": "z1 から z2 を引くと何が消えるか。 残った式を x について解くには何が要るか。",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "confirm",
+        "label": "復元した鍵を確認する",
+        "points": 30,
+        "wrongAnswerPenalty": 15
+      },
+      {
+        "id": "reject",
+        "label": "解けない組を解けないと言う",
+        "points": 40,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "reject-hint-1",
+            "content": "e1 = e2 のとき、 2 本目の式は 1 本目と何が違うか。",
+            "penalty": 15
+          }
+        ]
+      },
+      {
+        "id": "hunt",
+        "label": "noise の中から見つけ出す",
+        "points": 40,
+        "wrongAnswerPenalty": 15
+      },
+      {
+        "id": "collision",
+        "label": "見た目のランダムさを測る",
+        "points": 40,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "collision-hint-1",
+            "content": "生成器の値域は 64 通り。 40 回引いたら衝突は何回起きるか、 走らせる前に予測する。",
+            "penalty": 18
+          }
+        ]
+      },
+      {
+        "id": "repair",
+        "label": "生成器を直す",
+        "points": 35,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "repair-hint-1",
+            "content": "同じ鍵で同じ message なら同じ nonce でよい。 同じ署名になるだけで新しい情報は出ない。 では何が衝突してはいけないか。",
+            "penalty": 15
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "The same R twice is the key",
+      "shortDescription": "A signing service's audit log holds the message, the public key, R and z. It does not hold the secret key. Find the one place R appears twice and the secret key is two equations away.",
+      "instructions": "## Start here\n\nYou are handed a signing service's audit log. Each row has the message, the public key, the commitment R, and the response z. It has no secret keys — logs do not.\n\nSomewhere in it, one signer used the same commitment twice.\n\n```text\nz1 = k + e1*x\nz2 = k + e2*x\n```\n\nTwo equations, two unknowns. You already have one of them.\n\n## First move\n\n```bash\nmake inspect\n```\n\nThat prints the whole log and which commitments appear more than once. Not every duplicate is an opportunity.\n\nThen edit `local/starter/recover.py`.\n\n## Goal\n\nClear eight independently scored checkpoints. The first half is the attack; the second half is the repair. By the end you should be able to say why the attack worked as a property of the nonce generator.",
+      "writeup": "## This is not a story about random numbers\n\nNonce reuse is usually told as \"weak random number generators are dangerous\". That describes the symptom, not the reason.\n\nThe reason is **special soundness**: two accepting transcripts that share a commitment and differ in the challenge yield the witness. That is the definition of the Sigma protocol being a proof of knowledge — the property that guarantees the prover really knows x. The extractor exists, so the protocol is sound; the extractor exists, so reuse is fatal. One fact, two consequences.\n\n## Sharing R is not sufficient\n\nThe log contains a record from a *different* signer that happens to use the same R. With different keys, the two transcripts are not two equations in one unknown, and attacking them produces a scalar belonging to nobody. That is why a recovery is always confirmed against P = xG: the arithmetic succeeds on the wrong pair too.\n\nThe log also contains a record that parses cleanly and does not verify. Reuse inside a rejected transcript proves nothing.\n\nAnd when e1 = e2 there is no inverse, because two responses to the same challenge are one equation written twice. No new information arrived.\n\n## Three nonce generators\n\n- `fixed_nonce` — the same k every time. Dies immediately.\n- `truncated_nonce` — a genuine hash, thrown away down to a few bits. **In the log it looks perfectly random.** Every k differs, every signature verifies, nothing is visibly wrong. It collides on the birthday schedule anyway.\n- `deterministic_nonce` — a hash of the secret key and the message. The name is the most alarming and it is the safe one: the same key and message give the same nonce, which gives the same signature and leaks nothing new, while two different messages cannot collide without a hash collision. The key goes in too — hashing the message alone would give two signers the same nonce for the same message.\n\n## Group order, and the test that cannot be written\n\nThe repair checkpoint runs on secp256k1. A toy group has fewer than fifty scalars, so sixty messages cannot possibly get sixty distinct nonces — the pigeonhole says so before any code exists. There is no safe nonce generator in a forty-element group; the group being small **is** the vulnerability. A test that asserts the impossible is a design failure, not a failing test.\n\nTruncation is likewise not caught by \"are the sixty samples distinct\". At sixteen bits, sixty draws are all distinct about 97% of the time, so that assertion would let it through on most runs. The range is what rules it out: against a 256-bit order, every output landing below 2^64 has probability around 2^-11000 — that is evidence, not luck.\n\n## Where this leads\n\n\"One commitment, two challenges\" reappears throughout the proof systems in later weeks. There the extractor shows up as a tool in a security proof rather than as an attack, but it is the same subtraction.",
+      "learningGoals": [
+        "Find two transcripts in a log that share a commitment",
+        "Extract the secret key algebraically from the difference of the responses",
+        "Explain why (e1 - e2) must be invertible, and what it means when it is not",
+        "Confirm a recovered key against P = xG rather than claiming it unchecked",
+        "Explain why sharing a commitment is necessary but not sufficient",
+        "Show by measurement that looking random is not the same as having entropy",
+        "State the conditions under which a deterministic nonce is safe"
+      ],
+      "checks": [
+        {
+          "id": "parse",
+          "label": "Read a log that came from outside"
+        },
+        {
+          "id": "detect",
+          "label": "Name only the pairs that can be attacked",
+          "hints": [
+            {
+              "id": "detect-hint-1",
+              "content": "Sharing R is necessary. What else has to match before two transcripts are two equations in one unknown?"
+            }
+          ]
+        },
+        {
+          "id": "extract",
+          "label": "Solve the two equations for the key",
+          "hints": [
+            {
+              "id": "extract-hint-1",
+              "content": "Subtract z2 from z1 and see what cancels. What do you need to solve the remainder for x?"
+            }
+          ]
+        },
+        {
+          "id": "confirm",
+          "label": "Confirm the key you recovered"
+        },
+        {
+          "id": "reject",
+          "label": "Say that an unsolvable pair is unsolvable",
+          "hints": [
+            {
+              "id": "reject-hint-1",
+              "content": "When e1 equals e2, how does the second equation differ from the first?"
+            }
+          ]
+        },
+        {
+          "id": "hunt",
+          "label": "Find it in the noise"
+        },
+        {
+          "id": "collision",
+          "label": "Measure what looks random",
+          "hints": [
+            {
+              "id": "collision-hint-1",
+              "content": "The generator draws from 64 values. Predict how many collisions 40 draws produce before running it."
+            }
+          ]
+        },
+        {
+          "id": "repair",
+          "label": "Fix the generator",
+          "hints": [
+            {
+              "id": "repair-hint-1",
+              "content": "The same key and message may give the same nonce -- it produces the same signature and leaks nothing new. So what must never collide?"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
