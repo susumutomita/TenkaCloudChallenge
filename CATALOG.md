@@ -197,8 +197,45 @@ The legacy `uptime` kind is an alias for `uptime-flat`. New problems should use 
 | Track ID            | Curriculum                                                             | Problems (in `order`)                          |
 | -------------------- | ----------------------------------------------------------------------- | ----------------------------------------------- |
 | `ipa-web-security`   | IPA "安全なウェブサイトの作り方" (<https://www.ipa.go.jp/security/vuln/websecurity/about.html>), one chapter per problem | 1. `xss-demo` (§1.5 XSS)<br>2. `csrf-demo` (§1.6 CSRF) |
+| `advanced-cryptography-2026` | Unofficial companion to the Advanced Cryptography Program 2026 | See the week-by-week table in [`curriculum.md`](./docs/curricula/advanced-cryptography-2026/curriculum.md) — it is the source of truth for order, role, and owning issue |
 
 Planned (not yet authored, tracked in Issue #177's Phase 2/3): remaining `ipa-web-security` chapters (OS command injection §1.2, path traversal §1.3, session management §1.4), a `twelve-factor` track (<https://12factor.net/ja/>), and a `well-architected` track scoped to pillars that a Docker-only local drill can honestly reproduce (operational excellence, reliability, performance efficiency — cost optimization and least-privilege security are excluded from the local track since they need a real AWS billing/IAM model to teach honestly).
+
+### Aligning a problem to an external course (`courseAlignment`)
+
+`courseAlignment` (optional) records **which version of which external course** a problem was checked against, and how far it sits from that course's own exercise. It is separate from `track` deliberately: `track` is TenkaCloud's own ordering, `courseAlignment` is the outward reference.
+
+```json
+{
+  "track": { "id": "advanced-cryptography-2026", "order": 310, "chapter": "Week 3 / 有限体と逆元" },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 3,
+    "role": "mechanism",
+    "spoilerPolicy": "independent-reimplementation",
+    "sources": [
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        "path": "week3/problems/schnorr-from-scratch/README.md",
+        "kind": "assignment"
+      }
+    ]
+  }
+}
+```
+
+Rules worth knowing before writing one:
+
+- **`ref` must be a 40-hex commit SHA.** A branch or tag name is rejected by the schema, because an alignment that follows upstream `main` silently stops being a record of anything.
+- **`role`** states the distance from the official exercise: `diagnostic` (prerequisite check, before the lecture), `mechanism` (observe the internals), `assignment-companion` (supports understanding without giving the answer), `transfer` (same knowledge, different setting), `synthesis` (combines weeks).
+- **`sources` is optional, and omitting it is a real answer.** A pin asserts that somebody read that version. When there is nothing citable — an unpublished week, or a problem that gates a week rather than accompanying its material — leave it out and say why. [`challenges/ac26-bridge-experiment`](./challenges/ac26-bridge-experiment/) does exactly this. **Never invent a SHA to fill the field.**
+- **`kind: "placeholder"`** pins the *absence* of material, so `bun run course:drift` reports the day it is published as a publication rather than as an edit. Use it for a companion authored from an unpublished week's stated theme.
+- **`spoilerPolicy: "embargoed"`** cannot ship with `status: "ready"`, and is dropped from `index.json` entirely rather than published behind a flag a client could ignore.
+- A problem whose `track.id` is bound to a course (currently only `advanced-cryptography-2026`) **must** carry `courseAlignment`; the validator rejects it otherwise, so a tracked problem is always reachable from the curriculum map.
+
+A worked example is [`challenges/ac26-bridge-experiment/metadata.json`](./challenges/ac26-bridge-experiment/metadata.json), the template every other `ac26-*` problem is scaffolded from. The authoring contract for that track lives in [`docs/curricula/advanced-cryptography-2026/TEMPLATE.md`](./docs/curricula/advanced-cryptography-2026/TEMPLATE.md), the pin-review procedure in [`SYNC.md`](./docs/curricula/advanced-cryptography-2026/SYNC.md), and new problems are scaffolded with `bun run new-course-challenge`.
 
 ## template.yaml
 
