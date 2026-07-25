@@ -82,6 +82,7 @@ order; `track.order` only sequences presentation.
 | --- | --- |
 | `concept.experimental-method` | Predict before running, then compare prediction to measurement |
 | `concept.invariant` | A property that must hold at every step; the first step where it breaks locates the fault |
+| `concept.modular-arithmetic` | Arithmetic in a residue ring; reducing every step and reducing once at the end are not the same |
 | `concept.correctness` | The construction produces the right answer on honest inputs |
 | `concept.soundness` | A false statement cannot be made to pass |
 | `concept.privacy` | The transcript reveals nothing beyond what is intended |
@@ -189,7 +190,7 @@ the learner's first encounter with the tooling.
 
 | Order | Problem id | Role | Teaches | Issue |
 | --- | --- | --- | --- | --- |
-| 10 | `ac26-bridge-experiment` | `diagnostic` | `concept.experimental-method`, `concept.invariant` | #215 |
+| 10 | `ac26-bridge-experiment` | `diagnostic` | `concept.experimental-method`, `concept.invariant`, `concept.modular-arithmetic` | #215 |
 | 20 | `ac26-bridge-properties` | `diagnostic` | `concept.correctness`, `concept.soundness`, `concept.privacy` | #216 |
 
 Prerequisite for: every `ac26-*` challenge.

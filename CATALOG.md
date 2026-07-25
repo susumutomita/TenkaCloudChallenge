@@ -197,8 +197,45 @@ The legacy `uptime` kind is an alias for `uptime-flat`. New problems should use 
 | Track ID            | Curriculum                                                             | Problems (in `order`)                          |
 | -------------------- | ----------------------------------------------------------------------- | ----------------------------------------------- |
 | `ipa-web-security`   | IPA "安全なウェブサイトの作り方" (<https://www.ipa.go.jp/security/vuln/websecurity/about.html>), one chapter per problem | 1. `xss-demo` (§1.5 XSS)<br>2. `csrf-demo` (§1.6 CSRF) |
+| `advanced-cryptography-2026` | Unofficial companion to the Advanced Cryptography Program 2026, mapped week by week in [`docs/curricula/advanced-cryptography-2026/curriculum.md`](./docs/curricula/advanced-cryptography-2026/curriculum.md) | 10. `ac26-bridge-experiment` (Bridge 0 — experimental method) |
 
 Planned (not yet authored, tracked in Issue #177's Phase 2/3): remaining `ipa-web-security` chapters (OS command injection §1.2, path traversal §1.3, session management §1.4), a `twelve-factor` track (<https://12factor.net/ja/>), and a `well-architected` track scoped to pillars that a Docker-only local drill can honestly reproduce (operational excellence, reliability, performance efficiency — cost optimization and least-privilege security are excluded from the local track since they need a real AWS billing/IAM model to teach honestly).
+
+### Aligning a problem to an external course (`courseAlignment`)
+
+`courseAlignment` (optional) records **which version of which external course** a problem was checked against, and how close it sits to that course's own exercise. It is separate from `track` on purpose: `track` is TenkaCloud's ordering, `courseAlignment` is the external reference.
+
+```json
+{
+  "track": { "id": "advanced-cryptography-2026", "order": 310, "chapter": "Week 3 / 有限体と逆元" },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 3,
+    "role": "mechanism",
+    "spoilerPolicy": "independent-reimplementation",
+    "sources": [
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        "path": "week3/problems/schnorr-from-scratch/README.md",
+        "kind": "assignment"
+      }
+    ]
+  }
+}
+```
+
+Rules worth knowing before you write one:
+
+- **`ref` must be a 40-hex commit SHA.** A branch name is rejected, because alignment that follows upstream `main` silently stops being a record of anything.
+- **`role`** says how far the problem is from the official exercise: `diagnostic` (prerequisite check before the lecture), `mechanism` (observe the internals), `assignment-companion` (helps understanding without giving the answer), `transfer` (same knowledge, different setting), `synthesis` (combines weeks).
+- **`sources` is optional.** Omit it when there is no primary material to point at — an unpublished week, for instance. Never invent a pin: a pin claims somebody read that version.
+- **`kind: "placeholder"`** pins the *absence* of material, so `bun run course:drift` reports the day it is published as a publication rather than an edit.
+- **`spoilerPolicy: "embargoed"`** cannot ship with `status: "ready"`, and is dropped from `index.json` entirely rather than published with a flag a client could ignore.
+- A problem whose `track.id` is bound to a course (currently `advanced-cryptography-2026`) **must** carry `courseAlignment`; the validator rejects it otherwise, so a tracked problem can always be found in the curriculum map.
+
+A worked example is [`challenges/ac26-bridge-experiment/metadata.json`](./challenges/ac26-bridge-experiment/metadata.json). The authoring contract for that track — participant `make` targets, the `/verify` security contract, the public/hidden/mutation test split, and the graph-scoping rules — is [`docs/curricula/advanced-cryptography-2026/TEMPLATE.md`](./docs/curricula/advanced-cryptography-2026/TEMPLATE.md), and new challenges are scaffolded with `bun run new-course-challenge`.
 
 ## template.yaml
 

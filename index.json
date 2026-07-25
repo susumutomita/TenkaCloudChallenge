@@ -2,6 +2,52 @@
   "version": "1",
   "problems": [
     {
+      "id": "ac26-bridge-experiment",
+      "name": "ずれた計数器",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "track": {
+        "id": "advanced-cryptography-2026",
+        "order": 10,
+        "chapter": "Bridge 0 / 実験の作法"
+      },
+      "courseAlignment": {
+        "courseId": "advanced-cryptography-program",
+        "edition": "2026",
+        "week": 1,
+        "role": "diagnostic",
+        "sources": [
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "path": "week1/README.md",
+            "kind": "lecture"
+          }
+        ]
+      },
+      "difficulty": 1,
+      "estimatedDuration": "45 分",
+      "shortDescription": "小さな計数器を題材に、観察して予測を書き、実行して突き合わせ、最初にずれた場所を特定する。暗号の中身に入る前に、実験の作法そのものを身につける。",
+      "tags": [
+        "advanced-cryptography-2026",
+        "bridge",
+        "experimental-method",
+        "invariant",
+        "modular-arithmetic",
+        "local-play",
+        "container",
+        "multi-verify"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "ai-riscv-screen-repair",
       "name": "AI製RISC-V画面を復旧せよ",
       "category": "Challenge",

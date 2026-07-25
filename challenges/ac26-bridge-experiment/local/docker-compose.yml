@@ -1,0 +1,73 @@
+# Local-play lab for ac26-bridge-experiment. No cloud account needed.
+#
+# `solution/` is the participant's only live input and is mounted read-only: the
+# verifier copies it into a private temp workspace before importing it, so
+# verification never writes to the source tree.
+#
+# What actually contains a hostile submission, in the order it matters:
+#
+#   1. it runs in a spawned subprocess with a 10s wall-clock kill (`participant.py`),
+#      so an infinite loop cannot wedge the verifier;
+#   2. `spawn`, not `fork` — the child does not inherit the parent's imported
+#      `fixtures` module, so it cannot read the expected values out of memory;
+#   3. the container is `read_only`, non-root, `cap_drop: ALL`,
+#      `no-new-privileges`, `pids_limit`, and memory/CPU capped;
+#   4. both ports are bound to 127.0.0.1, so nothing is exposed off this machine.
+#
+# Egress is deliberately NOT on that list. A published port has to be DNAT'd
+# through a routable network, so the service sits on a bridge — and a bridge
+# reaches the internet. `internal: true` here would make `127.0.0.1:18310` refuse
+# the connection and the lab unsolvable. Nothing in this challenge is secret from
+# the participant (it is their own machine, their own code), so there is no claim
+# that a submission cannot reach the network. It can.
+services:
+  ac26-bridge-experiment:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      # Per-deploy secret injected by `make local`; every fixture parameter and
+      # the environment marker are derived from it.
+      FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
+    volumes:
+      - "./solution:/workspace/solution:ro"
+    tmpfs:
+      # Participant code is copied here before import. exec is required to import
+      # a module; the mount is small, private, and dropped when the lab stops.
+      - "/tmp:rw,exec,nosuid,size=32m,uid=10001,gid=10001"
+    ports:
+      # AC26 ports are `18300 + track.order` and that plus one, so two challenges
+      # in the track can never collide and the pair is derivable from metadata.
+      # This one is order 10. See TEMPLATE.md §Ports.
+      - "127.0.0.1:18310:8080" # challenge surface
+      - "127.0.0.1:18311:8081" # loopback /verify
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python3",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=2)",
+        ]
+      interval: "2s"
+      timeout: "3s"
+      retries: 30
+    cpus: "1.0"
+    mem_limit: "512m"
+    pids_limit: 128
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - "no-new-privileges:true"
+    networks:
+      - lab
+    restart: "no"
+
+networks:
+  # One bridge, because this lab is one service that has to be reachable on
+  # loopback. A multi-service lab where only the front door needs host access
+  # should add a second `internal: true` network and put the back-end services on
+  # that one alone — see docs/curricula/advanced-cryptography-2026/TEMPLATE.md.
+  lab:
+    driver: bridge

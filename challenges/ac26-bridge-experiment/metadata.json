@@ -1,0 +1,425 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "ac26-bridge-experiment",
+  "name": "ずれた計数器",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 1,
+  "estimatedDuration": "45 分",
+  "shortDescription": "小さな計数器を題材に、観察して予測を書き、実行して突き合わせ、最初にずれた場所を特定する。暗号の中身に入る前に、実験の作法そのものを身につける。",
+  "description": "[管理者/作者向け・ネタバレを含む] Advanced Cryptography 2026 companion track の Bridge 0。暗号の内容は一切扱わず、以後の全 AC26 チャレンジが前提にする実験ループ (観察 → 予測 → 実行 → 突き合わせ → 最初の分岐点を特定) だけを教える。\n\n題材は modular counter。round i で (start + step * i) mod modulus を記録するだけの関数 advance() を local/solution/counter.py に実装させる。\n\n4 checkpoint の設計意図:\n\n1. environment — 環境が動いたことの確認。make test が印字する marker (FLAG_SEED 由来) を提出させる。ここで詰まる人を最初に救う。\n2. predict — 実行前に最終 round の値を提出させる。公開 case とは別 parameter なので「動かして写す」では通らない。予測を先に書く癖を強制する checkpoint。\n3. first-divergence — 1 round だけ % modulus を飛ばした trace を提示し、最初にずれた round 番号 (1-based) を答えさせる。壊れた round 以降は正しく reduce するので末尾だけ見ても分からず、必ず追跡が必要になる。fixtures.broken_trace_case() は「壊れた round が 2 以上」を満たす parameter を seed から決定的に探索するので、どの seed でも checkpoint が成立する (selftest.py が 2000 seed で検証)。\n4. general-counter — 提出値ではなく counter.py 自体を hidden case 8 件で走らせる。負の start / 負の step / step == 0 / 合成数 modulus を含み、公開 case に過適合した実装 (最後にだけ reduce する、C 風の truncating remainder など) を落とす。mutations.py が 7 種の誤実装すべてを hidden case が kill することを image build 時に検証する。\n\n採点は全て loopback の /verify (:8081)。participant の code は spawn した別 process で 10 秒 wall-clock kill 付きで実行し、fork を使わないので親の fixtures を読めない。\n\n公式教材は一切参照しない。counter は TenkaCloud 独自の題材で、course の week1 課題 (proof-of-exploit) の解答にはならない。",
+  "instructions": "## 状況\n\n小さな計数器がある。`start` から始めて、round ごとに `step` を足し、そのたびに値を `modulus` で割った余りへ丸め直して記録していく。round `i` (1 起算) で記録される値は\n\n```text\n(start + step * i) を [0, modulus) へ丸めた値\n```\n\nこれを `local/solution/counter.py` の `advance()` に実装する。編集するのはこの 1 ファイルだけ。\n\n## 起動\n\n```bash\ncd local\ndocker compose up -d --wait\nmake test      # 公開テスト\nmake inspect   # 中間値と、checkpoint 2・3 用の情報\n```\n\n`make test` は python の version と、この環境固有の marker を印字する。\n\n## 採点 (4 checkpoint)\n\n| checkpoint | 提出するもの |\n| --- | --- |\n| `environment` | `make test` が印字した marker |\n| `predict` | `make inspect` が示す predict case で、**最後の round** が記録する値 |\n| `first-divergence` | `make inspect` が示す published trace で、最初に規則が破れる round 番号 (1 起算) |\n| `general-counter` | 提出値は使わない。`counter.py` 自体が未公開の case で走る |\n\n提出は portal から、または直接:\n\n```bash\ncurl -s -X POST http://127.0.0.1:18311/verify \\\n  -H 'Content-Type: application/json' \\\n  -d '{\"checkpointId\":\"predict\",\"submission\":\"12\"}'\n```\n\n## この 4 つがこの順に並んでいる理由\n\n`predict` は**実行する前に**答えを出すための checkpoint である。先に動かして写しても、predict case の parameter は公開 case と違うので通らない。\n\n`first-divergence` の trace は、壊れた round より後ろも規則どおりに進む。末尾の値だけ見ても分からないので、round を 1 つずつ突き合わせることになる。\n\n`general-counter` は、公開 case 1 件に合うだけの実装を落とす。負の値や `step == 0` を含む未公開 case で走る。\n\n## 進まないとき\n\n`make inspect` は毎 round の値を印字する。予測と実測が最初にずれた round を見つける — それがこのトラック全体で使う道具である。\n\n---\n\nTenkaCloud のこのトラックは Advanced Cryptography Program 2026 の学習者向けに独立して作られた非公式の補助教材です。講座運営とは無関係で、公式教材の解答は含みません。",
+  "learningGoals": [
+    "実行する前に中間値と最終値を予測し、実測と突き合わせて差を説明できる",
+    "各 round で成り立つべき不変条件を言葉にし、それが最初に破れた場所を trace から特定できる",
+    "公開された 1 例に合うだけの実装と、定義どおりに一般化した実装を、未公開 parameter で区別できる"
+  ],
+  "tags": [
+    "advanced-cryptography-2026",
+    "bridge",
+    "experimental-method",
+    "invariant",
+    "modular-arithmetic",
+    "local-play",
+    "container",
+    "multi-verify"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18310,
+      "name": "Challenge surface"
+    },
+    {
+      "port": 18311,
+      "name": "/verify (loopback scorer)"
+    }
+  ],
+  "track": {
+    "id": "advanced-cryptography-2026",
+    "order": 10,
+    "chapter": "Bridge 0 / 実験の作法"
+  },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 1,
+    "role": "diagnostic",
+    "spoilerPolicy": "independent-reimplementation",
+    "sources": [
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        "path": "week1/README.md",
+        "kind": "lecture"
+      }
+    ]
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Challenge": "http://127.0.0.1:18310"
+    },
+    "verifyUrl": "http://127.0.0.1:18311/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "environment",
+        "label": "環境が動いた印",
+        "points": 10,
+        "wrongAnswerPenalty": 0,
+        "hints": [
+          {
+            "id": "environment-1",
+            "content": "`cd local && docker compose up -d --wait` のあと `make test` を実行する。まだ `advance()` は実装していなくてよい。最初の数行に印字される。",
+            "penalty": 0
+          },
+          {
+            "id": "environment-2",
+            "content": "`environment` の行に `TC{AC26-ENV:...}` の形の文字列がある。波括弧を含めてそのまま提出する。この値は環境ごとに違う。",
+            "penalty": 2
+          }
+        ]
+      },
+      {
+        "id": "predict",
+        "label": "実行する前に答える",
+        "points": 30,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "predict-1",
+            "content": "`make inspect` の `[checkpoint 2: predict]` に `start` `step` `rounds` `modulus` がある。この case は公開 case とは別の parameter なので、`make test` の出力には答えがない。",
+            "penalty": 0
+          },
+          {
+            "id": "predict-2",
+            "content": "round を 1 つずつ足していく必要はない。round `i` が記録するのは `(start + step * i)` を `[0, modulus)` へ丸めた値である。最後の round は `i = rounds`。",
+            "penalty": 4
+          },
+          {
+            "id": "predict-3",
+            "content": "`(start + step * rounds) % modulus` を計算して提出する。手で計算した値と、あとで `counter.py` を実装して出た値が一致するかを必ず見比べること — このトラックはずっとこの突き合わせをする。",
+            "penalty": 9
+          }
+        ]
+      },
+      {
+        "id": "first-divergence",
+        "label": "最初にずれた場所",
+        "points": 30,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "first-divergence-1",
+            "content": "`make inspect` の `[checkpoint 3: published trace]` は round ごとの値を並べたものである。この trace のどこか 1 round が、規則どおりに進んでいない。",
+            "penalty": 0
+          },
+          {
+            "id": "first-divergence-2",
+            "content": "末尾の値を見ても分からない。壊れた round より後ろは、壊れた値から普通に規則どおり進むので、tail だけ見ると自己整合しているように見える。隣り合う 2 つの値の関係を先頭から順に確かめる。",
+            "penalty": 4
+          },
+          {
+            "id": "first-divergence-3",
+            "content": "各 round について「前の値 + step を `[0, modulus)` へ丸めた値」と、実際に記録されている値を比べる。1 箇所だけ、丸めをせず素の値を記録している round がある — `modulus` 以上の値が現れている round を探し、その 1 起算の番号を提出する。",
+            "penalty": 9
+          }
+        ]
+      },
+      {
+        "id": "general-counter",
+        "label": "1 例ではなく定義に合わせる",
+        "points": 30,
+        "wrongAnswerPenalty": 1,
+        "hints": [
+          {
+            "id": "general-counter-1",
+            "content": "この checkpoint は提出値を見ない。`counter.py` を未公開の case 8 件で走らせる。まず `make test` を通し、そのうえで公開 case にしか無い性質に頼っていないかを疑う。",
+            "penalty": 0
+          },
+          {
+            "id": "general-counter-2",
+            "content": "未公開 case には、負の `start`、負の `step`、`step == 0`、合成数の `modulus` が含まれる。公開 case にはどれも無い。自分の実装をこれらの入力で手元で試す。",
+            "penalty": 4
+          },
+          {
+            "id": "general-counter-3",
+            "content": "よくある 2 つの落とし穴。(1) 丸めを最後に 1 回だけ行う — 公開 case では偶然一致するが、途中で範囲を出る case でずれる。毎 round 丸める。(2) 言語によっては余りが被除数の符号を引き継ぐ。Python の `%` は常に `[0, modulus)` を返すので、`%` をそのまま使えばよい。自分で `raw - modulus * int(raw / modulus)` のように書くと負の入力で崩れる。",
+            "penalty": 9
+          }
+        ]
+      }
+    ]
+  },
+  "writeup": "## 何をしていたか\n\nこのチャレンジは暗号を扱っていない。扱っていたのは、以後の AC26 チャレンジすべてで使う 4 つの動作である。\n\n### 1. 環境が動いたことを先に確かめる (`environment`)\n\n`advance()` が未実装でも `make test` は動き、marker を印字する。「動かない」と「実装していない」を切り分けられる状態を最初に作った。以後のチャレンジでも、詰まったらまず環境を疑わずに済むよう同じ形にしてある。\n\n### 2. 実行する前に予測する (`predict`)\n\npredict case の parameter は公開 case と別にしてある。だから「先に動かして出力を写す」ができない。\n\nこれは意地悪ではなく、順序を守らせるための仕掛けである。予測せずに実行すると、出力が正しいかどうかを出力自身で判断することになる。予測を先に書いておくと、実測との差が情報になる。暗号の実装では、この差が「どの式を取り違えたか」を直接指す。\n\n### 3. 最初の分岐点を特定する (`first-divergence`)\n\n公開した trace は、1 round だけ `% modulus` を飛ばしていた。そこから後ろは、その壊れた値を出発点として規則どおりに進む。だから tail は自己整合していて、末尾の値だけでは異常が見えない。\n\n毎 round `前の値 + step ≡ 記録された値 (mod modulus)` が成り立つかを確かめると、破れる場所が 1 箇所だけ見つかる。これが不変条件で位置を特定するということで、後の週で constraint residual、group law の edge case、noise budget、share の再構成に同じ手つきを使う。\n\n### 4. 1 例と定義を区別する (`general-counter`)\n\n公開 case は `start=33 step=5 modulus=31` のように、すべて正で modulus が素数のこともある。この 1 例だけを見て通る実装が 4 種類ある。\n\n- 丸めを最後に 1 回だけ行う\n- 一度も丸めない\n- 余りが被除数の符号を引き継ぐ (C 風の切り捨て除算)\n- `step == 0` を `step == 1` として扱う (「計数器は進むもの」という思い込み)\n\n未公開 case は負の `start`、負の `step`、`step == 0`、合成数 `modulus` を含む。`mutations.py` はこの 4 つを含む 7 種の誤実装を用意し、未公開 case がそのすべてを落とすことを image build 時に確認している。落とせない誤実装が 1 つでもあれば build が失敗する — つまり「未公開 case が飾りになっていない」ことが機械的に保証されている。\n\n## 一般化\n\nこの 4 つは、そのまま Week 1 以降で使う。\n\n| ここでやったこと | 以後どこで使うか |\n| --- | --- |\n| 不変条件で最初の破れを探す | 算術回路の constraint residual、underconstraint の発見 |\n| 実行前の予測 | MPC の通信 round 数、noise の増え方、proof の受理/拒否 |\n| 1 例と定義の区別 | 楕円曲線の infinity、有限体の 0 の逆元、negative scalar |\n| 未公開 parameter での一般化 | modulus・curve・party 数・polynomial 次数を変えた検証 |\n\n## 補足\n\nここで使った剰余は観察しやすさのための小さい値であり、暗号的な安全性とは無関係である。以後のチャレンジで扱う toy parameter も同様で、実運用の parameter とは桁が違う。",
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.ac26-bridge-experiment.predict-before-running",
+        "description": "実行前に中間値と最終値を予測し、実測との差を説明できる"
+      },
+      {
+        "id": "lo.ac26-bridge-experiment.locate-first-divergence",
+        "description": "各 round の不変条件を突き合わせ、trace が最初に破れた位置を特定できる"
+      },
+      {
+        "id": "lo.ac26-bridge-experiment.generalize-beyond-example",
+        "description": "公開された 1 例に過適合した実装と、定義どおりの実装を未公開 parameter で区別できる"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.experimental-method",
+        "description": "実行前に予測し、実測と突き合わせるループ"
+      },
+      {
+        "id": "concept.invariant",
+        "description": "各 step で成り立つべき性質。最初に破れた step が原因の位置を指す"
+      },
+      {
+        "id": "concept.modular-arithmetic",
+        "description": "剰余環上の演算。毎 step 丸めるか最後に 1 回だけ丸めるかで結果が変わる"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.ac26-bridge-experiment.environment-marker",
+        "description": "この環境固有の marker を提出でき、環境障害と未実装を切り分けられている"
+      },
+      {
+        "id": "assessment.ac26-bridge-experiment.predicted-final-value",
+        "description": "公開 case とは別 parameter の case について、実行前に最終 round の値を当てている"
+      },
+      {
+        "id": "assessment.ac26-bridge-experiment.first-broken-round",
+        "description": "tail が自己整合している trace について、最初に規則が破れた round を特定している"
+      },
+      {
+        "id": "assessment.ac26-bridge-experiment.hidden-parameter-generality",
+        "description": "負の start・負の step・step == 0・合成数 modulus を含む未公開 case で実装が成立している"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.final-value-proves-the-trace",
+        "description": "最終値が正しければ途中も正しいという誤解。壊れた round 以降が規則どおり進むと tail は自己整合する"
+      },
+      {
+        "id": "misconception.reduce-once-at-the-end",
+        "description": "剰余は最後に 1 回取ればよいという誤解。途中で範囲を出る case で結果が変わる"
+      },
+      {
+        "id": "misconception.remainder-is-always-non-negative",
+        "description": "どの言語でも余りが非負だという誤解。被除数の符号を引き継ぐ実装では負の入力で範囲外になる"
+      },
+      {
+        "id": "misconception.public-tests-are-complete",
+        "description": "公開テストを通れば実装が正しいという誤解。公開されているのは 1 例だけである"
+      }
+    ],
+    "audiences": [
+      {
+        "id": "audience.cryptography-beginner",
+        "description": "暗号は初学だが、プログラムは書ける学習者"
+      },
+      {
+        "id": "audience.experienced-implementer",
+        "description": "実装経験はあるが、対象 primitive は未経験の学習者"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.ac26-bridge-experiment",
+      "target": "lo.ac26-bridge-experiment.predict-before-running"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-bridge-experiment",
+      "target": "lo.ac26-bridge-experiment.locate-first-divergence"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-bridge-experiment",
+      "target": "lo.ac26-bridge-experiment.generalize-beyond-example"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-bridge-experiment",
+      "target": "concept.experimental-method"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-bridge-experiment",
+      "target": "concept.invariant"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-bridge-experiment",
+      "target": "concept.modular-arithmetic"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-bridge-experiment",
+      "target": "assessment.ac26-bridge-experiment.environment-marker"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-bridge-experiment",
+      "target": "assessment.ac26-bridge-experiment.predicted-final-value"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-bridge-experiment",
+      "target": "assessment.ac26-bridge-experiment.first-broken-round"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-bridge-experiment",
+      "target": "assessment.ac26-bridge-experiment.hidden-parameter-generality"
+    },
+    {
+      "type": "related_to",
+      "source": "assessment.ac26-bridge-experiment.predicted-final-value",
+      "target": "lo.ac26-bridge-experiment.predict-before-running"
+    },
+    {
+      "type": "related_to",
+      "source": "assessment.ac26-bridge-experiment.first-broken-round",
+      "target": "lo.ac26-bridge-experiment.locate-first-divergence"
+    },
+    {
+      "type": "related_to",
+      "source": "assessment.ac26-bridge-experiment.hidden-parameter-generality",
+      "target": "lo.ac26-bridge-experiment.generalize-beyond-example"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-bridge-experiment.locate-first-divergence",
+      "target": "concept.invariant"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-bridge-experiment.predict-before-running",
+      "target": "concept.experimental-method"
+    },
+    {
+      "type": "related_to",
+      "source": "misconception.final-value-proves-the-trace",
+      "target": "concept.invariant"
+    },
+    {
+      "type": "related_to",
+      "source": "misconception.reduce-once-at-the-end",
+      "target": "lo.ac26-bridge-experiment.generalize-beyond-example"
+    },
+    {
+      "type": "related_to",
+      "source": "misconception.remainder-is-always-non-negative",
+      "target": "lo.ac26-bridge-experiment.generalize-beyond-example"
+    },
+    {
+      "type": "related_to",
+      "source": "misconception.public-tests-are-complete",
+      "target": "lo.ac26-bridge-experiment.generalize-beyond-example"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-bridge-experiment.generalize-beyond-example",
+      "target": "concept.modular-arithmetic"
+    }
+  ],
+  "i18n": {
+    "en": {
+      "name": "The Counter That Slipped",
+      "shortDescription": "A small counter is the subject. Observe it, write down a prediction, run it, compare, and find the first place they diverge. Learn the experimental loop itself before any cryptography.",
+      "instructions": "## The situation\n\nThere is a small counter. It starts at `start`, adds `step` once per round, and after each addition records the value reduced into `[0, modulus)`. The value recorded at round `i` (1-based) is\n\n```text\n(start + step * i) reduced into [0, modulus)\n```\n\nImplement this as `advance()` in `local/solution/counter.py`. That one file is the only thing you edit.\n\n## Starting up\n\n```bash\ncd local\ndocker compose up -d --wait\nmake test      # public tests\nmake inspect   # intermediate values, plus what checkpoints 2 and 3 need\n```\n\n`make test` prints the python version and a marker unique to this environment.\n\n## Scoring (4 checkpoints)\n\n| checkpoint | What you submit |\n| --- | --- |\n| `environment` | The marker `make test` printed |\n| `predict` | For the predict case shown by `make inspect`, the value the **last** round records |\n| `first-divergence` | For the published trace shown by `make inspect`, the 1-based round where the rule first breaks |\n| `general-counter` | Nothing is read from your submission. `counter.py` itself is run on cases you have not seen |\n\nSubmit from the portal, or directly:\n\n```bash\ncurl -s -X POST http://127.0.0.1:18311/verify \\\n  -H 'Content-Type: application/json' \\\n  -d '{\"checkpointId\":\"predict\",\"submission\":\"12\"}'\n```\n\n## Why these four, in this order\n\n`predict` exists to make you answer **before** running. Running first and copying the output will not help: the predict case uses different parameters from the public one.\n\nThe `first-divergence` trace keeps following the rule after the break. Reading the final value tells you nothing, so you will end up comparing round to round.\n\n`general-counter` rejects an implementation that only fits the single public case. It runs on unseen cases that include negative values and `step == 0`.\n\n## When you are stuck\n\n`make inspect` prints every round. Find the first round where your prediction and the measurement disagree — that is the tool this whole track uses.\n\n---\n\nThis TenkaCloud track is an unofficial companion built independently for learners of the Advanced Cryptography Program 2026. It is not affiliated with the course organizers and contains no official assignment solutions.",
+      "learningGoals": [
+        "Predict intermediate and final values before running, then account for any difference from the measurement",
+        "State the invariant that must hold at each round and locate the first round where a trace breaks it",
+        "Distinguish an implementation that fits one published example from one that generalizes, using unseen parameters"
+      ],
+      "description": "[For maintainers and authors — contains spoilers] Bridge 0 of the Advanced Cryptography 2026 companion track. It teaches no cryptography at all; it teaches only the experimental loop every later AC26 challenge assumes: observe, predict, run, compare, locate the first divergence.\n\nThe subject is a modular counter. The participant implements `advance()` in `local/solution/counter.py`, recording `(start + step * i) mod modulus` at each round `i`.\n\nWhy each of the four checkpoints exists:\n\n1. `environment` — proves the container runs. The participant submits the marker `make test` prints, derived from `FLAG_SEED`. It rescues anyone stuck on setup before they blame their own code.\n2. `predict` — the final value must be submitted before running. The case uses different parameters from the public one, so running first and copying does not work.\n3. `first-divergence` — a published trace skips `% modulus` on exactly one round. Every later round reduces normally from the broken value, so the tail stays self-consistent and the final value reveals nothing; the round has to be traced. `fixtures.broken_trace_case()` searches deterministically from the seed for parameters whose broken round is at least 2, so the checkpoint is well-formed for every seed — `selftest.py` verifies this across 2000 sampled seeds.\n4. `general-counter` — ignores the submission and runs `counter.py` against 8 hidden cases including a negative start, a negative step, `step == 0`, and composite moduli. `mutations.py` proves the hidden cases kill all 7 plausible wrong implementations, and runs at image build time so a hole fails the build.\n\nAll scoring goes through the loopback `/verify` on :8081. Participant code runs in a spawned subprocess with a 10s wall-clock kill; `spawn` rather than `fork` means it cannot read the parent's fixtures.\n\nNo official course material is referenced. The counter is TenkaCloud's own subject and does not answer the course's week 1 exercise (`proof-of-exploit`).",
+      "writeup": "## What this was doing\n\nThis challenge contained no cryptography. What it contained were the four moves every later AC26 challenge uses.\n\n### 1. Confirm the environment first (`environment`)\n\n`make test` runs and prints the marker even with `advance()` unimplemented. That separates \"it does not work\" from \"I have not written it yet\". Every later challenge has the same shape, so being stuck never has to start with doubting the setup.\n\n### 2. Predict before running (`predict`)\n\nThe predict case deliberately uses different parameters from the public case, so running first and copying the output is not available.\n\nThis is not an obstacle for its own sake. Running before predicting means judging an output by itself. Writing the prediction down first turns the difference into information — and in cryptographic implementations that difference points straight at which expression was misread.\n\n### 3. Locate the first divergence (`first-divergence`)\n\nThe published trace skipped `% modulus` on exactly one round. From there on it follows the rule again, starting from the broken value — so the tail is internally consistent and the final value looks unremarkable.\n\nChecking `previous + step ≡ recorded (mod modulus)` at each round finds exactly one place where it fails. That is what locating a fault by invariant means, and the same move recurs later on constraint residuals, elliptic-curve edge cases, noise budgets, and share reconstruction.\n\n### 4. Separate one example from the definition (`general-counter`)\n\nThe public case may be all-positive with a prime modulus. Four implementations pass it and are still wrong:\n\n- reducing once at the end\n- never reducing\n- a remainder that keeps the dividend's sign (C-style truncating division)\n- treating `step == 0` as `step == 1`, from the assumption that a counter must advance\n\nThe hidden cases include a negative start, a negative step, `step == 0`, and composite moduli. `mutations.py` builds seven wrong implementations covering those four and checks that the hidden cases reject every one, at image build time. If any survived, the build fails — so \"the hidden cases are not decoration\" is a mechanical guarantee, not a claim.\n\n## How it generalizes\n\n| What you did here | Where it comes back |\n| --- | --- |\n| Locating the first break by invariant | Constraint residuals in arithmetic circuits; finding underconstraint |\n| Predicting before running | MPC communication rounds, noise growth, proof accept/reject |\n| One example vs the definition | Curve points at infinity, the inverse of 0, negative scalars |\n| Generalizing over unseen parameters | Varying modulus, curve, party count, polynomial degree |\n\n## A note on the parameters\n\nThe moduli here are small so the values stay readable, and they carry no security meaning. The same is true of the toy parameters in later challenges: they are orders of magnitude away from anything used in production.",
+      "checks": [
+        {
+          "id": "environment",
+          "label": "Proof the environment runs",
+          "hints": [
+            {
+              "id": "environment-1",
+              "content": "Run `cd local && docker compose up -d --wait`, then `make test`. You do not need `advance()` implemented yet. It is printed in the first few lines."
+            },
+            {
+              "id": "environment-2",
+              "content": "The `environment` line holds a string shaped like `TC{AC26-ENV:...}`. Submit it exactly, braces included. This value differs per environment."
+            }
+          ]
+        },
+        {
+          "id": "predict",
+          "label": "Answer before running",
+          "hints": [
+            {
+              "id": "predict-1",
+              "content": "`make inspect` prints `start`, `step`, `rounds`, and `modulus` under `[checkpoint 2: predict]`. This case uses different parameters from the public one, so the answer is not in `make test`'s output."
+            },
+            {
+              "id": "predict-2",
+              "content": "You do not need to walk round by round. Round `i` records `(start + step * i)` reduced into `[0, modulus)`. The last round is `i = rounds`."
+            },
+            {
+              "id": "predict-3",
+              "content": "Compute `(start + step * rounds) % modulus` and submit it. Then, once `counter.py` works, compare your hand-computed value against what it produces — this track does that comparison over and over."
+            }
+          ]
+        },
+        {
+          "id": "first-divergence",
+          "label": "The first place it slipped",
+          "hints": [
+            {
+              "id": "first-divergence-1",
+              "content": "`[checkpoint 3: published trace]` in `make inspect` lists the value at each round. One of those rounds did not follow the rule."
+            },
+            {
+              "id": "first-divergence-2",
+              "content": "The final value will not tell you. After the broken round the trace follows the rule again from the broken value, so the tail looks self-consistent. Check the relation between each adjacent pair, from the start."
+            },
+            {
+              "id": "first-divergence-3",
+              "content": "For each round, compare \"the previous value plus `step`, reduced into `[0, modulus)`\" against what was actually recorded. Exactly one round recorded the raw value without reducing — find the round where a value at or above `modulus` appears, and submit its 1-based number."
+            }
+          ]
+        },
+        {
+          "id": "general-counter",
+          "label": "Match the definition, not one example",
+          "hints": [
+            {
+              "id": "general-counter-1",
+              "content": "This checkpoint ignores your submission. It runs `counter.py` on 8 unseen cases. Get `make test` passing first, then look for anything in your implementation that relies on a property only the public case happens to have."
+            },
+            {
+              "id": "general-counter-2",
+              "content": "The unseen cases include a negative `start`, a negative `step`, `step == 0`, and composite moduli. The public case has none of those. Try your implementation on them locally."
+            },
+            {
+              "id": "general-counter-3",
+              "content": "Two common traps. (1) Reducing once at the end — it coincidentally matches on the public case and diverges whenever an intermediate value leaves the range. Reduce every round. (2) In some languages the remainder keeps the dividend's sign. Python's `%` always returns a value in `[0, modulus)`, so plain `%` is enough; writing `raw - modulus * int(raw / modulus)` yourself breaks on negative input."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

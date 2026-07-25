@@ -195,8 +195,45 @@ ID は共通語彙として扱い、共有 node は catalog の 1 箇所だけ�
 | Track ID            | カリキュラム                                                           | 問題 (`order` 順)                              |
 | -------------------- | ----------------------------------------------------------------------- | ----------------------------------------------- |
 | `ipa-web-security`   | IPA「安全なウェブサイトの作り方」(<https://www.ipa.go.jp/security/vuln/websecurity/about.html>)、 1 章 = 1 問題 | 1. `xss-demo` (§1.5 XSS)<br>2. `csrf-demo` (§1.6 CSRF) |
+| `advanced-cryptography-2026` | Advanced Cryptography Program 2026 の非公式 companion。 週ごとの対応は [`docs/curricula/advanced-cryptography-2026/curriculum.md`](./docs/curricula/advanced-cryptography-2026/curriculum.md) | 10. `ac26-bridge-experiment` (Bridge 0 — 実験の作法) |
 
 未着手 (Issue #177 の Phase 2/3 で追跡): `ipa-web-security` の残り章 (OS コマンドインジェクション §1.2、 パストラバーサル §1.3、 セッション管理 §1.4)、 `twelve-factor` トラック (<https://12factor.net/ja/>)、 および Docker のみのローカルドリルで誠実に再現できる pillar に絞った `well-architected` トラック (運用上の優秀性、 信頼性、 パフォーマンス効率 — コスト最適化と最小権限セキュリティは実 AWS の課金/IAM モデルが無いと誠実に教えられないためローカルトラックからは除外)。
+
+### 外部講座との対応を書く (`courseAlignment`)
+
+`courseAlignment` (任意) は、 **どの外部講座のどの版に対して確認したか**と、 その講座自身の課題からどれだけ離れているかを記録する。 `track` とは意図的に分けている: `track` は TenkaCloud 側の並び、 `courseAlignment` は外部への参照である。
+
+```json
+{
+  "track": { "id": "advanced-cryptography-2026", "order": 310, "chapter": "Week 3 / 有限体と逆元" },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 3,
+    "role": "mechanism",
+    "spoilerPolicy": "independent-reimplementation",
+    "sources": [
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        "path": "week3/problems/schnorr-from-scratch/README.md",
+        "kind": "assignment"
+      }
+    ]
+  }
+}
+```
+
+書く前に知っておくべき規則:
+
+- **`ref` は 40 桁の commit SHA でなければならない。** branch 名は拒否される。 upstream の `main` に追随する alignment は、 何かを記録したものではなくなるからである。
+- **`role`** は公式課題からの距離を表す: `diagnostic` (講義前の前提確認)、 `mechanism` (内部を小さく観察)、 `assignment-companion` (理解を補助するが解答は与えない)、 `transfer` (同じ知識を別設定へ)、 `synthesis` (複数週の統合)。
+- **`sources` は任意。** 指せる一次情報が無いとき (未公開週など) は省略する。 pin を捏造してはならない — pin は「誰かがその版を読んだ」という主張である。
+- **`kind: "placeholder"`** は教材が**無いこと**を pin する。 これにより `bun run course:drift` は公開された日を、 編集ではなく公開として報告する。
+- **`spoilerPolicy: "embargoed"`** は `status: "ready"` と同時に出せず、 `index.json` からは flag 付きで出るのではなく丸ごと落とされる。
+- `track.id` が講座に束縛されている問題 (現在は `advanced-cryptography-2026`) は `courseAlignment` が**必須**である。 無いと validator が落とすので、 track に載った問題は必ず対応表から辿れる。
+
+実例は [`challenges/ac26-bridge-experiment/metadata.json`](./challenges/ac26-bridge-experiment/metadata.json)。 このトラックの authoring 契約 — participant 向け `make` target、 `/verify` の security contract、 public/hidden/mutation テストの役割分担、 graph の scope 規則 — は [`docs/curricula/advanced-cryptography-2026/TEMPLATE.md`](./docs/curricula/advanced-cryptography-2026/TEMPLATE.md) にあり、 新規チャレンジは `bun run new-course-challenge` で生成する。
 
 ## template.yaml
 
