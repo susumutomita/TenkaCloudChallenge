@@ -1,5 +1,6 @@
 import { globSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "bun:test";
 
 /**
@@ -28,7 +29,28 @@ import { describe, expect, it } from "bun:test";
  * check is checked here.
  */
 
-const REPO_ROOT = new URL("..", import.meta.url).pathname;
+const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
+
+const RECORD_PATH = "docs/curricula/advanced-cryptography-2026/alignment.md";
+const RECORD = readFileSync(join(REPO_ROOT, RECORD_PATH), "utf8");
+
+/**
+ * The weeks the record itself says it covers, read from its own headings.
+ *
+ * Derived rather than listed, because the two checks below and the record have
+ * to agree and there is no reason for a human to keep three copies in step. A
+ * hard-coded `[2, 4, 7]` is how the Week 7 gap below happened: the record grew a
+ * third week and the guard kept checking two.
+ */
+const DOCUMENTED_WEEKS: readonly number[] = [...RECORD.matchAll(/^## Week (\d+) /gm)]
+  .map((match) => Number(match[1]))
+  .sort((a, b) => a - b);
+
+/** `ac26-w2-beaver-mul` → 2. */
+function weekOf(id: string): number | null {
+  const match = /^ac26-w(\d+)-/.exec(id);
+  return match === null ? null : Number(match[1]);
+}
 
 /** A pin that records the absence of material rather than material. */
 const UNPUBLISHED_KINDS = new Set(["placeholder", "roadmap"]);
@@ -75,13 +97,25 @@ describe("what a companion may claim about an unpublished week", () => {
     expect(PROBLEMS.length).toBeGreaterThan(0);
   });
 
-  it("should find the problems standing on an unpublished week", () => {
-    // Weeks 2, 4 and 7 were unpublished when this track was authored. If this
-    // ever reaches zero, either the weeks were published — in which case the
-    // pins moved and the alignment record needs revisiting, which is what
-    // `bun run course:drift` reports as PUBLISHED — or the pins were dropped.
-    expect(ON_UNPUBLISHED_WEEKS.length).toBeGreaterThan(0);
+  it("should document at least one week as unpublished", () => {
+    expect(DOCUMENTED_WEEKS.length).toBeGreaterThan(0);
   });
+
+  it.each(DOCUMENTED_WEEKS)(
+    "should still have Week %i standing on an unpublished pin",
+    (week) => {
+      // Per week, not `ON_UNPUBLISHED_WEEKS.length > 0`. The aggregate check
+      // stays green while every Week 2 problem loses its placeholder pin, so
+      // long as one Week 7 problem still has one — and the Week 2 section of
+      // the record would then be describing a state no metadata claims.
+      //
+      // If this fails, either that week was published (the pins moved, which
+      // `bun run course:drift` reports as PUBLISHED and which means the record
+      // needs revisiting) or the pins were dropped. Both need a human.
+      const onThisWeek = ON_UNPUBLISHED_WEEKS.filter((problem) => weekOf(problem.id) === week);
+      expect(onThisWeek.length).toBeGreaterThan(0);
+    },
+  );
 
   it.each(ON_UNPUBLISHED_WEEKS.map((problem) => [problem.id, problem] as const))(
     "%s should not claim to accompany an assignment that is not published",
@@ -133,9 +167,20 @@ describe("the alignment record says what was checked", () => {
     }
   });
 
-  it("should not describe unpublished material as if it had been read", () => {
-    // The failure this whole record exists to prevent: writing down what a week
-    // "covers" when nobody could open it.
-    expect(record).not.toMatch(/week[24]\/problems\/[a-z0-9-]+\/README\.md/);
-  });
+  it.each(DOCUMENTED_WEEKS)(
+    "should not describe Week %i's material as if it had been read",
+    (week) => {
+      // The failure this whole record exists to prevent: writing down what a
+      // week "covers" when nobody could open it.
+      //
+      // The week numbers come from the record's own headings rather than a
+      // literal. This was `/week[24]\/…/` and the record documents three weeks,
+      // so a `week7/problems/…/README.md` citation could have been added
+      // without failing anything — the guard silently covered two thirds of
+      // what it claimed to.
+      expect(record).not.toMatch(
+        new RegExp(`week${week}/problems/[a-z0-9-]+/README\\.md`),
+      );
+    },
+  );
 });
