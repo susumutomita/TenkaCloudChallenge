@@ -1,0 +1,625 @@
+{
+  "id": "ac26-w6-stack-design",
+  "name": "部品はどれも正しい。 つないだものが正しくない",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "advanced-cryptography-2026",
+    "order": 660,
+    "chapter": "Week 6 / Programmable Cryptography Stack Design"
+  },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 6,
+    "role": "synthesis",
+    "spoilerPolicy": "independent-reimplementation",
+    "sources": [
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        "path": "week6/README.md",
+        "kind": "lecture"
+      }
+    ]
+  },
+  "difficulty": 5,
+  "estimatedDuration": "90-120 分",
+  "shortDescription": "primitive が検証できるのは **渡されたものの形** だけである。 MPC engine は share かどうかを見るが、 それが secret のはずだったかは知らない。 zkVM は guest が走ったことを言うが、 journal が読み手の持っている program の話かは言わない。 部品の test は全部通り、 architecture は壊れている。 その **composition failure** を 9 通りの角度から診断する。",
+  "description": "Week 6 の最後、 track の synthesis 問題である。 前の 5 問はそれぞれ **動く部品** を 1 つ作った。 この問題はその**あいだの配線**を扱う。\n\n出発点は 1 行である。\n\n```text\nprimitive が検証できるのは、 渡されたものの「形」だけである\n```\n\nこれは primitive の欠陥ではない。 primitive とはそういうものである。 MPC engine は届いたものが share であることを検証する。 それが secret のはずだったか、 相手が同じ field だと思っているか、 復元してよいと open policy が言ったかは、 知りようがない。 zkVM は guest が走ったことを検証する。 その journal が読み手の持っている program についてのものかは検証しない。 FHE の評価は渡された鍵の下で正しく、 その鍵が間違っていたことは教えられない。\n\nだから **部品の test は全部通り、 architecture は壊れている**。\n\n## 3 段の contract\n\n```text\nLICENCE      その transformation が何を変えてよいか\npolicy       その node がその transformation を持つことをこの architecture が承認したか\nobligations  この architecture が「どの wire に何を届ける」と約束したか\n```\n\n3 段は別の段である。 licensed な変更が correct な変更とは限らない — key switch は key domain を変えてよいが、 **何に変えるべきかを間違えない**こととは別である。 そして違反した box を承認し直せば contract は 1 手で満たされる。 それは repair ではなく、 deployment が自分で合格基準を書き換えたということである。\n\n## 13 の deployment\n\n毎 seed、 3 つの健全な architecture と、 そこから **1 箇所だけ**変えた 13 の deployment が引かれる。 11 個は 11 の boundary class をちょうど 1 つずつ踏む。 12 個目は licensed でない operation を承認されていない node に置く。 13 個目は **contract を 1 つも破らない** — すべての境界が成立していて、 primitive が消費できない形を握らされている。 contract が design review の代わりにならないことを、 1 つの deployment で言い切るためにある。\n\n## 採点の設計\n\nこの問題は 53 個の壊れた stack を同梱していて、 そのうち **47 個は 「健全な architecture には何も出さず、 壊れた architecture には何か出す」 という誰でも書く 2 問に正しく答える**。 `make reference-test` が毎回この数を測り直す。 その 2 つは問題文にそのまま書いてあるので誰も発見する必要がない。 残りが checkpoint になっているのはそのためである。\n\n## checkpoint が 9 でなく 8 である理由\n\nIssue #244 は 9 つ要求している。 multi-verify の上限は 8 で、 catalog 側の SCHEMA.json と platform 側 `packages/problem-sdk` の両方で強制され、 **9 個目は truncate されず scoring object ごと破棄される** — つまり 9 つ宣言すると残り 8 つも一緒に落ちて問題が採点不能になる。 そこで 2 つを 1 つの checkpoint に束ねた。 隣り合っていたからではない: 「どの wire が何を運んでいるか」 と 「primitive の保証がどこで終わるか」 は、 同じ typed graph を読む 1 つの行為である。 hidden phase は 9 のままで、 `dataflow` だけが 2 つ動く。",
+  "instructions": "## はじめに\n\n暗号は 1 行も走りません。 走るのは **typed graph** です。\n\n```text\nnode  1 つの計算と、 それがどこで走るか\nedge  1 つの値が次の計算へ渡るところと、 その瞬間それが何であるか\n```\n\nnode は `id` / `layer` / `domain` / `transformation` を持ちます。 edge は出所と行き先に加えて、 **値が同時に持つ 5 つ**と、 それが framing された dialect を持ちます。\n\n```text\nrepresentation  plaintext, secret-share, ciphertext, commitment, proof, journal\nclassification  public か secret か\nalgebra         どの field / modulus にいるか (該当する場合)\nkeyDomain       どの鍵の下にいるか (該当する場合)\nidentity        どの program / statement についてのものか (該当する場合)\nserialization   どの framing で符号化されたか\n```\n\n## 3 段の contract\n\n```text\nLICENCE      その transformation が何を変えてよいか。 key-switch は keyDomain を変えてよい。\n             carry は何も変えてよくない\npolicy       その node がその transformation を持つことを architecture が承認したか。\n             built[\"policy\"] にあります。 secret を開いてよい operation であることと、\n             それを実行してよい node であることは別の事実です\nobligations  この architecture が「どの wire に何を届ける」と約束したか。\n             built[\"obligations\"] にあります\n```\n\n`built[\"policy\"]` にはもう 2 つあります。 `distinctDomains` は別々の trust domain にいなければならない node の組、 `maxCrossings` はいくつの edge が domain をまたいでよいかです。 どちらも **計算をどこに置いたか**についての境界で、 flight 中の値についてのものではありません。\n\n## 支給されるもの\n\n```python\nfrom fixtures.generate import (\n    ATTRIBUTES, AUTHORISED, BOUNDARY_CLASSES, CASES, CLASSIFICATIONS, CLASS_OF, CONSUMES,\n    COST_OF, COST_ORDER, LAYERS, LICENCE, PROPERTIES, PROPERTY_OF, REPRESENTATIONS,\n    SERIALIZATIONS, ALGEBRAS, KEY_DOMAINS, TRANSFORMATIONS, TRUST_OF,\n    edges_by_id, nodes_by_id, incoming, outgoing, graph, broken, use_cases,\n)\n```\n\n```text\ngraph(seed, case)      3 つの case のうち 1 つの、 健全な architecture\nbroken(seed, variant)  同じものを、 ちょうど 1 箇所だけ変えたもの\nincoming/outgoing      1 つの node に届く edge と、 そこから出る edge\nCLASS_OF               attribute -> licensed でない変更が属する boundary class\nPROPERTY_OF            boundary class -> それを破ると失う end-to-end property\nCONSUMES               transformation -> 受け取れる representation\n```\n\n## 最初の一手\n\n```bash\nmake inspect\n```\n\n3 つの architecture、 その contract、 policy、 約束、 そして診断する deployment の一覧が出ます。 どの deployment がどの contract を破るか、 どこで最初に破れたか、 repair が何手かかるか、 どの brief がどの primitive を必要とするかは出ません。 そこが checkpoint です。\n\nそのあと `local/starter/stack.py` を編集します。\n\n## ゴール\n\n8 個の checkpoint を独立に通します。 下に出てくるどの graph でも、 **部品はすべて正しく動いています**。",
+  "writeup": "## 部品が検証できないもの\n\nMPC engine は届いたものが share であることを検証します。 それが secret のはずだったか、 相手が同じ field だと思っているか、 復元してよいと open policy が言ったかは検証できません。 zkVM は guest が走ったことを検証し、 journal が読み手の持っている program についてのものかは検証しません。 FHE の評価は渡された鍵の下で正しく、 鍵が間違っていたことは言えません。\n\nこの問題の 9 つの角度はすべてその 1 行の帰結です。\n\n## 3 段を混ぜないこと\n\n`LICENCE` は operation についての事実、 `policy` は誰がそれを実行してよいかについての事実、 `obligations` は何を届けると約束したかについての事実です。 3 つが別々であることは repair checkpoint で効いてきます。 secret を開いた node を承認し直せば contract は 1 手で満たされ、 それは repair ではありません。 obligations を削っても同じで、 同じ手口です。\n\n## fan-in には fan-in の規則がある\n\nnode が 2 入力を持つとき、 それは値を変換していません。 **merge** しています。\n\n```text\nclassification  secret が勝つ。 secret の関数は secret だから\nidentity        持ち越してよいが、 発明してはいけない\nそれ以外         持っている入力どうしが一致していなければならない\n```\n\n`zkvm-exploit` がこれを具体化します。 public な statement と secret な witness が 1 つの node で出会い、 出ていく値は secret でその statement についてのものです。 出力を入力 1 つずつと比べる contract は、 この edge を 2 件の違反と呼びます。 それはモデル化しようとしている architecture を表現できないモデルです。\n\n## 「最初」は id 順ではありません\n\nstack は 1 度壊れ、 そのあと壊れ続けます。 下流の症状はどれも本物で、 そこを狙った repair は何もしません。 3 つの deployment では、 値が届く順の最初と id 順の最初が**違う edge** です。 偶然の一致に寄りかかった解は、 より小さい問題の解です。\n\n## counterexample は「壊す」ことではありません\n\n部品の自前の check は `CONSUMES` がすべてです。 届いたものの**形**を読み、 それ以外は何も読みません。 classification も key domain も identity も dialect も、 部品を素通りします。 だから 1 箇所変えるだけで、 **すべての部品が満足したまま** end-to-end property を落とせます。 counterexample とは何かが動かなくなったことではなく、 **どの部品も見ていなかった**ことです。\n\n## 5 つ目の property\n\nproperty map は 5 つの key を返します。 そのうち 1 つは、 この 3 つの architecture のどの wire も運んでいません。 flight 中の値に何をしても失われないからで、 それを失うには計算を別の場所に置くしかありません。 空の tuple がその答えです。 **常に何かを見つける監査は、 読んでいるのではありません。**\n\n## contract を 1 つも破らない deployment\n\n13 個のうち 1 つは、 すべての境界が成立していて、 primitive が消費できない形を握らされています。 licensed でない変更はなく、 破られた約束もなく、 それでも動きません。 repair checkpoint が「すべての contract が成立する」ことと「すべての部品が渡されたものを実行できる」ことを別々に要求するのはこのためです。 前者だけで止まる repair は、 contract を design review の代わりにしています。\n\n## 実測\n\nこの問題は 53 個の壊れた stack を同梱していて、 そのうち **47 個は 「健全な architecture には何も出さず、 壊れた architecture には何か出す」 に正しく答えます**。 `make reference-test` が毎回測り直します。 その 2 つは問題文にそのまま書いてあるカテゴリで、 誰も発見する必要がありません。\n\n## 監査が証明できることと、 できないこと\n\n証明できるのは、 同梱された 53 個の欠陥をこの 8 checkpoint が捕まえること、 reference が全部を通ること、 出荷される starter が 1 つも通らないことです。 証明できないのは 「このモデルに他の穴が無い」 ことです。\n\n## toy と production の差\n\nnode は 8〜9 個、 edge は 7〜9 本、 attribute は 5 つ、 boundary class は 11 個です。 実際の stack では node は数百あり、 attribute は proof system と ciphertext scheme のパラメータすべてで、 boundary class はその deployment が書き下した数だけあります。 主張しているのは 「境界の contract は exact に書ける」 ことであって、 「ここに書いたものが完全である」 ことではありません。\n\n## 対象外\n\n実際の MPC / zkVM / FHE の実行、 特定 protocol の security proof、 proof system の soundness、 実運用の鍵管理、 network レベルの可用性。",
+  "tags": [
+    "advanced-cryptography-2026",
+    "week6",
+    "stack-design",
+    "composition",
+    "boundary-contract",
+    "trust-domain",
+    "zero-knowledge",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18118,
+      "name": "/verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "primitive implementation と primitive の上の application computation を区別できる",
+    "zkVM guest・MPC 上の prover computation・FHE 上の encrypted evaluation の実行場所を比較できる",
+    "public input・private witness・secret share・ciphertext・proof artifact の domain を追跡できる",
+    "correctness・soundness・privacy・binding・availability を別の end-to-end property として評価できる",
+    "operation が何を変えてよいか (licence) と、 どの node がそれを持ってよいか (policy) を別の段として扱える",
+    "architecture が届けると約束したものを、 licensed な変更と別に検証できる",
+    "fan-in node で classification・identity・その他の merge 規則を使い分けられる",
+    "primitive 間の serialization / field / key / statement mismatch を検出できる",
+    "primitive 単体が安全でも composition が安全とは限らないことを counterexample で示せる",
+    "複数の downstream error があるとき、 値が届く順で最初に破れた boundary を特定できる",
+    "policy と約束を書き換えない範囲で、 最小の変更で property を回復できる",
+    "trust domain の分離と通信量の予算を、 値ではなく配置についての boundary として扱える",
+    "use case から primitive 選定・公開情報・秘密情報・trust assumption・主要 cost を導ける",
+    "見たことのない deployment で同じ判断がすべて成立することを確かめられる"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.ac26-w6-stack-design.typed-dataflow",
+        "description": "source の premise と node の licence から、 各 edge が運ばなければならないものを伝播できる。"
+      },
+      {
+        "id": "lo.ac26-w6-stack-design.primitive-guarantee-scope",
+        "description": "primitive が何をどこまで保証するかを、 その assumption が満たされた場合に限って言える。"
+      },
+      {
+        "id": "lo.ac26-w6-stack-design.property-component-map",
+        "description": "各 end-to-end property を、 それを担う component / boundary へ対応づけられる。"
+      },
+      {
+        "id": "lo.ac26-w6-stack-design.boundary-validation",
+        "description": "licence・policy・obligation・trust・cost の 5 種の違反を、 別の失敗として検出し分類できる。"
+      },
+      {
+        "id": "lo.ac26-w6-stack-design.first-failure",
+        "description": "複数の症状のうち、 値が届く順で最初に contract を破った boundary を特定できる。"
+      },
+      {
+        "id": "lo.ac26-w6-stack-design.composition-counterexample",
+        "description": "すべての component check が通ったまま end-to-end property が破れる変更を構成できる。"
+      },
+      {
+        "id": "lo.ac26-w6-stack-design.minimal-repair",
+        "description": "policy と約束を保ったまま、 最小の変更で contract と実行可能性を回復できる。"
+      },
+      {
+        "id": "lo.ac26-w6-stack-design.architecture-selection",
+        "description": "use case から primitive の組合せ・公開範囲・trust assumption・主要 cost を導ける。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.stack-composition",
+        "description": "ZK・MPC・FHE が出会う場所と、 そこで壊れるもの。 部品がすべて正しくても composition は正しいとは限らない。"
+      },
+      {
+        "id": "concept.boundary-contract",
+        "description": "1 つの edge を越えるとき、 値の 5 つの属性がどう変わってよいかの規則。"
+      },
+      {
+        "id": "concept.composition-failure",
+        "description": "どの component も自分の test を通しているのに end-to-end property が失われている状態。"
+      },
+      {
+        "id": "concept.execution-layer",
+        "description": "計算が primitive の内側・primitive の上・host orchestration のどこで走るか。"
+      },
+      {
+        "id": "concept.authorised-operation",
+        "description": "operation が何を変えてよいかと、 どの node がそれを実行してよいかは別の段であること。"
+      },
+      {
+        "id": "concept.delivery-obligation",
+        "description": "architecture が「どの wire に何を届ける」と約束したもの。 licensed な変更が correct な変更とは限らない。"
+      },
+      {
+        "id": "concept.trust-domain-separation",
+        "description": "別々でなければならない trust domain と、 それらの間を渡る message の数。"
+      },
+      {
+        "id": "concept.minimal-repair",
+        "description": "要求を下げずに deployment を変えることで property を回復する、 最小の変更。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.component-tests-passing-means-the-system-holds",
+        "description": "部品の test が全部通ったのだから system は正しい、 という誤解。 部品は渡されたものの形しか見ていない。"
+      },
+      {
+        "id": "misconception.a-licensed-change-is-a-correct-change",
+        "description": "その操作が変えてよい属性なのだから変えてよい、 という誤解。 何に変えるべきかは別の問いである。"
+      },
+      {
+        "id": "misconception.authorising-the-offending-node-is-a-repair",
+        "description": "違反した node を承認すれば contract は満たされる、 という誤解。 それは deployment が合格基準を書き換えたということである。"
+      },
+      {
+        "id": "misconception.the-first-symptom-in-id-order-is-the-diagnosis",
+        "description": "並び順で最初の違反が原因だ、 という誤解。 「最初」は値が届く順である。"
+      },
+      {
+        "id": "misconception.every-property-depends-on-every-wire",
+        "description": "どの property もすべての wire に依存する、 という誤解。 常に何かを見つける監査は読んでいない。"
+      },
+      {
+        "id": "misconception.one-primitive-per-use-case",
+        "description": "1 つの use case には 1 つの primitive を選ぶ、 という誤解。 2 つ必要なところで 1 つ答えるのは選択でなく要求の取りこぼしである。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.ac26-w6-stack-design.dataflow",
+        "description": "各 edge が運ばなければならないものを伝播し、 primitive の保証が void になる node を言い当てた。"
+      },
+      {
+        "id": "assessment.ac26-w6-stack-design.properties",
+        "description": "5 つの property を担う edge を対応づけ、 どの wire も担わない property に空を返した。"
+      },
+      {
+        "id": "assessment.ac26-w6-stack-design.contracts",
+        "description": "licence・obligation・authorisation・trust・cost の 5 種の違反を、 正しい boundary class で報告した。"
+      },
+      {
+        "id": "assessment.ac26-w6-stack-design.diagnosis",
+        "description": "id 順でなく値が届く順で、 最初に破れた boundary を特定した。"
+      },
+      {
+        "id": "assessment.ac26-w6-stack-design.counterexample",
+        "description": "すべての component check を通したまま、 指定された property を落とす 1 箇所の変更を構成した。"
+      },
+      {
+        "id": "assessment.ac26-w6-stack-design.repair",
+        "description": "policy と約束を保ったまま、 最小の変更で contract と実行可能性の両方を回復した。"
+      },
+      {
+        "id": "assessment.ac26-w6-stack-design.selection",
+        "description": "3 つの問いを独立に答え、 2 つ必要な brief で 2 つ選び、 公開されるものと trust と cost を正しく並べた。"
+      },
+      {
+        "id": "assessment.ac26-w6-stack-design.transfer",
+        "description": "見たことのない field・statement・program・brief で 8 つすべてが成立した。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "lo.ac26-w6-stack-design.typed-dataflow"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "lo.ac26-w6-stack-design.primitive-guarantee-scope"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "lo.ac26-w6-stack-design.property-component-map"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "lo.ac26-w6-stack-design.boundary-validation"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "lo.ac26-w6-stack-design.first-failure"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "lo.ac26-w6-stack-design.composition-counterexample"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "lo.ac26-w6-stack-design.minimal-repair"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "lo.ac26-w6-stack-design.architecture-selection"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "concept.stack-composition"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "concept.boundary-contract"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "concept.composition-failure"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "concept.execution-layer"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "concept.authorised-operation"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "concept.delivery-obligation"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "concept.trust-domain-separation"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "concept.minimal-repair"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "concept.co-snark"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "concept.zkvm"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "concept.key-domain"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "concept.public-input-binding"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "concept.canonical-serialization"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "concept.share-reconstruction"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "concept.preprocessing-model"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "concept.artifact-flow"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "concept.primitive-selection"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "concept.threat-model"
+    },
+    {
+      "type": "requires",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "problem.ac26-w6-zkvm-witness-binding"
+    },
+    {
+      "type": "requires",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "problem.ac26-w6-cosnark-privacy"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w6-stack-design.typed-dataflow",
+      "target": "concept.boundary-contract"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w6-stack-design.primitive-guarantee-scope",
+      "target": "concept.execution-layer"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w6-stack-design.property-component-map",
+      "target": "concept.composition-failure"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w6-stack-design.boundary-validation",
+      "target": "concept.authorised-operation"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w6-stack-design.first-failure",
+      "target": "concept.composition-failure"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w6-stack-design.composition-counterexample",
+      "target": "concept.composition-failure"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w6-stack-design.minimal-repair",
+      "target": "concept.minimal-repair"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w6-stack-design.architecture-selection",
+      "target": "concept.stack-composition"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "misconception.component-tests-passing-means-the-system-holds"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "misconception.a-licensed-change-is-a-correct-change"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "misconception.authorising-the-offending-node-is-a-repair"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "misconception.the-first-symptom-in-id-order-is-the-diagnosis"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "misconception.every-property-depends-on-every-wire"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "misconception.one-primitive-per-use-case"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w6-stack-design",
+      "target": "problem.ac26-w7-capstone-design"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18118/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "dataflow",
+        "label": "何がその wire を渡っていて、 primitive の保証はどこで終わるか",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "dataflow-hint-1",
+            "content": "`carried` は 1 edge につき **pin されている attribute だけ**を返します。 node が変えてよい attribute は入りません — 入っていないことが「変えてよい」の意味そのものです。 pin される値は、 その node に届いた**宣言済みの**値から計算します: 前提から理想の flow を引き直すと、 1 度壊れた graph が壊れた地点より下流すべてで壊れて見えます。 入力が 2 本ある node は変換していません、 merge しています — classification は secret が勝ち、 identity は持ち越せるが発明はできない (候補の集合を返します)、 それ以外は持っている入力どうしが一致していなければなりません。 そして**何も届かない node には要求がありません**。 `underwrites` の側は、 primitive が受け取った値と produce した値の両方について vouch し、 どちらかの contract が破れていれば assumption が満たされていないので何も vouch しません。 `CONSUMES` の形を消費できない node は、 そもそも走っていません。",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "properties",
+        "label": "どの wire がどの property を担っているか",
+        "points": 30,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "properties-hint-1",
+            "content": "edge が property を担うのは、 その edge が**破れる**boundary class のどれかがその property を costs するときです。 破れないものが 2 つあります: node が変えてよい attribute (contract が何も言っていない) と、 上流が何も constrain していない edge (architecture の premise であって claim ではない)。 その architecture がその edge について約束したものも数えます。 5 つの key はすべて返します — どの wire も担わない property の答えは空の tuple であって、 key が無いことではありません。 それがどの property かは、 それを失うために何をしなければならないかを考えると出ます。 `PROPERTY_OF` の 1 つの class が 2 つ costs することがあり、 それが map を描く理由です。",
+            "penalty": 14
+          }
+        ]
+      },
+      {
+        "id": "contracts",
+        "label": "5 種類の違反があり、 それは 5 種類である",
+        "points": 50,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "contracts-hint-1",
+            "content": "licence は `CLASS_OF` が class を決めます。 obligation は `built[\"obligations\"]` が class を**宣言**します — 途中でされた変更と、 どこかに届くはずだったものが届かなかったことは別の失敗なので、 derive でなく宣言です。 authorisation は `AUTHORISED` の 4 つの transformation を、 policy に名前が無い node が持っているときで、 その node から**出ていくもの全部**に報告します。 trust は `distinctDomains` の 1 組が domain を共有しているときで、 両方の node から出ていくもの全部です。 cost は `maxCrossings` を超えた分で、 crossing を sorted した先頭からその数だけ飛ばした残りです。 1 つの間違った attribute が 2 件になることがあり、 それは正しい: 守られなかった約束と、 それを持ち越した次の node が破った licence は、 同じ 1 つの間違いについての 2 つの陳述です。 sorted、 重複なし、 `BOUNDARY_CLASSES` の外の名前は出しません。",
+            "penalty": 24
+          }
+        ]
+      },
+      {
+        "id": "diagnosis",
+        "label": "どれが最初に壊れたのか",
+        "points": 30,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "diagnosis-hint-1",
+            "content": "「最初」は値が edge に届く順であって、 id 順でも graph が並べた順でもありません。 3 つの deployment ではその 2 つが**違う edge**を指します。 edge が到達可能になるのは、 その source node が produce を終えてからです。 そして node は、 **待っていたものが全部届くまで**何も produce していません — 最初の入力で fan-in node を解放する walk は、 merge がそれが merge した値の 1 つより前に起きたと報告します。 source node は最初から produce 済みです。 健全な graph では `None` を返します。",
+            "penalty": 14
+          }
+        ]
+      },
+      {
+        "id": "counterexample",
+        "label": "どの部品も壊さずに 1 つ落とす",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "counterexample-hint-1",
+            "content": "返すのは architecture 全体です: 同じ node、 同じ edge、 同じ配線、 同じ policy、 同じ約束、 そして **1 箇所だけ**違うもの (1 edge の 1 attribute か、 1 node の trust domain か、 1 node の transformation)。 部品の自前の check は `CONSUMES` がすべてで、 届いたものの**形**しか読みません。 classification・key domain・identity・dialect は部品を素通りするので、 形を変えなければ local check は全部通ったままです。 渡される `built` は健全なので、 あとで at risk になっているものはあなたが入れたものです。 これは「何かを動かなくする」問題ではありません。 **どの部品も見ていなかった**ことを 1 手で示す問題です。",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "repair",
+        "label": "要求を下げずに戻す",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "repair-hint-1",
+            "content": "「壊れていない」は 2 つのことで、 1 つではありません: **すべての contract が成立している**ことと、 **すべての部品が渡されたものを実行できる**ことです。 13 個のうち 1 つは境界を 1 つも破らずに primitive に消費できない形を握らせるので、 前者だけで止まる repair はそこで落ちます。 policy と obligations は探索空間の外です — secret を開いた node を承認すれば contract は 1 手で満たされ、 それは repair ではなく deployment が自分で合格基準を書き換えたということです。 約束を消すのも同じ手口です。 渡される graph はどれも whole から 1 手なので、 2 手かかった repair は症状を直して原因を残したか、 原因を直して途中で別のものを壊しています。 何も壊れていなければ渡されたものをそのまま返します。",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "selection",
+        "label": "まだ誰も作っていないものに stack を選ぶ",
+        "points": 30,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "selection-hint-1",
+            "content": "3 つの問いを**独立に**答えます: 外の誰かが入力を見ずに納得しなければならないか (zk)、 複数の holder が自分たちのあいだで計算するか (mpc)、 外のサービスが計算して答えを見てはいけないか (fhe)。 どれも他を排除しません。 2 つ当てはまる brief で 1 つだけ答えるのは、 選択ではなく要求の取りこぼしです。 逆にどれも当てはまらない brief があり、 そこで primitive に手を伸ばすのは assumption をただで買うことです — `TRUST_OF` にその場合の assumption も載っています。 holder が 1 人の「自分たちのあいだで」は 1 人の計算で、 答えを見てよい外部サービスは何も隠す必要がありません。 `public` と `secret` は brief の 2 つの list を写したものではありません: primitive が brief に無いものを公開に足すことがあり、 公開されたものは同時に秘匿されていません。 cost は組合せの**いちばん高い**member のもので、 `COST_ORDER` は安い順です。",
+            "penalty": 14
+          }
+        ]
+      },
+      {
+        "id": "transfer",
+        "label": "見たことのない field・statement・program・brief で",
+        "points": 25,
+        "wrongAnswerPenalty": 15
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Every part is correct. What you built out of them is not",
+      "shortDescription": "A primitive can only check the **shape** of what it was handed. An MPC engine sees that something is a share and not that it was supposed to be secret. A zkVM says the guest ran and not that its journal is about the program you are holding. Every component's test passes and the architecture is broken. Diagnose that **composition failure** from nine angles.",
+      "description": "Week 6's last problem and the track's synthesis. The five before it each built one **working part**. This one is about the wiring between them.\n\nIt starts from one line:\n\n```text\na primitive can only check the shape of what it was handed\n```\n\nThat is not a criticism of primitives. It is what a primitive is. An MPC engine verifies that what arrived is a share; it has no way to know whether that share was supposed to be secret, which field the party on the other end thinks it is in, or whether the open policy ever approved reconstructing it. A zkVM verifies that the guest ran; it does not verify that its journal is about the program the reader is holding. An FHE evaluation is correct under whatever key it was given, and cannot tell you the key was the wrong one.\n\nSo **every component's test passes, and the architecture is broken anyway**.\n\n## Three levels of contract\n\n```text\nLICENCE      what a transformation may change\npolicy       which nodes this architecture allowed to hold such a transformation\nobligations  what it promised to deliver, and on which wire\n```\n\nThey are three levels rather than one. A licensed change is not a correct change — a key switch is authorised to change the key domain, and being authorised to change it is not being right about what to change it to. And authorising the box that broke the rule satisfies every contract in one move. That is not a repair; that is the deployment writing its own acceptance criteria.\n\n## Thirteen deployments\n\nEvery seed draws three sound architectures and thirteen deployments that differ from one of them in **exactly one place**. Eleven of them step on exactly one of the eleven boundary classes. The twelfth puts an operation on a node nobody approved to hold it. The thirteenth **breaks no contract at all** — every boundary holds and a primitive is left holding a shape it has no way to consume. It exists to say in one deployment that a contract is not a substitute for a design review.\n\n## On scoring\n\nThis problem ships 53 deliberately broken stacks, and **47 of them still answer the two questions anybody writes first** — does a sound architecture come back with nothing wrong with it, and does a broken one come back with something. `make reference-test` re-measures that count on every run. Both are stated outright in the problem text and nobody has to discover them. The rest is why there are checkpoints.\n\n## Why eight checkpoints and not nine\n\nIssue #244 asks for nine. The multi-verify cap is eight, enforced catalog-side in SCHEMA.json and again in the platform's `packages/problem-sdk`, and a ninth is **not truncated — the whole scoring object is dropped**, which would take the other eight down with it and leave the problem unscorable. So two of the nine share a checkpoint. Not because they were adjacent on the list: reading what each wire is carrying and knowing where the primitive's guarantee stops are the same act of reading the typed graph. There are still nine hidden phases; only `dataflow` runs two.",
+      "instructions": "## Start here\n\nNo cryptography runs. What runs is a **typed graph**.\n\n```text\na node   one computation, and where it runs\nan edge  one value crossing from one computation to the next, and what it is at that moment\n```\n\nA node carries `id`, `layer`, `domain` and `transformation`. An edge carries where it came from, where it goes, the **five things a value is at once**, and the dialect it is framed in.\n\n```text\nrepresentation  plaintext, secret-share, ciphertext, commitment, proof, journal\nclassification  public or secret\nalgebra         which field or modulus it lives in, when that applies\nkeyDomain       which key it is under, when that applies\nidentity        which program or statement it is about, when that applies\nserialization   the framing it was encoded in\n```\n\n## Three levels of contract\n\n```text\nLICENCE      what a transformation may change. A key-switch may change keyDomain. A carry may\n             change nothing at all\npolicy       which nodes this architecture allowed to hold such a transformation, in\n             built[\"policy\"]. Being licensed to open a secret is a fact about the operation;\n             being allowed to is a fact about who is running it\nobligations  what it promised to deliver, and on which wire, in built[\"obligations\"]\n```\n\n`built[\"policy\"]` holds two more: `distinctDomains`, groups of nodes that have to sit in different trust domains, and `maxCrossings`, how many edges may leave one domain for another. Both are statements about **where the computation was put** rather than about a value in flight.\n\n## What is supplied\n\n```python\nfrom fixtures.generate import (\n    ATTRIBUTES, AUTHORISED, BOUNDARY_CLASSES, CASES, CLASSIFICATIONS, CLASS_OF, CONSUMES,\n    COST_OF, COST_ORDER, LAYERS, LICENCE, PROPERTIES, PROPERTY_OF, REPRESENTATIONS,\n    SERIALIZATIONS, ALGEBRAS, KEY_DOMAINS, TRANSFORMATIONS, TRUST_OF,\n    edges_by_id, nodes_by_id, incoming, outgoing, graph, broken, use_cases,\n)\n```\n\n```text\ngraph(seed, case)      the sound architecture for one of the three cases\nbroken(seed, variant)  the same one with exactly one thing changed\nincoming/outgoing      the edges arriving at and leaving one node\nCLASS_OF               attribute -> the boundary class an unlicensed change to it belongs to\nPROPERTY_OF            boundary class -> the end-to-end properties breaking it costs\nCONSUMES               transformation -> the representations it is able to take in\n```\n\n## First move\n\n```bash\nmake inspect\n```\n\nIt prints the three architectures, their contracts, their policies, their promises, and the deployments you will diagnose. It does not print which contract each one breaks, where it broke first, what a repair costs, or which primitives a brief needs. Those are the checkpoints.\n\nThen edit `local/starter/stack.py`.\n\n## Goal\n\nClear eight independently scored checkpoints. **Every component in every graph below is correct.**",
+      "writeup": "## What a component cannot check\n\nAn MPC engine verifies that what arrived is a share. It cannot verify that the share was supposed to be secret, that the party on the other end works in the same field, or that the open policy ever approved reconstructing it. A zkVM verifies that the guest ran and not that its journal is about the program the reader is holding. An FHE evaluation is correct under whatever key it was given and cannot say the key was wrong.\n\nAll nine angles in this problem follow from that one line.\n\n## Keep the three levels apart\n\n`LICENCE` is a fact about an operation. `policy` is a fact about who may perform it. `obligations` is a fact about what was promised. That they are three separate facts is what the repair checkpoint is about: authorising the node that opened the secret satisfies every contract in one move, and it is not a repair. Deleting the obligation it failed to keep is the same trick.\n\n## Fan-in has its own rules\n\nA node with two inputs is not transforming a value. It is **merging** two.\n\n```text\nclassification  secret wins, because a function of a secret is a secret\nidentity        may be carried forward but never invented\neverything else every input that carries one has to agree\n```\n\n`zkvm-exploit` makes it concrete: a public statement and a secret witness meet at one node, and the value that leaves is secret and is about the statement. A contract that compared the output against each input separately would call that edge two violations — a model that cannot express the architecture it is modelling.\n\n## \"First\" is not id order\n\nA stack fails once and then keeps failing. Every downstream symptom is real, and a repair aimed at one of them does nothing. In three of the deployments, the first edge in the order the value arrives and the first edge in id order are **different edges**. A solution that leans on the coincidence is a solution to a smaller problem.\n\n## A counterexample is not \"break something\"\n\nA component's own check is the whole of `CONSUMES`: it reads the **shape** of what arrived and nothing else. Classification, key domain, identity and dialect all travel through unread. So one change is enough to lose an end-to-end property **with every component still content**. A counterexample here is not that something stopped working. It is that nothing was ever looking.\n\n## The fifth property\n\nThe property map returns five keys. One of them is carried by no wire in any of the three architectures, because nothing you can do to a value in flight costs it — losing it means putting the computation somewhere else. The empty tuple is its answer. **An audit that always finds something has not read anything.**\n\n## The deployment that breaks no contract\n\nOne of the thirteen has every boundary holding and a primitive holding a shape it has no way to consume. Nothing unlicensed was changed, no promise was broken, and it does not run. That is why the repair checkpoint asks for two things separately: every contract holding, and every component able to run what it was handed. A repair that stops at the first has made a contract into a substitute for a design review.\n\n## Measured\n\nThis problem ships 53 deliberately broken stacks, and **47 of them still get the easy two right** — nothing wrong with a sound architecture, something wrong with a broken one. `make reference-test` re-measures it on every run. Both categories are written out in the problem text; nobody has to discover them.\n\n## What the suite proves, and what it does not\n\nIt proves that these eight checkpoints catch the 53 defects shipped with the problem, that the reference clears all of them, and that the shipped starter clears none. It does **not** prove that the model has no other hole.\n\n## Toy versus production\n\nEight or nine nodes, seven to nine edges, five attributes, eleven boundary classes. A real stack has hundreds of nodes, an attribute for every parameter of every proof system and ciphertext scheme in it, and as many boundary classes as that deployment bothered to write down. The claim is that boundary contracts can be written as exact rules, not that the ones written here are complete.\n\n## Not in scope\n\nActually running MPC, a zkVM or FHE; the security proof of any specific protocol; the soundness of a proof system; production key management; network-level availability.",
+      "learningGoals": [
+        "Tell a primitive's implementation apart from the application computation running on top of it",
+        "Compare where a zkVM guest, a prover computation over MPC and an encrypted evaluation actually run",
+        "Track the domain of a public input, a private witness, a secret share, a ciphertext and a proof artifact",
+        "Judge correctness, soundness, privacy, binding and availability as separate end-to-end properties",
+        "Keep what an operation may change (licence) apart from which node may hold it (policy)",
+        "Check what an architecture promised to deliver separately from what it was licensed to change",
+        "Apply the merge rules for classification, identity and everything else at a fan-in node",
+        "Detect serialization, field, key and statement mismatches between primitives",
+        "Show with a counterexample that safe primitives do not make a safe composition",
+        "Find the boundary that broke first in the order the value arrives, not the first symptom",
+        "Recover a property with the fewest changes, without editing the policy or the promises",
+        "Treat trust-domain separation and a communication budget as boundaries about placement rather than about values",
+        "Derive primitives, public information, secrets, trust assumptions and dominant cost from a use case",
+        "Confirm every one of those judgements on a deployment you have not seen"
+      ],
+      "checks": [
+        {
+          "id": "dataflow",
+          "label": "What is crossing that wire, and where the primitive's guarantee stops",
+          "hints": [
+            {
+              "id": "dataflow-hint-1",
+              "content": "`carried` returns only the attributes an edge is **pinned** on. An attribute the node may change is absent, and being absent is exactly what \"may change\" means. Compute the pinned value from what was **declared** upstream rather than from a recomputed ideal flow: propagating the premises forward makes a graph that broke once look broken everywhere downstream of the break. A node with two inputs is not transforming, it is merging — secret wins on classification, an identity may be carried but not invented (return the set of candidates), and everything else has to agree. And a node with nothing arriving has no requirement at all. On the `underwrites` side: a primitive vouches for the value it received and the value it produced, so a contract broken on either means its assumption was not the one it was given and it vouches for nothing. A node handed a shape `CONSUMES` says it cannot take never ran."
+            }
+          ]
+        },
+        {
+          "id": "properties",
+          "label": "Which wire carries which property",
+          "hints": [
+            {
+              "id": "properties-hint-1",
+              "content": "An edge carries a property when some boundary class it can **break** costs that property. Two things it cannot break: an attribute the node is licensed to change (the contract says nothing there) and an edge nothing upstream constrained (the architecture's premise, not one of its claims). Whatever the architecture promised about that edge counts too. Return all five keys — the property no wire carries has an empty tuple for an answer, not a missing key, and working out which one falls out of asking what you would have to do to lose it. One class in `PROPERTY_OF` can cost two properties, which is the whole reason to draw the map."
+            }
+          ]
+        },
+        {
+          "id": "contracts",
+          "label": "There are five kinds of breach, and they really are five",
+          "hints": [
+            {
+              "id": "contracts-hint-1",
+              "content": "`CLASS_OF` names the class for a licence breach. `built[\"obligations\"]` **declares** the class for a broken promise, declared rather than derived because a change made on the way is not the same failure as something that never arrived. An authorisation breach is one of the four transformations in `AUTHORISED` on a node the policy does not name, reported against **everything that leaves** it. A trust breach is one `distinctDomains` group sharing a domain, reported against everything leaving both nodes. A cost breach is the excess past `maxCrossings` — the crossings, sorted, past that many. One wrong attribute can produce two entries and should: the promise it failed to keep and the licence the next node down broke carrying it forward are two statements about one mistake. Sorted, no duplicates, no name outside `BOUNDARY_CLASSES`."
+            }
+          ]
+        },
+        {
+          "id": "diagnosis",
+          "label": "Which one broke first",
+          "hints": [
+            {
+              "id": "diagnosis-hint-1",
+              "content": "\"First\" is the order the value reaches the edges, not id order and not the order the graph listed them — in three of the deployments those point at **different edges**. An edge becomes reachable once its source node has finished producing. And a node has produced nothing until **everything it was waiting for** has arrived: a walk that releases a fan-in node on its first input reports the merge as happening before one of the values it merged. Source nodes are produced to begin with. A sound graph answers `None`."
+            }
+          ]
+        },
+        {
+          "id": "counterexample",
+          "label": "Lose one without breaking a single component",
+          "hints": [
+            {
+              "id": "counterexample-hint-1",
+              "content": "Return a whole architecture: same nodes, same edges, same wires, same policy, same promises, and exactly **one** thing different — one attribute of one edge, one node's trust domain, or one node's transformation. A component's own check is the whole of `CONSUMES` and reads only the **shape** of what arrived, so anything that leaves the shapes alone leaves every local check passing: classification, key domain, identity and dialect all travel through unread. The `built` you are handed is sound, so anything at risk afterwards is something you introduced. This is not a \"make something stop working\" problem. It is a one-move demonstration that nothing was ever looking."
+            }
+          ]
+        },
+        {
+          "id": "repair",
+          "label": "Put it back without lowering the requirement",
+          "hints": [
+            {
+              "id": "repair-hint-1",
+              "content": "\"Nothing wrong\" is two things and not one: every contract holds, **and** every component can run what it was handed. One of the thirteen breaks no boundary at all while leaving a primitive holding a shape it cannot consume, so a repair that stops at the first condition fails there. The policy and the obligations are out of the search space — authorising the node that opened the secret satisfies every contract in one move, and that is the deployment writing its own acceptance criteria. Deleting the promise is the same trick. Every graph you are handed is one change from whole, so a repair costing two has fixed a symptom and left the cause, or fixed the cause and broken something on the way past. If nothing is wrong, return what you were given."
+            }
+          ]
+        },
+        {
+          "id": "selection",
+          "label": "Choose a stack for something nobody has built yet",
+          "hints": [
+            {
+              "id": "selection-hint-1",
+              "content": "Three questions, answered **independently**: does somebody outside have to be convinced without seeing the inputs (zk), do several holders compute it between themselves (mpc), does an outside service compute it and not get to see the answer (fhe). None of them excludes another, and answering with one name where two apply has dropped a requirement rather than chosen between them. Some briefs need none of the three, and reaching for a primitive there buys an assumption for nothing — `TRUST_OF` names the assumption that case carries instead. One holder \"computing between themselves\" is one party computing, and an outside service that may see the answer has nothing to hide it from. `public` and `secret` are not the brief's two lists copied across: a primitive can add something to what a design publishes, and anything published is not also kept. The cost of a combination is its **most expensive** member's, and `COST_ORDER` is cheapest first."
+            }
+          ]
+        },
+        {
+          "id": "transfer",
+          "label": "A field, a statement, a program and a brief you have not seen"
+        }
+      ]
+    }
+  }
+}
