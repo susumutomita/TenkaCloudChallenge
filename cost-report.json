@@ -807,6 +807,38 @@
       ]
     },
     {
+      "id": "stackstack-defend",
+      "category": "Challenge",
+      "region": "ap-northeast-1",
+      "estimatedSessionMinutes": 60,
+      "perHourUsd": 0,
+      "perSessionUsd": 0,
+      "ifLeftRunningUsd": {
+        "oneDay": 0,
+        "oneWeek": 0,
+        "oneMonth": 0
+      },
+      "freeTierEligible": true,
+      "alwaysOnResources": [],
+      "billable": []
+    },
+    {
+      "id": "stackstack-observability",
+      "category": "Challenge",
+      "region": "ap-northeast-1",
+      "estimatedSessionMinutes": 45,
+      "perHourUsd": 0,
+      "perSessionUsd": 0,
+      "ifLeftRunningUsd": {
+        "oneDay": 0,
+        "oneWeek": 0,
+        "oneMonth": 0
+      },
+      "freeTierEligible": true,
+      "alwaysOnResources": [],
+      "billable": []
+    },
+    {
       "id": "stackstack-onboarding",
       "category": "Challenge",
       "region": "ap-northeast-1",
@@ -823,7 +855,55 @@
       "billable": []
     },
     {
+      "id": "stackstack-safe-exposure",
+      "category": "Challenge",
+      "region": "ap-northeast-1",
+      "estimatedSessionMinutes": 75,
+      "perHourUsd": 0,
+      "perSessionUsd": 0,
+      "ifLeftRunningUsd": {
+        "oneDay": 0,
+        "oneWeek": 0,
+        "oneMonth": 0
+      },
+      "freeTierEligible": true,
+      "alwaysOnResources": [],
+      "billable": []
+    },
+    {
+      "id": "stackstack-secrets",
+      "category": "Challenge",
+      "region": "ap-northeast-1",
+      "estimatedSessionMinutes": 40,
+      "perHourUsd": 0,
+      "perSessionUsd": 0,
+      "ifLeftRunningUsd": {
+        "oneDay": 0,
+        "oneWeek": 0,
+        "oneMonth": 0
+      },
+      "freeTierEligible": true,
+      "alwaysOnResources": [],
+      "billable": []
+    },
+    {
       "id": "stackstack-ship",
+      "category": "Challenge",
+      "region": "ap-northeast-1",
+      "estimatedSessionMinutes": 45,
+      "perHourUsd": 0,
+      "perSessionUsd": 0,
+      "ifLeftRunningUsd": {
+        "oneDay": 0,
+        "oneWeek": 0,
+        "oneMonth": 0
+      },
+      "freeTierEligible": true,
+      "alwaysOnResources": [],
+      "billable": []
+    },
+    {
+      "id": "stackstack-vibe-build",
       "category": "Challenge",
       "region": "ap-northeast-1",
       "estimatedSessionMinutes": 45,

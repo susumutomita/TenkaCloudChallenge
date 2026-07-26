@@ -1907,6 +1907,60 @@
       }
     },
     {
+      "id": "stackstack-defend",
+      "name": "止めずに直す",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "45〜60 分",
+      "shortDescription": "天下クラウド株式会社、 入社 3 日目の夕方。 社内掲示板は無事に開き、 部署ごとの 「下書き」 機能まで載った。 前任の SRE が辞める直前に足した機能で、 引き継ぎ資料に残っているのはひと言だけ ── 「下書きの公開はモデレーター承認 (4-eyes)。 本人が自分で公開してはいけない」。\n\nさっき広報から連絡があった。 まだ社内の誰にも見せていないはずの CTO の下書きの中身を、 社外の知人が口にしたらしい。 CTO は淡々としている。 「止めるのは簡単だ。 でも止めたら、 明日の全社発表の下書きを誰も書けない。 動かしたまま直して。 それと、 直ったかどうかは君の報告じゃなく、 こっちで測る」\n\n手元の調査用アカウントで実際に何が読めてしまうのかを確かめ、 原因をアプリ側で直し、 正規の利用者を 1 人も止めないまま、 測られ続けている中でその状態を保つ。",
+      "tags": [
+        "stackstack",
+        "local-play",
+        "container",
+        "web-app",
+        "access-control",
+        "incident-response",
+        "defense"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "stackstack-observability",
+      "name": "黙っているアプリに口を割らせる",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "45 分",
+      "shortDescription": "「掲示板、 書いたのに後から探せないって声が来てる」。 月曜の朝、 CTO から飛んでくるのはその一行だけだ。\n\n板を開けば投稿はある。 ダッシュボードは緑。 死活確認は 200 を返し続けていて、 監視は一度も鳴っていない。 それでも社内チャットには 「書いたはずのものが出てこない」 が三件並んでいる。 前任の SRE は 「板から下流のアーカイブに流す relay を今朝入れました。 ログはうるさいので出さないようにしてあります」 と書き置きを残して、 もういない。\n\nアプリのログを開くと、 起動と投稿受付の行はある。 だが 「アーカイブに届かなかった投稿」 については 1 行も無い。 出ていないのは壊れていないからではない。 CTO 曰く: 「原因が分からないなら、 まず分かるようにして。 直す順番はそれから決める」。",
+      "tags": [
+        "stackstack",
+        "observability",
+        "logging",
+        "metrics",
+        "health-check",
+        "incident-response",
+        "local-play",
+        "container",
+        "web-app"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "stackstack-onboarding",
       "name": "初日の 15 分",
       "category": "Challenge",
@@ -1919,6 +1973,60 @@
         "onboarding",
         "stackstack",
         "getting-started",
+        "local-play",
+        "container",
+        "web-app"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "stackstack-safe-exposure",
+      "name": "誰に見せるかを決める",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "60〜75 分",
+      "shortDescription": "入社三日目。 昨日あなたが外から見えるようにした掲示板は、 今日から取引先にも配られる。\n\n出社したら CTO が机の横に立っている。 「星野デザインにも同じ板を出して。 下書き機能ごと。 管理画面と、 各自の下書きは外に出さないで。 それと監視は止めないこと ── 『安全にするために全部閉じました』 は無しね。 それをやった会社を知ってる」\n\n前任の SRE が残したファイルの中に `access.json` がある。 中身は `defaultEffect: \"allow\"` と、 ほぼ空のルール一覧。 引き継ぎメモには 「あとで締めます」 とだけ書いてあって、 その人はもういない。 いま誰が何に手が届く状態なのかは、 誰も書き残していない。",
+      "tags": [
+        "stackstack",
+        "authorization",
+        "authentication",
+        "multi-tenant",
+        "access-control",
+        "local-play",
+        "container",
+        "web-app"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "stackstack-secrets",
+      "name": "板に載ってしまった鍵",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "40 分",
+      "shortDescription": "入社 3 日目。 掲示板は先週から社内に公開されていて、 夜間ダイジェストが毎晩まわっている。 運用チームからの要望はひとつだけ ── 「動いているものは、 止めないでほしい」。\n\nその板の 2 番目の投稿を、 今朝はじめて最後まで読んだ。 前任の SRE が引き継ぎのつもりで貼っていったもので、 運用まわりの入口と、 そこに出す鍵がそのまま書いてある。 社内の誰でも読める。 CTO の反応は短かった ── 「その投稿は消せないよ。 消したところで何も変わらないし」。\n\n板から消す手段は無い。 消せないものを前提に、 何を変えれば実害が消えるのか。 それが今日の 40 分。",
+      "tags": [
+        "stackstack",
+        "secrets",
+        "credentials",
+        "least-privilege",
+        "key-rotation",
         "local-play",
         "container",
         "web-app"
@@ -1946,6 +2054,34 @@
         "release",
         "secrets",
         "health-check",
+        "local-play",
+        "container",
+        "web-app"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "stackstack-vibe-build",
+      "name": "AI が書いた検索を、 出荷できる状態にする",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "45 分",
+      "shortDescription": "天下クラウド株式会社、 入社 3 日目。 昨日ようやく外から見えるところまで持っていった社内掲示板に、 CTO から次の一手が飛んでくる。\n\n「過去ログのインポートが終わったので検索を付けてください。 生成 AI に書かせて構いません、 そのほうが速いなら。 要件は仕様書にしてアプリの中に置いてあります」\n\n書くのは 1 ファイル。 貼るのは 30 秒。 残りの 44 分は、 貼ったものが本当に要件どおりかを確かめる時間だ。",
+      "tags": [
+        "stackstack",
+        "ai-assisted",
+        "code-review",
+        "requirements",
+        "input-validation",
+        "output-encoding",
         "local-play",
         "container",
         "web-app"
