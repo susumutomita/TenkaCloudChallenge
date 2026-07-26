@@ -1807,6 +1807,31 @@
       }
     },
     {
+      "id": "stackstack-onboarding",
+      "name": "初日の 15 分",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 1,
+      "estimatedDuration": "15 分",
+      "shortDescription": "天下クラウド株式会社、 入社初日の午後。 前任の SRE はもういない。 AI Builder が作った社内掲示板が、 まだ誰にも投稿されないまま置いてある。\n\nCTO 曰く: 「本番の話は明日から。 今日はその板が動くところまで見ておいて。 見て、 ログを読んで、 設定をひとつ直して、 実際に書き込めるところまで」\n\n難しいことは何もない。 これは、 これから使う道具一式 ── ポータル、 アプリ、 ログ、 設定ファイル、 採点 ── を一周する 15 分だ。",
+      "tags": [
+        "onboarding",
+        "stackstack",
+        "getting-started",
+        "local-play",
+        "container",
+        "web-app"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "wix-exposure-audit",
       "name": "公開設定の置き土産",
       "category": "Challenge",
