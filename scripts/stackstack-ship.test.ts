@@ -368,6 +368,38 @@ describe("stackstack-ship, one full pass", () => {
     expect((await app.answer("release-receipt", "")).body.correct).toBe(false);
   });
 
+  it("should not put a receipt on a release the pipeline refused", async () => {
+    // Submitting a guess only proves guessing does not work. What makes this
+    // checkpoint mean something is that a receipt exists *because* a promote
+    // completed — and nothing above pins that. A one-line regression that
+    // stamped a receipt onto the failure path would award 40 points for a
+    // refused deploy, and every assertion in this file would stay green.
+    const listed = (await app.get("/shipyard/releases")).body as {
+      releases: Array<{ id: string; state: string; receipt: string | null }>;
+    };
+    expect(listed.releases.length).toBeGreaterThan(0);
+    for (const release of listed.releases) {
+      if (release.state !== "live" && release.state !== "superseded") {
+        expect(release.receipt).toBeNull();
+      }
+    }
+  });
+
+  it("should refuse every receipt the plane is actually exposing, until one is earned", async () => {
+    // Harvested from the app rather than invented, so this cannot go stale: any
+    // receipt a participant could read off the release plane right now must be
+    // refused while no promote has completed.
+    const listed = (await app.get("/shipyard/releases")).body as {
+      releases: Array<{ id: string; state: string; receipt: string | null }>;
+    };
+    const exposed = listed.releases
+      .map((release) => release.receipt)
+      .filter((receipt): receipt is string => typeof receipt === "string" && receipt !== "");
+    for (const receipt of exposed) {
+      expect((await app.answer("release-receipt", receipt)).body.correct).toBe(false);
+    }
+  });
+
   it("should promote a release once the manifest carries what the app needs", async () => {
     // A pasted copy of the key: the shortcut a participant can actually take,
     // and it genuinely works right now. That is the whole point of it.
