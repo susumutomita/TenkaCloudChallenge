@@ -100,6 +100,10 @@ jobs:
       - name: Check simulator workload
         run: bun run validate:simulator-workload
 
+      # Cross-repository capability coverage needs an immutable Simulator
+      # checkout and is enforced by simulator-compatibility.yml. Do not replace
+      # that pinned proof with a moving branch or a hidden clone in this job.
+
       # index.json is the platform-read catalog, regenerated from every
       # metadata.json by scripts/build-index.ts. --check fails if it is stale
       # (= a problem was added/edited without rerunning the generator), so a
@@ -118,6 +122,9 @@ jobs:
         run: |
           bun run cost:check \
             || { echo "::error::cost-report.json is stale. Run 'bun run reindex' and commit (or 'bun run setup' once to enable the auto-reindex hook)."; exit 1; }
+
+      - name: Check course references do not drift
+        run: bun run course:drift
 
   validate:
     # One stable name in front of the matrix. `if: always()` is what makes this
