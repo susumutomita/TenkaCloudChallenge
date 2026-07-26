@@ -828,13 +828,32 @@ describe("stackstack-secrets, one full pass", () => {
   it("should fail every checkpoint on the untouched starter, on real values", async () => {
     // The whole-problem version of "no vacuous pass", with the true answers
     // rather than guesses: nothing about the shipped state earns anything.
+    const solvedState = await app.posture();
     const truths: Record<string, string> = {
       "leak-live": witness,
       "key-rotated": newFingerprint,
       "key-revoked": receipt,
-      "least-privilege": (await other.posture()).tokens.least_privilege ?? "",
-      "sign-off": (await app.posture()).readyToken as string,
+      // From `solved`, like every other row. This read `other.posture()` — the
+      // untouched instance, where the gate is false and the token is therefore
+      // null, so `?? ""` handed the loop an empty string. The checkpoint refused
+      // it for being empty rather than for being another instance's receipt, so
+      // the one row whose gate is cheapest to raise was the row testing nothing.
+      "least-privilege": solvedState.tokens.least_privilege as string,
+      "sign-off": solvedState.readyToken as string,
     };
+    // The map is written by hand and the loop below reads it by metadata's ids.
+    // Let those drift and `truths[check.id]` is `undefined`, the checkpoint
+    // refuses it for being nothing rather than for being another instance's
+    // answer, and this goes green while testing none of what it names —
+    // verified by deleting an entry, which left it passing. So the keys are
+    // pinned to the ids and every value has to be a real one.
+    expect(Object.keys(truths).sort()).toEqual(
+      metadata.scoring.checks.map((check) => check.id).sort(),
+    );
+    for (const [id, truth] of Object.entries(truths)) {
+      expect(truth, `${id} has no true answer to offer`).toBeTypeOf("string");
+      expect(truth.length, `${id}'s true answer is empty`).toBeGreaterThan(0);
+    }
     for (const check of metadata.scoring.checks) {
       expect(await other.correct(check.id, truths[check.id] as string)).toBe(false);
       expect(await other.correct(check.id, (await other.policy()).digest)).toBe(false);
