@@ -1315,8 +1315,34 @@ describe("stackstack-safe-exposure checkpoints", () => {
     );
   }
 
+  /**
+   * The receipts the app emits while the reference policy is in place.
+   *
+   * `everythingOnOffer()` alone is not enough to state the property. Under a
+   * shortcut that closes every gate the app emits nothing, `offered` comes back
+   * empty, and the loop below then runs zero times and asserts nothing at all —
+   * which is what the source-address case was doing: green, checking nothing.
+   *
+   * A receipt is bound to the state that produced it (see "should stop
+   * accepting a sign-off captured while green"), so these are the submissions a
+   * participant who reached green and then broke something would actually have
+   * in hand, and refusing them is the property each case means to claim. They
+   * are non-empty by construction, so the loop can no longer be vacuous.
+   */
+  let greenReceipts: string[] = [];
+
+  beforeAll(async () => {
+    app.writePolicy(referencePolicy());
+    const green = await app.posture();
+    expect(green.ready).toBe(true);
+    greenReceipts = [...Object.values(green.tokens), green.readyToken].filter(
+      (value): value is string => typeof value === "string",
+    );
+    expect(greenReceipts.length).toBeGreaterThan(0);
+  });
+
   async function expectRefused(checkpoints: string[]) {
-    const offered = await everythingOnOffer();
+    const offered = [...new Set([...greenReceipts, ...(await everythingOnOffer())])];
     for (const checkpoint of checkpoints) {
       for (const value of offered) {
         expect(`${checkpoint}: ${await app.correct(checkpoint, value)}`).toBe(`${checkpoint}: false`);
