@@ -590,6 +590,16 @@ class Disclosure:
         )
 
 
+#: The four participant-visible channels, in the order a `Disclosure` holds them. A leak is a
+#: (channel, field name) pair, because the same name is a different disclosure depending on
+#: where it comes out.
+CHANNELS = ("artifact", "log", "metrics", "error")
+
+#: The capabilities one authorized multiplication reaches on its own. `beaver_product` opens
+#: `d` and `e`, and that is the whole of it -- so anything else in `reached()` is something the
+#: prover built on top decided to do.
+PROTOCOL_CAPABILITIES = ("open",)
+
 #: Every field name a prover may put in front of the participant, whichever channel it comes
 #: out of. `A`, `B` and `C` are on it **as sharings**; the same names carrying an integer are
 #: not the same disclosure, which is the distinction `leakage_audit` has to make.
@@ -742,6 +752,85 @@ def clean_artifact(row: dict, proof: dict) -> dict:
         "tripleId": proof["tripleId"],
         "roundId": proof["roundId"],
     }
+
+
+# ---------------------------------------------------------------------------
+# The catalog a data-classification policy is written against
+# ---------------------------------------------------------------------------
+
+#: Where a value came from. `runtime` is bookkeeping the instrument produced itself.
+ORIGINS = ("relation", "witness", "triple", "runtime")
+
+#: What a value *is*. A `share` is one party's piece; a `sharing` is one piece per party; an
+#: `element` is a field element in the clear; `metadata` names the statement rather than
+#: carrying any of it.
+FORMS = ("metadata", "element", "share", "sharing")
+
+#: Who ends up holding it. `party` means it never left the party that computed it.
+AUDIENCES = ("everyone", "participant", "party", "verifier")
+
+#: One catalog entry per shape of value a co-SNARK prover run produces, as
+#: `(origin, form, opening, audience)`. `opening` is `none`, `authorized` (the
+#: multiplication's own masked value), `undeclared` (masked, but published in a round the
+#: relation never declared) or `unmasked` (published in the right round with nothing hiding
+#: it). The last two are the reason classification is a policy and not a lookup.
+_CATALOG_KINDS = (
+    ("relation", "element", "none", "everyone"),
+    ("relation", "metadata", "none", "everyone"),
+    ("runtime", "metadata", "none", "everyone"),
+    ("witness", "share", "none", "party"),
+    ("triple", "share", "none", "party"),
+    ("witness", "element", "authorized", "everyone"),
+    ("witness", "element", "authorized", "everyone"),
+    ("triple", "element", "none", "party"),
+    ("witness", "element", "none", "party"),
+    ("witness", "element", "undeclared", "everyone"),
+    ("witness", "element", "unmasked", "everyone"),
+    ("witness", "sharing", "none", "participant"),
+    ("witness", "sharing", "none", "participant"),
+    ("triple", "sharing", "none", "party"),
+    ("witness", "element", "none", "verifier"),
+    ("witness", "element", "none", "verifier"),
+)
+
+
+def value_catalog(seed: str, label: str, row: dict) -> tuple[dict, ...]:
+    """Every kind of value one run produces, in a seed-derived order and under opaque ids.
+
+    An entry describes a value without naming it, so the answer comes from the descriptors
+    rather than from recognizing `w` or `x`:
+
+    ```text
+    id        opaque, and re-drawn per seed
+    origin    relation / witness / triple / runtime
+    form      metadata / element / share / sharing
+    opened    None, or {"roundId", "maskedBy"} -- the same shape `openings()` records use
+    audience  everyone / participant / party / verifier
+    ```
+    """
+    declared = round_id_for(row)
+    mask_id = f"T-{label}x#0"
+    openings = {
+        "none": None,
+        "authorized": {"roundId": declared, "maskedBy": (mask_id,)},
+        "undeclared": {"roundId": f"{row['relationId']}:recheck", "maskedBy": (mask_id,)},
+        "unmasked": {"roundId": declared, "maskedBy": ()},
+    }
+    drawn = [
+        {
+            "origin": origin,
+            "form": form,
+            "opened": None if openings[opening] is None else dict(openings[opening]),
+            "audience": audience,
+        }
+        for origin, form, opening, audience in _CATALOG_KINDS
+    ]
+    s = _stream(seed, f"catalog:{label}")
+    order = sorted(range(len(drawn)), key=lambda index: (s[(3 * index) % 500], index))
+    # The id is assigned after the shuffle, so it says nothing about which kind this is.
+    return tuple(
+        {"id": f"v{position:02d}", **drawn[index]} for position, index in enumerate(order)
+    )
 
 
 def health_token(seed: str) -> str:

@@ -243,6 +243,18 @@ GROUND_TRUTH = {
     },
 }
 
+#: The same four facts for the specimens that only misbehave when the input is malformed.
+#: `GROUND_TRUTH` above is the honest path, so an audit that never probes the error path
+#: reads S6 as spotless -- which it is, right up until it is not.
+MALFORMED_TRUTH = {
+    "S6": {
+        "capabilities": ("peek",),
+        "unauthorized": 0,
+        "disclosed": (("error", "shares"),),
+        "recoverable": "A",
+    },
+}
+
 #: S6 is only defective on the error path, so the audit has to feed it one. A row whose
 #: declared width disagrees with its coefficient vector is enough.
-MALFORMED_SPECIMENS = ("S6",)
+MALFORMED_SPECIMENS = tuple(MALFORMED_TRUTH)
