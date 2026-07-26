@@ -1,5 +1,6 @@
 import { globSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "bun:test";
 
 /**
@@ -28,7 +29,7 @@ import { describe, expect, it } from "bun:test";
  * scope" that this sits underneath.
  */
 
-const REPO_ROOT = new URL("..", import.meta.url).pathname;
+const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 
 const DOCKERFILES = globSync("challenges/ac26-*/local/Dockerfile", { cwd: REPO_ROOT }).sort();
 
