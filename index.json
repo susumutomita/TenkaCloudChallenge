@@ -1959,6 +1959,34 @@
       }
     },
     {
+      "id": "stackstack-vibe-build",
+      "name": "AI が書いた検索を、 出荷できる状態にする",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "45 分",
+      "shortDescription": "天下クラウド株式会社、 入社 3 日目。 昨日ようやく外から見えるところまで持っていった社内掲示板に、 CTO から次の一手が飛んでくる。\n\n「過去ログのインポートが終わったので検索を付けてください。 生成 AI に書かせて構いません、 そのほうが速いなら。 要件は仕様書にしてアプリの中に置いてあります」\n\n書くのは 1 ファイル。 貼るのは 30 秒。 残りの 44 分は、 貼ったものが本当に要件どおりかを確かめる時間だ。",
+      "tags": [
+        "stackstack",
+        "ai-assisted",
+        "code-review",
+        "requirements",
+        "input-validation",
+        "output-encoding",
+        "local-play",
+        "container",
+        "web-app"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "wix-exposure-audit",
       "name": "公開設定の置き土産",
       "category": "Challenge",
