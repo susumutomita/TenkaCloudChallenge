@@ -32,7 +32,7 @@ challenges/<id>/
     ├── show.py            `make inspect`
     ├── mutation.py        proves the hidden tests can fail a wrong answer
     ├── starter/           the only thing the learner edits
-    ├── reference/         inside the image, not bind-mounted (see Assurance scope)
+    ├── reference/         author stage only, never bind-mounted (see Assurance scope)
     ├── fixtures/          everything derived from FLAG_SEED
     ├── tests/
     │   ├── public/        the learner reads these
@@ -61,10 +61,12 @@ Three naming traps, all hit while building the reference problem:
 - **Do not name a top-level module `inspect.py`.** It shadows the standard library's `inspect`,
   and `dataclasses` imports it — the failure surfaces as a circular-import error somewhere
   unrelated. The template uses `show.py`.
-- **`reference/` ships inside the image** (the mutation suite needs it) **but is not bind-mounted**.
-  Mount `starter/` read-only and nothing else, or the answer lands in the learner's checkout as a
-  file they did not go looking for. That is the whole of what the arrangement buys — it is not
-  confidentiality; see [Assurance scope](#assurance-scope).
+- **`reference/` ships only in the `author` stage** (the mutation suite needs it); `make build` and
+  the compose `target:` both select `participant`. Mount `starter/` read-only and nothing else, so
+  the answer reaches neither the image the learner runs nor any bind mount. It is still in the
+  repository they cloned — this arrangement cannot and does not remove it from their checkout.
+  That is the whole of what it buys; it is not confidentiality. See
+  [Assurance scope](#assurance-scope).
 - **A scaffolded problem is a full copy, not a link.** Fixes made to the template after you
   scaffolded do not reach you. The macOS `RLIMIT_AS` fix had to be applied by hand to four
   problems for exactly this reason; `scripts/verifier-rlimit-guard.test.ts` exists to catch it.
@@ -105,9 +107,22 @@ These are properties of the verifier against a submission, and they hold:
 
 State these plainly rather than implying otherwise:
 
-- **`reference/` and `tests/hidden/` are not confidential.** They ship inside the image the
-  participant builds and runs. Not bind-mounting them keeps them out of the git checkout — it does
-  not keep them from someone who wants to look. "Not mounted" is tidiness, not a boundary.
+- **`tests/hidden/` is not confidential.** It ships inside the image the participant builds and
+  runs. Not bind-mounting it keeps it out of the git checkout — it does not keep it from someone
+  who wants to look. "Not mounted" is tidiness, not a boundary.
+- **`reference/` no longer ships in the image a learner runs**, which is a different and weaker
+  claim than confidentiality. `make build` builds the `participant` stage, which carries the
+  fixtures, tests, verifier and starter; `reference/` and `mutation.py` are added by the `author`
+  stage that `make reference-test` builds. Nothing on the participant path loads `reference/`, so
+  the split costs the learner nothing. It is **misdelivery prevention**: the answer is no longer
+  sitting in `/problem/reference/` on their machine by default. They can still build the author
+  stage, and the source is in this repository either way.
+  `scripts/author-artifact-separation.test.ts` parses each Dockerfile stage's `COPY` sources and
+  fails the build if any of them brings either artifact into the participant stage — including
+  `COPY ./reference/`, `COPY --chown=… reference/` and a whole-context `COPY . .`, none of which a
+  literal string check would have caught. It also fails if a Makefile builds without `--target`, or
+  if a `local/docker-compose.yml` omits `target: participant`; both silently produce the author
+  stage, since it is last.
 - **The checker is not tamper-resistant.** The participant controls the image and the process, so
   they can replace the checker, the fixtures, or the verifier itself.
 - **Submission and checker share a Python module graph.** `/verify` loads both into the same child
@@ -124,11 +139,30 @@ the graded party controls, and no amount of care inside the image changes that.
 | A learner convincing themselves they understood something | Yes |
 | Competition ranking, examination, completion certification | **No** |
 
-Trusted verification needs a verifier the participant does not administer. Designing that is
-tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271) along with
-separating author-only artifacts out of the participant-facing image and splitting the submission
-from the checker's process. Until that lands, do not let a local `multi-verify` result stand behind
-a claim in the "No" row.
+Trusted verification needs a verifier the participant does not administer. The design options are
+set out in [ADR-0001](./adr/0001-trusted-verification.md); none is adopted yet, and until one is,
+do not let a local `multi-verify` result stand behind a claim in the "No" row.
+
+[#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271) lists eight completion
+conditions. Where they stand:
+
+| # | Condition | State |
+|---|---|---|
+| 1 | Threat model written down; participant controls host, daemon and image | Landed — the section above |
+| 2 | Overstated "hidden" / "does not reach the host" wording corrected | Landed |
+| 3 | Honor-system and trusted verification separated by use | Landed — the table above |
+| 4 | Trusted-verification design **proposal** in an ADR | Landed — [ADR-0001](./adr/0001-trusted-verification.md), which adopts nothing |
+| 5 | `reference/` and mutation tooling out of the default participant image | Landed |
+| 6 | That separation positioned as misdelivery prevention, not confidentiality | Landed — stated here and in every problem README |
+| 7 | Regression test that author-only artifacts cannot enter the participant bundle | Landed — `scripts/author-artifact-separation.test.ts` |
+| 8 | Impact list and migration order for existing AC26 problems | Landed — [`author-artifact-migration.md`](./author-artifact-migration.md) |
+
+Adopting an ADR option is explicitly **not** one of them; #271 says the decision is separate.
+
+The item that is not in that list and not fixed is the one that keeps the "No" row at "No":
+the submission and the checker still share a Python process. Separating the artifacts changed what
+is delivered by default; it did not change who administers the machine, and that is the fact the
+whole table rests on.
 
 Every AC26 problem README carries a short **Assurance scope** section saying this in participant
 language. `scripts/assurance-scope.test.ts` asserts it is there and that no problem has drifted

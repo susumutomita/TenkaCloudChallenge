@@ -133,7 +133,7 @@ describe("ac26-w5-extract-key-switch: container safety", () => {
   });
 
   it("should pin the base image by digest", () => {
-    expect(read("local/Dockerfile")).toMatch(/^FROM \S+@sha256:[0-9a-f]{64}$/m);
+    expect(read("local/Dockerfile")).toMatch(/^FROM \S+@sha256:[0-9a-f]{64}( AS \S+)?$/m);
   });
 
   it("should bound the verifier itself, not only the submission it runs", () => {

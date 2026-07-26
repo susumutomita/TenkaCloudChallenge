@@ -124,7 +124,7 @@ describe("ac26-bridge-properties: container safety", () => {
   });
 
   it("should pin the base image by digest so fixtures cannot shift under the learner", () => {
-    expect(read("local/Dockerfile")).toMatch(/^FROM \S+@sha256:[0-9a-f]{64}$/m);
+    expect(read("local/Dockerfile")).toMatch(/^FROM \S+@sha256:[0-9a-f]{64}( AS \S+)?$/m);
   });
 
   it("should never build a shell command out of participant input", () => {
