@@ -1,0 +1,622 @@
+{
+  "id": "ac26-w6-zkvm-witness-binding",
+  "name": "証明は valid だった。 ただし、 別の口座についての証明だった",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "advanced-cryptography-2026",
+    "order": 650,
+    "chapter": "Week 6 / Programmable Cryptography Stack Design"
+  },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 6,
+    "role": "assignment-companion",
+    "spoilerPolicy": "independent-reimplementation",
+    "sources": [
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        "path": "week6/README.md",
+        "kind": "lecture"
+      },
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        "path": "week6/problems/zkvm-exploit/README.md",
+        "kind": "assignment"
+      }
+    ]
+  },
+  "difficulty": 5,
+  "estimatedDuration": "60-90 分",
+  "shortDescription": "zkVM が証明するのは 「そのプログラムが走った」 ことだけである。 **どの**プログラムか、 **どの**入力についてか、 **何を**主張しているのかは、 guest が bytes で言い切るしかない。 その contract — public statement・private witness・public journal — を書く。",
+  "description": "Week 6 の 5 問目、 そして `ac26-w6-zkvm-exploit-predicate` の続きである。 前問は **exact exploit predicate** を決めた。 この問題はその predicate を、 zkVM guest として成立する **public / private input contract** に仕上げる。\n\n暗号の側は最初から scope 外である。 proof は 1 つも生成しない。 やるのは、 proof system が**何も証明してくれない 2 つの半分**を自分で塞ぐことだけである。\n\n```text\npublic statement   その proof が何についての主張なのか\npublic journal     その run が公開したもの。 永久に、 全員に\n```\n\n暗号が保証するのは 「ある program の ある run に対応する journal である」 ことだけで、 **どの** program か、 **どの** 入力か、 **どの** claim かは何ひとつ言っていない。 それを言うのは guest の仕事で、 言い方を間違えれば完全に valid な proof が別物の証拠になる。\n\n## 前問から移動した 2 つ\n\n口座 (`price` / `spent` / `budget`) は target spec に焼き込まれた定数ではなく **public input** になった。 同じ compiled guest が世界中の口座について主張を出せるので、 「どの口座の話か」 を決めるのは bind された statement だけである。\n\n整数意味論も public input になった。 `semantics` profile は幅**と**桁溢れ時の挙動を名指し、 同じ image が profile 違いで別の machine になる。\n\n```text\nwrapping     2 ** width で法をとる — exploit が存在する唯一の machine\nsaturating   最大値で頭打ちになる\nchecked      trap して run が止まる\n```\n\nexploit が存在するのは 3 つのうち 1 つだけである。 どれで走ったかを言わない journal は、 読み手が勝手に想定した machine についての proof である。\n\n## この問題の中心にある 1 組\n\nfixtures は毎 seed、 **本物の口座 2 つ**を引く。 どちらにも本物の exploit がある。 長さ prefix の無い encoder に通すと、 2 つは同じ bytes になる — `\"53\" + \"7\"` と `\"5\" + \"37\"` は同じ 3 文字だからである。\n\nこれは malformed な statement がすり抜ける話ではない。 **片方についての valid な proof が、 もう片方についての valid な proof になる**という話で、 その間ずっと暗号は 1 ミリも壊れていない。 canonical serialization を 「書式の作法」 だと思っている guest が落ちるのはここである。\n\n## 採点の設計\n\nこの問題は 55 個の壊れた guest を同梱していて、 そのうち **42 個は 「happy path が verify し、 別 program に差し出した receipt を拒否する」 という誰でも書く 2 問に正しく答える**。 `make reference-test` が毎回この数を測り直す。 その 2 つは問題文にそのまま書いてあるので誰も発見する必要がない。 残りが checkpoint になっているのはそのためである。",
+  "instructions": "## はじめに\n\nzkVM の proving は動かしません。 動かすのは guest の入出力 contract だけです。\n\n扱うのは 3 つです。\n\n```text\npublic statement   何が主張されているのか、 何についてなのか\nprivate witness    prover が知っていたもの\npublic journal     その run が公開するもの。 永久に、 全員に\n```\n\n対象プログラムは前問と同じ prepaid account です。\n\n```text\norder(quantity)\n    cost  = price * quantity      <- 桁溢れ箇所 \"mul\"\n    total = spent + cost          <- 桁溢れ箇所 \"add\"\n    if total <= budget: deliver(quantity); spent = total\n```\n\nsecurity property は普通の整数の上で `spent + price * quantity <= budget` です。\n\n## 支給されるもの\n\n```python\nfrom fixtures.generate import (\n    STATEMENT_FIELDS, PARAM_NAMES, JOURNAL_FIELDS, MEASUREMENT_NAMES, RUN_FIELDS,\n    RECEIPT_FIELDS, PUBLIC_NAMES, CHANNELS, SEMANTICS, DOMAINS, GUEST_VERSIONS, CLAIMS,\n    LENGTH_PREFIX_BYTES, INTEGER_BYTES, BYTE_ORDER, DIGEST_HEX_LENGTH,\n    IMAGE_COMMITMENT_DOMAIN, STATEMENT_COMMITMENT_DOMAIN, WRAP_SITE_OF, GUARDS,\n    Env, commit, decode_program, is_well_formed, claim_site,\n    statement, image, sibling_images, scenario, shuffled, naive_encode,\n    replay_cases, disclosures,\n)\n```\n\n```text\ncommit(payload, domain)     domain 分離された digest。 hash 自体は主題ではありません\ndecode_program(body)        image body が持つ step 列、 または拒否\nis_well_formed(w, profile)  その witness がこの machine の定義域に入っているか\nnaive_encode(statement)     全 field をただ連結したもの。 雑な encoder がやること\nsibling_images(seed, label) base image の隣にある 4 つ。 1 つずつ違う\nscenario(seed, label)       image・statement・その claim を証明する witness\n```\n\n`statement` は `domain` / `guestVersion` / `imageDigest` / `semantics` / `claim` / `params`。 `witness` は `quantity` / `aux` / `search`。 `SEMANTICS` の profile は `semanticsId` / `width` / `modulus` / `max` / `overflow`。\n\n`width` は 8・16・32・64 の**どれでもなく**、 checkpoint ごとに変わります。 `overflow` も statement が名指すもので、 書き込んだ定数ではありません。\n\n## runner には扉が 2 つあります\n\n```text\nenv.public(name, value)     public input。 transcript に載ります\nenv.variable(name, value)   guest 向けの環境変数。 載ります\nenv.note(label, **values)   host のログ 1 件。 載ります\nenv.hint(name, value)       host の助言。 載りませんが、 証拠でもありません\nenv.write_private(payload)  private input channel。 載りません\n```\n\nguest 側は `env.public_inputs()` / `env.hints()` / `env.read_private()`、 監査側は `env.transcript()` / `env.writes()` を読みます。\n\n## 最初の一手\n\n```bash\nmake inspect\n```\n\nstatement・machine・口座・image とその 4 兄弟・journal の形・audit する run の一覧が出ます。 どの image が同じ program か、 どの receipt を受理してよいか、 どの run が witness を漏らしたかは出ません。 そこが checkpoint です。\n\nそのあと `local/starter/guest.py` を編集します。\n\n## ゴール\n\n8 個の checkpoint を独立に通します。 proof が valid であることと、 その proof が**あなたの statement の証拠**であることは、 別のことです。",
+  "writeup": "## 暗号が証明しないもの\n\nzkVM の proof が言うのは 「ある program の ある run があって、 この journal を出した」 までです。 **どの** program か、 **どの** 入力についてか、 **何を** 主張しているのかは、 guest が bytes で言い切るしかありません。 この問題の 8 checkpoint はすべてその 「言い切り」 の話で、 暗号の話は 1 つもありません。\n\n## 中心にあるのは 1 組の口座です\n\nfixtures は毎 seed、 本物の口座を 2 つ引きます。 どちらにも本物の exploit があります。 長さ prefix の無い encoder に通すと 2 つは同じ bytes になります。\n\n```text\nleft   price=53 spent=7  budget=272   ->  \"53\" \"7\"  \"272\"\nright  price=5  spent=37 budget=272   ->  \"5\"  \"37\" \"272\"\n```\n\n連結すると両方 `537272` です。 だから `left` について sealed された receipt が `right` に対して verify します。 **誰も触っていない口座が予算超過している証拠**が、 何も forge せずに手に入るということです。\n\n`naive_encode` は藁人形ではありません。 field 順は固定、 全 field 在り、 何も落ちていません。 それでも encoding ではないのは、 field の境界が出力の中に無いからです。 長さ prefix はそこにあります。\n\nそして分けなければならないのは、 この 1 組だけではありません。 `domain` だけが違う 2 つ、 `guestVersion` だけが違う 2 つも別の statement です。 この 2 つは 「計算に影響しないから」 という理由で真っ先に落とされます。\n\n## digest は 「走る bytes」 についてです\n\nimage record には toolchain が書いた label が 2 つ (`sourcePath` / `imageId`) と、 実際に走る `body` があります。 4 つの兄弟のうち 2 つは base と同じ program で、 2 つは違います。\n\n```text\nrebuilt     同じ source path、 比較演算子が 1 つ違う、 stamp も新しい  -> 別の program\nrestamped   step は同じ、 build stamp だけ違う                        -> 別の image\nrenamed     同じ bytes、 別の path                                    -> 同じ program\nrelabelled  同じ bytes、 別の imageId                                 -> 同じ program\n```\n\n`sourcePath` を digest する guest は `rebuilt` を base だと言います。 その 2 つは 「合計がちょうど budget に着地する注文」 について答えが違い、 それは攻撃者が選ぶ注文そのものです。 `imageId` を digest する guest は `relabelled` を別物だと言い、 何の問題も無い proof が誰にも理由の分からない形で拒否されます。\n\n`restamped` だけが判断です。 proving system が実際にそうしているのと同じに倒します — **観測可能な変化が無いことは、 監査の対象であって入力ではない**ので、 再ビルドは別の image です。\n\n## host の言い分は入力であって答えではありません\n\n`env.hints()` には host 自身の 「この run はこうなったはずだ」 が入っています。 採点で渡される hint は自信満々で、 詳細で、 全部間違っています。 host は証明される側の当事者です。 hint を採る guest は速くて、 ほとんどの場合正しくて、 何も証明していません。\n\n同じ理屈で、 statement が名指していない image を渡されたら**1 step も走らせる前に**拒否します。 走らせてから 「どの program だったか」 を報告した run は、 文脈を外して引用できる run です。\n\n## journal に入れてよい測定値の条件\n\n1 つだけあります。 **読み手がすでに計算できるもの**であることです。 「小さいから」 でも 「ただの数字だから」 でもありません。\n\nwitness とともに変わる cycle 数は測定値ではなく、 解像度を落とした witness です。 そして journal は run より長生きします — debug の都合で足して release で外す、 という扱いができる唯一できない場所です。\n\n## journal の field は、 読むものではなく照合するものです\n\njournal には statement の digest のほかに `imageDigest` と `guestVersion` が入っています。 これは statement を持っていない読み手のための便宜で、 **証拠ではありません**。 書いておくのは無料で、 信じるのは高くつきます。\n\n採点では、 誰も replay していない receipt の journal 側だけを後から書き換えたものが渡されます。 digest は合っていて、 journal は statement と違うことを言っています。 **verifier が読む journal field は、 攻撃者が書く journal field です。**\n\nそして `claimResult` が `False` の receipt は、 何も証明していない run についての正しい journal です。 それを claim の証拠として受理するのが、 いちばん静かな入口です。\n\n## 承認された名前は承認ではありません\n\nprivacy audit の policy は 2 段です。 1 段目は `PUBLIC_NAMES` — 出してよい名前の一覧です。 2 段目は、 **承認された名前が承認された値を運んでいるか**です。\n\n`spent` は公開してよい名前です。 しかし machine 自身の total が `spent` という名前を着て出てくるのは別の開示で、 price は公開かつ可逆なので、 それは 1 回の modular inverse を残しただけの quantity です。 名前しか見ない scan はここで何も見つけません。\n\n10 個の run のうち 2 個は何も漏らしていません。 そのうち 1 個は**うるさい** — 全 channel を数字で埋めます。 その 2 つに leak を報告するのは、 残り 8 つを見逃すのと同じだけ間違いです。 **つねに何かを見つける監査は、 読んでいるのではありません。**\n\n## 実測\n\nこの問題は 55 個の壊れた guest を同梱していて、 そのうち **42 個は 「happy path が verify し、 別 program に差し出した receipt を拒否する」 に正しく答えます**。 `make reference-test` が毎回測り直します。 その 2 つは問題文にそのまま書いてあるカテゴリで、 誰も発見する必要がありません。\n\n## 監査が証明できることと、 できないこと\n\n証明できるのは、 同梱された 55 個の欠陥をこの 8 checkpoint が捕まえること、 そして reference が全部を通ることです。 証明できないのは 「この contract に他の穴が無い」 ことです。\n\n## toy と production の差\n\n幅は 7〜13 bit、 口座は 1 つ、 program は 4 step、 receipt には seal がありません。 seal の検証は**まさに暗号がすでにやってくれる部分**なので scope 外で、 seal が無ければ意味を持たない binding のほうが scope 内です。 本物の zkVM では statement は program の ELF digest と public input の列で、 journal は proving system が commit する出力です。 主張しているのは 「binding は exact な contract として書ける」 ことであって、 「書いたものが完全である」 ことではありません。\n\n## 対象外\n\n実際の zkVM proof 生成と receipt verification、 production の binary reproducibility system、 特定 zkVM の zero-knowledge 性、 remote attestation。",
+  "tags": [
+    "advanced-cryptography-2026",
+    "week6",
+    "zkvm",
+    "proof-of-exploit",
+    "public-input",
+    "canonical-serialization",
+    "zero-knowledge",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18117,
+      "name": "/verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "public statement と private witness を明示的な型として分離できる",
+    "canonical serialization の必要性を、 実際に衝突する 2 つの statement で示せる",
+    "field 順・長さ prefix・整数幅・endianness・domain 分離を固定した serializer を書ける",
+    "target identity を source path 文字列ではなく実行される bytes へ bind できる",
+    "witness を public argument / 環境変数 / log へ出さずに guest へ渡せる",
+    "host が供給した結果を信じず、 guest 内で target execution を再計算できる",
+    "statement が名指していない image を、 1 step も走らせる前に拒否できる",
+    "wrapping / saturating / checked を statement が名指す profile として扱える",
+    "statement digest・target digest・claim result・guest version を 1 つの journal へ commit できる",
+    "public measurement の条件を 「読み手がすでに計算できること」 として言える",
+    "receipt が別 target / 別 claim / 別 semantics / 別 protocol version へ replay されるのを拒否できる",
+    "journal の便宜 field を証拠として読まず、 commitment と照合できる",
+    "witness が journal・stdout・stderr・error・trace・一時ファイルへ漏れていないか監査できる",
+    "承認された名前が承認されていない値を運んでいる開示を検出できる"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.ac26-w6-zkvm-witness-binding.canonical-encoding",
+        "description": "同じ statement は同じ bytes、 意味の違う statement は違う bytes になる serializer を書ける。"
+      },
+      {
+        "id": "lo.ac26-w6-zkvm-witness-binding.program-identity",
+        "description": "実行される bytes に対する deterministic な digest を作り、 toolchain の label と取り違えない。"
+      },
+      {
+        "id": "lo.ac26-w6-zkvm-witness-binding.witness-ingestion",
+        "description": "witness を transcript に残さない channel だけで guest へ渡せる。"
+      },
+      {
+        "id": "lo.ac26-w6-zkvm-witness-binding.guest-reexecution",
+        "description": "host 供給の結果を信じず、 statement が名指す program と machine で再計算できる。"
+      },
+      {
+        "id": "lo.ac26-w6-zkvm-witness-binding.journal-construction",
+        "description": "statement・target identity・claim result・guest version を canonical に commit し、 余分な測定値を出さない。"
+      },
+      {
+        "id": "lo.ac26-w6-zkvm-witness-binding.replay-defense",
+        "description": "sealed された statement 以外へ差し出された receipt と、 後から書き換えられた journal を拒否できる。"
+      },
+      {
+        "id": "lo.ac26-w6-zkvm-witness-binding.witness-privacy-audit",
+        "description": "6 つの channel を横断して witness 由来の開示を検出し、 clean な run を誤検出しない。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.public-input",
+        "description": "verifier 自身の view に現れる入力。 何についての主張なのかを決める。"
+      },
+      {
+        "id": "concept.private-witness",
+        "description": "prover が知っていたことだけを示し、 それ自体は公開されない入力。"
+      },
+      {
+        "id": "concept.program-identity",
+        "description": "どの program が走ったのかを一意に指す名前。 path や label ではなく走る bytes に対して取る。"
+      },
+      {
+        "id": "concept.canonical-serialization",
+        "description": "同じ対象は同じ bytes、 違う対象は違う bytes になる符号化。 commitment の前提である。"
+      },
+      {
+        "id": "concept.public-input-binding",
+        "description": "public input と program identity を proof に結び付け、 その proof がちょうど 1 つの statement の証拠であるようにすること。"
+      },
+      {
+        "id": "concept.zkvm-journal",
+        "description": "run が公開する成果物。 何を証明したかを述べ、 witness は述べない。"
+      },
+      {
+        "id": "concept.proof-replay",
+        "description": "valid な proof artifact を、 それが sealed されたのとは別の対象へ差し出す攻撃。"
+      },
+      {
+        "id": "concept.witness-confidentiality",
+        "description": "witness が journal・log・error・一時成果物のどこからも復元できないという性質。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.ac26-w6-zkvm-witness-binding.encoding",
+        "description": "本物の口座 2 つを含む statement family のどの 2 つも、 別の bytes へ符号化した。"
+      },
+      {
+        "id": "assessment.ac26-w6-zkvm-witness-binding.identity",
+        "description": "同じ bytes の 2 つを同じ program と呼び、 再ビルドされた 2 つを別の image と呼んだ。"
+      },
+      {
+        "id": "assessment.ac26-w6-zkvm-witness-binding.ingestion",
+        "description": "public input がちょうど statement で、 witness が transcript のどこにも現れなかった。"
+      },
+      {
+        "id": "assessment.ac26-w6-zkvm-witness-binding.reexec",
+        "description": "host の hint を採らず、 名指されていない image を走らせる前に拒否し、 3 つの overflow 挙動を profile から読んだ。"
+      },
+      {
+        "id": "assessment.ac26-w6-zkvm-witness-binding.journal",
+        "description": "statement 全体へ commit し、 測定値を公開 image から計算できるものだけに保った。"
+      },
+      {
+        "id": "assessment.ac26-w6-zkvm-witness-binding.replay",
+        "description": "sealed 先以外へ差し出された receipt と、 後から書き換えられた journal を拒否し、 例外を投げなかった。"
+      },
+      {
+        "id": "assessment.ac26-w6-zkvm-witness-binding.privacy",
+        "description": "承認された名前が承認されていない値を運んだ開示を見つけ、 clean な 2 つには何も報告しなかった。"
+      },
+      {
+        "id": "assessment.ac26-w6-zkvm-witness-binding.transfer",
+        "description": "見たことのない口座・幅・protocol namespace・guest build ですべての性質が成立した。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.program-name-is-a-sufficient-program-identity",
+        "description": "source path や toolchain の image id が program を指せるという誤解。 走るのは bytes である。"
+      },
+      {
+        "id": "misconception.valid-proof-artifact-can-be-reused-for-any-target",
+        "description": "valid な proof は valid なのだからどの statement にも使えるという誤解。 receipt は sealed された 1 つの statement の証拠である。"
+      },
+      {
+        "id": "misconception.host-validation-is-part-of-the-proven-statement",
+        "description": "host 側で検証しているのだから guest の制約は省けるという誤解。 proof を検証する側は host を見ていない。"
+      },
+      {
+        "id": "misconception.output-true-fully-describes-the-statement",
+        "description": "claim result が真であることが主張の全体だという誤解。 どの statement についての真なのかが抜けている。"
+      },
+      {
+        "id": "misconception.hiding-witness-means-omitting-it-from-the-journal-only",
+        "description": "journal に書かなければ witness は隠せているという誤解。 log・error・trace・一時成果物も公開経路である。"
+      },
+      {
+        "id": "misconception.an-approved-field-name-approves-its-value",
+        "description": "許可された名前で出したなら中身も許可されているという誤解。 名前は policy を書ける単位であって承認ではない。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "lo.ac26-w6-zkvm-witness-binding.canonical-encoding"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "lo.ac26-w6-zkvm-witness-binding.program-identity"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "lo.ac26-w6-zkvm-witness-binding.witness-ingestion"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "lo.ac26-w6-zkvm-witness-binding.guest-reexecution"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "lo.ac26-w6-zkvm-witness-binding.journal-construction"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "lo.ac26-w6-zkvm-witness-binding.replay-defense"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "lo.ac26-w6-zkvm-witness-binding.witness-privacy-audit"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "concept.public-input"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "concept.private-witness"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "concept.program-identity"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "concept.canonical-serialization"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "concept.public-input-binding"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "concept.zkvm-journal"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "concept.proof-replay"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "concept.witness-confidentiality"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "concept.zkvm"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "concept.guest-program"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "concept.domain-separation"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "concept.commitment-binding"
+    },
+    {
+      "type": "requires",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "problem.ac26-w6-zkvm-exploit-predicate"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w6-zkvm-witness-binding.canonical-encoding",
+      "target": "concept.canonical-serialization"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w6-zkvm-witness-binding.program-identity",
+      "target": "concept.program-identity"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w6-zkvm-witness-binding.witness-ingestion",
+      "target": "concept.private-witness"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w6-zkvm-witness-binding.guest-reexecution",
+      "target": "concept.guest-program"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w6-zkvm-witness-binding.journal-construction",
+      "target": "concept.zkvm-journal"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w6-zkvm-witness-binding.replay-defense",
+      "target": "concept.public-input-binding"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w6-zkvm-witness-binding.witness-privacy-audit",
+      "target": "concept.witness-confidentiality"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "assessment.ac26-w6-zkvm-witness-binding.encoding"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "assessment.ac26-w6-zkvm-witness-binding.identity"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "assessment.ac26-w6-zkvm-witness-binding.ingestion"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "assessment.ac26-w6-zkvm-witness-binding.reexec"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "assessment.ac26-w6-zkvm-witness-binding.journal"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "assessment.ac26-w6-zkvm-witness-binding.replay"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "assessment.ac26-w6-zkvm-witness-binding.privacy"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "assessment.ac26-w6-zkvm-witness-binding.transfer"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "misconception.program-name-is-a-sufficient-program-identity"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "misconception.valid-proof-artifact-can-be-reused-for-any-target"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "misconception.host-validation-is-part-of-the-proven-statement"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "misconception.output-true-fully-describes-the-statement"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "misconception.hiding-witness-means-omitting-it-from-the-journal-only"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "misconception.an-approved-field-name-approves-its-value"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w6-zkvm-witness-binding",
+      "target": "problem.ac26-w6-cosnark-privacy"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18117/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "encoding",
+        "label": "同じ statement は同じ bytes、 違う statement は違う bytes",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "encoding-hint-1",
+            "content": "各 field を `<長さ><中身>` で出します。 長さは `LENGTH_PREFIX_BYTES` bytes を `BYTE_ORDER` で、 文字列は UTF-8、 整数は `INTEGER_BYTES` bytes 固定幅です。 field の順は `STATEMENT_FIELDS` から読みます — 呼び出し側の dict の挿入順ではありません。 `params` はそれ自体を 1 つの枠に入れ、 中は名前と値の組を `PARAM_NAMES` 順に並べます。 外枠が無いと、 3 つの parameter を持つ statement と、 2 つ持って次の field が長い statement の境目が出力の中に存在しません。 固定幅なのは `1` と `01` が同じ数だからで、 固定順なのは等しい dict が同じ statement だからです。",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "identity",
+        "label": "どのプログラムの話かを、 走る bytes で名指す",
+        "points": 30,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "identity-hint-1",
+            "content": "image record の 4 つの field のうち、 実際に走るのは 1 つだけです。 残りは build system が書いた覚え書きです。 `sibling_images` の 4 つは 2 つが同じ program で 2 つが違い、 間違え方ごとに違う組を取り違えます — `sourcePath` を digest すると再ビルドが base に見え、 `imageId` を digest すると同じ bytes の複製が別物に見えます。 `restamped` は判断で、 proving system と同じに倒します。 それから `decode_program` が拒否する body に digest を出さないこと: digest は 「この bytes が走った」 という約束で、 走れない bytes にその約束はできません。",
+            "penalty": 14
+          }
+        ]
+      },
+      {
+        "id": "ingestion",
+        "label": "witness を通す扉は 1 つだけ",
+        "points": 35,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "ingestion-hint-1",
+            "content": "同時に成り立たせるものが 2 つあり、 引っ張る向きが逆です。 guest には statement 全体と witness 全体が要ります — public input はちょうど `STATEMENT_FIELDS`、 少なければ verifier は再構成できない claim を持たされ、 多ければ誰も合意していない public input です。 一方で `env.transcript()` は、 witness を知ってはいけない人に読まれても平気でなければなりません。 witness の 3 つの部分は 3 つとも公開できず、 理由がそれぞれ違います: `quantity` は exploit そのもの、 `aux` は price が可逆なので modular inverse 1 回分手前の exploit、 `search` は exploit とその近傍です。 「再現用に」 という note が最後に効きます。",
+            "penalty": 16
+          }
+        ]
+      },
+      {
+        "id": "reexec",
+        "label": "host の言い分は入力であって答えではない",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "reexec-hint-1",
+            "content": "`env.hints()` には host 自身の 「この run はこうなったはずだ」 が入っていて、 採点で渡されるものは全部間違っています。 host は証明される側です。 それから statement が名指していない image を渡されたら、 **1 step も走らせる前に** `ValueError` です。 算術は `SEMANTICS[statement[\"semantics\"]]` からだけ読みます — 幅は 8・16・32・64 のどれでもなく、 checkpoint ごとに変わり、 `overflow` も 3 通りあります。 `wrapping` は法をとって溢れた箇所を記録、 `saturating` は max で頭打ち (何も 0 の向こうへ回らないので何も wrap していません)、 `checked` は止まって `trapped`、 step 数はそこまでです。 `violated` は**値**についての判定で、 machine がどの register に入れていたかは無関係です。",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "journal",
+        "label": "公開してよいのは、 読者がすでに計算できるものだけ",
+        "points": 35,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "journal-hint-1",
+            "content": "`statementDigest` は checkpoint 1 の出番です — `encode_statement(statement)` を `STATEMENT_COMMITMENT_DOMAIN` で commit します。 statement の言うことは全部この 1 field の中にあり、 だから次の checkpoint が可能になります。 残りの 3 field は statement を持っていない読み手への便宜で、 証拠ではありません。 測定値は 1 つだけで、 条件は 「読み手が公開 image からすでに計算できること」 です — 「小さいこと」 でも 「ただの数字であること」 でもありません。 そして journal に入らないものが 3 つあります: witness、 実行 trace、 探索が試した値。 どれも 「debug のうちだけ足しておく」 ができません。 journal は run より長生きします。",
+            "penalty": 16
+          }
+        ]
+      },
+      {
+        "id": "replay",
+        "label": "その receipt は、 その statement の証拠か",
+        "points": 50,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "replay-hint-1",
+            "content": "seal の検証は暗号がやってくれる部分で、 やってくれないのは 「その seal が、 いま隣に置かれている statement の話ではない」 ことに気付くことです。 statement 全体への commitment 1 つを照合すれば、 別 target・別 claim・別整数幅・別 overflow 挙動・別 protocol version・別 guest build の 6 つが同じ 1 行で落ちます — 「面白い field」 だけに commit していると落ちません。 journal 側の便宜 field は**照合する**もので、 読むものではありません: digest は合っているのに journal が statement と違うことを言っている receipt が来ます。 `claimResult` が `False` の receipt は、 何も証明していない run についての正しい journal です。 そしてこの関数は例外を投げません — 投げた時点で、 呼び出し側に返すべき判断を例外処理に変えています。",
+            "penalty": 24
+          }
+        ]
+      },
+      {
+        "id": "privacy",
+        "label": "承認された名前は、 承認ではない",
+        "points": 35,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "privacy-hint-1",
+            "content": "policy は 2 段です。 1 段目は `PUBLIC_NAMES` — 出してよい名前です。 2 段目は、 承認された名前が承認された値を運んでいるか: `PARAM_NAMES` の名前はその parameter 自身の公開値だけ、 `MEASUREMENT_NAMES` の名前は公開 image が含意する step 数だけを運べます。 名前しか見ない scan が見つけられない run が 2 つあります。 `values` の中の dict は、 その中の名前も公開しています。 label と message は自由文で policy の対象外です — 名前は policy を書ける単位で、 整形済みの文字列はそうではないからです。 10 個のうち 2 個は何も漏らしておらず、 そのうち 1 個は全 channel を数字で埋めます。 その 2 つへの報告は、 残り 8 つの見逃しと同じだけ間違いです。",
+            "penalty": 16
+          }
+        ]
+      },
+      {
+        "id": "transfer",
+        "label": "見たことのない target・claim・protocol version で",
+        "points": 25,
+        "wrongAnswerPenalty": 15
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "The proof was valid. It was a proof about a different account",
+      "shortDescription": "A zkVM proves that a program ran, and nothing else. Which program, about which inputs, asserting what — the guest has to say all of that out loud, in bytes. Write the contract: public statement, private witness, public journal.",
+      "description": "Week 6's fifth problem, and the sequel to `ac26-w6-zkvm-exploit-predicate`. That one settled the **exact exploit predicate**. This one turns that predicate into a **public / private input contract** a zkVM guest can actually stand on.\n\nThe cryptography is out of scope from the start. No proof is generated. The whole job is the two halves the proof system proves **nothing** about:\n\n```text\nthe public statement   what the proof is a claim about\nthe public journal     what the run published, forever, to everyone\n```\n\nWhat the cryptography guarantees is that the journal corresponds to some run of some program. It does not say **which** program, **which** inputs, or **which** claim. Saying that is the guest's job, and saying it badly makes a perfectly valid proof into evidence for something else.\n\n## Two things moved over from the last problem\n\nThe account (`price` / `spent` / `budget`) is no longer a constant baked into a target spec — it is **public input**. The same compiled guest proves claims about every account there is, so the only thing that says which account a proof is about is the statement it was bound to.\n\nThe integer semantics moved too. A `semantics` profile names the width **and** what the hardware does on overflow, so the same image under two profiles is two different machines:\n\n```text\nwrapping     reduced modulo 2 ** width — the only machine where the exploit exists\nsaturating   clamped at the largest value the machine can hold\nchecked      the machine traps and the run stops\n```\n\nThe exploit exists on exactly one of the three. A journal that does not say which one it ran under is a proof about whichever machine the reader assumes.\n\n## The pair at the centre of it\n\nEvery seed draws **two real accounts**. Both have real exploits. Run their statements through an encoder with no length prefixes and the two produce the same bytes — `\"53\" + \"7\"` and `\"5\" + \"37\"` are the same three characters.\n\nThis is not a malformed statement slipping through. It is that a **valid proof about one account is a valid proof about the other**, with nothing in the cryptography broken while it happens. A guest that treats canonical serialization as a formatting convention fails exactly here.\n\n## On scoring\n\nThis problem ships 55 deliberately broken guests, and **42 of them still answer the two questions anybody writes first** — does the happy path produce a receipt that verifies, and is a receipt offered against a different program refused. `make reference-test` re-measures that count on every run. Both are stated outright in the problem text and nobody has to discover them. The rest is why there are checkpoints.",
+      "instructions": "## Start here\n\nNo zkVM proving runs. The guest's input and output contract is the only thing that runs.\n\nThere are three objects:\n\n```text\nthe public statement   what is being asserted, and about what\nthe private witness    what the prover knew\nthe public journal     what the run publishes, forever, to everyone\n```\n\nThe target is the prepaid account from the previous problem:\n\n```text\norder(quantity)\n    cost  = price * quantity      <- wrap site \"mul\"\n    total = spent + cost          <- wrap site \"add\"\n    if total <= budget: deliver(quantity); spent = total\n```\n\nThe security property, over plain integers: `spent + price * quantity <= budget`.\n\n## What is supplied\n\n```python\nfrom fixtures.generate import (\n    STATEMENT_FIELDS, PARAM_NAMES, JOURNAL_FIELDS, MEASUREMENT_NAMES, RUN_FIELDS,\n    RECEIPT_FIELDS, PUBLIC_NAMES, CHANNELS, SEMANTICS, DOMAINS, GUEST_VERSIONS, CLAIMS,\n    LENGTH_PREFIX_BYTES, INTEGER_BYTES, BYTE_ORDER, DIGEST_HEX_LENGTH,\n    IMAGE_COMMITMENT_DOMAIN, STATEMENT_COMMITMENT_DOMAIN, WRAP_SITE_OF, GUARDS,\n    Env, commit, decode_program, is_well_formed, claim_site,\n    statement, image, sibling_images, scenario, shuffled, naive_encode,\n    replay_cases, disclosures,\n)\n```\n\n```text\ncommit(payload, domain)     a domain-separated digest. The hash is not the lesson\ndecode_program(body)        the steps an image body holds, or a refusal\nis_well_formed(w, profile)  whether a witness is in this machine's domain\nnaive_encode(statement)     every field concatenated. What a sloppy encoder does\nsibling_images(seed, label) four images next to the base one, each one change away\nscenario(seed, label)       an image, a statement, and a witness proving its claim\n```\n\nA `statement` carries `domain` / `guestVersion` / `imageDigest` / `semantics` / `claim` / `params`. A `witness` carries `quantity` / `aux` / `search`. A profile from `SEMANTICS` carries `semanticsId` / `width` / `modulus` / `max` / `overflow`.\n\n`width` is **not** 8, 16, 32 or 64, and it changes between checkpoints. `overflow` is something the statement names too, not a constant you write in.\n\n## The runner has two doors\n\n```text\nenv.public(name, value)     a public input. It is in the transcript\nenv.variable(name, value)   a process environment variable. It is in the transcript\nenv.note(label, **values)   one host log record. It is in the transcript\nenv.hint(name, value)       host advice. Not in the transcript, and not evidence\nenv.write_private(payload)  the private input channel. Not in the transcript\n```\n\nThe guest side reads `env.public_inputs()`, `env.hints()` and `env.read_private()`; an auditor reads `env.transcript()` and `env.writes()`.\n\n## First move\n\n```bash\nmake inspect\n```\n\nIt prints the statement, the machine, the account, the image and its four siblings, the shape of a journal, and the runs you will audit. It does not print which images are the same program, which receipts may be accepted, or which runs gave the witness away. Those are the checkpoints.\n\nThen edit `local/starter/guest.py`.\n\n## Goal\n\nClear eight independently scored checkpoints. A proof being valid and a proof being evidence for **your** statement are two different things.",
+      "writeup": "## What the cryptography does not prove\n\nA zkVM proof says that some run of some program produced this journal. **Which** program, about **which** inputs, asserting **what** — the guest has to say all of that out loud, in bytes. All eight checkpoints are about that saying, and none of them is about cryptography.\n\n## The pair at the centre of it\n\nEvery seed draws two real accounts. Both have real exploits. Run them through an encoder with no length prefixes and they are the same bytes:\n\n```text\nleft   price=53 spent=7  budget=272   ->  \"53\" \"7\"  \"272\"\nright  price=5  spent=37 budget=272   ->  \"5\"  \"37\" \"272\"\n```\n\nBoth concatenate to `537272`. So a receipt sealed under `left` verifies against `right`, and what you have is **evidence that an account nobody has touched is over its budget**, forged out of nothing.\n\n`naive_encode` is not a straw man. The field order is fixed, every field is present, nothing is dropped. It is still not an encoding, because the boundary between one field and the next is not in the output. That is what the length prefix is.\n\nAnd that pair is not the only one that has to stay apart. Two statements differing only in `domain`, and two differing only in `guestVersion`, are different statements — and those are the two people drop first, because they \"do not affect the computation\".\n\n## A digest is about the bytes that run\n\nAn image record carries two labels a toolchain wrote (`sourcePath`, `imageId`) next to the `body` that actually executes. Of the four siblings, two are the same program as the base and two are not:\n\n```text\nrebuilt     same source path, one comparison changed, a new stamp  -> a different program\nrestamped   the same steps, a different build stamp                -> a different image\nrenamed     the same bytes, another path                           -> the same program\nrelabelled  the same bytes, another image id                       -> the same program\n```\n\nA digest over `sourcePath` calls the rebuild the base image. Those two disagree about every order whose total lands exactly on the budget, which is the order an attacker picks. A digest over `imageId` calls the relabelled copy a different program, and a perfectly good proof is refused for a reason nobody can find.\n\n`restamped` is the judgement call. Settle it the way proving systems do: **\"nothing observable changed\" is the claim under audit rather than an input to it**, so a rebuild is a different image.\n\n## The host's account is an input, not the answer\n\n`env.hints()` carries the host's own account of what the run produced, and on the runs the checker builds it is confident, detailed and wrong. The host is the party being proved about. A guest that takes the hint is fast, is right almost always, and proves nothing at all.\n\nSame reasoning: an image the statement does not name is refused **before a single step runs**. Executing first and reporting which program it was afterwards produces a run somebody can quote out of context.\n\n## What a public measurement has to pass\n\nOne test: **could a reader already compute it?** Not \"is it small\", and not \"is it just a number\".\n\nA cycle count that varies with the witness is not a measurement, it is the witness at lower resolution. And a journal outlives its run, which makes it the one artifact where \"add it for debugging and take it out before release\" is not available.\n\n## A journal's own fields are checked, not read\n\nBesides the statement's digest, a journal carries `imageDigest` and `guestVersion`. Those are a convenience for a reader who has the journal and not the statement, and they are **not the evidence**. Writing them down costs nothing; believing them costs everything.\n\nThe checkpoint hands in receipts nobody replayed whose journal was edited after sealing: the digest still matches, and the journal now says something the statement does not. **A journal field a verifier reads is a journal field an attacker writes.**\n\nAnd a receipt whose `claimResult` is `False` is a correct journal about a run that proves nothing. Accepting it as evidence for the claim is the quietest way in of all.\n\n## An approved name is not an approval\n\nThe privacy policy has two halves. The first is `PUBLIC_NAMES`, the names a run may disclose. The second is whether an approved name is carrying an approved **value**.\n\n`spent` is on the list. The machine's own total wearing the name `spent` is a different disclosure — the price is public and invertible, so it is the quantity with one modular inverse left to apply. A scan that only looks at names finds nothing there.\n\nTwo of the ten runs disclose nothing, and one of those two is **loud**: it fills every channel with numbers. Reporting a leak against either is exactly as wrong as missing one against the other eight. **An audit that always finds something has not read anything.**\n\n## Measured\n\nThis problem ships 55 deliberately broken guests, and **42 of them still get the easy two right** — the happy path verifies, and a receipt offered against a different program is refused. `make reference-test` re-measures it on every run. Both categories are written out in the problem text; nobody has to discover them.\n\n## What the suite proves, and what it does not\n\nIt proves that these eight checkpoints catch the 55 defects shipped with the problem, and that the reference clears all of them. It does **not** prove that the contract has no other hole.\n\n## Toy versus production\n\nThe width is seven to thirteen bits, there is one account, the program is four steps, and a receipt carries no seal. Verifying a seal is precisely the part cryptography already does, so it is out of scope — and the binding it is useless without is not. In a real zkVM the statement is a program's ELF digest and a list of public inputs, and the journal is the output the proving system commits to. The claim here is that the binding can be written as an exact contract, not that the one written here is complete.\n\n## Not in scope\n\nActual zkVM proof generation and receipt verification, production binary reproducibility systems, the zero-knowledge property of a specific zkVM, and remote attestation.",
+      "learningGoals": [
+        "Separate the public statement from the private witness as explicit types",
+        "Demonstrate why canonical serialization is needed, with two statements that actually collide",
+        "Fix field order, length prefixes, integer width, endianness and domain separation in one serializer",
+        "Bind target identity to the bytes that execute rather than to a source path string",
+        "Hand a witness to the guest without exposing it through arguments, environment or logs",
+        "Recompute the target execution inside the guest instead of trusting a host-supplied result",
+        "Refuse an image the statement does not name before a single step runs",
+        "Treat wrapping, saturating and checked as a profile the statement names",
+        "Commit the statement digest, target digest, claim result and guest version into one journal",
+        "State the condition for a public measurement as \"a reader could already compute it\"",
+        "Refuse a receipt replayed against another target, claim, semantics or protocol version",
+        "Check a journal's convenience fields against the commitment rather than reading them as evidence",
+        "Audit the journal, stdout, stderr, error, trace and temporary artifacts for witness disclosure",
+        "Detect a disclosure where an approved name carries a value it was never approved for"
+      ],
+      "checks": [
+        {
+          "id": "encoding",
+          "label": "Same statement, same bytes; different statement, different bytes",
+          "hints": [
+            {
+              "id": "encoding-hint-1",
+              "content": "Every field is emitted as `<length><payload>`, the length being `LENGTH_PREFIX_BYTES` bytes in `BYTE_ORDER`; text becomes UTF-8 and an integer becomes `INTEGER_BYTES` bytes at a fixed width. The field order comes from `STATEMENT_FIELDS`, not from the order the caller's dict was built in. `params` is its own framed block, each `PARAM_NAMES` entry as a name and then a value. Without that outer frame, a statement with three parameters and one with two followed by a longer next field are not separated by anything in the output. Fixed width because `1` and `01` are the same number; fixed order because two dicts that compare equal are one statement."
+            }
+          ]
+        },
+        {
+          "id": "identity",
+          "label": "Name the program by the bytes that run",
+          "hints": [
+            {
+              "id": "identity-hint-1",
+              "content": "Of the four fields on an image record, one is what actually executes. The rest are what a build system wrote down about it. Two of the four siblings are the same program as the base and two are not, and every way of getting this wrong gets a different pair wrong: a digest over `sourcePath` says the rebuild is the base image, and one over `imageId` says the relabelled copy is a different program. `restamped` is the judgement call — settle it the way proving systems do. And do not hand out a digest for a body `decode_program` refuses: a digest is a promise that the bytes under it are the bytes that ran, and bytes nothing can run have no such promise to make."
+            }
+          ]
+        },
+        {
+          "id": "ingestion",
+          "label": "The witness goes through one door",
+          "hints": [
+            {
+              "id": "ingestion-hint-1",
+              "content": "Two things have to be true at once and they pull in opposite directions. The guest needs the whole statement and the whole witness — the public inputs have to be exactly `STATEMENT_FIELDS`, since fewer leaves a verifier holding a claim it cannot reconstruct and more is a public input nobody agreed to. And `env.transcript()` has to survive being read by somebody who should not learn the witness. None of the witness's three parts is publishable, and each for a different reason: `quantity` is the exploit, `aux` is the exploit with one modular inverse still to apply because the price is public and invertible, and `search` is the exploit surrounded by its neighbours. The note written \"so the run can be reproduced\" is the one that gets you."
+            }
+          ]
+        },
+        {
+          "id": "reexec",
+          "label": "The host's account is an input, not the answer",
+          "hints": [
+            {
+              "id": "reexec-hint-1",
+              "content": "`env.hints()` carries the host's own account of what this run produced, and on the runs the checker builds every field of it is wrong. The host is the party being proved about. Refuse — `ValueError` — **before a single step runs** if the image handed over is not the one the statement names. The arithmetic comes out of `SEMANTICS[statement[\"semantics\"]]` and nowhere else: the width is not 8, 16, 32 or 64, it changes between checkpoints, and `overflow` has three values. `wrapping` reduces and records which site had to be reduced; `saturating` clamps at max, so nothing carried around zero and nothing wrapped; `checked` stops, with `trapped` set and however many steps had run. `violated` is a statement about **value** — which register the machine kept it in is no part of it."
+            }
+          ]
+        },
+        {
+          "id": "journal",
+          "label": "Publish only what a reader could already compute",
+          "hints": [
+            {
+              "id": "journal-hint-1",
+              "content": "`statementDigest` is where checkpoint 1 gets used: commit to `encode_statement(statement)` under `STATEMENT_COMMITMENT_DOMAIN`. Everything the statement says is inside that one field, which is what makes the next checkpoint possible. The three fields after it are a convenience for a reader who has the journal and not the statement, and they are not the evidence. There is one measurement and its test is \"could a reader already compute it from the public image\" — not \"is it small\" and not \"is it just a number\". Three things are never in a journal: the witness, the execution trace, and what the search tried. None of them is a debugging convenience that can be removed before release, because a journal outlives the run."
+            }
+          ]
+        },
+        {
+          "id": "replay",
+          "label": "Is this receipt evidence for this statement?",
+          "hints": [
+            {
+              "id": "replay-hint-1",
+              "content": "Verifying a seal is the part cryptography already does. What it does not do is notice that a perfectly valid seal is being shown to you next to a statement it was never about. Checking one commitment to the **whole** statement refuses six things on one line — another target, another claim, another integer width, another overflow behaviour, another protocol version, another guest build — and committing to only the interesting fields refuses none of them. The journal's own fields are **checked**, not read: receipts arrive whose digest matches and whose journal says something the statement does not. A receipt whose `claimResult` is `False` is a correct journal about a run that proves nothing. And this function never raises — raising turns a decision it owed its caller into an exception."
+            }
+          ]
+        },
+        {
+          "id": "privacy",
+          "label": "An approved name is not an approval",
+          "hints": [
+            {
+              "id": "privacy-hint-1",
+              "content": "The policy has two halves. The first is `PUBLIC_NAMES`, the names a run may disclose. The second is whether an approved name carries an approved value: a `PARAM_NAMES` name may carry that parameter's own public value and nothing else, and a `MEASUREMENT_NAMES` name may carry only what the public image already implies. Two of the runs are invisible to a scan that only reads names. A `values` entry that is itself a dict has published the names inside it too. Labels and messages are free text and are not policed, because a name is something a policy can be written against and a formatted string is not. Two of the ten disclose nothing, and one of those two fills every channel with numbers — reporting against either is as wrong as missing one against the other eight."
+            }
+          ]
+        },
+        {
+          "id": "transfer",
+          "label": "A target, a claim and a protocol version you have not seen"
+        }
+      ]
+    }
+  }
+}
