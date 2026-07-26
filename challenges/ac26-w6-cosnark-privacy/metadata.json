@@ -1,0 +1,604 @@
+{
+  "id": "ac26-w6-cosnark-privacy",
+  "name": "同じ答えを返す 8 つの prover が、 それぞれ別のことを言っている",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "advanced-cryptography-2026",
+    "order": 630,
+    "chapter": "Week 6 / Programmable Cryptography Stack Design"
+  },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 6,
+    "role": "transfer",
+    "spoilerPolicy": "independent-reimplementation",
+    "sources": [
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        "path": "week6/README.md",
+        "kind": "lecture"
+      },
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        "path": "week6/problems/co-snark-prove/README.md",
+        "kind": "assignment"
+      }
+    ]
+  },
+  "difficulty": 5,
+  "estimatedDuration": "60-90 分",
+  "shortDescription": "8 つの co-SNARK prover はどれも同じ `C = A × B` を返す。 違うのは何を、 どの出口から外へ出すかだけ。 最初の privacy violation を記録から特定し、 correctness と round 数を保ったまま塞ぐ。",
+  "description": "Week 6 の 3 問目。 前の 2 問で作った co-SNARK prover は、 ここでは**支給される**。 線形部分 (`ac26-w6-cosnark-linear`) も、 1 round の乗算 (`ac26-w6-cosnark-beaver`) も、 答えのまま渡される。 この問題は `C` をもう一度計算する問題ではない。\n\n```text\nA = Σ_j a_j w_j        B = Σ_j b_j w_j        C = A × B        (mod p)\n```\n\n渡されるのは、 その上に乗った 8 つの prover 実装 `S1`〜`S8` である。 **8 つとも、 全 seed・全 shape で `C` を `A × B` に正しく復元する。** 並べても correctness test には区別が付かない。 それがこの問題の前提であって、 ネタバレではない。\n\n違うのは、 それぞれが何を、 どの出口から外へ出すかである。\n\n```text\nartifact   次の段が受け取るもの\nlog        動きながら書き出す行\nmetrics    運用者が拾う名前付きの数\nerror      入力が壊れていたときに出るもの\n```\n\ncorrectness test が見るのは 1 番目の 1 field だけで、 8 つのうち 3 つは残りの 3 つしか使わない。 1 つは 4 つのどれも使わずに漏らし、 1 つは何も言わずに全 party の share を読む。\n\n前問の runtime は `reconstruct` を渡さなかった。 この問題の `AuditRuntime` は**渡す**。 実在の MPC library は reconstruction も cross-party な debug hook も structured logging も提供する — 運用者が必要とするからで、 ここで取り上げてしまうと問題にしたい defect の class がそもそも書けなくなり、 監査対象にならない。 代わりに runtime は、 到達した capability を operand id とともに記録する。 **値は記録しない。** 記録は transcript ではなく証拠である。\n\nspecimen の id は不透明 (`S1`..`S8`) で、 2 つは `reconstruct` を綴らない名前で到達する。 `grep(\"reconstruct\")` は何も見つけず、 capability の記録は見つける。 そこが `source-independent behavioral probe` の意味である。\n\n採点の設計として、 この問題は 35 個の壊れた監査を同梱していて、 そのうち **29 個は 8 つの specimen 全部について 「これは clean か否か」 を正しく答える**。 `make reference-test` が毎回この数を測る。 異常に気づくことと、 何がどこから漏れたかを言うことは、 まったく別の難度である。\n\ntoy であることも明示しておく。 field は列挙可能な小さい素数、 party は 2〜5、 敵対者は不在、 triple は trusted dealer が配る。 そして `Share._value` は属性 1 つ分の距離にある — runtime は sandbox ではなく instrument で、 記録しているのは 「その計算が何を公開したか」 であって 「書いた人が何を見たか」 ではない。",
+  "instructions": "## はじめに\n\nco-SNARK prover は前の 2 問で完成しています。 線形部分も 1 round の乗算も、 答えのまま支給されます。 この問題で書き直すものはありません。\n\n渡されるのは、 その上に乗った 8 つの実装 `S1`〜`S8` です。 **8 つとも同じ `C = A × B` を返します。** 違うのは、 何を外へ出すかです。\n\n## やってはいけないこと\n\nspecimen の source を読むこと。 2 つは capability を、 それを綴らない名前で呼び出します。 `grep` は、 この問題がそれより良くあろうとしている監査そのものです。 必要なものは全部、 実行が残す記録の中にあります。\n\n## 支給されるもの\n\n```python\nfrom fixtures.lab import malformed_row, probe_factory, serialized\n```\n\n```text\nprobe(specimen_id, row=None)   1 つの specimen を新しい scenario で走らせ、 Evidence を返す\nmalformed_row(row)             宣言された width と係数ベクトルが食い違う row\nserialized(disclosure)         次の段が実際に受け取る形の disclosure\n```\n\n`Evidence` が持つもの:\n\n```text\nruntime      それが走った AuditRuntime\n             .reached()    到達した capability: {\"capability\", \"party\", \"operands\"}\n             .openings()   開示の記録:         {\"roundId\", \"shareIds\", \"maskedBy\"}\n             .events()     操作の全 trace\ndisclosure   目の前に出されたもの: .artifact / .log / .metrics / .error\nrow          渡された relation\nsetting      p, parties, width, fieldId, settingId\nraised       例外を外へ出したならその型名\n```\n\npolicy は `fixtures.generate` にあります。 `ALLOWED_NAMES` と `SHARING_ONLY_NAMES` は**別々の 2 つの規則**で、 8 つのうち 1 つはその違いだけのために存在します。\n\n## 最初の一手\n\n```bash\nmake inspect\nmake inspect S=sparse\nmake inspect P=S3\n```\n\n`make inspect` は、 何も漏らさない prover が 1 回動いたときの記録の形を見せます。 specimen ではなく、 支給された `beaver_product` と `clean_artifact` を並べただけのものなので、 8 つのどれについても何も明かしません。 先に見てください。\n\nそのあと `local/starter/prover.py` を編集します。\n\n## ゴール\n\n8 個の checkpoint を独立に通します。 「壊れている」 と言うだけでは 1 つも通りません。 どの channel の、 どの field から、 どの値が導けるのかを、 記録から名指しします。",
+  "writeup": "## 正しい答えは、 正しい prover の証拠にならない\n\n8 つの specimen は全 seed・全 shape で `C` を `A × B` に復元します。 96 通りの実行で 96 通りとも一致します。 correctness test をいくら足しても、 このうち 7 つが何をしているかは 1 bit も見えません。\n\nそして監査の側にも同じ落とし穴があります。 この問題は 35 個の壊れた監査を同梱していて、 そのうち **29 個は 8 つの specimen 全部について 「clean か否か」 を正しく答えます**。 `make reference-test` が毎回この数を測り、 数が動いたら数のほうを直します。 **異常に気づくことは簡単で、 何がどこから漏れたかを言うことは難しい。** 8 個の checkpoint が exact な pair と exact な値を要求するのは、 その差が実務での差だからです。\n\n## 4 つの出口のうち、 correctness test は 1 つしか見ない\n\n`artifact` は次の段が受け取るもので、 test が読むのもそこです。 `log`・`metrics`・`error` は誰も読みません。 8 つのうち 3 つはその 3 つしか使いません。\n\nlog は**構造化**されています。 `emit(event, **values)` で、 1 行は `{\"event\", \"values\"}` です。 policy の対象になるのは `values` の**名前**であって、 event 名でも message の文面でもありません。 これは意図的な設計です: 先に文字列へ潰してしまえば、 この問題は正規表現の練習になってしまいます。 その代わり、 message の文面に秘密を書く実装はこの監査では捕まりません — 保証範囲の外です。\n\n## 許可された名前は、 許可ではない\n\n`ALLOWED_NAMES` に `A` / `B` / `C` は入っています。 **sharing として。** ある実装は allowlist のど真ん中にある名前 `C` に、 sharing の代わりに整数を入れて publish します。 名前だけを見る scan は何も見つけません。 `SHARING_ONLY_NAMES` はそのために存在する 2 つ目の規則で、 `is_sharing(value, parties)` が `Share._value` に手を伸ばさずに 「中身が何か」 を訊くための道具です。\n\n## 開示されたからといって、 開示してよかったわけではない\n\n1 回の Beaver 乗算が許可する開示はちょうど 2 つ、 mask された `d` と `e` で、 どちらも乗算自身の round id の下です。 開示が authorized なのは**両方**成り立つときだけです。\n\n- 祖先に予約済みの triple mask がある (`maskedBy` が空でない)、 かつ\n- `roundId` が relation の宣言した round である\n\n前者を欠く開示は、 何にも隠されていない値を公開しました。 後者を欠く開示は、 relation が宣言していない round で mask された値を公開しました — mask を、 それが引かれた相手ではない値に使ったということで、 triple の再利用と同じ defect が変装しているだけです。 `maskedBy` だけを見る監査は後者を通し、 round だけを見る監査は前者を通します。\n\n同じ述語が checkpoint `classify` と `open-set` の両方で要ります。 これは節約ではなく、 「その 2 つは同じ問いだ」 という主張です。 実測でも、 `_authorized` を片方だけの規則に壊すと 2 つの checkpoint が同時に落ちます。\n\n## 何も言わずに漏らす実装\n\nある specimen は 4 つの channel のどれにも何も出しません。 disclosure は clean な prover のものと 1 byte も違いません。 そのうえで全 party の share を `peek` します。 何も process の外へ出ないので、 **開示の監査には原理的に見えません。** capability の監査には見えます。\n\nこれが 「secret sharing という primitive を使っているから prover 全体が private」 という誤解の実体です。 primitive は正しく動いていて、 その上の application が privacy contract を持っていないだけです。\n\n`peek` の記録は、 読んだ party ではなく **share を持っている party** の id を刻みます。 それで足ります: 2 party 分の share を 1 つの party が全部持っていることはないので、 owner が 2 種類以上現れた時点で誰かが境界を越えています。 逆に、 自分の share を 2 回読んだだけの run は越えていません — peek の数と owner の数は別の数字です。\n\n## 1 回動かして分かることと、 分からないこと\n\nある specimen は happy path では完璧です。 宣言された width と係数ベクトルが食い違う row を渡したときだけ、 例外 handler が失敗時の状態を error に詰めます。 1 回しか動かさない監査は、 これを clean と報告します。 clean だからです — そうでなくなるまでは。\n\ncheckpoint `capability` だけが `probe` を渡され、 何回動かすかを監査側に決めさせるのはそのためです。 残りの 7 つは 1 回の run を渡して 「これは何を言っているか」 を訊きます。\n\n## 漏れた値から秘密を組み立てる\n\n漏れとは 「見て分かる数」 ではありません。 **目の前にあるものだけを使って何かを導ける数**です。 この問題の disclosure には 3 種類の導出があります。\n\n1. 秘密がそのまま、 秘密らしくない名前の下に出ている (`prover.left_half` は運用者が alert を張りたかった数です)\n2. sharing が平文のまま出ている — 加法的 share は足せば元に戻ります\n3. **秘密らしくない値が、 policy が明示的に許可している値と同じ record に出ている**\n\n3 番目が本題です。 flag される field は `x` で、 それ自体は秘密に見えません。 秘密は、 それを `d` と組み合わせたときに出てきます — そして `d` は policy が許可している公開値です。 前問の `d = A - x` がそのまま `A = d + x` になります。 「漏れを見つけること」 と 「そこから秘密を導くこと」 は別の技能で、 だから checkpoint も別です。\n\nこの checkpoint では `serialized` された disclosure が渡されます。 sharing はすでに不透明な share id の列になっていて、 `Share._value` も `reconstruct` も使えません。 checker は runtime を見ていて、 答えるために capability へ到達した提出は別の問いに答えたことになります。\n\n## 修復して、 同時に全部を満たす\n\n`private_prover` は支給された `beaver_product` の上に書きます。 満たすべきものは同時に成立します: `C` が `A × B` に復元し、 開示は 2 つでどちらも authorized、 round は 1、 `open` 以外の capability に到達せず、 4 つの channel のどれにも policy 外のものを出さない。\n\n何も publish しなければ 4 つは満たせます。 そして 1 つ目で落ちます。 **何も言わない prover は private ではなく、 ただ役に立たないだけです。**\n\nもう 1 つ採点されるものがあり、 それは 「何か別のことが既に壊れているときにしか起きない」 がゆえに間違えやすい部分です。 triple を消費済みの runtime が渡され、 `reserve_triple` が拒否して呼び出しが失敗します。 失敗させてください。 失敗を debug できるように失敗時の状態を人前に出す handler は、 火曜日に private だった prover が水曜日に private でなくなる最も一般的な経路です。\n\n## 監査が証明できることと、 できないこと\n\n証明できるのは、 この runtime 上で公開された値がどれも予約済み mask の下にあり、 到達した capability が protocol のものだけで、 4 つの channel に policy 外の名前が出ていないことです。\n\n証明できないのは 「誰も `A` を見なかった」 ことです。 `Share._value` は属性 1 つ分の距離にあり、 参加者は machine も image も持っています。 runtime は sandbox ではなく instrument です。 記録が証明できるのは `reached()` と `openings()` と `Disclosure` が言っていることちょうどであって、 それ以上ではありません。\n\n## toy と production の差\n\nfield は列挙できる小さい素数、 party は 2〜5、 敵対者は不在、 triple は trusted dealer が配ります。 本物の co-SNARK では、 ここで 「policy」 と呼んでいるものは serialization schema と log の schema と metric の cardinality 制限として実装され、 その全部が review の対象になります。 この問題が主張しているのは 「その review を機械で回せる形に落とせる」 ことであって、 「落としたものが完全である」 ことではありません。\n\n## 対象外\n\nformal simulation-based proof、 timing / cache side channel、 malicious-secure MPC compiler、 実際の SNARK proof の privacy 解析。",
+  "tags": [
+    "advanced-cryptography-2026",
+    "week6",
+    "mpc",
+    "co-snark",
+    "privacy-audit",
+    "secret-sharing",
+    "zero-knowledge",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18115,
+      "name": "/verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "co-SNARK prover の public input / secret share / allowed open / secret intermediate / artifact / verifier-only を分類できる",
+    "correct な relation を返しながら privacy が破れている実装を、 記録から検出できる",
+    "capability の到達記録を読み、 名前を綴らない alias 経由の reconstruct を見つけられる",
+    "authorized な d/e open と、 mask 無しの open・宣言外 round の open を区別できる",
+    "party 境界を越えた share の読み取りを、 何も開示しない実装についても検出できる",
+    "artifact / log / metrics / error の 4 channel すべてを policy に照らして検査できる",
+    "許可された名前が許可されていない中身を運んでいる場合を検出できる",
+    "participant に見える view だけから、 本来非公開の値を導出する counterexample を提出できる",
+    "1 回の実行では現れない、 malformed input path の leakage を probe で引き出せる",
+    "correctness・open set・round 数・artifact schema を同時に維持したまま leakage を塞げる",
+    "primitive レベルの安全性が application レベルの privacy contract を自動的には与えないことを説明できる"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.ac26-w6-cosnark-privacy.data-classification",
+        "description": "co-SNARK prover run に現れる値を、 provenance・形・開示の認可状態から 6 class へ分類できる。"
+      },
+      {
+        "id": "lo.ac26-w6-cosnark-privacy.capability-audit",
+        "description": "実行が到達した capability を記録から読み、 source を読まずに reconstruct / peek への到達を特定できる。"
+      },
+      {
+        "id": "lo.ac26-w6-cosnark-privacy.allowed-open-set",
+        "description": "1 回の乗算が認可する開示を mask と round の両方から定義し、 過剰 open を検出できる。"
+      },
+      {
+        "id": "lo.ac26-w6-cosnark-privacy.cross-party-access",
+        "description": "party-local な計算が別 party の share を読んだことを、 何も開示しない実装についても検出できる。"
+      },
+      {
+        "id": "lo.ac26-w6-cosnark-privacy.disclosure-audit",
+        "description": "artifact / log / metrics / error の 4 channel を name policy と kind policy の両方に照らせる。"
+      },
+      {
+        "id": "lo.ac26-w6-cosnark-privacy.leakage-evidence",
+        "description": "participant に見える disclosure だけから秘密を導出し、 実行可能な counterexample として提出できる。"
+      },
+      {
+        "id": "lo.ac26-w6-cosnark-privacy.private-repair",
+        "description": "correctness・open set・round 数・artifact schema を維持したまま leakage を塞げる。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.cosnark-privacy",
+        "description": "co-SNARK prover が relation を正しく計算しつつ、 witness 由来の値を公開しないという性質。"
+      },
+      {
+        "id": "concept.prover-data-boundary",
+        "description": "prover の内部状態と、 participant / 次段 / 運用者が見てよいものとを分ける境界。"
+      },
+      {
+        "id": "concept.allowed-open-set",
+        "description": "protocol が公開を認可した値の集合。 mask の有無と round の宣言の両方で定義される。"
+      },
+      {
+        "id": "concept.capability-security",
+        "description": "何ができたかを記録し、 到達した権能そのものを監査対象にする見方。"
+      },
+      {
+        "id": "concept.proof-artifact-minimization",
+        "description": "proof artifact が次段の消費に必要な最小限だけを運ぶという設計原則。"
+      },
+      {
+        "id": "concept.application-level-privacy",
+        "description": "primitive の安全性とは別に、 その上の application が保つべき privacy contract。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.ac26-w6-cosnark-privacy.classify",
+        "description": "開示済みでも認可されていない値を secret として分類し、 規則の順序を正しく置いた。"
+      },
+      {
+        "id": "assessment.ac26-w6-cosnark-privacy.capability",
+        "description": "record から到達 capability を読み、 単一実行では現れない error path の到達も probe で引き出した。"
+      },
+      {
+        "id": "assessment.ac26-w6-cosnark-privacy.open-set",
+        "description": "mask の有無と宣言 round の両方を検査し、 どちらか片方だけでは見えない開示を検出した。"
+      },
+      {
+        "id": "assessment.ac26-w6-cosnark-privacy.cross-party",
+        "description": "peek の owner から境界越えを判定し、 自分の share を複数回読んだだけの実行と区別した。"
+      },
+      {
+        "id": "assessment.ac26-w6-cosnark-privacy.leakage",
+        "description": "4 channel すべてを検査し、 許可された名前が sharing 以外を運んでいる場合も検出した。"
+      },
+      {
+        "id": "assessment.ac26-w6-cosnark-privacy.evidence",
+        "description": "serialize された disclosure だけから秘密を導出し、 取得元の channel と field を名指した。"
+      },
+      {
+        "id": "assessment.ac26-w6-cosnark-privacy.repair",
+        "description": "correctness・authorized open・round 数・artifact schema・失敗時の無開示を同時に満たした。"
+      },
+      {
+        "id": "assessment.ac26-w6-cosnark-privacy.transfer",
+        "description": "見たことのない体・party 数・witness 長と、 見たことのない実装で全性質が成立した。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.secret-sharing-primitive-makes-whole-prover-private",
+        "description": "secret sharing を使っているのだから prover 全体が private だという誤解。 primitive は正しく、 application に contract が無いだけのことがある。"
+      },
+      {
+        "id": "misconception.correct-proof-artifact-cannot-leak-witness",
+        "description": "schema 通りの proof artifact なら witness は漏れないという誤解。 許可された名前が許可されていない中身を運べる。"
+      },
+      {
+        "id": "misconception.debug-output-is-outside-the-protocol",
+        "description": "log や metrics や error は protocol の外だから threat model に入らないという誤解。"
+      },
+      {
+        "id": "misconception.opened-masked-values-are-always-safe",
+        "description": "mask された値なら公開してよいという誤解。 mask が引かれた相手の round でなければ安全ではない。"
+      },
+      {
+        "id": "misconception.removing-reconstruct-call-by-name-removes-leakage",
+        "description": "名前で reconstruct を消せば leakage も消えるという誤解。 alias 経由の到達は記録にしか現れない。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "lo.ac26-w6-cosnark-privacy.data-classification"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "lo.ac26-w6-cosnark-privacy.capability-audit"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "lo.ac26-w6-cosnark-privacy.allowed-open-set"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "lo.ac26-w6-cosnark-privacy.cross-party-access"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "lo.ac26-w6-cosnark-privacy.disclosure-audit"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "lo.ac26-w6-cosnark-privacy.leakage-evidence"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "lo.ac26-w6-cosnark-privacy.private-repair"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "concept.cosnark-privacy"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "concept.prover-data-boundary"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "concept.allowed-open-set"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "concept.capability-security"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "concept.proof-artifact-minimization"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "concept.application-level-privacy"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "concept.over-opening"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "concept.privacy"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "concept.co-snark"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "concept.beaver-triple"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "concept.mask-freshness"
+    },
+    {
+      "type": "requires",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "problem.ac26-w6-cosnark-beaver"
+    },
+    {
+      "type": "requires",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "problem.ac26-w6-cosnark-linear"
+    },
+    {
+      "type": "requires",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "problem.ac26-w2-privacy-audit"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w6-cosnark-privacy.data-classification",
+      "target": "concept.prover-data-boundary"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w6-cosnark-privacy.capability-audit",
+      "target": "concept.capability-security"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w6-cosnark-privacy.allowed-open-set",
+      "target": "concept.allowed-open-set"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w6-cosnark-privacy.cross-party-access",
+      "target": "concept.capability-security"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w6-cosnark-privacy.disclosure-audit",
+      "target": "concept.proof-artifact-minimization"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w6-cosnark-privacy.leakage-evidence",
+      "target": "concept.over-opening"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w6-cosnark-privacy.private-repair",
+      "target": "concept.application-level-privacy"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "assessment.ac26-w6-cosnark-privacy.classify"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "assessment.ac26-w6-cosnark-privacy.capability"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "assessment.ac26-w6-cosnark-privacy.open-set"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "assessment.ac26-w6-cosnark-privacy.cross-party"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "assessment.ac26-w6-cosnark-privacy.leakage"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "assessment.ac26-w6-cosnark-privacy.evidence"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "assessment.ac26-w6-cosnark-privacy.repair"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "assessment.ac26-w6-cosnark-privacy.transfer"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "misconception.secret-sharing-primitive-makes-whole-prover-private"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "misconception.correct-proof-artifact-cannot-leak-witness"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "misconception.debug-output-is-outside-the-protocol"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "misconception.opened-masked-values-are-always-safe"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "misconception.removing-reconstruct-call-by-name-removes-leakage"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w6-cosnark-privacy",
+      "target": "problem.ac26-w6-cosnark-beaver"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18115/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "classify",
+        "label": "どの値が、 誰のものか",
+        "points": 30,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "classify-hint-1",
+            "content": "6 つの class は provenance だけでは決まりません。 同じ 「witness 由来」 が、 誰が持っているかと、 protocol がその開示を認めたかで 3 つの class に分かれます。 だから規則には**順番**があり、 それを決めるのが仕事の大半です。 catalog には開示済みのくせに秘密のままの entry が 2 つ入っています。 1 つは relation が宣言していない round で、 1 つは何にも隠されずに公開されました。 「公開されたのだから公開してよかった」 が、 この checkpoint が壊しにきている思い込みです。",
+            "penalty": 12
+          }
+        ]
+      },
+      {
+        "id": "capability",
+        "label": "1 回動かして分かることと、 分からないこと",
+        "points": 40,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "capability-hint-1",
+            "content": "`reached()` に何が入るかは `PROTOCOL_CAPABILITIES` を引いてから見てください — 1 回の乗算は `d` と `e` を開くだけで、 それ以外は上に乗った prover が決めたことです。 それから、 この checkpoint だけが `probe` を渡します。 残りの 7 つは 1 回の run を渡します。 その差は偶然ではありません: 1 回の run は 1 つの入力で、 例外 path にしか defect が無い実装は、 何かがその path を通らせるまで完璧です。 `malformed_row` がその入力を作ります。",
+            "penalty": 16
+          }
+        ]
+      },
+      {
+        "id": "open-set",
+        "label": "話してよかった値と、 そうでない値",
+        "points": 40,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "open-set-hint-1",
+            "content": "開示が authorized なのは、 予約済み mask が祖先にあり、 **かつ** `roundId` が `round_id_for(row)` の名指す round のときだけです。 2 つのうち片方だけを見る監査は、 それぞれ別の実装を見逃します。 `maskedBy` だけを見れば、 relation が宣言していない round で mask された値を開く実装を通します — mask を、 それが引かれた相手ではない値に使ったということです。 round だけを見れば、 正しい round で何にも隠されていない値を公開する実装を通します。",
+            "penalty": 16
+          }
+        ]
+      },
+      {
+        "id": "cross-party",
+        "label": "何も言わずに、 読むだけの実装",
+        "points": 30,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "cross-party-hint-1",
+            "content": "`peek` の記録は、 読んだ側ではなく share を**持っている** party の id を刻みます。 それで足ります: 2 party 分の share を 1 つの party が全部持っていることはないので、 owner が 2 種類以上現れた時点で誰かが越えています。 逆向きも大事で、 自分の share を 2 回読んだだけの run は越えていません — peek の数と owner の数は別の数字です。 disclosure が完全に clean なまま、 ここだけで落ちる実装が 1 つあります。",
+            "penalty": 12
+          }
+        ]
+      },
+      {
+        "id": "leakage",
+        "label": "答えを見る test が、 見ていない 3 つの出口",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "leakage-hint-1",
+            "content": "4 つの channel を全部読んでください。 `artifact` だけを読む監査は 3 つの specimen を丸ごと見逃します。 log と error は構造化されていて、 policy の対象は `values` の**名前**です — event 名でも message の文面でもありません。 そして規則は 2 つです。 `ALLOWED_NAMES` に無い名前が 1 つ目。 2 つ目は、 allowlist にある名前が sharing 以外を運んでいる場合で、 `is_sharing(value, parties)` がそれを `Share._value` に触らずに訊く道具です。",
+            "penalty": 18
+          }
+        ]
+      },
+      {
+        "id": "evidence",
+        "label": "漏れた値から、 秘密を組み立てる",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "evidence-hint-1",
+            "content": "渡される disclosure は `serialized` 済みで、 sharing はもう不透明な id の列です。 `Share._value` も `reconstruct` も使えません — 導出してください。 3 通りあります。 秘密がそのまま出ている場合。 sharing が平文で出ている場合 (加法的 share は足せば戻ります)。 そして本題は 3 番目で、 flag される値そのものは秘密に見えず、 **policy が明示的に許可している値と同じ record に**出ています。 前問の `d = A - x` を、 逆から読んでください。",
+            "penalty": 18
+          }
+        ]
+      },
+      {
+        "id": "repair",
+        "label": "同じ答えを返し、 何も言わない prover",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "repair-hint-1",
+            "content": "支給された `beaver_product` と `clean_artifact` の上に書きます。 難しいのは足すことではなく、 足さないことです。 何も publish しなければ 4 つの性質は満たせて、 1 つ目 (`C` が `A × B` に復元し、 artifact が実在すること) で落ちます。 そして 1 つだけ、 何か別のことが壊れているときにしか起きない採点があります: triple を消費済みの runtime が渡され、 `reserve_triple` が拒否します。 **失敗させてください。** 失敗時の状態を人前に出す handler が、 火曜日に private だった prover を水曜日にそうでなくします。",
+            "penalty": 18
+          }
+        ]
+      },
+      {
+        "id": "transfer",
+        "label": "見たことのない設定と、 見たことのない実装で",
+        "points": 25,
+        "wrongAnswerPenalty": 15
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Eight provers that agree on the answer and disagree on what they say",
+      "shortDescription": "All eight co-SNARK provers return the same `C = A * B`. What differs is what each one lets out, and through which exit. Find the first privacy violation in the record and close it without changing the answer or the round count.",
+      "description": "Week 6's third problem. The co-SNARK prover the previous two built is **supplied** here: the linear layer (`ac26-w6-cosnark-linear`) and the one-round multiplication (`ac26-w6-cosnark-beaver`) are both handed over as answers. This problem does not ask you to compute `C` again.\n\n```text\nA = sum_j a_j w_j        B = sum_j b_j w_j        C = A * B        (mod p)\n```\n\nWhat you are handed is eight prover implementations built on top of it, `S1`..`S8`. **All eight reconstruct `C` to `A * B` at every seed and every shape.** Line them up and a correctness test cannot tell them apart. That is the premise of the problem, not a spoiler.\n\nWhat differs is what each one lets out, and through which exit.\n\n```text\nartifact   what the next stage consumes\nlog        lines a prover writes while working\nmetrics    named numbers an operator scrapes\nerror      what a malformed input produces\n```\n\nA correctness test reads the first field of the first one. Three of the eight use only the other three. One leaks through none of the four, and one says nothing at all while reading every party's share.\n\nThe previous problem's runtime withheld `reconstruct`. This one's `AuditRuntime` **does not**: a real MPC library exposes reconstruction, cross-party debugging hooks and structured logging because real operators need them, and withholding them here would make the whole class of defect unwritable and therefore unauditable. Instead the runtime records every capability reached, with its operand ids and **never with a value**. The record is evidence rather than a transcript.\n\nSpecimen ids are opaque (`S1`..`S8`) and two of them reach a capability through a name that does not spell it. `grep(\"reconstruct\")` finds nothing; the capability record finds it. That is what a source-independent behavioural probe means.\n\nOn scoring: this problem ships 35 deliberately broken audits, and **29 of them still give all eight specimens the right verdict** -- clean or not clean. `make reference-test` re-measures that count on every run. Noticing that something is wrong and saying what leaked and from where are very different difficulties.\n\nThis is a toy and says so. The field is a small enumerable prime, there are two to five parties, the adversary is absent, and a trusted dealer produces the triples. And `Share._value` is one attribute access away: the runtime is an instrument, not a sandbox, and it records what a computation published rather than what its author looked at.",
+      "instructions": "## Start here\n\nThe co-SNARK prover was finished in the previous two problems. The linear layer and the one-round multiplication are both supplied as answers. There is nothing here to rebuild.\n\nWhat you are handed is eight implementations built on top of it, `S1`..`S8`. **All eight return the same `C = A * B`.** What differs is what they let out.\n\n## What you may not do\n\nRead a specimen's source. Two of them reach a capability through a name that does not spell it, and `grep` is exactly the audit this problem exists to be better than. Everything you need is in the record a run leaves behind.\n\n## What is supplied\n\n```python\nfrom fixtures.lab import malformed_row, probe_factory, serialized\n```\n\n```text\nprobe(specimen_id, row=None)   run one specimen in a fresh scenario, return its Evidence\nmalformed_row(row)             a row whose declared width disagrees with its coefficients\nserialized(disclosure)         the disclosure as a next stage receives it\n```\n\nAn `Evidence` carries:\n\n```text\nruntime      the AuditRuntime it ran on\n             .reached()    every capability reached: {\"capability\", \"party\", \"operands\"}\n             .openings()   every opening:            {\"roundId\", \"shareIds\", \"maskedBy\"}\n             .events()     the full operation trace\ndisclosure   what it put in front of you: .artifact, .log, .metrics, .error\nrow          the relation it was handed\nsetting      p, parties, width, fieldId, settingId\nraised       the exception type name if it let one out\n```\n\nThe policy is in `fixtures.generate`. `ALLOWED_NAMES` and `SHARING_ONLY_NAMES` are **two separate rules**, and one of the eight exists entirely to make the difference matter.\n\n## First move\n\n```bash\nmake inspect\nmake inspect S=sparse\nmake inspect P=S3\n```\n\n`make inspect` shows the shape of the record one prover that leaks nothing leaves behind. It is not a specimen -- it is the supplied `beaver_product` and `clean_artifact` put side by side -- so it gives away nothing about any of the eight. Look at it first.\n\nThen edit `local/starter/prover.py`.\n\n## Goal\n\nClear eight independently scored checkpoints. Saying \"this one is broken\" clears none of them. Name the channel, the field, and the value the record yields.",
+      "writeup": "## A correct answer is not evidence of a correct prover\n\nAll eight specimens reconstruct `C` to `A * B` at every seed and every shape -- 96 runs out of 96 agree. No amount of correctness testing shows one bit of what seven of them are doing.\n\nThe same trap sits on the audit side. This problem ships 35 deliberately broken audits, and **29 of them give all eight specimens the right verdict** -- clean or not clean. `make reference-test` re-measures that count on every run; if it moves, the number moves with it. **Noticing that something is wrong is easy. Saying what leaked and from where is not.** The eight checkpoints demand exact pairs and exact values because that is the difference that matters in practice.\n\n## Of the four exits, a correctness test looks at one\n\n`artifact` is what the next stage consumes, and it is what a test reads. Nobody reads `log`, `metrics` or `error`. Three of the eight use only those three.\n\nThe log is **structured**: `emit(event, **values)`, and a record is `{\"event\", \"values\"}`. The policy surface is the *field names* inside `values` -- not the event name, and not the prose of a message. That is a deliberate design choice: reducing it to strings first would have made this problem an exercise in regular expressions. The cost is stated rather than hidden -- a prover that writes a secret into a message's prose is not caught by this audit.\n\n## An allowed name is not an allowance\n\n`A`, `B` and `C` are on `ALLOWED_NAMES`. **As sharings.** One implementation publishes a name squarely in the middle of the allowlist, `C`, carrying an integer where a sharing belongs. A scan that only looks at names finds nothing. `SHARING_ONLY_NAMES` is the second rule that exists for it, and `is_sharing(value, parties)` is the tool for asking what a value *is* without reaching into `Share._value`.\n\n## Published is not the same as allowed to be published\n\nOne Beaver multiplication authorizes exactly two openings -- the masked `d` and `e`, both under the multiplication's own round id. An opening is authorized only when **both** hold:\n\n- a reserved triple mask is in its ancestry (`maskedBy` is not empty), and\n- its `roundId` is the round the relation declared\n\nAn opening that fails the first published something nothing was hiding. One that fails the second published a masked value in a round the relation never declared -- a mask spent on a value it was not drawn for, which is triple reuse in a disguise. An audit that checks only `maskedBy` passes the second; one that checks only the round passes the first.\n\nThe same predicate is needed by the `classify` checkpoint and by `open-set`. That is not an economy; it is the claim that those are the same question. Measured: breaking `_authorized` down to either half alone fails both checkpoints at once.\n\n## The implementation that leaks without saying anything\n\nOne specimen puts nothing into any of the four channels. Its disclosure is byte-for-byte a clean prover's. It also peeks every party's share. Nothing leaves the process, so **an audit of disclosure cannot see it, even in principle.** An audit of capability can.\n\nThat is what \"the secret-sharing primitive makes the whole prover private\" actually looks like. The primitive is working exactly as specified. The application on top of it simply has no privacy contract.\n\nA `peek` record stamps the id of the party that **owns** the share, not the one that read it. That is enough: no single party holds shares belonging to two parties, so the moment two owners appear somebody crossed a boundary. And a run that read its own share twice did not -- the number of peeks and the number of owners are different numbers.\n\n## What one run tells you, and what it does not\n\nOne specimen is flawless on the happy path. Hand it a row whose declared width disagrees with its coefficient vector and an exception handler packs the failing state into the error. An audit that runs it once reports it clean. It *is* clean -- right up until it is not.\n\nThat is why only the `capability` checkpoint is handed a `probe` and left to decide how many runs there are. The other seven hand you one run and ask what it says.\n\n## Building the secret out of what leaked\n\nA leak is not \"a number you recognize\". It is **a number you can derive something secret from, using only what is in front of you**, and these disclosures need three different derivations:\n\n1. the secret itself, under a name nobody would flag as sensitive (`prover.left_half` is a number an operator wanted to alert on)\n2. a whole sharing in the clear -- additive shares sum to what they were hiding\n3. **a value that is not secret-looking at all, published in the same record as a value the policy explicitly allows**\n\nThe third is the point. The flagged field is `x`, which looks like nothing. The secret comes out of combining it with `d`, which the policy permits. The previous problem's `d = A - x` is simply read the other way: `A = d + x`. Finding the leak and deriving the secret are two different skills, so they are two different checkpoints.\n\nThat checkpoint is handed a `serialized` disclosure: sharings have already become lists of opaque share ids, so neither `Share._value` nor `reconstruct` is on the table. The checker watches the runtime, and a submission that reaches a capability to answer has answered a different question.\n\n## Repairing all of it at once\n\n`private_prover` is written on top of the supplied `beaver_product`, and everything has to hold simultaneously: `C` reconstructs to `A * B`, there are exactly two openings and both are authorized, the schedule is one round, no capability beyond `open` is reached, and none of the four channels carries anything outside the policy.\n\nPublishing nothing satisfies four of those and fails the first, which is the point. **A prover that says nothing is not private. It is useless.**\n\nOne more thing is graded, and it is easy to get wrong precisely because it only happens when something else has already gone wrong. The call is made on a runtime whose triple has already been spent, so `reserve_triple` refuses and the call fails. Let it fail. A handler that puts the failing state in front of someone so the failure can be debugged is the single most common way a prover that is private on Tuesday stops being private on Wednesday.\n\n## What the audit proves, and what it does not\n\nIt proves that every value published on this runtime went out under a reserved mask, that no capability beyond the protocol's own was reached, and that no name outside the policy appeared in any of the four channels.\n\nIt does **not** prove that nobody ever saw `A`. `Share._value` is one attribute access away, and the participant owns the machine and the image. The runtime is an instrument, not a sandbox: what the record proves is exactly what `reached()`, `openings()` and the `Disclosure` say, and no more.\n\n## Toy versus production\n\nThe field is a small enumerable prime, there are two to five parties, the adversary is absent, and a trusted dealer produces the triples. In a real co-SNARK, what is called \"the policy\" here is implemented as a serialization schema, a log schema and a metric cardinality limit, all of which are review artifacts. The claim this problem makes is that such a review can be reduced to something a machine runs -- not that what it reduces to is complete.\n\n## Not in scope\n\nFormal simulation-based proofs, timing and cache side channels, malicious-secure MPC compilers, and the privacy analysis of an actual SNARK proof.",
+      "learningGoals": [
+        "Classify a co-SNARK prover run's values into public input, secret share, allowed open, secret intermediate, artifact and verifier-only",
+        "Detect an implementation that returns the correct relation while its privacy is broken, from the record",
+        "Read the capability record and find a reconstruct reached through an alias that does not spell it",
+        "Tell an authorized d/e opening apart from an unmasked one and from one in an undeclared round",
+        "Detect a read across a party boundary, including in an implementation that discloses nothing",
+        "Check all four channels -- artifact, log, metrics, error -- against the policy",
+        "Detect an allowed name carrying something the policy does not allow",
+        "Submit a counterexample deriving a non-public value from the participant-visible view alone",
+        "Draw out a leak on a malformed-input path that a single run never reaches",
+        "Close the leak while keeping correctness, the open set, the round count and the artifact schema",
+        "Explain why primitive-level safety does not automatically give an application-level privacy contract"
+      ],
+      "checks": [
+        {
+          "id": "classify",
+          "label": "Which values belong to whom",
+          "hints": [
+            {
+              "id": "classify-hint-1",
+              "content": "The six classes are not decided by provenance alone. The same witness-derived value lands in three different classes depending on who holds it and whether the protocol authorized the disclosure -- so the rules have an **order**, and working out which one has to be asked first is most of the work. The catalog holds two entries that were opened and are still secret: one went out in a round the relation never declared, one went out with nothing hiding it. \"It was published, so publishing it was allowed\" is the belief this checkpoint exists to break."
+            }
+          ]
+        },
+        {
+          "id": "capability",
+          "label": "What one run tells you, and what it does not",
+          "hints": [
+            {
+              "id": "capability-hint-1",
+              "content": "Look at what `reached()` holds after subtracting `PROTOCOL_CAPABILITIES` -- one multiplication opens `d` and `e` and does nothing else, so anything more is something the prover on top decided to do. And note that this is the only checkpoint handed a `probe`; the other seven hand you a run. That is not an accident: one run is one input, and an implementation whose only defect sits on an exception path is flawless until something makes it take that path. `malformed_row` builds such an input."
+            }
+          ]
+        },
+        {
+          "id": "open-set",
+          "label": "The values it was allowed to say, and the ones it was not",
+          "hints": [
+            {
+              "id": "open-set-hint-1",
+              "content": "An opening is authorized only when a reserved mask is in its ancestry **and** its `roundId` is the one `round_id_for(row)` names. An audit that checks one half passes a different implementation than one that checks the other. Check only `maskedBy` and you pass a prover that opens a masked value in a round the relation never declared -- a mask spent on a value it was not drawn for. Check only the round and you pass one that publishes a value in the right round with nothing hiding it."
+            }
+          ]
+        },
+        {
+          "id": "cross-party",
+          "label": "The implementation that says nothing and reads everything",
+          "hints": [
+            {
+              "id": "cross-party-hint-1",
+              "content": "A `peek` record stamps the id of the party that **owns** the share, not the one that read it. That is enough: no single party holds shares belonging to two parties, so the moment two owners appear somebody crossed. The other direction matters too -- a run that read its own share twice did not cross, and the number of peeks and the number of owners are different numbers. One implementation has a perfectly clean disclosure and fails here alone."
+            }
+          ]
+        },
+        {
+          "id": "leakage",
+          "label": "The three exits a correctness test never looks at",
+          "hints": [
+            {
+              "id": "leakage-hint-1",
+              "content": "Read all four channels. An audit that reads only `artifact` misses three specimens entirely. The log and the error are structured, and the policy surface is the *names* inside `values` -- not the event name, not the prose of a message. And there are two rules: a name that is not in `ALLOWED_NAMES` is the first. The second is a name that *is* on the allowlist carrying something other than a sharing, and `is_sharing(value, parties)` asks that without touching `Share._value`."
+            }
+          ]
+        },
+        {
+          "id": "evidence",
+          "label": "Build the secret out of what leaked",
+          "hints": [
+            {
+              "id": "evidence-hint-1",
+              "content": "The disclosure you are handed is `serialized`: sharings are already lists of opaque ids, so neither `Share._value` nor `reconstruct` is available. Derive it. There are three shapes. The secret published as itself. A whole sharing in the clear -- additive shares sum back. And the one that matters: a flagged value that does not look secret at all, published **in the same record as a value the policy explicitly allows**. Read the previous problem's `d = A - x` backwards."
+            }
+          ]
+        },
+        {
+          "id": "repair",
+          "label": "Same answer, nothing said",
+          "hints": [
+            {
+              "id": "repair-hint-1",
+              "content": "Write it on top of the supplied `beaver_product` and `clean_artifact`. The hard part is not what to add; it is not adding anything. Publishing nothing satisfies four of the properties and fails the first -- `C` has to reconstruct to `A * B` and the artifact has to exist. And one thing is graded that only happens once something else has gone wrong: the call is made on a runtime whose triple is already spent, so `reserve_triple` refuses. **Let it fail.** A handler that puts the failing state in front of someone is what turns a private prover into a leaky one overnight."
+            }
+          ]
+        },
+        {
+          "id": "transfer",
+          "label": "A setting you have not seen, and provers you have not seen"
+        }
+      ]
+    }
+  }
+}
