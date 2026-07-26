@@ -1880,6 +1880,33 @@
       }
     },
     {
+      "id": "sha256-compress-digest",
+      "name": "SHA-256 その 3: 圧縮関数と digest、そしてパスワード保存",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 4,
+      "estimatedDuration": "90〜120 分",
+      "shortDescription": "1 round の T1 / T2、64 round、digest、そして「64 round は可逆で、最後の足し戻しだけが一方向性を作っている」ことを反例で確かめる。最後にハッシュ関数の性質とパスワード保存を問う。",
+      "tags": [
+        "sha256",
+        "hash-function",
+        "compression-function",
+        "avalanche",
+        "password-storage",
+        "cryptography-basics",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "sha256-schedule-logic",
       "name": "SHA-256 その 2: ビット演算とメッセージスケジュール",
       "category": "Challenge",

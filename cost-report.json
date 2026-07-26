@@ -769,6 +769,22 @@
       "billable": []
     },
     {
+      "id": "sha256-compress-digest",
+      "category": "Challenge",
+      "region": "ap-northeast-1",
+      "estimatedSessionMinutes": 120,
+      "perHourUsd": 0,
+      "perSessionUsd": 0,
+      "ifLeftRunningUsd": {
+        "oneDay": 0,
+        "oneWeek": 0,
+        "oneMonth": 0
+      },
+      "freeTierEligible": true,
+      "alwaysOnResources": [],
+      "billable": []
+    },
+    {
       "id": "sha256-schedule-logic",
       "category": "Challenge",
       "region": "ap-northeast-1",

@@ -1,0 +1,562 @@
+{
+  "id": "sha256-compress-digest",
+  "name": "SHA-256 その 3: 圧縮関数と digest、そしてパスワード保存",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 4,
+  "estimatedDuration": "90〜120 分",
+  "shortDescription": "1 round の T1 / T2、64 round、digest、そして「64 round は可逆で、最後の足し戻しだけが一方向性を作っている」ことを反例で確かめる。最後にハッシュ関数の性質とパスワード保存を問う。",
+  "description": "SHA-256 を自分で追える手続きに変える 3 問シリーズの 3 問目、そして最後。1 問目のパディングと 2 問目のビット演算は `local/given/primitives.py` として与えられているので、この問題は単独で解ける。\n\n`local/starter/compress.py` に 5 つの関数があり、全部が意図的に壊れている。T1 から K[i] を落とす、64 round のかわりに 63 round 回す、最後の足し戻しを省く、逆変換で h を復元せずに 0 で埋める、複数ブロックのうち最初の 1 つだけを圧縮する。最後のものは `abc` の公開テストベクタを通してしまうので、いちばん厄介な種類のバグだ。\n\n採点は 7 checkpoint 独立。round (45) は 1 round、compress (45) は 64 round と足し戻し、feedforward (45) は逆変換、digest (55) は完成した SHA-256、avalanche (40) は 1 bit 違いの 2 つのメッセージの digest が何 bit 違うかの実測、properties (35) はハッシュ関数の性質の真偽判定、storage (35) はパスワード保存の真偽判定。\n\nfeedforward がこの問題の核心。64 round は何も捨てていないので状態の置換であり、逆算できる。逆算できるものがハッシュになるのは、最後に入力状態を足し戻す Davies-Meyer の feed-forward があるからだ。checkpoint は逆変換を書かせたうえで、足し戻した後の状態には同じ逆変換が効かないことを確かめる。隠しテストは検査側が計算した順方向を逆算させるので、学習者の順方向と辻褄が合っているだけの逆変換では通らない。\n\nproperties と storage は真偽判定だが、暗記できない。文は固定 (seed からまともな主張は生成できない) で、seed が変えるのは順序だ。提出は T と F の並びなので、別のデプロイの答えは役に立たない。\n\n公開テストは意図的に不十分にしてある。使うメッセージが全部 1 ブロックに収まるので、最初のブロックだけを圧縮する実装が FIPS 公開ベクタごと全部通る。mutation suite (local/mutation.py) が 46 変異を kill することを CI で担保する。等価変異 5 種は意図的に除外し、うち 1 種は実際に survived してから外した — round 定数と schedule 語は T1 の中で足されるだけなので、引数を入れ替えても出力は変わらない。",
+  "instructions": "## はじめに\n\n圧縮関数と digest を実装します。パディング (1 問目) とビット演算 (2 問目) は `local/given/primitives.py` に正しい実装が入っているので、この問題から始めても構いません。そのファイルは編集しないでください。checkpoint 側も同じものを import します。\n\n## 最初の一手\n\n```bash\nmake inspect\n```\n\n自分の fixture と 2 つのクイズが出ます。クイズは順序が deploy ごとに変わるので、他の人の答えの並びは使えません。\n\n次に `local/starter/compress.py` を開きます。関数は 5 つ、全部壊れています。どの docstring にも仕様と starter の間違いが書いてあります。\n\n## ゴール\n\n7 つの checkpoint を独立に通します。\n\n## 手を動かす順番の目安\n\n1. `round_step` を書いて round。8 語のうち計算されるのは 2 語だけ。\n2. `compress_rounds` と `compress_block` を書いて compress。足し戻しを忘れない。\n3. `sha256_hex` を書いて digest。全ブロックを鎖のように繋ぐ。\n4. 2 つの digest を数えて avalanche。\n5. `invert_round` と `invert_rounds` を書いて feedforward。\n6. 落ち着いて読んで properties と storage。\n\n## feedforward checkpoint について\n\n64 round は情報を 1 bit も捨てていません。各 round で計算されるのは 2 語だけで、残る 6 語はずれるだけです。捨てていないなら、逆にたどれます。\n\n逆算のコツは、6 語は逆向きにずらすだけで戻ること、そして `d` と `h` は T1 の中にしか現れないので T1 を先に復元する必要があること。T1 は復元済みの語だけから決まる T2 と、新しい `a` から出ます。\n\nそこまで書けたら、`compress_block` の出力に同じ逆変換をかけてみてください。戻りません。それが一方向性の出どころです。",
+  "writeup": "## 何を確認したか\n\n### 1 round は思ったより小さい\n\n1 round で計算されるのは 8 語のうち 2 語だけです。新しい `a` は T1 + T2、新しい `e` は古い `d` + T1。残る 6 語は古い a, b, c と e, f, g がひとつずつずれたもので、古い `d` と `h` は消えます。\n\nT1 = h + Σ1(e) + Ch(e, f, g) + K[i] + W[i]、T2 = Σ0(a) + Maj(a, b, c) です。項が 5 つと 2 つ。1 つ落としても例外は出ず、全入力に対して違う digest が出ます。starter が K[i] を落としているのはそれを一度体験するためです。\n\n### 64 round は可逆で、それがまさに問題\n\n情報を捨てていないので、64 round は状態の置換です。固定された schedule に対して全単射で、逆写像を書けます。書けるということは、digest から中間状態へ逆算できるということでもあります。\n\n逆算を止めているのは最後の 1 行、入力状態の足し戻しです。Davies-Meyer 構成の feed-forward と呼ばれます。足し戻しがあると、出力から入力状態を求めるには「その状態を入れたときの round 出力」を知る必要があり、それには入力状態が要る、という循環になります。\n\nこの checkpoint で確かめたのは、一方向性が「64 回混ぜたから」ではなく「混ぜた結果に元を足したから」だという点です。round をいくら増やしても、足し戻しが無ければ可逆なままです。\n\n### digest は鎖\n\n各ブロックの圧縮出力が次のブロックの入力状態になります。最初のブロックだけを圧縮する実装は、55 バイト以下のメッセージでは正解を出し、`abc` の FIPS 公開ベクタも通ります。56 バイトから壊れます。\n\n公開テストベクタで検証するときは、必ず複数ブロックのケースを含めてください。これは SHA-256 に限らず、境界を跨がないテストで安心してしまう一般的な失敗です。\n\n### avalanche\n\n入力を 1 bit 変えると、出力 256 bit のおよそ半分が変わります。「およそ」であって「ちょうど」ではありません。理想的なランダム関数なら期待値が 128 bit で、実測は 100 から 160 くらいの範囲に散ります。あなたの計測値もその範囲に入ったはずです。\n\n半分変わるのが望ましいのは、出力の差分から入力の差分を推測できなくするためです。1 bit 入力を変えて出力が 1 bit しか変わらないハッシュは、差分をたどって入力を復元できてしまいます。\n\n### パスワード保存に SHA-256 を使ってはいけない\n\nここまで実装してきて分かるとおり、SHA-256 は速いです。それは設計目標であり、パスワード保存では欠点です。汎用 GPU で毎秒数十億回試せる関数の出力を保存すると、漏洩時に総当たりが現実的になります。\n\nソルトは必要ですが十分ではありません。ソルトが無効化するのは事前計算 (レインボーテーブル) であって、その場での総当たりは止めません。パスワードごとに別のソルトを使うのも必要です。テーブル全体で 1 つを共有すると、1 回の総当たりが全ユーザーに効いてしまいます。\n\n使うべきは意図的に遅く、コストを設定で上げられる関数です。Argon2 (できれば Argon2id)、bcrypt、scrypt、PBKDF2。Argon2id と scrypt は時間だけでなくメモリも要求するので、GPU や ASIC の並列性の優位を削ります。\n\n最後にひとつ。「SHA-256 を数千回繰り返せば PBKDF2 と同じ」ではありません。PBKDF2 は HMAC を鍵付きで反復する定義された構成で、ソルトと反復回数の扱いも規定されています。自分で書いた loop は、その規定のどこかを外していると考えるのが妥当です。暗号の実装で自作の loop に頼らないのは、ここまで 3 問かけて手で書いてきたあとでも (むしろそのあとだからこそ) 正しい判断です。\n\n## 公開テストが通っても終わりではない\n\nこの問題の公開テストが使うメッセージは全部 1 ブロックに収まります。最初のブロックだけを圧縮する実装が、FIPS の `abc` ベクタごと全部通ります。\n\n隠しテストは長さ 0・1・55・56・63・64・65・119・120・191・192 と seed 由来の長さ、UTF-8 混在を回し、`digest` だけは既知の答えと突き合わせます。`feedforward` は検査側が計算した順方向を逆算させるので、学習者の順方向と辻褄が合っているだけの逆変換では通りません。\n\n## ここまでで得たもの\n\nSHA-256 の全工程を自分で書きました。バイト列への変換、パディング、ワード分割、message schedule、64 round の圧縮、足し戻し、digest。ライブラリの `sha256()` が何をしているかは、もうブラックボックスではありません。\n\n同じ道具立ては HMAC、PBKDF2、Merkle tree、Bitcoin の proof-of-work にそのまま繋がります。どれも「圧縮関数を何にどう当てるか」の違いでしかありません。",
+  "tags": [
+    "sha256",
+    "hash-function",
+    "compression-function",
+    "avalanche",
+    "password-storage",
+    "cryptography-basics",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18091,
+      "name": "/verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "1 round で計算されるのが 8 語のうち 2 語だけであることを説明し、実装できる",
+    "64 round と足し戻しを分けて実装し、それぞれの役割を述べられる",
+    "64 round の逆変換を書き、round が情報を捨てていないことを示せる",
+    "一方向性が feed-forward の足し戻しから来ることを反例で示せる",
+    "複数ブロックを鎖のように繋いだ SHA-256 を完成させられる",
+    "1 bit の入力変化が出力の約半分を変えることを実測し、なぜ望ましいかを説明できる",
+    "ハッシュ関数について何が言えて何が言えないかを区別できる",
+    "パスワード保存に汎用ハッシュを使ってはいけない理由と、代わりに何を使うかを説明できる"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.sha256-compress-digest.implement-round",
+        "description": "T1 と T2 を組み立て、8 語のうち 2 語だけを計算する 1 round を実装できる。"
+      },
+      {
+        "id": "lo.sha256-compress-digest.implement-compression",
+        "description": "64 round と feed-forward の足し戻しを分けて実装できる。"
+      },
+      {
+        "id": "lo.sha256-compress-digest.invert-rounds",
+        "description": "64 round の逆変換を書き、round が全単射であることを実証できる。"
+      },
+      {
+        "id": "lo.sha256-compress-digest.explain-one-wayness",
+        "description": "一方向性が round 数ではなく feed-forward の足し戻しから来ることを、反例で説明できる。"
+      },
+      {
+        "id": "lo.sha256-compress-digest.chain-blocks",
+        "description": "各ブロックの出力を次の入力状態として繋ぎ、任意長のメッセージの digest を出せる。"
+      },
+      {
+        "id": "lo.sha256-compress-digest.measure-avalanche",
+        "description": "1 bit 違いの入力に対する digest の Hamming 距離を実測し、その値の意味を述べられる。"
+      },
+      {
+        "id": "lo.sha256-compress-digest.judge-hash-claims",
+        "description": "ハッシュ関数についてよく語られる主張の真偽を、理由付きで判定できる。"
+      },
+      {
+        "id": "lo.sha256-compress-digest.choose-password-hash",
+        "description": "パスワード保存に適した関数を選び、ソルトとコスト調整の役割を区別して説明できる。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.compression-function",
+        "description": "固定長の状態と固定長のブロックから、次の状態を作る関数。ハッシュの反復構造の中核。"
+      },
+      {
+        "id": "concept.davies-meyer",
+        "description": "ブロック暗号的な置換の出力に入力状態を足し戻す構成。可逆な置換から一方向な圧縮を作る。"
+      },
+      {
+        "id": "concept.one-wayness",
+        "description": "出力から入力を求めることが計算量的に困難な性質。混ぜる回数ではなく構成から生まれる。"
+      },
+      {
+        "id": "concept.avalanche-effect",
+        "description": "入力の 1 bit の変化が出力の約半分を変える性質。差分から入力を辿ることを防ぐ。"
+      },
+      {
+        "id": "concept.password-hashing",
+        "description": "パスワード保存専用の関数設計。速いことが欠点になり、コストとメモリを調整可能にする。"
+      },
+      {
+        "id": "concept.salting",
+        "description": "パスワードごとに異なる公開値を混ぜる手法。事前計算を無効化するが総当たりは止めない。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.sha256-compress-digest.round",
+        "description": "境界状態を含む隠しケースで 1 round を正しく計算できた。"
+      },
+      {
+        "id": "assessment.sha256-compress-digest.compress",
+        "description": "64 round と足し戻しの両方を、隠しの状態と schedule で正しく実装できた。"
+      },
+      {
+        "id": "assessment.sha256-compress-digest.feedforward",
+        "description": "検査側が計算した順方向を逆算でき、足し戻し後には逆算が効かないことを満たせた。"
+      },
+      {
+        "id": "assessment.sha256-compress-digest.digest",
+        "description": "複数ブロックと UTF-8 を含む隠しメッセージ全域で digest が既知の答えと一致した。"
+      },
+      {
+        "id": "assessment.sha256-compress-digest.avalanche",
+        "description": "1 bit 違いの 2 つの digest の Hamming 距離を正確に求められた。"
+      },
+      {
+        "id": "assessment.sha256-compress-digest.properties",
+        "description": "ハッシュ関数についての 10 個の主張の真偽をすべて正しく判定できた。"
+      },
+      {
+        "id": "assessment.sha256-compress-digest.storage",
+        "description": "パスワード保存についての 10 個の主張の真偽をすべて正しく判定できた。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.hash-is-encryption",
+        "description": "ハッシュは暗号化なので復号できる、という誤解。復号する鍵も手順も存在しない。"
+      },
+      {
+        "id": "misconception.no-published-collision-means-none",
+        "description": "衝突が publish されていないから存在しない、という誤解。出力が有限で入力が無限なら衝突は必ず存在する。"
+      },
+      {
+        "id": "misconception.more-rounds-make-it-one-way",
+        "description": "round を増やせば一方向になる、という誤解。round は可逆で、一方向性は足し戻しから来る。"
+      },
+      {
+        "id": "misconception.salted-fast-hash-is-enough",
+        "description": "ソルト付きの SHA-256 ならパスワード保存に十分、という誤解。ソルトは事前計算を止めるが GPU 総当たりは止めない。"
+      },
+      {
+        "id": "misconception.iterated-sha256-is-pbkdf2",
+        "description": "SHA-256 を数千回繰り返せば PBKDF2 と等価、という誤解。PBKDF2 は HMAC を用いた規定された構成である。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.sha256-compress-digest",
+      "target": "lo.sha256-compress-digest.implement-round"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.sha256-compress-digest",
+      "target": "lo.sha256-compress-digest.implement-compression"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.sha256-compress-digest",
+      "target": "lo.sha256-compress-digest.invert-rounds"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.sha256-compress-digest",
+      "target": "lo.sha256-compress-digest.explain-one-wayness"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.sha256-compress-digest",
+      "target": "lo.sha256-compress-digest.chain-blocks"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.sha256-compress-digest",
+      "target": "lo.sha256-compress-digest.measure-avalanche"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.sha256-compress-digest",
+      "target": "lo.sha256-compress-digest.judge-hash-claims"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.sha256-compress-digest",
+      "target": "lo.sha256-compress-digest.choose-password-hash"
+    },
+    {
+      "type": "covers",
+      "source": "problem.sha256-compress-digest",
+      "target": "concept.compression-function"
+    },
+    {
+      "type": "covers",
+      "source": "problem.sha256-compress-digest",
+      "target": "concept.davies-meyer"
+    },
+    {
+      "type": "covers",
+      "source": "problem.sha256-compress-digest",
+      "target": "concept.one-wayness"
+    },
+    {
+      "type": "covers",
+      "source": "problem.sha256-compress-digest",
+      "target": "concept.avalanche-effect"
+    },
+    {
+      "type": "covers",
+      "source": "problem.sha256-compress-digest",
+      "target": "concept.password-hashing"
+    },
+    {
+      "type": "covers",
+      "source": "problem.sha256-compress-digest",
+      "target": "concept.salting"
+    },
+    {
+      "type": "requires",
+      "source": "problem.sha256-compress-digest",
+      "target": "concept.message-schedule"
+    },
+    {
+      "type": "requires",
+      "source": "problem.sha256-compress-digest",
+      "target": "concept.merkle-damgard-padding"
+    },
+    {
+      "type": "requires",
+      "source": "lo.sha256-compress-digest.implement-round",
+      "target": "concept.compression-function"
+    },
+    {
+      "type": "requires",
+      "source": "lo.sha256-compress-digest.implement-compression",
+      "target": "concept.davies-meyer"
+    },
+    {
+      "type": "requires",
+      "source": "lo.sha256-compress-digest.invert-rounds",
+      "target": "concept.compression-function"
+    },
+    {
+      "type": "requires",
+      "source": "lo.sha256-compress-digest.explain-one-wayness",
+      "target": "concept.davies-meyer"
+    },
+    {
+      "type": "requires",
+      "source": "lo.sha256-compress-digest.explain-one-wayness",
+      "target": "concept.one-wayness"
+    },
+    {
+      "type": "requires",
+      "source": "lo.sha256-compress-digest.measure-avalanche",
+      "target": "concept.avalanche-effect"
+    },
+    {
+      "type": "requires",
+      "source": "lo.sha256-compress-digest.choose-password-hash",
+      "target": "concept.password-hashing"
+    },
+    {
+      "type": "requires",
+      "source": "lo.sha256-compress-digest.choose-password-hash",
+      "target": "concept.salting"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.sha256-compress-digest",
+      "target": "assessment.sha256-compress-digest.round"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.sha256-compress-digest",
+      "target": "assessment.sha256-compress-digest.compress"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.sha256-compress-digest",
+      "target": "assessment.sha256-compress-digest.feedforward"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.sha256-compress-digest",
+      "target": "assessment.sha256-compress-digest.digest"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.sha256-compress-digest",
+      "target": "assessment.sha256-compress-digest.avalanche"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.sha256-compress-digest",
+      "target": "assessment.sha256-compress-digest.properties"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.sha256-compress-digest",
+      "target": "assessment.sha256-compress-digest.storage"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.sha256-compress-digest",
+      "target": "misconception.hash-is-encryption"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.sha256-compress-digest",
+      "target": "misconception.no-published-collision-means-none"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.sha256-compress-digest",
+      "target": "misconception.more-rounds-make-it-one-way"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.sha256-compress-digest",
+      "target": "misconception.salted-fast-hash-is-enough"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.sha256-compress-digest",
+      "target": "misconception.iterated-sha256-is-pbkdf2"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.sha256-compress-digest",
+      "target": "misconception.public-tests-are-complete"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18091/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "round",
+        "label": "1 round を実装する",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "round-hint-1",
+            "content": "計算されるのは 8 語のうち 2 語だけ。新しい a は T1 + T2、新しい e は古い d + T1。残る 6 語は古い a, b, c と e, f, g がひとつずつずれたものになる。",
+            "penalty": 8
+          },
+          {
+            "id": "round-hint-2",
+            "content": "T1 = h + Σ1(e) + Ch(e, f, g) + K[i] + W[i] で 5 項、T2 = Σ0(a) + Maj(a, b, c) で 2 項。どちらも mod 2^32。項を 1 つ落としても例外は出ないので、5 項と 2 項を数えて確認する。",
+            "penalty": 14
+          }
+        ]
+      },
+      {
+        "id": "compress",
+        "label": "64 round と足し戻しを実装する",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "compress-hint-1",
+            "content": "`compress_rounds` は 64 回で、i 番目の round は K[i] と schedule[i] を使う。`compress_block` はその出力に入力状態を語ごとに mod 2^32 で足す。この足し算が feed-forward で、省くと後段の checkpoint も落ちる。",
+            "penalty": 22
+          }
+        ]
+      },
+      {
+        "id": "feedforward",
+        "label": "64 round を逆にたどる",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "feedforward-hint-1",
+            "content": "6 語は逆向きにずらすだけで戻る。新しい (b, c, d) が古い (a, b, c)、新しい (f, g, h) が古い (e, f, g) だったのだから、逆はその読み替えになる。",
+            "penalty": 8
+          },
+          {
+            "id": "feedforward-hint-2",
+            "content": "残る d と h は T1 の中にしか現れない。T2 は復元済みの a, b, c だけで決まるので、新しい a から T1 = a_new - T2 が求まる。そこから d = e_new - T1 と h = T1 - Σ1(e) - Ch(e, f, g) - K[i] - W[i] が出る。",
+            "penalty": 14
+          }
+        ]
+      },
+      {
+        "id": "digest",
+        "label": "SHA-256 を完成させる",
+        "points": 55,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "digest-hint-1",
+            "content": "公開テストのメッセージは全部 1 ブロックに収まる。56 バイト以上のメッセージで自分の実装を試してほしい。各ブロックの出力状態が次のブロックの入力状態になる。",
+            "penalty": 12
+          },
+          {
+            "id": "digest-hint-2",
+            "content": "出力は 8 語をそれぞれ 8 桁の小文字 hex にして順に連結した 64 文字。先頭の 0 を落とさないよう、`f'{word:08x}'` のように桁数を指定する。",
+            "penalty": 15
+          }
+        ]
+      },
+      {
+        "id": "avalanche",
+        "label": "1 bit の変化がどこまで広がるかを測る",
+        "points": 40,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "avalanche-hint-1",
+            "content": "`make inspect` が元のメッセージと 1 bit 反転した後のメッセージを両方 hex で出している。両方を hash して、2 つの digest を XOR し、立っているビットを数える。答えは 256 のうちのおよそ半分になるはずだが、ちょうど半分ではない。",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "properties",
+        "label": "ハッシュ関数について何が言えるか",
+        "points": 35,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "properties-hint-1",
+            "content": "迷う行があるなら、出力が 256 bit で固定なのに入力の長さに上限が無い、という一点から考える。入力の個数が出力の個数より多いなら何が言えるか。「まだ見つかっていない」と「存在しない」の違いも同じ話。",
+            "penalty": 17
+          }
+        ]
+      },
+      {
+        "id": "storage",
+        "label": "パスワードをどう保存するか",
+        "points": 35,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "storage-hint-1",
+            "content": "軸は 3 つ。(1) SHA-256 が速いことはここでは欠点。(2) ソルトが無効化するのは事前計算だけで、その場の総当たりは止まらない。(3) 必要なのはコストを上げられる関数で、メモリまで要求できるとさらに良い。",
+            "penalty": 17
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "SHA-256 part 3: the compression function, the digest, and password storage",
+      "shortDescription": "T1 and T2 for one round, then 64 of them, then the digest — and a counterexample showing that the 64 rounds are invertible and only the final addition makes SHA-256 one-way. Ends with what you can and cannot claim about a hash, and how to store a password.",
+      "instructions": "## Start here\n\nYou will implement the compression function and the digest on top of it. Padding (part 1) and the bit operations (part 2) are already written for you in `local/given/primitives.py`, so you can start with this problem. Do not edit that file — the checkpoints import it too.\n\n## First move\n\n```bash\nmake inspect\n```\n\nThat prints your fixtures and the two quizzes. The quizzes are shown in an order that depends on your deployment's seed, so somebody else's answer string is wrong even if their reasoning was right.\n\nThen open `local/starter/compress.py`. Five functions, all five wrong. Every docstring states the contract and how the starter gets it wrong.\n\n## Goal\n\nClear seven independently scored checkpoints.\n\n## A workable order\n\n1. Write `round_step`, for round. Only two of the eight words are computed.\n2. Write `compress_rounds` and `compress_block`, for compress. Do not skip the addition.\n3. Write `sha256_hex`, for digest. Chain every block.\n4. Count the bits between two digests, for avalanche.\n5. Write `invert_round` and `invert_rounds`, for feedforward.\n6. Read carefully, for properties and storage.\n\n## About the feedforward checkpoint\n\nThe 64 rounds discard nothing. Each round computes two words; the other six only shift. Nothing discarded means the whole thing can be walked backwards.\n\nThe trick: six words come back by shifting the other way, and `d` and `h` only ever appear inside T1, so you have to recover T1 first. You can, because T2 depends only on words you have already recovered, and the new `a` gives you T1 once you have T2.\n\nOnce that works, run the same inverse on `compress_block`'s output. It does not come back. That is where one-wayness comes from.",
+      "writeup": "## What this checked\n\n### A round is smaller than it looks\n\nOne round computes two of the eight words. The new `a` is T1 + T2 and the new `e` is the old `d` + T1. The other six are the old a, b, c and e, f, g shifted one position along, and the old `d` and `h` are gone.\n\nT1 = h + Σ1(e) + Ch(e, f, g) + K[i] + W[i]; T2 = Σ0(a) + Maj(a, b, c). Five terms and two. Drop one and nothing raises — you simply get a different digest for every input. The starter drops K[i] so that happens to you once, cheaply.\n\n### The 64 rounds are invertible, and that is the point\n\nNothing is discarded, so the 64 rounds are a permutation of the state: for a fixed schedule, a bijection with a writable inverse. Writable means somebody could walk a digest backwards into an intermediate state.\n\nWhat stops them is the last line: adding the incoming state back in. That is the Davies-Meyer feed-forward. With it, recovering the input state from the output would require knowing the round output for that state, which requires the input state — the circularity is the construction.\n\nSo the thing this checkpoint establishes is that one-wayness does not come from mixing 64 times. It comes from adding the original back to the mixture. Without the feed-forward, more rounds would still be invertible.\n\n### The digest is a chain\n\nEach block's compressed output is the next block's input state. An implementation that compresses only the first block is right for messages up to 55 bytes and passes the published `abc` vector. It breaks at 56.\n\nWhen you check an implementation against published test vectors, include a multi-block case. This generalizes well past SHA-256: a test suite that never crosses the boundary is the most reassuring kind of insufficient.\n\n### Avalanche\n\nFlip one input bit and roughly half the 256 output bits change. Roughly, not exactly. For an ideal random function the expected count is 128 and measurements scatter, typically somewhere between 100 and 160. Yours will have landed in that band.\n\nHalf is the target because it stops an attacker reading the input difference off the output difference. A hash where one input bit moved one output bit would let you walk differences back to the input.\n\n### Do not store passwords with SHA-256\n\nHaving implemented it, you know SHA-256 is fast. That is a design goal, and for password storage it is a defect: storing the output of a function a commodity GPU evaluates billions of times per second makes brute force practical the moment the database leaks.\n\nA salt is necessary and not sufficient. What a salt defeats is precomputation — rainbow tables — not brute force at the time of the attack. Per-password salts are also necessary: one salt shared across the table lets a single brute-force run pay off for every user at once.\n\nWhat you want is a deliberately slow function whose cost you can raise: Argon2 (ideally Argon2id), bcrypt, scrypt, PBKDF2. Argon2id and scrypt demand memory as well as time, which cuts into the parallelism advantage GPUs and ASICs have.\n\nOne last thing. \"Iterating SHA-256 a few thousand times is what PBKDF2 does\" is not right. PBKDF2 is a specified construction over HMAC with defined handling of the salt and the iteration count, and a loop you wrote yourself is most likely missing part of that specification. Not hand-rolling cryptographic constructions is the correct call even after three problems of writing SHA-256 by hand — arguably especially then.\n\n## Passing the public tests is not the end\n\nEvery message the public tests use fits in one block, so an implementation that compresses only the first block passes all of them, published `abc` vector included.\n\nThe hidden tests sweep lengths 0, 1, 55, 56, 63, 64, 65, 119, 120, 191, 192, a seeded length and a mixed UTF-8 message, and `digest` is the one checkpoint compared against known answers. `feedforward` inverts a forward pass the checker computed itself, so an inverse that only agrees with your own broken forward pass does not pass.\n\n## What you have now\n\nYou have written every stage of SHA-256: bytes, padding, word splitting, the message schedule, 64 rounds of compression, the feed-forward, the digest. Whatever your library's `sha256()` is doing, it is no longer a black box.\n\nThe same pieces carry directly into HMAC, PBKDF2, Merkle trees and Bitcoin's proof of work. Each of those is a different answer to \"what do we apply the compression function to, and how often\".",
+      "learningGoals": [
+        "Explain and implement a round in which only two of the eight words are computed",
+        "Implement the 64 rounds and the feed-forward separately, and say what each does",
+        "Write the inverse of the 64 rounds, showing they discard nothing",
+        "Show by counterexample that one-wayness comes from the feed-forward addition",
+        "Finish a SHA-256 that chains every block of a message",
+        "Measure that one input bit moves about half the output bits, and say why that is wanted",
+        "Tell apart what can and cannot be claimed about a hash function",
+        "Say why a general-purpose hash is wrong for passwords, and what to use instead"
+      ],
+      "checks": [
+        {
+          "id": "round",
+          "label": "Implement one round",
+          "hints": [
+            {
+              "id": "round-hint-1",
+              "content": "Only two of the eight words are computed. The new a is T1 + T2 and the new e is the old d + T1; the other six are the old a, b, c and e, f, g shifted one along."
+            },
+            {
+              "id": "round-hint-2",
+              "content": "T1 = h + Sigma1(e) + Ch(e, f, g) + K[i] + W[i] is five terms; T2 = Sigma0(a) + Maj(a, b, c) is two. Both modulo 2^32. Dropping a term raises nothing, so count them: five and two."
+            }
+          ]
+        },
+        {
+          "id": "compress",
+          "label": "Implement the 64 rounds and the feed-forward",
+          "hints": [
+            {
+              "id": "compress-hint-1",
+              "content": "`compress_rounds` runs 64 times and round i uses K[i] and schedule[i]. `compress_block` adds the incoming state to that output word by word, modulo 2^32. That addition is the feed-forward, and skipping it fails later checkpoints too."
+            }
+          ]
+        },
+        {
+          "id": "feedforward",
+          "label": "Walk the 64 rounds backwards",
+          "hints": [
+            {
+              "id": "feedforward-hint-1",
+              "content": "Six words come back by shifting the other way: the new (b, c, d) were the old (a, b, c) and the new (f, g, h) were the old (e, f, g), so the inverse is that reading, reversed."
+            },
+            {
+              "id": "feedforward-hint-2",
+              "content": "The remaining d and h only appear inside T1. T2 depends only on the a, b, c you have already recovered, so the new a gives you T1 = a_new - T2 — and then d = e_new - T1 and h = T1 - Sigma1(e) - Ch(e, f, g) - K[i] - W[i]."
+            }
+          ]
+        },
+        {
+          "id": "digest",
+          "label": "Finish SHA-256",
+          "hints": [
+            {
+              "id": "digest-hint-1",
+              "content": "Every public-test message fits in one block. Try your implementation on something 56 bytes or longer: each block's output state is the next block's input state."
+            },
+            {
+              "id": "digest-hint-2",
+              "content": "The output is 64 characters: eight words, each as 8 lower-case hex digits, in order. Specify the width — `f'{word:08x}'` — so leading zeros are not dropped."
+            }
+          ]
+        },
+        {
+          "id": "avalanche",
+          "label": "Measure how far one bit reaches",
+          "hints": [
+            {
+              "id": "avalanche-hint-1",
+              "content": "`make inspect` prints both the original message and the one-bit-flipped one in hex. Hash both, xor the two digests, and count the set bits. Expect roughly half of 256 — not exactly half."
+            }
+          ]
+        },
+        {
+          "id": "properties",
+          "label": "What can be claimed about a hash function",
+          "hints": [
+            {
+              "id": "properties-hint-1",
+              "content": "For any row you are unsure of, start from one fact: the output is fixed at 256 bits while the input length has no bound. If there are more inputs than outputs, what follows? \"Not found yet\" versus \"does not exist\" is the same question."
+            }
+          ]
+        },
+        {
+          "id": "storage",
+          "label": "How to store a password",
+          "hints": [
+            {
+              "id": "storage-hint-1",
+              "content": "Three axes. SHA-256 being fast is a defect here. A salt defeats precomputation only, not brute force at attack time. What you need is a function whose cost you can raise — better still, one that demands memory."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
