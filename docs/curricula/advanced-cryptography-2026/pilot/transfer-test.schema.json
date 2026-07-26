@@ -1,0 +1,1019 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tenkacloud.example/schemas/ac26-pilot/transfer-test-1.0.0.json",
+  "title": "AC26 pilot transfer test instrument",
+  "description": "Definition of the immediate (stage 3) and delayed (stage 5) transfer instruments described in protocol.md section 7, together with both frozen item banks in `examples`. A transfer item exists to separate a participant who generalised from one who pattern-matched, so it holds the concept fixed and changes everything around it: the scenario, the parameters, the signal names, and the medium. It is deliberately not the challenge's own hidden test, which ran inside the session with the participant's code, editor, tests, and assistant available and therefore measures the artifact rather than the person. Every item states what it varied, what it held fixed, what it discriminates, and why it is not the hidden test.",
+  "type": "object",
+  "required": [
+    "instrument",
+    "version",
+    "catalogPin",
+    "administration",
+    "items"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "instrument": {
+      "enum": [
+        "transfer-test-immediate",
+        "transfer-test-delayed"
+      ]
+    },
+    "version": {
+      "const": "1.0.0"
+    },
+    "catalogPin": {
+      "$ref": "#/$defs/catalogPin"
+    },
+    "administration": {
+      "$ref": "#/$defs/administration"
+    },
+    "items": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 10,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/item"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "instrument": {
+            "const": "transfer-test-immediate"
+          }
+        },
+        "required": [
+          "instrument"
+        ]
+      },
+      "then": {
+        "properties": {
+          "administration": {
+            "properties": {
+              "stage": {
+                "const": 3
+              }
+            }
+          },
+          "items": {
+            "items": {
+              "properties": {
+                "repeat": {
+                  "const": false,
+                  "description": "The immediate instrument contains no repeats, because there is nothing yet to repeat."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "instrument": {
+            "const": "transfer-test-delayed"
+          }
+        },
+        "required": [
+          "instrument"
+        ]
+      },
+      "then": {
+        "properties": {
+          "administration": {
+            "properties": {
+              "stage": {
+                "const": 5
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "catalogPin": {
+      "type": "object",
+      "required": [
+        "repository",
+        "ref"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "repository": {
+          "const": "susumutomita/TenkaCloudChallenge"
+        },
+        "ref": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            },
+            {
+              "const": "PENDING-FREEZE"
+            }
+          ]
+        }
+      }
+    },
+    "administration": {
+      "type": "object",
+      "required": [
+        "stage",
+        "timeLimitMinutes",
+        "assistanceAllowed",
+        "medium",
+        "feedback"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "stage": {
+          "enum": [
+            3,
+            5
+          ]
+        },
+        "timeLimitMinutes": {
+          "const": 30
+        },
+        "assistanceAllowed": {
+          "const": false,
+          "description": "No references, no search, no AI assistant, and no access to the containers. The session already measured what the participant can do with those; this measures what remains without them."
+        },
+        "medium": {
+          "const": "paper-or-plain-text",
+          "description": "Answers are written prose and arithmetic, never executed. Running code here would reintroduce the tooling the instrument is trying to hold out."
+        },
+        "feedback": {
+          "const": "none-until-debrief"
+        },
+        "delayDaysRange": {
+          "type": "array",
+          "description": "Present on the delayed instrument only. The realised delay per participant is recorded and reported, because a 7-day and a 10-day answer are not the same observation.",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "item": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "targetProblem",
+        "targetConcept",
+        "surface",
+        "variedFromChallenge",
+        "heldFixed",
+        "discriminates",
+        "notTheHiddenTest",
+        "repeat",
+        "prompt",
+        "scoring"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^item\\.tfd?\\.[a-z0-9][a-z0-9-]{0,47}$"
+        },
+        "kind": {
+          "enum": [
+            "single-choice",
+            "numeric",
+            "short-answer"
+          ]
+        },
+        "targetProblem": {
+          "enum": [
+            "ac26-bridge-experiment",
+            "ac26-w1-constraint-lab",
+            "ac26-w1-underconstraint"
+          ],
+          "description": "The extension problem ac26-w2-secret-sharing has no transfer items on purpose: it is offered only to participants who finished the core set early, so any measure over it is a measure over a sample selected by the outcome."
+        },
+        "targetConcept": {
+          "type": "string",
+          "pattern": "^(concept|misconception)\\.[a-z0-9-]+$"
+        },
+        "surface": {
+          "type": "string",
+          "minLength": 5,
+          "description": "The scenario this item is dressed in. Must differ from the challenge's scenario and, on the delayed instrument, from the immediate instrument's scenario as well."
+        },
+        "variedFromChallenge": {
+          "type": "array",
+          "minItems": 2,
+          "description": "Concretely what differs from the challenge: scenario, parameters, names, medium. Two changes is the floor, because a single changed number is a rerun with a new fixture.",
+          "items": {
+            "type": "string",
+            "minLength": 5
+          }
+        },
+        "heldFixed": {
+          "type": "string",
+          "minLength": 10,
+          "description": "The concept that must survive the change. If this is empty the item is measuring something else."
+        },
+        "discriminates": {
+          "type": "string",
+          "minLength": 20,
+          "description": "What a pattern-matcher does on this item and what a generaliser does. An item on which both behave the same is removed."
+        },
+        "notTheHiddenTest": {
+          "type": "string",
+          "minLength": 20,
+          "description": "Why this is not a rerun of the challenge's own hidden verifier or its `transfer` checkpoint."
+        },
+        "repeat": {
+          "type": "boolean",
+          "description": "True only on the delayed instrument, for items reproduced verbatim from the immediate one. Repeats measure memory of the item; new surfaces measure the concept. analysis-plan.md forbids pooling the two."
+        },
+        "repeatOf": {
+          "type": "string",
+          "pattern": "^item\\.tf\\.[a-z0-9-]+$"
+        },
+        "prompt": {
+          "$ref": "#/$defs/bilingualText"
+        },
+        "scoring": {
+          "$ref": "#/$defs/scoring"
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "kind": {
+              "const": "single-choice"
+            },
+            "choices": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 5,
+              "items": {
+                "type": "object",
+                "required": [
+                  "key",
+                  "text"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "key": {
+                    "type": "string",
+                    "pattern": "^[a-e]$"
+                  },
+                  "text": {
+                    "$ref": "#/$defs/bilingualText"
+                  },
+                  "diagnosis": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "required": [
+            "choices"
+          ]
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "numeric"
+            },
+            "answer": {
+              "type": "object",
+              "required": [
+                "value"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "value": {
+                  "type": "number"
+                },
+                "tolerance": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "required": [
+            "answer"
+          ]
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "short-answer"
+            },
+            "maxWords": {
+              "type": "integer",
+              "minimum": 10,
+              "maximum": 150
+            }
+          },
+          "required": [
+            "maxWords"
+          ]
+        }
+      ],
+      "dependentRequired": {
+        "repeatOf": [
+          "repeat"
+        ]
+      },
+      "unevaluatedProperties": false
+    },
+    "scoring": {
+      "type": "object",
+      "required": [
+        "kind",
+        "maxPoints"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "key",
+            "rubric"
+          ]
+        },
+        "maxPoints": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3
+        },
+        "correctChoice": {
+          "type": "string",
+          "pattern": "^[a-e]$"
+        },
+        "anchors": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "required": [
+              "points",
+              "descriptor"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "points": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3
+              },
+              "descriptor": {
+                "type": "string",
+                "minLength": 10
+              }
+            }
+          }
+        }
+      }
+    },
+    "bilingualText": {
+      "type": "object",
+      "required": [
+        "en",
+        "ja"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "en": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ja": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "instrument": "transfer-test-immediate",
+      "version": "1.0.0",
+      "catalogPin": {
+        "repository": "susumutomita/TenkaCloudChallenge",
+        "ref": "PENDING-FREEZE"
+      },
+      "administration": {
+        "stage": 3,
+        "timeLimitMinutes": 30,
+        "assistanceAllowed": false,
+        "medium": "paper-or-plain-text",
+        "feedback": "none-until-debrief"
+      },
+      "items": [
+        {
+          "id": "item.tf.checksum-predict",
+          "kind": "numeric",
+          "targetProblem": "ac26-bridge-experiment",
+          "targetConcept": "concept.experimental-method",
+          "surface": "A rolling checksum over a ring buffer",
+          "variedFromChallenge": [
+            "The recurrence is affine (x becomes 5x - 12) rather than additive (x becomes x + step).",
+            "The modulus is the fixed value 97 rather than a value derived from the participant's deployment seed.",
+            "The scenario is a checksum over a buffer rather than a counter.",
+            "It is computed on paper rather than by editing and running counter.py."
+          ],
+          "heldFixed": "State the value before running, and keep the representative inside the range at every step rather than only at the end.",
+          "discriminates": "A participant who learned the recipe `apply % m each round` still succeeds here, which is why this item is paired with the impossibility item below; alone it is the weaker of the two.",
+          "notTheHiddenTest": "The challenge's generalize checkpoint runs the participant's counter.py against unseen parameters. This asks the participant to produce a number by hand with no code in the loop.",
+          "repeat": false,
+          "prompt": {
+            "en": "A rolling checksum starts at 4 and is updated six times by the rule: replace x with (5x - 12) modulo 97, always reported in the range 0 to 96. What is the value after the sixth update? Do not write or run code.",
+            "ja": "ローリングチェックサムは 4 から始まり、x を (5x - 12) mod 97 に置き換える更新を 6 回行います。値は常に 0 以上 97 未満で報告されます。6 回目の更新後の値はいくつですか。コードは書かず、実行もしないでください。"
+          },
+          "scoring": {
+            "kind": "key",
+            "maxPoints": 1
+          },
+          "answer": {
+            "value": 11
+          }
+        },
+        {
+          "id": "item.tf.checksum-impossible",
+          "kind": "single-choice",
+          "targetProblem": "ac26-bridge-experiment",
+          "targetConcept": "concept.invariant",
+          "surface": "A rolling checksum over a ring buffer",
+          "variedFromChallenge": [
+            "The defect is an unnormalised negative offset rather than a reduction applied only at the end.",
+            "The participant is given three candidate traces and asked which is impossible, rather than an index inside one broken trace.",
+            "The modulus is fixed at 97 and shown, rather than seed-derived and read from make inspect."
+          ],
+          "heldFixed": "A trace is read against the invariant the process claims, and the first value violating it locates the fault.",
+          "discriminates": "A pattern-matcher looks for a value above the modulus and stops there, missing the trace whose only violation is an unnormalised negative representative of the same field element. A generaliser checks both ends of the range.",
+          "notTheHiddenTest": "The challenge asks for a 0-based index inside a trace generated from the participant's own seed. This asks which supplied traces cannot exist, and the discriminating trace fails at the lower bound rather than the upper one.",
+          "repeat": false,
+          "prompt": {
+            "en": "Three implementations of the same rolling checksum printed these traces, and all three claim that every reported value lies in 0 to 96. Which traces cannot have come from an implementation that keeps that promise?\n\n(a) 4, 8, 28, 31, 46, 24\n(b) 4, 8, 28, 128, 46, 24\n(c) 4, 8, 28, 31, -51, 24",
+            "ja": "同じローリングチェックサムの 3 つの実装が次の列を出力し、いずれも「報告する値はすべて 0 以上 97 未満」と主張しています。その約束を守る実装からは出えない列はどれですか。\n\n(a) 4, 8, 28, 31, 46, 24\n(b) 4, 8, 28, 128, 46, 24\n(c) 4, 8, 28, 31, -51, 24"
+          },
+          "choices": [
+            {
+              "key": "a",
+              "text": {
+                "en": "Only trace (b), first breaking the promise at index 3.",
+                "ja": "列 (b) だけ。最初に約束を破るのは index 3。"
+              },
+              "diagnosis": "Only the upper bound was checked. -51 is congruent to 46 and is arithmetically consistent, which is exactly why it slips past."
+            },
+            {
+              "key": "b",
+              "text": {
+                "en": "Only trace (c), first breaking the promise at index 4.",
+                "ja": "列 (c) だけ。最初に約束を破るのは index 4。"
+              },
+              "diagnosis": "Only the lower bound was checked."
+            },
+            {
+              "key": "c",
+              "text": {
+                "en": "Both (b) and (c): (b) at index 3, (c) at index 4.",
+                "ja": "(b) と (c) の両方。(b) は index 3、(c) は index 4。"
+              },
+              "diagnosis": "Correct. Both values sit outside 0 to 96, at opposite ends."
+            },
+            {
+              "key": "d",
+              "text": {
+                "en": "None of them; all three are consistent with the rule.",
+                "ja": "どれも出える。3 つとも規則と矛盾しない。"
+              },
+              "diagnosis": "The range promise is not being checked at all. Every trace here is consistent with the recurrence; only the reported representatives differ."
+            }
+          ],
+          "scoring": {
+            "kind": "key",
+            "maxPoints": 1,
+            "correctChoice": "c"
+          }
+        },
+        {
+          "id": "item.tf.coin-residuals",
+          "kind": "short-answer",
+          "targetProblem": "ac26-w1-constraint-lab",
+          "targetConcept": "concept.boolean-constraint",
+          "surface": "A vending machine coin selector",
+          "variedFromChallenge": [
+            "The scenario is a coin selector rather than an access-control policy.",
+            "The field is F13, small and stated, rather than a seed-derived prime the participant never enumerates.",
+            "The residuals are written and evaluated by hand rather than implemented in field.py, circuit.py, and gadgets.py.",
+            "The signal names are s, e, and paid rather than the challenge's."
+          ],
+          "heldFixed": "Every residual must be zero, residuals are evaluated in the field rather than over the integers, and a name does not bind a value.",
+          "discriminates": "A participant who memorised the gadget shapes writes them and stops. A participant who understood evaluates them, notices that only the boolean residual is nonzero, and reduces 42 in F13 rather than reporting 42.",
+          "notTheHiddenTest": "The challenge sweeps the participant's gadget over the whole field from inside the container. This asks for three expressions and one evaluation on paper, in a field small enough to check by hand.",
+          "repeat": false,
+          "prompt": {
+            "en": "A coin selector works over F13. The selector signal s must be one of {1, 5, 10}. The signal e is documented as a boolean. A third signal paid must equal s times e. Write the residual expression for each of those three requirements, then evaluate all three on the assignment s = 5, e = 7, paid = 9. Report which residuals are nonzero and their values in F13.",
+            "ja": "ある硬貨選別器は F13 上で動きます。選別信号 s は {1, 5, 10} のいずれかでなければなりません。信号 e は「真偽値」と説明されています。3 つ目の信号 paid は s と e の積に等しくなければなりません。この 3 つの要求それぞれについて残差の式を書き、割り当て s = 5, e = 7, paid = 9 で評価してください。ゼロでない残差とその F13 での値を答えてください。"
+          },
+          "maxWords": 120,
+          "scoring": {
+            "kind": "rubric",
+            "maxPoints": 3,
+            "anchors": [
+              {
+                "points": 0,
+                "descriptor": "Residual expressions are absent or are written as conditions rather than expressions required to vanish."
+              },
+              {
+                "points": 1,
+                "descriptor": "All three expressions are correct in shape, but evaluation is missing, or arithmetic is done over the integers without reduction."
+              },
+              {
+                "points": 2,
+                "descriptor": "Expressions correct and evaluation correct, identifying the boolean residual as the only nonzero one, but its value is reported as 42 rather than 3."
+              },
+              {
+                "points": 3,
+                "descriptor": "Expressions correct, membership and product residuals shown to vanish, boolean residual reported as 3 in F13."
+              }
+            ]
+          }
+        },
+        {
+          "id": "item.tf.membership-partial",
+          "kind": "short-answer",
+          "targetProblem": "ac26-w1-constraint-lab",
+          "targetConcept": "misconception.one-valid-example-proves-soundness",
+          "surface": "A vending machine coin selector",
+          "variedFromChallenge": [
+            "The gadget is supplied already broken rather than written by the participant.",
+            "The question is about what a passing example establishes, not about making a suite pass.",
+            "The allowed set is stated as {1, 5, 10} rather than generated from a seed with size 1 to 5."
+          ],
+          "heldFixed": "A gadget that passes the one visible example may admit or exclude the wrong set, and the example cannot tell you which.",
+          "discriminates": "A pattern-matcher answers that the gadget works because the test passed. A generaliser names the specific legitimate coins the gadget now refuses, and observes that the choice of example is what hid it.",
+          "notTheHiddenTest": "The challenge's membership checkpoint sweeps the field for allowed sets of size 1 to 5, inside the container. This asks the participant to say what a single passing example does and does not establish, with no execution.",
+          "repeat": false,
+          "prompt": {
+            "en": "A colleague writes the membership requirement for s as the single expression (s - 1), required to vanish, instead of the product over all allowed values. The one example in the visible test uses s = 1, and it passes. What has that passing test established, and what has it not? Name at least one legitimate input this requirement now refuses.",
+            "ja": "同僚が s の所属要求を、許される値すべての積ではなく (s - 1) という 1 つの式がゼロになること、として書きました。可視テストの唯一の例は s = 1 で、テストは通ります。この合格が示したこと、示していないことは何ですか。この要求が今や拒否してしまう正当な入力を 1 つ以上挙げてください。"
+          },
+          "maxWords": 100,
+          "scoring": {
+            "kind": "rubric",
+            "maxPoints": 3,
+            "anchors": [
+              {
+                "points": 0,
+                "descriptor": "Concludes the requirement is correct because the test passed."
+              },
+              {
+                "points": 1,
+                "descriptor": "Says the test is insufficient without naming a refused input."
+              },
+              {
+                "points": 2,
+                "descriptor": "Names s = 5 or s = 10 as now refused, and states that the test established only that s = 1 is admitted."
+              },
+              {
+                "points": 3,
+                "descriptor": "Adds that the example's own choice of value is what concealed the defect, so a suite is only as strong as the values it happens to use."
+              }
+            ]
+          }
+        },
+        {
+          "id": "item.tf.bits-direction",
+          "kind": "single-choice",
+          "targetProblem": "ac26-w1-underconstraint",
+          "targetConcept": "concept.underconstraint",
+          "surface": "A byte range check built from bit decomposition",
+          "variedFromChallenge": [
+            "The construction is bit decomposition rather than the two-constraint is-zero gadget.",
+            "The claim is a range claim rather than an access-control decision.",
+            "The signal names are byte and bit0 through bit7 rather than revoked, inv, ok, issuer_ok, and granted.",
+            "The participant states the direction before constructing anything, rather than after forging."
+          ],
+          "heldFixed": "A missing constraint makes a claim admit things it should not, and the direction is predictable from what the constraint was holding.",
+          "discriminates": "A participant who understood answers before constructing, because the direction follows from the constraint's job. A pattern-matcher wants to try values first, and the item's time limit does not allow it.",
+          "notTheHiddenTest": "The challenge's mutation-transfer checkpoint runs the participant's audit and forge code when a different constraint is missing. This asks for a direction, in advance, about a construction the session never contained.",
+          "repeat": false,
+          "prompt": {
+            "en": "A circuit is meant to establish that a signal `byte` lies between 0 and 255. It does this with eight signals bit0 to bit7, a requirement that each is 0 or 1, and a requirement that byte equals the sum of bit_i times 2 to the i. The deployed version is missing the 0-or-1 requirement on bit3 only. Before constructing anything: what does the deployed circuit now do wrong?",
+            "ja": "ある回路は、信号 `byte` が 0 以上 255 以下であることを示すためのものです。bit0 から bit7 の 8 つの信号、それぞれが 0 か 1 であるという要求、そして byte が bit_i かける 2 の i 乗の総和に等しいという要求から成ります。実際に配備された版では bit3 についてだけ「0 か 1」の要求が欠けています。何かを構成する前に答えてください。配備版は何を誤るようになりますか。"
+          },
+          "choices": [
+            {
+              "key": "a",
+              "text": {
+                "en": "It accepts assignments claiming a byte value outside 0 to 255.",
+                "ja": "0 から 255 の外の byte を主張する割り当てを受理してしまう。"
+              },
+              "diagnosis": "Correct. The removed constraint was excluding, so removing it admits more."
+            },
+            {
+              "key": "b",
+              "text": {
+                "en": "It refuses some genuine values between 0 and 255.",
+                "ja": "0 から 255 の範囲の正当な値の一部を拒否する。"
+              },
+              "diagnosis": "The direction is reversed. Removing a requirement never refuses more."
+            },
+            {
+              "key": "c",
+              "text": {
+                "en": "Nothing changes, because the sum requirement already pins byte.",
+                "ja": "総和の要求が byte を決めているので何も変わらない。"
+              },
+              "diagnosis": "The sum is being read as constraining its own summands."
+            }
+          ],
+          "scoring": {
+            "kind": "key",
+            "maxPoints": 1,
+            "correctChoice": "a"
+          }
+        },
+        {
+          "id": "item.tf.bits-forge",
+          "kind": "short-answer",
+          "targetProblem": "ac26-w1-underconstraint",
+          "targetConcept": "concept.witness",
+          "surface": "A byte range check built from bit decomposition",
+          "variedFromChallenge": [
+            "The construction is bit decomposition rather than the is-zero gadget.",
+            "The forged witness is described on paper rather than returned by forge_witness().",
+            "The intended claim is a numeric range rather than a policy decision."
+          ],
+          "heldFixed": "A forgery satisfies the deployed set and violates the intended claim, and exhibiting one is the only way to show the missing constraint was load-bearing.",
+          "discriminates": "A pattern-matcher tries to set bit3 to 2, notices the sum no longer matches, and stops. A generaliser sets the other bits to zero and solves for the single remaining unknown, which is possible precisely because the field has inverses.",
+          "notTheHiddenTest": "The challenge checks a forgery structurally, by running it against two circuits inside the verifier. This asks the participant to describe the assignment and say why it satisfies the deployed set.",
+          "repeat": false,
+          "prompt": {
+            "en": "Same circuit as the previous item. All arithmetic happens in a field with far more than 256 elements. Give an assignment to byte and bit0 through bit7 that satisfies every requirement the deployed circuit still has, while byte claims the value 300. State briefly why each surviving requirement holds.",
+            "ja": "前問と同じ回路です。演算は 256 個よりはるかに多くの元を持つ体の上で行われます。配備版に残っている要求をすべて満たしつつ、byte が 300 を主張するような、byte と bit0 から bit7 への割り当てを 1 つ挙げてください。残っている各要求が成り立つ理由も簡潔に述べてください。"
+          },
+          "maxWords": 120,
+          "scoring": {
+            "kind": "rubric",
+            "maxPoints": 3,
+            "anchors": [
+              {
+                "points": 0,
+                "descriptor": "No assignment, or an assignment that violates a surviving requirement."
+              },
+              {
+                "points": 1,
+                "descriptor": "Recognises that bit3 must absorb the excess but does not produce a consistent assignment."
+              },
+              {
+                "points": 2,
+                "descriptor": "Sets every bit except bit3 to zero and bit3 to the field element that makes 8 times it equal 300, without justifying that the other requirements survive."
+              },
+              {
+                "points": 3,
+                "descriptor": "Same assignment, and states that the remaining 0-or-1 requirements hold trivially at zero and that the sum requirement holds by construction, so nothing left in the circuit objects."
+              }
+            ]
+          }
+        },
+        {
+          "id": "item.tf.duplicate-repair",
+          "kind": "single-choice",
+          "targetProblem": "ac26-w1-underconstraint",
+          "targetConcept": "concept.constraint-system",
+          "surface": "A byte range check built from bit decomposition",
+          "variedFromChallenge": [
+            "The repair is proposed by someone else and judged, rather than written by the participant.",
+            "The proposal is a duplicate of an existing requirement rather than an omission.",
+            "The construction is bit decomposition rather than the is-zero gadget."
+          ],
+          "heldFixed": "A constraint set restricts what is admitted, so a requirement already implied adds nothing, and a repair is measured by the set it admits.",
+          "discriminates": "A participant who learned that repair means adding a constraint accepts the proposal. A participant who understood asks what the admitted set became, and answers that it did not move.",
+          "notTheHiddenTest": "The challenge's repair checkpoint runs the participant's repaired circuit against a forgery and both honest witnesses, and separately penalises constraint bloat. This asks for a judgement about somebody else's proposal, with no code.",
+          "repeat": false,
+          "prompt": {
+            "en": "To fix the byte range check, a colleague proposes adding a second copy of the 0-or-1 requirement on bit0, which is already present. Is that a repair?",
+            "ja": "byte の範囲検査を直すために、同僚がすでに存在する bit0 の「0 か 1」要求をもう 1 つ追加することを提案しました。これは修正になっていますか。"
+          },
+          "choices": [
+            {
+              "key": "a",
+              "text": {
+                "en": "Yes. The circuit now has more requirements than before.",
+                "ja": "なる。要求の数が前より増えている。"
+              },
+              "diagnosis": "Repair is being counted rather than reasoned about."
+            },
+            {
+              "key": "b",
+              "text": {
+                "en": "No. The set of admitted assignments is unchanged, so nothing that passed before is refused now.",
+                "ja": "ならない。受理される割り当ての集合は変わらず、以前通ったものは今も通る。"
+              },
+              "diagnosis": "Correct."
+            },
+            {
+              "key": "c",
+              "text": {
+                "en": "No, but it is harmless and can be left in.",
+                "ja": "修正ではないが無害なので残してよい。"
+              },
+              "diagnosis": "Correct on direction, but treats a duplicate requirement as free. Scored below (b) because the item asks whether it is a repair, and the participant has answered a different question."
+            }
+          ],
+          "scoring": {
+            "kind": "key",
+            "maxPoints": 1,
+            "correctChoice": "b"
+          }
+        }
+      ]
+    },
+    {
+      "instrument": "transfer-test-delayed",
+      "version": "1.0.0",
+      "catalogPin": {
+        "repository": "susumutomita/TenkaCloudChallenge",
+        "ref": "PENDING-FREEZE"
+      },
+      "administration": {
+        "stage": 5,
+        "timeLimitMinutes": 30,
+        "assistanceAllowed": false,
+        "medium": "paper-or-plain-text",
+        "feedback": "none-until-debrief",
+        "delayDaysRange": [
+          7,
+          10
+        ]
+      },
+      "items": [
+        {
+          "id": "item.tfd.window-predict",
+          "kind": "numeric",
+          "targetProblem": "ac26-bridge-experiment",
+          "targetConcept": "concept.experimental-method",
+          "surface": "A sequence number window in a transport protocol",
+          "variedFromChallenge": [
+            "The scenario is a protocol window rather than a counter or a checksum.",
+            "The multiplier, offset, modulus, and start value all differ from both the challenge and the immediate instrument.",
+            "The modulus 64 is a power of two, so a participant reasoning by discarding high bits can also arrive at the answer."
+          ],
+          "heldFixed": "State the value before running, keeping the representative in range at every step.",
+          "discriminates": "Retention of the habit is what is measured here, so the item is deliberately of the same difficulty as its immediate counterpart rather than harder.",
+          "notTheHiddenTest": "It is arithmetic on paper with a third scenario, seven to ten days after any container was running.",
+          "repeat": false,
+          "prompt": {
+            "en": "A sequence number window starts at 5 and is updated four times by the rule: replace w with (3w + 7) modulo 64, always reported in the range 0 to 63. What is the value after the fourth update?",
+            "ja": "シーケンス番号のウィンドウは 5 から始まり、w を (3w + 7) mod 64 に置き換える更新を 4 回行います。値は常に 0 以上 64 未満で報告されます。4 回目の更新後の値はいくつですか。"
+          },
+          "scoring": {
+            "kind": "key",
+            "maxPoints": 1
+          },
+          "answer": {
+            "value": 45
+          }
+        },
+        {
+          "id": "item.tfd.traffic-boolean",
+          "kind": "short-answer",
+          "targetProblem": "ac26-w1-constraint-lab",
+          "targetConcept": "misconception.boolean-name-implies-boolean-value",
+          "surface": "A traffic light state constraint",
+          "variedFromChallenge": [
+            "The scenario is a traffic light rather than a policy circuit or a coin selector.",
+            "The field is F11 rather than F13 or a seed-derived prime.",
+            "The allowed set is {0, 1, 2} and the documented boolean is named emergency."
+          ],
+          "heldFixed": "Membership and boolean requirements are expressions that must vanish, evaluated in the field, and documentation binds nothing.",
+          "discriminates": "A participant who retained the concept evaluates both residuals and reports 6. One who retained the phrasing of the immediate item may look for the same nonzero value as before.",
+          "notTheHiddenTest": "Written by hand in a third scenario, in a different field, with no container available.",
+          "repeat": false,
+          "prompt": {
+            "en": "A controller works over F11. The state signal s must be one of {0, 1, 2}. A signal named emergency is documented as a boolean. Write the residual for each requirement and evaluate both on the assignment s = 2, emergency = 3. Which residuals are nonzero, and what are their values in F11?",
+            "ja": "あるコントローラは F11 上で動きます。状態信号 s は {0, 1, 2} のいずれかでなければなりません。emergency という名前の信号は「真偽値」と説明されています。各要求の残差を書き、割り当て s = 2, emergency = 3 で両方を評価してください。ゼロでない残差はどれで、F11 での値はいくつですか。"
+          },
+          "maxWords": 100,
+          "scoring": {
+            "kind": "rubric",
+            "maxPoints": 3,
+            "anchors": [
+              {
+                "points": 0,
+                "descriptor": "Residuals absent or written as conditions rather than vanishing expressions."
+              },
+              {
+                "points": 2,
+                "descriptor": "Both residuals correct in shape, membership shown to vanish, boolean residual identified but reduced incorrectly."
+              },
+              {
+                "points": 3,
+                "descriptor": "Membership residual vanishes, boolean residual reported as 6 in F11."
+              }
+            ]
+          }
+        },
+        {
+          "id": "item.tfd.threshold-underconstraint",
+          "kind": "short-answer",
+          "targetProblem": "ac26-w1-underconstraint",
+          "targetConcept": "concept.underconstraint",
+          "surface": "A two-of-three approval flag",
+          "variedFromChallenge": [
+            "The claim is a threshold over three approvers rather than a range or an access decision.",
+            "There are three candidate signals rather than eight bits or a single is-zero gadget.",
+            "The participant must both exhibit the witness and name the direction, in one answer."
+          ],
+          "heldFixed": "Removing a constraint admits assignments the intended claim excludes, and exhibiting one is what shows the constraint was load-bearing.",
+          "discriminates": "A participant who retained the concept sets the unconstrained signal to a value outside {0, 1} and reads off the consequence. One who retained the byte example looks for a bit to manipulate and finds none.",
+          "notTheHiddenTest": "A third construction, on paper, with the missing constraint named rather than discovered, so that the item measures the consequence rather than the search.",
+          "repeat": false,
+          "prompt": {
+            "en": "A circuit is meant to establish that at least two of three approvers signed. It has signals a, b, c, a requirement that each is 0 or 1, and a requirement that the sum a + b + c is at least 2, enforced by requiring that (sum - 2) times (sum - 3) vanishes. The 0-or-1 requirement on c is missing. Give an assignment that satisfies everything remaining while only one approver genuinely signed, and say whether the defect makes the claim admit too much or too little.",
+            "ja": "ある回路は「3 人の承認者のうち少なくとも 2 人が署名した」ことを示すためのものです。信号 a, b, c と、それぞれが 0 か 1 であるという要求、そして総和 a + b + c が 2 以上であること (これは (sum - 2) かける (sum - 3) がゼロになることで課されています) から成ります。c についての「0 か 1」の要求が欠けています。実際には 1 人しか署名していないのに、残りの要求をすべて満たす割り当てを挙げ、この欠陥が主張を広げる方向か狭める方向かを述べてください。"
+          },
+          "maxWords": 120,
+          "scoring": {
+            "kind": "rubric",
+            "maxPoints": 3,
+            "anchors": [
+              {
+                "points": 0,
+                "descriptor": "No assignment, or one that violates a surviving requirement."
+              },
+              {
+                "points": 1,
+                "descriptor": "States the direction correctly but produces no assignment."
+              },
+              {
+                "points": 2,
+                "descriptor": "Gives a = 1, b = 0, c = 2 or an equivalent, without stating the direction."
+              },
+              {
+                "points": 3,
+                "descriptor": "Gives the assignment, shows the sum requirement is satisfied at 3, and states that the claim now admits too much."
+              }
+            ]
+          }
+        },
+        {
+          "id": "item.tfd.evidence-limit",
+          "kind": "short-answer",
+          "targetProblem": "ac26-w1-underconstraint",
+          "targetConcept": "concept.correctness",
+          "surface": "The participant's own session, recalled",
+          "variedFromChallenge": [
+            "It asks about the participant's own reasoning rather than about a supplied construction.",
+            "It has no fixture, no field, and no arithmetic.",
+            "It is answered from memory, seven to ten days later."
+          ],
+          "heldFixed": "A claim may not exceed the check that supports it, which is the discipline every checkpoint in the session was scored against.",
+          "discriminates": "A participant who retained the discipline names a specific limit of their own check. One who did not restates the claim as though the check proved it.",
+          "notTheHiddenTest": "No verifier can score this. It is scored by two raters against the anchors, and it exists because evidence discipline is the part of the session no automated checkpoint observes.",
+          "repeat": false,
+          "prompt": {
+            "en": "Think of one thing you established during the session and were confident about. State precisely what your check established, and name one thing it did not establish that somebody might wrongly assume it did.",
+            "ja": "セッション中に確かめられたと確信したことを 1 つ思い出してください。その確認が示したことを正確に述べ、示していないのに示したと誤解されうることを 1 つ挙げてください。"
+          },
+          "maxWords": 120,
+          "scoring": {
+            "kind": "rubric",
+            "maxPoints": 3,
+            "anchors": [
+              {
+                "points": 0,
+                "descriptor": "Restates a claim with no distinction between the claim and the check."
+              },
+              {
+                "points": 1,
+                "descriptor": "Names a check and a claim but the stated limit is generic, such as saying more testing is always possible."
+              },
+              {
+                "points": 2,
+                "descriptor": "Names a specific limit tied to the check that was actually run."
+              },
+              {
+                "points": 3,
+                "descriptor": "Names the limit and the assumption somebody would make, and the two are distinct."
+              }
+            ]
+          }
+        },
+        {
+          "id": "item.tfd.repeat-checksum-impossible",
+          "kind": "single-choice",
+          "targetProblem": "ac26-bridge-experiment",
+          "targetConcept": "concept.invariant",
+          "surface": "A rolling checksum over a ring buffer",
+          "variedFromChallenge": [
+            "Reproduced verbatim from the immediate instrument, so nothing is varied relative to it.",
+            "Relative to the challenge, the same variations as item.tf.checksum-impossible apply."
+          ],
+          "heldFixed": "A trace is read against the invariant the process claims.",
+          "discriminates": "Nothing, on its own. Its only job is to sit beside the new-surface items so that a drop can be attributed to forgetting the item rather than losing the concept.",
+          "notTheHiddenTest": "It is a repeat of an instrument item, not of any checkpoint.",
+          "repeat": true,
+          "repeatOf": "item.tf.checksum-impossible",
+          "prompt": {
+            "en": "Three implementations of the same rolling checksum printed these traces, and all three claim that every reported value lies in 0 to 96. Which traces cannot have come from an implementation that keeps that promise?\n\n(a) 4, 8, 28, 31, 46, 24\n(b) 4, 8, 28, 128, 46, 24\n(c) 4, 8, 28, 31, -51, 24",
+            "ja": "同じローリングチェックサムの 3 つの実装が次の列を出力し、いずれも「報告する値はすべて 0 以上 97 未満」と主張しています。その約束を守る実装からは出えない列はどれですか。\n\n(a) 4, 8, 28, 31, 46, 24\n(b) 4, 8, 28, 128, 46, 24\n(c) 4, 8, 28, 31, -51, 24"
+          },
+          "choices": [
+            {
+              "key": "a",
+              "text": {
+                "en": "Only trace (b), first breaking the promise at index 3.",
+                "ja": "列 (b) だけ。最初に約束を破るのは index 3。"
+              }
+            },
+            {
+              "key": "b",
+              "text": {
+                "en": "Only trace (c), first breaking the promise at index 4.",
+                "ja": "列 (c) だけ。最初に約束を破るのは index 4。"
+              }
+            },
+            {
+              "key": "c",
+              "text": {
+                "en": "Both (b) and (c): (b) at index 3, (c) at index 4.",
+                "ja": "(b) と (c) の両方。(b) は index 3、(c) は index 4。"
+              }
+            },
+            {
+              "key": "d",
+              "text": {
+                "en": "None of them; all three are consistent with the rule.",
+                "ja": "どれも出える。3 つとも規則と矛盾しない。"
+              }
+            }
+          ],
+          "scoring": {
+            "kind": "key",
+            "maxPoints": 1,
+            "correctChoice": "c"
+          }
+        },
+        {
+          "id": "item.tfd.repeat-duplicate-repair",
+          "kind": "single-choice",
+          "targetProblem": "ac26-w1-underconstraint",
+          "targetConcept": "concept.constraint-system",
+          "surface": "A byte range check built from bit decomposition",
+          "variedFromChallenge": [
+            "Reproduced verbatim from the immediate instrument, so nothing is varied relative to it.",
+            "Relative to the challenge, the same variations as item.tf.duplicate-repair apply."
+          ],
+          "heldFixed": "A repair is measured by the set of assignments admitted.",
+          "discriminates": "Nothing on its own; it is the harder of the two repeats and exists to bracket the retention estimate from both ends.",
+          "notTheHiddenTest": "It is a repeat of an instrument item, not of any checkpoint.",
+          "repeat": true,
+          "repeatOf": "item.tf.duplicate-repair",
+          "prompt": {
+            "en": "To fix the byte range check, a colleague proposes adding a second copy of the 0-or-1 requirement on bit0, which is already present. Is that a repair?",
+            "ja": "byte の範囲検査を直すために、同僚がすでに存在する bit0 の「0 か 1」要求をもう 1 つ追加することを提案しました。これは修正になっていますか。"
+          },
+          "choices": [
+            {
+              "key": "a",
+              "text": {
+                "en": "Yes. The circuit now has more requirements than before.",
+                "ja": "なる。要求の数が前より増えている。"
+              }
+            },
+            {
+              "key": "b",
+              "text": {
+                "en": "No. The set of admitted assignments is unchanged, so nothing that passed before is refused now.",
+                "ja": "ならない。受理される割り当ての集合は変わらず、以前通ったものは今も通る。"
+              }
+            },
+            {
+              "key": "c",
+              "text": {
+                "en": "No, but it is harmless and can be left in.",
+                "ja": "修正ではないが無害なので残してよい。"
+              }
+            }
+          ],
+          "scoring": {
+            "kind": "key",
+            "maxPoints": 1,
+            "correctChoice": "b"
+          }
+        }
+      ]
+    }
+  ]
+}

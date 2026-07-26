@@ -8,6 +8,16 @@ learner should meet it.
 Reuse, attribution, and spoiler rules are in [`GOVERNANCE.md`](./GOVERNANCE.md).
 This track is an **independent, unofficial** companion.
 
+## Measuring whether this track works
+
+The instruments for a learning-effect pilot live in [`pilot/`](./pilot/): the
+protocol, the consent text, the pre/transfer test item banks, the observation and
+interview forms, the telemetry schema, and a pre-registered analysis plan.
+
+They are written and version-fixed **before** any pilot runs, because success
+criteria chosen after seeing results are not criteria. No pilot has been run; the
+directory contains instruments, not findings.
+
 ## Source snapshot
 
 | Field | Value |
