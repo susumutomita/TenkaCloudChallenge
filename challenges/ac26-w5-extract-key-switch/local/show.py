@@ -48,7 +48,9 @@ def main() -> None:
     par = params(SEED)
     degree = par["degree"]
     try:
-        index = int(os.environ.get("INDEX", "0"))
+        # `or` rather than a default argument: the Makefile always passes -e INDEX, so an
+        # unset INDEX arrives as the empty string rather than as an absent variable.
+        index = int(os.environ.get("INDEX") or "0")
     except ValueError:
         index = 0
     index = max(0, min(index, degree - 1))

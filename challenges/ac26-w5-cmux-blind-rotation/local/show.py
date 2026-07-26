@@ -48,7 +48,9 @@ from fixtures.generate import (
 )
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
-CASE = os.environ.get("CASE", "1").strip()
+# `or` rather than a default argument: the Makefile always passes -e CASE, so an
+# unset CASE arrives as the empty string rather than as an absent variable.
+CASE = (os.environ.get("CASE") or "1").strip()
 
 
 def main() -> None:
