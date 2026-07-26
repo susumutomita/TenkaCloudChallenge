@@ -28,10 +28,15 @@ local/
 ├── fixtures/generate.py     every fixture, derived from your per-deploy seed
 ├── tests/public/            the tests you can read
 ├── tests/hidden/            the tests the verifier runs (in the image, not bind-mounted)
-├── reference/               the answer (in the image, not bind-mounted -- see Assurance scope)
+├── reference/               the answer -- NOT in the image `make build` gives you
 ├── verifier/server.py       POST /verify on 127.0.0.1:18091
 └── mutation.py              proves the hidden tests can actually fail a wrong answer
 ```
+
+`make build` builds the `participant` stage of the Dockerfile, which carries the fixtures, both
+test suites, the verifier and the starter. `reference/` and `mutation.py` are added only by the
+`author` stage that `make reference-test` builds, so the answer is not sitting in the image you
+were told to run. That is misdelivery prevention, not confidentiality — see Assurance scope.
 
 Your fixtures come from `FLAG_SEED`, injected fresh at deploy. Same seed, same numbers, so your
 session is reproducible and debuggable. Different seed, different numbers, so a value copied from
@@ -123,8 +128,10 @@ satisfied by memorizing one output.
 ## Assurance scope
 
 Local mode is **self-paced, honor-system verification**. You own the machine, the Docker daemon,
-and the image, so nothing inside that image is hidden from you: `reference/` and `tests/hidden/`
-are not bind-mounted, which keeps them out of your git checkout rather than out of reach.
+and the image, so nothing here is hidden from you: `tests/hidden/` is not bind-mounted and
+`reference/` is not in the participant image at all, which keeps them out of your way rather than
+out of reach. The source is in this repository either way, and you can build the `author` stage
+yourself.
 
 What the verifier does guarantee is narrower and real: a submission cannot hang or crash it, a
 checkpoint can only credit the id it echoes, results do not leak expected values, and the fixtures

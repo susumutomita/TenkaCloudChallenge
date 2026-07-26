@@ -138,7 +138,15 @@ describe("sha256-bytes-padding: container safety", () => {
   });
 
   it("should pin the base image by digest so fixtures cannot shift under the learner", () => {
-    expect(read("local/Dockerfile")).toMatch(/^FROM \S+@sha256:[0-9a-f]{64}$/m);
+    // The base `FROM` only — the second stage is `FROM participant`, which inherits the pin.
+    expect(read("local/Dockerfile")).toMatch(/^FROM \S+@sha256:[0-9a-f]{64}(?: AS \S+)?$/m);
+  });
+
+  it("should build the participant stage, not the last one", () => {
+    // `docker build` and a compose `build:` with no target both build the LAST stage, which
+    // is `author` — the one carrying reference/ and mutation.py.
+    expect(read("Makefile")).toContain("docker build --target participant -t $(IMAGE) local");
+    expect(read("local/docker-compose.yml")).toMatch(/^\s*target:\s*participant\s*$/m);
   });
 
   it("should never build a shell command out of participant input", () => {

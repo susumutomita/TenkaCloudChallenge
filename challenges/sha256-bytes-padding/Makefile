@@ -1,4 +1,4 @@
-# Participant contract, shared by every AC26 companion problem.
+# Participant contract, shared by every local-play problem in this catalog.
 #
 #   make test             run the public tests
 #   make test-one ID=...  re-run one public test by name substring
@@ -12,16 +12,17 @@ FLAG_SEED ?= local-dev-seed
 IMAGE := sha256-bytes-padding
 
 # starter/ is bind-mounted read-only: the learner edits their checkout, the container
-# reads it. reference/ and tests/hidden/ stay inside the image and are not bind-mounted,
-# which keeps them out of the checkout rather than out of reach -- local mode is
-# honor-system verification. See TEMPLATE.md "Assurance scope".
+# reads it. tests/hidden/ stays inside the image and is not bind-mounted, which keeps it
+# out of the checkout rather than out of reach -- local mode is honor-system
+# verification. See TEMPLATE.md "Assurance scope". reference/ is not in this image at
+# all: it only enters the `author` stage that `reference-test` builds.
 RUN := docker run --rm -e FLAG_SEED=$(FLAG_SEED) \
 	-v $(CURDIR)/local/starter:/problem/starter:ro $(IMAGE)
 
 .PHONY: build test test-one inspect reset reference-test
 
 build:
-	docker build -t $(IMAGE) local
+	docker build --target participant -t $(IMAGE) local
 
 test: build
 	$(RUN) python tests/public/test_padding.py
@@ -41,4 +42,5 @@ reset:
 	@echo "starter/ restored to its shipped state."
 
 reference-test: build
-	docker run --rm -e FLAG_SEED=$(FLAG_SEED) $(IMAGE) python mutation.py
+	docker build --target author -t $(IMAGE)-author local
+	docker run --rm -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python mutation.py

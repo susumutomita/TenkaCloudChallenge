@@ -2,11 +2,12 @@ import { globSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "bun:test";
+import { localPlayProblemDirs } from "./lib/local-play-problems";
 
 /**
  * The reference solution does not ship to learners.
  *
- * Every AC26 problem used to build one image containing the fixtures, the tests,
+ * Every local-play problem used to build one image containing the fixtures, the tests,
  * the verifier, the starter, the reference implementation, and the mutation
  * suite — and that is the image `make build` produced and a learner ran. The
  * answer to the problem was sitting in `/problem/reference/` on their own
@@ -31,7 +32,7 @@ import { describe, expect, it } from "bun:test";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 
-const DOCKERFILES = globSync("challenges/ac26-*/local/Dockerfile", { cwd: REPO_ROOT }).sort();
+const DOCKERFILES = localPlayProblemDirs(REPO_ROOT).map((dir) => `${dir}/local/Dockerfile`);
 
 /** Artifacts that exist to serve the author, not the learner. */
 const AUTHOR_ONLY = ["reference/", "mutation.py"] as const;
@@ -104,7 +105,7 @@ function brings(source: string, artifact: string): boolean {
 }
 
 describe("author-only artifacts do not ship in the participant image", () => {
-  it("should find the AC26 images to check, so a glob matching nothing cannot pass", () => {
+  it("should find the local-play images to check, so a glob matching nothing cannot pass", () => {
     expect(DOCKERFILES.length).toBeGreaterThan(0);
   });
 
@@ -228,7 +229,7 @@ describe("the participant path does not need what was removed", () => {
   });
 
   it("should keep the mutation suite as the only thing that loads it", () => {
-    const suites = globSync("challenges/ac26-*/local/mutation.py", { cwd: REPO_ROOT });
+    const suites = localPlayProblemDirs(REPO_ROOT).map((dir) => `${dir}/local/mutation.py`);
     expect(suites.length).toBeGreaterThan(0);
     for (const relative of suites) {
       expect(readFileSync(join(REPO_ROOT, relative), "utf8")).toMatch(LOADS_REFERENCE);

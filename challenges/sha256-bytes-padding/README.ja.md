@@ -26,10 +26,15 @@ local/
 ├── fixtures/generate.py     全 fixture を deploy ごとの seed から導出する
 ├── tests/public/            読めるテスト
 ├── tests/hidden/            verifier が実行するテスト (image 内のみ。bind-mount しない)
-├── reference/               解答 (image 内のみ。bind-mount しない。保証範囲を参照)
+├── reference/               解答。`make build` が作る image には入らない
 ├── verifier/server.py       POST /verify。127.0.0.1:18091
 └── mutation.py              hidden test が誤答を本当に落とせるかを証明する
 ```
+
+`make build` は Dockerfile の `participant` stage を作ります。fixture・両方のテスト・verifier・starter が
+入り、`reference/` と `mutation.py` は `make reference-test` が作る `author` stage でだけ追加されます。
+つまり「走らせろと言われた image」の中に解答は入っていません。これは誤配の防止であって秘匿ではありません
+(保証範囲を参照)。
 
 fixture は deploy 時に注入される `FLAG_SEED` から導出されます。同じ seed なら同じ数値なので、自分の
 セッションは再現でき、デバッグできます。seed が違えば数値も変わるので、他の人の実行結果から写した値は
@@ -117,9 +122,9 @@ hint は `byte-length` 以外の全 checkpoint にあります。すべて開い
 ## 保証範囲
 
 ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image もあなたの管理下に
-あるので、image の中身はあなたに対して秘匿されていません。`reference/` と `tests/hidden/` を
-bind-mount しないのは、あなたの git checkout に紛れ込ませないためであって、手が届かなくするためでは
-ありません。
+あるので、ここには秘匿されているものはありません。`tests/hidden/` を bind-mount せず `reference/` を
+participant image に入れないのは、あなたの作業に紛れ込ませないためであって、手が届かなくするためでは
+ありません。ソースはどちらにせよこのリポジトリにありますし、`author` stage は自分でビルドできます。
 
 verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier をハングさせたり
 クラッシュさせたりできません。checkpoint は echo した id しか加点できません。結果は期待値を漏らし
