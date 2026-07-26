@@ -1932,6 +1932,33 @@
       }
     },
     {
+      "id": "stackstack-safe-exposure",
+      "name": "誰に見せるかを決める",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "60〜75 分",
+      "shortDescription": "入社三日目。 昨日あなたが外から見えるようにした掲示板は、 今日から取引先にも配られる。\n\n出社したら CTO が机の横に立っている。 「星野デザインにも同じ板を出して。 下書き機能ごと。 管理画面と、 各自の下書きは外に出さないで。 それと監視は止めないこと ── 『安全にするために全部閉じました』 は無しね。 それをやった会社を知ってる」\n\n前任の SRE が残したファイルの中に `access.json` がある。 中身は `defaultEffect: \"allow\"` と、 ほぼ空のルール一覧。 引き継ぎメモには 「あとで締めます」 とだけ書いてあって、 その人はもういない。 いま誰が何に手が届く状態なのかは、 誰も書き残していない。",
+      "tags": [
+        "stackstack",
+        "authorization",
+        "authentication",
+        "multi-tenant",
+        "access-control",
+        "local-play",
+        "container",
+        "web-app"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "stackstack-ship",
       "name": "外から見えるところまで",
       "category": "Challenge",
