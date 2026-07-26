@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { parse as parseYaml } from "yaml";
 
@@ -33,7 +34,7 @@ import { parse as parseYaml } from "yaml";
  * ships.
  */
 
-const REPO_ROOT = new URL("..", import.meta.url).pathname;
+const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const PROBLEM_DIR = join(REPO_ROOT, "challenges", "stackstack-recover");
 const SERVER = join(REPO_ROOT, "stackstack-base", "app", "server.mjs");
 const SCENARIO_FILE = join(REPO_ROOT, "stackstack-base", "app", "scenarios", "recover.mjs");
