@@ -1,0 +1,1102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tenkacloud.example/schemas/ac26-pilot/event-1.0.0.json",
+  "title": "AC26 pilot telemetry event",
+  "description": "One event in the pilot's session record. A session record is a JSON Lines file, one event per line, each validating against this schema. Every event type here earns its place by feeding a named metric in analysis-plan.md; an event nobody analyses is surveillance with extra steps, and is removed rather than kept in case it becomes useful. The schema is also the enforcement point for consent.md section 5: keystrokes, AI prompt bodies, source outside the studied problem, and credentials cannot be represented. Every payload sets additionalProperties to false, so an unlisted field cannot be recorded even by accident, and the `not` clause below refuses the specific names most likely to be added under pressure.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "eventId",
+    "occurredAt",
+    "pilot",
+    "participant",
+    "sessionId",
+    "source",
+    "type",
+    "payload"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "eventId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique per event. Present so that a replayed or duplicated line is detectable rather than double-counted."
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "RFC 3339 with an explicit offset. Elapsed-time metrics are computed from these, so a local timestamp without an offset makes a session uninterpretable."
+    },
+    "pilot": {
+      "type": "object",
+      "required": [
+        "id",
+        "catalogRef"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "const": "ac26-pilot-v1"
+        },
+        "catalogRef": {
+          "description": "The frozen catalog commit from protocol.md section 2. Recorded on every event so that a stream cannot be silently assembled from two different catalog states.",
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            },
+            {
+              "const": "PENDING-FREEZE"
+            }
+          ]
+        }
+      }
+    },
+    "participant": {
+      "type": "string",
+      "pattern": "^p-[ABC]-[0-9]{2}$",
+      "description": "The pseudonymous id from protocol.md section 8. The cohort letter is part of the id because every metric is reported per cohort, and a separate cohort field would be one more place for the two to disagree."
+    },
+    "sessionId": {
+      "type": "string",
+      "pattern": "^s-[0-9]{8}-[a-z0-9]{4}$",
+      "description": "One id per sitting. Stage 5 happens days later and is therefore a different session for the same participant."
+    },
+    "source": {
+      "enum": [
+        "harness",
+        "facilitator",
+        "observer",
+        "participant"
+      ],
+      "description": "Who produced the record. Analysis treats a harness timestamp and an observer's recollection differently, so the difference must be in the data rather than in someone's memory of it."
+    },
+    "type": {
+      "type": "string"
+    },
+    "payload": {
+      "type": "object"
+    }
+  },
+  "not": {
+    "anyOf": [
+      {
+        "required": [
+          "keystrokes"
+        ]
+      },
+      {
+        "required": [
+          "keystrokeLog"
+        ]
+      },
+      {
+        "required": [
+          "prompt"
+        ]
+      },
+      {
+        "required": [
+          "promptText"
+        ]
+      },
+      {
+        "required": [
+          "aiPrompt"
+        ]
+      },
+      {
+        "required": [
+          "completion"
+        ]
+      },
+      {
+        "required": [
+          "sourceCode"
+        ]
+      },
+      {
+        "required": [
+          "credentials"
+        ]
+      },
+      {
+        "required": [
+          "secrets"
+        ]
+      },
+      {
+        "required": [
+          "apiKey"
+        ]
+      },
+      {
+        "required": [
+          "flagSeedValue"
+        ]
+      },
+      {
+        "required": [
+          "realName"
+        ]
+      },
+      {
+        "required": [
+          "email"
+        ]
+      },
+      {
+        "required": [
+          "ipAddress"
+        ]
+      },
+      {
+        "required": [
+          "screenRecording"
+        ]
+      }
+    ]
+  },
+  "oneOf": [
+    {
+      "title": "session.start",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "session.start"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "stagesPlanned",
+            "facilitatorId",
+            "observerId"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "stagesPlanned": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 5
+              }
+            },
+            "facilitatorId": {
+              "type": "string",
+              "description": "A role id, not a name. Recorded because protocol.md section 4 allows a problem author to facilitate but not to answer content questions, and that constraint is only auditable if the facilitator is identifiable."
+            },
+            "observerId": {
+              "type": "string"
+            },
+            "authoredProblemsByFacilitator": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Which studied problems this facilitator authored, if any. Present so a conflict of interest is visible in the record rather than reconstructed later."
+            }
+          }
+        }
+      }
+    },
+    {
+      "title": "session.end",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "session.end"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "endReason"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "endReason": {
+              "enum": [
+                "completed",
+                "withdrawal-request",
+                "facilitator-ended",
+                "environment-blocked",
+                "session-cap",
+                "privacy-incident",
+                "other"
+              ],
+              "description": "The stopping conditions in protocol.md section 5. `withdrawal-request` is never accompanied by a reason field, because the participant is told they need not give one."
+            }
+          }
+        }
+      }
+    },
+    {
+      "title": "stage.start",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "stage.start"
+        },
+        "payload": {
+          "$ref": "#/$defs/stagePayload"
+        }
+      }
+    },
+    {
+      "title": "stage.end",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "stage.end"
+        },
+        "payload": {
+          "$ref": "#/$defs/stagePayload"
+        }
+      }
+    },
+    {
+      "title": "break.start",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "break.start"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      }
+    },
+    {
+      "title": "break.end",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "break.end"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      }
+    },
+    {
+      "title": "environment.check",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "environment.check"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "outcome"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "outcome": {
+              "enum": [
+                "pass",
+                "pass-after-remediation",
+                "fail"
+              ]
+            },
+            "imageBuildSeconds": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Feeds the setup-cost gate. A track that takes twenty minutes to start has a friction problem before any cryptography appears."
+            },
+            "remediationAttempts": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "title": "problem.start",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "problem.start"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "problemId",
+            "imageDigest",
+            "set"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "problemId": {
+              "$ref": "#/$defs/problemId"
+            },
+            "imageDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "description": "The frozen image the participant actually ran, not the image the freeze record says they should have. A mismatch between the two is a deviation and must be detectable from the stream alone."
+            },
+            "set": {
+              "enum": [
+                "core",
+                "extension"
+              ],
+              "description": "Extension data is never pooled with core data (protocol.md section 3), and the split has to live in the record rather than in the analyst's head."
+            },
+            "seedRef": {
+              "type": "string",
+              "description": "An opaque handle for the deployment seed, held with the session record so a reported failure can be reproduced. Never the seed value itself and never anything derived from it."
+            }
+          }
+        }
+      }
+    },
+    {
+      "title": "problem.end",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "problem.end"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "problemId",
+            "endReason",
+            "checkpointsClosed",
+            "checkpointsTotal"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "problemId": {
+              "$ref": "#/$defs/problemId"
+            },
+            "endReason": {
+              "enum": [
+                "all-checkpoints-closed",
+                "participant-moved-on",
+                "time-exceeded",
+                "environment-blocked",
+                "abandoned",
+                "session-cap"
+              ]
+            },
+            "checkpointsClosed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "checkpointsTotal": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      }
+    },
+    {
+      "title": "command.run",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "command.run"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "problemId",
+            "command",
+            "exitCode"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "problemId": {
+              "$ref": "#/$defs/problemId"
+            },
+            "command": {
+              "enum": [
+                "build",
+                "test",
+                "test-one",
+                "inspect",
+                "reset"
+              ],
+              "description": "The participant contract every AC26 problem ships. `inspect` and `reset` are the two the catalog invested in and the two nobody knows are used; this event is how that question gets an answer."
+            },
+            "durationMs": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "exitCode": {
+              "type": "integer",
+              "description": "Required, because the friction gate is defined over the first *successful* `make inspect`. Without it a stream of attempts is indistinguishable from a stream of successes, and the bias runs one way: it makes friction look lower."
+            }
+          }
+        }
+      }
+    },
+    {
+      "title": "public-test.run",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "public-test.run"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "problemId",
+            "passed",
+            "failed",
+            "failedTestIds"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "problemId": {
+              "$ref": "#/$defs/problemId"
+            },
+            "passed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "failed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "failedTestIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Test names only, never assertion output. A public test that never fails for any participant is doing no work and is a finding about the suite."
+            }
+          }
+        }
+      }
+    },
+    {
+      "title": "checkpoint.submit",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "checkpoint.submit"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "problemId",
+            "checkpointId",
+            "attemptIndex",
+            "verdict",
+            "publicTestsGreenAtSubmit",
+            "secondsSinceProblemStart"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "problemId": {
+              "$ref": "#/$defs/problemId"
+            },
+            "checkpointId": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+            },
+            "attemptIndex": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "verdict": {
+              "enum": [
+                "correct",
+                "incorrect",
+                "verifier-error"
+              ]
+            },
+            "failureClass": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,47}$",
+              "description": "A structured reason supplied by the verifier, not free text and not the expected value. This is the field that makes the mutation-coverage metric computable: a failure class with no corresponding shipped mutation is a hole in the mutation suite."
+            },
+            "publicTestsGreenAtSubmit": {
+              "type": "boolean",
+              "description": "Whether the participant's last public-test run before this submission was green. Without it the public-only pass rate cannot be computed, and that metric is the main evidence about whether the public suite predicts the hidden one."
+            },
+            "secondsSinceProblemStart": {
+              "type": "number",
+              "minimum": 0
+            },
+            "secondsSinceCheckpointFirstViewed": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Feeds the label-sufficient closure metric: a checkpoint closed on the first attempt, seconds after being read, with no test run in between, is a checkpoint whose label may have carried the answer."
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "verdict": {
+                    "const": "incorrect"
+                  }
+                },
+                "required": [
+                  "verdict"
+                ]
+              },
+              "then": {
+                "required": [
+                  "failureClass"
+                ],
+                "description": "An incorrect verdict with no failure class cannot be matched against the shipped mutations, and mutation coverage (AQ4) is the pilot's actual contribution to assessment quality. A missing class reads as full coverage, which is the wrong direction to be wrong in."
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "title": "checkpoint.close",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "checkpoint.close"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "problemId",
+            "checkpointId",
+            "attempts",
+            "secondsSinceProblemStart",
+            "secondsSinceCheckpointFirstViewed"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "problemId": {
+              "$ref": "#/$defs/problemId"
+            },
+            "checkpointId": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+            },
+            "attempts": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "hintsOpenedBefore": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "secondsSinceProblemStart": {
+              "type": "number",
+              "minimum": 0
+            },
+            "secondsSinceCheckpointFirstViewed": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Required here, not only on submit, because the label-sufficiency metric (AQ5) is defined over closures. Reading it off a joined submit event would make the metric depend on a join the schema does not guarantee."
+            }
+          }
+        }
+      }
+    },
+    {
+      "title": "hint.unlock",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "hint.unlock"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "problemId",
+            "checkpointId",
+            "hintId"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "problemId": {
+              "$ref": "#/$defs/problemId"
+            },
+            "checkpointId": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+            },
+            "hintId": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+            },
+            "attemptsBefore": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "A hint opened before any attempt and followed immediately by a closure is the signature the hint-leak metric looks for."
+            }
+          }
+        }
+      }
+    },
+    {
+      "title": "ai-assistant.use",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "ai-assistant.use"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "purpose",
+            "target",
+            "declaredBy"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "problemId": {
+              "$ref": "#/$defs/problemId"
+            },
+            "purpose": {
+              "enum": [
+                "explain-concept",
+                "explain-error",
+                "explain-problem-statement",
+                "generate-code",
+                "review-code",
+                "translate",
+                "other"
+              ],
+              "description": "A category, declared by the participant. There is no field for what was typed and there will not be one: consent.md section 5 promises the prompt is never recorded, and a category is enough for the covariate analysis-plan.md defines."
+            },
+            "target": {
+              "enum": [
+                "problem-statement",
+                "own-code",
+                "test-output",
+                "error-message",
+                "external-concept"
+              ]
+            },
+            "declaredBy": {
+              "enum": [
+                "participant",
+                "participant-after-observer-prompt"
+              ],
+              "description": "Recorded because a declaration the observer had to ask for is weaker evidence than a volunteered one. Since prompts are not collected, declarations cannot be verified at all, and analysis-plan.md treats this as a known limitation rather than a measurement."
+            }
+          }
+        }
+      }
+    },
+    {
+      "title": "failure.environment",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "failure.environment"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "kind",
+            "blocking"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "problemId": {
+              "$ref": "#/$defs/problemId"
+            },
+            "kind": {
+              "enum": [
+                "docker-daemon",
+                "image-build",
+                "container-start",
+                "verifier-unreachable",
+                "port-conflict",
+                "host-resource",
+                "network",
+                "other"
+              ]
+            },
+            "blocking": {
+              "type": "boolean",
+              "description": "Blocking failures suspend the problem's timing clock. A participant is not charged for our infrastructure."
+            },
+            "resolvedSeconds": {
+              "type": "number",
+              "minimum": 0
+            },
+            "remediationAttempts": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "blocking": {
+                    "const": true
+                  }
+                },
+                "required": [
+                  "blocking"
+                ]
+              },
+              "then": {
+                "required": [
+                  "resolvedSeconds"
+                ],
+                "description": "A blocking environment failure has to say how long it blocked, because the friction lane subtracts exactly that from the timing it reports. An unmeasured block silently inflates the participant's apparent working time."
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "title": "failure.interface",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "failure.interface"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "surface",
+            "description"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "problemId": {
+              "$ref": "#/$defs/problemId"
+            },
+            "surface": {
+              "enum": [
+                "makefile",
+                "verifier-response",
+                "readme",
+                "instructions",
+                "portal",
+                "other"
+              ]
+            },
+            "description": {
+              "type": "string",
+              "maxLength": 240
+            }
+          }
+        }
+      }
+    },
+    {
+      "title": "abandonment",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "abandonment"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "problemId",
+            "reasonCategory"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "problemId": {
+              "$ref": "#/$defs/problemId"
+            },
+            "checkpointId": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+            },
+            "reasonCategory": {
+              "enum": [
+                "did-not-understand-the-task",
+                "understood-but-could-not-proceed",
+                "tooling-or-environment",
+                "lost-interest",
+                "out-of-time",
+                "declined-to-say"
+              ]
+            },
+            "participantWords": {
+              "type": "string",
+              "maxLength": 280,
+              "description": "The participant's own sentence, transcribed verbatim and never paraphrased by the observer. An observer's summary of why somebody gave up is a hypothesis; the participant's sentence is data."
+            }
+          }
+        }
+      }
+    },
+    {
+      "title": "observation.note",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "observation.note"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "category",
+            "observed"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "problemId": {
+              "$ref": "#/$defs/problemId"
+            },
+            "checkpointId": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+            },
+            "category": {
+              "enum": [
+                "content-bug",
+                "platform-bug",
+                "assessment-bug",
+                "course-alignment-bug",
+                "friction",
+                "insight",
+                "intervention",
+                "solution-exposure"
+              ],
+              "description": "The four bug categories are defined in analysis-plan.md section 6 and are separated because they have different owners and different fixes. A single bugs bucket produces a backlog nobody can act on. `solution-exposure` is the one the protocol's stopping-conditions table needs: when a facilitator finds a participant working from a reference solution or the official answer, the session continues but everything after it is evidence about the answer rather than about the participant. Without a place to record it, the instruction in protocol.md would have had nowhere to land, and the eligibility classification that depends on it would rest on the interview alone."
+            },
+            "observed": {
+              "type": "string",
+              "maxLength": 400,
+              "description": "What happened, in observable terms. The observation form requires this to be behaviour rather than diagnosis, because a diagnosis written in the moment is very hard to unpick afterwards."
+            },
+            "interpretation": {
+              "type": "string",
+              "maxLength": 400,
+              "description": "Optional, and kept in a separate field on purpose. Analysis can read the observations without the observer's theory attached."
+            },
+            "interventionRung": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5,
+              "description": "Required in practice for category `intervention`: the ladder in protocol.md section 6. An unlogged intervention becomes an unexplained difference between participants."
+            }
+          }
+        }
+      }
+    },
+    {
+      "title": "instrument.response",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "instrument.response"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "instrument",
+            "itemId",
+            "answered"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "instrument": {
+              "enum": [
+                "pre-test",
+                "transfer-test-immediate",
+                "transfer-test-delayed",
+                "interview"
+              ]
+            },
+            "itemId": {
+              "type": "string"
+            },
+            "answered": {
+              "type": "boolean",
+              "description": "Whether an answer was given. Unanswered is never scored as wrong."
+            },
+            "responseRef": {
+              "type": "string",
+              "description": "A pointer into the instrument response file, which is stored separately from this stream (protocol.md section 8). The answer text is deliberately not here, so the event stream can be handed to someone debugging the harness without handing over anybody's answers."
+            },
+            "secondsOnItem": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "title": "deviation",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "deviation"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "protocolSection",
+            "whatWasDone",
+            "decidedBy"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "protocolSection": {
+              "type": "string",
+              "description": "Which section of protocol.md was departed from."
+            },
+            "whatWasDone": {
+              "type": "string",
+              "maxLength": 400
+            },
+            "decidedBy": {
+              "type": "string"
+            },
+            "affectsMetrics": {
+              "type": "boolean",
+              "description": "When true, analysis-plan.md requires the affected metric to be reported both with and without this participant."
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "problemId": {
+      "enum": [
+        "ac26-bridge-experiment",
+        "ac26-w1-constraint-lab",
+        "ac26-w1-underconstraint",
+        "ac26-w2-secret-sharing"
+      ],
+      "description": "Closed on purpose. A problem outside the frozen set cannot appear in a pilot stream, and if one does, the stream is describing a session that was not the pilot."
+    },
+    "stagePayload": {
+      "type": "object",
+      "required": [
+        "stage"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "stage": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5
+        }
+      }
+    }
+  },
+  "unevaluatedProperties": false,
+  "examples": [
+    {
+      "schemaVersion": "1.0.0",
+      "eventId": "6f1b1d3e-3c2a-4f5b-9c7d-0a1b2c3d4e5f",
+      "occurredAt": "2026-09-14T02:11:07+09:00",
+      "pilot": {
+        "id": "ac26-pilot-v1",
+        "catalogRef": "PENDING-FREEZE"
+      },
+      "participant": "p-B-02",
+      "sessionId": "s-20260914-k3n7",
+      "source": "harness",
+      "type": "checkpoint.submit",
+      "payload": {
+        "problemId": "ac26-w1-underconstraint",
+        "checkpointId": "exploit",
+        "attemptIndex": 3,
+        "verdict": "incorrect",
+        "failureClass": "witness-satisfies-both-circuits",
+        "publicTestsGreenAtSubmit": true,
+        "secondsSinceProblemStart": 1840.5,
+        "secondsSinceCheckpointFirstViewed": 612.0
+      }
+    },
+    {
+      "schemaVersion": "1.0.0",
+      "eventId": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+      "occurredAt": "2026-09-14T02:19:44+09:00",
+      "pilot": {
+        "id": "ac26-pilot-v1",
+        "catalogRef": "PENDING-FREEZE"
+      },
+      "participant": "p-B-02",
+      "sessionId": "s-20260914-k3n7",
+      "source": "participant",
+      "type": "ai-assistant.use",
+      "payload": {
+        "problemId": "ac26-w1-underconstraint",
+        "purpose": "explain-error",
+        "target": "test-output",
+        "declaredBy": "participant"
+      }
+    },
+    {
+      "schemaVersion": "1.0.0",
+      "eventId": "9d8c7b6a-5f4e-4d3c-8b2a-1908f7e6d5c4",
+      "occurredAt": "2026-09-14T02:26:03+09:00",
+      "pilot": {
+        "id": "ac26-pilot-v1",
+        "catalogRef": "PENDING-FREEZE"
+      },
+      "participant": "p-B-02",
+      "sessionId": "s-20260914-k3n7",
+      "source": "observer",
+      "type": "observation.note",
+      "payload": {
+        "problemId": "ac26-w1-underconstraint",
+        "checkpointId": "audit",
+        "category": "assessment-bug",
+        "observed": "Read the checkpoint label aloud, then submitted the constraint id without opening the circuit, and it was accepted on the first attempt."
+      }
+    }
+  ]
+}

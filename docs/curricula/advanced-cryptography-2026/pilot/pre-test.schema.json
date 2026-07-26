@@ -1,0 +1,864 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tenkacloud.example/schemas/ac26-pilot/pre-test-1.0.0.json",
+  "title": "AC26 pilot pre-test instrument",
+  "description": "Definition of the pre-test administered at stage 1 of the pilot described in protocol.md, together with the frozen item bank in `examples[0]`. The schema fixes the format; the example fixes the instrument. A pre-test document that does not validate against this schema is not the frozen instrument and its responses are not comparable with anybody else's. The pre-test measures the starting point only: it is administered unassisted, no feedback is given until the post-session debrief, and no item may reveal the answer to a checkpoint the participant will meet later in the session. Every item therefore carries a `leakageCheck` stating why it does not.",
+  "type": "object",
+  "required": [
+    "instrument",
+    "version",
+    "catalogPin",
+    "administration",
+    "items"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "instrument": {
+      "const": "pre-test"
+    },
+    "version": {
+      "const": "1.0.0",
+      "description": "Fixed. A changed item bank is a new version and cannot be pooled with responses to this one."
+    },
+    "catalogPin": {
+      "$ref": "#/$defs/catalogPin"
+    },
+    "administration": {
+      "$ref": "#/$defs/administration"
+    },
+    "items": {
+      "type": "array",
+      "minItems": 14,
+      "maxItems": 14,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/item"
+      }
+    }
+  },
+  "$defs": {
+    "catalogPin": {
+      "type": "object",
+      "description": "The catalog state this instrument was authored against. `PENDING-FREEZE` is legal only before the freeze procedure in protocol.md section 9 runs; a session administered against a pending pin is discarded.",
+      "required": [
+        "repository",
+        "ref"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "repository": {
+          "const": "susumutomita/TenkaCloudChallenge"
+        },
+        "ref": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            },
+            {
+              "const": "PENDING-FREEZE"
+            }
+          ]
+        }
+      }
+    },
+    "administration": {
+      "type": "object",
+      "required": [
+        "stage",
+        "timeLimitMinutes",
+        "assistanceAllowed",
+        "feedback",
+        "unansweredHandling"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "stage": {
+          "const": 1
+        },
+        "timeLimitMinutes": {
+          "const": 30
+        },
+        "assistanceAllowed": {
+          "const": false,
+          "description": "No references, no search, no AI assistant. The reason is stated to the participant: a starting point measured with a research assistant is not the participant's starting point."
+        },
+        "feedback": {
+          "const": "none-until-debrief",
+          "description": "The participant is told no answer and no score until after stage 4. Feedback here would teach the concepts the session is about to measure."
+        },
+        "unansweredHandling": {
+          "const": "recorded-as-unanswered",
+          "description": "An item left blank is never scored as incorrect. Running out of time is a fact about the instrument's length, not about the participant's knowledge."
+        }
+      }
+    },
+    "item": {
+      "type": "object",
+      "required": [
+        "id",
+        "section",
+        "kind",
+        "prompt",
+        "rationale",
+        "leakageCheck",
+        "scoring"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^item\\.(screen|pre)\\.[a-z0-9][a-z0-9-]{0,47}$"
+        },
+        "section": {
+          "enum": [
+            "screening",
+            "concept"
+          ],
+          "description": "`screening` items assign the cohort (protocol.md section 4) and are never part of a learning score. `concept` items form the baseline."
+        },
+        "kind": {
+          "enum": [
+            "single-choice",
+            "numeric",
+            "short-answer",
+            "self-report"
+          ]
+        },
+        "prompt": {
+          "$ref": "#/$defs/bilingualText"
+        },
+        "targetConcept": {
+          "type": "string",
+          "description": "A concept or misconception id from curriculum.md. Absent on screening items, which target no concept.",
+          "pattern": "^(concept|misconception)\\.[a-z0-9-]+$"
+        },
+        "relatedProblem": {
+          "type": "string",
+          "description": "The studied problem whose objectives this item baselines. Present so that a baseline can be read against the right problem, absent when the item baselines a habit rather than a problem.",
+          "enum": [
+            "ac26-bridge-experiment",
+            "ac26-w1-constraint-lab",
+            "ac26-w1-underconstraint"
+          ]
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 30,
+          "description": "Why this item earns a place in a 30-minute instrument. An item without a stated job is removed rather than kept for completeness."
+        },
+        "leakageCheck": {
+          "type": "string",
+          "minLength": 30,
+          "description": "Why answering this item, correctly or not, does not hand the participant a checkpoint answer they will meet in stage 2."
+        },
+        "scoring": {
+          "$ref": "#/$defs/scoring"
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "kind": {
+              "const": "single-choice"
+            },
+            "choices": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 5,
+              "items": {
+                "type": "object",
+                "required": [
+                  "key",
+                  "text"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "key": {
+                    "type": "string",
+                    "pattern": "^[a-e]$"
+                  },
+                  "text": {
+                    "$ref": "#/$defs/bilingualText"
+                  },
+                  "diagnosis": {
+                    "type": "string",
+                    "description": "What choosing this option indicates. A distractor that diagnoses nothing is decoration."
+                  }
+                }
+              }
+            }
+          },
+          "required": [
+            "choices"
+          ]
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "numeric"
+            },
+            "answer": {
+              "type": "object",
+              "required": [
+                "value"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "value": {
+                  "type": "number"
+                },
+                "tolerance": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "required": [
+            "answer"
+          ]
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "short-answer"
+            },
+            "maxWords": {
+              "type": "integer",
+              "minimum": 10,
+              "maximum": 120
+            }
+          },
+          "required": [
+            "maxWords"
+          ]
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "self-report"
+            },
+            "options": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 6,
+              "items": {
+                "$ref": "#/$defs/bilingualText"
+              }
+            }
+          },
+          "required": [
+            "options"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "scoring": {
+      "type": "object",
+      "required": [
+        "kind",
+        "maxPoints"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "key",
+            "rubric",
+            "descriptive"
+          ],
+          "description": "`key` is machine-scored against the item's answer or choice key. `rubric` is scored by two raters against the anchors below. `descriptive` is not scored at all and is reported as a distribution."
+        },
+        "maxPoints": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "correctChoice": {
+          "type": "string",
+          "pattern": "^[a-e]$"
+        },
+        "anchors": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "required": [
+              "points",
+              "descriptor"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "points": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3
+              },
+              "descriptor": {
+                "type": "string",
+                "minLength": 10
+              }
+            }
+          }
+        }
+      }
+    },
+    "bilingualText": {
+      "type": "object",
+      "required": [
+        "en",
+        "ja"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "en": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ja": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "instrument": "pre-test",
+      "version": "1.0.0",
+      "catalogPin": {
+        "repository": "susumutomita/TenkaCloudChallenge",
+        "ref": "PENDING-FREEZE"
+      },
+      "administration": {
+        "stage": 1,
+        "timeLimitMinutes": 30,
+        "assistanceAllowed": false,
+        "feedback": "none-until-debrief",
+        "unansweredHandling": "recorded-as-unanswered"
+      },
+      "items": [
+        {
+          "id": "item.screen.python",
+          "section": "screening",
+          "kind": "self-report",
+          "prompt": {
+            "en": "How would you describe your Python experience?",
+            "ja": "Python の経験をどう表現しますか。"
+          },
+          "options": [
+            {
+              "en": "I have not written Python.",
+              "ja": "Python を書いたことがない。"
+            },
+            {
+              "en": "I can read it and modify existing code.",
+              "ja": "読めるし既存コードの修正はできる。"
+            },
+            {
+              "en": "I write it regularly.",
+              "ja": "日常的に書いている。"
+            },
+            {
+              "en": "I maintain Python systems professionally.",
+              "ja": "業務で Python のシステムを保守している。"
+            }
+          ],
+          "rationale": "Every studied problem is solved by editing Python in a bind-mounted starter file. A participant who cannot edit Python is measuring the language rather than the cryptography, and the observation must be readable that way.",
+          "leakageCheck": "Asks about the participant's history and shows no problem content.",
+          "scoring": {
+            "kind": "descriptive",
+            "maxPoints": 0
+          }
+        },
+        {
+          "id": "item.screen.crypto-implementation",
+          "section": "screening",
+          "kind": "self-report",
+          "prompt": {
+            "en": "Have you implemented a cryptographic construction from a specification, rather than calling a library?",
+            "ja": "ライブラリを呼ぶのではなく、仕様から暗号の構成を実装したことがありますか。"
+          },
+          "options": [
+            {
+              "en": "No.",
+              "ja": "ない。"
+            },
+            {
+              "en": "As an exercise, following a tutorial.",
+              "ja": "チュートリアルに沿った演習として。"
+            },
+            {
+              "en": "Yes, from a paper or standard, on my own.",
+              "ja": "論文や標準から自力で。"
+            }
+          ],
+          "rationale": "This is the single line separating cohort B from cohort C: both use cryptography, only one has built a primitive.",
+          "leakageCheck": "Asks about the participant's history and shows no problem content.",
+          "scoring": {
+            "kind": "descriptive",
+            "maxPoints": 0
+          }
+        },
+        {
+          "id": "item.screen.constructions-studied",
+          "section": "screening",
+          "kind": "self-report",
+          "prompt": {
+            "en": "Which of these have you studied in any depth? Select all that apply: arithmetic circuits, Sigma protocols, secret sharing, fully homomorphic encryption, none of these.",
+            "ja": "ある程度学んだことがあるものをすべて選んでください。算術回路、Sigma プロトコル、秘密分散、完全準同型暗号、いずれもない。"
+          },
+          "options": [
+            {
+              "en": "None of these.",
+              "ja": "いずれもない。"
+            },
+            {
+              "en": "One of them.",
+              "ja": "1 つ。"
+            },
+            {
+              "en": "Two or three of them.",
+              "ja": "2 つか 3 つ。"
+            },
+            {
+              "en": "All four.",
+              "ja": "4 つすべて。"
+            }
+          ],
+          "rationale": "Separates cohort A from B and C on specific prior exposure rather than on self-image, which is what protocol.md section 4 requires when the two disagree.",
+          "leakageCheck": "Names topic areas without stating any property, construction, or answer. Knowing that arithmetic circuits are on the list does not help clear a checkpoint about them.",
+          "scoring": {
+            "kind": "descriptive",
+            "maxPoints": 0
+          }
+        },
+        {
+          "id": "item.screen.course-enrolment",
+          "section": "screening",
+          "kind": "self-report",
+          "prompt": {
+            "en": "Are you currently enrolled in the Advanced Cryptography Program 2026? Your answer changes nothing about your participation and is not shared with the course.",
+            "ja": "現在 Advanced Cryptography Program 2026 に参加していますか。回答は参加条件に影響せず、講座側には共有されません。"
+          },
+          "options": [
+            {
+              "en": "No.",
+              "ja": "いいえ。"
+            },
+            {
+              "en": "Yes, and I have started the Week 1 exercise.",
+              "ja": "はい。Week 1 の課題に着手済み。"
+            },
+            {
+              "en": "Yes, and I have not started the Week 1 exercise.",
+              "ja": "はい。Week 1 の課題には未着手。"
+            }
+          ],
+          "rationale": "A participant who has already worked the official Week 1 exercise arrives at ac26-w1-underconstraint with exposure the others lack, and analysis-plan.md requires that exposure to be visible rather than inferred from a fast time.",
+          "leakageCheck": "Asks only whether an exercise was started, never what it contains. No official content appears in the item.",
+          "scoring": {
+            "kind": "descriptive",
+            "maxPoints": 0
+          }
+        },
+        {
+          "id": "item.pre.modular-normalise",
+          "section": "concept",
+          "kind": "numeric",
+          "prompt": {
+            "en": "Working modulo 12, what is the representative of -7 in the range 0 to 11?",
+            "ja": "法 12 のもとで、-7 を 0 以上 11 未満の範囲で表すといくつになりますか。"
+          },
+          "targetConcept": "concept.finite-field",
+          "relatedProblem": "ac26-bridge-experiment",
+          "answer": {
+            "value": 5
+          },
+          "rationale": "Normalising a negative representative is the arithmetic every studied problem rests on, and it is the single most common source of a wrong residual later.",
+          "leakageCheck": "Uses modulus 12, which appears in no studied problem; every problem's modulus is derived from the per-deployment seed. Getting this right is arithmetic the participant either has or does not, and it names no construction.",
+          "scoring": {
+            "kind": "key",
+            "maxPoints": 1
+          }
+        },
+        {
+          "id": "item.pre.trace-invariant",
+          "section": "concept",
+          "kind": "single-choice",
+          "prompt": {
+            "en": "A process repeatedly replaces x with (x + 4) mod 10, starting from 3. Which printed sequence cannot have come from that process?",
+            "ja": "x を (x + 4) mod 10 に繰り返し置き換える処理が 3 から始まります。この処理から出るはずのない出力列はどれですか。"
+          },
+          "targetConcept": "concept.invariant",
+          "relatedProblem": "ac26-bridge-experiment",
+          "choices": [
+            {
+              "key": "a",
+              "text": {
+                "en": "3, 7, 1, 5, 9",
+                "ja": "3, 7, 1, 5, 9"
+              },
+              "diagnosis": "Correctly recognised as consistent."
+            },
+            {
+              "key": "b",
+              "text": {
+                "en": "3, 7, 11, 15, 19",
+                "ja": "3, 7, 11, 15, 19"
+              },
+              "diagnosis": "The reduction was never applied. This is the intended answer."
+            },
+            {
+              "key": "c",
+              "text": {
+                "en": "3, 7, 1, 5, 9, 3",
+                "ja": "3, 7, 1, 5, 9, 3"
+              },
+              "diagnosis": "Rejecting this suggests the participant treats returning to a previous value as impossible."
+            },
+            {
+              "key": "d",
+              "text": {
+                "en": "All three are possible.",
+                "ja": "3 つとも起こりうる。"
+              },
+              "diagnosis": "The range invariant is not being checked at all."
+            }
+          ],
+          "rationale": "Establishes whether the participant already reads a trace against a stated range invariant, which is the habit ac26-bridge-experiment exists to build.",
+          "leakageCheck": "The studied problem asks for the index at which a trace first leaves its range, on a seed-derived modulus, using tooling. This item asks which of four short sequences is impossible on modulus 10, on paper, and reveals no index and no fixture.",
+          "scoring": {
+            "kind": "key",
+            "maxPoints": 1,
+            "correctChoice": "b"
+          }
+        },
+        {
+          "id": "item.pre.constraint-versus-branch",
+          "section": "concept",
+          "kind": "short-answer",
+          "prompt": {
+            "en": "In a program you might write `if b != 0 and b != 1: reject`. In a constraint system you might instead write the expression b * (b - 1), and require it to equal zero. In your own words, what is the difference between those two, and who is being convinced in each case?",
+            "ja": "プログラムなら `if b != 0 and b != 1: reject` と書くところを、制約系では b * (b - 1) という式を書いてこれがゼロであることを要求します。この 2 つの違いと、それぞれ誰を納得させているのかを自分の言葉で説明してください。"
+          },
+          "targetConcept": "misconception.constraint-is-an-if-statement",
+          "relatedProblem": "ac26-w1-constraint-lab",
+          "maxWords": 80,
+          "rationale": "This misconception is named in curriculum.md and is load-bearing for both Week 1 problems. Measuring it before exposure is the only way to say afterwards whether the mechanism problem moved it.",
+          "leakageCheck": "The item states the boolean expression, which the studied problem also states in its own README before the participant starts. It gives away no residual, no gadget implementation, and nothing about the membership gadget or the missing-constraint audit.",
+          "scoring": {
+            "kind": "rubric",
+            "maxPoints": 3,
+            "anchors": [
+              {
+                "points": 0,
+                "descriptor": "Treats the two as equivalent, or describes the constraint as executing."
+              },
+              {
+                "points": 1,
+                "descriptor": "Notes that one runs and one does not, without saying what the constraint achieves."
+              },
+              {
+                "points": 2,
+                "descriptor": "Says the constraint is a condition that must hold rather than a step that executes."
+              },
+              {
+                "points": 3,
+                "descriptor": "Adds that the branch convinces the party running the code, whereas the constraint convinces a verifier who never runs it."
+              }
+            ]
+          }
+        },
+        {
+          "id": "item.pre.name-does-not-bind",
+          "section": "concept",
+          "kind": "single-choice",
+          "prompt": {
+            "en": "A system documents a value called `flag` and says it is a boolean. A supplied assignment sets `flag` to 7. Nothing else in the system mentions `flag`. What is true?",
+            "ja": "あるシステムが `flag` という値を「真偽値」と説明しています。与えられた割り当てでは `flag` に 7 が入っています。システムの他の箇所は `flag` に触れていません。正しいのはどれですか。"
+          },
+          "targetConcept": "misconception.boolean-name-implies-boolean-value",
+          "relatedProblem": "ac26-w1-constraint-lab",
+          "choices": [
+            {
+              "key": "a",
+              "text": {
+                "en": "The assignment is invalid, because `flag` is documented as a boolean.",
+                "ja": "`flag` は真偽値と書かれているので、この割り当ては無効である。"
+              },
+              "diagnosis": "Documentation is being treated as enforcement."
+            },
+            {
+              "key": "b",
+              "text": {
+                "en": "The assignment is accepted, and nothing in the system rules out 7.",
+                "ja": "この割り当ては受理され、7 を排除するものはシステムにない。"
+              },
+              "diagnosis": "Correct. Naming is not binding."
+            },
+            {
+              "key": "c",
+              "text": {
+                "en": "It depends on the programming language.",
+                "ja": "プログラミング言語による。"
+              },
+              "diagnosis": "The question is being read as a typing question."
+            }
+          ],
+          "rationale": "Directly baselines a named misconception that ac26-w1-constraint-lab's boolean checkpoint attacks by sweeping the whole field rather than trying one value.",
+          "leakageCheck": "Poses the question about an abstract system with no constraints shown. It does not state the boolean gadget, the field, or the sweep, which are what the checkpoint actually requires.",
+          "scoring": {
+            "kind": "key",
+            "maxPoints": 1,
+            "correctChoice": "b"
+          }
+        },
+        {
+          "id": "item.pre.one-example-proves",
+          "section": "concept",
+          "kind": "single-choice",
+          "prompt": {
+            "en": "A checking procedure accepts one input that everyone agrees is legitimate. What has been established?",
+            "ja": "ある検査手続きが、誰もが正当だと認める入力を 1 つ受理しました。何が示されたことになりますか。"
+          },
+          "targetConcept": "misconception.one-valid-example-proves-soundness",
+          "relatedProblem": "ac26-w1-underconstraint",
+          "choices": [
+            {
+              "key": "a",
+              "text": {
+                "en": "The procedure works.",
+                "ja": "手続きは正しく動く。"
+              },
+              "diagnosis": "One example is being read as a proof."
+            },
+            {
+              "key": "b",
+              "text": {
+                "en": "The procedure does not reject that particular legitimate input.",
+                "ja": "その正当な入力を拒否しない、ということだけ。"
+              },
+              "diagnosis": "Correct, and correctly narrow."
+            },
+            {
+              "key": "c",
+              "text": {
+                "en": "The procedure rejects illegitimate inputs.",
+                "ja": "不正な入力は拒否される。"
+              },
+              "diagnosis": "The two directions are being conflated."
+            },
+            {
+              "key": "d",
+              "text": {
+                "en": "Nothing at all.",
+                "ja": "何も示されない。"
+              },
+              "diagnosis": "Over-correction: one accepted honest case is weak evidence, not zero evidence."
+            }
+          ],
+          "rationale": "ac26-w1-underconstraint's central trap is that the public tests pass in the starter state. Whether a participant already distinguishes the two directions decides how they read that.",
+          "leakageCheck": "Says nothing about circuits, missing constraints, or the starter state. A participant who answers b still has to discover which constraint is absent and build a forging witness.",
+          "scoring": {
+            "kind": "key",
+            "maxPoints": 1,
+            "correctChoice": "b"
+          }
+        },
+        {
+          "id": "item.pre.direction-of-failure",
+          "section": "concept",
+          "kind": "single-choice",
+          "prompt": {
+            "en": "A system of checks has one check deleted. Which of these becomes possible as a direct result?",
+            "ja": "検査の集まりから 1 つ検査を削除しました。その直接の結果として起こりうるのはどれですか。"
+          },
+          "targetConcept": "concept.soundness",
+          "relatedProblem": "ac26-w1-underconstraint",
+          "choices": [
+            {
+              "key": "a",
+              "text": {
+                "en": "Something that should be refused is now accepted.",
+                "ja": "拒否されるべきものが受理される。"
+              },
+              "diagnosis": "Correct direction."
+            },
+            {
+              "key": "b",
+              "text": {
+                "en": "Something that should be accepted is now refused.",
+                "ja": "受理されるべきものが拒否される。"
+              },
+              "diagnosis": "The directions are reversed; this is what adding a check risks."
+            },
+            {
+              "key": "c",
+              "text": {
+                "en": "Both are equally likely.",
+                "ja": "どちらも同程度に起こる。"
+              },
+              "diagnosis": "The asymmetry between the two directions is not held."
+            }
+          ],
+          "rationale": "The completeness and soundness contrast pair in ASSESSMENT.md section 2 is assessed by observed behaviour, and this is its plainest form, asked without the vocabulary.",
+          "leakageCheck": "Deliberately avoids the words soundness and completeness so that it measures the reasoning rather than the terminology, and avoids naming any construction the session uses.",
+          "scoring": {
+            "kind": "key",
+            "maxPoints": 1,
+            "correctChoice": "a"
+          }
+        },
+        {
+          "id": "item.pre.visible-tests-sufficiency",
+          "section": "concept",
+          "kind": "single-choice",
+          "prompt": {
+            "en": "Your implementation passes every test you can read. What is the strongest thing you can honestly say about it?",
+            "ja": "自分が読めるテストにはすべて通りました。正直に言えることのうち、いちばん強い主張はどれですか。"
+          },
+          "targetConcept": "misconception.public-tests-are-complete",
+          "relatedProblem": "ac26-w1-underconstraint",
+          "choices": [
+            {
+              "key": "a",
+              "text": {
+                "en": "It is correct.",
+                "ja": "正しい。"
+              },
+              "diagnosis": "The test suite is being treated as the specification."
+            },
+            {
+              "key": "b",
+              "text": {
+                "en": "It is correct on the cases those tests cover.",
+                "ja": "そのテストが覆う範囲では正しい。"
+              },
+              "diagnosis": "Correct."
+            },
+            {
+              "key": "c",
+              "text": {
+                "en": "It is probably correct, since tests are written to cover the important cases.",
+                "ja": "重要なケースを覆うようにテストは書かれるはずなので、おそらく正しい。"
+              },
+              "diagnosis": "Coverage is being assumed from the existence of tests."
+            }
+          ],
+          "rationale": "Every studied problem ships a public suite and a hidden verifier, and the gap between them is the object of the assessment-quality metrics in analysis-plan.md. This item baselines whether the participant expects that gap.",
+          "leakageCheck": "Reveals nothing about which cases the hidden verifier adds in any particular problem.",
+          "scoring": {
+            "kind": "key",
+            "maxPoints": 1,
+            "correctChoice": "b"
+          }
+        },
+        {
+          "id": "item.pre.counterexample-construction",
+          "section": "concept",
+          "kind": "short-answer",
+          "prompt": {
+            "en": "Someone claims: every number in this list is even. You disagree. Describe what you would have to produce to settle it, and what you would have to produce if you agreed instead.",
+            "ja": "「このリストの数はすべて偶数だ」と主張されました。あなたは同意しません。決着をつけるために何を出せばよいか、また逆に同意する側なら何を出す必要があるかを述べてください。"
+          },
+          "targetConcept": "concept.experimental-method",
+          "maxWords": 60,
+          "rationale": "Constructing a counterexample is one of the two evidence kinds ASSESSMENT.md requires of an assignment-companion, and it is a habit that transfers from arithmetic to circuits unchanged. Asking it on integers measures the habit without any cryptography.",
+          "leakageCheck": "Uses even numbers. No studied problem involves this list, this property, or this claim.",
+          "scoring": {
+            "kind": "rubric",
+            "maxPoints": 3,
+            "anchors": [
+              {
+                "points": 0,
+                "descriptor": "Proposes checking some examples for both directions."
+              },
+              {
+                "points": 2,
+                "descriptor": "Gives one odd element as the refutation, and does not clearly state that agreement needs all elements."
+              },
+              {
+                "points": 3,
+                "descriptor": "States the asymmetry: refutation needs one element, agreement needs every element or an argument covering all of them."
+              }
+            ]
+          }
+        },
+        {
+          "id": "item.pre.repair-versus-patch",
+          "section": "concept",
+          "kind": "short-answer",
+          "prompt": {
+            "en": "A check is failing on one known bad input. A colleague proposes adding a rule that refuses exactly that input. What would you want to know before agreeing that this is a fix?",
+            "ja": "既知の不正な入力 1 つで検査が失敗しています。同僚がその入力だけを拒否する規則の追加を提案しました。これを修正と認める前に何を確認したいですか。"
+          },
+          "targetConcept": "concept.correctness",
+          "relatedProblem": "ac26-w1-underconstraint",
+          "maxWords": 80,
+          "rationale": "The repair checkpoint in ac26-w1-underconstraint requires closing a gap without breaking honest cases and without constraint bloat. Whether a participant already distinguishes a repair from an over-fitted patch shapes how they read that checkpoint's feedback.",
+          "leakageCheck": "Contains no circuit, no constraint, and no is-zero gadget. It asks about a general engineering judgement that arises long before the participant sees the deployed circuit.",
+          "scoring": {
+            "kind": "rubric",
+            "maxPoints": 3,
+            "anchors": [
+              {
+                "points": 0,
+                "descriptor": "Accepts the proposal, or objects only on style grounds."
+              },
+              {
+                "points": 1,
+                "descriptor": "Asks whether other bad inputs exist, without saying why that matters."
+              },
+              {
+                "points": 2,
+                "descriptor": "Says the rule addresses the instance rather than the class, and asks what the class is."
+              },
+              {
+                "points": 3,
+                "descriptor": "Adds the second direction: asks whether the new rule refuses anything legitimate."
+              }
+            ]
+          }
+        },
+        {
+          "id": "item.pre.predict-before-running",
+          "section": "concept",
+          "kind": "self-report",
+          "prompt": {
+            "en": "When you run code you are debugging, how often do you state what you expect to see before you run it?",
+            "ja": "デバッグ中のコードを実行するとき、実行前に「何が出るはずか」を言葉にすることはどのくらいありますか。"
+          },
+          "targetConcept": "concept.experimental-method",
+          "relatedProblem": "ac26-bridge-experiment",
+          "options": [
+            {
+              "en": "Almost never; I run it and read the output.",
+              "ja": "ほとんどない。走らせて出力を読む。"
+            },
+            {
+              "en": "Sometimes, when I am stuck.",
+              "ja": "行き詰まったときには。"
+            },
+            {
+              "en": "Usually.",
+              "ja": "たいていしている。"
+            },
+            {
+              "en": "Always, and I write the prediction down.",
+              "ja": "必ずしていて、書き留めてもいる。"
+            }
+          ],
+          "rationale": "ac26-bridge-experiment exists to install this habit, and a habit already present cannot be installed. Reported as a distribution alongside the observed count of predict-checkpoint attempts, never scored.",
+          "leakageCheck": "Asks about the participant's practice. It signals that predicting is valued, which the problem's own instructions state anyway on the first screen.",
+          "scoring": {
+            "kind": "descriptive",
+            "maxPoints": 0
+          }
+        }
+      ]
+    }
+  ]
+}
