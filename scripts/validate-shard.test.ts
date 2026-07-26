@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
 import { parseShard, shardOf, suiteFiles } from "./validate-shard.ts";
@@ -25,8 +25,19 @@ const WORKFLOW = readFileSync(join(REPO_ROOT, ".github/workflows/ci.yml"), "utf8
 describe("the shard partition", () => {
   const files = suiteFiles();
 
-  it("should find the suite, so a glob matching nothing cannot pass", () => {
+  it("should discover exactly what is on disk, not a subset it remembers", () => {
+    // `length > 0` on its own would still pass if `suiteFiles()` regressed to a
+    // hard-coded list that happened to be non-empty — which is the very failure
+    // this whole file exists to remove, since a hand-maintained list is what
+    // `package.json` used to hold. Compare against an independent listing so an
+    // omitted catalog test fails here.
     expect(files.length).toBeGreaterThan(0);
+    expect(files).toEqual(
+      readdirSync(join(REPO_ROOT, "scripts"))
+        .filter((entry) => entry.endsWith(".test.ts"))
+        .map((entry) => `scripts/${entry}`)
+        .sort(),
+    );
   });
 
   it.each([1, 2, 3, 4, 5, 8, 13])(
@@ -36,6 +47,28 @@ describe("the shard partition", () => {
       expect(seen.flat().sort()).toEqual([...files].sort());
     },
   );
+
+  it("should separate neighbours, which is the whole reason it is round robin", () => {
+    // Exhaustiveness above is satisfied by a contiguous partition too — and a
+    // contiguous partition is exactly what must not happen. The list is sorted
+    // by name, name order correlates with cost, and the expensive `ac26-*` files
+    // sit together alphabetically; slicing contiguously hands one shard almost
+    // all of them and recreates the timeout this PR removes.
+    //
+    // So assert the property rather than the arithmetic. Restating
+    // `position % total` here would pass for any refactor that kept the formula
+    // and fail for a correct one that did not; "adjacent files land in different
+    // shards" is the thing actually being bought.
+    const total = workflowShardTotal();
+    const owner = new Map<string, number>();
+    for (let index = 1; index <= total; index += 1) {
+      for (const file of shardOf(files, index, total)) owner.set(file, index);
+    }
+    const together = files.filter(
+      (file, position) => position > 0 && owner.get(file) === owner.get(files[position - 1] ?? ""),
+    );
+    expect(together).toEqual([]);
+  });
 
   it("should reject a shard index outside the range", () => {
     expect(() => shardOf(files, 0, 4)).toThrow();

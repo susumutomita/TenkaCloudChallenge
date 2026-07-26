@@ -50,6 +50,12 @@ jobs:
       - name: Checkout
         # actions/checkout v4.3.1 (= pin matches TenkaCloud main repo)
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          # Neither job performs an authenticated git operation; it reads the
+          # tree and runs repository scripts. Without this the checkout leaves a
+          # token in .git/config for the life of the job, readable by everything
+          # the suite executes — and the suite executes participant-shaped code.
+          persist-credentials: false
 
       - name: Setup Bun
         # oven-sh/setup-bun v2.0.2 (= pin matches TenkaCloud main repo)
@@ -72,6 +78,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76

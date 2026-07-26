@@ -28,8 +28,16 @@
 
 import { globSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
-const REPO_ROOT = new URL("..", import.meta.url).pathname;
+/**
+ * `fileURLToPath` rather than `.pathname`, which keeps percent-encoding: a
+ * checkout under a directory with a space in it arrives as `Code%20Repo`, and
+ * `globSync` then matches nothing. It fails loudly rather than silently — the
+ * runner throws on an empty file list — but "no test files matched" is a
+ * confusing way to learn that your directory has a space in its name.
+ */
+const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 
 /** Every test file the catalog suite runs, in a stable order. */
 export function suiteFiles(cwd: string = REPO_ROOT): string[] {
