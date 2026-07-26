@@ -15,6 +15,24 @@ import { createServer } from "node:http";
  * committed and each deploy is unique.
  */
 
+/**
+ * Parse a request target without letting a malformed one end the process.
+ *
+ * `GET //` is a protocol-relative reference with no host, and `new URL` rejects
+ * it. This app serves its challenge surface and its `/verify` scorer from one
+ * process, so an unguarded parse in the handler takes both down over a stray
+ * slash. Leading slashes are collapsed (which is what the client meant) and
+ * anything still unparseable becomes a target the router will not match, so a
+ * malformed request is a 404 rather than a crash.
+ */
+function requestUrl(target, base) {
+  try {
+    return new URL(String(target ?? "/").replace(/^\/+/, "/"), base);
+  } catch {
+    return new URL("/__malformed_request__", base);
+  }
+}
+
 const FLAG_SEED = process.env.FLAG_SEED ?? "local-dev-seed";
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 const FLAG = `TC{csrf_${sha256(`flag:${FLAG_SEED}`).slice(0, 20)}}`;
@@ -144,7 +162,7 @@ function send(response, status, contentType, body) {
 }
 
 const challenge = createServer(async (request, response) => {
-  const url = new URL(request.url ?? "/", "http://127.0.0.1");
+  const url = requestUrl(request.url, "http://127.0.0.1");
   if (request.method === "GET" && url.pathname === "/healthz") {
     return send(response, 200, "application/json", JSON.stringify({ status: "ok" }));
   }

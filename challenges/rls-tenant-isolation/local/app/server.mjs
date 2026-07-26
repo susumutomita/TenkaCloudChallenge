@@ -22,6 +22,24 @@ import postgres from "postgres";
 import { runGrader } from "../grader/grade.mjs";
 import { createPgGraderClient } from "./pg-client.mjs";
 
+/**
+ * Parse a request target without letting a malformed one end the process.
+ *
+ * `GET //` is a protocol-relative reference with no host, and `new URL` rejects
+ * it. This app serves its challenge surface and its `/verify` scorer from one
+ * process, so an unguarded parse in the handler takes both down over a stray
+ * slash. Leading slashes are collapsed (which is what the client meant) and
+ * anything still unparseable becomes a target the router will not match, so a
+ * malformed request is a 404 rather than a crash.
+ */
+function requestUrl(target, base) {
+  try {
+    return new URL(String(target ?? "/").replace(/^\/+/, "/"), base);
+  } catch {
+    return new URL("/__malformed_request__", base);
+  }
+}
+
 const DATABASE_URL =
   process.env.DATABASE_URL ?? "postgres://postgres:postgres@127.0.0.1:5432/rls_demo";
 
@@ -88,7 +106,7 @@ async function withRequestIdentity(userId, fn) {
 
 const api = createServer(async (request, response) => {
   try {
-    const url = new URL(request.url ?? "/", "http://127.0.0.1");
+    const url = requestUrl(request.url, "http://127.0.0.1");
     const userId = String(request.headers["x-user-id"] ?? "");
     const idMatch = url.pathname.match(/^\/documents\/([0-9a-fA-F-]+)$/);
 
