@@ -25,22 +25,26 @@ it cannot be hung, crashed, fork-bombed, shell-injected, or used as an oracle,
 and per-deploy `FLAG_SEED` fixtures defeat a memorised answer. It does not
 resist a hostile *participant*, because the participant administers it.
 
-Two of the three gaps #271 named have since been closed, and it is worth being
+All eight of #271's completion conditions have since been met —
+`TEMPLATE.md`'s "Assurance scope" tracks them one by one — and it is worth being
 exact about what that did and did not buy:
 
 - **The threat model is written down** rather than implied. That is a
   documentation fix; it changed no behaviour.
 - **Author-only artifacts no longer ship in the image a learner runs.** The
-  image is now two stages: `make build` produces `participant` (fixtures, tests,
-  verifier, starter) and `make reference-test` produces `author`, which adds
-  `reference/` and `mutation.py`. This is misdelivery prevention. The answer is
-  no longer sitting in `/problem/reference/` by default; it is still in this
-  repository, and the participant can still build the author stage.
+  image is now two stages: `make build` and the compose `target:` both produce
+  `participant` (fixtures, tests, verifier, starter), and `make reference-test`
+  produces `author`, which adds `reference/` and `mutation.py`. This is
+  misdelivery prevention. The answer is no longer sitting in
+  `/problem/reference/` by default; it is still in this repository, and the
+  participant can still build the author stage.
 
-The third gap is open, and it is the one that matters for certification: the
-submission and the trusted checker are loaded into the same Python process, so
-the submission can reach the checker's namespace. Fixing that would raise the
-cost of tampering. It would not change who owns the machine.
+What remains open is not one of those eight, and #271 lists it as a non-goal
+rather than a deliverable — but it is the one that matters for certification:
+the submission and the trusted checker are loaded into the same Python process,
+so the submission can reach the checker's namespace. Fixing that would raise the
+cost of tampering. It would not change who owns the machine, which is why it is
+this ADR's subject rather than that issue's.
 
 That is the honest framing for everything below. **No arrangement in which the
 participant administers the verifier can support a certification claim.** The
@@ -144,8 +148,12 @@ to build.
   stdout, and an `atexit` handler registered during import used to win that race
   and pass every checkpoint of every problem. Any process-separation work has to
   keep that guard green rather than route around it.
-- `TEMPLATE.md`'s "What it does not guarantee" loses its third bullet and keeps
-  the other two.
+- `TEMPLATE.md`'s "What it does not guarantee" has four bullets, and Option B
+  removes exactly one of them: the shared Python module graph. The
+  checker-tampering bullet **stays** — the participant still controls the image,
+  the fixtures and the verifier, and process separation does not touch that.
+  Removing more than the one bullet would be the quiet overclaim this ADR exists
+  to prevent.
 - The "Which claims local results support" table does **not** change.
 
 ## Consequences if nothing is adopted

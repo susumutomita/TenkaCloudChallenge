@@ -5,6 +5,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # The participant stage, explicitly. Without this, compose builds the
+      # LAST stage -- `author` -- which carries reference/ and mutation.py.
+      target: participant
     environment:
       FLAG_SEED: ${FLAG_SEED:?FLAG_SEED must be provided by the platform}
       VERIFY_PORT: "18095"

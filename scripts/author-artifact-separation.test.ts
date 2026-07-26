@@ -39,6 +39,9 @@ const AUTHOR_ONLY = ["reference/", "mutation.py"] as const;
 /** The stage a learner's `make build` produces. */
 const PARTICIPANT_STAGE = "participant";
 
+/** The stage `make reference-test` produces. */
+const AUTHOR_STAGE = "author";
+
 /**
  * Split a Dockerfile into its stages, keyed by stage name.
  *
@@ -67,6 +70,39 @@ function stages(source: string): Map<string, string> {
   return found;
 }
 
+/**
+ * The source paths a stage copies in.
+ *
+ * Parsed rather than string-matched. `expect(stage).not.toContain("COPY reference/")`
+ * reads like it checks something and does not: `COPY ./reference/ ./reference/`,
+ * `COPY --chown=1000:1000 reference/ ./reference/` and `COPY . .` all ship the
+ * answer and all pass it. The last one is the one that would actually happen,
+ * because `COPY . .` is what somebody writes when adding a file is fiddly.
+ */
+function copySources(stage: string): string[] {
+  const sources: string[] = [];
+  for (const line of stage.split("\n")) {
+    const copy = /^\s*COPY\s+(.*)$/i.exec(line);
+    if (copy === null) continue;
+    const words = (copy[1] ?? "")
+      .trim()
+      .split(/\s+/)
+      .filter((word) => !word.startsWith("--"));
+    // Last word is the destination; everything before it is a source.
+    sources.push(...words.slice(0, -1));
+  }
+  return sources;
+}
+
+/** Does this COPY source bring `artifact` into the image? */
+function brings(source: string, artifact: string): boolean {
+  const normalised = source.replace(/^\.\//, "").replace(/\/$/, "");
+  const target = artifact.replace(/\/$/, "");
+  // A whole-context copy brings everything, including both author artifacts.
+  if (normalised === "." || normalised === "./") return true;
+  return normalised === target || normalised.startsWith(`${target}/`);
+}
+
 describe("author-only artifacts do not ship in the participant image", () => {
   it("should find the AC26 images to check, so a glob matching nothing cannot pass", () => {
     expect(DOCKERFILES.length).toBeGreaterThan(0);
@@ -79,21 +115,49 @@ describe("author-only artifacts do not ship in the participant image", () => {
 
   it.each(DOCKERFILES)("%s should keep the answer out of the participant stage", (relative) => {
     const parsed = stages(readFileSync(join(REPO_ROOT, relative), "utf8"));
-    const participant = parsed.get(PARTICIPANT_STAGE) ?? "";
+    const sources = copySources(parsed.get(PARTICIPANT_STAGE) ?? "");
     for (const artifact of AUTHOR_ONLY) {
-      expect(participant).not.toContain(`COPY ${artifact}`);
+      const leaking = sources.filter((source) => brings(source, artifact));
+      expect(leaking).toEqual([]);
     }
   });
 
-  it.each(DOCKERFILES)("%s should still give the author what the suite needs", (relative) => {
+  it.each(DOCKERFILES)("%s should give the author stage what the suite needs", (relative) => {
     // The separation must not quietly delete the mutation suite's inputs. If
     // `reference/` stopped being copied anywhere, `make reference-test` would
     // fail for a reason that looks like a problem bug.
-    const source = readFileSync(join(REPO_ROOT, relative), "utf8");
+    //
+    // Asserted against the `author` stage specifically, not the file: copying
+    // them into some third stage nothing builds would satisfy a whole-file
+    // check while `make reference-test` still had nothing to run against.
+    const parsed = stages(readFileSync(join(REPO_ROOT, relative), "utf8"));
+    expect([...parsed.keys()]).toContain(AUTHOR_STAGE);
+    const sources = copySources(parsed.get(AUTHOR_STAGE) ?? "");
     for (const artifact of AUTHOR_ONLY) {
-      expect(source).toContain(`COPY ${artifact}`);
+      expect(sources.some((source) => brings(source, artifact))).toBe(true);
     }
-    expect(source).toMatch(/^FROM participant AS author$/m);
+    expect(readFileSync(join(REPO_ROOT, relative), "utf8")).toMatch(
+      /^FROM participant AS author$/m,
+    );
+  });
+
+  it.each(DOCKERFILES)("%s should have a compose file that builds the right stage", (relative) => {
+    // The one that mattered. `make build` is not the only way a learner gets an
+    // image: the READMEs and `make local` bring the problem up with
+    // `docker compose up`, and a compose `build:` with no `target:` builds the
+    // LAST stage — `author`. Every one of the thirty compose files omitted it,
+    // so the answer still shipped through the path participants actually use,
+    // while the Makefile check above passed and the PR claimed the class closed.
+    //
+    // Checking the Makefile and not compose is how a fix ends up covering the
+    // path nobody takes.
+    const compose = readFileSync(
+      join(REPO_ROOT, dirname(relative), "docker-compose.yml"),
+      "utf8",
+    );
+    const build = /^\s*build:\s*$/m.test(compose);
+    if (!build) return; // an image-only service builds nothing to get wrong
+    expect(compose).toMatch(new RegExp(`^\\s*target:\\s*${PARTICIPANT_STAGE}\\s*$`, "m"));
   });
 
   it.each(DOCKERFILES)("%s should have a Makefile that builds the right stage", (relative) => {
@@ -122,9 +186,28 @@ describe("the participant path does not need what was removed", () => {
   const LOADS_REFERENCE =
     /\/\s*"reference"|"reference"\s*\/|["']reference\/|\/reference\/|^\s*(?:from|import)\s+reference\b/m;
 
+  /**
+   * Every Python file the participant stage copies in.
+   *
+   * Derived from the stage's own COPY sources rather than listed, because a
+   * hand-written glob pair missed `local/show.py` — which `make inspect` runs,
+   * and which a future `from reference import ...` would break with nothing here
+   * to say so. The starter is included for the same reason: it is executable and
+   * it ships.
+   */
   const PARTICIPANT_SOURCES = [
-    ...globSync("challenges/ac26-*/local/verifier/*.py", { cwd: REPO_ROOT }),
-    ...globSync("challenges/ac26-*/local/tests/**/*.py", { cwd: REPO_ROOT }),
+    ...new Set(
+      DOCKERFILES.flatMap((relative) => {
+        const parsed = stages(readFileSync(join(REPO_ROOT, relative), "utf8"));
+        const local = dirname(relative);
+        return copySources(parsed.get(PARTICIPANT_STAGE) ?? "").flatMap((source) => {
+          const cleaned = source.replace(/^\.\//, "").replace(/\/$/, "");
+          return globSync(`${local}/${cleaned}/**/*.py`, { cwd: REPO_ROOT }).concat(
+            cleaned.endsWith(".py") ? [`${local}/${cleaned}`] : [],
+          );
+        });
+      }),
+    ),
   ].sort();
 
   it("should find the participant-path modules to check", () => {
