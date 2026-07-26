@@ -458,15 +458,15 @@ describe("sha256-bytes-padding: /verify contract", () => {
 });
 
 describe("sha256-bytes-padding: scoring follows the tier regulation", () => {
-  it("should total the Easy tier's 100 points across its checkpoints", () => {
-    const meta = JSON.parse(read("metadata.json")) as {
-      difficulty: number;
-      scoring: {
-        kind: string;
-        checks: Array<{ id: string; points: number; hints?: Array<{ penalty: number }> }>;
-      };
+  const meta = JSON.parse(read("metadata.json")) as {
+    difficulty: number;
+    scoring: {
+      kind: string;
+      checks: Array<{ id: string; points: number; hints?: Array<{ penalty: number }> }>;
     };
+  };
 
+  it("should total the Easy tier's 100 points across its checkpoints", () => {
     expect(meta.scoring.kind).toBe("multi-verify");
     expect(meta.difficulty).toBeLessThanOrEqual(2);
     expect(meta.scoring.checks.reduce((sum, check) => sum + check.points, 0)).toBe(100);
@@ -480,14 +480,32 @@ describe("sha256-bytes-padding: scoring follows the tier regulation", () => {
   });
 
   it("should score exactly the checkpoints the verifier knows about", () => {
-    const meta = JSON.parse(read("metadata.json")) as {
-      scoring: { checks: Array<{ id: string }> };
-    };
     const declared = meta.scoring.checks.map((check) => check.id).sort();
     const implemented = JSON.parse(
       pythonValue(["import json", "from verifier.server import CHECKPOINTS", "print(json.dumps(sorted(CHECKPOINTS)))"]),
     ) as string[];
     expect(implemented).toEqual(declared);
+  });
+
+  it("should state the same hint remainder in both READMEs as the metadata implies", () => {
+    // Both READMEs advertise "opening every hint still leaves you N of M". I got that number
+    // wrong in two of the three problems before this assertion existed, and a wrong number
+    // here is a promise about scoring that the platform will not keep.
+    const total = meta.scoring.checks.reduce((sum, check) => sum + check.points, 0);
+    const hints = meta.scoring.checks
+      .flatMap((check) => check.hints ?? [])
+      .reduce((sum, hint) => sum + hint.penalty, 0);
+    const remaining = total - hints;
+
+    const english = /still leaves you\s+(\d+) of (\d+)/.exec(read("README.md"));
+    expect(english).not.toBeNull();
+    expect(Number((english as RegExpExecArray)[1])).toBe(remaining);
+    expect(Number((english as RegExpExecArray)[2])).toBe(total);
+
+    const japanese = /(\d+) 点中 (\d+) 点は残ります/.exec(read("README.ja.md"));
+    expect(japanese).not.toBeNull();
+    expect(Number((japanese as RegExpExecArray)[1])).toBe(total);
+    expect(Number((japanese as RegExpExecArray)[2])).toBe(remaining);
   });
 
   it("should span at least three checkpoint kinds, per the template's scoring contract", () => {
@@ -500,9 +518,6 @@ describe("sha256-bytes-padding: scoring follows the tier regulation", () => {
       counterexample: ["collision"],
     };
     expect(Object.keys(kinds).length).toBeGreaterThanOrEqual(3);
-    const meta = JSON.parse(read("metadata.json")) as {
-      scoring: { checks: Array<{ id: string }> };
-    };
     expect(Object.values(kinds).flat().sort()).toEqual(
       meta.scoring.checks.map((check) => check.id).sort(),
     );

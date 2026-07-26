@@ -77,7 +77,7 @@ Six checkpoints, scored independently. Wrong answers cost 10 points each.
 | `logic` | 30 | Your `schedule.py`, run against Ch and Maj |
 | `schedule` | 50 | Your `schedule.py`, run against `expand_schedule` |
 
-Hints are available on every checkpoint. Opening all of them still leaves you 133 of 200.
+Hints are available on every checkpoint. Opening all of them still leaves you 108 of 200.
 
 ### The three code checkpoints are genuinely independent
 

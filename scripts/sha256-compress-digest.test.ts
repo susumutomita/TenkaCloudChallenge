@@ -575,6 +575,27 @@ describe("sha256-compress-digest: scoring follows the tier regulation", () => {
     expect(meta.scoring.checks.length).toBeLessThanOrEqual(8);
   });
 
+  it("should state the same hint remainder in both READMEs as the metadata implies", () => {
+    // Both READMEs advertise "opening every hint still leaves you N of M". I got that number
+    // wrong in two of the three problems before this assertion existed, and a wrong number
+    // here is a promise about scoring that the platform will not keep.
+    const total = meta.scoring.checks.reduce((sum, check) => sum + check.points, 0);
+    const hints = meta.scoring.checks
+      .flatMap((check) => check.hints ?? [])
+      .reduce((sum, hint) => sum + hint.penalty, 0);
+    const remaining = total - hints;
+
+    const english = /still leaves you\s+(\d+) of (\d+)/.exec(read("README.md"));
+    expect(english).not.toBeNull();
+    expect(Number((english as RegExpExecArray)[1])).toBe(remaining);
+    expect(Number((english as RegExpExecArray)[2])).toBe(total);
+
+    const japanese = /(\d+) 点中 (\d+) 点は残ります/.exec(read("README.ja.md"));
+    expect(japanese).not.toBeNull();
+    expect(Number((japanese as RegExpExecArray)[1])).toBe(total);
+    expect(Number((japanese as RegExpExecArray)[2])).toBe(remaining);
+  });
+
   it("should span at least three checkpoint kinds, per the template's scoring contract", () => {
     const kinds = {
       construct: ["round", "compress", "digest"],

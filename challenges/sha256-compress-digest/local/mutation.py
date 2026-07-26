@@ -32,7 +32,7 @@ REFERENCE = Path(__file__).resolve().parent / "reference" / "compress.py"
 
 # (suite, name, function name, replacement source).
 #
-# Equivalent mutants are deliberately absent. Four obvious-looking candidates are
+# Equivalent mutants are deliberately absent. Five obvious-looking candidates are
 # mathematically identical to the reference and no correct test can distinguish them:
 #   - masking T1 and T2 once at the end instead of after each addition, since addition
 #     modulo 2**32 is associative;

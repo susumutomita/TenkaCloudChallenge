@@ -73,7 +73,7 @@ make reset                  # starter/compress.py を元に戻す
 | `properties` | 35 | ハッシュ関数についての 10 個の主張の真偽 |
 | `storage` | 35 | パスワード保存についての 10 個の主張の真偽 |
 
-hint は全 checkpoint にあります。すべて開いても 300 点中 192 点は残ります。
+hint は全 checkpoint にあります。すべて開いても 300 点中 153 点は残ります。
 
 ## この問題の核心
 

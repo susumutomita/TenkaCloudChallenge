@@ -75,7 +75,7 @@ Seven checkpoints, scored independently. Wrong answers cost 15 points each.
 | `properties` | 35 | True or false for ten claims about hash functions |
 | `storage` | 35 | True or false for ten claims about storing passwords |
 
-Hints are available on every checkpoint. Opening all of them still leaves you 192 of 300.
+Hints are available on every checkpoint. Opening all of them still leaves you 153 of 300.
 
 ## The one that is the point of the problem
 

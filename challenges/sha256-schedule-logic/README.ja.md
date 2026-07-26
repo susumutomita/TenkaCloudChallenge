@@ -77,7 +77,7 @@ make reset                   # starter/schedule.py を元に戻す
 | `logic` | 30 | 自分の `schedule.py`。Ch と Maj を検証される |
 | `schedule` | 50 | 自分の `schedule.py`。`expand_schedule` を検証される |
 
-hint は全 checkpoint にあります。すべて開いても 200 点中 133 点は残ります。
+hint は全 checkpoint にあります。すべて開いても 200 点中 108 点は残ります。
 
 ### コード checkpoint 3 つは本当に独立している
 
