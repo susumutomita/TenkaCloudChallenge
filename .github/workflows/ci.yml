@@ -9,6 +9,11 @@ name: ci
 #
 # Phase 2 will additionally check that publish.yml-produced S3 keys exist
 # for the new commit, once the AWS IAM Role is bound.
+#
+# Shape: `suite` runs the test files in parallel shards, `checks` runs the
+# generators and static validators, and `validate` is a no-op gate that both
+# feed. `validate` exists so there is one stable check name in front of a
+# matrix whose job names change whenever the shard count does.
 
 permissions:
   contents: read
@@ -19,19 +24,25 @@ on:
   workflow_dispatch:
 
 jobs:
-  validate:
+  suite:
+    name: suite (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
-    # Raised from 10 when the AC26 track pushed the suite past it. The cap is a runaway
-    # guard, not a budget: `bun run validate` runs each container problem's starter,
-    # reference, mutation suite, and /verify contract for real, so it grows with the
-    # catalog. It was ~5 min at 13 problems and ~8 min at 43, and Weeks 5 and 6 will add a
-    # dozen more.
+    # Sharded because the suite's wall time tracks the size of the catalog, not
+    # the size of a change: it runs each container problem's starter, reference,
+    # mutation suite and /verify contract for real. It was ~5 min at 13 problems,
+    # ~8 min at 43, and at 63 test files it reached the old 25-minute single-job
+    # cap and was cancelled — which reads as a red X with no failing assertion,
+    # the worst signal available.
     #
-    # A cancelled run reads as a red X with no failing assertion, which is the worst
-    # possible signal: it looks like flake. If this cap is reached again, find out which
-    # problem got slow before raising it further — the usual cause is a hidden test
-    # enumerating a space that a smaller parameter would cover just as exactly.
-    timeout-minutes: 25
+    # The cap below is a runaway guard, not a budget. When the catalog grows,
+    # add a shard rather than minutes; scripts/validate-shard.test.ts checks the
+    # matrix and the denominator below stay in agreement, so a half-done bump
+    # fails loudly instead of silently skipping files.
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     env:
       CI: "true"
       npm_config_ignore_scripts: "true"
@@ -39,6 +50,12 @@ jobs:
       - name: Checkout
         # actions/checkout v4.3.1 (= pin matches TenkaCloud main repo)
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          # Neither job performs an authenticated git operation; it reads the
+          # tree and runs repository scripts. Without this the checkout leaves a
+          # token in .git/config for the life of the job, readable by everything
+          # the suite executes — and the suite executes participant-shaped code.
+          persist-credentials: false
 
       - name: Setup Bun
         # oven-sh/setup-bun v2.0.2 (= pin matches TenkaCloud main repo)
@@ -49,8 +66,39 @@ jobs:
       - name: Install deps
         run: bun install --ignore-scripts
 
-      - name: Validate problem catalog
-        run: bun run validate
+      - name: Run catalog test suite
+        run: bun run scripts/validate-shard.ts --shard=${{ matrix.shard }}/4
+
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: "true"
+      npm_config_ignore_scripts: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: "1.3.11"
+
+      - name: Install deps
+        run: bun install --ignore-scripts
+
+      - name: Validate problem metadata
+        run: bun run scripts/validate-problems.ts
+
+      - name: Check CloudFormation templates
+        run: |
+          bun run scripts/check-template-ascii.ts
+          bun run scripts/check-template-security.ts
+
+      - name: Check simulator workload
+        run: bun run validate:simulator-workload
 
       # index.json is the platform-read catalog, regenerated from every
       # metadata.json by scripts/build-index.ts. --check fails if it is stale
@@ -70,3 +118,18 @@ jobs:
         run: |
           bun run cost:check \
             || { echo "::error::cost-report.json is stale. Run 'bun run reindex' and commit (or 'bun run setup' once to enable the auto-reindex hook)."; exit 1; }
+
+  validate:
+    # One stable name in front of the matrix. `if: always()` is what makes this
+    # run when a shard fails — and it is also what makes `needs:` stop gating, so
+    # the result has to be asserted explicitly rather than implied.
+    needs: [suite, checks]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every job to have succeeded
+        run: |
+          echo "suite=${{ needs.suite.result }} checks=${{ needs.checks.result }}"
+          test "${{ needs.suite.result }}" = "success"
+          test "${{ needs.checks.result }}" = "success"
