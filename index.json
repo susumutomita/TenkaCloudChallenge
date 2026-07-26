@@ -1907,6 +1907,32 @@
       }
     },
     {
+      "id": "stackstack-defend",
+      "name": "止めずに直す",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "45〜60 分",
+      "shortDescription": "天下クラウド株式会社、 入社 3 日目の夕方。 社内掲示板は無事に開き、 部署ごとの 「下書き」 機能まで載った。 前任の SRE が辞める直前に足した機能で、 引き継ぎ資料に残っているのはひと言だけ ── 「下書きの公開はモデレーター承認 (4-eyes)。 本人が自分で公開してはいけない」。\n\nさっき広報から連絡があった。 まだ社内の誰にも見せていないはずの CTO の下書きの中身を、 社外の知人が口にしたらしい。 CTO は淡々としている。 「止めるのは簡単だ。 でも止めたら、 明日の全社発表の下書きを誰も書けない。 動かしたまま直して。 それと、 直ったかどうかは君の報告じゃなく、 こっちで測る」\n\n手元の調査用アカウントで実際に何が読めてしまうのかを確かめ、 原因をアプリ側で直し、 正規の利用者を 1 人も止めないまま、 測られ続けている中でその状態を保つ。",
+      "tags": [
+        "stackstack",
+        "local-play",
+        "container",
+        "web-app",
+        "access-control",
+        "incident-response",
+        "defense"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "stackstack-observability",
       "name": "黙っているアプリに口を割らせる",
       "category": "Challenge",
