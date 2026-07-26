@@ -994,13 +994,19 @@ const GROUPS = {
  * sees ever contains one, and nothing they own is touched.
  */
 export function evaluateGroups() {
+  // Passed on whether or not it loaded. `handle()` answers 503 from a `!ok`
+  // result by itself, and its `policy ?? readPolicy()` fallback meant handing it
+  // `null` made every probe in every group re-read and re-validate the same
+  // broken file — dozens of reads per `/posture`, in precisely the state a
+  // participant refreshes hardest. It also gives the whole sweep one snapshot,
+  // as the loaded path already had, so a document edited mid-`/posture` cannot
+  // be half of one policy and half of another.
   const loaded = readPolicy();
-  const policy = loaded.ok ? loaded : null;
   const created = [];
   const groups = {};
   try {
     for (const [name, build] of Object.entries(GROUPS)) {
-      const probes = build((spec) => runProbe(policy, created, spec));
+      const probes = build((spec) => runProbe(loaded, created, spec));
       groups[name] = { ok: probes.every((probe) => probe.ok), probes };
     }
   } finally {
@@ -1285,6 +1291,25 @@ export const seedPosts = [
 const CHALLENGE_PORT = Number(process.env.CHALLENGE_PORT ?? 8080);
 
 /**
+ * How long a probe waits on this app's own listener before giving up.
+ *
+ * Without a deadline a wedged listener hangs `/verify` for the platform
+ * default, and `exposure-signoff` chains three surfaces of these.
+ *
+ * The floor on the number is self-inflicted: `evaluateGroups()` is synchronous
+ * by design, so a `/posture` arriving while a probe is in flight blocks the
+ * event loop — and the listener the probe is waiting on is this same process. A
+ * deadline shorter than the longest such block would abort a probe that was
+ * about to succeed and score a correct answer wrong. A full `/posture` runs in
+ * single-digit milliseconds, so five seconds leaves three orders of magnitude
+ * of headroom while still being far below the platform default.
+ *
+ * Not covered by a test: wedging this app's own listener is not reachable from
+ * outside the process, so there is no way to make the timeout fire on demand.
+ */
+const PROBE_TIMEOUT_MS = 5_000;
+
+/**
  * Ask this app over real HTTP, from inside this process.
  *
  * The gates already exercise `handle()`; what they cannot see is whether the
@@ -1302,7 +1327,10 @@ async function ask(path, as = null) {
   const key = as === null ? null : as === "unknown" ? UNKNOWN_KEY : apiKey(as);
   if (key !== null) headers.authorization = `Bearer ${key}`;
   try {
-    const response = await fetch(`http://127.0.0.1:${CHALLENGE_PORT}${path}`, { headers });
+    const response = await fetch(`http://127.0.0.1:${CHALLENGE_PORT}${path}`, {
+      headers,
+      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+    });
     const text = await response.text();
     let body = null;
     try {

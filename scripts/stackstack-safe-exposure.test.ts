@@ -983,6 +983,63 @@ describe("stackstack-safe-exposure 正常系 (normal use)", () => {
     expect((await app.get("/portal/healthz", null)).status).toBe(200);
   });
 
+  it("should keep a keep-alive connection usable after refusing an oversize body", async () => {
+    // The test above answers the oversize request and stops there, and it goes
+    // through `app.post` then `app.get` — two connections, so it says nothing
+    // about reuse. This one writes both requests onto a single socket.
+    //
+    // What it pins is the observable contract: after a 400 for an oversize
+    // body, the next request on that same connection is still parsed as a
+    // request rather than out of whatever the first one left behind.
+    //
+    // Be clear about what it is not. It is a contract test, not a regression
+    // guard aimed at one implementation: refusing by `pause()`, by draining
+    // with `resume()`, and by `request.destroy()` all satisfy it on this
+    // runtime — checked, including with a genuinely incomplete body (a declared
+    // Content-Length of 200 KiB with 80 KiB written, answered early, then the
+    // remainder plus a second request). Bun's parser skips the rest of the
+    // declared length and picks the next request up cleanly in every case.
+    const payload = JSON.stringify({ title: "big", body: "x".repeat(70 * 1024) });
+    const key = app.keys()["sre-anzu"] as string;
+    const conversation = await new Promise<string>((resolve, reject) => {
+      let seen = "";
+      let followed = false;
+      const socket = connect(18326, "127.0.0.1", () => {
+        socket.write(
+          `POST /portal/drafts HTTP/1.1\r\nHost: board.local\r\n` +
+            `Authorization: Bearer ${key}\r\nContent-Type: application/json\r\n` +
+            `Content-Length: ${Buffer.byteLength(payload)}\r\nConnection: keep-alive\r\n\r\n${payload}`,
+        );
+      });
+      socket.on("data", (chunk) => {
+        seen += chunk.toString("utf8");
+        // Second request only once the first has been answered, so this
+        // measures reuse of the connection rather than pipelining. The flag is
+        // its own variable: writing a marker into `seen` runs the two responses
+        // together on one line, and the anchored match below then misses the
+        // second one and reports a failure that is entirely the test's own.
+        if (!followed && seen.includes("\r\n\r\n")) {
+          followed = true;
+          socket.write("GET /portal/healthz HTTP/1.1\r\nHost: board.local\r\nConnection: close\r\n\r\n");
+        }
+      });
+      socket.on("close", () => resolve(seen));
+      socket.on("error", reject);
+      socket.setTimeout(5000, () => {
+        socket.destroy();
+        resolve(seen);
+      });
+    });
+    // Both answered, in order, on the one connection. Unanchored on purpose:
+    // an HTTP body is not newline-terminated, so the second response begins
+    // immediately after the first one's closing brace and `^` never sees it.
+    const statuses = [...conversation.matchAll(/HTTP\/1\.1 (\d{3})/g)].map((match) => Number(match[1]));
+    expect(statuses).toEqual([400, 200]);
+    // And the second answer is the health payload, rather than a fragment of
+    // the rejected body re-parsed as whatever it happened to look like.
+    expect(conversation).toContain('{"ok":true,"policy":"loaded"');
+  });
+
   it("should record its own decisions, including the ones it refused", async () => {
     await app.get("/portal/admin/audit", null);
     const audit = await app.get("/portal/admin/audit", "cto-daichi");
