@@ -135,3 +135,6 @@ dist
 # Python bytecode from local-play problem containers
 __pycache__/
 *.pyc
+
+# Transient git worktrees created for parallel agent runs.
+.claude/worktrees/

@@ -1,6 +1,6 @@
 import { participantPosts } from "./board.mjs";
 import { readConfig } from "./config.mjs";
-import { READY_TOKEN } from "./secrets.mjs";
+import { READY_TOKEN, gateToken } from "./secrets.mjs";
 
 /**
  * `/posture` reports what is *measured* about the running app, never what a
@@ -21,15 +21,19 @@ export function observe(event) {
 
 /**
  * Evaluate a scenario's gates.
- * @param {Record<string, (context: object) => boolean>} gates
+ *
+ * @param {object} scenario the loaded scenario module
+ * @param {object} [extra] scenario-owned state to expose to its own predicates
  */
-export function posture(gates) {
+export function posture(scenario, extra = {}) {
+  const gates = scenario.gates ?? {};
   const config = readConfig();
   const context = {
     observed,
     config: config.value,
     configOk: config.ok,
     participantPosts: participantPosts(),
+    ...extra,
   };
   const state = {};
   for (const [name, predicate] of Object.entries(gates)) {
@@ -40,8 +44,10 @@ export function posture(gates) {
   // measured nothing at all. No gates means nothing is known, not that
   // everything is fine.
   const ready = Object.keys(state).length > 0 && Object.values(state).every(Boolean);
+
   return {
     gates: state,
+    ...(scenario.gateTokens === true ? { tokens: tokensFor(state) } : {}),
     ready,
     // Withheld until every gate is green: the token is the proof of the whole
     // pass, so handing it out early would let a checkpoint be answered without
@@ -49,4 +55,26 @@ export function posture(gates) {
     readyToken: ready ? READY_TOKEN : null,
     configError: config.error,
   };
+}
+
+/**
+ * A receipt per gate, for problems whose checkpoints grade behaviour rather
+ * than a value the participant can go and read.
+ *
+ * The whole family after onboarding is like that: "the search endpoint returns
+ * what the spec says" has no answer written anywhere, so the app has to be the
+ * one that says it happened. A token that appears only while its gate is true
+ * makes the submission a receipt for measured behaviour instead of a claim —
+ * the same rule as `readyToken`, one gate at a time.
+ *
+ * Opt-in (`gateTokens: true`) so onboarding's `/posture`, whose answers really
+ * are displayed on the board and in the log, does not grow a field that would
+ * hand out three of its four answers at once.
+ */
+function tokensFor(state) {
+  const tokens = {};
+  for (const [name, ok] of Object.entries(state)) {
+    tokens[name] = ok ? gateToken(name) : null;
+  }
+  return tokens;
 }
