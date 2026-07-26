@@ -98,5 +98,5 @@ export const checks = {
    * green, so this checkpoint is exactly "the environment is verified end to
    * end" — which is what a later StackStack gate wants to read.
    */
-  handover: (submission) => posture(gates).ready && matches(submission, READY_TOKEN),
+  handover: (submission) => posture({ gates }).ready && matches(submission, READY_TOKEN),
 };

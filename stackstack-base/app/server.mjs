@@ -149,15 +149,40 @@ function requestUrl(target, base) {
   }
 }
 
-/** The board's whole surface. A route not in here is a 404. */
-const ROUTES = new Set([
+/** The routes the board itself serves, whatever the scenario. */
+const BASE_ROUTES = [
   "GET /",
   "GET /healthz",
   "GET /api/board",
   "GET /api/logs",
   "GET /posture",
   "POST /api/posts",
-]);
+];
+
+/**
+ * A scenario's own routes, e.g. the search endpoint a participant implements or
+ * the admin API another problem asks them to lock down.
+ *
+ * Declared rather than bolted onto this file, because every problem after
+ * onboarding adds a surface of its own and the alternative is this module
+ * growing a branch per problem — at which point the "shared board" is a
+ * platform and no longer shared in any useful sense. A scenario route is
+ * `"METHOD /path": (request, response, url) => ...`, and it is dispatched and
+ * observed exactly like a base route.
+ */
+const scenarioRoutes = scenario.routes ?? {};
+
+/** The board's whole surface. A route not in here is a 404. */
+const ROUTES = new Set([...BASE_ROUTES, ...Object.keys(scenarioRoutes)]);
+
+// A scenario silently shadowing `GET /healthz` would be a debugging nightmare
+// for whoever hit it next, so it is a boot failure rather than a surprise.
+for (const route of Object.keys(scenarioRoutes)) {
+  if (BASE_ROUTES.includes(route)) {
+    console.error(`scenario "${SCENARIO}" redeclares the base route ${route}`);
+    process.exit(1);
+  }
+}
 
 /**
  * Nothing a client can send may take the process down. Both servers live in one
@@ -187,14 +212,26 @@ function guard(handler) {
 /**
  * Last line of defence. `guard` covers the request handlers, but a rejection
  * raised anywhere else — a scenario's timer, a stream callback — would still end
- * the process by default and take the participant's session with it. Logged at
- * error level and served on `/api/logs`, so nothing is hidden by staying up.
+ * the process by default and take the participant's session with it.
+ *
+ * Staying up is the right trade for a training container, but only if staying
+ * up is not the same as pretending nothing happened. Each fault is logged at
+ * error level, served on `/api/logs`, and counted on `/healthz`: an app that
+ * has taken an uncaught fault says so when asked whether it is well.
  */
+const faults = [];
+
+function recordFault(kind, detail) {
+  const entry = log("error", `${kind}: ${detail}`);
+  faults.push({ kind, detail, at: entry.at });
+  if (faults.length > 20) faults.splice(0, faults.length - 20);
+}
+
 process.on("unhandledRejection", (reason) => {
-  log("error", `unhandled rejection: ${reason instanceof Error ? reason.message : reason}`);
+  recordFault("unhandled rejection", reason instanceof Error ? reason.message : String(reason));
 });
 process.on("uncaughtException", (error) => {
-  log("error", `uncaught exception: ${error.message}`);
+  recordFault("uncaught exception", error.message);
 });
 
 const challenge = createServer(guard(async (request, response) => {
@@ -211,10 +248,12 @@ const challenge = createServer(guard(async (request, response) => {
 
   if (route === "GET /healthz") {
     const config = readConfig();
-    return send(response, config.ok ? 200 : 503, {
-      ok: config.ok,
+    const well = config.ok && faults.length === 0;
+    return send(response, well ? 200 : 503, {
+      ok: well,
       configFile: CONFIG_FILE,
       configError: config.error,
+      faults,
     });
   }
 
@@ -236,7 +275,7 @@ const challenge = createServer(guard(async (request, response) => {
   }
 
   if (route === "GET /posture") {
-    return send(response, 200, posture(scenario.gates ?? {}));
+    return send(response, 200, posture(scenario, scenario.postureContext?.() ?? {}));
   }
 
   if (route === "POST /api/posts") {
@@ -263,6 +302,11 @@ const challenge = createServer(guard(async (request, response) => {
     const post = addPost(submitted.post, new Date().toISOString());
     log("info", `post accepted id=${post.id} author=${post.author}`);
     return send(response, 201, { post });
+  }
+
+  const scenarioHandler = Object.hasOwn(scenarioRoutes, route) ? scenarioRoutes[route] : undefined;
+  if (typeof scenarioHandler === "function") {
+    return scenarioHandler(request, response, url);
   }
 
   return send(response, 404, { error: "not_found" });

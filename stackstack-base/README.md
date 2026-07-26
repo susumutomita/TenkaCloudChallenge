@@ -60,11 +60,41 @@ started first or fifth.
 
 A scenario module exports three things, all optional:
 
-| export       | shape                                              | meaning                                                       |
-| ------------ | -------------------------------------------------- | ------------------------------------------------------------- |
-| `seedPosts`  | `{ author, title, body, at }[]`                     | posts the board ships with; marked `seeded` so a checkpoint can tell them from a participant's |
-| `gates`      | `Record<string, (context) => boolean>`              | the posture gates, as pure predicates over measured state      |
-| `checks`     | `Record<string, (submission) => boolean \| Promise>` | one handler per `scoring.checks[].id` in the problem's metadata |
+| export             | shape                                                | meaning                                                       |
+| ------------------ | ---------------------------------------------------- | ------------------------------------------------------------- |
+| `seedPosts`        | `{ author, title, body, at }[]`                       | posts the board ships with; marked `seeded` so a checkpoint can tell them from a participant's |
+| `gates`            | `Record<string, (context) => boolean>`                | the posture gates, as pure predicates over measured state      |
+| `checks`           | `Record<string, (submission) => boolean \| Promise>`   | one handler per `scoring.checks[].id` in the problem's metadata |
+| `routes`           | `Record<"METHOD /path", (request, response, url) => …>` | the surface this problem adds to the board                     |
+| `gateTokens`       | `true`                                                | opt in to a per-gate receipt on `/posture` (see below)         |
+| `postureContext`   | `() => object`                                        | scenario-owned state to expose to its own gate predicates      |
+
+### Routes
+
+A scenario declares its own surface rather than this module growing a branch per
+problem — at which point the shared board would be a platform and no longer
+shared in any useful sense. Scenario routes are dispatched and observed exactly
+like the board's own, and redeclaring one of the board's routes is a boot
+failure: a scenario silently shadowing `GET /healthz` would be found by whoever
+debugged it next, which is the wrong person at the wrong time.
+
+### Gate receipts
+
+Onboarding's answers are displayed on the board and in the log on purpose. Every
+later problem grades *behaviour* — "the endpoint returns what the spec says" has
+no answer written anywhere — so the app has to be the thing that says it
+happened. With `gateTokens: true`, `/posture` carries a `tokens` map alongside
+`gates`, and a gate's token appears only while that gate is true. The submission
+is then a receipt for measured behaviour rather than a claim.
+
+Receipts are derived from a secret generated at boot, **not** from `FLAG_SEED`.
+`FLAG_SEED` arrives in the environment, and on Linux `/proc/self/environ` keeps
+the exec-time copy no matter what is deleted from `process.env` — so anything
+derived from it is forgeable by participant code running inside the app, which
+later problems in this family do on purpose. The values a participant is *meant*
+to read stay seed-derived; a receipt asserting the app observed something does
+not. The cost is that receipts change across a restart, which is correct: a
+receipt is evidence about one run.
 
 `context` carries `observed` (the set of routes the app has served, e.g.
 `"GET /api/logs"` — only routes the app really serves are recorded, so an
@@ -88,8 +118,12 @@ Two rules hold for every scenario:
   and no two deploys share an answer.
 - **Ground truth lives outside the submission.** A checkpoint asks the running
   app what is true and compares that; it does not take the participant's word
-  for it. `GET /posture` withholds its `readyToken` until every gate is green
-  for the same reason.
+  for it. `GET /posture` withholds its `readyToken` until every gate is green,
+  and each gate receipt until that gate is true, for the same reason.
+- **An app that is unwell says so.** An uncaught fault is logged, counted, and
+  reported on `/healthz`, which answers `503` while any fault is outstanding.
+  Surviving a fault is right for a training container; answering "ok" afterwards
+  would be hiding one.
 
 ## Running it outside a container
 
