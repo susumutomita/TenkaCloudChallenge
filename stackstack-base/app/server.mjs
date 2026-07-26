@@ -52,15 +52,29 @@ function sendHtml(response, status, body) {
   response.end(body);
 }
 
+const MAX_BODY_BYTES = 64 * 1024;
+
+/**
+ * Returned when the body exceeds {@link MAX_BODY_BYTES}. A symbol rather than a
+ * marker string, so a request body that happens to *be* that string cannot be
+ * mistaken for the signal.
+ */
+const TOO_LARGE = Symbol("too-large");
+
+/**
+ * @returns the parsed body, `null` for malformed JSON, or {@link TOO_LARGE} so
+ * the caller can answer rather than reset the socket — a reset shows up as a
+ * curl transport error with no explanation of what went wrong.
+ */
 function readJson(request) {
   return new Promise((resolve) => {
     const chunks = [];
     let bytes = 0;
     request.on("data", (chunk) => {
       bytes += chunk.length;
-      if (bytes > 64 * 1024) {
-        request.destroy();
-        resolve(null);
+      if (bytes > MAX_BODY_BYTES) {
+        request.pause();
+        resolve(TOO_LARGE);
         return;
       }
       chunks.push(chunk);
@@ -127,7 +141,45 @@ const ROUTES = new Set([
   "POST /api/posts",
 ]);
 
-const challenge = createServer(async (request, response) => {
+/**
+ * Nothing a client can send may take the process down. Both servers live in one
+ * process, so an unhandled throw in a request handler would take the board and
+ * `/verify` with it and end the participant's session — and the cheapest way to
+ * trigger one is a typo: `GET //` is a protocol-relative reference with no host,
+ * which `new URL` rejects.
+ */
+function guard(handler) {
+  return async (request, response) => {
+    try {
+      await handler(request, response);
+    } catch (error) {
+      log("error", `${request.method} ${request.url}: ${error.message}`);
+      try {
+        if (!response.headersSent) send(response, 400, { error: "bad_request" });
+        else response.end();
+      } catch (writeError) {
+        // The socket is already gone. Reported rather than swallowed: if this
+        // line starts appearing, the failure above is not being seen by anyone.
+        log("error", `could not answer ${request.method} ${request.url}: ${writeError.message}`);
+      }
+    }
+  };
+}
+
+/**
+ * Last line of defence. `guard` covers the request handlers, but a rejection
+ * raised anywhere else — a scenario's timer, a stream callback — would still end
+ * the process by default and take the participant's session with it. Logged at
+ * error level and served on `/api/logs`, so nothing is hidden by staying up.
+ */
+process.on("unhandledRejection", (reason) => {
+  log("error", `unhandled rejection: ${reason instanceof Error ? reason.message : reason}`);
+});
+process.on("uncaughtException", (error) => {
+  log("error", `uncaught exception: ${error.message}`);
+});
+
+const challenge = createServer(guard(async (request, response) => {
   const url = new URL(request.url ?? "/", "http://board.local");
   const route = `${request.method} ${url.pathname}`;
   // Only routes the app actually serves are recorded. Observing before the
@@ -171,6 +223,12 @@ const challenge = createServer(async (request, response) => {
 
   if (route === "POST /api/posts") {
     const config = readConfig();
+    if (!config.ok) {
+      // Do not blame the flag when the file itself will not load: the
+      // participant would go and set a value that is already set.
+      log("warn", `post rejected: ${config.error}`);
+      return send(response, 503, { error: "config_unreadable", detail: config.error });
+    }
     if (config.value.acceptingPosts !== true) {
       log("warn", "post rejected: the board is not accepting posts");
       return send(response, 409, {
@@ -178,7 +236,11 @@ const challenge = createServer(async (request, response) => {
         detail: `set acceptingPosts to true in ${CONFIG_HINT}`,
       });
     }
-    const submitted = validatePost(await readJson(request));
+    const body = await readJson(request);
+    if (body === TOO_LARGE) {
+      return send(response, 413, { error: `body must be at most ${MAX_BODY_BYTES} bytes` });
+    }
+    const submitted = validatePost(body);
     if (!submitted.ok) return send(response, 400, { error: submitted.error });
     const post = addPost(submitted.post, new Date().toISOString());
     log("info", `post accepted id=${post.id} author=${post.author}`);
@@ -186,25 +248,30 @@ const challenge = createServer(async (request, response) => {
   }
 
   return send(response, 404, { error: "not_found" });
-});
+}));
 
 /**
  * `/verify` — the scorer delegate. The request carries a `checkpointId` the
  * response must echo back; the platform fails closed on a mismatch so a verdict
  * can never be credited to the wrong checkpoint.
  */
-const verify = createServer(async (request, response) => {
+const verify = createServer(guard(async (request, response) => {
   if (request.method === "GET" && (request.url ?? "/") === "/healthz") {
     return send(response, 200, { status: "ok" });
   }
   if (request.method !== "POST" || (request.url ?? "/") !== "/verify") {
     return send(response, 404, { error: "not_found" });
   }
-  const body = (await readJson(request)) ?? {};
+  const parsed = await readJson(request);
+  const body = parsed === null || parsed === TOO_LARGE ? {} : parsed;
   const checkpointId = typeof body.checkpointId === "string" ? body.checkpointId : "";
   const submission = typeof body.submission === "string" ? body.submission : "";
-  const handler = (scenario.checks ?? {})[checkpointId];
-  if (!handler) {
+  const declared = scenario.checks ?? {};
+  // Own properties only. A plain object inherits `constructor`, `toString` and
+  // friends, so a bare lookup would find a function for checkpoint ids nobody
+  // declared and call it instead of failing closed.
+  const handler = Object.hasOwn(declared, checkpointId) ? declared[checkpointId] : undefined;
+  if (typeof handler !== "function") {
     return send(response, 400, { checkpointId, error: "unknown_checkpoint" });
   }
   let correct = false;
@@ -219,7 +286,7 @@ const verify = createServer(async (request, response) => {
     correct,
     message: correct ? "確認しました。" : "まだです。もう一度確かめてみてください。",
   });
-});
+}));
 
 challenge.listen(CHALLENGE_PORT, "0.0.0.0", () => {
   log("info", `scenario=${SCENARIO} serial=${BOARD_SERIAL}`);

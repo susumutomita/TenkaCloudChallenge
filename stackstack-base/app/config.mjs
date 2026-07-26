@@ -23,17 +23,30 @@ const DEFAULTS = {
   acceptingPosts: false,
 };
 
-/** Only known keys are adopted, and only at the declared type. */
+/**
+ * Only known keys are adopted, and only at the declared type.
+ *
+ * A key that is missing, misspelled, or the wrong type is reported rather than
+ * quietly ignored. `acceptingPost: true` and `"acceptingPosts": "true"` are the
+ * two edits a participant actually makes by accident, and both would otherwise
+ * leave the board closed with nothing anywhere saying why.
+ */
 function coerce(raw) {
   const problems = [];
   const value = { ...DEFAULTS };
   for (const [key, fallback] of Object.entries(DEFAULTS)) {
-    if (!(key in raw)) continue;
+    if (!(key in raw)) {
+      problems.push(`${key} is missing`);
+      continue;
+    }
     if (typeof raw[key] !== typeof fallback) {
       problems.push(`${key} must be ${typeof fallback}, got ${typeof raw[key]}`);
       continue;
     }
     value[key] = raw[key];
+  }
+  for (const key of Object.keys(raw)) {
+    if (!(key in DEFAULTS)) problems.push(`${key} is not a setting this app reads`);
   }
   return { value, problems };
 }
@@ -49,19 +62,19 @@ export function readConfig(path = CONFIG_PATH) {
   try {
     text = readFileSync(path, "utf8");
   } catch (error) {
-    return report(path, `cannot read ${path}: ${error.code ?? error.message}`);
+    return report(`cannot read ${path}: ${error.code ?? error.message}`);
   }
   let parsed;
   try {
     parsed = JSON.parse(text);
   } catch (error) {
-    return report(path, `${path} is not valid JSON: ${error.message}`);
+    return report(`${path} is not valid JSON: ${error.message}`);
   }
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return report(path, `${path} must contain a JSON object`);
+    return report(`${path} must contain a JSON object`);
   }
   const { value, problems } = coerce(parsed);
-  if (problems.length > 0) return report(path, problems.join("; "), value);
+  if (problems.length > 0) return report(problems.join("; "), value);
   if (lastError !== null) {
     lastError = null;
     log("info", "config reloaded cleanly");
@@ -70,7 +83,7 @@ export function readConfig(path = CONFIG_PATH) {
 }
 
 /** Log a config failure once per distinct message, so a reload loop cannot flood the ring. */
-function report(path, error, value = { ...DEFAULTS }) {
+function report(error, value = { ...DEFAULTS }) {
   if (lastError !== error) {
     lastError = error;
     log("error", `config error: ${error}`);

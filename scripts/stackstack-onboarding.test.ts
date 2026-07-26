@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
@@ -32,7 +33,9 @@ const VERIFY_PORT = 18191;
 const BOARD = `http://127.0.0.1:${CHALLENGE_PORT}`;
 const VERIFY = `http://127.0.0.1:${VERIFY_PORT}/verify`;
 const SEED = "stackstack-onboarding-test-seed";
-const CONFIG_HINT = "challenges/stackstack-onboarding/local/config/app.json";
+// The value the shipped compose file sets, so the suite exercises what a
+// participant is actually shown rather than a convenient stand-in.
+const CONFIG_HINT = "problems/challenges/stackstack-onboarding/local/config/app.json";
 
 interface Metadata {
   readonly difficulty: number;
@@ -55,6 +58,7 @@ interface Metadata {
       }>;
     };
   };
+  readonly exposedPorts: ReadonlyArray<{ readonly port: number; readonly name: string }>;
   readonly runtime: {
     readonly challengeEndpoints: Record<string, string>;
     readonly verifyUrl: string;
@@ -123,7 +127,7 @@ beforeAll(async () => {
     stdio: ["ignore", "pipe", "pipe"],
   });
 
-  const deadline = Date.now() + 20_000;
+  const deadline = Date.now() + 4_000;
   for (;;) {
     try {
       const health = await fetch(`${BOARD}/healthz`);
@@ -153,6 +157,36 @@ describe("stackstack-onboarding scoring regulation", () => {
       const spent = (check.hints ?? []).reduce((sum, hint) => sum + hint.penalty, 0);
       expect(spent).toBeLessThanOrEqual(check.points / 2);
     }
+  });
+
+  it("should keep the whole problem's hint budget under half the total", () => {
+    // SCORING.md: opening every hint still leaves at least half the score.
+    const spent = metadata.scoring.checks
+      .flatMap((check) => check.hints ?? [])
+      .reduce((sum, hint) => sum + hint.penalty, 0);
+    expect(spent).toBeLessThanOrEqual(50);
+  });
+
+  it("should spend the Easy tier's whole wrong-answer budget and no more", () => {
+    // The tier standard is 5% of the base, and the validator only enforces that
+    // for flat `points`. Spread across checkpoints it has to still add up to 5.
+    const spent = metadata.scoring.checks.reduce(
+      (sum, check) => sum + (check.wrongAnswerPenalty ?? 0),
+      0,
+    );
+    expect(spent).toBe(5);
+    for (const check of metadata.scoring.checks) {
+      expect(check.wrongAnswerPenalty ?? 0).toBeLessThanOrEqual(check.points);
+    }
+  });
+
+  it("should give every hint in the problem a unique id", () => {
+    // The portal's reveal route is keyed on hintId alone, so a duplicate would
+    // unlock the wrong hint.
+    const ids = metadata.scoring.checks.flatMap((check) =>
+      (check.hints ?? []).map((hint) => hint.id),
+    );
+    expect(new Set(ids).size).toBe(ids.length);
   });
 
   it("should mirror every checkpoint and hint in the English overlay", () => {
@@ -195,6 +229,28 @@ describe("stackstack-onboarding first lap", () => {
     expect(missing.body.error).toBe("not_found");
   });
 
+  it("should survive a request target it cannot even parse", async () => {
+    // `GET //` is a protocol-relative reference with no host, which `new URL`
+    // rejects. Both servers share one process, so an unhandled throw here would
+    // take the board and /verify down together and end the session — over a
+    // typo. Sent raw, because fetch() would normalise the path away.
+    await new Promise<void>((resolve) => {
+      const socket = connect(CHALLENGE_PORT, "127.0.0.1", () => {
+        socket.write("GET // HTTP/1.1\r\nHost: board.local\r\nConnection: close\r\n\r\n");
+      });
+      socket.on("close", () => resolve());
+      socket.on("error", () => resolve());
+      socket.setTimeout(3000, () => {
+        socket.destroy();
+        resolve();
+      });
+    });
+
+    expect((await get("/healthz")).status).toBe(200);
+    const verifyAlive = await fetch(`http://127.0.0.1:${VERIFY_PORT}/healthz`);
+    expect(verifyAlive.ok).toBe(true);
+  });
+
   it("should serve the same serial from the JSON route as from the page", async () => {
     const page = await get("/");
     const board = await get("/api/board");
@@ -208,6 +264,19 @@ describe("stackstack-onboarding first lap", () => {
     );
     expect(boot).toBeDefined();
     expect(boot.message).toMatch(/^boot ok boot-check=[0-9a-f]{12}$/);
+  });
+
+  it("should keep the boot line reachable however much later traffic arrives", async () => {
+    // The log ring is bounded, and request traffic drives it. Without the boot
+    // lines pinned, a participant who sent a few hundred requests would lose the
+    // only place the `log-trail` value appears.
+    for (let attempt = 0; attempt < 600; attempt += 1) await get(`/api/nope-${attempt}`);
+    const logs = await get("/api/logs");
+    expect(
+      logs.body.lines.some((line: { message: string }) =>
+        line.message.startsWith("boot ok boot-check="),
+      ),
+    ).toBe(true);
   });
 
   it("should refuse a post while the board is closed, and say which setting opens it", async () => {
@@ -232,6 +301,55 @@ describe("stackstack-onboarding first lap", () => {
     const rejected = await post("/api/posts", { author: "newcomer", body: "no title" });
     expect(rejected.status).toBe(400);
     expect(rejected.body.error).toContain("title");
+  });
+
+  it("should reject a body larger than the app will read, with an answer rather than a reset", async () => {
+    const rejected = await post("/api/posts", {
+      author: "newcomer",
+      title: "big",
+      body: "x".repeat(70 * 1024),
+    });
+    expect(rejected.status).toBe(413);
+  });
+
+  it("should not mistake a body that merely looks like the oversize signal", async () => {
+    // The signal is a symbol precisely so a payload cannot impersonate it.
+    const rejected = await post("/api/posts", "too-large");
+    expect(rejected.status).toBe(400);
+    expect(rejected.body.error).toContain("JSON object");
+  });
+
+  it("should escape what a participant writes before putting it on the page", async () => {
+    // The board renders posts as HTML and the participant controls every field.
+    // Unescaped, this is stored XSS in a training app people run on their own
+    // machine — and the catalog's own rules forbid shipping one.
+    const payload = '<script>alert("xss")</script>';
+    const created = await post("/api/posts", {
+      author: `a${payload}`,
+      title: `t${payload}`,
+      body: `b${payload}`,
+    });
+    expect(created.status).toBe(201);
+    const page = await get("/");
+    expect(page.text).not.toContain("<script>");
+    expect(page.text).toContain("&lt;script&gt;");
+  });
+
+  it("should honour the log limit the README documents", async () => {
+    // Write past the pinned prologue first: with only the boot lines present,
+    // every limit returns the same list and the comparison proves nothing.
+    for (let filler = 0; filler < 20; filler += 1) {
+      await post("/api/posts", { author: "log", title: `filler ${filler}`, body: "" });
+    }
+    const narrow = await get("/api/logs?limit=1");
+    const wide = await get("/api/logs?limit=200");
+    expect(narrow.body.lines.length).toBeLessThan(wide.body.lines.length);
+    // The pinned boot lines survive the narrowest possible window.
+    expect(
+      narrow.body.lines.some((line: { message: string }) =>
+        line.message.startsWith("boot ok boot-check="),
+      ),
+    ).toBe(true);
   });
 });
 
@@ -282,12 +400,63 @@ describe("stackstack-onboarding checkpoints", () => {
       expect(response.status).toBe(200);
       expect(response.body.checkpointId).toBe(check.id);
     }
+    // The other direction too: a handler with no checkpoint behind it is dead
+    // code that nothing can ever reach, and a sign the two drifted apart.
+    const scenario = readFileSync(
+      join(REPO_ROOT, "stackstack-base", "app", "scenarios", "onboarding.mjs"),
+      "utf8",
+    );
+    const handlers = [...scenario.matchAll(/^ {2}"?([a-z][a-z0-9-]*)"?:\s*(?:\(|async)/gm)].map(
+      (match) => match[1] as string,
+    );
+    expect(handlers.sort()).toEqual(metadata.scoring.checks.map((check) => check.id).sort());
   });
 
   it("should fail closed on a checkpoint id it does not know", async () => {
     const response = await verifyCheckpoint("no-such-checkpoint", "anything");
     expect(response.status).toBe(400);
     expect(response.body.error).toBe("unknown_checkpoint");
+  });
+
+  it("should fail closed on an inherited property name, not call it", async () => {
+    // A plain object answers to `constructor` and `toString` with functions it
+    // never declared. Looking a checkpoint up without an own-property check
+    // would call one of those instead of rejecting the id.
+    for (const inherited of ["constructor", "toString", "valueOf", "__proto__"]) {
+      const response = await verifyCheckpoint(inherited, "anything");
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe("unknown_checkpoint");
+    }
+  });
+
+  it("should reject an empty or partial submission on every checkpoint", async () => {
+    // Guards against a handler loosened to a substring or truthiness test: with
+    // `includes` in place of an equality check, "" matches everything.
+    const board = await get("/api/board");
+    const posture = await get("/posture");
+    const answers: Record<string, string> = {
+      "board-open": board.body.serial,
+      "log-trail": (
+        (await get("/api/logs")).body.lines.find((line: { message: string }) =>
+          line.message.startsWith("boot ok boot-check="),
+        ).message as string
+      ).split("=")[1] as string,
+      "board-open-for-posts": "first post",
+      handover: posture.body.readyToken as string,
+    };
+    for (const check of metadata.scoring.checks) {
+      const right = answers[check.id] as string;
+      expect(await verifyCheckpoint(check.id, "")).toHaveProperty("body.correct", false);
+      expect(await verifyCheckpoint(check.id, " ")).toHaveProperty("body.correct", false);
+      expect(await verifyCheckpoint(check.id, right.slice(0, -1))).toHaveProperty(
+        "body.correct",
+        false,
+      );
+      expect(await verifyCheckpoint(check.id, `${right}x`)).toHaveProperty("body.correct", false);
+      // ...and the real answer still passes, so the assertions above are not
+      // passing merely because the checkpoint rejects everything.
+      expect(await verifyCheckpoint(check.id, right)).toHaveProperty("body.correct", true);
+    }
   });
 
   it("should accept the serial the board prints, and nothing else", async () => {
@@ -351,6 +520,139 @@ describe("stackstack-onboarding checkpoints", () => {
   });
 });
 
+describe("stackstack-onboarding gates on a fresh instance", () => {
+  /**
+   * Every gate asserted in its FALSE state. The main instance above only ever
+   * observes them green, so a gate hardcoded to `true` — `post_created: () =>
+   * true` is the dangerous one, since it would hand out the sign-off token to
+   * someone who never wrote to the board — would survive the whole suite.
+   */
+  const port = 18194;
+  const verifyPort = 18195;
+  const base = `http://127.0.0.1:${port}`;
+  let instance: ReturnType<typeof spawn>;
+  let instanceConfig = "";
+
+  beforeAll(async () => {
+    instanceConfig = join(scratch, "gates.json");
+    writeFileSync(instanceConfig, JSON.stringify({ boardTitle: "b", acceptingPosts: false }));
+    instance = spawn("bun", [SERVER], {
+      env: {
+        ...process.env,
+        SCENARIO: "onboarding",
+        FLAG_SEED: SEED,
+        APP_CONFIG: instanceConfig,
+        CHALLENGE_PORT: String(port),
+        VERIFY_PORT: String(verifyPort),
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    const deadline = Date.now() + 4_000;
+    for (;;) {
+      try {
+        if ((await fetch(`http://127.0.0.1:${verifyPort}/healthz`)).ok) break;
+      } catch {
+        // not listening yet
+      }
+      if (Date.now() > deadline) throw new Error("the gates instance never came up");
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  });
+
+  afterAll(() => instance?.kill());
+
+  const posture = async () =>
+    (await (await fetch(`${base}/posture`)).json()) as {
+      gates: Record<string, boolean>;
+      ready: boolean;
+      readyToken: string | null;
+    };
+
+  it("should start with every gate false and no sign-off token", async () => {
+    // Probed through /verify's port, so asking does not itself trip a gate.
+    const state = await posture();
+    expect(state.gates).toEqual({
+      board_visited: false,
+      logs_read: false,
+      posts_open: false,
+      post_created: false,
+    });
+    expect(state.ready).toBe(false);
+    expect(state.readyToken).toBeNull();
+  });
+
+  it("should raise one gate at a time, and only the one earned", async () => {
+    await fetch(`${base}/`);
+    expect((await posture()).gates).toMatchObject({
+      board_visited: true,
+      logs_read: false,
+      post_created: false,
+    });
+
+    await fetch(`${base}/api/logs`);
+    expect((await posture()).gates).toMatchObject({ logs_read: true, post_created: false });
+
+    writeFileSync(instanceConfig, JSON.stringify({ boardTitle: "b", acceptingPosts: true }));
+    const opened = await posture();
+    expect(opened.gates).toMatchObject({ posts_open: true, post_created: false });
+    // The board is open but nothing has been written: the sign-off must not be
+    // reachable yet.
+    expect(opened.ready).toBe(false);
+    expect(opened.readyToken).toBeNull();
+
+    await fetch(`${base}/api/posts`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ author: "you", title: "gate check", body: "" }),
+    });
+    const done = await posture();
+    expect(done.gates.post_created).toBe(true);
+    expect(done.ready).toBe(true);
+    expect(done.readyToken).not.toBeNull();
+  });
+
+  it("should not raise a gate for a route it 404s", async () => {
+    // The ROUTES guard on observe() is what keeps the observed set from growing
+    // without bound; a path the app does not serve must not be recorded.
+    const before = await posture();
+    await fetch(`${base}/api/board-not-really`);
+    expect((await posture()).gates).toEqual(before.gates);
+  });
+
+  it("should report a config whose only setting is misspelled", async () => {
+    // `acceptingPost` instead of `acceptingPosts` is the edit a participant
+    // actually makes by accident. Silently ignoring it would leave the board
+    // closed with nothing anywhere saying why.
+    writeFileSync(instanceConfig, JSON.stringify({ boardTitle: "b", acceptingPost: true }));
+    const health = await fetch(`${base}/healthz`);
+    expect(health.status).toBe(503);
+    const body = (await health.json()) as { configError: string };
+    expect(body.configError).toContain("acceptingPost");
+    expect((await posture()).gates.posts_open).toBe(false);
+
+    const rejected = await fetch(`${base}/api/posts`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ author: "you", title: "blocked", body: "" }),
+    });
+    // Not a 409: telling them to set a flag they believe they already set is
+    // the trap. The config itself is what will not load.
+    expect(rejected.status).toBe(503);
+    expect((await rejected.json()) as { error: string }).toHaveProperty(
+      "error",
+      "config_unreadable",
+    );
+    writeFileSync(instanceConfig, JSON.stringify({ boardTitle: "b", acceptingPosts: true }));
+  });
+
+  it("should report a boolean written as a string", async () => {
+    writeFileSync(instanceConfig, JSON.stringify({ boardTitle: "b", acceptingPosts: "true" }));
+    const body = (await (await fetch(`${base}/healthz`)).json()) as { configError: string };
+    expect(body.configError).toContain("acceptingPosts must be boolean");
+    writeFileSync(instanceConfig, JSON.stringify({ boardTitle: "b", acceptingPosts: true }));
+  });
+});
+
 describe("stackstack-onboarding without the app's own log route", () => {
   /**
    * The README offers `docker compose logs` as an equal alternative to
@@ -393,7 +695,7 @@ describe("stackstack-onboarding without the app's own log route", () => {
     instance.stdout?.on("data", (chunk: Buffer) => {
       stdout += chunk.toString("utf8");
     });
-    const deadline = Date.now() + 20_000;
+    const deadline = Date.now() + 4_000;
     for (;;) {
       if (/boot ok boot-check=[0-9a-f]{12}/.test(stdout)) break;
       if (Date.now() > deadline) throw new Error("the second instance never logged its boot line");
@@ -469,6 +771,16 @@ describe("stackstack-onboarding wiring", () => {
     expect(service.ports).toContain(`127.0.0.1:${new URL(metadata.runtime.verifyUrl).port}:8081`);
   });
 
+  it("should declare exactly the ports it publishes", () => {
+    // exposedPorts is what the portal shows the participant; a stale entry sends
+    // them to a port nothing is listening on.
+    const published = service.ports
+      .map((entry) => Number(entry.split(":")[1]))
+      .sort((a, b) => a - b);
+    const declared = metadata.exposedPorts.map((entry) => entry.port).sort((a, b) => a - b);
+    expect(declared).toEqual(published);
+  });
+
   it("should build the shared base image rather than a copy of it", () => {
     // Resolved rather than string-matched: the relative context is what the
     // platform's local runner pins with --project-directory, and a wrong number
@@ -493,8 +805,24 @@ describe("stackstack-onboarding wiring", () => {
     expect(existsSync(join(composeDir, "config", "app.json"))).toBe(true);
   });
 
-  it("should name a config path that exists in the checkout", () => {
-    expect(existsSync(join(REPO_ROOT, service.environment.CONFIG_HINT as string))).toBe(true);
+  it("should name the config path as the participant sees it, from the platform checkout", () => {
+    // A participant runs `make local` from the TenkaCloud repository, where this
+    // catalog is the `problems/` submodule. Printing this repo's own relative
+    // path would send them to a file that does not exist on their machine —
+    // which would be this problem's first trap, in the step that promises none.
+    const hint = service.environment.CONFIG_HINT as string;
+    const inThisRepo = "challenges/stackstack-onboarding/local/config/app.json";
+    expect(hint).toBe(`problems/${inThisRepo}`);
+    expect(existsSync(join(REPO_ROOT, inThisRepo))).toBe(true);
+  });
+
+  it("should give the participant-facing docs the same path the board prints", () => {
+    const hint = service.environment.CONFIG_HINT as string;
+    for (const name of ["README.md", "README.ja.md"]) {
+      expect(readFileSync(join(PROBLEM_DIR, name), "utf8")).toContain(hint);
+    }
+    const text = readFileSync(join(PROBLEM_DIR, "metadata.json"), "utf8");
+    expect(text).toContain(hint);
   });
 
   it("should ship the config file the compose file mounts", () => {

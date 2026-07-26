@@ -42,7 +42,7 @@ services:
       dockerfile: Dockerfile
     environment:
       SCENARIO: onboarding
-      CONFIG_HINT: challenges/stackstack-onboarding/local/config/app.json
+      CONFIG_HINT: problems/challenges/stackstack-onboarding/local/config/app.json
       FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
     volumes:
       - ./config:/app/config:ro
@@ -76,6 +76,11 @@ participant's checkout*, which the app itself never sees (it reads the mounted
 `/app/config/app.json`). Setting it keeps the board from telling a participant
 to open a path that does not exist on their machine.
 
+It carries the `problems/` prefix because a participant runs `make local` from
+the **platform** repository, where this catalog is mounted as the `problems/`
+submodule. The path a problem author uses inside this repository is the same one
+without that prefix.
+
 Two rules hold for every scenario:
 
 - **The answer never leaves the container.** Values a checkpoint compares
@@ -93,6 +98,7 @@ in the image and under Bun in CI. That is what lets each problem's test suite
 drive the real app over real HTTP instead of asserting on its source text:
 
 ```bash
+# from the root of this catalog repository
 CHALLENGE_PORT=18190 VERIFY_PORT=18191 \
   APP_CONFIG=challenges/stackstack-onboarding/local/config/app.json \
   SCENARIO=onboarding FLAG_SEED=demo \

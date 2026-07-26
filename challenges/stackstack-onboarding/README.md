@@ -18,7 +18,7 @@ so "this environment works end to end" is a machine-readable fact rather than a 
 | **Your machine (Docker)** | The shared **StackStack base app** — a small Node message board |
 | `127.0.0.1:18080` | The board (the app you use) |
 | `127.0.0.1:18081` | Loopback `/verify` the TenkaCloud scorer delegates to |
-| `local/config/app.json` | The app's config — **your** file, mounted read-only into the container |
+| `problems/challenges/.../local/config/app.json` | The app's config — **your** file, mounted read-only into the container |
 
 The image is built from [`stackstack-base/`](../../stackstack-base), which every problem
 in the StackStack family shares. The board serial, the boot-check value, and the sign-off
@@ -67,10 +67,11 @@ Four checkpoints, 25 points each:
    **Read the app's log**. `docker compose logs` shows the same lines.
 
 4. The board is not accepting posts yet, and says so. The setting that decides it lives
-   in your checkout:
+   in your checkout — paths below are relative to your TenkaCloud checkout, where this
+   catalog is the `problems/` submodule:
 
    ```jsonc
-   // challenges/stackstack-onboarding/local/config/app.json
+   // problems/challenges/stackstack-onboarding/local/config/app.json
    {
      "boardTitle": "天下クラウド 社内掲示板",
      "acceptingPosts": false      // ← change this
@@ -111,7 +112,13 @@ Four checkpoints, 25 points each:
    Submit `readyToken` for **Sign-off**. If it is still `null`, the false gate names your
    next action.
 
-6. Reset your config when you are done: `git checkout -- challenges/stackstack-onboarding/local/config/`.
+6. Reset your config **after** you have submitted the sign-off, not before: closing the board
+   again turns `posts_open` back off and the token stops being accepted. The file lives in the
+   `problems/` submodule, so run git there:
+
+   ```
+   git -C problems checkout -- challenges/stackstack-onboarding/local/config/
+   ```
 
 ## The board's routes
 
@@ -122,6 +129,11 @@ Four checkpoints, 25 points each:
 | `GET /api/logs` | The app's recent log lines (`?limit=` to widen) |
 | `GET /posture` | The four measured gates, and the sign-off token once they are green |
 | `GET /healthz` | Liveness, plus the config error if there is one |
+
+Restarting the container starts the environment check over: the gates are measured from the
+running app, so a restart clears them and takes your posts with them. Checkpoints you have
+already been credited for stay credited — the portal holds those — but the sign-off needs the
+four gates green again.
 | `POST /api/posts` | Post a message — `409` while the board is closed |
 
 ## Why measured, not claimed

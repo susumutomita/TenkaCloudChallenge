@@ -19,10 +19,6 @@ export function observe(event) {
   observed.add(event);
 }
 
-export function resetPosture() {
-  observed.clear();
-}
-
 /**
  * Evaluate a scenario's gates.
  * @param {Record<string, (context: object) => boolean>} gates
@@ -39,7 +35,11 @@ export function posture(gates) {
   for (const [name, predicate] of Object.entries(gates)) {
     state[name] = predicate(context) === true;
   }
-  const ready = Object.values(state).every(Boolean);
+  // `every` on an empty list is true, so a scenario that forgot to export
+  // `gates` would be reported ready and hand out its sign-off token having
+  // measured nothing at all. No gates means nothing is known, not that
+  // everything is fine.
+  const ready = Object.keys(state).length > 0 && Object.values(state).every(Boolean);
   return {
     gates: state,
     ready,
