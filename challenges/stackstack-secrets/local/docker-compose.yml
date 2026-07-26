@@ -1,0 +1,47 @@
+# Local-play container for stackstack-secrets.
+#
+# The image is the shared StackStack base app (../../../stackstack-base), not a
+# copy of it: this problem acts on the same board stackstack-onboarding and
+# stackstack-ship did, with `SCENARIO=secrets` adding the ops API, the key store
+# and the nightly digest on top.
+#
+# Both published ports are bound to 127.0.0.1 only: nothing here leaves the box.
+# There is no key material in this directory — the leaked credential, the
+# break-glass credential and every receipt are derived from FLAG_SEED inside the
+# container, so no two deploys share an answer and none is committed.
+services:
+  stackstack-secrets:
+    build:
+      context: ../../../stackstack-base
+      dockerfile: Dockerfile
+    environment:
+      SCENARIO: secrets
+      # Paths in the participant's checkout, which are not the paths the app
+      # reads (both directories are mounted under /app). Display only.
+      CONFIG_HINT: problems/challenges/stackstack-secrets/local/config/app.json
+      OPS_HINT: problems/challenges/stackstack-secrets/local/ops/ops.json
+      # Per-deploy random secret injected by `make local`. The published ops key,
+      # the break-glass credential, every fingerprint, witness, revocation
+      # receipt and policy digest are derived from it inside the container.
+      FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
+    volumes:
+      # The participant's own checkout, read-only. `ops.json` is the file this
+      # problem is about; the app re-reads it on every use, so an edit takes
+      # effect without a restart. It names a key — it never holds one.
+      - ./config:/app/config:ro
+      - ./ops:/app/ops:ro
+    ports:
+      - "127.0.0.1:18080:8080" # the board and the ops console
+      - "127.0.0.1:18081:8081" # loopback /verify
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: "2s"
+      timeout: "3s"
+      retries: 20
+    restart: "no"

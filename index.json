@@ -1959,6 +1959,33 @@
       }
     },
     {
+      "id": "stackstack-secrets",
+      "name": "板に載ってしまった鍵",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "40 分",
+      "shortDescription": "入社 3 日目。 掲示板は先週から社内に公開されていて、 夜間ダイジェストが毎晩まわっている。 運用チームからの要望はひとつだけ ── 「動いているものは、 止めないでほしい」。\n\nその板の 2 番目の投稿を、 今朝はじめて最後まで読んだ。 前任の SRE が引き継ぎのつもりで貼っていったもので、 運用まわりの入口と、 そこに出す鍵がそのまま書いてある。 社内の誰でも読める。 CTO の反応は短かった ── 「その投稿は消せないよ。 消したところで何も変わらないし」。\n\n板から消す手段は無い。 消せないものを前提に、 何を変えれば実害が消えるのか。 それが今日の 40 分。",
+      "tags": [
+        "stackstack",
+        "secrets",
+        "credentials",
+        "least-privilege",
+        "key-rotation",
+        "local-play",
+        "container",
+        "web-app"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "stackstack-ship",
       "name": "外から見えるところまで",
       "category": "Challenge",
