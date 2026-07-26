@@ -423,6 +423,21 @@ describe("stackstack-defend wiring", () => {
     expect(existsSync(SCENARIO_FILE)).toBe(true);
   });
 
+  it("should define a handler for exactly the checkpoints metadata declares", async () => {
+    // 上のテストは名前に "the scenario metadata's handlers live in" と書いてあるが、
+    // 実際に見ているのは SCENARIO 名とファイルの存在だけで、その中身が metadata の
+    // 宣言と揃っているかは誰も見ていなかった。checkpoint を metadata に足して
+    // handler を書き忘れる / handler を消す のどちらも、参加者が submit するまで
+    // 気づかない。import して突き合わせる。
+    const scenario = (await import(SCENARIO_FILE)) as { checks: Record<string, unknown> };
+    expect(Object.keys(scenario.checks).sort()).toEqual(
+      metadata.scoring.checks.map((check) => check.id).sort(),
+    );
+    for (const [id, handler] of Object.entries(scenario.checks)) {
+      expect(typeof handler, `${id} is declared but not callable`).toBe("function");
+    }
+  });
+
   it("should mount both participant-owned directories read-only", () => {
     expect(service.volumes).toEqual(["./config:/app/config:ro", "./policy:/app/policy:ro"]);
     expect(existsSync(join(composeDir, "config", "app.json"))).toBe(true);
@@ -735,7 +750,18 @@ describe("stackstack-defend: the fix", () => {
       "close-the-write-path": receipts.publishes_held as string,
       signoff: readyToken,
     };
+    // metadata ではなく自分の map を回すので、receipt checkpoint が増えても件数が
+    // 変わらず、"on every receipt checkpoint" と名乗ったまま新しい 1 つを飛ばす。
+    // `read-the-leak` だけは receipt ではなく攻撃で得た marker なので除外が正しい —
+    // その 1 件だけを引いた集合と一致することを固定する。
+    expect(Object.keys(answers).sort()).toEqual(
+      metadata.scoring.checks
+        .map((check) => check.id)
+        .filter((id) => id !== "read-the-leak")
+        .sort(),
+    );
     for (const [checkpoint, right] of Object.entries(answers)) {
+      expect(right, `${checkpoint} has no receipt to offer`).toBeTruthy();
       expect((await verifyCheckpoint(checkpoint, "")).body.correct).toBe(false);
       expect((await verifyCheckpoint(checkpoint, " ")).body.correct).toBe(false);
       expect((await verifyCheckpoint(checkpoint, right.slice(0, -1))).body.correct).toBe(false);
