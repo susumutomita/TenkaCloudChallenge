@@ -57,7 +57,13 @@
               "stage": {
                 "const": 3
               }
-            }
+            },
+            "not": {
+              "required": [
+                "delayDaysRange"
+              ]
+            },
+            "$comment": "The immediate instrument has no delay to describe; the field's own description says delayed-only and nothing enforced it."
           },
           "items": {
             "items": {
@@ -90,7 +96,11 @@
               "stage": {
                 "const": 5
               }
-            }
+            },
+            "required": [
+              "delayDaysRange"
+            ],
+            "$comment": "The delayed instrument is defined by its delay, so the range is not optional on it."
           }
         }
       }
@@ -326,12 +336,60 @@
           ]
         }
       ],
-      "dependentRequired": {
-        "repeatOf": [
-          "repeat"
-        ]
-      },
-      "unevaluatedProperties": false
+      "unevaluatedProperties": false,
+      "allOf": [
+        {
+          "$comment": "repeat is in `required`, so `dependentRequired: {repeatOf: [repeat]}` enforced the direction that cannot fail. The reachable defect is a repeat with nothing to pair against, which breaks the never-pooled split in analysis-plan.md section 4.",
+          "if": {
+            "properties": {
+              "repeat": {
+                "const": true
+              }
+            },
+            "required": [
+              "repeat"
+            ]
+          },
+          "then": {
+            "required": [
+              "repeatOf"
+            ]
+          }
+        },
+        {
+          "$comment": "A single-choice item scored by key needs the key. Without this a frozen bank could ship an item nobody can mark, and the freeze is what makes the bank unfixable afterwards.",
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "single-choice"
+              },
+              "scoring": {
+                "properties": {
+                  "kind": {
+                    "const": "key"
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "scoring"
+            ]
+          },
+          "then": {
+            "properties": {
+              "scoring": {
+                "required": [
+                  "correctChoice"
+                ]
+              }
+            }
+          }
+        }
+      ]
     },
     "scoring": {
       "type": "object",
@@ -380,7 +438,27 @@
             }
           }
         }
-      }
+      },
+      "allOf": [
+        {
+          "$comment": "`kind` decides which field makes the item scorable, so the schema has to tie them together. A rubric with no anchors cannot be applied by two raters independently, which is the whole point of interview-rubric.md section 5.",
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "rubric"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "anchors"
+            ]
+          }
+        }
+      ]
     },
     "bilingualText": {
       "type": "object",

@@ -436,18 +436,8 @@ detection.
 - The report states its own n, its lack of a control group, and its lack of
   randomisation in the first paragraph, not in a limitations section at the end.
 
-## 11. What is out of scope here
 
-Running the pilot and analysing its results belong to the parent initiative
-(susumutomita/TenkaCloud#2780). This document is the rulebook, written and frozen
-first; it contains no results, and it will not be edited to contain any.
-
-Also out of scope, permanently: causal inference about learning, comparison
-against any other course or platform, any claim about the Advanced Cryptography
-Program's own materials, and any analysis of participant behaviour beyond the
-five lanes in section 4.
-
-## Gates whose denominator is too small to report
+## 11. Gates whose denominator is too small to report
 
 §3 forbids stating a rate over a denominator below 3. Some gates are rates, so
 that rule can collide with a gate rather than only with a sentence.
@@ -460,3 +450,14 @@ enough to answer, which is the honest outcome of running a study this small and
 is the reason recruitment shortfalls are reported rather than absorbed. Reading
 it as a pass would let a shortfall manufacture the result the gate exists to
 test.
+
+## 12. What is out of scope here
+
+Running the pilot and analysing its results belong to the parent initiative
+(susumutomita/TenkaCloud#2780). This document is the rulebook, written and frozen
+first; it contains no results, and it will not be edited to contain any.
+
+Also out of scope, permanently: causal inference about learning, comparison
+against any other course or platform, any claim about the Advanced Cryptography
+Program's own materials, and any analysis of participant behaviour beyond the
+five lanes in section 4.

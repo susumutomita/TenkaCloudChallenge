@@ -921,9 +921,29 @@
               "type": "integer",
               "minimum": 0,
               "maximum": 5,
-              "description": "Required in practice for category `intervention`: the ladder in protocol.md section 6. An unlogged intervention becomes an unexplained difference between participants."
+              "description": "Required by schema for category `intervention`: the ladder in protocol.md section 6. An unlogged intervention becomes an unexplained difference between participants."
             }
-          }
+          },
+          "allOf": [
+            {
+              "$comment": "checkpoint.submit and failure.environment both enforce their conditional fields with if/then; this one said 'required in practice' and left it to reviewer attention, which this file's own preamble argues against. An unlogged intervention becomes an unexplained difference between participants.",
+              "if": {
+                "properties": {
+                  "category": {
+                    "const": "intervention"
+                  }
+                },
+                "required": [
+                  "category"
+                ]
+              },
+              "then": {
+                "required": [
+                  "interventionRung"
+                ]
+              }
+            }
+          ]
         }
       }
     },

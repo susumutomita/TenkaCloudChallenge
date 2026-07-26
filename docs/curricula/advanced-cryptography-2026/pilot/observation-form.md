@@ -173,6 +173,24 @@ Only if the problem ended without all checkpoints closed.
 The verbatim sentence is the single most useful thing this form collects. Ask
 once, do not press, and accept "I would rather not say" as a complete answer.
 
+**Two rules make it recordable**, because "verbatim" and "never transcribe a
+name" and "at most 280 characters" cannot all three hold unconditionally:
+
+1. **Redaction beats omission.** If the sentence contains a name, an email
+   address, an employer, or something read off the screen, replace that span with
+   `[redacted]` and keep the rest word for word. A redacted sentence is still
+   evidence; a dropped one is not. The redaction is the observer's, made at
+   transcription time, and the paper form is destroyed on the `consent.md` §7
+   schedule like everything else.
+2. **Over 280 characters, quote the end.** `abandonment.participantWords` caps at
+   280. If they said more, record the **last** 280 characters — the part where
+   people say why — prefixed with `…`. Note in the timeline that it was
+   truncated, so nobody later reads a fragment as the whole answer.
+
+Neither rule permits paraphrase. If you cannot record it under these rules,
+record nothing and say so in the timeline rather than writing your own version of
+what they meant.
+
 ## D. End of stage 2
 
 | Field | Value |
@@ -213,7 +231,10 @@ Within 24 hours, and before the next session:
 - [ ] Every intervention at rung 2 or above is an `observation.note` event with
       `interventionRung` set.
 - [ ] Abandonment, if any, is an `abandonment` event with the participant's own
-      words in `participantWords`.
+      words in `participantWords`, redacted and truncated by the two rules in
+      C7 — `[redacted]` spans for names, email, employer or screen content, and
+      the last 280 characters prefixed with `…` if they said more. Never
+      paraphrased.
 - [ ] Interface defects are `failure.interface` events.
 - [ ] Deviations are `deviation` events with `affectsMetrics` set.
 - [ ] No name, employer, email, or screen content has been transcribed anywhere.

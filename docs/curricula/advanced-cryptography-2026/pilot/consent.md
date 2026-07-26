@@ -22,8 +22,13 @@ Cryptography Program 2026. We want to know whether they teach anything.
 
 You are being asked to work through three of those problems while somebody
 watches, take a short test before and after, explain what you did, and take one
-more short test about a week later. It takes roughly four hours of your time in
-total, most of it in a single sitting.
+more short test about a week later.
+
+It takes **5 hours 10 minutes** of your time in total, split three ways: a
+15-minute setup check that can be its own day, a main sitting of 4 hours 25
+minutes with breaks, and a 30-minute follow-up 7 to 10 days later. The same three
+numbers are in `protocol.md` §5, and an earlier draft of this page said "roughly
+four hours", which was wrong.
 
 **This is unofficial.** TenkaCloud's track is an independent companion built by
 people unaffiliated with the Advanced Cryptography Program. Nothing you do here
@@ -110,22 +115,36 @@ The moment you agree, you are issued an identifier like `p-B-02`. Everything fro
 then on carries only that identifier: the event log, your test answers, the
 observer's notes, the interview transcript, and anything we publish.
 
-The list connecting `p-B-02` to your name and email exists in exactly one
-encrypted file, held by the pilot contact in §9, and nowhere else. It is not in
-the code repository, not in the event log, and not in any analysis file.
+The contact record connecting `p-B-02` to your name and email exists in exactly
+one encrypted file, held by the pilot contact in §9, and nowhere else. It is not
+in the code repository, not in the event log, and not in any analysis file. How
+long it is kept, and why it outlives the 30 days an earlier draft gave it, is §7.
 
 ## 7. How long we keep it
 
 | Data | Kept until |
 | --- | --- |
-| The name-to-identifier mapping | 30 days after your last session, then destroyed |
+| The contact record — your name, your email, your identifier, and which optional boxes you ticked | As long as any promise in §8 or §9 can still be exercised: until the raw session data is destroyed, and, if you ticked the quote-review box, until that review is finished or declined. Then destroyed |
 | Raw session data — event log, your test answers, observer notes | 90 days after the last participant's last session, then destroyed |
 | Interview audio, if you agreed to it | Transcribed within 30 days, audio destroyed immediately after |
 | Aggregated results and anonymised quotes | Kept indefinitely; they contain nothing that identifies you |
 
+The contact record is the shortest file in the pilot and it is kept apart from
+everything else — it is not joined to your answers, and no analysis ever reads it.
+It exists for exactly two reasons: so that "email us with your identifier **or
+your name**" in §8 actually works, and so the optional quote review in §10 has
+somewhere to send.
+
+**An earlier draft destroyed it after 30 days while keeping raw data for 90.**
+That would have left a 60-day stretch in which a withdrawal request carrying only
+a name could not be matched to anything — the promise would have been unkeepable
+for most of the window it covers. Holding a name and an email a little longer is
+the lesser cost, and it is stated here rather than buried.
+
 The 90-day clock does not pause because analysis is unfinished. If we did not
 finish in 90 days, we lost the raw data, and that is our problem rather than a
-reason to keep holding yours.
+reason to keep holding yours. The contact record goes when the raw data goes,
+except where the quote review is still open.
 
 ## 8. Stopping, and taking it back
 
@@ -192,11 +211,11 @@ is listed here so that it is not discovered halfway through a run.
 | --- | --- |
 | §5, no keystrokes or prompt bodies | [`event-schema.json`](./event-schema.json) rejects `keystrokes`, `promptText`, `sourceCode`, and `credentials` as properties anywhere in an event. The rule is enforced by the schema, not by reviewer attention |
 | §5, only in-problem source is read | Checkpoint submission reads only files under the problem's `local/starter/`, which is the only path bind-mounted into the container |
-| §6, one mapping file | No script may write a participant name into the repository, the event stream, or an analysis artifact. Any such occurrence is a `privacy-incident` deviation under `protocol.md` §5 |
+| §6, one contact record | No script may write a participant name into the repository, the event stream, or an analysis artifact. Any such occurrence is a `privacy-incident` deviation under `protocol.md` §5 |
 | §7, hard deletion dates | A calendar entry per date, created at freeze. Deletion is executed and recorded even if analysis is incomplete |
 | §8, deletion within 14 days | Raw artifacts are stored so that one participant's records can be located and removed without reconstructing the dataset. Identifier-keyed files, not one merged spreadsheet |
 | §8, aggregates recomputed | Analysis is scripted and re-runnable from the raw artifacts. A hand-assembled table cannot honour a withdrawal |
-| §9, quote-level opt-in | Quotes are collected into a review sheet per participant before publication, and an unanswered review request means the quote is not used |
+| §8, quote-level opt-in | Quotes are collected into a review sheet per participant before publication, and an unanswered review request means the quote is not used |
 
 ## 12. What this consent does not cover
 

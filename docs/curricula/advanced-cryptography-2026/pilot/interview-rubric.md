@@ -173,7 +173,7 @@ everything else.
    differences: how many dimensions agreed exactly, differed by 1, differed by 2
    or more. With six participants and five dimensions there are thirty
    comparisons, which is enough to describe and nowhere near enough for a
-   reliability coefficient. `analysis-plan.md` §7 forbids computing one.
+   reliability coefficient. `analysis-plan.md` §3 forbids computing one.
 
 ## 6. Reporting
 

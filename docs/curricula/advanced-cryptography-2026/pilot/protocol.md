@@ -48,17 +48,20 @@ difference between them is uninterpretable.
 | Field | Value |
 | --- | --- |
 | Instrument set version | `ac26-pilot-instruments v1.0.0` |
-| Instrument set frozen on | `PENDING-FREEZE` |
+| Instrument set frozen on | `PENDING-FREEZE` — the date C₁ landed |
 | Catalog repository | `susumutomita/TenkaCloudChallenge` |
-| Catalog commit (40-hex) | `PENDING-FREEZE` |
+| Instrument commit C₁ (40-hex) | `PENDING-FREEZE` — the last commit touching the eight instrument files; everything was built and validated against this tree |
+| Catalog commit for image builds (40-hex) | `PENDING-FREEZE` — usually C₁, recorded separately so it is never inferred |
+| Freeze-record commit C₂ (40-hex) | Recorded in the `ac26-pilot-freeze-v1.0.0` tag message, not here: a commit cannot contain its own SHA |
 | Upstream course repository | `zk-tokyo/advanced-cryptography-2026` |
 | Upstream course commit | `5e80999306608a45aecf9a0e4e3394a0b62f34d2` |
 | Docker image digests | `PENDING-FREEZE`, one `sha256:` digest per studied problem |
 
-The catalog commit cannot be filled in by this document, because the commit that
-freezes the instruments does not exist while the instruments are being written; a
-self-referential pin is not a pin. It is filled in by the freeze step in §9, and
-until then it reads `PENDING-FREEZE`.
+The commits cannot be filled in while the instruments are being written, because
+they do not exist yet; a self-referential pin is not a pin. §9 defines the exact
+order — C₁ finalises the instruments, C₂ writes this table, and the tag names C₂.
+C₂'s own SHA lives in the tag message for the same reason: a commit cannot
+contain its own hash. Until §9 runs, every such row reads `PENDING-FREEZE`.
 
 **The gate**: a session run against a freeze record that still contains
 `PENDING-FREEZE` in any row is not a pilot session. Its data is discarded rather
@@ -196,11 +199,26 @@ The pilot may still run. It may not pretend it did not shrink.
 
 ## 5. Session sequence
 
-Five stages. Stages 1 through 4 happen on one day; stage 5 happens 7 to 10 days
+Six stages, numbered 0 to 5. Stage 0 is setup and may happen on its own day;
+stages 1 through 4 happen together on one day; stage 5 happens 7 to 10 days
 later. The interval is a range rather than a single value because participant
 availability is real, and a fixed value would either be missed or would force
 scheduling pressure onto the participant; the actual interval in days is recorded
 per participant and reported.
+
+**What this actually costs a participant**, because a recruitment message has to
+be honest about it and an earlier draft said "roughly four hours":
+
+| | |
+| --- | --- |
+| Stage 0, setup | 15 min, possibly a separate day |
+| Stages 1–4, the main sitting | 4 h 25 min, breaks included |
+| Stage 5, follow-up | 30 min, 7–10 days later |
+| **Total** | **5 h 10 min** |
+
+`consent.md` §1 and §3 state the same three numbers. If any of them moves, all
+three documents move together — a participant who agreed to four hours did not
+agree to five.
 
 | Stage | What happens | Duration | Location |
 | --- | --- | --- | --- |
@@ -418,22 +436,41 @@ handing over anybody's answers.
 Executed once, before the first participant is recruited. Steps are in this order
 because each depends on the previous.
 
-1. Merge the instrument set. All eight files in this directory are on the default
-   branch and no longer being edited.
-2. Build one container image per studied problem from that commit, and record each
-   image's `sha256:` digest.
-3. Run `bun run validate` and `make reference-test` for each studied problem, and
-   record that the mutation suites pass. This is the pre-run value of the
-   `intended_mutation_kill_rate` gate in [`analysis-plan.md`](./analysis-plan.md)
-   and it is measured with zero participants, which is why it can be a
-   ship-blocking gate rather than a finding.
-4. Fill every `PENDING-FREEZE` cell in §2 in a single commit whose message names
-   this protocol version.
-5. Tag that commit `ac26-pilot-freeze-v1.0.0`.
+Three commits, in this order. Naming them separately is not pedantry: an earlier
+draft said "the instruments are no longer being edited" in step 1 and then edited
+`protocol.md` in step 4, which made the procedure impossible to follow literally
+and left "that commit" in step 2 ambiguous between the catalog and the
+instruments.
 
-After step 5 the instruments are read-only for the duration of the pilot. A
-defect discovered in an instrument mid-pilot is handled by §10, not by editing
-the instrument.
+| | Commit | What it is |
+| --- | --- | --- |
+| **C₁** | *instruments* | The last commit that touches any of the eight instrument files. Everything below is built and validated against **this** tree |
+| **C₂** | *freeze record* | Touches `protocol.md` §2 **only**, filling the `PENDING-FREEZE` cells. Permitted after C₁ because the freeze record is a record *about* the instruments, not one of them |
+| **C₃** | = C₂, tagged | `ac26-pilot-freeze-v1.0.0` points at C₂ |
+
+Steps:
+
+1. Land C₁: all eight instrument files are on the default branch and final. Record
+   its SHA — this fills the *Instrument commit C₁* row in §2.
+2. Build one container image per studied problem **from C₁**, and record each
+   image's `sha256:` digest. The catalog commit the images come from is recorded
+   in the *Catalog commit for image builds* row; it is usually C₁ but need not be, and writing both
+   removes the guesswork.
+3. Run `bun run validate` and `make reference-test` for each studied problem
+   **against C₁**, and record that the mutation suites pass. This is the pre-run
+   value of the `intended_mutation_kill_rate` gate in
+   [`analysis-plan.md`](./analysis-plan.md), measured with zero participants,
+   which is why it can be a ship-blocking gate rather than a finding.
+4. Land C₂: fill every `PENDING-FREEZE` cell in §2 — including the SHAs and
+   digests from steps 1 to 3 — in a single commit whose message names this
+   protocol version. C₂'s own SHA is knowable only after C₂ exists, so it goes in
+   the tag message rather than in the table it would have to modify.
+5. Tag C₂ as `ac26-pilot-freeze-v1.0.0`.
+
+**Read-only begins after step 5**, not after step 1. Between C₁ and C₂ the
+instruments are already final and only the record is being written. A defect
+discovered in an instrument after the tag is handled by §10, not by editing the
+instrument.
 
 ## 10. Deviations
 
