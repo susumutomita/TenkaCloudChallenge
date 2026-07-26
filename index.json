@@ -1880,6 +1880,32 @@
       }
     },
     {
+      "id": "sha256-schedule-logic",
+      "name": "SHA-256 その 2: ビット演算とメッセージスケジュール",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "60〜90 分",
+      "shortDescription": "回転とシフトの違い、σ0 σ1 Σ0 Σ1 の 4 種類のずらし量、Ch が選択回路であること、Maj がパリティではないこと、そして 16 ワードを 64 ワードへ広げる漸化式。SHA-256 の配線を全部自分で書く。",
+      "tags": [
+        "sha256",
+        "hash-function",
+        "bitwise",
+        "message-schedule",
+        "cryptography-basics",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "sqli-demo",
       "name": "スタッフ専用ログイン",
       "category": "Challenge",
