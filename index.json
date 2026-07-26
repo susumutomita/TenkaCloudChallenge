@@ -1854,6 +1854,32 @@
       }
     },
     {
+      "id": "sha256-bytes-padding",
+      "name": "SHA-256 その 1: バイト列とパディング",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "40〜60 分",
+      "shortDescription": "SHA-256 が最初に見るのは文字列ではなくバイト列。UTF-8 のバイト数、512 bit ブロックへのパディング、末尾 8 バイトのビット長、そして 32 bit ワードのバイト順を、手で数えて実装して確かめる。",
+      "tags": [
+        "sha256",
+        "hash-function",
+        "padding",
+        "endianness",
+        "cryptography-basics",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "sqli-demo",
       "name": "スタッフ専用ログイン",
       "category": "Challenge",

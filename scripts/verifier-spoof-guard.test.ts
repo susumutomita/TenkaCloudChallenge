@@ -1,7 +1,8 @@
 import { spawnSync } from "node:child_process";
-import { globSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { describe, expect, it } from "bun:test";
+import { localPlayVerifiers } from "./lib/local-play-problems";
 
 /**
  * Catalog-wide guard against a submission spoofing its own verdict.
@@ -29,7 +30,7 @@ import { describe, expect, it } from "bun:test";
 
 const REPO_ROOT = new URL("..", import.meta.url).pathname;
 
-const VERIFIERS = globSync("challenges/ac26-*/local/verifier/server.py", { cwd: REPO_ROOT }).sort();
+const VERIFIERS = localPlayVerifiers(REPO_ROOT);
 
 /** The exploit, as short as it gets: it implements nothing at all. */
 const SPOOF = [
@@ -44,7 +45,7 @@ function runnerBlock(source: string): string {
   return (match as RegExpExecArray)[1];
 }
 
-describe("AC26 verifier verdict spoofing", () => {
+describe("local-play verifier verdict spoofing", () => {
   it("should find verifiers to check, so a glob matching nothing cannot pass", () => {
     expect(VERIFIERS.length).toBeGreaterThan(0);
   });
