@@ -34,8 +34,15 @@ const REPO_ROOT = new URL("..", import.meta.url).pathname;
  * parse itself, guarded or not, so a file that regresses to the bare form is
  * still in scope. Test modules alongside the app are excluded: they mention
  * `request.url` while driving the app, but route nothing themselves.
+ *
+ * `stackstack-base` is in scope too: it is not under `challenges/`, but it is
+ * the app eight problems will run, so it is the last place this should be
+ * allowed to drift.
  */
-const APPS = globSync("challenges/*/local/app/*.mjs", { cwd: REPO_ROOT })
+const APPS = [
+  ...globSync("challenges/*/local/app/*.mjs", { cwd: REPO_ROOT }),
+  ...globSync("stackstack-base/app/*.mjs", { cwd: REPO_ROOT }),
+]
   .filter((relative) => !relative.endsWith(".test.mjs"))
   .filter((relative) =>
     /(?:new URL|requestUrl)\(\s*request\.url\b/.test(readFileSync(join(REPO_ROOT, relative), "utf8")),
