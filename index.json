@@ -1932,6 +1932,33 @@
       }
     },
     {
+      "id": "stackstack-ship",
+      "name": "外から見えるところまで",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "45 分",
+      "shortDescription": "板は動いた。 まだ、 運用コンソールの内側だけで。\n\n朝いちばんの Slack に CTO の一行が落ちてくる。 「例の掲示板、 今日じゅうに公開側の入口から見えるようにして」。 前任の SRE が残していったデプロイ用のファイルは 1 枚だけ ── `release.json`。 開いてみると、 配る成果物の ID は前任者のノート PC でビルドしたときのものがそのまま書いてあり、 アプリが起動時に要求する設定はひとつ足りない。 リリース基盤 (Shipyard) に投げても、 パイプラインは途中の stage で止まる。 止まった理由は、 デプロイログに stage 名と一緒に 1 行ずつ書いてある。\n\nビルドはもう終わっている。 デプロイはまだ 1 度も始まっていない。 この 2 つが別物だと体で分かるところが、 今日の最初の 45 分だ。",
+      "tags": [
+        "stackstack",
+        "deploy",
+        "release",
+        "secrets",
+        "health-check",
+        "local-play",
+        "container",
+        "web-app"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "wix-exposure-audit",
       "name": "公開設定の置き土産",
       "category": "Challenge",
