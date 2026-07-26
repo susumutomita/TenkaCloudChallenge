@@ -1,0 +1,45 @@
+# Local-play container for stackstack-ship.
+#
+# The image is the shared StackStack base app (../../../stackstack-base), not a
+# copy of it: this problem acts on the same board stackstack-onboarding did, with
+# `SCENARIO=ship` adding the release plane and the published site on top.
+#
+# Both published ports are bound to 127.0.0.1 only: nothing here leaves the box.
+# There is no third port — the "published site" is a separate surface on the same
+# origin (`/site`), not a separate network. The READMEs say so plainly.
+services:
+  stackstack-ship:
+    build:
+      context: ../../../stackstack-base
+      dockerfile: Dockerfile
+    environment:
+      SCENARIO: ship
+      # Paths in the participant's checkout, which are not the paths the app
+      # reads (both directories are mounted under /app). Display only.
+      CONFIG_HINT: problems/challenges/stackstack-ship/local/config/app.json
+      RELEASE_HINT: problems/challenges/stackstack-ship/local/release/release.json
+      # Per-deploy random secret injected by `make local`. The artifact id, the
+      # public serial, the deploy receipts and the signing key store are all
+      # derived from it inside the container.
+      FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
+    volumes:
+      # The participant's own checkout, read-only. The release manifest is the
+      # file this problem is about; the app re-reads it on every deploy call, so
+      # an edit takes effect without a restart.
+      - ./config:/app/config:ro
+      - ./release:/app/release:ro
+    ports:
+      - "127.0.0.1:18080:8080" # the board, the Shipyard console, and /site
+      - "127.0.0.1:18081:8081" # loopback /verify
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: "2s"
+      timeout: "3s"
+      retries: 20
+    restart: "no"
