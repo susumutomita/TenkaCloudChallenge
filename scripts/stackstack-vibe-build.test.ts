@@ -152,6 +152,16 @@ const RENDER_SKIPPING_RISKY = `  const rows = matches
     .join("");
   return \`<p>\${escape(query)}: \${matches.length}</p><ul>\${rows}</ul>\`;`;
 
+/**
+ * `CORRECT`, but each call sleeps.
+ *
+ * Used only to hold measurement slots open long enough that the queue is
+ * genuinely saturated when `/verify` arrives. Well under CALL_TIMEOUT_MS, so
+ * the calls still succeed and every gate still goes green — the point is the
+ * timing, not a failure.
+ */
+const SLOW_CORRECT_DELAY_MS = 120;
+
 const CORRECT = `${ESCAPE_FN}
 
 export function search({ query, posts }) {
@@ -178,6 +188,12 @@ export function renderResults({ query, matches }) {
 ${RENDER_CORRECT}
 }
 `;
+
+const SLOW_CORRECT = CORRECT.replace(
+  "export function search({ query, posts }) {",
+  `export async function search({ query, posts }) {
+  await new Promise((r) => setTimeout(r, ${SLOW_CORRECT_DELAY_MS}));`,
+);
 
 function mutate(from: string, to: string): string {
   const changed = CORRECT.replace(from, to);
@@ -472,6 +488,11 @@ beforeAll(async () => {
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
+  // Piped and never read fills the OS pipe buffer, at which point the app
+  // blocks on its next write and every later test times out with no signal
+  // pointing at the cause. Draining costs nothing and removes the trap.
+  server.stdout?.resume();
+  server.stderr?.resume();
 
   const deadline = Date.now() + 6_000;
   for (;;) {
@@ -741,6 +762,39 @@ describe("stackstack-vibe-build receipts are receipts for the current code", () 
     }
   }, 120_000);
 
+  it("should still score a correct receipt while the measurement queue is saturated", async () => {
+    // The scorer and the participant share one measurement queue, bounded at
+    // MAX_QUEUED so a feature that calls back into the app cannot pile up work
+    // forever. `/api/selfcheck` answers 409 past that bound, which is right --
+    // the participant sees the refusal and retries.
+    //
+    // `/verify` has no such channel: the multi-verify contract carries a
+    // boolean, so a declined measurement arrived as `correct: false`,
+    // indistinguishable from a wrong receipt and carrying the wrong-answer
+    // penalty. A participant would lose points for a queue somebody else's
+    // timing created, with nothing in the response saying so.
+    //
+    // Saturating it needs the slots *held*, not merely requested: eight
+    // concurrent self-checks against a fast feature are refused and drain
+    // before `/verify` arrives, and a test written that way passes with the bug
+    // still present. SLOW_CORRECT keeps each measurement occupied long enough
+    // that the queue is genuinely full at the moment scoring runs.
+    useFeature(SLOW_CORRECT);
+    expect(await greenGates()).toEqual([...GATES].sort());
+    const token = (await receipts()).search_answers as string;
+    expect(token).not.toBeNull();
+
+    const load = Array.from({ length: 6 }, () => get("/api/selfcheck").catch(() => null));
+    // Let the queue fill before scoring, and confirm it really did: at least one
+    // of these is refused, which is the state under test.
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const scored = await correctOf("search-answers", token);
+    const outcomes = await Promise.all(load);
+    expect(outcomes.some((r) => r !== null && r.status === 409)).toBe(true);
+
+    expect(scored).toBe(true);
+  }, 180_000);
+
   it("should withhold the receipt the moment the file changes, before anything re-measures", async () => {
     useFeature(CORRECT);
     expect(await greenGates()).toEqual([...GATES].sort());
@@ -795,10 +849,17 @@ describe("stackstack-vibe-build receipts are receipts for the current code", () 
     await selfcheck();
     const second = await report();
 
-    const repeatedQueries = [...second.queries].filter((q) => first.queries.has(q));
-    // Every term the second run used is one the first run never used. The
-    // 64-character term, the upper-cased one and the word-shaped one included.
-    expect(repeatedQueries.filter((q) => !first.queries.has(q))).toEqual([]);
+    // The recorder's `seenQueries` is module-level and the child is not
+    // respawned between the two measurements, so the set accumulates:
+    // `second` is a superset of `first`. The no-reuse property therefore reads
+    // as "the second run added as many terms as the first run used, and reused
+    // none of them" -- which is what the two assertions below say.
+    //
+    // There was a third line here that looked like the no-reuse check and was a
+    // tautology: it filtered `second ∩ first` by "not in first", which is empty
+    // whatever happens. Asserting `second ∩ first` empty instead would be wrong
+    // in the other direction, because accumulation makes that intersection
+    // exactly `first`.
     expect([...second.queries].length).toBeGreaterThan(first.queries.size);
     const onlyInSecond = [...second.queries].filter((q) => !first.queries.has(q));
     expect(onlyInSecond.length).toBe(second.queries.size - first.queries.size);

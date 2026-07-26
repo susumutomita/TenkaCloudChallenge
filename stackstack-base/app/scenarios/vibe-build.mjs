@@ -258,6 +258,15 @@ function ensureChild(stamp) {
     const text = String(chunk).trim();
     if (text !== "") noteFeatureError(`feature process wrote to stderr: ${readable(text).slice(0, 300)}`);
   });
+  // stdout, stderr, exit and spawn-error were all handled; stdin was not. A
+  // write can only fail because the child is already gone, and the pending call
+  // is failed by `gone` either way -- but an EPIPE on a stream with no `error`
+  // listener is an unhandled 'error' event, which takes the whole app down.
+  // This scenario runs participant code that is expected to crash its own
+  // process, so that is not a rare path here; it is the normal one.
+  spawned.stdin.on("error", (error) => {
+    noteFeatureError(`the feature process stopped accepting input: ${readable(error.message)}`);
+  });
   const gone = (reason) => {
     if (child !== spawned) return;
     childAlive = false;
@@ -1456,8 +1465,36 @@ const matches = (submission, expected) => submission.trim() === expected;
  * true and which is namespaced per gate, so one gate's receipt cannot answer
  * another's checkpoint.
  */
+/**
+ * Wait for a measurement slot rather than scoring the participant for the load.
+ *
+ * `serialize` declines past `MAX_QUEUED` so a participant's own code calling
+ * back into the app cannot pile up work forever. That bound is right for
+ * `/api/selfcheck`, which answers 409 and asks them to try again — the
+ * participant sees the refusal and retries.
+ *
+ * It is wrong for `/verify`. The `multi-verify` contract carries a boolean, so
+ * a declined measurement reaching `graded` becomes `correct: false`, which is
+ * indistinguishable from a wrong receipt and costs the participant a wrong-
+ * answer penalty for a queue they did not create. Nothing in the response
+ * would say why.
+ *
+ * So the scorer waits: a few short retries, which is far below the platform's
+ * verify timeout and far above the time a batch takes. Only if the queue is
+ * still saturated after that does it give up — at which point the app really is
+ * wedged, and a failed checkpoint is the least of it.
+ */
+async function measuredForScoring(gate, attempts = 12, waitMs = 250) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const report = await runMeasured([gate]);
+    if (report !== null) return report;
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+  }
+  return null;
+}
+
 async function graded(gate, submission) {
-  const report = await runMeasured([gate]);
+  const report = await measuredForScoring(gate);
   if (report === null || report.gates[gate] !== true) return false;
   return matches(submission, gateToken(gate));
 }
