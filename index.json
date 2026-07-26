@@ -1907,6 +1907,34 @@
       }
     },
     {
+      "id": "stackstack-observability",
+      "name": "黙っているアプリに口を割らせる",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "45 分",
+      "shortDescription": "「掲示板、 書いたのに後から探せないって声が来てる」。 月曜の朝、 CTO から飛んでくるのはその一行だけだ。\n\n板を開けば投稿はある。 ダッシュボードは緑。 死活確認は 200 を返し続けていて、 監視は一度も鳴っていない。 それでも社内チャットには 「書いたはずのものが出てこない」 が三件並んでいる。 前任の SRE は 「板から下流のアーカイブに流す relay を今朝入れました。 ログはうるさいので出さないようにしてあります」 と書き置きを残して、 もういない。\n\nアプリのログを開くと、 起動と投稿受付の行はある。 だが 「アーカイブに届かなかった投稿」 については 1 行も無い。 出ていないのは壊れていないからではない。 CTO 曰く: 「原因が分からないなら、 まず分かるようにして。 直す順番はそれから決める」。",
+      "tags": [
+        "stackstack",
+        "observability",
+        "logging",
+        "metrics",
+        "health-check",
+        "incident-response",
+        "local-play",
+        "container",
+        "web-app"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "stackstack-onboarding",
       "name": "初日の 15 分",
       "category": "Challenge",
