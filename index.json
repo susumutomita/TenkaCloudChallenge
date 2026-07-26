@@ -1201,6 +1201,53 @@
       }
     },
     {
+      "id": "ac26-w6-stack-design",
+      "name": "部品はどれも正しい。 つないだものが正しくない",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "advanced-cryptography-2026",
+        "order": 660,
+        "chapter": "Week 6 / Programmable Cryptography Stack Design"
+      },
+      "courseAlignment": {
+        "courseId": "advanced-cryptography-program",
+        "edition": "2026",
+        "week": 6,
+        "role": "synthesis",
+        "sources": [
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "path": "week6/README.md",
+            "kind": "lecture"
+          }
+        ]
+      },
+      "difficulty": 5,
+      "estimatedDuration": "90-120 分",
+      "shortDescription": "primitive が検証できるのは **渡されたものの形** だけである。 MPC engine は share かどうかを見るが、 それが secret のはずだったかは知らない。 zkVM は guest が走ったことを言うが、 journal が読み手の持っている program の話かは言わない。 部品の test は全部通り、 architecture は壊れている。 その **composition failure** を 9 通りの角度から診断する。",
+      "tags": [
+        "advanced-cryptography-2026",
+        "week6",
+        "stack-design",
+        "composition",
+        "boundary-contract",
+        "trust-domain",
+        "zero-knowledge",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "ac26-w6-zkvm-exploit-predicate",
       "name": "オーバーフローは 2 か所で起きる。 証明はどちらの話かを名指す",
       "category": "Challenge",
