@@ -345,7 +345,7 @@ a prerequisite for the next.
 | 620 | `ac26-w6-cosnark-beaver` | `assignment-companion` | `concept.beaver-triple`, `concept.co-snark` | #240 |
 | 630 | `ac26-w6-cosnark-privacy` | `transfer` | `concept.over-opening`, `concept.privacy` | #241 |
 | 640 | `ac26-w6-zkvm-exploit-predicate` | `mechanism` | `concept.zkvm`, `concept.guest-program`, `concept.exploit-predicate` | #242 |
-| 650 | `ac26-w6-zkvm-public-witness-binding` | `assignment-companion` | `concept.public-input-binding` | #243 |
+| 650 | `ac26-w6-zkvm-witness-binding` | `assignment-companion` | `concept.public-input`, `concept.private-witness`, `concept.statement-binding`, `concept.canonical-serialization` | #243 |
 | 660 | `ac26-w6-stack-design` | `synthesis` | `concept.stack-composition` | #244 |
 
 ### Week 7 — Demo Day
