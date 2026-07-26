@@ -8,6 +8,24 @@ import {
 } from './domain.mjs';
 import { callJson, routeBody, sendJson } from './http.mjs';
 
+/**
+ * Parse a request target without letting a malformed one end the process.
+ *
+ * `GET //` is a protocol-relative reference with no host, and `new URL` rejects
+ * it. This app serves its challenge surface and its `/verify` scorer from one
+ * process, so an unguarded parse in the handler takes both down over a stray
+ * slash. Leading slashes are collapsed (which is what the client meant) and
+ * anything still unparseable becomes a target the router will not match, so a
+ * malformed request is a 404 rather than a crash.
+ */
+function requestUrl(target, base) {
+  try {
+    return new URL(String(target ?? "/").replace(/^\/+/, "/"), base);
+  } catch {
+    return new URL("/__malformed_request__", base);
+  }
+}
+
 function patchPolicy(current, patch) {
   validateTcuPolicyPatch(patch);
   return { ...current, ...patch };
@@ -128,7 +146,7 @@ export function startTcuService(port = 8080, options = {}) {
   };
 
   const server = createServer(async (request, response) => {
-    const url = new URL(request.url ?? '/', 'http://tcu.local');
+    const url = requestUrl(request.url, 'http://tcu.local');
     if (request.method === 'GET' && url.pathname === '/healthz') {
       return sendJson(response, 200, { status: 'ok' });
     }

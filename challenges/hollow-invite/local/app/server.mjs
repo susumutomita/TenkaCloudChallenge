@@ -29,6 +29,24 @@ import { dirname, join, normalize } from "node:path";
  * FLAG-2/3/4 are structural facts recovered by analysing the committed evidence.
  */
 
+/**
+ * Parse a request target without letting a malformed one end the process.
+ *
+ * `GET //` is a protocol-relative reference with no host, and `new URL` rejects
+ * it. This app serves its challenge surface and its `/verify` scorer from one
+ * process, so an unguarded parse in the handler takes both down over a stray
+ * slash. Leading slashes are collapsed (which is what the client meant) and
+ * anything still unparseable becomes a target the router will not match, so a
+ * malformed request is a 404 rather than a crash.
+ */
+function requestUrl(target, base) {
+  try {
+    return new URL(String(target ?? "/").replace(/^\/+/, "/"), base);
+  } catch {
+    return new URL("/__malformed_request__", base);
+  }
+}
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FLAG_SEED = process.env.FLAG_SEED ?? "local-dev-seed";
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
@@ -163,7 +181,7 @@ box; there is no external network. Reserved names only (<code>*.example</code>,
 
 // ----- challenge / investigation surface (:8080) -----------------------------
 const challenge = createServer(async (request, response) => {
-  const url = new URL(request.url ?? "/", "http://127.0.0.1");
+  const url = requestUrl(request.url, "http://127.0.0.1");
   const p = url.pathname;
   const method = request.method ?? "GET";
 

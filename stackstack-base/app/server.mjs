@@ -131,6 +131,24 @@ ${rows}
 </body></html>`;
 }
 
+/**
+ * Parse a request target without letting a malformed one end the process.
+ *
+ * `GET //` is a protocol-relative reference with no host, and `new URL` rejects
+ * it. `guard` below would already catch the throw, but a browser pointed at a
+ * doubled slash should see the board rather than a 400 — so leading slashes are
+ * collapsed, which is what the client meant, and anything still unparseable
+ * becomes a target the router will not match. Same helper, same wording, as the
+ * rest of the catalog's local-play apps.
+ */
+function requestUrl(target, base) {
+  try {
+    return new URL(String(target ?? "/").replace(/^\/+/, "/"), base);
+  } catch {
+    return new URL("/__malformed_request__", base);
+  }
+}
+
 /** The board's whole surface. A route not in here is a 404. */
 const ROUTES = new Set([
   "GET /",
@@ -180,7 +198,7 @@ process.on("uncaughtException", (error) => {
 });
 
 const challenge = createServer(guard(async (request, response) => {
-  const url = new URL(request.url ?? "/", "http://board.local");
+  const url = requestUrl(request.url, "http://board.local");
   const route = `${request.method} ${url.pathname}`;
   // Only routes the app actually serves are recorded. Observing before the
   // match would let anyone grow the set without bound by walking made-up paths.
