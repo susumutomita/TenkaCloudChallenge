@@ -26,7 +26,7 @@ RUN_INSPECT := docker run --rm -e FLAG_SEED=$(FLAG_SEED) -e MODE=$(MODE) \
 .PHONY: build test test-one inspect reset reference-test
 
 build:
-	docker build -t $(IMAGE) local
+	docker build --target participant -t $(IMAGE) local
 
 test: build
 	$(RUN) python tests/public/test_lwe.py
@@ -46,4 +46,5 @@ reset:
 	@echo "starter/ restored to its shipped state."
 
 reference-test: build
-	docker run --rm -e FLAG_SEED=$(FLAG_SEED) $(IMAGE) python mutation.py
+	docker build --target author -t $(IMAGE)-author local
+	docker run --rm -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python mutation.py
