@@ -31,9 +31,15 @@ Run this before creating or updating a pull request:
 make agent-gate
 ```
 
-`make agent-gate` is the only machine-readable completion contract. It runs the complete catalog test suite and the static checks for metadata, CloudFormation templates, simulator workloads and compatibility, generated index drift, cost drift, and course drift.
+`make agent-gate` is the repository-local machine-readable completion contract. It runs the complete catalog test suite and static checks for metadata, CloudFormation templates, simulator workloads, compatibility-tool behavior, generated index drift, cost drift, and course drift.
 
-A task is incomplete while this command fails. Fix the implementation or content. Do not weaken validators, schemas, test discovery, cost checks, or compatibility checks to make a change pass.
+The actual catalog-versus-Simulator capability scan requires a second clean repository and therefore remains the dedicated `simulator-compatibility` GitHub Actions workflow. That workflow pins an immutable Simulator commit. For an explicit local scan, run:
+
+```bash
+make simulator-compatibility SIMULATOR_CHECKOUT=/absolute/path/to/TenkaCloudSimulator
+```
+
+A task is incomplete while the local gate or required cross-repository compatibility check fails. Fix the implementation or content. Do not weaken validators, schemas, test discovery, cost checks, or compatibility checks to make a change pass.
 
 ## Agent workflow
 
@@ -92,6 +98,7 @@ Include these sections:
 
 ## Validation
 - make agent-gate: passed
+- simulator-compatibility: passed
 
 ## Cross-repo impact
 - TenkaCloud: ...
