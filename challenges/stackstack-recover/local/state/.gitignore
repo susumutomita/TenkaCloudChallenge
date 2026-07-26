@@ -1,0 +1,6 @@
+# The app writes here when the policy permits it, into your own checkout, so you
+# can read what the scheduled job produced. Those files are session artefacts and
+# never belong in a commit — but the directory itself has to exist before the
+# container starts, or the bind mount creates it as root-owned.
+*
+!.gitignore

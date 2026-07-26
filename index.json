@@ -1986,6 +1986,33 @@
       }
     },
     {
+      "id": "stackstack-recover",
+      "name": "戻さないで直す",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "40 分",
+      "shortDescription": "入社 3 日目、 9 時 12 分。 掲示板が開かない。\n\n昨夜 23 時 40 分のデプロイで、 掲示板は 「本番品質」 になったはずだった。 投稿に認証を付け、 アプリが書いてよい場所を必要なところだけに絞った。 デプロイは通り、 誰も残業しなかった。 前任の SRE がいたら止めたかもしれないが、 前任の SRE はもういない。\n\n今朝、 公開側の入口は 401 を返し、 監視は unhealthy と言い、 総務部は 「昨日までは読めた」 と言っている。 CTO の指示は一行: 「戻していいとは言っていない。 昨夜の対策を残したまま、 午前中に読めるようにして。 あと、 何がどう止まったのかを朝会で 30 秒で説明できるようにしておいて」。\n\n再起動では直らない。 認証を外して開けるのは、 復旧に数えない。",
+      "tags": [
+        "stackstack",
+        "incident-response",
+        "availability",
+        "least-privilege",
+        "health-check",
+        "local-play",
+        "container",
+        "web-app"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "stackstack-safe-exposure",
       "name": "誰に見せるかを決める",
       "category": "Challenge",
