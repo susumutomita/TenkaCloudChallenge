@@ -97,10 +97,12 @@ jobs:
           bun run scripts/check-template-ascii.ts
           bun run scripts/check-template-security.ts
 
-      - name: Check simulator workload and capability compatibility
-        run: |
-          bun run validate:simulator-workload
-          bun run simulator:compatibility
+      - name: Check simulator workload
+        run: bun run validate:simulator-workload
+
+      # Cross-repository capability coverage needs an immutable Simulator
+      # checkout and is enforced by simulator-compatibility.yml. Do not replace
+      # that pinned proof with a moving branch or a hidden clone in this job.
 
       # index.json is the platform-read catalog, regenerated from every
       # metadata.json by scripts/build-index.ts. --check fails if it is stale
