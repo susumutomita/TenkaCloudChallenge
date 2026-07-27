@@ -1,10 +1,11 @@
 import { existsSync, globSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
+import { localPlayProblemDirs } from "./lib/local-play-problems";
 import { execFileSync } from "node:child_process";
 
 /**
- * Catalog-wide invariant for the AC26 participant contract.
+ * Catalog-wide invariant for the local-play participant contract.
  *
  * `docs/curricula/advanced-cryptography-2026/TEMPLATE.md` promises that the same four
  * `make` targets mean the same thing in every problem in the track, so a learner
@@ -26,7 +27,7 @@ import { execFileSync } from "node:child_process";
  */
 
 const REPO_ROOT = new URL("..", import.meta.url).pathname;
-const MAKEFILES = globSync("challenges/ac26-*/Makefile", { cwd: REPO_ROOT }).sort();
+const PROBLEM_DIRS = localPlayProblemDirs(REPO_ROOT);
 
 /** The four targets TEMPLATE.md documents as the shared participant contract. */
 const CONTRACT_TARGETS = ["test", "test-one", "inspect", "reset"] as const;
@@ -37,14 +38,11 @@ interface Problem {
   readonly makefile: string;
 }
 
-const PROBLEMS: readonly Problem[] = MAKEFILES.map((relative) => {
-  const dir = dirname(relative);
-  return {
-    id: dir.split("/").at(-1) ?? "",
-    dir,
-    makefile: readFileSync(join(REPO_ROOT, relative), "utf8"),
-  };
-});
+const PROBLEMS: readonly Problem[] = PROBLEM_DIRS.map((dir) => ({
+  id: dir.split("/").at(-1) ?? "",
+  dir,
+  makefile: readFileSync(join(REPO_ROOT, dir, "Makefile"), "utf8"),
+}));
 
 /**
  * The `make inspect VAR=...` variables a problem's READMEs advertise.
@@ -82,7 +80,7 @@ function inspectRecipe(problem: Problem): string {
   });
 }
 
-describe("AC26 participant contract", () => {
+describe("local-play participant contract", () => {
   it("should find problems to check, so a glob matching nothing cannot pass", () => {
     expect(PROBLEMS.length).toBeGreaterThan(0);
   });

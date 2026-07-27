@@ -1,0 +1,481 @@
+{
+  "id": "sha256-schedule-logic",
+  "name": "SHA-256 その 2: ビット演算とメッセージスケジュール",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "60〜90 分",
+  "shortDescription": "回転とシフトの違い、σ0 σ1 Σ0 Σ1 の 4 種類のずらし量、Ch が選択回路であること、Maj がパリティではないこと、そして 16 ワードを 64 ワードへ広げる漸化式。SHA-256 の配線を全部自分で書く。",
+  "description": "SHA-256 を自分で追える手続きに変える 3 問シリーズの 2 問目。1 問目で作った 512 bit ブロックが入力になる。圧縮ループの手前、ビット演算のすべてをここで実装する。\n\n`local/starter/schedule.py` に 8 つの関数があり、うち 5 つが意図的に壊れている。壊し方はどれも 1 行で、どれも実際によくある間違いにしてある。回転をマスクし忘れて 32 bit を超える、σ1 の第 3 項をシフトではなく回転にする、Σ0 に Σ1 のずらし量を書く、Ch の否定を落とす、Maj をパリティで書く、message schedule の 4 項を加算ではなく XOR で繋ぐ。\n\n採点は 6 checkpoint 独立。rotate (20) は回転とシフトを 1 語ずつ手で出す予測、mux (25) は Ch を選択回路として理解しているかの確認、dependency (30) は 1 bit 反転が 64 ワードのどこに最初に到達するかを漸化式から導く問題、sigma (45) は rotr と 4 つの σ、logic (30) は Ch と Maj、schedule (50) は expand_schedule を隠しテストで検証する。\n\n3 つのコード checkpoint は意図的に独立にしてある。schedule は「W[i] がどの 4 語を読み、それを加算するか」だけを見る。期待値は学習者自身の σ を使って計算するので、σ が間違っていても漸化式が正しければ schedule は通る。σ の正しさは sigma checkpoint の担当で、1 つの間違いを 2 回減点しない。\n\n公開テストは意図的に不十分にしてある。σ を仕様のずらし量と突き合わせず、Ch と Maj を混合セレクタで区別せず、展開するブロックは全ゼロだけ。全ゼロでは XOR と加算が一致するので、4 項を XOR する実装でも全部通る。隠しテストは σ の GF(2) 上の線形性、Maj の対称性、そして展開全体が XOR に対して線形でないこと (= 桁上がりが本当にあること) を検査する。\n\nmutation suite (local/mutation.py) が 33 変異を kill することを CI で担保する。加えて checkpoint の独立性そのものも検査する。σ を壊した変異が schedule suite に漏れていないことを assert してある。等価変異 5 種は意図的に除外し、理由を mutation.py の冒頭に書いた。うち 2 種は実際に survived してから外したものだ。",
+  "instructions": "## はじめに\n\nSHA-256 のビット演算をすべて実装します。1 問目のパディングは前提ですが、この問題は独立して解けます。\n\n## 最初の一手\n\n```bash\nmake inspect\n```\n\n自分の fixture が 16 進数と 2 進数の両方で出ます。この問題はビット位置の話なので、2 進数の行を見てください。回転とシフトの違いは 16 進数 2 つを睨んでも分かりませんが、ビット列 2 行を並べれば一目で分かります。\n\n次に `local/starter/schedule.py` を開きます。関数は 8 つ、そのうち 5 つが壊れています。どの関数の docstring にも「何を実装するのか」と「starter がどう間違っているか」が書いてあります。\n\n## ゴール\n\n6 つの checkpoint を独立に通します。\n\n## 手を動かす順番の目安\n\n1. `rotr` を直す。σ 4 つが全部これに乗っているので最初に。\n2. `make inspect` のビット行を数えて rotate。\n3. Ch を 1 bit 分だけ手で考えて mux。\n4. 仕様表を見ながら σ 4 つを直して sigma。\n5. Ch と Maj を直して logic。\n6. 漸化式を加算で書いて schedule。\n7. 漸化式が読む 4 つの添字を眺めて dependency。\n\n## dependency checkpoint について\n\nW[i] は W[i-16]、W[i-15]、W[i-7]、W[i-2] を読みます。ただし W[0] から W[15] は入力で、計算されるのは添字 16 以上だけです。この 2 つを合わせると、ある入力ワードを最初に読む「計算された」ワードがどこかが決まります。展開を実装しなくても答えは出ます。",
+  "writeup": "## 何を確認したか\n\n### 回転とシフトは別物で、両方が必要\n\n回転は 32 ビットの置換です。ビットは 1 つも失われず、立っているビットの数は変わりません。シフトは失います。\n\nSHA-256 は両方を使い、どちらを使うかで意味が変わります。σ0 と σ1 は回転 2 つとシフト 1 つ、Σ0 と Σ1 は回転 3 つです。σ にシフトが入っているのは偶然ではありません。シフトがビットを落とすからこそ message schedule は単射でなくなり、64 ワードから 16 ワードを逆算できなくなります。Σ は圧縮関数の中で状態を撹拌するだけなので、情報を落とす必要がありません。\n\nずらし量は 4 種類あって覚え違いを誘います。σ0 は (7, 18, 3)、σ1 は (17, 19, 10)、Σ0 は (2, 13, 22)、Σ1 は (6, 11, 25) です。記憶ではなく仕様表を見るべき場所です。\n\nPython で書くときの罠がもう 1 つあります。`value << (32 - amount)` の結果は 32 bit を超えるので、`& 0xFFFFFFFF` でワードに戻す必要があります。忘れると値は静かに巨大化し、σ もスケジュールも全部おかしくなりますが、例外は出ません。\n\n### Ch は選択回路、Maj は多数決\n\nCh(e, f, g) = (e AND f) XOR (NOT e AND g) を式として覚えると何も分かりません。1 bit 分だけ書き出すと正体が見えます。e のビットが 1 なら f のビットが出て、0 なら g のビットが出る。つまり 32 個並んだマルチプレクサで、e がセレクタ、f と g が選択肢です。\n\nMaj(a, b, c) = (a AND b) XOR (a AND c) XOR (b AND c) はビット位置ごとの多数決です。入力が 3 つなので必ず 2 対 1 が付きます。XOR で書けるのは、3 つのペア項のうち浮いている 1 つが高々 1 つしかないからで、OR で書いても同じ値になります。\n\nよくある誤解は Maj をパリティ `a ^ b ^ c` と混同することです。1 bit で見ると、一致するのは全 0 と全 1 の 2 通りだけで、残る 6 通りで食い違います。それでも fixture が 1 つだと通ってしまう種類の間違いなので、隠しテストは 1 bit の真理値表 8 行を全部回します。\n\n### message schedule は加算で、XOR ではない\n\nW[i] = W[i-16] + σ0(W[i-15]) + W[i-7] + σ1(W[i-2]) を mod 2^32 で足します。XOR は安く見える代用品で、間違っている理由がはっきりしています。XOR に桁上がりが無いので、あるビット位置の情報がより上の位置へ伝わりません。message schedule が存在する理由そのものである拡散が起きなくなります。\n\nこれは検査もできます。回転・シフト・XOR はすべて GF(2) 上で線形なので、4 項を XOR する展開は全体として線形になり、`expand(a XOR b)` がちょうど `expand(a) XOR expand(b)` になります。加算には桁上がりがあるのでそうなりません。隠しテストはこの性質を直接見ています。固定の期待値ではなく関係なので、暗記では通りません。\n\n### 1 bit はどこまで伝わるか\n\ndependency checkpoint の答えは 1 つの式ではありません。W[i] が読むのは i-16、i-15、i-7、i-2 の 4 つですが、W[0] から W[15] は入力なので、計算されるワードは添字 16 以上だけです。したがって入力の添字 k を最初に読む計算済みワードは、k+16、k+15、k+7、k+2 のうち 16 以上になる最小のものです。k=0 なら 16、k=1..8 なら k+15、k=9..13 なら k+7、k=14,15 なら k+2 になります。\n\n途中で差分が打ち消えることはありません。σ は 1 bit の差分を 2 つか 3 つの別々の位置へ送り、その XOR がゼロになることはないからです。\n\n## 公開テストが通っても終わりではない\n\nこの問題の公開テストは、σ を仕様のずらし量と突き合わせず、Ch と Maj を混合セレクタで区別せず、展開するブロックは全ゼロだけです。全ゼロでは XOR と加算が一致するので、4 項を XOR する実装でも全部通ります。\n\n隠しテストは境界値 (0、0xffffffff、0x80000000、0x55555555) と seed 由来の語を回し、σ の線形性、Maj の対称性、Ch の「両選択肢が同じなら結果もそれ」という性質、そして展開が XOR に対して線形でないことを検査します。\n\n## 次に何を学ぶか\n\nここまでで圧縮関数の部品はすべて揃いました。次の問題では T1 と T2 を組み立て、a から h の 8 語を 64 round 回し、初期値に足し戻して digest を作ります。そのあとで 1 bit 変えた入力を通し、なぜ出力が半分変わるのかを測ります。",
+  "tags": [
+    "sha256",
+    "hash-function",
+    "bitwise",
+    "message-schedule",
+    "cryptography-basics",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18091,
+      "name": "/verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "回転とシフトを区別し、どちらがビットを失うかを説明できる",
+    "σ0 σ1 Σ0 Σ1 の 4 種類のずらし量を仕様どおりに実装できる",
+    "σ にシフトが入っている理由を message schedule の非可逆性から説明できる",
+    "Ch をビットごとの選択回路として説明し、実装できる",
+    "Maj が多数決でありパリティではないことを真理値表で示せる",
+    "message schedule の漸化式を加算で実装し、XOR では拡散が起きないことを説明できる",
+    "入力 1 ワードの変更が 64 ワードのどこに最初に到達するかを漸化式から導ける"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.sha256-schedule-logic.rotate-versus-shift",
+        "description": "回転とシフトの違いを、立っているビット数の保存で区別して説明・実装できる。"
+      },
+      {
+        "id": "lo.sha256-schedule-logic.implement-sigmas",
+        "description": "4 つの σ / Σ を仕様のずらし量どおりに実装し、第 3 項が回転かシフトかを取り違えない。"
+      },
+      {
+        "id": "lo.sha256-schedule-logic.explain-mux",
+        "description": "Ch をセレクタ付きの選択回路として説明し、Maj との違いを述べられる。"
+      },
+      {
+        "id": "lo.sha256-schedule-logic.majority-not-parity",
+        "description": "Maj が多数決であり、パリティと 8 通りのうち 6 通りで食い違うことを示せる。"
+      },
+      {
+        "id": "lo.sha256-schedule-logic.implement-schedule",
+        "description": "message schedule の漸化式を mod 2^32 の加算で実装できる。"
+      },
+      {
+        "id": "lo.sha256-schedule-logic.trace-dependency",
+        "description": "漸化式の添字から、1 bit の変更が最初に到達する計算済みワードを導ける。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.bitwise-rotation",
+        "description": "32 bit 語の巡回シフト。ビット数を保存する置換であり、情報を落とすシフトとは役割が違う。"
+      },
+      {
+        "id": "concept.gf2-linearity",
+        "description": "回転・シフト・XOR はすべて GF(2) 上の線形写像。線形な部品だけでは拡散が起きない。"
+      },
+      {
+        "id": "concept.carry-propagation",
+        "description": "mod 2^32 の加算が持つ桁上がり。下位ビットの情報を上位へ運ぶ、XOR に無い非線形性の源。"
+      },
+      {
+        "id": "concept.bitwise-selection",
+        "description": "ビットごとの選択回路 (マルチプレクサ) と多数決。SHA-256 の Ch と Maj がそれぞれこれに当たる。"
+      },
+      {
+        "id": "concept.message-schedule",
+        "description": "16 語の入力を 64 語へ広げる漸化式。各 round に異なる語を供給し、入力全体を撹拌する。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.sha256-schedule-logic.rotate",
+        "description": "同じ語に対する回転結果とシフト結果を、手で区別して出せた。"
+      },
+      {
+        "id": "assessment.sha256-schedule-logic.mux",
+        "description": "Ch をセレクタ付き選択として計算でき、多数決やパリティと混同しなかった。"
+      },
+      {
+        "id": "assessment.sha256-schedule-logic.dependency",
+        "description": "1 bit の変更が最初に到達する schedule 添字を、入力語と計算語の区別を含めて導けた。"
+      },
+      {
+        "id": "assessment.sha256-schedule-logic.sigma",
+        "description": "rotr と 4 つの σ / Σ を、境界値と線形性の検査を通る形で実装できた。"
+      },
+      {
+        "id": "assessment.sha256-schedule-logic.logic",
+        "description": "Ch と Maj を、1 bit 真理値表と対称性の検査を通る形で実装できた。"
+      },
+      {
+        "id": "assessment.sha256-schedule-logic.schedule",
+        "description": "漸化式を加算で実装し、展開が XOR に対して線形でないことを満たせた。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.rotation-is-shift",
+        "description": "回転とシフトは似たようなもの、という誤解。シフトはビットを落とし回転は落とさないので、σ の第 3 項を取り違えると message schedule の性質が変わる。"
+      },
+      {
+        "id": "misconception.sigma-amounts-are-interchangeable",
+        "description": "σ の 4 種類のずらし量はどれも似ているので混ぜても大差ない、という誤解。4 つは別の関数で、1 つ取り違えるだけで digest が変わる。"
+      },
+      {
+        "id": "misconception.maj-is-parity",
+        "description": "Maj は XOR で書けるからパリティと同じ、という誤解。8 通りの入力のうち 5 通りで食い違う。"
+      },
+      {
+        "id": "misconception.xor-substitutes-for-addition",
+        "description": "ビット演算の中では XOR と加算は交換できる、という誤解。XOR には桁上がりが無いので、下位から上位への情報の流れが消える。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.sha256-schedule-logic",
+      "target": "lo.sha256-schedule-logic.rotate-versus-shift"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.sha256-schedule-logic",
+      "target": "lo.sha256-schedule-logic.implement-sigmas"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.sha256-schedule-logic",
+      "target": "lo.sha256-schedule-logic.explain-mux"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.sha256-schedule-logic",
+      "target": "lo.sha256-schedule-logic.majority-not-parity"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.sha256-schedule-logic",
+      "target": "lo.sha256-schedule-logic.implement-schedule"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.sha256-schedule-logic",
+      "target": "lo.sha256-schedule-logic.trace-dependency"
+    },
+    {
+      "type": "covers",
+      "source": "problem.sha256-schedule-logic",
+      "target": "concept.bitwise-rotation"
+    },
+    {
+      "type": "covers",
+      "source": "problem.sha256-schedule-logic",
+      "target": "concept.gf2-linearity"
+    },
+    {
+      "type": "covers",
+      "source": "problem.sha256-schedule-logic",
+      "target": "concept.carry-propagation"
+    },
+    {
+      "type": "covers",
+      "source": "problem.sha256-schedule-logic",
+      "target": "concept.bitwise-selection"
+    },
+    {
+      "type": "covers",
+      "source": "problem.sha256-schedule-logic",
+      "target": "concept.message-schedule"
+    },
+    {
+      "type": "requires",
+      "source": "problem.sha256-schedule-logic",
+      "target": "concept.endianness"
+    },
+    {
+      "type": "requires",
+      "source": "lo.sha256-schedule-logic.rotate-versus-shift",
+      "target": "concept.bitwise-rotation"
+    },
+    {
+      "type": "requires",
+      "source": "lo.sha256-schedule-logic.implement-sigmas",
+      "target": "concept.bitwise-rotation"
+    },
+    {
+      "type": "requires",
+      "source": "lo.sha256-schedule-logic.explain-mux",
+      "target": "concept.bitwise-selection"
+    },
+    {
+      "type": "requires",
+      "source": "lo.sha256-schedule-logic.majority-not-parity",
+      "target": "concept.bitwise-selection"
+    },
+    {
+      "type": "requires",
+      "source": "lo.sha256-schedule-logic.implement-schedule",
+      "target": "concept.carry-propagation"
+    },
+    {
+      "type": "requires",
+      "source": "lo.sha256-schedule-logic.implement-schedule",
+      "target": "concept.message-schedule"
+    },
+    {
+      "type": "requires",
+      "source": "lo.sha256-schedule-logic.trace-dependency",
+      "target": "concept.message-schedule"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.sha256-schedule-logic",
+      "target": "assessment.sha256-schedule-logic.rotate"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.sha256-schedule-logic",
+      "target": "assessment.sha256-schedule-logic.mux"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.sha256-schedule-logic",
+      "target": "assessment.sha256-schedule-logic.dependency"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.sha256-schedule-logic",
+      "target": "assessment.sha256-schedule-logic.sigma"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.sha256-schedule-logic",
+      "target": "assessment.sha256-schedule-logic.logic"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.sha256-schedule-logic",
+      "target": "assessment.sha256-schedule-logic.schedule"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.sha256-schedule-logic",
+      "target": "misconception.rotation-is-shift"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.sha256-schedule-logic",
+      "target": "misconception.sigma-amounts-are-interchangeable"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.sha256-schedule-logic",
+      "target": "misconception.maj-is-parity"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.sha256-schedule-logic",
+      "target": "misconception.xor-substitutes-for-addition"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.sha256-schedule-logic",
+      "target": "misconception.public-tests-are-complete"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18091/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "rotate",
+        "label": "回転とシフトを手で区別する",
+        "points": 20,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "rotate-hint-1",
+            "content": "`make inspect` のビット行を数えるのが速い。回転は立っているビットの数を変えない。シフトは下から抜けた分だけ減り、上から 0 が入る。同じ語を 2 通りにずらして、結果を 2 つ出す。",
+            "penalty": 8
+          }
+        ]
+      },
+      {
+        "id": "mux",
+        "label": "Ch が選択回路であることを使う",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "mux-hint-1",
+            "content": "1 bit 分だけ考える。e が 1 のとき (e AND f) は f、(NOT e AND g) は 0。e が 0 なら逆になる。つまり各位置で f か g のどちらか一方が出る。この fixture では f と g が互いの補数なので、答えは e が 1 の位置は f、0 の位置は g をそのまま並べたものになる。",
+            "penalty": 10
+          }
+        ]
+      },
+      {
+        "id": "dependency",
+        "label": "1 bit の変更がどこに最初に届くかを導く",
+        "points": 30,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "dependency-hint-1",
+            "content": "W[i] が読むのは W[i-16]、W[i-15]、W[i-7]、W[i-2] の 4 つ。反転させた添字 k を読む i は、この 4 つを逆に解いて k+16、k+15、k+7、k+2 になる。",
+            "penalty": 8
+          },
+          {
+            "id": "dependency-hint-2",
+            "content": "ただし W[0] から W[15] は入力で、漸化式で計算されるのは添字 16 以上だけ。だから候補のうち 16 未満のものは答えにならない。16 以上の候補の最小値が答え。",
+            "penalty": 7
+          }
+        ]
+      },
+      {
+        "id": "sigma",
+        "label": "rotr と 4 つの σ を実装する",
+        "points": 45,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "sigma-hint-1",
+            "content": "まず `rotr` を疑う。σ 4 つは全部これに乗っている。Python の左シフトは 32 bit で止まらないので、結果を `& 0xFFFFFFFF` でワードに戻す必要がある。戻さないと値は静かに 32 bit を超え、例外は出ない。",
+            "penalty": 8
+          },
+          {
+            "id": "sigma-hint-2",
+            "content": "ずらし量は σ0 が (7, 18, 3)、σ1 が (17, 19, 10)、Σ0 が (2, 13, 22)、Σ1 が (6, 11, 25)。σ の第 3 項だけがシフトで、Σ は 3 つとも回転。記憶ではなく FIPS 180-4 §4.1.2 の表を見る場所。",
+            "penalty": 14
+          }
+        ]
+      },
+      {
+        "id": "logic",
+        "label": "Ch と Maj を実装する",
+        "points": 30,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "logic-hint-1",
+            "content": "Maj をパリティ `a ^ b ^ c` で書いていないか確認する。1 bit の入力 8 通りの真理値表を書けば、一致するのは全 0 と全 1 の 2 通りだけだと分かる。Ch のほうは否定側のマスクを忘れていないか。",
+            "penalty": 12
+          }
+        ]
+      },
+      {
+        "id": "schedule",
+        "label": "16 ワードを 64 ワードへ広げる",
+        "points": 50,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "schedule-hint-1",
+            "content": "4 項は XOR ではなく加算で、mod 2^32 に収める。この checkpoint は σ の正しさを見ていない。期待値はあなた自身の σ を使って計算されるので、σ が未完成でも漸化式が正しければ通る。",
+            "penalty": 10
+          },
+          {
+            "id": "schedule-hint-2",
+            "content": "読む添字は i-16、i-15、i-7、i-2 の 4 つで、σ0 が i-15 側、σ1 が i-2 側。最初の 16 語はそのまま残し、16 から 63 まで追加して合計 64 語にする。",
+            "penalty": 15
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "SHA-256 part 2: bit operations and the message schedule",
+      "shortDescription": "Rotation versus shift, four different sigma amounts, Ch as a selector circuit, Maj as a majority rather than a parity, and the recurrence that grows sixteen words into sixty-four. All of SHA-256's wiring, written by hand.",
+      "instructions": "## Start here\n\nYou will implement all of SHA-256's bit operations. Part 1's padding is assumed but this problem stands on its own.\n\n## First move\n\n```bash\nmake inspect\n```\n\nThat prints your fixtures in hex and in binary. Read the binary rows: this problem is about bit positions, and the difference between a rotation and a shift is invisible when you stare at two hex strings and obvious when you line up two bit rows.\n\nThen open `local/starter/schedule.py`. Eight functions, five of them wrong. Every docstring states what the function must do and how the starter gets it wrong.\n\n## Goal\n\nClear six independently scored checkpoints.\n\n## A workable order\n\n1. Fix `rotr` first — all four sigmas are built on it.\n2. Count the bit rows from `make inspect`, for rotate.\n3. Work Ch out for a single bit position, for mux.\n4. Fix the four sigmas against the spec table, for sigma.\n5. Fix Ch and Maj, for logic.\n6. Write the recurrence with addition, for schedule.\n7. Look at the four indices the recurrence reads, for dependency.\n\n## About the dependency checkpoint\n\nW[i] reads W[i-16], W[i-15], W[i-7] and W[i-2]. But W[0] through W[15] are inputs; only indices 16 and above are computed. Put those two facts together and you know which computed word first reads a given input word. You do not have to implement the expansion to answer it.",
+      "writeup": "## What this checked\n\n### Rotation and shift are different, and both are needed\n\nA rotation is a permutation of the 32 positions: no bit is lost and the population count is unchanged. A shift loses bits.\n\nSHA-256 uses both, and which one it uses changes the meaning. σ0 and σ1 are two rotations and one *shift*; Σ0 and Σ1 are three rotations. The shift in the small sigmas is not incidental — losing bits is what makes the message schedule non-injective, so the sixteen message words cannot be recovered from the sixty-four. The big sigmas only stir the state inside the compression function, so they have no reason to lose anything.\n\nFour sets of amounts invite a misremembering: σ0 is (7, 18, 3), σ1 is (17, 19, 10), Σ0 is (2, 13, 22), Σ1 is (6, 11, 25). This is a place to read the spec table rather than trust your memory.\n\nOne more Python trap: `value << (32 - amount)` overflows past 32 bits, so the result needs `& 0xFFFFFFFF` to come back to a word. Forget it and values grow silently — every sigma and the whole schedule go wrong, with no exception raised anywhere.\n\n### Ch is a selector, Maj is a majority\n\nCh(e, f, g) = (e AND f) XOR (NOT e AND g) teaches nothing as a formula. Write out a single bit and it appears: where e's bit is 1 you get f's bit, where it is 0 you get g's. It is thirty-two multiplexers side by side, with e as the selector and f and g as the choices.\n\nMaj(a, b, c) = (a AND b) XOR (a AND c) XOR (b AND c) is a per-position majority. With three inputs there is always a two-to-one, and the reason it can be written with XOR is the reason Maj works at all: at most one of the three pairwise terms is ever the odd one out, so nothing cancels. Writing it with OR gives the same value.\n\nThe usual mistake is confusing Maj with the parity `a ^ b ^ c`. On single bits they agree on exactly two of the eight inputs — all zeros and all ones — and disagree on the other six. Close enough to look right, wrong often enough to matter, and still the kind of thing one lucky fixture waves through, which is why the hidden tests run the whole eight-row truth table.\n\n### The message schedule adds; it does not xor\n\nW[i] = W[i-16] + σ0(W[i-15]) + W[i-7] + σ1(W[i-2]), modulo 2^32. Xor is the cheap-looking substitute and it is wrong for a nameable reason: xor has no carries, so information in one bit position can never reach a higher one, and the diffusion the schedule exists to provide never happens.\n\nThat is testable. Rotations, shifts and xor are all GF(2)-linear, so a schedule that xors its four terms is linear as a whole — expanding `a ^ b` gives exactly the xor of the two expansions. Addition has carries and breaks that. The hidden tests check the property directly. It is a relation, not a fixed expected value, so it cannot be memorized.\n\n### How far does one bit reach\n\nThe dependency checkpoint's answer is not one formula. W[i] reads i-16, i-15, i-7 and i-2, but W[0] through W[15] are inputs, so only indices 16 and above are computed. The first computed word to read input index k is therefore the smallest of k+16, k+15, k+7 and k+2 that reaches 16: 16 for k=0, k+15 for k in 1..8, k+7 for k in 9..13, and k+2 for k=14 and 15.\n\nThe difference cannot cancel on the way, because each sigma sends a one-bit difference to two or three distinct positions whose xor is never zero.\n\n## Passing the public tests is not the end\n\nThe public tests here never compare a sigma against its specified amounts, never distinguish Ch from Maj on a mixed selector, and only ever expand the all-zero block — where xor and addition give the same answer. An implementation that xors its four terms passes every one of them.\n\nThe hidden tests sweep boundary words (0, 0xffffffff, 0x80000000, 0x55555555) and seeded ones, and check the sigmas' linearity, Maj's symmetry, Ch's \"both choices equal means the selector is irrelevant\" property, and that the expansion is not linear over xor.\n\n## What to learn next\n\nEvery part of the compression function is now in place. The next problem assembles T1 and T2, runs the eight working words a through h for 64 rounds, and adds the result back into the incoming state to produce a digest. Then it changes one input bit and measures why half the output moves.",
+      "learningGoals": [
+        "Tell rotation from shift, and say which one loses bits",
+        "Implement all four sigma functions with their specified amounts",
+        "Explain why the small sigmas include a shift, from the schedule's non-invertibility",
+        "Explain and implement Ch as a bitwise selector",
+        "Show with a truth table that Maj is a majority and not a parity",
+        "Implement the schedule recurrence with addition, and say why xor loses the diffusion",
+        "Derive where a one-word change first reaches in the sixty-four-word schedule"
+      ],
+      "checks": [
+        {
+          "id": "rotate",
+          "label": "Tell a rotation from a shift by hand",
+          "hints": [
+            {
+              "id": "rotate-hint-1",
+              "content": "Counting the bit rows from `make inspect` is quickest. A rotation never changes how many bits are set; a shift loses the ones that fall off the bottom and feeds zeros in at the top. Same word, two different displacements, two results."
+            }
+          ]
+        },
+        {
+          "id": "mux",
+          "label": "Use the fact that Ch is a selector",
+          "hints": [
+            {
+              "id": "mux-hint-1",
+              "content": "Think about one bit. Where e is 1, (e AND f) is f and (NOT e AND g) is 0; where e is 0 it is the other way round. So each position yields exactly one of f or g. In this fixture f and g are complements, so the answer is simply f's bits where e is 1 and g's where e is 0."
+            }
+          ]
+        },
+        {
+          "id": "dependency",
+          "label": "Derive where a single flipped bit first arrives",
+          "hints": [
+            {
+              "id": "dependency-hint-1",
+              "content": "W[i] reads W[i-16], W[i-15], W[i-7] and W[i-2]. Solve that the other way round: the words that read a flipped index k are k+16, k+15, k+7 and k+2."
+            },
+            {
+              "id": "dependency-hint-2",
+              "content": "But W[0] through W[15] are inputs — the recurrence only computes indices 16 and above. So candidates below 16 are not answers, and the smallest candidate that reaches 16 is."
+            }
+          ]
+        },
+        {
+          "id": "sigma",
+          "label": "Implement rotr and the four sigmas",
+          "hints": [
+            {
+              "id": "sigma-hint-1",
+              "content": "Suspect `rotr` first: all four sigmas are built on it. Python's left shift does not stop at 32 bits, so the result needs `& 0xFFFFFFFF` to come back to a word. Without it values grow silently and nothing raises."
+            },
+            {
+              "id": "sigma-hint-2",
+              "content": "The amounts are σ0 (7, 18, 3), σ1 (17, 19, 10), Σ0 (2, 13, 22), Σ1 (6, 11, 25). Only the small sigmas' third term is a shift; all three of a big sigma's terms are rotations. Read FIPS 180-4 §4.1.2's table rather than trusting memory."
+            }
+          ]
+        },
+        {
+          "id": "logic",
+          "label": "Implement Ch and Maj",
+          "hints": [
+            {
+              "id": "logic-hint-1",
+              "content": "Check whether you wrote Maj as the parity `a ^ b ^ c`. Write the eight-row single-bit truth table and you will see they agree on only two rows, all zeros and all ones. On the Ch side, check you did not drop the mask on the complement."
+            }
+          ]
+        },
+        {
+          "id": "schedule",
+          "label": "Grow sixteen words into sixty-four",
+          "hints": [
+            {
+              "id": "schedule-hint-1",
+              "content": "The four terms are added, not xored, and the sum is reduced modulo 2^32. This checkpoint does not score your sigmas: the expected value is computed with your own, so a correct recurrence passes even while the sigmas are unfinished."
+            },
+            {
+              "id": "schedule-hint-2",
+              "content": "The indices read are i-16, i-15, i-7 and i-2, with sigma0 on the i-15 side and sigma1 on the i-2 side. Keep the first sixteen words as they came in and append indices 16 through 63, for sixty-four in total."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

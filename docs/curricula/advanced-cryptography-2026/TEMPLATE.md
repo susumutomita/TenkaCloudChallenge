@@ -196,7 +196,8 @@ The verifier runs learner code. Every item below is implemented in
 | Nothing leaks | Responses carry `correct` and at most a property name — never hidden test names, expected values, or reference output |
 | Malformed input never kills the verifier | Body parsing and evaluation are both wrapped; a broken checkpoint returns `correct: false` |
 | Fixtures from the per-deploy seed | `fixtures/generate.py` derives everything from `FLAG_SEED` |
-| Loopback only | Compose binds `127.0.0.1:` on every published port |
+| Loopback only, on the host | Compose publishes `127.0.0.1:<port>:<port>`. This is the half that restricts exposure |
+| Reachable, inside the container | `HTTPServer(("0.0.0.0", port), ...)`. A published port is forwarded to the container's bridge address, so binding the container's own `127.0.0.1` accepts nothing from outside it — refused connection, no scoring, nothing in any log. The careful-looking address is the broken one, and no `make` target crosses this path, so it is invisible while authoring. `scripts/verifier-reachability-guard.test.ts` asserts both halves |
 
 One more, easy to forget: the verifier's access log is silenced. The default
 `BaseHTTPRequestHandler` log would echo request lines, and submissions are request bodies.

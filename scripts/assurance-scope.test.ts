@@ -1,9 +1,10 @@
-import { globSync, readFileSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { readFileSync } from "node:fs";
+import { basename, join } from "node:path";
 import { describe, expect, it } from "bun:test";
+import { localPlayProblemDirs } from "./lib/local-play-problems";
 
 /**
- * Catalog-wide guard on what AC26 local mode is allowed to claim about itself.
+ * Catalog-wide guard on what local mode is allowed to claim about itself.
  *
  * The arrangement is: the participant's submission, `tests/hidden/`, `reference/`, and the
  * mutation suite all live in one Docker image, and the participant owns the machine, the
@@ -26,9 +27,7 @@ import { describe, expect, it } from "bun:test";
 const REPO_ROOT = new URL("..", import.meta.url).pathname;
 const TEMPLATE = join(REPO_ROOT, "docs/curricula/advanced-cryptography-2026/TEMPLATE.md");
 
-const PROBLEM_DIRS = globSync("challenges/ac26-*/metadata.json", { cwd: REPO_ROOT })
-  .map((relative) => dirname(relative))
-  .sort();
+const PROBLEM_DIRS = localPlayProblemDirs(REPO_ROOT);
 
 /**
  * Wording that asserts more than the arrangement can deliver. Each of these was in the
@@ -46,7 +45,7 @@ function read(path: string): string {
   return readFileSync(join(REPO_ROOT, path), "utf8");
 }
 
-describe("AC26 assurance scope", () => {
+describe("local-play assurance scope", () => {
   it("should find problems to check, so a glob matching nothing cannot pass", () => {
     expect(PROBLEM_DIRS.length).toBeGreaterThan(0);
   });

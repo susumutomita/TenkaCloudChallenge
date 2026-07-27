@@ -1,0 +1,151 @@
+# SHA-256 その 3: 圧縮関数と digest、そしてパスワード保存
+
+**難易度:** 4 · **想定時間:** 90〜120 分 · **配点:** 300 · **シリーズ:** SHA-256 全 3 問の 3 問目
+
+## ストーリー
+
+1 問目と 2 問目で入力ができました。この問題は機械そのものです。32 bit 語 8 個を 64 round 回し、
+可逆な撹拌器を一方向関数に変える足し算を入れ、digest にします。
+
+そのあとに、書き終わってからでないと意味が薄い 2 つをやります。avalanche 効果を「そうらしい」と読む
+のではなく自分の実装で実測すること。そして、アルゴリズム全体が手の内にある状態で、いま作った速い
+ハッシュがなぜパスワード保存には向かないのかを答えることです。
+
+パディングとビット演算は `local/given/primitives.py` に正しい実装として与えられているので、この問題は
+単独で解けます。書く関数は 5 つ、全部壊してあります。
+
+## 何がデプロイされるか
+
+コンテナが 1 つだけです。クラウドアカウントも、外部ネットワーク面もありません。
+
+```text
+local/
+├── starter/compress.py   ← 編集するのはこのファイルだけ
+├── given/primitives.py      1 問目と 2 問目。正しい実装。編集しない
+├── fixtures/generate.py     全 fixture を deploy ごとの seed から導出する
+├── tests/public/            読めるテスト
+├── tests/hidden/            verifier が実行するテスト (image 内のみ。bind-mount しない)
+├── reference/               解答。`make build` が作る image には入らない
+├── verifier/server.py       POST /verify。127.0.0.1:18091
+└── mutation.py              hidden test が誤答を本当に落とせるかを証明する
+```
+
+`make build` は Dockerfile の `participant` stage を作ります。fixture・両方のテスト・verifier・
+given の primitives・starter が入り、`reference/` と `mutation.py` は `make reference-test` が作る
+`author` stage でだけ追加されます。つまり「走らせろと言われた image」の中に解答は入っていません。
+これは誤配の防止であって秘匿ではありません (保証範囲を参照)。
+
+fixture は deploy 時に注入される `FLAG_SEED` から導出されます。同じ seed なら同じ数値、違う seed なら
+違う数値です。2 つのクイズは順序も変わるので、他の人の答えの並びは、その人の推論が正しくても
+自分の答えにはなりません。
+
+## 遊び方
+
+```bash
+make inspect                # 自分の fixture と 2 つのクイズ
+make test                   # 公開テスト
+make test-one ID=inverting  # 反復中に 1 つのテストだけ再実行する
+make reset                  # starter/compress.py を元に戻す
+```
+
+`local/starter/compress.py` を開きます。
+
+| 関数 | 満たすべき仕様 |
+|---|---|
+| `round_step(state, k, w)` | 1 round。`(T1+T2, a, b, c, d+T1, e, f, g)` |
+| `compress_rounds(state, schedule)` | 64 round のみ。足し戻しはしない |
+| `compress_block(state, schedule)` | `compress_rounds` の出力に入力状態を足し戻す |
+| `invert_round(state, k, w)` | 1 round を逆にたどる |
+| `invert_rounds(state, schedule)` | 64 round を逆にたどる |
+| `sha256_hex(message)` | digest。小文字 hex 64 文字 |
+
+## 採点
+
+7 つの checkpoint を独立に採点します。誤答は 1 回 15 点減点です。
+
+| Checkpoint | 配点 | 提出するもの |
+|---|---:|---|
+| `round` | 45 | 自分の `compress.py`。`round_step` を検証される |
+| `compress` | 45 | 自分の `compress.py`。64 round と足し戻しを検証される |
+| `feedforward` | 45 | 自分の `compress.py`。逆変換を検証される |
+| `digest` | 55 | 自分の `compress.py`。多様な長さのメッセージで検証される |
+| `avalanche` | 40 | 1 bit 違いの 2 つのメッセージの digest が 256 bit のうち何 bit 違うか |
+| `properties` | 35 | ハッシュ関数についての 10 個の主張の真偽 |
+| `storage` | 35 | パスワード保存についての 10 個の主張の真偽 |
+
+hint は全 checkpoint にあります。すべて開いても 300 点中 153 点は残ります。
+
+## この問題の核心
+
+`feedforward` です。
+
+64 round は情報を 1 bit も捨てていません。各 round で計算されるのは 8 語のうち 2 語で、残る 6 語は
+ずれるだけです。捨てていないということは全体が状態の置換であり、固定された schedule に対して全単射で、
+逆写像が書けます。そして実際に書きます。それがこの checkpoint です。
+
+そこで当然の疑問が出ます。round を逆にたどれるなら、なぜ digest は逆にたどれないのでしょうか。
+
+`compress_block` の最後の 1 行、round 出力に入力状態を足し戻す行があるからです。Davies-Meyer 構成の
+feed-forward と呼ばれます。これがあると、出力から入力状態を求めるには「その状態を入れたときの round
+出力」が必要で、それには入力状態が要る、という循環になります。この循環が構成そのものです。
+
+つまり一方向性は「64 回混ぜたから」生まれていません。足し戻しが無ければ、64 round は 1 round と
+同じくらい簡単に逆算できます。checkpoint は両方を確かめます。逆変換が round を確かに戻すこと、そして
+圧縮済みブロックには戻らないこと。
+
+## 2 つのクイズ
+
+`properties` と `storage` はそれぞれ 10 個の真偽判定です。埋め草ではありません。
+
+`properties` の偽の文はどれも実際に口にされるものです。ハッシュは復号できる。衝突が publish されて
+いないから存在しない。入力が長ければ digest も長い。`storage` の偽の文はどれも実際に出荷されたもの
+です。ソルト付き SHA-256 はパスワードハッシュである。ソルトはテーブル全体で 1 つでよい。SHA-256 を
+自分で loop すれば PBKDF2 である。
+
+文そのものは固定です (seed からまともな主張は生成できません)。seed が変えるのは提示順です。その順で
+T と F を並べて提出してください。
+
+## 公開テストが通っても終わりではない
+
+公開テストが使うメッセージは全部 1 ブロックに収まります。だから最初のブロックだけを圧縮する実装が
+全部通ります。FIPS 180-4 の `abc` 公開テストベクタも通ります。starter の欠陥はこれで、この問題で
+いちばん厄介な種類のバグです。短い入力では正しく、誰もが確認するベクタでも正しく、56 バイトから壊れます。
+
+隠しテストは 0・1・55・56・63・64・65・119・120・191・192 バイトに seed 由来の長さと UTF-8 混在を
+加えて回します。`feedforward` は**検査側が**計算した順方向を逆算させるので、自分の壊れた順方向と
+辻褄が合っているだけの逆変換では通りません。
+
+## 保証範囲
+
+ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image もあなたの管理下に
+あるので、ここには秘匿されているものはありません。`tests/hidden/` を bind-mount せず `reference/` を
+participant image に入れないのは、あなたの作業に紛れ込ませないためであって、手が届かなくするためでは
+ありません。ソースはどちらにせよこのリポジトリにありますし、`author` stage は自分でビルドできます。
+
+verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier をハングさせたり
+クラッシュさせたりできません。checkpoint は echo した id しか加点できません。結果は期待値を漏らし
+ません。fixture はこのデプロイの seed 由来なので、暗記した答えは持ち越せません。
+
+これは自習と誠実な練習を支えます。競技順位・試験・修了判定は**支えません**。それらには participant が
+管理しない verifier が必要で、
+[#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271) で追跡しています。
+
+## コスト
+
+ゼロです。クラウドアカウントも AWS リソースも使いません。手元のコンテナだけです。
+
+## 作問者向け
+
+`make reference-test` が mutation suite を回します。4 つの suite にまたがる 23 個の壊れた実装と、
+verifier 自身を狙った 23 個。後者にはクイズの 1 文字ごとの反転が含まれます。答えの前方一致だけを
+見る verifier は、1 文字反転の 1 件だけなら通ってしまうので、全文字ぶん並べてあります。
+
+一見それらしい変異を 5 つ、意図的に一覧から外してあります。どれも reference と数学的に同値だから
+です。うち 1 つは survived してその位置を得ました。`round_step` に schedule 語と round 定数を逆に
+渡す変異は、T1 の中で足されるだけなので出力が変わりません。入れ替えて書いた学習者は正しいコードを
+書いているのであって、それを落とすテストのほうが間違っています。詳細は `local/mutation.py` の冒頭
+コメントにあります。
+
+`local/given/primitives.py` は K と初期状態を素数の根から導出しています。飾りではありません。64 要素の
+定数表に 1 桁の打ち間違いが混ざると、digest が違うという結果だけが出て手掛かりが何も残りません。
+導出すればその失敗自体が起こりえなくなります。

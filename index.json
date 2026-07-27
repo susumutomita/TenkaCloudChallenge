@@ -1854,6 +1854,85 @@
       }
     },
     {
+      "id": "sha256-bytes-padding",
+      "name": "SHA-256 その 1: バイト列とパディング",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 2,
+      "estimatedDuration": "40〜60 分",
+      "shortDescription": "SHA-256 が最初に見るのは文字列ではなくバイト列。UTF-8 のバイト数、512 bit ブロックへのパディング、末尾 8 バイトのビット長、そして 32 bit ワードのバイト順を、手で数えて実装して確かめる。",
+      "tags": [
+        "sha256",
+        "hash-function",
+        "padding",
+        "endianness",
+        "cryptography-basics",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "sha256-compress-digest",
+      "name": "SHA-256 その 3: 圧縮関数と digest、そしてパスワード保存",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 4,
+      "estimatedDuration": "90〜120 分",
+      "shortDescription": "1 round の T1 / T2、64 round、digest、そして「64 round は可逆で、最後の足し戻しだけが一方向性を作っている」ことを反例で確かめる。最後にハッシュ関数の性質とパスワード保存を問う。",
+      "tags": [
+        "sha256",
+        "hash-function",
+        "compression-function",
+        "avalanche",
+        "password-storage",
+        "cryptography-basics",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "sha256-schedule-logic",
+      "name": "SHA-256 その 2: ビット演算とメッセージスケジュール",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "60〜90 分",
+      "shortDescription": "回転とシフトの違い、σ0 σ1 Σ0 Σ1 の 4 種類のずらし量、Ch が選択回路であること、Maj がパリティではないこと、そして 16 ワードを 64 ワードへ広げる漸化式。SHA-256 の配線を全部自分で書く。",
+      "tags": [
+        "sha256",
+        "hash-function",
+        "bitwise",
+        "message-schedule",
+        "cryptography-basics",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "sqli-demo",
       "name": "スタッフ専用ログイン",
       "category": "Challenge",
