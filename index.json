@@ -2012,6 +2012,35 @@
       }
     },
     {
+      "id": "stackstack-gameday",
+      "name": "StackStack GameDay — 1 日ぶんを 1 本で",
+      "category": "Battle",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 5,
+      "estimatedDuration": "90 分 または 120 分 (切り替え式)",
+      "shortDescription": "天下クラウド株式会社、 入社 4 日目の朝。 前任の SRE はもういない。 CTO はコーヒーを持ったまま席の横に立って、 こう言う ── 「今日は 1 日、 板から手を離さないでほしい」。\n\n社内掲示板に検索を足し、 公開側の入口を開け、 星野デザインにも渡し、 その間ずっと外からのアクセスは止まらない。 途中で書き込みが下流に届かなくなり、 ダッシュボードは緑のまま鳴らない。 終盤には四半期の署名鍵の入れ替えが予定どおり走る。\n\n測られているのは 2 つだけ。 止めていないことと、 開いたままにしていないこと。 片方だけでは満点にならない ── 「安全にするために止めました」 も 「動いてはいます」 も、 どちらも同じだけ足りない。",
+      "tags": [
+        "stackstack",
+        "local-play",
+        "container",
+        "gameday",
+        "web-app",
+        "access-control",
+        "incident-response",
+        "observability",
+        "secrets",
+        "release-engineering"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "stackstack-observability",
       "name": "黙っているアプリに口を割らせる",
       "category": "Challenge",

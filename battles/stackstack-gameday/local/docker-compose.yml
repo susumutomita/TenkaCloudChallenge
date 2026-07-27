@@ -1,0 +1,86 @@
+# Local-play container for the stackstack-gameday Battle.
+#
+# The image is the shared StackStack base app (../../../stackstack-base), not a
+# copy of it. `SCENARIO=gameday` composes the six single-problem scenarios —
+# ship, vibe-build, safe-exposure, secrets, observability, defend — into one
+# continuous event on one board. The gates, the probes and the decision
+# functions are the ones those modules own; nothing is reimplemented here.
+#
+# Both published ports are bound to 127.0.0.1 only: nothing leaves the box.
+# There is no attacker container and no second network. The traffic the Attack
+# phase is judged on is real HTTP that the drill inside `defend.mjs` sends to
+# this same listener, and the READMEs say so plainly rather than implying a
+# separate adversary.
+services:
+  stackstack-gameday:
+    build:
+      context: ../../../stackstack-base
+      dockerfile: Dockerfile
+    environment:
+      SCENARIO: gameday
+
+      # The event's length. Exactly 90 or 120; anything else is a boot failure
+      # rather than a silent fall back, because an organiser who discovers forty
+      # minutes in that their 120-minute event is running the 90-minute schedule
+      # has no way to recover. Switch it with:
+      #   STACKSTACK_GAMEDAY_MINUTES=120 make local PROBLEM=stackstack-gameday
+      STACKSTACK_GAMEDAY_MINUTES: "${STACKSTACK_GAMEDAY_MINUTES:-90}"
+
+      # Rehearsal only: divides every wall-clock interval in the schedule, so an
+      # organiser (and this problem's own test suite) can walk a full event in
+      # seconds. It changes how long you wait, never what is required.
+      STACKSTACK_GAMEDAY_SCALE: "${STACKSTACK_GAMEDAY_SCALE:-1}"
+
+      # The two access documents. Both modules that read one of these look at
+      # ACCESS_POLICY, which can only ever be right for one of them, so the
+      # gameday scenario resolves them from these two variables instead and the
+      # participant gets two clearly named files rather than one ambiguous one.
+      GAMEDAY_EXPOSURE_POLICY: /app/access/access.json
+      GAMEDAY_DESK_POLICY: /app/policy/access.json
+
+      # Halved from the single-problem default: six modules share one process for
+      # up to two hours, and the drafts drill is the largest single source of
+      # loopback traffic in the container.
+      DEFEND_INTERVAL_MS: "2000"
+
+      # Paths in the participant's checkout, which are not the paths the app
+      # reads (every directory below is mounted under /app). Display only.
+      CONFIG_HINT: problems/battles/stackstack-gameday/local/config/app.json
+      FEATURE_HINT: problems/battles/stackstack-gameday/local/feature/search.mjs
+      RELEASE_HINT: problems/battles/stackstack-gameday/local/release/release.json
+      ACCESS_HINT: problems/battles/stackstack-gameday/local/access/access.json
+      POLICY_HINT: problems/battles/stackstack-gameday/local/policy/access.json
+      RELAY_HINT: problems/battles/stackstack-gameday/local/relay/relay.json
+      OPS_HINT: problems/battles/stackstack-gameday/local/ops/ops.json
+
+      # Per-deploy random secret injected by `make local`. Every unguessable
+      # value — the board serial, the artifact id, the account keys, the shard
+      # codes, the leaked marker — is derived from it inside the container. Gate
+      # receipts come from a separate boot secret that was never in the
+      # environment.
+      FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
+    volumes:
+      # The participant's own checkout, read-only. One file per phase; every one
+      # of them is re-read as it is used, so a save takes effect immediately.
+      - ./config:/app/config:ro
+      - ./feature:/app/feature:ro
+      - ./release:/app/release:ro
+      - ./access:/app/access:ro
+      - ./policy:/app/policy:ro
+      - ./relay:/app/relay:ro
+      - ./ops:/app/ops:ro
+    ports:
+      - "127.0.0.1:18080:8080" # the board, every phase surface, and the event console
+      - "127.0.0.1:18081:8081" # loopback /verify
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: "2s"
+      timeout: "3s"
+      retries: 20
+    restart: "no"
