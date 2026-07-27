@@ -1,0 +1,317 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "stackstack-gameday",
+  "name": "StackStack GameDay — 1 日ぶんを 1 本で",
+  "category": "Battle",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 5,
+  "estimatedDuration": "90 分 または 120 分 (切り替え式)",
+  "shortDescription": "天下クラウド株式会社、 入社 4 日目の朝。 前任の SRE はもういない。 CTO はコーヒーを持ったまま席の横に立って、 こう言う ── 「今日は 1 日、 板から手を離さないでほしい」。\n\n社内掲示板に検索を足し、 公開側の入口を開け、 星野デザインにも渡し、 その間ずっと外からのアクセスは止まらない。 途中で書き込みが下流に届かなくなり、 ダッシュボードは緑のまま鳴らない。 終盤には四半期の署名鍵の入れ替えが予定どおり走る。\n\n測られているのは 2 つだけ。 止めていないことと、 開いたままにしていないこと。 片方だけでは満点にならない ── 「安全にするために止めました」 も 「動いてはいます」 も、 どちらも同じだけ足りない。",
+  "instructions": "## はじめに\n\n1 つのアプリを、 1 本のイベントとして 90 分 (または 120 分) 通しで運用します。 工程は 参加 → 作る → 出す → 公開範囲 → 攻撃を受けながら → 障害 → 立て直す の 7 つ。 それぞれの工程は、 前の工程が終わったか、 予定時刻が来たかのどちらか早いほうで開きます。 詰まっても置いていかれません。\n\n触るファイルは工程ごとに 1 枚ずつ、 すべて自分のチェックアウトの中にあります。 どれも保存すればすぐ効きます (再起動は不要)。\n\n## 最初の一手\n\n1. `http://127.0.0.1:18080/` を開く。 見出しの下に board serial が出ています。 それが最初のチェックポイントの答えです (ここまで 2 分)\n2. `http://127.0.0.1:18080/gameday` を開く。 いまの工程、 予定表、 いま何が緑で何が赤か、 どのファイルを触るかが 1 画面に出ます\n3. 投稿の受付を開き (`local/config/app.json`)、 自分で 1 件書く。 そこから先の工程が開きます\n\n## ゴール\n\n7 つの工程をすべて緑にし、 **可用性と安全性を同時に**、 途切れさせずに保つこと。 合格印は最後の工程が開いたあと、 両方そろった状態が続いた時間が必要な長さに達して初めて出ます。 どちらかが欠けた瞬間に 0 に戻ります。\n\n一度でも動いた経路は、 そこから先ずっと採点されます。 落とした時間は返ってきません ── 残りは `GET /gameday` の 「使った猶予」 に出ています。\n\n## 時間の切り替え\n\n90 分と 120 分の 2 通り。 `STACKSTACK_GAMEDAY_MINUTES=120 make local PROBLEM=stackstack-gameday` で切り替わります。 変わるのは工程が開く時刻と合格印に必要な保持時間だけで、 要求されるものは 1 つも変わりません。",
+  "description": "## 目的\n\nStackStack ファミリーの 7 問を、 1 つの共有ベースアプリの上で 1 本の連続イベントとして走らせる。 単問では別々に測っていた 「攻撃を止めたこと」 と 「サービスが動き続けていること」 を、 イベント全体を通して**同時に**測る。\n\n## 構成方法 (= 再実装ではない)\n\n`SCENARIO=gameday` は `stackstack-base/app/scenarios/gameday.mjs` 1 枚で、 ship / vibe-build / safe-exposure / secrets / observability / defend の 6 モジュールを **import して合成**する。 採点対象の述語はすべて各モジュールの `gates` から取った関数オブジェクトそのもので、 コピーではない。 その出所は boot 時に identity 比較で決定され `GET /gameday/state` の `composition.facts` に出る (テストが機械的に検証する)。 単問側を直せば GameDay にも届く。\n\n再表現したのは受領証の層だけ。 `gateToken(name)` は gate 名だけをキーにするため、 `service_intact` という名前の gate を持つモジュールが 3 つある以上、 1 プロセス内では受領証が衝突する。 そこで GameDay は `gameday_*` の名前で自分の受領証を発行する。 測定はすべて import。\n\n## AWS の `battles/stackstack` を拡張しなかった理由\n\nあちらは CFn の `phased-polling` Battle で、 EC2 上のアプリが `/meta` と `/score` を返す。 JavaScript の scenario module はそこでは動かない。 「単問のロジックを再利用する」 をあちらで実現すると、 6 つの gate 群と 6 つの probe 群を EC2 側の言語で書き直すことになり、 共有テストのない 2 つ目の実装ができ、 どちらかを直した瞬間に乖離する。 しかも AWS アカウントなしでは検証できない。 既存の Battle は一切変更していない。\n\n## 連続採点 (A × S)\n\n`TICK_MS` (既定 2000) ごとに 2 つの割合を出す。\n\n- **A (可用性・通常利用)** ── 板が読める / 公開側の入口が応答する / 検索が結果の形を返す / 下書きの机が正規利用者に応えている (drill の実測) / 夜間ジョブがいまの設定で通る / 先方が障害ページを開ける (障害工程から)\n- **S (安全性)** ── 机の認可 / portal の認証・認可 / 公開アーカイブの範囲 / ops 権限の広さ / ログに資格情報が乗っていないこと / リリースが鍵の参照を持っていること\n\n1 tick の寄与は **A + S ではなく A × S**。 A = 0 の tick は S が何であっても 0 点。 「安全にするために止める」 が加点上まったく得にならないのは加算ではなく積だから。\n\n## 満点が止めても開いたままでも取れない仕組み\n\n積だけでは 「落として直して戻す」 が残る。 連続点はコンテナの中の数字で、 プラットフォームが記録するのは 8 つの checkpoint 判定だけなので、 積だけでは順位に届かない。 そこで**劣化を単調カウンタで持ち、 判定時の述語にする**。\n\n- 一度でも緑になった経路は commit され、 以後 tick ごとに `armedTicks` が増える。 緑でない tick は `degradedTicks` が増える。 どちらも減らない。\n- `degradedTicks <= 0.05 × armedTicks` が **join 以外のすべての phase check と合格印の必須条件**。 再起動でも後からの修復でも戻らない。\n- 合格印はさらに 「A も S も欠けない状態が hold 時間 (90 分設定で 5 分 / 120 分設定で 8 分) 続いたこと」 を判定時に再測定する。 どちらかが欠けた tick で `perfectSince` は null に戻る。\n\n止めて直した teamは猶予を使い切って phase check ごと落ちる。 動かしたまま塞がなかった team は S が 1 に届かず hold が始まらない。\n\n## 連鎖 (1 つの修正が後の工程に効く)\n\n1. **出す → 立て直す**: `release.json` に鍵の値を貼ると health gate は通り `site_serving` は緑になる。 予定された四半期の鍵入れ替えが立て直し工程の頭で走ると、 貼った鍵は受理されなくなり公開側が 503 に落ちる。 参照 (`{\"fromSecret\": ...}`) で出していた team には何も起きない。 入れ替えは板の投稿と工程ブリーフで事前に予告してあり、 障害注入ではない。\n2. **公開範囲 → 障害**: `access.json` は `portal` 以下すべてを管轄する ── 書かれた時点で存在しなかった画面も含めて。 障害工程で星野デザインの担当者が `portal/incident` を見に来る。 この経路は safe-exposure の probe 群が一切触らないので、 公開範囲工程の gate からは何も導かれない。 deny 既定なら先方が入れず、 allow 既定なら鍵なしでも開く。 判定は `safeExposure.decide` そのもの (実リクエストと同じ 1 本の判定路)。 障害工程の 1 つ前から**採点せずに**表示しているので、 不意打ちにはならない。\n3. **障害 → 立て直す**: 落ちている書き込みを見るには relay のログを on にするしかない。 on にした瞬間、 既定の詳細度ではログに資格情報が乗り始め、 それは無認証の `GET /api/logs` に出る。 `masked` は先頭が残るので通らない (照合は前方一致)。 `minimal` は調査に要る項目まで落ちるので通らない。 通るのは 1 つだけで、 すでに書かれた行は消えないため、 本当の答えは資格情報のほうを回す。\n\n## 工程の開き方\n\n| 工程 | 開く条件 |\n|---|---|\n| 参加 | t=0 (常に開いている) |\n| 作る | 参加の状態条件 (受付が開き投稿が 1 件ある) または 8 分 |\n| 出す | 作るの gate または 20 分 |\n| 公開範囲 | 出すの gate または 30 分 |\n| 攻撃を受けながら | 公開範囲の gate または 42 分 |\n| 障害 | relay が 1 件でも落とした (状態条件) または 55 分 |\n| 立て直す | 70 分 (時刻条件のみ。 予定された鍵入れ替えはここで走る) |\n\n時刻は 90 分設定のもの。 120 分設定では 10 / 26 / 40 / 56 / 74 / 95 分。 **時刻条件は飾りではない**: 工程が開くまでその phase gate は false なので `/posture` は受領証を出さず、 checkpoint を前倒しで取ることはできない。\n\n## 最初の 1 点\n\n`join` は板の serial 1 つ。 ページを 1 枚開くだけで、 設定の編集も投稿も要らない。 どの team も数分で 1 点入る ── 「15 分以内に最初の点」 が平均ではなく下限であるために、 一番安い check を一番最初に置いてある。\n\n## 意図的にやらないこと\n\n- **プラットフォーム側の連続採点**。 `endpoints[].default.from` は `cfn-output` のみなので、 container 問題にはプラットフォームが probe できる URL が無い。 連続点はコンテナ内にあり、 外へは 8 つの checkpoint 判定としてだけ出る。 プラットフォーム可視の連続点にはスキーマとプラットフォーム両方の変更が要り、 それはカタログ側 PR の裁量ではない (AGENT.md 「Extending the platform contract」)。\n- **`phases[]` / `disruptions[]` の宣言**。 `phases[].effect` は `scorePathOverride` と `switchPlatformToDegraded` だけで、 どちらも `phased-polling` に紐づく。 ここで宣言しても何も起きない機構を約束することになるので書かない (AGENT.md §11)。 工程はコンテナが強制する。 鍵入れ替えも障害注入ではなく予告された定期作業なので disruption ではない。\n- **チーム横断の集計**。 local play は 1 人 1 コンテナで中央サーバが無い。 `GET /gameday/results` は 1 run ぶんで、 主催者が終了時に各チームから回収する。\n- **結果の改竄防止**。 `FLAG_SEED` は環境変数で届き、 参加者は自分のマシンの持ち主なので、 それで署名した結果は偽造できる。 results は運用記録であって不正防止機構ではない。 正本はプラットフォームが記録した `/verify` 判定 (受領証は boot 時の別秘密から derive され、 導出不可能)。\n- **送信元アドレスによる遮断**。 全 probe が loopback の同一送信元なので、 試させていないものを 「防いだ」 と採点しない (defend.mjs の方針をそのまま継承)。\n\n## 未検証のまま残っていること (status: draft の理由)\n\n- 90 分での完走可能性は**見積もりであって計測ではない**。 各工程は starter が 「1 回の切り分け + 1 回の編集」 で済むように置いてあるが、 通しのプレイテストはまだ通っていない。 溢れた場合の正直な直し方は、 工程の要求を下げること (例: 作る工程を `drafts_withheld` だけにする) であって、 合格印を緩めることではない。\n- `make local` での実機 1 回。 テスト一式は Bun 上の実アプリを実 HTTP で駆動しており Docker も AWS も要らないが、 compose ファイル自体は `bun run validate` と local-play manifest 検査までしか通っていない。\n- 6 モジュール同居の長時間耐久 (2 時間の実走)。 定常でおよそ毎秒 10 数リクエストの loopback が 1 プロセス内で走る。",
+  "writeup": "## 何を測っていたのか\n\n2 つの数字を、 イベントのあいだじゅう同時に。 動いていること (A) と、 閉じていること (S)。 1 tick の点は A + S ではなく A × S で、 A = 0 の tick は S が満点でも 0 だった。 現場で 「攻撃は止まりました」 が価値を持つのは、 サービスが動いているときだけだからだ。\n\n## なぜ 「落として直して戻す」 が通らなかったのか\n\n積だけなら通る。 落ちているあいだ加点が無いだけで、 戻したあとに満点を取れてしまう。 だから劣化そのものを単調カウンタで持った ── 一度動いた経路が動かなかった tick は、 直したあとも減らない。 猶予は commit された時間の 5% で、 それを超えると phase check も合格印も落ちる。 エラーバジェットというのは本来そういうもので、 「今月はもう使い切ったので新しいことはやらない」 という判断の材料になるから意味がある。\n\n## なぜ 「動いてはいます」 も通らなかったのか\n\nS が 1 に届かないかぎり `perfectSince` は始まらない。 合格印は 「両方そろった状態が hold 時間続いたこと」 を判定時に測り直すので、 1 つでも塞ぎ残しがあるとタイマーが 1 度も動かない。 受領証を先に集めて後から壊す、 もできない ── `/posture` は gate が true のあいだしか受領証を出さない。\n\n## 3 つの連鎖\n\n**鍵を貼ったこと**は、 貼った瞬間には何も起こさない。 health gate は 「いまの鍵で署名できるか」 しか見ないので、 コピーしたてなら通る。 効いてくるのは次の入れ替えのときで、 それは今日の終盤に予定されていた。 これが本番で 「タスク定義に環境変数として鍵を書く」 と 「シークレットストアを参照する」 の違いそのものだ。 前者は次のローテーションまで完璧に動く。\n\n**公開範囲を deny 既定で書いたこと**は正しい判断で、 そのうえで新しい画面には明示の許可が要る。 障害の最中に新しい画面を出すことになって初めてそれに気づくのは、 現場でもよくある順番だ。 逆に allow 既定で個別に deny を積んでいた場合は、 新しい画面が最初から公開されている。 どちらの形も 1 か所の追記で直るが、 直すべき場所は正反対になる。\n\n**ログを on にしたこと**は障害を見るために必要で、 それが資格情報の流出を作った。 `masked` が通らないのは、 照合が前方一致だからだ ── 値の後ろを伏せても、 前が残っていれば回すべき理由には十分足りる。 `minimal` が通らないのは、 秘密と一緒に調査に要る項目まで消えるからだ。 そして一度書かれた行は消えない。 だから答えは 「ログを直す」 ではなく 「資格情報のほうを回す」 になる。\n\n## 次にやること\n\n同じ考え方が AWS 側では `stackstack` Battle の 6 つの production gate と `anonymous-spam` の攻撃 probe になる。 そこでも 「攻撃が止まったこと」 と 「正常利用が続いていること」 は別々に測られる。 コードは共有していない ── あちらは CFn の上で動く別の実装で、 共有しているのは板という題材と、 この 2 つを同時に見るという考え方だけだ。",
+  "tags": [
+    "stackstack",
+    "local-play",
+    "container",
+    "gameday",
+    "web-app",
+    "access-control",
+    "incident-response",
+    "observability",
+    "secrets",
+    "release-engineering"
+  ],
+  "exposedPorts": [
+    { "port": 18080, "name": "Web (board, every phase surface, and the event console)" },
+    { "port": 18081, "name": "/verify (loopback)" }
+  ],
+  "learningGoals": [
+    "可用性と安全性を同時に測られる状況で、 片方を犠牲にする判断が採点上どう扱われるかを体で理解する",
+    "エラーバジェットを 「使い切ったら戻らないもの」 として扱う運用感覚を身につける",
+    "1 つの工程で下した判断が、 数十分後の別の工程で結果になって返ってくる経験をする",
+    "deny 既定の認可document が、 書かれた時点で存在しなかった経路にも効くことを走っているアプリで確かめる",
+    "調査のために開けたものを閉じ忘れる、 という最も再現性の高い事故を自分の手で作って直す"
+  ],
+  "i18n": {
+    "en": {
+      "name": "StackStack GameDay — A Whole Day, In One Run",
+      "shortDescription": "TenkaCloud, the morning of your fourth day. The previous SRE is gone. The CTO stands by your desk with a coffee and says: \"Today I want you to keep your hands on the board all day.\"\n\nThe internal message board gets a search feature, a public entrance, and a customer. Traffic never stops. Partway through, writes stop arriving downstream while the dashboard stays green and nothing pages. Late in the day, the quarterly signing-key rotation runs exactly as scheduled.\n\nTwo things are measured, all day. That you did not take it down, and that you did not leave it open. Neither on its own is full marks — \"we stopped it to make it safe\" and \"well, it is still running\" fall exactly as short as each other.",
+      "instructions": "## Start here\n\nOne application, run as one continuous 90- (or 120-) minute event. Seven phases: Join, Build, Ship, Expose, Attack, Incident, Stabilize. Each opens when the previous one is done or when its scheduled time arrives, whichever comes first — being stuck never locks you out of the rest.\n\nOne file per phase, all in your own checkout. Every one of them is re-read as it is used, so a save takes effect immediately (no restart).\n\n## First move\n\n1. Open `http://127.0.0.1:18080/`. The board serial is printed under the heading. That is the answer to the first checkpoint (two minutes)\n2. Open `http://127.0.0.1:18080/gameday`. It shows the current phase, the schedule, what is green and what is red right now, and which file each phase touches\n3. Open the board for posts (`local/config/app.json`) and write one yourself. That is what opens the phases after it\n\n## Goal\n\nGet all seven phases green and hold availability and security **at the same time**, without a break. The sign-off appears only after the last phase opens and both have been whole for the required hold. The moment either one is short, the hold resets to zero.\n\nAny path that has ever worked is scored from then on. Time it was down does not come back — what is left of the allowance is on `GET /gameday`.\n\n## Switching the length\n\nTwo settings, 90 and 120 minutes: `STACKSTACK_GAMEDAY_MINUTES=120 make local PROBLEM=stackstack-gameday`. What changes is when each phase opens and how long the sign-off hold is. Nothing that is required changes.",
+      "description": "## Purpose\n\nRun the seven StackStack problems as one continuous event on one shared base application, and measure \"the attack was stopped\" and \"the service kept working\" **at the same time** across the whole run rather than one problem at a time.\n\n## How it is composed (and why that is not a reimplementation)\n\n`SCENARIO=gameday` is one file, `stackstack-base/app/scenarios/gameday.mjs`, which **imports and composes** six modules: ship, vibe-build, safe-exposure, secrets, observability, defend. Every scored predicate is the function object taken from that module's own `gates` export — not a copy. Its provenance is decided at boot by identity comparison and published on `GET /gameday/state` under `composition.facts`, and the test suite asserts it. Fixing a single problem reaches the GameDay too.\n\nOnly the receipt layer is re-expressed. `gateToken(name)` is keyed on the gate name alone, and three of the imported modules declare a gate called `service_intact`, so inside one process their receipts would collide. The GameDay therefore mints its own under `gameday_*` names. Every measurement behind them is imported.\n\n## Why the AWS `battles/stackstack` was not extended instead\n\nThat one is a CloudFormation `phased-polling` Battle whose EC2 app serves `/meta` and `/score`. A JavaScript scenario module cannot run there. \"Reuse each single problem's logic\" would mean rewriting six gate families and six probe families in that host's own language: a second implementation, no shared test suite, drifting the first time either side is edited, and unverifiable without a live AWS account. The existing Battle is untouched.\n\n## Continuous scoring (A × S)\n\nEvery `TICK_MS` (2000 by default) two fractions are computed.\n\n- **A (availability and normal use)** — the board is readable / the published entrance answers / search returns the shape of a result / the drafts desk is serving its legitimate users (measured by the drill) / the nightly job passes under the configuration in force now / the customer can open the incident page (from the Incident phase).\n- **S (security)** — desk authorization / portal authentication and authorization / what the public archive surface may publish / how wide the ops credential's permissions are / no credential on a surface this app serves / the release holds a reference to the key rather than a copy.\n\nOne tick's contribution is **A × S, not A + S**. A tick with A = 0 is worth zero whatever S is. Perfect security is worth literally nothing while the service is dark, and that is a property a sum does not have.\n\n## How full marks stay out of reach for both shortcuts\n\nA product alone still leaves \"go dark, fix everything in peace, come back clean\". The continuous number lives inside the container and the platform records only the eight checkpoint verdicts, so a product alone never reaches the ranking. So **degradation is kept as monotone counters and read back as a predicate at verdict time**.\n\n- A path that has ever been green is committed; from then on every tick increments `armedTicks`, and every tick it is not green increments `degradedTicks`. Neither ever decreases.\n- `degradedTicks <= 0.05 × armedTicks` is a required conjunct of **every phase check after Join, and of the sign-off**. No restart and no later repair gives it back.\n- The sign-off additionally re-measures, at verdict time, that A and S have both been whole without one tick's interruption for the hold (5 minutes at the 90-minute setting, 8 at the 120-minute one). Any tick where either was short resets `perfectSince` to null.\n\nA team that took the service down to fix things spends the allowance and loses the phase checks with it. A team that stayed up and left something open never gets S to 1, so the hold never starts.\n\n## The chains (one fix decides a later phase)\n\n1. **Ship → Stabilize.** Pasting the key value into `release.json` passes the health gate and turns `site_serving` green, because that gate only asks whether the candidate can sign with the key the store holds now. When the scheduled quarterly rotation runs at the start of Stabilize, the pasted key is no longer accepted and the published entrance falls to 503. A team that shipped a reference (`{\"fromSecret\": ...}`) notices nothing. The rotation is announced on the board from minute one and in the Ship brief; it is scheduled maintenance a correct release survives, not injected failure.\n2. **Expose → Incident.** `access.json` governs everything under `portal` — including surfaces that did not exist when it was written. During Incident the customer starts polling `portal/incident`. None of safe-exposure's probe groups touch that path, so nothing about it is implied by the Expose gates: deny-by-default shuts the customer out, allow-by-default leaves it open with no key. The decision is `safeExposure.decide` itself, the same single decision path a real request takes. The probe is displayed **unscored** from the phase before, so it is never a surprise.\n3. **Incident → Stabilize.** The only way to see the writes being lost is to turn the relay's log on, and the moment it is on the credential starts appearing in it — on the unauthenticated `GET /api/logs`. `masked` does not pass, because the match is on a prefix. `minimal` does not pass, because it removes the fields the investigation needs along with the secret. One setting passes, and the lines already written keep what they were written with — which is why the real answer is to rotate the credential rather than to edit the past.\n\n## How phases open\n\n| phase | opens when |\n|---|---|\n| Join | t = 0 (always open) |\n| Build | Join's state condition (posting open and one post written) or 8 min |\n| Ship | Build's gate or 20 min |\n| Expose | Ship's gate or 30 min |\n| Attack | Expose's gate or 42 min |\n| Incident | the relay has dropped at least one write (state) or 55 min |\n| Stabilize | 70 min (time only; the scheduled key rotation runs here) |\n\nTimes are the 90-minute setting; at 120 they are 10 / 26 / 40 / 56 / 74 / 95. **The time conditions are not decoration**: a phase's gate is false until its phase opens, so `/posture` withholds the receipt and the checkpoint cannot be banked early.\n\n## The first point\n\n`join` is the board's serial: one page load, no config edit, no write. Every team scores within a few minutes, including one that is stuck on everything else — \"a first score inside fifteen minutes\" is a floor, not an average, so the cheapest check is the first one.\n\n## Deliberate non-goals\n\n- **Platform-side continuous scoring.** `endpoints[].default.from` is an enum of `cfn-output` only, so a container problem has no URL the platform's scoring engine can probe. The continuous number lives in the container and reaches the platform only as eight checkpoint verdicts. Making it platform-visible needs a schema and platform change, which is not a catalog PR's to invent (AGENT.md, \"Extending the platform contract\").\n- **Declaring `phases[]` / `disruptions[]`.** `phases[].effect` accepts only `scorePathOverride` and `switchPlatformToDegraded`, both bound to `phased-polling`; declaring them would promise machinery that does not exist (AGENT.md §11). The phases are enforced by the container. The key rotation is announced scheduled maintenance, not platform fault injection.\n- **Cross-team aggregation.** Local play is one container per player with no central server. `GET /gameday/results` is one run's record, collected by the organiser at the end.\n- **Tamper-proof results.** `FLAG_SEED` arrives in the environment and the participant owns the machine, so anything this container signs is forgeable by them. The results ledger is an operational record, not an anti-cheat mechanism; the authoritative seam is the platform-recorded `/verify` verdicts, whose receipts come from a per-boot secret.\n- **Source-address blocking.** Every probe arrives on loopback from the same process, so an answer that was never testable is never scored as a defence (inherited from defend.mjs).\n\n## What is still unverified (why `status: draft`)\n\n- Finishing inside 90 minutes is **an estimate, not a measurement**. Each phase ships a starter that is one diagnosis and one edit from correct, but no end-to-end playtest has been run. If it overruns, the honest fix is to lower a phase's requirement (for example, Build requiring only `drafts_withheld`), not to loosen the sign-off.\n- One real `make local` run. The suite drives the real app over real HTTP under Bun with no Docker and no AWS, but the compose file itself is covered only by `bun run validate` and the local-play manifest checks.\n- A long soak with all six modules resident. Steady state is roughly a dozen loopback requests per second inside one process, for up to two hours.",
+      "writeup": "## What was actually being measured\n\nTwo numbers, at the same time, all day: that it was working (A) and that it was closed (S). A tick's score was A × S, not A + S, so a tick with A = 0 was worth nothing however perfect the security was. \"We stopped the attack\" is only worth something while the service is up.\n\n## Why \"take it down, fix it, bring it back\" did not work\n\nUnder a product alone it would have. Going dark only costs you the points you did not earn while dark; you can still be perfect afterwards. So the degradation itself was kept as a monotone counter — ticks where a path that had once worked did not work do not decrease when you fix it. The allowance is 5% of the time a path has been committed, and blowing it fails the phase checks and the sign-off. That is what an error budget is for: it is only meaningful because it can run out.\n\n## Why \"well, it is still running\" did not work either\n\n`perfectSince` never starts while S is short of 1. The sign-off re-measures, at verdict time, that both have been whole for the hold — so one thing left open means the timer never starts once. Collecting the receipt early and breaking something afterwards does not work either: `/posture` emits a receipt only while its gate is true.\n\n## The three chains\n\n**Pasting the key** does nothing at the moment you paste it. The health gate only asks whether the candidate can sign with the key the store holds right now, and a fresh copy can. It matters at the next rotation, which was on today's schedule. That is exactly the difference between putting a secret in a task definition's environment and pointing it at a secret store: the first one works perfectly until the next rotation.\n\n**Writing the access document deny-by-default** was the right call, and it means every new surface needs an explicit grant. Finding that out while shipping a new surface during an outage is a common order of events. If you went allow-by-default with individual denies instead, the new surface was public from the start. Both shapes are one line to fix, and the line goes in opposite places.\n\n**Turning the log on** was necessary to see the incident, and it created the leak. `masked` does not pass because the match is on a prefix — blanking the tail still leaves enough in the line to be worth rotating over. `minimal` does not pass because it takes the fields the investigation needs along with the secret. And the lines already written keep what they were written with, which is why the answer is to rotate the credential rather than to edit history.\n\n## Next\n\nThe same shape appears on AWS as the `stackstack` Battle's six production gates and its `anonymous-spam` probe, where \"the attack stopped\" and \"legitimate use continued\" are again measured separately. No code is shared — that one is a different implementation on CloudFormation. What is shared is the board as a subject, and the habit of watching both numbers at once.",
+      "learningGoals": [
+        "Feel, under measurement, how a decision that trades availability for security (or the reverse) is scored",
+        "Treat an error budget as something that runs out and does not come back",
+        "Experience a decision made in one phase arriving as a consequence forty minutes later",
+        "Confirm on a running app that a deny-by-default authorization document also governs paths that did not exist when it was written",
+        "Create and then close the most reproducible incident there is: something opened for an investigation and left open"
+      ],
+      "checks": [
+        {
+          "id": "join",
+          "label": "Arrive at the board",
+          "hints": [
+            {
+              "id": "gameday-join-1",
+              "content": "Open `http://127.0.0.1:18080/` in a browser, or `curl -s http://127.0.0.1:18080/api/board | jq -r .serial`. The value starts with `SS-`. Submit it exactly."
+            }
+          ]
+        },
+        {
+          "id": "build",
+          "label": "The archive search answers, and returns only what may be returned",
+          "hints": [
+            {
+              "id": "gameday-build-1",
+              "content": "`GET /api/spec` is the requirement list the running app carries (R1–R9), and `GET /api/selfcheck` runs exactly the measurement scoring runs, reporting which rule failed with expected-versus-actual. The implementation you inherited passes most of them."
+            },
+            {
+              "id": "gameday-build-2",
+              "content": "Compare what `GET /api/archive` publishes with what `GET /api/search?q=…` returns for the same term. The entries the app hands your code are not all the entries the app publishes. The receipt is on `GET /posture` under `tokens.gameday_build`, and it appears only while the phase is open, the search answers, and nothing that should be withheld comes back."
+            }
+          ]
+        },
+        {
+          "id": "ship",
+          "label": "The published entrance answers, and the release plane is tidy",
+          "hints": [
+            {
+              "id": "gameday-ship-1",
+              "content": "`GET /shipyard` is the release console. It lists the artifacts that exist, the manifest shape, and the release records — including one the predecessor left behind. `POST /shipyard/releases` deploys whatever `release.json` says right now."
+            },
+            {
+              "id": "gameday-ship-2",
+              "content": "`site_serving` needs the published entrance to have answered 200 to somebody other than the scorer, so open `/site` yourself after a successful deploy. `single_release` needs exactly one record left and it has to be the live one. `GET /shipyard/state` shows both. There is a third thing about the release the console reports but this checkpoint does not grade — read it before the end of the event."
+            }
+          ]
+        },
+        {
+          "id": "expose",
+          "label": "The customer has the board, and only what they should",
+          "hints": [
+            {
+              "id": "gameday-expose-1",
+              "content": "`GET /portal` is the review console and `GET /portal/review` is the probe-by-probe breakdown: what was expected, what came back, and which rule decided it. Neither is governed by the document, so you cannot lock yourself out of them."
+            },
+            {
+              "id": "gameday-expose-2",
+              "content": "Three groups have to be green at once: the admin surface answers only the admin, nobody's drafts reach anybody else, and monitoring plus every account's own reads keep working. The requirement vocabulary and the path-matching rule are printed on `/portal`. Remember that the document decides every path under `portal`, not only the ones on that page."
+            }
+          ]
+        },
+        {
+          "id": "attack",
+          "label": "The drafts desk holds, without stopping anyone legitimate",
+          "hints": [
+            {
+              "id": "gameday-attack-1",
+              "content": "`GET /desk` lists the accounts and their tokens; `GET /api/drill` is the running measurement, round by round, with the last failures reported as symptoms. The operations rule this desk is supposed to follow is a post on the board."
+            },
+            {
+              "id": "gameday-attack-2",
+              "content": "Both numbers are watched every round: nothing forbidden got through, and every entitled listing matched exactly. A refusal only counts if the policy decided it — a `503` or a `429` counts as broken. Draft ids rotate, so a policy naming the ids that exist now goes stale inside one window."
+            }
+          ]
+        },
+        {
+          "id": "incident",
+          "label": "The lost writes are visible, and the health check tells the truth",
+          "hints": [
+            {
+              "id": "gameday-incident-1",
+              "content": "`GET /metrics` has the numbers and `GET /relay/state` has the relay's current settings and what its health check is looking at. Only posts you write yourself flow through the relay — the seeded ones predate it — so write several and watch where they land."
+            },
+            {
+              "id": "gameday-incident-2",
+              "content": "Three things have to hold: both outcomes are really happening, the app is writing down the ones it loses, and the health condition is right in every world (including the one where the thing it looks at fails) and has actually been run since it was written. Whatever you turn on here, check afterwards what `GET /api/logs` now carries — that surface needs no key."
+            }
+          ]
+        },
+        {
+          "id": "stabilize",
+          "label": "Everything opened during the day is closed again",
+          "hints": [
+            {
+              "id": "gameday-stabilize-1",
+              "content": "`GET /api/ops` is the ops console and `GET /api/ops/policy` lists every action this API has, what each one does, and which are allowed under the manifest right now. `GET /api/ops/state` shows whether the nightly job is passing as configured."
+            },
+            {
+              "id": "gameday-stabilize-2",
+              "content": "Five facts at once: the published credential is closed in the store, the ops identity can do what the nightly job needs and nothing else, the job still passes, the relay log is being written and does not carry the credential, and the release survives the next key rotation. The quarterly rotation runs at the start of this phase, so check `GET /site/healthz` and `GET /shipyard/state` even if nothing looked wrong before."
+            }
+          ]
+        },
+        {
+          "id": "signoff",
+          "label": "Sign-off: held up and closed, at the same time",
+          "hints": [
+            {
+              "id": "gameday-signoff-1",
+              "content": "`GET /gameday` shows both fractions, what is red in each, and how long they have both been whole. The sign-off receipt appears on `GET /posture` only while every phase is green, the hold is satisfied, and the availability allowance is not spent."
+            },
+            {
+              "id": "gameday-signoff-2",
+              "content": "`curl -s http://127.0.0.1:18080/gameday/score | jq` gives `heldForMs` against `holdMs` and the allowance you have used. The hold resets to zero the moment either fraction is short, so once everything is green, leave it alone and let it run. The allowance does not reset."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Web": "http://127.0.0.1:18080"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": ["FLAG_SEED"]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "join",
+        "label": "板に着く",
+        "points": 60,
+        "wrongAnswerPenalty": 3,
+        "hints": [
+          {
+            "id": "gameday-join-1",
+            "content": "`http://127.0.0.1:18080/` をブラウザで開くか、 `curl -s http://127.0.0.1:18080/api/board | jq -r .serial` を実行してください。 `SS-` で始まる値です。 そのまま提出します。",
+            "penalty": 0
+          }
+        ]
+      },
+      {
+        "id": "build",
+        "label": "検索が応答し、 出してよいものだけを返す",
+        "points": 140,
+        "wrongAnswerPenalty": 7,
+        "hints": [
+          {
+            "id": "gameday-build-1",
+            "content": "`GET /api/spec` に走っているアプリが持っている要件 (R1〜R9) が入っています。 `GET /api/selfcheck` は採点とまったく同じ検査を回して、 落ちた規則と 「期待した値 / 返ってきた値」 を返します。 引き継いだ実装はほとんどの規則を満たしています。",
+            "penalty": 0
+          },
+          {
+            "id": "gameday-build-2",
+            "content": "同じ検索語で `GET /api/archive` が公開しているものと `GET /api/search?q=…` が返しているものを見比べてください。 アプリがあなたのコードに渡す entry は、 アプリが公開している entry と同じではありません。 受領証は `GET /posture` の `tokens.gameday_build` に、 工程が開いていて・検索が応答していて・出してはいけないものが返っていないあいだだけ出ます。",
+            "penalty": 40
+          }
+        ]
+      },
+      {
+        "id": "ship",
+        "label": "公開側の入口が応答し、 リリース記録が片付いている",
+        "points": 140,
+        "wrongAnswerPenalty": 7,
+        "hints": [
+          {
+            "id": "gameday-ship-1",
+            "content": "`GET /shipyard` がリリース基盤のコンソールです。 存在する artifact、 manifest の形、 リリース記録 (前任者が残した 1 件を含む) が出ています。 `POST /shipyard/releases` はそのときの `release.json` の内容でデプロイします。",
+            "penalty": 0
+          },
+          {
+            "id": "gameday-ship-2",
+            "content": "`site_serving` は 「scorer 以外の誰かが公開側を叩いて 200 が返った実績」 を要求するので、 デプロイが通ったら自分で `/site` を開いてください。 `single_release` は記録がちょうど 1 件で、 それが live であることを要求します。 どちらも `GET /shipyard/state` に出ます。 コンソールはリリースについてもう 1 つ報告していますが、 このチェックポイントはそれを採点しません ── イベントが終わる前に読んでおいてください。",
+            "penalty": 40
+          }
+        ]
+      },
+      {
+        "id": "expose",
+        "label": "先方に板を渡し、 渡してよいものだけを渡す",
+        "points": 140,
+        "wrongAnswerPenalty": 7,
+        "hints": [
+          {
+            "id": "gameday-expose-1",
+            "content": "`GET /portal` がレビュー画面、 `GET /portal/review` が probe 1 本ずつの内訳 (期待した値・返ってきた値・どのルールが決めたか) です。 どちらも設定の管轄外なので、 締めすぎて自分が締め出されることはありません。",
+            "penalty": 0
+          },
+          {
+            "id": "gameday-expose-2",
+            "content": "3 つの group を同時に緑にします ── 管理画面は管理者にだけ応え、 誰の下書きも他人には届かず、 監視と各アカウント自身の read は止まらない。 require の語彙と path の照合規則は `/portal` に書いてあります。 この設定が決めるのは そのページに並んでいる経路だけではなく `portal` 以下すべてだ、 ということも覚えておいてください。",
+            "penalty": 40
+          }
+        ]
+      },
+      {
+        "id": "attack",
+        "label": "下書きの机が持ちこたえ、 正規の利用者は止まらない",
+        "points": 160,
+        "wrongAnswerPenalty": 8,
+        "hints": [
+          {
+            "id": "gameday-attack-1",
+            "content": "`GET /desk` にアカウントと token、 `GET /api/drill` に走り続けている計測の内訳 (直近の失敗が症状として) が出ます。 この机が従うべき運用ルールは板の投稿に書いてあります。",
+            "penalty": 0
+          },
+          {
+            "id": "gameday-attack-2",
+            "content": "毎ラウンド 2 つの数字を見ています ── 通ってはいけないものが 1 件も通っていないことと、 各アカウントの一覧が 「見えてよい集合」 とちょうど一致していること。 止めた理由が方針の判断でなければ数えません (`503` も `429` も broken です)。 下書きの id は入れ替わるので、 いま存在する id を並べた方針は 1 window 以内に陳腐化します。",
+            "penalty": 45
+          }
+        ]
+      },
+      {
+        "id": "incident",
+        "label": "落ちている書き込みが見え、 死活確認が本当のことを言う",
+        "points": 140,
+        "wrongAnswerPenalty": 7,
+        "hints": [
+          {
+            "id": "gameday-incident-1",
+            "content": "`GET /metrics` に数字、 `GET /relay/state` にいまの設定と死活確認が見ているものが出ます。 relay を通るのは自分で書いた投稿だけです (seed 投稿は relay 導入前のもの) ので、 何件か書いてどこに落ちるか見てください。",
+            "penalty": 0
+          },
+          {
+            "id": "gameday-incident-2",
+            "content": "3 つ同時です ── 両方の結果が実際に起きていること、 落としたぶんをアプリが書き残していること、 死活確認の条件がどの世界でも正しく (見ている先が壊れる世界も含めて) かつ書いたあとに 1 度は実行されていること。 ここで何かを on にしたら、 そのあと `GET /api/logs` に何が載るようになったかを必ず確かめてください ── あの経路に鍵は要りません。",
+            "penalty": 40
+          }
+        ]
+      },
+      {
+        "id": "stabilize",
+        "label": "今日じゅうに開けたものを、 閉じ直す",
+        "points": 160,
+        "wrongAnswerPenalty": 8,
+        "hints": [
+          {
+            "id": "gameday-stabilize-1",
+            "content": "`GET /api/ops` が ops コンソール、 `GET /api/ops/policy` にこの API が持つ action の全部と、 それぞれが何をするか、 いまの manifest でどれが許可されているかが出ます。 夜間ジョブがいまの設定で通っているかは `GET /api/ops/state` です。",
+            "penalty": 0
+          },
+          {
+            "id": "gameday-stabilize-2",
+            "content": "5 つ同時です ── 公開された資格情報がストア側で閉じている、 ops の identity が夜間ジョブに要るものだけを持っている、 ジョブがいまも通る、 relay のログが書かれていて資格情報を載せていない、 リリースが次の鍵入れ替えを越えられる。 四半期の鍵入れ替えはこの工程の頭で走るので、 それまで何も問題が見えていなくても `GET /site/healthz` と `GET /shipyard/state` を見てください。",
+            "penalty": 45
+          }
+        ]
+      },
+      {
+        "id": "signoff",
+        "label": "合格印: 止めずに、 開けたままにもせず",
+        "points": 260,
+        "wrongAnswerPenalty": 13,
+        "hints": [
+          {
+            "id": "gameday-signoff-1",
+            "content": "`GET /gameday` に 2 つの割合と、 それぞれ何が赤か、 両方そろってから何秒経ったかが出ます。 合格印の受領証は、 全工程が緑で・保持時間に達していて・可用性の猶予を使い切っていない、 そのあいだだけ `GET /posture` に出ます。",
+            "penalty": 0
+          },
+          {
+            "id": "gameday-signoff-2",
+            "content": "`curl -s http://127.0.0.1:18080/gameday/score | jq` に `heldForMs` と `holdMs`、 それと使った猶予が出ます。 どちらかの割合が欠けた瞬間に保持時間は 0 に戻るので、 全部緑になったら触らずに走らせてください。 猶予のほうは戻りません。",
+            "penalty": 80
+          }
+        ]
+      }
+    ]
+  }
+}
