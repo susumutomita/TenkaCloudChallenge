@@ -1423,9 +1423,20 @@ describe("stackstack-recover wiring", () => {
     expect(existsSync(join(composeDir, service.build.context, "app", "server.mjs"))).toBe(true);
   });
 
-  it("should select the scenario whose checkpoint handlers metadata declares", () => {
+  it("should select the scenario whose checkpoint handlers metadata declares", async () => {
     expect(service.environment.SCENARIO).toBe("recover");
     expect(existsSync(SCENARIO_FILE)).toBe(true);
+    // 名前どおりのことを実際に見る。ここは SCENARIO 名とファイルの存在だけを見て
+    // いたので、「metadata が宣言した checkpoint の handler が居る」という題名の
+    // 主張は誰も検証していなかった。checkpoint を足して handler を書き忘れる /
+    // handler を消す のどちらも、参加者が submit するまで表面化しない。
+    const scenario = (await import(SCENARIO_FILE)) as { checks: Record<string, unknown> };
+    expect(Object.keys(scenario.checks).sort()).toEqual(
+      metadata.scoring.checks.map((check) => check.id).sort(),
+    );
+    for (const [id, handler] of Object.entries(scenario.checks)) {
+      expect(typeof handler, `${id} is declared but not callable`).toBe("function");
+    }
   });
 
   it("should point the container healthcheck at a surface this problem never takes dark", () => {
