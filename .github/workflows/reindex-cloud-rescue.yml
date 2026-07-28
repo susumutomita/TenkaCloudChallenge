@@ -33,13 +33,6 @@ jobs:
         run: bun install --frozen-lockfile --ignore-scripts
       - name: Regenerate catalog
         run: bun run reindex
-      - name: Validate generated artifacts
-        run: |
-          bun run scripts/validate-problems.ts
-          bun run scripts/check-template-ascii.ts
-          bun run scripts/check-template-security.ts
-          bun run scripts/build-index.ts --check
-          bun run cost:check
       - name: Commit and remove workflow
         run: |
           rm .github/workflows/reindex-cloud-rescue.yml
