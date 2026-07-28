@@ -1,6 +1,11 @@
 name: finish-cloud-rescue-hardening
 
 on:
+  push:
+    branches:
+      - feat/cloud-rescue-book
+    paths:
+      - .github/workflows/finish-cloud-rescue-hardening.yml
   pull_request:
     branches:
       - main
@@ -34,12 +39,12 @@ jobs:
           template = Path('challenges/cloud-rescue/template.yaml')
           text = template.read_text(encoding='utf-8')
           old_description = '''  Minimal Battle uptime sample. Single EC2 (Amazon Linux 2023, t3.micro) running
-            nginx (port 80) and python3 http.server (port 8080). Both endpoints expected to
-            return 200; HealthCheckLambda probes them every 1 minute and grants +100 pt
-            when both succeed.'''.replace('            ', '  ')
+          nginx (port 80) and python3 http.server (port 8080). Both endpoints expected to
+          return 200; HealthCheckLambda probes them every 1 minute and grants +100 pt
+          when both succeed.'''
           new_description = '''  Incident-response Challenge. A single EC2 runs an nginx frontend and a Python API.
-            The API starts healthy while nginx is deliberately stopped after a successful
-            setup. The learner connects through SSM, inspects evidence, and restores nginx.'''.replace('            ', '  ')
+          The API starts healthy while nginx is deliberately stopped after a successful
+          setup. The learner connects through SSM, inspects evidence, and restores nginx.'''
           if old_description not in text:
               raise RuntimeError('challenge description block not found')
           text = text.replace(old_description, new_description, 1)
@@ -76,19 +81,19 @@ jobs:
 
           ja = Path('challenges/cloud-rescue/README.ja.md')
           text = ja.read_text(encoding='utf-8')
-          text = text.replace(
-              '`/recovery`はlocalhostのnginxがHTTP 200を返すまでHTTP 503を返します。Challengeのflagは調査と復旧の導線を作るためのものです。継続状態の評価は`cloud-rescue-battle`で行います。',
-              '`/recovery`はEC2内のlocalhostからだけ利用できます。nginxがHTTP 200を返すまではHTTP 503を返します。Challengeのflagは調査と復旧の導線を作る確認値であり、sudo利用者に対する秘密境界ではありません。継続状態の評価は`cloud-rescue-battle`で行います。'
-          )
-          ja.write_text(text, encoding='utf-8')
+          old = '`/recovery`はlocalhostのnginxがHTTP 200を返すまでHTTP 503を返します。Challengeのflagは調査と復旧の導線を作るためのものです。継続状態の評価は`cloud-rescue-battle`で行います。'
+          new = '`/recovery`はEC2内のlocalhostからだけ利用できます。nginxがHTTP 200を返すまではHTTP 503を返します。Challengeのflagは調査と復旧の導線を作る確認値であり、sudo利用者に対する秘密境界ではありません。継続状態の評価は`cloud-rescue-battle`で行います。'
+          if old not in text:
+              raise RuntimeError('Japanese recovery explanation not found')
+          ja.write_text(text.replace(old, new, 1), encoding='utf-8')
 
           en = Path('challenges/cloud-rescue/README.md')
           text = en.read_text(encoding='utf-8')
-          text = text.replace(
-              'The recovery endpoint returns HTTP 503 until localhost nginx returns HTTP 200. The flag guides the Challenge; continuous state is assessed in `cloud-rescue-battle`.',
-              'The recovery endpoint is available only from localhost and returns HTTP 503 until nginx returns HTTP 200. The flag is a completion marker, not a secrecy boundary against a learner with sudo access. Continuous state is assessed in `cloud-rescue-battle`.'
-          )
-          en.write_text(text, encoding='utf-8')
+          old = 'The recovery endpoint returns HTTP 503 until localhost nginx returns HTTP 200. The flag guides the Challenge; continuous state is assessed in `cloud-rescue-battle`.'
+          new = 'The recovery endpoint is available only from localhost and returns HTTP 503 until nginx returns HTTP 200. The flag is a completion marker, not a secrecy boundary against a learner with sudo access. Continuous state is assessed in `cloud-rescue-battle`.'
+          if old not in text:
+              raise RuntimeError('English recovery explanation not found')
+          en.write_text(text.replace(old, new, 1), encoding='utf-8')
 
           Path('battles/cloud-rescue-battle/redteam/README.ja.md').write_text('''# Cloud Rescue Battle 運営ガイド
 
