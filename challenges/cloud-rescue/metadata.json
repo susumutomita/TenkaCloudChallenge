@@ -69,7 +69,7 @@
   "scoring": {
     "kind": "flag",
     "flagOutputKey": "RecoveryFlag",
-    "points": 300,
+    "points": 100,
     "wrongAnswerPenalty": 5,
     "hints": [
       {
