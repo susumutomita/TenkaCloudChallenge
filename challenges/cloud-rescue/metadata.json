@@ -80,12 +80,12 @@
       {
         "id": "hint-2",
         "content": "SSMで接続後、`systemctl status nginx tenkacloud-api`と`journalctl`で状態と証拠を確認します。",
-        "penalty": 20
+        "penalty": 15
       },
       {
         "id": "hint-3",
         "content": "停止しているfrontend serviceを復旧し、localhostで正常性を確認してから`http://localhost:8080/recovery`へアクセスします。",
-        "penalty": 30
+        "penalty": 25
       }
     ]
   },
