@@ -19,7 +19,7 @@
 4. 停止中のfrontendを復旧する
 5. `curl http://localhost:8080/recovery`でflagを取得し、Portalへ提出する
 
-`/recovery`はlocalhostのnginxがHTTP 200を返すまでHTTP 503を返します。Challengeのflagは調査と復旧の導線を作るためのものです。継続状態の評価は`cloud-rescue-battle`で行います。
+`/recovery`はEC2内のlocalhostからだけ利用できます。nginxがHTTP 200を返すまではHTTP 503を返します。Challengeのflagは調査と復旧の導線を作る確認値であり、sudo利用者に対する秘密境界ではありません。継続状態の評価は`cloud-rescue-battle`で行います。
 
 ## 安全性と削除
 
