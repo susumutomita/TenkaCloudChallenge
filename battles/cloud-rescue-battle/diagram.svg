@@ -1,19 +1,45 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 220" font-family="Helvetica,Arial,sans-serif">
-<defs><marker id="a" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#64748B"/></marker></defs>
-<rect x="0" y="0" width="440" height="220" fill="#FFFFFF"/>
-<text x="220" y="34" text-anchor="middle" font-size="18" font-weight="700" fill="#0F172A">Hello World Battle — keep it green</text>
-<rect x="24" y="86" width="168" height="70" rx="8" fill="#F8FAFC" stroke="#759C3E" stroke-width="2"/>
-<rect x="24" y="86" width="168" height="26" rx="8" fill="#759C3E"/>
-<rect x="24" y="104" width="168" height="8" fill="#759C3E"/>
-<text x="108" y="104" text-anchor="middle" font-size="12.5" font-weight="700" fill="#FFFFFF">Score probe</text>
-<text x="108" y="132" text-anchor="middle" font-size="10.5" fill="#334155">every 1 min</text>
-<rect x="248" y="86" width="168" height="70" rx="8" fill="#F8FAFC" stroke="#ED7100" stroke-width="2"/>
-<rect x="248" y="86" width="168" height="26" rx="8" fill="#ED7100"/>
-<rect x="248" y="104" width="168" height="8" fill="#ED7100"/>
-<text x="332" y="104" text-anchor="middle" font-size="12.5" font-weight="700" fill="#FFFFFF">EC2 app</text>
-<text x="332" y="132" text-anchor="middle" font-size="10.5" fill="#334155">2 endpoints</text>
-<text x="332" y="147" text-anchor="middle" font-size="10.5" fill="#334155">keep both 200</text>
-<line x1="192" y1="121" x2="245" y2="121" stroke="#64748B" stroke-width="2" marker-end="url(#a)"/>
-<text x="220" y="114" text-anchor="middle" font-size="9.5" fill="#7C3AED">probes</text>
-<text x="220" y="198" text-anchor="middle" font-size="11" fill="#475569">Register the URL to start; keep both endpoints returning 200.</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 320" font-family="Helvetica,Arial,sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#64748B"/>
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="760" height="320" fill="#FFFFFF"/>
+  <text x="380" y="34" text-anchor="middle" font-size="20" font-weight="700" fill="#0F172A">Cloud Rescue Battle</text>
+  <text x="380" y="57" text-anchor="middle" font-size="12" fill="#475569">Register two endpoints, maintain health, recover from team-scoped disruptions</text>
+
+  <rect x="24" y="108" width="164" height="94" rx="8" fill="#F8FAFC" stroke="#759C3E" stroke-width="2"/>
+  <rect x="24" y="108" width="164" height="28" rx="8" fill="#759C3E"/>
+  <rect x="24" y="128" width="164" height="8" fill="#759C3E"/>
+  <text x="106" y="127" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">TenkaCloud scorer</text>
+  <text x="106" y="158" text-anchor="middle" font-size="11" fill="#334155">probe every minute</text>
+  <text x="106" y="176" text-anchor="middle" font-size="11" fill="#334155">+100 success / -50 fail</text>
+
+  <rect x="286" y="82" width="178" height="72" rx="8" fill="#F0FDF4" stroke="#16A34A" stroke-width="2"/>
+  <text x="375" y="110" text-anchor="middle" font-size="12" font-weight="700" fill="#166534">nginx frontend</text>
+  <text x="375" y="132" text-anchor="middle" font-size="11" fill="#166534">HTTP /</text>
+
+  <rect x="286" y="178" width="178" height="72" rx="8" fill="#EFF6FF" stroke="#2563EB" stroke-width="2"/>
+  <text x="375" y="206" text-anchor="middle" font-size="12" font-weight="700" fill="#1D4ED8">Python API</text>
+  <text x="375" y="228" text-anchor="middle" font-size="11" fill="#1D4ED8">HTTP /healthz</text>
+
+  <rect x="570" y="108" width="166" height="94" rx="8" fill="#FFF7ED" stroke="#EA580C" stroke-width="2"/>
+  <rect x="570" y="108" width="166" height="28" rx="8" fill="#EA580C"/>
+  <rect x="570" y="128" width="166" height="8" fill="#EA580C"/>
+  <text x="653" y="127" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">Operator</text>
+  <text x="653" y="158" text-anchor="middle" font-size="11" fill="#334155">frontend-down</text>
+  <text x="653" y="176" text-anchor="middle" font-size="11" fill="#334155">api-down + auto-revert</text>
+
+  <line x1="188" y1="145" x2="282" y2="119" stroke="#64748B" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="188" y1="169" x2="282" y2="213" stroke="#64748B" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="232" y="150" text-anchor="middle" font-size="10" fill="#475569">probes</text>
+
+  <line x1="566" y1="143" x2="468" y2="119" stroke="#EA580C" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="566" y1="171" x2="468" y2="213" stroke="#EA580C" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="516" y="151" text-anchor="middle" font-size="10" fill="#9A3412">SSM disruption</text>
+
+  <path d="M653,205 C653,276 480,285 403,253" fill="none" stroke="#7C3AED" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
+  <text x="579" y="276" text-anchor="middle" font-size="10" fill="#7C3AED">automatic revert after 600 seconds</text>
+
+  <text x="380" y="304" text-anchor="middle" font-size="12" fill="#475569">Participants recover through SSM and confirm the next external probe succeeds.</text>
 </svg>
