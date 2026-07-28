@@ -1,5 +1,7 @@
 # Cloud Rescue Battle operator guide
 
+> 日本語版: [README.ja.md](./README.ja.md)
+
 This document is for the operator or red team. Participants should not receive it before the Battle.
 
 ## Disruption catalog
