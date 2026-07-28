@@ -1648,7 +1648,7 @@
       "visibility": "public",
       "difficulty": 1,
       "estimatedDuration": "1 分",
-      "shortDescription": "天下クラウド株式会社、 入社初日。 前任の SRE が先週突然退職し、 production には謎の SSM Parameter が 1 つだけ残されている。\n\nCTO 曰く 「動作確認のために残したやつ、 たぶん」。 詳細は不明、 Slack の DM 履歴を遡っても何も出てこない。 Notion の引継ぎ書には 『SSM の hello 見といて』 とだけ。\n\nあなたのミッション: 前任の SRE が production に残した 隠されたメッセージ を発見せよ。",
+      "shortDescription": "天下クラウド株式会社への入社初日。前任の SRE が production に残したのは、謎の SSM Parameter だけでした。\n\n引き継ぎ書には「SSM の hello を見て」と一行だけ。AWS Console または CLI から値を読み、前任者のメッセージを見つけてください。",
       "tags": [
         "sample",
         "challenge",
@@ -1672,7 +1672,7 @@
       "onboardingOrder": 1,
       "difficulty": 1,
       "estimatedDuration": "30 分",
-      "shortDescription": "天下クラウド株式会社、 2 日目。 前任の SRE が production に残した小さな web stack (EC2 上で nginx + Python `/healthz`) を引き継いだ ── が、 運営のレッドチームが予告なく障害を注入してくる (例: nginx を停止)。\n\nあなたの仕事: 自分のスタックの 2 つの URL (frontend / API) を Participant Portal に登録 → Health Check Lambda が 1 分ごとに probe を始め、 両方 200 を返した分だけ +100 pt。 落とされたら SSM Session Manager で復旧 (SSH 不要、 早く直すほど損失が小さい)。\n\nDeploy しただけでは何も起きない。 URL を portal に登録した瞬間から Battle が始まる。",
+      "shortDescription": "天下クラウド株式会社への入社 2 日目。前任の SRE から、nginx の frontend と Python API が動く小さな EC2 を引き継ぎました。\n\n2 つの URL を Participant Portal へ登録すると、1 分ごとの採点が始まります。運営が nginx を停止したら、SSM Session Manager から復旧してください。",
       "tags": [
         "sample",
         "battle",
