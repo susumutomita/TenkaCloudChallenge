@@ -1,0 +1,231 @@
+name: implement-cloud-rescue-book
+
+on:
+  push:
+    branches:
+      - feat/cloud-rescue-book
+    paths:
+      - .github/workflows/implement-cloud-rescue-book.yml
+
+permissions:
+  contents: write
+
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: feat/cloud-rescue-book
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: "1.3.11"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Create Cloud Rescue Challenge and Battle
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import json
+          import re
+          import shutil
+
+          root = Path('.')
+          source = root / 'battles/hello-world-battle'
+          challenge = root / 'challenges/cloud-rescue'
+          battle = root / 'battles/cloud-rescue-battle'
+
+          for target in (challenge, battle):
+              if target.exists():
+                  shutil.rmtree(target)
+              shutil.copytree(source, target)
+
+          # ---------------- Battle ----------------
+          battle_meta = json.loads((source / 'metadata.json').read_text(encoding='utf-8'))
+          battle_meta.pop('onboardingOrder', None)
+          battle_meta.update({
+              'id': 'cloud-rescue-battle',
+              'name': 'Cloud Rescue Battle',
+              'difficulty': 2,
+              'estimatedDuration': '60 分',
+              'shortDescription': '公開直前のWebサービスで障害が発生しました。frontendとAPIをParticipant Portalへ登録し、正常状態を維持してください。運営はnginxまたはAPIを停止する障害を注入します。SSM Session Managerで証拠を確認し、復旧してください。',
+              'instructions': '## ミッション\n公開直前のWebサービスを引き継ぎます。EC2上ではnginxのfrontendとPython APIが動いています。\n\n1. Stack Outputの`Ec2HostHint`を使い、Participant PortalへfrontendとAPIのURLを登録する\n2. 両endpointがHTTP 200を返し、得点が始まることを確認する\n3. 障害が発生したらSSM Session Managerで接続し、`systemctl`と`journalctl`から停止したserviceを特定する\n4. serviceを復旧し、外形監視が再び成功することを確認する\n\n## ゴール\n競技終了までfrontendとAPIの正常状態を維持する。',
+              'description': 'Cloud RescueのBattle版です。1台のEC2上にnginx frontendとPython APIを構築します。参加者が2つのURLをPortalへ登録すると、1分ごとの継続採点が始まります。運営はnginx停止とAPI停止をチーム単位で注入でき、各障害には10分後の自動revertがあります。SSHは公開せず、参加者はSSM Session Managerを使用します。',
+              'tags': ['battle', 'uptime', 'incident-response', 'ec2', 'nginx', 'ssm'],
+              'learningGoals': [
+                  'frontendとAPIの外形監視から障害範囲を切り分ける',
+                  'SSM Session Managerで接続しsystemdとjournalから停止serviceを特定する',
+                  '復旧後に外形監視と継続得点で正常性を確認する',
+                  '再発時に同じ調査手順を再利用する'
+              ],
+          })
+          battle_meta['scoring']['pointsPerSuccess'] = 100
+          battle_meta['scoring']['failurePenalty'] = -50
+          battle_meta['disruptions'] = [
+              {
+                  'id': 'frontend-down',
+                  'name': 'frontend停止',
+                  'eventDetailType': 'OutageDisruptionFired',
+                  'defaultAfterMinutes': 10,
+                  'operatorEditable': ['afterMinutes'],
+                  'publicHint': True,
+                  'description': '対象チームのEC2でnginxを停止する。参加者はSSM Session Managerで状態とlogを確認して復旧する。10分後に自動revertする。',
+                  'action': {
+                      'kind': 'ssm-run-command',
+                      'targetRef': 'InstanceId',
+                      'documentName': 'AWS-RunShellScript',
+                      'paramTemplate': {'commands': ['systemctl stop nginx || true']},
+                      'revert': {
+                          'afterSeconds': 600,
+                          'documentName': 'AWS-RunShellScript',
+                          'paramTemplate': {'commands': ['systemctl start nginx || true']}
+                      }
+                  }
+              },
+              {
+                  'id': 'api-down',
+                  'name': 'API停止',
+                  'eventDetailType': 'OutageDisruptionFired',
+                  'defaultAfterMinutes': 10,
+                  'operatorEditable': ['afterMinutes'],
+                  'publicHint': True,
+                  'description': '対象チームのEC2でtenkacloud-apiを停止する。参加者はfrontendが正常なことを手掛かりにAPI serviceへ範囲を絞る。10分後に自動revertする。',
+                  'action': {
+                      'kind': 'ssm-run-command',
+                      'targetRef': 'InstanceId',
+                      'documentName': 'AWS-RunShellScript',
+                      'paramTemplate': {'commands': ['systemctl stop tenkacloud-api || true']},
+                      'revert': {
+                          'afterSeconds': 600,
+                          'documentName': 'AWS-RunShellScript',
+                          'paramTemplate': {'commands': ['systemctl start tenkacloud-api || true']}
+                      }
+                  }
+              }
+          ]
+          battle_meta['i18n'] = {
+              'en': {
+                  'name': 'Cloud Rescue Battle',
+                  'shortDescription': 'A production web service fails just before launch. Register the frontend and API in the Participant Portal and keep both healthy while the operator injects nginx or API outages. Investigate and recover through SSM Session Manager.',
+                  'instructions': '## Mission\nYou inherit a web service with an nginx frontend and a Python API on EC2.\n\n1. Register both URLs in the Participant Portal.\n2. Confirm that continuous scoring starts.\n3. When an outage is injected, connect through SSM Session Manager and use systemd status and journal evidence to identify the failed service.\n4. Restore it and confirm the external probes recover.\n\n## Goal\nKeep both endpoints healthy until the Battle ends.',
+                  'description': 'The Battle edition of Cloud Rescue. It continuously scores an nginx frontend and Python API, supports team-scoped nginx and API fault injection, and automatically reverts every injected outage after ten minutes.',
+                  'learningGoals': [
+                      'Use external probes to narrow an incident to the frontend or API',
+                      'Investigate systemd and journal evidence through SSM Session Manager',
+                      'Confirm recovery through external health checks and continuous scoring',
+                      'Reuse the investigation process when an outage recurs'
+                  ]
+              }
+          }
+          (battle / 'metadata.json').write_text(json.dumps(battle_meta, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+          battle_template = (source / 'template.yaml').read_text(encoding='utf-8')
+          battle_template = battle_template.replace('hello-world-battle', 'cloud-rescue-battle')
+          battle_template = battle_template.replace('Hello World Battle', 'Cloud Rescue Battle')
+          battle_template = battle_template.replace('Hello from ${NamePrefix} frontend', 'Cloud Rescue frontend: ${NamePrefix}')
+          battle_template = battle_template.replace('While this page returns 200, HealthCheckLambda awards score points.', 'Keep this frontend and the API healthy while the operator injects outages.')
+          battle_template = battle_template.replace('Battle experience: if the attacker runs <code>systemctl stop nginx</code>, the score stops accruing.', 'Use SSM, systemd status, and journal evidence to investigate and recover.')
+          (battle / 'template.yaml').write_text(battle_template, encoding='utf-8')
+
+          (battle / 'README.ja.md').write_text('''# Cloud Rescue Battle\n\n> English: [README.md](./README.md)\n\n公開直前のWebサービスを、複数チームで運用するBattleです。EC2上のnginx frontendとPython APIをParticipant Portalへ登録すると、1分ごとの継続採点が始まります。運営はチーム単位でfrontend停止またはAPI停止を注入できます。\n\n## 学習目標\n\n- 外形監視からfrontendとAPIのどちらが壊れたかを切り分ける\n- SSM Session Managerで接続し、`systemctl`と`journalctl`で証拠を確認する\n- serviceを復旧し、外形監視の成功まで確認する\n- 再発時に調査手順を再利用する\n\n## 競技の流れ\n\n1. Stack Outputの`Ec2HostHint`を確認する\n2. Portalのfrontend slotへ`http://<host>`、api slotへ`http://<host>:8080`を登録する\n3. 両endpointがHTTP 200を返し、得点が増えることを確認する\n4. 障害後は`SsmStartSessionCommand`でEC2へ接続する\n5. 状態とlogから原因を絞り、停止serviceを復旧する\n6. Portalでprobeが再び成功したことを確認する\n\n## 障害注入\n\n- `frontend-down`: nginxを停止し、10分後に自動復旧する\n- `api-down`: `tenkacloud-api`を停止し、10分後に自動復旧する\n\n障害は対象チームの1台のEC2内で完結します。SSH portは公開しません。\n\n## 削除\n\n問題stackをCloudFormationから削除すると、EC2、VPC、subnet、Internet Gateway、Security Group、IAM roleを回収できます。終了後は残存リソースを確認してください。\n''', encoding='utf-8')
+
+          (battle / 'README.md').write_text('''# Cloud Rescue Battle\n\n> 日本語版: [README.ja.md](./README.ja.md)\n\nA team-based incident-response Battle. Register the nginx frontend and Python API in the Participant Portal to start continuous scoring. The operator can inject a frontend or API outage into one team at a time.\n\n## Learning goals\n\n- Narrow an outage to the frontend or API from external probe results\n- Connect through SSM Session Manager and inspect systemd and journal evidence\n- Restore the failed service and confirm recovery externally\n- Reuse the investigation process when the incident recurs\n\n## Flow\n\n1. Read `Ec2HostHint` from the stack outputs.\n2. Register `http://<host>` as the frontend and `http://<host>:8080` as the API.\n3. Confirm both probes return HTTP 200 and scoring starts.\n4. After an injected outage, connect with `SsmStartSessionCommand`.\n5. Identify and restore the stopped service.\n6. Confirm the Portal probe succeeds again.\n\n## Fault injection\n\n- `frontend-down`: stops nginx and automatically reverts after ten minutes.\n- `api-down`: stops `tenkacloud-api` and automatically reverts after ten minutes.\n\nEvery action stays inside one EC2 in the target team account. SSH is not exposed.\n''', encoding='utf-8')
+
+          # ---------------- Challenge ----------------
+          challenge_meta = {
+              '$schema': '../../SCHEMA.json',
+              'id': 'cloud-rescue',
+              'name': 'Cloud Rescue',
+              'category': 'Challenge',
+              'status': 'ready',
+              'visibility': 'public',
+              'difficulty': 2,
+              'estimatedDuration': '30 分',
+              'shortDescription': '顧客向けfrontendが応答していません。一方、同じEC2上のAPIは応答しています。SSM Session Managerで接続し、systemdとlogから原因を特定して既存環境を復旧してください。正常化するとrecovery endpointからデプロイごとのflagを取得できます。',
+              'instructions': '## 症状\n- frontendは応答しない\n- APIの`/healthz`はHTTP 200を返す\n\n## ゴール\n既存のEC2を作り直さず、停止しているserviceを調査して復旧する。復旧後、EC2内から`http://localhost:8080/recovery`へアクセスし、返された`TC{...}`を提出する。\n\n## 接続\nStack Outputの`SsmStartSessionCommand`を使う。SSH鍵は不要です。',
+              'description': 'Cloud RescueのChallenge版です。EC2、network、APIは正常ですが、nginxだけが停止した状態で開始します。参加者は外形症状を比較し、SSM Session Managerで接続してsystemdとjournalを確認し、nginxを復旧します。APIの`/recovery`はlocalhostのnginxがHTTP 200を返した場合だけデプロイごとのflagを返します。Challengeのflagは学習導線用であり、状態維持の評価はBattle版で行います。',
+              'tags': ['challenge', 'incident-response', 'ec2', 'nginx', 'systemd', 'ssm'],
+              'exposedPorts': [
+                  {'port': 80, 'name': 'frontend (nginx)'},
+                  {'port': 8080, 'name': 'api (Python)'}
+              ],
+              'learningGoals': [
+                  'frontendとAPIの症状差からnetwork全体ではなくfrontend serviceへ範囲を絞る',
+                  'SSM Session ManagerでSSHなしにEC2へ接続する',
+                  'systemctlとjournalctlで停止serviceを特定して復旧する',
+                  '復旧後に外形状態を再確認してflagを取得する'
+              ],
+              'cfnTemplate': 'template.yaml',
+              'cfnParameters': {'FlagSeed': '__RANDOM_PASSWORD__'},
+              'i18n': {
+                  'en': {
+                      'name': 'Cloud Rescue',
+                      'shortDescription': 'The customer frontend is down while the API on the same EC2 instance still responds. Connect through SSM Session Manager, use systemd and journal evidence to identify the cause, and recover the existing environment.',
+                      'instructions': '## Symptoms\n- The frontend does not respond.\n- API `/healthz` returns HTTP 200.\n\n## Goal\nInvestigate and restore the existing service without replacing the EC2 instance. After recovery, request `http://localhost:8080/recovery` from the instance and submit the returned `TC{...}` value.\n\nUse the `SsmStartSessionCommand` stack output to connect. No SSH key is required.',
+                      'description': 'The Challenge edition of Cloud Rescue. Networking and the API are healthy, but nginx starts stopped. The recovery endpoint reveals the per-deploy flag only after localhost nginx returns HTTP 200.',
+                      'learningGoals': [
+                          'Use the difference between frontend and API symptoms to narrow the incident scope',
+                          'Connect to EC2 through SSM Session Manager without SSH',
+                          'Use systemctl and journalctl to identify and restore the stopped service',
+                          'Verify the external state after recovery and retrieve the flag'
+                      ],
+                      'hints': [
+                          {'id': 'hint-1', 'content': 'Compare the frontend with API `/healthz`. If one service on the same host is healthy, the whole network path is unlikely to be the only cause.'},
+                          {'id': 'hint-2', 'content': 'After connecting through SSM, inspect `systemctl status nginx tenkacloud-api` and the corresponding journal entries.'},
+                          {'id': 'hint-3', 'content': 'Restore the stopped frontend service, verify it locally, and then request `http://localhost:8080/recovery`.'}
+                      ]
+                  }
+              },
+              'scoring': {
+                  'kind': 'flag',
+                  'flagOutputKey': 'RecoveryFlag',
+                  'points': 300,
+                  'wrongAnswerPenalty': 5,
+                  'hints': [
+                      {'id': 'hint-1', 'content': 'frontendとAPIの`/healthz`を比較してください。同じhost上でAPIが正常なら、network全体だけを疑い続ける必要はありません。', 'penalty': 10},
+                      {'id': 'hint-2', 'content': 'SSMで接続後、`systemctl status nginx tenkacloud-api`と`journalctl`で状態と証拠を確認します。', 'penalty': 20},
+                      {'id': 'hint-3', 'content': '停止しているfrontend serviceを復旧し、localhostで正常性を確認してから`http://localhost:8080/recovery`へアクセスします。', 'penalty': 30}
+                  ]
+              },
+              'simulationOverlay': {'schemaVersion': '1', 'entry': 'simulation.json'}
+          }
+          (challenge / 'metadata.json').write_text(json.dumps(challenge_meta, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+          challenge_template = battle_template.replace('cloud-rescue-battle', 'cloud-rescue')
+          challenge_template = challenge_template.replace('Cloud Rescue Battle', 'Cloud Rescue Challenge')
+          challenge_template = challenge_template.replace('\nResources:\n', '''\n  FlagSeed:\n    Type: String\n    NoEcho: true\n    MinLength: 8\n    MaxLength: 64\n    AllowedPattern: "^[A-Za-z0-9]+$"\n    Description: Per-deploy random value wrapped as the recovery flag.\n\nResources:\n''', 1)
+          challenge_template = challenge_template.replace('import os, json', 'import os, json, urllib.request')
+          challenge_template = challenge_template.replace('NAME_PREFIX = os.environ.get("NAME_PREFIX", "unknown")', 'NAME_PREFIX = os.environ.get("NAME_PREFIX", "unknown")\n          RECOVERY_FLAG = os.environ.get("RECOVERY_FLAG", "TC{missing}")')
+          recovery_route = '''                  if self.path == "/recovery":\n                      try:\n                          with urllib.request.urlopen("http://127.0.0.1/", timeout=2) as response:\n                              frontend_ok = response.status == 200\n                      except Exception:\n                          frontend_ok = False\n                      if not frontend_ok:\n                          self.send_response(503)\n                          self.send_header("Content-type", "application/json")\n                          self.end_headers()\n                          self.wfile.write(json.dumps({"ok": False, "reason": "frontend-unhealthy"}).encode())\n                          return\n                      self.send_response(200)\n                      self.send_header("Content-type", "text/plain")\n                      self.end_headers()\n                      self.wfile.write(RECOVERY_FLAG.encode())\n                      return\n'''
+          challenge_template = challenge_template.replace('                  self.send_response(404)\n', recovery_route + '                  self.send_response(404)\n', 1)
+          challenge_template = challenge_template.replace('          systemctl enable --now nginx\n', '          systemctl enable nginx\n          systemctl stop nginx || true\n', 1)
+          challenge_template = challenge_template.replace('          Environment=NAME_PREFIX=${NamePrefix}\n', '          Environment=NAME_PREFIX=${NamePrefix}\n          Environment=RECOVERY_FLAG=TC{${FlagSeed}}\n', 1)
+          profile_block = '''          cat > /etc/profile.d/tenkacloud-hello.sh <<PROFILE\n          #!/bin/sh\n          echo "=================================================================="\n          echo " Cloud Rescue Challenge -- connected through SSM"\n          echo "------------------------------------------------------------------"\n          echo " Compare the frontend and API symptoms, then inspect service state."\n          echo " Useful starting points:"\n          echo "   systemctl status nginx tenkacloud-api"\n          echo "   journalctl -u nginx -u tenkacloud-api --no-pager -n 50"\n          echo " After recovery, request: http://localhost:8080/recovery"\n          echo "=================================================================="\n          PROFILE\n          chmod 0644 /etc/profile.d/tenkacloud-hello.sh'''
+          challenge_template = re.sub(r'          cat > /etc/profile\.d/tenkacloud-hello\.sh <<PROFILE.*?          chmod 0644 /etc/profile\.d/tenkacloud-hello\.sh', profile_block, challenge_template, flags=re.S)
+          challenge_template = challenge_template.split('\nOutputs:\n', 1)[0] + '''\nOutputs:\n  FrontendUrl:\n    Description: Public frontend URL. It starts unhealthy because nginx is stopped.\n    Value: !Sub "http://${Ec2.PublicDnsName}"\n  ApiUrl:\n    Description: Public API URL. `/healthz` remains healthy during the initial incident.\n    Value: !Sub "http://${Ec2.PublicDnsName}:8080"\n  InstanceId:\n    Description: EC2 InstanceId for SSM Session Manager.\n    Value: !Ref Ec2\n  SsmStartSessionCommand:\n    Description: AWS CLI command for connecting without SSH.\n    Value: !Sub "aws ssm start-session --target ${Ec2}"\n  RecoveryFlag:\n    Description: Canonical flag used by the scoring engine after the learner restores the frontend.\n    Value: !Sub "TC{${FlagSeed}}"\n  NamePrefix:\n    Description: Common resource prefix.\n    Value: !Ref NamePrefix\n  ParticipantViewerRoleArn:\n    Description: Role ARN competitors assume to access their own stack.\n    Value: !GetAtt ParticipantViewerRole.Arn\n'''
+          (challenge / 'template.yaml').write_text(challenge_template, encoding='utf-8')
+
+          (challenge / 'README.ja.md').write_text('''# Cloud Rescue\n\n> English: [README.md](./README.md)\n\n顧客向けfrontendが応答しない一方、同じEC2上のAPIは正常です。既存環境を作り直さず、症状と証拠から停止serviceを特定して復旧します。\n\n## 学習目標\n\n- frontendとAPIの症状差から原因範囲を狭める\n- SSM Session ManagerでSSHなしに接続する\n- `systemctl`と`journalctl`で状態を確認する\n- 復旧後に外形確認を行う\n\n## 進め方\n\n1. `FrontendUrl`と`ApiUrl/healthz`の応答を比較する\n2. `SsmStartSessionCommand`でEC2へ接続する\n3. service状態とlogを確認する\n4. 停止中のfrontendを復旧する\n5. `curl http://localhost:8080/recovery`でflagを取得し、Portalへ提出する\n\n`/recovery`はlocalhostのnginxがHTTP 200を返すまでHTTP 503を返します。Challengeのflagは調査と復旧の導線を作るためのものです。継続状態の評価は`cloud-rescue-battle`で行います。\n\n## 安全性と削除\n\n- SSH portは公開しない\n- 操作対象は問題stackのEC2だけ\n- 新しい課金リソースを参加者に作らせない\n- CloudFormation stack削除でEC2とnetwork/IAMリソースを回収する\n''', encoding='utf-8')
+
+          (challenge / 'README.md').write_text('''# Cloud Rescue\n\n> 日本語版: [README.ja.md](./README.ja.md)\n\nThe customer frontend is down while the API on the same EC2 instance remains healthy. Investigate and restore the existing environment instead of replacing it.\n\n## Learning goals\n\n- Narrow the incident scope from the difference between frontend and API symptoms\n- Connect through SSM Session Manager without SSH\n- Inspect systemd state and journal evidence\n- Verify the external state after recovery\n\n## Flow\n\n1. Compare `FrontendUrl` with `ApiUrl/healthz`.\n2. Connect using `SsmStartSessionCommand`.\n3. Inspect service state and logs.\n4. Restore the stopped frontend.\n5. Run `curl http://localhost:8080/recovery`, then submit the returned flag.\n\nThe recovery endpoint returns HTTP 503 until localhost nginx returns HTTP 200. The flag guides the Challenge; continuous state is assessed in `cloud-rescue-battle`.\n''', encoding='utf-8')
+          PY
+
+      - name: Regenerate catalog and cost report
+        run: bun run reindex
+
+      - name: Remove one-shot workflow and commit
+        run: |
+          rm .github/workflows/implement-cloud-rescue-book.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add challenges/cloud-rescue battles/cloud-rescue-battle index.json cost-report.json .github/workflows/implement-cloud-rescue-book.yml
+          git commit -m "feat: add Cloud Rescue challenge and battle"
+          git push origin HEAD:feat/cloud-rescue-book
