@@ -1,6 +1,13 @@
 name: debug-cloud-rescue-validation
 
 on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/debug-cloud-rescue-validation.yml
+      - challenges/cloud-rescue/**
+      - battles/cloud-rescue-battle/**
   push:
     branches:
       - feat/cloud-rescue-book
