@@ -19,4 +19,4 @@ The customer frontend is down while the API on the same EC2 instance remains hea
 4. Restore the stopped frontend.
 5. Run `curl http://localhost:8080/recovery`, then submit the returned flag.
 
-The recovery endpoint returns HTTP 503 until localhost nginx returns HTTP 200. The flag guides the Challenge; continuous state is assessed in `cloud-rescue-battle`.
+The recovery endpoint is available only from localhost and returns HTTP 503 until nginx returns HTTP 200. The flag is a completion marker, not a secrecy boundary against a learner with sudo access. Continuous state is assessed in `cloud-rescue-battle`.
