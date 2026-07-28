@@ -1,0 +1,14 @@
+{
+  "$schema": "../../SIMULATION_SCHEMA.json",
+  "schemaVersion": "1",
+  "requirements": [
+    {
+      "targetId": "default",
+      "service": "ssm",
+      "resourceType": "AWS::SSM::Session",
+      "operation": "StartSession",
+      "fidelity": "L4",
+      "plane": "participant"
+    }
+  ]
+}

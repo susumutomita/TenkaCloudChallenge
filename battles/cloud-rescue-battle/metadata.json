@@ -1,0 +1,162 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "cloud-rescue-battle",
+  "name": "Cloud Rescue Battle",
+  "category": "Battle",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 2,
+  "estimatedDuration": "60 分",
+  "shortDescription": "公開直前のWebサービスで障害が発生しました。frontendとAPIをParticipant Portalへ登録し、正常状態を維持してください。運営はnginxまたはAPIを停止する障害を注入します。SSM Session Managerで証拠を確認し、復旧してください。",
+  "instructions": "## ミッション\n公開直前のWebサービスを引き継ぎます。EC2上ではnginxのfrontendとPython APIが動いています。\n\n1. Stack Outputの`Ec2HostHint`を使い、Participant PortalへfrontendとAPIのURLを登録する\n2. 両endpointがHTTP 200を返し、得点が始まることを確認する\n3. 障害が発生したらSSM Session Managerで接続し、`systemctl`と`journalctl`から停止したserviceを特定する\n4. serviceを復旧し、外形監視が再び成功することを確認する\n\n## ゴール\n競技終了までfrontendとAPIの正常状態を維持する。",
+  "description": "Cloud RescueのBattle版です。1台のEC2上にnginx frontendとPython APIを構築します。参加者が2つのURLをPortalへ登録すると、1分ごとの継続採点が始まります。運営はnginx停止とAPI停止をチーム単位で注入でき、各障害には10分後の自動revertがあります。SSHは公開せず、参加者はSSM Session Managerを使用します。",
+  "tags": [
+    "battle",
+    "uptime",
+    "incident-response",
+    "ec2",
+    "nginx",
+    "ssm"
+  ],
+  "exposedPorts": [
+    {
+      "port": 80,
+      "name": "frontend (nginx)"
+    },
+    {
+      "port": 8080,
+      "name": "api (python http.server)"
+    }
+  ],
+  "learningGoals": [
+    "frontendとAPIの外形監視から障害範囲を切り分ける",
+    "SSM Session Managerで接続しsystemdとjournalから停止serviceを特定する",
+    "復旧後に外形監視と継続得点で正常性を確認する",
+    "再発時に同じ調査手順を再利用する"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Cloud Rescue Battle",
+      "shortDescription": "A production web service fails just before launch. Register the frontend and API in the Participant Portal and keep both healthy while the operator injects nginx or API outages. Investigate and recover through SSM Session Manager.",
+      "instructions": "## Mission\nYou inherit a web service with an nginx frontend and a Python API on EC2.\n\n1. Register both URLs in the Participant Portal.\n2. Confirm that continuous scoring starts.\n3. When an outage is injected, connect through SSM Session Manager and use systemd status and journal evidence to identify the failed service.\n4. Restore it and confirm the external probes recover.\n\n## Goal\nKeep both endpoints healthy until the Battle ends.",
+      "description": "The Battle edition of Cloud Rescue. It continuously scores an nginx frontend and Python API, supports team-scoped nginx and API fault injection, and automatically reverts every injected outage after ten minutes.",
+      "learningGoals": [
+        "Use external probes to narrow an incident to the frontend or API",
+        "Investigate systemd and journal evidence through SSM Session Manager",
+        "Confirm recovery through external health checks and continuous scoring",
+        "Reuse the investigation process when an outage recurs"
+      ]
+    }
+  },
+  "endpoints": [
+    {
+      "slot": "frontend",
+      "default": {
+        "from": "cfn-output",
+        "key": "FrontendUrl"
+      },
+      "overridable": true,
+      "label": "Frontend (nginx)",
+      "description": "Ec2HostHint の DNS 名で `http://<host>` を貼り付け。 落とされるとスコア停止。"
+    },
+    {
+      "slot": "api",
+      "default": {
+        "from": "cfn-output",
+        "key": "ApiUrl"
+      },
+      "overridable": true,
+      "label": "API (python http.server)",
+      "description": "Ec2HostHint の DNS 名で `http://<host>:8080` を貼り付け。 `/healthz` で 200 を返す。"
+    }
+  ],
+  "scoring": {
+    "kind": "uptime-flat",
+    "endpoints": [
+      {
+        "slot": "frontend",
+        "path": "/",
+        "expectStatus": [
+          200
+        ]
+      },
+      {
+        "slot": "api",
+        "path": "/healthz",
+        "expectStatus": [
+          200
+        ]
+      }
+    ],
+    "pointsPerSuccess": 100,
+    "failurePenalty": -50
+  },
+  "disruptions": [
+    {
+      "id": "frontend-down",
+      "name": "frontend停止",
+      "eventDetailType": "OutageDisruptionFired",
+      "defaultAfterMinutes": 10,
+      "operatorEditable": [
+        "afterMinutes"
+      ],
+      "publicHint": true,
+      "description": "対象チームのEC2でnginxを停止する。参加者はSSM Session Managerで状態とlogを確認して復旧する。10分後に自動revertする。",
+      "action": {
+        "kind": "ssm-run-command",
+        "targetRef": "InstanceId",
+        "documentName": "AWS-RunShellScript",
+        "paramTemplate": {
+          "commands": [
+            "systemctl stop nginx || true"
+          ]
+        },
+        "revert": {
+          "afterSeconds": 600,
+          "documentName": "AWS-RunShellScript",
+          "paramTemplate": {
+            "commands": [
+              "systemctl start nginx || true"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "api-down",
+      "name": "API停止",
+      "eventDetailType": "OutageDisruptionFired",
+      "defaultAfterMinutes": 10,
+      "operatorEditable": [
+        "afterMinutes"
+      ],
+      "publicHint": true,
+      "description": "対象チームのEC2でtenkacloud-apiを停止する。参加者はfrontendが正常なことを手掛かりにAPI serviceへ範囲を絞る。10分後に自動revertする。",
+      "action": {
+        "kind": "ssm-run-command",
+        "targetRef": "InstanceId",
+        "documentName": "AWS-RunShellScript",
+        "paramTemplate": {
+          "commands": [
+            "systemctl stop tenkacloud-api || true"
+          ]
+        },
+        "revert": {
+          "afterSeconds": 600,
+          "documentName": "AWS-RunShellScript",
+          "paramTemplate": {
+            "commands": [
+              "systemctl start tenkacloud-api || true"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "simulationOverlay": {
+    "schemaVersion": "1",
+    "entry": "simulation.json"
+  }
+}

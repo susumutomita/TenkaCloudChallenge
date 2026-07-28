@@ -1,0 +1,96 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "cloud-rescue",
+  "name": "Cloud Rescue",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 2,
+  "estimatedDuration": "30 分",
+  "shortDescription": "顧客向けfrontendが応答していません。一方、同じEC2上のAPIは応答しています。SSM Session Managerで接続し、systemdとlogから原因を特定して既存環境を復旧してください。正常化するとrecovery endpointからデプロイごとのflagを取得できます。",
+  "instructions": "## 症状\n- frontendは応答しない\n- APIの`/healthz`はHTTP 200を返す\n\n## ゴール\n既存のEC2を作り直さず、停止しているserviceを調査して復旧する。復旧後、EC2内から`http://localhost:8080/recovery`へアクセスし、返された`TC{...}`を提出する。\n\n## 接続\nStack Outputの`SsmStartSessionCommand`を使う。SSH鍵は不要です。",
+  "description": "Cloud RescueのChallenge版です。EC2、network、APIは正常ですが、nginxだけが停止した状態で開始します。参加者は外形症状を比較し、SSM Session Managerで接続してsystemdとjournalを確認し、nginxを復旧します。APIの`/recovery`はlocalhostのnginxがHTTP 200を返した場合だけデプロイごとのflagを返します。Challengeのflagは学習導線用であり、状態維持の評価はBattle版で行います。",
+  "tags": [
+    "challenge",
+    "incident-response",
+    "ec2",
+    "nginx",
+    "systemd",
+    "ssm"
+  ],
+  "exposedPorts": [
+    {
+      "port": 80,
+      "name": "frontend (nginx)"
+    },
+    {
+      "port": 8080,
+      "name": "api (Python)"
+    }
+  ],
+  "learningGoals": [
+    "frontendとAPIの症状差からnetwork全体ではなくfrontend serviceへ範囲を絞る",
+    "SSM Session ManagerでSSHなしにEC2へ接続する",
+    "systemctlとjournalctlで停止serviceを特定して復旧する",
+    "復旧後に外形状態を再確認してflagを取得する"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {
+    "FlagSeed": "__RANDOM_PASSWORD__"
+  },
+  "i18n": {
+    "en": {
+      "name": "Cloud Rescue",
+      "shortDescription": "The customer frontend is down while the API on the same EC2 instance still responds. Connect through SSM Session Manager, use systemd and journal evidence to identify the cause, and recover the existing environment.",
+      "instructions": "## Symptoms\n- The frontend does not respond.\n- API `/healthz` returns HTTP 200.\n\n## Goal\nInvestigate and restore the existing service without replacing the EC2 instance. After recovery, request `http://localhost:8080/recovery` from the instance and submit the returned `TC{...}` value.\n\nUse the `SsmStartSessionCommand` stack output to connect. No SSH key is required.",
+      "description": "The Challenge edition of Cloud Rescue. Networking and the API are healthy, but nginx starts stopped. The recovery endpoint reveals the per-deploy flag only after localhost nginx returns HTTP 200.",
+      "learningGoals": [
+        "Use the difference between frontend and API symptoms to narrow the incident scope",
+        "Connect to EC2 through SSM Session Manager without SSH",
+        "Use systemctl and journalctl to identify and restore the stopped service",
+        "Verify the external state after recovery and retrieve the flag"
+      ],
+      "hints": [
+        {
+          "id": "hint-1",
+          "content": "Compare the frontend with API `/healthz`. If one service on the same host is healthy, the whole network path is unlikely to be the only cause."
+        },
+        {
+          "id": "hint-2",
+          "content": "After connecting through SSM, inspect `systemctl status nginx tenkacloud-api` and the corresponding journal entries."
+        },
+        {
+          "id": "hint-3",
+          "content": "Restore the stopped frontend service, verify it locally, and then request `http://localhost:8080/recovery`."
+        }
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "RecoveryFlag",
+    "points": 300,
+    "wrongAnswerPenalty": 5,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "frontendとAPIの`/healthz`を比較してください。同じhost上でAPIが正常なら、network全体だけを疑い続ける必要はありません。",
+        "penalty": 10
+      },
+      {
+        "id": "hint-2",
+        "content": "SSMで接続後、`systemctl status nginx tenkacloud-api`と`journalctl`で状態と証拠を確認します。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-3",
+        "content": "停止しているfrontend serviceを復旧し、localhostで正常性を確認してから`http://localhost:8080/recovery`へアクセスします。",
+        "penalty": 30
+      }
+    ]
+  },
+  "simulationOverlay": {
+    "schemaVersion": "1",
+    "entry": "simulation.json"
+  }
+}
