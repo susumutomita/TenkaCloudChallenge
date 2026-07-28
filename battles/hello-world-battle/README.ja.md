@@ -2,7 +2,7 @@
 
 > English: [README.md](./README.md)
 
-Battle uptime scoring の **最小 sample** 問題。 EC2 1 台に nginx (frontend) と Python http.server (api) を起動するが、 デプロイ直後の `FrontendUrl` / `ApiUrl` Output は **空**。 競技者が Participant Portal の override 欄に自分のスタックの URL を貼り付けて初めて Health Check Lambda が probe を開始し、 両方が 200 を返すサイクルごとに +100 pt が入る。
+Battle uptime scoring の最小 sample 問題。EC2 1 台に nginx (frontend) と Python http.server (api) を起動するが、デプロイ直後の `FrontendUrl` / `ApiUrl` Output は空。競技者が Participant Portal の override 欄に自分のスタックの URL を貼り付けて初めて Health Check Lambda が probe を開始し、両方が 200 を返すサイクルごとに +100 pt が入る。
 
 | 項目         | 値                                       |
 | ------------ | ---------------------------------------- |
@@ -14,38 +14,39 @@ Battle uptime scoring の **最小 sample** 問題。 EC2 1 台に nginx (fronte
 
 ## はじめての接続 (AWS が久しぶり / 初めてならここから)
 
-これは天下クラウドの **1-1**。 サインイン以外の事前準備なしで Battle の基本ループを体験できるよう作られています。 リソースを手で作ることはありません ── 接続して、 URL を登録して、 加点が始まるのを見るだけ。
+これは天下クラウドの 1-1。 サインイン以外の事前準備なしで Battle の基本ループを体験できるよう作られています。 リソースを手で作ることはありません ── 接続して、 URL を登録して、 加点が始まるのを見るだけ。
 
-1. **自分のスタック用の AWS 資格情報を用意する** ── いずれか 1 つ:
-   - **CloudShell (インストール不要)** ── AWS コンソールで CloudShell を開く。 AWS CLI と Session Manager plugin が最初から入っています。 手元にツールが無いならこれが一番楽。
-   - **`aws login` / SSO** ── 運営から IAM Identity Center (SSO) のサインインが渡されているなら、 手元で `aws sso login` (または `aws login`) を実行して一時資格情報を取得。
-   - **アクセスキー** ── 配布された参加者資格情報を `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` としてエクスポート。
-2. **app host に接続する** ── Stack Output の `SsmStartSessionCommand` を使う。 SSH も鍵ペアも不要:
+1. 自分のスタック用の AWS 資格情報を用意する ── いずれか 1 つ:
+   - CloudShell (インストール不要) ── AWS コンソールで CloudShell を開く。 AWS CLI と Session Manager plugin が最初から入っています。 手元にツールが無いならこれが一番楽。
+   - `aws login` / SSO ── 運営から IAM Identity Center (SSO) のサインインが渡されているなら、 手元で `aws sso login` (または `aws login`) を実行して一時資格情報を取得。
+   - アクセスキー ── 配布された参加者資格情報を `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` としてエクスポート。
+2. app host に接続する ── Stack Output の `SsmStartSessionCommand` を使う。 SSH も鍵ペアも不要:
    ```
    aws ssm start-session --target <InstanceId>
    ```
    手元で使う場合は [Session Manager plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html) が必要 (CloudShell には同梱)。
-3. **バナーに従う。** 接続すると、 シェルに次の一手 (URL 登録) の案内が出ます。 それをポータルで行うと採点が始まる ── これが成功体験です。
+3. バナーに従う。 接続すると、 シェルに次の一手 (URL 登録) の案内が出ます。 それをポータルで行うと採点が始まる ── これが成功体験です。
 
 > 本当に新しいのは `ssm start-session` の 1 コマンドだけ。 その後はシェル内とポータル内で「次はこれ」と案内されるので、 手が止まりません。
 
 ## 何をする問題か
 
-天下クラウド株式会社、 2 日目。 前任の SRE が production に残した小さな web stack (EC2 上で nginx + Python `/healthz`) を引き継いだ ── が、 同じアカウントには他チームの SRE がいて、 互いに相手のサービスを落とし合っている。
+天下クラウド株式会社、2 日目。前任の SRE が production に残した小さな web stack (EC2 上で nginx + Python `/healthz`) を引き継いだ。競技中は、運営のレッドチームが対象チームを選んで nginx 停止の障害を注入する。
 
 あなたの仕事:
 
 1. Deploy 完了後、 Output の `Ec2HostHint` (= EC2 の公開 DNS 名) をコピー。
 2. Participant Portal で `frontend` slot に `http://<host>`、 `api` slot に `http://<host>:8080` を貼り付けて override 保存。
-3. ここから 1 分ごとに Health Check Lambda が probe を始め、 両方 200 を返したサイクル分だけ +100 pt。
-4. 攻撃を受けて落とされたら SSM Session Manager で復旧 (SSH 不要)。
+3. ここから 1 分ごとに Health Check Lambda が probe を始め、両方 200 を返したサイクル分だけ +100 pt。
+4. 運営が nginx を停止したら、SSM Session Manager で接続して復旧する。
 
-**Deploy しただけでは 1 点も入らない**。 URL を portal に登録した瞬間から Battle が始まる。
+Deploy しただけでは得点しない。URL を portal に登録した瞬間から Battle が始まる。
 
-- **攻撃側**: 同じ EC2 / Security Group を弄って frontend や API を止める (例: `systemctl stop nginx`)
-- **防御側**: SSM Session Manager で SSH 不要に入り、 サービスを再起動する
+- 運営: 対象チームの EC2 で `systemctl stop nginx` を実行する
+- 参加者: SSM Session Manager で接続し、`systemctl start nginx` で復旧する
+- 安全網: 10 分後に nginx を起動する revert が予約される
 
-全操作は 1 EC2 内で完結するため cross-tenant 影響なし。
+障害と復旧は、対象チームの 1 EC2 内で完結する。
 
 ## デプロイされるもの
 
@@ -69,15 +70,15 @@ Battle uptime scoring の **最小 sample** 問題。 EC2 1 台に nginx (fronte
 | 状態                                            | 1 cycle (1 分) |
 | ----------------------------------------------- | -------------- |
 | `FrontendUrl /` と `ApiUrl /healthz` が両方 200 | +100 pt        |
-| いずれかが 200 以外 / timeout                   | 0 pt           |
+| いずれかが 200 以外 / timeout                   | -100 pt        |
 
 詳細は [`metadata.json`](./metadata.json) の `scoring` フィールド参照。
 
 ## コスト
 
-- EC2 t3.micro: AWS Free Tier 750 時間/月 (12 ヶ月) 内
-- VPC / IGW / SG: 無料
-- 1 セッション (~30 分) は Free Tier 範囲ならゼロ円
+- EC2 t3.micro の実行時間に応じた料金が発生する
+- VPC / IGW / SG 以外にも、利用リージョンのデータ転送や public IPv4 の料金を確認する
+- イベント終了後は CloudFormation stack を削除する
 
 ## 学習目的
 

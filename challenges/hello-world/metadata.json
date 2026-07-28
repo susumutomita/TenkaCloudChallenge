@@ -7,9 +7,9 @@
   "visibility": "public",
   "difficulty": 1,
   "estimatedDuration": "1 分",
-  "shortDescription": "天下クラウド株式会社、 入社初日。 前任の SRE が先週突然退職し、 production には謎の SSM Parameter が 1 つだけ残されている。\n\nCTO 曰く 「動作確認のために残したやつ、 たぶん」。 詳細は不明、 Slack の DM 履歴を遡っても何も出てこない。 Notion の引継ぎ書には 『SSM の hello 見といて』 とだけ。\n\nあなたのミッション: 前任の SRE が production に残した 隠されたメッセージ を発見せよ。",
-  "instructions": "## はじめに\n前任の SRE が production に残した **隠しメッセージ** を見つける、 入門問題。\n\n## 最初の一手\n- Console 派: Outputs の `ParameterConsoleUrl` を開くと SSM Parameter 詳細に直接着地\n- CLI 派: `aws ssm get-parameter --name /<NamePrefix>/hello --query Parameter.Value --output text`\n\n## ゴール\nSSM パラメータに隠されたメッセージ (`TC{…}`) を読み取って提出する。",
-  "description": "天下クラウド株式会社へようこそ。 あなたは今日が入社初日。 前任の SRE が先週 突然 退職し、 production には謎の SSM Parameter が 1 つ残されている。\n\nCTO 曰く、 「動作確認のために残したと思う、 たぶん」。 詳細は不明。 Slack の DM 履歴を遡っても何も出てこない。 Notion の引継ぎ書には 「SSM の hello 見といて」 とだけ書いてある。\n\nあなたのミッション: AWS Console または CLI で SSM Parameter Store にアクセスし、 `/{NamePrefix}/hello` の値を読んで Participant Portal の入力欄に貼り付ける。 一致すれば +100 pt。\n\n値は `TC{…}` 形式の隠しトークンで、 中括弧の中身は deploy ごとに生成されるランダム値。 NamePrefix からは推測できないので、 実際に Parameter を読まないと解けない (= discovered flag)。\n\n背景: この問題は scoring engine + deploy chain の sanity-check 用。 SSM Standard tier の Parameter 1 つだけなので AWS コストはゼロ。",
+  "shortDescription": "天下クラウド株式会社への入社初日。前任の SRE が production に残したのは、謎の SSM Parameter だけでした。\n\n引き継ぎ書には「SSM の hello を見て」と一行だけ。AWS Console または CLI から値を読み、前任者のメッセージを見つけてください。",
+  "instructions": "## はじめに\n前任の SRE が SSM Parameter に残したメッセージを見つける入門問題です。\n\n## 最初の一手\n- Console: Output の `ParameterConsoleUrl` を開く\n- CLI: `aws ssm get-parameter --name /<NamePrefix>/hello --query Parameter.Value --output text`\n\n## ゴール\nParameter の `TC{…}` を最初から最後まで Participant Portal へ提出します。",
+  "description": "Challenge と flag 採点の最小 sample。\n\nデプロイすると、競技者の AWS アカウントへ `/{NamePrefix}/hello` という SSM Parameter を 1 つ作成する。値はデプロイごとのランダム値を含む `TC{…}` で、NamePrefix からは推測できない。参加者が AWS Console または CLI で Parameter の実値を読み、Participant Portal へ提出すると、`ParameterValue` Output と一致した場合に 100 pt を加点する。\n\nSSM Standard tier の Parameter だけを使い、EC2、VPC、公開 endpoint は作成しない。",
   "tags": ["sample", "challenge", "flag", "ssm"],
   "exposedPorts": [
     {
@@ -28,9 +28,9 @@
   "i18n": {
     "en": {
       "name": "Hello World (Sample)",
-      "shortDescription": "Day one as TenkaCloud's new SRE. Your predecessor resigned abruptly last week, leaving a single mysterious SSM Parameter behind in production.\n\nThe CTO: \"I think he left it for smoke testing... probably.\" Details unknown. Slack DM history turns up nothing. The Notion handover note just says: 'check the SSM hello.'\n\nYour mission: uncover the hidden message your predecessor left behind in production.",
-      "instructions": "## Getting started\nAn intro problem: find the **hidden message** the previous SRE left in production.\n\n## First move\n- Console: open the `ParameterConsoleUrl` Output to land on the SSM Parameter detail\n- CLI: `aws ssm get-parameter --name /<NamePrefix>/hello --query Parameter.Value --output text`\n\n## Goal\nRead the message hidden in the SSM parameter (`TC{…}`) and submit it.",
-      "description": "Minimal sample of Challenge / flag-submission form.\n\nDeploying creates a single SSM Parameter `/{NamePrefix}/hello` in the competitor's AWS account. The value is a per-deploy random token `TC{…}` (the braces wrap a random value injected at deploy time — it is NOT derivable from the public NamePrefix, so you must actually read the parameter). Competitors read the parameter from AWS Console / CLI, paste the value into the Participant Portal submission field, and earn +100 points on match.\n\nZero-cost (SSM Standard tier, no EC2 / VPC / public endpoint). Use for sanity-checking problem authoring + scoring engine.",
+      "shortDescription": "Day one at TenkaCloud Inc. Your predecessor left only one mysterious SSM Parameter in production.\n\nThe handover note says, \"check the SSM hello.\" Read its value through the AWS Console or CLI and recover the message.",
+      "instructions": "## Getting started\nFind the message the previous SRE left in an SSM Parameter.\n\n## First move\n- Console: open the `ParameterConsoleUrl` Output\n- CLI: `aws ssm get-parameter --name /<NamePrefix>/hello --query Parameter.Value --output text`\n\n## Goal\nSubmit the complete `TC{…}` value in the Participant Portal.",
+      "description": "Minimal sample for Challenge flag scoring.\n\nDeploying creates one SSM Parameter named `/{NamePrefix}/hello` in the competitor's AWS account. Its value is a per-deploy random token in `TC{…}` form and cannot be derived from NamePrefix. The participant reads the actual value through the AWS Console or CLI and submits it in the Participant Portal. The scoring engine compares it with the `ParameterValue` Output and awards 100 points on a match.\n\nThe stack creates no EC2 instance, VPC, or public endpoint.",
       "learningGoals": [
         "Experience reading a value from SSM Parameter Store via AWS Console / CLI",
         "Verify that TenkaCloud's deploy → flag-submission → score pipeline works end-to-end"

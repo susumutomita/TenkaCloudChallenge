@@ -2,7 +2,7 @@
 
 > English: [README.md](./README.md)
 
-Challenge / flag-submission の **最小 sample** 問題。 SSM Parameter Store の値を読み取って Participant Portal に貼り付けると +100 pt。 deploy → flag 提出 → 加点経路を end-to-end で確認する用途。
+Challenge / flag-submission の最小 sample 問題。SSM Parameter Store の値を読み取り、Participant Portal に貼り付けると +100 pt。deploy → flag 提出 → 加点経路を end-to-end で確認する用途。
 
 | 項目         | 値                                                            |
 | ------------ | ------------------------------------------------------------- |
@@ -22,23 +22,23 @@ CTO 曰く、「動作確認のために残したやつ、 たぶん」。 詳�
 
 ## デプロイされるもの
 
-- `AWS::SSM::Parameter` (`/{NamePrefix}/hello`、 Standard tier、 値は `Hello from {NamePrefix}`)
+- `AWS::SSM::Parameter` (`/{NamePrefix}/hello`、Standard tier、値は deploy ごとの `TC{…}`)
 - `ParticipantViewerRole` — 競技者が AWS Console で読み取り専用 AssumeRole するための IAM Role
-  - `ssm:GetParameter` / `GetParameters` / `GetParametersByPath` を **自分の prefix だけ** に scope
-  - SSM 読み取り権限のみ (= 他テナントの parameter は覗けない、 ADR-021)
+  - `ssm:GetParameter` / `GetParameters` / `GetParametersByPath` を自分の prefix だけに scope
+  - Parameter 詳細画面に必要な `ssm:DescribeParameters` はチーム専用 AWS account 内でのみ許可
 
 EC2 / VPC / 公開エンドポイントは作らない。 SSM Standard tier は料金ゼロ。
 
 ## 解き方
 
-Participant Portal の `ParameterConsoleUrl` Output は **deep link** になっており、 クリックすると AWS Console の SSM Parameter 詳細ページ (このスタック専用) に直接着地する。 **Value** 欄の文字列がそのまま flag。 もしくは CLI:
+Participant Portal の `ParameterConsoleUrl` Output は deep link になっており、クリックすると AWS Console の SSM Parameter 詳細ページに直接着地する。Value 欄の `TC{…}` がそのまま flag。もしくは CLI:
 
 ```bash
 aws ssm get-parameter --name /{NamePrefix}/hello --query Parameter.Value --output text
-# → "Hello from {NamePrefix}"
+# → "TC{デプロイごとのランダム値}"
 ```
 
-> Console の Parameter Store **一覧** ページは `ssm:DescribeParameters` が必要で、 cross-tenant leak を防ぐため `ParticipantViewerRole` には付与していない (ADR-021)。 そのため一覧は空のまま、 代わりに 該当パラメータ への deep link を Output で配っている。 詳細ページは `ssm:GetParameter` (自分の prefix だけに scope 済み) で読めるので、 leak なしで成立する。
+`TC{…}` の中身は `NamePrefix` から推測できない。Parameter の実値を読み、`TC{` から `}` までをそのまま提出する。
 
 値を Participant Portal の Flag 提出欄に貼り付けて submit → 一致すれば +100 pt。 間違えると -5 pt のペナルティ。
 
@@ -46,8 +46,8 @@ aws ssm get-parameter --name /{NamePrefix}/hello --query Parameter.Value --outpu
 
 | hint   | 内容                                                                                  | 減点  |
 | ------ | ------------------------------------------------------------------------------------- | ----- |
-| hint-1 | Outputs の `ParameterConsoleUrl` をクリックすると SSM Parameter 詳細ページに直接飛べます。 CLI 派は `aws ssm get-parameter --name /{NamePrefix}/hello` | -10   |
-| hint-2 | 値は `Hello from tc-...` の形式で、 Stack 名 prefix を含みます (= NamePrefix の値そのもの) | -20   |
+| hint-1 | Outputs の `ParameterConsoleUrl` をクリックすると SSM Parameter 詳細ページに直接飛べます。CLI 派は `aws ssm get-parameter --name /{NamePrefix}/hello` | -20   |
+| hint-2 | 値は `TC{…}` 形式です。Parameter の実値を読み、最初から最後までそのまま貼り付けます。 | -30   |
 
 ## 採点
 
