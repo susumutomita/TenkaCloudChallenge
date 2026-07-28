@@ -38,13 +38,17 @@ jobs:
 
           template = Path('challenges/cloud-rescue/template.yaml')
           text = template.read_text(encoding='utf-8')
-          old_description = '''  Minimal Battle uptime sample. Single EC2 (Amazon Linux 2023, t3.micro) running
-          nginx (port 80) and python3 http.server (port 8080). Both endpoints expected to
-          return 200; HealthCheckLambda probes them every 1 minute and grants +100 pt
-          when both succeed.'''
-          new_description = '''  Incident-response Challenge. A single EC2 runs an nginx frontend and a Python API.
-          The API starts healthy while nginx is deliberately stopped after a successful
-          setup. The learner connects through SSM, inspects evidence, and restores nginx.'''
+          old_description = (
+              '  Minimal Battle uptime sample. Single EC2 (Amazon Linux 2023, t3.micro) running\n'
+              '  nginx (port 80) and python3 http.server (port 8080). Both endpoints expected to\n'
+              '  return 200; HealthCheckLambda probes them every 1 minute and grants +100 pt\n'
+              '  when both succeed.'
+          )
+          new_description = (
+              '  Incident-response Challenge. A single EC2 runs an nginx frontend and a Python API.\n'
+              '  The API starts healthy while nginx is deliberately stopped after a successful\n'
+              '  setup. The learner connects through SSM, inspects evidence, and restores nginx.'
+          )
           if old_description not in text:
               raise RuntimeError('challenge description block not found')
           text = text.replace(old_description, new_description, 1)
