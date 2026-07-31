@@ -1,0 +1,236 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly EXPECTED_SELF="/usr/local/libexec/tenkacloud-symphony-host"
+readonly EXPECTED_AGENT="/usr/local/libexec/tenkacloud-symphony-agent"
+readonly EXPECTED_REDACTOR="/usr/local/libexec/tenkacloud-symphony-redact-logs"
+readonly EXPECTED_WORKFLOW="/etc/tenkacloud-symphony/WORKFLOW.md"
+readonly SAFE_PATH="/usr/bin:/bin:/usr/local/bin"
+export PATH="$SAFE_PATH"
+umask 077
+
+die() {
+  printf 'tenkacloud-symphony-host: %s\n' "$1" >&2
+  exit "${2:-78}"
+}
+
+required() {
+  local name="$1"
+  printenv "$name" >/dev/null 2>&1 || die "$name is required"
+  [[ -n "${!name}" ]] || die "$name must not be empty"
+}
+
+sha256_file() {
+  local path="$1"
+  if [[ -x /usr/bin/sha256sum ]]; then
+    /usr/bin/sha256sum "$path" | /usr/bin/awk '{print $1}'
+  elif [[ -x /usr/bin/shasum ]]; then
+    /usr/bin/shasum -a 256 "$path" | /usr/bin/awk '{print $1}'
+  else
+    die "sha256sum or shasum is required"
+  fi
+}
+
+file_owner_id() {
+  if /usr/bin/stat -c '%u' "$1" >/dev/null 2>&1; then
+    /usr/bin/stat -c '%u' "$1"
+  else
+    /usr/bin/stat -f '%u' "$1"
+  fi
+}
+
+file_mode() {
+  if /usr/bin/stat -c '%a' "$1" >/dev/null 2>&1; then
+    /usr/bin/stat -c '%a' "$1"
+  else
+    /usr/bin/stat -f '%Lp' "$1"
+  fi
+}
+
+require_operator_file() {
+  local path="$1"
+  [[ -f "$path" && -x "$path" && ! -L "$path" ]] ||
+    die "$path must be an executable regular non-symlink file"
+  [[ "$(file_owner_id "$path")" == "0" ]] || die "$path must be owned by root"
+  local mode
+  mode="$(file_mode "$path")"
+  (( (8#$mode & 8#022) == 0 )) || die "$path must not be writable by group or others"
+}
+
+require_operator_config() {
+  local path="$1"
+  [[ -f "$path" && ! -L "$path" ]] ||
+    die "$path must be a regular non-symlink file"
+  [[ "$(file_owner_id "$path")" == "0" ]] || die "$path must be owned by root"
+  local mode
+  mode="$(file_mode "$path")"
+  (( (8#$mode & 8#022) == 0 )) || die "$path must not be writable by group or others"
+}
+
+canonical_private_directory() {
+  local path="$1"
+  local label="$2"
+  [[ -d "$path" && ! -L "$path" ]] ||
+    die "$label must already exist as a non-symlink directory"
+  [[ "$(file_owner_id "$path")" == "$(/usr/bin/id -u)" ]] ||
+    die "$label must be owned by the Symphony service account"
+  [[ "$(file_mode "$path")" == "700" ]] ||
+    die "$label must have mode 0700"
+  (cd "$path" && pwd -P) || die "$label cannot be canonicalized"
+}
+
+require_outside_config() {
+  local path="$1"
+  local label="$2"
+  local config_root="$3"
+  case "$path/" in
+    "$config_root" | "$config_root/"*) die "$label must be outside the trusted config root" ;;
+  esac
+}
+
+require_tmpfs() {
+  local path="$1"
+  [[ -x /usr/bin/findmnt ]] ||
+    die "findmnt is required to prove the raw log root is volatile"
+  local fs_type
+  fs_type="$(/usr/bin/findmnt -n -o FSTYPE -T "$path")" ||
+    die "cannot determine the raw log root filesystem"
+  [[ "$fs_type" == "tmpfs" || "$fs_type" == "ramfs" ]] ||
+    die "SYMPHONY_RAW_LOGS_ROOT must be on tmpfs or ramfs"
+}
+
+[[ "${BASH_SOURCE[0]}" == "$EXPECTED_SELF" ]] ||
+  die "run only the operator-installed launcher at $EXPECTED_SELF"
+require_operator_file "$EXPECTED_SELF"
+require_operator_file "$EXPECTED_AGENT"
+require_operator_file "$EXPECTED_REDACTOR"
+
+for forbidden in GITHUB_TOKEN GH_TOKEN AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN; do
+  if printenv "$forbidden" >/dev/null 2>&1; then
+    die "refusing an ambient $forbidden; use only the dedicated read-only tracker token"
+  fi
+done
+
+for name in \
+  SYMPHONY_TRACKER_TOKEN \
+  SYMPHONY_BIN \
+  SYMPHONY_BIN_SHA256 \
+  SYMPHONY_WORKFLOW \
+  SYMPHONY_WORKFLOW_SHA256 \
+  SYMPHONY_AGENT_LAUNCHER_SHA256 \
+  SYMPHONY_LOG_REDACTOR_SHA256 \
+  SYMPHONY_AGENT_IMAGE \
+  SYMPHONY_BOOTSTRAP_NETWORK \
+  SYMPHONY_BOOTSTRAP_PROXY \
+  SYMPHONY_AGENT_NETWORK \
+  SYMPHONY_AGENT_PROXY \
+  SYMPHONY_MODEL_AUTH_FILE \
+  SYMPHONY_SERVICE_HOME \
+  SYMPHONY_WORKSPACE_ROOT \
+  SYMPHONY_LOGS_ROOT \
+  SYMPHONY_RAW_LOGS_ROOT; do
+  required "$name"
+done
+
+[[ "$SYMPHONY_BIN" == /* ]] || die "SYMPHONY_BIN must be absolute"
+[[ "$SYMPHONY_WORKFLOW" == "$EXPECTED_WORKFLOW" ]] ||
+  die "SYMPHONY_WORKFLOW must be the operator-installed file at $EXPECTED_WORKFLOW"
+[[ "$SYMPHONY_SERVICE_HOME" == /* ]] || die "SYMPHONY_SERVICE_HOME must be absolute"
+[[ "$SYMPHONY_WORKSPACE_ROOT" == /* ]] || die "SYMPHONY_WORKSPACE_ROOT must be absolute"
+[[ "$SYMPHONY_LOGS_ROOT" == /* ]] || die "SYMPHONY_LOGS_ROOT must be absolute"
+[[ "$SYMPHONY_RAW_LOGS_ROOT" == /* ]] || die "SYMPHONY_RAW_LOGS_ROOT must be absolute"
+[[ "$SYMPHONY_TRACKER_TOKEN" =~ ^[A-Za-z0-9_]+$ ]] ||
+  die "SYMPHONY_TRACKER_TOKEN contains an unsupported character"
+require_operator_file "$SYMPHONY_BIN"
+require_operator_config "$SYMPHONY_WORKFLOW"
+[[ "$(sha256_file "$SYMPHONY_BIN")" == "$SYMPHONY_BIN_SHA256" ]] ||
+  die "Symphony binary checksum does not match the operator-approved value"
+[[ "$(sha256_file "$EXPECTED_AGENT")" == "$SYMPHONY_AGENT_LAUNCHER_SHA256" ]] ||
+  die "agent launcher checksum does not match the operator-approved value"
+[[ "$(sha256_file "$EXPECTED_REDACTOR")" == "$SYMPHONY_LOG_REDACTOR_SHA256" ]] ||
+  die "log redactor checksum does not match the operator-approved value"
+[[ "$(sha256_file "$SYMPHONY_WORKFLOW")" == "$SYMPHONY_WORKFLOW_SHA256" ]] ||
+  die "workflow checksum does not match the reviewed value"
+
+config_root="$(cd "$(dirname "$SYMPHONY_WORKFLOW")" && pwd -P)" ||
+  die "trusted config root cannot be canonicalized"
+readonly config_root
+service_home="$(canonical_private_directory "$SYMPHONY_SERVICE_HOME" "service home")" ||
+  exit $?
+readonly service_home
+workspace_root="$(canonical_private_directory "$SYMPHONY_WORKSPACE_ROOT" "workspace root")" ||
+  exit $?
+readonly workspace_root
+logs_root="$(canonical_private_directory "$SYMPHONY_LOGS_ROOT" "redacted log root")" ||
+  exit $?
+readonly logs_root
+raw_logs_root="$(canonical_private_directory "$SYMPHONY_RAW_LOGS_ROOT" "raw log root")" ||
+  exit $?
+readonly raw_logs_root
+require_outside_config "$service_home" "service home" "$config_root"
+require_outside_config "$workspace_root" "workspace root" "$config_root"
+require_outside_config "$logs_root" "redacted log root" "$config_root"
+require_outside_config "$raw_logs_root" "raw log root" "$config_root"
+require_tmpfs "$raw_logs_root"
+[[ -z "$(/usr/bin/find "$raw_logs_root" -mindepth 1 -print -quit)" ]] ||
+  die "SYMPHONY_RAW_LOGS_ROOT must be empty before startup"
+
+readonly port="${SYMPHONY_PORT:-4313}"
+if [[ ! "$port" =~ ^[0-9]{1,5}$ ]] || (( port <= 0 || port >= 65536 )); then
+  die "SYMPHONY_PORT must be between 1 and 65535"
+fi
+
+readonly tracker_canary="$SYMPHONY_TRACKER_TOKEN"
+run_id="$(/bin/date -u +%Y%m%dT%H%M%SZ)-$$"
+readonly run_id
+readonly redacted_run_root="$logs_root/$run_id"
+readonly redaction_secrets_file="$raw_logs_root/.redaction-secrets.json"
+/bin/mkdir -m 700 "$redacted_run_root"
+/bin/mkdir -m 700 "$redacted_run_root/internal"
+
+/usr/bin/env -i \
+  PATH="$SAFE_PATH" \
+  SYMPHONY_REDACTION_SECRET="$tracker_canary" \
+  "$EXPECTED_REDACTOR" --prepare \
+  "$SYMPHONY_MODEL_AUTH_FILE" "$redaction_secrets_file" ||
+  die "cannot prepare the volatile redaction set"
+
+set +e
+/usr/bin/env -i \
+  HOME="$service_home" \
+  PATH="$SAFE_PATH" \
+  SYMPHONY_TRACKER_TOKEN="$SYMPHONY_TRACKER_TOKEN" \
+  SYMPHONY_WORKSPACE_ROOT="$workspace_root" \
+  SYMPHONY_AGENT_LAUNCHER_SHA256="$SYMPHONY_AGENT_LAUNCHER_SHA256" \
+  SYMPHONY_AGENT_IMAGE="$SYMPHONY_AGENT_IMAGE" \
+  SYMPHONY_BOOTSTRAP_NETWORK="$SYMPHONY_BOOTSTRAP_NETWORK" \
+  SYMPHONY_BOOTSTRAP_PROXY="$SYMPHONY_BOOTSTRAP_PROXY" \
+  SYMPHONY_AGENT_NETWORK="$SYMPHONY_AGENT_NETWORK" \
+  SYMPHONY_AGENT_PROXY="$SYMPHONY_AGENT_PROXY" \
+  SYMPHONY_MODEL_AUTH_FILE="$SYMPHONY_MODEL_AUTH_FILE" \
+  "$SYMPHONY_BIN" "$SYMPHONY_WORKFLOW" --port "$port" --logs-root "$raw_logs_root" \
+  2>&1 |
+  /usr/bin/env -i \
+    PATH="$SAFE_PATH" \
+    SYMPHONY_REDACTION_SECRETS_FILE="$redaction_secrets_file" \
+    "$EXPECTED_REDACTOR" --stream |
+  /usr/bin/tee "$redacted_run_root/console.log"
+readonly pipeline_status=("${PIPESTATUS[@]}")
+
+/usr/bin/env -i \
+  PATH="$SAFE_PATH" \
+  SYMPHONY_REDACTION_SECRETS_FILE="$redaction_secrets_file" \
+  "$EXPECTED_REDACTOR" --tree "$raw_logs_root" "$redacted_run_root/internal"
+readonly tree_status="$?"
+/bin/rm -f "$redaction_secrets_file"
+
+if (( tree_status == 0 )); then
+  /usr/bin/find "$raw_logs_root" -type f -delete
+  /usr/bin/find "$raw_logs_root" -mindepth 1 -depth -type d -empty -delete
+fi
+set -e
+
+(( pipeline_status[1] == 0 )) || die "live log redaction failed"
+(( pipeline_status[2] == 0 )) || die "writing the redacted console log failed"
+(( tree_status == 0 )) || die "runtime log redaction failed; raw logs remain only on private tmpfs"
+exit "${pipeline_status[0]}"
