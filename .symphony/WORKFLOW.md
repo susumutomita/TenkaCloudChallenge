@@ -3,7 +3,7 @@ tracker:
   kind: github
   provider:
     repo: susumutomita/TenkaCloudChallenge
-    token: $GITHUB_TOKEN
+    token: $SYMPHONY_TRACKER_TOKEN
   required_labels:
     - agent:ready
   active_states:
@@ -14,20 +14,41 @@ polling:
   interval_ms: 15000
 workspace:
   root: $SYMPHONY_WORKSPACE_ROOT
-hooks:
-  after_create: |
-    git clone --filter=blob:none --no-tags git@github.com:susumutomita/TenkaCloudChallenge.git .
-    make install_ci
+hooks: {}
 agent:
   max_concurrent_agents: 1
   max_turns: 30
 codex:
-  command: codex app-server
-  approval_policy: never
+  command: /usr/local/libexec/tenkacloud-symphony-agent
+  read_timeout_ms: 900000
+  approval_policy: on-request
   thread_sandbox: workspace-write
   turn_sandbox_policy:
     type: workspaceWrite
-    networkAccess: true
+    networkAccess: false
+security:
+  production_intended: true
+  tracker_secret_environment_names:
+    - SYMPHONY_TRACKER_TOKEN
+  credentials:
+    tracker_scope: issues-read-only
+    agent_repository_write: none
+    model_credential: separate-read-only-file
+  isolation:
+    boundary: external-container
+    launcher_path: /usr/local/libexec/tenkacloud-symphony-agent
+    launcher_owner: root
+    launcher_writable_by_agent: false
+  egress:
+    mode: proxy-only
+    direct_network: false
+    internal_network_required: true
+    allowlist_source: operator-owned
+  logging:
+    exact_secret_redaction: true
+    synthetic_canary_test: required
+  lifecycle:
+    handoff_mode: approval-block-then-human-unlabel
 ---
 
 You are the unattended implementation agent for GitHub Issue `{{ issue.identifier }}` in
@@ -42,6 +63,10 @@ credentials, flags outside the Issue scope, reference-answer secrets, or `.env` 
 schemas, validators, test discovery, template security, cost checks, compatibility checks, CI, or
 `make agent-gate`.
 
+This runtime has no GitHub write credential. Do not authenticate to GitHub, push, comment, open or
+update a pull request, or merge. Prepare a reviewed local change and a handoff report only.
+External and integration validation that was not run must be reported as skipped, never passed.
+
 This repository owns problems, learning material, metadata, templates, local workloads, grading, and
 catalog artifacts. It declares required Simulator capabilities but does not implement Simulator or
 platform behavior.
@@ -49,21 +74,26 @@ platform behavior.
 Require explicit acceptance criteria. Treat shared schemas, grading, flags, reference solutions,
 compatibility semantics, CloudFormation security, cost rules, workflows, dependencies, lockfiles,
 agent guidance, or quality gates as high risk and stop for human review before implementation. New
-problems inside existing contracts are medium risk. Only low-risk changes may merge automatically.
+problems inside existing contracts are medium risk.
+High-risk changes must stop at human review and protected checks. This runtime never merges; a human
+publishes even low-risk work.
 
-Create or resume `agent/gh-<number>-<slug>` from `origin/main`. Reproduce the catalog or learner
-behavior, implement only the approved scope, add tests, regenerate artifacts, and run
-`make agent-gate`, with at most five repair cycles.
+The immutable launcher has already created and checked out the isolated `agent/symphony-*` workspace
+branch before this app-server started. Do not create, switch, rename, push, or delete branches.
+Reproduce the catalog or learner behavior, implement only the approved scope, add tests, regenerate
+artifacts, and run `make symphony-agent-gate`, with at most five repair cycles. This offline gate
+deliberately excludes the public-GitHub course-drift request. Record it as pending in the handoff;
+the human operator must run the complete networked `make agent-gate` outside this container.
 
-Run an independent review:
+Prepare a handoff with acceptance criteria, risk, validation, learner walkthrough, cost and cleanup
+impact, and known limitations in `.symphony-handoff.md`. Do not run a nested Codex review: the turn
+sandbox intentionally has no direct or brokered model access for child processes. A human operator
+must run `codex exec review --base origin/main` outside this agent container, resolve its findings,
+and independently publish and merge through protected checks.
 
-```bash
-codex exec review --base origin/main
-```
-
-Resolve actionable correctness, security, learning-quality, hint leakage, grading, cost,
-compatibility, test, complexity, and scope findings. Rerun the gate and review after fixes.
-
-Create or update one PR with acceptance criteria, risk, validation, learner walkthrough, cost and
-cleanup impact, and known limitations. For low-risk work only, squash merge after required checks and
-review threads are clean. Do not deploy a problem environment after merge.
+The handoff must not end as a normal completed turn while the Issue is still routable. After writing
+`.symphony-handoff.md`, request approval to run the harmless no-op `/usr/bin/true` with the exact
+justification `Symphony handoff ready; remove agent:ready before operator review`. Do not run another
+command. Do not finish normally. Symphony treats that approval request as a blocked handoff and
+does not retry it. The operator must never approve the no-op: first remove the `agent:ready` label,
+then review the handoff and workspace. Do not deploy a problem environment.

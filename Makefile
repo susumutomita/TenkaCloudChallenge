@@ -2,12 +2,9 @@
 
 SIMULATOR_CHECKOUT ?=
 SIMULATOR_REPORT ?= reports/simulator-coverage.json
-SYMPHONY_BIN ?= symphony
 SYMPHONY_WORKFLOW ?= .symphony/WORKFLOW.md
-SYMPHONY_PORT ?= 4313
-SYMPHONY_LOGS_ROOT ?= .symphony/logs
 
-.PHONY: help install install_ci validate agent-gate simulator-compatibility symphony-validate symphony-print symphony-run
+.PHONY: help install install_ci validate validate-offline agent-gate symphony-agent-gate simulator-compatibility symphony-validate symphony-print symphony-run
 
 help:
 	@echo "TenkaCloudChallenge quality commands"
@@ -15,6 +12,7 @@ help:
 	@echo "  make install_ci   Install the frozen dependency graph"
 	@echo "  make validate     Run the complete repository-local catalog contract"
 	@echo "  make agent-gate   Run the deterministic completion contract for agents"
+	@echo "  make symphony-agent-gate  Run the offline gate inside isolated Symphony"
 	@echo "  make symphony-validate  Validate this repository's Symphony workflow"
 	@echo "  make symphony-run       Run this repository's Symphony instance"
 	@echo "  make simulator-compatibility SIMULATOR_CHECKOUT=/absolute/path/to/TenkaCloudSimulator"
@@ -25,10 +23,12 @@ install:
 install_ci:
 	bun install --frozen-lockfile --ignore-scripts
 
-validate:
+validate-offline:
 	bun run validate
 	bun run scripts/build-index.ts --check
 	bun run cost:check
+
+validate: validate-offline
 	bun run course:drift
 
 simulator-compatibility:
@@ -42,20 +42,17 @@ simulator-compatibility:
 
 agent-gate: validate symphony-validate
 
+symphony-agent-gate: validate-offline symphony-validate
+
 symphony-validate:
-	@test -f "$(SYMPHONY_WORKFLOW)"
-	@grep -q '^  kind: github$$' "$(SYMPHONY_WORKFLOW)"
-	@grep -q '^    repo: susumutomita/TenkaCloudChallenge$$' "$(SYMPHONY_WORKFLOW)"
-	@grep -q '^    - agent:ready$$' "$(SYMPHONY_WORKFLOW)"
-	@grep -q 'make agent-gate' "$(SYMPHONY_WORKFLOW)"
-	@grep -q 'codex exec review --base origin/main' "$(SYMPHONY_WORKFLOW)"
-	@grep -q 'Never run deploy, destroy, release, force-push, or secret-management commands' "$(SYMPHONY_WORKFLOW)"
+	bun test scripts/symphony-security.test.ts scripts/symphony-launcher-contract.test.ts
+	bun run scripts/symphony-security.ts "$(SYMPHONY_WORKFLOW)"
 
 symphony-print: symphony-validate
 	@cat "$(SYMPHONY_WORKFLOW)"
 
 symphony-run: symphony-validate
-	@test -n "$$GITHUB_TOKEN" || { echo 'GITHUB_TOKEN is required' >&2; exit 2; }
-	@test -n "$$SYMPHONY_WORKSPACE_ROOT" || { echo 'SYMPHONY_WORKSPACE_ROOT is required' >&2; exit 2; }
-	@mkdir -p "$(SYMPHONY_LOGS_ROOT)"
-	"$(SYMPHONY_BIN)" "$(SYMPHONY_WORKFLOW)" --port "$(SYMPHONY_PORT)" --logs-root "$(SYMPHONY_LOGS_ROOT)"
+	@echo "Refusing to start a credentialed service from repository-controlled Makefile code." >&2
+	@echo "Install the reviewed operator launchers outside the checkout and start the host launcher directly." >&2
+	@echo "See .symphony/README.md." >&2
+	@exit 2
