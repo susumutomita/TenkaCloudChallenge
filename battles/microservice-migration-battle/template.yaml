@@ -230,6 +230,11 @@ Resources:
                   - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/${Ec2}"
                   - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:document/SSM-SessionManagerRunShell"
                   - !Sub "arn:aws:ssm:${AWS::Region}::document/SSM-SessionManagerRunShell"
+              - Sid: OpenOwnSessionDataChannel
+                Effect: Allow
+                Action:
+                  - ssmmessages:OpenDataChannel
+                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:session/${!aws:userid}-*"
               - Sid: TerminateOwnSession
                 Effect: Allow
                 Action:
@@ -247,7 +252,7 @@ Resources:
                   # pattern, restricting each caller to their own sessions.
                   StringLike:
                     ssm:resourceTag/aws:ssmmessages:session-id:
-                      - "${aws:userid}"
+                      - "${aws:userid}*"
               - Sid: DescribeOwnStack
                 Effect: Allow
                 Action:
