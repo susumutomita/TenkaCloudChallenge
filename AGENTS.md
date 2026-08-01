@@ -1,107 +1,47 @@
 # AGENTS.md — TenkaCloudChallenge
 
-This is the working contract for autonomous coding agents, including Symphony, Codex, and Claude Code.
+TenkaCloudChallenge の AI エージェント向け作業契約です。問題作成の方法は固定せず、repository boundary、安全、検証可能な完了条件を共有します。
 
 ## Repository boundary
 
-TenkaCloudChallenge owns problem content, learning material, scenarios, metadata, templates, local workloads, grading logic, and catalog indexes.
+TenkaCloudChallenge は problem content、learning material、scenario、metadata、template、local workload、grading、catalog index を所有します。
 
-- Declare capabilities a problem requires; do not implement simulator capabilities here.
-- TenkaCloudSimulator declares the capabilities it implements and must not contain problem IDs or problem-specific branches.
-- TenkaCloud performs the compatibility comparison and platform integration.
-- Do not move Challenge-specific scenarios or StackStack content into the TenkaCloud platform repository.
+- 必要な simulator capability を宣言するが、Simulator の実装は置かない。
+- TenkaCloudSimulator は capability 実装を所有し、problem ID や問題固有分岐を持たない。
+- TenkaCloud は compatibility comparison と platform integration を所有する。
+- participant-visible secret、flag、reference solution を公開 surface へ漏らさない。
 
-## Setup
+## Working contract
 
-```bash
-make install
-```
+- 依頼、Issue、schema、既存 problem、validator、generated artifact から受け入れ条件を把握する。
+- 新しい problem または helper を足す前に、既存 catalog、shared script、cost rule、compatibility contract を検索する。
+- 方法はタスクに合わせて選ぶ。`Plan.md`、固定 workflow、専用 Skill、固定人数の subagent は必須ではない。
+- problem content、template、portal、grading、local workload、generated catalog を必要な範囲で一貫させる。
+- scope 外の発見は PR に混ぜず、必要なら別 Issue または PR の known limitation として残す。専用 follow-up Skill は任意。
+- deploy、destroy、release、production cloud command は実行しない。
 
-CI and clean agent workspaces use:
+## Guardrails
 
-```bash
-make install_ci
-```
+- AWS credential、`.env`、secret、flag、participant-visible answer を読み出したり公開したりしない。
+- shared schema、grading semantics、cost rule、security rule、compatibility semantics は高影響の contract として扱う。
+- generated `index.json`、`cost-report.json` は generator から更新し、手編集しない。
+- test、validator、schema、cost check、compatibility check を通すためだけに弱めない。検出器が誤っている証拠がある場合は、fixture と test を伴って修正してよい。
+- skipped / focused test、placeholder、silent fallback を残さない。
 
-## Deterministic completion contract
+## Verification
 
-Run this before creating or updating a pull request:
+完了の正本は repository-local gate です。
 
 ```bash
 make agent-gate
 ```
 
-`make agent-gate` is the repository-local machine-readable completion contract. It runs the complete catalog test suite and static checks for metadata, CloudFormation templates, simulator workloads, compatibility-tool behavior, generated index drift, cost drift, and course drift.
-
-The actual catalog-versus-Simulator capability scan requires a second clean repository and therefore remains the dedicated `simulator-compatibility` GitHub Actions workflow. That workflow pins an immutable Simulator commit. For an explicit local scan, run:
+Simulator capability contract を変更した場合、clean checkout を使う cross-repository scan も必要です。
 
 ```bash
 make simulator-compatibility SIMULATOR_CHECKOUT=/absolute/path/to/TenkaCloudSimulator
 ```
 
-A task is incomplete while the local gate or required cross-repository compatibility check fails. Fix the implementation or content. Do not weaken validators, schemas, test discovery, cost checks, or compatibility checks to make a change pass.
+変更に応じて metadata、CloudFormation、container starter / reference / mutation / `/verify`、cost、course drift、generated artifact を実際の validator で確認します。既存テストが十分なら、儀式として重複テストを追加しません。
 
-## Agent workflow
-
-1. Read the Issue and write explicit acceptance criteria.
-2. Reproduce the current behavior or record the current catalog state.
-3. Inspect existing problems and shared scripts before adding new helpers.
-4. Keep changes inside the Issue scope.
-5. Add or update tests for every behavior change.
-6. Run `make agent-gate` until it passes.
-7. Review the diff for correctness, security, learning quality, unintended hints, stale generated files, and cross-repository contract impact.
-8. Leave proof in the pull request: acceptance criteria, risk, commands executed, results, and known limitations.
-
-## Risk boundaries
-
-Treat the following as high risk and do not auto-merge them:
-
-- `SCHEMA.json`, shared metadata contracts, or compatibility semantics
-- CloudFormation security rules or cost estimation rules
-- simulator capability requirements
-- grading, flags, reference solutions, or participant-visible secrets
-- GitHub Actions, `Makefile`, `AGENTS.md`, `CLAUDE.md`, dependency manifests, or lockfiles
-- changes that can leave billable cloud resources behind
-
-New problem content that stays within existing contracts is medium risk. Documentation-only and test-only changes can be low risk when they do not reveal solutions or secrets.
-
-## Prohibited actions
-
-- Do not run deploy, destroy, release, or production cloud commands.
-- Do not use AWS credentials or other production secrets.
-- Do not force-push or push directly to a protected branch.
-- Do not use `npx`; use `bunx`.
-- Do not use silent fallbacks, placeholder implementations, skipped tests, focused tests, or empty verification results.
-- Do not edit generated `index.json` or `cost-report.json` by hand; run the generators.
-- Do not add an Issue-unrelated cleanup to the same pull request.
-
-## Problem authoring rules
-
-- Every problem must satisfy `metadata.json` and catalog schema requirements.
-- Template outputs and portal references must resolve.
-- CloudFormation templates must pass ASCII and security checks.
-- Container problems must exercise starter, reference, mutation, and `/verify` behavior through the real test suite.
-- Simulator workloads must use the compatibility contract rather than problem-specific simulator logic.
-- Update generated catalog and cost artifacts whenever their source changes.
-
-## Pull request evidence
-
-Include these sections:
-
-```markdown
-## Acceptance criteria
-- [x] ...
-
-## Risk
-- level: low | medium | high
-- reasons: ...
-
-## Validation
-- make agent-gate: passed
-- simulator-compatibility: passed
-
-## Cross-repo impact
-- TenkaCloud: ...
-- TenkaCloudSimulator: ...
-- TenkaCloudPassport: none unless explicitly related
-```
+PR 本文には変更内容、検証結果、risk、TenkaCloud / Simulator / Passport への影響、未検証事項を書く。
