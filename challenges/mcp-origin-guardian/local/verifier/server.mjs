@@ -1,19 +1,59 @@
 import { createServer } from "node:http";
-import { decodeSubmission } from "../app/policy.mjs";
+import { decodeSubmission, encodeSubmission } from "../app/policy.mjs";
 import { gradePolicy } from "./grader.mjs";
+import { runPublicCases } from "./public-cases.mjs";
 
 const BODY_LIMIT = 32 * 1024;
+const HEADER_LIMIT = 8 * 1024;
 const PORT = Number(process.env.PORT || 8081);
+const WORKBENCH_ORIGINS = new Set([
+  "http://127.0.0.1:18110",
+  "http://localhost:18110",
+]);
 const HEADERS = Object.freeze({
   "cache-control": "no-store",
   "content-type": "application/json; charset=utf-8",
   "x-content-type-options": "nosniff",
 });
 
-function send(response, status, payload) {
+function requestUrl(target) {
+  try {
+    return new URL(String(target ?? "/"), "http://127.0.0.1");
+  } catch {
+    return new URL("http://127.0.0.1/__malformed_request__");
+  }
+}
+
+function corsHeaders(request) {
+  const origin = typeof request.headers.origin === "string" ? request.headers.origin : "";
+  if (!WORKBENCH_ORIGINS.has(origin)) return null;
+  return {
+    "access-control-allow-origin": origin,
+    vary: "Origin",
+  };
+}
+
+function send(response, status, payload, extra = {}) {
   const body = JSON.stringify(payload);
-  response.writeHead(status, { ...HEADERS, "content-length": Buffer.byteLength(body) });
+  response.writeHead(status, {
+    ...HEADERS,
+    "content-length": Buffer.byteLength(body),
+    ...extra,
+  });
   response.end(body);
+}
+
+function sendPreflight(response, cors) {
+  response.writeHead(204, {
+    ...cors,
+    "access-control-allow-headers": "content-type",
+    "access-control-allow-methods": "POST, OPTIONS",
+    "access-control-max-age": "600",
+    "cache-control": "no-store",
+    "content-length": "0",
+    "x-content-type-options": "nosniff",
+  });
+  response.end();
 }
 
 function readJson(request) {
@@ -55,11 +95,38 @@ function readJson(request) {
   });
 }
 
-const server = createServer(async (request, response) => {
-  if (request.method === "GET" && request.url === "/healthz") {
+const server = createServer({ maxHeaderSize: HEADER_LIMIT }, async (request, response) => {
+  const url = requestUrl(request.url);
+  if (request.method === "GET" && url.pathname === "/healthz") {
     return send(response, 200, { status: "ok" });
   }
-  if (request.method !== "POST" || request.url !== "/verify") {
+
+  if (
+    request.method === "OPTIONS" &&
+    ["/public-test", "/prepare"].includes(url.pathname)
+  ) {
+    const cors = corsHeaders(request);
+    if (!cors) return send(response, 403, { error: "origin_not_allowed" });
+    return sendPreflight(response, cors);
+  }
+
+  if (
+    request.method === "POST" &&
+    ["/public-test", "/prepare"].includes(url.pathname)
+  ) {
+    const cors = corsHeaders(request);
+    if (!cors) return send(response, 403, { error: "origin_not_allowed" });
+    const body = await readJson(request);
+    if (!body) return send(response, 400, { error: "invalid_json" }, cors);
+    const report = runPublicCases(body.policy);
+    const payload = { report };
+    if (url.pathname === "/prepare" && report.correct) {
+      payload.submission = encodeSubmission(body.policy);
+    }
+    return send(response, 200, payload, cors);
+  }
+
+  if (request.method !== "POST" || url.pathname !== "/verify") {
     return send(response, 404, { error: "not_found" });
   }
   const body = await readJson(request);
