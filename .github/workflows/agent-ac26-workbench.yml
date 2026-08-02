@@ -40,8 +40,11 @@ jobs:
 
       - name: Generate all Browser Workbenches
         run: |
-          python3 -m py_compile scripts/migrate-course-workbenches.py
+          python3 -m py_compile \
+            scripts/migrate-course-workbenches.py \
+            scripts/sanitize-course-workbench-docs.py
           python3 scripts/migrate-course-workbenches.py
+          python3 scripts/sanitize-course-workbench-docs.py
           python3 -m compileall -q challenges
 
       - name: Refresh generated catalogue files
