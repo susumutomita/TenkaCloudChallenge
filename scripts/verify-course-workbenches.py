@@ -56,6 +56,16 @@ REPRESENTATIVES = {
     "ac26-w7-capstone-demo",
     "sha256-compress-digest",
 }
+FORBIDDEN_DOC_TERMS = (
+    "make inspect",
+    "local/starter/",
+    "host terminal",
+    "host-side terminal",
+    "host-side file",
+    "ホスト側のターミナル",
+    "ホスト側で",
+    "ファイル操作",
+)
 
 PROBE = r'''
 import json
@@ -178,22 +188,17 @@ def check_static(problem_id: str) -> None:
         "Browser Workbench" in instructions,
         f"{problem_id}: instructions do not start in Workbench",
     )
-    require(
-        "make inspect" not in instructions and "local/starter/" not in instructions,
-        f"{problem_id}: host-only first move remains",
-    )
+    documents = [json.dumps(metadata, ensure_ascii=False)]
     for readme in ("README.md", "README.ja.md"):
         text = (problem / readme).read_text(encoding="utf-8")
         require("Browser Workbench" in text, f"{problem_id}: {readme} omits browser path")
-        explanation = "## 解説" if readme.endswith("ja.md") else "## Explanation"
-        participant_path = text.split(explanation, 1)[0]
-        workbench_position = participant_path.index("Browser Workbench")
-        for legacy_term in ("make inspect", "local/starter/"):
-            if legacy_term in participant_path:
-                require(
-                    workbench_position < participant_path.index(legacy_term),
-                    f"{problem_id}: {readme} puts checkout work before Browser Workbench",
-                )
+        documents.append(text)
+    combined = "\n".join(documents).casefold()
+    for term in FORBIDDEN_DOC_TERMS:
+        require(
+            term.casefold() not in combined,
+            f"{problem_id}: obsolete host-only direction remains: {term}",
+        )
 
 
 def check_runtime(problem_id: str) -> None:
