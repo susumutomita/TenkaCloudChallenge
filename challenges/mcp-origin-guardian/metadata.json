@@ -75,12 +75,12 @@
     ],
     "audiences": [
       {
-        "id": "audience.software-engineer",
+        "id": "audience.mcp-server-engineer",
         "description": "MCPまたはOAuth resource serverを実装するソフトウェアエンジニア"
       },
       {
-        "id": "audience.security-engineer",
-        "description": "HTTP trust boundaryをレビューするセキュリティエンジニア"
+        "id": "audience.http-security-reviewer",
+        "description": "HTTP authority trust boundaryをレビューするセキュリティエンジニア"
       }
     ]
   },
@@ -123,12 +123,12 @@
     {
       "type": "related_to",
       "source": "problem.mcp-origin-guardian",
-      "target": "audience.software-engineer"
+      "target": "audience.mcp-server-engineer"
     },
     {
       "type": "related_to",
       "source": "problem.mcp-origin-guardian",
-      "target": "audience.security-engineer"
+      "target": "audience.http-security-reviewer"
     }
   ],
   "i18n": {
@@ -171,8 +171,8 @@
   },
   "scoring": {
     "kind": "verify",
-    "points": 150,
-    "wrongAnswerPenalty": 5,
+    "points": 200,
+    "wrongAnswerPenalty": 10,
     "hints": [
       {
         "id": "hint-1",
