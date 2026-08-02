@@ -13,8 +13,10 @@ resource. It uses no real OAuth provider, credential, cloud account, or outbound
 | 127.0.0.1:18111 | verifier | Loopback `/verify` used by TenkaCloud |
 
 Both services run read-only as non-root users with every Linux capability dropped. Their
-published ports bind only to host loopback, and the shared Docker network is `internal`, so
-neither service has an outbound route.
+published ports bind only to host loopback. Participant and verifier use separate Docker
+networks, and a custom seccomp profile denies the `connect(2)` syscall in both containers.
+The services can accept the intended loopback requests but cannot initiate outbound TCP
+connections.
 
 The participant image contains only the Workbench, published cases, and policy execution
 logic. The hidden grader and `/verify` exist only in a separate verifier image and cannot be
@@ -44,4 +46,4 @@ No AWS resources are created and estimated cost is USD 0. Stop it with:
     docker compose -f challenges/mcp-origin-guardian/local/docker-compose.yml down --volumes --remove-orphans
 
 Physical impact on cloud resources: CREATE / UPDATE / REPLACE / DELETE are all none. Only
-disposable local containers, images, and a Docker network are created and removed.
+disposable local containers, images, and Docker networks are created and removed.
