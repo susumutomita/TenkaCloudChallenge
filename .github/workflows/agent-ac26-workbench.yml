@@ -1,0 +1,24 @@
+name: Agent AC26 workbench migration
+
+on:
+  push:
+    branches:
+      - agent/ac26-workbench-all
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent-ac26-workbench-all
+  cancel-in-progress: false
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Inspect targets
+        run: python3 scripts/inspect-workbench-targets.py
