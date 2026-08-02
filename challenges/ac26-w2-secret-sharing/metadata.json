@@ -27,9 +27,9 @@
   "difficulty": 3,
   "estimatedDuration": "40-60 分",
   "shortDescription": "秘密を n 個に分けて配る。足せば戻る。それだけなら暗号ではない。n-1 個を持っていても何も分からないことを、証拠で示す。",
-  "description": "Week 2 の mechanism 問題。 加法的秘密分散を F_p 上で実装する。 足し算で戻ることは数行で書けるので、 checkpoint はそこではなく「n-1 個では何も分からない」という性質を実行可能な形で示させることに置く。\n\nhides-the-secret checkpoint は participant の complete_shares を field の全要素に対して回す。 同じ n-1 個の share から、 どの秘密に対しても辻褄の合う最後の 1 個を作れるなら、 その n-1 個は秘密について 何の証拠でもない。 これが「漏れない」の実行可能な定義になる。\n\nthreshold checkpoint は必要数を答えるだけでは通らない。 同じ n-1 個と両立する相異なる 2 つの秘密を 提出させる。 数を当てるのは推測でできるが、 2 つの証人は理解がないと作れない。\n\nhidden test は starter の自明な分割 (party 0 に秘密をそのまま渡す) を明示的に落とす。 round trip だけを見る test はこれを通してしまい、 それは分散になっていない。\n\nWeek 2 の教材は pinned commit 時点で未公開のため courseAlignment.sources は持たない (schema は この場合のために sources を任意にしている)。 #219 が公開を検出した時点で対応づけを確定する。 status は draft のままにする。",
-  "instructions": "## はじめに\n\n秘密を n 人に分けて配ります。 全員分を足せば戻ります。 それだけなら暗号ではありません。\n\n## 最初の一手\n\n```bash\nmake inspect\n```\n\n自分の設定 (modulus と人数) と、 n-1 人が互いに見せ合ったときに 見えるものが出ます。 走らせる前に「この値と辻褄の合う秘密はどれか」を書き留めてください。\n\n次に `local/starter/sharing.py` を編集します。\n\n## ゴール\n\n分割と復元を実装し、 n-1 個では何も分からないことを実際に示し、 秘密を変えずに share を入れ替えられるようにします。",
-  "writeup": "## 足せば戻ることは、まだ何でもない\n\n加法的秘密分散の算術は数行で終わる。 価値があるのは「n-1 個では秘密について何も分からない」ほうで、 これは主張ではなく示すものだ。\n\n## 「漏れない」の実行可能な定義\n\n同じ n-1 個の share から、 field のどの秘密に対しても辻褄の合う 最後の 1 個を作れるなら、 その n-1 個は秘密の証拠になっていない。 complete_shares が全要素で成功する ことがそのまま証明になる。 これが Week 6 の over-opening (途中で share を開けてしまう) を 「なぜまずいか」で語れるようになる土台になる。\n\n## 自明な分割は分散ではない\n\nparty 0 に秘密をそのまま渡し、 残りを 0 にすれば足し算は合う。 round trip test は通る。 だが party 0 は最初から全部知っている。 hidden test がこれを明示的に落とすのは、 「テストが通る」と「性質が成り立つ」の差がこの問題でも同じ形で現れるからだ。\n\n## rerandomize\n\n和が 0 になる offset を足すと、 秘密は変わらないまま share は全部動く。 実プロトコルでは、 同じ share 集合がラウンドを跨いで結び付けられないようにするために使う。 固定の期待値ではなく「秘密が保たれ、 かつ全要素が動いた」という関係で検査している。",
+  "description": "Week 2 の mechanism 問題。 加法的秘密分散を F_p 上で扱う。 足し算で戻ることは数行なので、 段階はそこではなく「n-1 個では何も分からない」を実行可能な形で示させることに置く。\n\n配信形態は container のみ。 参加者は portal から問題コンテナのターミナルへ接続し、 `shares` コマンドを 1 行ずつ打つ。 編集するファイルは無く、 host への checkout も要らない。 `shares show` が題材・ホワイトボード版の分割・このデプロイの 2 つの ledger・各段階のコマンドを 1 画面で出す。\n\n採点は単一の discovered flag。 4 段階すべてを通すと `shares flag` が `TC{...}` を出し、 それを 1 行の回答欄に貼る。 flag は container 内で FLAG_SEED から導出する。\n\n段階は 4 つ。\n\n(1) recover: 全 share が画面にある ledger A の合計。 これは往復だけの易しい段階で、 次の段階との対比のために置いてある — この視界は合計を一意に決める。\n\n(2) complete: ledger B は 1 人分の share が欠けている。 「ledger B の合計は何か」ではなく「任意の target に対して、 欠けている share を選んで必ずその target に合わせられるか」を、 1 行の式で書かせる。 名前は target / known / modulus で、 見せていない (target, known, modulus) の族との一致で採点する。 全要素に合わせられるなら、 その n-1 個は何も絞っていない — これが「漏れない」の実行可能な定義になる。 known は**簡約せずに**渡す (可視 share の生の和なので modulus より大きい)。 そのため剰余を取らない式はこのデプロイの数値そのもので落ちる。\n\n(3) refresh: 総和を動かさず全 share を動かす offset を構成させる。 和が 0 かつ全要素が 0 でないことの両方を要求する。 和が 0 の全 0 ベクトルは前者を満たすが refresh ではない。\n\n(4) transfer: 別の modulus・別の人数・別の欠員で同じ 3 つ。 加えて可視 share の**和を前計算して渡さない**。 転移とは同じ問いから足場を 1 枚外すことである。\n\nmutation.py は判定器を 1 要件ずつ壊し、 wrong-answer カタログが全部殺すことを見る。 refresh の要件は fixtures ではなく judge に置いてある — fixtures に置くと mutation が届かず、 届かない要件は何もテストしていない要件になる。 加えて 120 seed の sweep (known > modulus、 2 つの ledger の合計が違う、 2 つの setting が modulus と人数の両方で違う、 族が退化していない)、 transfer の lock、 16 通りの部分集合すべてでの flag gate を CLI 経由で確認する。\n\nWeek 2 の教材は pinned commit 時点で未公開のため sources は kind: placeholder で pin してある。 #219 が公開を検出した時点で対応づけを確定する。 status は draft のままにする。",
+  "instructions": "## はじめに\n\n秘密を n 人に分けて配ります。 全員分を足せば戻ります。 それだけなら暗号ではありません。\n\n## 最初の一手\n\n問題を起動したら、 **コンテナのターミナルに接続**して次を打ってください。\n\n```bash\nshares show\n```\n\n秘密分散が何なのか、 前任者がホワイトボードに書いた分割がなぜ分散になっていないのか、 このデプロイの 2 つの ledger、 そして各段階で打つコマンドがそのまま出ます。 迷ったら何度でも `shares show` に戻ってください。\n\n引数なしで `shares` を打てばコマンド一覧が出ます。 編集するファイルはありません。 すべて 1 行で打てるコマンドです。\n\n## ゴール\n\n合計を戻し、 欠けている share を「どんな target にでも」合わせられることを 1 行の式で示し、 秘密を動かさずに全 share を入れ替え、 最後に見たことのない設定で同じ 3 つをやります。 全部通ると `shares flag` が `TC{...}` を出すので、 それを回答欄に貼ってください。",
+  "writeup": "## 足せば戻ることは、まだ何でもない\n\n加法的秘密分散の算術は数行で終わる。 価値があるのは「n-1 個では秘密について何も分からない」ほうで、 これは主張ではなく示すものだ。 だから最初の段階 (全 share が見えている ledger の合計) は易しくしてある — 次の段階との対比がすべてで、 1 つ share が欠けただけで視界が何も決めなくなることを、 同じ画面で並べて見るために置いてある。\n\n## 「漏れない」の実行可能な定義\n\n同じ n-1 個を持ったまま、 field のどの target に対しても辻褄の合う最後の 1 個を作れるなら、 その n-1 個は秘密の証拠になっていない。 「どの target に対しても」を 1 行の式で書き、 見ていないパラメータ族との一致で採点するのはそのためだ。 目の前の数値だけを見るなら、 その答えを定数で書けば通ってしまう。\n\n`known` を簡約せずに渡しているのも意図的で、 可視 share の生の和は modulus より大きい。 剰余を取らない式は、 族の端の case ではなく目の前の数値で落ちる。 field の要素であることが、 遠い抽象ではなくその場の制約になる。\n\n## 自明な分割は分散ではない\n\nparty 0 に秘密をそのまま渡し、 残りを 0 にすれば足し算は合う。 round trip の test は通る。 だが party 0 は最初から全部知っている。 族には known = 0 の case が入れてある — それはホワイトボード版で party 0 以外の全員が見る視界そのもので、 そこでも completion は成立する。 つまり壊れているのは算術ではなく手続きのほうだ、 という言い方ができるようになる。\n\n## rerandomize\n\n和が 0 になる offset を足すと、 秘密は変わらないまま share は全部動く。 要件は 2 つあって、 片方だけでは refresh ではない。 和が 0 でも 0 の offset が混じっていればその party の share は動いていないし、 全部動いても和が 0 でなければ秘密が変わっている。 実プロトコルでは、 同じ share 集合がラウンドを跨いで結び付けられないようにするために使う。\n\n## 後続問題への接続\n\nWeek 6 の co-SNARK は、 どの prover も単独では持っていない witness の上で計算する。 「途中で share を開けてしまう」がなぜまずいかを言えるかどうかは、 ここで n-1 個が何も決めないことを自分の手で示したかどうかで決まる。",
   "tags": [
     "advanced-cryptography-2026",
     "week2",
@@ -37,7 +37,8 @@
     "secret-sharing",
     "privacy",
     "local-play",
-    "container"
+    "container",
+    "terminal"
   ],
   "exposedPorts": [
     {
@@ -46,25 +47,25 @@
     }
   ],
   "learningGoals": [
-    "加法的秘密分散を有限体上で実装できる",
-    "全 share を集めたときだけ秘密が戻ることを確認できる",
-    "n-1 個の share が秘密について何の情報も持たないことを実際に示せる",
-    "自明な分割が分散になっていない理由を説明できる",
-    "秘密を変えずに share を入れ替えられる"
+    "有限体上の加法的秘密分散で、全 share を集めたときだけ秘密が戻ることを確認できる",
+    "n-1 個の share がどの秘密とも両立することを、1 行の一般則として書ける",
+    "「テストが通る」と「性質が成り立つ」の差を、自明な分割を例に説明できる",
+    "秘密を保ったまま全 share を入れ替える offset を構成できる",
+    "見ていない modulus と人数でも同じ 3 つの読み取りが成立する"
   ],
   "nodes": {
     "learning_objectives": [
       {
         "id": "lo.ac26-w2-secret-sharing.split-and-recover",
-        "description": "秘密を分割し、全 share から復元できる。"
+        "description": "全 share が見えている sharing から秘密を復元できる。"
       },
       {
         "id": "lo.ac26-w2-secret-sharing.show-independence",
-        "description": "n-1 個の share がどの秘密とも両立することを構成して示せる。"
+        "description": "n-1 個の share がどの秘密とも両立することを、一般則として構成して示せる。"
       },
       {
         "id": "lo.ac26-w2-secret-sharing.rerandomize",
-        "description": "秘密を保ったまま share を入れ替えられる。"
+        "description": "秘密を保ったまま全 share を動かす offset を構成できる。"
       }
     ],
     "concepts": [
@@ -79,24 +80,20 @@
     ],
     "assessment_criteria": [
       {
-        "id": "assessment.ac26-w2-secret-sharing.share-and-reconstruct",
-        "description": "複数の設定で分割と復元が成立し、自明な分割を使っていない。"
+        "id": "assessment.ac26-w2-secret-sharing.recover",
+        "description": "全 share が見えている ledger の合計を、field の要素として答えられた。"
       },
       {
-        "id": "assessment.ac26-w2-secret-sharing.hides-the-secret",
-        "description": "同じ n-1 個から、field の全ての秘密へ辻褄を合わせられた。"
+        "id": "assessment.ac26-w2-secret-sharing.complete",
+        "description": "見ていないパラメータ族すべてで、任意の target に合わせる欠員 share の式を書けた。"
       },
       {
-        "id": "assessment.ac26-w2-secret-sharing.threshold",
-        "description": "必要数と、n-1 個と両立する相異なる 2 つの秘密を提出できた。"
-      },
-      {
-        "id": "assessment.ac26-w2-secret-sharing.rerandomize",
-        "description": "秘密を保ったまま全 share を動かせた。"
+        "id": "assessment.ac26-w2-secret-sharing.refresh",
+        "description": "総和を動かさず、かつ全 share を動かす offset を構成できた。"
       },
       {
         "id": "assessment.ac26-w2-secret-sharing.transfer",
-        "description": "未知の modulus と人数でも同じ性質が成立した。"
+        "description": "別の modulus・人数・欠員で、前計算された和なしに同じ 3 つが成立した。"
       }
     ],
     "misconceptions": [
@@ -149,22 +146,17 @@
     {
       "type": "assesses",
       "source": "problem.ac26-w2-secret-sharing",
-      "target": "assessment.ac26-w2-secret-sharing.share-and-reconstruct"
+      "target": "assessment.ac26-w2-secret-sharing.recover"
     },
     {
       "type": "assesses",
       "source": "problem.ac26-w2-secret-sharing",
-      "target": "assessment.ac26-w2-secret-sharing.hides-the-secret"
+      "target": "assessment.ac26-w2-secret-sharing.complete"
     },
     {
       "type": "assesses",
       "source": "problem.ac26-w2-secret-sharing",
-      "target": "assessment.ac26-w2-secret-sharing.threshold"
-    },
-    {
-      "type": "assesses",
-      "source": "problem.ac26-w2-secret-sharing",
-      "target": "assessment.ac26-w2-secret-sharing.rerandomize"
+      "target": "assessment.ac26-w2-secret-sharing.refresh"
     },
     {
       "type": "assesses",
@@ -192,58 +184,19 @@
     ]
   },
   "scoring": {
-    "kind": "multi-verify",
-    "checks": [
+    "kind": "verify",
+    "points": 200,
+    "wrongAnswerPenalty": 10,
+    "hints": [
       {
-        "id": "share-and-reconstruct",
-        "label": "分けて、集めて、戻す",
-        "points": 50,
-        "wrongAnswerPenalty": 10
+        "id": "hint-1",
+        "content": "recover: 画面の share を全部足して、 [0, p) に戻すだけです。 戻し忘れた和はこの field の要素ではありません。 complete: 可視 share はすでに known を占めています。 合計を target にしたいなら、 欠けている 1 人は差分を持てばよく、 その差分を field に戻します。 known は生の和なので modulus より大きく、 差は負になります — `%` は左が負でも [0, modulus) に着地します。 名前 (target, known, modulus) をそのまま使ってください。 このデプロイの数値を定数で埋め込むと族の他の case で落ちます。",
+        "penalty": 40
       },
       {
-        "id": "hides-the-secret",
-        "label": "足りない集合からは何も言えないことを示す",
-        "points": 45,
-        "wrongAnswerPenalty": 10,
-        "hints": [
-          {
-            "id": "hides-hint-1",
-            "content": "同じ n-1 個を持ったまま、 狙った秘密になるよう最後の 1 個を選べるか。 選べるなら、 その n-1 個は秘密を絞っていない。",
-            "penalty": 20
-          }
-        ]
-      },
-      {
-        "id": "threshold",
-        "label": "必要数を、証人つきで答える",
-        "points": 45,
-        "wrongAnswerPenalty": 10,
-        "hints": [
-          {
-            "id": "threshold-hint-1",
-            "content": "数を答えるだけでは通らない。 同じ n-1 個と両立する、 相異なる 2 つの秘密を実際に作る。",
-            "penalty": 20
-          }
-        ]
-      },
-      {
-        "id": "rerandomize",
-        "label": "秘密を変えずに share を入れ替える",
-        "points": 30,
-        "wrongAnswerPenalty": 10,
-        "hints": [
-          {
-            "id": "rerandomize-hint-1",
-            "content": "和が 0 になる値の組を足せば、 総和は動かない。",
-            "penalty": 15
-          }
-        ]
-      },
-      {
-        "id": "transfer",
-        "label": "見たことのない設定でも成立させる",
-        "points": 30,
-        "wrongAnswerPenalty": 10
+        "id": "hint-2",
+        "content": "refresh: 和が 0 になる offset を足せば総和は動きません。 例えば 1 を n-1 人に配り、 最後の 1 人に -(n-1) を field に戻したものを渡します。 ただし要件は 2 つあります — 和が 0 であることと、 どの offset も 0 でないことです。 0 の offset があるとその party の share は動いていません。 transfer: 同じ 3 つを別の設定でやるだけですが、 可視 share の和は今度は前計算されていません。 まず自分で足してください。 欠けている party も最後の 1 人とは限りません。",
+        "penalty": 60
       }
     ]
   },
@@ -251,53 +204,24 @@
     "en": {
       "name": "Split it, and still nobody knows",
       "shortDescription": "Split a secret across n parties. Add them up and it comes back. If that were all, it would not be cryptography. Show, with evidence, that holding n-1 of them tells you nothing.",
-      "instructions": "## Start here\n\nYou split a secret across n parties. Add every share and the secret comes back. If that were all it did, it would not be cryptography.\n\n## First move\n\n```bash\nmake inspect\n```\n\nThat prints your setting and what n-1 parties would see between them. Before running anything, write down which secrets are consistent with those values.\n\nThen edit `local/starter/sharing.py`.\n\n## Goal\n\nImplement splitting and reconstruction, actually demonstrate that n-1 shares tell you nothing, and refresh the shares without moving the secret.",
-      "writeup": "## Adding up to the secret is not yet anything\n\nThe arithmetic of additive sharing takes a few lines. What makes it worth anything is that n-1 shares carry no information about the secret — and that is something to demonstrate, not assert.\n\n## An executable definition of 'it does not leak'\n\nIf, holding the same n-1 shares, you can produce a consistent final share for *every* secret in the field, then those n-1 shares are not evidence about the secret. `complete_shares` succeeding across the whole field is the proof. That is the footing for talking about Week 6's over-opening in terms of why it is bad, rather than as a rule.\n\n## A trivial split is not a sharing\n\nHand the secret to party 0 and give everyone else zero: the sum still works and the round-trip test still passes. Party 0 knew everything from the start. The hidden tests reject that case explicitly, because the gap between 'the test passes' and 'the property holds' shows up here in the same shape as everywhere else in this track.\n\n## Rerandomizing\n\nAdd a set of offsets summing to zero and the secret is unchanged while every share moves. Real protocols use this so a set of shares cannot be linked across rounds. It is checked as a relation — secret preserved, every element moved — not against a fixed expected list.",
+      "description": "Week 2's mechanism problem. Delivered as a container and played entirely from its terminal -- no file to edit, no checkout -- and scored as a single discovered flag released by the CLI once all four stages are cleared. See the Japanese `description` for the grading contract and the design notes.",
+      "instructions": "## Start here\n\nYou split a secret across n parties. Add every share and the secret comes back. If that were all it did, it would not be cryptography.\n\n## First move\n\nStart the problem, **attach the container terminal**, and type:\n\n```bash\nshares show\n```\n\nThat prints what a sharing is, why the split your predecessor left on the whiteboard is not one, this deployment's two ledgers, and the exact command for each stage. Whenever you lose your place, run it again.\n\nRun `shares` with no arguments for the list of commands. There is no file to edit; every command is one line.\n\n## Goal\n\nRecover a total, write in one line the share that lands the incomplete ledger on *any* target at all, refresh every share without moving the secret, and then do the same three on a setting you have not seen. When all four are cleared, `shares flag` prints your `TC{...}` -- paste it into the answer box.",
+      "writeup": "## Adding up to the secret is not yet anything\n\nThe arithmetic of additive sharing takes a few lines. What makes it worth anything is that n-1 shares carry no information about the secret -- and that is something to demonstrate, not assert. The first stage is easy on purpose: it exists for the contrast with the second, so that a view which fixes the total exactly and a view one share shorter which fixes nothing sit on the same screen.\n\n## An executable definition of 'it does not leak'\n\nIf, holding the same n-1 shares, you can produce a consistent final share for *every* target in the field, then those n-1 shares are not evidence about the total. That is why the stage asks for the rule rather than for one number, and why it is graded against parameters you were not shown: the case in front of you is satisfied by writing its answer down as a constant.\n\n`known` is handed over unreduced on purpose -- a raw sum of several shares is larger than the modulus. A rule that never reduces is then wrong on this deployment's own numbers rather than only on some edge case, so being an element of the field is a constraint you meet on screen.\n\n## A trivial split is not a sharing\n\nHand the secret to party 0 and give everyone else zero: the sum still works and the round-trip test still passes. Party 0 knew everything from the start. The family carries a case with `known = 0` -- exactly what every party except party 0 sees under that split -- and the completion works there too. Which is the point: what is broken there is the procedure, not the arithmetic.\n\n## Rerandomizing\n\nAdd a set of offsets summing to zero and the secret is unchanged while every share moves. There are two requirements and one without the other is not a refresh: offsets that sum to zero but include a zero leave one party exactly where it was, and offsets that all move but do not sum to zero have changed the secret. Real protocols use this so a set of shares cannot be linked across rounds.\n\n## What carries forward\n\nWeek 6's co-SNARK computes on a witness no single prover holds. Whether you can say why opening a share partway through is bad depends on whether you have shown, with your own hands, that n-1 of them decide nothing.",
       "learningGoals": [
-        "Implement additive secret sharing over a finite field",
-        "Confirm the secret returns only when every share is present",
-        "Actually demonstrate that n-1 shares carry no information about the secret",
-        "Explain why a trivial split is not a sharing",
-        "Refresh the shares without changing the secret"
+        "Confirm the secret returns only when every share of a sharing is present",
+        "Write, as one general rule, the fact that n-1 shares are consistent with every secret",
+        "Explain the gap between 'the test passes' and 'the property holds', using a trivial split",
+        "Construct offsets that refresh every share while preserving the secret",
+        "Have the same three readings hold on a modulus and a party count you have not seen"
       ],
-      "checks": [
+      "hints": [
         {
-          "id": "share-and-reconstruct",
-          "label": "Split it, collect it, get it back"
+          "id": "hint-1",
+          "content": "recover: add the shares on screen and bring the total back into [0, p). A sum you forgot to reduce is not an element of this field. complete: the visible shares already account for `known`, so to land the ledger on `target` the missing party has to hold the difference -- brought back into the field. `known` is a raw sum and is larger than the modulus, so that difference is usually negative, and `%` lands in [0, modulus) even then. Use the names (target, known, modulus); this deployment's numbers written in as constants fail on the rest of the family."
         },
         {
-          "id": "hides-the-secret",
-          "label": "Show that a short set says nothing",
-          "hints": [
-            {
-              "id": "hides-hint-1",
-              "content": "Holding the same n-1 shares, can you choose a final share that lands on any secret you like? If you can, those n-1 shares narrow nothing."
-            }
-          ]
-        },
-        {
-          "id": "threshold",
-          "label": "Answer how many are needed, with witnesses",
-          "hints": [
-            {
-              "id": "threshold-hint-1",
-              "content": "The number alone does not pass. Build two different secrets that are both consistent with the same n-1 shares."
-            }
-          ]
-        },
-        {
-          "id": "rerandomize",
-          "label": "Refresh the shares without moving the secret",
-          "hints": [
-            {
-              "id": "rerandomize-hint-1",
-              "content": "Add a set of values that sums to zero and the total does not move."
-            }
-          ]
-        },
-        {
-          "id": "transfer",
-          "label": "Hold up in settings you have not seen"
+          "id": "hint-2",
+          "content": "refresh: offsets that sum to zero leave the total alone -- for instance 1 for all but one party, and the field's version of -(n-1) for the last. But there are two requirements: the offsets sum to zero, AND none of them is zero. A zero offset means that party's share did not move. transfer: the same three questions on another setting, except the visible shares are not pre-summed this time, so add them yourself first -- and the missing party is not necessarily the last one."
         }
       ]
     }

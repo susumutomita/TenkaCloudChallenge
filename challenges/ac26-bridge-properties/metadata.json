@@ -18,10 +18,10 @@
   },
   "difficulty": 3,
   "estimatedDuration": "30-45 分",
-  "shortDescription": "監査に持ち込まれた 3 つの toy verifier。どれも正常系テストは通る。壊れ方が違うだけだ。反例を作って、何を満たし何を破るのかを分類する。",
-  "description": "Bridge 0 の 2 問目。 Week 1 以降で completeness / soundness / privacy / zero-knowledge が 暗黙の前提になる前に、 定義の暗記ではなく反例で区別できる状態にする。\n\n題材は a*w + b == c (mod p) かつ lo <= w <= hi という小さな整数関係だけで、 本物の ZKP は実装しない。 3 つの verifier は次のように壊してある。 P1 は range の下限が strict なため valid な witness を reject する (complete でない)。 P2 は range check 自体が無く、 範囲外の witness を accept する (sound でない)。 P3 は accept/reject は正しいが transcript へ witness を書き込む (private でない)。\n\n採点の要は「ラベルだけでは通さない」こと。 matrix で False と書いた性質は、 対応する checkpoint で 実際に成立する反例を提出しない限り閉じられない。 transfer checkpoint は participant 自身の classify.py / counterexamples.py を hidden seed の別 instance に対して実行する。\n\nP1 の不完全性は、 witness が range の内側にある instance では観測できない (その場合 P1 は正しい verifier と同一の挙動になる)。 そのため incompleteness checkpoint だけは witness が lo に一致する boundary instance を使う。 反例が到達可能でなければ、 その性質は学習者に示せない。",
-  "instructions": "## はじめに\n\n監査に持ち込まれた 3 つの toy verifier を分類します。 どれも正常系は通ります。 壊れ方が違うだけです。\n\n## 最初の一手\n\n```bash\nmake inspect\n```\n\n自分の statement、 3 つの verifier が 何を検査しているか、 P3 の transcript が出ます。\n\n次に `local/starter/classify.py` と `local/starter/counterexamples.py` を編集します。 `make test` は答えの形だけを見ます。 正しいかどうかは hidden verifier が見ます。\n\n## ゴール\n\ncomplete / sound / private を 3 つの verifier について分類し、 False と書いた性質すべてについて実際に成立する反例を提出します。 ラベルだけでは通りません。",
-  "writeup": "## 3 つの性質は独立している\n\ncompleteness は「正しい statement が受理される」、 soundness は「偽の statement が受理されない」、 privacy は「transcript から witness が漏れない」。 3 つは互いに 独立で、 protocol は任意の部分集合を満たしうる。 この問題の 3 つはそれぞれ 1 つだけを破っている。\n\n## なぜラベルだけでは足りないか\n\nP2 を unsound と書くのは簡単だが、 範囲外で accept される witness を 実際に作れて初めて理解したと言える。 hidden test は matrix の False と反例を突き合わせる。 範囲内の witness で「反例」と主張しても通らない。\n\n## security property と implementation bug\n\n3 つはどれも「バグ」だが、 壊している性質が違う。 P1 を「正しい入力を弾くバグ」と呼ぶだけでは、 なぜ soundness は無傷なのかを説明できない。 性質の言葉で言えるようになると、 Week 1 の underconstraint (soundness が壊れる) と Week 2 の over-opening (privacy が壊れる) が別の話だと分かる。\n\n## 反例が到達可能であること\n\nP1 の不完全性は、 witness が range の内側にある instance では観測できない。 boundary instance を用意して初めて示せる。 性質が壊れていることと、 それを示せることは別問題で、 後者は作問側の責任になる。 Week 4 以降で「この test は本当にその欠陥を落とせるか」を問うときに戻ってくる。",
+  "shortDescription": "監査に持ち込まれた 3 つの toy verifier。どれも正常系は通る。壊れ方が違うだけだ。反例を実際に作り、それぞれが今も守っているものを言う。",
+  "description": "Bridge 0 の 2 問目。 Week 1 以降で completeness / soundness / privacy が 暗黙の前提になる前に、 定義の暗記ではなく反例で区別できる状態にする。\n\n配信形態は container のみ。 参加者は portal から問題コンテナのターミナルへ接続し、 `review` コマンドを 1 行ずつ打つ。 編集するファイルは無く、 host への checkout も要らない。 `review show` が題材・このデプロイの statement・各 verifier が何を検査し何を記録したか・各段階のコマンドを 1 画面で出す。\n\n採点は単一の discovered flag。 5 段階すべてを通すと `review flag` が `TC{...}` を出し、 それを 1 行の回答欄に貼る。 flag は container 内で FLAG_SEED から導出する。\n\n題材は a*w + b == c (mod p) かつ lo <= w <= hi という小さな整数関係で、 本物の ZKP は実装しない。 panel は verifier 3 つ + statement 2 つ (main / edge) の組で、 3 つはそれぞれ complete / sound / private のうち 1 つだけを破り、 残り 2 つは守る。\n\n設計上の要点が 4 つある。\n\n(1) `review run <verifier> <w>` を無料で提供する。 verdict と record を両 statement について出すので、 反例は当てずっぽうではなく実験で見つかる。 「提出は採点され、 run は採点されない」を show に明記する。\n\n(2) どの verifier がどの欠陥を持つかは seed で入れ替える。 固定すると classify の答えが全デプロイ共通の 1 文になり、 それは読み取りではなく暗記であり、 参加者間で共有できてしまう。 verifier は「何を検査するか」と「何を記録したか」で説明されるので、 分類は画面から導ける。\n\n(3) 不完全性は edge statement でしか観測できない。 strict な範囲境界だけが欠陥の verifier は、 honest witness が範囲の内側にある statement では正しい verifier と完全に同一挙動になる。 edge statement は honest witness を境界そのものに置く。 性質が壊れていることと、 それを示せることは別問題で、 後者は作問側の責任になる。\n\n(4) classify は 3 つの反例が揃うまで開かない。 「示せないラベルは数えない」がこの問題の主題そのものだからで、 実際に測っているのは 9 マスのうち break ではない 6 マス — 「1 つ壊れているなら何も保証しない」という誤解を落とすのはそちらである。\n\n転移段階は 2 つ目の panel で、 欠陥の載る verifier が違い、 strict 境界が範囲の逆端にあり、 合同式の使える側が逆で、 record の数え方も逆になる。 質問は同じ 3 つのままにしてある。\n\nmutation.py は判定器を 1 要件ずつ壊し、 wrong-answer カタログが全部殺すことを見る。 加えて panel の well-posedness (全 seed で 3 つの答えが存在し互いに異なること)、 run が進捗を記録しないこと、 2 つの lock、 5 段階 32 通りの部分集合すべてでの flag gate を CLI 経由で確認する。 statement 2 つは独立に引くため witness が一致する seed が約 40 回に 1 回あり、 reject と recover の答えが同一になっていた。 sweep が見つけたので、 witness をずらして引き直す構成に変えてある。",
+  "instructions": "## はじめに\n\n監査に持ち込まれた 3 つの toy verifier を分類します。 どれも正常系は通ります。 壊れ方が違うだけです。\n\n## 最初の一手\n\n問題を起動したら、 **コンテナのターミナルに接続**して次を打ってください。\n\n```bash\nreview show\n```\n\n主張・このデプロイの statement・3 つの verifier が何を検査し何を記録したか・各段階で打つコマンドが、 そのまま出ます。 迷ったら何度でも `review show` に戻ってください。\n\n```bash\nreview run <verifier> <w>\n```\n\nは無料です。 verdict と record が両方の statement について出るので、 提出する前に候補を試してください。 採点されるのは 5 段階のコマンドだけです。\n\n引数なしで `review` を打てばコマンド一覧が出ます。 編集するファイルはありません。 すべて 1 行で打てるコマンドです。\n\n## ゴール\n\n3 つの反例を実際に作り、 そのうえで 3 つの verifier が今も守っている性質を言い、 最後に見たことのない 2 つ目の panel で同じ 3 つをやります。 全部通ると `review flag` が `TC{...}` を出すので、 それを回答欄に貼ってください。",
+  "writeup": "## 3 つの性質は独立している\n\ncompleteness は「正しい statement が受理される」、 soundness は「偽の statement が受理されない」、 privacy は「record から witness が漏れない」。 3 つは互いに独立で、 protocol は任意の部分集合を満たしうる。 この問題の 3 つはそれぞれ 1 つだけを破り、 残り 2 つは守っている。\n\n## なぜラベルだけでは足りないか\n\nunsound と書くのは 1 行のタイプで済む。 範囲外で受理される witness を実際に作れて初めて理解したと言える。 だから classify は 3 つの反例が揃うまで開かない。 そして classify が実際に測っているのは、 反例で埋まる 3 マスではなく残りの 6 マスのほうだ。 「1 つ壊れているのだから何も保証しない」は、 この問題で落ちる誤解の本体である。\n\n## 反例が到達可能であること\n\n範囲境界が strict なだけの verifier は、 honest witness が範囲の内側にある statement では正しい verifier と 1 入力たりとも挙動が違わない。 不完全性は本物なのに観測できない。 edge statement は honest witness を境界そのものに置くために存在する。 性質が壊れていることと、 それを示せることは別問題で、 後者は作問側の責任になる。 Week 4 以降で「この test は本当にその欠陥を落とせるか」を問うときに戻ってくる。\n\n## 合同式は範囲を決めない\n\na*w + b == c (mod p) の解は p ごとに繰り返す。 範囲検査だけが「どの解か」を決めていた。 それを落とした verifier は合同式を証明しているだけで、 主張の残り半分は一度も証明されていない。 転移段階の verifier は範囲の片側だけを残しているので、 使える解は逆側にある — 答えは負の数になる。\n\n## record は verdict と独立に壊れる\n\n3 つ目の verifier は accept / reject を完全に正しく出す。 壊れているのは、 そのついでに残す record のほうだ。 record が w とともに動くなら、 それは w を決めている。 `review run` で自分の選んだ w を通せば、 record がどちら向きに数えているかは推測ではなく観測になる。\n\n## 後続問題への接続\n\nWeek 1 の underconstraint は soundness が壊れる話、 Week 2 の share の開けすぎは privacy が壊れる話で、 別の話である。 性質の言葉で言えるようになると、 その 2 つが混ざらなくなる。",
   "tags": [
     "advanced-cryptography-2026",
     "bridge",
@@ -29,7 +29,8 @@
     "soundness",
     "privacy",
     "local-play",
-    "container"
+    "container",
+    "terminal"
   ],
   "exposedPorts": [
     {
@@ -38,17 +39,17 @@
     }
   ],
   "learningGoals": [
-    "correctness / completeness を「正しい入力が受理される性質」として実験できる",
-    "soundness を「偽の statement を受理させにくい性質」として反例で確認できる",
-    "privacy / zero-knowledge が correctness や soundness と独立であることを説明できる",
-    "同じ protocol が一つの性質を満たし別の性質を破る例を作れる",
-    "security property を implementation bug と混同しない"
+    "completeness / soundness / privacy を、定義の暗記ではなく反例で区別できる",
+    "正しい入力が弾かれる場面を、実際に到達可能な形で作れる",
+    "範囲外の witness を受理させ、合同式だけでは主張が決まらないと説明できる",
+    "record から witness を復元し、verdict が正しくても privacy は壊れうると示せる",
+    "1 つの性質が壊れた実装が、残りの性質を今も守っていると言える"
   ],
   "nodes": {
     "learning_objectives": [
       {
         "id": "lo.ac26-bridge-properties.observe-completeness",
-        "description": "正しい witness が reject される様子を反例で示せる。"
+        "description": "正しい witness が reject される様子を、到達可能な statement 上で示せる。"
       },
       {
         "id": "lo.ac26-bridge-properties.break-soundness",
@@ -56,11 +57,11 @@
       },
       {
         "id": "lo.ac26-bridge-properties.detect-leak",
-        "description": "transcript から witness を復元し privacy 侵害を示せる。"
+        "description": "record から witness を復元し privacy 侵害を示せる。"
       },
       {
         "id": "lo.ac26-bridge-properties.separate-properties",
-        "description": "3 性質が独立であることを protocol ごとの組合せで説明できる。"
+        "description": "3 性質が独立であることを、壊れた実装が今も守っているものとして説明できる。"
       }
     ],
     "concepts": [
@@ -74,29 +75,29 @@
       },
       {
         "id": "concept.privacy",
-        "description": "protocol の出力・transcript から秘密が漏れない性質。 正しさとは独立。"
+        "description": "protocol の出力・record から秘密が漏れない性質。 正しさとは独立。"
       }
     ],
     "assessment_criteria": [
       {
-        "id": "assessment.ac26-bridge-properties.incompleteness",
-        "description": "valid かつ P1 が reject する witness を提出できた。"
+        "id": "assessment.ac26-bridge-properties.reject",
+        "description": "statement が真である witness で、 受理されるべきなのに拒否される例を提出できた。"
       },
       {
-        "id": "assessment.ac26-bridge-properties.unsoundness",
-        "description": "範囲外かつ P2 が accept する witness を提出できた。"
+        "id": "assessment.ac26-bridge-properties.recover",
+        "description": "record から honest run の値を復元できた。"
       },
       {
-        "id": "assessment.ac26-bridge-properties.privacy-leak",
-        "description": "transcript から witness を復元できた。"
+        "id": "assessment.ac26-bridge-properties.forge",
+        "description": "範囲外かつ受理される witness を提出できた。"
       },
       {
-        "id": "assessment.ac26-bridge-properties.property-matrix",
-        "description": "3 protocol × 3 性質の分類が反例と矛盾しない。"
+        "id": "assessment.ac26-bridge-properties.classify",
+        "description": "3 verifier × 3 性質の分類が、 破っている 1 つだけでなく守っている 2 つまで一致した。"
       },
       {
         "id": "assessment.ac26-bridge-properties.transfer",
-        "description": "未知の instance でも同じ分類と反例生成が成立した。"
+        "description": "欠陥の配置も向きも違う 2 つ目の panel で、 同じ 3 つの反例が成立した。"
       }
     ],
     "misconceptions": [
@@ -106,7 +107,7 @@
       },
       {
         "id": "misconception.soundness-implies-privacy",
-        "description": "偽物を弾ければ秘密も守られる、 という誤解。 P3 が反例になる。"
+        "description": "偽物を弾ければ秘密も守られる、 という誤解。 verdict が正しくても record が漏らす。"
       },
       {
         "id": "misconception.zero-knowledge-means-encryption",
@@ -172,22 +173,22 @@
     {
       "type": "assesses",
       "source": "problem.ac26-bridge-properties",
-      "target": "assessment.ac26-bridge-properties.incompleteness"
+      "target": "assessment.ac26-bridge-properties.reject"
     },
     {
       "type": "assesses",
       "source": "problem.ac26-bridge-properties",
-      "target": "assessment.ac26-bridge-properties.unsoundness"
+      "target": "assessment.ac26-bridge-properties.recover"
     },
     {
       "type": "assesses",
       "source": "problem.ac26-bridge-properties",
-      "target": "assessment.ac26-bridge-properties.privacy-leak"
+      "target": "assessment.ac26-bridge-properties.forge"
     },
     {
       "type": "assesses",
       "source": "problem.ac26-bridge-properties",
-      "target": "assessment.ac26-bridge-properties.property-matrix"
+      "target": "assessment.ac26-bridge-properties.classify"
     },
     {
       "type": "assesses",
@@ -225,121 +226,44 @@
     ]
   },
   "scoring": {
-    "kind": "multi-verify",
-    "checks": [
+    "kind": "verify",
+    "points": 200,
+    "wrongAnswerPenalty": 10,
+    "hints": [
       {
-        "id": "incompleteness",
-        "label": "正しい入力が弾かれる場面を作る",
-        "points": 40,
-        "wrongAnswerPenalty": 10
+        "id": "hint-1",
+        "content": "`review run <verifier> <w>` は採点されません。 まずこれを使ってください。 reject: statement が真になる w は範囲内にただ 1 つで、 edge statement ではそれが範囲の端にあります。 端は 2 つしかないので、 両方を run に通せばどちらかが ACCEPT します。 そのうえで、 検査式に `<` が入っている verifier がそれを拒否します。 recover: record が w と一緒に動く verifier が 1 つあります。 自分で選んだ w を run に通して record を見れば、 どちらの端から数えているかは推測せずに分かります。",
+        "penalty": 40
       },
       {
-        "id": "unsoundness",
-        "label": "主張の範囲外を通してしまう例を作る",
-        "points": 45,
-        "wrongAnswerPenalty": 10,
-        "hints": [
-          {
-            "id": "unsoundness-hint-1",
-            "content": "P2 が検査しているのは合同式だけだ。 その合同式は p を法とする。 法が同じなら、 解はひとつではない。",
-            "penalty": 15
-          }
-        ]
-      },
-      {
-        "id": "privacy-leak",
-        "label": "transcript から秘密を取り出す",
-        "points": 40,
-        "wrongAnswerPenalty": 10,
-        "hints": [
-          {
-            "id": "privacy-hint-1",
-            "content": "P3 の accept/reject は正しい。 見るべきは判定ではなく、 判定のついでに記録されている内容のほうだ。",
-            "penalty": 15
-          }
-        ]
-      },
-      {
-        "id": "property-matrix",
-        "label": "3 つの verifier を性質で分類する",
-        "points": 35,
-        "wrongAnswerPenalty": 10
-      },
-      {
-        "id": "transfer",
-        "label": "見たことのない instance でも成立させる",
-        "points": 40,
-        "wrongAnswerPenalty": 10,
-        "hints": [
-          {
-            "id": "transfer-hint-1",
-            "content": "statement から witness を求める式は、 3 つの checkpoint すべてで同じものが使える。 固定値ではなく式で書く。",
-            "penalty": 12
-          },
-          {
-            "id": "transfer-hint-2",
-            "content": "incompleteness の instance は witness が range の端にある。 端であることを利用せず、 合同式から解いて構わない。",
-            "penalty": 8
-          }
-        ]
+        "id": "hint-2",
+        "content": "forge: a*w + b == c (mod p) の解は p ごとに繰り返します。 つまり honest witness に p を足した値も引いた値も合同式を満たし、 どちらも範囲の外です。 範囲検査を落とした verifier が受理するのはそのどちらかで、 どちらかは検査式を読めば決まります (run で試せます)。 classify: 各 verifier について 3 つを別々に問うてください — 真である w を拒否するか、 偽である w を受理するか、 w を変えたとき record が変わるか。 3 つの答えは互いに独立で、 1 つが yes でも残り 2 つは no のままです。",
+        "penalty": 60
       }
     ]
   },
   "i18n": {
     "en": {
       "name": "What it holds, what it breaks",
-      "shortDescription": "Three toy verifiers arrive for audit. All of them pass the happy-path tests. They are broken in different ways. Build counterexamples and classify what each one holds and what it breaks.",
-      "instructions": "## Start here\n\nYou are auditing three toy verifiers. All of them pass the happy path. They differ in how they are broken.\n\n## First move\n\n```bash\nmake inspect\n```\n\nThat prints your statement, what each verifier checks, and a P3 transcript.\n\nThen edit `local/starter/classify.py` and `local/starter/counterexamples.py`. `make test` only checks the shape of your answers; whether they are right is the hidden verifier's job.\n\n## Goal\n\nClassify complete / sound / private for all three verifiers, and for every property you mark False, submit a counterexample that actually holds. Labels alone do not pass.",
-      "writeup": "## The three properties are independent\n\nCompleteness means a true statement is accepted; soundness means a false statement is not; privacy means the transcript does not reveal the witness. A protocol can satisfy any subset. Each of the three here breaks exactly one.\n\n## Why a label is not enough\n\nCalling P2 unsound is easy. You have understood it when you can produce a witness outside the range that P2 accepts. The hidden tests cross-check every False in your matrix against the matching counterexample, so an in-range value submitted as a 'counterexample' fails.\n\n## Security property versus implementation bug\n\nAll three are bugs, but they break different properties. Calling P1 'a bug that rejects valid input' does not explain why its soundness is untouched. Once you can say it in property terms, Week 1's underconstraint (soundness) and Week 2's over-opening (privacy) stop looking like the same thing.\n\n## Counterexamples have to be reachable\n\nP1's incompleteness cannot be observed on an instance whose witness sits strictly inside the range — there, P1 behaves exactly like a correct verifier. It takes a boundary instance to show it. A property being broken and a property being demonstrable are different things, and the second one is the author's responsibility. That distinction returns in Week 4, when the question becomes whether a test can actually fail the defect it claims to catch.",
+      "shortDescription": "Three toy verifiers arrive for audit. All of them pass the happy path. They are broken in different ways. Build the counterexamples, then say what each one still guarantees.",
+      "description": "The second Bridge 0 problem. Delivered as a container and played entirely from its terminal -- no file to edit, no checkout -- and scored as a single discovered flag released by the CLI once all five stages are cleared. See the Japanese `description` for the grading contract and the design notes.",
+      "instructions": "## Start here\n\nYou are auditing three toy verifiers. All of them pass the happy path. They differ in how they are broken.\n\n## First move\n\nStart the problem, **attach the container terminal**, and type:\n\n```bash\nreview show\n```\n\nThat prints the claim, this deployment's statements, what each verifier checks and what it wrote down, and the exact command for each stage. Whenever you lose your place, run it again.\n\n```bash\nreview run <verifier> <w>\n```\n\nis free. It prints the verdict and the record on both statements, so test a candidate before you submit it. Only the five stages are scored.\n\nRun `review` with no arguments for the list of commands. There is no file to edit; every command is one line.\n\n## Goal\n\nBuild three counterexamples, then say what each of the three verifiers still holds, then do the same three on a second panel you have not seen. When all five are cleared, `review flag` prints your `TC{...}` -- paste it into the answer box.",
+      "writeup": "## The three properties are independent\n\nCompleteness means a true statement is accepted; soundness means a false statement is not; privacy means the record does not reveal the witness. A protocol can satisfy any subset. Each of the three here breaks exactly one and holds the other two.\n\n## Why a label is not enough\n\nCalling a verifier unsound is one line of typing. You have understood it when you can produce a witness outside the range that it accepts. That is why `classify` does not open until all three breaks are on the table -- and why what `classify` actually measures is not the three squares your counterexamples fill in but the other six. 'It has a bug, so it guarantees nothing' is the misconception this problem takes away.\n\n## Counterexamples have to be reachable\n\nA verifier whose only defect is a strict range bound does not differ from a correct one by a single input on a statement whose honest witness sits inside the range. The incompleteness is real and unobservable. The edge statement exists to put the honest witness on the bound itself. A property being broken and a property being demonstrable are different things, and the second one is the author's responsibility. That distinction returns in Week 4, when the question becomes whether a test can actually fail the defect it claims to catch.\n\n## The congruence does not pin down the range\n\nSolutions of a*w + b == c (mod p) repeat every p. The range check was the only thing choosing between them, so a verifier that dropped it is proving the congruence and never established the other half of the claim at all. On the transfer panel the unsound verifier keeps one side of the range, so the usable solution is on the other side -- and the answer is negative.\n\n## A record breaks independently of a verdict\n\nThe third verifier's accept and reject are exactly right. What is broken is what it writes down alongside them. If the record moves when w moves, the record determines w. Push a w of your own through `review run` and which direction it counts in stops being a guess.\n\n## What carries forward\n\nWeek 1's underconstraint is a soundness break; opening a share too early in Week 2 is a privacy break. Once you can say it in property terms the two stop looking like the same kind of bug.",
       "learningGoals": [
-        "Experiment with correctness / completeness as 'a true statement is accepted'",
-        "Confirm soundness by counterexample as 'a false statement is hard to get accepted'",
-        "Explain that privacy / zero-knowledge is independent of correctness and soundness",
-        "Build an example where one protocol holds one property and breaks another",
-        "Avoid confusing a security property with an implementation bug"
+        "Tell completeness, soundness and privacy apart by counterexample rather than by definition",
+        "Produce a case where a valid input is refused, on a statement where that is actually observable",
+        "Get an out-of-range witness accepted, and explain why a congruence alone does not fix the claim",
+        "Recover the witness from a record, and show that a correct verdict does not make a verifier private",
+        "Say what an implementation with one broken property still guarantees"
       ],
-      "checks": [
+      "hints": [
         {
-          "id": "incompleteness",
-          "label": "Make a valid input get rejected"
+          "id": "hint-1",
+          "content": "`review run <verifier> <w>` is not scored. Start there. reject: there is exactly one w in range that the statement is true of, and on the edge statement it sits on an end of that range. There are only two ends, so run both and one of them will be ACCEPTed -- and then the verifier whose check carries a `<` is the one that refuses it. recover: one verifier's record moves when w moves. Push a w of your own choosing through `run` and look at the record; which end it counts from stops being a guess."
         },
         {
-          "id": "unsoundness",
-          "label": "Get something outside the claim accepted",
-          "hints": [
-            {
-              "id": "unsoundness-hint-1",
-              "content": "P2 only checks the congruence, and the congruence is modulo p. Same modulus, more than one solution."
-            }
-          ]
-        },
-        {
-          "id": "privacy-leak",
-          "label": "Pull the secret out of a transcript",
-          "hints": [
-            {
-              "id": "privacy-hint-1",
-              "content": "P3's accept/reject is correct. Look not at the verdict but at what gets recorded alongside it."
-            }
-          ]
-        },
-        {
-          "id": "property-matrix",
-          "label": "Classify the three verifiers by property"
-        },
-        {
-          "id": "transfer",
-          "label": "Hold up on instances you have not seen",
-          "hints": [
-            {
-              "id": "transfer-hint-1",
-              "content": "The expression that solves the statement for its witness is the same in all three checkpoints. Write the expression, not the value."
-            },
-            {
-              "id": "transfer-hint-2",
-              "content": "The incompleteness instance has its witness at the edge of the range. You do not need to exploit that — solving the congruence is enough."
-            }
-          ]
+          "id": "hint-2",
+          "content": "forge: solutions of a*w + b == c (mod p) repeat every p, so the honest witness plus p and minus p both satisfy the congruence and both sit outside the range. The verifier that dropped a range check takes one of the two, and which one is decided by what it still checks -- `run` will tell you. classify: ask the three questions separately of each verifier. Is there a w the statement is true of that it refuses? Is there a w the statement is false of that it accepts? Do two runs with different w leave different records? The three answers are independent; one of them being yes leaves the other two no."
         }
       ]
     }

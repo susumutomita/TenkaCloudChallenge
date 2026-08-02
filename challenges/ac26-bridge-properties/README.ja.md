@@ -4,80 +4,144 @@
 > その運営者とは提携しておらず、承認も受けていません。問題文、コード、fixture、図はすべて独自に
 > 作成しています。このトラックに関する質問は講座運営ではなく TenkaCloud リポジトリへお願いします。
 
-**Track:** `advanced-cryptography-2026` · **Order:** 20 · **Chapter:** Bridge 0 / Security
-Properties · **Role:** `diagnostic` · **想定時間:** 30〜45 分 · **配点:** 200
+**トラック:** `advanced-cryptography-2026` · **順序:** 20 · **章:** Bridge 0 / Security
+Properties · **役割:** `diagnostic` · **所要:** 30〜45 分 · **配点:** 200
 · **推奨前提:** `ac26-bridge-experiment`
 
-## ストーリー
+## 物語
 
-3 つの toy verifier が監査に持ち込まれました。別々のチームが書き、すべて出荷済みで、すべてテストが
-緑でした。あなたの仕事は「どれにバグがあるか」を言うことではありません。全部あります。**それぞれが
-まだ何を保証していて、何をもう保証していないか**を述べ、その主張を証明することです。
+3 つの toy verifier が監査に持ち込まれました。書いたのは別々のチーム、どれも本番に出ていて、どれも
+自分たちのテストは緑でした。あなたの仕事は「どれが壊れているか」を言うことではありません ── 全部
+壊れています。**それぞれが今も保証しているものと、もう保証していないもの**を言い、その主張を一つ
+残らず証明することです。
 
-この区別がすべてです。Week 1 以降、completeness・soundness・privacy・zero-knowledge は全員が意味を
-共有している前提で使われます。定義の暗記は実物の protocol に触れた瞬間に崩れます。他の 2 つを保った
-まま 1 つだけを壊してみせることは崩れません。
+この区別がこの問題のすべてです。Week 1 以降、completeness / soundness / privacy /
+zero-knowledge は「みんな意味が一致している」前提で使われます。定義の暗記は実物のプロトコルに接触
+した時点で保ちません。ある性質だけを壊し、残りが無傷であることを示せる状態は保ちます。
 
 ## 主張
 
-3 つの verifier はどれも同じ statement を検査します。
+3 つの verifier はどれも同じ形の statement を渡されます。
 
 ```text
-a*w + b == c (mod p) かつ lo <= w <= hi を満たす w を知っている
+a*w + b == c  (mod p)   かつ   lo <= w <= hi   を満たす w を知っている
 ```
 
-意図的に小さな整数演算だけです。proof system も library も使いません。考える対象がすべて 1 画面に
-収まるので、難所は性質のほうであって配管ではありません。
+意図的に小さな整数演算です。証明系もライブラリもありません ── 考える対象はすべて 1 画面に収まる
+ので、難しさは配管ではなく性質のほうにあります。
+
+## 何がデプロイされるか
+
+コンテナが 1 つです。AWS アカウントもクラウドリソースもインストールも要りません。このデプロイの
+statement と verifier (デプロイごとの `FLAG_SEED` から導出されるので、他の人とは違う値です) と、
+遊ぶための `review` コマンドが入っています。公開されるポートは platform が flag を POST する
+loopback の `/verify` だけで、あなたが触ることはありません。
 
 ## 遊び方
 
+portal で問題を起動し、**コンテナのターミナルに接続**してください。すべてそこで、1 行ずつ進みます。
+編集するファイルも、開くエディタも、clone するものもありません。
+
 ```bash
-make inspect                    # 自分の statement、各 verifier の検査内容、P3 の transcript
-make test                       # 公開テスト
-make test-one ID=classify       # 1 つだけ再実行する
-make reset                      # starter 2 ファイルを元に戻す
+review                            # コマンド一覧
+review show                       # 主張・statement・3 つの verifier・次に打つコマンド
+review run <verifier> <w>         # 無料: verdict と record を両 statement について表示
+review reject <w>
+review recover <w>
+review forge <w>
+review classify p1=<性質> p2=<性質> p3=<性質>
+review transfer reject=<w> recover=<w> forge=<w>
+review status                     # 通した段階
+review flag                       # 5 段階すべて通ると TC{...}
 ```
 
-編集するのは 2 ファイルです。
+`python /problem/review.py <command>` も同じものです。
 
-- `local/starter/classify.py` — 各 verifier は complete か。sound か。private か。
-- `local/starter/counterexamples.py` — `False` と書いた性質をすべて証明する。
+`review show` は「それだけ読めば足りる」ように書いてあります。迷ったら何度でも戻ってください。
 
-## 採点
+### `run` は無料で、そこが要点です
 
-5 つの checkpoint を独立に採点します。誤答は 1 回 10 点減点です。
+`review run` は verifier の verdict **と record** を両方の statement について表示し、何も記録しま
+せん。採点されるのは提出だけで、run は採点されません。以下の反例はどれも、当てずっぽうで払うので
+はなく実験で見つけるように作ってあります。
 
-| Checkpoint | 配点 | 提出するもの |
-|---|---:|---|
-| `incompleteness` | 40 | 正当な witness でありながら reject される値 |
-| `unsoundness` | 45 | 主張の範囲外なのに accept される witness |
-| `privacy-leak` | 40 | transcript だけから復元した witness |
-| `property-matrix` | 35 | 3 × 3 の分類表 |
-| `transfer` | 40 | 自分の 2 ファイル。未知の instance で実行されます |
+### 2 つの statement
 
-hint は 5 つ中 3 つにあります (15 / 15 / 12 + 8)。すべて開いても 200 点中 150 点が残ります。
+panel には `main` と `edge` の 2 つの statement があります。edge のほうは honest witness が範囲の
+**片方の端ちょうど**にあります。どちらの端かはあなたが見つけるもので、run を 2 回通せば決まります。
+これは飾りではありません。範囲境界が strict なだけの verifier は、witness が範囲の内側にある
+statement では正しい verifier と *1 入力たりとも* 挙動が違いません。
 
-## この問題を成立させている規則
+### 3 つの反例
 
-**示せないラベルは数えません。**
+| 段階 | 提出するもの |
+|---|---|
+| `reject` | statement が **真** である witness で、3 つのうち 1 つが拒否するもの |
+| `recover` | honest run が使った値を、record から読み戻したもの |
+| `forge` | statement が **偽** である witness で、3 つのうち 1 つが受理するもの |
 
-verifier を unsound と書くのは 1 行です。hidden test は matrix の `False` すべてを対応する反例と
-突き合わせるので、範囲内の値を unsoundness の証拠として出しても通りません。何も示していないからです。
-逆に、matrix が矛盾していれば反例だけでも通りません。分類できない破壊は理解ではないからです。
+### `classify` ── そのあとで
 
-`transfer` checkpoint は、**あなたの**分類と**あなたの**生成器を、見たことのない seed 由来の instance
-に対して実行します。たまたま通った値は残りませんが、statement を解く式は残ります。
+3 つの break が出揃ってから、各 verifier が**今も守っている**性質を言います。
+
+```bash
+review classify p1=sound,private p2=complete,private p3=complete,sound
+```
+
+示せないラベルは数えません。だからこの段階は反例が揃うまで開きません。そして実際に測っているものに
+注意してください。あなたの反例で 9 マスのうち 3 マスはすでに埋まっています。問われているのは残りの
+6 マスです ── ここにある verifier はどれも壊れていて、どれも 3 つのうち 2 つを今も保証しています。
+
+### `transfer` ── 見たことのない panel で同じ 3 つ
+
+4 段階を通すと 2 つ目の panel が渡されます。欠陥は別の verifier に載っており、strict な境界は範囲の
+逆端にあり、合同式の使える側は逆で、record の数え方も逆です。問いは意図的に同じ 3 つのままです。
+測っているのは、読み方が形の変化を越えて通用するかどうかだからです。
+
+## 配点
+
+| | |
+|---|---:|
+| flag 正解 | **200** |
+| 誤答 | 1 回 −10 |
+| hint 1 | −40 |
+| hint 2 | −60 |
+
+hint を両方開いても 200 点中 100 点が残ります。flag はこのデプロイの seed から導出される `TC{...}`
+で、他人の実行結果を暗記しても当て推量でも通りません。どの verifier がどの欠陥を持つかも同じ seed
+から引くので、分類の答えは人づてに持ち回れる 1 文にはなりません。
+
+## 進捗はコンテナの中にあります
+
+`review status` は `/tmp` 配下のファイルを読みます。コンテナ内で書き込めるのはそこだけです
+(他はすべて read-only)。コンテナを作り直すと 5 段階は最初からになります。読み方が分かっていれば
+数分でやり直せますし、永続ボリュームは壊れうるものが 1 つ増えるだけです。
+
+## 講座との関係
+
+これは `diagnostic` です。教材に併走するのではなく、教材の**前**に置かれ、トラックの入口を担い
+ます。上流の `sources` を pin していないのもそのためです ── 特定の講義や課題に対して書かれた問題
+ではなく、欄を埋めるために commit SHA を捏造するのは空欄より悪いからです (`CATALOG.md` の
+`courseAlignment` の節)。
+
+講座の式・fixture・solution は一切転載していません (`GOVERNANCE.md` §2 および §4)。
 
 ## 保証範囲
 
-ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も
-あなたの管理下にあるので、 image の中身はあなたに対して秘匿されていません。
-`reference/` と `tests/hidden/` を bind-mount しないのは、あなたの git checkout に
-紛れ込ませないためであって、手が届かなくするためではありません。
+ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image もあなたの管理下に
+あるので、image の中身はあなたに対して秘匿されていません。具体的に書きます。
 
-verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
-ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。
-結果は期待値を漏らしません。 fixture はこのデプロイの seed 由来なので、暗記した答えは持ち越せません。
+- flag の導出元である `FLAG_SEED` はコンテナの環境変数に入っています。どの段階も通さずに flag は
+  計算できます。
+- `fixtures/generate.py` は image の中にあります (`review show` の表示がそこから作られるためです)。
+  そこには各 statement の honest witness が入っており、読めば 5 つのうち 3 つの答えが手に入ります。
+
+5 つの段階は解錠すべき鍵ではなく順路であり、飛ばして困るのはあなただけです。`author` stage の分離が
+買っているのはもっと狭いことです。reference の解答とそれを採点する suite があなたの動かす image に
+入っていないので、問題を解いてしまうファイルから目を逸らす必要がありません。seed が買っているのは
+本物です。statement も欠陥の配置も flag もこのデプロイ由来なので、他人の実行結果を暗記しても持ち越せ
+ません。そして分類は保存された答えとの照合ではなく、判定器が verifier を実際に走らせて計算した表と
+突き合わせています。
 
 これは自習と誠実な練習を支えます。競技順位・試験・修了判定は**支えません**。
 それらには participant が管理しない verifier が必要で、
@@ -85,15 +149,27 @@ verifier が実際に保証するのはもっと狭く、そして本物です�
 
 ## コスト
 
-ゼロです。クラウドアカウントも AWS リソースも使いません。手元のコンテナだけです。
+ゼロです。クラウドアカウントも AWS リソースも使いません。
 
 ## 作問者向け
 
-`make reference-test` が mutation suite を実行します。壊した提出 6 種類に加え、verifier 自体を狙った
-2 種類があり、すべて検出される必要があります。
+この問題はコンテナのターミナルから遊ぶので、参加者が編集するファイルを一切持ちません。
+[`TEMPLATE.md`](../../docs/curricula/advanced-cryptography-2026/TEMPLATE.md) の 4 target の参加者
+契約には違反しているのではなく、その対象外にいます。Makefile は作問者の道具で、参加者の目に触れる
+ことはありません。`make play` は participant image の中でシェルを開きます (portal のターミナルが
+繋がるのと同じ場所です)。`make test` は公開の自己検査 (インタフェースの性質だけで、答えは含みません)
+を実行します。
 
-後の週にも効く設計上の注意を 1 つ。P1 の欠陥は range 下限が strict であることですが、witness が range
-の内側にある instance では **P1 は正しい verifier と完全に同じ挙動をします**。不完全性は実在するのに
-観測できません。そのため `incompleteness` checkpoint だけは、正当な witness が `lo` に一致する
-boundary instance を使います。性質が壊れていることと、それを示せることは別の問題であり、後者を成立
-させるのは学習者ではなく作問者の責任です。
+本命は `make reference-test` です。8 seed で reference の解答を通し、際どい誤答のカタログを全部
+落とし、判定器を 1 要件ずつ壊してカタログがそれを全部殺すことを確認し、120 seed を sweep して
+「問いが成立しない panel」が無いことを見て、さらに CLI 経由で run が何も記録しないこと・2 つの
+lock・32 通りの進捗状態のうち 1 つでだけ flag が出ることを確認します。
+
+この suite が検査ではなく問題そのものを変えた点が 2 つあります。
+
+- 2 つの statement は独立に引かれるので、約 40 seed に 1 回 honest witness が**一致**していました。
+  `reject` と `recover` の答えが同じになり、1 つの読み取りしかしていない参加者が 2 つ分の credit を
+  得ていたことになります。今は edge を witness がずれるまで引き直します。
+- `reject` は当初 edge statement だけで採点していました。そのせいで「3 つとも受理した」分岐が到達
+  不能になり、「実際に誰かが拒否すること」という要件を削除しても verdict が 1 つも変わりませんでした。
+  今は両方の statement で採点するので、main の witness がその要件のための際どい誤答になります。
