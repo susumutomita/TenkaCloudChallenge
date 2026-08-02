@@ -57,15 +57,19 @@ jobs:
       - name: Verify the portal-only delivery contract
         run: python3 scripts/verify-course-workbenches.py
 
-      - name: Commit generated files to the PR branch
+      - name: Commit final generated files to the PR branch
         run: |
+          set -euo pipefail
           git diff --check
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm -f \
+            .github/workflows/agent-ac26-workbench.yml \
+            scripts/inspect-workbench-targets.py \
+            scripts/migrate-course-workbenches.py \
+            scripts/restore-course-readmes.py \
+            scripts/sanitize-course-workbench-docs.py \
+            scripts/seal-course-workbench-submissions.py
           git add challenges index.json cost-report.json scripts/verify-course-workbenches.py
-          if git diff --cached --quiet; then
-            echo "::error::The migration produced no generated changes."
-            exit 1
-          fi
-          git commit -m "fix(course): seal browser workbench submissions"
+          git commit -m "fix(course): finalize portal-solvable workbenches"
           git push origin HEAD:agent/ac26-workbench-all
