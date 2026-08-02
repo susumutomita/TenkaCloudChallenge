@@ -187,10 +187,13 @@ def check_static(problem_id: str) -> None:
         require("Browser Workbench" in text, f"{problem_id}: {readme} omits browser path")
         explanation = "## 解説" if readme.endswith("ja.md") else "## Explanation"
         participant_path = text.split(explanation, 1)[0]
-        require(
-            "local/starter/" not in participant_path,
-            f"{problem_id}: {readme} requires checkout editing before the explanation",
-        )
+        workbench_position = participant_path.index("Browser Workbench")
+        for legacy_term in ("make inspect", "local/starter/"):
+            if legacy_term in participant_path:
+                require(
+                    workbench_position < participant_path.index(legacy_term),
+                    f"{problem_id}: {readme} puts checkout work before Browser Workbench",
+                )
 
 
 def check_runtime(problem_id: str) -> None:
