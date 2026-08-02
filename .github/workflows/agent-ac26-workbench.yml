@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - agent/ac26-workbench-all
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
