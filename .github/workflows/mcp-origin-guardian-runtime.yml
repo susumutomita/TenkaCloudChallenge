@@ -39,13 +39,15 @@ jobs:
           docker compose -f "$COMPOSE_FILE" build
           docker compose -f "$COMPOSE_FILE" up --detach
 
-      - name: Wait for both services
+      - name: Wait for both loopback services
         run: |
           set -euo pipefail
           for attempt in $(seq 1 60); do
             if curl --fail --silent --show-error http://127.0.0.1:18110/healthz >/dev/null \
               && curl --fail --silent --show-error http://127.0.0.1:18111/healthz >/dev/null; then
               docker compose -f "$COMPOSE_FILE" ps
+              test "$(docker compose -f "$COMPOSE_FILE" port participant 8080)" = "127.0.0.1:18110"
+              test "$(docker compose -f "$COMPOSE_FILE" port verifier 8081)" = "127.0.0.1:18111"
               exit 0
             fi
             sleep 2
@@ -54,21 +56,26 @@ jobs:
           docker compose -f "$COMPOSE_FILE" logs --no-color
           exit 1
 
-      - name: Prove hidden grading is absent from the participant image
+      - name: Prove public and hidden grading are absent from the participant image
         run: |
           set -euo pipefail
           participant_image="$(docker compose -f "$COMPOSE_FILE" images --quiet participant)"
           test -n "$participant_image"
           docker run --rm --entrypoint sh "$participant_image" -ec '
             test ! -e /app/verifier
-            ! grep -R "gradePolicy\|hidden authority-boundary" /app >/dev/null 2>&1
+            test ! -e /app/app/public-cases.mjs
+            ! grep -R "gradePolicy\|runPublicCases\|APPROVED_POLICY\|hidden authority-boundary" /app >/dev/null 2>&1
           '
 
-      - name: Exercise Browser Workbench and positive or negative grading
+      - name: Exercise Browser Workbench and isolated public grading
         run: |
           set -euo pipefail
           workdir="$(mktemp -d)"
           trap 'rm -rf "$workdir"' EXIT
+
+          curl --fail --silent --show-error \
+            http://127.0.0.1:18110/ >"$workdir/workbench.html"
+          grep -q "MCP Origin Guardian" "$workdir/workbench.html"
 
           curl --fail --silent --show-error \
             http://127.0.0.1:18110/api/inspect >"$workdir/inspect.json"
@@ -79,6 +86,17 @@ jobs:
           assert value["vulnerable"]["allowedHost"] == "attacker.example"
           assert value["vulnerable"]["resource"] == "https://attacker.example"
           PY
+
+          preflight_headers="$(mktemp)"
+          curl --silent --show-error --output /dev/null --dump-header "$preflight_headers" \
+            --request OPTIONS \
+            --header 'Origin: http://127.0.0.1:18110' \
+            --header 'Access-Control-Request-Method: POST' \
+            --header 'Access-Control-Request-Headers: content-type' \
+            http://127.0.0.1:18111/public-test
+          grep -Eq '^HTTP/[0-9.]+ 204' "$preflight_headers"
+          grep -Eqi '^access-control-allow-origin: http://127\.0\.0\.1:18110' "$preflight_headers"
+          grep -Eqi '^access-control-allow-methods: POST, OPTIONS' "$preflight_headers"
 
           cat >"$workdir/policy.json" <<'JSON'
           {
@@ -91,10 +109,16 @@ jobs:
           print(json.dumps({"policy": json.loads(pathlib.Path(sys.argv[1]).read_text())}))
           PY
 
-          curl --fail --silent --show-error \
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
             --header 'content-type: application/json' \
             --data-binary @"$workdir/request.json" \
-            http://127.0.0.1:18110/api/test >"$workdir/public.json"
+            http://127.0.0.1:18111/public-test)" = "403"
+
+          curl --fail --silent --show-error \
+            --header 'Origin: http://127.0.0.1:18110' \
+            --header 'content-type: application/json' \
+            --data-binary @"$workdir/request.json" \
+            http://127.0.0.1:18111/public-test >"$workdir/public.json"
           python3 - "$workdir/public.json" <<'PY'
           import json, pathlib, sys
           value = json.loads(pathlib.Path(sys.argv[1]).read_text())
@@ -104,9 +128,10 @@ jobs:
           PY
 
           curl --fail --silent --show-error \
+            --header 'Origin: http://127.0.0.1:18110' \
             --header 'content-type: application/json' \
             --data-binary @"$workdir/request.json" \
-            http://127.0.0.1:18110/api/prepare >"$workdir/prepared.json"
+            http://127.0.0.1:18111/prepare >"$workdir/prepared.json"
           python3 - "$workdir/prepared.json" >"$workdir/verify.json" <<'PY'
           import json, pathlib, sys
           value = json.loads(pathlib.Path(sys.argv[1]).read_text())
@@ -179,11 +204,36 @@ jobs:
             http://127.0.0.1:18110/.well-known/oauth-protected-resource)" = "403"
           grep -Eqi '^www-authenticate: Bearer resource_metadata="https://mcp\.example\.test/\.well-known/oauth-protected-resource"' "$headers"
 
-      - name: Prove the participant network has no outbound path
+      - name: Prove bounded request parsing
         run: |
           set -euo pipefail
-          docker compose -f "$COMPOSE_FILE" exec -T participant \
-            node -e "fetch('https://example.com', {signal: AbortSignal.timeout(3000)}).then(() => process.exit(1)).catch(() => process.exit(0))"
+          python3 > /tmp/oversized.json <<'PY'
+          import json
+          print(json.dumps({"policy": {"canonicalOrigin": "x" * 40000}}))
+          PY
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            --header 'Origin: http://127.0.0.1:18110' \
+            --header 'content-type: application/json' \
+            --data-binary @/tmp/oversized.json \
+            http://127.0.0.1:18111/public-test)" = "400"
+
+          python3 <<'PY'
+          import socket
+          for port in (18110, 18111):
+              with socket.create_connection(("127.0.0.1", port), timeout=5) as sock:
+                  request = b"GET /healthz HTTP/1.1\r\nHost: x\r\nX-Large: " + b"a" * 9000 + b"\r\n\r\n"
+                  sock.sendall(request)
+                  response = sock.recv(1024)
+                  assert b" 431 " in response, (port, response)
+          PY
+
+      - name: Prove both services cannot initiate outbound connections
+        run: |
+          set -euo pipefail
+          for service in participant verifier; do
+            docker compose -f "$COMPOSE_FILE" exec -T "$service" \
+              node -e "fetch('https://example.com', {signal: AbortSignal.timeout(3000)}).then(() => process.exit(1)).catch(() => process.exit(0))"
+          done
 
       - name: Collect diagnostics
         if: always()
