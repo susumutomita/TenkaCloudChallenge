@@ -13,14 +13,15 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+      - seccomp=./seccomp-no-connect.json
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "try { process.kill(1, 0); process.exit(0) } catch { process.exit(1) }"]
       interval: 2s
       timeout: 3s
       retries: 20
     restart: "no"
     networks:
-      - isolated
+      - participant
 
   verifier:
     build:
@@ -36,15 +37,16 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+      - seccomp=./seccomp-no-connect.json
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8081/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "try { process.kill(1, 0); process.exit(0) } catch { process.exit(1) }"]
       interval: 2s
       timeout: 3s
       retries: 20
     restart: "no"
     networks:
-      - isolated
+      - verifier
 
 networks:
-  isolated:
-    internal: true
+  participant: {}
+  verifier: {}
