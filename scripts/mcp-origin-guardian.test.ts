@@ -142,7 +142,7 @@ describe("MCP Origin Guardian image boundary", () => {
     const participantServer = readFileSync(join(localRoot, "app/server.mjs"), "utf8");
     const verifierServer = readFileSync(join(localRoot, "verifier/server.mjs"), "utf8");
     expect(participantServer).toContain("port+1");
-    expect(participantServer).toContain("app\\.github\\.dev");
+    expect(participantServer).toContain("app\\\\.github\\\\.dev");
     expect(participantServer).not.toContain('const verifierOrigin=location.hostname');
     expect(verifierServer).toContain("isAllowedWorkbenchOrigin");
     expect(verifierServer).toContain("verifierPort === originPort + 1");
