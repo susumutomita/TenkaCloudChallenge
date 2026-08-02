@@ -28,7 +28,7 @@
   "estimatedDuration": "35-50 分",
   "shortDescription": "share に対する操作のうち、いくつかは誰とも話さずに各自の手元だけでできる。どれがそうで、どれが違うのか。1 つだけ、素直にやると間違える。",
   "description": "Week 2 の 2 問目。 加法的 share に対する線形操作を実装し、 通信が要る操作と要らない操作を区別する。 MPC が実用になるのは線形操作が通信不要だからで、 その境界を手を動かして引く。\n\n4 操作のうち 3 つは素直だが、 add-constant だけは違う。 全 party が自分の share に c を足すと、 総和は x + n*c になる。 この誤りは n=1 では正解と区別できず、 n が大きくても c の倍数だけずれるので、 固定の 1 設定だけを見る test では偶然通り得る。 hidden test は複数設定を回し、 かつ「全 share に足した場合の値」を名指しで落とす。\n\nno-communication checkpoint は round 数の完全一致ではなく 0 か非 0 かで採点する。 乗算プロトコルが何 round かかるかは方式によるが、 通信が要るかどうかは方式によらないため。\n\nWeek 2 の教材は pinned commit 時点で未公開のため courseAlignment.sources は持たず、 status は draft のままにする (#219 が公開を検出した時点で確定する)。",
-  "instructions": "## はじめに\n\nshare に対する操作のうち、 いくつかは誰とも話さずに各自の手元だけでできます。 どれがそうで、 どれが違うのかを、 実装して確かめます。\n\n## 最初の一手\n\n```bash\nmake inspect\n```\n\n設定と、 分類すべき 4 つの操作が出ます。 走らせる前に 「全員が自分の share に c を足したら総和はいくつになるか」を紙で出してください。\n\n次に `local/starter/linear.py` を編集します。\n\n## ゴール\n\n4 つの線形操作を実装し、 通信が要るものと要らないものを分類します。 4 つのうち 3 つは素直です。",
+  "instructions": "## ブラウザで解く\n\nParticipant Portal で問題を起動し、表示された **Browser Workbench** を開きます。\nWorkbench の `inspect` で deploy 固有の fixture と公開された証拠を確認し、画面内の\nstarter エディタを修正して `test` を実行します。コード以外の checkpoint が表示された\n場合は、inspect と実験結果から回答欄を埋めます。最後に `prepare` を実行し、生成された\n値を Portal の同名 checkpoint へ貼り付けます。回答型が object / array / number の場合は\nJSON で入力してください。すべての操作は Workbench 内で完結します。\n\n`prepare` は直接回答をこの deploy の seed に結び付けます。このため、別の起動で作った\n提出値や概念名だけを記憶して入力した値では合格できません。\n",
   "writeup": "## 線形操作が通信不要であること\n\n加法的 share では、 share 同士の加算も公開定数倍も、 各 party が自分の share だけを見て実行でき、 結果はそのまま正しい share になる。 MPC が実用になるのはこの性質のおかげで、 通信が要るのは shared 値同士の乗算のように 「和の積が積の和にならない」操作に限られる。\n\n## add-constant だけが違う理由\n\n公開定数 c を足す操作も線形だが、 各 party が自分の share に c を足すと 総和は x + n*c になる。 正しくは 1 party だけが c を畳み込む。 この誤りは n=1 では正解と一致し、 n が大きくても c の倍数だけのずれなので、 固定の 1 設定を見る test では偶然通り得る。 「線形だから全員が同じことをすればよい」という直感が、 ここでちょうど 1 回だけ裏切られる。\n\n## round 数ではなく 0 か非 0 か\n\nno-communication checkpoint が完全一致で採点しないのは、 乗算プロトコルの round 数が方式に依存するのに対し、 通信が要るかどうかは依存しないからだ。 採点は主張が確定している部分にだけ賭ける。\n\n## 次につながるところ\n\nここで引いた境界がそのまま Beaver triple の動機になる。 乗算だけが通信を要するなら、 その通信を前処理へ追い出せないか、 という問いが次に来る。",
   "tags": [
     "advanced-cryptography-2026",
@@ -41,7 +41,7 @@
   "exposedPorts": [
     {
       "port": 18096,
-      "name": "/verify (loopback only)"
+      "name": "Browser Workbench + /verify (loopback only)"
     }
   ],
   "learningGoals": [
@@ -179,7 +179,10 @@
     "verifyUrl": "http://127.0.0.1:18096/verify",
     "secretEnv": [
       "FLAG_SEED"
-    ]
+    ],
+    "challengeEndpoints": {
+      "Browser Workbench": "http://127.0.0.1:18096/"
+    }
   },
   "scoring": {
     "kind": "multi-verify",
@@ -234,7 +237,7 @@
     "en": {
       "name": "What you can do without talking to anyone",
       "shortDescription": "Some operations on shares can be done by every party alone, on its own share, with nobody talking. Which ones? Three are the obvious thing. One is not.",
-      "instructions": "## Start here\n\nSome operations on additive shares can be done by every party alone, with nobody talking to anybody. You will implement them and work out which are which.\n\n## First move\n\n```bash\nmake inspect\n```\n\nThat prints your setting and the four operations to classify. Before running anything, work out on paper what the shares sum to if *every* party adds c to its own share.\n\nThen edit `local/starter/linear.py`.\n\n## Goal\n\nImplement the four linear operations and classify which need communication. Three of the four are the obvious thing.",
+      "instructions": "## Solve in the browser\n\nStart the problem in the Participant Portal and open the **Browser Workbench** endpoint.\nUse `inspect` to read the deployment-specific fixture and published evidence, edit the\nstarter sources on the page, and run `test`. When direct-answer checkpoints are shown,\nderive their values from the evidence and your experiments. Run `prepare` and paste each\ngenerated value into the matching Portal checkpoint. Enter objects, arrays, and numbers as\nJSON. The complete participant journey stays inside the Workbench.\n\n`prepare` binds direct answers to this deployment's seed. A value prepared for another run,\nor a remembered concept name on its own, cannot earn credit.\n",
       "writeup": "## Why linear operations need no communication\n\nWith additive shares, adding two sharings and scaling by a public constant can each be done by a party looking only at its own share, and the result is already a valid sharing. That is what makes MPC practical. Communication is needed only where the sum of products is not the product of sums — multiplying two *shared* values.\n\n## Why add-constant is the odd one\n\nAdding a public constant is linear too, but if every party adds c to its own share the total becomes x + n*c. Exactly one party folds it in. The wrong version is indistinguishable from correct at n = 1, and off only by a multiple of c otherwise, so a test on one fixed setting can pass it by luck. The intuition 'it is linear, so everyone does the same thing' is wrong exactly once, and this is that once.\n\n## Zero versus non-zero, not an exact round count\n\nThe classification checkpoint grades on whether an operation needs to talk at all, not on how many rounds. The round count of a multiplication protocol depends on the protocol; whether it must communicate does not. The scoring only bets on the part that is settled.\n\n## Where this leads\n\nThe boundary you draw here is the motivation for Beaver triples. If multiplication is the only thing that needs to talk, the next question is whether that talking can be pushed into preprocessing.",
       "learningGoals": [
         "Confirm that adding two sharings completes locally",

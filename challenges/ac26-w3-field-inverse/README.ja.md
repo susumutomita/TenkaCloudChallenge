@@ -1,115 +1,86 @@
 # 曲線の前に、体を作る
 
-> このトラックは Advanced Cryptography Program 2026 の非公式・独立した companion です。講座および
-> その運営者とは提携しておらず、承認も受けていません。問題文、コード、fixture、図はすべて独自に
-> 作成しています。このトラックに関する質問は講座運営ではなく TenkaCloud リポジトリへお願いします。
+楕円曲線の式に入る前に、その下の有限体を手で作る。正規化、四則、そして拡張 Euclid による逆元。素数でない法では逆元が存在しない要素があり、それを見落とす実装がある。
 
-**Track:** `advanced-cryptography-2026` · **Order:** 310 · **Chapter:** Week 3 / Finite Fields
-· **Role:** `mechanism` · **想定時間:** 45〜60 分 · **配点:** 200
+Week 3 の 1 問目。 楕円曲線の群演算へ進む前に、 F_p 上の正規化・加減乗算・逆元・除算を自分で実装する。 公式課題の template や test 値は一切参照せず、 異なる API と seed 由来 fixture で同じ数学的構造を扱う。
 
-## ストーリー
+中心にあるのは 2 つの区別。
 
-楕円曲線のスライドはどれも `F_p` 上の方程式から始まり、1 分で先へ進みます。体は前提だからです。この
-問題はその 1 分を真面目にやります。正規化から `F_p` を組み上げ、最後の乗法逆元だけが本当の中身を
-持っています。
+1. **integer と field element は違う**。 -5 と p-5 は同じ元だが、 -5 は正規形ではない。 hidden test は負値・法以上の値・法の整数倍を含む値の集合を与え、 すべてが [0, p) に落ちることを要求する。
+2. **`pow(a, p-2, p)` は逆元を返すとは限らない**。 p が素数なら返すが、 合成数なら 「何か数」 を返す。 拡張 Euclid は gcd を返すので、 逆元が存在しない場合をそれとして報告できる。 mutation suite の 1 つ目はまさに Fermat 版で、 素数側は全部通り合成数側で落ちる。
 
-## 何を実装するのか
+checkpoint は 7 つ。 正規化と等価性、 四則と体の公理 (単位元・逆元・分配・可換・結合)、 拡張 Euclid の trace、 逆元と除算、 zero と非可逆元の error、 未知素数上での全元 property、 合成数法での counterexample 提出。
 
-```python
-class Field:
-    modulus: int
-    def element(self, value: int) -> FieldElement: ...
+inverse checkpoint は素体の**全**非零元を検査する。 標本ではなく全数なので、 表を覚える戦略が成立しない。 axioms checkpoint はさらに逆元写像が非零元上の全単射になることまで見る。
 
-class FieldElement:
-    def __add__, __sub__, __mul__, __truediv__
-    def inverse(self) -> FieldElement: ...
+trace checkpoint は Bezout 等式を各行で検査したうえで、 行列そのものを参照実装の step 列と突き合わせる。 最終行だけを持つ表は Bezout を満たしてしまうため、 それだけでは trace の検査にならない (mutation suite で実際に生き残ったので追加した)。
 
-def egcd(a, b) -> (g, s, t)          # a*s + b*t == g == gcd(a, b)
-def egcd_trace(a, b) -> [ {q, r, s, t}, ... ]
-def non_invertible_element(modulus) -> int
-```
+show.py が出す trace は algorithm 理解用であり、 入力に依存して分岐し実行時間も変わる。 constant-time 実装ではないことを participant 向けにも明記している。
 
-異なる法の元同士は、黙って演算されてはいけません。
+## ブラウザでの進め方
 
-## 遊び方
+1. Participant Portal で問題を起動し、**Browser Workbench** を開く。
+2. `inspect` で deploy 固有の fixture と公開された証拠を読む。
+3. 画面内の starter を編集し、`test` で公開テストを実行する。
+4. 表示された直接回答欄を、inspect と実験結果から埋める。
+5. `prepare` で全 checkpoint の提出値を作り、Portal へ貼る。
 
-```bash
-make inspect              # 自分の法と、1 つの trace
-make inspect A=17 P=101   # 任意の組の trace
-make test                 # 公開テスト
-make reset                # starter/field.py を元に戻す
-```
+直接回答は `prepare` により現在の deploy seed へ結び付けられます。
 
-編集するのは `local/starter/field.py` の 1 ファイルです。
+## 学習目標
 
-## 採点
+- integer と field element を区別できる
+- 負数や法以上の値を正規形へ落とせる
+- 加算・減算・乗算を法の下で実装できる
+- 拡張 Euclid から乗法逆元を求められる
+- a * a^{-1} = 1 を property として検証できる
+- zero と非可逆元に逆元が無いことを明示的な error にできる
+- 素数法と合成数法の違いを counterexample で示せる
 
-7 つの checkpoint を独立に採点します。誤答は 1 回 10 点減点です。
+## Checkpoint
 
-| Checkpoint | 配点 | 何を検査するか |
-|---|---:|---|
-| `normalize` | 25 | 負値、法以上の値、冪等性、等価判定 |
-| `arithmetic` | 30 | 加減乗、単位元、分配、可換、結合 |
-| `egcd-trace` | 35 | step 列を 1 行ずつアルゴリズム自身のものと突き合わせ |
-| `inverse` | 35 | 素体の全非零元と、`a / b * b == a` |
-| `errors` | 25 | zero、零除算、法の混在 |
-| `composite` | 25 | 最小の非可逆元。素数法では存在しないこと |
-| `axioms` | 25 | 見たことのない素数上での公理 |
+| Checkpoint | 内容 | Points |
+| --- | --- | ---: |
+| `normalize` | 整数を体の元にする | 25 |
+| `arithmetic` | 加減乗算と体の公理 | 30 |
+| `egcd-trace` | 拡張 Euclid の各ステップを出す | 35 |
+| `inverse` | 逆元と除算 | 35 |
+| `errors` | 存在しないものを存在しないと言う | 25 |
+| `composite` | 素数でない法で反例を作る | 25 |
+| `axioms` | 見たことのない素数で公理を通す | 25 |
 
-hint は 7 つ中 4 つにあり、いずれもその checkpoint の 50% 上限内です。
+## 解説
 
-## この問題が譲らない 2 つの区別
+## integer と field element
 
-**integer は field element ではありません。** `-5` と `p - 5` は同じ元を指しますが、`-5` は正規形では
-ありません。element を作る時点で正規化しておけば、負の入力も法以上の入力も以降は同じ経路を通ります。
+-5 と p-5 は F_p の同じ元を指すが、 -5 は正規形ではない。 element を作った時点で [0, p) に落としておくと、 負の step も法以上の初期値も同じ経路で扱える。 Python の `%` は法が正なら非負を返すので、 これは 1 演算で済む。
 
-**`pow(a, p - 2, p)` は「逆元」ではありません。** `p` が素数のときは逆元です。合成数 `n` では
-`pow(a, n - 2, n)` も数を返しますが、それは逆元ではなく、検算しない限り気づけません。拡張 Euclid は
-係数と一緒に gcd を返すので、**逆元が存在しない**と言えます。この問題の mutation suite の 1 つ目は
-まさに Fermat 版で、素数の checkpoint を全部通り、合成数の checkpoint だけで落ちます。
+剰余を最後にまとめて取る実装は、 この問題の範囲では正しい答えを出す。 落ちるのは中間値そのものを検査されたときで、 hidden test は演算結果が [0, p) にあることを毎回見る。
 
-## なぜ trace を 1 行ずつ突き合わせるのか
+## 拡張 Euclid が Fermat より多くを語る理由
 
-trace checkpoint は当初、各行が `a*s + p*t = r` を満たすことと、最終行が gcd と逆元に一致すること
-だけを見ていました。**最終行だけを返す**変異がそれを生き延びました。1 行だけの表は、その条件を
-すべて満たすからです。
+`pow(a, p-2, p)` は p が素数のときだけ逆元になる。 合成数 n では `pow(a, n-2, n)` も数を返すが、 それは逆元ではない。 検算しなければ気づけない。
 
-現在は step 数と各行の `(q, r, s, t)` を参照実装の列と突き合わせます。floor 除算なので列は一意に
-決まり、正解はちょうど 1 つです。
+拡張 Euclid は a*s + n*t = gcd(a, n) を返す。 gcd が 1 でなければ逆元は存在せず、 アルゴリズムがそれを教えてくれる。 「存在しないことが分かる」 のが Fermat 版との差で、 mutation suite の 1 つ目はこの差だけで落ちる。
 
-## 標本ではなく全数
+## trace を行列ごと突き合わせる理由
 
-`inverse` は素体の全非零元を回します。標本ではないので、一部の値を特別扱いする戦略は成立しません。
-`axioms` はさらに、逆元写像が非零元上の**全単射**であることを検査します。体では逆元は一意で、異なる
-元が同じ逆元を持つことはありません。
+trace checkpoint は当初、 各行が Bezout 等式 a*s + p*t = r を満たすことと、 最終行が gcd と逆元に一致することだけを見ていた。 mutation suite に 「最終行だけを返す」 変異を入れたところ、 生き残った。 1 行だけの表はその条件をすべて満たすからだ。
 
-## trace は constant-time ではありません
+現在は step 数と各行の (q, r, s, t) を参照実装の列と突き合わせる。 floor 除算なので step 列は一意に決まり、 正解はちょうど 1 つある。
 
-`make inspect` が出す trace は入力に依存して分岐し、step 数も入力で変わります。実際の鍵を扱うコード
-では、その性質そのものが side-channel です。これはアルゴリズムを読むためのものであり、production
-実装の手本ではありません。
+## 全数検査
 
-## 保証範囲
+inverse checkpoint は素体の全非零元 (p-1 個、 p は 3 桁) を回す。 標本ではないので、 一部の値だけ特別扱いする実装は通らない。 axioms checkpoint はさらに、 逆元写像が非零元上の全単射であることを検査する — 体では逆元は一意で、 異なる元が同じ逆元を持つことはない。
 
-ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も
-あなたの管理下にあるので、 image の中身はあなたに対して秘匿されていません。
-`reference/` と `tests/hidden/` を bind-mount しないのは、あなたの git checkout に
-紛れ込ませないためであって、手が届かなくするためではありません。
+## trace は constant-time ではない
 
-verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
-ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。
-結果は期待値を漏らしません。 fixture はこのデプロイの seed 由来なので、暗記した答えは持ち越せません。
+show.py が出す trace は入力に依存して分岐し、 step 数も入力で変わる。 実際の鍵を扱う実装では、 この性質そのものが side-channel になる。 ここでは algorithm を読むためのものであり、 production 実装の参考にはならない。
 
-これは自習と誠実な練習を支えます。競技順位・試験・修了判定は**支えません**。
-それらには participant が管理しない verifier が必要で、
-[#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271) で追跡しています。
+## 次につながるところ
 
-## コスト
+次の問題で曲線の群演算を作る。 点の加算は分母に体の逆元を持つので、 ここで作った inverse がそのまま使われ、 分母が 0 になる場合分けが群法則の場合分けそのものになる。
 
-ゼロです。クラウドアカウントも AWS リソースも使いません。
+## 作問・検証
 
-## 作問者向け
-
-`make reference-test` が mutation suite を実行します。壊した実装 8 種類があります。Fermat 版は素数の
-checkpoint を全部通り、最終行だけの trace は当初の checkpoint を生き延びました。後者が、列全体を
-突き合わせるようになった理由です。
+参加者は checkout を必要としません。リポジトリ保守者向けの検証手順は Makefile と CI を正とします。

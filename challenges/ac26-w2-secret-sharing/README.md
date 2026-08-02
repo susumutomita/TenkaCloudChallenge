@@ -1,103 +1,53 @@
 # Split it, and still nobody knows
 
-> This track is an independent, unofficial companion to the Advanced Cryptography Program 2026.
-> It is not affiliated with or endorsed by the course or its operators. All problem statements,
-> code, fixtures, and figures here are written independently. Questions about this track go to
-> the TenkaCloud repository, not to the course operators.
+Split a secret across n parties. Add them up and it comes back. If that were all, it would not be cryptography. Show, with evidence, that holding n-1 of them tells you nothing.
 
-**Track:** `advanced-cryptography-2026` · **Order:** 210 · **Chapter:** Week 2 / Additive Secret
-Sharing · **Role:** `mechanism` · **Time:** 40–60 minutes · **Points:** 200
-· **Status:** draft — see "Week 2 alignment" below
+## Browser workflow
 
-## The story
+1. Start the problem in the Participant Portal and open **Browser Workbench**.
+2. Run `inspect` and read the deployment-specific fixture and published evidence.
+3. Edit the starter sources on the page and run the public `test` command.
+4. Complete any direct-answer fields from the evidence and your experiments.
+5. Run `prepare`, then paste every generated value into the matching Portal checkpoint.
 
-Five auditors need to compute a total across their books without any of them learning another's
-figures. The plan on the whiteboard is simple enough: each number gets split into pieces, one per
-auditor, and only the pieces added together mean anything.
+Direct answers are bound to the current deployment seed by `prepare`.
 
-Somebody has already written the split. It adds up correctly. It is also, as written, useless —
-and the difference between "adds up correctly" and "keeps a secret" is the whole of this problem.
+## Learning goals
 
-## The idea
+- Implement additive secret sharing over a finite field
+- Confirm the secret returns only when every share is present
+- Actually demonstrate that n-1 shares carry no information about the secret
+- Explain why a trivial split is not a sharing
+- Refresh the shares without changing the secret
 
-Additive sharing over `F_p`: a secret `s` becomes `n` values summing to `s`. The arithmetic is
-three lines. What makes it cryptography is that **any n-1 of those values are independent of the
-secret** — and that is a claim you demonstrate, not one you assert.
+## Checkpoints
 
-## How to play
+| Checkpoint | Purpose | Points |
+| --- | --- | ---: |
+| `share-and-reconstruct` | Split it, collect it, get it back |  |
+| `hides-the-secret` | Show that a short set says nothing |  |
+| `threshold` | Answer how many are needed, with witnesses |  |
+| `rerandomize` | Refresh the shares without moving the secret |  |
+| `transfer` | Hold up in settings you have not seen |  |
 
-```bash
-make inspect            # your setting, and what n-1 parties see between them
-make test               # public tests
-make reset              # restore starter/sharing.py
-```
+## Explanation
 
-You edit one file, `local/starter/sharing.py`: `share()` · `reconstruct()` ·
-`complete_shares()` · `rerandomize()`.
+## Adding up to the secret is not yet anything
 
-## Scoring
+The arithmetic of additive sharing takes a few lines. What makes it worth anything is that n-1 shares carry no information about the secret — and that is something to demonstrate, not assert.
 
-Five checkpoints, scored independently. Wrong answers cost 10 points each.
+## An executable definition of 'it does not leak'
 
-| Checkpoint | Points | What is checked |
-|---|---:|---|
-| `share-and-reconstruct` | 50 | Round trip across four settings, **and** the split is not trivial |
-| `hides-the-secret` | 45 | Your completion works for **every** secret in the field |
-| `threshold` | 45 | How many shares are needed, plus two witnesses |
-| `rerandomize` | 30 | Secret preserved, every share moved |
-| `transfer` | 30 | All of it, on a modulus and party count from an unseen seed |
+If, holding the same n-1 shares, you can produce a consistent final share for *every* secret in the field, then those n-1 shares are not evidence about the secret. `complete_shares` succeeding across the whole field is the proof. That is the footing for talking about Week 6's over-opening in terms of why it is bad, rather than as a rule.
 
-Hints on three of the five (20 / 20 / 15). Opening every one still leaves 145 of 200.
+## A trivial split is not a sharing
 
-## The two checkpoints that carry the problem
+Hand the secret to party 0 and give everyone else zero: the sum still works and the round-trip test still passes. Party 0 knew everything from the start. The hidden tests reject that case explicitly, because the gap between 'the test passes' and 'the property holds' shows up here in the same shape as everywhere else in this track.
 
-**`hides-the-secret`** sweeps the entire field. If, holding the same n-1 shares, you can produce a
-consistent final share for *every* secret, then those n-1 shares are not evidence about the
-secret. That is an executable definition of "it does not leak", and it beats any amount of prose.
+## Rerandomizing
 
-**`threshold`** will not accept a number. You submit the count *and* two different secrets that
-are both consistent with the same n-1 shares. Guessing the number is easy; building two witnesses
-is not.
+Add a set of offsets summing to zero and the secret is unchanged while every share moves. Real protocols use this so a set of shares cannot be linked across rounds. It is checked as a relation — secret preserved, every element moved — not against a fixed expected list.
 
-## What the public tests do not tell you
+## Authoring and validation
 
-They check the round trip. They never ask whether a partial set hides anything — so the trivial
-split (hand the secret to party 0, give everyone else zero) passes them cleanly while party 0
-knows everything from the start. The hidden tests reject that case by name.
-
-## Week 2 alignment
-
-Week 2's material was **not published upstream** at the commit `curriculum.md` records. This
-problem therefore pins `week2/README.md` with `kind: "placeholder"` — a record of the *absence* of
-material at that commit, not an alignment to it. `status` stays `draft`.
-
-That pin is what lets `bun run course:drift` report `PUBLISHED` rather than `DRIFT` the day the
-material appears; the Week 2 course-sync issue then reconciles the planned row and this problem's
-alignment before it leaves draft.
-
-## Assurance scope
-
-Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
-daemon, and the image, so nothing inside that image is hidden from you: `reference/` and
-`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than
-out of reach.
-
-What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
-a checkpoint can only credit the id it echoes, results do not leak expected values, and the
-fixtures come from this deployment's seed so a memorized answer does not carry.
-
-That supports self-study and honest practice. It does **not** support competition ranking,
-examination, or completion certification — those need a verifier the participant does not
-administer, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
-
-## Cost
-
-Zero. No cloud account, no AWS resources.
-
-## For authors
-
-`make reference-test` runs the mutation suite: six broken submissions plus one aimed at the
-verifier. One of them — `reconstruct` forgetting the modulus — **survived the first version of the
-hidden tests**, because `check_roundtrip` was normalizing the learner's answer before comparing
-it. The check now requires the canonical element. That is the mutation suite doing its job on the
-tests rather than on the submission.
+Participants do not need a checkout. Repository maintainers use the Makefile author targets and CI as the validation source of truth.

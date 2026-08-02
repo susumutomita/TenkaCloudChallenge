@@ -1,117 +1,84 @@
 # 多項式にしただけでは証明ではない
 
-> このトラックは Advanced Cryptography Program 2026 の非公式・独立した companion です。講座および
-> その運営者とは提携しておらず、承認も受けていません。問題文、コード、fixture、図はすべて独自に
-> 作成しています。このトラックに関する質問は講座運営ではなく TenkaCloud リポジトリへお願いします。
+「プログラムを証明する」とき、実行そのものは証明に入らない。小さな状態機械の trace を有限体上の多項式関係へ変換し、変換が何を失わないか、何を保証しないかを確かめる。
 
-**Track:** `advanced-cryptography-2026` · **Order:** 410 · **Chapter:** Week 4 / Arithmetization
-Bridge · **Role:** `transfer` · **想定時間:** 60〜90 分 · **配点:** 300
-· **Status:** draft — 後述の「Week 4 の対応づけ」を参照
+Week 4 の 1 問目。 Week 4 の教材は pinned commit 時点で未公開のため、 公開されている主題 (ZKP) だけを手がかりに、 Week 1 の constraint と Week 3 の有限体を新しい設定へ転用する bridge 問題として作ってある。 role は transfer で、 GOVERNANCE.md §6 が未公開週の companion に許す 2 つの role のうちの 1 つ。 公式課題が何を要求するかについては何も主張しない。
 
-## ストーリー
+題材は 2 列・2 規則の状態機械。 計算そのものは重要ではなく、 「これが走ったことを証明する」 が 「これらの多項式関係が これらの点で消える」 へ変換される過程が主題。
 
-プログラムが走ったことを証明するとき、プログラムは証明の中に入りません。実行が表になり、表の規則が
-多項式関係になり、主張が「これらの関係がこれらの点で消える」になります。
+中心にあるのは 2 種類の制約が別の仕事をしていること。 transition 制約は 「各行が前の行から従う」 としか言わない。 boundary 制約が 「どこから始まったか」 を言う。 一方が他方を含意しないので、 boundary を落とした系は同じ機械を別の初期状態から走らせた trace で完全に充足される — 多項式は等しく正しく、 別の文の証明になっている。 underconstrained checkpoint はこの trace を participant に構成させる。
 
-機械は 2 列 2 規則です。
+evaluation domain は単位根の冪で、 行と点が順序どおり対応する。 素数は steps が p-1 を割るものだけを選んである。
 
-```text
-a_{i+1} = a_i + b_i
-b_{i+1} = b_i + weight*a_i     (mod p)
-```
+これは証明系ではない。 commitment も verifier の乱数も無く、 何に対しても健全ではない。 arithmetization への橋であって、 その先ではない。
 
-計算そのものは主題ではありません。変換が主題です。
+## ブラウザでの進め方
 
-## 2 種類の制約は別の仕事をしています
+1. Participant Portal で問題を起動し、**Browser Workbench** を開く。
+2. `inspect` で deploy 固有の fixture と公開された証拠を読む。
+3. 画面内の starter を編集し、`test` で公開テストを実行する。
+4. 表示された直接回答欄を、inspect と実験結果から埋める。
+5. `prepare` で全 checkpoint の提出値を作り、Portal へ貼る。
 
-**transition** 制約は「各行が前の行から従う」と言います。**boundary** 制約は「どこから始まったか」を
-言います。一方が他方を含意しません。
+直接回答は `prepare` により現在の deploy seed へ結び付けられます。
 
-boundary を落とすと、系は同じ機械を**別の初期状態から**走らせた trace で完全に充足されます。遷移は
-すべて成り立ち、residual はすべて 0 で、多項式は等しく正しい。そしてそれは別の文の証明です。
+## 学習目標
 
-`underconstrained` checkpoint で構成するのが、まさにその trace です。「制約を 1 本落とす」の具体的な
-意味がこれです。
+- 決定的な計算から execution trace を生成できる
+- 状態遷移を隣接行の制約として書ける
+- 初期状態の固定を boundary 制約として分離できる
+- trace の列を有限体上の多項式へ補間できる
+- 制約違反がどの行・どちらの制約に現れるかを追跡できる
+- trace を 1 箇所改ざんした反例を検出できる
+- 多項式にしただけでは証明にならないことを説明できる
 
-## 遊び方
+## Checkpoint
 
-```bash
-make inspect            # 機械、trace、各行の domain 点
-make test               # 公開テスト
-make reset              # starter/air.py を元に戻す
-```
+| Checkpoint | 内容 | Points |
+| --- | --- | ---: |
+| `trace` | 実行 trace を作る | 30 |
+| `transition` | 隣り合う行の関係を式にする | 40 |
+| `boundary` | どこから始まったかを固定する | 30 |
+| `interpolate` | 列を多項式にする | 45 |
+| `compose` | domain 上で関係が消えることを見る | 40 |
+| `locate` | 最初に壊れた行を特定する | 40 |
+| `underconstrained` | 多項式が正しくても文が違う例を作る | 45 |
+| `transfer` | 見たことのない設定でも成立させる | 30 |
 
-編集するのは `local/starter/air.py` の 1 ファイルです。
+## 解説
 
-## 採点
+## 変換は健全性を足さない
 
-8 つの checkpoint を独立に採点します。誤答は 1 回 15 点減点です。
+trace を多項式に補間しても、 それだけでは何も保証されない。 補間は表現を変える操作であって、 検証の力は制約が担っている。 「多項式になったから証明だ」 は、 表を CSV から JSON にしたら正しくなった、 と言うのに近い。
 
-| Checkpoint | 配点 | 何を検査するか |
-|---|---:|---|
-| `trace` | 30 | 機械が実際に出す trace |
-| `transition` | 40 | 隣接対ごとに 1 本、正直な trace で 0、改ざん位置で最初に非零 |
-| `boundary` | 30 | 正直な trace で 0、始点をずらすと非零 |
-| `interpolate` | 45 | domain 上で列を再現し、domain 外でも多項式として振る舞う |
-| `compose` | 40 | 多項式を通しても関係が消える |
-| `locate` | 40 | 最初に壊れた行と、制約の種類 |
-| `underconstrained` | 45 | 遷移制約をすべて満たす別の trace |
-| `transfer` | 30 | 見たことのない体・長さ・weight での再実行 |
+## 2 種類の制約は別の仕事をしている
 
-hint は 8 つ中 5 つにあり、いずれもその checkpoint の 50% 上限内です。
+transition 制約は 「各行が前の行から従う」 と言う。 boundary 制約は 「どこから始まったか」 と言う。 一方が他方を含意しない。
 
-## 実装の正否を分ける細部
+boundary を落とすと、 系は同じ機械を**別の初期状態から**走らせた trace で完全に充足される。 遷移はすべて成り立ち、 residual はすべて 0 で、 多項式は等しく正しい。 それは別の文の証明である。 underconstrained checkpoint で構成するのはこの trace で、 これが 「制約を 1 本落とす」 の具体的な意味になる。
 
-**residual は何本か。** 隣接する行の対ごとに 1 本なので、行数より 1 少ない。行ごとに 1 本作る実装は、
-最後の行を存在しない次の行と比べています。この mutation は `IndexError` で落ちます。
+## residual の本数
 
-**違反はどの行のものか。** i 番目の遷移が作るのは行 `i+1` なので、最初に壊れる行は `i+1` です。`i` と
-報告する実装は、読み手を 1 行ずらした場所へ案内します。
+transition residual は隣接する行の対ごとに 1 本なので、 行数より 1 少ない。 行ごとに 1 本作る実装は、 最後の行を存在しない次の行と比べている。 mutation suite の 1 つはこれで、 IndexError で落ちる。
 
-**行 0 には前の行がありません。** そこで壊れうるのは boundary だけです。それを transition 違反と呼ぶ
-のも間違った場所を指すことになります。だから boundary を先に見ます。
+## 違反はどの行に現れるか
+
+i 番目の遷移が作るのは行 i+1 なので、 最初に壊れる行は i+1 である。 i と報告する実装は、 直す場所を 1 行間違えて教える。
+
+行 0 には前の行が無い。 そこで壊れうるのは boundary だけで、 それを transition 違反と呼ぶと、 やはり間違った場所を指す。 だから boundary を先に見る。
 
 ## evaluation domain
 
-domain は単位根の冪で、行 `i` が点 `g^i` に対応します。隣り合う行が隣り合う点になるので、遷移制約は
-「`x` での多項式」と「次の点での同じ多項式」の関係として書けます。素数は `steps` が `p-1` を割るもの
-だけを選んであります。そうでなければ、その位数の単位根が存在しません。
+domain は単位根の冪で、 行 i が点 g^i に対応する。 隣り合う行が隣り合う点になるので、 遷移制約は 「x での多項式」 と 「次の点での同じ多項式」 の関係として書ける。 素数は steps が p-1 を割るものだけを選んである。 そうでなければ、 その位数の単位根が存在しない。
 
-## これは証明系ではありません
+## これは証明系ではない
 
-commitment がなく、verifier の乱数がなく、したがって誰に対しても健全ではありません。arithmetization
-までの橋であって、その先ではありません。ここで作るものを「小さな SNARK」と呼ぶのは、この問題が教えよう
-としていることの正反対です。
+commitment が無く、 verifier の乱数が無く、 したがって何に対しても健全ではない。 arithmetization までの橋であって、 その先ではない。 ここで作ったものを 「小さな SNARK」 と呼ぶのは、 この問題が教えようとしていることの正反対である。
 
 ## Week 4 の対応づけ
 
-Week 4 の教材は pinned commit の時点で未公開です。`courseAlignment` は `week4/README.md` を
-`kind: "placeholder"` で pin し、role は `transfer` にしてあります。`GOVERNANCE.md` §6 が未公開週の
-companion に許す 2 つの role のうちの 1 つであり、Week 1 の constraint と Week 3 の体を新しい設定へ
-転用しているという意味でも正確です。公式課題が何を要求するかについては何も主張していません。#229 が
-教材公開時に対応づけを確定します。
+Week 4 の教材は pinned commit 時点で未公開。 courseAlignment は `week4/README.md` を `kind: "placeholder"` で pin し、 role は transfer にしてある。 GOVERNANCE.md §6 が未公開週の companion に許すのは diagnostic と transfer で、 この問題は Week 1 の constraint と Week 3 の体を新しい設定へ転用しているので transfer が正確でもある。 公式課題が何を要求するかについては何も主張していない。
 
-## 保証範囲
+## 作問・検証
 
-ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も
-あなたの管理下にあるので、 image の中身はあなたに対して秘匿されていません。
-`reference/` と `tests/hidden/` を bind-mount しないのは、あなたの git checkout に
-紛れ込ませないためであって、手が届かなくするためではありません。
-
-verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
-ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。
-結果は期待値を漏らしません。 fixture はこのデプロイの seed 由来なので、暗記した答えは持ち越せません。
-
-これは自習と誠実な練習を支えます。競技順位・試験・修了判定は**支えません**。
-それらには participant が管理しない verifier が必要で、
-[#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271) で追跡しています。
-
-## コスト
-
-ゼロです。クラウドアカウントも AWS リソースも使いません。
-
-## 作問者向け
-
-`make reference-test` が mutation suite を実行します。壊した実装 9 種類があります。読む価値があるのは
-「最後の遷移だけ検査する」と「boundary 制約を落とす」の 2 つで、どちらも完全に見える系を作り、計算では
-ない trace を受理します。
+参加者は checkout を必要としません。リポジトリ保守者向けの検証手順は Makefile と CI を正とします。

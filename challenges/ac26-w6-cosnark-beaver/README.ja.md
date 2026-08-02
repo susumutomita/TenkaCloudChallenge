@@ -1,171 +1,116 @@
 # 誰も持っていない 2 つの値を、1 round だけ話して掛ける
 
-> このトラックは Advanced Cryptography Program 2026 の非公式・独立した companion です。講座および
-> その運営者とは提携しておらず、承認も受けていません。問題文、コード、fixture、図はすべて独自に
-> 作成しています。このトラックに関する質問は講座運営ではなく TenkaCloud リポジトリへお願いします。
+秘密分散された `[A]` と `[B]` から、fresh Beaver triple を使って `[C] = [A] × [B]` を 1 round で構成する。 open するのは d と e だけで、 witness も A も B も C も平文にならない。
 
-**Track:** `advanced-cryptography-2026` · **Order:** 620 · **Chapter:** Week 6 / Programmable
-Cryptography Stack Design · **Role:** `assignment-companion` · **想定時間:** 60〜90 分 ·
-**配点:** 300 · **必須前提:** `ac26-w6-cosnark-linear`、`ac26-w2-beaver-mul` · **Status:** draft
-
-## ストーリー
-
-前の問題で作った co-SNARK prover の線形部分は、通信を 1 round も必要としませんでした。そこで出て
-きた 2 つの sharing は、この問題では組み立て済みで渡されます。
+Week 6 の 2 問目。 前の問題 (`ac26-w6-cosnark-linear`) が作った co-SNARK prover の線形部分は 0 round で済んだ。 この問題はその続きで、 **通信が要る側**を書く。
 
 ```text
 A = Σ_j a_j w_j        B = Σ_j b_j w_j        C = A × B        (mod p)
 ```
 
-`[A]` と `[B]` は分散されたままです。和の積は積の和ではないので、局所演算をどう並べても `[C]` は
-出ません。代価は通信 1 round で、それを 1 round に抑えるのが Beaver の trick です。
+`[A]` と `[B]` は組み立て済みで支給される。 和の積は積の和ではないので、 局所演算をどう並べても `[C]` は出ない。 代価は通信 1 round で、 それを 1 round に抑えるのが Beaver の trick である。
 
 ```text
 [d] = [A] - [x]        [e] = [B] - [y]        どちらも local
-d, e を open                                   1 round、2 値
+d, e を open                                   1 round、 2 値
 [C] = [z] + d[y] + e[x] + de
 ```
 
-コストは消えたのではなく、preprocessing へ移動しました。triple を作るのが高価で input に依存しない
-部分で、online phase は独立な乗算がいくつ並んでいても 1 round です。全部が同じ round に相乗りする
-からです。
+Week 2 の `ac26-w2-beaver-mul` が general MPC の乗算として作ったものを、 co-SNARK prover という上位 layer に正しく組み込む transfer 問題である。 triple の消費、 d/e の batch、 公開定数 `de` を 1 party だけが畳むこと — Week 2 で学んだ 3 つが、 ここでは prover の privacy に直結する。
 
-## 支給されるものと、新しいところ
+runtime は前問と同じ instrument で、 `open` だけが通信する。 round は 「開いた値の数」 ではなく **distinct な roundId** として数える。 だから 「2 値を 1 round で」 は主張ではなく測定になり、 それが checkpoint `open` の採点対象である。 `reserve_triple` は消費する: 同じ triple を 2 度予約すると例外になる。 mask が uniform なのはちょうど 1 回だけ、 という一文がこの step の安全性の全部だからである。
 
-Week 2 の Beaver 乗算 (`ac26-w2-beaver-mul`) と前問の線形 layer は両方とも支給されます。どちらも
-再実装しません。新しいのは、その 2 つが出会うことです。同じ trick が 1 つ上の layer に載ると、単体
-protocol の性質ではなく co-SNARK の privacy になります。
+採点の設計として、 この問題は 31 個の壊れた実装を同梱していて、 そのうち **24 個は全 shape で `C` を `A × B` に正しく復元する**。 `make reference-test` が毎回この数を測る。 なかでも本題は 「`[A]` と `[B]` をそのまま open して平文で掛け、 答えを share し直す」 実装で、 これは全 seed・全 shape で完璧な `C` を返し、 round も 1、 triple もちゃんと消費する。 実測すると、 これを落とす checkpoint は `audit` **1 つだけ**である (別 seed で再実行する `transfer` を除く)。
 
-runtime には 3 つ増えます。
+toy であることも明示しておく。 field は列挙可能な小さい素数、 party は 2〜5、 semi-honest ですらなく敵対者は不在、 triple は trusted dealer が配る。 dealer は `z = x*y` を自分で検算するが、 **本物の protocol はそれができない** — party は share しか持たず、 積を確認することは 3 つとも再構成することだからである。
 
-```text
-runtime.reserve_triple(triple)   triple を検めて消費する。2 度目は例外
-runtime.open(round_id, sharing)  1 つの共有値を全員に開く。ここで唯一通信するもの
-runtime.openings()               開示の記録: {"roundId", "shareIds", "maskedBy"}
-runtime.consumed_triples()       これまでに消費した triple id
-```
+## ブラウザでの進め方
 
-round は開示した値の数ではなく **distinct な `roundId`** です。だから「2 値を 1 round で」が主張では
-なく測定になります。
+1. Participant Portal で問題を起動し、**Browser Workbench** を開く。
+2. `inspect` で deploy 固有の fixture と公開された証拠を読む。
+3. 画面内の starter を編集し、`test` で公開テストを実行する。
+4. 表示された直接回答欄を、inspect と実験結果から埋める。
+5. `prepare` で全 checkpoint の提出値を作り、Portal へ貼る。
 
-`reconstruct` は相変わらずありません。
+直接回答は `prepare` により現在の deploy seed へ結び付けられます。
 
-## 遊び方
+## 学習目標
 
-```bash
-make inspect            # 設定・行・triple・記録の見た目
-make inspect S=sparse   # dense / sparse / signed / unit
-make test               # 公開テスト
-make reset              # starter/ を元に戻す
-```
+- prover relation の非線形部分だけが interactive multiplication を必要とする理由を説明できる
+- fresh triple の field / party / 積の整合を検め、 一度だけ消費できる
+- [d] = [A] - [x] と [e] = [B] - [y] を局所演算だけで構成できる
+- d と e を同一 round へ batch し、 round 数を開示数と区別できる
+- [C] = [z] + d[y] + e[x] + de を share として構成し、 公開定数を 1 party だけが畳める
+- witness も A / B / C の平文も含まない proof artifact の形を守れる
+- 開示記録から mask のある開示と無い開示を見分け、 privacy を測定できる
+- linear-only relation と multiplicative relation の通信コスト差を予測できる
+- triple の再利用・field mismatch・過剰 open を診断できる
 
-編集するのは `local/starter/prover.py` の 1 ファイルです。
+## Checkpoint
 
-`make inspect` は、予約済み triple share で mask された開示と、されていない開示を、同じ round id で
-1 つずつ実行して両方の記録を印字します。`A` にも `B` にも触りません。この 2 つが同じ操作だと判断する
-前に、一度見ておく価値があります。
+| Checkpoint | 内容 | Points |
+| --- | --- | ---: |
+| `plan` | 通信する前に、 何回話すかを数える | 30 |
+| `triple` | mask は一度きり | 35 |
+| `masks` | 共有値を覆う。 まだ誰も話さない | 40 |
+| `open` | 2 つの値を、 1 度の待ち合わせで | 45 |
+| `product` | 4 つの項のうち、 1 つだけ性質が違う | 45 |
+| `artifact` | 次の段が受け取れる形にする | 30 |
+| `audit` | 何が公開されたのかを、 記録から測る | 50 |
+| `transfer` | 見たことのない設定で成立させる | 25 |
 
-## 採点
+## 解説
 
-8 つの checkpoint を独立に採点します。誤答は 1 回 15 点減点です。
+## 正しい C は、 正しい prover の証拠にならない
 
-| Checkpoint | 配点 | 何を検査するか |
-|---|---:|---|
-| `plan` | 30 | triple 数・開示数・round 数・message 数を layer の幅の関数として出す |
-| `triple` | 35 | triple を relation に照らして検め、一度だけ消費し、台帳を主張でなく読む |
-| `masks` | 40 | 代入から `[d]` と `[e]` を出す。局所で、mask を祖先に持つ |
-| `open` | 45 | 2 値を 1 round で。round 数は記憶でなく runtime から |
-| `product` | 45 | `[C]` が `A × B` に復元し、公開定数 `de` を 1 party だけが畳む |
-| `artifact` | 30 | 3 つの sharing と metadata だけ。平文も transcript も入れない |
-| `audit` | 50 | 公開された値がすべて予約済み mask 下にあることを、開示記録から測る |
-| `transfer` | 25 | 未知の体・party 数・witness 長で全部成立させる |
+この問題は 31 個の壊れた実装を同梱していて、 そのうち **24 個は全 shape で `C` を `A × B` に正しく復元します**。 `make reference-test` が毎回この数を測り、 数が動いたら数のほうを直します。
 
-hint は 8 つ中 7 つにあります (各 12〜20)。全部開いても 300 点中 190 点が残ります。
+## `[A]` と `[B]` を開いてから掛ける実装は、 値のテストを 1 つも落とさない
 
-## 正しい C は、見た目ほど何も保証しない
+`[A]` と `[B]` をそのまま open すれば平文の `A` と `B` が手に入ります。 掛けて、 答えを share し直す。 出てくる `C` は全 seed・全 shape で完璧に正しく、 round は 1 のまま (2 つの開示を同じ roundId に入れれば済む)、 triple もちゃんと 1 つ消費できます。 `prove_product` の契約 — 「C が正しく、 schedule が 1 round」 — を、 この実装は完全に満たします。
 
-この問題は 31 個の壊れた実装を同梱していて、そのうち **24 個は全 shape で `C` を `A × B` に正しく
-復元します**。`make reference-test` が毎回この数を測ります。
+満たしていないのは 「公開された値が mask されたものだけだった」 ことです。 実測すると、 これを落とす checkpoint は `audit` **1 つだけ**です (`transfer` が同じ検査を別 seed で再実行する分を除く)。 `openings()` の各記録が持つ `maskedBy` — その開示の祖先に予約済み triple share があったか — だけが見ています。
 
-そのうち 1 つがこの問題の本題です。`[A]` と `[B]` をそのまま open すれば平文の `A` と `B` が手に
-入ります。掛けて、答えを share し直す。出てくる `C` は全 seed・全 shape で完璧に正しく、round は
-1 のまま、triple もちゃんと 1 つ消費されます。実測すると、これを落とす checkpoint は `audit`
-**1 つだけ**です。
+これが 「d と e を開いても A と B は漏れない」 という主張の実際の中身です。 主張は `d = A - x` の `x` が uniform で、 かつ **1 度しか使われない**ことに全部乗っています。 mask のない開示はその条件を満たさないので、 同じ `open` という操作でも意味が違います。 runtime はそれを拒否せず、 記録します。 拒否したら shortcut は 「不可能」 になり、 「見える」 にはならないからです。
 
-これは採点の抜け穴ではありません。`prove_product` の契約は「`C` が正しく、schedule が 1 round」で、
-その実装は契約を完全に満たしています。満たしていないのは「公開された値が mask されたものだけだった」
-ことで、それが載っているのは開示記録のほうです。
+## audit が証明できることと、 できないこと
 
-## audit が証明できることと、できないこと
+証明できるのは、 この runtime 上で公開された値がどれも予約済み mask の下にあり、 refused read が無く、 triple が ledger の通りに消費されたことです。
 
-証明できるのは、この runtime 上で公開された値がどれも予約済み triple mask の下にあり、refused read
-が無く、triple が台帳の通りに消費されたことです。
+証明できないのは 「A と B が誰の目にも触れなかった」 ことです。 前問と同じで、 各 party の scope を開いて自分の share を読むのは合法で、 全 party 分やれば `A` が手に入ります。 `Share._value` は属性 1 つ分の距離です。 runtime は sandbox ではなく instrument で、 記録しているのは 「その計算が何を公開したか」 であって 「書いた人が何を見たか」 ではありません。
 
-証明**できない**のは「`A` や `B` を誰も見なかった」ことです。各 party の scope を開いて自分の share
-を読むのは合法で、全 party 分やれば `A` が手に入ります。`Share._value` に至っては属性 1 つ分の距離
-です。runtime は sandbox ではなく instrument で、記録しているのは「その計算が何を公開したか」であって
-「書いた人が何を見たか」ではありません。
+## 「1 round」 は答えであって、 測定ではない
 
-## mask が uniform なのは、ちょうど 1 回
+答えが 1 round であることは、 1 行も書く前から分かっています。 だから `rounds: 1` と書いて返す報告には点がありません。 `open` と `product` の checkpoint は毎回、 **すでに何かを開示した後の** runtime を渡します。 そこでの正解は 1 ではなく、 「この step が足した round が 1」 です。
 
-「`d` と `e` を開いても `A` と `B` は漏れない」という主張は、`d = A - x` の `x` が uniform で、かつ
-**1 度しか使われない**ことに全部乗っています。同じ `x` で 2 つの値を隠せば、その差が公開されます。
-それ以外は何も壊れません。`C` は正しく出ます。だから「triple の再利用は性能の話」という誤解は生き
-延びます。`reserve_triple` は 2 度目を docstring での注意ではなく例外にします。
+round が開示の数ではないことも同じ理由です。 2 値を 1 round で運ぶ schedule と 2 round で運ぶ schedule は出力が同一で、 違いは latency にしか出ません。 本物の prover では、 その差が回路の乗算 layer の数だけ積み上がります。
 
-## dealer が検算できて、本物の protocol ができないこと
+## 公開定数は 1 party だけが畳む
 
-`reserve_triple` は `z == x * y` を確認してから triple を渡します。**本物の protocol はこれができ
-ません。** party は share しか持たず、積を確認することは 3 つとも再構成することで、それは mask を
-破壊します。本物の preprocessing は triple をもう 1 つ潰して 1 つを検査する (sacrificing) か、
-malicious-secure な protocol で triple を生成します。ここでは trusted dealer が自分の仕事を検算して
-いるだけです。
+`de` は全員が知っている数です。 `[de]` という共有値は存在しません。 全 party の share に足すと `value + parties × de` の sharing になり、 2 party なら `de` 1 個分ずれます。 Week 2 が checkpoint 1 つを割いた話が、 ここでは 「`C` が `A × B` にならない」 という形で返ってきます。 実測でずれは正確に `(parties - 1) × d × e` です。
 
-## 次につながるところ
+## triple を 2 度使うと何が起きるか
 
-次の問題は同じ step を取り上げて、「ほかに何を開いたか」を訊きます。この問題が測るのは 2 つの開示が
-mask されていたかどうかで、privacy の問題が訊くのはそれが**本当に 2 つだけ**だったか、1 つ多く開いた
-prover が実際には何を公開したのか、です。
+何も壊れません。 `C` は正しく出ます。 壊れるのは mask のほうで、 同じ `x` で 2 つの値を隠すと、 その 2 つの差が公開されます。 だから `reserve_triple` は 2 度目を例外にします — docstring での注意ではなく、 API として。 「triple の再利用は性能の話」 という誤解は、 性能の話であるうちは何も起きないので生き延びます。
+
+## dealer が検算できて、 本物の protocol ができないこと
+
+`reserve_triple` は `z == x * y` を確認してから triple を渡します。 **本物の protocol はこれができません。** party は share しか持たず、 積を確認することは 3 つとも再構成することで、 それは mask を破壊します。 本物の preprocessing は triple をもう 1 つ潰して 1 つを検査する (sacrificing) か、 malicious-secure な protocol で triple を生成します。 ここでは trusted dealer が自分の仕事を検算しているだけで、 その限界は暗黙にせず書いてあります。
+
+## artifact に平文を入れない
+
+`[C]` はあと 1 回 `open` すれば `C = A × B` を満たす整数になり、 それらしい proof artifact に見えます。 入れてはいけません。 本物の prover の次の段は sharing を消費しますし、 平文の `C` は witness 由来の値を理由なく公開したものです。 `d` と `e` は公開値で transcript には属しますが、 artifact には属しません。
+
+metadata も飾りではありません。 どの relation の、 どの体の、 何 party 分かを言わない artifact は何とも突き合わせられず、 別の relation の名札が付いた `C` は誰もしていない主張の valid な proof です。
+
+## toy と production の差
+
+field は列挙できる小さい素数、 party は 2〜5、 敵対者は不在、 triple は trusted dealer が配ります。 本物の co-SNARK では triple の調達が設計の中心で、 online phase の 1 round はその preprocessing を前提にした数字です。 コストは消えたのではなく、 input に依存しない側へ移動しただけです。
 
 ## 対象外
 
-実際の proof encoding / verification、複数の乗算 layer の scheduling 最適化、malicious-secure triple、
-network transport。
+実際の proof encoding / verification、 複数の乗算 layer の scheduling 最適化、 malicious-secure triple、 network transport。
 
-## これは安全ではない
+## 作問・検証
 
-体は列挙できる小さい素数、party は 2〜5、敵対者は semi-honest ですらなく単に不在で、triple は trusted
-dealer が配ります。機構の toy です。
-
-## 出典との対応
-
-Week 6 の教材は上流で公開されているので、`courseAlignment` は `curriculum.md` が記録している commit
-の `week6/README.md` と `week6/problems/co-snark-prove/README.md` を pin します。公式演習の template・
-係数・fixture・解答は転載していません。relation も runtime も triple dealer も instrumentation も独自
-に書いたもので、公式演習が支給する primitive はこの問題が土台にするものであって、この問題が採点する
-コードではありません。
-
-## 保証範囲
-
-ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も
-あなたの管理下にあるので、 image の中身はあなたに対して秘匿されていません。
-`reference/` と `tests/hidden/` を bind-mount しないのは、あなたの git checkout に
-紛れ込ませないためであって、手が届かなくするためではありません。
-
-verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
-ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。
-結果は期待値を漏らしません。 fixture はこのデプロイの seed 由来なので、暗記した答えは持ち越せません。
-
-これは自習と誠実な練習を支えます。競技順位・試験・修了判定は**支えません**。
-それらには participant が管理しない verifier が必要で、
-[#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271) で追跡しています。
-
-## コスト
-
-ゼロです。クラウドアカウントも AWS リソースも使いません。
-
-## 作問者向け
-
-`make reference-test` が mutation suite を実行します。壊した提出 31 種類と verifier を狙った 1 種類が
-あります。31 種類のうち何個が依然として `C` を `A × B` に復元するかを毎回印字します。この README が
-引用しているのはその数で、後の変更で checkpoint が安くなればその数が動き、主張のほうを直します。
+参加者は checkout を必要としません。リポジトリ保守者向けの検証手順は Makefile と CI を正とします。

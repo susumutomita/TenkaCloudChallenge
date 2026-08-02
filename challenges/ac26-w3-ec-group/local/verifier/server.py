@@ -144,44 +144,73 @@ def evaluate(checkpoint_id: str, submission: object) -> bool:
         return _run_submission(submission, CODE_CHECKPOINTS[checkpoint_id], SEED)
     return False
 
+# BEGIN GENERATED BROWSER WORKBENCH
+from verifier.workbench import WorkbenchSupport
+
+_WORKBENCH = WorkbenchSupport(
+    root=ROOT,
+    seed=SEED,
+    problem_id='ac26-w3-ec-group',
+    problem_name='(0, 0) は無限遠点ではない',
+    description='有限体上の楕円曲線の点が群をなすことを、例外ケースまで含めて実装で確かめる。toy 曲線の多くは (0, 0) を含むので、それを単位元に流用する実装は本物の点と単位元を区別できなくなる。',
+    submitted_files=('curve.py',),
+    code_checkpoints=('on-curve', 'identity', 'add', 'double', 'scalar', 'trace', 'properties', 'secp256k1'),
+    checkpoints=('on-curve', 'identity', 'add', 'double', 'scalar', 'trace', 'properties', 'secp256k1'),
+    checkpoint_labels={'on-curve': '曲線上かどうかを判定する', 'identity': '単位元と逆元', 'add': '相異なる点を足す', 'double': '同じ点を足す', 'scalar': 'double-and-add で k 倍する', 'trace': '各ビットで何が起きたかを出す', 'properties': '見たことのない曲線で群の公理を通す', 'secp256k1': '実運用パラメータでも同じ抽象を動かす'},
+    max_body_bytes=MAX_BODY_BYTES,
+    run_timeout_seconds=RUN_TIMEOUT_SECONDS,
+    max_output_bytes=MAX_OUTPUT_BYTES,
+    limit_fn=_limits,
+)
+# END GENERATED BROWSER WORKBENCH
 
 class Handler(BaseHTTPRequestHandler):
-    #: `StreamRequestHandler.setup` applies this to the socket before `rfile` is created,
-    #: so it bounds `rfile.read` inside `do_POST` -- which a client that sends a
-    #: content-length and then stops sending would otherwise block on forever, pinning
-    #: this single-threaded server. Setting it here rather than in an overridden `setup`
-    #: is deliberate: `self.connection` does not exist until the base `setup` has run.
+    """Serve the Browser Workbench and preserve the existing /verify contract."""
+
     timeout = REQUEST_TIMEOUT_SECONDS
 
-    def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's name
-        if self.path.rstrip("/") != "/verify":
+    def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's API
+        from urllib.parse import urlsplit
+
+        path = urlsplit(self.path).path
+        if path == "/api/config":
+            self._respond(200, _WORKBENCH.config_payload())
+            return
+        if path == "/api/inspect":
+            self._respond(200, _WORKBENCH.inspect_payload())
+            return
+        if path == "/api/starter":
+            self._respond(200, _WORKBENCH.starter_payload())
+            return
+        asset = _WORKBENCH.asset(path)
+        if asset is None:
             self._respond(404, {"error": "not found"})
             return
-        try:
-            length = int(self.headers.get("content-length", "0"))
-        except ValueError:
-            self._respond(400, {"error": "bad content-length"})
+        content, content_type = asset
+        self._respond_bytes(200, content, content_type)
+
+    def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's API
+        from urllib.parse import urlsplit
+
+        path = urlsplit(self.path).path.rstrip("/") or "/"
+        if path not in ("/verify", "/api/test", "/api/prepare"):
+            self._respond(404, {"error": "not found"})
             return
-        if length <= 0 or length > MAX_BODY_BYTES:
-            self._respond(400, {"error": "bad content-length"})
+        body = self._read_json_body()
+        if body is None:
             return
-        try:
-            body = json.loads(self.rfile.read(length).decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            self._respond(400, {"error": "bad json"})
+        if path == "/api/test":
+            self._respond(200, _WORKBENCH.run_public_tests(body.get("files")))
             return
-        except (TimeoutError, OSError):
-            # A stalled body read, not a malformed one. Same fail-closed outcome.
-            self._respond(400, {"error": "incomplete body"})
-            return
-        if not isinstance(body, dict):
-            self._respond(400, {"error": "bad json"})
+        if path == "/api/prepare":
+            self._respond(
+                200,
+                _WORKBENCH.prepare_submissions(body.get("files"), body.get("manual")),
+            )
             return
 
         checkpoint_id = body.get("checkpointId")
         if not isinstance(checkpoint_id, str) or checkpoint_id not in CHECKPOINTS:
-            # Unknown checkpoint is a failed verdict with the id echoed when it is at
-            # least a string, so the platform's echo check still holds.
             self._respond(
                 200,
                 {
@@ -190,24 +219,59 @@ class Handler(BaseHTTPRequestHandler):
                 },
             )
             return
-
+        submission = _WORKBENCH.unwrap_submission(checkpoint_id, body.get("submission"))
         try:
-            correct = evaluate(checkpoint_id, body.get("submission"))
-        except Exception:  # noqa: BLE001 - a broken checkpoint must not kill the verifier
+            correct = evaluate(checkpoint_id, submission)
+        except Exception:  # noqa: BLE001 - a broken checkpoint must fail closed
             correct = False
         self._respond(200, {"checkpointId": checkpoint_id, "correct": correct})
 
+    def _read_json_body(self) -> dict[str, object] | None:
+        try:
+            length = int(self.headers.get("content-length", "0"))
+        except ValueError:
+            self._respond(400, {"error": "bad content-length"})
+            return None
+        if length <= 0 or length > MAX_BODY_BYTES:
+            self._respond(400, {"error": "bad content-length"})
+            return None
+        try:
+            body = json.loads(self.rfile.read(length).decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            self._respond(400, {"error": "bad json"})
+            return None
+        except (TimeoutError, OSError):
+            self._respond(400, {"error": "incomplete body"})
+            return None
+        if not isinstance(body, dict):
+            self._respond(400, {"error": "bad json"})
+            return None
+        return body
+
     def log_message(self, *_args: object) -> None:
-        """Silence the default stderr access log; it would echo submissions."""
+        """Do not echo source submissions into the access log."""
 
     def _respond(self, status: int, payload: dict[str, object]) -> None:
-        encoded = json.dumps(payload).encode("utf-8")
-        self.send_response(status)
-        self.send_header("content-type", "application/json")
-        self.send_header("content-length", str(len(encoded)))
-        self.end_headers()
-        self.wfile.write(encoded)
+        self._respond_bytes(
+            status,
+            json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            "application/json; charset=utf-8",
+        )
 
+    def _respond_bytes(self, status: int, content: bytes, content_type: str) -> None:
+        self.send_response(status)
+        self.send_header("content-type", content_type)
+        self.send_header("content-length", str(len(content)))
+        self.send_header("cache-control", "no-store")
+        self.send_header("x-content-type-options", "nosniff")
+        self.send_header(
+            "content-security-policy",
+            "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; "
+            "img-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; "
+            "form-action 'self'",
+        )
+        self.end_headers()
+        self.wfile.write(content)
 
 def main() -> None:
     port = int(os.environ.get("VERIFY_PORT", "18101"))

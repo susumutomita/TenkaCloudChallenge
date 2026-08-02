@@ -1,157 +1,82 @@
 # SHA-256 part 2: bit operations and the message schedule
 
-**Difficulty:** 3 · **Time:** 60–90 minutes · **Points:** 200 · **Series:** SHA-256, problem 2 of 3
+Rotation versus shift, four different sigma amounts, Ch as a selector circuit, Maj as a majority rather than a parity, and the recurrence that grows sixteen words into sixty-four. All of SHA-256's wiring, written by hand.
 
-## The story
+## Browser workflow
 
-Part 1 left you with a block: 512 bits, read as sixteen 32-bit words. This problem is everything
-that happens to those words before the compression loop starts turning.
+1. Start the problem in the Participant Portal and open **Browser Workbench**.
+2. Run `inspect` and read the deployment-specific fixture and published evidence.
+3. Edit the starter sources on the page and run the public `test` command.
+4. Complete any direct-answer fields from the evidence and your experiments.
+5. Run `prepare`, then paste every generated value into the matching Portal checkpoint.
 
-That is eight small functions. A rotation, four sigma functions built on it, two logic functions,
-and the recurrence that grows sixteen words into sixty-four. None of them is more than three lines.
-All eight together are where a hand-written SHA-256 quietly produces the wrong digest, because
-every one of them has a plausible near-miss: rotate where the spec shifts, use Σ1's amounts in Σ0,
-write Maj as a parity, xor the schedule's four terms instead of adding them.
+Direct answers are bound to the current deployment seed by `prepare`.
 
-Five of the eight are shipped wrong on purpose, one line each.
+## Learning goals
 
-## What gets deployed
+- Tell rotation from shift, and say which one loses bits
+- Implement all four sigma functions with their specified amounts
+- Explain why the small sigmas include a shift, from the schedule's non-invertibility
+- Explain and implement Ch as a bitwise selector
+- Show with a truth table that Maj is a majority and not a parity
+- Implement the schedule recurrence with addition, and say why xor loses the diffusion
+- Derive where a one-word change first reaches in the sixty-four-word schedule
 
-A single container, no cloud account, no network surface. Everything is local:
+## Checkpoints
 
-```text
-local/
-├── starter/schedule.py   ← the only file you edit
-├── fixtures/generate.py     every fixture, derived from your per-deploy seed
-├── tests/public/            the tests you can read
-├── tests/hidden/            the tests the verifier runs (in the image, not bind-mounted)
-├── reference/               the answer -- NOT in the image `make build` gives you
-├── verifier/server.py       POST /verify on 127.0.0.1:18091
-└── mutation.py              proves the hidden tests can actually fail a wrong answer
-```
+| Checkpoint | Purpose | Points |
+| --- | --- | ---: |
+| `rotate` | Tell a rotation from a shift by hand |  |
+| `mux` | Use the fact that Ch is a selector |  |
+| `dependency` | Derive where a single flipped bit first arrives |  |
+| `sigma` | Implement rotr and the four sigmas |  |
+| `logic` | Implement Ch and Maj |  |
+| `schedule` | Grow sixteen words into sixty-four |  |
 
-`make build` builds the `participant` stage of the Dockerfile, which carries the fixtures, both
-test suites, the verifier and the starter. `reference/` and `mutation.py` are added only by the
-`author` stage that `make reference-test` builds, so the answer is not sitting in the image you
-were told to run. That is misdelivery prevention, not confidentiality — see Assurance scope.
+## Explanation
 
-Your fixtures come from `FLAG_SEED`, injected fresh at deploy. Same seed, same numbers, so your
-session is reproducible and debuggable. Different seed, different numbers, so a value copied from
-someone else's run is worthless.
+## What this checked
 
-## How to play
+### Rotation and shift are different, and both are needed
 
-```bash
-make inspect                 # your fixtures, in hex AND in bits
-make test                    # the public tests
-make test-one ID=rotation    # re-run one public test while you iterate
-make reset                   # restore starter/schedule.py
-```
+A rotation is a permutation of the 32 positions: no bit is lost and the population count is unchanged. A shift loses bits.
 
-Read the bit rows `make inspect` prints. This problem is about bit positions: the difference
-between a rotation and a shift is invisible in two hex strings and obvious in two bit rows.
+SHA-256 uses both, and which one it uses changes the meaning. σ0 and σ1 are two rotations and one *shift*; Σ0 and Σ1 are three rotations. The shift in the small sigmas is not incidental — losing bits is what makes the message schedule non-injective, so the sixteen message words cannot be recovered from the sixty-four. The big sigmas only stir the state inside the compression function, so they have no reason to lose anything.
 
-Then open `local/starter/schedule.py`:
+Four sets of amounts invite a misremembering: σ0 is (7, 18, 3), σ1 is (17, 19, 10), Σ0 is (2, 13, 22), Σ1 is (6, 11, 25). This is a place to read the spec table rather than trust your memory.
 
-| function | must be |
-|---|---|
-| `rotr(value, amount)` | rotate right, no bit lost, result inside 32 bits |
-| `small_sigma0` | ROTR^7 xor ROTR^18 xor **SHR**^3 |
-| `small_sigma1` | ROTR^17 xor ROTR^19 xor **SHR**^10 |
-| `big_sigma0` | ROTR^2 xor ROTR^13 xor ROTR^22 |
-| `big_sigma1` | ROTR^6 xor ROTR^11 xor ROTR^25 |
-| `choose(e, f, g)` | `(e & f) ^ (~e & g)` — a bitwise multiplexer |
-| `majority(a, b, c)` | `(a & b) ^ (a & c) ^ (b & c)` — a per-bit majority |
-| `expand_schedule(words)` | 16 words in, 64 out, terms **added** mod 2^32 |
+One more Python trap: `value << (32 - amount)` overflows past 32 bits, so the result needs `& 0xFFFFFFFF` to come back to a word. Forget it and values grow silently — every sigma and the whole schedule go wrong, with no exception raised anywhere.
 
-## Scoring
+### Ch is a selector, Maj is a majority
 
-Six checkpoints, scored independently. Wrong answers cost 10 points each.
+Ch(e, f, g) = (e AND f) XOR (NOT e AND g) teaches nothing as a formula. Write out a single bit and it appears: where e's bit is 1 you get f's bit, where it is 0 you get g's. It is thirty-two multiplexers side by side, with e as the selector and f and g as the choices.
 
-| Checkpoint | Points | What you submit |
-|---|---:|---|
-| `rotate` | 20 | One word rotated right and shifted right, two hex words, rotation first |
-| `mux` | 25 | Ch(e, f, g) for the fixture triple, as hex |
-| `dependency` | 30 | The index of the first schedule word that changes when one input bit flips |
-| `sigma` | 45 | Your `schedule.py`, run against `rotr` and all four sigmas |
-| `logic` | 30 | Your `schedule.py`, run against Ch and Maj |
-| `schedule` | 50 | Your `schedule.py`, run against `expand_schedule` |
+Maj(a, b, c) = (a AND b) XOR (a AND c) XOR (b AND c) is a per-position majority. With three inputs there is always a two-to-one, and the reason it can be written with XOR is the reason Maj works at all: at most one of the three pairwise terms is ever the odd one out, so nothing cancels. Writing it with OR gives the same value.
 
-Hints are available on every checkpoint. Opening all of them still leaves you 108 of 200.
+The usual mistake is confusing Maj with the parity `a ^ b ^ c`. On single bits they agree on exactly two of the eight inputs — all zeros and all ones — and disagree on the other six. Close enough to look right, wrong often enough to matter, and still the kind of thing one lucky fixture waves through, which is why the hidden tests run the whole eight-row truth table.
 
-### The three code checkpoints are genuinely independent
+### The message schedule adds; it does not xor
 
-`schedule` checks only the shape of the recurrence — which four words `W[i]` reads, and that the
-terms are added rather than xored. It computes what it expects using **your** sigma functions, so a
-correct recurrence built on unfinished sigmas passes it. Wrong sigmas are what `sigma` is for.
+W[i] = W[i-16] + σ0(W[i-15]) + W[i-7] + σ1(W[i-2]), modulo 2^32. Xor is the cheap-looking substitute and it is wrong for a nameable reason: xor has no carries, so information in one bit position can never reach a higher one, and the diffusion the schedule exists to provide never happens.
 
-That is deliberate, and the mutation suite asserts it rather than assuming it: every sigma
-mutation has to be killed by `sigma` and has to stay invisible to `schedule`. Otherwise one
-mistake would cost you two checkpoints and tell you less about which one it was.
+That is testable. Rotations, shifts and xor are all GF(2)-linear, so a schedule that xors its four terms is linear as a whole — expanding `a ^ b` gives exactly the xor of the two expansions. Addition has carries and breaks that. The hidden tests check the property directly. It is a relation, not a fixed expected value, so it cannot be memorized.
 
-## The four things worth getting wrong once
+### How far does one bit reach
 
-**A rotation loses nothing; a shift does.** A rotation is a permutation of the 32 positions, so the
-population count is fixed. If you cannot tell which one your code did, count the set bits.
+The dependency checkpoint's answer is not one formula. W[i] reads i-16, i-15, i-7 and i-2, but W[0] through W[15] are inputs, so only indices 16 and above are computed. The first computed word to read input index k is therefore the smallest of k+16, k+15, k+7 and k+2 that reaches 16: 16 for k=0, k+15 for k in 1..8, k+7 for k in 9..13, and k+2 for k=14 and 15.
 
-**SHA-256 uses both, and it matters which.** σ0 and σ1 are two rotations and one *shift*. Σ0 and Σ1
-are three rotations. The shift is not incidental: losing bits is what makes the message schedule
-non-invertible, so the sixteen message words cannot be recovered from the sixty-four. The big
-sigmas only stir the state inside a round, so they have no reason to lose anything.
-
-**Ch is a multiplexer.** Read `(e & f) ^ (~e & g)` one bit at a time: where e is 1 you get f's bit,
-where e is 0 you get g's. Thirty-two selectors side by side. It is not a majority and it is not an
-if/else over whole words. Maj is the majority, and on single bits it agrees with the parity
-`a ^ b ^ c` on exactly two of the eight inputs — all zeros and all ones — so writing Maj as a
-parity is wrong six times out of eight and still survives a careless test.
-
-**The schedule adds; xor is not a substitute.** Xor has no carries, so a bit in one position can
-never influence a higher one, and the diffusion the schedule exists for never happens. This is
-checkable, not just assertable: rotations, shifts and xor are all GF(2)-linear, so an
-xor-everything schedule is linear as a whole — `expand(a ^ b)` comes out exactly equal to
-`expand(a) ^ expand(b)`. Addition breaks that. The hidden tests check it directly.
-
-One Python trap on top of the four: `value << (32 - amount)` does not stop at 32 bits. Without a
-`& 0xFFFFFFFF` your words grow silently, every sigma goes wrong, and nothing raises.
+The difference cannot cancel on the way, because each sigma sends a one-bit difference to two or three distinct positions whose xor is never zero.
 
 ## Passing the public tests is not the end
 
-The public tests never compare a sigma against its specified amounts, never distinguish Ch from Maj
-on a mixed selector, and only ever expand the all-zero block — where xor and addition agree. An
-implementation that xors the schedule's four terms passes every single one of them.
+The public tests here never compare a sigma against its specified amounts, never distinguish Ch from Maj on a mixed selector, and only ever expand the all-zero block — where xor and addition give the same answer. An implementation that xors its four terms passes every one of them.
 
-The hidden tests sweep boundary words (0, `0xffffffff`, `0x80000000`, `0x55555555`) and seeded
-ones, and check relations rather than fixed values: each sigma's linearity over xor, Maj's symmetry
-under reordering, Ch's "both choices equal makes the selector irrelevant", and that the expansion
-is *not* linear. A relation cannot be satisfied by memorizing one output.
+The hidden tests sweep boundary words (0, 0xffffffff, 0x80000000, 0x55555555) and seeded ones, and check the sigmas' linearity, Maj's symmetry, Ch's "both choices equal means the selector is irrelevant" property, and that the expansion is not linear over xor.
 
-## Assurance scope
+## What to learn next
 
-Local mode is **self-paced, honor-system verification**. You own the machine, the Docker daemon,
-and the image, so nothing here is hidden from you: `tests/hidden/` is not bind-mounted and
-`reference/` is not in the participant image at all, which keeps them out of your way rather than
-out of reach. The source is in this repository either way, and you can build the `author` stage
-yourself.
+Every part of the compression function is now in place. The next problem assembles T1 and T2, runs the eight working words a through h for 64 rounds, and adds the result back into the incoming state to produce a digest. Then it changes one input bit and measures why half the output moves.
 
-What the verifier does guarantee is narrower and real: a submission cannot hang or crash it, a
-checkpoint can only credit the id it echoes, results do not leak expected values, and the fixtures
-come from this deployment's seed so a memorized answer does not carry.
+## Authoring and validation
 
-That supports self-study and honest practice. It does **not** support competition ranking,
-examination, or completion certification — those need a verifier the participant does not
-administer, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
-
-## Cost
-
-Zero. No cloud account, no AWS resources. It is a container on your machine.
-
-## For authors
-
-`make reference-test` runs the mutation suite: 21 broken implementations across the three suites,
-12 mutations aimed at the verifier itself, and a separation pass asserting that a sigma mutation
-does not leak into the `schedule` suite. Every one must be caught.
-
-Five obvious-looking mutations are deliberately **not** in the list, because they are
-mathematically identical to the reference — including Maj written with `|` instead of `^`, and Ch
-written without masking the complement. Two of those five were in the list until they survived a
-run. See the comment at the top of `local/mutation.py`; that comment is the point of the exercise.
+Participants do not need a checkout. Repository maintainers use the Makefile author targets and CI as the validation source of truth.

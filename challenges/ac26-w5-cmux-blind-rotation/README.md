@@ -1,161 +1,95 @@
 # Turn it by an angle nobody knows
 
-> This track is an independent, unofficial companion to the Advanced Cryptography Program 2026.
-> It is not affiliated with or endorsed by the course or its operators. All problem statements,
-> code, fixtures, and figures here are written independently. Questions about this track go to
-> the TenkaCloud repository, not to the course operators.
+Pick one of two ciphertexts with an encrypted bit, then chain that into rotating a polynomial by an encrypted amount. Nothing inside the loop knows the angle.
 
-**Track:** `advanced-cryptography-2026` · **Order:** 540 · **Chapter:** Week 5 / CMUX and
-Blind Rotation · **Role:** `mechanism` · **Time:** 75–105 minutes · **Points:** 300 ·
-**Required first:** `ac26-w5-rgsw-external` · **Status:** draft
+The fourth Week 5 problem. Build CMUX and monomial rotation, then chain the two into blind rotation.
 
-## The story
+The ring, RLWE, RGSW and the external product are supplied -- they are ac26-w5-lwe-rlwe's and ac26-w5-rgsw-external's output, and this problem is the selection itself and what it accumulates into.
 
-Pick one of two ciphertexts with an **encrypted** bit. Then repeat that until you have
-rotated a polynomial by an amount nobody in the computation knows — not the code, not the
-key, not the trace it prints.
+CMUX is one line: `ct0 + ExternalProduct(c, ct1 - ct0)`. Selector 0 gives ct0's plaintext, selector 1 gives ct1's, and there is no branch. Computing both candidates every time is not waste; it is the mechanism, because computing only the one you need requires knowing which one that is.
 
-You are not rebuilding the ring, RLWE, RGSW or the external product. `fixtures.generate`
-supplies all of them, correct; `ac26-w5-lwe-rlwe` and `ac26-w5-rgsw-external` are where they
-come from. This problem is the selection, and what the selection accumulates into.
+The plaintext modulus is 4, and that is load-bearing. Negacyclic rotation negates a coefficient every time it wraps past degree N, and modulo 2 that flip is **invisible** -- `-delta == delta (mod q)` -- so an implementation that ignored `X^N = -1` entirely would score full marks. Modulo 4 the flip shows up in the plaintext as `m -> (-m) mod 4`.
 
-## CMUX is one line
+Rotation exponents are normalized modulo 2N. `X^(2N) = 1` is why it is 2N rather than N, and reducing modulo N instead loses exactly the sign -- which is the whole difference from a circular shift.
 
-```text
-CMUX(c, ct0, ct1) = ct0 + ExternalProduct(c, ct1 - ct0)
-```
+Blind rotation takes an LWE sample `(mask, body)` over `Z_(2N)` and lands on the exponent `phase = body - <mask, secret>`. No secret is passed. `body` is public, so the opening offset rotation needs no CMUX; the rest is carried by the rows of the bootstrapping key.
 
-The external product returns `RLWE(0) + mu * (ct1 - ct0)`, so the sum is `ct0` when `mu` is
-0 and `ct1` when it is 1. There is no branch anywhere in that expression.
+On scoring: an implementation whose rotation direction is reversed everywhere is perfectly consistent with itself and passes any test that compares the loop against its own parts. So the blind rotation is compared against a separate model computed in the clear from the phase, which calls none of the submission's functions.
 
-Both candidates get computed every time. That is not waste — computing only the one you
-need requires knowing which one that is, and you do not.
+None of this is secure. The parameters are small enough to enumerate and the secret falls to linear algebra.
 
-## The conventions, fixed
+## Browser workflow
 
-```text
-plaintext_modulus = 4        delta = q // 4
-X^(2N) = 1                   exponents normalize modulo 2N, not N
-X^N   = -1                   one wrap flips the sign, two restore it
-phase = (body - sum(mask[i] * secret[i])) mod 2N
-```
+1. Start the problem in the Participant Portal and open **Browser Workbench**.
+2. Run `inspect` and read the deployment-specific fixture and published evidence.
+3. Edit the starter sources on the page and run the public `test` command.
+4. Complete any direct-answer fields from the evidence and your experiments.
+5. Run `prepare`, then paste every generated value into the matching Portal checkpoint.
 
-**Four, not two.** Negacyclic rotation negates a coefficient every time it wraps past
-degree N, and modulo 2 that flip is invisible — `-delta == delta (mod q)`. An implementation
-that ignored `X^N = -1` completely would score full marks. Modulo 4 the flip lands in the
-plaintext as `m -> (-m) mod 4`.
+Direct answers are bound to the current deployment seed by `prepare`.
 
-**2N, not N.** `X^(2N) = 1`, so that is the exponent's modulus. Reduce modulo N instead and
-what you drop is the parity of how many times a coefficient wrapped — the sign. The whole
-difference between this and a circular shift lives there.
+## Learning goals
 
-## Blind rotation
+- Implement CMUX as one line on top of the external product
+- Confirm that selector 0 and 1 switch which branch is selected
+- Explain why multiplying by a monomial is a negacyclic rotation
+- Normalize a rotation exponent modulo 2N
+- Rotate or hold a ciphertext according to an encrypted bit
+- Chain conditional rotations driven by an LWE mask
+- Check a blind rotation against a plaintext reference model
+- State plainly how the toy differs from a production blind rotation
 
-An LWE sample is `(mask, body)` over `Z_(2N)`, already in the exponent's modulus, and
-`blind_rotate` has to land on `X^(-phase) * accumulator` while being handed no secret at
-all. `body` is **public**; only the bits are not, and they arrive as `key[i] = RGSW(bit_i)`.
+## Checkpoints
 
-Which means the opening offset rotation needs no CMUX, and each mask coefficient gets
-applied conditionally through the matching key row. Work out the shape before writing the
-loop — it is what makes the whole thing possible.
+| Checkpoint | Purpose | Points |
+| --- | --- | ---: |
+| `combine` | Add and subtract ciphertexts |  |
+| `cmux` | Select with an encrypted bit |  |
+| `constant` | Show you did not branch in the clear |  |
+| `rotate` | Turn by a monomial |  |
+| `conditional` | Choose between turning and holding |  |
+| `blind` | Turn by an amount nobody knows |  |
+| `trace` | Show the accumulation |  |
+| `transfer` | Hold up in a setting you have not seen |  |
 
-## Why your own tests cannot catch this
+## Explanation
 
-Reverse the rotation direction in `monomial_rotate` **and** in the loop, and a test that
-compares the loop against your own `conditional_rotate` still passes. The last public test
-is exactly that test, and it proves nothing.
+## Computing both is the mechanism
 
-So the hidden tests compare against a model that computes the rotation in the clear from the
-phase and calls none of your functions.
+CMUX is `ct0 + ExternalProduct(c, ct1 - ct0)`. The external product returns `RLWE(0) + mu * (ct1 - ct0)`, so the sum is ct0 when mu is 0 and ct1 when mu is 1. Fresh noise lands on both paths, so the output is a new ciphertext either way and never one of the inputs.
 
-## How to play
+An implementation that computed only the candidate it needs cannot be written without knowing which one that is. Computing both is not waste -- it is the reason an encrypted bit can steer anything.
 
-```bash
-make inspect            # a full turn of rotations, one CMUX, every blind-rotation step
-make inspect CASE=0     # the same with a key encrypting all zeroes
-make test               # public tests
-make reset              # restore starter/cmux.py
-```
+## A plaintext modulus of 4 is what makes the sign visible
 
-You edit one file, `local/starter/cmux.py`.
+Negacyclic rotation negates a coefficient every time it wraps past the degree. Modulo 2, `-delta` and `delta` are the same value, so that flip never reaches the plaintext and an implementation that wrote an ordinary circular shift passes everything. Modulo 4 it appears as `m -> (-m) mod 4`, which moves 1 and 3.
 
-## Scoring
+## 2N, not N
 
-Eight checkpoints, scored independently. Wrong answers cost 15 points each.
+`X^(2N) = 1`, so exponents reduce modulo 2N. Reducing modulo N instead drops the parity of how many times the coefficient wrapped -- that is, the sign. The entire difference between this and a circular shift lives there.
 
-| Checkpoint | Points | What is checked |
-|---|---:|---|
-| `combine` | 25 | Both halves added and subtracted, the difference the right way round, short coefficient lists padded |
-| `cmux` | 45 | Selector 0 → ct0's message, 1 → ct1's, and re-encrypting the selector does not move the result |
-| `constant` | 35 | Both candidates computed, every key row read, output equal to neither input, no decryption helper touched |
-| `rotate` | 40 | Signed wraparound, exponent modulo 2N, rotation by 0 and 2N the identity, by N a negation, composition additive, both ciphertext halves |
-| `conditional` | 35 | An encrypted 1 turns, an encrypted 0 holds, candidates not swapped |
-| `blind` | 55 | Matches a plaintext model built without your code, a different key lands elsewhere, an unreduced sample normalizes |
-| `trace` | 35 | One record per step plus the offset, ending at the rotation it describes, public fields independent of the secret |
-| `transfer` | 30 | All of it under a degree, dimension, base and modulus you have not seen |
+## A consistently reversed implementation cannot catch itself
 
-Hints on seven of the eight, each inside that checkpoint's 50% cap.
+Reverse the direction in `monomial_rotate` and in the loop together, and a test that compares the loop against your own `conditional_rotate` still passes. The last public test is exactly that test, and it proves nothing.
 
-## What the `constant` checkpoint does and does not claim
+So the hidden tests compare against a model that computes the rotation in the clear from the phase and calls none of your functions.
 
-It is an audit, not a proof. It cannot show your code is constant-time and it does not try.
-What it does show is that the selection happened arithmetically: both candidates were
-computed, the whole selector ciphertext was consumed, the output is a ciphertext neither
-input could have supplied, and no decryption helper was reached for along the way. Those are
-the observable differences between arithmetic selection and an `if`.
+## The degenerate case where the candidates coincide
 
-## The degenerate case, which is not a bug
+When a mask coefficient is zero the two candidates are the same ciphertext: the difference is zero, its digits are zero, and the external product is exactly the zero ciphertext. The output matches the candidate bit for bit. That is not a plaintext branch -- there was nothing to branch on. Mask coefficients are drawn from `Z_(2N)`, so this happens one time in 2N, not rarely.
 
-When a mask coefficient is zero the two candidates are the **same** ciphertext. The
-difference is zero, its digits are zero, the external product is exactly the zero
-ciphertext, and the output matches the candidate bit for bit. That is not a plaintext branch
-— there was nothing to branch on. Mask coefficients are drawn from `Z_(2N)`, so this happens
-one time in 2N, not rarely, and both the trace check and the mutation suite account for it.
+## body is public
 
-Two candidate mutations were **dropped rather than left to survive** for exactly this
-reason: returning `ct0` when the difference is the zero ciphertext, and skipping a step whose
-mask coefficient is zero, are both what the reference already does. An unkillable entry in
-the list would teach that a `SURVIVED` line can be ignored.
+The secret is the LWE bits; the body is not. That is why the opening offset rotation needs no CMUX, and why step 0 of the trace is labelled `phase-offset` -- it marks where the public part of the phase ends and the encrypted part begins.
 
 ## Not in scope
 
-Sample extraction and key switching (that is the next problem), programmable bootstrapping
-and HomNAND (the one after), modulus switching, constant-time guarantees, optimized blind
-rotation.
+Sample extraction and key switching (the next problem), programmable bootstrapping and HomNAND (the one after), modulus switching, constant-time guarantees, optimized blind rotation.
 
 ## This is not secure
 
-The parameters are small enough to enumerate and the secret falls to linear algebra. A toy
-of the mechanism, not of the hardness.
+The parameters are small enough to enumerate and the secret falls to linear algebra. A toy of the mechanism, not of the hardness.
 
-## Source alignment
+## Authoring and validation
 
-Week 5's material is published upstream, so `courseAlignment` pins `week5/README.md` as
-`lecture` and `week5/problems/tfhe-toy-python/README.md` as `assignment`. `spoilerPolicy` is
-`independent-reimplementation`: the API, the parameter generation, and the write-up here are
-original, and no function name, fixture, or skeleton is taken from the official exercise.
-
-## Assurance scope
-
-Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
-daemon, and the image, so nothing inside that image is hidden from you: `reference/` and
-`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than
-out of reach.
-
-What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
-a checkpoint can only credit the id it echoes, results do not leak expected values, and the
-fixtures come from this deployment's seed so a memorized answer does not carry.
-
-That supports self-study and honest practice. It does **not** support competition ranking,
-examination, or completion certification — those need a verifier the participant does not
-administer, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
-
-## Cost
-
-Zero. No cloud account, no AWS resources.
-
-## For authors
-
-`make reference-test` runs the mutation suite: twenty-four broken implementations. Several
-of them are wrong in both `monomial_rotate` and the loop at once, and only separate from the
-reference at the plaintext model.
+Participants do not need a checkout. Repository maintainers use the Makefile author targets and CI as the validation source of truth.

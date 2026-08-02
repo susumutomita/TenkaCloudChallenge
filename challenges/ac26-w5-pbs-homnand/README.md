@@ -1,236 +1,103 @@
 # Look up a function on a ciphertext, and hand back a fresh key
 
-> This track is an independent, unofficial companion to the Advanced Cryptography Program 2026.
-> It is not affiliated with or endorsed by the course or its operators. All problem statements,
-> code, fixtures, and figures here are written independently. Questions about this track go to
-> the TenkaCloud repository, not to the course operators.
+Chain what Week 5's five problems built into one Programmable Bootstrapping pipeline, then evaluate a NAND on ciphertexts. Nothing is decrypted at any step.
 
-**Track:** `advanced-cryptography-2026` · **Order:** 560 · **Chapter:** Week 5 / Programmable
-Bootstrapping and HomNAND · **Role:** `synthesis` · **Time:** 105–150 minutes ·
-**Points:** 300 · **Required first:** all five Week 5 problems · **Status:** draft
+Week 5's capstone. Everything the five earlier problems built is supplied -- encoding and noise, LWE and RLWE, RGSW and the external product, CMUX and blind rotation, sample extraction and key switching. What you write is the pipeline that chains them, and the gate it evaluates.
 
-## The story
+Remember bootstrapping as "the thing that removes noise" and you can explain neither why a function comes out of it nor why only some functions do. What actually happens is a chain of transformations that evaluates a lookup function against an encrypted phase and returns the result under a fresh key and domain -- and the noise the output carries does not mention the input's at all. That absence is the refresh.
 
-Week 5's five problems each built one piece. All five are supplied here, correct and
-finished: the ring and the encoding, LWE and RLWE, the gadget and the external product, CMUX
-and monomial rotation, sample extraction and key switching. You rebuild none of them.
+The encoding changes here. Under balanced encoding, `encode(1) = +q/8` and `encode(0) = -q/8`, decoding **is** a sign test -- and a sign test is what negacyclic rotation computes for free, because `X^N = -1` negates whatever wraps past the degree. If you have ever wondered why PBS cannot evaluate any function you like, this is the concrete answer.
 
-What is missing is the thing they were pieces of.
+The lookup table's upper half holds `1 - f(0)`, not `f(0)`, because the wrap hands coefficient 0 its value negated and `-encode(x)` is `encode(1 - x)`. Get it wrong and every non-constant unary function comes out inverted for `m = 0`: exactly half the truth table, which looks like a sign bug anywhere else in the pipeline.
 
-```text
-LWE(dimension n, key s_lwe)
-  -> rotation domain      scale by 2N/q and round
-  -> LUT accumulator      a trivial RLWE ciphertext: no mask, no noise, no message
-  -> blind rotation       X^(-phase), and the phase is never computed
-  -> RLWE(ring key)
-  -> sample extraction    coefficient 0, at dimension N under the ring key
-  -> key switching        back to dimension n under s_lwe
-  -> LWE(dimension n, key s_lwe)
-```
+Each stage returns its numbers **and** where they live -- kind, keyId, dimension, modulus, parameterSetId, noiseBound. Two of those change mid-pipeline: extraction moves the ciphertext to the ring secret at dimension `degree`, and the key switch moves it back. A stage that returns the right numbers under the wrong label has produced something the next stage will silently combine with a ciphertext it does not match.
 
-The output key is the **input** key. That is what makes this bootstrapping rather than a
-one-way evaluation, and it is checked: the hidden tests bootstrap the output of a bootstrap.
+HomNAND turns out to be mostly pre-processing. One linear combination, `(0, q/8) - c1 - c2`, gives the four input pairs phases of `3q/8, q/8, q/8, -q/8` -- negative only for `(1,1)`. Then one bootstrap with the identity table. There is no plaintext NAND anywhere, and no gate inside the lookup.
 
-## The encoding changed, and that is the point
+On scoring: this problem ships 37 deliberately broken implementations, and **21 of them produce a perfect truth table** -- every unary function, both messages, all four NAND rows, at every parameter set. All 21 are broken pipelines anyway: right numbers under the wrong label, a right answer with a false account of itself, or a right answer by luck. A final-answer test sees none of them. So grading happens stage by stage rather than end to end, and the trace is matched by artifact digest. The pipeline has ten stages and the hidden tests grade all ten separately; the eight scored checkpoints are those ten with the two most closely coupled pairs merged, which is the multi-verify contract's cap.
 
-```text
-encode(1) =  q/8        encode(0) = -q/8        decode(c) = centered(c) > 0
-```
+None of this is secure. The parameters are small enough to enumerate and both secrets fall to linear algebra.
 
-Balanced, not `m * delta`. Under it, decoding **is** a sign test — and a sign test is what
-negacyclic rotation computes for free, because `X^N = -1` negates whatever wraps past the
-degree. The earlier problems' encoding cannot express that. If you have ever wondered why
-PBS cannot just evaluate any function you like, this is the concrete answer.
+## Browser workflow
 
-The lookup table's upper half holds `1 - f(0)`, not `f(0)`: the wrap hands coefficient 0 its
-value negated, and under a balanced encoding `-encode(x)` is `encode(1 - x)`.
+1. Start the problem in the Participant Portal and open **Browser Workbench**.
+2. Run `inspect` and read the deployment-specific fixture and published evidence.
+3. Edit the starter sources on the page and run the public `test` command.
+4. Complete any direct-answer fields from the evidence and your experiments.
+5. Run `prepare`, then paste every generated value into the matching Portal checkpoint.
 
-## Every stage stamps where its numbers live
+Direct answers are bound to the current deployment seed by `prepare`.
 
-```text
-kind             "lwe" or "rlwe"
-keyId            which secret it is a ciphertext under
-dimension        how many mask coefficients that secret has
-modulus          which ring of integers the numbers are in
-parameterSetId   which parameter set they belong to
-noiseBound       what the stage can have added, as a bound
-```
+## Learning goals
 
-Two of those change mid-pipeline. Extraction moves the ciphertext to the **ring** secret at
-dimension `degree`; the key switch moves it back. A stage that returns the right numbers
-under the wrong label has produced something the next stage will silently combine with a
-ciphertext it does not match — and the result decrypts to noise under both keys.
+- Relate an input LWE ciphertext's phase to a position in the lookup accumulator
+- Encode a target function into an accumulator polynomial
+- Select the lookup position from an encrypted input using blind rotation
+- Return to an output LWE via sample extraction and key switching
+- Confirm that f(m) is evaluated correctly across the whole pipeline
+- Compare input and output noise on the toy metric
+- Explain why bootstrapping is not decryption
+- Compose HomNAND from pre-processing, one PBS lookup, and a decode
+- Generalize to all four inputs and to parameters you have not seen
+- State what this toy omits and how it differs from production TFHE
+
+## Checkpoints
+
+| Checkpoint | Purpose | Points |
+| --- | --- | ---: |
+| `lut` | Write the function into a polynomial |  |
+| `domain` | Move to the units of rotation |  |
+| `rotate` | Turn it while it stays encrypted |  |
+| `relabel` | Move it between key domains |  |
+| `evaluate` | Look up a function on a ciphertext |  |
+| `refresh` | Record what actually happened |  |
+| `nand` | Build the gate and complete the truth table |  |
+| `transfer` | Hold up in a setting you have not seen |  |
+
+## Explanation
 
 ## A correct truth table proves less than it looks
 
-This problem ships 37 deliberately broken implementations. **21 of them produce a perfect
-truth table** — every unary function, both messages, all four NAND rows, at every parameter
-set — and every one of the 21 is still a broken pipeline. `make reference-test` measures
-that count on every run and fails if it moves, because this file quotes it.
+This problem ships 37 deliberately broken implementations, and **21 of them produce a perfect truth table** -- every unary function, both messages, all four NAND rows, at every parameter set. Every one of the 21 is still a broken pipeline, and `make reference-test` re-measures the count on every run.
 
-That is the measured reason this problem grades every stage where it sits rather than
-checking the pipeline end to end. The 21 split
-three ways:
+They split three ways. **Right numbers, wrong label**: extraction that keeps the input's keyId, reports the input's dimension instead of the ring's, or calls its output an RLWE ciphertext. **Right answer, wrong account of it**: a trace whose noise bounds are all zero, an accumulator row claiming to carry the message, an output bound that grows with the input's. **Right answer by luck**: extracting coefficient 1 works because the table is constant across each half of the ring, and truncating instead of rounding works because the correctness budget absorbs it at these parameters.
 
-- **Right numbers, wrong label.** Extraction that keeps the input's `keyId`, or reports the
-  input's dimension instead of the ring's, or calls its output an RLWE ciphertext. The
-  pipeline works end to end because the switching key happens to be the matching one, and it
-  breaks the moment anything in a circuit reads that label to decide what may be combined
-  with what.
-- **Right answer, wrong account of it.** A trace whose noise bounds are all zero; an
-  accumulator row claiming to carry the message; an output bound that grows with the input's.
-  The pipeline is fine and the story it tells about itself is false — and the story is the
-  part you were supposed to learn.
-- **Right answer by luck.** Extracting coefficient 1 instead of 0 works because the lookup
-  table is constant across each half of the ring. Truncating instead of rounding works
-  because the correctness budget absorbs it at these parameters. Neither is a property you
-  would want to rely on, and neither is visible from the final bit.
+Ten stage-level checkpoints are expensive. That measured 21 is what pays for them. A twenty-second -- the dropped `q/8` offset -- is blind on most seeds and caught on the one the suite fixes, so it is left out of the count rather than papered over.
 
-A twenty-second is blind on most seeds and caught on the one the mutation suite fixes: the
-dropped `q/8` offset in `nand_combine`. Whether a truth table catches it depends on which
-way the noise fell, which is the worst kind of defect and is described further down.
+## The identity table shows you nothing
 
-The trace is matched by artifact digest for the same reason: a digest cannot be filled in
-from the final answer.
-
-## The identity table shows you nothing, and the constant functions show you everything
-
-The negation inverts which functions are interesting. The table's halves are `encode(f(1))`
-and `encode(1 - f(0))`, so they are equal exactly when `f(0) + f(1) = 1` — which is true of
-`identity` and `negate`, the two **bijections**. Their accumulators are constant, every
-coefficient the same number.
-
-A constant polynomial cannot distinguish where the rotation landed, so swapped halves, the
-wrong extracted coefficient, and truncation instead of rounding all pass under it. Every
-public test uses `identity`, on purpose, and says so.
-
-The two **constant functions**, `always-zero` and `always-one`, are the ones with two-valued
-tables. `make inspect F=always-one` is the first thing worth running.
-
-## How to play
-
-```bash
-make inspect                     # the identity table on m = 1 — the least informative run
-make inspect F=always-one        # identity, negate, always-zero, always-one
-make inspect F=always-one M=0    # the other message, where the wrap fires
-make test                    # public tests
-make reset                   # restore starter/pipeline.py
-```
-
-You edit one file, `local/starter/pipeline.py`.
-
-## Scoring
-
-Eight checkpoints, scored independently. Wrong answers cost 15 points each.
-
-| Checkpoint | Points | What is checked |
-|---|---:|---|
-| `lut` | 30 | All four unary functions, the upper half's negation, a trivial ciphertext with no mask and no noise |
-| `domain` | 25 | Scaled to `Z_2N`, rounded rather than truncated, every component in range, the rounding budget reported |
-| `rotate` | 40 | Coefficient 0 decodes to `f(m)` for every function and message, by the documented loop |
-| `relabel` | 50 | Extraction and the key switch: coefficient 0, the phase preserved exactly, the ring key at dimension `degree`, then back to the input's own key, mismatched keys refused |
-| `evaluate` | 40 | Every unary function plus a hidden one, the output bootstrapped again, fresh randomness |
-| `refresh` | 30 | Six trace rows matched by digest, the post-rotation bounds unmoved when the input's noise changes, the contract's edge |
-| `nand` | 60 | The offset present, the sign positive exactly when NAND is 1, mixed keys refused, all four truth-table rows at every parameter set, and over two already-bootstrapped bits |
-| `transfer` | 25 | All of it under parameters, keys, tables and inputs you have not seen |
-
-Hints on seven of the eight, each inside that checkpoint's 50% cap.
-The pipeline has **ten** stages and the hidden tests grade all ten separately, each with its
-own failure messages. The multi-verify contract caps a problem at eight scored checkpoints —
-in `SCHEMA.json` and again in the platform's `problem-sdk`, which drops the whole scoring
-object rather than truncating a ninth — so the two most closely coupled pairs share a
-checkpoint. `relabel` is extraction and the key switch, `nand` is the combination and the
-gate; each pair is one idea, and grading them apart would have suggested otherwise.
+For `f = identity` the lower half is `encode(f(1)) = encode(1)` and the upper half is `encode(1 - f(0)) = encode(1)`. Every coefficient is the same number. A constant polynomial cannot distinguish where the rotation landed, so swapped halves, the wrong extracted coefficient, and truncation instead of rounding all pass. Every public test uses it, on purpose.
 
 ## The refresh is not "the noise gets smaller"
 
-The output's noise bound is blind rotation's contribution plus the key switch's. The input's
-noise is not a term in it. It does not shrink — it stops being **depended on**. That is why
-the output can be bootstrapped again, and why circuits are possible at all.
+The output's noise bound is blind rotation's contribution plus the key switch's. The input's noise is not a term. It does not shrink -- it stops being **depended on**. That is why the output can be bootstrapped again, and why circuits are possible at all. Read the trace's noise column down and you can see which row the dependency ends at.
 
-Read the trace's noise column down and you can see the row where the dependency ends.
-`refresh_report` says the same thing as an equation: read `outputNoiseBound` twice with
-different inputs and the number does not move.
+## The right answer under the wrong label is still broken
+
+An extraction that keeps the input's `keyId` produces the correct numbers with the wrong domain stamped on them. The pipeline works end to end because the switching key happens to be the matching one, and it breaks the moment anything else in a circuit reads that label to decide what the ciphertext may be combined with. The artifact envelope exists for this class, and a truth table cannot see it.
 
 ## The gate is not in the lookup table
 
-HomNAND's lookup table is the identity. All four input pairs use the same table; what
-separates the rows is the sign of the phase the pre-processing produced. The bootstrap only
-turns that sign into a fresh ciphertext, and the gate lives in `(0, q/8) - c1 - c2`.
+HomNAND's lookup table is the identity. All four input pairs use the same table; what separates the rows is the sign of the phase the pre-processing produced. The bootstrap only turns that sign into a fresh ciphertext. The gate lives in `(0, q/8) - c1 - c2`.
 
-Drop that `q/8` and `(0,1)` and `(1,0)` have a phase of exactly zero, where the answer is
-settled by whichever way the noise fell. Measured over 40 seeds, 12 of the 80 attempts at
-those two rows came out wrong — and `(0,0)` and `(1,1)` never did. A missing constant that
-fails one row in seven reads as flakiness rather than as a bug, which is worse than failing
-outright.
+Drop that `q/8` and `(0,1)` and `(1,0)` have a phase of exactly zero, so the answer is settled by whichever way the noise fell. Measured over 40 seeds, 12 of the 80 attempts at those two rows came out wrong and the other two rows never did -- a missing constant that fails one row in seven reads as flakiness rather than as a bug.
+
+## Three rows out of four is not correct
+
+`(1,1)` is the only NAND row that returns 0, so an implementation that returns a constant 1 is 75% right. That is why the hidden tests run all four rows every time.
 
 ## What happens past the correctness bound
 
-An input noisier than the bound does not degrade the bootstrap. It returns the **other** bit,
-confidently, with a fresh small noise — a correct-looking ciphertext of the wrong answer
-rather than a broken one. That is the FHE failure mode worth remembering, and
-`refresh_report` is where you say whether a given input is inside the contract at all.
-
-## A shortcut that is structurally absent
-
-No function you write is handed a secret, at either end. Not the ring secret, not the LWE
-secret. So "decrypt the input, apply `f`, re-encrypt the answer" is not an implementation
-this API can express, and **two candidate mutations were dropped because they could not be
-written** rather than faked: that one, and "the output plaintext is stored in the artifact's
-metadata", which fails for the same reason — no stage ever learns `m` or `f(m)`.
-
-The hidden suite still scans every returned artifact for either secret, so a future author
-who threads one through finds out.
+An input noisier than the bound does not degrade the bootstrap. It returns the **other** bit, confidently, with a fresh small noise -- a correct-looking ciphertext of the wrong answer rather than a broken one. That is the FHE failure mode worth remembering.
 
 ## Toy versus production
 
-This is a toy of the mechanism. Production TFHE runs the polynomial products through FFT or
-NTT, compresses the bootstrapping key, and derives its parameters from security against
-lattice reduction rather than from what fits in a comment. Per-gate cost, realistic
-bootstrapping-key size, and compiling arbitrary multi-gate circuits are all out of scope.
+This is a toy of the mechanism. Production TFHE runs the polynomial products through FFT or NTT, compresses the bootstrapping key, and derives its parameters from security against lattice reduction. Here the parameters are small enough to enumerate and both secrets fall to linear algebra. Per-gate cost, realistic bootstrapping-key size, and compiling arbitrary multi-gate circuits are all out of scope.
 
 ## Not in scope
 
-Production TFHE security and performance, optimized FFT / NTT / SIMD, bootstrapping-key size
-optimization, an arbitrary multi-gate circuit compiler.
+Production TFHE security and performance, optimized FFT / NTT / SIMD, bootstrapping-key size optimization, an arbitrary multi-gate circuit compiler.
 
-## This is not secure
+## Authoring and validation
 
-The parameters are small enough to enumerate and both secrets fall to linear algebra. A toy
-of the mechanism, not of the hardness.
-
-## Source alignment
-
-Week 5's material is published upstream, so `courseAlignment` pins `week5/README.md` as
-`lecture` and `week5/problems/tfhe-toy-python/README.md` as `assignment`. The declared role
-is `synthesis` — the schema takes one role, and this problem's defining property is that it
-integrates the whole week rather than isolating one mechanism. `spoilerPolicy` is
-`independent-reimplementation`: the API, the parameter generation, and the write-up here are
-original, and no function name, fixture, or skeleton is taken from the official exercise.
-
-## Assurance scope
-
-Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
-daemon, and the image, so nothing inside that image is hidden from you: `reference/` and
-`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than
-out of reach.
-
-What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
-a checkpoint can only credit the id it echoes, results do not leak expected values, and the
-fixtures come from this deployment's seed so a memorized answer does not carry.
-
-That supports self-study and honest practice. It does **not** support competition ranking,
-examination, or completion certification — those need a verifier the participant does not
-administer, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
-
-## Cost
-
-Zero. No cloud account, no AWS resources.
-
-## For authors
-
-`make reference-test` runs the mutation suite: thirty-seven broken implementations, all killed.
-Twenty-one of them produce a perfect truth table, which is the number this problem exists to
-justify — a stage-by-stage checkpoint layout is expensive, and that figure is what pays for
-it. The suite measures it on every run and fails if it moves, so the READMEs and the
-metadata cannot drift away from the reference.
+Participants do not need a checkout. Repository maintainers use the Makefile author targets and CI as the validation source of truth.

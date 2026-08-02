@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TenkaCloud Browser Workbench</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <header class="hero">
+      <div>
+        <p class="eyebrow">TenkaCloud · Browser Workbench</p>
+        <h1 id="problem-name">Challenge</h1>
+        <p id="problem-description" class="lead">問題を読み込んでいます。</p>
+      </div>
+      <span id="connection-status" class="status">接続確認中</span>
+    </header>
+
+    <main>
+      <section class="panel">
+        <div class="section-heading with-action">
+          <div><p class="step">STEP 1</p><h2>inspect</h2></div>
+          <button type="button" data-command="inspect">inspect を実行</button>
+        </div>
+        <p>deploy ごとに変わる fixture と、問題を解くために公開された証拠を確認します。</p>
+        <pre id="inspect-output" class="output" tabindex="0">inspect を実行してください。</pre>
+      </section>
+
+      <section class="panel">
+        <div class="section-heading"><p class="step">STEP 2</p><h2>starter を編集</h2></div>
+        <p>各タブのソースを修正します。内容はこのブラウザに自動保存されます。</p>
+        <div id="editors" class="editor-stack"></div>
+        <div class="toolbar">
+          <button type="button" data-command="test">公開テスト</button>
+          <button type="button" data-command="reset" class="quiet">初期状態へ戻す</button>
+        </div>
+      </section>
+
+      <section id="manual-panel" class="panel" hidden>
+        <div class="section-heading"><p class="step">STEP 3</p><h2>直接回答を組み立てる</h2></div>
+        <p>
+          コード以外の checkpoint は、inspect と実験結果から回答します。JSON を求める欄は
+          JSON のまま入力してください。prepare は回答を deploy 固有の提出値へ変換します。
+        </p>
+        <div id="manual-fields" class="manual-stack"></div>
+      </section>
+
+      <section class="panel">
+        <div class="section-heading with-action">
+          <div><p class="step">STEP 4</p><h2>Portal 提出値を作る</h2></div>
+          <button type="button" data-command="prepare" class="primary">prepare</button>
+        </div>
+        <p>生成された各値を Participant Portal の同名 checkpoint へコピーします。</p>
+        <div id="submission-output" class="submission-grid" aria-live="polite">
+          <p class="empty">まだ提出値は作られていません。</p>
+        </div>
+      </section>
+
+      <section class="panel terminal">
+        <div class="section-heading"><p class="step">BROWSER CONSOLE</p><h2>安全なコマンド</h2></div>
+        <p>一般シェルではありません。この問題に必要な操作だけを実行します。</p>
+        <pre id="terminal-output" class="terminal-output" aria-live="polite"></pre>
+        <form id="terminal-form" class="terminal-prompt">
+          <span aria-hidden="true">$</span>
+          <label class="sr-only" for="terminal-input">command</label>
+          <input id="terminal-input" autocomplete="off" placeholder="help" />
+          <button type="submit">実行</button>
+        </form>
+      </section>
+    </main>
+  </body>
+</html>

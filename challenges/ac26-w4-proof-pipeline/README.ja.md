@@ -1,150 +1,87 @@
 # 9 層ある 1 個の箱
 
-> このトラックは Advanced Cryptography Program 2026 の非公式・独立コンパニオンです。
-> コース運営とは無関係で、承認も受けていません。問題文・コード・fixture・図はすべて独立に書いています。
-> このトラックへの質問はコース運営ではなく TenkaCloud リポジトリへお願いします。
+「SNARK」「STARK」はプロトコル名ではなく族の名前。 2 つの toy pipeline を stage graph として読み、層ごとの contract を書き、1 つだけ壊れた run から最初に破れた層を特定して直す。
 
-**Track:** `advanced-cryptography-2026` · **Order:** 430 · **Chapter:** Week 4 / Proof
-System Pipeline · **Role:** `transfer` · **想定時間:** 60〜90 分 · **配点:** 300 ·
-**前提:** `ac26-w4-arithmetization`, `ac26-w4-commit-open` · **Status:** draft — 「Week 4
-の対応づけ」を参照。
+Week 4 の 3 問目。 proof system を 1 個のブラックボックスとして扱うと、 「succinct だから速い」 「transparent だから何も仮定しない」 という文が出てくる。 どちらも別々の軸を混同している。 この問題は proof system を作らず、 2 つを stage graph として渡して壊す。
 
-## 物語
+pipeline A は circuit 指向で回路ごとの trusted setup を持ち、 B は trace 指向で transparent。 どちらも実在 scheme の実装ではなく、 実在 scheme の名前も付けていない。 重要なのは 2 つが同じ形ではないことで、 stage 数も stage 名も層の順序も query の下限も違い、 B には A に無い low-degree 層が opening と verifier の間に入る。 A から決め打ちしたものは B で外れ、 hidden check はすべて両方に対して走る。
 
-「SNARK」「STARK」はプロトコル名ではなく族の名前です。 1 個のブラックボックスとして扱うと
-「succinct だから速い」「transparent だから何も仮定しない」といった文が出てきますが、
-どちらも別々の軸を混同しています。
+run は 1 回の実行の記録であって proof ではない。 何を commit したか、 challenge を引く前に何を吸収したか、 verifier が実際にどの opening を検証したか。 participant は層ごとに contract を書き、 そのうち 1 つだけが壊れた run を診断する。
 
-そこでこの問題は proof system を作りません。 2 つを **stage graph** として渡し、壊します。
+中心にある罠が `commitment_ok` で、 これはこの問題のすべての run で True。 正常な run でも、 未充足の制約を抱えたまま accept した run でも。 commitment が成功したという事実は prover が何かに commit したことしか言わない。 これを読む contract は public test を通り、 constraints checkpoint で落ちる。
 
-```text
-input-boundary → arithmetization → polynomial → commitment
-               → transcript → opening → [low-degree] → verifier
-```
+診断は最悪の層ではなく最初の層を返す。 input boundary が 1 つ壊れれば下流はすべて壊れて見えるので、 opening を指す診断は正しく仕事をしていた stage を直しに人を送る。 修復は fault が壊したフィールド 1 つだけを変えてよい。 正常な run を組み直せばすべての contract を満たしたうえで証拠が消え、 verdict を reject にすればすべての contract が一度に黙る。 その制約の例外が 1 つだけあり、 それがどれで、 なぜ例外なのかを言えることが diagnose checkpoint の大部分になる。
 
-**run** は 1 回の実行の記録です。何を commit したか、challenge を引く前に何を吸収したか、
-verifier が実際にどの opening を検証したか。層ごとに 1 つ contract を書き、
-そのうち 1 つだけが壊れた run を診断します。
+## ブラウザでの進め方
 
-## 2 つの pipeline は同じ形ではない
+1. Participant Portal で問題を起動し、**Browser Workbench** を開く。
+2. `inspect` で deploy 固有の fixture と公開された証拠を読む。
+3. 画面内の starter を編集し、`test` で公開テストを実行する。
+4. 表示された直接回答欄を、inspect と実験結果から埋める。
+5. `prepare` で全 checkpoint の提出値を作り、Portal へ貼る。
 
-|  | A | B |
-|---|---|---|
-| family | circuit 指向・succinct | trace 指向・transparent |
-| setup | trusted、回路ごと | transparent、なし |
-| 依拠する仮定 | SRS を残さないこと、pairing の困難性 | 衝突困難ハッシュ、random oracle |
-| stage 数 | 8 | 9 |
-| 追加の層 | — | `low-degree`（`opening` と `verifier` の間） |
-| 最小 query 数 | 1 | 8 |
+直接回答は `prepare` により現在の deploy seed へ結び付けられます。
 
-どちらも実在 scheme の実装ではなく、実在 scheme の名前も付けていません。重要なのは
-**A から決め打ちしたものは B で必ず外れる**ことです。stage 名も、層の順序も、query の下限も、
-そもそも存在する artifact も違います。hidden check はすべて両方に対して走ります。
+## 学習目標
 
-## 罠になっているフィールド
+- statement・public input・witness・trace を区別できる
+- pipeline を artifact graph として読み、 stage 間の境界を説明できる
+- commitment の成功と制約の充足を混同しない
+- challenge を引く時点と transcript の束縛が健全性に効くことを説明できる
+- verifier が検証していない opening / query を指摘できる
+- trusted / transparent setup を security assumption として分類できる
+- succinctness・proof size・prover cost を別の軸として比較できる
+- 下流に波及した failure から最初の fault 層を特定して直せる
 
-`run["commitment_ok"]` はこの問題のすべての run で `True` です。正常な run でも壊れた run でも。
-commitment が成功したという事実は、prover が何かに commit したことを言うだけです。
-commit した中身が制約系を満たすかについては何も言わず、
-verifier が opening を検証したかについても何も言いません。
+## Checkpoint
 
-これを読む contract は public test を通り、`constraints` checkpoint で落ちます。
+| Checkpoint | 内容 | Points |
+| --- | --- | ---: |
+| `graph` | artifact の流れを図にする | 30 |
+| `wiring` | 誰が何を見てよいかを決める | 35 |
+| `constraints` | commit できたことと正しいことを分ける | 40 |
+| `transcript` | challenge を引く前に何を吸収したか | 45 |
+| `opening` | 検証されなかった opening を見つける | 40 |
+| `assumptions` | setup と仮定を別の欄にする | 30 |
+| `cost` | 支持されない主張だけを落とす | 30 |
+| `diagnose` | 最初に破れた層を指して直す | 50 |
 
-## 最悪ではなく最初
+## 解説
 
-input boundary が 1 つ壊れると、opening も transcript も verifier も壊れて見えます。
-`first_fault` が返すのは**最初**の層です。opening を指す診断は、
-正しく仕事をしていた stage を直しに人を送り出すからです。
+## commitment の成功は制約の充足ではない
 
-`repair` が変えてよいのは run の**フィールド 1 つだけ**、fault が壊したそのフィールドです。
-これがなければ通ってしまう 2 つの近道を、この制約が塞いでいます。
+この問題のすべての run で `commitment_ok` は True。 未充足の制約を抱えたまま accept した run でもそうなっている。 commitment が成功したという事実は、 prover が何かに commit したことを言う。 commit した中身が制約系を満たすかは別の主張で、 別の検査が要る。
 
-- definition から正常な run を組み直すと、すべての contract を満たしたうえで証拠が消える。
-- verdict を `reject` にすると、すべての contract が一度に黙る。
+そして commitment には第 2 の仕事がある。 commit stage が受け取った artifact のうち commit されなかったものは、 その後 prover が自由に差し替えられる。 setup material だけが例外で、 これは run より前に公開・固定されているので commit しても新しく縛るものが無い。 名指しで特例にするのではなく、 なぜ例外なのかを言えるようにする。
 
-ただし verdict を倒すことが**正解の修復**である fault が 1 つだけあります。それがどれかを見つけ、
-なぜ例外なのかを説明できることが、この checkpoint の大部分です。
+## transparent は setup の性質である
 
-## 遊び方
+B は transparent で、 かつ衝突困難ハッシュと random oracle に依拠している。 A は trusted setup を持ち、 SRS が残らないことと pairing の困難性に依拠している。 どちらの仮定リストも空ではない。 transparency は setup が何を必要とするかについての性質であって、 仮定の有無についての性質ではない。
 
-```bash
-make inspect            # 2 つの pipeline、正常な run、壊れた run、そして claim 一覧
-make test               # public test
-make reset              # starter/pipeline.py を元に戻す
-```
+同じ混同が cost 側にもある。 succinct は proof size と verifier 時間の話で、 prover のコストとは別の軸。 A の proof は定数サイズだが prover は superlinear で、 この 2 つは矛盾していない。
 
-編集するファイルは `local/starter/pipeline.py` の 1 つだけです。
+## 最初の層を返す
 
-## 採点
+input boundary が壊れると、 opening も transcript も verifier も壊れて見える。 診断が返すのは最初の層でなければならない。 opening を指す診断は、 正しく仕事をしていた stage を直しに人を送り出す。 層の順序は definition の stage 列から読む。 A の順序を書き写すと、 B の low-degree 層を落とすか置き場所を間違える。
 
-8 つの checkpoint を独立に採点します。誤答は 1 回 15 点。
+## 修復はフィールド 1 つ
 
-| Checkpoint | 配点 | 検査内容 |
-|---|---:|---|
-| `graph` | 30 | artifact ごとの producer と consumer、setup を含むこと、dangling の検出 |
-| `wiring` | 35 | verifier が入力を受け取ること、prover 専用 artifact が漏れないこと、setup material の一致 |
-| `constraints` | 40 | 未充足の制約があるのに accept したこと、commitment が渡されたものを束縛すること |
-| `transcript` | 45 | challenge が消費するものを、引く前にすべて吸収したこと |
-| `opening` | 40 | 必要な opening を件数ではなく名前で検証、pipeline ごとの query 下限、low-degree は在る側だけ |
-| `assumptions` | 30 | setup の種別、transparency、そして両方とも仮定リストが空でないこと |
-| `cost` | 30 | 支持されない 4 claim を落とし、支持される 4 claim を残す |
-| `diagnose` | 50 | 9 種類の fault で最初の層を特定し、1 フィールドだけ直す |
+修復が変えてよいのは fault が壊したフィールドだけ。 これがなければ 2 つの近道が通ってしまう。 definition から正常な run を組み直せばすべての contract を満たしたうえで証拠が消え、 verdict を reject にすればすべての contract が一度に黙る。
 
-8 つのうち 5 つに hint があり、いずれもその checkpoint の 50% 上限の内側です。
+例外は 1 つある。 未充足の制約は記録を編集しても充足にはならないので、 そこでの正しい修復は verifier が reject することそのものになる。 例外が 1 つだけであることと、 なぜそこだけなのかが、 この checkpoint の核心。
 
-## claim は何のためにあるか
+## 2 つの pipeline が同じ形ではないこと
 
-`make inspect` が出す 8 つの claim のうち 4 つが支持されません。どれも恣意的な誤りではなく、
-名前の付いた誤解に対応しています。
-
-- 「A は succinct だから prover が速い」 — proof size と prover コストは別の軸。
-- 「B は transparent だから何も仮定しない」 — transparency は **setup** の性質。
-  B は衝突困難ハッシュと random oracle を必要とし続ける。
-- 「A の setup は一度きりの ceremony だから何も仮定しない」 — 同じ混同の裏返し。
-- 「B の proof は A より小さい」 — polylogarithmic は constant より小さくない。
-
-残る 4 つは正しいので、全部を落とす実装は profile を読む実装より高い点にはなりません。
+stage 数、 stage 名、 層の順序、 query の下限、 存在する artifact — すべて違う。 B には low-degree 層があり、 A には無い。 A に無い層の契約を A に適用すると、 正常な A の run が全部落ちる。 契約を書くときは 「この pipeline がこの stage を持つなら」 から始める。
 
 ## 対象外
 
-Groth16 / PLONK / STARK の完全実装、benchmark の実測値、setup ceremony、
-proof generation service はいずれも対象外です。ここでのコストはすべて**宣言されたクラス**であって
-測定値ではなく、この問題が行う比較は宣言クラス同士の比較だけです。
+Groth16 / PLONK / STARK の完全実装、 benchmark の実測値、 setup ceremony、 proof generation service。 ここでのコストはすべて宣言されたクラスであって測定値ではない。
 
 ## Week 4 の対応づけ
 
-Week 4 の教材は pin した commit 時点で未公開です。 `courseAlignment` は `week4/README.md` を
-`kind: "placeholder"` で pin し、role は `transfer` にしてあります。
-`GOVERNANCE.md` §6 が未公開週に許す 2 つの role のうちの 1 つです。
-公式課題が何を要求するかについては何も主張していません。 #229 で教材公開時に更新します。
+Week 4 の教材は pin した commit 時点で未公開。 courseAlignment は `week4/README.md` を `kind: "placeholder"` で pin し、 role は transfer にしてある。 GOVERNANCE.md §6 が未公開週の companion に許す 2 つの role のうちの 1 つで、 Week 4 の arithmetization と commitment を新しい設定 (pipeline 診断) へ転用しているので transfer が正確でもある。 公式課題が何を要求するかについては何も主張していない。
 
-## 保証範囲
+## 作問・検証
 
-ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も
-あなたの管理下にあるので、 image の中身はあなたに対して秘匿されていません。
-`reference/` と `tests/hidden/` を bind-mount しないのは、あなたの git checkout に
-紛れ込ませないためであって、手が届かなくするためではありません。
-
-verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
-ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。
-結果は期待値を漏らしません。 fixture はこのデプロイの seed 由来なので、暗記した答えは持ち越せません。
-
-これは自習と誠実な練習を支えます。競技順位・試験・修了判定は**支えません**。
-それらには participant が管理しない verifier が必要で、
-[#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271) で追跡しています。
-
-## コスト
-
-ゼロ。クラウドアカウントも AWS リソースも不要です。
-
-## 作問者向け
-
-`make reference-test` が mutation suite を走らせます。 19 個の壊れた実装は、どれも typo ではなく
-もっともらしい読み違いです。ほとんどが public test と正常な run を通り、
-壊れた pipeline か、A ではなく B のときにだけ違いが出ます。
-
-mutation の候補のうち 2 つは、生き残らせるのではなく**外しました**。 prover 専用集合から
-`verdict` を除く操作（`verdict` を公開する run はそもそも無いので判定が変わらない）と、
-`dangling_artifacts` の出力を sort する操作（hidden test は比較前に sort する）です。
-結果を変えられない mutation は網羅性の証拠になりませんし、殺せない mutation を一覧に残すと
-`SURVIVED` の行を無視してよいと教えることになります。
+参加者は checkout を必要としません。リポジトリ保守者向けの検証手順は Makefile と CI を正とします。

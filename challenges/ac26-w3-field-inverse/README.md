@@ -1,118 +1,71 @@
 # Build the field before the curve
 
-> This track is an independent, unofficial companion to the Advanced Cryptography Program 2026.
-> It is not affiliated with or endorsed by the course or its operators. All problem statements,
-> code, fixtures, and figures here are written independently. Questions about this track go to
-> the TenkaCloud repository, not to the course operators.
+Before the curve equation, the field underneath it: normalization, arithmetic, and the inverse from the extended Euclidean algorithm. Over a composite modulus some elements have no inverse at all, and one popular implementation never notices.
 
-**Track:** `advanced-cryptography-2026` · **Order:** 310 · **Chapter:** Week 3 / Finite Fields
-· **Role:** `mechanism` · **Time:** 45–60 minutes · **Points:** 200
+## Browser workflow
 
-## The story
+1. Start the problem in the Participant Portal and open **Browser Workbench**.
+2. Run `inspect` and read the deployment-specific fixture and published evidence.
+3. Edit the starter sources on the page and run the public `test` command.
+4. Complete any direct-answer fields from the evidence and your experiments.
+5. Run `prepare`, then paste every generated value into the matching Portal checkpoint.
 
-Every elliptic-curve slide starts with an equation over `F_p` and moves on within a minute,
-because the field is assumed. This problem is that minute, taken seriously: you build `F_p` from
-normalization up, and the last piece — the multiplicative inverse — is the one with real content.
+Direct answers are bound to the current deployment seed by `prepare`.
 
-## What you implement
+## Learning goals
 
-```python
-class Field:
-    modulus: int
-    def element(self, value: int) -> FieldElement: ...
+- Tell an integer apart from a field element
+- Normalize negatives and values past the modulus to a canonical representative
+- Implement addition, subtraction and multiplication modulo p
+- Derive the multiplicative inverse from the extended Euclidean algorithm
+- Verify a * a^-1 = 1 as a property rather than on one example
+- Raise an explicit error for zero and for non-invertible elements
+- Show the difference between a prime and a composite modulus with a counterexample
 
-class FieldElement:
-    def __add__, __sub__, __mul__, __truediv__
-    def inverse(self) -> FieldElement: ...
+## Checkpoints
 
-def egcd(a, b) -> (g, s, t)          # a*s + b*t == g == gcd(a, b)
-def egcd_trace(a, b) -> [ {q, r, s, t}, ... ]
-def non_invertible_element(modulus) -> int
-```
+| Checkpoint | Purpose | Points |
+| --- | --- | ---: |
+| `normalize` | Turn an integer into a field element |  |
+| `arithmetic` | Arithmetic, and the axioms it must satisfy |  |
+| `egcd-trace` | Show every step of the extended algorithm |  |
+| `inverse` | Inverse and division |  |
+| `errors` | Say that something does not exist |  |
+| `composite` | Build a counterexample over a non-prime modulus |  |
+| `axioms` | Hold the axioms over a prime you have not seen |  |
 
-Elements of two different moduli never combine silently.
+## Explanation
 
-## How to play
+## Integers and field elements
 
-```bash
-make inspect              # your moduli, and a worked trace
-make inspect A=17 P=101   # a trace for any pair you like
-make test                 # public tests
-make reset                # restore starter/field.py
-```
+`-5` and `p - 5` name the same element of `F_p`, but `-5` is not a canonical representative of it. Normalizing when the element is constructed means a negative input and an input past the modulus take the same path afterwards. Python's `%` returns a non-negative result for a positive modulus, so that is one operation.
 
-You edit one file, `local/starter/field.py`.
+Reducing only at the end produces the right final answer for this exercise. What it fails is being asked about an intermediate value, and the hidden tests check that every arithmetic result lands in `[0, p)`.
 
-## Scoring
+## Why the extended algorithm says more than Fermat
 
-Seven checkpoints, scored independently. Wrong answers cost 10 points each.
+`pow(a, p - 2, p)` is an inverse only when `p` is prime. Over a composite `n`, `pow(a, n - 2, n)` still returns a number — it just is not an inverse, and nothing tells you unless you check.
 
-| Checkpoint | Points | What is checked |
-|---|---:|---|
-| `normalize` | 25 | Negatives, values past the modulus, idempotence, equality |
-| `arithmetic` | 30 | Add/sub/mul, identities, distributivity, commutativity, associativity |
-| `egcd-trace` | 35 | The step sequence, row by row, against the algorithm's own |
-| `inverse` | 35 | Every non-zero element of the prime field, plus `a / b * b == a` |
-| `errors` | 25 | Zero, division by zero, and mixing two moduli |
-| `composite` | 25 | The smallest non-invertible element — and none over a prime |
-| `axioms` | 25 | The axioms over a prime you have not been shown |
-
-Hints on four of the seven, each inside that checkpoint's 50% cap.
-
-## Two distinctions this problem insists on
-
-**An integer is not a field element.** `-5` and `p - 5` name the same element; `-5` is not a
-canonical representative of it. Normalizing at construction means a negative input and an input
-past the modulus take the same path afterwards.
-
-**`pow(a, p - 2, p)` is not "the inverse".** It is an inverse when `p` is prime. Over a composite
-`n` it still returns a number — just not an inverse, and nothing tells you unless you check. The
-extended Euclidean algorithm returns the gcd alongside the coefficients, so it can say *there is
-no inverse*. The first mutation in this problem's suite is exactly the Fermat version: it passes
-every prime checkpoint and fails the composite one.
+The extended Euclidean algorithm returns `a*s + n*t = gcd(a, n)`. When the gcd is not 1 there is no inverse, and the algorithm has told you so. Knowing the answer does not exist is the difference, and the first mutation in the suite fails on that difference alone.
 
 ## Why the trace is compared row by row
 
-The trace checkpoint first checked only that each row satisfies `a*s + p*t = r` and that the last
-row matches the gcd and the inverse. A mutation returning **only the last row** survived that — a
-one-row table satisfies all of it.
+The trace checkpoint originally checked only that each row satisfies `a*s + p*t = r` and that the last row matches the gcd and the inverse. A mutation that returns *only the last row* survived that: a one-row table satisfies every one of those conditions.
 
-It now compares the step count and each row's `(q, r, s, t)` against the reference sequence. Floor
-division makes that sequence deterministic, so there is exactly one right answer.
+It now compares the step count and each row's `(q, r, s, t)` against the reference sequence. Floor division makes that sequence deterministic, so there is exactly one right answer.
 
 ## Exhaustive, not sampled
 
-`inverse` runs every non-zero element of the prime field, not a sample, so special-casing a few
-values is not a strategy. `axioms` additionally checks that inversion is a **bijection** on the
-non-zero elements: in a field the inverse is unique, and two elements never share one.
+The inverse checkpoint runs every non-zero element of the prime field — `p - 1` of them, with `p` in the hundreds. Not a sample, so special-casing a few values is not a strategy. The axioms checkpoint goes further and checks that inversion is a bijection on the non-zero elements: in a field the inverse is unique, and two different elements never share one.
 
 ## The trace is not constant-time
 
-The trace `make inspect` prints branches on its inputs, and its step count depends on them. In
-code handling a real key that property is itself a side channel. It is here to make the algorithm
-legible, not as a model for production.
+The trace `show.py` prints branches on its inputs, and its step count depends on them. In an implementation handling a real key, that property is itself a side channel. This is here to make the algorithm legible, not as a model for production code.
 
-## Assurance scope
+## Where this leads
 
-Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
-daemon, and the image, so nothing inside that image is hidden from you: `reference/` and
-`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than
-out of reach.
+The next problem builds the curve's group law. Point addition has a field inverse in its denominator, so this `inverse` is used directly — and the cases where the denominator is zero turn out to be exactly the group law's case split.
 
-What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
-a checkpoint can only credit the id it echoes, results do not leak expected values, and the
-fixtures come from this deployment's seed so a memorized answer does not carry.
+## Authoring and validation
 
-That supports self-study and honest practice. It does **not** support competition ranking,
-examination, or completion certification — those need a verifier the participant does not
-administer, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
-
-## Cost
-
-Zero. No cloud account, no AWS resources.
-
-## For authors
-
-`make reference-test` runs the mutation suite: eight broken implementations. The Fermat-inverse
-one passes every prime checkpoint, and the last-row-only trace survived the original checkpoint
-and is why it now compares the whole sequence.
+Participants do not need a checkout. Repository maintainers use the Makefile author targets and CI as the validation source of truth.

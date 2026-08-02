@@ -1,28 +1,16 @@
-# 同じ答えを返す 8 つの prover が、それぞれ別のことを言っている
+# 同じ答えを返す 8 つの prover が、 それぞれ別のことを言っている
 
-> このトラックは Advanced Cryptography Program 2026 の非公式・独立した companion です。講座および
-> その運営者とは提携しておらず、承認も受けていません。問題文、コード、fixture、図はすべて独自に
-> 作成しています。このトラックに関する質問は講座運営ではなく TenkaCloud リポジトリへお願いします。
+8 つの co-SNARK prover はどれも同じ `C = A × B` を返す。 違うのは何を、 どの出口から外へ出すかだけ。 最初の privacy violation を記録から特定し、 correctness と round 数を保ったまま塞ぐ。
 
-**Track:** `advanced-cryptography-2026` · **Order:** 630 · **Chapter:** Week 6 / Programmable
-Cryptography Stack Design · **Role:** `transfer` · **想定時間:** 60〜90 分 ·
-**配点:** 300 · **必須前提:** `ac26-w6-cosnark-linear`、`ac26-w6-cosnark-beaver` ·
-**Status:** draft
-
-## ストーリー
-
-co-SNARK prover は前の 2 問で完成しました。線形部分は 0 round、乗算はちょうど 1 round。どちらも
-この問題では答えのまま渡されます。
+Week 6 の 3 問目。 前の 2 問で作った co-SNARK prover は、 ここでは**支給される**。 線形部分 (`ac26-w6-cosnark-linear`) も、 1 round の乗算 (`ac26-w6-cosnark-beaver`) も、 答えのまま渡される。 この問題は `C` をもう一度計算する問題ではない。
 
 ```text
 A = Σ_j a_j w_j        B = Σ_j b_j w_j        C = A × B        (mod p)
 ```
 
-渡されるのは、その上に乗った 8 つの実装 `S1`〜`S8` です。**8 つとも、全 seed・全 shape で `C` を
-`A × B` に正しく復元します** — 96 通りの実行で 96 通りとも一致します。correctness test には区別が
-付きません。それがこの問題の前提であって、ネタバレではありません。
+渡されるのは、 その上に乗った 8 つの prover 実装 `S1`〜`S8` である。 **8 つとも、 全 seed・全 shape で `C` を `A × B` に正しく復元する。** 並べても correctness test には区別が付かない。 それがこの問題の前提であって、 ネタバレではない。
 
-違うのは、それぞれが何を、どの出口から外へ出すかです。
+違うのは、 それぞれが何を、 どの出口から外へ出すかである。
 
 ```text
 artifact   次の段が受け取るもの
@@ -31,150 +19,130 @@ metrics    運用者が拾う名前付きの数
 error      入力が壊れていたときに出るもの
 ```
 
-correctness test が見るのは 1 番目の 1 field だけです。8 つのうち 3 つは残りの 3 つしか使いません。
-1 つは 4 つのどれからも漏らさず、1 つは何も言わないまま全 party の share を読みます。
+correctness test が見るのは 1 番目の 1 field だけで、 8 つのうち 3 つは残りの 3 つしか使わない。 1 つは 4 つのどれも使わずに漏らし、 1 つは何も言わずに全 party の share を読む。
 
-## 新しいところ
+前問の runtime は `reconstruct` を渡さなかった。 この問題の `AuditRuntime` は**渡す**。 実在の MPC library は reconstruction も cross-party な debug hook も structured logging も提供する — 運用者が必要とするからで、 ここで取り上げてしまうと問題にしたい defect の class がそもそも書けなくなり、 監査対象にならない。 代わりに runtime は、 到達した capability を operand id とともに記録する。 **値は記録しない。** 記録は transcript ではなく証拠である。
 
-前問の runtime は `reconstruct` を渡しませんでした。あそこではそれが正しい既定でしたが、ここでは
-違います。実在の MPC library は reconstruction も cross-party な debug hook も structured logging も
-提供します。運用者が必要とするからです。取り上げてしまえば、この問題が扱いたい defect の class は
-そもそも書けなくなり、監査対象になりません。
+specimen の id は不透明 (`S1`..`S8`) で、 2 つは `reconstruct` を綴らない名前で到達する。 `grep("reconstruct")` は何も見つけず、 capability の記録は見つける。 そこが `source-independent behavioral probe` の意味である。
 
-そこで `AuditRuntime` はそれらを渡し、何に到達したかを記録します。
+採点の設計として、 この問題は 35 個の壊れた監査を同梱していて、 そのうち **29 個は 8 つの specimen 全部について 「これは clean か否か」 を正しく答える**。 `make reference-test` が毎回この数を測る。 異常に気づくことと、 何がどこから漏れたかを言うことは、 まったく別の難度である。
 
-```text
-runtime.reached()     到達した capability: {"capability", "party", "operands"}
-runtime.openings()    開示の記録:          {"roundId", "shareIds", "maskedBy"}
-runtime.events()      操作の全 trace
-```
+toy であることも明示しておく。 field は列挙可能な小さい素数、 party は 2〜5、 敵対者は不在、 triple は trusted dealer が配る。 そして `Share._value` は属性 1 つ分の距離にある — runtime は sandbox ではなく instrument で、 記録しているのは 「その計算が何を公開したか」 であって 「書いた人が何を見たか」 ではない。
 
-operand の id だけで、**値は記録しません**。記録は transcript ではなく証拠です。capability に到達
-すること自体は違反ではありません — `d` と `e` を公開するのは protocol です — 判断するのはあなたの
-仕事です。
+## ブラウザでの進め方
 
-specimen の id は不透明で、2 つは capability をそれを綴らない名前で呼び出します。
-`grep("reconstruct")` は何も見つけません。capability の記録は見つけます。
+1. Participant Portal で問題を起動し、**Browser Workbench** を開く。
+2. `inspect` で deploy 固有の fixture と公開された証拠を読む。
+3. 画面内の starter を編集し、`test` で公開テストを実行する。
+4. 表示された直接回答欄を、inspect と実験結果から埋める。
+5. `prepare` で全 checkpoint の提出値を作り、Portal へ貼る。
 
-## 遊び方
+直接回答は `prepare` により現在の deploy seed へ結び付けられます。
 
-```bash
-make inspect            # 設定・行・policy・何も漏らさない 1 回の記録
-make inspect S=sparse   # dense / sparse / signed / unit
-make inspect P=S3       # 指定した specimen を 1 回走らせ、残したものを全部印字する
-make test               # 公開テスト
-make reset              # starter/ を元に戻す
-```
+## 学習目標
 
-編集するのは `local/starter/prover.py` 1 ファイルです。
+- co-SNARK prover の public input / secret share / allowed open / secret intermediate / artifact / verifier-only を分類できる
+- correct な relation を返しながら privacy が破れている実装を、 記録から検出できる
+- capability の到達記録を読み、 名前を綴らない alias 経由の reconstruct を見つけられる
+- authorized な d/e open と、 mask 無しの open・宣言外 round の open を区別できる
+- party 境界を越えた share の読み取りを、 何も開示しない実装についても検出できる
+- artifact / log / metrics / error の 4 channel すべてを policy に照らして検査できる
+- 許可された名前が許可されていない中身を運んでいる場合を検出できる
+- participant に見える view だけから、 本来非公開の値を導出する counterexample を提出できる
+- 1 回の実行では現れない、 malformed input path の leakage を probe で引き出せる
+- correctness・open set・round 数・artifact schema を同時に維持したまま leakage を塞げる
+- primitive レベルの安全性が application レベルの privacy contract を自動的には与えないことを説明できる
 
-既定の `make inspect` は specimen を 1 つも走らせません。支給された `beaver_product` と
-`clean_artifact` を並べただけの、何も漏らさない prover を 1 回動かして記録の形を見せます。8 つに
-ついては何も明かさずに、証拠の見た目だけが分かります。
+## Checkpoint
 
-## 採点
+| Checkpoint | 内容 | Points |
+| --- | --- | ---: |
+| `classify` | どの値が、 誰のものか | 30 |
+| `capability` | 1 回動かして分かることと、 分からないこと | 40 |
+| `open-set` | 話してよかった値と、 そうでない値 | 40 |
+| `cross-party` | 何も言わずに、 読むだけの実装 | 30 |
+| `leakage` | 答えを見る test が、 見ていない 3 つの出口 | 45 |
+| `evidence` | 漏れた値から、 秘密を組み立てる | 45 |
+| `repair` | 同じ答えを返し、 何も言わない prover | 45 |
+| `transfer` | 見たことのない設定と、 見たことのない実装で | 25 |
 
-8 個の checkpoint を独立に採点します。不正解は 1 回 15 点減点です。
+## 解説
 
-| Checkpoint | 配点 | 見るもの |
-|---|---:|---|
-| `classify` | 30 | descriptor の catalog を 6 class へ。開示済みなのに秘密のままの entry が 2 つ |
-| `capability` | 40 | 到達した capability 全部。1 つは 2 回目の malformed な probe が要る |
-| `open-set` | 40 | mask **と** 宣言 round。片方だけの規則はそれぞれ別の実装を通す |
-| `cross-party` | 30 | party 境界を越えた読み取り。disclosure が完全に clean な実装で |
-| `leakage` | 45 | 4 channel すべてを、name policy **と** kind policy の両方に照らす |
-| `evidence` | 45 | serialize された disclosure から秘密を導出し、取得元の pair を名指す |
-| `repair` | 45 | correctness・open set・round 数・schema・失敗時の無開示を同時に |
-| `transfer` | 25 | 見たことのない設定と、見たことのない実装で全部 |
+## 正しい答えは、 正しい prover の証拠にならない
 
-hint は 8 つのうち 7 つ (12〜18 点)。全部開けても 300 点中 190 点が残ります。
+8 つの specimen は全 seed・全 shape で `C` を `A × B` に復元します。 96 通りの実行で 96 通りとも一致します。 correctness test をいくら足しても、 このうち 7 つが何をしているかは 1 bit も見えません。
 
-## 気づくのは簡単で、何が漏れたかを言うのは難しい
+そして監査の側にも同じ落とし穴があります。 この問題は 35 個の壊れた監査を同梱していて、 そのうち **29 個は 8 つの specimen 全部について 「clean か否か」 を正しく答えます**。 `make reference-test` が毎回この数を測り、 数が動いたら数のほうを直します。 **異常に気づくことは簡単で、 何がどこから漏れたかを言うことは難しい。** 8 個の checkpoint が exact な pair と exact な値を要求するのは、 その差が実務での差だからです。
 
-この問題は 35 個の壊れた監査を同梱していて、そのうち **29 個は 8 つの specimen 全部について
-「clean か否か」を正しく答えます**。`make reference-test` が毎回この数を測ります。
+## 4 つの出口のうち、 correctness test は 1 つしか見ない
 
-checkpoint が exact な pair と exact な値を要求するのは、そのためです。正しい prover を間違った
-理由で指した監査は finding ではなく偶然で、次の実装では生き延びません。
+`artifact` は次の段が受け取るもので、 test が読むのもそこです。 `log`・`metrics`・`error` は誰も読みません。 8 つのうち 3 つはその 3 つしか使いません。
 
-実測すると、各 checkpoint は自分の defect を捕まえる唯一の checkpoint です (別 seed で全部を
-再実行する `transfer` を除く)。1 つだけ 2 つ同時に落ちるものがあります。`_authorized` を「mask が
-あったか」だけ、あるいは「round が正しかったか」だけに壊すと `classify` **と** `open-set` が
-両方落ちます。その 2 つは同じ問いを訊いているからです。
+log は**構造化**されています。 `emit(event, **values)` で、 1 行は `{"event", "values"}` です。 policy の対象になるのは `values` の**名前**であって、 event 名でも message の文面でもありません。 これは意図的な設計です: 先に文字列へ潰してしまえば、 この問題は正規表現の練習になってしまいます。 その代わり、 message の文面に秘密を書く実装はこの監査では捕まりません — 保証範囲の外です。
 
-## 開示されたからといって、開示してよかったわけではない
+## 許可された名前は、 許可ではない
 
-1 回の Beaver 乗算が許可する開示はちょうど 2 つ、mask された `d` と `e` で、どちらも乗算自身の
-round id の下です。開示が authorized なのは**両方**成り立つときだけです。
+`ALLOWED_NAMES` に `A` / `B` / `C` は入っています。 **sharing として。** ある実装は allowlist のど真ん中にある名前 `C` に、 sharing の代わりに整数を入れて publish します。 名前だけを見る scan は何も見つけません。 `SHARING_ONLY_NAMES` はそのために存在する 2 つ目の規則で、 `is_sharing(value, parties)` が `Share._value` に手を伸ばさずに 「中身が何か」 を訊くための道具です。
 
-- 祖先に予約済みの triple mask がある (`maskedBy` が空でない)、かつ
+## 開示されたからといって、 開示してよかったわけではない
+
+1 回の Beaver 乗算が許可する開示はちょうど 2 つ、 mask された `d` と `e` で、 どちらも乗算自身の round id の下です。 開示が authorized なのは**両方**成り立つときだけです。
+
+- 祖先に予約済みの triple mask がある (`maskedBy` が空でない)、 かつ
 - `roundId` が relation の宣言した round である
 
-前者を欠く開示は、何にも隠されていない値を公開しました。後者を欠く開示は、mask を、それが引かれた
-相手ではない値に使いました。triple の再利用が変装しているだけです。
+前者を欠く開示は、 何にも隠されていない値を公開しました。 後者を欠く開示は、 relation が宣言していない round で mask された値を公開しました — mask を、 それが引かれた相手ではない値に使ったということで、 triple の再利用と同じ defect が変装しているだけです。 `maskedBy` だけを見る監査は後者を通し、 round だけを見る監査は前者を通します。
 
-## 監査が証明できることと、できないこと
+同じ述語が checkpoint `classify` と `open-set` の両方で要ります。 これは節約ではなく、 「その 2 つは同じ問いだ」 という主張です。 実測でも、 `_authorized` を片方だけの規則に壊すと 2 つの checkpoint が同時に落ちます。
 
-証明できるのは、この runtime 上で公開された値がどれも予約済み mask の下にあり、到達した capability
-が protocol のものだけで、4 つの channel のどれにも policy 外の名前が出ていないことです。
+## 何も言わずに漏らす実装
 
-証明できないのは「誰も `A` を見なかった」ことです。`Share._value` は属性 1 つ分の距離にあり、
-マシンも image もあなたのものです。runtime は sandbox ではなく instrument で、記録しているのは
-「その計算が何を公開したか」であって「書いた人が何を見たか」ではありません。
+ある specimen は 4 つの channel のどれにも何も出しません。 disclosure は clean な prover のものと 1 byte も違いません。 そのうえで全 party の share を `peek` します。 何も process の外へ出ないので、 **開示の監査には原理的に見えません。** capability の監査には見えます。
 
-限界を 2 つ、暗黙にせず書いておきます。log の policy 対象は構造化された record の中の **field 名**
-なので、message の文面に秘密を書く実装はここでは捕まりません。先に文字列へ潰してしまえば、この問題
-は正規表現の練習になっていました。もう 1 つ、他の party へ開示されたが channel には出ていない値は、
-設計上 disclosure の監査からは見えません — それは `leakage` ではなく `open-set` の担当です。
+これが 「secret sharing という primitive を使っているから prover 全体が private」 という誤解の実体です。 primitive は正しく動いていて、 その上の application が privacy contract を持っていないだけです。
 
-## この先
+`peek` の記録は、 読んだ party ではなく **share を持っている party** の id を刻みます。 それで足ります: 2 party 分の share を 1 つの party が全部持っていることはないので、 owner が 2 種類以上現れた時点で誰かが境界を越えています。 逆に、 自分の share を 2 回読んだだけの run は越えていません — peek の数と owner の数は別の数字です。
 
-Week 6 の残りは MPC を離れて stack の zkVM 側へ行きます。持ち越されるのはこの問題の問いです。
-primitive が正しいことと system が約束を守ることは別の主張で、誰もが書くテストが見ているのは
-片方だけです。
+## 1 回動かして分かることと、 分からないこと
+
+ある specimen は happy path では完璧です。 宣言された width と係数ベクトルが食い違う row を渡したときだけ、 例外 handler が失敗時の状態を error に詰めます。 1 回しか動かさない監査は、 これを clean と報告します。 clean だからです — そうでなくなるまでは。
+
+checkpoint `capability` だけが `probe` を渡され、 何回動かすかを監査側に決めさせるのはそのためです。 残りの 7 つは 1 回の run を渡して 「これは何を言っているか」 を訊きます。
+
+## 漏れた値から秘密を組み立てる
+
+漏れとは 「見て分かる数」 ではありません。 **目の前にあるものだけを使って何かを導ける数**です。 この問題の disclosure には 3 種類の導出があります。
+
+1. 秘密がそのまま、 秘密らしくない名前の下に出ている (`prover.left_half` は運用者が alert を張りたかった数です)
+2. sharing が平文のまま出ている — 加法的 share は足せば元に戻ります
+3. **秘密らしくない値が、 policy が明示的に許可している値と同じ record に出ている**
+
+3 番目が本題です。 flag される field は `x` で、 それ自体は秘密に見えません。 秘密は、 それを `d` と組み合わせたときに出てきます — そして `d` は policy が許可している公開値です。 前問の `d = A - x` がそのまま `A = d + x` になります。 「漏れを見つけること」 と 「そこから秘密を導くこと」 は別の技能で、 だから checkpoint も別です。
+
+この checkpoint では `serialized` された disclosure が渡されます。 sharing はすでに不透明な share id の列になっていて、 `Share._value` も `reconstruct` も使えません。 checker は runtime を見ていて、 答えるために capability へ到達した提出は別の問いに答えたことになります。
+
+## 修復して、 同時に全部を満たす
+
+`private_prover` は支給された `beaver_product` の上に書きます。 満たすべきものは同時に成立します: `C` が `A × B` に復元し、 開示は 2 つでどちらも authorized、 round は 1、 `open` 以外の capability に到達せず、 4 つの channel のどれにも policy 外のものを出さない。
+
+何も publish しなければ 4 つは満たせます。 そして 1 つ目で落ちます。 **何も言わない prover は private ではなく、 ただ役に立たないだけです。**
+
+もう 1 つ採点されるものがあり、 それは 「何か別のことが既に壊れているときにしか起きない」 がゆえに間違えやすい部分です。 triple を消費済みの runtime が渡され、 `reserve_triple` が拒否して呼び出しが失敗します。 失敗させてください。 失敗を debug できるように失敗時の状態を人前に出す handler は、 火曜日に private だった prover が水曜日に private でなくなる最も一般的な経路です。
+
+## 監査が証明できることと、 できないこと
+
+証明できるのは、 この runtime 上で公開された値がどれも予約済み mask の下にあり、 到達した capability が protocol のものだけで、 4 つの channel に policy 外の名前が出ていないことです。
+
+証明できないのは 「誰も `A` を見なかった」 ことです。 `Share._value` は属性 1 つ分の距離にあり、 参加者は machine も image も持っています。 runtime は sandbox ではなく instrument です。 記録が証明できるのは `reached()` と `openings()` と `Disclosure` が言っていることちょうどであって、 それ以上ではありません。
+
+## toy と production の差
+
+field は列挙できる小さい素数、 party は 2〜5、 敵対者は不在、 triple は trusted dealer が配ります。 本物の co-SNARK では、 ここで 「policy」 と呼んでいるものは serialization schema と log の schema と metric の cardinality 制限として実装され、 その全部が review の対象になります。 この問題が主張しているのは 「その review を機械で回せる形に落とせる」 ことであって、 「落としたものが完全である」 ことではありません。
 
 ## 対象外
 
-formal simulation-based proof、timing / cache side channel、malicious-secure MPC compiler、
-実際の SNARK proof の privacy 解析。
+formal simulation-based proof、 timing / cache side channel、 malicious-secure MPC compiler、 実際の SNARK proof の privacy 解析。
 
-## これは安全ではありません
+## 作問・検証
 
-field は列挙できる小さい素数、party は 2〜5、敵対者は semi-honest ですらなく不在、triple は trusted
-dealer が配ります。機構の toy です。
-
-## 出典との対応
-
-Week 6 の教材は上流で公開されているので、`courseAlignment` は `curriculum.md` が記録している commit
-の `week6/README.md` と `week6/problems/co-snark-prove/README.md` を pin します。公式演習の template・
-係数・fixture・解答は転載していません。relation も runtime も specimen も disclosure sink も policy も
-独自に書いたもので、公式演習が支給する primitive はこの問題が監査する対象であって、この問題が採点する
-コードではありません。
-
-## 保証範囲
-
-ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も
-あなたの管理下にあるので、 image の中身はあなたに対して秘匿されていません。
-`reference/` と `tests/hidden/` を bind-mount しないのは、あなたの git checkout に
-紛れ込ませないためであって、手が届かなくするためではありません。hidden checker が読む
-ground truth も同じです。それを import した監査は何も監査していませんが、そうしないと
-決められるのはあなただけです。
-
-verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
-ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。
-結果は期待値を漏らしません。 fixture はこのデプロイの seed 由来なので、暗記した答えは持ち越せません。
-
-これは自習と誠実な練習を支えます。競技順位・試験・修了判定は**支えません**。
-それらには participant が管理しない verifier が必要で、
-[#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271) で追跡しています。
-
-## コスト
-
-ゼロです。クラウドアカウントも AWS リソースも使いません。
-
-## 作問者向け
-
-`make reference-test` が mutation suite を実行します。壊した監査 35 種類と verifier を狙った 1 種類が
-あります。35 種類のうち何個が依然として全 specimen の verdict を正しく答えるかを毎回印字します。この
-README が引用しているのはその数で、後の変更で checkpoint が安くなればその数が動き、主張のほうを
-直します。
+参加者は checkout を必要としません。リポジトリ保守者向けの検証手順は Makefile と CI を正とします。
