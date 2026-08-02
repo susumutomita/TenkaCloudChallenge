@@ -42,8 +42,10 @@ jobs:
         run: |
           python3 -m py_compile \
             scripts/migrate-course-workbenches.py \
+            scripts/restore-course-readmes.py \
             scripts/sanitize-course-workbench-docs.py
           python3 scripts/migrate-course-workbenches.py
+          python3 scripts/restore-course-readmes.py
           python3 scripts/sanitize-course-workbench-docs.py
           python3 -m compileall -q challenges
 
@@ -63,5 +65,5 @@ jobs:
             echo "::error::The migration produced no generated changes."
             exit 1
           fi
-          git commit -m "fix(course): add browser workbenches to remaining labs"
+          git commit -m "fix(course): preserve authored docs and add browser workbenches"
           git push origin HEAD:agent/ac26-workbench-all
