@@ -1,8 +1,7 @@
 import { createServer } from "node:http";
-import { encodeSubmission, evaluateRequest } from "./policy.mjs";
-import { runPublicCases } from "./public-cases.mjs";
+import { evaluateRequest } from "./policy.mjs";
 
-const BODY_LIMIT = 32 * 1024;
+const HEADER_LIMIT = 8 * 1024;
 const PORT = Number(process.env.PORT || 8080);
 const RUNTIME_POLICY = Object.freeze({
   canonicalOrigin: "https://mcp.example.test",
@@ -11,7 +10,8 @@ const RUNTIME_POLICY = Object.freeze({
 const SECURITY_HEADERS = Object.freeze({
   "cache-control": "no-store",
   "content-security-policy":
-    "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+    "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self' http://127.0.0.1:18111 http://localhost:18111; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+  "referrer-policy": "no-referrer",
   "x-content-type-options": "nosniff",
 });
 
@@ -37,45 +37,6 @@ function sendJson(response, status, payload, extra = {}) {
   send(response, status, "application/json; charset=utf-8", JSON.stringify(payload), extra);
 }
 
-function readJson(request) {
-  return new Promise((resolve) => {
-    const declared = Number(request.headers["content-length"] ?? 0);
-    if (!Number.isInteger(declared) || declared <= 0 || declared > BODY_LIMIT) {
-      request.resume();
-      resolve(null);
-      return;
-    }
-    const chunks = [];
-    let size = 0;
-    let settled = false;
-    const finish = (value) => {
-      if (!settled) {
-        settled = true;
-        resolve(value);
-      }
-    };
-    request.on("data", (chunk) => {
-      size += chunk.length;
-      if (size > BODY_LIMIT) {
-        request.destroy();
-        finish(null);
-      } else {
-        chunks.push(chunk);
-      }
-    });
-    request.on("end", () => {
-      if (settled || size !== declared) return finish(null);
-      try {
-        const value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-        finish(value && typeof value === "object" && !Array.isArray(value) ? value : null);
-      } catch {
-        finish(null);
-      }
-    });
-    request.on("error", () => finish(null));
-  });
-}
-
 const HOME = `<!doctype html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>Origin Guardian</title><style>
@@ -98,14 +59,15 @@ code{color:#ffd27a}.muted{color:#a9bec9}
 <script src="/app.js"></script></body></html>`;
 
 const APP = `const byId=(id)=>document.getElementById(id);
-async function call(path,body){const r=await fetch(path,{method:body?"POST":"GET",headers:body?{"content-type":"application/json"}:{},body:body?JSON.stringify(body):undefined});const value=await r.json();if(!r.ok)throw new Error(value.error||String(r.status));return value}
+const verifierOrigin=location.hostname==="localhost"?"http://localhost:18111":"http://127.0.0.1:18111";
+async function call(origin,path,body){const r=await fetch(origin+path,{method:body?"POST":"GET",headers:body?{"content-type":"application/json"}:{},body:body?JSON.stringify(body):undefined});const value=await r.json();if(!r.ok)throw new Error(value.error||String(r.status));return value}
 function policy(){try{return JSON.parse(byId("policy").value)}catch{return null}}
-byId("inspect").onclick=async()=>{try{byId("observation").textContent=JSON.stringify(await call("/api/inspect"),null,2)}catch(error){byId("observation").textContent=String(error)}};
-byId("test").onclick=async()=>{try{byId("result").textContent=JSON.stringify(await call("/api/test",{policy:policy()}),null,2)}catch(error){byId("result").textContent=String(error)}};
-byId("prepare").onclick=async()=>{try{const r=await call("/api/prepare",{policy:policy()});byId("result").textContent=JSON.stringify(r.report,null,2);byId("submission").textContent=r.submission||"公開ケースをすべて通してください。"}catch(error){byId("result").textContent=String(error)}};
+byId("inspect").onclick=async()=>{try{byId("observation").textContent=JSON.stringify(await call("","/api/inspect"),null,2)}catch(error){byId("observation").textContent=String(error)}};
+byId("test").onclick=async()=>{try{byId("result").textContent=JSON.stringify(await call(verifierOrigin,"/public-test",{policy:policy()}),null,2)}catch(error){byId("result").textContent=String(error)}};
+byId("prepare").onclick=async()=>{try{const r=await call(verifierOrigin,"/prepare",{policy:policy()});byId("result").textContent=JSON.stringify(r.report,null,2);byId("submission").textContent=r.submission||"公開ケースをすべて通してください。"}catch(error){byId("result").textContent=String(error)}};
 `;
 
-const server = createServer(async (request, response) => {
+const server = createServer({ maxHeaderSize: HEADER_LIMIT }, (request, response) => {
   const url = requestUrl(request.url);
   if (request.method === "GET" && url.pathname === "/healthz") {
     return sendJson(response, 200, { status: "ok" });
@@ -126,16 +88,6 @@ const server = createServer(async (request, response) => {
         explanation: "both values came from the same untrusted request",
       },
     });
-  }
-  if (request.method === "POST" && ["/api/test", "/api/prepare"].includes(url.pathname)) {
-    const body = await readJson(request);
-    if (!body) return sendJson(response, 400, { error: "invalid_json" });
-    const report = runPublicCases(body.policy);
-    const payload = { report };
-    if (url.pathname === "/api/prepare" && report.correct) {
-      payload.submission = encodeSubmission(body.policy);
-    }
-    return sendJson(response, 200, payload);
   }
 
   if (request.method === "GET" && url.pathname === "/.well-known/oauth-protected-resource") {
