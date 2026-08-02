@@ -95,23 +95,16 @@ relabelled  同じ bytes、別の imageId                                 -> 同
 `restamped` だけが恣意的に見えます。proving system が実際にそうしているのと同じに倒します
 ——**観測可能な変化が無いことは、監査の対象であって入力ではない**ので、再ビルドは別の image です。
 
-## 遊び方
+## ブラウザでの進め方
 
-```bash
-make inspect          # statement・machine・image と 4 つの兄弟
-make test             # 公開テスト
-make reset            # starter/ を戻す
-```
+1. Participant Portal で問題を起動し、**Browser Workbench** を開く。
+2. `inspect` でこの deploy 固有の fixture と公開された証拠を読む。
+3. 画面内のエディタで starter のソースを編集する。
+4. `test` で公開テストを実行し、直接回答欄があれば証拠から埋める。
+5. `prepare` で全 checkpoint の提出値を作り、Participant Portal へ貼る。
 
-編集するのは `local/starter/guest.py` の 1 ファイルだけです。
-
-`make inspect` が出すのは対象であって判定ではありません。4 兄弟のどれが同じ program か、どの
-receipt を受理してよいか、どの run が witness を漏らしたかは checkpoint なので出しません。
-唯一答えているのが衝突で、それは演習ではなく前提だからです。
-
-幅は 7・9・10・11・12・13 から引かれ——8・16・32・64 は意図的に外してあります——checkpoint ごとに
-変わります。statement が名指す桁溢れ挙動も同じです。`0xFFFF` を書き込んだ guest は序盤を通って
-`transfer` で落ちます。
+checkout、ターミナル、ローカルエディタは不要です。code checkpoint は編集したソースを提出します。
+直接回答は `prepare` が現在の deploy seed へ結び付けるため、別 deploy からコピーした値は拒否されます。
 
 ## 採点
 

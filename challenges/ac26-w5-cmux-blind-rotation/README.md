@@ -68,16 +68,17 @@ is exactly that test, and it proves nothing.
 So the hidden tests compare against a model that computes the rotation in the clear from the
 phase and calls none of your functions.
 
-## How to play
+## Browser workflow
 
-```bash
-make inspect            # a full turn of rotations, one CMUX, every blind-rotation step
-make inspect CASE=0     # the same with a key encrypting all zeroes
-make test               # public tests
-make reset              # restore starter/cmux.py
-```
+1. Start the problem in Participant Portal and open **Browser Workbench**.
+2. Run `inspect` to read this deployment's fixture and published evidence.
+3. Edit the starter source in the in-browser editor.
+4. Run `test` for the published checks and fill any direct-answer fields from the evidence.
+5. Run `prepare`, then paste every prepared checkpoint value into Participant Portal.
 
-You edit one file, `local/starter/cmux.py`.
+No checkout, terminal, or local editor is required. Code checkpoints submit the edited source.
+Direct answers are wrapped by `prepare` and bound to the current deployment seed, so a value copied
+from another deployment is rejected.
 
 ## Scoring
 

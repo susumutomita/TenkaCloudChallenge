@@ -49,21 +49,17 @@ the arithmetic. Once the lesson is *who may read what*, a share cannot stay an i
 The runtime you are handed has `party_scope`, `value_of`, `add`, `mul_public`, `zero`,
 `events()`, `violations()`, `ancestry()` and `issued()`. It does not have `reconstruct`.
 
-## How to play
+## Browser workflow
 
-```bash
-make inspect            # your setting, your row, and what an event looks like
-make inspect S=sparse   # dense, sparse, signed, unit
-make test               # public tests
-make reset              # restore starter/
-```
+1. Start the problem in Participant Portal and open **Browser Workbench**.
+2. Run `inspect` to read this deployment's fixture and published evidence.
+3. Edit the starter source in the in-browser editor.
+4. Run `test` for the published checks and fill any direct-answer fields from the evidence.
+5. Run `prepare`, then paste every prepared checkpoint value into Participant Portal.
 
-You edit one file, `local/starter/prover.py`.
-
-The default `dense` run is the **least** informative one. With every coefficient non-zero, an
-implementation that indexes the witness by `j` and one that walks the non-zero coefficients in
-order agree. `sparse` is where they part company; `signed` is where a coefficient that is not
-the field's canonical representative becomes visible.
+No checkout, terminal, or local editor is required. Code checkpoints submit the edited source.
+Direct answers are wrapped by `prepare` and bound to the current deployment seed, so a value copied
+from another deployment is rejected.
 
 ## Scoring
 

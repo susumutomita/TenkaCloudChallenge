@@ -17,24 +17,16 @@ primitive の名前は 1 つも書いてありません。
 それがこの問題です。「ZK にするか MPC にするか」から設計を始めれば、その質問には答えが出ます。出た
 答えが問題に合っているかどうかは別の話で、たいていは手遅れになってから訊かれます。
 
-## 何を書くか
+## ブラウザでの進め方
 
-設計を、コードとして書きます。`local/starter/design.py` の 8 つの関数は、いずれも目の前の brief から
-答えを導きます。
+1. Participant Portal で問題を起動し、**Browser Workbench** を開く。
+2. `inspect` でこの deploy 固有の fixture と公開された証拠を読む。
+3. 画面内のエディタで starter のソースを編集する。
+4. `test` で公開テストを実行し、直接回答欄があれば証拠から埋める。
+5. `prepare` で全 checkpoint の提出値を作り、Participant Portal へ貼る。
 
-```text
-classify_assets       誰の何で、どこまで隠すのか
-required_properties   6 つの性質のうち、この brief が実際に要求するもの
-compare_alternatives  選択肢すべて -- 使わない場合も含めて
-select_primitive      brief が必要とした分だけ
-architecture          typed data-flow graph: 何がどの境界を、どの形で越えるか
-attack_plan           どう壊れるかを、観測できる形で
-property_matrix       各性質を担う component と、その根拠
-revise                前提が動いた brief に対して、上を全部もう一度
-```
-
-設計を散文で書くと検査できません。検査できない設計文書があるから、privacy が「それを提供しない
-component」に委ねられたまま完成します。コードで書けば、同じ設計にテストが越えられる境界ができます。
+checkout、ターミナル、ローカルエディタは不要です。code checkpoint は編集したソースを提出します。
+直接回答は `prepare` が現在の deploy seed へ結び付けるため、別 deploy からコピーした値は拒否されます。
 
 ## checkpoint が本当に見ているもの 3 つ
 
@@ -54,12 +46,12 @@ public input を隠しません。component に責任を持たせる前に `PRIM
 ## 遊び方
 
 ```bash
-make inspect            # 自分の brief と、前提が 1 つ動いた同じ brief
-make test               # public tests
-make reset              # starter/design.py を戻す
+Workbench の `inspect`            # 自分の brief と、前提が 1 つ動いた同じ brief
+Browser Workbench の `test`               # public tests
+starter の再読み込み              # starter/design.py を戻す
 ```
 
-編集するのは `local/starter/design.py` の 1 ファイルだけです。
+編集するのは Workbench のエディタ (`design.py`) の 1 ファイルだけです。
 
 ## 採点
 
@@ -145,7 +137,7 @@ mutation を 1 つ、baseline に足さずに削除しました。選択肢が 6
   `python3` を直接呼ぶので、死んだ pin はすべての検査を通過します。
 - **verifier がコンテナ自身の loopback に bind していた。** publish された port はコンテナの bridge
   アドレスへ転送されるので、`HTTPServer(("127.0.0.1", port))` はコンテナ外からの接続を受けません。
-  すべての要求が応答なしで閉じられ、どの checkpoint も採点できません。本来効かせたいホスト側の
+  すべての要求が応答なしで閉じられ、どの checkpoint も採点できません。本来効かせたいWorkbenchの
   loopback 制限は `docker-compose.yml` にあり、こちらは影響を受けません。
 
 後者のほうが教訓的です。テストは `evaluate()` を直接呼び socket を越えないので、CI ではすべての

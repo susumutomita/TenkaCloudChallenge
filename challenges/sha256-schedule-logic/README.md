@@ -39,30 +39,17 @@ Your fixtures come from `FLAG_SEED`, injected fresh at deploy. Same seed, same n
 session is reproducible and debuggable. Different seed, different numbers, so a value copied from
 someone else's run is worthless.
 
-## How to play
+## Browser workflow
 
-```bash
-make inspect                 # your fixtures, in hex AND in bits
-make test                    # the public tests
-make test-one ID=rotation    # re-run one public test while you iterate
-make reset                   # restore starter/schedule.py
-```
+1. Start the problem in Participant Portal and open **Browser Workbench**.
+2. Run `inspect` to read this deployment's fixture and published evidence.
+3. Edit the starter source in the in-browser editor.
+4. Run `test` for the published checks and fill any direct-answer fields from the evidence.
+5. Run `prepare`, then paste every prepared checkpoint value into Participant Portal.
 
-Read the bit rows `make inspect` prints. This problem is about bit positions: the difference
-between a rotation and a shift is invisible in two hex strings and obvious in two bit rows.
-
-Then open `local/starter/schedule.py`:
-
-| function | must be |
-|---|---|
-| `rotr(value, amount)` | rotate right, no bit lost, result inside 32 bits |
-| `small_sigma0` | ROTR^7 xor ROTR^18 xor **SHR**^3 |
-| `small_sigma1` | ROTR^17 xor ROTR^19 xor **SHR**^10 |
-| `big_sigma0` | ROTR^2 xor ROTR^13 xor ROTR^22 |
-| `big_sigma1` | ROTR^6 xor ROTR^11 xor ROTR^25 |
-| `choose(e, f, g)` | `(e & f) ^ (~e & g)` — a bitwise multiplexer |
-| `majority(a, b, c)` | `(a & b) ^ (a & c) ^ (b & c)` — a per-bit majority |
-| `expand_schedule(words)` | 16 words in, 64 out, terms **added** mod 2^32 |
+No checkout, terminal, or local editor is required. Code checkpoints submit the edited source.
+Direct answers are wrapped by `prepare` and bound to the current deployment seed, so a value copied
+from another deployment is rejected.
 
 ## Scoring
 

@@ -31,16 +31,16 @@ def non_invertible_element(modulus) -> int
 
 異なる法の元同士は、黙って演算されてはいけません。
 
-## 遊び方
+## ブラウザでの進め方
 
-```bash
-make inspect              # 自分の法と、1 つの trace
-make inspect A=17 P=101   # 任意の組の trace
-make test                 # 公開テスト
-make reset                # starter/field.py を元に戻す
-```
+1. Participant Portal で問題を起動し、**Browser Workbench** を開く。
+2. `inspect` でこの deploy 固有の fixture と公開された証拠を読む。
+3. 画面内のエディタで starter のソースを編集する。
+4. `test` で公開テストを実行し、直接回答欄があれば証拠から埋める。
+5. `prepare` で全 checkpoint の提出値を作り、Participant Portal へ貼る。
 
-編集するのは `local/starter/field.py` の 1 ファイルです。
+checkout、ターミナル、ローカルエディタは不要です。code checkpoint は編集したソースを提出します。
+直接回答は `prepare` が現在の deploy seed へ結び付けるため、別 deploy からコピーした値は拒否されます。
 
 ## 採点
 
@@ -85,7 +85,7 @@ trace checkpoint は当初、各行が `a*s + p*t = r` を満たすことと、�
 
 ## trace は constant-time ではありません
 
-`make inspect` が出す trace は入力に依存して分岐し、step 数も入力で変わります。実際の鍵を扱うコード
+Workbench の `inspect` が出す trace は入力に依存して分岐し、step 数も入力で変わります。実際の鍵を扱うコード
 では、その性質そのものが side-channel です。これはアルゴリズムを読むためのものであり、production
 実装の手本ではありません。
 

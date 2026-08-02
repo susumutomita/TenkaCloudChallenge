@@ -65,15 +65,16 @@ input boundary が 1 つ壊れると、opening も transcript も verifier も�
 ただし verdict を倒すことが**正解の修復**である fault が 1 つだけあります。それがどれかを見つけ、
 なぜ例外なのかを説明できることが、この checkpoint の大部分です。
 
-## 遊び方
+## ブラウザでの進め方
 
-```bash
-make inspect            # 2 つの pipeline、正常な run、壊れた run、そして claim 一覧
-make test               # public test
-make reset              # starter/pipeline.py を元に戻す
-```
+1. Participant Portal で問題を起動し、**Browser Workbench** を開く。
+2. `inspect` でこの deploy 固有の fixture と公開された証拠を読む。
+3. 画面内のエディタで starter のソースを編集する。
+4. `test` で公開テストを実行し、直接回答欄があれば証拠から埋める。
+5. `prepare` で全 checkpoint の提出値を作り、Participant Portal へ貼る。
 
-編集するファイルは `local/starter/pipeline.py` の 1 つだけです。
+checkout、ターミナル、ローカルエディタは不要です。code checkpoint は編集したソースを提出します。
+直接回答は `prepare` が現在の deploy seed へ結び付けるため、別 deploy からコピーした値は拒否されます。
 
 ## 採点
 
@@ -94,7 +95,7 @@ make reset              # starter/pipeline.py を元に戻す
 
 ## claim は何のためにあるか
 
-`make inspect` が出す 8 つの claim のうち 4 つが支持されません。どれも恣意的な誤りではなく、
+Workbench の `inspect` が出す 8 つの claim のうち 4 つが支持されません。どれも恣意的な誤りではなく、
 名前の付いた誤解に対応しています。
 
 - 「A は succinct だから prover が速い」 — proof size と prover コストは別の軸。

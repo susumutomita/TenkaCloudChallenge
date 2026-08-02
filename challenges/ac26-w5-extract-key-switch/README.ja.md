@@ -62,16 +62,16 @@ public test は 4 つとも最後の係数を使っています。意図的で�
 hidden test は全 index を回し、しかも extraction を mask ではなく phase で採点するので、
 数を保つならば vector の作り方は自由です。
 
-## 遊び方
+## ブラウザでの進め方
 
-```bash
-make inspect            # 係数 0 での extraction の対応表、分解、switch
-make inspect INDEX=3    # 上の係数で同じもの。index が上がるほど `sign` の列が空になる
-make test               # public test
-make reset              # starter/extract.py を元に戻す
-```
+1. Participant Portal で問題を起動し、**Browser Workbench** を開く。
+2. `inspect` でこの deploy 固有の fixture と公開された証拠を読む。
+3. 画面内のエディタで starter のソースを編集する。
+4. `test` で公開テストを実行し、直接回答欄があれば証拠から埋める。
+5. `prepare` で全 checkpoint の提出値を作り、Participant Portal へ貼る。
 
-編集するファイルは `local/starter/extract.py` の 1 つだけです。
+checkout、ターミナル、ローカルエディタは不要です。code checkpoint は編集したソースを提出します。
+直接回答は `prepare` が現在の deploy seed へ結び付けるため、別 deploy からコピーした値は拒否されます。
 
 ## 採点
 

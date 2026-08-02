@@ -84,31 +84,28 @@ noise に復号されます。
 
 trace を digest で照合するのも同じ理由です。digest は最終ビットから逆算できません。
 
-## identity table は何も見せず、定数関数がすべてを見せる
+## ブラウザでの進め方
 
-負号は「どの関数が面白いか」を反転させます。table の両半分は `encode(f(1))` と
-`encode(1 - f(0))` なので、両者が一致するのは `f(0) + f(1) = 1` のとき — つまり
-`identity` と `negate`、2 つの**全単射**です。この 2 つの accumulator は全係数が同じ値、
-つまり定数になります。
+1. Participant Portal で問題を起動し、**Browser Workbench** を開く。
+2. `inspect` でこの deploy 固有の fixture と公開された証拠を読む。
+3. 画面内のエディタで starter のソースを編集する。
+4. `test` で公開テストを実行し、直接回答欄があれば証拠から埋める。
+5. `prepare` で全 checkpoint の提出値を作り、Participant Portal へ貼る。
 
-定数多項式は rotation がどこに着地したかを区別できないので、半分の入れ替えも、取り出す
-係数の間違いも、丸めではなく切り捨ても、すべて通ります。public test が全部 identity なのは
-それを見せるためです。
-
-2 値の table を持つのは `always-zero` と `always-one`、2 つの**定数関数**のほうです。
-まず `make inspect F=always-one` を走らせる価値があります。
+checkout、ターミナル、ローカルエディタは不要です。code checkpoint は編集したソースを提出します。
+直接回答は `prepare` が現在の deploy seed へ結び付けるため、別 deploy からコピーした値は拒否されます。
 
 ## 遊びかた
 
 ```bash
-make inspect                     # identity, m = 1 — いちばん情報の少ない実行
-make inspect F=always-one        # identity, negate, always-zero, always-one
-make inspect F=always-one M=0    # 巻き戻りが効く側の message
-make test                    # public tests
-make reset                   # starter/pipeline.py を戻す
+Workbench の `inspect`                     # identity, m = 1 — いちばん情報の少ない実行
+Workbench の `inspect` F=always-one        # identity, negate, always-zero, always-one
+Workbench の `inspect` F=always-one M=0    # 巻き戻りが効く側の message
+Browser Workbench の `test`                    # public tests
+starter の再読み込み                   # starter/pipeline.py を戻す
 ```
 
-編集するのは `local/starter/pipeline.py` の 1 ファイルだけです。
+編集するのは Workbench のエディタ (`pipeline.py`) の 1 ファイルだけです。
 
 ## 採点
 

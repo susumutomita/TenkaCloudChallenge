@@ -18,25 +18,17 @@ It names no primitive. Not one.
 That is the exercise. Begin a design at "should this be ZK or MPC" and you will get an answer;
 whether the answer fits the problem is a separate question, usually asked too late.
 
-## What you write
+## Browser workflow
 
-A design, as code. Eight functions in `local/starter/design.py`, each deriving its answer from
-the brief in front of it:
+1. Start the problem in Participant Portal and open **Browser Workbench**.
+2. Run `inspect` to read this deployment's fixture and published evidence.
+3. Edit the starter source in the in-browser editor.
+4. Run `test` for the published checks and fill any direct-answer fields from the evidence.
+5. Run `prepare`, then paste every prepared checkpoint value into Participant Portal.
 
-```text
-classify_assets       who owns what, and how far it is hidden
-required_properties   which of the six properties this brief actually asks for
-compare_alternatives  every option -- including using none of them
-select_primitive      exactly as much as the brief needs
-architecture          a typed data-flow graph: what crosses which boundary, in what form
-attack_plan           how it breaks, in a form you could observe
-property_matrix       which component carries each property, and the evidence
-revise                all of the above again, for a brief whose facts have moved
-```
-
-Design written as prose is un-checkable, and un-checkable design documents are how "privacy"
-ends up delegated to a component that does not provide it. Written as code, the same design has
-a boundary a test can cross.
+No checkout, terminal, or local editor is required. Code checkpoints submit the edited source.
+Direct answers are wrapped by `prepare` and bound to the current deployment seed, so a value copied
+from another deployment is rejected.
 
 ## Three things the checkpoints turn on
 
@@ -58,12 +50,12 @@ before making a component responsible for something.
 ## How to play
 
 ```bash
-make inspect            # your brief, and the same brief after one fact moves
-make test               # public tests
-make reset              # restore starter/design.py
+Workbench `inspect`            # your brief, and the same brief after one fact moves
+Browser Workbench `test`               # public tests
+reload the starter              # restore starter/design.py
 ```
 
-You edit one file, `local/starter/design.py`.
+You edit one file, the Workbench editor (`design.py`).
 
 ## Scoring
 
@@ -153,7 +145,7 @@ this one. This problem carries the fix; the others still need it.
 - **The verifier bound the container's own loopback.** A published port is forwarded to the
   container's bridge address, so `HTTPServer(("127.0.0.1", port))` accepts nothing from
   outside the container: every request is opened and closed with no response, and no
-  checkpoint can score. The host-side loopback restriction that matters lives in
+  checkpoint can score. The Workbench loopback restriction that matters lives in
   `docker-compose.yml`, and is unaffected.
 
 The second one is the more instructive failure. Every checkpoint passed in CI, because the

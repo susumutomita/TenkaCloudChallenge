@@ -56,21 +56,16 @@ operand の id だけで、**値は記録しません**。記録は transcript �
 specimen の id は不透明で、2 つは capability をそれを綴らない名前で呼び出します。
 `grep("reconstruct")` は何も見つけません。capability の記録は見つけます。
 
-## 遊び方
+## ブラウザでの進め方
 
-```bash
-make inspect            # 設定・行・policy・何も漏らさない 1 回の記録
-make inspect S=sparse   # dense / sparse / signed / unit
-make inspect P=S3       # 指定した specimen を 1 回走らせ、残したものを全部印字する
-make test               # 公開テスト
-make reset              # starter/ を元に戻す
-```
+1. Participant Portal で問題を起動し、**Browser Workbench** を開く。
+2. `inspect` でこの deploy 固有の fixture と公開された証拠を読む。
+3. 画面内のエディタで starter のソースを編集する。
+4. `test` で公開テストを実行し、直接回答欄があれば証拠から埋める。
+5. `prepare` で全 checkpoint の提出値を作り、Participant Portal へ貼る。
 
-編集するのは `local/starter/prover.py` 1 ファイルです。
-
-既定の `make inspect` は specimen を 1 つも走らせません。支給された `beaver_product` と
-`clean_artifact` を並べただけの、何も漏らさない prover を 1 回動かして記録の形を見せます。8 つに
-ついては何も明かさずに、証拠の見た目だけが分かります。
+checkout、ターミナル、ローカルエディタは不要です。code checkpoint は編集したソースを提出します。
+直接回答は `prepare` が現在の deploy seed へ結び付けるため、別 deploy からコピーした値は拒否されます。
 
 ## 採点
 

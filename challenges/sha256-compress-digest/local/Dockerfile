@@ -8,6 +8,7 @@ COPY given/ ./given/
 COPY fixtures/ ./fixtures/
 COPY tests/ ./tests/
 COPY verifier/ ./verifier/
+COPY workbench/ ./workbench/
 COPY starter/ ./starter/
 COPY show.py ./show.py
 

@@ -56,20 +56,17 @@ implementation samples both, and reusing a mask across two encryptions under one
 break: subtract the two ciphertexts and the mask term cancels, leaving the difference of
 the two plaintexts plus a little noise.
 
-## How to play
+## Browser workflow
 
-```bash
-make inspect                 # the ring, an LWE trace, an RLWE trace, the boundary samples
-make inspect MODE=lwe        # one scheme at a time
-make inspect MODE=rlwe
-make test                    # public tests
-make reset                   # restore starter/lwe.py
-```
+1. Start the problem in Participant Portal and open **Browser Workbench**.
+2. Run `inspect` to read this deployment's fixture and published evidence.
+3. Edit the starter source in the in-browser editor.
+4. Run `test` for the published checks and fill any direct-answer fields from the evidence.
+5. Run `prepare`, then paste every prepared checkpoint value into Participant Portal.
 
-The secret is not printed. Neither trace needs it, and a trace that shows the key teaches
-the wrong reflex; `MODE=debug` opts in explicitly.
-
-You edit one file, `local/starter/lwe.py`.
+No checkout, terminal, or local editor is required. Code checkpoints submit the edited source.
+Direct answers are wrapped by `prepare` and bound to the current deployment seed, so a value copied
+from another deployment is rejected.
 
 ## Scoring
 

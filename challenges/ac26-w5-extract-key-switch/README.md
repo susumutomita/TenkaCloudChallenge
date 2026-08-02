@@ -63,16 +63,17 @@ All four public tests use the last coefficient, on purpose, and say so. The hidd
 every index — and grade extraction on the phase rather than on the mask, so the vector can be
 built any way that preserves the number.
 
-## How to play
+## Browser workflow
 
-```bash
-make inspect            # coefficient 0: the extraction mapping, the decomposition, the switch
-make inspect INDEX=3    # the same higher up — the `sign` column empties out as the index rises
-make test               # public tests
-make reset              # restore starter/extract.py
-```
+1. Start the problem in Participant Portal and open **Browser Workbench**.
+2. Run `inspect` to read this deployment's fixture and published evidence.
+3. Edit the starter source in the in-browser editor.
+4. Run `test` for the published checks and fill any direct-answer fields from the evidence.
+5. Run `prepare`, then paste every prepared checkpoint value into Participant Portal.
 
-You edit one file, `local/starter/extract.py`.
+No checkout, terminal, or local editor is required. Code checkpoints submit the edited source.
+Direct answers are wrapped by `prepare` and bound to the current deployment seed, so a value copied
+from another deployment is rejected.
 
 ## Scoring
 

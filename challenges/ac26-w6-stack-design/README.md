@@ -90,20 +90,17 @@ way to consume. It is there to say in one deployment that a contract is not a su
 design review — which is why the repair checkpoint asks for two things separately, every
 contract holding *and* every component able to run what it was handed.
 
-## How to play
+## Browser workflow
 
-```bash
-make inspect          # the three architectures, their contracts, and what they promised
-make test             # public tests
-make reset            # restore starter/
-```
+1. Start the problem in Participant Portal and open **Browser Workbench**.
+2. Run `inspect` to read this deployment's fixture and published evidence.
+3. Edit the starter source in the in-browser editor.
+4. Run `test` for the published checks and fill any direct-answer fields from the evidence.
+5. Run `prepare`, then paste every prepared checkpoint value into Participant Portal.
 
-You edit one file, `local/starter/stack.py`.
-
-`make inspect` prints the objects and not the verdicts. Which contract each deployment breaks,
-where it broke first, what a repair costs, and which primitives a brief needs are the
-checkpoints, so none of them is printed. The one thing it does answer is that all three
-architectures are sound to begin with, because that is the premise rather than the exercise.
+No checkout, terminal, or local editor is required. Code checkpoints submit the edited source.
+Direct answers are wrapped by `prepare` and bound to the current deployment seed, so a value copied
+from another deployment is rejected.
 
 ## Scoring
 

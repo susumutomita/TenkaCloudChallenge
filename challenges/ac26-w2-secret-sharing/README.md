@@ -24,16 +24,17 @@ Additive sharing over `F_p`: a secret `s` becomes `n` values summing to `s`. The
 three lines. What makes it cryptography is that **any n-1 of those values are independent of the
 secret** — and that is a claim you demonstrate, not one you assert.
 
-## How to play
+## Browser workflow
 
-```bash
-make inspect            # your setting, and what n-1 parties see between them
-make test               # public tests
-make reset              # restore starter/sharing.py
-```
+1. Start the problem in Participant Portal and open **Browser Workbench**.
+2. Run `inspect` to read this deployment's fixture and published evidence.
+3. Edit the starter source in the in-browser editor.
+4. Run `test` for the published checks and fill any direct-answer fields from the evidence.
+5. Run `prepare`, then paste every prepared checkpoint value into Participant Portal.
 
-You edit one file, `local/starter/sharing.py`: `share()` · `reconstruct()` ·
-`complete_shares()` · `rerandomize()`.
+No checkout, terminal, or local editor is required. Code checkpoints submit the edited source.
+Direct answers are wrapped by `prepare` and bound to the current deployment seed, so a value copied
+from another deployment is rejected.
 
 ## Scoring
 

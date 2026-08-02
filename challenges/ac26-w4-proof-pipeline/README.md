@@ -68,15 +68,17 @@ out the two shortcuts that would otherwise pass everything —
 There is one fault for which flipping the verdict *is* the repair. Finding which, and
 being able to say why it is the exception, is most of the checkpoint.
 
-## How to play
+## Browser workflow
 
-```bash
-make inspect            # both pipelines, one honest run, one broken run, the claims
-make test               # public tests
-make reset              # restore starter/pipeline.py
-```
+1. Start the problem in Participant Portal and open **Browser Workbench**.
+2. Run `inspect` to read this deployment's fixture and published evidence.
+3. Edit the starter source in the in-browser editor.
+4. Run `test` for the published checks and fill any direct-answer fields from the evidence.
+5. Run `prepare`, then paste every prepared checkpoint value into Participant Portal.
 
-You edit one file, `local/starter/pipeline.py`.
+No checkout, terminal, or local editor is required. Code checkpoints submit the edited source.
+Direct answers are wrapped by `prepare` and bound to the current deployment seed, so a value copied
+from another deployment is rejected.
 
 ## Scoring
 
@@ -97,7 +99,7 @@ Hints on five of the eight, each inside that checkpoint's 50% cap.
 
 ## What the claims are for
 
-Four of the eight claims in `make inspect` are unsupported, and each one is a named
+Four of the eight claims in Workbench `inspect` are unsupported, and each one is a named
 misconception rather than an arbitrary wrong answer:
 
 - *A is succinct, so A's prover is fast* — proof size and prover cost are different axes.

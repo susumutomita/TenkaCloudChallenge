@@ -40,22 +40,16 @@ fixture は deploy 時に注入される `FLAG_SEED` から導出されます。
 セッションは再現でき、デバッグできます。seed が違えば数値も変わるので、他の人の実行結果から写した値は
 役に立ちません。
 
-## 遊び方
+## ブラウザでの進め方
 
-```bash
-make inspect                  # 自分の文字列・長さ・ブロック・衝突させる対象
-make test                     # 公開テスト
-make test-one ID=length       # 反復中に 1 つのテストだけ再実行する
-make reset                    # starter/padding.py を元に戻す
-```
+1. Participant Portal で問題を起動し、**Browser Workbench** を開く。
+2. `inspect` でこの deploy 固有の fixture と公開された証拠を読む。
+3. 画面内のエディタで starter のソースを編集する。
+4. `test` で公開テストを実行し、直接回答欄があれば証拠から埋める。
+5. `prepare` で全 checkpoint の提出値を作り、Participant Portal へ貼る。
 
-`local/starter/padding.py` を開きます。関数は 2 つで、どちらも意図的に壊してあります。
-
-- `pad_message(message)` は、メッセージを 64 バイトの倍数へ揃えて返します。1 bit を 1 個
-  (バイト境界では `0x80` そのもの)、続いて 0 を必要な数だけ、最後に**元の**メッセージ長を**ビット
-  単位**で 8 バイトの big-endian 整数として置きます。`b""` を含むどんな入力でも空にはなりません。
-- `block_words(block)` は、64 バイトブロックを 32 bit ワード 16 個として、最上位バイトから読みます。
-  バイト列 `61 62 63 80` は `0x61626380` になります。
+checkout、ターミナル、ローカルエディタは不要です。code checkpoint は編集したソースを提出します。
+直接回答は `prepare` が現在の deploy seed へ結び付けるため、別 deploy からコピーした値は拒否されます。
 
 ## 採点
 
@@ -63,7 +57,7 @@ make reset                    # starter/padding.py を元に戻す
 
 | Checkpoint | 配点 | 提出するもの |
 |---|---:|---|
-| `byte-length` | 10 | `make inspect` が出す文字列が何**バイト**か |
+| `byte-length` | 10 | Workbench の `inspect` が出す文字列が何**バイト**か |
 | `padded-length` | 15 | パディング後の長さ 6 つをカンマ区切りで。走らせる**前**に求める |
 | `length-field` | 15 | あるメッセージ長に対する末尾 8 バイトを hex 16 文字で |
 | `pad` | 25 | 自分の `padding.py`。見たことのない長さで検証される |
@@ -78,7 +72,7 @@ hint は `byte-length` 以外の全 checkpoint にあります。すべて開い
 
 ## 一度は間違えておきたい 4 箇所
 
-**文字とバイトは別物。** `make inspect` が出す文字列にはマルチバイト文字が混ざっているので、文字数と
+**文字とバイトは別物。** Workbench の `inspect` が出す文字列にはマルチバイト文字が混ざっているので、文字数と
 バイト数が食い違います。SHA-256 が見るのはバイトだけです。ASCII だけで動作確認したコードは、この 2 つ
 が偶然一致する範囲しか試していません。
 

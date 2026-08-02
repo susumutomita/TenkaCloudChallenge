@@ -32,16 +32,17 @@ def non_invertible_element(modulus) -> int
 
 Elements of two different moduli never combine silently.
 
-## How to play
+## Browser workflow
 
-```bash
-make inspect              # your moduli, and a worked trace
-make inspect A=17 P=101   # a trace for any pair you like
-make test                 # public tests
-make reset                # restore starter/field.py
-```
+1. Start the problem in Participant Portal and open **Browser Workbench**.
+2. Run `inspect` to read this deployment's fixture and published evidence.
+3. Edit the starter source in the in-browser editor.
+4. Run `test` for the published checks and fill any direct-answer fields from the evidence.
+5. Run `prepare`, then paste every prepared checkpoint value into Participant Portal.
 
-You edit one file, `local/starter/field.py`.
+No checkout, terminal, or local editor is required. Code checkpoints submit the edited source.
+Direct answers are wrapped by `prepare` and bound to the current deployment seed, so a value copied
+from another deployment is rejected.
 
 ## Scoring
 
@@ -88,7 +89,7 @@ non-zero elements: in a field the inverse is unique, and two elements never shar
 
 ## The trace is not constant-time
 
-The trace `make inspect` prints branches on its inputs, and its step count depends on them. In
+The trace Workbench `inspect` prints branches on its inputs, and its step count depends on them. In
 code handling a real key that property is itself a side channel. It is here to make the algorithm
 legible, not as a model for production.
 

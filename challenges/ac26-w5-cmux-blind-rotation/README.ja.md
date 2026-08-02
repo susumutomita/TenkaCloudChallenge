@@ -67,16 +67,16 @@ LWE sample は `Z_(2N)` 上の `(mask, body)` で、すでに指数の法の中�
 そこで hidden test は、 phase から平文で回転を計算したモデルと比較します。
 そのモデルはあなたの関数を 1 つも呼びません。
 
-## 遊び方
+## ブラウザでの進め方
 
-```bash
-make inspect            # 回転を 1 周、 CMUX 1 回、 blind rotation の全ステップ
-make inspect CASE=0     # 鍵がすべてゼロを暗号化している場合
-make test               # public test
-make reset              # starter/cmux.py を元に戻す
-```
+1. Participant Portal で問題を起動し、**Browser Workbench** を開く。
+2. `inspect` でこの deploy 固有の fixture と公開された証拠を読む。
+3. 画面内のエディタで starter のソースを編集する。
+4. `test` で公開テストを実行し、直接回答欄があれば証拠から埋める。
+5. `prepare` で全 checkpoint の提出値を作り、Participant Portal へ貼る。
 
-編集するファイルは `local/starter/cmux.py` の 1 つだけです。
+checkout、ターミナル、ローカルエディタは不要です。code checkpoint は編集したソースを提出します。
+直接回答は `prepare` が現在の deploy seed へ結び付けるため、別 deploy からコピーした値は拒否されます。
 
 ## 採点
 

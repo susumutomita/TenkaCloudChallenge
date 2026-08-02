@@ -33,15 +33,16 @@ boundary を落とすと、系は同じ機械を**別の初期状態から**走�
 `underconstrained` checkpoint で構成するのが、まさにその trace です。「制約を 1 本落とす」の具体的な
 意味がこれです。
 
-## 遊び方
+## ブラウザでの進め方
 
-```bash
-make inspect            # 機械、trace、各行の domain 点
-make test               # 公開テスト
-make reset              # starter/air.py を元に戻す
-```
+1. Participant Portal で問題を起動し、**Browser Workbench** を開く。
+2. `inspect` でこの deploy 固有の fixture と公開された証拠を読む。
+3. 画面内のエディタで starter のソースを編集する。
+4. `test` で公開テストを実行し、直接回答欄があれば証拠から埋める。
+5. `prepare` で全 checkpoint の提出値を作り、Participant Portal へ貼る。
 
-編集するのは `local/starter/air.py` の 1 ファイルです。
+checkout、ターミナル、ローカルエディタは不要です。code checkpoint は編集したソースを提出します。
+直接回答は `prepare` が現在の deploy seed へ結び付けるため、別 deploy からコピーした値は拒否されます。
 
 ## 採点
 

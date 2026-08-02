@@ -93,31 +93,29 @@ way the noise fell, which is the worst kind of defect and is described further d
 The trace is matched by artifact digest for the same reason: a digest cannot be filled in
 from the final answer.
 
-## The identity table shows you nothing, and the constant functions show you everything
+## Browser workflow
 
-The negation inverts which functions are interesting. The table's halves are `encode(f(1))`
-and `encode(1 - f(0))`, so they are equal exactly when `f(0) + f(1) = 1` — which is true of
-`identity` and `negate`, the two **bijections**. Their accumulators are constant, every
-coefficient the same number.
+1. Start the problem in Participant Portal and open **Browser Workbench**.
+2. Run `inspect` to read this deployment's fixture and published evidence.
+3. Edit the starter source in the in-browser editor.
+4. Run `test` for the published checks and fill any direct-answer fields from the evidence.
+5. Run `prepare`, then paste every prepared checkpoint value into Participant Portal.
 
-A constant polynomial cannot distinguish where the rotation landed, so swapped halves, the
-wrong extracted coefficient, and truncation instead of rounding all pass under it. Every
-public test uses `identity`, on purpose, and says so.
-
-The two **constant functions**, `always-zero` and `always-one`, are the ones with two-valued
-tables. `make inspect F=always-one` is the first thing worth running.
+No checkout, terminal, or local editor is required. Code checkpoints submit the edited source.
+Direct answers are wrapped by `prepare` and bound to the current deployment seed, so a value copied
+from another deployment is rejected.
 
 ## How to play
 
 ```bash
-make inspect                     # the identity table on m = 1 — the least informative run
-make inspect F=always-one        # identity, negate, always-zero, always-one
-make inspect F=always-one M=0    # the other message, where the wrap fires
-make test                    # public tests
-make reset                   # restore starter/pipeline.py
+Workbench `inspect`                     # the identity table on m = 1 — the least informative run
+Workbench `inspect` F=always-one        # identity, negate, always-zero, always-one
+Workbench `inspect` F=always-one M=0    # the other message, where the wrap fires
+Browser Workbench `test`                    # public tests
+reload the starter                   # restore starter/pipeline.py
 ```
 
-You edit one file, `local/starter/pipeline.py`.
+You edit one file, the Workbench editor (`pipeline.py`).
 
 ## Scoring
 

@@ -50,15 +50,17 @@ wrong pair too.
 And when `e1 = e2` there is no inverse, because two responses to the same challenge are one
 equation written twice.
 
-## How to play
+## Browser workflow
 
-```bash
-make inspect            # the log, and which commitments repeat
-make test               # public tests
-make reset              # restore starter/recover.py
-```
+1. Start the problem in Participant Portal and open **Browser Workbench**.
+2. Run `inspect` to read this deployment's fixture and published evidence.
+3. Edit the starter source in the in-browser editor.
+4. Run `test` for the published checks and fill any direct-answer fields from the evidence.
+5. Run `prepare`, then paste every prepared checkpoint value into Participant Portal.
 
-You edit one file, `local/starter/recover.py`.
+No checkout, terminal, or local editor is required. Code checkpoints submit the edited source.
+Direct answers are wrapped by `prepare` and bound to the current deployment seed, so a value copied
+from another deployment is rejected.
 
 ## Scoring
 

@@ -33,15 +33,17 @@ x*y = c + d*b + e*a + d*e               linear again, d and e now public
 Three of those four terms are handled exactly the way the previous problem handled them. **The
 fourth is not a sharing at all.**
 
-## How to play
+## Browser workflow
 
-```bash
-make inspect            # your setting and the shared-out triple
-make test               # public tests
-make reset              # restore starter/beaver.py
-```
+1. Start the problem in Participant Portal and open **Browser Workbench**.
+2. Run `inspect` to read this deployment's fixture and published evidence.
+3. Edit the starter source in the in-browser editor.
+4. Run `test` for the published checks and fill any direct-answer fields from the evidence.
+5. Run `prepare`, then paste every prepared checkpoint value into Participant Portal.
 
-You edit one file, `local/starter/beaver.py`.
+No checkout, terminal, or local editor is required. Code checkpoints submit the edited source.
+Direct answers are wrapped by `prepare` and bound to the current deployment seed, so a value copied
+from another deployment is rejected.
 
 ## Scoring
 

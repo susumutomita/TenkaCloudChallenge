@@ -42,22 +42,17 @@ Your fixtures come from `FLAG_SEED`, injected fresh at deploy. Same seed, same n
 session is reproducible and debuggable. Different seed, different numbers, so a value copied from
 someone else's run is worthless.
 
-## How to play
+## Browser workflow
 
-```bash
-make inspect                  # your string, your lengths, your block, your collision target
-make test                     # the public tests
-make test-one ID=length       # re-run one public test while you iterate
-make reset                    # restore starter/padding.py
-```
+1. Start the problem in Participant Portal and open **Browser Workbench**.
+2. Run `inspect` to read this deployment's fixture and published evidence.
+3. Edit the starter source in the in-browser editor.
+4. Run `test` for the published checks and fill any direct-answer fields from the evidence.
+5. Run `prepare`, then paste every prepared checkpoint value into Participant Portal.
 
-Open `local/starter/padding.py`. Two functions, both wrong on purpose:
-
-- `pad_message(message)` must return the message padded to a whole number of 64-byte blocks:
-  a single 1 bit (the byte `0x80`), then zeros, then the length of the **original** message in
-  **bits** as an 8-byte big-endian integer. Never empty, for any input including `b""`.
-- `block_words(block)` must read a 64-byte block as sixteen 32-bit words, most significant byte
-  first — so the bytes `61 62 63 80` become `0x61626380`.
+No checkout, terminal, or local editor is required. Code checkpoints submit the edited source.
+Direct answers are wrapped by `prepare` and bound to the current deployment seed, so a value copied
+from another deployment is rejected.
 
 ## Scoring
 
@@ -65,7 +60,7 @@ Six checkpoints, scored independently. Wrong answers cost 5 points each.
 
 | Checkpoint | Points | What you submit |
 |---|---:|---|
-| `byte-length` | 10 | How many **bytes** the string from `make inspect` is |
+| `byte-length` | 10 | How many **bytes** the string from Workbench `inspect` is |
 | `padded-length` | 15 | Six padded lengths, comma separated, worked out **before** you run anything |
 | `length-field` | 15 | The trailing 8 bytes for one message length, as 16 hex characters |
 | `pad` | 25 | Your `padding.py`, run against lengths you have not seen |
@@ -81,7 +76,7 @@ measure, in the two places where being wrong is cheapest.
 
 ## The four things worth getting wrong once
 
-**Characters are not bytes.** `make inspect` prints a string with multi-byte characters in it, so
+**Characters are not bytes.** Workbench `inspect` prints a string with multi-byte characters in it, so
 the character count and the byte count differ. SHA-256 only ever sees bytes. Any code you have
 tested with ASCII alone has been exercised only where those two numbers happen to agree.
 

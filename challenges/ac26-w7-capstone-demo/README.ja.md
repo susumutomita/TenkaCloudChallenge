@@ -48,15 +48,16 @@ party 0 から見れば受信は全部 0 で、公開値も 2 つの世界で同
 の入力を引けば、残るのは 1 人分だけだからです。和を計算するどんな protocol もこれより良くはできま
 せん。defect list ではなく scope に書くものです。
 
-## 遊び方
+## ブラウザでの進め方
 
-```bash
-make inspect            # 自分の setting と、privacy の測り方
-make test               # public tests
-make reset              # starter/capstone.py を戻す
-```
+1. Participant Portal で問題を起動し、**Browser Workbench** を開く。
+2. `inspect` でこの deploy 固有の fixture と公開された証拠を読む。
+3. 画面内のエディタで starter のソースを編集する。
+4. `test` で公開テストを実行し、直接回答欄があれば証拠から埋める。
+5. `prepare` で全 checkpoint の提出値を作り、Participant Portal へ貼る。
 
-編集するのは `local/starter/capstone.py` の 1 ファイルだけです。
+checkout、ターミナル、ローカルエディタは不要です。code checkpoint は編集したソースを提出します。
+直接回答は `prepare` が現在の deploy seed へ結び付けるため、別 deploy からコピーした値は拒否されます。
 
 ## 採点
 

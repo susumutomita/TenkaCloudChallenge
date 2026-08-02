@@ -41,15 +41,16 @@ decode       c が一番近い encoding point のメッセージ。同点は切�
 間違った decoder と間違った区間が一緒に通ってしまいます。
 hidden test は両方を fixture から計算し、decoder を区間に対して、区間を decoder に対して、別々に検査します。
 
-## 遊び方
+## ブラウザでの進め方
 
-```bash
-make inspect            # 環、全 encoding point、そして境界を跨がせた 1 メッセージ
-make test               # public test
-make reset              # starter/encoding.py を元に戻す
-```
+1. Participant Portal で問題を起動し、**Browser Workbench** を開く。
+2. `inspect` でこの deploy 固有の fixture と公開された証拠を読む。
+3. 画面内のエディタで starter のソースを編集する。
+4. `test` で公開テストを実行し、直接回答欄があれば証拠から埋める。
+5. `prepare` で全 checkpoint の提出値を作り、Participant Portal へ貼る。
 
-編集するファイルは `local/starter/encoding.py` の 1 つだけです。
+checkout、ターミナル、ローカルエディタは不要です。code checkpoint は編集したソースを提出します。
+直接回答は `prepare` が現在の deploy seed へ結び付けるため、別 deploy からコピーした値は拒否されます。
 
 ## 採点
 

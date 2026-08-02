@@ -35,16 +35,16 @@ Fiat–Shamir は `e` を transcript から計算することで対話を取り�
 どれも正常系には現れません。sign して verify すれば、毎回通ります。この問題の 10 個の mutation の
 うち 5 個がこの型で、だから checkpoint はそこを直接攻めます。
 
-## 遊び方
+## ブラウザでの進め方
 
-```bash
-make inspect            # 群、位数、public key、使う domain
-make test               # 公開テスト
-make reset              # starter/schnorr.py を元に戻す
-```
+1. Participant Portal で問題を起動し、**Browser Workbench** を開く。
+2. `inspect` でこの deploy 固有の fixture と公開された証拠を読む。
+3. 画面内のエディタで starter のソースを編集する。
+4. `test` で公開テストを実行し、直接回答欄があれば証拠から埋める。
+5. `prepare` で全 checkpoint の提出値を作り、Participant Portal へ貼る。
 
-編集するのは `local/starter/schnorr.py` の 1 ファイルです。secret key と nonce は表示されません。
-protocol が守る対象そのものであり、それを表示する lab は逆のことを教えるからです。
+checkout、ターミナル、ローカルエディタは不要です。code checkpoint は編集したソースを提出します。
+直接回答は `prepare` が現在の deploy seed へ結び付けるため、別 deploy からコピーした値は拒否されます。
 
 ## 採点
 

@@ -39,25 +39,16 @@ fixture は deploy 時に注入される `FLAG_SEED` から導出されます。
 違う数値です。2 つのクイズは順序も変わるので、他の人の答えの並びは、その人の推論が正しくても
 自分の答えにはなりません。
 
-## 遊び方
+## ブラウザでの進め方
 
-```bash
-make inspect                # 自分の fixture と 2 つのクイズ
-make test                   # 公開テスト
-make test-one ID=inverting  # 反復中に 1 つのテストだけ再実行する
-make reset                  # starter/compress.py を元に戻す
-```
+1. Participant Portal で問題を起動し、**Browser Workbench** を開く。
+2. `inspect` でこの deploy 固有の fixture と公開された証拠を読む。
+3. 画面内のエディタで starter のソースを編集する。
+4. `test` で公開テストを実行し、直接回答欄があれば証拠から埋める。
+5. `prepare` で全 checkpoint の提出値を作り、Participant Portal へ貼る。
 
-`local/starter/compress.py` を開きます。
-
-| 関数 | 満たすべき仕様 |
-|---|---|
-| `round_step(state, k, w)` | 1 round。`(T1+T2, a, b, c, d+T1, e, f, g)` |
-| `compress_rounds(state, schedule)` | 64 round のみ。足し戻しはしない |
-| `compress_block(state, schedule)` | `compress_rounds` の出力に入力状態を足し戻す |
-| `invert_round(state, k, w)` | 1 round を逆にたどる |
-| `invert_rounds(state, schedule)` | 64 round を逆にたどる |
-| `sha256_hex(message)` | digest。小文字 hex 64 文字 |
+checkout、ターミナル、ローカルエディタは不要です。code checkpoint は編集したソースを提出します。
+直接回答は `prepare` が現在の deploy seed へ結び付けるため、別 deploy からコピーした値は拒否されます。
 
 ## 採点
 

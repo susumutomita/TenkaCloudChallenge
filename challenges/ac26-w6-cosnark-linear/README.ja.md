@@ -46,20 +46,16 @@ Week 2 は sharing を `list[int]` として扱い、添字を引かせました
 渡される runtime には `party_scope`、`value_of`、`add`、`mul_public`、`zero`、`events()`、
 `violations()`、`ancestry()`、`issued()` があります。`reconstruct` はありません。
 
-## 遊び方
+## ブラウザでの進め方
 
-```bash
-make inspect            # 設定・行・event の見た目
-make inspect S=sparse   # dense / sparse / signed / unit
-make test               # 公開テスト
-make reset              # starter/ を元に戻す
-```
+1. Participant Portal で問題を起動し、**Browser Workbench** を開く。
+2. `inspect` でこの deploy 固有の fixture と公開された証拠を読む。
+3. 画面内のエディタで starter のソースを編集する。
+4. `test` で公開テストを実行し、直接回答欄があれば証拠から埋める。
+5. `prepare` で全 checkpoint の提出値を作り、Participant Portal へ貼る。
 
-編集するのは `local/starter/prover.py` の 1 ファイルです。
-
-既定の `dense` は**いちばん情報の少ない**実行です。係数がすべて非零だと、witness を `j` で引く実装
-と「非零な係数を順に対応させる」実装が同じ答えになります。分かれるのは `sparse` のほうで、体の正準
-な代表元でない係数が見えるのは `signed` のほうです。
+checkout、ターミナル、ローカルエディタは不要です。code checkpoint は編集したソースを提出します。
+直接回答は `prepare` が現在の deploy seed へ結び付けるため、別 deploy からコピーした値は拒否されます。
 
 ## 採点
 

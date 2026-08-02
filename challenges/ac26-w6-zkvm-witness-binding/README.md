@@ -97,24 +97,17 @@ refused for a reason nobody can find.
 rebuild is a different image even when nothing observable changed, because **"nothing observable
 changed" is the claim under audit rather than an input to it**.
 
-## How to play
+## Browser workflow
 
-```bash
-make inspect          # your statement, your machine, your image and its four siblings
-make test             # public tests
-make reset            # restore starter/
-```
+1. Start the problem in Participant Portal and open **Browser Workbench**.
+2. Run `inspect` to read this deployment's fixture and published evidence.
+3. Edit the starter source in the in-browser editor.
+4. Run `test` for the published checks and fill any direct-answer fields from the evidence.
+5. Run `prepare`, then paste every prepared checkpoint value into Participant Portal.
 
-You edit one file, `local/starter/guest.py`.
-
-`make inspect` prints the objects and not the verdicts. Which of the four siblings are the same
-program, which receipts a verifier may accept, and which runs gave the witness away are the
-checkpoints, so none of them is printed. The one thing it does answer is the collision, because
-the collision is the premise rather than the exercise.
-
-The width is drawn from 7, 9, 10, 11, 12 and 13 — deliberately none of 8, 16, 32 or 64 — and it
-changes between checkpoints, as does the overflow behaviour the statement names. A guest with
-`0xFFFF` written into it passes the early ones and fails `transfer`.
+No checkout, terminal, or local editor is required. Code checkpoints submit the edited source.
+Direct answers are wrapped by `prepare` and bound to the current deployment seed, so a value copied
+from another deployment is rejected.
 
 ## Scoring
 

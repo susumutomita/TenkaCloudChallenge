@@ -41,25 +41,17 @@ Your fixtures come from `FLAG_SEED`, injected fresh at deploy. Same seed, same n
 session is reproducible and debuggable. Different seed, different numbers — and for the two quizzes,
 a different order, so somebody else's answer string is wrong even if their reasoning was right.
 
-## How to play
+## Browser workflow
 
-```bash
-make inspect               # your fixtures and the two quizzes
-make test                  # the public tests
-make test-one ID=inverting # re-run one public test while you iterate
-make reset                 # restore starter/compress.py
-```
+1. Start the problem in Participant Portal and open **Browser Workbench**.
+2. Run `inspect` to read this deployment's fixture and published evidence.
+3. Edit the starter source in the in-browser editor.
+4. Run `test` for the published checks and fill any direct-answer fields from the evidence.
+5. Run `prepare`, then paste every prepared checkpoint value into Participant Portal.
 
-Open `local/starter/compress.py`:
-
-| function | must be |
-|---|---|
-| `round_step(state, k, w)` | one round: `(T1+T2, a, b, c, d+T1, e, f, g)` |
-| `compress_rounds(state, schedule)` | 64 rounds, no feed-forward |
-| `compress_block(state, schedule)` | `compress_rounds`, then add the incoming state back |
-| `invert_round(state, k, w)` | undo one round |
-| `invert_rounds(state, schedule)` | undo all 64 |
-| `sha256_hex(message)` | the digest: 64 lower-case hex characters |
+No checkout, terminal, or local editor is required. Code checkpoints submit the edited source.
+Direct answers are wrapped by `prepare` and bound to the current deployment seed, so a value copied
+from another deployment is rejected.
 
 ## Scoring
 

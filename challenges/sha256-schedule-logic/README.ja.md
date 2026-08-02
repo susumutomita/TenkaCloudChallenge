@@ -39,30 +39,16 @@ fixture は deploy 時に注入される `FLAG_SEED` から導出されます。
 セッションは再現でき、デバッグできます。seed が違えば数値も変わるので、他の人の実行結果から写した値は
 役に立ちません。
 
-## 遊び方
+## ブラウザでの進め方
 
-```bash
-make inspect                 # 自分の fixture。16 進数と 2 進数の両方
-make test                    # 公開テスト
-make test-one ID=rotation    # 反復中に 1 つのテストだけ再実行する
-make reset                   # starter/schedule.py を元に戻す
-```
+1. Participant Portal で問題を起動し、**Browser Workbench** を開く。
+2. `inspect` でこの deploy 固有の fixture と公開された証拠を読む。
+3. 画面内のエディタで starter のソースを編集する。
+4. `test` で公開テストを実行し、直接回答欄があれば証拠から埋める。
+5. `prepare` で全 checkpoint の提出値を作り、Participant Portal へ貼る。
 
-`make inspect` が出すビット行を読んでください。この問題はビット位置の話です。回転とシフトの違いは
-16 進数 2 つでは見えませんが、ビット列 2 行を並べれば一目で分かります。
-
-そのうえで `local/starter/schedule.py` を開きます。
-
-| 関数 | 満たすべき仕様 |
-|---|---|
-| `rotr(value, amount)` | 右回転。ビットを 1 つも失わず、結果は 32 bit に収まる |
-| `small_sigma0` | ROTR^7 xor ROTR^18 xor **SHR**^3 |
-| `small_sigma1` | ROTR^17 xor ROTR^19 xor **SHR**^10 |
-| `big_sigma0` | ROTR^2 xor ROTR^13 xor ROTR^22 |
-| `big_sigma1` | ROTR^6 xor ROTR^11 xor ROTR^25 |
-| `choose(e, f, g)` | `(e & f) ^ (~e & g)`。ビットごとのマルチプレクサ |
-| `majority(a, b, c)` | `(a & b) ^ (a & c) ^ (b & c)`。ビットごとの多数決 |
-| `expand_schedule(words)` | 16 ワード入力、64 ワード出力。4 項は mod 2^32 で**加算** |
+checkout、ターミナル、ローカルエディタは不要です。code checkpoint は編集したソースを提出します。
+直接回答は `prepare` が現在の deploy seed へ結び付けるため、別 deploy からコピーした値は拒否されます。
 
 ## 採点
 

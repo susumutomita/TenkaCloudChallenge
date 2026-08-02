@@ -20,15 +20,17 @@ y^2 = x^3 + a*x + b   (mod p)
 together with one extra element, form a group. Slides assert it. Here you build it, and the
 build is where the assertion turns out to have four cases rather than one formula.
 
-## The trap in the title
+## Browser workflow
 
-Six of the seven toy curves here have `b = 0`. On any of them `(0, 0)` satisfies the equation —
-it is an ordinary point of the curve, of order two, and `make inspect` will print it in your
-point list.
+1. Start the problem in Participant Portal and open **Browser Workbench**.
+2. Run `inspect` to read this deployment's fixture and published evidence.
+3. Edit the starter source in the in-browser editor.
+4. Run `test` for the published checks and fill any direct-answer fields from the evidence.
+5. Run `prepare`, then paste every prepared checkpoint value into Participant Portal.
 
-So an implementation that represents the point at infinity as `(0, 0)` cannot tell the identity
-from a real element of its own group. This is not a hypothetical; the hidden tests pick such a
-curve and check by name that the two do not compare equal.
+No checkout, terminal, or local editor is required. Code checkpoints submit the edited source.
+Direct answers are wrapped by `prepare` and bound to the current deployment seed, so a value copied
+from another deployment is rejected.
 
 ## Four cases, not one formula
 
@@ -45,13 +47,13 @@ optimization but because the chord does not exist there.
 ## How to play
 
 ```bash
-make inspect            # your curve, its points, and where the tangent is vertical
-make inspect K=13       # the bit decomposition for any scalar
-make test               # public tests
-make reset              # restore starter/curve.py
+Workbench `inspect`            # your curve, its points, and where the tangent is vertical
+Workbench `inspect` K=13       # the bit decomposition for any scalar
+Browser Workbench `test`               # public tests
+reload the starter              # restore starter/curve.py
 ```
 
-You edit one file, `local/starter/curve.py`.
+You edit one file, the Workbench editor (`curve.py`).
 
 ## Scoring
 

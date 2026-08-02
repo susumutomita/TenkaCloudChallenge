@@ -19,13 +19,16 @@ y^2 = x^3 + a*x + b   (mod p)
 スライドはそう断言します。ここでは実際に組み立てます。そして組み立ててみると、その主張は 1 つの式
 ではなく 4 つの場合分けだったことが分かります。
 
-## タイトルの罠
+## ブラウザでの進め方
 
-この問題の toy 曲線は 7 つ中 6 つが `b = 0` です。その場合 `(0, 0)` は方程式を満たします。つまり
-曲線上の**実在の点**であり、位数 2 の点です。`make inspect` はそれを点の一覧に表示します。
+1. Participant Portal で問題を起動し、**Browser Workbench** を開く。
+2. `inspect` でこの deploy 固有の fixture と公開された証拠を読む。
+3. 画面内のエディタで starter のソースを編集する。
+4. `test` で公開テストを実行し、直接回答欄があれば証拠から埋める。
+5. `prepare` で全 checkpoint の提出値を作り、Participant Portal へ貼る。
 
-したがって無限遠点を `(0, 0)` で表す実装は、単位元と自分の群の実在の元とを区別できません。これは
-仮定の話ではありません。hidden test はそういう曲線を選び、両者が等しくないことを名指しで検査します。
+checkout、ターミナル、ローカルエディタは不要です。code checkpoint は編集したソースを提出します。
+直接回答は `prepare` が現在の deploy seed へ結び付けるため、別 deploy からコピーした値は拒否されます。
 
 ## 1 つの式ではなく 4 つの場合
 
@@ -42,13 +45,13 @@ y^2 = x^3 + a*x + b   (mod p)
 ## 遊び方
 
 ```bash
-make inspect            # 曲線、全点、垂直接線を持つ点
-make inspect K=13       # 任意の scalar のビット分解
-make test               # 公開テスト
-make reset              # starter/curve.py を元に戻す
+Workbench の `inspect`            # 曲線、全点、垂直接線を持つ点
+Workbench の `inspect` K=13       # 任意の scalar のビット分解
+Browser Workbench の `test`               # 公開テスト
+starter の再読み込み              # starter/curve.py を元に戻す
 ```
 
-編集するのは `local/starter/curve.py` の 1 ファイルです。
+編集するのは Workbench のエディタ (`curve.py`) の 1 ファイルです。
 
 ## 採点
 
