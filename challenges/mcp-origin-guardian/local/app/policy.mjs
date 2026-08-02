@@ -24,6 +24,28 @@ function parseCanonical(value) {
   return url;
 }
 
+function parseDevelopment(value) {
+  if (typeof value !== "string") return null;
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+  if (
+    url.protocol !== "http:" ||
+    url.username ||
+    url.password ||
+    url.pathname !== "/" ||
+    url.search ||
+    url.hash ||
+    !LOOPBACK.has(url.host.toLowerCase())
+  ) {
+    return null;
+  }
+  return url;
+}
+
 export function validatePolicy(policy) {
   if (!policy || typeof policy !== "object" || Array.isArray(policy)) {
     return ["policy must be an object"];
@@ -32,8 +54,8 @@ export function validatePolicy(policy) {
   if (!parseCanonical(policy.canonicalOrigin)) {
     errors.push("canonicalOrigin must be an authority-only HTTPS origin from trusted configuration");
   }
-  if (typeof policy.allowDevLoopback !== "boolean") {
-    errors.push("allowDevLoopback must be boolean");
+  if (!parseDevelopment(policy.developmentOrigin)) {
+    errors.push("developmentOrigin must be an explicit loopback-only HTTP origin");
   }
   return errors;
 }
@@ -46,28 +68,28 @@ export function evaluateRequest(policy, request) {
     return { accepted: false, reason: "untrusted_forwarded_host" };
   }
 
-  const canonical = parseCanonical(policy.canonicalOrigin);
+  const environment = request.environment;
+  const configured =
+    environment === "production"
+      ? parseCanonical(policy.canonicalOrigin)
+      : environment === "development"
+        ? parseDevelopment(policy.developmentOrigin)
+        : null;
+  if (!configured) {
+    return { accepted: false, reason: "invalid_environment" };
+  }
+
   const host = String(request.host ?? "").toLowerCase();
   const origin = String(request.origin ?? "");
-  let resource = canonical.origin;
-
-  if (host === canonical.host.toLowerCase() && origin === canonical.origin) {
-    // production authority is exact and comes only from trusted configuration
-  } else if (
-    policy.allowDevLoopback === true &&
-    LOOPBACK.has(host) &&
-    origin === `http://${host}`
-  ) {
-    resource = origin;
-  } else {
+  if (host !== configured.host.toLowerCase() || origin !== configured.origin) {
     return { accepted: false, reason: "authority_mismatch" };
   }
 
   return {
     accepted: true,
     reason: "accepted",
-    metadataResource: resource,
-    resourceMetadataUrl: `${resource}/.well-known/oauth-protected-resource`,
+    metadataResource: configured.origin,
+    resourceMetadataUrl: `${configured.origin}/.well-known/oauth-protected-resource`,
   };
 }
 
@@ -93,8 +115,29 @@ export function gradePolicy(policy) {
       name: "canonical production request",
       expect: true,
       request: {
+        environment: "production",
         host: "mcp.example.test",
         origin: "https://mcp.example.test",
+        forwardedHost: "",
+      },
+    },
+    {
+      name: "explicit development loopback",
+      expect: true,
+      request: {
+        environment: "development",
+        host: "127.0.0.1:18110",
+        origin: "http://127.0.0.1:18110",
+        forwardedHost: "",
+      },
+    },
+    {
+      name: "development authority in production",
+      expect: false,
+      request: {
+        environment: "production",
+        host: "127.0.0.1:18110",
+        origin: "http://127.0.0.1:18110",
         forwardedHost: "",
       },
     },
@@ -102,6 +145,7 @@ export function gradePolicy(policy) {
       name: "attacker Host",
       expect: false,
       request: {
+        environment: "production",
         host: "attacker.example",
         origin: "https://mcp.example.test",
         forwardedHost: "",
@@ -111,6 +155,7 @@ export function gradePolicy(policy) {
       name: "cross-site Origin",
       expect: false,
       request: {
+        environment: "production",
         host: "mcp.example.test",
         origin: "https://attacker.example",
         forwardedHost: "",
@@ -119,12 +164,18 @@ export function gradePolicy(policy) {
     {
       name: "opaque Origin",
       expect: false,
-      request: { host: "mcp.example.test", origin: "null", forwardedHost: "" },
+      request: {
+        environment: "production",
+        host: "mcp.example.test",
+        origin: "null",
+        forwardedHost: "",
+      },
     },
     {
       name: "forwarded authority override",
       expect: false,
       request: {
+        environment: "production",
         host: "mcp.example.test",
         origin: "https://mcp.example.test",
         forwardedHost: "attacker.example",
@@ -132,8 +183,11 @@ export function gradePolicy(policy) {
     },
   ];
   if (errors.length > 0) return { correct: false, errors, cases: [] };
-  if (policy.canonicalOrigin !== "https://mcp.example.test") {
-    errors.push("policy does not select the lab's operator-approved canonical origin");
+  if (
+    policy.canonicalOrigin !== "https://mcp.example.test" ||
+    policy.developmentOrigin !== "http://127.0.0.1:18110"
+  ) {
+    errors.push("policy does not select the lab's operator-approved authorities");
   }
   const results = cases.map((item) => {
     const result = evaluateRequest(policy, item.request);

@@ -121,7 +121,7 @@ const challenge = createServer(async (request, response) => {
   if (request.method === "GET" && url.pathname === "/.well-known/oauth-protected-resource") {
     const policy = {
       canonicalOrigin: "https://mcp.example.test",
-      allowDevLoopback: true,
+      developmentOrigin: "http://127.0.0.1:18110",
     };
     const result = evaluateRequest(policy, {
       host: request.headers.host,

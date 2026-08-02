@@ -1,15 +1,16 @@
 import { describe, expect, it } from "bun:test";
 import { evaluateRequest, validatePolicy } from "../challenges/mcp-origin-guardian/local/app/policy.mjs";
 
-const production = {
+const policy = {
   canonicalOrigin: "https://mcp.example.test",
-  allowDevLoopback: false,
+  developmentOrigin: "http://127.0.0.1:18110",
 };
 
 describe("MCP canonical-origin challenge contract", () => {
   it("accepts only the configured production origin and emits canonical metadata", () => {
-    expect(validatePolicy(production)).toEqual([]);
-    const ok = evaluateRequest(production, {
+    expect(validatePolicy(policy)).toEqual([]);
+    const ok = evaluateRequest(policy, {
+      environment: "production",
       host: "mcp.example.test",
       origin: "https://mcp.example.test",
       forwardedHost: "",
@@ -21,17 +22,42 @@ describe("MCP canonical-origin challenge contract", () => {
     );
   });
 
+  it("accepts the explicit loopback origin only in development", () => {
+    const development = evaluateRequest(policy, {
+      environment: "development",
+      host: "127.0.0.1:18110",
+      origin: "http://127.0.0.1:18110",
+      forwardedHost: "",
+    });
+    const production = evaluateRequest(policy, {
+      environment: "production",
+      host: "127.0.0.1:18110",
+      origin: "http://127.0.0.1:18110",
+      forwardedHost: "",
+    });
+    expect(development.accepted).toBe(true);
+    expect(development.metadataResource).toBe("http://127.0.0.1:18110");
+    expect(production.accepted).toBe(false);
+  });
+
   it.each([
-    { host: "attacker.example", origin: "https://mcp.example.test", forwardedHost: "" },
-    { host: "mcp.example.test", origin: "https://attacker.example", forwardedHost: "" },
-    { host: "mcp.example.test", origin: "null", forwardedHost: "" },
+    { environment: "production", host: "attacker.example", origin: "https://mcp.example.test", forwardedHost: "" },
+    { environment: "production", host: "mcp.example.test", origin: "https://attacker.example", forwardedHost: "" },
+    { environment: "production", host: "mcp.example.test", origin: "null", forwardedHost: "" },
     {
+      environment: "production",
       host: "mcp.example.test",
       origin: "https://mcp.example.test",
       forwardedHost: "attacker.example",
     },
+    {
+      environment: "staging",
+      host: "mcp.example.test",
+      origin: "https://mcp.example.test",
+      forwardedHost: "",
+    },
   ])("fails closed for untrusted request authority %#", (request) => {
-    expect(evaluateRequest(production, request).accepted).toBe(false);
+    expect(evaluateRequest(policy, request).accepted).toBe(false);
   });
 
   it.each([
@@ -41,43 +67,40 @@ describe("MCP canonical-origin challenge contract", () => {
     "https://mcp.example.test?tenant=other",
     "$request",
   ])("rejects a non-canonical production value: %s", (canonicalOrigin) => {
-    expect(
-      validatePolicy({ canonicalOrigin, allowDevLoopback: false }),
-    ).not.toEqual([]);
+    expect(validatePolicy({ ...policy, canonicalOrigin })).not.toEqual([]);
   });
 
-  it("keeps the localhost exception behind explicit development mode", () => {
-    const disabled = evaluateRequest(production, {
-      host: "127.0.0.1:18110",
-      origin: "http://127.0.0.1:18110",
-      forwardedHost: "",
-    });
-    const enabled = evaluateRequest(
-      { canonicalOrigin: "https://mcp.example.test", allowDevLoopback: true },
-      {
-        host: "127.0.0.1:18110",
-        origin: "http://127.0.0.1:18110",
-        forwardedHost: "",
-      },
-    );
-    expect(disabled.accepted).toBe(false);
-    expect(enabled.accepted).toBe(true);
-    expect(enabled.metadataResource).toBe("http://127.0.0.1:18110");
+  it.each([
+    "https://127.0.0.1:18110",
+    "http://0.0.0.0:18110",
+    "http://127.0.0.1:8080",
+    "http://127.0.0.1:18110/path",
+    "$request",
+  ])("rejects an unsafe development value: %s", (developmentOrigin) => {
+    expect(validatePolicy({ ...policy, developmentOrigin })).not.toEqual([]);
   });
 
-  it("is non-vacuous: changing any security decision breaks at least one case", () => {
+  it("is non-vacuous: changing a security decision changes the result vector", () => {
     const accepted = [
-      evaluateRequest(production, {
+      evaluateRequest(policy, {
+        environment: "production",
         host: "mcp.example.test",
         origin: "https://mcp.example.test",
         forwardedHost: "",
       }).accepted,
-      evaluateRequest(production, {
+      evaluateRequest(policy, {
+        environment: "production",
         host: "attacker.example",
         origin: "https://mcp.example.test",
         forwardedHost: "",
       }).accepted,
+      evaluateRequest(policy, {
+        environment: "development",
+        host: "127.0.0.1:18110",
+        origin: "http://127.0.0.1:18110",
+        forwardedHost: "",
+      }).accepted,
     ];
-    expect(accepted).toEqual([true, false]);
+    expect(accepted).toEqual([true, false, true]);
   });
 });
