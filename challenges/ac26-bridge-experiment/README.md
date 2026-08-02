@@ -43,6 +43,13 @@ someone else's run is worthless.
 
 ## How to play
 
+Start the problem from the Participant Portal and open the **Browser Workbench** endpoint.
+`inspect`, editing `counter.py`, the public tests, and the environment / generalize submission
+values all live in the browser. The predict and inspect answers are read off by you and entered
+into the Portal directly. No host terminal or checkout editing is required.
+
+Only when authoring or verifying straight from the repository, run these in the problem directory:
+
 ```bash
 make inspect             # your fixture, your health token, the broken trace
 make test                # the public tests
@@ -50,7 +57,8 @@ make test-one ID=range   # re-run one public test while you iterate
 make reset               # restore starter/counter.py
 ```
 
-Open `local/starter/counter.py`. `advance(start, step, rounds, modulus)` must return the trace:
+In the Workbench or the checkout you edit one file, `local/starter/counter.py`.
+`advance(start, step, rounds, modulus)` must return the trace:
 the value after each round, with the modulus applied **every** round, always in `[0, modulus)`,
 for any sign of `step`.
 

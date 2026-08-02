@@ -113,16 +113,19 @@ const EXERCISE_RENAMES: ReadonlyArray<readonly [string, string]> = [
  * rewrite `counterexample`, which appears in the template's prose.
  */
 const EXERCISE_REFERENCES: ReadonlyArray<readonly [string, string]> = [
-  ["tests/public/test_counter.py", "tests/public/test_exercise.py"],
   ["tests.hidden.check_counter", "tests.hidden.check_exercise"],
   ["starter.counter", "starter.exercise"],
   // `make reset` restores the whole `local/starter/` directory, so no Makefile
   // rule names a starter file for this to repoint. Kept out deliberately: a rewrite
   // rule for a reference that no longer exists is the next thing to rot.
-  ["starter/counter.py", "starter/exercise.py"],
-  ['"reference" / "counter.py"', '"reference" / "exercise.py"'],
   ["from counter import", "from exercise import"],
-  ['Path(workspace) / "counter.py"', 'Path(workspace) / "exercise.py"'],
+  // The filename itself, wherever it appears: paths, dict keys, SUBMISSION_FILES,
+  // user-facing messages, the workbench editor payloads. The `.py` suffix is what
+  // keeps this off `counterexample` in the template's prose.
+  ["counter.py", "exercise.py"],
+  // The workbench editor's HTML id and JS binding, which pair with the filename.
+  ["counter-editor", "exercise-editor"],
+  ["counterEditor", "exerciseEditor"],
 ];
 
 function renameExerciseFiles(target: string): void {
@@ -169,7 +172,19 @@ export function scaffold(problemId: string, challengesDir: string = CHALLENGES_D
   return target;
 }
 
-const TEXT_SUFFIXES = [".json", ".md", ".py", ".yml", ".yaml", ".svg", "Makefile", "Dockerfile"];
+const TEXT_SUFFIXES = [
+  ".json",
+  ".md",
+  ".py",
+  ".yml",
+  ".yaml",
+  ".svg",
+  ".js",
+  ".html",
+  ".css",
+  "Makefile",
+  "Dockerfile",
+];
 
 function textFilesUnder(dir: string): string[] {
   const files: string[] = [];

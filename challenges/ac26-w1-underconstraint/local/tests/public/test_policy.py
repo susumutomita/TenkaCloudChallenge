@@ -12,14 +12,22 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+SUBMISSION_DIR = os.environ.get("SUBMISSION_DIR")
 sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ROOT / "starter"))
+sys.path.insert(0, SUBMISSION_DIR or str(ROOT / "starter"))
 
 from fixtures.evaluator import satisfies  # noqa: E402
 from fixtures.generate import clean_witness, honest_witness, params, vulnerable_circuit  # noqa: E402
 import policy  # noqa: E402
+from verifier.server import (  # noqa: E402
+    inspect_payload,
+    prepare_submissions,
+    run_public_tests,
+    starter_payload,
+)
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
+WORKBENCH_TEST_SEED = "public-workbench-test"
 
 
 def test_intended_circuit_returns_constraints() -> None:
@@ -47,6 +55,71 @@ def test_repair_returns_constraints() -> None:
     assert isinstance(repaired, list) and repaired
 
 
+def test_workbench_inspect_shows_seeded_evidence_without_answers() -> None:
+    payload = inspect_payload(WORKBENCH_TEST_SEED)
+    assert payload["parameters"] == params(WORKBENCH_TEST_SEED)
+    deployed = payload["deployedCircuit"]
+    assert [c["id"] for c in deployed] == [c["id"] for c in vulnerable_circuit(WORKBENCH_TEST_SEED)]
+    assert set(payload["honestWitnesses"]) == {"revokedCredential", "cleanCredential"}
+    assert set(payload["iszeroGadget"]) == {"iszero_a", "iszero_b"}
+    # The deployed circuit is evidence; the id of the dropped constraint is the
+    # answer to audit, so it must appear nowhere but implicitly, by absence.
+    assert set(payload) == {
+        "policy",
+        "parameters",
+        "deployedCircuit",
+        "honestWitnesses",
+        "iszeroGadget",
+        "healthToken",
+    }
+
+
+def test_workbench_starter_returns_the_editable_file() -> None:
+    payload = starter_payload()
+    assert set(payload) == {"policy.py"}
+    for name in ("intended_circuit", "audit", "forge_witness", "repair"):
+        assert f"def {name}" in payload["policy.py"]
+
+
+def test_workbench_public_tests_pass_the_shipped_starter() -> None:
+    # The starter deliberately passes every public test while its circuit has no
+    # is-zero gadget at all: that is misconception.happy-path-proves-soundness.
+    result = run_public_tests(WORKBENCH_TEST_SEED, starter_payload())
+    assert result["passed"] is True
+    assert "public tests: all passed" in result["output"]
+
+
+def test_workbench_public_tests_report_invalid_browser_source() -> None:
+    result = run_public_tests(WORKBENCH_TEST_SEED, {"policy.py": "def intended_circuit(:\n"})
+    assert result["passed"] is False
+    assert result["output"]
+
+
+def test_workbench_prepare_returns_the_code_checkpoints() -> None:
+    result = prepare_submissions(WORKBENCH_TEST_SEED, starter_payload())
+    assert result["ok"] is True
+    submissions = result["submissions"]
+    # root-cause is the learner's own diagnosis, never produced here.
+    assert set(submissions) == {"build", "audit", "exploit", "repair", "mutation-transfer"}
+    for value in submissions.values():
+        assert "def intended_circuit" in value
+
+
+def test_workbench_prepare_rejects_an_empty_source() -> None:
+    result = prepare_submissions(WORKBENCH_TEST_SEED, {"policy.py": "   "})
+    assert result["ok"] is False
+
+
+def test_workbench_assets_expose_browser_only_journey() -> None:
+    html = (ROOT / "workbench" / "index.html").read_text(encoding="utf-8")
+    script = (ROOT / "workbench" / "app.js").read_text(encoding="utf-8")
+    for term in ("audit", "exploit", "repair", "root-cause", "terminal-input"):
+        assert term in html
+    for command in ("inspect", "test", "prepare", "reset"):
+        assert f'case "{command}"' in script
+    assert "copyText" in script
+
+
 def main() -> int:
     only = ""
     if "--only" in sys.argv:
@@ -56,6 +129,8 @@ def main() -> int:
     selected = 0
     for name, fn in sorted(globals().items()):
         if not name.startswith("test_") or not callable(fn):
+            continue
+        if os.environ.get("BROWSER_PUBLIC_TESTS") == "1" and name.startswith("test_workbench_"):
             continue
         if only and only not in name:
             continue
