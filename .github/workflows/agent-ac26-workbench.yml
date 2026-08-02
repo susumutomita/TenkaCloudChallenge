@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - agent/ac26-workbench-all
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -14,17 +17,18 @@ concurrency:
 
 jobs:
   migrate:
-    if: github.actor != 'github-actions[bot]'
+    if: github.event_name == 'pull_request' && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
       CI: "true"
       npm_config_ignore_scripts: "true"
     steps:
-      - name: Checkout branch
+      - name: Checkout PR branch
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           fetch-depth: 0
+          ref: agent/ac26-workbench-all
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
