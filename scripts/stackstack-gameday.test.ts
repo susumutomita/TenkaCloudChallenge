@@ -190,18 +190,22 @@ const verify = async (ports: Ports, checkpointId: string, submission: string) =>
     ).json()
   ) as { checkpointId: string; correct: boolean };
 
-/** Poll until a condition over the event state holds, or give up and return the last state. */
+/**
+ * Poll until a condition over the event state holds, or give up and return the
+ * last snapshot. Pass `posture` as `read` to poll the receipt surface instead.
+ */
 async function until(
   port: number,
   predicate: (snapshot: any) => boolean,
   timeoutMs = 12_000,
+  read: (port: number) => Promise<any> = state,
 ): Promise<any> {
   const deadline = Date.now() + timeoutMs;
-  let snapshot = await state(port);
+  let snapshot = await read(port);
   while (Date.now() < deadline) {
     if (predicate(snapshot)) return snapshot;
     await sleep(60);
-    snapshot = await state(port);
+    snapshot = await read(port);
   }
   return snapshot;
 }
@@ -674,6 +678,8 @@ describe('rule 1 — "stopping the service to fix a security problem" cannot rea
   let app: Started;
 
   let working = "";
+  /** A real Build receipt, collected while the path was still up. */
+  let bankedBuildReceipt = "";
 
   beforeAll(async () => {
     const scratch = checkout();
@@ -697,6 +703,22 @@ describe('rule 1 — "stopping the service to fix a security problem" cannot rea
     expect(site.armed).toBe(false);
     expect(site.armedTicks).toBe(0);
     expect(snapshot.availability.withinBudget).toBe(true);
+  });
+
+  it("should hand out the Build receipt while the path is still up", async () => {
+    // Collected on purpose, so the last case in this describe can try to cash it
+    // after the outage. Without a real receipt in hand there is nothing to cash,
+    // and "the check refuses me" says only that a wrong string is wrong.
+    const green = await until(
+      ports.challenge,
+      (snapshot) => typeof snapshot.tokens?.gameday_build === "string",
+      20_000,
+      posture,
+    );
+    expect(green.gates.gameday_build).toBe(true);
+    bankedBuildReceipt = String(green.tokens.gameday_build);
+    expect(bankedBuildReceipt).toMatch(/^TC\{gameday_build_[0-9a-f]{16}\}$/);
+    expect((await verify(ports, "build", bankedBuildReceipt)).correct).toBe(true);
   });
 
   it("should spend the availability allowance when a working path is taken away", async () => {
@@ -740,6 +762,16 @@ describe('rule 1 — "stopping the service to fix a security problem" cannot rea
     // withheld, so it cannot be answered from a value seen earlier either.
     expect((await posture(ports.challenge)).tokens.gameday_build).toBeNull();
     expect((await verify(ports, "build", "anything")).correct).toBe(false);
+
+    // The one that makes rule 1 a rule. Withholding the receipt from `/posture`
+    // is not enough on its own: a team that read it while the path was up still
+    // holds the exact string. The check has to re-measure the gate at verdict
+    // time and refuse it. Submitting "anything" above cannot show that — a wrong
+    // string is refused whether or not the gate is ever consulted.
+    expect(bankedBuildReceipt, "the green-state receipt was never collected").toMatch(
+      /^TC\{gameday_build_[0-9a-f]{16}\}$/,
+    );
+    expect((await verify(ports, "build", bankedBuildReceipt)).correct).toBe(false);
   });
 });
 
@@ -1176,6 +1208,8 @@ describe("the event can be won, and only by holding both halves at once", () => 
   const seed = "gameday-solve-seed";
   let app: Started;
   let artifact = "";
+  /** A real sign-off receipt, collected while both halves were whole. */
+  let bankedSignoffReceipt = "";
 
   const solved = {
     /** Every rule the desk's own ground truth allows, and nothing else. */
@@ -1325,9 +1359,8 @@ describe("the event can be won, and only by holding both halves at once", () => 
     const measured = await posture(ports.challenge);
     expect(measured.gates.gameday_signoff).toBe(true);
     expect(measured.tokens.gameday_signoff).toMatch(/^TC\{gameday_signoff_[0-9a-f]{16}\}$/);
-    expect(
-      (await verify(ports, "signoff", String(measured.tokens.gameday_signoff))).correct,
-    ).toBe(true);
+    bankedSignoffReceipt = String(measured.tokens.gameday_signoff);
+    expect((await verify(ports, "signoff", bankedSignoffReceipt)).correct).toBe(true);
     // ...and every phase checkpoint answers to its own receipt, which is what
     // makes the per-phase result ledger mean something.
     for (const phase of ["build", "ship", "expose", "attack", "incident", "stabilize"]) {
@@ -1369,6 +1402,16 @@ describe("the event can be won, and only by holding both halves at once", () => 
     expect(live.heldForMs).toBe(0);
     expect(live.holdSatisfied).toBe(false);
     expect((await posture(ports.challenge)).gates.gameday_signoff).toBe(false);
+
+    // And the sign-off earned a moment ago stops answering. This is the same
+    // property as rule 1's, reached from the other side: there the team never
+    // finished, here it finished and then broke something. A run that could be
+    // signed off from a receipt taken before the outage would let a team bank
+    // the verdict and stop caring about the rest of the event.
+    expect(bankedSignoffReceipt, "the sign-off receipt was never collected").toMatch(
+      /^TC\{gameday_signoff_[0-9a-f]{16}\}$/,
+    );
+    expect((await verify(ports, "signoff", bankedSignoffReceipt)).correct).toBe(false);
   });
 });
 
