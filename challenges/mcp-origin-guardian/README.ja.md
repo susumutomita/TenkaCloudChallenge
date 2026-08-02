@@ -10,15 +10,16 @@ MCP風OAuth protected resourceのauthority境界を扱う、ブラウザ完結�
 | bind | サービス | 用途 |
 | --- | --- | --- |
 | 127.0.0.1:18110 | participant | Browser Workbenchと合成resource API |
-| 127.0.0.1:18111 | verifier | TenkaCloudが使うloopback `/verify` |
+| 127.0.0.1:18111 | verifier | 公開test、提出準備、loopback `/verify` |
 
 2サービスともread-only、non-root、Linux capability全削除で動き、portはhostの
 loopbackだけにbindされます。participantとverifierは別々のDocker networkへ接続し、
 両containerへ適用するcustom seccomp profileが`connect(2)` syscallを拒否します。
 意図したloopback requestは受信できますが、containerから外向きTCP接続は開始できません。
 
-participant imageにはWorkbench、公開ケース、policy実行ロジックだけを含めます。
-hidden graderと`/verify`は別のverifier imageにだけ入り、participantから取得できません。
+participant imageにはWorkbench、観察/resource API、policy実行の基本ロジックだけを
+含めます。公開testの判定、提出値の生成、hidden grader、`/verify`は別のverifier imageに
+だけ入り、browserは厳密なOrigin allowlistを持つCORS経由でそれらを呼び出します。
 これは採点コードを難読化する対策ではなく、Docker build targetとimageを物理的に分ける
 信頼境界です。
 
