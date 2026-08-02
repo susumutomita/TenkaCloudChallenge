@@ -7,8 +7,8 @@ import {
   evaluateRequest,
   validatePolicy,
 } from "../challenges/mcp-origin-guardian/local/app/policy.mjs";
-import { runPublicCases } from "../challenges/mcp-origin-guardian/local/app/public-cases.mjs";
 import { gradePolicy } from "../challenges/mcp-origin-guardian/local/verifier/grader.mjs";
+import { runPublicCases } from "../challenges/mcp-origin-guardian/local/verifier/public-cases.mjs";
 
 const policy = {
   canonicalOrigin: "https://mcp.example.test",
@@ -182,20 +182,36 @@ describe("MCP Origin Guardian image boundary", () => {
     });
   });
 
-  it("does not leave hidden grading in any participant-copied source", () => {
+  it("does not leave public or hidden grading in participant-copied source", () => {
     const appRoot = join(localRoot, "app");
-    expect(readdirSync(appRoot).sort()).toEqual([
-      "policy.mjs",
-      "public-cases.mjs",
-      "server.mjs",
-    ]);
+    expect(readdirSync(appRoot).sort()).toEqual(["policy.mjs", "server.mjs"]);
     for (const file of readdirSync(appRoot)) {
       const source = readFileSync(join(appRoot, file), "utf8");
       expect(source).not.toContain("gradePolicy");
+      expect(source).not.toContain("runPublicCases");
+      expect(source).not.toContain("APPROVED_POLICY");
       expect(source).not.toContain("hidden authority-boundary");
+      expect(source).not.toContain("operator-approved authorities");
     }
-    const verifier = readFileSync(join(localRoot, "verifier/grader.mjs"), "utf8");
-    expect(verifier).toContain("gradePolicy");
-    expect(verifier).toContain("missing Origin");
+
+    const publicCases = readFileSync(
+      join(localRoot, "verifier/public-cases.mjs"),
+      "utf8",
+    );
+    const hiddenGrader = readFileSync(
+      join(localRoot, "verifier/grader.mjs"),
+      "utf8",
+    );
+    const verifierServer = readFileSync(
+      join(localRoot, "verifier/server.mjs"),
+      "utf8",
+    );
+    expect(publicCases).toContain("runPublicCases");
+    expect(publicCases).toContain("APPROVED_POLICY");
+    expect(hiddenGrader).toContain("gradePolicy");
+    expect(hiddenGrader).toContain("missing Origin");
+    expect(verifierServer).toContain("/public-test");
+    expect(verifierServer).toContain("/prepare");
+    expect(verifierServer).toContain("maxHeaderSize");
   });
 });
