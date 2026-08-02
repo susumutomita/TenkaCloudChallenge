@@ -66,7 +66,7 @@ code{color:#ffd27a} .muted{color:#a9bec9}
 <section><h2>2. Policy</h2><p class="muted">運用者が承認したproduction originを固定し、development例外を分離してください。</p>
 <textarea id="policy">{
   "canonicalOrigin": "$request",
-  "allowDevLoopback": false
+  "developmentOrigin": "$request"
 }</textarea>
 <button id="test">公開ケースを実行</button><button id="prepare">提出値を作る</button><pre id="result">未実行</pre></section>
 <section><h2>3. Portalへ提出</h2><pre id="submission">公開ケース成功後に生成されます。</pre></section>
@@ -124,6 +124,10 @@ const challenge = createServer(async (request, response) => {
       developmentOrigin: "http://127.0.0.1:18110",
     };
     const result = evaluateRequest(policy, {
+      environment:
+        String(request.headers.host ?? "").toLowerCase() === "127.0.0.1:18110"
+          ? "development"
+          : "production",
       host: request.headers.host,
       origin: request.headers.origin,
       forwardedHost: request.headers["x-forwarded-host"],
