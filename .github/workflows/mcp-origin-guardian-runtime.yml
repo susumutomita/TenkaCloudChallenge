@@ -156,9 +156,9 @@ jobs:
             | python3 -c 'import json,sys; value=json.load(sys.stdin); assert value["resource"] == "http://127.0.0.1:18110"'
 
           curl --fail --silent --show-error \
-            --resolve mcp.example.test:18110:127.0.0.1 \
+            --header 'Host: mcp.example.test' \
             --header 'Origin: https://mcp.example.test' \
-            http://mcp.example.test:18110/.well-known/oauth-protected-resource \
+            http://127.0.0.1:18110/.well-known/oauth-protected-resource \
             | python3 -c 'import json,sys; value=json.load(sys.stdin); assert value["resource"] == "https://mcp.example.test"'
 
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
