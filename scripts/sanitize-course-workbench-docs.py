@@ -45,44 +45,66 @@ FORBIDDEN = (
     "make inspect",
     "local/starter/",
     "host terminal",
-    "host-side terminal",
-    "host-side file",
-    "ホスト側のターミナル",
-    "ホスト側で",
+    "host-side",
+    "ホスト側",
     "ファイル操作",
 )
+JAPANESE_RE = re.compile(r"[ぁ-んァ-ヶ一-龯々ー]")
+
+
+def replace_starter_paths(text: str, *, japanese: bool) -> str:
+    label = "Workbench のエディタ" if japanese else "the Workbench editor"
+    text = re.sub(
+        r"`local/starter/([^`]+)`",
+        lambda match: f"{label} (`{match.group(1)}`)",
+        text,
+    )
+    return re.sub(
+        r"local/starter/([A-Za-z0-9_./*-]+)",
+        lambda match: f"{label} (`{match.group(1)}`)",
+        text,
+    )
 
 
 def portalize_text(text: str) -> str:
-    replacements = (
-        ("`make inspect`", "`inspect`"),
-        ("make inspect", "Browser Workbench の `inspect`"),
-        ("`make test-one ID=...`", "対象 checkpoint の `test`"),
-        ("`make test-one`", "対象 checkpoint の `test`"),
-        ("make test-one", "checkpoint ごとの `test`"),
-        ("`make test`", "`test`"),
-        ("make test", "Browser Workbench の `test`"),
-        ("`make reset`", "starter の再読み込み"),
-        ("make reset", "starter の再読み込み"),
-        ("`local/starter/", "`Workbench editor: "),
-        ("local/starter/", "Workbench editor: "),
-        ("ホスト側のターミナル", "Browser Workbench"),
-        ("ホスト側で", "Browser Workbench で"),
-        ("ファイル操作", "Workbench 内の編集"),
-        ("host-side terminal", "Browser Workbench"),
-        ("host terminal", "Browser Workbench"),
-        ("host-side file operations", "Workbench editing"),
-        ("host-side file", "Workbench source"),
-    )
+    japanese = bool(JAPANESE_RE.search(text))
+    text = replace_starter_paths(text, japanese=japanese)
+
+    if japanese:
+        replacements = (
+            ("`make inspect`", "`inspect`"),
+            ("make inspect", "Browser Workbench の `inspect`"),
+            ("`make test-one ID=...`", "対象 checkpoint の `test`"),
+            ("`make test-one`", "対象 checkpoint の `test`"),
+            ("make test-one", "checkpoint ごとの `test`"),
+            ("`make test`", "`test`"),
+            ("make test", "Browser Workbench の `test`"),
+            ("`make reset`", "starter の再読み込み"),
+            ("make reset", "starter の再読み込み"),
+            ("ホスト側のターミナル", "Browser Workbench"),
+            ("ホスト側で", "Browser Workbench で"),
+            ("ホスト側", "Workbench"),
+            ("ファイル操作", "Workbench 内の編集"),
+        )
+    else:
+        replacements = (
+            ("`make inspect`", "Workbench `inspect`"),
+            ("make inspect", "Browser Workbench `inspect`"),
+            ("`make test-one ID=...`", "the checkpoint `test` control"),
+            ("`make test-one`", "the checkpoint `test` control"),
+            ("make test-one", "the per-checkpoint `test` control"),
+            ("`make test`", "Workbench `test`"),
+            ("make test", "Browser Workbench `test`"),
+            ("`make reset`", "reload the starter"),
+            ("make reset", "reload the starter"),
+            ("host-side terminal", "Browser Workbench"),
+            ("host terminal", "Browser Workbench"),
+            ("host-side file operations", "Workbench editing"),
+            ("host-side file", "Workbench source"),
+            ("host-side", "Workbench"),
+        )
     for old, new in replacements:
         text = text.replace(old, new)
-
-    # Preserve filenames when useful, but make the location unambiguously browser-owned.
-    text = re.sub(
-        r"Workbench editor: ([A-Za-z0-9_./*-]+)",
-        r"Workbench editor (`\1`)",
-        text,
-    )
     return text
 
 
