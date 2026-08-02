@@ -1743,6 +1743,33 @@
       }
     },
     {
+      "id": "mcp-origin-guardian",
+      "name": "信頼できる入口はどこ?",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "45-60 分",
+      "shortDescription": "MCP風resource serverのmetadataが、要求ごとに別の入口を正しいものとして受け入れてしまう。運用者が承認した境界へ揃えよう。",
+      "tags": [
+        "mcp",
+        "oauth",
+        "origin-validation",
+        "host-header",
+        "metadata-poisoning",
+        "api-security",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "microservice-migration-battle",
       "name": "Microservice Migration Battle",
       "category": "Battle",

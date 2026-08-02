@@ -1,0 +1,194 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "mcp-origin-guardian",
+  "name": "信頼できる入口はどこ?",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "45-60 分",
+  "shortDescription": "MCP風resource serverのmetadataが、要求ごとに別の入口を正しいものとして受け入れてしまう。運用者が承認した境界へ揃えよう。",
+  "description": "新しいMCP風resource serverは、届いた要求からprotected-resource metadataを組み立てている。正規の入口では動くが、監査チームは「外から指定された入口も正規扱いになる」と報告した。Browser Workbenchで要求とmetadataの関係を観察し、productionのcanonical origin、Origin照合、development loopback例外を分離したpolicyを提出する。実OAuth、実credential、外部networkは使わない。",
+  "instructions": "問題ランタイムを起動して Browser Workbench を開く。最初に「脆弱な応答を比較」で自己参照になっている値を確認する。Policyを編集し、公開ケースを実行する。すべて通ったら提出値を作り、Participant Portalへ貼り付ける。",
+  "writeup": "## 根本原因\n\n受信HostをallowedHostにし、同じHostからresource metadataも作ると、2つの値が一致していても信頼は確立しない。攻撃者が両方の入力源を支配しているためである。\n\n## 修正\n\nproductionのcanonical HTTPS originは運用者管理の設定から固定する。HostとOriginをその値へ厳密照合し、forwarded authorityは信頼済みproxy境界なしに受け入れない。localhostは明示的なdevelopment modeだけに閉じ込める。metadataのresourceとWWW-Authenticateのresource_metadataも同じcanonical設定から作る。",
+  "tags": [
+    "mcp",
+    "oauth",
+    "origin-validation",
+    "host-header",
+    "metadata-poisoning",
+    "api-security",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18110,
+      "name": "Browser Workbench + resource API"
+    },
+    {
+      "port": 18111,
+      "name": "/verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "受信Hostから許可値とmetadataを同時生成する自己参照検証を説明できる",
+    "production canonical originを信頼済み設定から固定し、未知HostとOriginをfail closedにできる",
+    "development loopback例外をproduction境界から分離できる"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.mcp-origin-guardian.identify-self-referential-trust",
+        "description": "untrusted requestからallowlistとmetadataを作る自己参照信頼を発見できる"
+      },
+      {
+        "id": "lo.mcp-origin-guardian.enforce-canonical-authority",
+        "description": "canonical authorityとdevelopment例外を分離したpolicyを構成できる"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.trust-boundary",
+        "description": "信頼済み設定と攻撃者制御入力を分離する境界"
+      },
+      {
+        "id": "concept.origin-validation",
+        "description": "HostとOriginを承認済みauthorityへ照合する検証"
+      },
+      {
+        "id": "concept.fail-closed",
+        "description": "不明なauthorityを既定で拒否する設計"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.mcp-origin-guardian.reject-untrusted-authority",
+        "description": "正規要求を許可しつつ未知Host・Origin・forwarded authorityを拒否するpolicyを提出できる"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.self-consistent-input-is-trusted",
+        "description": "同じ要求から作った値同士が一致すれば信頼できるという誤解"
+      }
+    ],
+    "audiences": [
+      {
+        "id": "audience.mcp-server-engineer",
+        "description": "MCPまたはOAuth resource serverを実装するソフトウェアエンジニア"
+      },
+      {
+        "id": "audience.http-security-reviewer",
+        "description": "HTTP authority trust boundaryをレビューするセキュリティエンジニア"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.mcp-origin-guardian",
+      "target": "lo.mcp-origin-guardian.identify-self-referential-trust"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.mcp-origin-guardian",
+      "target": "lo.mcp-origin-guardian.enforce-canonical-authority"
+    },
+    {
+      "type": "covers",
+      "source": "problem.mcp-origin-guardian",
+      "target": "concept.trust-boundary"
+    },
+    {
+      "type": "covers",
+      "source": "problem.mcp-origin-guardian",
+      "target": "concept.origin-validation"
+    },
+    {
+      "type": "covers",
+      "source": "problem.mcp-origin-guardian",
+      "target": "concept.fail-closed"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.mcp-origin-guardian",
+      "target": "assessment.mcp-origin-guardian.reject-untrusted-authority"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.mcp-origin-guardian",
+      "target": "misconception.self-consistent-input-is-trusted"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.mcp-origin-guardian",
+      "target": "audience.mcp-server-engineer"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.mcp-origin-guardian",
+      "target": "audience.http-security-reviewer"
+    }
+  ],
+  "i18n": {
+    "en": {
+      "name": "Which Entrance Can You Trust?",
+      "shortDescription": "An MCP-like resource server treats a different entrance as authoritative on every request. Converge it on the operator-approved boundary.",
+      "instructions": "Start the runtime and open Browser Workbench. Compare the vulnerable response, edit the policy, and run the public cases. When they all pass, generate the submission and paste it into Participant Portal.",
+      "description": "A new MCP-like resource server derives protected-resource metadata from each incoming request. It works on the intended entrance, but reviewers found that an externally supplied entrance becomes authoritative too. Build a policy that separates the production canonical origin, Origin matching, and the development loopback exception. No real OAuth credential or external network is used.",
+      "writeup": "## Root cause\n\nDeriving both allowedHost and resource metadata from the incoming Host is self-consistent but not trusted: the attacker controls the common source.\n\n## Fix\n\nPin the production HTTPS origin in operator-controlled configuration. Match Host and Origin exactly, reject forwarded authority without a trusted proxy boundary, isolate localhost behind explicit development mode, and derive both metadata resource values from the same canonical configuration.",
+      "learningGoals": [
+        "Explain why deriving both an allow value and metadata from an incoming Host is self-referential validation",
+        "Pin a production canonical origin and fail closed for unknown Host and Origin values",
+        "Separate a development loopback exception from the production boundary"
+      ],
+      "hints": [
+        {
+          "id": "hint-1",
+          "content": "A URL being parseable does not mean an operator approved that origin."
+        },
+        {
+          "id": "hint-2",
+          "content": "If both the allow value and metadata come from the same request, their agreement proves only self-consistency."
+        },
+        {
+          "id": "hint-3",
+          "content": "Use the operator-approved HTTPS origin as canonical configuration; reject unknown Host, Origin, and forwarded authority. Keep loopback behind an explicit development switch."
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Browser Workbench": "http://127.0.0.1:18110/"
+    },
+    "verifyUrl": "http://127.0.0.1:18111/verify",
+    "secretEnv": []
+  },
+  "scoring": {
+    "kind": "verify",
+    "points": 200,
+    "wrongAnswerPenalty": 10,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "URLとして解析できることと、運用者がそのoriginを承認したことは別です。",
+        "penalty": 15
+      },
+      {
+        "id": "hint-2",
+        "content": "allow値とmetadataの両方が同じrequest由来なら、一致しても自己整合性しか証明しません。",
+        "penalty": 25
+      },
+      {
+        "id": "hint-3",
+        "content": "運用者承認済みHTTPS originをcanonical設定にし、未知Host・Origin・forwarded authorityを拒否します。loopbackは明示dev switchの背後に置きます。",
+        "penalty": 35
+      }
+    ]
+  }
+}
