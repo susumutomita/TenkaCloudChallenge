@@ -13,8 +13,9 @@ MCP風OAuth protected resourceのauthority境界を扱う、ブラウザ完結�
 | 127.0.0.1:18111 | verifier | TenkaCloudが使うloopback `/verify` |
 
 2サービスともread-only、non-root、Linux capability全削除で動き、portはhostの
-loopbackだけにbindされます。両サービスが参加するDocker networkは`internal`で、
-外向き経路を持ちません。
+loopbackだけにbindされます。participantとverifierは別々のDocker networkへ接続し、
+両containerへ適用するcustom seccomp profileが`connect(2)` syscallを拒否します。
+意図したloopback requestは受信できますが、containerから外向きTCP接続は開始できません。
 
 participant imageにはWorkbench、公開ケース、policy実行ロジックだけを含めます。
 hidden graderと`/verify`は別のverifier imageにだけ入り、participantから取得できません。
