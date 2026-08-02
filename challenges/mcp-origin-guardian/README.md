@@ -10,7 +10,7 @@ resource. It uses no real OAuth provider, credential, cloud account, or outbound
 | Binding | Service | Purpose |
 | --- | --- | --- |
 | 127.0.0.1:18110 | participant | Browser Workbench and synthetic resource API |
-| 127.0.0.1:18111 | verifier | Loopback `/verify` used by TenkaCloud |
+| 127.0.0.1:18111 | verifier | Public tests, submission preparation, and loopback `/verify` |
 
 Both services run read-only as non-root users with every Linux capability dropped. Their
 published ports bind only to host loopback. Participant and verifier use separate Docker
@@ -18,10 +18,11 @@ networks, and a custom seccomp profile denies the `connect(2)` syscall in both c
 The services can accept the intended loopback requests but cannot initiate outbound TCP
 connections.
 
-The participant image contains only the Workbench, published cases, and policy execution
-logic. The hidden grader and `/verify` exist only in a separate verifier image and cannot be
-fetched from the participant service. This is a physical Docker build-target and image
-boundary, not code obfuscation.
+The participant image contains only the Workbench, observation/resource API, and policy
+execution primitives. Published test decisions, submission preparation, the hidden grader,
+and `/verify` exist only in the separate verifier image. The browser calls those verifier
+endpoints through an exact-origin CORS policy. This is a physical Docker build-target and
+image boundary, not code obfuscation.
 
 ## Mission
 
