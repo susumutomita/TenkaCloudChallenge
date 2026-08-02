@@ -1,0 +1,75 @@
+name: migrate remaining browser workbenches
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: migrate-workbenches-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'agent/workbench-remaining-29' &&
+      github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout migration branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: "1.3.11"
+
+      - name: Generate the remaining workbenches
+        run: python scripts/migrate_remaining_workbenches.py
+
+      - name: Run generated Browser Workbench contracts
+        run: |
+          count=0
+          while IFS= read -r contract; do
+            python "$contract"
+            count=$((count + 1))
+          done < <(find challenges -path '*/local/tests/workbench_contract.py' -type f | sort)
+          test "$count" -ge 29
+          echo "validated $count Browser Workbench contracts"
+
+      - name: Install repository dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Regenerate catalog artifacts
+        run: bun run reindex
+
+      - name: Validate generated metadata and catalog
+        run: |
+          bun run scripts/validate-problems.ts
+          bun run cost:check
+
+      - name: Remove one-shot migration machinery
+        run: |
+          rm -rf .migration
+          rm -f scripts/migrate_remaining_workbenches.py
+          rm -f .github/workflows/migrate-remaining-workbenches.yml
+
+      - name: Commit generated challenge changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Migration produced no changes."
+            exit 0
+          fi
+          git commit -m "feat(course): add workbenches to the remaining 29 challenges"
+          git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
