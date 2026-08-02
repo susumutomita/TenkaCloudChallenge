@@ -25,18 +25,19 @@
     ]
   },
   "difficulty": 3,
-  "estimatedDuration": "40-60 分",
-  "shortDescription": "shared 値同士の掛け算だけは手元で終わらない。前処理で作った三つ組を使って、通信を 1 round に押し込む。最後の項が他の 3 つと違う扱いを要求する。",
-  "description": "Week 2 の 3 問目。 前問で引いた 「通信が要る操作 / 要らない操作」 の境界を受け、 唯一残った乗算を Beaver triple で処理する。\n\n前処理で c = a*b を満たす三つ組 (a, b, c) を share しておくと、 入力に依存しない準備だけで乗算が\n\n    d = x - a,  e = y - b   (local)\n    open d, open e          (1 round)\n    x*y = c + d*b + e*a + d*e\n\nに分解できる。 前 3 項は share に対して線形なので各 party が自分の行を計算するだけで済むが、 d*e は protocol の途中で現れる公開定数であり、 1 party だけが畳み込む。 全員が足すと x*y + (n-1)*d*e の share になる。 これは ac26-w2-linear-shares の add-constant と同じ規則が、 見落としやすい位置で再登場したもの。\n\nこの誤りは d か e が 0 の設定では正解と区別できないため、 fixture 生成側で d != 0 かつ e != 0 を強制している (観測可能性のための選択であり、 実運用の mask 分布ではない)。 hidden test は誤答の総和を名指しで落とす。\n\nWeek 2 の教材は pinned commit 時点で未公開のため courseAlignment.sources は持たず、 status は draft のままにする (#219 が公開を検出した時点で確定する)。",
-  "instructions": "## はじめに\n\nshared 値同士の掛け算は、 前問で唯一 「通信が要る」 側に分類された操作です。 前処理で用意した三つ組を使い、 その通信を 1 round に押し込みます。\n\n## 最初の一手\n\n```bash\nmake inspect\n```\n\n設定 (p, party 数 n) と、 前処理済み三つ組が share されている様子が出ます。 走らせる前に紙で 1 つ出しておいてください — 「全 party が d*e を自分の share に足したら、 総和はいくつになるか」。\n\n次に `local/starter/beaver.py` を編集します。 `make test` で公開テスト、 `make reset` で元に戻せます。\n\n## ゴール\n\n5 つの checkpoint を独立に通します。 4 つの項のうち 3 つは前問と同じ扱いで済みます。 残り 1 つを間違えても、 n=1 なら気づけません。",
-  "writeup": "## 前処理が何を動かしたか\n\nBeaver triple (a, b, c) は c = a*b を満たすだけで、 x にも y にも依存しない。 だから event の前に、 あるいは暇な時間に、 いくらでも作り置きできる。 online phase に残るのは masking (local) と d, e の open (1 round) と線形結合 (local) だけになる。 乗算の総コストが消えたのではなく、 入力に依存しない部分が offline へ移った。\n\n## なぜ d と e を公開してよいのか\n\nd = x - a の a は前処理で作られた一様な値で、 誰も clear では持っていない。 だから d は x を one-time mask で隠したものであり、 公開しても x は漏れない。 triple を 2 回使い回すと同じ a が 2 つの秘密を隠すことになり、 この性質は壊れる。 三つ組が 1 回の乗算ごとに 1 つ必要なのはこのためで、 offline のコストがそのまま乗算回数に比例する。\n\n## 最後の項\n\nc + d*b + e*a までは share に対して線形なので、 各 party が自分の行を計算すればよい。 d*e だけは share ではなく公開されたスカラーで、 1 party だけが畳み込む。 全員が足すと総和は x*y + (n-1)*d*e になる。 前問の add-constant とまったく同じ規則だが、 protocol の途中に現れるぶん見落としやすい。\n\nこの誤りは n=1 では正解と一致し、 d か e が 0 の設定でも一致する。 hidden test の fixture が d != 0, e != 0 を強制しているのは、 誤答が観測できない設定を排除するため。 観測可能性のための選択であり、 実際の mask 分布ではない。\n\n## round 数\n\nd と e は同時に open できるので、 1 回の Beaver 乗算に必要な通信は 1 round。 0 ではない — 前処理は round を 0 にはしない。 深さ D の乗算回路は D round になり、 これが MPC の遅延がゲート数ではなく乗算深さで決まる理由になる。\n\n## 次につながるところ\n\n乗算が組めたことで、 任意の算術回路が MPC で評価できるようになった。 残るのは 「何を公開すると何が漏れるか」 で、 それが Week 2 の最後の 2 問。",
+  "estimatedDuration": "45-60 分",
+  "shortDescription": "shared 値同士の掛け算だけは手元で終わらない。前処理で作った三つ組を使うと通信は 1 round で済む。ただし 4 つの項のうち最後の 1 つだけが、他の 3 つと違う扱いを要求する。",
+  "description": "Week 2 の 3 問目。 前問で引いた 「通信が要る操作 / 要らない操作」 の境界を受け、 唯一残った乗算を Beaver triple で処理する。 配信形態は container のみで、 参加者は portal から問題コンテナのターミナルへ接続し、 `beaver` コマンドを 1 行ずつ打つ。 編集するファイルは無く、 host への checkout も要らない。 flag は FLAG_SEED から container 内で導出するので、 暗記も当て推量も効かない。\n\n設計の中心は前問と同じく「参加者を 1 party にする」こと。 `beaver show` が出すのは自分の 5 行 (X, Y, a, b, c それぞれの自分の row)、 他 party が broadcast した d と e の row、 そして desk が publish した (誤った) 積だけ。 他 party の a・b・c・X・Y の row は一切出さない。 これは 2 つの意味で効いている。 (1) `x = d + a` には a の全 row が要るのに画面には 1 行しかないので、 「d と e を公開しても入力は漏れない」が説明ではなく手元で確かめられる事実になる。 (2) 各 stage の答えが share ベクタではなく体元 1〜2 個になって一意に決まり、 1 行の回答欄に収まる。\n\nstage は 4 つで、 単一 flag のゲートになっている。 (1) open: round が公開する d と e。 自分の broadcast row だけは印字されないので、 local な引き算 1 回と総和 1 回が要る。 (2) row: x*y = c + d*b + e*a + d*e のうち前 3 項は share に線形なので自分の row を計算し、 d*e は公開スカラーなので担当 party だけが畳み込む。 live では参加者は担当ではないので d*e は入らない。 (3) product: desk が publish した誤りの積から、 本来の x*y。 live の fault は「全 party が d*e を畳み込んだ」なので補正は -(n-1)*d*e。 (4) transfer: (1)〜(3) が通って初めて渡される第 2 の乗算 ── 別の素数、 別の party 数、 参加者が担当 party の側、 そして fault が逆向き (誰も d*e を畳み込まなかった) ── で同じ 3 つを 1 行で答える。 補正は +d*e になり、 n が現れない。 「published から (n-1)*d*e を引く」を暗記した回答は第 2 の乗算で必ず落ちる。\n\n不合格応答の設計。 open は「2 つのうち何個がずれているか」だけを返し、 どちらかは返さない ── 片方を名指しすると引き算でもう片方が出るため。 row と product は近傍誤答 (「公開スカラーを畳み込んでしまった row」など) を一切名指ししない ── 名指しは答えから d*e を引いたものを渡すのと同じになる。\n\nfixture 側の不変条件。 参加者に渡される row から Beaver の等式が実際に x*y へ再構成されること (そうでなければ row stage は何の一部でもない数を要求している)。 d != 0 かつ e != 0 (どちらかが 0 だと d*e も 0 になり、 全 party が畳み込む誤りと 1 party だけが畳み込む正解が区別できない) かつ d != e (`beaver open e,d` の入れ替えが通ってしまう)。 live は必ず 参加者 != 担当 party、 transfer は必ず 参加者 == 担当 party。 2 つの run の fault は逆向きで、 live の補正式を transfer に当てると必ず外れる。 これらは観測可能性のための選択であり、 実運用の mask 分布ではない。\n\nWeek 2 の教材は pinned commit 時点で未公開のため courseAlignment.sources は placeholder のままで、 status は draft にしておく (#219 が公開を検出した時点で確定する)。",
+  "instructions": "## はじめに\n\nshared 値同士の掛け算は、 前問で唯一 「通信が要る」 側に分類された操作です。 前処理で用意した三つ組を使うと、 その通信は 1 round で済みます。 あなたはその乗算に参加している party の 1 人です。\n\n## 最初の一手\n\n問題を起動したら、 **コンテナのターミナルに接続**して次を打ってください。\n\n```bash\nbeaver show\n```\n\nこのデプロイの field、 自分が持っている 5 つの数、 protocol、 他 party が broadcast した値、 そして desk が publish した積が出ます。\n\n使えるコマンドは `beaver` を引数なしで打てば一覧できます。 編集するファイルはありません。 すべて 1 行で打てるコマンドです。 計算を手でやりたくなければ、 コンテナの中に python3 が入っています。\n\n## ゴール\n\nround が公開する 2 つの値を出し (`beaver open`)、 自分の積の row を組み立て (`beaver row`)、 desk が publish すべきだった積を出し (`beaver product`)、 その 3 つが通ると渡される見たことのない乗算でも同じことをします (`beaver transfer`)。 4 つとも通ると `beaver flag` が `TC{...}` を出すので、 それを回答欄に貼ってください。",
+  "writeup": "## 前処理が何を動かしたか\n\nBeaver triple (a, b, c) は c = a*b を満たすだけで、 x にも y にも依存しない。 だから event の前に、 あるいは暇な時間に、 いくらでも作り置きできる。 online phase に残るのは masking (local) と d, e の open (1 round) と線形結合 (local) だけになる。 乗算の総コストが消えたのではなく、 入力に依存しない部分が offline へ移った。\n\n## なぜ d と e を公開してよいのか\n\nd = x - a の a は前処理で作られた値で、 誰も clear では持っていない。 だから d は x を one-time mask で隠したものであり、 公開しても x は漏れない。\n\nこの問題ではその主張を主張のまま置いていない。 画面に出るのは a の row のうち自分の 1 行だけで、 他 party の row は出ない。 `x = d + a` に必要なのは a 全体なので、 手元にある材料で x を出せないことがその場で確かめられる。 逆に、 三つ組を 2 回使い回すと同じ a が 2 つの秘密を隠すことになり、 この性質は壊れる。 三つ組が 1 回の乗算ごとに 1 つ必要なのはこのためで、 offline のコストがそのまま乗算回数に比例する。\n\n## 最後の項\n\nc + d*b + e*a までは share に対して線形なので、 各 party が自分の row を計算すればよい。 d*e だけは share ではなく公開されたスカラーで、 1 party だけが畳み込む。 全員が足すと総和は x*y + (n-1)*d*e になる。 前問の add-constant とまったく同じ規則だが、 protocol の途中に現れるぶん見落としやすい。\n\nこの誤りは n=1 では正解と一致し、 d か e が 0 の設定でも一致する。 fixture が d != 0, e != 0 を強制しているのは、 誤答が観測できない設定を排除するため。 観測可能性のための選択であり、 実際の mask 分布ではない。 d != e も強制している ── これが無いと `beaver open e,d` の入れ替えが通る。\n\n## 補正式は覚えるものではない\n\n第 1 の run の fault は「全 party が d*e を畳み込んだ」なので、 総和は x*y + (n-1)*d*e、 補正は -(n-1)*d*e。 第 2 の run の fault は「誰も畳み込まなかった」なので、 総和は x*y - d*e、 補正は +d*e ── n が出てこない。 符号も形も違う。 持ち越せるのは、 「誤った run の row が結局いくつに足し合わさったのか」を毎回自分で書き下す手順のほうだけだ。\n\n## round 数\n\nd と e は同時に open できるので、 1 回の Beaver 乗算に必要な通信は 1 round。 0 ではない ── 前処理は round を 0 にはしない。 深さ D の乗算回路は D round になり、 これが MPC の遅延がゲート数ではなく乗算深さで決まる理由になる。\n\n## 次につながるところ\n\n乗算が組めたことで、 任意の算術回路が MPC で評価できるようになった。 残るのは 「何を公開すると何が漏れるか」 で、 それが Week 2 の最後の 2 問。",
   "tags": [
     "advanced-cryptography-2026",
     "week2",
     "mpc",
     "beaver-triple",
     "local-play",
-    "container"
+    "container",
+    "terminal"
   ],
   "exposedPorts": [
     {
@@ -46,9 +47,10 @@
   ],
   "learningGoals": [
     "前処理済み三つ組で秘密を mask し、差分を安全に公開できる",
-    "公開された d と e から x*y の share を線形結合で組み立てられる",
+    "share の集合を開いて公開値を正規形の体元として復元できる",
+    "公開された d と e から x*y の自分の row を線形結合で組み立てられる",
     "公開スカラー d*e を 1 party だけが畳み込む理由を説明できる",
-    "Beaver 乗算に必要な通信が 1 round であることを述べられる",
+    "誤った run が publish した積から、本来の積を公開情報だけで復元できる",
     "前処理が乗算コストを消すのではなく offline へ移すだけであることを説明できる"
   ],
   "nodes": {
@@ -82,24 +84,20 @@
     ],
     "assessment_criteria": [
       {
-        "id": "assessment.ac26-w2-beaver-mul.mask",
-        "description": "秘密の share から mask 済みの share を作れた。"
-      },
-      {
         "id": "assessment.ac26-w2-beaver-mul.open",
-        "description": "share の集合から公開値を正規形の体元として復元できた。"
+        "description": "自分の row から mask 済みの row を作り、 broadcast の集合から公開値を正規形の体元として復元できた。"
       },
       {
-        "id": "assessment.ac26-w2-beaver-mul.combine",
-        "description": "x*y の正しい share を組み立て、 公開スカラーを全 share に足す誤りを避けられた。"
+        "id": "assessment.ac26-w2-beaver-mul.row",
+        "description": "x*y の自分の row を組み立て、 公開スカラーを全 row に足す誤りを避けられた。"
       },
       {
-        "id": "assessment.ac26-w2-beaver-mul.protocol",
-        "description": "自分で書いた 4 つの部品を通しで走らせて x*y の share を得て、 必要な round 数を述べられた。"
+        "id": "assessment.ac26-w2-beaver-mul.product",
+        "description": "誤った run が publish した積から、 本来の積を公開情報だけで復元できた。"
       },
       {
         "id": "assessment.ac26-w2-beaver-mul.transfer",
-        "description": "見たことのない設定 (別の p、 別の party 数) でも成立した。"
+        "description": "別の field・party 数・担当関係・逆向きの fault を持つ乗算でも同じ 3 つが成立した。"
       }
     ],
     "misconceptions": [
@@ -162,22 +160,17 @@
     {
       "type": "assesses",
       "source": "problem.ac26-w2-beaver-mul",
-      "target": "assessment.ac26-w2-beaver-mul.mask"
-    },
-    {
-      "type": "assesses",
-      "source": "problem.ac26-w2-beaver-mul",
       "target": "assessment.ac26-w2-beaver-mul.open"
     },
     {
       "type": "assesses",
       "source": "problem.ac26-w2-beaver-mul",
-      "target": "assessment.ac26-w2-beaver-mul.combine"
+      "target": "assessment.ac26-w2-beaver-mul.row"
     },
     {
       "type": "assesses",
       "source": "problem.ac26-w2-beaver-mul",
-      "target": "assessment.ac26-w2-beaver-mul.protocol"
+      "target": "assessment.ac26-w2-beaver-mul.product"
     },
     {
       "type": "assesses",
@@ -210,56 +203,19 @@
     ]
   },
   "scoring": {
-    "kind": "multi-verify",
-    "checks": [
+    "kind": "verify",
+    "points": 200,
+    "wrongAnswerPenalty": 10,
+    "hints": [
       {
-        "id": "mask",
-        "label": "秘密を前処理済みの値で隠す",
-        "points": 40,
-        "wrongAnswerPenalty": 10
+        "id": "hint-1",
+        "content": "d = X - a も e = Y - b も share です。 だから各 party の row は「自分の X の row から自分の a の row を引いたもの」で、 open するとは全 party の row を足し合わせることです。 `beaver show` は他 party の broadcast を全部出しますが、 自分の分だけは出しません ── それが local な一手だからです。 引き算が負になったら [0, p) に戻してください。",
+        "penalty": 40
       },
       {
-        "id": "open",
-        "label": "隠した差分を公開する",
-        "points": 30,
-        "wrongAnswerPenalty": 10
-      },
-      {
-        "id": "combine",
-        "label": "公開された 2 つの値から積を組み立てる",
-        "points": 65,
-        "wrongAnswerPenalty": 10,
-        "hints": [
-          {
-            "id": "combine-hint-1",
-            "content": "4 つの項のうち 3 つは share に対して線形で、 各 party が自分の行を計算すればよい。 残る 1 つは share ではない。",
-            "penalty": 20
-          },
-          {
-            "id": "combine-hint-2",
-            "content": "全 party が d*e を自分の share に足したら、 総和はいくつになるか。 前問の公開定数の加算と同じ規則。",
-            "penalty": 12
-          }
-        ]
-      },
-      {
-        "id": "protocol",
-        "label": "通しで走らせて必要な round を述べる",
-        "points": 30,
-        "wrongAnswerPenalty": 10,
-        "hints": [
-          {
-            "id": "protocol-hint-1",
-            "content": "d と e は同時に open できる。 前処理があっても online の通信が 0 になるわけではない。",
-            "penalty": 10
-          }
-        ]
-      },
-      {
-        "id": "transfer",
-        "label": "見たことのない設定でも成立させる",
-        "points": 35,
-        "wrongAnswerPenalty": 10
+        "id": "hint-2",
+        "content": "x*y = c + d*b + e*a + d*e のうち、 前の 3 項は share に対して線形なので各 party が自分の row を計算すればよいだけです。 残る 1 つは share ではありません ── d も e ももう公開されているので、 d*e は公開スカラーです。 公開スカラーを畳み込むのは 1 party だけで、 誰かは `beaver show` に書いてあります。 全員が足すと row の総和は x*y + (n-1)*d*e になります。 publish された積を直すときは、 「誤った run の row が結局いくつに足し合わさったのか」を書き下してから引いてください ── その形は 2 つの run で同じではありません。",
+        "penalty": 60
       }
     ]
   },
@@ -267,51 +223,25 @@
     "en": {
       "name": "Multiplication is the one that has to talk",
       "shortDescription": "Multiplying two shared values is the one thing that cannot finish locally. A triple made in advance pushes the talking down to a single round — and the last of the four terms wants different treatment from the other three.",
-      "instructions": "## Start here\n\nMultiplying two *shared* values was the one operation the previous problem put on the 'has to talk' side. Using a triple prepared in advance, you will push that talking down to one round.\n\n## First move\n\n```bash\nmake inspect\n```\n\nThat prints your setting (p, party count n) and shows the preprocessed triple already shared out. Before running anything, work one thing out on paper: if *every* party adds d*e to its own share, what does the set sum to?\n\nThen edit `local/starter/beaver.py`. `make test` runs the public tests; `make reset` restores the starter.\n\n## Goal\n\nClear five independently scored checkpoints. Three of the four terms are handled exactly as in the previous problem. Get the fourth wrong and you will not notice it at n = 1.",
-      "writeup": "## What the preprocessing actually moved\n\nA Beaver triple (a, b, c) only has to satisfy c = a*b. It depends on neither x nor y, so it can be manufactured before the event, or in any idle stretch. What remains online is masking (local), opening d and e (one round), and a linear combination (local). The cost of multiplication did not disappear; the input-independent part of it moved offline.\n\n## Why d and e are safe to publish\n\nThe a in d = x - a is a uniform value made during preprocessing that nobody holds in the clear. So d is x under a one-time mask, and publishing it reveals nothing about x. Reuse the triple and the same a masks two different secrets, at which point that property is gone. That is why each multiplication consumes its own triple, and why the offline cost scales with the number of multiplications.\n\n## The last term\n\nc + d*b + e*a is linear in the shares, so each party computes its own row. d*e is not a sharing at all — it is a public scalar, and exactly one party folds it in. If every party adds it, the set sums to x*y + (n-1)*d*e. It is the same rule as adding a public constant in the previous problem, arriving mid-protocol where it is far easier to miss.\n\nThat mistake is indistinguishable from correct at n = 1, and also whenever d or e happens to be zero. The hidden fixtures force d != 0 and e != 0 precisely so the wrong answer stays observable. That is a choice made for observability, not a realistic mask distribution.\n\n## The round count\n\nd and e can be opened together, so one Beaver multiplication costs one round of communication. Not zero — preprocessing does not buy silence. A multiplication circuit of depth D costs D rounds, which is why MPC latency tracks multiplicative depth rather than gate count.\n\n## Where this leads\n\nWith multiplication in hand, any arithmetic circuit can be evaluated under MPC. What is left is which openings leak what, and that is the last two problems of Week 2.",
+      "description": "Week 2 mechanism problem, delivered as a container and played from its terminal. The participant is one party and is shown only its own five rows plus everyone's broadcast rows of d and e, which is what makes \"publishing d reveals nothing about x\" checkable against what is on the screen rather than a claim. See the Japanese `description` for the stage design, the grading contract, and the fixture invariants.",
+      "instructions": "## Start here\n\nMultiplying two *shared* values was the one operation the previous problem put on the 'has to talk' side. With a triple prepared in advance, that talking costs one round. You are one of the parties in the multiplication.\n\n## First move\n\nStart the problem, **attach the container terminal**, and type:\n\n```bash\nbeaver show\n```\n\nThat prints this deployment's field, the five numbers you hold, the protocol, what the other parties broadcast, and the product the desk published.\n\nRun `beaver` with no arguments for the list of commands. There is no file to edit; every command is one line. python3 is in the container if you would rather not do the arithmetic by hand.\n\n## Goal\n\nSay what the round makes public (`beaver open`), assemble your own row of the product (`beaver row`), say what the desk should have published (`beaver product`), and then do all three again on a multiplication you have never seen, handed over once those are cleared (`beaver transfer`). When all four are cleared, `beaver flag` prints your `TC{...}` — paste it into the answer box.",
+      "writeup": "## What the preprocessing actually moved\n\nA Beaver triple (a, b, c) only has to satisfy c = a*b. It depends on neither x nor y, so it can be manufactured before the event, or in any idle stretch. What remains online is masking (local), opening d and e (one round), and a linear combination (local). The cost of multiplication did not disappear; the input-independent part of it moved offline.\n\n## Why d and e are safe to publish\n\nThe a in d = x - a is a value made during preprocessing that nobody holds in the clear. So d is x under a one-time mask, and publishing it reveals nothing about x.\n\nThis problem does not leave that as a claim. What you are shown is your own row of a and no other, so `x = d + a` — which needs the whole of a — is not something you can do with what you have. You can check that on the screen. Reuse the triple and the same a masks two different secrets, at which point the property is gone. That is why each multiplication consumes its own triple, and why the offline cost scales with the number of multiplications.\n\n## The last term\n\nc + d*b + e*a is linear in the shares, so each party computes its own row. d*e is not a sharing at all — d and e are public by then, so it is a public scalar, and exactly one party folds it in. If every party adds it, the rows sum to x*y + (n-1)*d*e. It is the same rule as adding a public constant in the previous problem, arriving mid-protocol where it is far easier to miss.\n\nThat mistake is indistinguishable from correct at n = 1, and also whenever d or e happens to be zero. The fixtures force d != 0 and e != 0 precisely so the wrong answer stays observable, and force d != e so that `beaver open e,d` cannot pass a transposition. Those are choices made for observability, not a realistic mask distribution.\n\n## The correction is not something to memorise\n\nThe first run's fault is that every party folded d*e in, so the rows summed to x*y + (n-1)*d*e and the correction is -(n-1)*d*e. The second run's fault is that nobody did, so they summed to x*y - d*e and the correction is +d*e — with no n in it anywhere. Different sign, different shape. What carries is the habit of writing down what the faulty run's rows actually summed to, every time.\n\n## The round count\n\nd and e can be opened together, so one Beaver multiplication costs one round of communication. Not zero — preprocessing does not buy silence. A multiplication circuit of depth D costs D rounds, which is why MPC latency tracks multiplicative depth rather than gate count.\n\n## Where this leads\n\nWith multiplication in hand, any arithmetic circuit can be evaluated under MPC. What is left is which openings leak what, and that is the last two problems of Week 2.",
       "learningGoals": [
         "Mask a secret with a preprocessed value and open the difference safely",
-        "Assemble a sharing of x*y from the opened values by a linear combination",
+        "Open a set of rows into a public value in its reduced form",
+        "Assemble your own row of x*y from the opened values by a linear combination",
         "Explain why the public scalar d*e is folded in by exactly one party",
-        "State that a Beaver multiplication costs one round of communication",
+        "Recover the intended product from a faulty run's published one, using public values only",
         "Explain that preprocessing moves multiplication cost offline rather than removing it"
       ],
-      "checks": [
+      "hints": [
         {
-          "id": "mask",
-          "label": "Hide a secret behind a preprocessed value"
+          "id": "hint-1",
+          "content": "d = X - a and e = Y - b are both sharings, so a party's row of each is its own row of X minus its own row of a — and opening one means adding up every party's row of it. `beaver show` prints every other party's broadcast and not yours, because computing yours is the local step. If a subtraction goes negative, bring it back into [0, p)."
         },
         {
-          "id": "open",
-          "label": "Publish the masked difference"
-        },
-        {
-          "id": "combine",
-          "label": "Build the product from the two published values",
-          "hints": [
-            {
-              "id": "combine-hint-1",
-              "content": "Three of the four terms are linear in the shares, so each party computes its own row. The remaining one is not a sharing at all."
-            },
-            {
-              "id": "combine-hint-2",
-              "content": "If every party adds d*e to its own share, what does the set sum to? Same rule as adding a public constant in the previous problem."
-            }
-          ]
-        },
-        {
-          "id": "protocol",
-          "label": "Run it end to end and state the rounds",
-          "hints": [
-            {
-              "id": "protocol-hint-1",
-              "content": "d and e can be opened together. Preprocessing does not drive the online communication to zero."
-            }
-          ]
-        },
-        {
-          "id": "transfer",
-          "label": "Hold up in settings you have not seen"
+          "id": "hint-2",
+          "content": "In x*y = c + d*b + e*a + d*e, the first three terms are linear in the shares, so each party just computes its own row of them. The remaining one is not a sharing at all: d and e are public by now, so d*e is a public scalar. A public scalar is folded in by exactly one party, and `beaver show` says which. If every party adds it, the rows sum to x*y + (n-1)*d*e. When you correct the published number, write down what the faulty run's rows actually summed to before you subtract anything — that shape is not the same in both runs."
         }
       ]
     }

@@ -25,18 +25,19 @@
     ]
   },
   "difficulty": 3,
-  "estimatedDuration": "35-50 分",
-  "shortDescription": "share に対する操作のうち、いくつかは誰とも話さずに各自の手元だけでできる。どれがそうで、どれが違うのか。1 つだけ、素直にやると間違える。",
-  "description": "Week 2 の 2 問目。 加法的 share に対する線形操作を実装し、 通信が要る操作と要らない操作を区別する。 MPC が実用になるのは線形操作が通信不要だからで、 その境界を手を動かして引く。\n\n4 操作のうち 3 つは素直だが、 add-constant だけは違う。 全 party が自分の share に c を足すと、 総和は x + n*c になる。 この誤りは n=1 では正解と区別できず、 n が大きくても c の倍数だけずれるので、 固定の 1 設定だけを見る test では偶然通り得る。 hidden test は複数設定を回し、 かつ「全 share に足した場合の値」を名指しで落とす。\n\nno-communication checkpoint は round 数の完全一致ではなく 0 か非 0 かで採点する。 乗算プロトコルが何 round かかるかは方式によるが、 通信が要るかどうかは方式によらないため。\n\nWeek 2 の教材は pinned commit 時点で未公開のため courseAlignment.sources は持たず、 status は draft のままにする (#219 が公開を検出した時点で確定する)。",
-  "instructions": "## はじめに\n\nshare に対する操作のうち、 いくつかは誰とも話さずに各自の手元だけでできます。 どれがそうで、 どれが違うのかを、 実装して確かめます。\n\n## 最初の一手\n\n```bash\nmake inspect\n```\n\n設定と、 分類すべき 4 つの操作が出ます。 走らせる前に 「全員が自分の share に c を足したら総和はいくつになるか」を紙で出してください。\n\n次に `local/starter/linear.py` を編集します。\n\n## ゴール\n\n4 つの線形操作を実装し、 通信が要るものと要らないものを分類します。 4 つのうち 3 つは素直です。",
-  "writeup": "## 線形操作が通信不要であること\n\n加法的 share では、 share 同士の加算も公開定数倍も、 各 party が自分の share だけを見て実行でき、 結果はそのまま正しい share になる。 MPC が実用になるのはこの性質のおかげで、 通信が要るのは shared 値同士の乗算のように 「和の積が積の和にならない」操作に限られる。\n\n## add-constant だけが違う理由\n\n公開定数 c を足す操作も線形だが、 各 party が自分の share に c を足すと 総和は x + n*c になる。 正しくは 1 party だけが c を畳み込む。 この誤りは n=1 では正解と一致し、 n が大きくても c の倍数だけのずれなので、 固定の 1 設定を見る test では偶然通り得る。 「線形だから全員が同じことをすればよい」という直感が、 ここでちょうど 1 回だけ裏切られる。\n\n## round 数ではなく 0 か非 0 か\n\nno-communication checkpoint が完全一致で採点しないのは、 乗算プロトコルの round 数が方式に依存するのに対し、 通信が要るかどうかは依存しないからだ。 採点は主張が確定している部分にだけ賭ける。\n\n## 次につながるところ\n\nここで引いた境界がそのまま Beaver triple の動機になる。 乗算だけが通信を要するなら、 その通信を前処理へ追い出せないか、 という問いが次に来る。",
+  "estimatedDuration": "40-55 分",
+  "shortDescription": "share に対する操作のうち、いくつかは誰とも話さずに各自の手元だけでできる。どれがそうで、どれが違うのか。1 つだけ、素直にやると総和がずれる。",
+  "description": "Week 2 の 2 問目。 配信形態は container のみで、 参加者は portal から問題コンテナのターミナルへ接続し、 `shares` コマンドを 1 行ずつ打つ。 編集するファイルは無く、 host への checkout も要らない。 flag は FLAG_SEED から container 内で導出するので、 暗記も当て推量も効かない。\n\n設計の中心は「参加者を 1 party にする」こと。 `shares show` が出すのは自分の 2 行 (X の自分の row と Y の自分の row)、 公開値 k と c、 party 数 n、 自分の party 番号、 公開定数を畳み込む担当 party、 desk が実際に publish した総和だけで、 他 party の row は一切出さない。 これにより (1) 各 stage の答えが share ベクタではなく 1 つの体元になって一意に決まり、 (2)「この操作は手元で完結する」が主張ではなく画面上の事実になる ── 画面にあるもので計算できたなら、 それは 1 行から計算できたということ。\n\nstage は 4 つで、 単一 flag のゲートになっている。 (1) row: pipeline を正しく回したときの自分の row。 参加者は担当 party ではないので、 公開定数は自分の行には入らない。 (2) total: desk が publish した (誤った) 総和から、 本来 publish されるべきだった値。 live の fault は addpub が全 party で走ったことなので補正は -(n-1)*c。 (3) silent: 8 本の式のうち、 誰とも話さずに評価できるものを列挙する。 判定基準は「shared 変数について 1 次以下 (affine)」で、 これは additive share で各 party が自分の row を単独で計算できる条件そのもの。 (4) transfer: (1)〜(3) が通って初めて渡される第 2 の desk ── 別の素数、 別の party 数、 定数が scale の内側にある pipeline、 参加者が担当 party の側、 そして fault が逆向き (addpub が 1 度も走らなかった) ── で同じ 3 つを 1 行で答える。 補正は +k*c になり、 n が現れない。 「published から (n-1)*c を引く」を暗記した回答は第 2 の desk で必ず落ちる。\n\nsilent の不合格応答は「何本が逆側にあるか」だけを返し、 どれが逆かは返さない。 どれが逆かは「読み違いの所在」の地図そのもので、 それを描くのがこの stage だから。 ただしこれは防御ではない: 1 本ずつ変えれば個数は動くので位置ごとの探索は依然可能で、 コストが数十回から数百回に上がるだけである (flag は FLAG_SEED から導出できるので、 いずれにせよ honor-system の範囲)。 row / total の不合格応答は、 答えとの差が既知の定数になる近傍誤答 (「定数を畳み込んでしまった row」など) を名指ししない ── 名指しは答えから c を引いたものを渡すのと同じになる。\n\nfixture 側の不変条件。 live は必ず 参加者 != 担当 party、 transfer は必ず 参加者 == 担当 party。 k は 0 でも 1 でもなく、 c は 0 でない (c=0 では畳み込み方の違いが観測できない)。 2 つの desk の fault は逆向きで、 live の補正式を transfer に当てると必ず外れる。 式の locality は表の宣言を信じず、 mutation.py が体上で f(u+v)-f(u)-f(v)+f(0)=0 を無作為サンプルで検査して裏を取る ── 構文的な次数計算は `x*y - x*y` のような式で真実とずれるため。\n\nWeek 2 の教材は pinned commit 時点で未公開のため courseAlignment.sources は placeholder のままで、 status は draft にしておく (#219 が公開を検出した時点で確定する)。",
+  "instructions": "## はじめに\n\nshare に対する操作のうち、 いくつかは誰とも話さずに各自の手元だけでできます。 どれがそうで、 どれが違うのか。 あなたはその desk の party の 1 人です。\n\n## 最初の一手\n\n問題を起動したら、 **コンテナのターミナルに接続**して次を打ってください。\n\n```bash\nshares show\n```\n\nこのデプロイの field、 自分が何番の party でどの 2 つの数を持っているか、 desk が回している pipeline、 そして desk が実際に publish した総和が出ます。\n\n使えるコマンドは `shares` を引数なしで打てば一覧できます。 編集するファイルはありません。 すべて 1 行で打てるコマンドです。 計算を手でやりたくなければ、 コンテナの中に python3 が入っています。\n\n## ゴール\n\n自分の row を出し (`shares row`)、 desk が publish すべきだった総和を出し (`shares total`)、 誰とも話さずに評価できる式を挙げ (`shares silent`)、 その 3 つが通ると渡される見たことのない desk でも同じことをします (`shares transfer`)。 4 つとも通ると `shares flag` が `TC{...}` を出すので、 それを回答欄に貼ってください。",
+  "writeup": "## 線形操作が通信不要であること\n\n加法的 share では、 share 同士の加算も公開定数倍も、 各 party が自分の row だけを見て実行でき、 結果はそのまま正しい share になる。 MPC が実用になるのはこの性質のおかげで、 通信が要るのは shared 値同士の乗算のように 「和の積が積の和にならない」操作に限られる。\n\nこの問題で参加者に他 party の row を見せないのは、 その主張を主張のまま置かないためだ。 画面にあるもので答えが出たなら、 それは 1 行から出たということになる。\n\n## add-constant だけが違う理由\n\n公開定数 c を足す操作も線形だが、 各 party が自分の row に c を足すと 総和は x + n*c になる。 正しくは 1 party だけが畳み込む。 この誤りは n=1 では正解と一致し、 n が大きくても c の倍数だけのずれなので、 固定の 1 設定を見る test では偶然通り得る。 「線形だから全員が同じことをすればよい」という直感が、 ここでちょうど 1 回だけ裏切られる。\n\n## どこで畳み込むかで結果が変わる\n\n第 1 の desk の pipeline は `Z = k*(X + Y) + c` で、 fault は 「全 party が c を足した」。 だから総和は k*(x+y) + n*c になり、 補正は -(n-1)*c。 第 2 の desk の pipeline は `Z = k*(X + Y + c)` で、 fault は 「addpub が 1 度も走らなかった」。 総和は k*(x+y) で、 補正は +k*c ── n が出てこない。\n\n定数が pipeline のどこに置かれているかと、 fault がどちら向きかで、 補正式は値ではなく形ごと変わる。 「published から (n-1)*c を引く」を覚えて第 2 の desk に持ち込むと必ず外れる。 持ち越せるのは、 「誤った run の row が結局いくつに足し合わさったのか」を毎回自分で書き下す手順のほうだけだ。\n\n## 通信の要否は式の次数で決まる\n\n各 party が自分の row だけで f を評価できるのは、 f が shared 変数について 1 次以下 (affine) で、 係数が公開値のときちょうどそのとき。 share 同士の加算は row + row、 公開定数倍は row × 既知の数。 shared 値同士の積はどちらでもない ── row の積の和は和の積にならず、 その差を埋められる party は存在しない。\n\nこの判定を式の見た目ではなく体上の性質として持てるかどうかが、 silent stage が見ている点。 実際 mutation.py 側も、 表の宣言を信じずに f(u+v)-f(u)-f(v)+f(0)=0 を無作為サンプルで検査して locality の裏を取っている。\n\n## 次につながるところ\n\nここで引いた境界がそのまま Beaver triple の動機になる。 乗算だけが通信を要するなら、 その通信を前処理へ追い出せないか、 という問いが次に来る。",
   "tags": [
     "advanced-cryptography-2026",
     "week2",
     "mpc",
     "secret-sharing",
     "local-play",
-    "container"
+    "container",
+    "terminal"
   ],
   "exposedPorts": [
     {
@@ -48,8 +49,9 @@
     "share 同士の加算が各自の手元だけで完結することを確認できる",
     "公開定数倍が通信不要であることを確認できる",
     "公開定数の加算で全 share に足すと総和が x + n*c になることを説明できる",
-    "通信が必要な操作と不要な操作を区別できる",
-    "線形操作を合成しても正しい share であり続けることを確認できる"
+    "誤った run が publish した総和から、 本来の値を公開情報だけで復元できる",
+    "通信が必要な操作と不要な操作を、 shared 変数についての次数で区別できる",
+    "定数の位置と fault の向きが変わると補正式も変わることを、 見たことのない設定で確認できる"
   ],
   "nodes": {
     "learning_objectives": [
@@ -74,24 +76,20 @@
     ],
     "assessment_criteria": [
       {
-        "id": "assessment.ac26-w2-linear-shares.add-shares",
-        "description": "share 同士の加算が和へ復元できた。"
+        "id": "assessment.ac26-w2-linear-shares.row",
+        "description": "自分の row と公開値だけから、 pipeline の出力の自分の row を出せた。"
       },
       {
-        "id": "assessment.ac26-w2-linear-shares.add-constant",
-        "description": "公開定数の加算が x + c へ復元でき、全 share へ足す誤りを避けられた。"
+        "id": "assessment.ac26-w2-linear-shares.total",
+        "description": "誤った run が publish した総和から、 本来の総和を公開情報だけで復元できた。"
       },
       {
-        "id": "assessment.ac26-w2-linear-shares.mul-constant",
-        "description": "公開定数倍が x * c へ復元できた。"
-      },
-      {
-        "id": "assessment.ac26-w2-linear-shares.no-communication",
-        "description": "4 操作を通信の要否で正しく分類できた。"
+        "id": "assessment.ac26-w2-linear-shares.silent",
+        "description": "8 本の式を通信の要否でちょうど正しく分類できた。"
       },
       {
         "id": "assessment.ac26-w2-linear-shares.transfer",
-        "description": "未知の設定と合成式でも成立した。"
+        "description": "別の field・party 数・定数位置・逆向きの fault を持つ desk でも同じ 3 つが成立した。"
       }
     ],
     "misconceptions": [
@@ -139,22 +137,17 @@
     {
       "type": "assesses",
       "source": "problem.ac26-w2-linear-shares",
-      "target": "assessment.ac26-w2-linear-shares.add-shares"
+      "target": "assessment.ac26-w2-linear-shares.row"
     },
     {
       "type": "assesses",
       "source": "problem.ac26-w2-linear-shares",
-      "target": "assessment.ac26-w2-linear-shares.add-constant"
+      "target": "assessment.ac26-w2-linear-shares.total"
     },
     {
       "type": "assesses",
       "source": "problem.ac26-w2-linear-shares",
-      "target": "assessment.ac26-w2-linear-shares.mul-constant"
-    },
-    {
-      "type": "assesses",
-      "source": "problem.ac26-w2-linear-shares",
-      "target": "assessment.ac26-w2-linear-shares.no-communication"
+      "target": "assessment.ac26-w2-linear-shares.silent"
     },
     {
       "type": "assesses",
@@ -182,99 +175,45 @@
     ]
   },
   "scoring": {
-    "kind": "multi-verify",
-    "checks": [
+    "kind": "verify",
+    "points": 200,
+    "wrongAnswerPenalty": 10,
+    "hints": [
       {
-        "id": "add-shares",
-        "label": "share 同士を足す",
-        "points": 40,
-        "wrongAnswerPenalty": 10
+        "id": "hint-1",
+        "content": "自分の row は、 pipeline を自分の row に適用したものです。 share 同士の加算なら row + row、 公開値倍なら row × その値。 例外は公開定数の加算だけで、 これは 1 party が担当します (誰が担当かは `shares show` に書いてあります)。 全 party が c を足してしまうと、 row の総和は A + c ではなく A + n*c になります。 定数が pipeline のどこに置かれているかで、 その差が何倍されるかも変わります。 まず「誤った run の row は結局いくつに足し合わさったのか」を書き下してください。",
+        "penalty": 40
       },
       {
-        "id": "add-constant",
-        "label": "公開された値を足す",
-        "points": 50,
-        "wrongAnswerPenalty": 10,
-        "hints": [
-          {
-            "id": "add-constant-hint-1",
-            "content": "全員が自分の share に c を足したら、 総和はいくつになるか。 紙で 3 人分やってみる。",
-            "penalty": 20
-          }
-        ]
-      },
-      {
-        "id": "mul-constant",
-        "label": "公開された値を掛ける",
-        "points": 35,
-        "wrongAnswerPenalty": 10
-      },
-      {
-        "id": "no-communication",
-        "label": "誰とも話さずにできる操作を挙げる",
-        "points": 40,
-        "wrongAnswerPenalty": 10,
-        "hints": [
-          {
-            "id": "no-comm-hint-1",
-            "content": "和の積は積の和になるか。 ならない操作だけが通信を必要とする。",
-            "penalty": 15
-          }
-        ]
-      },
-      {
-        "id": "transfer",
-        "label": "見たことのない設定でも成立させる",
-        "points": 35,
-        "wrongAnswerPenalty": 10
+        "id": "hint-2",
+        "content": "分類は式ごとに同じ 1 つの問いで決まります ── 「ある party は自分の row と公開値だけで、 この式の自分の row を作れるか」。 share 同士の加算は row + row、 公開値倍は row × 既知の数で、 どちらも作れます。 shared 値同士の積はどちらでもありません: row の積の和は和の積にならず、 その差を埋められる party がいないからです。 言い換えると、 shared 変数について 1 次以下 (係数は公開値) の式だけが通信不要です。 括弧を展開してから次数を数えてください ── 見た目が公開値との積でも、 展開すると shared 値同士の積が残ることがあります。",
+        "penalty": 60
       }
     ]
   },
   "i18n": {
     "en": {
       "name": "What you can do without talking to anyone",
-      "shortDescription": "Some operations on shares can be done by every party alone, on its own share, with nobody talking. Which ones? Three are the obvious thing. One is not.",
-      "instructions": "## Start here\n\nSome operations on additive shares can be done by every party alone, with nobody talking to anybody. You will implement them and work out which are which.\n\n## First move\n\n```bash\nmake inspect\n```\n\nThat prints your setting and the four operations to classify. Before running anything, work out on paper what the shares sum to if *every* party adds c to its own share.\n\nThen edit `local/starter/linear.py`.\n\n## Goal\n\nImplement the four linear operations and classify which need communication. Three of the four are the obvious thing.",
-      "writeup": "## Why linear operations need no communication\n\nWith additive shares, adding two sharings and scaling by a public constant can each be done by a party looking only at its own share, and the result is already a valid sharing. That is what makes MPC practical. Communication is needed only where the sum of products is not the product of sums — multiplying two *shared* values.\n\n## Why add-constant is the odd one\n\nAdding a public constant is linear too, but if every party adds c to its own share the total becomes x + n*c. Exactly one party folds it in. The wrong version is indistinguishable from correct at n = 1, and off only by a multiple of c otherwise, so a test on one fixed setting can pass it by luck. The intuition 'it is linear, so everyone does the same thing' is wrong exactly once, and this is that once.\n\n## Zero versus non-zero, not an exact round count\n\nThe classification checkpoint grades on whether an operation needs to talk at all, not on how many rounds. The round count of a multiplication protocol depends on the protocol; whether it must communicate does not. The scoring only bets on the part that is settled.\n\n## Where this leads\n\nThe boundary you draw here is the motivation for Beaver triples. If multiplication is the only thing that needs to talk, the next question is whether that talking can be pushed into preprocessing.",
+      "shortDescription": "Some operations on shares can be done by every party alone, on its own row, with nobody talking. Which ones? One of them quietly moves the total when you do the obvious thing.",
+      "description": "Week 2 mechanism problem, delivered as a container and played from its terminal. The participant is one party and never sees another party's row, which is what makes every stage's answer a single field element and turns \"this finishes locally\" into a fact about the screen rather than a claim. See the Japanese `description` for the stage design, the grading contract, and the fixture invariants.",
+      "instructions": "## Start here\n\nSome operations on additive shares can be done by every party alone, with nobody talking to anybody. Which ones, and which are not — you are one of the parties at the desk.\n\n## First move\n\nStart the problem, **attach the container terminal**, and type:\n\n```bash\nshares show\n```\n\nThat prints this deployment's field, which party you are and which two numbers you hold, the pipeline the desk runs, and the total the desk actually published.\n\nRun `shares` with no arguments for the list of commands. There is no file to edit; every command is one line. python3 is in the container if you would rather not do the arithmetic by hand.\n\n## Goal\n\nWork out your own row (`shares row`), say what the desk should have published (`shares total`), name the expressions that finish without anyone talking (`shares silent`), and then do all three again at a desk you have never seen, handed over once those are cleared (`shares transfer`). When all four are cleared, `shares flag` prints your `TC{...}` — paste it into the answer box.",
+      "writeup": "## Why linear operations need no communication\n\nWith additive shares, adding two sharings and scaling by a public constant can each be done by a party looking only at its own row, and the result is already a valid sharing. That is what makes MPC practical. Communication is needed only where the sum of the products is not the product of the sums — multiplying two *shared* values.\n\nThe reason this problem never shows you another party's row is to keep that from staying a claim. If the answer came out of what was on your screen, it came out of one row.\n\n## Why add-constant is the odd one\n\nAdding a public constant is linear too, but if every party adds c to its own row the total becomes x + n*c. Exactly one party folds it in. The wrong version is indistinguishable from correct at n = 1, and off only by a multiple of c otherwise, so a test on one fixed setting can pass it by luck. The intuition 'it is linear, so everyone does the same thing' is wrong exactly once, and this is that once.\n\n## Where the constant sits changes the answer\n\nThe first desk runs `Z = k*(X + Y) + c` and its fault is that every party added c, so the rows summed to `k*(x+y) + n*c` and the correction is `-(n-1)*c`. The second desk runs `Z = k*(X + Y + c)` and its fault is the opposite one: `addpub` never ran at all, so the rows summed to `k*(x+y)` and the correction is `+k*c` — with no n in it anywhere.\n\nWhere the constant sits in the pipeline, and which way the fault goes, change the shape of the correction and not just its value. Carrying 'subtract (n-1) times c from the published number' to the second desk is wrong there. What carries is the habit of writing down what the faulty run's rows actually summed to, every time.\n\n## Whether talking is needed is a question about degree\n\nA party can evaluate f on its own row alone exactly when f is degree at most one in the shared values, with public coefficients. Adding two sharings is one row plus one row. Scaling by a public value is one row times a known number. Multiplying two shared values is neither: the sum of the products of the rows is not the product of the sums, and no party holds enough to make up the difference.\n\nHolding that as a property of the field rather than as a shape you recognise is what the classification stage looks at. The mutation suite holds itself to the same standard — it rechecks every expression's declared locality by sampling `f(u+v) - f(u) - f(v) + f(0)` over the field rather than by trusting the table.\n\n## Where this leads\n\nThe boundary you draw here is the motivation for Beaver triples. If multiplication is the only thing that needs to talk, the next question is whether that talking can be pushed into preprocessing.",
       "learningGoals": [
         "Confirm that adding two sharings completes locally",
         "Confirm that scaling by a public constant needs no communication",
-        "Explain why adding a constant to every share yields x + n*c",
-        "Tell operations that need communication apart from those that do not",
-        "Confirm that composing linear operations still yields a valid sharing"
+        "Explain why adding a constant to every row yields x + n*c",
+        "Recover the intended total from a faulty run's published one, using public values only",
+        "Tell operations that need communication apart from those that do not, by degree in the shared values",
+        "Confirm on a setting you have not seen that moving the constant and reversing the fault changes the correction"
       ],
-      "checks": [
+      "hints": [
         {
-          "id": "add-shares",
-          "label": "Add two sharings"
+          "id": "hint-1",
+          "content": "Your row is the pipeline applied to your row. Adding two sharings is one row plus one row; scaling by a public value is one row times that value. The one exception is adding a public constant, which exactly one party folds in — `shares show` says which one. If every party adds c, the rows sum to A + n*c rather than A + c. Where the constant sits in the pipeline also changes what that difference gets multiplied by. Start by writing down what the faulty run's rows actually summed to."
         },
         {
-          "id": "add-constant",
-          "label": "Add a value everyone already knows",
-          "hints": [
-            {
-              "id": "add-constant-hint-1",
-              "content": "If every party adds c to its own share, what does the set sum to? Try it on paper with three parties."
-            }
-          ]
-        },
-        {
-          "id": "mul-constant",
-          "label": "Scale by a value everyone already knows"
-        },
-        {
-          "id": "no-communication",
-          "label": "Name what needs no talking",
-          "hints": [
-            {
-              "id": "no-comm-hint-1",
-              "content": "Is the product of the sums the sum of the products? Only where it is not does anyone need to talk."
-            }
-          ]
-        },
-        {
-          "id": "transfer",
-          "label": "Hold up in settings you have not seen"
+          "id": "hint-2",
+          "content": "The classification comes down to one question asked of each expression: can a party produce its own row of this from its own rows and the public values alone? Adding two sharings is one row plus one row, and scaling by a public value is one row times a known number — both can. A product of two shared values cannot: the sum of the products of the rows is not the product of the sums, and no party holds enough to make up the difference. Equivalently, only expressions of degree at most one in the shared values (with public coefficients) need no communication. Expand the brackets before counting the degree — something that looks like a product with a public value can leave a product of two shared values behind."
         }
       ]
     }

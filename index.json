@@ -205,17 +205,18 @@
         ]
       },
       "difficulty": 3,
-      "estimatedDuration": "40-60 分",
-      "shortDescription": "shared 値同士の掛け算だけは手元で終わらない。前処理で作った三つ組を使って、通信を 1 round に押し込む。最後の項が他の 3 つと違う扱いを要求する。",
+      "estimatedDuration": "45-60 分",
+      "shortDescription": "shared 値同士の掛け算だけは手元で終わらない。前処理で作った三つ組を使うと通信は 1 round で済む。ただし 4 つの項のうち最後の 1 つだけが、他の 3 つと違う扱いを要求する。",
       "tags": [
         "advanced-cryptography-2026",
         "week2",
         "mpc",
         "beaver-triple",
         "local-play",
-        "container"
+        "container",
+        "terminal"
       ],
-      "scoringKind": "multi-verify",
+      "scoringKind": "verify",
       "cost": {
         "perHourUsd": 0,
         "perDayIfLeftRunningUsd": 0,
@@ -249,17 +250,18 @@
         ]
       },
       "difficulty": 3,
-      "estimatedDuration": "35-50 分",
-      "shortDescription": "share に対する操作のうち、いくつかは誰とも話さずに各自の手元だけでできる。どれがそうで、どれが違うのか。1 つだけ、素直にやると間違える。",
+      "estimatedDuration": "40-55 分",
+      "shortDescription": "share に対する操作のうち、いくつかは誰とも話さずに各自の手元だけでできる。どれがそうで、どれが違うのか。1 つだけ、素直にやると総和がずれる。",
       "tags": [
         "advanced-cryptography-2026",
         "week2",
         "mpc",
         "secret-sharing",
         "local-play",
-        "container"
+        "container",
+        "terminal"
       ],
-      "scoringKind": "multi-verify",
+      "scoringKind": "verify",
       "cost": {
         "perHourUsd": 0,
         "perDayIfLeftRunningUsd": 0,

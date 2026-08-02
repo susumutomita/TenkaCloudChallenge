@@ -1,53 +1,97 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "bun:test";
+import { afterAll, describe, expect, it } from "bun:test";
 import { parse as parseYaml } from "yaml";
 
 /**
- * ac26-w2-beaver-mul is the third Week 2 problem. The interesting assertions run its
- * Python for real — the starter fails, the reference passes every checkpoint, the mutation
- * suite kills every intended defect, and the near-miss answer that folds the public scalar
- * into every share is rejected — rather than reading source text. Python 3 is on
- * ubuntu-latest and the problem is stdlib-only.
+ * ac26-w2-beaver-mul is delivered as a container the participant plays from its
+ * terminal: `beaver show` / `beaver open` / `beaver row` / `beaver product` /
+ * `beaver transfer` / `beaver flag`, one line at a time, no file to edit. The
+ * interesting assertions therefore run that CLI for real -- including from a working
+ * directory that is not the problem root, which is what the portal's terminal does
+ * not promise -- rather than reading source text.
+ *
+ * Python 3 is on ubuntu-latest and the problem is stdlib-only.
  */
 
 const ROOT = join(import.meta.dir, "..", "challenges", "ac26-w2-beaver-mul");
 const LOCAL = join(ROOT, "local");
 const SEED = "ci-fixed-seed";
-const CHECKPOINTS = ["mask", "open", "combine", "protocol", "transfer"] as const;
+
+const scratch: string[] = [];
+afterAll(() => {
+  for (const directory of scratch.splice(0)) rmSync(directory, { recursive: true, force: true });
+});
 
 function read(relativePath: string): string {
   return readFileSync(join(ROOT, relativePath), "utf8");
 }
 
-function python(args: string[], cwd = LOCAL) {
+function python(args: string[], cwd = LOCAL, env: NodeJS.ProcessEnv = {}) {
   return spawnSync("python3", args, {
     cwd,
     encoding: "utf8",
-    env: { ...process.env, FLAG_SEED: SEED, PYTHONDONTWRITEBYTECODE: "1" },
-    timeout: 180_000,
+    env: { ...process.env, FLAG_SEED: SEED, PYTHONDONTWRITEBYTECODE: "1", ...env },
+    timeout: 600_000,
   });
 }
 
-function bundle(dir: "starter" | "reference"): string {
-  return read(`local/${dir}/beaver.py`);
+/** A fresh progress directory, so no test inherits another's cleared stages. */
+function state(): string {
+  const directory = mkdtempSync(join(tmpdir(), "ac26-w2-beaver-state-"));
+  scratch.push(directory);
+  return directory;
 }
 
-function evaluate(checkpointId: string, submission: string): boolean {
+/**
+ * Run the CLI the way the portal terminal does: by absolute path, from `/`.
+ *
+ * The cwd matters. The terminal does not promise to land in `/problem`, and a
+ * `beaver show` that fails with ImportError because of where the shell started is an
+ * unanswerable error message for a participant.
+ */
+function beaver(stateDir: string, ...args: string[]) {
+  return python([join(LOCAL, "beaver.py"), ...args], "/", { LAB_STATE_DIR: stateDir });
+}
+
+interface Answers {
+  readonly open: string;
+  readonly row: string;
+  readonly product: string;
+  readonly transfer: string[];
+}
+
+/** The answers, from `reference/` -- present in the checkout, absent from the image. */
+function referenceAnswers(seed: string): Answers {
   const script = [
     "import json, sys",
     "sys.path.insert(0, '.')",
-    "from verifier.server import evaluate",
-    "print(json.dumps(evaluate(sys.argv[1], sys.argv[2])))",
+    "from reference.solve import live_arguments, transfer_arguments",
+    "seed = sys.argv[1]",
+    "live = live_arguments(seed)",
+    "print(json.dumps({'open': live['open'][0], 'row': live['row'][0],",
+    "                  'product': live['product'][0],",
+    "                  'transfer': transfer_arguments(seed)}))",
   ].join("\n");
-  const result = python(["-c", script, checkpointId, submission]);
+  const result = python(["-c", script, seed]);
   expect(result.status).toBe(0);
-  return JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "null") === true;
+  return JSON.parse(result.stdout.trim().split("\n").at(-1) as string) as Answers;
 }
 
-describe("ac26-w2-beaver-mul: participant contract", () => {
-  it("should ship every file the AC26 template requires", () => {
+function expectedFlag(seed: string): string {
+  const result = python([
+    "-c",
+    "import sys; sys.path.insert(0, '.'); from fixtures.generate import flag; print(flag(sys.argv[1]))",
+    seed,
+  ]);
+  expect(result.status).toBe(0);
+  return result.stdout.trim();
+}
+
+describe("ac26-w2-beaver-mul: the files the container is built from", () => {
+  it("should ship every file the delivery needs", () => {
     for (const path of [
       "Makefile",
       "metadata.json",
@@ -55,31 +99,43 @@ describe("ac26-w2-beaver-mul: participant contract", () => {
       "README.ja.md",
       "local/docker-compose.yml",
       "local/Dockerfile",
-      "local/show.py",
+      "local/beaver.py",
       "local/mutation.py",
       "local/fixtures/generate.py",
+      "local/lab/judge.py",
+      "local/lab/progress.py",
       "local/tests/public/test_beaver.py",
-      "local/tests/hidden/check_beaver.py",
+      "local/reference/solve.py",
       "local/verifier/server.py",
-      "local/starter/beaver.py",
-      "local/reference/beaver.py",
     ]) {
       expect(existsSync(join(ROOT, path))).toBe(true);
     }
   });
 
-  it("should expose the four participant targets the template mandates", () => {
-    const makefile = read("Makefile");
-    for (const target of ["test:", "test-one:", "inspect:", "reset:"]) {
-      expect(makefile).toContain(target);
+  it("should have no starter to edit, since the problem is played from the terminal", () => {
+    expect(existsSync(join(LOCAL, "starter"))).toBe(false);
+  });
+
+  it("should have no hidden test directory, since the judge is what grades", () => {
+    // Grading moved into `lab/judge.py`, which the participant runs in their own
+    // terminal against their own answer. A leftover `tests/hidden/` would be a second
+    // grader nothing calls.
+    expect(existsSync(join(LOCAL, "tests", "hidden"))).toBe(false);
+  });
+
+  it("should not send a participant to a make target or a file to edit", () => {
+    // The player-facing surface is the portal page and the container terminal. A README
+    // or an `instructions` that says `make inspect` describes a workflow the portal has
+    // no way to offer, which is what this rebuild exists to remove.
+    for (const file of ["README.md", "README.ja.md", "metadata.json"]) {
+      const text = read(file);
+      expect(text).not.toContain("make inspect");
+      expect(text).not.toContain("starter");
     }
   });
 
-  it("should mount only starter/, keeping the answer out of the checkout", () => {
-    const makefile = read("Makefile");
-    expect(makefile).toContain("local/starter:/problem/starter:ro");
-    expect(makefile).not.toContain("local/reference:");
-    expect(makefile).not.toContain("tests/hidden:");
+  it("should tag its image with its own problem id", () => {
+    expect(read("Makefile")).toContain("IMAGE := ac26-w2-beaver-mul");
   });
 });
 
@@ -97,26 +153,56 @@ describe("ac26-w2-beaver-mul: container safety", () => {
     expect(read("local/docker-compose.yml")).toContain("${FLAG_SEED:?");
   });
 
+  it("should keep a writable path for the progress file on a read-only container", () => {
+    const compose = parseYaml(read("local/docker-compose.yml")) as {
+      services: Record<string, { read_only?: boolean; tmpfs?: string[] }>;
+    };
+    for (const service of Object.values(compose.services)) {
+      expect(service.read_only).toBe(true);
+      expect(service.tmpfs).toContain("/tmp");
+    }
+  });
+
+  it("should build the participant stage, not the one carrying the answers", () => {
+    const compose = parseYaml(read("local/docker-compose.yml")) as {
+      services: Record<string, { build?: { target?: string } }>;
+    };
+    for (const service of Object.values(compose.services)) {
+      expect(service.build?.target).toBe("participant");
+    }
+    expect(read("Makefile")).toContain("docker build --target participant");
+  });
+
   it("should pin the base image by digest", () => {
     expect(read("local/Dockerfile")).toMatch(/^FROM \S+@sha256:[0-9a-f]{64}( AS \S+)?$/m);
   });
 
+  it("should put the entry point on PATH, since the terminal's cwd is not promised", () => {
+    expect(read("local/Dockerfile")).toContain("/usr/local/bin/beaver");
+  });
+
   it("should never build a shell command out of participant input", () => {
-    const verifier = read("local/verifier/server.py");
-    expect(verifier).toContain("shell=False");
-    expect(verifier).not.toContain("os.system");
-    expect(verifier).not.toContain("shell=True");
+    for (const file of ["local/verifier/server.py", "local/beaver.py", "local/lab/judge.py"]) {
+      const source = read(file);
+      expect(source).not.toContain("os.system");
+      expect(source).not.toContain("shell=True");
+      expect(source).not.toContain("eval(");
+    }
   });
 });
 
 describe("ac26-w2-beaver-mul: fixtures are seed-derived", () => {
-  it("should produce different settings for different seeds", () => {
+  it("should produce a different multiplication for a different seed", () => {
     const script = [
       "import json, sys",
       "sys.path.insert(0, '.')",
-      "from fixtures.generate import setting, health_token",
+      "from fixtures.generate import CASES, broadcast, correct_row, field_modulus, flag",
+      "from fixtures.generate import opened, party_count, product, published_total, your_index",
       "seed = sys.argv[1]",
-      "print(json.dumps({'s': setting(seed), 't': health_token(seed)}))",
+      "print(json.dumps({c: [field_modulus(seed, c), party_count(seed, c), your_index(seed, c),",
+      "                      opened(seed, c), correct_row(seed, c), product(seed, c),",
+      "                      published_total(seed, c), broadcast(seed, c)] for c in CASES}",
+      "                 | {'f': flag(seed)}))",
     ].join("\n");
     const first = python(["-c", script, "seed-alpha"]).stdout.trim();
     const second = python(["-c", script, "seed-beta"]).stdout.trim();
@@ -130,148 +216,386 @@ describe("ac26-w2-beaver-mul: fixtures are seed-derived", () => {
     const script = [
       "import sys",
       "sys.path.insert(0, '.')",
-      "from fixtures.generate import setting",
-      "print(','.join(str(setting('s%d' % i)['n']) for i in range(40)))",
+      "from fixtures.generate import LIVE, party_count",
+      "print(','.join(str(party_count('s%d' % i, LIVE)) for i in range(40)))",
     ].join("\n");
     const counts = new Set(python(["-c", script]).stdout.trim().split(","));
     expect(counts.size).toBeGreaterThan(2);
   });
 
-  // If d or e were zero, d*e would vanish and folding the public scalar into every share
-  // would be indistinguishable from folding it into one. The generator forces both
-  // non-zero; asserting it here stops a later "simplification" from silently reopening
-  // the hole, because the wrong answer would then grade as correct.
-  it("should never generate a setting where the masked difference vanishes", () => {
+  it("should give the second multiplication a different field from the first", () => {
     const script = [
       "import sys",
       "sys.path.insert(0, '.')",
-      "from fixtures.generate import setting",
-      "bad = 0",
-      "for i in range(200):",
-      "    cfg = setting('s%d' % i)",
-      "    p = cfg['p']",
-      "    if (cfg['x'] - cfg['a']) % p == 0 or (cfg['y'] - cfg['b']) % p == 0:",
-      "        bad += 1",
-      "print(bad)",
+      "from fixtures.generate import LIVE, TRANSFER, field_modulus",
+      "print(sum(field_modulus('s%d' % i, LIVE) == field_modulus('s%d' % i, TRANSFER)",
+      "          for i in range(60)))",
     ].join("\n");
     expect(python(["-c", script]).stdout.trim()).toBe("0");
   });
 
-  it("should hold the triple invariant c = a*b in every generated setting", () => {
+  it("should reconstruct to x*y from the rows the participant is handed", () => {
+    // Beaver's identity has to hold for the actual table, not just on paper. Without
+    // this the `row` stage asks for a number that is not part of anything.
     const script = [
       "import sys",
       "sys.path.insert(0, '.')",
-      "from fixtures.generate import setting",
-      "bad = [i for i in range(200)",
-      "       if setting('s%d' % i)['c'] != (setting('s%d' % i)['a'] * setting('s%d' % i)['b'])",
-      "       % setting('s%d' % i)['p']]",
+      "from fixtures.generate import CASES, designated_party, field_modulus, opened",
+      "from fixtures.generate import party_count, product, rows",
+      "bad = []",
+      "for i in range(60):",
+      "    seed = 's%d' % i",
+      "    for case in CASES:",
+      "        p, n = field_modulus(seed, case), party_count(seed, case)",
+      "        t, o = designated_party(seed, case), opened(seed, case)",
+      "        a, b, c = rows(seed, case, 'a'), rows(seed, case, 'b'), rows(seed, case, 'c')",
+      "        total = sum(c[j] + o['d'] * b[j] + o['e'] * a[j] for j in range(n))",
+      "        total += o['d'] * o['e']",
+      "        if total % p != product(seed, case):",
+      "            bad.append(seed + '/' + case)",
+      "        del t",
+      "print(','.join(bad))",
+    ].join("\n");
+    expect(python(["-c", script]).stdout.trim()).toBe("");
+  });
+
+  it("should never open a value to zero, and never open both to the same value", () => {
+    // A zero `d` or `e` makes `d*e` vanish, at which point folding the public scalar
+    // into every row is indistinguishable from folding it into exactly one -- the wrong
+    // answer would grade as correct. Equal openings would let `beaver open e,d` pass a
+    // transposition. Both are observability choices, not a realistic mask distribution.
+    const script = [
+      "import sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import CASES, opened",
+      "bad = []",
+      "for i in range(200):",
+      "    seed = 's%d' % i",
+      "    for case in CASES:",
+      "        o = opened(seed, case)",
+      "        if o['d'] == 0 or o['e'] == 0 or o['d'] == o['e']:",
+      "            bad.append(seed + '/' + case)",
       "print(len(bad))",
     ].join("\n");
     expect(python(["-c", script]).stdout.trim()).toBe("0");
   });
+
+  it("should never make the live participant the party that folds the scalar in", () => {
+    // Without this the live `row` stage would ask for `d*e`, and the reflex the problem
+    // is built around ("everyone folds it in") would be right on the first try. The
+    // transfer case is the mirror image, which is what makes it a transfer.
+    const script = [
+      "import sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import LIVE, TRANSFER, designated_party, your_index",
+      "live = [i for i in range(60)",
+      "        if your_index('s%d' % i, LIVE) == designated_party('s%d' % i, LIVE)]",
+      "away = [i for i in range(60)",
+      "        if your_index('s%d' % i, TRANSFER) != designated_party('s%d' % i, TRANSFER)]",
+      "print(len(live), len(away))",
+    ].join("\n");
+    expect(python(["-c", script]).stdout.trim()).toBe("0 0");
+  });
+
+  it("should make the first run's correction wrong on the second one", () => {
+    // The anti-memorisation property. The two runs are faulty in opposite directions,
+    // so `published - (n-1)*d*e` -- the whole of the live `product` stage -- never
+    // answers the transfer one.
+    const script = [
+      "import sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import TRANSFER, field_modulus, opened, party_count, product",
+      "from fixtures.generate import published_total",
+      "bad = []",
+      "for i in range(60):",
+      "    seed = 's%d' % i",
+      "    p, n = field_modulus(seed, TRANSFER), party_count(seed, TRANSFER)",
+      "    o = opened(seed, TRANSFER)",
+      "    if (published_total(seed, TRANSFER) - (n - 1) * o['d'] * o['e']) % p == product(seed, TRANSFER):",
+      "        bad.append(seed)",
+      "print(','.join(bad))",
+    ].join("\n");
+    expect(python(["-c", script]).stdout.trim()).toBe("");
+  });
 });
 
-describe("ac26-w2-beaver-mul: the problem is solvable and actually fails", () => {
-  it("should fail the public tests in the shipped starter state", () => {
-    const result = python(["tests/public/test_beaver.py"]);
+describe("ac26-w2-beaver-mul: the terminal is the whole interface", () => {
+  it("should print usage when run with no arguments", () => {
+    const result = beaver(state());
+    expect(result.status).toBe(0);
+    for (const command of [
+      "beaver show",
+      "beaver open",
+      "beaver row",
+      "beaver product",
+      "beaver transfer",
+      "beaver flag",
+    ]) {
+      expect(result.stdout).toContain(command);
+    }
+  });
+
+  it("should describe the deployment without leaking the flag", () => {
+    const result = beaver(state(), "show");
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("what you hold");
+    expect(result.stdout).toContain("X*Y = c + d*b + e*a + d*e");
+    expect(result.stdout).toContain("what the other parties broadcast");
+    expect(result.stdout).not.toContain(expectedFlag(SEED));
+  });
+
+  it("should withhold the participant's own broadcast, since computing it is the stage", () => {
+    const script = [
+      "import json, sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import LIVE, broadcast, your_index",
+      "seed = sys.argv[1]",
+      "print(json.dumps(broadcast(seed, LIVE)[your_index(seed, LIVE)]))",
+    ].join("\n");
+    const own = JSON.parse(python(["-c", script, SEED]).stdout.trim()) as {
+      d: number;
+      e: number;
+    };
+    const stdout = beaver(state(), "show").stdout;
+    expect(stdout).not.toContain(`d row = ${own.d}    e row = ${own.e}`);
+    expect(stdout).toContain("(yours -- work it out)");
+  });
+
+  it("should name the literal next command for every open stage", () => {
+    // The portal shows a short brief and then hands over a shell, so whatever `show`
+    // does not say, nobody says.
+    const stdout = beaver(state(), "show").stdout;
+    for (const command of [
+      "beaver open <d>,<e>",
+      "beaver row <number>",
+      "beaver product <number>",
+    ]) {
+      expect(stdout).toContain(command);
+    }
+  });
+
+  it("should refuse an unknown command instead of doing something", () => {
+    const result = beaver(state(), "solve");
     expect(result.status).not.toBe(0);
-    expect(result.stdout).toContain("failed");
+    expect(result.stdout).toContain("unknown command");
+  });
+
+  it("should refuse an opening that is not a pair of field elements", () => {
+    const result = beaver(state(), "open", "-1,1");
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("not an element of the field");
+  });
+
+  it("should refuse an opening with the wrong number of values", () => {
+    const result = beaver(state(), "open", "1");
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toContain("values given");
+  });
+
+  it("should run identically from a directory that is not the problem root", () => {
+    // Asserted by running every command in this file from `/` already; this pins the
+    // property itself.
+    expect(beaver(state(), "show").status).toBe(0);
+  });
+});
+
+describe("ac26-w2-beaver-mul: the four stages and the gate", () => {
+  const seeds = ["ci-fixed-seed", "ci-other-seed"] as const;
+
+  it.each(seeds)("should take the reference answers from empty to flag on %s", (seed) => {
+    const directory = state();
+    const answers = referenceAnswers(seed);
+    const run = (...args: string[]) =>
+      python([join(LOCAL, "beaver.py"), ...args], "/", {
+        LAB_STATE_DIR: directory,
+        FLAG_SEED: seed,
+      });
+
+    expect(run("flag").stdout).not.toContain(expectedFlag(seed));
+    // The second multiplication is earned: not gradeable, and not printed, before it.
+    expect(run("transfer", ...answers.transfer).status).not.toBe(0);
+    expect(run("open", answers.open).status).toBe(0);
+    expect(run("row", answers.row).status).toBe(0);
+    expect(run("product", answers.product).status).toBe(0);
+    expect(run("flag").stdout).not.toContain(expectedFlag(seed));
+    expect(run("transfer", ...answers.transfer).status).toBe(0);
+    expect(run("flag").stdout).toContain(expectedFlag(seed));
+  }, 120_000);
+
+  it("should reject the two openings transposed", () => {
+    // `d != e` is a fixture invariant precisely so this is a real rejection.
+    const answers = referenceAnswers(SEED);
+    const [d, e] = answers.open.split(",");
+    const result = beaver(state(), "open", `${e},${d}`);
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toContain("NOT YET");
+  });
+
+  it("should never say which of the two openings is the wrong one", () => {
+    // Naming one hands the other over by subtraction, since their sum is not secret.
+    const answers = referenceAnswers(SEED);
+    const [d, e] = answers.open.split(",");
+    const stdout = beaver(state(), "open", `0,${e}`).stdout;
+    expect(stdout).not.toContain(d as string);
+    expect(stdout).toContain("1 of the two openings");
+  });
+
+  it("should reject the row that folds the public scalar in at every party", () => {
+    // The near miss the whole problem is built around. The live participant is not the
+    // designated party, so a row carrying `d*e` is the reflex being corrected.
+    const script = [
+      "import sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import LIVE, correct_row, field_modulus, opened",
+      "seed = sys.argv[1]",
+      "p, o = field_modulus(seed, LIVE), opened(seed, LIVE)",
+      "print((correct_row(seed, LIVE) + o['d'] * o['e']) % p)",
+    ].join("\n");
+    const wrong = python(["-c", script, SEED]).stdout.trim();
+    const result = beaver(state(), "row", wrong);
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toContain("NOT YET");
+  });
+
+  it("should reject the number the desk published as the product", () => {
+    const script = [
+      "import sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import LIVE, published_total",
+      "print(published_total(sys.argv[1], LIVE))",
+    ].join("\n");
+    const published = python(["-c", script, SEED]).stdout.trim();
+    const result = beaver(state(), "product", published);
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toContain("the desk published");
+  });
+
+  it("should lock the second multiplication until it is earned, rather than omit it", () => {
+    // Locked, not absent. The portal terminal has no scrollback and no second page, so
+    // a stage that simply is not printed reads as a broken problem.
+    const script = [
+      "import sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import TRANSFER, published_total",
+      "print(published_total(sys.argv[1], TRANSFER))",
+    ].join("\n");
+    const hidden = python(["-c", script, SEED]).stdout.trim();
+    const stdout = beaver(state(), "show").stdout;
+    expect(stdout).not.toContain("the second multiplication ==");
+    // Anchored on the label rather than matched as a bare number: `show` prints a page
+    // of four-digit values, so a naked substring check would go red for reasons that
+    // have nothing to do with the lock the moment a fixture changes.
+    expect(stdout).not.toContain(`published product = ${hidden}`);
+    expect(stdout).toContain("[locked]");
+  });
+
+  it("should name the transfer command once the second multiplication is unlocked", () => {
+    // The unlocked branch of `show` is the one nothing else exercises: every other
+    // test here runs with empty progress, and TEMPLATE.md names "a `show` that never
+    // said what to type next" as a bug found by playthrough and by no test.
+    const directory = state();
+    writeFileSync(
+      join(directory, "progress.json"),
+      JSON.stringify({ open: true, row: true, product: true }),
+    );
+    const stdout = beaver(directory, "show").stdout;
+    expect(stdout).toContain("the second multiplication ==");
+    expect(stdout).toContain("beaver transfer open=<d>,<e> row=<number> product=<number>");
+    expect(stdout).not.toContain("[locked]");
+  });
+
+  it("should require all three readings at once on the transfer stage", () => {
+    const directory = state();
+    writeFileSync(
+      join(directory, "progress.json"),
+      JSON.stringify({ open: true, row: true, product: true }),
+    );
+    const [opening, row, value] = referenceAnswers(SEED).transfer;
+    expect(beaver(directory, "transfer", opening as string, row as string).status).not.toBe(0);
+    expect(beaver(directory, "transfer", row as string, value as string).status).not.toBe(0);
+    expect(
+      beaver(directory, "transfer", opening as string, row as string, value as string).status,
+    ).toBe(0);
+  });
+
+  it("should withhold the flag for every incomplete progress state", () => {
+    for (const cleared of [
+      { open: true },
+      { row: true },
+      { product: true },
+      { transfer: true },
+      { open: true, row: true },
+      { open: true, row: true, product: true },
+      { open: true, row: true, transfer: true },
+      { row: true, product: true, transfer: true },
+    ]) {
+      const directory = state();
+      writeFileSync(join(directory, "progress.json"), JSON.stringify(cleared));
+      const result = beaver(directory, "flag");
+      expect(result.status).not.toBe(0);
+      expect(result.stdout).not.toContain(expectedFlag(SEED));
+    }
   });
 
   it("should kill every intended defect in the mutation suite", () => {
     const result = python(["mutation.py"]);
-    expect(result.stdout).toContain("PASS reference implementation passes the hidden tests");
+    expect(result.stdout).toContain("PASS the seed set spans");
+    expect(result.stdout).toContain("PASS the fixtures hold");
     expect(result.stdout).not.toContain("SURVIVED");
+    expect(result.stdout).not.toContain("FAILED");
     expect(result.status).toBe(0);
-  });
+  }, 900_000);
+
+  it("should pass its own public self-check", () => {
+    const result = python(["tests/public/test_beaver.py"]);
+    expect(result.stdout).not.toContain("FAIL");
+    expect(result.status).toBe(0);
+  }, 180_000);
 });
 
 describe("ac26-w2-beaver-mul: /verify contract", () => {
-  it.each(CHECKPOINTS)(
-    "should accept the reference submission on %s",
-    (checkpoint) => {
-      expect(evaluate(checkpoint, bundle("reference"))).toBe(true);
-    },
-    120_000,
-  );
-
-  it.each(CHECKPOINTS)(
-    "should reject the starter submission on %s",
-    (checkpoint) => {
-      expect(evaluate(checkpoint, bundle("starter"))).toBe(false);
-    },
-    120_000,
-  );
-
-  // The near miss this whole problem is built around: correct in every respect except
-  // that the public scalar d*e is folded into every share, giving x*y + (n-1)*d*e.
-  it("should reject a combine that folds the public scalar into every share", () => {
-    const source = bundle("reference")
-      .replace("out[0] = (out[0] + d * e) % p", "out = [(v + d * e) % p for v in out]")
-      .replace("    return out", "    return out");
-    expect(source).toContain("(v + d * e)");
-    expect(evaluate("combine", source)).toBe(false);
-  }, 120_000);
-
-  // Preprocessing moves work offline; it does not remove the round. A submission that is
-  // otherwise perfect must still fail the checkpoint that asks for the round count.
-  it("should reject a protocol answer claiming a Beaver multiplication is silent", () => {
-    const source = bundle("reference").replace("    return 1", "    return 0");
-    expect(source).toContain("return 0");
-    expect(evaluate("protocol", source)).toBe(false);
-  }, 120_000);
-
-  // `transfer` runs the whole suite under a seed the participant has never been shown, so
-  // an answer that hard-codes the setting it was handed cannot survive it.
-  it("should reject a submission hard-coded to one setting on transfer", () => {
+  function evaluate(submission: string): boolean {
     const script = [
       "import json, sys",
       "sys.path.insert(0, '.')",
-      "from fixtures.generate import setting",
-      "cfg = setting(sys.argv[1])",
-      "print(json.dumps({'p': cfg['p'], 'n': cfg['n']}))",
+      "from verifier.server import evaluate",
+      "print(json.dumps(evaluate(sys.argv[1])))",
     ].join("\n");
-    const parse = (seed: string) =>
-      JSON.parse(python(["-c", script, seed]).stdout.trim()) as { p: number; n: number };
-    const { p, n } = parse(SEED);
-    // The seed is fixed, so this is a deterministic precondition rather than a chance
-    // one: if the transfer setting happened to match, the submission below would not be
-    // hard-coded to anything and the assertion would pass vacuously.
-    expect(parse(`${SEED}:transfer`)).not.toEqual({ p, n });
-    const source = [
-      "def mask(value_shares, mask_shares, p):",
-      `    return [(v - m) % ${p} for v, m in zip(value_shares, mask_shares)]`,
-      "def open_value(shares, p):",
-      `    return sum(shares) % ${p}`,
-      "def combine(c_shares, a_shares, b_shares, d, e, p):",
-      `    out = [(c + d * b + e * a) % ${p}`,
-      "           for c, a, b in zip(c_shares, a_shares, b_shares)]",
-      `    out[0] = (out[0] + d * e) % ${p}`,
-      `    return out[:${n}]`,
-      "def rounds():",
-      "    return 1",
-    ].join("\n");
-    expect(evaluate("transfer", source)).toBe(false);
-  }, 120_000);
+    const result = python(["-c", script, submission]);
+    expect(result.status).toBe(0);
+    return JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "null") === true;
+  }
 
-  it("should reject a submission that hangs, rather than hanging itself", () => {
-    expect(
-      evaluate("mask", "def mask(a, b, p):\n    while True:\n        pass\n"),
-    ).toBe(false);
-  }, 60_000);
-
-  it("should reject a submission that cannot even be imported", () => {
-    expect(evaluate("mask", "def mask(:\n")).toBe(false);
-  }, 60_000);
-
-  it("should reject an unknown checkpoint id instead of crediting it", () => {
-    expect(evaluate("finish-week2", bundle("reference"))).toBe(false);
+  it("should accept this deployment's flag", () => {
+    expect(evaluate(expectedFlag(SEED))).toBe(true);
   });
 
-  it("should echo the checkpointId so the platform can fail closed", () => {
-    expect(read("local/verifier/server.py")).toContain(
-      '{"checkpointId": checkpoint_id, "correct": correct}',
-    );
+  it("should accept it with the whitespace a paste carries", () => {
+    expect(evaluate(`  ${expectedFlag(SEED)}\n`)).toBe(true);
+  });
+
+  it("should reject another deployment's flag", () => {
+    expect(evaluate(expectedFlag("some-other-seed"))).toBe(false);
+  });
+
+  it("should reject a guess at the flag's shape", () => {
+    expect(evaluate("TC{beaver_mul_00000000000000000000}")).toBe(false);
+    expect(evaluate("")).toBe(false);
+  });
+
+  it("should run no participant code at all, since there is none to run", () => {
+    const verifier = read("local/verifier/server.py");
+    for (const pattern of ["subprocess", "runpy", "importlib", "exec(", "eval(", "compile("]) {
+      expect(verifier).not.toContain(pattern);
+    }
+  });
+
+  it("should never restate the expected value in its response", () => {
+    const verifier = read("local/verifier/server.py");
+    const message = /"message": \(([\s\S]*?)\),/.exec(verifier)?.[1] ?? "";
+    expect(message).not.toContain("derive_flag");
+    expect(message).not.toContain("FLAG");
   });
 });
 
@@ -280,29 +604,52 @@ describe("ac26-w2-beaver-mul: metadata contracts", () => {
     return JSON.parse(read("metadata.json")) as {
       difficulty: number;
       status: string;
-      courseAlignment: { week: number; role: string; sources?: Array<{ ref: string }> };
+      courseAlignment: { week: number; role: string; sources: Array<{ ref: string; kind: string }> };
+      runtime: { verifyUrl: string; secretEnv: string[] };
+      exposedPorts: Array<{ port: number }>;
       scoring: {
         kind: string;
-        checks: Array<{ id: string; points: number; hints?: Array<{ penalty: number }> }>;
+        points: number;
+        wrongAnswerPenalty: number;
+        checks?: unknown;
+        hints: Array<{ id: string; penalty: number }>;
       };
+      i18n: { en: { hints: Array<{ id: string }>; checks?: unknown } };
     };
   }
 
-  it("should total the Medium tier's 200 points across its checkpoints", () => {
+  it("should score as a single discovered flag at the Medium tier", () => {
     const meta = metadata();
-    expect(meta.scoring.kind).toBe("multi-verify");
+    expect(meta.scoring.kind).toBe("verify");
     expect(meta.difficulty).toBe(3);
-    expect(meta.scoring.checks.reduce((sum, check) => sum + check.points, 0)).toBe(200);
-    // SCORING.md caps hints per checkpoint, not across the problem: no single checkpoint
-    // may be worth less than half its points once every hint on it is opened.
-    for (const check of meta.scoring.checks) {
-      const penalty = (check.hints ?? []).reduce((sum, hint) => sum + hint.penalty, 0);
-      expect(penalty).toBeLessThanOrEqual(check.points / 2);
-    }
+    expect(meta.scoring.points).toBe(200);
+    expect(meta.scoring.wrongAnswerPenalty).toBe(10);
+    const hintPenalty = meta.scoring.hints.reduce((sum, hint) => sum + hint.penalty, 0);
+    expect(hintPenalty).toBeLessThanOrEqual(100);
   });
 
-  it("should score exactly the checkpoints the verifier implements", () => {
-    expect(metadata().scoring.checks.map((check) => check.id)).toEqual([...CHECKPOINTS]);
+  it("should carry no leftover checkpoint list from the multi-verify shape", () => {
+    // The portal's answer box is a single-line text input, so a checkpoint that expected
+    // a file's source could not be submitted from it. A stale `checks[]` would still be
+    // projected into index.json.
+    const meta = metadata();
+    expect(meta.scoring.checks).toBeUndefined();
+    expect(meta.i18n.en.checks).toBeUndefined();
+  });
+
+  it("should translate every hint", () => {
+    const meta = metadata();
+    expect(meta.i18n.en.hints.map((hint) => hint.id)).toEqual(
+      meta.scoring.hints.map((hint) => hint.id),
+    );
+  });
+
+  it("should publish the verify port it advertises", () => {
+    const meta = metadata();
+    const url = new URL(meta.runtime.verifyUrl);
+    expect(url.hostname).toBe("127.0.0.1");
+    expect(meta.exposedPorts.map((entry) => String(entry.port))).toContain(url.port);
+    expect(meta.runtime.secretEnv).toContain("FLAG_SEED");
   });
 
   // Week 2 had no material at the recorded commit, so the pin records that absence

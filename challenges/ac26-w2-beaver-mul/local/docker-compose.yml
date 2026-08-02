@@ -1,5 +1,6 @@
 # Every port binds to 127.0.0.1 only. This problem has no network surface for the
-# learner to attack; the whole challenge is local reasoning.
+# learner to attack: it is played from the container terminal, and the published port
+# exists only so the platform can post a submitted flag to /verify.
 services:
   verifier:
     build:
@@ -14,14 +15,17 @@ services:
     ports:
       - "127.0.0.1:18097:18097"
     read_only: true
+    # The only writable path in the container, and where the lab records which stages
+    # have been cleared. Recreating the container starts that over; the four stages
+    # take a couple of minutes to redo once you know the answers, and a durable volume
+    # would be one more thing that can be wrong.
     tmpfs:
       - /tmp
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    # The rlimits in verifier/server.py bound the submission's child process. These bound
-    # the verifier itself, which is the process that would still be standing if a
-    # submission found a way past them.
+    # The container is long-lived (the terminal attaches to it) and runs a single
+    # stdlib HTTP server plus whatever the participant types. These bound both.
     mem_limit: 1g
     pids_limit: 128

@@ -6,7 +6,7 @@
 > the TenkaCloud repository, not to the course operators.
 
 **Track:** `advanced-cryptography-2026` · **Order:** 230 · **Chapter:** Week 2 / Beaver Triples
-· **Role:** `mechanism` · **Time:** 40–60 minutes · **Points:** 200
+· **Role:** `mechanism` · **Time:** 45–60 minutes · **Points:** 200
 · **Required first:** `ac26-w2-linear-shares` · **Status:** draft — see "Week 2 alignment"
 
 ## The story
@@ -19,83 +19,115 @@ Someone points out that the hard part does not depend on the numbers. You can gr
 awkward material in advance — the week before, overnight, whenever — and then the meeting itself
 is short.
 
+Last night's run came out wrong, and it is the last term of four that did it. **You are one of
+the parties**, and you are the one being asked what the product actually is.
+
+## What gets deployed
+
+One container. No AWS account, no cloud resources, nothing to install. The container holds this
+deployment's field, party count, rows and triple — all derived from a per-deploy `FLAG_SEED`, so
+they are not the same as anyone else's — and the `beaver` command you play it with. The only
+published port is a loopback `/verify` the platform posts your flag to; you never touch it
+yourself.
+
 ## The construction
 
 A preprocessed triple `(a, b, c)` with `c = a*b`, shared out ahead of time and independent of
 both inputs:
 
 ```text
-d = x - a        e = y - b              each party, locally
-open d, open e                          one round of talking
-x*y = c + d*b + e*a + d*e               linear again, d and e now public
+d = X - a      e = Y - b        each party, on its own two rows
+open d, open e                  one round: everybody broadcasts both rows, everybody adds up
+X*Y = c + d*b + e*a + d*e
 ```
 
-Three of those four terms are handled exactly the way the previous problem handled them. **The
-fourth is not a sharing at all.**
+Three of those four terms are linear in the shares, so each party computes its own row. **The
+fourth is not a sharing at all.** Once `d` and `e` are open, `d*e` is a public scalar — and a
+public scalar is folded in by exactly one party. If every party adds it, the rows sum to
+`X*Y + (n-1)*d*e`.
+
+You are shown your own row of `a` and no other. That is deliberate, and it is checkable: `x = d +
+a` needs the whole of `a`, so "publishing `d` reveals nothing about `x`" is a fact about what is
+on your screen rather than something you are asked to believe.
 
 ## How to play
 
+Start the problem in the portal and **attach the container terminal**. Everything happens there,
+one line at a time. There is no file to edit, no editor to open, and nothing to clone.
+
 ```bash
-make inspect            # your setting and the shared-out triple
-make test               # public tests
-make reset              # restore starter/beaver.py
+beaver                     # the list of commands
+beaver show                # your five rows, the protocol, the broadcasts, what was published
+beaver open 1234,567       # the two values the round makes public
+beaver row 890             # YOUR row of the product, assembled correctly
+beaver product 123         # what the desk should have published instead
+beaver transfer open=12,34 row=56 product=78
+beaver status              # what you have cleared
+beaver flag                # TC{...}, once all four stages are cleared
 ```
 
-You edit one file, `local/starter/beaver.py`.
+`python /problem/beaver.py <command>` is the same thing, if you prefer to see where it lives.
+python3 is in the container, so the arithmetic is a one-liner if you want it to be:
+`python3 -c "print((1234 * 567) % 4013)"`. The reasoning is the exercise; the multiplication is
+not.
+
+### `open` — the one round
+
+`d` and `e` are sharings, so a party's row of each is one row minus one row, and opening means
+adding up everybody's. `beaver show` prints every other party's broadcast and not yours, because
+computing yours is the local step this stage is about.
+
+### `row` — the linear combination, and the term that is not
+
+Assemble your own row of `X*Y`. Three of the four terms are your own row of something; the fourth
+is a public scalar, and `beaver show` says which party folds it in.
+
+### `product` — undo the fault
+
+The desk published a reconstruction from a run that mishandled that scalar in a way `beaver show`
+states outright. Say what the product actually is. Everything in the correction is public: the two
+opened values and the party count.
+
+### `transfer` — on a multiplication you have not seen
+
+Clearing the three above hands you a second run. Different prime, different party count, you as
+the designated party rather than an ordinary one, and a fault that goes the other way: nobody
+folded the scalar in. So the correction that worked on the first one is wrong here, and wrong by a
+different shape rather than by a different number. All three readings at once, on one line.
 
 ## Scoring
 
-Five checkpoints, scored independently. Wrong answers cost 10 points each.
+| | |
+|---|---:|
+| Correct flag | **200** |
+| Wrong answer | −10 each |
+| Hint 1 | −40 |
+| Hint 2 | −60 |
 
-| Checkpoint | Points | What is checked |
-|---|---:|---|
-| `mask` | 40 | `x - a` reconstructs correctly, across four settings |
-| `open` | 30 | A canonical field element in `[0, p)`, not merely a congruent one |
-| `combine` | 65 | Reconstructs to `x*y` — and the classic wrong answer is named |
-| `protocol` | 30 | Your own four pieces run end to end, plus the round count |
-| `transfer` | 35 | All of it under a seed you have never been shown |
+Opening both hints still leaves 100 of 200. The flag is a `TC{...}` derived from this deployment's
+seed: there is nothing to memorise from someone else's run and nothing to guess.
 
-Hints on two of the five (20 + 12 on `combine`, 10 on `protocol`). Opening all three still leaves
-158 of 200.
+## Progress is kept in the container
 
-## The term that is not like the others
+`beaver status` reads a file under `/tmp`, which is the only writable path in the container
+(everything else is mounted read-only). Recreating the container starts the four stages over. Once
+you know the answers they take a couple of minutes to redo, and a durable volume would be one more
+thing that can be wrong.
 
-`c + d*b + e*a` is linear in the shares, so each party computes its own row and stops. `d*e` is a
-**public scalar**, and exactly one party folds it in. If everyone adds it, the shares sum to
-`x*y + (n-1)*d*e`.
+## Three ways to be wrong that nothing will catch for you
 
-That is the same rule as adding a public constant in the previous problem — but it arrives in the
-middle of a protocol, next to three terms that genuinely are per-party, which is why it is so much
-easier to miss here.
-
-It also hides well:
-
-- at `n = 1` it is **indistinguishable** from correct;
-- whenever `d` or `e` happens to be zero, `d*e` vanishes and it is again indistinguishable.
-
-The hidden fixtures force `d ≠ 0` and `e ≠ 0` for exactly that reason, and the wrong total is
-named explicitly rather than being left to an inequality. Those parameters are chosen for
-observability — a real protocol draws a uniform mask and tolerates `d = 0`.
-
-## Why d and e are safe to publish
-
-`a` is uniform, made during preprocessing, and held by nobody in the clear. So `d = x - a` is `x`
-under a one-time mask and reveals nothing about `x`.
-
-Reuse the triple and that stops being true: the same `a` would mask two different secrets. This is
-why each multiplication consumes its own triple, and why the offline cost scales with the number
-of multiplications rather than being paid once.
-
-## The round count is one, not zero
-
-`d` and `e` open together, so a Beaver multiplication costs **one** round. Preprocessing does not
-buy silence; it moves the input-independent work offline. A multiplication circuit of depth `D`
-costs `D` rounds, which is why MPC latency tracks multiplicative depth rather than gate count.
+1. **`d*e` is not a sharing.** It looks like the other three terms and it is a public scalar.
+   Exactly one party folds it in.
+2. **Preprocessing does not buy silence.** One Beaver multiplication costs one round, not zero. A
+   circuit of multiplicative depth D costs D rounds, which is why MPC latency tracks depth rather
+   than gate count.
+3. **A row is a field element.** `X - a` goes negative on the way. Bring it back into `[0, p)`;
+   `-1` and `p-1` are the same element, and the CLI takes the one in range.
 
 ## Where this leads
 
-With multiplication in hand, any arithmetic circuit can be evaluated under MPC. What remains is
-which openings leak what — the last two problems of Week 2.
+With multiplication in hand, any arithmetic circuit can be evaluated under MPC. What is left is
+which openings leak what, and that is the last two problems of Week 2.
 
 ## Week 2 alignment
 
@@ -107,14 +139,23 @@ the row before this leaves draft.
 
 ## Assurance scope
 
-Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
-daemon, and the image, so nothing inside that image is hidden from you: `reference/` and
-`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than
-out of reach.
+Local mode is **self-paced, honor-system verification**. You own the machine, the Docker daemon,
+and the image, so nothing inside that image is hidden from you. Be specific about what that means
+here:
 
-What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
-a checkpoint can only credit the id it echoes, results do not leak expected values, and the
-fixtures come from this deployment's seed so a memorized answer does not carry.
+- `FLAG_SEED` is in the container's environment and the flag is derived from it, so the flag can be
+  computed without clearing any stage.
+- `fixtures/` is in the image, because `beaver show` is rendered from it. It carries the secrets,
+  the whole triple and the values the stages are graded against, so reading it hands you
+  everything.
+
+The four stages are a sequence to walk, not a lock to pick, and skipping them cheats nobody but
+you. What the `author` stage split does buy is narrower: the worked answers and the suite that
+grades them are not in the image you run, so you do not have to avert your eyes from a file that
+solves the problem for you. What the seed buys is real: the field, the party count, the triple and
+the flag come from this deployment, so an answer memorised from someone else's run does not carry.
+And the grading is structural rather than a stored string, so it accepts a correct answer it has
+never seen.
 
 That supports self-study and honest practice. It does **not** support competition ranking,
 examination, or completion certification — those need a verifier the participant does not
@@ -122,11 +163,20 @@ administer, tracked in [#271](https://github.com/susumutomita/TenkaCloudChalleng
 
 ## Cost
 
-Zero. No cloud account, no AWS resources.
+Zero. No cloud account, no AWS resources. A container on your machine.
 
 ## For authors
 
-`make reference-test` runs the mutation suite: six broken submissions plus one aimed at the
-verifier. Three of the six are near-miss forms of the public-scalar trap — folded into every
-share, dropped entirely, and the two cross terms swapped — because each of those reconstructs to
-something different and a test that only catches one is not enough.
+`make play` opens a shell in the participant image, which is what the portal terminal attaches to.
+`make test` runs the public self-check (interface properties only — it carries no answer).
+
+`make reference-test` is the real one. It checks the fixture invariants the design rests on, runs
+the reference answers across twelve seeds, refuses a catalog of near-miss wrong answers, and then
+breaks the judge one requirement at a time to confirm that catalog kills every broken version.
+Four invariants exist for specific failure modes: Beaver's identity actually reconstructs to `X*Y`
+from the rows the participant is handed (otherwise the `row` stage asks for a number that is not
+part of anything); neither opening is ever zero, because a zero `d` or `e` makes `d*e` vanish and
+the wrong way of folding it in indistinguishable from the right one; the two openings are never
+equal, because otherwise `beaver open e,d` would pass a transposition; and the live participant is
+never the designated party while the transfer participant always is, so neither `row` answer can
+be reached by repeating the other.

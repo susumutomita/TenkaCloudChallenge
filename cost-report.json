@@ -86,7 +86,7 @@
       "id": "ac26-w2-linear-shares",
       "category": "Challenge",
       "region": "ap-northeast-1",
-      "estimatedSessionMinutes": 50,
+      "estimatedSessionMinutes": 55,
       "perHourUsd": 0,
       "perSessionUsd": 0,
       "ifLeftRunningUsd": {
