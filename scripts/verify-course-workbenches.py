@@ -1,0 +1,225 @@
+#!/usr/bin/env python3
+"""Contract checks for the portal-only course Browser Workbenches.
+
+The existing per-problem suites remain the source of truth for cryptographic grading.
+This test guards the delivery layer added by the migration: every target must be
+reachable from the Portal, expose only authored evidence, preserve raw code submission
+compatibility, and bind direct answers to the current deployment.
+"""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+TARGETS = (
+    "ac26-w2-secret-sharing",
+    "ac26-w2-linear-shares",
+    "ac26-w2-beaver-mul",
+    "ac26-w2-privacy-audit",
+    "ac26-w2-private-aggregate",
+    "ac26-w3-field-inverse",
+    "ac26-w3-ec-group",
+    "ac26-w3-nonce-reuse",
+    "ac26-w3-schnorr",
+    "ac26-w4-arithmetization",
+    "ac26-w4-commit-open",
+    "ac26-w4-proof-pipeline",
+    "ac26-w5-encoding-noise",
+    "ac26-w5-lwe-rlwe",
+    "ac26-w5-rgsw-external",
+    "ac26-w5-cmux-blind-rotation",
+    "ac26-w5-extract-key-switch",
+    "ac26-w5-pbs-homnand",
+    "ac26-w6-cosnark-linear",
+    "ac26-w6-cosnark-beaver",
+    "ac26-w6-cosnark-privacy",
+    "ac26-w6-zkvm-exploit-predicate",
+    "ac26-w6-zkvm-witness-binding",
+    "ac26-w6-stack-design",
+    "ac26-w7-capstone-design",
+    "ac26-w7-capstone-demo",
+    "sha256-bytes-padding",
+    "sha256-schedule-logic",
+    "sha256-compress-digest",
+)
+# Execute the heavier inspect/public-test adapter on representative problems from
+# each family. The catalogue's existing sharded suite executes every problem's own
+# public, reference, mutation, and verifier tests.
+REPRESENTATIVES = {
+    "ac26-w2-secret-sharing",
+    "ac26-w3-schnorr",
+    "ac26-w5-pbs-homnand",
+    "ac26-w7-capstone-demo",
+    "sha256-compress-digest",
+}
+
+PROBE = r'''
+import json
+import sys
+
+sys.path.insert(0, ".")
+from verifier.server import CHECKPOINTS, _WORKBENCH
+
+config = _WORKBENCH.config_payload()
+starter = _WORKBENCH.starter_payload()
+assert tuple(config["submittedFiles"]) == tuple(starter)
+assert tuple(item["id"] for item in config["checkpoints"]) == tuple(CHECKPOINTS)
+assert all(isinstance(value, str) and value.strip() for value in starter.values())
+
+manual = {
+    item["id"]: "0"
+    for item in config["checkpoints"]
+    if item["kind"] == "answer"
+}
+prepared = _WORKBENCH.prepare_submissions(starter, manual)
+assert prepared["ok"] is True
+assert set(prepared["submissions"]) == set(CHECKPOINTS)
+
+for item in config["checkpoints"]:
+    checkpoint = item["id"]
+    submission = prepared["submissions"][checkpoint]
+    if item["kind"] == "code":
+        assert _WORKBENCH.unwrap_submission(checkpoint, submission) == submission
+    else:
+        assert _WORKBENCH.unwrap_submission(checkpoint, "0") is None
+        assert _WORKBENCH.unwrap_submission(checkpoint, submission) == 0
+        other = type(_WORKBENCH)(
+            root=_WORKBENCH.root,
+            seed=_WORKBENCH.seed + ":other",
+            problem_id=_WORKBENCH.problem_id,
+            problem_name=_WORKBENCH.problem_name,
+            description=_WORKBENCH.description,
+            submitted_files=_WORKBENCH.submitted_files,
+            code_checkpoints=_WORKBENCH.code_checkpoints,
+            checkpoints=_WORKBENCH.checkpoints,
+            checkpoint_labels=_WORKBENCH.checkpoint_labels,
+            max_body_bytes=_WORKBENCH.max_body_bytes,
+            run_timeout_seconds=_WORKBENCH.run_timeout_seconds,
+            max_output_bytes=_WORKBENCH.max_output_bytes,
+            limit_fn=_WORKBENCH.limit_fn,
+        )
+        assert other.unwrap_submission(checkpoint, submission) is None
+
+result = {"config": config, "prepared": len(prepared["submissions"])}
+if sys.argv[1] == "heavy":
+    inspection = _WORKBENCH.inspect_payload()
+    assert isinstance(inspection.get("output"), str) and inspection["output"].strip()
+    public = _WORKBENCH.run_public_tests(starter)
+    assert isinstance(public.get("passed"), bool)
+    assert isinstance(public.get("output"), str) and public["output"].strip()
+    result["publicPassed"] = public["passed"]
+print(json.dumps(result, ensure_ascii=False))
+'''
+
+
+def require(condition: bool, message: str) -> None:
+    if not condition:
+        raise AssertionError(message)
+
+
+def check_static(problem_id: str) -> None:
+    problem = ROOT / "challenges" / problem_id
+    local = problem / "local"
+    metadata = json.loads((problem / "metadata.json").read_text(encoding="utf-8"))
+    runtime = metadata.get("runtime")
+    require(isinstance(runtime, dict), f"{problem_id}: runtime missing")
+    verify_url = runtime.get("verifyUrl")
+    require(
+        isinstance(verify_url, str) and verify_url.endswith("/verify"),
+        f"{problem_id}: bad verifyUrl",
+    )
+    expected_endpoint = verify_url[: -len("verify")]
+    require(
+        runtime.get("challengeEndpoints") == {"Browser Workbench": expected_endpoint},
+        f"{problem_id}: Browser Workbench endpoint does not match /verify",
+    )
+
+    for relative in (
+        "workbench/index.html",
+        "workbench/app.js",
+        "workbench/styles.css",
+        "verifier/workbench.py",
+        "verifier/server.py",
+    ):
+        require((local / relative).is_file(), f"{problem_id}: missing local/{relative}")
+
+    dockerfile = (local / "Dockerfile").read_text(encoding="utf-8")
+    require("COPY workbench/ ./workbench/" in dockerfile, f"{problem_id}: image omits assets")
+    require(
+        " AS participant" in dockerfile and " AS author" in dockerfile,
+        f"{problem_id}: stage split lost",
+    )
+
+    server = (local / "verifier" / "server.py").read_text(encoding="utf-8")
+    support = (local / "verifier" / "workbench.py").read_text(encoding="utf-8")
+    require("/api/config" in server and "/api/inspect" in server, f"{problem_id}: GET APIs missing")
+    require("/api/test" in server and "/api/prepare" in server, f"{problem_id}: POST APIs missing")
+    require("content-security-policy" in server, f"{problem_id}: CSP missing")
+    require("shell=True" not in server + support, f"{problem_id}: shell=True introduced")
+    require("os.system" not in server + support, f"{problem_id}: os.system introduced")
+    require(
+        "from reference" not in support and "tests.hidden" not in support,
+        f"{problem_id}: answers leaked into adapter",
+    )
+
+    index = (local / "workbench" / "index.html").read_text(encoding="utf-8")
+    app = (local / "workbench" / "app.js").read_text(encoding="utf-8")
+    for term in ("inspect", "starter", "prepare", "terminal-input"):
+        require(term in index, f"{problem_id}: workbench omits {term}")
+    for endpoint in ("/api/config", "/api/starter", "/api/inspect", "/api/test", "/api/prepare"):
+        require(endpoint in app, f"{problem_id}: app does not call {endpoint}")
+
+    instructions = str(metadata.get("instructions") or "")
+    require(
+        "Browser Workbench" in instructions,
+        f"{problem_id}: instructions do not start in Workbench",
+    )
+    require(
+        "make inspect" not in instructions and "local/starter/" not in instructions,
+        f"{problem_id}: host-only first move remains",
+    )
+    for readme in ("README.md", "README.ja.md"):
+        text = (problem / readme).read_text(encoding="utf-8")
+        require("Browser Workbench" in text, f"{problem_id}: {readme} omits browser path")
+        explanation = "## 解説" if readme.endswith("ja.md") else "## Explanation"
+        participant_path = text.split(explanation, 1)[0]
+        require(
+            "local/starter/" not in participant_path,
+            f"{problem_id}: {readme} requires checkout editing before the explanation",
+        )
+
+
+def check_runtime(problem_id: str) -> None:
+    mode = "heavy" if problem_id in REPRESENTATIVES else "light"
+    completed = subprocess.run(
+        [sys.executable, "-I", "-c", PROBE, mode],
+        cwd=ROOT / "challenges" / problem_id / "local",
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=180,
+        check=False,
+    )
+    require(
+        completed.returncode == 0,
+        f"{problem_id}: runtime probe failed\n{completed.stdout}",
+    )
+    payload = json.loads(completed.stdout.strip().splitlines()[-1])
+    require(payload["prepared"] > 0, f"{problem_id}: no Portal submissions prepared")
+
+
+def main() -> int:
+    for problem_id in TARGETS:
+        check_static(problem_id)
+        check_runtime(problem_id)
+        print(f"PASS {problem_id}")
+    print(f"\n{len(TARGETS)} Browser Workbench contracts passed")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
