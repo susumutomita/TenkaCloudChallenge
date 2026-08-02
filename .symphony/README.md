@@ -169,8 +169,11 @@ container before publishing anything.
   tool network access, full-access sandbox types, short bootstrap timeouts, retrying handoffs,
   missing external isolation, direct egress, and agent write credentials;
 - validates Bash syntax and the required Docker restrictions;
-- runs a synthetic canary test proving the agent launcher fails before Docker if the tracker secret
-  reaches it;
+- runs a synthetic canary test proving the agent launcher fails before Docker if the tracker secret,
+  either GitHub token name, or any AWS credential variable reaches it;
+- drives the launcher rather than reading it, proving that a Docker network which is not internal or
+  does not exist, a proxy URL carrying a credential or a non-`http://host:port` scheme, and a
+  symlinked model credential each stop the run before a container starts;
 - proves the agent app-server has stdin, both dependency graphs are prepared, and only the two
   explicit restricted container plans are produced by fake Git and Docker processes;
 - proves the immutable launcher creates the workspace branch before the approval-blocked app-server
