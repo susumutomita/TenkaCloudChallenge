@@ -34,6 +34,13 @@ member   allowed の各要素との差の積
 
 ## 遊び方
 
+Participant Portal で問題を起動し、表示された **Browser Workbench** を開きます。`inspect`、
+3 ファイルの編集、公開テスト、residuals / boolean / membership / transfer の提出データ生成まで
+ブラウザ内で完結します。first-broken は壊れた witness の trace を自分で読み、constraint の id を
+Portal へ入力します。ホスト側のターミナルや checkout のファイル操作は必要ありません。
+
+リポジトリから直接作問・検証する場合だけ、問題ディレクトリで次を実行できます。
+
 ```bash
 make inspect              # 自分の field、circuit、正しい witness、壊れた witness
 make test                 # 公開テスト
@@ -41,7 +48,7 @@ make test-one ID=trace    # 1 つだけ再実行する
 make reset                # starter 3 ファイルを元に戻す
 ```
 
-編集するのは 3 ファイルです。`local/starter/field.py` (F_p の演算)、
+Workbench または checkout で編集するのは 3 ファイルです。`local/starter/field.py` (F_p の演算)、
 `local/starter/circuit.py` (residual と trace)、`local/starter/gadgets.py` (条件を制約へ変換)。
 
 ## 採点

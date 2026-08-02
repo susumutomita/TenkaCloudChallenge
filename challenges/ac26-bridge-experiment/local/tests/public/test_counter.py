@@ -10,12 +10,22 @@ import os
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+ROOT = Path(__file__).resolve().parents[2]
+SUBMISSION_DIR = os.environ.get("SUBMISSION_DIR")
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, SUBMISSION_DIR or str(ROOT / "starter"))
 
-from fixtures.generate import public_case  # noqa: E402
-from starter.counter import advance  # noqa: E402
+from counter import advance  # noqa: E402
+from fixtures.generate import health_token, public_case  # noqa: E402
+from verifier.server import (  # noqa: E402
+    inspect_payload,
+    prepare_submissions,
+    run_public_tests,
+    starter_payload,
+)
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
+WORKBENCH_TEST_SEED = "public-workbench-test"
 
 
 def test_trace_has_one_entry_per_round() -> None:
@@ -40,6 +50,61 @@ def test_first_entry_is_start_plus_step() -> None:
     assert trace[0] == (case.start + case.step) % case.modulus
 
 
+def test_workbench_inspect_shows_seeded_evidence_without_answers() -> None:
+    payload = inspect_payload(WORKBENCH_TEST_SEED)
+    assert payload["environment"]["healthToken"] == health_token(WORKBENCH_TEST_SEED)
+    assert set(payload["predict"]) == {"start", "step", "rounds", "modulus"}
+    # The trace is evidence; the broken index and the predicted final value are
+    # the answers, so they must not appear.
+    assert set(payload["inspect"]) == {"start", "step", "rounds", "modulus", "trace"}
+    assert isinstance(payload["inspect"]["trace"], list)
+
+
+def test_workbench_starter_returns_the_editable_file() -> None:
+    payload = starter_payload()
+    assert set(payload) == {"counter.py"}
+    assert "def advance" in payload["counter.py"]
+
+
+def test_workbench_public_tests_fail_the_shipped_starter() -> None:
+    # The starter never reduces mod `modulus`, so the range test must fail. If
+    # this starts passing, the starter no longer demonstrates the misconception.
+    result = run_public_tests(WORKBENCH_TEST_SEED, starter_payload())
+    assert result["passed"] is False
+    assert "FAIL test_every_entry_is_in_range" in result["output"]
+
+
+def test_workbench_public_tests_report_invalid_browser_source() -> None:
+    result = run_public_tests(WORKBENCH_TEST_SEED, {"counter.py": "def advance(:\n"})
+    assert result["passed"] is False
+    assert result["output"]
+
+
+def test_workbench_prepare_returns_the_producible_portal_values() -> None:
+    result = prepare_submissions(WORKBENCH_TEST_SEED, starter_payload())
+    assert result["ok"] is True
+    submissions = result["submissions"]
+    # predict and inspect are worked out by the learner, never produced here.
+    assert set(submissions) == {"environment", "generalize"}
+    assert submissions["environment"] == health_token(WORKBENCH_TEST_SEED)
+    assert "def advance" in submissions["generalize"]
+
+
+def test_workbench_prepare_rejects_an_empty_source() -> None:
+    result = prepare_submissions(WORKBENCH_TEST_SEED, {"counter.py": "   "})
+    assert result["ok"] is False
+
+
+def test_workbench_assets_expose_browser_only_journey() -> None:
+    html = (ROOT / "workbench" / "index.html").read_text(encoding="utf-8")
+    script = (ROOT / "workbench" / "app.js").read_text(encoding="utf-8")
+    for term in ("predict", "inspect", "generalize", "terminal-input"):
+        assert term in html
+    for command in ("inspect", "test", "prepare", "reset"):
+        assert f'case "{command}"' in script
+    assert "copyText" in script
+
+
 def main() -> int:
     # `--only <substring>` backs `make test-one ID=...`: iterate on one behaviour
     # without re-reading the whole run.
@@ -52,6 +117,8 @@ def main() -> int:
     selected = 0
     for name, fn in sorted(globals().items()):
         if not name.startswith("test_") or not callable(fn):
+            continue
+        if os.environ.get("BROWSER_PUBLIC_TESTS") == "1" and name.startswith("test_workbench_"):
             continue
         if only and only not in name:
             continue

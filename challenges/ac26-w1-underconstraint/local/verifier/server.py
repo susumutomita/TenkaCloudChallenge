@@ -15,12 +15,14 @@ import sys
 import tempfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fixtures.generate import (
     clean_witness,
     dropped_constraint,
+    health_token,
     honest_witness,
     params,
     vulnerable_circuit,
@@ -45,6 +47,14 @@ CODE_CHECKPOINTS = {
     "mutation-transfer": (),
 }
 CHECKPOINTS = ("build", "audit", "exploit", "root-cause", "repair", "mutation-transfer")
+SUBMISSION_FILES = ("policy.py",)
+#: The five checkpoints whose portal submission is the learner's policy.py source.
+CODE_CHECKPOINT_IDS = ("build", "audit", "exploit", "repair", "mutation-transfer")
+WORKBENCH_ASSETS = {
+    "/": ("index.html", "text/html; charset=utf-8"),
+    "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+    "/styles.css": ("styles.css", "text/css; charset=utf-8"),
+}
 
 
 # Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still
@@ -76,6 +86,126 @@ def _manipulated_signals() -> list[str]:
         forged = {"revoked": 0, "inv": 0, "ok": 0,
                   "issuer_ok": prm["issuer_ok"], "granted": 0}
     return sorted(k for k in baseline if baseline[k] != forged.get(k))
+
+
+def starter_payload() -> dict[str, str]:
+    """Return the editable file shipped to the browser workbench."""
+    return {
+        name: (ROOT / "starter" / name).read_text(encoding="utf-8") for name in SUBMISSION_FILES
+    }
+
+
+def inspect_payload(seed: str) -> dict[str, object]:
+    """Build the seeded evidence shown by the browser's inspect command.
+
+    Same facts as `show.py`. The id of the dropped constraint stays out of the
+    payload: finding it is the audit checkpoint.
+    """
+    prm = params(seed)
+    return {
+        "policy": "grant access iff the revocation counter is zero AND the issuer is recognised",
+        "parameters": prm,
+        "deployedCircuit": vulnerable_circuit(seed),
+        "honestWitnesses": {
+            "revokedCredential": honest_witness(prm),
+            "cleanCredential": clean_witness(prm),
+        },
+        "iszeroGadget": {
+            "iszero_a": "value * inv + out - 1 = 0",
+            "iszero_b": "value * out = 0",
+        },
+        "healthToken": health_token(seed),
+    }
+
+
+def _submission_sources(files: object) -> dict[str, str] | None:
+    if not isinstance(files, dict):
+        return None
+    sources = {name: files.get(name) for name in SUBMISSION_FILES}
+    if any(not isinstance(text, str) or not text.strip() for text in sources.values()):
+        return None
+    normalized = {name: text for name, text in sources.items() if isinstance(text, str)}
+    if sum(len(text) for text in normalized.values()) > MAX_BODY_BYTES:
+        return None
+    return normalized
+
+
+def _run_submission_script(
+    sources: dict[str, str], script: str, seed: str, **extra: object
+) -> tuple[int, str] | None:
+    """Run browser-edited Python with the verifier's existing resource limits."""
+    with tempfile.TemporaryDirectory() as workspace:
+        for name, text in sources.items():
+            (Path(workspace) / name).write_text(text, encoding="utf-8")
+        transcript = Path(workspace) / "stdout"
+        try:
+            # stdout goes to a real file, not a pipe. RLIMIT_FSIZE only bounds writes to
+            # files, so with `capture_output=True` a submission that printed gigabytes
+            # would have them buffered in THIS process before the tail slice threw them
+            # away. Writing to a file inside the workspace makes the cap actually bind:
+            # the child is killed by SIGXFSZ at the limit instead.
+            with transcript.open("w", encoding="utf-8") as sink:
+                completed = subprocess.run(  # noqa: S603 - argument list, shell=False
+                    [
+                        sys.executable,
+                        "-I",
+                        "-c",
+                        script.format(root=str(ROOT), workspace=workspace, seed=seed, **extra),
+                    ],
+                    stdout=sink,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    timeout=RUN_TIMEOUT_SECONDS,
+                    preexec_fn=_limits,
+                    cwd=workspace,
+                    env={"PATH": "/usr/local/bin:/usr/bin:/bin"},
+                    check=False,
+                )
+            captured = transcript.read_text(encoding="utf-8", errors="replace")
+        except (subprocess.TimeoutExpired, OSError, ValueError):
+            return None
+    return completed.returncode, captured[-MAX_OUTPUT_BYTES:]
+
+
+PUBLIC_TEST_SCRIPT = """
+import os, runpy
+os.environ["FLAG_SEED"] = {seed!r}
+os.environ["SUBMISSION_DIR"] = {workspace!r}
+os.environ["BROWSER_PUBLIC_TESTS"] = "1"
+runpy.run_path({root!r} + "/tests/public/test_policy.py", run_name="__main__")
+"""
+
+
+def run_public_tests(seed: str, files: object) -> dict[str, object]:
+    """Run the same checks as `make test` against the browser-edited source."""
+    sources = _submission_sources(files)
+    if sources is None:
+        return {"passed": False, "output": "policy.py must be a non-empty Python file."}
+    result = _run_submission_script(sources, PUBLIC_TEST_SCRIPT, seed)
+    if result is None:
+        return {"passed": False, "output": "Public tests timed out or could not start."}
+    return {"passed": result[0] == 0, "output": result[1]}
+
+
+def prepare_submissions(seed: str, files: object) -> dict[str, object]:
+    """Format the policy.py source the five code checkpoints take.
+
+    `root-cause` is deliberately absent: its JSON names the dropped constraint
+    and the manipulated signals, which is the diagnosis the learner derives from
+    their own audit and forgery. Producing it here would erase what that
+    checkpoint measures. The seed does not enter the values; it stays in the
+    signature so every workbench prepare endpoint has the same shape.
+    """
+    del seed
+    sources = _submission_sources(files)
+    if sources is None:
+        return {"ok": False, "output": "policy.py must be a non-empty Python file."}
+    return {
+        "ok": True,
+        "submissions": {
+            checkpoint: sources["policy.py"] for checkpoint in CODE_CHECKPOINT_IDS
+        },
+    }
 
 
 def _check_root_cause(submission: object) -> bool:
@@ -125,38 +255,13 @@ def _run_submission(submission: object, phases: tuple[str, ...], seed: str) -> b
         source = source.get("policy.py")
     if not isinstance(source, str) or not source.strip():
         return False
-    if len(source) > MAX_BODY_BYTES:
+    sources = _submission_sources({"policy.py": source})
+    if sources is None:
         return False
-    with tempfile.TemporaryDirectory() as workspace:
-        (Path(workspace) / "policy.py").write_text(source, encoding="utf-8")
-        script = RUNNER.format(
-            root=str(ROOT), workspace=workspace, phases=list(phases), seed=seed
-        )
-        try:
-            # stdout goes to a real file, not a pipe. RLIMIT_FSIZE only bounds writes to
-            # files, so with `capture_output=True` a submission that printed gigabytes
-            # would have them buffered in THIS process before the tail slice threw them
-            # away. Writing to a file inside the workspace makes the cap actually bind:
-            # the child is killed by SIGXFSZ at the limit instead.
-            transcript = Path(workspace) / "stdout"
-            with transcript.open("w", encoding="utf-8") as sink:
-                completed = subprocess.run(  # noqa: S603 - argument list, shell=False
-                    [sys.executable, "-I", "-c", script],
-                    stdout=sink,
-                    stderr=subprocess.DEVNULL,
-                    text=True,
-                    timeout=RUN_TIMEOUT_SECONDS,
-                    preexec_fn=_limits,
-                    cwd=workspace,
-                    env={"PATH": "/usr/local/bin:/usr/bin:/bin"},
-                    check=False,
-                )
-            captured = transcript.read_text(encoding="utf-8", errors="replace")
-        except (subprocess.TimeoutExpired, OSError, ValueError):
-            return False
-    if completed.returncode != 0:
+    result = _run_submission_script(sources, RUNNER, seed, phases=list(phases))
+    if result is None or result[0] != 0:
         return False
-    for line in reversed(captured[-MAX_OUTPUT_BYTES:].splitlines()):
+    for line in reversed(result[1].splitlines()):
         try:
             payload = json.loads(line)
         except json.JSONDecodeError:
@@ -183,8 +288,29 @@ class Handler(BaseHTTPRequestHandler):
     #: is deliberate: `self.connection` does not exist until the base `setup` has run.
     timeout = REQUEST_TIMEOUT_SECONDS
 
+    def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's name
+        path = urlsplit(self.path).path
+        if path == "/api/inspect":
+            self._respond(200, inspect_payload(SEED))
+            return
+        if path == "/api/starter":
+            self._respond(200, starter_payload())
+            return
+        asset = WORKBENCH_ASSETS.get(path)
+        if asset is None:
+            self._respond(404, {"error": "not found"})
+            return
+        filename, content_type = asset
+        try:
+            content = (ROOT / "workbench" / filename).read_bytes()
+        except OSError:
+            self._respond(404, {"error": "not found"})
+            return
+        self._respond_bytes(200, content, content_type)
+
     def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's name
-        if self.path.rstrip("/") != "/verify":
+        path = urlsplit(self.path).path.rstrip("/") or "/"
+        if path not in ("/verify", "/api/test", "/api/prepare"):
             self._respond(404, {"error": "not found"})
             return
         try:
@@ -207,6 +333,14 @@ class Handler(BaseHTTPRequestHandler):
         if not isinstance(body, dict):
             self._respond(400, {"error": "bad json"})
             return
+
+        if path == "/api/test":
+            self._respond(200, run_public_tests(SEED, body.get("files")))
+            return
+        if path == "/api/prepare":
+            self._respond(200, prepare_submissions(SEED, body.get("files")))
+            return
+
         checkpoint_id = body.get("checkpointId")
         if not isinstance(checkpoint_id, str) or checkpoint_id not in CHECKPOINTS:
             self._respond(200, {
@@ -225,9 +359,20 @@ class Handler(BaseHTTPRequestHandler):
 
     def _respond(self, status: int, payload: dict[str, object]) -> None:
         encoded = json.dumps(payload).encode("utf-8")
+        self._respond_bytes(status, encoded, "application/json")
+
+    def _respond_bytes(self, status: int, encoded: bytes, content_type: str) -> None:
         self.send_response(status)
-        self.send_header("content-type", "application/json")
+        self.send_header("content-type", content_type)
         self.send_header("content-length", str(len(encoded)))
+        self.send_header("cache-control", "no-store")
+        self.send_header("x-content-type-options", "nosniff")
+        self.send_header(
+            "content-security-policy",
+            "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; "
+            "img-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; "
+            "form-action 'self'",
+        )
         self.end_headers()
         self.wfile.write(encoded)
 

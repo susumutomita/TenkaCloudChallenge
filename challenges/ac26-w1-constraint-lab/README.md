@@ -36,6 +36,14 @@ member   product over allowed of (signal - a)
 
 ## How to play
 
+Start the problem from the Participant Portal and open the **Browser Workbench** endpoint.
+`inspect`, editing the three files, the public tests, and the residuals / boolean / membership /
+transfer submission values all live in the browser. The first-broken answer is the constraint id
+you read off the broken witness's trace and enter into the Portal directly. No host terminal or
+checkout editing is required.
+
+Only when authoring or verifying straight from the repository, run these in the problem directory:
+
 ```bash
 make inspect              # your field, circuit, honest witness, broken witness
 make test                 # public tests
@@ -43,8 +51,8 @@ make test-one ID=trace    # iterate on one of them
 make reset                # restore all three starter files
 ```
 
-You edit three files: `local/starter/field.py` (arithmetic in `F_p`),
-`local/starter/circuit.py` (residuals and traces), `local/starter/gadgets.py` (turning a
+In the Workbench or the checkout you edit three files: `local/starter/field.py` (arithmetic in
+`F_p`), `local/starter/circuit.py` (residuals and traces), `local/starter/gadgets.py` (turning a
 condition into constraints).
 
 ## Scoring

@@ -40,6 +40,13 @@ fixture は deploy 時に注入される `FLAG_SEED` から導出されます。
 
 ## 遊び方
 
+Participant Portal で問題を起動し、表示された **Browser Workbench** を開きます。`inspect`、
+`counter.py` の編集、公開テスト、environment / generalize の提出データ生成までブラウザ内で完結します。
+predict と inspect の答えは自分で読み取って Portal へ入力します。ホスト側のターミナルや checkout の
+ファイル操作は必要ありません。
+
+リポジトリから直接作問・検証する場合だけ、問題ディレクトリで次を実行できます。
+
 ```bash
 make inspect             # 自分の fixture、health token、壊れた trace
 make test                # 公開テスト
@@ -47,7 +54,8 @@ make test-one ID=range   # 反復中に 1 つのテストだけ再実行する
 make reset               # starter/counter.py を元に戻す
 ```
 
-`local/starter/counter.py` を開きます。`advance(start, step, rounds, modulus)` は trace を返します。
+Workbench または checkout で編集するのは `local/starter/counter.py` の 1 ファイルです。
+`advance(start, step, rounds, modulus)` は trace を返します。
 各 round 後の値を、**毎 round** 剰余を適用して、`step` の符号によらず常に `[0, modulus)` に収めます。
 
 ## 採点

@@ -8,20 +8,29 @@ That is the hidden verifier's job, deliberately.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+SUBMISSION_DIR = os.environ.get("SUBMISSION_DIR")
 sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ROOT / "starter"))
+sys.path.insert(0, SUBMISSION_DIR or str(ROOT / "starter"))
 
 from fixtures.generate import circuit, field_modulus, honest_witness  # noqa: E402
 import circuit as circuit_module  # noqa: E402
 import field as field_module  # noqa: E402
 import gadgets as gadgets_module  # noqa: E402
+from verifier.server import (  # noqa: E402
+    inspect_payload,
+    prepare_submissions,
+    run_public_tests,
+    starter_payload,
+)
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
+WORKBENCH_TEST_SEED = "public-workbench-test"
 
 
 def _field():
@@ -57,6 +66,68 @@ def test_gadgets_return_constraint_dicts() -> None:
     assert isinstance(gadgets_module.membership_constraints("m", [1, 2]), list)
 
 
+def test_workbench_inspect_shows_seeded_evidence_without_answers() -> None:
+    payload = inspect_payload(WORKBENCH_TEST_SEED)
+    assert payload["field"]["p"] == field_modulus(WORKBENCH_TEST_SEED)
+    assert isinstance(payload["field"]["allowedSet"], list)
+    assert [c["id"] for c in payload["circuit"]] == [c["id"] for c in circuit(WORKBENCH_TEST_SEED)]
+    assert isinstance(payload["honestWitness"], dict)
+    # The broken witness is evidence; the id of the first violated constraint is
+    # the answer to first-broken, so only the witness may appear.
+    assert set(payload) == {"field", "circuit", "honestWitness", "brokenWitness", "healthToken"}
+
+
+def test_workbench_starter_returns_all_editable_files() -> None:
+    payload = starter_payload()
+    assert set(payload) == {"field.py", "circuit.py", "gadgets.py"}
+    assert "class Field" in payload["field.py"]
+    assert "def trace" in payload["circuit.py"]
+    assert "def boolean_constraint" in payload["gadgets.py"]
+
+
+def test_workbench_public_tests_fail_the_shipped_starter() -> None:
+    # The starter's normalize is deliberately a no-op, so the field test must
+    # fail. If this starts passing, the starter no longer leaves work to do.
+    result = run_public_tests(WORKBENCH_TEST_SEED, starter_payload())
+    assert result["passed"] is False
+    assert "FAIL test_normalize_maps_into_the_field" in result["output"]
+
+
+def test_workbench_public_tests_report_invalid_browser_source() -> None:
+    sources = starter_payload()
+    sources["field.py"] = "class Field(:\n"
+    result = run_public_tests(WORKBENCH_TEST_SEED, sources)
+    assert result["passed"] is False
+    assert result["output"]
+
+
+def test_workbench_prepare_returns_the_file_checkpoints() -> None:
+    result = prepare_submissions(WORKBENCH_TEST_SEED, starter_payload())
+    assert result["ok"] is True
+    submissions = result["submissions"]
+    # first-broken is read off the trace by the learner, never produced here.
+    assert set(submissions) == {"residuals", "boolean", "membership", "transfer"}
+    for value in submissions.values():
+        assert set(json.loads(value)) == {"field.py", "circuit.py", "gadgets.py"}
+
+
+def test_workbench_prepare_rejects_a_missing_file() -> None:
+    sources = starter_payload()
+    del sources["gadgets.py"]
+    result = prepare_submissions(WORKBENCH_TEST_SEED, sources)
+    assert result["ok"] is False
+
+
+def test_workbench_assets_expose_browser_only_journey() -> None:
+    html = (ROOT / "workbench" / "index.html").read_text(encoding="utf-8")
+    script = (ROOT / "workbench" / "app.js").read_text(encoding="utf-8")
+    for term in ("residuals", "first-broken", "boolean", "membership", "terminal-input"):
+        assert term in html
+    for command in ("inspect", "test", "prepare", "reset"):
+        assert f'case "{command}"' in script
+    assert "copyText" in script
+
+
 def main() -> int:
     only = ""
     if "--only" in sys.argv:
@@ -67,6 +138,8 @@ def main() -> int:
     selected = 0
     for name, fn in sorted(globals().items()):
         if not name.startswith("test_") or not callable(fn):
+            continue
+        if os.environ.get("BROWSER_PUBLIC_TESTS") == "1" and name.startswith("test_workbench_"):
             continue
         if only and only not in name:
             continue
