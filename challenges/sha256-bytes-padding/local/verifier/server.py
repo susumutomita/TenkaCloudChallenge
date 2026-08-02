@@ -51,6 +51,10 @@ REQUEST_TIMEOUT_SECONDS = 15
 
 CHECKPOINTS = ("byte-length", "padded-length", "length-field", "pad", "words", "collision")
 
+#: The hidden entry point each code checkpoint runs. Keeping this explicit lets delivery
+#: adapters identify code submissions without executing or guessing from verifier logic.
+CODE_CHECKPOINTS = {"pad": "run_pad", "words": "run_words"}
+
 #: Bounds the `collision` submission. A counterexample fits in one block; anything longer
 #: is someone pasting a file, not answering.
 MAX_COLLISION_BYTES = 2 * 64
