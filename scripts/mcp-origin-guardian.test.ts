@@ -1,10 +1,20 @@
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
-import { evaluateRequest, validatePolicy } from "../challenges/mcp-origin-guardian/local/app/policy.mjs";
+import {
+  decodeSubmission,
+  encodeSubmission,
+  evaluateRequest,
+  validatePolicy,
+} from "../challenges/mcp-origin-guardian/local/app/policy.mjs";
+import { runPublicCases } from "../challenges/mcp-origin-guardian/local/app/public-cases.mjs";
+import { gradePolicy } from "../challenges/mcp-origin-guardian/local/verifier/grader.mjs";
 
 const policy = {
   canonicalOrigin: "https://mcp.example.test",
   developmentOrigin: "http://127.0.0.1:18110",
 };
+const localRoot = join(import.meta.dir, "../challenges/mcp-origin-guardian/local");
 
 describe("MCP canonical-origin challenge contract", () => {
   it("accepts only the configured production origin and emits canonical metadata", () => {
@@ -41,9 +51,24 @@ describe("MCP canonical-origin challenge contract", () => {
   });
 
   it.each([
-    { environment: "production", host: "attacker.example", origin: "https://mcp.example.test", forwardedHost: "" },
-    { environment: "production", host: "mcp.example.test", origin: "https://attacker.example", forwardedHost: "" },
-    { environment: "production", host: "mcp.example.test", origin: "null", forwardedHost: "" },
+    {
+      environment: "production",
+      host: "attacker.example",
+      origin: "https://mcp.example.test",
+      forwardedHost: "",
+    },
+    {
+      environment: "production",
+      host: "mcp.example.test",
+      origin: "https://attacker.example",
+      forwardedHost: "",
+    },
+    {
+      environment: "production",
+      host: "mcp.example.test",
+      origin: "null",
+      forwardedHost: "",
+    },
     {
       environment: "production",
       host: "mcp.example.test",
@@ -80,6 +105,24 @@ describe("MCP canonical-origin challenge contract", () => {
     expect(validatePolicy({ ...policy, developmentOrigin })).not.toEqual([]);
   });
 
+  it("keeps public feedback useful while the hidden verifier remains authoritative", () => {
+    expect(runPublicCases(policy).correct).toBe(true);
+    expect(gradePolicy(policy).correct).toBe(true);
+    expect(
+      gradePolicy({ ...policy, canonicalOrigin: "https://attacker.example" }).correct,
+    ).toBe(false);
+    expect(
+      gradePolicy({ ...policy, developmentOrigin: "http://localhost:18110" }).correct,
+    ).toBe(false);
+  });
+
+  it("round-trips a bounded policy submission without a fixed flag", () => {
+    const submission = encodeSubmission(policy);
+    expect(decodeSubmission(submission)).toEqual(policy);
+    expect(decodeSubmission("not-base64url")).toBeNull();
+    expect(decodeSubmission("a".repeat(2049))).toBeNull();
+  });
+
   it("is non-vacuous: changing a security decision changes the result vector", () => {
     const accepted = [
       evaluateRequest(policy, {
@@ -102,5 +145,42 @@ describe("MCP canonical-origin challenge contract", () => {
       }).accepted,
     ];
     expect(accepted).toEqual([true, false, true]);
+  });
+});
+
+describe("MCP Origin Guardian image boundary", () => {
+  it("builds participant and verifier from disjoint Docker targets", () => {
+    const dockerfile = readFileSync(join(localRoot, "Dockerfile"), "utf8");
+    const participant = dockerfile
+      .split("FROM base AS participant", 2)[1]
+      ?.split("FROM base AS verifier", 1)[0];
+    expect(participant).toBeDefined();
+    expect(participant).toContain("COPY --chown=node:node app/ ./app/");
+    expect(participant).not.toContain("verifier/");
+    expect(dockerfile).toContain("COPY --chown=node:node verifier/ ./verifier/");
+
+    const compose = readFileSync(join(localRoot, "docker-compose.yml"), "utf8");
+    expect(compose).toContain("target: participant");
+    expect(compose).toContain("target: verifier");
+    expect(compose).toContain('"127.0.0.1:18110:8080"');
+    expect(compose).toContain('"127.0.0.1:18111:8081"');
+    expect(compose).toContain("internal: true");
+  });
+
+  it("does not leave hidden grading in any participant-copied source", () => {
+    const appRoot = join(localRoot, "app");
+    expect(readdirSync(appRoot).sort()).toEqual([
+      "policy.mjs",
+      "public-cases.mjs",
+      "server.mjs",
+    ]);
+    for (const file of readdirSync(appRoot)) {
+      const source = readFileSync(join(appRoot, file), "utf8");
+      expect(source).not.toContain("gradePolicy");
+      expect(source).not.toContain("hidden authority-boundary");
+    }
+    const verifier = readFileSync(join(localRoot, "verifier/grader.mjs"), "utf8");
+    expect(verifier).toContain("gradePolicy");
+    expect(verifier).toContain("missing Origin");
   });
 });
