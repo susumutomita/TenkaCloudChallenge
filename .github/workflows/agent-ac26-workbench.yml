@@ -62,7 +62,7 @@ jobs:
           git diff --check
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add challenges index.json cost-report.json
+          git add challenges index.json cost-report.json scripts/verify-course-workbenches.py
           if git diff --cached --quiet; then
             echo "::error::The migration produced no generated changes."
             exit 1
