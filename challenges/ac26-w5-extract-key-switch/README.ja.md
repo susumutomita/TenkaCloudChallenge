@@ -1,85 +1,158 @@
 # 同じ数を、別の鍵の言葉で言う
 
-blind rotation が残した多項式から 1 係数を LWE sample として取り出し、 別の鍵・別の次元へ移す。 どちらの段階でも復号は 1 回も起きない。
+> このトラックは Advanced Cryptography Program 2026 の非公式・独立コンパニオンです。
+> コース運営とは無関係で、承認も受けていません。問題文・コード・fixture・図はすべて独立に書いています。
+> このトラックへの質問はコース運営ではなく TenkaCloud リポジトリへお願いします。
 
-Week 5 の 5 問目。 blind rotation が残した RLWE 暗号文から目的の係数を LWE sample として取り出し、 それを別の secret key・別の次元へ key switching で移す。
+**Track:** `advanced-cryptography-2026` · **Order:** 550 · **Chapter:** Week 5 / Sample
+Extraction and Key Switching · **Role:** `mechanism` · **想定時間:** 75〜105 分 ·
+**配点:** 300 · **前提:** `ac26-w5-cmux-blind-rotation` · **Status:** draft
 
-blind rotation までは支給される。 環・RLWE・RGSW・external product・CMUX・回転ループはすべて前 3 問の成果物で、 この問題はその後の 2 段。
+## 物語
 
-sample extraction は phase 多項式 `b - a*s` の係数 k を、 環の secret の係数を並べた vector に対する LWE phase として書き直す。 `(a*s)_k` に集まる積のうち添字が degree を跨いだものは符号が反転しているので、 mask の該当スロットもその反転を持たなければならない。 これは回転問題の `X^N = -1` を反対側から見たもの。 復号は起きず noise も増えず、 取り出した phase は多項式の係数そのものになる。
+blind rotation は RLWE 暗号文を残します。使えるようになるまでにあと 2 つ。
+係数 1 つを LWE sample として取り出すことと、その sample を別の鍵・別の次元へ移すこと。
+**中身を変えずに**。
 
-そして取り出した sample の secret は環の secret を vector として読んだもの。 これがシステムの他の部分が使う鍵ではないことが、 次の段が必要な理由。
+その手前を作り直すわけではありません。`fixtures.generate` が環・RLWE・RGSW・
+external product・CMUX・回転ループをすべて正しい形で提供します。扱う accumulator は
+本物の blind rotation の出力で、それが持つ noise もそのまま乗っています。
 
-key switching key は old index j と level l ごとに `LWE_new(B^l * s_old[j])` を持つ。 mask を分解して対応する entry を引くと、 phase から `<mask, s_old>` がちょうど消える。 ここでも復号は起きない。 s_old は switching key の暗号文の中にしか現れず、 s_new はどこにも現れない。 decrypt して re-encrypt する操作ではない。
+## extraction
 
-採点の設計として、 mask のスロットが巻き戻るのはその添字が取り出す index より上のときだけなので、 最後の係数では巻き戻りが起きない。 そこだけ正しい実装は 1 つの index で止まるテストをすべて通る。 だから extraction は全 index で検査する。 また digit の順序と switching key の読み順を両方逆にした実装は自分自身と完全に整合するので、 検査は交差させる。
+phase 多項式は `b - a*s` です。その係数 `k` は、環の secret の係数を並べた vector に対する
+LWE phase として書き直せます。
 
-これは安全ではない。 パラメータは全列挙でき、 両方の secret は線形代数で復元できる。
+```text
+phase_k = b_k - sum_j c_j * s_j
+```
+
+`(a*s)_k` には、添字が**環の中で** `k` に集まる積 `a_i * s_j` が集まります。そして環は
+negacyclic なので、そのうちいくつかは符号が反転して届きます。どれが、なぜ反転するのかが
+この checkpoint の全部です。復号は起きず noise も増えません。取り出した phase は
+係数**そのもの**です。
+
+そして取り出した sample の secret は `(s_0, ..., s_(N-1))`、環の secret を vector として
+読んだもので、次元は `degree` です。これはシステムの他の部分が使う鍵ではありません。
+だから後半があります。
+
+## key switching
+
+switching key は old index `j` と level `l` ごとに次を持ちます。
+
+```text
+ksk[j][l] = LWE_(s_new)( B^l * s_old[j] )
+```
+
+old の mask を分解して対応する entry を引くと、phase から `<mask, s_old>` がちょうど消えます。
+分解の規約は `ac26-w5-rgsw-external` のままです。
+
+**どちらの端の secret も渡りません。** 環の secret も、source key も、target key も。
+それでも phase は通ります。key switching が復号して再暗号化する操作に見えるなら、
+この導出のどこで何かが復号されているかを探してください。
+
+## 最後の係数は例外的に易しい
+
+mask のスロットが巻き戻るのは、その secret の添字が取り出す index より**上**のときです。
+`degree - 1` では上にスロットが 1 つも無いので、巻き戻りが起きません。符号を完全に無視した
+実装でも、そこでは、そこでだけ phase が一致します。index 0 はその逆で、1 つを除く全スロットが
+巻き戻ります。
+
+public test は 4 つとも最後の係数を使っています。意図的で、そう書いてあります。
+hidden test は全 index を回し、しかも extraction を mask ではなく phase で採点するので、
+数を保つならば vector の作り方は自由です。
 
 ## ブラウザでの進め方
 
 1. Participant Portal で問題を起動し、**Browser Workbench** を開く。
-2. `inspect` で deploy 固有の fixture と公開された証拠を読む。
-3. 画面内の starter を編集し、`test` で公開テストを実行する。
-4. 表示された直接回答欄を、inspect と実験結果から埋める。
-5. `prepare` で全 checkpoint の提出値を作り、Portal へ貼る。
+2. `inspect` でこの deploy 固有の fixture と公開された証拠を読む。
+3. 画面内のエディタで starter のソースを編集する。
+4. `test` で公開テストを実行し、直接回答欄があれば証拠から埋める。
+5. `prepare` で全 checkpoint の提出値を作り、Participant Portal へ貼る。
 
-直接回答は `prepare` により現在の deploy seed へ結び付けられます。
+checkout、ターミナル、ローカルエディタは不要です。code checkpoint は編集したソースを提出します。
+直接回答は `prepare` が現在の deploy seed へ結び付けるため、別 deploy からコピーした値は拒否されます。
 
-## 学習目標
+## 採点
 
-- RLWE ciphertext の指定係数に対応する LWE phase を導出できる
-- negacyclic ring の符号を含む extracted mask の並びを実装できる
-- extraction の前後で平文の意味が一致することを確認できる
-- old-key の LWE mask を digit decomposition できる
-- switching key を用いて new-key sample へ変換できる
-- 鍵と次元だけが変わり message が変わらないことを説明できる
-- source key・target key・ring key を取り違えた欠陥を特定できる
-- key switching が decrypt と re-encrypt ではないことを説明できる
+8 つの checkpoint を独立に採点します。誤答は 1 回 15 点。
 
-## Checkpoint
+| Checkpoint | 配点 | 検査内容 |
+|---|---:|---|
+| `phase` | 30 | `b - a*s` の全係数。accumulator と新規暗号文の両方、index 範囲の拒否 |
+| `extract` | 50 | **全 index** で phase を保存、mask は secret の係数ごとに 1 スロット、body は `b` 由来、結果は既約 |
+| `trace` | 35 | スロットごとに 1 レコード、値が mask そのもの、wrap の境界が index に一致 |
+| `decompose` | 25 | 係数ごとに 1 タプル、LSB 先頭、ちょうど `levels` 個、桁は `[0, base)` |
+| `switch` | 55 | 全 index で target key の下に message が残る、両方向の交差、不整合な鍵の拒否、鍵 ID を名乗り secret を持ち出さない |
+| `domains` | 35 | source・target・次元、整合 1 件と不整合 2 件の区別、noise の bound |
+| `endtoend` | 40 | RLWE 係数・extracted・switched の 3 つが一致し、switch が実際に動かしている |
+| `transfer` | 30 | 見たことのない degree・次元・base・modulus で上記すべて |
 
-| Checkpoint | 内容 | Points |
-| --- | --- | ---: |
-| `phase` | 保つべき数を書き下す | 30 |
-| `extract` | 1 係数を取り出す | 50 |
-| `trace` | 対応を見せる | 35 |
-| `decompose` | mask を桁へ分解する | 25 |
-| `switch` | 別の鍵へ移す | 55 |
-| `domains` | どの鍵の話かを分類する | 35 |
-| `endtoend` | 3 通りが同じ答えになる | 40 |
-| `transfer` | 見たことのない設定で成立させる | 30 |
+8 つのうち 7 つに hint があり、いずれもその checkpoint の 50% 上限の内側です。
 
-## 解説
+## switch の検査を交差させる理由
 
-## 最後の係数は例外的に易しい
+`decompose_mask` の digit の順序**と** `key_switch` の読み順を両方逆にすると、
+自分の分解を自分の switch に通すテストはすべて通ります。そこで hidden test は交差させます。
+fixture の sample をあなたの switch へ、あなたの sample を fixture の switch へ。
 
-mask のスロットが巻き戻るのは、 その添字が取り出す index より上のとき。 `degree - 1` では上にスロットが無いので巻き戻りが起きず、 符号を完全に無視した実装でも phase が一致してしまう。 index 0 はその逆で、 1 つを除く全スロットが巻き戻る。 public test が 4 つとも最後の係数なのはそれを見せるためで、 hidden test は全 index を回す。
+## `compatible` を metadata から決めるのは手抜きではない
 
-## 何も復号していない
+どちらの secret も手元に無いので、switch を試して復号できるかで判定することはできません。
+できたとしても、それは secret を最も置いてはならない場所に置くということです。
+noise を測定値ではなく bound で報告するのも同じ理由で、測るには phase が要り、
+phase には鍵が要ります。
 
-extraction には鍵が渡らない。 key switching にも渡らない。 s_old は switching key の暗号文の中にしか現れず、 s_new はどこにも現れない。 それでも phase は保たれる。 key switching が decrypt して re-encrypt する操作だという理解は、 この導出のどこにも当てはまらない。
+## 構造的に起こりえない leak
 
-## 取り出した鍵は使いたい鍵ではない
+ここで artifact を作る関数 — `extract_sample`、`extract_trace`、`key_switch`、
+`domain_report` — はどれも、どちらの端の secret も渡されません。鍵が渡るのは
+`phase_coefficient` だけで、それは整数を 1 つ返します。つまり
+「生の secret が暗号文の metadata に入った」はこの問題が持ちうる欠陥ではありません。
+取り繕わずに書いておくと、**mutation の候補が 1 つ、書けないという理由で外れました**。
+hidden suite は返された artifact をどちらの secret についても走査し続けるので、
+将来 secret を通す作者が出ればそこで分かります。
 
-extraction の結果の secret は環の secret を vector として読んだもの。 次元は degree で、 システムの他の部分が使う鍵ではない。 だから key switching が要る。 2 段が別々に存在する理由はここにある。
-
-## 交差させないと見えない
-
-digit の順序と switching key の読み順を両方逆にすると、 自分の分解を自分の switch に通すテストは通る。 だから hidden test は fixture の sample を submission の switch へ、 submission の sample を fixture の switch へ通す。
-
-## compatible は metadata から決める
-
-どちらの secret も手元に無いので、 switch を試して復号できるかで判定することはできない。 できたとしても、 それは secret を最も置いてはならない場所に置くということ。 noise も同じ理由で bound を報告する。 測るには phase が要り、 phase には鍵が要る。
+もう 1 つは equivalent として外しました。switch の内側で桁 0 を飛ばしても何も変わりません。
+entry を 0 個引くのは reference が既にやっていることです。
 
 ## 対象外
 
-production の switching key 生成、 圧縮された switching key、 noise-security パラメータ解析、 multi-key や proxy re-encryption。
+production の switching key 生成、圧縮された switching key、noise-security パラメータ解析、
+multi-key や proxy re-encryption。
 
 ## これは安全ではない
 
-パラメータは全列挙でき、 両方の secret は線形代数で復元できる。 機構の toy であって困難性の toy ではない。
+パラメータは全列挙できる大きさで、両方の secret は線形代数で復元できます。
+機構の toy であって、困難性の toy ではありません。
 
-## 作問・検証
+## 出典との対応
 
-参加者は checkout を必要としません。リポジトリ保守者向けの検証手順は Makefile と CI を正とします。
+Week 5 の教材は公開済みなので、 `courseAlignment` は `week5/README.md` を `lecture`、
+`week5/problems/tfhe-toy-python/README.md` を `assignment` として pin しています。
+`spoilerPolicy` は `independent-reimplementation` で、 API・パラメータ生成・記述は独自であり、
+公式課題から関数名も fixture も skeleton も取っていません。
+
+## 保証範囲
+
+ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も
+あなたの管理下にあるので、 image の中身はあなたに対して秘匿されていません。
+`reference/` と `tests/hidden/` を bind-mount しないのは、あなたの git checkout に
+紛れ込ませないためであって、手が届かなくするためではありません。
+
+verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
+ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。
+結果は期待値を漏らしません。 fixture はこのデプロイの seed 由来なので、暗記した答えは持ち越せません。
+
+これは自習と誠実な練習を支えます。競技順位・試験・修了判定は**支えません**。
+それらには participant が管理しない verifier が必要で、
+[#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271) で追跡しています。
+
+## コスト
+
+ゼロ。クラウドアカウントも AWS リソースも不要です。
+
+## 作問者向け
+
+`make reference-test` が mutation suite を走らせます。29 個の壊れた実装のうち 1 つは
+最後の係数でだけ正しく、それ以外で間違っています。この問題が捕まえるために作られている形です。

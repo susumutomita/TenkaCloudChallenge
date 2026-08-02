@@ -1,76 +1,153 @@
 # SHA-256 part 1: bytes and padding
 
-What SHA-256 actually reads is not a string but a byte sequence. Count the UTF-8 bytes, pad to whole 512-bit blocks, build the trailing bit-length field, and get the 32-bit word byte order right.
+**Difficulty:** 2 · **Time:** 40–60 minutes · **Points:** 100 · **Series:** SHA-256, problem 1 of 3
+
+## The story
+
+You have called `sha256(...)` hundreds of times. Sixty-four hex characters come out, they match
+what the other side computed, and everything works. Nothing about that experience tells you what
+happened in between.
+
+This is the first of three problems that replace the black box with a procedure you can follow by
+hand. Not the whole of it at once — this one stops before the interesting arithmetic even starts.
+All you do here is take a message and put it in the shape SHA-256 is able to read: a whole number
+of 512-bit blocks, each read as sixteen 32-bit words.
+
+That sounds like bookkeeping, and it mostly is. It is also where a first hand-written SHA-256
+usually goes wrong, in one of four ways: counting characters instead of bytes, rounding the length
+up to the wrong multiple, writing a byte count where the specification wants a bit count, and
+letting the CPU pick the byte order.
+
+## What gets deployed
+
+A single container, no cloud account, no network surface. Everything is local:
+
+```text
+local/
+├── starter/padding.py    ← the only file you edit
+├── fixtures/generate.py     every fixture, derived from your per-deploy seed
+├── tests/public/            the tests you can read
+├── tests/hidden/            the tests the verifier runs (in the image, not bind-mounted)
+├── reference/               the answer -- NOT in the image `make build` gives you
+├── verifier/server.py       POST /verify on 127.0.0.1:18091
+└── mutation.py              proves the hidden tests can actually fail a wrong answer
+```
+
+`make build` builds the `participant` stage of the Dockerfile, which carries the fixtures, both
+test suites, the verifier and the starter. `reference/` and `mutation.py` are added only by the
+`author` stage that `make reference-test` builds, so the answer is not sitting in the image you
+were told to run. That is misdelivery prevention, not confidentiality — see Assurance scope.
+
+Your fixtures come from `FLAG_SEED`, injected fresh at deploy. Same seed, same numbers, so your
+session is reproducible and debuggable. Different seed, different numbers, so a value copied from
+someone else's run is worthless.
 
 ## Browser workflow
 
-1. Start the problem in the Participant Portal and open **Browser Workbench**.
-2. Run `inspect` and read the deployment-specific fixture and published evidence.
-3. Edit the starter sources on the page and run the public `test` command.
-4. Complete any direct-answer fields from the evidence and your experiments.
-5. Run `prepare`, then paste every generated value into the matching Portal checkpoint.
+1. Start the problem in Participant Portal and open **Browser Workbench**.
+2. Run `inspect` to read this deployment's fixture and published evidence.
+3. Edit the starter source in the in-browser editor.
+4. Run `test` for the published checks and fill any direct-answer fields from the evidence.
+5. Run `prepare`, then paste every prepared checkpoint value into Participant Portal.
 
-Direct answers are bound to the current deployment seed by `prepare`.
+No checkout, terminal, or local editor is required. Code checkpoints submit the edited source.
+Direct answers are wrapped by `prepare` and bound to the current deployment seed, so a value copied
+from another deployment is rejected.
 
-## Learning goals
+## Scoring
 
-- Tell a character count apart from a UTF-8 byte count
-- Implement FIPS 180-4 §5.1.1 padding so any length lands on a multiple of 64 bytes
-- Compute the padded length, including across the 55 / 56 boundary
-- Explain and build the trailing 8 bytes as a big-endian bit count
-- Read a 64-byte block as sixteen big-endian 32-bit words
-- Show by counterexample that padding without the 1 bit marker is not injective
+Six checkpoints, scored independently. Wrong answers cost 5 points each.
 
-## Checkpoints
+| Checkpoint | Points | What you submit |
+|---|---:|---|
+| `byte-length` | 10 | How many **bytes** the string from Workbench `inspect` is |
+| `padded-length` | 15 | Six padded lengths, comma separated, worked out **before** you run anything |
+| `length-field` | 15 | The trailing 8 bytes for one message length, as 16 hex characters |
+| `pad` | 25 | Your `padding.py`, run against lengths you have not seen |
+| `words` | 20 | Your `padding.py`, run against blocks you have not seen |
+| `collision` | 15 | A second message that zero-only padding cannot tell apart from yours, as hex |
 
-| Checkpoint | Purpose | Points |
-| --- | --- | ---: |
-| `byte-length` | Count bytes, not characters |  |
-| `padded-length` | Predict six padded lengths |  |
-| `length-field` | Build the trailing 8 bytes |  |
-| `pad` | Implement pad_message to the specification |  |
-| `words` | Read the block as sixteen 32-bit words |  |
-| `collision` | Build a counterexample for padding with no marker |  |
+Hints are available on every checkpoint except `byte-length`. Opening all of them still leaves you
+66 of 100.
 
-## Explanation
+On `byte-length` and `padded-length`: you can trivially get these by running code first and copying
+the answer. Nobody will catch you. You will also have removed the only thing those checkpoints
+measure, in the two places where being wrong is cheapest.
 
-## What this checked
+## The four things worth getting wrong once
 
-### Bytes, not characters
+**Characters are not bytes.** Workbench `inspect` prints a string with multi-byte characters in it, so
+the character count and the byte count differ. SHA-256 only ever sees bytes. Any code you have
+tested with ASCII alone has been exercised only where those two numbers happen to agree.
 
-`len(text)` is a character count; `len(text.encode("utf-8"))` is a byte count. SHA-256 only ever sees the second one. Code tested against ASCII alone has only been exercised where those two numbers agree, and the moment a non-ASCII character arrives the length assumption breaks.
+**The padded length is not "round up to 64".** Past the message itself you need one byte for the
+marker and eight for the length. So `(length + 1 + 8)`, rounded up to a multiple of 64 — which is
+why 55 bytes fits one block and 56 bytes does not, and why a message that is already exactly 64
+bytes long still gains a whole block. The padding is never empty.
 
-### Padding has three parts
+**The length field counts bits and is big-endian.** Two independent chances to be wrong in eight
+bytes. A short message's field starts with a run of `0x00`, which is easy to mistake for "nothing
+was written there".
 
-FIPS 180-4 §5.1.1 says: append a single 1 bit, then as many zeros as needed, then the message length in bits as a 64-bit big-endian integer. On a byte boundary that 1 bit is exactly the byte `0x80`.
+**The specification decides the byte order, not your CPU.** x86 and ARM are little-endian, so the
+convenient reading is the wrong one. The starter's `block_words` reads each group the way your
+machine would, and that is exactly the defect.
 
-Rounding `(length + 1 + 8)` up to a multiple of 64 is the whole calculation. 55 bytes just fits one block; 56 bytes does not. Remembering the rule as "round up to the next multiple of 64" gets 56 wrong. And when the length is already a multiple of 64 the marker and the length field still need somewhere to live, so a whole extra block appears. The padding is never empty.
+## What the `collision` checkpoint is really asking
 
-### The 1 bit and the length field do different jobs
+The `0x80` marker and the trailing bit length get conflated constantly, so this checkpoint
+separates them by taking one away.
 
-These get conflated often enough to be worth separating:
+Imagine padding that just appends zero bytes up to the next multiple of 64 and stops. Lengths come
+out fine. Blocks come out fine. But nothing records where the message ended, so two different
+messages can produce byte-for-byte identical blocks — and a hash built on that padding has
+collisions no matter how good the compression function is.
 
-- **The `0x80` marker** is what makes padding injective. Without it, `m` and `m + 0x00` collapse onto the same block — which is exactly the counterexample the collision checkpoint asks for.
-- **The trailing 8-byte bit length** is Merkle–Damgård strengthening. Mixing the length into the compressed input blocks attacks that relate messages of different lengths (fixed-point chaining, part of the length-extension family). Injectivity is not its job; that belongs to the marker.
-
-The field counts *bits*, not bytes, and it is big-endian, so a short message's field starts with a run of `0x00`. Eight bytes is also where SHA-256's message-length ceiling comes from: under 2^64 bits.
-
-### Big-endian is the specification; little-endian is convenience
-
-x86 and ARM default to little-endian, so `int.from_bytes(group)` with no byte order is environment-dependent, and `"little"` is simply wrong for SHA-256. The specification puts the most significant byte first: `61 62 63 80` is `0x61626380`.
-
-This mismatch is a classic cause of an implementation that runs fine and produces the wrong digest. When your hash does not match the published test vectors, byte order is one of the first places to look.
+Finding a pair like that is the checkpoint. The marker is what fixes it; injectivity is its job.
+The trailing bit length is doing something else entirely — Merkle–Damgård strengthening, mixing the
+length into what gets compressed so that attacks relating messages of different lengths do not
+work. Two mechanisms, two purposes.
 
 ## Passing the public tests is not the end
 
-The public tests here use one message length and never check the value of the trailing 8 bytes, so an implementation that writes no length field at all passes every one of them. That is `misconception.public-tests-are-complete`, demonstrated rather than described.
+The public tests here use one message length and never check the *value* of the trailing 8 bytes.
+An implementation that writes no length field at all passes every single one of them. That is the
+point of including them: they show you the shape of the answer and they do not prove it.
 
-The hidden tests sweep lengths 0, 55, 56, 63, 64, 119, and 120, plus a mixed UTF-8 message and one built only from `0x80` and `0x00` bytes — the latter to fail an implementation that finds the marker by scanning for `0x80`. They check properties rather than fixed expected values: injectivity (`m` and `m + 0x00` must differ), minimality (no extra block nobody asked for), and word round-tripping (re-joining the sixteen words big-endian gives the block back). A relation cannot be satisfied by memorizing one output.
+The hidden tests sweep lengths 0, 55, 56, 63, 64, 119, and 120, add a mixed UTF-8 message, and add
+one built only from `0x80` and `0x00` bytes to fail an implementation that finds the marker by
+scanning. They check properties rather than fixed values — injectivity, minimality, and that
+re-joining the sixteen words big-endian gives the block back — because a relation cannot be
+satisfied by memorizing one output.
 
-## What to learn next
+## Assurance scope
 
-The block you just built is the input to the next problem: expanding sixteen words into sixty-four (the message schedule), the ROTR / SHR rotations and σ0 / σ1 that drive it, and the Ch / Maj / Σ0 / Σ1 functions. That is SHA-256 part 2.
+Local mode is **self-paced, honor-system verification**. You own the machine, the Docker daemon,
+and the image, so nothing here is hidden from you: `tests/hidden/` is not bind-mounted and
+`reference/` is not in the participant image at all, which keeps them out of your way rather than
+out of reach. The source is in this repository either way, and you can build the `author` stage
+yourself.
 
-## Authoring and validation
+What the verifier does guarantee is narrower and real: a submission cannot hang or crash it, a
+checkpoint can only credit the id it echoes, results do not leak expected values, and the fixtures
+come from this deployment's seed so a memorized answer does not carry.
 
-Participants do not need a checkout. Repository maintainers use the Makefile author targets and CI as the validation source of truth.
+That supports self-study and honest practice. It does **not** support competition ranking,
+examination, or completion certification — those need a verifier the participant does not
+administer, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
+
+## Cost
+
+Zero. No cloud account, no AWS resources. It is a container on your machine.
+
+## For authors
+
+`make reference-test` runs the mutation suite: nine broken `pad_message` implementations, six
+broken `block_words` implementations, and eight mutations aimed at the verifier itself — including
+one that checks an unknown checkpoint fails closed. Every one must be caught.
+
+Two obvious-looking mutations are deliberately **not** in the list. Writing `message + b"\x80"`
+instead of appending to a `bytearray`, and reading the bit length from `len(message)` before rather
+than after copying the message into the buffer, both produce byte-for-byte identical output, so no
+correct test could distinguish them. Listing them would produce a permanent "survived" and train
+the next author to ignore the suite. See the comment at the top of `local/mutation.py`.

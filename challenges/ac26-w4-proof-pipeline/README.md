@@ -1,77 +1,157 @@
 # One box with nine layers
 
-"SNARK" and "STARK" name families, not protocols. Read two toy pipelines as stage graphs, write one contract per layer, and find the first layer that broke in runs where exactly one thing is wrong.
+> This track is an independent, unofficial companion to the Advanced Cryptography Program 2026.
+> It is not affiliated with or endorsed by the course or its operators. All problem statements,
+> code, fixtures, and figures here are written independently. Questions about this track go to
+> the TenkaCloud repository, not to the course operators.
+
+**Track:** `advanced-cryptography-2026` · **Order:** 430 · **Chapter:** Week 4 / Proof
+System Pipeline · **Role:** `transfer` · **Time:** 60–90 minutes · **Points:** 300 ·
+**Required first:** `ac26-w4-arithmetization`, `ac26-w4-commit-open` · **Status:** draft —
+see "Week 4 alignment"
+
+## The story
+
+"SNARK" and "STARK" name families, not protocols. Treated as single black boxes they
+produce sentences like *it's succinct, so it's fast* and *it's transparent, so it assumes
+nothing* — both of which are confusions between two different axes.
+
+So this problem does not build a proof system. It gives you two, as **stage graphs**, and
+breaks them.
+
+```text
+input-boundary → arithmetization → polynomial → commitment
+               → transcript → opening → [low-degree] → verifier
+```
+
+A **run** is the paperwork for one execution: what was committed, what was absorbed
+before the challenge was drawn, which openings the verifier actually checked. You write
+one contract per layer, then diagnose runs where exactly one of those contracts broke.
+
+## Two pipelines, and they are not the same shape
+
+|  | A | B |
+|---|---|---|
+| family | circuit-oriented, succinct | trace-oriented, transparent |
+| setup | trusted, per-circuit | transparent, none |
+| rests on | SRS not retained, pairing hardness | collision-resistant hash, random oracle |
+| stages | 8 | 9 |
+| extra layer | — | `low-degree`, between `opening` and `verifier` |
+| minimum queries | 1 | 8 |
+
+Neither is an implementation of any real scheme and neither is named after one. What
+matters is that **anything you hardcode from A is wrong for B**: stage names, layer order,
+query minimum, and which artifacts exist at all. Every hidden check runs against both.
+
+## The field that is a trap
+
+`run["commitment_ok"]` is `True` in **every** run in this problem — honest ones and broken
+ones alike. A commitment succeeding says the prover committed to something. It says
+nothing about whether what they committed to satisfies the constraint system, and nothing
+about whether the verifier ever checked an opening.
+
+A contract that reads it passes the public tests and dies on the `constraints` checkpoint.
+
+## Earliest, not worst
+
+One broken input boundary makes the openings look wrong, the transcript look wrong, and
+the verifier look wrong. `first_fault` reports the **earliest** layer, because a diagnosis
+pointing at the openings sends somebody to repair a stage that was doing its job.
+
+`repair` may change **exactly one field** of the run: the one the fault damaged. That rules
+out the two shortcuts that would otherwise pass everything —
+
+- rebuilding a clean run from the definition satisfies every contract and destroys the
+  evidence;
+- setting the verdict to `reject` silences every contract at once.
+
+There is one fault for which flipping the verdict *is* the repair. Finding which, and
+being able to say why it is the exception, is most of the checkpoint.
 
 ## Browser workflow
 
-1. Start the problem in the Participant Portal and open **Browser Workbench**.
-2. Run `inspect` and read the deployment-specific fixture and published evidence.
-3. Edit the starter sources on the page and run the public `test` command.
-4. Complete any direct-answer fields from the evidence and your experiments.
-5. Run `prepare`, then paste every generated value into the matching Portal checkpoint.
+1. Start the problem in Participant Portal and open **Browser Workbench**.
+2. Run `inspect` to read this deployment's fixture and published evidence.
+3. Edit the starter source in the in-browser editor.
+4. Run `test` for the published checks and fill any direct-answer fields from the evidence.
+5. Run `prepare`, then paste every prepared checkpoint value into Participant Portal.
 
-Direct answers are bound to the current deployment seed by `prepare`.
+No checkout, terminal, or local editor is required. Code checkpoints submit the edited source.
+Direct answers are wrapped by `prepare` and bound to the current deployment seed, so a value copied
+from another deployment is rejected.
 
-## Learning goals
+## Scoring
 
-- Tell a statement, a public input, a witness and a trace apart
-- Read a pipeline as an artifact graph and explain the boundaries between stages
-- Keep commitment success and constraint satisfaction separate
-- Explain how challenge timing and transcript binding bear on soundness
-- Point at openings and queries the verifier never checked
-- Classify trusted and transparent setups as security assumptions
-- Compare succinctness, proof size and prover cost as separate axes
-- Find the first faulty layer behind a cascade of downstream failures and repair it
+Eight checkpoints, scored independently. Wrong answers cost 15 points each.
 
-## Checkpoints
+| Checkpoint | Points | What is checked |
+|---|---:|---|
+| `graph` | 30 | Producer and consumers per artifact, setup included, dangling detected |
+| `wiring` | 35 | Verifier gets its inputs, prover-only artifacts stay private, setup material matches |
+| `constraints` | 40 | Accepting despite an unsatisfied constraint; the commitment binding what it was handed |
+| `transcript` | 45 | Everything the challenge consumes was absorbed before it was drawn |
+| `opening` | 40 | Required openings checked by name not by count; per-pipeline query minimum; low-degree only where it exists |
+| `assumptions` | 30 | Setup kind, transparency, and a non-empty assumption list for both |
+| `cost` | 30 | Four unsupported claims rejected and four supported ones kept |
+| `diagnose` | 50 | Earliest broken layer on nine faults, and a one-field repair |
 
-| Checkpoint | Purpose | Points |
-| --- | --- | ---: |
-| `graph` | Map the artifact flow |  |
-| `wiring` | Decide who may see what |  |
-| `constraints` | Separate committed from correct |  |
-| `transcript` | What was absorbed before the challenge |  |
-| `opening` | Find the opening nobody checked |  |
-| `assumptions` | Put setup and assumptions in different columns |  |
-| `cost` | Reject only the unsupported claims |  |
-| `diagnose` | Name the first broken layer and fix it |  |
+Hints on five of the eight, each inside that checkpoint's 50% cap.
 
-## Explanation
+## What the claims are for
 
-## A successful commitment is not a satisfied constraint
+Four of the eight claims in Workbench `inspect` are unsupported, and each one is a named
+misconception rather than an arbitrary wrong answer:
 
-`commitment_ok` is True in every run here, including the ones that accepted with an unsatisfied constraint. A commitment succeeding says the prover committed to something. Whether what they committed to satisfies the constraint system is a separate claim and needs a separate check.
+- *A is succinct, so A's prover is fast* — proof size and prover cost are different axes.
+- *B is transparent, so B rests on no assumption* — transparency is a property of the
+  **setup**. B still needs a collision-resistant hash and a random oracle.
+- *A's setup is a one-time ceremony, so A rests on no assumption* — the same confusion
+  from the other side.
+- *B's proofs are smaller than A's* — polylogarithmic is not smaller than constant.
 
-The commitment has a second job as well. Any artifact the commit stage was handed but did not commit to is free for the prover to change afterwards. Setup material is the one exception, because it is public and fixed before the run, so committing to it would bind nothing that is not already bound. Be able to say why it is an exception rather than special-casing it by name.
-
-## Transparent is a property of the setup
-
-B is transparent and rests on a collision-resistant hash and a random oracle. A has a trusted setup and rests on the SRS not being retained and on pairing hardness. Neither assumption list is empty. Transparency is about what the setup requires, not about whether there are assumptions.
-
-The same confusion shows up on the cost side. Succinctness is about proof size and verifier time; it says nothing about prover cost. A's proof is constant size and A's prover is superlinear, and those two facts do not contradict each other.
-
-## Report the earliest layer
-
-A broken input boundary makes the openings, the transcript, and the verifier all look wrong. The diagnosis has to name the earliest layer, because pointing at the openings sends somebody to repair a stage that was doing its job. Read the layer order off the definition's stage list -- copying A's order either drops B's low-degree layer or puts it in the wrong place.
-
-## A repair changes one field
-
-A repair may change only the field the fault damaged. Without that, two shortcuts pass everything: rebuilding a clean run from the definition satisfies every contract while destroying the evidence, and setting the verdict to `reject` silences every contract at once.
-
-There is one exception. An unsatisfied constraint cannot be made satisfied by editing the record, so there the correct repair *is* for the verifier to reject. That the exception is exactly one, and why it is that one, is the core of the checkpoint.
-
-## The two pipelines are not the same shape
-
-Stage count, stage names, layer order, query minimum, which artifacts exist -- all different. B has a low-degree layer and A does not. Applying a contract for a layer A does not have fails every honest A run. Write each contract starting from "if this pipeline has this stage".
+The other four are true, and rejecting everything scores no better than reading the
+profiles.
 
 ## Not in scope
 
-No Groth16, PLONK, or STARK implementation; no benchmark numbers; no setup ceremony; no proof-generation service. Every cost here is a declared class rather than a measurement.
+No Groth16, PLONK, or STARK implementation; no benchmark numbers; no setup ceremony; no
+proof-generation service. Every cost here is a **declared class**, not a measurement, and
+comparing declared classes is the only comparison this problem makes.
 
 ## Week 4 alignment
 
-Week 4's material was not published upstream at the pinned commit. `courseAlignment` pins `week4/README.md` with `kind: "placeholder"` and takes the `transfer` role -- one of the two GOVERNANCE.md section 6 permits for an unpublished week, and accurate besides, since the problem transfers Week 4's arithmetization and commitment into a new setting. It asserts nothing about what the official exercise will require.
+Week 4's material was not published upstream at the pinned commit. `courseAlignment` pins
+`week4/README.md` with `kind: "placeholder"` and takes the `transfer` role, one of the two
+`GOVERNANCE.md` §6 permits for an unpublished week. It asserts nothing about what the
+official exercise will require. #229 reconciles the row when the material appears.
 
-## Authoring and validation
+## Assurance scope
 
-Participants do not need a checkout. Repository maintainers use the Makefile author targets and CI as the validation source of truth.
+Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
+daemon, and the image, so nothing inside that image is hidden from you: `reference/` and
+`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than
+out of reach.
+
+What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
+a checkpoint can only credit the id it echoes, results do not leak expected values, and the
+fixtures come from this deployment's seed so a memorized answer does not carry.
+
+That supports self-study and honest practice. It does **not** support competition ranking,
+examination, or completion certification — those need a verifier the participant does not
+administer, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
+
+## Cost
+
+Zero. No cloud account, no AWS resources.
+
+## For authors
+
+`make reference-test` runs the mutation suite: nineteen broken implementations, every one
+of them a plausible reading rather than a typo. Most pass the public tests and every
+honest run, and differ only on a broken pipeline or on B rather than A.
+
+Two candidate mutations were **dropped** rather than left to survive: excluding `verdict`
+from the prover-only set (nothing ever publishes it, so no verdict changes) and sorting
+`dangling_artifacts`' output (the hidden tests sort before comparing). A mutation that
+cannot change an outcome does not demonstrate coverage, and leaving an unkillable one in
+the list teaches that a `SURVIVED` line can be ignored.

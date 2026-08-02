@@ -1,91 +1,145 @@
 # 道具から決めない
 
-brief には actor と asset と信頼関係しか書いていない。 primitive の名前は 1 つも出てこない。 そこから必要な性質を導き、 必要な分だけ選び、 境界に型をつけ、 前提が動いた brief にもう一度答える。
+> このトラックは Advanced Cryptography Program 2026 の非公式・独立した companion です。講座および
+> その運営者とは提携しておらず、承認も受けていません。問題文、コード、fixture、図はすべて独自に
+> 作成しています。このトラックに関する質問は講座運営ではなく TenkaCloud リポジトリへお願いします。
 
-Week 7 の 1 問目、 role は synthesis。 Week 1〜6 の primitive を、 流行や library ではなく problem statement・adversary・公開可能情報・秘密情報・trust assumption から選ぶ設計問題として扱う。
+**Track:** `advanced-cryptography-2026` · **Order:** 710 · **Chapter:** Week 7 / Capstone Design
+· **Role:** `synthesis` · **想定時間:** 120〜180 分 · **配点:** 300
 
-設計を自由記述で書かせて LLM に採点させると、 読める文章と正しい設計の区別がつかない。 そこでこの問題は設計を **コード** として書かせる。 brief を入力に取り、 asset 分類・required property・alternative 比較・selection・typed data flow・attack plan・property matrix を返す 8 つの関数である。 いずれも brief の関数として書ける。
+## ストーリー
 
-**採点の芯は最後の checkpoint にある**。 前提が 1 つ動いた brief (運営が信用できなくなる / 第三者が結果に依存し始める / 1 者欠けても完了しなければならない) 18 種と、 seed から生成されてどのファイルにも存在しない brief 12 種を渡す。 brief を読んで導出する実装なら 4 回呼ぶだけで通り、 答えを 1 度決めて書き込んだ実装はここだけ動かない。
+brief が 1 つ渡されます。actor、asset、誰が何を知ってよくて誰が知ってはいけないか、誰が自分で計算
+していない値を信じるのか、締切の条件が書いてあります。
 
-**選定規則は 3 条件 + 1 優先規則**。 required を被覆する / この brief が用意していない相手を信用しない / 1 つ外すと被覆が壊れる。 そしてその前に、 暗号が不要な brief には暗号を選ばない。 6 つの brief のうち `shift-board` がそれで、 ここで primitive を選ぶ実装は落ちる。
+primitive の名前は 1 つも書いてありません。
 
-**privacy と zero knowledge を分けてある**。 計算に参加する相手から隠すのが privacy、 自分で計算していない値を信じてもらうのが soundness、 信じてもらう値が隠したい値から導かれるときだけ zero knowledge。 `solvency-claim` は privacy を要求せず zero_knowledge を要求するbrief で、 両者を同一視した実装をここで落とす。
-
-**最小性が満たす組を一意に決めるとは限らない**。 `delegated-scoring` は MPC でも FHE でも通る。 採点は reference の出力と一致するかではなく、 被覆・許容・最小の 3 条件だけを見る。
+それがこの問題です。「ZK にするか MPC にするか」から設計を始めれば、その質問には答えが出ます。出た
+答えが問題に合っているかどうかは別の話で、たいていは手遅れになってから訊かれます。
 
 ## ブラウザでの進め方
 
 1. Participant Portal で問題を起動し、**Browser Workbench** を開く。
-2. `inspect` で deploy 固有の fixture と公開された証拠を読む。
-3. 画面内の starter を編集し、`test` で公開テストを実行する。
-4. 表示された直接回答欄を、inspect と実験結果から埋める。
-5. `prepare` で全 checkpoint の提出値を作り、Portal へ貼る。
+2. `inspect` でこの deploy 固有の fixture と公開された証拠を読む。
+3. 画面内のエディタで starter のソースを編集する。
+4. `test` で公開テストを実行し、直接回答欄があれば証拠から埋める。
+5. `prepare` で全 checkpoint の提出値を作り、Participant Portal へ貼る。
 
-直接回答は `prepare` により現在の deploy seed へ結び付けられます。
+checkout、ターミナル、ローカルエディタは不要です。code checkpoint は編集したソースを提出します。
+直接回答は `prepare` が現在の deploy seed へ結び付けるため、別 deploy からコピーした値は拒否されます。
 
-## 学習目標
+## checkpoint が本当に見ているもの 3 つ
 
-- 問題文を actor・asset・信頼関係へ分解してから道具を考えられる。
-- 必要な security property を brief から導き、 不要なものを要求しない。
-- 暗号を使わない案を含めて比較し、 何を買ったのかを言える。
-- public / private / ciphertext / share / proof を辺の型として設計できる。
-- 各 property に責任 component と観測可能な evidence を対応づけられる。
-- 前提が変わった brief に、 設計を導出し直して答えられる。
+**privacy と zero knowledge は別の欄です。** lender に balance を見せたくない。しかし lender は計算に
+参加せず、答えを読むだけです。これは「計算する側から隠す」(privacy) ではなく「自分で計算していない値
+を信じてもらう」(soundness) であり、信じてもらう値が隠したい値から導かれているときに初めて zero
+knowledge が要ります。soundness だけなら、ただの署名で足ります。
 
-## Checkpoint
+**最小性。** 選んだ組から 1 つ外してみてください。まだ全部の要求を満たしているなら、その 1 つは何も
+していません。そして何もしていない primitive は無害ではありません。前提が 1 つ、攻撃面が 1 つ、説明
+すべきことが 1 つ増えます。6 つの brief のうち 1 つは、暗号をまったく必要としません。
 
-| Checkpoint | 内容 | Points |
-| --- | --- | ---: |
-| `assets` | 誰の何を、どこまで隠すのかを並べる | 30 |
-| `requirements` | brief から必要な性質だけを取り出す | 45 |
-| `alternatives` | 使わない場合を含めて並べる | 30 |
-| `selection` | brief が要求した分だけ選ぶ | 50 |
-| `architecture` | 何がどの形で境界を越えるかを書く | 45 |
-| `attacks` | 壊れ方を、観測できる形で書く | 35 |
-| `matrix` | 性質ごとに、誰が担うのかを書く | 35 |
-| `revision` | 前提が 1 つ動いた brief に答える | 30 |
+**`non_goals` は飾りではありません。** FHE は鍵管理を無くしません。復号鍵を持つ誰かがいて、その誰かは
+脅威モデルの登場人物のままです。MPC は結託の仮定を無くしません、置き換えるだけです。ZK proof は
+public input を隠しません。component に責任を持たせる前に `PRIMITIVES` を見てください。
 
-## 解説
+## 遊び方
 
-## 道具から始めない
+```bash
+Workbench の `inspect`            # 自分の brief と、前提が 1 つ動いた同じ brief
+Browser Workbench の `test`               # public tests
+starter の再読み込み              # starter/design.py を戻す
+```
 
-設計を 「ZK を使うか、 MPC を使うか」 から始めると、 その質問には答えが出る。 出た答えが問題に合っているかは、 別の話である。
+編集するのは Workbench のエディタ (`design.py`) の 1 ファイルだけです。
 
-この問題の brief は primitive の名前を 1 つも含んでいない。 含んでいるのは、 誰がいて、 何があって、 誰が何を知ってはいけなくて、 誰が自分で計算していない値を信じるか、 だけである。 そこから必要な property が決まり、 property から選択肢が決まる。 順序が逆になった設計は、 だいたい正しく動いて、 だいたい間違ったものを守っている。
+## 採点
 
-## privacy と zero knowledge は別の欄
+8 つの checkpoint を独立に採点します。誤答は 1 回 15 点です。
 
-`balance` を lender に見せたくない。 これは privacy だろうか。
+| Checkpoint | 配点 | 何を見るか |
+|---|---:|---|
+| `assets` | 30 | 全 asset を所有者つきで分類し、秘密を public と書かない |
+| `requirements` | 45 | brief が要求する性質だけ — それ以上は要求しない |
+| `alternatives` | 30 | 非暗号案を含め、選択肢を正直に比較する |
+| `selection` | 50 | 被覆・許容・最小、そして不要なら暗号を選ばない |
+| `architecture` | 45 | 全 asset が flow に現れ、秘密が平文で届かない |
+| `attacks` | 35 | 必要な性質すべてに、観測できる攻撃仮説がある |
+| `matrix` | 35 | 各性質を、それを実際に提供する component が担う |
+| `revision` | 30 | 見たことのない brief に対して、同じ 4 つの artifact が正しい |
 
-lender は計算に参加しない。 答えを読むだけである。 つまり 「計算する側から隠す」 話ではなく、 「自分で計算していない値を信じてもらう」 話になる。 前者が privacy、 後者が soundness であり、 信じてもらう値が隠したい値から導かれているときに初めて zero knowledge が要る。
+ヒントは 8 つ中 4 つにあり、いずれもその checkpoint の 50% 上限に収まっています。
 
-soundness だけなら、 ただの署名でよい。 この 2 つを一緒にすると、 署名で済む場所に証明系を持ち込むことになる。
+## 何に対して採点されるか
 
-## 最小性が効く場所
+| 対象 | 件数 | どこにあるか |
+|---|---:|---|
+| repository にある brief | 6 | `local/fixtures/generate.py` |
+| 前提が 1 つ動いた変種 | 18 | その 6 つから導出 |
+| seed から生成される brief | 12 | どこにも無い。採点時にだけ存在する |
 
-選んだ組から 1 つ外してみて、 まだ全部の要求を満たしているなら、 その 1 つは何もしていない。 何もしていない primitive は無害ではない。 前提が 1 つ増え、 攻撃面が 1 つ増え、 説明すべきことが 1 つ増える。
+3 行目があるので `brief["id"]` を鍵にした対応表は通りません。2 行目があるので、導出せずに 1 度決めた
+設計は最後の checkpoint で落ちます。どちらも意図的です。
 
-`shift-board` は暗号を必要としない brief として入れてある。 秘密が無く、 誰も運営を疑っておらず、 誰も他人の計算結果に依存していない。 ここで primitive を選んだ設計は、 問題ではなく道具から始めている。
+## 正解は 1 つとは限りません
 
-なお、 満たす最小の組は 1 つとは限らない。 `delegated-scoring` は MPC でも FHE でも通る。 採点は 「必要を満たし、 この brief が用意していない相手を信用せず、 何も余分でない」 かどうかだけを見る。
+満たす最小の組は一意とは限りません。`delegated-scoring` は MPC でも FHE でも通ります。あなたの選択を
+reference と突き合わせる処理はどこにもありません。採点が見るのは、brief の要求を被覆するか、この
+brief が用意していない相手を信用していないか、余分なものが無いか、それだけです。
 
-## non_goals は飾りではない
+## toy であることの断り
 
-`PRIMITIVES` の各 option には `non_goals` がある。 FHE は鍵管理を無くさない。 復号鍵を持つ誰かがいて、 その誰かは脅威モデルの登場人物のままである。 MPC は結託の仮定を無くさない。 置き換えるだけである。 ZK は public input を隠さない。
+`PRIMITIVES` は教材用の抽象化で、トレードオフが 1 画面に収まるように選んであります。setup 仮定、
+malicious / semi-honest の別、回路規模、ciphertext の膨張は落としてあります。production の指針では
+なく、実際の運用は異なります。
 
-property matrix で 「この component が privacy を担う」 と書くとき、 その component が実装している option が本当に privacy を提供するのかを見る。 提供しないものに委ねた設計は、 図の上では完成している。
+## 保証範囲
 
-## 導出した設計と、決めた設計
+ローカルモードは **自習向けの honor-system verification** です。マシンも Docker daemon も
+image もあなたのものなので、image の中に隠れているものはありません。`reference/` と
+`tests/hidden/` を bind-mount しないのは、git checkout に紛れ込ませないためであって、
+手が届かないようにするためではありません。
 
-最後の checkpoint は、 前提が 1 つ動いた brief を渡す。 運営が信用できなくなる、 第三者が結果に依存し始める、 1 者が落ちても完了しなければならない。
+verifier が実際に保証するのは、もっと狭く、そして本物です。提出物が verifier を停止させたり
+落としたりできないこと、checkpoint が echo した id 以外を加点できないこと、応答が期待値を
+漏らさないこと、fixture がこのデプロイの seed 由来なので暗記した答えが通用しないこと。
 
-brief を読んで導出する関数を書いていれば、 ここは 4 回呼ぶだけである。 どこか 1 つでも答えを書き込んでいれば、 そこだけが動かない。 設計文書が古くなるのはこれと同じ理由で、 違いは、 文書は自分が古いと言わないことである。
+自習と誠実な練習はこれで支えられます。しかし**競技順位・試験・修了判定は**支えません****。
+それには participant が管理しない verifier が要り、
+[#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271) で追跡しています。
 
-## 次につながるところ
+## コスト
 
-Week 7 の実装 challenge は、 ここで作った property matrix と attack plan を、 実際に走る実験へ変換する。 evidence の欄に書いた実験 id が、 そこで実行されるものになる。
+ゼロ。クラウドアカウントも AWS リソースも不要です。
 
-## 作問・検証
+## 作問者向け
 
-参加者は checkout を必要としません。リポジトリ保守者向けの検証手順は Makefile と CI を正とします。
+`make reference-test` が mutation suite を実行します。壊した設計 17 種と verifier の欠陥 2 種で、
+いずれも完全でもっともらしい設計を返します。設計問題では誤答が空にならないので、そこが要点です。
+
+執筆中に 2 件の欠陥が出ました。どちらもコードを読んで見つけたのではなく、生成 brief に対して hidden
+test を走らせて出たものです。計算する component 自身が所有する input に辺が 1 本も出ず、asset が flow
+から消えていた件。そして非暗号案が許容されるために operator **役割** を持つ actor を要求していたため、
+1 者が自分のデータを自分で計算するだけの brief が「信用できない」と判定され、ZK proof で答えられて
+いた件です。
+
+mutation を 1 つ、baseline に足さずに削除しました。選択肢が 6 つでは greedy cover の prune が到達不能
+で、reference と区別できるテストが書けなかったためです。代わりに選定を厳密な最小被覆探索にしました。
+修復ではなく構成によって最小になるので、この mutation は kill できるようになりました。
+
+### コンテナを実際に起動して見つかった 2 件 (どのテストも通る)
+
+どちらも scaffolder の template 由来で、この問題だけでなく **すべての AC26 問題** に影響します。修正が
+入っているのはこの問題だけで、他はまだ直っていません。
+
+- **pin されている base image の digest が存在しない。** `sha256:4efa69bf…` は Docker Hub がどの
+  platform に対しても 404 を返すため、`make build` が何も走る前に落ちます。CI は Docker を通らず
+  `python3` を直接呼ぶので、死んだ pin はすべての検査を通過します。
+- **verifier がコンテナ自身の loopback に bind していた。** publish された port はコンテナの bridge
+  アドレスへ転送されるので、`HTTPServer(("127.0.0.1", port))` はコンテナ外からの接続を受けません。
+  すべての要求が応答なしで閉じられ、どの checkpoint も採点できません。本来効かせたいWorkbenchの
+  loopback 制限は `docker-compose.yml` にあり、こちらは影響を受けません。
+
+後者のほうが教訓的です。テストは `evaluate()` を直接呼び socket を越えないので、CI ではすべての
+checkpoint が通っていました。採点ロジックは正しく、そして到達不能でした。「その性質を提供しない
+component に property を委ねる」のと同じ形の間違いです。

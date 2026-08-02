@@ -1,72 +1,136 @@
 # The same R twice is the key
 
-A signing service's audit log holds the message, the public key, R and z. It does not hold the secret key. Find the one place R appears twice and the secret key is two equations away.
+> This track is an independent, unofficial companion to the Advanced Cryptography Program 2026.
+> It is not affiliated with or endorsed by the course or its operators. All problem statements,
+> code, fixtures, and figures here are written independently. Questions about this track go to
+> the TenkaCloud repository, not to the course operators.
 
-## Browser workflow
+**Track:** `advanced-cryptography-2026` · **Order:** 340 · **Chapter:** Week 3 / Nonce Reuse and
+Special Soundness · **Role:** `transfer` · **Time:** 60–90 minutes · **Points:** 300
+· **Required first:** `ac26-w3-schnorr`
 
-1. Start the problem in the Participant Portal and open **Browser Workbench**.
-2. Run `inspect` and read the deployment-specific fixture and published evidence.
-3. Edit the starter sources on the page and run the public `test` command.
-4. Complete any direct-answer fields from the evidence and your experiments.
-5. Run `prepare`, then paste every generated value into the matching Portal checkpoint.
+## The story
 
-Direct answers are bound to the current deployment seed by `prepare`.
+A signing service kept an audit log. Per signature: the message, the public key, the commitment
+`R`, and the response `z`. No secret keys — that was rather the point of keeping a log.
 
-## Learning goals
+Somewhere in it, one signer used the same commitment twice.
 
-- Find two transcripts in a log that share a commitment
-- Extract the secret key algebraically from the difference of the responses
-- Explain why (e1 - e2) must be invertible, and what it means when it is not
-- Confirm a recovered key against P = xG rather than claiming it unchecked
-- Explain why sharing a commitment is necessary but not sufficient
-- Show by measurement that looking random is not the same as having entropy
-- State the conditions under which a deterministic nonce is safe
+```text
+z1 = k + e1*x
+z2 = k + e2*x
+```
 
-## Checkpoints
-
-| Checkpoint | Purpose | Points |
-| --- | --- | ---: |
-| `parse` | Read a log that came from outside |  |
-| `detect` | Name only the pairs that can be attacked |  |
-| `extract` | Solve the two equations for the key |  |
-| `confirm` | Confirm the key you recovered |  |
-| `reject` | Say that an unsolvable pair is unsolvable |  |
-| `hunt` | Find it in the noise |  |
-| `collision` | Measure what looks random |  |
-| `repair` | Fix the generator |  |
-
-## Explanation
+Two equations, two unknowns, and you already have one of them.
 
 ## This is not a story about random numbers
 
-Nonce reuse is usually told as "weak random number generators are dangerous". That describes the symptom, not the reason.
+Nonce reuse is usually told as "weak random number generators are dangerous". That is the
+symptom, not the reason.
 
-The reason is **special soundness**: two accepting transcripts that share a commitment and differ in the challenge yield the witness. That is the definition of the Sigma protocol being a proof of knowledge — the property that guarantees the prover really knows x. The extractor exists, so the protocol is sound; the extractor exists, so reuse is fatal. One fact, two consequences.
+The reason is **special soundness**: two accepting transcripts sharing a commitment and differing
+in the challenge yield the witness. That *is* the definition of the Sigma protocol being a proof
+of knowledge — the property that guarantees the prover really knows `x`. The extractor exists, so
+the protocol is sound. The extractor exists, so reuse is fatal. One fact, two consequences.
 
-## Sharing R is not sufficient
+## Sharing R is necessary, not sufficient
 
-The log contains a record from a *different* signer that happens to use the same R. With different keys, the two transcripts are not two equations in one unknown, and attacking them produces a scalar belonging to nobody. That is why a recovery is always confirmed against P = xG: the arithmetic succeeds on the wrong pair too.
+The log is noisy on purpose:
 
-The log also contains a record that parses cleanly and does not verify. Reuse inside a rejected transcript proves nothing.
+- rows that are **malformed** — a parser that trusts its input dies on the first one;
+- a row that **parses cleanly and does not verify** — reuse inside a rejected transcript proves
+  nothing;
+- a row from a **different signer who used the same R** — different keys means the two
+  transcripts are not two equations in one unknown, and attacking them yields a scalar belonging
+  to nobody.
 
-And when e1 = e2 there is no inverse, because two responses to the same challenge are one equation written twice. No new information arrived.
+Which is why a recovery is always confirmed against `P = xG`. The arithmetic succeeds on the
+wrong pair too.
+
+And when `e1 = e2` there is no inverse, because two responses to the same challenge are one
+equation written twice.
+
+## Browser workflow
+
+1. Start the problem in Participant Portal and open **Browser Workbench**.
+2. Run `inspect` to read this deployment's fixture and published evidence.
+3. Edit the starter source in the in-browser editor.
+4. Run `test` for the published checks and fill any direct-answer fields from the evidence.
+5. Run `prepare`, then paste every prepared checkpoint value into Participant Portal.
+
+No checkout, terminal, or local editor is required. Code checkpoints submit the edited source.
+Direct answers are wrapped by `prepare` and bound to the current deployment seed, so a value copied
+from another deployment is rejected.
+
+## Scoring
+
+Eight checkpoints, scored independently. Wrong answers cost 15 points each.
+
+| Checkpoint | Points | What is checked |
+|---|---:|---|
+| `parse` | 30 | Valid rows read, malformed rows rejected explicitly |
+| `detect` | 35 | Only same-signer, both-accepting pairs reported |
+| `extract` | 50 | The key, and independence from transcript order |
+| `confirm` | 30 | Confirmed against the public key; wrong scalars refused |
+| `reject` | 40 | `e1 = e2`, a cross-signer pair, and a log with no reuse |
+| `hunt` | 40 | The victim's key out of the noisy log, and whose it is |
+| `collision` | 40 | The truncated generator measured, against its actual space |
+| `repair` | 35 | A generator that collides on nothing it must not |
+
+Hints on five of the eight, each inside that checkpoint's 50% cap.
 
 ## Three nonce generators
 
-- `fixed_nonce` — the same k every time. Dies immediately.
-- `truncated_nonce` — a genuine hash, thrown away down to a few bits. **In the log it looks perfectly random.** Every k differs, every signature verifies, nothing is visibly wrong. It collides on the birthday schedule anyway.
-- `deterministic_nonce` — a hash of the secret key and the message. The name is the most alarming and it is the safe one: the same key and message give the same nonce, which gives the same signature and leaks nothing new, while two different messages cannot collide without a hash collision. The key goes in too — hashing the message alone would give two signers the same nonce for the same message.
+| Generator | In the log it looks | Actually |
+|---|---|---|
+| `fixed_nonce` | obviously wrong | dies immediately |
+| `truncated_nonce` | **perfectly random** | collides on the birthday schedule |
+| `deterministic_nonce` | alarming | the safe one |
 
-## Group order, and the test that cannot be written
+`truncated_nonce` is the interesting one: every `k` differs, every signature verifies, and nothing
+is visibly wrong. Looking random is not having entropy.
 
-The repair checkpoint runs on secp256k1. A toy group has fewer than fifty scalars, so sixty messages cannot possibly get sixty distinct nonces — the pigeonhole says so before any code exists. There is no safe nonce generator in a forty-element group; the group being small **is** the vulnerability. A test that asserts the impossible is a design failure, not a failing test.
+`deterministic_nonce` has the most worrying name and is correct. The same key and message give the
+same nonce — which gives the same signature, leaking nothing new — while two different messages
+cannot collide without a hash collision. The key goes into the hash too, or two signers of the
+same message would share a nonce.
 
-Truncation is likewise not caught by "are the sixty samples distinct". At sixteen bits, sixty draws are all distinct about 97% of the time, so that assertion would let it through on most runs. The range is what rules it out: against a 256-bit order, every output landing below 2^64 has probability around 2^-11000 — that is evidence, not luck.
+## Group order, and a test that cannot be written
 
-## Where this leads
+The repair checkpoint runs on **secp256k1**, and that is not incidental. A toy group has fewer
+than fifty scalars, so sixty messages cannot possibly receive sixty distinct nonces — the
+pigeonhole says so before any code exists. There is no safe nonce generator in a forty-element
+group; the group being small *is* the vulnerability. A test asserting the impossible is a design
+failure, not a failing test.
 
-"One commitment, two challenges" reappears throughout the proof systems in later weeks. There the extractor shows up as a tool in a security proof rather than as an attack, but it is the same subtraction.
+Truncation is likewise not caught by "are the sixty samples distinct". At sixteen bits, sixty
+draws are all distinct about 97% of the time — that assertion would let it through on most runs.
+The **range** rules it out: against a 256-bit order, every output landing below 2^64 has
+probability around 2^-11000. That is evidence, not luck.
 
-## Authoring and validation
+## Assurance scope
 
-Participants do not need a checkout. Repository maintainers use the Makefile author targets and CI as the validation source of truth.
+Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
+daemon, and the image, so nothing inside that image is hidden from you: `reference/` and
+`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than
+out of reach.
+
+What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
+a checkpoint can only credit the id it echoes, results do not leak expected values, and the
+fixtures come from this deployment's seed so a memorized answer does not carry.
+
+That supports self-study and honest practice. It does **not** support competition ranking,
+examination, or completion certification — those need a verifier the participant does not
+administer, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
+
+## Cost
+
+Zero. No cloud account, no AWS resources.
+
+## For authors
+
+`make reference-test` runs the mutation suite: nine broken implementations. Three of them found
+real holes in the hidden tests while this problem was being written — the log had no
+non-accepting duplicate, no cross-signer duplicate, and the nonce-space check was distinctness
+rather than range. A fourth, "reports a recovery without confirming it", turned out to be an
+equivalent mutant on its own and is now mutated together with the validation it depends on.

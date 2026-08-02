@@ -1,84 +1,127 @@
 # 同じ R が二度出たら、それは鍵である
 
-署名サービスの audit log には message、public key、R、z がある。秘密鍵は無い。同じ R が二度出ている 1 組を見つければ、秘密鍵は連立方程式を解くだけで出る。
+> このトラックは Advanced Cryptography Program 2026 の非公式・独立した companion です。講座および
+> その運営者とは提携しておらず、承認も受けていません。問題文、コード、fixture、図はすべて独自に
+> 作成しています。このトラックに関する質問は講座運営ではなく TenkaCloud リポジトリへお願いします。
 
-Week 3 の 4 問目、 role は transfer。 nonce 再利用を 「乱数の品質の問題」 として覚えるのではなく、 Sigma protocol の special soundness そのものとして扱う。
+**Track:** `advanced-cryptography-2026` · **Order:** 340 · **Chapter:** Week 3 / Nonce Reuse and
+Special Soundness · **Role:** `transfer` · **想定時間:** 60〜90 分 · **配点:** 300
+· **必須前提:** `ac26-w3-schnorr`
 
-z1 = k + e1*x と z2 = k + e2*x から k が消え、 x = (z1 - z2) * (e1 - e2)^-1 mod n が出る。 これは protocol を proof of knowledge たらしめている性質と同じもので、 「健全性の根拠」 と 「再利用が致命的である理由」 が同一の事実であることを実装で確認する。
+## ストーリー
 
-題材は noisy な audit log。 malformed な行、 きれいに parse できるが検証を通らない行、 そして**別の signer が同じ R を使っている行**が入れてある。 R の共有は必要条件であって十分条件ではない — 鍵が違えば解くべき未知数が 1 つではない。
+署名サービスが audit log を残していました。1 署名につき、message、public key、commitment `R`、
+response `z`。秘密鍵はありません。それが log というものです。
 
-nonce generator は 3 種類。 `fixed_nonce` は即死、 `truncated_nonce` は log 上では完全にランダムに見えて birthday bound で衝突する、 `deterministic_nonce` は名前が最も不安に見えて実際には安全。 「ランダムに見える」 は entropy ではない、 が collision checkpoint の主題。
+どこかで、1 人の signer が同じ commitment を二度使っています。
 
-**群位数の扱い**: repair checkpoint は secp256k1 で回す。 toy 群は scalar が 50 個未満しかなく、 60 通の message に 60 個の異なる nonce を割り当てることが鳩の巣原理で不可能だから。 40 元の群に安全な nonce 生成器は存在せず、 群が小さいこと自体が脆弱性である。 不可能なことを assert する test は書かない。
+```text
+z1 = k + e1*x
+z2 = k + e2*x
+```
 
-同様に、 nonce space の truncation は 「60 サンプルが全部相異なるか」 では検出できない (16 bit でも 97% の確率で相異なる)。 検出は値域で行う — 256 bit の位数に対して全出力が 2^64 未満になる確率は事実上ゼロ。
+方程式が 2 本、未知数が 2 つ。片方はもう手元にあります。
+
+## これは乱数の話ではありません
+
+nonce 再利用は「弱い乱数生成器は危険」として語られることが多いです。それは症状であって、理由では
+ありません。
+
+理由は **special soundness** です。commitment を共有し challenge が異なる 2 本の受理 transcript
+から witness が抽出できる。これは Sigma protocol が proof of knowledge であることの定義そのもの
+であり、「証明者は本当に `x` を知っている」を保証している当の性質です。抽出器が存在するから健全で
+あり、抽出器が存在するから再利用が致命的になります。1 つの事実の 2 つの帰結です。
+
+## R の共有は必要条件であって十分条件ではありません
+
+log にはわざと noise を入れてあります。
+
+- **malformed な行**。入力を信じる parser は最初の 1 行で死にます。
+- **きれいに parse できて検証を通らない行**。拒否される transcript の中の再利用は何も証明しません。
+- **同じ R を使った別の signer の行**。鍵が違えば 2 本の式は 1 つの未知数についての式ではなく、
+  攻撃すると誰のものでもない scalar が出ます。
+
+だから復元は必ず `P = xG` で確認します。算術は間違った組に対しても成功します。
+
+`e1 = e2` のとき逆元が無いのは、同じ challenge への 2 回の応答が同じ式を 2 回書いただけだからです。
 
 ## ブラウザでの進め方
 
 1. Participant Portal で問題を起動し、**Browser Workbench** を開く。
-2. `inspect` で deploy 固有の fixture と公開された証拠を読む。
-3. 画面内の starter を編集し、`test` で公開テストを実行する。
-4. 表示された直接回答欄を、inspect と実験結果から埋める。
-5. `prepare` で全 checkpoint の提出値を作り、Portal へ貼る。
+2. `inspect` でこの deploy 固有の fixture と公開された証拠を読む。
+3. 画面内のエディタで starter のソースを編集する。
+4. `test` で公開テストを実行し、直接回答欄があれば証拠から埋める。
+5. `prepare` で全 checkpoint の提出値を作り、Participant Portal へ貼る。
 
-直接回答は `prepare` により現在の deploy seed へ結び付けられます。
+checkout、ターミナル、ローカルエディタは不要です。code checkpoint は編集したソースを提出します。
+直接回答は `prepare` が現在の deploy seed へ結び付けるため、別 deploy からコピーした値は拒否されます。
 
-## 学習目標
+## 採点
 
-- 同じ commitment を持つ 2 本の transcript を log から特定できる
-- z1 と z2 の差から秘密鍵を代数的に抽出できる
-- e1 - e2 の逆元が必要な理由と、存在しない場合の意味を説明できる
-- 復元した鍵を P = xG で確認し、確認なしに主張しない
-- R の共有が必要条件であって十分条件でないことを説明できる
-- 「ランダムに見える」ことと entropy が別物であることを実験で示せる
-- 決定的な nonce 生成が安全である条件を述べられる
+8 つの checkpoint を独立に採点します。誤答は 1 回 15 点減点です。
 
-## Checkpoint
+| Checkpoint | 配点 | 何を検査するか |
+|---|---:|---|
+| `parse` | 30 | 正当な行を読み、malformed な行を明示的に拒否する |
+| `detect` | 35 | 同一 signer かつ両方が検証を通る組だけを挙げる |
+| `extract` | 50 | 鍵の復元と、transcript の順序への非依存 |
+| `confirm` | 30 | 公開鍵での確認。誤った scalar を確認しない |
+| `reject` | 40 | `e1 = e2`、別 signer、再利用の無い log |
+| `hunt` | 40 | noise を含む log からの復元と、誰の鍵かの特定 |
+| `collision` | 40 | 切り詰めた生成器の実測と、値域との突き合わせ |
+| `repair` | 35 | 衝突してはいけないものが衝突しない生成器 |
 
-| Checkpoint | 内容 | Points |
-| --- | --- | ---: |
-| `parse` | 外から来た log を読む | 30 |
-| `detect` | 攻撃できる組だけを挙げる | 35 |
-| `extract` | 2 本の式から鍵を解く | 50 |
-| `confirm` | 復元した鍵を確認する | 30 |
-| `reject` | 解けない組を解けないと言う | 40 |
-| `hunt` | noise の中から見つけ出す | 40 |
-| `collision` | 見た目のランダムさを測る | 40 |
-| `repair` | 生成器を直す | 35 |
-
-## 解説
-
-## これは乱数の話ではない
-
-nonce 再利用は 「弱い乱数生成器を使うと危ない」 として語られることが多い。 それは症状の説明であって、 理由の説明ではない。
-
-理由は special soundness である。 同じ commitment に対して異なる challenge へ 2 回応答すると、 その 2 本の transcript から witness が抽出できる。 これは Sigma protocol が proof of knowledge であることの定義そのもので、 「証明者は本当に x を知っている」 を保証している当の性質だ。 抽出器が存在するから健全であり、 抽出器が存在するから再利用が致命的になる。 同じ 1 つの事実の 2 つの側面である。
-
-## R の共有は十分条件ではない
-
-log には別の signer が同じ R を使っている行が入れてある。 鍵が違えば、 2 本の transcript は 1 つの未知数についての 2 本の式ではない。 攻撃すると 「誰のものでもない scalar」 が出る。 だから復元は必ず P = xG で確認する。 算術は間違った組に対しても成功する。
-
-同様に、 きれいに parse できるが検証を通らない行も入れてある。 拒否される transcript の中の再利用は何も証明しない。
-
-e1 = e2 のときに逆元が存在しないのは、 同じ challenge への 2 回の応答が同じ式を 2 回書いただけだから。 情報が増えていない。
+hint は 8 つ中 5 つにあり、いずれもその checkpoint の 50% 上限内です。
 
 ## 3 つの nonce generator
 
-- `fixed_nonce`: 毎回同じ。 即座に死ぬ。
-- `truncated_nonce`: 本物のハッシュを取り、 数ビットに切り詰める。 **log 上では完全にランダムに見える**。 どの k も違って見え、 すべての署名が検証を通り、 目視では何もおかしくない。 それでも birthday bound で衝突する。
-- `deterministic_nonce`: 秘密鍵と message のハッシュ。 名前が最も不安に見えて、 これが安全なもの。 同じ鍵と同じ message は同じ nonce を生むが、 それは同じ署名を生むだけで新しい情報は漏れない。 異なる message はハッシュ衝突なしには衝突しない。 鍵も入れるのは、 message だけだと 2 人の signer が同じ message で同じ nonce を使ってしまうため。
+| 生成器 | log 上の見た目 | 実際 |
+|---|---|---|
+| `fixed_nonce` | 明らかにおかしい | 即死 |
+| `truncated_nonce` | **完全にランダム** | birthday bound で衝突 |
+| `deterministic_nonce` | 名前が不安 | これが安全 |
 
-## 群位数と、書けない test
+`truncated_nonce` が面白いところです。どの `k` も違って見え、すべての署名が検証を通り、目で見て
+おかしいところがありません。**ランダムに見えることは entropy があることではありません。**
 
-repair checkpoint は secp256k1 で回す。 toy 群は scalar が 50 個未満しかなく、 60 通の message に相異なる nonce を割り当てることが鳩の巣原理で**不可能**だから。 40 元の群に安全な nonce 生成器は存在しない。 群が小さいこと自体が脆弱性であって、 生成器の欠陥ではない。 不可能なことを assert する test は、 テストの失敗ではなく設計の失敗である。
+`deterministic_nonce` は名前が最も不安に見えて、正しいものです。同じ鍵と同じ message は同じ nonce
+を生みますが、それは同じ署名を生むだけで新しい情報は漏れません。異なる message はハッシュ衝突なしに
+衝突しません。鍵もハッシュに入れるのは、入れないと 2 人の signer が同じ message で同じ nonce を使う
+からです。
 
-nonce space の truncation も、 「60 サンプルが全部相異なるか」 では捕まらない。 16 bit でも 60 draws が全部相異なる確率は約 97% で、 大半の実行をすり抜ける。 検出は値域で行う — 256 bit の位数に対して全出力が 2^64 未満に収まる確率は 2^-11000 程度で、 これは偶然ではなく truncation の証拠になる。
+## 群位数と、書けないテスト
 
-## 次につながるところ
+repair checkpoint は **secp256k1** で回します。これは偶然ではありません。toy 群は scalar が 50 個
+未満しかなく、60 通の message に相異なる nonce を割り当てることが鳩の巣原理で不可能です。40 元の群に
+安全な nonce 生成器は存在しません。群が小さいこと自体が脆弱性です。不可能なことを assert するテストは、
+テストの失敗ではなく設計の失敗です。
 
-Week 4 以降の証明系でも 「同じ commitment に 2 つの challenge」 は繰り返し現れる。 そこでは抽出器は攻撃ではなく安全性証明の道具として出てくるが、 中身は同じ引き算である。
+truncation も「60 サンプルが全部相異なるか」では捕まりません。16 bit でも 60 draws が全部相異なる
+確率は約 97% で、大半の実行をすり抜けます。**値域**が決め手です。256 bit の位数に対して全出力が
+2^64 未満に収まる確率は 2^-11000 程度で、これは偶然ではなく証拠です。
 
-## 作問・検証
+## 保証範囲
 
-参加者は checkout を必要としません。リポジトリ保守者向けの検証手順は Makefile と CI を正とします。
+ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も
+あなたの管理下にあるので、 image の中身はあなたに対して秘匿されていません。
+`reference/` と `tests/hidden/` を bind-mount しないのは、あなたの git checkout に
+紛れ込ませないためであって、手が届かなくするためではありません。
+
+verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
+ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。
+結果は期待値を漏らしません。 fixture はこのデプロイの seed 由来なので、暗記した答えは持ち越せません。
+
+これは自習と誠実な練習を支えます。競技順位・試験・修了判定は**支えません**。
+それらには participant が管理しない verifier が必要で、
+[#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271) で追跡しています。
+
+## コスト
+
+ゼロです。クラウドアカウントも AWS リソースも使いません。
+
+## 作問者向け
+
+`make reference-test` が mutation suite を実行します。壊した実装 9 種類があります。うち 3 つは、この
+問題を書いている最中に hidden test の本物の穴を見つけました。log に非受理の重複が無かったこと、
+別 signer の重複が無かったこと、nonce space の検査が値域ではなく相異性だったことです。4 つ目
+「確認せずに復元を報告する」は単独では等価変異と分かり、依存する検証と組にして変異させています。

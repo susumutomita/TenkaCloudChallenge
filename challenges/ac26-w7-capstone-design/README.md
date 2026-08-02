@@ -1,104 +1,154 @@
 # Do not start from the tool
 
-The brief names actors, assets, and who trusts whom. It names no primitive. Derive the properties it requires, select exactly that much, type every boundary, then answer the same brief with one fact moved.
+> This track is an independent, unofficial companion to the Advanced Cryptography Program 2026.
+> It is not affiliated with or endorsed by the course or its operators. All problem statements,
+> code, fixtures, and figures here are written independently. Questions about this track go to
+> the TenkaCloud repository, not to the course operators.
+
+**Track:** `advanced-cryptography-2026` · **Order:** 710 · **Chapter:** Week 7 / Capstone Design
+· **Role:** `synthesis` · **Time:** 120–180 minutes · **Points:** 300
+
+## The story
+
+You are handed a brief. It names the actors, the assets, who may know what and who may not, who
+acts on a value they did not compute, and what the deadline rules are.
+
+It names no primitive. Not one.
+
+That is the exercise. Begin a design at "should this be ZK or MPC" and you will get an answer;
+whether the answer fits the problem is a separate question, usually asked too late.
 
 ## Browser workflow
 
-1. Start the problem in the Participant Portal and open **Browser Workbench**.
-2. Run `inspect` and read the deployment-specific fixture and published evidence.
-3. Edit the starter sources on the page and run the public `test` command.
-4. Complete any direct-answer fields from the evidence and your experiments.
-5. Run `prepare`, then paste every generated value into the matching Portal checkpoint.
+1. Start the problem in Participant Portal and open **Browser Workbench**.
+2. Run `inspect` to read this deployment's fixture and published evidence.
+3. Edit the starter source in the in-browser editor.
+4. Run `test` for the published checks and fill any direct-answer fields from the evidence.
+5. Run `prepare`, then paste every prepared checkpoint value into Participant Portal.
 
-Direct answers are bound to the current deployment seed by `prepare`.
+No checkout, terminal, or local editor is required. Code checkpoints submit the edited source.
+Direct answers are wrapped by `prepare` and bound to the current deployment seed, so a value copied
+from another deployment is rejected.
 
-## Learning goals
+## Three things the checkpoints turn on
 
-- Break a problem statement into actors, assets, and trust before thinking about tools.
-- Derive the required security properties from the brief, and require nothing beyond them.
-- Compare against the option that uses no cryptography, and say what cryptography bought.
-- Design the boundary by typing each edge as plaintext, ciphertext, share, or proof.
-- Tie every property to a responsible component and to evidence you could observe.
-- Answer a brief whose facts have changed by re-deriving the design.
+**Privacy and zero knowledge are different columns.** The lender must not see the balance — but
+the lender does not take part in the computation, it only reads the answer. That is not "hide it
+from the party doing the work" (privacy); it is "get somebody to believe a value they did not
+compute" (soundness), and zero knowledge enters only when the value they must believe is derived
+from the value you are hiding. Soundness alone is an ordinary signature.
 
-## Checkpoints
+**Minimality.** Drop one option from your selection. If the requirements are still covered, that
+option was doing nothing — and it is not free: it adds an assumption, a surface, and something
+more to explain. One of the six briefs requires no cryptography at all.
 
-| Checkpoint | Purpose | Points |
-| --- | --- | ---: |
-| `assets` | List what belongs to whom, and how far it is hidden |  |
-| `requirements` | Take from the brief only the properties it asks for |  |
-| `alternatives` | Lay the options out, including using none of them |  |
-| `selection` | Select as much as the brief asked for, and no more |  |
-| `architecture` | Say what crosses each boundary, and in what form |  |
-| `attacks` | Write down how it breaks, in a form you could observe |  |
-| `matrix` | Say, for each property, which component carries it |  |
-| `revision` | Answer a brief in which one fact has moved |  |
+**`non_goals` is not decoration.** FHE does not remove key management: somebody holds the
+decryption key and stays an actor in the threat model. MPC does not remove the collusion
+assumption; it relocates it. A ZK proof does not hide the public inputs. Check `PRIMITIVES`
+before making a component responsible for something.
 
-## Explanation
+## How to play
 
-## Not starting from the tool
+```bash
+Workbench `inspect`            # your brief, and the same brief after one fact moves
+Browser Workbench `test`               # public tests
+reload the starter              # restore starter/design.py
+```
 
-Begin a design at "should this be ZK or MPC" and you will get an answer. Whether the answer
-fits the problem is a separate question, and it is usually asked too late.
+You edit one file, the Workbench editor (`design.py`).
 
-None of the briefs here names a primitive. They name who is involved, what exists, who must
-not learn what, and who acts on a value they did not compute. The required properties follow
-from that, and the options follow from the properties. A design built the other way round
-usually works, and usually protects the wrong thing.
+## Scoring
 
-## Privacy and zero knowledge are different columns
+Eight checkpoints, scored independently. Wrong answers cost 15 points each.
 
-The lender must not see the `balance`. Is that privacy?
+| Checkpoint | Points | What is checked |
+|---|---:|---|
+| `assets` | 30 | Every asset classified, with its owner; nothing secret labelled public |
+| `requirements` | 45 | Exactly the properties the brief asks for — no more |
+| `alternatives` | 30 | Every option compared honestly, including the non-cryptographic one |
+| `selection` | 50 | Sufficient, admissible, minimal — and free of cryptography when it can be |
+| `architecture` | 45 | Every asset in the flow; nothing secret arriving in the clear |
+| `attacks` | 35 | Every required property attacked, each with something observable |
+| `matrix` | 35 | Each property carried by a component that actually provides it |
+| `revision` | 30 | The same four artifacts, right, for a brief you have not seen |
 
-The lender does not take part in the computation; it only reads the answer. So this is not
-"hide it from the party doing the work" — it is "get somebody to believe a value they did not
-compute". The first is privacy. The second is soundness, and zero knowledge is required only
-when the value they must believe is derived from the value you are hiding.
+Hints on four of the eight, each inside that checkpoint's 50% cap.
 
-Soundness alone is an ordinary signature. Collapse the two and you bring a proof system to a
-place a signature would have done.
+## What you are graded on
 
-## Where minimality bites
+| Population | Count | Where it lives |
+|---|---:|---|
+| Briefs in the repository | 6 | `local/fixtures/generate.py` |
+| Variants — one fact moved | 18 | derived from those six |
+| Briefs generated from the seed | 12 | nowhere; they exist only at grading time |
 
-Drop one option from your selection. If the requirements are still covered, that option was
-doing nothing — and an option that does nothing is not free. It adds an assumption, a surface
-to attack, and something you now have to explain.
+The third row is why a lookup table keyed by `brief["id"]` does not work. The second is why a
+design that was decided once rather than derived fails the last checkpoint. Both are deliberate.
 
-`shift-board` is in the set as the brief that needs no cryptography. Nothing is secret,
-nobody distrusts the operator, and nobody depends on somebody else's computation. A design
-that reaches for a primitive there started from the tool.
+## More than one answer can be right
 
-Note also that the smallest sufficient combination need not be unique: `delegated-scoring`
-passes with MPC and with FHE. The grading asks only whether the selection covers what is
-required, relies on no party this brief does not supply, and contains nothing spare.
+The smallest sufficient combination need not be unique — `delegated-scoring` passes with MPC and
+with FHE. Nothing compares your selection against a reference. The grading asks only whether it
+covers what the brief requires, relies on no party the brief does not supply, and contains
+nothing spare.
 
-## `non_goals` is not decoration
+## The toy warning
 
-Every option in `PRIMITIVES` carries a `non_goals` list. FHE does not remove key management:
-somebody holds the decryption key, and that somebody remains an actor in the threat model.
-MPC does not remove the collusion assumption; it relocates it. A ZK proof does not hide the
-public inputs.
+`PRIMITIVES` is a teaching abstraction, chosen so the trade-offs fit on one screen. It flattens
+setup assumptions, malicious-versus-semi-honest security, circuit size, and ciphertext expansion.
+It is not production guidance, and a real deployment differs.
 
-So when the property matrix says a component is responsible for privacy, check that the
-component implements an option that actually provides it. A design that delegates a property
-to something which does not provide it is complete on the diagram.
+## Assurance scope
 
-## A derived design and a decided one
+Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
+daemon, and the image, so nothing inside that image is hidden from you: `reference/` and
+`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than
+out of reach.
 
-The last checkpoint hands you briefs in which one fact has moved: the operator is no longer
-trusted, an outside party now depends on the result, the answer must arrive with one party
-unreachable.
+What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
+a checkpoint can only credit the id it echoes, results do not leak expected values, and the
+fixtures come from this deployment's seed so a memorized answer does not carry.
 
-If your functions read the brief, this is four calls. If any of them wrote an answer down,
-that is the one that does not move. Design documents go stale for exactly this reason — the
-difference being that a document does not tell you it has.
+That supports self-study and honest practice. It does **not** support competition ranking,
+examination, or completion certification — those need a verifier the participant does not
+administer, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
 
-## Where this leads
+## Cost
 
-Week 7's implementation challenge turns this property matrix and attack plan into experiments
-that actually run. The experiment ids you put in the `evidence` column are the ones it
-executes.
+Zero. No cloud account, no AWS resources.
 
-## Authoring and validation
+## For authors
 
-Participants do not need a checkout. Repository maintainers use the Makefile author targets and CI as the validation source of truth.
+`make reference-test` runs the mutation suite: seventeen broken designs plus two verifier
+defects. Every one of them still returns a complete, plausible-looking design — which is the
+point, because in a design problem the wrong answers are never empty.
+
+Two defects surfaced while writing it, both from the hidden tests running against generated
+briefs rather than from reading the code. An input owned by the component that computes on it
+produced no edge at all, so the asset vanished from the flow. And requiring a dedicated operator
+*role* before the non-cryptographic baseline could be admissible meant a lone party computing on
+its own data counted as untrusted — and got answered with a ZK proof.
+
+One mutation was removed rather than baselined. Pruning a greedy cover is unreachable with six
+options, so no test could distinguish it from the reference. The selection is an exact
+smallest-cover search instead — minimal by construction rather than by repair — which made the
+mutation killable.
+
+### Two things found by running the container, which no test covers
+
+Both are inherited from the scaffolder's template and affect **every** AC26 problem, not only
+this one. This problem carries the fix; the others still need it.
+
+- **The pinned base-image digest does not exist.** `sha256:4efa69bf…` returns 404 from Docker
+  Hub for every platform, so `make build` fails before anything runs. Nothing in CI goes
+  through Docker — the tests invoke `python3` directly — so a dead pin passes every check.
+- **The verifier bound the container's own loopback.** A published port is forwarded to the
+  container's bridge address, so `HTTPServer(("127.0.0.1", port))` accepts nothing from
+  outside the container: every request is opened and closed with no response, and no
+  checkpoint can score. The Workbench loopback restriction that matters lives in
+  `docker-compose.yml`, and is unaffected.
+
+The second one is the more instructive failure. Every checkpoint passed in CI, because the
+tests call `evaluate()` directly and never cross a socket. The scoring logic was correct and
+entirely unreachable — which is the same shape of mistake as delegating a property to a
+component that does not provide it.

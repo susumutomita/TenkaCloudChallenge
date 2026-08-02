@@ -1,104 +1,166 @@
 # Build half a proof over a witness nobody holds
 
-Compute a co-SNARK prover's linear layer on a secret-shared witness, on shares. The witness is never assembled and not one round of communication happens.
+> This track is an independent, unofficial companion to the Advanced Cryptography Program 2026.
+> It is not affiliated with or endorsed by the course or its operators. All problem statements,
+> code, fixtures, and figures here are written independently. Questions about this track go to
+> the TenkaCloud repository, not to the course operators.
 
-Week 6's first problem. A co-SNARK proves a statement about a witness that **no single prover holds**: the witness is secret-shared across parties and the prover computation runs on top of MPC. What you write here is the half of that computation which costs no communication at all.
+**Track:** `advanced-cryptography-2026` · **Order:** 610 · **Chapter:** Week 6 / Programmable
+Cryptography Stack Design · **Role:** `mechanism` · **Time:** 60–90 minutes · **Points:** 300
+· **Required first:** `ac26-w2-secret-sharing`, `ac26-w2-linear-shares` · **Status:** draft
+
+## The story
+
+A co-SNARK proves a statement about a witness that **no single prover holds**. The witness is
+secret-shared across parties, and the prover computation itself runs on top of MPC.
+
+That sounds expensive, and half of it is free.
 
 ```text
 A = sum_j a_j w_j        B = sum_j b_j w_j        (mod p)
 ```
 
-`a` and `b` are public, `w` is secret. Under an additive sharing, `sum_j a_j [w_j]_party = [sum_j a_j w_j]_party` holds for each party independently, so scaling by a public constant and adding two same-party shares is the whole of it. Nobody sends anything. Multiplication, in the next problem, is where that stops being true -- which is why a co-SNARK's cost is counted in multiplications.
+`a` and `b` are public coefficient vectors. `w` is the shared witness. Under an additive
+sharing,
 
-Week 2's two problems (`ac26-w2-secret-sharing`, `ac26-w2-linear-shares`) are supplied. What changes is the type of a share: Week 2 modelled a sharing as `list[int]`, and here a `Share` carries a party, a field and an id, and its value is read through a runtime. Once the lesson is who may read what, a share cannot stay an int.
+```text
+sum_j a_j * [w_j]_party  =  [sum_j a_j * w_j]_party
+```
 
-The runtime handed to the participant has no `reconstruct`. "Reconstruct, do the arithmetic in the clear, re-share" is absent from the API rather than discouraged in a comment. It is an instrument and not a security boundary, though: `Share._value` is one attribute access away. What the audit can prove is that a result was produced by the runtime out of that party's own inputs -- not that the witness was never assembled. The writeup is explicit about the difference.
+holds for each party **independently**. Scaling by a public constant and adding two shares held
+by the same party are both things one party does alone, so the entire linear layer of a
+co-SNARK prover costs zero rounds. Multiplication is where that stops being true, and that is
+the next problem.
 
-On scoring: this problem ships 24 deliberately broken implementations, and **18 of them reconstruct to the right A and B on every shape**. `make reference-test` re-measures the count on every run. They split three ways: right value, non-canonical form; right value, nothing checked; right value, false account of itself. None of them is visible to a test that looks at the prover's output, so the checkpoints grade stages instead. One in particular -- reconstruct the witness, fold it in the clear, re-share the answer -- returns a perfect A and B at every seed and every shape, and is caught by the **audit checkpoint alone**.
+## What is supplied, and what changed
 
-This is a toy and says so. The field is a small enumerable prime, there are two to five parties, and there is no adversary and no channel.
+Week 2's additive secret sharing and its local operations are supplied. You rebuild neither.
+What changed is the type of a share.
+
+```text
+Share.party    which party holds it
+Share.field    which field its value lives in
+Share.id       a name, so a trace can name an operand without naming a value
+```
+
+Week 2 modelled a sharing as `list[int]` and let you index it. That is fine when the lesson is
+the arithmetic. Once the lesson is *who may read what*, a share cannot stay an int.
+
+The runtime you are handed has `party_scope`, `value_of`, `add`, `mul_public`, `zero`,
+`events()`, `violations()`, `ancestry()` and `issued()`. It does not have `reconstruct`.
 
 ## Browser workflow
 
-1. Start the problem in the Participant Portal and open **Browser Workbench**.
-2. Run `inspect` and read the deployment-specific fixture and published evidence.
-3. Edit the starter sources on the page and run the public `test` command.
-4. Complete any direct-answer fields from the evidence and your experiments.
-5. Run `prepare`, then paste every generated value into the matching Portal checkpoint.
+1. Start the problem in Participant Portal and open **Browser Workbench**.
+2. Run `inspect` to read this deployment's fixture and published evidence.
+3. Edit the starter source in the in-browser editor.
+4. Run `test` for the published checks and fill any direct-answer fields from the evidence.
+5. Run `prepare`, then paste every prepared checkpoint value into Participant Portal.
 
-Direct answers are bound to the current deployment seed by `prepare`.
+No checkout, terminal, or local editor is required. Code checkpoints submit the edited source.
+Direct answers are wrapped by `prepare` and bound to the current deployment seed, so a value copied
+from another deployment is rejected.
 
-## Learning goals
+## Scoring
 
-- Explain where responsibility divides between public coefficients and a secret-shared witness
-- Validate a witness vector's shape, field and party count without reading a value
-- Implement a linear combination using only addition and public scaling on shares
-- Keep the intermediate A and B as sharings rather than reconstructing them
-- Predict zero rounds of communication from the operation DAG
-- Tell local operations and communication events apart in a runtime trace
-- Confirm that the shared computation agrees with the plain reference
-- Diagnose coefficient-order, witness-index and field-mismatch defects
-- State what a provenance audit does and does not prove
+Eight checkpoints, scored independently. Wrong answers cost 15 points each.
 
-## Checkpoints
+| Checkpoint | Points | What is checked |
+|---|---:|---|
+| `relation` | 30 | Canonical coefficients, and rows that do not describe a field are refused |
+| `witness` | 30 | Shape, party order, field stamp and duplicates — checked without reading a value |
+| `combine-a` | 40 | A combination built from local operations, indexed by witness position |
+| `combine-b` | 40 | Both halves from their own vectors, over a witness that was checked first |
+| `audit` | 50 | Every result issued by the runtime, descending only from its own party's inputs |
+| `trace` | 45 | Rounds, messages and parties read out of the log rather than asserted |
+| `equivalence` | 40 | Agreement with the plain relation on all four shapes, under rerandomization |
+| `transfer` | 25 | All of it at a field, party count and witness length you have not seen |
 
-| Checkpoint | Purpose | Points |
-| --- | --- | ---: |
-| `relation` | Read the row, in the field's own words |  |
-| `witness` | Check the sharing without reading it |  |
-| `combine-a` | Build the combination on shares |  |
-| `combine-b` | Both halves of the row, from different vectors |  |
-| `audit` | Trace where the result came from |  |
-| `trace` | Report what the log says |  |
-| `equivalence` | Agree with the plain relation |  |
-| `transfer` | Hold up in a setting you have not seen |  |
+Hints on seven of the eight (12–20 each). Opening every one still leaves 188 of 300.
 
-## Explanation
+## A correct A and B proves less than it looks
 
-## A correct A and B is not evidence of a correct prover
+This problem ships 24 deliberately broken implementations, and **18 of them reconstruct to the
+right A and B on every shape**. `make reference-test` re-measures that count on every run.
 
-This problem ships 24 deliberately broken implementations, and **18 of them reconstruct to the right A and B on every shape and every label**. `make reference-test` re-measures that count on every run; if it moves, the number moves with it.
+They split three ways. **Right value, wrong form** — a relation stored with `-3` where the
+canonical name for that element is `94`. **Right value, nothing checked** — folding a sharing
+whose parties are out of order, or that appears at two witness positions. **Right value, false
+account of itself** — `rounds: 0` returned from belief rather than from the log.
 
-They split three ways. **Right value, wrong form**: a relation stored with `-3` where the field's canonical name for that element is `94`. **Right value, nothing checked**: folding a sharing whose parties are out of order, whose shares belong to another field, or that appears at two witness positions. **Right value, false account of itself**: returning `rounds: 0` from belief rather than from the log, or asserting `issued` instead of asking.
-
-One of them is the point.
-
-## Reconstructing the witness first does not fail a single value test
-
-An implementation that adds up each sharing to recover `w`, computes `A` and `B` in the clear, and re-shares the answers returns a **perfectly correct A and B** at every seed and every shape. The reconstruction values agree, rerandomizing the sharing changes nothing, and sparse, signed and unit vectors all pass.
-
-Measured, exactly **one** checkpoint kills it: `audit` (plus `transfer`, which re-runs the same checks under another seed). There is no way to catch it from the output, because `issued` and `ancestry` are not looking at values. They are looking at where a share came from.
+One of them is the point of the problem. An implementation that adds up each sharing to recover
+`w`, computes `A` and `B` in the clear, and re-shares the answers returns a perfect `A` and `B`
+at every seed and every shape. Measured, exactly **one** checkpoint kills it: `audit`.
 
 ## What the audit proves, and what it does not
 
-It proves this: every result share was issued by the runtime, its ancestry reaches **only that party's own input shares**, and not one read was refused. That is a real property, and it is what the shortcut above fails.
+It proves that every result share was issued by the runtime, that its ancestry reaches only
+that party's own input shares, and that no read was refused. That is real, and it is what the
+shortcut above fails.
 
-It does not prove that the witness was never assembled. Opening each party's scope in turn and reading that party's own share is legal; do it for every party and you have `w`, and if you then fold honestly the trace looks completely innocent. `Share._value` is one attribute access away besides. The runtime is an instrument, not a sandbox: it records what a computation consumed, not what the person writing it looked at.
+It does **not** prove that the witness was never assembled. Opening each party's scope in turn
+and reading that party's own share is legal; do it for every party and you have `w`, and folding
+honestly afterwards leaves a completely innocent trace. `Share._value` is one attribute access
+away besides. The runtime is an instrument, not a sandbox — it records what a computation
+consumed, not what its author looked at.
 
-This is not a hole in the exercise -- it is the same in a real MPC prover. A transcript shows the protocol's message pattern; it does not show that a party's operator kept no copy of their input. That second thing is a trust boundary and an operational question rather than a cryptographic one, and conflating them lands you at "we used MPC, so nothing leaked".
+That is not a gap in the exercise. A real MPC transcript shows the protocol's message pattern;
+it does not show that a party's operator kept no copy of their input. Conflating the two lands
+you at "we used MPC, so nothing leaked".
 
-## "Zero rounds" is the answer, not a measurement
+## Zero rounds is the answer, not a measurement
 
-Everyone knows this problem's answer is zero rounds before writing a line. That is exactly why a report that returns `rounds: 0` earns nothing. The `trace` checkpoint hands the report a log with communication in it every time: three messages carried in one round, five carried in two, a round that carried nothing at all, and a message from a party outside this row's committee. Read the log rather than your expectations and all of them pass.
+You knew the answer before you wrote a line, so a report that returns `rounds: 0` earns nothing.
+The `trace` checkpoint hands the report a log with communication in it every time: three
+messages in one round, five in two, a round that carried nothing, and a message from a party
+outside this row's committee. Read the log and all of them pass.
 
-`rounds` and `messages` being different numbers is the same lesson. How many messages a round carries is protocol-dependent; whether anything was sent is not.
+## Where this leads
 
-## Why sparse is harder than dense
-
-`a_j` multiplies the witness at position `j`, not "the j-th surviving term". For a dense coefficient vector those are the same thing, so code written against dense vectors passes quietly. Skipping zero coefficients is a fine optimization in itself; advancing `shares` alongside the skips is the bug.
-
-## A negative coefficient is not a mistake
-
-`-3` is a perfectly correct name for an element of `F_97`, and not the canonical one. Everything downstream reduces mod p anyway, so `A` and `B` come out right. What does not come out right is comparing your stored relation with the same relation as another prover wrote it -- which is exactly how two provers agree they are proving the same statement.
-
-## Toy versus production
-
-This is a toy of the mechanism. The field is a small enumerable prime, there are two to five parties, the adversary is not semi-honest so much as absent, and there is no channel, no committed randomness and no preprocessing. A real co-SNARK spends Beaver triples on its multiplications, and where those triples come from is the centre of the design. That is the next problem.
+The next problem is multiplication, which cannot be done this way: the product of the sums is
+not the sum of the products, so parties have to exchange masked values. Everything a co-SNARK
+spends is spent there, which is why the boundary drawn here is worth drawing precisely.
 
 ## Not in scope
 
 Actual SNARK proof generation, malicious-secure MPC, network transport, prover performance.
 
-## Authoring and validation
+## This is not secure
 
-Participants do not need a checkout. Repository maintainers use the Makefile author targets and CI as the validation source of truth.
+The field is a small enumerable prime, there are two to five parties, the adversary is not
+semi-honest so much as absent, and there is no channel, no committed randomness and no
+preprocessing. It is a toy of the mechanism.
+
+## Source alignment
+
+Week 6's material is published upstream, so `courseAlignment` pins `week6/README.md` and
+`week6/problems/co-snark-prove/README.md` at the commit `curriculum.md` records. The exercise's
+template, coefficients, fixtures and solution are not reproduced here: the relation, the runtime
+and the instrumentation are written independently, and the course's exercise supplies the
+secret-sharing primitives this one builds on rather than the code this one grades.
+
+## Assurance scope
+
+Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
+daemon, and the image, so nothing inside that image is hidden from you: `reference/` and
+`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than
+out of reach.
+
+What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
+a checkpoint can only credit the id it echoes, results do not leak expected values, and the
+fixtures come from this deployment's seed so a memorized answer does not carry.
+
+That supports self-study and honest practice. It does **not** support competition ranking,
+examination, or completion certification — those need a verifier the participant does not
+administer, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
+
+## Cost
+
+Zero. No cloud account, no AWS resources.
+
+## For authors
+
+`make reference-test` runs the mutation suite: 24 broken submissions plus one aimed at the
+verifier. It prints how many of the 24 still reconstruct to the right `A` and `B`, which is the
+number this README quotes — if a later edit makes the checkpoints cheaper, that number moves and
+the claim has to move with it.

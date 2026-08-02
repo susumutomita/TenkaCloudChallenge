@@ -1,76 +1,145 @@
 # The answer is right. That is all it is
 
-Seven implementations all return the correct total. Four of them leak something on the way. Every correctness test passes. Write the auditor that finds the first violation.
+> This track is an independent, unofficial companion to the Advanced Cryptography Program 2026.
+> It is not affiliated with or endorsed by the course or its operators. All problem statements,
+> code, fixtures, and figures here are written independently. Questions about this track go to
+> the TenkaCloud repository, not to the course operators.
+
+**Track:** `advanced-cryptography-2026` · **Order:** 240 · **Chapter:** Week 2 / Privacy Audit
+· **Role:** `transfer` · **Time:** 60–75 minutes · **Points:** 300
+· **Required first:** `ac26-w2-beaver-mul` · **Status:** draft — see "Week 2 alignment"
+
+## The story
+
+Three teams were asked to compute the same thing: a weighted risk total across three parties,
+without anyone seeing anyone else's figure. All three shipped. All three return the right number.
+The correctness suite is green on every one of them.
+
+The privacy review did not come back the same.
+
+## What you are auditing
+
+A program here is an **operation list**, not Python source, and a runtime executes it and records
+what an outsider could observe:
+
+```text
+open    a value is revealed to everyone
+peek    a party reads somebody's raw share slot
+emit    a log line carrying a value
+fail    an error path carrying a value
+output  the protocol's declared result
+```
+
+Local arithmetic produces no events at all. That asymmetry is the subject: a protocol is judged by
+what it reveals, not by how much it computes.
+
+Seven implementations. Four leak. Three do not — and two of those three are the awkward kind.
 
 ## Browser workflow
 
-1. Start the problem in the Participant Portal and open **Browser Workbench**.
-2. Run `inspect` and read the deployment-specific fixture and published evidence.
-3. Edit the starter sources on the page and run the public `test` command.
-4. Complete any direct-answer fields from the evidence and your experiments.
-5. Run `prepare`, then paste every generated value into the matching Portal checkpoint.
+1. Start the problem in Participant Portal and open **Browser Workbench**.
+2. Run `inspect` to read this deployment's fixture and published evidence.
+3. Edit the starter source in the in-browser editor.
+4. Run `test` for the published checks and fill any direct-answer fields from the evidence.
+5. Run `prepare`, then paste every prepared checkpoint value into Participant Portal.
 
-Direct answers are bound to the current deployment seed by `prepare`.
+No checkout, terminal, or local editor is required. Code checkpoints submit the edited source.
+Direct answers are wrapped by `prepare` and bound to the current deployment seed, so a value copied
+from another deployment is rejected.
 
-## Learning goals
+## Scoring
 
-- Confirm in code that correctness tests cannot establish privacy
-- Derive the set of values a protocol may reveal from its specification
-- Tell opened secrets, cross-party reads, and log or error leaks apart
-- Avoid reporting a violation on a value the specification publishes
-- Recover a secret from a transcript to show the leak did harm
-- Remove the violation while keeping every legitimate observation
-- Explain how the same view yields a different verdict under a different threat model
+Seven checkpoints, scored independently. Wrong answers cost 15 points each.
 
-## Checkpoints
+| Checkpoint | Points | What is checked |
+|---|---:|---|
+| `allowed-opens` | 35 | The set of labels the specification permits to be revealed |
+| `opened-secret` | 45 | An intermediate value opened — kind *and* position |
+| `cross-party` | 45 | A party reading somebody else's slot, not its own |
+| `log-leak` | 45 | A raw value escaping through a log line or an error message |
+| `transcript` | 40 | The recovered private input, not just the accusation |
+| `repair` | 50 | The violation removed, and every legitimate observation kept |
+| `mutation` | 40 | Same verdicts under renamed labels, moved operations, an unseen seed |
 
-| Checkpoint | Purpose | Points |
-| --- | --- | ---: |
-| `allowed-opens` | Name what the specification allows to be revealed |  |
-| `opened-secret` | Find a value that should not have been revealed |  |
-| `cross-party` | Find where somebody looked at another's slot |  |
-| `log-leak` | Find what escaped through a log or a failure |  |
-| `transcript` | Recover a secret from the leaking transcript |  |
-| `repair` | Take out the leak and nothing else |  |
-| `mutation` | Hold the same verdict when the names change |  |
+Hints on six of the seven, each inside that checkpoint's 50% cap.
 
-## Explanation
+## A false positive costs what a miss costs
 
-## What correctness tests cannot catch
+Every checkpoint mixes leaking and clean implementations, and the clean ones are chosen to punish
+"flag everything":
 
-All seven implementations return the right total. No number of correctness tests tells you which of them is safe, because privacy is not a property of the output — it is a property of what became observable along the way.
+- one logs a **weight**, which the specification publishes;
+- one has a party read **its own** slot, which is what a party does.
 
-## The four violations
+Neither is a violation. What may be revealed is decided by the specification, not by the kind of
+operation. An auditor that reports both finds every real leak and still fails.
 
-- **opened-a-secret**: an intermediate value (a partial sum) is opened. Nothing masks it, so anyone reading the transcript learns it.
-- **cross-party-read**: one party reads another party's raw share slot. Nothing is opened and the transcript is spotless; only the access trace shows it.
-- **leaked-in-log**: a log line carries a raw private value. Logs are not outside the threat model.
-- **leaked-in-error**: the error path carries a secret. The happy path is perfectly clean, which is exactly why a correctness review passes it.
+## Why the programs are data
 
-## The two false positives
+An auditor that greps for `reconstruct` is defeated by a rename, a wrapper, or a call through a
+helper. Making the program an operation list means what gets audited is **the operations a run
+actually performed** — so the mutation checkpoint can rename every label, move the independent
+openings, and run under a seed you have never seen, and the verdict must not move. An auditor keyed
+on label text, or on where a violation sat last time, contradicts itself there.
 
-An auditor that flags everything suspicious finds every real violation and still fails. One clean implementation logs a weight that is public by specification; another has a party read its own slot. Neither is a violation. What may be revealed is decided by the specification, not by the kind of operation.
+## Why naming the leak is not enough
 
-## Why the programs are data, not code
+The transcript of the over-opening implementation holds both a partial sum and the total. Their
+difference is the last party's weighted contribution; the weight is public and `p` is prime. One
+subtraction and one modular inverse hand you that party's private input.
 
-An auditor that greps for the word `reconstruct` is defeated by a rename, a wrapper, or a call through a helper. Here a program is an operation list, and what gets audited is the operations a run actually performed. The mutation checkpoint renames every label, moves the independent openings, and runs under a seed you have never seen. The protocol is unchanged, so the verdict must be unchanged. An auditor keyed on label text, or on where a violation sat last time, contradicts itself there.
+Until you recover it, "this leaks" is a claim about the code. After you recover it, it is a fact
+about somebody's data.
 
-## Why a counterexample is required
+## Why "delete everything" is not a repair
 
-Pointing at an extra opening does not show that it hurt. The transcript holds both the partial sum and the total; the difference is the last party's weighted contribution, and the weight is public and invertible. One subtraction and one inverse hand you that party's private input. A leak claim becomes a claim when you recover the value.
-
-## What counts as a repair
-
-Deleting every observable operation also stops the leak, and still returns the total. So the grading checks that everything the specification permits to be observed is still observed afterwards. A repair removes the violation and nothing else.
+Removing every observable operation also stops the leak, and the program still outputs the total.
+So the repair checkpoint additionally requires that everything the specification permits to be
+observed is **still observed** afterwards. A repair takes out the violation and nothing else.
 
 ## Threat model
 
-This assumes honest-but-curious parties and no collusion. The same view, judged under a model that permits collusion, yields a different verdict. A safety judgement is made against assumptions, not against code.
+Honest-but-curious parties, no collusion. Toy field, three parties, values small enough to check by
+hand. This is a leakage contract you can observe in a simulator — not a security claim, and not a
+model of a real MPC deployment.
+
+The same view judged under a model that permits collusion gives a different verdict. A safety
+judgement is made against assumptions, not against code.
 
 ## Where this leads
 
-This separation — a correct output, and what was observable while producing it — is used directly in Week 6's co-SNARK privacy audit.
+The separation drawn here — a correct output, and what was observable while producing it — is used
+directly in Week 6's co-SNARK privacy audit.
 
-## Authoring and validation
+## Week 2 alignment
 
-Participants do not need a checkout. Repository maintainers use the Makefile author targets and CI as the validation source of truth.
+Week 2's material was not published upstream at the commit `curriculum.md` records, so
+`courseAlignment` pins `week2/README.md` with `kind: "placeholder"`, and `status` stays `draft`.
+The pin records the *absence* of material at that commit rather than an alignment to it — which is
+what lets `bun run course:drift` report `PUBLISHED` the day the material appears. #219 reconciles
+the row before this leaves draft.
+
+## Assurance scope
+
+Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
+daemon, and the image, so nothing inside that image is hidden from you: `reference/` and
+`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than
+out of reach.
+
+What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
+a checkpoint can only credit the id it echoes, results do not leak expected values, and the
+fixtures come from this deployment's seed so a memorized answer does not carry.
+
+That supports self-study and honest practice. It does **not** support competition ranking,
+examination, or completion certification — those need a verifier the participant does not
+administer, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
+
+## Cost
+
+Zero. No cloud account, no AWS resources.
+
+## For authors
+
+`make reference-test` runs the mutation suite: seven broken auditors plus one aimed at the
+verifier. Two of the seven are over-flagging rather than under-flagging, because a suite that only
+punishes misses would certify an auditor that condemns every run.

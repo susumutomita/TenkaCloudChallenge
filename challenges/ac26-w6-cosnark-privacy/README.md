@@ -1,14 +1,27 @@
 # Eight provers that agree on the answer and disagree on what they say
 
-All eight co-SNARK provers return the same `C = A * B`. What differs is what each one lets out, and through which exit. Find the first privacy violation in the record and close it without changing the answer or the round count.
+> This track is an independent, unofficial companion to the Advanced Cryptography Program 2026.
+> It is not affiliated with or endorsed by the course or its operators. All problem statements,
+> code, fixtures, and figures here are written independently. Questions about this track go to
+> the TenkaCloud repository, not to the course operators.
 
-Week 6's third problem. The co-SNARK prover the previous two built is **supplied** here: the linear layer (`ac26-w6-cosnark-linear`) and the one-round multiplication (`ac26-w6-cosnark-beaver`) are both handed over as answers. This problem does not ask you to compute `C` again.
+**Track:** `advanced-cryptography-2026` · **Order:** 630 · **Chapter:** Week 6 / Programmable
+Cryptography Stack Design · **Role:** `transfer` · **Time:** 60–90 minutes ·
+**Points:** 300 · **Required first:** `ac26-w6-cosnark-linear`, `ac26-w6-cosnark-beaver` ·
+**Status:** draft
+
+## The story
+
+The co-SNARK prover was finished in the previous two problems. The linear layer cost zero
+rounds; the multiplication cost exactly one. Both are handed to you here as answers.
 
 ```text
 A = sum_j a_j w_j        B = sum_j b_j w_j        C = A * B        (mod p)
 ```
 
-What you are handed is eight prover implementations built on top of it, `S1`..`S8`. **All eight reconstruct `C` to `A * B` at every seed and every shape.** Line them up and a correctness test cannot tell them apart. That is the premise of the problem, not a spoiler.
+What you are handed is eight implementations built on top of it, `S1`..`S8`. **All eight
+reconstruct `C` to `A * B` at every seed and every shape** — 96 runs out of 96 agree. A
+correctness test cannot tell them apart. That is the premise of the problem, not a spoiler.
 
 What differs is what each one lets out, and through which exit.
 
@@ -19,130 +32,153 @@ metrics    named numbers an operator scrapes
 error      what a malformed input produces
 ```
 
-A correctness test reads the first field of the first one. Three of the eight use only the other three. One leaks through none of the four, and one says nothing at all while reading every party's share.
+A correctness test reads the first field of the first one. Three of the eight use only the
+other three. One leaks through none of the four, and one says nothing at all while reading
+every party's share.
 
-The previous problem's runtime withheld `reconstruct`. This one's `AuditRuntime` **does not**: a real MPC library exposes reconstruction, cross-party debugging hooks and structured logging because real operators need them, and withholding them here would make the whole class of defect unwritable and therefore unauditable. Instead the runtime records every capability reached, with its operand ids and **never with a value**. The record is evidence rather than a transcript.
+## What is new
 
-Specimen ids are opaque (`S1`..`S8`) and two of them reach a capability through a name that does not spell it. `grep("reconstruct")` finds nothing; the capability record finds it. That is what a source-independent behavioural probe means.
+The previous problem's runtime withheld `reconstruct`, which made one class of shortcut
+unwritable. That was the right default there and it is the wrong one here: a real MPC library
+exposes reconstruction, cross-party debugging hooks and structured logging, because real
+operators need them. Withhold them and the whole class of defect becomes unwritable and
+therefore unauditable.
 
-On scoring: this problem ships 35 deliberately broken audits, and **29 of them still give all eight specimens the right verdict** -- clean or not clean. `make reference-test` re-measures that count on every run. Noticing that something is wrong and saying what leaked and from where are very different difficulties.
+So `AuditRuntime` hands them out, and records what was reached:
 
-This is a toy and says so. The field is a small enumerable prime, there are two to five parties, the adversary is absent, and a trusted dealer produces the triples. And `Share._value` is one attribute access away: the runtime is an instrument, not a sandbox, and it records what a computation published rather than what its author looked at.
+```text
+runtime.reached()     every capability reached: {"capability", "party", "operands"}
+runtime.openings()    every opening:            {"roundId", "shareIds", "maskedBy"}
+runtime.events()      the full operation trace
+```
+
+Operand ids, **never a value**. The record is evidence rather than a transcript. Reaching a
+capability is not a violation — publishing `d` and `e` is the protocol — and deciding is your
+job.
+
+Specimen ids are opaque and two of them reach a capability through a name that does not spell
+it. `grep("reconstruct")` finds nothing. The capability record finds it.
 
 ## Browser workflow
 
-1. Start the problem in the Participant Portal and open **Browser Workbench**.
-2. Run `inspect` and read the deployment-specific fixture and published evidence.
-3. Edit the starter sources on the page and run the public `test` command.
-4. Complete any direct-answer fields from the evidence and your experiments.
-5. Run `prepare`, then paste every generated value into the matching Portal checkpoint.
+1. Start the problem in Participant Portal and open **Browser Workbench**.
+2. Run `inspect` to read this deployment's fixture and published evidence.
+3. Edit the starter source in the in-browser editor.
+4. Run `test` for the published checks and fill any direct-answer fields from the evidence.
+5. Run `prepare`, then paste every prepared checkpoint value into Participant Portal.
 
-Direct answers are bound to the current deployment seed by `prepare`.
+No checkout, terminal, or local editor is required. Code checkpoints submit the edited source.
+Direct answers are wrapped by `prepare` and bound to the current deployment seed, so a value copied
+from another deployment is rejected.
 
-## Learning goals
+## Scoring
 
-- Classify a co-SNARK prover run's values into public input, secret share, allowed open, secret intermediate, artifact and verifier-only
-- Detect an implementation that returns the correct relation while its privacy is broken, from the record
-- Read the capability record and find a reconstruct reached through an alias that does not spell it
-- Tell an authorized d/e opening apart from an unmasked one and from one in an undeclared round
-- Detect a read across a party boundary, including in an implementation that discloses nothing
-- Check all four channels -- artifact, log, metrics, error -- against the policy
-- Detect an allowed name carrying something the policy does not allow
-- Submit a counterexample deriving a non-public value from the participant-visible view alone
-- Draw out a leak on a malformed-input path that a single run never reaches
-- Close the leak while keeping correctness, the open set, the round count and the artifact schema
-- Explain why primitive-level safety does not automatically give an application-level privacy contract
+Eight checkpoints, scored independently. Wrong answers cost 15 points each.
 
-## Checkpoints
+| Checkpoint | Points | What is checked |
+|---|---:|---|
+| `classify` | 30 | Six classes over a catalog of descriptors, including two openings that are still secret |
+| `capability` | 40 | Every capability reached — including one that needs a second, malformed probe |
+| `open-set` | 40 | Mask **and** declared round, because each half alone passes a different prover |
+| `cross-party` | 30 | Reads across a party boundary, in an implementation whose disclosure is clean |
+| `leakage` | 45 | All four channels, against the name policy **and** the kind policy |
+| `evidence` | 45 | A secret derived from a serialized disclosure, named by the pair it came from |
+| `repair` | 45 | Correctness, the open set, the round count, the schema and the failure path at once |
+| `transfer` | 25 | All of it at a setting you have not seen, on provers you have not seen |
 
-| Checkpoint | Purpose | Points |
-| --- | --- | ---: |
-| `classify` | Which values belong to whom |  |
-| `capability` | What one run tells you, and what it does not |  |
-| `open-set` | The values it was allowed to say, and the ones it was not |  |
-| `cross-party` | The implementation that says nothing and reads everything |  |
-| `leakage` | The three exits a correctness test never looks at |  |
-| `evidence` | Build the secret out of what leaked |  |
-| `repair` | Same answer, nothing said |  |
-| `transfer` | A setting you have not seen, and provers you have not seen |  |
+Hints on seven of the eight (12–18 each). Opening every one still leaves 190 of 300.
 
-## Explanation
+## Noticing is easy. Saying what leaked is not
 
-## A correct answer is not evidence of a correct prover
+This problem ships 35 deliberately broken audits, and **29 of them still give all eight
+specimens the right verdict** — clean or not clean. `make reference-test` re-measures that
+count on every run.
 
-All eight specimens reconstruct `C` to `A * B` at every seed and every shape -- 96 runs out of 96 agree. No amount of correctness testing shows one bit of what seven of them are doing.
+That is the whole reason the checkpoints demand exact pairs and exact values. An audit that
+points at the right prover for the wrong reason is not a finding; it is a coincidence that
+will not survive the next implementation.
 
-The same trap sits on the audit side. This problem ships 35 deliberately broken audits, and **29 of them give all eight specimens the right verdict** -- clean or not clean. `make reference-test` re-measures that count on every run; if it moves, the number moves with it. **Noticing that something is wrong is easy. Saying what leaked and from where is not.** The eight checkpoints demand exact pairs and exact values because that is the difference that matters in practice.
-
-## Of the four exits, a correctness test looks at one
-
-`artifact` is what the next stage consumes, and it is what a test reads. Nobody reads `log`, `metrics` or `error`. Three of the eight use only those three.
-
-The log is **structured**: `emit(event, **values)`, and a record is `{"event", "values"}`. The policy surface is the *field names* inside `values` -- not the event name, and not the prose of a message. That is a deliberate design choice: reducing it to strings first would have made this problem an exercise in regular expressions. The cost is stated rather than hidden -- a prover that writes a secret into a message's prose is not caught by this audit.
-
-## An allowed name is not an allowance
-
-`A`, `B` and `C` are on `ALLOWED_NAMES`. **As sharings.** One implementation publishes a name squarely in the middle of the allowlist, `C`, carrying an integer where a sharing belongs. A scan that only looks at names finds nothing. `SHARING_ONLY_NAMES` is the second rule that exists for it, and `is_sharing(value, parties)` is the tool for asking what a value *is* without reaching into `Share._value`.
+Measured, each checkpoint is the sole catcher of its own defect (alongside `transfer`, which
+re-runs everything under another seed). One predicate breaks two at once: `_authorized`
+reduced to "was there a mask" or "was it the right round" fails `classify` **and** `open-set`,
+because those two checkpoints are asking the same question.
 
 ## Published is not the same as allowed to be published
 
-One Beaver multiplication authorizes exactly two openings -- the masked `d` and `e`, both under the multiplication's own round id. An opening is authorized only when **both** hold:
+One Beaver multiplication authorizes exactly two openings — the masked `d` and `e`, both under
+the multiplication's own round id. An opening is authorized only when **both** hold:
 
 - a reserved triple mask is in its ancestry (`maskedBy` is not empty), and
-- its `roundId` is the round the relation declared
+- its `roundId` is the round the relation declared.
 
-An opening that fails the first published something nothing was hiding. One that fails the second published a masked value in a round the relation never declared -- a mask spent on a value it was not drawn for, which is triple reuse in a disguise. An audit that checks only `maskedBy` passes the second; one that checks only the round passes the first.
-
-The same predicate is needed by the `classify` checkpoint and by `open-set`. That is not an economy; it is the claim that those are the same question. Measured: breaking `_authorized` down to either half alone fails both checkpoints at once.
-
-## The implementation that leaks without saying anything
-
-One specimen puts nothing into any of the four channels. Its disclosure is byte-for-byte a clean prover's. It also peeks every party's share. Nothing leaves the process, so **an audit of disclosure cannot see it, even in principle.** An audit of capability can.
-
-That is what "the secret-sharing primitive makes the whole prover private" actually looks like. The primitive is working exactly as specified. The application on top of it simply has no privacy contract.
-
-A `peek` record stamps the id of the party that **owns** the share, not the one that read it. That is enough: no single party holds shares belonging to two parties, so the moment two owners appear somebody crossed a boundary. And a run that read its own share twice did not -- the number of peeks and the number of owners are different numbers.
-
-## What one run tells you, and what it does not
-
-One specimen is flawless on the happy path. Hand it a row whose declared width disagrees with its coefficient vector and an exception handler packs the failing state into the error. An audit that runs it once reports it clean. It *is* clean -- right up until it is not.
-
-That is why only the `capability` checkpoint is handed a `probe` and left to decide how many runs there are. The other seven hand you one run and ask what it says.
-
-## Building the secret out of what leaked
-
-A leak is not "a number you recognize". It is **a number you can derive something secret from, using only what is in front of you**, and these disclosures need three different derivations:
-
-1. the secret itself, under a name nobody would flag as sensitive (`prover.left_half` is a number an operator wanted to alert on)
-2. a whole sharing in the clear -- additive shares sum to what they were hiding
-3. **a value that is not secret-looking at all, published in the same record as a value the policy explicitly allows**
-
-The third is the point. The flagged field is `x`, which looks like nothing. The secret comes out of combining it with `d`, which the policy permits. The previous problem's `d = A - x` is simply read the other way: `A = d + x`. Finding the leak and deriving the secret are two different skills, so they are two different checkpoints.
-
-That checkpoint is handed a `serialized` disclosure: sharings have already become lists of opaque share ids, so neither `Share._value` nor `reconstruct` is on the table. The checker watches the runtime, and a submission that reaches a capability to answer has answered a different question.
-
-## Repairing all of it at once
-
-`private_prover` is written on top of the supplied `beaver_product`, and everything has to hold simultaneously: `C` reconstructs to `A * B`, there are exactly two openings and both are authorized, the schedule is one round, no capability beyond `open` is reached, and none of the four channels carries anything outside the policy.
-
-Publishing nothing satisfies four of those and fails the first, which is the point. **A prover that says nothing is not private. It is useless.**
-
-One more thing is graded, and it is easy to get wrong precisely because it only happens when something else has already gone wrong. The call is made on a runtime whose triple has already been spent, so `reserve_triple` refuses and the call fails. Let it fail. A handler that puts the failing state in front of someone so the failure can be debugged is the single most common way a prover that is private on Tuesday stops being private on Wednesday.
+An opening that fails the first published something nothing was hiding. One that fails the
+second spent a mask on a value it was not drawn for, which is triple reuse in a disguise.
 
 ## What the audit proves, and what it does not
 
-It proves that every value published on this runtime went out under a reserved mask, that no capability beyond the protocol's own was reached, and that no name outside the policy appeared in any of the four channels.
+It proves that every value published on this runtime went out under a reserved mask, that no
+capability beyond the protocol's own was reached, and that no name outside the policy appeared
+in any of the four channels.
 
-It does **not** prove that nobody ever saw `A`. `Share._value` is one attribute access away, and the participant owns the machine and the image. The runtime is an instrument, not a sandbox: what the record proves is exactly what `reached()`, `openings()` and the `Disclosure` say, and no more.
+It does **not** prove that nobody ever saw `A`. `Share._value` is one attribute access away,
+and you own the machine and the image. The runtime is an instrument, not a sandbox — it
+records what a computation published, not what its author looked at.
 
-## Toy versus production
+Two limits are worth stating rather than implying. The log's policy surface is the *field
+names* inside a structured record, so a prover that writes a secret into a message's prose is
+not caught here; reducing the log to strings first would have made this an exercise in regular
+expressions. And a value opened to the other parties but never put into a channel is invisible
+to the disclosure audit by construction — it is `open-set`'s business, not `leakage`'s.
 
-The field is a small enumerable prime, there are two to five parties, the adversary is absent, and a trusted dealer produces the triples. In a real co-SNARK, what is called "the policy" here is implemented as a serialization schema, a log schema and a metric cardinality limit, all of which are review artifacts. The claim this problem makes is that such a review can be reduced to something a machine runs -- not that what it reduces to is complete.
+## Where this leads
+
+Week 6's remaining problems leave MPC for the zkVM side of the stack. What carries over is the
+question this one asks: a primitive that is correct and a system that keeps its promise are
+different claims, and only one of them is checked by the tests everybody writes.
 
 ## Not in scope
 
-Formal simulation-based proofs, timing and cache side channels, malicious-secure MPC compilers, and the privacy analysis of an actual SNARK proof.
+Formal simulation-based proofs, timing and cache side channels, malicious-secure MPC
+compilers, and the privacy analysis of an actual SNARK proof.
 
-## Authoring and validation
+## This is not secure
 
-Participants do not need a checkout. Repository maintainers use the Makefile author targets and CI as the validation source of truth.
+The field is a small enumerable prime, there are two to five parties, the adversary is not
+semi-honest so much as absent, and a trusted dealer produces the triples. It is a toy of the
+mechanism.
+
+## Source alignment
+
+Week 6's material is published upstream, so `courseAlignment` pins `week6/README.md` and
+`week6/problems/co-snark-prove/README.md` at the commit `curriculum.md` records. The
+exercise's template, coefficients, fixtures and solution are not reproduced here: the
+relation, the runtime, the specimens, the disclosure sink and the policy are written
+independently, and the course's exercise supplies the primitives this one audits rather than
+the code this one grades.
+
+## Assurance scope
+
+Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
+daemon, and the image, so nothing inside that image is hidden from you: `reference/` and
+`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than
+out of reach. The same is true of the ground truth the hidden checker reads — an audit that
+imports it has not audited anything, and only you can decide not to.
+
+What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
+a checkpoint can only credit the id it echoes, results do not leak expected values, and the
+fixtures come from this deployment's seed so a memorized answer does not carry.
+
+That supports self-study and honest practice. It does **not** support competition ranking,
+examination, or completion certification — those need a verifier the participant does not
+administer, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
+
+## Cost
+
+Zero. No cloud account, no AWS resources.
+
+## For authors
+
+`make reference-test` runs the mutation suite: 35 broken audits plus one aimed at the
+verifier. It prints how many of the 35 still give every specimen the right verdict, which is
+the number this README quotes — if a later edit makes the checkpoints cheaper, that number
+moves and the claim has to move with it.

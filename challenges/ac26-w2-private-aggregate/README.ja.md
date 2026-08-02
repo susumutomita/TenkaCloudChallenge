@@ -1,86 +1,133 @@
 # 掛け算は 5 回、通信は 1 回
 
-複数組織が件数と深刻度を出さずに加重リスクスコアだけを得る。Week 2 の 4 問を 1 つの application へ束ねる。乗算の数と round の数は同じではない。
+> このトラックは Advanced Cryptography Program 2026 の非公式・独立した companion です。講座および
+> その運営者とは提携しておらず、承認も受けていません。問題文、コード、fixture、図はすべて独自に
+> 作成しています。このトラックに関する質問は講座運営ではなく TenkaCloud リポジトリへお願いします。
 
-Week 2 の総合問題、 role は synthesis。 share・線形演算・Beaver 乗算・open policy を個別に実装して終わりにせず、 複数 party の秘密入力から非線形な集計値だけを公開する小さな MPC application へ統合する。
+**Track:** `advanced-cryptography-2026` · **Order:** 250 · **Chapter:** Week 2 / Private
+Aggregation Synthesis · **Role:** `synthesis` · **想定時間:** 75〜105 分 · **配点:** 300
+· **必須前提:** `ac26-w2-privacy-audit` · **Status:** draft — 後述の「Week 2 の対応づけ」を参照
 
-式は score = Σ_i (count_i * severity_i) + bias (bias は公開、 mod p)。 積の両側が秘密なので、 組織数 k に対して乗算が k 回必要になる。 一方 d と e の open は互いに独立なので、 全部まとめて 1 round に収まる。
+## ストーリー
 
-**この 2 つの数が違う**ことがこの問題の中心。 乗算ごとに open する実装は正しく、 privacy も保たれ、 latency だけが k 倍になる。 主張ではなく実測で採点するため、 開示経路を `io.open_batch()` 1 つに絞り、 呼び出し回数を round として数える。
+複数の組織が incident について情報交換をしています。うまくいっていません。昼食の席で、一般論として、
+誰も最初に数字を言おうとしないからです。彼らが本当に欲しいのは 1 つの数値です。
 
-triple の使い回しも同様に correctness では捕まらない。 Beaver は任意の妥当な triple で正しく動くため、 同じ triple を全積に使ってもスコアは合う。 壊れるのは privacy で、 同じ mask a が複数の秘密を覆うと transcript から秘密の差が出る。 hidden test は open された値の多重集合を、 供給された triple が含意する mask 差と厳密に照合するので、 使い回しはここで落ちる。
+```text
+score = Σ_i (count_i * severity_i) + bias        （bias は公開、mod p）
+```
 
-checkpoint は 8 つで、 correctness・privacy・communication cost を別々に採点する。 1 つの verdict にまとめると、 学習者が作ったのが 「正しいが高い」 のか 「正しいが漏れる」 のか 「安全だが誤り」 なのかを区別できないため。
+積の両側が秘密で、しかも別々の人が持っています。この式が Week 2 のすべてです。
 
-Week 2 の教材は pinned commit 時点で未公開のため sources は placeholder pin であり、 status は draft のままにする (#219 が公開を検出した時点で確定する)。
+## 何を作るのか
+
+公開はすべて 1 つのハンドルを通ります。
+
+```python
+io.open_batch([sharing_a, sharing_b])   # -> [value_a, value_b]   1 round
+io.open_batch([sharing_a])
+io.open_batch([sharing_b])              # -> 同じ値               2 rounds
+```
+
+1 回の呼び出しが 1 round です。何をどうまとめるかは設計判断であり、主張ではなく**実測**で採点され
+ます。
 
 ## ブラウザでの進め方
 
 1. Participant Portal で問題を起動し、**Browser Workbench** を開く。
-2. `inspect` で deploy 固有の fixture と公開された証拠を読む。
-3. 画面内の starter を編集し、`test` で公開テストを実行する。
-4. 表示された直接回答欄を、inspect と実験結果から埋める。
-5. `prepare` で全 checkpoint の提出値を作り、Portal へ貼る。
+2. `inspect` でこの deploy 固有の fixture と公開された証拠を読む。
+3. 画面内のエディタで starter のソースを編集する。
+4. `test` で公開テストを実行し、直接回答欄があれば証拠から埋める。
+5. `prepare` で全 checkpoint の提出値を作り、Participant Portal へ貼る。
 
-直接回答は `prepare` により現在の deploy seed へ結び付けられます。
+checkout、ターミナル、ローカルエディタは不要です。code checkpoint は編集したソースを提出します。
+直接回答は `prepare` が現在の deploy seed へ結び付けるため、別 deploy からコピーした値は拒否されます。
 
-## 学習目標
+## 採点
 
-- application 式を線形部分と乗算部分へ分解できる
-- 必要な Beaver triple 数と communication round 数を実装前に見積もれる
-- round 数が乗算の数ではなく乗算の深さで決まることを説明できる
-- secret-shared input から途中値を公開せずに結果を計算できる
-- triple の使い回しが correctness ではなく privacy を壊すことを説明できる
-- correctness、privacy、communication cost を別々に検証できる
-- 公開すると決めた最終出力から不可避に漏れる情報を説明できる
+8 つの checkpoint を独立に採点します。誤答は 1 回 15 点減点です。
 
-## Checkpoint
+| Checkpoint | 配点 | 何を検査するか |
+|---|---:|---|
+| `plan` | 35 | 実装前に見積もった乗算数・triple 数・round 数 |
+| `share-inputs` | 30 | party 数ぶんの正規形 share と、秘密への復元 |
+| `linear` | 30 | 公開定数を 1 party だけが畳み込む |
+| `multiply` | 55 | スコアが平文計算と一致する |
+| `result` | 35 | 再 share・順序反転・入力の既知変化 |
+| `privacy` | 40 | mask 差を公開し、それ以外を公開しない |
+| `cost` | 35 | 見積もりと実測の一致 |
+| `transfer` | 40 | 見たことのない seed での再実行 |
 
-| Checkpoint | 内容 | Points |
-| --- | --- | ---: |
-| `plan` | 書く前にコストを見積もる | 35 |
-| `share-inputs` | 秘密を分割する | 30 |
-| `linear` | 公開された定数を足す | 30 |
-| `multiply` | 秘密同士の積を組み上げる | 55 |
-| `result` | 関係が成り立つことを示す | 35 |
-| `privacy` | mask 差以外を公開しない | 40 |
-| `cost` | 見積もりと実測を一致させる | 35 |
-| `transfer` | 見たことのない設定でも成立させる | 40 |
+hint は 8 つ中 6 つにあり、いずれもその checkpoint の 50% 上限内です。
 
-## 解説
+## 3 つの数のうち 2 つは同じ
 
-## 式を分解する
+組織が k 個なら乗算は k 回、triple も k 個です。しかし round は k 回では**ありません**。どの積の
+`d` と `e` も他の積の結果に依存しないので、全部を 1 回の open にまとめられます。
 
-score = Σ_i (count_i * severity_i) + bias。 総和は線形、 bias の加算も線形 (ただし 1 party だけが畳み込む)、 秘密同士の積だけが線形でない。 だから組織数 k に対して Beaver 乗算が k 回、 triple が k 個要る。
+乗算ごとに open する実装は正しく、privacy も保たれ、latency だけが k 倍になります。それがこの問題の
+主題です。round 数は乗算の**深さ**で決まり、個数では決まりません。この式の深さは 1 なので、幅がいくら
+増えても round は 1 のままです。深さ D の回路なら D round になります。
 
-## round が k ではなく 1 である理由
+## triple の使い回しが correctness のバグではない理由
 
-k 個の積の d と e は、 どれも他の積の結果に依存しない。 だから全部を 1 回の open にまとめられる。 乗算ごとに open する実装は正しく、 privacy も保たれ、 latency だけが k 倍になる。
+Beaver 乗算は c = a*b を満たす任意の triple で正しく動くので、同じ triple を全積に使ってもスコアは
+合います。書けるどんな correctness test も通ります。
 
-これが 「round 数 = 乗算数」 という誤解の実演で、 実際には round 数は乗算の**深さ**で決まる。 この式の深さは 1 なので、 幅がいくら増えても round は 1 のまま。 深さ D の回路なら D round になる。
+壊れるのは privacy です。1 つの `a` が `x₁` と `x₂` の両方を覆うと、open された `d₁ - d₂` は
+`x₁ - x₂` そのもの、つまり秘密の差が transcript に載ります。
 
-## triple 使い回しが correctness で捕まらない理由
+hidden test は open された値の多重集合を、供給された triple が含意する mask 差と厳密に照合します。
+blacklist ではなく完全一致なので、「別の積の triple を使った」「余計に何か出した」「足りない」を
+1 つの検査で捕まえます。
 
-Beaver 乗算は c = a*b を満たす任意の triple で正しく動く。 同じ triple を全積に使ってもスコアは合う。 壊れるのは privacy で、 同じ a が x_1 と x_2 の両方を覆うと、 open された d_1 - d_2 = x_1 - x_2 がそのまま秘密の差になる。
+## correctness・privacy・cost を別々に採点する理由
 
-hidden test は open された値の多重集合を、 供給された triple が含意する mask 差と厳密に照合する。 blacklist ではなく完全一致なので、 「別の triple の d を出した」 も 「余計に何か出した」 も同じ検査で落ちる。 1 回の乗算に 1 つの triple が要るのはこのためで、 offline コストが乗算回数に比例するのもこのため。
+実装は「正しいが高い」「正しいが漏れる」「安全だが誤り」のいずれにもなり得ます。1 つの verdict に
+まとめると、自分がどれを作ったのか分かりません。だから 3 つの checkpoint に分けてあります。
 
-## 3 つを別々に採点する理由
+## 公開した出力から定義上漏れるもの
 
-実装は 「正しいが高い」 「正しいが漏れる」 「安全だが誤り」 のいずれにもなり得る。 1 つの verdict にまとめると、 学習者は自分がどれを作ったのか分からない。 correctness・privacy・cost を別 checkpoint にしてあるのはそのため。
+score を公開すると決めた時点で、score から導けることは公開されます。k = 1 なら `score - bias` は
+その組織の積そのものです。k が小さく severity の範囲が狭ければ、count の候補はかなり絞れます。
 
-## 固定期待値ではなく関係で検査する
+MPC が保証するのは**計算過程**が追加の漏洩を生まないことです。出力から何も分からないことは保証
+しません。それが必要なら、出力の摂動や閾値化といった別の仕組みが要ります。
 
-result checkpoint は 3 つの関係を検査する。 randomness を変えて share し直してもスコアは動かない、 組織の順序を反転してもスコアは動かない、 1 組織の count を Δ 動かすとスコアは Δ * severity だけ動く。 1 回の出力を覚えても関係は満たせない。
+## threat model
 
-## 最終出力から不可避に漏れるもの
+honest-but-curious、collusion なし、toy field、手で検算できる大きさの値。security の主張でも、実運用
+のモデルでもありません。
 
-score を公開すると決めた時点で、 score から導けることは漏れる。 k=1 なら score - bias がその組織の積そのもの。 k が小さく severity の範囲が狭ければ、 count の候補は絞れる。 MPC が保証するのは 「計算過程から追加で漏れない」 ことであって、 「出力から何も分からない」 ことではない。 後者が要るなら別の仕組み (出力の摂動、 閾値化) が要る。
+## Week 2 の対応づけ
 
-## 次につながるところ
+Week 2 の教材は `curriculum.md` が記録している commit の時点で未公開です。`courseAlignment` は
+`week2/README.md` を `kind: "placeholder"` で pin し、`status` は `draft` のままです。この pin は
+対応づけではなく、その commit 時点で教材が存在しなかったという事実を記録します。これにより
+`bun run course:drift` は教材公開の日に `PUBLISHED` を報告できます。#219 が対応づけを確定してから
+draft を外します。
 
-application 式を線形部分と乗算部分へ分解し、 コストを事前に見積もり、 実測と突き合わせる — この 3 つは Week 6 の co-SNARK でそのまま使う。
+## 保証範囲
 
-## 作問・検証
+ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も
+あなたの管理下にあるので、 image の中身はあなたに対して秘匿されていません。
+`reference/` と `tests/hidden/` を bind-mount しないのは、あなたの git checkout に
+紛れ込ませないためであって、手が届かなくするためではありません。
 
-参加者は checkout を必要としません。リポジトリ保守者向けの検証手順は Makefile と CI を正とします。
+verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
+ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。
+結果は期待値を漏らしません。 fixture はこのデプロイの seed 由来なので、暗記した答えは持ち越せません。
+
+これは自習と誠実な練習を支えます。競技順位・試験・修了判定は**支えません**。
+それらには participant が管理しない verifier が必要で、
+[#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271) で追跡しています。
+
+## コスト
+
+ゼロです。クラウドアカウントも AWS リソースも使いません。
+
+## 作問者向け
+
+`make reference-test` が mutation suite を実行します。壊した実装 9 種類があります。うち 2 つ
+（triple の使い回しと、乗算ごとの open）は**完全に正しいスコアを返します**。答えだけを見る suite なら
+両方とも通ってしまい、この問題は算術を採点しているだけになります。

@@ -1,74 +1,124 @@
 # Turning it into a polynomial is not a proof
 
-Proving a program ran does not put the program into the proof. Translate a small state machine's trace into polynomial relations over a finite field, and find out what the translation preserves and what it does not guarantee.
+> This track is an independent, unofficial companion to the Advanced Cryptography Program 2026.
+> It is not affiliated with or endorsed by the course or its operators. All problem statements,
+> code, fixtures, and figures here are written independently. Questions about this track go to
+> the TenkaCloud repository, not to the course operators.
+
+**Track:** `advanced-cryptography-2026` · **Order:** 410 · **Chapter:** Week 4 / Arithmetization
+Bridge · **Role:** `transfer` · **Time:** 60–90 minutes · **Points:** 300
+· **Status:** draft — see "Week 4 alignment"
+
+## The story
+
+Proving that a program ran does not put the program into the proof. The execution becomes a
+table, the table's rules become polynomial relations, and the claim becomes "these relations
+vanish on these points".
+
+The machine is two columns and two rules:
+
+```text
+a_{i+1} = a_i + b_i
+b_{i+1} = b_i + weight*a_i     (mod p)
+```
+
+The computation is not the point. The translation is.
+
+## Two kinds of constraint, two different jobs
+
+**Transition** constraints say each row follows from the one before it.
+**Boundary** constraints say where the machine started. Neither implies the other.
+
+Drop the boundary and the system is perfectly satisfied by a trace of the same machine started
+from **somewhere else**. Every transition holds. Every residual is zero. The polynomials are
+just as valid — and they are a proof of a different statement.
+
+The `underconstrained` checkpoint has you build exactly that trace. It is what "dropping one
+constraint" concretely means.
 
 ## Browser workflow
 
-1. Start the problem in the Participant Portal and open **Browser Workbench**.
-2. Run `inspect` and read the deployment-specific fixture and published evidence.
-3. Edit the starter sources on the page and run the public `test` command.
-4. Complete any direct-answer fields from the evidence and your experiments.
-5. Run `prepare`, then paste every generated value into the matching Portal checkpoint.
+1. Start the problem in Participant Portal and open **Browser Workbench**.
+2. Run `inspect` to read this deployment's fixture and published evidence.
+3. Edit the starter source in the in-browser editor.
+4. Run `test` for the published checks and fill any direct-answer fields from the evidence.
+5. Run `prepare`, then paste every prepared checkpoint value into Participant Portal.
 
-Direct answers are bound to the current deployment seed by `prepare`.
+No checkout, terminal, or local editor is required. Code checkpoints submit the edited source.
+Direct answers are wrapped by `prepare` and bound to the current deployment seed, so a value copied
+from another deployment is rejected.
 
-## Learning goals
+## Scoring
 
-- Generate an execution trace from a deterministic computation
-- Write a state transition as a constraint between adjacent rows
-- Separate pinning the initial state from the transition rules
-- Interpolate a trace column into a polynomial over a finite field
-- Track which row, and which kind of constraint, a violation appears in
-- Detect a counterexample where one row of the trace was altered
-- Explain why turning something into a polynomial is not by itself a proof
+Eight checkpoints, scored independently. Wrong answers cost 15 points each.
 
-## Checkpoints
+| Checkpoint | Points | What is checked |
+|---|---:|---|
+| `trace` | 30 | The trace the machine actually produces |
+| `transition` | 40 | One residual per adjacent pair, zero on honest, first non-zero at the tamper |
+| `boundary` | 30 | Zero on honest, non-zero when the start moves |
+| `interpolate` | 45 | Agrees with the column on the domain, and is a polynomial off it |
+| `compose` | 40 | The relation still vanishes when read through the polynomials |
+| `locate` | 40 | The first wrong row, and which kind of constraint broke |
+| `underconstrained` | 45 | A different trace satisfying every transition constraint |
+| `transfer` | 30 | All of it under a field, length and weight you have not seen |
 
-| Checkpoint | Purpose | Points |
-| --- | --- | ---: |
-| `trace` | Produce the execution trace |  |
-| `transition` | Turn adjacent rows into a relation |  |
-| `boundary` | Pin where it started |  |
-| `interpolate` | Turn a column into a polynomial |  |
-| `compose` | Watch the relation vanish on the domain |  |
-| `locate` | Locate the first row that breaks |  |
-| `underconstrained` | Build a valid proof of the wrong statement |  |
-| `transfer` | Hold up in a setting you have not seen |  |
+Hints on five of the eight, each inside that checkpoint's 50% cap.
 
-## Explanation
+## Details that decide whether an implementation is right
 
-## The translation adds no soundness
+**How many residuals.** One per adjacent row pair — one fewer than the number of rows. One per
+row means the last row is being compared against a next row that does not exist. That mutation
+dies with an `IndexError`.
 
-Interpolating a trace into polynomials guarantees nothing by itself. Interpolation changes the representation; the checking power lives in the constraints. "It is a polynomial now, so it is a proof" is close to saying a table became correct when it was converted from CSV to JSON.
+**Which row a violation belongs to.** The i-th transition produces row `i+1`, so row `i+1` is the
+first row that is wrong. Reporting `i` sends the reader one row away from the problem.
 
-## The two kinds of constraint do different jobs
-
-Transition constraints say each row follows from the one before it. Boundary constraints say where the machine started. Neither implies the other.
-
-Drop the boundary and the system is perfectly satisfied by a trace of the same machine started from **somewhere else**. Every transition holds, every residual is zero, and the polynomials are just as valid. They are a proof of a different statement. The `underconstrained` checkpoint has you build that trace, which is what "dropping one constraint" concretely means.
-
-## How many residuals
-
-One per adjacent row pair, so one fewer than the number of rows. An implementation with one per row is comparing the last row against a next row that does not exist -- one of the mutations is exactly that, and it dies with an IndexError.
-
-## Which row a violation belongs to
-
-The i-th transition produces row i+1, so row i+1 is the first row that is wrong. Reporting i sends the reader one row away from the problem.
-
-Row 0 has no predecessor, so the only thing that can break there is the boundary; calling that a transition failure points at the wrong place too. That is why the boundary is checked first.
+**Row 0 has no predecessor.** The only thing that can break there is the boundary. Calling it a
+transition failure points at the wrong place, which is why the boundary is checked first.
 
 ## The evaluation domain
 
-The domain is the powers of a root of unity, with row i at point g^i. Consecutive rows are consecutive points, so the transition constraint becomes a relation between a polynomial at x and the same polynomial at the next point. The primes are chosen so that `steps` divides p-1 -- otherwise no root of unity of that order exists.
+The domain is the powers of a root of unity, with row `i` at point `g^i`, so consecutive rows are
+consecutive points and the transition constraint becomes a relation between a polynomial at `x`
+and the same polynomial at the next point. The primes are chosen so that `steps` divides `p-1` —
+otherwise no root of unity of that order exists at all.
 
 ## This is not a proof system
 
-There is no commitment, no verifier randomness, and therefore no soundness against anybody. It is a bridge to arithmetization, not past it. Calling what you build here "a small SNARK" is the opposite of what the problem is trying to teach.
+No commitment. No verifier randomness. Therefore no soundness against anybody. This is a bridge
+to arithmetization, not past it. Calling what you build here "a small SNARK" is the opposite of
+what the problem is for.
 
 ## Week 4 alignment
 
-Week 4's material was not published upstream at the pinned commit. `courseAlignment` pins `week4/README.md` with `kind: "placeholder"` and takes the `transfer` role -- one of the two GOVERNANCE.md section 6 permits for an unpublished week, and accurate besides, since the problem transfers Week 1's constraints and Week 3's field into a new setting. It asserts nothing about what the official exercise will require.
+Week 4's material was not published upstream at the pinned commit. `courseAlignment` pins
+`week4/README.md` with `kind: "placeholder"` and takes the `transfer` role — one of the two
+`GOVERNANCE.md` §6 permits for an unpublished week, and accurate besides, since the problem
+transfers Week 1's constraints and Week 3's field into a new setting. It asserts nothing about
+what the official exercise will require. #229 reconciles the row when the material appears.
 
-## Authoring and validation
+## Assurance scope
 
-Participants do not need a checkout. Repository maintainers use the Makefile author targets and CI as the validation source of truth.
+Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
+daemon, and the image, so nothing inside that image is hidden from you: `reference/` and
+`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than
+out of reach.
+
+What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
+a checkpoint can only credit the id it echoes, results do not leak expected values, and the
+fixtures come from this deployment's seed so a memorized answer does not carry.
+
+That supports self-study and honest practice. It does **not** support competition ranking,
+examination, or completion certification — those need a verifier the participant does not
+administer, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
+
+## Cost
+
+Zero. No cloud account, no AWS resources.
+
+## For authors
+
+`make reference-test` runs the mutation suite: nine broken implementations. The two worth reading
+are "checks only the last transition" and "drops the boundary constraints" — both produce a system
+that looks complete and accepts traces that are not the computation.

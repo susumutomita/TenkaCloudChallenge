@@ -1,92 +1,130 @@
 # 何をハッシュに入れ忘れたか
 
-Sigma protocol を対話的に走らせ、Fiat-Shamir で署名へ変換する。ハッシュに入れ忘れたものは 1 つも守られない。domain separator を落とすと、1 つの署名が 2 つのプロトコルで通る。
+> このトラックは Advanced Cryptography Program 2026 の非公式・独立した companion です。講座および
+> その運営者とは提携しておらず、承認も受けていません。問題文、コード、fixture、図はすべて独自に
+> 作成しています。このトラックに関する質問は講座運営ではなく TenkaCloud リポジトリへお願いします。
 
-Week 3 の 3 問目、 role は assignment-companion。 群は前問で作ったものを与え、 participant が書くのは protocol と serialization と Fiat-Shamir 変換に絞ってある。
+**Track:** `advanced-cryptography-2026` · **Order:** 330 · **Chapter:** Week 3 / Sigma Protocol
+and Fiat–Shamir · **Role:** `assignment-companion` · **想定時間:** 75〜105 分 · **配点:** 300
+· **必須前提:** `ac26-w3-ec-group`
 
-この問題の主題は 「何をハッシュに入れるか」 と 「どう並べるか」 の 2 点で、 どちらも正常系では一切現れない。 domain・message・commitment・public key のどれを落としても sign と verify は完璧に動く。 だから checkpoint はそこを直接攻める。
+## ストーリー
 
-cross-protocol checkpoint は ASSESSMENT.md が assignment-companion に要求する counterexample 型で、 participant は 「1 つの署名が 2 つの domain で通る」 witness を構成する。 弱い challenge (domain separator を落としたもの) は fixtures 側に固定してあり、 participant 自身の弱いコードを攻める答えは成立しない。
+`x` を渡さずに、`x` を知っていることを相手に納得させたい。3 手でできます。
 
-serialization は length prefix の有無を検査する。 参照実装は可変長 2 フィールド (domain と message) を**隣接**させてある。 固定長の点表現を間に挟むと、 length prefix を落としても衝突には点の並びの偶然が要るようになり、 「prefix は飾り」 と自分を納得させられてしまうため。 隣接させてあることで ('ab','cd') と ('a','bcd') が決定的に衝突する。
+```text
+P = xG                        主張
+R = kG                        commitment
+e                             challenge
+z = k + e*x  (mod n)          response
+zG == R + eP                  verifier が確認する式
+```
 
-**群位数と確率の扱い**: toy 群は n が 29〜43 しかない。 Schnorr の偽造成功確率は 1/n なので、 「message を 1 byte 変えて verify」 は正しい実装でも 40 回に 1 回通る。 したがって拒否側の assertion は secp256k1 で回し、 toy 群では受理側と、 ハッシュ入力 (preimage) が変わることだけを検査する。 preimage の比較は決定的で、 challenge 値の比較は 1/n で衝突するため。 この設計自体を writeup で説明している。
+Fiat–Shamir は `e` を transcript から計算することで対話を取り除きます。問題はそこから始まります。
+**何をハッシュに入れるかを自分で決める**ことになるからです。
 
-secret key と nonce は show.py が出力しない。 protocol が守る対象そのものであり、 それを表示する lab は逆のことを教えるため。
+## 入れ忘れたものは守られない
+
+| challenge から落としたもの | 成り立たなくなること |
+|---|---|
+| message | 1 つの署名が任意の message に付く |
+| public key | 署名を別の鍵へ付け替えられる |
+| commitment | Fiat–Shamir が Fiat–Shamir でなくなる |
+| domain | 別プロトコル用の署名がここでも通る |
+
+どれも正常系には現れません。sign して verify すれば、毎回通ります。この問題の 10 個の mutation の
+うち 5 個がこの型で、だから checkpoint はそこを直接攻めます。
 
 ## ブラウザでの進め方
 
 1. Participant Portal で問題を起動し、**Browser Workbench** を開く。
-2. `inspect` で deploy 固有の fixture と公開された証拠を読む。
-3. 画面内の starter を編集し、`test` で公開テストを実行する。
-4. 表示された直接回答欄を、inspect と実験結果から埋める。
-5. `prepare` で全 checkpoint の提出値を作り、Portal へ貼る。
+2. `inspect` でこの deploy 固有の fixture と公開された証拠を読む。
+3. 画面内のエディタで starter のソースを編集する。
+4. `test` で公開テストを実行し、直接回答欄があれば証拠から埋める。
+5. `prepare` で全 checkpoint の提出値を作り、Participant Portal へ貼る。
 
-直接回答は `prepare` により現在の deploy seed へ結び付けられます。
+checkout、ターミナル、ローカルエディタは不要です。code checkpoint は編集したソースを提出します。
+直接回答は `prepare` が現在の deploy seed へ結び付けるため、別 deploy からコピーした値は拒否されます。
 
-## 学習目標
+## 採点
 
-- public key P = xG と secret key x の関係を説明できる
-- commitment・challenge・response の 3 手を実装できる
-- verifier equation の左辺と右辺を点として突き合わせられる
-- Fiat-Shamir で challenge を transcript から導出できる
-- domain・message・commitment・public key の binding が要る理由を反例で示せる
-- 可変長フィールドの連結が曖昧になる条件を説明できる
-- 署名が message を隠すものではないと説明できる
+8 つの checkpoint を独立に採点します。誤答は 1 回 15 点減点です。
 
-## Checkpoint
+| Checkpoint | 配点 | 何を検査するか |
+|---|---:|---|
+| `keygen` | 30 | `P = xG`、使えない secret と public key の拒否 |
+| `sigma` | 40 | commitment と response。正しい法で |
+| `transcript` | 35 | 正直な transcript の受理と、改変されたものの拒否 |
+| `serialization` | 40 | 往復、非正規形の拒否、連結の一意性 |
+| `fiat-shamir` | 45 | 4 つの binding input すべてがハッシュ入力を変える |
+| `sign-verify` | 40 | 正直な署名が通り、実サイズの群で改変が落ちる |
+| `cross-protocol` | 40 | 反例の構成と、それへの耐性 |
+| `transfer` | 30 | 同じコードが secp256k1 で動く |
 
-| Checkpoint | 内容 | Points |
-| --- | --- | ---: |
-| `keygen` | 鍵を作り、使えない鍵を断る | 30 |
-| `sigma` | 3 手を実装する | 40 |
-| `transcript` | 検証式の両辺を突き合わせる | 35 |
-| `serialization` | 一意な符号化を書く | 40 |
-| `fiat-shamir` | challenge を transcript から作る | 45 |
-| `sign-verify` | 署名して検証する | 40 |
-| `cross-protocol` | domain を落とすと何が起きるか示す | 40 |
-| `transfer` | 実運用パラメータでも動かす | 30 |
+hint は 8 つ中 6 つにあり、いずれもその checkpoint の 50% 上限内です。
 
-## 解説
+## 反例の checkpoint
 
-## 入れ忘れたものは守られない
+`fixtures.generate.weak_challenge` は commitment、public key、message をハッシュし、domain を
+**見ません**。これは fixtures 側にあり、あなたのファイルにはありません。「自分で弱くしたコードを
+自分で破りました」は答えにならないからです。
 
-challenge に含めなかったものは、 署名が何も主張していないものになる。 message を入れなければ同じ署名が任意の message に付く。 public key を入れなければ鍵の付け替えができる。 commitment を入れなければ Fiat-Shamir が Fiat-Shamir でなくなる。 domain を入れなければ、 別のプロトコル用の署名がこちらでも通る。
+あなたは、1 つの署名が 2 つの domain で同時に通る witness を構成します。そのうえで、あなた自身の
+`challenge` はその 2 つの domain で異なるバイト列をハッシュしなければなりません。攻撃を作れることと、
+自分がそれに耐えることは別の主張であり、この checkpoint は両方を要求します。
 
-どれも正常系では起きない。 sign して verify すれば全部通る。 mutation suite の 10 個中 5 個がこの型で、 だから checkpoint は正常系を確認したあと直接そこを攻める。
+## length prefix と、なぜ隣接させるのか
 
-## cross-protocol counterexample
+可変長フィールドを長さ無しで連結すると、`('ab', 'cd')` と `('a', 'bcd')` が同じバイト列になります。
+異なる 2 つの主張が 1 つの証明を共有します。
 
-domain separator を落とした challenge を fixtures 側に固定してある (`weak_challenge`)。 participant はそれに対して 1 つの署名が 2 つの domain で通る witness を構成する。 弱い challenge を participant 自身に書かせないのは、 「自分の弱いコードを自分で破る」 が答えになってしまわないようにするため。
-
-そのうえで、 participant 自身の challenge が 2 つの domain で**異なるバイト列をハッシュする**ことを検査する。 攻撃を作れることと、 自分の実装がそれを防いでいることは別の主張であり、 両方が要る。
-
-## length prefix と隣接
-
-可変長フィールドを長さ無しで連結すると、 ('ab', 'cd') と ('a', 'bcd') が同じバイト列になる。 異なる 2 つの主張に 1 つの証明が付く。
-
-参照実装は domain と message を**隣接**させてある。 間に固定長の点表現を挟む並びでも原理的には不健全だが、 衝突には点の並びの偶然が要るようになり、 レビューで 「実際には起きないから prefix は飾り」 と結論できてしまう。 隣接させれば衝突は決定的で、 その議論の余地が無い。
+参照実装は domain と message を**隣接**させています。間に固定長の点表現を挟む並びでも原理的には
+不健全ですが、衝突には点のバイト列が偶然揃う必要が出てきます。するとレビューで「実際には起きない
+から length prefix は飾り」と自分を納得させられてしまいます。隣接させれば衝突は決定的です。
 
 ## 群位数と確率
 
-toy 群は位数が 29〜43 しかない。 Schnorr の偽造成功確率は 1/n なので、 「message を 1 byte 変えて verify」 は**正しい実装でも** 40 回に 1 回通る。 これはコードの欠陥ではなくパラメータの性質であり、 実際に作問中に踏んだ。
+toy 群の位数は 29〜43 です。Schnorr の偽造成功確率は `1/n` なので、「message を 1 byte 変えて
+verify」は**正しい実装でも** 40 回に 1 回通ります。これはパラメータの性質であって欠陥ではなく、
+この問題を書いている最中に実際に踏みました。
 
-したがって:
+そこで検査を分けてあります。
 
-- 受理側 (正直な署名が通る) は toy 群で検査する。 決定的だから。
-- 拒否側 (改変した署名が落ちる) は secp256k1 で検査する。 1/n が無視できるから。
-- 「binding input を変えると challenge が変わる」 は toy 群では **preimage** を比較する。 challenge 値は 1/n で衝突するが、 ハッシュ入力が変わることは決定的だから。
+- **受理側**（正直な署名が通る）は toy 群。決定的だからです。
+- **拒否側**（改変された署名が落ちる）は secp256k1。`1/n` が到達不能だからです。
+- **「binding input を変えると challenge が変わる」** は toy 群では *preimage* を比較します。
+  preimage 同士は `1/n` で衝突しますが、ハッシュ入力が変わること自体は決定的だからです。
 
-テストが確率で落ちる設計は、 学習者に 「たまに落ちるので再実行する」 を教えてしまう。 それは採点の失敗である。
+確率で落ちるテストは、学習者に「たまに落ちるので再実行する」を教えます。それは flake ではなく採点の
+失敗です。
 
-## 署名は暗号化ではない
+## 署名は暗号化ではありません
 
-検証式が成立しても message は隠れていない。 message は verifier が持っている前提であり、 署名はそれに対する主張である。 「valid な式 = 機密性」 は成り立たない。
+検証式が成立しても、機密性については何も言えません。message は隠れておらず、verifier がすでに持って
+いる前提で、署名はそれに対する主張です。
 
-## 次につながるところ
+## 保証範囲
 
-次の問題は nonce 再利用。 ここで z = k + e*x を書いたので、 同じ k で 2 つの署名を作ると連立方程式になり x が解けることが直接見える。
+ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も
+あなたの管理下にあるので、 image の中身はあなたに対して秘匿されていません。
+`reference/` と `tests/hidden/` を bind-mount しないのは、あなたの git checkout に
+紛れ込ませないためであって、手が届かなくするためではありません。
 
-## 作問・検証
+verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
+ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。
+結果は期待値を漏らしません。 fixture はこのデプロイの seed 由来なので、暗記した答えは持ち越せません。
 
-参加者は checkout を必要としません。リポジトリ保守者向けの検証手順は Makefile と CI を正とします。
+これは自習と誠実な練習を支えます。競技順位・試験・修了判定は**支えません**。
+それらには participant が管理しない verifier が必要で、
+[#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271) で追跡しています。
+
+## コスト
+
+ゼロです。クラウドアカウントも AWS リソースも使いません。
+
+## 作問者向け
+
+`make reference-test` が mutation suite を実行します。壊した実装 10 種類があり、半分は sign と verify
+が完璧に通り、攻撃者に対してだけ壊れています。length prefix の mutation は、参照実装の preimage が
+可変長 2 フィールドを隣接させている理由そのものです。点を間に挟んだ並びでは、この mutation が生き
+残りました。

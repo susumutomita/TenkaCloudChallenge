@@ -1,88 +1,142 @@
 # 答えは合っている。それだけだ
 
-7 つの実装がすべて正しい合計を返す。うち 4 つは途中で何かを漏らしている。correctness test は全部通る。監査器を書いて、最初の違反を特定する。
+> このトラックは Advanced Cryptography Program 2026 の非公式・独立した companion です。講座および
+> その運営者とは提携しておらず、承認も受けていません。問題文、コード、fixture、図はすべて独自に
+> 作成しています。このトラックに関する質問は講座運営ではなく TenkaCloud リポジトリへお願いします。
 
-Week 2 の 4 問目、 role は transfer。 correctness と privacy は別の性質であり、 前者の test をいくら足しても後者は保証されない、 を実装で確認する。
+**Track:** `advanced-cryptography-2026` · **Order:** 240 · **Chapter:** Week 2 / Privacy Audit
+· **Role:** `transfer` · **想定時間:** 60〜75 分 · **配点:** 300
+· **必須前提:** `ac26-w2-beaver-mul` · **Status:** draft — 後述の「Week 2 の対応づけ」を参照
 
-題材は 3 party の加重合計 MPC。 program は Python source ではなく操作列 (op list) として与えられ、 runtime が実行して観測可能な event 列を出す。 これが本問題の設計上の要で、 `reconstruct` という語を grep する監査器は rename・wrapper・helper で破れるが、 実際に実行された操作を読む監査器は破れない。 program を code ではなく data にしたことで、 その違いを採点できる。
+## ストーリー
 
-7 実装すべてが正しい合計を返す。 4 つが違反 (secret の open / 他 party の share 読み取り / log への raw 値 / error message への secret) を持ち、 3 つは clean。 clean 側には偽陽性の罠を 2 つ置いてある — 仕様上 public な値を log に出す実装と、 自分自身の slot を読む party。 「全部怪しい」 と言う監査器は本物を全部見つけた上で不合格になる。
+3 つのチームが同じものを作りました。3 party の加重リスク合計を、誰も他人の数字を見ずに計算する。
+3 つとも納品されました。3 つとも正しい数値を返します。correctness suite はどれも緑です。
 
-checkpoint は 7 つ。 allowed open 集合の導出、 3 種類の違反検出、 transcript からの秘密復元 (counterexample)、 修復、 rename + 並べ替え + 未知 seed での再監査。 修復は 「消せば漏れない」 を排除するため、 仕様が許す観測がすべて残っていることまで検査する。
+privacy review の結果は、同じではありませんでした。
 
-threat model は honest-but-curious、 collusion なし。 実運用の security 主張はせず、 toy simulator で観測できる leakage contract だけを評価する。
+## 何を監査するのか
 
-Week 2 の教材は pinned commit 時点で未公開のため sources は placeholder pin であり、 status は draft のままにする (#219 が公開を検出した時点で確定する)。
+ここでの program は Python source ではなく**操作列**で、runtime がそれを実行し、外部から観測できる
+ものを記録します。
+
+```text
+open    値が全員に公開される
+peek    ある party が誰かの raw share slot を読む
+emit    値を載せた log 行
+fail    値を載せた失敗経路
+output  protocol が宣言した結果
+```
+
+手元の算術は event を 1 つも出しません。この非対称性が主題です。protocol は、どれだけ計算したかで
+はなく、何を公開したかで評価されます。
+
+実装は 7 つ。4 つが漏らします。3 つは漏らしません。そのうち 2 つが厄介な方です。
 
 ## ブラウザでの進め方
 
 1. Participant Portal で問題を起動し、**Browser Workbench** を開く。
-2. `inspect` で deploy 固有の fixture と公開された証拠を読む。
-3. 画面内の starter を編集し、`test` で公開テストを実行する。
-4. 表示された直接回答欄を、inspect と実験結果から埋める。
-5. `prepare` で全 checkpoint の提出値を作り、Portal へ貼る。
+2. `inspect` でこの deploy 固有の fixture と公開された証拠を読む。
+3. 画面内のエディタで starter のソースを編集する。
+4. `test` で公開テストを実行し、直接回答欄があれば証拠から埋める。
+5. `prepare` で全 checkpoint の提出値を作り、Participant Portal へ貼る。
 
-直接回答は `prepare` により現在の deploy seed へ結び付けられます。
+checkout、ターミナル、ローカルエディタは不要です。code checkpoint は編集したソースを提出します。
+直接回答は `prepare` が現在の deploy seed へ結び付けるため、別 deploy からコピーした値は拒否されます。
 
-## 学習目標
+## 採点
 
-- correctness test だけでは privacy を保証できないことを実装で確認できる
-- protocol 仕様から公開してよい値の集合を導ける
-- secret の open、cross-party read、log / error への漏洩を区別して検出できる
-- 仕様上 public な値の露出を違反と誤判定しない
-- transcript から秘密を復元して漏洩の害を示せる
-- 違反だけを取り除き、正当な観測を残したまま修復できる
-- 同じ view でも threat model の仮定が変われば判定が変わることを説明できる
+7 つの checkpoint を独立に採点します。誤答は 1 回 15 点減点です。
 
-## Checkpoint
+| Checkpoint | 配点 | 何を検査するか |
+|---|---:|---|
+| `allowed-opens` | 35 | 仕様が公開を許す label の集合 |
+| `opened-secret` | 45 | 中間値の open。種類と位置の両方 |
+| `cross-party` | 45 | 自分ではなく他人の slot を読んだ party |
+| `log-leak` | 45 | log 行や error message から出た raw 値 |
+| `transcript` | 40 | 指摘ではなく、復元された private 値 |
+| `repair` | 50 | 違反の除去と、正当な観測の保持 |
+| `mutation` | 40 | rename・並べ替え・未知 seed でも同じ判定 |
 
-| Checkpoint | 内容 | Points |
-| --- | --- | ---: |
-| `allowed-opens` | 仕様から公開してよい値を挙げる | 35 |
-| `opened-secret` | 公開してよくない値の公開を見つける | 45 |
-| `cross-party` | 他人の手元を覗いた場所を見つける | 45 |
-| `log-leak` | log と失敗経路から漏れた値を見つける | 45 |
-| `transcript` | 漏れた transcript から秘密を復元する | 40 |
-| `repair` | 漏れだけを取り除く | 50 |
-| `mutation` | 名前を変えられても同じ判定を出す | 40 |
+hint は 7 つ中 6 つにあり、いずれもその checkpoint の 50% 上限内です。
 
-## 解説
+## 偽陽性は見逃しと同じだけ失点する
 
-## correctness test では捕まらないもの
+どの checkpoint も漏れる実装と clean な実装を混ぜてあり、clean 側は「全部挙げる」を罰するように
+選んであります。
 
-7 実装すべてが正しい合計を返す。 correctness test を何本足しても、 このうちどれが安全かは 1 ビットも分からない。 privacy は出力の性質ではなく、 計算の途中に何が観測可能になったかの性質だから。
+- 1 つは仕様が公開している **weight** を log に出します。
+- 1 つは party が**自分の** slot を読みます。party がやって当然のことです。
 
-## 4 種類の違反
-
-- **opened-a-secret**: 中間値 (部分和) を open する。 mask が掛かっていないので、 transcript を読んだ者はその値を知る。
-- **cross-party-read**: ある party が別の party の raw share slot を読む。 何も open されず transcript は綺麗なので、 access trace を見ない限り分からない。
-- **leaked-in-log**: log 行に raw な private 値が入る。 log は threat model の外ではない。
-- **leaked-in-error**: error path が secret を含む。 正常系は完全に綺麗で、 だからこそ correctness review を通過する。
-
-## 偽陽性の 2 つ
-
-「怪しいものは全部挙げる」 監査器は、 本物の違反を全部見つけた上で不合格になる。 clean な実装のうち 1 つは仕様上 public な weight を log に出し、 もう 1 つは party が自分自身の slot を読む。 どちらも違反ではない。 何が公開されてよいかは仕様が決めるのであって、 操作の種類が決めるのではない。
+どちらも違反ではありません。何が公開されてよいかは仕様が決めるのであって、操作の種類が決めるので
+はありません。両方を挙げる監査器は、本物の漏洩を全部見つけた上で不合格になります。
 
 ## なぜ program が code ではなく data なのか
 
-`reconstruct` という語を grep する監査器は、 rename・wrapper・helper 経由の呼び出しで破れる。 本問題の program は操作列として与えられ、 runtime が実行した操作そのものが観測対象になる。 mutation checkpoint は全 label を rename し、 独立な open を並べ替え、 未知の seed で回す。 protocol は変わっていないので判定も変わってはならない。 label の文字列や event の index を覚えた監査器は、 ここで自分自身と矛盾する。
+`reconstruct` という語を grep する監査器は、rename・wrapper・helper 経由の呼び出しで破れます。
+program を操作列にすると、監査対象は**実行が実際に行った操作**になります。だから mutation
+checkpoint は全 label を rename し、独立な open を移動し、見たことのない seed で回せます。protocol
+は変わっていないので判定も変わってはなりません。label の文字列や、前回違反があった位置を覚えた
+監査器は、ここで自分自身と矛盾します。
 
-## counterexample が要る理由
+## なぜ指摘だけでは足りないのか
 
-「余計に open している」 と指摘するだけでは、 それが害だったことを示していない。 transcript には部分和と合計の両方があり、 差は最後の party の加重寄与で、 weight は公開かつ可逆。 引き算 1 回と逆元 1 回で、 その party の private 値がそのまま出る。 漏洩の主張は、 復元して初めて主張になる。
+過剰に open する実装の transcript には、部分和と合計の両方があります。その差は最後の party の加重
+寄与であり、weight は公開されていて `p` は素数です。引き算 1 回と逆元 1 回で、その party の private
+値がそのまま出ます。
 
-## 修復の条件
+復元するまでは「これは漏れている」はコードについての主張です。復元した後は、誰かのデータについての
+事実になります。
 
-「観測を全部消す」 も漏れないし、 合計も返る。 それを修復と呼ばないために、 採点は仕様が許す観測がすべて残っていることまで見る。 修復とは、 違反だけをちょうど取り除くこと。
+## なぜ「全部消す」が修復ではないのか
+
+観測可能な操作を全部消しても漏洩は止まり、program は合計を返し続けます。そこで repair checkpoint は、
+仕様が観測を許すものが修復後も**すべて残っている**ことまで要求します。修復とは、違反だけを取り除く
+ことです。
 
 ## threat model
 
-ここでは honest-but-curious、 collusion なしを仮定している。 同じ view でも、 collusion を許した瞬間に安全性の判定は変わる。 判定は仮定に対して行うものであって、 コードに対して行うものではない。
+honest-but-curious、collusion なし。toy field、3 party、手で検算できる大きさの値です。これは
+simulator で観測できる leakage contract であって、security の主張でも、実運用 MPC のモデルでも
+ありません。
+
+同じ view でも、collusion を許す model の下では判定が変わります。安全性の判断は仮定に対して行うもの
+であって、コードに対して行うものではありません。
 
 ## 次につながるところ
 
-この分離 — 正しい出力と、 途中の観測可能性 — は Week 6 の co-SNARK privacy audit でそのまま使う。
+ここで引いた分離 — 出力の正しさと、生成過程の観測可能性 — は Week 6 の co-SNARK privacy audit で
+そのまま使います。
 
-## 作問・検証
+## Week 2 の対応づけ
 
-参加者は checkout を必要としません。リポジトリ保守者向けの検証手順は Makefile と CI を正とします。
+Week 2 の教材は `curriculum.md` が記録している commit の時点で未公開です。`courseAlignment` は
+`week2/README.md` を `kind: "placeholder"` で pin し、`status` は `draft` のままです。この pin は
+対応づけではなく、その commit 時点で教材が存在しなかったという事実を記録します。これにより
+`bun run course:drift` は教材公開の日に `PUBLISHED` を報告できます。#219 が対応づけを確定してから
+draft を外します。
+
+## 保証範囲
+
+ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も
+あなたの管理下にあるので、 image の中身はあなたに対して秘匿されていません。
+`reference/` と `tests/hidden/` を bind-mount しないのは、あなたの git checkout に
+紛れ込ませないためであって、手が届かなくするためではありません。
+
+verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
+ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。
+結果は期待値を漏らしません。 fixture はこのデプロイの seed 由来なので、暗記した答えは持ち越せません。
+
+これは自習と誠実な練習を支えます。競技順位・試験・修了判定は**支えません**。
+それらには participant が管理しない verifier が必要で、
+[#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271) で追跡しています。
+
+## コスト
+
+ゼロです。クラウドアカウントも AWS リソースも使いません。
+
+## 作問者向け
+
+`make reference-test` が mutation suite を実行します。壊した監査器 7 種類と verifier を狙った 1 種類が
+あります。7 つのうち 2 つは見逃しではなく過剰検出です。見逃しだけを罰する suite は、すべての実行を
+違反と判定する監査器を通してしまうためです。

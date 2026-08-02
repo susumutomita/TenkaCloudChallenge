@@ -1,53 +1,118 @@
 # What you can do without talking to anyone
 
-Some operations on shares can be done by every party alone, on its own share, with nobody talking. Which ones? Three are the obvious thing. One is not.
+> This track is an independent, unofficial companion to the Advanced Cryptography Program 2026.
+> It is not affiliated with or endorsed by the course or its operators. All problem statements,
+> code, fixtures, and figures here are written independently. Questions about this track go to
+> the TenkaCloud repository, not to the course operators.
+
+**Track:** `advanced-cryptography-2026` · **Order:** 220 · **Chapter:** Week 2 / Local Linear
+Operations · **Role:** `mechanism` · **Time:** 35–50 minutes · **Points:** 200
+· **Required first:** `ac26-w2-secret-sharing` · **Status:** draft — see "Week 2 alignment"
+
+## The story
+
+The auditors' scheme from last time works: numbers get split, nobody sees anyone else's figure.
+Now they actually want to *compute* — sums, weighted totals, a running average.
+
+The obvious worry is that every step needs a meeting. It does not. Most of what they want, each
+auditor can do alone, on their own slip of paper, and the pieces still add up to the right answer.
+Working out exactly which steps those are is what makes the scheme usable instead of theoretical.
+
+## The four operations
+
+```text
+add-shared      shares of x, shares of y   ->  shares of x + y
+add-constant    shares of x, public c      ->  shares of x + c
+mul-constant    shares of x, public c      ->  shares of x * c
+mul-shared      shares of x, shares of y   ->  shares of x * y
+```
+
+Three of the four are the obvious thing. **One is not**, and it is not the one you would guess.
 
 ## Browser workflow
 
-1. Start the problem in the Participant Portal and open **Browser Workbench**.
-2. Run `inspect` and read the deployment-specific fixture and published evidence.
-3. Edit the starter sources on the page and run the public `test` command.
-4. Complete any direct-answer fields from the evidence and your experiments.
-5. Run `prepare`, then paste every generated value into the matching Portal checkpoint.
+1. Start the problem in Participant Portal and open **Browser Workbench**.
+2. Run `inspect` to read this deployment's fixture and published evidence.
+3. Edit the starter source in the in-browser editor.
+4. Run `test` for the published checks and fill any direct-answer fields from the evidence.
+5. Run `prepare`, then paste every prepared checkpoint value into Participant Portal.
 
-Direct answers are bound to the current deployment seed by `prepare`.
+No checkout, terminal, or local editor is required. Code checkpoints submit the edited source.
+Direct answers are wrapped by `prepare` and bound to the current deployment seed, so a value copied
+from another deployment is rejected.
 
-## Learning goals
+## Scoring
 
-- Confirm that adding two sharings completes locally
-- Confirm that scaling by a public constant needs no communication
-- Explain why adding a constant to every share yields x + n*c
-- Tell operations that need communication apart from those that do not
-- Confirm that composing linear operations still yields a valid sharing
+Five checkpoints, scored independently. Wrong answers cost 10 points each.
 
-## Checkpoints
+| Checkpoint | Points | What is checked |
+|---|---:|---|
+| `add-shares` | 40 | Reconstructs to the sum, across four settings |
+| `add-constant` | 50 | Reconstructs to `x + c` — and the classic wrong answer is named |
+| `mul-constant` | 35 | Reconstructs to `x * c` |
+| `no-communication` | 40 | Which of the four need anyone to talk |
+| `transfer` | 35 | All of it, plus a composed expression, on an unseen setting |
 
-| Checkpoint | Purpose | Points |
-| --- | --- | ---: |
-| `add-shares` | Add two sharings |  |
-| `add-constant` | Add a value everyone already knows |  |
-| `mul-constant` | Scale by a value everyone already knows |  |
-| `no-communication` | Name what needs no talking |  |
-| `transfer` | Hold up in settings you have not seen |  |
+Hints on two of the five (20 / 15). Opening both still leaves 165 of 200.
 
-## Explanation
+## The one that is not obvious
 
-## Why linear operations need no communication
+If every party adds `c` to its own share, the shares now sum to **`x + n*c`**. Exactly one party
+folds the constant in.
 
-With additive shares, adding two sharings and scaling by a public constant can each be done by a party looking only at its own share, and the result is already a valid sharing. That is what makes MPC practical. Communication is needed only where the sum of products is not the product of sums — multiplying two *shared* values.
+This wrong version is worth dwelling on because of how well it hides:
 
-## Why add-constant is the odd one
+- at `n = 1` it is **indistinguishable** from correct;
+- for larger `n` it is off only by a multiple of `c`, so a test on one fixed setting can pass it by
+  luck.
 
-Adding a public constant is linear too, but if every party adds c to its own share the total becomes x + n*c. Exactly one party folds it in. The wrong version is indistinguishable from correct at n = 1, and off only by a multiple of c otherwise, so a test on one fixed setting can pass it by luck. The intuition 'it is linear, so everyone does the same thing' is wrong exactly once, and this is that once.
+The hidden tests run four settings, all with `n ≥ 2`, and name the `x + n*c` result explicitly so
+it cannot slip through as a coincidence.
 
-## Zero versus non-zero, not an exact round count
+The intuition being corrected is "it is linear, so everyone does the same thing". That is right
+for three of the four operations and wrong for this one.
 
-The classification checkpoint grades on whether an operation needs to talk at all, not on how many rounds. The round count of a multiplication protocol depends on the protocol; whether it must communicate does not. The scoring only bets on the part that is settled.
+## Why the classification is graded 0-versus-non-zero
+
+`no-communication` does not ask for an exact round count. How many rounds a multiplication
+protocol takes depends on the protocol; **whether it has to communicate at all** does not. The
+scoring only bets on the part that is settled.
 
 ## Where this leads
 
-The boundary you draw here is the motivation for Beaver triples. If multiplication is the only thing that needs to talk, the next question is whether that talking can be pushed into preprocessing.
+The boundary you draw here is the motivation for the next problem. If multiplication is the only
+operation that needs to talk, the natural question is whether that talking can be moved into
+preprocessing — which is exactly what a Beaver triple does.
 
-## Authoring and validation
+## Week 2 alignment
 
-Participants do not need a checkout. Repository maintainers use the Makefile author targets and CI as the validation source of truth.
+Week 2's material was not published upstream at the commit `curriculum.md` records, so
+`courseAlignment` pins `week2/README.md` with `kind: "placeholder"`, and `status` stays `draft`.
+The pin records the *absence* of material at that commit rather than an alignment to it — which is
+what lets `bun run course:drift` report `PUBLISHED` the day the material appears. #219 reconciles
+the row before this leaves draft.
+
+## Assurance scope
+
+Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
+daemon, and the image, so nothing inside that image is hidden from you: `reference/` and
+`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than
+out of reach.
+
+What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
+a checkpoint can only credit the id it echoes, results do not leak expected values, and the
+fixtures come from this deployment's seed so a memorized answer does not carry.
+
+That supports self-study and honest practice. It does **not** support competition ranking,
+examination, or completion certification — those need a verifier the participant does not
+administer, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
+
+## Cost
+
+Zero. No cloud account, no AWS resources.
+
+## For authors
+
+`make reference-test` runs the mutation suite: six broken submissions plus one aimed at the
+verifier. Two of them are the near-miss forms of the constant trap — folding into every share, and
+folding into two shares — because a test that only catches the first would still pass the second.
