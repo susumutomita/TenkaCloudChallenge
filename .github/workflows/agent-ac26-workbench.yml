@@ -13,7 +13,7 @@ permissions:
 
 concurrency:
   group: agent-ac26-workbench-all
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   migrate:
