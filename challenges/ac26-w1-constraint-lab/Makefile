@@ -1,44 +1,46 @@
-# Participant contract, shared by every AC26 companion problem.
+# Author-side targets. NOT the participant path.
 #
-#   make test             run the public tests
-#   make test-one ID=...  re-run one public test by name substring
-#   make inspect          print your fixtures and the trace to reason about
-#   make reset            restore starter/ to its shipped state
-#   make reference-test   authors / CI only: hidden + mutation suites, inside the image
+# A participant never sees this file. They open the problem in the portal, attach the
+# container terminal, and type `audit show`. These targets exist so the same image can
+# be built, exercised and graded from a checkout while the problem is being written or
+# reviewed.
+#
+#   make build            build the participant image
+#   make test             run the public self-check inside that image
+#   make test-one ID=...  re-run one public check by name substring
+#   make inspect          print what `audit show` prints
+#   make play             open a shell in the image, the way the portal terminal does
+#   make reference-test   authors / CI only: fixtures + reference + wrong answers + mutations
 #
 # FLAG_SEED is injected by the platform at deploy. The default below exists only so an
 # author can run the problem straight out of a checkout.
+#
+# reference/ and mutation.py are in the `author` stage only, so they are not in the
+# image a participant runs. That is misdelivery prevention and not a boundary --
+# whoever runs this can build the author stage too, and local mode is honor-system
+# verification. See TEMPLATE.md "Assurance scope".
 FLAG_SEED ?= local-dev-seed
 IMAGE := ac26-w1-constraint-lab
 
-# starter/ is bind-mounted read-only: the learner edits their checkout, the container
-# reads it. reference/ and tests/hidden/ stay inside the image and are not bind-mounted,
-# which keeps them out of the checkout rather than out of reach -- local mode is
-# honor-system verification. See TEMPLATE.md "Assurance scope".
-RUN := docker run --rm -e FLAG_SEED=$(FLAG_SEED) \
-	-v $(CURDIR)/local/starter:/problem/starter:ro $(IMAGE)
+RUN := docker run --rm -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)
 
-.PHONY: build test test-one inspect reset reference-test
+.PHONY: build test test-one inspect play reference-test
 
 build:
 	docker build --target participant -t $(IMAGE) local
 
 test: build
-	$(RUN) python tests/public/test_circuit.py
+	$(RUN) python tests/public/test_audit.py
 
 test-one: build
-	@test -n "$(ID)" || (echo "usage: make test-one ID=<test name substring>" && exit 1)
-	$(RUN) python tests/public/test_circuit.py --only $(ID)
+	@test -n "$(ID)" || (echo "usage: make test-one ID=<check name substring>" && exit 1)
+	$(RUN) python tests/public/test_audit.py --only $(ID)
 
 inspect: build
-	$(RUN) python show.py
+	$(RUN) audit show
 
-reset:
-	# The whole directory, not a named file: a problem may ship more than one
-	# starter, and a filename here goes stale the moment a problem is scaffolded
-	# from another one. Checking out the directory restores every tracked starter.
-	git checkout -- local/starter/
-	@echo "starter/ restored to its shipped state."
+play: build
+	docker run --rm -it -e FLAG_SEED=$(FLAG_SEED) $(IMAGE) /bin/sh
 
 reference-test: build
 	docker build --target author -t $(IMAGE)-author local

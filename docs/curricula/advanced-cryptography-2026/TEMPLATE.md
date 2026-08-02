@@ -4,11 +4,24 @@ Every problem in this track is scaffolded from the same shape, so that adding on
 the cryptography, not re-deciding the Docker layout, the scoring API, the hidden-test discipline,
 or the metadata graph.
 
-The reference implementation is [`challenges/ac26-bridge-experiment`](../../../challenges/ac26-bridge-experiment).
-It is a working problem, not a skeleton: `bun test scripts/ac26-bridge-experiment.test.ts` runs
-its starter, its reference, its mutation suite, and its `/verify` contract for real on every CI
-run. When this document and that directory disagree, the directory is right and this document is
-a bug.
+There are **two** shapes, and the first decision when writing a problem is which one it is.
+
+| Shape | Played by | Scoring | Reference implementation |
+|---|---|---|---|
+| **Terminal** | attaching the portal's container terminal and typing one line at a time | `verify`, a single discovered flag | [`ac26-bridge-experiment`](../../../challenges/ac26-bridge-experiment) (difficulty 1), [`ac26-w1-underconstraint`](../../../challenges/ac26-w1-underconstraint) (difficulty 4) |
+| **Starter** | editing `local/starter/` in a checkout and submitting the file | `multi-verify`, checkpoints with partial credit | [`ac26-w3-field-inverse`](../../../challenges/ac26-w3-field-inverse) |
+
+**Reach for the terminal shape unless you have a specific reason not to.** The portal's answer box
+is a single-line `<input type="text">`; the container has no `make`, no `vi` and no `nano`; and
+`starter/` is baked into a `read_only` image. A starter-shaped problem is therefore not playable
+from the portal at all — it needs a checkout, an editor and a local Docker daemon, which is a
+different product. The starter shape is documented here because most of the track still uses it,
+not because it is the default.
+
+Both references are working problems, not skeletons: `bun test scripts/ac26-bridge-experiment.test.ts`
+and `bun test scripts/ac26-w3-field-inverse.test.ts` run their references, their mutation suites
+and their `/verify` contracts for real on every CI run. When this document and those directories
+disagree, the directories are right and this document is a bug.
 
 Scaffold a new one:
 
@@ -16,19 +29,43 @@ Scaffold a new one:
 bun run new-course-challenge ac26-w3-field-inverse
 ```
 
+> **Known stale.** `scripts/new-course-challenge.ts` hard-codes
+> `TEMPLATE_ID = "ac26-bridge-experiment"` and renames `local/starter/counter.py` and friends,
+> which that problem no longer has. Until the scaffolder is repointed or taught the terminal
+> shape, it copies a terminal-shaped problem while printing starter-shaped next steps, and
+> `scripts/new-course-challenge.test.ts` fails on the file layout it expects. Copy an existing
+> problem of the shape you want by hand in the meantime.
+
 ## Layout
+
+Terminal shape — `ac26-bridge-experiment`, `ac26-w1-underconstraint`:
 
 ```text
 challenges/<id>/
 ├── metadata.json
 ├── README.md          English primary
 ├── README.ja.md       Japanese mirror
-├── Makefile           the participant contract
+├── Makefile           author tools only; no participant ever sees it
 ├── diagram.svg        optional
-├── artifacts/         specs, observation logs, figures — never answers
 └── local/
     ├── docker-compose.yml
     ├── Dockerfile
+    ├── <verb>.py          the CLI: the entire participant surface, installed on PATH
+    ├── mutation.py        proves the judge can fail a wrong answer  (author stage)
+    ├── lab/               the judgements, the input language, the progress store
+    ├── reference/         the answers, derived from the seed        (author stage)
+    ├── fixtures/          everything derived from FLAG_SEED
+    ├── tests/public/      the interface self-check
+    └── verifier/          POST /verify — compares a flag, runs nothing
+```
+
+Starter shape — `ac26-w3-field-inverse` and most of the track:
+
+```text
+challenges/<id>/
+├── ... (as above)
+├── Makefile           the participant contract
+└── local/
     ├── show.py            `make inspect`
     ├── mutation.py        proves the hidden tests can fail a wrong answer
     ├── starter/           the only thing the learner edits
@@ -37,10 +74,11 @@ challenges/<id>/
     ├── tests/
     │   ├── public/        the learner reads these
     │   └── hidden/        the verifier runs these
-    └── verifier/          POST /verify
+    └── verifier/          POST /verify — runs learner code
 ```
 
-The scaffolder hands you one neutrally-named exercise module in each place:
+The rest of this section is the starter shape. The scaffolder hands you one neutrally-named
+exercise module in each place:
 
 ```text
 local/starter/exercise.py
@@ -56,11 +94,12 @@ That reached main once. `scripts/scaffold-leftover-guard.test.ts` now fails the 
 `reference/` must mirror `starter/`, and each problem has exactly one public test entry point and
 exactly one hidden check module.
 
-Three naming traps, all hit while building the reference problem:
+Three naming traps, all hit while building these problems:
 
 - **Do not name a top-level module `inspect.py`.** It shadows the standard library's `inspect`,
   and `dataclasses` imports it — the failure surfaces as a circular-import error somewhere
-  unrelated. The template uses `show.py`.
+  unrelated. The starter shape uses `show.py`; the terminal shape names its CLI after the verb the
+  participant types.
 - **`reference/` ships only in the `author` stage** (the mutation suite needs it); `make build` and
   the compose `target:` both select `participant`. Mount `starter/` read-only and nothing else, so
   the answer reaches neither the image the learner runs nor any bind mount. It is still in the
@@ -73,7 +112,8 @@ Three naming traps, all hit while building the reference problem:
 
 ## Participant contract
 
-Identical across every AC26 problem, so a learner learns the commands once:
+Identical across every AC26 problem **that ships a `local/starter/`**, so a learner who edits a
+starter learns the commands once:
 
 ```bash
 make test             # public tests
@@ -84,6 +124,89 @@ make reset            # restore starter/ to its shipped state
 
 `make reference-test` is authors and CI only. It runs the hidden and mutation suites **inside the
 image**, so the reference implementation is not written into the learner's working tree.
+
+### Terminal-delivered problems have no starter and no `make` contract
+
+A problem can instead be played **entirely from the container terminal the portal attaches**, with
+a CLI inside the image and no file to edit. Two worked examples, at opposite ends of the track's
+difficulty range:
+
+- `ac26-bridge-experiment` — `counter show` / `counter predict 4` / `counter locate 2` /
+  `counter rule "…"` / `counter transfer predict=1 locate=3` / `counter flag`.
+- `ac26-w1-underconstraint` — `circuit show` / `circuit check …` / `circuit repair "…"` /
+  `circuit flag`.
+
+Reach for this shape when the portal is the only place the problem will be played. The `make`
+contract above assumes a checkout, an editor, and a starter to reset; a player who opened the
+problem in a browser has none of those, and `make inspect` is not a command they can run. What
+replaces each piece:
+
+- **`scoring.kind: "verify"`, not `multi-verify`.** The portal's answer box is a single-line text
+  input. A checkpoint that expects a file's source cannot be submitted from it. The submission is
+  a flag derived from `FLAG_SEED` inside the container, released by the CLI only after the stages
+  are cleared — so it stays a discovered value rather than a remembered one.
+- **State lives in `/tmp`**, the only writable path under `read_only: true` + a tmpfs. It is lost
+  when the container is recreated; say so in the README rather than adding a volume.
+- **Every command fits on one line.** The terminal has no TTY, so there is no line editing, no
+  prompt, and no multi-line paste. Take `key=value` lists and short quoted expressions, not JSON.
+- **Install the entry point on `PATH`** and resolve imports from the script's own directory. The
+  terminal does not promise to open in `/problem`.
+- **The Makefile stays, as an author tool.** Keep `build` / `test` / `reference-test`; drop
+  `reset`, which has no starter to restore. `scripts/participant-contract.test.ts` selects on
+  `local/starter/`, so such a problem sits outside that contract rather than violating it.
+- **`reference/` and `mutation.py` still split into the `author` stage**, and
+  `make reference-test` still has to fail a wrong answer — the grading moved into the image, so
+  the mutation suite now breaks the *judge* one requirement at a time instead of the submission.
+
+#### `show` is the whole briefing
+
+The portal shows a short `instructions` block and then hands over a shell. Whatever the CLI's
+`show` does not say, nobody says. It has to carry the subject, this deployment's numbers, **and
+the literal next command for every stage** — not a description of what to do, the line to type.
+`ac26-bridge-experiment` is the one to copy here, because it is the first problem in the track and
+the first terminal its participants ever open.
+
+Two consequences worth stating:
+
+- **Run it again is the recovery path.** There is no scrollback you can rely on and no editor, so
+  `show` must be idempotent, must restate everything, and must be advertised as the thing to run
+  when lost.
+- **Gate later stages inside `show` itself.** A stage that is not yet reachable prints "locked"
+  and what unlocks it, rather than being absent — absent reads as broken.
+
+#### Multi-stage problems need a transfer stage
+
+A CLI with three stages can be cleared by someone who found one shape and repeated it. After the
+main stages pass, present **the same subject with different parameters** and require that too
+before the flag is released. Keep it the same *questions* rather than new ones: what is being
+measured is whether the reading generalises, not whether a fifth concept was learned.
+`ac26-bridge-experiment` runs its counter backwards for exactly this.
+
+Gate it on the earlier stages both ways — refuse the answer, and keep the case off the screen —
+so the transfer cannot be worked in parallel with the thing it is supposed to come after.
+
+#### What the mutation suite has to cover once the CLI is the grader
+
+Breaking the judge is necessary but not sufficient, because two of the failure modes live outside
+it:
+
+- **The flag gate, over every subset of the stages.** Enumerate them (`itertools.combinations`)
+  rather than hand-listing: four stages is sixteen states, and the one nobody thought of is the
+  one that leaks.
+- **The stage locks**, driven through the CLI, since the progress store is CLI-level state that
+  the judge functions never see.
+
+And expect the suite to change the problem, not just check it. `ac26-bridge-experiment`'s broken
+trace originally left the window exactly once; breaking the judge's "is it the **first** entry"
+requirement then changed no verdict, because with one break there is no difference between the
+first and the only. The mutation survived, and the fix was to the fixture — the trace now breaks
+twice. A surviving mutant is as often a badly-posed question as a missing test.
+
+Finally, a mutation that only fails on some seeds is worse than no mutation. When a defect is real
+but not deterministically reachable from the wrong-answer catalog — defaulting a missing input to
+`0` is only wrong on a deployment whose answer happens to be `0` — assert the property directly
+instead and say why in a comment. A `SURVIVED` line that is sometimes correct trains authors to
+stop reading the output.
 
 ## Assurance scope
 
@@ -170,8 +293,14 @@ back to claiming confidentiality.
 
 ## Scoring contract
 
-`scoring.kind: "multi-verify"`, 2–8 checkpoints (4–6 recommended), each scoring exactly one
-observable outcome. Spanning at least three of these kinds:
+**Starter shape:** `scoring.kind: "multi-verify"`, 2–8 checkpoints (4–6 recommended), each scoring
+exactly one observable outcome.
+
+**Terminal shape:** `scoring.kind: "verify"`, a single discovered flag, with the same coverage
+demanded of the CLI's **stages** instead of of checkpoints. The stages are what the participant
+walks; the flag is what the platform scores.
+
+Either way, span at least three of these kinds:
 
 `observe` · `predict` · `construct` · `counterexample` · `repair` · `transfer` · `misconception`
 
@@ -181,8 +310,17 @@ requirements are in [`ASSESSMENT.md`](./ASSESSMENT.md).
 
 ## `/verify` security contract
 
-The verifier runs learner code. Every item below is implemented in
-`challenges/ac26-bridge-experiment/local/verifier/server.py` and asserted by its test file.
+**This section applies to the starter shape**, where `/verify` runs learner code. Every item below
+is implemented in `challenges/ac26-w3-field-inverse/local/verifier/server.py` and asserted by its
+test file.
+
+A terminal-shaped problem's `/verify` runs **no** participant code at all: the grading that needs
+reasoning happened in the participant's own terminal, and by the time a string reaches the verifier
+the only question left is whether it is this deployment's flag. Such a verifier needs only the
+constant-time comparison (`hmac.compare_digest`, so a wrong answer is not a timing oracle), the
+body-size and timeout bounds, the silenced access log, and the two binding rules at the bottom of
+the table. `scripts/verifier-spoof-guard.test.ts` enforces the split from the other side: a
+verifier with no runner must execute nothing — no `subprocess`, `exec`, `eval` or `compile`.
 
 | Requirement | How the reference does it |
 |---|---|
@@ -206,24 +344,40 @@ One more, easy to forget: the verifier's access log is silenced. The default
 
 **Public tests** show the API and the minimal happy path. They must be readable and they must
 *not* be sufficient — if a learner can pass the hidden tests by satisfying the public ones, the
-problem has no teeth.
+problem has no teeth. In a terminal-shaped problem there is no submission to test, so the public
+suite tests the *interface* instead: that `show` says everything, that a malformed input explains
+itself, that a locked stage stays locked, that nothing prints the flag.
 
 **Hidden tests** vary what the public ones hold fixed: modulus, group element, polynomial degree,
 noise, share count, nonce. They include boundary and invalid values, and they check metamorphic
 relations rather than fixed expected values wherever possible, because a relation cannot be
-satisfied by memorizing one output.
+satisfied by memorizing one output. The terminal shape's equivalent is the **family** a structural
+judgement is graded over — same discipline, same reason: grade against a relation over parameters
+the participant cannot see, never against the case in front of them.
+
+Whatever that family is, assert it cannot have collapsed. An empty or degenerate family makes the
+comparison vacuously true and accepts everything, so check every run that the family still fails
+some obviously-wrong answer, and fail closed and loudly when it does not. A checkpoint nobody can
+fail is worse than no checkpoint, because it reports as a pass.
 
 **Mutation tests** are the check on the checks. Break the reference on purpose, assert the hidden
 tests catch each break. Include the always-succeed verifier — a verifier that returns `correct:
 true` unconditionally is the one defect that silently invalidates an entire problem, and it
-cannot be expressed as a broken submission.
+cannot be expressed as a broken submission. In the terminal shape the target is the judge rather
+than the submission; see "What the mutation suite has to cover once the CLI is the grader" above.
 
 ### Equivalent mutants
 
-Some plausible-looking mutations are mathematically identical to the reference, so no correct
-test can distinguish them. In the reference problem, reducing once at the end and leaving `start`
-unnormalized are both equivalent to round-by-round reduction under Python's floored `%`. Listing
-them produces a permanent "survived" that trains authors to ignore the suite.
+Some plausible-looking mutations change no verdict, so no correct test can distinguish them.
+Listing one produces a permanent "survived" that trains authors to ignore the suite. Two families
+of them show up repeatedly:
+
+- **Mathematically identical rewrites.** Reducing once at the end and leaving a running value
+  unnormalized before the loop are both equivalent to round-by-round reduction under Python's
+  floored `%`.
+- **Branches that change a message, not an outcome.** A guard that rejects an out-of-range answer
+  before the comparison that would have rejected it anyway is there for the wording. Removing it
+  is an equivalent mutant, and the wording is still worth keeping.
 
 Before adding a mutation, convince yourself it changes an observable output for some input. If
 you cannot construct that input, it is an equivalent mutant — leave it out and say why in a
@@ -254,12 +408,30 @@ comment.
 
 - [ ] `bun run validate` passes.
 - [ ] The container builds and starts.
+- [ ] Changing the seed changes the fixtures.
+- [ ] The mutation suite kills every listed defect, and every equivalent mutant left out is
+      explained in a comment where a reader will look for it.
+
+Starter shape:
+
 - [ ] At least one checkpoint fails in the shipped starter state.
 - [ ] Every checkpoint passes with the reference.
 - [ ] `/verify` scores per checkpoint and echoes the id.
 - [ ] Timeout, malformed request, and unknown checkpoint are all handled safely.
-- [ ] Changing the seed changes the fixtures.
-- [ ] The mutation suite kills every listed defect, including the verifier mutations.
+
+Terminal shape:
+
+- [ ] **You have played it through in the container**, by hand, from the compose service rather
+      than from a checkout — `docker compose up`, then `docker exec -w /root <container> <verb>
+      show` and onwards. Every problem below the line was found this way and by no test: a case
+      whose parameters made a stage unanswerable, a `show` that never said what to type next.
+- [ ] `show` alone names the subject, this deployment's numbers, and the literal next command for
+      every stage, and says nothing about a flag anyone has not earned.
+- [ ] Every stage refuses a wrong answer with what is not satisfied, and never with the answer.
+- [ ] The transfer stage is refused *and* invisible until the stages before it are cleared.
+- [ ] The flag is released for exactly one progress state, checked over every subset.
+- [ ] Nothing participant-facing mentions `make`, a starter, or a file to edit — including
+      `metadata.json` and both READMEs.
 - [ ] Neither the writeup nor the hidden tests reach the participant-facing bundle.
 - [ ] Both READMEs carry the **Assurance scope** section, and nothing in the problem claims
       the reference or the hidden tests are confidential or tamper-resistant.

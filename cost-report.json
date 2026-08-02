@@ -54,7 +54,7 @@
       "id": "ac26-w1-underconstraint",
       "category": "Challenge",
       "region": "ap-northeast-1",
-      "estimatedSessionMinutes": 90,
+      "estimatedSessionMinutes": 75,
       "perHourUsd": 0,
       "perSessionUsd": 0,
       "ifLeftRunningUsd": {

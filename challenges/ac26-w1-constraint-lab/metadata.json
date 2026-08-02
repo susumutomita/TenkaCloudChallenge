@@ -32,10 +32,10 @@
   },
   "difficulty": 3,
   "estimatedDuration": "45-60 分",
-  "shortDescription": "新しい policy engine は if 文ではなく算術回路でアクセス判断を表す。だが monitor は pass/fail しか出さない。residual を見えるようにして、witness を診断できるようにする。",
-  "description": "Week 1 の mechanism 問題。 公式課題はアクセス制御回路の構築と underconstraint exploit を扱うが、 本問題はその前段として「回路とは 0 になるべき constraint の集合であり、 witness とは各 signal へ入れる値である」 ことを中間値から理解させる。 公式課題の式・fixture・solution は転載しない (GOVERNANCE.md の independent-reimplementation)。\n\nparticipant が編集するのは field.py / circuit.py / gadgets.py の 3 ファイル。 5 checkpoint を独立採点する。 residuals (45) は hidden field 3 つで normalize・trace・順序非依存・signal 欠落を検査する。 first-broken (40) は壊れた witness の最初の違反 constraint id。 boolean (40) と membership (35) は participant の gadget を field 全体で総当たりし、 許す値の集合が厳密に一致することを要求する。 transfer (40) は別 seed の field・circuit・順序で全体を再実行する。\n\nboolean checkpoint は field の全要素を走査する。 名前が flag だから boolean、 という誤解 (misconception.boolean-name-implies-boolean-value) は 2 だけを試す test では落ちないため、 総当たりで「許す集合がちょうど {0,1}」を要求している。\n\n壊れた witness の混入位置は c2 か c3 で、 c0 は選ばない。 先頭を答えれば当たる状態にしないため。",
-  "instructions": "## はじめに\n\nアクセス判断を算術回路で表す policy engine の監査ツールを完成させます。 monitor は pass/fail しか出さないので、 どの constraint が壊れたのか分かりません。\n\n## 最初の一手\n\n```bash\nmake inspect\n```\n\n自分の field、 circuit、 正しい witness と壊れた witness が出ます。 正しい witness の residual がすべて 0 になることを、 走らせる前に確認してください。\n\n次に `local/starter/field.py`、 `local/starter/circuit.py`、 `local/starter/gadgets.py` を編集します。\n\n## ゴール\n\nresidual を正しく計算し、 壊れた witness の最初の違反箇所を特定し、 boolean と membership の gadget が許す値の集合をちょうど狙いどおりにします。",
-  "writeup": "## constraint は if 文ではない\n\n`if flag in (0,1)` は実行時の分岐だが、 constraint は 「この式は 0 でなければならない」という宣言で、 witness 全体に対して同時に課される。 `b*(b-1)` が 0 になるのは b が 0 か 1 のときだけで、 これが boolean 制約の全内容になる。\n\n## 名前は制約ではない\n\nsignal を flag と名付けても値は縛られない。 制約を書いて初めて縛られる。 この問題の boolean checkpoint が field の全要素を走査するのはそのためで、 2 だけを試す test なら「b < 2 を検査する」実装でも通ってしまう。\n\n## residual は field の元\n\n-1 と p-1 は同じ元であり、 どちらも 0 ではない。 normalize を忘れた実装は 公開例では動き、 負の中間値が出た瞬間に壊れる。\n\n## 1 例では soundness は示せない\n\n正しい witness で全 residual が 0 になっても、 制約が足りない回路は他の witness も通してしまう。 membership gadget で allowed[0] だけを const 制約にすると、 公開例が allowed[0] のときは通り、 他の許可値で落ちる。 「1 つの valid example が soundness を証明する」という誤解はここで折れる。\n\n## 公式課題への接続\n\n公式課題は underconstraint を突く。 その前提は「どの条件がどの式になっているか」 を読めることで、 それがこの問題で作った trace そのものになる。",
+  "shortDescription": "新しい policy engine は if 文ではなく算術回路でアクセス判断を表す。だが monitor は PASS か FAIL しか出さない。なぜ落ちたのかを言えるようにする。",
+  "description": "Week 1 の mechanism 問題。 公式課題はアクセス制御回路の構築と underconstraint exploit を扱うが、 本問題はその前段として「回路とは 0 になるべき constraint の集合であり、 witness とは各 signal へ入れる値である」 ことを、 参加者自身が residual を計算することで理解させる。 公式課題の式・fixture・solution は転載しない (GOVERNANCE.md の independent-reimplementation)。\n\n配信形態は container のみ。 参加者は portal から問題コンテナのターミナルへ接続し、 `audit` コマンドを 1 行ずつ打つ。 編集するファイルは無く、 host への checkout も要らない。 flag は FLAG_SEED から container 内で導出するので、 暗記も当て推量も効かない。\n\nstage は 3 つで、 単一 flag のゲートになっている。 (1) trace: monitor が落とした witness について、 全 constraint の residual を circuit 順に、 [0, p) に正規化して出す。 (2) admit: 許可値集合ちょうどで 0 になり他では 0 にならない残差を 1 本書く (membership gadget)。 circuit には member 制約が無く、 kind 表にも member の行は出さないので、 これは書き写しではなく構成になる。 (3) transfer: (1)(2) が通って初めて渡される第 2 の回路 — 別の素数、 別の signal 名、 別の並び、 制約が 1 本多く、 そして (2) で書いた membership gadget が deploy 済み制約として入っている — について、 同じ trace を出す。\n\ntrace の不合格応答は「何個ずれているか」だけを返し、 どれがずれているかは返さない。 どれがずれているかは「間違いの所在」の地図そのもので、 それを描くのがこの stage だから。 ただしこれは防御ではない: 1 か所だけ変えれば個数は動くので、 位置ごとの探索は依然として可能で、 コストが数十回から数百回に上がるだけである (flag は FLAG_SEED から導出できるので、 いずれにせよ honor-system の範囲)。 代わりに `audit explain <id>` が制約 1 本の残差を operand 名つき (値は出さない) で出す。 admit の不合格応答は値を挙げてよい ── それは参加者自身が書いた式の根であって、 答えではない。\n\nfixture 側の設計。 落ちた witness は必ず 2 本以上の制約を破る (0 でない残差が 1 つだけだと、 残り 4 つが見えている以上 5*(p-1) 通りの当て推量になる)。 live 側の破壊は先頭 constraint には置かない。 transfer 側の破壊は必ず member か boolean の残差を 0 でなくする ── これが無いと転移 stage は「0 を書き写す」だけになるので、 mutation.py が seed 全体でこの性質を検査している。\n\nmutation.py は判定器を 1 要件ずつ壊し、 wrong-answer カタログがそれを全部殺すことを見る。 カタログには「正しい残差を 1 つずらして並べたもの」「許可値の先頭だけを固定した gadget」「許可値ちょうどに根が 1 つ余分に付いた gadget」が入っている。 admit の判定は field を全走査する: 許可値だけを試す判定なら、 恒等的に 0 の式が通ってしまう。",
+  "instructions": "## はじめに\n\nアクセス判断を算術回路で表す policy engine の監査ツールを完成させます。 monitor は PASS か FAIL しか出しません。 拒否された利用者に理由を聞かれても、 いまは誰も答えられません。\n\n## 最初の一手\n\n問題を起動したら、 **コンテナのターミナルに接続**して次を打ってください。\n\n```bash\naudit show\n```\n\nこのデプロイの field、 制約の読み方、 回路、 それを満たす witness、 そして monitor が落とした witness が出ます。\n\n使えるコマンドは `audit` を引数なしで打てば一覧できます。 編集するファイルはありません。 すべて 1 行で打てるコマンドです。\n\n## ゴール\n\n落ちた witness の residual を全部自分で出し (`audit trace`)、 許可値だけを通す制約を 1 本書き (`audit admit`)、 その 2 つが通ると渡される見たことのない回路でも同じことをします (`audit transfer`)。 3 つとも通ると `audit flag` が `TC{...}` を出すので、 それを回答欄に貼ってください。",
+  "writeup": "## constraint は if 文ではない\n\n`if flag in (0,1)` は実行時の分岐だが、 constraint は 「この式は 0 でなければならない」という宣言で、 witness 全体に対して同時に課される。 実行順は無く、 比較も無い。 `audit trace` が回路の順で答えを取るのは報告の都合であって、 residual の値そのものは順序に依存しない。\n\n## residual は field の元\n\n-1 と p-1 は同じ元であり、 どちらも 0 ではない。 `role * flag - gated` のような残差は途中で負になる。 そこで止めて「-14」と書いた瞬間に、 それは field の元ではなくなる。 正規化を「作法」ではなく「そもそも同じ元である」として扱えるかどうかが、 この stage が見ている点。\n\n## 名前は制約ではない\n\nsignal を flag と名付けても値は縛られない。 縛るのは `flag * (flag - 1) = 0` という制約 1 本だけで、 それが無ければ flag は field のどの元にもなれる。 落ちた witness の破壊がしばしば flag に入るのはそのためで、 boolean 制約の残差が 0 でないことは「名前ではなく制約が縛る」の実物になっている。\n\n## membership は boolean の一般化\n\n`flag * (flag - 1)` は因子 (flag - 0) と (flag - 1) の積である。 許可値が n 個なら因子は n 個。 積が 0 になるのは因子のどれかが 0 のとき、 つまり許可値のどれかに一致するときだけ ── p が素数だから、 0 でない元だけの積は 0 にならない。 これが membership gadget の全内容で、 「許可値の先頭だけを const 制約で固定する」が通らない理由でもある。\n\n## 1 例では何も示せない\n\n正しい witness で全 residual が 0 になっても、 制約が足りない回路は他の witness も通す。 だから admit の判定は許可値だけを試さない: field を全走査して、 「0 になる元の集合がちょうど許可集合と一致するか」を見る。 許可値だけを試す判定なら、 恒等的に 0 の式すら通ってしまう。\n\n## 転移\n\n第 2 の回路は素数も signal 名も並びも違い、 制約が 1 本多く、 そして自分で書いた membership gadget が deploy 済み制約として入っている。 自分の seed の 5 つの数字を覚えても何の役にも立たない。 持ち越せるのは読み方だけで、 それがこの問題の成果物になる。\n\n## 公式課題への接続\n\n公式課題は underconstraint を突く。 その前提は「どの条件がどの式になっているか」 を読めることで、 それがこの問題で作った trace そのものになる。",
   "tags": [
     "advanced-cryptography-2026",
     "week1",
@@ -43,7 +43,8 @@
     "constraint-system",
     "witness",
     "local-play",
-    "container"
+    "container",
+    "terminal"
   ],
   "exposedPorts": [
     {
@@ -53,11 +54,11 @@
   ],
   "learningGoals": [
     "signal、witness、constraint を区別できる",
-    "constraint を residual == 0 として評価できる",
+    "constraint を residual == 0 として評価し、回路全体の trace を出せる",
+    "residual が field の元であることを、負の中間値が出る場面で確認できる",
     "program の条件を有限体上の多項式制約へ変換できる",
-    "boolean constraint b(b-1)=0 の意味を反例で確認できる",
-    "membership の補助制約が必要な理由を説明できる",
-    "valid witness と invalid witness を trace から判定できる"
+    "boolean 制約 b(b-1)=0 の意味と、その membership への一般化を説明できる",
+    "見たことのない field・回路・並びでも同じ読み方が成立することを確認できる"
   ],
   "nodes": {
     "learning_objectives": [
@@ -71,7 +72,7 @@
       },
       {
         "id": "lo.ac26-w1-constraint-lab.diagnose-witness",
-        "description": "trace から最初に壊れた constraint を特定できる。"
+        "description": "trace から、 witness が回路を満たさなくなる箇所を特定できる。"
       }
     ],
     "concepts": [
@@ -90,24 +91,16 @@
     ],
     "assessment_criteria": [
       {
-        "id": "assessment.ac26-w1-constraint-lab.residuals",
-        "description": "複数の field で residual と trace を正しく計算できた。"
+        "id": "assessment.ac26-w1-constraint-lab.trace",
+        "description": "落ちた witness について、 全 constraint の residual を field の元として出せた。"
       },
       {
-        "id": "assessment.ac26-w1-constraint-lab.first-broken",
-        "description": "壊れた witness の最初の違反 constraint を特定できた。"
-      },
-      {
-        "id": "assessment.ac26-w1-constraint-lab.boolean",
-        "description": "boolean gadget が許す値の集合がちょうど {0,1} になった。"
-      },
-      {
-        "id": "assessment.ac26-w1-constraint-lab.membership",
-        "description": "membership gadget が許す値の集合が allowed と厳密に一致した。"
+        "id": "assessment.ac26-w1-constraint-lab.admit",
+        "description": "許可値ちょうどで 0 になり他では 0 にならない残差を 1 本構成できた。"
       },
       {
         "id": "assessment.ac26-w1-constraint-lab.transfer",
-        "description": "未知の field・circuit・順序でも同じ判定が成立した。"
+        "description": "未知の field・signal・並び・制約数の回路でも同じ判定が成立した。"
       }
     ],
     "misconceptions": [
@@ -178,22 +171,12 @@
     {
       "type": "assesses",
       "source": "problem.ac26-w1-constraint-lab",
-      "target": "assessment.ac26-w1-constraint-lab.residuals"
+      "target": "assessment.ac26-w1-constraint-lab.trace"
     },
     {
       "type": "assesses",
       "source": "problem.ac26-w1-constraint-lab",
-      "target": "assessment.ac26-w1-constraint-lab.first-broken"
-    },
-    {
-      "type": "assesses",
-      "source": "problem.ac26-w1-constraint-lab",
-      "target": "assessment.ac26-w1-constraint-lab.boolean"
-    },
-    {
-      "type": "assesses",
-      "source": "problem.ac26-w1-constraint-lab",
-      "target": "assessment.ac26-w1-constraint-lab.membership"
+      "target": "assessment.ac26-w1-constraint-lab.admit"
     },
     {
       "type": "assesses",
@@ -231,126 +214,45 @@
     ]
   },
   "scoring": {
-    "kind": "multi-verify",
-    "checks": [
+    "kind": "verify",
+    "points": 200,
+    "wrongAnswerPenalty": 10,
+    "hints": [
       {
-        "id": "residuals",
-        "label": "residual を計算して trace を出す",
-        "points": 45,
-        "wrongAnswerPenalty": 10,
-        "hints": [
-          {
-            "id": "residuals-hint-1",
-            "content": "residual は field の元だ。 -1 と p-1 は同じ元で、 どちらも 0 ではない。 引き算の結果をそのまま返していないか。",
-            "penalty": 15
-          }
-        ]
+        "id": "hint-1",
+        "content": "residual は field の元です。 引き算の途中で負になったら、 [0, p) に入るまで p を足してください。 -1 と p-1 は同じ元で、 どちらも 0 ではありません。 制約 1 本の残差がどんな式なのかは `audit explain <id>` が operand 名つきで出します。 落ちた witness は、 満たす witness と比べて signal が 1 つだけ違います。 その signal が出てくる制約はどれか、 から始めてください。",
+        "penalty": 40
       },
       {
-        "id": "first-broken",
-        "label": "壊れた witness の最初の違反箇所を言う",
-        "points": 40,
-        "wrongAnswerPenalty": 10
-      },
-      {
-        "id": "boolean",
-        "label": "signal を 0 か 1 だけに縛る",
-        "points": 40,
-        "wrongAnswerPenalty": 10,
-        "hints": [
-          {
-            "id": "boolean-hint-1",
-            "content": "0 のときと 1 のときだけ 0 になり、 それ以外では 0 にならない式を 1 本書く。 積が使える。",
-            "penalty": 15
-          }
-        ]
-      },
-      {
-        "id": "membership",
-        "label": "許可された値だけを通す",
-        "points": 35,
-        "wrongAnswerPenalty": 10,
-        "hints": [
-          {
-            "id": "membership-hint-1",
-            "content": "boolean 制約は {0,1} 版の同じ形をしている。 許可値が増えたら、 掛ける因子を増やす。",
-            "penalty": 10
-          }
-        ]
-      },
-      {
-        "id": "transfer",
-        "label": "見たことのない回路でも成立させる",
-        "points": 40,
-        "wrongAnswerPenalty": 10,
-        "hints": [
-          {
-            "id": "transfer-hint-1",
-            "content": "constraint の並び順に依存していないか。 trace は circuit の順を保ち、 residual は順序に依存しない。",
-            "penalty": 10
-          }
-        ]
+        "id": "hint-2",
+        "content": "membership gadget は boolean 制約の一般化です。 `flag * (flag - 1)` は、 因子 (flag - 0) と (flag - 1) の積になっています。 だから flag が 0 か 1 のときだけ積が 0 になります。 許可値が n 個あるなら、 因子は n 個です。 p が素数なので、 0 でない元だけを掛けても 0 にはなりません ── つまり許可値のどれとも一致しない値では、 積は必ず 0 以外になります。 定数を 1 つだけ固定する形 (許可値の先頭だけ) では、 残りの許可値が拒否されます。",
+        "penalty": 60
       }
     ]
   },
   "i18n": {
     "en": {
       "name": "A set of things that must be zero",
-      "shortDescription": "The new policy engine expresses access decisions as an arithmetic circuit instead of if-statements. The monitor only prints pass or fail. Make the residuals visible so a witness can be diagnosed.",
-      "instructions": "## Start here\n\nYou are finishing the audit tooling for a policy engine that expresses access decisions as an arithmetic circuit. The monitor only prints pass or fail, so nobody can see which constraint broke.\n\n## First move\n\n```bash\nmake inspect\n```\n\nThat prints your field, your circuit, an honest witness and a broken one. Predict that every residual of the honest witness is zero before you run your trace.\n\nThen edit `local/starter/field.py`, `local/starter/circuit.py` and `local/starter/gadgets.py`.\n\n## Goal\n\nCompute residuals correctly, name the first violated constraint in the broken witness, and make the boolean and membership gadgets admit exactly the intended set of values.",
-      "writeup": "## A constraint is not an if-statement\n\n`if flag in (0, 1)` is a runtime branch. A constraint is a declaration that an expression must be zero, imposed on the whole witness at once. `b*(b-1)` is zero exactly when b is 0 or 1, and that is the entire content of a boolean constraint.\n\n## A name is not a constraint\n\nCalling a signal `flag` does not bind its value; writing a constraint does. That is why this problem's boolean checkpoint sweeps the entire field — a test that only tries 2 would pass an implementation that merely checks `b < 2`.\n\n## Residuals are field elements\n\n-1 and p-1 are the same element, and neither is zero. An implementation that skips normalization works on the visible example and breaks the moment an intermediate value goes negative.\n\n## One valid example proves nothing about soundness\n\nAn under-constrained circuit still gives every residual zero on an honest witness. Pinning only `allowed[0]` with a const constraint passes whenever the visible example happens to use that value, and fails on the others. That is where 'one valid example proves soundness' breaks.\n\n## Where this leads\n\nThe official exercise attacks underconstraint. Doing that requires reading which condition became which expression — which is exactly the trace you built here.",
+      "shortDescription": "The new policy engine expresses access decisions as an arithmetic circuit instead of if-statements. The monitor prints only PASS or FAIL. Make it possible to say why something was refused.",
+      "description": "Week 1 mechanism problem, delivered as a container and played from its terminal. Same subject as the official exercise, different circuit and different signal names. See the Japanese `description` for the grading contract and the design notes.",
+      "instructions": "## Start here\n\nYou are finishing the audit tooling for a policy engine that expresses access decisions as an arithmetic circuit. The monitor prints one word, PASS or FAIL, so when a request is refused nobody can say why.\n\n## First move\n\nStart the problem, **attach the container terminal**, and type:\n\n```bash\naudit show\n```\n\nThat prints this deployment's field, how to read a constraint, the circuit, a witness that satisfies it, and the witness the monitor refused.\n\nRun `audit` with no arguments for the list of commands. There is no file to edit; every command is one line.\n\n## Goal\n\nWork out every residual of the refused witness yourself (`audit trace`), write the one constraint that admits exactly the licensed values (`audit admit`), and then do the same on a circuit you have never seen, handed over once those two are cleared (`audit transfer`). When all three are cleared, `audit flag` prints your `TC{...}` — paste it into the answer box.",
+      "writeup": "## A constraint is not an if-statement\n\n`if flag in (0, 1)` is a runtime branch. A constraint is a declaration that an expression must be zero, imposed on the whole witness at once. Nothing runs in order and there are no comparisons. `audit trace` asks for the residuals in circuit order because a report needs an order, not because any residual depends on one.\n\n## Residuals are field elements\n\n-1 and p-1 are the same element, and neither is zero. A residual like `role * flag - gated` goes negative on the way. Stopping there and writing '-14' produces something that is not an element of the field. Whether normalization is a rule you follow or a fact about what an element is, is what this stage looks at.\n\n## A name is not a constraint\n\nCalling a signal `flag` does not bind its value. One constraint does — `flag * (flag - 1) = 0` — and without it, `flag` can be any element of the field. That is why the refused witness so often breaks there: a non-zero boolean residual is the misconception in the concrete.\n\n## Membership is the general case of boolean\n\n`flag * (flag - 1)` is the product of the factors `(flag - 0)` and `(flag - 1)`. With n licensed values there are n factors. The product is zero exactly when one factor is, which is exactly when the signal equals one of the licensed values — the modulus is prime, so a product of non-zero elements is never zero. That is the whole of the membership gadget, and the reason pinning only the first licensed value with a const constraint does not work.\n\n## One example proves nothing\n\nAn under-constrained circuit still gives every residual zero on an honest witness. So the gadget is graded by sweeping the entire field and asking whether the set of elements it is zero at is exactly the licensed set. A check that only tried the licensed values would pass an expression that is identically zero.\n\n## Transfer\n\nThe second circuit has a different prime, different signal names, a different order, one more constraint, and the membership gadget you just wrote as a deployed constraint. Memorizing your own five numbers is worth nothing. What carries is the reading, and that is the thing you came away with.\n\n## Where this leads\n\nThe official exercise attacks underconstraint. Doing that requires reading which condition became which expression — which is exactly the trace you built here.",
       "learningGoals": [
         "Tell signals, witnesses and constraints apart",
-        "Evaluate a constraint as residual == 0",
+        "Evaluate a constraint as residual == 0 and produce the trace of a whole circuit",
+        "Confirm that a residual is a field element, where an intermediate value goes negative",
         "Translate a program condition into a polynomial constraint over a finite field",
-        "Confirm what b(b-1)=0 means by counterexample",
-        "Explain why a membership gadget needs its own constraints",
-        "Diagnose a valid versus an invalid witness from a trace"
+        "Explain what b(b-1)=0 means and how it generalizes to membership",
+        "Confirm the same reading holds on a field, circuit and ordering you have not seen"
       ],
-      "checks": [
+      "hints": [
         {
-          "id": "residuals",
-          "label": "Compute residuals and emit a trace",
-          "hints": [
-            {
-              "id": "residuals-hint-1",
-              "content": "A residual is a field element. -1 and p-1 are the same element and neither is zero. Are you returning the raw subtraction?"
-            }
-          ]
+          "id": "hint-1",
+          "content": "A residual is a field element. If a subtraction goes negative, add p until it lands in [0, p). -1 and p-1 are the same element and neither is zero. `audit explain <id>` prints the expression one constraint requires to be zero, with its operands named. The refused witness differs from the satisfying one in exactly one signal — start from which constraints that signal appears in."
         },
         {
-          "id": "first-broken",
-          "label": "Name the first violated constraint"
-        },
-        {
-          "id": "boolean",
-          "label": "Bind a signal to 0 or 1 only",
-          "hints": [
-            {
-              "id": "boolean-hint-1",
-              "content": "Write one expression that is zero at 0 and at 1, and non-zero everywhere else. A product will do it."
-            }
-          ]
-        },
-        {
-          "id": "membership",
-          "label": "Admit only the allowed values",
-          "hints": [
-            {
-              "id": "membership-hint-1",
-              "content": "The boolean constraint is the {0,1} case of the same shape. More allowed values means more factors."
-            }
-          ]
-        },
-        {
-          "id": "transfer",
-          "label": "Hold up on circuits you have not seen",
-          "hints": [
-            {
-              "id": "transfer-hint-1",
-              "content": "Are you depending on constraint order? The trace preserves circuit order, but no residual depends on it."
-            }
-          ]
+          "id": "hint-2",
+          "content": "The membership gadget is the general case of the boolean constraint. `flag * (flag - 1)` is the product of the factors `(flag - 0)` and `(flag - 1)`, which is why it is zero only at 0 and 1. With n licensed values there are n factors. The modulus is prime, so a product of non-zero elements is never zero — at any value that matches none of the licensed ones, the product is non-zero. Pinning a single constant (the first licensed value) refuses all the others."
         }
       ]
     }

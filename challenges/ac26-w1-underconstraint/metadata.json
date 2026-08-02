@@ -31,11 +31,11 @@
     ]
   },
   "difficulty": 4,
-  "estimatedDuration": "60-90 分",
-  "shortDescription": "資格確認回路が production 直前の監査で止まった。通常の利用者は正しく判定される。だが不正な witness を作ると条件を迂回できるらしい。組んで、突いて、直す。",
-  "description": "Week 1 の assignment-companion。 公式課題と同じアクセス制御条件・signal 名・fixture は使わず、 別の業務ルール (失効カウンタと発行者確認) の回路で「正しく組む」「constraint を 1 本抜いた穴を突く」「修復後に正常系を維持する」を一続きで体験する。\n\n題材は is-zero gadget。 回路上で「この signal は 0 か」は比較ではなく、 prover が供給する補助 signal inv を 使った 2 本の制約になる。 A: value*inv + out - 1 = 0、 B: value*out = 0。 両方必要で、 片方だけでは それぞれ別の嘘が通る。 deploy 済み回路はどちらか一方を欠いており、 どちらが欠けるかは seed で変わる。\n\nexploit checkpoint の合格条件は構造的に定義してある。 forged witness が「deploy 済み回路を充足し、 かつ intended 回路を充足しない」こと。 これは欠けた制約が実際に効いていたことの定義そのもので、 どちらの制約が落ちた場合にも同じ判定で機能する。\n\nrepair checkpoint は制約数の上限も見る。 全部盛りは修復ではない。 加えて participant 自身の forgery を 修復後の回路へ再投入し、 正常系 2 ケースが維持されることも確認する。",
-  "instructions": "## はじめに\n\nプライバシーを保った資格確認回路が production 直前の監査で止まりました。 通常の利用者は正しく判定されます。 しかし不正な witness を作れば条件を迂回できる、 と報告されています。\n\n## 最初の一手\n\n```bash\nmake inspect\n```\n\nポリシー、 deploy 済みの回路、 正常な witness 2 種類が出ます。 回路には、 ポリシーが必要とする制約が 1 本足りません。\n\n次に `local/starter/policy.py` を編集します。 4 つの関数があり、 順に「本来の回路を組む」「欠落を特定する」「反例を作る」「最小限で直す」に対応します。\n\n## ゴール\n\n正しい回路を組み、 欠落を突く witness を実際に作り、 原因を構造化して提出し、 正常系を壊さずに修復します。",
-  "writeup": "## program と constraint system は同値ではない\n\n`if revoked == 0` は実行時の比較だが、 回路には比較が無い。 「0 かどうか」は prover が供給する inv を使った 2 本の制約で表す。 A は revoked != 0 のとき ok = 1 を防ぎ、 B は revoked != 0 のとき ok が 0 以外になるのを防ぐ。 片方だけ残すと、 残ったほうが防いでいない嘘がちょうど 1 つ通る。\n\n## 欠落の向きで反例の形が変わる\n\nB が欠けた場合、 A だけでは失効済み (revoked != 0) の利用者が inv = 0、 ok = 1 と主張できる。 A が欠けた場合、 B だけでは revoked != 0 のとき ok = 1 は作れないので、 通る嘘は逆向きになる。 正常な利用者 (revoked = 0) に対して ok = 0 を主張し、 正当な権利を否定する witness だ。 どちらも「偽の主張なのに全 residual が 0」であり、 これが underconstraint の一般形になる。\n\n## happy-path test は soundness を示さない\n\nこの問題の公開テストは starter の状態で全部通る。 starter の回路は正常な利用者 2 種類をどちらも正しく受理するからだ。 だが is-zero gadget が丸ごと無いので、 ok は何にも縛られていない。 「通る」と「守れている」は別のことで、 その差を測るには反例を作るしかない。\n\n## 修復の最小性\n\n思いつく制約を全部足すのは修復ではない。 制約が増えれば正常系を落とす危険も増える。 このため repair checkpoint は、 反例が拒否されることと正常系 2 ケースが維持されることの両方を見る。\n\n## 公式課題への接続\n\n公式課題も underconstraint を扱う。 ここで身につけるのは「どの制約がどの嘘を防いでいるか」 を言語化する読み方であって、 公式課題の答えではない。 signal 名も業務ルールも意図的に別のものにしてある。",
+  "estimatedDuration": "45-75 分",
+  "shortDescription": "資格確認回路が production 直前の監査で止まった。通常の利用者は正しく判定される。だが不正な witness を作ると条件を迂回できるらしい。突いて、直す。",
+  "description": "Week 1 の assignment-companion。 公式課題と同じアクセス制御条件・signal 名・fixture は使わず、 別の業務ルール (失効カウンタと発行者確認) の回路で「constraint を 1 本抜いた穴を突く」「最小限で修復し正常系を維持する」を一続きで体験する。\n\n配信形態は container のみ。 参加者は portal から問題コンテナのターミナルへ接続し、 `circuit` コマンドを 1 行ずつ打つ。 編集するファイルは無く、 host への checkout も要らない。 flag は FLAG_SEED から container 内で導出するので、 暗記も当て推量も効かない。\n\n題材は is-zero gadget。 回路上で「この signal は 0 か」は比較ではなく、 prover が供給する補助 signal inv を 使った 2 本の制約になる。 A: value*inv + out - 1 = 0、 B: value*out = 0。 両方必要で、 片方だけでは それぞれ別の嘘が通る。 deploy 済み回路はどちらか一方を欠いており、 どちらが欠けるかは seed で変わる。\n\n`circuit check` の合格条件は 2 つで、 どちらの欠落でも同じ判定として機能する。 (1) witness が deploy 済み回路を充足すること、 (2) その witness が主張する granted が、 ポリシーの言う値と食い違うこと。 (2) は落としやすく、 落とすと採点が壊れる。 c-iszero-a が欠けた回路では、 inv を出鱈目にした正常な witness が deploy 済み回路を充足し intended を充足しない ── しかし何も偽っていない。 「intended が拒否する witness を見つけた」と 「嘘を通した」を分けるのが (2) である。\n\n`circuit repair` は 3 つ見る。 追加は 1 本まで (欠落は 1 本なので、 全部盛りは修復ではない)、 正常系 2 種類の維持、 そして修復後の回路が intended 回路と同じ witness 集合を受理すること。 最後の判定は一様乱択ではなく構造化した witness 族で行う: intended の解集合は p^5 のうち約 4p 点しかなく、 一様乱択では両辺とも False になって何でも通ってしまう。 族には 0 と非 0 の失効カウンタ、 正しい逆元と誤った逆元、 boolean 外の ok、 そして複数の revoked 値を入れてある (最後のものは、 このデプロイのカウンタを定数で埋め込んだ修復を落とすため)。\n\nmutation.py は判定器を 1 要件ずつ壊し、 wrong-answer カタログがそれを全部殺すことを見る。 カタログには「deploy 済み回路は通るが何も偽っていない witness」と 「正常系も嘘の遮断も満たすのに、 revoked = 0 のとき自由なはずの inv を固定してしまう修復」が入っている。 後者は正常系 2 件だけでは絶対に見つからない誤りで、 witness 族が実際に効いていることの証明になっている。",
+  "instructions": "## はじめに\n\nプライバシーを保った資格確認回路が production 直前の監査で止まりました。 通常の利用者は正しく判定されます。 しかし不正な witness を作れば条件を迂回できる、 と報告されています。\n\n## 最初の一手\n\n問題を起動したら、 **コンテナのターミナルに接続**して次を打ってください。\n\n```bash\ncircuit show\n```\n\nポリシー、 このデプロイのパラメータ、 deploy 済みの回路、 正常な witness 2 種類が出ます。 その回路には、 ポリシーが必要とする制約が 1 本足りません。\n\n使えるコマンドは `circuit` を引数なしで打てば一覧できます。 編集するファイルはありません。 すべて 1 行で打てるコマンドです。\n\n## ゴール\n\n偽の主張を通す witness を実際に作り (`circuit check`)、 欠けた制約を最小限で戻します (`circuit repair`)。 どちらも通ると `circuit flag` が `TC{...}` を出すので、 それを回答欄に貼ってください。",
+  "writeup": "## program と constraint system は同値ではない\n\n`if revoked == 0` は実行時の比較だが、 回路には比較が無い。 「0 かどうか」は prover が供給する inv を使った 2 本の制約で表す。 A は revoked != 0 のとき ok = 1 を防ぎ、 B は revoked != 0 のとき ok が 0 以外になるのを防ぐ。 片方だけ残すと、 残ったほうが防いでいない嘘がちょうど 1 つ通る。\n\n## 欠落の向きで反例の形が変わる\n\nB が欠けた場合、 A だけでは失効済み (revoked != 0) の利用者が inv = 0、 ok = 1 と主張できる。 A が欠けた場合、 B だけでは revoked != 0 のとき ok = 1 は作れないので、 通る嘘は逆向きになる。 正常な利用者 (revoked = 0) に対して ok = 0 を主張し、 正当な権利を否定する witness だ。 どちらも「主張が偽なのに全 residual が 0」であり、 これが underconstraint の一般形になる。\n\n## 「intended が拒否する」だけでは足りない\n\nA が欠けた回路では、 正常な witness の inv を出鱈目な値に差し替えるだけで、 deploy 済み回路を充足し intended 回路を充足しない witness ができる。 しかしその witness は何も偽っていない。 granted はポリシーの言うとおりの値のままだ。 exploit の条件に「主張が偽であること」を入れないと、 この見かけだけの反例が通ってしまう。 反例の価値は「拒否されること」ではなく「嘘が通ること」にある。\n\n## 正常系 2 件は修復の正しさを示さない\n\n修復が正常系 2 件を保ち、 かつ既知の嘘を全部止めても、 まだ間違っていることがある。 revoked = 0 のとき、 A は ok = 1 を強制するだけで inv は自由なままだ (実際の is-zero gadget も同じ)。 欠けた制約に inv*ok を足したものは、 正常系 2 件を通し、 嘘も全部止め、 それでも inv を正規の値に固定してしまう。 別の inv を出した正直な prover が拒否される ── 正常系 2 件では絶対に現れない outage だ。 だから採点は「嘘が止まったか」ではなく「ポリシーと同じ witness 集合を受理するか」を見る。\n\n## 最小性\n\n思いつく制約を全部足すのは修復ではない。 欠落は 1 本なので、 戻すのも 1 本。 制約が増えれば正当な prover を落とす危険も増える。\n\n## 公式課題への接続\n\n公式課題も underconstraint を扱う。 ここで身につけるのは「どの制約がどの嘘を防いでいるか」 を言語化する読み方であって、 公式課題の答えではない。 signal 名も業務ルールも意図的に別のものにしてある。",
   "tags": [
     "advanced-cryptography-2026",
     "week1",
@@ -43,7 +43,8 @@
     "soundness",
     "exploit",
     "local-play",
-    "container"
+    "container",
+    "terminal"
   ],
   "exposedPorts": [
     {
@@ -53,17 +54,17 @@
   ],
   "learningGoals": [
     "program の意図と constraint system が同値とは限らないことを確認できる",
-    "unconstrained / underconstrained な signal を見つけられる",
+    "constraint system を読み、ポリシーが要求する制約との差分を見つけられる",
     "false statement を受理させる witness を構成できる",
-    "exploit 成立条件を residual と signal の依存から説明できる",
-    "欠落 constraint を追加し、exploit を拒否しつつ valid witness を維持できる",
-    "happy-path test だけでは soundness を示せないことを理解する"
+    "「intended が拒否する witness」と「嘘が通る witness」を区別できる",
+    "欠落 constraint を最小限で追加し、exploit を拒否しつつ valid witness を維持できる",
+    "正常系テストだけでは soundness も completeness も示せないことを理解する"
   ],
   "nodes": {
     "learning_objectives": [
       {
-        "id": "lo.ac26-w1-underconstraint.build-circuit",
-        "description": "自然言語のポリシーを constraint system へ変換できる。"
+        "id": "lo.ac26-w1-underconstraint.read-circuit",
+        "description": "constraint system を読み、 自然言語のポリシーとの差分を特定できる。"
       },
       {
         "id": "lo.ac26-w1-underconstraint.exploit-underconstraint",
@@ -90,28 +91,12 @@
     ],
     "assessment_criteria": [
       {
-        "id": "assessment.ac26-w1-underconstraint.build",
-        "description": "組んだ回路が正常系を受理し、 既知の forgery をすべて拒否した。"
-      },
-      {
-        "id": "assessment.ac26-w1-underconstraint.audit",
-        "description": "欠落している制約をちょうど特定できた。"
-      },
-      {
         "id": "assessment.ac26-w1-underconstraint.exploit",
-        "description": "deploy 済み回路を充足し intended 回路を充足しない witness を作れた。"
-      },
-      {
-        "id": "assessment.ac26-w1-underconstraint.root-cause",
-        "description": "欠落 constraint と操作した signal を構造化して提出できた。"
+        "description": "deploy 済み回路を充足し、 かつポリシーが偽と呼ぶ主張を運ぶ witness を作れた。"
       },
       {
         "id": "assessment.ac26-w1-underconstraint.repair",
-        "description": "最小限の追加で exploit を拒否し、 正常系 2 ケースを維持した。"
-      },
-      {
-        "id": "assessment.ac26-w1-underconstraint.mutation-transfer",
-        "description": "別の制約が欠けた未知の回路でも audit と反例生成が成立した。"
+        "description": "制約 1 本の追加で、 正常系を維持したままポリシーと同じ witness 集合を受理させられた。"
       }
     ],
     "misconceptions": [
@@ -121,7 +106,7 @@
       },
       {
         "id": "misconception.more-constraints-is-safer",
-        "description": "制約を足せば足すほど安全という誤解。 過剰な制約は正常系を落とす。"
+        "description": "制約を足せば足すほど安全という誤解。 過剰な制約は正当な prover を落とす。"
       }
     ]
   },
@@ -129,7 +114,7 @@
     {
       "type": "teaches",
       "source": "problem.ac26-w1-underconstraint",
-      "target": "lo.ac26-w1-underconstraint.build-circuit"
+      "target": "lo.ac26-w1-underconstraint.read-circuit"
     },
     {
       "type": "teaches",
@@ -174,32 +159,12 @@
     {
       "type": "assesses",
       "source": "problem.ac26-w1-underconstraint",
-      "target": "assessment.ac26-w1-underconstraint.build"
-    },
-    {
-      "type": "assesses",
-      "source": "problem.ac26-w1-underconstraint",
-      "target": "assessment.ac26-w1-underconstraint.audit"
-    },
-    {
-      "type": "assesses",
-      "source": "problem.ac26-w1-underconstraint",
       "target": "assessment.ac26-w1-underconstraint.exploit"
     },
     {
       "type": "assesses",
       "source": "problem.ac26-w1-underconstraint",
-      "target": "assessment.ac26-w1-underconstraint.root-cause"
-    },
-    {
-      "type": "assesses",
-      "source": "problem.ac26-w1-underconstraint",
       "target": "assessment.ac26-w1-underconstraint.repair"
-    },
-    {
-      "type": "assesses",
-      "source": "problem.ac26-w1-underconstraint",
-      "target": "assessment.ac26-w1-underconstraint.mutation-transfer"
     },
     {
       "type": "related_to",
@@ -222,136 +187,45 @@
     ]
   },
   "scoring": {
-    "kind": "multi-verify",
-    "checks": [
+    "kind": "verify",
+    "points": 300,
+    "wrongAnswerPenalty": 15,
+    "hints": [
       {
-        "id": "build",
-        "label": "ポリシーどおりの回路を組む",
-        "points": 60,
-        "wrongAnswerPenalty": 15,
-        "hints": [
-          {
-            "id": "build-hint-1",
-            "content": "回路には比較が無い。 「0 かどうか」は prover が供給する補助 signal を使った 2 本の制約で表す。 1 本では足りない。",
-            "penalty": 20
-          }
-        ]
+        "id": "hint-1",
+        "content": "`circuit show` が出す「制約の読み方」の表を見てください。 「この signal は 0 か」を主張するのに必要な残差は 2 種類あり、 deploy 済みの回路にはそのうち 1 つしかありません。 残っているほうが防げない嘘は、 「失効済みなのに許可」か「正常なのに拒否」のどちらか一方です。 どちらなのかは、 残っている残差に ok = 1 を入れて成立させられるかどうかで決まります。",
+        "penalty": 60
       },
       {
-        "id": "audit",
-        "label": "足りない制約を特定する",
-        "points": 50,
-        "wrongAnswerPenalty": 15
-      },
-      {
-        "id": "exploit",
-        "label": "偽の主張を通す witness を作る",
-        "points": 60,
-        "wrongAnswerPenalty": 15,
-        "hints": [
-          {
-            "id": "exploit-hint-1",
-            "content": "残っている制約が防いでいない嘘は何か。 欠落の向きによって、 通る嘘は「失効済みなのに許可」か「正常なのに拒否」のどちらかになる。",
-            "penalty": 25
-          }
-        ]
-      },
-      {
-        "id": "root-cause",
-        "label": "原因を構造化して提出する",
-        "points": 40,
-        "wrongAnswerPenalty": 15
-      },
-      {
-        "id": "repair",
-        "label": "正常系を壊さずに塞ぐ",
-        "points": 50,
-        "wrongAnswerPenalty": 15,
-        "hints": [
-          {
-            "id": "repair-hint-1",
-            "content": "思いつく制約を全部足すのは修復ではない。 加える本数の上限も見られている。",
-            "penalty": 20
-          }
-        ]
-      },
-      {
-        "id": "mutation-transfer",
-        "label": "別の欠落でも成立させる",
-        "points": 40,
-        "wrongAnswerPenalty": 15,
-        "hints": [
-          {
-            "id": "transfer-hint-1",
-            "content": "反例を固定値で書いていないか。 何が欠けているかを audit してから、 その欠落に応じて組み立てる。",
-            "penalty": 15
-          }
-        ]
+        "id": "hint-2",
+        "content": "残差 `revoked * inv + ok - 1` だけが残っている場合: inv = 0 とすると revoked が何であれ ok = 1 が成立します。 失効済みのカウンタのまま ok = 1、 granted = 1 を主張してください。 残差 `revoked * ok` だけが残っている場合: revoked != 0 では ok = 1 を作れないので、 嘘は逆向きです。 revoked = 0 の正常な利用者に ok = 0、 granted = 0 を主張させます。 修復は、 いま無いほうの残差をそのまま 1 本足すだけです。 定数を埋め込まず、 signal 名で書いてください。",
+        "penalty": 90
       }
     ]
   },
   "i18n": {
     "en": {
       "name": "It passes, but it does not protect",
-      "shortDescription": "A credential circuit was stopped by audit just before production. Ordinary holders are judged correctly. But a forged witness may be able to walk around the condition. Build it, break it, fix it.",
-      "instructions": "## Start here\n\nA privacy-preserving credential circuit was stopped by audit just before production. Ordinary holders are judged correctly, but the report says a forged witness can walk around the condition.\n\n## First move\n\n```bash\nmake inspect\n```\n\nThat prints the policy, the deployed circuit, and two honest witnesses. One constraint the policy needs is missing from that circuit.\n\nThen edit `local/starter/policy.py`. Its four functions are, in order: build the intended circuit, find what is missing, forge a witness, repair minimally.\n\n## Goal\n\nBuild the circuit correctly, actually produce a witness that exploits the gap, submit the root cause in structured form, and repair without breaking the honest cases.",
-      "writeup": "## A program and a constraint system are not the same thing\n\n`if revoked == 0` is a runtime comparison, and a circuit has no comparisons. 'Is it zero' is expressed with two constraints around a prover-supplied `inv`. A stops `ok = 1` when `revoked != 0`; B stops `ok` from being anything but 0 in that case. Keep only one and exactly one lie gets through — the one the survivor was not guarding.\n\n## The direction of the gap changes the shape of the counterexample\n\nWith B missing, A alone cannot stop a revoked holder claiming `inv = 0, ok = 1`. With A missing, B alone makes `ok = 1` impossible when `revoked != 0`, so the lie that gets through runs the other way: assert `ok = 0` for a clean holder and deny a legitimate right. Both are 'a false claim with every residual zero', which is the general shape of underconstraint.\n\n## Happy-path tests do not show soundness\n\nThe public tests here all pass in the starter state, because the starter circuit accepts both honest witnesses. It also has no is-zero gadget at all, so `ok` is bound by nothing. 'It passes' and 'it protects' are different claims, and the only way to measure the gap is to build a counterexample.\n\n## Minimality of the repair\n\nAdding every constraint you can think of is not a repair; more constraints means more ways to reject an honest holder. So the repair checkpoint checks both directions: the forgery must fail and both honest cases must still pass.\n\n## Where this leads\n\nThe official exercise also deals with underconstraint. What you build here is the habit of naming which constraint prevents which lie — not its answer. The signal names and the business rule are deliberately different.",
+      "shortDescription": "A credential circuit was stopped by audit just before production. Ordinary holders are judged correctly. But a forged witness may be able to walk around the condition. Break it, then fix it.",
+      "description": "Week 1 assignment-companion, delivered as a container and played from its terminal. Same subject as the official exercise, different business rule and different signal names. See the Japanese `description` for the grading contract and the design notes.",
+      "instructions": "## Start here\n\nA privacy-preserving credential circuit was stopped by audit just before production. Ordinary holders are judged correctly, but the report says a forged witness can walk around the condition.\n\n## First move\n\nStart the problem, **attach the container terminal**, and type:\n\n```bash\ncircuit show\n```\n\nThat prints the policy, this deployment's parameters, the circuit that is deployed, and two honest witnesses. One constraint the policy needs is missing from that circuit.\n\nRun `circuit` with no arguments for the list of commands. There is no file to edit; every command is one line.\n\n## Goal\n\nActually produce a witness that gets a false claim accepted (`circuit check`), then put the missing constraint back with the smallest change that works (`circuit repair`). When both are cleared, `circuit flag` prints your `TC{...}` — paste it into the answer box.",
+      "writeup": "## A program and a constraint system are not the same thing\n\n`if revoked == 0` is a runtime comparison, and a circuit has no comparisons. 'Is it zero' is expressed with two constraints around a prover-supplied `inv`. A stops `ok = 1` when `revoked != 0`; B stops `ok` from being anything but 0 in that case. Keep only one and exactly one lie gets through — the one the survivor was not guarding.\n\n## The direction of the gap changes the shape of the counterexample\n\nWith B missing, A alone cannot stop a revoked holder claiming `inv = 0, ok = 1`. With A missing, B alone makes `ok = 1` impossible when `revoked != 0`, so the lie that gets through runs the other way: assert `ok = 0` for a clean holder and deny a legitimate right. Both are 'a false claim with every residual zero', which is the general shape of underconstraint.\n\n## 'The intended circuit rejects it' is not enough\n\nWith A missing, replacing an honest witness's `inv` with garbage already produces a witness that satisfies the deployed circuit and fails the intended one — and claims nothing false. Its `granted` is exactly what the policy says it should be. Unless the exploit condition also requires the *claim* to be false, that hollow counterexample passes. The value of a counterexample is that a lie got through, not that something rejected it.\n\n## Two honest witnesses do not prove a repair correct\n\nA repair can keep both honest cases, block every lie, and still be wrong. When `revoked = 0`, A forces `ok = 1` and leaves `inv` completely free — as the real is-zero gadget does. Adding the missing constraint *plus* `inv*ok` keeps both honest witnesses, blocks every lie, and pins `inv` to its canonical value: an honest prover who supplies a different one is refused. That outage never appears in two happy paths, which is why the repair is graded on whether it accepts the same witnesses the policy does, not on whether it stopped the lie.\n\n## Minimality\n\nAdding every constraint you can think of is not a repair. One constraint was removed, so one goes back. Every extra constraint is another way to deny a legitimate holder.\n\n## Where this leads\n\nThe official exercise also deals with underconstraint. What you build here is the habit of naming which constraint prevents which lie — not its answer. The signal names and the business rule are deliberately different.",
       "learningGoals": [
         "Confirm that a program's intent and a constraint system are not automatically equivalent",
-        "Find unconstrained or underconstrained signals",
+        "Read a constraint system and find where it differs from the policy it implements",
         "Construct a witness that gets a false statement accepted",
-        "Explain when the exploit works, from residuals and signal dependency",
-        "Add the missing constraint so the exploit fails and valid witnesses still pass",
-        "Understand that happy-path tests cannot demonstrate soundness"
+        "Tell 'the intended circuit rejects this' apart from 'a lie got through'",
+        "Add the missing constraint back minimally, so the exploit fails and valid witnesses still pass",
+        "Understand that happy-path tests show neither soundness nor completeness"
       ],
-      "checks": [
+      "hints": [
         {
-          "id": "build",
-          "label": "Build the circuit the policy intends",
-          "hints": [
-            {
-              "id": "build-hint-1",
-              "content": "A circuit has no comparisons. 'Is it zero' takes two constraints around a prover-supplied helper signal. One is not enough."
-            }
-          ]
+          "id": "hint-1",
+          "content": "Look at the residual table `circuit show` prints. Asserting 'this signal is zero' takes two residuals, and the deployed circuit has only one of them. The lie the survivor cannot stop is either 'revoked but allowed' or 'clean but denied' — exactly one of the two. Which one it is follows from whether the surviving residual can be satisfied with `ok = 1`."
         },
         {
-          "id": "audit",
-          "label": "Identify the missing constraint"
-        },
-        {
-          "id": "exploit",
-          "label": "Forge a witness that carries a false claim",
-          "hints": [
-            {
-              "id": "exploit-hint-1",
-              "content": "What lie is the surviving constraint not guarding against? Depending on which one is gone, it is either 'revoked but allowed' or 'clean but denied'."
-            }
-          ]
-        },
-        {
-          "id": "root-cause",
-          "label": "Submit the root cause in structured form"
-        },
-        {
-          "id": "repair",
-          "label": "Close the gap without breaking the honest cases",
-          "hints": [
-            {
-              "id": "repair-hint-1",
-              "content": "Adding every constraint you can think of is not a repair. The number you add is also checked."
-            }
-          ]
-        },
-        {
-          "id": "mutation-transfer",
-          "label": "Hold up when a different constraint is missing",
-          "hints": [
-            {
-              "id": "transfer-hint-1",
-              "content": "Is your counterexample a fixed value? Audit what is missing first, then build the forgery from that."
-            }
-          ]
+          "id": "hint-2",
+          "content": "If only `revoked * inv + ok - 1` survives: `inv = 0` makes `ok = 1` hold for any counter. Claim `ok = 1` and `granted = 1` while the counter stays revoked. If only `revoked * ok` survives: `ok = 1` is impossible for a non-zero counter, so the lie runs the other way — make a clean holder (`revoked = 0`) claim `ok = 0` and `granted = 0`. The repair is the residual that is not there, added back as one constraint. Write it with signal names, not with this deployment's counter as a literal."
         }
       ]
     }

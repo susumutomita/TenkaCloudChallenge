@@ -1,52 +1,86 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "bun:test";
+import { afterAll, describe, expect, it } from "bun:test";
 import { parse as parseYaml } from "yaml";
 
 /**
- * ac26-w1-underconstraint is the first Week 1 problem. The interesting assertions run its
- * Python for real — the starter fails, the reference passes every checkpoint, the mutation
- * suite kills every intended defect, and /verify holds its security contract — rather than
- * reading source text. Python 3 is on ubuntu-latest and the problem is stdlib-only.
+ * ac26-w1-underconstraint is delivered as a container the participant plays from its
+ * terminal: `circuit show` / `circuit check` / `circuit repair` / `circuit flag`, one
+ * line at a time, no file to edit. The interesting assertions therefore run that CLI
+ * for real -- including from a working directory that is not the problem root, which
+ * is what the portal's terminal does not promise -- rather than reading source text.
+ *
+ * Python 3 is on ubuntu-latest and the problem is stdlib-only.
  */
 
 const ROOT = join(import.meta.dir, "..", "challenges", "ac26-w1-underconstraint");
 const LOCAL = join(ROOT, "local");
 const SEED = "ci-fixed-seed";
-const SUBMITTED = ["policy.py"] as const;
+
+const scratch: string[] = [];
+afterAll(() => {
+  for (const directory of scratch.splice(0)) rmSync(directory, { recursive: true, force: true });
+});
 
 function read(relativePath: string): string {
   return readFileSync(join(ROOT, relativePath), "utf8");
 }
 
-function python(args: string[], cwd = LOCAL) {
+function python(args: string[], cwd = LOCAL, env: NodeJS.ProcessEnv = {}) {
   return spawnSync("python3", args, {
     cwd,
     encoding: "utf8",
-    env: { ...process.env, FLAG_SEED: SEED, PYTHONDONTWRITEBYTECODE: "1" },
+    env: { ...process.env, FLAG_SEED: SEED, PYTHONDONTWRITEBYTECODE: "1", ...env },
     timeout: 180_000,
   });
 }
 
-function bundle(dir: "starter" | "reference"): string {
-  return read(`local/${dir}/policy.py`);
+/** A fresh progress directory, so no test inherits another's cleared stages. */
+function state(): string {
+  const directory = mkdtempSync(join(tmpdir(), "ac26-w1-state-"));
+  scratch.push(directory);
+  return directory;
 }
 
-function evaluate(checkpointId: string, submission: string): boolean {
+/**
+ * Run the CLI the way the portal terminal does: by absolute path, from `/`.
+ *
+ * The cwd matters. The terminal does not promise to land in `/problem`, and a
+ * `circuit show` that fails with ImportError because of where the shell started is an
+ * unanswerable error message for a participant.
+ */
+function circuit(stateDir: string, ...args: string[]) {
+  return python([join(LOCAL, "circuit.py"), ...args], "/", { LAB_STATE_DIR: stateDir });
+}
+
+/** The answers, from `reference/` -- present in the checkout, absent from the image. */
+function referenceAnswers(seed: string): { witness: string[]; repair: string[] } {
   const script = [
     "import json, sys",
     "sys.path.insert(0, '.')",
-    "from verifier.server import evaluate",
-    "print(json.dumps(evaluate(sys.argv[1], sys.argv[2])))",
+    "from reference.solve import repair_arguments, witness_arguments",
+    "print(json.dumps({'witness': witness_arguments(sys.argv[1]),",
+    "                  'repair': repair_arguments(sys.argv[1])}))",
   ].join("\n");
-  const result = python(["-c", script, checkpointId, submission]);
+  const result = python(["-c", script, seed]);
   expect(result.status).toBe(0);
-  return JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "null") === true;
+  return JSON.parse(result.stdout.trim().split("\n").at(-1) as string);
 }
 
-describe("ac26-w1-underconstraint: participant contract", () => {
-  it("should ship every file the AC26 template requires", () => {
+function expectedFlag(seed: string): string {
+  const result = python([
+    "-c",
+    "import sys; sys.path.insert(0, '.'); from fixtures.generate import flag; print(flag(sys.argv[1]))",
+    seed,
+  ]);
+  expect(result.status).toBe(0);
+  return result.stdout.trim();
+}
+
+describe("ac26-w1-underconstraint: the files the container is built from", () => {
+  it("should ship every file the delivery needs", () => {
     for (const path of [
       "Makefile",
       "metadata.json",
@@ -54,32 +88,38 @@ describe("ac26-w1-underconstraint: participant contract", () => {
       "README.ja.md",
       "local/docker-compose.yml",
       "local/Dockerfile",
-      "local/show.py",
+      "local/circuit.py",
       "local/mutation.py",
       "local/fixtures/generate.py",
-      "local/tests/public/test_policy.py",
-      "local/tests/hidden/check_policy.py",
       "local/fixtures/evaluator.py",
+      "local/lab/expr.py",
+      "local/lab/judge.py",
+      "local/lab/progress.py",
+      "local/tests/public/test_circuit.py",
+      "local/reference/solve.py",
       "local/verifier/server.py",
-      "local/starter/policy.py",
-      "local/reference/policy.py",
     ]) {
       expect(existsSync(join(ROOT, path))).toBe(true);
     }
   });
 
-  it("should expose the four participant targets the template mandates", () => {
-    const makefile = read("Makefile");
-    for (const target of ["test:", "test-one:", "inspect:", "reset:"]) {
-      expect(makefile).toContain(target);
+  it("should have no starter to edit, since the problem is played from the terminal", () => {
+    expect(existsSync(join(LOCAL, "starter"))).toBe(false);
+  });
+
+  it("should not send a participant to a make target or a file to edit", () => {
+    // The player-facing surface is the portal page and the container terminal. A README
+    // or an `instructions` that says `make inspect` describes a workflow the portal has
+    // no way to offer, which is what this rebuild exists to remove.
+    for (const file of ["README.md", "README.ja.md", "metadata.json"]) {
+      const text = read(file);
+      expect(text).not.toContain("make inspect");
+      expect(text).not.toContain("starter");
     }
   });
 
-  it("should mount only starter/, keeping the answer out of the checkout", () => {
-    const makefile = read("Makefile");
-    expect(makefile).toContain("local/starter:/problem/starter:ro");
-    expect(makefile).not.toContain("local/reference:");
-    expect(makefile).not.toContain("tests/hidden:");
+  it("should tag its image with its own problem id", () => {
+    expect(read("Makefile")).toContain("IMAGE := ac26-w1-underconstraint");
   });
 });
 
@@ -97,15 +137,31 @@ describe("ac26-w1-underconstraint: container safety", () => {
     expect(read("local/docker-compose.yml")).toContain("${FLAG_SEED:?");
   });
 
+  it("should keep a writable path for the progress file on a read-only container", () => {
+    const compose = parseYaml(read("local/docker-compose.yml")) as {
+      services: Record<string, { read_only?: boolean; tmpfs?: string[] }>;
+    };
+    for (const service of Object.values(compose.services)) {
+      expect(service.read_only).toBe(true);
+      expect(service.tmpfs).toContain("/tmp");
+    }
+  });
+
   it("should pin the base image by digest", () => {
     expect(read("local/Dockerfile")).toMatch(/^FROM \S+@sha256:[0-9a-f]{64}( AS \S+)?$/m);
   });
 
+  it("should put the entry point on PATH, since the terminal's cwd is not promised", () => {
+    expect(read("local/Dockerfile")).toContain("/usr/local/bin/circuit");
+  });
+
   it("should never build a shell command out of participant input", () => {
-    const verifier = read("local/verifier/server.py");
-    expect(verifier).toContain("shell=False");
-    expect(verifier).not.toContain("os.system");
-    expect(verifier).not.toContain("shell=True");
+    for (const file of ["local/verifier/server.py", "local/circuit.py", "local/lab/judge.py"]) {
+      const source = read(file);
+      expect(source).not.toContain("os.system");
+      expect(source).not.toContain("shell=True");
+      expect(source).not.toContain("eval(");
+    }
   });
 });
 
@@ -114,9 +170,9 @@ describe("ac26-w1-underconstraint: fixtures are seed-derived", () => {
     const script = [
       "import json, sys",
       "sys.path.insert(0, '.')",
-      "from fixtures.generate import params, vulnerable_circuit, health_token",
+      "from fixtures.generate import params, deployed_circuit, flag",
       "seed = sys.argv[1]",
-      "print(json.dumps({'p': params(seed), 'c': vulnerable_circuit(seed), 't': health_token(seed)}))",
+      "print(json.dumps({'p': params(seed), 'c': deployed_circuit(seed), 'f': flag(seed)}))",
     ].join("\n");
     const first = python(["-c", script, "seed-alpha"]).stdout.trim();
     const second = python(["-c", script, "seed-beta"]).stdout.trim();
@@ -140,79 +196,154 @@ describe("ac26-w1-underconstraint: fixtures are seed-derived", () => {
   });
 });
 
-describe("ac26-w1-underconstraint: the problem is solvable and actually fails", () => {
-  // The public tests pass in the starter state *by design*: the starter circuit accepts
-  // both honest witnesses while binding `ok` to nothing at all. That is the misconception
-  // the problem exists to break, so it is asserted rather than tolerated.
-  it("should pass the public tests in the shipped starter state, because they never forge", () => {
-    const result = python(["tests/public/test_policy.py"]);
+describe("ac26-w1-underconstraint: the terminal is the whole interface", () => {
+  it("should print usage when run with no arguments", () => {
+    const result = circuit(state());
     expect(result.status).toBe(0);
-    expect(result.stdout).not.toContain("FAIL");
+    for (const command of ["circuit show", "circuit check", "circuit repair", "circuit flag"]) {
+      expect(result.stdout).toContain(command);
+    }
+  });
+
+  it("should describe the deployment without leaking the flag", () => {
+    const result = circuit(state(), "show");
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("the circuit that is deployed");
+    expect(result.stdout).toContain("honest witnesses");
+    expect(result.stdout).not.toContain(expectedFlag(SEED));
+  });
+
+  it("should refuse an unknown command instead of doing something", () => {
+    const result = circuit(state(), "solve");
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toContain("unknown command");
+  });
+
+  it("should explain a malformed witness rather than raising", () => {
+    const result = circuit(state(), "check", "revoked=1");
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("no value for");
+  });
+
+  it("should run identically from a directory that is not the problem root", () => {
+    // The portal terminal does not promise a working directory. Asserted by running
+    // every command in this file from `/` already; this pins the property itself.
+    expect(circuit(state(), "show").status).toBe(0);
+  });
+});
+
+describe("ac26-w1-underconstraint: the two stages and the gate", () => {
+  const seeds = ["ci-fixed-seed", "ci-other-seed"] as const;
+
+  it.each(seeds)("should take the reference answers from empty to flag on %s", (seed) => {
+    const directory = state();
+    const answers = referenceAnswers(seed);
+    const run = (...args: string[]) =>
+      python([join(LOCAL, "circuit.py"), ...args], "/", {
+        LAB_STATE_DIR: directory,
+        FLAG_SEED: seed,
+      });
+
+    expect(run("flag").stdout).not.toContain(expectedFlag(seed));
+    expect(run("check", ...answers.witness).status).toBe(0);
+    expect(run("flag").stdout).not.toContain(expectedFlag(seed));
+    expect(run("repair", ...answers.repair).status).toBe(0);
+    expect(run("flag").stdout).toContain(expectedFlag(seed));
+  }, 60_000);
+
+  it("should reject an honest witness, which asserts nothing false", () => {
+    // The near miss the structural definition exists to exclude: satisfying the
+    // deployed circuit is only half of an exploit.
+    const script = [
+      "import sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import SIGNALS, honest_witnesses, params",
+      "w = honest_witnesses(params(sys.argv[1]))[0]",
+      "print(' '.join('%s=%d' % (n, w[n]) for n in SIGNALS))",
+    ].join("\n");
+    const witness = python(["-c", script, SEED]).stdout.trim().split(" ");
+    const result = circuit(state(), "check", ...witness);
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toContain("REJECTED");
+  });
+
+  it("should reject a repair that adds nothing", () => {
+    expect(circuit(state(), "repair", "0").status).not.toBe(0);
+  });
+
+  it("should reject a repair that denies an honest holder", () => {
+    const result = circuit(state(), "repair", "ok");
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toContain("REJECTED");
+  });
+
+  it("should reject a repair that adds more than the one constraint that was removed", () => {
+    const result = circuit(state(), "repair", "revoked*ok", "revoked*inv + ok - 1");
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toContain("REJECTED");
+  });
+
+  it("should withhold the flag when only one stage is recorded", () => {
+    for (const cleared of [{ check: true }, { repair: true }]) {
+      const directory = state();
+      writeFileSync(join(directory, "progress.json"), JSON.stringify(cleared));
+      const result = circuit(directory, "flag");
+      expect(result.status).not.toBe(0);
+      expect(result.stdout).not.toContain(expectedFlag(SEED));
+    }
   });
 
   it("should kill every intended defect in the mutation suite", () => {
     const result = python(["mutation.py"]);
-    expect(result.stdout).toContain("PASS reference implementation passes the hidden tests");
+    expect(result.stdout).toContain("PASS the seed set covers both drops");
     expect(result.stdout).not.toContain("SURVIVED");
+    expect(result.stdout).not.toContain("FAILED");
     expect(result.status).toBe(0);
-  });
+  }, 180_000);
+
+  it("should pass its own public self-check", () => {
+    const result = python(["tests/public/test_circuit.py"]);
+    expect(result.stdout).not.toContain("FAIL");
+    expect(result.status).toBe(0);
+  }, 120_000);
 });
 
 describe("ac26-w1-underconstraint: /verify contract", () => {
-  it.each(["build", "audit", "exploit", "repair", "mutation-transfer"])(
-    "should accept the reference submission on %s",
-    (checkpoint) => {
-      expect(evaluate(checkpoint, bundle("reference"))).toBe(true);
-    },
-    120_000,
-  );
-
-  it.each(["build", "audit", "exploit", "repair", "mutation-transfer"])(
-    "should reject the starter submission on %s",
-    (checkpoint) => {
-      expect(evaluate(checkpoint, bundle("starter"))).toBe(false);
-    },
-    120_000,
-  );
-
-  it("should reject a submission that hangs, rather than hanging itself", () => {
-    expect(evaluate("build", "def intended_circuit():\n    while True:\n        pass\n")).toBe(
-      false,
-    );
-  }, 60_000);
-
-  it("should reject an unknown checkpoint id instead of crediting it", () => {
-    expect(evaluate("finish-week1", bundle("reference"))).toBe(false);
-  });
-
-  it("should reject a root cause that names the wrong constraint", () => {
-    expect(
-      evaluate("root-cause", '{"missingConstraintId": "c-grant", "manipulatedSignals": []}'),
-    ).toBe(false);
-  });
-
-  // A forgery that also satisfies the intended circuit demonstrates nothing, and is the
-  // single most likely way to "pass" the exploit checkpoint without understanding it.
-  it("should reject a forgery that satisfies the intended circuit too", () => {
-    const source = [
-      "def intended_circuit():",
-      "    return []",
-      "def audit(circuit):",
-      "    return []",
-      "def forge_witness(circuit, params):",
-      "    p = params['p']; r = params['revoked'] % p",
-      "    inv = pow(r, -1, p) if r else 0",
-      "    return {'revoked': r, 'inv': inv, 'ok': 0, 'issuer_ok': params['issuer_ok'], 'granted': 0}",
-      "def repair(circuit):",
-      "    return list(circuit)",
+  function evaluate(submission: string): boolean {
+    const script = [
+      "import json, sys",
+      "sys.path.insert(0, '.')",
+      "from verifier.server import evaluate",
+      "print(json.dumps(evaluate(sys.argv[1])))",
     ].join("\n");
-    expect(evaluate("exploit", source)).toBe(false);
+    const result = python(["-c", script, submission]);
+    expect(result.status).toBe(0);
+    return JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "null") === true;
+  }
+
+  it("should accept this deployment's flag", () => {
+    expect(evaluate(expectedFlag(SEED))).toBe(true);
   });
 
-  it("should echo the checkpointId so the platform can fail closed", () => {
-    expect(read("local/verifier/server.py")).toContain(
-      '{"checkpointId": checkpoint_id, "correct": correct}',
-    );
+  it("should accept it with the whitespace a paste carries", () => {
+    expect(evaluate(`  ${expectedFlag(SEED)}\n`)).toBe(true);
+  });
+
+  it("should reject another deployment's flag", () => {
+    expect(evaluate(expectedFlag("some-other-seed"))).toBe(false);
+  });
+
+  it("should reject a guess at the flag's shape", () => {
+    expect(evaluate("TC{underconstraint_00000000000000000000}")).toBe(false);
+    expect(evaluate("")).toBe(false);
+  });
+
+  it("should never restate the expected value in its response", () => {
+    const verifier = read("local/verifier/server.py");
+    const message = /"message": \(([\s\S]*?)\),/.exec(verifier)?.[1] ?? "";
+    expect(message).not.toContain("derive_flag");
+    expect(message).not.toContain("FLAG");
   });
 });
 
@@ -221,22 +352,41 @@ describe("ac26-w1-underconstraint: metadata contracts", () => {
     return JSON.parse(read("metadata.json")) as {
       difficulty: number;
       courseAlignment: { week: number; role: string; sources: Array<{ ref: string }> };
+      runtime: { verifyUrl: string; secretEnv: string[] };
+      exposedPorts: Array<{ port: number }>;
       scoring: {
         kind: string;
-        checks: Array<{ points: number; hints?: Array<{ penalty: number }> }>;
+        points: number;
+        wrongAnswerPenalty: number;
+        hints: Array<{ id: string; penalty: number }>;
       };
+      i18n: { en: { hints: Array<{ id: string }> } };
     };
   }
 
-  it("should total the Hard tier's 300 points across its checkpoints", () => {
+  it("should score as a single discovered flag at the Hard tier", () => {
     const meta = metadata();
-    expect(meta.scoring.kind).toBe("multi-verify");
+    expect(meta.scoring.kind).toBe("verify");
     expect(meta.difficulty).toBe(4);
-    expect(meta.scoring.checks.reduce((sum, check) => sum + check.points, 0)).toBe(300);
-    const hintPenalty = meta.scoring.checks
-      .flatMap((check) => check.hints ?? [])
-      .reduce((sum, hint) => sum + hint.penalty, 0);
+    expect(meta.scoring.points).toBe(300);
+    expect(meta.scoring.wrongAnswerPenalty).toBe(15);
+    const hintPenalty = meta.scoring.hints.reduce((sum, hint) => sum + hint.penalty, 0);
     expect(hintPenalty).toBeLessThanOrEqual(150);
+  });
+
+  it("should translate every hint", () => {
+    const meta = metadata();
+    expect(meta.i18n.en.hints.map((hint) => hint.id)).toEqual(
+      meta.scoring.hints.map((hint) => hint.id),
+    );
+  });
+
+  it("should publish the verify port it advertises", () => {
+    const meta = metadata();
+    const url = new URL(meta.runtime.verifyUrl);
+    expect(url.hostname).toBe("127.0.0.1");
+    expect(meta.exposedPorts.map((entry) => String(entry.port))).toContain(url.port);
+    expect(meta.runtime.secretEnv).toContain("FLAG_SEED");
   });
 
   it("should pin every upstream source to a 40-hex commit sha", () => {

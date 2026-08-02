@@ -18,17 +18,18 @@
   },
   "difficulty": 1,
   "estimatedDuration": "20-30 分",
-  "shortDescription": "暗号の前に、実験の作法を一度だけ。剰余カウンタを題材に、予測してから走らせる・trace から最初に壊れた場所を特定する・見えないパラメータでも通る一般解を書く、を体験する。",
-  "description": "AC26 companion track の入口。 暗号 primitive は一切扱わない。 後続の全問題が要求する操作 (local-play の起動・reset、 public test と hidden verifier の役割の違い、 実行前予測、 trace 読解、 seed 由来 fixture) を、 暗号の負荷が無い題材で一度だけ通す。\n\n採点は 4 checkpoint 独立。 environment (20) は container が実際に起動したことの確認、 predict (25) は実行前に紙で解いた値、 inspect (25) は 1 round だけ剰余適用が抜けた trace の最初の破綻位置、 generalize (30) は participant の counter.py を hidden seed の複数 modulus・負の step・zero step・start >= modulus・zero rounds に対して検証する。\n\n公開 test は正の step の 1 fixture しか使わないので、 剰余を最後に 1 回だけ適用する実装でも通る。 hidden test はそこを落とす。 これが misconception.public-tests-are-complete の実演であり、 この問題の主目的。\n\nmutation suite (local/mutation.py) が hidden test の有効性を CI で担保する。 等価変異 (末尾一括剰余 / start 未正規化) は Python の floored % の下で数学的に同値なため意図的に除外してある — 詳細は mutation.py の冒頭コメント。",
-  "instructions": "## はじめに\n\n剰余カウンタを完成させます。 暗号の知識は要りません。 後続問題で環境操作が学習の邪魔にならないよう、 ここで作法だけ通します。\n\n## 最初の一手\n\n```bash\nmake inspect\n```\n\n自分の fixture (start / step / rounds / modulus) と health token が出ます。 fixture は deploy ごとに変わるので、 他の人の数値は使えません。\n\n次に `local/starter/counter.py` を開き、 `advance` を完成させます。 `make test` で公開テスト、 `make reset` で元に戻せます。\n\n## ゴール\n\n4 つの checkpoint を独立に通します。 予測は実行前に提出してください — 走らせてから写すと、 この問題で得るものが無くなります。",
-  "writeup": "## 何を確認したか\n\npublic test は「形」を教えるが「正しさ」は証明しない。 この問題の公開テストは正の step の 1 fixture しか使わないため、 剰余を最後に 1 回だけ適用する実装でも、 負の step を正規化しない実装でも通ってしまう。\n\nhidden test が落とすのはこの 2 つ。 複数 modulus・負の step・zero step・start >= modulus・zero rounds を回し、 さらに metamorphic property (start や step を modulus の整数倍だけずらしても trace は変わらない) を検査する。 固定の期待値ではなく関係を検査するので、 1 回の出力を丸暗記しても通らない。\n\n## mutation suite\n\nhidden test 自体が有効かは、 reference をわざと壊して各欠陥が検出されることで担保する (`make reference-test`)。 ここで学ぶべきは「通ったテスト」ではなく「落とせるテスト」。\n\n等価変異には注意が要る。 末尾で一括剰余を取る実装と start を事前正規化しない実装は、 Python の floored `%` の下で round ごとの剰余と数学的に同値であり、 正しいテストでは区別できない。 これらを mutation 一覧に入れると永久に survived が出て、 suite 自体が無視されるようになる。\n\n## 後続問題への接続\n\n以降の全 AC26 問題は `concept.experimental-method` を前提に置く。 予測してから走らせる、 trace の最初の破綻位置を言う、 見えないパラメータで一般化する — この 3 つは Week 1 の constraint residual、 Week 3 の group law 境界、 Week 5 の noise budget でそのまま使う。",
+  "shortDescription": "暗号の前に、実験の作法を一度だけ。窓の中を進むカウンタを題材に、走らせる前に予測する・壊れた trace が最初に約束を破った場所を指す・見ていないパラメータでも成り立つ規則を 1 行で書く。",
+  "description": "AC26 companion track の入口であり、 トラックで最初に解く 1 問。 暗号 primitive は一切扱わない。 後続の全問題が要求する 3 つの操作 (実行前予測・trace 読解・一般化) を、 暗号の負荷が無い題材で一度だけ通す。\n\n配信形態は container のみ。 参加者は portal から問題コンテナのターミナルへ接続し、 `counter` コマンドを 1 行ずつ打つ。 編集するファイルは無く、 host への checkout も要らない。 `counter show` が題材・このデプロイの数値・各段階のコマンドを 1 画面で説明するので、 参加者が最初に読むものはそれだけで足りる。\n\n採点は単一の discovered flag。 4 段階すべてを通すと `counter flag` が `TC{...}` を出し、 それを 1 行の回答欄に貼る。 flag は container 内で FLAG_SEED から導出するので、 リポジトリに答えは無く、 暗記も当て推量も効かない。\n\n題材は窓 [0, modulus) の中を step ずつ進むカウンタ。 約束は「カウンタが取る値は必ず窓の中にある」の 1 つだけで、 4 段階はその約束を別々の角度から扱う。 predict は最終値を紙で出す (正解するまで trace は出さない。 出してしまうと予測が測るものが無くなる)。 locate は壊れた実装の trace を読み、 最初に窓を出た entry の index を言う。 rule は最終値を与える式を 1 行で書き、 見えていないパラメータ族との一致で採点する。 transfer は step が負に走る 2 つ目の題材で predict と locate をもう一度やる。\n\n設計上の要点が 3 つある。 (1) 壊れた trace は窓を 2 回以上出る。 1 回しか出ないと「最初に」という語が無意味になり、 判定器の該当要件を壊しても verdict が変わらない (mutation suite がこれを検出した)。 (2) rule は目に見えている case ではなくパラメータ族との一致で採点する。 族には 負の step・step 0・modulus より大きい step・窓の外の start・rounds 0 が入っており、 このデプロイの答えを定数で書いた rule は族の他の要素で落ちる。 (3) 族が退化すると全 rule が通るので、 「剰余を取らない rule を族が落とせること」を毎回確認し、 落とせないなら AssertionError で止まる。\n\nmutation.py は判定器を 1 要件ずつ壊し、 wrong-answer カタログがそれを全部殺すことを見る。 加えて transfer の lock (前 3 段階が通るまで case を見せず受理もしない) と flag gate (4 段階の 16 通りの部分集合すべて) を CLI 経由で確認する。",
+  "instructions": "## はじめに\n\n窓の中を進むカウンタを読みます。 暗号の知識は要りません。 後続の問題で「環境の操作」が学習の邪魔にならないよう、 ここで作法だけ通します。\n\n## 最初の一手\n\n問題を起動したら、 **コンテナのターミナルに接続**して次を打ってください。\n\n```bash\ncounter show\n```\n\nカウンタが何なのか、 このデプロイの数値、 そして各段階で打つコマンドがそのまま出ます。 迷ったら何度でも `counter show` に戻ってください。\n\n引数なしで `counter` を打てばコマンド一覧が出ます。 編集するファイルはありません。 すべて 1 行で打てるコマンドです。\n\n## ゴール\n\n4 つの段階を順に通します。 予測は**走らせる前に**出してください — 答えを見てから写した数値は何も測りません。 4 つとも通ると `counter flag` が `TC{...}` を出すので、 それを回答欄に貼ってください。",
+  "writeup": "## 走らせる前に言う\n\n予測に価値があるのは、 答えが画面に出る前に言い切ったからだ。 だからこの問題の `counter predict` は、 予測が当たるまで trace を出さない。 外したときに出るのは 1 round 分の計算だけで、 それは「自分の計算とカウンタがどこで分かれたか」を探すには足りるが、 残りを飛ばすには足りない。\n\n## 「最初に」壊れた場所\n\n出力が間違っていることと、 どこで間違い始めたかを言えることは別の能力だ。 デバッグに効くのは後者で、 それは「各段階で必ず成り立つはずの性質」を 1 つ決めて、 それが最初に崩れた地点を探す作業になる。 ここでの性質は「値は常に [0, modulus) の中」の 1 つだけである。\n\nこの trace は窓を 2 回以上出る。 1 回しか出ないなら「最初に窓を出た entry」と「窓を出た entry」は同じ問いで、 前者を訊いているつもりで後者しか訊けていないことになる。 これは作問時に mutation suite が見つけた: 判定器から「最初かどうか」の要件を外しても、 どの回答の verdict も変わらなかった。\n\n## 見ていないパラメータ\n\n`counter rule` は、 目の前の case ではなくパラメータ族との一致で採点する。 目の前の case だけを見るなら、 その答えを定数で書けば通ってしまうからだ。 族には 負の step・step 0・modulus より大きい step・窓の外の start・rounds 0 が入っている。 一様乱択ではなく手で構成してあるのは、 乱択だとほとんどが普通の前向き case になり、 間違った rule のほとんどが生き残るためである。\n\n族そのものが退化していないことも毎回確認している。 族が空になれば比較は空虚に真になり、 どんな rule も通る。 「誰も落ちない checkpoint」は checkpoint ではないので、 剰余を取らない rule を族が落とせない状態を検出したら判定を止める。\n\n## 逆向きに走らせる\n\n4 段階目は同じカウンタを逆向きに走らせて、 predict と locate をもう一度やる。 新しい種類の問いを足していないのは意図的で、 ここで見たいのは「読み方が別のパラメータでも通用するか」であって、 5 つ目の概念を覚えたかではない。 丸暗記で 3 段階まで来た人が止まるのはここになる。\n\n負の step では、 値を窓に戻す操作は modulus を引くのではなく足す。 4 段階目の壊れた実装は 0 を割り込んだ値をそのまま持ち続けており、 trace は窓を下側に出て、 しばらく出たままになる。 破っている約束は 3 段階目までと同じ 1 つである。\n\n## 後続問題への接続\n\n以降の全 AC26 問題は `concept.experimental-method` を前提に置く。 予測してから走らせる、 trace の最初の破綻位置を言う、 見えないパラメータで一般化する — この 3 つは Week 1 の constraint residual、 Week 3 の group law 境界、 Week 5 の noise budget でそのまま使う。",
   "tags": [
     "advanced-cryptography-2026",
     "bridge",
     "experimental-method",
     "modular-arithmetic",
     "local-play",
-    "container"
+    "container",
+    "terminal"
   ],
   "exposedPorts": [
     {
@@ -37,17 +38,17 @@
     }
   ],
   "learningGoals": [
-    "local-play challenge を起動・停止・reset できる",
-    "public test と hidden verifier の役割を区別できる",
+    "問題コンテナのターミナルに接続し、1 行ずつコマンドを打って進められる",
     "実行前の予測を記録し、実測と比較できる",
-    "trace から最初に不変条件が崩れた箇所を特定できる",
-    "公開 fixture の固定値を hard-code しても一般解にならないことを説明できる"
+    "trace を辿り、不変条件が最初に崩れた位置を特定できる",
+    "見えているパラメータに依存しない規則を書き、未知のパラメータでも成立させられる",
+    "目に見える 1 例が通ることは、規則が正しいことを示さないと説明できる"
   ],
   "nodes": {
     "learning_objectives": [
       {
-        "id": "lo.ac26-bridge-experiment.run-local-play",
-        "description": "local-play challenge を起動し、 fixture を確認し、 starter を初期状態へ戻せる。"
+        "id": "lo.ac26-bridge-experiment.run-the-lab",
+        "description": "問題コンテナのターミナルに接続し、 1 行ずつのコマンドで課題を進められる。"
       },
       {
         "id": "lo.ac26-bridge-experiment.predict-before-run",
@@ -59,7 +60,7 @@
       },
       {
         "id": "lo.ac26-bridge-experiment.generalize",
-        "description": "公開 fixture に依存しない一般解を書き、 未知のパラメータでも成立させられる。"
+        "description": "見えているパラメータに依存しない一般解を書き、 未知のパラメータでも成立させられる。"
       }
     ],
     "concepts": [
@@ -78,20 +79,20 @@
     ],
     "assessment_criteria": [
       {
-        "id": "assessment.ac26-bridge-experiment.environment",
-        "description": "container を実際に起動し、 seed 由来の health token を提出できた。"
-      },
-      {
         "id": "assessment.ac26-bridge-experiment.predict",
         "description": "実行前に最終値を正しく予測できた。"
       },
       {
-        "id": "assessment.ac26-bridge-experiment.inspect",
-        "description": "壊れた trace の最初の破綻 index を特定できた。"
+        "id": "assessment.ac26-bridge-experiment.locate",
+        "description": "壊れた trace が最初に不変条件を破った index を特定できた。"
       },
       {
-        "id": "assessment.ac26-bridge-experiment.generalize",
-        "description": "未知の modulus・負の step・zero step・zero rounds すべてで成立する実装を書けた。"
+        "id": "assessment.ac26-bridge-experiment.rule",
+        "description": "負の step・step 0・窓の外の start・rounds 0 を含むパラメータ族すべてで成立する規則を 1 行で書けた。"
+      },
+      {
+        "id": "assessment.ac26-bridge-experiment.transfer",
+        "description": "逆向きに走るカウンタでも、 予測と trace 読解の両方が成立した。"
       }
     ],
     "misconceptions": [
@@ -109,7 +110,7 @@
     {
       "type": "teaches",
       "source": "problem.ac26-bridge-experiment",
-      "target": "lo.ac26-bridge-experiment.run-local-play"
+      "target": "lo.ac26-bridge-experiment.run-the-lab"
     },
     {
       "type": "teaches",
@@ -154,22 +155,22 @@
     {
       "type": "assesses",
       "source": "problem.ac26-bridge-experiment",
-      "target": "assessment.ac26-bridge-experiment.environment"
-    },
-    {
-      "type": "assesses",
-      "source": "problem.ac26-bridge-experiment",
       "target": "assessment.ac26-bridge-experiment.predict"
     },
     {
       "type": "assesses",
       "source": "problem.ac26-bridge-experiment",
-      "target": "assessment.ac26-bridge-experiment.inspect"
+      "target": "assessment.ac26-bridge-experiment.locate"
     },
     {
       "type": "assesses",
       "source": "problem.ac26-bridge-experiment",
-      "target": "assessment.ac26-bridge-experiment.generalize"
+      "target": "assessment.ac26-bridge-experiment.rule"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-bridge-experiment",
+      "target": "assessment.ac26-bridge-experiment.transfer"
     },
     {
       "type": "related_to",
@@ -190,98 +191,44 @@
     "secretEnv": ["FLAG_SEED"]
   },
   "scoring": {
-    "kind": "multi-verify",
-    "checks": [
+    "kind": "verify",
+    "points": 100,
+    "wrongAnswerPenalty": 5,
+    "hints": [
       {
-        "id": "environment",
-        "label": "環境が動いていることを確認する",
-        "points": 20,
-        "wrongAnswerPenalty": 5
+        "id": "hint-1",
+        "content": "`counter show` の 'the promise' の行が全部です。 1 round は「step を足して、 窓 [0, modulus) に戻す」の 2 手であり、 カウンタが取る値は必ず窓の中にあります。 predict は紙の上で 1 round ずつ進めれば出ます (rounds は 10 未満です)。 locate は trace を先頭 (index 0) から順に見て、 0 以上 modulus 未満を最初に外れた entry を探すだけです。 trace は 2 回以上外れているので、 最初のものを答えてください。",
+        "penalty": 20
       },
       {
-        "id": "predict",
-        "label": "実行前に最終値を予測する",
-        "points": 25,
-        "wrongAnswerPenalty": 5
-      },
-      {
-        "id": "inspect",
-        "label": "trace が最初に崩れた位置を特定する",
-        "points": 25,
-        "wrongAnswerPenalty": 5,
-        "hints": [
-          {
-            "id": "inspect-hint-1",
-            "content": "trace の各要素は 0 以上 modulus 未満のはずだ。 先頭から順に、 その範囲を最初に外れたのはどこか。",
-            "penalty": 10
-          }
-        ]
-      },
-      {
-        "id": "generalize",
-        "label": "見えないパラメータでも成立させる",
-        "points": 30,
-        "wrongAnswerPenalty": 5,
-        "hints": [
-          {
-            "id": "generalize-hint-1",
-            "content": "公開テストは正の step しか使っていない。 step が負のとき、 あなたの実装は 0 以上 modulus 未満の値を返しているか。",
-            "penalty": 10
-          },
-          {
-            "id": "generalize-hint-2",
-            "content": "剰余は round ごとに取る。 start も loop に入る前に一度正規化しておくと、 start が modulus 以上のときも同じ経路で扱える。",
-            "penalty": 5
-          }
-        ]
+        "id": "hint-2",
+        "content": "rule: 1 round が step を 1 回足すので、 rounds 回では step*rounds が足されます。 窓に戻す操作は毎 round やっても最後に 1 回だけやっても同じ値になるので、 rule は「start に step*rounds を足したものを窓に戻す」1 行で書けます。 名前 (start, step, rounds, modulus) をそのまま使ってください — このデプロイの数値を定数で埋め込むと、 別のパラメータで落ちます。 transfer: step が負でも書き方は変わりません。 `%` は左が負でも [0, modulus) に着地します。 壊れた trace のほうは、 0 を割り込んだ値がそのまま残っています。",
+        "penalty": 30
       }
     ]
   },
   "i18n": {
     "en": {
       "name": "Predict, then run",
-      "shortDescription": "Before any cryptography, the experimental habits. Using a modular counter: predict before you run, find where a trace first breaks, and write a solution that survives parameters you cannot see.",
-      "instructions": "## Start here\n\nYou will finish a modular counter. No cryptography knowledge is needed. This exists so that in later problems, operating the environment is not what you are struggling with.\n\n## First move\n\n```bash\nmake inspect\n```\n\nThat prints your fixture (start / step / rounds / modulus) and your health token. Fixtures are derived from a per-deploy seed, so someone else's numbers will not help you.\n\nThen open `local/starter/counter.py` and finish `advance`. `make test` runs the public tests; `make reset` restores the starter.\n\n## Goal\n\nClear four independently scored checkpoints. Submit the prediction *before* you run — copying it out of your own output removes the only thing this checkpoint measures.",
-      "writeup": "## What this checked\n\nPublic tests show you the shape of an answer; they do not prove it correct. The public tests here use one fixture with a positive step, so an implementation that reduces only at the end, or one that never normalizes a negative step, sails straight through.\n\nThe hidden tests are what catch those. They run several moduli, a negative step, a zero step, start >= modulus, and zero rounds, and they check metamorphic properties rather than fixed expected values: shifting start or step by a whole multiple of the modulus must leave the trace unchanged. Memorizing one run's output cannot satisfy a relation.\n\n## The mutation suite\n\nWhether the hidden tests are any good is itself checked, by breaking the reference on purpose and asserting each defect is caught (`make reference-test`). The thing worth learning is not \"the tests passed\" but \"the tests can fail the wrong answer\".\n\nEquivalent mutants need care. Reducing once at the end, and leaving `start` unnormalized before the loop, are mathematically identical to round-by-round reduction under Python's floored `%` — no correct test can tell them apart. Listing them as mutations would produce a permanent \"survived\" and train everyone to ignore the suite.\n\n## What carries forward\n\nEvery later AC26 problem assumes `concept.experimental-method`. Predict before running, name where a trace first breaks, generalize past the parameters you were shown — you will use all three on Week 1's constraint residuals, Week 3's group-law edge cases, and Week 5's noise budget.",
+      "shortDescription": "Before any cryptography, the experimental habits. Using a counter that advances inside a window: predict before you run, find where a broken trace first breaks its promise, and write in one line a rule that holds for parameters you cannot see.",
+      "description": "The entry point of the AC26 companion track and the first problem anyone solves in it. No cryptographic primitive appears. Delivered as a container and played entirely from its terminal — no file to edit, no checkout — and scored as a single discovered flag released by the CLI once all four stages are cleared. See the Japanese `description` for the grading contract and the design notes.",
+      "instructions": "## Start here\n\nYou will read a counter that advances inside a window. No cryptography knowledge is needed. This exists so that in the later problems, operating the environment is not what you are struggling with.\n\n## First move\n\nStart the problem, **attach the container terminal**, and type:\n\n```bash\ncounter show\n```\n\nThat prints what the counter is, this deployment's numbers, and the exact command for each stage. Whenever you lose your place, run it again.\n\nRun `counter` with no arguments for the list of commands. There is no file to edit; every command is one line.\n\n## Goal\n\nClear four stages in order. Submit each prediction **before** you run anything — a number copied out of an answer measures nothing. When all four are cleared, `counter flag` prints your `TC{...}` — paste it into the answer box.",
+      "writeup": "## Say it before you run it\n\nA prediction is worth something because it was committed to before the answer was on screen. So `counter predict` withholds the trace until the prediction is right. A wrong prediction gets one round worked out instead: enough to find where your arithmetic and the counter's part company, not enough to skip the rest.\n\n## Where it FIRST broke\n\nKnowing that an output is wrong and being able to say where it started going wrong are different abilities. Debugging needs the second one, and it works by fixing on a property that must hold at every step and finding the first place it does not. Here there is exactly one such property: the value is always inside [0, modulus).\n\nThis trace leaves the window more than once. If it left only once, \"the first entry that breaks the promise\" and \"the entry that breaks the promise\" would be the same question, and the checkpoint would be asking the second while claiming the first. The mutation suite found that while this problem was being written: with a single break, removing the judge's \"is it the first one\" requirement changed no verdict at all.\n\n## Parameters you were not shown\n\n`counter rule` is graded by agreement with the counter over a family of parameter sets rather than against the case in front of you — because the case in front of you is satisfied by writing its answer down as a constant. The family carries a step that runs backwards, a step of zero, a step larger than the modulus, a start already outside the window, and no rounds at all. It is built by hand rather than sampled: uniform draws are nearly all ordinary forward cases, which nearly every wrong rule survives.\n\nThe family is also checked for not having collapsed. An empty family makes the comparison vacuously true and accepts everything, and a checkpoint nobody can fail is not a checkpoint — so if the family cannot fail a rule that never reduces, the judge refuses to grade at all.\n\n## Running it backwards\n\nThe fourth stage runs the same counter the other way and asks for the same two readings. Adding no new kind of question is deliberate: what is being looked for is whether the reading survives different parameters, not whether a fifth concept was memorised. A participant who got through the first three by repeating one shape stops here.\n\nWith a step below zero, bringing a value back into the window means adding the modulus, not subtracting it. The broken implementation in that stage keeps a value that has crossed below zero, so its trace leaves the window downwards and stays out for a while. The promise it breaks is the same single one.\n\n## What carries forward\n\nEvery later AC26 problem assumes `concept.experimental-method`. Predict before running, name where a trace first breaks, generalize past the parameters you were shown — you will use all three on Week 1's constraint residuals, Week 3's group-law edge cases, and Week 5's noise budget.",
       "learningGoals": [
-        "Start, stop, and reset a local-play challenge",
-        "Tell the role of the public tests apart from the hidden verifier",
+        "Attach to a problem container's terminal and work through it one line at a time",
         "Record a prediction before running and compare it against the measurement",
         "Follow a trace and name where the invariant first broke",
-        "Explain why hard-coding the public fixture is not a general solution"
+        "Write a rule that does not depend on the parameters you were shown, and have it hold for ones you were not",
+        "Explain why one visible case passing does not make a rule correct"
       ],
-      "checks": [
+      "hints": [
         {
-          "id": "environment",
-          "label": "Confirm the environment is running"
+          "id": "hint-1",
+          "content": "The 'the promise' line in `counter show` is the whole thing. One round is two moves — add `step`, then bring the value back into the window [0, modulus) — and every value the counter takes is inside that window. `predict` comes out of stepping through it on paper (there are fewer than ten rounds). `locate` is reading the trace from entry 0 and stopping at the first value that is not in [0, modulus). That trace leaves the window more than once, so answer with the first one."
         },
         {
-          "id": "predict",
-          "label": "Predict the final value before running"
-        },
-        {
-          "id": "inspect",
-          "label": "Locate where the trace first breaks",
-          "hints": [
-            {
-              "id": "inspect-hint-1",
-              "content": "Every entry should sit in [0, modulus). Reading from the start, which one first leaves that range?"
-            }
-          ]
-        },
-        {
-          "id": "generalize",
-          "label": "Hold up under parameters you cannot see",
-          "hints": [
-            {
-              "id": "generalize-hint-1",
-              "content": "The public tests only ever use a positive step. When the step is negative, does your implementation still return values in [0, modulus)?"
-            },
-            {
-              "id": "generalize-hint-2",
-              "content": "Reduce every round, not once at the end. Normalizing `start` before the loop lets start >= modulus take the same path as everything else."
-            }
-          ]
+          "id": "hint-2",
+          "content": "rule: one round adds `step` once, so `rounds` of them add `step*rounds`. Bringing the value back into the window every round and doing it once at the end give the same value, so the rule is one line: take `start` plus `step*rounds` and bring it into the window. Use the names (start, step, rounds, modulus) — writing this deployment's numbers in as constants fails on other parameters. transfer: a negative step does not change how it is written. `%` lands in [0, modulus) even when its left side is negative. In the broken trace there, a value that crossed below zero was simply left there."
         }
       ]
     }

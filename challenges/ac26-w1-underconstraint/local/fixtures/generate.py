@@ -1,18 +1,18 @@
-"""Circuits, policy parameters and the vulnerable variant, all from FLAG_SEED.
+"""Circuits, policy parameters and the deployed variant, all derived from FLAG_SEED.
 
 The policy: a credential is honoured only when its revocation counter is zero and
 its issuer is recognised. Expressed as constraints, "is this signal zero?" is not a
-comparison — it is a pair of constraints around a claimed inverse:
+comparison -- it is a pair of constraints around a claimed inverse:
 
     A:  revoked * inv + ok - 1 = 0      (if revoked != 0, ok must be 0)
-    B:  revoked * ok         = 0        (if revoked != 0, ok must be 0 -- again)
+    B:  revoked * ok           = 0      (if revoked != 0, ok must be 0 -- again)
 
 Both are needed. Each alone is satisfiable with a lie, which is the entire lesson:
 a circuit that computes the right answer for honest inputs can still accept a false
 statement, because a constraint system is not a program.
 
-The vulnerable variant drops exactly one of them. Which one is seed-dependent, so a
-memorised counterexample does not carry.
+The deployed variant drops exactly one of them. Which one is seed-dependent, so a
+memorised counterexample does not carry between deployments.
 """
 
 from __future__ import annotations
@@ -23,6 +23,22 @@ PRIMES = (97, 101, 103, 107, 109, 113, 127, 131, 137, 139)
 # The two constraints that make up the is-zero gadget. Dropping either is a real,
 # exploitable underconstraint -- with a *different* forged witness for each.
 DROPPABLE = ("c-iszero-a", "c-iszero-b")
+
+#: Every signal a witness has to name. The CLI rejects a witness that names any
+#: other set, so a typo is a message rather than a KeyError three layers down.
+SIGNALS = ("revoked", "inv", "ok", "issuer_ok", "granted")
+
+#: What each constraint kind means, as the residual that has to come out zero.
+#: Printed by `circuit.py show` -- it is the language reference for reading the
+#: deployed circuit at all, not a hint about what is missing from it.
+KIND_RESIDUALS = {
+    "boolean": "signal * (signal - 1)",
+    "mul": "left * right - out",
+    "add": "left + right - out",
+    "const": "signal - value",
+    "iszero_a": "value * inv + out - 1",
+    "iszero_b": "value * out",
+}
 
 
 def _stream(seed: str, label: str) -> list[int]:
@@ -50,7 +66,7 @@ def dropped_constraint(seed: str, label: str = "public") -> str:
 
 
 def intended_circuit() -> list[dict[str, object]]:
-    """The circuit as the policy intends it. This is the answer to checkpoint 1."""
+    """The circuit as the policy intends it."""
     return [
         {"id": "c-issuer-bool", "kind": "boolean", "signal": "issuer_ok"},
         {"id": "c-ok-bool", "kind": "boolean", "signal": "ok"},
@@ -60,28 +76,33 @@ def intended_circuit() -> list[dict[str, object]]:
     ]
 
 
-def vulnerable_circuit(seed: str, label: str = "public") -> list[dict[str, object]]:
+def deployed_circuit(seed: str, label: str = "public") -> list[dict[str, object]]:
+    """What is actually running in production: the intended circuit minus one constraint."""
     dropped = dropped_constraint(seed, label)
     return [c for c in intended_circuit() if c["id"] != dropped]
 
 
-def honest_witness(prm: dict[str, int]) -> dict[str, int]:
-    """What an honest holder can produce: revoked != 0, so ok = 0 and access is denied."""
+def policy_verdict(prm: dict[str, int], revoked: int, issuer_ok: int) -> int:
+    """What the written policy says `granted` must be. The ground truth a lie contradicts."""
+    p = prm["p"]
+    return 1 if revoked % p == 0 and issuer_ok % p == 1 else 0
+
+
+def revoked_witness(prm: dict[str, int]) -> dict[str, int]:
+    """An honest revoked holder: revoked != 0, so ok = 0 and access is denied."""
     p = prm["p"]
     revoked = prm["revoked"] % p
-    ok = 1 if revoked == 0 else 0
-    inv = pow(revoked, -1, p) if revoked != 0 else 0
     return {
         "revoked": revoked,
-        "inv": inv,
-        "ok": ok,
+        "inv": pow(revoked, -1, p) if revoked else 0,
+        "ok": 0,
         "issuer_ok": prm["issuer_ok"] % p,
-        "granted": (ok * prm["issuer_ok"]) % p,
+        "granted": 0,
     }
 
 
 def clean_witness(prm: dict[str, int]) -> dict[str, int]:
-    """A genuinely unrevoked holder: revoked = 0, so ok = 1 and access is granted."""
+    """An honest unrevoked holder: revoked = 0, so ok = 1 and access is granted."""
     p = prm["p"]
     return {
         "revoked": 0,
@@ -90,6 +111,16 @@ def clean_witness(prm: dict[str, int]) -> dict[str, int]:
         "issuer_ok": prm["issuer_ok"] % p,
         "granted": prm["issuer_ok"] % p,
     }
+
+
+def honest_witnesses(prm: dict[str, int]) -> list[dict[str, int]]:
+    """The two cases a repair must keep accepting, in the order `show` prints them."""
+    return [revoked_witness(prm), clean_witness(prm)]
+
+
+def flag(seed: str) -> str:
+    """Derived from the per-deploy seed, so it can be neither memorised nor guessed."""
+    return f"TC{{underconstraint_{hashlib.sha256(f'flag:{seed}'.encode()).hexdigest()[:20]}}}"
 
 
 def health_token(seed: str) -> str:

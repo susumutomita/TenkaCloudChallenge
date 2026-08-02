@@ -5,97 +5,147 @@
 > code, fixtures, and figures here are written independently. Questions about this track go to
 > the TenkaCloud repository, not to the course operators.
 
-**Track:** `advanced-cryptography-2026` · **Order:** 10 · **Chapter:** Bridge 0 / Experimental
-Workflow · **Role:** `diagnostic` · **Time:** 20–30 minutes · **Points:** 100
+**Track:** `advanced-cryptography-2026` · **Order:** 10 · **Chapter:** Bridge 0 / Experimental Workflow
+· **Role:** `diagnostic` · **Time:** 20–30 minutes · **Points:** 100
+· **Required first:** nothing. This is the first problem in the track.
 
 ## The story
 
-You are joining a cryptography reading group that meets for seven weeks. Before the first
-lecture, someone hands you a laptop and says: "we do not debug by guessing here. You say what
-will happen, then you run it, and the gap between those two is where the learning is."
+There is no cryptography in this problem, and that is the point.
 
-Then they hand you the least interesting program in the building — a counter that adds a number
-to itself over and over, modulo something — and tell you to finish it.
+Everything later in this track asks you to do three things at once: say what a computation will
+do before you run it, read a trace and name where it first went wrong, and write something that
+holds for parameters you were never shown. Doing all three for the first time *while also* meeting
+your first constraint system is how a good afternoon turns into a bad one.
 
-It is not a cryptography problem. That is the point. Every problem after this one asks you to
-predict a value before running, to read a trace and say where it first went wrong, and to write
-something that survives inputs you were never shown. Learning those three habits while also
-learning elliptic curves means learning neither.
+So here they are on their own, on a subject small enough to work out on paper: a counter that
+advances by a fixed step and is kept inside a window.
 
 ## What gets deployed
 
-A single container, no cloud account, no network surface. Everything is local:
-
-```text
-local/
-├── starter/counter.py    ← the only file you edit
-├── fixtures/generate.py     every fixture, derived from your per-deploy seed
-├── tests/public/            the tests you can read
-├── tests/hidden/            the tests the verifier runs (in the image, not mounted)
-├── reference/               the answer (in the image, not mounted -- see Assurance scope)
-├── verifier/server.py       POST /verify on 127.0.0.1:18091
-└── mutation.py              proves the hidden tests can actually fail a wrong answer
-```
-
-Your fixtures come from `FLAG_SEED`, injected fresh at deploy. Same seed, same numbers, so your
-session is reproducible and debuggable. Different seed, different numbers, so a value copied from
-someone else's run is worthless.
+One container. No AWS account, no cloud resources, nothing to install. The container holds this
+deployment's numbers — derived from a per-deploy `FLAG_SEED`, so they are not the same as anyone
+else's — and the `counter` command you play it with. The only published port is a loopback
+`/verify` the platform posts your flag to; you never touch it yourself.
 
 ## How to play
 
+Start the problem in the portal and **attach the container terminal**. Everything happens there,
+one line at a time. There is no file to edit, no editor to open, and nothing to clone.
+
 ```bash
-make inspect             # your fixture, your health token, the broken trace
-make test                # the public tests
-make test-one ID=range   # re-run one public test while you iterate
-make reset               # restore starter/counter.py
+counter                 # the list of commands
+counter show            # the subject, your numbers, and the exact command for each stage
+counter predict <number>
+counter locate <index>
+counter rule "<expression>"
+counter transfer predict=<number> locate=<index>
+counter status          # what you have cleared
+counter flag            # TC{...}, once all four are cleared
 ```
 
-Open `local/starter/counter.py`. `advance(start, step, rounds, modulus)` must return the trace:
-the value after each round, with the modulus applied **every** round, always in `[0, modulus)`,
-for any sign of `step`.
+`python /problem/counter.py <command>` is the same thing, if you prefer to see where it lives.
+
+`counter show` is written to be the only thing you have to read. If you lose your place, run it
+again.
+
+### The subject
+
+```text
+one round:  value <- value + step, brought back into the window [0, modulus)
+the promise: every value the counter takes is inside [0, modulus)
+```
+
+That single promise is what all four stages are about.
+
+### `predict` — say it before you look
+
+Work out on paper where the counter stands after its last round, then submit it. **The trace is
+printed once the prediction is right, and not before.** A wrong prediction gets one round worked
+out for you — enough to find where your arithmetic and the counter's part company, not enough to
+skip the rest. A number copied out of an answer measures nothing, which is the whole reason the
+order matters.
+
+### `locate` — where it FIRST broke
+
+The trace `counter show` prints came out of a different, broken implementation. Say which entry is
+the **first** one outside `[0, modulus)`. Entries are numbered from 0.
+
+That trace leaves the window more than once, on purpose. If it left only once, "the first entry
+that breaks the promise" and "the entry that breaks the promise" would be the same question — see
+the note in *For authors* about how that was caught.
+
+### `rule` — one line, for parameters you cannot see
+
+Write an expression that gives the final value, using the names `start`, `step`, `rounds`,
+`modulus` and the operators `+ - * % ( )`.
+
+```bash
+counter rule "<expression>"
+```
+
+Quote it — `*` is a shell glob. It is graded by **agreeing with the counter over a family of
+parameter sets**, not by matching the case you were shown: that case is satisfied by writing its
+answer down as a constant. The family carries a step that runs backwards, a step of zero, a step
+larger than the modulus, a start already outside the window, and no rounds at all.
+
+Any expression that agrees is accepted. There is no single spelling being looked for.
+
+### `transfer` — the same readings, running backwards
+
+Once the first three are cleared, `counter show` prints a fourth case: the same counter, with the
+step running the other way. Predict it and locate the first break in its trace, both on one line.
+
+It is deliberately not a new kind of question. What is being looked for is whether the reading
+survives different parameters — not whether you learned a fifth thing.
 
 ## Scoring
 
-Four checkpoints, scored independently. Wrong answers cost 5 points each.
+| | |
+|---|---:|
+| Correct flag | **100** |
+| Wrong answer | −5 each |
+| Hint 1 | −20 |
+| Hint 2 | −30 |
 
-| Checkpoint | Points | What you submit |
-|---|---:|---|
-| `environment` | 20 | The health token from `make inspect` |
-| `predict` | 25 | The final value, worked out **before** you run anything |
-| `inspect` | 25 | The 0-based index where the broken trace first leaves `[0, modulus)` |
-| `generalize` | 30 | Your `counter.py`, run against parameters you have not seen |
+Opening both hints still leaves 50 of 100. The flag is a `TC{...}` derived from this deployment's
+seed: there is nothing to memorise from someone else's run and nothing to guess.
 
-Hints are available on `inspect` (10) and `generalize` (10, then 5). Opening every hint still
-leaves you 75 of 100.
+## Progress is kept in the container
 
-On `predict`: you can trivially get this one by running your code first and copying the answer.
-Nobody will catch you. You will also have removed the only thing the checkpoint measures, in the
-one problem in the track that is cheap to fail.
+`counter status` reads a file under `/tmp`, which is the only writable path in the container
+(everything else is mounted read-only). Recreating the container starts the four stages over. Once
+you know the readings they take a couple of minutes to redo, and a durable volume would be one
+more thing that can be wrong.
 
-## The thing this problem is actually about
+## Relationship to the official course
 
-The public tests pass for implementations that are wrong.
+This is a `diagnostic`: it runs **before** the course material rather than alongside it, and it
+gates the track rather than accompanying a particular week. That is also why it pins no upstream
+`sources` — there is no specific lecture or exercise it is written against, and inventing a commit
+SHA to fill the field would be worse than leaving it empty (`CATALOG.md` §`courseAlignment`).
 
-They use one fixture, with a positive step. An implementation that never normalizes a negative
-result passes them. So does one that skips the reduction on some rounds. The hidden tests use
-several moduli, a negative step, a zero step, a start larger than the modulus, and zero rounds —
-and they check *relations* rather than fixed values, so remembering one output does not help.
-
-That gap between "my tests are green" and "my code is right" is the habit this whole track is
-built on. In Week 1 it will be a constraint that is satisfied but under-specified. In Week 3 it
-will be a curve operation that works everywhere except at infinity. In Week 5 it will be noise
-that stays in budget for the example and blows past it for anything else.
+No expression, fixture, or solution from the course is reproduced here; there is no cryptography
+in this problem at all. See `GOVERNANCE.md` §2 and §4.
 
 ## Assurance scope
 
-Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
-daemon, and the image, so nothing inside that image is hidden from you: `reference/` and
-`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than
-out of reach.
+Local mode is **self-paced, honor-system verification**. You own the machine, the Docker daemon,
+and the image, so nothing inside that image is hidden from you. Be specific about what that means
+here:
 
-What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
-a checkpoint can only credit the id it echoes, results do not leak expected values, and the
-fixtures come from this deployment's seed so a memorized answer does not carry.
+- `FLAG_SEED` is in the container's environment and the flag is derived from it, so the flag can
+  be computed without clearing any stage.
+- `fixtures/generate.py` — in the image, because `counter show` is rendered from it — computes the
+  honest trace and the first break. Reading it hands you three of the four answers.
+
+The four stages are a sequence to walk, not a lock to pick, and skipping them cheats nobody but
+you. What the `author` stage split does buy is narrower: the reference answers and the suite that
+grades them are not in the image you run, so you do not have to avert your eyes from a file that
+solves the problem for you. What the seed buys is real: the numbers and the flag come from this
+deployment, so an answer memorised from someone else's run does not carry. And the grading is
+structural rather than a stored string — `counter rule` accepts any expression that agrees with
+the counter, including ones nobody has written before.
 
 That supports self-study and honest practice. It does **not** support competition ranking,
 examination, or completion certification — those need a verifier the participant does not
@@ -103,20 +153,23 @@ administer, tracked in [#271](https://github.com/susumutomita/TenkaCloudChalleng
 
 ## Cost
 
-Zero. No cloud account, no AWS resources. It is a container on your machine.
+Zero. No cloud account, no AWS resources.
 
 ## For authors
 
-`make reference-test` runs the mutation suite: it breaks the reference implementation seven
-different ways and asserts the hidden tests catch every one, plus two mutations aimed at the
-verifier itself. Two obvious-looking mutations are deliberately **not** in the list — reducing
-once at the end and leaving `start` unnormalized are mathematically identical to the reference
-under Python's floored `%`, so no correct test could distinguish them. See the comment at the top
-of `local/mutation.py`.
+This problem is played from the container terminal, so it ships nothing for a participant to edit
+and sits outside the four-target participant contract in
+[`TEMPLATE.md`](../../docs/curricula/advanced-cryptography-2026/TEMPLATE.md) rather than violating
+it. The Makefile is an author tool and no participant ever sees it: `make play` opens a shell in
+the participant image, which is what the portal terminal attaches to, and `make test` runs the
+public self-check (interface properties only — it carries no answer).
 
-This problem's `courseAlignment` declares `week: 1` (Bridge 0 gates Week 1) with **no**
-`sources[]`. That is deliberate, not an omission: the only upstream artifact that could plausibly
-be cited is `week0/slide.pdf`, which `curriculum.md` records as out of scope — no week README
-references it and this track does not map, open, or derive from it. The schema makes `sources`
-optional precisely for this case. Never invent a commit SHA to fill the gap; see
-`docs/curricula/advanced-cryptography-2026/GOVERNANCE.md` §5.
+`make reference-test` is the real one. It runs the reference answers across eight seeds, refuses a
+catalog of near-miss wrong answers, breaks the judge one requirement at a time to confirm that
+catalog kills every broken version, and drives the CLI to check both gates: the transfer case is
+neither shown nor accepted until the first three stages are cleared, and the flag is released for
+exactly one of the sixteen progress states.
+
+That suite is also what shaped the problem. The broken trace originally left the window once, and
+breaking the judge's "is it the **first** entry" requirement changed no verdict — the checkpoint
+was asking a question it could not grade. The trace now breaks twice.

@@ -39,15 +39,34 @@ const SPOOF = [
   "",
 ].join("\n");
 
-function runnerBlock(source: string): string {
+function runnerBlock(source: string): string | null {
   const match = /RUNNER = """\n([\s\S]*?)\n"""/.exec(source);
-  expect(match).not.toBeNull();
-  return (match as RegExpExecArray)[1];
+  return match === null ? null : match[1];
 }
+
+/**
+ * Ways a verifier can hand control to something a participant wrote.
+ *
+ * The spoof is only reachable for a verifier that *runs a submission*, and not every
+ * local-play verifier does: `ac26-w1-underconstraint` grades in the participant's own
+ * terminal and its `/verify` only compares a flag, so it has no runner and no child
+ * process to be spoofed by. Rather than exempting it by name, the pair of assertions
+ * below is bidirectional -- a verifier that executes anything must carry a compliant
+ * runner, and a verifier with no runner must execute nothing. Adding `exec` to a
+ * runner-less verifier therefore fails here instead of quietly leaving the guard.
+ */
+const EXECUTES_SUBMISSION = /\b(subprocess|runpy|importlib|exec\(|eval\(|compile\()/;
 
 describe("local-play verifier verdict spoofing", () => {
   it("should find verifiers to check, so a glob matching nothing cannot pass", () => {
     expect(VERIFIERS.length).toBeGreaterThan(0);
+  });
+
+  it("should find verifiers that run a submission, so the runner assertions are not vacuous", () => {
+    const withRunner = VERIFIERS.filter(
+      (relative) => runnerBlock(readFileSync(join(REPO_ROOT, relative), "utf8")) !== null,
+    );
+    expect(withRunner.length).toBeGreaterThan(0);
   });
 
   for (const relative of VERIFIERS) {
@@ -55,6 +74,13 @@ describe("local-play verifier verdict spoofing", () => {
     describe(problem, () => {
       const source = readFileSync(join(REPO_ROOT, relative), "utf8");
       const runner = runnerBlock(source);
+
+      if (runner === null) {
+        it("should execute nothing at all, since it has no runner to make safe", () => {
+          expect(source).not.toMatch(EXECUTES_SUBMISSION);
+        });
+        return;
+      }
 
       it("should end the runner with a hard exit rather than falling off the script", () => {
         // Falling off the end runs atexit handlers, which can write after the verdict.

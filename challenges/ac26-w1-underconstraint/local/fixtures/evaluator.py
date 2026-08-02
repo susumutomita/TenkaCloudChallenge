@@ -7,6 +7,11 @@ from __future__ import annotations
 
 def residual(constraint: dict, witness: dict[str, int], p: int) -> int:
     kind = constraint["kind"]
+    if kind == "expr":
+        # An added constraint the participant wrote, already compiled to a callable
+        # by lab.expr. Kept here so `satisfies` treats a repair exactly like a
+        # shipped constraint rather than through a second code path.
+        return constraint["evaluate"](witness, p) % p  # type: ignore[operator]
     get = lambda name: witness[str(constraint[name])]  # noqa: E731 - local shorthand
     if kind == "boolean":
         v = witness[str(constraint["signal"])]
@@ -29,3 +34,8 @@ def satisfies(circuit: list[dict], witness: dict[str, int], p: int) -> bool:
         return all(residual(c, witness, p) == 0 for c in circuit)
     except KeyError:
         return False
+
+
+def unsatisfied(circuit: list[dict], witness: dict[str, int], p: int) -> list[str]:
+    """The ids of the constraints this witness fails, in circuit order."""
+    return [str(c["id"]) for c in circuit if residual(c, witness, p) != 0]

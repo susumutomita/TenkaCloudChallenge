@@ -136,15 +136,29 @@ describe("scaffold", () => {
       "Makefile",
       "local/docker-compose.yml",
       "local/Dockerfile",
-      "local/starter/exercise.py",
-      "local/reference/exercise.py",
+      // The terminal-native shape: one CLI at the top of local/, the judging behind it in
+      // local/lab/, and no starter to edit. See scripts/new-course-challenge.ts.
+      "local/exercise.py",
+      "local/lab/judge.py",
+      "local/lab/progress.py",
+      "local/fixtures/generate.py",
+      "local/reference/solve.py",
       "local/tests/public/test_exercise.py",
-      "local/tests/hidden/check_exercise.py",
       "local/verifier/server.py",
       "local/mutation.py",
     ]) {
       expect(existsSync(join(target, path))).toBe(true);
     }
+  });
+
+  // A scaffolded problem must not carry the shape this track moved away from: a starter to
+  // edit only works from a checkout, and the portal has no editor and no `make`.
+  it("should not scaffold a starter or a hidden test directory", () => {
+    const challenges = isolatedChallengesDir();
+    const target = scaffold("ac26-w3-field-inverse", challenges);
+
+    expect(existsSync(join(target, "local/starter"))).toBe(false);
+    expect(existsSync(join(target, "local/tests/hidden"))).toBe(false);
   });
 
   // The template's exercise is renamed, not copied alongside a new one. "Replace counter.py
@@ -154,12 +168,7 @@ describe("scaffold", () => {
     const challenges = isolatedChallengesDir();
     const target = scaffold("ac26-w3-field-inverse", challenges);
 
-    for (const path of [
-      "local/starter/counter.py",
-      "local/reference/counter.py",
-      "local/tests/public/test_counter.py",
-      "local/tests/hidden/check_counter.py",
-    ]) {
+    for (const path of ["local/counter.py", "local/tests/public/test_counter.py"]) {
       expect(existsSync(join(target, path))).toBe(false);
     }
   });
@@ -170,20 +179,18 @@ describe("scaffold", () => {
 
     const makefile = readFileSync(join(target, "Makefile"), "utf8");
     expect(makefile).toContain("tests/public/test_exercise.py");
-    // The Makefile names no starter file at all: `make reset` restores the directory,
-    // which is why 6 of the first 7 problems shipped with a reset pointing at the
-    // template's `counter.py`. Asserted by scripts/participant-contract.test.ts.
-    expect(makefile).toMatch(/git checkout -- local\/starter\/\s*$/m);
-    expect(makefile).not.toContain("counter.py");
+    expect(makefile).toContain("$(RUN) exercise show");
+    expect(makefile).not.toContain("counter");
 
-    const verifier = readFileSync(join(target, "local/verifier/server.py"), "utf8");
-    expect(verifier).toContain("from tests.hidden.check_exercise import run");
-    expect(verifier).toContain("from exercise import advance");
-    expect(verifier).not.toContain("counter.py");
-
-    const mutation = readFileSync(join(target, "local/mutation.py"), "utf8");
-    expect(mutation).toContain("from tests.hidden.check_exercise import run");
-    expect(mutation).not.toContain("counter.py");
+    // The PATH wrapper is the participant surface: the portal terminal opens in no
+    // particular directory, so a wrapper still pointing at the renamed-away file leaves
+    // the scaffolded problem with no way in, and the symptom is "command not found"
+    // in the terminal long after authoring.
+    const dockerfile = readFileSync(join(target, "local/Dockerfile"), "utf8");
+    expect(dockerfile).toContain("COPY exercise.py ./exercise.py");
+    expect(dockerfile).toContain("/usr/local/bin/exercise");
+    expect(dockerfile).toContain("/problem/exercise.py");
+    expect(dockerfile).not.toContain("counter");
   });
 
   // The template prose talks about counterexamples; a blind counter -> exercise sweep would

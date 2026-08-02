@@ -27,7 +27,25 @@ import { execFileSync } from "node:child_process";
  */
 
 const REPO_ROOT = new URL("..", import.meta.url).pathname;
-const PROBLEM_DIRS = localPlayProblemDirs(REPO_ROOT);
+
+/**
+ * The `make` contract applies to the problems whose learner edits a starter.
+ *
+ * That is what the four targets are *for*: `test` runs the public suite against the
+ * edit, `test-one` iterates on it, `inspect` prints the fixtures the edit has to
+ * satisfy, and `reset` throws the edit away. A problem with no `local/starter/` has no
+ * edit, so `reset` has nothing to restore and `test` is an author's smoke check rather
+ * than the participant's feedback loop -- `ac26-w1-underconstraint` is played entirely
+ * from the container terminal and never opens a file.
+ *
+ * Selected on `local/starter/` rather than on a problem id, for the same reason
+ * `lib/local-play-problems.ts` selects on structure: a name list would silently exclude
+ * the next problem built the same way. Every assertion below is about a starter, so a
+ * problem without one is outside this contract rather than exempted from it.
+ */
+const PROBLEM_DIRS = localPlayProblemDirs(REPO_ROOT).filter((dir) =>
+  existsSync(join(REPO_ROOT, dir, "local", "starter")),
+);
 
 /** The four targets TEMPLATE.md documents as the shared participant contract. */
 const CONTRACT_TARGETS = ["test", "test-one", "inspect", "reset"] as const;

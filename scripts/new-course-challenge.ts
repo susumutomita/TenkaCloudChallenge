@@ -4,8 +4,9 @@
  *
  * `bun run new` (scripts/new-problem.ts) scaffolds a CloudFormation problem and keeps that
  * responsibility. This is a separate command rather than a flag on that one, because a
- * container-delivered, multi-verify, seed-derived problem shares almost nothing with a CFn
- * problem beyond the metadata envelope.
+ * container-delivered, terminal-native, seed-derived problem shares almost nothing with a CFn
+ * problem beyond the metadata envelope: the participant connects a shell to the container, runs
+ * a CLI there, and pastes the flag it emits. There is no file to edit and no starter to ship.
  *
  * The template source is a real, working, CI-covered problem — challenges/ac26-bridge-experiment
  * — not a skeleton, so a freshly scaffolded directory's container runs, and its tests and
@@ -95,34 +96,45 @@ const SKIP_ENTRIES = new Set([".git", "node_modules", "__pycache__"]);
  * The template's exercise is a modular counter, and every scaffolded problem replaces it. The
  * files are RENAMED to a neutral `exercise` rather than left in place, because "replace
  * counter.py with your own file" is a trap: an author who writes `auditor.py` alongside it ships
- * a dead `counter.py`, a dead `check_counter.py`, and a dead `test_counter.py` inside their
- * image. That happened, reached main, and is what `scaffold-leftover-guard.test.ts` now fails on.
+ * a dead `counter.py` and a dead `test_counter.py` inside their image. That happened, reached
+ * main, and is what `scaffold-leftover-guard.test.ts` now fails on.
  *
  * With one neutrally-named module per directory, the natural action is a rename, and a rename
  * cannot leave a leftover behind.
+ *
+ * The terminal-native shape (the participant runs a CLI in the container; there is no file to
+ * edit) moved the exercise: `local/counter.py` is the whole participant surface, `local/lab/`
+ * holds the judging behind it, and `local/reference/solve.py` is already neutral. There is no
+ * `local/starter/` and no `local/tests/hidden/` to rename any more.
  */
 const EXERCISE_RENAMES: ReadonlyArray<readonly [string, string]> = [
-  ["local/starter/counter.py", "local/starter/exercise.py"],
-  ["local/reference/counter.py", "local/reference/exercise.py"],
+  ["local/counter.py", "local/exercise.py"],
   ["local/tests/public/test_counter.py", "local/tests/public/test_exercise.py"],
-  ["local/tests/hidden/check_counter.py", "local/tests/hidden/check_exercise.py"],
 ];
 
 /**
- * Only the identifiers that name those files. A blind `counter` -> `exercise` sweep would also
- * rewrite `counterexample`, which appears in the template's prose.
+ * Only the identifiers that name those files, plus the PATH entry point the Dockerfile installs.
+ * A blind `counter` -> `exercise` sweep would also rewrite `counterexample`, which appears in the
+ * template's prose.
+ *
+ * The entry point matters more than it looks: the portal terminal opens in no particular
+ * directory, so `counter <command>` only works because the Dockerfile puts a wrapper on PATH.
+ * Leave that pointing at a file the rename moved and the scaffolded problem has no participant
+ * surface at all — and the failure is "command not found" in the terminal, long after authoring.
  */
 const EXERCISE_REFERENCES: ReadonlyArray<readonly [string, string]> = [
   ["tests/public/test_counter.py", "tests/public/test_exercise.py"],
-  ["tests.hidden.check_counter", "tests.hidden.check_exercise"],
-  ["starter.counter", "starter.exercise"],
-  // `make reset` restores the whole `local/starter/` directory, so no Makefile
-  // rule names a starter file for this to repoint. Kept out deliberately: a rewrite
-  // rule for a reference that no longer exists is the next thing to rot.
-  ["starter/counter.py", "starter/exercise.py"],
-  ['"reference" / "counter.py"', '"reference" / "exercise.py"'],
+  ["/problem/counter.py", "/problem/exercise.py"],
+  ["COPY counter.py ./counter.py", "COPY exercise.py ./exercise.py"],
+  ["/usr/local/bin/counter", "/usr/local/bin/exercise"],
+  ["$(RUN) counter show", "$(RUN) exercise show"],
   ["from counter import", "from exercise import"],
-  ['Path(workspace) / "counter.py"', 'Path(workspace) / "exercise.py"'],
+  // Prose that names the command, not just the code that runs it. A scaffolded Makefile
+  // telling its author to "type `counter show`" is describing a command the scaffold just
+  // renamed away — the kind of stale instruction that outlives the file it referred to.
+  ["`counter show`", "`exercise show`"],
+  ["`counter <command>`", "`exercise <command>`"],
+  ["on PATH and counter.py", "on PATH and exercise.py"],
 ];
 
 function renameExerciseFiles(target: string): void {
@@ -195,22 +207,24 @@ function main(): void {
   console.log(`Scaffolded ${target} from challenges/${TEMPLATE_ID}.`);
   console.log("");
   console.log("Next:");
-  console.log("  1. RENAME local/starter/exercise.py, local/reference/exercise.py,");
-  console.log("     local/tests/public/test_exercise.py and local/tests/hidden/check_exercise.py");
-  console.log("     to your exercise's name, then write it. Rename rather than add: a leftover");
-  console.log("     module fails scripts/scaffold-leftover-guard.test.ts.");
-  console.log("  2. Replace local/fixtures and the tests with");
-  console.log("     your exercise. Keep the /verify contract and the seed-derived fixtures.");
-  console.log("  2. Rewrite metadata.json: name, shortDescription, instructions, description,");
-  console.log("     writeup, checks, nodes, relations, track.chapter.");
+  console.log("  1. RENAME local/exercise.py and local/tests/public/test_exercise.py to your");
+  console.log("     exercise's name, then write it. Repoint the PATH wrapper in local/Dockerfile");
+  console.log("     and the `$(RUN) exercise show` line in the Makefile at the new name — the");
+  console.log("     portal terminal opens in no particular directory, so that wrapper IS the");
+  console.log("     participant surface. Rename rather than add: a leftover module fails");
+  console.log("     scripts/scaffold-leftover-guard.test.ts.");
+  console.log("  2. Replace local/lab/, local/fixtures/, local/reference/solve.py and the tests");
+  console.log("     with your exercise. Keep the /verify contract and the seed-derived flag.");
+  console.log("  3. Rewrite metadata.json: name, shortDescription, instructions, description,");
+  console.log("     writeup, scoring, nodes, relations, track.chapter.");
   if (week !== undefined) {
-    console.log(`  3. Add courseAlignment for week ${week} with a REAL 40-hex upstream commit SHA.`);
+    console.log(`  4. Add courseAlignment for week ${week} with a REAL 40-hex upstream commit SHA.`);
     console.log("     Never invent one — see GOVERNANCE.md §5.");
   } else {
-    console.log("  3. Omit courseAlignment unless you have a real upstream commit SHA to pin.");
+    console.log("  4. Omit courseAlignment unless you have a real upstream commit SHA to pin.");
   }
-  console.log(`  4. Copy scripts/${TEMPLATE_ID}.test.ts to scripts/${problemId}.test.ts and adapt.`);
-  console.log("  5. bun run validate");
+  console.log(`  5. Copy scripts/${TEMPLATE_ID}.test.ts to scripts/${problemId}.test.ts and adapt.`);
+  console.log("  6. bun run validate");
   console.log("");
   console.log("Checklist: docs/curricula/advanced-cryptography-2026/TEMPLATE.md");
 }

@@ -20,16 +20,17 @@
       },
       "difficulty": 1,
       "estimatedDuration": "20-30 分",
-      "shortDescription": "暗号の前に、実験の作法を一度だけ。剰余カウンタを題材に、予測してから走らせる・trace から最初に壊れた場所を特定する・見えないパラメータでも通る一般解を書く、を体験する。",
+      "shortDescription": "暗号の前に、実験の作法を一度だけ。窓の中を進むカウンタを題材に、走らせる前に予測する・壊れた trace が最初に約束を破った場所を指す・見ていないパラメータでも成り立つ規則を 1 行で書く。",
       "tags": [
         "advanced-cryptography-2026",
         "bridge",
         "experimental-method",
         "modular-arithmetic",
         "local-play",
-        "container"
+        "container",
+        "terminal"
       ],
-      "scoringKind": "multi-verify",
+      "scoringKind": "verify",
       "cost": {
         "perHourUsd": 0,
         "perDayIfLeftRunningUsd": 0,
@@ -107,7 +108,7 @@
       },
       "difficulty": 3,
       "estimatedDuration": "45-60 分",
-      "shortDescription": "新しい policy engine は if 文ではなく算術回路でアクセス判断を表す。だが monitor は pass/fail しか出さない。residual を見えるようにして、witness を診断できるようにする。",
+      "shortDescription": "新しい policy engine は if 文ではなく算術回路でアクセス判断を表す。だが monitor は PASS か FAIL しか出さない。なぜ落ちたのかを言えるようにする。",
       "tags": [
         "advanced-cryptography-2026",
         "week1",
@@ -115,9 +116,10 @@
         "constraint-system",
         "witness",
         "local-play",
-        "container"
+        "container",
+        "terminal"
       ],
-      "scoringKind": "multi-verify",
+      "scoringKind": "verify",
       "cost": {
         "perHourUsd": 0,
         "perDayIfLeftRunningUsd": 0,
@@ -157,8 +159,8 @@
         ]
       },
       "difficulty": 4,
-      "estimatedDuration": "60-90 分",
-      "shortDescription": "資格確認回路が production 直前の監査で止まった。通常の利用者は正しく判定される。だが不正な witness を作ると条件を迂回できるらしい。組んで、突いて、直す。",
+      "estimatedDuration": "45-75 分",
+      "shortDescription": "資格確認回路が production 直前の監査で止まった。通常の利用者は正しく判定される。だが不正な witness を作ると条件を迂回できるらしい。突いて、直す。",
       "tags": [
         "advanced-cryptography-2026",
         "week1",
@@ -166,9 +168,10 @@
         "soundness",
         "exploit",
         "local-play",
-        "container"
+        "container",
+        "terminal"
       ],
-      "scoringKind": "multi-verify",
+      "scoringKind": "verify",
       "cost": {
         "perHourUsd": 0,
         "perDayIfLeftRunningUsd": 0,
