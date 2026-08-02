@@ -7,13 +7,19 @@ MCP風OAuth protected resourceのauthority境界を扱う、ブラウザ完結�
 
 ## 起動するもの
 
-| bind | 用途 |
-| --- | --- |
-| 127.0.0.1:18110 | Browser Workbenchと合成resource API |
-| 127.0.0.1:18111 | TenkaCloudが使うloopback verifier |
+| bind | サービス | 用途 |
+| --- | --- | --- |
+| 127.0.0.1:18110 | participant | Browser Workbenchと合成resource API |
+| 127.0.0.1:18111 | verifier | TenkaCloudが使うloopback `/verify` |
 
-コンテナはread-only、non-root、Linux capability全削除で動き、両portはloopbackだけに
-bindされます。
+2サービスともread-only、non-root、Linux capability全削除で動き、portはhostの
+loopbackだけにbindされます。両サービスが参加するDocker networkは`internal`で、
+外向き経路を持ちません。
+
+participant imageにはWorkbench、公開ケース、policy実行ロジックだけを含めます。
+hidden graderと`/verify`は別のverifier imageにだけ入り、participantから取得できません。
+これは採点コードを難読化する対策ではなく、Docker build targetとimageを物理的に分ける
+信頼境界です。
 
 ## ミッション
 
@@ -28,7 +34,8 @@ bindされます。
 5. 公開ケースを実行し、Participant Portalへの提出値を作る
 
 提出値はpolicy JSONのbase64url表現で、credentialやflagを含みません。verifierは
-正常系と異常系を再実行するため、常時許可や常時拒否では合格できません。
+公開されていない正常系・異常系も独立して再実行するため、常時許可、常時拒否、公開ケース
+専用の分岐では合格できません。
 
 ## cleanupとコスト
 
@@ -36,4 +43,5 @@ AWSリソースは作らず、推定費用は0 USDです。停止・削除:
 
     docker compose -f challenges/mcp-origin-guardian/local/docker-compose.yml down --volumes --remove-orphans
 
-物理影響: CREATE / UPDATE / REPLACE / DELETE はすべてなし。ローカルcontainerのみです。
+物理影響: cloud resourceのCREATE / UPDATE / REPLACE / DELETEはすべてなし。
+作成・削除されるのは使い捨てのローカルcontainer、image、networkだけです。
