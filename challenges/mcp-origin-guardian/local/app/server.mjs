@@ -10,7 +10,7 @@ const RUNTIME_POLICY = Object.freeze({
 const SECURITY_HEADERS = Object.freeze({
   "cache-control": "no-store",
   "content-security-policy":
-    "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self' http://127.0.0.1:18111 http://localhost:18111; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+    "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self' http://127.0.0.1:* http://localhost:* https://*.app.github.dev; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
   "referrer-policy": "no-referrer",
   "x-content-type-options": "nosniff",
 });
@@ -59,12 +59,26 @@ code{color:#ffd27a}.muted{color:#a9bec9}
 <script src="/app.js"></script></body></html>`;
 
 const APP = `const byId=(id)=>document.getElementById(id);
-const verifierOrigin=location.hostname==="localhost"?"http://localhost:18111":"http://127.0.0.1:18111";
+function verifierOrigin(){
+  const target=new URL(location.href);
+  if(target.hostname==="127.0.0.1"||target.hostname==="localhost"){
+    const port=Number(target.port);
+    if(!Number.isInteger(port)||port<=0)throw new Error("Workbench port is missing");
+    target.port=String(port+1);
+    return target.origin;
+  }
+  const match=target.hostname.match(/^(.*-)(\\d+)(\\.app\\.github\\.dev)$/);
+  if(match){
+    target.hostname=match[1]+String(Number(match[2])+1)+match[3];
+    return target.origin;
+  }
+  throw new Error("Unsupported Workbench origin");
+}
 async function call(origin,path,body){const r=await fetch(origin+path,{method:body?"POST":"GET",headers:body?{"content-type":"application/json"}:{},body:body?JSON.stringify(body):undefined});const value=await r.json();if(!r.ok)throw new Error(value.error||String(r.status));return value}
 function policy(){try{return JSON.parse(byId("policy").value)}catch{return null}}
 byId("inspect").onclick=async()=>{try{byId("observation").textContent=JSON.stringify(await call("","/api/inspect"),null,2)}catch(error){byId("observation").textContent=String(error)}};
-byId("test").onclick=async()=>{try{byId("result").textContent=JSON.stringify(await call(verifierOrigin,"/public-test",{policy:policy()}),null,2)}catch(error){byId("result").textContent=String(error)}};
-byId("prepare").onclick=async()=>{try{const r=await call(verifierOrigin,"/prepare",{policy:policy()});byId("result").textContent=JSON.stringify(r.report,null,2);byId("submission").textContent=r.submission||"公開ケースをすべて通してください。"}catch(error){byId("result").textContent=String(error)}};
+byId("test").onclick=async()=>{try{byId("result").textContent=JSON.stringify(await call(verifierOrigin(),"/public-test",{policy:policy()}),null,2)}catch(error){byId("result").textContent=String(error)}};
+byId("prepare").onclick=async()=>{try{const r=await call(verifierOrigin(),"/prepare",{policy:policy()});byId("result").textContent=JSON.stringify(r.report,null,2);byId("submission").textContent=r.submission||"公開ケースをすべて通してください。"}catch(error){byId("result").textContent=String(error)}};
 `;
 
 const server = createServer({ maxHeaderSize: HEADER_LIMIT }, (request, response) => {
