@@ -7,13 +7,19 @@ resource. It uses no real OAuth provider, credential, cloud account, or outbound
 
 ## Runtime
 
-| Binding | Purpose |
-| --- | --- |
-| 127.0.0.1:18110 | Browser Workbench and synthetic resource API |
-| 127.0.0.1:18111 | Loopback verifier used by TenkaCloud |
+| Binding | Service | Purpose |
+| --- | --- | --- |
+| 127.0.0.1:18110 | participant | Browser Workbench and synthetic resource API |
+| 127.0.0.1:18111 | verifier | Loopback `/verify` used by TenkaCloud |
 
-The container runs read-only as a non-root user with all Linux capabilities dropped. Both
-ports bind only to loopback.
+Both services run read-only as non-root users with every Linux capability dropped. Their
+published ports bind only to host loopback, and the shared Docker network is `internal`, so
+neither service has an outbound route.
+
+The participant image contains only the Workbench, published cases, and policy execution
+logic. The hidden grader and `/verify` exist only in a separate verifier image and cannot be
+fetched from the participant service. This is a physical Docker build-target and image
+boundary, not code obfuscation.
 
 ## Mission
 
@@ -28,7 +34,8 @@ Workbench to:
 5. run public cases and prepare the submission for Participant Portal.
 
 The submitted value is a base64url policy document. It contains no credential or flag. The
-verifier replays positive and negative requests, so a constant allow/deny answer cannot pass.
+verifier independently replays unpublished positive and negative cases, so a constant
+allow/deny answer or a branch written only for the published cases cannot pass.
 
 ## Cleanup and cost
 
@@ -36,4 +43,5 @@ No AWS resources are created and estimated cost is USD 0. Stop it with:
 
     docker compose -f challenges/mcp-origin-guardian/local/docker-compose.yml down --volumes --remove-orphans
 
-Physical impact: CREATE / UPDATE / REPLACE / DELETE are all none; local container only.
+Physical impact on cloud resources: CREATE / UPDATE / REPLACE / DELETE are all none. Only
+disposable local containers, images, and a Docker network are created and removed.
