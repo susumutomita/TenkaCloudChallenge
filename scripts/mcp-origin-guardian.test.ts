@@ -51,36 +51,11 @@ describe("MCP canonical-origin challenge contract", () => {
   });
 
   it.each([
-    {
-      environment: "production",
-      host: "attacker.example",
-      origin: "https://mcp.example.test",
-      forwardedHost: "",
-    },
-    {
-      environment: "production",
-      host: "mcp.example.test",
-      origin: "https://attacker.example",
-      forwardedHost: "",
-    },
-    {
-      environment: "production",
-      host: "mcp.example.test",
-      origin: "null",
-      forwardedHost: "",
-    },
-    {
-      environment: "production",
-      host: "mcp.example.test",
-      origin: "https://mcp.example.test",
-      forwardedHost: "attacker.example",
-    },
-    {
-      environment: "staging",
-      host: "mcp.example.test",
-      origin: "https://mcp.example.test",
-      forwardedHost: "",
-    },
+    { environment: "production", host: "attacker.example", origin: "https://mcp.example.test", forwardedHost: "" },
+    { environment: "production", host: "mcp.example.test", origin: "https://attacker.example", forwardedHost: "" },
+    { environment: "production", host: "mcp.example.test", origin: "null", forwardedHost: "" },
+    { environment: "production", host: "mcp.example.test", origin: "https://mcp.example.test", forwardedHost: "attacker.example" },
+    { environment: "staging", host: "mcp.example.test", origin: "https://mcp.example.test", forwardedHost: "" },
   ])("fails closed for untrusted request authority %#", (request) => {
     expect(evaluateRequest(policy, request).accepted).toBe(false);
   });
@@ -108,12 +83,8 @@ describe("MCP canonical-origin challenge contract", () => {
   it("keeps public feedback useful while the hidden verifier remains authoritative", () => {
     expect(runPublicCases(policy).correct).toBe(true);
     expect(gradePolicy(policy).correct).toBe(true);
-    expect(
-      gradePolicy({ ...policy, canonicalOrigin: "https://attacker.example" }).correct,
-    ).toBe(false);
-    expect(
-      gradePolicy({ ...policy, developmentOrigin: "http://localhost:18110" }).correct,
-    ).toBe(false);
+    expect(gradePolicy({ ...policy, canonicalOrigin: "https://attacker.example" }).correct).toBe(false);
+    expect(gradePolicy({ ...policy, developmentOrigin: "http://localhost:18110" }).correct).toBe(false);
   });
 
   it("round-trips a bounded policy submission without a fixed flag", () => {
@@ -125,24 +96,9 @@ describe("MCP canonical-origin challenge contract", () => {
 
   it("is non-vacuous: changing a security decision changes the result vector", () => {
     const accepted = [
-      evaluateRequest(policy, {
-        environment: "production",
-        host: "mcp.example.test",
-        origin: "https://mcp.example.test",
-        forwardedHost: "",
-      }).accepted,
-      evaluateRequest(policy, {
-        environment: "production",
-        host: "attacker.example",
-        origin: "https://mcp.example.test",
-        forwardedHost: "",
-      }).accepted,
-      evaluateRequest(policy, {
-        environment: "development",
-        host: "127.0.0.1:18110",
-        origin: "http://127.0.0.1:18110",
-        forwardedHost: "",
-      }).accepted,
+      evaluateRequest(policy, { environment: "production", host: "mcp.example.test", origin: "https://mcp.example.test", forwardedHost: "" }).accepted,
+      evaluateRequest(policy, { environment: "production", host: "attacker.example", origin: "https://mcp.example.test", forwardedHost: "" }).accepted,
+      evaluateRequest(policy, { environment: "development", host: "127.0.0.1:18110", origin: "http://127.0.0.1:18110", forwardedHost: "" }).accepted,
     ];
     expect(accepted).toEqual([true, false, true]);
   });
@@ -176,10 +132,21 @@ describe("MCP Origin Guardian image boundary", () => {
     };
     expect(seccomp.defaultAction).toBe("SCMP_ACT_ALLOW");
     expect(seccomp.syscalls).toContainEqual({
-      names: ["connect"],
+      names: ["connect", "sendto", "sendmsg", "sendmmsg"],
       action: "SCMP_ACT_ERRNO",
       errnoRet: 1,
     });
+  });
+
+  it("derives verifier origins instead of hard-coding one host port", () => {
+    const participantServer = readFileSync(join(localRoot, "app/server.mjs"), "utf8");
+    const verifierServer = readFileSync(join(localRoot, "verifier/server.mjs"), "utf8");
+    expect(participantServer).toContain("port+1");
+    expect(participantServer).toContain("app\\.github\\.dev");
+    expect(participantServer).not.toContain('const verifierOrigin=location.hostname');
+    expect(verifierServer).toContain("isAllowedWorkbenchOrigin");
+    expect(verifierServer).toContain("verifierPort === originPort + 1");
+    expect(verifierServer).toContain("app\\.github\\.dev");
   });
 
   it("does not leave public or hidden grading in participant-copied source", () => {
@@ -194,18 +161,9 @@ describe("MCP Origin Guardian image boundary", () => {
       expect(source).not.toContain("operator-approved authorities");
     }
 
-    const publicCases = readFileSync(
-      join(localRoot, "verifier/public-cases.mjs"),
-      "utf8",
-    );
-    const hiddenGrader = readFileSync(
-      join(localRoot, "verifier/grader.mjs"),
-      "utf8",
-    );
-    const verifierServer = readFileSync(
-      join(localRoot, "verifier/server.mjs"),
-      "utf8",
-    );
+    const publicCases = readFileSync(join(localRoot, "verifier/public-cases.mjs"), "utf8");
+    const hiddenGrader = readFileSync(join(localRoot, "verifier/grader.mjs"), "utf8");
+    const verifierServer = readFileSync(join(localRoot, "verifier/server.mjs"), "utf8");
     expect(publicCases).toContain("runPublicCases");
     expect(publicCases).toContain("APPROVED_POLICY");
     expect(hiddenGrader).toContain("gradePolicy");
