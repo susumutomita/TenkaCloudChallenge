@@ -675,6 +675,22 @@
       ]
     },
     {
+      "id": "mcp-origin-guardian",
+      "category": "Challenge",
+      "region": "ap-northeast-1",
+      "estimatedSessionMinutes": 60,
+      "perHourUsd": 0,
+      "perSessionUsd": 0,
+      "ifLeftRunningUsd": {
+        "oneDay": 0,
+        "oneWeek": 0,
+        "oneMonth": 0
+      },
+      "freeTierEligible": true,
+      "alwaysOnResources": [],
+      "billable": []
+    },
+    {
       "id": "microservice-migration-battle",
       "category": "Battle",
       "region": "ap-northeast-1",
