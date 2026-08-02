@@ -7,6 +7,14 @@ import {
 } from "./policy.mjs";
 
 const LIMIT = 32 * 1024;
+
+function requestUrl(target, base) {
+  try {
+    return new URL(String(target ?? "/").replace(/^\\/+/, "/"), base);
+  } catch {
+    return new URL("/__malformed_request__", base);
+  }
+}
 const headers = {
   "cache-control": "no-store",
   "content-security-policy":
@@ -73,7 +81,7 @@ byId("prepare").onclick=async()=>{const r=await call("/api/prepare",{policy:poli
 `;
 
 const challenge = createServer(async (request, response) => {
-  const url = new URL(request.url ?? "/", "http://127.0.0.1");
+  const url = requestUrl(request.url, "http://127.0.0.1");
   if (request.method === "GET" && url.pathname === "/healthz") {
     return send(response, 200, "application/json", JSON.stringify({ status: "ok" }));
   }
