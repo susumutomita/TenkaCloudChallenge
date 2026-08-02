@@ -1,0 +1,199 @@
+name: mcp-origin-guardian-runtime
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/mcp-origin-guardian-runtime.yml"
+      - "challenges/mcp-origin-guardian/**"
+      - "scripts/mcp-origin-guardian.test.ts"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/mcp-origin-guardian-runtime.yml"
+      - "challenges/mcp-origin-guardian/**"
+      - "scripts/mcp-origin-guardian.test.ts"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mcp-origin-guardian-runtime-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docker-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      COMPOSE_FILE: challenges/mcp-origin-guardian/local/docker-compose.yml
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Build and start the isolated lab
+        run: |
+          set -euo pipefail
+          docker compose -f "$COMPOSE_FILE" build
+          docker compose -f "$COMPOSE_FILE" up --detach
+
+      - name: Wait for both services
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --show-error http://127.0.0.1:18110/healthz >/dev/null \
+              && curl --fail --silent --show-error http://127.0.0.1:18111/healthz >/dev/null; then
+              docker compose -f "$COMPOSE_FILE" ps
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose -f "$COMPOSE_FILE" ps
+          docker compose -f "$COMPOSE_FILE" logs --no-color
+          exit 1
+
+      - name: Prove hidden grading is absent from the participant image
+        run: |
+          set -euo pipefail
+          participant_image="$(docker compose -f "$COMPOSE_FILE" images --quiet participant)"
+          test -n "$participant_image"
+          docker run --rm --entrypoint sh "$participant_image" -ec '
+            test ! -e /app/verifier
+            ! grep -R "gradePolicy\|hidden authority-boundary" /app >/dev/null 2>&1
+          '
+
+      - name: Exercise Browser Workbench and positive or negative grading
+        run: |
+          set -euo pipefail
+          workdir="$(mktemp -d)"
+          trap 'rm -rf "$workdir"' EXIT
+
+          curl --fail --silent --show-error \
+            http://127.0.0.1:18110/api/inspect >"$workdir/inspect.json"
+          python3 - "$workdir/inspect.json" <<'PY'
+          import json, pathlib, sys
+          value = json.loads(pathlib.Path(sys.argv[1]).read_text())
+          assert value["request"]["host"] == "attacker.example"
+          assert value["vulnerable"]["allowedHost"] == "attacker.example"
+          assert value["vulnerable"]["resource"] == "https://attacker.example"
+          PY
+
+          cat >"$workdir/policy.json" <<'JSON'
+          {
+            "canonicalOrigin": "https://mcp.example.test",
+            "developmentOrigin": "http://127.0.0.1:18110"
+          }
+          JSON
+          python3 - "$workdir/policy.json" >"$workdir/request.json" <<'PY'
+          import json, pathlib, sys
+          print(json.dumps({"policy": json.loads(pathlib.Path(sys.argv[1]).read_text())}))
+          PY
+
+          curl --fail --silent --show-error \
+            --header 'content-type: application/json' \
+            --data-binary @"$workdir/request.json" \
+            http://127.0.0.1:18110/api/test >"$workdir/public.json"
+          python3 - "$workdir/public.json" <<'PY'
+          import json, pathlib, sys
+          value = json.loads(pathlib.Path(sys.argv[1]).read_text())
+          assert value["report"]["correct"] is True
+          assert value["report"]["cases"]
+          assert all(case["passed"] is True for case in value["report"]["cases"])
+          PY
+
+          curl --fail --silent --show-error \
+            --header 'content-type: application/json' \
+            --data-binary @"$workdir/request.json" \
+            http://127.0.0.1:18110/api/prepare >"$workdir/prepared.json"
+          python3 - "$workdir/prepared.json" >"$workdir/verify.json" <<'PY'
+          import json, pathlib, sys
+          value = json.loads(pathlib.Path(sys.argv[1]).read_text())
+          assert value["report"]["correct"] is True
+          assert isinstance(value["submission"], str) and value["submission"]
+          print(json.dumps({"checkpointId": "canonical-policy", "submission": value["submission"]}))
+          PY
+
+          curl --fail --silent --show-error \
+            --header 'content-type: application/json' \
+            --data-binary @"$workdir/verify.json" \
+            http://127.0.0.1:18111/verify >"$workdir/verdict.json"
+          python3 - "$workdir/verdict.json" <<'PY'
+          import json, pathlib, sys
+          value = json.loads(pathlib.Path(sys.argv[1]).read_text())
+          assert value["checkpointId"] == "canonical-policy"
+          assert value["correct"] is True
+          PY
+
+          python3 >"$workdir/bad-verify.json" <<'PY'
+          import base64, json
+          policy = {
+              "canonicalOrigin": "https://attacker.example",
+              "developmentOrigin": "http://127.0.0.1:18110",
+          }
+          encoded = base64.urlsafe_b64encode(json.dumps(policy, separators=(",", ":")).encode()).decode().rstrip("=")
+          print(json.dumps({"checkpointId": "canonical-policy", "submission": encoded}))
+          PY
+          curl --fail --silent --show-error \
+            --header 'content-type: application/json' \
+            --data-binary @"$workdir/bad-verify.json" \
+            http://127.0.0.1:18111/verify >"$workdir/bad-verdict.json"
+          python3 - "$workdir/bad-verdict.json" <<'PY'
+          import json, pathlib, sys
+          value = json.loads(pathlib.Path(sys.argv[1]).read_text())
+          assert value["checkpointId"] == "canonical-policy"
+          assert value["correct"] is False
+          PY
+
+      - name: Exercise canonical metadata and fail-closed authority checks
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error \
+            --header 'Host: 127.0.0.1:18110' \
+            --header 'Origin: http://127.0.0.1:18110' \
+            http://127.0.0.1:18110/.well-known/oauth-protected-resource \
+            | python3 -c 'import json,sys; value=json.load(sys.stdin); assert value["resource"] == "http://127.0.0.1:18110"'
+
+          curl --fail --silent --show-error \
+            --resolve mcp.example.test:18110:127.0.0.1 \
+            --header 'Origin: https://mcp.example.test' \
+            http://mcp.example.test:18110/.well-known/oauth-protected-resource \
+            | python3 -c 'import json,sys; value=json.load(sys.stdin); assert value["resource"] == "https://mcp.example.test"'
+
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            --header 'Host: attacker.example' \
+            --header 'Origin: https://attacker.example' \
+            http://127.0.0.1:18110/.well-known/oauth-protected-resource)" = "403"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            --header 'Host: mcp.example.test' \
+            --header 'Origin: https://mcp.example.test' \
+            --header 'X-Forwarded-Host: attacker.example' \
+            http://127.0.0.1:18110/.well-known/oauth-protected-resource)" = "403"
+
+          headers="$(mktemp)"
+          trap 'rm -f "$headers"' EXIT
+          test "$(curl --silent --dump-header "$headers" --output /dev/null --write-out '%{http_code}' \
+            --header 'Host: attacker.example' \
+            --header 'Origin: https://attacker.example' \
+            http://127.0.0.1:18110/.well-known/oauth-protected-resource)" = "403"
+          grep -Eqi '^www-authenticate: Bearer resource_metadata="https://mcp\.example\.test/\.well-known/oauth-protected-resource"' "$headers"
+
+      - name: Prove the participant network has no outbound path
+        run: |
+          set -euo pipefail
+          docker compose -f "$COMPOSE_FILE" exec -T participant \
+            node -e "fetch('https://example.com', {signal: AbortSignal.timeout(3000)}).then(() => process.exit(1)).catch(() => process.exit(0))"
+
+      - name: Collect diagnostics
+        if: always()
+        run: |
+          docker compose -f "$COMPOSE_FILE" ps || true
+          docker compose -f "$COMPOSE_FILE" logs --no-color || true
+
+      - name: Remove every disposable Docker resource
+        if: always()
+        run: |
+          set -euo pipefail
+          docker compose -f "$COMPOSE_FILE" down --volumes --remove-orphans
+          test -z "$(docker compose -f "$COMPOSE_FILE" ps --all --quiet)"
