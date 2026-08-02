@@ -68,11 +68,10 @@ export function evaluateRequest(policy, request) {
     return { accepted: false, reason: "untrusted_forwarded_host" };
   }
 
-  const environment = request.environment;
   const configured =
-    environment === "production"
+    request.environment === "production"
       ? parseCanonical(policy.canonicalOrigin)
-      : environment === "development"
+      : request.environment === "development"
         ? parseDevelopment(policy.developmentOrigin)
         : null;
   if (!configured) {
@@ -101,100 +100,12 @@ export function decodeSubmission(value) {
   if (typeof value !== "string" || value.length < 8 || value.length > 2048) return null;
   try {
     const decoded = Buffer.from(value, "base64url").toString("utf8");
-    if (Buffer.from(decoded, "utf8").toString("base64url") !== value.replace(/=+$/, "")) return null;
-    return JSON.parse(decoded);
+    if (Buffer.from(decoded, "utf8").toString("base64url") !== value.replace(/=+$/, "")) {
+      return null;
+    }
+    const parsed = JSON.parse(decoded);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
   } catch {
     return null;
   }
-}
-
-export function gradePolicy(policy) {
-  const errors = validatePolicy(policy);
-  const cases = [
-    {
-      name: "canonical production request",
-      expect: true,
-      request: {
-        environment: "production",
-        host: "mcp.example.test",
-        origin: "https://mcp.example.test",
-        forwardedHost: "",
-      },
-    },
-    {
-      name: "explicit development loopback",
-      expect: true,
-      request: {
-        environment: "development",
-        host: "127.0.0.1:18110",
-        origin: "http://127.0.0.1:18110",
-        forwardedHost: "",
-      },
-    },
-    {
-      name: "development authority in production",
-      expect: false,
-      request: {
-        environment: "production",
-        host: "127.0.0.1:18110",
-        origin: "http://127.0.0.1:18110",
-        forwardedHost: "",
-      },
-    },
-    {
-      name: "attacker Host",
-      expect: false,
-      request: {
-        environment: "production",
-        host: "attacker.example",
-        origin: "https://mcp.example.test",
-        forwardedHost: "",
-      },
-    },
-    {
-      name: "cross-site Origin",
-      expect: false,
-      request: {
-        environment: "production",
-        host: "mcp.example.test",
-        origin: "https://attacker.example",
-        forwardedHost: "",
-      },
-    },
-    {
-      name: "opaque Origin",
-      expect: false,
-      request: {
-        environment: "production",
-        host: "mcp.example.test",
-        origin: "null",
-        forwardedHost: "",
-      },
-    },
-    {
-      name: "forwarded authority override",
-      expect: false,
-      request: {
-        environment: "production",
-        host: "mcp.example.test",
-        origin: "https://mcp.example.test",
-        forwardedHost: "attacker.example",
-      },
-    },
-  ];
-  if (errors.length > 0) return { correct: false, errors, cases: [] };
-  if (
-    policy.canonicalOrigin !== "https://mcp.example.test" ||
-    policy.developmentOrigin !== "http://127.0.0.1:18110"
-  ) {
-    errors.push("policy does not select the lab's operator-approved authorities");
-  }
-  const results = cases.map((item) => {
-    const result = evaluateRequest(policy, item.request);
-    return { name: item.name, passed: result.accepted === item.expect };
-  });
-  if (results.some((result) => !result.passed)) {
-    errors.push("one or more authority-boundary cases failed");
-  }
-  return { correct: errors.length === 0, errors, cases: results };
 }
