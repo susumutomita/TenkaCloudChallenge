@@ -6,10 +6,6 @@ import { runPublicCases } from "./public-cases.mjs";
 const BODY_LIMIT = 32 * 1024;
 const HEADER_LIMIT = 8 * 1024;
 const PORT = Number(process.env.PORT || 8081);
-const WORKBENCH_ORIGINS = new Set([
-  "http://127.0.0.1:18110",
-  "http://localhost:18110",
-]);
 const HEADERS = Object.freeze({
   "cache-control": "no-store",
   "content-type": "application/json; charset=utf-8",
@@ -24,9 +20,40 @@ function requestUrl(target) {
   }
 }
 
+function isAllowedWorkbenchOrigin(originText, hostText) {
+  let origin;
+  try {
+    origin = new URL(originText);
+  } catch {
+    return false;
+  }
+
+  const host = String(hostText ?? "").toLowerCase();
+  if (
+    origin.protocol === "http:" &&
+    ["127.0.0.1", "localhost"].includes(origin.hostname) &&
+    ["127.0.0.1", "localhost"].includes(host.split(":", 1)[0])
+  ) {
+    const originPort = Number(origin.port);
+    const verifierPort = Number(host.slice(host.lastIndexOf(":") + 1));
+    return Number.isInteger(originPort) && verifierPort === originPort + 1;
+  }
+
+  if (origin.protocol !== "https:") return false;
+  const originMatch = origin.hostname.match(/^(.*-)(\d+)(\.app\.github\.dev)$/);
+  const hostMatch = host.match(/^(.*-)(\d+)(\.app\.github\.dev)$/);
+  return Boolean(
+    originMatch &&
+      hostMatch &&
+      originMatch[1] === hostMatch[1] &&
+      originMatch[3] === hostMatch[3] &&
+      Number(hostMatch[2]) === Number(originMatch[2]) + 1,
+  );
+}
+
 function corsHeaders(request) {
   const origin = typeof request.headers.origin === "string" ? request.headers.origin : "";
-  if (!WORKBENCH_ORIGINS.has(origin)) return null;
+  if (!isAllowedWorkbenchOrigin(origin, request.headers.host)) return null;
   return {
     "access-control-allow-origin": origin,
     vary: "Origin",
