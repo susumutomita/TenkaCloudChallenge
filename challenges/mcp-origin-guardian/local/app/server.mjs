@@ -1,53 +1,78 @@
 import { createServer } from "node:http";
-import {
-  decodeSubmission,
-  encodeSubmission,
-  evaluateRequest,
-  gradePolicy,
-} from "./policy.mjs";
+import { encodeSubmission, evaluateRequest } from "./policy.mjs";
+import { runPublicCases } from "./public-cases.mjs";
 
-const LIMIT = 32 * 1024;
-
-function requestUrl(target, base) {
-  try {
-    return new URL(String(target ?? "/").replace(/^\\/+/, "/"), base);
-  } catch {
-    return new URL("/__malformed_request__", base);
-  }
-}
-const headers = {
+const BODY_LIMIT = 32 * 1024;
+const PORT = Number(process.env.PORT || 8080);
+const RUNTIME_POLICY = Object.freeze({
+  canonicalOrigin: "https://mcp.example.test",
+  developmentOrigin: "http://127.0.0.1:18110",
+});
+const SECURITY_HEADERS = Object.freeze({
   "cache-control": "no-store",
   "content-security-policy":
-    "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'",
+    "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
   "x-content-type-options": "nosniff",
-};
+});
 
-function send(response, status, type, body, extra = {}) {
-  response.writeHead(status, { ...headers, "content-type": type, ...extra });
+function requestUrl(target) {
+  try {
+    return new URL(String(target ?? "/").replace(/^\/+/, "/"), "http://127.0.0.1");
+  } catch {
+    return new URL("http://127.0.0.1/__malformed_request__");
+  }
+}
+
+function send(response, status, contentType, body, extra = {}) {
+  response.writeHead(status, {
+    ...SECURITY_HEADERS,
+    "content-type": contentType,
+    "content-length": Buffer.byteLength(body),
+    ...extra,
+  });
   response.end(body);
+}
+
+function sendJson(response, status, payload, extra = {}) {
+  send(response, status, "application/json; charset=utf-8", JSON.stringify(payload), extra);
 }
 
 function readJson(request) {
   return new Promise((resolve) => {
+    const declared = Number(request.headers["content-length"] ?? 0);
+    if (!Number.isInteger(declared) || declared <= 0 || declared > BODY_LIMIT) {
+      request.resume();
+      resolve(null);
+      return;
+    }
     const chunks = [];
     let size = 0;
+    let settled = false;
+    const finish = (value) => {
+      if (!settled) {
+        settled = true;
+        resolve(value);
+      }
+    };
     request.on("data", (chunk) => {
       size += chunk.length;
-      if (size > LIMIT) {
+      if (size > BODY_LIMIT) {
         request.destroy();
-        resolve(null);
+        finish(null);
       } else {
         chunks.push(chunk);
       }
     });
     request.on("end", () => {
+      if (settled || size !== declared) return finish(null);
       try {
-        resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+        const value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+        finish(value && typeof value === "object" && !Array.isArray(value) ? value : null);
       } catch {
-        resolve(null);
+        finish(null);
       }
     });
-    request.on("error", () => resolve(null));
+    request.on("error", () => finish(null));
   });
 }
 
@@ -58,7 +83,7 @@ body{font-family:system-ui;max-width:880px;margin:2rem auto;padding:0 1rem;line-
 section{background:#102331;border:1px solid #294455;border-radius:12px;padding:1rem;margin:1rem 0}
 textarea,pre{width:100%;box-sizing:border-box;background:#03090d;color:#d8f0f7;border:1px solid #385767;border-radius:8px;padding:.8rem}
 textarea{min-height:9rem}button{margin:.3rem;padding:.6rem 1rem;border-radius:8px;border:1px solid #66cddd;background:#164458;color:white}
-code{color:#ffd27a} .muted{color:#a9bec9}
+code{color:#ffd27a}.muted{color:#a9bec9}
 </style></head><body>
 <h1>MCP Origin Guardian</h1>
 <p>受信したHostをそのまま信頼済みoriginにしているresource serverを監査します。実credentialや外部networkは使いません。</p>
@@ -73,17 +98,17 @@ code{color:#ffd27a} .muted{color:#a9bec9}
 <script src="/app.js"></script></body></html>`;
 
 const APP = `const byId=(id)=>document.getElementById(id);
-async function call(path,body){const r=await fetch(path,{method:body?"POST":"GET",headers:body?{"content-type":"application/json"}:{},body:body?JSON.stringify(body):undefined});return r.json()}
+async function call(path,body){const r=await fetch(path,{method:body?"POST":"GET",headers:body?{"content-type":"application/json"}:{},body:body?JSON.stringify(body):undefined});const value=await r.json();if(!r.ok)throw new Error(value.error||String(r.status));return value}
 function policy(){try{return JSON.parse(byId("policy").value)}catch{return null}}
-byId("inspect").onclick=async()=>{byId("observation").textContent=JSON.stringify(await call("/api/inspect"),null,2)};
-byId("test").onclick=async()=>{byId("result").textContent=JSON.stringify(await call("/api/test",{policy:policy()}),null,2)};
-byId("prepare").onclick=async()=>{const r=await call("/api/prepare",{policy:policy()});byId("result").textContent=JSON.stringify(r.report,null,2);byId("submission").textContent=r.submission||"公開ケースをすべて通してください。"};
+byId("inspect").onclick=async()=>{try{byId("observation").textContent=JSON.stringify(await call("/api/inspect"),null,2)}catch(error){byId("observation").textContent=String(error)}};
+byId("test").onclick=async()=>{try{byId("result").textContent=JSON.stringify(await call("/api/test",{policy:policy()}),null,2)}catch(error){byId("result").textContent=String(error)}};
+byId("prepare").onclick=async()=>{try{const r=await call("/api/prepare",{policy:policy()});byId("result").textContent=JSON.stringify(r.report,null,2);byId("submission").textContent=r.submission||"公開ケースをすべて通してください。"}catch(error){byId("result").textContent=String(error)}};
 `;
 
-const challenge = createServer(async (request, response) => {
-  const url = requestUrl(request.url, "http://127.0.0.1");
+const server = createServer(async (request, response) => {
+  const url = requestUrl(request.url);
   if (request.method === "GET" && url.pathname === "/healthz") {
-    return send(response, 200, "application/json", JSON.stringify({ status: "ok" }));
+    return sendJson(response, 200, { status: "ok" });
   }
   if (request.method === "GET" && url.pathname === "/") {
     return send(response, 200, "text/html; charset=utf-8", HOME);
@@ -93,87 +118,56 @@ const challenge = createServer(async (request, response) => {
   }
   if (request.method === "GET" && url.pathname === "/api/inspect") {
     const attackerHost = "attacker.example";
-    return send(
-      response,
-      200,
-      "application/json",
-      JSON.stringify({
-        request: { host: attackerHost, origin: "https://attacker.example" },
-        vulnerable: {
-          allowedHost: attackerHost,
-          resource: `https://${attackerHost}`,
-          explanation: "both values came from the same untrusted request",
-        },
-      }),
-    );
+    return sendJson(response, 200, {
+      request: { host: attackerHost, origin: "https://attacker.example" },
+      vulnerable: {
+        allowedHost: attackerHost,
+        resource: `https://${attackerHost}`,
+        explanation: "both values came from the same untrusted request",
+      },
+    });
   }
   if (request.method === "POST" && ["/api/test", "/api/prepare"].includes(url.pathname)) {
     const body = await readJson(request);
-    if (!body) return send(response, 400, "application/json", JSON.stringify({ error: "invalid_json" }));
-    const report = gradePolicy(body.policy);
+    if (!body) return sendJson(response, 400, { error: "invalid_json" });
+    const report = runPublicCases(body.policy);
     const payload = { report };
     if (url.pathname === "/api/prepare" && report.correct) {
       payload.submission = encodeSubmission(body.policy);
     }
-    return send(response, 200, "application/json", JSON.stringify(payload));
+    return sendJson(response, 200, payload);
   }
 
   if (request.method === "GET" && url.pathname === "/.well-known/oauth-protected-resource") {
-    const policy = {
-      canonicalOrigin: "https://mcp.example.test",
-      developmentOrigin: "http://127.0.0.1:18110",
-    };
-    const result = evaluateRequest(policy, {
+    const host = String(request.headers.host ?? "").toLowerCase();
+    const result = evaluateRequest(RUNTIME_POLICY, {
       environment:
-        String(request.headers.host ?? "").toLowerCase() === "127.0.0.1:18110"
+        host === "127.0.0.1:18110" || host === "localhost:18110"
           ? "development"
           : "production",
-      host: request.headers.host,
+      host,
       origin: request.headers.origin,
       forwardedHost: request.headers["x-forwarded-host"],
     });
     if (!result.accepted) {
-      return send(
+      return sendJson(
         response,
         403,
-        "application/json",
-        JSON.stringify({ error: result.reason }),
+        { error: result.reason },
         {
           "www-authenticate":
             'Bearer resource_metadata="https://mcp.example.test/.well-known/oauth-protected-resource"',
         },
       );
     }
-    return send(
-      response,
-      200,
-      "application/json",
-      JSON.stringify({
-        resource: result.metadataResource,
-        authorization_servers: ["https://auth.example.test"],
-      }),
-    );
+    return sendJson(response, 200, {
+      resource: result.metadataResource,
+      authorization_servers: ["https://auth.example.test"],
+    });
   }
-  return send(response, 404, "application/json", JSON.stringify({ error: "not_found" }));
+  return sendJson(response, 404, { error: "not_found" });
 });
 
-const verify = createServer(async (request, response) => {
-  if (request.method !== "POST" || request.url !== "/verify") {
-    return send(response, 404, "application/json", JSON.stringify({ error: "not_found" }));
-  }
-  const body = await readJson(request);
-  const policy = decodeSubmission(body?.submission);
-  const report = policy ? gradePolicy(policy) : { correct: false };
-  return send(
-    response,
-    200,
-    "application/json",
-    JSON.stringify({
-      correct: report.correct === true,
-      message: report.correct ? "Canonical authority policy accepted." : "The policy still trusts an unsafe authority.",
-    }),
-  );
-});
-
-challenge.listen(8080, "0.0.0.0");
-verify.listen(8081, "0.0.0.0");
+server.requestTimeout = 10_000;
+server.headersTimeout = 10_000;
+server.listen(PORT, "0.0.0.0");
