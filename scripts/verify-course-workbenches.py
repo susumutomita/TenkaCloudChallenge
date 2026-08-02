@@ -93,7 +93,12 @@ for item in config["checkpoints"]:
     checkpoint = item["id"]
     submission = prepared["submissions"][checkpoint]
     if item["kind"] == "code":
-        assert _WORKBENCH.unwrap_submission(checkpoint, submission) == submission
+        assert submission.startswith("tcw1.")
+        assert "\n" not in submission and "\r" not in submission
+        expected_source = starter[config["submittedFiles"][0]] if len(starter) == 1 else json.dumps(starter, separators=(",", ":"), ensure_ascii=False)
+        assert _WORKBENCH.unwrap_submission(checkpoint, submission) == expected_source
+        # Existing callers that still submit raw source remain compatible.
+        assert _WORKBENCH.unwrap_submission(checkpoint, expected_source) == expected_source
     else:
         assert _WORKBENCH.unwrap_submission(checkpoint, "0") is None
         assert _WORKBENCH.unwrap_submission(checkpoint, submission) == 0

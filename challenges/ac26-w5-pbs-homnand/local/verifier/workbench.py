@@ -215,7 +215,8 @@ class WorkbenchSupport:
             code_value = json.dumps(sources, separators=(",", ":"), ensure_ascii=False)
 
         submissions: dict[str, str] = {
-            checkpoint: code_value for checkpoint in self.code_checkpoints
+            checkpoint: self._seal_manual(checkpoint, code_value)
+            for checkpoint in self.code_checkpoints
         }
         for checkpoint in self.manual_checkpoints:
             submissions[checkpoint] = self._seal_manual(
