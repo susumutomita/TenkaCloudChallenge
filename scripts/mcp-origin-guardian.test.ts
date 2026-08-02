@@ -164,7 +164,22 @@ describe("MCP Origin Guardian image boundary", () => {
     expect(compose).toContain("target: verifier");
     expect(compose).toContain('"127.0.0.1:18110:8080"');
     expect(compose).toContain('"127.0.0.1:18111:8081"');
-    expect(compose).toContain("internal: true");
+    expect(compose.match(/seccomp=\.\/seccomp-no-connect\.json/g)).toHaveLength(2);
+    expect(compose).toContain("- participant");
+    expect(compose).toContain("- verifier");
+
+    const seccomp = JSON.parse(
+      readFileSync(join(localRoot, "seccomp-no-connect.json"), "utf8"),
+    ) as {
+      defaultAction: string;
+      syscalls: Array<{ names: string[]; action: string; errnoRet?: number }>;
+    };
+    expect(seccomp.defaultAction).toBe("SCMP_ACT_ALLOW");
+    expect(seccomp.syscalls).toContainEqual({
+      names: ["connect"],
+      action: "SCMP_ACT_ERRNO",
+      errnoRet: 1,
+    });
   });
 
   it("does not leave hidden grading in any participant-copied source", () => {
