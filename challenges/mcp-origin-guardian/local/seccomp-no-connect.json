@@ -3,7 +3,10 @@
   "syscalls": [
     {
       "names": [
-        "connect"
+        "connect",
+        "sendto",
+        "sendmsg",
+        "sendmmsg"
       ],
       "action": "SCMP_ACT_ERRNO",
       "errnoRet": 1
