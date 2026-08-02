@@ -19,3 +19,9 @@ services:
       timeout: 3s
       retries: 20
     restart: "no"
+    networks:
+      - isolated
+
+networks:
+  isolated:
+    internal: true
