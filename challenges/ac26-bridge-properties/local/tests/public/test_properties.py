@@ -11,12 +11,14 @@ import os
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "starter"))
+ROOT = Path(__file__).resolve().parents[2]
+SUBMISSION_DIR = os.environ.get("SUBMISSION_DIR")
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, SUBMISSION_DIR or str(ROOT / "starter"))
 
 from fixtures.generate import PROTOCOL_IDS, instance  # noqa: E402
-from starter.classify import PROPERTIES, classify  # noqa: E402
-from starter.counterexamples import (  # noqa: E402
+from classify import PROPERTIES, classify  # noqa: E402
+from counterexamples import (  # noqa: E402
     extract_witness,
     incompleteness_witness,
     unsoundness_witness,
