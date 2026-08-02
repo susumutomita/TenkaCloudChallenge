@@ -164,6 +164,7 @@ PUBLIC_TEST_SCRIPT = """
 import os, runpy
 os.environ["FLAG_SEED"] = {seed!r}
 os.environ["SUBMISSION_DIR"] = {workspace!r}
+os.environ["BROWSER_PUBLIC_TESTS"] = "1"
 runpy.run_path({root!r} + "/tests/public/test_properties.py", run_name="__main__")
 """
 

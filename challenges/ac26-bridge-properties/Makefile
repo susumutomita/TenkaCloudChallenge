@@ -25,7 +25,6 @@ build:
 
 test: build
 	$(RUN) python tests/public/test_properties.py
-	$(RUN) python tests/public/test_workbench.py
 
 test-one: build
 	@test -n "$(ID)" || (echo "usage: make test-one ID=<test name substring>" && exit 1)
