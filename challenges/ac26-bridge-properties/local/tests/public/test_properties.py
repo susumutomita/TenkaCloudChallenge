@@ -1,4 +1,4 @@
-"""Public tests: they check the SHAPE of your answers, not whether they are right.
+"""Public tests: answer shape and the browser-only participant contract.
 
 They confirm classify() returns the three keys and that your generators return
 integers. They cannot tell you whether P2 really accepts your out-of-range witness —
@@ -7,22 +7,32 @@ that is what the hidden verifier does, deliberately.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "starter"))
+ROOT = Path(__file__).resolve().parents[2]
+SUBMISSION_DIR = os.environ.get("SUBMISSION_DIR")
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, SUBMISSION_DIR or str(ROOT / "starter"))
 
 from fixtures.generate import PROTOCOL_IDS, instance  # noqa: E402
-from starter.classify import PROPERTIES, classify  # noqa: E402
-from starter.counterexamples import (  # noqa: E402
+from classify import PROPERTIES, classify  # noqa: E402
+from counterexamples import (  # noqa: E402
     extract_witness,
     incompleteness_witness,
     unsoundness_witness,
 )
+from verifier.server import (  # noqa: E402
+    inspect_payload,
+    prepare_submissions,
+    run_public_tests,
+    starter_payload,
+)
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
+WORKBENCH_TEST_SEED = "public-workbench-test"
 
 
 def test_classify_answers_every_protocol() -> None:
@@ -51,6 +61,64 @@ def test_extractor_returns_an_integer() -> None:
     assert isinstance(extract_witness(transcript), int)
 
 
+def test_workbench_inspect_explains_properties_and_seeded_evidence() -> None:
+    payload = inspect_payload(WORKBENCH_TEST_SEED)
+    assert set(payload["definitions"]) == {"complete", "sound", "private"}
+    assert set(payload["verifiers"]) == {"p1", "p2", "p3"}
+    assert set(payload["statement"]) == {"a", "b", "c", "p", "lo", "hi"}
+    assert set(payload["boundaryStatement"]) == {"a", "b", "c", "p", "lo", "hi"}
+    assert payload["transcript"]["protocol"] == "p3"
+
+
+def test_workbench_starter_returns_both_editable_files() -> None:
+    payload = starter_payload()
+    assert set(payload) == {"classify.py", "counterexamples.py"}
+    assert "def classify" in payload["classify.py"]
+    assert "def incompleteness_witness" in payload["counterexamples.py"]
+
+
+def test_workbench_public_tests_run_browser_sources() -> None:
+    result = run_public_tests(WORKBENCH_TEST_SEED, starter_payload())
+    assert result["passed"] is True
+    assert "public tests: all passed" in result["output"]
+
+
+def test_workbench_public_tests_report_invalid_browser_source() -> None:
+    sources = starter_payload()
+    sources["classify.py"] = "def classify(:\n"
+    result = run_public_tests(WORKBENCH_TEST_SEED, sources)
+    assert result["passed"] is False
+    assert result["output"]
+
+
+def test_workbench_prepare_returns_all_portal_checkpoints() -> None:
+    result = prepare_submissions(WORKBENCH_TEST_SEED, starter_payload())
+    assert result["ok"] is True
+    submissions = result["submissions"]
+    assert set(submissions) == {
+        "incompleteness",
+        "unsoundness",
+        "privacy-leak",
+        "property-matrix",
+        "transfer",
+    }
+    assert isinstance(submissions["incompleteness"], int)
+    assert isinstance(submissions["unsoundness"], int)
+    assert isinstance(submissions["privacy-leak"], int)
+    assert isinstance(json.loads(submissions["property-matrix"]), dict)
+    assert set(json.loads(submissions["transfer"])) == {"classify.py", "counterexamples.py"}
+
+
+def test_workbench_assets_expose_browser_only_journey() -> None:
+    html = (ROOT / "workbench" / "index.html").read_text(encoding="utf-8")
+    script = (ROOT / "workbench" / "app.js").read_text(encoding="utf-8")
+    for term in ("completeness", "soundness", "privacy", "terminal-input"):
+        assert term in html
+    for command in ("inspect", "test", "prepare", "reset"):
+        assert f'case "{command}"' in script
+    assert "copyText" in script
+
+
 def main() -> int:
     only = ""
     if "--only" in sys.argv:
@@ -61,6 +129,8 @@ def main() -> int:
     selected = 0
     for name, fn in sorted(globals().items()):
         if not name.startswith("test_") or not callable(fn):
+            continue
+        if os.environ.get("BROWSER_PUBLIC_TESTS") == "1" and name.startswith("test_workbench_"):
             continue
         if only and only not in name:
             continue
