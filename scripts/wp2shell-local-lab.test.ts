@@ -143,20 +143,90 @@ describe("wp2shell-local-lab catalog contract", () => {
     }
   });
 
-  it("should give the app no route out of its compose network (internal: true) and no other network", () => {
+  it("should give the app no route out of its compose networks, on every network it joins", () => {
+    // [TenkaCloud#347] This used to assert `networks.length === 1` and
+    // `service.networks === [labnet]`. That shape is egress-free AND
+    // unreachable: Docker establishes no host port binding at all for a
+    // container attached only to internal networks, so `ports:` above was inert
+    // and the platform's /verify probe timed out on every launch while the
+    // in-container healthcheck reported `Up (healthy)`.
+    //
+    // The real invariant is not "exactly one network", it is "no network the
+    // app joins can carry a packet out". So: the lab network stays
+    // `internal: true`, and any additional network exists only to carry the
+    // inbound published-port path and must be a bridge with IP masquerade
+    // disabled (no SNAT => an egress packet has no return route) and its host
+    // binding pinned to loopback. That is the arrangement
+    // challenges/ai-riscv-screen-repair and challenges/secure-ota-rollback
+    // already ship, and it is strictly more specific than a network count.
     const compose = parseYaml(read("local/docker-compose.yml")) as {
-      services: Record<string, { networks?: string[]; ports?: string[]; privileged?: boolean; cap_add?: unknown }>;
-      networks: Record<string, { internal?: boolean }>;
+      services: Record<
+        string,
+        { networks?: string[]; ports?: string[]; privileged?: boolean; cap_add?: unknown }
+      >;
+      networks: Record<
+        string,
+        { internal?: boolean; driver?: string; driver_opts?: Record<string, string> }
+      >;
     };
     const networkNames = Object.keys(compose.networks ?? {});
-    expect(networkNames.length).toBe(1);
-    const [labnet] = networkNames;
-    expect(compose.networks[labnet].internal).toBe(true);
+    expect(networkNames.length).toBeGreaterThan(0);
+
+    const internalNames = networkNames.filter((name) => compose.networks[name].internal === true);
+    expect(internalNames.length, "at least one network must be internal: true").toBeGreaterThan(0);
+
+    for (const name of networkNames) {
+      const network = compose.networks[name];
+      if (network.internal === true) continue;
+      // A non-internal network is allowed for one reason only: published ports.
+      expect(network.driver, `network ${name} must be an explicit bridge`).toBe("bridge");
+      expect(
+        network.driver_opts?.["com.docker.network.bridge.enable_ip_masquerade"],
+        `network ${name} must disable IP masquerade, or it grants the lab egress`,
+      ).toBe("false");
+      expect(
+        network.driver_opts?.["com.docker.network.bridge.host_binding_ipv4"],
+        `network ${name} must pin its host binding to loopback`,
+      ).toBe("127.0.0.1");
+    }
 
     for (const [name, service] of Object.entries(compose.services)) {
-      expect(service.networks, `service ${name} must declare networks`).toEqual([labnet]);
+      expect(service.networks, `service ${name} must declare networks`).toBeDefined();
+      expect(
+        service.networks?.length,
+        `service ${name} must declare at least one network`,
+      ).toBeGreaterThan(0);
+      for (const joined of service.networks ?? []) {
+        expect(networkNames, `service ${name} joins undeclared network ${joined}`).toContain(joined);
+      }
+      // Every service still sits on the internal lab network; the publish-only
+      // bridge is an addition to it, never a replacement for it.
+      expect(
+        service.networks?.some((joined) => compose.networks[joined]?.internal === true),
+        `service ${name} must stay on an internal network`,
+      ).toBe(true);
       expect(service.privileged, `service ${name} must not be privileged`).toBeFalsy();
       expect(service.cap_add, `service ${name} must not add capabilities`).toBeUndefined();
+    }
+  });
+
+  it("should attach every port-publishing service to a non-internal network, or the publish is inert", () => {
+    // [TenkaCloud#347] The half the old test could not see. Docker records
+    // HostConfig.PortBindings for an internal-only container but leaves
+    // NetworkSettings.Ports null, so `docker ps` shows `8080-8081/tcp` with no
+    // `127.0.0.1:...->` arrow and nothing on the host can connect. This is the
+    // exact assertion that turns that silent failure into a red test.
+    const compose = parseYaml(read("local/docker-compose.yml")) as {
+      services: Record<string, { networks?: string[]; ports?: string[] }>;
+      networks: Record<string, { internal?: boolean }>;
+    };
+    for (const [name, service] of Object.entries(compose.services)) {
+      if ((service.ports ?? []).length === 0) continue;
+      expect(
+        service.networks?.some((joined) => compose.networks[joined]?.internal !== true),
+        `service ${name} publishes ports but joins only internal networks, ` +
+          "so Docker will establish no host binding and /verify is unreachable",
+      ).toBe(true);
     }
   });
 
