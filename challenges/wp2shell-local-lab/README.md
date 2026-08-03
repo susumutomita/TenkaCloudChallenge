@@ -71,9 +71,13 @@ regresses (`scripts/wp2shell-local-lab.test.ts`):
 - **No outbound network, structurally, not by policy.** `local/docker-compose.yml` attaches
   the app to a compose network declared `internal: true` — Docker gives that network *no
   route* to the internet or the host's external interface at all. It is not a firewall rule
-  that could be misconfigured; there is nowhere for an outbound packet to go. The test
-  asserts the network declaration is present and that the service is not attached to any
-  other network.
+  that could be misconfigured; there is nowhere for an outbound packet to go. A second
+  network, `workshop-host`, exists only so that the loopback ports below are published at
+  all — Docker establishes no host port binding for a container attached only to internal
+  networks — and it carries no egress either: it is a bridge with IP masquerade disabled, so
+  an outbound packet gets no source NAT and therefore no return route. The test asserts the
+  internal declaration is present, that every service stays on it, and that any additional
+  network is a masquerade-disabled bridge pinned to loopback.
 - **Loopback only.** Both published ports are bound to `127.0.0.1`; the test asserts every
   `ports:` entry carries that prefix and that neither `privileged: true`, `cap_add`, nor a
   Docker-socket bind mount is present.
@@ -130,12 +134,12 @@ first run pulls it.
 
 ## Related files
 
-- `local/docker-compose.yml` — the single-container stack, `internal: true` network,
-  loopback-only ports.
+- `local/docker-compose.yml` — the single-container stack, `internal: true` lab network plus
+  the masquerade-disabled `workshop-host` bridge that publishes them, loopback-only ports.
 - `local/Dockerfile` — `node:22-alpine`, no extra packages.
 - `local/app/server.mjs` — the whole simulator: the mock REST surface, the batch-routing
   bug, the SQL flaw, the SRE console, and the multi-verify scorer, in one file.
 - `metadata.json` — catalog entry, eight-checkpoint scoring, per-checkpoint hints.
 - `scripts/wp2shell-local-lab.test.ts` (repo root) — asserts the safety boundary (no
-  exec/eval, loopback-only, `internal: true` network) and the scoring/template
-  cross-references.
+  exec/eval, loopback-only, `internal: true` network, every additional network
+  masquerade-disabled) and the scoring/template cross-references.

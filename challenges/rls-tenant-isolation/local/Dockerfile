@@ -24,6 +24,21 @@ COPY reference/ ./reference/
 COPY entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
 
+# Run unprivileged, like every other local-play image in this catalog
+# (`USER node` in sqli-demo / wp2shell-local-lab, `USER lab` in ai-riscv-*).
+#
+# For a Postgres-based image this is not only convention, it is required:
+# `initdb` refuses to run as uid 0 ("initdb: error: cannot be run as root"), so
+# a root entrypoint kills the container on its very first boot before either
+# server ever listens. The official image papers over this by re-exec'ing its own
+# docker-entrypoint.sh through `su-exec postgres`; this problem replaces that
+# entrypoint wholesale, so the drop has to happen here instead.
+#
+# uid 70 (`postgres`) already owns $PGDATA (/var/lib/postgresql/data, mode 1777)
+# and the socket dir in the base image, and /app is world-readable, so nothing
+# else needs a chown.
+USER postgres
+
 # 8080 = documents API (challenge surface), 8081 = loopback /verify.
 EXPOSE 8080 8081
 

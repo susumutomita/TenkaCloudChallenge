@@ -15,7 +15,12 @@
 create schema if not exists app;
 
 -- ---------------------------------------------------------------------------
--- Identity helpers — the only sanctioned way a policy learns "who is asking".
+-- Identity helpers, part 1 — the GUC readers, which depend on no table.
+--
+-- These are the only sanctioned way a policy learns "who is asking". The two
+-- helpers that read public.memberships live BELOW the domain tables, because
+-- Postgres parses a `language sql` body at CREATE time (check_function_bodies
+-- defaults to on) and rejects it if a referenced relation does not exist yet.
 -- ---------------------------------------------------------------------------
 
 -- The signed-in user's id, or NULL for the anon/public client. SECURITY DEFINER
@@ -27,27 +32,6 @@ create or replace function app.current_user_id() returns text
 create or replace function app.is_authenticated() returns boolean
   language sql stable
   as $$ select current_setting('request.jwt.role', true) = 'authenticated' $$;
-
--- The organizations the current user belongs to (drives every documents policy).
-create or replace function app.current_org_ids() returns setof uuid
-  language sql stable
-  as $$
-    select m.organization_id
-    from public.memberships m
-    where m.user_id = app.current_user_id()
-  $$;
-
--- True when the current user is an OWNER of the given organization.
-create or replace function app.is_owner_of(org uuid) returns boolean
-  language sql stable
-  as $$
-    select exists (
-      select 1 from public.memberships m
-      where m.user_id = app.current_user_id()
-        and m.organization_id = org
-        and m.role = 'owner'
-    )
-  $$;
 
 -- ---------------------------------------------------------------------------
 -- Domain tables.
@@ -75,6 +59,32 @@ create table if not exists public.documents (
 );
 
 create index if not exists documents_org_idx on public.documents (organization_id);
+
+-- ---------------------------------------------------------------------------
+-- Identity helpers, part 2 — the membership readers. They must be created after
+-- public.memberships exists (see the note above part 1).
+-- ---------------------------------------------------------------------------
+
+-- The organizations the current user belongs to (drives every documents policy).
+create or replace function app.current_org_ids() returns setof uuid
+  language sql stable
+  as $$
+    select m.organization_id
+    from public.memberships m
+    where m.user_id = app.current_user_id()
+  $$;
+
+-- True when the current user is an OWNER of the given organization.
+create or replace function app.is_owner_of(org uuid) returns boolean
+  language sql stable
+  as $$
+    select exists (
+      select 1 from public.memberships m
+      where m.user_id = app.current_user_id()
+        and m.organization_id = org
+        and m.role = 'owner'
+    )
+  $$;
 
 -- The API connects as this NON-superuser, login role. RLS does NOT apply to the
 -- table owner / superuser, so the app MUST run as a role that RLS binds to —

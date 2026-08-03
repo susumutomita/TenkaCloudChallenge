@@ -12,9 +12,11 @@ import { DatabaseSync } from "node:sqlite";
  * SQL query construction -- without shipping, deploying, or exposing anything
  * that is actually exploitable against a real WordPress site. There is no shell
  * access, no child_process / exec / eval anywhere in this file, and no outbound
- * network call is ever made (the compose network is `internal: true`; see
- * docker-compose.yml). scripts/wp2shell-local-lab.test.ts asserts both of those
- * facts so a regression fails CI, not just a reviewer's eyeball.
+ * network call is ever made (the lab network is `internal: true`, and the second
+ * network that exists only to publish the loopback ports has IP masquerade
+ * disabled, so it has no return route either; see docker-compose.yml).
+ * scripts/wp2shell-local-lab.test.ts asserts both of those facts so a regression
+ * fails CI, not just a reviewer's eyeball.
  *
  * Two servers run in one process (same pattern as challenges/sqli-demo):
  *   :8080  the challenge surface (the mock REST API the participant attacks, then
