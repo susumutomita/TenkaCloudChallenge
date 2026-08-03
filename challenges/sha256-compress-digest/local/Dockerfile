@@ -1,6 +1,6 @@
 # Pinned digest, not a floating tag: the fixtures a learner debugs must not change
 # because a base image moved underneath them.
-FROM python:3.13-slim@sha256:4efa69bf17cfbd83a9942e60e2642335c3b397448e5b4a1cf1e2ea7bfcd1b8dd AS participant
+FROM python:3.13-slim@sha256:6771159cd4fa5d9bba1258caf0b82e6b73458c694d178ad97c5e925c2d0e1a91 AS participant
 
 WORKDIR /problem
 
