@@ -89,6 +89,14 @@ jobs:
       - name: Install deps
         run: bun install --ignore-scripts
 
+      # Keep both gates explicit in CI: TypeScript proves compiler invariants,
+      # while ESLint covers promise handling and other type-aware semantics.
+      - name: Typecheck catalog tooling
+        run: bun run typecheck
+
+      - name: Lint catalog tooling
+        run: bun run lint
+
       - name: Validate problem metadata
         run: bun run scripts/validate-problems.ts
 
