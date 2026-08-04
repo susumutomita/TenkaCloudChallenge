@@ -18,10 +18,10 @@
   },
   "difficulty": 1,
   "estimatedDuration": "20-30 分",
-  "shortDescription": "暗号の前に、実験の作法を一度だけ。剰余カウンタを題材に、予測してから走らせる・trace から最初に壊れた場所を特定する・見えないパラメータでも通る一般解を書く、を体験する。",
-  "description": "AC26 companion track の入口。 暗号 primitive は一切扱わない。 後続の全問題が要求する操作 (local-play の起動・reset、 public test と hidden verifier の役割の違い、 実行前予測、 trace 読解、 seed 由来 fixture) を、 暗号の負荷が無い題材で一度だけ通す。\n\n採点は 4 checkpoint 独立。 environment (20) は container が実際に起動したことの確認、 predict (25) は実行前に紙で解いた値、 inspect (25) は 1 round だけ剰余適用が抜けた trace の最初の破綻位置、 generalize (30) は participant の counter.py を hidden seed の複数 modulus・負の step・zero step・start >= modulus・zero rounds に対して検証する。\n\n公開 test は正の step の 1 fixture しか使わないので、 剰余を最後に 1 回だけ適用する実装でも通る。 hidden test はそこを落とす。 これが misconception.public-tests-are-complete の実演であり、 この問題の主目的。\n\nmutation suite (local/mutation.py) が hidden test の有効性を CI で担保する。 等価変異 (末尾一括剰余 / start 未正規化) は Python の floored % の下で数学的に同値なため意図的に除外してある — 詳細は mutation.py の冒頭コメント。",
-  "instructions": "## はじめに\n\n剰余カウンタを完成させます。 暗号の知識は要りません。 後続問題で環境操作が学習の邪魔にならないよう、 ここで作法だけ通します。\n\n## 最初の一手\n\n問題ランタイムを起動し、 表示された **Browser Workbench** を開いてください。 Workbench 内の `inspect` を実行すると、 自分の fixture (start / step / rounds / modulus)、 health token、 壊れた trace が表示されます。 fixture は deploy ごとに変わるので、 他の人の数値は使えません。 ホスト側のターミナルやファイル操作は不要です。\n\n## 解き方\n\nWorkbench のエディタで `counter.py` の `advance` を完成させます。 `test` は公開テストを実行し、 `reset` で starter へ戻せます。 `prepare` は environment と generalize の 2 つの提出値を整形します。 predict は実行前に紙で求めた最終値を、 inspect は壊れた trace を読んで特定した index を、 Participant Portal の提出欄へ自分で入力します。\n\n## ゴール\n\n4 つの checkpoint を独立に通します。 予測は実行前に提出してください — 走らせてから写すと、 この問題で得るものが無くなります。",
-  "writeup": "## 何を確認したか\n\npublic test は「形」を教えるが「正しさ」は証明しない。 この問題の公開テストは正の step の 1 fixture しか使わないため、 剰余を最後に 1 回だけ適用する実装でも、 負の step を正規化しない実装でも通ってしまう。\n\nhidden test が落とすのはこの 2 つ。 複数 modulus・負の step・zero step・start >= modulus・zero rounds を回し、 さらに metamorphic property (start や step を modulus の整数倍だけずらしても trace は変わらない) を検査する。 固定の期待値ではなく関係を検査するので、 1 回の出力を丸暗記しても通らない。\n\n## mutation suite\n\nhidden test 自体が有効かは、 reference をわざと壊して各欠陥が検出されることで担保する (`make reference-test`)。 ここで学ぶべきは「通ったテスト」ではなく「落とせるテスト」。\n\n等価変異には注意が要る。 末尾で一括剰余を取る実装と start を事前正規化しない実装は、 Python の floored `%` の下で round ごとの剰余と数学的に同値であり、 正しいテストでは区別できない。 これらを mutation 一覧に入れると永久に survived が出て、 suite 自体が無視されるようになる。\n\n## 後続問題への接続\n\n以降の全 AC26 問題は `concept.experimental-method` を前提に置く。 予測してから走らせる、 trace の最初の破綻位置を言う、 見えないパラメータで一般化する — この 3 つは Week 1 の constraint residual、 Week 3 の group law 境界、 Week 5 の noise budget でそのまま使う。",
+  "shortDescription": "暗号が数を mod で閉じ込めるのは、 大きさという手がかりを消すため。 その最も単純な形である剰余カウンタを自分で書き、 それでもまだ暗号にならない理由 — 歩数を逆算できてしまう — まで見る。 Week 3 で楕円曲線に置き換わる、 その同じ「歩く」操作のいちばん簡単な版。",
+  "description": "AC26 companion track の入口。 暗号 primitive は実装しないが、 題材は暗号と無関係ではない。 剰余カウンタ (`start` に `step` を `rounds` 回足して毎回 mod) は Z_m 上を歩く操作そのもので、 Week 3 の楕円曲線の `k·G` と構造が同じ。 違いは逆算のコストだけで、 Z_m では `step` の逆元を 掛ければ `rounds` が戻る。 だから Z_m では署名が立たず、 Week 3 で歩く対象が置き換わる。 problem statement と `inspect` 出力はこの一点を動機として前面に置いている (fixtures.generate.walkback_case が実際に歩数を復元して見せる)。 参加者フィードバック (2026-08、 1 問目で 『なぜこれをやるのかの理由がない』 『剰余カウンタと暗号が結びつかない』) を受けた構成。\n\n採点は 4 checkpoint 独立。 environment (20) は container が実際に起動したことの確認、 predict (25) は実行前に紙で解いた値、 first-broken (25) は 1 round だけ剰余適用が抜けた trace の 最初の破綻位置、 generalize (30) は participant の counter.py を hidden seed の複数 modulus・負の step・zero step・start >= modulus・zero rounds に対して検証する。 checkpoint id は `inspect` ではなく `first-broken`: Workbench と Makefile の `inspect` コマンドと 名前が衝突し、 問題文中で同じものに読めていた (`ac26-w1-constraint-lab` の同種 checkpoint と同じ語彙)。\n\ncorrupted_trace は 「剰余を飛ばす round」 を wrap する round の中から選ぶ。 以前は無条件に選んでいたため、 飛ばした round で `value + step < modulus` なら壊れた trace が clean な trace と一致し、 範囲を外れる entry が 1 つも無い状態で出荷されていた (seed のおよそ半数)。 その seed を引いた参加者にとって first-broken は答えの無い設問だった。\n\n公開 test は正の step の 1 fixture しか使わないので、 剰余を最後に 1 回だけ適用する実装でも通る。 hidden test はそこを落とす。 これが misconception.public-tests-are-complete の実演であり、 この問題の第二の目的。\n\nmutation suite (local/mutation.py) が hidden test の有効性を CI で担保する。 等価変異 (末尾一括剰余 / start 未正規化) は Python の floored % の下で数学的に同値なため意図的に 除外してある — 詳細は mutation.py の冒頭コメント。",
+  "instructions": "## なぜこれをやるのか\n\n普通の整数は「大きさ」で喋ってしまいます。 足した結果が 5000 だと分かれば、 何回足したのかの見当がついてしまう。 大きさそのものが手がかりだからです。 `mod 17` で計算すると、 答えは必ず 0〜16 のどれかになります。 大きさからは何も読み取れない。 暗号が数を有限に閉じ込めるのは、 この漏れを消すためです。\n\nその最も単純な形が、 この問題で完成させる剰余カウンタです。 `start` から `step` を `rounds` 回足し、 毎回 mod で折り返しながら輪の上を歩く。 それだけ。\n\nただしこれはまだ暗号になりません。 この歩き方は逆算できてしまいます — 最終値さえ分かれば、 `step` に掛けると mod で 1 になる数を求めて掛け直すだけで、 歩数が戻ってくる。 `inspect` が実際に復元して見せるので、 自分の目で確かめてください。 大きさの漏れは塞げても、 抜け道が残っている。\n\nだから後で楕円曲線に置き換わります。 操作は同じ「歩く」ですが、 そちらは歩数の逆算が現実的にできない。 Week 3 の署名はその差の上に立っています。 この問題は、 その差を見に行くための最初の足場です。\n\n## 最初の一手\n\n問題ランタイムを起動し、 表示された **Browser Workbench** を開いてください。 `inspect` を実行すると、 health token、 自分の fixture (start / step / rounds / modulus)、 歩数を逆算して見せる別の walk、 そして壊れた trace が出ます。 `inspect` は証拠を出すコマンドの名前であって、 checkpoint の名前ではありません。 fixture は deploy ごとに変わるので、 他の人の数値は使えません。\n\n## 提出欄は 4 つ、 値の出どころは 2 種類\n\nWorkbench の `prepare` が値を作ってくれるのは 2 つだけです。 残りの 2 つは自分で決めて、 Participant Portal の同名欄へ直接書きます。\n\n- **environment** — `prepare` が出す health token をそのまま貼る。 container が本当に動いた証拠です。\n- **predict** — `inspect` が見せた fixture を紙で追い、 **最後の round の後の値**を整数 1 個で書く。 trace 全体ではありません。\n- **first-broken** — 壊れた trace を先頭から読み、 `inspect` が明示する不変条件を最初に破る entry の index を、 **0 始まり**の整数 1 個で書く。\n- **generalize** — Workbench のエディタで `counter.py` の `advance` を完成させ、 `prepare` が出す全文を貼る。 見たことのない fixture で検証されます。\n\n`test` は公開テストを実行し、 `reset` は starter へ戻します。\n\n## ゴール\n\n4 つの checkpoint は独立に採点されるので、 1 つ詰まっても他は取れます。\n\npredict だけは順番に意味があります。 暗号は出力を見ても正しさが分かりません。 壊れた暗号文ももっともらしいバイト列に見えるし、 穴のある回路も正直な witness なら通ってしまう。 「走らせる前に何が成り立つべきかを決めておいて、 それを検査する」 以外に見つける方法がない。 後続の全問題がこれを要求します。 ここで一度、 間違いが安いうちに練習しておいてください。",
+  "writeup": "## なぜ剰余カウンタだったのか\n\n`start` から `step` を `rounds` 回足して毎回 mod を取る、 という操作は Week 3 で 楕円曲線上の `k·G` として再び現れる。 構造は同じで、 違うのは逆算のコストだけ。 この問題の Z_m では `step` に掛けると 1 になる数を求めて掛け直せば歩数が戻ってしまう (`inspect` が毎回それを実演している)。 楕円曲線ではその一手が現実的に効かない。 署名も鍵交換も、 突き詰めればこの一点の差の上に立っている。\n\n剰余そのものの役割も、 ここで一度見ておく価値がある。 有限の範囲に閉じ込めることで 「値の大きさ」 という手がかりが消える。 消せるのはそこまでで、 歩数は別の経路で漏れる。 「何を隠せていて、 何を隠せていないか」 を分けて言えることが、 この先ずっと効く。\n\n## 何を確認したか\n\npublic test は 「形」 を教えるが 「正しさ」 は証明しない。 この問題の公開テストは正の step の 1 fixture しか使わないため、 剰余を最後に 1 回だけ適用する実装でも、 負の step を正規化しない 実装でも通ってしまう。\n\nhidden test が落とすのはこの 2 つ。 複数 modulus・負の step・zero step・start >= modulus・zero rounds を回し、 さらに metamorphic property (start や step を modulus の整数倍だけずらしても trace は変わらない) を検査する。 固定の期待値ではなく関係を検査するので、 1 回の出力を丸暗記しても通らない。\n\n## mutation suite\n\nhidden test 自体が有効かは、 reference をわざと壊して各欠陥が検出されることで担保する (`make reference-test`)。 ここで学ぶべきは 「通ったテスト」 ではなく 「落とせるテスト」。\n\n等価変異には注意が要る。 末尾で一括剰余を取る実装と start を事前正規化しない実装は、 Python の floored `%` の下で round ごとの剰余と数学的に同値であり、 正しいテストでは区別できない。 これらを mutation 一覧に入れると永久に survived が出て、 suite 自体が無視されるようになる。\n\n## 後続問題への接続\n\n以降の全 AC26 問題は `concept.experimental-method` を前提に置く。 予測してから走らせる、 trace の最初の破綻位置を言う、 見えないパラメータで一般化する — この 3 つは Week 1 の constraint residual、 Week 3 の group law 境界、 Week 5 の noise budget でそのまま使う。",
   "tags": [
     "advanced-cryptography-2026",
     "bridge",
@@ -37,6 +37,7 @@
     }
   ],
   "learningGoals": [
+    "剰余が消す漏れ (値の大きさ) と、消せない漏れ (歩数) を分けて説明できる",
     "local-play challenge を起動・停止・reset できる",
     "public test と hidden verifier の役割を区別できる",
     "実行前の予測を記録し、実測と比較できる",
@@ -86,7 +87,7 @@
         "description": "実行前に最終値を正しく予測できた。"
       },
       {
-        "id": "assessment.ac26-bridge-experiment.inspect",
+        "id": "assessment.ac26-bridge-experiment.first-broken",
         "description": "壊れた trace の最初の破綻 index を特定できた。"
       },
       {
@@ -164,7 +165,7 @@
     {
       "type": "assesses",
       "source": "problem.ac26-bridge-experiment",
-      "target": "assessment.ac26-bridge-experiment.inspect"
+      "target": "assessment.ac26-bridge-experiment.first-broken"
     },
     {
       "type": "assesses",
@@ -197,24 +198,24 @@
     "checks": [
       {
         "id": "environment",
-        "label": "環境が動いていることを確認する",
+        "label": "environment — Workbench の prepare が出す health token",
         "points": 20,
         "wrongAnswerPenalty": 5
       },
       {
         "id": "predict",
-        "label": "実行前に最終値を予測する",
+        "label": "predict — 走らせる前に求めた最終値 (整数 1 個)",
         "points": 25,
         "wrongAnswerPenalty": 5
       },
       {
-        "id": "inspect",
-        "label": "trace が最初に崩れた位置を特定する",
+        "id": "first-broken",
+        "label": "first-broken — 壊れた trace が最初に範囲を外れる index (0 始まり)",
         "points": 25,
         "wrongAnswerPenalty": 5,
         "hints": [
           {
-            "id": "inspect-hint-1",
+            "id": "first-broken-hint-1",
             "content": "trace の各要素は 0 以上 modulus 未満のはずだ。 先頭から順に、 その範囲を最初に外れたのはどこか。",
             "penalty": 10
           }
@@ -222,7 +223,7 @@
       },
       {
         "id": "generalize",
-        "label": "見えないパラメータでも成立させる",
+        "label": "generalize — 完成した counter.py の全文",
         "points": 30,
         "wrongAnswerPenalty": 5,
         "hints": [
@@ -243,10 +244,11 @@
   "i18n": {
     "en": {
       "name": "Predict, then run",
-      "shortDescription": "Before any cryptography, the experimental habits. Using a modular counter: predict before you run, find where a trace first breaks, and write a solution that survives parameters you cannot see.",
-      "instructions": "## Start here\n\nYou will finish a modular counter. No cryptography knowledge is needed. This exists so that in later problems, operating the environment is not what you are struggling with.\n\n## First move\n\nStart the problem runtime and open the **Browser Workbench** endpoint. Run `inspect` there to see your fixture (start / step / rounds / modulus), your health token, and the broken trace. Fixtures are derived from a per-deploy seed, so someone else's numbers will not help you. No host terminal or checkout editing is required.\n\n## Workflow\n\nFinish `advance` in the Workbench's `counter.py` editor. `test` runs the public tests and `reset` restores the starter. `prepare` formats the environment and generalize values; predict (the final value, worked out before running) and inspect (the index you read off the broken trace) go straight into the Participant Portal yourself.\n\n## Goal\n\nClear four independently scored checkpoints. Submit the prediction *before* you run — copying it out of your own output removes the only thing this checkpoint measures.",
-      "writeup": "## What this checked\n\nPublic tests show you the shape of an answer; they do not prove it correct. The public tests here use one fixture with a positive step, so an implementation that reduces only at the end, or one that never normalizes a negative step, sails straight through.\n\nThe hidden tests are what catch those. They run several moduli, a negative step, a zero step, start >= modulus, and zero rounds, and they check metamorphic properties rather than fixed expected values: shifting start or step by a whole multiple of the modulus must leave the trace unchanged. Memorizing one run's output cannot satisfy a relation.\n\n## The mutation suite\n\nWhether the hidden tests are any good is itself checked, by breaking the reference on purpose and asserting each defect is caught (`make reference-test`). The thing worth learning is not \"the tests passed\" but \"the tests can fail the wrong answer\".\n\nEquivalent mutants need care. Reducing once at the end, and leaving `start` unnormalized before the loop, are mathematically identical to round-by-round reduction under Python's floored `%` — no correct test can tell them apart. Listing them as mutations would produce a permanent \"survived\" and train everyone to ignore the suite.\n\n## What carries forward\n\nEvery later AC26 problem assumes `concept.experimental-method`. Predict before running, name where a trace first breaks, generalize past the parameters you were shown — you will use all three on Week 1's constraint residuals, Week 3's group-law edge cases, and Week 5's noise budget.",
+      "shortDescription": "Cryptography reduces mod something to erase the one thing a plain integer leaks: its size. Build that in its simplest form, a modular counter — then see why it is still not cryptography, because the number of steps walks straight back out. Week 3 keeps this walk and changes what it walks on.",
+      "instructions": "## Why you are doing this\n\nA plain integer talks about itself. Tell someone a sum came out at 5000 and they can already guess roughly how many times you added: the size is the clue. Work `mod 17` and the answer is always one of 0..16, so the size says nothing at all. Confining numbers to a finite range is how cryptography closes that leak.\n\nThe simplest thing shaped like that is the modular counter you are about to finish: from `start`, add `step` `rounds` times, folding back with the modulus every round. That is the whole program.\n\nIt is still not cryptography, though. This walk runs backwards: knowing where it ended, find the number that multiplies `step` to 1 under the modulus, multiply, and the number of steps falls out. `inspect` does exactly that in front of you. The size leak is closed; a different way in is still wide open.\n\nWhich is why the walk later moves onto an elliptic curve. Same operation — keep walking — but there the step count cannot be recovered in practice, and Week 3's signatures stand on that difference. This problem is the first place to stand and look at it.\n\n## First move\n\nStart the problem runtime and open the **Browser Workbench** endpoint. Run `inspect` and you get your health token, your fixture (start / step / rounds / modulus), the second walk that is reversed in front of you, and the broken trace. `inspect` is the name of the command that shows evidence, not the name of a checkpoint. Fixtures come from a per-deploy seed, so someone else's numbers will not help you.\n\n## Four submission fields, two kinds of source\n\nThe Workbench's `prepare` produces two of them. You work out the other two yourself and type them straight into the matching field in the Participant Portal.\n\n- **environment** — paste the health token `prepare` prints. It is the evidence that the container really ran.\n- **predict** — follow the fixture `inspect` showed you, on paper, and write **the value after the last round** as a single integer. Not the whole trace.\n- **first-broken** — read the broken trace from the start and write the index of the first entry that breaks the invariant `inspect` states, as a single **0-based** integer.\n- **generalize** — finish `advance` in the Workbench's `counter.py` editor and paste the whole file `prepare` prints. It is checked against fixtures you have not seen.\n\n`test` runs the public tests, `reset` restores the starter.\n\n## Goal\n\nThe four checkpoints score independently, so getting stuck on one does not cost you the others.\n\nOnly `predict` cares about order. Cryptographic output does not show you whether it is correct: broken ciphertext looks like perfectly plausible bytes, and an under-constrained circuit accepts an honest witness without complaint. Deciding what must hold before you run, and then checking it, is the only way any of that becomes visible. Every problem after this one asks for it. Practise here, where being wrong is cheap.",
+      "writeup": "## Why it was a modular counter\n\nAdding `step` to `start` `rounds` times, reducing every round, is the same operation Week 3 writes as `k·G` on an elliptic curve. Same structure; the only thing that differs is the cost of running it backwards. In this problem's world you find the number that multiplies `step` to 1, multiply, and the step count is back — `inspect` demonstrated it on every run. On the curve that one move has no practical answer, and signatures and key exchange both rest on that gap.\n\nThe modulus itself is worth one look too. Confining values to a finite range removes one clue, the size of the number. It removes only that one; the step count leaks by another route. Being able to say what is hidden and what merely looks hidden is the habit that carries.\n\n## What this checked\n\nPublic tests show you the shape of an answer; they do not prove it correct. The public tests here use one fixture with a positive step, so an implementation that reduces only at the end, or one that never normalizes a negative step, sails straight through.\n\nThe hidden tests are what catch those. They run several moduli, a negative step, a zero step, start >= modulus, and zero rounds, and they check metamorphic properties rather than fixed expected values: shifting start or step by a whole multiple of the modulus must leave the trace unchanged. Memorizing one run's output cannot satisfy a relation.\n\n## The mutation suite\n\nWhether the hidden tests are any good is itself checked, by breaking the reference on purpose and asserting each defect is caught (`make reference-test`). The thing worth learning is not \"the tests passed\" but \"the tests can fail the wrong answer\".\n\nEquivalent mutants need care. Reducing once at the end, and leaving `start` unnormalized before the loop, are mathematically identical to round-by-round reduction under Python's floored `%` — no correct test can tell them apart. Listing them as mutations would produce a permanent \"survived\" and train everyone to ignore the suite.\n\n## What carries forward\n\nEvery later AC26 problem assumes `concept.experimental-method`. Predict before running, name where a trace first breaks, generalize past the parameters you were shown — you will use all three on Week 1's constraint residuals, Week 3's group-law edge cases, and Week 5's noise budget.",
       "learningGoals": [
+        "Separate the leak a modulus removes (the size of a value) from the one it does not (the step count)",
         "Start, stop, and reset a local-play challenge",
         "Tell the role of the public tests apart from the hidden verifier",
         "Record a prediction before running and compare it against the measurement",
@@ -256,25 +258,25 @@
       "checks": [
         {
           "id": "environment",
-          "label": "Confirm the environment is running"
+          "label": "environment — the health token the Workbench's prepare prints"
         },
         {
           "id": "predict",
-          "label": "Predict the final value before running"
+          "label": "predict — the final value, worked out before running (one integer)"
         },
         {
-          "id": "inspect",
-          "label": "Locate where the trace first breaks",
+          "id": "first-broken",
+          "label": "first-broken — 0-based index where the broken trace first leaves the range",
           "hints": [
             {
-              "id": "inspect-hint-1",
+              "id": "first-broken-hint-1",
               "content": "Every entry should sit in [0, modulus). Reading from the start, which one first leaves that range?"
             }
           ]
         },
         {
           "id": "generalize",
-          "label": "Hold up under parameters you cannot see",
+          "label": "generalize — your finished counter.py, in full",
           "hints": [
             {
               "id": "generalize-hint-1",

@@ -47,16 +47,63 @@ def _pick(stream: list[int], index: int, low: int, high: int) -> int:
     return low + ((stream[index] * 256 + stream[index + 1]) % span)
 
 
+#: Prime, and small enough to work on paper. A composite modulus lets `step` share a
+#: factor with it, which collapses the walk onto a short sub-cycle: fewer distinct values
+#: to land on, and a `predict` answer that can be guessed instead of computed.
+_PUBLIC_MODULI = (7, 11, 13, 17, 19, 23)
+
+
 def public_case(seed: str) -> Case:
     """The one case the learner can see, via `make inspect`."""
     s = _stream(seed, "public")
-    modulus = _pick(s, 0, 7, 23)
-    return Case(
-        start=_pick(s, 2, 0, modulus - 1),
-        step=_pick(s, 4, 1, modulus - 1),
-        rounds=_pick(s, 6, 4, 9),
-        modulus=modulus,
-    )
+    modulus = _PUBLIC_MODULI[_pick(s, 0, 0, len(_PUBLIC_MODULI) - 1)]
+    start = _pick(s, 2, 0, modulus - 1)
+    step = _pick(s, 4, 1, modulus - 1)
+    rounds = _pick(s, 6, 4, 9)
+    # `predict` is the checkpoint that carries the point of the problem, so the walk has
+    # to end somewhere other than where it started. It returns to `start` exactly when
+    # `step * rounds` is a whole number of laps; with a prime modulus that needs
+    # `rounds` to be a multiple of it, which one nudge always escapes.
+    while step * rounds % modulus == 0:
+        rounds += 1
+    return Case(start=start, step=step, rounds=rounds, modulus=modulus)
+
+
+#: Prime moduli only, so every step in [2, modulus-1] has something to multiply it back
+#: to 1 and the walk-back below always exists.
+_WALKBACK_MODULI = (11, 13, 17, 19, 23, 29, 31)
+
+
+def walkback_case(seed: str) -> dict[str, int]:
+    """A second walk, shown with every number including its final value.
+
+    Nothing here is a checkpoint, which is why the final value can be printed: the
+    point of this case is that the walk runs backwards. Knowing where it ended, the
+    number of steps comes back out by multiplying by whatever takes `step` to 1.
+
+    That is the whole reason this problem exists as the track's first one. Reducing
+    mod something removes the clue a plain integer leaks — its size — but it does not
+    hide the number of steps, so this is not yet a group anyone can build a signature
+    on. Week 3 keeps the walk and changes the thing being walked on.
+    """
+    s = _stream(seed, "walkback")
+    modulus = _WALKBACK_MODULI[_pick(s, 0, 0, len(_WALKBACK_MODULI) - 1)]
+    step = _pick(s, 2, 2, modulus - 1)
+    rounds = _pick(s, 4, 3, modulus - 2)
+    # Non-zero, so the printed `(final - start)` is a subtraction the reader can see
+    # doing something rather than a term that vanishes.
+    start = _pick(s, 6, 1, modulus - 1)
+    final = (start + step * rounds) % modulus
+    undo_step = pow(step, -1, modulus)
+    return {
+        "start": start,
+        "step": step,
+        "rounds": rounds,
+        "modulus": modulus,
+        "final": final,
+        "undoStep": undo_step,
+        "recoveredRounds": ((final - start) * undo_step) % modulus,
+    }
 
 
 def hidden_cases(seed: str) -> list[Case]:
@@ -113,20 +160,40 @@ def corrupted_trace(seed: str) -> tuple[Case, list[int], int]:
     """A trace with the modulus skipped on exactly one round.
 
     Returns the case, the corrupted trace, and the 0-based index where the trace
-    first stops satisfying `0 <= value < modulus` — the answer to the inspect
+    first stops satisfying `0 <= value < modulus` — the answer to the first-broken
     checkpoint.
+
+    The checkpoint asks which entry first leaves `[0, modulus)`, so the trace has to
+    contain such an entry. Skipping the reduction only produces one on a round that
+    would have wrapped: if `value + step` was already below `modulus`, reducing or not
+    reducing gives the same number and the corruption is invisible. Picking the round
+    blind therefore left roughly half of all seeds shipping a trace whose every entry
+    was in range, with no answerable "first broken index" at all. So the round is
+    picked from the rounds that actually wrap.
     """
     s = _stream(seed, "corrupt")
     modulus = _pick(s, 0, 6, 19)
-    case = Case(
-        start=_pick(s, 2, 0, modulus - 1),
-        step=_pick(s, 4, 2, modulus - 1),
-        rounds=_pick(s, 6, 6, 11),
-        modulus=modulus,
-    )
-    # Skip the reduction on this round. Chosen late enough that the value has already
-    # wrapped at least once, so the break is a real observation and not just "round 0".
-    skip_at = _pick(s, 8, 2, case.rounds - 2)
+    step = _pick(s, 4, 2, modulus - 1)
+    rounds = _pick(s, 6, 6, 11)
+
+    # Rotating `start` walks `values_before[index]` over every residue mod `modulus`,
+    # and `step >= 2` means at least two residues wrap, so some rotation always yields
+    # a wrapping round. The loop terminates on the first one rather than searching.
+    base_start = _pick(s, 2, 0, modulus - 1)
+    # Late enough that the trace has already run for a while, so the break reads as an
+    # observation about a wrap rather than "round 0 looked odd".
+    candidate_rounds = range(2, rounds - 1)
+    start = base_start
+    wrapping: list[int] = []
+    for rotation in range(modulus):
+        start = (base_start + rotation) % modulus
+        values_before = _values_before_each_round(start, step, rounds, modulus)
+        wrapping = [index for index in candidate_rounds if values_before[index] + step >= modulus]
+        if wrapping:
+            break
+
+    case = Case(start=start, step=step, rounds=rounds, modulus=modulus)
+    skip_at = wrapping[_pick(s, 8, 0, len(wrapping) - 1)]
 
     trace: list[int] = []
     value = case.start % modulus
@@ -139,6 +206,16 @@ def corrupted_trace(seed: str) -> tuple[Case, list[int], int]:
         if broke_at == -1 and not 0 <= trace[index] < modulus:
             broke_at = index
     return case, trace, broke_at
+
+
+def _values_before_each_round(start: int, step: int, rounds: int, modulus: int) -> list[int]:
+    """The uncorrupted value entering each round, so a caller can ask which rounds wrap."""
+    values: list[int] = []
+    value = start % modulus
+    for _ in range(rounds):
+        values.append(value)
+        value = (value + step) % modulus
+    return values
 
 
 def health_token(seed: str) -> str:

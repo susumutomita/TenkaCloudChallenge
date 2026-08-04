@@ -8,19 +8,34 @@
 **Track:** `advanced-cryptography-2026` · **Order:** 10 · **Chapter:** Bridge 0 / Experimental
 Workflow · **Role:** `diagnostic` · **Time:** 20–30 minutes · **Points:** 100
 
-## The story
+## Why this problem exists
 
-You are joining a cryptography reading group that meets for seven weeks. Before the first
-lecture, someone hands you a laptop and says: "we do not debug by guessing here. You say what
-will happen, then you run it, and the gap between those two is where the learning is."
+A plain integer talks about itself. Tell someone a running total came out at 5000 and they
+already have a rough idea how many times you added — the size of the number is the clue. Compute
+`mod 17` and the answer is always one of 0..16, so the size says nothing at all. Confining
+numbers to a finite range is how cryptography closes that leak, and it is why nearly everything
+later in this track is written "mod something".
 
-Then they hand you the least interesting program in the building — a counter that adds a number
-to itself over and over, modulo something — and tell you to finish it.
+The simplest thing with that shape is the counter you are about to finish: from `start`, add
+`step` `rounds` times, folding back with the modulus every round. That is the entire program.
 
-It is not a cryptography problem. That is the point. Every problem after this one asks you to
-predict a value before running, to read a trace and say where it first went wrong, and to write
-something that survives inputs you were never shown. Learning those three habits while also
-learning elliptic curves means learning neither.
+It is not cryptography yet, and it is worth seeing exactly why not. This walk runs backwards.
+Knowing where it ended, find the number that multiplies `step` to 1 under the modulus, multiply,
+and the number of steps falls out. `inspect` does that in front of you, on a walk from your own
+deployment. The size leak is closed; a different way in is still wide open.
+
+Which is why Week 3 keeps this walk and changes what is being walked on. Adding a point to
+itself on an elliptic curve is the same operation, except that there the step count cannot be
+recovered in practice — and that difference is the entire reason a signature means anything.
+This is the cheapest place to look at it, because here you can run the recovery yourself in one
+line.
+
+You are joining a cryptography reading group that meets for seven weeks, and the person handing
+you the laptop says: "we do not debug by guessing here. You say what will happen, then you run
+it, and the gap between those two is where the learning is." So the problem also asks you to
+predict before running, to read a trace and say where it first went wrong, and to write
+something that survives inputs you were never shown. Every problem after this one assumes you
+already work that way.
 
 ## What gets deployed
 
@@ -44,43 +59,52 @@ someone else's run is worthless.
 ## How to play
 
 Start the problem from the Participant Portal and open the **Browser Workbench** endpoint.
-`inspect`, editing `counter.py`, the public tests, and the environment / generalize submission
-values all live in the browser. The predict and inspect answers are read off by you and entered
-into the Portal directly. No host terminal or checkout editing is required.
+Everything lives in the browser: `inspect`, editing `counter.py`, the public tests, and
+`prepare`. No host terminal or checkout editing is required.
 
-Only when authoring or verifying straight from the repository, run these in the problem directory:
+`inspect` is the name of the command that shows you evidence. None of the checkpoints is called
+that, so when this document says `inspect` it always means the command.
+
+You edit one file, `local/starter/counter.py`. `advance(start, step, rounds, modulus)` must
+return the trace: the value after each round, with the modulus applied **every** round, always
+in `[0, modulus)`, for any sign of `step`.
+
+Only when authoring or verifying straight from the repository, the same four commands exist as
+make targets in the problem directory:
 
 ```bash
-make inspect             # your fixture, your health token, the broken trace
+make inspect             # your fixture, your health token, the reversible walk, the broken trace
 make test                # the public tests
 make test-one ID=range   # re-run one public test while you iterate
 make reset               # restore starter/counter.py
 ```
 
-In the Workbench or the checkout you edit one file, `local/starter/counter.py`.
-`advance(start, step, rounds, modulus)` must return the trace:
-the value after each round, with the modulus applied **every** round, always in `[0, modulus)`,
-for any sign of `step`.
-
 ## Scoring
 
 Four checkpoints, scored independently. Wrong answers cost 5 points each.
 
-| Checkpoint | Points | What you submit |
-|---|---:|---|
-| `environment` | 20 | The health token from `make inspect` |
-| `predict` | 25 | The final value, worked out **before** you run anything |
-| `inspect` | 25 | The 0-based index where the broken trace first leaves `[0, modulus)` |
-| `generalize` | 30 | Your `counter.py`, run against parameters you have not seen |
+Two of the four values are produced for you by the Workbench's `prepare`; you copy them across.
+The other two you work out yourself and type straight into the Portal — nothing in the problem
+will compute them for you, and that is deliberate.
 
-Hints are available on `inspect` (10) and `generalize` (10, then 5). Opening every hint still
-leaves you 75 of 100.
+| Checkpoint | Points | Where the value comes from | What you submit |
+|---|---:|---|---|
+| `environment` | 20 | `prepare` | The health token, as printed |
+| `predict` | 25 | **you, by hand** | The value after the last round, as one integer — worked out **before** you run anything |
+| `first-broken` | 25 | **you, by hand** | The 0-based index where the broken trace first leaves `[0, modulus)`, as one integer |
+| `generalize` | 30 | `prepare` | Your whole `counter.py`, run against parameters you have not seen |
+
+Hints are available on `first-broken` (10) and `generalize` (10, then 5). Opening every hint
+still leaves you 75 of 100.
 
 On `predict`: you can trivially get this one by running your code first and copying the answer.
 Nobody will catch you. You will also have removed the only thing the checkpoint measures, in the
-one problem in the track that is cheap to fail.
+one problem in the track that is cheap to fail. It matters because cryptographic output does not
+show you whether it is correct — broken ciphertext is plausible-looking bytes, and an
+under-constrained circuit accepts an honest witness without complaint. Deciding what must hold
+before you run is the only thing that makes either visible.
 
-## The thing this problem is actually about
+## The other thing this problem is about
 
 The public tests pass for implementations that are wrong.
 
@@ -121,6 +145,11 @@ verifier itself. Two obvious-looking mutations are deliberately **not** in the l
 once at the end and leaving `start` unnormalized are mathematically identical to the reference
 under Python's floored `%`, so no correct test could distinguish them. See the comment at the top
 of `local/mutation.py`.
+
+`corrupted_trace` picks the round it skips the reduction on from the rounds that actually wrap.
+Picking blind looked equivalent and was not: when the skipped round would not have wrapped, the
+corrupted trace equals the clean one and no entry leaves `[0, modulus)`, so `first-broken` had no
+answer at all for roughly half of all seeds. The public tests pin the property over 200 seeds.
 
 This problem's `courseAlignment` declares `week: 1` (Bridge 0 gates Week 1) with **no**
 `sources[]`. That is deliberate, not an omission: the only upstream artifact that could plausibly
