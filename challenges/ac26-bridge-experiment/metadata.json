@@ -191,9 +191,7 @@
       "Browser Workbench": "http://127.0.0.1:18091/"
     },
     "verifyUrl": "http://127.0.0.1:18091/verify",
-    "secretEnv": [
-      "FLAG_SEED"
-    ]
+    "secretEnv": ["FLAG_SEED"]
   },
   "scoring": {
     "kind": "multi-verify",

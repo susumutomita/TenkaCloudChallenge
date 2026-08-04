@@ -47,16 +47,26 @@ def _pick(stream: list[int], index: int, low: int, high: int) -> int:
     return low + ((stream[index] * 256 + stream[index + 1]) % span)
 
 
+#: Prime, and small enough to work on paper. A composite modulus lets `step` share a
+#: factor with it, which collapses the walk onto a short sub-cycle: fewer distinct values
+#: to land on, and a `predict` answer that can be guessed instead of computed.
+_PUBLIC_MODULI = (7, 11, 13, 17, 19, 23)
+
+
 def public_case(seed: str) -> Case:
     """The one case the learner can see, via `make inspect`."""
     s = _stream(seed, "public")
-    modulus = _pick(s, 0, 7, 23)
-    return Case(
-        start=_pick(s, 2, 0, modulus - 1),
-        step=_pick(s, 4, 1, modulus - 1),
-        rounds=_pick(s, 6, 4, 9),
-        modulus=modulus,
-    )
+    modulus = _PUBLIC_MODULI[_pick(s, 0, 0, len(_PUBLIC_MODULI) - 1)]
+    start = _pick(s, 2, 0, modulus - 1)
+    step = _pick(s, 4, 1, modulus - 1)
+    rounds = _pick(s, 6, 4, 9)
+    # `predict` is the checkpoint that carries the point of the problem, so the walk has
+    # to end somewhere other than where it started. It returns to `start` exactly when
+    # `step * rounds` is a whole number of laps; with a prime modulus that needs
+    # `rounds` to be a multiple of it, which one nudge always escapes.
+    while step * rounds % modulus == 0:
+        rounds += 1
+    return Case(start=start, step=step, rounds=rounds, modulus=modulus)
 
 
 #: Prime moduli only, so every step in [2, modulus-1] has something to multiply it back

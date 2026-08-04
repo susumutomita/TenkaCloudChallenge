@@ -76,6 +76,14 @@ def test_the_broken_trace_actually_leaves_the_range_it_is_asked_about() -> None:
         assert outside == [broke_at], f"seed {index}: outside={outside} broke_at={broke_at}"
 
 
+def test_the_predict_fixture_does_not_answer_itself() -> None:
+    # If the walk ends where it started, `predict` can be answered by copying `start`,
+    # and the checkpoint that carries the point of the problem measures nothing.
+    for index in range(200):
+        case = public_case(f"predict-guard-{index}")
+        assert (case.start + case.step * case.rounds) % case.modulus != case.start
+
+
 def test_the_walkback_case_really_walks_back() -> None:
     # The motivation for the whole problem is that this walk is reversible. If the
     # printed arithmetic did not actually recover `rounds`, the evidence would be
