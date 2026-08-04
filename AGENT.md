@@ -10,6 +10,82 @@ You can ship a new problem with a PR to **this repo alone** — no platform-repo
 
 A competition problem is only worth shipping if a player would call it *fun*, not homework. Aim for four properties: a **discovered flag** (a random per-deploy value earned by performing the intended AWS operation, never a concept name typed from memory), **fix-by-settings** (the template deploys a broken resource and the solve *modifies* it — players never create top-level resources, so `delete-stack` leaves no orphans), a **real "aha"** (a production skill felt viscerally, like `curl` that hangs vs refuses), and **story with stakes**. Full rationale + two worked archetypes are in the [`new-problem`](./.claude/skills/new-problem/SKILL.md) skill; the reference implementation is [`challenges/hello-world`](./challenges/hello-world/). The invariants below are the floor; the design bar is the target.
 
+## Teaching problems: the reader has to be able to start
+
+The bar above is for *competition* problems, which assume an AWS practitioner. A **teaching** problem — the course-aligned tracks especially — is written for someone who does not know the subject yet. That reader is the customer. If they cannot take the first step, nothing else in the problem matters.
+
+### The evidence this section is built on
+
+`ac26-bridge-experiment` is the first problem of a 33-problem track, difficulty `入門`. It shipped green: `bun run validate` passed, 24 unit tests passed, `make reference-test` killed 9/9 mutants. Two things were true anyway.
+
+**One checkpoint had no answer on 47% of seeds.** The generator built a "corrupted" trace by skipping the modulus on one round — but when that round never wrapped, the corrupted trace equalled the clean one, and the question *"where does it first leave the range?"* had no answer at all. Every gate passed, because **no gate asked whether the question has an answer.**
+
+**A reader who writes Python could not begin.** Verbatim, in order:
+
+| What the problem showed | What the reader said |
+| --- | --- |
+| motivation: *"so environment handling doesn't distract from later problems"* | 「なぜこれをやるのかの理由がない」 |
+| `start=6 step=3 rounds=9 modulus=10` | 「なにこれ」 |
+| `trace`, `index` | 「隠し文字でも入ってるってこと？」 |
+| `0 始まりの index` | did not parse |
+| the contract, as a spec bullet list | 「python はわかるけど何をかけばいいのかよくわからない」 |
+
+Replacing `modulus=17` with 「17 以上になったら 17 を引く。時計と同じ」 unblocked the same reader on the same problem, the same day. **The difficulty did not change. The vocabulary and the entry point did.**
+
+That is the whole of this section. The failure mode is not that problems are too hard — it is that they are written in the author's order, by someone who already knows the answer.
+
+### State the prerequisites, in the reader's words
+
+Open with what the problem assumes and what it does not. `requires: concept.modular-arithmetic` does not count: it is a machine-readable ID for the knowledge graph and the reader never sees it. Write the sentence.
+
+> 前提にするもの: 足し算・引き算・掛け算・割り算。Python が読めて書けること。
+> 前提にしないもの: 「余り」の記号、群や体、文字式の操作。
+
+**Every term outside that list is defined the first time it appears** — including English identifiers (`trace`, `index`, `modulus`), zero-based indexing, and stiff Japanese technical register (`不変条件`, `適用`). A term you would explain in a footnote is a term the reader stops at.
+
+### Show what to write, not what it must satisfy
+
+「python はわかるけど何をかけばいいのかよくわからない」 is the most expensive line in that table, because the problem looks like a Python problem and isn't. The reader can code. What they cannot do is turn a list of properties into a first line of code.
+
+So give **input → output with the intermediate steps**, before any contract or specification:
+
+```
+ 5 + 1 =  6    6 は 17 より小さいので、そのまま
+ 6 + 1 =  7    7 は 17 より小さいので、そのまま
+16 + 1 = 17    17 になったので 17 を引いて 0
+```
+
+Two or three worked lines — not the answer, the *shape* of the work. Bullet-list contracts go after that, or live in the tests.
+
+### Order: why → the smallest real thing → what it can't do → what's next
+
+Never Why-last. A motivation that is the author's convenience ("so later problems stay clean") is not a Why, it is scheduling. The reader's Why answers *what can I do now that I couldn't before*.
+
+Then spiral, don't ladder. Games put the player in the real game inside five minutes and introduce each mechanic at the moment it is needed. A track ordered `mod → inverse → constraint → witness → elliptic curve` loses the reader before the subject arrives. Instead: **level 1 does one genuinely cryptographic thing end to end**, and level 2 starts because level 1's tool ran out — so the new machinery arrives as the reader's own need rather than as syllabus order.
+
+Pick subject matter with a contact point the reader has personally wondered about. 「このガチャ本当に 1% か」 is a question people actually have, and commit-then-reveal is literally the answer to it. Rock-paper-scissors is a toy and reads as one.
+
+### Do not lower the difficulty
+
+Everything above changes vocabulary, entry point, and order. None of it changes what the reader has to work out. Removing the hard part is not accessibility — it wastes the reader's time. **Keep the work; move the door.**
+
+Two related habits to drop: arguing from authority or adoption numbers, and asking the reader to approve a design written in the vocabulary they just said they couldn't read. Both read as arrogance, and neither is evidence.
+
+### Checklist before opening the PR
+
+No validator checks any of these. Read the problem as someone who has not seen it.
+
+- [ ] Does every checkpoint have an answer **for every seed**? Prove it by sweep, not by one example.
+- [ ] Is the answer unique, and not copyable straight out of the problem statement?
+- [ ] Are the prerequisites stated up front, in the reader's words?
+- [ ] Is every term outside that list defined at first use?
+- [ ] Does it open with Why — the reader's, not the author's?
+- [ ] Does a concrete example come before the abstraction?
+- [ ] Is what to write shown as input → output with intermediate steps?
+- [ ] Is there at least one figure? (`diagram.svg` per §12, or an ASCII figure in the problem's own output. A wall of text is a defect, not a style.)
+- [ ] Does the reader know where they are in the whole track?
+- [ ] Did the difficulty stay the same?
+
 ## The 60-second mental model
 
 ```
@@ -150,6 +226,8 @@ The portal hides `description` from competitors (fairness contract), so authored
 
 Worked examples: every problem under `challenges/` and `battles/` now carries `instructions`; mirror their JA/EN shape.
 
+For a **teaching** problem, `instructions` is also where the prerequisites and the first worked example go — see [Teaching problems: the reader has to be able to start](#teaching-problems-the-reader-has-to-be-able-to-start). "Non-spoiler" never means "unexplained": defining a term the reader doesn't know is not a hint.
+
 ### 13. Container (local-play) problems — `runtime` + `scoring.kind: "verify"`
 
 [#2054] A problem can be delivered as an **AWS-free Docker container** for local play (`make local PROBLEM=<id>` in the platform repo) instead of a CloudFormation stack. It declares a container `runtime` (ADR-023) instead of `cfnTemplate`, and the platform delegates scoring to the container's own `/verify` — so the answer and the hidden tests live **only** inside the container.
@@ -205,6 +283,8 @@ The catalog leans into SRE-day-in-the-life narration: the previous SRE (the pred
 - `battles/microservice-migration-battle` — month one, CTO orders the split.
 
 Two paragraphs of setup, then a clear "what you do" line. Avoid stamping the migration target or scoring numbers into `shortDescription`.
+
+This voice is for competition problems. Teaching problems trade the SRE story for a real-world contact point and a defined vocabulary — see [Teaching problems: the reader has to be able to start](#teaching-problems-the-reader-has-to-be-able-to-start).
 
 ## How to add a problem
 
