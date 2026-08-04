@@ -155,18 +155,40 @@ jobs:
       - name: Verify clean RLS startup and scoring
         run: bun run rls:runtime
 
+  eventbridge-runtime:
+    name: eventbridge-delivery-discipline runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CI: "true"
+      npm_config_ignore_scripts: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: "1.3.11"
+
+      - name: Verify isolated local runtime and scoring
+        run: bun run eventbridge:runtime
+
   validate:
     # One stable name in front of the matrix. `if: always()` is what makes this
     # run when a shard fails — and it is also what makes `needs:` stop gating, so
     # the result has to be asserted explicitly rather than implied.
-    needs: [suite, checks, rls-runtime]
+    needs: [suite, checks, rls-runtime, eventbridge-runtime]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Require every job to have succeeded
         run: |
-          echo "suite=${{ needs.suite.result }} checks=${{ needs.checks.result }} rls-runtime=${{ needs.rls-runtime.result }}"
+          echo "suite=${{ needs.suite.result }} checks=${{ needs.checks.result }} rls-runtime=${{ needs.rls-runtime.result }} eventbridge-runtime=${{ needs.eventbridge-runtime.result }}"
           test "${{ needs.suite.result }}" = "success"
           test "${{ needs.checks.result }}" = "success"
           test "${{ needs.rls-runtime.result }}" = "success"
+          test "${{ needs.eventbridge-runtime.result }}" = "success"

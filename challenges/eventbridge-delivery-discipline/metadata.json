@@ -1,0 +1,288 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "eventbridge-delivery-discipline",
+  "name": "二度届いて、前後する",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "45-60 分",
+  "shortDescription": "重複・順序逆転・retry枯渇が混ざるEventBridge風deliveryを、決定論的な状態機械とDLQで扱おう。",
+  "description": "注文consumerが、重複したPaymentCapturedを二重計上し、遅れて届いたOrderCreatedで状態を巻き戻している。Browser Workbenchでdelivery policyを修正し、event IDのidempotency、aggregate versionの単調性、same-version conflict、bounded retry、完全なDLQ receipt、replay invariantを別々に成立させる。実AWS、credential、production data、外向きnetworkは使わない。",
+  "instructions": "問題ランタイムを起動してBrowser Workbenchを開く。最初にvulnerable streamを実行し、重複副作用とstate regressionを観察する。policy JSONの7 sectionを修正して公開テストを実行し、提出値を作る。同じ提出値を6つのcheckpointへ提出する。verifierはcheckpointごとに独立したevent列を再実行する。",
+  "writeup": "## event IDとversionは別の境界\n\nevent IDは同じeventの再配信を識別する。aggregate versionは異なるevent間のbusiness orderを識別する。どちらか一方、arrival timestamp、または最後に届いた値だけでは、重複と順序逆転を同時に処理できない。\n\n## terminal outcomeを失わない\n\nduplicate、stale、conflict、version_gap、retry_exhaustedを別のoutcomeにして、retry枯渇とnon-retryable failureは元eventと原因・attemptを含むDLQ receiptへ残す。副作用とprocessed ledgerは同じatomic boundaryで更新する。\n\n## retryはexactly-onceではない\n\nretryはdeliveryの再試行であって、処理結果のexactly-onceを保証しない。consumer側のidempotencyと単調な状態遷移が必要である。",
+  "tags": [
+    "aws",
+    "eventbridge",
+    "idempotency",
+    "ordering",
+    "state-machine",
+    "retry",
+    "dlq",
+    "replay",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18120,
+      "name": "Browser Workbench"
+    },
+    {
+      "port": 18121,
+      "name": "/verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "event IDによるidempotencyとaggregate versionによる単調な状態遷移を分離できる",
+    "duplicate、stale、conflict、version_gapを決定論的に分類できる",
+    "bounded retryの枯渇を完全なDLQ receiptへ残せる",
+    "同じstreamのreplayでfinal state、副作用回数、DLQを変えない"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.eventbridge-delivery-discipline.separate-identity-order",
+        "description": "event identityとaggregate orderを別の状態として扱える"
+      },
+      {
+        "id": "lo.eventbridge-delivery-discipline.bound-retry",
+        "description": "retry budgetとDLQ receiptで失敗を終端できる"
+      },
+      {
+        "id": "lo.eventbridge-delivery-discipline.prove-replay",
+        "description": "replay invariantを反例列で検証できる"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.event-idempotency",
+        "description": "event ID ledgerによる重複副作用の防止"
+      },
+      {
+        "id": "concept.monotonic-aggregate-version",
+        "description": "aggregate versionによる単調なbusiness state"
+      },
+      {
+        "id": "concept.delivery-retry-budget",
+        "description": "有限attemptとbackoffを持つdelivery retry"
+      },
+      {
+        "id": "concept.dead-letter-receipt",
+        "description": "原因と元eventを保持する再処理可能なfailure receipt"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.eventbridge-delivery-discipline.classify-deliveries",
+        "description": "hidden delivery列を正しいterminal outcomeへ分類できる"
+      },
+      {
+        "id": "assessment.eventbridge-delivery-discipline.replay-invariant",
+        "description": "interleaveと2回replayでも状態・副作用・DLQを一定に保てる"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.timestamp-is-business-order",
+        "description": "arrival timestampをsortすればbusiness orderになるという誤解"
+      },
+      {
+        "id": "misconception.retry-is-exactly-once",
+        "description": "transport retryが処理結果をexactly-onceにするという誤解"
+      }
+    ],
+    "audiences": [
+      {
+        "id": "audience.event-driven-application-engineer",
+        "description": "EventBridge consumerを設計するapplication engineer"
+      },
+      {
+        "id": "audience.platform-operations-engineer",
+        "description": "retry、DLQ、replayを運用するplatform/SysOps engineer"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.eventbridge-delivery-discipline",
+      "target": "lo.eventbridge-delivery-discipline.separate-identity-order"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.eventbridge-delivery-discipline",
+      "target": "lo.eventbridge-delivery-discipline.bound-retry"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.eventbridge-delivery-discipline",
+      "target": "lo.eventbridge-delivery-discipline.prove-replay"
+    },
+    {
+      "type": "covers",
+      "source": "problem.eventbridge-delivery-discipline",
+      "target": "concept.event-idempotency"
+    },
+    {
+      "type": "covers",
+      "source": "problem.eventbridge-delivery-discipline",
+      "target": "concept.monotonic-aggregate-version"
+    },
+    {
+      "type": "covers",
+      "source": "problem.eventbridge-delivery-discipline",
+      "target": "concept.delivery-retry-budget"
+    },
+    {
+      "type": "covers",
+      "source": "problem.eventbridge-delivery-discipline",
+      "target": "concept.dead-letter-receipt"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.eventbridge-delivery-discipline",
+      "target": "assessment.eventbridge-delivery-discipline.classify-deliveries"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.eventbridge-delivery-discipline",
+      "target": "assessment.eventbridge-delivery-discipline.replay-invariant"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.eventbridge-delivery-discipline",
+      "target": "misconception.timestamp-is-business-order"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.eventbridge-delivery-discipline",
+      "target": "misconception.retry-is-exactly-once"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.eventbridge-delivery-discipline",
+      "target": "audience.event-driven-application-engineer"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.eventbridge-delivery-discipline",
+      "target": "audience.platform-operations-engineer"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Browser Workbench": "http://127.0.0.1:18120/"
+    },
+    "verifyUrl": "http://127.0.0.1:18121/verify",
+    "secretEnv": []
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "observe",
+        "label": "壊れ方を観察する",
+        "points": 20,
+        "wrongAnswerPenalty": 1,
+        "hints": [
+          {
+            "id": "observe-1",
+            "content": "Workbenchのvulnerable streamで、sideEffectsと最後のaggregate versionを確認する。",
+            "penalty": 4
+          }
+        ]
+      },
+      {
+        "id": "idempotency",
+        "label": "重複副作用を止める",
+        "points": 35,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "idempotency-1",
+            "content": "delivery IDはretryのたびに変わり得る。元eventのIDと副作用を同じatomic boundaryで記録する。",
+            "penalty": 7
+          }
+        ]
+      },
+      {
+        "id": "ordering",
+        "label": "versionを単調に保つ",
+        "points": 35,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "ordering-1",
+            "content": "arrival時刻ではなくaggregate versionを使い、古いversionと未来のgapを別々にfail closedにする。",
+            "penalty": 7
+          }
+        ]
+      },
+      {
+        "id": "conflict",
+        "label": "same-version conflictを分離する",
+        "points": 30,
+        "wrongAnswerPenalty": 1,
+        "hints": [
+          {
+            "id": "conflict-1",
+            "content": "同version同payloadはduplicateになり得るが、同version異payloadは黙ってdedupeできない。",
+            "penalty": 6
+          }
+        ]
+      },
+      {
+        "id": "retry-dlq",
+        "label": "retryを終端してDLQへ残す",
+        "points": 40,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "retry-dlq-1",
+            "content": "transientだけを有限回retryし、元event、原因、attempt、時刻、rule/targetをreceiptへ残す。",
+            "penalty": 8
+          }
+        ]
+      },
+      {
+        "id": "replay",
+        "label": "2回replayしても変えない",
+        "points": 40,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "replay-1",
+            "content": "成功だけでなくterminal failureもledgerへ残さないと、replayでDLQ receiptが増える。",
+            "penalty": 8
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Delivered Twice, Arrived Out of Order",
+      "shortDescription": "Turn duplicate, reordered, and retry-exhausted EventBridge-like deliveries into a deterministic state machine with a replayable DLQ.",
+      "instructions": "Start the runtime and open Browser Workbench. Run the vulnerable stream first and observe the duplicate side effect and state regression. Repair the seven policy sections, run the public tests, and prepare a submission. Submit the same value to all six checkpoints; the verifier replays an independent stream for each checkpoint.",
+      "writeup": "## Event identity and aggregate order are separate boundaries\n\nAn event ID recognizes a redelivery of the same event. An aggregate version orders different business events. Neither one alone, an arrival timestamp, nor the last received value handles both duplication and reordering.\n\n## Preserve terminal outcomes\n\nClassify duplicate, stale, conflict, version_gap, and retry_exhausted separately. Store exhausted and non-retryable deliveries in a DLQ receipt with the original event, reason, attempts, and routing metadata. Update the side effect and processed-event ledger atomically.\n\n## Retry is not exactly-once\n\nRetry repeats delivery; it does not make the processing result exactly-once. The consumer still needs idempotency and monotonic state transitions.",
+      "learningGoals": [
+        "Separate event-ID idempotency from aggregate-version monotonicity",
+        "Classify duplicate, stale, conflict, and version-gap outcomes deterministically",
+        "Terminate bounded retries with a complete DLQ receipt",
+        "Keep final state, side-effect count, and DLQ unchanged across replay"
+      ],
+      "checks": [
+        { "id": "observe", "label": "Observe both failure modes", "hints": [{ "id": "observe-1", "content": "Inspect sideEffects and the final aggregate version in the vulnerable stream." }] },
+        { "id": "idempotency", "label": "Stop duplicate side effects", "hints": [{ "id": "idempotency-1", "content": "A delivery ID may change on retry. Record the source event ID in the same atomic boundary as the side effect." }] },
+        { "id": "ordering", "label": "Keep versions monotonic", "hints": [{ "id": "ordering-1", "content": "Use aggregate version, not arrival time, and fail closed differently for stale and future-gap versions." }] },
+        { "id": "conflict", "label": "Separate same-version conflicts", "hints": [{ "id": "conflict-1", "content": "The same version and payload may be a duplicate; a different payload at the same version is not." }] },
+        { "id": "retry-dlq", "label": "Terminate retry into a DLQ", "hints": [{ "id": "retry-dlq-1", "content": "Retry transient failures a bounded number of times and preserve the event, reason, attempts, timestamps, rule, and target." }] },
+        { "id": "replay", "label": "Keep a second replay unchanged", "hints": [{ "id": "replay-1", "content": "Ledger terminal failures as well as successes, or replay will append duplicate DLQ receipts." }] }
+      ]
+    }
+  }
+}
