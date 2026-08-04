@@ -138,3 +138,6 @@ __pycache__/
 
 # Transient git worktrees created for parallel agent runs.
 .claude/worktrees/
+
+# Sweep output: `make solvability-sweep`, `make simulator-compatibility`.
+reports/

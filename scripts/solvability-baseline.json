@@ -1,0 +1,124 @@
+{
+  "$comment": [
+    "Findings from scripts/solvability-audit.ts that are already known.",
+    "",
+    "accepted = the measurement is real and the design is deliberate.",
+    "open     = the measurement is real, the design is not deliberate, and it is not fixed yet.",
+    "",
+    "Both suppress the gate, so a known defect cannot mask a new one. Only the second list",
+    "is work that is owed. Moving an entry from `open` to `accepted` is a decision about the",
+    "problem, not a way to close the entry.",
+    "",
+    "recordedAtSeeds is the sweep size the rate was measured at; a smaller run is not",
+    "allowed to call the entry stale."
+  ],
+  "accepted": [
+    {
+      "problem": "ac26-bridge-experiment",
+      "checkpoint": "environment",
+      "type": "answer-on-screen",
+      "reason": "The environment checkpoint is proof that the container was started, not a question. The health token is printed by `make inspect` precisely so the player can copy it, and the token is seed-derived, so nothing carries between deployments. There is no answer here to leak.",
+      "recordedAtSeeds": 2000
+    },
+    {
+      "problem": "ac26-bridge-properties",
+      "checkpoint": "privacy-leak",
+      "type": "answer-on-screen",
+      "reason": "The checkpoint is 'recover the witness from the P3 transcript you were shown', and P3's defect is that its transcript carries the witness. The answer being visible is the lesson; a P3 that hid it would make the checkpoint unanswerable instead.",
+      "recordedAtSeeds": 2000
+    }
+  ],
+  "open": [
+    {
+      "problem": "ac26-bridge-properties",
+      "checkpoint": "_check_property_matrix",
+      "type": "seedless-grader",
+      "reason": "The grader compares against the module constant TRUTH, which never varies. Same finding as the property-matrix constant-answer entry below; this is the static half of it.",
+      "recordedAtSeeds": 1
+    },
+    {
+      "problem": "ac26-bridge-properties",
+      "checkpoint": "property-matrix",
+      "type": "constant-answer",
+      "reason": "The 3x3 complete/sound/private matrix is the same nine booleans in every deployment, because which verifier is broken how is fixed in the fixtures. One player's answer scores for every other player. The instances are seed-derived; the labels on them are not.",
+      "recordedAtSeeds": 2000
+    },
+    {
+      "problem": "ac26-bridge-properties",
+      "checkpoint": "incompleteness",
+      "type": "answer-on-screen",
+      "reason": "boundary_instance always places the honest witness at `lo`, and `lo` is printed in the boundary statement, so the answer is the printed lower bound on 100 % of seeds against a chance level under 3 %. The fixture docstring explains why the witness has to sit on a boundary - P1's off-by-one is unobservable otherwise - but not why it always has to be the same boundary.",
+      "recordedAtSeeds": 2000
+    },
+    {
+      "problem": "ac26-w1-constraint-lab",
+      "checkpoint": "first-broken",
+      "type": "guessable-answer",
+      "reason": "broken_witness only ever breaks c2 or c3, so the checkpoint has two possible answers over any number of seeds and the more common one covers 50.8 %. A coin flip scores it.",
+      "recordedAtSeeds": 2000
+    },
+    {
+      "problem": "ac26-w1-underconstraint",
+      "checkpoint": "root-cause",
+      "type": "guessable-answer",
+      "reason": "DROPPABLE holds two constraint ids, and manipulatedSignals is determined by which one was dropped, so the whole object has two possible values and the more common one covers 50.7 %.",
+      "recordedAtSeeds": 2000
+    },
+    {
+      "problem": "ac26-w2-linear-shares",
+      "checkpoint": "_check_no_communication",
+      "type": "seedless-grader",
+      "reason": "The grader compares against the module constant EXPECTED_ROUNDS and never reaches SEED. Static half of the no-communication constant-answer entry below.",
+      "recordedAtSeeds": 1
+    },
+    {
+      "problem": "ac26-w2-linear-shares",
+      "checkpoint": "no-communication",
+      "type": "constant-answer",
+      "reason": "Which of the four share operations need a round of talking is a property of the scheme, not of the deployment, so the answer is the same table everywhere, graded on the zero / non-zero split - 16 possibilities. Arguably a deliberate concept question; recorded as open because nothing in the problem says so, and it is the only checkpoint in the catalog whose answer is worth writing down for a friend.",
+      "recordedAtSeeds": 2000
+    },
+    {
+      "problem": "ac26-w2-secret-sharing",
+      "checkpoint": "share-and-reconstruct",
+      "type": "reference-fails",
+      "reason": "On 30/2000 seeds (1.5 %) the seeded randomness makes all but one share zero, and the hidden test rejects that split - 'one party holds the secret outright'. The shipped reference cannot pass, so neither can a correct submission. The fixture draws its randomness without checking the split is non-degenerate.",
+      "recordedAtSeeds": 2000
+    },
+    {
+      "problem": "ac26-w2-secret-sharing",
+      "checkpoint": "rerandomize",
+      "type": "reference-fails",
+      "reason": "On 14/2000 seeds (0.7 %) the refresh deltas all come out zero, so rerandomize returns the shares it was given and the hidden test rejects it. The reference fails; a correct submission fails with it.",
+      "recordedAtSeeds": 2000
+    },
+    {
+      "problem": "ac26-w2-secret-sharing",
+      "checkpoint": "transfer",
+      "type": "reference-fails",
+      "reason": "transfer runs the whole hidden suite under a derived seed, so it inherits both degenerate-fixture cases above: 42/2000 seeds (2.1 %).",
+      "recordedAtSeeds": 2000
+    },
+    {
+      "problem": "ac26-w3-nonce-reuse",
+      "checkpoint": "extract",
+      "type": "reference-fails",
+      "reason": "The two transcripts the fixture builds share a commitment but are never checked for sharing a challenge. The toy group order is 29-43, so the two challenges collide on 166/2000 seeds (8.3 %); (e1 - e2) is then zero, the secret cannot be recovered, and the shipped reference raises MalformedRecord. On those deploys the checkpoint has no answer at all - the same defect as ac26-bridge-experiment's first-broken, in a different problem.",
+      "recordedAtSeeds": 2000
+    },
+    {
+      "problem": "ac26-w3-nonce-reuse",
+      "checkpoint": "hunt",
+      "type": "reference-fails",
+      "reason": "153/2000 seeds (7.7 %): 'the attack came back with nothing'. Same family as extract - the seeded transcript pool does not guarantee that an attackable pair exists.",
+      "recordedAtSeeds": 2000
+    },
+    {
+      "problem": "sha256-bytes-padding",
+      "checkpoint": "padded-length",
+      "type": "guessable-answer",
+      "reason": "length_quiz pins four of its six lengths to 55, 56, 64 and a value in 57..63, and the two seeded ones land in ranges that mostly map to the same padded length either way. The six-number answer has two possible values over 2000 seeds: (64,64,128,128,128,128) on 63.9 % and (64,64,128,128,128,192) on the rest.",
+      "recordedAtSeeds": 2000
+    }
+  ]
+}
