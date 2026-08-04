@@ -47,14 +47,40 @@ const DEFAULT_VALUE_SEEDS = 500;
 const DEFAULT_CODE_SEEDS = 8;
 const DEFAULT_SCREEN_SEEDS = 200;
 
-/** A rate has to clear this over its own control before it counts as a leak. */
-const LEAK_MARGIN = 0.05;
+/**
+ * When "the answer equals this field" counts as a leak rather than arithmetic coincidence.
+ *
+ * A fixed margin does not work. Replayed against the `predict` defect this audit exists
+ * to catch, the answer equalled the printed `start` on 9.5 % of seeds against a 6.3 %
+ * chance level: real, and a 3.2-point gap that any margin loose enough to catch it would
+ * also catch a dozen coincidences in a small answer space. The gap has to be judged
+ * against the sample size, so it is a two-proportion z-test.
+ *
+ * `z >= 3` rather than 1.96 because a checkpoint compares against every declared field:
+ * roughly 210 comparisons across the catalog, where 5 % would mean ten false findings and
+ * 0.27 % means half of one. The floor keeps a statistically clean but practically
+ * irrelevant 3 % coincidence out of the report.
+ *
+ * Detection limit: the `predict` defect clears z = 3 at N = 2000 (z = 3.8) and does not at
+ * N = 500 (z = 1.9). A leak of that size is a sweep finding, not a gate finding.
+ */
+const LEAK_FLOOR = 0.05;
+const LEAK_Z = 3;
+
+/** Two-proportion z, for `hits` of `n` against `controlHits` of the same `n`. */
+export function leakZ(rate: number, control: number, n: number): number {
+  if (n <= 0) return 0;
+  const pooled = (rate + control) / 2;
+  if (pooled <= 0 || pooled >= 1) return 0;
+  const se = Math.sqrt((2 * pooled * (1 - pooled)) / n);
+  return se === 0 ? 0 : (rate - control) / se;
+}
 /** One answer covering this share of seeds is worth guessing rather than working out. */
 const GUESSABLE_SHARE = 0.5;
 
 type Rates = { rate: number; control: number };
 
-type Row = {
+export type Row = {
   checkpoint: string;
   kind: "value" | "code";
   seeds: number;
@@ -87,7 +113,7 @@ type Row = {
 
 type NotAudited = { checkpoints?: string[]; reason: string; seed?: string; shapesTried?: string[] };
 
-type Report = {
+export type Report = {
   problem: string;
   rows: Row[];
   notAudited: NotAudited[];
@@ -97,7 +123,7 @@ type Report = {
   auditError?: string;
 };
 
-type Finding = {
+export type Finding = {
   problem: string;
   checkpoint: string;
   type: string;
@@ -217,7 +243,7 @@ async function pooled<T, R>(items: readonly T[], limit: number, run: (item: T) =
  * answer is the same in every deployment, the reference cannot pass, or the starter
  * already does.
  */
-function findings(report: Report): Finding[] {
+export function findings(report: Report): Finding[] {
   const found: Finding[] = [];
   const push = (checkpoint: string, type: string, detail: string, seeds: number): void => {
     found.push({ problem: report.problem, checkpoint, type, detail, seeds });
@@ -272,13 +298,15 @@ function findings(report: Report): Finding[] {
         row.seeds,
       );
     }
+    const fieldSeeds = row.fixtureFieldSeeds ?? row.seeds;
     for (const [label, rates] of Object.entries(row.fixtureFieldRates ?? {})) {
-      if (rates.rate >= LEAK_MARGIN && rates.rate - rates.control >= LEAK_MARGIN) {
+      const z = leakZ(rates.rate, rates.control, fieldSeeds);
+      if (rates.rate >= LEAK_FLOOR && z >= LEAK_Z) {
         push(
           row.checkpoint,
           "answer-on-screen",
-          `the answer equals the shown ${label} on ${percent(rates.rate)} of seeds, against a chance level of ${percent(rates.control)}`,
-          row.fixtureFieldSeeds ?? row.seeds,
+          `the answer equals the shown ${label} on ${percent(rates.rate)} of seeds, against a chance level of ${percent(rates.control)} (z=${z.toFixed(1)} over ${fieldSeeds} seeds)`,
+          fieldSeeds,
         );
       }
     }
@@ -432,4 +460,6 @@ async function main(): Promise<number> {
   return 0;
 }
 
-process.exit(await main());
+// Importing this module must not run the audit: scripts/solvability-audit.test.ts imports
+// `findings` to pin the thresholds against the two defects that motivated them.
+if (import.meta.main) process.exit(await main());

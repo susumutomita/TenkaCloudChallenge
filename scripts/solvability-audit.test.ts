@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
 import { localPlayProblemDirs } from "./lib/local-play-problems.ts";
+import { findings, type Report } from "./solvability-audit.ts";
 
 /**
  * The solvability gate.
@@ -57,6 +58,76 @@ describe("solvability baseline", () => {
     for (const entry of baseline()) {
       expect(known.has(entry.problem), `${entry.problem} is not a local-play problem`).toBe(true);
     }
+  });
+});
+
+/**
+ * The numbers below are the audit's own output, replayed against `b64926b^` — the last
+ * revision of `ac26-bridge-experiment` that still carried the two defects. They are here
+ * because a threshold that no longer fires on the defect it was chosen for is worse than
+ * no threshold: the report would say clean and mean unmeasured.
+ *
+ * Reproduce with:
+ *   git archive b64926b^ challenges/ac26-bridge-experiment | tar -x -C /tmp/old
+ *   python3 scripts/solvability/audit.py --problem /tmp/old/challenges/ac26-bridge-experiment \
+ *     --mode value --seeds 2000 --expected-dir <a copy with first-broken renamed to inspect>
+ */
+function replayOfTheKnownDefects(): Report {
+  return {
+    problem: "ac26-bridge-experiment@b64926b^",
+    notAudited: [],
+    rows: [
+      {
+        // `first-broken`, then called `inspect`: on 45.5 % of seeds the corrupted trace
+        // never left [0, modulus) and the only accepted answer was -1.
+        checkpoint: "inspect",
+        kind: "value",
+        seeds: 2000,
+        distinctAnswers: 9,
+        mostCommonRate: 0.455,
+        sentinelRate: 0.455,
+        sentinelExamples: ["solvability-1", "solvability-2"],
+        visibleDeclared: true,
+        fixtureFieldSeeds: 2000,
+        fixtureFieldRates: { step: { rate: 0.051, control: 0.065 } },
+      },
+      {
+        // `predict`: the answer was the printed `start` on 9.5 % of seeds, against a
+        // 6.25 % chance level. The whole point of the field-level probe.
+        checkpoint: "predict",
+        kind: "value",
+        seeds: 2000,
+        distinctAnswers: 23,
+        mostCommonRate: 0.08,
+        sentinelRate: 0,
+        visibleDeclared: true,
+        fixtureFieldSeeds: 2000,
+        fixtureFieldRates: {
+          start: { rate: 0.095, control: 0.0625 },
+          step: { rate: 0.071, control: 0.064 },
+          rounds: { rate: 0.0665, control: 0.0685 },
+        },
+      },
+    ],
+  };
+}
+
+describe("solvability thresholds still fire on the defects they were chosen for", () => {
+  it("reports the sentinel-only answer as no-answer", () => {
+    const types = findings(replayOfTheKnownDefects())
+      .filter((finding) => finding.checkpoint === "inspect")
+      .map((finding) => finding.type);
+    expect(types).toContain("no-answer");
+  });
+
+  it("reports the answer that equals the printed start as answer-on-screen", () => {
+    const hits = findings(replayOfTheKnownDefects()).filter(
+      (finding) => finding.checkpoint === "predict" && finding.type === "answer-on-screen",
+    );
+    expect(hits.map((finding) => finding.detail).join(" ")).toContain("start");
+    // `step` and `rounds` sit at their own control on the same rows. A rule that flagged
+    // them too would be reporting the small answer space, not the leak.
+    expect(hits).toHaveLength(1);
   });
 });
 
