@@ -16,8 +16,8 @@ back round.
 Do the same thing with, say, 10. As soon as a number reaches 10, take 10 off it.
 
 ```text
-12 - 10 = 2   ->  12 comes back to 2
-        9     ->   9 stays as it is
+12 reaches 10 -> 12 - 10 = 2
+ 9 does not   ->  9 stays as 9
 ```
 
 Every answer is one of 0 to 9. "Take the remainder after dividing by 10" is another way of
