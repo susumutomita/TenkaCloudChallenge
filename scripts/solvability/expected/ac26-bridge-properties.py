@@ -35,3 +35,9 @@ def _public_fields(server, seed):
 
 
 VISIBLE = {name: _public_fields for name in ("incompleteness", "unsoundness", "privacy-leak")}
+
+
+# The property matrix is nine booleans about the three verifiers. Nothing printed is a
+# matrix, so there is no on-screen value it could be copied from; what makes it copyable
+# is that it never varies, which the constant-answer probe already reports.
+VISIBLE["property-matrix"] = lambda _server, _seed: {}

@@ -34,6 +34,18 @@ def _mux_fields(server, seed):
     return {name: [f"{getattr(case, name):08x}"] for name in ("e", "f", "g")}
 
 
+def _dependency_fields(server, seed):
+    """The flip position, which is the number the player is shown for this checkpoint.
+
+    The answer is the first *computed* schedule index that feels the flip, so it is never
+    the flipped index itself — but `flipIndex + 16` is one of the four candidates the
+    recurrence offers, and a fixture that always landed there would reward adding 16
+    rather than working out which of `k+16`, `k+15`, `k+7`, `k+2` reaches 16 first.
+    """
+    case = server.dependency_case(seed)
+    return {"flipIndex": case.index, "flipBit": case.bit, "flipIndexPlus16": case.index + 16}
+
+
 #: A rotate answer equal to an input word means the shift amount was a no-op; a Ch answer
 #: equal to `f` or `g` means the fixture picked a mask that selects one input whole.
-VISIBLE = {"rotate": _rotate_fields, "mux": _mux_fields}
+VISIBLE = {"rotate": _rotate_fields, "mux": _mux_fields, "dependency": _dependency_fields}

@@ -64,9 +64,14 @@ describe("solvability gate", () => {
   it(
     "finds no unexplained solvability defect across the course catalog",
     () => {
+      // ~2.5 min. This file is picked up by scripts/validate-shard.ts's `scripts/*.test.ts`
+      // glob, so it shares a 15-minute CI shard with a sixth of the catalog suite; the
+      // code probes are what cost, and 10 seeds of them is what fits. At that size the
+      // run sees a defect present on >= 26 % of deploys, which is the gross-breakage
+      // band a newly added problem lands in. Anything rarer is `make solvability-sweep`.
       const result = spawnSync(
         "bun",
-        ["run", "scripts/solvability-audit.ts", "--seeds", "500", "--code-seeds", "6", "--screen-seeds", "120"],
+        ["run", "scripts/solvability-audit.ts", "--seeds", "500", "--code-seeds", "10", "--screen-seeds", "120"],
         {
           cwd: ROOT,
           encoding: "utf8",

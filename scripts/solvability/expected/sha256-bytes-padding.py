@@ -32,4 +32,41 @@ def _text_fields(server, seed):
     return {"charLength": len(server.text_case(seed).text)}
 
 
-VISIBLE = {"byte-length": _text_fields}
+def _length_field_fields(server, seed):
+    """The message length the player is given, in the forms they might submit unchanged.
+
+    The answer is that length times eight, big-endian in eight bytes. Submitting the
+    length itself — bytes rather than bits — is the mistake the checkpoint exists to
+    catch, so the two must never coincide.
+    """
+    length = server.length_field_case(seed)
+    return {
+        "messageLengthBytes": length,
+        "messageLengthAsField": length.to_bytes(server.LENGTH_FIELD_BYTES, "big").hex(),
+    }
+
+
+VISIBLE = {"byte-length": _text_fields, "length-field": _length_field_fields}
+
+
+def _quiz_fields(server, seed):
+    """The six message lengths the player is shown, against the six padded lengths asked for.
+
+    The two coincide only for a length that is already a padded length, which the quiz
+    never contains — so this rate is expected to be zero, and a non-zero one would mean a
+    row of the quiz answers itself.
+    """
+    return {"quizLengths": [server.length_quiz(seed)]}
+
+
+def _collision_fields(server, seed):
+    """The message the player is colliding with.
+
+    The grader rejects a candidate equal to it, so a leak here is impossible by
+    construction; the declaration exists so the audit records that it looked.
+    """
+    return {"originalMessage": server.collision_message(seed).hex()}
+
+
+VISIBLE["padded-length"] = _quiz_fields
+VISIBLE["collision"] = _collision_fields

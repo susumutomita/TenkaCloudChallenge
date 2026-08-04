@@ -9,3 +9,7 @@ EXPECTED = {
         operation: server.EXPECTED_ROUNDS[operation] for operation in server.OPERATIONS
     }
 }
+
+
+# A table of round counts, not a value read off the screen. Nothing shown can equal it.
+VISIBLE = {"no-communication": lambda _server, _seed: {}}

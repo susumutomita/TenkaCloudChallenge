@@ -9,3 +9,9 @@ def _root_cause(server, seed):
 
 
 EXPECTED = {"root-cause": _root_cause}
+
+
+# The answer names the dropped constraint and the signals it let move. Both are drawn from
+# the circuit the player is shown, so being on screen is the format of the answer. The
+# defect here is the two-way choice, which the guessable-answer probe reports.
+VISIBLE = {"root-cause": lambda _server, _seed: {}}

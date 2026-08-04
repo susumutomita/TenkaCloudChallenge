@@ -17,3 +17,16 @@ EXPECTED = {
 #: avalanche is *supposed* to be. The rate at which the fixture's true distance is exactly
 #: 128 is the rate at which the checkpoint rewards the guess.
 VISIBLE = {"avalanche": lambda server, _seed: {"halfOfDigestBits": server.DIGEST_BITS // 2}}
+
+
+# `properties` and `storage` are true/false verdicts on a fixed set of statements, shown
+# in a seed-derived order. No value on the player's screen can equal a verdict string, so
+# there is no answer-on-screen probe to run; the empty declaration records that rather
+# than leaving the checkpoint silently unmeasured.
+#
+# The order is why they do not read as `constant-answer` while `property-matrix` in
+# ac26-bridge-properties does: shuffling makes the literal string differ per deploy even
+# though the underlying judgements do not. That defeats copying the string, not learning
+# the statements.
+VISIBLE["properties"] = lambda _server, _seed: {}
+VISIBLE["storage"] = lambda _server, _seed: {}

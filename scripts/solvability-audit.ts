@@ -69,6 +69,7 @@ type Row = {
   visibleControlRate?: number;
   screenSeeds?: number;
   fieldScope?: string;
+  visibleDeclared?: boolean;
   fixtureFieldSeeds?: number;
   fixtureFieldRates?: Record<string, Rates>;
   fieldRates?: Record<string, Rates>;
@@ -301,6 +302,16 @@ function findings(report: Report): Finding[] {
     }
     if (row.kind === "code" && row.starterAudited === false) {
       push(row.checkpoint, "not-audited", "no starter sources, so 'the starter must fail' was not checked", row.seeds);
+    }
+    if (row.kind === "value" && row.visibleDeclared === false) {
+      push(
+        row.checkpoint,
+        "not-audited",
+        "no VISIBLE declaration in the expected() mirror, so answer-on-screen was not measured at fixture-field precision. " +
+          "The coarse token-set rate is all that ran, and replaying this audit against the defect it was built for showed " +
+          "that rate at its own chance level while the defect was real — so it is not evidence of anything here",
+        row.seeds,
+      );
     }
   }
   return found;

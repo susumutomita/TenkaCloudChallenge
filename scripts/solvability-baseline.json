@@ -114,6 +114,13 @@
       "recordedAtSeeds": 2000
     },
     {
+      "problem": "ac26-w5-pbs-homnand",
+      "checkpoint": "refresh",
+      "type": "reference-fails",
+      "reason": "On 10/2000 seeds (0.5 %) the hidden check rejects the shipped reference with 'the rotation produced the same artifact for a different input'. The fixture draws two inputs without checking that the blind rotation separates them, so on those deploys a correct implementation is graded wrong. Found by the N=150 code sweep and measured in-process at 2000; the gate budget cannot see a defect this rare.",
+      "recordedAtSeeds": 150
+    },
+    {
       "problem": "sha256-bytes-padding",
       "checkpoint": "padded-length",
       "type": "guessable-answer",

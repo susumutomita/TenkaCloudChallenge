@@ -418,12 +418,12 @@ def audit_value(
             screened += 1
             section, field_scope = _screen_section(screen, checkpoint)
             tokens = _answer_tokens(seen[seed])
-            visible = _visible_tokens(screen)
-            if tokens and all(token in visible for token in tokens):
+            on_screen = _visible_tokens(screen)
+            if tokens and all(token in on_screen for token in tokens):
                 matched += 1
             other = ordered[(index + 1) % len(ordered)]
             other_tokens = _answer_tokens(other)
-            if other_tokens and all(token in visible for token in other_tokens):
+            if other_tokens and all(token in on_screen for token in other_tokens):
                 control += 1
             if len(tokens) == 1:
                 for label, values in _visible_fields(section).items():
@@ -499,6 +499,13 @@ def audit_value(
                 # A leak is `rate` materially above `control`; equal rates mean the
                 # collision is arithmetic coincidence in a small answer space.
                 "screenSeeds": screened,
+                # Whether the mirror declared what the player is looking at. Without it
+                # the only answer-on-screen signal left is the token-set rate below, and
+                # replaying this audit against the defect it was built for showed that
+                # rate sitting at its own control (0.736 against 0.724) while the defect
+                # was real. So a missing declaration is an unmeasured checkpoint, and it
+                # is reported as one rather than passing quietly.
+                "visibleDeclared": checkpoint in visible,
                 "fixtureFieldSeeds": fixture_total,
                 "fixtureFieldRates": {
                     label: {
