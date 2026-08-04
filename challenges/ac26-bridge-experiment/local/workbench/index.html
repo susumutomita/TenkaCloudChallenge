@@ -13,9 +13,9 @@
         <p class="eyebrow">TenkaCloud · Experimental Workflow Lab</p>
         <h1>予測してから走らせる</h1>
         <p class="lead">
-          暗号がなぜ mod で計算するのか、その理由をいちばん簡単な形で自分の手で作ります。
-          この画面だけで <code>inspect</code>、Python編集、公開テスト、提出データ作成まで
-          完結します。4つの提出欄のうち2つは、あなたの頭で決めます。
+          暗号がなぜ「割ったあまり」で計算するのか、その理由をいちばん簡単な形で自分の手で
+          作ります。この画面だけで <code>inspect</code>、Python の編集、公開テスト、提出データ
+          作りまで終わります。4つの提出欄のうち2つは、あなたの頭で決めます。
         </p>
       </div>
       <span id="connection-status" class="status">接続確認中</span>
@@ -25,29 +25,40 @@
       <section class="panel theory" aria-labelledby="theory-title">
         <div class="section-heading">
           <p class="step">STEP 1</p>
-          <h2 id="theory-title">なぜ、剰余カウンタなのか</h2>
+          <h2 id="theory-title">まず、これだけ</h2>
         </div>
         <p>
-          普通の整数は「大きさ」で喋ってしまいます。足し算の結果が 5000 だと分かれば、
-          何回足したのかの見当がつく。大きさそのものが手がかりだからです。
-          <code>mod 17</code> で計算すると、答えは必ず 0〜16 のどれかになります。
-          大きさからは何も読み取れなくなる。暗号が数を有限に閉じ込めるのは、この漏れを
-          消すためです。
+          時計を思い出してください。10時の3時間後は 13時ではなく 1時です。12 を超えたら
+          戻ってくる。同じことを、たとえば 10 でやります。10 以上になったら 10 を引いて戻す。
+          答えは必ず 0 から 9 のどれかになります。「10 で割ったあまりにする」と言っても
+          同じことです。
+        </p>
+        <pre class="figure" tabindex="0">12 - 10 = 2   →  12 は 2 に戻る
+        9     →   9 はそのまま
+
+        0
+    9       1
+  8           2     ← 0 から 9 の 10 個しかない輪
+  7           3
+    6       4
+        5
+
+6 から 3 進むと 9。9 から 3 進むと 12 …ではなく、0 を通り越して 2 に着く。</pre>
+        <p>
+          この 10 は説明のための例です。あなたが使う数は STEP 2 の <code>inspect</code> が
+          出します。
         </p>
         <p>
-          その最も単純な形が、これから完成させる剰余カウンタです。<code>start</code> から
-          <code>step</code> を <code>rounds</code> 回足し、毎回 mod で折り返しながら歩く。
-          それだけ。ただしこれはまだ暗号になりません — この歩き方は逆算できてしまいます。
-          <code>inspect</code> が実際に歩数を復元して見せるので、STEP 2 で確かめてください。
-        </p>
-        <p>
-          だからこの歩き方は、後で楕円曲線に置き換わります。操作は同じ「歩く」ですが、
-          そちらは歩数の逆算が現実的にできない。Week 3 の署名はその差の上に立っています。
-          この問題は、その差を見に行くための最初の足場です。
+          普通の足し算は、答えの大きさが手がかりになります。5000 になったと聞けば、何回
+          足したのかの見当がつく。輪の上を回る足し算なら、答えは必ず 0 から 9 のどれかで、
+          大きさからは何も分かりません。暗号が数をこう閉じ込めるのは、この手がかりを消す
+          ためです。ただし、足した回数のほうは掛け算ひとつで戻せてしまいます
+          (<code>inspect</code> があなたの数で実際にやって見せます)。Week 3 では足す相手を
+          楕円曲線というものに替えて、その戻し方が効かないようにします。
         </p>
         <div class="claim">
-          <span>不変条件</span>
-          <code>traceの各entryは毎round剰余を適用し、常に 0 &lt;= entry &lt; modulus に収まる</code>
+          <span>約束</span>
+          <code>出てくる数は毎回はみ出した分を引いて戻すので、いつも 0 以上、引く目印の数より小さい</code>
         </div>
       </section>
 
@@ -55,15 +66,15 @@
         <div class="section-heading with-action">
           <div>
             <p class="step">STEP 2</p>
-            <h2 id="inspect-title">自分のfixtureを観察する</h2>
+            <h2 id="inspect-title">自分の数を見る</h2>
           </div>
           <button type="button" data-command="inspect">inspectを実行</button>
         </div>
         <p>
-          health token、predict用のfixture、歩数を逆算して見せる別のwalk、壊れたtraceを
-          表示します。<code>inspect</code>はこの証拠を出すコマンドの名前で、checkpointの
-          名前ではありません（採点欄の名前は environment / predict / first-broken /
-          generalize）。fixtureはdeployごとのseedから作られるので、他の人の数値は使えません。
+          合言葉、あなたが使う 4 つの数、足した回数が戻ってしまう例、1 個だけはみ出した
+          並びが出ます。<code>inspect</code> は証拠を出すコマンドの名前で、書き込む欄の
+          名前ではありません（欄の名前は environment / predict / first-broken /
+          generalize）。数は起動するたびに変わるので、他の人の数値は使えません。
         </p>
         <pre id="inspect-output" class="output" tabindex="0">inspectを実行してください。</pre>
       </section>
@@ -74,8 +85,12 @@
           <h2 id="edit-title">advanceを完成させる</h2>
         </div>
         <p>
-          starterは意図的に未完成で、剰余を一度も適用しません。編集内容はこのブラウザに
-          自動保存されます。公開テストは形を見るだけで、負のstepもzero stepも使いません。
+          最初のコードはわざと未完成で、はみ出した分を一度も引きません。書いた内容はこの
+          ブラウザに自動保存されます。<code>advance</code> の 4 つの引数
+          <code>start</code> / <code>step</code> / <code>rounds</code> / <code>modulus</code> は、
+          <code>inspect</code> が見せる「からはじめて」「を毎回たす」「回くりかえす」
+          「以上になったら引く」の 4 つの数です。公開テストは形を見るだけで、たす数が
+          マイナスの場合も 0 の場合も試しません。
         </p>
         <div class="editor-grid single">
           <label>
@@ -114,36 +129,36 @@
           <h2 id="submit-title">Portalへ提出する</h2>
         </div>
         <p>
-          提出欄は4つ、値の出どころは2種類です。「提出データを作る」が値を用意するのは
-          environment と generalize の2つだけ。残りの2つは自分で決めて、Participant Portal
-          の同名チェックポイント欄へ直接入力します。
+          書く欄は4つ。「提出データを作る」が用意してくれるのは environment と generalize の
+          2つだけです。残りの2つは自分で決めて、Participant Portal の同じ名前の欄へ直接
+          書きます。
         </p>
         <div class="property-grid pairs">
           <article>
             <h3>environment</h3>
-            <p class="source">prepare が出す</p>
-            <p>health tokenをそのまま貼ります。containerが本当に動いた証拠です。</p>
+            <p class="source">ボタンが出す</p>
+            <p>表示された合言葉をそのまま貼ります。コンテナが本当に動いた証拠です。</p>
           </article>
           <article>
             <h3>predict</h3>
-            <p class="source">自分で計算して手入力</p>
+            <p class="source">自分で計算して書く</p>
             <p>
-              inspectが見せたfixtureを紙で追い、<strong>最後のroundの後の値</strong>を
-              整数1個で。trace全体ではありません。
+              inspect が見せた4つの数を紙で追い、<strong>最後にいる数</strong>をひとつだけ。
+              途中の数を全部並べるのではありません。
             </p>
           </article>
           <article>
             <h3>first-broken</h3>
-            <p class="source">自分で読んで手入力</p>
+            <p class="source">自分で読んで書く</p>
             <p>
-              壊れたtraceを先頭から読み、上の不変条件を最初に破るentryのindexを
-              <strong>0始まり</strong>の整数1個で。
+              並んだ数のうち、はみ出している1個が<strong>左から何番目</strong>か。
+              左端が0番です。
             </p>
           </article>
           <article>
             <h3>generalize</h3>
-            <p class="source">prepare が出す</p>
-            <p>完成させたcounter.pyの全文を貼ります。見たことのないfixtureで検証されます。</p>
+            <p class="source">ボタンが出す</p>
+            <p>書き上げた counter.py の中身を全部貼ります。見たことのない数で試されます。</p>
           </article>
         </div>
         <div id="submission-output" class="submission-grid" aria-live="polite">
