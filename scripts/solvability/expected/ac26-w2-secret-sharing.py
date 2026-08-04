@@ -23,9 +23,9 @@ def _threshold(server, seed):
 EXPECTED = {"threshold": _threshold}
 
 
-VISIBLE = {
-    "threshold": lambda server, seed: {
-        "n": server.setting(seed)["n"],
-        "p": server.setting(seed)["p"],
-    }
-}
+# The answer is an object — a count, n-1 shares, and two completions — and the probe
+# compares a declared field against the answer as a whole, so no field could ever match
+# it. Declaring the shown `n` and `p` here would read as a measurement while measuring
+# nothing. `sharesNeeded` alone *is* the on-screen party count, but the grader accepts it
+# only alongside the two completions, which is the part that cannot be copied.
+VISIBLE = {"threshold": lambda _server, _seed: {}}

@@ -145,6 +145,11 @@ function key(problem: string, checkpoint: string, type: string): string {
   return [problem, checkpoint, type].join(" :: ");
 }
 
+/** Which seed budget a finding of this type was measured against. */
+function budgetFor(type: string, seeds: number, codeSeeds: number): number {
+  return type === "reference-fails" || type === "starter-passes" ? codeSeeds : seeds;
+}
+
 /**
  * The baseline has two lists, and the difference between them is the whole point.
  *
@@ -397,8 +402,12 @@ async function main(): Promise<number> {
       ? [...baseline.accepted, ...baseline.open].filter(
           (entry) =>
             !seen.has(key(entry.problem, entry.checkpoint, entry.type)) &&
-            seeds >= entry.recordedAtSeeds &&
-            codeSeeds >= entry.recordedAtSeeds,
+            // Against the budget that would actually have re-measured this entry. The two
+            // budgets differ by an order of magnitude, so requiring both to clear the
+            // recorded size meant a direct-answer entry recorded at 2000 could never be
+            // called stale — `codeSeeds` never gets there — and the anti-rot check
+            // silently applied to the code entries only.
+            budgetFor(entry.type, seeds, codeSeeds) >= entry.recordedAtSeeds,
         )
       : [];
 

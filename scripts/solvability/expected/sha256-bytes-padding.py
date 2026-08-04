@@ -49,16 +49,6 @@ def _length_field_fields(server, seed):
 VISIBLE = {"byte-length": _text_fields, "length-field": _length_field_fields}
 
 
-def _quiz_fields(server, seed):
-    """The six message lengths the player is shown, against the six padded lengths asked for.
-
-    The two coincide only for a length that is already a padded length, which the quiz
-    never contains — so this rate is expected to be zero, and a non-zero one would mean a
-    row of the quiz answers itself.
-    """
-    return {"quizLengths": [server.length_quiz(seed)]}
-
-
 def _collision_fields(server, seed):
     """The message the player is colliding with.
 
@@ -68,5 +58,11 @@ def _collision_fields(server, seed):
     return {"originalMessage": server.collision_message(seed).hex()}
 
 
-VISIBLE["padded-length"] = _quiz_fields
 VISIBLE["collision"] = _collision_fields
+
+# `padded-length` answers with six numbers at once, and the probe compares a declared
+# field against the answer *as a whole* — so no field it could be handed would ever match,
+# and declaring the six shown message lengths here would read as a measurement while
+# measuring nothing. What is actually wrong with this checkpoint is that those six numbers
+# only ever take two values, which the guessable-answer probe reports.
+VISIBLE["padded-length"] = lambda _server, _seed: {}
