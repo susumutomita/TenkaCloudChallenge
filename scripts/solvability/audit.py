@@ -21,15 +21,21 @@ What it measures
           every deploy, so one leaked answer scores the checkpoint for everybody.
           Cheap (AST only), runs over every problem, needs no fixtures.
 
-`value`   Direct-answer checkpoints, driven by an `expected(seed)` mirror declared in
+`value`   Direct-answer checkpoints, driven by the `EXPECTED` / `VISIBLE` mirror in
           `expected/<problem>.py`. Per checkpoint, over N seeds:
-            - oracle:      `evaluate(cp, expected(seed))` is True          (type 5)
-            - distinct:    how many distinct answers N seeds produce       (types 1/4)
-            - sentinel:    how often the answer is -1 / 0 / "" / [] / {}   (type 1)
-            - replay:      `evaluate(cp, expected(other_seed))` is False   (type 4)
-            - visible:     the answer is a value already on the player's
-                           screen (`show.py` stdout, `inspect_payload`)    (type 2)
-          Value graders are pure arithmetic in-process, so N here is cheap.
+            - oracle:      `evaluate(cp, expected(seed))` is True
+            - distinct:    how many distinct answers N seeds produce, and how
+                           much of the distribution the most common one covers
+            - sentinel:    how often the answer is -1 / "" / [] / {} / None
+            - replay:      `evaluate(cp, expected(other_seed))` is False
+            - visible:     how often the answer equals a value the player is
+                           looking at, against a control drawn from another
+                           seed's answer. Two resolutions: the fields `VISIBLE`
+                           names, and — coarser, and shown by the replay to sit
+                           at its own chance level — every token `show.py` prints
+          Value graders are pure arithmetic in-process, so N here is cheap. Rendering
+          the screen is not, so it runs for the first `--screen-seeds` only; the
+          `VISIBLE` fields, which are the half with teeth, run for every seed.
 
 `code`    Code checkpoints, driven through the problem's own `evaluate()` — the real
           production path, not a re-implementation of it:
