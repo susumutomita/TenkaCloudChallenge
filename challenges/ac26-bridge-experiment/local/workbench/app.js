@@ -88,10 +88,12 @@ function numberedList(values) {
 /** One addition, written the way a reader would do it on paper. */
 function addOnce(value, step, modulus) {
   const raw = value + step;
-  const sum = `${value} + ${step} = ${raw}`.padEnd(12);
+  // 14 clears the widest sum this problem can print ("22 + 22 = 44"), so the
+  // explanation never runs straight into the arithmetic.
+  const sum = `${value} + ${step} = ${raw}`.padEnd(14);
   return raw >= modulus
-    ? `${sum} ${raw} は ${modulus} 以上なので、${raw} - ${modulus} = ${raw - modulus}`
-    : `${sum} ${raw} は ${modulus} より小さいので、そのまま`;
+    ? `${sum}${raw} は ${modulus} 以上なので、${raw} - ${modulus} = ${raw - modulus}`
+    : `${sum}${raw} は ${modulus} より小さいので、そのまま`;
 }
 
 async function inspect() {

@@ -45,10 +45,12 @@ def numbered_list(values: list[int]) -> tuple[str, str]:
 def add_once(value: int, step: int, modulus: int) -> str:
     """One addition, written the way a reader would do it on paper."""
     raw = value + step
+    # 14 clears the widest sum this problem can print ("22 + 22 = 44"), so the
+    # explanation never runs straight into the arithmetic.
     sum_text = f"{value} + {step} = {raw}"
     if raw >= modulus:
-        return f"{sum_text:<12} {raw} reaches {modulus}, so {raw} - {modulus} = {raw - modulus}"
-    return f"{sum_text:<12} {raw} is below {modulus}, so leave it"
+        return f"{sum_text:<14}{raw} reaches {modulus}, so {raw} - {modulus} = {raw - modulus}"
+    return f"{sum_text:<14}{raw} is below {modulus}, so leave it"
 
 
 def main() -> None:
