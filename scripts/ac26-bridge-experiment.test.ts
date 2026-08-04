@@ -221,6 +221,82 @@ describe("ac26-bridge-experiment: /verify contract", () => {
     expect(evaluate("finish-everything", "anything")).toBe(false);
   });
 
+  // The checkpoint used to be called `inspect`, which is also the name of the Workbench
+  // command and the make target that show the evidence. Players read the two as one
+  // thing. The checkpoint was the half that moved.
+  it("should score the broken index under `first-broken`, not under `inspect`", () => {
+    const brokenIndex = python([
+      "-c",
+      [
+        "import sys",
+        "sys.path.insert(0, '.')",
+        "from fixtures.generate import corrupted_trace",
+        "print(corrupted_trace(sys.argv[1])[2])",
+      ].join("\n"),
+      SEED,
+    ]);
+    expect(brokenIndex.status).toBe(0);
+    const answer = brokenIndex.stdout.trim().split("\n").at(-1) ?? "";
+    expect(answer).not.toBe("-1");
+    expect(evaluate("first-broken", answer)).toBe(true);
+    expect(evaluate("inspect", answer)).toBe(false);
+  });
+
+  /**
+   * Skipping the reduction is only observable on a round that would have wrapped: if
+   * `value + step` was already below the modulus, the corrupted trace equals the clean
+   * one and no entry leaves `[0, modulus)`. Picking the round blind therefore shipped a
+   * trace with nothing to find for roughly half of all seeds, and `first-broken` asked
+   * those players for an index that did not exist. A per-deploy seed picks a fresh case
+   * every time, so the property has to hold for all of them, not for this one.
+   */
+  it("should always leave exactly one entry outside the range, for any seed", () => {
+    const result = python([
+      "-c",
+      [
+        "import sys",
+        "sys.path.insert(0, '.')",
+        "from fixtures.generate import corrupted_trace",
+        "bad = []",
+        "for index in range(400):",
+        "    case, trace, broke_at = corrupted_trace(f'sweep-{index}')",
+        "    outside = [i for i, v in enumerate(trace) if not 0 <= v < case.modulus]",
+        "    if outside != [broke_at]:",
+        "        bad.append((index, outside, broke_at))",
+        "print(bad[:5])",
+        "print(len(bad))",
+      ].join("\n"),
+    ]);
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim().split("\n").at(-1)).toBe("0");
+  });
+
+  /**
+   * The evidence claims the step count can be recovered, and that claim is the reason
+   * the problem exists at all. If the printed arithmetic did not round-trip, the
+   * motivation would be a lie told to every player.
+   */
+  it("should print a walk that really does run backwards", () => {
+    const result = python([
+      "-c",
+      [
+        "import sys",
+        "sys.path.insert(0, '.')",
+        "from fixtures.generate import walkback_case",
+        "bad = 0",
+        "for index in range(400):",
+        "    w = walkback_case(f'sweep-{index}')",
+        "    if w['step'] * w['undoStep'] % w['modulus'] != 1:",
+        "        bad += 1",
+        "    if w['recoveredRounds'] != w['rounds']:",
+        "        bad += 1",
+        "print(bad)",
+      ].join("\n"),
+    ]);
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim().split("\n").at(-1)).toBe("0");
+  });
+
   it("should reject a wrong health token", () => {
     expect(evaluate("environment", "not-the-token")).toBe(false);
   });

@@ -29,7 +29,7 @@ from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fixtures.generate import corrupted_trace, health_token, public_case
+from fixtures.generate import corrupted_trace, health_token, public_case, walkback_case
 
 ROOT = Path(__file__).resolve().parents[1]
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
@@ -42,7 +42,7 @@ MAX_OUTPUT_BYTES = 64 * 1024
 #: Wall clock for reading a request body, so a stalled client cannot pin the server.
 REQUEST_TIMEOUT_SECONDS = 15
 
-CHECKPOINTS = ("environment", "predict", "inspect", "generalize")
+CHECKPOINTS = ("environment", "predict", "first-broken", "generalize")
 SUBMISSION_FILES = ("counter.py",)
 WORKBENCH_ASSETS = {
     "/": ("index.html", "text/html; charset=utf-8"),
@@ -99,7 +99,12 @@ def inspect_payload(seed: str) -> dict[str, object]:
 
     Same facts as `show.py`, structured for the workbench. The predicted final
     value and the broken index stay out of the payload: they are the answers to
-    the `predict` and `inspect` checkpoints.
+    the `predict` and `first-broken` checkpoints.
+
+    `walkback` is not a checkpoint and is shown complete, final value included. It
+    is why the problem is worth doing: reducing mod something hides the size of a
+    value but not the number of steps taken, so this walk is not one anything can
+    be signed with, and Week 3 swaps out what is being walked on.
     """
     case = public_case(seed)
     bad_case, trace, _broke_at = corrupted_trace(seed)
@@ -109,7 +114,8 @@ def inspect_payload(seed: str) -> dict[str, object]:
             "healthToken": health_token(seed),
         },
         "predict": case.as_dict(),
-        "inspect": {**bad_case.as_dict(), "trace": trace},
+        "walkback": walkback_case(seed),
+        "firstBroken": {**bad_case.as_dict(), "trace": trace},
     }
 
 
@@ -185,7 +191,7 @@ def run_public_tests(seed: str, files: object) -> dict[str, object]:
 def prepare_submissions(seed: str, files: object) -> dict[str, object]:
     """Format the two portal values the workbench can produce.
 
-    `predict` and `inspect` are deliberately absent: the first is worked out on
+    `predict` and `first-broken` are deliberately absent: the first is worked out on
     paper before running anything, the second is read off the corrupted trace.
     Producing either here would erase what those checkpoints measure.
     """
@@ -213,7 +219,7 @@ def _check_predict(submission: object) -> bool:
     return value == (case.start + case.step * case.rounds) % case.modulus
 
 
-def _check_inspect(submission: object) -> bool:
+def _check_first_broken(submission: object) -> bool:
     _case, _trace, broke_at = corrupted_trace(SEED)
     value = _normalized_int(submission)
     if value is None:
@@ -263,8 +269,8 @@ def evaluate(checkpoint_id: str, submission: object) -> bool:
         return _check_environment(submission)
     if checkpoint_id == "predict":
         return _check_predict(submission)
-    if checkpoint_id == "inspect":
-        return _check_inspect(submission)
+    if checkpoint_id == "first-broken":
+        return _check_first_broken(submission)
     if checkpoint_id == "generalize":
         return _check_generalize(submission)
     return False

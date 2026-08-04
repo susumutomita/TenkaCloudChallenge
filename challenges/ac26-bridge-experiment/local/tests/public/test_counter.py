@@ -16,7 +16,12 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, SUBMISSION_DIR or str(ROOT / "starter"))
 
 from counter import advance  # noqa: E402
-from fixtures.generate import health_token, public_case  # noqa: E402
+from fixtures.generate import (  # noqa: E402
+    corrupted_trace,
+    health_token,
+    public_case,
+    walkback_case,
+)
 from verifier.server import (  # noqa: E402
     inspect_payload,
     prepare_submissions,
@@ -56,8 +61,28 @@ def test_workbench_inspect_shows_seeded_evidence_without_answers() -> None:
     assert set(payload["predict"]) == {"start", "step", "rounds", "modulus"}
     # The trace is evidence; the broken index and the predicted final value are
     # the answers, so they must not appear.
-    assert set(payload["inspect"]) == {"start", "step", "rounds", "modulus", "trace"}
-    assert isinstance(payload["inspect"]["trace"], list)
+    assert set(payload["firstBroken"]) == {"start", "step", "rounds", "modulus", "trace"}
+    assert isinstance(payload["firstBroken"]["trace"], list)
+
+
+def test_the_broken_trace_actually_leaves_the_range_it_is_asked_about() -> None:
+    # first-broken asks which entry first leaves [0, modulus). If skipping the
+    # reduction happened on a round that would not have wrapped, the corrupted trace
+    # equals the clean one and the question has no answer at all. Pin the property
+    # over many seeds, because a per-deploy seed picks a different case every time.
+    for index in range(200):
+        case, trace, broke_at = corrupted_trace(f"range-guard-{index}")
+        outside = [i for i, value in enumerate(trace) if not 0 <= value < case.modulus]
+        assert outside == [broke_at], f"seed {index}: outside={outside} broke_at={broke_at}"
+
+
+def test_the_walkback_case_really_walks_back() -> None:
+    # The motivation for the whole problem is that this walk is reversible. If the
+    # printed arithmetic did not actually recover `rounds`, the evidence would be
+    # telling the learner something false.
+    walk = walkback_case(WORKBENCH_TEST_SEED)
+    assert walk["step"] * walk["undoStep"] % walk["modulus"] == 1
+    assert walk["recoveredRounds"] == walk["rounds"]
 
 
 def test_workbench_starter_returns_the_editable_file() -> None:
@@ -84,7 +109,7 @@ def test_workbench_prepare_returns_the_producible_portal_values() -> None:
     result = prepare_submissions(WORKBENCH_TEST_SEED, starter_payload())
     assert result["ok"] is True
     submissions = result["submissions"]
-    # predict and inspect are worked out by the learner, never produced here.
+    # predict and first-broken are worked out by the learner, never produced here.
     assert set(submissions) == {"environment", "generalize"}
     assert submissions["environment"] == health_token(WORKBENCH_TEST_SEED)
     assert "def advance" in submissions["generalize"]
@@ -98,7 +123,7 @@ def test_workbench_prepare_rejects_an_empty_source() -> None:
 def test_workbench_assets_expose_browser_only_journey() -> None:
     html = (ROOT / "workbench" / "index.html").read_text(encoding="utf-8")
     script = (ROOT / "workbench" / "app.js").read_text(encoding="utf-8")
-    for term in ("predict", "inspect", "generalize", "terminal-input"):
+    for term in ("predict", "first-broken", "generalize", "terminal-input"):
         assert term in html
     for command in ("inspect", "test", "prepare", "reset"):
         assert f'case "{command}"' in script

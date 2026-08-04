@@ -13,11 +13,11 @@ const connectionStatus = document.querySelector("#connection-status");
 const MANUAL_CHECKPOINTS = [
   {
     id: "predict",
-    hint: "走らせる前に紙で求めた最終値を、Portalのpredict欄へ直接入力します。",
+    hint: "走らせる前に紙で求めた最終値を、整数1個でPortalのpredict欄へ直接入力します。trace全体ではありません。",
   },
   {
-    id: "inspect",
-    hint: "壊れたtraceが最初に 0 <= entry < modulus を外れる0始まりのindexを、Portalのinspect欄へ直接入力します。",
+    id: "first-broken",
+    hint: "壊れたtraceが最初に 0 <= entry < modulus を外れる0始まりのindexを、整数1個でPortalのfirst-broken欄へ直接入力します。",
   },
 ];
 
@@ -69,7 +69,8 @@ async function inspect() {
   print("$ inspect");
   const payload = await request("/api/inspect");
   const predict = payload.predict;
-  const broken = payload.inspect;
+  const walk = payload.walkback;
+  const broken = payload.firstBroken;
   const lines = [
     "== checkpoint: environment ==",
     `  python        ${payload.environment.python}`,
@@ -78,12 +79,22 @@ async function inspect() {
     "== checkpoint: predict ==",
     "  走らせる前に紙で解いてください:",
     `  start=${predict.start} step=${predict.step} rounds=${predict.rounds} modulus=${predict.modulus}`,
-    "  最後のroundの後の値を提出します。",
+    "  最後のroundの後の値を、整数1個で提出します。",
     "",
-    "== checkpoint: inspect ==",
+    "== なぜこれがまだ暗号にならないか (提出なし) ==",
+    "  もう1つのwalk。こちらは最終値まで全部見せます:",
+    `    start=${walk.start} step=${walk.step} rounds=${walk.rounds} modulus=${walk.modulus} → 最終値 ${walk.final}`,
+    `    mod ${walk.modulus} で計算したので値は必ず 0〜${walk.modulus - 1}。大きさからは歩数が読めません。`,
+    "    ただし歩数そのものは復元できます:",
+    `      ${walk.step} に ${walk.undoStep} を掛けると mod ${walk.modulus} で 1 になる (${walk.step} * ${walk.undoStep} = 1 mod ${walk.modulus})`,
+    `      (${walk.final} - ${walk.start}) * ${walk.undoStep} mod ${walk.modulus} = ${walk.recoveredRounds}  ← 歩数が戻ってきた`,
+    "    Week 3 は同じ「歩く」操作のまま、歩く対象だけを楕円曲線に替えます。",
+    "    そちらではこの最後の行に現実的な答えがない。署名はその差の上に立っています。",
+    "",
+    "== checkpoint: first-broken ==",
     `  start=${broken.start} step=${broken.step} rounds=${broken.rounds} modulus=${broken.modulus}`,
     "  このtraceは、ちょうど1つのroundで剰余を適用し損ねた実装の出力です。",
-    "  不変条件 0 <= value < modulus を最初に破るentryの0始まりのindexを提出します。",
+    `  不変条件 0 <= value < ${broken.modulus} を最初に破るentryの0始まりのindexを、整数1個で提出します。`,
     `  trace = ${JSON.stringify(broken.trace)}`,
   ];
   inspectOutput.textContent = lines.join("\n");
@@ -155,7 +166,7 @@ async function prepare() {
     return;
   }
   renderSubmissions(result.submissions);
-  print("prepare: environment / generalize are ready; predict / inspect stay yours");
+  print("prepare: environment / generalize are ready; predict / first-broken stay yours");
   document.querySelector("#submit-title").scrollIntoView({ behavior: "smooth" });
 }
 
@@ -184,10 +195,10 @@ async function runCommand(commandLine) {
   switch (command) {
     case "help":
       print("$ help");
-      print("inspect          health token、predict用fixture、壊れたtraceを表示");
+      print("inspect          health token、predict用fixture、歩数を逆算するwalk、壊れたtraceを表示");
       print("show counter.py  現在のコードを表示");
       print("test             公開shape testを実行");
-      print("prepare          environmentとgeneralizeの提出値を生成");
+      print("prepare          environmentとgeneralizeの提出値を生成 (predict / first-broken は手入力)");
       print("reset            counter.pyをstarterへ戻す");
       print("clear            console出力を消去");
       break;

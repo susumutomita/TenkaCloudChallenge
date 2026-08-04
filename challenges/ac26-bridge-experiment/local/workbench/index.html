@@ -13,9 +13,9 @@
         <p class="eyebrow">TenkaCloud · Experimental Workflow Lab</p>
         <h1>予測してから走らせる</h1>
         <p class="lead">
-          剰余カウンタを完成させながら、実験の作法を一度だけ通します。この画面だけで
-          <code>inspect</code>、Python編集、公開テスト、提出データ作成まで完結します。
-          predict と inspect の答えだけは、あなたの頭で決めます。
+          暗号がなぜ mod で計算するのか、その理由をいちばん簡単な形で自分の手で作ります。
+          この画面だけで <code>inspect</code>、Python編集、公開テスト、提出データ作成まで
+          完結します。4つの提出欄のうち2つは、あなたの頭で決めます。
         </p>
       </div>
       <span id="connection-status" class="status">接続確認中</span>
@@ -25,29 +25,26 @@
       <section class="panel theory" aria-labelledby="theory-title">
         <div class="section-heading">
           <p class="step">STEP 1</p>
-          <h2 id="theory-title">まず、実験の作法を知る</h2>
+          <h2 id="theory-title">なぜ、剰余カウンタなのか</h2>
         </div>
         <p>
-          走らせてから答えを写すと、この問題で得るものはありません。4つのcheckpointは
-          それぞれ独立に採点され、順番に「作法」を検査します。
+          普通の整数は「大きさ」で喋ってしまいます。足し算の結果が 5000 だと分かれば、
+          何回足したのかの見当がつく。大きさそのものが手がかりだからです。
+          <code>mod 17</code> で計算すると、答えは必ず 0〜16 のどれかになります。
+          大きさからは何も読み取れなくなる。暗号が数を有限に閉じ込めるのは、この漏れを
+          消すためです。
         </p>
-        <div class="property-grid">
-          <article>
-            <h3>predict</h3>
-            <p class="question">走らせる前に、結果を言えるか？</p>
-            <p>fixtureを紙で追い、最後のroundの値を実行前に予測して提出します。</p>
-          </article>
-          <article>
-            <h3>inspect</h3>
-            <p class="question">traceの、どこが最初に壊れたか？</p>
-            <p>壊れたtraceを先頭から読み、不変条件が最初に破れた位置を特定します。</p>
-          </article>
-          <article>
-            <h3>generalize</h3>
-            <p class="question">見えないパラメータでも通るか？</p>
-            <p>公開fixtureの固定値に依存しない一般解を書きます。hidden verifierが検査します。</p>
-          </article>
-        </div>
+        <p>
+          その最も単純な形が、これから完成させる剰余カウンタです。<code>start</code> から
+          <code>step</code> を <code>rounds</code> 回足し、毎回 mod で折り返しながら歩く。
+          それだけ。ただしこれはまだ暗号になりません — この歩き方は逆算できてしまいます。
+          <code>inspect</code> が実際に歩数を復元して見せるので、STEP 2 で確かめてください。
+        </p>
+        <p>
+          だからこの歩き方は、後で楕円曲線に置き換わります。操作は同じ「歩く」ですが、
+          そちらは歩数の逆算が現実的にできない。Week 3 の署名はその差の上に立っています。
+          この問題は、その差を見に行くための最初の足場です。
+        </p>
         <div class="claim">
           <span>不変条件</span>
           <code>traceの各entryは毎round剰余を適用し、常に 0 &lt;= entry &lt; modulus に収まる</code>
@@ -63,8 +60,10 @@
           <button type="button" data-command="inspect">inspectを実行</button>
         </div>
         <p>
-          health token、predict用のfixture、壊れたtraceを表示します。fixtureはdeployごとの
-          seedから作られるので、他の人の数値は使えません。
+          health token、predict用のfixture、歩数を逆算して見せる別のwalk、壊れたtraceを
+          表示します。<code>inspect</code>はこの証拠を出すコマンドの名前で、checkpointの
+          名前ではありません（採点欄の名前は environment / predict / first-broken /
+          generalize）。fixtureはdeployごとのseedから作られるので、他の人の数値は使えません。
         </p>
         <pre id="inspect-output" class="output" tabindex="0">inspectを実行してください。</pre>
       </section>
@@ -115,10 +114,38 @@
           <h2 id="submit-title">Portalへ提出する</h2>
         </div>
         <p>
-          「提出データを作る」はenvironmentとgeneralizeの2つだけを整形します。predictは
-          実行前に紙で求めた最終値、inspectは壊れたtraceを読んで特定した0始まりのindexを、
-          Participant Portalの同名チェックポイントへ自分で入力してください。
+          提出欄は4つ、値の出どころは2種類です。「提出データを作る」が値を用意するのは
+          environment と generalize の2つだけ。残りの2つは自分で決めて、Participant Portal
+          の同名チェックポイント欄へ直接入力します。
         </p>
+        <div class="property-grid pairs">
+          <article>
+            <h3>environment</h3>
+            <p class="source">prepare が出す</p>
+            <p>health tokenをそのまま貼ります。containerが本当に動いた証拠です。</p>
+          </article>
+          <article>
+            <h3>predict</h3>
+            <p class="source">自分で計算して手入力</p>
+            <p>
+              inspectが見せたfixtureを紙で追い、<strong>最後のroundの後の値</strong>を
+              整数1個で。trace全体ではありません。
+            </p>
+          </article>
+          <article>
+            <h3>first-broken</h3>
+            <p class="source">自分で読んで手入力</p>
+            <p>
+              壊れたtraceを先頭から読み、上の不変条件を最初に破るentryのindexを
+              <strong>0始まり</strong>の整数1個で。
+            </p>
+          </article>
+          <article>
+            <h3>generalize</h3>
+            <p class="source">prepare が出す</p>
+            <p>完成させたcounter.pyの全文を貼ります。見たことのないfixtureで検証されます。</p>
+          </article>
+        </div>
         <div id="submission-output" class="submission-grid" aria-live="polite">
           <p class="empty">まだ提出データは作られていません。</p>
         </div>
