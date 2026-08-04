@@ -73,9 +73,9 @@ Two related habits to drop: arguing from authority or adoption numbers, and aski
 
 ### Checklist before opening the PR
 
-No validator checks any of these. Read the problem as someone who has not seen it.
+Only the first item is machine-checked. Read the rest of the problem as someone who has not seen it.
 
-- [ ] Does every checkpoint have an answer **for every seed**? Prove it by sweep, not by one example.
+- [ ] Does every checkpoint have an answer **for every seed**? Prove it by sweep, not by one example — `make solvability` (§16) runs the sweep for you and fails on a checkpoint whose own reference solution does not pass.
 - [ ] Is the answer unique, and not copyable straight out of the problem statement?
 - [ ] Are the prerequisites stated up front, in the reader's words?
 - [ ] Is every term outside that list defined at first use?
