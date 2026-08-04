@@ -5,6 +5,7 @@
   "description": "TenkaCloud problem catalog. Validates metadata.json against SCHEMA.json and cross-refs template.yaml Outputs + portal slot files.",
   "type": "module",
   "scripts": {
+    "rls:runtime": "bun run scripts/verify-rls-tenant-isolation.ts",
     "new": "bun run scripts/new-problem.ts",
     "new-course-challenge": "bun run scripts/new-course-challenge.ts",
     "reindex": "bun run scripts/build-index.ts && bun run scripts/estimate-cost.ts --write",
