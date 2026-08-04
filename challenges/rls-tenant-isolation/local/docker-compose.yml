@@ -9,16 +9,17 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: participant
     environment:
       # Unused by this problem (the challenge is structural, not a discovered
       # flag) but injected by `make local` for every local-play problem.
       FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
     volumes:
       # Live-edit the RLS policies without rebuilding the image.
-      - "./solution/policies.sql:/app/solution/policies.sql:ro"
+      - "${RLS_SOLUTION_DIR:-./solution}:/app/solution:ro"
     ports:
-      - "127.0.0.1:18080:8080" # documents API (challenge surface)
-      - "127.0.0.1:18081:8081" # loopback /verify
+      - "127.0.0.1:${RLS_APP_PORT:-18080}:8080" # documents API (challenge surface)
+      - "127.0.0.1:${RLS_VERIFY_PORT:-18081}:8081" # loopback /verify
     healthcheck:
       test:
         [

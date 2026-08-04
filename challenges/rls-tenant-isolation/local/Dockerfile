@@ -7,7 +7,7 @@
 # Postgres is the point of the problem (Row Level Security lives in the DB), so
 # the image is Postgres-based with Node added for the app layer. This mirrors a
 # Supabase project: PostgREST-style identity GUCs + RLS enforced in the database.
-FROM postgres:16-alpine
+FROM postgres:16-alpine AS participant
 
 # Node for the API + grader; install app deps (the `postgres` JS driver).
 RUN apk add --no-cache nodejs npm
@@ -20,7 +20,6 @@ COPY app/ ./app/
 COPY grader/ ./grader/
 COPY db/ ./db/
 COPY solution/ ./solution/
-COPY reference/ ./reference/
 COPY entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
 
@@ -43,3 +42,8 @@ USER postgres
 EXPOSE 8080 8081
 
 ENTRYPOINT ["/app/entrypoint.sh"]
+
+# The reference answer is author-only. Compose and the platform explicitly
+# build `participant`, so the image handed to a learner does not contain it.
+FROM participant AS author
+COPY reference/ ./reference/

@@ -1586,6 +1586,35 @@
       }
     },
     {
+      "id": "eventbridge-delivery-discipline",
+      "name": "二度届いて、前後する",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "45-60 分",
+      "shortDescription": "重複・順序逆転・retry枯渇が混ざるEventBridge風deliveryを、決定論的な状態機械とDLQで扱おう。",
+      "tags": [
+        "aws",
+        "eventbridge",
+        "idempotency",
+        "ordering",
+        "state-machine",
+        "retry",
+        "dlq",
+        "replay",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "festivalgate-terminal-api",
       "name": "入場端末の信頼境界",
       "category": "Challenge",

@@ -124,12 +124,12 @@ describe("the CI workflow agrees with the partition", () => {
     // The aggregation job exists to keep one stable required-check name in front
     // of a matrix. It is only worth having if it actually fails when a shard
     // does — `needs:` alone does not, once `if: always()` is set.
-    expect(WORKFLOW).toMatch(/needs:\s*\[suite, checks\]/);
+    expect(WORKFLOW).toMatch(/needs:\s*\[suite, checks, rls-runtime, eventbridge-runtime\]/);
     // Match the assertion, not the mention. Both job results are also echoed
     // for the log, and a `toContain("needs.checks.result")` was satisfied by
     // that echo alone — deleting the line that actually gates on it left this
     // test green.
-    for (const job of ["suite", "checks"]) {
+    for (const job of ["suite", "checks", "rls-runtime", "eventbridge-runtime"]) {
       expect(WORKFLOW).toContain(`test "\${{ needs.${job}.result }}" = "success"`);
     }
   });
