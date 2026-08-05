@@ -66,7 +66,7 @@ def _known_forgeries(prm: dict[str, int], dropped: str) -> list[dict[str, int]]:
     p, revoked, issuer = prm["p"], prm["revoked"] % prm["p"], prm["issuer_ok"] % prm["p"]
     if dropped == "c-iszero-b":
         return [{"revoked": revoked, "inv": 0, "ok": 1, "issuer_ok": issuer, "granted": issuer}]
-    return [{"revoked": 0, "inv": 0, "ok": 0, "issuer_ok": issuer, "granted": 0}]
+    return [{"revoked": revoked, "inv": 0, "ok": 0, "issuer_ok": issuer, "granted": 0}]
 
 
 def check_audit(module, seed: str) -> list[str]:

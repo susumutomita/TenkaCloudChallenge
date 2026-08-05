@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fixtures.generate import (
     allowed_set,
+    broken_diagnosis,
     broken_witness,
     circuit,
     field_modulus,
@@ -78,11 +79,19 @@ def _limits() -> None:
 
 
 def _check_first_broken(submission: object) -> bool:
-    """The learner's reading of the broken trace, as a constraint id."""
-    if not isinstance(submission, str):
+    """The learner's reading of the first non-zero trace row."""
+    answer = submission
+    if isinstance(answer, str):
+        try:
+            answer = json.loads(answer)
+        except json.JSONDecodeError:
+            return False
+    if not isinstance(answer, dict) or set(answer) != {"constraintId", "residual"}:
         return False
-    _witness, expected = broken_witness(SEED)
-    return submission.strip() == expected
+    residual = answer.get("residual")
+    if isinstance(residual, bool) or not isinstance(residual, int):
+        return False
+    return answer == broken_diagnosis(SEED)
 
 
 def starter_payload() -> dict[str, str]:

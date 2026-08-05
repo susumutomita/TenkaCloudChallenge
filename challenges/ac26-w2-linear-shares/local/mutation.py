@@ -44,7 +44,7 @@ MUTATIONS: list[tuple[str, str]] = [
     ),
     (
         "claims multiplying two shared values also needs no communication",
-        REFERENCE.replace('"mul-shared": 1}', '"mul-shared": 0}'),
+        REFERENCE.replace('"mul-shared": 1,', '"mul-shared": 0,'),
     ),
     (
         "claims adding a public constant needs a round",

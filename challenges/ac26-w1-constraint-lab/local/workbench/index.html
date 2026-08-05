@@ -15,7 +15,7 @@
         <p class="lead">
           算術回路の監査ツールを完成させます。この画面だけで<code>inspect</code>、
           3ファイルのPython編集、公開テスト、提出データ作成まで完結します。
-          first-brokenの答えだけは、traceを読んだあなたが決めます。
+          first-brokenの答えだけは、traceを読んだあなたがJSONで組み立てます。
         </p>
       </div>
       <span id="connection-status" class="status">接続確認中</span>
@@ -41,7 +41,7 @@
           <article>
             <h3>first-broken</h3>
             <p class="question">最初に破れたのは、どのconstraintか？</p>
-            <p>壊れたwitnessのtraceを読み、最初にresidualが0でないconstraintのidを言います。</p>
+            <p>最初にresidualが0でないconstraintのidと、そのresidualをJSONで提出します。</p>
           </article>
           <article>
             <h3>boolean / membership</h3>
@@ -126,7 +126,8 @@
         <p>
           「提出データを作る」は現在の3ファイルをJSONに整形し、residuals / boolean /
           membership / transferの4欄に貼る値を作ります。first-brokenは壊れたwitnessの
-          traceを自分で読み、最初に違反したconstraintのidをPortalへ直接入力してください。
+          traceを自分で読み、<code>{"constraintId": "...", "residual": 1}</code>の形で
+          Portalへ直接入力してください。
           公開テスト成功は正解を保証しません。
         </p>
         <div id="submission-output" class="submission-grid" aria-live="polite">

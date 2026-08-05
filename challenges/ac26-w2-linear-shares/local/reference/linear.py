@@ -4,7 +4,16 @@ from __future__ import annotations
 
 # Multiplying two *shared* values is the one that needs interaction: the product of
 # the sums is not the sum of the products, so parties must exchange masked values.
-_ROUNDS = {"add-shared": 0, "add-constant": 0, "mul-constant": 0, "mul-shared": 1}
+_ROUNDS = {
+    "add-shared": 0,
+    "sub-shared": 0,
+    "add-constant": 0,
+    "mul-constant": 0,
+    "negate-shared": 0,
+    "mul-shared": 1,
+    "square-shared": 1,
+    "compare-shared": 1,
+}
 
 
 def add_shares(a: list[int], b: list[int], p: int) -> list[int]:

@@ -2,14 +2,10 @@
 
 from __future__ import annotations
 
-PROPERTIES = ("complete", "sound", "private")
+from fixtures.generate import TRUTH
 
-_TRUTH = {
-    "p1": {"complete": False, "sound": True, "private": True},
-    "p2": {"complete": True, "sound": False, "private": True},
-    "p3": {"complete": True, "sound": True, "private": False},
-}
+PROPERTIES = ("complete", "sound", "private")
 
 
 def classify(protocol_id: str) -> dict[str, bool]:
-    return dict(_TRUTH[protocol_id])
+    return dict(TRUTH[protocol_id])

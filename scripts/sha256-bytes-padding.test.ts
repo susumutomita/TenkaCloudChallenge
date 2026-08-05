@@ -179,6 +179,19 @@ describe("sha256-bytes-padding: fixtures are seed-derived", () => {
     expect(first).toBe(again);
   });
 
+  it("should give padded-length enough seeded answer shapes to defeat guessing", () => {
+    const lines = [
+      "import json",
+      "from fixtures.generate import length_quiz, padded_length",
+      "answers = [json.dumps([padded_length(n) for n in length_quiz(f'solvability-{i}')]) for i in range(2000)]",
+      "counts = {answer: answers.count(answer) for answer in set(answers)}",
+      "print(json.dumps({'distinct': len(counts), 'max': max(counts.values())}))",
+    ];
+    const distribution = JSON.parse(pythonValue(lines)) as { distinct: number; max: number };
+    expect(distribution.distinct).toBeGreaterThan(100);
+    expect(distribution.max / 2000).toBeLessThan(0.05);
+  });
+
   it("should always include the 55 and 56 byte boundary in the length quiz", () => {
     // The whole point of the padded-length checkpoint. A seed that dropped these would leave a
     // learner able to pass by "round up to the next multiple of 64".

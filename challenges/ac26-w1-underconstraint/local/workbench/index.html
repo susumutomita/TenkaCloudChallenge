@@ -119,9 +119,10 @@
         <p>
           「提出データを作る」は現在の<code>policy.py</code>を、build / audit / exploit /
           repair / mutation-transferの5欄に貼る値として整形します。root-causeは
-          <code>{"missingConstraintId": "...", "manipulatedSignals": ["..."]}</code>の形の
-          JSONを自分で組み立て、Portalへ直接入力してください。欠けた制約のidはあなたの
-          auditが、操作したsignalはあなたの反例が知っています。
+          <code>{"missingConstraintId": "...", "manipulatedSignals":
+          [{"signal": "...", "before": 1, "after": 0}]}</code>の形のJSONを自分で組み立て、
+          Portalへ直接入力してください。欠けた制約のidはあなたのauditが、変更前後の値は正常な
+          witnessと反例の比較が教えてくれます。
         </p>
         <div id="submission-output" class="submission-grid" aria-live="polite">
           <p class="empty">まだ提出データは作られていません。</p>

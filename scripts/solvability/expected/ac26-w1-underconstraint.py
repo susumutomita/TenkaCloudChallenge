@@ -2,16 +2,12 @@
 
 
 def _root_cause(server, seed):
-    return {
-        "missingConstraintId": server.dropped_constraint(seed),
-        "manipulatedSignals": server._manipulated_signals(),
-    }
+    return server.root_cause_diagnosis(seed)
 
 
 EXPECTED = {"root-cause": _root_cause}
 
 
-# The answer names the dropped constraint and the signals it let move. Both are drawn from
-# the circuit the player is shown, so being on screen is the format of the answer. The
-# defect here is the two-way choice, which the guessable-answer probe reports.
+# The answer names the dropped constraint and the learner's seeded before/after values.
+# Those are derived by running the audit and forgery rather than copied from one fixture field.
 VISIBLE = {"root-cause": lambda _server, _seed: {}}

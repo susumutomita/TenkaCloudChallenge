@@ -66,16 +66,12 @@ async function inspect() {
     "== statement ==",
     `  ${JSON.stringify(payload.statement)}`,
     "",
-    "== boundary statement ==",
-    `  ${JSON.stringify(payload.boundaryStatement)}`,
-    "  honest witnessはrangeの端にあります。",
-    "",
     "== verifierが検査する項目 ==",
     ...Object.entries(payload.verifiers).map(([name, checked]) =>
       `  ${name}: ${checked.join(", ")}`,
     ),
     "",
-    "== observerから見えるP3 transcript ==",
+    `== observerから見える${payload.privacyProtocol} transcript ==`,
     `  ${JSON.stringify(payload.transcript)}`,
   ];
   inspectOutput.textContent = lines.join("\n");

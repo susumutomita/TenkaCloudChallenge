@@ -92,5 +92,33 @@ def clean_witness(prm: dict[str, int]) -> dict[str, int]:
     }
 
 
+def forgery_case(
+    seed: str, label: str = "public"
+) -> tuple[dict[str, int], dict[str, int]]:
+    """Return the honest baseline and a witness accepted only by the short circuit."""
+    prm = params(seed, label)
+    baseline = honest_witness(prm)
+    forged = dict(baseline)
+    forged["inv"] = 0
+    if dropped_constraint(seed, label) == "c-iszero-b":
+        forged["ok"] = 1
+        forged["granted"] = prm["issuer_ok"] % prm["p"]
+    return baseline, forged
+
+
+def root_cause_diagnosis(seed: str, label: str = "public") -> dict[str, object]:
+    """The missing constraint plus the seeded before/after values it left movable."""
+    baseline, forged = forgery_case(seed, label)
+    changes = [
+        {"signal": name, "before": baseline[name], "after": forged[name]}
+        for name in sorted(baseline)
+        if baseline[name] != forged[name]
+    ]
+    return {
+        "missingConstraintId": dropped_constraint(seed, label),
+        "manipulatedSignals": changes,
+    }
+
+
 def health_token(seed: str) -> str:
     return hashlib.sha256(f"health:{seed}:{params(seed)['p']}".encode()).hexdigest()[:16]

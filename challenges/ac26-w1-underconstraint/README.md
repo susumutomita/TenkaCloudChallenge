@@ -64,7 +64,7 @@ Six checkpoints, scored independently. Wrong answers cost 15 points each.
 | `build` | 60 | Your circuit accepts both honest witnesses and rejects every known forgery |
 | `audit` | 50 | You name exactly the missing constraint, and report none on a complete circuit |
 | `exploit` | 60 | Your witness satisfies the deployed circuit and fails the intended one |
-| `root-cause` | 40 | Missing constraint id + the signals you manipulated, as JSON |
+| `root-cause` | 40 | Missing id + every manipulated signal's before/after values, as JSON |
 | `repair` | 50 | Forgery rejected, both honest cases still accepted, no constraint bloat |
 | `mutation-transfer` | 40 | Audit and forgery both work when a *different* constraint is missing |
 

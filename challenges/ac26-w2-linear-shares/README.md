@@ -18,16 +18,21 @@ The obvious worry is that every step needs a meeting. It does not. Most of what 
 auditor can do alone, on their own slip of paper, and the pieces still add up to the right answer.
 Working out exactly which steps those are is what makes the scheme usable instead of theoretical.
 
-## The four operations
+## The operation catalog
 
 ```text
 add-shared      shares of x, shares of y   ->  shares of x + y
+sub-shared      shares of x, shares of y   ->  shares of x - y
 add-constant    shares of x, public c      ->  shares of x + c
 mul-constant    shares of x, public c      ->  shares of x * c
+negate-shared   shares of x                ->  shares of -x
 mul-shared      shares of x, shares of y   ->  shares of x * y
+square-shared   shares of x                ->  shares of x * x
+compare-shared  shares of x, shares of y   ->  a comparison result
 ```
 
-Three of the four are the obvious thing. **One is not**, and it is not the one you would guess.
+Each deployment selects and shuffles four of these: two local operations and two that require
+interaction. The classification therefore measures the rule, not one reusable four-entry table.
 
 ## Browser workflow
 
@@ -50,7 +55,7 @@ Five checkpoints, scored independently. Wrong answers cost 10 points each.
 | `add-shares` | 40 | Reconstructs to the sum, across four settings |
 | `add-constant` | 50 | Reconstructs to `x + c` — and the classic wrong answer is named |
 | `mul-constant` | 35 | Reconstructs to `x * c` |
-| `no-communication` | 40 | Which of the four need anyone to talk |
+| `no-communication` | 40 | Which four this deployment selected, classified as 0 or non-zero rounds |
 | `transfer` | 35 | All of it, plus a composed expression, on an unseen setting |
 
 Hints on two of the five (20 / 15). Opening both still leaves 165 of 200.
@@ -69,20 +74,21 @@ This wrong version is worth dwelling on because of how well it hides:
 The hidden tests run four settings, all with `n ≥ 2`, and name the `x + n*c` result explicitly so
 it cannot slip through as a coincidence.
 
-The intuition being corrected is "it is linear, so everyone does the same thing". That is right
-for three of the four operations and wrong for this one.
+The intuition being corrected is "it is linear, so everyone does the same thing". It works for
+share-wise addition, subtraction, negation, and public scaling, but public constant addition needs
+exactly one party to fold the constant in.
 
 ## Why the classification is graded 0-versus-non-zero
 
-`no-communication` does not ask for an exact round count. How many rounds a multiplication
-protocol takes depends on the protocol; **whether it has to communicate at all** does not. The
-scoring only bets on the part that is settled.
+`no-communication` does not ask for an exact positive round count. How many rounds multiplication,
+squaring, or comparison takes depends on the protocol; **whether it has to communicate at all**
+does not. The scoring only bets on the part that is settled.
 
 ## Where this leads
 
-The boundary you draw here is the motivation for the next problem. If multiplication is the only
-operation that needs to talk, the natural question is whether that talking can be moved into
-preprocessing — which is exactly what a Beaver triple does.
+The boundary you draw here is the motivation for the next problem. Once non-linear operations need
+interaction, the natural question is whether some of that work can be moved into preprocessing —
+which is exactly what a Beaver triple does for multiplication.
 
 ## Week 2 alignment
 

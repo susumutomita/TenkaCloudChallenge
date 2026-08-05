@@ -26,13 +26,14 @@ from urllib.parse import urlsplit
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fixtures.generate import (
-    PROTOCOL_IDS,
     TRUTH,
     boundary_instance,
     health_token,
     in_range,
     instance,
     is_true_statement,
+    protocol_for,
+    protocol_ids,
     verify,
 )
 
@@ -96,12 +97,12 @@ def starter_payload() -> dict[str, str]:
 def inspect_payload(seed: str) -> dict[str, object]:
     """Build the theory and seeded evidence shown by the browser's inspect command."""
     inst = instance(seed)
-    boundary = boundary_instance(seed)
     verifiers: dict[str, object] = {}
-    for protocol_id in PROTOCOL_IDS:
+    for protocol_id in protocol_ids(seed):
         _accepted, transcript = verify(protocol_id, inst, inst.witness)
         verifiers[protocol_id] = transcript["checked"]
-    _accepted, transcript = verify("p3", inst, inst.witness)
+    privacy_protocol = protocol_for(seed, "leaky")
+    _accepted, transcript = verify(privacy_protocol, inst, inst.witness)
     return {
         "definitions": {
             "complete": "正しい主張と正直な witness を、検証者が必ず受理する性質",
@@ -110,8 +111,8 @@ def inspect_payload(seed: str) -> dict[str, object]:
         },
         "claim": "a*w + b == c (mod p) and lo <= w <= hi",
         "statement": inst.as_public(),
-        "boundaryStatement": boundary.as_public(),
         "verifiers": verifiers,
+        "privacyProtocol": privacy_protocol,
         "transcript": transcript,
     }
 
@@ -184,19 +185,19 @@ PREPARE_SCRIPT = """
 import json, sys
 sys.path.insert(0, {root!r})
 sys.path.insert(0, {workspace!r})
-from fixtures.generate import PROTOCOL_IDS, boundary_instance, instance, verify
+from fixtures.generate import boundary_instance, instance, protocol_for, protocol_ids, verify
 from classify import classify
 import counterexamples
 seed = {seed!r}
 inst = instance(seed)
 boundary = boundary_instance(seed)
-_accepted, transcript = verify("p3", inst, inst.witness)
+_accepted, transcript = verify(protocol_for(seed, "leaky"), inst, inst.witness)
 sources = {{name: open(name, encoding="utf-8").read() for name in ("classify.py", "counterexamples.py")}}
 submissions = {{
     "incompleteness": counterexamples.incompleteness_witness(boundary.as_public()),
     "unsoundness": counterexamples.unsoundness_witness(inst.as_public()),
     "privacy-leak": counterexamples.extract_witness(transcript),
-    "property-matrix": json.dumps({{protocol_id: classify(protocol_id) for protocol_id in PROTOCOL_IDS}}, separators=(",", ":")),
+    "property-matrix": json.dumps({{protocol_id: classify(protocol_id) for protocol_id in protocol_ids(seed)}}, separators=(",", ":")),
     "transfer": json.dumps(sources, separators=(",", ":")),
 }}
 print(json.dumps({{"submissions": submissions}}, separators=(",", ":")))
@@ -230,7 +231,7 @@ def _check_incompleteness(submission: object) -> bool:
     if w is None:
         return False
     inst = boundary_instance(SEED)
-    return is_true_statement(inst, w) and not verify("p1", inst, w)[0]
+    return is_true_statement(inst, w) and not verify(protocol_for(SEED, "incomplete"), inst, w)[0]
 
 
 def _check_unsoundness(submission: object) -> bool:
@@ -239,7 +240,7 @@ def _check_unsoundness(submission: object) -> bool:
     if w is None:
         return False
     inst = instance(SEED)
-    return (not in_range(inst, w)) and verify("p2", inst, w)[0]
+    return (not in_range(inst, w)) and verify(protocol_for(SEED, "unsound"), inst, w)[0]
 
 
 def _check_privacy_leak(submission: object) -> bool:
@@ -260,7 +261,10 @@ def _check_property_matrix(submission: object) -> bool:
             return False
     if not isinstance(matrix, dict):
         return False
-    for protocol_id in PROTOCOL_IDS:
+    expected_protocols = protocol_ids(SEED)
+    if set(matrix) != set(expected_protocols):
+        return False
+    for protocol_id in expected_protocols:
         answer = matrix.get(protocol_id)
         if not isinstance(answer, dict):
             return False

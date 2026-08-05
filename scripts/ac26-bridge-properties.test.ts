@@ -151,6 +151,35 @@ describe("ac26-bridge-properties: fixtures are seed-derived", () => {
     expect(first).not.toBe(second);
     expect(first).toBe(again);
   });
+
+  it("should vary the three public verifier labels across deployments", () => {
+    const script = [
+      "import json, sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import protocol_ids",
+      "answers = [json.dumps(protocol_ids(f'solvability-{i}')) for i in range(2000)]",
+      "counts = {answer: answers.count(answer) for answer in set(answers)}",
+      "print(json.dumps({'distinct': len(counts), 'max': max(counts.values())}))",
+    ].join("\n");
+    const result = python(["-c", script]);
+    expect(result.status).toBe(0);
+    const distribution = JSON.parse(result.stdout.trim()) as { distinct: number; max: number };
+    expect(distribution.distinct).toBeGreaterThan(100);
+    expect(distribution.max / 2000).toBeLessThan(0.05);
+  });
+
+  it("should keep the incompleteness boundary statement out of inspect", () => {
+    const script = [
+      "import json, sys",
+      "sys.path.insert(0, '.')",
+      "from verifier.server import inspect_payload",
+      "print(json.dumps(inspect_payload('ci-fixed-seed')))" ,
+    ].join("\n");
+    const result = python(["-c", script]);
+    expect(result.status).toBe(0);
+    const payload = JSON.parse(result.stdout.trim()) as Record<string, unknown>;
+    expect(payload).not.toHaveProperty("boundaryStatement");
+  });
 });
 
 describe("ac26-bridge-properties: the problem is actually solvable and actually fails", () => {
