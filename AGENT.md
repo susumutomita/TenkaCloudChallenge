@@ -274,6 +274,40 @@ make an operation blocking. When a documented participant/workload flow depends 
 a broader allow-list, promote only that proven action in `simulation.json`; never copy the whole
 policy into the overlay merely to satisfy coverage.
 
+### 16. Course checkpoints must stay answerable on every seed — `make solvability`
+
+Fixtures are derived from a per-deploy `FLAG_SEED`, so a checkpoint is not one question,
+it is a *distribution* of questions. Every other gate in this repo runs one seed, and a
+defect that hits a third of that distribution therefore passes all of them. Two did:
+
+- `ac26-bridge-experiment` / `first-broken` asked for the index where a corrupted trace
+  first leaves `[0, modulus)`, and on **47 % of seeds no entry ever left it**. The only
+  accepted answer was `-1`, a value the statement never mentions.
+- the same problem's `predict` returned the `start` printed on screen on **164 of 2000
+  seeds**. Copying a number off the screen scored the checkpoint.
+
+`bun run validate` carries the cheap static half of the check. The sweep runs as
+`make solvability` (gate budget) and `make solvability-sweep` (deep, minutes, writes
+`reports/solvability.json`). What it measures per checkpoint, over many seeds:
+
+| defect | what is measured |
+| --- | --- |
+| no answer exists | the correct answer is `-1` / empty on some seeds |
+| the answer is on screen | the answer equals a fixture field the player is shown, above chance |
+| the answer is guessable | one answer covers >= 50 % of seeds, or there are only one or two |
+| the answer is the same everywhere | the grader never reaches `SEED` |
+| the reference cannot pass | `evaluate(cp, reference)` fails on some seeds |
+| the starter already passes | `evaluate(cp, starter)` succeeds on some seeds |
+
+**A new problem fails this gate until somebody looks at it.** A direct-answer checkpoint
+needs a three-line `expected(seed)` mirror in
+[`scripts/solvability/expected/`](./scripts/solvability/expected/) — that is what lets the
+sweep know the answer, rather than only whether a guess was accepted. Without one the
+checkpoint is reported as `not-audited`, which is a failure and not a pass: the reason
+these two defects survived is that nothing distinguished "measured and clean" from "never
+measured". Known findings live in `scripts/solvability-baseline.json`, split into
+`accepted` (deliberate) and `open` (real, unfixed).
+
 ## Voice for `shortDescription` / `instructions` / `description`
 
 The catalog leans into SRE-day-in-the-life narration: the previous SRE (the predecessor who abruptly resigned), the CTO (gives vague but high-stakes orders), competitor as "the new hire" inheriting a mess. Players engage 2-3× better with story than with dry mechanics. Examples:
