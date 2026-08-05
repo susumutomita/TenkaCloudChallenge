@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { addPost, allPosts, resetBoard, validatePost } from "./board.mjs";
 import { applyConfigChange, CONFIG_FILE, readConfig, resetConfigChanges } from "./config.mjs";
@@ -120,7 +121,7 @@ function boardPage(config, posts) {
 <p>board serial: <code>${BOARD_SERIAL}</code></p>
 <p>投稿の受付: <strong>${config.acceptingPosts ? "開いています" : "閉じています"}</strong></p>
 <h2>この板でできること</h2>
-<p><a href="console"><strong>API コンソールを開く</strong></a> — ここから設定を変えたり投稿したりできます。ファイルを探して編集する必要はありません。</p>
+<p><a href="docs"><strong>API コンソールを開く</strong></a> — ここから設定を変えたり投稿したりできます。ファイルを探して編集する必要はありません。</p>
 <pre>GET    api/board     板の状態と投稿一覧
 GET    api/logs      アプリのログ
 GET    posture       いまの状態の実測結果
@@ -135,97 +136,102 @@ ${rows}
 }
 
 /**
- * 実行できる API 一覧。 板の説明に並んでいた行を、 そのまま押せる形にしたもの。
+ * この板が話す API の仕様。 Swagger UI がこれを読んで「試す」画面を出す。
  *
- * Swagger UI や Redoc を CDN から読む方向は採らない — この板は loopback と Codespaces の
- * 転送ポートの両方から開かれ、 どちらもコンテナの外へ出られる保証が無い。 外部を引いた
- * 瞬間、 「動く環境と動かない環境がある」 という一番手間のかかる不具合になる。
+ * 仕様書を別ファイルに置く方向は採らない — 実装と別々に古くなる。 ここが唯一の一覧で、
+ * ルート表 (`BASE_ROUTES`) と突き合わせる test が両者のずれを落とす。
  *
- * OpenAPI 文書を置いて別 UI に描かせる方向も採らない — この板の API は 8 本で、
- * 仕様書と実装が別々に old くなる余地を作るほうが高くつく。 ここが唯一の一覧。
- *
- * URL はすべて相対で、 この面は `/console` に置く。 `/api/console` に置く方向は採らない —
- * そこからの `api/board` は `/api/api/board` に解決してしまう。 先頭 `/` を付ける方向も
- * 採らない: Codespaces の転送も loopback もアプリを root に置くので今は動くが、 前段に
- * パスを足した瞬間に全部外れる。 板と同じ階層に置いておけば、 相対のまま両方で動く。
+ * `servers` は書かない。 loopback と Codespaces の転送ポートでは origin が違い、 書けば
+ * どちらか一方でしか「試す」が通らなくなる。 省略すると Swagger UI は開いている URL を
+ * 基準にするので、 両方で動く。
  */
-function consolePage() {
-  const calls = [
-    { method: "GET", path: "api/board", note: "板の状態と投稿一覧" },
-    { method: "GET", path: "api/config", note: "いまの設定" },
-    {
-      method: "PATCH",
-      path: "api/config",
-      note: "設定を変える",
-      body: '{\n  "acceptingPosts": true\n}',
+function openApiDocument(scenarioName) {
+  const json = (schema) => ({ content: { "application/json": { schema } } });
+  const ok = (description) => ({ description, ...json({ type: "object" }) });
+  const settings = {
+    type: "object",
+    properties: {
+      boardTitle: { type: "string" },
+      acceptingPosts: { type: "boolean" },
     },
-    { method: "DELETE", path: "api/config", note: "変えた設定を捨てて初期状態に戻す" },
-    {
-      method: "POST",
-      path: "api/posts",
-      note: "投稿する",
-      body: '{\n  "author": "you",\n  "title": "はじめての投稿",\n  "body": "本文"\n}',
+  };
+  return {
+    openapi: "3.0.3",
+    info: {
+      title: `StackStack board (${scenarioName})`,
+      version: "1.0.0",
+      description:
+        "この板の API です。 各項目の Try it out から実際に実行できます。 設定の変更もここから行い、 リポジトリのファイルは書き換えません。 コンテナを作り直せば変更は消えて元の状態に戻ります。",
     },
-    { method: "GET", path: "posture", note: "いまの状態の実測結果" },
-    { method: "GET", path: "api/logs", note: "アプリのログ" },
-    { method: "GET", path: "healthz", note: "死活確認" },
-  ];
-  const cards = calls
-    .map((call, index) => {
-      const body =
-        call.body === undefined
-          ? ""
-          : `<textarea id="b${index}" rows="${call.body.split("\n").length}" spellcheck="false">${escapeHtml(call.body)}</textarea>`;
-      return `<article>
-  <h3><code>${call.method}</code> <code>${escapeHtml(call.path)}</code></h3>
-  <p>${escapeHtml(call.note)}</p>
-  ${body}
-  <p><button type="button" data-call="${index}">実行</button></p>
-  <pre id="r${index}" class="out" aria-live="polite"></pre>
-</article>`;
-    })
-    .join("\n");
+    paths: {
+      "/api/board": {
+        get: { summary: "板の状態と投稿一覧", responses: { 200: ok("板の状態") } },
+      },
+      "/api/config": {
+        get: { summary: "いまの設定", responses: { 200: ok("設定") } },
+        patch: {
+          summary: "設定を変える",
+          requestBody: {
+            required: true,
+            ...json({ ...settings, example: { acceptingPosts: true } }),
+          },
+          responses: { 200: ok("変更後の設定"), 400: ok("受け付けられない値") },
+        },
+        delete: {
+          summary: "変えた設定を捨てて初期状態に戻す",
+          responses: { 200: ok("戻した後の設定") },
+        },
+      },
+      "/api/posts": {
+        post: {
+          summary: "投稿する",
+          requestBody: {
+            required: true,
+            ...json({
+              type: "object",
+              required: ["author", "title", "body"],
+              properties: {
+                author: { type: "string" },
+                title: { type: "string" },
+                body: { type: "string" },
+              },
+              example: { author: "you", title: "はじめての投稿", body: "本文" },
+            }),
+          },
+          responses: {
+            201: ok("投稿できた"),
+            409: ok("板が投稿を受け付けていない"),
+            503: ok("設定が読めない"),
+          },
+        },
+      },
+      "/api/logs": { get: { summary: "アプリのログ", responses: { 200: ok("ログ") } } },
+      "/posture": { get: { summary: "いまの状態の実測結果", responses: { 200: ok("実測") } } },
+      "/healthz": { get: { summary: "死活確認", responses: { 200: ok("健康"), 503: ok("不調") } } },
+    },
+  };
+}
+
+/**
+ * Swagger UI を出す 1 枚。 資産はイメージに焼いてあるので外部へ出ない。
+ *
+ * `/api/docs` ではなく `/docs` に置く。 前者からの相対 `openapi.json` は
+ * `/api/openapi.json` に解決してしまう。 板と同じ階層なら相対のまま両方の環境で動く。
+ */
+function docsPage() {
   return `<!doctype html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>API コンソール</title>
-<style>
- body{font-family:system-ui;max-width:44rem;margin:2.5rem auto;line-height:1.7;padding:0 1rem}
- article{border:1px solid #ccd;border-radius:.5rem;padding:.75rem 1rem;margin:1rem 0}
- h3{margin:.2rem 0}
- textarea{width:100%;font-family:ui-monospace,monospace;font-size:.9rem}
- .out{background:#f4f6f8;padding:.6rem;border-radius:.4rem;white-space:pre-wrap;min-height:1.2rem;overflow-x:auto}
- button{font-size:1rem;padding:.35rem 1rem}
-</style></head>
-<body>
-<h1>API コンソール</h1>
-<p>この板の API をここから実行できます。設定の変更もここから行います
- — <strong>リポジトリのファイルは書き換えません</strong>。コンテナを作り直せば元に戻ります。</p>
-<p><a href="./">板に戻る</a></p>
-${cards}
+<link rel="stylesheet" href="vendor/swagger/swagger-ui.css">
+<style>body{margin:0}#note{font-family:system-ui;padding:.8rem 1.2rem;background:#eef4ff;line-height:1.6}</style>
+</head><body>
+<div id="note">この板の API をここから実行できます (各項目の <strong>Try it out</strong>)。
+ 設定の変更もここから行い、<strong>リポジトリのファイルは書き換えません</strong>。
+ <a href="./">板に戻る</a></div>
+<div id="ui"></div>
+<script src="vendor/swagger/swagger-ui-bundle.js"></script>
 <script>
-const CALLS = ${JSON.stringify(calls.map(({ method, path, body }) => ({ method, path, hasBody: body !== undefined })))};
-for (const button of document.querySelectorAll("button[data-call]")) {
-  button.addEventListener("click", async () => {
-    const index = Number(button.dataset.call);
-    const call = CALLS[index];
-    const out = document.querySelector("#r" + index);
-    out.textContent = "…";
-    const init = { method: call.method };
-    if (call.hasBody) {
-      init.headers = { "content-type": "application/json" };
-      init.body = document.querySelector("#b" + index).value;
-    }
-    try {
-      const response = await fetch(call.path, init);
-      const text = await response.text();
-      let shown = text;
-      try { shown = JSON.stringify(JSON.parse(text), null, 2); } catch {}
-      out.textContent = response.status + " " + response.statusText + "\\n" + shown;
-    } catch (error) {
-      out.textContent = "リクエストが届きませんでした: " + error;
-    }
-  });
-}
+SwaggerUIBundle({ url: "openapi.json", dom_id: "#ui", tryItOutEnabled: true, defaultModelsExpandDepth: -1 });
 </script>
 </body></html>`;
 }
@@ -248,6 +254,27 @@ function requestUrl(target, base) {
   }
 }
 
+/**
+ * Swagger UI の実行に要る資産だけ。 ディレクトリを配る方向は採らない — 焼いた覚えの無い
+ * ファイルまで配られる余地を残さない。
+ */
+const SWAGGER_ASSETS = new Map([
+  ["/vendor/swagger/swagger-ui-bundle.js", ["vendor/swagger/swagger-ui-bundle.js", "text/javascript; charset=utf-8"]],
+  ["/vendor/swagger/swagger-ui.css", ["vendor/swagger/swagger-ui.css", "text/css; charset=utf-8"]],
+]);
+
+function sendAsset(response, pathname) {
+  const [file, type] = SWAGGER_ASSETS.get(pathname);
+  let body;
+  try {
+    body = readFileSync(new URL(file, import.meta.url));
+  } catch {
+    return send(response, 404, { error: "not_found" });
+  }
+  response.writeHead(200, { "content-type": type, "cache-control": "no-store" });
+  response.end(body);
+}
+
 /** The routes the board itself serves, whatever the scenario. */
 const BASE_ROUTES = [
   "GET /",
@@ -259,7 +286,8 @@ const BASE_ROUTES = [
   "GET /api/config",
   "PATCH /api/config",
   "DELETE /api/config",
-  "GET /console",
+  "GET /docs",
+  "GET /openapi.json",
 ];
 
 /**
@@ -349,8 +377,18 @@ const challenge = createServer(guard(async (request, response) => {
     return sendHtml(response, 200, boardPage(config.value, allPosts()));
   }
 
-  if (route === "GET /console") {
-    return sendHtml(response, 200, consolePage());
+  // Swagger UI の資産。 名前は固定 2 つだけを配る — パスを受け取って読む形にすると、
+  // 板のプロセスから任意のファイルを読ませる穴になる。
+  if (request.method === "GET" && SWAGGER_ASSETS.has(url.pathname)) {
+    return sendAsset(response, url.pathname);
+  }
+
+  if (route === "GET /docs") {
+    return sendHtml(response, 200, docsPage());
+  }
+
+  if (route === "GET /openapi.json") {
+    return send(response, 200, openApiDocument(SCENARIO));
   }
 
   if (route === "GET /api/config") {

@@ -1,0 +1,9 @@
+{
+  "name": "stackstack-base",
+  "private": true,
+  "type": "module",
+  "description": "The shared StackStack board app. The only dependency is the Swagger UI bundle, vendored into the image so the API console works with no network at run time.",
+  "dependencies": {
+    "swagger-ui-dist": "5.29.4"
+  }
+}
