@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from fixtures.generate import OPERATIONS, health_token, setting, shares_of
+from fixtures.generate import health_token, operations, setting, shares_of
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
@@ -25,7 +25,7 @@ def main() -> None:
         print(f"  party {index}: {value}")
     print()
     print("== the four operations ==")
-    for operation in OPERATIONS:
+    for operation in operations(SEED):
         print(f"  {operation}")
     print("  For each: can every party act alone on its own share, or must they talk?")
     print("  Write your answer down before you run anything.")

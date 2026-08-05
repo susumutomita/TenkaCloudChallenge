@@ -62,7 +62,7 @@ Workbench または checkout で編集するのは `local/starter/policy.py` の
 | `build` | 60 | 組んだ回路が正常系 2 種類を受理し、既知の forgery をすべて拒否する |
 | `audit` | 50 | 欠落した制約をちょうど特定し、完全な回路には何も報告しない |
 | `exploit` | 60 | witness が deploy 済み回路を充足し、intended 回路を充足しない |
-| `root-cause` | 40 | 欠落 constraint id と操作した signal を JSON で提出 |
+| `root-cause` | 40 | 欠落 id と、操作した全 signal の変更前後の値を JSON で提出 |
 | `repair` | 50 | forgery を拒否し、正常系 2 種類を維持し、制約を盛りすぎない |
 | `mutation-transfer` | 40 | **別の**制約が欠けた回路でも audit と反例生成が成立する |
 

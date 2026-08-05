@@ -38,7 +38,7 @@ Participant Portal で問題を起動し、表示された **Browser Workbench**
 リポジトリから直接作問・検証する場合だけ、問題ディレクトリで次を実行できます。
 
 ```bash
-make inspect                    # 自分の statement、各 verifier の検査内容、P3 の transcript
+make inspect                    # 自分の statement、各 verifier の検査内容、公開 transcript
 make test                       # 公開テスト
 make test-one ID=classify       # 1 つだけ再実行する
 make reset                      # starter 2 ファイルを元に戻す
@@ -98,8 +98,12 @@ verifier が実際に保証するのはもっと狭く、そして本物です�
 `make reference-test` が mutation suite を実行します。壊した提出 6 種類に加え、verifier 自体を狙った
 2 種類があり、すべて検出される必要があります。
 
-後の週にも効く設計上の注意を 1 つ。P1 の欠陥は range 下限が strict であることですが、witness が range
-の内側にある instance では **P1 は正しい verifier と完全に同じ挙動をします**。不完全性は実在するのに
-観測できません。そのため `incompleteness` checkpoint だけは、正当な witness が `lo` に一致する
-boundary instance を使います。性質が壊れていることと、それを示せることは別の問題であり、後者を成立
-させるのは学習者ではなく作問者の責任です。
+後の週にも効く設計上の注意を 1 つ。不完全な verifier の欠陥は range 下限が strict なことですが、
+witness が range の内側にある instance では正しい verifier と完全に同じ挙動をします。不完全性は
+実在するのに観測できません。そのため `incompleteness` checkpoint は、正当な witness が `lo` に一致
+する hidden boundary instance で提出した生成器を評価します。その答えを `inspect` に表示はしません。
+性質が壊れていることと、それを示せることは別の問題であり、後者を成立させるのは学習者ではなく作問者の
+責任です。
+
+公開される 3 つの protocol 名は、deploy seed から選んで並べ替えた中立な alias です。別 deploy では
+名前も順序も変わります。`P1` / `P2` / `P3` の位置を覚えるのではなく、観察した挙動を分類してください。

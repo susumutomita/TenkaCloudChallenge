@@ -67,6 +67,9 @@ Six checkpoints, scored independently. Wrong answers cost 5 points each.
 | `words` | 20 | Your `padding.py`, run against blocks you have not seen |
 | `collision` | 15 | A second message that zero-only padding cannot tell apart from yours, as hex |
 
+The six `padded-length` inputs always include 55 and 56 bytes, plus four seed-selected translations
+of that same block-boundary decision. The rule is stable; the answer tuple is deployment-specific.
+
 Hints are available on every checkpoint except `byte-length`. Opening all of them still leaves you
 66 of 100.
 

@@ -36,8 +36,9 @@ member   allowed の各要素との差の積
 
 Participant Portal で問題を起動し、表示された **Browser Workbench** を開きます。`inspect`、
 3 ファイルの編集、公開テスト、residuals / boolean / membership / transfer の提出データ生成まで
-ブラウザ内で完結します。first-broken は壊れた witness の trace を自分で読み、constraint の id を
-Portal へ入力します。ホスト側のターミナルや checkout のファイル操作は必要ありません。
+ブラウザ内で完結します。first-broken は壊れた witness の trace を自分で読み、最初に違反した
+constraint の id と非 0 の residual を JSON で Portal へ入力します。ホスト側のターミナルや checkout の
+ファイル操作は必要ありません。
 
 リポジトリから直接作問・検証する場合だけ、問題ディレクトリで次を実行できます。
 
@@ -58,7 +59,7 @@ Workbench または checkout で編集するのは 3 ファイルです。`local
 | Checkpoint | 配点 | 何を検査するか |
 |---|---:|---|
 | `residuals` | 45 | 3 つの異なる素数、順序の入れ替え、signal 欠落での評価器 |
-| `first-broken` | 40 | 壊れた witness で最初に違反する constraint の id |
+| `first-broken` | 40 | 最初の違反の `{ "constraintId": ..., "residual": ... }` |
 | `boolean` | 40 | boolean gadget を field の**全要素**で総当たり |
 | `membership` | 35 | membership gadget を全要素で総当たり (許可集合サイズ 1〜5) |
 | `transfer` | 40 | 3 ファイルを、見たことのない seed 由来の field と circuit で実行 |
@@ -104,5 +105,5 @@ verifier が実際に保証するのはもっと狭く、そして本物です�
 ## 作問者向け
 
 `make reference-test` が mutation suite を実行します。壊した提出 6 種類と verifier を狙った 1 種類が
-あり、すべて検出される必要があります。壊れた witness の混入位置は `c2` か `c3` で、`c0` は選びません。
-「リストの先頭」と答えて偶然当たる状態にしないためです。
+あり、すべて検出される必要があります。壊れた constraint の位置と residual はどちらも seed 由来です。
+constraint 名の暗記でも二択でも、別 deploy へ答えを持ち越せません。

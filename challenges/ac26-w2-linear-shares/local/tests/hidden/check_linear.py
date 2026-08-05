@@ -20,12 +20,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from fixtures.generate import OPERATIONS, reconstruct, setting, shares_of  # noqa: E402
+from fixtures.generate import (  # noqa: E402
+    OPERATIONS,
+    OPERATION_ROUNDS,
+    reconstruct,
+    setting,
+    shares_of,
+)
 
 LABELS = ("h0", "h1", "h2", "h3")
-EXPECTED_ROUNDS = {"add-shared": 0, "add-constant": 0, "mul-constant": 0, "mul-shared": 1}
-
-
 def _valid_output(result: object, n: int, p: int) -> bool:
     return (
         isinstance(result, list)
@@ -114,7 +117,8 @@ def check_composition(module, seed: str) -> list[str]:
     return failures
 
 
-def check_rounds(module, _seed: str) -> list[str]:
+def check_rounds(module, seed: str) -> list[str]:
+    del seed
     failures: list[str] = []
     for operation in OPERATIONS:
         try:
@@ -123,7 +127,7 @@ def check_rounds(module, _seed: str) -> list[str]:
             return [f"communication_rounds raised {type(error).__name__} on {operation}"]
         if not isinstance(actual, int) or isinstance(actual, bool):
             failures.append(f"communication_rounds did not return an integer for {operation}")
-        elif (actual == 0) != (EXPECTED_ROUNDS[operation] == 0):
+        elif (actual == 0) != (OPERATION_ROUNDS[operation] == 0):
             failures.append(f"{operation} is classified on the wrong side of needing communication")
     return failures
 

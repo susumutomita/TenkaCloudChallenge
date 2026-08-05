@@ -103,7 +103,7 @@
       },
       {
         "id": "assessment.ac26-w1-underconstraint.root-cause",
-        "description": "欠落 constraint と操作した signal を構造化して提出できた。"
+        "description": "欠落 constraint と、操作した各 signal の変更前後の値を構造化して提出できた。"
       },
       {
         "id": "assessment.ac26-w1-underconstraint.repair",

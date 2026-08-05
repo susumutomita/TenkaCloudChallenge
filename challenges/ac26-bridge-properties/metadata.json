@@ -19,9 +19,9 @@
   "difficulty": 3,
   "estimatedDuration": "30-45 分",
   "shortDescription": "監査に持ち込まれた 3 つの toy verifier。どれも正常系テストは通る。壊れ方が違うだけだ。反例を作って、何を満たし何を破るのかを分類する。",
-  "description": "Bridge 0 の 2 問目。 Week 1 以降で completeness / soundness / privacy / zero-knowledge が 暗黙の前提になる前に、 定義の暗記ではなく反例で区別できる状態にする。\n\n題材は a*w + b == c (mod p) かつ lo <= w <= hi という小さな整数関係だけで、 本物の ZKP は実装しない。 3 つの verifier は次のように壊してある。 P1 は range の下限が strict なため valid な witness を reject する (complete でない)。 P2 は range check 自体が無く、 範囲外の witness を accept する (sound でない)。 P3 は accept/reject は正しいが transcript へ witness を書き込む (private でない)。\n\n採点の要は「ラベルだけでは通さない」こと。 matrix で False と書いた性質は、 対応する checkpoint で 実際に成立する反例を提出しない限り閉じられない。 transfer checkpoint は participant 自身の classify.py / counterexamples.py を hidden seed の別 instance に対して実行する。\n\nP1 の不完全性は、 witness が range の内側にある instance では観測できない (その場合 P1 は正しい verifier と同一の挙動になる)。 そのため incompleteness checkpoint だけは witness が lo に一致する boundary instance を使う。 反例が到達可能でなければ、 その性質は学習者に示せない。",
-  "instructions": "## はじめに\n\n監査に持ち込まれた 3 つの toy verifier を分類します。 正しい入力を受理する completeness、 偽の入力を受理しない soundness、 transcript から秘密を漏らさない privacy は、 それぞれ独立した性質です。\n\n## 最初の一手\n\n問題ランタイムを起動し、 表示された **Browser Workbench** を開いてください。 Workbench 内の `inspect` を実行すると、 自分の statement、 3 つの verifier が検査する項目、 P3 の公開 transcript が表示されます。 ホスト側のターミナルやファイル操作は不要です。\n\n## 解き方\n\nWorkbench のエディタで `classify.py` と `counterexamples.py` を編集します。 `test` は答えの形だけを確認し、 `prepare` は Participant Portal の 5 つの提出欄へ貼る値を作ります。 正しいかどうかは Portal から呼ばれる hidden verifier が判定します。\n\n## ゴール\n\ncomplete / sound / private を 3 つの verifier について分類し、 False と書いた性質すべてについて実際に成立する反例を提出します。 ラベルだけでは通りません。",
-  "writeup": "## 3 つの性質は独立している\n\ncompleteness は「正しい statement が受理される」、 soundness は「偽の statement が受理されない」、 privacy は「transcript から witness が漏れない」。 3 つは互いに 独立で、 protocol は任意の部分集合を満たしうる。 この問題の 3 つはそれぞれ 1 つだけを破っている。\n\n## なぜラベルだけでは足りないか\n\nP2 を unsound と書くのは簡単だが、 範囲外で accept される witness を 実際に作れて初めて理解したと言える。 hidden test は matrix の False と反例を突き合わせる。 範囲内の witness で「反例」と主張しても通らない。\n\n## security property と implementation bug\n\n3 つはどれも「バグ」だが、 壊している性質が違う。 P1 を「正しい入力を弾くバグ」と呼ぶだけでは、 なぜ soundness は無傷なのかを説明できない。 性質の言葉で言えるようになると、 Week 1 の underconstraint (soundness が壊れる) と Week 2 の over-opening (privacy が壊れる) が別の話だと分かる。\n\n## 反例が到達可能であること\n\nP1 の不完全性は、 witness が range の内側にある instance では観測できない。 boundary instance を用意して初めて示せる。 性質が壊れていることと、 それを示せることは別問題で、 後者は作問側の責任になる。 Week 4 以降で「この test は本当にその欠陥を落とせるか」を問うときに戻ってくる。",
+  "description": "Bridge 0 の 2 問目。 Week 1 以降で completeness / soundness / privacy / zero-knowledge が暗黙の前提になる前に、定義の暗記ではなく反例で区別できる状態にする。\n\n題材は a*w + b == c (mod p) かつ lo <= w <= hi という小さな整数関係だけで、本物の ZKP は実装しない。3 つの verifier はそれぞれ、range 下限を strict にして completeness を、range check を省いて soundness を、transcript へ witness を記録して privacy を破る。公開名は deploy seed 由来の中立 alias で、名前と順序は deploy ごとに変わる。\n\n採点の要は「ラベルだけでは通さない」こと。matrix で False と書いた性質は、対応する checkpoint で実際に成立する反例を提出しない限り閉じられない。transfer checkpoint は participant 自身の classify.py / counterexamples.py を hidden seed の別 instance に対して実行する。\n\n不完全性は witness が range の内側にある instance では観測できない。そのため incompleteness checkpoint は witness が lo に一致する hidden boundary instance で提出生成器を評価する。boundary の答えは inspect に表示しない。反例が到達可能でなければ、その性質は学習者に示せない。",
+  "instructions": "## はじめに\n\n監査に持ち込まれた 3 つの toy verifier を分類します。正しい入力を受理する completeness、偽の入力を受理しない soundness、transcript から秘密を漏らさない privacy は、それぞれ独立した性質です。\n\n## 最初の一手\n\n問題ランタイムを起動し、表示された **Browser Workbench** を開いてください。Workbench 内の `inspect` を実行すると、自分の statement、seed 由来の中立名を持つ 3 つの verifier が検査する項目、privacy を破る verifier の公開 transcript が表示されます。ホスト側のターミナルやファイル操作は不要です。\n\n## 解き方\n\nWorkbench のエディタで `classify.py` と `counterexamples.py` を編集します。`test` は答えの形だけを確認し、`prepare` は Participant Portal の 5 つの提出欄へ貼る値を作ります。正しいかどうかは Portal から呼ばれる hidden verifier が判定します。\n\n## ゴール\n\n名前や順序を暗記せず、complete / sound / private を観察した 3 つの verifier について分類し、False と書いた性質すべてについて実際に成立する反例を提出します。ラベルだけでは通りません。",
+  "writeup": "## 3 つの性質は独立している\n\ncompleteness は「正しい statement が受理される」、soundness は「偽の statement が受理されない」、privacy は「transcript から witness が漏れない」。3 つは互いに独立で、protocol は任意の部分集合を満たしうる。この問題の 3 つはそれぞれ 1 つだけを破っている。\n\n## なぜラベルだけでは足りないか\n\nrange を検査しない verifier を unsound と書くだけでなく、範囲外で accept される witness を実際に作れて初めて理解したと言える。hidden test は matrix の False と反例を突き合わせる。公開 alias と順序も seed ごとに変わるため、固定表は使えない。\n\n## security property と implementation bug\n\n3 つはどれもバグだが、壊している性質が違う。正しい入力を弾くバグでも soundness は無傷であり得る。性質の言葉で言えるようになると、Week 1 の underconstraint と Week 2 の over-opening が別の話だと分かる。\n\n## 反例が到達可能であること\n\n不完全性は witness が range の内側にある instance では観測できない。hidden boundary instance を用意して初めて示せる。性質が壊れていることと、それを示せることは別問題で、後者は作問側の責任になる。",
   "tags": [
     "advanced-cryptography-2026",
     "bridge",
@@ -80,11 +80,11 @@
     "assessment_criteria": [
       {
         "id": "assessment.ac26-bridge-properties.incompleteness",
-        "description": "valid かつ P1 が reject する witness を提出できた。"
+        "description": "valid かつ不完全な verifier が reject する witness を提出できた。"
       },
       {
         "id": "assessment.ac26-bridge-properties.unsoundness",
-        "description": "範囲外かつ P2 が accept する witness を提出できた。"
+        "description": "範囲外かつ unsound な verifier が accept する witness を提出できた。"
       },
       {
         "id": "assessment.ac26-bridge-properties.privacy-leak",
@@ -106,7 +106,7 @@
       },
       {
         "id": "misconception.soundness-implies-privacy",
-        "description": "偽物を弾ければ秘密も守られる、 という誤解。 P3 が反例になる。"
+        "description": "偽物を弾ければ秘密も守られる、という誤解。正しく判定しつつ transcript へ witness を記録する verifier が反例になる。"
       },
       {
         "id": "misconception.zero-knowledge-means-encryption",
@@ -244,7 +244,7 @@
         "hints": [
           {
             "id": "unsoundness-hint-1",
-            "content": "P2 が検査しているのは合同式だけだ。 その合同式は p を法とする。 法が同じなら、 解はひとつではない。",
+            "content": "range を検査しない verifier が見ているのは合同式だけだ。その合同式は p を法とする。法が同じなら、解はひとつではない。",
             "penalty": 15
           }
         ]
@@ -257,7 +257,7 @@
         "hints": [
           {
             "id": "privacy-hint-1",
-            "content": "P3 の accept/reject は正しい。 見るべきは判定ではなく、 判定のついでに記録されている内容のほうだ。",
+            "content": "transcript を公開する verifier の accept/reject は正しい。見るべきは判定ではなく、判定のついでに記録されている内容のほうだ。",
             "penalty": 15
           }
         ]
@@ -292,8 +292,8 @@
     "en": {
       "name": "What it holds, what it breaks",
       "shortDescription": "Three toy verifiers arrive for audit. All of them pass the happy-path tests. They are broken in different ways. Build counterexamples and classify what each one holds and what it breaks.",
-      "instructions": "## Start here\n\nYou are auditing three toy verifiers. Completeness (accept honest inputs), soundness (reject false inputs), and privacy (do not reveal the witness in the transcript) are independent properties.\n\n## First move\n\nStart the problem runtime and open the **Browser Workbench** endpoint. Run `inspect` there to see your statement, what each verifier checks, and the public P3 transcript. No host terminal or checkout editing is required.\n\n## Workflow\n\nEdit `classify.py` and `counterexamples.py` in the Workbench. `test` checks only the shape of your answers. `prepare` formats the five values to paste into the Participant Portal; the hidden verifier decides whether they are correct.\n\n## Goal\n\nClassify complete / sound / private for all three verifiers, and for every property you mark False, submit a counterexample that actually holds. Labels alone do not pass.",
-      "writeup": "## The three properties are independent\n\nCompleteness means a true statement is accepted; soundness means a false statement is not; privacy means the transcript does not reveal the witness. A protocol can satisfy any subset. Each of the three here breaks exactly one.\n\n## Why a label is not enough\n\nCalling P2 unsound is easy. You have understood it when you can produce a witness outside the range that P2 accepts. The hidden tests cross-check every False in your matrix against the matching counterexample, so an in-range value submitted as a 'counterexample' fails.\n\n## Security property versus implementation bug\n\nAll three are bugs, but they break different properties. Calling P1 'a bug that rejects valid input' does not explain why its soundness is untouched. Once you can say it in property terms, Week 1's underconstraint (soundness) and Week 2's over-opening (privacy) stop looking like the same thing.\n\n## Counterexamples have to be reachable\n\nP1's incompleteness cannot be observed on an instance whose witness sits strictly inside the range — there, P1 behaves exactly like a correct verifier. It takes a boundary instance to show it. A property being broken and a property being demonstrable are different things, and the second one is the author's responsibility. That distinction returns in Week 4, when the question becomes whether a test can actually fail the defect it claims to catch.",
+      "instructions": "## Start here\n\nYou are auditing three toy verifiers. Completeness (accept honest inputs), soundness (reject false inputs), and privacy (do not reveal the witness in the transcript) are independent properties.\n\n## First move\n\nStart the problem runtime and open the **Browser Workbench** endpoint. Run `inspect` there to see your statement, what each neutrally named verifier checks, and the public transcript of the privacy-breaking verifier. Names and order vary by deployment. No host terminal or checkout editing is required.\n\n## Workflow\n\nEdit `classify.py` and `counterexamples.py` in the Workbench. `test` checks only the shape of your answers. `prepare` formats the five values to paste into the Participant Portal; the hidden verifier decides whether they are correct.\n\n## Goal\n\nClassify complete / sound / private from observed behavior for all three verifiers, and for every property you mark False, submit a counterexample that actually holds. Labels alone do not pass.",
+      "writeup": "## The three properties are independent\n\nCompleteness means a true statement is accepted; soundness means a false statement is not; privacy means the transcript does not reveal the witness. A protocol can satisfy any subset. Each of the three here breaks exactly one.\n\n## Why a label is not enough\n\nYou have understood the verifier without a range check when you can produce an out-of-range witness it accepts. Hidden tests cross-check every False against its counterexample, while neutral aliases and their order vary by deployment, so a fixed table cannot pass.\n\n## Security property versus implementation bug\n\nAll three are bugs, but they break different properties. A bug that rejects valid input need not damage soundness. Property terms separate Week 1's underconstraint from Week 2's over-opening.\n\n## Counterexamples have to be reachable\n\nIncompleteness cannot be observed when the witness lies strictly inside the range. A hidden boundary instance makes it demonstrable without printing its answer. A property being broken and being demonstrable are different things, and the second is the author's responsibility.",
       "learningGoals": [
         "Experiment with correctness / completeness as 'a true statement is accepted'",
         "Confirm soundness by counterexample as 'a false statement is hard to get accepted'",
@@ -312,7 +312,7 @@
           "hints": [
             {
               "id": "unsoundness-hint-1",
-              "content": "P2 only checks the congruence, and the congruence is modulo p. Same modulus, more than one solution."
+              "content": "The verifier without a range check only checks the congruence, and the congruence is modulo p. Same modulus, more than one solution."
             }
           ]
         },
@@ -322,7 +322,7 @@
           "hints": [
             {
               "id": "privacy-hint-1",
-              "content": "P3's accept/reject is correct. Look not at the verdict but at what gets recorded alongside it."
+              "content": "The transcript-producing verifier's accept/reject is correct. Look not at the verdict but at what gets recorded alongside it."
             }
           ]
         },

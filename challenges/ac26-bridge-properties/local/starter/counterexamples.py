@@ -9,7 +9,7 @@ from __future__ import annotations
 
 
 def incompleteness_witness(statement: dict[str, int]) -> int:
-    """A witness that is genuinely valid, yet P1 rejects.
+    """A witness that is genuinely valid, yet the incomplete verifier rejects.
 
     "Valid" means: it satisfies a*w + b == c (mod p) AND lo <= w <= hi.
     Return the integer w. The starter returns a value that is not even valid.
@@ -18,16 +18,16 @@ def incompleteness_witness(statement: dict[str, int]) -> int:
 
 
 def unsoundness_witness(statement: dict[str, int]) -> int:
-    """A witness OUTSIDE [lo, hi] that P2 nevertheless accepts.
+    """A witness OUTSIDE [lo, hi] that the unsound verifier nevertheless accepts.
 
-    Accepting it means P2 has not proved the in-range half of the statement.
+    Accepting it means the verifier has not proved the in-range half of the statement.
     Return the integer w. The starter returns an in-range value, which proves nothing.
     """
     return statement["lo"]
 
 
 def extract_witness(transcript: dict) -> int:
-    """Recover the witness from a P3 transcript.
+    """Recover the witness from the leaky verifier's transcript.
 
     You are given only the transcript an observer would see. Return the integer w.
     """

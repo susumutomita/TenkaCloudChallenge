@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "starter"))
 
-from fixtures.generate import OPERATIONS, reconstruct, setting, shares_of  # noqa: E402
+from fixtures.generate import operations, reconstruct, setting, shares_of  # noqa: E402
 import linear  # noqa: E402
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
@@ -44,7 +44,7 @@ def test_add_constant_returns_one_value_per_party() -> None:
 
 
 def test_communication_rounds_answers_every_operation() -> None:
-    for operation in OPERATIONS:
+    for operation in operations(SEED):
         assert isinstance(linear.communication_rounds(operation), int)
 
 

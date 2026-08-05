@@ -7,13 +7,12 @@ The relation is deliberately small integer arithmetic, not a real proof system:
 Everything the learner reasons about is visible in these few dozen lines, so the
 difficulty is in telling the *properties* apart, not in reading a crypto library.
 
-Three verifiers, each broken differently on purpose:
+Three verifier roles, each broken differently on purpose. The learner sees neutral,
+deployment-specific aliases rather than these role names:
 
-  P1  complete? no.  Off-by-one range check rejects a witness that is genuinely valid.
-  P2  sound?    no.  Range check missing entirely, so a witness outside [lo, hi]
-                     is accepted and the in-range claim is never actually proved.
-  P3  private?  no.  Accepts and rejects correctly, but writes the witness into the
-                     transcript, so anyone reading the transcript learns it.
+  incomplete  Off-by-one range check rejects a genuinely valid witness.
+  unsound     Range check missing; an out-of-range witness can be accepted.
+  leaky       Accepts and rejects correctly but records the witness in its transcript.
 
 None of the three is "just buggy code": each satisfies some properties and breaks
 others, which is the distinction the learner has to be able to state.
@@ -24,7 +23,40 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 
-PROTOCOL_IDS = ("p1", "p2", "p3")
+_PROTOCOL_ALIASES = {
+    "incomplete": ("amber", "birch", "cobalt", "dune", "ember", "fjord"),
+    "unsound": ("gale", "harbor", "indigo", "juniper", "kelp", "lumen"),
+    "leaky": ("mesa", "nova", "onyx", "prairie", "quartz", "river"),
+}
+PROTOCOL_IDS = tuple(alias for aliases in _PROTOCOL_ALIASES.values() for alias in aliases)
+
+
+def protocol_role(protocol_id: str) -> str:
+    """Return the verifier behavior behind an otherwise meaningless public label."""
+    for role, aliases in _PROTOCOL_ALIASES.items():
+        if protocol_id in aliases:
+            return role
+    raise ValueError(f"unknown protocol id: {protocol_id}")
+
+
+def protocol_ids(seed: str) -> tuple[str, ...]:
+    """One verifier of each behavior, under deployment-specific neutral labels."""
+    stream = _stream(seed, "protocol-labels")
+    chosen = [
+        aliases[_pick(stream, index * 2, 0, len(aliases) - 1)]
+        for index, aliases in enumerate(_PROTOCOL_ALIASES.values())
+    ]
+    return tuple(
+        sorted(
+            chosen,
+            key=lambda alias: hashlib.sha256(f"{seed}:protocol-order:{alias}".encode()).digest(),
+        )
+    )
+
+
+def protocol_for(seed: str, role: str) -> str:
+    """The public label carrying one behavior in this deployment."""
+    return next(protocol_id for protocol_id in protocol_ids(seed) if protocol_role(protocol_id) == role)
 
 
 @dataclass(frozen=True)
@@ -117,34 +149,38 @@ def verify(protocol_id: str, inst: Instance, w: int) -> tuple[bool, dict[str, ob
     The transcript is what an observer sees. Whether it leaks the witness is exactly
     what the privacy checkpoint is about.
     """
-    if protocol_id == "p1":
+    role = protocol_role(protocol_id)
+    if role == "incomplete":
         # Off-by-one: strict lower bound, so w == lo is rejected even though the
         # statement says lo <= w. Complete? No. Sound? Yes. Private? Yes.
         accepted = satisfies_relation(inst, w) and inst.lo < w <= inst.hi
-        return accepted, {"protocol": "p1", "checked": ["relation", "range(strict-lo)"]}
-    if protocol_id == "p2":
+        return accepted, {"protocol": protocol_id, "checked": ["relation", "range(strict-lo)"]}
+    if role == "unsound":
         # Range check dropped. Complete? Yes. Sound? No — a witness outside [lo, hi]
         # that satisfies the relation is accepted, so the in-range claim is unproved.
         accepted = satisfies_relation(inst, w)
-        return accepted, {"protocol": "p2", "checked": ["relation"]}
-    if protocol_id == "p3":
+        return accepted, {"protocol": protocol_id, "checked": ["relation"]}
+    if role == "leaky":
         # Correct accept/reject, but the transcript carries the witness.
         # Complete? Yes. Sound? Yes. Private? No.
         accepted = is_true_statement(inst, w)
         return accepted, {
-            "protocol": "p3",
+            "protocol": protocol_id,
             "checked": ["relation", "range"],
             "opening": {"value": w, "note": "recorded for audit"},
         }
-    raise ValueError(f"unknown protocol id: {protocol_id}")
+    raise AssertionError(f"unhandled protocol role: {role}")
 
 
 # The property matrix the learner has to arrive at. Kept inside the image so the
 # verifier can grade it; never written anywhere the learner can read.
+_ROLE_TRUTH: dict[str, dict[str, bool]] = {
+    "incomplete": {"complete": False, "sound": True, "private": True},
+    "unsound": {"complete": True, "sound": False, "private": True},
+    "leaky": {"complete": True, "sound": True, "private": False},
+}
 TRUTH: dict[str, dict[str, bool]] = {
-    "p1": {"complete": False, "sound": True, "private": True},
-    "p2": {"complete": True, "sound": False, "private": True},
-    "p3": {"complete": True, "sound": True, "private": False},
+    protocol_id: _ROLE_TRUTH[protocol_role(protocol_id)] for protocol_id in PROTOCOL_IDS
 }
 
 

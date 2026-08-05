@@ -38,9 +38,9 @@ member   product over allowed of (signal - a)
 
 Start the problem from the Participant Portal and open the **Browser Workbench** endpoint.
 `inspect`, editing the three files, the public tests, and the residuals / boolean / membership /
-transfer submission values all live in the browser. The first-broken answer is the constraint id
-you read off the broken witness's trace and enter into the Portal directly. No host terminal or
-checkout editing is required.
+transfer submission values all live in the browser. The first-broken answer is the first violated
+constraint's id **and its non-zero residual**, read from the broken witness's trace and entered as
+JSON in the Portal. No host terminal or checkout editing is required.
 
 Only when authoring or verifying straight from the repository, run these in the problem directory:
 
@@ -62,7 +62,7 @@ Five checkpoints, scored independently. Wrong answers cost 10 points each.
 | Checkpoint | Points | What is checked |
 |---|---:|---|
 | `residuals` | 45 | Your evaluator over three different primes, shuffled order, missing signals |
-| `first-broken` | 40 | The id of the first violated constraint in the broken witness |
+| `first-broken` | 40 | `{ "constraintId": ..., "residual": ... }` for the first violation |
 | `boolean` | 40 | Your boolean gadget, swept over **every** element of the field |
 | `membership` | 35 | Your membership gadget, swept over the field, for allowed sets of size 1–5 |
 | `transfer` | 40 | All three files, against a field and circuit from a seed you never see |
@@ -109,5 +109,5 @@ Zero. No cloud account, no AWS resources. A container on your machine.
 ## For authors
 
 `make reference-test` runs the mutation suite: six broken submissions plus one aimed at the
-verifier, all of which must be caught. The broken witness is injected at `c2` or `c3`, never at
-`c0`, so answering "the first one in the list" is never right by accident.
+verifier, all of which must be caught. Both the position and residual of the broken constraint are
+seed-derived, so neither a constraint-name guess nor a two-choice answer carries across deploys.

@@ -47,6 +47,18 @@ function evaluate(checkpointId: string, submission: string): boolean {
   return JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "null") === true;
 }
 
+function firstBrokenAnswer(): { constraintId: string; residual: number } {
+  const script = [
+    "import json, os, sys",
+    "sys.path.insert(0, '.')",
+    "from fixtures.generate import broken_diagnosis",
+    "print(json.dumps(broken_diagnosis(os.environ['FLAG_SEED'])))",
+  ].join("\n");
+  const result = python(["-c", script]);
+  expect(result.status).toBe(0);
+  return JSON.parse(result.stdout.trim()) as { constraintId: string; residual: number };
+}
+
 describe("ac26-w1-constraint-lab: participant contract", () => {
   it("should ship every file the AC26 template requires", () => {
     for (const path of [
@@ -137,6 +149,22 @@ describe("ac26-w1-constraint-lab: fixtures are seed-derived", () => {
     expect(ids.length).toBe(40);
     expect(ids).not.toContain("c0");
   });
+
+  it("should bind first-broken to the seeded residual, not a two-way guess", () => {
+    const script = [
+      "import json, sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import broken_diagnosis",
+      "answers = [json.dumps(broken_diagnosis(f'solvability-{i}'), sort_keys=True) for i in range(2000)]",
+      "counts = {answer: answers.count(answer) for answer in set(answers)}",
+      "print(json.dumps({'distinct': len(counts), 'max': max(counts.values())}))",
+    ].join("\n");
+    const result = python(["-c", script]);
+    expect(result.status).toBe(0);
+    const distribution = JSON.parse(result.stdout.trim()) as { distinct: number; max: number };
+    expect(distribution.distinct).toBeGreaterThan(100);
+    expect(distribution.max / 2000).toBeLessThan(0.05);
+  });
 });
 
 describe("ac26-w1-constraint-lab: the problem is solvable and actually fails", () => {
@@ -181,8 +209,13 @@ describe("ac26-w1-constraint-lab: /verify contract", () => {
     expect(evaluate("finish-week1", bundle("reference"))).toBe(false);
   });
 
-  it("should reject a wrong constraint id on first-broken", () => {
-    expect(evaluate("first-broken", "c0")).toBe(false);
+  it("should require the seeded id and residual on first-broken", () => {
+    const answer = firstBrokenAnswer();
+    expect(evaluate("first-broken", JSON.stringify(answer))).toBe(true);
+    expect(evaluate("first-broken", answer.constraintId)).toBe(false);
+    expect(
+      evaluate("first-broken", JSON.stringify({ ...answer, residual: answer.residual + 1 })),
+    ).toBe(false);
   });
 
   it("should echo the checkpointId so the platform can fail closed", () => {

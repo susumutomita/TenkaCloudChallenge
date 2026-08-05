@@ -17,12 +17,13 @@ from typing import Callable
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from fixtures.generate import (  # noqa: E402
-    PROTOCOL_IDS,
     TRUTH,
     boundary_instance,
     in_range,
     instance,
     is_true_statement,
+    protocol_for,
+    protocol_ids,
     verify,
 )
 
@@ -30,9 +31,9 @@ Classify = Callable[[str], "dict[str, bool]"]
 Generator = Callable[..., int]
 
 
-def check_matrix(classify: Classify) -> list[str]:
+def check_matrix(classify: Classify, seed: str) -> list[str]:
     failures: list[str] = []
-    for protocol_id in PROTOCOL_IDS:
+    for protocol_id in protocol_ids(seed):
         try:
             answer = classify(protocol_id)
         except Exception as error:  # noqa: BLE001
@@ -62,7 +63,7 @@ def check_incompleteness(generator: Generator, seed: str, label: str) -> list[st
     failures: list[str] = []
     if not is_true_statement(inst, w):
         failures.append("the submitted witness is not valid for the statement")
-    if verify("p1", inst, w)[0]:
+    if verify(protocol_for(seed, "incomplete"), inst, w)[0]:
         failures.append("P1 accepts the submitted witness, so it shows no incompleteness")
     return failures
 
@@ -79,7 +80,7 @@ def check_unsoundness(generator: Generator, seed: str, label: str) -> list[str]:
     failures: list[str] = []
     if in_range(inst, w):
         failures.append("the submitted witness is inside the claimed range, so nothing is broken")
-    if not verify("p2", inst, w)[0]:
+    if not verify(protocol_for(seed, "unsound"), inst, w)[0]:
         failures.append("P2 rejects the submitted witness, so it shows no unsoundness")
     return failures
 
@@ -87,7 +88,7 @@ def check_unsoundness(generator: Generator, seed: str, label: str) -> list[str]:
 def check_extraction(extractor: Callable[[dict], int], seed: str, label: str) -> list[str]:
     """The extractor must recover the witness from the transcript alone."""
     inst = instance(seed, label)
-    accepted, transcript = verify("p3", inst, inst.witness)
+    accepted, transcript = verify(protocol_for(seed, "leaky"), inst, inst.witness)
     if not accepted:
         return ["fixture error: P3 rejected its own honest witness"]
     try:
@@ -113,7 +114,7 @@ def check_extraction_is_not_hardcoded(extractor: Callable[[dict], int], seed: st
 def run(classify: Classify, module, seed: str) -> list[str]:
     """Full hidden suite. `module` supplies the three counterexample generators."""
     failures: list[str] = []
-    failures.extend(check_matrix(classify))
+    failures.extend(check_matrix(classify, seed))
     for index in range(3):
         for message in check_incompleteness(module.incompleteness_witness, seed, f"inc-{index}"):
             failures.append(f"instance {index}: {message}")

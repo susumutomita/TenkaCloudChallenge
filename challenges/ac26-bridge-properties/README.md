@@ -40,7 +40,7 @@ Authors working directly from the repository can still run these commands from t
 directory:
 
 ```bash
-make inspect                    # your statement, what each verifier checks, a P3 transcript
+make inspect                    # your statement, what each verifier checks, a public transcript
 make test                       # public tests
 make test-one ID=classify       # iterate on one of them
 make reset                      # restore both starter files
@@ -104,9 +104,14 @@ Zero. No cloud account, no AWS resources. A container on your machine.
 `make reference-test` runs the mutation suite: six broken submissions plus two aimed at the
 verifier itself, all of which must be caught.
 
-One design note worth carrying to the later weeks. P1's defect is a strict lower bound on the
-range, and on any instance whose witness sits strictly inside the range **P1 behaves exactly like
-a correct verifier** — the incompleteness is real but unobservable. The `incompleteness`
-checkpoint therefore uses a boundary instance whose honest witness is exactly `lo`. A property
-being broken and a property being demonstrable are different things, and making the second one
-true is the author's job, not the learner's.
+One design note worth carrying to the later weeks. The incomplete verifier uses a strict lower
+bound, and on any instance whose witness sits strictly inside the range it behaves exactly like a
+correct verifier — the incompleteness is real but unobservable. The `incompleteness` checkpoint
+therefore evaluates the submitted generator on a hidden boundary instance whose honest witness is
+exactly `lo`; that boundary answer is not printed by `inspect`. A property being broken and a
+property being demonstrable are different things, and making the second one true is the author's
+job, not the learner's.
+
+The three public protocol labels are neutral aliases selected and shuffled from this deployment's
+seed. Classify behavior, not a remembered `P1` / `P2` / `P3` position: another deployment receives
+different labels in a different order.

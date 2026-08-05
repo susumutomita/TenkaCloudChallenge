@@ -19,18 +19,19 @@ EXPECTED = {
     "incompleteness": lambda server, seed: server.boundary_instance(seed).witness,
     "unsoundness": _unsoundness,
     "privacy-leak": lambda server, seed: server.instance(seed).witness,
-    "property-matrix": lambda server, _seed: server.TRUTH,
+    "property-matrix": lambda server, seed: {
+        protocol_id: server.TRUTH[protocol_id] for protocol_id in server.protocol_ids(seed)
+    },
 }
 
 
 def _public_fields(server, seed):
     inst = server.instance(seed)
-    boundary = server.boundary_instance(seed)
     fields = {f"instance.{k}": v for k, v in inst.as_public().items()}
-    fields.update({f"boundary.{k}": v for k, v in boundary.as_public().items()})
     # The P3 transcript is shown to the learner and carries the witness on purpose;
     # `privacy-leak` is the checkpoint about exactly that.
-    fields["p3Transcript.opening"] = server.verify("p3", inst, inst.witness)[1]["opening"]["value"]
+    leaky = server.protocol_for(seed, "leaky")
+    fields["leakyTranscript.opening"] = server.verify(leaky, inst, inst.witness)[1]["opening"]["value"]
     return fields
 
 

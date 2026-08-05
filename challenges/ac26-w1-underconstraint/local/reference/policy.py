@@ -26,11 +26,9 @@ def forge_witness(circuit: list[dict], params: dict[str, int]) -> dict[str, int]
     Which helper value makes that consistent depends on which constraint is gone:
 
       iszero_b missing -> only A survives: revoked*inv + 1 - 1 = 0, so inv = 0.
-      iszero_a missing -> only B survives: revoked*ok = 0 with revoked != 0 forces
-        ok = 0, so ok = 1 is impossible. The forgery there is the mirror image:
-        keep ok = 0 consistent but claim `granted` = 1 is unreachable... so instead
-        target the other false statement A was protecting -- claim revoked is
-        non-zero when it is zero -- by setting ok = 0 on a clean credential.
+      iszero_a missing -> only B survives. B never reads inv, so replacing the
+        honest revoked credential's seeded inverse with zero still satisfies the
+        deployed circuit while A would reject it.
     """
     p = params["p"]
     revoked = params["revoked"] % p
@@ -39,8 +37,10 @@ def forge_witness(circuit: list[dict], params: dict[str, int]) -> dict[str, int]
     if "c-iszero-b" in missing:
         # A alone cannot stop ok = 1 on a revoked credential: pick inv = 0.
         return {"revoked": revoked, "inv": 0, "ok": 1, "issuer_ok": issuer_ok, "granted": issuer_ok}
-    # B alone cannot stop ok = 0 on a clean credential: deny an honest holder.
-    return {"revoked": 0, "inv": 0, "ok": 0, "issuer_ok": issuer_ok, "granted": 0}
+    # B never reads inv. Keep the revoked credential's policy outcome honest but
+    # replace its seeded inverse with zero; the surviving circuit accepts a value
+    # that the missing A constraint rejects.
+    return {"revoked": revoked, "inv": 0, "ok": 0, "issuer_ok": issuer_ok, "granted": 0}
 
 
 def repair(circuit: list[dict]) -> list[dict]:

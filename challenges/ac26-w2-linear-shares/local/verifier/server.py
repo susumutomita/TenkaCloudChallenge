@@ -18,7 +18,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fixtures.generate import OPERATIONS, setting
+from fixtures.generate import OPERATION_ROUNDS, operations, setting
 
 ROOT = Path(__file__).resolve().parents[1]
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
@@ -44,10 +44,6 @@ CHECKPOINTS = (
     "no-communication",
     "transfer",
 )
-# Communication cost per operation. Only multiplying two *shared* values needs a round.
-EXPECTED_ROUNDS = {"add-shared": 0, "add-constant": 0, "mul-constant": 0, "mul-shared": 1}
-
-
 # Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still
 # reporting RLIM_INFINITY for it. Setting it anyway raises inside `preexec_fn` and
 # aborts the exec, so on a macOS checkout every submission run failed -- including
@@ -79,13 +75,14 @@ def _check_no_communication(submission: object) -> bool:
             return False
     if not isinstance(answer, dict):
         return False
-    if set(answer) != set(OPERATIONS):
+    expected_operations = operations(SEED)
+    if set(answer) != set(expected_operations):
         return False
-    for operation in OPERATIONS:
+    for operation in expected_operations:
         value = answer[operation]
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
             return False
-        if (value == 0) != (EXPECTED_ROUNDS[operation] == 0):
+        if (value == 0) != (OPERATION_ROUNDS[operation] == 0):
             return False
     return True
 

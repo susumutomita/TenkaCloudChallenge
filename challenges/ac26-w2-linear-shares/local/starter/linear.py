@@ -32,7 +32,8 @@ def mul_constant(shares: list[int], c: int, p: int) -> list[int]:
 def communication_rounds(operation: str) -> int:
     """How many rounds of talking each operation needs.
 
-    Operations: "add-shared", "add-constant", "mul-constant", "mul-shared".
+    Operations may include add/subtract/negate shared values, add/multiply by a
+    public constant, or multiply/square/compare shared values.
     Return 0 when every party can act alone.
     """
     return 1

@@ -45,6 +45,21 @@ function evaluate(checkpointId: string, submission: string): boolean {
   return JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "null") === true;
 }
 
+function rootCauseAnswer(): {
+  missingConstraintId: string;
+  manipulatedSignals: Array<{ signal: string; before: number; after: number }>;
+} {
+  const script = [
+    "import json, os, sys",
+    "sys.path.insert(0, '.')",
+    "from fixtures.generate import root_cause_diagnosis",
+    "print(json.dumps(root_cause_diagnosis(os.environ['FLAG_SEED'])))",
+  ].join("\n");
+  const result = python(["-c", script]);
+  expect(result.status).toBe(0);
+  return JSON.parse(result.stdout.trim());
+}
+
 describe("ac26-w1-underconstraint: participant contract", () => {
   it("should ship every file the AC26 template requires", () => {
     for (const path of [
@@ -138,6 +153,22 @@ describe("ac26-w1-underconstraint: fixtures are seed-derived", () => {
     const dropped = new Set(python(["-c", script]).stdout.trim().split(","));
     expect(dropped).toEqual(new Set(["c-iszero-a", "c-iszero-b"]));
   });
+
+  it("should bind root-cause to seeded before/after values, not a two-way guess", () => {
+    const script = [
+      "import json, sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import root_cause_diagnosis",
+      "answers = [json.dumps(root_cause_diagnosis(f'solvability-{i}'), sort_keys=True) for i in range(2000)]",
+      "counts = {answer: answers.count(answer) for answer in set(answers)}",
+      "print(json.dumps({'distinct': len(counts), 'max': max(counts.values())}))",
+    ].join("\n");
+    const result = python(["-c", script]);
+    expect(result.status).toBe(0);
+    const distribution = JSON.parse(result.stdout.trim()) as { distinct: number; max: number };
+    expect(distribution.distinct).toBeGreaterThan(100);
+    expect(distribution.max / 2000).toBeLessThan(0.05);
+  });
 });
 
 describe("ac26-w1-underconstraint: the problem is solvable and actually fails", () => {
@@ -185,9 +216,17 @@ describe("ac26-w1-underconstraint: /verify contract", () => {
     expect(evaluate("finish-week1", bundle("reference"))).toBe(false);
   });
 
-  it("should reject a root cause that names the wrong constraint", () => {
+  it("should require the seeded before/after values in root-cause", () => {
+    const answer = rootCauseAnswer();
+    expect(evaluate("root-cause", JSON.stringify(answer))).toBe(true);
     expect(
-      evaluate("root-cause", '{"missingConstraintId": "c-grant", "manipulatedSignals": []}'),
+      evaluate(
+        "root-cause",
+        JSON.stringify({
+          missingConstraintId: answer.missingConstraintId,
+          manipulatedSignals: answer.manipulatedSignals.map(({ signal }) => signal),
+        }),
+      ),
     ).toBe(false);
   });
 

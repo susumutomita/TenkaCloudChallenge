@@ -45,6 +45,20 @@ function evaluate(checkpointId: string, submission: string): boolean {
   return JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "null") === true;
 }
 
+function communicationAnswer(interactiveRounds = 1): string {
+  const script = [
+    "import json, os, sys",
+    "sys.path.insert(0, '.')",
+    "from fixtures.generate import OPERATION_ROUNDS, operations",
+    "answer = {name: (0 if OPERATION_ROUNDS[name] == 0 else int(sys.argv[1]))",
+    "          for name in operations(os.environ['FLAG_SEED'])}",
+    "print(json.dumps(answer))",
+  ].join("\n");
+  const result = python(["-c", script, String(interactiveRounds)]);
+  expect(result.status).toBe(0);
+  return result.stdout.trim();
+}
+
 describe("ac26-w2-linear-shares: participant contract", () => {
   it("should ship every file the AC26 template requires", () => {
     for (const path of [
@@ -135,6 +149,22 @@ describe("ac26-w2-linear-shares: fixtures are seed-derived", () => {
     const counts = new Set(python(["-c", script]).stdout.trim().split(","));
     expect(counts.size).toBeGreaterThan(2);
   });
+
+  it("should vary the operation set instead of grading one shareable table", () => {
+    const script = [
+      "import json, sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import operations",
+      "answers = [json.dumps(operations(f'solvability-{i}')) for i in range(2000)]",
+      "counts = {answer: answers.count(answer) for answer in set(answers)}",
+      "print(json.dumps({'distinct': len(counts), 'max': max(counts.values())}))",
+    ].join("\n");
+    const result = python(["-c", script]);
+    expect(result.status).toBe(0);
+    const distribution = JSON.parse(result.stdout.trim()) as { distinct: number; max: number };
+    expect(distribution.distinct).toBeGreaterThan(20);
+    expect(distribution.max / 2000).toBeLessThan(0.08);
+  });
 });
 
 describe("ac26-w2-linear-shares: the problem is solvable and actually fails", () => {
@@ -203,12 +233,7 @@ describe("ac26-w2-linear-shares: /verify contract", () => {
   // protocol is protocol-dependent while the need to communicate is not.
   it("should accept any positive round count for multiplying two sharings", () => {
     for (const rounds of [1, 2, 3]) {
-      expect(
-        evaluate(
-          "no-communication",
-          `{"add-shared": 0, "add-constant": 0, "mul-constant": 0, "mul-shared": ${rounds}}`,
-        ),
-      ).toBe(true);
+      expect(evaluate("no-communication", communicationAnswer(rounds))).toBe(true);
     }
   });
 

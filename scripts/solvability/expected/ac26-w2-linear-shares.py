@@ -5,8 +5,8 @@ The grader compares only the zero / non-zero split, so the exact round counts in
 """
 
 EXPECTED = {
-    "no-communication": lambda server, _seed: {
-        operation: server.EXPECTED_ROUNDS[operation] for operation in server.OPERATIONS
+    "no-communication": lambda server, seed: {
+        operation: server.OPERATION_ROUNDS[operation] for operation in server.operations(seed)
     }
 }
 

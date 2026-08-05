@@ -34,8 +34,10 @@ MUTATIONS: list[tuple[str, str]] = [
             '''    if "c-iszero-b" in missing:
         # A alone cannot stop ok = 1 on a revoked credential: pick inv = 0.
         return {"revoked": revoked, "inv": 0, "ok": 1, "issuer_ok": issuer_ok, "granted": issuer_ok}
-    # B alone cannot stop ok = 0 on a clean credential: deny an honest holder.
-    return {"revoked": 0, "inv": 0, "ok": 0, "issuer_ok": issuer_ok, "granted": 0}''',
+    # B never reads inv. Keep the revoked credential's policy outcome honest but
+    # replace its seeded inverse with zero; the surviving circuit accepts a value
+    # that the missing A constraint rejects.
+    return {"revoked": revoked, "inv": 0, "ok": 0, "issuer_ok": issuer_ok, "granted": 0}''',
             '    return {"revoked": revoked, "inv": 0, "ok": 1, "issuer_ok": issuer_ok, "granted": issuer_ok}',
         ),
     ),
@@ -45,8 +47,10 @@ MUTATIONS: list[tuple[str, str]] = [
             '''    if "c-iszero-b" in missing:
         # A alone cannot stop ok = 1 on a revoked credential: pick inv = 0.
         return {"revoked": revoked, "inv": 0, "ok": 1, "issuer_ok": issuer_ok, "granted": issuer_ok}
-    # B alone cannot stop ok = 0 on a clean credential: deny an honest holder.
-    return {"revoked": 0, "inv": 0, "ok": 0, "issuer_ok": issuer_ok, "granted": 0}''',
+    # B never reads inv. Keep the revoked credential's policy outcome honest but
+    # replace its seeded inverse with zero; the surviving circuit accepts a value
+    # that the missing A constraint rejects.
+    return {"revoked": revoked, "inv": 0, "ok": 0, "issuer_ok": issuer_ok, "granted": 0}''',
             '''    inv = pow(revoked, -1, p) if revoked else 0
     return {"revoked": revoked, "inv": inv, "ok": 0, "issuer_ok": issuer_ok, "granted": 0}''',
         ),

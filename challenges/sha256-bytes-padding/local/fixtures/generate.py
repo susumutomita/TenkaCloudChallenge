@@ -84,14 +84,16 @@ def length_quiz(seed: str) -> list[int]:
     guesses "round up to the next multiple of 64" gets 56 wrong.
     """
     s = _stream(seed, "lengths")
-    return [
-        _pick(s, 0, 1, 40),
-        55,
-        56,
-        _pick(s, 2, 57, 63),
-        BLOCK_BYTES,
-        _pick(s, 4, 100, 130),
-    ]
+    # Keep the canonical first-block boundary, then translate that same 55/56
+    # decision to four seeded block numbers. The arithmetic stays exactly as easy
+    # to do by hand, while the six-result answer no longer has only two shapes for
+    # the entire course.
+    translated = []
+    for index in range(4):
+        blocks = _pick(s, index * 4, 1, 7)
+        side = _pick(s, index * 4 + 2, 0, 1)
+        translated.append(blocks * BLOCK_BYTES + (55 if side == 0 else 56))
+    return [55, 56, *translated]
 
 
 def length_field_case(seed: str) -> int:

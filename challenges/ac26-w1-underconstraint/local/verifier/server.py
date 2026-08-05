@@ -21,10 +21,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fixtures.generate import (
     clean_witness,
-    dropped_constraint,
     health_token,
     honest_witness,
     params,
+    root_cause_diagnosis,
     vulnerable_circuit,
 )
 
@@ -71,21 +71,6 @@ def _limits() -> None:
         resource.setrlimit(resource.RLIMIT_AS, (MAX_ADDRESS_SPACE_BYTES, MAX_ADDRESS_SPACE_BYTES))
     resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
     resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_BYTES, MAX_OUTPUT_BYTES))
-
-
-def _manipulated_signals() -> list[str]:
-    """Signals whose forged value differs from the honest one, for this seed's drop."""
-    prm = params(SEED)
-    dropped = dropped_constraint(SEED)
-    if dropped == "c-iszero-b":
-        baseline = honest_witness(prm)
-        forged = {"revoked": prm["revoked"] % prm["p"], "inv": 0, "ok": 1,
-                  "issuer_ok": prm["issuer_ok"], "granted": prm["issuer_ok"]}
-    else:
-        baseline = clean_witness(prm)
-        forged = {"revoked": 0, "inv": 0, "ok": 0,
-                  "issuer_ok": prm["issuer_ok"], "granted": 0}
-    return sorted(k for k in baseline if baseline[k] != forged.get(k))
 
 
 def starter_payload() -> dict[str, str]:
@@ -217,12 +202,7 @@ def _check_root_cause(submission: object) -> bool:
             return False
     if not isinstance(answer, dict):
         return False
-    if str(answer.get("missingConstraintId", "")).strip() != dropped_constraint(SEED):
-        return False
-    signals = answer.get("manipulatedSignals")
-    if not isinstance(signals, list):
-        return False
-    return sorted(str(s).strip() for s in signals) == _manipulated_signals()
+    return answer == root_cause_diagnosis(SEED)
 
 
 RUNNER = """

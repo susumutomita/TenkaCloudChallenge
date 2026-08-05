@@ -39,7 +39,8 @@ def main() -> None:
     print("== a broken witness (checkpoint: first-broken) ==")
     witness, _expected = broken_witness(SEED)
     print(f"  {json.dumps(witness)}")
-    print("  Exactly one constraint is violated first. Submit its id.")
+    print("  Exactly one constraint is violated first.")
+    print('  Submit that trace row as {"constraintId":"...","residual":...}.')
     print()
     print(f"health token: {health_token(SEED)}")
 

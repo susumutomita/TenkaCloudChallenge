@@ -87,21 +87,36 @@ def honest_witness(seed: str, label: str = "public") -> dict[str, int]:
     }
 
 
-def broken_witness(seed: str, label: str = "public") -> tuple[dict[str, int], str]:
-    """A witness with exactly one constraint violated. Returns (witness, first broken id).
+def _broken_case(seed: str, label: str) -> tuple[dict[str, int], str, int]:
+    """Build the broken witness and the first non-zero residual it produces."""
 
-    The break is placed at c2 or c3 — never at c0, so the answer is never just
-    "the first constraint in the list".
-    """
     s = _stream(seed, f"broken:{label}")
     p = field_modulus(seed, label)
     witness = dict(honest_witness(seed, label))
     if s[0] % 2 == 0:
-        witness["gated"] = (witness["gated"] + _pick(s, 2, 1, p - 1)) % p
+        delta = _pick(s, 2, 1, p - 1)
+        witness["gated"] = (witness["gated"] + delta) % p
         # gated feeds c3 too, but c2 comes first in the list order.
-        return witness, "c2"
-    witness["score"] = (witness["score"] + _pick(s, 4, 1, p - 1)) % p
-    return witness, "c3"
+        return witness, "c2", (-delta) % p
+    delta = _pick(s, 4, 1, p - 1)
+    witness["score"] = (witness["score"] + delta) % p
+    return witness, "c3", (-delta) % p
+
+
+def broken_witness(seed: str, label: str = "public") -> tuple[dict[str, int], str]:
+    """A witness with exactly one first violation. Returns (witness, first broken id).
+
+    The break is placed at c2 or c3 — never at c0, so the answer is never just
+    "the first constraint in the list".
+    """
+    witness, constraint_id, _residual = _broken_case(seed, label)
+    return witness, constraint_id
+
+
+def broken_diagnosis(seed: str, label: str = "public") -> dict[str, object]:
+    """The trace row the manual checkpoint asks the learner to identify."""
+    _witness, constraint_id, residual = _broken_case(seed, label)
+    return {"constraintId": constraint_id, "residual": residual}
 
 
 def health_token(seed: str) -> str:

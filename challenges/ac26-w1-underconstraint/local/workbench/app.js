@@ -13,7 +13,7 @@ const connectionStatus = document.querySelector("#connection-status");
 const MANUAL_CHECKPOINTS = [
   {
     id: "root-cause",
-    hint: '{"missingConstraintId": "...", "manipulatedSignals": ["..."]} の形のJSONを自分で組み立てて、Portalのroot-cause欄へ直接入力します。欠けた制約のidはauditが、操作したsignalは反例が教えてくれます。',
+    hint: '{"missingConstraintId":"...","manipulatedSignals":[{"signal":"...","before":1,"after":0}]} の形のJSONを自分で組み立てます。欠けたidはauditが、変更前後の値は正常なwitnessと反例の比較が教えてくれます。',
   },
 ];
 

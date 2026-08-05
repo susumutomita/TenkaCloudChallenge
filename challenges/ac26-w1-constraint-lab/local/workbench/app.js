@@ -18,7 +18,7 @@ const connectionStatus = document.querySelector("#connection-status");
 const MANUAL_CHECKPOINTS = [
   {
     id: "first-broken",
-    hint: "壊れたwitnessのtraceを読み、最初にresidualが0でないconstraintのidを、Portalのfirst-broken欄へ直接入力します。",
+    hint: '壊れたwitnessのtraceを読み、最初にresidualが0でない行を {"constraintId":"...","residual":...} のJSONでPortalへ入力します。',
   },
 ];
 
@@ -83,7 +83,7 @@ async function inspect() {
     "",
     "== 壊れたwitness (checkpoint: first-broken) ==",
     `  ${JSON.stringify(payload.brokenWitness)}`,
-    "  ちょうど1つのconstraintが最初に違反されます。そのidを提出します。",
+    '  最初にresidualが0でない行を {"constraintId":"...","residual":...} で提出します。',
     "",
     `health token: ${payload.healthToken}`,
   ];

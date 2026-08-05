@@ -14,8 +14,22 @@ import hashlib
 
 PRIMES = (97, 101, 103, 107, 109, 113, 127, 131, 137, 139)
 
-# The four operations the learner is asked to classify by communication cost.
-OPERATIONS = ("add-shared", "add-constant", "mul-constant", "mul-shared")
+# Each deployment asks about four operations: two local linear operations and two
+# operations on shared values that need interaction. The larger catalog keeps the
+# concept stable while preventing one four-row answer from carrying to every learner.
+LOCAL_OPERATIONS = (
+    "add-shared",
+    "sub-shared",
+    "add-constant",
+    "mul-constant",
+    "negate-shared",
+)
+INTERACTIVE_OPERATIONS = ("mul-shared", "square-shared", "compare-shared")
+OPERATIONS = (*LOCAL_OPERATIONS, *INTERACTIVE_OPERATIONS)
+OPERATION_ROUNDS = {
+    **{operation: 0 for operation in LOCAL_OPERATIONS},
+    **{operation: 1 for operation in INTERACTIVE_OPERATIONS},
+}
 
 
 def _stream(seed: str, label: str) -> list[int]:
@@ -29,6 +43,21 @@ def _stream(seed: str, label: str) -> list[int]:
 
 def _pick(s: list[int], i: int, low: int, high: int) -> int:
     return low + ((s[i] * 256 + s[i + 1]) % (high - low + 1))
+
+
+def operations(seed: str) -> tuple[str, ...]:
+    """The balanced four-operation communication quiz for one deployment."""
+
+    def ranked(pool: tuple[str, ...], label: str) -> list[str]:
+        return sorted(
+            pool,
+            key=lambda operation: hashlib.sha256(
+                f"{seed}:operations:{label}:{operation}".encode()
+            ).digest(),
+        )
+
+    selected = [*ranked(LOCAL_OPERATIONS, "local")[:2], *ranked(INTERACTIVE_OPERATIONS, "talk")[:2]]
+    return tuple(ranked(tuple(selected), "display"))
 
 
 def setting(seed: str, label: str = "public") -> dict[str, int]:
