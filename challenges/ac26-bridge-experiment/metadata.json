@@ -223,6 +223,7 @@
       },
       {
         "id": "generalize",
+        "input": "multiline",
         "label": "generalize — 書き上げた counter.py の中身を、全部",
         "points": 30,
         "wrongAnswerPenalty": 5,

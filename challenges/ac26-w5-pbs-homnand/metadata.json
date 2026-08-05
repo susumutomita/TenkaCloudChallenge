@@ -438,6 +438,7 @@
     "checks": [
       {
         "id": "lut",
+        "input": "multiline",
         "label": "関数を多項式に書く",
         "points": 30,
         "wrongAnswerPenalty": 15,
@@ -451,6 +452,7 @@
       },
       {
         "id": "domain",
+        "input": "multiline",
         "label": "回転の単位へ移す",
         "points": 25,
         "wrongAnswerPenalty": 15,
@@ -464,6 +466,7 @@
       },
       {
         "id": "rotate",
+        "input": "multiline",
         "label": "暗号化されたまま回す",
         "points": 40,
         "wrongAnswerPenalty": 15,
@@ -477,6 +480,7 @@
       },
       {
         "id": "relabel",
+        "input": "multiline",
         "label": "鍵の所属を付け替える",
         "points": 50,
         "wrongAnswerPenalty": 15,
@@ -495,6 +499,7 @@
       },
       {
         "id": "evaluate",
+        "input": "multiline",
         "label": "暗号文のまま関数を引く",
         "points": 40,
         "wrongAnswerPenalty": 15,
@@ -508,6 +513,7 @@
       },
       {
         "id": "refresh",
+        "input": "multiline",
         "label": "何が起きたかを記録する",
         "points": 30,
         "wrongAnswerPenalty": 15,
@@ -521,6 +527,7 @@
       },
       {
         "id": "nand",
+        "input": "multiline",
         "label": "ゲートを組んで真理値表をそろえる",
         "points": 60,
         "wrongAnswerPenalty": 15,
@@ -539,6 +546,7 @@
       },
       {
         "id": "transfer",
+        "input": "multiline",
         "label": "見たことのない設定で成立させる",
         "points": 25,
         "wrongAnswerPenalty": 15

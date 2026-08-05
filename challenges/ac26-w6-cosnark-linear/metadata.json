@@ -357,6 +357,7 @@
     "checks": [
       {
         "id": "relation",
+        "input": "multiline",
         "label": "行を読み、 体の言葉に直す",
         "points": 30,
         "wrongAnswerPenalty": 15,
@@ -370,6 +371,7 @@
       },
       {
         "id": "witness",
+        "input": "multiline",
         "label": "値を見ずに sharing を検める",
         "points": 30,
         "wrongAnswerPenalty": 15,
@@ -383,6 +385,7 @@
       },
       {
         "id": "combine-a",
+        "input": "multiline",
         "label": "share のまま線形結合を組む",
         "points": 40,
         "wrongAnswerPenalty": 15,
@@ -396,6 +399,7 @@
       },
       {
         "id": "combine-b",
+        "input": "multiline",
         "label": "行の両半分を、 別々の係数から",
         "points": 40,
         "wrongAnswerPenalty": 15,
@@ -409,6 +413,7 @@
       },
       {
         "id": "audit",
+        "input": "multiline",
         "label": "結果がどこから来たかを辿る",
         "points": 50,
         "wrongAnswerPenalty": 15,
@@ -422,6 +427,7 @@
       },
       {
         "id": "trace",
+        "input": "multiline",
         "label": "log が言っていることを報告する",
         "points": 45,
         "wrongAnswerPenalty": 15,
@@ -435,6 +441,7 @@
       },
       {
         "id": "equivalence",
+        "input": "multiline",
         "label": "平文の関係式と一致させる",
         "points": 40,
         "wrongAnswerPenalty": 15,
@@ -448,6 +455,7 @@
       },
       {
         "id": "transfer",
+        "input": "multiline",
         "label": "見たことのない設定で成立させる",
         "points": 25,
         "wrongAnswerPenalty": 15

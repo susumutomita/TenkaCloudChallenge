@@ -350,6 +350,7 @@
     "checks": [
       {
         "id": "scope",
+        "input": "multiline",
         "label": "作ったものが何を保証しないかを書く",
         "points": 30,
         "wrongAnswerPenalty": 15,
@@ -363,12 +364,14 @@
       },
       {
         "id": "correctness",
+        "input": "multiline",
         "label": "見せていないパラメータで和が出る",
         "points": 30,
         "wrongAnswerPenalty": 15
       },
       {
         "id": "transcript",
+        "input": "multiline",
         "label": "transcript が自分の出力を再構成する",
         "points": 40,
         "wrongAnswerPenalty": 15,
@@ -382,6 +385,7 @@
       },
       {
         "id": "privacy",
+        "input": "multiline",
         "label": "見えるものが出力だけで決まると測る",
         "points": 55,
         "wrongAnswerPenalty": 15,
@@ -400,6 +404,7 @@
       },
       {
         "id": "threshold",
+        "input": "multiline",
         "label": "どこから隠せなくなるかを言う",
         "points": 40,
         "wrongAnswerPenalty": 15,
@@ -413,6 +418,7 @@
       },
       {
         "id": "detect",
+        "input": "multiline",
         "label": "見たことのない壊れ方を捕まえる",
         "points": 55,
         "wrongAnswerPenalty": 15,
@@ -426,12 +432,14 @@
       },
       {
         "id": "measure",
+        "input": "multiline",
         "label": "実際の run から数える",
         "points": 25,
         "wrongAnswerPenalty": 15
       },
       {
         "id": "evidence",
+        "input": "multiline",
         "label": "主張と実験を 1 対 1 で結ぶ",
         "points": 25,
         "wrongAnswerPenalty": 15

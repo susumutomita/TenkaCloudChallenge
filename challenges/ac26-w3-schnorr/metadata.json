@@ -302,6 +302,7 @@
     "checks": [
       {
         "id": "keygen",
+        "input": "multiline",
         "label": "鍵を作り、使えない鍵を断る",
         "points": 30,
         "wrongAnswerPenalty": 15,
@@ -315,6 +316,7 @@
       },
       {
         "id": "sigma",
+        "input": "multiline",
         "label": "3 手を実装する",
         "points": 40,
         "wrongAnswerPenalty": 15,
@@ -328,12 +330,14 @@
       },
       {
         "id": "transcript",
+        "input": "multiline",
         "label": "検証式の両辺を突き合わせる",
         "points": 35,
         "wrongAnswerPenalty": 15
       },
       {
         "id": "serialization",
+        "input": "multiline",
         "label": "一意な符号化を書く",
         "points": 40,
         "wrongAnswerPenalty": 15,
@@ -347,6 +351,7 @@
       },
       {
         "id": "fiat-shamir",
+        "input": "multiline",
         "label": "challenge を transcript から作る",
         "points": 45,
         "wrongAnswerPenalty": 15,
@@ -360,12 +365,14 @@
       },
       {
         "id": "sign-verify",
+        "input": "multiline",
         "label": "署名して検証する",
         "points": 40,
         "wrongAnswerPenalty": 15
       },
       {
         "id": "cross-protocol",
+        "input": "multiline",
         "label": "domain を落とすと何が起きるか示す",
         "points": 40,
         "wrongAnswerPenalty": 15,
@@ -379,6 +386,7 @@
       },
       {
         "id": "transfer",
+        "input": "multiline",
         "label": "実運用パラメータでも動かす",
         "points": 30,
         "wrongAnswerPenalty": 15

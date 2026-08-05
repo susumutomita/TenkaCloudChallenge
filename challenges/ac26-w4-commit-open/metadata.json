@@ -300,6 +300,7 @@
     "checks": [
       {
         "id": "encoding",
+        "input": "multiline",
         "label": "葉の符号化を一意にする",
         "points": 35,
         "wrongAnswerPenalty": 15,
@@ -313,12 +314,14 @@
       },
       {
         "id": "root",
+        "input": "multiline",
         "label": "commitment を作る",
         "points": 30,
         "wrongAnswerPenalty": 15
       },
       {
         "id": "opening",
+        "input": "multiline",
         "label": "一箇所だけ開示して検証する",
         "points": 45,
         "wrongAnswerPenalty": 15,
@@ -332,12 +335,14 @@
       },
       {
         "id": "order",
+        "input": "multiline",
         "label": "順序を強制する",
         "points": 40,
         "wrongAnswerPenalty": 15
       },
       {
         "id": "adaptive",
+        "input": "multiline",
         "label": "challenge が先に来たら何ができるか示す",
         "points": 45,
         "wrongAnswerPenalty": 15,
@@ -351,6 +356,7 @@
       },
       {
         "id": "ambiguity",
+        "input": "multiline",
         "label": "符号化の曖昧さを反例で示す",
         "points": 40,
         "wrongAnswerPenalty": 15,
@@ -364,6 +370,7 @@
       },
       {
         "id": "transcript",
+        "input": "multiline",
         "label": "challenge を transcript から導く",
         "points": 35,
         "wrongAnswerPenalty": 15,
@@ -377,6 +384,7 @@
       },
       {
         "id": "transfer",
+        "input": "multiline",
         "label": "見たことのない設定でも成立させる",
         "points": 30,
         "wrongAnswerPenalty": 15

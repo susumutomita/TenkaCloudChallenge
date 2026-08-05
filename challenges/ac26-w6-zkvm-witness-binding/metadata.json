@@ -424,6 +424,7 @@
     "checks": [
       {
         "id": "encoding",
+        "input": "multiline",
         "label": "同じ statement は同じ bytes、 違う statement は違う bytes",
         "points": 45,
         "wrongAnswerPenalty": 15,
@@ -437,6 +438,7 @@
       },
       {
         "id": "identity",
+        "input": "multiline",
         "label": "どのプログラムの話かを、 走る bytes で名指す",
         "points": 30,
         "wrongAnswerPenalty": 15,
@@ -450,6 +452,7 @@
       },
       {
         "id": "ingestion",
+        "input": "multiline",
         "label": "witness を通す扉は 1 つだけ",
         "points": 35,
         "wrongAnswerPenalty": 15,
@@ -463,6 +466,7 @@
       },
       {
         "id": "reexec",
+        "input": "multiline",
         "label": "host の言い分は入力であって答えではない",
         "points": 45,
         "wrongAnswerPenalty": 15,
@@ -476,6 +480,7 @@
       },
       {
         "id": "journal",
+        "input": "multiline",
         "label": "公開してよいのは、 読者がすでに計算できるものだけ",
         "points": 35,
         "wrongAnswerPenalty": 15,
@@ -489,6 +494,7 @@
       },
       {
         "id": "replay",
+        "input": "multiline",
         "label": "その receipt は、 その statement の証拠か",
         "points": 50,
         "wrongAnswerPenalty": 15,
@@ -502,6 +508,7 @@
       },
       {
         "id": "privacy",
+        "input": "multiline",
         "label": "承認された名前は、 承認ではない",
         "points": 35,
         "wrongAnswerPenalty": 15,
@@ -515,6 +522,7 @@
       },
       {
         "id": "transfer",
+        "input": "multiline",
         "label": "見たことのない target・claim・protocol version で",
         "points": 25,
         "wrongAnswerPenalty": 15

@@ -238,6 +238,7 @@
     "checks": [
       {
         "id": "residuals",
+        "input": "multiline",
         "label": "residual を計算して trace を出す",
         "points": 45,
         "wrongAnswerPenalty": 10,
@@ -257,6 +258,7 @@
       },
       {
         "id": "boolean",
+        "input": "multiline",
         "label": "signal を 0 か 1 だけに縛る",
         "points": 40,
         "wrongAnswerPenalty": 10,
@@ -270,6 +272,7 @@
       },
       {
         "id": "membership",
+        "input": "multiline",
         "label": "許可された値だけを通す",
         "points": 35,
         "wrongAnswerPenalty": 10,
@@ -283,6 +286,7 @@
       },
       {
         "id": "transfer",
+        "input": "multiline",
         "label": "見たことのない回路でも成立させる",
         "points": 40,
         "wrongAnswerPenalty": 10,

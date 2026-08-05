@@ -344,6 +344,7 @@
     "checks": [
       {
         "id": "decompose",
+        "input": "multiline",
         "label": "値を桁へ分解する",
         "points": 35,
         "wrongAnswerPenalty": 15,
@@ -357,6 +358,7 @@
       },
       {
         "id": "gadget",
+        "input": "multiline",
         "label": "gadget vector を書く",
         "points": 30,
         "wrongAnswerPenalty": 15,
@@ -370,6 +372,7 @@
       },
       {
         "id": "polynomial",
+        "input": "multiline",
         "label": "係数ごとに分解する",
         "points": 30,
         "wrongAnswerPenalty": 15,
@@ -383,6 +386,7 @@
       },
       {
         "id": "rgsw",
+        "input": "multiline",
         "label": "selector を暗号化する",
         "points": 40,
         "wrongAnswerPenalty": 15,
@@ -396,6 +400,7 @@
       },
       {
         "id": "external",
+        "input": "multiline",
         "label": "ビットを掛ける",
         "points": 50,
         "wrongAnswerPenalty": 15,
@@ -409,12 +414,14 @@
       },
       {
         "id": "trace",
+        "input": "multiline",
         "label": "積み上がりを見せる",
         "points": 35,
         "wrongAnswerPenalty": 15
       },
       {
         "id": "failure",
+        "input": "multiline",
         "label": "level が足りなくなる点",
         "points": 40,
         "wrongAnswerPenalty": 15,
@@ -428,6 +435,7 @@
       },
       {
         "id": "transfer",
+        "input": "multiline",
         "label": "見たことのない設定で成立させる",
         "points": 40,
         "wrongAnswerPenalty": 15

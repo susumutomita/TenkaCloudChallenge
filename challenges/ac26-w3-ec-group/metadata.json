@@ -293,12 +293,14 @@
     "checks": [
       {
         "id": "on-curve",
+        "input": "multiline",
         "label": "曲線上かどうかを判定する",
         "points": 30,
         "wrongAnswerPenalty": 15
       },
       {
         "id": "identity",
+        "input": "multiline",
         "label": "単位元と逆元",
         "points": 30,
         "wrongAnswerPenalty": 15,
@@ -312,12 +314,14 @@
       },
       {
         "id": "add",
+        "input": "multiline",
         "label": "相異なる点を足す",
         "points": 45,
         "wrongAnswerPenalty": 15
       },
       {
         "id": "double",
+        "input": "multiline",
         "label": "同じ点を足す",
         "points": 45,
         "wrongAnswerPenalty": 15,
@@ -336,6 +340,7 @@
       },
       {
         "id": "scalar",
+        "input": "multiline",
         "label": "double-and-add で k 倍する",
         "points": 45,
         "wrongAnswerPenalty": 15,
@@ -349,6 +354,7 @@
       },
       {
         "id": "trace",
+        "input": "multiline",
         "label": "各ビットで何が起きたかを出す",
         "points": 35,
         "wrongAnswerPenalty": 15,
@@ -362,12 +368,14 @@
       },
       {
         "id": "properties",
+        "input": "multiline",
         "label": "見たことのない曲線で群の公理を通す",
         "points": 40,
         "wrongAnswerPenalty": 15
       },
       {
         "id": "secp256k1",
+        "input": "multiline",
         "label": "実運用パラメータでも同じ抽象を動かす",
         "points": 30,
         "wrongAnswerPenalty": 15

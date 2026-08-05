@@ -270,6 +270,7 @@
       },
       {
         "id": "transfer",
+        "input": "multiline",
         "label": "見たことのない instance でも成立させる",
         "points": 40,
         "wrongAnswerPenalty": 10,

@@ -301,12 +301,14 @@
     "checks": [
       {
         "id": "parse",
+        "input": "multiline",
         "label": "外から来た log を読む",
         "points": 30,
         "wrongAnswerPenalty": 15
       },
       {
         "id": "detect",
+        "input": "multiline",
         "label": "攻撃できる組だけを挙げる",
         "points": 35,
         "wrongAnswerPenalty": 15,
@@ -320,6 +322,7 @@
       },
       {
         "id": "extract",
+        "input": "multiline",
         "label": "2 本の式から鍵を解く",
         "points": 50,
         "wrongAnswerPenalty": 15,
@@ -333,12 +336,14 @@
       },
       {
         "id": "confirm",
+        "input": "multiline",
         "label": "復元した鍵を確認する",
         "points": 30,
         "wrongAnswerPenalty": 15
       },
       {
         "id": "reject",
+        "input": "multiline",
         "label": "解けない組を解けないと言う",
         "points": 40,
         "wrongAnswerPenalty": 15,
@@ -352,12 +357,14 @@
       },
       {
         "id": "hunt",
+        "input": "multiline",
         "label": "noise の中から見つけ出す",
         "points": 40,
         "wrongAnswerPenalty": 15
       },
       {
         "id": "collision",
+        "input": "multiline",
         "label": "見た目のランダムさを測る",
         "points": 40,
         "wrongAnswerPenalty": 15,
@@ -371,6 +378,7 @@
       },
       {
         "id": "repair",
+        "input": "multiline",
         "label": "生成器を直す",
         "points": 35,
         "wrongAnswerPenalty": 15,

@@ -328,6 +328,18 @@ describe("multi-verify (TenkaCloud#2252)", () => {
     ).toEqual([]);
   });
 
+  it("checkMultiVerifyStructure: text / multiline だけを入力形状として許可する", () => {
+    expect(
+      checkMultiVerifyStructure(
+        meta([check({ input: "multiline" }), check({ id: "answer", input: "text" })]),
+      ),
+    ).toEqual([]);
+    expect(
+      checkMultiVerifyStructure(meta([check({ input: "rich-text" }), check({ id: "answer" })]))
+        .join(),
+    ).toMatch(/input must be "text" or "multiline"/);
+  });
+
   it("checkMultiVerifyStructure: 空 checks / 重複 id / 不正 id / 非正整数 points を止める", () => {
     expect(checkMultiVerifyStructure(meta([]))[0]).toMatch(/2–8 entries/);
     expect(checkMultiVerifyStructure(meta([check(), check()])).join()).toMatch(/duplicated/);

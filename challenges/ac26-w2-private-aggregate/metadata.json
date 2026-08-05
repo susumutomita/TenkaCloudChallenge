@@ -289,6 +289,7 @@
     "checks": [
       {
         "id": "plan",
+        "input": "multiline",
         "label": "書く前にコストを見積もる",
         "points": 35,
         "wrongAnswerPenalty": 15,
@@ -302,12 +303,14 @@
       },
       {
         "id": "share-inputs",
+        "input": "multiline",
         "label": "秘密を分割する",
         "points": 30,
         "wrongAnswerPenalty": 15
       },
       {
         "id": "linear",
+        "input": "multiline",
         "label": "公開された定数を足す",
         "points": 30,
         "wrongAnswerPenalty": 15,
@@ -321,6 +324,7 @@
       },
       {
         "id": "multiply",
+        "input": "multiline",
         "label": "秘密同士の積を組み上げる",
         "points": 55,
         "wrongAnswerPenalty": 15,
@@ -334,6 +338,7 @@
       },
       {
         "id": "result",
+        "input": "multiline",
         "label": "関係が成り立つことを示す",
         "points": 35,
         "wrongAnswerPenalty": 15,
@@ -347,6 +352,7 @@
       },
       {
         "id": "privacy",
+        "input": "multiline",
         "label": "mask 差以外を公開しない",
         "points": 40,
         "wrongAnswerPenalty": 15,
@@ -360,6 +366,7 @@
       },
       {
         "id": "cost",
+        "input": "multiline",
         "label": "見積もりと実測を一致させる",
         "points": 35,
         "wrongAnswerPenalty": 15,
@@ -373,6 +380,7 @@
       },
       {
         "id": "transfer",
+        "input": "multiline",
         "label": "見たことのない設定でも成立させる",
         "points": 40,
         "wrongAnswerPenalty": 15

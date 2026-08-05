@@ -320,12 +320,14 @@
     "checks": [
       {
         "id": "encode",
+        "input": "multiline",
         "label": "メッセージを環の上に置く",
         "points": 25,
         "wrongAnswerPenalty": 10
       },
       {
         "id": "noise",
+        "input": "multiline",
         "label": "押しずらして、 符号を見る",
         "points": 30,
         "wrongAnswerPenalty": 10,
@@ -339,6 +341,7 @@
       },
       {
         "id": "decode",
+        "input": "multiline",
         "label": "一番近い点を選ぶ",
         "points": 30,
         "wrongAnswerPenalty": 10,
@@ -352,6 +355,7 @@
       },
       {
         "id": "interval",
+        "input": "multiline",
         "label": "耐えられる幅を先に言う",
         "points": 30,
         "wrongAnswerPenalty": 10,
@@ -365,6 +369,7 @@
       },
       {
         "id": "first-failure",
+        "input": "multiline",
         "label": "最初に壊れる noise を見つける",
         "points": 30,
         "wrongAnswerPenalty": 10,
@@ -378,12 +383,14 @@
       },
       {
         "id": "transfer",
+        "input": "multiline",
         "label": "見たことのないパラメータで成立させる",
         "points": 25,
         "wrongAnswerPenalty": 10
       },
       {
         "id": "validate",
+        "input": "multiline",
         "label": "使えないパラメータを断る",
         "points": 30,
         "wrongAnswerPenalty": 10

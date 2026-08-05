@@ -340,6 +340,7 @@
     "checks": [
       {
         "id": "normalize",
+        "input": "multiline",
         "label": "環の元へ畳む",
         "points": 30,
         "wrongAnswerPenalty": 15,
@@ -353,6 +354,7 @@
       },
       {
         "id": "ring",
+        "input": "multiline",
         "label": "negacyclic に掛ける",
         "points": 45,
         "wrongAnswerPenalty": 15,
@@ -366,6 +368,7 @@
       },
       {
         "id": "lwe",
+        "input": "multiline",
         "label": "ベクトルの秘密で暗号化する",
         "points": 40,
         "wrongAnswerPenalty": 15,
@@ -379,6 +382,7 @@
       },
       {
         "id": "rlwe",
+        "input": "multiline",
         "label": "多項式の秘密で暗号化する",
         "points": 40,
         "wrongAnswerPenalty": 15,
@@ -392,12 +396,14 @@
       },
       {
         "id": "correspondence",
+        "input": "multiline",
         "label": "2 つを並べて違いを名指す",
         "points": 30,
         "wrongAnswerPenalty": 15
       },
       {
         "id": "boundary",
+        "input": "multiline",
         "label": "予算を越える最初の 1 つ",
         "points": 40,
         "wrongAnswerPenalty": 15,
@@ -411,12 +417,14 @@
       },
       {
         "id": "transfer",
+        "input": "multiline",
         "label": "見たことのない環で成立させる",
         "points": 30,
         "wrongAnswerPenalty": 15
       },
       {
         "id": "defense",
+        "input": "multiline",
         "label": "壊れた暗号文を断る",
         "points": 45,
         "wrongAnswerPenalty": 15

@@ -270,6 +270,7 @@
     "checks": [
       {
         "id": "allowed-opens",
+        "input": "multiline",
         "label": "仕様から公開してよい値を挙げる",
         "points": 35,
         "wrongAnswerPenalty": 15,
@@ -283,6 +284,7 @@
       },
       {
         "id": "opened-secret",
+        "input": "multiline",
         "label": "公開してよくない値の公開を見つける",
         "points": 45,
         "wrongAnswerPenalty": 15,
@@ -296,6 +298,7 @@
       },
       {
         "id": "cross-party",
+        "input": "multiline",
         "label": "他人の手元を覗いた場所を見つける",
         "points": 45,
         "wrongAnswerPenalty": 15,
@@ -309,6 +312,7 @@
       },
       {
         "id": "log-leak",
+        "input": "multiline",
         "label": "log と失敗経路から漏れた値を見つける",
         "points": 45,
         "wrongAnswerPenalty": 15,
@@ -322,6 +326,7 @@
       },
       {
         "id": "transcript",
+        "input": "multiline",
         "label": "漏れた transcript から秘密を復元する",
         "points": 40,
         "wrongAnswerPenalty": 15,
@@ -335,6 +340,7 @@
       },
       {
         "id": "repair",
+        "input": "multiline",
         "label": "漏れだけを取り除く",
         "points": 50,
         "wrongAnswerPenalty": 15,
@@ -348,6 +354,7 @@
       },
       {
         "id": "mutation",
+        "input": "multiline",
         "label": "名前を変えられても同じ判定を出す",
         "points": 40,
         "wrongAnswerPenalty": 15

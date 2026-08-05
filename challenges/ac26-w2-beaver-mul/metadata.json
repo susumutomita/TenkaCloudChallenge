@@ -217,18 +217,21 @@
     "checks": [
       {
         "id": "mask",
+        "input": "multiline",
         "label": "秘密を前処理済みの値で隠す",
         "points": 40,
         "wrongAnswerPenalty": 10
       },
       {
         "id": "open",
+        "input": "multiline",
         "label": "隠した差分を公開する",
         "points": 30,
         "wrongAnswerPenalty": 10
       },
       {
         "id": "combine",
+        "input": "multiline",
         "label": "公開された 2 つの値から積を組み立てる",
         "points": 65,
         "wrongAnswerPenalty": 10,
@@ -247,6 +250,7 @@
       },
       {
         "id": "protocol",
+        "input": "multiline",
         "label": "通しで走らせて必要な round を述べる",
         "points": 30,
         "wrongAnswerPenalty": 10,
@@ -260,6 +264,7 @@
       },
       {
         "id": "transfer",
+        "input": "multiline",
         "label": "見たことのない設定でも成立させる",
         "points": 35,
         "wrongAnswerPenalty": 10
