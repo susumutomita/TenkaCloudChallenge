@@ -33,7 +33,7 @@ SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 WORKBENCH_TEST_SEED = "public-workbench-test"
 
 
-def test_trace_has_one_entry_per_round() -> None:
+def test_the_list_has_one_number_per_round() -> None:
     case = public_case(SEED)
     assert len(advance(**case.as_dict())) == case.rounds
 
@@ -51,25 +51,26 @@ def test_every_entry_is_in_range() -> None:
 
 def test_first_entry_is_start_plus_step() -> None:
     case = public_case(SEED)
-    trace = advance(**case.as_dict())
-    assert trace[0] == (case.start + case.step) % case.modulus
+    numbers = advance(**case.as_dict())
+    assert numbers[0] == (case.start + case.step) % case.modulus
 
 
 def test_workbench_inspect_shows_seeded_evidence_without_answers() -> None:
     payload = inspect_payload(WORKBENCH_TEST_SEED)
     assert payload["environment"]["healthToken"] == health_token(WORKBENCH_TEST_SEED)
     assert set(payload["predict"]) == {"start", "step", "rounds", "modulus"}
-    # The trace is evidence; the broken index and the predicted final value are
-    # the answers, so they must not appear.
+    # The list of numbers ("trace" on the wire) is evidence; the broken position
+    # and the predicted final value are the answers, so they must not appear.
     assert set(payload["firstBroken"]) == {"start", "step", "rounds", "modulus", "trace"}
     assert isinstance(payload["firstBroken"]["trace"], list)
 
 
-def test_the_broken_trace_actually_leaves_the_range_it_is_asked_about() -> None:
-    # first-broken asks which entry first leaves [0, modulus). If skipping the
-    # reduction happened on a round that would not have wrapped, the corrupted trace
-    # equals the clean one and the question has no answer at all. Pin the property
-    # over many seeds, because a per-deploy seed picks a different case every time.
+def test_the_broken_list_really_has_a_number_outside_the_range() -> None:
+    # first-broken asks which number in the list is the first to leave
+    # [0, modulus). If skipping the reduction happened on a round that would not
+    # have wrapped, the corrupted list equals the clean one and the question has
+    # no answer at all. Pin the property over many seeds, because a per-deploy
+    # seed picks a different case every time.
     for index in range(200):
         case, trace, broke_at = corrupted_trace(f"range-guard-{index}")
         outside = [i for i, value in enumerate(trace) if not 0 <= value < case.modulus]
@@ -168,8 +169,8 @@ def main() -> int:
         return 1
     print("public tests:", "all passed" if failures == 0 else f"{failures} failed")
     print()
-    print("Passing these does not mean you are done. They only use one set of")
-    print("parameters, and they never use a negative or zero step.")
+    print("Passing these does not mean you are done. They only check one fixed")
+    print("start / step / rounds / modulus, and the step is always positive.")
     return 1 if failures else 0
 
 
