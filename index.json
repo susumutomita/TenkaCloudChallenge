@@ -550,6 +550,57 @@
       }
     },
     {
+      "id": "ac26-w3-passkey-assertion",
+      "name": "署名は正しい。それでも拒否する",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "advanced-cryptography-2026",
+        "order": 350,
+        "chapter": "Week 3 / Passkey Assertion and User Verification"
+      },
+      "courseAlignment": {
+        "courseId": "advanced-cryptography-program",
+        "edition": "2026",
+        "week": 3,
+        "role": "transfer",
+        "sources": [
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "path": "week3/README.md",
+            "kind": "lecture"
+          },
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "path": "week3/problems/schnorr-from-scratch/README.md",
+            "kind": "assignment"
+          }
+        ]
+      },
+      "difficulty": 3,
+      "estimatedDuration": "35-50 分",
+      "shortDescription": "パスキーのサーバ側で assertion の署名を公開鍵だけで検証する。次に、署名は正しいのに本人確認済み bit が 0 の assertion を見つけ、UV 必須ポリシーで拒否する。暗号の成立と認証方針の成立を同じものにしない。",
+      "tags": [
+        "advanced-cryptography-2026",
+        "week3",
+        "passkey",
+        "webauthn",
+        "signature-verification",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "ac26-w3-schnorr",
       "name": "何をハッシュに入れ忘れたか",
       "category": "Challenge",
