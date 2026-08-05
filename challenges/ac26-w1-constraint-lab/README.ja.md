@@ -34,9 +34,9 @@ member   allowed の各要素との差の積
 
 ## 遊び方
 
-Participant Portal で問題を起動し、表示された **Browser Workbench** を開きます。`inspect`、
-3 ファイルの編集、公開テスト、residuals / boolean / membership / transfer の提出データ生成まで
-ブラウザ内で完結します。first-broken は壊れた witness の trace を自分で読み、最初に違反した
+Participant Portal で問題を起動すると、3 ファイルのエディタが問題文と同じ画面に表示されます。
+証拠の確認、編集、公開テスト、residuals / boolean / membership / transfer の提出まで Portal 内で
+完結します。first-broken は壊れた witness の trace を自分で読み、最初に違反した
 constraint の id と非 0 の residual を JSON で Portal へ入力します。ホスト側のターミナルや checkout の
 ファイル操作は必要ありません。
 
@@ -49,7 +49,7 @@ make test-one ID=trace    # 1 つだけ再実行する
 make reset                # starter 3 ファイルを元に戻す
 ```
 
-Workbench または checkout で編集するのは 3 ファイルです。`local/starter/field.py` (F_p の演算)、
+Portal のエディタまたは作問用 checkout で編集するのは 3 ファイルです。`local/starter/field.py` (F_p の演算)、
 `local/starter/circuit.py` (residual と trace)、`local/starter/gadgets.py` (条件を制約へ変換)。
 
 ## 採点

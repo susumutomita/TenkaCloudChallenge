@@ -38,10 +38,10 @@ keep. The deployed circuit is missing one of them, and which one changes with yo
 
 ## How to play
 
-Start the problem from the Participant Portal and open the **Browser Workbench** endpoint.
-`inspect`, editing `policy.py`, the public tests, and the build / audit / exploit / repair /
-mutation-transfer submission values all live in the browser. The root-cause answer is a JSON
-diagnosis in the shape the Workbench shows, assembled and entered into the Portal by you.
+Start the problem from Participant Portal. The `policy.py` editor appears on the same page.
+Inspect the evidence, edit the file, run the public tests, and submit build / audit / exploit /
+repair / mutation-transfer there. The root-cause answer is a JSON diagnosis in the shape Portal
+shows, assembled and entered into its answer field by you.
 No host terminal or checkout editing is required.
 
 Only when authoring or verifying straight from the repository, run these in the problem directory:
@@ -52,7 +52,7 @@ make test               # public tests
 make reset              # restore starter/policy.py
 ```
 
-In the Workbench or the checkout you edit one file, `local/starter/policy.py`, with four functions:
+In the Portal editor or author checkout you edit one file, `local/starter/policy.py`, with four functions:
 `intended_circuit()` · `audit()` · `forge_witness()` · `repair()`.
 
 ## Scoring

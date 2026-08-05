@@ -19,39 +19,17 @@ y^2 = x^3 + a*x + b   (mod p)
 スライドはそう断言します。ここでは実際に組み立てます。そして組み立ててみると、その主張は 1 つの式
 ではなく 4 つの場合分けだったことが分かります。
 
-## ブラウザでの進め方
+## Participant Portal での進め方
 
-1. Participant Portal で問題を起動し、**Browser Workbench** を開く。
-2. `inspect` でこの deploy 固有の fixture と公開された証拠を読む。
-3. 画面内のエディタで starter のソースを編集する。
-4. `test` で公開テストを実行し、直接回答欄があれば証拠から埋める。
-5. `prepare` で全 checkpoint の提出値を作り、Participant Portal へ貼る。
+1. Participant Portal で問題を起動する。同じ画面に問題エディタが表示される。
+2. **証拠を調べる**で、この deploy 固有の fixture と公開された証拠を読む。
+3. Portal のエディタで starter のソースを編集する。
+4. **公開テストを実行**を押し、直接回答欄があれば証拠から埋める。
+5. 各 checkpoint をそのまま提出する。Portal が現在のファイルと回答を準備して送る。
 
-checkout、ターミナル、ローカルエディタは不要です。code checkpoint は編集したソースを提出します。
-直接回答は `prepare` が現在の deploy seed へ結び付けるため、別 deploy からコピーした値は拒否されます。
-
-## 1 つの式ではなく 4 つの場合
-
-| 場合 | 結果 |
-|---|---|
-| どちらかが単位元 | もう一方 |
-| `x` が同じで `y` が符号反転 | 単位元。`y = 0` の点の doubling を含む |
-| 同じ点 | 接線の傾き `(3x² + a) / 2y` |
-| それ以外 | 弦の傾き `(y₂ - y₁) / (x₂ - x₁)` |
-
-弦の傾きに `P = Q` を代入すると `0/0` になります。doubling が別式なのは最適化のためではなく、そこに
-弦が存在しないからです。
-
-## 遊び方
-
-```bash
-Workbench の `inspect`            # 曲線、全点、垂直接線を持つ点
-Workbench の `inspect` K=13       # 任意の scalar のビット分解
-Browser Workbench の `test`               # 公開テスト
-starter の再読み込み              # starter/curve.py を元に戻す
-```
-
-編集するのは Workbench のエディタ (`curve.py`) の 1 ファイルです。
+checkout、ターミナル、ローカルエディタ、別画面、コピペは不要です。code checkpoint は現在の
+エディタ内容を使います。直接回答は現在の deploy seed へ結び付くため、別 deploy からコピーした
+値は拒否されます。
 
 ## 採点
 

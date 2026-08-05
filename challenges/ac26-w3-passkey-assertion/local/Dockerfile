@@ -8,7 +8,6 @@ COPY fixtures/ ./fixtures/
 COPY tests/ ./tests/
 COPY verifier/ ./verifier/
 COPY starter/ ./starter/
-COPY workbench/ ./workbench/
 COPY show.py ./show.py
 
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1

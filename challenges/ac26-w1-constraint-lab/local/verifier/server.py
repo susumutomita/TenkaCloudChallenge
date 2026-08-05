@@ -63,12 +63,6 @@ CHECKPOINT_LABELS = {
     "membership": "許可された値だけを通す",
     "transfer": "見たことのない回路でも成立させる",
 }
-WORKBENCH_ASSETS = {
-    "/": ("index.html", "text/html; charset=utf-8"),
-    "/app.js": ("app.js", "text/javascript; charset=utf-8"),
-    "/styles.css": ("styles.css", "text/css; charset=utf-8"),
-}
-
 
 # Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still
 # reporting RLIM_INFINITY for it. Setting it anyway raises inside `preexec_fn` and
@@ -103,7 +97,7 @@ def _check_first_broken(submission: object) -> bool:
 
 
 def starter_payload() -> dict[str, str]:
-    """Return the three editable files shipped to the browser workbench."""
+    """Return the three editable files shipped to the Portal editor."""
     return {
         name: (ROOT / "starter" / name).read_text(encoding="utf-8") for name in SUBMITTED_FILES
     }
@@ -161,7 +155,7 @@ def _submission_sources(files: object) -> dict[str, str] | None:
 def _run_submission_script(
     sources: dict[str, str], script: str, seed: str, **extra: object
 ) -> tuple[int, str] | None:
-    """Run browser-edited Python with the verifier's existing resource limits."""
+    """Run Portal-edited Python with the verifier's existing resource limits."""
     with tempfile.TemporaryDirectory() as workspace:
         for name, text in sources.items():
             (Path(workspace) / name).write_text(text, encoding="utf-8")
@@ -205,7 +199,7 @@ runpy.run_path({root!r} + "/tests/public/test_circuit.py", run_name="__main__")
 
 
 def run_public_tests(seed: str, files: object) -> dict[str, object]:
-    """Run the same checks as `make test` against the browser-edited sources."""
+    """Run the same checks as `make test` against the Portal-edited sources."""
     sources = _submission_sources(files)
     if sources is None:
         return {"passed": False, "output": "All three editable Python files are required."}
@@ -221,7 +215,7 @@ def prepare_submissions(seed: str, files: object) -> dict[str, object]:
     `first-broken` is deliberately absent: it is read off the broken witness's
     trace by the learner. Producing it here would erase what that checkpoint
     measures. The seed does not enter the bundle; it stays in the signature so
-    every workbench prepare endpoint has the same shape.
+    every Portal prepare API has the same shape.
     """
     del seed
     sources = _submission_sources(files)
@@ -317,17 +311,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/starter":
             self._respond(200, starter_payload())
             return
-        asset = WORKBENCH_ASSETS.get(path)
-        if asset is None:
-            self._respond(404, {"error": "not found"})
-            return
-        filename, content_type = asset
-        try:
-            content = (ROOT / "workbench" / filename).read_bytes()
-        except OSError:
-            self._respond(404, {"error": "not found"})
-            return
-        self._respond_bytes(200, content, content_type)
+        self._respond(404, {"error": "not found"})
 
     def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's name
         path = urlsplit(self.path).path.rstrip("/") or "/"

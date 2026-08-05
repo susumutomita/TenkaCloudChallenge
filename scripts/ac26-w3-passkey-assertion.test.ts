@@ -63,12 +63,10 @@ describe("ac26-w3-passkey-assertion: participant contract", () => {
       "local/tests/public/test_assertion.py",
       "local/tests/hidden/check_assertion.py",
       "local/verifier/server.py",
-      "local/workbench/index.html",
-      "local/workbench/app.js",
-      "local/workbench/styles.css",
     ]) {
       expect(existsSync(join(ROOT, path))).toBe(true);
     }
+    expect(existsSync(join(ROOT, "local/workbench"))).toBe(false);
   });
 
   it("should expose the participant and author targets", () => {
@@ -88,8 +86,6 @@ describe("ac26-w3-passkey-assertion: participant contract", () => {
       read("README.md"),
       read("README.ja.md"),
       read("local/verifier/server.py"),
-      read("local/workbench/index.html"),
-      read("local/workbench/app.js"),
     ].join("\n");
     expect(participantFiles).not.toContain("exercise.py");
     expect(participantFiles).not.toContain("modular counter");
@@ -210,8 +206,11 @@ describe("ac26-w3-passkey-assertion: safety and metadata", () => {
       status: string;
       track: { order: number };
       courseAlignment: { week: number; role: string; sources: Array<{ ref: string }> };
-      scoring: { kind: string; checks: Array<{ id: string; points: number; wrongAnswerPenalty: number }> };
-      runtime: { verifyUrl: string };
+      scoring: {
+        kind: string;
+        checks: Array<{ id: string; points: number; wrongAnswerPenalty: number; input: string }>;
+      };
+      runtime: { verifyUrl: string; challengeEndpoints?: Record<string, string> };
     };
     expect(metadata.difficulty).toBe(3);
     expect(metadata.status).toBe("draft");
@@ -222,7 +221,9 @@ describe("ac26-w3-passkey-assertion: safety and metadata", () => {
     expect(metadata.scoring.checks.map((check) => check.id)).toEqual([...CHECKPOINTS]);
     expect(metadata.scoring.checks.reduce((sum, check) => sum + check.points, 0)).toBe(200);
     expect(metadata.scoring.checks.every((check) => check.wrongAnswerPenalty === 10)).toBe(true);
+    expect(metadata.scoring.checks.every((check) => check.input === "multiline")).toBe(true);
     expect(metadata.runtime.verifyUrl).toBe("http://127.0.0.1:18121/verify");
+    expect(metadata.runtime.challengeEndpoints).toBeUndefined();
     for (const source of metadata.courseAlignment.sources) expect(source.ref).toMatch(/^[0-9a-f]{40}$/);
   });
 

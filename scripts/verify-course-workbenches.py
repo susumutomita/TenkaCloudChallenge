@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Contract checks for the portal-only course Browser Workbenches.
+"""Contract checks for the course containers consumed by Participant Portal.
 
 The existing per-problem suites remain the source of truth for cryptographic grading.
 This test guards the delivery layer added by the migration: every target must be
@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-TARGETS = (
+SHARED_TARGETS = (
     "ac26-w2-secret-sharing",
     "ac26-w2-linear-shares",
     "ac26-w2-beaver-mul",
@@ -57,14 +57,8 @@ REPRESENTATIVES = {
     "sha256-compress-digest",
 }
 FORBIDDEN_DOC_TERMS = (
-    "make inspect",
-    "local/starter/",
-    "host terminal",
-    "host-side terminal",
-    "host-side file",
-    "ホスト側のターミナル",
-    "ホスト側で",
-    "ファイル操作",
+    "Browser Workbench",
+    "open the endpoint",
 )
 
 PROBE = r'''
@@ -136,14 +130,16 @@ if sys.argv[1] == "heavy":
 print(json.dumps(result, ensure_ascii=False))
 '''
 
-# The first four course problems predate the shared Workbench adapter above. Keep their
-# catalog declaration explicit until #2877 migrates them to the generic Portal editor.
+# The first four course problems predate the shared adapter above. Keep their code
+# checkpoint declarations explicit while verifying the same Portal editor contract.
 LEGACY_CODE_CHECKPOINTS = {
     "ac26-bridge-experiment": {"generalize"},
     "ac26-bridge-properties": {"transfer"},
     "ac26-w1-constraint-lab": {"residuals", "boolean", "membership", "transfer"},
     "ac26-w1-underconstraint": {"build", "audit", "exploit", "repair", "mutation-transfer"},
 }
+PASSKEY_TARGET = "ac26-w3-passkey-assertion"
+ALL_TARGETS = (*LEGACY_CODE_CHECKPOINTS, *SHARED_TARGETS, PASSKEY_TARGET)
 
 LEGACY_PROBE = r'''
 import json
@@ -171,6 +167,31 @@ for item in config["checkpoints"]:
 print(json.dumps(config, ensure_ascii=False))
 '''
 
+PASSKEY_PROBE = r'''
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, ".")
+from verifier.server import CHECKPOINTS, config_payload, prepare_submissions, starter_payload
+
+config = config_payload()
+starter = starter_payload()
+metadata = json.loads(Path("..", "metadata.json").read_text(encoding="utf-8"))
+checks = {item["id"]: item for item in metadata["scoring"]["checks"]}
+
+assert config["id"] == metadata["id"]
+assert tuple(config["submittedFiles"]) == tuple(starter)
+assert tuple(item["id"] for item in config["checkpoints"]) == tuple(CHECKPOINTS)
+assert all(item["kind"] == "code" for item in config["checkpoints"])
+assert all(checks[checkpoint].get("input") == "multiline" for checkpoint in CHECKPOINTS)
+prepared = prepare_submissions("portal-contract-seed", starter)
+assert prepared["ok"] is True
+assert set(prepared["submissions"]) == set(CHECKPOINTS)
+assert all(value == starter["assertion.py"] for value in prepared["submissions"].values())
+print(json.dumps(config, ensure_ascii=False))
+'''
+
 
 def require(condition: bool, message: str) -> None:
     if not condition:
@@ -188,33 +209,35 @@ def check_static(problem_id: str) -> None:
         isinstance(verify_url, str) and verify_url.endswith("/verify"),
         f"{problem_id}: bad verifyUrl",
     )
-    expected_endpoint = verify_url[: -len("verify")]
     require(
-        runtime.get("challengeEndpoints") == {"Browser Workbench": expected_endpoint},
-        f"{problem_id}: Browser Workbench endpoint does not match /verify",
+        "challengeEndpoints" not in runtime,
+        f"{problem_id}: duplicate challenge endpoint remains",
     )
 
-    for relative in (
-        "workbench/index.html",
-        "workbench/app.js",
-        "workbench/styles.css",
-        "verifier/workbench.py",
-        "verifier/server.py",
-    ):
+    for relative in ("verifier/server.py",):
         require((local / relative).is_file(), f"{problem_id}: missing local/{relative}")
+    require(not (local / "workbench").exists(), f"{problem_id}: duplicate UI assets remain")
+    if problem_id in SHARED_TARGETS:
+        require(
+            (local / "verifier" / "workbench.py").is_file(),
+            f"{problem_id}: shared Portal API adapter missing",
+        )
 
     dockerfile = (local / "Dockerfile").read_text(encoding="utf-8")
-    require("COPY workbench/ ./workbench/" in dockerfile, f"{problem_id}: image omits assets")
+    require("COPY workbench/" not in dockerfile, f"{problem_id}: image still copies duplicate UI")
     require(
         " AS participant" in dockerfile and " AS author" in dockerfile,
         f"{problem_id}: stage split lost",
     )
 
     server = (local / "verifier" / "server.py").read_text(encoding="utf-8")
-    support = (local / "verifier" / "workbench.py").read_text(encoding="utf-8")
+    support_path = local / "verifier" / "workbench.py"
+    support = support_path.read_text(encoding="utf-8") if support_path.is_file() else ""
     require("/api/config" in server and "/api/inspect" in server, f"{problem_id}: GET APIs missing")
     require("/api/test" in server and "/api/prepare" in server, f"{problem_id}: POST APIs missing")
     require("content-security-policy" in server, f"{problem_id}: CSP missing")
+    require("WORKBENCH_ASSETS" not in server, f"{problem_id}: asset map remains")
+    require("_WORKBENCH.asset" not in server, f"{problem_id}: asset route remains")
     require("shell=True" not in server + support, f"{problem_id}: shell=True introduced")
     require("os.system" not in server + support, f"{problem_id}: os.system introduced")
     require(
@@ -222,22 +245,15 @@ def check_static(problem_id: str) -> None:
         f"{problem_id}: answers leaked into adapter",
     )
 
-    index = (local / "workbench" / "index.html").read_text(encoding="utf-8")
-    app = (local / "workbench" / "app.js").read_text(encoding="utf-8")
-    for term in ("inspect", "starter", "prepare", "terminal-input"):
-        require(term in index, f"{problem_id}: workbench omits {term}")
-    for endpoint in ("/api/config", "/api/starter", "/api/inspect", "/api/test", "/api/prepare"):
-        require(endpoint in app, f"{problem_id}: app does not call {endpoint}")
-
     instructions = str(metadata.get("instructions") or "")
     require(
-        "Browser Workbench" in instructions,
-        f"{problem_id}: instructions do not start in Workbench",
+        "Participant Portal" in instructions,
+        f"{problem_id}: instructions do not start in Participant Portal",
     )
     documents = [json.dumps(metadata, ensure_ascii=False)]
     for readme in ("README.md", "README.ja.md"):
         text = (problem / readme).read_text(encoding="utf-8")
-        require("Browser Workbench" in text, f"{problem_id}: {readme} omits browser path")
+        require("Participant Portal" in text, f"{problem_id}: {readme} omits Portal path")
         documents.append(text)
     combined = "\n".join(documents).casefold()
     for term in FORBIDDEN_DOC_TERMS:
@@ -295,15 +311,35 @@ def check_legacy_input_contract(problem_id: str, code_checkpoints: set[str]) -> 
     )
 
 
+def check_passkey_contract() -> None:
+    completed = subprocess.run(
+        [sys.executable, "-I", "-c", PASSKEY_PROBE],
+        cwd=ROOT / "challenges" / PASSKEY_TARGET / "local",
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=30,
+        check=False,
+    )
+    require(
+        completed.returncode == 0,
+        f"{PASSKEY_TARGET}: Portal editor config probe failed\n{completed.stdout}",
+    )
+
+
 def main() -> int:
     for problem_id, code_checkpoints in LEGACY_CODE_CHECKPOINTS.items():
+        check_static(problem_id)
         check_legacy_input_contract(problem_id, code_checkpoints)
         print(f"PASS {problem_id} input and config contract")
-    for problem_id in TARGETS:
+    for problem_id in SHARED_TARGETS:
         check_static(problem_id)
         check_runtime(problem_id)
         print(f"PASS {problem_id}")
-    print(f"\n{len(TARGETS)} Browser Workbench contracts passed")
+    check_static(PASSKEY_TARGET)
+    check_passkey_contract()
+    print(f"PASS {PASSKEY_TARGET}")
+    print(f"\n{len(ALL_TARGETS)} Portal editor API contracts passed")
     return 0
 
 

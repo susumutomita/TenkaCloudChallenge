@@ -34,7 +34,7 @@
   "estimatedDuration": "35-50 分",
   "shortDescription": "パスキーのサーバ側で assertion の署名を公開鍵だけで検証する。次に、署名は正しいのに本人確認済み bit が 0 の assertion を見つけ、UV 必須ポリシーで拒否する。暗号の成立と認証方針の成立を同じものにしない。",
   "description": "WebAuthn assertion verification の L1。stdlib のみで P-256 ECDSA を検証し、署名対象を authenticatorData || SHA-256(clientDataJSON) として組み立てる。fixture は seed ごとに honest / no-uv / bad-signature / wrong-rp を必ず 1 本ずつ構成し、no-uv は署名・credential ID・RP ID・origin・challenge・UP がすべて正当で UV だけが 0。拒否理由がちょうど user-verification-required 1 個であることを hidden suite が検証する。WebAuthn credential id は登録 record と一致させ、lab 専用 caseId と順序だけを seed で変える。checkpoint はすべて source submission にして二択・画面転記を避ける。serverRecord に credential private key、password、password verifier は無い。fixture generator は lab 用 FLAG_SEED から署名を構成するが、participant が扱う relying-party record と verification path は public key のみ。Unit 42 の 2026-08 research は既に malware が存在する Windows + TPM + Chrome / Google Password Manager を前提にした deployment attack であり、署名 primitive の破壊ではない。GitHub / eBay の比較は原典で確認し、eBay は disclosure 後に修正済みという時点も participant-facing docs に残す。L2 以降の onboarding、UV key replacement、SDS extraction は範囲外。",
-  "instructions": "## 前提にするもの\n\nPython の bytes、辞書、真偽値。公開鍵と秘密鍵、署名、challenge、assertion、WebAuthn、bit flag は前提にしません。初出で説明します。楕円曲線の計算は完成済みです。\n\n## なぜこれをやるのか\n\nパスキーのログインでは、端末の authenticator が秘密鍵を持ち、server は公開鍵だけを保存します。server は届いた署名を検証できますが、署名が正しいことだけでは『本人確認をした』ことになりません。本人確認済みかは、署名対象の flags にある UV bit を別に確かめます。\n\n```text\nauthenticator: challenge + flags に署名\n                         ↓ assertion\nserver: 公開鍵で署名検証 → UV 必須なら 0x04 bit も確認\n```\n\n## 最初の一手\n\n問題を起動して **Browser Workbench** を開き、`inspect` を実行してください。server record と 4 本の assertion が出ます。record に公開鍵はありますが秘密鍵はありません。4 本は『全部正しい』『UV だけ 0』『署名だけ不正』『RP ID だけ不一致』が必ず 1 本ずつです。WebAuthn credential の id は登録 record と一致し、lab 専用 caseId と順序だけが起動ごとに変わります。\n\n## 何を書くか\n\n`assertion.py` を次の順に完成させます。\n\n```text\nauthenticatorData を base64url decode\nclientDataJSON を base64url decode → SHA-256\n2つをこの順に連結 → 公開鍵で署名検証\nflags byte & 0x04 → UV を確認\nUV 必須なのに 0 なら、署名が正しくても拒否\n```\n\n`test` で公開テストを実行します。`prepare` は同じ source を `signature` / `find-uv-gap` / `enforce-uv` の 3 checkpoint 用に作ります。\n\n## ゴール\n\n署名が正しい UV=0 assertion をコードで特定し、UV を要求しない方針では受理、要求する方針では `user-verification-required` だけを理由に拒否してください。『パスキーが危ない』ではなく、暗号検証と relying-party policy 検証を分けて説明できれば完了です。",
+  "instructions": "## 前提にするもの\n\nPython の bytes、辞書、真偽値。公開鍵と秘密鍵、署名、challenge、assertion、WebAuthn、bit flag は前提にしません。初出で説明します。楕円曲線の計算は完成済みです。\n\n## なぜこれをやるのか\n\nパスキーのログインでは、端末の authenticator が秘密鍵を持ち、server は公開鍵だけを保存します。server は届いた署名を検証できますが、署名が正しいことだけでは『本人確認をした』ことになりません。本人確認済みかは、署名対象の flags にある UV bit を別に確かめます。\n\n```text\nauthenticator: challenge + flags に署名\n                         ↓ assertion\nserver: 公開鍵で署名検証 → UV 必須なら 0x04 bit も確認\n```\n\n## 最初の一手\n\n問題を起動して **Participant Portal の問題エディタ** を開き、`inspect` を実行してください。server record と 4 本の assertion が出ます。record に公開鍵はありますが秘密鍵はありません。4 本は『全部正しい』『UV だけ 0』『署名だけ不正』『RP ID だけ不一致』が必ず 1 本ずつです。WebAuthn credential の id は登録 record と一致し、lab 専用 caseId と順序だけが起動ごとに変わります。\n\n## 何を書くか\n\n`assertion.py` を次の順に完成させます。\n\n```text\nauthenticatorData を base64url decode\nclientDataJSON を base64url decode → SHA-256\n2つをこの順に連結 → 公開鍵で署名検証\nflags byte & 0x04 → UV を確認\nUV 必須なのに 0 なら、署名が正しくても拒否\n```\n\n`test` で公開テストを実行します。`prepare` は同じ source を `signature` / `find-uv-gap` / `enforce-uv` の 3 checkpoint 用に作ります。\n\n## ゴール\n\n署名が正しい UV=0 assertion をコードで特定し、UV を要求しない方針では受理、要求する方針では `user-verification-required` だけを理由に拒否してください。『パスキーが危ない』ではなく、暗号検証と relying-party policy 検証を分けて説明できれば完了です。",
   "writeup": "## 秘密を保存せずに確認できる\n\npassword server は通常、password そのものではなくても password 由来の verifier を持つ。passkey の relying party が持つ credential public key は署名を確認できるが作れない。server の漏洩が credential private key の直接漏洩にならないのは、この非対称性による。これは phishing や endpoint compromise が絶対に起きないという主張ではない。credential が RP ID に scoped されることと、端末・同期・登録の trust boundary は別途評価する。\n\n## 署名が守るのは値であって意味ではない\n\nUV bit は authenticatorData に入り、assertion signature の対象になる。したがって途中で 0 を 1 に書き換えると署名が壊れる。しかし署名は 0 を 1 に変換しない。正当に署名された UV=0 を受け取った server が userVerification を required にしたなら、server 自身が 0 を拒否しなければならない。\n\n## request と response は別\n\n`userVerification: required` は request side の要求である。WebAuthn Level 3 §7.2 は relying party に、required と判断した場合は response の UV bit が set されていることを検査させる。『要求したから検査済み』ではない。\n\n## incident の境界\n\nUnit 42 の Pass-ta-key は malware がすでに victim device で動くことを初期条件にし、Chrome on Windows with TPM の Google synced passkey deployment を調べた。そこで得た assertion は cryptographically valid でも UV が unset であり、GitHub は拒否した。一方、eBay は required を request しながら当時 UV response validation が欠けて受理し、その後修正したと原典が述べる。この問題はその verification seam だけを再現し、malware、cloud authenticator、onboarding、key extraction を再現しない。\n\n## fixture を先に設計する\n\nランダムに 4 本作って no-uv が出ることを祈っていない。4 種類を個別に構成し、各 negative fixture は欠陥を 1 個だけ持つ。hidden tests は 8 seed で expected reason を exact match する。これにより『拒否できたが、本当は署名も壊れていた』を成功と数えない。",
   "tags": [
     "advanced-cryptography-2026",
@@ -48,7 +48,7 @@
   "exposedPorts": [
     {
       "port": 18121,
-      "name": "Browser Workbench + /verify (loopback only)"
+      "name": "Portal editor API + /verify (loopback only)"
     }
   ],
   "learningGoals": [
@@ -193,9 +193,6 @@
     "provider": "docker",
     "engine": "compose",
     "entry": "local/docker-compose.yml",
-    "challengeEndpoints": {
-      "Browser Workbench": "http://127.0.0.1:18121/"
-    },
     "verifyUrl": "http://127.0.0.1:18121/verify",
     "secretEnv": [
       "FLAG_SEED"
@@ -215,7 +212,8 @@
             "content": "clientDataJSON はそのまま連結しない。W3C の signed bytes で SHA-256 になるのはどちらかを確認する。",
             "penalty": 20
           }
-        ]
+        ],
+        "input": "multiline"
       },
       {
         "id": "find-uv-gap",
@@ -228,7 +226,8 @@
             "content": "authenticatorData の先頭 32 byte は RP ID hash。その次の flags byte に対して `flags & 0x04` を調べる。",
             "penalty": 20
           }
-        ]
+        ],
+        "input": "multiline"
       },
       {
         "id": "enforce-uv",
@@ -241,7 +240,8 @@
             "content": "署名検証が true でも処理は終わらない。require_user_verification が true なら、署名対象 flags の UV=0 を独立に拒否する。",
             "penalty": 20
           }
-        ]
+        ],
+        "input": "multiline"
       }
     ]
   },
@@ -249,7 +249,7 @@
     "en": {
       "name": "The signature is valid. Reject it anyway.",
       "shortDescription": "Verify a passkey assertion on the server with only the public key. Then find a cryptographically valid assertion whose user-verification bit is zero and reject it under a UV-required policy. Keep cryptographic validity separate from authentication policy.",
-      "instructions": "## Prerequisites\n\nPython bytes, dictionaries and booleans. Public/private keys, signatures, challenges, assertions, WebAuthn and bit flags are introduced here rather than assumed. The elliptic-curve arithmetic is supplied.\n\n## Why\n\nIn a passkey login the authenticator keeps the private key and the server stores only the public key. A valid signature does not, by itself, say that local user verification happened. That fact is carried by the separately checked UV bit inside the signed flags.\n\n```text\nauthenticator: sign challenge + flags\n                         ↓ assertion\nserver: verify signature → if UV is required, also check bit 0x04\n```\n\n## First move\n\nStart the problem, open the **Browser Workbench**, and run `inspect`. The server record contains a public key but no private key. The four assertions are constructed as one fully valid, one with only UV missing, one with only a bad signature, and one with only the wrong RP ID. The WebAuthn credential id matches the registered record; only the lab caseId labels and order change per deployment.\n\n## What to write\n\nComplete `assertion.py` in this order:\n\n```text\nbase64url-decode authenticatorData\nbase64url-decode clientDataJSON → SHA-256\nconcatenate in that order → verify with the public key\nflags byte & 0x04 → read UV\nwhen UV is required but zero, reject even if the signature is valid\n```\n\nRun `test`. `prepare` makes the same source submission for `signature`, `find-uv-gap`, and `enforce-uv`.\n\n## Goal\n\nFind the valid-signature UV=0 assertion by code. Accept it when UV is not required and reject it with the sole reason `user-verification-required` when UV is required. Finish able to describe this as a relying-party validation boundary, not as broken passkey cryptography.",
+      "instructions": "## Prerequisites\n\nPython bytes, dictionaries and booleans. Public/private keys, signatures, challenges, assertions, WebAuthn and bit flags are introduced here rather than assumed. The elliptic-curve arithmetic is supplied.\n\n## Why\n\nIn a passkey login the authenticator keeps the private key and the server stores only the public key. A valid signature does not, by itself, say that local user verification happened. That fact is carried by the separately checked UV bit inside the signed flags.\n\n```text\nauthenticator: sign challenge + flags\n                         ↓ assertion\nserver: verify signature → if UV is required, also check bit 0x04\n```\n\n## First move\n\nStart the problem, open the **Participant Portal problem editor**, and run `inspect`. The server record contains a public key but no private key. The four assertions are constructed as one fully valid, one with only UV missing, one with only a bad signature, and one with only the wrong RP ID. The WebAuthn credential id matches the registered record; only the lab caseId labels and order change per deployment.\n\n## What to write\n\nComplete `assertion.py` in this order:\n\n```text\nbase64url-decode authenticatorData\nbase64url-decode clientDataJSON → SHA-256\nconcatenate in that order → verify with the public key\nflags byte & 0x04 → read UV\nwhen UV is required but zero, reject even if the signature is valid\n```\n\nRun `test`. `prepare` makes the same source submission for `signature`, `find-uv-gap`, and `enforce-uv`.\n\n## Goal\n\nFind the valid-signature UV=0 assertion by code. Accept it when UV is not required and reject it with the sole reason `user-verification-required` when UV is required. Finish able to describe this as a relying-party validation boundary, not as broken passkey cryptography.",
       "writeup": "## Verification without a server-side credential secret\n\nThe relying party stores a public key that can verify but cannot create a credential signature. A server breach therefore does not directly reveal the credential private key. This is not a claim that phishing, endpoint compromise, registration or synchronization threats disappear; those are separate trust boundaries.\n\n## A signature protects a value, not its meaning\n\nThe UV bit is inside signed authenticatorData, so changing zero to one breaks the signature. A signature does not turn a legitimately signed zero into one. When the server requires user verification, it must reject that zero itself.\n\n## Request and response are separate\n\n`userVerification: required` expresses a request. WebAuthn Level 3 §7.2 separately directs the relying party to verify that the response UV bit is set when UV was required. Requesting the property is not validating the returned evidence.\n\n## Incident boundary\n\nUnit 42's Pass-ta-key research starts with malware already on the victim endpoint and studies Google synced passkeys in Chrome on Windows with TPM. The assertion remained cryptographically valid while UV was unset. Unit 42 reported GitHub rejecting it and a pre-fix eBay flow accepting it despite requesting required UV; the article says eBay fixed the validation gap after disclosure. This lab reproduces only that verification seam, not malware, cloud-authenticator onboarding or key extraction.\n\n## Construct the fixture first\n\nThe generator creates each of four kinds explicitly. Every negative fixture has exactly one defect, and hidden tests exact-match its one reason over eight seeds. A rejection cannot pass merely because a second accidental defect was present.",
       "learningGoals": [
         "Explain how a server verifies an assertion with a public key while storing no credential private key",

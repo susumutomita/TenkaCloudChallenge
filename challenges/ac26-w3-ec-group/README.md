@@ -20,40 +20,17 @@ y^2 = x^3 + a*x + b   (mod p)
 together with one extra element, form a group. Slides assert it. Here you build it, and the
 build is where the assertion turns out to have four cases rather than one formula.
 
-## Browser workflow
+## Participant Portal workflow
 
-1. Start the problem in Participant Portal and open **Browser Workbench**.
-2. Run `inspect` to read this deployment's fixture and published evidence.
-3. Edit the starter source in the in-browser editor.
-4. Run `test` for the published checks and fill any direct-answer fields from the evidence.
-5. Run `prepare`, then paste every prepared checkpoint value into Participant Portal.
+1. Start the problem in Participant Portal; the problem editor appears on the same page.
+2. Select **Inspect evidence** to read this deployment's fixture and published evidence.
+3. Edit the starter source in the Portal editor.
+4. Select **Run public tests** and fill any direct-answer fields from the evidence.
+5. Submit each checkpoint directly. Portal prepares and sends the current files and answers.
 
-No checkout, terminal, or local editor is required. Code checkpoints submit the edited source.
-Direct answers are wrapped by `prepare` and bound to the current deployment seed, so a value copied
-from another deployment is rejected.
-
-## Four cases, not one formula
-
-| Case | Result |
-|---|---|
-| Either side is the identity | the other side |
-| Same `x`, opposite `y` | the identity — this includes doubling a point with `y = 0` |
-| The same point | tangent slope `(3x² + a) / 2y` |
-| Anything else | chord slope `(y₂ - y₁) / (x₂ - x₁)` |
-
-Substituting `P = Q` into the chord's slope gives `0/0`. Doubling has its own formula not as an
-optimization but because the chord does not exist there.
-
-## How to play
-
-```bash
-Workbench `inspect`            # your curve, its points, and where the tangent is vertical
-Workbench `inspect` K=13       # the bit decomposition for any scalar
-Browser Workbench `test`               # public tests
-reload the starter              # restore starter/curve.py
-```
-
-You edit one file, the Workbench editor (`curve.py`).
+No checkout, terminal, local editor, second screen, or copy-and-paste step is required. Code
+checkpoints use the current editor source. Direct answers are bound to the current deployment
+seed, so a value copied from another deployment is rejected.
 
 ## Scoring
 

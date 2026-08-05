@@ -185,14 +185,11 @@ def test_workbench_prepare_rejects_an_empty_source() -> None:
     assert result["ok"] is False
 
 
-def test_workbench_assets_expose_browser_only_journey() -> None:
-    html = (ROOT / "workbench" / "index.html").read_text(encoding="utf-8")
-    script = (ROOT / "workbench" / "app.js").read_text(encoding="utf-8")
-    for term in ("predict", "first-broken", "generalize", "terminal-input"):
-        assert term in html
-    for command in ("inspect", "test", "prepare", "reset"):
-        assert f'case "{command}"' in script
-    assert "copyText" in script
+def test_portal_editor_replaces_static_assets() -> None:
+    assert not (ROOT / "workbench").exists()
+    server = (ROOT / "verifier" / "server.py").read_text(encoding="utf-8")
+    for endpoint in ("/api/config", "/api/starter", "/api/inspect", "/api/test", "/api/prepare"):
+        assert endpoint in server
 
 
 def main() -> int:

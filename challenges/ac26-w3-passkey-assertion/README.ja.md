@@ -61,7 +61,8 @@ lab 専用の `caseId` と順序だけが seed ごとに変わるので、位置
 
 ## 実行する
 
-Participant Portal の Browser Workbench を使うか、ローカルで実行します。
+Participant Portal で問題を起動し、問題文と同じ画面のエディタを使います。作問者は同じ検査を
+ローカルでも実行できます。
 
 ```bash
 make inspect
@@ -78,8 +79,8 @@ make reset
 4. `find_signed_without_user_verification` — `caseId` や順番ではなく性質で 1 本を選ぶ。
 5. `verify_assertion` — context、UV 方針、署名を見て、理由 1 個の verdict を返す。
 
-`prepare` は同じ source を `signature`、`find-uv-gap`、`enforce-uv` の 3 checkpoint 用に作ります。
-採点は独立です。
+Portal は現在の source を `signature`、`find-uv-gap`、`enforce-uv` の 3 checkpoint へそれぞれ
+提出します。採点は独立です。
 
 ## 現実の incident とどこが同じか
 

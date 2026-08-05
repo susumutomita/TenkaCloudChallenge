@@ -56,17 +56,17 @@ implementation samples both, and reusing a mask across two encryptions under one
 break: subtract the two ciphertexts and the mask term cancels, leaving the difference of
 the two plaintexts plus a little noise.
 
-## Browser workflow
+## Participant Portal workflow
 
-1. Start the problem in Participant Portal and open **Browser Workbench**.
-2. Run `inspect` to read this deployment's fixture and published evidence.
-3. Edit the starter source in the in-browser editor.
-4. Run `test` for the published checks and fill any direct-answer fields from the evidence.
-5. Run `prepare`, then paste every prepared checkpoint value into Participant Portal.
+1. Start the problem in Participant Portal; the problem editor appears on the same page.
+2. Select **Inspect evidence** to read this deployment's fixture and published evidence.
+3. Edit the starter source in the Portal editor.
+4. Select **Run public tests** and fill any direct-answer fields from the evidence.
+5. Submit each checkpoint directly. Portal prepares and sends the current files and answers.
 
-No checkout, terminal, or local editor is required. Code checkpoints submit the edited source.
-Direct answers are wrapped by `prepare` and bound to the current deployment seed, so a value copied
-from another deployment is rejected.
+No checkout, terminal, local editor, second screen, or copy-and-paste step is required. Code
+checkpoints use the current editor source. Direct answers are bound to the current deployment
+seed, so a value copied from another deployment is rejected.
 
 ## Scoring
 

@@ -45,12 +45,6 @@ REQUEST_TIMEOUT_SECONDS = 15
 CHECKPOINTS = ("signature", "find-uv-gap", "enforce-uv")
 CODE_CHECKPOINTS = CHECKPOINTS
 SUBMISSION_FILES = ("assertion.py",)
-WORKBENCH_ASSETS = {
-    "/": ("index.html", "text/html; charset=utf-8"),
-    "/app.js": ("app.js", "text/javascript; charset=utf-8"),
-    "/styles.css": ("styles.css", "text/css; charset=utf-8"),
-}
-
 
 # Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still
 # reporting RLIM_INFINITY for it. Setting it anyway raises inside `preexec_fn`,
@@ -73,8 +67,22 @@ def _limits() -> None:
     resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_BYTES, MAX_OUTPUT_BYTES))
 
 
+def config_payload() -> dict[str, object]:
+    """Declare the generic Participant Portal editor contract."""
+    return {
+        "id": "ac26-w3-passkey-assertion",
+        "name": "署名は正しい。それでも拒否する。",
+        "description": "パスキー assertion の署名検証と UV 必須ポリシーを分けて実装する。",
+        "submittedFiles": list(SUBMISSION_FILES),
+        "checkpoints": [
+            {"id": checkpoint, "label": checkpoint, "kind": "code"}
+            for checkpoint in CHECKPOINTS
+        ],
+    }
+
+
 def starter_payload() -> dict[str, str]:
-    """Return the editable file shipped to the browser workbench."""
+    """Return the editable file shipped to the Portal editor."""
     return {
         name: (ROOT / "starter" / name).read_text(encoding="utf-8") for name in SUBMISSION_FILES
     }
@@ -105,7 +113,7 @@ def _submission_sources(files: object) -> dict[str, str] | None:
 def _run_submission_script(
     sources: dict[str, str], script: str, seed: str
 ) -> tuple[int, str] | None:
-    """Run browser-edited Python with the verifier's existing resource limits."""
+    """Run Portal-edited Python with the verifier's existing resource limits."""
     with tempfile.TemporaryDirectory() as workspace:
         for name, text in sources.items():
             (Path(workspace) / name).write_text(text, encoding="utf-8")
@@ -149,7 +157,7 @@ runpy.run_path({root!r} + "/tests/public/test_assertion.py", run_name="__main__"
 
 
 def run_public_tests(seed: str, files: object) -> dict[str, object]:
-    """Run the same checks as `make test` against the browser-edited source."""
+    """Run the same checks as `make test` against the Portal-edited source."""
     sources = _submission_sources(files)
     if sources is None:
         return {"passed": False, "output": "assertion.py must be a non-empty Python file."}
@@ -224,23 +232,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's name
         path = urlsplit(self.path).path
+        if path == "/api/config":
+            self._respond(200, config_payload())
+            return
         if path == "/api/inspect":
             self._respond(200, inspect_payload(SEED))
             return
         if path == "/api/starter":
             self._respond(200, starter_payload())
             return
-        asset = WORKBENCH_ASSETS.get(path)
-        if asset is None:
-            self._respond(404, {"error": "not found"})
-            return
-        filename, content_type = asset
-        try:
-            content = (ROOT / "workbench" / filename).read_bytes()
-        except OSError:
-            self._respond(404, {"error": "not found"})
-            return
-        self._respond_bytes(200, content, content_type)
+        self._respond(404, {"error": "not found"})
 
     def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's name
         path = urlsplit(self.path).path.rstrip("/") or "/"

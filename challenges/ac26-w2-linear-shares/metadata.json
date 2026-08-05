@@ -28,7 +28,7 @@
   "estimatedDuration": "35-50 分",
   "shortDescription": "share に対する操作のうち、いくつかは誰とも話さずに各自の手元だけでできる。どれがそうで、どれが違うのか。1 つだけ、素直にやると間違える。",
   "description": "Week 2 の 2 問目。加法的 share に対する線形操作を実装し、通信が要る操作と要らない操作を区別する。MPC が実用になるのは線形操作が通信不要だからで、その境界を手を動かして引く。\n\nadd-constant では、全 party が自分の share に c を足すと総和が x + n*c になる。正しくは 1 party だけが畳み込む。hidden test は複数設定を回し、この典型的な誤りを名指しで落とす。\n\nno-communication checkpoint は 8 操作の catalog から seed ごとにローカル 2・対話型 2 を選んで並べ替える。round 数の完全一致ではなく 0 か非 0 かで採点し、固定の 4 行や定数表を別 deploy へ持ち越せない。\n\nWeek 2 の教材は pinned commit 時点で未公開のため courseAlignment.sources は持たず、status は draft のままにする (#219 が公開を検出した時点で確定する)。",
-  "instructions": "## ブラウザで解く\n\nParticipant Portal で問題を起動し、表示された **Browser Workbench** を開きます。\nWorkbench の `inspect` で deploy 固有の fixture と公開された証拠を確認し、画面内の\nstarter エディタを修正して `test` を実行します。コード以外の checkpoint が表示された\n場合は、inspect と実験結果から回答欄を埋めます。最後に `prepare` を実行し、生成された\n値を Portal の同名 checkpoint へ貼り付けます。回答型が object / array / number の場合は\nJSON で入力してください。すべての操作は Workbench 内で完結します。\n\n`prepare` は直接回答をこの deploy の seed に結び付けます。このため、別の起動で作った\n提出値や概念名だけを記憶して入力した値では合格できません。\n",
+  "instructions": "## Participant Portal で解く\n\nParticipant Portal で問題を起動すると、問題文と同じ画面に問題エディタが表示されます。\n「証拠を調べる」で deploy 固有の fixture と公開された証拠を確認し、starter ソースを編集して\n「公開テストを実行」を押します。コード以外の checkpoint は、証拠と実験結果から回答欄を\n埋めてください。object / array / number は JSON で入力します。\n\n各 checkpoint の提出ボタンは、現在のエディタ内容と回答欄を container の prepare API へ送り、\n生成された値をそのまま採点へ渡します。画面を移動したり提出値をコピーしたりする必要はありません。\n直接回答はこの deploy の seed に結び付くため、別の起動で作った値や概念名の暗記だけでは合格できません。\n",
   "writeup": "## 線形操作が通信不要であること\n\n加法的 share では、share 同士の加減算・符号反転・公開定数倍を各 party が自分の share だけで実行できる。乗算・二乗・比較のような非線形操作は対話を要する。\n\n## add-constant だけが違う理由\n\n公開定数 c を全 party が足すと総和は x + n*c になる。正しくは 1 party だけが c を畳み込む。\n\n## round 数ではなく 0 か非 0 か\n\nno-communication は catalog から seed ごとに 4 操作を選ぶ。対話型 protocol の正確な round 数は方式に依存するため、0 か非 0 かだけを採点する。\n\n## 次につながるところ\n\n非線形操作の対話を前処理へ追い出せないか、という問いが Beaver triple につながる。",
   "tags": [
     "advanced-cryptography-2026",
@@ -41,7 +41,7 @@
   "exposedPorts": [
     {
       "port": 18096,
-      "name": "Browser Workbench + /verify (loopback only)"
+      "name": "Portal editor API + /verify (loopback only)"
     }
   ],
   "learningGoals": [
@@ -179,10 +179,7 @@
     "verifyUrl": "http://127.0.0.1:18096/verify",
     "secretEnv": [
       "FLAG_SEED"
-    ],
-    "challengeEndpoints": {
-      "Browser Workbench": "http://127.0.0.1:18096/"
-    }
+    ]
   },
   "scoring": {
     "kind": "multi-verify",
@@ -241,7 +238,7 @@
     "en": {
       "name": "What you can do without talking to anyone",
       "shortDescription": "Some operations on shares are local and others require interaction. Each deployment selects a different balanced four-operation quiz from the catalog.",
-      "instructions": "## Solve in the browser\n\nStart the problem in the Participant Portal and open the **Browser Workbench** endpoint.\nUse `inspect` to read the deployment-specific fixture and published evidence, edit the\nstarter sources on the page, and run `test`. When direct-answer checkpoints are shown,\nderive their values from the evidence and your experiments. Run `prepare` and paste each\ngenerated value into the matching Portal checkpoint. Enter objects, arrays, and numbers as\nJSON. The complete participant journey stays inside the Workbench.\n\n`prepare` binds direct answers to this deployment's seed. A value prepared for another run,\nor a remembered concept name on its own, cannot earn credit.\n",
+      "instructions": "## Solve in Participant Portal\n\nStart the problem in Participant Portal. The problem editor appears on the same page as the\nstatement. Use **Inspect evidence** to read the deployment-specific fixture and published\nevidence, edit the starter sources, and select **Run public tests**. Fill any direct-answer\ncheckpoint from the evidence and your experiments; enter objects, arrays, and numbers as JSON.\n\nEach checkpoint's submit button sends the current editor files and answer fields through the\ncontainer prepare API, then submits the generated value directly for scoring. There is no second\nscreen and no submission value to copy. Direct answers are bound to this deployment's seed, so a\nvalue prepared for another run, or a remembered concept name on its own, cannot earn credit.\n",
       "writeup": "## Why linear operations need no communication\n\nWith additive shares, addition, subtraction, negation, and public scaling are local. Non-linear operations such as multiplication, squaring, and comparison require interaction.\n\n## Why add-constant is the odd one\n\nIf every party adds public c, the total becomes x + n*c. Exactly one party must fold it in.\n\n## Zero versus non-zero, not an exact round count\n\nEach deployment selects two local and two interactive operations from the catalog. Exact positive round counts depend on the protocol, so grading distinguishes zero from non-zero.\n\n## Where this leads\n\nMoving interaction for non-linear work into preprocessing motivates Beaver triples for multiplication.",
       "learningGoals": [
         "Confirm that adding two sharings completes locally",

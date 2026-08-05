@@ -32,9 +32,9 @@ fits on one screen, so the difficulty is the properties, not the plumbing.
 
 ## How to play
 
-Start the problem in Participant Portal and open the **Browser Workbench** endpoint. The theory,
-`inspect`, both editors, public tests, and preparation of all five checkpoint submissions stay in
-the browser. No host terminal or checkout editing is required.
+Start the problem in Participant Portal. The theory and both editors appear on the same page.
+Inspect the evidence, edit both files, run public tests, and submit all five checkpoints there.
+No host terminal or checkout editing is required.
 
 Authors working directly from the repository can still run these commands from the problem
 directory:
@@ -46,7 +46,7 @@ make test-one ID=classify       # iterate on one of them
 make reset                      # restore both starter files
 ```
 
-The Workbench and checkout workflow both edit two files:
+The Portal editor and author checkout both edit two files:
 
 - `local/starter/classify.py` — for each verifier, is it complete? sound? private?
 - `local/starter/counterexamples.py` — prove every property you marked `False`.

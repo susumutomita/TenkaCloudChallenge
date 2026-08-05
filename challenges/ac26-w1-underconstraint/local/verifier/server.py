@@ -59,12 +59,6 @@ CHECKPOINT_LABELS = {
     "repair": "正常系を壊さずに塞ぐ",
     "mutation-transfer": "別の欠落でも成立させる",
 }
-WORKBENCH_ASSETS = {
-    "/": ("index.html", "text/html; charset=utf-8"),
-    "/app.js": ("app.js", "text/javascript; charset=utf-8"),
-    "/styles.css": ("styles.css", "text/css; charset=utf-8"),
-}
-
 
 # Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still
 # reporting RLIM_INFINITY for it. Setting it anyway raises inside `preexec_fn` and
@@ -83,7 +77,7 @@ def _limits() -> None:
 
 
 def starter_payload() -> dict[str, str]:
-    """Return the editable file shipped to the browser workbench."""
+    """Return the editable file shipped to the Portal editor."""
     return {
         name: (ROOT / "starter" / name).read_text(encoding="utf-8") for name in SUBMISSION_FILES
     }
@@ -145,7 +139,7 @@ def _submission_sources(files: object) -> dict[str, str] | None:
 def _run_submission_script(
     sources: dict[str, str], script: str, seed: str, **extra: object
 ) -> tuple[int, str] | None:
-    """Run browser-edited Python with the verifier's existing resource limits."""
+    """Run Portal-edited Python with the verifier's existing resource limits."""
     with tempfile.TemporaryDirectory() as workspace:
         for name, text in sources.items():
             (Path(workspace) / name).write_text(text, encoding="utf-8")
@@ -189,7 +183,7 @@ runpy.run_path({root!r} + "/tests/public/test_policy.py", run_name="__main__")
 
 
 def run_public_tests(seed: str, files: object) -> dict[str, object]:
-    """Run the same checks as `make test` against the browser-edited source."""
+    """Run the same checks as `make test` against the Portal-edited source."""
     sources = _submission_sources(files)
     if sources is None:
         return {"passed": False, "output": "policy.py must be a non-empty Python file."}
@@ -206,7 +200,7 @@ def prepare_submissions(seed: str, files: object) -> dict[str, object]:
     and the manipulated signals, which is the diagnosis the learner derives from
     their own audit and forgery. Producing it here would erase what that
     checkpoint measures. The seed does not enter the values; it stays in the
-    signature so every workbench prepare endpoint has the same shape.
+    signature so every Portal prepare API has the same shape.
     """
     del seed
     sources = _submission_sources(files)
@@ -306,17 +300,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/starter":
             self._respond(200, starter_payload())
             return
-        asset = WORKBENCH_ASSETS.get(path)
-        if asset is None:
-            self._respond(404, {"error": "not found"})
-            return
-        filename, content_type = asset
-        try:
-            content = (ROOT / "workbench" / filename).read_bytes()
-        except OSError:
-            self._respond(404, {"error": "not found"})
-            return
-        self._respond_bytes(200, content, content_type)
+        self._respond(404, {"error": "not found"})
 
     def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's name
         path = urlsplit(self.path).path.rstrip("/") or "/"
