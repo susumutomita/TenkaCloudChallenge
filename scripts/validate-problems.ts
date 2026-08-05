@@ -582,8 +582,37 @@ function checkContainerRefs(dir: string, meta: Metadata): CrossRefResult {
     errors.push(...checkMultiVerifyStructure(meta), ...checkMultiVerifyTranslations(meta));
     warnings.push(...checkCheckLabelSpoilerAdvisory(meta));
   }
-  errors.push(...checkDashboardSlotFiles(meta, dir), ...checkCoordinationPluginFile(meta, dir));
+  errors.push(
+    ...checkDashboardSlotFiles(meta, dir),
+    ...checkCoordinationPluginFile(meta, dir),
+    ...checkWorkbenchEndpointExists(dir, meta),
+  );
   return { errors, warnings };
+}
+
+/**
+ * [TenkaCloud#2882] `challengeEndpoints` の "Browser Workbench" は、 その問題が実際に
+ * `local/workbench/` を同梱しているときだけ宣言してよい。
+ *
+ * Portal はこの宣言をそのままアクセス用リンクとして出す。 ページを消したのに宣言だけ残ると、
+ * 参加者はカードのリンクを踏み、 コンテナの素の 404 (`{"error": "not found"}`) を受け取って
+ * 「起動しない」と読む。 実際に #375 で workbench を削除した後、 3 問がこの状態で残っていた。
+ * リンク先の実在は人が覚えておく類のことではないので、 ここで検査する。
+ */
+function checkWorkbenchEndpointExists(dir: string, meta: Metadata): ValidationError[] {
+  const runtime = meta.runtime as { challengeEndpoints?: unknown } | undefined;
+  const endpoints = runtime?.challengeEndpoints;
+  if (typeof endpoints !== "object" || endpoints === null) return [];
+  const errors: ValidationError[] = [];
+  for (const name of Object.keys(endpoints as Record<string, unknown>)) {
+    if (!name.toLowerCase().includes("workbench")) continue;
+    if (!existsSync(join(dir, "local", "workbench"))) {
+      errors.push(
+        `runtime.challengeEndpoints["${name}"] points at a Browser Workbench, but local/workbench/ does not exist — the link would serve a bare 404`,
+      );
+    }
+  }
+  return errors;
 }
 
 /**

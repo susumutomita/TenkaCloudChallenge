@@ -9,7 +9,7 @@
   "estimatedDuration": "45-60 分",
   "shortDescription": "重複・順序逆転・retry枯渇が混ざるEventBridge風deliveryを、決定論的な状態機械とDLQで扱おう。",
   "description": "注文consumerが、重複したPaymentCapturedを二重計上し、遅れて届いたOrderCreatedで状態を巻き戻している。Browser Workbenchでdelivery policyを修正し、event IDのidempotency、aggregate versionの単調性、same-version conflict、bounded retry、完全なDLQ receipt、replay invariantを別々に成立させる。実AWS、credential、production data、外向きnetworkは使わない。",
-  "instructions": "問題ランタイムを起動してBrowser Workbenchを開く。最初にvulnerable streamを実行し、重複副作用とstate regressionを観察する。policy JSONの7 sectionを修正して公開テストを実行し、提出値を作る。同じ提出値を6つのcheckpointへ提出する。verifierはcheckpointごとに独立したevent列を再実行する。",
+  "instructions": "問題ランタイムを起動してParticipant Portal の問題エディタを開く。最初にvulnerable streamを実行し、重複副作用とstate regressionを観察する。policy JSONの7 sectionを修正して公開テストを実行し、提出値を作る。同じ提出値を6つのcheckpointへ提出する。verifierはcheckpointごとに独立したevent列を再実行する。",
   "writeup": "## event IDとversionは別の境界\n\nevent IDは同じeventの再配信を識別する。aggregate versionは異なるevent間のbusiness orderを識別する。どちらか一方、arrival timestamp、または最後に届いた値だけでは、重複と順序逆転を同時に処理できない。\n\n## terminal outcomeを失わない\n\nduplicate、stale、conflict、version_gap、retry_exhaustedを別のoutcomeにして、retry枯渇とnon-retryable failureは元eventと原因・attemptを含むDLQ receiptへ残す。副作用とprocessed ledgerは同じatomic boundaryで更新する。\n\n## retryはexactly-onceではない\n\nretryはdeliveryの再試行であって、処理結果のexactly-onceを保証しない。consumer側のidempotencyと単調な状態遷移が必要である。",
   "tags": [
     "aws",
@@ -174,9 +174,6 @@
     "provider": "docker",
     "engine": "compose",
     "entry": "local/docker-compose.yml",
-    "challengeEndpoints": {
-      "Browser Workbench": "http://127.0.0.1:18120/"
-    },
     "verifyUrl": "http://127.0.0.1:18121/verify",
     "secretEnv": []
   },
@@ -267,7 +264,7 @@
     "en": {
       "name": "Delivered Twice, Arrived Out of Order",
       "shortDescription": "Turn duplicate, reordered, and retry-exhausted EventBridge-like deliveries into a deterministic state machine with a replayable DLQ.",
-      "instructions": "Start the runtime and open Browser Workbench. Run the vulnerable stream first and observe the duplicate side effect and state regression. Repair the seven policy sections, run the public tests, and prepare a submission. Submit the same value to all six checkpoints; the verifier replays an independent stream for each checkpoint.",
+      "instructions": "Start the runtime and open the problem editor in the Participant Portal. Run the vulnerable stream first and observe the duplicate side effect and state regression. Repair the seven policy sections, run the public tests, and prepare a submission. Submit the same value to all six checkpoints; the verifier replays an independent stream for each checkpoint.",
       "writeup": "## Event identity and aggregate order are separate boundaries\n\nAn event ID recognizes a redelivery of the same event. An aggregate version orders different business events. Neither one alone, an arrival timestamp, nor the last received value handles both duplication and reordering.\n\n## Preserve terminal outcomes\n\nClassify duplicate, stale, conflict, version_gap, and retry_exhausted separately. Store exhausted and non-retryable deliveries in a DLQ receipt with the original event, reason, attempts, and routing metadata. Update the side effect and processed-event ledger atomically.\n\n## Retry is not exactly-once\n\nRetry repeats delivery; it does not make the processing result exactly-once. The consumer still needs idempotency and monotonic state transitions.",
       "learningGoals": [
         "Separate event-ID idempotency from aggregate-version monotonicity",
@@ -276,12 +273,66 @@
         "Keep final state, side-effect count, and DLQ unchanged across replay"
       ],
       "checks": [
-        { "id": "observe", "label": "Observe both failure modes", "hints": [{ "id": "observe-1", "content": "Inspect sideEffects and the final aggregate version in the vulnerable stream." }] },
-        { "id": "idempotency", "label": "Stop duplicate side effects", "hints": [{ "id": "idempotency-1", "content": "A delivery ID may change on retry. Record the source event ID in the same atomic boundary as the side effect." }] },
-        { "id": "ordering", "label": "Keep versions monotonic", "hints": [{ "id": "ordering-1", "content": "Use aggregate version, not arrival time, and fail closed differently for stale and future-gap versions." }] },
-        { "id": "conflict", "label": "Separate same-version conflicts", "hints": [{ "id": "conflict-1", "content": "The same version and payload may be a duplicate; a different payload at the same version is not." }] },
-        { "id": "retry-dlq", "label": "Terminate retry into a DLQ", "hints": [{ "id": "retry-dlq-1", "content": "Retry transient failures a bounded number of times and preserve the event, reason, attempts, timestamps, rule, and target." }] },
-        { "id": "replay", "label": "Keep a second replay unchanged", "hints": [{ "id": "replay-1", "content": "Ledger terminal failures as well as successes, or replay will append duplicate DLQ receipts." }] }
+        {
+          "id": "observe",
+          "label": "Observe both failure modes",
+          "hints": [
+            {
+              "id": "observe-1",
+              "content": "Inspect sideEffects and the final aggregate version in the vulnerable stream."
+            }
+          ]
+        },
+        {
+          "id": "idempotency",
+          "label": "Stop duplicate side effects",
+          "hints": [
+            {
+              "id": "idempotency-1",
+              "content": "A delivery ID may change on retry. Record the source event ID in the same atomic boundary as the side effect."
+            }
+          ]
+        },
+        {
+          "id": "ordering",
+          "label": "Keep versions monotonic",
+          "hints": [
+            {
+              "id": "ordering-1",
+              "content": "Use aggregate version, not arrival time, and fail closed differently for stale and future-gap versions."
+            }
+          ]
+        },
+        {
+          "id": "conflict",
+          "label": "Separate same-version conflicts",
+          "hints": [
+            {
+              "id": "conflict-1",
+              "content": "The same version and payload may be a duplicate; a different payload at the same version is not."
+            }
+          ]
+        },
+        {
+          "id": "retry-dlq",
+          "label": "Terminate retry into a DLQ",
+          "hints": [
+            {
+              "id": "retry-dlq-1",
+              "content": "Retry transient failures a bounded number of times and preserve the event, reason, attempts, timestamps, rule, and target."
+            }
+          ]
+        },
+        {
+          "id": "replay",
+          "label": "Keep a second replay unchanged",
+          "hints": [
+            {
+              "id": "replay-1",
+              "content": "Ledger terminal failures as well as successes, or replay will append duplicate DLQ receipts."
+            }
+          ]
+        }
       ]
     }
   }
