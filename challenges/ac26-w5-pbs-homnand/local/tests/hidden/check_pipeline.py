@@ -723,14 +723,47 @@ def check_evaluate(module, seed: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
+def _refresh_inputs(seed: str, par: dict, scene: dict, table: dict) -> tuple[dict, dict]:
+    """Two inputs whose blind-rotation artifacts are observably different.
+
+    Fresh ciphertexts may collapse to the same rotation-domain artifact in the toy
+    parameter sets. That makes the reference fail the very comparison intended to prove
+    that two inputs were processed. Reject that degenerate fixture draw instead.
+    """
+    sample = _input(seed, par, scene, 1, "refresh:trace")
+    accumulator = reference_accumulator(par, table)
+    baseline = reference_rotate(
+        par, scene["bootstrapKey"], reference_domain(par, sample), accumulator
+    )
+    baseline_digest = rlwe_digest(par, baseline)
+    for attempt in range(256):
+        noisy = _input(
+            seed,
+            par,
+            scene,
+            1,
+            f"refresh:noisy:{attempt}",
+            error=correctness_bound(par) // 2,
+        )
+        rotated = reference_rotate(
+            par,
+            scene["bootstrapKey"],
+            reference_domain(par, noisy),
+            accumulator,
+        )
+        if rlwe_digest(par, rotated) != baseline_digest:
+            return sample, noisy
+    raise RuntimeError("could not construct distinct refresh artifacts")
+
+
 def check_refresh(module, seed: str) -> list[str]:
     """Six rows that name real artifacts, and a bound that does not mention the input."""
     failures: list[str] = []
     for par in _sets(seed):
         scene = _scene(seed, par, "refresh")
         key, switch_key = scene["bootstrapKey"], scene["switchingKey"]
-        sample = _input(seed, par, scene, 1, "refresh:trace")
         table = {0: 1, 1: 0}
+        sample, noisy = _refresh_inputs(seed, par, scene, table)
         try:
             got = module.pipeline_trace(par, key, switch_key, sample, table)
         except Exception as error:  # noqa: BLE001
@@ -752,7 +785,6 @@ def check_refresh(module, seed: str) -> list[str]:
 
         # The refresh, stated as a measurement rather than as a claim: vary the input's
         # noise and every row from the rotation on is unmoved.
-        noisy = _input(seed, par, scene, 1, "refresh:noisy", error=correctness_bound(par) // 2)
         after = module.pipeline_trace(par, key, switch_key, noisy, table)
         if [row["noiseBound"] for row in after[3:]] != [row["noiseBound"] for row in got[3:]]:
             failures.append("a post-rotation noise bound changed when the input's noise did")

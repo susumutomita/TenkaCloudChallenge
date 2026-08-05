@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from fixtures.generate import health_token, randomness, reference_shares, setting
+from fixtures.generate import health_token, reference_shares, setting, share_randomness
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
@@ -27,7 +27,7 @@ def main() -> None:
     print("  those values? Write your answer down, then make complete_shares prove it.")
     print()
     print("== randomness you are given ==")
-    print(f"  {json.dumps(randomness(SEED, 'public', n - 1, p))}")
+    print(f"  {json.dumps(share_randomness(SEED, 'public', n - 1, p, cfg['secret']))}")
     print()
     print(f"health token: {health_token(SEED)}")
 

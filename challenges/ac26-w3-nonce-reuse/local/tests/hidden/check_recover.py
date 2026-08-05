@@ -18,6 +18,7 @@ from fixtures.generate import (  # noqa: E402
     NONCE_SPACE,
     audit_log,
     challenge,
+    message_with_different_challenge,
     messages,
     secret_key,
     sign_with,
@@ -33,7 +34,14 @@ def _reuse_pair(seed: str, label: str, group):
     secret = secret_key(seed, f"{label}-pair", group)
     k = 1 + (secret * 3 + 5) % (group.n - 2)
     note_list = messages(seed, f"{label}-pair", 4)
-    first, second = note_list[0], note_list[1] + b"-second"
+    first = note_list[0]
+    second = message_with_different_challenge(
+        first,
+        note_list[1] + b"-second",
+        group.generator.scalar_mul(k),
+        group.generator.scalar_mul(secret),
+        group,
+    )
     return (
         secret,
         sign_with(k, secret, first, group),

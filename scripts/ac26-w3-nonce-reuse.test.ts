@@ -138,6 +138,23 @@ describe("ac26-w3-nonce-reuse: container safety", () => {
 });
 
 describe("ac26-w3-nonce-reuse: the log contains exactly one solvable reuse", () => {
+  it("should keep the reference extraction and hunt answerable across 2000 fixture seeds", () => {
+    const script = [
+      "import json, sys",
+      "sys.path.insert(0, 'reference')",
+      "import recover",
+      "from tests.hidden import check_recover",
+      "bad = {'extract': [], 'hunt': []}",
+      "for index in range(2000):",
+      "    seed = f'solvability-{index}'",
+      "    for name in bad:",
+      "        failures = getattr(check_recover, f'check_{name}')(recover, seed)",
+      "        if failures: bad[name].append([seed, failures])",
+      "print(json.dumps({name: rows[:5] for name, rows in bad.items() if rows}))",
+    ].join("\n");
+    expect(JSON.parse(python(["-c", script]).stdout.trim())).toEqual({});
+  });
+
   // Two same-signer reuse groups would make "find the reuse" ambiguous: the attack would
   // recover a key, just not reliably the victim's. On a group this small a hash-derived
   // nonce collides often enough for that to happen, so the honest nonces are chosen.
