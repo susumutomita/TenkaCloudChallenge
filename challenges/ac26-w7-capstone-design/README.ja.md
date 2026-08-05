@@ -17,41 +17,17 @@ primitive の名前は 1 つも書いてありません。
 それがこの問題です。「ZK にするか MPC にするか」から設計を始めれば、その質問には答えが出ます。出た
 答えが問題に合っているかどうかは別の話で、たいていは手遅れになってから訊かれます。
 
-## ブラウザでの進め方
+## Participant Portal での進め方
 
-1. Participant Portal で問題を起動し、**Browser Workbench** を開く。
-2. `inspect` でこの deploy 固有の fixture と公開された証拠を読む。
-3. 画面内のエディタで starter のソースを編集する。
-4. `test` で公開テストを実行し、直接回答欄があれば証拠から埋める。
-5. `prepare` で全 checkpoint の提出値を作り、Participant Portal へ貼る。
+1. Participant Portal で問題を起動する。同じ画面に問題エディタが表示される。
+2. **証拠を調べる**で、この deploy 固有の fixture と公開された証拠を読む。
+3. Portal のエディタで starter のソースを編集する。
+4. **公開テストを実行**を押し、直接回答欄があれば証拠から埋める。
+5. 各 checkpoint をそのまま提出する。Portal が現在のファイルと回答を準備して送る。
 
-checkout、ターミナル、ローカルエディタは不要です。code checkpoint は編集したソースを提出します。
-直接回答は `prepare` が現在の deploy seed へ結び付けるため、別 deploy からコピーした値は拒否されます。
-
-## checkpoint が本当に見ているもの 3 つ
-
-**privacy と zero knowledge は別の欄です。** lender に balance を見せたくない。しかし lender は計算に
-参加せず、答えを読むだけです。これは「計算する側から隠す」(privacy) ではなく「自分で計算していない値
-を信じてもらう」(soundness) であり、信じてもらう値が隠したい値から導かれているときに初めて zero
-knowledge が要ります。soundness だけなら、ただの署名で足ります。
-
-**最小性。** 選んだ組から 1 つ外してみてください。まだ全部の要求を満たしているなら、その 1 つは何も
-していません。そして何もしていない primitive は無害ではありません。前提が 1 つ、攻撃面が 1 つ、説明
-すべきことが 1 つ増えます。6 つの brief のうち 1 つは、暗号をまったく必要としません。
-
-**`non_goals` は飾りではありません。** FHE は鍵管理を無くしません。復号鍵を持つ誰かがいて、その誰かは
-脅威モデルの登場人物のままです。MPC は結託の仮定を無くしません、置き換えるだけです。ZK proof は
-public input を隠しません。component に責任を持たせる前に `PRIMITIVES` を見てください。
-
-## 遊び方
-
-```bash
-Workbench の `inspect`            # 自分の brief と、前提が 1 つ動いた同じ brief
-Browser Workbench の `test`               # public tests
-starter の再読み込み              # starter/design.py を戻す
-```
-
-編集するのは Workbench のエディタ (`design.py`) の 1 ファイルだけです。
+checkout、ターミナル、ローカルエディタ、別画面、コピペは不要です。code checkpoint は現在の
+エディタ内容を使います。直接回答は現在の deploy seed へ結び付くため、別 deploy からコピーした
+値は拒否されます。
 
 ## 採点
 

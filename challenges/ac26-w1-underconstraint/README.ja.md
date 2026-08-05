@@ -37,10 +37,10 @@ iszero_b:  value * out           = 0
 
 ## 遊び方
 
-Participant Portal で問題を起動し、表示された **Browser Workbench** を開きます。`inspect`、
-`policy.py` の編集、公開テスト、build / audit / exploit / repair / mutation-transfer の
-提出データ生成までブラウザ内で完結します。root-cause は Workbench に表示される形式の JSON を
-自分で組み立てて Portal へ入力します。ホスト側のターミナルや checkout のファイル操作は必要ありません。
+Participant Portal で問題を起動すると、`policy.py` のエディタが問題文と同じ画面に表示されます。
+証拠の確認、編集、公開テスト、build / audit / exploit / repair / mutation-transfer の提出まで Portal 内で
+完結します。root-cause は Portal に表示される形式の JSON を自分で組み立てて回答欄へ入力します。
+ホスト側のターミナルや checkout のファイル操作は必要ありません。
 
 リポジトリから直接作問・検証する場合だけ、問題ディレクトリで次を実行できます。
 
@@ -50,7 +50,7 @@ make test               # 公開テスト
 make reset              # starter/policy.py を元に戻す
 ```
 
-Workbench または checkout で編集するのは `local/starter/policy.py` の 1 ファイル、4 つの関数です。
+Portal のエディタまたは作問用 checkout で編集するのは `local/starter/policy.py` の 1 ファイル、4 つの関数です。
 `intended_circuit()`・`audit()`・`forge_witness()`・`repair()`。
 
 ## 採点

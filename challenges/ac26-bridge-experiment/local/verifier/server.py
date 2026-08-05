@@ -46,17 +46,11 @@ CHECKPOINTS = ("environment", "predict", "first-broken", "generalize")
 SUBMISSION_FILES = ("counter.py",)
 CODE_CHECKPOINTS = frozenset(("generalize",))
 CHECKPOINT_LABELS = {
-    "environment": "environment — Workbench が出す合言葉を、そのまま貼る",
+    "environment": "environment — Portal editor が出す合言葉を、そのまま貼る",
     "predict": "predict — 走らせる前に紙で出した、最後にいる数 (数はひとつ)",
     "first-broken": "first-broken — 並んだ数のうち、はみ出しているのは左から何番目？ (左端が 0)",
     "generalize": "generalize — 書き上げた counter.py の中身を、全部",
 }
-WORKBENCH_ASSETS = {
-    "/": ("index.html", "text/html; charset=utf-8"),
-    "/app.js": ("app.js", "text/javascript; charset=utf-8"),
-    "/styles.css": ("styles.css", "text/css; charset=utf-8"),
-}
-
 
 # Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still
 # reporting RLIM_INFINITY for it. Setting it anyway raises inside `preexec_fn`,
@@ -95,7 +89,7 @@ def _normalized_int(value: object) -> int | None:
 
 
 def starter_payload() -> dict[str, str]:
-    """Return the editable file shipped to the browser workbench."""
+    """Return the editable file shipped to the Portal editor."""
     return {
         name: (ROOT / "starter" / name).read_text(encoding="utf-8") for name in SUBMISSION_FILES
     }
@@ -159,7 +153,7 @@ def _submission_sources(files: object) -> dict[str, str] | None:
 def _run_submission_script(
     sources: dict[str, str], script: str, seed: str
 ) -> tuple[int, str] | None:
-    """Run browser-edited Python with the verifier's existing resource limits."""
+    """Run Portal-edited Python with the verifier's existing resource limits."""
     with tempfile.TemporaryDirectory() as workspace:
         for name, text in sources.items():
             (Path(workspace) / name).write_text(text, encoding="utf-8")
@@ -203,7 +197,7 @@ runpy.run_path({root!r} + "/tests/public/test_counter.py", run_name="__main__")
 
 
 def run_public_tests(seed: str, files: object) -> dict[str, object]:
-    """Run the same checks as `make test` against the browser-edited source."""
+    """Run the same checks as `make test` against the Portal-edited source."""
     sources = _submission_sources(files)
     if sources is None:
         return {"passed": False, "output": "counter.py must be a non-empty Python file."}
@@ -320,17 +314,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/starter":
             self._respond(200, starter_payload())
             return
-        asset = WORKBENCH_ASSETS.get(path)
-        if asset is None:
-            self._respond(404, {"error": "not found"})
-            return
-        filename, content_type = asset
-        try:
-            content = (ROOT / "workbench" / filename).read_bytes()
-        except OSError:
-            self._respond(404, {"error": "not found"})
-            return
-        self._respond_bytes(200, content, content_type)
+        self._respond(404, {"error": "not found"})
 
     def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's name
         path = urlsplit(self.path).path.rstrip("/") or "/"

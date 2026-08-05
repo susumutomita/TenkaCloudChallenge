@@ -34,7 +34,7 @@
   "estimatedDuration": "75-105 分",
   "shortDescription": "有限体上の楕円曲線の点が群をなすことを、例外ケースまで含めて実装で確かめる。toy 曲線の多くは (0, 0) を含むので、それを単位元に流用する実装は本物の点と単位元を区別できなくなる。",
   "description": "Week 3 の 2 問目。 前問で作った体の上に楕円曲線の群を組み、 point addition・doubling・scalar multiplication を例外ケースまで含めて実装する。\n\n本問題の toy 曲線は 7 つ中 6 つが b = 0 であり、 したがって **(0, 0) が曲線上の実在の点** (位数 2) である。 単位元を (0, 0) で代用する実装は、 この点と単位元を区別できなくなる。 misconception-infinity-is-zero-coordinate が仮定の話ではなく、 その場で観測できる欠陥になるよう曲線を選んである。 fixture 生成側は 「判別式が 0 でない」 と 「y = 0 の点が存在する」 の両方を満たす曲線だけを持つ (後者は垂直接線の分岐が到達可能であるために必要で、 満たさない候補は候補から外した)。\n\n曲線が小さい (点の数が 23〜47 程度) ため、 hidden test は標本ではなく全数を回す。 on-curve は p^2 通りの座標対すべてを分類し、 addition は相異なる点の全順序対、 doubling は全点、 group axioms は群全体で検査する。 「一般式は合っているが単位元 / P+(-P) / y=0 で壊れる」 実装に隠れる場所が無い。\n\ntrace checkpoint は各 step の accumulator が 「そこまでに消費した下位ビット × P」 に一致することを検査する。 ビット順を逆にする実装はここで落ちる。\n\n最後の checkpoint は secp256k1。 公開されている標準パラメータ上で同じ抽象がそのまま動くことを見る。 検査する関係は 「どこかから写した値と一致するか」 ではなく、 パラメータの定義から従うもの (G が曲線上にある、 n*G = O、 (n-1)*G = -G、 (k+m)G = kG + mG) だけにしてある。\n\nconstant-time 性や side-channel 耐性は主張しない。 double-and-add の trace はビットに依存して分岐し、 それ自体が実鍵では side-channel になる。",
-  "instructions": "## ブラウザで解く\n\nParticipant Portal で問題を起動し、表示された **Browser Workbench** を開きます。\nWorkbench の `inspect` で deploy 固有の fixture と公開された証拠を確認し、画面内の\nstarter エディタを修正して `test` を実行します。コード以外の checkpoint が表示された\n場合は、inspect と実験結果から回答欄を埋めます。最後に `prepare` を実行し、生成された\n値を Portal の同名 checkpoint へ貼り付けます。回答型が object / array / number の場合は\nJSON で入力してください。すべての操作は Workbench 内で完結します。\n\n`prepare` は直接回答をこの deploy の seed に結び付けます。このため、別の起動で作った\n提出値や概念名だけを記憶して入力した値では合格できません。\n",
+  "instructions": "## Participant Portal で解く\n\nParticipant Portal で問題を起動すると、問題文と同じ画面に問題エディタが表示されます。\n「証拠を調べる」で deploy 固有の fixture と公開された証拠を確認し、starter ソースを編集して\n「公開テストを実行」を押します。コード以外の checkpoint は、証拠と実験結果から回答欄を\n埋めてください。object / array / number は JSON で入力します。\n\n各 checkpoint の提出ボタンは、現在のエディタ内容と回答欄を container の prepare API へ送り、\n生成された値をそのまま採点へ渡します。画面を移動したり提出値をコピーしたりする必要はありません。\n直接回答はこの deploy の seed に結び付くため、別の起動で作った値や概念名の暗記だけでは合格できません。\n",
   "writeup": "## なぜ (0, 0) を単位元に使えないのか\n\nこの問題の toy 曲線は多くが b = 0 で、 その場合 (0, 0) は y^2 = x^3 + ax を満たす。 つまり曲線上の実在の点であり、 しかも y = 0 なので位数 2 の点である。 単位元をこの座標で代用すると、 その点と単位元が区別できなくなる。\n\n「無限遠点だから (0,0) でいいだろう」 は、 曲線を選べば本当に壊れる。 hidden test は (0, 0) が曲線上にある設定で、 それが単位元と等しくないことを名指しで検査する。\n\n## 4 つの場合分け\n\n加算は 1 つの式ではない。\n\n1. どちらかが単位元 → もう一方を返す\n2. x が同じで y が符号反転 → 単位元 (y = 0 の点の doubling を含む)\n3. 同じ点 → 接線の傾き (3x^2 + a) / 2y\n4. それ以外 → 弦の傾き (y2 - y1) / (x2 - x1)\n\n3 を 4 の特殊ケースとして書くと、 分子も分母も 0 になって割れない。 doubling が別式なのは効率のためではなく、 弦が定義できないからである。\n\n## 全数検査\n\n曲線が小さいので、 検査は標本ではなく全数で行う。 on-curve は p^2 通りの座標対すべて、 addition は相異なる点の全順序対、 doubling は全点、 group axioms は群全体。 一般ケースだけ合っている実装が隠れる場所は無い。\n\n## trace がビット順を捕まえる仕組み\n\ndouble-and-add は下位ビットから消費する。 step i の直後、 accumulator は 「下位 i+1 ビットが表す数 × P」 でなければならない。 trace checkpoint はこれを各行で検査するので、 上位ビットから消費する実装は最初の行で落ちる。 「最終結果だけ合っていればよい」 では通らない。\n\n## secp256k1 で何を検査しているか\n\n最後の checkpoint は公開標準パラメータ上で同じ抽象を動かす。 検査する関係は、 どこかから写した期待値との一致ではなく、 パラメータの定義から従うものだけにしてある。\n\n- G が曲線上にある\n- n は群の位数なので n*G = O\n- したがって (n-1)*G = -G、 (n+1)*G = G\n- (k+m)G = kG + mG\n\n写した値が 1 つも要らないので、 転記ミスや出所不明の定数が混入する余地が無い。\n\n## constant-time ではない\n\ndouble-and-add はビットに依存して分岐し、 加算の回数がビットの立ち方で変わる。 実鍵に対しては、 その性質そのものが side-channel になる。 ここでの目的はアルゴリズムを読めるようにすることであり、 production 実装の手本ではない。\n\n## 次につながるところ\n\n次の問題で Schnorr を組む。 署名の検証式は scalar multiplication と点加算だけでできており、 ここで作った群がそのまま土台になる。",
   "tags": [
     "advanced-cryptography-2026",
@@ -47,7 +47,7 @@
   "exposedPorts": [
     {
       "port": 18101,
-      "name": "Browser Workbench + /verify (loopback only)"
+      "name": "Portal editor API + /verify (loopback only)"
     }
   ],
   "learningGoals": [
@@ -283,10 +283,7 @@
     "verifyUrl": "http://127.0.0.1:18101/verify",
     "secretEnv": [
       "FLAG_SEED"
-    ],
-    "challengeEndpoints": {
-      "Browser Workbench": "http://127.0.0.1:18101/"
-    }
+    ]
   },
   "scoring": {
     "kind": "multi-verify",
@@ -386,7 +383,7 @@
     "en": {
       "name": "(0, 0) is not the point at infinity",
       "shortDescription": "Verify by building it that the points of an elliptic curve over a finite field form a group, exceptional cases included. Most of the toy curves here contain (0, 0), so an implementation that borrows it for the identity cannot tell the identity from a real point.",
-      "instructions": "## Solve in the browser\n\nStart the problem in the Participant Portal and open the **Browser Workbench** endpoint.\nUse `inspect` to read the deployment-specific fixture and published evidence, edit the\nstarter sources on the page, and run `test`. When direct-answer checkpoints are shown,\nderive their values from the evidence and your experiments. Run `prepare` and paste each\ngenerated value into the matching Portal checkpoint. Enter objects, arrays, and numbers as\nJSON. The complete participant journey stays inside the Workbench.\n\n`prepare` binds direct answers to this deployment's seed. A value prepared for another run,\nor a remembered concept name on its own, cannot earn credit.\n",
+      "instructions": "## Solve in Participant Portal\n\nStart the problem in Participant Portal. The problem editor appears on the same page as the\nstatement. Use **Inspect evidence** to read the deployment-specific fixture and published\nevidence, edit the starter sources, and select **Run public tests**. Fill any direct-answer\ncheckpoint from the evidence and your experiments; enter objects, arrays, and numbers as JSON.\n\nEach checkpoint's submit button sends the current editor files and answer fields through the\ncontainer prepare API, then submits the generated value directly for scoring. There is no second\nscreen and no submission value to copy. Direct answers are bound to this deployment's seed, so a\nvalue prepared for another run, or a remembered concept name on its own, cannot earn credit.\n",
       "writeup": "## Why (0, 0) cannot be the identity\n\nMost of the toy curves here have b = 0, and then (0, 0) satisfies y^2 = x^3 + ax. It is a real point on the curve, and since y = 0 it has order two. Borrow that coordinate for the identity and the two become indistinguishable.\n\n\"It is the point at infinity, so (0, 0) will do\" genuinely breaks on the right curve. The hidden tests pick curves where (0, 0) is on the curve and check by name that it does not compare equal to the identity.\n\n## Four cases, not one formula\n\n1. either side is the identity, so return the other;\n2. same x, opposite y, so the result is the identity (this includes doubling a point with y = 0);\n3. the same point, so the slope is the tangent's, (3x^2 + a) / 2y;\n4. anything else, so the slope is the chord's, (y2 - y1) / (x2 - x1).\n\nWriting case 3 as a special case of case 4 gives 0/0. Doubling has its own formula not for speed but because the chord is not defined there.\n\n## Exhaustive, not sampled\n\nThe curves are small, so the checks are exhaustive: every coordinate pair is classified, every ordered pair of distinct points is added, every point is doubled, and the group axioms are checked over the whole group. There is nowhere for an implementation that only handles the generic case to hide.\n\n## How the trace catches bit order\n\nDouble-and-add consumes bits least significant first. Immediately after step i, the accumulator must equal the number formed by the low i+1 bits, times P. The trace checkpoint verifies that on every row, so an implementation consuming bits the other way fails on the first one. Getting only the final answer right is not enough.\n\n## What the secp256k1 checkpoint actually checks\n\nThe last checkpoint runs the same abstraction over the published standard parameters. Every relation it checks follows from the definition of those parameters rather than matching a value copied from somewhere:\n\n- G is on the curve;\n- n is the group's order, so n*G is the identity;\n- therefore (n-1)*G = -G and (n+1)*G = G;\n- (k+m)G = kG + mG.\n\nNo transcribed expected value is needed, so no mistyped or unsourced constant can creep in.\n\n## Not constant-time\n\nDouble-and-add branches on the scalar's bits, and how many additions it performs depends on how those bits fall. Against a real key that property is itself a side channel. The goal here is a legible algorithm, not a model for production.\n\n## Where this leads\n\nThe next problem builds Schnorr. Its verification equation is nothing but scalar multiplication and point addition, so this group is the floor it stands on.",
       "learningGoals": [
         "Decide whether a point is on the curve",
@@ -409,7 +406,7 @@
           "hints": [
             {
               "id": "identity-hint-1",
-              "content": "Is (0, 0) in the point list Workbench `inspect` printed? If it is, what happens when you use it as the identity?"
+              "content": "Is (0, 0) in the point list Portal editor `inspect` printed? If it is, what happens when you use it as the identity?"
             }
           ]
         },

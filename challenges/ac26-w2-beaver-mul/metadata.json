@@ -28,7 +28,7 @@
   "estimatedDuration": "40-60 分",
   "shortDescription": "shared 値同士の掛け算だけは手元で終わらない。前処理で作った三つ組を使って、通信を 1 round に押し込む。最後の項が他の 3 つと違う扱いを要求する。",
   "description": "Week 2 の 3 問目。 前問で引いた 「通信が要る操作 / 要らない操作」 の境界を受け、 唯一残った乗算を Beaver triple で処理する。\n\n前処理で c = a*b を満たす三つ組 (a, b, c) を share しておくと、 入力に依存しない準備だけで乗算が\n\n    d = x - a,  e = y - b   (local)\n    open d, open e          (1 round)\n    x*y = c + d*b + e*a + d*e\n\nに分解できる。 前 3 項は share に対して線形なので各 party が自分の行を計算するだけで済むが、 d*e は protocol の途中で現れる公開定数であり、 1 party だけが畳み込む。 全員が足すと x*y + (n-1)*d*e の share になる。 これは ac26-w2-linear-shares の add-constant と同じ規則が、 見落としやすい位置で再登場したもの。\n\nこの誤りは d か e が 0 の設定では正解と区別できないため、 fixture 生成側で d != 0 かつ e != 0 を強制している (観測可能性のための選択であり、 実運用の mask 分布ではない)。 hidden test は誤答の総和を名指しで落とす。\n\nWeek 2 の教材は pinned commit 時点で未公開のため courseAlignment.sources は持たず、 status は draft のままにする (#219 が公開を検出した時点で確定する)。",
-  "instructions": "## ブラウザで解く\n\nParticipant Portal で問題を起動し、表示された **Browser Workbench** を開きます。\nWorkbench の `inspect` で deploy 固有の fixture と公開された証拠を確認し、画面内の\nstarter エディタを修正して `test` を実行します。コード以外の checkpoint が表示された\n場合は、inspect と実験結果から回答欄を埋めます。最後に `prepare` を実行し、生成された\n値を Portal の同名 checkpoint へ貼り付けます。回答型が object / array / number の場合は\nJSON で入力してください。すべての操作は Workbench 内で完結します。\n\n`prepare` は直接回答をこの deploy の seed に結び付けます。このため、別の起動で作った\n提出値や概念名だけを記憶して入力した値では合格できません。\n",
+  "instructions": "## Participant Portal で解く\n\nParticipant Portal で問題を起動すると、問題文と同じ画面に問題エディタが表示されます。\n「証拠を調べる」で deploy 固有の fixture と公開された証拠を確認し、starter ソースを編集して\n「公開テストを実行」を押します。コード以外の checkpoint は、証拠と実験結果から回答欄を\n埋めてください。object / array / number は JSON で入力します。\n\n各 checkpoint の提出ボタンは、現在のエディタ内容と回答欄を container の prepare API へ送り、\n生成された値をそのまま採点へ渡します。画面を移動したり提出値をコピーしたりする必要はありません。\n直接回答はこの deploy の seed に結び付くため、別の起動で作った値や概念名の暗記だけでは合格できません。\n",
   "writeup": "## 前処理が何を動かしたか\n\nBeaver triple (a, b, c) は c = a*b を満たすだけで、 x にも y にも依存しない。 だから event の前に、 あるいは暇な時間に、 いくらでも作り置きできる。 online phase に残るのは masking (local) と d, e の open (1 round) と線形結合 (local) だけになる。 乗算の総コストが消えたのではなく、 入力に依存しない部分が offline へ移った。\n\n## なぜ d と e を公開してよいのか\n\nd = x - a の a は前処理で作られた一様な値で、 誰も clear では持っていない。 だから d は x を one-time mask で隠したものであり、 公開しても x は漏れない。 triple を 2 回使い回すと同じ a が 2 つの秘密を隠すことになり、 この性質は壊れる。 三つ組が 1 回の乗算ごとに 1 つ必要なのはこのためで、 offline のコストがそのまま乗算回数に比例する。\n\n## 最後の項\n\nc + d*b + e*a までは share に対して線形なので、 各 party が自分の行を計算すればよい。 d*e だけは share ではなく公開されたスカラーで、 1 party だけが畳み込む。 全員が足すと総和は x*y + (n-1)*d*e になる。 前問の add-constant とまったく同じ規則だが、 protocol の途中に現れるぶん見落としやすい。\n\nこの誤りは n=1 では正解と一致し、 d か e が 0 の設定でも一致する。 hidden test の fixture が d != 0, e != 0 を強制しているのは、 誤答が観測できない設定を排除するため。 観測可能性のための選択であり、 実際の mask 分布ではない。\n\n## round 数\n\nd と e は同時に open できるので、 1 回の Beaver 乗算に必要な通信は 1 round。 0 ではない — 前処理は round を 0 にはしない。 深さ D の乗算回路は D round になり、 これが MPC の遅延がゲート数ではなく乗算深さで決まる理由になる。\n\n## 次につながるところ\n\n乗算が組めたことで、 任意の算術回路が MPC で評価できるようになった。 残るのは 「何を公開すると何が漏れるか」 で、 それが Week 2 の最後の 2 問。",
   "tags": [
     "advanced-cryptography-2026",
@@ -41,7 +41,7 @@
   "exposedPorts": [
     {
       "port": 18097,
-      "name": "Browser Workbench + /verify (loopback only)"
+      "name": "Portal editor API + /verify (loopback only)"
     }
   ],
   "learningGoals": [
@@ -207,10 +207,7 @@
     "verifyUrl": "http://127.0.0.1:18097/verify",
     "secretEnv": [
       "FLAG_SEED"
-    ],
-    "challengeEndpoints": {
-      "Browser Workbench": "http://127.0.0.1:18097/"
-    }
+    ]
   },
   "scoring": {
     "kind": "multi-verify",
@@ -275,7 +272,7 @@
     "en": {
       "name": "Multiplication is the one that has to talk",
       "shortDescription": "Multiplying two shared values is the one thing that cannot finish locally. A triple made in advance pushes the talking down to a single round — and the last of the four terms wants different treatment from the other three.",
-      "instructions": "## Solve in the browser\n\nStart the problem in the Participant Portal and open the **Browser Workbench** endpoint.\nUse `inspect` to read the deployment-specific fixture and published evidence, edit the\nstarter sources on the page, and run `test`. When direct-answer checkpoints are shown,\nderive their values from the evidence and your experiments. Run `prepare` and paste each\ngenerated value into the matching Portal checkpoint. Enter objects, arrays, and numbers as\nJSON. The complete participant journey stays inside the Workbench.\n\n`prepare` binds direct answers to this deployment's seed. A value prepared for another run,\nor a remembered concept name on its own, cannot earn credit.\n",
+      "instructions": "## Solve in Participant Portal\n\nStart the problem in Participant Portal. The problem editor appears on the same page as the\nstatement. Use **Inspect evidence** to read the deployment-specific fixture and published\nevidence, edit the starter sources, and select **Run public tests**. Fill any direct-answer\ncheckpoint from the evidence and your experiments; enter objects, arrays, and numbers as JSON.\n\nEach checkpoint's submit button sends the current editor files and answer fields through the\ncontainer prepare API, then submits the generated value directly for scoring. There is no second\nscreen and no submission value to copy. Direct answers are bound to this deployment's seed, so a\nvalue prepared for another run, or a remembered concept name on its own, cannot earn credit.\n",
       "writeup": "## What the preprocessing actually moved\n\nA Beaver triple (a, b, c) only has to satisfy c = a*b. It depends on neither x nor y, so it can be manufactured before the event, or in any idle stretch. What remains online is masking (local), opening d and e (one round), and a linear combination (local). The cost of multiplication did not disappear; the input-independent part of it moved offline.\n\n## Why d and e are safe to publish\n\nThe a in d = x - a is a uniform value made during preprocessing that nobody holds in the clear. So d is x under a one-time mask, and publishing it reveals nothing about x. Reuse the triple and the same a masks two different secrets, at which point that property is gone. That is why each multiplication consumes its own triple, and why the offline cost scales with the number of multiplications.\n\n## The last term\n\nc + d*b + e*a is linear in the shares, so each party computes its own row. d*e is not a sharing at all — it is a public scalar, and exactly one party folds it in. If every party adds it, the set sums to x*y + (n-1)*d*e. It is the same rule as adding a public constant in the previous problem, arriving mid-protocol where it is far easier to miss.\n\nThat mistake is indistinguishable from correct at n = 1, and also whenever d or e happens to be zero. The hidden fixtures force d != 0 and e != 0 precisely so the wrong answer stays observable. That is a choice made for observability, not a realistic mask distribution.\n\n## The round count\n\nd and e can be opened together, so one Beaver multiplication costs one round of communication. Not zero — preprocessing does not buy silence. A multiplication circuit of depth D costs D rounds, which is why MPC latency tracks multiplicative depth rather than gate count.\n\n## Where this leads\n\nWith multiplication in hand, any arithmetic circuit can be evaluated under MPC. What is left is which openings leak what, and that is the last two problems of Week 2.",
       "learningGoals": [
         "Mask a secret with a preprocessed value and open the difference safely",

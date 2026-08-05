@@ -63,7 +63,8 @@ counter policy are outside this problem.
 
 ## Run it
 
-Use the Browser Workbench from the Participant Portal, or locally:
+Start the problem in Participant Portal and use the editor on the problem page. Authors can also
+run the same checks locally:
 
 ```bash
 make inspect
@@ -80,8 +81,8 @@ Complete these functions in `local/starter/assertion.py`:
 4. `find_signed_without_user_verification` — select by properties, not by `caseId` or order.
 5. `verify_assertion` — return one specific verdict after context, UV-policy and signature checks.
 
-`prepare` produces the same source for all three independently graded checkpoints:
-`signature`, `find-uv-gap`, and `enforce-uv`.
+Portal submits the current source independently for all three graded checkpoints: `signature`,
+`find-uv-gap`, and `enforce-uv`.
 
 ## Why this maps to a real incident
 

@@ -36,9 +36,9 @@ member   product over allowed of (signal - a)
 
 ## How to play
 
-Start the problem from the Participant Portal and open the **Browser Workbench** endpoint.
-`inspect`, editing the three files, the public tests, and the residuals / boolean / membership /
-transfer submission values all live in the browser. The first-broken answer is the first violated
+Start the problem from Participant Portal. The three-file editor appears on the same page.
+Inspect the evidence, edit the files, run the public tests, and submit residuals / boolean /
+membership / transfer there. The first-broken answer is the first violated
 constraint's id **and its non-zero residual**, read from the broken witness's trace and entered as
 JSON in the Portal. No host terminal or checkout editing is required.
 
@@ -51,7 +51,7 @@ make test-one ID=trace    # iterate on one of them
 make reset                # restore all three starter files
 ```
 
-In the Workbench or the checkout you edit three files: `local/starter/field.py` (arithmetic in
+In the Portal editor or author checkout you edit three files: `local/starter/field.py` (arithmetic in
 `F_p`), `local/starter/circuit.py` (residuals and traces), `local/starter/gadgets.py` (turning a
 condition into constraints).
 

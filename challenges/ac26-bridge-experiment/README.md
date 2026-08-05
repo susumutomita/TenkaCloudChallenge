@@ -85,9 +85,9 @@ someone else's run is worthless.
 
 ## How to play
 
-Start the problem from the Participant Portal and open the **Browser Workbench** endpoint.
-Everything lives in the browser: `inspect`, editing `counter.py`, the public tests, and
-`prepare`. No host terminal or checkout editing is required.
+Start the problem from Participant Portal. Its editor appears on the same page as the statement.
+Inspect the evidence, edit `counter.py`, and run the public tests there. No host terminal or
+checkout editing is required.
 
 `inspect` is the name of the command that shows you evidence. None of the boxes you fill in is
 called that, so when this document says `inspect` it always means the command.
@@ -112,16 +112,16 @@ make reset               # restore starter/counter.py
 
 Four boxes, marked independently. Wrong answers cost 5 points each.
 
-Two of the four values are produced for you by the Workbench's `prepare`; you copy them across.
-The other two you work out yourself and type straight into the Portal — nothing in the problem
-will compute them for you, and that is deliberate.
+Portal prepares and submits two of the four values from the current editor state. You work out
+the other two and type them directly into their answer fields — nothing in the problem computes
+them for you, and that is deliberate.
 
 | Box | Points | Where the value comes from | What you write |
 |---|---:|---|---|
-| `environment` | 20 | `prepare` | The pass phrase, exactly as printed |
+| `environment` | 20 | Portal | The pass phrase, exactly as printed |
 | `predict` | 25 | **you, by hand** | The number you end on, as one number — worked out **before** you run anything |
 | `first-broken` | 25 | **you, by hand** | Which position holds the number that does not belong, counting from 0 at the left |
-| `generalize` | 30 | `prepare` | Your whole `counter.py`, run against numbers you have not seen |
+| `generalize` | 30 | Portal | Your whole `counter.py`, run against numbers you have not seen |
 
 Hints are available on `first-broken` (10) and `generalize` (10, then 5). Opening every hint
 still leaves you 75 of 100.

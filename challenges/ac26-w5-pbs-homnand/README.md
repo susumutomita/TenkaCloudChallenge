@@ -93,29 +93,17 @@ way the noise fell, which is the worst kind of defect and is described further d
 The trace is matched by artifact digest for the same reason: a digest cannot be filled in
 from the final answer.
 
-## Browser workflow
+## Participant Portal workflow
 
-1. Start the problem in Participant Portal and open **Browser Workbench**.
-2. Run `inspect` to read this deployment's fixture and published evidence.
-3. Edit the starter source in the in-browser editor.
-4. Run `test` for the published checks and fill any direct-answer fields from the evidence.
-5. Run `prepare`, then paste every prepared checkpoint value into Participant Portal.
+1. Start the problem in Participant Portal; the problem editor appears on the same page.
+2. Select **Inspect evidence** to read this deployment's fixture and published evidence.
+3. Edit the starter source in the Portal editor.
+4. Select **Run public tests** and fill any direct-answer fields from the evidence.
+5. Submit each checkpoint directly. Portal prepares and sends the current files and answers.
 
-No checkout, terminal, or local editor is required. Code checkpoints submit the edited source.
-Direct answers are wrapped by `prepare` and bound to the current deployment seed, so a value copied
-from another deployment is rejected.
-
-## How to play
-
-```bash
-Workbench `inspect`                     # the identity table on m = 1 — the least informative run
-Workbench `inspect` F=always-one        # identity, negate, always-zero, always-one
-Workbench `inspect` F=always-one M=0    # the other message, where the wrap fires
-Browser Workbench `test`                    # public tests
-reload the starter                   # restore starter/pipeline.py
-```
-
-You edit one file, the Workbench editor (`pipeline.py`).
+No checkout, terminal, local editor, second screen, or copy-and-paste step is required. Code
+checkpoints use the current editor source. Direct answers are bound to the current deployment
+seed, so a value copied from another deployment is rejected.
 
 ## Scoring
 

@@ -87,16 +87,17 @@ design review の代わりにならないことを 1 つの deployment で言い
 checkpoint が「すべての contract が成立する」ことと「すべての部品が渡されたものを実行できる」
 ことを別々に要求する理由でもあります。
 
-## ブラウザでの進め方
+## Participant Portal での進め方
 
-1. Participant Portal で問題を起動し、**Browser Workbench** を開く。
-2. `inspect` でこの deploy 固有の fixture と公開された証拠を読む。
-3. 画面内のエディタで starter のソースを編集する。
-4. `test` で公開テストを実行し、直接回答欄があれば証拠から埋める。
-5. `prepare` で全 checkpoint の提出値を作り、Participant Portal へ貼る。
+1. Participant Portal で問題を起動する。同じ画面に問題エディタが表示される。
+2. **証拠を調べる**で、この deploy 固有の fixture と公開された証拠を読む。
+3. Portal のエディタで starter のソースを編集する。
+4. **公開テストを実行**を押し、直接回答欄があれば証拠から埋める。
+5. 各 checkpoint をそのまま提出する。Portal が現在のファイルと回答を準備して送る。
 
-checkout、ターミナル、ローカルエディタは不要です。code checkpoint は編集したソースを提出します。
-直接回答は `prepare` が現在の deploy seed へ結び付けるため、別 deploy からコピーした値は拒否されます。
+checkout、ターミナル、ローカルエディタ、別画面、コピペは不要です。code checkpoint は現在の
+エディタ内容を使います。直接回答は現在の deploy seed へ結び付くため、別 deploy からコピーした
+値は拒否されます。
 
 ## 採点
 

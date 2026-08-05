@@ -166,10 +166,10 @@ def evaluate(checkpoint_id: str, submission: object) -> bool:
         return _run_submission(submission, CODE_CHECKPOINTS[checkpoint_id], seed)
     return False
 
-# BEGIN GENERATED BROWSER WORKBENCH
-from verifier.workbench import WorkbenchSupport
+# BEGIN GENERATED PORTAL EDITOR API
+from verifier.workbench import PortalEditorSupport
 
-_WORKBENCH = WorkbenchSupport(
+_WORKBENCH = PortalEditorSupport(
     root=ROOT,
     seed=SEED,
     problem_id='ac26-w2-linear-shares',
@@ -184,10 +184,10 @@ _WORKBENCH = WorkbenchSupport(
     max_output_bytes=MAX_OUTPUT_BYTES,
     limit_fn=_limits,
 )
-# END GENERATED BROWSER WORKBENCH
+# END GENERATED PORTAL EDITOR API
 
 class Handler(BaseHTTPRequestHandler):
-    """Serve the Browser Workbench and preserve the existing /verify contract."""
+    """Serve the Portal editor API and preserve the existing /verify contract."""
 
     timeout = REQUEST_TIMEOUT_SECONDS
 
@@ -204,12 +204,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/starter":
             self._respond(200, _WORKBENCH.starter_payload())
             return
-        asset = _WORKBENCH.asset(path)
-        if asset is None:
-            self._respond(404, {"error": "not found"})
-            return
-        content, content_type = asset
-        self._respond_bytes(200, content, content_type)
+        self._respond(404, {"error": "not found"})
 
     def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's API
         from urllib.parse import urlsplit

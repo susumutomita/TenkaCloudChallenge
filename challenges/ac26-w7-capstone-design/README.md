@@ -18,44 +18,17 @@ It names no primitive. Not one.
 That is the exercise. Begin a design at "should this be ZK or MPC" and you will get an answer;
 whether the answer fits the problem is a separate question, usually asked too late.
 
-## Browser workflow
+## Participant Portal workflow
 
-1. Start the problem in Participant Portal and open **Browser Workbench**.
-2. Run `inspect` to read this deployment's fixture and published evidence.
-3. Edit the starter source in the in-browser editor.
-4. Run `test` for the published checks and fill any direct-answer fields from the evidence.
-5. Run `prepare`, then paste every prepared checkpoint value into Participant Portal.
+1. Start the problem in Participant Portal; the problem editor appears on the same page.
+2. Select **Inspect evidence** to read this deployment's fixture and published evidence.
+3. Edit the starter source in the Portal editor.
+4. Select **Run public tests** and fill any direct-answer fields from the evidence.
+5. Submit each checkpoint directly. Portal prepares and sends the current files and answers.
 
-No checkout, terminal, or local editor is required. Code checkpoints submit the edited source.
-Direct answers are wrapped by `prepare` and bound to the current deployment seed, so a value copied
-from another deployment is rejected.
-
-## Three things the checkpoints turn on
-
-**Privacy and zero knowledge are different columns.** The lender must not see the balance — but
-the lender does not take part in the computation, it only reads the answer. That is not "hide it
-from the party doing the work" (privacy); it is "get somebody to believe a value they did not
-compute" (soundness), and zero knowledge enters only when the value they must believe is derived
-from the value you are hiding. Soundness alone is an ordinary signature.
-
-**Minimality.** Drop one option from your selection. If the requirements are still covered, that
-option was doing nothing — and it is not free: it adds an assumption, a surface, and something
-more to explain. One of the six briefs requires no cryptography at all.
-
-**`non_goals` is not decoration.** FHE does not remove key management: somebody holds the
-decryption key and stays an actor in the threat model. MPC does not remove the collusion
-assumption; it relocates it. A ZK proof does not hide the public inputs. Check `PRIMITIVES`
-before making a component responsible for something.
-
-## How to play
-
-```bash
-Workbench `inspect`            # your brief, and the same brief after one fact moves
-Browser Workbench `test`               # public tests
-reload the starter              # restore starter/design.py
-```
-
-You edit one file, the Workbench editor (`design.py`).
+No checkout, terminal, local editor, second screen, or copy-and-paste step is required. Code
+checkpoints use the current editor source. Direct answers are bound to the current deployment
+seed, so a value copied from another deployment is rejected.
 
 ## Scoring
 

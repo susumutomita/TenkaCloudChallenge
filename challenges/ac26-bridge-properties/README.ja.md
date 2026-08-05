@@ -31,9 +31,9 @@ a*w + b == c (mod p) かつ lo <= w <= hi を満たす w を知っている
 
 ## 遊び方
 
-Participant Portal で問題を起動し、表示された **Browser Workbench** を開きます。理論説明、
-`inspect`、2 ファイルの編集、公開テスト、5 checkpoint の提出データ生成までブラウザ内で完結します。
-ホスト側のターミナルや checkout のファイル操作は必要ありません。
+Participant Portal で問題を起動すると、理論説明と 2 つのエディタが問題文と同じ画面に表示されます。
+証拠の確認、編集、公開テスト、5 checkpoint の提出まで Portal 内で完結します。ホスト側のターミナルや
+checkout のファイル操作は必要ありません。
 
 リポジトリから直接作問・検証する場合だけ、問題ディレクトリで次を実行できます。
 
@@ -44,7 +44,7 @@ make test-one ID=classify       # 1 つだけ再実行する
 make reset                      # starter 2 ファイルを元に戻す
 ```
 
-Workbench または checkout で編集するのは 2 ファイルです。
+Portal のエディタまたは作問用 checkout で編集するのは 2 ファイルです。
 
 - `local/starter/classify.py` — 各 verifier は complete か。sound か。private か。
 - `local/starter/counterexamples.py` — `False` と書いた性質をすべて証明する。

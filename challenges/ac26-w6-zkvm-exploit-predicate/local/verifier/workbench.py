@@ -1,8 +1,8 @@
-"""Shared stdlib-only support used by this challenge's Browser Workbench.
+"""Shared stdlib-only support used by this challenge's Portal editor API.
 
 This module never decides whether a checkpoint is correct. The existing ``evaluate``
 function remains the only grading seam. It serves authored evidence, runs the public
-suite against browser-edited files in a throwaway copy, formats Portal submissions, and
+suite against Portal-edited files in a throwaway copy, formats Portal submissions, and
 binds direct-answer submissions to this deployment's seed.
 """
 
@@ -21,13 +21,7 @@ from pathlib import Path
 from typing import Callable
 
 
-class WorkbenchSupport:
-    ASSETS = {
-        "/": ("index.html", "text/html; charset=utf-8"),
-        "/app.js": ("app.js", "text/javascript; charset=utf-8"),
-        "/styles.css": ("styles.css", "text/css; charset=utf-8"),
-    }
-
+class PortalEditorSupport:
     def __init__(
         self,
         *,
@@ -84,17 +78,6 @@ class WorkbenchSupport:
             for name in self.submitted_files
         }
 
-    def asset(self, request_path: str) -> tuple[bytes, str] | None:
-        asset = self.ASSETS.get(request_path)
-        if asset is None:
-            return None
-        filename, content_type = asset
-        try:
-            content = (self.root / "workbench" / filename).read_bytes()
-        except OSError:
-            return None
-        return content, content_type
-
     def inspect_payload(self) -> dict[str, object]:
         show = self.root / "show.py"
         if not show.exists():
@@ -140,7 +123,7 @@ class WorkbenchSupport:
         if sources is None:
             return {
                 "passed": False,
-                "output": "Every Workbench editor must contain a non-empty source file.",
+                "output": "Every Portal editor must contain a non-empty source file.",
             }
         with tempfile.TemporaryDirectory() as temp_directory:
             copied_root = Path(temp_directory) / "problem"
@@ -148,7 +131,7 @@ class WorkbenchSupport:
                 self.root,
                 copied_root,
                 ignore=shutil.ignore_patterns(
-                    "__pycache__", "*.pyc", "reference", "mutation.py", "workbench"
+                    "__pycache__", "*.pyc", "reference", "mutation.py"
                 ),
             )
             for name, source in sources.items():
@@ -193,7 +176,7 @@ class WorkbenchSupport:
         if sources is None:
             return {
                 "ok": False,
-                "output": "Every Workbench editor must contain a non-empty source file.",
+                "output": "Every Portal editor must contain a non-empty source file.",
             }
         manual_values = manual if isinstance(manual, dict) else {}
         missing = [

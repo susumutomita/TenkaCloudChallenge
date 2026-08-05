@@ -4,9 +4,9 @@ import { describe, expect, it } from "bun:test";
 
 const ROOT = join(import.meta.dir, "..");
 
-describe("course Browser Workbench contract", () => {
+describe("course Portal editor API contract", () => {
   it(
-    "keeps all 29 AC26 and SHA-256 problems solvable from the Participant Portal",
+    "keeps all 34 AC26 and SHA-256 problems solvable from the Participant Portal",
     () => {
       // The Python contract includes one-line, deployment-bound submission envelopes
       // for code and direct-answer checkpoints, plus raw-source backward compatibility.
@@ -18,7 +18,7 @@ describe("course Browser Workbench contract", () => {
       });
 
       expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
-      expect(result.stdout).toContain("29 Browser Workbench contracts passed");
+      expect(result.stdout).toContain("34 Portal editor API contracts passed");
     },
     600_000,
   );

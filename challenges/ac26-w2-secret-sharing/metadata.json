@@ -28,7 +28,7 @@
   "estimatedDuration": "40-60 分",
   "shortDescription": "秘密を n 個に分けて配る。足せば戻る。それだけなら暗号ではない。n-1 個を持っていても何も分からないことを、証拠で示す。",
   "description": "Week 2 の mechanism 問題。 加法的秘密分散を F_p 上で実装する。 足し算で戻ることは数行で書けるので、 checkpoint はそこではなく「n-1 個では何も分からない」という性質を実行可能な形で示させることに置く。\n\nhides-the-secret checkpoint は participant の complete_shares を field の全要素に対して回す。 同じ n-1 個の share から、 どの秘密に対しても辻褄の合う最後の 1 個を作れるなら、 その n-1 個は秘密について 何の証拠でもない。 これが「漏れない」の実行可能な定義になる。\n\nthreshold checkpoint は必要数を答えるだけでは通らない。 同じ n-1 個と両立する相異なる 2 つの秘密を 提出させる。 数を当てるのは推測でできるが、 2 つの証人は理解がないと作れない。\n\nhidden test は starter の自明な分割 (party 0 に秘密をそのまま渡す) を明示的に落とす。 round trip だけを見る test はこれを通してしまい、 それは分散になっていない。\n\nWeek 2 の教材は pinned commit 時点で未公開のため courseAlignment.sources は持たない (schema は この場合のために sources を任意にしている)。 #219 が公開を検出した時点で対応づけを確定する。 status は draft のままにする。",
-  "instructions": "## ブラウザで解く\n\nParticipant Portal で問題を起動し、表示された **Browser Workbench** を開きます。\nWorkbench の `inspect` で deploy 固有の fixture と公開された証拠を確認し、画面内の\nstarter エディタを修正して `test` を実行します。コード以外の checkpoint が表示された\n場合は、inspect と実験結果から回答欄を埋めます。最後に `prepare` を実行し、生成された\n値を Portal の同名 checkpoint へ貼り付けます。回答型が object / array / number の場合は\nJSON で入力してください。すべての操作は Workbench 内で完結します。\n\n`prepare` は直接回答をこの deploy の seed に結び付けます。このため、別の起動で作った\n提出値や概念名だけを記憶して入力した値では合格できません。\n",
+  "instructions": "## Participant Portal で解く\n\nParticipant Portal で問題を起動すると、問題文と同じ画面に問題エディタが表示されます。\n「証拠を調べる」で deploy 固有の fixture と公開された証拠を確認し、starter ソースを編集して\n「公開テストを実行」を押します。コード以外の checkpoint は、証拠と実験結果から回答欄を\n埋めてください。object / array / number は JSON で入力します。\n\n各 checkpoint の提出ボタンは、現在のエディタ内容と回答欄を container の prepare API へ送り、\n生成された値をそのまま採点へ渡します。画面を移動したり提出値をコピーしたりする必要はありません。\n直接回答はこの deploy の seed に結び付くため、別の起動で作った値や概念名の暗記だけでは合格できません。\n",
   "writeup": "## 足せば戻ることは、まだ何でもない\n\n加法的秘密分散の算術は数行で終わる。 価値があるのは「n-1 個では秘密について何も分からない」ほうで、 これは主張ではなく示すものだ。\n\n## 「漏れない」の実行可能な定義\n\n同じ n-1 個の share から、 field のどの秘密に対しても辻褄の合う 最後の 1 個を作れるなら、 その n-1 個は秘密の証拠になっていない。 complete_shares が全要素で成功する ことがそのまま証明になる。 これが Week 6 の over-opening (途中で share を開けてしまう) を 「なぜまずいか」で語れるようになる土台になる。\n\n## 自明な分割は分散ではない\n\nparty 0 に秘密をそのまま渡し、 残りを 0 にすれば足し算は合う。 round trip test は通る。 だが party 0 は最初から全部知っている。 hidden test がこれを明示的に落とすのは、 「テストが通る」と「性質が成り立つ」の差がこの問題でも同じ形で現れるからだ。\n\n## rerandomize\n\n和が 0 になる offset を足すと、 秘密は変わらないまま share は全部動く。 実プロトコルでは、 同じ share 集合がラウンドを跨いで結び付けられないようにするために使う。 固定の期待値ではなく「秘密が保たれ、 かつ全要素が動いた」という関係で検査している。",
   "tags": [
     "advanced-cryptography-2026",
@@ -42,7 +42,7 @@
   "exposedPorts": [
     {
       "port": 18095,
-      "name": "Browser Workbench + /verify (loopback only)"
+      "name": "Portal editor API + /verify (loopback only)"
     }
   ],
   "learningGoals": [
@@ -189,10 +189,7 @@
     "verifyUrl": "http://127.0.0.1:18095/verify",
     "secretEnv": [
       "FLAG_SEED"
-    ],
-    "challengeEndpoints": {
-      "Browser Workbench": "http://127.0.0.1:18095/"
-    }
+    ]
   },
   "scoring": {
     "kind": "multi-verify",
@@ -258,7 +255,7 @@
     "en": {
       "name": "Split it, and still nobody knows",
       "shortDescription": "Split a secret across n parties. Add them up and it comes back. If that were all, it would not be cryptography. Show, with evidence, that holding n-1 of them tells you nothing.",
-      "instructions": "## Solve in the browser\n\nStart the problem in the Participant Portal and open the **Browser Workbench** endpoint.\nUse `inspect` to read the deployment-specific fixture and published evidence, edit the\nstarter sources on the page, and run `test`. When direct-answer checkpoints are shown,\nderive their values from the evidence and your experiments. Run `prepare` and paste each\ngenerated value into the matching Portal checkpoint. Enter objects, arrays, and numbers as\nJSON. The complete participant journey stays inside the Workbench.\n\n`prepare` binds direct answers to this deployment's seed. A value prepared for another run,\nor a remembered concept name on its own, cannot earn credit.\n",
+      "instructions": "## Solve in Participant Portal\n\nStart the problem in Participant Portal. The problem editor appears on the same page as the\nstatement. Use **Inspect evidence** to read the deployment-specific fixture and published\nevidence, edit the starter sources, and select **Run public tests**. Fill any direct-answer\ncheckpoint from the evidence and your experiments; enter objects, arrays, and numbers as JSON.\n\nEach checkpoint's submit button sends the current editor files and answer fields through the\ncontainer prepare API, then submits the generated value directly for scoring. There is no second\nscreen and no submission value to copy. Direct answers are bound to this deployment's seed, so a\nvalue prepared for another run, or a remembered concept name on its own, cannot earn credit.\n",
       "writeup": "## Adding up to the secret is not yet anything\n\nThe arithmetic of additive sharing takes a few lines. What makes it worth anything is that n-1 shares carry no information about the secret — and that is something to demonstrate, not assert.\n\n## An executable definition of 'it does not leak'\n\nIf, holding the same n-1 shares, you can produce a consistent final share for *every* secret in the field, then those n-1 shares are not evidence about the secret. `complete_shares` succeeding across the whole field is the proof. That is the footing for talking about Week 6's over-opening in terms of why it is bad, rather than as a rule.\n\n## A trivial split is not a sharing\n\nHand the secret to party 0 and give everyone else zero: the sum still works and the round-trip test still passes. Party 0 knew everything from the start. The hidden tests reject that case explicitly, because the gap between 'the test passes' and 'the property holds' shows up here in the same shape as everywhere else in this track.\n\n## Rerandomizing\n\nAdd a set of offsets summing to zero and the secret is unchanged while every share moves. Real protocols use this so a set of shares cannot be linked across rounds. It is checked as a relation — secret preserved, every element moved — not against a fixed expected list.",
       "learningGoals": [
         "Implement additive secret sharing over a finite field",
