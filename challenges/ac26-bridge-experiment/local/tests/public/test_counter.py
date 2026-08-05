@@ -17,6 +17,7 @@ sys.path.insert(0, SUBMISSION_DIR or str(ROOT / "starter"))
 
 from counter import advance  # noqa: E402
 from fixtures.generate import (  # noqa: E402
+    Case,
     corrupted_trace,
     health_token,
     public_case,
@@ -33,6 +34,13 @@ SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 WORKBENCH_TEST_SEED = "public-workbench-test"
 
 
+def _assert_contract_shape_and_range(case: Case) -> None:
+    numbers = advance(**case.as_dict())
+    assert len(numbers) == case.rounds
+    for value in numbers:
+        assert 0 <= value < case.modulus
+
+
 def test_the_list_has_one_number_per_round() -> None:
     case = public_case(SEED)
     assert len(advance(**case.as_dict())) == case.rounds
@@ -45,8 +53,38 @@ def test_zero_rounds_is_empty() -> None:
 
 def test_every_entry_is_in_range() -> None:
     case = public_case(SEED)
-    for value in advance(**case.as_dict()):
-        assert 0 <= value < case.modulus
+    _assert_contract_shape_and_range(case)
+
+
+def test_negative_step_stays_in_range() -> None:
+    case = public_case(SEED)
+    _assert_contract_shape_and_range(
+        Case(start=0, step=-case.step, rounds=case.rounds, modulus=case.modulus)
+    )
+
+
+def test_start_larger_than_modulus_stays_in_range() -> None:
+    case = public_case(SEED)
+    _assert_contract_shape_and_range(
+        Case(
+            start=case.start + case.modulus * 3,
+            step=case.step,
+            rounds=case.rounds,
+            modulus=case.modulus,
+        )
+    )
+
+
+def test_step_larger_than_modulus_stays_in_range() -> None:
+    case = public_case(SEED)
+    _assert_contract_shape_and_range(
+        Case(
+            start=case.start,
+            step=case.step + case.modulus * 3,
+            rounds=case.rounds,
+            modulus=case.modulus,
+        )
+    )
 
 
 def test_first_entry_is_start_plus_step() -> None:
@@ -106,6 +144,24 @@ def test_workbench_public_tests_fail_the_shipped_starter() -> None:
     result = run_public_tests(WORKBENCH_TEST_SEED, starter_payload())
     assert result["passed"] is False
     assert "FAIL test_every_entry_is_in_range" in result["output"]
+
+
+def test_workbench_public_tests_reject_a_single_subtraction_solution() -> None:
+    source = """def advance(start, step, rounds, modulus):
+    trace = []
+    value = start
+    for _ in range(rounds):
+        value = value + step
+        if value >= modulus:
+            value -= modulus
+        trace.append(value)
+    return trace
+"""
+    result = run_public_tests(WORKBENCH_TEST_SEED, {"counter.py": source})
+    assert result["passed"] is False
+    assert "FAIL test_negative_step_stays_in_range" in result["output"]
+    assert "FAIL test_start_larger_than_modulus_stays_in_range" in result["output"]
+    assert "FAIL test_step_larger_than_modulus_stays_in_range" in result["output"]
 
 
 def test_workbench_public_tests_report_invalid_browser_source() -> None:
@@ -169,8 +225,8 @@ def main() -> int:
         return 1
     print("public tests:", "all passed" if failures == 0 else f"{failures} failed")
     print()
-    print("Passing these does not mean you are done. They only check one fixed")
-    print("start / step / rounds / modulus, and the step is always positive.")
+    print("Passing these does not mean you are done. They check one visible example")
+    print("and a few contract boundaries, but not every unseen combination.")
     return 1 if failures else 0
 
 
