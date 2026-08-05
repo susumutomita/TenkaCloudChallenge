@@ -18,6 +18,7 @@ import {
   checkParticipantVisibleSpoilerAdvisory,
   checkRequiredReadmes,
   checkScoringRegulation,
+  checkSolutionDoesNotEditCatalog,
   checkWriteupTranslations,
 } from "./validate-problems";
 
@@ -655,6 +656,56 @@ describe("checkParticipantVisibleSpoilerAdvisory (name / i18n.en.name)", () => {
         description: "## レッドチーム\n- AI がデータを消す。",
         instructions: "vibe-status を実行する。",
       }),
+    ).toEqual([]);
+  });
+});
+
+describe("checkSolutionDoesNotEditCatalog", () => {
+  it("rejects instructions that send the participant to a file in this catalog", () => {
+    const errors = checkSolutionDoesNotEditCatalog({
+      id: "new-problem",
+      instructions:
+        "設定ファイル `problems/challenges/stackstack-onboarding/local/config/app.json` を直す",
+    } as never);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain("rewrite the problem's own source");
+  });
+
+  it("rejects it in the English instructions too", () => {
+    const errors = checkSolutionDoesNotEditCatalog({
+      id: "new-problem",
+      instructions: "",
+      i18n: {
+        en: { instructions: "Edit challenges/stackstack-onboarding/local/config/app.json" },
+      },
+    } as never);
+    expect(errors).toHaveLength(1);
+  });
+
+  it("accepts a path that is not part of this catalog", () => {
+    expect(
+      checkSolutionDoesNotEditCatalog({
+        id: "new-problem",
+        instructions: "Portal の問題エディタで counter.py を書き換える",
+      } as never),
+    ).toEqual([]);
+  });
+
+  it("accepts a catalog-looking path that does not exist", () => {
+    expect(
+      checkSolutionDoesNotEditCatalog({
+        id: "new-problem",
+        instructions: "challenges/no-such-problem/local/config/app.json",
+      } as never),
+    ).toEqual([]);
+  });
+
+  it("stays quiet for the problems already shipped this way", () => {
+    expect(
+      checkSolutionDoesNotEditCatalog({
+        id: "stackstack-onboarding",
+        instructions: "problems/challenges/stackstack-onboarding/local/config/app.json を直す",
+      } as never),
     ).toEqual([]);
   });
 });
