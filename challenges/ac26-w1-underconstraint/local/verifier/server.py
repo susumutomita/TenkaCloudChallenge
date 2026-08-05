@@ -50,6 +50,15 @@ CHECKPOINTS = ("build", "audit", "exploit", "root-cause", "repair", "mutation-tr
 SUBMISSION_FILES = ("policy.py",)
 #: The five checkpoints whose portal submission is the learner's policy.py source.
 CODE_CHECKPOINT_IDS = ("build", "audit", "exploit", "repair", "mutation-transfer")
+CODE_CHECKPOINTS_FOR_PORTAL = frozenset(CODE_CHECKPOINT_IDS)
+CHECKPOINT_LABELS = {
+    "build": "ポリシーどおりの回路を組む",
+    "audit": "足りない制約を特定する",
+    "exploit": "偽の主張を通す witness を作る",
+    "root-cause": "原因を構造化して提出する",
+    "repair": "正常系を壊さずに塞ぐ",
+    "mutation-transfer": "別の欠落でも成立させる",
+}
 WORKBENCH_ASSETS = {
     "/": ("index.html", "text/html; charset=utf-8"),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
@@ -77,6 +86,24 @@ def starter_payload() -> dict[str, str]:
     """Return the editable file shipped to the browser workbench."""
     return {
         name: (ROOT / "starter" / name).read_text(encoding="utf-8") for name in SUBMISSION_FILES
+    }
+
+
+def config_payload() -> dict[str, object]:
+    """Declare the generic editor contract consumed by the Participant Portal."""
+    return {
+        "id": "ac26-w1-underconstraint",
+        "name": "通るのに、守れていない",
+        "description": "不足した constraint を監査・悪用し、正常系を保ったまま修復する。",
+        "submittedFiles": list(SUBMISSION_FILES),
+        "checkpoints": [
+            {
+                "id": checkpoint,
+                "label": CHECKPOINT_LABELS[checkpoint],
+                "kind": "code" if checkpoint in CODE_CHECKPOINTS_FOR_PORTAL else "answer",
+            }
+            for checkpoint in CHECKPOINTS
+        ],
     }
 
 
@@ -270,6 +297,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's name
         path = urlsplit(self.path).path
+        if path == "/api/config":
+            self._respond(200, config_payload())
+            return
         if path == "/api/inspect":
             self._respond(200, inspect_payload(SEED))
             return

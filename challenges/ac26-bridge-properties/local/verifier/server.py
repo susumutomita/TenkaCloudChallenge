@@ -51,6 +51,14 @@ REQUEST_TIMEOUT_SECONDS = 15
 CHECKPOINTS = ("incompleteness", "unsoundness", "privacy-leak", "property-matrix", "transfer")
 PROPERTIES = ("complete", "sound", "private")
 SUBMISSION_FILES = ("classify.py", "counterexamples.py")
+CODE_CHECKPOINTS = frozenset(("transfer",))
+CHECKPOINT_LABELS = {
+    "incompleteness": "正しい入力が弾かれる場面を作る",
+    "unsoundness": "主張の範囲外を通してしまう例を作る",
+    "privacy-leak": "transcript から秘密を取り出す",
+    "property-matrix": "3 つの verifier を性質で分類する",
+    "transfer": "見たことのない instance でも成立させる",
+}
 WORKBENCH_ASSETS = {
     "/": ("index.html", "text/html; charset=utf-8"),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
@@ -91,6 +99,24 @@ def starter_payload() -> dict[str, str]:
     """Return the two editable files shipped to the browser workbench."""
     return {
         name: (ROOT / "starter" / name).read_text(encoding="utf-8") for name in SUBMISSION_FILES
+    }
+
+
+def config_payload() -> dict[str, object]:
+    """Declare the generic editor contract consumed by the Participant Portal."""
+    return {
+        "id": "ac26-bridge-properties",
+        "name": "満たす性質、破る性質",
+        "description": "反例を作り、completeness・soundness・privacy を区別する。",
+        "submittedFiles": list(SUBMISSION_FILES),
+        "checkpoints": [
+            {
+                "id": checkpoint,
+                "label": CHECKPOINT_LABELS[checkpoint],
+                "kind": "code" if checkpoint in CODE_CHECKPOINTS else "answer",
+            }
+            for checkpoint in CHECKPOINTS
+        ],
     }
 
 
@@ -340,6 +366,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's name
         path = urlsplit(self.path).path
+        if path == "/api/config":
+            self._respond(200, config_payload())
+            return
         if path == "/api/inspect":
             self._respond(200, inspect_payload(SEED))
             return
