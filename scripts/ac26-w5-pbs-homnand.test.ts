@@ -304,6 +304,22 @@ describe("ac26-w5-pbs-homnand: the balanced encoding is what makes the lookup wo
 });
 
 describe("ac26-w5-pbs-homnand: PBS evaluates the function and refreshes the key", () => {
+  it("should keep the refresh comparison non-degenerate on every known failing seed", () => {
+    const answer = probe([
+      "import json, sys",
+      "sys.path.insert(0, 'reference')",
+      "import pipeline",
+      "from tests.hidden import check_pipeline",
+      "seeds = ('solvability-90', 'solvability-100', 'solvability-122',",
+      "         'solvability-504', 'solvability-578', 'solvability-978',",
+      "         'solvability-1002', 'solvability-1621', 'solvability-1708',",
+      "         'solvability-1967')",
+      "bad = {seed: check_pipeline.check_refresh(pipeline, seed) for seed in seeds}",
+      "print(json.dumps({seed: failures for seed, failures in bad.items() if failures}))",
+    ]);
+    expect(JSON.parse(answer)).toEqual({});
+  });
+
   it("should satisfy Dec(PBS_f(Enc(m))) = f(m) for every unary f at every parameter set", () => {
     const answer = probe([
       "import json",

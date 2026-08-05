@@ -14,7 +14,11 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "starter"))
 
-from fixtures.generate import randomness, setting  # noqa: E402
+from fixtures.generate import (  # noqa: E402
+    rerandomization_randomness,
+    setting,
+    share_randomness,
+)
 import sharing  # noqa: E402
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
@@ -22,7 +26,12 @@ SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 def _shares() -> list[int]:
     cfg = setting(SEED)
-    return sharing.share(cfg["secret"], cfg["n"], cfg["p"], randomness(SEED, "public", cfg["n"] - 1, cfg["p"]))
+    return sharing.share(
+        cfg["secret"],
+        cfg["n"],
+        cfg["p"],
+        share_randomness(SEED, "public", cfg["n"] - 1, cfg["p"], cfg["secret"]),
+    )
 
 
 def test_share_returns_one_value_per_party() -> None:
@@ -43,7 +52,11 @@ def test_the_full_set_reconstructs_the_secret() -> None:
 
 def test_rerandomize_returns_one_value_per_party() -> None:
     cfg = setting(SEED)
-    fresh = sharing.rerandomize(_shares(), cfg["p"], randomness(SEED, "rr", cfg["n"] - 1, cfg["p"]))
+    fresh = sharing.rerandomize(
+        _shares(),
+        cfg["p"],
+        rerandomization_randomness(SEED, "rr", cfg["n"] - 1, cfg["p"]),
+    )
     assert len(fresh) == cfg["n"]
 
 

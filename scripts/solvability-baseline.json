@@ -79,48 +79,6 @@
       "recordedAtSeeds": 2000
     },
     {
-      "problem": "ac26-w2-secret-sharing",
-      "checkpoint": "share-and-reconstruct",
-      "type": "reference-fails",
-      "reason": "On 30/2000 seeds (1.5 %) the seeded randomness makes all but one share zero, and the hidden test rejects that split - 'one party holds the secret outright'. The shipped reference cannot pass, so neither can a correct submission. The fixture draws its randomness without checking the split is non-degenerate.",
-      "recordedAtSeeds": 2000
-    },
-    {
-      "problem": "ac26-w2-secret-sharing",
-      "checkpoint": "rerandomize",
-      "type": "reference-fails",
-      "reason": "On 14/2000 seeds (0.7 %) the refresh deltas all come out zero, so rerandomize returns the shares it was given and the hidden test rejects it. The reference fails; a correct submission fails with it.",
-      "recordedAtSeeds": 2000
-    },
-    {
-      "problem": "ac26-w2-secret-sharing",
-      "checkpoint": "transfer",
-      "type": "reference-fails",
-      "reason": "transfer runs the whole hidden suite under a derived seed, so it inherits both degenerate-fixture cases above: 42/2000 seeds (2.1 %).",
-      "recordedAtSeeds": 2000
-    },
-    {
-      "problem": "ac26-w3-nonce-reuse",
-      "checkpoint": "extract",
-      "type": "reference-fails",
-      "reason": "The two transcripts the fixture builds share a commitment but are never checked for sharing a challenge. The toy group order is 29-43, so the two challenges collide on 166/2000 seeds (8.3 %); (e1 - e2) is then zero, the secret cannot be recovered, and the shipped reference raises MalformedRecord. On those deploys the checkpoint has no answer at all - the same defect as ac26-bridge-experiment's first-broken, in a different problem.",
-      "recordedAtSeeds": 2000
-    },
-    {
-      "problem": "ac26-w3-nonce-reuse",
-      "checkpoint": "hunt",
-      "type": "reference-fails",
-      "reason": "153/2000 seeds (7.7 %): 'the attack came back with nothing'. Same family as extract - the seeded transcript pool does not guarantee that an attackable pair exists.",
-      "recordedAtSeeds": 2000
-    },
-    {
-      "problem": "ac26-w5-pbs-homnand",
-      "checkpoint": "refresh",
-      "type": "reference-fails",
-      "reason": "On 10/2000 seeds (0.5 %) the hidden check rejects the shipped reference with 'the rotation produced the same artifact for a different input'. The fixture draws two inputs without checking that the blind rotation separates them, so on those deploys a correct implementation is graded wrong. Surfaced by the N=150 code sweep (3/150) and pinned down by running the hidden phase in-process over 2000 seeds; a 0.5 % defect is below what any affordable code budget reproduces reliably, so this entry is recorded at 2000 and is never called stale.",
-      "recordedAtSeeds": 2000
-    },
-    {
       "problem": "sha256-bytes-padding",
       "checkpoint": "padded-length",
       "type": "guessable-answer",

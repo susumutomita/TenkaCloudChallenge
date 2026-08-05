@@ -18,7 +18,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from fixtures.generate import randomness, setting  # noqa: E402
+from fixtures.generate import (  # noqa: E402
+    randomness,
+    rerandomization_randomness,
+    setting,
+    share_randomness,
+)
 
 LABELS = ("h0", "h1", "h2", "h3")
 
@@ -29,7 +34,9 @@ def check_roundtrip(module, seed: str) -> list[str]:
         cfg = setting(seed, label)
         p, n, secret = cfg["p"], cfg["n"], cfg["secret"]
         try:
-            shares = module.share(secret, n, p, randomness(seed, label, n - 1, p))
+            shares = module.share(
+                secret, n, p, share_randomness(seed, label, n - 1, p, secret)
+            )
         except Exception as error:  # noqa: BLE001
             return [f"share raised {type(error).__name__}"]
         if not isinstance(shares, list) or len(shares) != n:
@@ -62,7 +69,9 @@ def check_no_trivial_split(module, seed: str) -> list[str]:
         if n < 2 or secret == 0:
             continue
         try:
-            shares = module.share(secret, n, p, randomness(seed, label, n - 1, p))
+            shares = module.share(
+                secret, n, p, share_randomness(seed, label, n - 1, p, secret)
+            )
         except Exception:  # noqa: BLE001 - covered by check_roundtrip
             return []
         if not isinstance(shares, list) or len(shares) != n:
@@ -99,8 +108,14 @@ def check_rerandomize(module, seed: str) -> list[str]:
         cfg = setting(seed, label)
         p, n, secret = cfg["p"], cfg["n"], cfg["secret"]
         try:
-            shares = module.share(secret, n, p, randomness(seed, label, n - 1, p))
-            fresh = module.rerandomize(list(shares), p, randomness(seed, f"{label}-rr", n - 1, p))
+            shares = module.share(
+                secret, n, p, share_randomness(seed, label, n - 1, p, secret)
+            )
+            fresh = module.rerandomize(
+                list(shares),
+                p,
+                rerandomization_randomness(seed, f"{label}-rr", n - 1, p),
+            )
         except Exception as error:  # noqa: BLE001
             return [f"rerandomize raised {type(error).__name__}"]
         if not isinstance(fresh, list) or len(fresh) != n:

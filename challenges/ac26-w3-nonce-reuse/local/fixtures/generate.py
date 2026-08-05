@@ -210,6 +210,32 @@ def sign_with(nonce_value: int, secret: int, message: bytes, group: Group) -> di
     }
 
 
+def message_with_different_challenge(
+    first: bytes,
+    candidate: bytes,
+    commitment: Point,
+    public: Point,
+    group: Group,
+) -> bytes:
+    """Choose a second message that makes the reused nonce extractable.
+
+    Reusing a commitment gives two equations only when their Fiat-Shamir challenges
+    differ. In these toy groups a blind pair collides modulo ``n`` often enough to make
+    real deployments unsolvable, so the fixture rejects that degenerate draw instead of
+    asking the learner to invert zero.
+    """
+    first_challenge = challenge(DOMAINS[0], commitment, public, first, group)
+    for attempt in range(256):
+        suffix = b"" if attempt == 0 else f"-retry-{attempt}".encode()
+        second = candidate + suffix
+        if (
+            second != first
+            and challenge(DOMAINS[0], commitment, public, second, group) != first_challenge
+        ):
+            return second
+    raise RuntimeError("could not construct two transcripts with different challenges")
+
+
 def fixed_nonce(secret: int, message: bytes, group: Group) -> int:
     """The same k every time. The bug this problem exists to punish."""
     return 1 + (secret % 1)  # always 1
@@ -272,9 +298,14 @@ def audit_log(seed: str, label: str, group: Group) -> dict:
     for index, note in enumerate(note_list[:6]):
         signer = others[index % len(others)]
         records.append(sign_with(available[index % len(available)], signer, note, group))
-    first, second = note_list[6], note_list[7]
-    if first == second:
-        second = second + b"!"
+    first = note_list[6]
+    second = message_with_different_challenge(
+        first,
+        note_list[7],
+        group.generator.scalar_mul(reused),
+        group.generator.scalar_mul(victim),
+        group,
+    )
     records.append(sign_with(reused, victim, first, group))
     records.append(sign_with(reused, victim, second, group))
 

@@ -109,6 +109,28 @@ describe("ac26-w2-secret-sharing: container safety", () => {
 });
 
 describe("ac26-w2-secret-sharing: fixtures are seed-derived", () => {
+  it("should keep the reference split and refresh non-degenerate across 2000 fixture seeds", () => {
+    const script = [
+      "import json, sys",
+      "sys.path.insert(0, 'reference')",
+      "import sharing",
+      "from tests.hidden import check_sharing",
+      "bad = {'share-and-reconstruct': [], 'rerandomize': [], 'transfer': []}",
+      "for index in range(2000):",
+      "    seed = f'solvability-{index}'",
+      "    phases = {",
+      "        'share-and-reconstruct': check_sharing.check_roundtrip(sharing, seed)",
+      "            + check_sharing.check_no_trivial_split(sharing, seed),",
+      "        'rerandomize': check_sharing.check_rerandomize(sharing, seed),",
+      "        'transfer': check_sharing.run(sharing, seed + ':transfer'),",
+      "    }",
+      "    for name, failures in phases.items():",
+      "        if failures: bad[name].append([seed, failures])",
+      "print(json.dumps({name: rows[:5] for name, rows in bad.items() if rows}))",
+    ].join("\n");
+    expect(JSON.parse(python(["-c", script]).stdout.trim())).toEqual({});
+  });
+
   it("should produce different circuits for different seeds", () => {
     const script = [
       "import json, sys",
