@@ -160,6 +160,51 @@ describe("ac26-w3-nonce-reuse: the log contains exactly one solvable reuse", () 
     expect(python(["-c", script, SEED]).stdout.trim()).toBe("[1]");
   });
 
+  // Issue #361. Two different messages are not enough. The attack divides by
+  // `e1 - e2`, and on a toy group (n is 29..43) the Fiat-Shamir challenge
+  // `e = SHA256(...) mod n` collides for roughly one message pair in n. When it
+  // collided the log carried a reuse with no answer and the extraction pair had
+  // no answer, so the deploy was unsolvable: the reference solution failed on
+  // 16.95% of 2000 seeds, and a correct solver raising `MalformedRecord` was
+  // scored as a wrong answer.
+  //
+  // Swept over seeds because a per-deploy seed picks a different log every time;
+  // a single fixed seed says nothing about the deploy a learner actually gets.
+  it("should hand every deploy a reuse that can actually be solved", () => {
+    const script = [
+      "import importlib.util, sys",
+      "from pathlib import Path",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import audit_log, toy_group",
+      "from tests.hidden.check_recover import _reuse_pair",
+      "spec = importlib.util.spec_from_file_location('ref', Path('reference/recover.py'))",
+      "ref = importlib.util.module_from_spec(spec)",
+      "spec.loader.exec_module(ref)",
+      "unsolvable_logs = 0",
+      "unsolvable_pairs = 0",
+      "for index in range(300):",
+      "    seed = f'solvable-{index}'",
+      "    for label in ('public', 'h0', 'h1', 'h2'):",
+      "        group = toy_group(seed, label)",
+      "        log = audit_log(seed, label, group)",
+      "        # The attack must come back with the victim's key, not merely a number.",
+      "        try:",
+      "            result = ref.attack_log(list(log['records']), group)",
+      "        except Exception:",
+      "            result = None",
+      "        if not result or result.get('secret', -1) % group.n != log['victim_secret'] % group.n:",
+      "            unsolvable_logs += 1",
+      "        # Both transcripts share one nonce k and one secret x, so",
+      "        # z1 - z2 = (e1 - e2) * x. x is drawn from [1, n) and n is prime, so",
+      "        # equal responses hold exactly when the two challenges are equal.",
+      "        _secret, first, second = _reuse_pair(seed, label, group)",
+      "        if first['response'] == second['response']:",
+      "            unsolvable_pairs += 1",
+      "print(unsolvable_logs, unsolvable_pairs)",
+    ].join("\n");
+    expect(python(["-c", script]).stdout.trim()).toBe("0 0");
+  });
+
   // Each decoy makes a specific wrong implementation produce a wrong answer instead of
   // an error, and each one was added because a mutation survived without it.
   it("should carry all three decoys: malformed, non-accepting, and cross-signer", () => {

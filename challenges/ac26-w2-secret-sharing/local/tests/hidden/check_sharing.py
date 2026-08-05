@@ -23,13 +23,42 @@ from fixtures.generate import randomness, setting  # noqa: E402
 LABELS = ("h0", "h1", "h2", "h3")
 
 
+def _splitting_randomness(seed: str, label: str, n: int, p: int, secret: int) -> list[int]:
+    """Randomness whose split is not itself the thing the checks reject.
+
+    `randomness` is uniform over [0, p)^(n-1), so on these small primes a draw
+    that makes the honest split degenerate is not rare. Two of them are
+    questions with no answer:
+
+      * all but one value zero, so the correct split hands the secret to one
+        party outright -- which `check_no_trivial_split` reports as the
+        implementation's fault;
+      * every value zero, so the correct `rerandomize` is a no-op and returns
+        the shares it was given -- which `check_rerandomize` reports as a
+        refresh that did not happen.
+
+    In both cases a correct implementation is required to produce exactly what
+    the check calls a failure. Redraw under a fresh label until the case has an
+    answer, the same way `_reuse_pair` does in ac26-w3-nonce-reuse (#361).
+    """
+    for attempt in range(64):
+        tag = label if attempt == 0 else f"{label}-fair{attempt}"
+        head = randomness(seed, tag, n - 1, p)
+        split = [*head, (secret - sum(head)) % p]
+        if any(value % p for value in head) and sum(1 for v in split if v % p == 0) < n - 1:
+            return head
+    raise AssertionError(f"no non-degenerate split for {seed}/{label} after 64 draws")
+
+
 def check_roundtrip(module, seed: str) -> list[str]:
     failures: list[str] = []
     for label in LABELS:
         cfg = setting(seed, label)
         p, n, secret = cfg["p"], cfg["n"], cfg["secret"]
         try:
-            shares = module.share(secret, n, p, randomness(seed, label, n - 1, p))
+            shares = module.share(
+                secret, n, p, _splitting_randomness(seed, label, n, p, secret)
+            )
         except Exception as error:  # noqa: BLE001
             return [f"share raised {type(error).__name__}"]
         if not isinstance(shares, list) or len(shares) != n:
@@ -62,7 +91,9 @@ def check_no_trivial_split(module, seed: str) -> list[str]:
         if n < 2 or secret == 0:
             continue
         try:
-            shares = module.share(secret, n, p, randomness(seed, label, n - 1, p))
+            shares = module.share(
+                secret, n, p, _splitting_randomness(seed, label, n, p, secret)
+            )
         except Exception:  # noqa: BLE001 - covered by check_roundtrip
             return []
         if not isinstance(shares, list) or len(shares) != n:
@@ -99,8 +130,12 @@ def check_rerandomize(module, seed: str) -> list[str]:
         cfg = setting(seed, label)
         p, n, secret = cfg["p"], cfg["n"], cfg["secret"]
         try:
-            shares = module.share(secret, n, p, randomness(seed, label, n - 1, p))
-            fresh = module.rerandomize(list(shares), p, randomness(seed, f"{label}-rr", n - 1, p))
+            shares = module.share(
+                secret, n, p, _splitting_randomness(seed, label, n, p, secret)
+            )
+            fresh = module.rerandomize(
+                list(shares), p, _splitting_randomness(seed, f"{label}-rr", n, p, secret)
+            )
         except Exception as error:  # noqa: BLE001
             return [f"rerandomize raised {type(error).__name__}"]
         if not isinstance(fresh, list) or len(fresh) != n:

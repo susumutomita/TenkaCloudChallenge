@@ -272,8 +272,20 @@ def audit_log(seed: str, label: str, group: Group) -> dict:
     for index, note in enumerate(note_list[:6]):
         signer = others[index % len(others)]
         records.append(sign_with(available[index % len(available)], signer, note, group))
+    # Two different messages are not enough: the attack divides by `e1 - e2`, and
+    # on a toy group the challenge `e = SHA256(...) mod n` collides for roughly
+    # one message pair in n. When it collides the reuse in this log is not
+    # solvable, so the whole hunt has no answer for that deploy. Extend the
+    # second note until the pair carries two independent equations.
+    victim_public = group.generator.scalar_mul(victim)
+    reused_commitment = group.generator.scalar_mul(reused)
     first, second = note_list[6], note_list[7]
-    if first == second:
+    first_challenge = challenge(DOMAINS[0], reused_commitment, victim_public, first, group)
+    while (
+        second == first
+        or challenge(DOMAINS[0], reused_commitment, victim_public, second, group)
+        == first_challenge
+    ):
         second = second + b"!"
     records.append(sign_with(reused, victim, first, group))
     records.append(sign_with(reused, victim, second, group))

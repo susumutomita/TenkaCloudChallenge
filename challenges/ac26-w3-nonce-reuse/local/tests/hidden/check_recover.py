@@ -29,11 +29,25 @@ LABELS = ("h0", "h1", "h2")
 
 
 def _reuse_pair(seed: str, label: str, group):
-    """Two accepting transcripts under one commitment, built directly."""
+    """Two accepting transcripts under one commitment, built directly.
+
+    The two challenges have to differ. `x = (z1 - z2) * (e1 - e2)^-1` has no
+    solution when `e1 == e2`, and on a toy group (n is 29..43) the Fiat-Shamir
+    challenge `e = SHA256(...) mod n` collides for roughly one message pair in n.
+    A colliding pair is a question with no answer: a correct solver raises
+    `MalformedRecord`, and this file counted that right answer as a failure.
+    Keep extending the second note until the pair is actually solvable.
+    """
     secret = secret_key(seed, f"{label}-pair", group)
     k = 1 + (secret * 3 + 5) % (group.n - 2)
     note_list = messages(seed, f"{label}-pair", 4)
-    first, second = note_list[0], note_list[1] + b"-second"
+    public = group.generator.scalar_mul(secret)
+    commitment = group.generator.scalar_mul(k)
+    first = note_list[0]
+    first_challenge = challenge(DOMAINS[0], commitment, public, first, group)
+    second = note_list[1] + b"-second"
+    while challenge(DOMAINS[0], commitment, public, second, group) == first_challenge:
+        second += b"!"
     return (
         secret,
         sign_with(k, secret, first, group),
