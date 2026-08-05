@@ -13,11 +13,11 @@ const connectionStatus = document.querySelector("#connection-status");
 const MANUAL_CHECKPOINTS = [
   {
     id: "predict",
-    hint: "走らせる前に紙で求めた最終値を、整数1個でPortalのpredict欄へ直接入力します。trace全体ではありません。",
+    hint: "走らせる前に紙で出した、最後にいる数をひとつだけ書きます。途中の数を全部並べるのではありません。",
   },
   {
     id: "first-broken",
-    hint: "壊れたtraceが最初に 0 <= entry < modulus を外れる0始まりのindexを、整数1個でPortalのfirst-broken欄へ直接入力します。",
+    hint: "並んだ数のうち、使ってよい数からはみ出しているものが左から何番目かを書きます。左端が 0 番です。",
   },
 ];
 
@@ -65,37 +65,113 @@ async function copyText(value) {
   if (!copied) throw new Error("clipboard copy was refused");
 }
 
+/**
+ * The list of numbers, plus a row of positions sitting directly under it.
+ *
+ * "0 始まりの index" is never named in this problem. The positions are drawn under
+ * the numbers instead, which is the same fact and needs no vocabulary. Both rows
+ * are pure ASCII digits and spaces, so they line up in any monospace font -- a
+ * Japanese label inside the aligned region would not.
+ */
+function numberedList(values) {
+  const parts = values.map((value) => String(value));
+  const listing = `[${parts.join(", ")}]`;
+  let positions = "";
+  let column = 1; // the "[" is one character wide
+  parts.forEach((part, index) => {
+    positions += " ".repeat(Math.max(column - positions.length, 0)) + String(index);
+    column += part.length + 2; // the number itself, then ", "
+  });
+  return { listing, positions };
+}
+
+/** One addition, written the way a reader would do it on paper. */
+function addOnce(value, step, modulus) {
+  const raw = value + step;
+  // 14 clears the widest sum this problem can print ("22 + 22 = 44"), so the
+  // explanation never runs straight into the arithmetic.
+  const sum = `${value} + ${step} = ${raw}`.padEnd(14);
+  return raw >= modulus
+    ? `${sum}${raw} は ${modulus} 以上なので、${raw} - ${modulus} = ${raw - modulus}`
+    : `${sum}${raw} は ${modulus} より小さいので、そのまま`;
+}
+
 async function inspect() {
   print("$ inspect");
   const payload = await request("/api/inspect");
   const predict = payload.predict;
   const walk = payload.walkback;
   const broken = payload.firstBroken;
+
+  const modulus = predict.modulus;
+  const width = String(Math.max(predict.start, predict.step, predict.rounds, modulus)).length;
+  const pad = (value) => String(value).padStart(width);
+  const first = (predict.start + predict.step) % modulus;
+  const noWrapYet = predict.start + predict.step < modulus && first + predict.step < modulus;
+
+  // JavaScript's % keeps the sign of the left operand, so the walk-back gap has to be
+  // folded back by hand. show.py gets this free from Python's floored %.
+  const gap = (((walk.final - walk.start) % walk.modulus) + walk.modulus) % walk.modulus;
+  const product = gap * walk.undoStep;
+  const undone = walk.step * walk.undoStep;
+
+  const { listing, positions } = numberedList(broken.trace);
+
   const lines = [
-    "== checkpoint: environment ==",
-    `  python        ${payload.environment.python}`,
-    `  health token  ${payload.environment.healthToken}`,
+    "== environment 欄に入れるもの ==",
+    `  python    ${payload.environment.python}`,
+    `  合言葉    ${payload.environment.healthToken}`,
+    "  この合言葉をそのまま Portal の environment 欄に貼ります。",
+    "  コンテナが本当に動いた、という証拠にしかなりません。",
     "",
-    "== checkpoint: predict ==",
-    "  走らせる前に紙で解いてください:",
-    `  start=${predict.start} step=${predict.step} rounds=${predict.rounds} modulus=${predict.modulus}`,
-    "  最後のroundの後の値を、整数1個で提出します。",
+    "== predict 欄に入れるもの ==",
+    `  ここで使う数は 0 から ${modulus - 1} までだけです。時計の 10時の3時間後が 13時ではなく`,
+    `  1時になるのと同じで、${modulus} 以上になったら ${modulus} を引きます。`,
+    `  (${modulus} で割ったあまりにする、と同じことです)`,
     "",
-    "== なぜこれがまだ暗号にならないか (提出なし) ==",
-    "  もう1つのwalk。こちらは最終値まで全部見せます:",
-    `    start=${walk.start} step=${walk.step} rounds=${walk.rounds} modulus=${walk.modulus} → 最終値 ${walk.final}`,
-    `    mod ${walk.modulus} で計算したので値は必ず 0〜${walk.modulus - 1}。大きさからは歩数が読めません。`,
-    "    ただし歩数そのものは復元できます:",
-    `      ${walk.step} に ${walk.undoStep} を掛けると mod ${walk.modulus} で 1 になる (${walk.step} * ${walk.undoStep} = 1 mod ${walk.modulus})`,
-    `      (${walk.final} - ${walk.start}) * ${walk.undoStep} mod ${walk.modulus} = ${walk.recoveredRounds}  ← 歩数が戻ってきた`,
-    "    Week 3 は同じ「歩く」操作のまま、歩く対象だけを楕円曲線に替えます。",
-    "    そちらではこの最後の行に現実的な答えがない。署名はその差の上に立っています。",
+    `    ${pad(predict.start)}  からはじめて`,
+    `    ${pad(predict.step)}  を毎回たす`,
+    `    ${pad(predict.rounds)}  回くりかえす`,
+    `    ${pad(modulus)}  以上になったら ${modulus} を引く`,
+    "    (counter.py ではこの4つを start / step / rounds / modulus と呼んでいます)",
     "",
-    "== checkpoint: first-broken ==",
-    `  start=${broken.start} step=${broken.step} rounds=${broken.rounds} modulus=${broken.modulus}`,
-    "  このtraceは、ちょうど1つのroundで剰余を適用し損ねた実装の出力です。",
-    `  不変条件 0 <= value < ${broken.modulus} を最初に破るentryの0始まりのindexを、整数1個で提出します。`,
-    `  trace = ${JSON.stringify(broken.trace)}`,
+    "  はじめの2回だけ、やってみせます:",
+    `    ${addOnce(predict.start, predict.step, modulus)}`,
+    `    ${addOnce(first, predict.step, modulus)}`,
+    ...(noWrapYet
+      ? [`    (${modulus} 以上になった場合は、たとえば ${modulus - 1} + ${predict.step} = ` +
+         `${modulus - 1 + predict.step} なので ${modulus - 1 + predict.step} - ${modulus} = ${predict.step - 1})`]
+      : []),
+    "",
+    `  同じように最後まで進めてください。${predict.rounds} 回目を終えたときにいる数が、predict 欄に`,
+    "  入れるものです。数はひとつだけで、途中の数を全部並べるのではありません。",
+    "  走らせる前に紙で出すこと。それがこの欄の目的です。",
+    "",
+    "== ここは提出しません: これがまだ何も隠せていない理由 ==",
+    `  もう1つ、終わりまで見せる例です。${walk.start} からはじめて ${walk.step} を毎回たし、${walk.modulus} 以上に`,
+    `  なったら ${walk.modulus} を引く。これを ${walk.rounds} 回やって ${walk.final} で終わりました。`,
+    `  ${walk.final} という数だけ見ても、${walk.step} を何回たしたかは分かりません。答えは必ず 0〜${walk.modulus - 1} の`,
+    "  どれかなので、数の大きさが手がかりになりません。",
+    "  ところが、たした回数は計算で戻ってきます:",
+    `    ここでは ${walk.undoStep} が ${walk.step} を打ち消します。${walk.step} × ${walk.undoStep} = ${undone}、` +
+      `${undone} を ${walk.modulus} で割ったあまりが 1。`,
+    `    ${walk.start} から ${walk.final} まで数えると ${gap}。${gap} × ${walk.undoStep} = ${product}、` +
+      `${product} を ${walk.modulus} で割ったあまりは ${walk.recoveredRounds}。`,
+    `    たした回数の ${walk.recoveredRounds} が、そのまま戻ってきました。`,
+    "  ひとつは隠せて、ひとつは開いたまま。Week 3 ではたす相手を楕円曲線というものに",
+    "  替えて、この最後の計算をできなくします。",
+    "",
+    "== first-broken 欄に入れるもの ==",
+    "  別の人が同じ遊びをして、出てきた数を全部書き出したものです:",
+    `  ${broken.start} からはじめて ${broken.step} を毎回たし、${broken.modulus} 以上になったら ${broken.modulus} を引く。これを ${broken.rounds} 回。`,
+    `  その ${broken.rounds} 回のうち 1 回だけ、${broken.modulus} を引くのを忘れています。だから下の並びには、`,
+    `  0〜${broken.modulus - 1} に収まっていない数がちょうど 1 個あります。`,
+    "",
+    `    ${listing}`,
+    `    ${positions}    ← 左から 0, 1, 2 ... と数えた番号`,
+    "",
+    `  0〜${broken.modulus - 1} に収まっていない数は、何番目にありますか。`,
+    "  その番号ひとつ (左端が 0) を Portal の first-broken 欄に書きます。",
   ];
   inspectOutput.textContent = lines.join("\n");
   print("inspect: evidence updated");
@@ -166,7 +242,7 @@ async function prepare() {
     return;
   }
   renderSubmissions(result.submissions);
-  print("prepare: environment / generalize are ready; predict / first-broken stay yours");
+  print("prepare: environment と generalize ができました。predict と first-broken は自分で書きます");
   document.querySelector("#submit-title").scrollIntoView({ behavior: "smooth" });
 }
 
@@ -195,12 +271,12 @@ async function runCommand(commandLine) {
   switch (command) {
     case "help":
       print("$ help");
-      print("inspect          health token、predict用fixture、歩数を逆算するwalk、壊れたtraceを表示");
-      print("show counter.py  現在のコードを表示");
-      print("test             公開shape testを実行");
-      print("prepare          environmentとgeneralizeの提出値を生成 (predict / first-broken は手入力)");
-      print("reset            counter.pyをstarterへ戻す");
-      print("clear            console出力を消去");
+      print("inspect          あなたの数、合言葉、回数が戻ってしまう例、1個だけはみ出した並びを表示");
+      print("show counter.py  いま書いているコードを表示");
+      print("test             公開テストを実行");
+      print("prepare          environment と generalize の提出値を作る (残り2つは自分で書く)");
+      print("reset            counter.py を最初の状態に戻す");
+      print("clear            この画面の文字を消す");
       break;
     case "inspect":
       await inspect();
@@ -255,7 +331,7 @@ async function boot() {
     counterEditor.addEventListener("input", save);
     connectionStatus.textContent = "Workbench ready";
     connectionStatus.classList.add("ready");
-    print("Browser workbench ready. Run help or inspect.");
+    print("準備できました。inspect を実行してください (コマンド一覧は help)。");
   } catch (error) {
     connectionStatus.textContent = "接続失敗";
     print(`boot: ${error instanceof Error ? error.message : String(error)}`);

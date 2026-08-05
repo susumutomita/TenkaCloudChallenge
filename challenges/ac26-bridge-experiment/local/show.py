@@ -1,10 +1,15 @@
-"""`make inspect` — show the worked example and the corrupted trace.
+"""`make inspect` — show the worked example and the list with one number out of place.
 
 Everything here is derived from FLAG_SEED, so what you see is yours: copying
 another learner's numbers will not help you.
 
-The command is called `inspect`; none of the checkpoints are. It only shows
+The command is called `inspect`; none of the boxes you fill in are. It only shows
 evidence, and it never produces an answer.
+
+Written for someone who has arithmetic and nothing else: no "modulus", no
+"invariant", no "trace", no "index" without the thing itself on screen next to it.
+The names `start` / `step` / `rounds` / `modulus` appear once, as a bridge to
+counter.py, after the four numbers have already been explained in words.
 """
 
 from __future__ import annotations
@@ -20,41 +25,105 @@ from fixtures.generate import corrupted_trace, health_token, public_case, walkba
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 
+def numbered_list(values: list[int]) -> tuple[str, str]:
+    """The list, and a row of positions that sits directly under it.
+
+    "0-based index" is never explained in this problem; the positions are printed
+    under the numbers instead, which is the same fact and needs no words. Both rows
+    are pure ASCII, so they line up in whatever font the reader has.
+    """
+    parts = [str(value) for value in values]
+    listing = "[" + ", ".join(parts) + "]"
+    positions = ""
+    column = 1  # the "[" is one character wide
+    for index, part in enumerate(parts):
+        positions += " " * (column - len(positions)) + str(index)
+        column += len(part) + 2  # the number itself, then ", "
+    return listing, positions
+
+
+def add_once(value: int, step: int, modulus: int) -> str:
+    """One addition, written the way a reader would do it on paper."""
+    raw = value + step
+    # 14 clears the widest sum this problem can print ("22 + 22 = 44"), so the
+    # explanation never runs straight into the arithmetic.
+    sum_text = f"{value} + {step} = {raw}"
+    if raw >= modulus:
+        return f"{sum_text:<14}{raw} reaches {modulus}, so {raw} - {modulus} = {raw - modulus}"
+    return f"{sum_text:<14}{raw} is below {modulus}, so leave it"
+
+
 def main() -> None:
     case = public_case(SEED)
-    print("== checkpoint: environment ==")
-    print(f"python           {sys.version.split()[0]}")
-    print(f"health token     {health_token(SEED)}")
+    print("== what goes in the environment box ==")
+    print(f"  python       {sys.version.split()[0]}")
+    print(f"  pass phrase  {health_token(SEED)}")
+    print("  Paste that phrase into the environment box in the Portal, exactly as printed.")
+    print("  It is only proof that this container really ran.")
     print()
-    print("== checkpoint: predict ==")
-    print("Work this out on paper BEFORE running your code:")
-    print(f"  start={case.start} step={case.step} rounds={case.rounds} modulus={case.modulus}")
-    print("  submit the value after the last round. One integer, not the whole trace.")
+
+    modulus = case.modulus
+    print("== what goes in the predict box ==")
+    print(f"  Only the numbers 0 to {modulus - 1} are used here. Like a clock, where three hours after")
+    print(f"  10 o'clock is 1 o'clock and not 13: as soon as a number reaches {modulus}, take {modulus} off")
+    print(f"  it. (That is the same thing as the remainder after dividing by {modulus}.)")
     print()
-    print("== why this counter is not cryptography yet (nothing to submit) ==")
+    width = len(str(max(case.start, case.step, case.rounds, modulus)))
+    print(f"    {case.start:>{width}}  is where you start")
+    print(f"    {case.step:>{width}}  gets added each time")
+    print(f"    {case.rounds:>{width}}  times in total")
+    print(f"    {modulus:>{width}}  gets taken off whenever a number reaches it")
+    print("    (counter.py calls those four start / step / rounds / modulus)")
+    print()
+    print("  The first two additions, done for you:")
+    first = (case.start + case.step) % modulus
+    print(f"    {add_once(case.start, case.step, modulus)}")
+    print(f"    {add_once(first, case.step, modulus)}")
+    if case.start + case.step < modulus and first + case.step < modulus:
+        print(f"    (one that does reach {modulus}: {modulus - 1} + {case.step} = "
+              f"{modulus - 1 + case.step}, so {modulus - 1 + case.step} - {modulus} = {case.step - 1})")
+    print()
+    print(f"  Carry on the same way to the end. The number you are on after the {case.rounds}th addition")
+    print("  is what goes in the predict box: one number, not the list of all of them. Work")
+    print("  it out on paper before you run anything -- that is the whole point of this box.")
+    print()
+
     walk = walkback_case(SEED)
-    print("  A second walk, this one shown in full:")
-    print(f"    start={walk['start']} step={walk['step']} "
-          f"rounds={walk['rounds']} modulus={walk['modulus']}, ending on {walk['final']}.")
-    print(f"    Reducing mod {walk['modulus']} keeps every value inside "
-          f"0..{walk['modulus'] - 1}, so the size of")
-    print("    the answer tells you nothing about how far it walked. The number of")
-    print("    steps is still recoverable, though:")
-    print(f"      {walk['undoStep']} is what takes {walk['step']} back to 1 "
-          f"({walk['step']} * {walk['undoStep']} = 1 mod {walk['modulus']}), so")
-    print(f"      ({walk['final']} - {walk['start']}) * {walk['undoStep']} "
-          f"mod {walk['modulus']} = {walk['recoveredRounds']} -- the step count, back again.")
-    print("    Week 3 keeps this walk and changes what is walked on, to something where")
-    print("    that last line has no practical answer. Signatures stand on that gap.")
+    gap = (walk["final"] - walk["start"]) % walk["modulus"]
+    product = gap * walk["undoStep"]
+    undone = walk["step"] * walk["undoStep"]
+    print("== nothing to fill in here: why this is not hiding anything yet ==")
+    print(f"  A second run, shown to the end: start at {walk['start']}, add {walk['step']} each time, take "
+          f"{walk['modulus']} off")
+    print(f"  whenever a number reaches it, {walk['rounds']} times. It finishes on {walk['final']}.")
+    print(f"  Looking at {walk['final']} alone tells you nothing about how many times {walk['step']} was added --")
+    print(f"  every answer is one of 0 to {walk['modulus'] - 1}, so the size of it gives nothing away.")
+    print("  The number of times comes back out anyway:")
+    print(f"    {walk['undoStep']} undoes {walk['step']} here: {walk['step']} * {walk['undoStep']} = {undone}, "
+          f"and {undone} divided by {walk['modulus']} leaves 1.")
+    print(f"    Counting forward from {walk['start']} to {walk['final']} is {gap}. Then {gap} * "
+          f"{walk['undoStep']} = {product}, and")
+    print(f"    {product} divided by {walk['modulus']} leaves {walk['recoveredRounds']} -- "
+          f"the number of times, back again.")
+    print("  One leak closed, another wide open. Week 3 changes what gets added -- to a thing")
+    print("  called an elliptic curve -- so that last calculation has no practical answer.")
     print()
-    print("== checkpoint: first-broken ==")
+
     bad_case, trace, _broke_at = corrupted_trace(SEED)
-    print(f"  start={bad_case.start} step={bad_case.step} "
-          f"rounds={bad_case.rounds} modulus={bad_case.modulus}")
-    print("  this trace was produced by an implementation that skipped the reduction")
-    print("  on exactly one round. Submit the 0-based index of the FIRST entry that")
-    print(f"  breaks the invariant 0 <= value < {bad_case.modulus}.")
-    print(f"  trace = {trace}")
+    listing, positions = numbered_list(trace)
+    print("== what goes in the first-broken box ==")
+    print("  Someone else played the same game and wrote down every number they got:")
+    print(f"  start at {bad_case.start}, add {bad_case.step} each time, take {bad_case.modulus} off whenever a "
+          f"number reaches it, {bad_case.rounds} times.")
+    print(f"  On one of those {bad_case.rounds} additions they forgot to take the {bad_case.modulus} off. "
+          f"So exactly one")
+    print(f"  number in the list below is not between 0 and {bad_case.modulus - 1}.")
+    print()
+    print(f"    {listing}")
+    print(f"    {positions}    <- positions, counting 0, 1, 2 ... from the left")
+    print()
+    print(f"  Which position is the number that is not between 0 and {bad_case.modulus - 1}?")
+    print("  Write that one number (the leftmost is 0) in the first-broken box.")
 
 
 if __name__ == "__main__":

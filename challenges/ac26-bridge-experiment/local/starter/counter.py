@@ -1,27 +1,28 @@
 """The only file you edit in this problem.
 
-`advance` must return the *trace*: the value after each round, in order, with the
-modulus applied at every step. `advance` is called with small parameters you can
-work through on paper, and with parameters you have not seen.
+`advance` adds `step` to `start`, `rounds` times, and returns the number it was on
+after each addition -- with the excess taken off every time, so the numbers stay
+inside 0 .. modulus - 1. Run `inspect` to see it done on your own numbers.
 
-Run `make inspect` to see a worked example, `make test` to check yourself.
+It is called with small numbers you can work through on paper, and with numbers you
+have not been shown.
 """
 
 from __future__ import annotations
 
 
 def advance(start: int, step: int, rounds: int, modulus: int) -> list[int]:
-    """Return the value after each of `rounds` additions of `step`, mod `modulus`.
+    """Return the number you are on after each of the `rounds` additions of `step`.
 
-    Contract:
-      - The returned list has exactly `rounds` entries.
-      - Entry i is the value after i+1 additions, reduced mod `modulus`.
-      - Every entry satisfies 0 <= entry < modulus, including when `step` or
-        `start` is negative.
-      - `rounds == 0` returns an empty list.
-      - `modulus` is always >= 2.
+    What the answer has to satisfy:
+      - The list has exactly `rounds` numbers in it.
+      - The number in position i is where you are after i+1 additions.
+      - Every number is 0 or more and smaller than `modulus` -- including when
+        `step` is negative, and when `start` is already `modulus` or bigger.
+      - `rounds == 0` gives an empty list.
+      - `modulus` is always 2 or more.
 
-    The starter below is deliberately incomplete: it never reduces mod `modulus`.
+    The version below is deliberately unfinished: it never takes the excess off.
     """
     trace: list[int] = []
     value = start
