@@ -40,6 +40,9 @@ class WorkbenchSupport:
         code_checkpoints: tuple[str, ...],
         checkpoints: tuple[str, ...],
         checkpoint_labels: dict[str, str],
+        problem_name_en: str = "",
+        description_en: str = "",
+        checkpoint_labels_en: dict[str, str] | None = None,
         max_body_bytes: int,
         run_timeout_seconds: int,
         max_output_bytes: int,
@@ -57,6 +60,12 @@ class WorkbenchSupport:
             checkpoint for checkpoint in checkpoints if checkpoint not in code_checkpoints
         )
         self.checkpoint_labels = checkpoint_labels
+        # [#2877] Browser Workbench は Portal と別オリジンなので Portal の locale を
+        # 読めない。 英語は metadata.json の i18n.en から取り込んで同梱する
+        # (container のビルド文脈は local/ なので metadata.json 自体は入らない)。
+        self.problem_name_en = problem_name_en
+        self.description_en = description_en
+        self.checkpoint_labels_en = checkpoint_labels_en or {}
         self.max_body_bytes = max_body_bytes
         self.run_timeout_seconds = run_timeout_seconds
         self.max_output_bytes = max_output_bytes
@@ -68,6 +77,19 @@ class WorkbenchSupport:
             "name": self.problem_name,
             "description": self.description,
             "submittedFiles": list(self.submitted_files),
+            **(
+                {
+                    "i18n": {
+                        "en": {
+                            "name": self.problem_name_en,
+                            "description": self.description_en,
+                            "checkpointLabels": self.checkpoint_labels_en,
+                        }
+                    }
+                }
+                if self.problem_name_en or self.checkpoint_labels_en
+                else {}
+            ),
             "checkpoints": [
                 {
                     "id": checkpoint,

@@ -1,4 +1,8 @@
 <!doctype html>
+<!--
+  lang は app.js が起動時に書き換える (?lang= → 保存済みの選択 → ブラウザの言語 → ja)。
+  静的に "ja" と書いてあると、英語で読む人にも日本語の読み上げ規則が当たる。
+-->
 <html lang="ja">
   <head>
     <meta charset="utf-8" />
@@ -12,60 +16,85 @@
       <div>
         <p class="eyebrow">TenkaCloud · Browser Workbench</p>
         <h1 id="problem-name">Challenge</h1>
-        <p id="problem-description" class="lead">問題を読み込んでいます。</p>
+        <p id="problem-description" class="lead" data-i18n="loading">問題を読み込んでいます。</p>
       </div>
-      <span id="connection-status" class="status">接続確認中</span>
+      <div class="hero-side">
+        <span id="connection-status" class="status" data-i18n="connecting">接続確認中</span>
+        <button type="button" id="lang-toggle" class="quiet lang-toggle">English</button>
+      </div>
     </header>
 
     <main>
       <section class="panel">
         <div class="section-heading with-action">
           <div><p class="step">STEP 1</p><h2>inspect</h2></div>
-          <button type="button" data-command="inspect">inspect を実行</button>
+          <button type="button" data-command="inspect" data-i18n="runInspect">inspect を実行</button>
         </div>
-        <p>deploy ごとに変わる fixture と、問題を解くために公開された証拠を確認します。</p>
-        <pre id="inspect-output" class="output" tabindex="0">inspect を実行してください。</pre>
+        <p data-i18n="inspectLead">
+          deploy ごとに変わる fixture と、問題を解くために公開された証拠を確認します。
+        </p>
+        <pre id="inspect-output" class="output" tabindex="0" data-i18n="inspectEmpty">
+inspect を実行してください。</pre
+        >
       </section>
 
       <section class="panel">
-        <div class="section-heading"><p class="step">STEP 2</p><h2>starter を編集</h2></div>
-        <p>各タブのソースを修正します。内容はこのブラウザに自動保存されます。</p>
+        <div class="section-heading">
+          <p class="step">STEP 2</p>
+          <h2 data-i18n="editStarter">starter を編集</h2>
+        </div>
+        <p data-i18n="editLead">各タブのソースを修正します。内容はこのブラウザに自動保存されます。</p>
         <div id="editors" class="editor-stack"></div>
         <div class="toolbar">
-          <button type="button" data-command="test">公開テスト</button>
-          <button type="button" data-command="reset" class="quiet">初期状態へ戻す</button>
+          <button type="button" data-command="test" data-i18n="runTests">公開テスト</button>
+          <button type="button" data-command="reset" class="quiet" data-i18n="reset">
+            初期状態へ戻す
+          </button>
         </div>
       </section>
 
       <section id="manual-panel" class="panel" hidden>
-        <div class="section-heading"><p class="step">STEP 3</p><h2>直接回答を組み立てる</h2></div>
-        <p>
-          コード以外の checkpoint は、inspect と実験結果から回答します。JSON を求める欄は
-          JSON のまま入力してください。prepare は回答を deploy 固有の提出値へ変換します。
+        <div class="section-heading">
+          <p class="step">STEP 3</p>
+          <h2 data-i18n="manualHeading">直接回答を組み立てる</h2>
+        </div>
+        <p data-i18n="manualLead">
+          コード以外の checkpoint は、inspect と実験結果から回答します。JSON を求める欄は JSON
+          のまま入力してください。prepare は回答を deploy 固有の提出値へ変換します。
         </p>
         <div id="manual-fields" class="manual-stack"></div>
       </section>
 
       <section class="panel">
         <div class="section-heading with-action">
-          <div><p class="step">STEP 4</p><h2>Portal 提出値を作る</h2></div>
+          <div>
+            <p class="step">STEP 4</p>
+            <h2 data-i18n="prepareHeading">Portal 提出値を作る</h2>
+          </div>
           <button type="button" data-command="prepare" class="primary">prepare</button>
         </div>
-        <p>生成された各値を Participant Portal の同名 checkpoint へコピーします。</p>
+        <p data-i18n="prepareLead">
+          生成された各値を Participant Portal の同名 checkpoint へコピーします。
+        </p>
         <div id="submission-output" class="submission-grid" aria-live="polite">
-          <p class="empty">まだ提出値は作られていません。</p>
+          <p class="empty" data-i18n="noSubmissions">まだ提出値は作られていません。</p>
         </div>
       </section>
 
       <section class="panel terminal">
-        <div class="section-heading"><p class="step">BROWSER CONSOLE</p><h2>安全なコマンド</h2></div>
-        <p>一般シェルではありません。この問題に必要な操作だけを実行します。</p>
+        <div class="section-heading">
+          <p class="step">BROWSER CONSOLE</p>
+          <h2 data-i18n="consoleHeading">安全なコマンド</h2>
+        </div>
+        <p data-i18n="consoleLead">
+          一般シェルではありません。この問題に必要な操作だけを実行します。
+        </p>
         <pre id="terminal-output" class="terminal-output" aria-live="polite"></pre>
         <form id="terminal-form" class="terminal-prompt">
           <span aria-hidden="true">$</span>
           <label class="sr-only" for="terminal-input">command</label>
           <input id="terminal-input" autocomplete="off" placeholder="help" />
-          <button type="submit">実行</button>
+          <button type="submit" data-i18n="run">実行</button>
         </form>
       </section>
     </main>
