@@ -60,7 +60,9 @@ describe("rls-tenant-isolation Docker proof is a required CI job", () => {
   });
 
   it("gates the stable validate check on the runtime proof", () => {
-    expect(workflow).toMatch(/needs:\s*\[suite, checks, rls-runtime, eventbridge-runtime\]/);
+    expect(workflow).toMatch(
+      /needs:\s*\[suite, checks, rls-runtime, eventbridge-runtime, github-oidc-runtime\]/,
+    );
     expect(workflow).toContain('test "${{ needs.rls-runtime.result }}" = "success"');
   });
 });

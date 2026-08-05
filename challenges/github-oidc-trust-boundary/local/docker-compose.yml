@@ -1,0 +1,54 @@
+services:
+  participant:
+    image: "${GITHUB_OIDC_PARTICIPANT_IMAGE:-github-oidc-trust-boundary-participant:local}"
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: participant
+    ports:
+      - "${GITHUB_OIDC_WORKBENCH_BIND:-127.0.0.1}:${GITHUB_OIDC_WORKBENCH_PORT:-18122}:8080"
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+      - seccomp=./seccomp-no-connect.json
+    healthcheck:
+      test: ["CMD", "node", "-e", "try { process.kill(1, 0); process.exit(0) } catch { process.exit(1) }"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    restart: "no"
+    networks:
+      - participant
+
+  verifier:
+    image: "${GITHUB_OIDC_VERIFIER_IMAGE:-github-oidc-trust-boundary-verifier:local}"
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: verifier
+    ports:
+      - "${GITHUB_OIDC_VERIFY_BIND:-127.0.0.1}:${GITHUB_OIDC_VERIFY_PORT:-18123}:8081"
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+      - seccomp=./seccomp-no-connect.json
+    healthcheck:
+      test: ["CMD", "node", "-e", "try { process.kill(1, 0); process.exit(0) } catch { process.exit(1) }"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    restart: "no"
+    networks:
+      - verifier
+
+networks:
+  participant: {}
+  verifier: {}

@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "eventbridge:runtime": "bun run scripts/verify-eventbridge-delivery-discipline.ts",
+    "github-oidc:runtime": "bun run scripts/verify-github-oidc-trust-boundary.ts",
     "rls:runtime": "bun run scripts/verify-rls-tenant-isolation.ts",
     "new": "bun run scripts/new-problem.ts",
     "new-course-challenge": "bun run scripts/new-course-challenge.ts",
