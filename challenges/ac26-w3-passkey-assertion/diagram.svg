@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="360" viewBox="0 0 960 360" role="img" aria-labelledby="title desc">
+  <title id="title">Passkey assertion verification flow</title>
+  <desc id="desc">An authenticator keeps the credential private key and signs a challenge and flags. A relying party stores the public key, verifies the signature, and separately enforces the UV bit.</desc>
+  <rect width="960" height="360" rx="24" fill="#0b1220"/>
+  <rect x="45" y="70" width="270" height="210" rx="18" fill="#17233a" stroke="#65d6c5" stroke-width="3"/>
+  <rect x="645" y="70" width="270" height="210" rx="18" fill="#17233a" stroke="#7ea6ff" stroke-width="3"/>
+  <text x="180" y="110" fill="#eaf2ff" text-anchor="middle" font-family="system-ui" font-size="24" font-weight="700">Authenticator</text>
+  <text x="180" y="148" fill="#b8c7dc" text-anchor="middle" font-family="system-ui" font-size="18">keeps private key</text>
+  <text x="180" y="190" fill="#65d6c5" text-anchor="middle" font-family="monospace" font-size="17">sign(challenge + flags)</text>
+  <text x="780" y="110" fill="#eaf2ff" text-anchor="middle" font-family="system-ui" font-size="24" font-weight="700">Relying party</text>
+  <text x="780" y="148" fill="#b8c7dc" text-anchor="middle" font-family="system-ui" font-size="18">stores public key</text>
+  <text x="780" y="190" fill="#7ea6ff" text-anchor="middle" font-family="monospace" font-size="17">verify signature</text>
+  <text x="780" y="226" fill="#ffcc77" text-anchor="middle" font-family="monospace" font-size="17">then require UV=1</text>
+  <path d="M315 176 H630" stroke="#eaf2ff" stroke-width="4" marker-end="url(#arrow)"/>
+  <text x="472" y="155" fill="#eaf2ff" text-anchor="middle" font-family="system-ui" font-size="19">signed assertion</text>
+  <text x="472" y="211" fill="#ffcc77" text-anchor="middle" font-family="system-ui" font-size="17">valid signature does not turn UV=0 into UV=1</text>
+  <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#eaf2ff"/></marker></defs>
+</svg>
