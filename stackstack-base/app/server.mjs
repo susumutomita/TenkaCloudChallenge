@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { addPost, allPosts, resetBoard, validatePost } from "./board.mjs";
-import { CONFIG_FILE, readConfig } from "./config.mjs";
+import { applyConfigChange, CONFIG_FILE, readConfig, resetConfigChanges } from "./config.mjs";
 import { log, recentLines } from "./log.mjs";
 import { observe, posture } from "./posture.mjs";
 import { BOARD_SERIAL, BOOT_CHECK } from "./secrets.mjs";
@@ -118,16 +118,115 @@ function boardPage(config, posts) {
 <body style="font-family:system-ui;max-width:44rem;margin:2.5rem auto;line-height:1.7;padding:0 1rem">
 <h1>${escapeHtml(config.boardTitle)}</h1>
 <p>board serial: <code>${BOARD_SERIAL}</code></p>
-<p>投稿の受付: <strong>${config.acceptingPosts ? "開いています" : "閉じています"}</strong>
- (設定ファイル <code>${escapeHtml(CONFIG_HINT)}</code> の <code>acceptingPosts</code>)</p>
+<p>投稿の受付: <strong>${config.acceptingPosts ? "開いています" : "閉じています"}</strong></p>
 <h2>この板でできること</h2>
-<pre>GET  api/board     板の状態と投稿一覧
-GET  api/logs      アプリのログ
-GET  posture       いまの状態の実測結果
-GET  healthz       死活確認
-POST api/posts     投稿する  {"author":"...","title":"...","body":"..."}</pre>
+<p><a href="console"><strong>API コンソールを開く</strong></a> — ここから設定を変えたり投稿したりできます。ファイルを探して編集する必要はありません。</p>
+<pre>GET    api/board     板の状態と投稿一覧
+GET    api/logs      アプリのログ
+GET    posture       いまの状態の実測結果
+GET    healthz       死活確認
+POST   api/posts     投稿する  {"author":"...","title":"...","body":"..."}
+GET    api/config    いまの設定
+PATCH  api/config    設定を変える  {"acceptingPosts": true}
+DELETE api/config    変えた設定を捨てて初期状態に戻す</pre>
 <h2>投稿</h2>
 ${rows}
+</body></html>`;
+}
+
+/**
+ * 実行できる API 一覧。 板の説明に並んでいた行を、 そのまま押せる形にしたもの。
+ *
+ * Swagger UI や Redoc を CDN から読む方向は採らない — この板は loopback と Codespaces の
+ * 転送ポートの両方から開かれ、 どちらもコンテナの外へ出られる保証が無い。 外部を引いた
+ * 瞬間、 「動く環境と動かない環境がある」 という一番手間のかかる不具合になる。
+ *
+ * OpenAPI 文書を置いて別 UI に描かせる方向も採らない — この板の API は 8 本で、
+ * 仕様書と実装が別々に old くなる余地を作るほうが高くつく。 ここが唯一の一覧。
+ *
+ * URL はすべて相対で、 この面は `/console` に置く。 `/api/console` に置く方向は採らない —
+ * そこからの `api/board` は `/api/api/board` に解決してしまう。 先頭 `/` を付ける方向も
+ * 採らない: Codespaces の転送も loopback もアプリを root に置くので今は動くが、 前段に
+ * パスを足した瞬間に全部外れる。 板と同じ階層に置いておけば、 相対のまま両方で動く。
+ */
+function consolePage() {
+  const calls = [
+    { method: "GET", path: "api/board", note: "板の状態と投稿一覧" },
+    { method: "GET", path: "api/config", note: "いまの設定" },
+    {
+      method: "PATCH",
+      path: "api/config",
+      note: "設定を変える",
+      body: '{\n  "acceptingPosts": true\n}',
+    },
+    { method: "DELETE", path: "api/config", note: "変えた設定を捨てて初期状態に戻す" },
+    {
+      method: "POST",
+      path: "api/posts",
+      note: "投稿する",
+      body: '{\n  "author": "you",\n  "title": "はじめての投稿",\n  "body": "本文"\n}',
+    },
+    { method: "GET", path: "posture", note: "いまの状態の実測結果" },
+    { method: "GET", path: "api/logs", note: "アプリのログ" },
+    { method: "GET", path: "healthz", note: "死活確認" },
+  ];
+  const cards = calls
+    .map((call, index) => {
+      const body =
+        call.body === undefined
+          ? ""
+          : `<textarea id="b${index}" rows="${call.body.split("\n").length}" spellcheck="false">${escapeHtml(call.body)}</textarea>`;
+      return `<article>
+  <h3><code>${call.method}</code> <code>${escapeHtml(call.path)}</code></h3>
+  <p>${escapeHtml(call.note)}</p>
+  ${body}
+  <p><button type="button" data-call="${index}">実行</button></p>
+  <pre id="r${index}" class="out" aria-live="polite"></pre>
+</article>`;
+    })
+    .join("\n");
+  return `<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>API コンソール</title>
+<style>
+ body{font-family:system-ui;max-width:44rem;margin:2.5rem auto;line-height:1.7;padding:0 1rem}
+ article{border:1px solid #ccd;border-radius:.5rem;padding:.75rem 1rem;margin:1rem 0}
+ h3{margin:.2rem 0}
+ textarea{width:100%;font-family:ui-monospace,monospace;font-size:.9rem}
+ .out{background:#f4f6f8;padding:.6rem;border-radius:.4rem;white-space:pre-wrap;min-height:1.2rem;overflow-x:auto}
+ button{font-size:1rem;padding:.35rem 1rem}
+</style></head>
+<body>
+<h1>API コンソール</h1>
+<p>この板の API をここから実行できます。設定の変更もここから行います
+ — <strong>リポジトリのファイルは書き換えません</strong>。コンテナを作り直せば元に戻ります。</p>
+<p><a href="./">板に戻る</a></p>
+${cards}
+<script>
+const CALLS = ${JSON.stringify(calls.map(({ method, path, body }) => ({ method, path, hasBody: body !== undefined })))};
+for (const button of document.querySelectorAll("button[data-call]")) {
+  button.addEventListener("click", async () => {
+    const index = Number(button.dataset.call);
+    const call = CALLS[index];
+    const out = document.querySelector("#r" + index);
+    out.textContent = "…";
+    const init = { method: call.method };
+    if (call.hasBody) {
+      init.headers = { "content-type": "application/json" };
+      init.body = document.querySelector("#b" + index).value;
+    }
+    try {
+      const response = await fetch(call.path, init);
+      const text = await response.text();
+      let shown = text;
+      try { shown = JSON.stringify(JSON.parse(text), null, 2); } catch {}
+      out.textContent = response.status + " " + response.statusText + "\\n" + shown;
+    } catch (error) {
+      out.textContent = "リクエストが届きませんでした: " + error;
+    }
+  });
+}
+</script>
 </body></html>`;
 }
 
@@ -157,6 +256,10 @@ const BASE_ROUTES = [
   "GET /api/logs",
   "GET /posture",
   "POST /api/posts",
+  "GET /api/config",
+  "PATCH /api/config",
+  "DELETE /api/config",
+  "GET /console",
 ];
 
 /**
@@ -244,6 +347,29 @@ const challenge = createServer(guard(async (request, response) => {
   if (route === "GET /") {
     const config = readConfig();
     return sendHtml(response, 200, boardPage(config.value, allPosts()));
+  }
+
+  if (route === "GET /console") {
+    return sendHtml(response, 200, consolePage());
+  }
+
+  if (route === "GET /api/config") {
+    const config = readConfig();
+    return send(response, 200, { settings: config.value, ok: config.ok, error: config.error });
+  }
+
+  if (route === "PATCH /api/config") {
+    const body = await readJson(request);
+    if (body === TOO_LARGE) {
+      return send(response, 413, { error: `body must be at most ${MAX_BODY_BYTES} bytes` });
+    }
+    const result = applyConfigChange(body);
+    if (!result.ok) return send(response, 400, { error: "rejected", detail: result.problems });
+    return send(response, 200, { settings: result.value });
+  }
+
+  if (route === "DELETE /api/config") {
+    return send(response, 200, { settings: resetConfigChanges().value });
   }
 
   if (route === "GET /healthz") {

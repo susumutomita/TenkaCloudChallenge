@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { log } from "./log.mjs";
 
 /**
@@ -17,6 +17,18 @@ import { log } from "./log.mjs";
  */
 
 const CONFIG_PATH = process.env.APP_CONFIG ?? "/app/config/app.json";
+
+/**
+ * 実行中に変えた設定の置き場。
+ *
+ * マウント元のファイルを書き換える方向は採らない — あれは checkout の中の git 管理下の
+ * ファイルなので、 書いた瞬間に作業ツリーが汚れ、 コンテナを作り直しても内容が残る。
+ * つまり「一度解いたらその checkout に二周目が無い」状態になる。
+ *
+ * 永続ボリュームに置く方向も採らない — 消し方を知っている人しかやり直せなくなる。
+ * `/tmp` はコンテナと一緒に消えるので、 作り直しがそのままリセットになる。
+ */
+const OVERRIDE_PATH = process.env.APP_CONFIG_OVERRIDE ?? "/tmp/stackstack-config.json";
 
 const DEFAULTS = {
   boardTitle: "board",
@@ -73,7 +85,7 @@ export function readConfig(path = CONFIG_PATH) {
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
     return report(`${path} must contain a JSON object`);
   }
-  const { value, problems } = coerce(parsed);
+  const { value, problems } = coerce({ ...parsed, ...readOverride() });
   if (problems.length > 0) return report(problems.join("; "), value);
   if (lastError !== null) {
     lastError = null;
@@ -92,3 +104,57 @@ function report(error, value = { ...DEFAULTS }) {
 }
 
 export const CONFIG_FILE = CONFIG_PATH;
+
+
+/**
+ * 実行中に変えた分。 読めなければ「無かったこと」にする。
+ *
+ * 壊れた上書きを報告する方向は採らない — これを書くのは API だけで、 参加者が手で編集する
+ * 面ではない。 報告しても直す手段が無い相手に見せることになる。 マウント元 (参加者が
+ * 触れるファイル) の JSON 破損は従来どおり `/healthz` と `/posture` に出る。
+ */
+function readOverride() {
+  try {
+    const parsed = JSON.parse(readFileSync(OVERRIDE_PATH, "utf8"));
+    return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * 設定を 1 つ以上変える。 受け付けた結果を返す。
+ *
+ * 部分適用はしない — 3 つ送って 2 つだけ通ると、 参加者は `/api/board` を見るまで何が
+ * 効いたか分からない。 1 つでも弾かれたら全部やめて理由を返す。
+ *
+ * @param {Record<string, unknown>} patch
+ * @returns {{ ok: boolean, value?: typeof DEFAULTS, problems?: string[] }}
+ */
+export function applyConfigChange(patch) {
+  if (patch === null || typeof patch !== "object" || Array.isArray(patch)) {
+    return { ok: false, problems: ["the body must be a JSON object"] };
+  }
+  const merged = { ...readConfig().value, ...readOverride(), ...patch };
+  const { value, problems } = coerce(merged);
+  if (problems.length > 0) return { ok: false, problems };
+  const next = { ...readOverride(), ...patch };
+  try {
+    writeFileSync(OVERRIDE_PATH, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+  } catch (error) {
+    return { ok: false, problems: [`cannot save the change: ${error.code ?? error.message}`] };
+  }
+  log("info", `config changed via API: ${Object.keys(patch).join(", ")}`);
+  return { ok: true, value };
+}
+
+/** 実行中に変えた分を捨て、 マウント元のファイルだけの状態に戻す。 */
+export function resetConfigChanges() {
+  try {
+    rmSync(OVERRIDE_PATH, { force: true });
+  } catch {
+    // 消せない = 元から無い。 呼び出し側にとっては同じ結果なので黙る。
+  }
+  log("info", "config changes discarded");
+  return readConfig();
+}
