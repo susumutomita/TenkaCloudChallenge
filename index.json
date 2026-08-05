@@ -1695,6 +1695,34 @@
       }
     },
     {
+      "id": "github-oidc-trust-boundary",
+      "name": "そのトークンは、どのworkflowのもの？",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "45-60 分",
+      "shortDescription": "GitHub Actions OIDCのAWS production roleを、正しいaudience・repository・environmentへ束縛しよう。",
+      "tags": [
+        "github-actions",
+        "oidc",
+        "aws",
+        "iam",
+        "sts",
+        "trust-policy",
+        "least-privilege",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "hello-multicloud",
       "name": "Hello Multicloud (Sample)",
       "category": "Challenge",

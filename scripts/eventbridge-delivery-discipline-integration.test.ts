@@ -150,7 +150,7 @@ describe("eventbridge delivery metadata and image boundary", () => {
     expect(workflow).toContain("eventbridge-runtime:");
     expect(workflow).toContain("run: bun run eventbridge:runtime");
     expect(workflow).toMatch(
-      /needs:\s*\[suite, checks, rls-runtime, eventbridge-runtime\]/,
+      /needs:\s*\[suite, checks, rls-runtime, eventbridge-runtime, github-oidc-runtime\]/,
     );
     expect(workflow).toContain(
       'test "${{ needs.eventbridge-runtime.result }}" = "success"',
