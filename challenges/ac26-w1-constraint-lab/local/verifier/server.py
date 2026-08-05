@@ -55,6 +55,14 @@ CODE_CHECKPOINTS = {
 CHECKPOINTS = ("residuals", "first-broken", "boolean", "membership", "transfer")
 #: The four checkpoints whose portal submission is the learner's three files as JSON.
 FILE_CHECKPOINTS = ("residuals", "boolean", "membership", "transfer")
+CODE_CHECKPOINTS_FOR_PORTAL = frozenset(FILE_CHECKPOINTS)
+CHECKPOINT_LABELS = {
+    "residuals": "residual を計算して trace を出す",
+    "first-broken": "最初の違反箇所と residual を言う",
+    "boolean": "signal を 0 か 1 だけに縛る",
+    "membership": "許可された値だけを通す",
+    "transfer": "見たことのない回路でも成立させる",
+}
 WORKBENCH_ASSETS = {
     "/": ("index.html", "text/html; charset=utf-8"),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
@@ -98,6 +106,24 @@ def starter_payload() -> dict[str, str]:
     """Return the three editable files shipped to the browser workbench."""
     return {
         name: (ROOT / "starter" / name).read_text(encoding="utf-8") for name in SUBMITTED_FILES
+    }
+
+
+def config_payload() -> dict[str, object]:
+    """Declare the generic editor contract consumed by the Participant Portal."""
+    return {
+        "id": "ac26-w1-constraint-lab",
+        "name": "0 になるべき式の集まり",
+        "description": "constraint の residual と最初の破綻を読み、gadget を完成させる。",
+        "submittedFiles": list(SUBMITTED_FILES),
+        "checkpoints": [
+            {
+                "id": checkpoint,
+                "label": CHECKPOINT_LABELS[checkpoint],
+                "kind": "code" if checkpoint in CODE_CHECKPOINTS_FOR_PORTAL else "answer",
+            }
+            for checkpoint in CHECKPOINTS
+        ],
     }
 
 
@@ -282,6 +308,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's name
         path = urlsplit(self.path).path
+        if path == "/api/config":
+            self._respond(200, config_payload())
+            return
         if path == "/api/inspect":
             self._respond(200, inspect_payload(SEED))
             return

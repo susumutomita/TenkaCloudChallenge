@@ -145,6 +145,32 @@ LEGACY_CODE_CHECKPOINTS = {
     "ac26-w1-underconstraint": {"build", "audit", "exploit", "repair", "mutation-transfer"},
 }
 
+LEGACY_PROBE = r'''
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, ".")
+from verifier.server import CHECKPOINTS, config_payload, starter_payload
+
+config = config_payload()
+starter = starter_payload()
+metadata = json.loads(Path("..", "metadata.json").read_text(encoding="utf-8"))
+checks = {item["id"]: item for item in metadata["scoring"]["checks"]}
+
+assert config["id"] == metadata["id"]
+assert tuple(config["submittedFiles"]) == tuple(starter)
+assert tuple(item["id"] for item in config["checkpoints"]) == tuple(CHECKPOINTS)
+assert all(isinstance(value, str) and value.strip() for value in starter.values())
+for item in config["checkpoints"]:
+    assert item["kind"] in ("code", "answer")
+    assert isinstance(item["label"], str) and item["label"].strip()
+    expected_input = "multiline" if item["kind"] == "code" else "text"
+    assert checks[item["id"]].get("input", "text") == expected_input
+
+print(json.dumps(config, ensure_ascii=False))
+'''
+
 
 def require(condition: bool, message: str) -> None:
     if not condition:
@@ -249,12 +275,30 @@ def check_legacy_input_contract(problem_id: str, code_checkpoints: set[str]) -> 
         actual == code_checkpoints,
         f"{problem_id}: multiline checkpoints {sorted(actual)} != {sorted(code_checkpoints)}",
     )
+    server = (ROOT / "challenges" / problem_id / "local" / "verifier" / "server.py").read_text(
+        encoding="utf-8"
+    )
+    require("/api/config" in server, f"{problem_id}: GET /api/config missing")
+
+    completed = subprocess.run(
+        [sys.executable, "-I", "-c", LEGACY_PROBE],
+        cwd=ROOT / "challenges" / problem_id / "local",
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=30,
+        check=False,
+    )
+    require(
+        completed.returncode == 0,
+        f"{problem_id}: generic Portal editor config probe failed\n{completed.stdout}",
+    )
 
 
 def main() -> int:
     for problem_id, code_checkpoints in LEGACY_CODE_CHECKPOINTS.items():
         check_legacy_input_contract(problem_id, code_checkpoints)
-        print(f"PASS {problem_id} input contract")
+        print(f"PASS {problem_id} input and config contract")
     for problem_id in TARGETS:
         check_static(problem_id)
         check_runtime(problem_id)

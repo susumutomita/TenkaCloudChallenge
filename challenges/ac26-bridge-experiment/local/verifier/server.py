@@ -44,6 +44,13 @@ REQUEST_TIMEOUT_SECONDS = 15
 
 CHECKPOINTS = ("environment", "predict", "first-broken", "generalize")
 SUBMISSION_FILES = ("counter.py",)
+CODE_CHECKPOINTS = frozenset(("generalize",))
+CHECKPOINT_LABELS = {
+    "environment": "environment — Workbench が出す合言葉を、そのまま貼る",
+    "predict": "predict — 走らせる前に紙で出した、最後にいる数 (数はひとつ)",
+    "first-broken": "first-broken — 並んだ数のうち、はみ出しているのは左から何番目？ (左端が 0)",
+    "generalize": "generalize — 書き上げた counter.py の中身を、全部",
+}
 WORKBENCH_ASSETS = {
     "/": ("index.html", "text/html; charset=utf-8"),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
@@ -91,6 +98,24 @@ def starter_payload() -> dict[str, str]:
     """Return the editable file shipped to the browser workbench."""
     return {
         name: (ROOT / "starter" / name).read_text(encoding="utf-8") for name in SUBMISSION_FILES
+    }
+
+
+def config_payload() -> dict[str, object]:
+    """Declare the generic editor contract consumed by the Participant Portal."""
+    return {
+        "id": "ac26-bridge-experiment",
+        "name": "予測してから走らせる",
+        "description": "剰余カウンタを紙で予測し、壊れた trace を読み、実装を一般化する。",
+        "submittedFiles": list(SUBMISSION_FILES),
+        "checkpoints": [
+            {
+                "id": checkpoint,
+                "label": CHECKPOINT_LABELS[checkpoint],
+                "kind": "code" if checkpoint in CODE_CHECKPOINTS else "answer",
+            }
+            for checkpoint in CHECKPOINTS
+        ],
     }
 
 
@@ -286,6 +311,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's name
         path = urlsplit(self.path).path
+        if path == "/api/config":
+            self._respond(200, config_payload())
+            return
         if path == "/api/inspect":
             self._respond(200, inspect_payload(SEED))
             return
