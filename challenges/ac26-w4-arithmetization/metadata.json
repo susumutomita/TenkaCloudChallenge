@@ -314,12 +314,14 @@
     "checks": [
       {
         "id": "trace",
+        "input": "multiline",
         "label": "実行 trace を作る",
         "points": 30,
         "wrongAnswerPenalty": 15
       },
       {
         "id": "transition",
+        "input": "multiline",
         "label": "隣り合う行の関係を式にする",
         "points": 40,
         "wrongAnswerPenalty": 15,
@@ -333,6 +335,7 @@
       },
       {
         "id": "boundary",
+        "input": "multiline",
         "label": "どこから始まったかを固定する",
         "points": 30,
         "wrongAnswerPenalty": 15,
@@ -346,6 +349,7 @@
       },
       {
         "id": "interpolate",
+        "input": "multiline",
         "label": "列を多項式にする",
         "points": 45,
         "wrongAnswerPenalty": 15,
@@ -359,12 +363,14 @@
       },
       {
         "id": "compose",
+        "input": "multiline",
         "label": "domain 上で関係が消えることを見る",
         "points": 40,
         "wrongAnswerPenalty": 15
       },
       {
         "id": "locate",
+        "input": "multiline",
         "label": "最初に壊れた行を特定する",
         "points": 40,
         "wrongAnswerPenalty": 15,
@@ -378,6 +384,7 @@
       },
       {
         "id": "underconstrained",
+        "input": "multiline",
         "label": "多項式が正しくても文が違う例を作る",
         "points": 45,
         "wrongAnswerPenalty": 15,
@@ -391,6 +398,7 @@
       },
       {
         "id": "transfer",
+        "input": "multiline",
         "label": "見たことのない設定でも成立させる",
         "points": 30,
         "wrongAnswerPenalty": 15

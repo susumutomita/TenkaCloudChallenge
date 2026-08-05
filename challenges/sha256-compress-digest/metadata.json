@@ -354,6 +354,7 @@
     "checks": [
       {
         "id": "round",
+        "input": "multiline",
         "label": "1 round を実装する",
         "points": 45,
         "wrongAnswerPenalty": 15,
@@ -372,6 +373,7 @@
       },
       {
         "id": "compress",
+        "input": "multiline",
         "label": "64 round と足し戻しを実装する",
         "points": 45,
         "wrongAnswerPenalty": 15,
@@ -385,6 +387,7 @@
       },
       {
         "id": "feedforward",
+        "input": "multiline",
         "label": "64 round を逆にたどる",
         "points": 45,
         "wrongAnswerPenalty": 15,
@@ -403,6 +406,7 @@
       },
       {
         "id": "digest",
+        "input": "multiline",
         "label": "SHA-256 を完成させる",
         "points": 55,
         "wrongAnswerPenalty": 15,

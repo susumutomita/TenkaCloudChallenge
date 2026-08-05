@@ -279,6 +279,7 @@
     "checks": [
       {
         "id": "normalize",
+        "input": "multiline",
         "label": "整数を体の元にする",
         "points": 25,
         "wrongAnswerPenalty": 10,
@@ -292,12 +293,14 @@
       },
       {
         "id": "arithmetic",
+        "input": "multiline",
         "label": "加減乗算と体の公理",
         "points": 30,
         "wrongAnswerPenalty": 10
       },
       {
         "id": "egcd-trace",
+        "input": "multiline",
         "label": "拡張 Euclid の各ステップを出す",
         "points": 35,
         "wrongAnswerPenalty": 10,
@@ -311,6 +314,7 @@
       },
       {
         "id": "inverse",
+        "input": "multiline",
         "label": "逆元と除算",
         "points": 35,
         "wrongAnswerPenalty": 10,
@@ -324,12 +328,14 @@
       },
       {
         "id": "errors",
+        "input": "multiline",
         "label": "存在しないものを存在しないと言う",
         "points": 25,
         "wrongAnswerPenalty": 10
       },
       {
         "id": "composite",
+        "input": "multiline",
         "label": "素数でない法で反例を作る",
         "points": 25,
         "wrongAnswerPenalty": 10,
@@ -343,6 +349,7 @@
       },
       {
         "id": "axioms",
+        "input": "multiline",
         "label": "見たことのない素数で公理を通す",
         "points": 25,
         "wrongAnswerPenalty": 10

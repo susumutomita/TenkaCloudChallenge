@@ -427,6 +427,7 @@
     "checks": [
       {
         "id": "dataflow",
+        "input": "multiline",
         "label": "何がその wire を渡っていて、 primitive の保証はどこで終わるか",
         "points": 45,
         "wrongAnswerPenalty": 15,
@@ -440,6 +441,7 @@
       },
       {
         "id": "properties",
+        "input": "multiline",
         "label": "どの wire がどの property を担っているか",
         "points": 30,
         "wrongAnswerPenalty": 15,
@@ -453,6 +455,7 @@
       },
       {
         "id": "contracts",
+        "input": "multiline",
         "label": "5 種類の違反があり、 それは 5 種類である",
         "points": 50,
         "wrongAnswerPenalty": 15,
@@ -466,6 +469,7 @@
       },
       {
         "id": "diagnosis",
+        "input": "multiline",
         "label": "どれが最初に壊れたのか",
         "points": 30,
         "wrongAnswerPenalty": 15,
@@ -479,6 +483,7 @@
       },
       {
         "id": "counterexample",
+        "input": "multiline",
         "label": "どの部品も壊さずに 1 つ落とす",
         "points": 45,
         "wrongAnswerPenalty": 15,
@@ -492,6 +497,7 @@
       },
       {
         "id": "repair",
+        "input": "multiline",
         "label": "要求を下げずに戻す",
         "points": 45,
         "wrongAnswerPenalty": 15,
@@ -505,6 +511,7 @@
       },
       {
         "id": "selection",
+        "input": "multiline",
         "label": "まだ誰も作っていないものに stack を選ぶ",
         "points": 30,
         "wrongAnswerPenalty": 15,
@@ -518,6 +525,7 @@
       },
       {
         "id": "transfer",
+        "input": "multiline",
         "label": "見たことのない field・statement・program・brief で",
         "points": 25,
         "wrongAnswerPenalty": 15

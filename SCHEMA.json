@@ -1065,6 +1065,14 @@
                     "maxLength": 80,
                     "description": "Portal に出す表示名 (非スポイラー、 80 文字以下。 例: \"公開バックアップ\")。 英訳は i18n.en.checks[] へ。"
                   },
+                  "input": {
+                    "type": "string",
+                    "enum": [
+                      "text",
+                      "multiline"
+                    ],
+                    "description": "[TenkaCloud#2876] Portal の提出欄の形。multiline はソースコードなど改行を保持する値に使う。省略時または text は後方互換の 1 行入力。"
+                  },
                   "points": {
                     "type": "integer",
                     "minimum": 1,

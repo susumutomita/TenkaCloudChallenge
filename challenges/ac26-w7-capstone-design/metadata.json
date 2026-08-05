@@ -324,12 +324,14 @@
     "checks": [
       {
         "id": "assets",
+        "input": "multiline",
         "label": "誰の何を、どこまで隠すのかを並べる",
         "points": 30,
         "wrongAnswerPenalty": 15
       },
       {
         "id": "requirements",
+        "input": "multiline",
         "label": "brief から必要な性質だけを取り出す",
         "points": 45,
         "wrongAnswerPenalty": 15,
@@ -343,12 +345,14 @@
       },
       {
         "id": "alternatives",
+        "input": "multiline",
         "label": "使わない場合を含めて並べる",
         "points": 30,
         "wrongAnswerPenalty": 15
       },
       {
         "id": "selection",
+        "input": "multiline",
         "label": "brief が要求した分だけ選ぶ",
         "points": 50,
         "wrongAnswerPenalty": 15,
@@ -367,6 +371,7 @@
       },
       {
         "id": "architecture",
+        "input": "multiline",
         "label": "何がどの形で境界を越えるかを書く",
         "points": 45,
         "wrongAnswerPenalty": 15,
@@ -380,12 +385,14 @@
       },
       {
         "id": "attacks",
+        "input": "multiline",
         "label": "壊れ方を、観測できる形で書く",
         "points": 35,
         "wrongAnswerPenalty": 15
       },
       {
         "id": "matrix",
+        "input": "multiline",
         "label": "性質ごとに、誰が担うのかを書く",
         "points": 35,
         "wrongAnswerPenalty": 15,
@@ -399,6 +406,7 @@
       },
       {
         "id": "revision",
+        "input": "multiline",
         "label": "前提が 1 つ動いた brief に答える",
         "points": 30,
         "wrongAnswerPenalty": 15

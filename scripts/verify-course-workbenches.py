@@ -70,15 +70,21 @@ FORBIDDEN_DOC_TERMS = (
 PROBE = r'''
 import json
 import sys
+from pathlib import Path
 
 sys.path.insert(0, ".")
 from verifier.server import CHECKPOINTS, _WORKBENCH
 
 config = _WORKBENCH.config_payload()
 starter = _WORKBENCH.starter_payload()
+metadata = json.loads(Path("..", "metadata.json").read_text(encoding="utf-8"))
+checks = {item["id"]: item for item in metadata["scoring"]["checks"]}
 assert tuple(config["submittedFiles"]) == tuple(starter)
 assert tuple(item["id"] for item in config["checkpoints"]) == tuple(CHECKPOINTS)
 assert all(isinstance(value, str) and value.strip() for value in starter.values())
+for item in config["checkpoints"]:
+    expected_input = "multiline" if item["kind"] == "code" else "text"
+    assert checks[item["id"]].get("input", "text") == expected_input
 
 manual = {
     item["id"]: "0"
@@ -129,6 +135,15 @@ if sys.argv[1] == "heavy":
     result["publicPassed"] = public["passed"]
 print(json.dumps(result, ensure_ascii=False))
 '''
+
+# The first four course problems predate the shared Workbench adapter above. Keep their
+# catalog declaration explicit until #2877 migrates them to the generic Portal editor.
+LEGACY_CODE_CHECKPOINTS = {
+    "ac26-bridge-experiment": {"generalize"},
+    "ac26-bridge-properties": {"transfer"},
+    "ac26-w1-constraint-lab": {"residuals", "boolean", "membership", "transfer"},
+    "ac26-w1-underconstraint": {"build", "audit", "exploit", "repair", "mutation-transfer"},
+}
 
 
 def require(condition: bool, message: str) -> None:
@@ -225,7 +240,21 @@ def check_runtime(problem_id: str) -> None:
     require(payload["prepared"] > 0, f"{problem_id}: no Portal submissions prepared")
 
 
+def check_legacy_input_contract(problem_id: str, code_checkpoints: set[str]) -> None:
+    metadata_path = ROOT / "challenges" / problem_id / "metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    checks = metadata["scoring"]["checks"]
+    actual = {check["id"] for check in checks if check.get("input", "text") == "multiline"}
+    require(
+        actual == code_checkpoints,
+        f"{problem_id}: multiline checkpoints {sorted(actual)} != {sorted(code_checkpoints)}",
+    )
+
+
 def main() -> int:
+    for problem_id, code_checkpoints in LEGACY_CODE_CHECKPOINTS.items():
+        check_legacy_input_contract(problem_id, code_checkpoints)
+        print(f"PASS {problem_id} input contract")
     for problem_id in TARGETS:
         check_static(problem_id)
         check_runtime(problem_id)

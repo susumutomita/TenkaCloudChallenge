@@ -409,6 +409,7 @@
     "checks": [
       {
         "id": "classify",
+        "input": "multiline",
         "label": "どの値が、 誰のものか",
         "points": 30,
         "wrongAnswerPenalty": 15,
@@ -422,6 +423,7 @@
       },
       {
         "id": "capability",
+        "input": "multiline",
         "label": "1 回動かして分かることと、 分からないこと",
         "points": 40,
         "wrongAnswerPenalty": 15,
@@ -435,6 +437,7 @@
       },
       {
         "id": "open-set",
+        "input": "multiline",
         "label": "話してよかった値と、 そうでない値",
         "points": 40,
         "wrongAnswerPenalty": 15,
@@ -448,6 +451,7 @@
       },
       {
         "id": "cross-party",
+        "input": "multiline",
         "label": "何も言わずに、 読むだけの実装",
         "points": 30,
         "wrongAnswerPenalty": 15,
@@ -461,6 +465,7 @@
       },
       {
         "id": "leakage",
+        "input": "multiline",
         "label": "答えを見る test が、 見ていない 3 つの出口",
         "points": 45,
         "wrongAnswerPenalty": 15,
@@ -474,6 +479,7 @@
       },
       {
         "id": "evidence",
+        "input": "multiline",
         "label": "漏れた値から、 秘密を組み立てる",
         "points": 45,
         "wrongAnswerPenalty": 15,
@@ -487,6 +493,7 @@
       },
       {
         "id": "repair",
+        "input": "multiline",
         "label": "同じ答えを返し、 何も言わない prover",
         "points": 45,
         "wrongAnswerPenalty": 15,
@@ -500,6 +507,7 @@
       },
       {
         "id": "transfer",
+        "input": "multiline",
         "label": "見たことのない設定と、 見たことのない実装で",
         "points": 25,
         "wrongAnswerPenalty": 15

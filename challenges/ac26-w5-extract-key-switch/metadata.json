@@ -355,6 +355,7 @@
     "checks": [
       {
         "id": "phase",
+        "input": "multiline",
         "label": "保つべき数を書き下す",
         "points": 30,
         "wrongAnswerPenalty": 15,
@@ -368,6 +369,7 @@
       },
       {
         "id": "extract",
+        "input": "multiline",
         "label": "1 係数を取り出す",
         "points": 50,
         "wrongAnswerPenalty": 15,
@@ -381,6 +383,7 @@
       },
       {
         "id": "trace",
+        "input": "multiline",
         "label": "対応を見せる",
         "points": 35,
         "wrongAnswerPenalty": 15,
@@ -394,6 +397,7 @@
       },
       {
         "id": "decompose",
+        "input": "multiline",
         "label": "mask を桁へ分解する",
         "points": 25,
         "wrongAnswerPenalty": 15,
@@ -407,6 +411,7 @@
       },
       {
         "id": "switch",
+        "input": "multiline",
         "label": "別の鍵へ移す",
         "points": 55,
         "wrongAnswerPenalty": 15,
@@ -420,6 +425,7 @@
       },
       {
         "id": "domains",
+        "input": "multiline",
         "label": "どの鍵の話かを分類する",
         "points": 35,
         "wrongAnswerPenalty": 15,
@@ -433,6 +439,7 @@
       },
       {
         "id": "endtoend",
+        "input": "multiline",
         "label": "3 通りが同じ答えになる",
         "points": 40,
         "wrongAnswerPenalty": 15,
@@ -446,6 +453,7 @@
       },
       {
         "id": "transfer",
+        "input": "multiline",
         "label": "見たことのない設定で成立させる",
         "points": 30,
         "wrongAnswerPenalty": 15

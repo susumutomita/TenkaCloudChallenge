@@ -389,6 +389,7 @@
     "checks": [
       {
         "id": "plan",
+        "input": "multiline",
         "label": "通信する前に、 何回話すかを数える",
         "points": 30,
         "wrongAnswerPenalty": 15,
@@ -402,6 +403,7 @@
       },
       {
         "id": "triple",
+        "input": "multiline",
         "label": "mask は一度きり",
         "points": 35,
         "wrongAnswerPenalty": 15,
@@ -415,6 +417,7 @@
       },
       {
         "id": "masks",
+        "input": "multiline",
         "label": "共有値を覆う。 まだ誰も話さない",
         "points": 40,
         "wrongAnswerPenalty": 15,
@@ -428,6 +431,7 @@
       },
       {
         "id": "open",
+        "input": "multiline",
         "label": "2 つの値を、 1 度の待ち合わせで",
         "points": 45,
         "wrongAnswerPenalty": 15,
@@ -441,6 +445,7 @@
       },
       {
         "id": "product",
+        "input": "multiline",
         "label": "4 つの項のうち、 1 つだけ性質が違う",
         "points": 45,
         "wrongAnswerPenalty": 15,
@@ -454,6 +459,7 @@
       },
       {
         "id": "artifact",
+        "input": "multiline",
         "label": "次の段が受け取れる形にする",
         "points": 30,
         "wrongAnswerPenalty": 15,
@@ -467,6 +473,7 @@
       },
       {
         "id": "audit",
+        "input": "multiline",
         "label": "何が公開されたのかを、 記録から測る",
         "points": 50,
         "wrongAnswerPenalty": 15,
@@ -480,6 +487,7 @@
       },
       {
         "id": "transfer",
+        "input": "multiline",
         "label": "見たことのない設定で成立させる",
         "points": 25,
         "wrongAnswerPenalty": 15

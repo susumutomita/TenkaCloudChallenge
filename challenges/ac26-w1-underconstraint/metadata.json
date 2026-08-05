@@ -229,6 +229,7 @@
     "checks": [
       {
         "id": "build",
+        "input": "multiline",
         "label": "ポリシーどおりの回路を組む",
         "points": 60,
         "wrongAnswerPenalty": 15,
@@ -242,12 +243,14 @@
       },
       {
         "id": "audit",
+        "input": "multiline",
         "label": "足りない制約を特定する",
         "points": 50,
         "wrongAnswerPenalty": 15
       },
       {
         "id": "exploit",
+        "input": "multiline",
         "label": "偽の主張を通す witness を作る",
         "points": 60,
         "wrongAnswerPenalty": 15,
@@ -267,6 +270,7 @@
       },
       {
         "id": "repair",
+        "input": "multiline",
         "label": "正常系を壊さずに塞ぐ",
         "points": 50,
         "wrongAnswerPenalty": 15,
@@ -280,6 +284,7 @@
       },
       {
         "id": "mutation-transfer",
+        "input": "multiline",
         "label": "別の欠落でも成立させる",
         "points": 40,
         "wrongAnswerPenalty": 15,

@@ -341,6 +341,7 @@
       },
       {
         "id": "sigma",
+        "input": "multiline",
         "label": "rotr と 4 つの σ を実装する",
         "points": 45,
         "wrongAnswerPenalty": 10,
@@ -359,6 +360,7 @@
       },
       {
         "id": "logic",
+        "input": "multiline",
         "label": "Ch と Maj を実装する",
         "points": 30,
         "wrongAnswerPenalty": 10,
@@ -372,6 +374,7 @@
       },
       {
         "id": "schedule",
+        "input": "multiline",
         "label": "16 ワードを 64 ワードへ広げる",
         "points": 50,
         "wrongAnswerPenalty": 10,

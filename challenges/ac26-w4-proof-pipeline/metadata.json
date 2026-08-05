@@ -356,6 +356,7 @@
     "checks": [
       {
         "id": "graph",
+        "input": "multiline",
         "label": "artifact の流れを図にする",
         "points": 30,
         "wrongAnswerPenalty": 15,
@@ -369,6 +370,7 @@
       },
       {
         "id": "wiring",
+        "input": "multiline",
         "label": "誰が何を見てよいかを決める",
         "points": 35,
         "wrongAnswerPenalty": 15,
@@ -382,6 +384,7 @@
       },
       {
         "id": "constraints",
+        "input": "multiline",
         "label": "commit できたことと正しいことを分ける",
         "points": 40,
         "wrongAnswerPenalty": 15,
@@ -395,6 +398,7 @@
       },
       {
         "id": "transcript",
+        "input": "multiline",
         "label": "challenge を引く前に何を吸収したか",
         "points": 45,
         "wrongAnswerPenalty": 15,
@@ -408,6 +412,7 @@
       },
       {
         "id": "opening",
+        "input": "multiline",
         "label": "検証されなかった opening を見つける",
         "points": 40,
         "wrongAnswerPenalty": 15,
@@ -421,18 +426,21 @@
       },
       {
         "id": "assumptions",
+        "input": "multiline",
         "label": "setup と仮定を別の欄にする",
         "points": 30,
         "wrongAnswerPenalty": 15
       },
       {
         "id": "cost",
+        "input": "multiline",
         "label": "支持されない主張だけを落とす",
         "points": 30,
         "wrongAnswerPenalty": 15
       },
       {
         "id": "diagnose",
+        "input": "multiline",
         "label": "最初に破れた層を指して直す",
         "points": 50,
         "wrongAnswerPenalty": 15,

@@ -290,6 +290,7 @@
       },
       {
         "id": "pad",
+        "input": "multiline",
         "label": "pad_message を仕様どおり実装する",
         "points": 25,
         "wrongAnswerPenalty": 5,
@@ -308,6 +309,7 @@
       },
       {
         "id": "words",
+        "input": "multiline",
         "label": "ブロックを 32 bit ワード 16 個として読む",
         "points": 20,
         "wrongAnswerPenalty": 5,

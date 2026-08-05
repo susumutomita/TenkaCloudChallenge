@@ -591,6 +591,7 @@ function checkContainerRefs(dir: string, meta: Metadata): CrossRefResult {
  *   - checks は 2〜8 件 (engine の許容範囲、 教材は原則 4〜6)
  *   - checks[].id は `^[a-z0-9][a-z0-9-]{0,63}$` かつ問題内 unique (= verify request の checkpointId)
  *   - checks[].label 非空・80 文字以下、 checks[].points 正整数
+ *   - checks[].input は省略 / `text` / `multiline` のみ (#2876、Portal 入力形状)
  *   - wrongAnswerPenalty は 0 以上整数、 当該 check の points 以下
  *   - 1 check 内の hint 減点合計は当該 check points の 50% 以下 (問題全体 50% は checkScoringRegulation)
  *   - hints[].id は **問題全体で unique** (portal の reveal route が hintId 単独キーのため、
@@ -629,6 +630,9 @@ export function checkMultiVerifyStructure(meta: Metadata): ValidationError[] {
       errors.push(`scoring.checks[${index}].label must be a non-empty string`);
     } else if (check.label.length > CHECK_LABEL_MAX) {
       errors.push(`scoring.checks[${index}].label must be ${CHECK_LABEL_MAX} characters or fewer`);
+    }
+    if (check.input !== undefined && check.input !== "text" && check.input !== "multiline") {
+      errors.push(`scoring.checks[${index}].input must be "text" or "multiline"`);
     }
     const points = check.points;
     const pointsValid = typeof points === "number" && Number.isInteger(points) && points > 0;
