@@ -15,9 +15,6 @@ services:
       dockerfile: Dockerfile
     environment:
       SCENARIO: onboarding
-      # The path the participant has to open, which is not the path the app sees
-      # (the config is mounted at /app/config). Display only.
-      CONFIG_HINT: problems/challenges/stackstack-onboarding/local/config/app.json
       # Per-deploy random secret injected by `make local`. The board serial, the
       # boot-check value, and the handover token are all derived from it inside
       # the container.

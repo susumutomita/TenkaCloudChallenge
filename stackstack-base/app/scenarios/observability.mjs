@@ -828,7 +828,7 @@ export const checks = {
  */
 export const editableSettings = {
   name: SETTINGS_NAME,
-  summary: "リレー設定",
+  summary: { ja: "リレー設定", en: "relay settings" },
   example: {"enabled": true},
   read: () => readRelayConfig(),
 };

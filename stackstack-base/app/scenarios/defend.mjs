@@ -1227,7 +1227,7 @@ export const checks = {
  */
 export const editableSettings = {
   name: SETTINGS_NAME,
-  summary: "アクセスポリシー",
+  summary: { ja: "アクセスポリシー", en: "access policy" },
   example: { enabled: true },
   read: () => loadPolicy(),
 };

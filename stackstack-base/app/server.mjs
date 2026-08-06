@@ -32,7 +32,6 @@ const SCENARIO = process.env.SCENARIO ?? "onboarding";
  * sees the mounted container path, which is not the path they need to open, so
  * the problem's compose file passes the checkout-relative one for display.
  */
-const CONFIG_HINT = process.env.CONFIG_HINT ?? CONFIG_FILE;
 
 // An unknown scenario is a wiring mistake in the problem, not a participant
 // error: fail at boot rather than serving a board with no checkpoints behind it.
@@ -100,11 +99,30 @@ const escapeHtml = (text) =>
   );
 
 /**
+ * この 1 リクエストで使う言語。
+ *
+ * cookie や localStorage で覚える方向は採らない — この板はサーバが 1 枚ずつ描く静的な
+ * ページで、 リンクに `?lang=` を持たせれば選択はページからページへ運べる。 状態を 2 箇所
+ * (ブラウザとリンク) に持つと、 どちらが勝つかという新しい問いが生まれるだけで得が無い。
+ */
+function pickLang(url, request) {
+  const asked = url.searchParams.get("lang");
+  if (asked === "ja" || asked === "en") return asked;
+  const header = String(request.headers["accept-language"] ?? "");
+  return header.trim().toLowerCase().startsWith("en") ? "en" : "ja";
+}
+
+/** 対訳を 1 組ずつ並べ、 その言語の側を返す。 辞書ファイルを別に持つほどの量ではない。 */
+function bi(lang, ja, en) {
+  return lang === "en" ? en : ja;
+}
+
+/**
  * Every URL on this page is relative. The board is reached through a forwarded
  * port in Codespaces and through loopback locally, and a hard-coded
  * `http://127.0.0.1:...` would work in exactly one of those.
  */
-function boardPage(config, posts) {
+function boardPage(config, posts, lang) {
   const rows = posts
     .map(
       (post) => `<article>
@@ -114,24 +132,43 @@ function boardPage(config, posts) {
     </article>`,
     )
     .join("\n");
+  const api = [
+    ["GET   ", "api/board", "板の状態と投稿一覧", "board state and every post"],
+    ["GET   ", "api/logs", "アプリのログ", "the app's log"],
+    ["GET   ", "posture", "いまの状態の実測結果", "the measured state, live"],
+    ["GET   ", "healthz", "死活確認", "liveness"],
+    ["POST  ", "api/posts", '投稿する  {"author":"...","title":"...","body":"..."}',
+      'write a post  {"author":"...","title":"...","body":"..."}'],
+    ["GET   ", "api/config", "いまの設定", "current settings"],
+    ["PATCH ", "api/config", '設定を変える  {"acceptingPosts": true}',
+      'change a setting  {"acceptingPosts": true}'],
+    ["DELETE", "api/config", "変えた設定を捨てて初期状態に戻す",
+      "discard changes and return to the initial state"],
+  ]
+    .map(([m, path, ja, en]) => `${m} ${path.padEnd(12)} ${bi(lang, ja, en)}`)
+    .join("\n");
+  const other = lang === "en" ? "ja" : "en";
   return `<!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${escapeHtml(config.boardTitle)}</title></head>
 <body style="font-family:system-ui;max-width:44rem;margin:2.5rem auto;line-height:1.7;padding:0 1rem">
+<p style="text-align:right"><a href="?lang=${other}">${bi(lang, "English", "日本語")}</a></p>
 <h1>${escapeHtml(config.boardTitle)}</h1>
 <p>board serial: <code>${BOARD_SERIAL}</code></p>
-<p>投稿の受付: <strong>${config.acceptingPosts ? "開いています" : "閉じています"}</strong></p>
-<h2>この板でできること</h2>
-<p><a href="docs"><strong>API コンソールを開く</strong></a> — ここから設定を変えたり投稿したりできます。ファイルを探して編集する必要はありません。</p>
-<pre>GET    api/board     板の状態と投稿一覧
-GET    api/logs      アプリのログ
-GET    posture       いまの状態の実測結果
-GET    healthz       死活確認
-POST   api/posts     投稿する  {"author":"...","title":"...","body":"..."}
-GET    api/config    いまの設定
-PATCH  api/config    設定を変える  {"acceptingPosts": true}
-DELETE api/config    変えた設定を捨てて初期状態に戻す</pre>
-<h2>投稿</h2>
+<p>${bi(lang, "投稿の受付", "Accepting posts")}: <strong>${
+    config.acceptingPosts
+      ? bi(lang, "開いています", "open")
+      : bi(lang, "閉じています", "closed")
+  }</strong></p>
+<h2>${bi(lang, "この板でできること", "What this board answers")}</h2>
+<p><a href="docs?lang=${lang}"><strong>${bi(lang, "API コンソールを開く", "Open the API console")}</strong></a>
+ — ${bi(
+   lang,
+   "ここから設定を変えたり投稿したりできます。ファイルを探して編集する必要はありません。",
+   "Change settings and post from there. No file hunting required.",
+ )}</p>
+<pre>${api}</pre>
+<h2>${bi(lang, "投稿", "Posts")}</h2>
 ${rows}
 </body></html>`;
 }
@@ -193,7 +230,8 @@ async function handleSettings(route, request, response) {
  * どちらか一方でしか「試す」が通らなくなる。 省略すると Swagger UI は開いている URL を
  * 基準にするので、 両方で動く。
  */
-function openApiDocument(scenarioName) {
+function openApiDocument(scenarioName, lang) {
+  const L = (ja, en) => bi(lang, ja, en);
   const json = (schema) => ({ content: { "application/json": { schema } } });
   const ok = (description) => ({ description, ...json({ type: "object" }) });
   const settings = {
@@ -209,30 +247,33 @@ function openApiDocument(scenarioName) {
       title: `StackStack board (${scenarioName})`,
       version: "1.0.0",
       description:
+        L(
         "この板の API です。 各項目の Try it out から実際に実行できます。 設定の変更もここから行い、 リポジトリのファイルは書き換えません。 コンテナを作り直せば変更は消えて元の状態に戻ります。",
+        "The board's API. Run any entry with Try it out. Settings are changed from here too — no repository file is ever written. Rebuild the container and every change is gone.",
+      ),
     },
     paths: {
       "/api/board": {
-        get: { summary: "板の状態と投稿一覧", responses: { 200: ok("板の状態") } },
+        get: { summary: L("板の状態と投稿一覧", "board state and every post"), responses: { 200: ok(L("板の状態", "board state")) } },
       },
       "/api/config": {
-        get: { summary: "いまの設定", responses: { 200: ok("設定") } },
+        get: { summary: L("いまの設定", "current settings"), responses: { 200: ok(L("設定", "settings")) } },
         patch: {
-          summary: "設定を変える",
+          summary: L("設定を変える", "change a setting"),
           requestBody: {
             required: true,
             ...json({ ...settings, example: { acceptingPosts: true } }),
           },
-          responses: { 200: ok("変更後の設定"), 400: ok("受け付けられない値") },
+          responses: { 200: ok(L("変更後の設定", "settings after the change")), 400: ok(L("受け付けられない値", "a value the app refuses")) },
         },
         delete: {
-          summary: "変えた設定を捨てて初期状態に戻す",
-          responses: { 200: ok("戻した後の設定") },
+          summary: L("変えた設定を捨てて初期状態に戻す", "discard changes and return to the initial state"),
+          responses: { 200: ok(L("戻した後の設定", "settings after the reset")) },
         },
       },
       "/api/posts": {
         post: {
-          summary: "投稿する",
+          summary: L("投稿する", "write a post"),
           requestBody: {
             required: true,
             ...json({
@@ -243,39 +284,39 @@ function openApiDocument(scenarioName) {
                 title: { type: "string" },
                 body: { type: "string" },
               },
-              example: { author: "you", title: "はじめての投稿", body: "本文" },
+              example: { author: "you", title: L("はじめての投稿", "first post"), body: L("本文", "body") },
             }),
           },
           responses: {
-            201: ok("投稿できた"),
-            409: ok("板が投稿を受け付けていない"),
-            503: ok("設定が読めない"),
+            201: ok(L("投稿できた", "posted")),
+            409: ok(L("板が投稿を受け付けていない", "the board is not accepting posts")),
+            503: ok(L("設定が読めない", "the config cannot be read")),
           },
         },
       },
-      "/api/logs": { get: { summary: "アプリのログ", responses: { 200: ok("ログ") } } },
-      "/posture": { get: { summary: "いまの状態の実測結果", responses: { 200: ok("実測") } } },
-      "/healthz": { get: { summary: "死活確認", responses: { 200: ok("健康"), 503: ok("不調") } } },
+      "/api/logs": { get: { summary: L("アプリのログ", "the app's log"), responses: { 200: ok(L("ログ", "log lines")) } } },
+      "/posture": { get: { summary: L("いまの状態の実測結果", "the measured state, live"), responses: { 200: ok(L("実測", "measurements")) } } },
+      "/healthz": { get: { summary: L("死活確認", "liveness"), responses: { 200: ok(L("健康", "healthy")), 503: ok(L("不調", "unwell")) } } },
       // scenario が設定を持つときだけ出す。 手で書き足す方向は採らない — 宣言と一覧が
       // 別々に古くなり、 Swagger に無い経路や、 経路の無い Swagger 項目が生まれる。
       ...(scenario.editableSettings
         ? {
             "/api/settings": {
               get: {
-                summary: `${scenario.editableSettings.summary}をみる`,
-                responses: { 200: ok("いまの設定") },
+                summary: L(`${scenario.editableSettings.summary.ja}をみる`, `view the ${scenario.editableSettings.summary.en}`),
+                responses: { 200: ok(L("いまの設定", "current values")) },
               },
               patch: {
-                summary: `${scenario.editableSettings.summary}を変える`,
+                summary: L(`${scenario.editableSettings.summary.ja}を変える`, `change the ${scenario.editableSettings.summary.en}`),
                 requestBody: {
                   required: true,
                   ...json({ type: "object", example: scenario.editableSettings.example }),
                 },
-                responses: { 200: ok("変更後"), 400: ok("受け付けられない値") },
+                responses: { 200: ok(L("変更後", "after the change")), 400: ok(L("受け付けられない値", "a value the scenario refuses")) },
               },
               delete: {
-                summary: `${scenario.editableSettings.summary}の変更を捨てて初期状態に戻す`,
-                responses: { 200: ok("戻した後") },
+                summary: L(`${scenario.editableSettings.summary.ja}の変更を捨てて初期状態に戻す`, `discard ${scenario.editableSettings.summary.en} changes and return to the initial state`),
+                responses: { 200: ok(L("戻した後", "after the reset")) },
               },
             },
           }
@@ -290,20 +331,25 @@ function openApiDocument(scenarioName) {
  * `/api/docs` ではなく `/docs` に置く。 前者からの相対 `openapi.json` は
  * `/api/openapi.json` に解決してしまう。 板と同じ階層なら相対のまま両方の環境で動く。
  */
-function docsPage() {
+function docsPage(lang) {
+  const other = lang === "en" ? "ja" : "en";
   return `<!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>API コンソール</title>
+<html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${bi(lang, "API コンソール", "API console")}</title>
 <link rel="stylesheet" href="vendor/swagger/swagger-ui.css">
 <style>body{margin:0}#note{font-family:system-ui;padding:.8rem 1.2rem;background:#eef4ff;line-height:1.6}</style>
 </head><body>
-<div id="note">この板の API をここから実行できます (各項目の <strong>Try it out</strong>)。
- 設定の変更もここから行い、<strong>リポジトリのファイルは書き換えません</strong>。
- <a href="./">板に戻る</a></div>
+<div id="note">${bi(
+    lang,
+    "この板の API をここから実行できます (各項目の <strong>Try it out</strong>)。 設定の変更もここから行い、<strong>リポジトリのファイルは書き換えません</strong>。",
+    "Run this board's API from here (<strong>Try it out</strong> on any entry). Settings are changed from here too — <strong>no repository file is ever written</strong>.",
+  )}
+ <a href="./?lang=${lang}">${bi(lang, "板に戻る", "Back to the board")}</a> ·
+ <a href="docs?lang=${other}">${bi(lang, "English", "日本語")}</a></div>
 <div id="ui"></div>
 <script src="vendor/swagger/swagger-ui-bundle.js"></script>
 <script>
-SwaggerUIBundle({ url: "openapi.json", dom_id: "#ui", tryItOutEnabled: true, defaultModelsExpandDepth: -1 });
+SwaggerUIBundle({ url: "openapi.json?lang=${lang}", dom_id: "#ui", tryItOutEnabled: true, defaultModelsExpandDepth: -1 });
 </script>
 </body></html>`;
 }
@@ -456,7 +502,7 @@ const challenge = createServer(guard(async (request, response) => {
 
   if (route === "GET /") {
     const config = readConfig();
-    return sendHtml(response, 200, boardPage(config.value, allPosts()));
+    return sendHtml(response, 200, boardPage(config.value, allPosts(), pickLang(url, request)));
   }
 
   // Swagger UI の資産。 名前は固定 2 つだけを配る — パスを受け取って読む形にすると、
@@ -466,11 +512,11 @@ const challenge = createServer(guard(async (request, response) => {
   }
 
   if (route === "GET /docs") {
-    return sendHtml(response, 200, docsPage());
+    return sendHtml(response, 200, docsPage(pickLang(url, request)));
   }
 
   if (route === "GET /openapi.json") {
-    return send(response, 200, openApiDocument(SCENARIO));
+    return send(response, 200, openApiDocument(SCENARIO, pickLang(url, request)));
   }
 
   if (route === "GET /api/config") {
@@ -540,7 +586,7 @@ const challenge = createServer(guard(async (request, response) => {
       log("warn", "post rejected: the board is not accepting posts");
       return send(response, 409, {
         error: "board_closed",
-        detail: `set acceptingPosts to true in ${CONFIG_HINT}`,
+        detail: 'send {"acceptingPosts": true} to PATCH /api/config — the API console at /docs does it from the screen',
       });
     }
     const body = await readJson(request);

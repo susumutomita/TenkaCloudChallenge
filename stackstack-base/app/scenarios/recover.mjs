@@ -1279,7 +1279,7 @@ export const checks = {
  */
 export const editableSettings = {
   name: SETTINGS_NAME,
-  summary: "復旧ポリシー",
+  summary: { ja: "復旧ポリシー", en: "recovery policy" },
   example: {"enabled": true},
   read: () => readPolicy(),
 };
