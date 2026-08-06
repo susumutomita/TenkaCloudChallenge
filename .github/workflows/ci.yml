@@ -100,6 +100,13 @@ jobs:
       - name: Validate problem metadata
         run: bun run scripts/validate-problems.ts
 
+      # 問題は 1 問ずつ独立して deploy できなければならないので、PortalEditorSupport は
+      # 共有 package ではなく各問題への複製で配っている。複製が仕様である以上、揃って
+      # いることを機械が保証しないと、1 問だけ直した修正が他へ届かず問題ごとに挙動が
+      # 変わる。中身は判定せず「全部同じか」だけを見る。
+      - name: Check vendored workbench copies do not drift
+        run: bun run scripts/check-workbench-vendoring.ts
+
       - name: Check CloudFormation templates
         run: |
           bun run scripts/check-template-ascii.ts
