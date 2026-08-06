@@ -1,6 +1,6 @@
 # The Predecessor's Leftovers — A Site That Runs Fine Can Still Leak Everything
 
-> TenkaCloud Challenge · `challenges/wp-exposed-backup` · difficulty 3 · ~45 min · `multi-verify` scoring (4 checkpoints, 200 pts)
+> TenkaCloud Challenge · `challenges/wp-exposed-backup` · difficulty 1 (introductory) · ~30 min · `multi-verify` scoring (4 checkpoints, 200 pts)
 
 A local, **AWS-free** teaching problem built on a **real, current WordPress + MariaDB**
 running in an isolated Docker stack. It is aimed at non-engineers who operate a WordPress
@@ -29,6 +29,11 @@ never learns the answers, it only holds the points.
 
 All four grow from the same habit — *leaving things in the public area* — which is exactly
 the lesson: they are distinct controls, not one bug split four ways.
+
+This is an introductory problem designed as TenkaCloud's **first real problem**. Every
+checkpoint's hints follow the same three-step scaffold — observe → hypothesize →
+confirm & fix — and **opening a hint never costs points**: hints are scaffolding, not a
+penalty.
 
 ## What gets deployed
 
