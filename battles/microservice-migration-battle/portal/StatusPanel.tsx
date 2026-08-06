@@ -23,6 +23,27 @@
 import type { PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 import { useEffect, useState } from "react";
 
+/**
+ * 表示文言。 言語は portal が渡す `props.locale` で選ぶ (stackstack StatusPanel と同じ契約)。
+ * 参加者向け文字列を日本語だけで焼き込まない (#381)。
+ */
+const COPY = {
+  en: {
+    intro:
+      "Shows where the three endpoints — users / orders / catalog — currently route. Register an endpoint override and the platform's scoring engine probes the new URL.",
+    routerFallbackName: "Service router",
+    noRoutes: "No routes registered yet.",
+    minutes: (n: number) => `+${n} min`,
+  },
+  ja: {
+    intro:
+      "users / orders / catalog の 3 endpoint の現在 routing 先を表示します。 endpoint を override 登録すると、 platform の scoring engine が新 URL を probe します。",
+    routerFallbackName: "サービスルーター",
+    noRoutes: "まだ登録された route はありません。",
+    minutes: (n: number) => `+${n} 分`,
+  },
+} as const;
+
 /** router.ts (coordination plugin) が共有する service 名。 projection の列順をここで固定する。 */
 const SERVICES = ["users", "orders", "catalog"] as const;
 
@@ -47,6 +68,7 @@ function isRouteDirectory(value: unknown): value is RouteDirectory {
 const COORDINATION_POLL_MS = 30_000;
 
 export default function StatusPanel(props: PortalSlotProps) {
+  const copy = COPY[props.locale === "ja" ? "ja" : "en"];
   const { endpoints, phases, disruptions, coordination, coordinationClient } = props;
   const myTeamId = props.team.teamId;
 
@@ -89,10 +111,7 @@ export default function StatusPanel(props: PortalSlotProps) {
       }}
     >
       <h3 style={{ margin: "0 0 12px 0", fontSize: "16px" }}>Microservice Migration — Status</h3>
-      <p style={{ margin: "0 0 16px 0", color: "#5f6b7a" }}>
-        users / orders / catalog の 3 endpoint の現在 routing 先を表示します。
-        endpoint を override 登録すると、 platform の scoring engine が新 URL を probe します。
-      </p>
+      <p style={{ margin: "0 0 16px 0", color: "#5f6b7a" }}>{copy.intro}</p>
 
       <div style={{ marginBottom: "16px" }}>
         <h4 style={{ margin: "0 0 8px 0", fontSize: "13px", color: "#414d5c" }}>Endpoint slots</h4>
@@ -123,7 +142,7 @@ export default function StatusPanel(props: PortalSlotProps) {
       {coordination && coordinationClient && (
         <div style={{ marginBottom: "16px" }}>
           <h4 style={{ margin: "0 0 8px 0", fontSize: "13px", color: "#0972d3" }}>
-            {coordination.name ?? "サービスルーター"} (inter-team)
+            {coordination.name ?? copy.routerFallbackName} (inter-team)
           </h4>
           {coordination.description && (
             <p style={{ margin: "0 0 8px 0", fontSize: "13px", color: "#5f6b7a" }}>
@@ -171,9 +190,7 @@ export default function StatusPanel(props: PortalSlotProps) {
             </table>
           ) : (
             !coordStatus && (
-              <p style={{ margin: "0", fontSize: "13px", color: "#5f6b7a" }}>
-                まだ登録された route はありません。
-              </p>
+              <p style={{ margin: "0", fontSize: "13px", color: "#5f6b7a" }}>{copy.noRoutes}</p>
             )
           )}
         </div>
@@ -187,7 +204,7 @@ export default function StatusPanel(props: PortalSlotProps) {
           <ul style={{ margin: "0", paddingLeft: "20px", fontSize: "13px" }}>
             {phases.map((p) => (
               <li key={p.name}>
-                <strong>+{p.afterMinutes} 分</strong> — {p.name}
+                <strong>{copy.minutes(p.afterMinutes)}</strong> — {p.name}
                 {p.description && <span style={{ color: "#5f6b7a" }}>: {p.description}</span>}
               </li>
             ))}
@@ -202,7 +219,7 @@ export default function StatusPanel(props: PortalSlotProps) {
             {disruptions.map((d) => (
               <li key={d.id}>
                 {typeof d.defaultAfterMinutes === "number" && (
-                  <strong>+{d.defaultAfterMinutes} 分</strong>
+                  <strong>{copy.minutes(d.defaultAfterMinutes)}</strong>
                 )}{" "}
                 {d.name}
               </li>
