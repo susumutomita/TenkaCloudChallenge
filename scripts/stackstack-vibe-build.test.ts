@@ -416,9 +416,9 @@ function useFeature(source: string): void {
   writeFileSync(featurePath, `${source}\n// fixture ${writes}\n`);
 }
 
-async function patchSettings(body: unknown) {
-  const response = await fetch(`${BOARD}/api/settings`, {
-    method: "PATCH",
+async function putSource(body: unknown) {
+  const response = await fetch(`${BOARD}/api/source`, {
+    method: "PUT",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
@@ -644,16 +644,16 @@ describe("stackstack-vibe-build requirements are one document", () => {
     // The metadata does not restate the rules — it sends the participant to the
     // one copy that cannot drift, which is the running app's.
     const meta = readFileSync(join(PROBLEM_DIR, "metadata.json"), "utf8");
-    for (const token of ["/api/spec", "/api/selfcheck", "/editor"]) expect(meta).toContain(token);
+    for (const token of ["/api/spec", "/api/selfcheck", "/api/source", "/editor"]) expect(meta).toContain(token);
     // ...and the result field has exactly one name across all of them.
     for (const document of [spec, ...readmes]) expect(document).not.toContain("body.entries");
   });
 
-  it("should call the feature by the surface the participant edits, never by a path", async () => {
+  it("should point at the browser-editable runtime source, never at a path", async () => {
     // The old spec named a checkout file. Editing that file dirtied git status
     // and survived every rebuild — one solve, and no second attempt (#378).
     const spec = await get("/api/spec");
-    expect(String(spec.body.feature)).toContain("/editor");
+    expect(spec.body.feature).toBe("/api/source");
     expect(spec.text).not.toContain("/app/feature");
     expect(spec.text).not.toContain("challenges/stackstack-vibe-build");
   });
@@ -661,6 +661,23 @@ describe("stackstack-vibe-build requirements are one document", () => {
 
 describe("stackstack-vibe-build with the shipped starter", () => {
   beforeAll(() => useFeature(STARTER));
+
+  it("should change and reset the feature through the API without touching its source", async () => {
+    const source = readFileSync(featurePath, "utf8");
+    const changed = await fetch(`${BOARD}/api/source`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ source: CORRECT }),
+    });
+    expect(changed.status).toBe(200);
+    expect(((await changed.json()) as { source: string }).source).toBe(CORRECT);
+    expect(readFileSync(featurePath, "utf8")).toBe(source);
+
+    const reset = await fetch(`${BOARD}/api/source`, { method: "DELETE" });
+    expect(reset.status).toBe(200);
+    expect(((await reset.json()) as { source: string }).source).toBe(source);
+    expect(readFileSync(featurePath, "utf8")).toBe(source);
+  });
 
   it("should load and export both functions, so the first minute is 'not written yet'", async () => {
     const feature = await get("/api/feature");
@@ -1065,7 +1082,7 @@ describe("stackstack-vibe-build runs participant code out of reach of its own se
     expect(peeked).toContain("envKeys=0");
     // A child process's /proc/self/environ is its own exec-time environment,
     // which is what a worker thread would not have given us.
-    expect(peeked).toMatch(/\/proc\/self\/environ=\s*($|\|)/);
+    expect(peeked).toMatch(/\/proc\/self\/environ=(\s*($|\|)|unreadable:ENOENT)/);
   });
 
   it("should never let the seed reach the participant's code", async () => {
@@ -1277,13 +1294,13 @@ describe("stackstack-vibe-build checkpoint wiring", () => {
   });
 });
 
-describe("stackstack-vibe-build editor and settings API", () => {
+describe("stackstack-vibe-build editor and source API", () => {
   beforeAll(() => useFeature(STARTER));
 
   it("should serve a self-contained editor page that never names a path", async () => {
     const page = await get("/editor");
     expect(page.status).toBe(200);
-    expect(page.text).toContain("api/settings");
+    expect(page.text).toContain("api/source");
     expect(page.text).toContain("api/selfcheck");
     expect(page.text).not.toContain("/app/");
     expect(page.text).not.toContain("challenges/stackstack-vibe-build");
@@ -1299,16 +1316,16 @@ describe("stackstack-vibe-build editor and settings API", () => {
     // changes, so a rebuilt container starts from the same place.
     const fileBefore = readFileSync(featurePath, "utf8");
 
-    const current = await get("/api/settings");
+    const current = await get("/api/source");
     expect(current.status).toBe(200);
-    expect(current.body.settings.source).toBe(fileBefore);
+    expect(current.body.source).toBe(fileBefore);
 
-    const junkKey = await patchSettings({ sauce: "typo" });
+    const junkKey = await putSource({ sauce: "typo" });
     expect(junkKey.status).toBe(400);
-    const junkType = await patchSettings({ source: 42 });
+    const junkType = await putSource({ source: 42 });
     expect(junkType.status).toBe(400);
 
-    const saved = await patchSettings({ source: `${CORRECT}\n` });
+    const saved = await putSource({ source: `${CORRECT}\n` });
     expect(saved.status).toBe(200);
     const feature = await get("/api/feature");
     expect(feature.body.loaded).toBe(true);
@@ -1316,9 +1333,9 @@ describe("stackstack-vibe-build editor and settings API", () => {
     expect(Object.values(state).every((gate) => gate === true)).toBe(true);
     expect(readFileSync(featurePath, "utf8")).toBe(fileBefore);
 
-    const reset = await fetch(`${BOARD}/api/settings`, { method: "DELETE" });
+    const reset = await fetch(`${BOARD}/api/source`, { method: "DELETE" });
     expect(reset.status).toBe(200);
-    expect((await get("/api/settings")).body.settings.source).toBe(fileBefore);
+    expect((await get("/api/source")).body.source).toBe(fileBefore);
     const back = await selfcheck();
     expect(Object.values(back).every((gate) => gate === true)).toBe(false);
   });
@@ -1390,10 +1407,11 @@ describe("stackstack-vibe-build wiring", () => {
     }
   });
 
-  it("should steer every participant-facing doc to the editor, never to the checkout file", () => {
+  it("should steer every participant-facing doc to the editor and the source API, never to the checkout file", () => {
     for (const name of ["README.md", "README.ja.md", "metadata.json"]) {
       const text = readFileSync(join(PROBLEM_DIR, name), "utf8");
       expect(text).not.toContain("challenges/stackstack-vibe-build/local/");
+      expect(text).toContain("/api/source");
       expect(text).toContain("/editor");
     }
   });

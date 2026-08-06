@@ -16,7 +16,7 @@
 | --- | --- |
 | 掲示板 | StackStack 系が共有する掲示板アプリ (`stackstack-base/`)。 `stackstack-onboarding` と同じもの |
 | アーカイブ | インポート済みの行を持つメモリ上の集合。 公開面に一度も出たことのない行も含む |
-| あなたの機能 | チェックアウト側の `local/feature/search.mjs`。 読み取り専用でマウントされ、 変わるたびに読み直される |
+| あなたの機能 | `/api/source` にある runtime source。 ブラウザ API コンソールから編集 |
 | `GET /api/search` | JSON 検索。 あなたの `search` を呼び、 返ってきたものをそのまま返す |
 | `GET /search` | 検索ページ。 あなたの `renderResults` を呼び、 返ってきた文字列を **エスケープせずに** ページへ置く |
 | `GET /api/spec` | 9 項目の要求仕様 R1〜R9。 アプリ自身が持っている |
@@ -32,7 +32,8 @@
 curl -s http://127.0.0.1:18080/api/spec | jq
 
 # 2. 実装する (生成 AI の利用は自由、 むしろ推奨)
-open http://127.0.0.1:18080/editor   # エディタで書いて保存。 リポジトリのファイルは書き換わらない
+open http://127.0.0.1:18080/editor   # エディタで書いて保存。 裏は GET/PUT/DELETE /api/source で、
+                                     # /docs から同じ操作もできる。 リポジトリは読み取り専用のまま
 
 # 3. 使う ── 保存すれば再起動なしで反映される
 curl -s 'http://127.0.0.1:18080/api/search?q=板'

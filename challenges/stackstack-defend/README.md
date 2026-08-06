@@ -20,11 +20,7 @@ every round.
 | `127.0.0.1:18080/desk` | The drafts desk — the accounts, their tokens, the routes |
 | `127.0.0.1:18080/api/drill` | What the continuous traffic actually measured, this round |
 | `127.0.0.1:18081` | Loopback `/verify` the TenkaCloud scorer delegates to |
-| `127.0.0.1:18080/docs` | The API console — view, change and discard the access policy (`/api/settings`) |
-
-The policy's starting point is mounted read-only; changes go through the API and live only
-inside the container. No repository file is ever written. The board's own config
-(`/api/config`) is unchanged from onboarding.
+| `127.0.0.1:18080/docs` | Browser API console and request workbench; policy changes live at `PATCH /api/settings` |
 
 The image is built from [`stackstack-base/`](../../stackstack-base), shared by every
 StackStack problem. The draft ids, the account tokens and the leaked marker are derived
@@ -111,18 +107,15 @@ Five checkpoints, 200 points:
    `lastFailures` reports symptoms — who was stopped, or what got through. It never
    reports the rule that would fix it.
 
-6. Fix the cause.
+6. Fix the cause in
 
-   ```
-   curl -s http://127.0.0.1:18080/api/settings | jq          # the current policy
-   # send the change with PATCH /api/settings from the API console (docs)
-   ```
+   Open `/docs`, inspect `GET /api/settings`, then use `PATCH /api/settings`.
+   The change lives only in this running container; no repository file is edited.
 
    The shapes the evaluator understands are listed under `grammar` in
-   `curl -s http://127.0.0.1:18080/api/policy | jq`. A change takes effect on the next
-   request — there is nothing to restart, and a change the policy engine refuses comes
-   back as a `400` with the reason, leaving everything as it was, rather than a quiet
-   fallback to something that works.
+   `curl -s http://127.0.0.1:18080/api/policy | jq`. A save takes effect on the next
+   request — there is nothing to restart, and a file it cannot parse produces a `503`
+   with the reason rather than a quiet fallback to something that works.
 
 7. Then leave it alone and let it run:
 
@@ -149,15 +142,11 @@ Five checkpoints, 200 points:
    `curl -s http://127.0.0.1:18080/api/drill | jq '{cleanForMs, holdMs}'` shows how much is
    left. One bad round sets it back to zero.
 
-8. To get back to the original broken state, discard your changes:
-
-   ```
-   curl -s -X DELETE http://127.0.0.1:18080/api/settings
-   ```
+8. Use `DELETE /api/settings` in `/docs` to retry from the starter. Rebuilding the
+   container does the same thing.
 
    If you fixed the policy before reproducing the leak, this is also how you get the first
-   checkpoint back: discard, reproduce, then re-apply your fix. Rebuilding the container
-   resets to the same state.
+   checkpoint back: restore it, reproduce, then re-apply your fix.
 
 ## The surfaces this problem adds
 
@@ -243,8 +232,8 @@ retry. Each checkpoint has two hints: the first is free, the second costs
 
 Zero. Nothing is deployed to a cloud account; the container runs on your machine and is
 removed by `make local-down`. Drafts, publications and measurements live entirely in the
-container's memory, and policy changes live only inside the container too, so tearing down
-leaves nothing behind — your checkout's `git status` stays clean from first request to last.
+container's memory, including the runtime policy override, so tearing down leaves the
+repository checkout untouched.
 
 ## What carries into the Battle
 

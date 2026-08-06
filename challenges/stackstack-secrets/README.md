@@ -22,12 +22,7 @@ scheduled job that must not stop.
 | `127.0.0.1:18080/` | The board, unchanged from onboarding |
 | `127.0.0.1:18080/api/ops` | The ops console — keys, action catalogue, policy, digest |
 | `127.0.0.1:18081` | Loopback `/verify` the TenkaCloud scorer delegates to |
-| `127.0.0.1:18080/docs` | The API console — view, change and discard the ops manifest (`/api/settings`) |
-
-The ops manifest (ops.json — which key the nightly job runs as, and what it may do) starts
-from a read-only mount; changes go through the API and live only inside the container. No
-repository file is ever written. The board's own config (`/api/config`) is unchanged from
-onboarding.
+| `127.0.0.1:18080/docs` | Browser API console; identity and grants change through `PATCH /api/settings` |
 
 The image is built from [`stackstack-base/`](../../stackstack-base), shared by every
 StackStack problem. The leaked key, the break-glass credential, every fingerprint, witness,
@@ -111,11 +106,13 @@ Five checkpoints, 200 points:
 
    The secret comes back in that one response and nowhere else, ever.
 
-6. Cut the nightly job over. Which key it runs as is decided by the ops manifest:
-   `GET /api/settings` returns what is loaded now, and changes are sent with
-   `PATCH /api/settings` from the API console (`docs`). `identity` names a key; it never
-   holds one, and a value starting with `SSOPS-` is refused through the API too. Send the
-   change and run the job:
+6. Cut the nightly job over. Which key it runs as is decided in
+
+   Open `/docs`, inspect `GET /api/settings`, then use `PATCH /api/settings`.
+   No credential or answer is written to the repository.
+
+   `identity` names a key; it never holds one, and a value starting with `SSOPS-` is
+   refused. Save the file and run the job:
 
    ```
    curl -sX POST http://127.0.0.1:18080/api/ops/digest/run | jq
@@ -164,15 +161,8 @@ Five checkpoints, 200 points:
    }
    ```
 
-10. Return to the original broken state **after** you have submitted the sign-off, not
-    before — discarding early points the job back at a revoked key and turns the gates
-    red:
-
-    ```
-    curl -s -X DELETE http://127.0.0.1:18080/api/settings
-    ```
-
-    Rebuilding the container resets to the same state.
+10. After submitting the sign-off, retry with `DELETE /api/settings` or rebuild the
+    container. Either restores the starter without touching git.
 
 ## The surfaces this problem adds
 
@@ -220,11 +210,9 @@ The board's own routes (`GET /`, `/api/board`, `/api/logs`, `/posture`, `/health
   the job needs also carries one it does not: `board:count` beside `board:export`,
   `digest:publish` beside `digest:recipients`. So `board:*` is not one character safer than
   `*`, and *What the ops key can do* probes all of them over real HTTP.
-- **Pasting the new secret into `ops.json` is refused.** `identity` names a key and `grants`
-  name actions; a value starting with `SSOPS-` is rejected with `secret_in_manifest`. A file
-  in your git checkout is exactly the kind of place this whole problem is about, and a
-  problem that ended with a fresh credential sitting in one would have taught the opposite
-  of what it set out to.
+- **Pasting the new secret into settings is refused.** `identity` names a key and `grants`
+  name actions; a value starting with `SSOPS-` is rejected with `secret_in_manifest`.
+  Runtime configuration is not a secret store.
 - **Hard-coding the answers does not work.** All five submissions are derived from a
   per-deploy `FLAG_SEED` inside the container, four of them also depend on runtime state,
   the policy language has no deny form to write a list into, and the action catalogue itself
@@ -267,11 +255,9 @@ leaves 106.
 
 Zero. Nothing is deployed to a cloud account; the container runs on your machine and is
 removed by `make local-down`. The key store, the journal and the digest archive live
-entirely in the container's memory, and manifest changes live only inside the container
-too, so tearing down leaves nothing behind — your checkout's `git status` stays clean from
-first request to last. Restarting the container resets the key store and the board, and
-the leaked key and the break-glass value are seed-derived, so the same steps take you back
-to the same place.
+entirely in the container's memory, including the settings override. Restarting resets the
+key store and board, leaves the repository untouched, and returns the one-time break-glass
+handover envelope to its sealed state.
 
 ## What carries into the Battle
 

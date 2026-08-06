@@ -18,11 +18,7 @@ staged pipeline、 live release ポインタ、 そして実際に何かがデ�
 | `127.0.0.1:18080/shipyard` | 運用コンソール ── registry、 releases、 デプロイログ、 secret store |
 | `127.0.0.1:18080/site` | 公開側の入口 ── 外が受け取るもの |
 | `127.0.0.1:18081` | TenkaCloud の採点が委譲する loopback の `/verify` |
-| `127.0.0.1:18080/docs` | API コンソール ── リリース manifest の閲覧・変更・破棄 (`/api/settings`) |
-
-リリース manifest の出発点は読み取り専用でマウントされ、 変更は API 経由でコンテナ内にだけ
-置かれます。 リポジトリのファイルは何をしても書き換わりません。 板自身の設定 (`/api/config`)
-は onboarding から変わっていません。
+| `127.0.0.1:18080/docs` | ブラウザ API コンソール。 manifest は `PATCH /api/settings` で変更 |
 
 image は StackStack 系問題が共有する [`stackstack-base/`](../../stackstack-base) から
 ビルドされます。 artifact の id、 public serial、 デプロイの receipt、 署名鍵の store は
@@ -88,10 +84,12 @@ AWS に移したときの対応:
    curl -sX POST http://127.0.0.1:18080/shipyard/releases | jq '.release.failure'
    ```
 
-   止まります。 そして止まった stage を名指しします。 その内容を manifest で直して ──
-   いまの値は `GET /api/settings` が返し、 変更は API コンソール (`docs`) の
-   `PATCH /api/settings` から送ります (`env` はオブジェクトごと) ── もう一度打ってください。
-   リリースが promote されるまで繰り返します。
+   止まります。 そして止まった stage を名指しします。 その内容を
+
+   `/docs` の `GET /api/settings` で読み、 `PATCH /api/settings` で変更します。
+   リポジトリは読み取り専用のままです。
+
+   で直して、 もう一度打ってください。 リリースが promote されるまで繰り返します。
    再起動は要りません ── manifest はデプロイのたびに読み直されます。 stage は
    `read-manifest` / `resolve-artifact` / `resolve-config` / `start` / `health-gate` /
    `promote` の順に走り、 拒否されたデプロイは `5xx` ではなく `422` を返します。
@@ -145,14 +143,10 @@ AWS に移したときの対応:
    来たときすでにあったものも含めて全部の記録を並べ、
    `DELETE 'http://127.0.0.1:18080/shipyard/release?id=rel-N'` で 1 件消せます。
 
-8. 最初の壊れた状態に戻すのは合格印を提出した **あと** にしてください。 manifest を戻して
+8. チェックアウトを戻すのは合格印を提出した **あと** にしてください。 manifest を戻して
    デプロイし直すのは構いませんが、 戻したまま plane を空にすると gate が赤に戻ります:
 
-   ```
-   curl -s -X DELETE http://127.0.0.1:18080/api/settings
-   ```
-
-   コンテナを作り直しても同じ状態に戻ります。
+   sign-off 提出後にやり直すなら `DELETE /api/settings` またはコンテナ再作成です。
 
 ## この問題が足すサーフェス
 
@@ -228,8 +222,7 @@ submodule からビルドします。
 
 ゼロ。 クラウドアカウントには何もデプロイされません。 コンテナは自分のマシンで動き、
 `make local-down` で消えます。 リリース plane はコンテナのメモリ上だけに存在するので、
-manifest の変更もコンテナの中にだけ置かれます。 片付けたあとにチェックアウトへ残るものは
-無く、 `git status` は最初から最後まで clean のままです。
+runtime の manifest override も一緒に消え、 リポジトリのチェックアウトは汚れません。
 
 ## Battle に何が引き継がれるか
 

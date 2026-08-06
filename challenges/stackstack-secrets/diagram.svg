@@ -28,7 +28,7 @@
 
   <rect x="28" y="170" width="184" height="90" rx="6" class="box"/>
   <text x="40" y="194" class="t">your checkout</text>
-  <text x="40" y="213" class="s">local/ops/ops.json</text>
+  <text x="40" y="213" class="s">API /api/settings</text>
   <text x="40" y="231" class="s">identity: which key</text>
   <text x="40" y="249" class="s">grants: what it may do</text>
 

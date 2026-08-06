@@ -86,6 +86,8 @@ Only the first item is machine-checked. Read the rest of the problem as someone 
 - [ ] Does the reader know where they are in the whole track?
 - [ ] Did the difficulty stay the same?
 
+The [`validate-problem`](./.claude/skills/validate-problem/SKILL.md) skill runs this checklist for you — the machine-checked items through the existing gates, the "read it as someone who has not seen it" items as a spoiler-firewalled blind playthrough (`/validate-problem <problemId>`).
+
 ## The 60-second mental model
 
 ```
@@ -329,6 +331,7 @@ Type one of these slash commands and follow the prompts:
 - **`/new-problem challenge`** — scaffold a self-paced, single-flag problem (= Challenge).
 - **`/new-problem battle`** — scaffold a real-time PvP / uptime-scoring problem (= Battle); the skill asks which scoring kind next.
 - **`/new-problem`** — no argument; the skill asks Challenge or Battle first.
+- **`/validate-problem <problemId>`** — play-test an authored problem from the participant surface before its PR: a solution exists on every seed, the initial state does not reveal the answer, and the goal is reachable through the screen alone (`.claude/skills/validate-problem/SKILL.md`).
 
 The skill (`.claude/skills/new-problem/SKILL.md`) walks the 6 steps below, dropping in the IAM baseline, the required tags, and the URL-registration gate boilerplate so you don't reconstruct them from scratch. Not using Claude Code? The [skill usage guide](./.claude/skills/new-problem/README.md) explains how to invoke it and the manual / Codex-CLI paths.
 

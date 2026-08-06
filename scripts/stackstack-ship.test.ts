@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -151,6 +151,13 @@ function client(instance: () => Instance) {
     get: (path: string) => json(path),
     post: (path: string) => json(path, { method: "POST" }),
     remove: (path: string) => json(path, { method: "DELETE" }),
+    patchSettings: (settings: Record<string, unknown>) =>
+      json("/api/settings", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(settings),
+      }),
+    resetSettings: () => json("/api/settings", { method: "DELETE" }),
     deploy: () => json("/shipyard/releases", { method: "POST" }),
     posture: async () =>
       (await json("/posture")).body as {
@@ -283,6 +290,19 @@ describe("stackstack-ship, one full pass", () => {
     instance = await startInstance("pass", 18310, 18311);
   });
   afterAll(() => instance?.kill());
+
+  it("should change and reset the release manifest through the API without touching its source", async () => {
+    const source = readFileSync(instance.manifestPath, "utf8");
+    const changed = await app.patchSettings({ artifact: "board-from-api" });
+    expect(changed.status).toBe(200);
+    expect(changed.body.settings.artifact).toBe("board-from-api");
+    expect(readFileSync(instance.manifestPath, "utf8")).toBe(source);
+
+    const reset = await app.resetSettings();
+    expect(reset.status).toBe(200);
+    expect(reset.body.settings.artifact).toBe("board-2f9c81ae");
+    expect(readFileSync(instance.manifestPath, "utf8")).toBe(source);
+  });
 
   it("should have built an artifact and deployed nothing at all", async () => {
     // Build and deploy are two facts. This is the one the story is built on.
@@ -1240,9 +1260,9 @@ describe("stackstack-ship wiring", () => {
       "GET /site/healthz",
       "127.0.0.1:18080/site",
       "127.0.0.1:18081",
-      "make local PROBLEM=stackstack-ship",
-      "DELETE http://127.0.0.1:18080/api/settings",
       "PATCH /api/settings",
+      "make local PROBLEM=stackstack-ship",
+      "DELETE /api/settings",
       "8 / 16 / 16 / 28 / 16",
     ]) {
       expect(english).toContain(anchor);

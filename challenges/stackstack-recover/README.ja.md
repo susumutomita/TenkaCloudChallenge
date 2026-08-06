@@ -20,9 +20,8 @@
 | `127.0.0.1:18080/ops` | 運用面。 公開側の入口とは別系統なので、 入口が落ちていても答えます |
 | `127.0.0.1:18080/edge/*` | 掲示板の手前にある公開側の入口 |
 | `127.0.0.1:18081` | TenkaCloud の採点が委譲する loopback の `/verify` |
-| `127.0.0.1:18080/docs` | API コンソール ── 復旧ポリシーの閲覧・変更・破棄 (`/api/settings`) |
-| `GET/PATCH/DELETE /api/settings` | **昨夜のデプロイが変えた設定。** 出発点は read-only でマウントされ、 変更は API 経由でコンテナ内にだけ置かれます |
-| `problems/challenges/stackstack-recover/local/state/` | 定期処理が書く場所 ── 設定が許可していれば |
+| `127.0.0.1:18080/docs` | ブラウザ API コンソール。 昨夜の policy は `PATCH /api/settings` で変更 |
+| `/app/state/` | policy が許可したとき定期処理が書くコンテナ内の領域 |
 
 イメージは [`stackstack-base/`](../../stackstack-base) から作られます。 incident の署名は
 デプロイごとにランダムな `FLAG_SEED` からコンテナの中で導出されるので、 答えはこのリポジトリに
@@ -101,11 +100,13 @@ receipt は `GET /posture` の `tokens` に、 その gate が true のあいだ
    それを **止まったものを名指しする** に提出します。 このオラクルは渡された任意の集合に
    答えます ── 一度も落ちていない集合にも。 ヒントではなく電卓です。
 
-5. 設定を直す。 いまの値は `GET /api/settings` が返し、 変更は API コンソール (`docs`) の
-   `PATCH /api/settings` から送ります (セクションは丸ごと)。 形は次のとおりです:
+5. 設定を直す。 リポジトリの 1 枚です (以下のパスは TenkaCloud のチェックアウト基準。 この
+   カタログは `problems/` submodule としてマウントされています):
+
+   `/docs` の `GET /api/settings` で読み、 `PATCH /api/settings` で変更します。
+   リポジトリのファイルは編集しません。
 
    ```jsonc
-   // GET /api/settings が返す形
    {
      "auth": {
        "requireToken": true,
@@ -119,15 +120,12 @@ receipt は `GET /posture` の `tokens` に、 その gate が true のあいだ
    }
    ```
 
-   再起動は要りません。 リクエストごとに読み直されます。 送ったら測り直して
+   再起動は要りません。 リクエストごとに読み直されます。 保存したら測り直して
    (`curl -sX POST http://127.0.0.1:18080/ops/probe`)、 `GET /posture` をもう一度見てください。
-   変更を捨てて最初の壊れた状態に戻すには `DELETE /api/settings`。 コンテナを作り直しても
-   同じ状態に戻ります。
 
-   **`storage.writable` に書くのはコンテナ内のパス** で、 チェックアウト側のパスではありません。
-   定期処理が書くのは `/app/state/digest/latest.json` で、 それがチェックアウトに現れる場所は
-   `problems/challenges/stackstack-recover/local/state/digest/latest.json` です。
-   `GET /ops/digest` は両方を出します。
+   **`storage.writable` に書くのはコンテナ内のパス**です。 定期処理は
+   `/app/state/digest/latest.json` に書き、 `GET /ops/digest` で結果を確認できます。
+   リポジトリは runtime の出力先ではありません。
 
 6. `GET /posture` の 5 つの gate が全部 true になったら、 それぞれの `tokens` の値を提出します。
    `survived_restart` だけはもう 1 つ条件があります ── 運用面の再起動台帳がそれを言っています。

@@ -722,9 +722,9 @@ describe("checkSolutionDoesNotEditCatalog", () => {
     ).toEqual([]);
   });
 
-  it("no longer exempts the formerly-legacy problems — the repair emptied the list (#378)", () => {
-    // 8 問すべてを API 経由の設定変更に直した時点で legacy 一覧は空になった。 ここが
-    // また静かになる変更は、 例外を復活させたか検査を弱めたかのどちらかなので落とす。
+  it("rejects a regression in a repaired StackStack problem", () => {
+    // 8 問すべてを API 経由の設定変更に直した時点で legacy 例外は消えた。 ここがまた
+    // 静かになる変更は、 例外を復活させたか検査を弱めたかのどちらかなので落とす。
     const errors = checkSolutionDoesNotEditCatalog({
       id: "stackstack-onboarding",
       instructions: "problems/challenges/stackstack-onboarding/local/config/app.json を直す",

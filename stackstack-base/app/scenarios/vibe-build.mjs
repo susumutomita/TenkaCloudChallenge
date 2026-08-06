@@ -1,11 +1,11 @@
 import { spawn } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
-import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { mkdtempSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { allPosts } from "../board.mjs";
 import { log } from "../log.mjs";
-import { OVERRIDE_DIR, readOverride } from "../overrides.mjs";
+import { activeSourcePath } from "../overrides.mjs";
 import { gateToken } from "../secrets.mjs";
 
 /**
@@ -20,14 +20,8 @@ import { gateToken } from "../secrets.mjs";
  *
  *   spec        `GET /api/spec` — nine numbered requirements, the same text the
  *               READMEs carry, served by the app so it cannot drift out of reach
- *   feature     `search` and `renderResults`, written at `GET /editor` and
- *               saved through `PATCH /api/settings`. The mounted read-only
- *               starter is the starting point; a saved implementation lives in
- *               the override directory, so discarding it (or rebuilding the
- *               container) is a real reset and the catalog is never written
- *   editor      `GET /editor` — a self-contained page with the code, a save, a
- *               discard, and the self-check; the reachable surface the old
- *               "edit this checkout file" instruction never had
+ *   feature     one file in the participant's checkout, mounted read-only and
+ *               re-read whenever it changes: `search` and `renderResults`
  *   corpus      the imported archive the search runs over — public entries and
  *               entries that have never been on a public surface
  *   surfaces    `GET /api/search` (JSON) and `GET /search` (HTML), both of which
@@ -52,71 +46,16 @@ import { gateToken } from "../secrets.mjs";
  */
 
 const FEATURE_PATH = process.env.APP_FEATURE ?? "/app/feature/search.mjs";
+const SOURCE_NAME = "vibe-search";
+const FEATURE_LABEL = "/api/source";
 
-/**
- * What participant-facing messages call the feature, in place of a path.
- *
- * There is no path to name any more: the participant edits their code at
- * `GET /editor` and it is stored through the API, never in a file they could
- * open. Printing either real path (the read-only mount or the /tmp override)
- * would send them at a file that editing cannot help them with — the exact
- * trap the editor exists to remove.
- */
-const FEATURE_HINT = process.env.FEATURE_HINT ?? "your feature code (edit it at /editor)";
-
-/** この scenario の設定名。 上書き JSON は `overrides.mjs` の置き場に載る。 */
-const SETTINGS_NAME = "feature";
-
-/**
- * Where an API-saved implementation is materialized so the child process can
- * import it. It sits in the override directory on purpose: the same lifetime as
- * every other runtime change, so a container rebuild is the reset and the
- * mounted starter is what you are back at.
- */
-const OVERRIDE_FEATURE_PATH = `${OVERRIDE_DIR}/stackstack-vibe-build-feature.mjs`;
-
-/**
- * The source text this module last confirmed to be sitting at
- * {@link OVERRIDE_FEATURE_PATH}. Module state alone is not trusted across an
- * app restart in the same container — the file is checked before any write, so
- * a restart neither rewrites an unchanged override (which would bump its mtime
- * and kill receipts for code that did not change) nor trusts a file it never
- * verified.
- */
-let materialized = null;
-
-/**
- * Which file the harness should import right now: the API-saved override when
- * one exists, otherwise the mounted starter.
- *
- * @returns {{ ok: true, path: string } | { ok: false, path: string, error: string }}
- */
-function effectiveFeature() {
-  const source = readOverride(SETTINGS_NAME).source;
-  if (typeof source !== "string") return { ok: true, path: FEATURE_PATH };
-  if (materialized !== source) {
-    let onDisk = null;
-    try {
-      onDisk = readFileSync(OVERRIDE_FEATURE_PATH, "utf8");
-    } catch {
-      onDisk = null;
-    }
-    if (onDisk !== source) {
-      materialized = null;
-      try {
-        writeFileSync(OVERRIDE_FEATURE_PATH, source, "utf8");
-      } catch (error) {
-        return {
-          ok: false,
-          path: OVERRIDE_FEATURE_PATH,
-          error: `cannot write ${FEATURE_HINT}: ${error.code ?? error.message}`,
-        };
-      }
-    }
-    materialized = source;
-  }
-  return { ok: true, path: OVERRIDE_FEATURE_PATH };
-}
+export const editableSource = {
+  name: SOURCE_NAME,
+  basePath: FEATURE_PATH,
+  summary: { ja: "検索機能の source", en: "search feature source" },
+  example:
+    "export function search({ query, posts }) { return { status: 200, body: { query, matches: posts } }; }\n",
+};
 
 const ORIGIN = `http://127.0.0.1:${Number(process.env.CHALLENGE_PORT ?? 8080)}`;
 
@@ -267,13 +206,16 @@ function failPending(reason) {
 }
 
 /**
- * Both real paths appear in a loader's own error text, and neither is a place
- * the participant edits: the mount is read-only and the override file is the
- * API's storage, not theirs. Every message swaps both for the surface they can
- * actually act on — the editor.
+ * The container path appears in a loader's own error text, and it is not a path
+ * the participant can open. Swapped for the one they can — the same reason
+ * `CONFIG_HINT` exists.
  */
 const readable = (text) =>
-  String(text).split(FEATURE_PATH).join(FEATURE_HINT).split(OVERRIDE_FEATURE_PATH).join(FEATURE_HINT);
+  String(text)
+    .split(FEATURE_PATH)
+    .join(FEATURE_LABEL)
+    .split(activeSourcePath(SOURCE_NAME, FEATURE_PATH))
+    .join(FEATURE_LABEL);
 
 function onChildLine(line) {
   let message;
@@ -294,7 +236,7 @@ function onChildLine(line) {
   // A module that failed to load poisons the process that tried: throw it away
   // rather than let the next call hang on a specifier the loader will not
   // settle. A handler that merely threw leaves the process perfectly usable.
-  if (message.phase === "load") restartChild(`${FEATURE_HINT} could not be loaded`);
+  if (message.phase === "load") restartChild(`${FEATURE_LABEL} could not be loaded`);
 }
 
 function ensureChild(stamp) {
@@ -357,32 +299,18 @@ function restartChild(reason) {
   doomed?.kill();
 }
 
-/**
- * The *effective* feature file as it is on disk right now — never cached at
- * boot, and never a fixed path: a save through the API switches the effective
- * file to the override, and a discard switches it back.
- *
- * The path is part of the stamp's value on purpose. Receipts are keyed on this
- * stamp, and the starter and the override are two different files whose
- * mtime+size could collide — a stamp of `mtime-size` alone would let a receipt
- * earned against one keep verifying against the other. With the path in the
- * stamp, switching the effective code in either direction kills every receipt
- * until the new code is re-measured, which is the semantics a save always had.
- *
- * @returns {{ ok: true, path: string, value: string } | { ok: false, path: string, value: "", error: string }}
- */
+/** The feature file as it is on disk right now — never cached at boot. */
 function featureStamp() {
-  const feature = effectiveFeature();
-  if (!feature.ok) return { ok: false, path: feature.path, value: "", error: feature.error };
+  const path = activeSourcePath(SOURCE_NAME, FEATURE_PATH);
   try {
-    const stat = statSync(feature.path);
-    return { ok: true, path: feature.path, value: `${feature.path}:${stat.mtimeMs}-${stat.size}` };
+    const stat = statSync(path);
+    return { ok: true, path, value: `${path}:${stat.mtimeMs}-${stat.size}` };
   } catch (error) {
     return {
       ok: false,
-      path: feature.path,
+      path,
       value: "",
-      error: `cannot read ${readable(feature.path)}: ${error.code ?? error.message}`,
+      error: `cannot read ${FEATURE_LABEL}: ${error.code ?? error.message}`,
     };
   }
 }
@@ -410,7 +338,7 @@ function callFeature(fn, arg) {
   if (pending.size >= MAX_PENDING_CALLS) {
     return Promise.resolve({
       ok: false,
-      error: `too many calls into ${FEATURE_HINT} at once (${MAX_PENDING_CALLS})`,
+      error: `too many calls into ${FEATURE_LABEL} at once (${MAX_PENDING_CALLS})`,
     });
   }
   const proc = ensureChild(stamp.value);
@@ -420,7 +348,7 @@ function callFeature(fn, arg) {
     const timer = setTimeout(() => {
       if (!pending.has(id)) return;
       pending.delete(id);
-      const error = `${fn} in ${FEATURE_HINT} did not answer within ${CALL_TIMEOUT_MS}ms`;
+      const error = `${fn} in ${FEATURE_LABEL} did not answer within ${CALL_TIMEOUT_MS}ms`;
       noteFeatureError(error);
       restartChild(error);
       resolve({ ok: false, error });
@@ -639,7 +567,7 @@ const ENTRY_KEYS = ["at", "author", "id", "title"];
 
 const SPEC = {
   version: 1,
-  feature: FEATURE_HINT,
+  feature: FEATURE_LABEL,
   endpoints: {
     json: "GET /api/search?q=<検索語>",
     html: "GET /search?q=<検索語>",
@@ -1373,6 +1301,7 @@ async function runSearch(rawQuery) {
   return { ok: true, status: value.status, body: value.body };
 }
 
+
 /**
  * この 1 リクエストで使う言語。 server.mjs の `pickLang` と同じ規則 (?lang=、 なければ
  * Accept-Language、 既定は ja)。 scenario route は server の helper に触れないので同じ
@@ -1391,12 +1320,13 @@ const bi = (lang, ja, en) => (lang === "en" ? en : ja);
 /**
  * The editor — the surface the participant writes their implementation on.
  *
- * Hand-editing a JSON body in Swagger means escaping a whole JavaScript module
- * into a string by hand; a textarea does not. The page loads the current code
- * from `GET api/settings`, saves with `PATCH api/settings`, discards with
- * `DELETE api/settings`, and runs `GET api/selfcheck` — all with **relative**
- * URLs, because the board is reached both over loopback and through a
- * forwarded port and a hard-coded origin would work in exactly one of those.
+ * The API console can PUT `/api/source`, but hand-escaping a whole JavaScript
+ * module into a JSON string is nobody's editing surface; a textarea is. The
+ * page loads the current code from `GET api/source`, saves with
+ * `PUT api/source`, discards with `DELETE api/source`, and runs
+ * `GET api/selfcheck` — all with **relative** URLs, because the board is
+ * reached both over loopback and through a forwarded port and a hard-coded
+ * origin would work in exactly one of those.
  *
  * Fully self-contained: inline CSS and script, no external request, nothing
  * vendored. Served with the same headers as the other first-party pages
@@ -1480,10 +1410,10 @@ async function readJson(response) {
 async function load() {
   setStatus(M.loading);
   try {
-    const response = await fetch("api/settings");
+    const response = await fetch("api/source");
     const data = await readJson(response);
-    el("source").value = data.settings && typeof data.settings.source === "string" ? data.settings.source : "";
-    setStatus(data.ok === false && data.error ? String(data.error) : M.loaded);
+    el("source").value = typeof data.source === "string" ? data.source : "";
+    setStatus(M.loaded);
   } catch (error) {
     setStatus(M.failedToReach + error.message);
   }
@@ -1491,8 +1421,8 @@ async function load() {
 async function save() {
   setStatus(M.saving);
   try {
-    const response = await fetch("api/settings", {
-      method: "PATCH",
+    const response = await fetch("api/source", {
+      method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ source: el("source").value }),
     });
@@ -1510,7 +1440,7 @@ async function save() {
 async function discard() {
   if (!confirm(M.confirmDiscard)) return;
   try {
-    await fetch("api/settings", { method: "DELETE" });
+    await fetch("api/source", { method: "DELETE" });
     await load();
     setStatus(M.discarded);
   } catch (error) {
@@ -1559,8 +1489,6 @@ load();
 }
 
 export const routes = {
-  "GET /api/spec": (request, response) => sendJson(response, 200, SPEC),
-
   /**
    * The editing surface. Served exactly like the board's other first-party
    * pages: plain HTML, no CSP sandbox — this page runs its own inline script
@@ -1570,6 +1498,7 @@ export const routes = {
     response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
     response.end(editorPage(pickLang(url, request)));
   },
+  "GET /api/spec": (request, response) => sendJson(response, 200, SPEC),
 
   "GET /api/search": async (request, response, url) => {
     const result = await runSearch(url.searchParams.get("q"));
@@ -1577,7 +1506,7 @@ export const routes = {
       return sendJson(response, result.status, {
         error: result.error,
         detail: result.detail,
-        feature: FEATURE_HINT,
+        feature: FEATURE_LABEL,
       });
     }
     return sendJson(response, result.status, result.body);
@@ -1590,7 +1519,7 @@ export const routes = {
       return sendPage(
         response,
         result.status,
-        `<p><code>${escapeHtml(result.error)}</code></p><p>${escapeHtml(result.detail)}</p><p>${escapeHtml(FEATURE_HINT)}</p>`,
+        `<p><code>${escapeHtml(result.error)}</code></p><p>${escapeHtml(result.detail)}</p><p>${escapeHtml(FEATURE_LABEL)}</p>`,
       );
     }
     if (result.status !== 200) {
@@ -1637,7 +1566,7 @@ export const routes = {
     const stamp = featureStamp();
     if (!stamp.ok) {
       return sendJson(response, 200, {
-        feature: FEATURE_HINT,
+        feature: FEATURE_LABEL,
         loaded: false,
         error: stamp.error,
         exports: [],
@@ -1645,7 +1574,7 @@ export const routes = {
     }
     const called = await callFeature("__exports", null);
     return sendJson(response, 200, {
-      feature: FEATURE_HINT,
+      feature: FEATURE_LABEL,
       loaded: called.ok,
       error: called.ok ? null : called.error,
       exports: called.ok ? called.value : [],
@@ -1670,7 +1599,7 @@ export const routes = {
       });
     }
     return sendJson(response, 200, {
-      feature: FEATURE_HINT,
+      feature: FEATURE_LABEL,
       featureError: report.featureError,
       allGreen: GATE_NAMES.every((name) => report.gates[name] === true),
       checks: GATE_NAMES.map((name) => ({
@@ -1680,49 +1609,6 @@ export const routes = {
       })),
       next: "全部 ok になったら GET /posture の tokens に受領印が出ます。",
     });
-  },
-};
-
-/**
- * The feature source as a runtime setting — what turns the base app's
- * GET/PATCH/DELETE `/api/settings` (and the matching Swagger entries) on.
- *
- * `read()` decides a PATCH's fate: the base writes the override first, asks
- * this to read it back, and rolls back on `ok: false`. Only the *shape* is
- * judged here — `source` must be a string of module source code. A
- * syntactically broken string is accepted on purpose: saving broken code is a
- * state this problem is about, it used to be one broken file-save away, and it
- * surfaces exactly where it always did — `/api/feature` says the module will
- * not load and `/api/selfcheck` carries the loader's message. Parsing JS here
- * would make the settings API refuse a state every real editor lets you reach.
- */
-export const editableSettings = {
-  name: SETTINGS_NAME,
-  summary: { ja: "検索機能の実装", en: "the search feature implementation" },
-  example: { source: "export function search(query, entries) { ... }" },
-  read: () => {
-    const override = readOverride(SETTINGS_NAME);
-    // 知らないキーは黙って捨てずに弾く — 受けたのに何も変わらない PATCH は、 参加者が
-    // 状態を読み直すまで気づけない不発弾になる (config.mjs の coerce と同じ判断)。
-    for (const key of Object.keys(override)) {
-      if (key !== "source") {
-        return { ok: false, value: null, error: `${key} is not a setting this feature has (source)` };
-      }
-    }
-    if (Object.hasOwn(override, "source") && typeof override.source !== "string") {
-      return { ok: false, value: null, error: "source must be a string of module source code" };
-    }
-    const feature = effectiveFeature();
-    if (!feature.ok) return { ok: false, value: null, error: feature.error };
-    try {
-      return { ok: true, value: { source: readFileSync(feature.path, "utf8") }, error: null };
-    } catch (error) {
-      return {
-        ok: false,
-        value: null,
-        error: `cannot read ${readable(feature.path)}: ${error.code ?? error.message}`,
-      };
-    }
   },
 };
 

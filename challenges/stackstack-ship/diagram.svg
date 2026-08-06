@@ -18,8 +18,8 @@
 
   <rect x="28" y="52" width="180" height="72" rx="6" class="box"/>
   <text x="40" y="76" class="t">your checkout</text>
-  <text x="40" y="95" class="s">local/release/release.json</text>
-  <text x="40" y="112" class="s">local/config/app.json</text>
+  <text x="40" y="95" class="s">API /api/settings</text>
+  <text x="40" y="112" class="s">API /api/config</text>
 
   <rect x="28" y="152" width="180" height="86" rx="6" class="box"/>
   <text x="40" y="176" class="t">Shipyard console</text>

@@ -21,8 +21,8 @@ import { READY_TOKEN, gateToken } from "../secrets.mjs";
  *   key store    ops credentials, each with a status. A secret leaves the store
  *                exactly once, in the response that issues it
  *   break-glass  the out-of-band credential that can issue and revoke keys —
- *                written once to this container's startup output and served on
- *                no HTTP surface at all
+ *                written once to startup output and also handed to this
+ *                single-user local exercise through a one-time envelope
  *   manifest     a file in the participant's checkout naming which key the
  *                nightly job runs as, and what that key is allowed to do
  *   policy       allow-only, `service:action`, segment-wise `*`
@@ -68,12 +68,14 @@ const witnessFor = (keyId) => opsDigest(`whoami:${keyId}`).slice(0, 12);
 const revocationReceiptFor = (keyId) => opsDigest(`revoked:${keyId}`).slice(0, 12);
 
 /**
- * The out-of-band credential. Written once to this container's startup output
- * (stderr — `docker compose logs` shows it, `GET /api/logs` does not) and served
- * on no HTTP surface, because the point of a break-glass credential is that
- * reaching it is not something the running application can do for you.
+ * The out-of-band credential. Startup output remains available to operators.
+ * This local, single-user exercise also models a sealed handover envelope: one
+ * deliberate POST reveals it once, then answers 410 until the container is
+ * rebuilt. Production would put that envelope in a separate vault and approval
+ * path; the in-app handover is explicitly only the browser-accessible model.
  */
 const BREAK_GLASS = opsDigest("break-glass").slice(0, 16);
+let breakGlassRevealed = false;
 
 /** The predecessor's key. Its secret is on the board. */
 const LEGACY_KEY_ID = "ops-legacy";
@@ -613,7 +615,7 @@ function opsPage() {
 <table border="1" cellpadding="6" cellspacing="0"><tr><th>keyId</th><th>status</th><th>fingerprint</th><th>createdAt</th><th>revocationReceipt</th></tr>
 ${keyRows}</table>
 <p>secret はこの表には出ません。 出るのは発行時の応答 1 回きりです。</p>
-<p>鍵の発行と失効は運用キーではできません。 <code>X-Break-Glass</code> だけが通ります。 その値はこのコンテナの<strong>起動時の出力に 1 度だけ</strong>書かれ (<code>docker compose logs</code>)、 HTTP のどのサーフェスにも出ません。</p>
+<p>鍵の発行と失効は運用キーではできません。 <code>X-Break-Glass</code> だけが通ります。 ローカル演習では封印された引き継ぎ票に相当する <code>POST /api/ops/break-glass/reveal</code> が値を<strong>1度だけ</strong>返します。 本番ではアプリ自身ではなく、 別管理の保管庫と承認経路が担う境界です。</p>
 
 <h2>夜間ダイジェスト</h2>
 <p>この板で定期的に走っているのはこれだけです。 <code>ops.json</code> の <code>identity</code> の鍵として認証し、 必要な action を順に authorize します。 いま走らせるなら <code>POST /api/ops/digest/run</code>。 拒否されたときは、 どの action で止まったかが応答と journal に出ます。</p>
@@ -637,6 +639,7 @@ ${catalogRows}</table>
 
 <h2>この API でできること</h2>
 <pre>GET  /api/ops/keys                   鍵の棚卸し (secret は出ません)
+POST /api/ops/break-glass/reveal     ローカル引き継ぎ票を 1 度だけ開く
 POST /api/ops/keys                   鍵を発行する               X-Break-Glass
 POST /api/ops/keys/revoke?keyId=...  鍵を失効させる             X-Break-Glass
 GET  /api/ops/whoami                 提示した鍵が何者かを返す   X-Ops-Key
@@ -650,6 +653,22 @@ GET  /api/ops/state                  いまの状態のまとめ</pre>
 
 export const routes = {
   "GET /api/ops": (request, response) => sendHtml(response, 200, opsPage()),
+
+  "POST /api/ops/break-glass/reveal": (request, response) => {
+    request.resume();
+    if (breakGlassRevealed) {
+      return sendJson(response, 410, {
+        error: "envelope_already_opened",
+        detail: "rebuild the local container to restore the sealed envelope",
+      });
+    }
+    breakGlassRevealed = true;
+    return sendJson(response, 200, {
+      credential: BREAK_GLASS,
+      header: "X-Break-Glass",
+      note: "shown once; keep it outside application configuration",
+    });
+  },
 
   /** The inventory is not a secret. What is in it is. */
   "GET /api/ops/keys": (request, response) =>
@@ -1096,7 +1115,7 @@ export const checks = {
 // ---------------------------------------------------------------------------
 
 /**
- * The break-glass credential, on stderr, once.
+ * The break-glass credential, on stderr, once for the operator path.
  *
  * Not through `log()`: that writes into the ring `GET /api/logs` serves without
  * authentication, and the credential that can issue and revoke every key in this
@@ -1105,7 +1124,7 @@ export const checks = {
  * stderr reaches `docker compose logs` and nothing the app serves.
  */
 console.error(`[boot] ops break-glass credential: ${BREAK_GLASS}`);
-console.error("[boot] this value is not served on any HTTP surface of this container");
+console.error("[boot] the local exercise also exposes a one-time break-glass handover envelope");
 
 /**
  * The nightly job has been running since before the participant arrived, so the

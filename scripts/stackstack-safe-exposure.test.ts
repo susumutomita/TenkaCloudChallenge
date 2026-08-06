@@ -288,6 +288,9 @@ function client(instance: () => Instance) {
     patch: (path: string, body: unknown) => send(path, { as: null, method: "PATCH", body }),
     remove: (path: string, as: string | null = null) => send(path, { as, method: "DELETE" }),
     accessPath: () => instance().accessPath,
+    patchSettings: (settings: Record<string, unknown>) =>
+      send("/api/settings", { method: "PATCH", body: settings }),
+    resetSettings: () => send("/api/settings", { method: "DELETE" }),
     /** `id` is looked up per call: the ids are seed-derived and never committed. */
     async ids(): Promise<Record<Slug, string>> {
       const all = await send("/portal/admin/drafts", { as: "cto-daichi" });
@@ -1836,13 +1839,13 @@ describe("stackstack-safe-exposure wiring", () => {
     const japanese = readFileSync(join(PROBLEM_DIR, "README.ja.md"), "utf8");
     for (const anchor of [
       "make local PROBLEM=stackstack-safe-exposure",
-      "DELETE http://127.0.0.1:18080/api/settings",
-      "PATCH /api/settings",
+      "DELETE /api/settings",
       "127.0.0.1:18080/portal",
       "127.0.0.1:18081",
       "GET /portal/review",
       "DELETE /portal/admin/draft?id=…",
       "client-ip:",
+      "PATCH /api/settings",
       "4 / 9",
       "5 / 7 / 11",
       "6 / 9 / 13",

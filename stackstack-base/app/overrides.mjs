@@ -14,12 +14,16 @@
  * 残す — 二重に持つと、 片方だけ直された仕様がもう片方に残る。
  */
 
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 
 export const OVERRIDE_DIR = process.env.APP_OVERRIDE_DIR ?? "/tmp";
 
 function overridePath(name) {
   return `${OVERRIDE_DIR}/stackstack-${name}.json`;
+}
+
+function sourceOverridePath(name) {
+  return `${OVERRIDE_DIR}/stackstack-${name}.mjs`;
 }
 
 /**
@@ -67,5 +71,35 @@ export function clearOverride(name) {
     rmSync(overridePath(name), { force: true });
   } catch {
     // 消せない = 元から無い。 呼び出し側にとっては同じ結果なので黙る。
+  }
+}
+
+/** 実行時の source があればその path、 無ければ image に焼いた starter の path。 */
+export function activeSourcePath(name, basePath) {
+  const override = sourceOverridePath(name);
+  return existsSync(override) ? override : basePath;
+}
+
+/** API console に表示する、 現在有効な source。 */
+export function readSource(name, basePath) {
+  return readFileSync(activeSourcePath(name, basePath), "utf8");
+}
+
+/** participant の source を checkout ではなくコンテナ寿命の `/tmp` に保存する。 */
+export function saveSource(name, source) {
+  try {
+    writeFileSync(sourceOverridePath(name), source, "utf8");
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: `cannot save the source: ${error.code ?? error.message}` };
+  }
+}
+
+/** 実行時の source を捨て、 image に焼いた starter に戻す。 */
+export function clearSource(name) {
+  try {
+    rmSync(sourceOverridePath(name), { force: true });
+  } catch {
+    // 元から無ければ、 starter が有効という要求は既に満たされている。
   }
 }
