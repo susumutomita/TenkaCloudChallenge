@@ -143,8 +143,8 @@
       {
         "id": "public-backup",
         "label": "公開フォルダのバックアップ",
-        "points": 60,
-        "wrongAnswerPenalty": 3,
+        "points": 30,
+        "wrongAnswerPenalty": 2,
         "hints": [
           {
             "id": "public-backup-1",
@@ -166,8 +166,8 @@
       {
         "id": "exposed-config",
         "label": "設定ファイルの控え",
-        "points": 60,
-        "wrongAnswerPenalty": 3,
+        "points": 30,
+        "wrongAnswerPenalty": 2,
         "hints": [
           {
             "id": "exposed-config-1",
@@ -189,8 +189,8 @@
       {
         "id": "debug-log",
         "label": "本番に残ったログ",
-        "points": 40,
-        "wrongAnswerPenalty": 2,
+        "points": 20,
+        "wrongAnswerPenalty": 1,
         "hints": [
           {
             "id": "debug-log-1",
@@ -212,8 +212,8 @@
       {
         "id": "dir-listing",
         "label": "中身が見える内部フォルダ",
-        "points": 40,
-        "wrongAnswerPenalty": 2,
+        "points": 20,
+        "wrongAnswerPenalty": 1,
         "hints": [
           {
             "id": "dir-listing-1",
