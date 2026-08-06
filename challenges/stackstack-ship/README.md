@@ -18,8 +18,11 @@ only answers while something is actually deployed.
 | `127.0.0.1:18080/shipyard` | The ops console — registry, releases, deploy log, secret store |
 | `127.0.0.1:18080/site` | The published entrance — what the outside gets |
 | `127.0.0.1:18081` | Loopback `/verify` the TenkaCloud scorer delegates to |
-| `problems/challenges/stackstack-ship/local/release/release.json` | The release manifest — **your** file, mounted read-only |
-| `problems/challenges/stackstack-ship/local/config/app.json` | The board's own config, unchanged from onboarding |
+| `127.0.0.1:18080/docs` | The API console — view, change and discard the release manifest (`/api/settings`) |
+
+The manifest's starting point is mounted read-only; changes go through the API and live
+only inside the container. No repository file is ever written. The board's own config
+(`/api/config`) is unchanged from onboarding.
 
 The image is built from [`stackstack-base/`](../../stackstack-base), shared by every
 StackStack problem. The artifact id, the public serial, the deploy receipts and the
@@ -86,14 +89,11 @@ Five checkpoints, 200 points:
    curl -sX POST http://127.0.0.1:18080/shipyard/releases | jq '.release.failure'
    ```
 
-   It stops, and it names the stage it stopped at. Fix what that says in
-
-   ```
-   problems/challenges/stackstack-ship/local/release/release.json
-   ```
-
-   and run it again. Repeat until a release is promoted. There is nothing to restart:
-   the manifest is re-read on every deploy call. Six stages run in order —
+   It stops, and it names the stage it stopped at. Fix what that says in the manifest —
+   `GET /api/settings` returns the current values, and changes are sent with
+   `PATCH /api/settings` from the API console (`docs`), `env` as a whole object — and run
+   it again. Repeat until a release is promoted. There is nothing to restart: the
+   manifest is re-read on every deploy call. Six stages run in order —
    `read-manifest`, `resolve-artifact`, `resolve-config`, `start`, `health-gate`,
    `promote` — and a refused deploy answers `422`, not a `5xx`. A refused deploy is a
    normal outcome.
@@ -147,13 +147,15 @@ Five checkpoints, 200 points:
    including the one that was already there when you arrived, and
    `DELETE 'http://127.0.0.1:18080/shipyard/release?id=rel-N'` removes one.
 
-8. Restore your checkout **after** you have submitted the sign-off, not before —
-   reverting the manifest and redeploying is fine, but reverting it and leaving the
-   plane empty turns the gates red:
+8. Return to the original broken state **after** you have submitted the sign-off, not
+   before — discarding the manifest and redeploying is fine, but discarding it and
+   leaving the plane empty turns the gates red:
 
    ```
-   git -C problems checkout -- challenges/stackstack-ship/local/
+   curl -s -X DELETE http://127.0.0.1:18080/api/settings
    ```
+
+   Rebuilding the container resets to the same state.
 
 ## The surfaces this problem adds
 
@@ -234,8 +236,8 @@ still leaves 116.
 
 Zero. Nothing is deployed to a cloud account; the container runs on your machine and is
 removed by `make local-down`. The release plane lives entirely in the container's memory,
-so tearing down leaves nothing behind except the two files in your own checkout, which
-`git -C problems checkout -- challenges/stackstack-ship/local/` restores.
+and manifest changes live only inside the container too, so tearing down leaves nothing
+behind — your checkout's `git status` stays clean from first request to last.
 
 ## What carries into the Battle
 

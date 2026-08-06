@@ -21,8 +21,8 @@ credentials.
 | `127.0.0.1:18080/ops` | The ops plane — a separate plane from the entrance, so it answers even while the entrance does not |
 | `127.0.0.1:18080/edge/*` | The public entrance in front of the board |
 | `127.0.0.1:18081` | Loopback `/verify` the TenkaCloud scorer delegates to |
-| `problems/challenges/stackstack-recover/local/policy/policy.json` | **The file last night's deploy edited.** Yours, mounted read-only, re-read on every request |
-| `problems/challenges/stackstack-recover/local/config/app.json` | The board's own config, unchanged from the previous problems |
+| `127.0.0.1:18080/docs` | The API console — view, change and discard the recovery policy (`/api/settings`) |
+| `GET/PATCH/DELETE /api/settings` | **The settings last night's deploy changed.** The starting point is mounted read-only; changes go through the API and live only inside the container |
 | `problems/challenges/stackstack-recover/local/state/` | Where the scheduled job writes, if the policy lets it |
 
 The image is built from [`stackstack-base/`](../../stackstack-base). The incident
@@ -104,11 +104,12 @@ the thing it attests to stops being true.
    Submit that for **Name what stopped**. The oracle answers for any set you hand it,
    including sets that were never down — it is a calculator, not a hint.
 
-5. Fix the policy. It is one file in your checkout (paths below are relative to your
-   TenkaCloud checkout, where this catalog is the `problems/` submodule):
+5. Fix the policy. `GET /api/settings` returns the current values; send the change with
+   `PATCH /api/settings` from the API console (`docs`) — a section is sent whole. The
+   shape:
 
    ```jsonc
-   // problems/challenges/stackstack-recover/local/policy/policy.json
+   // what GET /api/settings returns
    {
      "auth": {
        "requireToken": true,
@@ -122,9 +123,10 @@ the thing it attests to stops being true.
    }
    ```
 
-   Nothing to restart: the app re-reads it on every request. After a save, take a fresh
+   Nothing to restart: the app re-reads it on every request. After a change, take a fresh
    measurement — `curl -sX POST http://127.0.0.1:18080/ops/probe` — and read
-   `GET /posture` again.
+   `GET /posture` again. `DELETE /api/settings` discards your changes and puts the
+   original broken state back; so does rebuilding the container.
 
    **Paths in `storage.writable` are the paths inside the container**, not the ones in
    your checkout. The job writes `/app/state/digest/latest.json`, which shows up in your

@@ -20,8 +20,8 @@
 | `127.0.0.1:18080/ops` | 運用面。 公開側の入口とは別系統なので、 入口が落ちていても答えます |
 | `127.0.0.1:18080/edge/*` | 掲示板の手前にある公開側の入口 |
 | `127.0.0.1:18081` | TenkaCloud の採点が委譲する loopback の `/verify` |
-| `problems/challenges/stackstack-recover/local/policy/policy.json` | **昨夜のデプロイが書き換えた 1 枚。** あなたのファイルで、 read-only でマウントされ、 リクエストごとに読み直されます |
-| `problems/challenges/stackstack-recover/local/config/app.json` | 掲示板自身の設定。 前の問題から変わっていません |
+| `127.0.0.1:18080/docs` | API コンソール ── 復旧ポリシーの閲覧・変更・破棄 (`/api/settings`) |
+| `GET/PATCH/DELETE /api/settings` | **昨夜のデプロイが変えた設定。** 出発点は read-only でマウントされ、 変更は API 経由でコンテナ内にだけ置かれます |
 | `problems/challenges/stackstack-recover/local/state/` | 定期処理が書く場所 ── 設定が許可していれば |
 
 イメージは [`stackstack-base/`](../../stackstack-base) から作られます。 incident の署名は
@@ -101,11 +101,11 @@ receipt は `GET /posture` の `tokens` に、 その gate が true のあいだ
    それを **止まったものを名指しする** に提出します。 このオラクルは渡された任意の集合に
    答えます ── 一度も落ちていない集合にも。 ヒントではなく電卓です。
 
-5. 設定を直す。 リポジトリの 1 枚です (以下のパスは TenkaCloud のチェックアウト基準。 この
-   カタログは `problems/` submodule としてマウントされています):
+5. 設定を直す。 いまの値は `GET /api/settings` が返し、 変更は API コンソール (`docs`) の
+   `PATCH /api/settings` から送ります (セクションは丸ごと)。 形は次のとおりです:
 
    ```jsonc
-   // problems/challenges/stackstack-recover/local/policy/policy.json
+   // GET /api/settings が返す形
    {
      "auth": {
        "requireToken": true,
@@ -119,8 +119,10 @@ receipt は `GET /posture` の `tokens` に、 その gate が true のあいだ
    }
    ```
 
-   再起動は要りません。 リクエストごとに読み直されます。 保存したら測り直して
+   再起動は要りません。 リクエストごとに読み直されます。 送ったら測り直して
    (`curl -sX POST http://127.0.0.1:18080/ops/probe`)、 `GET /posture` をもう一度見てください。
+   変更を捨てて最初の壊れた状態に戻すには `DELETE /api/settings`。 コンテナを作り直しても
+   同じ状態に戻ります。
 
    **`storage.writable` に書くのはコンテナ内のパス** で、 チェックアウト側のパスではありません。
    定期処理が書くのは `/app/state/digest/latest.json` で、 それがチェックアウトに現れる場所は

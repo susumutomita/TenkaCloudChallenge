@@ -71,7 +71,13 @@ const POLICY_PATH = process.env.RECOVER_POLICY ?? "/app/policy/policy.json";
 
 /** この scenario の設定の上書き名 (置き場と挙動は `overrides.mjs`)。 */
 const SETTINGS_NAME = "policy";
-const POLICY_HINT = process.env.RECOVER_POLICY_HINT ?? POLICY_PATH;
+/**
+ * 参加者向けの文中でこの policy を指す呼び名。 パスを既定にする方向は採らない — マウント元は
+ * git 管理下で、 コンテナ内パスは参加者の機械に存在せず、 checkout パスは直接編集に誘導して
+ * 解いた瞬間に作業ツリーを汚す。 変更は `PATCH /api/settings` (コンソールは `/docs`) へ誘導する。
+ */
+const POLICY_HINT =
+  process.env.RECOVER_POLICY_HINT ?? "the recovery policy (change it via PATCH /api/settings)";
 
 /** Where the app is allowed to write, if the policy lets it. */
 const STATE_DIR = normalizePath(process.env.RECOVER_STATE_DIR ?? "/app/state");
@@ -826,8 +832,10 @@ ${gateRows}</table>
 <pre>${SUBSYSTEMS.join("\n")}</pre>
 <p>集合から署名を計算させるには <code>GET ops/signature?subsystems=a,b</code>。 順不同・重複可。</p>
 
-<h2>設定ファイル</h2>
-<p>昨夜のデプロイが書き換えた 1 枚: <code>${escapeHtml(POLICY_HINT)}</code> (呼ぶたびに読み直します)</p>
+<h2>設定 (policy)</h2>
+<p>昨夜のデプロイが変えた 1 組。 いまの値は <code>GET /api/settings</code> が返し、 変更は板の API コンソール
+ (<a href="docs">docs</a>) から <code>PATCH /api/settings</code> で送ります (呼ぶたびに読み直します)。
+ 変更を捨てて初期状態に戻すのは <code>DELETE /api/settings</code> です。</p>
 <pre>{
   "auth": {
     "requireToken": true,
@@ -837,7 +845,7 @@ ${gateRows}</table>
   "storage": { "writable": ["&lt;アプリが書いてよいディレクトリ&gt;", "..."] },
   "digest": { "enabled": true }
 }</pre>
-<p>ここに書いていないキーは受け付けません。</p>
+<p>ここに書いていないキーは受け付けません。 セクションは丸ごと送ります (<code>auth</code> を変えるときは <code>auth</code> の中身ごと)。</p>
 <p>定期処理の出力先は動かせません。 アプリが書く先 (= <code>storage.writable</code> に書く値と同じ体系) は
  <code>${escapeHtml(DIGEST_FILE)}</code>、 それが参加者のチェックアウトに現れる場所は
  <code>${escapeHtml(`${STATE_HINT}/digest/latest.json`)}</code> です。</p>
@@ -1280,6 +1288,8 @@ export const checks = {
 export const editableSettings = {
   name: SETTINGS_NAME,
   summary: { ja: "復旧ポリシー", en: "recovery policy" },
-  example: {"enabled": true},
+  // Swagger の Try it out にそのまま入る例。 この policy が実際に受け付けるキーを使い、
+  // セクションは丸ごと送る (top-level merge)。 解答そのものはここに書かない。
+  example: { digest: { enabled: true } },
   read: () => readPolicy(),
 };

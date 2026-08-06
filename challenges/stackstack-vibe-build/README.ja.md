@@ -32,7 +32,7 @@
 curl -s http://127.0.0.1:18080/api/spec | jq
 
 # 2. 実装する (生成 AI の利用は自由、 むしろ推奨)
-$EDITOR problems/challenges/stackstack-vibe-build/local/feature/search.mjs
+open http://127.0.0.1:18080/editor   # エディタで書いて保存。 リポジトリのファイルは書き換わらない
 
 # 3. 使う ── 保存すれば再起動なしで反映される
 curl -s 'http://127.0.0.1:18080/api/search?q=板'

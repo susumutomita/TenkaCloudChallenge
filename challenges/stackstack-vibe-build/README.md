@@ -43,7 +43,7 @@ surfaces) and `18081` (the loopback `/verify` the platform delegates scoring to)
 curl -s http://127.0.0.1:18080/api/spec | jq
 
 # 2. implement it (an AI tool is allowed, and encouraged)
-$EDITOR problems/challenges/stackstack-vibe-build/local/feature/search.mjs
+open http://127.0.0.1:18080/editor   # write and save in the editor; no repository file is ever written
 
 # 3. use it — a save takes effect without a restart
 curl -s 'http://127.0.0.1:18080/api/search?q=board'

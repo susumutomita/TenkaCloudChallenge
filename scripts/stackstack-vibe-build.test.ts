@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -40,8 +40,6 @@ const VERIFY = `http://127.0.0.1:${VERIFY_PORT}/verify`;
  */
 const SEED = "stackstack-vibe-build-test-seed-8f2c41";
 
-const FEATURE_HINT = "problems/challenges/stackstack-vibe-build/local/feature/search.mjs";
-const CONFIG_HINT = "problems/challenges/stackstack-vibe-build/local/config/app.json";
 
 const CHECKPOINTS = [
   "search-answers",
@@ -401,6 +399,7 @@ export function renderResults() {
 
 let scratch = "";
 let featurePath = "";
+let overrideDir = "";
 let configPath = "";
 let server: ReturnType<typeof spawn>;
 let writes = 0;
@@ -415,6 +414,22 @@ let writes = 0;
 function useFeature(source: string): void {
   writes += 1;
   writeFileSync(featurePath, `${source}\n// fixture ${writes}\n`);
+}
+
+async function patchSettings(body: unknown) {
+  const response = await fetch(`${BOARD}/api/settings`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const text = await response.text();
+  let parsed: any;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    parsed = undefined;
+  }
+  return { status: response.status, body: parsed, text };
 }
 
 async function get(path: string): Promise<{ status: number; body: any; text: string; headers: Headers }> {
@@ -471,6 +486,8 @@ beforeAll(async () => {
   scratch = mkdtempSync(join(tmpdir(), "stackstack-vibe-build-"));
   featurePath = join(scratch, "search.mjs");
   configPath = join(scratch, "app.json");
+  overrideDir = join(scratch, "overrides");
+  mkdirSync(overrideDir, { recursive: true });
   writeFileSync(configPath, readFileSync(join(PROBLEM_DIR, "local", "config", "app.json")));
   useFeature(STARTER);
 
@@ -481,8 +498,9 @@ beforeAll(async () => {
       FLAG_SEED: SEED,
       APP_CONFIG: configPath,
       APP_FEATURE: featurePath,
-      CONFIG_HINT,
-      FEATURE_HINT,
+      // 上書きの置き場は共有 /tmp ではなくインスタンスごとの scratch。 スイートを並走させても、
+      // 前回の実行が残した上書きを拾っても、 互いに汚染しない。
+      APP_OVERRIDE_DIR: overrideDir,
       CHALLENGE_PORT: String(CHALLENGE_PORT),
       VERIFY_PORT: String(VERIFY_PORT),
     },
@@ -626,15 +644,18 @@ describe("stackstack-vibe-build requirements are one document", () => {
     // The metadata does not restate the rules — it sends the participant to the
     // one copy that cannot drift, which is the running app's.
     const meta = readFileSync(join(PROBLEM_DIR, "metadata.json"), "utf8");
-    for (const token of ["/api/spec", "/api/selfcheck", "search.mjs"]) expect(meta).toContain(token);
+    for (const token of ["/api/spec", "/api/selfcheck", "/editor"]) expect(meta).toContain(token);
     // ...and the result field has exactly one name across all of them.
     for (const document of [spec, ...readmes]) expect(document).not.toContain("body.entries");
   });
 
-  it("should point at the feature file by the path in the participant's checkout", async () => {
+  it("should call the feature by the surface the participant edits, never by a path", async () => {
+    // The old spec named a checkout file. Editing that file dirtied git status
+    // and survived every rebuild — one solve, and no second attempt (#378).
     const spec = await get("/api/spec");
-    expect(spec.body.feature).toBe(FEATURE_HINT);
-    expect(spec.text).not.toContain("/app/feature/search.mjs");
+    expect(String(spec.body.feature)).toContain("/editor");
+    expect(spec.text).not.toContain("/app/feature");
+    expect(spec.text).not.toContain("challenges/stackstack-vibe-build");
   });
 });
 
@@ -1256,6 +1277,53 @@ describe("stackstack-vibe-build checkpoint wiring", () => {
   });
 });
 
+describe("stackstack-vibe-build editor and settings API", () => {
+  beforeAll(() => useFeature(STARTER));
+
+  it("should serve a self-contained editor page that never names a path", async () => {
+    const page = await get("/editor");
+    expect(page.status).toBe(200);
+    expect(page.text).toContain("api/settings");
+    expect(page.text).toContain("api/selfcheck");
+    expect(page.text).not.toContain("/app/");
+    expect(page.text).not.toContain("challenges/stackstack-vibe-build");
+    // 自己完結: 外部の script/style/フォントを一切引かない (loopback と転送ポートの両方で
+    // 同じに動くことがこの板の前提)。
+    expect(page.text).not.toMatch(/src="https?:\/\//);
+    expect(page.text).not.toMatch(/href="https?:\/\//);
+  });
+
+  it("should take an implementation through the API, run it, and reset to the starter", async () => {
+    // The participant loop of #378: broken starter → save through the API with
+    // no restart → discard → the starter is back. The mounted file never
+    // changes, so a rebuilt container starts from the same place.
+    const fileBefore = readFileSync(featurePath, "utf8");
+
+    const current = await get("/api/settings");
+    expect(current.status).toBe(200);
+    expect(current.body.settings.source).toBe(fileBefore);
+
+    const junkKey = await patchSettings({ sauce: "typo" });
+    expect(junkKey.status).toBe(400);
+    const junkType = await patchSettings({ source: 42 });
+    expect(junkType.status).toBe(400);
+
+    const saved = await patchSettings({ source: `${CORRECT}\n` });
+    expect(saved.status).toBe(200);
+    const feature = await get("/api/feature");
+    expect(feature.body.loaded).toBe(true);
+    const state = await selfcheck();
+    expect(Object.values(state).every((gate) => gate === true)).toBe(true);
+    expect(readFileSync(featurePath, "utf8")).toBe(fileBefore);
+
+    const reset = await fetch(`${BOARD}/api/settings`, { method: "DELETE" });
+    expect(reset.status).toBe(200);
+    expect((await get("/api/settings")).body.settings.source).toBe(fileBefore);
+    const back = await selfcheck();
+    expect(Object.values(back).every((gate) => gate === true)).toBe(false);
+  });
+});
+
 describe("stackstack-vibe-build wiring", () => {
   const composeDir = join(PROBLEM_DIR, "local");
   const compose = parseYaml(readFileSync(join(composeDir, "docker-compose.yml"), "utf8")) as {
@@ -1309,21 +1377,24 @@ describe("stackstack-vibe-build wiring", () => {
     expect(existsSync(join(composeDir, "feature", "search.mjs"))).toBe(true);
   });
 
-  it("should name both participant-owned paths as they appear in the platform checkout", () => {
-    // A participant runs `make local` from the TenkaCloud repository, where this
-    // catalog is the `problems/` submodule.
-    for (const [hint, inThisRepo] of [
-      [service.environment.FEATURE_HINT, "challenges/stackstack-vibe-build/local/feature/search.mjs"],
-      [service.environment.CONFIG_HINT, "challenges/stackstack-vibe-build/local/config/app.json"],
-    ] as const) {
-      expect(hint).toBe(`problems/${inThisRepo}`);
+  it("should carry no path hint for anyone to resurrect in copy (#378)", () => {
+    // The participant writes their implementation at /editor and it is stored
+    // through the API, so the compose file must not ship a "path to open".
+    expect(service.environment.FEATURE_HINT).toBeUndefined();
+    expect(service.environment.CONFIG_HINT).toBeUndefined();
+    for (const inThisRepo of [
+      "challenges/stackstack-vibe-build/local/feature/search.mjs",
+      "challenges/stackstack-vibe-build/local/config/app.json",
+    ]) {
       expect(existsSync(join(REPO_ROOT, inThisRepo))).toBe(true);
     }
   });
 
-  it("should give the participant-facing docs the same feature path the app prints", () => {
+  it("should steer every participant-facing doc to the editor, never to the checkout file", () => {
     for (const name of ["README.md", "README.ja.md", "metadata.json"]) {
-      expect(readFileSync(join(PROBLEM_DIR, name), "utf8")).toContain(FEATURE_HINT);
+      const text = readFileSync(join(PROBLEM_DIR, name), "utf8");
+      expect(text).not.toContain("challenges/stackstack-vibe-build/local/");
+      expect(text).toContain("/editor");
     }
   });
 

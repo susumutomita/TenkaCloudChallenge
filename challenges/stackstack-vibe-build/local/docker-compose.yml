@@ -17,18 +17,15 @@ services:
       dockerfile: Dockerfile
     environment:
       SCENARIO: vibe-build
-      # Paths in the participant's checkout, which are not the paths the app
-      # reads (both directories are mounted under /app). Display only.
-      CONFIG_HINT: problems/challenges/stackstack-vibe-build/local/config/app.json
-      FEATURE_HINT: problems/challenges/stackstack-vibe-build/local/feature/search.mjs
       # Per-deploy random secret injected by `make local`. Nothing this problem
       # grades is derived from it — the gate receipts come from a secret the app
       # generates at boot, because participant code runs inside this container.
       FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
     volumes:
-      # The participant's own checkout, read-only. The feature file is the one
-      # this problem is about; the app re-reads it whenever it changes, so a save
-      # takes effect without a restart.
+      # The participant's own checkout, read-only: the starting point the app
+      # reads, never a place anything writes. The implementation is written at
+      # /editor and stored through the API inside the container, so a rebuild
+      # is a full reset back to this starter.
       - ./config:/app/config:ro
       - ./feature:/app/feature:ro
     ports:

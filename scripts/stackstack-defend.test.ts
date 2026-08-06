@@ -61,8 +61,6 @@ const INTERVAL_MS = 10;
 const WINDOW_ROUNDS = 4;
 const HOLD_MS = 200;
 
-const CONFIG_HINT = "problems/challenges/stackstack-defend/local/config/app.json";
-const POLICY_HINT = "problems/challenges/stackstack-defend/local/policy/access.json";
 
 interface Metadata {
   readonly difficulty: number;
@@ -136,6 +134,7 @@ function startServer(options: {
   verifyPort: number;
   policy: string;
   config: string;
+  overrideDir: string;
 }): ReturnType<typeof spawn> {
   return spawn("bun", [SERVER], {
     env: {
@@ -144,8 +143,9 @@ function startServer(options: {
       FLAG_SEED: SEED,
       APP_CONFIG: options.config,
       ACCESS_POLICY: options.policy,
-      CONFIG_HINT,
-      POLICY_HINT,
+      // 上書きの置き場は共有 /tmp ではなくインスタンスごとの scratch。 スイートを
+      // 並走させても、 前回の実行が残した上書きを拾っても、 互いに汚染しない。
+      APP_OVERRIDE_DIR: options.overrideDir,
       CHALLENGE_PORT: String(options.challengePort),
       VERIFY_PORT: String(options.verifyPort),
       DEFEND_INTERVAL_MS: String(INTERVAL_MS),
@@ -290,12 +290,14 @@ beforeAll(async () => {
     verifyPort: VERIFY_PORT,
     policy: policyPath,
     config: configPath,
+    overrideDir: mkdtempSync(join(scratch, "overrides-main-")),
   });
   freshInstance = startServer({
     challengePort: FRESH_PORT,
     verifyPort: FRESH_VERIFY_PORT,
     policy: freshPolicyPath,
     config: configPath,
+    overrideDir: mkdtempSync(join(scratch, "overrides-fresh-")),
   });
   await waitForListener(PORT);
   await waitForListener(FRESH_PORT);
@@ -444,19 +446,46 @@ describe("stackstack-defend wiring", () => {
     expect(existsSync(join(composeDir, "policy", "access.json"))).toBe(true);
   });
 
-  it("should name both files by the path in the participant's checkout", () => {
-    // `make local` runs from the platform repository, where this catalog is the
-    // `problems/` submodule. The app itself only ever sees /app/..., which is a
-    // path that does not exist on their machine.
-    expect(service.environment.CONFIG_HINT).toBe(CONFIG_HINT);
-    expect(service.environment.POLICY_HINT).toBe(POLICY_HINT);
-    for (const relative of [CONFIG_HINT, POLICY_HINT]) {
-      expect(existsSync(join(REPO_ROOT, relative.replace(/^problems\//, "")))).toBe(true);
+  it("should carry no path hint, and steer every doc to the API instead (#378)", () => {
+    // The participant no longer edits the mounted files at all — changes go
+    // through PATCH /api/settings — so neither the compose file nor any doc may
+    // ship a "path to open" for anyone to resurrect in copy. Editing the tracked
+    // file rewrote the problem's own source: git went dirty, and no rebuild
+    // brought the broken state back.
+    expect(service.environment.CONFIG_HINT).toBeUndefined();
+    expect(service.environment.POLICY_HINT).toBeUndefined();
+    for (const inThisRepo of [
+      "challenges/stackstack-defend/local/config/app.json",
+      "challenges/stackstack-defend/local/policy/access.json",
+    ]) {
+      expect(existsSync(join(REPO_ROOT, inThisRepo))).toBe(true);
     }
-    for (const name of ["README.md", "README.ja.md"]) {
-      expect(readFileSync(join(PROBLEM_DIR, name), "utf8")).toContain(POLICY_HINT);
+    for (const name of ["README.md", "README.ja.md", "metadata.json"]) {
+      const text = readFileSync(join(PROBLEM_DIR, name), "utf8");
+      expect(text).not.toContain("challenges/stackstack-defend/local/");
+      expect(text).toContain("/api/settings");
     }
-    expect(readFileSync(join(PROBLEM_DIR, "metadata.json"), "utf8")).toContain(POLICY_HINT);
+  });
+
+  it("should change the policy through the API, refuse a bad value, and reset to the mount", async () => {
+    // The participant loop of #378: the mounted file is the starting point, a
+    // change rides on top of it inside the container, and discarding the change
+    // — or rebuilding the container — brings the broken start back.
+    const fileBefore = readFileSync(policyPath, "utf8");
+
+    const refused = await asActor("PATCH", "/api/settings", "", BOARD, { readsPerRound: "many" });
+    expect(refused.status).toBe(400);
+
+    const changed = await asActor("PATCH", "/api/settings", "", BOARD, { readsPerRound: 150 });
+    expect(changed.status).toBe(200);
+    expect((await get("/api/policy")).body.policy.readsPerRound).toBe(150);
+    expect(readFileSync(policyPath, "utf8")).toBe(fileBefore);
+
+    const reset = await asActor("DELETE", "/api/settings", "", BOARD);
+    expect(reset.status).toBe(200);
+    expect((await get("/api/policy")).body.policy.readsPerRound).toBe(
+      (STARTER_POLICY as { readsPerRound: number }).readsPerRound,
+    );
   });
 
   it("should ship a starter policy that is genuinely open", () => {

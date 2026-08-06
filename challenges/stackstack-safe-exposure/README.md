@@ -19,8 +19,11 @@ document, re-read on every request, that decides which of them may reach which.
 | `127.0.0.1:18080/portal/review` | The same thing one probe at a time, with the rule that decided each |
 | `127.0.0.1:18080/` | The board itself, unchanged from the earlier StackStack problems |
 | `127.0.0.1:18081` | Loopback `/verify` the TenkaCloud scorer delegates to |
-| `problems/challenges/stackstack-safe-exposure/local/access/access.json` | The access document — **your** file, mounted read-only |
-| `problems/challenges/stackstack-safe-exposure/local/config/app.json` | The board's own config, which this problem is not about |
+| `127.0.0.1:18080/docs` | The API console — view, change and discard the access document (`/api/settings`) |
+
+The access document's starting point is mounted read-only; changes go through the API and
+live only inside the container. No repository file is ever written. The board's own config
+(`/api/config`) is not what this problem is about.
 
 The image is built from [`stackstack-base/`](../../stackstack-base), shared by every
 StackStack problem. The four API keys, the draft ids and the two markings are derived
@@ -103,12 +106,15 @@ Four checkpoints, 200 points:
 4. Rewrite the access document:
 
    ```
-   problems/challenges/stackstack-safe-exposure/local/access/access.json
+   curl -s http://127.0.0.1:18080/api/settings | jq          # what is loaded now
+   # send the change with PATCH /api/settings from the API console (docs) — rules as a whole array
    ```
 
-   There is nothing to restart — the file is re-read on every request. A document that
-   will not load is an outage that says so: every governed route answers `503
-   policy_error` with the problem named, and `/portal` still tells you what is wrong.
+   There is nothing to restart — the document is re-read on every request. A change the
+   engine refuses comes back as a `400` with the reason, leaving everything as it was. A
+   document that will not load is an outage that says so: every governed route answers
+   `503 policy_error` with the problem named, and `/portal` still tells you what is
+   wrong.
 
 5. Open a red gate and read what is failing:
 
@@ -146,11 +152,13 @@ Four checkpoints, 200 points:
    A receipt appears only while its gate is true, and `readyToken` only while all five
    are.
 
-7. Restore your checkout **after** you have submitted the sign-off:
+7. Return to the original broken state **after** you have submitted the sign-off:
 
    ```
-   git -C problems checkout -- challenges/stackstack-safe-exposure/local/
+   curl -s -X DELETE http://127.0.0.1:18080/api/settings
    ```
+
+   Rebuilding the container resets to the same state.
 
 ## The access document
 
@@ -296,9 +304,9 @@ see "About the answer being in this repository" above for why.
 
 Zero. Nothing is deployed to a cloud account; the container runs on your machine and is
 removed by `make local-down`. The drafts and the decision record live entirely in the
-container's memory, so tearing down leaves nothing behind except the two files in your own
-checkout, which `git -C problems checkout -- challenges/stackstack-safe-exposure/local/`
-restores.
+container's memory, and access-document changes live only inside the container too, so
+tearing down leaves nothing behind — your checkout's `git status` stays clean from first
+request to last.
 
 ## What carries into the Battle
 

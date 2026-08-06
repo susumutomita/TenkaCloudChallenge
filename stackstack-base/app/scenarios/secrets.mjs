@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { allPosts } from "../board.mjs";
 import { log } from "../log.mjs";
+import { readOverride } from "../overrides.mjs";
 import { posture } from "../posture.mjs";
 import { READY_TOKEN, gateToken } from "../secrets.mjs";
 
@@ -239,10 +240,14 @@ function keyBySecret(presented, observe = true) {
 const OPS_MANIFEST = process.env.OPS_MANIFEST ?? "/app/ops/ops.json";
 
 /**
- * Where the manifest sits in the *participant's* checkout, which is not the path
- * this process reads. Display only, exactly like `CONFIG_HINT`.
+ * 参加者向けの文中でこの manifest を指す呼び名。 パスを既定にする方向は採らない — マウント元は
+ * git 管理下で、 コンテナ内パスは参加者の機械に存在せず、 checkout パスは直接編集に誘導して
+ * 解いた瞬間に作業ツリーを汚す。 変更は `PATCH /api/settings` (コンソールは `/docs`) へ誘導する。
  */
-const OPS_HINT = process.env.OPS_HINT ?? OPS_MANIFEST;
+const OPS_HINT = process.env.OPS_HINT ?? "the ops manifest (change it via PATCH /api/settings)";
+
+/** この scenario の設定の上書き名 (置き場と挙動は `overrides.mjs`)。 */
+const SETTINGS_NAME = "ops";
 
 /**
  * The manifest as it is on disk right now — re-read on every use, never cached,
@@ -282,6 +287,9 @@ function readManifest() {
       detail: `${OPS_HINT} must contain a JSON object`,
     };
   }
+  // マウント元は出発点。 実行中に変えた分を重ねてから検証する (置き場は overrides.mjs)。
+  // 検証の前に重ねるのが要点 — secret-in-manifest の拒否は API 経由の変更にもそのまま効く。
+  parsed = { ...parsed, ...readOverride(SETTINGS_NAME) };
   for (const key of Object.keys(parsed)) {
     if (key !== "identity" && key !== "grants") {
       return {
@@ -617,7 +625,9 @@ ${catalogRows}</table>
 <p>判定は <code>ops.json</code> の <code>grants</code> をポリシーエンジンが実際に評価した結果です。 書き方は <code>service:action</code>、 <code>*</code> は 1 セグメントに一致し、 裸の <code>*</code> は <code>*:*</code> と同じ。 拒否を書く形はありません — 許可したものだけが通ります。</p>
 
 <h2>manifest</h2>
-<p>編集するファイル: <code>${escapeHtml(OPS_HINT)}</code> (使うたびに読み直すので再起動は要りません)</p>
+<p>いまの内容は <code>GET /api/settings</code> が返し、 変更は板の API コンソール (<a href="docs">docs</a>) から
+ <code>PATCH /api/settings</code> で送ります (使うたびに読み直すので再起動は要りません)。
+ 変更を捨てて初期状態に戻すのは <code>DELETE /api/settings</code> です。</p>
 <pre>{
   "identity": "&lt;鍵ストアにある keyId&gt;",
   "grants":   ["&lt;service:action&gt;", "..."]
@@ -803,7 +813,7 @@ export const routes = {
     const allowed = allowedWith(manifest);
     const identity = resolveIdentityWith(manifest);
     return sendJson(response, 200, {
-      manifestPath: OPS_HINT,
+      changeVia: "PATCH /api/settings (API console: /docs)",
       identity: identity.ok ? identity.key.keyId : null,
       identityError: identity.ok ? null : identity.detail,
       keys: keys.size,
@@ -1108,3 +1118,24 @@ console.error("[boot] this value is not served on any HTTP surface of this conta
  * and before the listener has accepted anything.
  */
 setTimeout(() => runDigest("job"), 0);
+
+/**
+ * 実行中に変えられる設定。 これを宣言すると `/api/settings` と Swagger の項目が生える。
+ *
+ * ファイルの場所を参加者に案内する方向は採らない — マウント元は git 管理下なので、
+ * 直接編集させると解いた瞬間にリポジトリが汚れ、 作り直しても壊れた状態に戻らなくなる。
+ * secret-in-manifest の拒否は readManifest() の中にあり、 API 経由の変更も同じ検証を通る。
+ */
+export const editableSettings = {
+  name: SETTINGS_NAME,
+  summary: { ja: "運用マニフェスト (ops.json)", en: "the ops manifest (ops.json)" },
+  // Swagger の Try it out にそのまま入る例。 starter がいま持っている値そのもの — 妥当で、
+  // どの identity とどの grants が正解かは何も先回りしない。
+  example: { identity: "ops-legacy" },
+  read: () => {
+    const manifest = readManifest();
+    return manifest.ok
+      ? { ok: true, value: manifest.value, error: null }
+      : { ok: false, value: null, error: manifest.detail };
+  },
+};

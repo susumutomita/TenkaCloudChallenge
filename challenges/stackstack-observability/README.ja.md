@@ -21,8 +21,10 @@
 | `127.0.0.1:18080/relay/healthz` | relay の死活確認 |
 | `127.0.0.1:18080/archive` | 下流の archive に実際に届いたもの |
 | `127.0.0.1:18081` | TenkaCloud の採点が委譲する loopback の `/verify` |
-| `problems/challenges/stackstack-observability/local/relay/relay.json` | relay の設定 ── **自分の** ファイル、 読み取り専用でマウント |
-| `problems/challenges/stackstack-observability/local/config/app.json` | 板自身の設定。 onboarding から変わっていません |
+| `127.0.0.1:18080/docs` | API コンソール ── relay 設定の閲覧・変更・破棄 (`/api/settings`) |
+
+relay 設定の出発点は読み取り専用でマウントされ、 変更は API 経由でコンテナ内にだけ置かれます。
+リポジトリのファイルは何をしても書き換わりません。 板自身の設定 (`/api/config`) は onboarding から変わっていません。
 
 image は StackStack 系問題が共有する [`stackstack-base/`](../../stackstack-base) から
 ビルドされます。 shard の名前、 shard の code、 incident id、 safe-log の値、 relay が下流に
@@ -103,13 +105,14 @@ image は StackStack 系問題が共有する [`stackstack-base/`](../../stackst
    ```
 
    起動の行、 投稿を受け付けた行 ── そして届かなかった書き込みについては 1 行もありません。
-   その沈黙は設定であり、 設定は
+   その沈黙は設定です。 いまの設定は
 
    ```
-   problems/challenges/stackstack-observability/local/relay/relay.json
+   curl -s http://127.0.0.1:18080/api/settings | jq
    ```
 
-   にあります。 アプリはリクエストごとに読み直すので、 再起動は要りません。
+   が返し、 変更は API コンソール (`docs`) の `PATCH /api/settings` から送ります。
+   アプリはリクエストごとに読み直すので、 再起動は要りません。
 
 5. シグナルを出したら、 どこかに貼る前にもう一度自分でログを読み直してください。
 
@@ -136,11 +139,13 @@ image は StackStack 系問題が共有する [`stackstack-base/`](../../stackst
    細かく返します ── 自分が書いた死活条件が gate の見る 3 つの場合を通っているか、
    そして書いたあとに誰かがそれを実際に走らせたか、 も含めて。
 
-7. 終わったらチェックアウトを戻す:
+7. 最初の壊れた状態に戻したくなったら、 変更を捨てます:
 
    ```
-   git -C problems checkout -- challenges/stackstack-observability/local/
+   curl -s -X DELETE http://127.0.0.1:18080/api/settings
    ```
+
+   コンテナを作り直しても同じ状態に戻ります。
 
 ## この問題が足す面
 
@@ -234,8 +239,8 @@ submodule からビルドします。 推測不能性も同様に、 プラッ�
 
 ゼロ。 クラウドアカウントには何もデプロイされません。 コンテナは自分のマシンで動き、
 `make local-down` で消えます。 relay も archive もカウンタもコンテナのメモリ上だけに
-あるので、 片付けたあとに残るのは自分のチェックアウトの 2 ファイルだけで、
-`git -C problems checkout -- challenges/stackstack-observability/local/` で戻せます。
+あり、 設定の変更もコンテナの中にだけ置かれます。 片付けたあとにチェックアウトへ残るものは
+無く、 `git status` は最初から最後まで clean のままです。
 
 ## Battle への引き継ぎ
 

@@ -16,10 +16,9 @@ services:
       dockerfile: Dockerfile
     environment:
       SCENARIO: recover
-      # Paths in the participant's checkout, which are not the paths the app
-      # reads or writes (everything is mounted under /app). Display only.
-      CONFIG_HINT: problems/challenges/stackstack-recover/local/config/app.json
-      RECOVER_POLICY_HINT: problems/challenges/stackstack-recover/local/policy/policy.json
+      # Where the scheduled job's OUTPUT lands in the participant's checkout — a
+      # read-to-verify location, never an edit target. The directory ignores its
+      # own contents, so nothing the app writes ever dirties git status.
       RECOVER_STATE_HINT: problems/challenges/stackstack-recover/local/state
       # Per-deploy random secret injected by `make local`. The incident
       # signature and the seed-derived probe identities are all derived from it
@@ -27,9 +26,9 @@ services:
       # never in the environment at all.
       FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
     volumes:
-      # The participant's own checkout. The board's config and last night's
-      # policy are read-only and re-read on every request, so a save takes
-      # effect with no restart.
+      # The participant's own checkout, read-only: the starting point the app
+      # reads, never a place anything writes. Changes go through the board's
+      # settings API and live in the container, so a rebuild is a full reset.
       - ./config:/app/config:ro
       - ./policy:/app/policy:ro
       # The one place the app is allowed to write — and only as far as the

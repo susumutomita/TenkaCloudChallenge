@@ -1,10 +1,11 @@
 import { spawn } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
-import { mkdtempSync, statSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { allPosts } from "../board.mjs";
 import { log } from "../log.mjs";
+import { OVERRIDE_DIR, readOverride } from "../overrides.mjs";
 import { gateToken } from "../secrets.mjs";
 
 /**
@@ -19,8 +20,14 @@ import { gateToken } from "../secrets.mjs";
  *
  *   spec        `GET /api/spec` — nine numbered requirements, the same text the
  *               READMEs carry, served by the app so it cannot drift out of reach
- *   feature     one file in the participant's checkout, mounted read-only and
- *               re-read whenever it changes: `search` and `renderResults`
+ *   feature     `search` and `renderResults`, written at `GET /editor` and
+ *               saved through `PATCH /api/settings`. The mounted read-only
+ *               starter is the starting point; a saved implementation lives in
+ *               the override directory, so discarding it (or rebuilding the
+ *               container) is a real reset and the catalog is never written
+ *   editor      `GET /editor` — a self-contained page with the code, a save, a
+ *               discard, and the self-check; the reachable surface the old
+ *               "edit this checkout file" instruction never had
  *   corpus      the imported archive the search runs over — public entries and
  *               entries that have never been on a public surface
  *   surfaces    `GET /api/search` (JSON) and `GET /search` (HTML), both of which
@@ -47,10 +54,69 @@ import { gateToken } from "../secrets.mjs";
 const FEATURE_PATH = process.env.APP_FEATURE ?? "/app/feature/search.mjs";
 
 /**
- * Where the feature file sits in the *participant's* checkout, which is not the
- * path this process reads. Display only, exactly like `CONFIG_HINT`.
+ * What participant-facing messages call the feature, in place of a path.
+ *
+ * There is no path to name any more: the participant edits their code at
+ * `GET /editor` and it is stored through the API, never in a file they could
+ * open. Printing either real path (the read-only mount or the /tmp override)
+ * would send them at a file that editing cannot help them with — the exact
+ * trap the editor exists to remove.
  */
-const FEATURE_HINT = process.env.FEATURE_HINT ?? FEATURE_PATH;
+const FEATURE_HINT = process.env.FEATURE_HINT ?? "your feature code (edit it at /editor)";
+
+/** この scenario の設定名。 上書き JSON は `overrides.mjs` の置き場に載る。 */
+const SETTINGS_NAME = "feature";
+
+/**
+ * Where an API-saved implementation is materialized so the child process can
+ * import it. It sits in the override directory on purpose: the same lifetime as
+ * every other runtime change, so a container rebuild is the reset and the
+ * mounted starter is what you are back at.
+ */
+const OVERRIDE_FEATURE_PATH = `${OVERRIDE_DIR}/stackstack-vibe-build-feature.mjs`;
+
+/**
+ * The source text this module last confirmed to be sitting at
+ * {@link OVERRIDE_FEATURE_PATH}. Module state alone is not trusted across an
+ * app restart in the same container — the file is checked before any write, so
+ * a restart neither rewrites an unchanged override (which would bump its mtime
+ * and kill receipts for code that did not change) nor trusts a file it never
+ * verified.
+ */
+let materialized = null;
+
+/**
+ * Which file the harness should import right now: the API-saved override when
+ * one exists, otherwise the mounted starter.
+ *
+ * @returns {{ ok: true, path: string } | { ok: false, path: string, error: string }}
+ */
+function effectiveFeature() {
+  const source = readOverride(SETTINGS_NAME).source;
+  if (typeof source !== "string") return { ok: true, path: FEATURE_PATH };
+  if (materialized !== source) {
+    let onDisk = null;
+    try {
+      onDisk = readFileSync(OVERRIDE_FEATURE_PATH, "utf8");
+    } catch {
+      onDisk = null;
+    }
+    if (onDisk !== source) {
+      materialized = null;
+      try {
+        writeFileSync(OVERRIDE_FEATURE_PATH, source, "utf8");
+      } catch (error) {
+        return {
+          ok: false,
+          path: OVERRIDE_FEATURE_PATH,
+          error: `cannot write ${FEATURE_HINT}: ${error.code ?? error.message}`,
+        };
+      }
+    }
+    materialized = source;
+  }
+  return { ok: true, path: OVERRIDE_FEATURE_PATH };
+}
 
 const ORIGIN = `http://127.0.0.1:${Number(process.env.CHALLENGE_PORT ?? 8080)}`;
 
@@ -201,11 +267,13 @@ function failPending(reason) {
 }
 
 /**
- * The container path appears in a loader's own error text, and it is not a path
- * the participant can open. Swapped for the one they can — the same reason
- * `CONFIG_HINT` exists.
+ * Both real paths appear in a loader's own error text, and neither is a place
+ * the participant edits: the mount is read-only and the override file is the
+ * API's storage, not theirs. Every message swaps both for the surface they can
+ * actually act on — the editor.
  */
-const readable = (text) => String(text).split(FEATURE_PATH).join(FEATURE_HINT);
+const readable = (text) =>
+  String(text).split(FEATURE_PATH).join(FEATURE_HINT).split(OVERRIDE_FEATURE_PATH).join(FEATURE_HINT);
 
 function onChildLine(line) {
   let message;
@@ -289,16 +357,32 @@ function restartChild(reason) {
   doomed?.kill();
 }
 
-/** The feature file as it is on disk right now — never cached at boot. */
+/**
+ * The *effective* feature file as it is on disk right now — never cached at
+ * boot, and never a fixed path: a save through the API switches the effective
+ * file to the override, and a discard switches it back.
+ *
+ * The path is part of the stamp's value on purpose. Receipts are keyed on this
+ * stamp, and the starter and the override are two different files whose
+ * mtime+size could collide — a stamp of `mtime-size` alone would let a receipt
+ * earned against one keep verifying against the other. With the path in the
+ * stamp, switching the effective code in either direction kills every receipt
+ * until the new code is re-measured, which is the semantics a save always had.
+ *
+ * @returns {{ ok: true, path: string, value: string } | { ok: false, path: string, value: "", error: string }}
+ */
 function featureStamp() {
+  const feature = effectiveFeature();
+  if (!feature.ok) return { ok: false, path: feature.path, value: "", error: feature.error };
   try {
-    const stat = statSync(FEATURE_PATH);
-    return { ok: true, value: `${stat.mtimeMs}-${stat.size}` };
+    const stat = statSync(feature.path);
+    return { ok: true, path: feature.path, value: `${feature.path}:${stat.mtimeMs}-${stat.size}` };
   } catch (error) {
     return {
       ok: false,
+      path: feature.path,
       value: "",
-      error: `cannot read ${FEATURE_HINT}: ${error.code ?? error.message}`,
+      error: `cannot read ${readable(feature.path)}: ${error.code ?? error.message}`,
     };
   }
 }
@@ -348,7 +432,7 @@ function callFeature(fn, arg) {
       resolve(payload);
     });
     try {
-      proc.stdin.write(`${JSON.stringify({ id, path: FEATURE_PATH, stamp: stamp.value, fn, arg })}\n`);
+      proc.stdin.write(`${JSON.stringify({ id, path: stamp.path, stamp: stamp.value, fn, arg })}\n`);
     } catch (error) {
       clearTimeout(timer);
       pending.delete(id);
@@ -559,6 +643,7 @@ const SPEC = {
   endpoints: {
     json: "GET /api/search?q=<検索語>",
     html: "GET /search?q=<検索語>",
+    editor: "GET /editor",
   },
   exports: {
     search: "search({ query, posts }) -> { status, body }",
@@ -1288,8 +1373,203 @@ async function runSearch(rawQuery) {
   return { ok: true, status: value.status, body: value.body };
 }
 
+/**
+ * この 1 リクエストで使う言語。 server.mjs の `pickLang` と同じ規則 (?lang=、 なければ
+ * Accept-Language、 既定は ja)。 scenario route は server の helper に触れないので同じ
+ * 4 行をここにも持つ — 規則が割れると、 ページを移るたびに言語が変わる板になる。
+ */
+function pickLang(url, request) {
+  const asked = url.searchParams.get("lang");
+  if (asked === "ja" || asked === "en") return asked;
+  const header = String(request.headers["accept-language"] ?? "");
+  return header.trim().toLowerCase().startsWith("en") ? "en" : "ja";
+}
+
+/** 対訳を 1 組ずつ並べ、 その言語の側を返す (server.mjs の `bi` と同じ)。 */
+const bi = (lang, ja, en) => (lang === "en" ? en : ja);
+
+/**
+ * The editor — the surface the participant writes their implementation on.
+ *
+ * Hand-editing a JSON body in Swagger means escaping a whole JavaScript module
+ * into a string by hand; a textarea does not. The page loads the current code
+ * from `GET api/settings`, saves with `PATCH api/settings`, discards with
+ * `DELETE api/settings`, and runs `GET api/selfcheck` — all with **relative**
+ * URLs, because the board is reached both over loopback and through a
+ * forwarded port and a hard-coded origin would work in exactly one of those.
+ *
+ * Fully self-contained: inline CSS and script, no external request, nothing
+ * vendored. Served with the same headers as the other first-party pages
+ * (`/docs`, the board). The strict CSP on `/search` stays exactly where it is —
+ * that page renders participant HTML and this one renders none: every value it
+ * shows goes through `textContent`, never through markup.
+ */
+function editorPage(lang) {
+  const other = lang === "en" ? "ja" : "en";
+  const L = (ja, en) => bi(lang, ja, en);
+  const messages = {
+    loading: L("読み込み中…", "Loading…"),
+    loaded: L("現在のコードを読み込みました。", "Loaded the current code."),
+    saving: L("保存中…", "Saving…"),
+    saved: L(
+      "保存しました。 反映は即時です。 「自己検査を実行」 で確かめられます。",
+      "Saved. It takes effect immediately — run the self-check to see where it stands.",
+    ),
+    refused: L("保存できませんでした", "The save was refused"),
+    confirmDiscard: L(
+      "保存した変更をすべて捨てて、 初期状態のコードに戻します。 よろしいですか?",
+      "Discard everything you saved and return to the starting code. Continue?",
+    ),
+    discarded: L(
+      "変更を捨てました。 初期状態のコードに戻っています。",
+      "Changes discarded — you are back at the starting code.",
+    ),
+    checking: L("自己検査を実行中… (数秒かかります)", "Running the self-check… (this takes a few seconds)"),
+    busy: L(
+      "いま別の計測が走っています。 少し待ってからもう一度実行してください。",
+      "Another measurement is running — wait a moment and try again.",
+    ),
+    failedToReach: L("アプリに届きませんでした: ", "Could not reach the app: "),
+    allGreen: L(
+      "5 つの検査すべて ok です。 GET /posture の tokens に受領印が出ています。",
+      "All five checks are ok. GET /posture now carries the receipts under tokens.",
+    ),
+    notGreen: L(
+      "まだ落ちている検査があります。 各注記が 「期待した値 / 返ってきた値」 です。",
+      "Some checks still fail. Each note is expected-versus-actual.",
+    ),
+    ok: "ok",
+    ng: "NG",
+  };
+  return `<!doctype html>
+<html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${L("検索機能のエディタ", "Feature editor")}</title>
+<style>
+body{font-family:system-ui;max-width:52rem;margin:2rem auto;line-height:1.7;padding:0 1rem}
+textarea{width:100%;min-height:24rem;font-family:ui-monospace,SFMono-Regular,monospace;font-size:.85rem;line-height:1.5;box-sizing:border-box}
+button{font:inherit;padding:.4rem 1rem;margin:0 .5rem .5rem 0}
+#status{min-height:1.5rem}
+#result .notes{font-family:ui-monospace,SFMono-Regular,monospace;font-size:.8rem;white-space:pre-wrap;margin:.1rem 0 .5rem 1.2rem}
+.ok{color:#1a7f37}.ng{color:#b91c1c}
+</style></head>
+<body>
+<p style="text-align:right"><a href="editor?lang=${other}">${bi(lang, "English", "日本語")}</a></p>
+<h1>${L("検索機能のエディタ", "Feature editor")}</h1>
+<p>${L(
+    'ここに書いたコードが、 走っている板の検索機能になります。 保存は API 経由でコンテナの中にだけ置かれ、 <strong>リポジトリのファイルは書き換わりません</strong>。 破棄するかコンテナを作り直せば、 初期状態のコードに戻ります。 要件は <a href="api/spec">GET /api/spec</a> (R1〜R9) にあります。',
+    'What you write here becomes the running board\'s search feature. A save is stored through the API inside the container only — <strong>no repository file is ever written</strong>. Discard, or rebuild the container, and you are back at the starting code. The requirements live at <a href="api/spec">GET /api/spec</a> (R1–R9).',
+  )}</p>
+<textarea id="source" spellcheck="false" autocomplete="off"></textarea>
+<p>
+<button id="save" type="button">${L("保存", "Save")}</button>
+<button id="check" type="button">${L("自己検査を実行", "Run the self-check")}</button>
+<button id="discard" type="button">${L("破棄して初期状態に戻す", "Discard and return to the start")}</button>
+</p>
+<p id="status"></p>
+<div id="result"></div>
+<p><a href="docs?lang=${lang}">${L("API コンソール", "API console")}</a> ·
+ <a href="search?q=board">${L("検索ページ", "the search page")}</a> ·
+ <a href="./?lang=${lang}">${L("板に戻る", "back to the board")}</a></p>
+<script>
+const M = ${JSON.stringify(messages)};
+const el = (id) => document.getElementById(id);
+const setStatus = (text) => { el("status").textContent = text; };
+async function readJson(response) {
+  try { return await response.json(); } catch { return {}; }
+}
+async function load() {
+  setStatus(M.loading);
+  try {
+    const response = await fetch("api/settings");
+    const data = await readJson(response);
+    el("source").value = data.settings && typeof data.settings.source === "string" ? data.settings.source : "";
+    setStatus(data.ok === false && data.error ? String(data.error) : M.loaded);
+  } catch (error) {
+    setStatus(M.failedToReach + error.message);
+  }
+}
+async function save() {
+  setStatus(M.saving);
+  try {
+    const response = await fetch("api/settings", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ source: el("source").value }),
+    });
+    const data = await readJson(response);
+    if (response.ok) {
+      setStatus(M.saved);
+      return;
+    }
+    const detail = Array.isArray(data.detail) ? data.detail.join(" / ") : data.error || String(response.status);
+    setStatus(M.refused + ": " + detail);
+  } catch (error) {
+    setStatus(M.failedToReach + error.message);
+  }
+}
+async function discard() {
+  if (!confirm(M.confirmDiscard)) return;
+  try {
+    await fetch("api/settings", { method: "DELETE" });
+    await load();
+    setStatus(M.discarded);
+  } catch (error) {
+    setStatus(M.failedToReach + error.message);
+  }
+}
+async function check() {
+  setStatus(M.checking);
+  el("result").textContent = "";
+  try {
+    const response = await fetch("api/selfcheck");
+    if (response.status === 409) {
+      setStatus(M.busy);
+      return;
+    }
+    const data = await readJson(response);
+    const list = document.createElement("ul");
+    for (const entry of data.checks || []) {
+      const item = document.createElement("li");
+      const mark = document.createElement("strong");
+      mark.className = entry.ok ? "ok" : "ng";
+      mark.textContent = (entry.ok ? M.ok : M.ng) + " ";
+      item.appendChild(mark);
+      item.appendChild(document.createTextNode(String(entry.gate)));
+      const notes = Array.isArray(entry.notes) ? entry.notes : [];
+      if (notes.length > 0) {
+        const block = document.createElement("div");
+        block.className = "notes";
+        block.textContent = notes.join("\\n");
+        item.appendChild(block);
+      }
+      list.appendChild(item);
+    }
+    el("result").appendChild(list);
+    setStatus(data.allGreen === true ? M.allGreen : M.notGreen);
+  } catch (error) {
+    setStatus(M.failedToReach + error.message);
+  }
+}
+el("save").addEventListener("click", save);
+el("discard").addEventListener("click", discard);
+el("check").addEventListener("click", check);
+load();
+</script>
+</body></html>`;
+}
+
 export const routes = {
   "GET /api/spec": (request, response) => sendJson(response, 200, SPEC),
+
+  /**
+   * The editing surface. Served exactly like the board's other first-party
+   * pages: plain HTML, no CSP sandbox — this page runs its own inline script
+   * and renders no participant HTML. `/search` keeps its own strict policy.
+   */
+  "GET /editor": (request, response, url) => {
+    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    response.end(editorPage(pickLang(url, request)));
+  },
 
   "GET /api/search": async (request, response, url) => {
     const result = await runSearch(url.searchParams.get("q"));
@@ -1400,6 +1680,49 @@ export const routes = {
       })),
       next: "全部 ok になったら GET /posture の tokens に受領印が出ます。",
     });
+  },
+};
+
+/**
+ * The feature source as a runtime setting — what turns the base app's
+ * GET/PATCH/DELETE `/api/settings` (and the matching Swagger entries) on.
+ *
+ * `read()` decides a PATCH's fate: the base writes the override first, asks
+ * this to read it back, and rolls back on `ok: false`. Only the *shape* is
+ * judged here — `source` must be a string of module source code. A
+ * syntactically broken string is accepted on purpose: saving broken code is a
+ * state this problem is about, it used to be one broken file-save away, and it
+ * surfaces exactly where it always did — `/api/feature` says the module will
+ * not load and `/api/selfcheck` carries the loader's message. Parsing JS here
+ * would make the settings API refuse a state every real editor lets you reach.
+ */
+export const editableSettings = {
+  name: SETTINGS_NAME,
+  summary: { ja: "検索機能の実装", en: "the search feature implementation" },
+  example: { source: "export function search(query, entries) { ... }" },
+  read: () => {
+    const override = readOverride(SETTINGS_NAME);
+    // 知らないキーは黙って捨てずに弾く — 受けたのに何も変わらない PATCH は、 参加者が
+    // 状態を読み直すまで気づけない不発弾になる (config.mjs の coerce と同じ判断)。
+    for (const key of Object.keys(override)) {
+      if (key !== "source") {
+        return { ok: false, value: null, error: `${key} is not a setting this feature has (source)` };
+      }
+    }
+    if (Object.hasOwn(override, "source") && typeof override.source !== "string") {
+      return { ok: false, value: null, error: "source must be a string of module source code" };
+    }
+    const feature = effectiveFeature();
+    if (!feature.ok) return { ok: false, value: null, error: feature.error };
+    try {
+      return { ok: true, value: { source: readFileSync(feature.path, "utf8") }, error: null };
+    } catch (error) {
+      return {
+        ok: false,
+        value: null,
+        error: `cannot read ${readable(feature.path)}: ${error.code ?? error.message}`,
+      };
+    }
   },
 };
 

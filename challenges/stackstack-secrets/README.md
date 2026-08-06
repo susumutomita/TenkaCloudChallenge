@@ -22,8 +22,12 @@ scheduled job that must not stop.
 | `127.0.0.1:18080/` | The board, unchanged from onboarding |
 | `127.0.0.1:18080/api/ops` | The ops console — keys, action catalogue, policy, digest |
 | `127.0.0.1:18081` | Loopback `/verify` the TenkaCloud scorer delegates to |
-| `problems/challenges/stackstack-secrets/local/ops/ops.json` | Which key the nightly job runs as, and what it may do — **your** file, mounted read-only |
-| `problems/challenges/stackstack-secrets/local/config/app.json` | The board's own config, unchanged from onboarding |
+| `127.0.0.1:18080/docs` | The API console — view, change and discard the ops manifest (`/api/settings`) |
+
+The ops manifest (ops.json — which key the nightly job runs as, and what it may do) starts
+from a read-only mount; changes go through the API and live only inside the container. No
+repository file is ever written. The board's own config (`/api/config`) is unchanged from
+onboarding.
 
 The image is built from [`stackstack-base/`](../../stackstack-base), shared by every
 StackStack problem. The leaked key, the break-glass credential, every fingerprint, witness,
@@ -107,14 +111,11 @@ Five checkpoints, 200 points:
 
    The secret comes back in that one response and nowhere else, ever.
 
-6. Cut the nightly job over. Which key it runs as is decided in
-
-   ```
-   problems/challenges/stackstack-secrets/local/ops/ops.json
-   ```
-
-   `identity` names a key; it never holds one, and a value starting with `SSOPS-` is
-   refused. Save the file and run the job:
+6. Cut the nightly job over. Which key it runs as is decided by the ops manifest:
+   `GET /api/settings` returns what is loaded now, and changes are sent with
+   `PATCH /api/settings` from the API console (`docs`). `identity` names a key; it never
+   holds one, and a value starting with `SSOPS-` is refused through the API too. Send the
+   change and run the job:
 
    ```
    curl -sX POST http://127.0.0.1:18080/api/ops/digest/run | jq
@@ -163,12 +164,15 @@ Five checkpoints, 200 points:
    }
    ```
 
-10. Restore your checkout **after** you have submitted the sign-off, not before — reverting
-    `ops.json` points the job back at a revoked key and turns the gates red:
+10. Return to the original broken state **after** you have submitted the sign-off, not
+    before — discarding early points the job back at a revoked key and turns the gates
+    red:
 
     ```
-    git -C problems checkout -- challenges/stackstack-secrets/local/
+    curl -s -X DELETE http://127.0.0.1:18080/api/settings
     ```
+
+    Rebuilding the container resets to the same state.
 
 ## The surfaces this problem adds
 
@@ -263,11 +267,11 @@ leaves 106.
 
 Zero. Nothing is deployed to a cloud account; the container runs on your machine and is
 removed by `make local-down`. The key store, the journal and the digest archive live
-entirely in the container's memory, so tearing down leaves nothing behind except the two
-files in your own checkout, which
-`git -C problems checkout -- challenges/stackstack-secrets/local/` restores. Restarting the
-container resets the key store and the board, and the leaked key and the break-glass value
-are seed-derived, so the same steps take you back to the same place.
+entirely in the container's memory, and manifest changes live only inside the container
+too, so tearing down leaves nothing behind — your checkout's `git status` stays clean from
+first request to last. Restarting the container resets the key store and the board, and
+the leaked key and the break-glass value are seed-derived, so the same steps take you back
+to the same place.
 
 ## What carries into the Battle
 

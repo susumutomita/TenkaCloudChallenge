@@ -1,6 +1,7 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { log } from "../log.mjs";
+import { readOverride } from "../overrides.mjs";
 import { posture } from "../posture.mjs";
 import { READY_TOKEN, gateToken } from "../secrets.mjs";
 
@@ -86,10 +87,15 @@ const probeSecret = (name) => secretValue(name, secretStore.get(name).version + 
 const MANIFEST_PATH = process.env.RELEASE_MANIFEST ?? "/app/release/release.json";
 
 /**
- * Where the manifest sits in the *participant's* checkout, which is not the path
- * this process reads. Display only, exactly like `CONFIG_HINT`.
+ * 参加者向けの文中でこの manifest を指す呼び名。 パスを既定にする方向は採らない — マウント元は
+ * git 管理下で、 コンテナ内パスは参加者の機械に存在せず、 checkout パスは直接編集に誘導して
+ * 解いた瞬間に作業ツリーを汚す。 変更は `PATCH /api/settings` (コンソールは `/docs`) へ誘導する。
  */
-const RELEASE_HINT = process.env.RELEASE_HINT ?? MANIFEST_PATH;
+const RELEASE_HINT =
+  process.env.RELEASE_HINT ?? "the release manifest (change it via PATCH /api/settings)";
+
+/** この scenario の設定の上書き名 (置き場と挙動は `overrides.mjs`)。 */
+const SETTINGS_NAME = "release";
 
 /**
  * The title the manifest ships with. A release that still carries it has not
@@ -307,6 +313,8 @@ function readManifest() {
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
     return { ok: false, reason: "manifest_invalid", detail: `${RELEASE_HINT} must contain a JSON object` };
   }
+  // マウント元は出発点。 実行中に変えた分を重ねてから検証する (置き場は overrides.mjs)。
+  parsed = { ...parsed, ...readOverride(SETTINGS_NAME) };
   if (typeof parsed.artifact !== "string" || parsed.artifact.trim() === "") {
     return { ok: false, reason: "manifest_invalid", detail: "artifact must be a non-empty string" };
   }
@@ -559,7 +567,9 @@ ${rows}</table>
 <p>中身は <code>GET /shipyard/secrets/value?name=...</code> で読めます (読んだことはログに残ります)。 入れ替えは <code>POST /shipyard/secrets/rotate</code>。</p>
 
 <h2>manifest</h2>
-<p>デプロイに使うファイル: <code>${escapeHtml(RELEASE_HINT)}</code> (呼ぶたびに読み直します)</p>
+<p>いまの内容は <code>GET /api/settings</code> が返し、 変更は板の API コンソール (<a href="docs">docs</a>) から
+ <code>PATCH /api/settings</code> で送ります (呼ぶたびに読み直します)。 <code>env</code> はオブジェクトごと送ります。
+ 変更を捨てて初期状態に戻すのは <code>DELETE /api/settings</code> です。</p>
 <pre>{
   "artifact": "&lt;registry にある artifact の id&gt;",
   "env": {
@@ -699,7 +709,7 @@ export const routes = {
   "GET /shipyard/state": (request, response) => {
     const verdict = siteVerdict();
     return sendJson(response, 200, {
-      manifestPath: RELEASE_HINT,
+      changeVia: "PATCH /api/settings (API console: /docs)",
       live: liveId,
       generation,
       releaseCount: releases.length,
@@ -891,5 +901,25 @@ export const checks = {
     if (!(await siteIsAnswering())) return false;
     const state = gateState();
     return state.ready === true && matches(submission, READY_TOKEN);
+  },
+};
+
+/**
+ * 実行中に変えられる設定。 これを宣言すると `/api/settings` と Swagger の項目が生える。
+ *
+ * ファイルの場所を参加者に案内する方向は採らない — マウント元は git 管理下なので、
+ * 直接編集させると解いた瞬間にリポジトリが汚れ、 作り直しても壊れた状態に戻らなくなる。
+ */
+export const editableSettings = {
+  name: SETTINGS_NAME,
+  summary: { ja: "リリースマニフェスト (release.json)", en: "the release manifest (release.json)" },
+  // Swagger の Try it out にそのまま入る例。 starter がいま持っている値そのもの — 妥当で、
+  // どの artifact と env が正解かは何も先回りしない。 env はオブジェクトごと送る。
+  example: { artifact: "board-2f9c81ae" },
+  read: () => {
+    const manifest = readManifest();
+    return manifest.ok
+      ? { ok: true, value: manifest.value, error: null }
+      : { ok: false, value: null, error: manifest.detail };
   },
 };

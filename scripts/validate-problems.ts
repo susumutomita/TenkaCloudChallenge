@@ -629,24 +629,12 @@ export function checkSolutionDoesNotEditCatalog(meta: Metadata): ValidationError
 }
 
 /**
- * 既にこの形で出荷済みの問題 (#378)。
- *
- * まとめて直してから検査を入れる方向は採らない — 直すには container 側に提出経路を足す必要が
- * あり、 その間ずっと新規が同じ形で増えられてしまう。 止血と修理は分ける。
- *
- * 検査自体を警告にする方向も採らない — 今日この型が見過ごされたのは、 警告が「出ているが誰も
- * 見ていない」状態で機能しなかったため。
+ * 既にこの形で出荷済みの問題 (#378)。 全 8 問を API 経由の設定変更 (`/api/settings` /
+ * `/api/config` / `/editor`) に直したので、 いまは空。 構造を残しているのは、 将来また
+ * この形の問題が「直すまでの間だけ」列挙される場所を無くさないため — 検査そのものを
+ * 弱める形での例外化はここでは許していない。
  */
-const CATALOG_EDITING_LEGACY = new Set([
-  "stackstack-defend",
-  "stackstack-observability",
-  "stackstack-onboarding",
-  "stackstack-recover",
-  "stackstack-safe-exposure",
-  "stackstack-secrets",
-  "stackstack-ship",
-  "stackstack-vibe-build",
-]);
+const CATALOG_EDITING_LEGACY = new Set<string>([]);
 
 /** `problems/challenges/<id>/...` / `challenges/<id>/...` の形をした参加者向けパス。 */
 const CATALOG_PATH_RE = /(?:problems\/)?challenges\/[a-z0-9-]+\/[^\s`"')、。]+/g;

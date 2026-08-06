@@ -15,18 +15,14 @@ services:
       dockerfile: Dockerfile
     environment:
       SCENARIO: observability
-      # Paths in the participant's checkout, which are not the paths the app
-      # reads (both directories are mounted under /app). Display only.
-      CONFIG_HINT: problems/challenges/stackstack-observability/local/config/app.json
-      RELAY_HINT: problems/challenges/stackstack-observability/local/relay/relay.json
       # Per-deploy random secret injected by `make local`. The shard names, the
       # shard codes, the incident id, the safe-log token, the relay credential
       # and the title-to-shard map are all derived from it inside the container.
       FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
     volumes:
-      # The participant's own checkout, read-only. `relay.json` is the file this
-      # problem is about; the app re-reads it on every request, so an edit takes
-      # effect without a restart.
+      # The participant's own checkout, read-only: the starting point the app
+      # reads, never a place anything writes. Changes go through the board's
+      # settings API and live in the container, so a rebuild is a full reset.
       - ./config:/app/config:ro
       - ./relay:/app/relay:ro
     ports:

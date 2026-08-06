@@ -22,8 +22,11 @@ condition is written down where you can read it and argue with it.
 | `127.0.0.1:18080/relay/healthz` | The relay's health check |
 | `127.0.0.1:18080/archive` | What actually reached the downstream archive |
 | `127.0.0.1:18081` | Loopback `/verify` the TenkaCloud scorer delegates to |
-| `problems/challenges/stackstack-observability/local/relay/relay.json` | The relay's settings — **your** file, mounted read-only |
-| `problems/challenges/stackstack-observability/local/config/app.json` | The board's own config, unchanged from onboarding |
+| `127.0.0.1:18080/docs` | The API console — view, change and discard the relay's settings (`/api/settings`) |
+
+The settings' starting point is mounted read-only; changes go through the API and live only
+inside the container. No repository file is ever written. The board's own config
+(`/api/config`) is unchanged from onboarding.
 
 The image is built from [`stackstack-base/`](../../stackstack-base), shared by every
 StackStack problem. The shard names, the shard codes, the incident id, the safe-log
@@ -104,13 +107,14 @@ Four checkpoints, 200 points:
    ```
 
    Boot lines, post-accepted lines — and nothing at all about the writes that did not
-   land. That silence is a setting, and the setting is in
+   land. That silence is a setting. The current values come from
 
    ```
-   problems/challenges/stackstack-observability/local/relay/relay.json
+   curl -s http://127.0.0.1:18080/api/settings | jq
    ```
 
-   which the app re-reads on every request. There is nothing to restart.
+   and changes are sent with `PATCH /api/settings` from the API console (`docs`).
+   The app re-reads them on every request; there is nothing to restart.
 
 5. Once the signal is on, read the log again before you paste any of it anywhere.
 
@@ -137,11 +141,13 @@ Four checkpoints, 200 points:
    more detail — including whether the health condition you wrote passes the three cases
    the gate evaluates, and whether anybody has actually run it since you wrote it.
 
-7. Restore your checkout when you are done:
+7. To get back to the original broken state, discard your changes:
 
    ```
-   git -C problems checkout -- challenges/stackstack-observability/local/
+   curl -s -X DELETE http://127.0.0.1:18080/api/settings
    ```
+
+   Rebuilding the container resets to the same state.
 
 ## The surfaces this problem adds
 
@@ -246,9 +252,9 @@ leaves 120.
 
 Zero. Nothing is deployed to a cloud account; the container runs on your machine and is
 removed by `make local-down`. The relay, the archive and the counters live entirely in
-the container's memory, so tearing down leaves nothing behind except the two files in
-your own checkout, which
-`git -C problems checkout -- challenges/stackstack-observability/local/` restores.
+the container's memory, and settings changes live only inside the container too, so
+tearing down leaves nothing behind — your checkout's `git status` stays clean from first
+request to last.
 
 ## What carries into the Battle
 
