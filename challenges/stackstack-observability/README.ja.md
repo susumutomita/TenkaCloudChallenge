@@ -21,8 +21,7 @@
 | `127.0.0.1:18080/relay/healthz` | relay の死活確認 |
 | `127.0.0.1:18080/archive` | 下流の archive に実際に届いたもの |
 | `127.0.0.1:18081` | TenkaCloud の採点が委譲する loopback の `/verify` |
-| `problems/challenges/stackstack-observability/local/relay/relay.json` | relay の設定 ── **自分の** ファイル、 読み取り専用でマウント |
-| `problems/challenges/stackstack-observability/local/config/app.json` | 板自身の設定。 onboarding から変わっていません |
+| `127.0.0.1:18080/docs` | ブラウザ API コンソール。 relay は `PATCH /api/settings` で変更 |
 
 image は StackStack 系問題が共有する [`stackstack-base/`](../../stackstack-base) から
 ビルドされます。 shard の名前、 shard の code、 incident id、 safe-log の値、 relay が下流に
@@ -105,9 +104,8 @@ image は StackStack 系問題が共有する [`stackstack-base/`](../../stackst
    起動の行、 投稿を受け付けた行 ── そして届かなかった書き込みについては 1 行もありません。
    その沈黙は設定であり、 設定は
 
-   ```
-   problems/challenges/stackstack-observability/local/relay/relay.json
-   ```
+   `/docs` で `GET /api/settings` を読み、 `PATCH /api/settings` で変更します。
+   リポジトリのファイルは編集しません。
 
    にあります。 アプリはリクエストごとに読み直すので、 再起動は要りません。
 
@@ -138,9 +136,7 @@ image は StackStack 系問題が共有する [`stackstack-base/`](../../stackst
 
 7. 終わったらチェックアウトを戻す:
 
-   ```
-   git -C problems checkout -- challenges/stackstack-observability/local/
-   ```
+   やり直しは `/docs` の `DELETE /api/settings` です。
 
 ## この問題が足す面
 
@@ -234,8 +230,7 @@ submodule からビルドします。 推測不能性も同様に、 プラッ�
 
 ゼロ。 クラウドアカウントには何もデプロイされません。 コンテナは自分のマシンで動き、
 `make local-down` で消えます。 relay も archive もカウンタもコンテナのメモリ上だけに
-あるので、 片付けたあとに残るのは自分のチェックアウトの 2 ファイルだけで、
-`git -C problems checkout -- challenges/stackstack-observability/local/` で戻せます。
+あり、 runtime の設定変更も一緒に消えます。 リポジトリのチェックアウトは汚れません。
 
 ## Battle への引き継ぎ
 

@@ -224,6 +224,50 @@ describe("stackstack-onboarding first lap", () => {
     expect(page.text).not.toContain("problems/challenges/");
   });
 
+  it("should provide a browser request workbench for scenario APIs", async () => {
+    const docs = await get("/docs");
+    expect(docs.status).toBe(200);
+    expect(docs.text).toContain('id="request-method"');
+    expect(docs.text).toContain('id="request-path"');
+    expect(docs.text).toContain('id="request-headers"');
+    expect(docs.text).toContain('id="request-body"');
+    expect(docs.text).toContain('id="request-send"');
+    expect(docs.text).toContain('id="request-response"');
+    expect(docs.text).toContain("target.origin !== window.location.origin");
+  });
+
+  it("should keep every StackStack instruction and hint browser-solvable", () => {
+    const problemIds = [
+      "stackstack-onboarding",
+      "stackstack-defend",
+      "stackstack-observability",
+      "stackstack-recover",
+      "stackstack-secrets",
+      "stackstack-ship",
+      "stackstack-safe-exposure",
+      "stackstack-vibe-build",
+    ];
+    for (const problemId of problemIds) {
+      const meta = JSON.parse(
+        readFileSync(join(REPO_ROOT, "challenges", problemId, "metadata.json"), "utf8"),
+      ) as {
+        instructions: string;
+        scoring: { checks: unknown[] };
+        i18n: { en: { instructions: string; checks: unknown[] } };
+      };
+      const visible = JSON.stringify([
+        meta.instructions,
+        meta.scoring.checks,
+        meta.i18n.en.instructions,
+        meta.i18n.en.checks,
+      ]).toLowerCase();
+      expect(visible).not.toContain("curl");
+      expect(visible).not.toContain("docker compose");
+      expect(visible).not.toContain("in your checkout");
+      expect(visible).not.toContain("チェックアウト側");
+    }
+  });
+
   it("should 404 a route it does not serve", async () => {
     const missing = await get("/api/nope");
     expect(missing.status).toBe(404);

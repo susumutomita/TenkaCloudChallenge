@@ -67,6 +67,7 @@ const LEAK_MARKER = `TC{leak_${defendDigest("leak").slice(0, 32)}}`;
 /** Where the participant-owned access policy is mounted, and where it is in their checkout. */
 const POLICY_PATH = process.env.ACCESS_POLICY ?? "/app/policy/access.json";
 const POLICY_HINT = process.env.POLICY_HINT ?? POLICY_PATH;
+const SETTINGS_LABEL = "/api/settings";
 
 /** この scenario の設定の上書き名 (置き場と挙動は `overrides.mjs`)。 */
 const SETTINGS_NAME = "policy";
@@ -556,7 +557,7 @@ function gateRequest(request) {
     return {
       error: {
         status: 503,
-        body: { error: "drafts_disabled", detail: `enabled is false in ${POLICY_HINT}` },
+        body: { error: "drafts_disabled", detail: `enabled is false in ${SETTINGS_LABEL}` },
       },
     };
   }
@@ -586,7 +587,7 @@ function deskPage() {
 <title>下書きデスク</title></head>
 <body style="font-family:system-ui;max-width:52rem;margin:2.5rem auto;line-height:1.7;padding:0 1rem">
 <h1>下書きデスク</h1>
-<p>アクセス方針のファイル: <code>${escapeHtml(POLICY_HINT)}</code>${
+<p>アクセス方針は <a href="../docs"><code>${SETTINGS_LABEL}</code> を API コンソールで変更</a>します。${
     state.policyError === null
       ? " (読み込めています)"
       : ` <strong>読み込めていません: ${escapeHtml(state.policyError)}</strong>`
@@ -620,7 +621,7 @@ export const routes = {
   "GET /api/policy": (request, response) => {
     const policy = loadPolicy();
     return sendJson(response, 200, {
-      policyFile: POLICY_HINT,
+      policyFile: SETTINGS_LABEL,
       ok: policy.ok,
       error: policy.error,
       policy: policy.value,

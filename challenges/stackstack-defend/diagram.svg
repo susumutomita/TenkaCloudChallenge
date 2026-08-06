@@ -42,7 +42,7 @@
 
   <rect class="own" x="40" y="240" width="300" height="120"/>
   <text class="t" x="56" y="264">your checkout (read-only mount)</text>
-  <text class="s" x="56" y="288">local/policy/access.json</text>
+  <text class="s" x="56" y="288">API /api/settings</text>
   <text class="s" x="56" y="308">who may read, who may publish</text>
   <text class="s" x="56" y="330">data, not code — never imported</text>
   <text class="s" x="56" y="350">re-read on every request, no restart</text>

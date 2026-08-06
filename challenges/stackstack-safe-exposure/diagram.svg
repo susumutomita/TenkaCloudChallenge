@@ -22,7 +22,7 @@
 
   <rect x="28" y="52" width="170" height="96" rx="6" class="box"/>
   <text x="40" y="76" class="t">your checkout</text>
-  <text x="40" y="96" class="s">local/access/access.json</text>
+  <text x="40" y="96" class="s">API /api/settings</text>
   <text x="40" y="112" class="s">the one file you edit</text>
   <text x="40" y="132" class="s">re-read every request</text>
 

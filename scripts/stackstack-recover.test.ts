@@ -1464,7 +1464,7 @@ describe("stackstack-recover wiring", () => {
     expect(readFileSync(join(composeDir, "state", ".gitignore"), "utf8")).toContain("*");
   });
 
-  it("should name every participant-facing path as the participant sees it", () => {
+  it("should keep mounted source paths valid but direct policy changes to the API", () => {
     const paths = {
       CONFIG_HINT: "challenges/stackstack-recover/local/config/app.json",
       RECOVER_POLICY_HINT: "challenges/stackstack-recover/local/policy/policy.json",
@@ -1478,9 +1478,10 @@ describe("stackstack-recover wiring", () => {
     }
     const policyHint = service.environment.RECOVER_POLICY_HINT as string;
     for (const name of ["README.md", "README.ja.md"]) {
-      expect(readFileSync(join(PROBLEM_DIR, name), "utf8")).toContain(policyHint);
+      expect(readFileSync(join(PROBLEM_DIR, name), "utf8")).toContain("PATCH /api/settings");
     }
-    expect(readFileSync(join(PROBLEM_DIR, "metadata.json"), "utf8")).toContain(policyHint);
+    expect(policyHint).toContain("policy.json");
+    expect(readFileSync(join(PROBLEM_DIR, "metadata.json"), "utf8")).toContain("PATCH /api/settings");
   });
 
   it("should ship a policy that is broken in exactly the two places the problem is about", () => {
