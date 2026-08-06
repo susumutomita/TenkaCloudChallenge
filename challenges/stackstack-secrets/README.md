@@ -22,8 +22,7 @@ scheduled job that must not stop.
 | `127.0.0.1:18080/` | The board, unchanged from onboarding |
 | `127.0.0.1:18080/api/ops` | The ops console — keys, action catalogue, policy, digest |
 | `127.0.0.1:18081` | Loopback `/verify` the TenkaCloud scorer delegates to |
-| `problems/challenges/stackstack-secrets/local/ops/ops.json` | Which key the nightly job runs as, and what it may do — **your** file, mounted read-only |
-| `problems/challenges/stackstack-secrets/local/config/app.json` | The board's own config, unchanged from onboarding |
+| `127.0.0.1:18080/docs` | Browser API console; identity and grants change through `PATCH /api/settings` |
 
 The image is built from [`stackstack-base/`](../../stackstack-base), shared by every
 StackStack problem. The leaked key, the break-glass credential, every fingerprint, witness,
@@ -109,9 +108,8 @@ Five checkpoints, 200 points:
 
 6. Cut the nightly job over. Which key it runs as is decided in
 
-   ```
-   problems/challenges/stackstack-secrets/local/ops/ops.json
-   ```
+   Open `/docs`, inspect `GET /api/settings`, then use `PATCH /api/settings`.
+   No credential or answer is written to the repository.
 
    `identity` names a key; it never holds one, and a value starting with `SSOPS-` is
    refused. Save the file and run the job:
@@ -163,12 +161,8 @@ Five checkpoints, 200 points:
    }
    ```
 
-10. Restore your checkout **after** you have submitted the sign-off, not before — reverting
-    `ops.json` points the job back at a revoked key and turns the gates red:
-
-    ```
-    git -C problems checkout -- challenges/stackstack-secrets/local/
-    ```
+10. After submitting the sign-off, retry with `DELETE /api/settings` or rebuild the
+    container. Either restores the starter without touching git.
 
 ## The surfaces this problem adds
 
@@ -216,11 +210,9 @@ The board's own routes (`GET /`, `/api/board`, `/api/logs`, `/posture`, `/health
   the job needs also carries one it does not: `board:count` beside `board:export`,
   `digest:publish` beside `digest:recipients`. So `board:*` is not one character safer than
   `*`, and *What the ops key can do* probes all of them over real HTTP.
-- **Pasting the new secret into `ops.json` is refused.** `identity` names a key and `grants`
-  name actions; a value starting with `SSOPS-` is rejected with `secret_in_manifest`. A file
-  in your git checkout is exactly the kind of place this whole problem is about, and a
-  problem that ended with a fresh credential sitting in one would have taught the opposite
-  of what it set out to.
+- **Pasting the new secret into settings is refused.** `identity` names a key and `grants`
+  name actions; a value starting with `SSOPS-` is rejected with `secret_in_manifest`.
+  Runtime configuration is not a secret store.
 - **Hard-coding the answers does not work.** All five submissions are derived from a
   per-deploy `FLAG_SEED` inside the container, four of them also depend on runtime state,
   the policy language has no deny form to write a list into, and the action catalogue itself
@@ -263,11 +255,9 @@ leaves 106.
 
 Zero. Nothing is deployed to a cloud account; the container runs on your machine and is
 removed by `make local-down`. The key store, the journal and the digest archive live
-entirely in the container's memory, so tearing down leaves nothing behind except the two
-files in your own checkout, which
-`git -C problems checkout -- challenges/stackstack-secrets/local/` restores. Restarting the
-container resets the key store and the board, and the leaked key and the break-glass value
-are seed-derived, so the same steps take you back to the same place.
+entirely in the container's memory, including the settings override. Restarting resets the
+key store and board, leaves the repository untouched, and returns the one-time break-glass
+handover envelope to its sealed state.
 
 ## What carries into the Battle
 

@@ -19,6 +19,7 @@ import {
   checkRequiredReadmes,
   checkScoringRegulation,
   checkSolutionDoesNotEditCatalog,
+  checkDescriptionTranslations,
   checkWriteupTranslations,
 } from "./validate-problems";
 
@@ -188,6 +189,27 @@ describe("checkWriteupTranslations (#2191)", () => {
     expect(
       checkWriteupTranslations({ i18n: { en: { writeup: "English only" } } }).join(),
     ).toMatch(/top-level writeup/);
+  });
+});
+
+describe("checkDescriptionTranslations (#381)", () => {
+  it("accepts no description or a complete ja/en pair", () => {
+    expect(checkDescriptionTranslations({} as never)).toEqual([]);
+    expect(
+      checkDescriptionTranslations({
+        description: "目的と設計",
+        i18n: { en: { description: "Purpose and design" } },
+      } as never),
+    ).toEqual([]);
+  });
+
+  it("rejects a description present in only one language", () => {
+    expect(checkDescriptionTranslations({ description: "日本語のみ" } as never).join()).toMatch(
+      /i18n\.en\.description/,
+    );
+    expect(
+      checkDescriptionTranslations({ i18n: { en: { description: "English only" } } } as never).join(),
+    ).toMatch(/top-level description/);
   });
 });
 
@@ -700,12 +722,14 @@ describe("checkSolutionDoesNotEditCatalog", () => {
     ).toEqual([]);
   });
 
-  it("stays quiet for the problems already shipped this way", () => {
-    expect(
-      checkSolutionDoesNotEditCatalog({
-        id: "stackstack-onboarding",
-        instructions: "problems/challenges/stackstack-onboarding/local/config/app.json を直す",
-      } as never),
-    ).toEqual([]);
+  it("rejects a regression in a repaired StackStack problem", () => {
+    // 8 問すべてを API 経由の設定変更に直した時点で legacy 例外は消えた。 ここがまた
+    // 静かになる変更は、 例外を復活させたか検査を弱めたかのどちらかなので落とす。
+    const errors = checkSolutionDoesNotEditCatalog({
+      id: "stackstack-onboarding",
+      instructions: "problems/challenges/stackstack-onboarding/local/config/app.json を直す",
+    } as never);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain("rewrite the problem's own source");
   });
 });

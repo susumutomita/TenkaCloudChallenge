@@ -8,7 +8,7 @@
   "difficulty": 3,
   "estimatedDuration": "45〜60 分",
   "shortDescription": "天下クラウド株式会社、 入社 3 日目の夕方。 社内掲示板は無事に開き、 部署ごとの 「下書き」 機能まで載った。 前任の SRE が辞める直前に足した機能で、 引き継ぎ資料に残っているのはひと言だけ ── 「下書きの公開はモデレーター承認 (4-eyes)。 本人が自分で公開してはいけない」。\n\nさっき広報から連絡があった。 まだ社内の誰にも見せていないはずの CTO の下書きの中身を、 社外の知人が口にしたらしい。 CTO は淡々としている。 「止めるのは簡単だ。 でも止めたら、 明日の全社発表の下書きを誰も書けない。 動かしたまま直して。 それと、 直ったかどうかは君の報告じゃなく、 こっちで測る」\n\n手元の調査用アカウントで実際に何が読めてしまうのかを確かめ、 原因をアプリ側で直し、 正規の利用者を 1 人も止めないまま、 測られ続けている中でその状態を保つ。",
-  "instructions": "## はじめに\n\n下書き機能が、 見せてはいけない相手に下書きを見せています。 板は止められません ── 明日の全社発表の下書きを、 いま誰かが書いているところです。\n\nコンテナの中では、 正常に使われるトラフィックと、 通ってはいけないトラフィックが 1 ラウンドずつ走り続けていて、 その両方が毎ラウンド採点されています。 片方だけ良くしても点になりません。\n\n## 最初の一手\n\n1. `http://127.0.0.1:18080/desk` を開く。 調査用の閲覧アカウントの token と、 この問題が足した経路が並んでいます\n2. その token で `GET /api/drafts` と `GET /api/draft?id=...` を叩き、 実際に何が読めてしまうのかを自分の目で確かめる\n3. 板に残っている運用ルールの投稿を読む (`GET /` または `GET /api/board`)。 誰が何をしてよいかはそこに書いてあります\n4. `problems/challenges/stackstack-defend/local/policy/access.json` を直す。 保存すれば次のリクエストから反映されます (再起動は不要)\n5. `GET /api/drill` で実測の内訳を、 `GET /posture` で 5 つの gate を見る\n\n## ゴール\n\n通ってはいけないリクエストが 1 件も通らず、 正規の利用者のリクエストが 1 件も止まらない状態を、 **既定で 60 秒**、 1 ラウンドも崩さずに保つこと。 残り時間は `curl -s http://127.0.0.1:18080/api/drill | jq '{cleanForMs, holdMs}'` で見えます。 待ち時間そのものは環境変数 `DEFEND_HOLD_MS` / `DEFEND_INTERVAL_MS` / `DEFEND_WINDOW_ROUNDS` で短くできますが、 要求 (1 ラウンドも崩さないこと) は変わりません。\n\n最初のチェックポイントは 「直す前の状態を実際に踏むこと」 を採点します。 先に直してしまったら `git -C problems checkout -- challenges/stackstack-defend/local/policy/access.json` で戻せます。",
+  "instructions": "## はじめに\n\n下書き機能が、 見せてはいけない相手に下書きを見せています。 板は止められません。 正規利用を保ったまま、 認証された主体と対象リソースの関係で認可するのがこの問題です。\n\n## ブラウザだけで進める\n\n1. `/desk` を開き、 調査用 token と経路を確認する\n2. `/docs` の **任意の API を試す** で `GET /api/drafts` と `GET /api/draft?id=...` を実行する。 Headers には desk の token を `Authorization: Bearer ...` として入れる\n3. `/` の運用ルールを読み、 `/docs` の `PATCH /api/settings` で policy を変更する。 リポジトリのファイルは編集しない\n4. 同じ画面で `GET /api/drill` と `GET /posture` を実行し、 正常系と拒否系を同時に確認する\n5. やり直すときは `DELETE /api/settings`。 コンテナ再作成でも初期状態に戻る\n\n## ゴール\n\n通ってはいけないリクエストが 1 件も通らず、 正規の利用者のリクエストが 1 件も止まらない状態を、 **既定で 60 秒**、 1 ラウンドも崩さずに保つこと。 最初のチェックポイントは変更前の漏えいを実測した事実も確認します。",
   "description": "## 目的\n\n実際に成立する認可の欠落を自分で再現させ、 正常利用を 1 件も止めないままアプリ側で塞がせる。 「全部拒否」 「機能停止」 「レート制限」 「攻撃者を名指しで遮断」 が採点上まったく得にならないように作ってある。\n\n## 何を実測しているか\n\nコンテナ内の drill が 1 ラウンドごとに実 HTTP を自分自身へ投げる。 判定の基準 (`intendedAllow`) は scenario 側が持っていて、 参加者のファイルは一切参照しない。\n\n| gate | 実測しているもの |\n|---|---|\n| `policy_loaded` | 参加者の方針ファイルが読め、 全ルールが妥当 |\n| `service_intact` | 4 アカウントの一覧が entitled 集合と完全一致し、 正規の read が全件成功し、 承認役の publish が全件公開キューに載った |\n| `reads_held` | 通ってはいけない read が 1 件も 200 にならず、 止めたのが全部 403 (503/429/5xx は broken に計上) |\n| `publishes_held` | 通ってはいけない publish (他人の下書き / 承認役自身の下書き) が 1 件も 201 にならず、 止めたのが全部 403 |\n| `held_under_load` | 上記が 1 ラウンドも崩れずに hold 時間 (既定 60 秒) 継続した |\n\n## 不在採点を単独で置かない\n\n`reads_held` / `publishes_held` は 「起きなかったこと」 の採点なので、 対応するチェックポイントのハンドラは **必ず `service_intact` が同時に true であること** を先に要求する。 機能を落とした状態・全拒否の状態では、 攻撃が 0 件でも 1 点も入らない。\n\n## 初期状態\n\n`local/policy/access.json` は 「承認役の read を許可する正しいルール」 と 「その下に残った catch-all の allow」 の 2 本。 catch-all があるので誰でも誰の下書きでも読めて公開できる。 `service_intact` は初期状態で **false** ── 一覧が entitled 集合を超えるため ── なので、 どのチェックポイントも初期状態では通らない。\n\n## 場当たり対策が落ちる仕組み\n\n| 場当たり | 落ちる場所 |\n|---|---|\n| 全部拒否 (`deny` 1 本) | `service_intact` (正規の read / publish が止まる) |\n| 機能停止 (`enabled: false`) | 攻撃側の拒否が 503 になり `heldByPolicy` に数えられない + 正常側も全滅 |\n| レート制限 (`readsPerRound` を絞る) | 429 は `heldByPolicy` に数えない + read 件数の多い正常側が先に当たる |\n| 攻撃者を名指し (`{\"id\":\"u-guest\"}` を deny) | u-guest は自分の下書きの正規読者でもあり、 攻撃側は毎ラウンド別のアカウントに回る |\n| 観測した id を焼き込む | drill が数ラウンドごとに新しい id の下書きを作るので、 window 内で必ず陳腐化する |\n| read だけ直す | `publishes_held` が赤のままで `close-the-write-path` と `signoff` が落ちる |\n\n## 意図的にやらないこと\n\n- 送信元アドレスによる遮断はモデル化しない。 全 probe が loopback の同一送信元なので、 「試させていない」 ものを 「防いだ」 と採点しない。\n- 参加者のコードをこのプロセスに import しない。 方針ファイルはデータで、 評価器は scenario 側にある。 参加者が書いたものが drill / posture / verify に触れる経路は存在しない。\n- 下書きの本文は公開キューにも板にも一切載せない。 marker が読める経路は `GET /api/draft?id=...` の 1 本だけ。",
   "writeup": "## 何が起きていたか\n\n方針ファイルの末尾に catch-all の allow が 1 本残っていた。 その上に書かれた 「承認役は全部読んでよい」 という正しいルールは、 catch-all があるかぎり何の制限にもなっていない。 `allow` を積み上げる方針では、 一番緩いルールが実質の方針になる。\n\n## なぜ 「全部止める」 では点にならないのか\n\nこの問題の gate は 2 つの数字を同時に見ている。 通ってはいけないものが通っていないこと (`reads_held` / `publishes_held`) と、 通ってよいものが全部通っていること (`service_intact`)。 受領証を出すハンドラは前者を採点する場合でも後者を先に要求する。 現場で 「攻撃は止まりました」 が価値を持つのは、 サービスが動いているときだけだからだ。\n\n## `403` と `503` と `429` を区別している理由\n\n止まった理由が違う。 `403` は 「方針が判断して断った」。 `503` は 「機能が落ちている」。 `429` は 「流量で潰した」。 後ろ 2 つは攻撃も止めるが正規利用も止めるので、 drill は `heldByPolicy` に数えず `broken` に入れる。 「落とせば攻撃は来ない」 が採点上まったく得にならないのはこのためだ。\n\n## 焼き込みが効かない理由\n\n下書きの id はデプロイごとに変わり、 drill は数ラウンドごとに新しい id の下書きを作る。 いま存在する id を列挙して個別に塞ぐ方針は、 window が 1 周する前に陳腐化する。 関係 (`ownerIs` / `ownerIsNot` / `role`) で書いた方針だけが、 触らずに正しいままでいる。\n\n## 次にやること\n\n同じ考え方が AWS 側では `stackstack` Battle の `auth_enabled` gate と `anonymous-spam` の攻撃プローブになる。 そこでも 「攻撃が止まったこと」 と 「正常利用が続いていること」 は別々に測られる。",
   "tags": [
@@ -34,7 +34,7 @@
     "en": {
       "name": "Fix It Without Taking It Down",
       "shortDescription": "TenkaCloud, evening of your third day. The board is up, and it has grown a per-team \"drafts\" feature — added by the previous SRE just before they left. The handover notes say one thing about it: \"publishing a draft needs a moderator (4-eyes); nobody publishes their own.\"\n\nPR just called. Someone outside the company repeated the contents of a CTO draft nobody inside has been shown. The CTO is unbothered: \"Taking it down is easy. But then nobody can write tomorrow's all-hands draft. Fix it while it runs. And whether it is fixed is something we measure, not something you report.\"\n\nUse the investigation account you have to see for yourself what is actually readable, fix the cause in the application, and hold that state while it is being measured — without stopping a single legitimate user.",
-      "instructions": "## Start here\n\nThe drafts feature is showing drafts to people it must not. You cannot take the board down — somebody is writing tomorrow's all-hands draft on it right now.\n\nInside the container, ordinary traffic and traffic that must be refused are running one round at a time, forever, and both are scored every round. Getting one of them right is worth nothing on its own.\n\n## First move\n\n1. Open `http://127.0.0.1:18080/desk`. It lists the investigation account's token and the routes this problem adds\n2. With that token, call `GET /api/drafts` and `GET /api/draft?id=...` and see for yourself what comes back\n3. Read the operations-rule post left on the board (`GET /` or `GET /api/board`). Who may do what is written there\n4. Fix `problems/challenges/stackstack-defend/local/policy/access.json`. A save takes effect on the next request — no restart\n5. Watch `GET /api/drill` for the measured breakdown and `GET /posture` for the five gates\n\n## Goal\n\nHold a state where nothing that must be refused gets through and nothing legitimate is stopped, for **60 seconds by default**, without a single bad round. The remaining time is visible as `curl -s http://127.0.0.1:18080/api/drill | jq '{cleanForMs, holdMs}'`. The waiting itself can be shortened with `DEFEND_HOLD_MS` / `DEFEND_INTERVAL_MS` / `DEFEND_WINDOW_ROUNDS`; what is required (no bad round for the whole hold) does not change.\n\nThe first checkpoint scores having actually walked through the broken state. If you fix it first, `git -C problems checkout -- challenges/stackstack-defend/local/policy/access.json` puts it back.",
+      "instructions": "## Start here\n\nThe drafts feature exposes drafts to the wrong people. Keep legitimate use alive while authorizing from both the authenticated principal and the target resource.\n\n## Work entirely in the browser\n\n1. Open `/desk` for the investigation token and routes\n2. In `/docs` under **Try any API**, run `GET /api/drafts` and `GET /api/draft?id=...`; supply the desk token as `Authorization: Bearer ...` in Headers\n3. Read the operations rule on `/`, then change the policy with `PATCH /api/settings` in `/docs`. Do not edit repository files\n4. Run `GET /api/drill` and `GET /posture` in the same screen to check legitimate and refused traffic together\n5. Use `DELETE /api/settings` to retry; rebuilding the container also restores the starter\n\n## Goal\n\nFor **60 seconds by default**, let no forbidden request through and stop no legitimate request, without one bad round. The first checkpoint also verifies that you measured the original exposure before fixing it.",
       "description": "## Purpose\n\nMake the participant reproduce a real, live authorization gap themselves, then close it in the application without stopping one legitimate request. \"Deny everything\", \"turn the feature off\", \"rate-limit it\" and \"block the attacker by name\" are all built to earn exactly nothing.\n\n## What is measured\n\nA drill inside the container sends real HTTP to its own listener every round. The reference decision (`intendedAllow`) belongs to the scenario and never consults the participant's file.\n\n| gate | what it measures |\n|---|---|\n| `policy_loaded` | the participant's policy file loads and every rule is well formed |\n| `service_intact` | all four accounts' listings equal their entitled set exactly, every entitled read succeeds, and the moderator's publishes land in the queue |\n| `reads_held` | no forbidden read returned 200, and every refusal was a `403` (a `503`/`429`/`5xx` counts as broken) |\n| `publishes_held` | no forbidden publish (someone else's draft, or the moderator's own) returned 201, and every refusal was a `403` |\n| `held_under_load` | all of the above held without one bad round for the hold (60 s by default) |\n\n## No absence is graded on its own\n\n`reads_held` and `publishes_held` grade something *not* happening, so the handlers behind them require `service_intact` to be true at the same moment, first. With the feature switched off or everything denied, zero attacks getting through is worth zero points.\n\n## Starting state\n\n`local/policy/access.json` ships two rules: a correct \"the moderator may read everything\" rule, and a catch-all `allow` left underneath it. Because of the catch-all, anyone can read and publish anything. `service_intact` is **false** at the start — the listings exceed the entitled sets — so no checkpoint passes on an untouched starter.\n\n## How the shortcuts fail\n\n| shortcut | where it dies |\n|---|---|\n| deny everything | `service_intact` (legitimate reads and publishes stop) |\n| turn the feature off (`enabled: false`) | refusals become `503`, which is not counted as held, and normal traffic dies too |\n| throttle it (`readsPerRound`) | `429` is not counted as held, and the busier normal traffic hits the limit first |\n| block the attacker by name | `u-guest` is also the legitimate reader of its own draft, and the attacking account rotates every round |\n| burn in the ids you observed | the drill mints a draft with a fresh id every few rounds, so any id table goes stale inside one window |\n| fix reads only | `publishes_held` stays red, so `close-the-write-path` and `signoff` both fail |\n\n## Deliberate non-goals\n\n- Source-address blocking is not modelled. Every probe arrives on loopback from this same process, so an answer that was never testable is never scored as a defence.\n- Participant code is never imported into this process. The policy file is data; the evaluator belongs to the scenario. Nothing a participant writes can reach the drill, `/posture` or `/verify`.\n- No draft body ever reaches the publication queue or the board. The marker is readable through exactly one route, `GET /api/draft?id=...`.",
       "writeup": "## What was actually wrong\n\nA catch-all `allow` was left at the end of the policy file. The correct rule above it — \"the moderator may read everything\" — restricted nothing while the catch-all was there. In an allow-list policy, the loosest rule is the real policy.\n\n## Why \"stop everything\" earns nothing\n\nThe gates watch two numbers at once: nothing forbidden got through (`reads_held` / `publishes_held`), and everything permitted did (`service_intact`). Even the checkpoints that grade the first require the second at the same moment. \"We stopped the attack\" is only worth something while the service is up.\n\n## Why `403`, `503` and `429` are counted differently\n\nThey mean different things. `403` is the policy deciding. `503` is the feature being down. `429` is traffic being crushed. The last two stop the attack and the legitimate users equally, so the drill counts them as broken rather than held — which is why \"take it down and nothing can leak\" scores zero.\n\n## Why burning in ids does not work\n\nDraft ids change per deploy, and the drill mints a draft with a new id every few rounds. A policy that names the ids that exist right now goes stale before one window has passed. Only a policy written in terms of the relationship (`ownerIs` / `ownerIsNot` / `role`) stays correct without being touched.\n\n## Next\n\nThe same shape appears on AWS in the `stackstack` Battle as the `auth_enabled` gate and the `anonymous-spam` attack probe — where, again, \"the attack stopped\" and \"legitimate use continued\" are measured separately.",
       "learningGoals": [
@@ -54,7 +54,7 @@
             },
             {
               "id": "defend-leak-2",
-              "content": "`curl -s -H \"Authorization: Bearer <u-guest token>\" http://127.0.0.1:18080/api/drafts` gives you the ids; then open them one at a time with `/api/draft?id=<id>`. One draft whose `ownerId` is not `u-guest` has a `TC{leak_...}` string in its `body`. Submit that string exactly. Reading it as the moderator (`u-mod`) does not count — that account is allowed to, so nothing went wrong when it worked."
+              "content": "In `/docs`, run `GET /api/drafts` with the header `{\"Authorization\":\"Bearer <u-guest token>\"}`, then open each id with `GET /api/draft?id=<id>` and the same header. One draft whose `ownerId` is not `u-guest` has a `TC{leak_...}` string in its `body`. Submit that string exactly. Reading it as the moderator (`u-mod`) does not count — that account is allowed to."
             }
           ]
         },
@@ -64,11 +64,11 @@
           "hints": [
             {
               "id": "defend-stop-1",
-              "content": "Exactly one file decides who may touch which draft, and it is in your own checkout. The app re-reads it per request, so there is nothing to restart. `GET /api/policy` shows what is loaded right now."
+              "content": "Exactly one runtime policy decides who may touch which draft. Change its `rules` with `PATCH /api/settings` in `/docs`; there is nothing to restart. `GET /api/policy` shows what is loaded right now."
             },
             {
               "id": "defend-stop-2",
-              "content": "Edit the `rules` in `problems/challenges/stackstack-defend/local/policy/access.json`. The shapes you can write — the `actor` / `resource` matchers, and the fact that a `deny` beats any `allow` — are listed under `grammar` in `GET /api/policy`. Then watch `curl -s http://127.0.0.1:18080/api/drill | jq .window`: the receipt is withheld until every `attack.read` is `heldByPolicy` and no legitimate read has been refused in the same window."
+              "content": "Edit the `rules` with `PATCH /api/settings` in `/docs`. The shapes you can write — the `actor` / `resource` matchers, and the fact that a `deny` beats any `allow` — are listed under `grammar` in `GET /api/policy`. Then run `GET /api/drill` in the browser workbench and inspect `window`: the receipt is withheld until every `attack.read` is `heldByPolicy` and no legitimate read has been refused in the same window."
             }
           ]
         },
@@ -82,7 +82,7 @@
             },
             {
               "id": "defend-keep-2",
-              "content": "Every round, each account's listing is compared with the set it is entitled to — too many fails, too few fails. `curl -s http://127.0.0.1:18080/api/drill | jq .lastFailures` reports, as a symptom, which user's operation was stopped or got through. The tokens for `u-editor` and `u-mod` are on `/desk` too, so you can check any of it by hand."
+              "content": "Every round, each account's listing is compared with the set it is entitled to — too many fails, too few fails. Run `GET /api/drill` from `/docs` and inspect `lastFailures` to see which user's operation was stopped or got through. The tokens for `u-editor` and `u-mod` are on `/desk` too."
             }
           ]
         },
@@ -96,7 +96,7 @@
             },
             {
               "id": "defend-write-2",
-              "content": "A rule declares which `actions` it covers, so read and publish can be decided separately. Fixing reads and leaving the rest as it is leaves the publish path open. Watch `curl -s http://127.0.0.1:18080/api/drill | jq .window.attack.publish` — while `leaked` is anything but 0, no receipt appears."
+              "content": "A rule declares which `actions` it covers, so read and publish can be decided separately. Fixing reads and leaving the rest as it is leaves the publish path open. Run `GET /api/drill` from `/docs` and inspect `window.attack.publish`; while `leaked` is anything but 0, no receipt appears."
             }
           ]
         },
@@ -110,7 +110,7 @@
             },
             {
               "id": "defend-signoff-2",
-              "content": "`curl -s http://127.0.0.1:18080/posture | jq` shows `gates` and `readyToken`. The last gate is \"how long this has held without breaking once\" — 60 seconds by default. One bad round anywhere resets it to zero, so after you fix it, leave it alone and let it run. `curl -s http://127.0.0.1:18080/api/drill | jq '{cleanForMs, holdMs}'` shows how much is left."
+              "content": "Run `GET /posture` from `/docs` to see `gates` and `readyToken`. The last gate is how long the repair has held without breaking — 60 seconds by default. One bad round resets it to zero, so after the fix, leave it alone. `GET /api/drill` shows `cleanForMs` and `holdMs`."
             }
           ]
         }
@@ -143,7 +143,7 @@
           },
           {
             "id": "defend-leak-2",
-            "content": "`curl -s -H \"Authorization: Bearer <u-guest の token>\" http://127.0.0.1:18080/api/drafts` で id を確かめ、 続けて `/api/draft?id=<id>` を 1 件ずつ開きます。 `ownerId` が `u-guest` ではない下書きの `body` に `TC{leak_...}` が入っています。 その文字列をそのまま提出してください。 承認役 (`u-mod`) として読んだ場合は数えません ── そのアカウントは読んでよい側なので、 何も起きていないからです。",
+            "content": "`/docs` で header に `{\"Authorization\":\"Bearer <u-guest の token>\"}` を入れて `GET /api/drafts` を実行し、 同じ header で `GET /api/draft?id=<id>` を 1 件ずつ開きます。 `ownerId` が `u-guest` ではない下書きの `body` にある `TC{leak_...}` を提出してください。 承認役 (`u-mod`) として読んだ場合は数えません。",
             "penalty": 14
           }
         ]
@@ -156,12 +156,12 @@
         "hints": [
           {
             "id": "defend-stop-1",
-            "content": "誰がどの下書きに触れてよいかを決めているファイルは 1 枚だけで、 自分のチェックアウト側にあります。 アプリはリクエストごとに読み直すので再起動は要りません。 いま何が読み込まれているかは `GET /api/policy` で見られます。",
+            "content": "誰がどの下書きに触れてよいかは、 実行時 policy の `rules` だけで決まります。 `/docs` の `PATCH /api/settings` で変更でき、 再起動は不要です。 いまの policy は `GET /api/policy` で見られます。",
             "penalty": 0
           },
           {
             "id": "defend-stop-2",
-            "content": "`problems/challenges/stackstack-defend/local/policy/access.json` の `rules` を書き換えます。 書ける形 (`actor` / `resource` の照合子と、 `deny` が `allow` に優先すること) は `GET /api/policy` の `grammar` にまとまっています。 直したら `curl -s http://127.0.0.1:18080/api/drill | jq .window` を見てください。 受領証は 「`attack.read` が全件 `heldByPolicy`」 かつ 「同じ window で正規の read が 1 件も止まっていない」 まで出ません。",
+            "content": "`/docs` の `PATCH /api/settings` で `rules` を変更します。 書ける形 (`actor` / `resource` の照合子と、 `deny` が `allow` に優先すること) は `GET /api/policy` の `grammar` にまとまっています。 直したらブラウザ workbench で `GET /api/drill` を実行し、 `window` を見てください。 受領証は 「`attack.read` が全件 `heldByPolicy`」 かつ 「同じ window で正規の read が 1 件も止まっていない」 まで出ません。",
             "penalty": 20
           }
         ]
@@ -179,7 +179,7 @@
           },
           {
             "id": "defend-keep-2",
-            "content": "毎ラウンド、 各アカウントの一覧が 「見えてよい集合」 とちょうど一致しているかを比べています。 多すぎても少なすぎても駄目です。 `curl -s http://127.0.0.1:18080/api/drill | jq .lastFailures` に、 どの利用者のどの操作が止まったか (あるいは通ってしまったか) が症状として出ます。 `u-editor` と `u-mod` の token も `/desk` に出ているので、 自分の手でも確かめられます。",
+            "content": "毎ラウンド、 各アカウントの一覧が 「見えてよい集合」 とちょうど一致しているかを比べています。 多すぎても少なすぎても駄目です。 `/docs` から `GET /api/drill` を実行し、 `lastFailures` でどの利用者のどの操作が止まったか (または通ったか) を確認します。 token は `/desk` にあります。",
             "penalty": 20
           }
         ]
@@ -197,7 +197,7 @@
           },
           {
             "id": "defend-write-2",
-            "content": "ルールは `actions` で対象の操作を宣言するので、 read と publish は別々に判断できます。 read だけ直して残りをそのまま通す形だと、 公開の経路は開いたままです。 `curl -s http://127.0.0.1:18080/api/drill | jq .window.attack.publish` を見てください ── `leaked` が 0 でないうちは受領証は出ません。",
+            "content": "ルールは `actions` で対象の操作を宣言するので、 read と publish は別々に判断できます。 read だけ直すと公開の経路は開いたままです。 `/docs` から `GET /api/drill` を実行し、 `window.attack.publish` を見てください。 `leaked` が 0 でないうちは受領証は出ません。",
             "penalty": 18
           }
         ]
@@ -215,7 +215,7 @@
           },
           {
             "id": "defend-signoff-2",
-            "content": "`curl -s http://127.0.0.1:18080/posture | jq` に `gates` と `readyToken` が出ます。 最後の gate は 「一度も崩れずに保たれた時間」 で、 既定は 60 秒です。 どこかで 1 ラウンドでも悪い結果が出ると 0 に戻るので、 直したあとは触らずに走らせてください。 残り時間は `curl -s http://127.0.0.1:18080/api/drill | jq '{cleanForMs, holdMs}'` で見えます。",
+            "content": "`/docs` から `GET /posture` を実行すると `gates` と `readyToken` が出ます。 最後の gate は修正が一度も崩れずに保たれた時間で、 既定は 60 秒です。 直したあとは触らずに走らせ、 `GET /api/drill` の `cleanForMs` と `holdMs` で残りを確認します。",
             "penalty": 18
           }
         ]

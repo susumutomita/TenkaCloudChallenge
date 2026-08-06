@@ -1,0 +1,54 @@
+services:
+  participant:
+    image: "${SIGNED_NPM_PARTICIPANT_IMAGE:-signed-does-not-mean-safe-participant:local}"
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: participant
+    ports:
+      - "${SIGNED_NPM_WORKBENCH_BIND:-127.0.0.1}:${SIGNED_NPM_WORKBENCH_PORT:-18124}:8080"
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+      - seccomp=./seccomp-no-connect.json
+    healthcheck:
+      test: ["CMD", "node", "-e", "try { process.kill(1, 0); process.exit(0) } catch { process.exit(1) }"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    restart: "no"
+    networks:
+      - participant
+
+  verifier:
+    image: "${SIGNED_NPM_VERIFIER_IMAGE:-signed-does-not-mean-safe-verifier:local}"
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: verifier
+    ports:
+      - "${SIGNED_NPM_VERIFY_BIND:-127.0.0.1}:${SIGNED_NPM_VERIFY_PORT:-18125}:8081"
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+      - seccomp=./seccomp-no-connect.json
+    healthcheck:
+      test: ["CMD", "node", "-e", "try { process.kill(1, 0); process.exit(0) } catch { process.exit(1) }"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    restart: "no"
+    networks:
+      - verifier
+
+networks:
+  participant: {}
+  verifier: {}

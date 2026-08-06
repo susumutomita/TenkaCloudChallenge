@@ -111,6 +111,16 @@ def config_payload() -> dict[str, object]:
             }
             for checkpoint in CHECKPOINTS
         ],
+        # 英語は Portal 側の locale が選ぶ (共有 workbench.py の config_payload と同じ契約)。
+        # 文言の正本は metadata.json — scripts/generate-course-workbenches.py --check が
+        # 乖離を落とす (#381)。 この payload は手書きなので、 直すときはここを編集する。
+        "i18n": {
+            "en": {
+                "name": 'What it holds, what it breaks',
+                "description": 'Three toy verifiers arrive for audit. All of them pass the happy-path tests. They are broken in different ways. Build counterexamples and classify what each one holds and what it breaks.',
+                "checkpointLabels": {'incompleteness': 'Make a valid input get rejected', 'unsoundness': 'Get something outside the claim accepted', 'privacy-leak': 'Pull the secret out of a transcript', 'property-matrix': 'Classify the three verifiers by property', 'transfer': 'Hold up on instances you have not seen'},
+            }
+        },
     }
 
 

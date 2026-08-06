@@ -15,18 +15,14 @@ services:
       dockerfile: Dockerfile
     environment:
       SCENARIO: safe-exposure
-      # Paths in the participant's checkout, which are not the paths the app
-      # reads (both directories are mounted under /app). Display only.
-      CONFIG_HINT: problems/challenges/stackstack-safe-exposure/local/config/app.json
-      ACCESS_HINT: problems/challenges/stackstack-safe-exposure/local/access/access.json
       # Per-deploy random secret injected by `make local`. The four API keys, the
       # draft ids and the two markers are all derived from it inside the
       # container; the gate receipts come from a separate boot-time secret.
       FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
     volumes:
-      # The participant's own checkout, read-only. The access document is the
-      # file this problem is about; the app re-reads it on every request, so an
-      # edit takes effect without a restart.
+      # The participant's own checkout, read-only: the starting point the app
+      # reads, never a place anything writes. Changes go through the board's
+      # settings API and live in the container, so a rebuild is a full reset.
       - ./config:/app/config:ro
       - ./access:/app/access:ro
     ports:

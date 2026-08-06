@@ -164,6 +164,7 @@
     "en": {
       "name": "Which Workflow Is This Token From?",
       "shortDescription": "Bind an AWS production role for GitHub Actions OIDC to the intended audience, repository, and environment.",
+      "description": "The long-lived AWS secret was replaced with OIDC, but the production role's starter trust policy never checks the audience and admits every repository, branch, pull request, and environment under the same owner. Observe the false allows in the Browser Workbench, then fix provider, audience, and subject as three separate boundaries. No real GitHub tokens, no real AWS account, no credentials, no outbound network.",
       "instructions": "Start the local runtime and open Browser Workbench. Observe the starter's four unintended allows, repair diagnosis and trustPolicy, pass the public cases, and submit the same prepared value to all six checkpoints.",
       "writeup": "## Boundary\n\nTrusting GitHub's provider does not select a token within that provider. Match the AWS audience exactly and bind sub to the target repository's Production environment.\n\n## Reusable workflows\n\njob_workflow_ref identifies the reusable workflow, while the default sub carries the caller repository context. This lab follows AWS's GitHub custom-claim limitation and evaluates only provider/action plus aud/sub.",
       "learningGoals": [

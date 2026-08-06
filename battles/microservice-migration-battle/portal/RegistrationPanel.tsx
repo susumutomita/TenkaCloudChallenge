@@ -25,8 +25,39 @@ import { useState } from "react";
 /** router.ts (coordination plugin) が受け付ける service 名。 register op の service field に渡す。 */
 const SERVICES = ["users", "orders", "catalog"] as const;
 
+/**
+ * 表示文言。 言語は portal が渡す `props.locale` で選ぶ (stackstack StatusPanel と同じ契約)。
+ * 参加者向け文字列を日本語だけで焼き込まない (#381)。
+ */
+const COPY = {
+  en: {
+    intro:
+      'Once you carve out a slot, register it as an override and the scoring engine switches to the new endpoint. Registration happens in the portal\u2019s standard "Endpoint override" form.',
+    routerHeading: "Register with the service router (shared with every team)",
+    routerBody:
+      "Register the public URL of a service you carved out and it appears in every team\u2019s route directory.",
+    registering: "Registering\u2026",
+    register: "Register",
+    registered: "Registered (it will appear in the route directory).",
+    rejected: "Registration refused: ",
+    coordination: "coordination: ",
+  },
+  ja: {
+    intro:
+      "各 slot を切り出したら override で登録すると、 scoring engine が新 endpoint に切り替わります。 登録は portal の標準 \"Endpoint override\" form から行います。",
+    routerHeading: "サービスルーターに登録 (他チームと共有)",
+    routerBody: "切り出した service の公開 URL を登録すると、 全チームの route directory に表示されます。",
+    registering: "登録中…",
+    register: "登録",
+    registered: "登録しました (route directory に反映されます)",
+    rejected: "登録できません: ",
+    coordination: "coordination: ",
+  },
+} as const;
+
 export default function RegistrationPanel(props: PortalSlotProps) {
   const { endpoints, coordinationClient } = props;
+  const copy = COPY[props.locale === "ja" ? "ja" : "en"];
   const [service, setService] = useState<string>(SERVICES[0]);
   const [url, setUrl] = useState<string>("");
   const [result, setResult] = useState<string | null>(null);
@@ -40,10 +71,10 @@ export default function RegistrationPanel(props: PortalSlotProps) {
     // discriminated union を message に写す (= ok は directory 反映、 rejected は理由表示)。
     setResult(
       outcome.kind === "ok"
-        ? "登録しました (route directory に反映されます)"
+        ? copy.registered
         : outcome.kind === "rejected"
-          ? `登録できません: ${outcome.error}`
-          : `coordination: ${outcome.kind}`,
+          ? `${copy.rejected}${outcome.error}`
+          : `${copy.coordination}${outcome.kind}`,
     );
     setSubmitting(false);
   };
@@ -60,10 +91,7 @@ export default function RegistrationPanel(props: PortalSlotProps) {
       <h3 style={{ margin: "0 0 12px 0", fontSize: "16px" }}>
         Microservice Migration — Endpoint Registration
       </h3>
-      <p style={{ margin: "0 0 12px 0", fontSize: "13px", color: "#414d5c" }}>
-        各 slot を切り出したら override で登録すると、 scoring engine が新 endpoint に
-        切り替わります。 登録は portal の標準 "Endpoint override" form から行います。
-      </p>
+      <p style={{ margin: "0 0 12px 0", fontSize: "13px", color: "#414d5c" }}>{copy.intro}</p>
       <ul style={{ margin: "0", paddingLeft: "20px", fontSize: "13px" }}>
         {endpoints.map((ep) => (
           <li key={ep.slot} style={{ marginBottom: "4px" }}>
@@ -82,11 +110,9 @@ export default function RegistrationPanel(props: PortalSlotProps) {
           }}
         >
           <h4 style={{ margin: "0 0 8px 0", fontSize: "13px", color: "#0972d3" }}>
-            サービスルーターに登録 (他チームと共有)
+            {copy.routerHeading}
           </h4>
-          <p style={{ margin: "0 0 8px 0", fontSize: "12px", color: "#5f6b7a" }}>
-            切り出した service の公開 URL を登録すると、 全チームの route directory に表示されます。
-          </p>
+          <p style={{ margin: "0 0 8px 0", fontSize: "12px", color: "#5f6b7a" }}>{copy.routerBody}</p>
           <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
             <select
               aria-label="service"
@@ -114,7 +140,7 @@ export default function RegistrationPanel(props: PortalSlotProps) {
               disabled={submitting || url.length === 0}
               style={{ padding: "4px 12px", fontSize: "13px" }}
             >
-              {submitting ? "登録中…" : "登録"}
+              {submitting ? copy.registering : copy.register}
             </button>
           </div>
           {result && (

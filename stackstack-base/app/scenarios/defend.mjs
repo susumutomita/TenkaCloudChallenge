@@ -64,9 +64,15 @@ function defendDigest(namespace) {
  */
 const LEAK_MARKER = `TC{leak_${defendDigest("leak").slice(0, 32)}}`;
 
-/** Where the participant-owned access policy is mounted, and where it is in their checkout. */
+/** Where the participant-owned access policy is mounted into the container. */
 const POLICY_PATH = process.env.ACCESS_POLICY ?? "/app/policy/access.json";
-const POLICY_HINT = process.env.POLICY_HINT ?? POLICY_PATH;
+/**
+ * 参加者向けの文中でこの方針を指す呼び名。 パスを既定にする方向は採らない — マウント元は
+ * git 管理下で、 コンテナ内パスは参加者の機械に存在せず、 checkout パスは直接編集に誘導して
+ * 解いた瞬間に作業ツリーを汚す。 変更は `PATCH /api/settings` (コンソールは `/docs`) へ誘導する。
+ */
+const POLICY_HINT =
+  process.env.POLICY_HINT ?? "the access policy (change it via PATCH /api/settings)";
 
 /** この scenario の設定の上書き名 (置き場と挙動は `overrides.mjs`)。 */
 const SETTINGS_NAME = "policy";
@@ -586,10 +592,11 @@ function deskPage() {
 <title>下書きデスク</title></head>
 <body style="font-family:system-ui;max-width:52rem;margin:2.5rem auto;line-height:1.7;padding:0 1rem">
 <h1>下書きデスク</h1>
-<p>アクセス方針のファイル: <code>${escapeHtml(POLICY_HINT)}</code>${
+<p>アクセス方針は板の API コンソール (<a href="docs">docs</a>) から <code>PATCH /api/settings</code> で変えられます。
+ 変更を捨てて初期状態に戻すのは <code>DELETE /api/settings</code> です。${
     state.policyError === null
-      ? " (読み込めています)"
-      : ` <strong>読み込めていません: ${escapeHtml(state.policyError)}</strong>`
+      ? " (いまの方針は読み込めています)"
+      : ` <strong>いまの方針は読み込めていません: ${escapeHtml(state.policyError)}</strong>`
   }</p>
 <h2>アカウント</h2>
 <table border="1" cellpadding="6" style="border-collapse:collapse">
@@ -608,6 +615,7 @@ POST api/drafts              下書きを新しく書く              {"title":"
 POST api/publish?id=...      下書きを公開キューへ載せる
 GET  api/published           公開キュー (本文は載りません)
 GET  api/policy              いま読み込まれている方針とその検証結果
+GET/PATCH/DELETE api/settings  方針を見る・変える・初期状態へ戻す (docs から画面で実行できます)
 GET  api/drill               走り続けている計測の内訳
 GET  posture                 5 つの gate と受領証</pre>
 <p>計測: ${state.roundsCompleted} ラウンド完了 / 直近 ${state.window.rounds} ラウンドを採点 / 連続良好 ${Math.round(state.cleanForMs / 1000)} 秒 (必要 ${Math.round(state.holdMs / 1000)} 秒)</p>
@@ -620,7 +628,7 @@ export const routes = {
   "GET /api/policy": (request, response) => {
     const policy = loadPolicy();
     return sendJson(response, 200, {
-      policyFile: POLICY_HINT,
+      changeVia: "PATCH /api/settings (API console: /docs)",
       ok: policy.ok,
       error: policy.error,
       policy: policy.value,
@@ -1228,6 +1236,8 @@ export const checks = {
 export const editableSettings = {
   name: SETTINGS_NAME,
   summary: { ja: "アクセスポリシー", en: "access policy" },
-  example: { enabled: true },
+  // Swagger の Try it out にそのまま入る例。 この policy が実際に受け付けるキーを使い、
+  // 解答 (rules の絞り込み) はここに書かない — 例が答えになる例は例ではない。
+  example: { readsPerRound: 100 },
   read: () => loadPolicy(),
 };

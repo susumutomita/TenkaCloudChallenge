@@ -78,6 +78,16 @@ def config_payload() -> dict[str, object]:
             {"id": checkpoint, "label": checkpoint, "kind": "code"}
             for checkpoint in CHECKPOINTS
         ],
+        # 英語は Portal 側の locale が選ぶ (共有 workbench.py の config_payload と同じ契約)。
+        # 文言の正本は metadata.json — scripts/generate-course-workbenches.py --check が
+        # 乖離を落とす (#381)。 この payload は手書きなので、 直すときはここを編集する。
+        "i18n": {
+            "en": {
+                "name": 'The signature is valid. Reject it anyway.',
+                "description": 'Verify a passkey assertion on the server with only the public key. Then find a cryptographically valid assertion whose user-verification bit is zero and reject it under a UV-required policy. Keep cryptographic validity separate from authentication policy.',
+                "checkpointLabels": {'signature': 'Verify the assertion signature with the public key', 'find-uv-gap': 'Select the valid signature made without user verification', 'enforce-uv': 'Complete a server verdict that requires user verification'},
+            }
+        },
     }
 
 

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -39,8 +39,6 @@ const BOARD = `http://127.0.0.1:${CHALLENGE_PORT}`;
 const VERIFY = `http://127.0.0.1:${VERIFY_PORT}/verify`;
 const SEED = "stackstack-observability-test-seed";
 const OTHER_SEED = "stackstack-observability-other-seed";
-const CONFIG_HINT = "problems/challenges/stackstack-observability/local/config/app.json";
-const RELAY_HINT = "problems/challenges/stackstack-observability/local/relay/relay.json";
 
 const SHIPPED_RELAY = {
   archiveLogging: "off",
@@ -99,6 +97,7 @@ class Instance {
   readonly verify: string;
   readonly relayPath: string;
   readonly configPath: string;
+  readonly overrideDir: string;
   private process: ReturnType<typeof spawn> | undefined;
   private counter = 0;
 
@@ -112,9 +111,11 @@ class Instance {
     this.verify = `http://127.0.0.1:${verifyPort}/verify`;
     this.relayPath = join(scratch, `${name}-relay.json`);
     this.configPath = join(scratch, `${name}-app.json`);
+    this.overrideDir = join(scratch, `${name}-overrides`);
   }
 
   async start(options: { seed?: string; relay?: object; acceptingPosts?: boolean } = {}) {
+    mkdirSync(this.overrideDir, { recursive: true });
     writeFileSync(this.relayPath, JSON.stringify(options.relay ?? SHIPPED_RELAY, null, 2));
     writeFileSync(
       this.configPath,
@@ -127,8 +128,9 @@ class Instance {
         FLAG_SEED: options.seed ?? SEED,
         APP_CONFIG: this.configPath,
         RELAY_CONFIG: this.relayPath,
-        CONFIG_HINT,
-        RELAY_HINT,
+        // 上書きの置き場は共有 /tmp ではなくインスタンスごとの scratch。 スイートを
+        // 並走させても、 前回の実行が残した上書きを拾っても、 互いに汚染しない。
+        APP_OVERRIDE_DIR: this.overrideDir,
         CHALLENGE_PORT: String(this.port),
         VERIFY_PORT: String(this.verifyPort),
       },
@@ -166,6 +168,22 @@ class Instance {
 
   async get(path: string): Promise<{ status: number; body: any; text: string }> {
     const response = await fetch(`${this.base}${path}`);
+    const text = await response.text();
+    let body: unknown;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      body = undefined;
+    }
+    return { status: response.status, body, text };
+  }
+
+  async request(method: string, path: string, payload?: unknown) {
+    const response = await fetch(`${this.base}${path}`, {
+      method,
+      headers: payload === undefined ? undefined : { "content-type": "application/json" },
+      body: payload === undefined ? undefined : JSON.stringify(payload),
+    });
     const text = await response.text();
     let body: unknown;
     try {
@@ -1402,20 +1420,28 @@ describe("stackstack-observability wiring", () => {
     expect(existsSync(join(composeDir, "relay", "relay.json"))).toBe(true);
   });
 
-  it("should name both paths as the participant sees them, from the platform checkout", () => {
-    for (const [variable, inThisRepo] of [
-      ["CONFIG_HINT", "challenges/stackstack-observability/local/config/app.json"],
-      ["RELAY_HINT", "challenges/stackstack-observability/local/relay/relay.json"],
-    ] as const) {
-      expect(service.environment[variable]).toBe(`problems/${inThisRepo}`);
+  it("should carry no path hint for anyone to resurrect in copy", () => {
+    // The participant no longer edits the mounted files at all — changes go
+    // through PATCH /api/settings — so the compose file must not ship a
+    // "path to open" for a doc or a page to quote back at them (#378).
+    expect(service.environment.CONFIG_HINT).toBeUndefined();
+    expect(service.environment.RELAY_HINT).toBeUndefined();
+    for (const inThisRepo of [
+      "challenges/stackstack-observability/local/config/app.json",
+      "challenges/stackstack-observability/local/relay/relay.json",
+    ]) {
       expect(existsSync(join(REPO_ROOT, inThisRepo))).toBe(true);
     }
   });
 
-  it("should give the participant-facing docs the same paths the app prints", () => {
-    const hint = service.environment.RELAY_HINT as string;
+  it("should steer every participant-facing doc to the API, never to the checkout file", () => {
+    // Solving by editing the tracked file rewrites the problem itself: git goes
+    // dirty and no rebuild restores the broken state. Any doc that names the
+    // path invites exactly that (#378).
     for (const name of ["README.md", "README.ja.md", "metadata.json"]) {
-      expect(readFileSync(join(PROBLEM_DIR, name), "utf8")).toContain(hint);
+      const text = readFileSync(join(PROBLEM_DIR, name), "utf8");
+      expect(text).not.toContain("challenges/stackstack-observability/local/");
+      expect(text).toContain("/api/settings");
     }
   });
 
@@ -1427,9 +1453,35 @@ describe("stackstack-observability wiring", () => {
     expect(raw).not.toContain("relay/healthz");
   });
 
-  it("should show the relay settings path on the console the participant opens", async () => {
+  it("should steer the console the participant opens to the settings API, never to a path", async () => {
     const page = await main.get("/relay");
-    expect(page.text).toContain(RELAY_HINT);
+    expect(page.text).toContain("PATCH /api/settings");
     expect(page.text).not.toContain("/app/relay/relay.json");
+    expect(page.text).not.toContain("challenges/stackstack-observability/");
+  });
+
+  it("should change the relay through the API, refuse a bad value, and reset to the mount", async () => {
+    // The participant loop of #378: broken start → fix over the API with no
+    // restart → discard → the broken start is back. The mounted file never
+    // changes, so a rebuilt container starts from the same place.
+    const before = await main.get("/api/settings");
+    expect(before.status).toBe(200);
+    expect((before.body as { settings: { archiveLogging: string } }).settings.archiveLogging).toBe("off");
+
+    const refused = await main.request("PATCH", "/api/settings", { archiveLogging: "sometimes" });
+    expect(refused.status).toBe(400);
+    const unchanged = await main.get("/api/settings");
+    expect((unchanged.body as { settings: { archiveLogging: string } }).settings.archiveLogging).toBe("off");
+
+    const fixed = await main.request("PATCH", "/api/settings", { archiveLogging: "on" });
+    expect(fixed.status).toBe(200);
+    const after = await main.get("/relay/state");
+    expect((after.body as { settings: { archiveLogging: string } }).settings.archiveLogging).toBe("on");
+    expect(JSON.parse(readFileSync(main.relayPath, "utf8")).archiveLogging).toBe("off");
+
+    const reset = await main.request("DELETE", "/api/settings");
+    expect(reset.status).toBe(200);
+    const restored = await main.get("/api/settings");
+    expect((restored.body as { settings: { archiveLogging: string } }).settings.archiveLogging).toBe("off");
   });
 });

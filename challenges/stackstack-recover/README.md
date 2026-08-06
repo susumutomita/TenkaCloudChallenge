@@ -21,9 +21,8 @@ credentials.
 | `127.0.0.1:18080/ops` | The ops plane — a separate plane from the entrance, so it answers even while the entrance does not |
 | `127.0.0.1:18080/edge/*` | The public entrance in front of the board |
 | `127.0.0.1:18081` | Loopback `/verify` the TenkaCloud scorer delegates to |
-| `problems/challenges/stackstack-recover/local/policy/policy.json` | **The file last night's deploy edited.** Yours, mounted read-only, re-read on every request |
-| `problems/challenges/stackstack-recover/local/config/app.json` | The board's own config, unchanged from the previous problems |
-| `problems/challenges/stackstack-recover/local/state/` | Where the scheduled job writes, if the policy lets it |
+| `127.0.0.1:18080/docs` | Browser API console; last night's policy is changed with `PATCH /api/settings` |
+| `/app/state/` | Container-local output written by the scheduled job when policy permits it |
 
 The image is built from [`stackstack-base/`](../../stackstack-base). The incident
 signature is derived inside the container from a per-deploy random `FLAG_SEED`, so no
@@ -48,7 +47,7 @@ is what an IAM policy is too. It is not implemented with file modes, for two rea
 there is no IAM in local play, and a chmod-ed read-only directory is ignored by a CI
 runner running as root, so the verification would not reproduce. What is real: the
 refusal is a real refusal written to a real log line, the permitted write is a real
-write to a real file in your checkout, and widening the allow-list back out is caught.
+container-local write, and widening the allow-list back out is caught.
 
 ## Mission
 
@@ -104,11 +103,10 @@ the thing it attests to stops being true.
    Submit that for **Name what stopped**. The oracle answers for any set you hand it,
    including sets that were never down — it is a calculator, not a hint.
 
-5. Fix the policy. It is one file in your checkout (paths below are relative to your
-   TenkaCloud checkout, where this catalog is the `problems/` submodule):
+5. Fix the policy in `/docs`: read `GET /api/settings`, then send the changed fields to
+   `PATCH /api/settings`. The shape is:
 
    ```jsonc
-   // problems/challenges/stackstack-recover/local/policy/policy.json
    {
      "auth": {
        "requireToken": true,
@@ -126,10 +124,9 @@ the thing it attests to stops being true.
    measurement — `curl -sX POST http://127.0.0.1:18080/ops/probe` — and read
    `GET /posture` again.
 
-   **Paths in `storage.writable` are the paths inside the container**, not the ones in
-   your checkout. The job writes `/app/state/digest/latest.json`, which shows up in your
-   checkout as `problems/challenges/stackstack-recover/local/state/digest/latest.json`.
-   `GET /ops/digest` prints both.
+   **Paths in `storage.writable` are paths inside the container.** The job writes
+   `/app/state/digest/latest.json`; `GET /ops/digest` shows the result. The repository is
+   never a runtime output directory.
 
 6. When `GET /posture` shows five green gates, submit each gate's entry from `tokens`.
    `survived_restart` needs one more thing than the others — the ops plane's restart

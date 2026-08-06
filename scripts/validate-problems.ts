@@ -184,6 +184,21 @@ export function checkParticipantVisibleSpoilerAdvisory(meta: Metadata): Validati
  * [TenkaCloud#2191] writeup は optional だが、追加する場合は JA canonical と EN override を
  * 必ず対にする。片言語だけの種明かしを出荷すると競技終了後の学習体験が locale で欠落する。
  */
+/**
+ * [#381] description の ja/en parity。 71/71 問が i18n.en.description を持つ状態まで是正
+ * したので、 ここから先は欠けを増やせない。 「英語話者に解けない問題がマージできない」の
+ * カタログ記述面の担保で、 verifier 側の担保は generate-course-workbenches.py --check が持つ。
+ */
+export function checkDescriptionTranslations(meta: Metadata): ValidationError[] {
+  const ja = typeof meta.description === "string" && meta.description.trim().length > 0;
+  const i18n = meta.i18n as { en?: { description?: unknown } } | undefined;
+  const en = typeof i18n?.en?.description === "string" && i18n.en.description.trim().length > 0;
+  if (ja === en) return [];
+  return ja
+    ? ["i18n.en.description is required when top-level description is present (ja/en parity, #381)"]
+    : ["top-level description is required when i18n.en.description is present (ja/en parity, #381)"];
+}
+
 export function checkWriteupTranslations(meta: Metadata): ValidationError[] {
   const ja = typeof meta.writeup === "string" && meta.writeup.trim().length > 0;
   const i18n = meta.i18n as { en?: { writeup?: unknown } } | undefined;
@@ -459,6 +474,7 @@ function checkCompositeRefs(dir: string, meta: Metadata): CrossRefResult {
   const errors: ValidationError[] = [
     ...checkInstructionsPresent(meta),
     ...checkWriteupTranslations(meta),
+    ...checkDescriptionTranslations(meta),
     ...checkHintTranslations(meta),
     ...checkScoringRegulation(meta),
     ...checkDashboardSlotFiles(meta, dir),
@@ -557,6 +573,7 @@ function checkContainerRefs(dir: string, meta: Metadata): CrossRefResult {
   const errors: ValidationError[] = [
     ...checkInstructionsPresent(meta),
     ...checkWriteupTranslations(meta),
+    ...checkDescriptionTranslations(meta),
     ...checkHintTranslations(meta),
     ...checkScoringRegulation(meta),
   ];
@@ -602,12 +619,10 @@ function checkContainerRefs(dir: string, meta: Metadata): CrossRefResult {
  * 起動時に書き込み可能なコピーへ差し替える方向は破壊性だけは消すが、 それ単体では採らない —
  * 参加者の編集先が画面から到達できないままで、 「どこにあるか分からない」が残る。
  *
- * 採るのは提出値として `/verify` に渡す形 (Portal のエディタ経路)。 カタログは読み取り専用の
- * 出題物であって、 参加者の作業領域ではない。
+ * 採るのは実行中の participant 別状態へ API から書く形。 カタログは読み取り専用の出題物で
+ * あって、 参加者の作業領域ではない。
  */
 export function checkSolutionDoesNotEditCatalog(meta: Metadata): ValidationError[] {
-  const id = typeof meta.id === "string" ? meta.id : "";
-  if (CATALOG_EDITING_LEGACY.has(id)) return [];
   const i18n = meta.i18n as { en?: { instructions?: unknown } } | undefined;
   const texts = [meta.instructions, i18n?.en?.instructions].filter(
     (value): value is string => typeof value === "string",
@@ -627,26 +642,6 @@ export function checkSolutionDoesNotEditCatalog(meta: Metadata): ValidationError
   }
   return errors;
 }
-
-/**
- * 既にこの形で出荷済みの問題 (#378)。
- *
- * まとめて直してから検査を入れる方向は採らない — 直すには container 側に提出経路を足す必要が
- * あり、 その間ずっと新規が同じ形で増えられてしまう。 止血と修理は分ける。
- *
- * 検査自体を警告にする方向も採らない — 今日この型が見過ごされたのは、 警告が「出ているが誰も
- * 見ていない」状態で機能しなかったため。
- */
-const CATALOG_EDITING_LEGACY = new Set([
-  "stackstack-defend",
-  "stackstack-observability",
-  "stackstack-onboarding",
-  "stackstack-recover",
-  "stackstack-safe-exposure",
-  "stackstack-secrets",
-  "stackstack-ship",
-  "stackstack-vibe-build",
-]);
 
 /** `problems/challenges/<id>/...` / `challenges/<id>/...` の形をした参加者向けパス。 */
 const CATALOG_PATH_RE = /(?:problems\/)?challenges\/[a-z0-9-]+\/[^\s`"')、。]+/g;
@@ -954,6 +949,7 @@ function checkCrossRefs(metaPath: string, meta: Metadata): CrossRefResult {
       ...containerOnlyKindErrors,
       ...checkInstructionsPresent(meta),
       ...checkWriteupTranslations(meta),
+      ...checkDescriptionTranslations(meta),
       ...checkHintTranslations(meta),
       ...checkScoringRegulation(meta),
       ...checkScoringOutputRefs(meta, yaml, cfnTemplate),
