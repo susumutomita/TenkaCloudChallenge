@@ -98,6 +98,16 @@ def config_payload() -> dict[str, object]:
             }
             for checkpoint in CHECKPOINTS
         ],
+        # 英語は Portal 側の locale が選ぶ (共有 workbench.py の config_payload と同じ契約)。
+        # 文言の正本は metadata.json — scripts/generate-course-workbenches.py --check が
+        # 乖離を落とす (#381)。 この payload は手書きなので、 直すときはここを編集する。
+        "i18n": {
+            "en": {
+                "name": 'It passes, but it does not protect',
+                "description": 'A credential circuit was stopped by audit just before production. Ordinary holders are judged correctly. But a forged witness may be able to walk around the condition. Build it, break it, fix it.',
+                "checkpointLabels": {'build': 'Build the circuit the policy intends', 'audit': 'Identify the missing constraint', 'exploit': 'Forge a witness that carries a false claim', 'root-cause': 'Submit the root cause in structured form', 'repair': 'Close the gap without breaking the honest cases', 'mutation-transfer': 'Hold up when a different constraint is missing'},
+            }
+        },
     }
 
 

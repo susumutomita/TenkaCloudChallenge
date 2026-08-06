@@ -118,6 +118,16 @@ def config_payload() -> dict[str, object]:
             }
             for checkpoint in CHECKPOINTS
         ],
+        # 英語は Portal 側の locale が選ぶ (共有 workbench.py の config_payload と同じ契約)。
+        # 文言の正本は metadata.json — scripts/generate-course-workbenches.py --check が
+        # 乖離を落とす (#381)。 この payload は手書きなので、 直すときはここを編集する。
+        "i18n": {
+            "en": {
+                "name": 'A set of things that must be zero',
+                "description": 'The new policy engine expresses access decisions as an arithmetic circuit instead of if-statements. The monitor only prints pass or fail. Make the residuals visible so a witness can be diagnosed.',
+                "checkpointLabels": {'residuals': 'Compute residuals and emit a trace', 'first-broken': 'Name the first violation and its residual', 'boolean': 'Bind a signal to 0 or 1 only', 'membership': 'Admit only the allowed values', 'transfer': 'Hold up on circuits you have not seen'},
+            }
+        },
     }
 
 

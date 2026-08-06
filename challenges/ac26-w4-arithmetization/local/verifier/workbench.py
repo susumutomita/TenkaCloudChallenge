@@ -38,6 +38,9 @@ class PortalEditorSupport:
         run_timeout_seconds: int,
         max_output_bytes: int,
         limit_fn: Callable[[], None],
+        problem_name_en: str | None = None,
+        description_en: str | None = None,
+        checkpoint_labels_en: dict[str, str] | None = None,
     ) -> None:
         self.root = root
         self.seed = seed
@@ -55,9 +58,16 @@ class PortalEditorSupport:
         self.run_timeout_seconds = run_timeout_seconds
         self.max_output_bytes = max_output_bytes
         self.limit_fn = limit_fn
+        self.problem_name_en = problem_name_en
+        self.description_en = description_en
+        self.checkpoint_labels_en = checkpoint_labels_en or {}
 
     def config_payload(self) -> dict[str, object]:
-        return {
+        # 日本語 (従来のトップレベル) と英語 (i18n.en) を両方運ぶ。 言語の選択は Portal 側の
+        # locale (TenkaCloud#2890: ?lang= → 永続 locale → browser language) が行うので、
+        # この verifier はリクエストの言語を知る必要がない。 文言は生成時に metadata から
+        # 埋め込まれた定数で、 実行時にこのコンテナの外を読むことはない (#381)。
+        payload: dict[str, object] = {
             "id": self.problem_id,
             "name": self.problem_name,
             "description": self.description,
@@ -71,6 +81,20 @@ class PortalEditorSupport:
                 for checkpoint in self.checkpoints
             ],
         }
+        if self.problem_name_en or self.description_en or self.checkpoint_labels_en:
+            payload["i18n"] = {
+                "en": {
+                    "name": self.problem_name_en or self.problem_name,
+                    "description": self.description_en or self.description,
+                    "checkpointLabels": {
+                        checkpoint: self.checkpoint_labels_en.get(
+                            checkpoint, self.checkpoint_labels.get(checkpoint, checkpoint)
+                        )
+                        for checkpoint in self.checkpoints
+                    },
+                }
+            }
+        return payload
 
     def starter_payload(self) -> dict[str, str]:
         return {
