@@ -223,7 +223,9 @@ describe("github-oidc-trust-boundary metadata and sources", () => {
     const workflow = readRoot(".github/workflows/ci.yml");
     expect(workflow).toContain("github-oidc-runtime:");
     expect(workflow).toContain("bun run github-oidc:runtime");
-    expect(workflow).toContain("needs: [suite, checks, rls-runtime, eventbridge-runtime, github-oidc-runtime]");
+    expect(workflow).toContain(
+      "needs: [suite, checks, rls-runtime, eventbridge-runtime, github-oidc-runtime, signed-npm-runtime]",
+    );
     expect(workflow).toContain('test "${{ needs.github-oidc-runtime.result }}" = "success"');
   });
 

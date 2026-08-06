@@ -125,13 +125,20 @@ describe("the CI workflow agrees with the partition", () => {
     // of a matrix. It is only worth having if it actually fails when a shard
     // does — `needs:` alone does not, once `if: always()` is set.
     expect(WORKFLOW).toMatch(
-      /needs:\s*\[suite, checks, rls-runtime, eventbridge-runtime, github-oidc-runtime\]/,
+      /needs:\s*\[suite, checks, rls-runtime, eventbridge-runtime, github-oidc-runtime, signed-npm-runtime\]/,
     );
     // Match the assertion, not the mention. Both job results are also echoed
     // for the log, and a `toContain("needs.checks.result")` was satisfied by
     // that echo alone — deleting the line that actually gates on it left this
     // test green.
-    for (const job of ["suite", "checks", "rls-runtime", "eventbridge-runtime", "github-oidc-runtime"]) {
+    for (const job of [
+      "suite",
+      "checks",
+      "rls-runtime",
+      "eventbridge-runtime",
+      "github-oidc-runtime",
+      "signed-npm-runtime",
+    ]) {
       expect(WORKFLOW).toContain(`test "\${{ needs.${job}.result }}" = "success"`);
     }
   });

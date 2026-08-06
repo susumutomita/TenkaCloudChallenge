@@ -2068,6 +2068,34 @@
       }
     },
     {
+      "id": "signed-does-not-mean-safe",
+      "name": "署名済みなら、安全？",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "45-60 分",
+      "shortDescription": "npm provenance が保証する範囲を見極め、lockfile・tarball inventory・lifecycle script policy で防御しよう。",
+      "tags": [
+        "npm",
+        "supply-chain",
+        "provenance",
+        "attestation",
+        "lockfile",
+        "lifecycle-scripts",
+        "incident-response",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "sqli-demo",
       "name": "スタッフ専用ログイン",
       "category": "Challenge",

@@ -8,6 +8,7 @@
     "eventbridge:runtime": "bun run scripts/verify-eventbridge-delivery-discipline.ts",
     "github-oidc:runtime": "bun run scripts/verify-github-oidc-trust-boundary.ts",
     "rls:runtime": "bun run scripts/verify-rls-tenant-isolation.ts",
+    "signed-npm:runtime": "bun run scripts/verify-signed-does-not-mean-safe.ts",
     "new": "bun run scripts/new-problem.ts",
     "new-course-challenge": "bun run scripts/new-course-challenge.ts",
     "reindex": "bun run scripts/build-index.ts && bun run scripts/estimate-cost.ts --write",
