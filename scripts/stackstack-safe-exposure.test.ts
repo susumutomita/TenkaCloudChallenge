@@ -30,9 +30,6 @@ const SERVER = join(REPO_ROOT, "stackstack-base", "app", "server.mjs");
 const SCENARIO_FILE = join(REPO_ROOT, "stackstack-base", "app", "scenarios", "safe-exposure.mjs");
 
 const SEED = "stackstack-safe-exposure-test-seed";
-const ACCESS_HINT = "problems/challenges/stackstack-safe-exposure/local/access/access.json";
-const CONFIG_HINT = "problems/challenges/stackstack-safe-exposure/local/config/app.json";
-const SETTINGS_ENDPOINT = "/api/settings";
 
 /** The four seeded documents, by the slug `/portal/review` names them with. */
 const SLUGS = ["anzu-private", "kenji-private", "team-runbook", "hoshino-contract"] as const;
@@ -200,8 +197,10 @@ interface Instance {
 async function startInstance(name: string, challengePort: number, verifyPort: number) {
   const accessPath = join(scratch, `${name}-access.json`);
   const configPath = join(scratch, `${name}-app.json`);
+  // 上書きの置き場は共有 /tmp ではなくインスタンスごとの scratch。 スイートを並走させても、
+  // 前回の実行が残した上書きを拾っても、 互いに汚染しない。
   const overrideDir = join(scratch, `${name}-overrides`);
-  mkdirSync(overrideDir);
+  mkdirSync(overrideDir, { recursive: true });
   writeFileSync(accessPath, readFileSync(join(PROBLEM_DIR, "local", "access", "access.json")));
   writeFileSync(configPath, readFileSync(join(PROBLEM_DIR, "local", "config", "app.json")));
 
@@ -212,10 +211,8 @@ async function startInstance(name: string, challengePort: number, verifyPort: nu
       SCENARIO: "safe-exposure",
       FLAG_SEED: SEED,
       APP_CONFIG: configPath,
-      APP_OVERRIDE_DIR: overrideDir,
-      CONFIG_HINT,
       ACCESS_POLICY: accessPath,
-      ACCESS_HINT,
+      APP_OVERRIDE_DIR: overrideDir,
       CHALLENGE_PORT: String(challengePort),
       VERIFY_PORT: String(verifyPort),
     },
@@ -288,7 +285,9 @@ function client(instance: () => Instance) {
     keys,
     get: (path: string, as: string | null = null) => send(path, { as }),
     post: (path: string, as: string | null, body: unknown) => send(path, { as, method: "POST", body }),
+    patch: (path: string, body: unknown) => send(path, { as: null, method: "PATCH", body }),
     remove: (path: string, as: string | null = null) => send(path, { as, method: "DELETE" }),
+    accessPath: () => instance().accessPath,
     patchSettings: (settings: Record<string, unknown>) =>
       send("/api/settings", { method: "PATCH", body: settings }),
     resetSettings: () => send("/api/settings", { method: "DELETE" }),
@@ -457,17 +456,24 @@ describe("stackstack-safe-exposure as it ships", () => {
   });
   afterAll(() => instance?.kill());
 
-  it("should change and reset the access policy through the API without touching its source", async () => {
-    const source = readFileSync(instance.accessPath, "utf8");
-    const changed = await app.patchSettings({ defaultEffect: "deny" });
-    expect(changed.status).toBe(200);
-    expect(changed.body.settings.defaultEffect).toBe("deny");
-    expect(readFileSync(instance.accessPath, "utf8")).toBe(source);
+  it("should change the document through the API, refuse a bad value, and reset to the mount", async () => {
+    // The participant loop of #378: the mounted file is the starting point, a
+    // change rides on top of it inside the container, and discarding the change
+    // — or rebuilding the container — brings the broken start back.
+    const fileBefore = readFileSync(app.accessPath(), "utf8");
 
-    const reset = await app.resetSettings();
+    const refused = await app.patch("/api/settings", { defaultEffect: "maybe" });
+    expect(refused.status).toBe(400);
+    expect((await app.get("/api/settings")).body.settings.defaultEffect).toBe("allow");
+
+    const changed = await app.patch("/api/settings", { defaultEffect: "deny" });
+    expect(changed.status).toBe(200);
+    expect((await app.get("/api/settings")).body.settings.defaultEffect).toBe("deny");
+    expect(readFileSync(app.accessPath(), "utf8")).toBe(fileBefore);
+
+    const reset = await app.remove("/api/settings");
     expect(reset.status).toBe(200);
-    expect(reset.body.settings.defaultEffect).toBe("allow");
-    expect(readFileSync(instance.accessPath, "utf8")).toBe(source);
+    expect((await app.get("/api/settings")).body.settings.defaultEffect).toBe("allow");
   });
 
   it("should ship a document that is open, and say what it decided", async () => {
@@ -675,7 +681,7 @@ describe("stackstack-safe-exposure 認証 (authentication)", () => {
     expect(health.status).toBe(503);
     expect(health.body.error).toBe("policy_error");
     expect(String(health.body.detail)).toContain("not valid JSON");
-    expect(health.body.file).toBe(SETTINGS_ENDPOINT);
+    expect(String(health.body.changeVia)).toContain("/api/settings");
 
     // The panel still explains it, and the board itself is unaffected: the
     // access document governs /portal, and this README-level claim is asserted
@@ -1776,12 +1782,15 @@ describe("stackstack-safe-exposure wiring", () => {
     expect(existsSync(join(composeDir, "access", "access.json"))).toBe(true);
   });
 
-  it("should name both files as the participant sees them, from the platform checkout", () => {
-    for (const [hint, inThisRepo] of [
-      [service.environment.ACCESS_HINT, "challenges/stackstack-safe-exposure/local/access/access.json"],
-      [service.environment.CONFIG_HINT, "challenges/stackstack-safe-exposure/local/config/app.json"],
-    ] as const) {
-      expect(hint).toBe(`problems/${inThisRepo}`);
+  it("should carry no path hint for anyone to resurrect in copy (#378)", () => {
+    // The participant changes the document through PATCH /api/settings, so the
+    // compose file must not ship a "path to open" for a doc or a page to quote.
+    expect(service.environment.ACCESS_HINT).toBeUndefined();
+    expect(service.environment.CONFIG_HINT).toBeUndefined();
+    for (const inThisRepo of [
+      "challenges/stackstack-safe-exposure/local/access/access.json",
+      "challenges/stackstack-safe-exposure/local/config/app.json",
+    ]) {
       expect(existsSync(join(REPO_ROOT, inThisRepo))).toBe(true);
     }
   });
@@ -1794,12 +1803,14 @@ describe("stackstack-safe-exposure wiring", () => {
     expect(service.volumes).toContain("./access:/app/access:ro");
   });
 
-  it("should direct participant-facing docs to the runtime access API", () => {
-    for (const name of ["README.md", "README.ja.md"]) {
-      expect(readFileSync(join(PROBLEM_DIR, name), "utf8")).toContain("PATCH /api/settings");
+  it("should steer every participant-facing doc to the API, never to the checkout file", () => {
+    for (const name of ["README.md", "README.ja.md", "metadata.json"]) {
+      const text = readFileSync(join(PROBLEM_DIR, name), "utf8");
+      expect(text).not.toContain("challenges/stackstack-safe-exposure/local/");
+      expect(text).toContain("/api/settings");
     }
-    expect(readFileSync(join(PROBLEM_DIR, "metadata.json"), "utf8")).toContain("PATCH /api/settings");
   });
+
 
   it("should ship a document that is open, with one rule as a worked example", () => {
     const shipped = JSON.parse(readFileSync(join(PROBLEM_DIR, "local", "access", "access.json"), "utf8")) as Policy;

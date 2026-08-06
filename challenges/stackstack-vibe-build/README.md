@@ -42,8 +42,9 @@ surfaces) and `18081` (the loopback `/verify` the platform delegates scoring to)
 # 1. read the requirement
 curl -s http://127.0.0.1:18080/api/spec | jq
 
-# 2. implement it in /docs (GET /api/source, then PUT /api/source)
-# an AI tool is allowed and encouraged; the repository remains read-only
+# 2. implement it (an AI tool is allowed, and encouraged)
+open http://127.0.0.1:18080/editor   # write and save in the editor; backed by GET/PUT/DELETE
+                                     # /api/source, so /docs works too. The repository stays read-only
 
 # 3. use it — a save takes effect without a restart
 curl -s 'http://127.0.0.1:18080/api/search?q=board'

@@ -16,7 +16,7 @@
 
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 
-const OVERRIDE_DIR = process.env.APP_OVERRIDE_DIR ?? "/tmp";
+export const OVERRIDE_DIR = process.env.APP_OVERRIDE_DIR ?? "/tmp";
 
 function overridePath(name) {
   return `${OVERRIDE_DIR}/stackstack-${name}.json`;

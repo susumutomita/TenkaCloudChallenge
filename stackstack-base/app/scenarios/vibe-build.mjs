@@ -571,6 +571,7 @@ const SPEC = {
   endpoints: {
     json: "GET /api/search?q=<検索語>",
     html: "GET /search?q=<検索語>",
+    editor: "GET /editor",
   },
   exports: {
     search: "search({ query, posts }) -> { status, body }",
@@ -1300,7 +1301,203 @@ async function runSearch(rawQuery) {
   return { ok: true, status: value.status, body: value.body };
 }
 
+
+/**
+ * この 1 リクエストで使う言語。 server.mjs の `pickLang` と同じ規則 (?lang=、 なければ
+ * Accept-Language、 既定は ja)。 scenario route は server の helper に触れないので同じ
+ * 4 行をここにも持つ — 規則が割れると、 ページを移るたびに言語が変わる板になる。
+ */
+function pickLang(url, request) {
+  const asked = url.searchParams.get("lang");
+  if (asked === "ja" || asked === "en") return asked;
+  const header = String(request.headers["accept-language"] ?? "");
+  return header.trim().toLowerCase().startsWith("en") ? "en" : "ja";
+}
+
+/** 対訳を 1 組ずつ並べ、 その言語の側を返す (server.mjs の `bi` と同じ)。 */
+const bi = (lang, ja, en) => (lang === "en" ? en : ja);
+
+/**
+ * The editor — the surface the participant writes their implementation on.
+ *
+ * The API console can PUT `/api/source`, but hand-escaping a whole JavaScript
+ * module into a JSON string is nobody's editing surface; a textarea is. The
+ * page loads the current code from `GET api/source`, saves with
+ * `PUT api/source`, discards with `DELETE api/source`, and runs
+ * `GET api/selfcheck` — all with **relative** URLs, because the board is
+ * reached both over loopback and through a forwarded port and a hard-coded
+ * origin would work in exactly one of those.
+ *
+ * Fully self-contained: inline CSS and script, no external request, nothing
+ * vendored. Served with the same headers as the other first-party pages
+ * (`/docs`, the board). The strict CSP on `/search` stays exactly where it is —
+ * that page renders participant HTML and this one renders none: every value it
+ * shows goes through `textContent`, never through markup.
+ */
+function editorPage(lang) {
+  const other = lang === "en" ? "ja" : "en";
+  const L = (ja, en) => bi(lang, ja, en);
+  const messages = {
+    loading: L("読み込み中…", "Loading…"),
+    loaded: L("現在のコードを読み込みました。", "Loaded the current code."),
+    saving: L("保存中…", "Saving…"),
+    saved: L(
+      "保存しました。 反映は即時です。 「自己検査を実行」 で確かめられます。",
+      "Saved. It takes effect immediately — run the self-check to see where it stands.",
+    ),
+    refused: L("保存できませんでした", "The save was refused"),
+    confirmDiscard: L(
+      "保存した変更をすべて捨てて、 初期状態のコードに戻します。 よろしいですか?",
+      "Discard everything you saved and return to the starting code. Continue?",
+    ),
+    discarded: L(
+      "変更を捨てました。 初期状態のコードに戻っています。",
+      "Changes discarded — you are back at the starting code.",
+    ),
+    checking: L("自己検査を実行中… (数秒かかります)", "Running the self-check… (this takes a few seconds)"),
+    busy: L(
+      "いま別の計測が走っています。 少し待ってからもう一度実行してください。",
+      "Another measurement is running — wait a moment and try again.",
+    ),
+    failedToReach: L("アプリに届きませんでした: ", "Could not reach the app: "),
+    allGreen: L(
+      "5 つの検査すべて ok です。 GET /posture の tokens に受領印が出ています。",
+      "All five checks are ok. GET /posture now carries the receipts under tokens.",
+    ),
+    notGreen: L(
+      "まだ落ちている検査があります。 各注記が 「期待した値 / 返ってきた値」 です。",
+      "Some checks still fail. Each note is expected-versus-actual.",
+    ),
+    ok: "ok",
+    ng: "NG",
+  };
+  return `<!doctype html>
+<html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${L("検索機能のエディタ", "Feature editor")}</title>
+<style>
+body{font-family:system-ui;max-width:52rem;margin:2rem auto;line-height:1.7;padding:0 1rem}
+textarea{width:100%;min-height:24rem;font-family:ui-monospace,SFMono-Regular,monospace;font-size:.85rem;line-height:1.5;box-sizing:border-box}
+button{font:inherit;padding:.4rem 1rem;margin:0 .5rem .5rem 0}
+#status{min-height:1.5rem}
+#result .notes{font-family:ui-monospace,SFMono-Regular,monospace;font-size:.8rem;white-space:pre-wrap;margin:.1rem 0 .5rem 1.2rem}
+.ok{color:#1a7f37}.ng{color:#b91c1c}
+</style></head>
+<body>
+<p style="text-align:right"><a href="editor?lang=${other}">${bi(lang, "English", "日本語")}</a></p>
+<h1>${L("検索機能のエディタ", "Feature editor")}</h1>
+<p>${L(
+    'ここに書いたコードが、 走っている板の検索機能になります。 保存は API 経由でコンテナの中にだけ置かれ、 <strong>リポジトリのファイルは書き換わりません</strong>。 破棄するかコンテナを作り直せば、 初期状態のコードに戻ります。 要件は <a href="api/spec">GET /api/spec</a> (R1〜R9) にあります。',
+    'What you write here becomes the running board\'s search feature. A save is stored through the API inside the container only — <strong>no repository file is ever written</strong>. Discard, or rebuild the container, and you are back at the starting code. The requirements live at <a href="api/spec">GET /api/spec</a> (R1–R9).',
+  )}</p>
+<textarea id="source" spellcheck="false" autocomplete="off"></textarea>
+<p>
+<button id="save" type="button">${L("保存", "Save")}</button>
+<button id="check" type="button">${L("自己検査を実行", "Run the self-check")}</button>
+<button id="discard" type="button">${L("破棄して初期状態に戻す", "Discard and return to the start")}</button>
+</p>
+<p id="status"></p>
+<div id="result"></div>
+<p><a href="docs?lang=${lang}">${L("API コンソール", "API console")}</a> ·
+ <a href="search?q=board">${L("検索ページ", "the search page")}</a> ·
+ <a href="./?lang=${lang}">${L("板に戻る", "back to the board")}</a></p>
+<script>
+const M = ${JSON.stringify(messages)};
+const el = (id) => document.getElementById(id);
+const setStatus = (text) => { el("status").textContent = text; };
+async function readJson(response) {
+  try { return await response.json(); } catch { return {}; }
+}
+async function load() {
+  setStatus(M.loading);
+  try {
+    const response = await fetch("api/source");
+    const data = await readJson(response);
+    el("source").value = typeof data.source === "string" ? data.source : "";
+    setStatus(M.loaded);
+  } catch (error) {
+    setStatus(M.failedToReach + error.message);
+  }
+}
+async function save() {
+  setStatus(M.saving);
+  try {
+    const response = await fetch("api/source", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ source: el("source").value }),
+    });
+    const data = await readJson(response);
+    if (response.ok) {
+      setStatus(M.saved);
+      return;
+    }
+    const detail = Array.isArray(data.detail) ? data.detail.join(" / ") : data.error || String(response.status);
+    setStatus(M.refused + ": " + detail);
+  } catch (error) {
+    setStatus(M.failedToReach + error.message);
+  }
+}
+async function discard() {
+  if (!confirm(M.confirmDiscard)) return;
+  try {
+    await fetch("api/source", { method: "DELETE" });
+    await load();
+    setStatus(M.discarded);
+  } catch (error) {
+    setStatus(M.failedToReach + error.message);
+  }
+}
+async function check() {
+  setStatus(M.checking);
+  el("result").textContent = "";
+  try {
+    const response = await fetch("api/selfcheck");
+    if (response.status === 409) {
+      setStatus(M.busy);
+      return;
+    }
+    const data = await readJson(response);
+    const list = document.createElement("ul");
+    for (const entry of data.checks || []) {
+      const item = document.createElement("li");
+      const mark = document.createElement("strong");
+      mark.className = entry.ok ? "ok" : "ng";
+      mark.textContent = (entry.ok ? M.ok : M.ng) + " ";
+      item.appendChild(mark);
+      item.appendChild(document.createTextNode(String(entry.gate)));
+      const notes = Array.isArray(entry.notes) ? entry.notes : [];
+      if (notes.length > 0) {
+        const block = document.createElement("div");
+        block.className = "notes";
+        block.textContent = notes.join("\\n");
+        item.appendChild(block);
+      }
+      list.appendChild(item);
+    }
+    el("result").appendChild(list);
+    setStatus(data.allGreen === true ? M.allGreen : M.notGreen);
+  } catch (error) {
+    setStatus(M.failedToReach + error.message);
+  }
+}
+el("save").addEventListener("click", save);
+el("discard").addEventListener("click", discard);
+el("check").addEventListener("click", check);
+load();
+</script>
+</body></html>`;
+}
+
 export const routes = {
+  /**
+   * The editing surface. Served exactly like the board's other first-party
+   * pages: plain HTML, no CSP sandbox — this page runs its own inline script
+   * and renders no participant HTML. `/search` keeps its own strict policy.
+   */
+  "GET /editor": (request, response, url) => {
+    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    response.end(editorPage(pickLang(url, request)));
+  },
   "GET /api/spec": (request, response) => sendJson(response, 200, SPEC),
 
   "GET /api/search": async (request, response, url) => {

@@ -199,14 +199,17 @@ const HANDOVER_NOTE = [
 // ---------------------------------------------------------------------------
 
 const POLICY_PATH = process.env.ACCESS_POLICY ?? "/app/access/access.json";
-const SETTINGS_NAME = "access";
 
 /**
- * Where the document sits in the *participant's* checkout, which is not the path
- * this process reads. Display only, exactly like `CONFIG_HINT`.
+ * 参加者向けの文中でこの document を指す呼び名。 パスを既定にする方向は採らない — マウント元は
+ * git 管理下で、 コンテナ内パスは参加者の機械に存在せず、 checkout パスは直接編集に誘導して
+ * 解いた瞬間に作業ツリーを汚す。 変更は `PATCH /api/settings` (コンソールは `/docs`) へ誘導する。
  */
-const ACCESS_HINT = process.env.ACCESS_HINT ?? POLICY_PATH;
-const SETTINGS_LABEL = "/api/settings";
+const ACCESS_HINT =
+  process.env.ACCESS_HINT ?? "the access document (change it via PATCH /api/settings)";
+
+/** この scenario の設定の上書き名 (置き場と挙動は `overrides.mjs`)。 */
+const SETTINGS_NAME = "access";
 
 const EFFECTS = new Set(["allow", "deny"]);
 const RULE_KEYS = new Set(["id", "effect", "methods", "path", "require"]);
@@ -343,7 +346,8 @@ export function readPolicy(path = POLICY_PATH) {
   } catch (error) {
     return reportPolicy([`${ACCESS_HINT} is not valid JSON: ${error.message}`]);
   }
-  if (path === POLICY_PATH && parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
+  // マウント元は出発点。 実行中に変えた分を重ねてから検証する (置き場は overrides.mjs)。
+  if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
     parsed = { ...parsed, ...readOverride(SETTINGS_NAME) };
   }
   const checked = validatePolicy(parsed);
@@ -354,18 +358,6 @@ export function readPolicy(path = POLICY_PATH) {
   }
   return { ok: true, policy: checked.policy, problems: [] };
 }
-
-export const editableSettings = {
-  name: SETTINGS_NAME,
-  summary: { ja: "公開範囲 policy", en: "access policy" },
-  example: { defaultEffect: "deny", rules: [] },
-  read: () => {
-    const loaded = readPolicy();
-    return loaded.ok
-      ? { ok: true, value: loaded.policy, error: null }
-      : { ok: false, value: null, error: loaded.problems.join("; ") };
-  },
-};
 
 /** Log a policy failure once per distinct message, so a reload loop cannot flood the ring. */
 function reportPolicy(problems) {
@@ -491,7 +483,7 @@ export function handle({ method, path, id = null, authorization, body = null, po
   if (!loaded.ok) {
     const answer = {
       status: 503,
-      body: { error: "policy_error", detail: loaded.problems, file: SETTINGS_LABEL },
+      body: { error: "policy_error", detail: loaded.problems, changeVia: "PATCH /api/settings (API console: /docs)" },
       decision: { effect: "deny", ruleId: "policy-error" },
     };
     if (record) {
@@ -552,7 +544,7 @@ export function handle({ method, path, id = null, authorization, body = null, po
 /** What an allowed request actually does. Never reached while a decision is deny. */
 function work(route, { principal, object, body, policy }) {
   if (route === "GET /portal/healthz") {
-    return { status: 200, body: { ok: true, policy: "loaded", file: SETTINGS_LABEL } };
+    return { status: 200, body: { ok: true, policy: "loaded" } };
   }
   if (route === "GET /portal/me") {
     return { status: 200, body: { principal: principal === null ? null : { ...principal } } };
@@ -1036,7 +1028,7 @@ export function evaluateGroups() {
   return {
     policy: {
       loaded: loaded.ok,
-      file: SETTINGS_LABEL,
+      changeVia: "PATCH /api/settings (API console: /docs)",
       problems: loaded.problems,
       defaultEffect: loaded.ok ? loaded.policy.defaultEffect : null,
       ruleCount: loaded.ok ? loaded.policy.rules.length : 0,
@@ -1184,15 +1176,19 @@ function consolePage() {
 <p>この画面と <a href="portal/review">portal/review</a> は access.json の管轄外です。 締めすぎて自分が締め出されても、 ここだけは必ず開きます。</p>
 
 <h2>いまの状態</h2>
-<p>access policy: <a href="../docs"><code>${escapeHtml(evaluated.policy.file)}</code> を API コンソールで変更</a> /
- defaultEffect <code>${escapeHtml(String(evaluated.policy.defaultEffect))}</code> /
- rule ${evaluated.policy.ruleCount} 件</p>
+<p>defaultEffect <code>${escapeHtml(String(evaluated.policy.defaultEffect))}</code> /
+ rule ${evaluated.policy.ruleCount} 件。
+ いまの内容は <code>GET /api/settings</code> が返し、 変更は板の API コンソール (<a href="docs">docs</a>) から
+ <code>PATCH /api/settings</code> で送ります (呼ぶたびに読み直します)。
+ 変更を捨てて初期状態に戻すのは <code>DELETE /api/settings</code> です。</p>
 ${problems}
 <table border="1" cellpadding="6" cellspacing="0"><tr><th>gate</th><th>状態</th><th>通った probe</th><th>最初に落ちている probe</th></tr>
 ${gateRows}</table>
 <p>probe 1 本ずつの内訳は <a href="portal/review">portal/review</a>、 受領証は <a href="posture">posture</a>。</p>
 
 <h2>access.json の書き方</h2>
+<p>access.json はこの板が読む文書の名前で、 中身は丸ごと <code>PATCH /api/settings</code> で送って変えます
+ (<code>rules</code> は配列ごと)。 リポジトリのファイルを直接編集する経路はありません。</p>
 <pre>{
   "defaultEffect": "allow" | "deny",
   "rules": [
@@ -1495,9 +1491,35 @@ export const checks = {
 // later — including a config error the participant then fixes — is pinned there
 // forever, and the keys survive however much request traffic follows.
 log("info", `safe-exposure staging keys: ${accounts.map((a) => `${a.subject}=${apiKey(a.subject)}`).join(" ")}`);
-log("info", `safe-exposure access document: ${SETTINGS_LABEL} (runtime override)`);
+log("info", "safe-exposure access document: change it via PATCH /api/settings (re-read on every request)");
 log("info", `safe-exposure governed routes: ${Object.keys(GOVERNED).length} under /portal (the console and /portal/review are not governed)`);
 log(
   "info",
   "safe-exposure note: the keys above are printed because this container is a single-player training environment; scoring never depends on them being secret",
 );
+
+/**
+ * 実行中に変えられる設定。 これを宣言すると `/api/settings` と Swagger の項目が生える。
+ *
+ * ファイルの場所を参加者に案内する方向は採らない — マウント元は git 管理下なので、
+ * 直接編集させると解いた瞬間にリポジトリが汚れ、 作り直しても壊れた状態に戻らなくなる。
+ */
+export const editableSettings = {
+  name: SETTINGS_NAME,
+  summary: { ja: "アクセス文書 (access.json)", en: "the access document (access.json)" },
+  // Swagger の Try it out にそのまま入る例。 starter が最初から持っている公開 healthz の
+  // rule をそのまま送り返す形 — 妥当で、 何も先回りしない。 rules は配列ごと送る。
+  example: {
+    rules: [
+      { id: "monitoring-is-public", effect: "allow", methods: ["GET"], path: "/portal/healthz", require: [] },
+    ],
+  },
+  read: () => {
+    const loaded = readPolicy();
+    return {
+      ok: loaded.ok,
+      value: loaded.policy,
+      error: loaded.problems.length > 0 ? loaded.problems.join("; ") : null,
+    };
+  },
+};

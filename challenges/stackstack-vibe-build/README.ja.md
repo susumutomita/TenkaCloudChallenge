@@ -31,8 +31,9 @@
 # 1. 要求を読む
 curl -s http://127.0.0.1:18080/api/spec | jq
 
-# 2. /docs で実装する (GET /api/source → PUT /api/source)
-# 生成 AI の利用は自由、 むしろ推奨。 リポジトリは読み取り専用のまま
+# 2. 実装する (生成 AI の利用は自由、 むしろ推奨)
+open http://127.0.0.1:18080/editor   # エディタで書いて保存。 裏は GET/PUT/DELETE /api/source で、
+                                     # /docs から同じ操作もできる。 リポジトリは読み取り専用のまま
 
 # 3. 使う ── 保存すれば再起動なしで反映される
 curl -s 'http://127.0.0.1:18080/api/search?q=板'

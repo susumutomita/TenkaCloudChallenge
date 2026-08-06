@@ -98,6 +98,7 @@ class Instance {
   readonly digestDir: string;
   readonly configPath: string;
   readonly policyPath: string;
+  readonly overrideDir: string;
   private readonly process: ReturnType<typeof spawn>;
   private output = "";
 
@@ -113,6 +114,10 @@ class Instance {
     this.digestDir = join(this.stateDir, "digest");
     this.configPath = join(home, "app.json");
     this.policyPath = join(home, "policy.json");
+    // 上書きの置き場は共有 /tmp ではなくインスタンスごとの scratch。 スイートを並走させても、
+    // 前回の実行が残した上書きを拾っても、 互いに汚染しない。
+    this.overrideDir = join(home, "overrides");
+    mkdirSync(this.overrideDir, { recursive: true });
     writeFileSync(this.configPath, readFileSync(join(PROBLEM_DIR, "local", "config", "app.json")));
     writeFileSync(
       this.policyPath,
@@ -131,6 +136,7 @@ class Instance {
         APP_CONFIG: this.configPath,
         RECOVER_POLICY: this.policyPath,
         RECOVER_STATE_DIR: this.stateDir,
+        APP_OVERRIDE_DIR: this.overrideDir,
         CHALLENGE_PORT: String(port),
         VERIFY_PORT: String(verifyPort),
       },
@@ -201,6 +207,22 @@ class Instance {
     const response = await fetch(`${this.board}${path}`);
     const text = await response.text();
     let body: unknown;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      body = undefined;
+    }
+    return { status: response.status, body, text };
+  }
+
+  async request(method: string, path: string, payload?: unknown) {
+    const response = await fetch(`${this.board}${path}`, {
+      method,
+      headers: payload === undefined ? undefined : { "content-type": "application/json" },
+      body: payload === undefined ? undefined : JSON.stringify(payload),
+    });
+    const text = await response.text();
+    let body: any;
     try {
       body = JSON.parse(text);
     } catch {
@@ -1464,24 +1486,48 @@ describe("stackstack-recover wiring", () => {
     expect(readFileSync(join(composeDir, "state", ".gitignore"), "utf8")).toContain("*");
   });
 
-  it("should keep mounted source paths valid but direct policy changes to the API", () => {
-    const paths = {
-      CONFIG_HINT: "challenges/stackstack-recover/local/config/app.json",
-      RECOVER_POLICY_HINT: "challenges/stackstack-recover/local/policy/policy.json",
-      RECOVER_STATE_HINT: "challenges/stackstack-recover/local/state",
-    } as const;
-    for (const [variable, inThisRepo] of Object.entries(paths)) {
-      // A participant runs `make local` from the TenkaCloud repository, where
-      // this catalog is the `problems/` submodule.
-      expect(service.environment[variable]).toBe(`problems/${inThisRepo}`);
+  it("should hint only the job's output location, never an edit target (#378)", () => {
+    // The policy is changed through PATCH /api/settings, so the compose file
+    // must not carry a "path to open" for it or for the config. The state dir
+    // is different: the scheduled job WRITES there, the participant only reads
+    // the output, and the directory ignores its own contents — that hint stays.
+    expect(service.environment.CONFIG_HINT).toBeUndefined();
+    expect(service.environment.RECOVER_POLICY_HINT).toBeUndefined();
+    expect(service.environment.RECOVER_STATE_HINT).toBe(
+      "problems/challenges/stackstack-recover/local/state",
+    );
+    for (const inThisRepo of [
+      "challenges/stackstack-recover/local/config/app.json",
+      "challenges/stackstack-recover/local/policy/policy.json",
+      "challenges/stackstack-recover/local/state",
+    ]) {
       expect(existsSync(join(REPO_ROOT, inThisRepo))).toBe(true);
     }
-    const policyHint = service.environment.RECOVER_POLICY_HINT as string;
-    for (const name of ["README.md", "README.ja.md"]) {
-      expect(readFileSync(join(PROBLEM_DIR, name), "utf8")).toContain("PATCH /api/settings");
+    for (const name of ["README.md", "README.ja.md", "metadata.json"]) {
+      const text = readFileSync(join(PROBLEM_DIR, name), "utf8");
+      expect(text).not.toContain("challenges/stackstack-recover/local/policy");
+      expect(text).not.toContain("challenges/stackstack-recover/local/config");
+      expect(text).toContain("/api/settings");
     }
-    expect(policyHint).toContain("policy.json");
-    expect(readFileSync(join(PROBLEM_DIR, "metadata.json"), "utf8")).toContain("PATCH /api/settings");
+  });
+
+  it("should change the policy through the API, refuse a bad value, and reset to the mount", async () => {
+    // The participant loop of #378: the mounted file is the starting point, a
+    // change rides on top of it inside the container, and discarding the change
+    // — or rebuilding the container — brings the broken start back.
+    const fileBefore = readFileSync(main.policyPath, "utf8");
+
+    const refused = await main.request("PATCH", "/api/settings", { digest: "yes" });
+    expect(refused.status).toBe(400);
+
+    const changed = await main.request("PATCH", "/api/settings", { digest: { enabled: false } });
+    expect(changed.status).toBe(200);
+    expect((await main.get("/api/settings")).body.settings.digest.enabled).toBe(false);
+    expect(readFileSync(main.policyPath, "utf8")).toBe(fileBefore);
+
+    const reset = await main.request("DELETE", "/api/settings");
+    expect(reset.status).toBe(200);
+    expect((await main.get("/api/settings")).body.settings.digest.enabled).toBe(true);
   });
 
   it("should ship a policy that is broken in exactly the two places the problem is about", () => {

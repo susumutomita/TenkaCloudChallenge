@@ -112,11 +112,12 @@ const RELAY_CONFIG_PATH = process.env.RELAY_CONFIG ?? "/app/relay/relay.json";
 const SETTINGS_NAME = "relay";
 
 /**
- * Where the relay's settings sit in the *participant's* checkout, which is not
- * the path this process reads. Display only, exactly like `CONFIG_HINT`.
+ * 参加者向けの文中でこの設定を指す呼び名。 パスを既定にする方向は採らない — マウント元は
+ * git 管理下で、 コンテナ内パスは参加者の機械に存在せず、 checkout パスは直接編集に誘導して
+ * 解いた瞬間に作業ツリーを汚す。 変更は `PATCH /api/settings` (コンソールは `/docs`) へ誘導する。
  */
-const RELAY_HINT = process.env.RELAY_HINT ?? RELAY_CONFIG_PATH;
-const SETTINGS_LABEL = "/api/settings";
+const RELAY_HINT =
+  process.env.RELAY_HINT ?? "the relay settings (change them via PATCH /api/settings)";
 
 /** The dependencies this relay has. The health check may be pointed at these. */
 const DEPENDENCIES = ["config", "archive"];
@@ -501,7 +502,7 @@ function baseState() {
   const counted = totals();
   const lines = currentEpochLines();
   return {
-    settingsFile: SETTINGS_LABEL,
+    changeVia: "PATCH /api/settings (API console: /docs)",
     settings: settings.ok ? settings.value : null,
     settingsError: settings.error,
     epoch,
@@ -571,7 +572,7 @@ function relayPage() {
 ${shardRows === "" ? '<tr><td colspan="4">まだ 1 件も流れていません</td></tr>' : shardRows}</table>
 
 <h2>設定</h2>
-<p>relay の設定は <a href="../docs"><code>${SETTINGS_LABEL}</code> を API コンソールで変更</a>します。 リポジトリのファイルは書き換えません。</p>
+<p>relay の設定は板の API コンソール (<a href="docs">docs</a>) から <code>PATCH /api/settings</code> で変えます。 リクエストごとに読み直すので、 送ればすぐ効きます (再起動は要りません)。 変更を捨てて初期状態に戻すのは <code>DELETE /api/settings</code> です。</p>
 <pre>{
   "archiveLogging":    "off" | "on",      relay の 1 行ログを書くかどうか
   "healthCheckProbes": ["&lt;依存先の名前&gt;", ...],  死活確認が見る依存先
@@ -584,7 +585,9 @@ ${shardRows === "" ? '<tr><td colspan="4">まだ 1 件も流れていません</
 GET relay/state     いまの状態 (JSON)
 GET relay/healthz   relay の死活確認
 GET archive         archive に届いた投稿
-GET api/logs        アプリのログ (板と共通)</pre>
+GET api/logs        アプリのログ (板と共通)
+GET docs            API コンソール ── 設定の変更もここから
+GET/PATCH/DELETE api/settings   relay の設定を見る・変える・初期状態へ戻す</pre>
 </body></html>`;
 }
 
@@ -625,7 +628,7 @@ export const routes = {
         ok: false,
         error: "relay_settings_invalid",
         detail: settings.error,
-        settingsFile: SETTINGS_LABEL,
+        changeVia: "PATCH /api/settings (API console: /docs)",
       });
     }
     const probes = settings.value.healthCheckProbes;
@@ -830,6 +833,8 @@ export const checks = {
 export const editableSettings = {
   name: SETTINGS_NAME,
   summary: { ja: "リレー設定", en: "relay settings" },
-  example: {"enabled": true},
+  // Swagger の Try it out にそのまま入る例。 この relay が実際に受け付けるキーを使う —
+  // 受け付けない例を置くと、 最初の 1 回が 400 で返る道具になってしまう。
+  example: { archiveLogging: "on" },
   read: () => readRelayConfig(),
 };

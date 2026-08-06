@@ -24,8 +24,6 @@ const SERVER = join(REPO_ROOT, "stackstack-base", "app", "server.mjs");
 const SCENARIO_FILE = join(REPO_ROOT, "stackstack-base", "app", "scenarios", "ship.mjs");
 
 const SEED = "stackstack-ship-test-seed";
-const RELEASE_HINT = "problems/challenges/stackstack-ship/local/release/release.json";
-const CONFIG_HINT = "problems/challenges/stackstack-ship/local/config/app.json";
 
 /** The value the shipped manifest carries, which `published-title` never credits. */
 const LAPTOP_TITLE = "board (built on a laptop)";
@@ -87,9 +85,11 @@ interface Instance {
  */
 async function startInstance(name: string, challengePort: number, verifyPort: number) {
   const manifestPath = join(scratch, `${name}-release.json`);
-  const configPath = join(scratch, `${name}-app.json`);
+  // 上書きの置き場は共有 /tmp ではなくインスタンスごとの scratch。 スイートを並走させても、
+  // 前回の実行が残した上書きを拾っても、 互いに汚染しない。
   const overrideDir = join(scratch, `${name}-overrides`);
-  mkdirSync(overrideDir);
+  mkdirSync(overrideDir, { recursive: true });
+  const configPath = join(scratch, `${name}-app.json`);
   writeFileSync(manifestPath, readFileSync(join(PROBLEM_DIR, "local", "release", "release.json")));
   writeFileSync(configPath, readFileSync(join(PROBLEM_DIR, "local", "config", "app.json")));
 
@@ -100,10 +100,8 @@ async function startInstance(name: string, challengePort: number, verifyPort: nu
       SCENARIO: "ship",
       FLAG_SEED: SEED,
       APP_CONFIG: configPath,
-      APP_OVERRIDE_DIR: overrideDir,
-      CONFIG_HINT,
       RELEASE_MANIFEST: manifestPath,
-      RELEASE_HINT,
+      APP_OVERRIDE_DIR: overrideDir,
       CHALLENGE_PORT: String(challengePort),
       VERIFY_PORT: String(verifyPort),
     },
@@ -169,6 +167,16 @@ function client(instance: () => Instance) {
         readyToken: string | null;
       },
     site: () => json("/site/healthz"),
+    settings: {
+      get: () => json("/api/settings"),
+      patch: (body: unknown) =>
+        json("/api/settings", {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+      discard: () => json("/api/settings", { method: "DELETE" }),
+    },
     /** Rewrite the manifest the way an editor save does. */
     writeManifest(patch: { artifact?: string; env?: Record<string, unknown>; [key: string]: unknown }) {
       const current = JSON.parse(readFileSync(instance().manifestPath, "utf8")) as Record<string, unknown>;
@@ -783,6 +791,25 @@ describe("stackstack-ship gates on a fresh instance", () => {
   });
   afterAll(() => instance?.kill());
 
+  it("should change the manifest through the API, refuse a bad value, and reset to the mount", async () => {
+    // The participant loop of #378: the mounted file is the starting point, a
+    // change rides on top of it inside the container, and discarding the change
+    // — or rebuilding the container — brings the broken start back.
+    const fileBefore = readFileSync(instance.manifestPath, "utf8");
+
+    const refused = await app.settings.patch({ artifact: "" });
+    expect(refused.status).toBe(400);
+
+    const changed = await app.settings.patch({ artifact: "board-but-newer" });
+    expect(changed.status).toBe(200);
+    expect((await app.settings.get()).body.settings.artifact).toBe("board-but-newer");
+    expect(readFileSync(instance.manifestPath, "utf8")).toBe(fileBefore);
+
+    const reset = await app.settings.discard();
+    expect(reset.status).toBe(200);
+    expect((await app.settings.get()).body.settings.artifact).toBe("board-2f9c81ae");
+  });
+
   it("should start with every gate false and no sign-off token", async () => {
     const state = await app.posture();
     expect(state.gates).toEqual({
@@ -1181,24 +1208,25 @@ describe("stackstack-ship wiring", () => {
     expect(existsSync(join(composeDir, "release", "release.json"))).toBe(true);
   });
 
-  it("should name both files as the participant sees them, from the platform checkout", () => {
-    // A participant runs `make local` from the TenkaCloud repository, where this
-    // catalog is the `problems/` submodule. Printing this repo's own relative
-    // path would send them to a file that does not exist on their machine.
-    for (const [hint, inThisRepo] of [
-      [service.environment.RELEASE_HINT, "challenges/stackstack-ship/local/release/release.json"],
-      [service.environment.CONFIG_HINT, "challenges/stackstack-ship/local/config/app.json"],
-    ] as const) {
-      expect(hint).toBe(`problems/${inThisRepo}`);
+  it("should carry no path hint for anyone to resurrect in copy (#378)", () => {
+    // The participant changes the manifest through PATCH /api/settings, so the
+    // compose file must not ship a "path to open" for a doc or a page to quote.
+    expect(service.environment.RELEASE_HINT).toBeUndefined();
+    expect(service.environment.CONFIG_HINT).toBeUndefined();
+    for (const inThisRepo of [
+      "challenges/stackstack-ship/local/release/release.json",
+      "challenges/stackstack-ship/local/config/app.json",
+    ]) {
       expect(existsSync(join(REPO_ROOT, inThisRepo))).toBe(true);
     }
   });
 
-  it("should direct participant-facing docs to the runtime manifest API", () => {
-    for (const name of ["README.md", "README.ja.md"]) {
-      expect(readFileSync(join(PROBLEM_DIR, name), "utf8")).toContain("PATCH /api/settings");
+  it("should steer every participant-facing doc to the API, never to the checkout file", () => {
+    for (const name of ["README.md", "README.ja.md", "metadata.json"]) {
+      const text = readFileSync(join(PROBLEM_DIR, name), "utf8");
+      expect(text).not.toContain("challenges/stackstack-ship/local/");
+      expect(text).toContain("/api/settings");
     }
-    expect(readFileSync(join(PROBLEM_DIR, "metadata.json"), "utf8")).toContain("PATCH /api/settings");
   });
 
   it("should ship a manifest that cannot deploy, in exactly the two documented ways", () => {

@@ -110,6 +110,16 @@ def config_payload() -> dict[str, object]:
             }
             for checkpoint in CHECKPOINTS
         ],
+        # 英語は Portal 側の locale が選ぶ (共有 workbench.py の config_payload と同じ契約)。
+        # 文言の正本は metadata.json — scripts/generate-course-workbenches.py --check が
+        # 乖離を落とす (#381)。 この payload は手書きなので、 直すときはここを編集する。
+        "i18n": {
+            "en": {
+                "name": 'Predict, then run',
+                "description": 'A clock goes from 12 back to 1. Write the same kind of counting for a different number, work out the answer on paper before running it, and find the one number in a list that does not belong. Why cryptography counts like this, and why this much is still not cryptography -- using nothing but arithmetic.',
+                "checkpointLabels": {'environment': 'environment - the pass phrase the Portal editor prints, pasted exactly', 'predict': 'predict - the number you end on, worked out on paper before running (one number)', 'first-broken': 'first-broken - one number in the list does not belong: which position is it? (leftmost is 0)', 'generalize': 'generalize - your finished counter.py, all of it'},
+            }
+        },
     }
 
 

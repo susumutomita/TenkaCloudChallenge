@@ -80,6 +80,14 @@ for item in config["checkpoints"]:
     expected_input = "multiline" if item["kind"] == "code" else "text"
     assert checks[item["id"]].get("input", "text") == expected_input
 
+# [#381] The Portal editor must carry the English the metadata already has.
+en = metadata.get("i18n", {}).get("en", {})
+served = config.get("i18n", {}).get("en", {})
+assert served.get("name") == en.get("name"), "config i18n.en.name != metadata i18n.en.name"
+assert served.get("description") == en.get("shortDescription"), "config i18n.en.description != metadata i18n.en.shortDescription"
+expected_labels = {item["id"]: en["checks"][index]["label"] for index, item in enumerate(metadata["scoring"]["checks"])}
+assert served.get("checkpointLabels") == expected_labels, "config i18n.en.checkpointLabels != metadata i18n.en.checks labels"
+
 manual = {
     item["id"]: "0"
     for item in config["checkpoints"]
@@ -164,6 +172,14 @@ for item in config["checkpoints"]:
     expected_input = "multiline" if item["kind"] == "code" else "text"
     assert checks[item["id"]].get("input", "text") == expected_input
 
+# [#381] The Portal editor must carry the English the metadata already has.
+en = metadata.get("i18n", {}).get("en", {})
+served = config.get("i18n", {}).get("en", {})
+assert served.get("name") == en.get("name"), "config i18n.en.name != metadata i18n.en.name"
+assert served.get("description") == en.get("shortDescription"), "config i18n.en.description != metadata i18n.en.shortDescription"
+expected_labels = {item["id"]: en["checks"][index]["label"] for index, item in enumerate(metadata["scoring"]["checks"])}
+assert served.get("checkpointLabels") == expected_labels, "config i18n.en.checkpointLabels != metadata i18n.en.checks labels"
+
 print(json.dumps(config, ensure_ascii=False))
 '''
 
@@ -189,6 +205,15 @@ prepared = prepare_submissions("portal-contract-seed", starter)
 assert prepared["ok"] is True
 assert set(prepared["submissions"]) == set(CHECKPOINTS)
 assert all(value == starter["assertion.py"] for value in prepared["submissions"].values())
+
+# [#381] The Portal editor must carry the English the metadata already has.
+en = metadata.get("i18n", {}).get("en", {})
+served = config.get("i18n", {}).get("en", {})
+assert served.get("name") == en.get("name"), "config i18n.en.name != metadata i18n.en.name"
+assert served.get("description") == en.get("shortDescription"), "config i18n.en.description != metadata i18n.en.shortDescription"
+expected_labels = {item["id"]: en["checks"][index]["label"] for index, item in enumerate(metadata["scoring"]["checks"])}
+assert served.get("checkpointLabels") == expected_labels, "config i18n.en.checkpointLabels != metadata i18n.en.checks labels"
+
 print(json.dumps(config, ensure_ascii=False))
 '''
 

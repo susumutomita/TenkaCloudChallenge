@@ -15,18 +15,14 @@ services:
       dockerfile: Dockerfile
     environment:
       SCENARIO: defend
-      # Paths in the participant's checkout, which are not the paths the app
-      # reads (both directories are mounted under /app). Display only.
-      CONFIG_HINT: problems/challenges/stackstack-defend/local/config/app.json
-      POLICY_HINT: problems/challenges/stackstack-defend/local/policy/access.json
       # Per-deploy random secret injected by `make local`. The draft ids, the
       # account tokens and the leaked marker are all derived from it inside the
       # container; the gate receipts come from a separate boot secret.
       FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
     volumes:
-      # The participant's own checkout, read-only. The access policy is the file
-      # this problem is about; the app re-reads it on every request, so a save
-      # takes effect without a restart.
+      # The participant's own checkout, read-only: the starting point the app
+      # reads, never a place anything writes. Changes go through the board's
+      # settings API and live in the container, so a rebuild is a full reset.
       - ./config:/app/config:ro
       - ./policy:/app/policy:ro
     ports:

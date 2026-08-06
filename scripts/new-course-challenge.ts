@@ -226,6 +226,11 @@ function main(): void {
   }
   console.log(`  4. Copy scripts/${TEMPLATE_ID}.test.ts to scripts/${problemId}.test.ts and adapt.`);
   console.log("  5. bun run validate");
+  console.log(`  6. bun run scripts/solvability-audit.ts --problem ${problemId}   # is every checkpoint answerable?`);
+  console.log("     The sweep also runs nightly (#382). A by-design finding (e.g. the template's");
+  console.log("     environment checkpoint prints its own answer as proof-of-container) must be");
+  console.log("     recorded in scripts/solvability-baseline.json under YOUR problem id, with the");
+  console.log("     reason — baseline entries do not follow a copy.");
   console.log("");
   console.log("Checklist: docs/curricula/advanced-cryptography-2026/TEMPLATE.md");
 }

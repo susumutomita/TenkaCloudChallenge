@@ -1,0 +1,83 @@
+name: solvability-sweep
+
+# [#382] Nightly deep sweep behind the solvability gate: are the course questions
+# actually answerable, on every seed they can ship with?
+#
+# The merge gate (`bun run validate`) carries only the static pass — no fixtures,
+# no seeds, no subprocesses — because the sweep takes minutes. This workflow runs
+# the full sweep (`make solvability-sweep`) at the budgets the Makefile declares
+# (2000 direct-answer seeds, 150 code seeds), so a rare-seed defect that the fast
+# gate cannot see is surfaced within a day instead of by a participant.
+#
+# The audit fails on any finding that is not recorded in
+# scripts/solvability-baseline.json with a reason, so a red run here means a new
+# defect, not noise. Known-open defects keep reproducing as OPEN without masking
+# new ones; the report artifact carries the full per-checkpoint measurements.
+
+permissions:
+  contents: read
+
+on:
+  schedule:
+    # Nightly 02:17 UTC — offset from course-drift (Mondays 01:23) so scheduled
+    # runs never contend.
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+  pull_request:
+    # Re-run the full sweep whenever the audit itself changes, so a threshold or
+    # probe regression is caught in review rather than by the next nightly run.
+    paths:
+      - "scripts/solvability-audit.ts"
+      - "scripts/solvability-baseline.json"
+      - "scripts/solvability/**"
+      - ".github/workflows/solvability-sweep.yml"
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: "true"
+      npm_config_ignore_scripts: "true"
+    steps:
+      - name: Checkout
+        # actions/checkout v4.3.1 (= pin matches ci.yml)
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          # The sweep executes each problem's own evaluate() on participant-shaped
+          # submissions. Same rule as ci.yml: no credential may outlive checkout
+          # into an environment that runs that code.
+          persist-credentials: false
+
+      - name: Setup Bun
+        # oven-sh/setup-bun v2.0.2 (= pin matches ci.yml)
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: "1.3.11"
+
+      - name: Install deps
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Run the deep solvability sweep
+        run: make solvability-sweep | tee "$RUNNER_TEMP/sweep.txt"
+
+      - name: Summarize
+        if: always()
+        run: |
+          {
+            echo "## Solvability sweep"
+            echo
+            echo '```text'
+            cat "$RUNNER_TEMP/sweep.txt" 2>/dev/null || echo "(no output produced)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload report
+        if: always()
+        # actions/upload-artifact v4.6.2 (= pin matches simulator-compatibility.yml)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: solvability-report
+          path: reports/solvability.json
+          if-no-files-found: ignore
+          retention-days: 30

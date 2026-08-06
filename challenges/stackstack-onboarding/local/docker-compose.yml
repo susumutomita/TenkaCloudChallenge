@@ -20,9 +20,9 @@ services:
       # the container.
       FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
     volumes:
-      # The participant's own checkout, read-only. Editing this file is the
-      # problem's one required change, and the app re-reads it per request so a
-      # save takes effect without a restart.
+      # The participant's own checkout, read-only: the starting point the app
+      # reads, never a place anything writes. Changes go through the board's
+      # settings API and live in the container, so a rebuild is a full reset.
       - ./config:/app/config:ro
     ports:
       - "127.0.0.1:18080:8080" # the board

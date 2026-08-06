@@ -33,8 +33,6 @@ const SCENARIO_FILE = join(REPO_ROOT, "stackstack-base", "app", "scenarios", "se
 const ONBOARDING_DIR = join(REPO_ROOT, "challenges", "stackstack-onboarding");
 
 const SEED = "stackstack-secrets-test-seed";
-const OPS_HINT = "problems/challenges/stackstack-secrets/local/ops/ops.json";
-const CONFIG_HINT = "problems/challenges/stackstack-secrets/local/config/app.json";
 
 const LEGACY_KEY_ID = "ops-legacy";
 /** The actions the shipped starter's wildcard covers, and the job's own two. */
@@ -105,9 +103,11 @@ async function startInstance(
   const scenario = options.scenario ?? "secrets";
   const sourceDir = options.sourceDir ?? PROBLEM_DIR;
   const manifestPath = join(scratch, `${name}-ops.json`);
-  const configPath = join(scratch, `${name}-app.json`);
+  // 上書きの置き場は共有 /tmp ではなくインスタンスごとの scratch。 スイートを並走させても、
+  // 前回の実行が残した上書きを拾っても、 互いに汚染しない。
   const overrideDir = join(scratch, `${name}-overrides`);
-  mkdirSync(overrideDir);
+  mkdirSync(overrideDir, { recursive: true });
+  const configPath = join(scratch, `${name}-app.json`);
   if (existsSync(join(sourceDir, "local", "ops", "ops.json"))) {
     writeFileSync(manifestPath, readFileSync(join(sourceDir, "local", "ops", "ops.json")));
   }
@@ -121,10 +121,8 @@ async function startInstance(
       SCENARIO: scenario,
       FLAG_SEED: options.seed ?? SEED,
       APP_CONFIG: configPath,
-      APP_OVERRIDE_DIR: overrideDir,
-      CONFIG_HINT,
       OPS_MANIFEST: manifestPath,
-      OPS_HINT,
+      APP_OVERRIDE_DIR: overrideDir,
       CHALLENGE_PORT: String(challengePort),
       VERIFY_PORT: String(verifyPort),
     },
@@ -234,6 +232,16 @@ function client(instance: () => Instance) {
         method: "POST",
         headers: { "x-break-glass": breakGlass },
       }),
+    settings: {
+      get: () => json("/api/settings"),
+      patch: (body: unknown) =>
+        json("/api/settings", {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+      discard: () => json("/api/settings", { method: "DELETE" }),
+    },
     /** Rewrite the manifest the way an editor save does. */
     writeManifest(next: { identity?: string; grants?: string[] }) {
       const current = JSON.parse(readFileSync(instance().manifestPath, "utf8")) as Record<string, unknown>;
@@ -995,6 +1003,29 @@ describe("stackstack-secrets gates on a fresh instance", () => {
   });
   afterAll(() => instance?.kill());
 
+  it("should change the manifest through the API, refuse a pasted secret, and reset to the mount", async () => {
+    // The participant loop of #378, plus the refusal this problem exists to
+    // teach: the same secret-in-manifest check that guarded the file guards the
+    // API. The mounted file is the starting point and never changes.
+    const fileBefore = readFileSync(instance.manifestPath, "utf8");
+
+    const pasted = await app.settings.patch({ identity: leaked });
+    expect(pasted.status).toBe(400);
+    expect(String(pasted.body.detail)).toContain("never a key's value");
+
+    const junk = await app.settings.patch({ identity: 42 });
+    expect(junk.status).toBe(400);
+
+    const changed = await app.settings.patch({ grants: ["board:count", "digest:publish"] });
+    expect(changed.status).toBe(200);
+    expect((await app.settings.get()).body.settings.grants).toEqual(["board:count", "digest:publish"]);
+    expect(readFileSync(instance.manifestPath, "utf8")).toBe(fileBefore);
+
+    const reset = await app.settings.discard();
+    expect(reset.status).toBe(200);
+    expect((await app.settings.get()).body.settings.grants).toEqual(["*"]);
+  });
+
   it("should start with one gate green and no sign-off token", async () => {
     const state = await app.posture();
     expect(state.gates).toEqual({
@@ -1436,24 +1467,25 @@ describe("stackstack-secrets wiring", () => {
     expect(existsSync(join(composeDir, "ops", "ops.json"))).toBe(true);
   });
 
-  it("should name both files as the participant sees them, from the platform checkout", () => {
-    // A participant runs `make local` from the TenkaCloud repository, where this
-    // catalog is the `problems/` submodule. Printing this repo's own relative
-    // path would send them to a file that does not exist on their machine.
-    for (const [hint, inThisRepo] of [
-      [service.environment.OPS_HINT, "challenges/stackstack-secrets/local/ops/ops.json"],
-      [service.environment.CONFIG_HINT, "challenges/stackstack-secrets/local/config/app.json"],
-    ] as const) {
-      expect(hint).toBe(`problems/${inThisRepo}`);
+  it("should carry no path hint for anyone to resurrect in copy (#378)", () => {
+    // The participant changes the manifest through PATCH /api/settings, so the
+    // compose file must not ship a "path to open" for a doc or a page to quote.
+    expect(service.environment.OPS_HINT).toBeUndefined();
+    expect(service.environment.CONFIG_HINT).toBeUndefined();
+    for (const inThisRepo of [
+      "challenges/stackstack-secrets/local/ops/ops.json",
+      "challenges/stackstack-secrets/local/config/app.json",
+    ]) {
       expect(existsSync(join(REPO_ROOT, inThisRepo))).toBe(true);
     }
   });
 
-  it("should direct participant-facing docs to the runtime manifest API", () => {
-    for (const name of ["README.md", "README.ja.md"]) {
-      expect(readFileSync(join(PROBLEM_DIR, name), "utf8")).toContain("PATCH /api/settings");
+  it("should steer every participant-facing doc to the API, never to the checkout file", () => {
+    for (const name of ["README.md", "README.ja.md", "metadata.json"]) {
+      const text = readFileSync(join(PROBLEM_DIR, name), "utf8");
+      expect(text).not.toContain("challenges/stackstack-secrets/local/");
+      expect(text).toContain("/api/settings");
     }
-    expect(readFileSync(join(PROBLEM_DIR, "metadata.json"), "utf8")).toContain("PATCH /api/settings");
   });
 
   it("should ship a manifest that is broken in exactly the two documented ways", () => {

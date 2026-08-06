@@ -1,0 +1,238 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "signed-does-not-mean-safe",
+  "name": "署名済みなら、安全？",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "45-60 分",
+  "shortDescription": "npm provenance が保証する範囲を見極め、lockfile・tarball inventory・lifecycle script policy で防御しよう。",
+  "description": "上流 registry の乗っ取りで、provenance 付きの改ざん版が正規の publish pipeline から公開された。starter の CI triage policy は valid な attestation を安全と同一視し、manifest の semver range で版を判断し、install script を全許可し、取得と実行を区別せず credential rotation を乱発する。Browser Workbench で合成 fixture (manifest、lockfile、attestation、tarball inventory、host evidence) を観察し、triage policy を修正する。実 package、悪性 code、credential、外向き network は使わない。",
+  "instructions": "ローカル runtime を起動して Browser Workbench を開く。fixture (manifest、lockfile、attestation、tarball inventory、host evidence) と starter の盲点を観察し、triage policy を修正する。公開 test を通して提出値を作り、同じ値を 6 つの checkpoint へ提出する。hidden matrix は依存 graph を並べ替え、無関係な script を足し、clean な package を混ぜて再評価する。",
+  "writeup": "## 境界\n\nnpm provenance attestation は「どの source repository の、どの workflow が、この artifact を build して publish したか」を束縛する。subject は artifact digest、predicate は build の出自であり、source そのものが無害であることはどこにも含まれない。maintainer の token が奪われ正規 pipeline から悪性 commit が publish されると、attestation は valid なまま悪性 artifact に付く。\n\n## 判定の分離\n\nresolved version は manifest の semver range ではなく lockfile の exact version + integrity + dependency path で追跡する。tarball の file inventory と install lifecycle event (preinstall / install / postinstall / prepare) の追加は、attestation の valid とは独立に検査する。install script は default-deny にし、必要な package だけを exact version で許可する。incident response は「取得した」「script 無効で install した」「script が実行された」を別状態として扱い、実行 evidence が無い host に credential rotation を宣言しない。",
+  "tags": [
+    "npm",
+    "supply-chain",
+    "provenance",
+    "attestation",
+    "lockfile",
+    "lifecycle-scripts",
+    "incident-response",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    { "port": 18124, "name": "Browser Workbench" },
+    { "port": 18125, "name": "/verify (loopback only)" }
+  ],
+  "learningGoals": [
+    "provenance attestation が束縛する対象と保証しない範囲を区別できる",
+    "manifest の semver range ではなく lockfile の解決結果で inventory を追跡できる",
+    "install lifecycle script を default-deny にし、必要な package だけを exact version で許可できる",
+    "取得・script 無効・script 実行済みを区別し、過剰でも過小でもない対応を選べる"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.signed-does-not-mean-safe.provenance-guarantee-boundary",
+        "description": "valid な provenance attestation が保証する範囲と保証しない範囲を分けて判定できる"
+      },
+      {
+        "id": "lo.signed-does-not-mean-safe.default-deny-lifecycle",
+        "description": "lockfile 解決と install script の default-deny を組み合わせて供給網の実行面を絞れる"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.npm-provenance-attestation",
+        "description": "artifact digest と build 出自を束縛する npm の provenance attestation"
+      },
+      {
+        "id": "concept.install-lifecycle-script",
+        "description": "install 時に自動実行される npm lifecycle script (preinstall / install / postinstall / prepare)"
+      },
+      {
+        "id": "concept.lockfile-resolution",
+        "description": "manifest の range ではなく lockfile が固定する exact version・integrity・依存 path"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.signed-does-not-mean-safe.triage-without-overreach",
+        "description": "改ざん版を検出しつつ clean な package を誤検知せず、実行 evidence に応じた対応だけを選べる"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.provenance-implies-safety",
+        "description": "provenance attestation が valid なら package の中身も無害だという誤解"
+      },
+      {
+        "id": "misconception.fetched-means-executed",
+        "description": "package を取得したことと install script が実行されたことを同一視する誤解"
+      }
+    ],
+    "audiences": [
+      {
+        "id": "audience.devsecops-engineer",
+        "description": "依存の取り込みと CI の install policy を設計・review する platform / DevSecOps engineer"
+      }
+    ]
+  },
+  "relations": [
+    { "type": "teaches", "source": "problem.signed-does-not-mean-safe", "target": "lo.signed-does-not-mean-safe.provenance-guarantee-boundary" },
+    { "type": "teaches", "source": "problem.signed-does-not-mean-safe", "target": "lo.signed-does-not-mean-safe.default-deny-lifecycle" },
+    { "type": "covers", "source": "problem.signed-does-not-mean-safe", "target": "concept.npm-provenance-attestation" },
+    { "type": "covers", "source": "problem.signed-does-not-mean-safe", "target": "concept.install-lifecycle-script" },
+    { "type": "covers", "source": "problem.signed-does-not-mean-safe", "target": "concept.lockfile-resolution" },
+    { "type": "assesses", "source": "problem.signed-does-not-mean-safe", "target": "assessment.signed-does-not-mean-safe.triage-without-overreach" },
+    { "type": "related_to", "source": "problem.signed-does-not-mean-safe", "target": "misconception.provenance-implies-safety" },
+    { "type": "related_to", "source": "problem.signed-does-not-mean-safe", "target": "misconception.fetched-means-executed" },
+    { "type": "related_to", "source": "problem.signed-does-not-mean-safe", "target": "audience.devsecops-engineer" }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Browser Workbench": "http://127.0.0.1:18124/"
+    },
+    "verifyUrl": "http://127.0.0.1:18125/verify",
+    "secretEnv": []
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "artifact-inventory",
+        "label": "配布物と期待 file の差分を特定する",
+        "points": 30,
+        "wrongAnswerPenalty": 1,
+        "hints": [
+          {
+            "id": "inventory-1",
+            "content": "package.json だけでなく、pack された file inventory と lockfile を確認する。",
+            "penalty": 6
+          }
+        ]
+      },
+      {
+        "id": "provenance-boundary",
+        "label": "attestation が保証する範囲を判定する",
+        "points": 35,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "provenance-1",
+            "content": "attestation の subject と predicate が何を束縛しているかを確認する。source の中身はどこに現れるか。",
+            "penalty": 7
+          }
+        ]
+      },
+      {
+        "id": "resolved-dependency",
+        "label": "実際に解決された version を特定する",
+        "points": 35,
+        "wrongAnswerPenalty": 2
+      },
+      {
+        "id": "install-policy",
+        "label": "install script の既定拒否 policy を書く",
+        "points": 35,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "policy-1",
+            "content": "install 時に自動実行される lifecycle event を列挙し、どの package が本当に script を必要とするかを分ける。",
+            "penalty": 7
+          }
+        ]
+      },
+      {
+        "id": "incident-scope",
+        "label": "影響範囲と対応を状態別に決める",
+        "points": 35,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "scope-1",
+            "content": "「package を取得した」と「script が実行された」を別の状態として扱う。",
+            "penalty": 7
+          }
+        ]
+      },
+      {
+        "id": "replay-resistance",
+        "label": "並べ替えと言い換えに耐える",
+        "points": 30,
+        "wrongAnswerPenalty": 1
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Signed Does Not Mean Safe",
+      "shortDescription": "Learn what npm provenance actually guarantees, then defend with the lockfile, the tarball inventory, and a lifecycle-script policy.",
+      "description": "Upstream registry namespaces were taken over, and tampered releases shipped through the legitimate publish pipeline with valid provenance. The starter CI triage policy equates a valid attestation with safety, resolves versions from the manifest's semver range, allows every install script, and rotates credentials without distinguishing fetch from execution. Observe the synthetic fixtures (manifest, lockfile, attestation, tarball inventory, host evidence) in the Browser Workbench and repair the triage policy. No real packages, no malicious code, no credentials, and no outbound network are used.",
+      "instructions": "Start the local runtime and open Browser Workbench. Observe the fixtures (manifest, lockfile, attestation, tarball inventory, host evidence) and the starter's blind spots, repair the triage policy, pass the public cases to prepare a submission value, and submit the same value to all six checkpoints. The hidden matrix re-evaluates with a shuffled dependency graph, irrelevant extra scripts, and a clean package mixed in.",
+      "writeup": "## Boundary\n\nAn npm provenance attestation binds which source repository and which workflow built and published this artifact. The subject is the artifact digest and the predicate is the build's origin; nothing in it says the source itself is harmless. When a maintainer token is stolen and a malicious commit ships through the legitimate pipeline, the attestation stays valid on the malicious artifact.\n\n## Separate decisions\n\nTrack the resolved version from the lockfile's exact version, integrity, and dependency path, never from the manifest's semver range. Inspect the tarball file inventory and added install lifecycle events (preinstall / install / postinstall / prepare) independently of attestation validity. Default-deny install scripts and allow only the packages that need them, pinned to exact versions. For incident response, treat fetched, installed-with-scripts-disabled, and scripts-executed as separate states, and never declare credential rotation for a host without execution evidence.",
+      "learningGoals": [
+        "Distinguish what a provenance attestation binds from what it does not guarantee",
+        "Track the inventory from the lockfile resolution instead of the manifest's semver range",
+        "Default-deny install lifecycle scripts and allow only needed packages at exact versions",
+        "Separate fetched, scripts-disabled, and scripts-executed states and respond without over- or under-reach"
+      ],
+      "checks": [
+        {
+          "id": "artifact-inventory",
+          "label": "Identify the diff between shipped and expected files",
+          "hints": [
+            {
+              "id": "inventory-1",
+              "content": "Check the packed file inventory and the lockfile, not just package.json."
+            }
+          ]
+        },
+        {
+          "id": "provenance-boundary",
+          "label": "Judge what the attestation guarantees",
+          "hints": [
+            {
+              "id": "provenance-1",
+              "content": "Look at what the attestation's subject and predicate bind. Where would the source's content appear?"
+            }
+          ]
+        },
+        {
+          "id": "resolved-dependency",
+          "label": "Identify the version that was actually resolved"
+        },
+        {
+          "id": "install-policy",
+          "label": "Write the default-deny install-script policy",
+          "hints": [
+            {
+              "id": "policy-1",
+              "content": "Enumerate the lifecycle events that run at install time, and separate the packages that truly need scripts."
+            }
+          ]
+        },
+        {
+          "id": "incident-scope",
+          "label": "Scope the impact and response per state",
+          "hints": [
+            {
+              "id": "scope-1",
+              "content": "Treat \"the package was fetched\" and \"the script was executed\" as separate states."
+            }
+          ]
+        },
+        {
+          "id": "replay-resistance",
+          "label": "Stay correct under shuffling and rewording"
+        }
+      ]
+    }
+  }
+}
