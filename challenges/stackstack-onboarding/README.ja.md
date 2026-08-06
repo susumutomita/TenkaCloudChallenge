@@ -13,7 +13,7 @@ StackStack 本編の前に走らせる肩慣らし。 **AWS 不要** で、 自�
 | **自分のマシン (Docker)** | StackStack 共通の **ベースアプリ** ── 小さな Node 製掲示板 |
 | `127.0.0.1:18080` | 掲示板 (参加者が使うアプリ) |
 | `127.0.0.1:18081` | TenkaCloud の採点が委譲する loopback `/verify` |
-| `problems/challenges/.../local/config/app.json` | アプリの設定 ── **自分のファイル**。 コンテナには読み取り専用でマウントされる |
+| 板の `docs` (API コンソール) | アプリの設定を見る・変える・初期状態へ戻す ── リポジトリのファイルは触らない |
 
 image は StackStack 系問題が共有する [`stackstack-base/`](../../stackstack-base) から作る。 board serial・boot-check の値・合格印 token はすべて、 deploy ごとにランダムな `FLAG_SEED` からコンテナ内で導出する。 だから答えはこのリポジトリに存在せず、 2 つの deploy が同じ答えを持つこともない。 公開ポートはどちらも `127.0.0.1` のみ。
 
@@ -54,17 +54,15 @@ image は StackStack 系問題が共有する [`stackstack-base/`](../../stackst
 
    起動時の行に `boot ok boot-check=<値>` がある。 `=` の後ろの値だけを **アプリのログを読む** に提出する。 `docker compose logs` にも同じ行が出る。
 
-4. 板はまだ投稿を受け付けておらず、 そのことが板自身に書いてある。 それを決めている設定は自分のチェックアウト側にある (以下のパスは TenkaCloud のチェックアウト基準。 このカタログはそこに `problems/` submodule として入っている)。
+4. 板はまだ投稿を受け付けておらず、 そのことが板自身に書いてある。 開けるのは板の API コンソール (`docs`) から ── **リポジトリのファイルは書き換えない**。
 
-   ```jsonc
-   // problems/challenges/stackstack-onboarding/local/config/app.json
-   {
-     "boardTitle": "天下クラウド 社内掲示板",
-     "acceptingPosts": false      // ← ここを変える
-   }
+   ```
+   curl -X PATCH http://127.0.0.1:18080/api/config \
+     -H 'content-type: application/json' \
+     -d '{"acceptingPosts": true}'
    ```
 
-   `true` にして保存する。 再起動は要らない (アプリはリクエストごとに読み直す)。 そして投稿する。
+   再起動は要らない (即反映)。 変更はコンテナの中にだけ置かれるので、 リポジトリは汚れない。 そして投稿する。
 
    ```
    curl -X POST http://127.0.0.1:18080/api/posts \
@@ -95,10 +93,10 @@ image は StackStack 系問題が共有する [`stackstack-base/`](../../stackst
 
    `readyToken` を **本番前チェックの合格印** に提出する。 まだ `null` なら、 false の gate がそのまま次にやることだ。
 
-6. 設定を戻すのは、 合格印を提出した **後** にする。 先に閉じると `posts_open` が false に戻り、 token が通らなくなる。 このファイルは `problems/` submodule の中にあるので、 git はそちらで動かす。
+6. 設定を戻すのは、 合格印を提出した **後** にする。 先に閉じると `posts_open` が false に戻り、 token が通らなくなる。 戻すのも API から ── 変えた分を全部捨てて初期状態に戻る。
 
    ```
-   git -C problems checkout -- challenges/stackstack-onboarding/local/config/
+   curl -X DELETE http://127.0.0.1:18080/api/config
    ```
 
 ## 板の経路
@@ -110,6 +108,8 @@ image は StackStack 系問題が共有する [`stackstack-base/`](../../stackst
 | `GET /api/logs` | アプリの直近ログ行 (`?limit=` で広げられる) |
 | `GET /posture` | 実測した 4 gate と、 緑になったときの合格印 token |
 | `GET /healthz` | 死活確認と、 設定エラーがあればその内容 |
+| `GET /docs` | API コンソール ── ここに並ぶ全経路を画面から実行できる |
+| `GET/PATCH/DELETE /api/config` | 設定を見る・変える・初期状態へ戻す |
 
 コンテナを再起動すると環境チェックはやり直しになる。 gate は走っているアプリからの実測なので、 再起動で全部 false に戻り、 投稿も消える。 すでに正解したチェックポイントの得点はポータル側に残るが、 合格印にはもう一度 4 つの gate を緑にする必要がある。
 | `POST /api/posts` | 投稿する ── 板が閉じている間は `409` |

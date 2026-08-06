@@ -23,8 +23,8 @@ export const seedPosts = [
   },
   {
     author: "sre-predecessor",
-    title: "引き継ぎ: 設定は config/app.json",
-    body: "アプリの設定はリポジトリの config/app.json 1 枚です。書き換えたら即反映されます。再起動は要りません。",
+    title: "引き継ぎ: 設定は板の API コンソールから",
+    body: "設定の変更は板の docs (API コンソール) から。PATCH api/config で即反映されます。再起動は要りません。リポジトリのファイルは触らないでください — 変えても、コンテナを作り直すと戻ります。",
     at: "2026-04-06T09:20:00.000Z",
   },
 ];

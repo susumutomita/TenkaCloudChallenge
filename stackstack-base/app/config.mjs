@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { clearOverride, readOverride, saveOverride } from "./overrides.mjs";
 import { log } from "./log.mjs";
 
 /**
@@ -17,6 +18,9 @@ import { log } from "./log.mjs";
  */
 
 const CONFIG_PATH = process.env.APP_CONFIG ?? "/app/config/app.json";
+
+/** この設定の上書きを指す名前 (置き場と挙動は `overrides.mjs`)。 */
+const OVERRIDE_NAME = "config";
 
 const DEFAULTS = {
   boardTitle: "board",
@@ -73,7 +77,7 @@ export function readConfig(path = CONFIG_PATH) {
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
     return report(`${path} must contain a JSON object`);
   }
-  const { value, problems } = coerce(parsed);
+  const { value, problems } = coerce({ ...parsed, ...readOverride(OVERRIDE_NAME) });
   if (problems.length > 0) return report(problems.join("; "), value);
   if (lastError !== null) {
     lastError = null;
@@ -92,3 +96,33 @@ function report(error, value = { ...DEFAULTS }) {
 }
 
 export const CONFIG_FILE = CONFIG_PATH;
+
+
+/**
+ * 設定を 1 つ以上変える。 受け付けた結果を返す。
+ *
+ * 部分適用はしない — 3 つ送って 2 つだけ通ると、 参加者は `/api/board` を見るまで何が
+ * 効いたか分からない。 1 つでも弾かれたら全部やめて理由を返す。
+ *
+ * @param {Record<string, unknown>} patch
+ * @returns {{ ok: boolean, value?: typeof DEFAULTS, problems?: string[] }}
+ */
+export function applyConfigChange(patch) {
+  if (patch === null || typeof patch !== "object" || Array.isArray(patch)) {
+    return { ok: false, problems: ["the body must be a JSON object"] };
+  }
+  const merged = { ...readConfig().value, ...readOverride(OVERRIDE_NAME), ...patch };
+  const { value, problems } = coerce(merged);
+  if (problems.length > 0) return { ok: false, problems };
+  const saved = saveOverride(OVERRIDE_NAME, patch);
+  if (!saved.ok) return { ok: false, problems: [saved.error] };
+  log("info", `config changed via API: ${Object.keys(patch).join(", ")}`);
+  return { ok: true, value };
+}
+
+/** 実行中に変えた分を捨て、 マウント元のファイルだけの状態に戻す。 */
+export function resetConfigChanges() {
+  clearOverride(OVERRIDE_NAME);
+  log("info", "config changes discarded");
+  return readConfig();
+}

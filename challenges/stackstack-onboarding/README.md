@@ -4,7 +4,7 @@
 
 The shakedown you run before StackStack. It is **AWS-free**: one Docker container on
 your machine, no cloud account, no credentials. Nothing in it is a puzzle. Its job is
-to walk one full lap of the tools — portal, app, log, config file, scoring — so that
+to walk one full lap of the tools — portal, app, log, settings, scoring — so that
 when the real event starts, none of that is new.
 
 It doubles as an environment diagnostic. `GET /posture` reports four gates measured
@@ -18,7 +18,7 @@ so "this environment works end to end" is a machine-readable fact rather than a 
 | **Your machine (Docker)** | The shared **StackStack base app** — a small Node message board |
 | `127.0.0.1:18080` | The board (the app you use) |
 | `127.0.0.1:18081` | Loopback `/verify` the TenkaCloud scorer delegates to |
-| `problems/challenges/.../local/config/app.json` | The app's config — **your** file, mounted read-only into the container |
+| The board's `docs` (API console) | View, change and reset the app's settings — no repository file is ever touched |
 
 The image is built from [`stackstack-base/`](../../stackstack-base), which every problem
 in the StackStack family shares. The board serial, the boot-check value, and the sign-off
@@ -66,29 +66,17 @@ Four checkpoints, 25 points each:
    One of the boot lines reads `boot ok boot-check=<value>`. Submit just the value for
    **Read the app's log**. `docker compose logs` shows the same lines.
 
-4. The board is not accepting posts yet, and says so. The setting that decides it lives
-   in your checkout — paths below are relative to your TenkaCloud checkout, where this
-   catalog is the `problems/` submodule:
-
-   ```jsonc
-   // problems/challenges/stackstack-onboarding/local/config/app.json
-   {
-     "boardTitle": "天下クラウド 社内掲示板",
-     "acceptingPosts": false      // ← change this
-   }
-   ```
-
-   Set it to `true` and save. There is nothing to restart: the app re-reads the file on
-   every request. Then post:
+4. The board is not accepting posts yet, and says so on its own page. Open it through the
+   board's API console (`docs`) — **never by editing a repository file**.
 
    ```
-   curl -X POST http://127.0.0.1:18080/api/posts \
+   curl -X PATCH http://127.0.0.1:18080/api/config \
      -H 'content-type: application/json' \
-     -d '{"author":"you","title":"hello","body":"first post"}'
+     -d '{"acceptingPosts": true}'
    ```
 
-   Submit the title you used for **Open the board for posts**. The checkpoint checks both
-   halves: the config is open *and* a post that the board did not ship with now exists.
+   No restart needed; the change lives only inside the container, so your checkout stays
+   clean. Then post for real.
 
 5. Check the posture:
 
@@ -112,12 +100,12 @@ Four checkpoints, 25 points each:
    Submit `readyToken` for **Sign-off**. If it is still `null`, the false gate names your
    next action.
 
-6. Reset your config **after** you have submitted the sign-off, not before: closing the board
-   again turns `posts_open` back off and the token stops being accepted. The file lives in the
-   `problems/` submodule, so run git there:
+6. Reset **after** you have submitted the sign-off, not before: closing the board flips
+   `posts_open` back to false and the token stops verifying. Resetting is an API call too —
+   it discards every change and returns to the initial state.
 
    ```
-   git -C problems checkout -- challenges/stackstack-onboarding/local/config/
+   curl -X DELETE http://127.0.0.1:18080/api/config
    ```
 
 ## The board's routes
@@ -129,6 +117,8 @@ Four checkpoints, 25 points each:
 | `GET /api/logs` | The app's recent log lines (`?limit=` to widen) |
 | `GET /posture` | The four measured gates, and the sign-off token once they are green |
 | `GET /healthz` | Liveness, plus the config error if there is one |
+| `GET /docs` | The API console — run every route on this list from the screen |
+| `GET/PATCH/DELETE /api/config` | View, change and reset the settings |
 
 Restarting the container starts the environment check over: the gates are measured from the
 running app, so a restart clears them and takes your posts with them. Checkpoints you have

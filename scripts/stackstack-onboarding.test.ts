@@ -35,7 +35,6 @@ const VERIFY = `http://127.0.0.1:${VERIFY_PORT}/verify`;
 const SEED = "stackstack-onboarding-test-seed";
 // The value the shipped compose file sets, so the suite exercises what a
 // participant is actually shown rather than a convenient stand-in.
-const CONFIG_HINT = "problems/challenges/stackstack-onboarding/local/config/app.json";
 
 interface Metadata {
   readonly difficulty: number;
@@ -120,7 +119,6 @@ beforeAll(async () => {
       SCENARIO: "onboarding",
       FLAG_SEED: SEED,
       APP_CONFIG: configPath,
-      CONFIG_HINT: CONFIG_HINT,
       CHALLENGE_PORT: String(CHALLENGE_PORT),
       VERIFY_PORT: String(VERIFY_PORT),
     },
@@ -215,12 +213,15 @@ describe("stackstack-onboarding first lap", () => {
     expect(page.text).not.toContain("http://localhost");
   });
 
-  it("should name the config file by the path in the checkout, not the mounted one", async () => {
-    // The app only ever sees /app/config/app.json, which is not a path the
-    // participant can open. Printing that would be the problem's first trap.
+  it("should point at the API console and never at a file path", async () => {
+    // The old page named a file in the participant's checkout. Editing that file
+    // dirtied their git status, and a rebuilt container kept reading the edit —
+    // one solve, and that checkout never sees the broken state again. The page
+    // now points at the console, and printing ANY file path is the regression.
     const page = await get("/");
-    expect(page.text).toContain(CONFIG_HINT);
+    expect(page.text).toContain('href="docs');
     expect(page.text).not.toContain("/app/config/app.json");
+    expect(page.text).not.toContain("problems/challenges/");
   });
 
   it("should 404 a route it does not serve", async () => {
@@ -283,7 +284,10 @@ describe("stackstack-onboarding first lap", () => {
     const rejected = await post("/api/posts", { author: "you", title: "too early", body: "" });
     expect(rejected.status).toBe(409);
     expect(rejected.body.detail).toContain("acceptingPosts");
-    expect(rejected.body.detail).toContain(CONFIG_HINT);
+    // The refusal steers to the API console, never to a file: pointing a
+    // participant at the tracked config was how solving used to dirty git.
+    expect(rejected.body.detail).toContain("/api/config");
+    expect(rejected.body.detail).not.toContain("app.json");
   });
 
   it("should accept a post as soon as the config file says so, with no restart", async () => {
@@ -807,22 +811,25 @@ describe("stackstack-onboarding wiring", () => {
 
   it("should name the config path as the participant sees it, from the platform checkout", () => {
     // A participant runs `make local` from the TenkaCloud repository, where this
-    // catalog is the `problems/` submodule. Printing this repo's own relative
-    // path would send them to a file that does not exist on their machine —
-    // which would be this problem's first trap, in the step that promises none.
-    const hint = service.environment.CONFIG_HINT as string;
+    // catalog is the `problems/` submodule. The participant no longer edits the
+    // file at all — changes go through PATCH /api/config — so the compose file
+    // must not carry a "path to open" hint for anyone to resurrect in copy.
+    expect(service.environment.CONFIG_HINT).toBeUndefined();
     const inThisRepo = "challenges/stackstack-onboarding/local/config/app.json";
-    expect(hint).toBe(`problems/${inThisRepo}`);
     expect(existsSync(join(REPO_ROOT, inThisRepo))).toBe(true);
   });
 
-  it("should give the participant-facing docs the same path the board prints", () => {
-    const hint = service.environment.CONFIG_HINT as string;
-    for (const name of ["README.md", "README.ja.md"]) {
-      expect(readFileSync(join(PROBLEM_DIR, name), "utf8")).toContain(hint);
+  it("should steer every participant-facing doc to the API, never to the checkout file", () => {
+    // Solving by editing the tracked file rewrites the problem itself: git goes
+    // dirty and no rebuild restores the broken state. Any doc that names the
+    // path invites exactly that, so naming it anywhere participant-facing is
+    // the regression this test exists to catch.
+    const checkoutPath = "challenges/stackstack-onboarding/local/config/app.json";
+    for (const name of ["README.md", "README.ja.md", "metadata.json"]) {
+      const text = readFileSync(join(PROBLEM_DIR, name), "utf8");
+      expect(text).not.toContain(checkoutPath);
+      expect(text).toContain("api/config");
     }
-    const text = readFileSync(join(PROBLEM_DIR, "metadata.json"), "utf8");
-    expect(text).toContain(hint);
   });
 
   it("should ship the config file the compose file mounts", () => {

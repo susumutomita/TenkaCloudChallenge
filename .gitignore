@@ -141,3 +141,7 @@ __pycache__/
 
 # Sweep output: `make solvability-sweep`, `make simulator-compatibility`.
 reports/
+
+# Swagger UI はイメージのビルド時に焼く。 作業ツリーには置かない。
+stackstack-base/node_modules/
+stackstack-base/app/vendor/

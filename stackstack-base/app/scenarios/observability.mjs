@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { readOverride } from "../overrides.mjs";
 import { allPosts } from "../board.mjs";
 import { log, recentLines } from "../log.mjs";
 import { posture } from "../posture.mjs";
@@ -107,6 +108,9 @@ function shardFor(title) {
 
 const RELAY_CONFIG_PATH = process.env.RELAY_CONFIG ?? "/app/relay/relay.json";
 
+/** この scenario の設定の上書き名 (置き場と挙動は `overrides.mjs`)。 */
+const SETTINGS_NAME = "relay";
+
 /**
  * Where the relay's settings sit in the *participant's* checkout, which is not
  * the path this process reads. Display only, exactly like `CONFIG_HINT`.
@@ -142,6 +146,10 @@ function readRelayConfig(path = RELAY_CONFIG_PATH) {
   let parsed;
   try {
     parsed = JSON.parse(text);
+    // マウント元は出発点。 実行中に変えた分を重ねてから検証する (置き場は overrides.mjs)。
+    if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
+      parsed = { ...parsed, ...readOverride(SETTINGS_NAME) };
+    }
   } catch (error) {
     return { ok: false, value: null, error: `${RELAY_HINT} is not valid JSON: ${error.message}` };
   }
@@ -809,4 +817,18 @@ export const checks = {
     if (!elsewhere) return false;
     return matches(submission, SHARD_CODES.get(DOWN_SHARD));
   },
+};
+
+
+/**
+ * 実行中に変えられる設定。 これを宣言すると `/api/settings` と Swagger の項目が生える。
+ *
+ * ファイルの場所を参加者に案内する方向は採らない — マウント元は git 管理下なので、
+ * 直接編集させると解いた瞬間にリポジトリが汚れ、 作り直しても壊れた状態に戻らなくなる。
+ */
+export const editableSettings = {
+  name: SETTINGS_NAME,
+  summary: { ja: "リレー設定", en: "relay settings" },
+  example: {"enabled": true},
+  read: () => readRelayConfig(),
 };
