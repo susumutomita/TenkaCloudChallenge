@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { log } from "../log.mjs";
+import { readOverride } from "../overrides.mjs";
 import { posture } from "../posture.mjs";
 import { READY_TOKEN, gateToken } from "../secrets.mjs";
 
@@ -198,12 +199,14 @@ const HANDOVER_NOTE = [
 // ---------------------------------------------------------------------------
 
 const POLICY_PATH = process.env.ACCESS_POLICY ?? "/app/access/access.json";
+const SETTINGS_NAME = "access";
 
 /**
  * Where the document sits in the *participant's* checkout, which is not the path
  * this process reads. Display only, exactly like `CONFIG_HINT`.
  */
 const ACCESS_HINT = process.env.ACCESS_HINT ?? POLICY_PATH;
+const SETTINGS_LABEL = "/api/settings";
 
 const EFFECTS = new Set(["allow", "deny"]);
 const RULE_KEYS = new Set(["id", "effect", "methods", "path", "require"]);
@@ -340,6 +343,9 @@ export function readPolicy(path = POLICY_PATH) {
   } catch (error) {
     return reportPolicy([`${ACCESS_HINT} is not valid JSON: ${error.message}`]);
   }
+  if (path === POLICY_PATH && parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
+    parsed = { ...parsed, ...readOverride(SETTINGS_NAME) };
+  }
   const checked = validatePolicy(parsed);
   if (!checked.ok) return reportPolicy(checked.problems);
   if (lastPolicyError !== null) {
@@ -348,6 +354,18 @@ export function readPolicy(path = POLICY_PATH) {
   }
   return { ok: true, policy: checked.policy, problems: [] };
 }
+
+export const editableSettings = {
+  name: SETTINGS_NAME,
+  summary: { ja: "公開範囲 policy", en: "access policy" },
+  example: { defaultEffect: "deny", rules: [] },
+  read: () => {
+    const loaded = readPolicy();
+    return loaded.ok
+      ? { ok: true, value: loaded.policy, error: null }
+      : { ok: false, value: null, error: loaded.problems.join("; ") };
+  },
+};
 
 /** Log a policy failure once per distinct message, so a reload loop cannot flood the ring. */
 function reportPolicy(problems) {
@@ -473,7 +491,7 @@ export function handle({ method, path, id = null, authorization, body = null, po
   if (!loaded.ok) {
     const answer = {
       status: 503,
-      body: { error: "policy_error", detail: loaded.problems, file: ACCESS_HINT },
+      body: { error: "policy_error", detail: loaded.problems, file: SETTINGS_LABEL },
       decision: { effect: "deny", ruleId: "policy-error" },
     };
     if (record) {
@@ -534,7 +552,7 @@ export function handle({ method, path, id = null, authorization, body = null, po
 /** What an allowed request actually does. Never reached while a decision is deny. */
 function work(route, { principal, object, body, policy }) {
   if (route === "GET /portal/healthz") {
-    return { status: 200, body: { ok: true, policy: "loaded", file: ACCESS_HINT } };
+    return { status: 200, body: { ok: true, policy: "loaded", file: SETTINGS_LABEL } };
   }
   if (route === "GET /portal/me") {
     return { status: 200, body: { principal: principal === null ? null : { ...principal } } };
@@ -1018,7 +1036,7 @@ export function evaluateGroups() {
   return {
     policy: {
       loaded: loaded.ok,
-      file: ACCESS_HINT,
+      file: SETTINGS_LABEL,
       problems: loaded.problems,
       defaultEffect: loaded.ok ? loaded.policy.defaultEffect : null,
       ruleCount: loaded.ok ? loaded.policy.rules.length : 0,
@@ -1166,7 +1184,7 @@ function consolePage() {
 <p>この画面と <a href="portal/review">portal/review</a> は access.json の管轄外です。 締めすぎて自分が締め出されても、 ここだけは必ず開きます。</p>
 
 <h2>いまの状態</h2>
-<p>access.json: <code>${escapeHtml(evaluated.policy.file)}</code> /
+<p>access policy: <a href="../docs"><code>${escapeHtml(evaluated.policy.file)}</code> を API コンソールで変更</a> /
  defaultEffect <code>${escapeHtml(String(evaluated.policy.defaultEffect))}</code> /
  rule ${evaluated.policy.ruleCount} 件</p>
 ${problems}
@@ -1477,7 +1495,7 @@ export const checks = {
 // later — including a config error the participant then fixes — is pinned there
 // forever, and the keys survive however much request traffic follows.
 log("info", `safe-exposure staging keys: ${accounts.map((a) => `${a.subject}=${apiKey(a.subject)}`).join(" ")}`);
-log("info", `safe-exposure access document: ${ACCESS_HINT} (re-read on every request)`);
+log("info", `safe-exposure access document: ${SETTINGS_LABEL} (runtime override)`);
 log("info", `safe-exposure governed routes: ${Object.keys(GOVERNED).length} under /portal (the console and /portal/review are not governed)`);
 log(
   "info",

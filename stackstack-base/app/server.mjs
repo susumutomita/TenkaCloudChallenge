@@ -3,7 +3,14 @@ import { createServer } from "node:http";
 import { addPost, allPosts, resetBoard, validatePost } from "./board.mjs";
 import { applyConfigChange, CONFIG_FILE, readConfig, resetConfigChanges } from "./config.mjs";
 import { log, recentLines } from "./log.mjs";
-import { clearOverride, readOverride, saveOverride } from "./overrides.mjs";
+import {
+  clearOverride,
+  clearSource,
+  readOverride,
+  readSource,
+  saveOverride,
+  saveSource,
+} from "./overrides.mjs";
 import { observe, posture } from "./posture.mjs";
 import { BOARD_SERIAL, BOOT_CHECK } from "./secrets.mjs";
 
@@ -220,6 +227,38 @@ async function handleSettings(route, request, response) {
   return send(response, 200, { settings: settings.read().value });
 }
 
+/** scenario 固有の source を checkout に触れず、 実行中だけ差し替える。 */
+async function handleSource(route, request, response) {
+  const source = scenario.editableSource;
+  if (route === "GET /api/source") {
+    return send(response, 200, { source: readSource(source.name, source.basePath) });
+  }
+  if (route === "DELETE /api/source") {
+    clearSource(source.name);
+    log("info", `${source.name} source changes discarded`);
+    return send(response, 200, { source: readSource(source.name, source.basePath) });
+  }
+  const body = await readJson(request);
+  if (body === TOO_LARGE) {
+    return send(response, 413, { error: `body must be at most ${MAX_BODY_BYTES} bytes` });
+  }
+  if (
+    body === null ||
+    typeof body !== "object" ||
+    Array.isArray(body) ||
+    typeof body.source !== "string"
+  ) {
+    return send(response, 400, {
+      error: "rejected",
+      detail: ["the body must be a JSON object with a string source field"],
+    });
+  }
+  const saved = saveSource(source.name, body.source);
+  if (!saved.ok) return send(response, 500, { error: "rejected", detail: [saved.error] });
+  log("info", `${source.name} source changed via API`);
+  return send(response, 200, { source: readSource(source.name, source.basePath) });
+}
+
 /**
  * この板が話す API の仕様。 Swagger UI がこれを読んで「試す」画面を出す。
  *
@@ -321,6 +360,42 @@ function openApiDocument(scenarioName, lang) {
             },
           }
         : {}),
+      ...(scenario.editableSource
+        ? {
+            "/api/source": {
+              get: {
+                summary: L(
+                  `${scenario.editableSource.summary.ja}をみる`,
+                  `view the ${scenario.editableSource.summary.en}`,
+                ),
+                responses: { 200: ok(L("いまの source", "current source")) },
+              },
+              put: {
+                summary: L(
+                  `${scenario.editableSource.summary.ja}を置き換える`,
+                  `replace the ${scenario.editableSource.summary.en}`,
+                ),
+                requestBody: {
+                  required: true,
+                  ...json({
+                    type: "object",
+                    required: ["source"],
+                    properties: { source: { type: "string" } },
+                    example: { source: scenario.editableSource.example },
+                  }),
+                },
+                responses: { 200: ok(L("変更後", "after the change")), 400: ok(L("不正な要求", "invalid request")) },
+              },
+              delete: {
+                summary: L(
+                  `${scenario.editableSource.summary.ja}の変更を捨てて初期状態に戻す`,
+                  `discard ${scenario.editableSource.summary.en} changes and return to the initial state`,
+                ),
+                responses: { 200: ok(L("戻した後", "after the reset")) },
+              },
+            },
+          }
+        : {}),
     },
   };
 }
@@ -337,7 +412,15 @@ function docsPage(lang) {
 <html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${bi(lang, "API コンソール", "API console")}</title>
 <link rel="stylesheet" href="vendor/swagger/swagger-ui.css">
-<style>body{margin:0}#note{font-family:system-ui;padding:.8rem 1.2rem;background:#eef4ff;line-height:1.6}</style>
+<style>
+body{margin:0}#note{font-family:system-ui;padding:.8rem 1.2rem;background:#eef4ff;line-height:1.6}
+#request-workbench{font-family:system-ui;margin:1rem;padding:1rem;border:1px solid #ccd5e1;border-radius:.5rem}
+#request-workbench label{display:block;font-weight:600;margin-top:.7rem}
+#request-workbench input,#request-workbench select,#request-workbench textarea{box-sizing:border-box;width:100%;padding:.55rem;font:inherit}
+#request-workbench textarea{min-height:5rem;font-family:ui-monospace,monospace}
+#request-send{margin-top:.8rem;padding:.6rem 1rem;font:inherit}
+#request-response{white-space:pre-wrap;overflow-wrap:anywhere;background:#111827;color:#f9fafb;padding:.8rem;min-height:3rem}
+</style>
 </head><body>
 <div id="note">${bi(
     lang,
@@ -346,10 +429,50 @@ function docsPage(lang) {
   )}
  <a href="./?lang=${lang}">${bi(lang, "板に戻る", "Back to the board")}</a> ·
  <a href="docs?lang=${other}">${bi(lang, "English", "日本語")}</a></div>
+<section id="request-workbench">
+<h2>${bi(lang, "任意の API を試す", "Try any API")}</h2>
+<p>${bi(
+    lang,
+    "下の一覧にない問題固有の API も、ここから同じブラウザ内で実行できます。ターミナルは要りません。",
+    "Run scenario-specific APIs here even when they are not listed below. No terminal is required.",
+  )}</p>
+<label for="request-method">${bi(lang, "メソッド", "Method")}</label>
+<select id="request-method"><option>GET</option><option>POST</option><option>PATCH</option><option>PUT</option><option>DELETE</option></select>
+<label for="request-path">${bi(lang, "パス (query を含められます)", "Path (query allowed)")}</label>
+<input id="request-path" value="/posture" spellcheck="false">
+<label for="request-headers">${bi(lang, "ヘッダー (JSON)", "Headers (JSON)")}</label>
+<textarea id="request-headers" spellcheck="false">{}</textarea>
+<label for="request-body">${bi(lang, "body (必要なときだけ)", "Body (only when needed)")}</label>
+<textarea id="request-body" spellcheck="false"></textarea>
+<button id="request-send" type="button">${bi(lang, "実行", "Send")}</button>
+<pre id="request-response" aria-live="polite"></pre>
+</section>
 <div id="ui"></div>
 <script src="vendor/swagger/swagger-ui-bundle.js"></script>
 <script>
 SwaggerUIBundle({ url: "openapi.json?lang=${lang}", dom_id: "#ui", tryItOutEnabled: true, defaultModelsExpandDepth: -1 });
+document.getElementById("request-send").addEventListener("click", async () => {
+  const output = document.getElementById("request-response");
+  output.textContent = ${JSON.stringify(bi(lang, "実行中…", "Sending…"))};
+  try {
+    const method = document.getElementById("request-method").value;
+    const asked = document.getElementById("request-path").value.trim();
+    const path = asked.startsWith("/") ? asked : "/" + asked;
+    const target = new URL(path, window.location.origin);
+    if (target.origin !== window.location.origin) throw new Error(${JSON.stringify(
+      bi(lang, "同じアプリ内のパスを入力してください", "Enter a path inside this app"),
+    )});
+    const headers = JSON.parse(document.getElementById("request-headers").value || "{}");
+    const body = document.getElementById("request-body").value;
+    const options = { method, headers };
+    if (body !== "" && method !== "GET" && method !== "HEAD") options.body = body;
+    const response = await fetch(target.pathname + target.search, options);
+    const text = await response.text();
+    output.textContent = response.status + " " + response.statusText + "\n\n" + text;
+  } catch (error) {
+    output.textContent = ${JSON.stringify(bi(lang, "実行できません: ", "Could not send: "))} + error.message;
+  }
+});
 </script>
 </body></html>`;
 }
@@ -401,6 +524,7 @@ function sendAsset(response, pathname) {
  * 「ここが設定」 という位置は同じにする。
  */
 const SETTINGS_ROUTES = ["GET /api/settings", "PATCH /api/settings", "DELETE /api/settings"];
+const SOURCE_ROUTES = ["GET /api/source", "PUT /api/source", "DELETE /api/source"];
 
 /** The routes the board itself serves, whatever the scenario. */
 const BASE_ROUTES = [
@@ -414,6 +538,7 @@ const BASE_ROUTES = [
   "PATCH /api/config",
   "DELETE /api/config",
   ...(scenario.editableSettings ? SETTINGS_ROUTES : []),
+  ...(scenario.editableSource ? SOURCE_ROUTES : []),
   "GET /docs",
   "GET /openapi.json",
 ];
@@ -540,6 +665,10 @@ const challenge = createServer(guard(async (request, response) => {
 
   if (scenario.editableSettings && SETTINGS_ROUTES.includes(route)) {
     return handleSettings(route, request, response);
+  }
+
+  if (scenario.editableSource && SOURCE_ROUTES.includes(route)) {
+    return handleSource(route, request, response);
   }
 
   if (route === "GET /healthz") {

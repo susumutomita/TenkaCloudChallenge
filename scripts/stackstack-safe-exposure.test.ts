@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -32,6 +32,7 @@ const SCENARIO_FILE = join(REPO_ROOT, "stackstack-base", "app", "scenarios", "sa
 const SEED = "stackstack-safe-exposure-test-seed";
 const ACCESS_HINT = "problems/challenges/stackstack-safe-exposure/local/access/access.json";
 const CONFIG_HINT = "problems/challenges/stackstack-safe-exposure/local/config/app.json";
+const SETTINGS_ENDPOINT = "/api/settings";
 
 /** The four seeded documents, by the slug `/portal/review` names them with. */
 const SLUGS = ["anzu-private", "kenji-private", "team-runbook", "hoshino-contract"] as const;
@@ -199,6 +200,8 @@ interface Instance {
 async function startInstance(name: string, challengePort: number, verifyPort: number) {
   const accessPath = join(scratch, `${name}-access.json`);
   const configPath = join(scratch, `${name}-app.json`);
+  const overrideDir = join(scratch, `${name}-overrides`);
+  mkdirSync(overrideDir);
   writeFileSync(accessPath, readFileSync(join(PROBLEM_DIR, "local", "access", "access.json")));
   writeFileSync(configPath, readFileSync(join(PROBLEM_DIR, "local", "config", "app.json")));
 
@@ -209,6 +212,7 @@ async function startInstance(name: string, challengePort: number, verifyPort: nu
       SCENARIO: "safe-exposure",
       FLAG_SEED: SEED,
       APP_CONFIG: configPath,
+      APP_OVERRIDE_DIR: overrideDir,
       CONFIG_HINT,
       ACCESS_POLICY: accessPath,
       ACCESS_HINT,
@@ -285,6 +289,9 @@ function client(instance: () => Instance) {
     get: (path: string, as: string | null = null) => send(path, { as }),
     post: (path: string, as: string | null, body: unknown) => send(path, { as, method: "POST", body }),
     remove: (path: string, as: string | null = null) => send(path, { as, method: "DELETE" }),
+    patchSettings: (settings: Record<string, unknown>) =>
+      send("/api/settings", { method: "PATCH", body: settings }),
+    resetSettings: () => send("/api/settings", { method: "DELETE" }),
     /** `id` is looked up per call: the ids are seed-derived and never committed. */
     async ids(): Promise<Record<Slug, string>> {
       const all = await send("/portal/admin/drafts", { as: "cto-daichi" });
@@ -449,6 +456,19 @@ describe("stackstack-safe-exposure as it ships", () => {
     instance = await startInstance("ships", 18320, 18321);
   });
   afterAll(() => instance?.kill());
+
+  it("should change and reset the access policy through the API without touching its source", async () => {
+    const source = readFileSync(instance.accessPath, "utf8");
+    const changed = await app.patchSettings({ defaultEffect: "deny" });
+    expect(changed.status).toBe(200);
+    expect(changed.body.settings.defaultEffect).toBe("deny");
+    expect(readFileSync(instance.accessPath, "utf8")).toBe(source);
+
+    const reset = await app.resetSettings();
+    expect(reset.status).toBe(200);
+    expect(reset.body.settings.defaultEffect).toBe("allow");
+    expect(readFileSync(instance.accessPath, "utf8")).toBe(source);
+  });
 
   it("should ship a document that is open, and say what it decided", async () => {
     const review = await app.review();
@@ -655,7 +675,7 @@ describe("stackstack-safe-exposure 認証 (authentication)", () => {
     expect(health.status).toBe(503);
     expect(health.body.error).toBe("policy_error");
     expect(String(health.body.detail)).toContain("not valid JSON");
-    expect(health.body.file).toBe(ACCESS_HINT);
+    expect(health.body.file).toBe(SETTINGS_ENDPOINT);
 
     // The panel still explains it, and the board itself is unaffected: the
     // access document governs /portal, and this README-level claim is asserted
@@ -1774,12 +1794,11 @@ describe("stackstack-safe-exposure wiring", () => {
     expect(service.volumes).toContain("./access:/app/access:ro");
   });
 
-  it("should give the participant-facing docs the same path the app prints", () => {
-    const hint = service.environment.ACCESS_HINT as string;
+  it("should direct participant-facing docs to the runtime access API", () => {
     for (const name of ["README.md", "README.ja.md"]) {
-      expect(readFileSync(join(PROBLEM_DIR, name), "utf8")).toContain(hint);
+      expect(readFileSync(join(PROBLEM_DIR, name), "utf8")).toContain("PATCH /api/settings");
     }
-    expect(readFileSync(join(PROBLEM_DIR, "metadata.json"), "utf8")).toContain(hint);
+    expect(readFileSync(join(PROBLEM_DIR, "metadata.json"), "utf8")).toContain("PATCH /api/settings");
   });
 
   it("should ship a document that is open, with one rule as a worked example", () => {
@@ -1809,13 +1828,13 @@ describe("stackstack-safe-exposure wiring", () => {
     const japanese = readFileSync(join(PROBLEM_DIR, "README.ja.md"), "utf8");
     for (const anchor of [
       "make local PROBLEM=stackstack-safe-exposure",
-      "git -C problems checkout -- challenges/stackstack-safe-exposure/local/",
+      "DELETE /api/settings",
       "127.0.0.1:18080/portal",
       "127.0.0.1:18081",
       "GET /portal/review",
       "DELETE /portal/admin/draft?id=…",
       "client-ip:",
-      ACCESS_HINT,
+      "PATCH /api/settings",
       "4 / 9",
       "5 / 7 / 11",
       "6 / 9 / 13",

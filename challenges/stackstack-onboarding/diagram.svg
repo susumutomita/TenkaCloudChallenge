@@ -16,7 +16,7 @@
 <rect x="20" y="212" width="150" height="26" rx="8" fill="#7C3AED"/>
 <rect x="20" y="230" width="150" height="8" fill="#7C3AED"/>
 <text x="95" y="230" text-anchor="middle" font-size="12.5" font-weight="700" fill="#FFFFFF">Your editor</text>
-<text x="95" y="258" text-anchor="middle" font-size="10.5" fill="#334155">local/config/app.json</text>
+<text x="95" y="258" text-anchor="middle" font-size="10.5" fill="#334155">API /api/config</text>
 <text x="95" y="273" text-anchor="middle" font-size="10.5" fill="#334155">acceptingPosts</text>
 <text x="95" y="288" text-anchor="middle" font-size="10.5" fill="#334155">(mounted read-only)</text>
 

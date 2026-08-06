@@ -19,8 +19,7 @@
 | `127.0.0.1:18080/portal/review` | 同じものを probe 1 本ずつ、 決めた rule 付きで |
 | `127.0.0.1:18080/` | 板そのもの。 これまでの StackStack 問題から変わっていない |
 | `127.0.0.1:18081` | TenkaCloud の採点が委譲する loopback の `/verify` |
-| `problems/challenges/stackstack-safe-exposure/local/access/access.json` | access ドキュメント ── **あなたの** ファイル、 読み取り専用でマウント |
-| `problems/challenges/stackstack-safe-exposure/local/config/app.json` | 板自身の設定。 この問題の対象ではない |
+| `127.0.0.1:18080/docs` | ブラウザ API コンソール。 access は `PATCH /api/settings` で変更 |
 
 image は StackStack 全問題で共有している [`stackstack-base/`](../../stackstack-base) から
 ビルドされる。 4 つの API キー・下書きの id・2 つの管理番号はデプロイごとにランダムな
@@ -100,9 +99,8 @@ checkpoint 4 つ、 200 点:
 
 4. access ドキュメントを書き直す:
 
-   ```
-   problems/challenges/stackstack-safe-exposure/local/access/access.json
-   ```
+   `/docs` の `GET /api/settings` で現状を読み、 `PATCH /api/settings` で変更します。
+   リポジトリは読み取り専用のままです。
 
    再起動は要らない ── リクエストごとに読み直される。 読み込めないドキュメントは 「黙って
    閉まる」 のではなく障害として出る: governed なルートは全部 `503 policy_error` を返し、
@@ -145,9 +143,7 @@ checkpoint 4 つ、 200 点:
 
 7. チェックアウトを戻すのは、 合格印を提出した **あと** で:
 
-   ```
-   git -C problems checkout -- challenges/stackstack-safe-exposure/local/
-   ```
+   sign-off 提出後にやり直すなら `/docs` の `DELETE /api/settings` を使います。
 
 ## access ドキュメント
 
@@ -283,9 +279,8 @@ probe から最後まで同期実行になっている。 途中で他のリク�
 ## コスト
 
 ゼロ。 クラウドアカウントには何もデプロイされない。 コンテナは手元で動き、 `make local-down`
-で消える。 下書きも判定記録もコンテナのメモリ上だけにあるので、 片付けたあとに残るのは自分の
-チェックアウトの 2 ファイルだけ。 それも
-`git -C problems checkout -- challenges/stackstack-safe-exposure/local/` で戻せる。
+で消える。 下書きも判定記録も runtime の policy 変更もコンテナ内だけなので、
+リポジトリのチェックアウトは汚れない。
 
 ## Battle への引き継ぎ
 

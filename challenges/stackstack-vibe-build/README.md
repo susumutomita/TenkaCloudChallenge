@@ -26,7 +26,7 @@ says plainly what is real and what is stood in for:
 | --- | --- |
 | the board | the StackStack family's shared message board (`stackstack-base/`), same app as `stackstack-onboarding` |
 | the archive | an in-memory set of imported rows, some of which have never been on a public surface |
-| your feature | `local/feature/search.mjs` in your checkout, mounted read-only and re-read whenever it changes |
+| your feature | runtime source in `/api/source`, edited from the browser API console |
 | `GET /api/search` | JSON search; calls your `search` and publishes what it returns |
 | `GET /search` | the search page; calls your `renderResults` and puts the string it returns onto the page **without escaping it** |
 | `GET /api/spec` | the nine requirements, R1–R9, served by the app itself |
@@ -42,8 +42,8 @@ surfaces) and `18081` (the loopback `/verify` the platform delegates scoring to)
 # 1. read the requirement
 curl -s http://127.0.0.1:18080/api/spec | jq
 
-# 2. implement it (an AI tool is allowed, and encouraged)
-$EDITOR problems/challenges/stackstack-vibe-build/local/feature/search.mjs
+# 2. implement it in /docs (GET /api/source, then PUT /api/source)
+# an AI tool is allowed and encouraged; the repository remains read-only
 
 # 3. use it — a save takes effect without a restart
 curl -s 'http://127.0.0.1:18080/api/search?q=board'

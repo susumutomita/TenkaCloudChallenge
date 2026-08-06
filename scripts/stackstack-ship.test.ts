@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -88,6 +88,8 @@ interface Instance {
 async function startInstance(name: string, challengePort: number, verifyPort: number) {
   const manifestPath = join(scratch, `${name}-release.json`);
   const configPath = join(scratch, `${name}-app.json`);
+  const overrideDir = join(scratch, `${name}-overrides`);
+  mkdirSync(overrideDir);
   writeFileSync(manifestPath, readFileSync(join(PROBLEM_DIR, "local", "release", "release.json")));
   writeFileSync(configPath, readFileSync(join(PROBLEM_DIR, "local", "config", "app.json")));
 
@@ -98,6 +100,7 @@ async function startInstance(name: string, challengePort: number, verifyPort: nu
       SCENARIO: "ship",
       FLAG_SEED: SEED,
       APP_CONFIG: configPath,
+      APP_OVERRIDE_DIR: overrideDir,
       CONFIG_HINT,
       RELEASE_MANIFEST: manifestPath,
       RELEASE_HINT,
@@ -150,6 +153,13 @@ function client(instance: () => Instance) {
     get: (path: string) => json(path),
     post: (path: string) => json(path, { method: "POST" }),
     remove: (path: string) => json(path, { method: "DELETE" }),
+    patchSettings: (settings: Record<string, unknown>) =>
+      json("/api/settings", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(settings),
+      }),
+    resetSettings: () => json("/api/settings", { method: "DELETE" }),
     deploy: () => json("/shipyard/releases", { method: "POST" }),
     posture: async () =>
       (await json("/posture")).body as {
@@ -272,6 +282,19 @@ describe("stackstack-ship, one full pass", () => {
     instance = await startInstance("pass", 18310, 18311);
   });
   afterAll(() => instance?.kill());
+
+  it("should change and reset the release manifest through the API without touching its source", async () => {
+    const source = readFileSync(instance.manifestPath, "utf8");
+    const changed = await app.patchSettings({ artifact: "board-from-api" });
+    expect(changed.status).toBe(200);
+    expect(changed.body.settings.artifact).toBe("board-from-api");
+    expect(readFileSync(instance.manifestPath, "utf8")).toBe(source);
+
+    const reset = await app.resetSettings();
+    expect(reset.status).toBe(200);
+    expect(reset.body.settings.artifact).toBe("board-2f9c81ae");
+    expect(readFileSync(instance.manifestPath, "utf8")).toBe(source);
+  });
 
   it("should have built an artifact and deployed nothing at all", async () => {
     // Build and deploy are two facts. This is the one the story is built on.
@@ -1171,12 +1194,11 @@ describe("stackstack-ship wiring", () => {
     }
   });
 
-  it("should give the participant-facing docs the same manifest path the app prints", () => {
-    const hint = service.environment.RELEASE_HINT as string;
+  it("should direct participant-facing docs to the runtime manifest API", () => {
     for (const name of ["README.md", "README.ja.md"]) {
-      expect(readFileSync(join(PROBLEM_DIR, name), "utf8")).toContain(hint);
+      expect(readFileSync(join(PROBLEM_DIR, name), "utf8")).toContain("PATCH /api/settings");
     }
-    expect(readFileSync(join(PROBLEM_DIR, "metadata.json"), "utf8")).toContain(hint);
+    expect(readFileSync(join(PROBLEM_DIR, "metadata.json"), "utf8")).toContain("PATCH /api/settings");
   });
 
   it("should ship a manifest that cannot deploy, in exactly the two documented ways", () => {
@@ -1210,9 +1232,9 @@ describe("stackstack-ship wiring", () => {
       "GET /site/healthz",
       "127.0.0.1:18080/site",
       "127.0.0.1:18081",
-      RELEASE_HINT,
+      "PATCH /api/settings",
       "make local PROBLEM=stackstack-ship",
-      "git -C problems checkout -- challenges/stackstack-ship/local/",
+      "DELETE /api/settings",
       "8 / 16 / 16 / 28 / 16",
     ]) {
       expect(english).toContain(anchor);

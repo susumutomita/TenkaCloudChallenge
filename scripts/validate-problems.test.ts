@@ -700,12 +700,11 @@ describe("checkSolutionDoesNotEditCatalog", () => {
     ).toEqual([]);
   });
 
-  it("stays quiet for the problems already shipped this way", () => {
-    expect(
-      checkSolutionDoesNotEditCatalog({
-        id: "stackstack-onboarding",
-        instructions: "problems/challenges/stackstack-onboarding/local/config/app.json を直す",
-      } as never),
-    ).toEqual([]);
+  it("rejects a regression in a repaired StackStack problem", () => {
+    const errors = checkSolutionDoesNotEditCatalog({
+      id: "stackstack-onboarding",
+      instructions: "problems/challenges/stackstack-onboarding/local/config/app.json を直す",
+    } as never);
+    expect(errors).toHaveLength(1);
   });
 });

@@ -19,7 +19,7 @@
 
   <rect class="box" x="30" y="52" width="200" height="86" />
   <text class="h" x="44" y="76">your checkout</text>
-  <text class="s" x="44" y="96">local/feature/search.mjs</text>
+  <text class="s" x="44" y="96">API /api/source</text>
   <text class="s" x="44" y="114">search() / renderResults()</text>
   <text class="s" x="44" y="130">read-only mount, re-read on save</text>
 

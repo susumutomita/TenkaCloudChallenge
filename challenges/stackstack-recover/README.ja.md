@@ -20,9 +20,8 @@
 | `127.0.0.1:18080/ops` | 運用面。 公開側の入口とは別系統なので、 入口が落ちていても答えます |
 | `127.0.0.1:18080/edge/*` | 掲示板の手前にある公開側の入口 |
 | `127.0.0.1:18081` | TenkaCloud の採点が委譲する loopback の `/verify` |
-| `problems/challenges/stackstack-recover/local/policy/policy.json` | **昨夜のデプロイが書き換えた 1 枚。** あなたのファイルで、 read-only でマウントされ、 リクエストごとに読み直されます |
-| `problems/challenges/stackstack-recover/local/config/app.json` | 掲示板自身の設定。 前の問題から変わっていません |
-| `problems/challenges/stackstack-recover/local/state/` | 定期処理が書く場所 ── 設定が許可していれば |
+| `127.0.0.1:18080/docs` | ブラウザ API コンソール。 昨夜の policy は `PATCH /api/settings` で変更 |
+| `/app/state/` | policy が許可したとき定期処理が書くコンテナ内の領域 |
 
 イメージは [`stackstack-base/`](../../stackstack-base) から作られます。 incident の署名は
 デプロイごとにランダムな `FLAG_SEED` からコンテナの中で導出されるので、 答えはこのリポジトリに
@@ -104,8 +103,10 @@ receipt は `GET /posture` の `tokens` に、 その gate が true のあいだ
 5. 設定を直す。 リポジトリの 1 枚です (以下のパスは TenkaCloud のチェックアウト基準。 この
    カタログは `problems/` submodule としてマウントされています):
 
+   `/docs` の `GET /api/settings` で読み、 `PATCH /api/settings` で変更します。
+   リポジトリのファイルは編集しません。
+
    ```jsonc
-   // problems/challenges/stackstack-recover/local/policy/policy.json
    {
      "auth": {
        "requireToken": true,
@@ -122,10 +123,9 @@ receipt は `GET /posture` の `tokens` に、 その gate が true のあいだ
    再起動は要りません。 リクエストごとに読み直されます。 保存したら測り直して
    (`curl -sX POST http://127.0.0.1:18080/ops/probe`)、 `GET /posture` をもう一度見てください。
 
-   **`storage.writable` に書くのはコンテナ内のパス** で、 チェックアウト側のパスではありません。
-   定期処理が書くのは `/app/state/digest/latest.json` で、 それがチェックアウトに現れる場所は
-   `problems/challenges/stackstack-recover/local/state/digest/latest.json` です。
-   `GET /ops/digest` は両方を出します。
+   **`storage.writable` に書くのはコンテナ内のパス**です。 定期処理は
+   `/app/state/digest/latest.json` に書き、 `GET /ops/digest` で結果を確認できます。
+   リポジトリは runtime の出力先ではありません。
 
 6. `GET /posture` の 5 つの gate が全部 true になったら、 それぞれの `tokens` の値を提出します。
    `survived_restart` だけはもう 1 つ条件があります ── 運用面の再起動台帳がそれを言っています。
