@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readOverride } from "../overrides.mjs";
 import { posix } from "node:path";
 import { addPost, validatePost } from "../board.mjs";
 import { readConfig } from "../config.mjs";
@@ -67,6 +68,9 @@ const PORT = Number(process.env.CHALLENGE_PORT ?? 8080);
 
 /** The policy file this scenario owns, and the path of it in the participant's checkout. */
 const POLICY_PATH = process.env.RECOVER_POLICY ?? "/app/policy/policy.json";
+
+/** この scenario の設定の上書き名 (置き場と挙動は `overrides.mjs`)。 */
+const SETTINGS_NAME = "policy";
 const POLICY_HINT = process.env.RECOVER_POLICY_HINT ?? POLICY_PATH;
 
 /** Where the app is allowed to write, if the policy lets it. */
@@ -236,6 +240,10 @@ function readPolicy(path = POLICY_PATH) {
   let parsed;
   try {
     parsed = JSON.parse(text);
+    // マウント元は出発点。 実行中に変えた分を重ねてから検証する (置き場は overrides.mjs)。
+    if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
+      parsed = { ...parsed, ...readOverride(SETTINGS_NAME) };
+    }
   } catch (error) {
     return policyError(`${POLICY_HINT} is not valid JSON: ${error.message}`);
   }
@@ -1260,4 +1268,18 @@ export const checks = {
     }
     return matches(submission, gateToken("survived_restart"));
   },
+};
+
+
+/**
+ * 実行中に変えられる設定。 これを宣言すると `/api/settings` と Swagger の項目が生える。
+ *
+ * ファイルの場所を参加者に案内する方向は採らない — マウント元は git 管理下なので、
+ * 直接編集させると解いた瞬間にリポジトリが汚れ、 作り直しても壊れた状態に戻らなくなる。
+ */
+export const editableSettings = {
+  name: SETTINGS_NAME,
+  summary: "復旧ポリシー",
+  example: {"enabled": true},
+  read: () => readPolicy(),
 };

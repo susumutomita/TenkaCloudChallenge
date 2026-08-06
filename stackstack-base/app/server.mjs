@@ -3,6 +3,7 @@ import { createServer } from "node:http";
 import { addPost, allPosts, resetBoard, validatePost } from "./board.mjs";
 import { applyConfigChange, CONFIG_FILE, readConfig, resetConfigChanges } from "./config.mjs";
 import { log, recentLines } from "./log.mjs";
+import { clearOverride, readOverride, saveOverride } from "./overrides.mjs";
 import { observe, posture } from "./posture.mjs";
 import { BOARD_SERIAL, BOOT_CHECK } from "./secrets.mjs";
 
@@ -136,6 +137,53 @@ ${rows}
 }
 
 /**
+ * scenario 固有の設定を読む・変える・捨てる。
+ *
+ * 板の `/api/config` と 1 本にまとめる方向は採らない — 板の設定は 8 問すべてに共通で、
+ * scenario の設定は問題ごとに形が違う。 混ぜると、 どちらを直せばよいか参加者が判別できない。
+ */
+async function handleSettings(route, request, response) {
+  const settings = scenario.editableSettings;
+  if (route === "GET /api/settings") {
+    const current = settings.read();
+    return send(response, 200, {
+      settings: current.value,
+      ok: current.ok,
+      error: current.error ?? null,
+    });
+  }
+  if (route === "DELETE /api/settings") {
+    clearOverride(settings.name);
+    log("info", `${settings.name} changes discarded`);
+    return send(response, 200, { settings: settings.read().value });
+  }
+  const body = await readJson(request);
+  if (body === TOO_LARGE) {
+    return send(response, 413, { error: `body must be at most ${MAX_BODY_BYTES} bytes` });
+  }
+  if (body === null || typeof body !== "object" || Array.isArray(body)) {
+    return send(response, 400, { error: "rejected", detail: ["the body must be a JSON object"] });
+  }
+  // 妥当性は scenario 自身の読み込み経路に判定させる。 ここに別の検査を置く方向は採らない —
+  // 設定の形は問題ごとに違い、 二重に持てば片方だけ直された仕様がもう片方に残る。
+  //
+  // 事前に検証関数を呼ぶ方向も採らない — scenario によって検証は読み込みの中にあり、
+  // 切り出せる形になっていない。 いったん書いて読み直し、 通らなければ元に戻す。
+  // 上書きは /tmp の 1 ファイルなので、 巻き戻しは取りこぼしなく効く。
+  const previous = readOverride(settings.name);
+  const saved = saveOverride(settings.name, body);
+  if (!saved.ok) return send(response, 500, { error: "rejected", detail: [saved.error] });
+  const after = settings.read();
+  if (!after.ok) {
+    clearOverride(settings.name);
+    if (Object.keys(previous).length > 0) saveOverride(settings.name, previous);
+    return send(response, 400, { error: "rejected", detail: [after.error] });
+  }
+  log("info", `${settings.name} changed via API: ${Object.keys(body).join(", ")}`);
+  return send(response, 200, { settings: settings.read().value });
+}
+
+/**
  * この板が話す API の仕様。 Swagger UI がこれを読んで「試す」画面を出す。
  *
  * 仕様書を別ファイルに置く方向は採らない — 実装と別々に古くなる。 ここが唯一の一覧で、
@@ -208,6 +256,30 @@ function openApiDocument(scenarioName) {
       "/api/logs": { get: { summary: "アプリのログ", responses: { 200: ok("ログ") } } },
       "/posture": { get: { summary: "いまの状態の実測結果", responses: { 200: ok("実測") } } },
       "/healthz": { get: { summary: "死活確認", responses: { 200: ok("健康"), 503: ok("不調") } } },
+      // scenario が設定を持つときだけ出す。 手で書き足す方向は採らない — 宣言と一覧が
+      // 別々に古くなり、 Swagger に無い経路や、 経路の無い Swagger 項目が生まれる。
+      ...(scenario.editableSettings
+        ? {
+            "/api/settings": {
+              get: {
+                summary: `${scenario.editableSettings.summary}をみる`,
+                responses: { 200: ok("いまの設定") },
+              },
+              patch: {
+                summary: `${scenario.editableSettings.summary}を変える`,
+                requestBody: {
+                  required: true,
+                  ...json({ type: "object", example: scenario.editableSettings.example }),
+                },
+                responses: { 200: ok("変更後"), 400: ok("受け付けられない値") },
+              },
+              delete: {
+                summary: `${scenario.editableSettings.summary}の変更を捨てて初期状態に戻す`,
+                responses: { 200: ok("戻した後") },
+              },
+            },
+          }
+        : {}),
     },
   };
 }
@@ -275,6 +347,15 @@ function sendAsset(response, pathname) {
   response.end(body);
 }
 
+/**
+ * scenario が持つ設定を実行時に変えるための経路。
+ *
+ * scenario ごとに別のパス名を与える方向は採らない — Swagger の一覧で場所が毎回変わると、
+ * 8 問を通した参加者が毎回探し直すことになる。 設定の中身は問題ごとに違っても、
+ * 「ここが設定」 という位置は同じにする。
+ */
+const SETTINGS_ROUTES = ["GET /api/settings", "PATCH /api/settings", "DELETE /api/settings"];
+
 /** The routes the board itself serves, whatever the scenario. */
 const BASE_ROUTES = [
   "GET /",
@@ -286,6 +367,7 @@ const BASE_ROUTES = [
   "GET /api/config",
   "PATCH /api/config",
   "DELETE /api/config",
+  ...(scenario.editableSettings ? SETTINGS_ROUTES : []),
   "GET /docs",
   "GET /openapi.json",
 ];
@@ -408,6 +490,10 @@ const challenge = createServer(guard(async (request, response) => {
 
   if (route === "DELETE /api/config") {
     return send(response, 200, { settings: resetConfigChanges().value });
+  }
+
+  if (scenario.editableSettings && SETTINGS_ROUTES.includes(route)) {
+    return handleSettings(route, request, response);
   }
 
   if (route === "GET /healthz") {

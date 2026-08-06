@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { readOverride } from "../overrides.mjs";
 import { log } from "../log.mjs";
 import { posture } from "../posture.mjs";
 import { READY_TOKEN, gateToken } from "../secrets.mjs";
@@ -66,6 +67,9 @@ const LEAK_MARKER = `TC{leak_${defendDigest("leak").slice(0, 32)}}`;
 /** Where the participant-owned access policy is mounted, and where it is in their checkout. */
 const POLICY_PATH = process.env.ACCESS_POLICY ?? "/app/policy/access.json";
 const POLICY_HINT = process.env.POLICY_HINT ?? POLICY_PATH;
+
+/** この scenario の設定の上書き名 (置き場と挙動は `overrides.mjs`)。 */
+const SETTINGS_NAME = "policy";
 
 const CHALLENGE_PORT = Number(process.env.CHALLENGE_PORT ?? 8080);
 
@@ -379,6 +383,10 @@ function loadPolicy(path = POLICY_PATH) {
     parsed = JSON.parse(text);
   } catch (error) {
     return reportPolicy(`${path} is not valid JSON: ${error.message}`);
+  }
+  // マウント元は出発点。 実行中に変えた分を重ねてから検証する (置き場は overrides.mjs)。
+  if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
+    parsed = { ...parsed, ...readOverride(SETTINGS_NAME) };
   }
   const { errors, value } = validatePolicy(parsed);
   if (errors.length > 0) return reportPolicy(errors.join("; "));
@@ -1208,4 +1216,18 @@ export const checks = {
     const state = measure();
     return state.ready === true && matches(submission, READY_TOKEN);
   },
+};
+
+
+/**
+ * 実行中に変えられる設定。 これを宣言すると `/api/settings` と Swagger の項目が生える。
+ *
+ * ファイルの場所を参加者に案内する方向は採らない — マウント元は git 管理下なので、
+ * 直接編集させると解いた瞬間にリポジトリが汚れ、 作り直しても壊れた状態に戻らなくなる。
+ */
+export const editableSettings = {
+  name: SETTINGS_NAME,
+  summary: "アクセスポリシー",
+  example: { enabled: true },
+  read: () => loadPolicy(),
 };
