@@ -1412,10 +1412,9 @@ describe("stackstack-observability wiring", () => {
     }
   });
 
-  it("should give the participant-facing docs the same paths the app prints", () => {
-    const hint = service.environment.RELAY_HINT as string;
+  it("should direct every participant-facing document to runtime settings", () => {
     for (const name of ["README.md", "README.ja.md", "metadata.json"]) {
-      expect(readFileSync(join(PROBLEM_DIR, name), "utf8")).toContain(hint);
+      expect(readFileSync(join(PROBLEM_DIR, name), "utf8")).toContain("PATCH /api/settings");
     }
   });
 
@@ -1427,9 +1426,9 @@ describe("stackstack-observability wiring", () => {
     expect(raw).not.toContain("relay/healthz");
   });
 
-  it("should show the relay settings path on the console the participant opens", async () => {
+  it("should show the runtime settings endpoint on the console the participant opens", async () => {
     const page = await main.get("/relay");
-    expect(page.text).toContain(RELAY_HINT);
+    expect(page.text).toContain("/api/settings");
     expect(page.text).not.toContain("/app/relay/relay.json");
   });
 });

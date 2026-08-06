@@ -444,7 +444,7 @@ describe("stackstack-defend wiring", () => {
     expect(existsSync(join(composeDir, "policy", "access.json"))).toBe(true);
   });
 
-  it("should name both files by the path in the participant's checkout", () => {
+  it("should keep source mounts valid while directing participants to runtime settings", () => {
     // `make local` runs from the platform repository, where this catalog is the
     // `problems/` submodule. The app itself only ever sees /app/..., which is a
     // path that does not exist on their machine.
@@ -454,9 +454,9 @@ describe("stackstack-defend wiring", () => {
       expect(existsSync(join(REPO_ROOT, relative.replace(/^problems\//, "")))).toBe(true);
     }
     for (const name of ["README.md", "README.ja.md"]) {
-      expect(readFileSync(join(PROBLEM_DIR, name), "utf8")).toContain(POLICY_HINT);
+      expect(readFileSync(join(PROBLEM_DIR, name), "utf8")).toContain("PATCH /api/settings");
     }
-    expect(readFileSync(join(PROBLEM_DIR, "metadata.json"), "utf8")).toContain(POLICY_HINT);
+    expect(readFileSync(join(PROBLEM_DIR, "metadata.json"), "utf8")).toContain("PATCH /api/settings");
   });
 
   it("should ship a starter policy that is genuinely open", () => {

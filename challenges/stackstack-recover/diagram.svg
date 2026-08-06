@@ -22,8 +22,8 @@
 
   <rect x="28" y="52" width="188" height="96" rx="6" class="box"/>
   <text x="40" y="76" class="t">your checkout</text>
-  <text x="40" y="96" class="s">policy/policy.json  (read-only)</text>
-  <text x="40" y="113" class="s">config/app.json     (read-only)</text>
+  <text x="40" y="96" class="s">API /api/settings  (runtime)</text>
+  <text x="40" y="113" class="s">API /api/config    (runtime)</text>
   <text x="40" y="130" class="s">state/              (writable)</text>
 
   <rect x="264" y="52" width="188" height="96" rx="6" class="box"/>

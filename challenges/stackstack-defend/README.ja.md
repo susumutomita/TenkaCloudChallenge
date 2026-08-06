@@ -20,8 +20,7 @@
 | `127.0.0.1:18080/desk` | 下書きデスク ── アカウント、 token、 追加された経路 |
 | `127.0.0.1:18080/api/drill` | 走り続けているトラフィックが実際に測った内訳 |
 | `127.0.0.1:18081` | TenkaCloud の採点系が委譲する loopback の `/verify` |
-| `problems/challenges/stackstack-defend/local/policy/access.json` | アクセス方針 ── **自分の** ファイル。 読み取り専用でマウント |
-| `problems/challenges/stackstack-defend/local/config/app.json` | 板自身の設定。 onboarding から変更なし |
+| `127.0.0.1:18080/docs` | ブラウザ API コンソール。 方針は `PATCH /api/settings` で変更 |
 
 image は StackStack 系問題が共有する [`stackstack-base/`](../../stackstack-base) から
 ビルドされる。 下書きの id・アカウントの token・漏れている marker は、
@@ -109,9 +108,8 @@ AWS では何に相当するか。
 
 6. 原因を直す。
 
-   ```
-   problems/challenges/stackstack-defend/local/policy/access.json
-   ```
+   `/docs` を開き、 `GET /api/settings` で現状を読み、 `PATCH /api/settings` で
+   変更します。 変更先は実行中のコンテナだけで、 リポジトリのファイルは触りません。
 
    評価器が理解する書き方は
    `curl -s http://127.0.0.1:18080/api/policy | jq` の `grammar` に出ている。
@@ -145,9 +143,7 @@ AWS では何に相当するか。
 
 8. 終わったらチェックアウトを戻す。
 
-   ```
-   git -C problems checkout -- challenges/stackstack-defend/local/
-   ```
+   やり直すときは `/docs` の `DELETE /api/settings`。 コンテナ再作成でも同じ初期状態に戻ります。
 
    再現より先に方針を直してしまった場合も、 これで最初のチェックポイントを取り戻せる ──
    戻して、 再現して、 もう一度直す。
@@ -230,8 +226,7 @@ AWS では何に相当するか。
 
 ゼロ。 クラウドアカウントには何もデプロイされない。 コンテナは自分のマシンで動き、
 `make local-down` で消える。 下書きも公開キューも測定結果もすべてコンテナのメモリ上に
-あるので、 片付けたあとに残るのは自分のチェックアウトの 2 ファイルだけで、 それも
-`git -C problems checkout -- challenges/stackstack-defend/local/` で戻る。
+あり、 runtime の方針変更も一緒に消えます。 リポジトリのチェックアウトは最初から汚れません。
 
 ## Battle に持ち越されるもの
 

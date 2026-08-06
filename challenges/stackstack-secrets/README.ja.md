@@ -22,8 +22,7 @@ delete は無く、 これから生えることもありません。
 | `127.0.0.1:18080/` | 板そのもの (onboarding から変わりません) |
 | `127.0.0.1:18080/api/ops` | 運用コンソール ── 鍵、 action カタログ、 ポリシー、 ダイジェスト |
 | `127.0.0.1:18081` | TenkaCloud のスコアラーが委譲するループバックの `/verify` |
-| `problems/challenges/stackstack-secrets/local/ops/ops.json` | 夜間ジョブがどの鍵で動き、 その鍵に何を許すか ── **あなたの**ファイル、 read-only でマウント |
-| `problems/challenges/stackstack-secrets/local/config/app.json` | 板自身の設定 (onboarding から変わりません) |
+| `127.0.0.1:18080/docs` | ブラウザ API コンソール。 identity と grants は `PATCH /api/settings` で変更 |
 
 イメージは StackStack 問題すべてが共有する [`stackstack-base/`](../../stackstack-base) から
 ビルドされます。 漏れた鍵、 break-glass 値、 fingerprint、 witness、 revocation receipt、
@@ -109,9 +108,8 @@ policy digest はすべて、 デプロイごとにランダムな `FLAG_SEED` �
 
 6. 夜間ジョブを切り替える。 どの鍵で動くかを決めているのは
 
-   ```
-   problems/challenges/stackstack-secrets/local/ops/ops.json
-   ```
+   `/docs` の `GET /api/settings` で読み、 `PATCH /api/settings` で変更します。
+   credential も解答もリポジトリには書きません。
 
    です。 `identity` は鍵の**名前**であって鍵そのものではなく、 `SSOPS-` で始まる値は拒否され
    ます。 保存してからジョブを走らせてください:
@@ -165,9 +163,7 @@ policy digest はすべて、 デプロイごとにランダムな `FLAG_SEED` �
 10. チェックアウトを戻すのは、 合格印を提出した**あと**にしてください。 先に `ops.json` を戻す
     と、 ジョブが失効済みの鍵を向いて gate が赤に戻ります:
 
-    ```
-    git -C problems checkout -- challenges/stackstack-secrets/local/
-    ```
+    sign-off 提出後にやり直すなら `DELETE /api/settings` またはコンテナ再作成です。
 
 ## この問題が足すサーフェス
 
@@ -255,11 +251,9 @@ submodule からビルドします。
 ## コスト
 
 ゼロです。 クラウドアカウントには何もデプロイされず、 コンテナは自分のマシンで動き、
-`make local-down` で消えます。 鍵ストアも journal もダイジェストの記録もすべてコンテナの
-メモリ上にあるので、 片付けたあとに残るのは自分のチェックアウトの 2 ファイルだけで、
-`git -C problems checkout -- challenges/stackstack-secrets/local/` で戻せます。 コンテナを
-再起動すると鍵ストアと板は初期化されますが、 漏れた鍵も break-glass 値も seed 由来なので、
-同じ手順をなぞれば同じ場所に戻れます。
+`make local-down` で消えます。 鍵ストア、 journal、 ダイジェスト、 settings override は
+コンテナ内だけで、 リポジトリは汚れません。 再作成すると one-time の break-glass
+引き継ぎ票も封印された状態に戻ります。
 
 ## Battle に引き継がれるもの
 

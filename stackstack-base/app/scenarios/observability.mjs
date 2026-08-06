@@ -116,6 +116,7 @@ const SETTINGS_NAME = "relay";
  * the path this process reads. Display only, exactly like `CONFIG_HINT`.
  */
 const RELAY_HINT = process.env.RELAY_HINT ?? RELAY_CONFIG_PATH;
+const SETTINGS_LABEL = "/api/settings";
 
 /** The dependencies this relay has. The health check may be pointed at these. */
 const DEPENDENCIES = ["config", "archive"];
@@ -500,7 +501,7 @@ function baseState() {
   const counted = totals();
   const lines = currentEpochLines();
   return {
-    settingsFile: RELAY_HINT,
+    settingsFile: SETTINGS_LABEL,
     settings: settings.ok ? settings.value : null,
     settingsError: settings.error,
     epoch,
@@ -569,8 +570,8 @@ function relayPage() {
 <table border="1" cellpadding="6" cellspacing="0"><tr><th>shard</th><th>code</th><th>archived</th><th>dropped</th></tr>
 ${shardRows === "" ? '<tr><td colspan="4">まだ 1 件も流れていません</td></tr>' : shardRows}</table>
 
-<h2>設定ファイル</h2>
-<p>relay の設定はあなたのチェックアウトの <code>${escapeHtml(RELAY_HINT)}</code> です。 リクエストごとに読み直すので、 保存すればすぐ効きます (再起動は要りません)。</p>
+<h2>設定</h2>
+<p>relay の設定は <a href="../docs"><code>${SETTINGS_LABEL}</code> を API コンソールで変更</a>します。 リポジトリのファイルは書き換えません。</p>
 <pre>{
   "archiveLogging":    "off" | "on",      relay の 1 行ログを書くかどうか
   "healthCheckProbes": ["&lt;依存先の名前&gt;", ...],  死活確認が見る依存先
@@ -624,7 +625,7 @@ export const routes = {
         ok: false,
         error: "relay_settings_invalid",
         detail: settings.error,
-        settingsFile: RELAY_HINT,
+        settingsFile: SETTINGS_LABEL,
       });
     }
     const probes = settings.value.healthCheckProbes;

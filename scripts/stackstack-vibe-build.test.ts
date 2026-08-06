@@ -481,6 +481,7 @@ beforeAll(async () => {
       FLAG_SEED: SEED,
       APP_CONFIG: configPath,
       APP_FEATURE: featurePath,
+      APP_OVERRIDE_DIR: scratch,
       CONFIG_HINT,
       FEATURE_HINT,
       CHALLENGE_PORT: String(CHALLENGE_PORT),
@@ -626,20 +627,37 @@ describe("stackstack-vibe-build requirements are one document", () => {
     // The metadata does not restate the rules — it sends the participant to the
     // one copy that cannot drift, which is the running app's.
     const meta = readFileSync(join(PROBLEM_DIR, "metadata.json"), "utf8");
-    for (const token of ["/api/spec", "/api/selfcheck", "search.mjs"]) expect(meta).toContain(token);
+    for (const token of ["/api/spec", "/api/selfcheck", "/api/source"]) expect(meta).toContain(token);
     // ...and the result field has exactly one name across all of them.
     for (const document of [spec, ...readmes]) expect(document).not.toContain("body.entries");
   });
 
-  it("should point at the feature file by the path in the participant's checkout", async () => {
+  it("should point at the browser-editable runtime source", async () => {
     const spec = await get("/api/spec");
-    expect(spec.body.feature).toBe(FEATURE_HINT);
+    expect(spec.body.feature).toBe("/api/source");
     expect(spec.text).not.toContain("/app/feature/search.mjs");
   });
 });
 
 describe("stackstack-vibe-build with the shipped starter", () => {
   beforeAll(() => useFeature(STARTER));
+
+  it("should change and reset the feature through the API without touching its source", async () => {
+    const source = readFileSync(featurePath, "utf8");
+    const changed = await fetch(`${BOARD}/api/source`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ source: CORRECT }),
+    });
+    expect(changed.status).toBe(200);
+    expect(((await changed.json()) as { source: string }).source).toBe(CORRECT);
+    expect(readFileSync(featurePath, "utf8")).toBe(source);
+
+    const reset = await fetch(`${BOARD}/api/source`, { method: "DELETE" });
+    expect(reset.status).toBe(200);
+    expect(((await reset.json()) as { source: string }).source).toBe(source);
+    expect(readFileSync(featurePath, "utf8")).toBe(source);
+  });
 
   it("should load and export both functions, so the first minute is 'not written yet'", async () => {
     const feature = await get("/api/feature");
@@ -1044,7 +1062,7 @@ describe("stackstack-vibe-build runs participant code out of reach of its own se
     expect(peeked).toContain("envKeys=0");
     // A child process's /proc/self/environ is its own exec-time environment,
     // which is what a worker thread would not have given us.
-    expect(peeked).toMatch(/\/proc\/self\/environ=\s*($|\|)/);
+    expect(peeked).toMatch(/\/proc\/self\/environ=(\s*($|\|)|unreadable:ENOENT)/);
   });
 
   it("should never let the seed reach the participant's code", async () => {
@@ -1321,9 +1339,9 @@ describe("stackstack-vibe-build wiring", () => {
     }
   });
 
-  it("should give the participant-facing docs the same feature path the app prints", () => {
+  it("should direct participant-facing docs to the runtime source API", () => {
     for (const name of ["README.md", "README.ja.md", "metadata.json"]) {
-      expect(readFileSync(join(PROBLEM_DIR, name), "utf8")).toContain(FEATURE_HINT);
+      expect(readFileSync(join(PROBLEM_DIR, name), "utf8")).toContain("/api/source");
     }
   });
 

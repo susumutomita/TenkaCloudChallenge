@@ -72,6 +72,7 @@ const POLICY_PATH = process.env.RECOVER_POLICY ?? "/app/policy/policy.json";
 /** この scenario の設定の上書き名 (置き場と挙動は `overrides.mjs`)。 */
 const SETTINGS_NAME = "policy";
 const POLICY_HINT = process.env.RECOVER_POLICY_HINT ?? POLICY_PATH;
+const SETTINGS_LABEL = "/api/settings";
 
 /** Where the app is allowed to write, if the policy lets it. */
 const STATE_DIR = normalizePath(process.env.RECOVER_STATE_DIR ?? "/app/state");
@@ -826,8 +827,8 @@ ${gateRows}</table>
 <pre>${SUBSYSTEMS.join("\n")}</pre>
 <p>集合から署名を計算させるには <code>GET ops/signature?subsystems=a,b</code>。 順不同・重複可。</p>
 
-<h2>設定ファイル</h2>
-<p>昨夜のデプロイが書き換えた 1 枚: <code>${escapeHtml(POLICY_HINT)}</code> (呼ぶたびに読み直します)</p>
+<h2>設定</h2>
+<p>昨夜のデプロイが変えた policy は <a href="../docs"><code>${SETTINGS_LABEL}</code> を API コンソールで変更</a>します。 リポジトリのファイルは書き換えません。</p>
 <pre>{
   "auth": {
     "requireToken": true,
@@ -865,7 +866,7 @@ function statusPayload() {
   const output = digestOutput();
   return {
     policy: {
-      path: POLICY_HINT,
+      path: SETTINGS_LABEL,
       ok: policy.ok,
       error: policy.error,
       revision: state.revision,
@@ -984,7 +985,7 @@ async function edgeWrite(request, response) {
   if (!authorize(request, policy.value, "/edge/posts").ok) {
     return sendJson(response, 401, {
       error: "unauthorized",
-      detail: `this path is covered by auth.protect in ${POLICY_HINT}`,
+      detail: `this path is covered by auth.protect in ${SETTINGS_LABEL}`,
     });
   }
   const config = readConfig();
@@ -1108,7 +1109,7 @@ export const routes = {
     if (!authorize(request, policy.value, "/edge/healthz").ok) {
       return sendJson(response, 401, {
         error: "unauthorized",
-        detail: `this path is covered by auth.protect in ${POLICY_HINT}`,
+        detail: `this path is covered by auth.protect in ${SETTINGS_LABEL}`,
       });
     }
     const origin = await sample("GET", "/healthz");
@@ -1132,7 +1133,7 @@ export const routes = {
     if (!authorize(request, policy.value, "/edge/board").ok) {
       return sendJson(response, 401, {
         error: "unauthorized",
-        detail: `this path is covered by auth.protect in ${POLICY_HINT}`,
+        detail: `this path is covered by auth.protect in ${SETTINGS_LABEL}`,
       });
     }
     const origin = await sample("GET", "/api/board");

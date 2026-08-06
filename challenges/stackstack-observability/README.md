@@ -22,8 +22,7 @@ condition is written down where you can read it and argue with it.
 | `127.0.0.1:18080/relay/healthz` | The relay's health check |
 | `127.0.0.1:18080/archive` | What actually reached the downstream archive |
 | `127.0.0.1:18081` | Loopback `/verify` the TenkaCloud scorer delegates to |
-| `problems/challenges/stackstack-observability/local/relay/relay.json` | The relay's settings — **your** file, mounted read-only |
-| `problems/challenges/stackstack-observability/local/config/app.json` | The board's own config, unchanged from onboarding |
+| `127.0.0.1:18080/docs` | Browser API console and request workbench; relay changes live at `PATCH /api/settings` |
 
 The image is built from [`stackstack-base/`](../../stackstack-base), shared by every
 StackStack problem. The shard names, the shard codes, the incident id, the safe-log
@@ -106,9 +105,8 @@ Four checkpoints, 200 points:
    Boot lines, post-accepted lines — and nothing at all about the writes that did not
    land. That silence is a setting, and the setting is in
 
-   ```
-   problems/challenges/stackstack-observability/local/relay/relay.json
-   ```
+   Open `/docs`, inspect `GET /api/settings`, then use `PATCH /api/settings`.
+   No repository file is edited.
 
    which the app re-reads on every request. There is nothing to restart.
 
@@ -137,11 +135,7 @@ Four checkpoints, 200 points:
    more detail — including whether the health condition you wrote passes the three cases
    the gate evaluates, and whether anybody has actually run it since you wrote it.
 
-7. Restore your checkout when you are done:
-
-   ```
-   git -C problems checkout -- challenges/stackstack-observability/local/
-   ```
+7. Retry from the starter with `DELETE /api/settings` in `/docs`.
 
 ## The surfaces this problem adds
 
@@ -246,9 +240,8 @@ leaves 120.
 
 Zero. Nothing is deployed to a cloud account; the container runs on your machine and is
 removed by `make local-down`. The relay, the archive and the counters live entirely in
-the container's memory, so tearing down leaves nothing behind except the two files in
-your own checkout, which
-`git -C problems checkout -- challenges/stackstack-observability/local/` restores.
+the container's memory, including the runtime settings override, so tearing down leaves
+the repository checkout untouched.
 
 ## What carries into the Battle
 

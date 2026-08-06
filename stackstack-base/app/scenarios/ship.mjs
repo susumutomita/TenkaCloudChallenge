@@ -1,6 +1,7 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { log } from "../log.mjs";
+import { readOverride } from "../overrides.mjs";
 import { posture } from "../posture.mjs";
 import { READY_TOKEN, gateToken } from "../secrets.mjs";
 
@@ -84,12 +85,14 @@ const currentSecret = (name) => secretValue(name, secretStore.get(name).version)
 const probeSecret = (name) => secretValue(name, secretStore.get(name).version + 1);
 
 const MANIFEST_PATH = process.env.RELEASE_MANIFEST ?? "/app/release/release.json";
+const SETTINGS_NAME = "release";
 
 /**
  * Where the manifest sits in the *participant's* checkout, which is not the path
  * this process reads. Display only, exactly like `CONFIG_HINT`.
  */
 const RELEASE_HINT = process.env.RELEASE_HINT ?? MANIFEST_PATH;
+const SETTINGS_LABEL = "/api/settings";
 
 /**
  * The title the manifest ships with. A release that still carries it has not
@@ -307,6 +310,7 @@ function readManifest() {
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
     return { ok: false, reason: "manifest_invalid", detail: `${RELEASE_HINT} must contain a JSON object` };
   }
+  parsed = { ...parsed, ...readOverride(SETTINGS_NAME) };
   if (typeof parsed.artifact !== "string" || parsed.artifact.trim() === "") {
     return { ok: false, reason: "manifest_invalid", detail: "artifact must be a non-empty string" };
   }
@@ -320,6 +324,18 @@ function readManifest() {
   }
   return { ok: true, value: { artifact: parsed.artifact.trim(), env: parsed.env } };
 }
+
+export const editableSettings = {
+  name: SETTINGS_NAME,
+  summary: { ja: "リリース manifest", en: "release manifest" },
+  example: { artifact: "board-…", env: { BOARD_TITLE: "StackStack" } },
+  read: () => {
+    const manifest = readManifest();
+    return manifest.ok
+      ? { ok: true, value: manifest.value, error: null }
+      : { ok: false, value: null, error: manifest.detail };
+  },
+};
 
 /**
  * The environment a release must carry, and nothing else.
@@ -559,7 +575,7 @@ ${rows}</table>
 <p>中身は <code>GET /shipyard/secrets/value?name=...</code> で読めます (読んだことはログに残ります)。 入れ替えは <code>POST /shipyard/secrets/rotate</code>。</p>
 
 <h2>manifest</h2>
-<p>デプロイに使うファイル: <code>${escapeHtml(RELEASE_HINT)}</code> (呼ぶたびに読み直します)</p>
+<p><a href="../docs"><code>${SETTINGS_LABEL}</code> を API コンソールで変更</a>します。 リポジトリのファイルは書き換えません。</p>
 <pre>{
   "artifact": "&lt;registry にある artifact の id&gt;",
   "env": {
@@ -699,7 +715,7 @@ export const routes = {
   "GET /shipyard/state": (request, response) => {
     const verdict = siteVerdict();
     return sendJson(response, 200, {
-      manifestPath: RELEASE_HINT,
+      manifestPath: SETTINGS_LABEL,
       live: liveId,
       generation,
       releaseCount: releases.length,

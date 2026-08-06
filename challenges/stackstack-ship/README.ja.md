@@ -18,8 +18,7 @@ staged pipeline、 live release ポインタ、 そして実際に何かがデ�
 | `127.0.0.1:18080/shipyard` | 運用コンソール ── registry、 releases、 デプロイログ、 secret store |
 | `127.0.0.1:18080/site` | 公開側の入口 ── 外が受け取るもの |
 | `127.0.0.1:18081` | TenkaCloud の採点が委譲する loopback の `/verify` |
-| `problems/challenges/stackstack-ship/local/release/release.json` | リリース manifest ── **自分の** ファイル、 読み取り専用でマウント |
-| `problems/challenges/stackstack-ship/local/config/app.json` | 板自身の設定。 onboarding から変わっていません |
+| `127.0.0.1:18080/docs` | ブラウザ API コンソール。 manifest は `PATCH /api/settings` で変更 |
 
 image は StackStack 系問題が共有する [`stackstack-base/`](../../stackstack-base) から
 ビルドされます。 artifact の id、 public serial、 デプロイの receipt、 署名鍵の store は
@@ -87,9 +86,8 @@ AWS に移したときの対応:
 
    止まります。 そして止まった stage を名指しします。 その内容を
 
-   ```
-   problems/challenges/stackstack-ship/local/release/release.json
-   ```
+   `/docs` の `GET /api/settings` で読み、 `PATCH /api/settings` で変更します。
+   リポジトリは読み取り専用のままです。
 
    で直して、 もう一度打ってください。 リリースが promote されるまで繰り返します。
    再起動は要りません ── manifest はデプロイのたびに読み直されます。 stage は
@@ -148,9 +146,7 @@ AWS に移したときの対応:
 8. チェックアウトを戻すのは合格印を提出した **あと** にしてください。 manifest を戻して
    デプロイし直すのは構いませんが、 戻したまま plane を空にすると gate が赤に戻ります:
 
-   ```
-   git -C problems checkout -- challenges/stackstack-ship/local/
-   ```
+   sign-off 提出後にやり直すなら `DELETE /api/settings` またはコンテナ再作成です。
 
 ## この問題が足すサーフェス
 
@@ -226,8 +222,7 @@ submodule からビルドします。
 
 ゼロ。 クラウドアカウントには何もデプロイされません。 コンテナは自分のマシンで動き、
 `make local-down` で消えます。 リリース plane はコンテナのメモリ上だけに存在するので、
-片付けたあとに残るのは自分のチェックアウトの 2 ファイルだけで、 これは
-`git -C problems checkout -- challenges/stackstack-ship/local/` で戻せます。
+runtime の manifest override も一緒に消え、 リポジトリのチェックアウトは汚れません。
 
 ## Battle に何が引き継がれるか
 

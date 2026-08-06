@@ -20,8 +20,7 @@ every round.
 | `127.0.0.1:18080/desk` | The drafts desk — the accounts, their tokens, the routes |
 | `127.0.0.1:18080/api/drill` | What the continuous traffic actually measured, this round |
 | `127.0.0.1:18081` | Loopback `/verify` the TenkaCloud scorer delegates to |
-| `problems/challenges/stackstack-defend/local/policy/access.json` | The access policy — **your** file, mounted read-only |
-| `problems/challenges/stackstack-defend/local/config/app.json` | The board's own config, unchanged from onboarding |
+| `127.0.0.1:18080/docs` | Browser API console and request workbench; policy changes live at `PATCH /api/settings` |
 
 The image is built from [`stackstack-base/`](../../stackstack-base), shared by every
 StackStack problem. The draft ids, the account tokens and the leaked marker are derived
@@ -110,9 +109,8 @@ Five checkpoints, 200 points:
 
 6. Fix the cause in
 
-   ```
-   problems/challenges/stackstack-defend/local/policy/access.json
-   ```
+   Open `/docs`, inspect `GET /api/settings`, then use `PATCH /api/settings`.
+   The change lives only in this running container; no repository file is edited.
 
    The shapes the evaluator understands are listed under `grammar` in
    `curl -s http://127.0.0.1:18080/api/policy | jq`. A save takes effect on the next
@@ -144,11 +142,8 @@ Five checkpoints, 200 points:
    `curl -s http://127.0.0.1:18080/api/drill | jq '{cleanForMs, holdMs}'` shows how much is
    left. One bad round sets it back to zero.
 
-8. Restore your checkout when you are done:
-
-   ```
-   git -C problems checkout -- challenges/stackstack-defend/local/
-   ```
+8. Use `DELETE /api/settings` in `/docs` to retry from the starter. Rebuilding the
+   container does the same thing.
 
    If you fixed the policy before reproducing the leak, this is also how you get the first
    checkpoint back: restore it, reproduce, then re-apply your fix.
@@ -237,8 +232,8 @@ retry. Each checkpoint has two hints: the first is free, the second costs
 
 Zero. Nothing is deployed to a cloud account; the container runs on your machine and is
 removed by `make local-down`. Drafts, publications and measurements live entirely in the
-container's memory, so tearing down leaves nothing behind except the two files in your own
-checkout, which `git -C problems checkout -- challenges/stackstack-defend/local/` restores.
+container's memory, including the runtime policy override, so tearing down leaves the
+repository checkout untouched.
 
 ## What carries into the Battle
 

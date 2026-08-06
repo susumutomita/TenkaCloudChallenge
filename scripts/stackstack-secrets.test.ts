@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -106,6 +106,8 @@ async function startInstance(
   const sourceDir = options.sourceDir ?? PROBLEM_DIR;
   const manifestPath = join(scratch, `${name}-ops.json`);
   const configPath = join(scratch, `${name}-app.json`);
+  const overrideDir = join(scratch, `${name}-overrides`);
+  mkdirSync(overrideDir);
   if (existsSync(join(sourceDir, "local", "ops", "ops.json"))) {
     writeFileSync(manifestPath, readFileSync(join(sourceDir, "local", "ops", "ops.json")));
   }
@@ -119,6 +121,7 @@ async function startInstance(
       SCENARIO: scenario,
       FLAG_SEED: options.seed ?? SEED,
       APP_CONFIG: configPath,
+      APP_OVERRIDE_DIR: overrideDir,
       CONFIG_HINT,
       OPS_MANIFEST: manifestPath,
       OPS_HINT,
@@ -192,6 +195,13 @@ function client(instance: () => Instance) {
     get: (path: string) => json(path),
     post: (path: string, headers: Record<string, string> = {}) =>
       json(path, { method: "POST", headers }),
+    patchSettings: (settings: Record<string, unknown>) =>
+      json("/api/settings", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(settings),
+      }),
+    resetSettings: () => json("/api/settings", { method: "DELETE" }),
     posture: async () => (await json("/posture")).body as Posture,
     keys: async () => ((await json("/api/ops/keys")).body as { keys: KeyRow[] }).keys,
     key: async (keyId: string) => (await api.keys()).find((entry) => entry.keyId === keyId),
@@ -216,6 +226,7 @@ function client(instance: () => Instance) {
         headers: { "x-ops-key": secret },
       }),
     runDigest: () => json("/api/ops/digest/run", { method: "POST" }),
+    revealBreakGlass: () => json("/api/ops/break-glass/reveal", { method: "POST" }),
     mint: (breakGlass: string) =>
       json("/api/ops/keys", { method: "POST", headers: { "x-break-glass": breakGlass } }),
     revoke: (keyId: string, breakGlass: string) =>
@@ -397,6 +408,19 @@ describe("stackstack-secrets, one full pass", () => {
     fresh?.kill();
   });
 
+  it("should change and reset the ops manifest through the API without touching its source", async () => {
+    const source = readFileSync(solved.manifestPath, "utf8");
+    const changed = await app.patchSettings({ grants: ["board:count", "digest:publish"] });
+    expect(changed.status).toBe(200);
+    expect(changed.body.settings.grants).toEqual(["board:count", "digest:publish"]);
+    expect(readFileSync(solved.manifestPath, "utf8")).toBe(source);
+
+    const reset = await app.resetSettings();
+    expect(reset.status).toBe(200);
+    expect(reset.body.settings).toEqual({ identity: LEGACY_KEY_ID, grants: ["*"] });
+    expect(readFileSync(solved.manifestPath, "utf8")).toBe(source);
+  });
+
   it("should open with the service running and everything else red", async () => {
     const state = await app.posture();
     expect(state.gates).toEqual({
@@ -498,9 +522,13 @@ describe("stackstack-secrets, one full pass", () => {
     expect((await other.posture()).gates.leak_confirmed).toBe(false);
   });
 
-  it("should never serve the break-glass credential over HTTP", async () => {
+  it("should reveal the local break-glass envelope exactly once and nowhere else", async () => {
     breakGlass = breakGlassFrom(solved);
     expect(breakGlass).toMatch(/^[0-9a-f]{16}$/);
+    const revealed = await app.revealBreakGlass();
+    expect(revealed.status).toBe(200);
+    expect(revealed.body.credential).toBe(breakGlass);
+    expect((await app.revealBreakGlass()).status).toBe(410);
     for (const path of [
       "/",
       "/api/board",
@@ -516,7 +544,7 @@ describe("stackstack-secrets, one full pass", () => {
       expect((await app.get(path)).text).not.toContain(breakGlass);
     }
     // The board's own log is served unauthenticated, so this is the assertion
-    // that keeps the whole problem from collapsing into two GETs.
+    // that confines the value to the deliberate one-time handover.
     expect(solved.stdout()).not.toContain(breakGlass);
   });
 
@@ -1421,12 +1449,11 @@ describe("stackstack-secrets wiring", () => {
     }
   });
 
-  it("should give the participant-facing docs the same manifest path the app prints", () => {
-    const hint = service.environment.OPS_HINT as string;
+  it("should direct participant-facing docs to the runtime manifest API", () => {
     for (const name of ["README.md", "README.ja.md"]) {
-      expect(readFileSync(join(PROBLEM_DIR, name), "utf8")).toContain(hint);
+      expect(readFileSync(join(PROBLEM_DIR, name), "utf8")).toContain("PATCH /api/settings");
     }
-    expect(readFileSync(join(PROBLEM_DIR, "metadata.json"), "utf8")).toContain(hint);
+    expect(readFileSync(join(PROBLEM_DIR, "metadata.json"), "utf8")).toContain("PATCH /api/settings");
   });
 
   it("should ship a manifest that is broken in exactly the two documented ways", () => {
@@ -1466,9 +1493,9 @@ describe("stackstack-secrets wiring", () => {
       "GET /api/ops/journal",
       "127.0.0.1:18080/api/ops",
       "127.0.0.1:18081",
-      OPS_HINT,
+      "PATCH /api/settings",
       "make local PROBLEM=stackstack-secrets",
-      "git -C problems checkout -- challenges/stackstack-secrets/local/",
+      "DELETE /api/settings",
       "18 / 18 / 22 / 22 / 14",
       "would_orphan_service",
       "secret_in_manifest",

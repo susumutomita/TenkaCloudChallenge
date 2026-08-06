@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { allPosts } from "../board.mjs";
 import { log } from "../log.mjs";
+import { activeSourcePath } from "../overrides.mjs";
 import { gateToken } from "../secrets.mjs";
 
 /**
@@ -45,12 +46,16 @@ import { gateToken } from "../secrets.mjs";
  */
 
 const FEATURE_PATH = process.env.APP_FEATURE ?? "/app/feature/search.mjs";
+const SOURCE_NAME = "vibe-search";
+const FEATURE_LABEL = "/api/source";
 
-/**
- * Where the feature file sits in the *participant's* checkout, which is not the
- * path this process reads. Display only, exactly like `CONFIG_HINT`.
- */
-const FEATURE_HINT = process.env.FEATURE_HINT ?? FEATURE_PATH;
+export const editableSource = {
+  name: SOURCE_NAME,
+  basePath: FEATURE_PATH,
+  summary: { ja: "検索機能の source", en: "search feature source" },
+  example:
+    "export function search({ query, posts }) { return { status: 200, body: { query, matches: posts } }; }\n",
+};
 
 const ORIGIN = `http://127.0.0.1:${Number(process.env.CHALLENGE_PORT ?? 8080)}`;
 
@@ -205,7 +210,12 @@ function failPending(reason) {
  * the participant can open. Swapped for the one they can — the same reason
  * `CONFIG_HINT` exists.
  */
-const readable = (text) => String(text).split(FEATURE_PATH).join(FEATURE_HINT);
+const readable = (text) =>
+  String(text)
+    .split(FEATURE_PATH)
+    .join(FEATURE_LABEL)
+    .split(activeSourcePath(SOURCE_NAME, FEATURE_PATH))
+    .join(FEATURE_LABEL);
 
 function onChildLine(line) {
   let message;
@@ -226,7 +236,7 @@ function onChildLine(line) {
   // A module that failed to load poisons the process that tried: throw it away
   // rather than let the next call hang on a specifier the loader will not
   // settle. A handler that merely threw leaves the process perfectly usable.
-  if (message.phase === "load") restartChild(`${FEATURE_HINT} could not be loaded`);
+  if (message.phase === "load") restartChild(`${FEATURE_LABEL} could not be loaded`);
 }
 
 function ensureChild(stamp) {
@@ -291,14 +301,16 @@ function restartChild(reason) {
 
 /** The feature file as it is on disk right now — never cached at boot. */
 function featureStamp() {
+  const path = activeSourcePath(SOURCE_NAME, FEATURE_PATH);
   try {
-    const stat = statSync(FEATURE_PATH);
-    return { ok: true, value: `${stat.mtimeMs}-${stat.size}` };
+    const stat = statSync(path);
+    return { ok: true, path, value: `${path}:${stat.mtimeMs}-${stat.size}` };
   } catch (error) {
     return {
       ok: false,
+      path,
       value: "",
-      error: `cannot read ${FEATURE_HINT}: ${error.code ?? error.message}`,
+      error: `cannot read ${FEATURE_LABEL}: ${error.code ?? error.message}`,
     };
   }
 }
@@ -326,7 +338,7 @@ function callFeature(fn, arg) {
   if (pending.size >= MAX_PENDING_CALLS) {
     return Promise.resolve({
       ok: false,
-      error: `too many calls into ${FEATURE_HINT} at once (${MAX_PENDING_CALLS})`,
+      error: `too many calls into ${FEATURE_LABEL} at once (${MAX_PENDING_CALLS})`,
     });
   }
   const proc = ensureChild(stamp.value);
@@ -336,7 +348,7 @@ function callFeature(fn, arg) {
     const timer = setTimeout(() => {
       if (!pending.has(id)) return;
       pending.delete(id);
-      const error = `${fn} in ${FEATURE_HINT} did not answer within ${CALL_TIMEOUT_MS}ms`;
+      const error = `${fn} in ${FEATURE_LABEL} did not answer within ${CALL_TIMEOUT_MS}ms`;
       noteFeatureError(error);
       restartChild(error);
       resolve({ ok: false, error });
@@ -348,7 +360,7 @@ function callFeature(fn, arg) {
       resolve(payload);
     });
     try {
-      proc.stdin.write(`${JSON.stringify({ id, path: FEATURE_PATH, stamp: stamp.value, fn, arg })}\n`);
+      proc.stdin.write(`${JSON.stringify({ id, path: stamp.path, stamp: stamp.value, fn, arg })}\n`);
     } catch (error) {
       clearTimeout(timer);
       pending.delete(id);
@@ -555,7 +567,7 @@ const ENTRY_KEYS = ["at", "author", "id", "title"];
 
 const SPEC = {
   version: 1,
-  feature: FEATURE_HINT,
+  feature: FEATURE_LABEL,
   endpoints: {
     json: "GET /api/search?q=<検索語>",
     html: "GET /search?q=<検索語>",
@@ -1297,7 +1309,7 @@ export const routes = {
       return sendJson(response, result.status, {
         error: result.error,
         detail: result.detail,
-        feature: FEATURE_HINT,
+        feature: FEATURE_LABEL,
       });
     }
     return sendJson(response, result.status, result.body);
@@ -1310,7 +1322,7 @@ export const routes = {
       return sendPage(
         response,
         result.status,
-        `<p><code>${escapeHtml(result.error)}</code></p><p>${escapeHtml(result.detail)}</p><p>${escapeHtml(FEATURE_HINT)}</p>`,
+        `<p><code>${escapeHtml(result.error)}</code></p><p>${escapeHtml(result.detail)}</p><p>${escapeHtml(FEATURE_LABEL)}</p>`,
       );
     }
     if (result.status !== 200) {
@@ -1357,7 +1369,7 @@ export const routes = {
     const stamp = featureStamp();
     if (!stamp.ok) {
       return sendJson(response, 200, {
-        feature: FEATURE_HINT,
+        feature: FEATURE_LABEL,
         loaded: false,
         error: stamp.error,
         exports: [],
@@ -1365,7 +1377,7 @@ export const routes = {
     }
     const called = await callFeature("__exports", null);
     return sendJson(response, 200, {
-      feature: FEATURE_HINT,
+      feature: FEATURE_LABEL,
       loaded: called.ok,
       error: called.ok ? null : called.error,
       exports: called.ok ? called.value : [],
@@ -1390,7 +1402,7 @@ export const routes = {
       });
     }
     return sendJson(response, 200, {
-      feature: FEATURE_HINT,
+      feature: FEATURE_LABEL,
       featureError: report.featureError,
       allGreen: GATE_NAMES.every((name) => report.gates[name] === true),
       checks: GATE_NAMES.map((name) => ({
