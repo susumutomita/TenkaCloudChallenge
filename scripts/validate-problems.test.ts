@@ -19,6 +19,7 @@ import {
   checkRequiredReadmes,
   checkScoringRegulation,
   checkSolutionDoesNotEditCatalog,
+  checkDescriptionTranslations,
   checkWriteupTranslations,
 } from "./validate-problems";
 
@@ -188,6 +189,27 @@ describe("checkWriteupTranslations (#2191)", () => {
     expect(
       checkWriteupTranslations({ i18n: { en: { writeup: "English only" } } }).join(),
     ).toMatch(/top-level writeup/);
+  });
+});
+
+describe("checkDescriptionTranslations (#381)", () => {
+  it("accepts no description or a complete ja/en pair", () => {
+    expect(checkDescriptionTranslations({} as never)).toEqual([]);
+    expect(
+      checkDescriptionTranslations({
+        description: "目的と設計",
+        i18n: { en: { description: "Purpose and design" } },
+      } as never),
+    ).toEqual([]);
+  });
+
+  it("rejects a description present in only one language", () => {
+    expect(checkDescriptionTranslations({ description: "日本語のみ" } as never).join()).toMatch(
+      /i18n\.en\.description/,
+    );
+    expect(
+      checkDescriptionTranslations({ i18n: { en: { description: "English only" } } } as never).join(),
+    ).toMatch(/top-level description/);
   });
 });
 

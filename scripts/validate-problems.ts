@@ -184,6 +184,21 @@ export function checkParticipantVisibleSpoilerAdvisory(meta: Metadata): Validati
  * [TenkaCloud#2191] writeup は optional だが、追加する場合は JA canonical と EN override を
  * 必ず対にする。片言語だけの種明かしを出荷すると競技終了後の学習体験が locale で欠落する。
  */
+/**
+ * [#381] description の ja/en parity。 71/71 問が i18n.en.description を持つ状態まで是正
+ * したので、 ここから先は欠けを増やせない。 「英語話者に解けない問題がマージできない」の
+ * カタログ記述面の担保で、 verifier 側の担保は generate-course-workbenches.py --check が持つ。
+ */
+export function checkDescriptionTranslations(meta: Metadata): ValidationError[] {
+  const ja = typeof meta.description === "string" && meta.description.trim().length > 0;
+  const i18n = meta.i18n as { en?: { description?: unknown } } | undefined;
+  const en = typeof i18n?.en?.description === "string" && i18n.en.description.trim().length > 0;
+  if (ja === en) return [];
+  return ja
+    ? ["i18n.en.description is required when top-level description is present (ja/en parity, #381)"]
+    : ["top-level description is required when i18n.en.description is present (ja/en parity, #381)"];
+}
+
 export function checkWriteupTranslations(meta: Metadata): ValidationError[] {
   const ja = typeof meta.writeup === "string" && meta.writeup.trim().length > 0;
   const i18n = meta.i18n as { en?: { writeup?: unknown } } | undefined;
@@ -459,6 +474,7 @@ function checkCompositeRefs(dir: string, meta: Metadata): CrossRefResult {
   const errors: ValidationError[] = [
     ...checkInstructionsPresent(meta),
     ...checkWriteupTranslations(meta),
+    ...checkDescriptionTranslations(meta),
     ...checkHintTranslations(meta),
     ...checkScoringRegulation(meta),
     ...checkDashboardSlotFiles(meta, dir),
@@ -557,6 +573,7 @@ function checkContainerRefs(dir: string, meta: Metadata): CrossRefResult {
   const errors: ValidationError[] = [
     ...checkInstructionsPresent(meta),
     ...checkWriteupTranslations(meta),
+    ...checkDescriptionTranslations(meta),
     ...checkHintTranslations(meta),
     ...checkScoringRegulation(meta),
   ];
@@ -942,6 +959,7 @@ function checkCrossRefs(metaPath: string, meta: Metadata): CrossRefResult {
       ...containerOnlyKindErrors,
       ...checkInstructionsPresent(meta),
       ...checkWriteupTranslations(meta),
+      ...checkDescriptionTranslations(meta),
       ...checkHintTranslations(meta),
       ...checkScoringRegulation(meta),
       ...checkScoringOutputRefs(meta, yaml, cfnTemplate),
