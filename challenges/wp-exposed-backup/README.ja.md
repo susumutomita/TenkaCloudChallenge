@@ -1,6 +1,6 @@
 # 前任者の忘れ物 — 動いているサイトでも情報は漏れる
 
-> TenkaCloud Challenge · `challenges/wp-exposed-backup` · 難易度 3 · 約45分 · `multi-verify` 採点 (4 チェックポイント・200点)
+> TenkaCloud Challenge · `challenges/wp-exposed-backup` · 難易度 1 (入門) · 約30分 · `multi-verify` 採点 (4 チェックポイント・100点)
 
 実際の現行 WordPress と MariaDB をローカル Docker で起動する、AWS 不要の教材です。
 古い WordPress の既知脆弱性ではなく、前任者が移行作業中に**複数の運用ファイルを公開領域へ
@@ -18,13 +18,17 @@ SaaS (Wix) 版の運用不備問題の WordPress 版です。メッセージは�
 
 | チェックポイント | 攻撃面 (見つけ方) | 配点 |
 | --- | --- | ---: |
-| `public-backup` | 公開フォルダに残った DB ダンプ `/wp-content/backups/db-backup.sql` (`robots.txt` が案内)。 | 60 |
-| `exposed-config` | エディタの控え `wp-config.php.bak` が**平文で配信** (PHP は `.php` しか実行しない)。DB 接続情報と ops token が漏れる。 | 60 |
-| `debug-log` | 本番で `WP_DEBUG_LOG` が付けっぱなし。`wp-content/debug.log` が誰でも読め、内部メモが記録されている。 | 40 |
-| `dir-listing` | `/internal/` に Apache のディレクトリ一覧 (Indexes) が残り、引き継ぎメモが一覧表示される。 | 40 |
+| `public-backup` | 公開フォルダに残った DB ダンプ `/wp-content/backups/db-backup.sql` (`robots.txt` が案内)。 | 30 |
+| `exposed-config` | エディタの控え `wp-config.php.bak` が**平文で配信** (PHP は `.php` しか実行しない)。DB 接続情報と ops token が漏れる。 | 30 |
+| `debug-log` | 本番で `WP_DEBUG_LOG` が付けっぱなし。`wp-content/debug.log` が誰でも読め、内部メモが記録されている。 | 20 |
+| `dir-listing` | `/internal/` に Apache のディレクトリ一覧 (Indexes) が残り、引き継ぎメモが一覧表示される。 | 20 |
 
 4 つとも「公開領域に置き忘れる」という同じ習慣から生まれます。ここが学びどころで、
 1 つのバグを 4 分割したものではなく、**別々の対策**が必要な別々の不備です。
+
+これは TenkaCloud の**最初の実問題**として設計された入門問題です。各チェックポイントの
+ヒントは「観察 → 仮説 → 確認と対策」の 3 段構成で、**どれを開いても減点はありません**
+── ヒントは罰ではなく学習用の足場です。
 
 ## 起動するもの
 

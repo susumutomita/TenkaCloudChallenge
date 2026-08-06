@@ -1082,7 +1082,7 @@
       "id": "wp-exposed-backup",
       "category": "Challenge",
       "region": "ap-northeast-1",
-      "estimatedSessionMinutes": 45,
+      "estimatedSessionMinutes": 30,
       "perHourUsd": 0,
       "perSessionUsd": 0,
       "ifLeftRunningUsd": {

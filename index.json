@@ -2396,10 +2396,10 @@
       "id": "wp-exposed-backup",
       "name": "前任者の忘れ物",
       "category": "Challenge",
-      "status": "draft",
+      "status": "ready",
       "visibility": "public",
-      "difficulty": 3,
-      "estimatedDuration": "45 分",
+      "difficulty": 1,
+      "estimatedDuration": "30 分",
       "shortDescription": "普通に動いている会社の WordPress サイト。 だが前任の担当者が移行のときに公開フォルダへ置いたまま消し忘れた 「忘れ物」 が複数あり、 サイトの中身や設定が外から読めてしまっているらしい。 一つずつ見つけよう。",
       "tags": [
         "wordpress",
