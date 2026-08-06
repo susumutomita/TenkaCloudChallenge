@@ -204,6 +204,8 @@ Must pass. If it fails:
 - *missing CloudShell baseline actions* — restore the 7-action statement.
 - *not found in Outputs* — typo between metadata field and template Output key.
 
+`bun run validate` proves the catalog contract, not the problem: before the PR, play-test it from the participant surface with `/validate-problem <slug>` (`.claude/skills/validate-problem/SKILL.md`) — a solution exists on every seed, the initial state does not reveal the answer, and the goal is reachable through the screen alone.
+
 Then:
 
 ```bash
