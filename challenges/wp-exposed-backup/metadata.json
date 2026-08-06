@@ -3,14 +3,14 @@
   "id": "wp-exposed-backup",
   "name": "前任者の忘れ物",
   "category": "Challenge",
-  "status": "draft",
+  "status": "ready",
   "visibility": "public",
-  "difficulty": 3,
-  "estimatedDuration": "45 分",
-  "shortDescription": "普通に動いている会社の WordPress サイト。 だが前任の担当者が移行のときに公開フォルダへ置いたまま消し忘れた 「忘れ物」 が複数あり、 サイトの中身や設定が外から読めてしまっているらしい。 一つずつ見つけよう。",
-  "instructions": "## はじめに\n\n前任者から引き継いだ WordPress サイトに、 公開してはいけない運用ファイルが複数残っている。 サイト本体を攻撃するのではなく、 外部の利用者と同じ目線で 「公開領域への置き忘れ」 を一つずつ探すのが狙いだ。\n\n## この問題は 4 つのチェックポイントに分かれている\n\n前任者が公開フォルダに残した 「忘れ物」 は 1 つではない。 それぞれ別の合言葉 (`TC{...}`) が入っていて、 見つけた合言葉を対応するチェックポイントに個別に提出する。 4 つすべてを提出すると満点になる (部分点あり)。 どれから解いてもよいが、 1 → 4 の順に進めるのがおすすめだ (最初の robots.txt の手がかりから自然につながる)。\n\n1. 公開フォルダのバックアップ\n2. 設定ファイルの控え\n3. 本番に残ったログ\n4. 中身が見える内部フォルダ\n\n## 調査の進め方 (ウォークスルー)\n\n1. まず `http://127.0.0.1:18080/robots.txt` を開く。 「検索避け」 のつもりで書かれた `Disallow` が、 かえって隠したいフォルダの場所を教えてくれる。\n2. 運用者が公開領域に置き忘れがちなファイルを 1 種類ずつ思い出して試す ── データベースのバックアップ (`*.sql`)、 設定ファイルの控え (`*.bak` / `*.save`)、 デバッグログ (`debug.log`) など。\n3. `index.html` の無いフォルダは、 サーバの設定次第で中身が一覧表示 (ディレクトリリスティング) されることがある。\n4. 見つけたファイルを開き、 中に書かれた合言葉 (`TC{...}`) を、 対応するチェックポイントに提出する。\n5. 各チェックポイントには段階的なヒントがある。 手が止まったら、 まず 1 番目 (無料) を開こう。 それでも進めなければ 2 番目・3 番目 (答えそのもの) を開ける。\n\n## ゴール\n\n4 つの忘れ物それぞれの合言葉を、 対応するチェックポイントに提出する。 発見後は README の対策を読み、 同じ事故を防ぐ運用を説明できる状態にする。",
+  "difficulty": 1,
+  "estimatedDuration": "30〜45 分",
+  "shortDescription": "普通に動いている会社の WordPress サイト。 だが前任の担当者が移行のときに公開フォルダへ置いたまま消し忘れた 「忘れ物」 が複数あり、 サイトの中身や設定が外から読めてしまっているらしい。 一つずつ見つけよう。 セキュリティがはじめてでも、 減点なしの段階ヒントを開きながら完走できる導入問題。",
+  "instructions": "## はじめに\n\n前任者から引き継いだ WordPress サイトに、 公開してはいけない運用ファイルが複数残っている。 サイト本体を攻撃するのではなく、 外部の利用者と同じ目線で 「公開領域への置き忘れ」 を一つずつ探すのが狙いだ。\n\nこの問題はセキュリティ初挑戦の人向けの導入問題だ。 各チェックポイントに 3 段階のヒントがあり、 **どのヒントを何回開いても減点はない**。 ヒントを開くことは失敗ではなく、 この問題では学習の一部だ。 分からなくなったら迷わず開こう。\n\n## 先に知っておく言葉 (すぐ使う 3 つだけ)\n\n- **URL のパス**: アドレスのドメイン以降の部分 (`/robots.txt` など)。 ブラウザのアドレス欄の末尾に付け足して開ける\n- **公開フォルダ**: Web サーバが外部へ配信してしまう置き場所。 ここに置いたファイルは誰でも読める\n- **robots.txt**: 検索エンジン向けの 「ここは見ないで」 リスト。 アクセス制限ではないので、 人間は普通に読める\n\n残りの言葉 (バックアップ、 設定ファイルの控え、 デバッグログ、 ディレクトリ一覧) は、 各チェックポイントのヒントが使う直前に説明する。\n\n## この問題は 4 つのチェックポイントに分かれている\n\n前任者が公開フォルダに残した 「忘れ物」 は 1 つではない。 それぞれ別の合言葉 (`TC{...}`) が入っていて、 見つけた合言葉を対応するチェックポイントに個別に提出する。 4 つすべてを提出すると満点になる (部分点あり)。 どれから解いてもよいが、 1 → 4 の順に進めるのがおすすめだ (最初の robots.txt の手がかりから自然につながる)。\n\n1. 公開フォルダのバックアップ\n2. 設定ファイルの控え\n3. 本番に残ったログ\n4. 中身が見える内部フォルダ\n\n## 調査の進め方 (ウォークスルー)\n\nどのチェックポイントも同じ型で進む ── **観察** (何が見えるか) → **仮説** (前任者は何を置き忘れた?) → **確認** (実際に開いて確かめる) → **対策** (どう防ぐ?)。 ヒントもこの順に並んでいる。\n\n1. 最初の一手はこれだけ: ブラウザで `http://127.0.0.1:18080/robots.txt` を開く。 「検索避け」 のつもりで書かれた `Disallow` が、 かえって隠したいフォルダの場所を教えてくれる。\n2. 運用者が公開領域に置き忘れがちなファイルを 1 種類ずつ思い出して試す ── データベースのバックアップ (`*.sql`)、 設定ファイルの控え (`*.bak` / `*.save`)、 デバッグログ (`debug.log`) など。\n3. `index.html` の無いフォルダは、 サーバの設定次第で中身が一覧表示 (ディレクトリリスティング) されることがある。\n4. 見つけたファイルを開き、 中に書かれた合言葉 (`TC{...}`) を、 対応するチェックポイントに提出する。\n5. 手が止まったら、 まずヒント 1 (観察のしかた) を開こう。 ヒント 2 は考え方、 ヒント 3 は答えの URL と対策そのものだ。 減点はないので、 最後まで進み切ることを優先しよう。\n\n## ゴール\n\n4 つの忘れ物それぞれの合言葉を、 対応するチェックポイントに提出する。 全部そろうと解説 (writeup) が開き、 4 つの原因と対策を振り返れる。 同じ事故を防ぐ運用を自分の言葉で説明できたらクリアだ。",
   "description": "あなたは、 ある会社のコーポレートサイト (WordPress) の運用を引き継いだ。 サイトは現行の WordPress と MySQL 系 DB で普通に動いている。\n\nところが前任の担当者は、 サイト移行のときに 「テスト用」 「あとで消す」 と言いながら、 いくつもの運用ファイルを公開フォルダ (Web からアクセスできる場所) に置いたまま消し忘れていた。 その結果、 会社のデータ・DB 接続情報・内部メモが、 外部から読み取れる状態で放置されている ── という指摘が入った。\n\nこれは WordPress 本体の脆弱性でも、 意図的に書かれた危険なコードでもない。 「初期設定・運用の不備」 ── 公開してはいけない場所に、 公開してはいけないファイルが複数残っている、 という問題だ。 サイトを外から調べ、 前任者が残した 4 つの忘れ物 (バックアップ・設定ファイルの控え・デバッグログ・中身が見える内部フォルダ) にたどり着け。 それぞれに監査用の合言葉 (`TC{...}`) が書かれている。",
-  "writeup": "## 何が起きていたか\n\nWordPress 本体に脆弱性はなかった。問題は前任者が移行のときに公開フォルダ (Web から届く場所) に置き忘れた 4 つの運用ファイルで、いずれも外から素通しで読めてしまっていた。しかも `robots.txt` の `Disallow` が、隠したつもりで逆にそのフォルダの在り処を教えていた。\n\n1 つ目は `/wp-content/backups/db-backup.sql`。移行時に取ったデータベースの丸ごとダンプで、開くと `maintenance_notes` の行に合言葉が入っていた。2 つ目は `/wp-config.php.bak`。`wp-config.php` 自体は PHP として実行されるので中身は見えないが、`.bak` は実行されず Apache がプレーンテキストのまま返すため、DB 接続情報と「ops handoff token」が丸見えになる。3 つ目は `/wp-content/debug.log`。`WP_DEBUG_LOG` を本番で切り忘れると PHP のエラーやメモが誰でも読めるログに残り、`[ops]` から始まる行に合言葉があった。4 つ目は `/internal/`。`index.html` の無いフォルダに Apache のディレクトリ一覧 (`Indexes`) が有効だったため、開いた瞬間に `handover.txt` が一覧に並び、その中に合言葉が書かれていた。\n\n4 つはそれぞれ別のファイルだが、根っこは同じだ ── 「公開してはいけないものを、公開領域に置いたまま消し忘れた」。WordPress のコードの欠陥ではなく、初期設定・運用の不備 (misconfiguration) から生まれた実在のインシデントである。\n\n## 直し方\n\nどれもコードを触らずに直せる。バックアップ・設定ファイルの控え・内部メモは、そもそも Web サーバが配信できる場所 (docroot 配下) に置かず、サーバの外や非公開の領域で管理する。移行時に一時的に置いたファイルは、用が済んだら必ず削除する。デバッグ出力は本番で `WP_DEBUG` / `WP_DEBUG_LOG` を無効化し、ログは公開領域の外へ出す。ディレクトリ一覧は `Options -Indexes` で無効化する。\n\nこれは WordPress に限らない。どんなサービスでも、「公開領域に何が置いてあるか」を定期的に棚卸しし、バックアップ・設定・ログ・作業メモといった運用ファイルを公開ルートから隔離しておくのが基本の守りになる。攻撃者はまず `robots.txt` や推測しやすいファイル名から探しにくるので、「隠す」よりも「そもそも置かない・消す」ことが確実な対策になる。",
+  "writeup": "## 何が起きていたか\n\nWordPress 本体に脆弱性はなかった。問題は前任者が移行のときに公開フォルダ (Web から届く場所) に置き忘れた 4 つの運用ファイルで、いずれも外から素通しで読めてしまっていた。しかも `robots.txt` の `Disallow` が、隠したつもりで逆にそのフォルダの在り処を教えていた。以下、チェックポイントごとに 「何が漏れたか」 と 「どう防ぐか」 を振り返る。\n\n## 1. 公開された DB バックアップ (public-backup)\n\n`/wp-content/backups/db-backup.sql` は移行時に取ったデータベースの丸ごとダンプで、開くと `maintenance_notes` の行に合言葉が入っていた。会社の全データが 1 ファイルで持ち出せる状態だった。**対策**: バックアップ (`*.sql` / `*.zip`) を Web サーバが配信できる場所 (docroot 配下) に置かない。移行時の一時ファイルは、用が済んだら必ず削除する。\n\n## 2. 公開された設定ファイルの控え (exposed-config)\n\n`/wp-config.php.bak` ── `wp-config.php` 自体は PHP として実行されるので中身は見えないが、`.bak` は実行されず Apache がプレーンテキストのまま返すため、DB 接続情報と「ops handoff token」が丸見えになる。**対策**: 編集用の控え (`.bak` / `.save` / `~`) を公開領域に残さない (サーバの外で管理する)。漏れた認証情報は必ずローテーションする。\n\n## 3. 本番に残ったデバッグログ (debug-log)\n\n`/wp-content/debug.log` ── `WP_DEBUG_LOG` を本番で切り忘れると、PHP のエラーやメモが誰でも読めるログに残る。`[ops]` から始まる行に合言葉があった。**対策**: 本番では `WP_DEBUG` / `WP_DEBUG_LOG` を無効化し、ログを公開領域の外へ出す。\n\n## 4. 有効なままのディレクトリ一覧 (dir-listing)\n\n`/internal/` ── `index.html` の無いフォルダに Apache のディレクトリ一覧 (`Indexes`) が有効だったため、開いた瞬間に `handover.txt` が一覧に並び、その中に合言葉が書かれていた。**対策**: `Options -Indexes` でディレクトリ一覧を無効化し、内部ファイルを公開領域に置かない。\n\n## 共通する根本原因\n\n4 つはそれぞれ別のファイルだが、根っこは同じだ ── 「公開してはいけないものを、公開領域に置いたまま消し忘れた」。WordPress のコードの欠陥ではなく、初期設定・運用の不備 (misconfiguration) から生まれた実在のインシデントである。攻撃者はまず `robots.txt` や推測しやすいファイル名から探しにくるので、「隠す」よりも「そもそも置かない・消す」ことが確実な対策になる。\n\n## 再発防止チェックリスト\n\n- 公開フォルダ (docroot) に何が置いてあるか、移行や作業のたびに棚卸しする\n- バックアップは公開領域の外で管理し、一時ファイルは削除する\n- 設定ファイルの控え (`.bak` / `.save` / `~`) を docroot に残さない\n- 本番の `WP_DEBUG` / `WP_DEBUG_LOG` を無効化し、ログを公開領域の外へ出す\n- `Options -Indexes` でディレクトリ一覧を無効化する\n- `robots.txt` をアクセス制限の代わりに使わない\n\nこれは WordPress に限らない。どんなサービスでも、「公開領域に何が置いてあるか」を定期的に見直すことが基本の守りになる。",
   "tags": [
     "wordpress",
     "misconfiguration",
@@ -22,8 +22,14 @@
     "multi-verify"
   ],
   "exposedPorts": [
-    { "port": 18080, "name": "Web (WordPress site)" },
-    { "port": 18081, "name": "/verify (loopback admin)" }
+    {
+      "port": 18080,
+      "name": "Web (WordPress site)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback admin)"
+    }
   ],
   "learningGoals": [
     "WordPress は PHP・DB・認証・設定の上で動いていて、 デフォルトや初期設定を放置すると何が守れなくなるかを、 実際の環境で体感できるようになる",
@@ -32,10 +38,10 @@
   ],
   "i18n": {
     "en": {
-      "writeup": "## What happened\n\nWordPress itself had no vulnerability. The problem was four operations files the previous operator left in the public folder (reachable from the web) during the migration — all of them readable from the outside. Worse, the `robots.txt` `Disallow` lines, meant to hide those folders, instead advertised exactly where to look.\n\nThe first was `/wp-content/backups/db-backup.sql`, a full database dump taken during the migration; opening it revealed the passphrase on the `maintenance_notes` line. The second was `/wp-config.php.bak`: `wp-config.php` itself runs as PHP so its contents stay hidden, but a `.bak` is not executed — Apache serves it as plain text — exposing the DB credentials and an \"ops handoff token.\" The third was `/wp-content/debug.log`: leaving `WP_DEBUG_LOG` on in production writes PHP errors and notes to a log anyone can read, with the passphrase on the line starting `[ops]`. The fourth was `/internal/`: a folder with no `index.html` and Apache directory listing (`Indexes`) left on, so opening it lists `handover.txt`, whose contents held the passphrase.\n\nFour separate files, one shared root cause: things that must not be public were left sitting in the public area. This is not a flaw in WordPress's code but a real incident born of misconfiguration — an initial-setup and operations mistake.\n\n## How to fix\n\nNone of this requires touching code. Backups, config copies, and internal notes should never sit where the web server can serve them (under the docroot) — keep them off the server or in a private area, and delete anything placed temporarily during a migration once it is no longer needed. Turn `WP_DEBUG` / `WP_DEBUG_LOG` off in production and keep logs out of the public area. Disable directory listing with `Options -Indexes`.\n\nThis generalizes well beyond WordPress. For any service, the basic defense is to periodically inventory what actually lives in the public area and keep operational files — backups, configs, logs, working notes — out of the public root. Attackers probe `robots.txt` and guessable filenames first, so \"don't place it / delete it\" is a far more reliable control than trying to \"hide\" it.",
+      "writeup": "## What happened\n\nWordPress itself had no vulnerability. The problem was four operations files the previous operator left in the public folder (reachable from the web) during the migration — all of them readable from the outside. Worse, the `robots.txt` `Disallow` lines, meant to hide those folders, instead advertised exactly where to look. Below is a checkpoint-by-checkpoint review of what leaked and how to prevent it.\n\n## 1. The exposed DB backup (public-backup)\n\n`/wp-content/backups/db-backup.sql` was a full database dump taken during the migration; opening it revealed the passphrase on the `maintenance_notes` line. The company's entire data could walk away in one file. **Fix**: never place backups (`*.sql` / `*.zip`) where the web server can serve them (under the docroot), and delete migration-time temporary files once they are no longer needed.\n\n## 2. The exposed config-file copy (exposed-config)\n\n`/wp-config.php.bak` — `wp-config.php` itself runs as PHP so its contents stay hidden, but a `.bak` is not executed; Apache serves it as plain text, exposing the DB credentials and an \"ops handoff token.\" **Fix**: never leave editor copies (`.bak` / `.save` / `~`) in the public area (keep them off the server), and always rotate any credential that was exposed.\n\n## 3. The debug log left on in production (debug-log)\n\n`/wp-content/debug.log` — leaving `WP_DEBUG_LOG` on in production writes PHP errors and notes to a log anyone can read, with the passphrase on the line starting `[ops]`. **Fix**: disable `WP_DEBUG` / `WP_DEBUG_LOG` in production and keep logs out of the public area.\n\n## 4. The directory listing left enabled (dir-listing)\n\n`/internal/` — a folder with no `index.html` and Apache directory listing (`Indexes`) left on, so opening it lists `handover.txt`, whose contents held the passphrase. **Fix**: disable directory listing with `Options -Indexes` and keep internal files out of the public area.\n\n## The shared root cause\n\nFour separate files, one shared root cause: things that must not be public were left sitting in the public area. This is not a flaw in WordPress's code but a real incident born of misconfiguration — an initial-setup and operations mistake. Attackers probe `robots.txt` and guessable filenames first, so \"don't place it / delete it\" is a far more reliable control than trying to \"hide\" it.\n\n## Recurrence-prevention checklist\n\n- Inventory what actually lives in the public folder (docroot) at every migration and work session\n- Keep backups outside the public area and delete temporary files\n- Never leave config-file copies (`.bak` / `.save` / `~`) in the docroot\n- Disable `WP_DEBUG` / `WP_DEBUG_LOG` in production and keep logs out of the public area\n- Disable directory listing with `Options -Indexes`\n- Never use `robots.txt` as a substitute for access control\n\nThis generalizes well beyond WordPress: for any service, periodically reviewing what sits in the public area is the basic defense.",
       "name": "The Predecessor's Leftovers",
       "shortDescription": "A company's WordPress site, running normally. But the previous operator left several files in the public folder during the migration, so the site's data and settings can be read from the outside. Find them one by one.",
-      "instructions": "## Introduction\n\nThe inherited WordPress site still contains several operations files that must not be public. Don't attack WordPress itself — from the same perspective as an external visitor, hunt for things 'left behind in the public area', one by one.\n\n## This problem has 4 checkpoints\n\nThe previous operator left more than one thing in the public folder. Each leftover carries its own passphrase (`TC{...}`); submit each one to its matching checkpoint. Clearing all four gives full marks (partial credit applies). Solve them in any order, but 1 → 4 is recommended (it follows naturally from the first robots.txt clue).\n\n1. Backup in a public folder\n2. A copy of the config file\n3. A log left on in production\n4. A browsable internal folder\n\n## How to investigate (walkthrough)\n\n1. Open `http://127.0.0.1:18080/robots.txt` first. The `Disallow` lines, meant to keep crawlers away, instead advertise exactly which folders to look in.\n2. Recall the kinds of files an operator leaves in the public area and try each — a database backup (`*.sql`), a copy of the config file (`*.bak` / `*.save`), a debug log (`debug.log`).\n3. A folder with no `index.html` may list its contents (directory listing), depending on the server config.\n4. Open the file you find and submit the passphrase (`TC{...}`) inside it to its matching checkpoint.\n5. Each checkpoint has graduated hints. If you're stuck, open hint 1 (free) first; if you still need it, hints 2 and 3 (the answer itself) are there.\n\n## Goal\n\nSubmit each leftover's passphrase to its matching checkpoint. Then read the README remediation guidance and be able to explain how to prevent the same incident.",
+      "instructions": "## Introduction\n\nThe inherited WordPress site still contains several operations files that must not be public. Don't attack WordPress itself — from the same perspective as an external visitor, hunt for things 'left behind in the public area', one by one.\n\nThis is an introductory problem for people trying security for the first time. Every checkpoint has 3 graduated hints and **opening any hint, any number of times, costs nothing**. Opening hints is not failure — in this problem it is part of the learning. When in doubt, open one.\n\n## Three terms to know first (only the ones you need right away)\n\n- **URL path**: the part of the address after the domain (like `/robots.txt`). You can open it by appending it in the browser's address bar\n- **Public folder**: a location the web server serves to the outside. Anything placed there can be read by anyone\n- **robots.txt**: a 'please don't look here' list for search engines. It is not access control — humans can read it freely\n\nThe remaining terms (backup, config-file copy, debug log, directory listing) are explained by each checkpoint's hints right before you need them.\n\n## This problem has 4 checkpoints\n\nThe previous operator left more than one thing in the public folder. Each leftover carries its own passphrase (`TC{...}`); submit each one to its matching checkpoint. Clearing all four gives full marks (partial credit applies). Solve them in any order, but 1 → 4 is recommended (it follows naturally from the first robots.txt clue).\n\n1. Backup in a public folder\n2. A copy of the config file\n3. A log left on in production\n4. A browsable internal folder\n\n## How to investigate (walkthrough)\n\nEvery checkpoint follows the same pattern — **observe** (what can you see?) → **hypothesize** (what might the previous operator have left behind?) → **check** (actually open it) → **fix** (how do you prevent it?). The hints follow the same order.\n\n1. Your first move is just this: open `http://127.0.0.1:18080/robots.txt` in the browser. The `Disallow` lines, meant to keep crawlers away, instead advertise exactly which folders to look in.\n2. Recall the kinds of files an operator leaves in the public area and try each — a database backup (`*.sql`), a copy of the config file (`*.bak` / `*.save`), a debug log (`debug.log`).\n3. A folder with no `index.html` may list its contents (directory listing), depending on the server config.\n4. Open the file you find and submit the passphrase (`TC{...}`) inside it to its matching checkpoint.\n5. When you're stuck, open hint 1 (how to observe) first. Hint 2 is the way to think; hint 3 is the answer URL and the fix itself. There is no penalty, so prioritize finishing.\n\n## Goal\n\nSubmit each leftover's passphrase to its matching checkpoint. Clearing all four unlocks the writeup, where you can review the four causes and fixes. You've truly cleared it when you can explain, in your own words, how to prevent the same incident.",
       "description": "You have taken over running a company's corporate site (WordPress). It runs normally on current WordPress and a MySQL-family database.\n\nBut the previous operator, during the site migration, left several operations files in a public folder (reachable from the web) 'just for testing' / 'to delete later' and never removed them. As a result — someone has warned you — the company's data, DB connection details, and internal notes can be read from the outside.\n\nThis is not a vulnerability in WordPress itself, nor deliberately dangerous code. It is an initial-setup / operations mistake: several files that must not be public are sitting somewhere that is public. Investigate the site from the outside and reach the four leftovers the previous operator forgot (a backup, a copy of the config file, a debug log, and a browsable internal folder). Each has an audit passphrase (`TC{...}`) written inside it.",
       "learningGoals": [
         "Feel, in a real environment, that WordPress runs on PHP, a DB, auth, and settings — and what stops being protected when defaults and initial setup are left alone",
@@ -49,15 +55,15 @@
           "hints": [
             {
               "id": "public-backup-1",
-              "content": "The site itself works fine, so don't attack WordPress. The target is a file the operator left in a public folder. Start by opening `/robots.txt` and note the folders it 'hides' with `Disallow`."
+              "content": "[Observe] The site itself works fine, so don't attack WordPress. The target is a file the operator left in a public folder. Start by opening `/robots.txt` and note the folders it 'hides' with `Disallow`."
             },
             {
               "id": "public-backup-2",
-              "content": "During a migration, operators often dump the whole database to a backup file. In the `/wp-content/backups/` folder that robots.txt revealed, try common names: `db-backup.sql`, `backup.sql`, `dump.sql`."
+              "content": "[Hypothesize → check] During a migration, operators often dump the whole database to a backup file. In the `/wp-content/backups/` folder that robots.txt revealed, try common names: `db-backup.sql`, `backup.sql`, `dump.sql`."
             },
             {
               "id": "public-backup-3",
-              "content": "Open `http://127.0.0.1:18080/wp-content/backups/db-backup.sql` — the DB dump is exposed. The `maintenance_notes` line holds the audit passphrase. Fix: never place backups where the web server can serve them, and delete them when no longer needed."
+              "content": "[Answer & fix] Open `http://127.0.0.1:18080/wp-content/backups/db-backup.sql` — the DB dump is exposed. The `maintenance_notes` line holds the audit passphrase. Fix: never place backups where the web server can serve them, and delete them when no longer needed."
             }
           ]
         },
@@ -67,15 +73,15 @@
           "hints": [
             {
               "id": "exposed-config-1",
-              "content": "The config file `wp-config.php` runs as PHP, so its contents aren't visible. But a copy taken before editing may have been left in the public area under a different extension."
+              "content": "[Observe] The config file `wp-config.php` runs as PHP, so its contents aren't visible. But a copy taken before editing may have been left in the public area under a different extension."
             },
             {
               "id": "exposed-config-2",
-              "content": "Editors often leave a copy like `wp-config.php.bak`, `.save`, or `wp-config.php~`. A `.bak` isn't executed as PHP — Apache serves it as plain text — so its contents (DB credentials, etc.) are exposed."
+              "content": "[Hypothesize → check] Editors often leave a copy like `wp-config.php.bak`, `.save`, or `wp-config.php~`. A `.bak` isn't executed as PHP — Apache serves it as plain text — so its contents (DB credentials, etc.) are exposed."
             },
             {
               "id": "exposed-config-3",
-              "content": "Open `http://127.0.0.1:18080/wp-config.php.bak` — you'll see the DB credentials and an 'ops handoff token' line. That token is the passphrase. Fix: never leave editor backups of the config in the public area (keep them off the server)."
+              "content": "[Answer & fix] Open `http://127.0.0.1:18080/wp-config.php.bak` — you'll see the DB credentials and an 'ops handoff token' line. That token is the passphrase. Fix: never leave editor backups of the config in the public area (keep them off the server)."
             }
           ]
         },
@@ -85,15 +91,15 @@
           "hints": [
             {
               "id": "debug-log-1",
-              "content": "There is an 'output' that is dangerous to leave on in production. Think of WordPress's development / debug features — the kind you enable while developing and forget to turn off."
+              "content": "[Observe] There is an 'output' that is dangerous to leave on in production. Think of WordPress's development / debug features — the kind you enable while developing and forget to turn off."
             },
             {
               "id": "debug-log-2",
-              "content": "Enabling `WP_DEBUG_LOG` writes PHP errors and notes to `wp-content/debug.log`. Left on in production, that log sits somewhere anyone can read."
+              "content": "[Hypothesize → check] Enabling `WP_DEBUG_LOG` writes PHP errors and notes to `wp-content/debug.log`. Left on in production, that log sits somewhere anyone can read."
             },
             {
               "id": "debug-log-3",
-              "content": "Open `http://127.0.0.1:18080/wp-content/debug.log` and read the ops note line starting with `[ops]` — the passphrase is there. Fix: disable `WP_DEBUG` / `WP_DEBUG_LOG` in production and keep logs out of the public area."
+              "content": "[Answer & fix] Open `http://127.0.0.1:18080/wp-content/debug.log` and read the ops note line starting with `[ops]` — the passphrase is there. Fix: disable `WP_DEBUG` / `WP_DEBUG_LOG` in production and keep logs out of the public area."
             }
           ]
         },
@@ -103,15 +109,15 @@
           "hints": [
             {
               "id": "dir-listing-1",
-              "content": "Sometimes you don't even need a filename — opening a folder shows every file in it. Look at the other folder `/robots.txt` was hiding."
+              "content": "[Observe] Sometimes you don't even need a filename — opening a folder shows every file in it. Look at the other folder `/robots.txt` was hiding."
             },
             {
               "id": "dir-listing-2",
-              "content": "A folder with no `index.html` (like `/internal/`) will list its contents the moment you open it, if the server's directory listing (Apache `Indexes`) is left on."
+              "content": "[Hypothesize → check] A folder with no `index.html` (like `/internal/`) will list its contents the moment you open it, if the server's directory listing (Apache `Indexes`) is left on."
             },
             {
               "id": "dir-listing-3",
-              "content": "Open `http://127.0.0.1:18080/internal/` and you'll see a handover note (`handover.txt`) in the listing. Open it and read the passphrase. Fix: disable directory listing with `Options -Indexes`, and keep internal files out of the public area."
+              "content": "[Answer & fix] Open `http://127.0.0.1:18080/internal/` and you'll see a handover note (`handover.txt`) in the listing. Open it and read the passphrase. Fix: disable directory listing with `Options -Indexes`, and keep internal files out of the public area."
             }
           ]
         }
@@ -126,7 +132,9 @@
       "Web": "http://127.0.0.1:18080"
     },
     "verifyUrl": "http://127.0.0.1:18081/verify",
-    "secretEnv": ["FLAG_SEED"]
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
   },
   "scoring": {
     "kind": "multi-verify",
@@ -135,92 +143,92 @@
       {
         "id": "public-backup",
         "label": "公開フォルダのバックアップ",
-        "points": 60,
-        "wrongAnswerPenalty": 3,
+        "points": 30,
+        "wrongAnswerPenalty": 2,
         "hints": [
           {
             "id": "public-backup-1",
-            "content": "サイト自体は正常に動いている。 だから WordPress 本体を攻めるのではない。 狙いは 「運用者が公開フォルダに置き忘れたファイル」 だ。 まず `/robots.txt` を開き、 隠したつもりで書かれた `Disallow` のフォルダを確認しよう。",
+            "content": "【観察】 サイト自体は正常に動いている。 だから WordPress 本体を攻めるのではない。 狙いは 「運用者が公開フォルダに置き忘れたファイル」 だ。 まず `/robots.txt` を開き、 隠したつもりで書かれた `Disallow` のフォルダを確認しよう。",
             "penalty": 0
           },
           {
             "id": "public-backup-2",
-            "content": "サイト移行のとき、 運用者はデータベースを丸ごと書き出した 「バックアップ (ダンプ)」 を取ることが多い。 robots.txt に出ていた `/wp-content/backups/` に、 よくある名前 (`db-backup.sql` / `backup.sql` / `dump.sql`) で残っていないか試そう。",
-            "penalty": 6
+            "content": "【仮説→確認】 サイト移行のとき、 運用者はデータベースを丸ごと書き出した 「バックアップ (ダンプ)」 を取ることが多い。 robots.txt に出ていた `/wp-content/backups/` に、 よくある名前 (`db-backup.sql` / `backup.sql` / `dump.sql`) で残っていないか試そう。",
+            "penalty": 0
           },
           {
             "id": "public-backup-3",
-            "content": "`http://127.0.0.1:18080/wp-content/backups/db-backup.sql` を開くと DB のダンプが丸見えになる。 `maintenance_notes` の行に監査用の合言葉がある。 対策: バックアップを Web から届く場所に置かない・不要になったら削除する。",
-            "penalty": 14
+            "content": "【答えと対策】 `http://127.0.0.1:18080/wp-content/backups/db-backup.sql` を開くと DB のダンプが丸見えになる。 `maintenance_notes` の行に監査用の合言葉がある。 対策: バックアップを Web から届く場所に置かない・不要になったら削除する。",
+            "penalty": 0
           }
         ]
       },
       {
         "id": "exposed-config",
         "label": "設定ファイルの控え",
-        "points": 60,
-        "wrongAnswerPenalty": 3,
+        "points": 30,
+        "wrongAnswerPenalty": 2,
         "hints": [
           {
             "id": "exposed-config-1",
-            "content": "設定ファイル `wp-config.php` 自体は PHP として実行されるので中身は見えない。 だが 「編集する前に取った控え」 が、 別の拡張子で公開領域に残っていることがある。",
+            "content": "【観察】 設定ファイル `wp-config.php` 自体は PHP として実行されるので中身は見えない。 だが 「編集する前に取った控え」 が、 別の拡張子で公開領域に残っていることがある。",
             "penalty": 0
           },
           {
             "id": "exposed-config-2",
-            "content": "エディタは編集前に `wp-config.php.bak` / `.save` / `wp-config.php~` のような控えを作りがち。 `.bak` などは PHP として実行されず、 Apache がそのままプレーンテキストで返すので、 中身 (DB 接続情報など) が丸見えになる。",
-            "penalty": 6
+            "content": "【仮説→確認】 エディタは編集前に `wp-config.php.bak` / `.save` / `wp-config.php~` のような控えを作りがち。 `.bak` などは PHP として実行されず、 Apache がそのままプレーンテキストで返すので、 中身 (DB 接続情報など) が丸見えになる。",
+            "penalty": 0
           },
           {
             "id": "exposed-config-3",
-            "content": "`http://127.0.0.1:18080/wp-config.php.bak` を開くと、 DB 接続情報と 「ops handoff token」 の行が読める。 その token が合言葉だ。 対策: 編集用の控えを公開領域に残さない (サーバの外で管理する)。",
-            "penalty": 14
+            "content": "【答えと対策】 `http://127.0.0.1:18080/wp-config.php.bak` を開くと、 DB 接続情報と 「ops handoff token」 の行が読める。 その token が合言葉だ。 対策: 編集用の控えを公開領域に残さない (サーバの外で管理する)。",
+            "penalty": 0
           }
         ]
       },
       {
         "id": "debug-log",
         "label": "本番に残ったログ",
-        "points": 40,
-        "wrongAnswerPenalty": 2,
+        "points": 20,
+        "wrongAnswerPenalty": 1,
         "hints": [
           {
             "id": "debug-log-1",
-            "content": "本番環境で付けっぱなしにすると危険な 「出力」 がある。 WordPress の開発・デバッグ機能を思い出そう ── 開発中に有効化して、 本番で切り忘れるものだ。",
+            "content": "【観察】 本番環境で付けっぱなしにすると危険な 「出力」 がある。 WordPress の開発・デバッグ機能を思い出そう ── 開発中に有効化して、 本番で切り忘れるものだ。",
             "penalty": 0
           },
           {
             "id": "debug-log-2",
-            "content": "`WP_DEBUG_LOG` を有効にすると、 PHP のエラーやメモが `wp-content/debug.log` に書き出される。 本番で有効なままだと、 このログが誰でも読める場所に残る。",
-            "penalty": 4
+            "content": "【仮説→確認】 `WP_DEBUG_LOG` を有効にすると、 PHP のエラーやメモが `wp-content/debug.log` に書き出される。 本番で有効なままだと、 このログが誰でも読める場所に残る。",
+            "penalty": 0
           },
           {
             "id": "debug-log-3",
-            "content": "`http://127.0.0.1:18080/wp-content/debug.log` を開き、 `[ops]` から始まる運用メモの行を読む。 そこに合言葉がある。 対策: 本番では `WP_DEBUG` / `WP_DEBUG_LOG` を無効化し、 ログを公開領域に置かない。",
-            "penalty": 10
+            "content": "【答えと対策】 `http://127.0.0.1:18080/wp-content/debug.log` を開き、 `[ops]` から始まる運用メモの行を読む。 そこに合言葉がある。 対策: 本番では `WP_DEBUG` / `WP_DEBUG_LOG` を無効化し、 ログを公開領域に置かない。",
+            "penalty": 0
           }
         ]
       },
       {
         "id": "dir-listing",
         "label": "中身が見える内部フォルダ",
-        "points": 40,
-        "wrongAnswerPenalty": 2,
+        "points": 20,
+        "wrongAnswerPenalty": 1,
         "hints": [
           {
             "id": "dir-listing-1",
-            "content": "ファイル名を知らなくても、 フォルダを開くだけで中のファイルが全部見えてしまうことがある。 `/robots.txt` がもう一つ隠していたフォルダに注目しよう。",
+            "content": "【観察】 ファイル名を知らなくても、 フォルダを開くだけで中のファイルが全部見えてしまうことがある。 `/robots.txt` がもう一つ隠していたフォルダに注目しよう。",
             "penalty": 0
           },
           {
             "id": "dir-listing-2",
-            "content": "`/internal/` のように `index.html` が無いフォルダは、 サーバのディレクトリ一覧 (Apache の `Indexes`) が有効なままだと、 開いた瞬間に中のファイルが一覧表示される。",
-            "penalty": 4
+            "content": "【仮説→確認】 `/internal/` のように `index.html` が無いフォルダは、 サーバのディレクトリ一覧 (Apache の `Indexes`) が有効なままだと、 開いた瞬間に中のファイルが一覧表示される。",
+            "penalty": 0
           },
           {
             "id": "dir-listing-3",
-            "content": "`http://127.0.0.1:18080/internal/` を開くと、 引き継ぎメモ (`handover.txt`) が一覧に並ぶ。 それを開いて合言葉を読む。 対策: `Options -Indexes` でディレクトリ一覧を無効化し、 内部ファイルを公開領域に置かない。",
-            "penalty": 10
+            "content": "【答えと対策】 `http://127.0.0.1:18080/internal/` を開くと、 引き継ぎメモ (`handover.txt`) が一覧に並ぶ。 それを開いて合言葉を読む。 対策: `Options -Indexes` でディレクトリ一覧を無効化し、 内部ファイルを公開領域に置かない。",
+            "penalty": 0
           }
         ]
       }
