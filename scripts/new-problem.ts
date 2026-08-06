@@ -122,8 +122,10 @@ function main(): void {
       "Next:",
       `  1. Edit ${category}/${id}/metadata.json (name, description, scoring, endpoints, disruptions).`,
       `  2. Edit ${category}/${id}/template.yaml (your CloudFormation deploy body).`,
-      "  3. bun run validate   # schema + cross-ref check",
-      "  4. Set status to \"ready\" when done, then open a PR.",
+      "  3. bun run validate   # schema + cross-ref check (includes the static solvability pass)",
+      `  4. If the problem is local-play: bun run scripts/solvability-audit.ts --problem ${id}`,
+      "     runs the full per-problem sweep — is every checkpoint actually answerable?",
+      "  5. Set status to \"ready\" when done, then open a PR.",
       "The catalog index.json / cost-report.json were regenerated for you.",
     ].join("\n"),
   );
