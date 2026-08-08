@@ -8,9 +8,9 @@
   "difficulty": 2,
   "estimatedDuration": "30 分",
   "track": {
-    "id": "ipa-web-security",
-    "order": 2,
-    "chapter": "IPA §1.6 CSRF"
+    "id": "absolute-beginner-to-stackstack",
+    "order": 60,
+    "chapter": "3. Browser attacks / ブラウザの攻撃"
   },
   "shortDescription": "セキュリティ担当への「怪しいページの通報」窓口。担当が信じ込んで開いたページに、担当の権限で操作を実行させろ。",
   "instructions": "「通報」に投稿した内容を、 後でセキュリティ担当が確認する。 担当がそれを確認した瞬間に手に入る合言葉 (`TC{...}`) をこのポータルに提出せよ。\n\n通報の投稿・巡回のリクエスト・レビュー状況の確認、 この 3 つの操作はどれも自分の手で行う必要がある (担当は自動では巡回しない)。\n\n手がかりが欲しくなったら、 下のヒントを開こう (ヒントにはスコアのペナルティが付く)。",

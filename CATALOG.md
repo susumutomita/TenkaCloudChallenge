@@ -196,8 +196,12 @@ The legacy `uptime` kind is an alias for `uptime-flat`. New problems should use 
 
 | Track ID            | Curriculum                                                             | Problems (in `order`)                          |
 | -------------------- | ----------------------------------------------------------------------- | ----------------------------------------------- |
-| `ipa-web-security`   | IPA "安全なウェブサイトの作り方" (<https://www.ipa.go.jp/security/vuln/websecurity/about.html>), one chapter per problem | 1. `xss-demo` (§1.5 XSS)<br>2. `csrf-demo` (§1.6 CSRF) |
-| `advanced-cryptography-2026` | Unofficial companion to the Advanced Cryptography Program 2026 | See the week-by-week table in [`curriculum.md`](./docs/curricula/advanced-cryptography-2026/curriculum.md) — it is the source of truth for order, role, and owning issue |
+| `absolute-beginner-to-stackstack` | Default learning path for a newcomer: first browser win → public exposure → operations → StackStack drills → the `stackstack` Battle | See [`stackstack-learning-path.md`](./docs/curricula/stackstack-learning-path.md), including the prerequisite gaps that still need new problems |
+| `advanced-cryptography-2026` | Separate, independent companion to the Advanced Cryptography Program 2026; **not part of the StackStack route or its default recommendation** | See the week-by-week table in [`curriculum.md`](./docs/curricula/advanced-cryptography-2026/curriculum.md) — it is the source of truth for order, role, and owning issue |
+
+The schema currently gives each problem one `track`. `xss-demo` and `csrf-demo` retain
+their IPA provenance in their README and tags, but their machine-readable position is now
+the newcomer-to-StackStack path so the participant has one continuous default route.
 
 Planned (not yet authored, tracked in Issue #177's Phase 2/3): remaining `ipa-web-security` chapters (OS command injection §1.2, path traversal §1.3, session management §1.4), a `twelve-factor` track (<https://12factor.net/ja/>), and a `well-architected` track scoped to pillars that a Docker-only local drill can honestly reproduce (operational excellence, reliability, performance efficiency — cost optimization and least-privilege security are excluded from the local track since they need a real AWS billing/IAM model to teach honestly).
 

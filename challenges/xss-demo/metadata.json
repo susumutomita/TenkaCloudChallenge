@@ -8,9 +8,9 @@
   "difficulty": 2,
   "estimatedDuration": "30 分",
   "track": {
-    "id": "ipa-web-security",
-    "order": 1,
-    "chapter": "IPA §1.5 XSS"
+    "id": "absolute-beginner-to-stackstack",
+    "order": 50,
+    "chapter": "3. Browser attacks / ブラウザの攻撃"
   },
   "shortDescription": "スタッフ専用の社内掲示板。投稿を見たセキュリティ担当が持つ合言葉を、投稿の中身だけで奪い取れ。",
   "instructions": "掲示板に投稿すると、 後でセキュリティ担当がその投稿を確認しに来る。 担当が確認した瞬間に手に入る合言葉 (`TC{...}`) をこのポータルに提出せよ。\n\n投稿・巡回のリクエスト・監視ログの確認、 この 3 つの操作はどれも自分の手で行う必要がある (担当は自動では巡回しない)。\n\n手がかりが欲しくなったら、 下のヒントを開こう (ヒントにはスコアのペナルティが付く)。",

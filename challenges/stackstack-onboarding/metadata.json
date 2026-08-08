@@ -7,6 +7,11 @@
   "visibility": "public",
   "difficulty": 1,
   "estimatedDuration": "15 分",
+  "track": {
+    "id": "absolute-beginner-to-stackstack",
+    "order": 20,
+    "chapter": "1. First wins / 最初の成功体験"
+  },
   "shortDescription": "天下クラウド株式会社、 入社初日の午後。 前任の SRE はもういない。 AI Builder が作った社内掲示板が、 まだ誰にも投稿されないまま置いてある。\n\nCTO 曰く: 「本番の話は明日から。 今日はその板が動くところまで見ておいて。 見て、 ログを読んで、 設定をひとつ直して、 実際に書き込めるところまで」\n\n難しいことは何もない。 これは、 これから使う道具一式 ── ポータル、 アプリ、 ログ、 設定ファイル、 採点 ── を一周する 15 分だ。",
   "instructions": "この問題は「環境が動くこと」を 15 分で確かめる肩慣らしです。 罠はありません。\n\n1. ポータルの endpoint から掲示板 (`Web`) を開く\n2. 板の `/docs` を開き、 **Try any API** から `GET /api/logs` を実行する\n3. 同じ画面から `PATCH /api/config` で設定をひとつだけ変えて、 実際に投稿する\n4. `GET /posture` で 4 つのゲートが全部緑になったことを確認する\n\nターミナルやリポジトリ編集は不要です。 答えは 3 つが板・ログ・`/posture` に実際に表示され、 残る 1 つ (投稿) は自分が付けたタイトルです。 詰まったらヒントを開いてください (1 つ目は減点なしです)。\n\n終わったら次は StackStack 本編 (`stackstack` Battle) です。 同じ掲示板を、 今度は本番品質まで持っていきます。",
   "description": "## 目的\n\nStackStack 本編に入る前の環境診断であり、 参加者にとっては最初の成功体験。 15 分以内に、 ポータル・エディタ・アプリ・ログ・採点の関係を一周させる。\n\n## 何を確かめるか\n\n4 つのチェックポイントは、 参加者の申告ではなく **走っているアプリの実測** で判定する。\n\n| checkpoint | 実測しているもの |\n|---|---|\n| `board-open` | 板に届いたか (serial は板と `/api/board`、 起動ログにしか出ない) |\n| `log-trail` | ログを読んだか (boot-check は起動ログ行にしか出ない) |\n| `board-open-for-posts` | 設定を直したか **かつ** その上で API 経由の投稿が通ったか |\n| `handover` | 上 3 つが全部緑になったか (`/posture` が緑になるまで token を出さない) |\n\n`handover` の token は `/posture` の 4 ゲートが全部 true になるまで出ない。 つまり 「この環境は end-to-end で動く」 という機械可読な合格印になり、 後続問題のゲートから参照できる。\n\n## 意図的にやらないこと\n\n- 脆弱性を置かない。 攻撃も障害も起きない (それは StackStack 本編の仕事)。\n- 最初の操作に罠を置かない。 設定は再起動なしで即反映され、 壊れた JSON は `/healthz` と `/api/logs` に理由が出る。\n- クラウドアカウントを要求しない。 ローカル (`make local`) と Codespaces のどちらでも同じ手順で動く。\n\n## 共有ベースアプリ\n\nコンテナ image は StackStack 系問題が共有する `stackstack-base/` (掲示板アプリ 1 本) を `SCENARIO=onboarding` で起動したもの。 後続の StackStack Challenge は同じ板・同じログ・同じ `/posture` の上に自分の scenario を足す。",

@@ -8,6 +8,11 @@
   "onboardingOrder": 1,
   "difficulty": 1,
   "estimatedDuration": "30 分",
+  "track": {
+    "id": "absolute-beginner-to-stackstack",
+    "order": 70,
+    "chapter": "4. Battle operations / Battle の基本操作"
+  },
   "shortDescription": "天下クラウド株式会社への入社 2 日目。前任の SRE から、nginx の frontend と Python API が動く小さな EC2 を引き継ぎました。\n\n2 つの URL を Participant Portal へ登録すると、1 分ごとの採点が始まります。運営が nginx を停止したら、SSM Session Manager から復旧してください。",
   "instructions": "## はじめに\nendpoint の登録、継続採点、障害からの復旧を体験する入門 Battle です。\n\n## Step 1: EC2 へ接続する\nOutput の `SsmStartSessionCommand` を実行します。SSH と秘密鍵は使いません。\n\n## Step 2: URL を登録する\nParticipant Portal へ次の URL を登録します。\n- frontend: `http://<Ec2HostHint>`\n- api: `http://<Ec2HostHint>:8080`\n登録後に 1 分ごとの採点が始まります。\n\n## Step 3: nginx を復旧する\n運営が nginx を停止したら、SSM Session Manager で接続し、`sudo systemctl start nginx` を実行します。\n\n## ゴール\nfrontend と API を HTTP 200 に保ちます。",
   "description": "Battle uptime 採点の最小 sample。\n\n競技者の AWS アカウントへ、専用 VPC、public subnet、Internet Gateway、EC2 t3.micro を作成する。EC2 では nginx が port 80、Python HTTP server が port 8080 の `/healthz` を提供する。\n\n`FrontendUrl` と `ApiUrl` Output は空文字で、参加者が Participant Portal へ URL を登録するまで採点を開始しない。登録後は 1 分ごとに 2 endpoint を確認し、両方が HTTP 200 なら 100 pt、どちらかが失敗したら -100 pt を記録する。\n\n運営は `frontend-down` disruption を対象チームへ実行できる。TenkaCloud は SSM Run Command で nginx を停止し、10 分後に起動する revert を予約する。参加者は SSM Session Manager から `systemctl start nginx` を実行して、revert より早く復旧できる。",

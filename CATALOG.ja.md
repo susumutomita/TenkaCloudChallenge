@@ -194,8 +194,12 @@ ID は共通語彙として扱い、共有 node は catalog の 1 箇所だけ�
 
 | Track ID            | カリキュラム                                                           | 問題 (`order` 順)                              |
 | -------------------- | ----------------------------------------------------------------------- | ----------------------------------------------- |
-| `ipa-web-security`   | IPA「安全なウェブサイトの作り方」(<https://www.ipa.go.jp/security/vuln/websecurity/about.html>)、 1 章 = 1 問題 | 1. `xss-demo` (§1.5 XSS)<br>2. `csrf-demo` (§1.6 CSRF) |
-| `advanced-cryptography-2026` | Advanced Cryptography Program 2026 の非公式 companion | 週ごとの一覧は [`curriculum.md`](./docs/curricula/advanced-cryptography-2026/curriculum.md) が正本 (order・role・担当 Issue を含む) |
+| `absolute-beginner-to-stackstack` | 未経験者向けの既定ルート: ブラウザでの最初の成功 → 公開範囲 → 運用 → StackStack 演習 → `stackstack` Battle | 前提知識がまだ断絶していて新規問題が必要な箇所も含め、[`stackstack-learning-path.md`](./docs/curricula/stackstack-learning-path.md) を参照 |
+| `advanced-cryptography-2026` | Advanced Cryptography Program 2026 の独立した別講座。**StackStack ルートにも、その既定推薦にも含まれない** | 週ごとの一覧は [`curriculum.md`](./docs/curricula/advanced-cryptography-2026/curriculum.md) が正本 (order・role・担当 Issue を含む) |
+
+現在の schema では 1 問題につき `track` は 1 つだけである。`xss-demo` と `csrf-demo` の
+IPA 由来は README と tag に残しつつ、機械可読な所属は未経験者から StackStack へ続く
+単一の既定ルートに置く。
 
 未着手 (Issue #177 の Phase 2/3 で追跡): `ipa-web-security` の残り章 (OS コマンドインジェクション §1.2、 パストラバーサル §1.3、 セッション管理 §1.4)、 `twelve-factor` トラック (<https://12factor.net/ja/>)、 および Docker のみのローカルドリルで誠実に再現できる pillar に絞った `well-architected` トラック (運用上の優秀性、 信頼性、 パフォーマンス効率 — コスト最適化と最小権限セキュリティは実 AWS の課金/IAM モデルが無いと誠実に教えられないためローカルトラックからは除外)。
 
