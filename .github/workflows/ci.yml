@@ -112,6 +112,24 @@ jobs:
           bun run scripts/check-template-ascii.ts
           bun run scripts/check-template-security.ts
 
+      # 参加者の画面に配信される HTML / inline script の欠陥 (Issue 395 / 396)。
+      # ソースを読むと正しく見える種類なので、目視レビューでは落ちない。
+      # stackstack-base/ も走査対象なので、この step は check:problem --all では代替できない。
+      - name: Check participant-visible surface
+        run: bun run check:participant-surface
+
+      # 出荷ゲートを 1 問ずつ回す (Issue 382)。第三者の PR / 独自問題という想定ケースで
+      # 実際に使われるのと同じ入口を CI でも通し、「1 問だけ緑」と「カタログ全体が緑」が
+      # 同じ検出ロジックで決まるようにする。列挙は index.json ではなく filesystem なので、
+      # catalog に登録し忘れた新問題も素通りしない。
+      - name: Check every problem against the shipping gate
+        run: bun run check:problem --all
+
+      # verifier 側の生成物。metadata と生成ブロックがずれたまま merge されると、
+      # Portal から見える問題文と実際に採点される内容が食い違う。
+      - name: Check generated course workbenches are up to date
+        run: python3 scripts/generate-course-workbenches.py --check
+
       - name: Check simulator workload
         run: bun run validate:simulator-workload
 

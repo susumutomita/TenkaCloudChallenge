@@ -15,6 +15,7 @@
     "setup": "git config core.hooksPath .githooks && echo 'pre-commit hook enabled (auto-reindex).'",
     "validate": "bun run scripts/validate-shard.ts && bun run scripts/validate-problems.ts && bun run scripts/check-workbench-vendoring.ts && bun run scripts/check-template-ascii.ts && bun run scripts/check-template-security.ts && bun run scripts/check-participant-surface.ts && python3 scripts/generate-course-workbenches.py --check && bun run solvability:static && bun run validate:simulator-workload",
     "check:participant-surface": "bun run scripts/check-participant-surface.ts",
+    "check:problem": "bun run scripts/check-problem.ts",
     "solvability": "bun run scripts/solvability-audit.ts",
     "solvability:static": "bun run scripts/solvability-audit.ts --static-only",
     "validate:simulator-workload": "bun install --cwd battles/microservice-migration-battle/services --frozen-lockfile --ignore-scripts && bun run --cwd battles/microservice-migration-battle/services test && bun run --cwd battles/microservice-migration-battle/services typecheck",

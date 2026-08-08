@@ -218,10 +218,15 @@ Sections in order: story (lead with this), what-gets-deployed (diagram if non-tr
 ## Step 6 — validate and PR
 
 ```bash
-bun run validate
+bun run check:problem <slug>   # your problem alone: schema, participant surface, local-play shape, static solvability
+bun run validate               # the whole catalog contract
 ```
 
-Must pass. If it fails:
+`check:problem` は自分の 1 問についてだけ答える入口で、他の 70 問あまりの出力から自分の行を
+探さずに済む。CI の `checks` job も同じ検査を `--all` で回すので、ここが緑なら CI でも緑になる。
+何を証明していて何を証明していないかは `docs/authoring/shipping-gate.md`。
+
+Both must pass. If `validate` fails:
 
 - *missing TenkaCloud:NamePrefix tag* — add the tag block to the named resource.
 - *missing CloudShell baseline actions* — restore the 7-action statement.

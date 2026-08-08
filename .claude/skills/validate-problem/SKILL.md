@@ -62,11 +62,16 @@ These already exist. Run them and read their output — the playthrough in Phase
 be spent rediscovering what a script catches in seconds.
 
 ```bash
+bun run check:problem <id>                                # the shipping gate for this problem alone
 bun run validate                                          # schema, cross-refs, IAM baseline, tags, scoring tiers
 bun run check:participant-surface                         # what the participant's browser actually receives
 bun run scripts/solvability-audit.ts --problem <id>       # course-checkpoint problems: E and fixture-level L, per seed
 make -C challenges/<id> reference-test                    # course-checkpoint problems: hidden + mutation suites
 ```
+
+`check:problem <id>` は上記のうち静的に分かるものを 1 問のスコープでまとめて回す。緑でも
+「解ける」証明にはならない (実 deploy と想定解法の確認は Phase 2 が担当する)。基準の一覧は
+`docs/authoring/shipping-gate.md`。
 
 `check:participant-surface` は `bun run validate` にも含まれる。単独で回せるようにしてあるのは、
 HTML を触ったときに数秒で確かめられるようにするため。捕まえるのは 2 件で、どちらも
