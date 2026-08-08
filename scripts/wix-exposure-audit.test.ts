@@ -108,6 +108,15 @@ async function harness(seed: string) {
     await closeServer(verify);
   }
 
+  /**
+   * Fetches from the challenge server with a caller-chosen Host header, so
+   * tests can simulate the port this instance would actually be reassigned
+   * to under local play (see the port-independence test below).
+   */
+  async function fetchChallenge(path: string, host: string): Promise<Response> {
+    return fetch(`${challengeBase}${path}`, { headers: { host } });
+  }
+
   return {
     state,
     verifySubmit,
@@ -116,6 +125,7 @@ async function harness(seed: string) {
     scrapePreviewFlag,
     scrapeInboxFlag,
     scrapeAgencyFlag,
+    fetchChallenge,
     close,
   };
 }
@@ -248,6 +258,27 @@ describe("wix-exposure-audit checkpoint gating", () => {
         const result = await h.verifySubmit(checkpointId, "TC{not_the_real_flag}");
         expect(result.correct).toBe(false);
       }
+    } finally {
+      await h.close();
+    }
+  });
+
+  // Issue #399: local play reassigns the host port whenever 18080 is already
+  // taken by another running problem. robots.txt / sitemap.xml must reflect
+  // whatever port this instance actually answers on (from the request's own
+  // Host header), not a hardcoded 18080 -- otherwise the sitemap link a
+  // participant follows points at a different problem's container.
+  it("should derive robots.txt/sitemap.xml URLs from the request Host, not a hardcoded port", async () => {
+    const h = await harness("test-seed-port-independence");
+    try {
+      const reassignedHost = "127.0.0.1:54321";
+      const robots = await (await h.fetchChallenge("/robots.txt", reassignedHost)).text();
+      expect(robots).toContain(`Sitemap: http://${reassignedHost}/sitemap.xml`);
+      expect(robots).not.toContain("18080");
+
+      const sitemap = await (await h.fetchChallenge("/sitemap.xml", reassignedHost)).text();
+      expect(sitemap).toContain(`<loc>http://${reassignedHost}/</loc>`);
+      expect(sitemap).not.toContain("18080");
     } finally {
       await h.close();
     }

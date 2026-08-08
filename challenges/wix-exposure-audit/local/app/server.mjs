@@ -278,6 +278,11 @@ function createChallengeServer(state) {
     const url = requestUrl(request.url, "http://127.0.0.1");
     const { method } = request;
     const { controls } = state;
+    // Issue #399: local play reassigns the host port when 18080 is already taken
+    // by another running problem, so the port cannot be hardcoded. Derive the
+    // origin from the request's own Host header (set by the client that is
+    // actually talking to this instance) instead of assuming a fixed port.
+    const origin = `http://${request.headers.host ?? "127.0.0.1:18080"}`;
 
     if (method === "GET" && url.pathname === "/healthz") {
       return sendJson(response, 200, { status: "ok" });
@@ -290,18 +295,18 @@ function createChallengeServer(state) {
         response,
         200,
         "text/plain; charset=utf-8",
-        "Sitemap: http://127.0.0.1:18080/sitemap.xml\n",
+        `Sitemap: ${origin}/sitemap.xml\n`,
       );
     }
     if (method === "GET" && url.pathname === "/sitemap.xml") {
       const preview = controls.searchIndexing
-        ? "<url><loc>http://127.0.0.1:18080/preview/client-review</loc></url>"
+        ? `<url><loc>${origin}/preview/client-review</loc></url>`
         : "";
       return send(
         response,
         200,
         "application/xml; charset=utf-8",
-        `<?xml version="1.0"?><urlset><url><loc>http://127.0.0.1:18080/</loc></url>${preview}</urlset>`,
+        `<?xml version="1.0"?><urlset><url><loc>${origin}/</loc></url>${preview}</urlset>`,
       );
     }
     if (method === "GET" && url.pathname === "/preview/client-review") {
