@@ -409,11 +409,12 @@ function openApiDocument(scenarioName, lang) {
 function docsPage(lang) {
   const other = lang === "en" ? "ja" : "en";
   return `<!doctype html>
-<html lang="${lang}"><head><meta name="color-scheme" content="light dark"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${bi(lang, "API コンソール", "API console")}</title>
 <link rel="stylesheet" href="vendor/swagger/swagger-ui.css">
 <style>
-body{margin:0}#note{font-family:system-ui;padding:.8rem 1.2rem;background:#eef4ff;color:#1f2937;line-height:1.6}
+:root{color-scheme:light}
+body{margin:0;background:#fff;color:#0f141a}#note{font-family:system-ui;padding:.8rem 1.2rem;background:#eef4ff;line-height:1.6}
 #request-workbench{font-family:system-ui;margin:1rem;padding:1rem;border:1px solid #ccd5e1;border-radius:.5rem}
 #request-workbench label{display:block;font-weight:600;margin-top:.7rem}
 #request-workbench input,#request-workbench select,#request-workbench textarea{box-sizing:border-box;width:100%;padding:.55rem;font:inherit}
