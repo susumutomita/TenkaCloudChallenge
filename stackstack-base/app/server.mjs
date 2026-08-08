@@ -413,7 +413,8 @@ function docsPage(lang) {
 <title>${bi(lang, "API コンソール", "API console")}</title>
 <link rel="stylesheet" href="vendor/swagger/swagger-ui.css">
 <style>
-body{margin:0}#note{font-family:system-ui;padding:.8rem 1.2rem;background:#eef4ff;line-height:1.6}
+:root{color-scheme:light}
+body{margin:0;background:#fff;color:#0f141a}#note{font-family:system-ui;padding:.8rem 1.2rem;background:#eef4ff;line-height:1.6}
 #request-workbench{font-family:system-ui;margin:1rem;padding:1rem;border:1px solid #ccd5e1;border-radius:.5rem}
 #request-workbench label{display:block;font-weight:600;margin-top:.7rem}
 #request-workbench input,#request-workbench select,#request-workbench textarea{box-sizing:border-box;width:100%;padding:.55rem;font:inherit}
@@ -468,7 +469,7 @@ document.getElementById("request-send").addEventListener("click", async () => {
     if (body !== "" && method !== "GET" && method !== "HEAD") options.body = body;
     const response = await fetch(target.pathname + target.search, options);
     const text = await response.text();
-    output.textContent = response.status + " " + response.statusText + "\n\n" + text;
+    output.textContent = response.status + " " + response.statusText + ${JSON.stringify("\n\n")} + text;
   } catch (error) {
     output.textContent = ${JSON.stringify(bi(lang, "実行できません: ", "Could not send: "))} + error.message;
   }
