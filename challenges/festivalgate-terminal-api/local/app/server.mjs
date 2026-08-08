@@ -160,7 +160,7 @@ function requireTerminal(request, response) {
 }
 
 const HOME = `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>FestivalGate Terminal API</title></head>
+<html lang="en"><head><meta name="color-scheme" content="light dark"><meta charset="utf-8"><title>FestivalGate Terminal API</title></head>
 <body style="font-family:system-ui;max-width:52rem;margin:3rem auto;line-height:1.6">
 <h1>FestivalGate — Entrance Terminal API</h1>
 <p>Venue terminals use this API for ticket lookup and check-in. Your assigned
@@ -188,7 +188,7 @@ function ownerSecurityPage() {
         : "—"
     }</td></tr>`;
   return `<!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><title>FestivalGate Owner Security</title></head>
+<html lang="ja"><head><meta name="color-scheme" content="light dark"><meta charset="utf-8"><title>FestivalGate Owner Security</title></head>
 <body style="font-family:system-ui;max-width:56rem;margin:2rem auto;line-height:1.7">
 <h1>運営所有者のsecurity設定</h1>
 <p>ここは診断担当者が所有者権限で使える正規の設定面です。4つの証跡を先に集めてください。</p>

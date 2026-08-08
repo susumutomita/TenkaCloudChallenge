@@ -63,9 +63,21 @@ be spent rediscovering what a script catches in seconds.
 
 ```bash
 bun run validate                                          # schema, cross-refs, IAM baseline, tags, scoring tiers
+bun run check:participant-surface                         # what the participant's browser actually receives
 bun run scripts/solvability-audit.ts --problem <id>       # course-checkpoint problems: E and fixture-level L, per seed
 make -C challenges/<id> reference-test                    # course-checkpoint problems: hidden + mutation suites
 ```
+
+`check:participant-surface` は `bun run validate` にも含まれる。単独で回せるようにしてあるのは、
+HTML を触ったときに数秒で確かめられるようにするため。捕まえるのは 2 件で、どちらも
+**ソースを読むと正しく見える**ため目視レビューを通り抜けた実績がある (Issue 398)。
+
+- inline script の中に `\n` と書くと、外側のテンプレートリテラルがそれを実際の改行に変える。
+  配信される script は文字列リテラルが行をまたいで SyntaxError になり、**その script が
+  丸ごと死ぬ**。API コンソールが動かないまま StackStack 系 8 問が出荷されていた (Issue 395)。
+  正しい書き方は `\\n` か `${JSON.stringify(value)}`。
+- `color-scheme` を宣言しない HTML は、ダークモードのブラウザで黒背景に黒文字になる。
+  作者の環境がライトモードだと永遠に気付けない。14 問中 11 問が該当した (Issue 396)。
 
 Notes that decide pass/fail here:
 
@@ -84,6 +96,10 @@ What a green Phase 1 does **not** prove: that the portal renders a usable statem
 the first move in `instructions` is executable, that the submission survives the portal's
 input field, that the intended operations are within the participant's grants. That is
 Phase 2.
+
+`check:participant-surface` についても同じことが言える。あれは **静的に確実に分かるものだけ**を
+落とす。console に出る実行時エラー、問題文が「ここから操作する」と書いている UI が実際に動くか、
+ダークモードで本当に読めるか、は実ブラウザでしか分からない。両方が要る。
 
 ## Phase 2 — the blind playthrough (the heart of this skill)
 
@@ -160,6 +176,16 @@ the rest honestly:
   carve-outs, deep-link slash rule — AGENT.md §6, §7).
 - Confirm the URL-registration gate for Battles (§9) and that `instructions`' first move
   is executable exactly as written.
+- **問題文が要求する解き方で解く。** 問題文が「ターミナル不要、この画面から実行する」と
+  書いているなら、ターミナルを使わずに完走すること。curl で代替して「解けた」と報告すると、
+  参加者が実際に踏む経路を一度も通らないまま合格になる — Issue 395 はまさにこの形ですり抜けた
+  (API コンソールが死んでいたが、検証はターミナルで行われていた)。
+- **Web UI を持つ問題は実ブラウザで開く。** 見るのは 3 点。
+  - console にエラーが出ていないこと (Issue 395 はこれで一発で出た)
+  - 問題文が「ここから操作する」と書いている UI が実際に動くこと
+  - **ダークモードで判読できること** (Issue 396)。ライトモードだけで確認しない
+- 生成された HTML / JS を持つ問題は、**生成物側**を見る。ソースの目視で代替しない。
+  Issue 395 のソースは読む限り正しく、壊れていたのは配信された成果物だけだった。
 - The full screen playthrough needs a deployed stack (or a Simulator run where the
   declared capabilities cover the problem). If it did not happen, the report says so as a
   required **one-time verification on live AWS** — never "verified" by extrapolation.

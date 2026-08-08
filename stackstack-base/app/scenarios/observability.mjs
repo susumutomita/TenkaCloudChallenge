@@ -551,7 +551,7 @@ function relayPage() {
     })
     .join("\n");
   return `<!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="ja"><head><meta name="color-scheme" content="light dark"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>relay</title></head>
 <body style="font-family:system-ui;max-width:52rem;margin:2.5rem auto;line-height:1.7;padding:0 1rem">
 <h1>archive relay</h1>

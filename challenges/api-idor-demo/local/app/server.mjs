@@ -88,7 +88,7 @@ function send(response, status, contentType, body) {
 }
 
 const HOME = `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Acme Profile API</title></head>
+<html lang="en"><head><meta name="color-scheme" content="light dark"><meta charset="utf-8"><title>Acme Profile API</title></head>
 <body style="font-family:system-ui;max-width:40rem;margin:3rem auto;line-height:1.6">
 <h1>Acme Profile API</h1>
 <p>You are signed in as <code>guest</code>. Your API token is <code>token-guest</code>.</p>

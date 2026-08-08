@@ -11,6 +11,29 @@ Use this skill when the user wants to add a brand-new problem. For edits to an e
 
 The catalog's #1 failure mode is the **exam-drill problem**: a corporate-memo wrapper around a flashcard, where the "flag" is a concept name you type from memory (`TC{standard-ia}`, `TC{port-3389}`) and the same "新人入社 / 前任の SRE の負債 / CTO 激怒" template is stamped on every entry. After three of those it is pure repetition — players feel like they are grinding AWS homework, not playing. A problem is only worth shipping if a player would call it *fun*, not *homework*.
 
+### 誰に向けて書くか (Issue 398)
+
+オーナーが宣言した目標は 1 本だけである。
+
+> ターゲットは未経験の人が StackStack を解けるくらいの知識を身につけること
+
+これを執筆時の判断基準にする。
+
+- **高校卒業程度の知識で読めるか。** 読めないなら、その問題の中で説明する。
+- **専門用語を定義なしに使っていないか。** WAF / IAM ロール / リバースプロキシ / CSP / SSRF /
+  presigned URL などは、**その問題の中で定義していなければジャーゴン**として扱う。用語を
+  知っている人にしか解けない問題は、目標読者を外している。
+- 目標水準の実例は `challenges/wp-exposed-backup`。URL の「パス」をその場で説明し、段階ヒントを
+  減点なしで開かせ、解説に再発防止のチェックリストまで置いている。迷ったらこれを読む。
+
+これは難易度を下げろという意味ではない。**前提知識を問題の中で閉じろ**という意味である。
+
+### 「この画面だけで解ける」と書くなら
+
+問題文にそう書いた時点で、それは**検証すべき主張**になる。`/validate-problem` の Phase 2 は
+「問題文が要求する解き方で解く」ことを求めており、ターミナルで代替した検証は合格にならない。
+書くなら、その経路が実ブラウザで動くことまで確かめること。
+
 Four properties separate a fun problem from a drill. Aim for all four.
 
 1. **Discovered flag, never a memorized one.** The flag must be a value the player can only obtain by *performing the intended AWS operation* — a random per-deploy secret served by a resource they had to reach, a value reconstructed from logs, an Output that only becomes correct once the fix lands. If the flag can be guessed from studying for the exam, the problem is a flashcard. (Reference: `challenges/net-evo-01-reachability` — the flag lives on a private host you can reach only after repairing the network path.)
@@ -268,5 +291,11 @@ By following the steps above you avoid:
 - Permanent faults / unfair double penalties (= step 3.5's mandatory `revert` + no `effect`-on-top-of-`action` rule).
 - AWS Console deep link 400s (= use literal slashes, never `%2F` encoding).
 - Dry, non-engaging problem framing (= step 5's SRE-narration voice).
+- Inline script が丸ごと死ぬ (= HTML を返すテンプレートリテラルの中で `\n` と書かない。
+  外側のリテラルがそれを実際の改行に変え、配信される script が SyntaxError になる。
+  `\\n` か `${JSON.stringify(value)}` を使う。`bun run check:participant-surface` が捕まえる)。
+- ダークモードで黒背景に黒文字 (= HTML を返すなら `<meta name="color-scheme" content="light dark">`
+  を必ず入れる。背景色を明示するなら文字色も一緒に明示する。片方だけだと、もう片方が
+  ブラウザ既定のまま反転して読めなくなる。同じ checker が捕まえる)。
 
 All of the above have happened in this repo before. AGENT.md §"Required invariants" carries the long-form rationale.

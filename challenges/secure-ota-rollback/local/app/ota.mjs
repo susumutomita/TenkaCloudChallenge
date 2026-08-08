@@ -43,7 +43,7 @@ const CHECKPOINTS = new Set([
 
 const WORKSHOP_HTML = `<!doctype html>
 <html lang="en">
-<head>
+<head><meta name="color-scheme" content="light dark">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Northstar OTA Recovery Console</title>
