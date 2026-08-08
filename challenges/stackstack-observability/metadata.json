@@ -202,5 +202,10 @@
         ]
       }
     ]
+  },
+  "track": {
+    "id": "stackstack-route",
+    "order": 150,
+    "chapter": "4. StackStack 本編"
   }
 }

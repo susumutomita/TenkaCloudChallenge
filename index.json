@@ -1557,6 +1557,11 @@
       "category": "Challenge",
       "status": "draft",
       "visibility": "public",
+      "track": {
+        "id": "stackstack-route",
+        "order": 70,
+        "chapter": "2. 壊れ方を知る"
+      },
       "difficulty": 2,
       "estimatedDuration": "30 分",
       "shortDescription": "プロフィール閲覧 API。 自分のプロフィールは読めるが、 管理者だけが持つ秘密のメモに、 隠された合言葉があるらしい。 あなたはゲスト用アカウントしか持っていない。",
@@ -2101,6 +2106,11 @@
       "category": "Challenge",
       "status": "draft",
       "visibility": "public",
+      "track": {
+        "id": "stackstack-route",
+        "order": 40,
+        "chapter": "2. 壊れ方を知る"
+      },
       "difficulty": 2,
       "estimatedDuration": "30 分",
       "shortDescription": "社内スタッフ専用のログイン画面。 admin としてサインインできれば、 管理者だけが見られる合言葉が手に入る ── だが管理者のパスワードは誰も知らない。",
@@ -2154,6 +2164,11 @@
       "category": "Challenge",
       "status": "ready",
       "visibility": "public",
+      "track": {
+        "id": "stackstack-route",
+        "order": 140,
+        "chapter": "4. StackStack 本編"
+      },
       "difficulty": 3,
       "estimatedDuration": "45〜60 分",
       "shortDescription": "天下クラウド株式会社、 入社 3 日目の夕方。 社内掲示板は無事に開き、 部署ごとの 「下書き」 機能まで載った。 前任の SRE が辞める直前に足した機能で、 引き継ぎ資料に残っているのはひと言だけ ── 「下書きの公開はモデレーター承認 (4-eyes)。 本人が自分で公開してはいけない」。\n\nさっき広報から連絡があった。 まだ社内の誰にも見せていないはずの CTO の下書きの中身を、 社外の知人が口にしたらしい。 CTO は淡々としている。 「止めるのは簡単だ。 でも止めたら、 明日の全社発表の下書きを誰も書けない。 動かしたまま直して。 それと、 直ったかどうかは君の報告じゃなく、 こっちで測る」\n\n手元の調査用アカウントで実際に何が読めてしまうのかを確かめ、 原因をアプリ側で直し、 正規の利用者を 1 人も止めないまま、 測られ続けている中でその状態を保つ。",
@@ -2209,6 +2224,11 @@
       "category": "Challenge",
       "status": "ready",
       "visibility": "public",
+      "track": {
+        "id": "stackstack-route",
+        "order": 150,
+        "chapter": "4. StackStack 本編"
+      },
       "difficulty": 3,
       "estimatedDuration": "45 分",
       "shortDescription": "「掲示板、 書いたのに後から探せないって声が来てる」。 月曜の朝、 CTO から飛んでくるのはその一行だけだ。\n\n板を開けば投稿はある。 ダッシュボードは緑。 死活確認は 200 を返し続けていて、 監視は一度も鳴っていない。 それでも社内チャットには 「書いたはずのものが出てこない」 が三件並んでいる。 前任の SRE は 「板から下流のアーカイブに流す relay を今朝入れました。 ログはうるさいので出さないようにしてあります」 と書き置きを残して、 もういない。\n\nアプリのログを開くと、 起動と投稿受付の行はある。 だが 「アーカイブに届かなかった投稿」 については 1 行も無い。 出ていないのは壊れていないからではない。 CTO 曰く: 「原因が分からないなら、 まず分かるようにして。 直す順番はそれから決める」。",
@@ -2237,6 +2257,11 @@
       "category": "Challenge",
       "status": "ready",
       "visibility": "public",
+      "track": {
+        "id": "stackstack-route",
+        "order": 10,
+        "chapter": "1. はじめの一歩"
+      },
       "difficulty": 1,
       "estimatedDuration": "15 分",
       "shortDescription": "天下クラウド株式会社、 入社初日の午後。 前任の SRE はもういない。 AI Builder が作った社内掲示板が、 まだ誰にも投稿されないまま置いてある。\n\nCTO 曰く: 「本番の話は明日から。 今日はその板が動くところまで見ておいて。 見て、 ログを読んで、 設定をひとつ直して、 実際に書き込めるところまで」\n\n難しいことは何もない。 これは、 これから使う道具一式 ── ポータル、 アプリ、 ログ、 設定ファイル、 採点 ── を一周する 15 分だ。",
@@ -2262,6 +2287,11 @@
       "category": "Challenge",
       "status": "ready",
       "visibility": "public",
+      "track": {
+        "id": "stackstack-route",
+        "order": 160,
+        "chapter": "4. StackStack 本編"
+      },
       "difficulty": 3,
       "estimatedDuration": "40 分",
       "shortDescription": "入社 3 日目、 9 時 12 分。 掲示板が開かない。\n\n昨夜 23 時 40 分のデプロイで、 掲示板は 「本番品質」 になったはずだった。 投稿に認証を付け、 アプリが書いてよい場所を必要なところだけに絞った。 デプロイは通り、 誰も残業しなかった。 前任の SRE がいたら止めたかもしれないが、 前任の SRE はもういない。\n\n今朝、 公開側の入口は 401 を返し、 監視は unhealthy と言い、 総務部は 「昨日までは読めた」 と言っている。 CTO の指示は一行: 「戻していいとは言っていない。 昨夜の対策を残したまま、 午前中に読めるようにして。 あと、 何がどう止まったのかを朝会で 30 秒で説明できるようにしておいて」。\n\n再起動では直らない。 認証を外して開けるのは、 復旧に数えない。",
@@ -2289,6 +2319,11 @@
       "category": "Challenge",
       "status": "ready",
       "visibility": "public",
+      "track": {
+        "id": "stackstack-route",
+        "order": 120,
+        "chapter": "4. StackStack 本編"
+      },
       "difficulty": 3,
       "estimatedDuration": "60〜75 分",
       "shortDescription": "入社三日目。 昨日あなたが外から見えるようにした掲示板は、 今日から取引先にも配られる。\n\n出社したら CTO が机の横に立っている。 「星野デザインにも同じ板を出して。 下書き機能ごと。 管理画面と、 各自の下書きは外に出さないで。 それと監視は止めないこと ── 『安全にするために全部閉じました』 は無しね。 それをやった会社を知ってる」\n\n前任の SRE が残したファイルの中に `access.json` がある。 中身は `defaultEffect: \"allow\"` と、 ほぼ空のルール一覧。 引き継ぎメモには 「あとで締めます」 とだけ書いてあって、 その人はもういない。 いま誰が何に手が届く状態なのかは、 誰も書き残していない。",
@@ -2316,6 +2351,11 @@
       "category": "Challenge",
       "status": "ready",
       "visibility": "public",
+      "track": {
+        "id": "stackstack-route",
+        "order": 130,
+        "chapter": "4. StackStack 本編"
+      },
       "difficulty": 3,
       "estimatedDuration": "40 分",
       "shortDescription": "入社 3 日目。 掲示板は先週から社内に公開されていて、 夜間ダイジェストが毎晩まわっている。 運用チームからの要望はひとつだけ ── 「動いているものは、 止めないでほしい」。\n\nその板の 2 番目の投稿を、 今朝はじめて最後まで読んだ。 前任の SRE が引き継ぎのつもりで貼っていったもので、 運用まわりの入口と、 そこに出す鍵がそのまま書いてある。 社内の誰でも読める。 CTO の反応は短かった ── 「その投稿は消せないよ。 消したところで何も変わらないし」。\n\n板から消す手段は無い。 消せないものを前提に、 何を変えれば実害が消えるのか。 それが今日の 40 分。",
@@ -2343,6 +2383,11 @@
       "category": "Challenge",
       "status": "ready",
       "visibility": "public",
+      "track": {
+        "id": "stackstack-route",
+        "order": 100,
+        "chapter": "4. StackStack 本編"
+      },
       "difficulty": 3,
       "estimatedDuration": "45 分",
       "shortDescription": "板は動いた。 まだ、 運用コンソールの内側だけで。\n\n朝いちばんの Slack に CTO の一行が落ちてくる。 「例の掲示板、 今日じゅうに公開側の入口から見えるようにして」。 前任の SRE が残していったデプロイ用のファイルは 1 枚だけ ── `release.json`。 開いてみると、 配る成果物の ID は前任者のノート PC でビルドしたときのものがそのまま書いてあり、 アプリが起動時に要求する設定はひとつ足りない。 リリース基盤 (Shipyard) に投げても、 パイプラインは途中の stage で止まる。 止まった理由は、 デプロイログに stage 名と一緒に 1 行ずつ書いてある。\n\nビルドはもう終わっている。 デプロイはまだ 1 度も始まっていない。 この 2 つが別物だと体で分かるところが、 今日の最初の 45 分だ。",
@@ -2370,6 +2415,11 @@
       "category": "Challenge",
       "status": "ready",
       "visibility": "public",
+      "track": {
+        "id": "stackstack-route",
+        "order": 110,
+        "chapter": "4. StackStack 本編"
+      },
       "difficulty": 3,
       "estimatedDuration": "45 分",
       "shortDescription": "天下クラウド株式会社、 入社 3 日目。 昨日ようやく外から見えるところまで持っていった社内掲示板に、 CTO から次の一手が飛んでくる。\n\n「過去ログのインポートが終わったので検索を付けてください。 生成 AI に書かせて構いません、 そのほうが速いなら。 要件は仕様書にしてアプリの中に置いてあります」\n\n書くのは 1 ファイル。 貼るのは 30 秒。 残りの 44 分は、 貼ったものが本当に要件どおりかを確かめる時間だ。",
@@ -2398,6 +2448,11 @@
       "category": "Challenge",
       "status": "draft",
       "visibility": "public",
+      "track": {
+        "id": "stackstack-route",
+        "order": 20,
+        "chapter": "2. 壊れ方を知る"
+      },
       "difficulty": 1,
       "estimatedDuration": "40 分",
       "shortDescription": "制作会社から引き継いだSaaSサイト。公開ページ、共有link、共同編集者権限が整理されず、顧客情報と制作中情報が想定外の相手から見える。証跡を集め、所有者設定から是正しよう。",
@@ -2426,6 +2481,11 @@
       "category": "Challenge",
       "status": "ready",
       "visibility": "public",
+      "track": {
+        "id": "stackstack-route",
+        "order": 30,
+        "chapter": "2. 壊れ方を知る"
+      },
       "difficulty": 1,
       "estimatedDuration": "30 分",
       "shortDescription": "普通に動いている会社の WordPress サイト。 だが前任の担当者が移行のときに公開フォルダへ置いたまま消し忘れた 「忘れ物」 が複数あり、 サイトの中身や設定が外から読めてしまっているらしい。 一つずつ見つけよう。",
@@ -2453,6 +2513,11 @@
       "category": "Challenge",
       "status": "draft",
       "visibility": "public",
+      "track": {
+        "id": "stackstack-route",
+        "order": 80,
+        "chapter": "3. 運用で直す"
+      },
       "difficulty": 3,
       "estimatedDuration": "約40分",
       "shortDescription": "前任者が公開領域に残した漏れが複数ある WordPress サイト。 あなたは後任担当として、 サーバに入り、 外部スキャナが 「クリーン」 と言うまで穴を一つずつ塞ぐ。 ただし、 表面的に消しただけでは塞がらない穴もある。",
@@ -2480,6 +2545,11 @@
       "category": "Challenge",
       "status": "draft",
       "visibility": "public",
+      "track": {
+        "id": "stackstack-route",
+        "order": 90,
+        "chapter": "3. 運用で直す"
+      },
       "difficulty": 3,
       "estimatedDuration": "45 分",
       "shortDescription": "デザイン事務所 「さくらデザイン」 の WordPress サイトを引き継いだ翌朝、監視ツールから 「見覚えのない管理者アカウントが夜間に増えた」 という通知が届いた。 攻撃するのではなく、外から見える手がかりだけで 「誰が・どうやって・何を残したか」 を突き止めよう。",
@@ -2534,6 +2604,11 @@
       "category": "Challenge",
       "status": "draft",
       "visibility": "public",
+      "track": {
+        "id": "stackstack-route",
+        "order": 170,
+        "chapter": "5. 本番インシデント"
+      },
       "difficulty": 4,
       "estimatedDuration": "90 分",
       "shortDescription": "ある朝、 セキュリティベンダーから一通の勧告が届く。 『まとめ処理 (バッチ) の経路解決と、 データ問い合わせの組み方の間に、 認証をすり抜けられる抜け道がある』 という。 CTO の指示は明快だ ── 本番を触る前に、 同じ構成を再現した自分専用の使い捨てラボで、 抜け道を実際にたどり、 直し方を証明してから来い。",

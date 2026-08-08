@@ -11,10 +11,24 @@
   "instructions": "管理者のメモに書かれた合言葉 (`TC{...}`) を読み出し、 このポータルに提出せよ。\n\n手がかりが欲しくなったら、 下のヒントを開こう (ヒントにはスコアのペナルティが付く)。",
   "description": "あなたは、 あるサービスのプロフィール閲覧 API のセキュリティ診断を任された。 このサービスでは、 ログインしたユーザーが自分のプロフィールを読める。\n\nあなたが持っているのは、 権限の低いゲスト用アカウント (`token-guest`) だけ。 一方、 管理者 (admin) のプロフィールには、 管理者だけが見るべき秘密のメモ (`TC{...}`) が書かれているという。\n\nこの API が 「どのプロフィールを返すか」 をどう決めているか ── そこに、 見過ごせない隙があるかもしれない。 ゲストのまま、 管理者のメモを読み出せ。",
   "writeup": "## 何が起きていたか\n\nAPIはBearer tokenが有効かだけを確認し、URLのプロフィールIDがログイン中の利用者に属するかを確認していなかった。そのため guest のtokenのままIDを `1` に変えるだけで、admin のプロフィールを取得できた。\n\nこれは IDOR (Insecure Direct Object Reference、現在のOWASP分類ではBroken Object Level Authorization) である。認証は「誰か」を確かめるだけで、認可は「その人がこのオブジェクトを読めるか」をリクエストごとに確かめる必要がある。連番IDをUUIDへ変えるだけでは推測しにくくなるだけで、認可不備は直らない。\n\n## 直し方\n\nプロフィールを `requested_id` だけで検索せず、一般利用者ならtokenから得たsubject/owner IDを検索条件へ必ず含める。管理者アクセスは明示的なroleとpolicyで分離し、レスポンスDTOから内部メモ等の不要な機密フィールドを除外する。別ユーザーのIDで必ず403または404になる認可回帰テストも追加する。",
-  "tags": ["api-security", "idor", "bola", "owasp", "access-control", "local-play", "container"],
+  "tags": [
+    "api-security",
+    "idor",
+    "bola",
+    "owasp",
+    "access-control",
+    "local-play",
+    "container"
+  ],
   "exposedPorts": [
-    { "port": 18080, "name": "Web (profile API)" },
-    { "port": 18081, "name": "/verify (loopback admin)" }
+    {
+      "port": 18080,
+      "name": "Web (profile API)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback admin)"
+    }
   ],
   "learningGoals": [
     "権限の低いアカウントのまま、 他人だけが見られるはずのデータに到達できてしまう穴を、 自分で発見できるようになる",
@@ -180,7 +194,9 @@
       "Web": "http://127.0.0.1:18080"
     },
     "verifyUrl": "http://127.0.0.1:18081/verify",
-    "secretEnv": ["FLAG_SEED"]
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
   },
   "scoring": {
     "kind": "verify",
@@ -198,5 +214,10 @@
         "penalty": 30
       }
     ]
+  },
+  "track": {
+    "id": "stackstack-route",
+    "order": 70,
+    "chapter": "2. 壊れ方を知る"
   }
 }

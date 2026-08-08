@@ -24,8 +24,14 @@
     "multi-verify"
   ],
   "exposedPorts": [
-    { "port": 18080, "name": "Web (challenge surface + SRE console)" },
-    { "port": 18081, "name": "/verify (loopback scorer)" }
+    {
+      "port": 18080,
+      "name": "Web (challenge surface + SRE console)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback scorer)"
+    }
   ],
   "learningGoals": [
     "REST のバッチ (まとめ) 経路と単体経路とで権限判定の正規化がずれると認証をすり抜けられることを、 自分の手で再現して理解する。",
@@ -202,7 +208,9 @@
       "Web": "http://127.0.0.1:18080"
     },
     "verifyUrl": "http://127.0.0.1:18081/verify",
-    "secretEnv": ["FLAG_SEED"]
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
   },
   "scoring": {
     "kind": "multi-verify",
@@ -393,5 +401,10 @@
         ]
       }
     ]
+  },
+  "track": {
+    "id": "stackstack-route",
+    "order": 170,
+    "chapter": "5. 本番インシデント"
   }
 }

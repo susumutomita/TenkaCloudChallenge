@@ -21,8 +21,14 @@
     "defense"
   ],
   "exposedPorts": [
-    { "port": 18080, "name": "Web (board + drafts desk)" },
-    { "port": 18081, "name": "/verify (loopback)" }
+    {
+      "port": 18080,
+      "name": "Web (board + drafts desk)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback)"
+    }
   ],
   "learningGoals": [
     "実際に成立している不正アクセスを、 自分の手で再現して確かめられるようになる",
@@ -125,7 +131,9 @@
       "Web": "http://127.0.0.1:18080"
     },
     "verifyUrl": "http://127.0.0.1:18081/verify",
-    "secretEnv": ["FLAG_SEED"]
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
   },
   "scoring": {
     "kind": "multi-verify",
@@ -221,5 +229,10 @@
         ]
       }
     ]
+  },
+  "track": {
+    "id": "stackstack-route",
+    "order": 140,
+    "chapter": "4. StackStack 本編"
   }
 }

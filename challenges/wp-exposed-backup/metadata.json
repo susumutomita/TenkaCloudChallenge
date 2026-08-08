@@ -233,5 +233,10 @@
         ]
       }
     ]
+  },
+  "track": {
+    "id": "stackstack-route",
+    "order": 30,
+    "chapter": "2. 壊れ方を知る"
   }
 }

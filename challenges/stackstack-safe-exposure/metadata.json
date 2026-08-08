@@ -22,8 +22,14 @@
     "web-app"
   ],
   "exposedPorts": [
-    { "port": 18080, "name": "Web (board / portal review)" },
-    { "port": 18081, "name": "/verify (loopback)" }
+    {
+      "port": 18080,
+      "name": "Web (board / portal review)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback)"
+    }
   ],
   "learningGoals": [
     "認証 (誰か) と認可 (何をしてよいか) を、 同じリクエストの別の判定として区別できる",
@@ -123,7 +129,9 @@
       "Board": "http://127.0.0.1:18080/"
     },
     "verifyUrl": "http://127.0.0.1:18081/verify",
-    "secretEnv": ["FLAG_SEED"]
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
   },
   "scoring": {
     "kind": "multi-verify",
@@ -211,5 +219,10 @@
         ]
       }
     ]
+  },
+  "track": {
+    "id": "stackstack-route",
+    "order": 120,
+    "chapter": "4. StackStack 本編"
   }
 }

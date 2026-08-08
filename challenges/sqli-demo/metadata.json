@@ -11,10 +11,23 @@
   "instructions": "admin としてサインインに成功すると、 画面に合言葉 (`TC{...}`) が表示される。 それをこのポータルに提出せよ。\n\n手がかりが欲しくなったら、 下のヒントを開こう (ヒントにはスコアのペナルティが付く)。",
   "description": "あなたは、 ある会社のセキュリティ診断を任された。 対象は、 スタッフだけが使う社内ログイン画面。\n\n管理者 (admin) としてサインインできれば、 管理者だけが見られる合言葉 (`TC{...}`) が表示される。 だが、 管理者のパスワードは誰も知らない。\n\nこのログイン画面は前任のエンジニアが急ごしらえで作ったもので、 入力の扱いがどこか雑だという噂がある。 正規のパスワードを知らないまま、 admin としてサインインする方法を見つけ出せ。",
   "writeup": "## 何が起きていたか\n\nログイン処理は、入力されたユーザー名とパスワードをSQL文へ直接文字列連結していた。ユーザー名に `admin' --` を入れると、クオートで文字列を閉じ、`--` 以降のパスワード条件をコメント化できる。その結果、正しいパスワードを知らなくても admin の行が一致した。\n\nこれは SQL インジェクションであり、入力値が「データ」ではなくSQL構文として解釈されたことが根本原因である。入力のエスケープだけでは、DBや文字コード、将来のクエリ変更で抜け道が生まれやすい。\n\n## 直し方\n\nSQL文と値を分離し、プレースホルダーを使ったパラメータ化クエリにする。たとえば `WHERE username = ? AND password_hash = ?` の値をDBドライバへ別引数で渡す。パスワードは平文で保存せず、Argon2idやbcrypt等でハッシュ化し、一般利用のDBユーザーには必要最小限の権限だけを与える。あわせて、異常なログイン試行の監視と回帰テストを追加する。",
-  "tags": ["web-security", "sql-injection", "owasp", "ipa", "local-play", "container"],
+  "tags": [
+    "web-security",
+    "sql-injection",
+    "owasp",
+    "ipa",
+    "local-play",
+    "container"
+  ],
   "exposedPorts": [
-    { "port": 18080, "name": "Web (challenge surface)" },
-    { "port": 18081, "name": "/verify (loopback admin)" }
+    {
+      "port": 18080,
+      "name": "Web (challenge surface)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback admin)"
+    }
   ],
   "learningGoals": [
     "正規の認証情報を持たずにログインを突破できてしまう典型的な穴を、 自分で発見できるようになる",
@@ -53,7 +66,9 @@
       "Web": "http://127.0.0.1:18080"
     },
     "verifyUrl": "http://127.0.0.1:18081/verify",
-    "secretEnv": ["FLAG_SEED"]
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
   },
   "scoring": {
     "kind": "verify",
@@ -71,5 +86,10 @@
         "penalty": 30
       }
     ]
+  },
+  "track": {
+    "id": "stackstack-route",
+    "order": 40,
+    "chapter": "2. 壊れ方を知る"
   }
 }

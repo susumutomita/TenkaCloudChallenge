@@ -23,8 +23,14 @@
     "multi-verify"
   ],
   "exposedPorts": [
-    { "port": 18080, "name": "Web (published site and owner settings)" },
-    { "port": 18081, "name": "/verify (loopback admin)" }
+    {
+      "port": 18080,
+      "name": "Web (published site and owner settings)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback admin)"
+    }
   ],
   "learningGoals": [
     "SaaSでも公開page、share link、共同編集者という別々のaccess boundaryをsite ownerが管理する必要があると理解する",
@@ -95,7 +101,9 @@
       "Web": "http://127.0.0.1:18080"
     },
     "verifyUrl": "http://127.0.0.1:18081/verify",
-    "secretEnv": ["FLAG_SEED"]
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
   },
   "scoring": {
     "kind": "multi-verify",
@@ -153,5 +161,10 @@
         ]
       }
     ]
+  },
+  "track": {
+    "id": "stackstack-route",
+    "order": 20,
+    "chapter": "2. 壊れ方を知る"
   }
 }

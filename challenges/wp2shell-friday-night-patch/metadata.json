@@ -21,7 +21,12 @@
     "evidence-preservation",
     "serverless"
   ],
-  "exposedPorts": [{ "port": 443, "name": "REST API (API Gateway, HTTPS)" }],
+  "exposedPorts": [
+    {
+      "port": 443,
+      "name": "REST API (API Gateway, HTTPS)"
+    }
+  ],
   "learningGoals": [
     "WAF のルールを Count (検知) から Block (遮断) に切り替えることが、 ダウンタイムなしの即時封じ込め手段であることを理解する。",
     "根本原因の修正 (設定変更) と、 封じ込め (WAF) と、 後片付け (居座り・不正アカウント・改変ファイルの是正) が、 それぞれ独立した対応であることを体感する。",
