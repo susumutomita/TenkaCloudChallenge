@@ -7,6 +7,7 @@ import {
   findProblemDir,
   isFailing,
   listProblemIds,
+  hostTerminalCheck,
   localPlayableCheck,
   participantSurfaceCheck,
   schemaCheck,
@@ -139,6 +140,68 @@ describe("catalog discovery", () => {
     expect(ids).toContain("hello-world-battle");
     expect(new Set(ids).size).toBe(ids.length);
     expect([...ids].sort()).toEqual(ids);
+  });
+});
+
+describe("ホスト側のターミナルが要る問題 (Issue 415)", () => {
+  it("は docker コマンドを要求しているのに黙っている問題を落とす", () => {
+    // local play の売りは「ブラウザだけで完結する」こと。その前提で選んだ人が
+    // 最初の一手で docker compose logs を要求されると詰まる。
+    const dir = fixture({
+      "metadata.json": JSON.stringify({
+        instructions: "## 最初の一手\n`docker compose logs lab` でトークンを控える。",
+      }),
+    });
+    const result = hostTerminalCheck(dir);
+    expect(result.status).toBe("fail");
+    expect(result.detail).toContain("instructions");
+  });
+
+  it("は片方の言語だけが書いている状態も落とす", () => {
+    const dir = fixture({
+      "metadata.json": JSON.stringify({
+        instructions: "この問題はホスト側のターミナルが必要です。`docker compose exec app bash`。",
+        i18n: { en: { instructions: "Run `docker compose exec app bash`." } },
+      }),
+    });
+    expect(hostTerminalCheck(dir)).toMatchObject({ status: "fail" });
+  });
+
+  it("は両言語が書いていれば通す", () => {
+    const dir = fixture({
+      "metadata.json": JSON.stringify({
+        instructions: "この問題はホスト側のターミナルが必要です。`docker compose exec app bash`。",
+        i18n: {
+          en: {
+            instructions:
+              "This problem requires a terminal on your machine: `docker compose exec app bash`.",
+          },
+        },
+      }),
+    });
+    expect(hostTerminalCheck(dir)).toMatchObject({ status: "pass" });
+  });
+
+  it("は docker コマンドを要求しない問題に断りを求めない", () => {
+    // 大半の問題はブラウザだけで終わる。そこへ余計な但し書きを強いると、
+    // 本当に要る 2 問の警告が埋もれる。
+    const dir = fixture({
+      "metadata.json": JSON.stringify({
+        instructions: "ポータルの画面だけで完結します。ターミナルは不要です。",
+      }),
+    });
+    expect(hostTerminalCheck(dir)).toMatchObject({ status: "pass" });
+  });
+
+  it("は端末という語だけでは要求と見なさない", () => {
+    // `festivalgate-terminal-api` の「端末 token」は会場の端末のことで、shell とは無関係。
+    // 語ではなく docker の呼び出しで判定している、というのがこの test の主題。
+    const dir = fixture({
+      "metadata.json": JSON.stringify({
+        instructions: "端末 token で `/api/terminal/customers/<id>` を開く。",
+      }),
+    });
+    expect(hostTerminalCheck(dir)).toMatchObject({ status: "pass" });
   });
 });
 
