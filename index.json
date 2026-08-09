@@ -1640,6 +1640,35 @@
       }
     },
     {
+      "id": "cs-auth-claim-audit",
+      "name": "署名は通った。それは、その要求を通してよいという意味ではない",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "cs-foundations",
+        "order": 10,
+        "chapter": "1. 信用の境界"
+      },
+      "difficulty": 3,
+      "estimatedDuration": "45-75 分",
+      "shortDescription": "この gateway は期限切れの token を拒否し、改竄された token を拒否し、scope の無い操作を拒否する。そして数か月のあいだ、あるテナントに別のテナントの文書を読ませていた。決定ログを監査して、通り抜けた要求を特定し、止められる gateway を書く。",
+      "tags": [
+        "cs-foundations",
+        "authorization",
+        "audit",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "csrf-demo",
       "name": "報告されたリンクの罠",
       "category": "Challenge",
