@@ -8,7 +8,7 @@ import resource
 import subprocess
 import sys
 import tempfile
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -18,7 +18,6 @@ from fixtures.generate import audit_log, health_token, public_operation
 
 ROOT = Path(__file__).resolve().parents[1]
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
-PORT = int(os.environ.get("VERIFY_PORT", "18351"))
 MAX_BODY_BYTES = 256 * 1024
 MAX_OUTPUT_BYTES = 64 * 1024
 RUN_TIMEOUT_SECONDS = 15
@@ -218,10 +217,12 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    # Bind all container interfaces for the internal Compose network; this verifier
-    # has no published host port. The Workbench is the only loopback entry point.
-    server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
-    server.serve_forever()
+    port = int(os.environ.get("VERIFY_PORT", "18351"))
+    # Inside the container, the Workbench reaches this verifier over the Compose bridge,
+    # so it must listen on every interface rather than only its own loopback.
+    # docker-compose.yml publishes only the Workbench on host loopback; the verifier has
+    # no host port.
+    HTTPServer(("0.0.0.0", port), Handler).serve_forever()  # noqa: S104 - see above
 
 
 if __name__ == "__main__":
