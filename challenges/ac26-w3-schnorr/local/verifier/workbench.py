@@ -203,18 +203,33 @@ class PortalEditorSupport:
                 "output": "Every Portal editor must contain a non-empty source file.",
             }
         manual_values = manual if isinstance(manual, dict) else {}
+
+        def supplied(checkpoint: str) -> bool:
+            value = manual_values.get(checkpoint)
+            return isinstance(value, str) and bool(value.strip())
+
+        # Prepare everything that *can* be prepared, and report the rest. Refusing the
+        # whole call because some direct-answer field is empty locked players out of the
+        # problem permanently (Issue 414).
+        #
+        # The Portal prepares one checkpoint at a time but sends the values of *every*
+        # answer-kind checkpoint, filling the ones it has no input for with "". Once a
+        # direct answer is accepted, the Portal replaces its input with a "solved" badge
+        # and persists that — so after a runtime restart the remembered value is gone,
+        # the field cannot be typed into again, and it arrives here as "". Under the old
+        # rule that single empty string refused prepare for *all* checkpoints, including
+        # pure-code ones that never needed it. A player who followed the stop button's
+        # own advice to free local resources could not submit anything ever again, with
+        # no way back: 2/6 cleared and the remaining four unreachable.
+        #
+        # Nothing is loosened by preparing partially. A code checkpoint only ever needed
+        # the editor files. A direct-answer checkpoint still has to arrive sealed —
+        # `unwrap_submission` rejects an unsealed manual submission — so omitting the
+        # ones with no value cannot let an unanswered checkpoint score. `missingManual`
+        # still names them, so a caller that wants to prompt for them still can.
         missing = [
-            checkpoint
-            for checkpoint in self.manual_checkpoints
-            if not isinstance(manual_values.get(checkpoint), str)
-            or not manual_values[checkpoint].strip()
+            checkpoint for checkpoint in self.manual_checkpoints if not supplied(checkpoint)
         ]
-        if missing:
-            return {
-                "ok": False,
-                "output": "Complete the direct-answer fields before prepare.",
-                "missingManual": missing,
-            }
 
         if len(sources) == 1:
             code_value = next(iter(sources.values()))
@@ -226,10 +241,12 @@ class PortalEditorSupport:
             for checkpoint in self.code_checkpoints
         }
         for checkpoint in self.manual_checkpoints:
+            if not supplied(checkpoint):
+                continue
             submissions[checkpoint] = self._seal_manual(
                 checkpoint, self._decode_manual(manual_values[checkpoint])
             )
-        return {"ok": True, "submissions": submissions}
+        return {"ok": True, "submissions": submissions, "missingManual": missing}
 
     @staticmethod
     def _decode_manual(raw_value: str) -> object:
