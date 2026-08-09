@@ -1495,6 +1495,34 @@
       }
     },
     {
+      "id": "agent-approval-gameday",
+      "name": "Enter を押す前に",
+      "category": "Battle",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "45〜60 分",
+      "shortDescription": "AI で構築された注文 API で不審な操作が検知された。AI エージェントに渡す道具を 3 段階で解禁しながら、侵害された対象だけを隔離し、本番を止めず、証拠を残して収束させる。届いた依頼は「suspicious なものを全部止めて、不要なものを削除して」。そのまま承認すると、正常系と監査証拠まで消える。",
+      "tags": [
+        "ai-agent",
+        "mcp",
+        "incident-response",
+        "least-privilege",
+        "change-approval",
+        "audit",
+        "local-play",
+        "container",
+        "multi-verify"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "ai-riscv-screen-repair",
       "name": "AI製RISC-V画面を復旧せよ",
       "category": "Challenge",
