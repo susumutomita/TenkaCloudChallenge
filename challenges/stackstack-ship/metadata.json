@@ -22,8 +22,14 @@
     "web-app"
   ],
   "exposedPorts": [
-    { "port": 18080, "name": "Web (board / shipyard / site)" },
-    { "port": 18081, "name": "/verify (loopback)" }
+    {
+      "port": 18080,
+      "name": "Web (board / shipyard / site)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback)"
+    }
   ],
   "learningGoals": [
     "ビルド済みの成果物が存在することと、 それが配られていることが別の事実だと区別できる",
@@ -111,7 +117,7 @@
             },
             {
               "id": "ship-cutover-2",
-              "content": "`GET /shipyard/releases` lists every record, including the one that was already there when you arrived; `DELETE 'http://127.0.0.1:18080/shipyard/release?id=rel-N'` removes one. The plane will let you delete the live one too, and the public side goes down if you do. Leave exactly one, live, ask `/site` for it yourself at least once, then submit `readyToken`."
+              "content": "`GET /shipyard/releases` lists every record, including the one that was already there when you arrived; running `delete /shipyard/release?id=rel-N` from `/docs` removes one. The plane will let you delete the live one too, and the public side goes down if you do. Leave exactly one, live, ask `/site` for it yourself at least once, then submit `readyToken`."
             }
           ]
         }
@@ -127,7 +133,9 @@
       "Public": "http://127.0.0.1:18080/site"
     },
     "verifyUrl": "http://127.0.0.1:18081/verify",
-    "secretEnv": ["FLAG_SEED"]
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
   },
   "scoring": {
     "kind": "multi-verify",
@@ -217,11 +225,16 @@
           },
           {
             "id": "ship-cutover-2",
-            "content": "`GET /shipyard/releases` は、 あなたが来たときすでにあったものも含めて全部の記録を並べます。 `DELETE 'http://127.0.0.1:18080/shipyard/release?id=rel-N'` で 1 件消せます。 live のものも消せてしまい、 消せば公開側は落ちます。 live なものを 1 本だけ残し、 自分で 1 度は `/site` を叩いてから `readyToken` を提出してください。",
+            "content": "`GET /shipyard/releases` は、 あなたが来たときすでにあったものも含めて全部の記録を並べます。 `/docs` から `delete /shipyard/release?id=rel-N` を実行すると 1 件消せます。 live のものも消せてしまい、 消せば公開側は落ちます。 live なものを 1 本だけ残し、 自分で 1 度は `/site` を叩いてから `readyToken` を提出してください。",
             "penalty": 16
           }
         ]
       }
     ]
+  },
+  "track": {
+    "id": "stackstack-route",
+    "order": 100,
+    "chapter": "4. StackStack 本編"
   }
 }

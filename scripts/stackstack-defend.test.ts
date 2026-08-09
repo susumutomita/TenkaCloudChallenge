@@ -984,26 +984,66 @@ describe("stackstack-defend: the cheap answers are worth nothing", () => {
     };
     writePolicy(burned);
 
-    // First pin the mechanism, not just the consequence: wait for the board to
-    // contain an id that did not exist when the table was written. Without this
-    // step the assertion below would be satisfied by rounds still in the window
-    // from the *previous* policy, and the test would pass with the rotation
-    // switched off entirely.
+    // Fill the window with rounds measured against the burned table, so a false
+    // `service_intact` below means "somebody was stopped", not "the window is
+    // not full yet" — an unfilled window reports false for its own reason.
+    await flushWindow();
+
+    // Then pin the mechanism, not just the consequence: wait for the board to
+    // contain a draft the burned table does not describe.
+    //
+    // "An id that did not exist when the table was written" is not that
+    // condition, and waiting on it is what made this test flaky (Issue 389).
+    // The rotation mints one draft for an owner chosen by `pick(ACTORS, round,
+    // ...)`, and the table ends with a wildcard for the moderator role — so a
+    // freshly minted id owned by `u-mod` is still fully covered and nothing
+    // breaks. Which owner gets minted follows the absolute round number, which
+    // follows how many rounds elapsed before `writePolicy`, which follows how
+    // busy the machine is. Same commit, different load, different answer.
+    //
+    // What the table actually fails to cover is a draft owned by somebody who
+    // is not the moderator. Wait for that.
     const known = new Set(all.map((draft) => draft.id));
-    const deadline = Date.now() + 15_000;
-    let minted: string | null = null;
-    while (Date.now() < deadline && minted === null) {
+    const uncoveredIds = async (): Promise<string[]> => {
       const now = (await asActor("GET", "/api/drafts", tokens["u-mod"] as string)).body.drafts as {
         id: string;
+        ownerId: string;
       }[];
-      minted = now.find((draft) => !known.has(draft.id))?.id ?? null;
-      if (minted === null) await new Promise((resolve) => setTimeout(resolve, 25));
+      return now
+        .filter((draft) => !known.has(draft.id) && draft.ownerId !== "u-mod")
+        .map((draft) => draft.id);
+    };
+    // One whole round has to be *measured* while such a draft is on the board.
+    // The window scores every round it holds, so one round with a miss is
+    // enough — but zero rounds is not, and "wait 15 seconds" is how this test
+    // failed before. Count rounds, and require the same draft to survive both
+    // of them: rotation prunes, so a draft that appeared and vanished between
+    // two polls proves nothing about what the drill saw.
+    const deadline = Date.now() + 45_000;
+    let minted: string | null = null;
+    while (Date.now() < deadline) {
+      const candidate = (await uncoveredIds())[0];
+      if (candidate === undefined) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+        continue;
+      }
+      const from = (await drill()).roundsCompleted as number;
+      let survived = true;
+      while (((await drill()).roundsCompleted as number) < from + 2) {
+        if (Date.now() > deadline) throw new Error("the drill stopped advancing");
+        if (!(await uncoveredIds()).includes(candidate)) {
+          survived = false; // rotated away mid-measurement; pick the next one.
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      if (survived) {
+        minted = candidate;
+        break;
+      }
     }
     expect(minted).not.toBeNull();
 
-    // Now the window contains only rounds measured against the burned table, in
-    // a world that has moved on from it.
-    await flushWindow();
     const stale = await postureOf();
     expect(stale.gates.service_intact).toBe(false);
     expect(stale.ready).toBe(false);

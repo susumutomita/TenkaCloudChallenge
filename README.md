@@ -41,19 +41,30 @@ That's all you need for authoring. AWS credentials are only required when runnin
 
 ## ➕ Add a new problem
 
+Decide in this order: **what to teach → which runtime that needs → which scoring format.**
+Runtime (Docker / real cloud / Simulator / composite) and game style (Challenge / Battle)
+are two independent axes — `Challenge` and `Battle` describe scoring, not where the problem
+runs. The full decision guide is [`docs/authoring/runtime-and-style.md`](./docs/authoring/runtime-and-style.md).
+
 ```bash
 bun install
 bun run setup                          # one-time: enable the auto-reindex git hook
-bun run new battles my-cool-battle     # scaffold from a working sample (validates immediately)
+bun run new --runtimes                 # what each runtime is for, and what it costs you
+bun run new my-cool-problem --runtime docker/compose --style challenge
 ```
 
-`bun run new <battles|challenges> <id>` copies a known-good sample (so it passes
-validation from the start) and regenerates the catalog index for you. Then:
+`bun run new <id> --runtime <runtime> --style <challenge|battle>` copies the smallest
+real problem for that runtime (so it passes validation from the start) and regenerates
+the catalog index for you. A Docker author never starts from a CloudFormation starter.
+Both flags are non-interactive, so CI and agents can scaffold deterministically. Then:
 
 1. **Edit `metadata.json`.** Conform to [`SCHEMA.json`](./SCHEMA.json). Key fields: `id`, `name`, `category`, `difficulty`, `scoring`, `endpoints`, `disruptions`. (Use `--from <sampleId>` to start from a closer example.)
-2. **Edit `template.yaml`.** A single-page CloudFormation template (the deploy body). Must accept `NamePrefix` / `TenkaCloudAccountId` / `ExternalId` parameters and create the required `ParticipantViewerRole`.
+2. **Edit the runtime artifacts.** `local/docker-compose.yml` + `local/app/` for `docker/compose`; `template.yaml` for `aws/cloudformation` (it must accept `NamePrefix` / `TenkaCloudAccountId` / `ExternalId` and create the required `ParticipantViewerRole`).
 3. **(Optional) Add `portal/<slot>.tsx`** for problem-specific UI in the participant portal, and **`services/`** for any docker-compose / Lambda code your template pulls down (e.g. via EC2 UserData).
-4. **`bun run validate`**, set `status` to `ready`, then open a PR.
+4. **`bun run check:problem <id>`** for your problem alone, then **`bun run validate`** for the whole catalog. Set `status` to `ready`, then open a PR.
+
+`bun run new <battles|challenges> <id>` still works during the migration and prints a
+warning pointing at the new form.
 
 You never hand-edit `index.json` / `cost-report.json` — `bun run new` regenerates
 them, and after `bun run setup` the pre-commit hook keeps them fresh on every commit.

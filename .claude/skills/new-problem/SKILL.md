@@ -1,6 +1,6 @@
 ---
 name: new-problem
-description: Scaffold a new TenkaCloudChallenge problem. Invoked via `/new-problem challenge` (self-paced single-flag) or `/new-problem battle` (real-time PvP / uptime). With no argument, the skill asks which category. Also triggers on natural-language requests like "add a new problem", "create a new Battle/Challenge", or "scaffold a new problem". Walks through picking a starter, filling metadata.json, writing template.yaml with the required participant-role baseline and tag-based scoping, validating, and opening a PR. NOT for edits to existing problems — read AGENT.md and edit directly for those.
+description: Scaffold a new TenkaCloudChallenge problem. Invoked via `/new-problem challenge` (self-paced single-flag) or `/new-problem battle` (real-time PvP / uptime). With no argument, the skill asks which style. Runtime (docker/compose, aws/cloudformation, composite, simulator/*) is a separate axis and is always asked, because it decides the starter. Also triggers on natural-language requests like "add a new problem", "create a new Battle/Challenge", or "scaffold a new problem". Walks through picking a starter, filling metadata.json, writing template.yaml with the required participant-role baseline and tag-based scoping, validating, and opening a PR. NOT for edits to existing problems — read AGENT.md and edit directly for those.
 ---
 
 # new-problem — scaffold a TenkaCloudChallenge problem
@@ -10,6 +10,29 @@ Use this skill when the user wants to add a brand-new problem. For edits to an e
 ## The design bar — make it fun, not a drill (read this first)
 
 The catalog's #1 failure mode is the **exam-drill problem**: a corporate-memo wrapper around a flashcard, where the "flag" is a concept name you type from memory (`TC{standard-ia}`, `TC{port-3389}`) and the same "新人入社 / 前任の SRE の負債 / CTO 激怒" template is stamped on every entry. After three of those it is pure repetition — players feel like they are grinding AWS homework, not playing. A problem is only worth shipping if a player would call it *fun*, not *homework*.
+
+### 誰に向けて書くか (Issue 398)
+
+オーナーが宣言した目標は 1 本だけである。
+
+> ターゲットは未経験の人が StackStack を解けるくらいの知識を身につけること
+
+これを執筆時の判断基準にする。
+
+- **高校卒業程度の知識で読めるか。** 読めないなら、その問題の中で説明する。
+- **専門用語を定義なしに使っていないか。** WAF / IAM ロール / リバースプロキシ / CSP / SSRF /
+  presigned URL などは、**その問題の中で定義していなければジャーゴン**として扱う。用語を
+  知っている人にしか解けない問題は、目標読者を外している。
+- 目標水準の実例は `challenges/wp-exposed-backup`。URL の「パス」をその場で説明し、段階ヒントを
+  減点なしで開かせ、解説に再発防止のチェックリストまで置いている。迷ったらこれを読む。
+
+これは難易度を下げろという意味ではない。**前提知識を問題の中で閉じろ**という意味である。
+
+### 「この画面だけで解ける」と書くなら
+
+問題文にそう書いた時点で、それは**検証すべき主張**になる。`/validate-problem` の Phase 2 は
+「問題文が要求する解き方で解く」ことを求めており、ターミナルで代替した検証は合格にならない。
+書くなら、その経路が実ブラウザで動くことまで確かめること。
 
 Four properties separate a fun problem from a drill. Aim for all four.
 
@@ -43,9 +66,9 @@ A fix-by-settings puzzle is single-player by default. Make it a Battle by adding
 
 | Invocation | Behavior |
 | --- | --- |
-| `/new-problem challenge` | Skip the category question. Use `challenges/hello-world` as the starter. Scoring kind defaults to `flag`; ask the user to confirm. |
-| `/new-problem battle` | Skip the category question. Then ask for scoring kind (`uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection`) before picking the starter. |
-| `/new-problem` (no arg) | Ask "Challenge or Battle?" first. Everything else as below. |
+| `/new-problem challenge` | Style is set. **Still ask for the runtime** — it decides the starter, not the style. Scoring kind defaults to `flag`; ask the user to confirm. |
+| `/new-problem battle` | Style is set. Ask for the runtime, then the scoring kind (`uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection`). |
+| `/new-problem` (no arg) | Ask what the problem should teach, then the runtime, then Challenge or Battle. Everything else as below. |
 
 Natural-language invocations ("add a new problem", "create a Battle") behave like the no-arg form.
 
@@ -57,9 +80,10 @@ Open `AGENT.md` at the repo root before writing files. The required invariants t
 
 If the invocation was `/new-problem challenge` or `/new-problem battle`, **Category is already set** — skip that question. Otherwise ask. Then gather the rest with `AskUserQuestion` when running interactively. Required inputs:
 
-1. **Category** — `challenges/` (self-paced, single submission) or `battles/` (real-time PvP / continuous scoring). Provided as arg or asked.
-2. **Slug** — kebab-case, alphanumeric + hyphens, lowercase. Becomes the directory name and the `tc-<slug>-<teamSlug>` resource prefix.
-3. **Scoring kind** — one of:
+1. **Runtime — ask this before anything else** (Issue 388). `docker/compose` (everything happens in a container), `aws/cloudformation` (the learning goal *is* provider-specific control-plane or managed-service semantics), `composite` (both), `simulator/*` (not runnable in this repository yet). The question that decides it: **what would be lost if this ran in a container instead of real AWS?** If the answer is "nothing", it is a Docker problem. Run `bun run new --runtimes` for the guide, or read [`docs/authoring/runtime-and-style.md`](../../../docs/authoring/runtime-and-style.md).
+2. **Style / Category** — `challenge` (`challenges/`, self-paced, single submission) or `battle` (`battles/`, real-time PvP / continuous scoring). This is a *separate axis* from runtime: it describes scoring, not where the problem runs. A hard Challenge is not a Battle. Provided as arg or asked.
+3. **Slug** — kebab-case, alphanumeric + hyphens, lowercase. Becomes the directory name and the `tc-<slug>-<teamSlug>` resource prefix.
+4. **Scoring kind** — one of:
    - `flag` — submit a string, scored once. **Challenge default.**
    - `verify` — submission is delegated to a container's loopback `/verify` (no AWS; see "Local (AWS-free) CTF container format" below). Single check.
    - `multi-verify` — like `verify`, but 2–8 named checkpoints; `/verify` echoes back `checkpointId`.
@@ -69,31 +93,40 @@ If the invocation was `/new-problem challenge` or `/new-problem battle`, **Categ
    - `attack-detection` — counter from a stats endpoint converts to points.
 
    For `challenge` mode default to `flag` and ask only to confirm (offer `verify`/`multi-verify` if the user wants an AWS-free local-play problem). For `battle` mode the 4 uptime/polling/attack kinds are the relevant choices — ask which.
-4. **Concept** — one or two sentences in the user's own words. The skill weaves this into the story-style `shortDescription` later; raw mechanics are not the player-facing voice.
-5. **Difficulty** 1–5 and rough **estimatedDuration** (e.g. "30 分").
+5. **Concept** — one or two sentences in the user's own words. The skill weaves this into the story-style `shortDescription` later; raw mechanics are not the player-facing voice.
+6. **Difficulty** 1–5 and rough **estimatedDuration** (e.g. "30 分").
 
-## Step 2 — pick the closest starter and copy
+## Step 2 — scaffold from the runtime's starter
 
-| Inputs | Starter directory |
-| --- | --- |
-| Challenge + `flag` | `challenges/hello-world` |
-| Challenge + `verify` (local/container, no AWS) | `challenges/sqli-demo` (single check) |
-| Challenge + `multi-verify` (local/container, no AWS) | `challenges/wp-exposed-backup` (multiple checkpoints) |
-| Battle + `uptime-flat` | `battles/hello-world-battle` |
-| Battle + `phased-polling` | `battles/microservice-migration-battle` or `battles/stackstack` |
-| Battle + `uptime-multi` + `attack-detection` | `battles/security-battle-royale` |
+Always go through the scaffolder, whichever runtime was chosen: it keeps `index.json` /
+`cost-report.json` in sync, writes `status: draft`, and — for `aws/cloudformation`, whose
+starter is still in the legacy `cfnTemplate` form — records the `runtime` declaration so
+the generated problem says *why* it is a real-cloud problem.
 
 ```bash
-# CFn-based problems: plain copy
-cp -r <starter> <category>/<slug>
-cd <category>/<slug>
-
-# Local/container problems: use the scaffolder so index.json/cost-report.json
-# stay in sync — it copies the starter's local/ directory (Dockerfile,
-# docker-compose.yml, app/) along with metadata.json.
-bun run new <category> <slug> --from sqli-demo          # single-check verify
-bun run new <category> <slug> --from wp-exposed-backup   # multi-verify
+bun run new <slug> --runtime docker/compose     --style challenge
+bun run new <slug> --runtime aws/cloudformation --style challenge
+bun run new <slug> --runtime composite          --style challenge
 ```
+
+The runtime picks the starter, so a Docker author never receives a CloudFormation
+template. `--from <sampleId>` overrides it when a closer example exists within the same
+runtime:
+
+| Inputs | `--from` |
+| --- | --- |
+| Challenge + `flag` (real cloud) | *(default)* `hello-world` |
+| Challenge + `verify` (container, no AWS) | *(default)* `sqli-demo` — single check |
+| Challenge + `multi-verify` (container, no AWS) | `wp-exposed-backup` — multiple checkpoints |
+| Battle + `uptime-flat` | *(default)* `hello-world-battle` |
+| Battle + `phased-polling` | `microservice-migration-battle` or `stackstack` |
+| Battle + `uptime-multi` + `attack-detection` | `security-battle-royale` |
+
+`simulator/*` is refused rather than scaffolded — no problem in this repository uses it, so
+there is nothing to copy, and a hand-written skeleton would look runnable while not being.
+`composite` has no Battle example, and is refused for that combination with a different
+message. Both refusals name the next step; do not work around them by copying a directory
+by hand.
 
 The starter ships with the required IAM baseline, the right tag set, the standard parameters (`NamePrefix`, `TenkaCloudAccountId`, `ExternalId`), and a working `ParticipantViewerRole`. Do **not** delete those — adapt them.
 
@@ -195,10 +228,15 @@ Sections in order: story (lead with this), what-gets-deployed (diagram if non-tr
 ## Step 6 — validate and PR
 
 ```bash
-bun run validate
+bun run check:problem <slug>   # your problem alone: schema, participant surface, local-play shape, static solvability
+bun run validate               # the whole catalog contract
 ```
 
-Must pass. If it fails:
+`check:problem` は自分の 1 問についてだけ答える入口で、他の 70 問あまりの出力から自分の行を
+探さずに済む。CI の `checks` job も同じ検査を `--all` で回すので、ここが緑なら CI でも緑になる。
+何を証明していて何を証明していないかは `docs/authoring/shipping-gate.md`。
+
+Both must pass. If `validate` fails:
 
 - *missing TenkaCloud:NamePrefix tag* — add the tag block to the named resource.
 - *missing CloudShell baseline actions* — restore the 7-action statement.
@@ -268,5 +306,11 @@ By following the steps above you avoid:
 - Permanent faults / unfair double penalties (= step 3.5's mandatory `revert` + no `effect`-on-top-of-`action` rule).
 - AWS Console deep link 400s (= use literal slashes, never `%2F` encoding).
 - Dry, non-engaging problem framing (= step 5's SRE-narration voice).
+- Inline script が丸ごと死ぬ (= HTML を返すテンプレートリテラルの中で `\n` と書かない。
+  外側のリテラルがそれを実際の改行に変え、配信される script が SyntaxError になる。
+  `\\n` か `${JSON.stringify(value)}` を使う。`bun run check:participant-surface` が捕まえる)。
+- ダークモードで黒背景に黒文字 (= HTML を返すなら `<meta name="color-scheme" content="light dark">`
+  を必ず入れる。背景色を明示するなら文字色も一緒に明示する。片方だけだと、もう片方が
+  ブラウザ既定のまま反転して読めなくなる。同じ checker が捕まえる)。
 
 All of the above have happened in this repo before. AGENT.md §"Required invariants" carries the long-form rationale.

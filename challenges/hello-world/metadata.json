@@ -8,7 +8,7 @@
   "difficulty": 1,
   "estimatedDuration": "1 分",
   "shortDescription": "天下クラウド株式会社への入社初日。前任の SRE が production に残したのは、謎の SSM Parameter だけでした。\n\n引き継ぎ書には「SSM の hello を見て」と一行だけ。AWS Console または CLI から値を読み、前任者のメッセージを見つけてください。",
-  "instructions": "## はじめに\n前任の SRE が SSM Parameter に残したメッセージを見つける入門問題です。\n\n## 最初の一手\n- Console: Output の `ParameterConsoleUrl` を開く\n- CLI: `aws ssm get-parameter --name /<NamePrefix>/hello --query Parameter.Value --output text`\n\n## ゴール\nParameter の `TC{…}` を最初から最後まで Participant Portal へ提出します。",
+  "instructions": "> **この問題は実 AWS アカウントが必要です。** local play (`make local`) では起動しません。\n> 参加するには、TenkaCloud に自チームの AWS アカウントが登録されている必要があります。\n\n## はじめに\n前任の SRE が SSM Parameter に残したメッセージを見つける入門問題です。\n\n## 最初の一手\n- Console: Output の `ParameterConsoleUrl` を開く\n- CLI: `aws ssm get-parameter --name /<NamePrefix>/hello --query Parameter.Value --output text`\n\n## ゴール\nParameter の `TC{…}` を最初から最後まで Participant Portal へ提出します。",
   "description": "Challenge と flag 採点の最小 sample。\n\nデプロイすると、競技者の AWS アカウントへ `/{NamePrefix}/hello` という SSM Parameter を 1 つ作成する。値はデプロイごとのランダム値を含む `TC{…}` で、NamePrefix からは推測できない。参加者が AWS Console または CLI で Parameter の実値を読み、Participant Portal へ提出すると、`ParameterValue` Output と一致した場合に 100 pt を加点する。\n\nSSM Standard tier の Parameter だけを使い、EC2、VPC、公開 endpoint は作成しない。",
   "tags": ["sample", "challenge", "flag", "ssm"],
   "exposedPorts": [
@@ -29,7 +29,7 @@
     "en": {
       "name": "Hello World (Sample)",
       "shortDescription": "Day one at TenkaCloud Inc. Your predecessor left only one mysterious SSM Parameter in production.\n\nThe handover note says, \"check the SSM hello.\" Read its value through the AWS Console or CLI and recover the message.",
-      "instructions": "## Getting started\nFind the message the previous SRE left in an SSM Parameter.\n\n## First move\n- Console: open the `ParameterConsoleUrl` Output\n- CLI: `aws ssm get-parameter --name /<NamePrefix>/hello --query Parameter.Value --output text`\n\n## Goal\nSubmit the complete `TC{…}` value in the Participant Portal.",
+      "instructions": "> **This problem requires a real AWS account.** It does not run under local play (`make local`).\n> Your team's AWS account has to be registered with TenkaCloud to play it.\n\n## Getting started\nFind the message the previous SRE left in an SSM Parameter.\n\n## First move\n- Console: open the `ParameterConsoleUrl` Output\n- CLI: `aws ssm get-parameter --name /<NamePrefix>/hello --query Parameter.Value --output text`\n\n## Goal\nSubmit the complete `TC{…}` value in the Participant Portal.",
       "description": "Minimal sample for Challenge flag scoring.\n\nDeploying creates one SSM Parameter named `/{NamePrefix}/hello` in the competitor's AWS account. Its value is a per-deploy random token in `TC{…}` form and cannot be derived from NamePrefix. The participant reads the actual value through the AWS Console or CLI and submits it in the Participant Portal. The scoring engine compares it with the `ParameterValue` Output and awards 100 points on a match.\n\nThe stack creates no EC2 instance, VPC, or public endpoint.",
       "learningGoals": [
         "Experience reading a value from SSM Parameter Store via AWS Console / CLI",

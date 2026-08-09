@@ -92,6 +92,22 @@ function createChallengeState(flagSeed) {
   return { FLAGS, SHARE_TOKEN, AGENCY_TOKEN, controls, INBOX };
 }
 
+/**
+ * この板が自分自身を指すときの絶対 URL。
+ *
+ * ポートを焼き込んではいけない。local play は空いているポートへ再割り当てするので、
+ * 別の問題を起動したままこの問題を起動すると 18080 は他問題のものになる。この問題は
+ * robots.txt から sitemap.xml へ、そこから preview page へ辿る導線そのものが主題なので、
+ * 焼き込んだ URL は**参加者を別の問題へ飛ばす** (Issue 399)。
+ *
+ * `Host` は参加者のブラウザが実際に打ったホストとポートなので、それを使えば割り当てが
+ * どこであっても正しい先を指す。`Host` の無い HTTP/1.0 クライアントだけ既定へ落とす。
+ */
+function siteBase(request) {
+  const host = request.headers.host;
+  return host ? `http://${host}` : "http://127.0.0.1:8080";
+}
+
 function send(response, status, contentType, body) {
   response.writeHead(status, {
     "content-type": contentType,
@@ -121,10 +137,10 @@ async function readJson(request) {
 
 function sitePage(state) {
   return `<!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><title>Aoi Design Studio</title>
+<html lang="ja"><head><meta name="color-scheme" content="light"><meta charset="utf-8"><title>Aoi Design Studio</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  body{font-family:system-ui;margin:0;color:#1b2a3a;line-height:1.7}
+  body{font-family:system-ui;margin:0;background:#fff;color:#1b2a3a;line-height:1.7}
   header{background:#0d3b66;color:#fff;padding:3rem 1.5rem;text-align:center}
   main{max-width:44rem;margin:0 auto;padding:2rem 1.5rem}
   h1{margin:.2rem 0;font-size:2rem}
@@ -159,7 +175,7 @@ function sitePage(state) {
 
 function previewPage(state) {
   return `<!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><title>Client Review — Aoi Design Studio</title></head>
+<html lang="ja"><head><meta name="color-scheme" content="light dark"><meta charset="utf-8"><title>Client Review — Aoi Design Studio</title></head>
 <body style="font-family:system-ui;max-width:48rem;margin:2rem auto;line-height:1.7">
 <h1>制作会社との公開前レビュー</h1>
 <p>このページは検索対象外のつもりでしたが、公開sitemapに残っています。</p>
@@ -174,8 +190,8 @@ function inboxPage(state) {
       `<tr><td>${entry.name}</td><td>${entry.email}</td><td>${entry.message}</td></tr>`,
   ).join("");
   return `<!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><title>お問い合わせ受信箱</title>
-<style>body{font-family:system-ui;max-width:56rem;margin:2rem auto}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:.5rem;text-align:left;vertical-align:top}.warn{background:#fff7ed;padding:.8rem}</style>
+<html lang="ja"><head><meta name="color-scheme" content="light dark"><meta charset="utf-8"><title>お問い合わせ受信箱</title>
+<style>body{font-family:system-ui;max-width:56rem;margin:2rem auto}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:.5rem;text-align:left;vertical-align:top}.warn{background:#fff7ed;color:#1f2937;padding:.8rem}</style>
 </head><body><h1>お問い合わせ受信箱</h1>
 <p class="warn">この共有リンクを知る人は、認証なしで以下の個人情報を閲覧できます。</p>
 <table><tr><th>お名前</th><th>メール</th><th>ご相談内容</th></tr>${rows}</table>
@@ -184,7 +200,7 @@ function inboxPage(state) {
 
 function agencyPage(state) {
   return `<!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><title>Collaborator Access</title></head>
+<html lang="ja"><head><meta name="color-scheme" content="light dark"><meta charset="utf-8"><title>Collaborator Access</title></head>
 <body style="font-family:system-ui;max-width:48rem;margin:2rem auto;line-height:1.7">
 <h1>共同編集者アクセス</h1>
 <p>契約終了済みの制作会社accountが、公開後もSite manager権限を保持しています。</p>
@@ -211,7 +227,7 @@ function reAuditResult(state) {
 function reAuditPage(state) {
   const { remediated, openLabels } = reAuditResult(state);
   return `<!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><title>設定の再検証</title></head>
+<html lang="ja"><head><meta name="color-scheme" content="light dark"><meta charset="utf-8"><title>設定の再検証</title></head>
 <body style="font-family:system-ui;max-width:50rem;margin:2rem auto;line-height:1.7">
 <h1>設定の再検証</h1>
 ${
@@ -232,7 +248,7 @@ function ownerSettingsPage(state) {
         : `<form method="post" action="${reopenAction}"><button>${reopenLabel}</button></form>`
     }</td></tr>`;
   return `<!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><title>Owner Settings</title></head>
+<html lang="ja"><head><meta name="color-scheme" content="light dark"><meta charset="utf-8"><title>Owner Settings</title></head>
 <body style="font-family:system-ui;max-width:50rem;margin:2rem auto;line-height:1.7">
 <h1>サイト所有者の設定</h1>
 <p>ここは所有者として利用できる正規の設定画面です。証跡を先に集め、最後に設定を是正してください。誤って先に閉じてしまった設定は「元に戻す」で再度有効化でき、証跡を集め直してから改めて閉じられます。</p>
@@ -290,18 +306,19 @@ function createChallengeServer(state) {
         response,
         200,
         "text/plain; charset=utf-8",
-        "Sitemap: http://127.0.0.1:18080/sitemap.xml\n",
+        `Sitemap: ${siteBase(request)}/sitemap.xml\n`,
       );
     }
     if (method === "GET" && url.pathname === "/sitemap.xml") {
+      const base = siteBase(request);
       const preview = controls.searchIndexing
-        ? "<url><loc>http://127.0.0.1:18080/preview/client-review</loc></url>"
+        ? `<url><loc>${base}/preview/client-review</loc></url>`
         : "";
       return send(
         response,
         200,
         "application/xml; charset=utf-8",
-        `<?xml version="1.0"?><urlset><url><loc>http://127.0.0.1:18080/</loc></url>${preview}</urlset>`,
+        `<?xml version="1.0"?><urlset><url><loc>${base}/</loc></url>${preview}</urlset>`,
       );
     }
     if (method === "GET" && url.pathname === "/preview/client-review") {

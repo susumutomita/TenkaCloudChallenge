@@ -87,15 +87,27 @@ function send(response, status, contentType, body) {
   response.end(body);
 }
 
-const HOME = `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Acme Profile API</title></head>
+/**
+ * この板が自分自身を指すときの絶対 URL。
+ *
+ * ポートを焼き込むと、別の問題を起動したまま起動したときに 18080 が他問題のものになり、
+ * 例示した curl が**別の問題へ飛ぶ** (Issue 399)。`Host` は参加者が実際に打ったホストと
+ * ポートなので、再割り当てがどこであっても正しい先を指す。
+ */
+function siteBase(request) {
+  const host = request.headers.host;
+  return host ? `http://${host}` : "http://127.0.0.1:8080";
+}
+
+const home = (base) => `<!doctype html>
+<html lang="en"><head><meta name="color-scheme" content="light dark"><meta charset="utf-8"><title>Acme Profile API</title></head>
 <body style="font-family:system-ui;max-width:40rem;margin:3rem auto;line-height:1.6">
 <h1>Acme Profile API</h1>
 <p>You are signed in as <code>guest</code>. Your API token is <code>token-guest</code>.</p>
 <h2>Read your profile</h2>
-<pre>curl -H "Authorization: Bearer token-guest" http://127.0.0.1:18080/api/profile
-curl -H "Authorization: Bearer token-guest" http://127.0.0.1:18080/api/profiles
-curl -H "Authorization: Bearer token-guest" http://127.0.0.1:18080/api/profile/3</pre>
+<pre>curl -H "Authorization: Bearer token-guest" ${base}/api/profile
+curl -H "Authorization: Bearer token-guest" ${base}/api/profiles
+curl -H "Authorization: Bearer token-guest" ${base}/api/profile/3</pre>
 <p><code>/api/profiles</code> lists the profiles you are authorized to see — as a
 guest, just your own. Notice the shape: <code>id</code> is a small integer.</p>
 <p>The administrator is <b>user id 1</b> (<code>root</code>), and the flag lives in
@@ -111,7 +123,7 @@ const challenge = createServer(async (request, response) => {
     return send(response, 200, "application/json", JSON.stringify({ status: "ok" }));
   }
   if (method === "GET" && url.pathname === "/") {
-    return send(response, 200, "text/html; charset=utf-8", HOME);
+    return send(response, 200, "text/html; charset=utf-8", home(siteBase(request)));
   }
 
   // Intended endpoint: read *your own* profile, identified by your token.
