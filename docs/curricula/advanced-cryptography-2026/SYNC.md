@@ -28,24 +28,31 @@ answer; an invented SHA is not.
 What keeps an unpinned problem accountable is `curriculum.md`'s "Maintenance"
 section: a problem whose week has no row there is an unmapped problem.
 
-At the time of writing **no problem in the catalog pins a source yet**, so
-`bun run course:drift` reports "nothing to check" and exits 0. The check engages
-with the first `mechanism` or `assignment-companion` problem, which cites the
-material it was built beside.
+As of 2026-08-09 the catalog carries **52 pins** across the Advanced Cryptography
+track, so `bun run course:drift` does real work on every pull request that
+touches a `metadata.json`, the checker, or its workflow.
+
+The check has fired in anger once. On 2026-08-09 it reported seven `DRIFT` rows
+and five `PUBLISHED` rows; the drift turned out to be a lecture-slide link added
+to the Week 1 and Week 3 READMEs, and the publication was Week 2's material
+arriving. See `curriculum.md`'s Week 2 section for what the reading found — the
+SHA bump was the easy half.
 
 ## 2. Unpublished weeks
 
-Week 2 and Week 4 shipped a README saying materials are in preparation, with
-`problems/` holding only `.gitkeep`. Week 7 has no directory at all.
+Week 2 and Week 4 both shipped a README saying materials are in preparation, with
+`problems/` holding only `.gitkeep`. Week 7 has no directory at all. Week 2's
+material was published on 2026-08-09 and its companions now pin the real thing;
+Week 4 is still in the placeholder state, and is the live example below.
 
-Companion challenges for those weeks pin the placeholder itself, with
+Companion challenges for such weeks pin the placeholder itself, with
 `kind: "placeholder"`:
 
 ```json
 {
   "repository": "zk-tokyo/advanced-cryptography-2026",
-  "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
-  "path": "week2/README.md",
+  "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
+  "path": "week4/README.md",
   "kind": "placeholder"
 }
 ```

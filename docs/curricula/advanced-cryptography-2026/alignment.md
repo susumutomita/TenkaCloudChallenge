@@ -21,8 +21,8 @@ the week it accompanies is empty?*
 | | |
 | --- | --- |
 | Source repository | `zk-tokyo/advanced-cryptography-2026` (public) |
-| Commit checked | `5e80999306608a45aecf9a0e4e3394a0b62f34d2` |
-| Checked on | 2026-07-25 |
+| Commit checked | `a3aa4b56fa88fbe803b57d320fbc87c1a203b480` |
+| Checked on | 2026-08-09 |
 | Method | Repository tree read at that commit; recorded in `GOVERNANCE.md` §1 and `SYNC.md` §2 |
 
 State at that commit:

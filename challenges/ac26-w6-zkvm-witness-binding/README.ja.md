@@ -183,7 +183,7 @@ binding のほうが対象内です。本物の zkVM では statement は progra
 ## 出典との対応
 
 Week 6 の資料は公開済みなので、`courseAlignment` は `week6/README.md` と
-`week6/problems/zkvm-exploit/README.md` を commit `5e80999306608a45aecf9a0e4e3394a0b62f34d2`
+`week6/problems/zkvm-exploit/README.md` を commit `a3aa4b56fa88fbe803b57d320fbc87c1a203b480`
 で pin しています。公式課題からの転載はありません。statement の形、image format、opcode 集合、
 fixtures、disclosure、解答はすべて独自に書いており、公式課題は Rust、こちらは Python です。
 主題——proof が 1 つのものについての証拠になるために guest が何を公開すべきか——は講座が名指す

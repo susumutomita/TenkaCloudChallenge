@@ -53,7 +53,7 @@ const CHECKPOINTS = [
   "privacy",
   "transfer",
 ] as const;
-const PINNED = "5e80999306608a45aecf9a0e4e3394a0b62f34d2";
+const PINNED = "a3aa4b56fa88fbe803b57d320fbc87c1a203b480";
 /** Measured by `make reference-test`; both READMEs quote these two numbers. */
 const BROKEN_GUESTS = 55;
 const WEAK_PROBE_BLIND = 42;

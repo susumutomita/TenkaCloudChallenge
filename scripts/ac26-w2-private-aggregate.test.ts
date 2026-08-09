@@ -320,16 +320,33 @@ describe("ac26-w2-private-aggregate: metadata contracts", () => {
     expect(metadata().scoring.checks.map((check) => check.id)).toEqual([...CHECKPOINTS]);
   });
 
-  it("should pin week 2's placeholder rather than an alignment", () => {
+  // Week 2's material was published and read on 2026-08-09, so this pin now records an
+  // alignment rather than an absence. The placeholder did its job: `course:drift`
+  // reported PUBLISHED, and the material was read before the kind moved.
+  //
+  // What the reading found is what this test now guards. The official `toy-mpc` has two
+  // halves, and this track accompanies one of them: Part A (Arithmetic MPC) is covered,
+  // Part B (Oblivious Transfer and the GMW secret AND) has no companion at all —
+  // Issue 412. The `assignment` pin is the only thing watching the file that would tell
+  // us the official exercise moved again. Dropping it would not fail anything today; it
+  // would just make the uncovered half stop being visible, which is how a known gap
+  // turns into a forgotten one.
+  it("should pin week 2's published material, including the official exercise", () => {
     const { courseAlignment, status } = metadata();
     expect(courseAlignment.week).toBe(2);
     expect(courseAlignment.role).toBe("synthesis");
     expect(courseAlignment.sources).toEqual([
       {
         repository: "zk-tokyo/advanced-cryptography-2026",
-        ref: "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        ref: "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
         path: "week2/README.md",
-        kind: "placeholder",
+        kind: "lecture",
+      },
+      {
+        repository: "zk-tokyo/advanced-cryptography-2026",
+        ref: "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
+        path: "week2/problems/toy-mpc/README.md",
+        kind: "assignment",
       },
     ]);
     expect(status).toBe("draft");
