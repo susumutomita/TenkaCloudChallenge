@@ -1,8 +1,18 @@
 """POST /verify — the scoring seam. Loopback only, stdlib only.
 
-Same security contract as the AC26 template. Every checkpoint runs the learner's
-oblivious.py against seeded settings; they differ in which hidden phases they run, and
-`transfer` runs the whole suite under a seed the learner has never been shown.
+Security contract (docs/curricula/advanced-cryptography-2026/TEMPLATE.md §/verify):
+  - `checkpointId` is required and is echoed back verbatim. The platform fails closed
+    on a missing or mismatched echo, so it can never credit another checkpoint.
+  - Submissions are copied into a fresh temporary workspace. The source tree is never
+    written to.
+  - Learner code runs in a subprocess with a wall-clock timeout, a memory cap, and a
+    capped output size. A hang, a fork bomb, or a gigabyte of prints fails the
+    checkpoint instead of the verifier.
+  - No learner input is ever concatenated into a shell command; the subprocess is
+    invoked with an argument list and `shell=False`.
+  - Responses carry `correct` and, at most, a property name. Never the hidden test
+    names, the expected values, or reference output.
+  - Malformed input produces a failed checkpoint, never a crashed process.
 """
 
 from __future__ import annotations
@@ -18,47 +28,40 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fixtures.generate import group
-
 ROOT = Path(__file__).resolve().parents[1]
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 MAX_BODY_BYTES = 256 * 1024
-RUN_TIMEOUT_SECONDS = 20
+RUN_TIMEOUT_SECONDS = 25
 MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
 MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
 #: Wall clock for reading a request body, so a stalled client cannot pin the server.
 REQUEST_TIMEOUT_SECONDS = 15
 
-# The two privacy checkpoints carry their correctness phase as well, and that is not
-# redundancy. Both privacy properties are "this party's view does not move with the
-# other party's secrets", and a stub that returns a constant satisfies that perfectly
-# by computing nothing: the shipped starter scored `gate-privacy` on 10/10 seeds until
-# `check_and_gate` was folded in. Privacy is only a claim about a protocol that works,
-# so the checkpoint asks for both. The separation that matters is preserved — the
-# mask-reuse mutation passes `check_and_gate` and dies on `check_gate_privacy`.
+# Final truth-table correctness is deliberately separate from the OT transcript and
+# party-boundary audits. transfer runs the full suite on an unseen seed.
 CODE_CHECKPOINTS = {
-    "request": ("check_request",),
-    "choice-privacy": ("check_request", "check_receiver_privacy"),
-    "transfer": ("check_transfer",),
-    "and-gate": ("check_and_gate", "check_gates"),
-    "gate-privacy": ("check_and_gate", "check_gate_privacy"),
-    "unseen": (),
+    "truth-table": ("check_delivery",),
+    "cross-terms": ("check_cross_terms",),
+    "output-sharing": ("check_output_sharing",),
+    "transcript": ("check_transcript",),
+    "privacy-audit": ("check_privacy",),
+    "transfer": (),
 }
-CHECKPOINTS = ("request", "choice-privacy", "transfer", "and-gate", "gate-privacy", "unseen")
+CHECKPOINTS = tuple(CODE_CHECKPOINTS)
 
 
 # Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still
-# reporting RLIM_INFINITY for it. Setting it anyway raises inside `preexec_fn` and
-# aborts the exec, so on a macOS checkout every submission run failed -- including
-# the reference. The lab runs on Linux, where the cap does apply, so skipping it on
-# Darwin does not change what participants run. See the same note in
-# ac26-bridge-experiment's verifier.
+# reporting RLIM_INFINITY for it. Setting it anyway raises inside `preexec_fn`, which
+# aborts the exec -- so on a macOS checkout every submission run failed, including the
+# reference. The lab runs on Linux, where the cap does apply, so skipping it on Darwin
+# does not change what participants run.
 _ADDRESS_SPACE_CAPPABLE = sys.platform.startswith("linux")
 
 
 def _limits() -> None:
+    """Applied inside the child, before exec. Caps memory, processes, and file size."""
     if _ADDRESS_SPACE_CAPPABLE:
         resource.setrlimit(resource.RLIMIT_AS, (MAX_ADDRESS_SPACE_BYTES, MAX_ADDRESS_SPACE_BYTES))
     resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
@@ -69,9 +72,9 @@ RUNNER = """
 import json, os, sys
 sys.path.insert(0, {root!r})
 sys.path.insert(0, {workspace!r})
-from tests.hidden import check_oblivious
+from tests.hidden import check_gmw
 try:
-    import oblivious
+    import gmw
 except Exception as error:
     print(json.dumps({{"failures": ["submission could not be imported: " + type(error).__name__]}}))
     sys.stdout.flush()
@@ -80,9 +83,9 @@ phases = {phases!r}
 if phases:
     failures = []
     for name in phases:
-        failures.extend(getattr(check_oblivious, name)(oblivious, {seed!r}))
+        failures.extend(getattr(check_gmw, name)(gmw, {seed!r}))
 else:
-    failures = check_oblivious.run(oblivious, {seed!r})
+    failures = check_gmw.run(gmw, {seed!r})
 print(json.dumps({{"failures": failures}}))
 sys.stdout.flush()
 os._exit(0)
@@ -90,15 +93,16 @@ os._exit(0)
 
 
 def _run_submission(submission: object, phases: tuple[str, ...], seed: str) -> bool:
+    """Run the named hidden phases against the learner's file in a throwaway workspace."""
     source = submission
     if isinstance(source, dict):
-        source = source.get("oblivious.py")
+        source = source.get("gmw.py")
     if not isinstance(source, str) or not source.strip():
         return False
     if len(source) > MAX_BODY_BYTES:
         return False
     with tempfile.TemporaryDirectory() as workspace:
-        (Path(workspace) / "oblivious.py").write_text(source, encoding="utf-8")
+        (Path(workspace) / "gmw.py").write_text(source, encoding="utf-8")
         script = RUNNER.format(
             root=str(ROOT), workspace=workspace, phases=list(phases), seed=seed
         )
@@ -138,7 +142,7 @@ def _run_submission(submission: object, phases: tuple[str, ...], seed: str) -> b
 
 def evaluate(checkpoint_id: str, submission: object) -> bool:
     if checkpoint_id in CODE_CHECKPOINTS:
-        seed = f"{SEED}:unseen" if checkpoint_id == "unseen" else SEED
+        seed = f"{SEED}:transfer" if checkpoint_id == "transfer" else SEED
         return _run_submission(submission, CODE_CHECKPOINTS[checkpoint_id], seed)
     return False
 
@@ -148,16 +152,16 @@ from verifier.workbench import PortalEditorSupport
 _WORKBENCH = PortalEditorSupport(
     root=ROOT,
     seed=SEED,
-    problem_id='ac26-w2-oblivious-transfer',
-    problem_name='選んだことを言わずに、選ぶ',
-    problem_name_en='Choosing without saying which',
-    description='2 つのうち 1 つだけ受け取り、どちらを選んだかは相手に言わない。ここまでの週で当然としてきた「前処理された三つ組」が、どこから来るのかの話。正しく動く実装が 2 通りあり、隠せているのは片方だけ。',
-    description_en='Take one of two, and do not tell the sender which. This is where the preprocessed triples the earlier problems assumed actually come from — and two implementations work correctly while only one of them hides anything.',
-    checkpoint_labels={'request': 'choice を隠した request を作る', 'choice-privacy': 'choice が request から読めない範囲を選ぶ', 'transfer': '片方だけを渡す', 'and-gate': '転送 2 回で AND を作る', 'gate-privacy': 'ゲートが相手の秘密を渡さないようにする', 'unseen': '見たことのない群でも成立させる'},
-    checkpoint_labels_en={'request': 'Build a request that hides the choice', 'choice-privacy': 'Pick a range that keeps the choice unreadable', 'transfer': 'Hand over exactly one of the two', 'and-gate': 'Build AND from two transfers', 'gate-privacy': "Stop the gate handing over the other party's secret", 'unseen': 'Hold up in groups you have not seen'},
-    submitted_files=('oblivious.py',),
-    code_checkpoints=CHECKPOINTS,
-    checkpoints=CHECKPOINTS,
+    problem_id='ac26-w2-gmw-and',
+    problem_name='正しい AND は、まだ秘密ではない',
+    problem_name_en='A correct AND is not yet private',
+    description='XOR share のまま AND を作る。真理値表は、入力を平文へ戻しても通る。2つの cross term を OT で分け、open しなかった transcript まで証明する。',
+    description_en='Build AND while values remain XOR-shared. The truth table also passes after plaintext reconstruction; use two OTs for the cross terms and prove from the transcript that nothing was opened.',
+    checkpoint_labels={'truth-table': 'AND の真理値表を合わせる', 'cross-terms': '2つの cross term を OT で分ける', 'output-sharing': '出力を新しい2 share に保つ', 'transcript': 'party 境界と OT session を監査する', 'privacy-audit': '復元せずに構成したことを証明する', 'transfer': '見ていない share と mask でも成立させる'},
+    checkpoint_labels_en={'truth-table': 'Match the AND truth table', 'cross-terms': 'Split both cross terms with OT', 'output-sharing': 'Keep the output as fresh two-party shares', 'transcript': 'Audit party boundaries and OT sessions', 'privacy-audit': 'Prove the gate was composed without reconstruction', 'transfer': 'Hold up under unseen shares and masks'},
+    submitted_files=('gmw.py',),
+    code_checkpoints=('truth-table', 'cross-terms', 'output-sharing', 'transcript', 'privacy-audit', 'transfer'),
+    checkpoints=('truth-table', 'cross-terms', 'output-sharing', 'transcript', 'privacy-audit', 'transfer'),
     max_body_bytes=MAX_BODY_BYTES,
     run_timeout_seconds=RUN_TIMEOUT_SECONDS,
     max_output_bytes=MAX_OUTPUT_BYTES,
@@ -270,7 +274,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(content)
 
 def main() -> None:
-    port = int(os.environ.get("VERIFY_PORT", "18310"))
+    port = int(os.environ.get("VERIFY_PORT", "18123"))
     # Bind every interface *inside the container*, not the container's loopback. A published
     # port is forwarded to the container's bridge address, so a server listening only on
     # 127.0.0.1 inside the container accepts nothing from outside it — the connection is

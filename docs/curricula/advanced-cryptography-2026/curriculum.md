@@ -115,6 +115,7 @@ order; `track.order` only sequences presentation.
 | `concept.share-reconstruction` | Recombining shares, and the threshold at which it succeeds |
 | `concept.local-linear-operation` | Linear operations on shares need no communication |
 | `concept.beaver-triple` | Preprocessed randomness turning multiplication into one opening round |
+| `concept.xor-secret-sharing` | Splitting a bit into two values whose XOR reconstructs it |
 | `concept.over-opening` | Revealing more than the protocol requires, leaking the secret |
 | `concept.threat-model` | Actors, assets, trust boundaries, and what the adversary can do |
 
@@ -248,7 +249,7 @@ Prerequisite for: every `ac26-*` challenge.
 ### Week 2 — MPC
 
 - **Source**: `week2/README.md`, `week2/problems/toy-mpc/README.md`
-- **State**: published. The five companions below were authored while this week
+- **State**: published. The original five companions were authored while this week
   was still a "materials in preparation" placeholder, and were re-pinned to the
   published material on 2026-08-09 after it was read.
 - **Official exercise**: `toy-mpc`, in two halves.
@@ -271,8 +272,10 @@ exercise composes them.
 **Part B had no companion at all** when the material was read: nothing in this
 track taught Oblivious Transfer or GMW, so a learner who worked the track and
 then opened `toy-mpc` met OT for the first time in the official exercise. That
-was the gap Issue 412 recorded, and `ac26-w2-oblivious-transfer` (order 260)
-closes it.
+was the gap Issue 412 recorded. `ac26-w2-oblivious-transfer` (order 260) covers
+the transfer and its privacy boundary, while `ac26-w2-gmw-and` (order 270) takes
+OT as an ideal fixture so the Boolean gate composition can be learned and audited
+as its own building block.
 
 The new problem is not a translation of the official one. It takes the same two
 mechanisms — a 1-out-of-2 transfer in a prime-order subgroup, and a GMW AND gate
@@ -304,6 +307,7 @@ a challenge teaches is a content decision, not a pin update.
 | 240 | `ac26-w2-privacy-audit` | `transfer` | `concept.over-opening`, `concept.privacy` | A (privacy of the above) | #223 |
 | 250 | `ac26-w2-private-aggregate` | `synthesis` | combines the four above | A (composition) | #224 |
 | 260 | `ac26-w2-oblivious-transfer` | `mechanism` | `concept.oblivious-transfer`, `concept.gmw-and-gate`, `concept.indistinguishable-distribution` | B (`ot_*`, `gmw_and`) | Issue 412 |
+| 270 | `ac26-w2-gmw-and` | `mechanism` | `concept.xor-secret-sharing`, `concept.gmw-and-gate` | B (`gmw_and`, with ideal OT fixture) | Issue 412 |
 
 ### Week 3 — elliptic curves and Schnorr
 

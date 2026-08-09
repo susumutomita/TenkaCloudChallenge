@@ -227,6 +227,59 @@
       }
     },
     {
+      "id": "ac26-w2-gmw-and",
+      "name": "正しい AND は、まだ秘密ではない",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "advanced-cryptography-2026",
+        "order": 270,
+        "chapter": "Week 2 / GMW Boolean AND"
+      },
+      "courseAlignment": {
+        "courseId": "advanced-cryptography-program",
+        "edition": "2026",
+        "week": 2,
+        "role": "mechanism",
+        "sources": [
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
+            "path": "week2/README.md",
+            "kind": "lecture"
+          },
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
+            "path": "week2/problems/toy-mpc/README.md",
+            "kind": "assignment"
+          }
+        ]
+      },
+      "difficulty": 4,
+      "estimatedDuration": "60-90 分",
+      "shortDescription": "XOR share のまま AND を作る。真理値表は、入力を平文へ戻しても通る。2つの cross term を OT で分け、open しなかった transcript まで証明する。",
+      "tags": [
+        "advanced-cryptography-2026",
+        "week2",
+        "mpc",
+        "boolean-mpc",
+        "gmw",
+        "oblivious-transfer",
+        "xor-sharing",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "ac26-w2-linear-shares",
       "name": "誰とも話さずにできること",
       "category": "Challenge",

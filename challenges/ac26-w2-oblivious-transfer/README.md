@@ -55,6 +55,9 @@ a property of one run.
 
 ## Working on it
 
+Open the problem in Participant Portal, edit the provided starter, and submit it for each
+checkpoint. To exercise the same contract locally, use:
+
 ```bash
 make inspect   # your group, key, session, and the gate's shares
 make test      # public tests: shape, and one successful transfer

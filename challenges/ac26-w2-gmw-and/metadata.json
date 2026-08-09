@@ -1,0 +1,338 @@
+{
+  "id": "ac26-w2-gmw-and",
+  "name": "正しい AND は、まだ秘密ではない",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "advanced-cryptography-2026",
+    "order": 270,
+    "chapter": "Week 2 / GMW Boolean AND"
+  },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 2,
+    "role": "mechanism",
+    "spoilerPolicy": "independent-reimplementation",
+    "sources": [
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
+        "path": "week2/README.md",
+        "kind": "lecture"
+      },
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
+        "path": "week2/problems/toy-mpc/README.md",
+        "kind": "assignment"
+      }
+    ]
+  },
+  "difficulty": 4,
+  "estimatedDuration": "60-90 分",
+  "shortDescription": "XOR share のまま AND を作る。真理値表は、入力を平文へ戻しても通る。2つの cross term を OT で分け、open しなかった transcript まで証明する。",
+  "description": "Week 2 Part B の GMW AND に対応する独立実装の mechanism 問題。OT の数式は前問の成果として fixture が ideal transfer を供給し、この問題は (x0 xor x1)(y0 xor y1) の4項展開と2方向の cross term composition に集中する。関数名は公式 skeleton と分けるが、x_shares / y_shares / masks / ot_secrets を受け取り output shares を返す意味は揃える。\n\npublic test は全4行の AND truth table を復元して確認するだけ。mutation 8種のうち7種は完全に通る。入力を open する、share を直接跨いで平文 AND を計算する、OT を1回しか使わない、session や mask を再利用する、出力を固定 slot の平文にする実装も最終 bit は正しい。transcript と privacy audit だけが欠陥を検出する。\n\n作成中に #419 が `main` へ確立した Week 2 の公開済み講義・課題 reference を再利用する。この変更は既存 pin を動かさず、問題は `status: draft` のままとする。",
+  "instructions": "## はじめに\n\n前提にするもの: Python、bit の AND と XOR、2つの share を XOR すると秘密へ戻ること。前提にしないもの: OT の実装。OT は前の companion の building block として fixture が供給します。\n\n## 最初の一手\n\nParticipant Portal の「証拠を調べる」で share と4項展開を確認します。x0*y0 と x1*y1 に印を付け、残る x0*y1 と x1*y0 をどちら向きの OT が運ぶか決めてから gmw.py を編集してください。\n\n## ゴール\n\n入力を一度も復元せず、2つの独立した OT session で cross term を分け、2つの output share を返します。truth-table checkpoint が通っても終わりではなく、transcript と privacy audit まで通して完成です。",
+  "writeup": "## 4項のうち2項だけが難しい\n\nx=(x0 xor x1)、y=(y0 xor y1) なら、x*y は x0*y0 xor x0*y1 xor x1*y0 xor x1*y1。両端の local term は各 party が計算できる。cross term だけが相手の share を必要とする。\n\n## OT で cross term を share に分ける\n\nx0*y1 では party 0 が random mask r と r xor x0 を2通にし、party 1 が y1 で1通を選ぶ。sender share を r、receiver share を選んだ値にすれば、XOR は x0*y1。反対向きも独立した mask と session で行う。\n\n## 真理値表が見ないもの\n\n入力を復元して AND し、(r, r xor answer) を返せば全4行は合う。そこで audit は open が0、OT が2、方向が両方向、session と mask が別、所有者の違う share を直接演算していないことを記録する。7/8 mutants が final output を通るという測定が、checkpoint を分ける理由。",
+  "tags": [
+    "advanced-cryptography-2026",
+    "week2",
+    "mpc",
+    "boolean-mpc",
+    "gmw",
+    "oblivious-transfer",
+    "xor-sharing",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18123,
+      "name": "Portal editor API + /verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "XOR share の積を4つの項へ展開できる",
+    "local term と2つの cross term を区別できる",
+    "ideal OT を2方向に使って cross term を share に分けられる",
+    "truth table の correctness と transcript の privacy を別々に検査できる"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.ac26-w2-gmw-and.expand-product",
+        "description": "XOR share の AND を4項へ展開し、local term と cross term を分類できる。"
+      },
+      {
+        "id": "lo.ac26-w2-gmw-and.compose-cross-terms",
+        "description": "2方向の OT で cross term を share のまま構成できる。"
+      },
+      {
+        "id": "lo.ac26-w2-gmw-and.audit-path",
+        "description": "最終 bit ではなく open・party boundary・OT transcript から privacy を検査できる。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.xor-secret-sharing",
+        "description": "bit を2つの share へ分け、XOR すると元の bit に戻る Boolean secret sharing。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.ac26-w2-gmw-and.truth-table",
+        "description": "AND の真理値表を合わせる checkpoint を満たした。"
+      },
+      {
+        "id": "assessment.ac26-w2-gmw-and.cross-terms",
+        "description": "2つの cross term を OT で分ける checkpoint を満たした。"
+      },
+      {
+        "id": "assessment.ac26-w2-gmw-and.output-sharing",
+        "description": "出力を新しい2 share に保つ checkpoint を満たした。"
+      },
+      {
+        "id": "assessment.ac26-w2-gmw-and.transcript",
+        "description": "party 境界と OT session を監査する checkpoint を満たした。"
+      },
+      {
+        "id": "assessment.ac26-w2-gmw-and.privacy-audit",
+        "description": "復元せずに構成したことを証明する checkpoint を満たした。"
+      },
+      {
+        "id": "assessment.ac26-w2-gmw-and.transfer",
+        "description": "見ていない share と mask でも成立させる checkpoint を満たした。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.gmw-truth-table-is-enough",
+        "description": "AND の真理値表が合えば GMW gate という誤解。入力を復元して平文 AND を再 share しても同じ表になる。"
+      },
+      {
+        "id": "misconception.gmw-one-ot-is-enough",
+        "description": "cross term は片方向だけ処理すればよいという誤解。x0*y1 と x1*y0 は独立した2方向の OT が必要。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w2-gmw-and",
+      "target": "lo.ac26-w2-gmw-and.expand-product"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w2-gmw-and",
+      "target": "lo.ac26-w2-gmw-and.compose-cross-terms"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w2-gmw-and",
+      "target": "lo.ac26-w2-gmw-and.audit-path"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w2-gmw-and",
+      "target": "concept.xor-secret-sharing"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w2-gmw-and",
+      "target": "concept.gmw-and-gate"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w2-gmw-and",
+      "target": "concept.oblivious-transfer"
+    },
+    {
+      "type": "requires",
+      "source": "problem.ac26-w2-gmw-and",
+      "target": "problem.ac26-w2-oblivious-transfer"
+    },
+    {
+      "type": "requires",
+      "source": "problem.ac26-w2-gmw-and",
+      "target": "problem.ac26-w2-secret-sharing"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w2-gmw-and",
+      "target": "assessment.ac26-w2-gmw-and.truth-table"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w2-gmw-and",
+      "target": "assessment.ac26-w2-gmw-and.cross-terms"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w2-gmw-and",
+      "target": "assessment.ac26-w2-gmw-and.output-sharing"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w2-gmw-and",
+      "target": "assessment.ac26-w2-gmw-and.transcript"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w2-gmw-and",
+      "target": "assessment.ac26-w2-gmw-and.privacy-audit"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w2-gmw-and",
+      "target": "assessment.ac26-w2-gmw-and.transfer"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w2-gmw-and",
+      "target": "misconception.gmw-truth-table-is-enough"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w2-gmw-and",
+      "target": "misconception.gmw-one-ot-is-enough"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18123/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "truth-table",
+        "input": "multiline",
+        "label": "AND の真理値表を合わせる",
+        "points": 45,
+        "wrongAnswerPenalty": 15
+      },
+      {
+        "id": "cross-terms",
+        "input": "multiline",
+        "label": "2つの cross term を OT で分ける",
+        "points": 50,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "gmw-cross-hint-1",
+            "content": "x*y を4項へ展開する。x0*y1 は party 0 が (r, r xor x0) を送り party 1 が y1 で選ぶ。反対向きも同じ。",
+            "penalty": 25
+          }
+        ]
+      },
+      {
+        "id": "output-sharing",
+        "input": "multiline",
+        "label": "出力を新しい2 share に保つ",
+        "points": 45,
+        "wrongAnswerPenalty": 15
+      },
+      {
+        "id": "transcript",
+        "input": "multiline",
+        "label": "party 境界と OT session を監査する",
+        "points": 50,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "gmw-transcript-hint-1",
+            "content": "正しい最終 bit だけを見ない。open が0回、OT が2回、方向が0→1と1→0、session と mask が別々かを数える。",
+              "penalty": 25
+          }
+        ]
+      },
+      {
+        "id": "privacy-audit",
+        "input": "multiline",
+        "label": "復元せずに構成したことを証明する",
+        "points": 65,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "gmw-privacy-hint-1",
+            "content": "各 party がローカルに掛けられるのは xi*yi だけ。所有者が違う share 同士の演算が起きたら、答えが合っても privacy boundary を越えている。",
+            "penalty": 30
+          }
+        ]
+      },
+      {
+        "id": "transfer",
+        "input": "multiline",
+        "label": "見ていない share と mask でも成立させる",
+        "points": 45,
+        "wrongAnswerPenalty": 15
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "A correct AND is not yet private",
+      "shortDescription": "Build AND while values remain XOR-shared. The truth table also passes after plaintext reconstruction; use two OTs for the cross terms and prove from the transcript that nothing was opened.",
+      "description": "An independently implemented Week 2 Part B mechanism companion for a GMW Boolean AND gate. The OT algebra is supplied as an ideal fixture from the preceding building block, so this problem focuses on the four-term expansion and two directed cross terms. The argument roles match x shares, y shares, masks, and OT secrets without copying the official skeleton or function name.\n\nThe public test reconstructs only the complete four-row AND truth table. Seven of eight mutations pass it perfectly while opening the inputs, crossing party boundaries, using one OT, reusing a session or mask, or returning plaintext in a fixed share. Only transcript and privacy audits detect those defects.\n\nThis problem reuses the published Week 2 lecture and assignment references that #419 established on `main` while it was being authored. It moves no existing pin and remains `status: draft`.",
+      "instructions": "## Start here\n\nPrerequisites: Python, bitwise AND and XOR, and the fact that XORing two shares reconstructs a bit. OT implementation is not assumed; the fixture supplies it as the preceding companion's building block.\n\n## First move\n\nUse Inspect evidence in Participant Portal to read the shares and four-term expansion. Mark x0*y0 and x1*y1, then decide which OT direction carries x0*y1 and x1*y0 before editing gmw.py.\n\n## Goal\n\nNever reconstruct an input. Split both cross terms through two independent OT sessions and return two output shares. Passing the truth table is only the first step; the transcript and privacy audits complete the gate.",
+      "writeup": "## Only two of four terms are difficult\n\nFor x=x0 xor x1 and y=y0 xor y1, x*y expands to x0*y0 xor x0*y1 xor x1*y0 xor x1*y1. The edge terms are local. Only the cross terms need the other party's share.\n\n## Split a cross term with OT\n\nFor x0*y1, party 0 offers random mask r and r xor x0, while party 1 selects with y1. The sender keeps r and the receiver keeps the selected value; their XOR is x0*y1. Repeat in the other direction with a fresh mask and session.\n\n## What the truth table cannot see\n\nOpening both inputs, computing AND, and returning (r, r xor answer) passes all four rows. The audit therefore records zero opens, two opposite-direction OTs, distinct sessions and masks, and no direct operation across owners. The measured seven of eight final-output-blind mutants justify the separate checkpoints.",
+      "learningGoals": [
+        "Expand a product of XOR-shared bits into four terms",
+        "Separate local terms from two cross terms",
+        "Use two directed ideal OTs to split the cross terms",
+        "Test truth-table correctness and transcript privacy separately"
+      ],
+      "checks": [
+        {
+          "id": "truth-table",
+          "label": "Match the AND truth table"
+        },
+        {
+          "id": "cross-terms",
+          "label": "Split both cross terms with OT",
+          "hints": [
+            {
+              "id": "gmw-cross-hint-1",
+              "content": "Expand x*y into four terms. For x0*y1, party 0 sends (r, r xor x0) and party 1 chooses with y1. Repeat in the other direction."
+            }
+          ]
+        },
+        {
+          "id": "output-sharing",
+          "label": "Keep the output as fresh two-party shares"
+        },
+        {
+          "id": "transcript",
+          "label": "Audit party boundaries and OT sessions",
+          "hints": [
+            {
+              "id": "gmw-transcript-hint-1",
+              "content": "Do not inspect only the final bit. Count zero opens, two OTs, directions 0 to 1 and 1 to 0, and distinct sessions and masks."
+            }
+          ]
+        },
+        {
+          "id": "privacy-audit",
+          "label": "Prove the gate was composed without reconstruction",
+          "hints": [
+            {
+              "id": "gmw-privacy-hint-1",
+              "content": "Each party can multiply only xi*yi locally. Any operation combining shares with different owners crosses the privacy boundary even when the answer is right."
+            }
+          ]
+        },
+        {
+          "id": "transfer",
+          "label": "Hold up under unseen shares and masks"
+        }
+      ]
+    }
+  }
+}

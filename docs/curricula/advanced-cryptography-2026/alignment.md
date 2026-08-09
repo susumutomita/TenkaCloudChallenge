@@ -95,15 +95,17 @@ conclusions belong here, though, because they are about *this record's method*:
   neighbour bounds what a week *must* contain, never what it *will* contain.
 
   A sixth companion, `ac26-w2-oblivious-transfer`, was written afterwards to cover
-  it (Issue 412). That closes the coverage gap and does not retract the lesson:
-  the derivation still could not have found it, and the only reason anyone looked
-  was that the drift check reported a publication and somebody read the material.
+  it, and a seventh, `ac26-w2-gmw-and`, isolates the Boolean composition while
+  receiving OT through an ideal fixture (Issue 412). Together they close the
+  coverage gap and do not retract the lesson: the derivation still could not have
+  found it, and the only reason anyone looked was that the drift check reported a
+  publication and somebody read the material.
 
 On step 4 of "When the material appears" — does any companion claim
 `assignment-companion`? **No, and that is a decision rather than an omission.** The
 role tells a reader *there is an official assignment and this accompanies it*, and
 a reader who takes that at face value expects a correspondence they can check
-item by item. These six accompany the same two mechanisms by independent
+item by item. These seven accompany the same course mechanisms by independent
 reimplementation, under different names and a different decomposition; the claim
 `assignment-companion` would invite a comparison that the problems are not built
 to survive. Revisit if the decomposition is ever aligned deliberately.
@@ -138,10 +140,15 @@ to reach Week 6.
 | `ac26-w2-secret-sharing` | `mechanism` | share/reconstruct, required by `co-snark-prove` |
 | `ac26-w2-linear-shares` | `mechanism` | linear operations on shares, required by `co-snark-prove` |
 | `ac26-w2-beaver-mul` | `mechanism` | Beaver triples, named directly by `co-snark-prove` |
+| `ac26-w2-oblivious-transfer` | `mechanism` | closes the published `toy-mpc` Part B OT gap through an independent toy construction |
+| `ac26-w2-gmw-and` | `mechanism` | isolates the published Part B Boolean AND group while receiving OT as a fixture building block |
 | `ac26-w2-privacy-audit` | `transfer` | the privacy boundary, applied to a case Week 6 does not cover |
 | `ac26-w2-private-aggregate` | `synthesis` | the five above, composed |
 
 None claims `assignment-companion`, and the guard keeps it that way.
+
+The two Part B rows use the lecture and assignment references already established
+on `main`. Adding the focused GMW problem does not move any existing source pin.
 
 ## Week 4 — proof systems
 

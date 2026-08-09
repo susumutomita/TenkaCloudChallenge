@@ -230,6 +230,23 @@ def check_gate_privacy(module, seed: str) -> list[str]:
                 "two transfers are not independently masked"
             )
             break
+    for x1, y1 in product((0, 1), repeat=2):
+        views: dict[tuple[int, int], frozenset[tuple[int, int]]] = {}
+        for x0, y0 in product((0, 1), repeat=2):
+            seen: set[tuple[int, int]] = set()
+            for randomness in product((0, 1), repeat=2):
+                try:
+                    _view_0, view_1 = _gate(module, x0, x1, y0, y1, randomness)
+                except Exception as error:  # noqa: BLE001
+                    return [f"the AND gate raised {type(error).__name__}"]
+                seen.add(view_1)
+            views[(x0, y0)] = frozenset(seen)
+        if len({*views.values()}) > 1:
+            failures.append(
+                "party 1's view of the gate changes with party 0's secret bits, so the "
+                "two transfers are not independently masked"
+            )
+            break
     return failures
 
 

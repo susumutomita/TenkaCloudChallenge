@@ -111,7 +111,27 @@ describe("ac26-w2-oblivious-transfer: the problem holds up (Issue 412)", () => {
     expect(failures).toEqual([
       "party 0's view of the gate changes with party 1's secret bits, so the two " +
         "transfers are not independently masked",
+      "party 1's view of the gate changes with party 0's secret bits, so the two " +
+        "transfers are not independently masked",
     ]);
+  });
+
+  it("は両 party の view を対称に監査する", () => {
+    const partyZeroMaskFixed = mutate(
+      "    return (randomness[0], randomness[1])",
+      "    return (0, randomness[1])",
+    );
+    expect(hiddenFailures(partyZeroMaskFixed).join(" ")).toContain("party 1's view");
+  });
+
+  it("は mutation の過半数が final-output-only 検査を通る設計を固定する", () => {
+    const output = execFileSync("python3", ["mutation.py"], {
+      cwd: LOCAL,
+      encoding: "utf8",
+      timeout: 120_000,
+    });
+    expect(output).toContain("FINAL-OUTPUT-BLIND 8 of 13");
+    expect(output).toContain("All 14 mutations killed.");
   });
 
   it("は公式課題の Part B に対応する pin を持つ", () => {

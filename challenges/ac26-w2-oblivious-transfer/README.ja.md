@@ -51,6 +51,9 @@ B = A * g^t      message 1 が欲しいとき
 
 ## 進め方
 
+Participant Portal で問題を開き、表示される starter を編集して checkpoint ごとに提出する。
+ローカルで同じ契約を確認したい場合は次を使う。
+
 ```bash
 make inspect   # 自分の群、鍵、セッション、ゲートの share
 make test      # 公開テスト: shape と、転送が 1 回成功すること
