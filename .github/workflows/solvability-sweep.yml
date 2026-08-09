@@ -34,13 +34,18 @@ on:
 
 jobs:
   sweep:
-    name: sweep (${{ matrix.shard }}/3)
+    name: sweep (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
     # Sharded for the same reason ci.yml's `suite` is: the sweep's wall time tracks the
     # size of the catalog, not the size of a change. At 36 local-play problems and the
     # budgets below it stopped fitting — the nightly run on main was cancelled at this
     # cap on 2026-08-09, which shows up as a red X with no failing assertion and reads
     # as flake rather than as "the budget no longer fits".
+    #
+    # Four rather than three. Measured on 2026-08-09 at three: 14.6 min, 18.2 min, and a
+    # third shard still running past 23. Finishing under the cap is not the bar — the
+    # catalog only grows, and a partition that clears it by two minutes is one problem
+    # away from being cancelled again with no failing assertion to point at.
     #
     # The cap below is a runaway guard, not a budget. When the catalog grows, add a
     # shard rather than minutes; scripts/solvability-shard.test.ts checks the matrix and
@@ -50,7 +55,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2, 3, 4]
     env:
       CI: "true"
       npm_config_ignore_scripts: "true"
@@ -76,7 +81,7 @@ jobs:
       - name: Run the deep solvability sweep
         run: |
           make solvability-sweep \
-            SOLVABILITY_SHARD=--shard=${{ matrix.shard }}/3 \
+            SOLVABILITY_SHARD=--shard=${{ matrix.shard }}/4 \
             SOLVABILITY_REPORT=reports/solvability-${{ matrix.shard }}.json \
             | tee "$RUNNER_TEMP/sweep.txt"
 
@@ -84,7 +89,7 @@ jobs:
         if: always()
         run: |
           {
-            echo "## Solvability sweep (shard ${{ matrix.shard }}/3)"
+            echo "## Solvability sweep (shard ${{ matrix.shard }}/4)"
             echo
             echo '```text'
             cat "$RUNNER_TEMP/sweep.txt" 2>/dev/null || echo "(no output produced)"
