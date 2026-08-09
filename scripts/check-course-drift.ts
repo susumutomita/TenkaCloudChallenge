@@ -110,8 +110,45 @@ function githubHeaders(): Record<string, string> {
   return headers;
 }
 
+/**
+ * In-flight and completed `blobShaAt` calls, keyed by what actually identifies the
+ * answer: repository, ref, path.
+ *
+ * The catalog pins 47 sources across 24 distinct (repository, ref, path) triples —
+ * `week3/README.md` alone is pinned by five problems, and each `inspect` asks for the
+ * pinned ref *and* the default branch. Without this, one run made 94 requests for 24
+ * answers.
+ *
+ * That was not merely wasteful. Unauthenticated GitHub allows 60 requests an hour per
+ * IP, so a run that had not been given a token started returning 403 partway through
+ * and reported the remainder as `unreachable` — a different set every time, depending
+ * on how many other jobs shared the runner. The count of "unreachable" rows moved
+ * between 18 and 30 across runs of the *same commit*, which reads as an upstream
+ * repository going in and out of existence rather than as a rate limit.
+ *
+ * Promises are cached, not values, so concurrent `inspect` calls for the same triple
+ * share one request instead of racing to make three.
+ */
+const blobShaCache = new Map<string, Promise<string | undefined>>();
+
 /** Content SHA (git blob id) of one path at one ref, or undefined when absent. */
 async function blobShaAt(
+  repository: string,
+  ref: string,
+  path: string,
+): Promise<string | undefined> {
+  const key = `${repository}@${ref}:${path}`;
+  const cached = blobShaCache.get(key);
+  if (cached !== undefined) return cached;
+  const pending = fetchBlobShaAt(repository, ref, path);
+  blobShaCache.set(key, pending);
+  // A rejected promise must not be cached: a transient failure would then be replayed
+  // as the answer for every later caller in the same run.
+  pending.catch(() => blobShaCache.delete(key));
+  return pending;
+}
+
+async function fetchBlobShaAt(
   repository: string,
   ref: string,
   path: string,
@@ -124,6 +161,16 @@ async function blobShaAt(
   }
   const body = (await response.json()) as { sha?: unknown };
   return typeof body.sha === "string" ? body.sha : undefined;
+}
+
+/** Test seam: the number of distinct triples this run has requested. */
+export function requestedBlobKeys(): readonly string[] {
+  return [...blobShaCache.keys()];
+}
+
+/** Test seam: forget what this run has requested. */
+export function resetBlobShaCache(): void {
+  blobShaCache.clear();
 }
 
 async function defaultBranch(repository: string): Promise<string> {

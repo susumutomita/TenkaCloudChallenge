@@ -3,7 +3,14 @@ import { join } from "node:path";
 import Ajv2020 from "ajv";
 import addFormats from "ajv-formats";
 import { describe, expect, it } from "bun:test";
-import { classify, isActionable, report } from "./check-course-drift";
+import {
+  classify,
+  inspect,
+  isActionable,
+  report,
+  requestedBlobKeys,
+  resetBlobShaCache,
+} from "./check-course-drift";
 import type { DriftRow } from "./check-course-drift";
 
 /**
@@ -194,5 +201,86 @@ describe("SCHEMA.json source kinds", () => {
 
   it("should still reject an unknown source kind", () => {
     expect(validateMetadata(withKind("guess"))).toBe(false);
+  });
+});
+
+describe("blob request deduplication", () => {
+  /**
+   * The catalog pins the same upstream path from several problems, and each `inspect`
+   * asks for two refs. Before the cache, one run made 94 requests for 24 answers and
+   * spent the unauthenticated 60-an-hour budget partway through — which surfaced as a
+   * different set of `unreachable` rows on every run of the same commit.
+   *
+   * `fetch` is replaced rather than reached over the network: the property is "how many
+   * distinct requests does a run make", which a live call cannot pin.
+   */
+  it("should request each (repository, ref, path) triple once, however many problems pin it", async () => {
+    resetBlobShaCache();
+    const requested: string[] = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      requested.push(String(input));
+      return new Response(JSON.stringify({ sha: PINNED }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    try {
+      const source = {
+        problemId: "p",
+        repository: "owner/repo",
+        ref: PINNED,
+        path: "week3/README.md",
+        kind: "lecture",
+      } as const;
+      // Three problems pinning the same path, inspected concurrently against the same
+      // default branch: 6 logical lookups over 2 distinct triples.
+      await Promise.all([
+        inspect({ ...source, problemId: "a" }, "main"),
+        inspect({ ...source, problemId: "b" }, "main"),
+        inspect({ ...source, problemId: "c" }, "main"),
+      ]);
+      expect(requested).toHaveLength(2);
+      expect(requestedBlobKeys().toSorted()).toEqual([
+        `owner/repo@${PINNED}:week3/README.md`,
+        "owner/repo@main:week3/README.md",
+      ]);
+    } finally {
+      globalThis.fetch = realFetch;
+      resetBlobShaCache();
+    }
+  });
+
+  it("should not cache a failure, so one transient error is not replayed as the answer", async () => {
+    resetBlobShaCache();
+    let calls = 0;
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      calls += 1;
+      return calls === 1
+        ? new Response("rate limited", { status: 403 })
+        : new Response(JSON.stringify({ sha: PINNED }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+    }) as typeof fetch;
+
+    try {
+      const source = {
+        problemId: "p",
+        repository: "owner/repo",
+        ref: PINNED,
+        path: "week3/README.md",
+        kind: "lecture",
+      } as const;
+      const first = await inspect(source, PINNED);
+      expect(first.status).toBe("unreachable");
+      const second = await inspect(source, PINNED);
+      expect(second.status).toBe("in-sync");
+    } finally {
+      globalThis.fetch = realFetch;
+      resetBlobShaCache();
+    }
   });
 });
