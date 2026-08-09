@@ -1811,6 +1811,37 @@
       }
     },
     {
+      "id": "cs-http-retry-idempotency",
+      "name": "応答が消えた。再送で同じ支払いを増やさない",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "cs-foundations",
+        "order": 50,
+        "chapter": "5. HTTP/TLSプロトコル境界"
+      },
+      "difficulty": 3,
+      "estimatedDuration": "45-75 分",
+      "shortDescription": "commit後にHTTP応答だけが消えたtraceを監査し、SQLite receiptで同じ論理操作を再生する。",
+      "tags": [
+        "cs-foundations",
+        "http",
+        "idempotency",
+        "sqlite",
+        "concurrency",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "cs-transaction-visibility-audit",
       "name": "どちらも committed。だが、その合計は一度も存在しない",
       "category": "Challenge",

@@ -47,6 +47,13 @@
       "type": "answer-on-screen",
       "reason": "The environment checkpoint only proves that this deployment's container and Portal evidence are reachable. The health token is intentionally copied from inspect and is bound to the current seed. The audit answer is measured separately and is not marked on screen.",
       "recordedAtSeeds": 500
+    },
+    {
+      "problem": "cs-http-retry-idempotency",
+      "checkpoint": "environment",
+      "type": "answer-on-screen",
+      "reason": "The environment checkpoint is proof that the separated Workbench started, not a reasoning question. Its seed-derived health token is intentionally shown for copying and does not carry across deployments. The uncertain and audit checkpoints still require interpreting the response-drop trace and identifying the later duplicate effect.",
+      "recordedAtSeeds": 500
     }
   ],
   "open": []
