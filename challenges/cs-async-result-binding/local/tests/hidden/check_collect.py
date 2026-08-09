@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import importlib.util
 import sys
 from pathlib import Path
@@ -56,19 +57,27 @@ def bind_cases(seed: str) -> list[Case]:
 
 
 def failure_cases(seed: str) -> list[Case]:
-    jobs = jobs_for(f"{seed}:failure", 5)
-    values = values_for(f"{seed}:failure", jobs)
-    failed_id = jobs[2]["id"]
-    order = [4, 2, 0, 3, 1]
-    return [
-        Case(
-            jobs,
-            groups_from_order([jobs[index]["id"] for index in order]),
-            values,
-            {failed_id: "upstream rejected request"},
-            len(jobs),
+    cases: list[Case] = []
+    # A single failure position can accidentally reward an implementation that
+    # special-cases that input slot. Use three distinct seed-permuted positions in
+    # every grading run, with independently generated jobs, orders, and messages.
+    failure_positions = completion_permutation(f"{seed}:failure-positions", 5)[:3]
+    for case_index, failed_index in enumerate(failure_positions):
+        case_seed = f"{seed}:failure:{case_index}"
+        jobs = jobs_for(case_seed, 5)
+        values = values_for(case_seed, jobs)
+        order = completion_permutation(f"{case_seed}:order", len(jobs))
+        message_digest = hashlib.sha256(f"{case_seed}:message".encode("utf-8")).hexdigest()
+        cases.append(
+            Case(
+                jobs,
+                groups_from_order([jobs[index]["id"] for index in order]),
+                values,
+                {jobs[failed_index]["id"]: f"upstream-{message_digest[:12]}"},
+                len(jobs),
+            )
         )
-    ]
+    return cases
 
 
 def generalize_cases(seed: str) -> list[Case]:

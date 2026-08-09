@@ -133,6 +133,55 @@ print(server._check_code("bind", spoof), server._check_code("bind", reference))
     });
     expect(result.trim()).toBe("False True");
   });
+
+  it("does not expose hidden checker modules to participant imports", () => {
+    const probe = String.raw`
+import sys
+sys.path.insert(0, ".")
+from verifier import server
+spoof = '''
+from tests.hidden import check_collect
+async def bypass(*_): return True, "passed"
+check_collect.evaluate_module = bypass
+async def collect(*_): return []
+'''
+reference = open("reference/collector.py", encoding="utf-8").read()
+print(server._check_code("bind", spoof), server._check_code("bind", reference))
+`;
+    const result = execFileSync("python3", ["-c", probe], {
+      cwd: LOCAL,
+      encoding: "utf8",
+      env: { ...process.env, FLAG_SEED: "repo-suite-seed", PYTHONDONTWRITEBYTECODE: "1" },
+    });
+    expect(result.trim()).toBe("False True");
+  });
+
+  it("derives the failed job, completion order, and message from the seed", () => {
+    const probe = String.raw`
+import json, sys
+sys.path.insert(0, ".")
+from tests.hidden.check_collect import failure_cases
+def shape(seed):
+    cases = failure_cases(seed)
+    return {
+        "positions": [next(index for index, job in enumerate(case.jobs) if job["id"] in case.failures) for case in cases],
+        "groups": [case.completion_groups for case in cases],
+        "messages": [sorted(case.failures.values()) for case in cases],
+    }
+print(json.dumps([shape("failure-seed-a"), shape("failure-seed-b")]))
+`;
+    const result = execFileSync("python3", ["-c", probe], {
+      cwd: LOCAL,
+      encoding: "utf8",
+      env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" },
+    });
+    const [first, second] = JSON.parse(result) as Array<{ positions: number[] }>;
+    expect(first.positions).toHaveLength(3);
+    expect(new Set(first.positions).size).toBe(3);
+    expect(second.positions).toHaveLength(3);
+    expect(new Set(second.positions).size).toBe(3);
+    expect(first).not.toEqual(second);
+  });
 });
 
 describe("cs-async-result-binding delivery boundary", () => {

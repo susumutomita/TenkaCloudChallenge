@@ -27,25 +27,48 @@ CODE_CHECKPOINT_PHASES = {
 }
 CODE_CHECKPOINTS = frozenset(CODE_CHECKPOINT_PHASES)
 
+# The Participant Portal runs in a separate process, but the repository parity gate
+# reads this authored verifier source. Keep the exact English metadata material here
+# so a future edit cannot silently drift the two participant-facing surfaces.
+PORTAL_ENGLISH_CONTRACT = {
+    "name": "Which request did that early result belong to?",
+    "description": "Bind async I/O completion to request identity in code instead of guessing from order.",
+    "labels": {
+        "environment": "environment — the Future gate pass phrase shown by Portal",
+        "audit": "audit — indices stored under the wrong request identity, ascending",
+        "overlap": "overlap — start every I/O before the first completion",
+        "bind": "bind — preserve request identity when completion order changes",
+        "failure": "failure — do not shift later identities after a middle failure",
+        "generalize": "generalize — handle permutations, shared URLs, and simultaneous completion",
+    },
+}
+
 
 RUNNER = """
 import json, os, sys
 import asyncio
 hard_exit = os._exit
 sys.path.insert(0, {root!r})
-sys.path.insert(0, {workspace!r})
 from tests.hidden import check_collect
-try:
-    import collector
-except Exception as error:
-    os._exit = hard_exit
-    print(json.dumps({{"failures": ["submission could not be imported: " + type(error).__name__]}}))
-    sys.stdout.flush()
-    os._exit(0)
-try:
-    passed, message = asyncio.run(check_collect.evaluate_module(collector, {phase!r}, {seed!r}))
-except Exception as error:
-    passed, message = False, "collector could not be checked: " + type(error).__name__
+private_checker = check_collect.evaluate_module
+for module_name in tuple(sys.modules):
+    if module_name == "tests" or module_name.startswith("tests.") or module_name == "fixtures" or module_name.startswith("fixtures."):
+        sys.modules.pop(module_name, None)
+while {root!r} in sys.path:
+    sys.path.remove({root!r})
+sys.path.insert(0, {workspace!r})
+
+async def evaluate_submission(checker):
+    try:
+        import collector
+    except Exception as error:
+        return False, "submission could not be imported: " + type(error).__name__
+    try:
+        return await checker(collector, {phase!r}, {seed!r})
+    except Exception as error:
+        return False, "collector could not be checked: " + type(error).__name__
+
+passed, message = asyncio.run(evaluate_submission(private_checker))
 os._exit = hard_exit
 print(json.dumps({{"failures": [] if passed else [message]}}))
 sys.stdout.flush()
