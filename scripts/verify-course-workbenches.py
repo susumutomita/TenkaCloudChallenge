@@ -19,6 +19,8 @@ SHARED_TARGETS = (
     "ac26-w2-secret-sharing",
     "ac26-w2-linear-shares",
     "ac26-w2-beaver-mul",
+    "ac26-w2-oblivious-transfer",
+    "ac26-w2-gmw-and",
     "ac26-w2-privacy-audit",
     "ac26-w2-private-aggregate",
     "ac26-w3-field-inverse",

@@ -115,6 +115,11 @@ order; `track.order` only sequences presentation.
 | `concept.share-reconstruction` | Recombining shares, and the threshold at which it succeeds |
 | `concept.local-linear-operation` | Linear operations on shares need no communication |
 | `concept.beaver-triple` | Preprocessed randomness turning multiplication into one opening round |
+| `concept.one-out-of-two-oblivious-transfer` | A receiver learns one selected message while hiding the choice and learning nothing about the other |
+| `concept.choice-privacy` | The sender's transcript does not distinguish which branch the receiver selected |
+| `concept.message-privacy` | The receiver cannot recover the unselected sender message |
+| `concept.xor-secret-sharing` | Splitting a bit into two values whose XOR reconstructs it |
+| `concept.gmw-and-gate` | Building a Boolean AND from local products and two OT-split cross terms |
 | `concept.over-opening` | Revealing more than the protocol requires, leaking the secret |
 | `concept.threat-model` | Actors, assets, trust boundaries, and what the adversary can do |
 
@@ -248,9 +253,11 @@ Prerequisite for: every `ac26-*` challenge.
 ### Week 2 — MPC
 
 - **Source**: `week2/README.md`, `week2/problems/toy-mpc/README.md`
-- **State**: published. The five companions below were authored while this week
-  was still a "materials in preparation" placeholder, and were re-pinned to the
-  published material on 2026-08-09 after it was read.
+- **State**: published. The original five companions were authored while this
+  week was still a "materials in preparation" placeholder and were re-pinned by
+  #419 after the published material was read. The two Part B companions added by
+  #412 reuse those already-established source references; this change does not
+  move an existing pin.
 - **Official exercise**: `toy-mpc`, in two halves.
   - **Part A — Arithmetic MPC**: `share`, `reconstruct`, `add_shares`,
     `beaver_multiply` over `F_p`.
@@ -268,11 +275,12 @@ produce.** The four Part A functions map onto the first three companions almost
 one-for-one, and `ac26-w2-private-aggregate` composes them the way the official
 exercise composes them.
 
-**Part B has no companion at all.** Nothing in this track teaches Oblivious
-Transfer or GMW. A learner who works this track and then opens `toy-mpc` meets
-OT for the first time in the official exercise, with no reimplementation behind
-them — which is precisely the situation the companion track exists to prevent.
-That gap is tracked in Issue 412 and is **not** closed by the re-pin.
+**Part B was the gap left by the re-pin.** The published exercise added
+Oblivious Transfer and GMW, neither of which was on the derived path to Week 6.
+`ac26-w2-oblivious-transfer` and `ac26-w2-gmw-and` now close that gap with
+independent names, code, fixtures, tests, and toy parameters. The second problem
+receives OT through a fixture so its learning target remains Boolean MPC
+composition.
 
 One thing the published material adds that no companion currently teaches, and
 that is not a scoping accident but a security property: a Beaver triple must
@@ -288,9 +296,10 @@ a challenge teaches is a content decision, not a pin update.
 | 210 | `ac26-w2-secret-sharing` | `mechanism` | `concept.additive-secret-sharing`, `concept.share-reconstruction` | A (`share`, `reconstruct`) | #220 |
 | 220 | `ac26-w2-linear-shares` | `mechanism` | `concept.local-linear-operation` | A (`add_shares`) | #221 |
 | 230 | `ac26-w2-beaver-mul` | `mechanism` | `concept.beaver-triple` | A (`beaver_multiply`) | #222 |
-| 240 | `ac26-w2-privacy-audit` | `transfer` | `concept.over-opening`, `concept.privacy` | A (privacy of the above) | #223 |
-| 250 | `ac26-w2-private-aggregate` | `synthesis` | combines the four above | A (composition) | #224 |
-| — | *none* | — | Oblivious Transfer, GMW secret AND | **B — uncovered** | Issue 412 |
+| 240 | `ac26-w2-oblivious-transfer` | `mechanism` | `concept.one-out-of-two-oblivious-transfer`, `concept.choice-privacy`, `concept.message-privacy` | B (OT) | #412 |
+| 250 | `ac26-w2-gmw-and` | `mechanism` | `concept.xor-secret-sharing`, `concept.gmw-and-gate` | B (`gmw_and`) | #412 |
+| 260 | `ac26-w2-privacy-audit` | `transfer` | `concept.over-opening`, `concept.privacy` | A (privacy of the above) | #223 |
+| 270 | `ac26-w2-private-aggregate` | `synthesis` | combines the arithmetic building blocks and privacy audit | A (composition) | #224 |
 
 ### Week 3 — elliptic curves and Schnorr
 
@@ -427,6 +436,7 @@ in [`ASSESSMENT.md`](./ASSESSMENT.md), which also fixes the rule that any
 - A `PUBLISHED` row is a content question wearing a pin's clothes. The 2026-08-09
   re-pin is the reference case: the SHA bump was the trivial half, and the half
   worth the review was discovering that the official exercise had a Part B this
-  track does not accompany. Re-pinning without that reading would have turned the
-  check green and left the gap invisible, which is the outcome
+  track did not accompany. Re-pinning without that reading would have turned the
+  check green and left the gap invisible; #412 subsequently closed that recorded
+  gap. The invisible-gap outcome is what
   [`SYNC.md`](./SYNC.md) §5 exists to forbid.

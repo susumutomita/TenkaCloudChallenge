@@ -6,7 +6,7 @@
   "visibility": "public",
   "track": {
     "id": "advanced-cryptography-2026",
-    "order": 250,
+    "order": 270,
     "chapter": "Week 2 / Private Aggregation Synthesis"
   },
   "courseAlignment": {
