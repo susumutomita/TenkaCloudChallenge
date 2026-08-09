@@ -23,8 +23,8 @@ directory contains instruments, not findings.
 | Field | Value |
 | --- | --- |
 | Repository | `zk-tokyo/advanced-cryptography-2026` |
-| Commit | `5e80999306608a45aecf9a0e4e3394a0b62f34d2` |
-| Read on | 2026-07-25 |
+| Commit | `a3aa4b56fa88fbe803b57d320fbc87c1a203b480` |
+| Read on | 2026-08-09 |
 | Visibility | Public |
 | Licence | None found — see `GOVERNANCE.md` §1 |
 
@@ -47,9 +47,9 @@ it, and it is not part of the numbered sequence. This track treats it as
 | Week | Theme | Official exercise | State at pinned commit |
 | --- | --- | --- | --- |
 | 1 | Programmable Cryptography / arithmetic circuits | `proof-of-exploit` | Published |
-| 2 | MPC | — | **Not published** — README says materials are in preparation; `problems/` holds only `.gitkeep` |
+| 2 | MPC (Arithmetic MPC / Boolean MPC) | `toy-mpc` | Published — see the Week 2 section for what this track does and does not accompany |
 | 3 | Finite fields, elliptic curves, Sigma, Fiat–Shamir, Schnorr | `schnorr-from-scratch` | Published |
-| 4 | ZKP / SNARK / STARK | — | **Not published** — same state as Week 2 |
+| 4 | ZKP / SNARK / STARK | — | **Not published** — README says materials are in preparation; `problems/` holds only `.gitkeep` |
 | 5 | TFHE, Programmable Bootstrapping, HomNAND | `tfhe-toy-python` | Published |
 | 6 | Programmable Cryptography Stack Design | `co-snark-prove`, `zkvm-exploit` | Published |
 | 7 | Demo Day / capstone | — | **No `week7/` directory exists** |
@@ -247,25 +247,50 @@ Prerequisite for: every `ac26-*` challenge.
 
 ### Week 2 — MPC
 
-- **Source**: `week2/README.md`
-- **State**: not published. The README states materials are in preparation and
-  lists no goals, exercise, or submission target.
-- **Known only**: the theme is MPC — secure and collaborative computation.
-- **Not decided**: official goals, exercise, evaluation.
+- **Source**: `week2/README.md`, `week2/problems/toy-mpc/README.md`
+- **State**: published. The five companions below were authored while this week
+  was still a "materials in preparation" placeholder, and were re-pinned to the
+  published material on 2026-08-09 after it was read.
+- **Official exercise**: `toy-mpc`, in two halves.
+  - **Part A — Arithmetic MPC**: `share`, `reconstruct`, `add_shares`,
+    `beaver_multiply` over `F_p`.
+  - **Part B — Oblivious Transfer and Boolean MPC**: 1-out-of-2 OT over a finite
+    group, and a GMW-style secret AND built from two OT invocations.
 
-Companion challenges are authored from the publicly stated theme alone and make
-no claim about what the official exercise will require. Confirmation is tracked
-by #219, with a 2026-09-30 review cutoff. Each pins `week2/README.md` with
-`kind: "placeholder"`, so the day the material appears the drift check reports it
-as a publication rather than an edit — see [`SYNC.md`](./SYNC.md) §2.
+#### What the re-pin found
 
-| Order | Problem id | Role | Teaches | Issue |
-| --- | --- | --- | --- | --- |
-| 210 | `ac26-w2-secret-sharing` | `mechanism` | `concept.additive-secret-sharing`, `concept.share-reconstruction` | #220 |
-| 220 | `ac26-w2-linear-shares` | `mechanism` | `concept.local-linear-operation` | #221 |
-| 230 | `ac26-w2-beaver-mul` | `mechanism` | `concept.beaver-triple` | #222 |
-| 240 | `ac26-w2-privacy-audit` | `transfer` | `concept.over-opening`, `concept.privacy` | #223 |
-| 250 | `ac26-w2-private-aggregate` | `synthesis` | combines the four above | #224 |
+The five companions were scoped against the stated theme alone, so the honest
+question on publication was not "does the SHA move" but "did we accompany the
+right thing". Read against the published exercise, the answer is *half*.
+
+**Part A is covered, and the alignment is closer than guessing had any right to
+produce.** The four Part A functions map onto the first three companions almost
+one-for-one, and `ac26-w2-private-aggregate` composes them the way the official
+exercise composes them.
+
+**Part B has no companion at all.** Nothing in this track teaches Oblivious
+Transfer or GMW. A learner who works this track and then opens `toy-mpc` meets
+OT for the first time in the official exercise, with no reimplementation behind
+them — which is precisely the situation the companion track exists to prevent.
+That gap is tracked in Issue 412 and is **not** closed by the re-pin.
+
+One thing the published material adds that no companion currently teaches, and
+that is not a scoping accident but a security property: a Beaver triple must
+never be reused across two multiplications. Reusing `([a],[b],[c])` publishes
+`d₁ = x₁ - a` and `d₂ = x₂ - a`, from which `x₁ - x₂ = d₁ - d₂` follows, leaking
+a relation between secret inputs. `ac26-w2-beaver-mul` currently treats triples
+as per-multiplication by construction without making reuse a failure the learner
+can observe. Recorded here rather than fixed in the re-pin, because changing what
+a challenge teaches is a content decision, not a pin update.
+
+| Order | Problem id | Role | Teaches | Official half | Issue |
+| --- | --- | --- | --- | --- | --- |
+| 210 | `ac26-w2-secret-sharing` | `mechanism` | `concept.additive-secret-sharing`, `concept.share-reconstruction` | A (`share`, `reconstruct`) | #220 |
+| 220 | `ac26-w2-linear-shares` | `mechanism` | `concept.local-linear-operation` | A (`add_shares`) | #221 |
+| 230 | `ac26-w2-beaver-mul` | `mechanism` | `concept.beaver-triple` | A (`beaver_multiply`) | #222 |
+| 240 | `ac26-w2-privacy-audit` | `transfer` | `concept.over-opening`, `concept.privacy` | A (privacy of the above) | #223 |
+| 250 | `ac26-w2-private-aggregate` | `synthesis` | combines the four above | A (composition) | #224 |
+| — | *none* | — | Oblivious Transfer, GMW secret AND | **B — uncovered** | Issue 412 |
 
 ### Week 3 — elliptic curves and Schnorr
 
@@ -290,11 +315,17 @@ as a publication rather than an edit — see [`SYNC.md`](./SYNC.md) §2.
 ### Week 4 — ZKP / SNARK / STARK
 
 - **Source**: `week4/README.md`
-- **State**: not published, identical in form to Week 2.
+- **State**: not published. The README states materials are in preparation and
+  `problems/` holds only `.gitkeep` — the form Week 2 was in until 2026-08-09.
 - **Known only**: the theme is ZKP, with SNARK and STARK in scope.
 
-Confirmation is tracked by #229, with a 2026-09-30 review cutoff. As with Week 2,
-each challenge pins `week4/README.md` as `kind: "placeholder"`.
+Confirmation is tracked by #229, with a 2026-09-30 review cutoff. Each challenge
+pins `week4/README.md` as `kind: "placeholder"`, the way the Week 2 companions
+did before their material appeared.
+
+Week 2's publication is the worked example of what to expect here: Part A landed
+close to what had been guessed, and Part B was a half of the exercise nobody had
+accompanied. Budget for the second outcome, not just the first.
 
 | Order | Problem id | Role | Teaches | Issue |
 | --- | --- | --- | --- | --- |
@@ -343,9 +374,12 @@ a prerequisite for the next.
   multiplication), with the secret-sharing primitives supplied. `zkvm-exploit` —
   implement, in Rust, the guest program and its public/witness design; the zkVM
   itself is not run.
-- **Prerequisites**: Weeks 1–3, plus Week 2's Beaver multiplication. A learner who
-  met MPC only through the unpublished Week 2 arrives here without it, which is
-  why `ac26-w2-beaver-mul` is a hard prerequisite of `ac26-w6-cosnark-beaver`.
+- **Prerequisites**: Weeks 1–3, plus Week 2's Beaver multiplication. This was
+  written when Week 2 was unpublished and its companions were the only route to
+  Beaver multiplication; that is why `ac26-w2-beaver-mul` is a hard prerequisite
+  of `ac26-w6-cosnark-beaver`. Week 2's publication does not weaken the
+  requirement — the official `toy-mpc` Part A teaches the same construction, so a
+  learner now has two routes to it rather than none.
 - **What the exercises do not force**: noticing that a prover which opens one
   value too many silently destroys the privacy the whole construction exists for.
 
@@ -390,3 +424,9 @@ in [`ASSESSMENT.md`](./ASSESSMENT.md), which also fixes the rule that any
 - Adding a concept id means adding it to the registry above. Ids are referenced
   by education-graph `nodes` across many problems and must not be renamed
   casually.
+- A `PUBLISHED` row is a content question wearing a pin's clothes. The 2026-08-09
+  re-pin is the reference case: the SHA bump was the trivial half, and the half
+  worth the review was discovering that the official exercise had a Part B this
+  track does not accompany. Re-pinning without that reading would have turned the
+  check green and left the gap invisible, which is the outcome
+  [`SYNC.md`](./SYNC.md) §5 exists to forbid.

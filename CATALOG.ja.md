@@ -215,7 +215,7 @@ ID は共通語彙として扱い、共有 node は catalog の 1 箇所だけ�
     "sources": [
       {
         "repository": "zk-tokyo/advanced-cryptography-2026",
-        "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
         "path": "week3/problems/schnorr-from-scratch/README.md",
         "kind": "assignment"
       }
