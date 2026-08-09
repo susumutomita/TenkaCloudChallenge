@@ -1,0 +1,54 @@
+# Local-play container for `agent-approval-gameday` (Issue 390).
+#
+# Loopback only, and no outbound connections. The problem is about approving changes to
+# a simulated control plane; nothing in it needs to reach the internet, and a sandbox
+# that can call out teaches the wrong reflex for an incident-response exercise.
+#
+# Egress is blocked with seccomp rather than `network_mode: none`, because publishing a
+# port needs a network namespace with a gateway — `none` would take the workbench away
+# along with the internet. `connect` / `send*` return EPERM, which the server never
+# calls: an HTTP server binds, listens and accepts. The healthcheck therefore checks
+# that the process is alive rather than fetching its own URL, since a fetch would need
+# the syscall this profile denies.
+#
+# No model API key, no AWS credential, no GitHub token is requested or accepted. The
+# agent side of this problem is *tools and scope*, not a model — the whole thing plays
+# from the browser with no MCP client at all.
+services:
+  agent-approval-gameday:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      # Per-deploy random secret injected by `make local`. The world (which worker is
+      # compromised, which decoys carry the stale tag, the ids) and every checkpoint
+      # receipt are derived from it, so no two deploys share an answer.
+      FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
+      # Phase schedule. The defaults are the 45-60 minute event; shorten them for a
+      # self-paced run. Phases only ever move forward, and the server's clock decides —
+      # a client can never claim a phase.
+      AGENT_GD_PHASE2_MS: "${AGENT_GD_PHASE2_MS:-900000}"
+      AGENT_GD_PHASE3_MS: "${AGENT_GD_PHASE3_MS:-1800000}"
+    ports:
+      - "127.0.0.1:18080:8080" # Browser Workbench + tool gateway (challenge surface)
+      - "127.0.0.1:18081:8081" # loopback /verify
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+      - seccomp=./seccomp-no-connect.json
+    healthcheck:
+      test:
+        ["CMD", "node", "-e", "try { process.kill(1, 0); process.exit(0) } catch { process.exit(1) }"]
+      interval: "2s"
+      timeout: "3s"
+      retries: 20
+    restart: "no"
+    networks:
+      - incident
+
+networks:
+  incident: {}

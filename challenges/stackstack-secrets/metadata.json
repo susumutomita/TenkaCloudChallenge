@@ -22,8 +22,14 @@
     "web-app"
   ],
   "exposedPorts": [
-    { "port": 18080, "name": "Web (board / ops console)" },
-    { "port": 18081, "name": "/verify (loopback)" }
+    {
+      "port": 18080,
+      "name": "Web (board / ops console)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback)"
+    }
   ],
   "learningGoals": [
     "公開されてしまった資格情報は撤回できず、 無効化しかできないことを、 実際の挙動で説明できる",
@@ -127,7 +133,9 @@
       "Ops": "http://127.0.0.1:18080/api/ops"
     },
     "verifyUrl": "http://127.0.0.1:18081/verify",
-    "secretEnv": ["FLAG_SEED"]
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
   },
   "scoring": {
     "kind": "multi-verify",
@@ -223,5 +231,10 @@
         ]
       }
     ]
+  },
+  "track": {
+    "id": "stackstack-route",
+    "order": 130,
+    "chapter": "4. StackStack 本編"
   }
 }

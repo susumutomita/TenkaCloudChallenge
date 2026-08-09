@@ -1244,7 +1244,7 @@ function sendPage(response, status, fragment) {
     "x-content-type-options": "nosniff",
   });
   response.end(`<!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="ja"><head><meta name="color-scheme" content="light dark"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>archive search</title></head>
 <body style="font-family:system-ui;max-width:44rem;margin:2.5rem auto;line-height:1.7;padding:0 1rem">
 <h1>アーカイブ検索</h1>
@@ -1372,7 +1372,7 @@ function editorPage(lang) {
     ng: "NG",
   };
   return `<!doctype html>
-<html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="${lang}"><head><meta name="color-scheme" content="light dark"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${L("検索機能のエディタ", "Feature editor")}</title>
 <style>
 body{font-family:system-ui;max-width:52rem;margin:2rem auto;line-height:1.7;padding:0 1rem}

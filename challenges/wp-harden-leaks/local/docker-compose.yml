@@ -51,10 +51,24 @@ services:
       # so the player turns off the literal WP_DEBUG line in wp-config.php to stop the log
       # regenerating — deleting the file alone loses.
       WORDPRESS_DEBUG: "1"
+      # ポートを焼き込まない (Issue 399)。local play は空いているポートへ再割り当てするので、
+      # DB に保存された siteurl が 18080 のままだと、19080 で開いた参加者は WordPress の
+      # canonical redirect で 18080 = **別の問題**へ飛ばされる。リクエストの Host から
+      # 毎回組み立てれば、割り当てがどこであっても正しい先を指す。
+      #
+      # Host ヘッダーを信じる形は production では host header injection の入口になるが、
+      # この compose は 127.0.0.1 にだけ bind する単一参加者の訓練コンテナで、Host を
+      # 詐称できるのは参加者自身しかいない。
+      #
+      # `$$` は compose の変数展開を抜けて PHP へ `$` を渡すための書き方。
       WORDPRESS_CONFIG_EXTRA: |
         define( 'WP_DEBUG_LOG', true );
         define( 'WP_DEBUG_DISPLAY', false );
         @ini_set( 'display_errors', 0 );
+        if ( ! empty( $$_SERVER['HTTP_HOST'] ) ) {
+          define( 'WP_HOME', 'http://' . $$_SERVER['HTTP_HOST'] );
+          define( 'WP_SITEURL', 'http://' . $$_SERVER['HTTP_HOST'] );
+        }
     volumes:
       - wp_data:/var/www/html
     ports:

@@ -156,7 +156,7 @@ function boardPage(config, posts, lang) {
     .join("\n");
   const other = lang === "en" ? "ja" : "en";
   return `<!doctype html>
-<html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="${lang}"><head><meta name="color-scheme" content="light dark"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${escapeHtml(config.boardTitle)}</title></head>
 <body style="font-family:system-ui;max-width:44rem;margin:2.5rem auto;line-height:1.7;padding:0 1rem">
 <p style="text-align:right"><a href="?lang=${other}">${bi(lang, "English", "日本語")}</a></p>

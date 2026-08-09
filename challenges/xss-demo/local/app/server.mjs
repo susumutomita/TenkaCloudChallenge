@@ -51,7 +51,7 @@ function renderBoard() {
     .map((p) => `<li><strong>${p.name}</strong>: ${p.message}</li>`)
     .join("\n");
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Staff Bulletin Board</title></head>
+<html lang="en"><head><meta name="color-scheme" content="light dark"><meta charset="utf-8"><title>Staff Bulletin Board</title></head>
 <body style="font-family:system-ui;max-width:32rem;margin:3rem auto">
 <h1>Acme Staff Bulletin Board</h1>
 <p>Post a note for the team. A security reviewer checks new notes periodically.</p>

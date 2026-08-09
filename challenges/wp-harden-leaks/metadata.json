@@ -22,8 +22,14 @@
     "multi-verify"
   ],
   "exposedPorts": [
-    { "port": 18080, "name": "Web (WordPress site)" },
-    { "port": 18081, "name": "/verify (loopback admin)" }
+    {
+      "port": 18080,
+      "name": "Web (WordPress site)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback admin)"
+    }
   ],
   "learningGoals": [
     "「動いているサイトを安全にする」 とは、 コードを書くことではなく運用の是正 (不要ファイルの削除・設定の無効化) であることを、 実際に手を動かして体得する",
@@ -126,7 +132,9 @@
       "Web": "http://127.0.0.1:18080"
     },
     "verifyUrl": "http://127.0.0.1:18081/verify",
-    "secretEnv": ["FLAG_SEED"]
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
   },
   "scoring": {
     "kind": "multi-verify",
@@ -225,5 +233,10 @@
         ]
       }
     ]
+  },
+  "track": {
+    "id": "stackstack-route",
+    "order": 80,
+    "chapter": "3. 運用で直す"
   }
 }
