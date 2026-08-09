@@ -1751,6 +1751,36 @@
       }
     },
     {
+      "id": "cs-transaction-visibility-audit",
+      "name": "どちらも committed。だが、その合計は一度も存在しない",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "cs-foundations",
+        "order": 20,
+        "chapter": "2. トランザクションと可視性"
+      },
+      "difficulty": 3,
+      "estimatedDuration": "45-75 分",
+      "shortDescription": "ポイント台帳の各 read は、その瞬間の committed 値を返している。公開テストも緑。それでも複数口座を束ねた report は、一度も存在しなかった合計を返せる。seed 固有の監査ログから反例を組み立て、1 revision の snapshot で report を直す。",
+      "tags": [
+        "cs-foundations",
+        "transactions",
+        "mvcc",
+        "audit",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "csrf-demo",
       "name": "報告されたリンクの罠",
       "category": "Challenge",

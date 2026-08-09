@@ -43,6 +43,7 @@ SHARED_TARGETS = (
     "ac26-w6-stack-design",
     "ac26-w7-capstone-design",
     "ac26-w7-capstone-demo",
+    "cs-transaction-visibility-audit",
     "sha256-bytes-padding",
     "sha256-schedule-logic",
     "sha256-compress-digest",
