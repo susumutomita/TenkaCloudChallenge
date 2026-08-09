@@ -1,109 +1,213 @@
-import { describe, expect, it } from "bun:test";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { spawnSync } from "node:child_process";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "bun:test";
 
-const ROOT = join(import.meta.dir, "..", "challenges", "ac26-w2-oblivious-transfer");
-const LOCAL = join(ROOT, "local");
-const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
+/**
+ * `ac26-w2-oblivious-transfer` — the Week 2 Part B companion (Issue 412).
+ *
+ * ## Why this problem exists
+ *
+ * The official Week 2 exercise has two halves. This track accompanied only the first
+ * (arithmetic MPC: sharing, local addition, Beaver multiplication) and had nothing at
+ * all for the second — oblivious transfer and the GMW secret AND. A learner who
+ * finished the track met OT for the first time in the official assignment.
+ *
+ * ## What is pinned here
+ *
+ * The two properties the problem is actually about, and neither is "does it produce
+ * the right answer". Both failures below are **correct on every input** and still hand
+ * a secret to the other side, which is precisely why a test that only reconstructs
+ * cannot see them:
+ *
+ *   - drawing the receiver's blind from `1..q-1` instead of `0..q-1` makes two group
+ *     elements reachable under one choice and not the other, naming the choice bit;
+ *   - reusing one mask across the gate's two transfers still cancels under XOR, while
+ *     turning each party's output share into a readout of the other party's bits.
+ *
+ * The mutation suite is the load-bearing check and it runs inside the image, so it is
+ * not reachable here. What is reachable without Docker is the hidden suite itself, run
+ * against the reference and against those two mutations — which is the part that would
+ * silently rot if someone "simplified" the privacy checks into the correctness ones.
+ */
 
-function python(script: string) {
-  return spawnSync("python3", ["-c", script], { cwd: LOCAL, encoding: "utf8" });
+const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+const PROBLEM = join(REPO_ROOT, "challenges", "ac26-w2-oblivious-transfer");
+const LOCAL = join(PROBLEM, "local");
+
+/** Run the hidden suite against a source string, the way `/verify` does. */
+function hiddenFailures(source: string): string[] {
+  const script = `
+import json, sys, types
+sys.path.insert(0, ${JSON.stringify(LOCAL)})
+from tests.hidden.check_oblivious import run
+module = types.ModuleType("candidate")
+exec(compile(sys.stdin.read(), "<candidate>", "exec"), module.__dict__)
+print(json.dumps(run(module, "pinned-suite-seed")))
+`;
+  const out = execFileSync("python3", ["-c", script], {
+    input: source,
+    encoding: "utf8",
+    timeout: 120_000,
+  });
+  return JSON.parse(out.trim().split("\n").at(-1) as string) as string[];
 }
 
-describe("ac26-w2-oblivious-transfer: participant and author contract", () => {
-  it("ships the shared make targets and only the intended exercise module", () => {
-    const makefile = read("Makefile");
-    for (const target of ["test:", "test-one:", "inspect:", "reset:", "reference-test:"]) {
-      expect(makefile).toContain(target);
-    }
-    expect(read("local/starter/ot.py")).toContain("def make_receiver_request");
-    expect(read("local/starter/ot.py")).toContain('f"tc-ot-v1:{shared}:{branch}"');
-    expect(read("local/show.py")).toContain("ciphertext_i = message_i XOR pad");
-    expect(read("local/starter/ot.py")).not.toContain("ot_receiver_request");
-    expect(read("local/reference/ot.py")).not.toContain("ot_sender_encrypt");
+function portalContract(): { id: string; checkpoints: string[]; prepared: string[] } {
+  const script = `
+import json, sys
+from pathlib import Path
+sys.path.insert(0, ${JSON.stringify(LOCAL)})
+from verifier.server import CHECKPOINTS, _WORKBENCH
+source = Path(${JSON.stringify(join(LOCAL, "reference", "oblivious.py"))}).read_text()
+config = _WORKBENCH.config_payload()
+prepared = _WORKBENCH.prepare_submissions({"oblivious.py": source}, {})
+assert prepared["ok"] is True
+assert tuple(item["id"] for item in config["checkpoints"]) == CHECKPOINTS
+assert set(prepared["submissions"]) == set(CHECKPOINTS)
+for checkpoint, submission in prepared["submissions"].items():
+    assert _WORKBENCH.unwrap_submission(checkpoint, submission) == source
+print(json.dumps({
+    "id": config["id"],
+    "checkpoints": [item["id"] for item in config["checkpoints"]],
+    "prepared": sorted(prepared["submissions"]),
+}))
+`;
+  const out = execFileSync("python3", ["-c", script], { encoding: "utf8" });
+  return JSON.parse(out.trim().split("\n").at(-1) as string);
+}
+
+const REFERENCE = readFileSync(join(LOCAL, "reference", "oblivious.py"), "utf8");
+const STARTER = readFileSync(join(LOCAL, "starter", "oblivious.py"), "utf8");
+
+/** Apply a mutation and prove it applied — a no-op replace would pass vacuously. */
+function mutate(from: string, to: string): string {
+  const mutated = REFERENCE.replace(from, to);
+  expect(mutated, `mutation did not apply: ${from}`).not.toBe(REFERENCE);
+  return mutated;
+}
+
+describe("ac26-w2-oblivious-transfer: the problem holds up (Issue 412)", () => {
+  it("は reference が hidden suite を通る", () => {
+    expect(hiddenFailures(REFERENCE)).toEqual([]);
   });
 
-  it("keeps the verifier loopback-only, bounded, healthy, and unprivileged", () => {
-    const compose = read("local/docker-compose.yml");
-    expect(compose).toContain("127.0.0.1:18122:18122");
-    expect(compose).toContain("healthcheck:");
-    expect(compose).toContain("mem_limit: 1g");
-    expect(compose).toContain("pids_limit: 128");
-    expect(read("local/Dockerfile")).toContain("USER lab");
-    expect(read("local/verifier/server.py")).toContain('HTTPServer(("0.0.0.0", port)');
+  it("は starter のままでは通らない", () => {
+    // 配布状態で満点が出る問題は問題ではない。
+    expect(hiddenFailures(STARTER).length).toBeGreaterThan(0);
   });
 
-  it("derives different fixtures from different seeds", () => {
-    const result = python([
-      "from fixtures.generate import case",
-      "print(case(\"seed-a\", \"x\", 0) != case(\"seed-b\", \"x\", 0))",
-    ].join("\n"));
-    expect(result.status).toBe(0);
-    expect(result.stdout.trim()).toBe("True");
+  it("は Participant Portal に正しい problem と全 checkpoint を公開する", () => {
+    const contract = portalContract();
+    const checkpoints = [
+      "request",
+      "choice-privacy",
+      "transfer",
+      "and-gate",
+      "gate-privacy",
+      "unseen",
+    ];
+    expect(contract.id).toBe("ac26-w2-oblivious-transfer");
+    expect(contract.checkpoints).toEqual(checkpoints);
+    expect(contract.prepared).toEqual([...checkpoints].sort());
   });
 
-  it("has a reachable reference and a failing starter for every checkpoint", () => {
-    const result = python([
-      "import json",
-      "from pathlib import Path",
-      "from verifier.server import CHECKPOINTS, evaluate",
-      "reference = Path(\"reference/ot.py\").read_text()",
-      "starter = Path(\"starter/ot.py\").read_text()",
-      "print(json.dumps({\"reference\": {c: evaluate(c, reference) for c in CHECKPOINTS}, \"starter\": {c: evaluate(c, starter) for c in CHECKPOINTS}}))",
-    ].join("\n"));
-    expect(result.status).toBe(0);
-    const verdict = JSON.parse(result.stdout);
-    expect(Object.values(verdict.reference).every(Boolean)).toBe(true);
-    expect(Object.values(verdict.starter).some(Boolean)).toBe(false);
+  it("は starter が privacy checkpoint を素通りしないようにする", () => {
+    // 実際に開いた穴の回帰テスト。starter は offer も output_share も定数を返すので、
+    // 「自分の view が相手の秘密で動かない」は何も計算しないことで完璧に成立していた。
+    // solvability audit が `gate-privacy / starter-passes` を 10/10 seed で検出した。
+    //
+    // privacy は「動く protocol について」の主張なので、両 checkpoint は対応する
+    // 正しさ phase を一緒に走らせる。ここで固定するのは checkpoint の構成そのもの。
+    const server = readFileSync(join(LOCAL, "verifier", "server.py"), "utf8");
+    const phases = /"choice-privacy": \(([^)]*)\)/.exec(server)?.[1] ?? "";
+    expect(phases).toContain("check_request");
+    const gate = /"gate-privacy": \(([^)]*)\)/.exec(server)?.[1] ?? "";
+    expect(gate).toContain("check_and_gate");
+
+    // 構成だけでなく挙動も見る: starter は両方の phase 集合で落ちること。
+    const failures = hiddenFailures(STARTER);
+    expect(failures.join(" ")).toContain("subgroup");
   });
 
-  it("measures six final-output-blind mutations and kills every mutant", () => {
-    const result = spawnSync("python3", ["mutation.py"], { cwd: LOCAL, encoding: "utf8" });
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain("FINAL-OUTPUT-BLIND 6 of 8");
-    expect(result.stdout).toContain("All 9 mutations killed.");
+  it("は blind から 0 を外した実装を、正しく動いていても落とす", () => {
+    // 1 回の転送は成功し続ける。落ちるのは分布の検査だけ。
+    const failures = hiddenFailures(
+      mutate('    return (0, grp["q"] - 1)', '    return (1, grp["q"] - 1)'),
+    );
+    expect(failures.join(" ")).toContain("distribution");
   });
 
-  it("rejects a cleartext protocol although its final delivery is correct", () => {
-    const result = python([
-      "import types",
-      "from tests.hidden import check_ot",
-      "source = \"\"\"def make_receiver_request(a,c,b): return c",
-      "def seal_sender_messages(a,r,m0,m1): return (m0,m1)",
-      "def open_receiver_message(a,c,b,cts): return cts[c]",
-      "\"\"\"",
-      "m=types.ModuleType(\"clear\"); exec(source,m.__dict__)",
-      "print(not check_ot.check_delivery(m,\"probe\"), bool(check_ot.run(m,\"probe\")))",
-    ].join("\n"));
-    expect(result.status).toBe(0);
-    expect(result.stdout.trim()).toBe("True True");
-  });
-
-  it("reuses main's published Week 2 sources and totals 300 points", () => {
-    const meta = JSON.parse(read("metadata.json"));
-    expect(meta.track).toEqual({ id: "advanced-cryptography-2026", order: 240, chapter: "Week 2 / Oblivious Transfer" });
-    expect(meta.courseAlignment.sources).toEqual([
-      {
-        repository: "zk-tokyo/advanced-cryptography-2026",
-        ref: "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
-        path: "week2/README.md",
-        kind: "lecture",
-      },
-      {
-        repository: "zk-tokyo/advanced-cryptography-2026",
-        ref: "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
-        path: "week2/problems/toy-mpc/README.md",
-        kind: "assignment",
-      },
+  it("は mask を 1 つに使い回した実装を、復元が正しくても落とす", () => {
+    const leaky = mutate(
+      "    return (randomness[0], randomness[1])",
+      "    return (randomness[0], randomness[0])",
+    );
+    const failures = hiddenFailures(leaky);
+    // 「復元は正しいのに落ちる」ことがこの問題の主張なので、両方を固定する。
+    // 正しさの検査まで落ちていたら、それは privacy を教えていることにならない。
+    expect(failures).toEqual([
+      "party 0's view of the gate changes with party 1's secret bits, so the two " +
+        "transfers are not independently masked",
     ]);
-    expect(meta.scoring.checks.reduce((sum: number, item: { points: number }) => sum + item.points, 0)).toBe(300);
-    expect(meta.i18n.en.checks).toHaveLength(meta.scoring.checks.length);
   });
 
-  it("echoes checkpointId and fails unknown ids closed", () => {
-    expect(read("local/verifier/server.py")).toContain('{"checkpointId": checkpoint_id, "correct": correct}');
-    const result = python("from verifier.server import evaluate; print(evaluate('unknown', 'x'))");
-    expect(result.stdout.trim()).toBe("False");
+  it("は party 1 だけへ漏れる非対称 mask を、復元が正しくても落とす", () => {
+    const leaky = mutate(
+      "    return (randomness[0], randomness[1])",
+      "    return (0, randomness[1])",
+    );
+    expect(hiddenFailures(leaky)).toEqual([
+      "party 1's view of the gate changes with party 0's secret bits, so the two " +
+        "transfers are not independently masked",
+    ]);
+  });
+
+  it("は両平文を埋め込む可逆 ciphertext を transfer と認めない", () => {
+    const encoded = mutate(
+      "    return (message_0 ^ key_0, message_1 ^ key_1)",
+      "    return ((1 << 64) | message_0, (1 << 64) | message_1)",
+    ).replace(
+      "    return ciphertexts[choice] ^ key",
+      "    return ciphertexts[choice] & ((1 << 32) - 1)",
+    );
+    expect(hiddenFailures(encoded).join(" ")).toContain(
+      "ciphertexts do not use the declared independent sender keys",
+    );
+  });
+
+  it("は verifier container を非 root と healthcheck 付きで動かす", () => {
+    const dockerfile = readFileSync(join(LOCAL, "Dockerfile"), "utf8");
+    const compose = readFileSync(join(LOCAL, "docker-compose.yml"), "utf8");
+    expect(dockerfile).toContain("USER lab");
+    expect(compose).toContain("healthcheck:");
+    expect(compose).toContain("127.0.0.1:18310/api/config");
+  });
+
+  it("は公式課題の Part B に対応する pin を持つ", () => {
+    const meta = JSON.parse(readFileSync(join(PROBLEM, "metadata.json"), "utf8")) as {
+      courseAlignment: { week: number; sources: { path: string; kind: string }[] };
+      scoring: { checks: { id: string; points: number }[] };
+    };
+    expect(meta.courseAlignment.week).toBe(2);
+    expect(meta.courseAlignment.sources.map((s) => s.kind).toSorted()).toEqual([
+      "assignment",
+      "lecture",
+    ]);
+    expect(meta.scoring.checks.reduce((sum, c) => sum + c.points, 0)).toBe(200);
+  });
+
+  it("は参加者に配る面へ reference を混ぜない", () => {
+    // starter と公開テストしか読めない参加者が、答えを読めてはいけない。
+    const surface = [
+      readFileSync(join(LOCAL, "starter", "oblivious.py"), "utf8"),
+      readFileSync(join(LOCAL, "tests", "public", "test_oblivious.py"), "utf8"),
+      readFileSync(join(PROBLEM, "README.md"), "utf8"),
+      readFileSync(join(PROBLEM, "README.ja.md"), "utf8"),
+    ].join("\n");
+    expect(surface).not.toContain("(randomness[0], randomness[1])");
+    expect(surface).not.toContain("mask ^ own_bit");
+    expect(surface).not.toContain("(own_x & own_y) ^ own_mask ^ received");
   });
 });

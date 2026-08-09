@@ -6,7 +6,7 @@ const ROOT = join(import.meta.dir, "..");
 
 describe("course Portal editor API contract", () => {
   it(
-    "keeps all 36 AC26 and SHA-256 problems solvable from the Participant Portal",
+    "keeps all 35 AC26 and SHA-256 problems solvable from the Participant Portal",
     () => {
       // The Python contract includes one-line, deployment-bound submission envelopes
       // for code and direct-answer checkpoints, plus raw-source backward compatibility.
@@ -18,7 +18,7 @@ describe("course Portal editor API contract", () => {
       });
 
       expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
-      expect(result.stdout).toContain("36 Portal editor API contracts passed");
+      expect(result.stdout).toContain("35 Portal editor API contracts passed");
     },
     600_000,
   );

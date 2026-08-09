@@ -1,12 +1,12 @@
 {
   "id": "ac26-w2-oblivious-transfer",
-  "name": "選んだ番号は、送らない",
+  "name": "選んだことを言わずに、選ぶ",
   "category": "Challenge",
   "status": "draft",
   "visibility": "public",
   "track": {
     "id": "advanced-cryptography-2026",
-    "order": 240,
+    "order": 260,
     "chapter": "Week 2 / Oblivious Transfer"
   },
   "courseAlignment": {
@@ -30,182 +30,40 @@
       }
     ]
   },
-  "difficulty": 4,
-  "estimatedDuration": "60-90 分",
-  "shortDescription": "2通のうち1通だけを受け取る。届いた、だけでは足りない。request が選択を語らず、未選択の1通も開かないことまで transcript で確かめる。",
-  "description": "Week 2 Part B の OT に対応する独立実装の mechanism 問題。小さな離散対数群で Chou-Orlandi 型の 1-out-of-2 OT を組む。公式 skeleton と同じ関数名・コード・fixture は使わず、sender public / choice / receiver secret、sender secret / request / messages、receiver inputs / ciphertexts という引数の意味だけを揃える。\n\npublic test は選んだ message が届くことしか見ない。mutation 8種のうち6種はこの final-output test を完全に通るが、choice を request に入れる、両 message を平文で返す、public key だけで pad を作る、receiver が両 branch を開ける、という本質的欠陥を持つ。choice-audit と message-audit だけがそれらを検出する。\n\n作成中に #419 が `main` へ確立した Week 2 の公開済み講義・課題 reference を再利用する。この変更は既存 pin を動かさず、問題は `status: draft` のままとする。",
-  "instructions": "## はじめに\n\n前提にするもの: Python、整数の累乗と余り、XOR。前提にしないもの: OT や離散対数の知識。OT は「2通のうち選んだ1通だけを受け取り、送信者は番号を知らず、受信者はもう1通を知らない」転送です。\n\n## 最初の一手\n\nParticipant Portal の「証拠を調べる」で toy 群と worked input を読みます。まず g^b、次に g^b * A^choice を紙で計算し、starter の3関数を埋めて公開テストを実行してください。\n\n## ゴール\n\n両 choice で正しい message を受け取り、request の分布から choice を区別できず、receiver の共有値で未選択 branch を開けない実装にします。各 checkpoint は同じ ot.py を別の観点で採点します。",
-  "writeup": "## 届くことと OT であることは別\n\nrequest を (choice, secret) にして ciphertexts を (message0, message1) のまま返しても、選択結果は正しい。だから配送の一致は correctness の証拠であって privacy の証拠ではない。\n\n## toy construction\n\nA=g^a、B=g^b*A^choice とする。sender は B^a と (B/A)^a を2つの branch key にする。choice 0 なら receiver が知る A^b は前者、choice 1 なら後者に一致する。request の分布は A を掛けても同じ subgroup 上の一様分布なので choice を区別しない。\n\n## 2つの audit\n\nchoice audit は toy subgroup を全列挙して request multiset の一致を測る。message audit は A^b で反対 branch まで開けないこと、public value だけで両 pad を作れないこと、ciphertext に平文が残らないことを別々に確かめる。これは実用安全性の証明ではないが、correctness-only test が見落とす契約を具体化する。",
+  "difficulty": 3,
+  "estimatedDuration": "50-75 分",
+  "shortDescription": "公式 Week 2 Part B の oblivious transfer と GMW secret AND を 1 つの問題で組む。正しく動くことと、相手に秘密を渡さないことを別々に確かめる。",
+  "description": "Week 2 の 6 問目。 ここまでの 5 問は arithmetic MPC を扱ってきましたが、 公開された公式演習の Part B は oblivious transfer と GMW Boolean MPC を要求します。 この問題は既存 companion に無かったその半分を埋めます。\n\n位数 q の部分群で標準的な Diffie-Hellman 型の転送を組み、 その上に GMW の AND ゲートを載せます。 XOR は share に対して線形なので手元で済み、 AND だけが 2 回の転送を必要とします。\n\nこの問題の本題は、 **正しく動く実装が 2 通りあり、 隠せているのはその片方だけ** という点です。 受信者の blind を 0 から取るか 1 から取るか、 AND ゲートで mask を 1 つ引くか 2 つ引くか。 どちらも全部のメッセージが届き、 全部のゲートが復元します。 公開テストはどちらも通します。",
+  "instructions": "## Participant Portal で解く\n\nParticipant Portal で問題を起動すると、問題文と同じ画面に `oblivious.py` のエディタが表示されます。 **証拠を調べる**で deploy 固有の群、鍵、セッション、ゲートの share を確認し、starter を編集して **公開テストを実行**します。\n\n6 個の checkpoint はすべて code checkpoint です。各提出ボタンは現在のエディタ内容を container の prepare API へ送り、生成された値をそのまま採点へ渡します。checkout、ターミナル、別画面、提出値のコピペは不要です。\n\n## ゴール\n\n位数 q の部分群上の 1-out-of-2 転送と、その上に載る GMW の AND ゲートを完成させます。プライバシーは 1 回の実行ではなく分布の性質です。「メッセージが届いた」「ゲートが復元した」だけでは、秘密が隠れていることを証明できません。",
+  "writeup": "受信者の privacy は 「B が choice によらず同じ分布になる」 という主張で、 blind を 0..q-1 から一様に取ると B は部分群上一様になり両者が一致する。 1..q-1 にすると B = 1 は choice 1 でしか、 B = A は choice 0 でしか起こらなくなり、 q 個中 2 個の値が choice を名指しする。\n\nAND ゲートの mask も同じ形。 2 回の転送で同じ mask を使い回しても、 XOR したときに打ち消えるので復元は正しいまま。 しかし各 party の出力 share が相手の秘密ビットの関数になり、 例えば x0=0, y0=1 の party 0 は z0 からそのまま x1 を読める。\n\nどちらも 「テストが通る」 と 「秘密が守られている」 が別物であることの具体例で、 前者から後者は出てこない。",
   "tags": [
     "advanced-cryptography-2026",
     "week2",
     "mpc",
     "oblivious-transfer",
-    "choice-privacy",
-    "message-privacy",
+    "gmw",
+    "privacy",
     "local-play",
     "container"
   ],
   "exposedPorts": [
     {
-      "port": 18122,
+      "port": 18310,
       "name": "Portal editor API + /verify (loopback only)"
     }
   ],
   "learningGoals": [
-    "1-out-of-2 OT の receiver request、sender encryption、receiver decryption を接続できる",
-    "request の分布が choice を隠す理由を説明できる",
-    "receiver が選択 branch の共有値だけを導けることを確かめられる",
-    "final output の correctness と2つの privacy 性質を別々に検査できる"
-  ],
-  "nodes": {
-    "learning_objectives": [
-      {
-        "id": "lo.ac26-w2-oblivious-transfer.compose-three-moves",
-        "description": "receiver request、sender encryption、receiver decryption を1つの 1-out-of-2 OT として接続できる。"
-      },
-      {
-        "id": "lo.ac26-w2-oblivious-transfer.separate-privacy",
-        "description": "配送の correctness と choice privacy / message privacy を別々の証拠で検査できる。"
-      }
-    ],
-    "concepts": [
-      {
-        "id": "concept.one-out-of-two-oblivious-transfer",
-        "description": "送信者が持つ2通から受信者が1通だけを得て、送信者は選択を知らず、受信者は未選択の1通を知らない転送。"
-      },
-      {
-        "id": "concept.choice-privacy",
-        "description": "送信者から見た transcript が受信者の choice を区別させない性質。"
-      },
-      {
-        "id": "concept.message-privacy",
-        "description": "受信者が選ばなかった message を transcript と自分の秘密から復元できない性質。"
-      }
-    ],
-    "assessment_criteria": [
-      {
-        "id": "assessment.ac26-w2-oblivious-transfer.request",
-        "description": "受信者の request を作る checkpoint を満たした。"
-      },
-      {
-        "id": "assessment.ac26-w2-oblivious-transfer.sender-encrypt",
-        "description": "送信者が2通を封じる checkpoint を満たした。"
-      },
-      {
-        "id": "assessment.ac26-w2-oblivious-transfer.receiver-decrypt",
-        "description": "選んだ1通だけを開く checkpoint を満たした。"
-      },
-      {
-        "id": "assessment.ac26-w2-oblivious-transfer.delivery",
-        "description": "両方の選択で配送を成立させる checkpoint を満たした。"
-      },
-      {
-        "id": "assessment.ac26-w2-oblivious-transfer.choice-audit",
-        "description": "request が選択を語らないか監査する checkpoint を満たした。"
-      },
-      {
-        "id": "assessment.ac26-w2-oblivious-transfer.message-audit",
-        "description": "未選択の1通が開かないか監査する checkpoint を満たした。"
-      },
-      {
-        "id": "assessment.ac26-w2-oblivious-transfer.transfer",
-        "description": "見ていない seed でも全性質を保つ checkpoint を満たした。"
-      }
-    ],
-    "misconceptions": [
-      {
-        "id": "misconception.ot-delivery-implies-privacy",
-        "description": "選んだ message が届けば OT は完成という誤解。choice や両方の message を平文で送っても最終出力は合う。"
-      },
-      {
-        "id": "misconception.ot-request-may-carry-choice",
-        "description": "request に choice を付けても sender が使わなければよいという誤解。transcript 自体が choice を漏らす。"
-      }
-    ]
-  },
-  "relations": [
-    {
-      "type": "teaches",
-      "source": "problem.ac26-w2-oblivious-transfer",
-      "target": "lo.ac26-w2-oblivious-transfer.compose-three-moves"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.ac26-w2-oblivious-transfer",
-      "target": "lo.ac26-w2-oblivious-transfer.separate-privacy"
-    },
-    {
-      "type": "covers",
-      "source": "problem.ac26-w2-oblivious-transfer",
-      "target": "concept.one-out-of-two-oblivious-transfer"
-    },
-    {
-      "type": "covers",
-      "source": "problem.ac26-w2-oblivious-transfer",
-      "target": "concept.choice-privacy"
-    },
-    {
-      "type": "covers",
-      "source": "problem.ac26-w2-oblivious-transfer",
-      "target": "concept.message-privacy"
-    },
-    {
-      "type": "requires",
-      "source": "problem.ac26-w2-oblivious-transfer",
-      "target": "concept.experimental-method"
-    },
-    {
-      "type": "assesses",
-      "source": "problem.ac26-w2-oblivious-transfer",
-      "target": "assessment.ac26-w2-oblivious-transfer.request"
-    },
-    {
-      "type": "assesses",
-      "source": "problem.ac26-w2-oblivious-transfer",
-      "target": "assessment.ac26-w2-oblivious-transfer.sender-encrypt"
-    },
-    {
-      "type": "assesses",
-      "source": "problem.ac26-w2-oblivious-transfer",
-      "target": "assessment.ac26-w2-oblivious-transfer.receiver-decrypt"
-    },
-    {
-      "type": "assesses",
-      "source": "problem.ac26-w2-oblivious-transfer",
-      "target": "assessment.ac26-w2-oblivious-transfer.delivery"
-    },
-    {
-      "type": "assesses",
-      "source": "problem.ac26-w2-oblivious-transfer",
-      "target": "assessment.ac26-w2-oblivious-transfer.choice-audit"
-    },
-    {
-      "type": "assesses",
-      "source": "problem.ac26-w2-oblivious-transfer",
-      "target": "assessment.ac26-w2-oblivious-transfer.message-audit"
-    },
-    {
-      "type": "assesses",
-      "source": "problem.ac26-w2-oblivious-transfer",
-      "target": "assessment.ac26-w2-oblivious-transfer.transfer"
-    },
-    {
-      "type": "related_to",
-      "source": "problem.ac26-w2-oblivious-transfer",
-      "target": "misconception.ot-delivery-implies-privacy"
-    },
-    {
-      "type": "related_to",
-      "source": "problem.ac26-w2-oblivious-transfer",
-      "target": "misconception.ot-request-may-carry-choice"
-    }
+    "位数 q の部分群上で 1-out-of-2 oblivious transfer を実装できる",
+    "受信者の choice が隠れる条件を、 1 回の実行ではなく request の分布として述べられる",
+    "送信者が 2 つのうち片方しか渡せない理由を離散対数の困難性から説明できる",
+    "XOR share 上で AND ゲートを 2 回の転送から構成できる",
+    "復元が正しいことと秘密が隠れていることが別の性質であると、 具体例を挙げて説明できる"
   ],
   "runtime": {
     "provider": "docker",
     "engine": "compose",
     "entry": "local/docker-compose.yml",
-    "verifyUrl": "http://127.0.0.1:18122/verify",
+    "verifyUrl": "http://127.0.0.1:18310/verify",
     "secretEnv": [
       "FLAG_SEED"
     ]
@@ -216,134 +74,317 @@
       {
         "id": "request",
         "input": "multiline",
-        "label": "受信者の request を作る",
+        "label": "choice を隠した request を作る",
+        "points": 30,
+        "wrongAnswerPenalty": 10
+      },
+      {
+        "id": "choice-privacy",
+        "input": "multiline",
+        "label": "choice が request から読めない範囲を選ぶ",
         "points": 40,
-        "wrongAnswerPenalty": 15,
+        "wrongAnswerPenalty": 10,
         "hints": [
           {
-            "id": "ot-request-hint-1",
-            "content": "受信者の基底値を g^b とする。choice=1 のときだけ送信者の公開値 A を掛けると、2つの分布は同じ部分群を巡る。",
-            "penalty": 20
-          }
-        ]
-      },
-      {
-        "id": "sender-encrypt",
-        "input": "multiline",
-        "label": "送信者が2通を封じる",
-        "points": 40,
-        "wrongAnswerPenalty": 15
-      },
-      {
-        "id": "receiver-decrypt",
-        "input": "multiline",
-        "label": "選んだ1通だけを開く",
-        "points": 40,
-        "wrongAnswerPenalty": 15
-      },
-      {
-        "id": "delivery",
-        "input": "multiline",
-        "label": "両方の選択で配送を成立させる",
-        "points": 45,
-        "wrongAnswerPenalty": 15
-      },
-      {
-        "id": "choice-audit",
-        "input": "multiline",
-        "label": "request が選択を語らないか監査する",
-        "points": 50,
-        "wrongAnswerPenalty": 15,
-        "hints": [
+            "id": "choice-privacy-hint-1",
+            "content": "1 回の転送が成功するかではなく、 blind を範囲全体で動かしたとき request がどの元を取りうるかを、 choice 0 と choice 1 で比べる。",
+            "penalty": 12
+          },
           {
-            "id": "ot-choice-hint-1",
-            "content": "小さな toy 群なので receiver secret を全列挙できる。choice 0 と 1 で request の multiset が一致するか比べる。",
-              "penalty": 20
-          }
-        ]
-      },
-      {
-        "id": "message-audit",
-        "input": "multiline",
-        "label": "未選択の1通が開かないか監査する",
-        "points": 45,
-        "wrongAnswerPenalty": 15,
-        "hints": [
-          {
-            "id": "ot-message-hint-1",
-            "content": "選んだ側が知る共有値 A^b で、反対 branch の pad まで作れてしまわないか試す。ciphertext が平文と同じならさらに手前で失敗。",
-            "penalty": 20
+            "id": "choice-privacy-hint-2",
+            "content": "blind から 0 を外すと、 choice 0 では作れないのに choice 1 では作れる元が現れる。 それがどの元か書き出してみる。",
+            "penalty": 8
           }
         ]
       },
       {
         "id": "transfer",
         "input": "multiline",
-        "label": "見ていない seed でも全性質を保つ",
-        "points": 40,
-        "wrongAnswerPenalty": 15
+        "label": "片方だけを渡す",
+        "points": 35,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "transfer-hint-1",
+            "content": "送信者は 2 つの鍵を作る。 片方は request をそのまま、 もう片方は request から公開鍵を割り戻した元から。",
+            "penalty": 12
+          }
+        ]
+      },
+      {
+        "id": "and-gate",
+        "input": "multiline",
+        "label": "転送 2 回で AND を作る",
+        "points": 45,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "and-gate-hint-1",
+            "content": "(x0^x1)&(y0^y1) を展開すると 4 項。 2 項は手元で計算でき、 残る 2 項が交差項で 1 つにつき転送 1 回。",
+            "penalty": 15
+          }
+        ]
+      },
+      {
+        "id": "gate-privacy",
+        "input": "multiline",
+        "label": "ゲートが相手の秘密を渡さないようにする",
+        "points": 30,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "gate-privacy-hint-1",
+            "content": "mask は XOR で打ち消えるので、 1 つでも 2 つでも復元は正しい。 復元が正しいことは隠せている証拠にならない。",
+            "penalty": 10
+          }
+        ]
+      },
+      {
+        "id": "unseen",
+        "input": "multiline",
+        "label": "見たことのない群でも成立させる",
+        "points": 20,
+        "wrongAnswerPenalty": 10
       }
     ]
   },
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.ac26-w2-oblivious-transfer.transfer",
+        "description": "位数 q の部分群上で 1-out-of-2 oblivious transfer を実装し、 受信者が選んだ側だけを復号できることを確認できる。"
+      },
+      {
+        "id": "lo.ac26-w2-oblivious-transfer.choice-privacy",
+        "description": "受信者の choice が隠れる条件を、 blind の範囲全体にわたる request の分布として述べられる。"
+      },
+      {
+        "id": "lo.ac26-w2-oblivious-transfer.sender-privacy",
+        "description": "送信者の他方のメッセージが守られる根拠を離散対数の困難性から説明できる。"
+      },
+      {
+        "id": "lo.ac26-w2-oblivious-transfer.gmw-and",
+        "description": "XOR share 上の AND ゲートを 2 回の転送と交差項の分解から構成できる。"
+      },
+      {
+        "id": "lo.ac26-w2-oblivious-transfer.correct-is-not-private",
+        "description": "復元の正しさと秘密の秘匿が別の性質であることを、 正しいまま漏れる実装を挙げて説明できる。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.oblivious-transfer",
+        "description": "送信者の 2 つのメッセージから受信者が 1 つだけ得て、 送信者はどちらかを知らず、 受信者は他方を知らない 2 者間の基本部品。"
+      },
+      {
+        "id": "concept.gmw-and-gate",
+        "description": "XOR share 上で AND を計算する構成。 交差項 2 つをそれぞれ 1 回の oblivious transfer で買う。"
+      },
+      {
+        "id": "concept.indistinguishable-distribution",
+        "description": "秘密が隠れているとは、 相手から見える値の分布が秘密によらず同じであること。 1 回の実行の成否とは別の主張。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.ac26-w2-oblivious-transfer.request",
+        "description": "choice を公開鍵によるずらしとして符号化した request を作れた。"
+      },
+      {
+        "id": "assessment.ac26-w2-oblivious-transfer.choice-privacy",
+        "description": "blind の範囲を部分群全体に取り、 2 つの choice が同じ request 集合を生むようにできた。"
+      },
+      {
+        "id": "assessment.ac26-w2-oblivious-transfer.transfer",
+        "description": "選んだメッセージだけを復号でき、 他方が同じ鍵で開かないことを保てた。"
+      },
+      {
+        "id": "assessment.ac26-w2-oblivious-transfer.and-gate",
+        "description": "転送 2 回で AND の出力 share を作り、 XOR には転送が要らないと判定できた。"
+      },
+      {
+        "id": "assessment.ac26-w2-oblivious-transfer.gate-privacy",
+        "description": "転送ごとに独立な mask を引き、 自分の view が相手の秘密ビットで動かないようにできた。"
+      },
+      {
+        "id": "assessment.ac26-w2-oblivious-transfer.unseen",
+        "description": "見たことのない群と設定でも成立した。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.passing-tests-means-private",
+        "description": "テストが通れば秘密は守られているという誤解。 復元の正しさは秘匿について何も言わない。"
+      },
+      {
+        "id": "misconception.secret-ranges-always-exclude-zero",
+        "description": "秘密の指数だから 0 は外すという習慣を blind にも適用してしまう誤解。 blind は鍵ではなく分布を一様にするための値。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w2-oblivious-transfer",
+      "target": "lo.ac26-w2-oblivious-transfer.transfer"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w2-oblivious-transfer",
+      "target": "lo.ac26-w2-oblivious-transfer.choice-privacy"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w2-oblivious-transfer",
+      "target": "lo.ac26-w2-oblivious-transfer.sender-privacy"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w2-oblivious-transfer",
+      "target": "lo.ac26-w2-oblivious-transfer.gmw-and"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w2-oblivious-transfer",
+      "target": "lo.ac26-w2-oblivious-transfer.correct-is-not-private"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w2-oblivious-transfer",
+      "target": "concept.oblivious-transfer"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w2-oblivious-transfer",
+      "target": "concept.gmw-and-gate"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w2-oblivious-transfer",
+      "target": "concept.indistinguishable-distribution"
+    },
+    {
+      "type": "requires",
+      "source": "problem.ac26-w2-oblivious-transfer",
+      "target": "problem.ac26-w2-beaver-mul"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w2-oblivious-transfer.gmw-and",
+      "target": "concept.additive-secret-sharing"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w2-oblivious-transfer.correct-is-not-private",
+      "target": "concept.privacy"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w2-oblivious-transfer",
+      "target": "assessment.ac26-w2-oblivious-transfer.request"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w2-oblivious-transfer",
+      "target": "assessment.ac26-w2-oblivious-transfer.choice-privacy"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w2-oblivious-transfer",
+      "target": "assessment.ac26-w2-oblivious-transfer.transfer"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w2-oblivious-transfer",
+      "target": "assessment.ac26-w2-oblivious-transfer.and-gate"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w2-oblivious-transfer",
+      "target": "assessment.ac26-w2-oblivious-transfer.gate-privacy"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w2-oblivious-transfer",
+      "target": "assessment.ac26-w2-oblivious-transfer.unseen"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w2-oblivious-transfer",
+      "target": "misconception.passing-tests-means-private"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w2-oblivious-transfer",
+      "target": "misconception.secret-ranges-always-exclude-zero"
+    }
+  ],
   "i18n": {
     "en": {
-      "name": "Do not send the number you chose",
-      "shortDescription": "Receive one of two messages. Delivery alone is not enough: verify from the transcript that the request hides the choice and the unchosen message stays closed.",
-      "description": "An independently implemented Week 2 Part B mechanism companion for 1-out-of-2 OT over a tiny discrete-log group. It preserves the meaning of the official input roles without copying its skeleton, function names, tests, fixtures, or solution.\n\nThe public test checks only final delivery. Six of eight mutations pass that test completely while leaking the choice, exposing both messages, using public pads, or letting the receiver open both branches. Only the choice and message audit checkpoints detect those defects.\n\nThis problem reuses the published Week 2 lecture and assignment references that #419 established on `main` while it was being authored. It moves no existing pin and remains `status: draft`.",
-      "instructions": "## Start here\n\nPrerequisites: Python, integer powers and remainders, and XOR. No OT or discrete-log background is assumed. OT means receiving one selected message out of two while the sender does not learn the index and the receiver does not learn the other message.\n\n## First move\n\nUse Inspect evidence in Participant Portal to read the toy group and worked input. Compute g^b and then g^b * A^choice on paper, fill the three starter functions, and run the public test.\n\n## Goal\n\nDeliver the right message for both choices, make the request distributions indistinguishable, and prevent the receiver-known shared value from opening the other branch. Every checkpoint grades the same ot.py from a different angle.",
-      "writeup": "## Delivery is not OT\n\nA request containing (choice, secret) plus two plaintext messages delivers the selected value perfectly. It proves correctness and no privacy.\n\n## Toy construction\n\nLet A=g^a and B=g^b*A^choice. The sender derives B^a and (B/A)^a. The receiver-known A^b matches the first for choice 0 and the second for choice 1. Multiplication by A permutes the subgroup, so the request distribution does not reveal the choice.\n\n## Separate audits\n\nThe choice audit enumerates the toy subgroup and compares request multisets. The message audit checks that A^b does not open the other branch, public values do not derive both pads, and plaintext is absent from the ciphertexts. This is not production security; it makes the contracts missed by correctness-only tests observable.",
+      "name": "Choosing without saying which",
+      "shortDescription": "Build the official Week 2 Part B topics — oblivious transfer and a GMW secret AND — in one problem, and test correctness separately from whether either party learns a secret.",
+      "description": "Sixth problem of Week 2. The five earlier companions cover arithmetic MPC, while the published official assignment's Part B requires oblivious transfer and GMW Boolean MPC. This problem fills that missing half.\n\nBuild the standard Diffie-Hellman-flavoured transfer in a prime-order subgroup, then put a GMW AND gate on top of it. XOR is linear over XOR-shares and stays local; AND is the one that costs two transfers.\n\nThe real subject is that **two implementations work correctly and only one of them hides anything.** Draw the receiver's blind from 0 or from 1; draw one mask for the gate or two. Every message still arrives and every gate still reconstructs, and the public tests pass either way.",
+      "instructions": "## Solve in Participant Portal\n\nStart the problem in Participant Portal. The `oblivious.py` editor appears on the same page as the statement. Select **Inspect evidence** to see the deployment-specific group, key, session, and gate shares; edit the starter; then select **Run public tests**.\n\nAll six checkpoints are code checkpoints. Each submit button sends the current editor source through the container prepare API and submits the prepared value directly for scoring. No checkout, terminal, second screen, or copy-and-paste step is required.\n\n## Goal\n\nComplete the 1-out-of-2 transfer in a prime-order subgroup and the GMW AND gate built on it. Privacy is a property of a distribution, not of one run: delivery and correct reconstruction alone do not prove that either party's secret stayed hidden.",
+      "writeup": "Receiver privacy is the claim that B has the same distribution under both choices. With the blind uniform over 0..q-1, B is uniform over the subgroup either way and the two coincide. Restrict it to 1..q-1 and B = 1 becomes reachable only under choice 1, B = A only under choice 0 — two values out of q that name the bit.\n\nThe gate's masks have the same shape. Reusing one mask across both transfers still cancels under XOR, so reconstruction stays correct, while each party's output share becomes a function of the other party's secret bits: a party holding x0 = 0, y0 = 1 reads x1 straight off z0.\n\nBoth are concrete cases of \"the tests pass\" and \"the secret is safe\" being different statements, with no route from the first to the second.",
       "learningGoals": [
-        "Connect receiver request, sender encryption, and receiver decryption into 1-out-of-2 OT",
-        "Explain why the request distribution hides the receiver choice",
-        "Verify that the receiver derives only the selected branch key",
-        "Test final-output correctness and both privacy properties separately"
+        "Implement 1-out-of-2 oblivious transfer in a prime-order subgroup",
+        "State the condition for the receiver's choice to be hidden as a property of the request's distribution, not of one run",
+        "Explain from discrete log why the sender can only hand over one of the two messages",
+        "Build an AND gate over XOR-shares from two transfers",
+        "Explain, with a concrete case, why reconstructing correctly is not the same as hiding anything"
       ],
       "checks": [
         {
           "id": "request",
-          "label": "Build the receiver request",
+          "label": "Build a request that hides the choice"
+        },
+        {
+          "id": "choice-privacy",
+          "label": "Pick a range that keeps the choice unreadable",
           "hints": [
             {
-              "id": "ot-request-hint-1",
-              "content": "Let the receiver base be g^b. Multiplying by sender public A only for choice 1 makes both choices range over the same subgroup."
-            }
-          ]
-        },
-        {
-          "id": "sender-encrypt",
-          "label": "Seal both sender messages"
-        },
-        {
-          "id": "receiver-decrypt",
-          "label": "Open only the selected message"
-        },
-        {
-          "id": "delivery",
-          "label": "Deliver correctly for both choices"
-        },
-        {
-          "id": "choice-audit",
-          "label": "Audit whether the request reveals the choice",
-          "hints": [
+              "id": "choice-privacy-hint-1",
+              "content": "Do not ask whether one transfer succeeds. Sweep the blind across its whole range and compare which elements the request can take under choice 0 against choice 1."
+            },
             {
-              "id": "ot-choice-hint-1",
-              "content": "The toy group is small enough to enumerate every receiver secret. Compare the request multisets for choices 0 and 1."
-            }
-          ]
-        },
-        {
-          "id": "message-audit",
-          "label": "Audit whether the unchosen message opens",
-          "hints": [
-            {
-              "id": "ot-message-hint-1",
-              "content": "Try the receiver-known shared value A^b as the pad for the other branch too. An unchanged plaintext ciphertext fails even earlier."
+              "id": "choice-privacy-hint-2",
+              "content": "Drop 0 from the blind's range and some element becomes reachable under one choice but not the other. Write down which."
             }
           ]
         },
         {
           "id": "transfer",
-          "label": "Preserve every property on an unseen seed"
+          "label": "Hand over exactly one of the two",
+          "hints": [
+            {
+              "id": "transfer-hint-1",
+              "content": "The sender builds two keys: one from the request as it arrived, the other from the request with the public key divided back out."
+            }
+          ]
+        },
+        {
+          "id": "and-gate",
+          "label": "Build AND from two transfers",
+          "hints": [
+            {
+              "id": "and-gate-hint-1",
+              "content": "Expand (x0^x1)&(y0^y1) into four terms. Two are local; the other two are the cross terms, one transfer each."
+            }
+          ]
+        },
+        {
+          "id": "gate-privacy",
+          "label": "Stop the gate handing over the other party's secret",
+          "hints": [
+            {
+              "id": "gate-privacy-hint-1",
+              "content": "The masks cancel under XOR, so reconstruction is correct with one mask or two. Correct reconstruction is not evidence that anything was hidden."
+            }
+          ]
+        },
+        {
+          "id": "unseen",
+          "label": "Hold up in groups you have not seen"
         }
       ]
     }

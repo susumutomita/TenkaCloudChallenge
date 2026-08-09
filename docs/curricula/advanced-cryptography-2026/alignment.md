@@ -79,7 +79,7 @@ unpublished pin, and a published week left in that list fails the build for a
 reason that is not true.
 
 **The full retrospective — what the official exercise turned out to require, which
-companions match it, and how the uncovered Part B was closed — lives in
+companions match it, and what is uncovered — lives in
 [`curriculum.md`](./curriculum.md)'s Week 2 section**, because that is the
 week-by-week map and this file is only about weeks with nothing to map. Two
 conclusions belong here, though, because they are about *this record's method*:
@@ -88,27 +88,31 @@ conclusions belong here, though, because they are about *this record's method*:
   rather than guessed, and the official exercise's first half asks for very nearly
   the list below, item for item.
 - **The derivation was structurally incomplete.** The official exercise has a
-  second half — oblivious transfer and a GMW-style secret AND — that the derived
-  companions did not teach. Deriving "what a learner must have to reach Week 6" could never
-  have produced it, because that half is not on the path to Week 6. For Weeks 4
-  and 7 the lesson is exact: deriving from a published neighbour bounds what a
-  week *must* contain, never what it *will* contain. Issue 412 closes the observed
-  gap with two independently implemented mechanism problems; it does not change
-  the lesson about the derivation method.
+  second half — oblivious transfer and a GMW-style secret AND — that none of the
+  five companions below teaches. Deriving "what a learner must have to reach
+  Week 6" could never have produced it, because that half is not on the path to
+  Week 6. For Weeks 4 and 7 the lesson is exact: deriving from a published
+  neighbour bounds what a week *must* contain, never what it *will* contain.
 
-On step 4 of "When the material appears" — does any companion now claim
+  A sixth companion, `ac26-w2-oblivious-transfer`, was written afterwards to cover
+  it (Issue 412). That closes the coverage gap and does not retract the lesson:
+  the derivation still could not have found it, and the only reason anyone looked
+  was that the drift check reported a publication and somebody read the material.
+
+On step 4 of "When the material appears" — does any companion claim
 `assignment-companion`? **No, and that is a decision rather than an omission.** The
-role tells a reader *there is an official assignment and this accompanies it*.
-The seven rows split one assignment into focused mechanisms, privacy transfer,
-and synthesis; no single row accompanies the complete assignment. The track as a
-set now covers both halves without overloading one problem's role.
+role tells a reader *there is an official assignment and this accompanies it*, and
+a reader who takes that at face value expects a correspondence they can check
+item by item. These six accompany the same two mechanisms by independent
+reimplementation, under different names and a different decomposition; the claim
+`assignment-companion` would invite a comparison that the problems are not built
+to survive. Revisit if the decomposition is ever aligned deliberately.
 
-On step 6 — nothing leaked. Only the two published README files and the function
-contract recorded by Issue 412 informed the new scope; the official solution,
-template implementation, given/public test modules, and every participant
-submission directory were left unread. The original five companions were authored
-and shipped before this material existed; the two Part B mechanisms use independent
-names, code, fixtures, tests, and toy parameters.
+On step 6 — nothing leaked. Only the two published README files were read; the
+official template, its given and public test modules, and every participant
+submission directory were left unread. All five companions were authored and
+shipped before this material existed, so no official solution could have reached
+them by any route.
 
 ### The original basis, as written
 
@@ -134,16 +138,10 @@ to reach Week 6.
 | `ac26-w2-secret-sharing` | `mechanism` | share/reconstruct, required by `co-snark-prove` |
 | `ac26-w2-linear-shares` | `mechanism` | linear operations on shares, required by `co-snark-prove` |
 | `ac26-w2-beaver-mul` | `mechanism` | Beaver triples, named directly by `co-snark-prove` |
-| `ac26-w2-oblivious-transfer` | `mechanism` | closes the published `toy-mpc` Part B OT gap recorded by #412, through an independent toy construction |
-| `ac26-w2-gmw-and` | `mechanism` | closes the published Part B Boolean AND gap while receiving OT as a fixture building block |
 | `ac26-w2-privacy-audit` | `transfer` | the privacy boundary, applied to a case Week 6 does not cover |
-| `ac26-w2-private-aggregate` | `synthesis` | the arithmetic building blocks and privacy audit, composed |
+| `ac26-w2-private-aggregate` | `synthesis` | the five above, composed |
 
 None claims `assignment-companion`, and the guard keeps it that way.
-
-The two Part B rows reuse the lecture and assignment references already
-established by #419 on `main`. This change does not move any existing pin; it
-only gives the new problems the catalog's current published-source provenance.
 
 ## Week 4 — proof systems
 

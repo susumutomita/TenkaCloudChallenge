@@ -15,7 +15,7 @@ window in which half the catalog behaves differently from the other half.
 |---|---|---|
 | bridge | `ac26-bridge-experiment`, `ac26-bridge-properties` | 2 |
 | Week 1 | `ac26-w1-constraint-lab`, `ac26-w1-underconstraint` | 2 |
-| Week 2 | `ac26-w2-beaver-mul`, `ac26-w2-gmw-and`, `ac26-w2-linear-shares`, `ac26-w2-oblivious-transfer`, `ac26-w2-privacy-audit`, `ac26-w2-private-aggregate`, `ac26-w2-secret-sharing` | 7 |
+| Week 2 | `ac26-w2-beaver-mul`, `ac26-w2-linear-shares`, `ac26-w2-privacy-audit`, `ac26-w2-private-aggregate`, `ac26-w2-secret-sharing` | 5 |
 | Week 3 | `ac26-w3-ec-group`, `ac26-w3-field-inverse`, `ac26-w3-nonce-reuse`, `ac26-w3-schnorr` | 4 |
 | Week 4 | `ac26-w4-arithmetization`, `ac26-w4-commit-open`, `ac26-w4-proof-pipeline` | 3 |
 | Week 5 | `ac26-w5-cmux-blind-rotation`, `ac26-w5-encoding-noise`, `ac26-w5-extract-key-switch`, `ac26-w5-lwe-rlwe`, `ac26-w5-pbs-homnand`, `ac26-w5-rgsw-external` | 6 |

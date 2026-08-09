@@ -10,15 +10,9 @@ services:
       target: participant
     environment:
       FLAG_SEED: ${FLAG_SEED:?FLAG_SEED must be provided by the platform}
-      VERIFY_PORT: "18122"
+      VERIFY_PORT: "18310"
     ports:
-      - "127.0.0.1:18122:18122"
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:18122/api/config', timeout=2).read()"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-      start_period: 5s
+      - "127.0.0.1:18310:18310"
     read_only: true
     tmpfs:
       - /tmp
@@ -26,6 +20,11 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:18310/api/config', timeout=2).read()"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
     # The rlimits in verifier/server.py bound the submission's child process. These bound
     # the verifier itself, which is the process that would still be standing if a
     # submission found a way past them.

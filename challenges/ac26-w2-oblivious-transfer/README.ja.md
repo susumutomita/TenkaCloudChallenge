@@ -1,83 +1,122 @@
-# 選んだ番号は、送らない
+# 選んだことを言わずに、選ぶ
 
-> TenkaCloud のこのトラックは Advanced Cryptography Program 2026 の学習者向けに独立して作られた非公式の補助教材です。講座運営とは無関係で、公式教材の解答は含みません。
+> English: [README.md](./README.md)
 
-## なぜやるか
+Week 2 の 6 問目。 track `advanced-cryptography-2026`、 order 260。
 
-送信者は 16-bit の message を2通持つ。受信者は1通だけを受け取りたい。送信者には選んだ番号を知らせず、受信者はもう1通を読めないままにする。
+Week 2 のここまでの 5 問は arithmetic MPC を扱ってきた。公開された公式演習の Part B は別の経路、
+oblivious transfer と GMW の Boolean MPC を要求する。互いに何も預けていない 2 者が、秘密を渡さず
+一緒に計算を始めるにはどうするか。この問題は、既存 companion に無かったその半分を埋める。
 
-ここでは最終出力テストが弱点になる。request に choice を入れ、2通を平文で返しても選んだ値は正しい。そこで配送、choice privacy、message privacy を別々に採点する。
+oblivious transfer がその最小の答え。 送信者は 2 つのメッセージを出し、 受信者は 1 つだけ受け取る。
+受信者は他方について何も知らず、 送信者はどちらが取られたかを知らない。 これがあれば、 互いに
+信用していない 2 者の間で任意のブール回路が計算できる。 この問題の後半がそれ。
 
-前提にするものは Python、整数の累乗と余り、XOR。OT と離散対数はこの問題の中で定義する。
+## 作るもの
 
-## 実装するもの
-
-`local/starter/ot.py` の3関数を埋める。
-
-- `make_receiver_request(sender_public, choice, receiver_secret)`
-- `seal_sender_messages(sender_secret, request, message_0, message_1)`
-- `open_receiver_message(sender_public, choice, receiver_secret, ciphertexts)`
-
-引数の役割は講座 Part B の3操作と対応する。一方で関数名、コード、fixture、test、小さな parameter は独立して設計している。
-
-## toy construction
-
-素数 467、位数 233、generator 4 の部分群を使う。送信者の公開値を `A = g^a`、受信者の秘密指数を `b` とする。
+**Part 1 — 転送そのもの。** `Z_p*` の位数 `q` の部分群で、 送信者が `A = g^a` を公開する。 受信者は
 
 ```text
-B = g^b * A^choice
-
-sender branch 0 key = B^a
-sender branch 1 key = (B / A)^a
-receiver key        = A^b
+B = g^t          message 0 が欲しいとき
+B = A * g^t      message 1 が欲しいとき
 ```
 
-choice 0 なら `A^b = B^a`、choice 1 なら `A^b = (B/A)^a`。一様な部分群要素へ固定値 A を掛けても同じ部分群を巡るため、request の分布は choice を語らない。
+を送る。 送信者はこの 2 つを区別できないまま、 message 0 を `B^a` の鍵で、 message 1 を
+`(B/A)^a` の鍵で暗号化して返す。 このうちちょうど一方が `A^t` に等しく、 受信者はそれを計算できる。
+もう一方を得るには離散対数が要る。
 
-starter は `_pad(shared, branch)` を支給する。ASCII 文字列 `tc-ot-v1:{shared}:{branch}` の SHA-256 先頭16 bitを big-endian 整数にする関数である。branch `i` は `message_i XOR _pad(branch_key_i, i)` で封じ、選択 branch も同じ helper で開く。この pad mapping は問題仕様であり、学習者に推測させる手順ではない。
+**Part 2 — AND ゲート。** `x = x0 ^ x1`、 `y = y0 ^ y1` と 2 者に分かれているとき、
 
-この parameter は全列挙でき、実用上安全ではない。ここでは全列挙できるからこそ、2つの request 分布を完全に比較できる。
+```text
+(x0 ^ x1) & (y0 ^ y1)  =  x0y0 ^ x1y1 ^ x0y1 ^ x1y0
+```
+
+最初の 2 項は手元で計算できる。 残る 2 項がそれぞれ転送 1 回。 XOR は share に対して線形なので
+転送が要らない。
+
+## この問題の本題
+
+**正しく動くのに相手へ秘密を渡してしまう実装が 2 箇所ある。** どちらも公開テストを通る。
+
+- **受信者の blind。** ここでの privacy は**分布**についての主張で、 `B` が choice によらず
+  同じに見える必要がある。 `t` を `0..q-1` 全体から取ればそうなる。 秘密の指数だからと反射的に
+  `0` を外すと、 `B = 1` は choice 1 でしか、 `B = A` は choice 0 でしか起こらなくなる。
+  q 個のうち 2 個が choice を名指しする。
+- **ゲートの mask。** 2 つの出力 share を XOR すると mask は打ち消えるので、 1 つ引いても
+  2 つ引いても復元は正しい。 1 つだと各 party の出力 share が相手の秘密ビットの関数になり、
+  `x0 = 0, y0 = 1` を持つ party は `z0` からそのまま `x1` を読める。
+
+どちらも 「メッセージが届いた」 「ゲートが復元した」 では捕まらない。 1 回の実行の性質では
+ないため。
 
 ## Participant Portal での進め方
 
-1. Participant Portal で問題を起動する。同じ画面に問題エディタが表示される。
-2. **証拠を調べる**で construction と deploy 固有の入力を読む。
-3. Portal のエディタで `ot.py` を編集する。
-4. **公開テストを実行**で最終配送を確認する。
-5. 各 checkpoint をそのまま提出する。Portal が現在の source を準備して送る。
+1. Participant Portal で問題を起動する。同じ画面に `oblivious.py` のエディタが表示される。
+2. **証拠を調べる**で、自分の群、鍵、セッション、ゲートの share を確認する。
+3. エディタで starter を直し、**公開テストを実行**する。
+4. 6 個の checkpoint を順に提出する。Portal が現在のソースを prepare API に送り、そのまま採点する。
+
+checkout、ターミナル、ローカルエディタ、別画面へのコピペは不要。すべての checkpoint は、提出時の
+エディタ内容を使う。
+
+作問・ローカル確認では次も使える。
+
+```bash
+make inspect   # 自分の群、鍵、セッション、ゲートの share
+make test      # 公開テスト: shape と、転送が 1 回成功すること
+make reset     # starter/ を元に戻す
+```
+
+編集するのは `local/starter/oblivious.py` だけ。 `make reference-test` は作問側の経路で、hidden と
+mutation の suite を image 内で回す。
 
 ## checkpoint
 
-| checkpoint | 見るもの |
-| --- | --- |
-| request | request の代数的な形 |
-| sender-encrypt | 2つの ciphertext branch |
-| receiver-decrypt | 選択 branch の復号 |
-| delivery | end-to-end の最終 message |
-| choice-audit | request multiset の一致 |
-| message-audit | 平文なし、public pad なし、A^b で反対 branch が開かない |
-| transfer | 見ていない seed で全 suite |
-
-`make inspect` で例を読み、starter を編集して `make test` を実行する。public test が見るのは最終配送だけ。`make reference-test` は作問者専用。
-
-## audit を分ける理由
-
-mutation suite は壊れた実装を8種持つ。そのうち6種は全 final-delivery case を通る。平文 protocol、choice 付き request、public value の pad、1つの receiver key で両 branch が開く実装、ciphertext 順序違反を audit が落とす。
-
-## Week 2 の対応づけ
-
-Issue #412 が公開された Part B の要求を記録している。この問題の作成中に #419 が別途 `main` へ Week 2 の公開済み講義・課題 reference を確立した。この問題はその reference を再利用し `status: draft` のままとする。既存 pin は動かさない。
+| id | 何を見るか | 配点 |
+| --- | --- | --- |
+| `request` | choice を公開鍵によるずらしとして符号化できているか | 30 |
+| `choice-privacy` | 2 つの choice が同じ request 集合を生む範囲を選べているか | 40 |
+| `transfer` | 片方だけが復号できるか | 35 |
+| `and-gate` | 転送 2 回で AND を作り、 XOR は手元と判定できているか | 45 |
+| `gate-privacy` | mask が独立で、 自分の view が相手の秘密で動かないか | 30 |
+| `unseen` | 見たことのない seed でも通しで成立するか | 20 |
 
 ## 保証範囲
 
-ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も参加者の管理下にあります。`reference/` と `tests/hidden/` を bind-mount しないのは通常経路へ作問者 artifact を混ぜないためで、秘匿や改ざん耐性のためではありません。
+ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も
+あなたの管理下にあるので、 image の中身はあなたに対して秘匿されていません。
+`reference/` と `tests/hidden/` を bind-mount しないのは、あなたの git checkout に
+紛れ込ませないためであって、手が届かなくするためではありません。
 
-verifier は提出を resource limit 内で実行し、checkpoint id を fail closed で扱い、期待値を返さず、fixture を deployment seed から作ります。これは自習を支えますが、競技順位・試験・修了判定は**支えません**。
+verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
+ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。
+結果は期待値を漏らしません。 fixture はこのデプロイの seed 由来なので、暗記した答えは持ち越せません。
+
+これは自習と誠実な練習を支えます。競技順位・試験・修了判定は**支えません**。
+それらには participant が管理しない verifier が必要で、
+[#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271) で追跡しています。
 
 ## コスト
 
-ゼロです。クラウドアカウントも AWS resource も使いません。
+ゼロです。クラウドアカウントも AWS リソースも使いません。
 
 ## 作問者向け
 
-`make reference-test` は `FINAL-OUTPUT-BLIND 6 of 8` を出し、8つの submission mutation と cleartext verifier probe をすべて kill する必要がある。
+`make reference-test` が mutation suite を実行します。壊した提出 10 種類と verifier を狙った 3 種類が
+あります。blind から 0 を外す、mask を使い回す、片側だけに漏らす、両平文を可逆に埋め込む、といった
+「動くのに隠せていない」実装を名指しで落とします。どれかが survive するようになったら、この問題は
+「動く protocol」と「隠せている protocol」の区別を教えるのをやめています。
+
+## 講座との対応
+
+Advanced Cryptography Program 2026 の Week 2 に対応する companion で、 `week2/README.md` と
+`week2/problems/toy-mpc/README.md` に pin している。 公式課題の **Part B (oblivious transfer と
+GMW の秘密 AND)** に伴走する問題で、 この track の他の Week 2 問題はそこまで届いていない。
+詳細は
+[`docs/curricula/advanced-cryptography-2026/curriculum.md`](../../docs/curricula/advanced-cryptography-2026/curriculum.md)。
+
+公式の解答、 テンプレート、 テストモジュールは読まずに書いている (`spoilerPolicy` は
+`independent-reimplementation`)。
+
+パラメータは読める程度に小さく、 実用にはまったく足りない。 この群の離散対数は数百回の試し算で
+解ける。 失敗を観測可能にするための選択であって、 何かに耐えるためのものではない。

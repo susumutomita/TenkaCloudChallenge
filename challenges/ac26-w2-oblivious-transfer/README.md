@@ -1,84 +1,129 @@
-# Do not send the number you chose
+# Choosing without saying which
 
-> This TenkaCloud track is an unofficial companion built independently for learners of the Advanced Cryptography Program 2026. It is not affiliated with the course organizers and contains no official assignment solutions.
+> 日本語版: [README.ja.md](./README.ja.md)
 
-## Why
+Week 2, problem 6. Track `advanced-cryptography-2026`, order 260.
 
-A sender has two 16-bit messages. A receiver should obtain exactly one without telling the sender which index was chosen and without learning the other message.
+The five earlier Week 2 problems cover arithmetic MPC. The published official assignment's
+Part B takes a different route through oblivious transfer and GMW Boolean MPC. This problem
+fills that missing half: how two parties who have deposited no trust with each other can
+compute together without handing over their secrets.
 
-A final-output test is dangerously weak here. A request containing the choice plus two plaintext messages delivers the selected value perfectly. This lab therefore grades delivery, choice privacy, and message privacy separately.
+Oblivious transfer is the smallest answer. The sender offers two messages; the receiver
+takes exactly one; the receiver learns nothing about the other, and the sender does not
+learn which one was taken. With it you can evaluate any Boolean circuit between two
+mutually suspicious parties — which is what the second half of this problem does.
 
-Prerequisites: Python, integer powers and remainders, and XOR. OT and discrete logarithms are defined here.
+## What you build
 
-## What you implement
-
-Edit `local/starter/ot.py` and implement three independently named functions:
-
-- `make_receiver_request(sender_public, choice, receiver_secret)`
-- `seal_sender_messages(sender_secret, request, message_0, message_1)`
-- `open_receiver_message(sender_public, choice, receiver_secret, ciphertexts)`
-
-Their argument roles match the three operations in the course Part B exercise, while the names, code, fixtures, tests, and tiny parameters were designed independently.
-
-## The toy construction
-
-The group has prime modulus 467, subgroup order 233, and generator 4. Let the sender publish `A = g^a` and the receiver hold exponent `b`.
+**Part 1 — the transfer.** In a subgroup of order `q` inside `Z_p*`, the sender publishes
+`A = g^a`. As receiver you send
 
 ```text
-B = g^b * A^choice
-
-sender branch 0 key = B^a
-sender branch 1 key = (B / A)^a
-receiver key        = A^b
+B = g^t          to ask for message 0
+B = A * g^t      to ask for message 1
 ```
 
-For choice 0, `A^b = B^a`. For choice 1, `A^b = (B/A)^a`. Multiplying a uniformly distributed subgroup element by fixed `A` permutes the subgroup, so the request distribution does not identify the choice.
+and the sender, unable to tell those apart, replies with message 0 under the key for `B^a`
+and message 1 under the key for `(B/A)^a`. Exactly one of those is `A^t`, which you can
+compute; the other would need a discrete log.
 
-The starter supplies `_pad(shared, branch)`: it takes the first 16 bits, big-endian, of SHA-256 over the ASCII string `tc-ot-v1:{shared}:{branch}`. Seal branch `i` as `message_i XOR _pad(branch_key_i, i)` and use the same helper to open the selected branch. The pad mapping is fixed by the exercise; it is not a step learners must guess.
+**Part 2 — an AND gate.** With `x = x0 ^ x1` and `y = y0 ^ y1` split across two parties,
 
-These parameters are enumerable and are not secure. Enumeration is useful here because the choice audit can compare both complete request distributions.
+```text
+(x0 ^ x1) & (y0 ^ y1)  =  x0y0 ^ x1y1 ^ x0y1 ^ x1y0
+```
+
+The first two terms are local. Each of the other two is bought with one transfer. XOR
+needs no transfer at all — it is linear over the shares.
+
+## The part that is actually the problem
+
+**Two of these functions have an implementation that is correct on every input and still
+hands a secret to the other side.** Both pass the public tests.
+
+- The receiver's blind. Privacy here is a statement about a *distribution*: `B` must look
+  the same whichever choice was made. Draw `t` from the whole of `0..q-1` and it does.
+  Exclude `0` — the reflex for a secret exponent — and `B = 1` becomes reachable only
+  under choice 1, `B = A` only under choice 0. Two elements out of `q` name the bit.
+- The gate's masks. They cancel when the two output shares are XORed, so reconstruction is
+  correct whether you draw one mask or two. With one, each party's output share becomes a
+  function of the other party's secret bits: a party holding `x0 = 0, y0 = 1` reads `x1`
+  straight off its own share.
+
+Neither is caught by "the message arrived" or "the gate reconstructed", because neither is
+a property of one run.
 
 ## Participant Portal workflow
 
-1. Start the problem in Participant Portal; the problem editor appears on the same page.
-2. Select **Inspect evidence** to read the construction and deployment-specific inputs.
-3. Edit `ot.py` in the Portal editor.
-4. Select **Run public tests** to check final delivery.
-5. Submit each checkpoint directly; Portal prepares and sends the current source.
+1. Start the problem in Participant Portal; the `oblivious.py` editor appears on the same page.
+2. Select **Inspect evidence** to see your group, key, session, and gate shares.
+3. Edit the starter in the Portal and select **Run public tests**.
+4. Submit all six checkpoints. Portal sends the current source through the prepare API and
+   submits the prepared value directly for scoring.
+
+No checkout, terminal, local editor, second screen, or copy-and-paste step is required. Every
+checkpoint uses the source currently shown in the editor.
+
+Authors and local learners can also use:
+
+```bash
+make inspect   # your group, key, session, and the gate's shares
+make test      # public tests: shape, and one successful transfer
+make reset     # restore starter/
+```
+
+Edit `local/starter/oblivious.py` only. `make reference-test` is the authoring path and
+runs the hidden and mutation suites inside the image.
 
 ## Checkpoints
 
-| Checkpoint | What it observes |
-| --- | --- |
-| request | algebraic request shape |
-| sender-encrypt | both ciphertext branches |
-| receiver-decrypt | selected branch opening |
-| delivery | end-to-end selected message |
-| choice-audit | equality of request multisets |
-| message-audit | no plaintext, no public pads, no second branch from `A^b` |
-| transfer | the complete suite under an unseen seed |
-
-Run `make inspect`, edit the starter, then use `make test`. The public test checks only final delivery. `make reference-test` is author-only.
-
-## Why the audits are separate
-
-The mutation suite contains eight broken implementations. Six still pass every final-delivery case. The audits kill all six: plaintext protocols, a choice-tagged request, pads derived from public data, one receiver key opening both branches, and a swapped ciphertext contract.
-
-## Week 2 alignment
-
-Issue #412 records the published Part B requirements. While this problem was being authored, #419 independently established the published Week 2 lecture and assignment references on `main`. This problem reuses those references and remains `status: draft`; it does not move an existing pin.
+| id | what it wants | points |
+| --- | --- | --- |
+| `request` | the choice encoded as a shift by the public key | 30 |
+| `choice-privacy` | a blind range under which both choices produce the same requests | 40 |
+| `transfer` | exactly one message recoverable | 35 |
+| `and-gate` | AND from two transfers; XOR classified as local | 45 |
+| `gate-privacy` | independent masks, so a party's view does not move with the other's secrets | 30 |
+| `unseen` | the whole thing under a seed you were never shown | 20 |
 
 ## Assurance scope
 
-Local mode is **self-paced, honor-system verification**. You own the machine, Docker daemon, and image. `reference/` and `tests/hidden/` are not bind-mounted, which keeps author artifacts out of the ordinary working path rather than out of reach.
+Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
+daemon, and the image, so nothing inside that image is hidden from you: `reference/` and
+`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than
+out of reach.
 
-The verifier does bound submissions, fail closed on checkpoint ids, avoid returning expected values, and derive fixtures from the deployment seed. That supports self-study and honest practice. It does **not** support competition ranking,
-examination, or completion certification — those need a verifier the participant does not administer.
+What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
+a checkpoint can only credit the id it echoes, results do not leak expected values, and the
+fixtures come from this deployment's seed so a memorized answer does not carry.
+
+That supports self-study and honest practice. It does **not** support competition ranking,
+examination, or completion certification — those need a verifier the participant does not
+administer, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
 
 ## Cost
 
-Zero. No cloud account or AWS resources are used.
+Zero. No cloud account, no AWS resources.
 
 ## For authors
 
-`make reference-test` must report `FINAL-OUTPUT-BLIND 6 of 8` and kill all eight submission mutations plus the cleartext-verifier probe.
+`make reference-test` runs ten broken submissions plus three verifier probes. They include a
+blind excluding 0, reused and one-sided masks, and a reversible encoding that carries both
+plaintexts. Each names a way a protocol can work while failing to hide. If any survives, the
+problem has stopped teaching the distinction it exists to teach.
+
+## Course alignment
+
+Companion to Week 2 of the Advanced Cryptography Program 2026, pinned to
+`week2/README.md` and `week2/problems/toy-mpc/README.md`. It accompanies the official
+exercise's Part B (oblivious transfer and the GMW secret AND), which the rest of this
+track's Week 2 problems do not reach — see
+[`docs/curricula/advanced-cryptography-2026/curriculum.md`](../../docs/curricula/advanced-cryptography-2026/curriculum.md).
+
+Written without reading the official solution, template, or test modules;
+`spoilerPolicy` is `independent-reimplementation`.
+
+The parameters are small enough to read and far too small to use — discrete log in these
+groups is a few hundred trial multiplications. They are chosen to make the failures
+observable, not to withstand anything.

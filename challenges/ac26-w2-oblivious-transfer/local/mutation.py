@@ -1,9 +1,9 @@
-"""Prove that final delivery misses most defects and the audit catches them.
+"""Mutation suite: break the reference on purpose, assert the hidden tests notice.
 
-Six of the eight mutations below still deliver the chosen message for every case in
-the final-output probe. They are nevertheless broken OT implementations: the choice,
-one or both messages, or the ciphertext ordering contract is wrong. The measured count
-is part of the problem design and fails closed if it changes.
+Several of these are the reason the problem exists. Some mutations are *correct* --
+every message arrives or every gate reconstructs -- and still hand a secret to the
+other side. The suite also includes asymmetric and reversibly encoded leaks so a
+checker cannot accidentally prove privacy for only one party or one guessed decoder.
 """
 
 from __future__ import annotations
@@ -12,173 +12,139 @@ import sys
 import types
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from tests.hidden import check_ot  # noqa: E402
+from tests.hidden.check_oblivious import run
 
-REFERENCE = (ROOT / "reference" / "ot.py").read_text(encoding="utf-8")
 SEED = "mutation-suite-seed"
+REFERENCE = (Path(__file__).resolve().parent / "reference" / "oblivious.py").read_text("utf-8")
 
-REQUEST_RETURN = (
-    "    return receiver_base * pow(sender_public, choice, GROUP_PRIME) % GROUP_PRIME"
-)
-CIPHERTEXT_RETURN = (
-    "    return (message_0 ^ _pad(shared_0, 0), message_1 ^ _pad(shared_1, 1))"
-)
-DECRYPT_RETURN = "    return ciphertexts[choice] ^ _pad(shared, choice)"
-
-MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
-    (
-        "puts the choice in the request and sends both messages in clear",
-        [
-            (REQUEST_RETURN, "    return (choice, receiver_secret)"),
-            ("    _require_group_element(request)", "    choice, receiver_secret = request"),
-            (
-                "    shared_0 = pow(request, sender_secret, GROUP_PRIME)",
-                "    shared_0 = 1",
-            ),
-            (
-                "    shared_1 = pow(request * inverse_public % GROUP_PRIME, sender_secret, GROUP_PRIME)",
-                "    shared_1 = 1",
-            ),
-            (CIPHERTEXT_RETURN, "    return (message_0, message_1)"),
-            (DECRYPT_RETURN, "    return ciphertexts[choice]"),
-        ],
-    ),
-    (
-        "sends both messages in clear while keeping the group transcript",
-        [
-            (CIPHERTEXT_RETURN, "    return (message_0, message_1)"),
-            (DECRYPT_RETURN, "    return ciphertexts[choice]"),
-        ],
-    ),
-    (
-        "derives both pads from the public key",
-        [
-            (
-                "    shared_0 = pow(request, sender_secret, GROUP_PRIME)",
-                "    shared_0 = sender_public",
-            ),
-            (
-                "    shared_1 = pow(request * inverse_public % GROUP_PRIME, sender_secret, GROUP_PRIME)",
-                "    shared_1 = sender_public",
-            ),
-            (
-                "    shared = pow(sender_public, receiver_secret, GROUP_PRIME)",
-                "    shared = sender_public",
-            ),
-        ],
-    ),
-    (
-        "uses the same receiver key for both branches",
-        [
-            (REQUEST_RETURN, "    return receiver_base"),
-            (
-                "    shared_1 = pow(request * inverse_public % GROUP_PRIME, sender_secret, GROUP_PRIME)",
-                "    shared_1 = shared_0",
-            ),
-        ],
-    ),
-    (
-        "attaches the choice to an otherwise valid request",
-        [
-            (REQUEST_RETURN, REQUEST_RETURN.replace("return ", "return (") + ", choice)"),
-            ("    _require_group_element(request)", "    request, leaked_choice = request"),
-        ],
-    ),
-    (
-        "swaps the ciphertext branches and compensates in decryption",
-        [
-            (
-                CIPHERTEXT_RETURN,
-                "    return (message_1 ^ _pad(shared_1, 1), message_0 ^ _pad(shared_0, 0))",
-            ),
-            (
-                DECRYPT_RETURN,
-                "    return ciphertexts[1 - choice] ^ _pad(shared, choice)",
-            ),
-        ],
-    ),
-    (
-        "drops the sender public factor for choice one",
-        [(REQUEST_RETURN, "    return receiver_base")],
-    ),
-    (
-        "always opens branch zero",
-        [(DECRYPT_RETURN, "    return ciphertexts[0] ^ _pad(shared, 0)")],
-    ),
+_OFFER_BODY = "    return (mask, mask ^ own_bit)"
+_SHARE_BODY = "    return (own_x & own_y) ^ own_mask ^ received"
+_REVERSIBLE_CIPHERTEXT = REFERENCE.replace(
+    "    return (message_0 ^ key_0, message_1 ^ key_1)",
+    "    return ((1 << 64) | message_0, (1 << 64) | message_1)",
+).replace(
+    "    return ciphertexts[choice] ^ key",
+    "    return ciphertexts[choice] & ((1 << 32) - 1)",
 )
 
-FINAL_OUTPUT_BLIND = 6
+MUTATIONS: list[tuple[str, str]] = [
+    (
+        "blind excludes 0, so two requests name the choice bit",
+        REFERENCE.replace("    return (0, grp[\"q\"] - 1)", "    return (1, grp[\"q\"] - 1)"),
+    ),
+    (
+        "one mask reused for both transfers: correct, and leaks the other party's bit",
+        REFERENCE.replace(
+            "    return (randomness[0], randomness[1])",
+            "    return (randomness[0], randomness[0])",
+        ),
+    ),
+    (
+        "party zero gets a constant mask: correct, and leaks only to party one",
+        REFERENCE.replace(
+            "    return (randomness[0], randomness[1])",
+            "    return (0, randomness[1])",
+        ),
+    ),
+    (
+        "request ignores the choice, so the receiver always gets message 0",
+        REFERENCE.replace(
+            "    return (public * blinded) % p if choice else blinded",
+            "    return blinded",
+        ),
+    ),
+    (
+        "sender derives both keys from the request as sent",
+        REFERENCE.replace(
+            "    unshifted = (req * pow(public, p - 2, p)) % p",
+            "    unshifted = req",
+        ),
+    ),
+    (
+        "ciphertexts carry both plaintexts in a reversible high-bit encoding",
+        _REVERSIBLE_CIPHERTEXT,
+    ),
+    (
+        "receiver decrypts with its own blind as the key material",
+        REFERENCE.replace(
+            "    key = derive_key(grp, pow(public, blind, grp[\"p\"]))",
+            "    key = derive_key(grp, blind)",
+        ),
+    ),
+    (
+        "offer folds the mask into only one branch",
+        REFERENCE.replace(_OFFER_BODY, "    return (0, mask ^ own_bit)"),
+    ),
+    (
+        "output share drops the mask it kept as sender",
+        REFERENCE.replace(_SHARE_BODY, "    return (own_x & own_y) ^ received"),
+    ),
+    (
+        "claims XOR also needs a transfer",
+        REFERENCE.replace("    return gate == \"and\"", "    return True"),
+    ),
+]
 
 
-def _load(source: str):
-    module = types.ModuleType("mut_ot")
-    exec(compile(source, "<mutation>", "exec"), module.__dict__)  # noqa: S102
+def _load(source: str) -> types.ModuleType:
+    module = types.ModuleType("mut_oblivious")
+    exec(compile(source, "<mutation>", "exec"), module.__dict__)  # noqa: S102 - our own fixtures
     return module
 
 
 def main() -> int:
-    reference = _load(REFERENCE)
-    baseline = check_ot.run(reference, SEED)
-    if baseline:
-        print(f"FAIL reference implementation does not pass: {baseline[0]}")
+    if run(_load(REFERENCE), SEED):
+        print("FAIL reference implementation does not pass the hidden tests")
         return 1
-    print("PASS reference implementation passes the hidden checks")
+    print("PASS reference implementation passes the hidden tests")
 
-    survivors = 0
-    blind = 0
-    for name, substitutions in MUTATIONS:
-        missing = [needle for needle, _ in substitutions if needle not in REFERENCE]
-        if missing:
-            print(f"SURVIVED {name} (mutation no longer applies)")
-            survivors += 1
-            continue
-        source = REFERENCE
-        for needle, replacement in substitutions:
-            source = source.replace(needle, replacement)
-        try:
-            module = _load(source)
-            failures = check_ot.run(module, SEED)
-            delivery_only = not check_ot.check_delivery(module, SEED)
-        except Exception as error:  # noqa: BLE001
-            failures = [f"raised {type(error).__name__}"]
-            delivery_only = False
-        blind += int(delivery_only)
+    survivors: list[str] = []
+    for name, source in MUTATIONS:
+        failures = run(_load(source), SEED)
         if failures:
-            marker = " [final-output-blind]" if delivery_only else ""
-            print(f"KILLED{marker} {name} ({failures[0]})")
+            print(f"KILLED {name} ({failures[0]})")
         else:
+            survivors.append(name)
             print(f"SURVIVED {name}")
-            survivors += 1
 
-    from verifier.server import evaluate  # noqa: PLC0415
+    from verifier.server import evaluate  # noqa: PLC0415 - imported after sys.path
 
-    inert = "\n".join(
-        [
-            "def make_receiver_request(sender_public, choice, receiver_secret): return choice",
-            "def seal_sender_messages(sender_secret, request, message_0, message_1): return (message_0, message_1)",
-            "def open_receiver_message(sender_public, choice, receiver_secret, ciphertexts): return ciphertexts[choice]",
-        ]
-    )
-    if evaluate("message-audit", inert):
-        print("SURVIVED verifier credits the cleartext protocol")
-        survivors += 1
+    verifier_probes = 0
+
+    verifier_probes += 1
+    if evaluate("and-gate", "def offer(b, m):\n    return (m, m)\n"):
+        survivors.append("verifier accepts a gate whose offer ignores the party's bit")
+        print("SURVIVED verifier accepts a gate whose offer ignores the party's bit")
     else:
-        print("KILLED verifier credits the cleartext protocol")
+        print("KILLED verifier accepts a gate whose offer ignores the party's bit")
 
-    print(f"FINAL-OUTPUT-BLIND {blind} of {len(MUTATIONS)}")
-    if blind != FINAL_OUTPUT_BLIND:
-        print(
-            f"Expected {FINAL_OUTPUT_BLIND} final-output-blind mutations; "
-            "update the tests and documentation together."
-        )
-        return 1
+    verifier_probes += 1
+    if evaluate("transfer", _REVERSIBLE_CIPHERTEXT):
+        survivors.append("transfer checkpoint accepts reversible plaintext ciphertexts")
+        print("SURVIVED transfer checkpoint accepts reversible plaintext ciphertexts")
+    else:
+        print("KILLED transfer checkpoint accepts reversible plaintext ciphertexts")
+
+    party_one_leak = REFERENCE.replace(
+        "    return (randomness[0], randomness[1])",
+        "    return (0, randomness[1])",
+    )
+    verifier_probes += 1
+    if evaluate("gate-privacy", party_one_leak):
+        survivors.append("gate privacy checkpoint checks only party zero")
+        print("SURVIVED gate privacy checkpoint checks only party zero")
+    else:
+        print("KILLED gate privacy checkpoint checks only party zero")
+
+    print()
     if survivors:
-        print(f"{survivors} mutation(s) survived.")
+        print(f"{len(survivors)} mutation(s) survived:")
+        for name in survivors:
+            print(f"  - {name}")
         return 1
-    print(f"All {len(MUTATIONS) + 1} mutations killed.")
+    print(f"All {len(MUTATIONS) + verifier_probes} mutations killed.")
     return 0
 
 

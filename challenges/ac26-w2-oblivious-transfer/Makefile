@@ -24,11 +24,11 @@ build:
 	docker build --target participant -t $(IMAGE) local
 
 test: build
-	$(RUN) python tests/public/test_ot.py
+	$(RUN) python tests/public/test_oblivious.py
 
 test-one: build
 	@test -n "$(ID)" || (echo "usage: make test-one ID=<test name substring>" && exit 1)
-	$(RUN) python tests/public/test_ot.py --only $(ID)
+	$(RUN) python tests/public/test_oblivious.py --only $(ID)
 
 inspect: build
 	$(RUN) python show.py
