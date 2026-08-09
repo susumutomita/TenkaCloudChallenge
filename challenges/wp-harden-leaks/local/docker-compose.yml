@@ -37,6 +37,7 @@ services:
     build:
       context: ./wordpress
       dockerfile: Dockerfile
+      target: participant
     depends_on:
       db:
         condition: service_healthy
