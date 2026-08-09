@@ -31,12 +31,19 @@ MAX_OUTPUT_BYTES = 64 * 1024
 #: Wall clock for reading a request body, so a stalled client cannot pin the server.
 REQUEST_TIMEOUT_SECONDS = 15
 
+# The two privacy checkpoints carry their correctness phase as well, and that is not
+# redundancy. Both privacy properties are "this party's view does not move with the
+# other party's secrets", and a stub that returns a constant satisfies that perfectly
+# by computing nothing: the shipped starter scored `gate-privacy` on 10/10 seeds until
+# `check_and_gate` was folded in. Privacy is only a claim about a protocol that works,
+# so the checkpoint asks for both. The separation that matters is preserved — the
+# mask-reuse mutation passes `check_and_gate` and dies on `check_gate_privacy`.
 CODE_CHECKPOINTS = {
     "request": ("check_request",),
-    "choice-privacy": ("check_receiver_privacy",),
+    "choice-privacy": ("check_request", "check_receiver_privacy"),
     "transfer": ("check_transfer",),
     "and-gate": ("check_and_gate", "check_gates"),
-    "gate-privacy": ("check_gate_privacy",),
+    "gate-privacy": ("check_and_gate", "check_gate_privacy"),
     "unseen": (),
 }
 CHECKPOINTS = ("request", "choice-privacy", "transfer", "and-gate", "gate-privacy", "unseen")

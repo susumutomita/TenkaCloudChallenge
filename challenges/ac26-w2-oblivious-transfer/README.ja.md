@@ -71,6 +71,33 @@ hidden と mutation の suite をイメージ内で回す。
 | `gate-privacy` | mask が独立で、 自分の view が相手の秘密で動かないか | 30 |
 | `unseen` | 見たことのない seed でも通しで成立するか | 20 |
 
+## 保証範囲
+
+ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も
+あなたの管理下にあるので、 image の中身はあなたに対して秘匿されていません。
+`reference/` と `tests/hidden/` を bind-mount しないのは、あなたの git checkout に
+紛れ込ませないためであって、手が届かなくするためではありません。
+
+verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
+ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。
+結果は期待値を漏らしません。 fixture はこのデプロイの seed 由来なので、暗記した答えは持ち越せません。
+
+これは自習と誠実な練習を支えます。競技順位・試験・修了判定は**支えません**。
+それらには participant が管理しない verifier が必要で、
+[#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271) で追跡しています。
+
+## コスト
+
+ゼロです。クラウドアカウントも AWS リソースも使いません。
+
+## 作問者向け
+
+`make reference-test` が mutation suite を実行します。壊した提出 8 種類と verifier を
+狙った 1 種類があります。 このうち 2 つ (blind から 0 を外した実装と、 2 回の転送で mask を
+使い回した実装) は**どの入力でも正しく復元し**、 分布の検査だけが殺します。 どちらかが
+survive するようになったら、 この問題は 「動く protocol」 と 「隠せている protocol」 の
+区別を教えるのをやめています。 この suite を触るときは、 まずその 2 つを見てください。
+
 ## 講座との対応
 
 Advanced Cryptography Program 2026 の Week 2 に対応する companion で、 `week2/README.md` と

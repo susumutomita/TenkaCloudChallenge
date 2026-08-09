@@ -100,6 +100,16 @@ def check_receiver_privacy(module, seed: str) -> list[str]:
             ]
         except Exception as error:  # noqa: BLE001
             return [f"request raised {type(error).__name__} while sweeping the blind"]
+        # Stated positively, and not only as "the two sets agree". A `request` that
+        # ignores its arguments makes both sets `{1}`, which agrees perfectly and hides
+        # nothing because it transfers nothing. The property is that the request ranges
+        # over the whole subgroup under each choice, which a constant cannot fake.
+        if any(len(side) != grp["q"] for side in reachable):
+            failures.append(
+                "the request does not range over the whole subgroup, so it is not "
+                "uniform under either choice"
+            )
+            continue
         if reachable[0] != reachable[1]:
             only_one = sorted(reachable[1] - reachable[0])[:2]
             only_zero = sorted(reachable[0] - reachable[1])[:2]

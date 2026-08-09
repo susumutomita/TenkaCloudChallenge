@@ -75,6 +75,34 @@ runs the hidden and mutation suites inside the image.
 | `gate-privacy` | independent masks, so a party's view does not move with the other's secrets | 30 |
 | `unseen` | the whole thing under a seed you were never shown | 20 |
 
+## Assurance scope
+
+Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
+daemon, and the image, so nothing inside that image is hidden from you: `reference/` and
+`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than
+out of reach.
+
+What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
+a checkpoint can only credit the id it echoes, results do not leak expected values, and the
+fixtures come from this deployment's seed so a memorized answer does not carry.
+
+That supports self-study and honest practice. It does **not** support competition ranking,
+examination, or completion certification — those need a verifier the participant does not
+administer, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
+
+## Cost
+
+Zero. No cloud account, no AWS resources.
+
+## For authors
+
+`make reference-test` runs the mutation suite: eight broken submissions plus one aimed at
+the verifier. Two of the eight — the blind excluding 0, and one mask reused across both
+transfers — reconstruct correctly on every input and are killed only by the distribution
+checks. If either ever survives, the problem has stopped teaching the difference between
+a protocol that works and a protocol that hides, so those two are the ones to look at
+first when this suite changes.
+
 ## Course alignment
 
 Companion to Week 2 of the Advanced Cryptography Program 2026, pinned to
