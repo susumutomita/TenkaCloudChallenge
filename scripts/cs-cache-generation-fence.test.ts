@@ -63,6 +63,28 @@ print(json.dumps({
     }
   });
 
+  it("does not expose hidden checker modules to participant imports", () => {
+    const probe = `
+import sys
+sys.path.insert(0, ".")
+from verifier import server
+spoof = '''
+from tests.hidden import check_cache_policy
+check_cache_policy.check_fence = lambda *_: []
+def invalidate(*_): pass
+def admit_fill(*_): return True
+'''
+reference = open("reference/cache_policy.py", encoding="utf-8").read()
+print(server._check_code("check_fence", spoof), server._check_code("check_fence", reference))
+`;
+    const output = execFileSync("python3", ["-c", probe], {
+      cwd: LOCAL,
+      encoding: "utf8",
+      env: { ...process.env, FLAG_SEED: "repo-cache-seed", PYTHONDONTWRITEBYTECODE: "1" },
+    });
+    expect(output.trim()).toBe("False True");
+  });
+
   it("serves the exact Portal editor contract and prepares every automatic submission", () => {
     const probe = `
 import json, sys

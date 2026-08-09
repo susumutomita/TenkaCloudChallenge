@@ -93,7 +93,7 @@ def config_payload() -> dict[str, object]:
         "i18n": {
             "en": {
                 "name": "Deleted. The old value still came back",
-                "description": "Audit a trace where an old fill completes after invalidation and resurrects stale cache data, then implement a generation fence.",
+                "description": "A product price was updated and its old cache entry deleted, yet a later request received the old price. Find the stale responses in the decision log and write a generation fence that refuses fills started before invalidation.",
                 "checkpointLabels": ENGLISH_LABELS,
             }
         },
@@ -223,20 +223,26 @@ def _check_audit(submission: object) -> bool:
 RUNNER = """
 import json, os, sys
 sys.path.insert(0, {root!r})
-sys.path.insert(0, {workspace!r})
 from tests.hidden import check_cache_policy
-try:
-    import cache_policy
-except Exception as error:
-    print(json.dumps({{"failures": ["submission could not be imported: " + type(error).__name__]}}))
-    sys.stdout.flush()
-    os._exit(0)
-required = ("invalidate", "admit_fill")
-if any(not hasattr(cache_policy, name) for name in required):
-    print(json.dumps({{"failures": ["submission does not define both required functions"]}}))
-    sys.stdout.flush()
-    os._exit(0)
-print(json.dumps({{"failures": getattr(check_cache_policy, __PHASE__)(cache_policy, {seed!r})}}))
+private_checker = getattr(check_cache_policy, __PHASE__)
+for module_name in tuple(sys.modules):
+    if module_name == "tests" or module_name.startswith("tests.") or module_name == "fixtures" or module_name.startswith("fixtures."):
+        sys.modules.pop(module_name, None)
+while {root!r} in sys.path:
+    sys.path.remove({root!r})
+sys.path.insert(0, {workspace!r})
+
+def evaluate_submission(checker):
+    try:
+        import cache_policy
+    except Exception as error:
+        return ["submission could not be imported: " + type(error).__name__]
+    required = ("invalidate", "admit_fill")
+    if any(not hasattr(cache_policy, name) for name in required):
+        return ["submission does not define both required functions"]
+    return checker(cache_policy, {seed!r})
+
+print(json.dumps({{"failures": evaluate_submission(private_checker)}}))
 sys.stdout.flush()
 os._exit(0)
 """
