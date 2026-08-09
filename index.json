@@ -1722,6 +1722,36 @@
       }
     },
     {
+      "id": "cs-async-result-binding",
+      "name": "先に返ったのは、どの request の結果だろう",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "cs-foundations",
+        "order": 30,
+        "chapter": "3. I/Oと並行性"
+      },
+      "difficulty": 3,
+      "estimatedDuration": "45-75 分",
+      "shortDescription": "async I/O の完了順と request identity を、推測ではなくコードで結び付ける。",
+      "tags": [
+        "cs-foundations",
+        "python",
+        "asyncio",
+        "concurrency",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "cs-auth-claim-audit",
       "name": "署名は通った。それは、その要求を通してよいという意味ではない",
       "category": "Challenge",

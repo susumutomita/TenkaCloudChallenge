@@ -1,0 +1,74 @@
+services:
+  participant:
+    image: "${ASYNC_BINDING_PARTICIPANT_IMAGE:-cs-async-result-binding-participant:local}"
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: participant
+    environment:
+      FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
+    ports:
+      - "${ASYNC_BINDING_PORTAL_BIND:-127.0.0.1}:${ASYNC_BINDING_PORTAL_PORT:-18330}:8080"
+    read_only: true
+    tmpfs:
+      - "/tmp:rw,noexec,nosuid,size=32m,uid=10001,gid=10001"
+    cap_drop:
+      - ALL
+    security_opt:
+      - "no-new-privileges:true"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/config', timeout=2).read()"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    mem_limit: 1g
+    pids_limit: 128
+    restart: "no"
+    networks:
+      - participant-isolated
+      - participant-host
+
+  verifier:
+    image: "${ASYNC_BINDING_VERIFIER_IMAGE:-cs-async-result-binding-verifier:local}"
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: verifier
+    environment:
+      FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
+    ports:
+      - "${ASYNC_BINDING_VERIFY_BIND:-127.0.0.1}:${ASYNC_BINDING_VERIFY_PORT:-18331}:8081"
+    read_only: true
+    tmpfs:
+      - "/tmp:rw,noexec,nosuid,size=32m,uid=10001,gid=10001"
+    cap_drop:
+      - ALL
+    security_opt:
+      - "no-new-privileges:true"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/healthz', timeout=2).read()"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    mem_limit: 1g
+    pids_limit: 128
+    restart: "no"
+    networks:
+      - verifier-isolated
+      - verifier-host
+
+networks:
+  participant-isolated:
+    internal: true
+  participant-host:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+      com.docker.network.bridge.host_binding_ipv4: "127.0.0.1"
+  verifier-isolated:
+    internal: true
+  verifier-host:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+      com.docker.network.bridge.host_binding_ipv4: "127.0.0.1"
