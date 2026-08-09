@@ -38,6 +38,33 @@ policyでは7つの判断を分離します。
 6. 完全で再処理可能なDLQ receipt
 7. 2回目のreplayでも変化しない永続化
 
+### policy が受け付ける値
+
+**どれを選ぶかがこの問題です。選択肢そのものは伏せません。** `retry.maxAttempts` 以外は、
+すべて次の一覧の中から選びます。同じ表は Browser Workbench の「policy が受け付ける値」からも
+開けます。
+
+| セクション | フィールド | 受け付ける値 |
+| --- | --- | --- |
+| `diagnosis` | (この語彙から重複なく選ぶ配列) | `"duplicate_side_effect"` / `"state_regression"` / `"silent_retry_drop"` / `"same_version_conflict"` |
+| `idempotency` | `key` | `"deliveryId"` / `"eventId"` |
+| `idempotency` | `duplicateOutcome` | `"applied"` / `"duplicate"` |
+| `idempotency` | `atomic` | `true` / `false` |
+| `ordering` | `key` | `"arrival"` / `"timestamp"` / `"version"` |
+| `ordering` | `staleOutcome` | `"applied"` / `"stale"` |
+| `ordering` | `gapOutcome` | `"applied"` / `"version_gap"` |
+| `conflict` | `fingerprint` | `"none"` / `"canonical_payload"` |
+| `conflict` | `sameVersion` | `"last_write_wins"` / `"conflict"` |
+| `retry` | `maxAttempts` | 1 以上 10 以下の整数 |
+| `retry` | `retryable` | `"transient"` / `"permanent"` |
+| `retry` | `backoff` | `"none"` / `"linear"` / `"exponential"` |
+| `dlq` | `enabled` | `true` / `false` |
+| `dlq` | `include` | `"event"` / `"reason"` / `"attempts"` / `"firstFailureAt"` / `"lastFailureAt"` / `"ruleArn"` / `"targetArn"` / `"errorCode"` / `"exhaustedRetryCondition"` |
+| `replay` | `persistLedger` | `true` / `false` |
+| `replay` | `deterministic` | `true` / `false` |
+
+`retry.maxAttempts` は 1 以上 10 以下の整数です。
+
 6つの採点checkpointは独立です。部分修正は満たしたcheckpointだけ得点します。hidden testは
 正常系・異常系・shuffle・malformed・retry枯渇・mutationを含みます。固定回答、timestamp sort、
 event IDだけ、versionだけのpolicyでは全checkpointを通過できません。

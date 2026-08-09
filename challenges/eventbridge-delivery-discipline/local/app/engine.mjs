@@ -20,6 +20,55 @@ const DLQ_FIELDS = new Set([
   "exhaustedRetryCondition",
 ]);
 
+/**
+ * 参加者が policy に書ける値の全体。**検証と表示の両方がここだけを読む**。
+ *
+ * Issue 416: 以前は許容値が `validatePolicy` の中のリテラルにしか存在せず、README にも
+ * 問題文にもヒントにも出ていなかった。厳密に採点する一方で選択肢を伏せていたので、
+ * 参加者は理解ではなく総当たりを要求されていた。実測では 50 通り以上試しても
+ * `duplicateOutcome` を特定できず、最終的に verifier コンテナへ `docker exec` して
+ * grader のソースを直読みするしかなかった。
+ *
+ * 定義を 1 つにしてあるのは、README に書き写す運用では必ずずれるからで、ずれた瞬間に
+ * 同じ状態へ戻る。 `local/app/server.mjs` はこの表をそのまま画面へ描き、
+ * `validatePolicy` は同じ表で判定する。
+ */
+export const POLICY_VOCABULARY = Object.freeze({
+  diagnosis: Object.freeze([
+    "duplicate_side_effect",
+    "state_regression",
+    "silent_retry_drop",
+    "same_version_conflict",
+  ]),
+  idempotency: Object.freeze({
+    key: Object.freeze(["deliveryId", "eventId"]),
+    duplicateOutcome: Object.freeze(["applied", "duplicate"]),
+    atomic: Object.freeze([true, false]),
+  }),
+  ordering: Object.freeze({
+    key: Object.freeze(["arrival", "timestamp", "version"]),
+    staleOutcome: Object.freeze(["applied", "stale"]),
+    gapOutcome: Object.freeze(["applied", "version_gap"]),
+  }),
+  conflict: Object.freeze({
+    fingerprint: Object.freeze(["none", "canonical_payload"]),
+    sameVersion: Object.freeze(["last_write_wins", "conflict"]),
+  }),
+  retry: Object.freeze({
+    maxAttempts: "1 以上 10 以下の整数",
+    retryable: Object.freeze(["transient", "permanent"]),
+    backoff: Object.freeze(["none", "linear", "exponential"]),
+  }),
+  dlq: Object.freeze({
+    enabled: Object.freeze([true, false]),
+    include: Object.freeze([...DLQ_FIELDS]),
+  }),
+  replay: Object.freeze({
+    persistLedger: Object.freeze([true, false]),
+    deterministic: Object.freeze([true, false]),
+  }),
+});
+
 export const STARTER_POLICY = Object.freeze({
   diagnosis: [],
   idempotency: {
@@ -81,7 +130,7 @@ export function validatePolicy(policy) {
   if (
     !stringArray(
       policy.diagnosis,
-      new Set(["duplicate_side_effect", "state_regression", "silent_retry_drop", "same_version_conflict"]),
+      new Set(POLICY_VOCABULARY.diagnosis),
       4,
     )
   ) {
@@ -90,22 +139,22 @@ export function validatePolicy(policy) {
   if (!exactKeys(policy.idempotency, ["key", "duplicateOutcome", "atomic"])) {
     errors.push("idempotency has an invalid shape");
   } else {
-    if (!oneOf(policy.idempotency.key, ["deliveryId", "eventId"])) errors.push("invalid idempotency key");
-    if (!oneOf(policy.idempotency.duplicateOutcome, ["applied", "duplicate"])) errors.push("invalid duplicate outcome");
+    if (!oneOf(policy.idempotency.key, POLICY_VOCABULARY.idempotency.key)) errors.push("invalid idempotency key");
+    if (!oneOf(policy.idempotency.duplicateOutcome, POLICY_VOCABULARY.idempotency.duplicateOutcome)) errors.push("invalid duplicate outcome");
     if (typeof policy.idempotency.atomic !== "boolean") errors.push("idempotency.atomic must be boolean");
   }
   if (!exactKeys(policy.ordering, ["key", "staleOutcome", "gapOutcome"])) {
     errors.push("ordering has an invalid shape");
   } else {
-    if (!oneOf(policy.ordering.key, ["arrival", "timestamp", "version"])) errors.push("invalid ordering key");
-    if (!oneOf(policy.ordering.staleOutcome, ["applied", "stale"])) errors.push("invalid stale outcome");
-    if (!oneOf(policy.ordering.gapOutcome, ["applied", "version_gap"])) errors.push("invalid gap outcome");
+    if (!oneOf(policy.ordering.key, POLICY_VOCABULARY.ordering.key)) errors.push("invalid ordering key");
+    if (!oneOf(policy.ordering.staleOutcome, POLICY_VOCABULARY.ordering.staleOutcome)) errors.push("invalid stale outcome");
+    if (!oneOf(policy.ordering.gapOutcome, POLICY_VOCABULARY.ordering.gapOutcome)) errors.push("invalid gap outcome");
   }
   if (!exactKeys(policy.conflict, ["fingerprint", "sameVersion"])) {
     errors.push("conflict has an invalid shape");
   } else {
-    if (!oneOf(policy.conflict.fingerprint, ["none", "canonical_payload"])) errors.push("invalid conflict fingerprint");
-    if (!oneOf(policy.conflict.sameVersion, ["last_write_wins", "conflict"])) errors.push("invalid same-version outcome");
+    if (!oneOf(policy.conflict.fingerprint, POLICY_VOCABULARY.conflict.fingerprint)) errors.push("invalid conflict fingerprint");
+    if (!oneOf(policy.conflict.sameVersion, POLICY_VOCABULARY.conflict.sameVersion)) errors.push("invalid same-version outcome");
   }
   if (!exactKeys(policy.retry, ["maxAttempts", "retryable", "backoff"])) {
     errors.push("retry has an invalid shape");
@@ -113,8 +162,8 @@ export function validatePolicy(policy) {
     if (!Number.isInteger(policy.retry.maxAttempts) || policy.retry.maxAttempts < 1 || policy.retry.maxAttempts > 10) {
       errors.push("retry.maxAttempts must be between 1 and 10");
     }
-    if (!stringArray(policy.retry.retryable, new Set(["transient", "permanent"]), 2)) errors.push("invalid retryable list");
-    if (!oneOf(policy.retry.backoff, ["none", "linear", "exponential"])) errors.push("invalid retry backoff");
+    if (!stringArray(policy.retry.retryable, new Set(POLICY_VOCABULARY.retry.retryable), 2)) errors.push("invalid retryable list");
+    if (!oneOf(policy.retry.backoff, POLICY_VOCABULARY.retry.backoff)) errors.push("invalid retry backoff");
   }
   if (!exactKeys(policy.dlq, ["enabled", "include"])) {
     errors.push("dlq has an invalid shape");

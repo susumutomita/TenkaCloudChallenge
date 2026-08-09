@@ -39,6 +39,33 @@ The policy separates seven decisions:
 6. a complete, replayable DLQ receipt;
 7. deterministic persistence across a second replay.
 
+### Values the policy accepts
+
+**Choosing among them is the exercise; the options themselves are not hidden.** Everything except
+`retry.maxAttempts` is chosen from the list below. The same table is available in the Browser
+Workbench under "policy が受け付ける値".
+
+| Section | Field | Accepted values |
+| --- | --- | --- |
+| `diagnosis` | (an array of distinct values from this vocabulary) | `"duplicate_side_effect"` / `"state_regression"` / `"silent_retry_drop"` / `"same_version_conflict"` |
+| `idempotency` | `key` | `"deliveryId"` / `"eventId"` |
+| `idempotency` | `duplicateOutcome` | `"applied"` / `"duplicate"` |
+| `idempotency` | `atomic` | `true` / `false` |
+| `ordering` | `key` | `"arrival"` / `"timestamp"` / `"version"` |
+| `ordering` | `staleOutcome` | `"applied"` / `"stale"` |
+| `ordering` | `gapOutcome` | `"applied"` / `"version_gap"` |
+| `conflict` | `fingerprint` | `"none"` / `"canonical_payload"` |
+| `conflict` | `sameVersion` | `"last_write_wins"` / `"conflict"` |
+| `retry` | `maxAttempts` | an integer from 1 to 10 |
+| `retry` | `retryable` | `"transient"` / `"permanent"` |
+| `retry` | `backoff` | `"none"` / `"linear"` / `"exponential"` |
+| `dlq` | `enabled` | `true` / `false` |
+| `dlq` | `include` | `"event"` / `"reason"` / `"attempts"` / `"firstFailureAt"` / `"lastFailureAt"` / `"ruleArn"` / `"targetArn"` / `"errorCode"` / `"exhaustedRetryCondition"` |
+| `replay` | `persistLedger` | `true` / `false` |
+| `replay` | `deterministic` | `true` / `false` |
+
+`retry.maxAttempts` is an integer from 1 to 10.
+
 The six scoring checkpoints are independent. A partial repair earns only the checkpoints it
 satisfies. Hidden tests include positive, negative, shuffled, malformed, retry-exhausted, and
 mutation cases. A constant answer, timestamp sort, event-ID-only policy, or version-only policy
