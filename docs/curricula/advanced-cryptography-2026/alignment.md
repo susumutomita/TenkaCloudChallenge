@@ -88,21 +88,25 @@ conclusions belong here, though, because they are about *this record's method*:
   rather than guessed, and the official exercise's first half asks for very nearly
   the list below, item for item.
 - **The derivation was structurally incomplete.** The official exercise has a
-  second half — oblivious transfer and a GMW-style secret AND — that no companion
-  here teaches. Deriving "what a learner must have to reach Week 6" could never
-  have produced it, because that half is not on the path to Week 6. For Weeks 4
-  and 7 the lesson is exact: deriving from a published neighbour bounds what a
-  week *must* contain, never what it *will* contain. The gap is tracked in
-  Issue 412.
+  second half — oblivious transfer and a GMW-style secret AND — that none of the
+  five companions below teaches. Deriving "what a learner must have to reach
+  Week 6" could never have produced it, because that half is not on the path to
+  Week 6. For Weeks 4 and 7 the lesson is exact: deriving from a published
+  neighbour bounds what a week *must* contain, never what it *will* contain.
 
-On step 4 of "When the material appears" — does any companion now claim
+  A sixth companion, `ac26-w2-oblivious-transfer`, was written afterwards to cover
+  it (Issue 412). That closes the coverage gap and does not retract the lesson:
+  the derivation still could not have found it, and the only reason anyone looked
+  was that the drift check reported a publication and somebody read the material.
+
+On step 4 of "When the material appears" — does any companion claim
 `assignment-companion`? **No, and that is a decision rather than an omission.** The
-role tells a reader *there is an official assignment and this accompanies it*.
-These five accompany one half of it; a learner who finished all five would meet the
-second half cold. Claiming the role while that half is uncovered is the same
-overclaim the rule exists to prevent, only harder to notice now that a real
-assignment does exist on the other side. Revisit when the second half is
-accompanied.
+role tells a reader *there is an official assignment and this accompanies it*, and
+a reader who takes that at face value expects a correspondence they can check
+item by item. These six accompany the same two mechanisms by independent
+reimplementation, under different names and a different decomposition; the claim
+`assignment-companion` would invite a comparison that the problems are not built
+to survive. Revisit if the decomposition is ever aligned deliberately.
 
 On step 6 — nothing leaked. Only the two published README files were read; the
 official template, its given and public test modules, and every participant

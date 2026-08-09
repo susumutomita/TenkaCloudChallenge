@@ -277,6 +277,58 @@
       }
     },
     {
+      "id": "ac26-w2-oblivious-transfer",
+      "name": "選んだことを言わずに、選ぶ",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "advanced-cryptography-2026",
+        "order": 260,
+        "chapter": "Week 2 / Oblivious Transfer"
+      },
+      "courseAlignment": {
+        "courseId": "advanced-cryptography-program",
+        "edition": "2026",
+        "week": 2,
+        "role": "mechanism",
+        "sources": [
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
+            "path": "week2/README.md",
+            "kind": "lecture"
+          },
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
+            "path": "week2/problems/toy-mpc/README.md",
+            "kind": "assignment"
+          }
+        ]
+      },
+      "difficulty": 3,
+      "estimatedDuration": "50-75 分",
+      "shortDescription": "2 つのうち 1 つだけ受け取り、どちらを選んだかは相手に言わない。ここまでの週で当然としてきた「前処理された三つ組」が、どこから来るのかの話。正しく動く実装が 2 通りあり、隠せているのは片方だけ。",
+      "tags": [
+        "advanced-cryptography-2026",
+        "week2",
+        "mpc",
+        "oblivious-transfer",
+        "gmw",
+        "privacy",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "ac26-w2-privacy-audit",
       "name": "答えは合っている。それだけだ",
       "category": "Challenge",
