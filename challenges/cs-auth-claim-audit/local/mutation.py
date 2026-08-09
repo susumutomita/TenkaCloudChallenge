@@ -65,6 +65,26 @@ MUTATIONS: list[tuple[str, str, str]] = [
         '    if not isinstance(kid, str) or kid not in keys:\n        return _deny("bad_signature")',
     ),
     (
+        "always verifies with the first key instead of the kid-selected key",
+        "        secret = bytes.fromhex(keys[kid])",
+        "        secret = bytes.fromhex(next(iter(keys.values())))",
+    ),
+    (
+        "raises when a held key entry is not hexadecimal text",
+        "    except (TypeError, ValueError):",
+        "    except ValueError:",
+    ),
+    (
+        "treats JSON booleans as integer timestamps",
+        "    if type(not_before) is not int or type(expires) is not int or type(now) is not int:",
+        "    if not isinstance(not_before, int) or not isinstance(expires, int) or not isinstance(now, int):",
+    ),
+    (
+        "treats a JSON boolean as an integer gateway clock",
+        "    if type(not_before) is not int or type(expires) is not int or type(now) is not int:",
+        "    if type(not_before) is not int or type(expires) is not int or not isinstance(now, int):",
+    ),
+    (
         "any scope at all is treated as every scope",
         '    if not isinstance(scope, list) or action not in scope:',
         '    if not isinstance(scope, list):',

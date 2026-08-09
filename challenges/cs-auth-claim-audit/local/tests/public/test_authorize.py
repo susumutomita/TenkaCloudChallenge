@@ -186,8 +186,8 @@ def test_workbench_starter_returns_the_editable_file() -> None:
 
 
 def test_workbench_public_tests_pass_the_shipped_starter() -> None:
-    # This is the uncomfortable one. The starter is wrong in two ways and these tests
-    # do not notice either. If this ever starts failing, the starter no longer
+    # This is the uncomfortable one. The starter is incomplete and these tests do not
+    # notice. If this ever starts failing, the starter no longer
     # demonstrates the misconception the problem is about.
     result = run_public_tests(WORKBENCH_TEST_SEED, starter_payload())
     assert result["passed"] is True, result["output"]
@@ -249,7 +249,7 @@ def main() -> int:
         return 1
     print("public tests:", "all passed" if failures == 0 else f"{failures} failed")
     print()
-    print("These pass for the starter, and the starter is wrong twice over.")
+    print("These pass for the starter, but they do not cover the whole contract.")
     print("Passing them is not evidence. Read what they never ask about.")
     return 1 if failures else 0
 

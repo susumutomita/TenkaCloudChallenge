@@ -100,11 +100,16 @@ def _phase(authorize: Authorize, seed: str, reasons: frozenset[str]) -> list[str
 
 
 def check_verify(module: Submission, seed: str) -> list[str]:
-    return _phase(module.authorize, seed, _VERIFY_REASONS)
+    failures = _phase(module.authorize, seed, _VERIFY_REASONS)
+    failures.extend(_check_every_held_key_is_usable(module.authorize, seed))
+    failures.extend(_check_invalid_key_material_fails_closed(module.authorize, seed))
+    return failures
 
 
 def check_isolate(module: Submission, seed: str) -> list[str]:
-    return _phase(module.authorize, seed, _ISOLATE_REASONS)
+    failures = _phase(module.authorize, seed, _ISOLATE_REASONS)
+    failures.extend(_check_time_claim_types_fail_closed(module.authorize, seed))
+    return failures
 
 
 def _check_algorithm_is_not_negotiable(authorize: Authorize, seed: str) -> list[str]:
@@ -269,6 +274,107 @@ def _check_an_unknown_key_is_not_a_bad_signature(authorize: Authorize, seed: str
     return []
 
 
+def _check_every_held_key_is_usable(authorize: Authorize, seed: str) -> list[str]:
+    """`kid` selects the matching held key, including a rotated one.
+
+    Looking up only the first key works for every primary-key fixture and still looks
+    like key verification. A real rotation is the case that proves the identifier and
+    key material remain bound together.
+    """
+    keys = keyring(seed)
+    genuine = hidden_cases(seed)[0]
+    payload = _payload_of(genuine)
+    failures: list[str] = []
+    for kid, secret in keys.items():
+        token = sign({"alg": "hs256", "kid": kid}, payload, secret)
+        try:
+            decision = authorize(
+                token,
+                genuine.request.action,
+                {"id": genuine.request.resource_id, "tenant": genuine.request.resource_tenant},
+                genuine.request.now,
+                keys,
+            )
+        except Exception as error:  # noqa: BLE001
+            failures.append(f"raised {type(error).__name__} while using a held signing key")
+            continue
+        if not isinstance(decision, dict) or decision.get("allowed") is not True:
+            failures.append("refused a genuine token made with a held signing key")
+        elif decision.get("reason") != "ok":
+            failures.append("did not report a genuine held-key token as accepted")
+    return failures
+
+
+def _check_invalid_key_material_fails_closed(authorize: Authorize, seed: str) -> list[str]:
+    """A broken local key entry is a denial, never a crashed gateway.
+
+    The participant contract does not assign a specific reason to locally corrupted
+    key material, so this check deliberately grades only the fail-closed boundary.
+    """
+    keys: dict[str, object] = dict(keyring(seed))
+    kid = primary_kid(seed)
+    keys[kid] = None
+    genuine = hidden_cases(seed)[0]
+    try:
+        decision = authorize(
+            genuine.request.token,
+            genuine.request.action,
+            {"id": genuine.request.resource_id, "tenant": genuine.request.resource_tenant},
+            genuine.request.now,
+            keys,
+        )
+    except Exception as error:  # noqa: BLE001
+        return [f"raised {type(error).__name__} on unusable held key material"]
+    if not isinstance(decision, dict) or decision.get("allowed") is not False:
+        return ["accepted a token when its selected held key was unusable"]
+    return []
+
+
+def _check_time_claim_types_fail_closed(authorize: Authorize, seed: str) -> list[str]:
+    """JSON booleans must not become timestamps through Python's bool/int relation."""
+    keys = keyring(seed)
+    kid = primary_kid(seed)
+    genuine = hidden_cases(seed)[0]
+    payload = _payload_of(genuine)
+    failures: list[str] = []
+    for claim in ("nbf", "exp"):
+        malformed = dict(payload)
+        malformed[claim] = True
+        token = sign({"alg": "hs256", "kid": kid}, malformed, keys[kid])
+        try:
+            decision = authorize(
+                token,
+                genuine.request.action,
+                {"id": genuine.request.resource_id, "tenant": genuine.request.resource_tenant},
+                genuine.request.now,
+                keys,
+            )
+        except Exception as error:  # noqa: BLE001
+            failures.append(f"raised {type(error).__name__} on a non-integer time claim")
+            continue
+        if not isinstance(decision, dict) or decision.get("allowed") is not False:
+            failures.append("accepted a token whose time claim is not an integer")
+        elif decision.get("reason") != "malformed":
+            failures.append("did not report a non-integer time claim as malformed")
+
+    try:
+        decision = authorize(
+            genuine.request.token,
+            genuine.request.action,
+            {"id": genuine.request.resource_id, "tenant": genuine.request.resource_tenant},
+            True,
+            keys,
+        )
+    except Exception as error:  # noqa: BLE001
+        failures.append(f"raised {type(error).__name__} on a non-integer gateway clock")
+    else:
+        if not isinstance(decision, dict) or decision.get("allowed") is not False:
+            failures.append("accepted a request whose gateway clock is not an integer")
+        elif decision.get("reason") != "malformed":
+            failures.append("did not report a non-integer gateway clock as malformed")
+    return failures
+
+
 def _check_the_whole_signature_is_compared(authorize: Authorize, seed: str) -> list[str]:
     """A signature is not a prefix.
 
@@ -320,6 +426,9 @@ def check_generalize(module: Submission, seed: str) -> list[str]:
     failures.extend(_check_the_resource_is_read(authorize, seed))
     failures.extend(_check_time_boundaries(authorize, seed))
     failures.extend(_check_an_unknown_key_is_not_a_bad_signature(authorize, seed))
+    failures.extend(_check_every_held_key_is_usable(authorize, seed))
+    failures.extend(_check_invalid_key_material_fails_closed(authorize, seed))
+    failures.extend(_check_time_claim_types_fail_closed(authorize, seed))
     failures.extend(_check_the_whole_signature_is_compared(authorize, seed))
     return failures
 

@@ -94,9 +94,20 @@ print(json.dumps({
     const participant = dockerfile.slice(0, dockerfile.indexOf("AS author"));
     expect(participant).not.toContain("COPY reference/");
     expect(participant).not.toContain("COPY mutation.py");
-    expect(dockerfile).toContain("COPY reference/");
+    expect(dockerfile).toContain("COPY --chown=lab:lab reference/ ./reference/");
     // compose は participant stage を明示すること。省くと最後の stage (= author) が建つ。
     expect(readFileSync(join(LOCAL, "docker-compose.yml"), "utf8")).toContain("target: participant");
+  });
+
+  it("は verifier を非 root で起動し、compose が実際の API を監視する", () => {
+    const dockerfile = readFileSync(join(LOCAL, "Dockerfile"), "utf8");
+    expect(dockerfile).toContain("RUN useradd --create-home --uid 10001 lab");
+    expect(dockerfile).toContain("USER lab");
+    expect(dockerfile).toContain("COPY --chown=lab:lab verifier/ ./verifier/");
+
+    const compose = readFileSync(join(LOCAL, "docker-compose.yml"), "utf8");
+    expect(compose).toContain("healthcheck:");
+    expect(compose).toContain("http://127.0.0.1:18300/api/config");
   });
 
   it("は答えを inspect の payload へ載せない", () => {
