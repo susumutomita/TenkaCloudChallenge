@@ -543,7 +543,7 @@ function shipyardPage() {
     )
     .join("\n");
   return `<!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="ja"><head><meta name="color-scheme" content="light dark"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Shipyard</title></head>
 <body style="font-family:system-ui;max-width:56rem;margin:2.5rem auto;line-height:1.7;padding:0 1rem">
 <h1>Shipyard</h1>
@@ -597,14 +597,14 @@ GET    site/healthz              公開側のヘルスチェック</pre>
 function sitePage(verdict) {
   if (verdict.status !== 200) {
     return `<!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><title>service unavailable</title></head>
+<html lang="ja"><head><meta name="color-scheme" content="light dark"><meta charset="utf-8"><title>service unavailable</title></head>
 <body style="font-family:system-ui;max-width:40rem;margin:3rem auto;padding:0 1rem">
 <h1>503</h1><p><code>${escapeHtml(verdict.body.error)}</code></p>
 <p>${escapeHtml(verdict.body.detail ?? "")}</p>
 </body></html>`;
   }
   return `<!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="ja"><head><meta name="color-scheme" content="light dark"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${escapeHtml(verdict.body.title)}</title></head>
 <body style="font-family:system-ui;max-width:40rem;margin:3rem auto;line-height:1.7;padding:0 1rem">
 <h1>${escapeHtml(verdict.body.title)}</h1>

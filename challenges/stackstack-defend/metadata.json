@@ -7,11 +7,6 @@
   "visibility": "public",
   "difficulty": 3,
   "estimatedDuration": "45〜60 分",
-  "track": {
-    "id": "absolute-beginner-to-stackstack",
-    "order": 120,
-    "chapter": "6. StackStack drills / StackStack 演習"
-  },
   "shortDescription": "天下クラウド株式会社、 入社 3 日目の夕方。 社内掲示板は無事に開き、 部署ごとの 「下書き」 機能まで載った。 前任の SRE が辞める直前に足した機能で、 引き継ぎ資料に残っているのはひと言だけ ── 「下書きの公開はモデレーター承認 (4-eyes)。 本人が自分で公開してはいけない」。\n\nさっき広報から連絡があった。 まだ社内の誰にも見せていないはずの CTO の下書きの中身を、 社外の知人が口にしたらしい。 CTO は淡々としている。 「止めるのは簡単だ。 でも止めたら、 明日の全社発表の下書きを誰も書けない。 動かしたまま直して。 それと、 直ったかどうかは君の報告じゃなく、 こっちで測る」\n\n手元の調査用アカウントで実際に何が読めてしまうのかを確かめ、 原因をアプリ側で直し、 正規の利用者を 1 人も止めないまま、 測られ続けている中でその状態を保つ。",
   "instructions": "## はじめに\n\n下書き機能が、 見せてはいけない相手に下書きを見せています。 板は止められません。 正規利用を保ったまま、 認証された主体と対象リソースの関係で認可するのがこの問題です。\n\n## ブラウザだけで進める\n\n1. `/desk` を開き、 調査用 token と経路を確認する\n2. `/docs` の **任意の API を試す** で `GET /api/drafts` と `GET /api/draft?id=...` を実行する。 Headers には desk の token を `Authorization: Bearer ...` として入れる\n3. `/` の運用ルールを読み、 `/docs` の `PATCH /api/settings` で policy を変更する。 リポジトリのファイルは編集しない\n4. 同じ画面で `GET /api/drill` と `GET /posture` を実行し、 正常系と拒否系を同時に確認する\n5. やり直すときは `DELETE /api/settings`。 コンテナ再作成でも初期状態に戻る\n\n## ゴール\n\n通ってはいけないリクエストが 1 件も通らず、 正規の利用者のリクエストが 1 件も止まらない状態を、 **既定で 60 秒**、 1 ラウンドも崩さずに保つこと。 最初のチェックポイントは変更前の漏えいを実測した事実も確認します。",
   "description": "## 目的\n\n実際に成立する認可の欠落を自分で再現させ、 正常利用を 1 件も止めないままアプリ側で塞がせる。 「全部拒否」 「機能停止」 「レート制限」 「攻撃者を名指しで遮断」 が採点上まったく得にならないように作ってある。\n\n## 何を実測しているか\n\nコンテナ内の drill が 1 ラウンドごとに実 HTTP を自分自身へ投げる。 判定の基準 (`intendedAllow`) は scenario 側が持っていて、 参加者のファイルは一切参照しない。\n\n| gate | 実測しているもの |\n|---|---|\n| `policy_loaded` | 参加者の方針ファイルが読め、 全ルールが妥当 |\n| `service_intact` | 4 アカウントの一覧が entitled 集合と完全一致し、 正規の read が全件成功し、 承認役の publish が全件公開キューに載った |\n| `reads_held` | 通ってはいけない read が 1 件も 200 にならず、 止めたのが全部 403 (503/429/5xx は broken に計上) |\n| `publishes_held` | 通ってはいけない publish (他人の下書き / 承認役自身の下書き) が 1 件も 201 にならず、 止めたのが全部 403 |\n| `held_under_load` | 上記が 1 ラウンドも崩れずに hold 時間 (既定 60 秒) 継続した |\n\n## 不在採点を単独で置かない\n\n`reads_held` / `publishes_held` は 「起きなかったこと」 の採点なので、 対応するチェックポイントのハンドラは **必ず `service_intact` が同時に true であること** を先に要求する。 機能を落とした状態・全拒否の状態では、 攻撃が 0 件でも 1 点も入らない。\n\n## 初期状態\n\n`local/policy/access.json` は 「承認役の read を許可する正しいルール」 と 「その下に残った catch-all の allow」 の 2 本。 catch-all があるので誰でも誰の下書きでも読めて公開できる。 `service_intact` は初期状態で **false** ── 一覧が entitled 集合を超えるため ── なので、 どのチェックポイントも初期状態では通らない。\n\n## 場当たり対策が落ちる仕組み\n\n| 場当たり | 落ちる場所 |\n|---|---|\n| 全部拒否 (`deny` 1 本) | `service_intact` (正規の read / publish が止まる) |\n| 機能停止 (`enabled: false`) | 攻撃側の拒否が 503 になり `heldByPolicy` に数えられない + 正常側も全滅 |\n| レート制限 (`readsPerRound` を絞る) | 429 は `heldByPolicy` に数えない + read 件数の多い正常側が先に当たる |\n| 攻撃者を名指し (`{\"id\":\"u-guest\"}` を deny) | u-guest は自分の下書きの正規読者でもあり、 攻撃側は毎ラウンド別のアカウントに回る |\n| 観測した id を焼き込む | drill が数ラウンドごとに新しい id の下書きを作るので、 window 内で必ず陳腐化する |\n| read だけ直す | `publishes_held` が赤のままで `close-the-write-path` と `signoff` が落ちる |\n\n## 意図的にやらないこと\n\n- 送信元アドレスによる遮断はモデル化しない。 全 probe が loopback の同一送信元なので、 「試させていない」 ものを 「防いだ」 と採点しない。\n- 参加者のコードをこのプロセスに import しない。 方針ファイルはデータで、 評価器は scenario 側にある。 参加者が書いたものが drill / posture / verify に触れる経路は存在しない。\n- 下書きの本文は公開キューにも板にも一切載せない。 marker が読める経路は `GET /api/draft?id=...` の 1 本だけ。",
@@ -26,8 +21,14 @@
     "defense"
   ],
   "exposedPorts": [
-    { "port": 18080, "name": "Web (board + drafts desk)" },
-    { "port": 18081, "name": "/verify (loopback)" }
+    {
+      "port": 18080,
+      "name": "Web (board + drafts desk)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback)"
+    }
   ],
   "learningGoals": [
     "実際に成立している不正アクセスを、 自分の手で再現して確かめられるようになる",
@@ -130,7 +131,9 @@
       "Web": "http://127.0.0.1:18080"
     },
     "verifyUrl": "http://127.0.0.1:18081/verify",
-    "secretEnv": ["FLAG_SEED"]
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
   },
   "scoring": {
     "kind": "multi-verify",
@@ -226,5 +229,10 @@
         ]
       }
     ]
+  },
+  "track": {
+    "id": "stackstack-route",
+    "order": 140,
+    "chapter": "4. StackStack 本編"
   }
 }

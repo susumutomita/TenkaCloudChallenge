@@ -7,11 +7,6 @@
   "visibility": "public",
   "difficulty": 3,
   "estimatedDuration": "40 分",
-  "track": {
-    "id": "absolute-beginner-to-stackstack",
-    "order": 160,
-    "chapter": "6. StackStack drills / StackStack 演習"
-  },
   "shortDescription": "入社 3 日目、 9 時 12 分。 掲示板が開かない。\n\n昨夜 23 時 40 分のデプロイで、 掲示板は 「本番品質」 になったはずだった。 投稿に認証を付け、 アプリが書いてよい場所を必要なところだけに絞った。 デプロイは通り、 誰も残業しなかった。 前任の SRE がいたら止めたかもしれないが、 前任の SRE はもういない。\n\n今朝、 公開側の入口は 401 を返し、 監視は unhealthy と言い、 総務部は 「昨日までは読めた」 と言っている。 CTO の指示は一行: 「戻していいとは言っていない。 昨夜の対策を残したまま、 午前中に読めるようにして。 あと、 何がどう止まったのかを朝会で 30 秒で説明できるようにしておいて」。\n\n再起動では直らない。 認証を外して開けるのは、 復旧に数えない。",
   "instructions": "## はじめに\n\n昨夜の変更で公開側の入口と定期処理が止まりました。 保護を残したまま、 障害箇所を観測し、 復旧して再起動後も成立する設定にする問題です。\n\n## ブラウザだけで進める\n\n1. 入口と別系統の `/ops` を開く\n2. `/docs` の **任意の API を試す** で `GET /ops/status` と `GET /api/logs` を実行する\n3. 観測結果から止まった機能を特定し、 `PATCH /api/settings` で policy を変更する。 リポジトリのファイルは編集しない\n4. `GET /posture` で5つの gate と `tokens` を確認する\n5. やり直すときは `DELETE /api/settings`。 コンテナ再作成でも壊れた初期状態に戻る\n\n## ゴール\n\n公開入口を戻し、 定期処理を再開し、 昨夜追加した保護を残し、 再起動をまたいでも復旧したままであること。 gate は実際の HTTP 応答から測られます。",
   "description": "## 目的\n\nIssue 290。 「セキュリティ修正を維持したまま障害を復旧する」 を、 連鎖障害の切り分け → 設定修正 → 再起動をまたいだ安定性、 の順で 1 本の経路に通す。 復旧の速さではなく、 復旧の *仕方* を採点する。\n\n## クラウドではなくコンテナで何を模しているか (正直な粒度)\n\nクラウドアカウントも ALB も IAM も使わない。 同じプロセスの中に最小のモデルを置いている。\n\n| このコンテナ | 現実の対応 | 何を主張していないか |\n|---|---|---|\n| `/edge/*` (公開側の入口) | ALB / CloudFront の前段 | 別ネットワークではない。 同一プロセスの別サーフェス |\n| watchdog (`/edge/healthz` を実 HTTP で叩く) | target group の health check | 閾値 1 回。 フラッピングは模していない |\n| shed (公開経路が 503) | unhealthy target の切り離し | 実際の接続ドレインではない |\n| `storage.writable` (アプリ自身が書く前に照合する宣言的許可) | IAM の `Resource` 絞り込み | **OS の権限ではない**。 file mode でも IAM でもない |\n| `/ops/*` (運用面) | AWS コンソール / 運用 VPN | 認証は無い。 ローカルプレイなので参加者しか触れない |\n\n`storage.writable` を OS 権限で実装しなかった理由は 2 つ: (a) ローカルプレイに IAM は無い、 (b) chmod による read-only ディレクトリは root で走る CI ランナーでは mode bits が無視され、 検証が再現しない。 意味論は保存されている ── IAM もまた 「サービスが実行前に照合する宣言的な許可リスト」 であり、 拒否は本物のログ行として出て、 許可された書き込みは本物の `writeFileSync` として実行され、 許可を広げ直す回避策は canary で不合格になる。\n\n## 何を実測しているか\n\n5 つの gate はすべて、 アプリが自分自身へ実際の HTTP リクエストを投げて測った結果から立つ。 提出値は gate ごとの receipt で、 その gate が緑のあいだだけ `/posture` の `tokens` に出る。 receipt は `FLAG_SEED` ではなく **起動時に生成した秘密** から導出されるので、 コンテナの中で走るコードからも偽造できない。\n\n| checkpoint | 実測しているもの | 手つかずの starter が落ちる理由 |\n|---|---|---|\n| `incident-scope` | 最初に incident が開いたときに **アプリ自身が観測して固定した** 停止 subsystem 集合の署名 | 値は seed 由来 12 hex。 committed file にも応答本文にも無く、 オラクルは 「どの 6 つの名前を渡すか」 を先に知っていないと計算できない。 非空部分集合 63 通り、 誤答 -2 |\n| `board-back` | (1) 公開側の入口が 200 を返し watchdog が配信している (2) 匿名書き込みが 401/403 (3) トークン付き書き込みが 201 で保存された | shipped 状態では入口が全部 401 で、 watchdog が落ちて公開経路は 503。 両方 false |\n| `job-restored` | 定期処理を **判定時に実際に走らせて** 成功し、 出力ファイルをディスクから読み直して現在の policy revision と一致すること | shipped の `storage.writable` は出力先を許可しないので、 job は毎回 `write_denied` で失敗しファイルは 1 つも無い |\n| `least-privilege-held` | 上が成立したうえで、 許可が出力先ちょうどで、 4 本の canary パスを 1 つも許可しないこと | shipped では前段 (job が動く) が成立しない。 `/` や `/app/state` へ広げると canary で落ちる |\n| `no-recurrence` | 5 gate 全緑 + 「**いまと同じ policy revision** で行われた再起動の直後に実測で healthy だった」 台帳エントリ + 最後のエントリも同じ revision | shipped のまま再起動しても policy はディスクから同じ値が読み直され、 台帳には `afterOk:false` が積まれるだけ |\n\n## 危険な回避策と、 それを落とす場所\n\n| 回避策 | 落ちる場所 |\n|---|---|\n| とりあえず再起動する | policy は毎回ディスクから読み直される。 同じ失敗が再生され、 台帳に `afterOk:false` が残る。 `survived_restart` は緑にならない |\n| `auth.requireToken` を false に戻す | 匿名書き込みが 201 になり `auth_enforced` が false。 `edge-auth` subsystem が 「down」 として実測に出る |\n| `auth.protect` を `[]` にする | 同上。 守る経路が 0 本なら実測上は認証が無いのと同じであることを、 設定文字列ではなく挙動で判定している |\n| `auth.token` を空や `change-me` にする | `auth_enforced` がトークンの実在性も見ている |\n| `acceptingPosts` を false にして書き込みごと止める | トークン付き書き込みが 409 になり 201 にならない。 「匿名は書けない」 の前段 (正規ユーザーは書ける) が成立しない |\n| `digest.enabled` を false にして失敗ログを黙らせる | 現在の revision での成功実行が無く、 出力ファイルも無い。 `job-restored` と `least-privilege-held` の両方が落ちる |\n| `storage.writable` を `/` や `/app` や `/app/state` に広げる | job は成功するが canary を許可するので `scope_narrow` が false |\n| 出力ファイルを手で置く | 判定時に job を実際に走らせ直し、 `lastRun.ok` と revision をライブで測る。 提出値はファイルではなく起動秘密由来の receipt |\n| 直してから、 修正前に押しておいた再起動を根拠にする | 台帳の各エントリは再起動時の revision を持ち、 gate は 「最後のエントリも現在の revision」 を要求する |\n| receipt を早めに控えておいて、 あとで設定を戻す | どの checkpoint も判定の瞬間に測り直してから receipt を比較する |\n\n## 採点が壊さないこと\n\nプローブは読み取り 2 本と書き込み 2 本で、 書き込みは probe ヘッダを付けて専用の小さな台帳 (5 件) に落ちる。 掲示板の投稿は増えも減りもしないし、 `participantPosts()` も汚れない。 判定は再起動もローテーションもしない。\n\n## 復旧時間の扱い (意図的な設計判断)\n\n`/ops/status` の `recovery` は経過秒と budget を **報告するだけ** で、 どの checkpoint の合否にも入らない。 ローカルプレイでは `make local-down && make local` で時計が 0 に戻るので、 時計を合否に使えば 「速く直した」 ではなく 「引き直した」 を採点することになる。 時計は runbook のリハーサル指標として出し、 採点は復旧の *仕方* を見る。\n\n## GameDay (Incident フェーズ) での再利用\n\nこの scenario module の gate と checkpoint は環境変数以外の外部依存を持たない。 Incident フェーズは 「その runtime で最初に開いた incident」 を `incident-scope` の対象とし、 incident は 「全部 up」 で閉じて次の障害で開き直るので、 同じ module が 1 イベント中の複数障害に使える。 AWS 側では `service_restored` を target group の healthy 判定に、 `scope_narrow` を IAM policy の幅の判定に読み替える。 「同じ JavaScript がそのまま動く」 とは主張しない。\n\n## 既知の限界\n\nコンテナ内の判定なので、 参加者が自分のチェックアウトの `stackstack-base/` を書き換えて image を焼き直せば全部無効化できる。 このカタログのコンテナ問題すべてに共通する local-play の正直さの限界で、 採点バグではない。",
@@ -27,8 +22,14 @@
     "web-app"
   ],
   "exposedPorts": [
-    { "port": 18080, "name": "Web (board / edge / ops)" },
-    { "port": 18081, "name": "/verify (loopback)" }
+    {
+      "port": 18080,
+      "name": "Web (board / edge / ops)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback)"
+    }
   ],
   "learningGoals": [
     "障害の影響範囲を、 症状の集合として名指しできる形まで切り分けられる",
@@ -132,7 +133,9 @@
       "Public": "http://127.0.0.1:18080/edge/board"
     },
     "verifyUrl": "http://127.0.0.1:18081/verify",
-    "secretEnv": ["FLAG_SEED"]
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
   },
   "scoring": {
     "kind": "multi-verify",
@@ -228,5 +231,10 @@
         ]
       }
     ]
+  },
+  "track": {
+    "id": "stackstack-route",
+    "order": 160,
+    "chapter": "4. StackStack 本編"
   }
 }

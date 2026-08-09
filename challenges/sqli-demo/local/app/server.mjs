@@ -94,7 +94,7 @@ function parseCredentials(contentType, raw) {
 }
 
 const LOGIN_PAGE = `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Staff Login</title></head>
+<html lang="en"><head><meta name="color-scheme" content="light dark"><meta charset="utf-8"><title>Staff Login</title></head>
 <body style="font-family:system-ui;max-width:32rem;margin:3rem auto">
 <h1>Acme Staff Login</h1>
 <p>Sign in as <code>admin</code> to view the flag. (You do not know the admin password.)</p>

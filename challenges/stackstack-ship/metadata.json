@@ -7,11 +7,6 @@
   "visibility": "public",
   "difficulty": 3,
   "estimatedDuration": "45 分",
-  "track": {
-    "id": "absolute-beginner-to-stackstack",
-    "order": 100,
-    "chapter": "6. StackStack drills / StackStack 演習"
-  },
   "shortDescription": "板は動いた。 まだ、 運用コンソールの内側だけで。\n\n朝いちばんの Slack に CTO の一行が落ちてくる。 「例の掲示板、 今日じゅうに公開側の入口から見えるようにして」。 前任の SRE が残していったデプロイ用のファイルは 1 枚だけ ── `release.json`。 開いてみると、 配る成果物の ID は前任者のノート PC でビルドしたときのものがそのまま書いてあり、 アプリが起動時に要求する設定はひとつ足りない。 リリース基盤 (Shipyard) に投げても、 パイプラインは途中の stage で止まる。 止まった理由は、 デプロイログに stage 名と一緒に 1 行ずつ書いてある。\n\nビルドはもう終わっている。 デプロイはまだ 1 度も始まっていない。 この 2 つが別物だと体で分かるところが、 今日の最初の 45 分だ。",
   "instructions": "## はじめに\n\n動いている板を公開する release plane を直します。 成果物・実行時設定・秘密の参照方法を結び、 鍵ローテーションや失敗リリースの削除でも公開側が止まらない状態を作る問題です。\n\n## ブラウザだけで進める\n\n1. `/shipyard` を開き、 artifact・release・secret store の現在値を読む\n2. `/docs` の **任意の API を試す** で `GET /site/healthz` と `POST /shipyard/releases` を実行し、 `failure.stage` と `failure.reason` を確認する\n3. `PATCH /api/settings` で release manifest を変更する。 リポジトリのファイルは編集しない\n4. 同じ画面から deploy・鍵 rotation・失敗 release の削除を実行する\n5. `GET /posture` で3つの gate を確認する。 やり直しは `DELETE /api/settings`\n\n## ゴール\n\n公開見出しを自分の言葉にし、 鍵ローテーション後も公開側を生かし、 失敗リリースを消しても停止させず、 `readyToken` を出すこと。",
   "description": "## 目的\n\nIssue 285。 「ビルド」 と 「デプロイ」 が別物であること、 必須設定を渡すこと、 デプロイログから失敗を切り分けること、 公開側から動作確認すること ── この 4 つを 1 本のリリース経路の上で通す。\n\n## クラウドではなくコンテナで何を模しているか\n\nクラウドアカウントも公開 URL も使わない。 代わりにコンテナ内に最小のリリース基盤を置く。\n\n| Shipyard | 現実の対応 |\n|---|---|\n| artifact registry | ECR / コンテナレジストリ |\n| release + generation | App Runner / ECS のリビジョン |\n| `BOARD_SIGNING_KEY: \"<値>\"` | 環境変数に秘密を貼り付ける |\n| `BOARD_SIGNING_KEY: {\"fromSecret\": ...}` | Secrets Manager 参照 |\n| `/site` | ALB / CloudFront の向こう側 |\n\n`/site` は **同じプロセスの別サーフェス** であって別ネットワークではない。 README にもそう書いてある。 模しているのは 「運用コンソールで見えていることと、 公開側が実際に返すことは別」 という点だけで、 それ以上は主張しない。\n\n## 何を実測しているか\n\n| checkpoint | 実測しているもの |\n|---|---|\n| `built-artifact` | registry にある artifact id (seed 由来、 リポジトリのどこにも無い) |\n| `release-receipt` | promote stage が実際に走ったこと (receipt は promote でしか発行されない) |\n| `published-title` | `/site` に実 HTTP で聞いて、 live release の env が運んだ見出しを返していること |\n| `rotation-survives` | (1) `/site` がいま 200 を返す (2) 次の鍵世代でも受理される (3) その gate の receipt |\n| `clean-cutover` | 3 gate 全緑 + `/site` の実 HTTP プローブ + `readyToken` |\n\n## 危険な回避策と、 それを落とす場所\n\n| 回避策 | 落ちる場所 |\n|---|---|\n| 秘密の値を読んで manifest に直書き | deploy も `published-title` も通る。 `rotation-survives` (60) と `clean-cutover` (40) が落ちる |\n| 先に rotate してから新しい値を直書き | dry-run のプローブ世代は必ず 1 つ先なので `survives_key_rotation` は false のまま |\n| 全部消して 「1 本だけ」 を満たす | `single_release` は 0 で false、 `/site` も 503。 サービスを止めて片付けの体裁を整える経路は不合格 |\n| 失敗した記録を残したまま | `single_release` が false のまま token が出ない |\n| `config/app.json` の見出しを書き換える | `/site` の見出しは live release の env からしか来ない |\n| health gate を manifest から緩める | manifest に health 系のフィールドが無く、 未知キーは `resolve-config` が拒否する |\n\n## 採点が壊さないこと\n\n`rotation-survives` は store を **動かさない**。 判定はプローブ世代 (version + 1) に対する dry-run で行うので、 誤答でも再送でも参加者の環境は変わらない。 鍵が実際に動くのは参加者が `POST /shipyard/secrets/rotate` を打ったときだけ。\n\n## Battle への引き継ぎ (正直な粒度)\n\n`battles/stackstack` は `phased-polling` の CloudFormation 問題なので、 この scenario の JavaScript も in-process のリスナも境界を越えない。 越えるのは形だけ: (1) 採点する事実 = 「外から観測された 200」 (ALB target group が healthy)、 (2) 入れ替え判定 = 「環境変数に貼った値か Secrets Manager 参照か」 (`DescribeTaskDefinition` で何も壊さず答えられる)、 (3) 昇格ゲートの形 = 申告ではなく実測。 「同じデプロイ資産をそのまま再利用する」 とは書かない ── それはこの 2 つの実行基盤の間では成立しない。\n\n## 既知の限界\n\nコンテナ内の判定なので、 参加者が自分のチェックアウトの `stackstack-base/` を書き換えて image を焼き直せば全部無効化できる。 このカタログのコンテナ問題すべてに共通する local-play の正直さの限界で、 採点バグではない。",
@@ -27,8 +22,14 @@
     "web-app"
   ],
   "exposedPorts": [
-    { "port": 18080, "name": "Web (board / shipyard / site)" },
-    { "port": 18081, "name": "/verify (loopback)" }
+    {
+      "port": 18080,
+      "name": "Web (board / shipyard / site)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback)"
+    }
   ],
   "learningGoals": [
     "ビルド済みの成果物が存在することと、 それが配られていることが別の事実だと区別できる",
@@ -116,7 +117,7 @@
             },
             {
               "id": "ship-cutover-2",
-              "content": "`GET /shipyard/releases` lists every record, including the one that was already there when you arrived; `DELETE 'http://127.0.0.1:18080/shipyard/release?id=rel-N'` removes one. The plane will let you delete the live one too, and the public side goes down if you do. Leave exactly one, live, ask `/site` for it yourself at least once, then submit `readyToken`."
+              "content": "`GET /shipyard/releases` lists every record, including the one that was already there when you arrived; running `delete /shipyard/release?id=rel-N` from `/docs` removes one. The plane will let you delete the live one too, and the public side goes down if you do. Leave exactly one, live, ask `/site` for it yourself at least once, then submit `readyToken`."
             }
           ]
         }
@@ -132,7 +133,9 @@
       "Public": "http://127.0.0.1:18080/site"
     },
     "verifyUrl": "http://127.0.0.1:18081/verify",
-    "secretEnv": ["FLAG_SEED"]
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
   },
   "scoring": {
     "kind": "multi-verify",
@@ -222,11 +225,16 @@
           },
           {
             "id": "ship-cutover-2",
-            "content": "`GET /shipyard/releases` は、 あなたが来たときすでにあったものも含めて全部の記録を並べます。 `DELETE 'http://127.0.0.1:18080/shipyard/release?id=rel-N'` で 1 件消せます。 live のものも消せてしまい、 消せば公開側は落ちます。 live なものを 1 本だけ残し、 自分で 1 度は `/site` を叩いてから `readyToken` を提出してください。",
+            "content": "`GET /shipyard/releases` は、 あなたが来たときすでにあったものも含めて全部の記録を並べます。 `/docs` から `delete /shipyard/release?id=rel-N` を実行すると 1 件消せます。 live のものも消せてしまい、 消せば公開側は落ちます。 live なものを 1 本だけ残し、 自分で 1 度は `/site` を叩いてから `readyToken` を提出してください。",
             "penalty": 16
           }
         ]
       }
     ]
+  },
+  "track": {
+    "id": "stackstack-route",
+    "order": 100,
+    "chapter": "4. StackStack 本編"
   }
 }

@@ -1,0 +1,368 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "agent-approval-gameday",
+  "name": "Enter を押す前に",
+  "category": "Battle",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "45〜60 分",
+  "shortDescription": "AI で構築された注文 API で不審な操作が検知された。AI エージェントに渡す道具を 3 段階で解禁しながら、侵害された対象だけを隔離し、本番を止めず、証拠を残して収束させる。届いた依頼は「suspicious なものを全部止めて、不要なものを削除して」。そのまま承認すると、正常系と監査証拠まで消える。",
+  "instructions": "## はじめに\n\nAI で構築された注文 API で、不審な操作が検知されました。あなたは対応の指揮を執ります。\n\nこの問題が問うのは「AI を使えるかどうか」ではありません。**どの権限をいつ渡し、何を確認してから実行を承認するか**です。\n\n## 3 つのフェーズで、AI に渡す道具が変わります\n\n1. **フェーズ 1 (0〜15 分)** — AI tool は 1 つも渡しません。自分で証跡を読み、構造化した仮説を出します。\n2. **フェーズ 2 (15〜30 分)** — read-only tool だけを渡します。調査はできますが、何も変えられません。\n3. **フェーズ 3 (30 分〜)** — write tool を渡します。ただし propose → preview → approve → execute の順にしか通りません。\n\nフェーズはサーバ側の時計で開きます。クライアントが「いまフェーズ 3 です」と名乗ることはできません。\n\n## 環境には、名前もタグも似たリソースが並んでいます\n\n侵害された worker、正常な本番 API、検証用の canary、監査証拠ストア、共通設定。\n正しい対応は、**証拠を保存したまま侵害された対象だけを隔離し、本番 API を動かし続ける**ことです。\n\n届いた依頼はこう書かれていました。\n\n> suspicious なリソースをすべて停止して、不要なものを削除し、安全な状態にしてください\n\nもっともらしく見えますが、タグや名前の部分一致で対象を選ぶと、正常系や監査証拠まで巻き添えになります。\n**preview で何に当たるかを見てから承認してください。** 危ない提案は、実行しなければ減点しません。\n\n## 最初の一手\n\nポータルに表示されている **アクセス先 URL** を開きます。インシデントの概要、証跡、いまの得点が出ます。\n「リソース」で並んでいるものを読み、「計画」で仮説を提出してください。\n\n## ゴール\n\n7 つの checkpoint すべてで受領証を取ること。封じ込めと可用性は**両方**必要です。\n全部止めれば封じ込めは満たせますが可用性を落とし、何もしなければ可用性は保てますが封じ込めが立ちません。\n\n## MCP クライアントは任意です\n\nKiro / Claude Code などの MCP 対応クライアントから同じ tool を呼べますが、**すべての checkpoint は\nブラウザだけで完走できます**。特定の製品を持っていることは、この問題の条件ではありません。",
+  "description": "AWS GameDay で AI Agent を段階的に解禁した事例に着想を得た Battle。元イベントの問題内容は複製せず、**段階的な能力解放と、人間が実行内容をレビューする責任**だけを抽出して独立した問題として設計している。\n\n実装は local Docker のみ。学習目標の中心が AWS 固有 API ではなく agent tool の権限分離・proposal review・approval discipline であること、誤操作を実際に起こしても production credential や実クラウドリソースを壊さないこと、seed ごとの再現とミューテーション検証を決定論的に回せることが理由。\n\nフェーズはサーバ側の状態で遷移し、capability token は phase・session・tool scope に束縛される。phase 2 の token で phase 3 の tool を呼ぶと、phase 3 が開いた後でも fail closed になる。write は propose → preview → approve(digest) → execute の順にしか通らず、approvalDigest は **解決結果** に対して計算されるので、preview 後に世界が動いた場合は古い digest での実行が拒否されて監査に残る。\n\n採点は agent の出力文を読まない。リソースの状態と操作記録という外部事実だけを見るので、別のモデルに差し替えても score は動かず、自信のある誤った要約は 1 点も生まない。",
+  "tags": [
+    "ai-agent",
+    "mcp",
+    "incident-response",
+    "least-privilege",
+    "change-approval",
+    "audit",
+    "local-play",
+    "container",
+    "multi-verify"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18080,
+      "name": "Browser Workbench + tool gateway"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback)"
+    }
+  ],
+  "learningGoals": [
+    "AI エージェントの能力を、会話の巧拙ではなく「呼べる tool・渡した credential・書き込みの scope」で捉えられるようになる",
+    "調査用の read-only 権限と変更用の write 権限を、別フェーズ・別 token として扱えるようになる",
+    "提示された変更を、対象リソース・差分・前提条件・巻き添え範囲・戻し方の観点でレビューできるようになる",
+    "ワイルドカードや名前の部分一致ではなく、正確なリソース ID と期待する事後条件で指示できるようになる",
+    "「速く直す」と「正しく安全に直す」を同時に満たし、サービス停止や証拠消失を解決扱いにしないでいられるようになる",
+    "実行後に外部状態を再観測し、エージェントの自己申告ではなく事実で成功を確認できるようになる",
+    "インシデント終了後に一時的な write 権限を失効させ、監査記録を残す習慣が身につく"
+  ],
+  "i18n": {
+    "en": {
+      "name": "Before You Press Enter",
+      "shortDescription": "Suspicious activity on an AI-built order API. Capability is released to the agent in three stages while you isolate only what is compromised, keep production answering, and preserve the evidence. The request that arrived says 'stop everything suspicious and delete what is not needed' — approve it as written and the healthy side and the audit trail go with it.",
+      "instructions": "## Introduction\n\nSuspicious activity was detected on an AI-built order API. You are running the response.\n\nThe question is not whether you may use an AI. It is **which capability you hand it, when, and what you check before approving an execution**.\n\n## Three phases, changing what the agent can call\n\n1. **Phase 1 (0-15 min)** — no AI tools at all. Read the evidence yourself and submit a structured hypothesis.\n2. **Phase 2 (15-30 min)** — read-only tools. The agent can investigate and can change nothing.\n3. **Phase 3 (30 min onward)** — write tools, and only through propose → preview → approve → execute.\n\nPhases open on the server's clock. A client cannot declare that it is in phase 3.\n\n## The environment is full of things that look alike\n\nA compromised worker, the healthy production API, a validation canary, the audit evidence store, and shared config. The correct response is to **isolate only what is compromised, while the evidence survives and the production API keeps answering**.\n\nThe request that arrived reads:\n\n> Stop every suspicious resource, delete what is not needed, and get us to a safe state.\n\nIt sounds reasonable. Selecting by stale tag or by name substring sweeps in the healthy side and the audit evidence. **Preview what a change would touch before you approve it.** A dangerous proposal costs nothing if you decline it.\n\n## First move\n\nOpen the access URL shown in the portal. It has the incident summary, the evidence, and your current score. Read the resources, then submit your hypothesis on the plan screen.\n\n## Goal\n\nEarn the receipt for all seven checkpoints. Containment and availability are both required: stopping everything contains the threat and fails availability, and doing nothing keeps availability and fails containment.\n\n## An MCP client is optional\n\nKiro, Claude Code and other MCP-capable clients can call the same tools, but **every checkpoint is reachable from the browser alone**. Owning a particular product is not a condition of this problem.",
+      "description": "A Battle inspired by an AWS GameDay report in which an AI agent was unlocked in stages. It reproduces none of that event's content: what is extracted is the staged capability release and the human's responsibility to review what is about to run.\n\nLocal Docker only. The learning goal is tool-scope separation, proposal review and approval discipline rather than provider-specific API semantics; a mistake has to be able to do real damage without touching a production credential or a real cloud resource; and seeds, rollback, phase transitions and mutation tests have to be deterministic.\n\nPhases advance on server-side state, and capability tokens are bound to phase, session and tool scope — a phase-2 token calling a phase-3 tool fails closed even after phase 3 opens. Writes only pass through propose → preview → approve(digest) → execute, and the digest is computed over the *resolved* change set, so a world that moved after the preview refuses the stale approval and records it.\n\nScoring never reads the agent's prose. It reads resource state and the operation record, so swapping the model does not move the score and a confident wrong summary earns nothing.",
+      "writeup": "## What this was measuring\n\nNot what you told the AI to do. **What you handed it.**\n\n### 1. Capability is tools and scope, not conversation\n\nA phase-2 read-only token stays read-only after phase 3 opens. Without that, \"read-only\"\nmeans \"read-only until the clock moves\", and a long-lived agent session quietly gains a\nwrite capability nobody granted.\n\n### 2. A preview shows the resolved change, not the sentence\n\nThe `approvalDigest` is computed over the selector **resolved against the world as it is\nnow**. If the world moves after the preview, the digest changes and the stale approval is\nrefused and recorded. That is what makes \"I approved this\" mean \"I approved these\nresources\".\n\n### 3. A vague request stays vague right up to execution\n\n\"Stop everything suspicious and delete what is not needed\" resolves, through a stale tag\nand a name substring, to the healthy side and the audit evidence. **Without a preview in\nbetween, that fact only arrives after the execution.** Building the dangerous proposal is\nnot the mistake; looking at it and declining is the response.\n\n### 4. Neither half is a full score\n\nStopping everything contains the threat and fails availability. Doing nothing keeps\navailability and fails containment. Incident response asks for both.\n\n### 5. What is deleted does not come back\n\n`delete` has no rollback. Delete the evidence store and the penalty and the record stay\nhowever you repair the final state. An environment where every mistake rewinds teaches\nthat approval is cheap.\n\n### 6. Close the capability with the incident\n\nThe last hole is the change window closing while the credential stays open. After\nrevocation, write tools are refused with `capability_revoked` and the audit says so.\n\n## What to take to work\n\n- Bound the agent's capability by phase and by expiry\n- Approve the resolved target list, never the sentence describing it\n- Name exact ids instead of wildcards, and write the expected post-conditions first\n- Re-observe external state after the change instead of trusting the agent's report\n- Close temporary capability together with the incident",
+      "learningGoals": [
+        "See an AI agent's capability as the tools it can call, the credential it holds and the write scope it has — not how well it writes",
+        "Treat read-only investigation and write remediation as different phases with different tokens",
+        "Review a proposed change by target, diff, precondition, blast radius and rollback",
+        "Name exact resource ids and expected post-conditions instead of wildcards and name substrings",
+        "Satisfy 'fix it fast' and 'fix it safely' together, without counting an outage or lost evidence as a resolution",
+        "Confirm success by re-observing external state rather than trusting the agent's own report",
+        "Revoke the temporary write capability when the incident closes, and leave an audit record"
+      ],
+      "checks": [
+        {
+          "id": "manual-hypothesis",
+          "label": "Form a hypothesis with no AI tools",
+          "hints": [
+            {
+              "id": "mh-1",
+              "content": "There are only three pieces of evidence. The high-severity ones point at a single resource."
+            },
+            {
+              "id": "mh-2",
+              "content": "What must survive is what customers notice when it stops, and what you cannot explain the incident without afterwards."
+            },
+            {
+              "id": "mh-3",
+              "content": "On the plan screen, choose the compromised resource, the two high-severity pieces of evidence, and the order API plus the evidence store as protected. Free text is not graded."
+            }
+          ]
+        },
+        {
+          "id": "evidence-backed-plan",
+          "label": "Write a plan that names an exact target",
+          "hints": [
+            {
+              "id": "ep-1",
+              "content": "A plan needs a target, an action, what should be true afterwards, and how to undo it. A proposal missing any of those is refused."
+            },
+            {
+              "id": "ep-2",
+              "content": "Selecting by tag or by name makes it a plan about a label somebody else applied for another reason, not a plan about a resource."
+            },
+            {
+              "id": "ep-3",
+              "content": "On the proposals screen, select only the compromised worker, action `isolate`, and fill in evidence, post-conditions and rollback. The receipt appears in `tokens` on `/posture`."
+            }
+          ]
+        },
+        {
+          "id": "safe-proposal-review",
+          "label": "Preview the dangerous proposal and decline it",
+          "hints": [
+            {
+              "id": "sr-1",
+              "content": "The request that arrived was 'stop everything suspicious and delete what is not needed'. You can turn it into a proposal as written."
+            },
+            {
+              "id": "sr-2",
+              "content": "Preview resolves the selector against the world as it is now and names what it would touch beyond the compromised resource, and what depends on those."
+            },
+            {
+              "id": "sr-3",
+              "content": "Build the request as written, preview it, then decline instead of executing. Avoiding a proposal you never previewed is not review."
+            }
+          ]
+        },
+        {
+          "id": "threat-containment",
+          "label": "Contain only what is compromised",
+          "hints": [
+            {
+              "id": "tc-1",
+              "content": "Containment means the attack path is closed, not that things went quiet."
+            },
+            {
+              "id": "tc-2",
+              "content": "`isolate` is reversible; `delete` is not. Prefer the reversible action when it is enough."
+            },
+            {
+              "id": "tc-3",
+              "content": "Isolate the one compromised worker with an exact selector, then execute with the `approvalDigest` the preview returned. The receipt appears in `tokens` on `/posture`."
+            }
+          ]
+        },
+        {
+          "id": "service-availability",
+          "label": "Keep the production API answering",
+          "hints": [
+            {
+              "id": "sa-1",
+              "content": "The order API does not answer just because it is running; what it depends on has to be running too."
+            },
+            {
+              "id": "sa-2",
+              "content": "Disabling the shared config takes the healthy side down with it. The preview's 'what depends on this' list names that."
+            },
+            {
+              "id": "sa-3",
+              "content": "Leave the production API and everything it depends on alone and this gate is true from start to finish. The receipt appears in `tokens` on `/posture`."
+            }
+          ]
+        },
+        {
+          "id": "evidence-protected",
+          "label": "Keep the evidence and the healthy resources",
+          "hints": [
+            {
+              "id": "ev-1",
+              "content": "The evidence store looks like 'unneeded logs'. Delete it and repairing the final state does not bring the record back."
+            },
+            {
+              "id": "ev-2",
+              "content": "The canary is a validation copy and is not counted as collateral. Anything else stopped makes this gate false."
+            },
+            {
+              "id": "ev-3",
+              "content": "Leave everything except the compromised worker running. The receipt appears in `tokens` on `/posture`."
+            }
+          ]
+        },
+        {
+          "id": "capability-closure",
+          "label": "Hand the temporary capability back",
+          "hints": [
+            {
+              "id": "cc-1",
+              "content": "The last hole is the change window closing while the credential stays open."
+            },
+            {
+              "id": "cc-2",
+              "content": "Handing the capability back while the threat is still running does not clear this checkpoint."
+            },
+            {
+              "id": "cc-3",
+              "content": "Press 'revoke operator capability' on the incident screen. Write tools are then refused with `capability_revoked`. The receipt appears in `tokens` on `/posture`."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "writeup": "## この問題が測っていたもの\n\nAI に「何をさせるか」ではなく、**何を渡すか**でした。\n\n### 1. 能力は会話ではなく tool と scope\n\nフェーズ 2 の read-only token は、フェーズ 3 が開いた後も read-only のままです。これが無いと\n「read-only」は「時計が進むまでの read-only」になり、長く生きているエージェントのセッションが、\n誰も渡していない write 権限を静かに獲得します。\n\n### 2. preview は「文章」ではなく「解決結果」を見せる\n\n`approvalDigest` は selector を **いまの世界に対して解決した結果** に対して計算されます。\npreview してから世界が動くと digest は変わり、古い digest での実行は拒否されて監査に残ります。\n「これを承認した」が「これらのリソースを承認した」を意味するために必要でした。\n\n### 3. 曖昧な依頼は、曖昧なまま実行できてしまう\n\n「suspicious なものを全部止めて、不要なものを削除して」は、タグと名前の部分一致で解決されると\n正常系と監査証拠まで含みます。**preview を挟まなければ、その事実は実行後にしか分かりません。**\n危ない提案を作ること自体は間違いではありません。見て、止めることが対応です。\n\n### 4. 片方だけでは満点にならない\n\n全部止めれば封じ込めは満たせますが可用性を落とし、何もしなければ可用性は保てますが封じ込めが\n立ちません。インシデント対応が両方を要求するのはそのためです。\n\n### 5. 消えたものは戻らない\n\n`delete` は rollback できません。監査証拠ストアを消した場合、最終状態を直しても減点と記録は\n残ります。すべての誤りが巻き戻る環境は、承認が安いと教えてしまいます。\n\n### 6. 終わったら権限を返す\n\n変更の窓が閉じたのに資格情報が残っている、というのが最後の穴です。失効させると write tool は\n`capability_revoked` で拒否され、その事実が監査に残ります。\n\n## 現場に持ち帰るもの\n\n- エージェントに渡す権限を、フェーズと有効期限で区切る\n- 変更は必ず「解決結果」を見てから承認する。文章ではなく対象一覧を読む\n- 対象はワイルドカードではなく正確な ID で指定し、期待する事後条件を先に書く\n- 実行後は自己申告ではなく外部状態を再観測する\n- 一時的な権限は、インシデントと一緒に閉じる",
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Browser Workbench": "http://127.0.0.1:18080"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "manual-hypothesis",
+        "label": "AI なしで仮説を立てる",
+        "points": 100,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "mh-1",
+            "content": "証跡は 3 件しかありません。重大度が high のものが指しているリソースは 1 つです。",
+            "penalty": 0
+          },
+          {
+            "id": "mh-2",
+            "content": "守るべきものは「止まると顧客に影響が出るもの」と「消えると事後に説明できなくなるもの」です。リソース一覧の種別を見てください。",
+            "penalty": 0
+          },
+          {
+            "id": "mh-3",
+            "content": "「計画」画面で、侵害されたリソース・根拠にする証跡 (high の 2 件)・守るべきリソース (注文 API と監査証拠ストア) を選んで提出します。自由記述は採点しません。",
+            "penalty": 0
+          }
+        ]
+      },
+      {
+        "id": "evidence-backed-plan",
+        "label": "正確な対象を指す計画を書く",
+        "points": 150,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "ep-1",
+            "content": "計画は「何に対して」「何をして」「どうなれば成功で」「どう戻すか」が揃って初めて計画です。どれかが空だと提案は作れません。",
+            "penalty": 0
+          },
+          {
+            "id": "ep-2",
+            "content": "タグや名前で対象を選ぶと、それは「リソースについての計画」ではなく「誰かが別の理由で貼ったラベルについての計画」になります。",
+            "penalty": 0
+          },
+          {
+            "id": "ep-3",
+            "content": "「提案と承認」画面で、対象に侵害された worker だけを選び、操作は isolate、証跡 ID・事後条件・戻し方を埋めて提案を作ります。作った提案の受領証は `/posture` の tokens に出ます。",
+            "penalty": 0
+          }
+        ]
+      },
+      {
+        "id": "safe-proposal-review",
+        "label": "危ない提案を preview して止める",
+        "points": 150,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "sr-1",
+            "content": "届いた依頼は「suspicious なものをすべて停止して、不要なものを削除して」でした。そのままの意味で提案にできます。",
+            "penalty": 0
+          },
+          {
+            "id": "sr-2",
+            "content": "preview は selector をいまの世界に対して解決し、侵害対象以外に当たるものと、それに依存して巻き添えになるものを名指しします。",
+            "penalty": 0
+          },
+          {
+            "id": "sr-3",
+            "content": "依頼どおりの提案を作り、preview で中身を見て、実行せずに却下します。preview していない提案を避けただけでは審査したことになりません。",
+            "penalty": 0
+          }
+        ]
+      },
+      {
+        "id": "threat-containment",
+        "label": "侵害された対象だけを封じる",
+        "points": 200,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "tc-1",
+            "content": "封じ込めは「攻撃の経路が閉じている」ことで、「静かになった」ことではありません。",
+            "penalty": 0
+          },
+          {
+            "id": "tc-2",
+            "content": "isolate は元に戻せます。delete は戻せません。戻せる操作で足りるなら戻せる方を選びます。",
+            "penalty": 0
+          },
+          {
+            "id": "tc-3",
+            "content": "exact selector で侵害された worker 1 つを isolate し、preview で出た approvalDigest を付けて実行します。受領証は `/posture` の tokens に出ます。",
+            "penalty": 0
+          }
+        ]
+      },
+      {
+        "id": "service-availability",
+        "label": "本番 API を止めない",
+        "points": 200,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "sa-1",
+            "content": "注文 API は自分が動いているだけでは応答しません。依存先も動いている必要があります。",
+            "penalty": 0
+          },
+          {
+            "id": "sa-2",
+            "content": "共有設定を無効化すると、健全な側まで一緒に落ちます。preview の「依存していて巻き添えになるもの」がそれを名指しします。",
+            "penalty": 0
+          },
+          {
+            "id": "sa-3",
+            "content": "本番 API と、それが依存しているものに触らなければ、この gate は最初から最後まで true のままです。受領証は `/posture` の tokens に出ます。",
+            "penalty": 0
+          }
+        ]
+      },
+      {
+        "id": "evidence-protected",
+        "label": "証拠と正常系を残す",
+        "points": 150,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "ev-1",
+            "content": "監査証拠ストアは「不要なログ」に見えます。消すと、最終状態を直しても記録は戻りません。",
+            "penalty": 0
+          },
+          {
+            "id": "ev-2",
+            "content": "canary は検証用の複製なので、巻き添えとしては数えません。それ以外が止まっていると、この gate は false です。",
+            "penalty": 0
+          },
+          {
+            "id": "ev-3",
+            "content": "侵害された worker 以外を running のままにしておけば true です。受領証は `/posture` の tokens に出ます。",
+            "penalty": 0
+          }
+        ]
+      },
+      {
+        "id": "capability-closure",
+        "label": "渡した権限を返してもらう",
+        "points": 50,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "cc-1",
+            "content": "変更の窓が閉じたのに資格情報が残っている、というのが最後の穴です。",
+            "penalty": 0
+          },
+          {
+            "id": "cc-2",
+            "content": "封じ込めが済んでいない状態で権限だけ返しても、この checkpoint は満たされません。",
+            "penalty": 0
+          },
+          {
+            "id": "cc-3",
+            "content": "インシデント画面の「operator capability を失効させる」を押します。以降 write tool は `capability_revoked` で拒否されます。受領証は `/posture` の tokens に出ます。",
+            "penalty": 0
+          }
+        ]
+      }
+    ]
+  }
+}

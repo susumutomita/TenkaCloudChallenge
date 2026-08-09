@@ -605,7 +605,7 @@ function opsPage() {
       ? "まだ走っていません"
       : `${lastDigestRun.ok ? "ok" : lastDigestRun.reason} (${lastDigestRun.detail})`;
   return `<!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="ja"><head><meta name="color-scheme" content="light dark"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Ops</title></head>
 <body style="font-family:system-ui;max-width:56rem;margin:2.5rem auto;line-height:1.7;padding:0 1rem">
 <h1>運用コンソール</h1>

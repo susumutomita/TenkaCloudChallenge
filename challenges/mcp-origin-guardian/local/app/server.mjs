@@ -38,7 +38,7 @@ function sendJson(response, status, payload, extra = {}) {
 }
 
 const HOME = `<!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<html lang="ja"><head><meta name="color-scheme" content="light dark"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>Origin Guardian</title><style>
 body{font-family:system-ui;max-width:880px;margin:2rem auto;padding:0 1rem;line-height:1.6;background:#07131d;color:#e9f4fa}
 section{background:#102331;border:1px solid #294455;border-radius:12px;padding:1rem;margin:1rem 0}

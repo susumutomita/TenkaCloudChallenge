@@ -7,11 +7,6 @@
   "visibility": "public",
   "difficulty": 3,
   "estimatedDuration": "45 分",
-  "track": {
-    "id": "absolute-beginner-to-stackstack",
-    "order": 110,
-    "chapter": "6. StackStack drills / StackStack 演習"
-  },
   "shortDescription": "天下クラウド株式会社、 入社 3 日目。 昨日ようやく外から見えるところまで持っていった社内掲示板に、 CTO から次の一手が飛んでくる。\n\n「過去ログのインポートが終わったので検索を付けてください。 生成 AI に書かせて構いません、 そのほうが速いなら。 要件は仕様書にしてアプリの中に置いてあります」\n\n書くのは 1 ファイル。 貼るのは 30 秒。 残りの 44 分は、 貼ったものが本当に要件どおりかを確かめる時間だ。",
   "instructions": "## はじめに\n\n掲示板のアーカイブ検索を実装します。 生成 AI の利用は推奨ですが、 生成結果を仕様と反例で検証する責任は利用者にあります。 採点はコードではなく実際の HTTP 応答だけを見ます。\n\n## ブラウザだけで進める\n\n1. `/docs` の **任意の API を試す** で `GET /api/spec` を実行し、 R1〜R9 を読む\n2. エディタ `/editor` を開き、 `search` と `renderResults` を書いて保存する。 裏は `GET/PUT/DELETE /api/source` なので、 `/docs` から同じ操作もできる。 リポジトリのファイルは編集しない\n3. `GET /api/search?q=板` と `/search?q=板` で動作を見る\n4. `GET /api/selfcheck` で、 落ちた規則と期待値・実値を確認して小さく直す (エディタの 「自己検査を実行」 でも同じ)\n5. `GET /posture` の tokens を確認する。 やり直しは `DELETE /api/source` (エディタの 「破棄」)\n\n## ゴール\n\n5項目の selfcheck と5つの gate をすべて通すこと。 検査データは毎回変わるため、 入力の暗記ではなく R1〜R9 の性質を満たす必要があります。",
   "description": "## 目的\n\n生成 AI に書かせたコードを、 読んで納得した気になる代わりに、 走らせて確かめる。 #284 の学習目標 (要求を伝える / 生成コードを確認する / テストを走らせる / 要求どおりに動くことを確認する / 無検証で採用しない) を、 1 ファイル・9 要件・5 チェックポイントに落としたもの。\n\n## 何を実測しているか\n\n| checkpoint | gate | 実測しているもの |\n|---|---|---|\n| `search-answers` | `search_answers` | 検索語を含む投稿だけが、 仕様どおりの 4 キーで返ること |\n| `search-order` | `search_order` | id 降順・上限 10 件・大文字小文字非依存・0 件でも 200 |\n| `search-bad-queries` | `search_bad_queries` | 4 つの壊れた入力を名前付きで断り、 かつ正常系を壊さないこと |\n| `drafts-withheld` | `drafts_withheld` | 公開してよいものだけが返り、 それ以外がレスポンス全文のどこにも出ないこと |\n| `results-are-text` | `results_are_text` | 投稿の文字と検索語が、 1 文字も落ちずに 「文字として」 表示されること |\n\n5 つの gate はどれも他の 4 つから導けない。 検索が答えても並びは間違えられるし、 並びが正しくても壊れた入力は素通りできるし、 そのすべてが正しくても画面はマークアップを出せる。\n\n## 不在の検査には必ず前提を置く\n\n`drafts-withheld` と `results-are-text` と `search-order` の 0 件検査は 「出てはいけないものが出ていないこと」 を見る。 これらは同じレスポンスに対して先に正の検査を通す:\n\n- `drafts-withheld` は (1) 公開分の id 集合の完全一致と (2) 各 entry の値が実際のアーカイブと一致することを先に見る。 その上で (3) 公開してよくない投稿の id とマーカー文字列がレスポンス**全文**に出ないことを見る。 (3) は (1) から導けない ── `matches` が完全に正しいまま `debug` フィールドに `posts` をそのまま入れた実装が (1) を通って (3) で落ちる。\n- `results-are-text` は、 エスケープ済みのタイトル全文・author・検索語が出ていることを先に見る。 何も描画しない実装と、 危ない文字を削除する実装は、 ここで落ちる。\n\n## 参加者コードの隔離\n\n参加者のモジュールは worker thread ではなく **子プロセス** (`env: {}`) で動く。 worker は同一 OS プロセスのスレッドなので `/proc/self/environ` に exec 時の環境が残り、 同一プロセス実行なら `secrets.mjs` を import して受領印を自作したり `globalThis.fetch` を差し替えて採点自身のプローブに答えたりできてしまう。\n\nそのうえで、 **この問題が採点に使う値は 1 つも `FLAG_SEED` 由来ではない**。 提出値はすべて `gateToken(...)` の受領印で、 これは base app が起動時に生成する乱数から derive される (`secrets.mjs`)。 コンテナの `/proc/1/environ` を読んでも、 この問題では何も得られない。\n\n## 意図的にやらないこと\n\n- 参加者が書いた HTML をこちらでエスケープしない (それをやると採点対象が消える)。 代わりにページには `Content-Security-Policy: default-src 'none'; sandbox` が付き、 ポートは loopback 限定。\n- 板の投稿をプローブが触らない。 検査用の投稿はアーカイブ側の一時エントリで、 参加者が書いたものは採点で一切変化しない。\n- クラウドアカウントを要求しない。 これはコンテナの中で閉じたモデルであり、 README にそう書いてある。",
@@ -28,8 +23,14 @@
     "web-app"
   ],
   "exposedPorts": [
-    { "port": 18080, "name": "Web (board / search)" },
-    { "port": 18081, "name": "/verify (loopback)" }
+    {
+      "port": 18080,
+      "name": "Web (board / search)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback)"
+    }
   ],
   "learningGoals": [
     "機械可読な要求仕様に対して、 生成されたコードが満たしている項目と満たしていない項目を、 走らせて 1 つずつ切り分けられるようになる",
@@ -151,7 +152,9 @@
       "Search": "http://127.0.0.1:18080/search"
     },
     "verifyUrl": "http://127.0.0.1:18081/verify",
-    "secretEnv": ["FLAG_SEED"]
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
   },
   "scoring": {
     "kind": "multi-verify",
@@ -272,5 +275,10 @@
         ]
       }
     ]
+  },
+  "track": {
+    "id": "stackstack-route",
+    "order": 110,
+    "chapter": "4. StackStack 本編"
   }
 }

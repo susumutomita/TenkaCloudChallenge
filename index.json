@@ -1495,6 +1495,34 @@
       }
     },
     {
+      "id": "agent-approval-gameday",
+      "name": "Enter を押す前に",
+      "category": "Battle",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "45〜60 分",
+      "shortDescription": "AI で構築された注文 API で不審な操作が検知された。AI エージェントに渡す道具を 3 段階で解禁しながら、侵害された対象だけを隔離し、本番を止めず、証拠を残して収束させる。届いた依頼は「suspicious なものを全部止めて、不要なものを削除して」。そのまま承認すると、正常系と監査証拠まで消える。",
+      "tags": [
+        "ai-agent",
+        "mcp",
+        "incident-response",
+        "least-privilege",
+        "change-approval",
+        "audit",
+        "local-play",
+        "container",
+        "multi-verify"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "ai-riscv-screen-repair",
       "name": "AI製RISC-V画面を復旧せよ",
       "category": "Challenge",
@@ -1557,6 +1585,11 @@
       "category": "Challenge",
       "status": "draft",
       "visibility": "public",
+      "track": {
+        "id": "stackstack-route",
+        "order": 70,
+        "chapter": "2. 壊れ方を知る"
+      },
       "difficulty": 2,
       "estimatedDuration": "30 分",
       "shortDescription": "プロフィール閲覧 API。 自分のプロフィールは読めるが、 管理者だけが持つ秘密のメモに、 隠された合言葉があるらしい。 あなたはゲスト用アカウントしか持っていない。",
@@ -1613,9 +1646,9 @@
       "status": "ready",
       "visibility": "public",
       "track": {
-        "id": "absolute-beginner-to-stackstack",
-        "order": 60,
-        "chapter": "3. Browser attacks / ブラウザの攻撃"
+        "id": "ipa-web-security",
+        "order": 2,
+        "chapter": "IPA §1.6 CSRF"
       },
       "difficulty": 2,
       "estimatedDuration": "30 分",
@@ -1778,11 +1811,6 @@
       "status": "ready",
       "visibility": "public",
       "onboardingOrder": 1,
-      "track": {
-        "id": "absolute-beginner-to-stackstack",
-        "order": 70,
-        "chapter": "4. Battle operations / Battle の基本操作"
-      },
       "difficulty": 1,
       "estimatedDuration": "30 分",
       "shortDescription": "天下クラウド株式会社への入社 2 日目。前任の SRE から、nginx の frontend と Python API が動く小さな EC2 を引き継ぎました。\n\n2 つの URL を Participant Portal へ登録すると、1 分ごとの採点が始まります。運営が nginx を停止したら、SSM Session Manager から復旧してください。",
@@ -2107,9 +2135,9 @@
       "status": "draft",
       "visibility": "public",
       "track": {
-        "id": "absolute-beginner-to-stackstack",
-        "order": 10,
-        "chapter": "1. First wins / 最初の成功体験"
+        "id": "stackstack-route",
+        "order": 40,
+        "chapter": "2. 壊れ方を知る"
       },
       "difficulty": 2,
       "estimatedDuration": "30 分",
@@ -2136,11 +2164,6 @@
       "category": "Battle",
       "status": "ready",
       "visibility": "public",
-      "track": {
-        "id": "absolute-beginner-to-stackstack",
-        "order": 170,
-        "chapter": "7. Capstone / StackStack 本編"
-      },
       "difficulty": 4,
       "estimatedDuration": "90〜120 分",
       "shortDescription": "天下クラウド株式会社 Platform Team、 月初の朝会。 前任の SRE が辞めた直後、 AI Builder が量産した掲示板アプリが社内公開待ちになっている。 動くが、 DB は空、 認証なし、 rate limit なし、 監査なし、 SQLite のまま。\n\nCTO 曰く: 「ホスティングしただけじゃ公開できない。 既存の統制リソースを使って、 今日中に本番品質まで持っていって」\n\n君の仕事: stack が作成済みの ALB / EC2 / WAF / S3 backup / S3 audit / RDS PostgreSQL を使い、 新規トップレベルリソースを作らずに、 ローカルビルドのデプロイ → restored → protected → audited → production へ上げていく。\n\n▶ 最初の一手: `aws ssm start-session --target <InstanceId>` で app host に入り `vibe-status` を実行 (6 つの gate の現状と各 gate の目的が出る)。 `AppUrlHint` を Portal の app endpoint に登録すると採点開始。",
@@ -2170,9 +2193,9 @@
       "status": "ready",
       "visibility": "public",
       "track": {
-        "id": "absolute-beginner-to-stackstack",
-        "order": 120,
-        "chapter": "6. StackStack drills / StackStack 演習"
+        "id": "stackstack-route",
+        "order": 140,
+        "chapter": "4. StackStack 本編"
       },
       "difficulty": 3,
       "estimatedDuration": "45〜60 分",
@@ -2230,9 +2253,9 @@
       "status": "ready",
       "visibility": "public",
       "track": {
-        "id": "absolute-beginner-to-stackstack",
-        "order": 140,
-        "chapter": "6. StackStack drills / StackStack 演習"
+        "id": "stackstack-route",
+        "order": 150,
+        "chapter": "4. StackStack 本編"
       },
       "difficulty": 3,
       "estimatedDuration": "45 分",
@@ -2263,9 +2286,9 @@
       "status": "ready",
       "visibility": "public",
       "track": {
-        "id": "absolute-beginner-to-stackstack",
-        "order": 20,
-        "chapter": "1. First wins / 最初の成功体験"
+        "id": "stackstack-route",
+        "order": 10,
+        "chapter": "1. はじめの一歩"
       },
       "difficulty": 1,
       "estimatedDuration": "15 分",
@@ -2293,9 +2316,9 @@
       "status": "ready",
       "visibility": "public",
       "track": {
-        "id": "absolute-beginner-to-stackstack",
+        "id": "stackstack-route",
         "order": 160,
-        "chapter": "6. StackStack drills / StackStack 演習"
+        "chapter": "4. StackStack 本編"
       },
       "difficulty": 3,
       "estimatedDuration": "40 分",
@@ -2325,9 +2348,9 @@
       "status": "ready",
       "visibility": "public",
       "track": {
-        "id": "absolute-beginner-to-stackstack",
-        "order": 130,
-        "chapter": "6. StackStack drills / StackStack 演習"
+        "id": "stackstack-route",
+        "order": 120,
+        "chapter": "4. StackStack 本編"
       },
       "difficulty": 3,
       "estimatedDuration": "60〜75 分",
@@ -2357,9 +2380,9 @@
       "status": "ready",
       "visibility": "public",
       "track": {
-        "id": "absolute-beginner-to-stackstack",
-        "order": 150,
-        "chapter": "6. StackStack drills / StackStack 演習"
+        "id": "stackstack-route",
+        "order": 130,
+        "chapter": "4. StackStack 本編"
       },
       "difficulty": 3,
       "estimatedDuration": "40 分",
@@ -2389,9 +2412,9 @@
       "status": "ready",
       "visibility": "public",
       "track": {
-        "id": "absolute-beginner-to-stackstack",
+        "id": "stackstack-route",
         "order": 100,
-        "chapter": "6. StackStack drills / StackStack 演習"
+        "chapter": "4. StackStack 本編"
       },
       "difficulty": 3,
       "estimatedDuration": "45 分",
@@ -2421,9 +2444,9 @@
       "status": "ready",
       "visibility": "public",
       "track": {
-        "id": "absolute-beginner-to-stackstack",
+        "id": "stackstack-route",
         "order": 110,
-        "chapter": "6. StackStack drills / StackStack 演習"
+        "chapter": "4. StackStack 本編"
       },
       "difficulty": 3,
       "estimatedDuration": "45 分",
@@ -2454,9 +2477,9 @@
       "status": "draft",
       "visibility": "public",
       "track": {
-        "id": "absolute-beginner-to-stackstack",
-        "order": 40,
-        "chapter": "2. Web exposure / Web の公開範囲"
+        "id": "stackstack-route",
+        "order": 20,
+        "chapter": "2. 壊れ方を知る"
       },
       "difficulty": 1,
       "estimatedDuration": "40 分",
@@ -2487,9 +2510,9 @@
       "status": "ready",
       "visibility": "public",
       "track": {
-        "id": "absolute-beginner-to-stackstack",
+        "id": "stackstack-route",
         "order": 30,
-        "chapter": "2. Web exposure / Web の公開範囲"
+        "chapter": "2. 壊れ方を知る"
       },
       "difficulty": 1,
       "estimatedDuration": "30 分",
@@ -2519,9 +2542,9 @@
       "status": "draft",
       "visibility": "public",
       "track": {
-        "id": "absolute-beginner-to-stackstack",
+        "id": "stackstack-route",
         "order": 80,
-        "chapter": "5. Operate and investigate / 運用と調査"
+        "chapter": "3. 運用で直す"
       },
       "difficulty": 3,
       "estimatedDuration": "約40分",
@@ -2551,9 +2574,9 @@
       "status": "draft",
       "visibility": "public",
       "track": {
-        "id": "absolute-beginner-to-stackstack",
+        "id": "stackstack-route",
         "order": 90,
-        "chapter": "5. Operate and investigate / 運用と調査"
+        "chapter": "3. 運用で直す"
       },
       "difficulty": 3,
       "estimatedDuration": "45 分",
@@ -2610,9 +2633,9 @@
       "status": "draft",
       "visibility": "public",
       "track": {
-        "id": "absolute-beginner-to-stackstack",
-        "order": 180,
-        "chapter": "8. Advanced incident / 発展インシデント"
+        "id": "stackstack-route",
+        "order": 170,
+        "chapter": "5. 本番インシデント"
       },
       "difficulty": 4,
       "estimatedDuration": "90 分",
@@ -2673,9 +2696,9 @@
       "status": "ready",
       "visibility": "public",
       "track": {
-        "id": "absolute-beginner-to-stackstack",
-        "order": 50,
-        "chapter": "3. Browser attacks / ブラウザの攻撃"
+        "id": "ipa-web-security",
+        "order": 1,
+        "chapter": "IPA §1.5 XSS"
       },
       "difficulty": 2,
       "estimatedDuration": "30 分",

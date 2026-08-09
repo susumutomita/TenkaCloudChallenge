@@ -1169,7 +1169,7 @@ function consolePage() {
 <ul>${evaluated.policy.problems.map((problem) => `<li><code>${escapeHtml(problem)}</code></li>`).join("")}</ul>`;
 
   return `<!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="ja"><head><meta name="color-scheme" content="light dark"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>公開範囲レビュー</title></head>
 <body style="font-family:system-ui;max-width:60rem;margin:2.5rem auto;line-height:1.7;padding:0 1rem">
 <h1>公開範囲レビュー</h1>

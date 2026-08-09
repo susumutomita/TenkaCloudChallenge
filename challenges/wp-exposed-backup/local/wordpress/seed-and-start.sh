@@ -57,7 +57,7 @@ INSERT INTO `wp_users` VALUES
 -- Table structure for table `wp_options`
 --
 INSERT INTO `wp_options` VALUES
-  (1,'siteurl','http://127.0.0.1:18080'),
+  (1,'siteurl','http://www.aoi-corp.example'),
   (2,'blogname','Aoi Corp');
 --
 -- Table structure for table `maintenance_notes`
