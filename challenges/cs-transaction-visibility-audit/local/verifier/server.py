@@ -93,22 +93,32 @@ def _check_counterexample(submission: object) -> bool:
 RUNNER = """
 import json, os, sys
 sys.path.insert(0, {root!r})
-sys.path.insert(0, {workspace!r})
 from tests.hidden import check_report
-try:
-    import report
-except Exception as error:
-    print(json.dumps({{"failures": ["submission could not be imported: " + type(error).__name__]}}))
-    sys.stdout.flush()
-    os._exit(0)
-if not hasattr(report, "build_report"):
-    print(json.dumps({{"failures": ["submission does not define build_report()"]}}))
-    sys.stdout.flush()
-    os._exit(0)
-failures = []
-for phase in {phases!r}:
-    failures.extend(getattr(check_report, phase)(report, {seed!r}))
-print(json.dumps({{"failures": failures}}))
+checkers = tuple(getattr(check_report, phase) for phase in {phases!r})
+
+# Keep private callable references, then remove the checker package and path before
+# importing participant code. The submission must not be able to replace a hidden
+# check through Python's shared module cache.
+for module_name in tuple(sys.modules):
+    if module_name == "tests" or module_name.startswith("tests."):
+        sys.modules.pop(module_name, None)
+while {root!r} in sys.path:
+    sys.path.remove({root!r})
+sys.path.insert(0, {workspace!r})
+
+def evaluate_submission(private_checkers):
+    try:
+        import report
+    except Exception as error:
+        return ["submission could not be imported: " + type(error).__name__]
+    if not hasattr(report, "build_report"):
+        return ["submission does not define build_report()"]
+    failures = []
+    for checker in private_checkers:
+        failures.extend(checker(report, {seed!r}))
+    return failures
+
+print(json.dumps({{"failures": evaluate_submission(checkers)}}))
 sys.stdout.flush()
 os._exit(0)
 """

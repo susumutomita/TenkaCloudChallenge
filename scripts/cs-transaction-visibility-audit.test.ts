@@ -99,6 +99,32 @@ print(json.dumps({
     expect(result.referenceTransfer).toEqual([]);
   });
 
+  it("は participant から hidden checker を差し替えられない", () => {
+    const probe = String.raw`
+import json, sys
+sys.path.insert(0, ".")
+from verifier import server
+spoof = '''
+from tests.hidden import check_report
+check_report.check_snapshot = lambda *_: []
+def build_report(*_):
+    return {"revision": 0, "balances": {}, "total": 0}
+'''
+print(json.dumps({"accepted": server._run_submission(spoof, ("check_snapshot",), server.SEED)}))
+`;
+    const output = execFileSync("python3", ["-c", probe], {
+      cwd: LOCAL,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        FLAG_SEED: "transaction-repo-suite-seed",
+        PYTHONDONTWRITEBYTECODE: "1",
+      },
+      timeout: 120_000,
+    });
+    expect(JSON.parse(output.trim())).toEqual({ accepted: false });
+  });
+
   it("は指定された 8 欠陥と writer freeze を mutation suite で殺す", () => {
     const result = python("mutation.py");
     expect(result.output).toContain("reference: passes");
