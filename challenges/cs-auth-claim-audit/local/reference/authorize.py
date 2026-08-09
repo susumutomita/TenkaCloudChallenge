@@ -76,7 +76,7 @@ def authorize(
     signing_input = f"{head_b64}.{body_b64}".encode("ascii")
     try:
         secret = bytes.fromhex(keys[kid])
-    except ValueError:
+    except (TypeError, ValueError):
         return _deny("unknown_key")
     expected = hmac.new(secret, signing_input, hashlib.sha256).digest()
     if not hmac.compare_digest(expected, presented):
@@ -85,7 +85,9 @@ def authorize(
     # From here the token is genuine. Everything that follows is about the request.
     not_before = payload.get("nbf")
     expires = payload.get("exp")
-    if not isinstance(not_before, int) or not isinstance(expires, int):
+    # JSON booleans are Python ints, but `true` is not a timestamp. Use exact types so
+    # a syntactically valid token with semantically invalid time claims fails closed.
+    if type(not_before) is not int or type(expires) is not int or type(now) is not int:
         return _deny("malformed")
     if now < not_before:
         return _deny("not_yet_valid")

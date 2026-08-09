@@ -21,9 +21,15 @@ keyed by the gateway secret for the key id named in the header.
     payload  {"sub": "u-3391", "tenant": "t-208",
               "scope": ["read:doc"], "nbf": 1000042, "exp": 1000431}
 
-`nbf` is the first instant the token is usable. `exp` is when it stops being usable.
+The gateway's verification algorithm is configured as HMAC-SHA256. A value inside the
+token does not get to select a different verification method. `kid` selects the exact
+entry in `keys`; either held key may be used while keys are being rotated.
 
-The version below verifies the signature and returns the claims. It is not finished.
+`nbf` is the first instant the token is usable. `exp` is when it stops being usable.
+Both claims and `now` are integers; JSON booleans are not timestamps.
+
+The version below handles the examples in the public tests. Audit it against the whole
+contract before treating that as evidence that it is finished.
 """
 
 from __future__ import annotations
@@ -60,7 +66,7 @@ def authorize(
     these strings, so an accurate `allowed` with the wrong `reason` is still wrong.
 
       "ok"               allowed
-      "malformed"        the token is not three base64url segments of JSON
+      "malformed"        the token or required claims do not have the required shape/type
       "unknown_key"      the header names a key id the gateway does not hold
       "bad_signature"    the signature does not match the one this gateway would make
       "not_yet_valid"    presented before the token became usable
@@ -74,11 +80,7 @@ def authorize(
     is not", and an incident review that reads them backwards learns the wrong thing.
 
     Never raise. A request the gateway cannot make sense of is a denied request.
-
-    ## What the version below gets wrong
-
-    It reads `alg` out of the header and does what the header says. It also never
-    looks at `resource`. Both of those pass every test you have been given.
+    Passing the public examples is not proof that every rule above was consulted.
     """
     parts = token.split(".")
     if len(parts) != 3:

@@ -23,31 +23,31 @@ That is all. The step from there to "so this request may proceed" is not somethi
 said — it is something the reader added. And the moment it is added, the claims **inside** the
 token pass unexamined against the facts **outside** it. Such as who owns this document.
 
-The gateway you are auditing implemented signature verification correctly. It is still wrong.
+The gateway you are auditing passes its public tests and serves ordinary production traffic. Its
+authorization decisions can still be wrong.
 
-## Two defects, both invisible to a test of behaviour
+## The gateway contract
 
-**It reads `alg` out of the token.** The algorithm is in the header; the header is in the token;
-the token is the thing being authenticated. Reading it means the caller chooses how their own
-token gets checked. A token declaring `alg: "none"` carries a real SHA-256 of the signing input
-in its third segment — not empty, not visibly wrong, and accepted.
+`authorize.py` has to enforce all of these rules:
 
-"Just reject `none`" does not settle it. This is not a fact about one value; it is the direction
-of control. Add another algorithm later and the same hole opens again.
+- A token has exactly three non-empty base64url segments; its header and payload are JSON objects.
+- The gateway fixes verification to HMAC-SHA256. The token being verified does not choose a method.
+- `kid` selects the same-named entry in `keys`. During rotation, a token made with either held key is genuine.
+- Time is valid only for `nbf <= now < exp`, and time claims are integers.
+- `action` has to be present in `scope`.
+- The token's `tenant` has to exactly match the requested `resource["tenant"]`.
+- Unreadable input is denied rather than raised, using the reason order in `authorize.py`'s docstring.
 
-**It never looks at `resource`.** The `tenant` claim says which organisation the bearer belongs
-to. `resource["tenant"]` says which organisation the document belongs to. That these agree does
-not follow from either value. Unless a line compares them, no comparison happens — and the
-signature still verifies, the expiry still holds, the scope still matches, and the tests still
-pass.
+Audit how much of that contract the decision log and starter actually enforce. The list above is
+the specification, not the result of the audit.
 
 ## The public tests pass the starter
 
 That is not an accident, and it is not a gap to be fixed. It is the exercise.
 
-The public tests check the signature, the expiry, the scope, malformed input. They were written
-by someone who was not thinking about tenants, so they do not ask about tenants, so they pass.
-Green means one thing: **nothing is broken within what the test's author considered.**
+The public tests cover representative accepted and refused requests; they do not ask every
+combination of conditions in the contract. Green means one thing: **nothing is broken within
+what the test's author considered.**
 
 Reading code an AI wrote, and reading tests an AI wrote, comes down to the same single question —
 what is this test not asking?
