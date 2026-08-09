@@ -35,7 +35,13 @@ Issue 382 が候補として挙げた 4 つを、**強制する場所**で分類
 2. **participant surface** — 参加者へ配信される HTML / inline script の既知欠陥
    (Issue 395 の template literal エスケープ、Issue 396 の `color-scheme` 未宣言)。
    ソースを読むと正しく見える種類なので、目視レビューでは落ちない。
-3. **local playable** — `local/` を持つか。持たない = AWS 専用で、**欠陥ではない**ので `skip`。
+3. **local playable** — `local/` を持つか。持たない = AWS 専用で、それ自体は**欠陥ではない**ので
+   `skip`。ただし **AWS 専用であることを instructions に書いていなければ `fail`** (Issue 402)。
+   黙っていると local play のカタログに出て、カードが開いて、最後に「自チームに deploy されて
+   いません」で行き止まる。行き止まってから初めて分かるのが欠陥で、AWS 専用であることではない。
+   決まった一文 (日本語「実 AWS アカウントが必要です」/ 英語 "requires a real AWS account") を
+   要求している。prose を機械で縛るのは普通は筋が悪いが、ここは人のレビューに任せた結果が
+   Issue 402 なので、書いたかどうかを機械が見る。
 4. **local play url** — 問題文とアプリが local play の割り当てポートを焼き込んでいないか
    (Issue 399)。焼き込むと、別の問題を起動したまま起動した参加者が**別の問題へ飛ぶ**。
    1 問だけ起動している間は表面化しないので、作者は自分では踏まない。

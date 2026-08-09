@@ -164,14 +164,51 @@ export function localPlayUrlCheck(dir: string): CheckResult {
   };
 }
 
+/**
+ * AWS 専用の問題が、そのことを参加者へ言っているか (Issue 402)。
+ *
+ * 言わないと、カタログに出て、カードが開いて、最後に「自チームに deploy されていません」で
+ * 行き止まる。**行き止まってから初めて分かるのが問題**であって、AWS 専用であること自体は
+ * 設計である。だから片方 (実行できない) は `skip`、もう片方 (黙っている) は `fail`。
+ *
+ * 文言の一致を要求している。prose を機械で縛るのは普通は筋が悪いが、ここは「書いたかどうか」
+ * を人のレビューに任せた結果が Issue 402 なので、決まった一文を要求する。
+ */
+const AWS_ONLY_MARKER_JA = "実 AWS アカウントが必要です";
+const AWS_ONLY_MARKER_EN = "requires a real AWS account";
+
 export function localPlayableCheck(dir: string): CheckResult {
-  return existsSync(join(dir, "local"))
-    ? { name: "local playable", status: "pass" }
-    : {
-        name: "local playable",
-        status: "skip",
-        detail: "local/ が無い = AWS 専用。local play では起動しない (Issue 402)",
-      };
+  const name = "local playable";
+  if (existsSync(join(dir, "local"))) return { name, status: "pass" };
+
+  const metadataPath = join(dir, "metadata.json");
+  if (!existsSync(metadataPath)) return { name, status: "skip", detail: "metadata.json が無い" };
+  const meta = JSON.parse(readFileSync(metadataPath, "utf8")) as {
+    instructions?: string;
+    i18n?: Record<string, { instructions?: string } | undefined>;
+  };
+  const missing: string[] = [];
+  if (!String(meta.instructions ?? "").includes(AWS_ONLY_MARKER_JA)) missing.push("instructions");
+  for (const [lang, block] of Object.entries(meta.i18n ?? {})) {
+    const text = block?.instructions;
+    if (typeof text !== "string") continue;
+    const marker = lang === "en" ? AWS_ONLY_MARKER_EN : AWS_ONLY_MARKER_JA;
+    if (!text.includes(marker)) missing.push(`i18n.${lang}.instructions`);
+  }
+  if (missing.length > 0) {
+    return {
+      name,
+      status: "fail",
+      detail:
+        `local/ が無い = AWS 専用なのに、${missing.join(" / ")} がそう書いていません。` +
+        "local play のカタログに出て行き止まります (Issue 402)",
+    };
+  }
+  return {
+    name,
+    status: "skip",
+    detail: "local/ が無い = AWS 専用。そう明記されている (Issue 402)",
+  };
 }
 
 /**

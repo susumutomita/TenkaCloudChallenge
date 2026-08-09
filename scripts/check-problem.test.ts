@@ -86,9 +86,13 @@ describe("local playable", () => {
     expect(localPlayableCheck(dir).status).toBe("pass");
   });
 
-  it("should skip, not fail, a problem that is AWS only", () => {
+  it("should skip, not fail, a problem that is AWS only and says so", () => {
     // AWS 専用は設計であって欠陥ではない。ここを fail にすると赤が意味を失う。
-    expect(localPlayableCheck(fixture({ "metadata.json": "{}" })).status).toBe("skip");
+    // 黙っていることだけが欠陥で、それは下の Issue 402 の block が見る。
+    const dir = fixture({
+      "metadata.json": JSON.stringify({ instructions: "実 AWS アカウントが必要です。" }),
+    });
+    expect(localPlayableCheck(dir).status).toBe("skip");
   });
 });
 
@@ -135,5 +139,43 @@ describe("catalog discovery", () => {
     expect(ids).toContain("hello-world-battle");
     expect(new Set(ids).size).toBe(ids.length);
     expect([...ids].sort()).toEqual(ids);
+  });
+});
+
+describe("AWS-only problems (Issue 402)", () => {
+  it("should fail an AWS-only problem that does not say so", () => {
+    // local play のカタログに出て、カードが開いて、最後に「自チームに deploy されていません」
+    // で行き止まる。行き止まってから分かるのが問題であって、AWS 専用であること自体ではない。
+    const dir = fixture({
+      "metadata.json": JSON.stringify({ instructions: "## はじめに\nSSM を開く。" }),
+    });
+    const result = localPlayableCheck(dir);
+    expect(result.status).toBe("fail");
+    expect(result.detail).toContain("instructions");
+  });
+
+  it("should fail when only the Japanese side says so", () => {
+    const dir = fixture({
+      "metadata.json": JSON.stringify({
+        instructions: "この問題は実 AWS アカウントが必要です。",
+        i18n: { en: { instructions: "## Getting started" } },
+      }),
+    });
+    expect(localPlayableCheck(dir)).toMatchObject({ status: "fail" });
+  });
+
+  it("should skip an AWS-only problem that says so in both languages", () => {
+    const dir = fixture({
+      "metadata.json": JSON.stringify({
+        instructions: "この問題は実 AWS アカウントが必要です。",
+        i18n: { en: { instructions: "This problem requires a real AWS account." } },
+      }),
+    });
+    expect(localPlayableCheck(dir)).toMatchObject({ status: "skip" });
+  });
+
+  it("should not ask a locally playable problem for the notice", () => {
+    const dir = fixture({ "local/compose.yaml": "services: {}\n", "metadata.json": "{}" });
+    expect(localPlayableCheck(dir)).toMatchObject({ status: "pass" });
   });
 });
