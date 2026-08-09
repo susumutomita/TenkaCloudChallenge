@@ -153,6 +153,7 @@ LEGACY_CODE_CHECKPOINTS = {
     "ac26-bridge-properties": {"transfer"},
     "ac26-w1-constraint-lab": {"residuals", "boolean", "membership", "transfer"},
     "ac26-w1-underconstraint": {"build", "audit", "exploit", "repair", "mutation-transfer"},
+    "cs-cache-generation-fence": {"basic-invalidate", "fence", "per-key", "generalize"},
 }
 PASSKEY_TARGET = "ac26-w3-passkey-assertion"
 ALL_TARGETS = (*LEGACY_CODE_CHECKPOINTS, *SHARED_TARGETS, PASSKEY_TARGET)

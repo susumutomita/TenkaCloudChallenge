@@ -1781,6 +1781,36 @@
       }
     },
     {
+      "id": "cs-cache-generation-fence",
+      "name": "消した。それでも古い値が戻ってきた",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "cs-foundations",
+        "order": 40,
+        "chapter": "4. キャッシュ無効化"
+      },
+      "difficulty": 3,
+      "estimatedDuration": "45-75 分",
+      "shortDescription": "商品価格を更新し、cache の古い値も削除した。それなのに少し後の要求へ旧価格が返った。決定ログから古い応答を特定し、invalidate 前に始まった fill を戻さない世代 fence を書く。",
+      "tags": [
+        "cs-foundations",
+        "cache",
+        "invalidation",
+        "concurrency",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "cs-transaction-visibility-audit",
       "name": "どちらも committed。だが、その合計は一度も存在しない",
       "category": "Challenge",

@@ -40,6 +40,13 @@
       "type": "answer-on-screen",
       "reason": "The environment checkpoint is proof that the seeded Future-gate runtime started, not a reasoning question. Portal intentionally prints the health token for the learner to copy, and its seed binding prevents reuse across deployments. The audit and four code checkpoints carry the actual learning work and are measured separately.",
       "recordedAtSeeds": 500
+    },
+    {
+      "problem": "cs-cache-generation-fence",
+      "checkpoint": "environment",
+      "type": "answer-on-screen",
+      "reason": "The environment checkpoint only proves that this deployment's container and Portal evidence are reachable. The health token is intentionally copied from inspect and is bound to the current seed. The audit answer is measured separately and is not marked on screen.",
+      "recordedAtSeeds": 500
     }
   ],
   "open": []
