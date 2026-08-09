@@ -50,7 +50,7 @@ const SOURCE_EXTENSIONS = new Set([".mjs", ".js", ".ts", ".cjs"]);
 export interface SurfaceFinding {
   readonly file: string;
   readonly line: number;
-  readonly rule: "script-escape" | "color-scheme";
+  readonly rule: "script-escape" | "color-scheme" | "body-color-pair";
   readonly message: string;
 }
 
@@ -165,8 +165,61 @@ export function findColorSchemeIssues(source: string, file: string): SurfaceFind
   ];
 }
 
+/**
+ * `body` に文字色だけを書いて、背景を書いていないか (Issue 400 の実プレイで判明)。
+ *
+ * ## なぜ `color-scheme` の宣言だけでは足りなかったか
+ *
+ * Issue 396 への最初の対処は「`color-scheme` が宣言されているか」だけを見ていた。ところが
+ * 2026-08-09 に実ブラウザで一周したところ、**宣言済みの問題が 2 つ、ダークモードで読めない
+ * ままだった**。
+ *
+ *   hollow-invite       `body{...color:#1b2733}`  背景の指定なし  → 対比 1.38
+ *   wix-exposure-audit  `body{...color:#1b2a3a}`  背景の指定なし  → 対比 1.44
+ *
+ * `color-scheme: light dark` は「両方に対応している」という**宣言**であって実装ではない。
+ * 宣言するとブラウザはダークモードで canvas を暗く塗る。そこへ明示的な暗い文字色だけを置くと、
+ * 暗い背景に暗い文字になる。宣言が無かったとき (Issue 396 の元の形) と結果は同じで、
+ * **宣言を足したことで直ったように見えていた**。
+ *
+ * 検査するのはその組み合わせだけ。`body` に明示的な `color` があり、同じ規則に `background`
+ * が無い場合に落とす。両方書いてあるか、どちらも書いていない (= ブラウザ既定の組) なら問題ない。
+ */
+export function findBodyColorPairIssues(source: string, file: string): SurfaceFinding[] {
+  const docMatch = /<!doctype html>/i.exec(source);
+  if (!docMatch) return [];
+
+  const findings: SurfaceFinding[] = [];
+  // `body{...}` の CSS 規則と、`<body style="...">` の両方を見る。
+  const rules = [
+    ...source.matchAll(/\bbody\s*\{([^}]*)\}/gi),
+    ...source.matchAll(/<body\b[^>]*\bstyle\s*=\s*"([^"]*)"/gi),
+  ];
+  for (const rule of rules) {
+    const declarations = rule[1] ?? "";
+    const hasColor = /(?:^|;|\s)color\s*:/i.test(declarations);
+    const hasBackground = /(?:^|;|\s)background(?:-color)?\s*:/i.test(declarations);
+    if (!hasColor || hasBackground) continue;
+    findings.push({
+      file,
+      line: lineOf(source, rule.index ?? 0),
+      rule: "body-color-pair",
+      message:
+        "`body` に文字色だけを指定し、背景色を指定していません。`color-scheme` を宣言すると " +
+        "ダークモードのブラウザは canvas を暗く塗るので、明示した暗い文字色と重なって読めなく " +
+        "なります (Issue 400 の実プレイで hollow-invite / wix-exposure-audit がこれでした)。" +
+        "背景色も明示するか、`Canvas` / `CanvasText` のシステム色を組で使ってください。",
+    });
+  }
+  return findings;
+}
+
 export function checkSource(source: string, file: string): SurfaceFinding[] {
-  return [...findScriptEscapeIssues(source, file), ...findColorSchemeIssues(source, file)];
+  return [
+    ...findScriptEscapeIssues(source, file),
+    ...findColorSchemeIssues(source, file),
+    ...findBodyColorPairIssues(source, file),
+  ];
 }
 
 function walk(dir: string): string[] {
