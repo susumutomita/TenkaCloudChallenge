@@ -134,7 +134,10 @@
     "verifyUrl": "http://127.0.0.1:18081/verify",
     "secretEnv": [
       "FLAG_SEED"
-    ]
+    ],
+    "terminal": {
+      "service": "wordpress"
+    }
   },
   "scoring": {
     "kind": "multi-verify",
