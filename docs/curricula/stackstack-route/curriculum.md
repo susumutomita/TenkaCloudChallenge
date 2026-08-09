@@ -89,6 +89,22 @@ order 50 / 60 が空いているのは意図的。理由は「既知の断絶」
 
 `wp2shell-local-lab` 自身が「本番を触る前の予行演習」という位置づけなので、**予行演習だけあって本番が無い**状態になっている。`friday-night-patch` は AWS 専用であることを instructions に明記したので行き止まりではなくなったが、local play だけで一周したい人にとって 5 章が 1 問なのは変わらない。ここは新規問題が要る。
 
+### 5. ルートの途中で、ブラウザだけでは足りなくなる
+
+ルート上の 2 問は**ホスト側のターミナルが要る** (Issue 415)。
+
+- `wp-harden-leaks` (order 80) — `docker compose exec wordpress bash` でサーバに入って直す
+- `wp2shell-local-lab` (order 170) — 最初の一手が `docker compose logs`、以降は `curl`
+
+上の「`stackstack-*` 8 問はコンテナだけで完走できる」は 8 問についての記述であって、ルート
+全体についてではない。3 章に入った時点で、参加者は手元のターミナルを開くことになる。両問の
+instructions には要ることを明記した (`check:problem` の `host terminal disclosed` が、書いて
+いない状態を落とす)。
+
+ポータル内蔵ターミナル (`runtime.terminal`) を宣言すればブラウザだけで済む可能性はあるが、
+`SCHEMA.json` にそのキーは無く、宣言側は platform の契約になる。カタログ側で閉じられるのは
+「黙っていない」ところまでで、ブラウザ完結そのものは Issue 415 に残っている。
+
 ## 暗号トラックの位置づけ
 
 `advanced-cryptography-2026` (31 問) は完成度の高い独立した講座であり、消す対象ではない。ただし StackStack を目指す人の既定ルートではないため、既定推薦から外してある。
