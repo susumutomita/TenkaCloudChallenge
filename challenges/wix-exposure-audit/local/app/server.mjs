@@ -137,10 +137,10 @@ async function readJson(request) {
 
 function sitePage(state) {
   return `<!doctype html>
-<html lang="ja"><head><meta name="color-scheme" content="light dark"><meta charset="utf-8"><title>Aoi Design Studio</title>
+<html lang="ja"><head><meta name="color-scheme" content="light"><meta charset="utf-8"><title>Aoi Design Studio</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  body{font-family:system-ui;margin:0;color:#1b2a3a;line-height:1.7}
+  body{font-family:system-ui;margin:0;background:#fff;color:#1b2a3a;line-height:1.7}
   header{background:#0d3b66;color:#fff;padding:3rem 1.5rem;text-align:center}
   main{max-width:44rem;margin:0 auto;padding:2rem 1.5rem}
   h1{margin:.2rem 0;font-size:2rem}

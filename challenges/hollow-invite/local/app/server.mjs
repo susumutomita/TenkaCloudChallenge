@@ -155,8 +155,8 @@ function readBody(request) {
 }
 
 const INDEX_PAGE = `<!doctype html>
-<html lang="en"><head><meta name="color-scheme" content="light dark"><meta charset="utf-8"><title>Hollow Invite — evidence tenant</title>
-<style>body{font-family:system-ui;max-width:46rem;margin:3rem auto;line-height:1.6;color:#1b2733}
+<html lang="en"><head><meta name="color-scheme" content="light"><meta charset="utf-8"><title>Hollow Invite — evidence tenant</title>
+<style>body{font-family:system-ui;max-width:46rem;margin:3rem auto;line-height:1.6;background:#fff;color:#1b2733}
 code{background:#eef1f5;padding:.1rem .35rem;border-radius:4px}h2{margin-top:1.6rem}</style></head>
 <body>
 <h1>Hollow Invite — isolated evidence tenant</h1>
