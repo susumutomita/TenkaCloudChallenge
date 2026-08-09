@@ -1,0 +1,414 @@
+{
+  "id": "cs-auth-claim-audit",
+  "name": "署名は通った。それは、その要求を通してよいという意味ではない",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "cs-foundations",
+    "order": 10,
+    "chapter": "1. 信用の境界"
+  },
+  "difficulty": 3,
+  "estimatedDuration": "45-75 分",
+  "shortDescription": "この gateway は期限切れの token を拒否し、改竄された token を拒否し、scope の無い操作を拒否する。そして数か月のあいだ、あるテナントに別のテナントの文書を読ませていた。決定ログを監査して、通り抜けた要求を特定し、止められる gateway を書く。",
+  "description": "cs-foundations track の 1 問目。題材は認証だが、主題は認証ではない。**検証を通ったという事実が、何を保証していて何を保証していないか**を、動くコードの上で分けられるようにする。\n\n参加者に渡すのは、本番で数か月動いていた API gateway の決定ログと、その gateway の署名鍵、そして壊れた `authorize.py` である。gateway は期限切れを拒否し、payload を書き換えた token を拒否し、scope に無い操作を拒否する。ログを眺めるかぎり、正しく動いている gateway に見える。\n\n欠陥は 2 つで、どちらも「動作テスト」では見えない。\n\n1. **`header[\"alg\"]` を信じている**。alg は token の中にあり、token は今まさに認証しようとしている対象そのものなので、これを読むと「どう検証されるか」を呼び出し側が選べる。`alg: \"none\"` を宣言したtoken の第 3 セグメントには、鍵を使わない SHA-256 が入っている。空でもなく、見た目に壊れてもいない。\n\n2. **`resource` を一度も見ていない**。署名検証までが答えているのは「この gateway が発行したか」で、「この主体が**この文書に**その操作をしてよいか」ではない。正しく署名され、期限内で、scope も合っているtoken が、別テナントの文書に向いている行がログに入っている。token については何も間違っていない。間違っているのは要求のほうである。\n\n**公開テストは starter を通す。** これは事故ではなく問題の中心で、公開テスト自身がそう書いてある。「テストが通ったから正しい」を一度壊しておかないと、audit checkpoint は成立しない。\n\n**時刻の境界**: `nbf` は使えるようになる最初の瞬間、`exp` は使えなくなる瞬間である。この 2 つは同じ比較演算子を使わない。真ん中をサンプルするテストではどちらの off-by-one も見えないので、hidden 側は両端の前後 2 刻みを走査する。\n\n**audit の答えは deploy ごとに変わる**。ログの行の種類と数と並びを seed から引くので、別の起動で作った番号は当たらない。",
+  "instructions": "## Participant Portal で解く\n\nParticipant Portal で問題を起動すると、問題文と同じ画面に問題エディタが表示されます。\n「証拠を調べる」で、この deploy 固有の token・claims・gateway の署名鍵・決定ログを確認し、\nstarter を編集して「公開テストを実行」を押します。コード以外の checkpoint は、証拠と\n実験結果から回答欄を埋めてください。object / array / number は JSON で入力します。\n\n各 checkpoint の提出ボタンは、現在のエディタ内容と回答欄を container の prepare API へ送り、\n生成された値をそのまま採点へ渡します。画面を移動したり提出値をコピーしたりする必要はありません。\n直接回答はこの deploy の seed に結び付くため、別の起動で作った値では合格できません。\n",
+  "writeup": "## 「検証した」は動詞であって、結論ではない\n\nこの問題の gateway は、署名検証という工程を正しく実装していた。壊れていたのは、その工程が答えた質問と、gateway が答えたつもりでいた質問が違っていたことである。\n\n署名検証が答えるのは 1 つだけ — **この bytes 列は、この鍵を持つ者が作ったか**。そこから先の「だからこの要求を通してよい」は、検証が言ったことではなく、読んだ人が足したものだ。足した瞬間に、token の中に書いてある主張 (claims) が、外の世界の事実 (この文書は誰のものか) と照合されないまま通る。\n\n## alg を token から読むということ\n\n`header[\"alg\"]` は token の中にある。token は認証の対象である。対象の中の値を見て検証方法を決めると、**攻撃者が自分の token の検証方法を選べる**。「none を弾けばよい」で済まないのは、これが個別の値の問題ではなく制御の向きの問題だからで、後で別の値が増えれば同じ穴がもう一度開く。\n\nアルゴリズムは設定である。gateway が知っていて、token は知らせてこない。この問題の reference は `ALGORITHM` を module 定数に置き、header の alg を一度も読まない。\n\n## テナントは token の中にしか無い\n\n`tenant` claim は「この token の持ち主が属する組織」を言う。`resource[\"tenant\"]` は「この文書が属する組織」を言う。この 2 つが一致することは、どちらの値からも自動的には出てこない。**比較する行を書かないかぎり、比較は起きない**。\n\nそして比較を書き忘れても、署名は通り、期限も scope も通り、テストも通る。本番でも動く — 攻撃者が来るまでは。\n\n## 半開区間\n\n`nbf <= now < exp`。`nbf` は含み、`exp` は含まない。片方だけ揃えた実装は、真ん中を見るテストでは絶対に落ちない。境界のテストは境界に置かないと意味が無い。\n\n## 公開テストが starter を通した理由\n\n公開テストは、書いた人が「こう動くべきだ」と思ったことしか書けない。この問題の公開テストを書いた人は、テナントのことを考えていなかった。だから通った。\n\nテストが緑であることは、**テストを書いた人が考えた範囲では壊れていない**という意味しかない。AI に書かせたコードを読むときも、AI に書かせたテストを読むときも、確認するのは同じ一点になる — このテストは、何を訊いていないか。\n\n## 次につながるところ\n\n「検証は通った / だから通してよい」の飛躍は、この track で繰り返し出てくる。トランザクションが commitされたことは、読んだ人が見た状態が正しいことを意味しない。cache が hit したことは、その値が今も正しいことを意味しない。どれも同じ形の間違いで、どれも動作テストでは緑になる。",
+  "tags": [
+    "cs-foundations",
+    "authorization",
+    "audit",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18300,
+      "name": "Portal editor API + /verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "token の 3 セグメント構造を復号し、壊れた入力で処理を落とさずに拒否できる",
+    "署名検証が答えている質問と、答えていない質問を分けて説明できる",
+    "検証方法を token 自身に選ばせてはいけない理由を、alg 以外の値にも一般化して述べられる",
+    "claims の tenant と resource の tenant を照合しないかぎり照合は起きないことを、実装で示せる",
+    "nbf と exp が同じ比較演算子を使わないことを、両端の前後で確かめられる",
+    "他人が下した許可判断のログを監査し、通してはいけなかった行を根拠付きで特定できる",
+    "公開テストが緑であることが何を保証していないかを説明できる"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.cs-auth-claim-audit.parse-untrusted-token",
+        "description": "外部由来の token を検証しながら復号し、壊れた入力で処理全体を落とさない。"
+      },
+      {
+        "id": "lo.cs-auth-claim-audit.authentication-is-not-authorization",
+        "description": "署名検証が保証することと保証しないことを分けて説明できる。"
+      },
+      {
+        "id": "lo.cs-auth-claim-audit.algorithm-is-configuration",
+        "description": "検証方法を認証対象から読まない理由を一般化して述べられる。"
+      },
+      {
+        "id": "lo.cs-auth-claim-audit.compare-the-claim-with-the-world",
+        "description": "claims の主張を外の事実と照合する行を、自分で書く必要があると理解する。"
+      },
+      {
+        "id": "lo.cs-auth-claim-audit.half-open-window",
+        "description": "有効期間が半開区間であることを、両端の前後で確かめられる。"
+      },
+      {
+        "id": "lo.cs-auth-claim-audit.audit-someone-elses-decisions",
+        "description": "他人が下した許可判断のログから、誤って許可された行を特定できる。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.authentication-vs-authorization",
+        "description": "「誰であるか」の確認と「何をしてよいか」の決定は別の質問であり、前者が答えても後者は答えられない。"
+      },
+      {
+        "id": "concept.algorithm-confusion",
+        "description": "検証アルゴリズムを認証対象の中の値から選ぶと、攻撃者が自分の検証方法を選べる。"
+      },
+      {
+        "id": "concept.tenant-isolation",
+        "description": "資源の所有者と主体の所属を照合すること。照合する処理を書かないかぎり分離は成立しない。"
+      },
+      {
+        "id": "concept.half-open-interval",
+        "description": "片端を含み片端を含まない区間。有効期間の両端が同じ比較にならない理由。"
+      },
+      {
+        "id": "concept.tests-encode-the-author-assumptions",
+        "description": "テストは書いた人が想定した失敗しか検出しない。緑は想定範囲内での無事故を意味する。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.cs-auth-claim-audit.parse",
+        "description": "壊れた token を例外ではなく拒否として扱えた。"
+      },
+      {
+        "id": "assessment.cs-auth-claim-audit.signature",
+        "description": "署名を全体で比較し、宣言されたアルゴリズムを信用しなかった。"
+      },
+      {
+        "id": "assessment.cs-auth-claim-audit.window",
+        "description": "有効期間の両端を、含む側と含まない側で正しく扱えた。"
+      },
+      {
+        "id": "assessment.cs-auth-claim-audit.scope",
+        "description": "操作ごとに scope を参照し、1 つ通ったから全部通す実装にしなかった。"
+      },
+      {
+        "id": "assessment.cs-auth-claim-audit.tenant",
+        "description": "resource の所有者を判断に使い、正当な token でも越境を止められた。"
+      },
+      {
+        "id": "assessment.cs-auth-claim-audit.reason",
+        "description": "拒否の理由を、事後の調査が読んで正しい結論に至る粒度で返せた。"
+      },
+      {
+        "id": "assessment.cs-auth-claim-audit.audit",
+        "description": "決定ログから、誤って許可された行だけを過不足なく挙げられた。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.valid-signature-means-allowed",
+        "description": "署名が通れば要求を通してよいという誤解。通ったのは発行元の確認だけである。"
+      },
+      {
+        "id": "misconception.rejecting-alg-none-is-enough",
+        "description": "alg: none を弾けば十分という誤解。問題は値ではなく、検証方法を対象に選ばせている制御の向き。"
+      },
+      {
+        "id": "misconception.expiry-and-not-before-are-symmetric",
+        "description": "有効期間の両端が同じ比較でよいという誤解。半開区間なので片方だけ等号が付く。"
+      },
+      {
+        "id": "misconception.the-framework-checks-the-tenant",
+        "description": "テナント分離は基盤がやってくれるという誤解。照合する行を書かないかぎり照合は起きない。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.cs-auth-claim-audit",
+      "target": "lo.cs-auth-claim-audit.parse-untrusted-token"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.cs-auth-claim-audit",
+      "target": "lo.cs-auth-claim-audit.authentication-is-not-authorization"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.cs-auth-claim-audit",
+      "target": "lo.cs-auth-claim-audit.algorithm-is-configuration"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.cs-auth-claim-audit",
+      "target": "lo.cs-auth-claim-audit.compare-the-claim-with-the-world"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.cs-auth-claim-audit",
+      "target": "lo.cs-auth-claim-audit.half-open-window"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.cs-auth-claim-audit",
+      "target": "lo.cs-auth-claim-audit.audit-someone-elses-decisions"
+    },
+    {
+      "type": "covers",
+      "source": "problem.cs-auth-claim-audit",
+      "target": "concept.authentication-vs-authorization"
+    },
+    {
+      "type": "covers",
+      "source": "problem.cs-auth-claim-audit",
+      "target": "concept.algorithm-confusion"
+    },
+    {
+      "type": "covers",
+      "source": "problem.cs-auth-claim-audit",
+      "target": "concept.tenant-isolation"
+    },
+    {
+      "type": "covers",
+      "source": "problem.cs-auth-claim-audit",
+      "target": "concept.half-open-interval"
+    },
+    {
+      "type": "covers",
+      "source": "problem.cs-auth-claim-audit",
+      "target": "concept.tests-encode-the-author-assumptions"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-auth-claim-audit",
+      "target": "assessment.cs-auth-claim-audit.parse"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-auth-claim-audit",
+      "target": "assessment.cs-auth-claim-audit.signature"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-auth-claim-audit",
+      "target": "assessment.cs-auth-claim-audit.window"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-auth-claim-audit",
+      "target": "assessment.cs-auth-claim-audit.scope"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-auth-claim-audit",
+      "target": "assessment.cs-auth-claim-audit.tenant"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-auth-claim-audit",
+      "target": "assessment.cs-auth-claim-audit.reason"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-auth-claim-audit",
+      "target": "assessment.cs-auth-claim-audit.audit"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.cs-auth-claim-audit",
+      "target": "misconception.valid-signature-means-allowed"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.cs-auth-claim-audit",
+      "target": "misconception.rejecting-alg-none-is-enough"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.cs-auth-claim-audit",
+      "target": "misconception.public-tests-are-complete"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.cs-auth-claim-audit",
+      "target": "misconception.expiry-and-not-before-are-symmetric"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.cs-auth-claim-audit",
+      "target": "misconception.the-framework-checks-the-tenant"
+    },
+    {
+      "type": "requires",
+      "source": "lo.cs-auth-claim-audit.compare-the-claim-with-the-world",
+      "target": "concept.authentication-vs-authorization"
+    },
+    {
+      "type": "requires",
+      "source": "lo.cs-auth-claim-audit.algorithm-is-configuration",
+      "target": "concept.algorithm-confusion"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18300/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "environment",
+        "label": "environment — Portal editor が出す合言葉を、そのまま貼る",
+        "points": 15,
+        "wrongAnswerPenalty": 5
+      },
+      {
+        "id": "window",
+        "label": "window — この token が通る最初と最後の now を [最初, 最後] で",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "window-hint-1",
+            "content": "`nbf` は「使えるようになる」瞬間、`exp` は「使えなくなる」瞬間です。この 2 つの日本語は、同じ比較演算子になりますか。",
+            "penalty": 12
+          }
+        ]
+      },
+      {
+        "id": "audit",
+        "label": "audit — gateway が allow したうち、通してはいけなかった行の番号を昇順で",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "audit-hint-1",
+            "content": "allow された行のうち、署名も期限も scope も問題が無いものがあります。それでも通してはいけない理由は、token の中には書かれていません。行のどこを見ていませんか。",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "verify",
+        "label": "verify — この gateway が発行した token かどうかを判定できる authorize.py",
+        "points": 35,
+        "wrongAnswerPenalty": 12,
+        "input": "multiline",
+        "hints": [
+          {
+            "id": "verify-hint-1",
+            "content": "header は token の中にあります。token は今まさに本物か確かめようとしている対象です。その中の値を見て検証方法を決めると、決めているのは誰になりますか。",
+            "penalty": 17
+          }
+        ]
+      },
+      {
+        "id": "isolate",
+        "label": "isolate — token は本物として、この要求を通してよいかを判定できる authorize.py",
+        "points": 35,
+        "wrongAnswerPenalty": 12,
+        "input": "multiline",
+        "hints": [
+          {
+            "id": "isolate-hint-1",
+            "content": "署名検証まででは `resource` を一度も読んでいません。読まないまま答えられる質問と、答えられない質問を分けてください。",
+            "penalty": 17
+          }
+        ]
+      },
+      {
+        "id": "generalize",
+        "label": "generalize — 書き上げた authorize.py の中身を、全部",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "input": "multiline"
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "The signature checked out. That is not the same as the request being allowed",
+      "shortDescription": "A gateway refuses expired tokens, refuses forged ones, refuses actions outside a token's scope -- and has been letting one tenant read another tenant's documents for months. Audit its decision log, find the requests that got through, and write the gateway that would have stopped them.",
+      "description": "First problem of the cs-foundations track. The material is authentication; the subject is not. The subject is being able to say, on running code, exactly what a passing check guarantees and what it does not.\n\nYou are handed the decision log of an API gateway that ran in production for months, that gateway's signing keys, and a broken `authorize.py`. The gateway refuses expired tokens, refuses tokens whose payload was edited, and refuses actions a token does not carry. From the log, it looks like a gateway that works.\n\nThere are two defects and neither is visible to a test of behaviour.\n\n1. **It trusts `header[\"alg\"]`.** The algorithm is inside the token, and the token is the thing being authenticated, so reading it lets the caller choose how their own token gets checked. A token declaring `alg: \"none\"` carries a real SHA-256 of the signing input in its third segment -- not empty, not visibly wrong.\n\n2. **It never looks at `resource`.** Everything up to the signature check answers \"did this gateway issue this?\". Nothing there answers \"may this subject do this to *this* document?\". The log contains rows where a correctly signed, unexpired, in-scope token is pointed at another tenant's file. Nothing about the token is wrong. The request is.\n\n**The public tests pass the starter.** That is not an accident and the tests say so themselves. Unless \"the tests are green\" is broken once, up front, the audit checkpoint has nothing to stand on.\n\n**Time boundaries**: `nbf` is the first instant a token is usable and `exp` is when it stops being usable. Those two sentences do not use the same comparison. A test that samples the middle cannot see either off-by-one, so the hidden suite walks two steps either side of both ends.\n\n**The audit answer differs per deployment.** The kinds, counts and order of the log's rows are drawn from the seed, so indices prepared on another run do not carry.",
+      "instructions": "## Solve in Participant Portal\n\nStart the problem in Participant Portal. The problem editor appears on the same page as the statement. Use **Inspect evidence** to read this deployment's token, its claims, the gateway's signing keys and the decision log; edit the starter and select **Run public tests**. Fill any direct-answer checkpoint from the evidence and your experiments; enter objects, arrays and numbers as JSON.\n\nEach checkpoint's submit button sends the current editor files and answer fields through the container prepare API, then submits the generated value directly for scoring. There is no second screen and no submission value to copy. Direct answers are bound to this deployment's seed, so a value prepared for another run cannot earn credit.\n",
+      "writeup": "## \"Verified\" is a verb, not a conclusion\n\nThis gateway implemented signature verification correctly. What was broken is that the question the step answered and the question the gateway believed it had answered were different questions.\n\nA signature check answers one thing: **was this byte string produced by someone holding this key?** The step from there to \"so this request may proceed\" is not something the check said. It is something the reader added. And the moment it is added, the claims inside the token pass unchecked against the facts outside it -- such as who owns this document.\n\n## What it means to read `alg` from the token\n\n`header[\"alg\"]` is inside the token. The token is the thing being authenticated. Choosing the verification method from a value inside the object under verification means **an attacker picks how their own token gets checked**. \"Just reject none\" does not settle it, because this is not a fact about one value, it is the direction of control: add another algorithm later and the same hole opens again.\n\nThe algorithm is configuration. The gateway knows it; the token does not get to say. The reference puts `ALGORITHM` in a module constant and never reads the header's `alg` at all.\n\n## The tenant exists only inside the token\n\nThe `tenant` claim says which organisation the bearer belongs to. `resource[\"tenant\"]` says which organisation the document belongs to. That these two agree does not follow from either value. **Unless a line compares them, no comparison happens.**\n\nForget that line and the signature still verifies, the expiry still holds, the scope still matches and the tests still pass. It works in production too -- until somebody tries.\n\n## Half-open\n\n`nbf <= now < exp`. The lower end is included, the upper end is not. An implementation that gets only one of them right can never fail a test that looks at the middle. A boundary test has to be at the boundary.\n\n## Why the public tests passed the starter\n\nA test can only encode what its author thought should happen. Whoever wrote this problem's public tests was not thinking about tenants, so the starter passed.\n\nGreen means one thing: **nothing is broken within what the test's author considered.** Reading code an AI wrote, and reading tests an AI wrote, comes down to the same single question -- what is this test not asking?\n\n## Where this leads\n\n\"The check passed, therefore it is allowed\" recurs through this track. A committed transaction does not mean the state a reader saw was correct. A cache hit does not mean the value is still true. Same shape of mistake every time, and green tests every time.",
+      "learningGoals": [
+        "Decode a token's three segments and refuse malformed input without crashing",
+        "Separate what a signature check guarantees from what it does not",
+        "Explain, generalised beyond `alg`, why the object under verification must not choose the verification method",
+        "Show in code that no tenant comparison happens unless a line performs it",
+        "Confirm that `nbf` and `exp` do not use the same comparison, at both boundaries",
+        "Audit somebody else's authorisation decisions and name the wrongly allowed ones with evidence",
+        "Explain what a green public test suite does not guarantee"
+      ],
+      "checks": [
+        {
+          "id": "environment",
+          "label": "environment - the pass phrase the Portal editor prints, pasted exactly"
+        },
+        {
+          "id": "window",
+          "label": "window - the first and last `now` this token is accepted at, as [first, last]",
+          "hints": [
+            {
+              "id": "window-hint-1",
+              "content": "`nbf` is the instant a token *becomes* usable; `exp` is the instant it *stops* being usable. Do those two English sentences turn into the same comparison?"
+            }
+          ]
+        },
+        {
+          "id": "audit",
+          "label": "audit - the indices the gateway allowed that it should have refused, ascending",
+          "hints": [
+            {
+              "id": "audit-hint-1",
+              "content": "Among the allowed rows are some whose signature, expiry and scope are all fine. The reason they should still have been refused is not written anywhere in the token. What part of the row are you not reading?"
+            }
+          ]
+        },
+        {
+          "id": "verify",
+          "label": "verify - an authorize.py that can tell whether this gateway issued the token",
+          "hints": [
+            {
+              "id": "verify-hint-1",
+              "content": "The header is inside the token, and the token is the thing you are checking. If a value in there decides how the check runs, who is doing the deciding?"
+            }
+          ]
+        },
+        {
+          "id": "isolate",
+          "label": "isolate - an authorize.py that decides, given a genuine token, whether the request may proceed",
+          "hints": [
+            {
+              "id": "isolate-hint-1",
+              "content": "Nothing up to the signature check reads `resource`. Sort the questions into the ones you can answer without reading it and the ones you cannot."
+            }
+          ]
+        },
+        {
+          "id": "generalize",
+          "label": "generalize - your finished authorize.py, all of it"
+        }
+      ]
+    }
+  }
+}
