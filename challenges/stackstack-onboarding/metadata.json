@@ -332,5 +332,10 @@
         ]
       }
     ]
+  },
+  "track": {
+    "id": "stackstack-route",
+    "order": 10,
+    "chapter": "1. はじめの一歩"
   }
 }

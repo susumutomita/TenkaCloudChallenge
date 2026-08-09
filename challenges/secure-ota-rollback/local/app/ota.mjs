@@ -41,9 +41,21 @@ const CHECKPOINTS = new Set([
   'correlated-audit',
 ]);
 
-const WORKSHOP_HTML = `<!doctype html>
+/**
+ * この板が自分自身を指すときの絶対 URL。
+ *
+ * ポートを焼き込むと、別の問題を起動したまま起動したときに 18100 が他問題のものになり、
+ * 例示した curl が**別の問題へ飛ぶ** (Issue 399)。`Host` は参加者が実際に打ったホストと
+ * ポートなので、再割り当てがどこであっても正しい先を指す。
+ */
+function siteBase(request) {
+  const host = request.headers.host;
+  return host ? `http://${host}` : 'http://127.0.0.1:8080';
+}
+
+const workshopHtml = (base) => `<!doctype html>
 <html lang="en">
-<head>
+<head><meta name="color-scheme" content="light dark">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Northstar OTA Recovery Console</title>
@@ -60,8 +72,8 @@ const WORKSHOP_HTML = `<!doctype html>
   <p>A rushed OTA handoff left several safety controls in permissive modes. Observe a scenario, inspect
   the state and audit trail, change the controls, then run the scenario again.</p>
   <h2>First observations</h2>
-  <pre>curl -s http://127.0.0.1:18100/api/state
-curl -s -X POST http://127.0.0.1:18100/run -H 'content-type: application/json' \
+  <pre>curl -s ${base}/api/state
+curl -s -X POST ${base}/run -H 'content-type: application/json' \
   -d '{"scenario":"signed-ordered"}'</pre>
   <h2>Endpoints</h2>
   <ul>
@@ -507,7 +519,7 @@ export function startOtaService(
       return sendJson(response, 200, { status: 'ok' });
     }
     if (request.method === 'GET' && url.pathname === '/') {
-      return sendHtml(response, 200, WORKSHOP_HTML);
+      return sendHtml(response, 200, workshopHtml(siteBase(request)));
     }
     if (request.method === 'GET' && url.pathname === '/api/state') {
       try {

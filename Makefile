@@ -11,13 +11,14 @@ SOLVABILITY_SEEDS ?= 2000
 SOLVABILITY_CODE_SEEDS ?= 150
 SOLVABILITY_REPORT ?= reports/solvability.json
 
-.PHONY: help install install_ci validate validate-offline agent-gate symphony-agent-gate simulator-compatibility symphony-validate symphony-print symphony-run solvability solvability-sweep
+.PHONY: help install install_ci validate validate-offline check-problem agent-gate symphony-agent-gate simulator-compatibility symphony-validate symphony-print symphony-run solvability solvability-sweep
 
 help:
 	@echo "TenkaCloudChallenge quality commands"
 	@echo "  make install      Install dependencies without lifecycle scripts"
 	@echo "  make install_ci   Install the frozen dependency graph"
 	@echo "  make validate     Run the complete repository-local catalog contract"
+	@echo "  make check-problem PROBLEM=<id>   Run the shipping gate for one problem (omit PROBLEM for all)"
 	@echo "  make solvability  Run the course solvability gate (are the questions answerable?)"
 	@echo "  make solvability-sweep  The deep seed sweep behind that gate (minutes, writes a report)"
 	@echo "  make agent-gate   Run the deterministic completion contract for agents"
@@ -39,6 +40,11 @@ validate-offline:
 
 validate: validate-offline
 	bun run course:drift
+
+#: 問題 1 つに対して走る出荷ゲート (Issue 382)。第三者の PR や独自問題で、リポジトリ全体を
+#: 意識せずに自分の問題の状態を知るための入口。基準は docs/authoring/shipping-gate.md。
+check-problem:
+	bun run check:problem $(if $(PROBLEM),$(PROBLEM),--all)
 
 # Are the course questions answerable at all? `bun run validate` carries only the static
 # pass — no fixtures, no seeds, no subprocesses, a couple of seconds — because the full

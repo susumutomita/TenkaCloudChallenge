@@ -22,8 +22,14 @@
     "multi-verify"
   ],
   "exposedPorts": [
-    { "port": 18080, "name": "Web (WordPress site)" },
-    { "port": 18081, "name": "/verify (loopback scorer)" }
+    {
+      "port": 18080,
+      "name": "Web (WordPress site)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback scorer)"
+    }
   ],
   "learningGoals": [
     "予期しない管理者アカウントがインシデントの最重要シグナルであることを、 実際の環境で体感できるようになる",
@@ -57,7 +63,7 @@
             },
             {
               "id": "rogue-admin-3",
-              "content": "Open `http://127.0.0.1:18080/wp-json/wp/v2/users` — an administrator `media-sync` nobody added is mixed in, and the passphrase is written in its `description` (bio). Fix: delete any suspicious administrator immediately and audit every admin account."
+              "content": "Open `/wp-json/wp/v2/users` under the access URL — an administrator `media-sync` nobody added is mixed in, and the passphrase is written in its `description` (bio). Fix: delete any suspicious administrator immediately and audit every admin account."
             }
           ]
         },
@@ -75,7 +81,7 @@
             },
             {
               "id": "login-trail-3",
-              "content": "Open `http://127.0.0.1:18080/server-logs/access.log`: logins from `203.0.113.66` fail repeatedly, then succeed exactly once (a `302` to `/wp-admin/`). The passphrase is on the monitoring annotation line (`[tripwire]`) right after it. Fix: stop using weak / reused passwords, monitor and rate-limit login attempts, and rotate the credential."
+              "content": "Open `/server-logs/access.log` under the access URL: logins from `203.0.113.66` fail repeatedly, then succeed exactly once (a `302` to `/wp-admin/`). The passphrase is on the monitoring annotation line (`[tripwire]`) right after it. Fix: stop using weak / reused passwords, monitor and rate-limit login attempts, and rotate the credential."
             }
           ]
         },
@@ -93,7 +99,7 @@
             },
             {
               "id": "orphan-plugin-3",
-              "content": "Open `http://127.0.0.1:18080/wp-content/plugins/legacy-contact-form/readme.txt` — it's an old plugin (`Tested up to: 4.9`), and the passphrase is on the ops NOTE line. Fix: remove unused / abandoned plugins and keep the ones you keep up to date."
+              "content": "Open `/wp-content/plugins/legacy-contact-form/readme.txt` under the access URL — it's an old plugin (`Tested up to: 4.9`), and the passphrase is on the ops NOTE line. Fix: remove unused / abandoned plugins and keep the ones you keep up to date."
             }
           ]
         },
@@ -126,7 +132,9 @@
       "Web": "http://127.0.0.1:18080"
     },
     "verifyUrl": "http://127.0.0.1:18081/verify",
-    "secretEnv": ["FLAG_SEED"]
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
   },
   "scoring": {
     "kind": "multi-verify",
@@ -150,7 +158,7 @@
           },
           {
             "id": "rogue-admin-3",
-            "content": "`http://127.0.0.1:18080/wp-json/wp/v2/users` を開くと、 誰も追加していない管理者 `media-sync` が混じっている。 その `description` (bio) に監査用の合言葉が書かれている。 対策: 不審な管理者アカウントは即削除し、 全管理者を棚卸しする。",
+            "content": "アクセス先 URL の `/wp-json/wp/v2/users` を開くと、 誰も追加していない管理者 `media-sync` が混じっている。 その `description` (bio) に監査用の合言葉が書かれている。 対策: 不審な管理者アカウントは即削除し、 全管理者を棚卸しする。",
             "penalty": 12
           }
         ]
@@ -173,7 +181,7 @@
           },
           {
             "id": "login-trail-3",
-            "content": "`http://127.0.0.1:18080/server-logs/access.log` を開くと、 `203.0.113.66` からのログイン失敗が連続し、 最後に 1 回だけ成功 (`302` で `/wp-admin/` へ) している。 その直後の監視用の注記 (`[tripwire]`) の行に合言葉がある。 対策: 弱い / 使い回しのパスワードをやめ、 ログイン試行を監視・制限し、 資格情報をローテーションする。",
+            "content": "アクセス先 URL の `/server-logs/access.log` を開くと、 `203.0.113.66` からのログイン失敗が連続し、 最後に 1 回だけ成功 (`302` で `/wp-admin/` へ) している。 その直後の監視用の注記 (`[tripwire]`) の行に合言葉がある。 対策: 弱い / 使い回しのパスワードをやめ、 ログイン試行を監視・制限し、 資格情報をローテーションする。",
             "penalty": 12
           }
         ]
@@ -196,7 +204,7 @@
           },
           {
             "id": "orphan-plugin-3",
-            "content": "`http://127.0.0.1:18080/wp-content/plugins/legacy-contact-form/readme.txt` を開くと、 `Tested up to: 4.9` という古いプラグインで、 運用メモ (NOTE) の行に合言葉がある。 対策: 使っていない / 放置されたプラグインは削除し、 残すものは最新に保つ。",
+            "content": "アクセス先 URL の `/wp-content/plugins/legacy-contact-form/readme.txt` を開くと、 `Tested up to: 4.9` という古いプラグインで、 運用メモ (NOTE) の行に合言葉がある。 対策: 使っていない / 放置されたプラグインは削除し、 残すものは最新に保つ。",
             "penalty": 12
           }
         ]
@@ -225,5 +233,10 @@
         ]
       }
     ]
+  },
+  "track": {
+    "id": "stackstack-route",
+    "order": 90,
+    "chapter": "3. 運用で直す"
   }
 }
