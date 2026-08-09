@@ -8,7 +8,7 @@ services:
     environment:
       FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
     ports:
-      - "${ASYNC_BINDING_PORTAL_BIND:-127.0.0.1}:${ASYNC_BINDING_PORTAL_PORT:-18330}:8080"
+      - "127.0.0.1:18330:8080"
     read_only: true
     tmpfs:
       - "/tmp:rw,noexec,nosuid,size=32m,uid=10001,gid=10001"
@@ -37,7 +37,7 @@ services:
     environment:
       FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
     ports:
-      - "${ASYNC_BINDING_VERIFY_BIND:-127.0.0.1}:${ASYNC_BINDING_VERIFY_PORT:-18331}:8081"
+      - "127.0.0.1:18331:8081"
     read_only: true
     tmpfs:
       - "/tmp:rw,noexec,nosuid,size=32m,uid=10001,gid=10001"

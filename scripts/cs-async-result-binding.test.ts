@@ -237,8 +237,8 @@ describe("cs-async-result-binding delivery boundary", () => {
     expect(source.match(/read_only: true/g)).toHaveLength(2);
     expect(source.match(/cap_drop:/g)).toHaveLength(2);
     expect(source.match(/healthcheck:/g)).toHaveLength(2);
-    expect(source).toContain("${ASYNC_BINDING_PORTAL_PORT:-18330}:8080");
-    expect(source).toContain("${ASYNC_BINDING_VERIFY_PORT:-18331}:8081");
+    expect(source).toContain('"127.0.0.1:18330:8080"');
+    expect(source).toContain('"127.0.0.1:18331:8081"');
     expect(source.match(/internal: true/g)).toHaveLength(2);
     expect(source.match(/com\.docker\.network\.bridge\.enable_ip_masquerade: "false"/g)).toHaveLength(2);
     expect(source).toContain("- participant-isolated");
