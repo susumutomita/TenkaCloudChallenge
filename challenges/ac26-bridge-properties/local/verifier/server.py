@@ -224,9 +224,9 @@ boundary = boundary_instance(seed)
 _accepted, transcript = verify(protocol_for(seed, "leaky"), inst, inst.witness)
 sources = {{name: open(name, encoding="utf-8").read() for name in ("classify.py", "counterexamples.py")}}
 submissions = {{
-    "incompleteness": counterexamples.incompleteness_witness(boundary.as_public()),
-    "unsoundness": counterexamples.unsoundness_witness(inst.as_public()),
-    "privacy-leak": counterexamples.extract_witness(transcript),
+    "incompleteness": str(counterexamples.incompleteness_witness(boundary.as_public())),
+    "unsoundness": str(counterexamples.unsoundness_witness(inst.as_public())),
+    "privacy-leak": str(counterexamples.extract_witness(transcript)),
     "property-matrix": json.dumps({{protocol_id: classify(protocol_id) for protocol_id in protocol_ids(seed)}}, separators=(",", ":")),
     "transfer": json.dumps(sources, separators=(",", ":")),
 }}

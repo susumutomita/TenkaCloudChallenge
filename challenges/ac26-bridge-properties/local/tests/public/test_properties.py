@@ -102,9 +102,18 @@ def test_workbench_prepare_returns_all_portal_checkpoints() -> None:
         "property-matrix",
         "transfer",
     }
-    assert isinstance(submissions["incompleteness"], int)
-    assert isinstance(submissions["unsoundness"], int)
-    assert isinstance(submissions["privacy-leak"], int)
+    # Portal の workbench-client は submissions の値を全部 string で要求する
+    # (PrepareSchema: z.record(z.string(), z.string()))。raw int を返していたので
+    # この 3 つは提出のたびに 502 invalid_workbench_response になっていた。
+    # ここが int を要求していたせいで、その欠陥が public test で守られていた。
+    #
+    # 「string であること」だけでなく「10 進整数として読めること」まで見る。
+    # 型だけ通せば str(None) の "None" も通ってしまい、参加者から見て前より
+    # 分かりにくい失敗になる。
+    for checkpoint in ("incompleteness", "unsoundness", "privacy-leak"):
+        value = submissions[checkpoint]
+        assert isinstance(value, str), checkpoint
+        int(value)
     assert isinstance(json.loads(submissions["property-matrix"]), dict)
     assert set(json.loads(submissions["transfer"])) == {"classify.py", "counterexamples.py"}
 
