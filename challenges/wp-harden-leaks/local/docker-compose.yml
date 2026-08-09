@@ -112,6 +112,18 @@ services:
     depends_on:
       wordpress:
         condition: service_healthy
+      # Scoring must not be able to start before the leftovers exist. An unseeded site
+      # answers 404 on every probe, which reads as "every hole closed" — 200 points for
+      # doing nothing, with nothing in any log to say so. This edge is the first of two
+      # defences; the second is the marker check in verify/server.mjs, which holds even
+      # if this condition is ever relaxed.
+      wpinit:
+        condition: service_completed_successfully
+    volumes:
+      # Read-only, and only to see wpinit's completion marker. The scanner judges the
+      # site over HTTP like any external scanner would — it must not be able to inspect
+      # or edit the docroot to decide whether a hole is closed.
+      - wp_data:/wp:ro
     ports:
       - "127.0.0.1:18081:8081" # loopback /verify (the external scanner)
     healthcheck:
