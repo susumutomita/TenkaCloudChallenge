@@ -53,11 +53,17 @@ check-problem:
 solvability:
 	bun test scripts/solvability-audit.test.ts
 
+# SOLVABILITY_SHARD is `--shard=<index>/<total>` when CI runs one shard, empty when a
+# human runs the whole sweep locally. The workflow's matrix supplies it; the partition
+# itself lives in scripts/validate-shard.ts so the suite and the sweep agree on what a
+# shard is.
+SOLVABILITY_SHARD ?=
 solvability-sweep:
 	@mkdir -p $(dir $(SOLVABILITY_REPORT))
 	bun run scripts/solvability-audit.ts \
 		--seeds $(SOLVABILITY_SEEDS) \
 		--code-seeds $(SOLVABILITY_CODE_SEEDS) \
+		$(SOLVABILITY_SHARD) \
 		--report $(SOLVABILITY_REPORT)
 
 simulator-compatibility:
