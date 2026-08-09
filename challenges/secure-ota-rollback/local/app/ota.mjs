@@ -55,12 +55,12 @@ function siteBase(request) {
 
 const workshopHtml = (base) => `<!doctype html>
 <html lang="en">
-<head><meta name="color-scheme" content="light dark">
+<head><meta name="color-scheme" content="light">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Northstar OTA Recovery Console</title>
   <style>
-    body { font: 16px/1.55 system-ui, sans-serif; max-width: 72rem; margin: auto; padding: 2rem; color: #172033; }
+    body { font: 16px/1.55 system-ui, sans-serif; max-width: 72rem; margin: auto; padding: 2rem; background: #fff; color: #172033; }
     h1, h2 { line-height: 1.2; } code, pre { background: #eef2f8; border-radius: .35rem; }
     code { padding: .1rem .3rem; } pre { padding: 1rem; overflow: auto; }
     .warning { border-left: .35rem solid #d97706; padding-left: 1rem; }

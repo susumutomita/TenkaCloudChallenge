@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
   checkSource,
+  findBodyColorPairIssues,
   findColorSchemeIssues,
   findScriptEscapeIssues,
 } from "./check-participant-surface";
@@ -88,5 +89,43 @@ describe("checkSource", () => {
     expect(new Set(checkSource(source, "server.mjs").map((f) => f.rule))).toEqual(
       new Set(["script-escape", "color-scheme"]),
     );
+  });
+});
+
+describe("body colour pair (Issue 400 の実プレイで判明)", () => {
+  it("should catch a body that sets only a text colour", () => {
+    // `color-scheme` を宣言するとブラウザはダークモードで canvas を暗く塗る。そこへ暗い
+    // 文字色だけを置くと、宣言が無かったとき (Issue 396 の元の形) と同じ結果になる。
+    const source = `<!doctype html><html><head><meta name="color-scheme" content="light dark">
+<style>body{font-family:system-ui;color:#1b2733}</style></head><body>hi</body></html>`;
+    const findings = findBodyColorPairIssues(source, "server.mjs");
+    expect(findings.length).toBe(1);
+    expect(findings[0]?.rule).toBe("body-color-pair");
+  });
+
+  it("should accept a body that sets both", () => {
+    const source = `<!doctype html><html><head></head>
+<style>body{background:#fff;color:#1b2733}</style><body>hi</body></html>`;
+    expect(findBodyColorPairIssues(source, "server.mjs")).toEqual([]);
+  });
+
+  it("should accept a body that sets neither, leaving the browser's own pair", () => {
+    // 何も指定しなければ文字色と背景はブラウザが組で決める。壊れるのは片方だけ書いたとき。
+    const source = `<!doctype html><html><head></head><style>body{margin:0}</style><body>hi</body></html>`;
+    expect(findBodyColorPairIssues(source, "server.mjs")).toEqual([]);
+  });
+
+  it("should catch the same mistake written as an inline style attribute", () => {
+    const source = `<!doctype html><html><body style="font-family:system-ui;color:#111">hi</body></html>`;
+    expect(findBodyColorPairIssues(source, "server.mjs")).toHaveLength(1);
+  });
+
+  it("should accept background-color as the background half", () => {
+    const source = `<!doctype html><html><style>body{background-color:#fff;color:#111}</style><body>hi</body></html>`;
+    expect(findBodyColorPairIssues(source, "server.mjs")).toEqual([]);
+  });
+
+  it("should stay silent for a file that serves no HTML", () => {
+    expect(findBodyColorPairIssues(`const body = { color: "red" };`, "api.mjs")).toEqual([]);
   });
 });
