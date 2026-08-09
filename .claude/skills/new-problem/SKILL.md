@@ -1,6 +1,6 @@
 ---
 name: new-problem
-description: Scaffold a new TenkaCloudChallenge problem. Invoked via `/new-problem challenge` (self-paced single-flag) or `/new-problem battle` (real-time PvP / uptime). With no argument, the skill asks which category. Also triggers on natural-language requests like "add a new problem", "create a new Battle/Challenge", or "scaffold a new problem". Walks through picking a starter, filling metadata.json, writing template.yaml with the required participant-role baseline and tag-based scoping, validating, and opening a PR. NOT for edits to existing problems — read AGENT.md and edit directly for those.
+description: Scaffold a new TenkaCloudChallenge problem. Invoked via `/new-problem challenge` (self-paced single-flag) or `/new-problem battle` (real-time PvP / uptime). With no argument, the skill asks which style. Runtime (docker/compose, aws/cloudformation, composite, simulator/*) is a separate axis and is always asked, because it decides the starter. Also triggers on natural-language requests like "add a new problem", "create a new Battle/Challenge", or "scaffold a new problem". Walks through picking a starter, filling metadata.json, writing template.yaml with the required participant-role baseline and tag-based scoping, validating, and opening a PR. NOT for edits to existing problems — read AGENT.md and edit directly for those.
 ---
 
 # new-problem — scaffold a TenkaCloudChallenge problem
@@ -66,9 +66,9 @@ A fix-by-settings puzzle is single-player by default. Make it a Battle by adding
 
 | Invocation | Behavior |
 | --- | --- |
-| `/new-problem challenge` | Skip the category question. Use `challenges/hello-world` as the starter. Scoring kind defaults to `flag`; ask the user to confirm. |
-| `/new-problem battle` | Skip the category question. Then ask for scoring kind (`uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection`) before picking the starter. |
-| `/new-problem` (no arg) | Ask "Challenge or Battle?" first. Everything else as below. |
+| `/new-problem challenge` | Style is set. **Still ask for the runtime** — it decides the starter, not the style. Scoring kind defaults to `flag`; ask the user to confirm. |
+| `/new-problem battle` | Style is set. Ask for the runtime, then the scoring kind (`uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection`). |
+| `/new-problem` (no arg) | Ask what the problem should teach, then the runtime, then Challenge or Battle. Everything else as below. |
 
 Natural-language invocations ("add a new problem", "create a Battle") behave like the no-arg form.
 
@@ -80,9 +80,10 @@ Open `AGENT.md` at the repo root before writing files. The required invariants t
 
 If the invocation was `/new-problem challenge` or `/new-problem battle`, **Category is already set** — skip that question. Otherwise ask. Then gather the rest with `AskUserQuestion` when running interactively. Required inputs:
 
-1. **Category** — `challenges/` (self-paced, single submission) or `battles/` (real-time PvP / continuous scoring). Provided as arg or asked.
-2. **Slug** — kebab-case, alphanumeric + hyphens, lowercase. Becomes the directory name and the `tc-<slug>-<teamSlug>` resource prefix.
-3. **Scoring kind** — one of:
+1. **Runtime — ask this before anything else** (Issue 388). `docker/compose` (everything happens in a container), `aws/cloudformation` (the learning goal *is* provider-specific control-plane or managed-service semantics), `composite` (both), `simulator/*` (not runnable in this repository yet). The question that decides it: **what would be lost if this ran in a container instead of real AWS?** If the answer is "nothing", it is a Docker problem. Run `bun run new --runtimes` for the guide, or read [`docs/authoring/runtime-and-style.md`](../../../docs/authoring/runtime-and-style.md).
+2. **Style / Category** — `challenge` (`challenges/`, self-paced, single submission) or `battle` (`battles/`, real-time PvP / continuous scoring). This is a *separate axis* from runtime: it describes scoring, not where the problem runs. A hard Challenge is not a Battle. Provided as arg or asked.
+3. **Slug** — kebab-case, alphanumeric + hyphens, lowercase. Becomes the directory name and the `tc-<slug>-<teamSlug>` resource prefix.
+4. **Scoring kind** — one of:
    - `flag` — submit a string, scored once. **Challenge default.**
    - `verify` — submission is delegated to a container's loopback `/verify` (no AWS; see "Local (AWS-free) CTF container format" below). Single check.
    - `multi-verify` — like `verify`, but 2–8 named checkpoints; `/verify` echoes back `checkpointId`.
@@ -92,31 +93,40 @@ If the invocation was `/new-problem challenge` or `/new-problem battle`, **Categ
    - `attack-detection` — counter from a stats endpoint converts to points.
 
    For `challenge` mode default to `flag` and ask only to confirm (offer `verify`/`multi-verify` if the user wants an AWS-free local-play problem). For `battle` mode the 4 uptime/polling/attack kinds are the relevant choices — ask which.
-4. **Concept** — one or two sentences in the user's own words. The skill weaves this into the story-style `shortDescription` later; raw mechanics are not the player-facing voice.
-5. **Difficulty** 1–5 and rough **estimatedDuration** (e.g. "30 分").
+5. **Concept** — one or two sentences in the user's own words. The skill weaves this into the story-style `shortDescription` later; raw mechanics are not the player-facing voice.
+6. **Difficulty** 1–5 and rough **estimatedDuration** (e.g. "30 分").
 
-## Step 2 — pick the closest starter and copy
+## Step 2 — scaffold from the runtime's starter
 
-| Inputs | Starter directory |
-| --- | --- |
-| Challenge + `flag` | `challenges/hello-world` |
-| Challenge + `verify` (local/container, no AWS) | `challenges/sqli-demo` (single check) |
-| Challenge + `multi-verify` (local/container, no AWS) | `challenges/wp-exposed-backup` (multiple checkpoints) |
-| Battle + `uptime-flat` | `battles/hello-world-battle` |
-| Battle + `phased-polling` | `battles/microservice-migration-battle` or `battles/stackstack` |
-| Battle + `uptime-multi` + `attack-detection` | `battles/security-battle-royale` |
+Always go through the scaffolder, whichever runtime was chosen: it keeps `index.json` /
+`cost-report.json` in sync, writes `status: draft`, and — for `aws/cloudformation`, whose
+starter is still in the legacy `cfnTemplate` form — records the `runtime` declaration so
+the generated problem says *why* it is a real-cloud problem.
 
 ```bash
-# CFn-based problems: plain copy
-cp -r <starter> <category>/<slug>
-cd <category>/<slug>
-
-# Local/container problems: use the scaffolder so index.json/cost-report.json
-# stay in sync — it copies the starter's local/ directory (Dockerfile,
-# docker-compose.yml, app/) along with metadata.json.
-bun run new <category> <slug> --from sqli-demo          # single-check verify
-bun run new <category> <slug> --from wp-exposed-backup   # multi-verify
+bun run new <slug> --runtime docker/compose     --style challenge
+bun run new <slug> --runtime aws/cloudformation --style challenge
+bun run new <slug> --runtime composite          --style challenge
 ```
+
+The runtime picks the starter, so a Docker author never receives a CloudFormation
+template. `--from <sampleId>` overrides it when a closer example exists within the same
+runtime:
+
+| Inputs | `--from` |
+| --- | --- |
+| Challenge + `flag` (real cloud) | *(default)* `hello-world` |
+| Challenge + `verify` (container, no AWS) | *(default)* `sqli-demo` — single check |
+| Challenge + `multi-verify` (container, no AWS) | `wp-exposed-backup` — multiple checkpoints |
+| Battle + `uptime-flat` | *(default)* `hello-world-battle` |
+| Battle + `phased-polling` | `microservice-migration-battle` or `stackstack` |
+| Battle + `uptime-multi` + `attack-detection` | `security-battle-royale` |
+
+`simulator/*` is refused rather than scaffolded — no problem in this repository uses it, so
+there is nothing to copy, and a hand-written skeleton would look runnable while not being.
+`composite` has no Battle example, and is refused for that combination with a different
+message. Both refusals name the next step; do not work around them by copying a directory
+by hand.
 
 The starter ships with the required IAM baseline, the right tag set, the standard parameters (`NamePrefix`, `TenkaCloudAccountId`, `ExternalId`), and a working `ParticipantViewerRole`. Do **not** delete those — adapt them.
 

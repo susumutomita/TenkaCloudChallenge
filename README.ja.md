@@ -41,11 +41,23 @@ bun run validate
 
 ## ➕ 新しい問題を追加する
 
-1. **ディレクトリを作る**。 `<category>/<id>/` (= `<category>` は `battles` / `challenges`、 `<id>` は lowercase kebab-case)。
-2. **`metadata.json` を書く**。 [`SCHEMA.json`](./SCHEMA.json) に準拠。 既存問題が動く reference。 主キー: `id` / `name` / `category` / `difficulty` / `scoring` / `endpoints` / `disruptions`。
-3. **`template.yaml` を書く**。 CFn ペライチ (deploy 本体)。 必須パラメータ (`NamePrefix` / `TenkaCloudAccountId` / `ExternalId`) と必須 IAM Role (`ParticipantViewerRole`) を含める。
-4. **(任意) `portal/<slot>.tsx`** で participant portal に問題固有 UI を差し込み、 **`services/`** で template が pull してくる docker-compose / Lambda code を置く (例: EC2 UserData から fetch)。
-5. **ローカルで `bun run validate`** → PR → レビュー → main マージ。
+決める順序は **何を学ばせるか → それに必要な runtime → どの採点形式か**。 runtime (Docker / 実クラウド / Simulator / composite) と game style (Challenge / Battle) は**別の軸**で、 `Challenge` / `Battle` は採点の形式であって実行環境ではない。 判断フローの正本は [`docs/authoring/runtime-and-style.md`](./docs/authoring/runtime-and-style.md)。
+
+```bash
+bun install
+bun run setup                          # 一度だけ: auto-reindex の git hook を有効化
+bun run new --runtimes                 # 各 runtime の使いどころと、選んだ場合の成立条件
+bun run new my-cool-problem --runtime docker/compose --style challenge
+```
+
+`bun run new <id> --runtime <runtime> --style <challenge|battle>` は、 その runtime で最も小さい実在の問題を複製し (= 最初から validation を通る)、 catalog index を再生成する。 **Docker 問題の作者が CloudFormation starter から始めることはない。** どちらの flag も非対話なので、 CI からも agent からも決定論的に呼べる。 その後:
+
+1. **`metadata.json` を編集する**。 [`SCHEMA.json`](./SCHEMA.json) に準拠。 主キー: `id` / `name` / `category` / `difficulty` / `scoring` / `endpoints` / `disruptions`。 (`--from <sampleId>` でより近い例から始められる。)
+2. **runtime の artifact を編集する**。 `docker/compose` なら `local/docker-compose.yml` と `local/app/`、 `aws/cloudformation` なら `template.yaml` (必須パラメータ `NamePrefix` / `TenkaCloudAccountId` / `ExternalId` と必須 IAM Role `ParticipantViewerRole` を含める)。
+3. **(任意) `portal/<slot>.tsx`** で participant portal に問題固有 UI を差し込み、 **`services/`** で template が pull してくる docker-compose / Lambda code を置く (例: EC2 UserData から fetch)。
+4. **`bun run check:problem <id>`** で自分の 1 問だけを検査し、 **`bun run validate`** で catalog 全体を検査する。 `status` を `ready` にして PR → レビュー → main マージ。
+
+`bun run new <battles|challenges> <id>` は移行期間として動き、 新形式を指す警告が出る。
 
 platform repo の maintainer が submodule pointer を更新すると、 次の `make deploy` で deploy される。
 
