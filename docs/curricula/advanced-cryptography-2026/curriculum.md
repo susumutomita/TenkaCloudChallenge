@@ -268,11 +268,24 @@ produce.** The four Part A functions map onto the first three companions almost
 one-for-one, and `ac26-w2-private-aggregate` composes them the way the official
 exercise composes them.
 
-**Part B has no companion at all.** Nothing in this track teaches Oblivious
-Transfer or GMW. A learner who works this track and then opens `toy-mpc` meets
-OT for the first time in the official exercise, with no reimplementation behind
-them — which is precisely the situation the companion track exists to prevent.
-That gap is tracked in Issue 412 and is **not** closed by the re-pin.
+**Part B had no companion at all** when the material was read: nothing in this
+track taught Oblivious Transfer or GMW, so a learner who worked the track and
+then opened `toy-mpc` met OT for the first time in the official exercise. That
+was the gap Issue 412 recorded, and `ac26-w2-oblivious-transfer` (order 260)
+closes it.
+
+The new problem is not a translation of the official one. It takes the same two
+mechanisms — a 1-out-of-2 transfer in a prime-order subgroup, and a GMW AND gate
+built from two of them — and puts the weight on the property the arithmetic half
+never forces anyone to confront: **correct and private are different claims.**
+Two of its functions have implementations that are right on every input and still
+hand a secret across. Drawing the receiver's blind from `1..q-1` instead of
+`0..q-1` leaves two group elements reachable under one choice and not the other,
+which names the choice bit; reusing one mask across the gate's two transfers
+still cancels under XOR, so every gate reconstructs while each party's output
+share becomes a readout of the other party's bits. Neither is visible to a test
+that only checks the answer, which is why the hidden suite checks the
+distributions separately from the reconstructions.
 
 One thing the published material adds that no companion currently teaches, and
 that is not a scoping accident but a security property: a Beaver triple must
@@ -290,7 +303,7 @@ a challenge teaches is a content decision, not a pin update.
 | 230 | `ac26-w2-beaver-mul` | `mechanism` | `concept.beaver-triple` | A (`beaver_multiply`) | #222 |
 | 240 | `ac26-w2-privacy-audit` | `transfer` | `concept.over-opening`, `concept.privacy` | A (privacy of the above) | #223 |
 | 250 | `ac26-w2-private-aggregate` | `synthesis` | combines the four above | A (composition) | #224 |
-| — | *none* | — | Oblivious Transfer, GMW secret AND | **B — uncovered** | Issue 412 |
+| 260 | `ac26-w2-oblivious-transfer` | `mechanism` | `concept.oblivious-transfer`, `concept.gmw-and-gate`, `concept.indistinguishable-distribution` | B (`ot_*`, `gmw_and`) | Issue 412 |
 
 ### Week 3 — elliptic curves and Schnorr
 
@@ -427,6 +440,7 @@ in [`ASSESSMENT.md`](./ASSESSMENT.md), which also fixes the rule that any
 - A `PUBLISHED` row is a content question wearing a pin's clothes. The 2026-08-09
   re-pin is the reference case: the SHA bump was the trivial half, and the half
   worth the review was discovering that the official exercise had a Part B this
-  track does not accompany. Re-pinning without that reading would have turned the
+  track did not accompany. Re-pinning without that reading would have turned the
   check green and left the gap invisible, which is the outcome
-  [`SYNC.md`](./SYNC.md) §5 exists to forbid.
+  [`SYNC.md`](./SYNC.md) §5 exists to forbid. The gap was closed afterwards by
+  `ac26-w2-oblivious-transfer`; the review is what found it, not the SHA.
