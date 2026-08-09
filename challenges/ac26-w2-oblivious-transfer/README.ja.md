@@ -2,11 +2,11 @@
 
 > English: [README.md](./README.md)
 
-Week 2 の 5 問目。 track `advanced-cryptography-2026`、 order 260。
+Week 2 の 6 問目。 track `advanced-cryptography-2026`、 order 260。
 
-Week 2 のここまでの問題は、 すべて 「c = a·b を満たす三つ組が前もって配られている」 ところから
-始まっている。 その三つ組を誰がどう作るのかは、 どこにも書かれていない。 互いに何も預けていない
-2 者が、 そもそもどうやって一緒に計算を始めるのか。
+Week 2 のここまでの 5 問は arithmetic MPC を扱ってきた。公開された公式演習の Part B は別の経路、
+oblivious transfer と GMW の Boolean MPC を要求する。互いに何も預けていない 2 者が、秘密を渡さず
+一緒に計算を始めるにはどうするか。この問題は、既存 companion に無かったその半分を埋める。
 
 oblivious transfer がその最小の答え。 送信者は 2 つのメッセージを出し、 受信者は 1 つだけ受け取る。
 受信者は他方について何も知らず、 送信者はどちらが取られたかを知らない。 これがあれば、 互いに
@@ -49,7 +49,17 @@ B = A * g^t      message 1 が欲しいとき
 どちらも 「メッセージが届いた」 「ゲートが復元した」 では捕まらない。 1 回の実行の性質では
 ないため。
 
-## 進め方
+## Participant Portal での進め方
+
+1. Participant Portal で問題を起動する。同じ画面に `oblivious.py` のエディタが表示される。
+2. **証拠を調べる**で、自分の群、鍵、セッション、ゲートの share を確認する。
+3. エディタで starter を直し、**公開テストを実行**する。
+4. 6 個の checkpoint を順に提出する。Portal が現在のソースを prepare API に送り、そのまま採点する。
+
+checkout、ターミナル、ローカルエディタ、別画面へのコピペは不要。すべての checkpoint は、提出時の
+エディタ内容を使う。
+
+作問・ローカル確認では次も使える。
 
 ```bash
 make inspect   # 自分の群、鍵、セッション、ゲートの share
@@ -57,8 +67,8 @@ make test      # 公開テスト: shape と、転送が 1 回成功すること
 make reset     # starter/ を元に戻す
 ```
 
-編集するのは `local/starter/oblivious.py` だけ。 `make reference-test` は作問側の経路で、
-hidden と mutation の suite をイメージ内で回す。
+編集するのは `local/starter/oblivious.py` だけ。 `make reference-test` は作問側の経路で、hidden と
+mutation の suite を image 内で回す。
 
 ## checkpoint
 
@@ -92,11 +102,10 @@ verifier が実際に保証するのはもっと狭く、そして本物です�
 
 ## 作問者向け
 
-`make reference-test` が mutation suite を実行します。壊した提出 8 種類と verifier を
-狙った 1 種類があります。 このうち 2 つ (blind から 0 を外した実装と、 2 回の転送で mask を
-使い回した実装) は**どの入力でも正しく復元し**、 分布の検査だけが殺します。 どちらかが
-survive するようになったら、 この問題は 「動く protocol」 と 「隠せている protocol」 の
-区別を教えるのをやめています。 この suite を触るときは、 まずその 2 つを見てください。
+`make reference-test` が mutation suite を実行します。壊した提出 10 種類と verifier を狙った 3 種類が
+あります。blind から 0 を外す、mask を使い回す、片側だけに漏らす、両平文を可逆に埋め込む、といった
+「動くのに隠せていない」実装を名指しで落とします。どれかが survive するようになったら、この問題は
+「動く protocol」と「隠せている protocol」の区別を教えるのをやめています。
 
 ## 講座との対応
 

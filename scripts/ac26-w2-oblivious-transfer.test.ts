@@ -54,6 +54,30 @@ print(json.dumps(run(module, "pinned-suite-seed")))
   return JSON.parse(out.trim().split("\n").at(-1) as string) as string[];
 }
 
+function portalContract(): { id: string; checkpoints: string[]; prepared: string[] } {
+  const script = `
+import json, sys
+from pathlib import Path
+sys.path.insert(0, ${JSON.stringify(LOCAL)})
+from verifier.server import CHECKPOINTS, _WORKBENCH
+source = Path(${JSON.stringify(join(LOCAL, "reference", "oblivious.py"))}).read_text()
+config = _WORKBENCH.config_payload()
+prepared = _WORKBENCH.prepare_submissions({"oblivious.py": source}, {})
+assert prepared["ok"] is True
+assert tuple(item["id"] for item in config["checkpoints"]) == CHECKPOINTS
+assert set(prepared["submissions"]) == set(CHECKPOINTS)
+for checkpoint, submission in prepared["submissions"].items():
+    assert _WORKBENCH.unwrap_submission(checkpoint, submission) == source
+print(json.dumps({
+    "id": config["id"],
+    "checkpoints": [item["id"] for item in config["checkpoints"]],
+    "prepared": sorted(prepared["submissions"]),
+}))
+`;
+  const out = execFileSync("python3", ["-c", script], { encoding: "utf8" });
+  return JSON.parse(out.trim().split("\n").at(-1) as string);
+}
+
 const REFERENCE = readFileSync(join(LOCAL, "reference", "oblivious.py"), "utf8");
 const STARTER = readFileSync(join(LOCAL, "starter", "oblivious.py"), "utf8");
 
@@ -72,6 +96,21 @@ describe("ac26-w2-oblivious-transfer: the problem holds up (Issue 412)", () => {
   it("は starter のままでは通らない", () => {
     // 配布状態で満点が出る問題は問題ではない。
     expect(hiddenFailures(STARTER).length).toBeGreaterThan(0);
+  });
+
+  it("は Participant Portal に正しい problem と全 checkpoint を公開する", () => {
+    const contract = portalContract();
+    const checkpoints = [
+      "request",
+      "choice-privacy",
+      "transfer",
+      "and-gate",
+      "gate-privacy",
+      "unseen",
+    ];
+    expect(contract.id).toBe("ac26-w2-oblivious-transfer");
+    expect(contract.checkpoints).toEqual(checkpoints);
+    expect(contract.prepared).toEqual([...checkpoints].sort());
   });
 
   it("は starter が privacy checkpoint を素通りしないようにする", () => {
@@ -112,6 +151,38 @@ describe("ac26-w2-oblivious-transfer: the problem holds up (Issue 412)", () => {
       "party 0's view of the gate changes with party 1's secret bits, so the two " +
         "transfers are not independently masked",
     ]);
+  });
+
+  it("は party 1 だけへ漏れる非対称 mask を、復元が正しくても落とす", () => {
+    const leaky = mutate(
+      "    return (randomness[0], randomness[1])",
+      "    return (0, randomness[1])",
+    );
+    expect(hiddenFailures(leaky)).toEqual([
+      "party 1's view of the gate changes with party 0's secret bits, so the two " +
+        "transfers are not independently masked",
+    ]);
+  });
+
+  it("は両平文を埋め込む可逆 ciphertext を transfer と認めない", () => {
+    const encoded = mutate(
+      "    return (message_0 ^ key_0, message_1 ^ key_1)",
+      "    return ((1 << 64) | message_0, (1 << 64) | message_1)",
+    ).replace(
+      "    return ciphertexts[choice] ^ key",
+      "    return ciphertexts[choice] & ((1 << 32) - 1)",
+    );
+    expect(hiddenFailures(encoded).join(" ")).toContain(
+      "ciphertexts do not use the declared independent sender keys",
+    );
+  });
+
+  it("は verifier container を非 root と healthcheck 付きで動かす", () => {
+    const dockerfile = readFileSync(join(LOCAL, "Dockerfile"), "utf8");
+    const compose = readFileSync(join(LOCAL, "docker-compose.yml"), "utf8");
+    expect(dockerfile).toContain("USER lab");
+    expect(compose).toContain("healthcheck:");
+    expect(compose).toContain("127.0.0.1:18310/api/config");
   });
 
   it("は公式課題の Part B に対応する pin を持つ", () => {

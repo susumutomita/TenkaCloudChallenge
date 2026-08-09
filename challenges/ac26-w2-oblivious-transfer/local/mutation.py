@@ -1,10 +1,9 @@
 """Mutation suite: break the reference on purpose, assert the hidden tests notice.
 
-Two of these are the reason the problem exists. `blind excludes 0` and `one mask
-reused for both transfers` are both *correct* -- every message arrives, every gate
-reconstructs -- and both hand a secret to the other side. If either survives, the
-problem is teaching that a passing test means a private protocol, which is worse
-than teaching nothing.
+Several of these are the reason the problem exists. Some mutations are *correct* --
+every message arrives or every gate reconstructs -- and still hand a secret to the
+other side. The suite also includes asymmetric and reversibly encoded leaks so a
+checker cannot accidentally prove privacy for only one party or one guessed decoder.
 """
 
 from __future__ import annotations
@@ -22,6 +21,13 @@ REFERENCE = (Path(__file__).resolve().parent / "reference" / "oblivious.py").rea
 
 _OFFER_BODY = "    return (mask, mask ^ own_bit)"
 _SHARE_BODY = "    return (own_x & own_y) ^ own_mask ^ received"
+_REVERSIBLE_CIPHERTEXT = REFERENCE.replace(
+    "    return (message_0 ^ key_0, message_1 ^ key_1)",
+    "    return ((1 << 64) | message_0, (1 << 64) | message_1)",
+).replace(
+    "    return ciphertexts[choice] ^ key",
+    "    return ciphertexts[choice] & ((1 << 32) - 1)",
+)
 
 MUTATIONS: list[tuple[str, str]] = [
     (
@@ -33,6 +39,13 @@ MUTATIONS: list[tuple[str, str]] = [
         REFERENCE.replace(
             "    return (randomness[0], randomness[1])",
             "    return (randomness[0], randomness[0])",
+        ),
+    ),
+    (
+        "party zero gets a constant mask: correct, and leaks only to party one",
+        REFERENCE.replace(
+            "    return (randomness[0], randomness[1])",
+            "    return (0, randomness[1])",
         ),
     ),
     (
@@ -48,6 +61,10 @@ MUTATIONS: list[tuple[str, str]] = [
             "    unshifted = (req * pow(public, p - 2, p)) % p",
             "    unshifted = req",
         ),
+    ),
+    (
+        "ciphertexts carry both plaintexts in a reversible high-bit encoding",
+        _REVERSIBLE_CIPHERTEXT,
     ),
     (
         "receiver decrypts with its own blind as the key material",
@@ -94,11 +111,32 @@ def main() -> int:
 
     from verifier.server import evaluate  # noqa: PLC0415 - imported after sys.path
 
+    verifier_probes = 0
+
+    verifier_probes += 1
     if evaluate("and-gate", "def offer(b, m):\n    return (m, m)\n"):
         survivors.append("verifier accepts a gate whose offer ignores the party's bit")
         print("SURVIVED verifier accepts a gate whose offer ignores the party's bit")
     else:
         print("KILLED verifier accepts a gate whose offer ignores the party's bit")
+
+    verifier_probes += 1
+    if evaluate("transfer", _REVERSIBLE_CIPHERTEXT):
+        survivors.append("transfer checkpoint accepts reversible plaintext ciphertexts")
+        print("SURVIVED transfer checkpoint accepts reversible plaintext ciphertexts")
+    else:
+        print("KILLED transfer checkpoint accepts reversible plaintext ciphertexts")
+
+    party_one_leak = REFERENCE.replace(
+        "    return (randomness[0], randomness[1])",
+        "    return (0, randomness[1])",
+    )
+    verifier_probes += 1
+    if evaluate("gate-privacy", party_one_leak):
+        survivors.append("gate privacy checkpoint checks only party zero")
+        print("SURVIVED gate privacy checkpoint checks only party zero")
+    else:
+        print("KILLED gate privacy checkpoint checks only party zero")
 
     print()
     if survivors:
@@ -106,7 +144,7 @@ def main() -> int:
         for name in survivors:
             print(f"  - {name}")
         return 1
-    print(f"All {len(MUTATIONS) + 1} mutations killed.")
+    print(f"All {len(MUTATIONS) + verifier_probes} mutations killed.")
     return 0
 
 

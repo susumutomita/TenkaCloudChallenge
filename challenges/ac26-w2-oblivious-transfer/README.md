@@ -2,11 +2,12 @@
 
 > 日本語版: [README.ja.md](./README.ja.md)
 
-Week 2, problem 5. Track `advanced-cryptography-2026`, order 260.
+Week 2, problem 6. Track `advanced-cryptography-2026`, order 260.
 
-Everything in Week 2 so far starts from *"a triple with c = a·b has already been handed
-out"*. Nothing says where it comes from, or how two parties who have deposited no trust
-with each other get to compute anything together at all.
+The five earlier Week 2 problems cover arithmetic MPC. The published official assignment's
+Part B takes a different route through oblivious transfer and GMW Boolean MPC. This problem
+fills that missing half: how two parties who have deposited no trust with each other can
+compute together without handing over their secrets.
 
 Oblivious transfer is the smallest answer. The sender offers two messages; the receiver
 takes exactly one; the receiver learns nothing about the other, and the sender does not
@@ -53,7 +54,18 @@ hands a secret to the other side.** Both pass the public tests.
 Neither is caught by "the message arrived" or "the gate reconstructed", because neither is
 a property of one run.
 
-## Working on it
+## Participant Portal workflow
+
+1. Start the problem in Participant Portal; the `oblivious.py` editor appears on the same page.
+2. Select **Inspect evidence** to see your group, key, session, and gate shares.
+3. Edit the starter in the Portal and select **Run public tests**.
+4. Submit all six checkpoints. Portal sends the current source through the prepare API and
+   submits the prepared value directly for scoring.
+
+No checkout, terminal, local editor, second screen, or copy-and-paste step is required. Every
+checkpoint uses the source currently shown in the editor.
+
+Authors and local learners can also use:
 
 ```bash
 make inspect   # your group, key, session, and the gate's shares
@@ -96,12 +108,10 @@ Zero. No cloud account, no AWS resources.
 
 ## For authors
 
-`make reference-test` runs the mutation suite: eight broken submissions plus one aimed at
-the verifier. Two of the eight — the blind excluding 0, and one mask reused across both
-transfers — reconstruct correctly on every input and are killed only by the distribution
-checks. If either ever survives, the problem has stopped teaching the difference between
-a protocol that works and a protocol that hides, so those two are the ones to look at
-first when this suite changes.
+`make reference-test` runs ten broken submissions plus three verifier probes. They include a
+blind excluding 0, reused and one-sided masks, and a reversible encoding that carries both
+plaintexts. Each names a way a protocol can work while failing to hide. If any survives, the
+problem has stopped teaching the distinction it exists to teach.
 
 ## Course alignment
 

@@ -147,6 +147,23 @@ def check_transfer(module, seed: str) -> list[str]:
             ):
                 failures.append("encrypt did not return two integer ciphertexts")
                 continue
+            # Sender privacy is not proved by checking only that one key fails to
+            # XOR-open the other branch. A reversible encoding can keep the plaintext
+            # in high bits and make that one attempted XOR look harmless. Require the
+            # declared two-key construction itself before crediting the transfer.
+            p = grp["p"]
+            key_0 = derive_key(grp, pow(req, key["secret"], p))
+            unshifted = (req * pow(key["public"], p - 2, p)) % p
+            key_1 = derive_key(grp, pow(unshifted, key["secret"], p))
+            expected = (
+                ses["message_0"] ^ key_0,
+                ses["message_1"] ^ key_1,
+            )
+            if tuple(cts) != expected:
+                failures.append(
+                    "the ciphertexts do not use the declared independent sender keys"
+                )
+                continue
             try:
                 got = module.unwrap(grp, key["public"], choice, ses["blind"], tuple(cts))
             except Exception as error:  # noqa: BLE001
@@ -210,25 +227,34 @@ def check_gate_privacy(module, seed: str) -> list[str]:
     into the correctness check: a `gate_masks` that returns one mask twice passes
     every reconstruction above and fails here. Party 0's whole view is the message it
     received plus its own output share; sweeping the gate's randomness must leave that
-    view's distribution unchanged as party 1's secrets vary.
+    view's distribution unchanged as the other party's secrets vary. The sweep is
+    symmetric: checking only party 0 leaves implementations that leak exclusively to
+    party 1 undetected.
     """
     failures: list[str] = []
-    for x0, y0 in product((0, 1), repeat=2):
-        views: dict[tuple[int, int], frozenset[tuple[int, int]]] = {}
-        for x1, y1 in product((0, 1), repeat=2):
-            seen: set[tuple[int, int]] = set()
-            for randomness in product((0, 1), repeat=2):
-                try:
-                    view_0, _view_1 = _gate(module, x0, x1, y0, y1, randomness)
-                except Exception as error:  # noqa: BLE001
-                    return [f"the AND gate raised {type(error).__name__}"]
-                seen.add(view_0)
-            views[(x1, y1)] = frozenset(seen)
-        if len({*views.values()}) > 1:
-            failures.append(
-                "party 0's view of the gate changes with party 1's secret bits, so the "
-                "two transfers are not independently masked"
-            )
+    for party in (0, 1):
+        for own_x, own_y in product((0, 1), repeat=2):
+            views: dict[tuple[int, int], frozenset[tuple[int, int]]] = {}
+            for other_x, other_y in product((0, 1), repeat=2):
+                seen: set[tuple[int, int]] = set()
+                for randomness in product((0, 1), repeat=2):
+                    if party == 0:
+                        gate_inputs = (own_x, other_x, own_y, other_y)
+                    else:
+                        gate_inputs = (other_x, own_x, other_y, own_y)
+                    try:
+                        party_views = _gate(module, *gate_inputs, randomness)
+                    except Exception as error:  # noqa: BLE001
+                        return [f"the AND gate raised {type(error).__name__}"]
+                    seen.add(party_views[party])
+                views[(other_x, other_y)] = frozenset(seen)
+            if len({*views.values()}) > 1:
+                failures.append(
+                    f"party {party}'s view of the gate changes with party {1 - party}'s "
+                    "secret bits, so the two transfers are not independently masked"
+                )
+                break
+        if failures:
             break
     return failures
 
