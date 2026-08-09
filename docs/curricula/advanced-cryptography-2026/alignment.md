@@ -5,6 +5,11 @@ companion track was authored. This file records what was actually checked, what
 each companion for those weeks stands on instead, and what a future author must
 do when the material appears.
 
+One of the three has since appeared. Week 2 published on 2026-08-09; its section
+below is kept and scored rather than removed, because a record of a bet is only
+worth keeping if it stays readable after the result is known. Weeks 4 and 7 are
+still open.
+
 It exists because the alternative — leaving the decision until the course
 publishes — makes the record hostage to somebody else's schedule. The companions
 were built and shipped regardless, so the reasoning behind them should be written
@@ -27,17 +32,20 @@ the week it accompanies is empty?*
 
 State at that commit:
 
-- **Week 2** — `week2/README.md` says materials are in preparation. `week2/problems/`
+- **Week 2** — **published.** See "Resolved — MPC week" below. It was unpublished when
+  this record was first written on 2026-07-25 at commit
+  `5e80999306608a45aecf9a0e4e3394a0b62f34d2`, and that is the state the Week 2
+  section was reasoning about.
+- **Week 4** — `week4/README.md` says materials are in preparation. `week4/problems/`
   holds only `.gitkeep`.
-- **Week 4** — same shape as Week 2.
 - **Week 7** — no directory at all.
 
-Every companion for those weeks pins that state rather than pretending to material:
-Weeks 2 and 4 pin their placeholder `README.md` with `kind: "placeholder"`, Week 7
-pins the repository `README.md` with `kind: "roadmap"` because there was no path to
-pin. `bun run course:drift` reports `PUBLISHED` rather than `DRIFT` when one of
-those pins moves, precisely so that this case is distinguishable from ordinary
-upstream churn.
+Every companion for a still-unpublished week pins that state rather than pretending
+to material: Week 4 pins its placeholder `README.md` with `kind: "placeholder"`,
+Week 7 pins the repository `README.md` with `kind: "roadmap"` because there is no
+path to pin. `bun run course:drift` reports `PUBLISHED` rather than `DRIFT` when one
+of those pins moves, precisely so that this case is distinguishable from ordinary
+upstream churn — which is how Week 2's publication was noticed.
 
 **This record is not a claim about the state today.** It is a claim about the state
 at that commit, on that date, by that method. Nothing here should be read as
@@ -60,7 +68,49 @@ The guard keys on the pin's `kind`, not on the week number, so it stops applying
 itself the moment an author repins to real material — a rule that needs a human to
 remember to relax it eventually gets relaxed for the wrong reason.
 
-## Week 2 — MPC
+## Resolved — MPC week, published 2026-08-09
+
+This week has left the list above, and the guard released with it: the pins moved
+to real material first, and this heading followed. It does not read `## Week 2 …`
+any more because
+[`course-alignment-basis.test.ts`](../../../scripts/course-alignment-basis.test.ts)
+reads this file's week headings to decide which weeks must still stand on an
+unpublished pin, and a published week left in that list fails the build for a
+reason that is not true.
+
+**The full retrospective — what the official exercise turned out to require, which
+companions match it, and what is uncovered — lives in
+[`curriculum.md`](./curriculum.md)'s Week 2 section**, because that is the
+week-by-week map and this file is only about weeks with nothing to map. Two
+conclusions belong here, though, because they are about *this record's method*:
+
+- **The derivation held.** The basis below was derived from published Week 6
+  rather than guessed, and the official exercise's first half asks for very nearly
+  the list below, item for item.
+- **The derivation was structurally incomplete.** The official exercise has a
+  second half — oblivious transfer and a GMW-style secret AND — that no companion
+  here teaches. Deriving "what a learner must have to reach Week 6" could never
+  have produced it, because that half is not on the path to Week 6. For Weeks 4
+  and 7 the lesson is exact: deriving from a published neighbour bounds what a
+  week *must* contain, never what it *will* contain. The gap is tracked in
+  Issue 412.
+
+On step 4 of "When the material appears" — does any companion now claim
+`assignment-companion`? **No, and that is a decision rather than an omission.** The
+role tells a reader *there is an official assignment and this accompanies it*.
+These five accompany one half of it; a learner who finished all five would meet the
+second half cold. Claiming the role while that half is uncovered is the same
+overclaim the rule exists to prevent, only harder to notice now that a real
+assignment does exist on the other side. Revisit when the second half is
+accompanied.
+
+On step 6 — nothing leaked. Only the two published README files were read; the
+official template, its given and public test modules, and every participant
+submission directory were left unread. All five companions were authored and
+shipped before this material existed, so no official solution could have reached
+them by any route.
+
+### The original basis, as written
 
 **Basis: derived from a published week, not guessed from an unpublished one.**
 
