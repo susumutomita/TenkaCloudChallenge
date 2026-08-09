@@ -196,7 +196,7 @@ are complete.
 ## Source alignment
 
 Week 6's material is published upstream, so `courseAlignment` pins `week6/README.md` at commit
-`5e80999306608a45aecf9a0e4e3394a0b62f34d2`. Nothing is reproduced from the official material:
+`a3aa4b56fa88fbe803b57d320fbc87c1a203b480`. Nothing is reproduced from the official material:
 the graph model, the attribute set, the licence and policy tables, the three architectures, the
 thirteen deployments, the briefs and the solution are written independently. The subject —
 computations that run inside a primitive versus on top of one, and what breaks where they meet

@@ -189,7 +189,7 @@ stack では node は数百あり、 attribute はその中の proof system と 
 ## Source alignment
 
 Week 6 の資料は公開されているので、 `courseAlignment` は `week6/README.md` を commit
-`5e80999306608a45aecf9a0e4e3394a0b62f34d2` で pin しています。 公式資料からは何も再現していま
+`a3aa4b56fa88fbe803b57d320fbc87c1a203b480` で pin しています。 公式資料からは何も再現していま
 せん。 graph モデル、 attribute の集合、 licence と policy の表、 3 つの architecture、 13 の
 deployment、 brief、 解答はすべて独立に書かれています。 主題 — primitive の内側で走る計算と
 その上で走る計算、 そしてそれらが出会うところで何が壊れるか — はコース自身の README が名指して
