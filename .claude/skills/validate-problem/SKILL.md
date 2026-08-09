@@ -130,6 +130,22 @@ Repo-only fallback when no platform checkout is available:
 FLAG_SEED=$(openssl rand -hex 16) docker compose -f <problem>/local/docker-compose.yml up --build -d
 ```
 
+**別の問題を起動したまま**この問題を起動すること (Issue 399)。参加者は前の問題を開いたまま
+次を試す。既定ポートが埋まっていると launcher は空いているポートへ再割り当てするので、
+問題文やアプリがポートを焼き込んでいると、そこから先の導線は**別の問題**を指す。1 問だけ
+起動して確かめると、この壊れ方は永遠に見えない。
+
+```bash
+make local PROBLEM=stackstack-onboarding   # 先に別の問題を占有させる
+make local PROBLEM=<id>                    # 検証したい問題 (再割り当てされる)
+docker ps --format '{{.Names}}\t{{.Ports}}' # ポータルの表示と一致しているか
+```
+
+ポータルが表示するアクセス先 URL だけを使って一周し、問題文が指すリンク、アプリが返す
+`robots.txt` / `sitemap.xml` / 例示コマンドが、**その割り当て**を指しているかを見る。
+`bun run check:local-play-urls` は静的に分かる焼き込みを落とすが、リダイレクト先や
+生成リンクが実際にどこへ行くかは実起動でしか分からない。
+
 Always a **random** `FLAG_SEED`, never the `local-dev-seed` default — a problem tuned to
 the dev seed must fail here, not at an event. Interact only through the published
 `127.0.0.1` ports; if the fallback is used, note in the report that the portal rendering

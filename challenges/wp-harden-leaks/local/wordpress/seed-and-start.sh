@@ -30,7 +30,7 @@ cat > "${DOCROOT}/wp-content/backups/db-backup.sql" <<'SQL'
 INSERT INTO `wp_users` VALUES
   (1,'admin','$P$Bf7Hs9kExampleHashNotRealDoNotUse01','admin@aoi-corp.example','Administrator');
 INSERT INTO `wp_options` VALUES
-  (1,'siteurl','http://127.0.0.1:18080'),(2,'blogname','Aoi Corp');
+  (1,'siteurl','http://www.aoi-corp.example'),(2,'blogname','Aoi Corp');
 SQL
 
 # --- hole: close-config -------------------------------------------------------

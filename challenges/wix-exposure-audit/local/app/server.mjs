@@ -92,6 +92,22 @@ function createChallengeState(flagSeed) {
   return { FLAGS, SHARE_TOKEN, AGENCY_TOKEN, controls, INBOX };
 }
 
+/**
+ * この板が自分自身を指すときの絶対 URL。
+ *
+ * ポートを焼き込んではいけない。local play は空いているポートへ再割り当てするので、
+ * 別の問題を起動したままこの問題を起動すると 18080 は他問題のものになる。この問題は
+ * robots.txt から sitemap.xml へ、そこから preview page へ辿る導線そのものが主題なので、
+ * 焼き込んだ URL は**参加者を別の問題へ飛ばす** (Issue 399)。
+ *
+ * `Host` は参加者のブラウザが実際に打ったホストとポートなので、それを使えば割り当てが
+ * どこであっても正しい先を指す。`Host` の無い HTTP/1.0 クライアントだけ既定へ落とす。
+ */
+function siteBase(request) {
+  const host = request.headers.host;
+  return host ? `http://${host}` : "http://127.0.0.1:8080";
+}
+
 function send(response, status, contentType, body) {
   response.writeHead(status, {
     "content-type": contentType,
@@ -290,18 +306,19 @@ function createChallengeServer(state) {
         response,
         200,
         "text/plain; charset=utf-8",
-        "Sitemap: http://127.0.0.1:18080/sitemap.xml\n",
+        `Sitemap: ${siteBase(request)}/sitemap.xml\n`,
       );
     }
     if (method === "GET" && url.pathname === "/sitemap.xml") {
+      const base = siteBase(request);
       const preview = controls.searchIndexing
-        ? "<url><loc>http://127.0.0.1:18080/preview/client-review</loc></url>"
+        ? `<url><loc>${base}/preview/client-review</loc></url>`
         : "";
       return send(
         response,
         200,
         "application/xml; charset=utf-8",
-        `<?xml version="1.0"?><urlset><url><loc>http://127.0.0.1:18080/</loc></url>${preview}</urlset>`,
+        `<?xml version="1.0"?><urlset><url><loc>${base}/</loc></url>${preview}</urlset>`,
       );
     }
     if (method === "GET" && url.pathname === "/preview/client-review") {

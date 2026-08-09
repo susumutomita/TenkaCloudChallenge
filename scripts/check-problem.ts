@@ -24,6 +24,7 @@
  *   - metadata.json が SCHEMA に適合しているか
  *   - 参加者へ配信される HTML / script が壊れていないか (Issue 395 / 396)
  *   - local play で起動できる形か、それとも AWS 専用か (Issue 402)
+ *   - local play の割り当てポートを焼き込んでいないか (Issue 399)
  *   - 静的な solvability 監査 (`--static-only` と同じもの)
  *
  * **見ないもの**は、Issue 382 が「基準の確定」として TODO に置いている 4 つのうち 3 つである。
@@ -44,6 +45,7 @@ import { join } from "node:path";
 // 既存の validate-problems.ts と同じ import に揃える。
 import Ajv2020 from "ajv";
 import addFormats from "ajv-formats";
+import { scanProblem } from "./check-local-play-urls.ts";
 import { checkSource } from "./check-participant-surface.ts";
 import { localPlayProblemDirs } from "./lib/local-play-problems.ts";
 
@@ -145,6 +147,23 @@ export function participantSurfaceCheck(dir: string): CheckResult {
  * AWS 専用は **欠陥ではない** ので fail にしない。`skip` で「この checker の後半は答えられない」
  * と言う。fail にすると、正しく AWS 専用として作られた問題まで赤くなり、赤が意味を失う。
  */
+/**
+ * local play の割り当てポートを焼き込んでいないか (Issue 399)。
+ *
+ * 1 問だけ起動している間は表面化しないので、作者は自分では踏まない。だからこそ authoring
+ * 時の機械検査に置く価値がある。
+ */
+export function localPlayUrlCheck(dir: string): CheckResult {
+  const findings = scanProblem(dir);
+  if (findings.length === 0) return { name: "local play url", status: "pass" };
+  const first = findings[0];
+  return {
+    name: "local play url",
+    status: "fail",
+    detail: `${findings.length} 件 (最初: ${first?.file} port ${first?.port})`,
+  };
+}
+
 export function localPlayableCheck(dir: string): CheckResult {
   return existsSync(join(dir, "local"))
     ? { name: "local playable", status: "pass" }
@@ -204,6 +223,7 @@ export function checkProblem(problemId: string): ProblemReport {
       schemaCheck(dir),
       participantSurfaceCheck(dir),
       localPlayableCheck(dir),
+      localPlayUrlCheck(dir),
       solvabilityStaticCheck(problemId, dir),
     ],
   };

@@ -159,16 +159,28 @@ function requireTerminal(request, response) {
   return false;
 }
 
-const HOME = `<!doctype html>
+/**
+ * この板が自分自身を指すときの絶対 URL。
+ *
+ * ポートを焼き込むと、別の問題を起動したまま起動したときに 18080 が他問題のものになり、
+ * 例示した curl が**別の問題へ飛ぶ** (Issue 399)。`Host` は参加者が実際に打ったホストと
+ * ポートなので、再割り当てがどこであっても正しい先を指す。
+ */
+function siteBase(request) {
+  const host = request.headers.host;
+  return host ? `http://${host}` : "http://127.0.0.1:8080";
+}
+
+const home = (base) => `<!doctype html>
 <html lang="en"><head><meta name="color-scheme" content="light dark"><meta charset="utf-8"><title>FestivalGate Terminal API</title></head>
 <body style="font-family:system-ui;max-width:52rem;margin:3rem auto;line-height:1.6">
 <h1>FestivalGate — Entrance Terminal API</h1>
 <p>Venue terminals use this API for ticket lookup and check-in. Your assigned
 low-privilege terminal token is <code>${TERMINAL_TOKEN}</code>.</p>
 <h2>Documented terminal endpoints</h2>
-<pre>curl -H "X-Terminal-Token: ${TERMINAL_TOKEN}" http://127.0.0.1:18080/api/terminal/tickets/TG-1001
+<pre>curl -H "X-Terminal-Token: ${TERMINAL_TOKEN}" ${base}/api/terminal/tickets/TG-1001
 curl -X POST -H "X-Terminal-Token: ${TERMINAL_TOKEN}" -H "content-type: application/json" \\
-  -d '{"code":"TG-1001"}' http://127.0.0.1:18080/api/terminal/checkin</pre>
+  -d '{"code":"TG-1001"}' ${base}/api/terminal/checkin</pre>
 <h2>Operations endpoints</h2>
 <p><code>/internal/ops/status</code> and <code>/internal/ops/summary</code> are
 described as internal-only. Test what evidence the server uses to trust that claim,
@@ -218,7 +230,7 @@ const challenge = createServer(async (request, response) => {
     return sendJson(response, 200, { status: "ok" });
   }
   if (method === "GET" && url.pathname === "/") {
-    return send(response, 200, "text/html; charset=utf-8", HOME);
+    return send(response, 200, "text/html; charset=utf-8", home(siteBase(request)));
   }
 
   const ticketMatch = url.pathname.match(/^\/api\/terminal\/tickets\/([A-Za-z0-9-]+)$/);

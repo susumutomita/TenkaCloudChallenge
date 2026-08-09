@@ -36,7 +36,10 @@ Issue 382 が候補として挙げた 4 つを、**強制する場所**で分類
    (Issue 395 の template literal エスケープ、Issue 396 の `color-scheme` 未宣言)。
    ソースを読むと正しく見える種類なので、目視レビューでは落ちない。
 3. **local playable** — `local/` を持つか。持たない = AWS 専用で、**欠陥ではない**ので `skip`。
-4. **solvability (static)** — `solvability-audit --static-only`。対象は `local/verifier/server.py`
+4. **local play url** — 問題文とアプリが local play の割り当てポートを焼き込んでいないか
+   (Issue 399)。焼き込むと、別の問題を起動したまま起動した参加者が**別の問題へ飛ぶ**。
+   1 問だけ起動している間は表面化しないので、作者は自分では踏まない。
+5. **solvability (static)** — `solvability-audit --static-only`。対象は `local/verifier/server.py`
    を持つ course checkpoint 型に限られるので、それ以外は `skip`。
 
 `skip` は「この問題には当てはまらない」であって「検査を省いた」ではない。`skip` を `fail` にすると

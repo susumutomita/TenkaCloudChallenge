@@ -118,6 +118,11 @@ jobs:
       - name: Check participant-visible surface
         run: bun run check:participant-surface
 
+      # local play は空いているポートへ再割り当てするので、焼き込んだ 18080 は
+      # 「別の問題を起動したまま起動した」瞬間に別問題を指す (Issue 399)。
+      - name: Check no participant surface pins a reassignable port
+        run: bun run check:local-play-urls
+
       # 出荷ゲートを 1 問ずつ回す (Issue 382)。第三者の PR / 独自問題という想定ケースで
       # 実際に使われるのと同じ入口を CI でも通し、「1 問だけ緑」と「カタログ全体が緑」が
       # 同じ検出ロジックで決まるようにする。列挙は index.json ではなく filesystem なので、

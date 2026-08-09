@@ -181,7 +181,7 @@
         },
         {
           "id": "hint-2",
-          "content": "The API returns any profile you name by id but never checks that the id is yours (IDOR). Try `curl -H \"Authorization: Bearer token-guest\" http://127.0.0.1:18080/api/profile/1`: the admin (id 1) object comes back and its `note` holds the flag."
+          "content": "The API returns any profile you name by id but never checks that the id is yours (IDOR). Set `BASE` to the access URL shown in the portal (`BASE=<access URL>`), then run: `curl -H \"Authorization: Bearer token-guest\" \"$BASE/api/profile/1\"` — the admin (id 1) object comes back and its `note` holds the flag."
         }
       ]
     }
@@ -210,7 +210,7 @@
       },
       {
         "id": "hint-2",
-        "content": "この API は id を指定して任意のプロフィールを返すのに、 その id が呼び出し元本人かを確認していない (IDOR)。 `curl -H \"Authorization: Bearer token-guest\" http://127.0.0.1:18080/api/profile/1` で管理者 (id 1) のオブジェクトが返り、 `note` フィールドにフラグが入っている。",
+        "content": "この API は id を指定して任意のプロフィールを返すのに、 その id が呼び出し元本人かを確認していない (IDOR)。 ポータルに表示されている **アクセス先 URL** を `BASE` に控えてから実行する (`BASE=<アクセス先 URL>`)。 `curl -H \"Authorization: Bearer token-guest\" \"$BASE/api/profile/1\"` で管理者 (id 1) のオブジェクトが返り、 `note` フィールドにフラグが入っている。",
         "penalty": 30
       }
     ]
