@@ -759,6 +759,22 @@
                 "minLength": 1
               },
               "description": "[local play / #2054] deploy ごとにランダム秘密を注入する env 変数名 (例: `FLAG_SEED`)。 フラグ・管理者資格情報はこの seed からコンテナ内で導出する (= 答えは repo に置かない)。"
+            },
+            "terminal": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "service"
+              ],
+              "description": "[local play / #2846 #2850] ポータル内蔵コンテナ terminal への明示的な opt-in。 未宣言 = terminal 無し (portal panel も handoff ticket も出ない)。 shell は宣言した compose service にしか入れない (= 「先頭の service」のような暗黙 fallback は無い)。 宣言は必要条件であって十分条件ではない: attach 時に docker adapter が該当 service の compose 定義で `target: participant` build であることを live に検証し、そうでなければ拒否する。 provider=docker (local play) 専用。",
+              "properties": {
+                "service": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$",
+                  "minLength": 1,
+                  "description": "shell を通す compose service 名。 `compose exec <service>` の argv にそのまま渡るため、 先頭は英数字必須 (CLI flag として解釈されないための制約)。 該当 service は `target: participant` で build されていなければならない (author-only material を含む `reference/` 等を participant stage が除外している、という catalog 規約の保証)。"
+                }
+              }
             }
           }
         },
