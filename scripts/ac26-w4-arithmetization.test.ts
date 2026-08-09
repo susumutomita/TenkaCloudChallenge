@@ -309,7 +309,7 @@ describe("ac26-w4-arithmetization: metadata contracts", () => {
     expect(courseAlignment.sources).toEqual([
       {
         repository: "zk-tokyo/advanced-cryptography-2026",
-        ref: "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        ref: "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
         path: "week4/README.md",
         kind: "placeholder",
       },
