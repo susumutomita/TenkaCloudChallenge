@@ -56,6 +56,20 @@ def _counts(db_path: Path) -> tuple[int, int]:
         return ledger, receipts
 
 
+def _ledger_rows(db_path: Path) -> list[tuple[object, ...]]:
+    if not db_path.exists():
+        return []
+    try:
+        with sqlite3.connect(db_path) as connection:
+            return list(
+                connection.execute(
+                    "SELECT account, amount, memo FROM ledger ORDER BY id"
+                ).fetchall()
+            )
+    except sqlite3.Error:
+        return []
+
+
 def _call(module: ModuleType, db_path: Path, key: object, request: object) -> object:
     try:
         return module.handle_request(db_path, key, request)
@@ -93,6 +107,25 @@ def _replay_properties(module: ModuleType, seed: str, phase: str) -> list[str]:
             failures.append("same key and canonical request did not replay the exact status/body")
         if not isinstance(first, dict) or first.get("status") != 201:
             failures.append("the first valid operation did not return status 201")
+        body = first.get("body") if isinstance(first, dict) else None
+        expected_body_fields = {
+            "account": request_a["account"],
+            "amount": request_a["amount"],
+            "memo": request_a["memo"],
+        }
+        if (
+            not isinstance(body, dict)
+            or set(body) != {"chargeId", "account", "amount", "memo"}
+            or not isinstance(body.get("chargeId"), str)
+            or not body.get("chargeId")
+            or any(body.get(name) != value for name, value in expected_body_fields.items())
+        ):
+            failures.append("an unseen valid request was not preserved in the response body")
+        expected_ledger = [
+            (request_a["account"], request_a["amount"], request_a["memo"])
+        ]
+        if _ledger_rows(db_path) != expected_ledger:
+            failures.append("the durable business effect did not preserve the unseen request")
         if _counts(db_path) != (1, 1):
             failures.append("a sequential retry changed the ledger or did not leave one durable receipt")
     return failures

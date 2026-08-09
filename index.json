@@ -1819,7 +1819,7 @@
       "track": {
         "id": "cs-foundations",
         "order": 50,
-        "chapter": "5. HTTP/TLSプロトコル境界"
+        "chapter": "5. HTTP再送と冪等性"
       },
       "difficulty": 3,
       "estimatedDuration": "45-75 分",

@@ -130,7 +130,7 @@ make down
 作者とCIだけが使う。
 
 ```bash
-make reference-test   # reference + hidden properties + 6 mutations kill
+make reference-test   # reference + hidden properties + 7 mutations kill
 ```
 
 ## Checkpoint

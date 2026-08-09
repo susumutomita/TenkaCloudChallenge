@@ -85,19 +85,25 @@ def _check_audit(submission: object) -> bool:
 RUNNER = """
 import json, os, sys
 sys.path.insert(0, {root!r})
-sys.path.insert(0, {workspace!r})
 from tests.hidden import check_idempotency
-try:
-    import idempotency
-except Exception as error:
-    print(json.dumps({{"failures": ["submission could not be imported: " + type(error).__name__]}}))
-    sys.stdout.flush()
-    os._exit(0)
-if not hasattr(idempotency, "handle_request"):
-    print(json.dumps({{"failures": ["submission does not define handle_request()"]}}))
-    sys.stdout.flush()
-    os._exit(0)
-print(json.dumps({{"failures": getattr(check_idempotency, {phase!r})(idempotency, {seed!r})}}))
+private_checker = getattr(check_idempotency, {phase!r})
+for module_name in tuple(sys.modules):
+    if module_name == "tests" or module_name.startswith("tests.") or module_name == "fixtures" or module_name.startswith("fixtures."):
+        sys.modules.pop(module_name, None)
+while {root!r} in sys.path:
+    sys.path.remove({root!r})
+sys.path.insert(0, {workspace!r})
+
+def evaluate_submission(checker):
+    try:
+        import idempotency
+    except Exception as error:
+        return ["submission could not be imported: " + type(error).__name__]
+    if not hasattr(idempotency, "handle_request"):
+        return ["submission does not define handle_request()"]
+    return checker(idempotency, {seed!r})
+
+print(json.dumps({{"failures": evaluate_submission(private_checker)}}))
 sys.stdout.flush()
 os._exit(0)
 """

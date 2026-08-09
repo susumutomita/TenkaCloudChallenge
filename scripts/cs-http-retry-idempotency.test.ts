@@ -47,7 +47,7 @@ print(json.dumps({
   it("passes the reference and kills durable, binding, replay, race, and validation mutants", () => {
     const output = python("mutation.py");
     expect(output).toContain("reference: passes");
-    expect(output).toContain("all 6 mutations killed");
+    expect(output).toContain("all 7 mutations killed");
     expect(output).not.toContain("SURVIVED");
   });
 
@@ -108,6 +108,28 @@ print(json.dumps({"distinct": distinct, "samples": samples}))
     expect(new Set(oneSeed).size).toBe(oneSeed.length);
   });
 
+  it("does not expose hidden checker modules to participant imports", () => {
+    const probe = `
+import sys
+sys.path.insert(0, ".")
+from verifier import server
+spoof = '''
+from tests.hidden import check_idempotency
+check_idempotency.check_replay = lambda *_: []
+def handle_request(*_): return {"status": 500, "body": {}}
+'''
+reference = open("reference/idempotency.py", encoding="utf-8").read()
+print(server._check_code("check_replay", spoof), server._check_code("check_replay", reference))
+`;
+    const output = execFileSync("python3", ["-c", probe], {
+      cwd: LOCAL,
+      encoding: "utf8",
+      env: { ...process.env, FLAG_SEED: "repo-contract-seed", PYTHONDONTWRITEBYTECODE: "1" },
+      timeout: 120_000,
+    });
+    expect(output.trim()).toBe("False True");
+  });
+
   it("separates participant Workbench, hidden verifier, and author artifacts", () => {
     const dockerfile = readFileSync(join(LOCAL, "Dockerfile"), "utf8");
     const participantFixtures = readFileSync(join(LOCAL, "fixtures", "generate.py"), "utf8");
@@ -152,7 +174,7 @@ print(json.dumps({"distinct": distinct, "samples": samples}))
     expect(metadata.track).toEqual({
       id: "cs-foundations",
       order: 50,
-      chapter: "5. HTTP/TLSプロトコル境界",
+      chapter: "5. HTTP再送と冪等性",
     });
     expect(metadata.scoring.kind).toBe("multi-verify");
     expect(metadata.scoring.checks.reduce((sum, item) => sum + item.points, 0)).toBe(200);

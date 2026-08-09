@@ -1,4 +1,4 @@
-"""Break the reference six ways and require the hidden properties to notice."""
+"""Break the reference seven ways and require the hidden properties to notice."""
 
 from __future__ import annotations
 
@@ -54,6 +54,11 @@ MUTATIONS: list[tuple[str, str, str]] = [
         finally:
             connection.close()
         return _error(400, "invalid_request")''',
+    ),
+    (
+        "writes a ledger effect unrelated to the accepted request",
+        '(normalized["account"], normalized["amount"], normalized["memo"]),',
+        '("acct-discarded", 1, ""),',
     ),
 ]
 

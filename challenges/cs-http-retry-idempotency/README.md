@@ -139,7 +139,7 @@ make down
 Authors and CI only:
 
 ```bash
-make reference-test   # reference + hidden properties + six killed mutations
+make reference-test   # reference + hidden properties + seven killed mutations
 ```
 
 ## Checkpoints
