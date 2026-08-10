@@ -12,9 +12,10 @@ Challenge → Battle (#430「DB が遅いらしい」) → Polyglot Battle へ�
 
 Phase 1 の全体設計と依存関係を本ドキュメントで先に確定した。実装は複数 PR に分
 けて進めており、最初の PR で **Drill A1・A2**、stacked #2 で **Drill A3・A4**、
-stacked #3 で **Drill A6・A7**、stacked #4 で **Drill A8・A12**、この PR
-(stacked #5) で **Drill A10・A11** を実装した。残りは「計画」であって「実装済
-み」ではない。実装状況は各行の先頭に明記する。
+stacked #3 で **Drill A6・A7**、stacked #4 で **Drill A8・A12**、stacked #5 で
+**Drill A10・A11**、この PR (stacked #6、最終) で **Challenge 1・Challenge 2**
+を実装した。これで Phase 1 MVP のチェックリスト (Drill 10 問 + Challenge 2 問)
+が全て実装済みになった。実装状況は各行の先頭に明記する。
 
 | 状態 | order | 問題 ID | 章 | 前提とする Drill | 学ぶこと |
 | --- | --- | --- | --- | --- | --- |
@@ -22,22 +23,28 @@ stacked #3 で **Drill A6・A7**、stacked #4 で **Drill A8・A12**、この PR
 | ✅ 実装済み | 20 | `db-a2-index-tradeoff` | 1. Storage Foundations | A1 | Index の read/write trade-off ── Seq Scan vs Index Scan、EXPLAIN の読み方 |
 | ✅ 実装済み | 30 | `db-a3-query-plan` | 1. Storage Foundations | A2 | Query Plan ── planner が必ず index を選ぶわけではないこと (選択性、統計、コスト推定) |
 | ✅ 実装済み | 40 | `db-a4-transaction` | 2. Transactions & Concurrency | A1 | Transaction ── BEGIN/COMMIT/ROLLBACK、原子性を壊す操作の観察 |
+| 🧭 計画 (MVP 対象外・意図的な欠番) | (欠番) | A5: Isolation (未着手) | 2. Transactions & Concurrency | A4 | Isolation level (read committed / repeatable read など) の違いを観測する ── Epic #431 の Phase 1 MVP チェックリストに元から含まれていない番号で、実装漏れではない (詳細は「既知の断絶」1 節) |
 | ✅ 実装済み | 50 | `db-a6-lock` | 2. Transactions & Concurrency | A4 | Lock ── 同じ行への書き込み同士が行ロックで待たされる様子を 2 セッションで再現し、pg_locks/pg_stat_activity で blocker を特定する |
 | ✅ 実装済み | 60 | `db-a7-mvcc` | 2. Transactions & Concurrency | A4, A6 | MVCC ── 読み取りが書き込みに待たされない理由 (行バージョニング) を xmin/xmax で観察し、長時間 transaction が VACUUM の dead tuple 回収を妨げる様子を確認する |
 | ✅ 実装済み | 70 | `db-a8-delete-vacuum` | 2. Transactions & Concurrency | A7 | DELETE / VACUUM ── 大量 DELETE 直後は disk が縮まず n_dead_tup が増えること、手動 VACUUM で dead tuple は回収されるがファイルサイズ自体は縮まないこと (VACUUM FULL との対比) を確認する |
+| 🧭 計画 (MVP 対象外・意図的な欠番) | (欠番) | A9: WAL / Durability (未着手) | 2. Transactions & Concurrency | A8 | WAL (write-ahead log) による durability を観測する ── A5 と同じ理由で Phase 1 MVP チェックリストに元から含まれていない (詳細は「既知の断絶」1 節) |
 | ✅ 実装済み | 80 | `db-a10-primary-replica` | 3. Scaling & Topology | A1 | Primary / Replica ── primary + streaming replica の 2 ノード構成 (結線は自動) で、書き込みが replica へ継続的に追従することを実測する |
 | ✅ 実装済み | 90 | `db-a11-replication-lag` | 3. Scaling & Topology | A10 | Replication Lag ── recovery_min_apply_delay で replica の apply を意図的に絞り、lag を発生させてから解消する |
 | ✅ 実装済み | 100 | `db-a12-partition` | 3. Scaling & Topology | A2, A8 | Partition ── 同じ規模の古いデータを row-level DELETE で消す場合と DETACH PARTITION (+ DROP TABLE) で消す場合の作業量の違いを実測比較する |
-| 🧭 計画 | 110 | Challenge 1 (仮称: slow query) | 4. Challenges | A2, A3 | 未知のスロークエリを EXPLAIN で特定し、根本対策する |
-| 🧭 計画 | 120 | Challenge 2 (仮称: blocked transaction) | 4. Challenges | A6, A7 | ブロックしているトランザクションを `pg_locks` / `pg_stat_activity` から特定し、解消する |
-| 🧭 計画 (別 Issue #430) | 130 | Battle #430「DB が遅いらしい」 | 5. Battle | 4章の Challenge 全て | 上記全ドリルを前提にした、時間制限つきの実戦形式 |
+| ✅ 実装済み | 110 | `db-challenge-slow-query` | 4. Challenges | A2, A3 | 未知のスロークエリ (症状のみ、原因は教えない) を EXPLAIN (ANALYZE, BUFFERS) と pg_indexes で自力診断し、根本対策する。列順の違う既存 index という赤いニシンつき |
+| ✅ 実装済み | 120 | `db-challenge-blocked-transaction` | 4. Challenges | A6, A7 | 止まったままのアプリ書き込み (症状のみ、原因は教えない) を pg_stat_activity / pg_locks / pg_blocking_pids() で自力診断し、pg_terminate_backend() で解消する。無害なデコイ接続という赤いニシンつき |
+| 🧭 計画 (別 Issue #430、未着手) | 130 | Battle #430「DB が遅いらしい」 | 5. Battle | 4章の Challenge 全て | 上記全ドリル・Challenge を前提にした、時間制限つきの実戦形式 |
 
-order 110 (Challenge 1) 以降は**「まだ実行できません」ではなく「まだ書いていま
-せん」**。runtime は A1〜A8・A10〜A12 と同じ docker/compose (postgres:16 系) で
-成立する見込みで、runtime そのものが動かないわけではない。A6・A7 は「2 つの
-transaction を同時に操作する」という要求を解決した最初の Drill、A10・A11 は
+A5・A9 の行は、実装予定が無いことを隠さず明記するための **プレースホルダ行**
+であり、`order` は割り当てていない (実在する `track.order` の値ではない ──
+将来これらを実装する場合、その時点で 45・75 相当の値を新たに割り当てる)。
+
+order 110・120 (Challenge 1・2) は、この PR で実装が完了し、host の実 Postgres
+16 で最初から最後まで検証済みである (詳細は「既知の断絶」2 節)。A6・A7 は「2 つ
+の transaction を同時に操作する」という要求を解決した最初の Drill、A10・A11 は
 「1 コンテナでは表現できない、2 ノードの物理トポロジー」という要求を解決した
-最初の Drill で、それぞれの具体的な手法は後述の「既知の断絶」1 節に記録した。
+最初の Drill、Challenge 1・2 は「参加者に原因を教えない」という要求を解決した
+最初の問題で、それぞれの具体的な手法は後述の「既知の断絶」1 節に記録した。
 
 ## 順序の根拠 (prerequisite 依存関係であって difficulty / ID 辞書順ではない)
 
@@ -74,11 +81,17 @@ Epic の要求どおり、順序は「A1, A2, A3, A4, ...」という ID の辞�
   率を上げる」話で、Index による絞り込み (A2) と DELETE の運用コスト (A8、行数
   に比例して重くなる) の両方を知っていないと、「DETACH PARTITION がなぜ行数に
   依存しないほぼ定数時間で終わるのか」という対比の片方しか説明できない。
-- **Challenge 1 (計画)**: A2 (index) と A3 (query plan) が無いと、未知のスロー
-  クエリを自力で EXPLAIN から特定する土台が無い。
-- **Challenge 2 (計画)**: A6 (lock) と A7 (MVCC) が無いと、`pg_locks` /
-  `pg_stat_activity` から「何がブロックしているトランザクションを止めているか」
-  を読み解けない。
+- **A2, A3 → Challenge 1 (`db-challenge-slow-query`)**: A2 (index) と A3
+  (query plan) が無いと、未知のスロークエリを自力で EXPLAIN から特定する土台
+  が無い。Challenge 1 は A2・A3 と違い「index が無い」「列順が違う」と直接教
+  えない ── 症状 (遅いクエリ 1 本) だけを渡し、A2・A3 で身につけた道具
+  (EXPLAIN (ANALYZE, BUFFERS)、pg_indexes) を自分の判断だけで適用させる。
+- **A6, A7 → Challenge 2 (`db-challenge-blocked-transaction`)**: A6 (lock) と
+  A7 (MVCC) が無いと、`pg_locks` / `pg_stat_activity` から「何がブロックして
+  いるトランザクションを止めているか」を読み解けない。Challenge 2 も同様に
+  「blocker が居る」と直接教えない ── 症状 (止まったままの書き込み) だけを渡
+  し、A6 で身につけた `pg_blocking_pids()` の技法を自分の判断だけで適用させ
+  る。
 - **Battle #430 (計画、別 Issue)**: 4 章の Challenge 2 問を前提にした実戦形式。
   Drill だけを終えた状態で Battle に出すと、時間制限の中で使う道具 (EXPLAIN、
   pg_locks 等) に触れたことが無いまま競技に投げ出すことになる。
@@ -112,8 +125,16 @@ Epic の要求どおり、順序は「A1, A2, A3, A4, ...」という ID の辞�
   は `recovery_min_apply_delay` を上げてから書き込んで `replay_lag` が伸びる
   様子、下げてからもう一度書き込んで縮む様子を対比させ、`replay_lag` が常時
   カウントアップするタイマーではなく feedback を受けた瞬間だけ更新される値だ
-  という、実機で確認した挙動をそのまま体験させる。
-- **採点は外部状態で行う**: 10 問とも `scoring.kind: "multi-verify"` で、提出テ
+  という、実機で確認した挙動をそのまま体験させる。Challenge 1
+  (`db-challenge-slow-query`) と Challenge 2
+  (`db-challenge-blocked-transaction`) は、この対比の構造そのものを Drill か
+  ら一段引き上げる ── 前後の状態を「教える」のではなく、症状 1 つだけを渡し、
+  参加者自身に「before」を EXPLAIN や pg_stat_activity で実測させてから、自
+  分で選んだ対策の「after」を同じ道具でもう一度測らせる。対比の軸 (before/
+  after) は Drill と同じだが、before が何であるかを教えないのが Challenge の
+  違いである。
+- **採点は外部状態で行う**: 10 問の Drill + 2 問の Challenge、計 12 問とも
+  `scoring.kind: "multi-verify"` で、提出テ
   キストは一切読まれない。checkpoint は毎回、コンテナ内の実 Postgres へ
   `pg_index` / `pg_indexes` への問い合わせ、実際の `EXPLAIN` 実行、
   `pg_stat_user_tables` の統計、`xmin` システム列、`pg_xact_commit_timestamp()`、
@@ -155,6 +176,33 @@ Epic の要求どおり、順序は「A1, A2, A3, A4, ...」という ID の辞�
   (participant が書き込めず、primary の Node app が約 1 秒おきに書く記録) に
   残る ── trigger の代わりにタイマーが埋める、A6〜A8 と同じ「診断結果の自己
   申告を避ける」という設計原則の延長。
+  Challenge 1 の `target-query-uses-customer-id-led-index` は、当初「実行計画
+  に Seq Scan が無いこと」を判定条件にする予定だったが、host の実 Postgres 16
+  で検証したところ、赤いニシン (`(status, customer_id)`、列順が違う) だけで
+  Seq Scan ノードが最初から一度も現れないと分かった (Postgres が、heap より幅
+  の狭い index を全件たどりながら customer_id を index tuple に対して直接評価
+  する形でこの index を選ぶため)。そこで判定を「Seq Scan が無いか」ではなく
+  「実行計画が実際に選んだ index (`Index Name`) の先頭列が customer_id か」に
+  変更した ── 「index が存在する」「Seq Scan が消えた」という 2 つの浅い近道
+  をどちらも塞ぐ設計。`buffers-dramatically-reduced` の閾値も、赤いニシンが
+  それ自体で部分的な改善をもたらしてしまう実測を踏まえ、A2 の
+  `max(50, baseline * 0.1)` より緩やかな `max(100, baseline * 0.3)` にして
+  ある (それでも本当の対策は閾値を大きく下回る)。Challenge 2 の
+  `blocking-session-cleared` は、インシデント開始時に一度だけ記録された本物の
+  blocker の backend pid が実際に `pg_stat_activity` から消えたかを見る ──
+  無害なデコイ接続 (同じ `app_service` role、transaction も lock も持たない)
+  を終了させただけではこの pid は消えない。`genuine-wait-then-resolution` は、
+  保留中の書き込みが実際に意味のある時間だけロック待ちしてから完了したかを、
+  アプリ自身のコードが記録した時刻 (書き込みを発行した瞬間・実際に返ってきた
+  瞬間) から判定する ── この書き込み文自体を参加者が実行することは無いため、
+  A6 のような「自分の文に `pg_sleep()` を仕込んで偽装する」という近道はそも
+  そも成立しない。host の実 Postgres 16 で検証して初めて分かったこととして、
+  `pg_stat_activity` の `state`/`wait_event_type`/`wait_event` は、superuser
+  または `pg_read_all_stats` のメンバーでない限り**他 role** の backend につ
+  いては NULL を返す ── `participant` と `app_service` が別 role である
+  Challenge 2 ではこの grant が無いと、instructions が指示する診断クエリ自体
+  が 0 行を返してしまう (`local/db/schema.sql` に `pg_read_all_stats` の
+  grant として反映済み)。
 - **学習順は prerequisite 依存関係で決める**: 上述のとおり。`track.order` は
   10 刻みで、この依存関係の順に並んでいる。
 - **runtime fidelity を偽装しない**: 実 PostgreSQL 16 系公式 image
@@ -205,6 +253,22 @@ Epic の要求どおり、順序は「A1, A2, A3, A4, ...」という ID の辞�
   "permission denied" になることを確認済み) ── これはこのドリルの正解の手段
   そのものなので隠す対象ではなく、逆に「これ以外は一切変更できない」ことが
   least privilege の担保になっている。
+  Challenge 1 は `grading` schema (`grading.baseline_buffers`) を A2 と同じ設
+  計で持つ ── baseline (赤いニシンしか無い状態でのバッファ数) はコンテナ初回
+  起動時に一度だけ記録され、`participant` には `USAGE` すら与えない。加えて
+  Challenge 特有の非スポイラー制約として、`instructions`/`description` の参
+  加者向け文面には「index が無い」「列順が違う」という原因そのものを一度も書
+  かない (`description` フィールド自体が SCHEMA.json の定義どおり管理者専用
+  で、参加者には配信されない) ── これは他の Drill (A2・A3 など) には無い、
+  Challenge 固有の制約である。Challenge 2 は `audit` schema
+  (`audit.incident_log`) を持つが、書き込み手は A6〜A8 のような trigger では
+  なく、インシデントを自作自演するアプリ自身の Node app のコード ── 参加者
+  はこの schema に `SELECT` しか持たず、`app.accounts` 自体への書き込み権限
+  も一切与えられない (A6 の `inventory.stock` とは違い、参加者自身が書き込む
+  側に回らない設計)。参加者に唯一許可した書き込み相当の操作は
+  `pg_terminate_backend()` (`pg_signal_backend` メンバーシップ経由、非
+  superuser の backend しか終了させられないことを実機で確認済み) のみで、こ
+  れがこの Challenge の正解の手段そのものである。
 
 ## runtime 選定の根拠
 
@@ -214,12 +278,12 @@ Epic の要求どおり、順序は「A1, A2, A3, A4, ...」という ID の辞�
 managed service の意味論には依存しないため。「AWS っぽい名前を付けるだけ」の問
 題にしていない。
 
-A1〜A4・A6〜A8・A10〜A12 とも `runtime.terminal` を宣言し、Portal 内蔵ターミナ
-ルから `psql` に直接触れる形にした (ホスト側に何もインストールしなくてよい)。
-`docker compose exec` のようなホストコマンドを instructions 本文には書いてい
-ない (書くと `check:problem` の `host terminal disclosed` チェックが「ホスト
-側のターミナルが必要です」の明記を要求するため。README には fallback として
-明記している)。
+A1〜A4・A6〜A8・A10〜A12・Challenge 1・Challenge 2 とも `runtime.terminal` を
+宣言し、Portal 内蔵ターミナルから `psql` に直接触れる形にした (ホスト側に何も
+インストールしなくてよい)。`docker compose exec` のようなホストコマンドを
+instructions 本文には書いていない (書くと `check:problem` の `host terminal
+disclosed` チェックが「ホスト側のターミナルが必要です」の明記を要求するため。
+README には fallback として明記している)。
 
 A6・A7 は「2 つの transaction を同時に操作する」という、A4 までには無かった
 要求がある。1 つの Portal ターミナルの中から psql の `\!` で 2 本目の psql プ
@@ -243,7 +307,8 @@ A10・A11 は「1 コンテナでは表現できない」という、これま�
 - `runtime`: `{ "provider": "docker", "engine": "compose", ... "terminal": { "service": "<compose service名>" } }`
 - `scoring`: `{ "kind": "multi-verify", "checks": [...] }` ── 満点は難易度ティ
   ア標準 (`SCORING.md`)。A1 は difficulty 1 (Easy, 100pt)、A2・A3・A4・A6・A7・
-  A8・A10・A11・A12 は difficulty 2 (Easy, 100pt)。
+  A8・A10・A11・A12・Challenge 1 (`db-challenge-slow-query`)・Challenge 2
+  (`db-challenge-blocked-transaction`) は difficulty 2 (Easy, 100pt)。
 
 生成される `index.json` がポータルの「講座トラック」画面と「次にやること」導線
 の正本になる (`bun run reindex` で再生成、手編集禁止)。
@@ -252,12 +317,19 @@ A10・A11 は「1 コンテナでは表現できない」という、これま�
 
 受け入れ条件の要求により、**埋まっていない箇所を埋まったことにせず列挙する**。
 
-### 1. Phase 1 の Drill 10 問中 10 問を実装、残るのは Challenge 2 問と Battle
+### 1. Phase 1 の Drill 10 問 + Challenge 2 問、計 12 問を実装。残るのは Battle #430 への接続のみ
 
 A5・A9 は Epic 側の番号採番自体に元から存在しない (stackstack-route の order
 50/60 の空席と同様、意図的な欠番であって欠落ではない) ため、Drill は実質 10 問
-(A1〜A4, A6〜A8, A10〜A12) 全てが実装済みになった。Challenge 2 問 (order 110・
-120) と Battle #430 への接続はこの PR の範囲外のまま (4 節)。
+(A1〜A4, A6〜A8, A10〜A12) 全てが実装済みになった。この PR (stacked #6、最終)
+で Challenge 2 問 (`db-challenge-slow-query` = order 110、
+`db-challenge-blocked-transaction` = order 120) も実装し、Phase 1 MVP の
+チェックリスト (Drill 10 問 + Challenge 2 問) は全て実装済みになった。
+
+**残っているのは Battle #430 への接続だけである。** 「接続」とは、Phase 1 の
+Drill・Challenge を終えた参加者が、事前知識ゼロの状態で実際に Battle #430 を
+攻略できることを示す blind playthrough の証拠を指す。これは別 Issue #430 (未
+着手) の実装そのものに加え、本 PR の範囲外であり、4 節で改めて明記する。
 
 A6・A7 (stacked #3) で「2 つの transaction を同時に操作する」という、A4 まで
 には無かった要求をどう解決したかを記録しておく。A4 は Portal 内蔵ターミナル 1
@@ -317,15 +389,52 @@ A10・A11 (stacked #5) は「1 コンテナでは表現できない、2 ノー�
   `primary` で一度 `GRANT` すれば `replica` 側にも複製で自動的に伝わる ──
   これも実機で確認済み (`local/entrypoint-primary.sh` のコメント参照)。
 
+Challenge 1・Challenge 2 (この PR、stacked #6) は「参加者に原因を教えない」
+という、A1〜A12 のどの Drill にも無かった要求をどう解決したかを記録しておく。
+Drill は「これから何を観察するか」を instructions で明示するが、Challenge は
+症状だけを渡し、原因の特定そのものを課題にする ── この設計上の違いが、実装
+と grading の両方に直接効いた。
+
+- **Challenge 1 (`db-challenge-slow-query`)**: 当初「実行計画に Seq Scan が
+  無くなれば正しい index が選ばれた証拠」という grading 設計を想定していた
+  が、host の実 Postgres 16 で赤いニシン (`(status, customer_id)`、列順が違
+  う) を実際に動かして検証したところ、これは誤りだと判明した。Postgres は
+  `customer_id` がこの index の先頭列でなくても、この (heap より幅の狭い)
+  index を全件たどりながら `customer_id` を index tuple に対して直接評価す
+  る形 (`Index Cond`、`Filter` ではない) でこの index を選ぶ ── heap を
+  Seq Scan するよりそちらの方が実際に安いため。この結果、対象クエリの実行計
+  画には赤いニシンしか無い起動直後の状態から一度も `Seq Scan` ノードが現れ
+  ない。「Seq Scan が消えたか」を grading 条件にすると、参加者が何もしてい
+  ない状態から checkpoint が trivially 通ってしまうところだった。この発見を
+  受けて、grading は「実行計画が実際に選んだ index (`Index Name`) の先頭列
+  が customer_id か」に変更した ── 詳細は `local/grader/grade.mjs` のコメン
+  トと本ドキュメントの「設計原則との対応」節を参照。
+- **Challenge 2 (`db-challenge-blocked-transaction`)**: `participant` とは
+  別の role (`app_service`) が blocker/waiter を演じる設計にしたところ、
+  host の実 Postgres 16 で検証して初めて、`pg_stat_activity` の
+  `state`/`wait_event_type`/`wait_event` が superuser または
+  `pg_read_all_stats` のメンバー以外には**他 role** の backend について常に
+  NULL を返すと判明した。A6 は participant 自身が blocker/waiter 両方を演じ
+  るためこの制限が問題にならなかったが、Challenge 2 では
+  instructions がそのまま指示する診断クエリが `participant` から見て 0 行を
+  返してしまうところだった。`local/db/schema.sql` に `pg_read_all_stats` の
+  grant を追加して解決した (読み取り専用、書き込みや signal の権限は含まな
+  い)。同様に、`participant` が実際の書き込み文を一度も実行しない設計 (アプ
+  リ自身の Node app が blocker/waiter 双方の書き込みを行う) にしたことで、
+  A6 のような「参加者が自分の文に `pg_sleep()` を仕込んで待ち時間を偽装す
+  る」という近道がそもそも成立しない grading になった。
+
 ### 2. Docker image のビルド・起動は実 Docker で未検証 (セッション固有の制約)
 
-A1〜A4・A6〜A8・A10〜A12 いずれの実装セッションでも、Docker daemon 自体は起動
-できたが (A10・A11 の実装セッションでは `dockerd` の起動自体には成功した)、
-`postgres:16-alpine` / `node:22-alpine` を含む Docker Hub からの image pull が
-ネットワークポリシーでブロックされていた
-(`production.cloudfront.docker.com` への CONNECT が 403、`docker pull
-postgres:16-alpine` で実際に再現・確認した)。そのため **配布する Docker image
-そのものをビルド・起動しての検証はできていない**。
+A1〜A4・A6〜A8・A10〜A12・Challenge 1・Challenge 2 いずれの実装セッションで
+も、Docker daemon 自体は起動できたが、Docker Hub からの image pull がブロッ
+クされていた。この PR (stacked #6) のセッションでは `docker pull
+postgres:16-alpine` / `docker pull alpine:latest` のいずれも
+`registry-1.docker.io` への HEAD request が `429 Too Many Requests` で失敗す
+ることを実際に確認した (先行する stacked PR のセッションでは `403` だった ──
+エラーの種類はセッションごとに違うが、「image pull ができない」という実害は
+同じである)。そのため **配布する Docker image そのものをビルド・起動しての
+検証はできていない**。
 
 代わりに、apt でインストールした実 PostgreSQL 16 (`postgresql-16`, Ubuntu
 noble) をこのマシン上で直接起動し、`local/db/schema.sql` → `local/db/seed.sql`
@@ -389,9 +498,44 @@ select pg_reload_conf();` を実行 → primary へ書き込み → 数秒後に
 checkpoint が、何もしていない状態→lag 発生後→lag 解消後の順で正しく
 false→false / true→false / true→true と遷移することも確認した。
 
+Challenge 1 (`db-challenge-slow-query`) は、host の実 Postgres 16 に
+`schema.sql`→`seed.sql`→`server.mjs` を適用し、参加者役として実際に `psql`
+から操作して確認した。(1) 未着手 (赤いニシンのみ) の状態で 3 checkpoint 全て
+が false であること。(2) 無関係な列 (`total_cents`) への index 追加が 3
+checkpoint とも false のままであること。(3) 先頭列が違う**別の**赤いニシン風
+index (`(created_at desc, customer_id)`) を追加すると、プランナが元の赤いニ
+シンよりこちらを選ぶことがあるにもかかわらず、実測バッファ数はむしろ悪化 (386
+→ 396) し、3 checkpoint とも false のままであること。(4) `customer_id` を先頭
+列とする単純な index (`create index ... (customer_id)`) で 3 checkpoint とも
+true に反転し、実測バッファ数が 389 → 62 まで落ちること。(5) 複合 index
+(`(customer_id, created_at desc)`) ではさらに 23 まで落ちること。(6)
+`participant` が `grading` schema を読み書きできないこと (`permission denied
+for schema grading`)。いずれも実測で確認した。当初の grading 設計 (「Seq Scan
+が消えたか」) が赤いニシン単体で trivially 満たされてしまうと分かったのもこの
+実機検証によってであり (1 節)、これを受けて grading を「実際に選ばれた index
+の先頭列」に変更した。
+
+Challenge 2 (`db-challenge-blocked-transaction`) も同じ経路で検証した。(1)
+コンテナ起動直後、リークした blocker (`idle in transaction`) と無害なデコイ
+(`idle`) の 2 本の `app_service` 接続が実際に確立され、3 本目の waiter が実際
+に `wait_event_type = 'Lock'` で待たされること。(2) `participant` から
+`pg_stat_activity` を見たとき、`pg_read_all_stats` を grant する前は
+`state`/`wait_event_type` が他 role の backend について NULL になり、grant 後
+は正しく見えるようになることを実際に確認した (1 節の発見)。(3) デコイ接続を
+`pg_terminate_backend()` で終了させても 3 checkpoint が false のままであるこ
+と (無害なデコイである証明)。(4) waiter 自身の backend を誤って終了させても、
+アプリの retry loop が新しい接続で自動的に再試行し、その後正しい blocker を
+終了させれば最終的に 3 checkpoint とも true になること (誤った操作からの回復
+力の実測)。(5) `pg_blocking_pids()` で正しく特定した blocker の pid を終了さ
+せると、3 checkpoint が全て true に反転し、`app.accounts` の残高が期待どおり
+95000 cents になること。(6) `participant` の `app.accounts` への直接 UPDATE
+と、superuser backend への `pg_terminate_backend()` がいずれも権限エラーにな
+ること。(7) 一度解消した状態でコンテナ (Node app) を再起動しても、インシデン
+トが再発せず解消済みのまま保たれること。いずれも実測で確認した。
+
 これは `postgres:16-alpine` と同じ PostgreSQL 16 系エンジンだが、**配布物その
 ものではない**。Docker が使える環境での
-`make local PROBLEM=db-a1-table-primary-key` 等 10 問それぞれの最終確認は未実
+`make local PROBLEM=db-a1-table-primary-key` 等 12 問それぞれの最終確認は未実
 施であり、one-time verification として残る (詳細は PR 本文の Validation 節)。
 
 ### 3. platform 側 (TenkaCloud リポジトリ) の導線設定は未確認
@@ -406,12 +550,34 @@ Portal がこの契約をどう描画するか (embedded terminal panel の UX) 
 側の実装に依存する。`wp-harden-leaks` が同じ宣言を先に使っているため、契約自
 体は実績があるとみなしている。
 
-### 4. Challenge 2 問と Battle #430 の具体的な内容は未確定
+### 4. Battle #430 への「接続」(blind playthrough の証拠) は未着手のまま
 
-curriculum.md 上は「slow query」「blocked transaction」という仮称のみで、
-metadata・runtime・scoring は何も決まっていない。Battle #430 は別 Issue であ
-り、本 PR はその接続点 (Phase 1 の Drill が Battle の前提知識になっていること)
-を上の依存関係表で記述したのみで、Battle 側の実装には一切触れていない。
+Phase 1 MVP のチェックリスト (Drill 10 問 + Challenge 2 問) は、この PR
+(stacked #6、最終) で全て実装済みになった。`db-challenge-slow-query` と
+`db-challenge-blocked-transaction` は metadata・runtime・scoring とも確定して
+おり、仮称ではない。
+
+しかし、Epic の受け入れ条件が実際に求めているのは「未経験者がこのルートだけで
+#430 に到達できること」であり、これは Drill・Challenge が実装済みであること
+だけでは満たされない。満たすには、Phase 1 (Drill 10 問 + Challenge 2 問) だけ
+を終えた参加者が、事前知識ゼロの状態で実際に Battle #430 を攻略できることを示
+す **blind playthrough の証拠**が要る。**これは本 PR / 本リポジトリの範囲外
+のまま、正直に未着手として記録する。**
+
+具体的に未着手なのは次の 2 つである。
+
+1. **Battle #430 自体の実装**: Issue #430「DB が遅いらしい」は別 Issue であ
+   り、metadata・runtime・scoring を含め本 PR は一切触れていない。curriculum.md
+   の依存関係表 (「この PR で実装した範囲」節) に order 130 として記載してい
+   るのは、Phase 1 との依存関係を示すためだけの記述であり、Battle #430 の実
+   装状況を表すものではない。
+2. **接続点の実証 (blind playthrough)**: 上記の Battle #430 が実装された後、
+   Phase 1 を終えた (かつ Phase 1 の答えを一切事前に知らない) 参加者役が実際
+   に Battle #430 を制限時間内で攻略できるかを確認する手順は、この PR には
+   含まれていない。「Drill・Challenge が Battle の前提知識になっている」とい
+   う設計意図を依存関係表・「順序の根拠」節で説明することと、それが実際に機
+   能する証拠を持つことは別物である ── 前者はこの PR で行ったが、後者はまだ
+   何一つ検証していない。
 
 ## 関連
 

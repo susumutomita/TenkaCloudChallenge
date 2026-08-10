@@ -2111,6 +2111,74 @@
       }
     },
     {
+      "id": "db-challenge-blocked-transaction",
+      "name": "支払いの書き込みが止まったまま返ってこない",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "database-track",
+        "order": 120,
+        "chapter": "4. Challenges"
+      },
+      "difficulty": 2,
+      "estimatedDuration": "10〜15 分",
+      "shortDescription": "ある口座への出金処理が、ずっと保留のまま完了しない。原因は教えない ── A6 (Lock) で使った pg_stat_activity / pg_locks / pg_blocking_pids() を自分の手で使い、何が止めているのかを自力で突き止めて解消する。似たようなセッションが複数見えるが、全部が犯人とは限らない。",
+      "tags": [
+        "database",
+        "postgresql",
+        "challenge",
+        "local-play",
+        "container",
+        "sql",
+        "lock",
+        "concurrency",
+        "pg-locks",
+        "diagnostics"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "db-challenge-slow-query",
+      "name": "顧客の注文履歴が返ってこない",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "database-track",
+        "order": 110,
+        "chapter": "4. Challenges"
+      },
+      "difficulty": 2,
+      "estimatedDuration": "10〜15 分",
+      "shortDescription": "カスタマーサポートの管理画面で、ある顧客の注文履歴を開くといつまでも読み込みが終わらない。原因は教えない ── A2 (Index)・A3 (Query Plan) で使った EXPLAIN (ANALYZE, BUFFERS) を自分の手で使い、遅い理由を自力で突き止めて直す。テーブルは空ではない ── 既にインデックスが 1 つあるが、それで足りているとは誰も言っていない。",
+      "tags": [
+        "database",
+        "postgresql",
+        "challenge",
+        "local-play",
+        "container",
+        "sql",
+        "index",
+        "query-plan",
+        "performance",
+        "diagnostics"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "eventbridge-delivery-discipline",
       "name": "二度届いて、前後する",
       "category": "Challenge",
