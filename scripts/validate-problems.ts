@@ -568,6 +568,59 @@ function isContainerProblem(meta: Metadata): boolean {
   return typeof runtime?.engine === "string" && runtime.engine !== "cloudformation";
 }
 
+/**
+ * [TenkaCloud#3008] `runtime.compatibility` は「この host では結果に意味が無い」を platform が
+ * 起動前に fail closed で拒否するための宣言。 schema は形を検査するが、 ここで意味論を見る。
+ *
+ * 検出したいのは、 宣言したつもりで何も制約していない状態と、 どの host でも一致しない token。
+ * どちらも「宣言はあるのに起動が拒否されない / 常に拒否される」という、 出た値を信じてよいか
+ * が分からない問題になる。 platform 側 (`scripts/local-play/manifest.ts` の
+ * `normalizeCompatibility`) と同じ規則をカタログ側でも先に落とす。
+ */
+export function checkNativeCompatibility(meta: Metadata): ValidationError[] {
+  const runtime = meta.runtime as { compatibility?: unknown } | undefined;
+  const compatibility = runtime?.compatibility;
+  if (compatibility === undefined) return [];
+  if (typeof compatibility !== "object" || compatibility === null || Array.isArray(compatibility)) {
+    return ["runtime.compatibility must be an object"];
+  }
+  // local play 以外で宣言しても platform に判定させる経路が無く、 静かに無視される。
+  if (!isContainerProblem(meta)) {
+    return [
+      'runtime.compatibility is only meaningful for a container problem (provider=docker); an AWS/CloudFormation problem has no local host to check',
+    ];
+  }
+  const raw = compatibility as { nativeArchitectures?: unknown; cpuFlags?: unknown };
+  const errors: ValidationError[] = [
+    ...checkCompatibilityTokens(raw.nativeArchitectures, "runtime.compatibility.nativeArchitectures"),
+    ...checkCompatibilityTokens(raw.cpuFlags, "runtime.compatibility.cpuFlags"),
+  ];
+  if (raw.nativeArchitectures === undefined && raw.cpuFlags === undefined) {
+    errors.push(
+      "runtime.compatibility must declare nativeArchitectures or cpuFlags (an empty declaration silently allows every host)",
+    );
+  }
+  return errors;
+}
+
+/** OCI platform 名 / `/proc/cpuinfo` の flag 名と同じ綴りだけを通す。 */
+const COMPATIBILITY_TOKEN_RE = /^[a-z0-9][a-z0-9._-]*$/;
+
+function checkCompatibilityTokens(value: unknown, field: string): ValidationError[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) return [`${field} must be an array`];
+  if (value.length === 0) return [`${field} must not be empty`];
+  const errors: ValidationError[] = [];
+  for (const [index, entry] of value.entries()) {
+    if (typeof entry !== "string" || !COMPATIBILITY_TOKEN_RE.test(entry)) {
+      // 大文字や空白混じりの token は、 どの host の報告値とも一致せず「常に拒否」になる。
+      errors.push(`${field}[${index}] must match ${COMPATIBILITY_TOKEN_RE} (got ${JSON.stringify(entry)})`);
+    }
+  }
+  if (new Set(value).size !== value.length) errors.push(`${field} must not repeat a value`);
+  return errors;
+}
+
 function checkContainerRefs(dir: string, meta: Metadata): CrossRefResult {
   const runtime = meta.runtime as { entry?: unknown } | undefined;
   const errors: ValidationError[] = [
@@ -915,6 +968,7 @@ function checkCrossRefs(metaPath: string, meta: Metadata): CrossRefResult {
   const runtimeAgnosticErrors = [
     ...checkSimulationOverlay(metaPath, meta),
     ...checkCourseAlignment(meta),
+    ...checkNativeCompatibility(meta),
   ];
   if (isCompositeProblem(meta)) {
     const result = checkCompositeRefs(dir, meta);
