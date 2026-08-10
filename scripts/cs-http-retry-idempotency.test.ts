@@ -51,6 +51,25 @@ print(json.dumps({
     expect(output).not.toContain("SURVIVED");
   });
 
+  it("grades the documented behavior without requiring an unpublished receipt table name", () => {
+    const probe = `
+import importlib.util, json, tempfile
+from pathlib import Path
+from tests.hidden import check_idempotency as check
+source = Path("reference/idempotency.py").read_text(encoding="utf-8")
+source = source.replace("idempotency_receipts", "receipts")
+with tempfile.TemporaryDirectory() as directory:
+    path = Path(directory) / "idempotency.py"
+    path.write_text(source, encoding="utf-8")
+    spec = importlib.util.spec_from_file_location("alternate_schema", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    print(json.dumps(check.check_generalize(module, "alternate-schema-seed")))
+`;
+    expect(JSON.parse(python("-c", [probe]))).toEqual([]);
+  });
+
   it("shows commit before response drop and varies the audit answer by seed", () => {
     const probe = `
 import json

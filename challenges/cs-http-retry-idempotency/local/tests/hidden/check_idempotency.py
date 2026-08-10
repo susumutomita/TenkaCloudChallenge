@@ -35,25 +35,19 @@ def _operation(seed: str, label: str) -> tuple[str, dict[str, object]]:
     )
 
 
-def _counts(db_path: Path) -> tuple[int, int]:
+def _ledger_count(db_path: Path) -> int:
     if not db_path.exists():
-        return (0, 0)
+        return 0
     with sqlite3.connect(db_path) as connection:
         tables = {
             row[0]
             for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
-        ledger = (
+        return (
             int(connection.execute("SELECT COUNT(*) FROM ledger").fetchone()[0])
             if "ledger" in tables
             else 0
         )
-        receipts = (
-            int(connection.execute("SELECT COUNT(*) FROM idempotency_receipts").fetchone()[0])
-            if "idempotency_receipts" in tables
-            else 0
-        )
-        return ledger, receipts
 
 
 def _ledger_rows(db_path: Path) -> list[tuple[object, ...]]:
@@ -126,7 +120,7 @@ def _replay_properties(module: ModuleType, seed: str, phase: str) -> list[str]:
         ]
         if _ledger_rows(db_path) != expected_ledger:
             failures.append("the durable business effect did not preserve the unseen request")
-        if _counts(db_path) != (1, 1):
+        if _ledger_count(db_path) != 1:
             failures.append("a sequential retry changed the ledger or did not leave one durable receipt")
     return failures
 
@@ -143,7 +137,7 @@ def _binding_and_validation_properties(module: ModuleType, seed: str, phase: str
             failures.append("a valid first operation was not created")
         if conflict != {"status": 409, "body": {"error": "idempotency_conflict"}}:
             failures.append("same key with a different valid request was not a 409 conflict")
-        if _counts(db_path) != (1, 1):
+        if _ledger_count(db_path) != 1:
             failures.append("a conflicting request changed the ledger or receipt")
 
         recovery_key, recovery_request = _operation(seed, f"{phase}:validation-recovery")
@@ -161,7 +155,7 @@ def _binding_and_validation_properties(module: ModuleType, seed: str, phase: str
             failures.append("an invalid request did not return the documented 400")
         if not isinstance(recovered, dict) or recovered.get("status") != 201:
             failures.append("validation consumed an idempotency key before a valid operation")
-        if _counts(db_path) != (2, 2):
+        if _ledger_count(db_path) != 2:
             failures.append("validation or conflict produced an unexpected side effect")
     return failures
 
@@ -184,7 +178,7 @@ def _concurrency_and_restart_properties(module: ModuleType, seed: str, phase: st
             responses = list(pool.map(attempt, range(8)))
         if not responses or any(response != responses[0] for response in responses):
             failures.append("concurrent retries did not all receive the same stored response")
-        if _counts(db_path) != (1, 1):
+        if _ledger_count(db_path) != 1:
             failures.append("concurrent first attempts created more than one business effect")
 
     with tempfile.TemporaryDirectory() as directory:
@@ -195,7 +189,7 @@ def _concurrency_and_restart_properties(module: ModuleType, seed: str, phase: st
         second = _call(restarted, db_path, key, request)
         if first != second:
             failures.append("handler recreation lost the exact stored status/body")
-        if _counts(db_path) != (1, 1):
+        if _ledger_count(db_path) != 1:
             failures.append("handler recreation created a second business effect")
     return failures
 
