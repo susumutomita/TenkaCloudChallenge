@@ -73,15 +73,3 @@ def audit_evidence(seed: str) -> dict[str, Any]:
         "completionTrace": completion,
         "storedRows": stored,
     }
-
-
-def audit_answer(seed: str) -> list[int]:
-    evidence = audit_evidence(seed)
-    source_at = {
-        row["value"]["receipt"]: row["sourceJobId"] for row in evidence["completionTrace"]
-    }
-    return [
-        row["index"]
-        for row in evidence["storedRows"]
-        if source_at[row["value"]["receipt"]] != row["jobId"]
-    ]

@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from fixtures.gate import Case, expected_rows, groups_from_order, run_case
-from fixtures.generate import audit_answer, audit_evidence, jobs_for, values_for
+from fixtures.generate import audit_evidence, jobs_for, values_for
 
 
 def load_submission() -> ModuleType:
@@ -52,9 +52,19 @@ async def check_ordered_completion(module: ModuleType) -> None:
 
 def check_audit_fixture() -> None:
     evidence = audit_evidence("public-audit")
-    wrong = audit_answer("public-audit")
-    assert 1 < len(wrong) < len(evidence["jobs"])
-    assert len({tuple(audit_answer(f"public-audit-{index}")) for index in range(12)}) > 1
+    assert len(evidence["jobs"]) == len(evidence["completionTrace"]) == len(evidence["storedRows"])
+    input_ids = [row["id"] for row in evidence["jobs"]]
+    completion_ids = [row["sourceJobId"] for row in evidence["completionTrace"]]
+    assert completion_ids != input_ids
+    assert len(
+        {
+            tuple(
+                row["sourceJobId"]
+                for row in audit_evidence(f"public-audit-{index}")["completionTrace"]
+            )
+            for index in range(12)
+        }
+    ) > 1
 
 
 async def main(only: str | None = None) -> None:

@@ -13,8 +13,9 @@ from urllib.parse import urlsplit
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from fixtures.generate import audit_answer, audit_evidence, health_token
+from fixtures.generate import audit_evidence, health_token
 from sandbox import MAX_SOURCE_BYTES, run_source
+from verifier.expected import audit_answer
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 MAX_BODY_BYTES = 256 * 1024

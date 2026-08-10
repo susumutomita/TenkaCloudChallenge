@@ -69,7 +69,7 @@ describe("cs-async-result-binding deterministic harness", () => {
 import json, sys
 sys.path.insert(0, ".")
 from portal.server import config_payload, inspect_payload, prepare_submissions, starter_payload
-from fixtures.generate import audit_answer
+from verifier.expected import audit_answer
 seed = "repo-suite-seed"
 evidence = inspect_payload(seed)
 prepared = prepare_submissions(seed, starter_payload())
@@ -252,6 +252,15 @@ describe("cs-async-result-binding delivery boundary", () => {
     expect(dockerfile).toContain("FROM participant AS author");
     expect(dockerfile).toContain("COPY --chown=lab:lab tests/hidden/ ./tests/hidden/");
     expect(dockerfile).toContain("COPY --chown=lab:lab reference/ ./reference/");
+  });
+
+  it("keeps the audit answer helper out of participant fixtures and public tests", () => {
+    const fixtures = readFileSync(join(LOCAL, "fixtures", "generate.py"), "utf8");
+    const publicTests = readFileSync(join(LOCAL, "tests", "public", "test_collect.py"), "utf8");
+    const expected = readFileSync(join(LOCAL, "verifier", "expected.py"), "utf8");
+    expect(fixtures).not.toContain("def audit_answer");
+    expect(publicTests).not.toContain("audit_answer");
+    expect(expected).toContain("def audit_answer");
   });
 
   it("runs non-root/read-only on loopback and retains inbound reachability without egress", () => {
