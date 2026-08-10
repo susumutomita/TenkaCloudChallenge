@@ -32,6 +32,7 @@ CMD ["python", "verifier/server.py"]
 FROM participant AS author
 # Author/CI only. Local mode remains honor-system verification: the stage split
 # prevents accidental answer delivery, not inspection by somebody controlling Docker.
+# See TEMPLATE.md "Assurance scope" for the participant-facing boundary claim.
 
 COPY --chown=lab:lab tests/hidden/ ./tests/hidden/
 COPY --chown=lab:lab reference/ ./reference/
