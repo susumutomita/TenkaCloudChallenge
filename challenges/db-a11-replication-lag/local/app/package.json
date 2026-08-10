@@ -1,0 +1,10 @@
+{
+  "name": "db-a11-replication-lag-local",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local-play container (primary side) for the db-a11-replication-lag Drill: deliberately throttle a streaming replica's apply rate, watch replication lag actually grow, then restore it and watch the lag actually shrink back down — all from real replay_lag history.",
+  "dependencies": {
+    "postgres": "3.4.5"
+  }
+}
