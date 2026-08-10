@@ -1812,6 +1812,39 @@
       }
     },
     {
+      "id": "db-a12-partition",
+      "name": "大量削除の単位 ── row か partition か",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "database-track",
+        "order": 100,
+        "chapter": "3. Scaling & Topology"
+      },
+      "difficulty": 2,
+      "estimatedDuration": "10〜15 分",
+      "shortDescription": "6 か月分・計 12 万行に月別 native partitioning された時系列テーブルから、古い月のデータを (a) 通常の DELETE と (b) DETACH PARTITION (+ DROP TABLE) の 2 通りで実際に消し、同じ規模の作業でも所要時間がどれだけ違うかを自分の手で計測する。結論を先に教えない ── 両方の手順を実際に踏んでから、体感の差を自分の言葉で言語化する。",
+      "tags": [
+        "database",
+        "postgresql",
+        "drill",
+        "local-play",
+        "container",
+        "sql",
+        "partition",
+        "delete",
+        "scaling"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "db-a2-index-tradeoff",
       "name": "遅い注文検索 — Index の read/write trade-off",
       "category": "Challenge",
@@ -1967,6 +2000,39 @@
         "mvcc",
         "vacuum",
         "xmin"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "db-a8-delete-vacuum",
+      "name": "DELETE したのに disk が減らない ── 論理削除と物理回収は別物",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "database-track",
+        "order": 70,
+        "chapter": "2. Transactions & Concurrency"
+      },
+      "difficulty": 2,
+      "estimatedDuration": "10〜15 分",
+      "shortDescription": "40 万行のイベントテーブルから retention cutoff より古い 30 万行を DELETE しても、テーブルのディスク使用量はすぐには縮まない。n_dead_tup が急増する様子を自分の目で観測してから、autovacuum を無効にした状態で自分で VACUUM を実行し、dead tuple が回収される (が、それでもファイルサイズ自体は変わらない) ことまで確認する。",
+      "tags": [
+        "database",
+        "postgresql",
+        "drill",
+        "local-play",
+        "container",
+        "sql",
+        "delete",
+        "vacuum",
+        "dead-tuple"
       ],
       "scoringKind": "multi-verify",
       "cost": {

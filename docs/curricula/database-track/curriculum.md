@@ -12,8 +12,9 @@ Challenge → Battle (#430「DB が遅いらしい」) → Polyglot Battle へ�
 
 Phase 1 の全体設計と依存関係を本ドキュメントで先に確定した。実装は複数 PR に分
 けて進めており、最初の PR で **Drill A1・A2**、stacked #2 で **Drill A3・A4**、
-この PR (stacked #3) で **Drill A6・A7** を実装した。残りは「計画」であって
-「実装済み」ではない。実装状況は各行の先頭に明記する。
+stacked #3 で **Drill A6・A7**、この PR (stacked #4) で **Drill A8・A12** を実
+装した。残りは「計画」であって「実装済み」ではない。実装状況は各行の先頭に明記
+する。
 
 | 状態 | order | 問題 ID | 章 | 前提とする Drill | 学ぶこと |
 | --- | --- | --- | --- | --- | --- |
@@ -23,18 +24,18 @@ Phase 1 の全体設計と依存関係を本ドキュメントで先に確定し
 | ✅ 実装済み | 40 | `db-a4-transaction` | 2. Transactions & Concurrency | A1 | Transaction ── BEGIN/COMMIT/ROLLBACK、原子性を壊す操作の観察 |
 | ✅ 実装済み | 50 | `db-a6-lock` | 2. Transactions & Concurrency | A4 | Lock ── 同じ行への書き込み同士が行ロックで待たされる様子を 2 セッションで再現し、pg_locks/pg_stat_activity で blocker を特定する |
 | ✅ 実装済み | 60 | `db-a7-mvcc` | 2. Transactions & Concurrency | A4, A6 | MVCC ── 読み取りが書き込みに待たされない理由 (行バージョニング) を xmin/xmax で観察し、長時間 transaction が VACUUM の dead tuple 回収を妨げる様子を確認する |
-| 🧭 計画 | 70 | `db-a8-delete-vacuum` (仮 ID) | 2. Transactions & Concurrency | A7 | DELETE / VACUUM ── MVCC が生む dead tuple と VACUUM の役割 |
+| ✅ 実装済み | 70 | `db-a8-delete-vacuum` | 2. Transactions & Concurrency | A7 | DELETE / VACUUM ── 大量 DELETE 直後は disk が縮まず n_dead_tup が増えること、手動 VACUUM で dead tuple は回収されるがファイルサイズ自体は縮まないこと (VACUUM FULL との対比) を確認する |
 | 🧭 計画 | 80 | `db-a10-primary-replica` (仮 ID) | 3. Scaling & Topology | A1 | Primary / Replica ── 物理レプリケーションの構成を自分で組む |
 | 🧭 計画 | 90 | `db-a11-replication-lag` (仮 ID) | 3. Scaling & Topology | A10 | Replication Lag ── 遅延を発生させ、観測し、原因を説明する |
-| 🧭 計画 | 100 | `db-a12-partition` (仮 ID) | 3. Scaling & Topology | A2, A8 | Partition ── テーブルパーティショニングと prune の効果測定 |
+| ✅ 実装済み | 100 | `db-a12-partition` | 3. Scaling & Topology | A2, A8 | Partition ── 同じ規模の古いデータを row-level DELETE で消す場合と DETACH PARTITION (+ DROP TABLE) で消す場合の作業量の違いを実測比較する |
 | 🧭 計画 | 110 | Challenge 1 (仮称: slow query) | 4. Challenges | A2, A3 | 未知のスロークエリを EXPLAIN で特定し、根本対策する |
 | 🧭 計画 | 120 | Challenge 2 (仮称: blocked transaction) | 4. Challenges | A6, A7 | ブロックしているトランザクションを `pg_locks` / `pg_stat_activity` から特定し、解消する |
 | 🧭 計画 (別 Issue #430) | 130 | Battle #430「DB が遅いらしい」 | 5. Battle | 4章の Challenge 全て | 上記全ドリルを前提にした、時間制限つきの実戦形式 |
 
-order 70 (A8) 以降は**「まだ実行できません」ではなく「まだ書いていません」**。
-runtime は A1〜A7 と同じ docker/compose (postgres:16 系) で成立する見込みで、
-runtime そのものが動かないわけではない。A6・A7 は「2 つの transaction を同時
-に操作する」という要求を解決した最初の Drill で、その具体的な手法は後述の
+order 80 (A10) 以降は**「まだ実行できません」ではなく「まだ書いていません」**。
+runtime は A1〜A8・A12 と同じ docker/compose (postgres:16 系) で成立する見込み
+で、runtime そのものが動かないわけではない。A6・A7 は「2 つの transaction を
+同時に操作する」という要求を解決した最初の Drill で、その具体的な手法は後述の
 「既知の断絶」1 節に記録した。
 
 ## 順序の根拠 (prerequisite 依存関係であって difficulty / ID 辞書順ではない)
@@ -60,17 +61,17 @@ Epic の要求どおり、順序は「A1, A2, A3, A4, ...」という ID の辞�
   観察 (「書き込み同士はブロックされる」) を経て初めて「なぜ読み取りはブロッ
   クされないのか」という MVCC の核心 (行バージョニング) との対比が効く ── A7
   の最初の一手は A6 の逆から始まる (読み取りは待たされないことを見せる)。
-- **A7 → A8 (計画)**: DELETE / VACUUM は MVCC が生む dead tuple (削除されても
-  古いバージョンとして残る行) の後始末の話なので、MVCC を理解していない状態で
-  VACUUM だけを教えると「ゴミ掃除コマンド」以上の意味を持たない。
+- **A7 → A8**: DELETE / VACUUM は MVCC が生む dead tuple (削除されても古いバー
+  ジョンとして残る行) の後始末の話なので、MVCC を理解していない状態で VACUUM
+  だけを教えると「ゴミ掃除コマンド」以上の意味を持たない。
 - **A1 → A10 → A11 (計画)**: Primary/Replica は「1 つのテーブルの状態をどう複
   製するか」という主題で、複製対象である「テーブルの行」の概念さえあれば A2〜
   A8 を経由しなくても成立する。Replication Lag は Primary/Replica の構成が既に
   あることが前提。
-- **A2, A8 → A12 (計画)**: Partition は「大きな 1 つのテーブルを分割して読み書
-  きの効率を上げる」話で、Index による絞り込み (A2) と VACUUM/DELETE の運用コ
-  スト (A8) の両方を知っていないと、「なぜパーティションが有効か」の半分しか説
-  明できない。
+- **A2, A8 → A12**: Partition は「大きな 1 つのテーブルを分割して読み書きの効
+  率を上げる」話で、Index による絞り込み (A2) と DELETE の運用コスト (A8、行数
+  に比例して重くなる) の両方を知っていないと、「DETACH PARTITION がなぜ行数に
+  依存しないほぼ定数時間で終わるのか」という対比の片方しか説明できない。
 - **Challenge 1 (計画)**: A2 (index) と A3 (query plan) が無いと、未知のスロー
   クエリを自力で EXPLAIN から特定する土台が無い。
 - **Challenge 2 (計画)**: A6 (lock) と A7 (MVCC) が無いと、`pg_locks` /
@@ -82,8 +83,8 @@ Epic の要求どおり、順序は「A1, A2, A3, A4, ...」という ID の辞�
 
 ## 設計原則との対応 (Epic より)
 
-- **「答えを読むだけ」にしない**: A1〜A4・A6・A7 とも、操作前後で観測値が変わ
-  る体験になっている。A1 は「重複を止める制約が無い状態」→「重複を止める
+- **「答えを読むだけ」にしない**: A1〜A4・A6〜A8・A12 とも、操作前後で観測値が
+  変わる体験になっている。A1 は「重複を止める制約が無い状態」→「重複を止める
   PRIMARY KEY がある状態」を同じ操作 (`insert` の重複) で対比させる。A2 は
   `EXPLAIN (ANALYZE, BUFFERS)` の Node Type とバッファ数を index 追加前後で対比
   させ、INSERT 側の変化も (採点対象外ではあるが) instructions で明示的に手を動
@@ -97,13 +98,19 @@ Epic の要求どおり、順序は「A1, A2, A3, A4, ...」という ID の辞�
   様子を観察させる。A7 は A6 と対称の構造で、書き込み中の行への読み取りが一切
   ブロックされないことをまず見せ (A6 との対比)、続けて `repeatable read` の長
   時間 transaction が開いている間だけ `VACUUM` が dead tuple を回収できないこ
-  とを、閉じる前後で対比させる。
-- **採点は外部状態で行う**: 6 問とも `scoring.kind: "multi-verify"` で、提出テ
+  とを、閉じる前後で対比させる。A8 は 30 万行の DELETE 直後に table size が縮
+  まないこと・`n_dead_tup` が急増することを見せ、手動 VACUUM 後は dead tuple
+  が回収されるのに table size 自体は変わらないこと (VACUUM FULL との対比) ま
+  で 3 段階で対比させる。A12 は同じ約 2 万行規模の削除を通常の DELETE と
+  DETACH PARTITION の両方で実際に実行させ、`\timing` の所要時間を自分の目で
+  比較させる ── 「partition を使うべき」という結論は先に教えない。
+- **採点は外部状態で行う**: 8 問とも `scoring.kind: "multi-verify"` で、提出テ
   キストは一切読まれない。checkpoint は毎回、コンテナ内の実 Postgres へ
   `pg_index` / `pg_indexes` への問い合わせ、実際の `EXPLAIN` 実行、
   `pg_stat_user_tables` の統計、`xmin` システム列、`pg_xact_commit_timestamp()`、
-  `pg_stat_activity.backend_xmin` などで判定する。答えの hard-code では核心
-  checkpoint を通過できない (詳細は各問題の README の「How scoring works」節)。
+  `pg_stat_activity.backend_xmin`、`pg_class.relispartition`/`pg_inherits` など
+  で判定する。答えの hard-code では核心 checkpoint を通過できない (詳細は各問
+  題の README の「How scoring works」節)。
   A4 の `updates-committed-atomically` は、2 つの UPDATE を別々の autocommit 文
   で実行して「数字だけ正しい」状態に到達しても `xmin` が一致しないため通らない
   設計にした。A6 の `row-lock-wait-observed` は、`audit.lock_wait_log` (trigger
@@ -114,15 +121,29 @@ Epic の要求どおり、順序は「A1, A2, A3, A4, ...」という ID の辞�
   た。A7 の `long-transaction-blocked-cleanup-observed` は、`audit.churn_log` の
   `pg_stat_activity.backend_xmin` が非 null (= 実際に snapshot を保持している)
   な transaction が開いている間の churn だけを数える ── 単なる `begin;` は
-  VACUUM を一切妨げないことをホストの実 Postgres 16 で確認した上での設計。
+  VACUUM を一切妨げないことをホストの実 Postgres 16 で確認した上での設計。A8
+  の `bulk-delete-observed` は、`audit.delete_log` (statement-level trigger +
+  transition table が書く監査 log) の削除行数合計と、`pg_stat_user_tables`
+  の累積カウンタ `n_tup_del` (VACUUM でもリセットされない) の 2 系統で独立に
+  「本当に大量 DELETE が起きたか」を突き合わせる ── 参加者が未使用のテーブル
+  に `VACUUM;` を叩くだけで `dead-tuples-reclaimed` が素通りしてしまう near-
+  miss を、この二重チェックで塞ぐ設計にした。A12 の
+  `old-month-deleted-via-delete` は、2024-01 の partition が「attach された
+  まま」であることを `pg_class.relispartition` で要求する ── DETACH は必ず
+  この値を false にするため、「attach されたまま行数 0」は本物の row-level
+  DELETE でしか到達できない (2024-02 の DETACH を 2024-01 に流用する近道を
+  塞ぐ)。
 - **学習順は prerequisite 依存関係で決める**: 上述のとおり。`track.order` は
   10 刻みで、この依存関係の順に並んでいる。
 - **runtime fidelity を偽装しない**: 実 PostgreSQL 16 系公式 image
   (`postgres:16-alpine`) をそのまま使う。participant-visible な endpoint は
   loopback のみ、external credential / external network は不要、
   `docker compose down -v` で完全に再現可能な seed 済み初期状態に戻る。A2 の
-  40 万行・A3 の 30 万行 seed もラップトップで数秒 (実測、後述の Verification
-  節参照) で生成できる規模に抑えている。
+  40 万行・A3 の 30 万行・A8 の 40 万行 seed もラップトップで数秒 (実測、後述
+  の Verification 節参照) で生成できる規模に抑えている。A12 の seed は意図的
+  に 12 万行 (A8 より小規模) ── このドリルの主題は大量データの生成コストでは
+  なく、削除の「単位」による作業量の違いなので、差が測定できれば十分であり、
+  A8 と同じ規模にする理由が無い。
 - **bilingual**: metadata.json の全 participant-visible field (name /
   shortDescription / instructions / description / writeup / learningGoals /
   checks[].label / checks[].hints) が ja (top-level) + `i18n.en` の両方を持つ。
@@ -131,13 +152,18 @@ Epic の要求どおり、順序は「A1, A2, A3, A4, ...」という ID の辞�
   (baseline)」は `grading` schema に置かれ、`participant` role には
   `USAGE`/`CREATE` すら与えていない ── 読み出しも改ざんもできない。A3・A4 は
   目標値 (対象クエリ、送金額) 自体が instructions で公開されている値であり、
-  隠す必要が無いため `grading` schema を持たない。A6・A7 は隠す値こそ無いが
-  (期待する在庫数・チケット数は instructions がそのまま伝えている)、代わりに
-  「参加者が本当に手順を踏んだか」を証明する `audit` schema (trigger だけが書
-  き込み、`participant` は SELECT しかできない) を持つ ── A6 の
-  `audit.lock_wait_log`、A7 の `audit.churn_log` がそれで、どちらも「参加者が
-  診断クエリの結果を専用の回答テーブルへ INSERT する」設計は意図的に避けてい
-  る (それは自己申告と同じで、任意の値を打ち込めてしまうため)。
+  隠す必要が無いため `grading` schema を持たない。A6・A7・A8 は隠す値こそ無い
+  が (期待する在庫数・チケット数・retention cutoff は instructions がそのまま
+  伝えている)、代わりに「参加者が本当に手順を踏んだか」を証明する `audit`
+  schema (trigger だけが書き込み、`participant` は SELECT しかできない) を持
+  つ ── A6 の `audit.lock_wait_log`、A7 の `audit.churn_log`、A8 の
+  `audit.delete_log` がそれで、どちらも「参加者が診断クエリの結果を専用の回答
+  テーブルへ INSERT する」設計は意図的に避けている (それは自己申告と同じで、
+  任意の値を打ち込めてしまうため)。A12 は `audit` schema を持たない ──
+  `pg_class.relispartition`/`pg_inherits` という、Postgres 自身のカタログが
+  管理し、どんな DML 権限でも書き換えられない事実だけで「DETACH という手段を
+  正しく使ったか」を判定できるため、trigger による監査 log を別途用意する必
+  要が無かった。
 
 ## runtime 選定の根拠
 
@@ -147,7 +173,7 @@ Epic の要求どおり、順序は「A1, A2, A3, A4, ...」という ID の辞�
 managed service の意味論には依存しないため。「AWS っぽい名前を付けるだけ」の問
 題にしていない。
 
-A1〜A4・A6・A7 とも `runtime.terminal` を宣言し、Portal 内蔵ターミナルから
+A1〜A4・A6〜A8・A12 とも `runtime.terminal` を宣言し、Portal 内蔵ターミナルから
 `psql` に直接触れる形にした (ホスト側に何もインストールしなくてよい)。
 `docker compose exec` のようなホストコマンドを instructions 本文には書いてい
 ない (書くと `check:problem` の `host terminal disclosed` チェックが「ホスト
@@ -166,8 +192,8 @@ A6・A7 は「2 つの transaction を同時に操作する」という、A4 ま
 - `track`: `{ "id": "database-track", "order": <10 刻み>, "chapter": "<章名>" }`
 - `runtime`: `{ "provider": "docker", "engine": "compose", ... "terminal": { "service": "<compose service名>" } }`
 - `scoring`: `{ "kind": "multi-verify", "checks": [...] }` ── 満点は難易度ティ
-  ア標準 (`SCORING.md`)。A1 は difficulty 1 (Easy, 100pt)、A2・A3・A4・A6・A7 は
-  difficulty 2 (Easy, 100pt)。
+  ア標準 (`SCORING.md`)。A1 は difficulty 1 (Easy, 100pt)、A2・A3・A4・A6・A7・
+  A8・A12 は difficulty 2 (Easy, 100pt)。
 
 生成される `index.json` がポータルの「講座トラック」画面と「次にやること」導線
 の正本になる (`bun run reindex` で再生成、手編集禁止)。
@@ -176,13 +202,13 @@ A6・A7 は「2 つの transaction を同時に操作する」という、A4 ま
 
 受け入れ条件の要求により、**埋まっていない箇所を埋まったことにせず列挙する**。
 
-### 1. Phase 1 の 10 問中 6 問しか実装していない
+### 1. Phase 1 の 10 問中 8 問しか実装していない
 
-A8・A10〜A12 (10 問中 4 問、A5・A9 は Epic 側の番号採番自体に元から存在しない
-── stackstack-route の order 50/60 の空席と同様、意図的な欠番であって本 PR の
-ミスではない) と Challenge 2 問、Battle への接続はこの PR の範囲外。それぞれの
-runtime は A1〜A7 と同じ docker/compose (postgres:16 系) で成立する見込みだが、
-実装するまでは見込みでしかない。
+A10・A11 (10 問中 2 問、A5・A9 は Epic 側の番号採番自体に元から存在しない ──
+stackstack-route の order 50/60 の空席と同様、意図的な欠番であって本 PR のミス
+ではない) と Challenge 2 問、Battle への接続はこの PR の範囲外。それぞれの
+runtime は A1〜A8・A12 と同じ docker/compose (postgres:16 系) で成立する見込み
+だが、実装するまでは見込みでしかない。
 
 A6・A7 (stacked #3) で「2 つの transaction を同時に操作する」という、A4 まで
 には無かった要求をどう解決したかを記録しておく。A4 は Portal 内蔵ターミナル 1
@@ -208,19 +234,19 @@ A6・A7 (stacked #3) で「2 つの transaction を同時に操作する」と�
 
 ### 2. Docker image のビルド・起動は実 Docker で未検証 (セッション固有の制約)
 
-A1〜A4・A6・A7 いずれの実装セッションでも、Docker daemon 自体は起動できたが、
-`postgres:16-alpine` / `node:22-alpine` を含む Docker Hub からの image pull が
-ネットワークポリシーでブロックされていた (`production.cloudfront.docker.com`
-への CONNECT が 403)。そのため **配布する Docker image そのものをビルド・起動
-しての検証はできていない**。
+A1〜A4・A6〜A8・A12 いずれの実装セッションでも、Docker daemon 自体は起動でき
+たが、`postgres:16-alpine` / `node:22-alpine` を含む Docker Hub からの image
+pull がネットワークポリシーでブロックされていた
+(`production.cloudfront.docker.com` への CONNECT が 403)。そのため **配布する
+Docker image そのものをビルド・起動しての検証はできていない**。
 
 代わりに、apt でインストールした実 PostgreSQL 16 (`postgresql-16`, Ubuntu
 noble) をこのマシン上で直接起動し、`local/db/schema.sql` → `local/db/seed.sql`
 → `local/app/server.mjs` (`postgres` JS driver 経由) → 参加者役の `psql` 操作
-→ `/verify` への実 HTTP リクエストという経路を、**A1〜A4・A6・A7 それぞれにつ
-いて before (未解決) → after (解決) の両状態で** 実行し、checkpoint すべてが
-正しく false → true に反転すること、grader のロールバック系プローブが参加者
-データを一切汚さないことを確認した。A4 はさらに、参加者役の `psql` から
+→ `/verify` への実 HTTP リクエストという経路を、**A1〜A4・A6〜A8・A12 それぞ
+れについて before (未解決) → after (解決) の両状態で** 実行し、checkpoint す
+べてが正しく false → true に反転すること、grader のロールバック系プローブが
+参加者データを一切汚さないことを確認した。A4 はさらに、参加者役の `psql` から
 `\!` で 2 本目の psql を起動する未 commit 不可視性のデモ手順そのものを実際に動
 かして確認した。A6 は blocker (`begin` して commit しない UPDATE) を
 `\! ... &` でバックグラウンド化した waiter が実際に行ロックで待たされ、
@@ -231,10 +257,22 @@ noble) をこのマシン上で直接起動し、`local/db/schema.sql` → `loca
 こと、単なる `begin;` (クエリ無し) は `VACUUM` を一切妨げないのに対し
 `repeatable read` でクエリを 1 つ実行した後の transaction は妨げること、閉じ
 て `VACUUM` すると回収されることを、いずれも実測した (「閾値の根拠」は各問題
-の README を参照)。これは `postgres:16-alpine` と同じ PostgreSQL 16 系エンジ
-ンだが、**配布物そのものではない**。Docker が使える環境での
-`make local PROBLEM=db-a1-table-primary-key` 等 6 問それぞれの最終確認は未実
-施であり、one-time verification として残る (詳細は PR 本文の Validation 節)。
+の README を参照)。A8 は 30 万行の `DELETE` 直後に table size が変わらず
+`n_dead_tup` が 30 万件前後まで増えること、手動 `VACUUM` で `n_dead_tup` が
+回収される一方 table size 自体は変わらないこと、`VACUUM FULL` で初めて実際に
+縮む (約 30MB → 約 7.6MB) ことを実測した。加えて anti-cheat の反証として、未
+使用のテーブルに `VACUUM;` だけを実行しても全 checkpoint が false のままであ
+ること、`audit.delete_log` への INSERT と `telemetry.events` への INSERT/
+UPDATE がいずれも権限エラーになることも確認した。A12 は 2 万行の `DELETE`
+(約 19ms) と `DETACH PARTITION` (約 1.3ms) + `DROP TABLE` (約 2.4ms) の所要時
+間を同一 `psql` セッション内で比較し、桁違いの差を実測した。加えて anti-cheat
+の反証として、`DETACH` すべき対象を間違えて DELETE 対象の方に使う近道が
+`old-month-deleted-via-delete` を確実に落とすこと、`TRUNCATE`/`CREATE` がいず
+れも権限エラーになることも確認した。これは `postgres:16-alpine` と同じ
+PostgreSQL 16 系エンジンだが、**配布物そのものではない**。Docker が使える環境
+での `make local PROBLEM=db-a1-table-primary-key` 等 8 問それぞれの最終確認は
+未実施であり、one-time verification として残る (詳細は PR 本文の Validation
+節)。
 
 ### 3. platform 側 (TenkaCloud リポジトリ) の導線設定は未確認
 
