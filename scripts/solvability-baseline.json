@@ -33,6 +33,13 @@
       "type": "answer-on-screen",
       "reason": "The environment checkpoint is proof that the container was started, not a question. The health token is printed by `make inspect` and by the Portal editor's inspect view precisely so the player can copy it, and it is seed-derived, so nothing carries between deployments. There is no answer here to leak. The two checkpoints that do carry answers -- `window` and `audit` -- were measured in the same sweep and are not on screen.",
       "recordedAtSeeds": 500
+    },
+    {
+      "problem": "cs-async-result-binding",
+      "checkpoint": "environment",
+      "type": "answer-on-screen",
+      "reason": "The environment checkpoint is proof that the seeded Future-gate runtime started, not a reasoning question. Portal intentionally prints the health token for the learner to copy, and its seed binding prevents reuse across deployments. The audit and four code checkpoints carry the actual learning work and are measured separately.",
+      "recordedAtSeeds": 500
     }
   ],
   "open": []
