@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import resource
+import secrets
 import subprocess
 import sys
 import tempfile
@@ -92,6 +93,9 @@ def _check_counterexample(submission: object) -> bool:
 
 RUNNER = """
 import json, os, sys
+hard_exit = os._exit
+trusted_stdout = sys.stdout
+trusted_write = sys.stdout.buffer.write
 sys.path.insert(0, {root!r})
 from tests.hidden import check_report
 checkers = tuple(getattr(check_report, phase) for phase in {phases!r})
@@ -106,19 +110,29 @@ while {root!r} in sys.path:
     sys.path.remove({root!r})
 sys.path.insert(0, {workspace!r})
 
-def evaluate_submission(private_checkers):
-    try:
-        import report
-    except Exception as error:
-        return ["submission could not be imported: " + type(error).__name__]
-    if not hasattr(report, "build_report"):
-        return ["submission does not define build_report()"]
-    failures = []
-    for checker in private_checkers:
-        failures.extend(checker(report, {seed!r}))
-    return failures
+try:
+    import report
+except Exception:
+    # submission could not be imported: emit only the private, nonce-bound failure record.
+    os._exit = hard_exit
+    sys.stdout = trusted_stdout
+    trusted_write({fail_record!r})
+    sys.stdout.flush()
+    os._exit(0)
 
-print(json.dumps({{"failures": evaluate_submission(checkers)}}))
+failures = []
+if not hasattr(report, "build_report"):
+    failures.append("submission does not define build_report()")
+else:
+    for checker in checkers:
+        failures.extend(checker(report, {seed!r}))
+
+# Participant imports may replace json.dumps, print, sys.stdout, or os._exit. Restore
+# the trusted C-backed output/exit handles and write a fixed record instead of calling
+# any participant-mutable serializer after grading.
+os._exit = hard_exit
+sys.stdout = trusted_stdout
+trusted_write({pass_record!r} if not failures else {fail_record!r})
 sys.stdout.flush()
 os._exit(0)
 """
@@ -134,9 +148,17 @@ def _run_submission(submission: object, phases: tuple[str, ...], seed: str) -> b
         return False
 
     with tempfile.TemporaryDirectory() as workspace:
+        verdict_token = secrets.token_hex(32)
+        pass_line = f"TC-VERDICT:{verdict_token}:PASS"
+        fail_line = f"TC-VERDICT:{verdict_token}:FAIL"
         (Path(workspace) / "report.py").write_text(source, encoding="utf-8")
         script = RUNNER.format(
-            root=str(ROOT), workspace=workspace, phases=list(phases), seed=seed
+            root=str(ROOT),
+            workspace=workspace,
+            phases=list(phases),
+            seed=seed,
+            pass_record=(pass_line + "\n").encode("utf-8"),
+            fail_record=(fail_line + "\n").encode("utf-8"),
         )
         transcript = Path(workspace) / "stdout"
         try:
@@ -157,14 +179,8 @@ def _run_submission(submission: object, phases: tuple[str, ...], seed: str) -> b
             return False
     if completed.returncode != 0:
         return False
-    for line in reversed(output[-MAX_OUTPUT_BYTES:].splitlines()):
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        failures = payload.get("failures")
-        return isinstance(failures, list) and not failures
-    return False
+    lines = output[-MAX_OUTPUT_BYTES:].splitlines()
+    return bool(lines) and lines[-1] == pass_line
 
 
 def evaluate(checkpoint_id: str, submission: object) -> bool:

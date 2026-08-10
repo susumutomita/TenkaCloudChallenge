@@ -125,6 +125,34 @@ print(json.dumps({"accepted": server._run_submission(spoof, ("check_snapshot",),
     expect(JSON.parse(output.trim())).toEqual({ accepted: false });
   });
 
+  it("は participant に verdict の serializer と hard exit を差し替えられても fail closed する", () => {
+    const probe = String.raw`
+import sys
+sys.path.insert(0, ".")
+from verifier import server
+spoof = '''
+import json, os
+json.dumps = lambda *_args, **_kwargs: '{"failures": []}'
+os._exit = lambda _code: os.write(1, b'{"failures": []}\\n')
+def build_report(*_):
+    return {"revision": 0, "balances": {}, "total": 0}
+'''
+reference = open("reference/report.py", encoding="utf-8").read()
+print(server._run_submission(spoof, ("check_snapshot",), server.SEED), server._run_submission(reference, ("check_snapshot",), server.SEED))
+`;
+    const output = execFileSync("python3", ["-c", probe], {
+      cwd: LOCAL,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        FLAG_SEED: "transaction-repo-suite-seed",
+        PYTHONDONTWRITEBYTECODE: "1",
+      },
+      timeout: 120_000,
+    });
+    expect(output.trim()).toBe("False True");
+  });
+
   it("は指定された 8 欠陥と writer freeze を mutation suite で殺す", () => {
     const result = python("mutation.py");
     expect(result.output).toContain("reference: passes");
