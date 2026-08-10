@@ -178,6 +178,7 @@ print(server._check_code("check_replay", spoof), server._check_code("check_repla
   it("publishes only loopback 18350 and runs read-only without an outbound-masqueraded network", () => {
     const compose = readFileSync(join(LOCAL, "docker-compose.yml"), "utf8");
     const verifier = readFileSync(join(LOCAL, "verifier", "server.py"), "utf8");
+    const checker = readFileSync(join(LOCAL, "tests", "hidden", "check_idempotency.py"), "utf8");
     expect(compose).toContain('"127.0.0.1:18350:18350"');
     expect(compose).not.toContain("18351:18351");
     expect(compose.match(/read_only: true/g)?.length).toBe(2);
@@ -190,6 +191,9 @@ print(server._check_code("check_replay", spoof), server._check_code("check_repla
     expect(compose.match(/pids_limit: 96/g)).toHaveLength(2);
     expect(verifier).toContain("MAX_PROCESSES = 128");
     expect(verifier).toContain("baseline + MAX_PROCESSES");
+    expect(verifier).toContain('"MALLOC_ARENA_MAX": "2"');
+    expect(checker).toContain("threading.Barrier(8)");
+    expect(checker).toContain("ThreadPoolExecutor(max_workers=8)");
   });
 
   it("adds submission headroom to the shared Linux uid baseline", () => {
@@ -223,7 +227,7 @@ sys.path.insert(0, ".")
 from verifier import server
 helper_source = r'''
 import threading
-threading.stack_size(64 * 1024)
+threading.stack_size(256 * 1024)
 stop = threading.Event()
 threads = [threading.Thread(target=stop.wait, daemon=True) for _ in range(129)]
 for thread in threads:
@@ -255,7 +259,51 @@ finally:
       timeout: 120_000,
     });
     expect(output.trim()).toBe("True");
-  });
+  }, 120_000);
+
+  it("keeps the eight-thread checker below a conservative Linux address-space cap", () => {
+    const probe = `
+import importlib.util, json, platform, resource, sys
+if not sys.platform.startswith("linux") or platform.libc_ver()[0] != "glibc":
+    print(json.dumps({"skipped": True}))
+    raise SystemExit(0)
+limit = 256 * 1024 * 1024
+resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
+sys.path.insert(0, ".")
+from tests.hidden import check_idempotency
+spec = importlib.util.spec_from_file_location("reference_idempotency", "reference/idempotency.py")
+assert spec is not None and spec.loader is not None
+reference = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(reference)
+failures = check_idempotency.check_generalize(reference, "arena-regression")
+peak_kib = 0
+with open("/proc/self/status", encoding="utf-8") as source:
+    for line in source:
+        if line.startswith("VmPeak:"):
+            peak_kib = int(line.split()[1])
+print(json.dumps({"failures": failures, "peakKib": peak_kib}))
+`;
+    const output = execFileSync("python3", ["-c", probe], {
+      cwd: LOCAL,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        FLAG_SEED: "arena-regression",
+        MALLOC_ARENA_MAX: "2",
+        PYTHONDONTWRITEBYTECODE: "1",
+      },
+      timeout: 120_000,
+    });
+    const result = JSON.parse(output) as {
+      skipped?: boolean;
+      failures?: string[];
+      peakKib?: number;
+    };
+    if (result.skipped) return;
+    expect(result.failures).toEqual([]);
+    expect(result.peakKib).toBeGreaterThan(0);
+    expect(result.peakKib).toBeLessThan(256 * 1024);
+  }, 120_000);
 
   it("ships six checkpoints worth 200 points at curriculum order 50", () => {
     const metadata = JSON.parse(readFileSync(join(PROBLEM, "metadata.json"), "utf8")) as {

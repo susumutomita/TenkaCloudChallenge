@@ -171,9 +171,9 @@ def _concurrency_and_restart_properties(module: ModuleType, seed: str, phase: st
     with tempfile.TemporaryDirectory() as directory:
         db_path = Path(directory) / "concurrent.sqlite"
         key, request = _operation(seed, f"{phase}:concurrent")
-        # Eight simultaneous first attempts are enough to expose check-then-insert,
-        # while fitting under the verifier child's 512 MiB address-space cap even on
-        # libc implementations that reserve a sizeable stack per thread.
+        # Eight simultaneous first attempts expose check-then-insert while remaining
+        # well within the verifier's PID and address-space budgets. The trusted runner
+        # bounds glibc's per-thread malloc arenas before this module is imported.
         barrier = threading.Barrier(8)
 
         def attempt(_index: int) -> object:

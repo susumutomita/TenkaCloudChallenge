@@ -197,7 +197,13 @@ def _check_code(phase: str, submission: object) -> bool:
                     timeout=RUN_TIMEOUT_SECONDS,
                     preexec_fn=partial(_limits, nproc_limit),
                     cwd=workspace,
-                    env={"PATH": "/usr/local/bin:/usr/bin:/bin"},
+                    # glibc otherwise creates a large malloc arena for each checker
+                    # thread. The concurrency property can approach the 512 MiB
+                    # address-space cap before participant data is allocated at all.
+                    env={
+                        "PATH": "/usr/local/bin:/usr/bin:/bin",
+                        "MALLOC_ARENA_MAX": "2",
+                    },
                     check=False,
                 )
             output = transcript.read_text(encoding="utf-8", errors="replace")[-MAX_OUTPUT_BYTES:]
