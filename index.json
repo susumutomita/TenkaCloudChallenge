@@ -1911,6 +1911,72 @@
       }
     },
     {
+      "id": "db-a6-lock",
+      "name": "詰まっているのは query か、それとも lock 待ちか — Row Lock",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "database-track",
+        "order": 50,
+        "chapter": "2. Transactions & Concurrency"
+      },
+      "difficulty": 2,
+      "estimatedDuration": "10〜15 分",
+      "shortDescription": "2 つのセッションが同じ行を同時に UPDATE しようとするとどうなるか。片方を BEGIN で開いたまま放置し、もう片方が待たされる様子を pg_stat_activity から観測する。blocker の pid を pg_blocking_pids() で特定し、COMMIT して解放するまでを自分の手で辿る。",
+      "tags": [
+        "database",
+        "postgresql",
+        "drill",
+        "local-play",
+        "container",
+        "sql",
+        "lock",
+        "concurrency",
+        "pg-locks"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "db-a7-mvcc",
+      "name": "書き込み中でも読み取りは待たされない理由 — MVCC と行バージョン",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "database-track",
+        "order": 60,
+        "chapter": "2. Transactions & Concurrency"
+      },
+      "difficulty": 2,
+      "estimatedDuration": "10〜15 分",
+      "shortDescription": "A6 で見た「書き込み同士は待たされる」の対比として、読み取りが書き込み中の行でも一切ブロックされないことを観測する。xmin/xmax で行バージョンを直接確認したあと、repeatable read の長時間 transaction を開いたまま別セッションで churn すると VACUUM が dead tuple を回収できず、transaction を閉じて初めて回収されることを自分の手で確認する。",
+      "tags": [
+        "database",
+        "postgresql",
+        "drill",
+        "local-play",
+        "container",
+        "sql",
+        "mvcc",
+        "vacuum",
+        "xmin"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "eventbridge-delivery-discipline",
       "name": "二度届いて、前後する",
       "category": "Challenge",
