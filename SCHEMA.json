@@ -775,6 +775,34 @@
                   "description": "shell を通す compose service 名。 `compose exec <service>` の argv にそのまま渡るため、 先頭は英数字必須 (CLI flag として解釈されないための制約)。 該当 service は `target: participant` で build されていなければならない (author-only material を含む `reference/` 等を participant stage が除外している、という catalog 規約の保証)。"
                 }
               }
+            },
+            "compatibility": {
+              "type": "object",
+              "additionalProperties": false,
+              "minProperties": 1,
+              "description": "[local play / TenkaCloud#3008] 問題の **結果に意味がある** host の条件。 未宣言 = どの host でも動く (既存問題は全てこちら)。 宣言した問題は、条件を満たさない host では platform が起動前に fail closed で拒否する。 これは「動くかどうか」ではなく「測った値が本物かどうか」の宣言であり、 例えば amd64 の命令 latency ベンチマークは Apple Silicon の QEMU emulation 上でも動いてしまい、 もっともらしい無意味な数値を出す (TenkaCloudChallenge#434)。 platform が保証するのは compatibility の報告のみで、 ベンチマークの安定性や機材間の比較可能性は問題側の責任。 provider=docker (local play) 専用。",
+              "properties": {
+                "nativeArchitectures": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "description": "結果に意味がある CPU architecture を OCI platform 名で列挙する。 host が **native に** そのいずれかであることを要求し、 emulation で同じ architecture を名乗れる host は一致とみなさない (それがこの field の目的)。",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                  }
+                },
+                "cpuFlags": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "description": "測定が依存する CPU 機能を host の報告名 (`/proc/cpuinfo` の `flags` / `Features`) で列挙する (例: `rdtscp`, `constant_tsc`)。 読み取れない host は「不明」として拒否され、 互換とはみなされない。",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                  }
+                }
+              }
             }
           }
         },
