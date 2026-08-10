@@ -1,0 +1,140 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "db-a1-table-primary-key",
+  "name": "重複した会員 — Table / Row / Primary Key",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 1,
+  "estimatedDuration": "10〜15 分",
+  "shortDescription": "前任者が作った会員名簿には、同じ人が 2 回、3 回と重複して登録されている。テーブルには行が並んでいるだけで、「この列が重複してはいけない」というルールはどこにも書かれていない。email を PRIMARY KEY とするテーブルを自分で作り、Postgres エンジンに一意性を強制させる。",
+  "instructions": "## はじめに\nDatabase Track・Drill A1。テーブル・行・主キーの関係を、画面ではなく実際のデータベースの挙動で観察する。ブラウザは要らない。Portal のターミナルを開けば `psql` が使える状態で入る (ホスト側に何かを別途インストールする必要はない)。\n\n## 最初の一手\n1. Portal のターミナルを開く。\n2. `psql -U participant -d drill` で接続する。\n3. `select ctid, id, email, display_name from training.members_unkeyed order by email, id;` を実行し、同じ email が複数回登場していることを確認する。\n4. 同じ email でもう 1 行 `insert` してみる — 成功してしまうはずだ。何がこれを止めていないかを考える。\n\n## ゴール\n1. `email` を PRIMARY KEY とする `training.members` テーブルを自分で作成する。\n2. `training.members_unkeyed` から重複の無い会員データ (7 名) を `training.members` へ読み込む。\n3. 既に入っている email をもう一度 `insert` して、今度は Postgres 自身が拒否することを確認する。\n4. 3 つのチェックポイントをポータルから再スキャンする — 提出内容そのものは採点されない (押すたびに実データベースの状態を見に行く)。\n\n手が止まったら各チェックポイントのヒントを開く (ペナルティ付き)。",
+  "description": "## 背景\n\n前任のエンジニアが作った会員名簿 `training.members_unkeyed` には、同じ人物が複数回登録されている。テーブルは「行の集まり」であること以上の制約を何も宣言していないので、Postgres は重複を止める理由を持たない。\n\n## ドリルの構造\n\n1. 参加者は `training.members_unkeyed` を観察し、同じ email を持つ行が複数の `id` / `ctid` (= 別々の物理行) として存在することに気づく。\n2. 同じテーブルへもう一度重複 email を insert して、何も止まらないことを自分の手で確認する (before の体験)。\n3. `email` を PRIMARY KEY とする `training.members` を自分で作り、重複を除いたデータを読み込む。\n4. 同じ操作を `training.members` に対して試し、今度は engine が `23505 unique_violation` で拒否することを確認する (after の体験、before との対比)。\n\n## なぜ docker/compose か\n\n学習目標が Postgres エンジンの内部動作 (制約が無ければ物理的に重複行を許すこと、PRIMARY KEY が一意性をエンジンレベルで強制すること) に依存し、AWS 固有の要素は無い。docker/compose の postgres:16 系コンテナ 1 つで完全に再現できるため、AWS 専用にする理由が無い (docs/authoring/runtime-and-style.md)。\n\n## 採点 (multi-verify, 3 checkpoints)\n\nコンテナ内の grader が `training.members` / `training.members_unkeyed` の実データベース状態を毎回問い合わせて判定する。参加者の提出内容 (テキスト) 自体は読まれない — 押すたびに実際のテーブル定義・行数・制約の効き目を再確認する「再スキャン」である。\n\n1. `members-table-has-primary-key` — `training.members` に `email` を含む PRIMARY KEY が実在するか (pg_index/pg_attribute への問い合わせ)。\n2. `members-rows-loaded` — `training.members` の行数が `training.members_unkeyed` の重複無し email 件数 (7) と一致するか。\n3. `duplicate-insert-rejected` — grader が実際に `training.members` へ既存 email の重複行を insert してみて (ロールバックする使い捨てトランザクション内)、Postgres がエラーで拒否するか。\n\n自己申告や固定文字列の一致では通らない。3 つとも実データベースへの問い合わせだけで判定する。\n\n## 安全方針\n\n訓練用ターゲット。compose は `127.0.0.1` のみに bind し外部公開しない。秘密のフラグは無く、課題は構造的 (制約が実在し、実際に効いているか)。\n\n## コスト\n\nローカル Docker のみ。AWS リソースは作成しない (無料)。",
+  "writeup": "## 何が起きていたか\n\n`training.members_unkeyed` には `id` という PRIMARY KEY があった。しかしこの `id` は行を作った順番の連番であって、「誰であるか」を表す値ではない。データベースにとって、テーブルの行が論理的に同じ会員を指しているかどうかは分からない ── 分かるのは、どの列に一意性の制約が宣言されているか、それだけである。\n\nそのため同じ email を持つ会員が 2 回、3 回と insert されても、Postgres には拒否する理由が無かった。テーブル定義 (logical schema) が「この列は重複してはいけない」と言っていない限り、物理ストレージは言われたとおりに行を積み増すだけである。\n\n`email` を PRIMARY KEY として宣言した `training.members` を作ると、Postgres は内部的に `email` の一意インデックスを作成し、insert / update のたびにそれを使って重複を検出するようになる。同じ email をもう一度 insert すると `23505 unique_violation` で拒否されるのはこのためで、アプリケーション側のコードは一切関与していない。一意性はデータベースエンジンそのものが保証している。\n\n## 一般化\n\nテーブル設計で「これが会員を一意に特定する値だ」という判断は、コメントや命名規則では強制力を持たない。PRIMARY KEY (または UNIQUE 制約) として宣言して初めて、データベースがそれを裏付ける。逆に言えば、PRIMARY KEY が「たまたま重複しない連番」に付いているだけのテーブルは、業務上のキー (今回で言えば email) の重複をまったく防げていない可能性がある。テーブルを見たら、まず「何が PRIMARY KEY か」「それは業務上の一意性と一致しているか」を確認する習慣が、この先のドリル (Index, Transaction, Lock, MVCC) の土台になる。",
+  "tags": [
+    "database",
+    "postgresql",
+    "drill",
+    "local-play",
+    "container",
+    "sql",
+    "primary-key"
+  ],
+  "exposedPorts": [
+    { "port": 18400, "name": "Info (challenge surface)" },
+    { "port": 18401, "name": "/verify (loopback grader)" }
+  ],
+  "learningGoals": [
+    "テーブルの行は、宣言された一意性制約が無ければ、論理的に重複していても物理的には別々の行として保存されることを、自分の手で確認できる",
+    "PRIMARY KEY 制約が一意性をデータベースエンジンのレベルで強制する仕組みを説明できる",
+    "重複を含むデータを観察し、正しい一意キーを持つテーブルへ読み込み直す基本操作を実行できる"
+  ],
+  "i18n": {
+    "en": {
+      "name": "Duplicate Members — Table / Row / Primary Key",
+      "shortDescription": "Your predecessor's member ledger has the same person registered two or three times. The table is just a pile of rows — nothing anywhere says \"this column may not repeat.\" Build your own table with email as the PRIMARY KEY and let the Postgres engine enforce uniqueness for you.",
+      "instructions": "## Getting started\nDatabase Track, Drill A1. Observe the relationship between table / row / primary key through actual database behavior, not a screen. No browser needed — open the Portal terminal and you land with `psql` ready to go (nothing to install on your own machine).\n\n## First move\n1. Open the Portal terminal.\n2. Connect: `psql -U participant -d drill`.\n3. Run `select ctid, id, email, display_name from training.members_unkeyed order by email, id;` and notice the same email appears more than once.\n4. Try inserting one more row with an email that is already there — it will succeed. Think about what is (not) stopping it.\n\n## Goal\n1. Create your own `training.members` table with `email` as the PRIMARY KEY.\n2. Load the deduplicated member data (7 people) from `training.members_unkeyed` into it.\n3. Insert an already-used email again and watch Postgres itself reject it this time.\n4. Re-scan the 3 checkpoints from the portal — the submission text itself is not graded (each click re-checks live database state).\n\nIf you get stuck, open a checkpoint's hints (penalty applies).",
+      "description": "## Background\n\nThe previous engineer's member ledger, `training.members_unkeyed`, has the same person registered more than once. The table declares nothing beyond \"a bag of rows,\" so Postgres has no reason to stop the duplication.\n\n## Drill structure\n\n1. The participant observes `training.members_unkeyed` and notices rows sharing an email have distinct `id` / `ctid` values (= genuinely separate physical rows).\n2. They insert one more duplicate into the same table themselves and confirm nothing stops it (the \"before\" experience).\n3. They build `training.members` with `email` as PRIMARY KEY and load the deduplicated data.\n4. They repeat the same insert against `training.members` and watch the engine reject it with `23505 unique_violation` (the \"after\" experience, in direct contrast to step 2).\n\n## Why docker/compose\n\nThe learning goal depends on Postgres engine internals (a table with no constraint physically allows duplicate rows; PRIMARY KEY enforces uniqueness at the engine level) and nothing AWS-specific. A single docker/compose postgres:16 container reproduces this completely, so there is no reason to make it AWS-only (docs/authoring/runtime-and-style.md).\n\n## Scoring (multi-verify, 3 checkpoints)\n\nA grader inside the container queries the live state of `training.members` / `training.members_unkeyed` every time. The submission text itself is never read — each click is a re-scan of the actual table definition, row count, and whether the constraint really holds.\n\n1. `members-table-has-primary-key` — does `training.members` have a real PRIMARY KEY that includes `email` (queried from pg_index/pg_attribute)?\n2. `members-rows-loaded` — does the row count of `training.members` match the deduplicated email count (7) of `training.members_unkeyed`?\n3. `duplicate-insert-rejected` — does the grader's own attempt to insert an already-used email into `training.members` (inside a throwaway, always-rolled-back transaction) get rejected by Postgres?\n\nSelf-report or a fixed-string match cannot pass any of these. All three are answered purely by querying the live database.\n\n## Safety policy\n\nA training target. The compose stack binds to `127.0.0.1` only and is never exposed externally. There is no secret flag; the challenge is structural (does the constraint exist, and does it actually work?).\n\n## Cost\n\nLocal Docker only. No AWS resources are created (free).",
+      "writeup": "## What happened\n\n`training.members_unkeyed` already had a PRIMARY KEY — on `id`. But `id` is just a sequence number assigned in insertion order; it says nothing about *who* the row represents. As far as the database is concerned, whether two rows logically refer to the same member is simply not a question it can answer — it only knows which column, if any, was declared unique.\n\nSo when the same email was inserted a second and third time, Postgres had no reason to refuse it. Unless the table definition (the logical schema) says \"this column may not repeat,\" physical storage just keeps appending rows exactly as told.\n\nDeclaring `email` as the PRIMARY KEY of `training.members` makes Postgres build a unique index on `email` internally and consult it on every insert/update. That is the entire mechanism behind the `23505 unique_violation` you see on a second insert of the same email — no application code is involved. Uniqueness is guaranteed by the database engine itself.\n\n## Generalizing\n\nA comment or a naming convention that says \"this is the value that identifies a member\" carries no enforcement power. Only declaring it as a PRIMARY KEY (or UNIQUE constraint) makes the database back that claim up. Conversely, a table whose PRIMARY KEY happens to sit on an unrelated auto-incrementing id is not protecting the business key (here, email) from duplication at all. Before trusting any table, ask \"what is actually the primary key, and does it match the business notion of uniqueness?\" — that habit is the foundation the rest of this drill sequence (Index, Transaction, Lock, MVCC) builds on.",
+      "learningGoals": [
+        "Confirm, hands-on, that table rows with no declared uniqueness constraint are stored as separate physical rows even when they are logical duplicates",
+        "Explain how the PRIMARY KEY constraint enforces uniqueness at the database engine level",
+        "Perform the basic operation of observing duplicated data and reloading it into a table with a correct unique key"
+      ],
+      "checks": [
+        {
+          "id": "members-table-has-primary-key",
+          "label": "training.members has a working Primary Key",
+          "hints": [
+            {
+              "id": "a1-pk-hint-1",
+              "content": "Shape: `create table training.members (email text primary key, display_name text not null);`. You can confirm the constraint exists with `\\d training.members` in psql."
+            }
+          ]
+        },
+        {
+          "id": "members-rows-loaded",
+          "label": "The deduplicated member data is loaded",
+          "hints": [
+            {
+              "id": "a1-rows-hint-1",
+              "content": "`training.members_unkeyed` has duplicate emails. `select distinct on (email) email, display_name from training.members_unkeyed order by email, id` keeps only the first row per email — insert that result into `training.members`."
+            }
+          ]
+        },
+        {
+          "id": "duplicate-insert-rejected",
+          "label": "The database rejects a duplicate email registration",
+          "hints": [
+            {
+              "id": "a1-dup-hint-1",
+              "content": "Try inserting an already-used email into `training.members` yourself. With a real PRIMARY KEY in place, the engine should return a `duplicate key value violates unique constraint` error."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Info": "http://127.0.0.1:18400"
+    },
+    "verifyUrl": "http://127.0.0.1:18401/verify",
+    "secretEnv": ["FLAG_SEED"],
+    "terminal": {
+      "service": "db-a1-table-primary-key"
+    }
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "members-table-has-primary-key",
+        "label": "training.members に有効な Primary Key がある",
+        "points": 30,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "a1-pk-hint-1",
+            "content": "形は `create table training.members (email text primary key, display_name text not null);`。psql で `\\d training.members` を打つと制約が実在するか確認できる。",
+            "penalty": 10
+          }
+        ]
+      },
+      {
+        "id": "members-rows-loaded",
+        "label": "重複を除いた会員データが読み込まれている",
+        "points": 30,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "a1-rows-hint-1",
+            "content": "`training.members_unkeyed` には重複した email がある。`select distinct on (email) email, display_name from training.members_unkeyed order by email, id` で email ごとの先頭行だけを拾い、それを training.members へ insert しよう。",
+            "penalty": 10
+          }
+        ]
+      },
+      {
+        "id": "duplicate-insert-rejected",
+        "label": "重複した会員登録をデータベースが拒否する",
+        "points": 40,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "a1-dup-hint-1",
+            "content": "自分で既存の email を training.members へもう一度 insert してみよう。本物の PRIMARY KEY があれば `duplicate key value violates unique constraint` エラーが返るはず。",
+            "penalty": 15
+          }
+        ]
+      }
+    ]
+  },
+  "track": {
+    "id": "database-track",
+    "order": 10,
+    "chapter": "1. Storage Foundations"
+  }
+}
