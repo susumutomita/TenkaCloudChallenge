@@ -1,0 +1,176 @@
+{
+  "id": "cs-cache-generation-fence",
+  "name": "消した。それでも古い値が戻ってきた",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "cs-foundations",
+    "order": 40,
+    "chapter": "4. キャッシュ無効化"
+  },
+  "difficulty": 3,
+  "estimatedDuration": "45-75 分",
+  "shortDescription": "商品価格を更新し、cache の古い値も削除した。それなのに少し後の要求へ旧価格が返った。決定ログから古い応答を特定し、invalidate 前に始まった fill を戻さない世代 fence を書く。",
+  "description": "cs-foundations track の第4章。扱う飛躍は **invalidate が完了した → その後の cache hit は更新前の値を返さない** の1つだけである。\n\n監査対象は、商品価格を origin から読み cache へ入れる service である。旧 revision の cache miss が origin I/O 中に、新価格が commit され、対象 key は invalidate された。ところが最初の read が遅れて完了し、削除済みの cache を旧値で再び埋めた。次の hit は正常に見え、public tests も正常に見える。\n\n問題は thread や実時間に依存させない。seed 由来の event ordering と revision を verifier が決定的に再生する。origin の commit と read は正しい前提に固定し、参加者が直すのは cache admission policy だけである。\n\nPublic tests は stable hit/miss と逐次的な update → invalidate → fill を検査し、delete-only starter を意図的に通す。Hidden phases は miss start → new commit → invalidate → late old fill → hit を再生し、key ごとの monotonic generation floor を要求する。cache を常に使わない、TTL を 0 にする、全 key を1つの global generation で止める解答は合格しない。",
+  "instructions": "## Participant Portal で解く\n\n前提にするもの: Python の関数と辞書が読めること。前提にしないもの: cache、revision、並行処理を知っていること。\n\ncache は、元の保存場所 (origin) から読んだ値を一時的に置く辞書です。revision は origin が commit するたび増える版番号、fill は cache miss のあと origin から戻ってきた値です。invalidate は「この key は更新されたので古い cache を使わないで」という通知です。\n\nParticipant Portal で問題を起動し、まず「証拠を調べる」を押してください。旧 revision の read が始まった後に、新 revision の commit と invalidate が終わり、最後に旧 read が戻る6行の時系列が表示されます。\n\n`cache_policy.py` の `invalidate` と `admit_fill` を編集し、「公開テストを実行」で通常の流れを壊していないことを確かめます。audit は decision log を上から読み、各 key の最後の `origin_commit` より古い `cache_hit` の行番号を JSON 配列で答えます。コード checkpoint は現在の editor 内容を prepare API が提出します。\n",
+  "writeup": "## delete は過去だけを消す\n\ninvalidate が entry を削除した瞬間に、すでに走っている read は消えない。その read は旧 revision を持ったまま後で完了し、無条件の fill が entry を復活させる。delete が保証したのは、その瞬間に cache にあった過去の entry を消したことだけである。\n\n## 世代を覚える\n\nkey ごとに「これより古い fill は受け取らない」という revision の下限を残す。invalidate が来るたび下限を前へ進め、fill は自分が読んだ revision と比較してから admission を決める。下限と同じ revision は現在の値なので受け取れ、下限より小さい revision は遅れてきた過去なので拒否する。\n\nこの比較は cache hit の正しさではなく、cache へ入れる瞬間の正しさを決める。そのため cache を全回避する必要はないし、別 key の正常な fill も止めない。\n\n## track の同じ形\n\n署名が通ったことは要求を許可してよいことを保証しない。commit された各値も、組合せ全体が同じ時点とは限らない。cache に値が入っていることも、その値が現在の origin と同じとは限らない。各章で壊しているのは「検査Aを通ったから性質Bも保証された」という飛躍である。",
+  "tags": [
+    "cs-foundations",
+    "cache",
+    "invalidation",
+    "concurrency",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18340,
+      "name": "Portal editor API + /verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "cache、origin、revision、fill、invalidate を event trace 上で区別できる",
+    "entry を削除しても進行中の古い read は停止しないことを説明できる",
+    "key ごとの monotonic generation floor を更新できる",
+    "fill の revision を floor と比較し、古い fill だけを拒否できる",
+    "global invalidation や cache 全回避をせず、別 key の正常な fill を保てる",
+    "決定ログから origin より古い cache response を特定できる"
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18340/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "environment",
+        "label": "environment — Portal editor が出す合言葉を、そのまま貼る",
+        "points": 10,
+        "wrongAnswerPenalty": 5
+      },
+      {
+        "id": "audit",
+        "label": "audit — 現在の origin より古い cache hit の行番号を昇順で",
+        "points": 30,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "cache-audit-hint-1",
+            "content": "key ごとに、最後に見た `origin_commit` の revision を覚えてください。その数字より小さい revision の `cache_hit` だけを選びます。",
+            "penalty": 15
+          }
+        ]
+      },
+      {
+        "id": "basic-invalidate",
+        "label": "basic-invalidate — 更新の世代を忘れない cache_policy.py",
+        "points": 25,
+        "wrongAnswerPenalty": 8,
+        "input": "multiline"
+      },
+      {
+        "id": "fence",
+        "label": "fence — invalidate 前に始まった古い fill を戻さない cache_policy.py",
+        "points": 50,
+        "wrongAnswerPenalty": 15,
+        "input": "multiline",
+        "hints": [
+          {
+            "id": "cache-fence-hint-1",
+            "content": "delete は、いま辞書にある entry しか消しません。invalidate の revision を残し、fill 自身の revision と cache に入れる直前に比較してください。",
+            "penalty": 25
+          }
+        ]
+      },
+      {
+        "id": "per-key",
+        "label": "per-key — ほかの商品を巻き込まない cache_policy.py",
+        "points": 35,
+        "wrongAnswerPenalty": 12,
+        "input": "multiline",
+        "hints": [
+          {
+            "id": "cache-key-hint-1",
+            "content": "generation floor は cache 全体の数字ではありません。どの商品が更新されたかを key と一緒に保存します。",
+            "penalty": 17
+          }
+        ]
+      },
+      {
+        "id": "generalize",
+        "label": "generalize — 未見の順序と revision でも成り立つ cache_policy.py",
+        "points": 50,
+        "wrongAnswerPenalty": 15,
+        "input": "multiline"
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Deleted. The old value still came back",
+      "shortDescription": "A product price was updated and its old cache entry deleted, yet a later request received the old price. Find the stale responses in the decision log and write a generation fence that refuses fills started before invalidation.",
+      "description": "Chapter 4 of cs-foundations. It studies one leap only: invalidation completed, therefore a later cache hit cannot return the pre-update value.\n\nA cache miss for an old product revision is still reading origin when a new price commits and invalidates the key. The first read then completes late and fills the deleted entry with the old value. The next hit looks ordinary and the public tests still pass.\n\nNo thread timing or real network decides the result. The verifier replays a seed-derived ordering and revisions deterministically. Origin commits and reads are fixed as correct; the participant changes only cache admission.\n\nPublic tests cover stable hit/miss and sequential update, invalidate and fill, deliberately passing the delete-only starter. Hidden phases replay miss start, new commit, invalidate, late old fill and hit. They require a monotonic per-key generation floor and reject disabling the cache, TTL zero, or a global generation that blocks unrelated keys.",
+      "instructions": "## Solve in Participant Portal\n\nPrerequisite: reading Python functions and dictionaries. No prior cache, revision or concurrency knowledge is assumed.\n\nA cache is a dictionary holding a temporary copy from the source of truth (origin). A revision is the integer version increased by each origin commit. A fill is the value that returns from origin after a cache miss. Invalidation says that a key changed and its old cached value must not be used.\n\nStart the problem in Participant Portal and select **Inspect evidence** first. You will see six ordered events: an old read starts, a new revision commits and invalidates, then the old read returns.\n\nEdit `invalidate` and `admit_fill` in `cache_policy.py`, then run the public tests to preserve ordinary traffic. For audit, scan the decision log and submit, as a JSON array, cache-hit indices whose revision is below the latest earlier `origin_commit` for that key. Code checkpoints use the current editor contents through the prepare API.\n",
+      "writeup": "## Delete only removes the past\n\nInvalidation can delete an entry but cannot cancel a read already in flight. That read can finish later and an unconditional fill resurrects the old revision. Delete proved only that the entry present at that instant was removed.\n\n## Remember the generation\n\nKeep, per key, the lowest revision a future fill may have. Move that floor forward on invalidation and compare a fill's own revision at admission time. A fill equal to the floor is current; one below it is late history.\n\nThis protects admission without disabling cache or stopping another key's healthy fill. It is the same track shape again: passing check A never automatically proves property B.",
+      "learningGoals": [
+        "Distinguish cache, origin, revision, fill and invalidation in an event trace",
+        "Explain why deleting an entry does not stop an origin read already in flight",
+        "Maintain a monotonic per-key generation floor",
+        "Compare a fill revision with the floor and refuse only stale fills",
+        "Preserve healthy fills for other keys without globally disabling the cache",
+        "Identify cache responses older than origin from a decision log"
+      ],
+      "checks": [
+        {
+          "id": "environment",
+          "label": "environment - paste the pass phrase printed by the Portal editor"
+        },
+        {
+          "id": "audit",
+          "label": "audit - indices of cache hits older than the current origin revision, ascending",
+          "hints": [
+            {
+              "id": "cache-audit-hint-1",
+              "content": "For each key, remember the revision in the latest `origin_commit`. Select only `cache_hit` rows carrying a lower revision."
+            }
+          ]
+        },
+        {
+          "id": "basic-invalidate",
+          "label": "basic-invalidate - a cache_policy.py that remembers the update generation"
+        },
+        {
+          "id": "fence",
+          "label": "fence - a cache_policy.py that refuses a fill started before invalidation",
+          "hints": [
+            {
+              "id": "cache-fence-hint-1",
+              "content": "Delete can remove only the entry currently in the dictionary. Retain the invalidation revision and compare it with the fill's revision immediately before admission."
+            }
+          ]
+        },
+        {
+          "id": "per-key",
+          "label": "per-key - a cache_policy.py that does not disturb other products",
+          "hints": [
+            {
+              "id": "cache-key-hint-1",
+              "content": "The generation floor is not one number for the whole cache. Store it with the key that changed."
+            }
+          ]
+        },
+        {
+          "id": "generalize",
+          "label": "generalize - a cache_policy.py that holds for unseen orderings and revisions"
+        }
+      ]
+    }
+  }
+}

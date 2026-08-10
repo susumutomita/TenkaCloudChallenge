@@ -41,10 +41,11 @@ container / `/verify` 契約をそのまま使う。この track 固有の約束
 | 10 | `cs-auth-claim-audit` | d3 | 1. 信用の境界 | 署名が通った → その要求を通してよい |
 | 20 | `cs-transaction-visibility-audit` | d3 | 2. トランザクションと可視性 | 各 read が committed → 同じ瞬間を見た |
 | 30 | `cs-async-result-binding` | d3 | 3. I/Oと並行性 | 各 I/O が正しい → 完了結果を正しい request に結び付けた |
+| 40 | `cs-cache-generation-fence` | d3 | 4. キャッシュ無効化 | invalidate が完了した → 古い値は戻らない |
 
-第 1 章から第 3 章まで実装済み。第 3 章は時間や実 network を使わない決定論的な `asyncio.Future`
-gate で completion permutation を再現する。埋まっていないものを埋まったことにしないため、下の
-「これから作るもの」には第 4 章以降の順序の根拠も残す。
+第 1 章から第 4 章まで実装済み。第 3 章は時間や実 network を使わない決定論的な `asyncio.Future`
+gate、第 4 章は決定論的な late-fill schedule で順序逆転を再現する。下の「これから作るもの」には
+未実装の第 5 章まで含めた順序の根拠を残す。
 
 ## これから作るもの
 
@@ -70,7 +71,7 @@ Issue が最初に挙げている領域だが、この設計パターンには�
 3. **並行性 (I/O 境界)** (実装済み: `cs-async-result-binding`)
    「各処理は正しい」から「並べても正しい」への飛躍。決定的に再現させる仕掛けが要るので、
    トランザクションの後に置く。
-4. **キャッシュ無効化**
+4. **キャッシュ無効化** (実装済み: `cs-cache-generation-fence`)
    「cache に入っていた」から「その値は今も正しい」への飛躍。2 と 3 の語彙 (可視性、順序) が前提。
 5. **プロトコル (HTTP / 再送 / 冪等性)**
    「200 が返った」から「1 回だけ実行された」への飛躍。前 4 章の飛躍がすべて再登場する形になるので、
@@ -82,13 +83,14 @@ Issue が最初に挙げている領域だが、この設計パターンには�
   HMAC が「鍵付きハッシュ」であることを知っていることを前提にしている。まったくの初学者はここから
   始められない。`stackstack-route` の 1-2 章が近い役割を果たすが、あちらは AWS 運用の導線であって
   この track の前提ではない。難易度 1-2 の導入問題が要る。
-- **第 4 章以降は未実装。** 第 2 章と第 3 章で snapshot、決定的 schedule、結果の identity binding
-  までは渡せたが、cache と再送へ転用する問題はまだ無い。将来順序を、実装済みであるかのように
-  カタログへは出さない。
+- **第 5 章は未実装。** 第 2 章から第 4 章で snapshot、決定的 schedule、identity binding、世代 fence
+  までは渡せたが、HTTP timeout と再送へ転用する問題はまだ無い。将来順序を、実装済みであるかの
+  ようにカタログへは出さない。
 
 ## 関連
 
 - Issue 407 — この track の起票元
+- Issue 428 — cache generation fence の受け入れ条件
 - [`advanced-cryptography-2026/TEMPLATE.md`](../advanced-cryptography-2026/TEMPLATE.md) — container と
   `/verify` の契約、assurance scope の正本
 - [`stackstack-route`](../stackstack-route/curriculum.md) — もう 1 つの学習ルート。目的地が AWS 運用で、
