@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import hashlib
+import json
 import sqlite3
 import tempfile
 import threading
@@ -64,6 +65,62 @@ def _ledger_rows(db_path: Path) -> list[tuple[object, ...]]:
         return []
 
 
+def _has_sqlite_receipt(
+    db_path: Path,
+    key: str,
+    request: dict[str, object],
+    response: object,
+) -> bool:
+    """Find the documented durable receipt without prescribing a table name.
+
+    The participant contract requires one SQLite row to bind the idempotency key,
+    canonical request fingerprint, response status, and serialized response body.
+    Looking across user tables keeps that contract schema-neutral while rejecting a
+    process cache or sidecar file that merely happens to replay the same behavior.
+    """
+    if not isinstance(response, dict) or response.get("status") != 201:
+        return False
+    body = response.get("body")
+    if not isinstance(body, dict):
+        return False
+    canonical = json.dumps(request, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    fingerprint = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    if not db_path.exists():
+        return False
+    try:
+        with sqlite3.connect(db_path) as connection:
+            tables = [
+                str(row[0])
+                for row in connection.execute(
+                    """SELECT name FROM sqlite_master
+                       WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"""
+                )
+            ]
+            for table in tables:
+                quoted = '"' + table.replace('"', '""') + '"'
+                for row in connection.execute(f"SELECT * FROM {quoted}"):
+                    values = list(row)
+                    if key not in values or fingerprint not in values or 201 not in values:
+                        continue
+                    for value in values:
+                        if isinstance(value, bytes):
+                            try:
+                                value = value.decode("utf-8")
+                            except UnicodeDecodeError:
+                                continue
+                        if not isinstance(value, str):
+                            continue
+                        try:
+                            stored_body = json.loads(value)
+                        except (TypeError, ValueError):
+                            continue
+                        if stored_body == body:
+                            return True
+    except sqlite3.Error:
+        return False
+    return False
+
+
 def _call(module: ModuleType, db_path: Path, key: object, request: object) -> object:
     try:
         return module.handle_request(db_path, key, request)
@@ -122,6 +179,8 @@ def _replay_properties(module: ModuleType, seed: str, phase: str) -> list[str]:
             failures.append("the durable business effect did not preserve the unseen request")
         if _ledger_count(db_path) != 1:
             failures.append("a sequential retry changed the ledger or did not leave one durable receipt")
+        if not _has_sqlite_receipt(db_path, key, request_a, first):
+            failures.append("the key, fingerprint, status, and body were not stored together in SQLite")
     return failures
 
 
@@ -139,6 +198,8 @@ def _binding_and_validation_properties(module: ModuleType, seed: str, phase: str
             failures.append("same key with a different valid request was not a 409 conflict")
         if _ledger_count(db_path) != 1:
             failures.append("a conflicting request changed the ledger or receipt")
+        if not _has_sqlite_receipt(db_path, key, original, created):
+            failures.append("the original durable SQLite receipt was missing after a conflict")
 
         recovery_key, recovery_request = _operation(seed, f"{phase}:validation-recovery")
         invalid_key = _call(module, db_path, "", original)
@@ -157,6 +218,8 @@ def _binding_and_validation_properties(module: ModuleType, seed: str, phase: str
             failures.append("validation consumed an idempotency key before a valid operation")
         if _ledger_count(db_path) != 2:
             failures.append("validation or conflict produced an unexpected side effect")
+        if not _has_sqlite_receipt(db_path, recovery_key, recovery_request, recovered):
+            failures.append("the recovered key did not leave its durable receipt in SQLite")
     return failures
 
 
@@ -180,6 +243,8 @@ def _concurrency_and_restart_properties(module: ModuleType, seed: str, phase: st
             failures.append("concurrent retries did not all receive the same stored response")
         if _ledger_count(db_path) != 1:
             failures.append("concurrent first attempts created more than one business effect")
+        if responses and not _has_sqlite_receipt(db_path, key, request, responses[0]):
+            failures.append("concurrent creation did not leave one complete SQLite receipt")
 
     with tempfile.TemporaryDirectory() as directory:
         db_path = Path(directory) / "restart.sqlite"
@@ -191,6 +256,8 @@ def _concurrency_and_restart_properties(module: ModuleType, seed: str, phase: st
             failures.append("handler recreation lost the exact stored status/body")
         if _ledger_count(db_path) != 1:
             failures.append("handler recreation created a second business effect")
+        if not _has_sqlite_receipt(db_path, key, request, first):
+            failures.append("handler recreation did not replay a receipt stored in SQLite")
     return failures
 
 

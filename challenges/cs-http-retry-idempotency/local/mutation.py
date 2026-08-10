@@ -25,6 +25,16 @@ MUTATIONS: list[tuple[str, str, str]] = [
         'sqlite3.connect(":memory:", timeout=10, isolation_level=None)',
     ),
     (
+        "stores the receipt in a sidecar database outside the ledger file",
+        '    connection.execute(\n        """CREATE TABLE IF NOT EXISTS idempotency_receipts (',
+        '''    connection.execute(
+        "ATTACH DATABASE ? AS receipt_store",
+        (str(db_path) + ".receipts.sqlite",),
+    )
+    connection.execute(
+        """CREATE TABLE IF NOT EXISTS receipt_store.idempotency_receipts (''',
+    ),
+    (
         "uses a check-then-insert deferred transaction",
         'connection.execute("BEGIN IMMEDIATE")\n        stored = _lookup_receipt(connection, key)',
         'connection.execute("BEGIN")\n        stored = _lookup_receipt(connection, key)\n        __import__("time").sleep(0.05)',

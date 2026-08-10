@@ -47,7 +47,7 @@ print(json.dumps({
   it("passes the reference and kills durable, binding, replay, race, and validation mutants", () => {
     const output = python("mutation.py");
     expect(output).toContain("reference: passes");
-    expect(output).toContain("all 7 mutations killed");
+    expect(output).toContain("all 8 mutations killed");
     expect(output).not.toContain("SURVIVED");
   });
 
