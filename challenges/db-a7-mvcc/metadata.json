@@ -1,0 +1,152 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "db-a7-mvcc",
+  "name": "書き込み中でも読み取りは待たされない理由 — MVCC と行バージョン",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 2,
+  "estimatedDuration": "10〜15 分",
+  "shortDescription": "A6 で見た「書き込み同士は待たされる」の対比として、読み取りが書き込み中の行でも一切ブロックされないことを観測する。xmin/xmax で行バージョンを直接確認したあと、repeatable read の長時間 transaction を開いたまま別セッションで churn すると VACUUM が dead tuple を回収できず、transaction を閉じて初めて回収されることを自分の手で確認する。",
+  "instructions": "## はじめに\nDatabase Track・Drill A7。A6 は「書き込み同士は行ロックで待たされる」という話だった。今回は逆から始まる ── 「読み取りは待たされない」という対比を自分の目で見て、その理由 (行バージョニング、いわゆる MVCC) を `xmin`/`xmax` で直接観察し、最後に「長時間開いた transaction が VACUUM の足を引っ張る」という運用上の帰結までたどる。ブラウザは要らない。Portal のターミナルを開けば `psql` が使える状態で入る。\n\n## 最初の一手 (読み取りは待たされないことを見る)\n1. Portal のターミナルを開く。\n2. `psql -U participant -d drill` で接続する。\n3. 現在の状態を確認する:\n   ```sql\n   select * from mvcc.tickets order by id;\n   ```\n   5 行、すべて `status = 'open'` のはずだ。\n4. 1 件更新し、commit せずに放置する:\n   ```sql\n   begin;\n   update mvcc.tickets set status = 'closed' where id = 1;\n   select xmin, xmax, status from mvcc.tickets where id = 1;\n   ```\n   自分のセッションからは、更新後の値がすでに見える (read-your-own-writes)。\n5. 同じターミナルから、A4 と同じ要領で (今回は SELECT なのでバックグラウンド化は不要):\n   ```sql\n   \\! psql -U participant -d drill -c \"select id, status from mvcc.tickets where id = 1;\"\n   ```\n   別セッションからは古い値 `open` が即座に見える ── A6 の「書き込み同士は待たされる」とは対照的に、読み取りは一切ブロックされない。これが MVCC の核心だ ── 書き込み中の行にも、他のセッションは「まだ commit されていない版」を待たされることなく、直前の commit 済みの版を読める。\n6. commit する:\n   ```sql\n   commit;\n   select xmin, xmax, status from mvcc.tickets where id = 1;\n   ```\n   commit 後、この行の `xmin` (この版を書いた transaction の ID) が新しい値になっているはずだ。\n\n## 2 手目 (長時間 transaction を開く)\n1. 今度は `repeatable read` で transaction を開始し、実際に 1 つクエリを実行して snapshot を確定させる (これをやらないと、この transaction は何も \"pin\" しない ── 後述):\n   ```sql\n   begin transaction isolation level repeatable read;\n   select count(*) from mvcc.tickets;\n   ```\n   このセッションはこのまま放置する ── まだ commit も rollback もしない。\n\n## 3 手目 (別セッションで churn する)\n1. 同じターミナルから、2 本目の psql を起動して `mvcc.tickets` を何度も更新する (A6 と違い、これはブロックされないのでバックグラウンド化は不要 ── 長時間 transaction はどの行もロックしていない):\n   ```sql\n   \\! psql -U participant -d drill -c \"do \\$\\$ begin for i in 1..30 loop update mvcc.tickets set status = 'churn-' || i, version = version + 1 where id = ((i % 5) + 1); end loop; end \\$\\$;\"\n   ```\n   これはすぐに終わる (待たされない)。\n2. dead tuple が増えたことを確認する:\n   ```sql\n   select relname, n_live_tup, n_dead_tup from pg_stat_user_tables where schemaname = 'mvcc' and relname = 'tickets';\n   ```\n   `n_dead_tup` が 0 から大きく増えているはずだ。\n\n## 4 手目 (VACUUM が効かないことを見る)\n1. 長時間 transaction をまだ開いたまま、VACUUM を試す:\n   ```sql\n   \\! psql -U participant -d drill -c \"vacuum (verbose) mvcc.tickets;\"\n   ```\n   出力に `X are dead but not yet removable` と出るはずだ。\n2. もう一度確認する:\n   ```sql\n   select relname, n_live_tup, n_dead_tup from pg_stat_user_tables where schemaname = 'mvcc' and relname = 'tickets';\n   ```\n   `n_dead_tup` は減っていないはずだ ── VACUUM は「消せるはずの古い版」を、まだ開いている transaction の snapshot が必要とするかもしれないという理由で消せない。\n\n## 5 手目 (長時間 transaction を閉じてから、もう一度 VACUUM)\n1. 元のセッション (2 手目で開いたセッション) に戻り、閉じる:\n   ```sql\n   rollback;\n   ```\n2. もう一度 VACUUM する:\n   ```sql\n   \\! psql -U participant -d drill -c \"vacuum (verbose) mvcc.tickets;\"\n   ```\n   今度は `X removed` になるはずだ。\n3. 最終確認:\n   ```sql\n   select relname, n_live_tup, n_dead_tup from pg_stat_user_tables where schemaname = 'mvcc' and relname = 'tickets';\n   ```\n   `n_dead_tup` はほぼ 0 のはずだ。\n\n## ゴール\n3 つのチェックポイントをポータルから再スキャンする ── 提出内容そのものは採点されない (押すたびに実データベースの状態を見に行く)。\n\n手が止まったら各チェックポイントのヒントを開く (ペナルティ付き)。",
+  "description": "## 背景\n\n`mvcc.tickets` は 5 行のチケットテーブル。`mvcc.reference` は 1 行だけの、このドリルに一切関わらないテーブルだ。テーマは 2 つの対比: (1) A6 の「書き込み同士は待たされる」に対して「読み取りは待たされない」、(2) 長時間開いた transaction が VACUUM の足を引っ張るという dead tuple の運用上の帰結。\n\n## ドリルの構造\n\n1. 参加者はまず、あるセッションで `begin` した transaction の中で `mvcc.tickets` の 1 行を更新し、commit せずに放置する。同じターミナルから `!` (A4 と同じ、SELECT なので即座に戻ってくる) で 2 本目の psql を起動し、その行を読むと古い (commit 済みの) 値が見えることを確認する ── A6 の書き込み同士のブロックとの対比。\n2. 次に `repeatable read` で長時間 transaction を開き、実際に 1 つクエリを実行して snapshot を確定させる。\n3. 別セッションから `mvcc.tickets` を 30 回更新する (churn) ── これは長時間 transaction がどの行もロックしていないためブロックされない。\n4. 長時間 transaction がまだ開いている状態で `VACUUM` を実行すると、dead tuple を回収できないことを確認する。\n5. 長時間 transaction を閉じてから、もう一度 `VACUUM` すると回収されることを確認する。\n\n## なぜ docker/compose か\n\n学習目標が Postgres の MVCC・VACUUM という engine 内部の意味論に依存し、AWS 固有の要素は無い。docker/compose の postgres:16 系コンテナ 1 つで完全に再現できるため、AWS 専用にする理由が無い (docs/authoring/runtime-and-style.md)。A4・A6 と同じ理由で `runtime.terminal` を使う。\n\n## 採点 (multi-verify, 3 checkpoints)\n\nコンテナ内の grader が、毎回 `mvcc.reference`・`pg_stat_user_tables`・`audit.churn_log` (参加者が書き込めない、trigger だけが書く監査 log) の現在の状態を実際に問い合わせて判定する。参加者の提出内容 (テキスト) 自体は読まれない。\n\n1. `reference-untouched` ── churn の対象ではない `mvcc.reference` の内容が変わっていないか。\n2. `long-transaction-blocked-cleanup-observed` ── `audit.churn_log` から、別セッションが実際に snapshot を保持する長時間 transaction を開いている間に、十分な数の churn 書き込みが行われたか。単なる `begin;` を開いただけの transaction はカウントされない (`pg_stat_activity.backend_xmin` が null のままの transaction は VACUUM を一切妨げないため)。\n3. `dead-tuples-reclaimed` ── 十分な churn (累積 `n_tup_upd`/`n_tup_del`) が行われた上で、現在の `n_dead_tup` が十分小さいか。\n\n自己申告や固定文字列の一致では通らない。3 つとも実際のテーブルと監査 log の現在の状態への問い合わせだけで判定する。\n\n## 安全方針\n\n訓練用ターゲット。compose は `127.0.0.1` のみに bind し外部公開しない。秘密のフラグは無く、課題は構造的である。\n\n## コスト\n\nローカル Docker のみ。AWS リソースは作成しない (無料)。シードは 6 行だけなので起動は一瞬。",
+  "writeup": "## 何が起きていたか\n\n`mvcc.tickets` の 1 行を更新して commit せずに放置しても、別セッションからの `SELECT` は一切ブロックされなかった ── 見えるのは直前の commit 済みの版だ。これは A6 の「書き込み同士は行ロックで待たされる」とは違う。Postgres は行を更新するとき、既存の行を書き換えるのではなく、新しい版 (tuple) を追加する ── 古い版は \"dead\" になるが、まだ commit されていない新しい版を他のセッションに強制的に読ませることはない。読み取りは常に、自分の transaction が開始した時点で「確定していた」版を見る。これが MVCC (Multi-Version Concurrency Control) の核心で、`xmin` (この版を書いた transaction ID) と `xmax` (この版を無効にした transaction ID、まだなら 0) という 2 つのシステム列が、この仕組みをそのまま外部から観測可能にしている。\n\nしかし、この「複数の版を同時に持てる」仕組みには後始末が要る。`UPDATE`/`DELETE` のたびに増える dead tuple は、どの transaction からも見えなくなった時点で `VACUUM` が回収する。ここで長時間 transaction が問題になる ── `repeatable read` で snapshot を確定させた transaction は、その snapshot が有効な間ずっと「その時点で見えていた版」を必要とし続ける可能性がある。VACUUM は「まだ誰かが必要としているかもしれない版」を安全側に倒して消さない。だから、その長時間 transaction が commit または rollback で終わるまで、dead tuple は溜まり続ける。この事実は `pg_stat_activity.backend_xmin` (その transaction が今どの版を snapshot の下限にしているか) から外部から確認できる ── 単に `begin` しているだけで実際にはクエリを 1 つも実行していない transaction は、この値が null のままで、VACUUM を一切妨げない。\n\n## 一般化\n\n「読み取りは書き込みをブロックしない」という MVCC の恩恵は無料ではない ── 複数の版を同時に保持するコストが dead tuple として蓄積し、それを回収する VACUUM は、長時間開いたままの transaction (アプリケーションのバグ、コネクションプールの設定ミス、デバッグ用に開いたまま忘れたセッションなど) によって妨げられうる。「なぜかテーブルサイズが減らない」「VACUUM を実行しても効果が無い」という運用上の症状の多くは、この「誰かが古い transaction を開いたまま放置している」という原因に行き着く。次の Drill (DELETE / VACUUM) は、この dead tuple の後始末そのものをさらに掘り下げる。",
+  "tags": [
+    "database",
+    "postgresql",
+    "drill",
+    "local-play",
+    "container",
+    "sql",
+    "mvcc",
+    "vacuum",
+    "xmin"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18450,
+      "name": "Info (challenge surface)"
+    },
+    {
+      "port": 18451,
+      "name": "/verify (loopback grader)"
+    }
+  ],
+  "learningGoals": [
+    "書き込み中 (未 commit) の行への SELECT が、A6 の書き込み同士のブロックとは対照的に一切待たされないことを自分の手で確認できる",
+    "xmin/xmax システム列を読み、Postgres が行を上書きせず新しい版を追加していることを直接観察できる",
+    "repeatable read の長時間 transaction が開いている間、別セッションの UPDATE/DELETE が dead tuple を生み続けても VACUUM がそれを回収できないことを、自分の手で再現できる",
+    "pg_stat_activity.backend_xmin を使って、ある transaction が実際に VACUUM の障害になり得るか (snapshot を保持しているか) を外部から判定できる"
+  ],
+  "i18n": {
+    "en": {
+      "name": "Why reads aren't blocked by a write in progress — MVCC and row versions",
+      "shortDescription": "As the contrast to A6's 'writes against the same row wait', watch reads stay completely unblocked by an in-progress write. After confirming row versions directly via xmin/xmax, open a long-running repeatable-read transaction and churn from a second session — watch VACUUM fail to reclaim the dead tuples until you close that transaction.",
+      "instructions": "## Getting started\nDatabase Track, Drill A7. A6 was about writes against the same row waiting on each other's row lock. This one starts from the opposite direction — see with your own eyes that reads are NEVER blocked, understand why (row versioning, i.e. MVCC) by reading `xmin`/`xmax` directly, then follow that mechanism to its operational consequence: a long-running transaction keeping VACUUM from doing its job. No browser needed — open the Portal terminal and you land with `psql` ready to go.\n\n## First move (watch reads never get blocked)\n1. Open the Portal terminal.\n2. Connect: `psql -U participant -d drill`.\n3. Check the current state:\n   ```sql\n   select * from mvcc.tickets order by id;\n   ```\n   Expect 5 rows, all `status = 'open'`.\n4. Update one row, without committing:\n   ```sql\n   begin;\n   update mvcc.tickets set status = 'closed' where id = 1;\n   select xmin, xmax, status from mvcc.tickets where id = 1;\n   ```\n   Your own session already sees the new value (read-your-own-writes).\n5. From the same terminal, the same way A4 did it (this is a SELECT, so no backgrounding needed this time):\n   ```sql\n   \\! psql -U participant -d drill -c \"select id, status from mvcc.tickets where id = 1;\"\n   ```\n   The other session sees the old value, `open`, immediately — in contrast to A6's \"writes against the same row wait for each other\", reads are never blocked at all. That is MVCC's core idea: even while a row is mid-write, other sessions can read the last COMMITTED version without ever waiting for the not-yet-committed one.\n6. Commit:\n   ```sql\n   commit;\n   select xmin, xmax, status from mvcc.tickets where id = 1;\n   ```\n   After commit, this row's `xmin` (the id of the transaction that wrote this version) should now be a new value.\n\n## Second move (open a long transaction)\n1. This time start a transaction under `repeatable read`, and actually run one query so it establishes a snapshot (skip this and the transaction pins nothing — more on that below):\n   ```sql\n   begin transaction isolation level repeatable read;\n   select count(*) from mvcc.tickets;\n   ```\n   Leave this session open — do not commit or rollback yet.\n\n## Third move (churn from a second session)\n1. From the same terminal, launch a second psql process and update `mvcc.tickets` repeatedly (unlike A6, this is never blocked — the long transaction holds no row lock at all — so no backgrounding is needed):\n   ```sql\n   \\! psql -U participant -d drill -c \"do \\$\\$ begin for i in 1..30 loop update mvcc.tickets set status = 'churn-' || i, version = version + 1 where id = ((i % 5) + 1); end loop; end \\$\\$;\"\n   ```\n   This finishes immediately.\n2. Confirm dead tuples piled up:\n   ```sql\n   select relname, n_live_tup, n_dead_tup from pg_stat_user_tables where schemaname = 'mvcc' and relname = 'tickets';\n   ```\n   `n_dead_tup` should have jumped up from 0.\n\n## Fourth move (watch VACUUM fail to reclaim)\n1. With the long transaction still open, try VACUUM:\n   ```sql\n   \\! psql -U participant -d drill -c \"vacuum (verbose) mvcc.tickets;\"\n   ```\n   The output should say something like `X are dead but not yet removable`.\n2. Check again:\n   ```sql\n   select relname, n_live_tup, n_dead_tup from pg_stat_user_tables where schemaname = 'mvcc' and relname = 'tickets';\n   ```\n   `n_dead_tup` should not have dropped — VACUUM can't remove an old row version that the still-open transaction's snapshot might still need to see.\n\n## Fifth move (close the long transaction, then VACUUM again)\n1. Go back to the first session (opened in the second move) and close it:\n   ```sql\n   rollback;\n   ```\n2. VACUUM again:\n   ```sql\n   \\! psql -U participant -d drill -c \"vacuum (verbose) mvcc.tickets;\"\n   ```\n   This time it should say `X removed`.\n3. Final check:\n   ```sql\n   select relname, n_live_tup, n_dead_tup from pg_stat_user_tables where schemaname = 'mvcc' and relname = 'tickets';\n   ```\n   `n_dead_tup` should now be close to 0.\n\n## Goal\nRe-scan the 3 checkpoints from the portal — the submission text itself is not graded (each click re-checks live database state).\n\nIf you get stuck, open a checkpoint's hints (penalty applies).",
+      "description": "## Background\n\n`mvcc.tickets` has 5 rows. `mvcc.reference` has just 1 row and never takes part in this drill. The theme is two contrasts: (1) A6's \"writes against the same row wait for each other\" versus \"reads are never blocked\", and (2) the operational consequence of dead tuples — a long-running transaction keeping VACUUM from doing its job.\n\n## Drill structure\n\n1. The participant updates one row of `mvcc.tickets` inside a `begin`-wrapped transaction and leaves it uncommitted. From the same terminal they use `!` (like A4 — a SELECT, so it returns instantly) to launch a second psql process and read that row, seeing the old, committed value — the contrast with A6's write-vs-write blocking.\n2. They then open a long-running transaction under `repeatable read`, actually running one query to establish its snapshot.\n3. From a second session, they update `mvcc.tickets` 30 times (churn) — never blocked, since the long transaction holds no row lock at all.\n4. With the long transaction still open, they run `VACUUM` and see it cannot reclaim the dead tuples.\n5. They close the long transaction, then run `VACUUM` again and see it reclaim them.\n\n## Why docker/compose\n\nThe learning goal depends on Postgres's MVCC/VACUUM semantics — engine internals with nothing AWS-specific. A single docker/compose postgres:16 container reproduces this completely, so there is no reason to make it AWS-only (docs/authoring/runtime-and-style.md). Uses `runtime.terminal` for the same reason A4 and A6 do.\n\n## Scoring (multi-verify, 3 checkpoints)\n\nA grader inside the container actually queries the CURRENT state of `mvcc.reference`, `pg_stat_user_tables`, and `audit.churn_log` (an audit trail participants cannot write to — only a trigger writes it) every time. The submission text itself is never read.\n\n1. `reference-untouched` — is `mvcc.reference`'s content, which never takes part in this drill's churn, unchanged?\n2. `long-transaction-blocked-cleanup-observed` — from `audit.churn_log`, did enough churn writes land while another session genuinely held a long-running, snapshot-pinning transaction open? A plain `begin;` with no query run does not count (a transaction whose `pg_stat_activity.backend_xmin` stays null never blocks VACUUM at all).\n3. `dead-tuples-reclaimed` — after enough churn happened (cumulative `n_tup_upd`/`n_tup_del`), is the current `n_dead_tup` small enough?\n\nSelf-report or a fixed-string match cannot pass any of these. All three are answered purely by querying the table's and the audit log's current live state.\n\n## Safety policy\n\nA training target. The compose stack binds to `127.0.0.1` only and is never exposed externally. There is no secret flag; the challenge is structural.\n\n## Cost\n\nLocal Docker only. No AWS resources are created (free). The seed is just 6 rows, so boot is instant.",
+      "writeup": "## What happened\n\nUpdating one row of `mvcc.tickets` and leaving it uncommitted never blocked a `SELECT` from another session — that session simply saw the last committed version. This is different from A6's \"writes against the same row wait on the row lock.\" When Postgres updates a row, it does not overwrite the existing tuple in place — it adds a new version. The old version becomes \"dead,\" but no other session is ever forced to wait on a not-yet-committed new version. A read always sees whatever was already committed at the moment its own transaction's snapshot was taken. That is the core of MVCC (Multi-Version Concurrency Control), and the `xmin` (the id of the transaction that wrote this version) and `xmax` (the id of the transaction that superseded it, 0 if none yet) system columns make that mechanism directly observable from outside.\n\nBut keeping multiple versions around has cleanup costs. Every `UPDATE`/`DELETE` adds a dead tuple, and `VACUUM` reclaims one only once no transaction anywhere could still need to see it. This is where a long-running transaction becomes a problem: one that has pinned a snapshot under `repeatable read` may need that snapshot's view to stay valid for as long as it stays open. VACUUM errs on the side of caution and will not remove a version someone might still need. So dead tuples keep piling up until that long transaction ends, one way or another. This fact is externally visible via `pg_stat_activity.backend_xmin` — how far back that transaction's snapshot currently pins the horizon. A transaction that merely ran `begin` without ever running a query keeps this value null, and blocks VACUUM not at all.\n\n## Generalizing\n\nMVCC's \"reads never block on writes\" guarantee is not free — the cost of keeping multiple versions around accumulates as dead tuples, and VACUUM's ability to clean them up can be stalled by a transaction left open too long (an application bug, a misconfigured connection pool, a debugging session someone forgot to close). Many \"the table won't shrink\" or \"VACUUM doesn't seem to do anything\" incidents trace back to exactly this: someone, somewhere, has an old transaction sitting open. The next drill (DELETE / VACUUM) digs further into this dead-tuple cleanup itself.",
+      "learningGoals": [
+        "Confirm, by hand, that a SELECT against a row with an uncommitted write in progress is never blocked — the opposite of A6's write-vs-write blocking",
+        "Read the xmin/xmax system columns directly and observe that Postgres adds new row versions instead of overwriting in place",
+        "Reproduce, by hand, that while a repeatable-read long-running transaction is open, VACUUM cannot reclaim dead tuples generated by UPDATE/DELETE on a second session, no matter how many there are",
+        "Use pg_stat_activity.backend_xmin to externally determine whether a given transaction is actually capable of blocking VACUUM (i.e. is holding a pinned snapshot)"
+      ],
+      "checks": [
+        {
+          "id": "reference-untouched",
+          "label": "churn の対象ではない mvcc.reference の内容が変わっていない",
+          "hints": [
+            {
+              "id": "a7-reference-hint-1",
+              "content": "更新の対象を mvcc.tickets だけに絞れているか確認しよう。`select * from mvcc.reference;` で note が \"do-not-touch\" のままかを見られる。"
+            }
+          ]
+        },
+        {
+          "id": "long-transaction-blocked-cleanup-observed",
+          "label": "長時間 transaction が snapshot を保持している間に churn が行われた",
+          "hints": [
+            {
+              "id": "a7-longtx-hint-1",
+              "content": "`begin;` だけでは何も pin しない。`begin transaction isolation level repeatable read;` の後、実際にクエリを 1 つ実行してから (例: `select count(*) from mvcc.tickets;`)、そのセッションを開いたまま別セッションで churn を走らせよう。"
+            }
+          ]
+        },
+        {
+          "id": "dead-tuples-reclaimed",
+          "label": "churn で発生した dead tuple が、長時間 transaction を閉じた後の VACUUM で回収されている",
+          "hints": [
+            {
+              "id": "a7-vacuum-hint-1",
+              "content": "長時間 transaction のセッションに戻り `rollback;` (または `commit;`) してから、`vacuum (verbose) mvcc.tickets;` をもう一度実行しよう。`select n_dead_tup from pg_stat_user_tables where relname = 'tickets';` で確認できる。"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Info": "http://127.0.0.1:18450"
+    },
+    "verifyUrl": "http://127.0.0.1:18451/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ],
+    "terminal": {
+      "service": "db-a7-mvcc"
+    }
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "reference-untouched",
+        "label": "churn の対象ではない mvcc.reference の内容が変わっていない",
+        "points": 30,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "a7-reference-hint-1",
+            "content": "更新の対象を mvcc.tickets だけに絞れているか確認しよう。`select * from mvcc.reference;` で note が \"do-not-touch\" のままかを見られる。",
+            "penalty": 10
+          }
+        ]
+      },
+      {
+        "id": "long-transaction-blocked-cleanup-observed",
+        "label": "長時間 transaction が snapshot を保持している間に churn が行われた",
+        "points": 40,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "a7-longtx-hint-1",
+            "content": "`begin;` だけでは何も pin しない。`begin transaction isolation level repeatable read;` の後、実際にクエリを 1 つ実行してから (例: `select count(*) from mvcc.tickets;`)、そのセッションを開いたまま別セッションで churn を走らせよう。",
+            "penalty": 15
+          }
+        ]
+      },
+      {
+        "id": "dead-tuples-reclaimed",
+        "label": "churn で発生した dead tuple が、長時間 transaction を閉じた後の VACUUM で回収されている",
+        "points": 30,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "a7-vacuum-hint-1",
+            "content": "長時間 transaction のセッションに戻り `rollback;` (または `commit;`) してから、`vacuum (verbose) mvcc.tickets;` をもう一度実行しよう。`select n_dead_tup from pg_stat_user_tables where relname = 'tickets';` で確認できる。",
+            "penalty": 10
+          }
+        ]
+      }
+    ]
+  },
+  "track": {
+    "id": "database-track",
+    "order": 60,
+    "chapter": "2. Transactions & Concurrency"
+  }
+}
