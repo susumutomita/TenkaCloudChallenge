@@ -189,6 +189,72 @@ print(server._check_code("check_replay", spoof), server._check_code("check_repla
     expect(compose).toContain("healthcheck:");
     expect(compose.match(/pids_limit: 96/g)).toHaveLength(2);
     expect(verifier).toContain("MAX_PROCESSES = 128");
+    expect(verifier).toContain("baseline + MAX_PROCESSES");
+  });
+
+  it("adds submission headroom to the shared Linux uid baseline", () => {
+    const probe = `
+import resource, sys
+sys.path.insert(0, ".")
+from verifier import server
+server._uid_task_count = lambda: 240
+original = resource.getrlimit
+resource.getrlimit = lambda _kind: (resource.RLIM_INFINITY, resource.RLIM_INFINITY)
+try:
+    print(server._nproc_limit())
+finally:
+    resource.getrlimit = original
+`;
+    const output = execFileSync("python3", ["-c", probe], {
+      cwd: LOCAL,
+      encoding: "utf8",
+      env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" },
+    });
+    expect(output.trim()).toBe("368");
+  });
+
+  it("accepts valid concurrency when the shared Linux uid already owns 129 threads", () => {
+    const probe = `
+import os, subprocess, sys
+if not sys.platform.startswith("linux") or os.geteuid() == 0:
+    print(True)
+    raise SystemExit(0)
+sys.path.insert(0, ".")
+from verifier import server
+helper_source = r'''
+import threading
+threading.stack_size(64 * 1024)
+stop = threading.Event()
+threads = [threading.Thread(target=stop.wait, daemon=True) for _ in range(129)]
+for thread in threads:
+    thread.start()
+print("ready", flush=True)
+stop.wait(30)
+'''
+helper = subprocess.Popen(
+    [sys.executable, "-c", helper_source],
+    stdout=subprocess.PIPE,
+    text=True,
+)
+try:
+    assert helper.stdout is not None and helper.stdout.readline().strip() == "ready"
+    reference = open("reference/idempotency.py", encoding="utf-8").read()
+    print(server._check_code("check_generalize", reference))
+finally:
+    helper.terminate()
+    helper.wait(timeout=5)
+`;
+    const output = execFileSync("python3", ["-c", probe], {
+      cwd: LOCAL,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        FLAG_SEED: "shared-uid-regression",
+        PYTHONDONTWRITEBYTECODE: "1",
+      },
+      timeout: 120_000,
+    });
+    expect(output.trim()).toBe("True");
   });
 
   it("ships six checkpoints worth 200 points at curriculum order 50", () => {

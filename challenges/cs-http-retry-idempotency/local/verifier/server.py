@@ -9,6 +9,7 @@ import secrets
 import subprocess
 import sys
 import tempfile
+from functools import partial
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -50,15 +51,47 @@ PORTAL_ENGLISH_CONTRACT = {
 }
 
 
-def _limits() -> None:
+def _uid_task_count() -> int:
+    """Count Linux tasks charged to this real uid before the submission starts."""
+    if not _ADDRESS_SPACE_CAPPABLE:
+        return 0
+    total = 0
+    try:
+        processes = os.scandir("/proc")
+    except OSError:
+        return 0
+    with processes:
+        for process in processes:
+            if not process.name.isdigit():
+                continue
+            try:
+                if process.stat(follow_symlinks=False).st_uid != os.getuid():
+                    continue
+                with os.scandir(f"{process.path}/task") as tasks:
+                    total += sum(1 for task in tasks if task.name.isdigit())
+            except OSError:
+                # Processes can exit between the two /proc reads.
+                continue
+    return total
+
+
+def _nproc_limit() -> int:
+    """Give this submission bounded headroom without charging the host baseline."""
+    baseline = _uid_task_count()
+    desired = MAX_PROCESSES if baseline == 0 else baseline + MAX_PROCESSES
+    _soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
+    return desired if hard == resource.RLIM_INFINITY else min(desired, hard)
+
+
+def _limits(nproc_limit: int) -> None:
     if _ADDRESS_SPACE_CAPPABLE:
         resource.setrlimit(resource.RLIMIT_AS, (512 * 1024 * 1024, 512 * 1024 * 1024))
-    # RLIMIT_NPROC counts every process and thread owned by the host uid, not only this
-    # child. A limit of 64 starved the eight-thread concurrency property on a shared CI
-    # runner before the submission started. The real Compose service has the tighter
-    # cgroup-local pids_limit=96, while 128 keeps direct author/CI runs bounded without
-    # charging unrelated runner services against the exercise's thread budget.
-    resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
+    # RLIMIT_NPROC counts every process and thread owned by the real uid, not only this
+    # child. A fixed ceiling therefore rejects valid code when shared CI already owns
+    # more tasks than that ceiling. The parent measures the uid baseline before fork and
+    # grants a MAX_PROCESSES task budget that includes the runner child. Compose still
+    # applies its tighter, cgroup-local pids_limit=96 to the whole verifier service.
+    resource.setrlimit(resource.RLIMIT_NPROC, (nproc_limit, nproc_limit))
     resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_BYTES, MAX_OUTPUT_BYTES))
 
 
@@ -139,6 +172,7 @@ def _check_code(phase: str, submission: object) -> bool:
         verdict_token = secrets.token_hex(32)
         pass_line = f"TC-VERDICT:{verdict_token}:PASS"
         fail_line = f"TC-VERDICT:{verdict_token}:FAIL"
+        nproc_limit = _nproc_limit()
         Path(workspace, "idempotency.py").write_text(submission, encoding="utf-8")
         transcript = Path(workspace, "stdout")
         try:
@@ -161,7 +195,7 @@ def _check_code(phase: str, submission: object) -> bool:
                     stderr=subprocess.STDOUT,
                     text=True,
                     timeout=RUN_TIMEOUT_SECONDS,
-                    preexec_fn=_limits,
+                    preexec_fn=partial(_limits, nproc_limit),
                     cwd=workspace,
                     env={"PATH": "/usr/local/bin:/usr/bin:/bin"},
                     check=False,
