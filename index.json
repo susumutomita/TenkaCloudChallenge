@@ -1781,6 +1781,70 @@
       }
     },
     {
+      "id": "db-a1-table-primary-key",
+      "name": "重複した会員 — Table / Row / Primary Key",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "database-track",
+        "order": 10,
+        "chapter": "1. Storage Foundations"
+      },
+      "difficulty": 1,
+      "estimatedDuration": "10〜15 分",
+      "shortDescription": "前任者が作った会員名簿には、同じ人が 2 回、3 回と重複して登録されている。テーブルには行が並んでいるだけで、「この列が重複してはいけない」というルールはどこにも書かれていない。email を PRIMARY KEY とするテーブルを自分で作り、Postgres エンジンに一意性を強制させる。",
+      "tags": [
+        "database",
+        "postgresql",
+        "drill",
+        "local-play",
+        "container",
+        "sql",
+        "primary-key"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "db-a2-index-tradeoff",
+      "name": "遅い注文検索 — Index の read/write trade-off",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "database-track",
+        "order": 20,
+        "chapter": "1. Storage Foundations"
+      },
+      "difficulty": 2,
+      "estimatedDuration": "10〜15 分",
+      "shortDescription": "40 万件の注文テーブルから、注文番号 1 件を検索するだけの問い合わせが重い。EXPLAIN (ANALYZE, BUFFERS) で index が無い状態を自分の目で観測し、index を追加してもう一度観測する。結論を先には教えない ── 「速くなった」だけでなく「何が、どれだけ変わったか」を自分の数字で確認する。",
+      "tags": [
+        "database",
+        "postgresql",
+        "drill",
+        "local-play",
+        "container",
+        "sql",
+        "index",
+        "query-plan",
+        "performance"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "eventbridge-delivery-discipline",
       "name": "二度届いて、前後する",
       "category": "Challenge",

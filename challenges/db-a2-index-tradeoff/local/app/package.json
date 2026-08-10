@@ -1,0 +1,10 @@
+{
+  "name": "db-a2-index-tradeoff-local",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local-play container for the db-a2-index-tradeoff Drill: measure the Seq Scan cost of an order lookup, add an index, and watch the plan and buffer cost change.",
+  "dependencies": {
+    "postgres": "3.4.5"
+  }
+}

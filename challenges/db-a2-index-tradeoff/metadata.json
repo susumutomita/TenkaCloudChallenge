@@ -1,0 +1,144 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "db-a2-index-tradeoff",
+  "name": "遅い注文検索 — Index の read/write trade-off",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 2,
+  "estimatedDuration": "10〜15 分",
+  "shortDescription": "40 万件の注文テーブルから、注文番号 1 件を検索するだけの問い合わせが重い。EXPLAIN (ANALYZE, BUFFERS) で index が無い状態を自分の目で観測し、index を追加してもう一度観測する。結論を先には教えない ── 「速くなった」だけでなく「何が、どれだけ変わったか」を自分の数字で確認する。",
+  "instructions": "## はじめに\nDatabase Track・Drill A2。「index を張れば速くなる」を言葉で覚えるのではなく、実行計画とバッファ数の変化として自分の目で見る。ブラウザは要らない。Portal のターミナルを開けば `psql` が使える状態で入る。\n\n## 最初の一手\n1. Portal のターミナルを開く。\n2. `psql -U participant -d drill` で接続する。\n3. 次の対象クエリを実行し、実行計画を観察する:\n   ```sql\n   explain (analyze, buffers)\n   select * from shop.orders where order_number = 'ORD-00256789';\n   ```\n4. `Seq Scan` と、`Buffers: shared hit=... read=...` の数字を控える。40 万行のテーブルを全部舐めている数字のはずだ。\n\n## ゴール\n1. `order_number` を対象とする index を作る。\n2. `analyze shop.orders;` を実行する (index を作った直後は統計が古いままのことがある)。\n3. 同じ `explain (analyze, buffers)` をもう一度実行し、`Seq Scan` が消えて `Index Scan` (または index を使う形の実行計画) に変わったこと、バッファ数が大きく減ったことを確認する。\n4. 余裕があれば: index を追加する前後で `\\timing on` にした `insert` の所要時間も比べてみる。読み取りが速くなった代わりに、書き込み側で何が起きているかも体感できる (この部分は採点対象ではない)。\n5. 3 つのチェックポイントをポータルから再スキャンする — 提出内容そのものは採点されない (押すたびに実データベースの状態を見に行く)。\n\n手が止まったら各チェックポイントのヒントを開く (ペナルティ付き)。",
+  "description": "## 背景\n\n`shop.orders` は 40 万行あるが、主キー (`id`) 以外に index が無い。カスタマーサポートが問い合わせ番号 1 件で注文を探すような、現実によくあるクエリ (`order_number` の等値検索) は、選べる手段が全件走査しか無い。\n\n## ドリルの構造\n\n1. 参加者は index が無い状態で `EXPLAIN (ANALYZE, BUFFERS)` を実行し、`Seq Scan` とバッファ数を記録する (before)。\n2. `order_number` に index を作り、`ANALYZE` する。\n3. 同じクエリをもう一度実行し、`Index Scan` へ変わったこと・バッファ数が大きく減ったことを確認する (after、before との対比)。\n4. 任意で、insert の所要時間を before/after で比べ、read が速くなった代わりに write 側に何が起きているかを体感する (採点対象外、体験として instructions に明記)。\n\n本ドリルは「index を張れば必ず速くなる」という結論を先に教えない。実際にどのくらい変わるかを、参加者自身の EXPLAIN の数字で確認させる。\n\n## なぜ docker/compose か\n\n学習目標が Postgres のクエリプランナ・インデックス実装という engine 内部の意味論に依存し、AWS 固有の要素は無い。docker/compose の postgres:16 系コンテナ 1 つ (40 万行を数秒で生成できる規模) で完全に再現できるため、AWS 専用にする理由が無い (docs/authoring/runtime-and-style.md)。\n\n## 採点 (multi-verify, 3 checkpoints)\n\nコンテナ内の grader が、対象クエリ `select * from shop.orders where order_number = 'ORD-00256789'` に対して毎回 `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)` を実際に実行し、実行計画そのものから判定する。参加者の提出内容 (テキスト) 自体は読まれない。\n\n1. `order-number-index-exists` — `pg_indexes` に `order_number` を対象とする index が実在するか。\n2. `query-plan-avoids-seq-scan` — 対象クエリの実行計画に `Seq Scan` ノードが**存在しない**、かつ何らかの Index 系ノード (`Index Scan` / `Index Only Scan` / `Bitmap Index Scan`) が**存在する**か。プランナが index を選ばなければ通らない — 「index を作っただけ」では成立しない設計 (統計を更新し忘れると Seq Scan のままのことがある)。\n3. `buffers-dramatically-reduced` — 対象クエリのバッファ数 (Shared Hit + Shared Read の合計) が、コンテナ起動時に一度だけ記録した「index 追加前」の値と比べて、`max(50, baseline * 0.1)` 以下まで減っているか。baseline は `grading` schema に保存され、参加者には権限が無く読めない/改ざんできない。\n\n自己申告や固定文字列の一致では通らない。3 つとも実際の `EXPLAIN` 出力への問い合わせだけで判定する。\n\n## 安全方針\n\n訓練用ターゲット。compose は `127.0.0.1` のみに bind し外部公開しない。秘密のフラグは無く、課題は構造的 (index が実在し、実際にプランナに選ばれ、実際に効果が出ているか)。\n\n## コスト\n\nローカル Docker のみ。AWS リソースは作成しない (無料)。シード (40 万行) はコンテナ起動時に数秒で生成する。",
+  "writeup": "## 何が起きていたか\n\n`shop.orders` には `id` の PRIMARY KEY があったが、参加者が実際に検索したい列は `order_number` だった。Postgres のクエリプランナは、`order_number` の等値検索を効率化する手段を何も持っていなかったので、条件に一致する行を探すために毎回テーブル全体 (40 万行、約 4,600 ページ分の buffer) を読む `Seq Scan` を選ぶしかなかった。\n\n`order_number` に index を作ると、プランナは `Index Scan` を選べるようになる。1 行を特定するのに必要なのはインデックスの数ページと該当ヒープページ 1 枚程度で、バッファ数は数千から一桁台まで落ちる。ここで重要なのは「index を作った」ことそのものではなく、**プランナが実際にそれを選んだ**ことと、**実測のバッファ数が実際に落ちた**ことの両方である。index があっても統計 (`ANALYZE`) が古いままだとプランナが選ばないことがあり、「作っただけ」で安心できない理由はここにある。\n\n## トレードオフ\n\nindex は read を速くする代わりに無料ではない。index を持つ列への `insert` / `update` / `delete` のたびに、テーブル本体だけでなく index 側の構造も更新しなければならない。index が増えるほど書き込みのコストは積み上がる。今回のドリルで `\\timing` を使って比べた insert の所要時間の変化は、その代償を体感するためのものである (採点対象ではないが、体験としては core)。\n\n## 一般化\n\n「よく検索する列に index を張る」は正しい直感だが、それだけでは足りない。実際にプランナがその index を選ぶか (統計は最新か、選択性は十分か) と、書き込み側にどれだけコストが乗るか (この後の Drill、Transaction / Lock / MVCC / Partition につながる) の両方を見て初めて、index を張るべきかどうかの判断になる。EXPLAIN (ANALYZE, BUFFERS) を読む習慣は、この判断のたびに使う道具になる。",
+  "tags": [
+    "database",
+    "postgresql",
+    "drill",
+    "local-play",
+    "container",
+    "sql",
+    "index",
+    "query-plan",
+    "performance"
+  ],
+  "exposedPorts": [
+    { "port": 18410, "name": "Info (challenge surface)" },
+    { "port": 18411, "name": "/verify (loopback grader)" }
+  ],
+  "learningGoals": [
+    "index が無い列の等値検索がテーブル全体を走査する (Seq Scan) ことを、実際の EXPLAIN 出力で確認できる",
+    "index を追加した後、クエリプランナが実際に Index Scan を選ぶかどうかを EXPLAIN で検証する習慣を身につける",
+    "EXPLAIN (ANALYZE, BUFFERS) のバッファ数を before/after で比較し、read 側の改善を定量的に説明できる",
+    "index が read を速くする代わりに write 側にコストを課すという trade-off を、自分の手を動かした体験として説明できる"
+  ],
+  "i18n": {
+    "en": {
+      "name": "The Slow Order Lookup — Index Read/Write Trade-off",
+      "shortDescription": "A single order lookup by order number is slow against a 400,000-row orders table. Observe the no-index state for yourself with EXPLAIN (ANALYZE, BUFFERS), add an index, and observe it again. The conclusion is never handed to you — you confirm what changed, and by how much, with your own numbers.",
+      "instructions": "## Getting started\nDatabase Track, Drill A2. Instead of memorizing \"adding an index makes it faster,\" watch the plan and the buffer count actually change with your own eyes. No browser needed — open the Portal terminal and you land with `psql` ready to go.\n\n## First move\n1. Open the Portal terminal.\n2. Connect: `psql -U participant -d drill`.\n3. Run the target query and look at its plan:\n   ```sql\n   explain (analyze, buffers)\n   select * from shop.orders where order_number = 'ORD-00256789';\n   ```\n4. Note the `Seq Scan` and the `Buffers: shared hit=... read=...` numbers — that is the cost of scanning all 400,000 rows.\n\n## Goal\n1. Create an index that targets `order_number`.\n2. Run `analyze shop.orders;` (stats can stay stale right after CREATE INDEX).\n3. Run the same `explain (analyze, buffers)` again and confirm `Seq Scan` is gone, replaced by `Index Scan` (or another index-based plan), and the buffer count dropped sharply.\n4. If you have time: compare `insert` timing (`\\timing on`) before and after adding the index. Reads got faster — see what that costs on the write side (this part is not graded).\n5. Re-scan the 3 checkpoints from the portal — the submission text itself is not graded (each click re-checks live database state).\n\nIf you get stuck, open a checkpoint's hints (penalty applies).",
+      "description": "## Background\n\n`shop.orders` has 400,000 rows and no index beyond the primary key (`id`). A realistic query — customer support looking an order up by its order number — has nothing to use but a full table scan.\n\n## Drill structure\n\n1. The participant runs `EXPLAIN (ANALYZE, BUFFERS)` with no index and records the `Seq Scan` plan and its buffer count (before).\n2. They create an index on `order_number` and run `ANALYZE`.\n3. They run the same query again and confirm the plan switched to `Index Scan` and the buffer count collapsed (after, in direct contrast to before).\n4. Optionally, they compare insert timing before/after to feel the write-side cost of the same index (not graded, but called out in instructions as part of the intended experience).\n\nThis drill never hands over the conclusion \"indexing makes it faster\" — the participant confirms how much, with their own EXPLAIN numbers.\n\n## Why docker/compose\n\nThe learning goal depends on Postgres query-planner and index-implementation semantics — engine internals with nothing AWS-specific. A single docker/compose postgres:16 container (400,000 rows generated in a few seconds) reproduces this completely, so there is no reason to make it AWS-only (docs/authoring/runtime-and-style.md).\n\n## Scoring (multi-verify, 3 checkpoints)\n\nA grader inside the container actually runs `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)` against the fixed target query `select * from shop.orders where order_number = 'ORD-00256789'` every time, and grades from the plan itself. The submission text itself is never read.\n\n1. `order-number-index-exists` — does `pg_indexes` show an index targeting `order_number`?\n2. `query-plan-avoids-seq-scan` — does the target query's plan contain **no** `Seq Scan` node, and **at least one** index-based node (`Index Scan` / `Index Only Scan` / `Bitmap Index Scan`)? The planner has to actually choose the index — creating one is not enough by itself (stale statistics can leave the planner on `Seq Scan`).\n3. `buffers-dramatically-reduced` — has the target query's buffer count (Shared Hit + Shared Read, summed) dropped to `max(50, baseline * 0.1)` or below, compared to the \"before any index\" value captured exactly once at container boot? The baseline lives in the `grading` schema, which `participant` has no privilege on and cannot read or tamper with.\n\nSelf-report or a fixed-string match cannot pass any of these. All three are answered purely by querying a live `EXPLAIN` run.\n\n## Safety policy\n\nA training target. The compose stack binds to `127.0.0.1` only and is never exposed externally. There is no secret flag; the challenge is structural (does the index exist, does the planner actually pick it, and did it actually help?).\n\n## Cost\n\nLocal Docker only. No AWS resources are created (free). The 400,000-row seed generates in a few seconds at container boot.",
+      "writeup": "## What happened\n\n`shop.orders` had a PRIMARY KEY on `id`, but the column the participant actually needed to search was `order_number`. The Postgres planner had no way to make an equality lookup on `order_number` efficient, so the only plan available for finding a matching row was a `Seq Scan` — reading the whole table (400,000 rows, roughly 4,600 pages of buffers) every time.\n\nCreating an index on `order_number` gives the planner an `Index Scan` option: locating one row now costs a handful of index pages plus one heap page, and the buffer count drops from thousands to single digits. The important part is not that an index was *created* — it is that the planner actually *chose* it, and that the measured buffer count actually *dropped*. An index whose statistics (`ANALYZE`) are stale can be ignored by the planner even though it exists, which is exactly why \"I created it\" is not the same as \"it's working.\"\n\n## The trade-off\n\nAn index is not free just because it makes reads faster. Every `insert` / `update` / `delete` that touches an indexed column now has to maintain the index's own structure in addition to the table itself. More indexes mean more write-side cost accumulating. Comparing insert timing with `\\timing` before and after in this drill is meant to make that cost tangible, even though it is not part of automated scoring — it is still core to the intended experience.\n\n## Generalizing\n\n\"Index the columns you search on\" is the right instinct, but it is not the whole picture. Deciding whether to add an index means checking both whether the planner will actually use it (are statistics current? is the predicate selective enough?) and how much cost lands on the write side (a question the next drills — Transaction, Lock, MVCC, Partition — keep building on). Reading `EXPLAIN (ANALYZE, BUFFERS)` is the tool you reach for every time you have to make that call.",
+      "learningGoals": [
+        "Confirm, from real EXPLAIN output, that an equality lookup on an unindexed column scans the whole table (Seq Scan)",
+        "Build the habit of checking with EXPLAIN whether the planner actually chooses an Index Scan after you add an index, rather than assuming it will",
+        "Compare EXPLAIN (ANALYZE, BUFFERS) buffer counts before/after and explain the read-side improvement quantitatively",
+        "Explain, from hands-on experience, the trade-off that an index speeds up reads at a cost to writes"
+      ],
+      "checks": [
+        {
+          "id": "order-number-index-exists",
+          "label": "shop.orders.order_number has an index",
+          "hints": [
+            {
+              "id": "a2-index-hint-1",
+              "content": "Try `create index idx_orders_order_number on shop.orders (order_number);`. `\\di+ shop.*` in psql lists existing indexes."
+            }
+          ]
+        },
+        {
+          "id": "query-plan-avoids-seq-scan",
+          "label": "The target query's plan no longer uses a Seq Scan",
+          "hints": [
+            {
+              "id": "a2-plan-hint-1",
+              "content": "Right after CREATE INDEX, planner statistics can still be stale. Run `analyze shop.orders;`, then re-run `explain (analyze, buffers) select * from shop.orders where order_number = 'ORD-00256789';` and check the top node type."
+            }
+          ]
+        },
+        {
+          "id": "buffers-dramatically-reduced",
+          "label": "The buffer count for that lookup dropped sharply",
+          "hints": [
+            {
+              "id": "a2-buffers-hint-1",
+              "content": "Look at 'Shared Hit Blocks' + 'Shared Read Blocks' in the EXPLAIN (ANALYZE, BUFFERS) output. Before the index it should be in the thousands (a full table scan); after, it should be single digits to a few dozen."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Info": "http://127.0.0.1:18410"
+    },
+    "verifyUrl": "http://127.0.0.1:18411/verify",
+    "secretEnv": ["FLAG_SEED"],
+    "terminal": {
+      "service": "db-a2-index-tradeoff"
+    }
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "order-number-index-exists",
+        "label": "shop.orders.order_number にインデックスがある",
+        "points": 30,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "a2-index-hint-1",
+            "content": "`create index idx_orders_order_number on shop.orders (order_number);` を試そう。psql の `\\di+ shop.*` で既存 index を一覧できる。",
+            "penalty": 10
+          }
+        ]
+      },
+      {
+        "id": "query-plan-avoids-seq-scan",
+        "label": "対象クエリの実行計画が Seq Scan を使わなくなった",
+        "points": 30,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "a2-plan-hint-1",
+            "content": "CREATE INDEX の直後は統計が古いままのことがある。`analyze shop.orders;` を実行してから `explain (analyze, buffers) select * from shop.orders where order_number = 'ORD-00256789';` を再実行し、先頭のノード種別を確認しよう。",
+            "penalty": 10
+          }
+        ]
+      },
+      {
+        "id": "buffers-dramatically-reduced",
+        "label": "対象クエリのバッファ数が大きく減った",
+        "points": 40,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "a2-buffers-hint-1",
+            "content": "EXPLAIN (ANALYZE, BUFFERS) 出力の 'Shared Hit Blocks' + 'Shared Read Blocks' を見よう。index が無い状態では数千、index が効いている状態では一桁〜数十のはず。",
+            "penalty": 15
+          }
+        ]
+      }
+    ]
+  },
+  "track": {
+    "id": "database-track",
+    "order": 20,
+    "chapter": "1. Storage Foundations"
+  }
+}
