@@ -50,6 +50,10 @@ SHARED_TARGETS = (
 )
 SPLIT_PORTAL_MODULES = {
     "cs-transaction-visibility-audit": "participant.server",
+    # Issue 440: #437 は participant/ に公開 Workbench を置く分離型。 元の branch は
+    # 別の集合 (問題 id の frozenset) を足していたが、 main 側はこの map へ
+    # 一般化済みなので、 古い機構を戻さずここへ寄せる。
+    "cs-cache-generation-fence": "participant.server",
 }
 # Execute the heavier inspect/public-test adapter on representative problems from
 # each family. The catalogue's existing sharded suite executes every problem's own
@@ -155,16 +159,22 @@ LEGACY_CODE_CHECKPOINTS = {
     "ac26-w1-underconstraint": {"build", "audit", "exploit", "repair", "mutation-transfer"},
     "cs-cache-generation-fence": {"basic-invalidate", "fence", "per-key", "generalize"},
 }
+# These legacy-config problems intentionally put the participant-facing Portal API
+# in a public-only image rather than in the hidden verifier process.
 PASSKEY_TARGET = "ac26-w3-passkey-assertion"
 ALL_TARGETS = (*LEGACY_CODE_CHECKPOINTS, *SHARED_TARGETS, PASSKEY_TARGET)
 
 LEGACY_PROBE = r'''
+import importlib
 import json
 import sys
 from pathlib import Path
 
 sys.path.insert(0, ".")
-from verifier.server import CHECKPOINTS, config_payload, starter_payload
+server = importlib.import_module(sys.argv[1])
+CHECKPOINTS = server.CHECKPOINTS
+config_payload = server.config_payload
+starter_payload = server.starter_payload
 
 config = config_payload()
 starter = starter_payload()
@@ -364,13 +374,15 @@ def check_legacy_input_contract(problem_id: str, code_checkpoints: set[str]) -> 
         actual == code_checkpoints,
         f"{problem_id}: multiline checkpoints {sorted(actual)} != {sorted(code_checkpoints)}",
     )
-    server = (ROOT / "challenges" / problem_id / "local" / "verifier" / "server.py").read_text(
-        encoding="utf-8"
-    )
+    module = SPLIT_PORTAL_MODULES.get(problem_id, "verifier.server")
+    server_path = (
+        ROOT / "challenges" / problem_id / "local" / Path(*module.split("."))
+    ).with_suffix(".py")
+    server = server_path.read_text(encoding="utf-8")
     require("/api/config" in server, f"{problem_id}: GET /api/config missing")
 
     completed = subprocess.run(
-        [sys.executable, "-I", "-c", LEGACY_PROBE],
+        [sys.executable, "-I", "-c", LEGACY_PROBE, module],
         cwd=ROOT / "challenges" / problem_id / "local",
         text=True,
         stdout=subprocess.PIPE,

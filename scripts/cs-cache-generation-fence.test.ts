@@ -27,7 +27,11 @@ describe("cs-cache-generation-fence harness", () => {
   it("kills every cache-policy mutation", () => {
     const result = python("mutation.py");
     expect(result.output).toContain("reference: passes");
-    expect(result.output).toContain("killed: 10/10");
+    expect(result.output).toContain("waits for a TTL and then admits the stale fill at fence");
+    expect(result.output).toContain(
+      "invalidates before commit and guesses the next revision from cache at basic-invalidate",
+    );
+    expect(result.output).toContain("killed: 12/12");
     expect(result.output).not.toContain("SURVIVED");
     expect(result.status).toBe(0);
   });
@@ -115,7 +119,8 @@ print(server._check_code("check_fence", spoof), server._check_code("check_fence"
     const probe = `
 import json, sys
 sys.path.insert(0, ".")
-from verifier.server import CHECKPOINTS, CODE_CHECKPOINTS, config_payload, prepare_submissions, starter_payload
+from verifier.server import CHECKPOINTS as VERIFIER_CHECKPOINTS
+from participant.server import CHECKPOINTS, CODE_CHECKPOINTS, config_payload, prepare_submissions, starter_payload
 starter = starter_payload()
 config = config_payload()
 prepared = prepare_submissions("repo-cache-seed", starter)
@@ -127,6 +132,7 @@ print(json.dumps({
     "prepared": sorted(prepared["submissions"]),
     "automatic": sorted({"environment", *CODE_CHECKPOINTS}),
     "sourceMatches": all(prepared["submissions"][checkpoint] == starter["cache_policy.py"] for checkpoint in CODE_CHECKPOINTS),
+    "verifierMatches": tuple(CHECKPOINTS) == tuple(VERIFIER_CHECKPOINTS),
 }))
 `;
     const output = execFileSync("python3", ["-c", probe], {
@@ -142,6 +148,7 @@ print(json.dumps({
       prepared: string[];
       automatic: string[];
       sourceMatches: boolean;
+      verifierMatches: boolean;
     };
     expect(result.id).toBe("cs-cache-generation-fence");
     expect(result.files).toEqual(["cache_policy.py"]);
@@ -157,13 +164,14 @@ print(json.dumps({
     expect(result.kinds.fence).toBe("code");
     expect(result.prepared).toEqual(result.automatic);
     expect(result.sourceMatches).toBe(true);
+    expect(result.verifierMatches).toBe(true);
   });
 
   it("does not put the audit answer on the inspect wire", () => {
     const probe = `
 import json, sys
 sys.path.insert(0, ".")
-from verifier.server import inspect_payload
+from participant.server import inspect_payload
 from fixtures.generate import audit_trace
 seed = "repo-cache-seed"
 payload = inspect_payload(seed)
@@ -188,21 +196,41 @@ print(json.dumps({"payload": payload, "answer": answer, "events": events}))
     expect(JSON.stringify(result.payload)).not.toContain('"answer"');
   });
 
-  it("separates author artifacts and hardens the loopback runtime", () => {
+  it("separates the public Workbench, hidden verifier, and author artifacts", () => {
     const dockerfile = readFileSync(join(LOCAL, "Dockerfile"), "utf8");
-    const participant = dockerfile.slice(0, dockerfile.indexOf("AS author"));
-    expect(participant).not.toContain("COPY reference/");
-    expect(participant).not.toContain("COPY mutation.py");
+    const participant = (dockerfile.split("FROM base AS participant")[1] ?? "").split(
+      "FROM base AS verifier",
+    )[0];
+    const verifier = (dockerfile.split("FROM base AS verifier")[1] ?? "").split(
+      "FROM participant AS author",
+    )[0];
+    expect(participant).toContain("tests/public/");
+    expect(participant).toContain("participant/");
+    expect(participant).not.toMatch(/^COPY .*tests\/hidden/m);
+    expect(participant).not.toMatch(/^COPY .*verifier\//m);
+    expect(participant).not.toMatch(/^COPY .*reference\//m);
+    expect(participant).not.toMatch(/^COPY .*mutation\.py/m);
+    expect(verifier).toContain("tests/hidden/");
+    expect(verifier).toContain("verifier/");
+    expect(verifier).not.toMatch(/^COPY .*tests\/public/m);
+    expect(verifier).not.toMatch(/^COPY .*starter\//m);
+    expect(verifier).not.toMatch(/^COPY .*reference\//m);
+    expect(verifier).not.toMatch(/^COPY .*mutation\.py/m);
     expect(dockerfile).toContain("USER lab");
 
     const compose = readFileSync(join(LOCAL, "docker-compose.yml"), "utf8");
     expect(compose).toContain("target: participant");
+    expect(compose).toContain("target: verifier");
+    expect(compose).toContain("VERIFIER_URL: http://verifier:18341/verify");
     expect(compose).toContain('127.0.0.1:18340:18340');
-    expect(compose).toContain("read_only: true");
-    expect(compose).toContain("cap_drop:");
+    expect(compose).not.toContain("18341:18341");
+    expect(compose.match(/ports:/g)).toHaveLength(1);
+    expect(compose.match(/read_only: true/g)).toHaveLength(2);
+    expect(compose.match(/cap_drop:/g)).toHaveLength(2);
     expect(compose).toContain("internal: true");
     expect(compose).toContain('enable_ip_masquerade: "false"');
     expect(compose).toContain("http://127.0.0.1:18340/api/config");
+    expect(compose).toContain("http://127.0.0.1:18341/health");
   });
 
   it("belongs to the internal track without external course alignment", () => {

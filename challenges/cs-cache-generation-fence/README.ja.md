@@ -89,12 +89,14 @@ cacheを常に使わない、TTLを0にする、全keyを1つのglobal floorで�
 ## 保証範囲
 
 ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image もあなたの管理下に
-あるので、image の中身はあなたに対して秘匿されていません。参加者用 image に `reference/` と mutation
-suite を入れないのは誤配防止であって秘匿ではなく、`author` stage をビルドすれば読めます。
+あるので、image の中身はあなたに対して秘匿されていません。参加者用 Workbench image に入るのは公開
+fixture・公開test・starterだけです。hidden checkは内部network上の別verifier image、`reference/` と
+mutation suiteは`author` stageだけに置きます。この分離は誤配防止であって秘匿ではありません。
 
-verifier は host の `127.0.0.1:18340` だけに公開され、container は non-root、read-only filesystem、
-no-new-privileges、capabilities なし、外向き通信なしで動きます。提出は timeout と資源上限のある一時領域で
-実行され、checkpoint は echo した id しか加点できず、結果は期待値を返しません。
+host の `127.0.0.1:18340` に公開するのはWorkbenchだけです。verifierにはhost portがなく、内部Compose
+networkからだけ到達できます。両containerはnon-root、read-only filesystem、no-new-privileges、
+capabilitiesなし、外向き通信なしで動きます。提出はtimeoutと資源上限のある一時領域で実行され、
+checkpointはechoしたidしか加点できず、結果は期待値を返しません。
 
 これは自習と誠実な練習を支えます。競技順位・試験・修了判定は**支えません**。
 

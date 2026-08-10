@@ -89,12 +89,14 @@ Disabling cache, setting TTL to zero or using one global floor for all keys does
 ## Assurance scope
 
 Local mode is **self-paced, honor-system verification**. You own the machine, Docker daemon and image, so nothing in
-the image is confidential from you. Omitting `reference/` and the mutation suite from the participant image prevents
-accidental delivery; it is not confidentiality, and anyone who builds the `author` stage can inspect them.
+the images is confidential from you. The participant Workbench contains only public fixtures, tests and starter
+material. Hidden checks run in a separate internal verifier image, while `reference/` and the mutation suite are added
+only to the `author` stage. This separation prevents accidental delivery; it is not confidentiality.
 
-The verifier is published only at host `127.0.0.1:18340`. It runs non-root with a read-only filesystem,
-no-new-privileges, no capabilities and no outbound network. Submissions run in a temporary workspace with time and
-resource limits; a checkpoint can only credit the id it echoes and its response does not reveal expected values.
+Only the Workbench is published at host `127.0.0.1:18340`; the verifier has no host port and is reachable only on the
+internal Compose network. Both run non-root with a read-only filesystem, no-new-privileges, no capabilities and no
+outbound network. Submissions run in a temporary workspace with time and resource limits; a checkpoint can only
+credit the id it echoes and its response does not reveal expected values.
 
 That supports self-study and honest practice. It does **not** support competition ranking,
 examination, or completion certification.

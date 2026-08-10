@@ -1,24 +1,24 @@
-# Every port binds to 127.0.0.1 only. This problem has no network surface for the
-# learner to attack; the whole challenge is local reasoning.
 services:
-  verifier:
+  workbench:
     build:
       context: .
       dockerfile: Dockerfile
-      # The participant stage, explicitly. Without this, compose builds the
-      # LAST stage -- `author` -- which carries reference/ and mutation.py.
       target: participant
     environment:
       FLAG_SEED: ${FLAG_SEED:?FLAG_SEED must be provided by the platform}
-      VERIFY_PORT: "18340"
+      WORKBENCH_PORT: "18340"
+      VERIFIER_URL: http://verifier:18341/verify
     ports:
       - "127.0.0.1:18340:18340"
+    depends_on:
+      verifier:
+        condition: service_healthy
     networks:
-      - no_egress
-      - loopback_publish
+      - lab
+      - workshop-host
     read_only: true
     tmpfs:
-      - /tmp
+      - /tmp:rw,noexec,nosuid,nodev,size=128m
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -28,16 +28,39 @@ services:
       interval: 2s
       timeout: 3s
       retries: 20
-    # The rlimits in verifier/server.py bound the submission's child process. These bound
-    # the verifier itself, which is the process that would still be standing if a
-    # submission found a way past them.
+    mem_limit: 1g
+    pids_limit: 128
+
+  verifier:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: verifier
+    environment:
+      FLAG_SEED: ${FLAG_SEED:?FLAG_SEED must be provided by the platform}
+      VERIFY_PORT: "18341"
+    networks:
+      - lab
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=128m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:18341/health', timeout=2).read()"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    # The verifier applies per-submission rlimits; these bound the long-lived service.
     mem_limit: 1g
     pids_limit: 128
 
 networks:
-  no_egress:
+  lab:
     internal: true
-  loopback_publish:
+  workshop-host:
     driver: bridge
     driver_opts:
       com.docker.network.bridge.enable_ip_masquerade: "false"

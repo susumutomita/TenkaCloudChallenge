@@ -11,10 +11,10 @@
 FLAG_SEED ?= local-dev-seed
 IMAGE := cs-cache-generation-fence
 
-# starter/ is bind-mounted read-only: the learner edits their checkout, the container
-# reads it. reference/ and tests/hidden/ stay inside the image and are not bind-mounted,
-# which keeps them out of the checkout rather than out of reach -- local mode is
-# honor-system verification. See TEMPLATE.md "Assurance scope".
+# starter/ is bind-mounted read-only: the learner edits their checkout and the public
+# participant image reads it. Hidden tests and the verifier live only in the separate
+# Compose verifier stage; reference/ and mutation.py are added only to the author stage.
+# Local mode remains honor-system verification. See TEMPLATE.md "Assurance scope".
 RUN := docker run --rm -e FLAG_SEED=$(FLAG_SEED) \
 	-v $(CURDIR)/local/starter:/problem/starter:ro $(IMAGE)
 
