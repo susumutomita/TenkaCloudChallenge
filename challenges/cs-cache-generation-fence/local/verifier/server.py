@@ -16,6 +16,7 @@ from urllib.parse import urlsplit
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fixtures.generate import audit_trace, health_token
+from verifier.expected import audit_answer
 
 ROOT = Path(__file__).resolve().parents[1]
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
@@ -93,8 +94,7 @@ def _check_audit(submission: object) -> bool:
     value = _normalized_int_list(submission)
     if value is None or len(value) != len(set(value)):
         return False
-    _events, stale = audit_trace(SEED)
-    return sorted(value) == stale
+    return sorted(value) == audit_answer(SEED)
 
 
 RUNNER = """

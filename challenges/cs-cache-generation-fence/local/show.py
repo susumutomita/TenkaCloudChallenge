@@ -10,7 +10,7 @@ from fixtures.generate import audit_trace, health_token, race_evidence
 
 def main() -> None:
     seed = os.environ.get("FLAG_SEED", "local-dev-seed")
-    rows, _answer = audit_trace(seed)
+    rows = audit_trace(seed)
     print("cs-cache-generation-fence")
     print("Prerequisite: Python dictionaries and functions.")
     print("origin = source of truth; revision = committed version number")

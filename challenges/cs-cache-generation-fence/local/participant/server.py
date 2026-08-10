@@ -99,7 +99,7 @@ def config_payload() -> dict[str, object]:
 
 
 def inspect_payload(seed: str) -> dict[str, object]:
-    rows, _answer = audit_trace(seed)
+    rows = audit_trace(seed)
     return {
         "environment": {
             "python": sys.version.split()[0],

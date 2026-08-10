@@ -3,12 +3,12 @@
 
 EXPECTED = {
     "environment": lambda server, seed: server.health_token(seed),
-    "audit": lambda server, seed: server.audit_trace(seed)[1],
+    "audit": lambda server, seed: server.audit_answer(seed),
 }
 
 
 def _audit_visible(server, seed):
-    events, _answer = server.audit_trace(seed)
+    events = server.audit_trace(seed)
     return {
         "cacheHitIndices": [
             index for index, event in enumerate(events) if event.get("op") == "cache_hit"

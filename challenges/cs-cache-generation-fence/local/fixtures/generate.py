@@ -86,12 +86,8 @@ def _episode(key: str, revision: int, value: int, kind: str) -> list[dict[str, o
     ]
 
 
-def audit_trace(seed: str) -> tuple[list[dict[str, object]], list[int]]:
-    """Return evidence plus the indices of stale cache responses.
-
-    The answer is recomputed by replaying origin commits.  It is deliberately not
-    stored in any event field.
-    """
+def audit_trace(seed: str) -> list[dict[str, object]]:
+    """Return participant-visible evidence without computing a checkpoint answer."""
     rng = _rng(seed, "audit")
     keys = product_keys(seed)
     revisions = [rng.randint(10, 80) for _ in keys]
@@ -110,17 +106,7 @@ def audit_trace(seed: str) -> tuple[list[dict[str, object]], list[int]]:
             rows.append({"op": "request_received", "requestId": f"r-{rng.randrange(10_000):04d}"})
         rows.extend(episode)
 
-    origin_revision: dict[str, int] = {}
-    stale: list[int] = []
-    for index, row in enumerate(rows):
-        key = row.get("key")
-        revision = row.get("revision")
-        if row.get("op") == "origin_commit" and isinstance(key, str) and type(revision) is int:
-            origin_revision[key] = revision
-        if row.get("op") == "cache_hit" and isinstance(key, str) and type(revision) is int:
-            if revision < origin_revision.get(key, revision):
-                stale.append(index)
-    return rows, stale
+    return rows
 
 
 def race_evidence(seed: str) -> dict[str, object]:

@@ -173,9 +173,11 @@ import json, sys
 sys.path.insert(0, ".")
 from participant.server import inspect_payload
 from fixtures.generate import audit_trace
+from verifier.expected import audit_answer
 seed = "repo-cache-seed"
 payload = inspect_payload(seed)
-events, answer = audit_trace(seed)
+events = audit_trace(seed)
+answer = audit_answer(seed)
 print(json.dumps({"payload": payload, "answer": answer, "events": events}))
 `;
     const output = execFileSync("python3", ["-c", probe], {
@@ -217,6 +219,13 @@ print(json.dumps({"payload": payload, "answer": answer, "events": events}))
     expect(verifier).not.toMatch(/^COPY .*reference\//m);
     expect(verifier).not.toMatch(/^COPY .*mutation\.py/m);
     expect(dockerfile).toContain("USER lab");
+
+    const fixtures = readFileSync(join(LOCAL, "fixtures", "generate.py"), "utf8");
+    expect(fixtures).not.toContain("def audit_answer");
+    expect(fixtures).not.toContain("return rows, stale");
+    expect(readFileSync(join(LOCAL, "verifier", "expected.py"), "utf8")).toContain(
+      "def audit_answer",
+    );
 
     const compose = readFileSync(join(LOCAL, "docker-compose.yml"), "utf8");
     expect(compose).toContain("target: participant");
