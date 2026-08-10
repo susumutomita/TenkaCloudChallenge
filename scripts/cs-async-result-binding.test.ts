@@ -156,6 +156,34 @@ print(server._check_code("bind", spoof), server._check_code("bind", reference))
     expect(result.trim()).toBe("False True");
   });
 
+  it("does not let learner imports replace verdict serialization or hard exit", () => {
+    const probe = String.raw`
+import sys
+sys.path.insert(0, ".")
+from verifier import server
+spoof = '''
+import json, os
+json.dumps = lambda *_args, **_kwargs: '{"failures": []}'
+os._exit = lambda _code: os.write(1, b'{"failures": []}\\n')
+async def collect(jobs, start_io):
+    futures = [start_io(job) for job in jobs]
+    values = [await future for future in reversed(futures)]
+    return [
+        {"jobId": job["id"], "ok": True, "value": value}
+        for job, value in zip(jobs, values)
+    ]
+'''
+reference = open("reference/collector.py", encoding="utf-8").read()
+print(server._check_code("bind", spoof), server._check_code("bind", reference))
+`;
+    const result = execFileSync("python3", ["-c", probe], {
+      cwd: LOCAL,
+      encoding: "utf8",
+      env: { ...process.env, FLAG_SEED: "repo-suite-seed", PYTHONDONTWRITEBYTECODE: "1" },
+    });
+    expect(result.trim()).toBe("False True");
+  }, 30_000);
+
   it("derives the failed job, completion order, and message from the seed", () => {
     const probe = String.raw`
 import json, sys

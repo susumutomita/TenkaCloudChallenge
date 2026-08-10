@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -48,6 +49,9 @@ RUNNER = """
 import json, os, sys
 import asyncio
 hard_exit = os._exit
+trusted_stdout = sys.stdout
+trusted_write = sys.stdout.buffer.write
+trusted_asyncio_run = asyncio.run
 sys.path.insert(0, {root!r})
 from tests.hidden import check_collect
 private_checker = check_collect.evaluate_module
@@ -58,19 +62,33 @@ while {root!r} in sys.path:
     sys.path.remove({root!r})
 sys.path.insert(0, {workspace!r})
 
-async def evaluate_submission(checker):
-    try:
-        import collector
-    except Exception as error:
-        return False, "submission could not be imported: " + type(error).__name__
-    try:
-        return await checker(collector, {phase!r}, {seed!r})
-    except Exception as error:
-        return False, "collector could not be checked: " + type(error).__name__
+try:
+    import collector
+except Exception:
+    # submission could not be imported: emit only the private, nonce-bound failure record.
+    os._exit = hard_exit
+    sys.stdout = trusted_stdout
+    trusted_write({fail_record!r})
+    sys.stdout.flush()
+    os._exit(0)
 
-passed, message = asyncio.run(evaluate_submission(private_checker))
+async def evaluate_submission(checker, participant_module):
+    try:
+        return await checker(participant_module, {phase!r}, {seed!r})
+    except Exception:
+        return False, "collector could not be checked"
+
+try:
+    passed, _message = trusted_asyncio_run(evaluate_submission(private_checker, collector))
+except Exception:
+    passed = False
+
+# Participant imports may replace json.dumps, print, asyncio.run, sys.stdout, or
+# os._exit. Restore the trusted C-backed output/exit handles and write a fixed record
+# instead of calling any participant-mutable serializer after grading.
 os._exit = hard_exit
-print(json.dumps({{"failures": [] if passed else [message]}}))
+sys.stdout = trusted_stdout
+trusted_write({pass_record!r} if passed is True else {fail_record!r})
 sys.stdout.flush()
 os._exit(0)
 """
@@ -105,7 +123,17 @@ def _check_code(checkpoint: str, submission: object) -> bool:
     if len(submission.encode()) > MAX_SOURCE_BYTES:
         return False
     phase = CODE_CHECKPOINT_PHASES[checkpoint]
-    script = RUNNER.format(root=str(ROOT), workspace="{workspace}", phase=phase, seed=SEED)
+    verdict_token = secrets.token_hex(32)
+    pass_line = f"TC-VERDICT:{verdict_token}:PASS"
+    fail_line = f"TC-VERDICT:{verdict_token}:FAIL"
+    script = RUNNER.format(
+        root=str(ROOT),
+        workspace="{workspace}",
+        phase=phase,
+        seed=SEED,
+        pass_record=(pass_line + "\n").encode("utf-8"),
+        fail_record=(fail_line + "\n").encode("utf-8"),
+    )
     result = run_source(
         submission,
         [sys.executable, "-I", "-c", script],
@@ -113,16 +141,8 @@ def _check_code(checkpoint: str, submission: object) -> bool:
     )
     if result is None or result[0] != 0:
         return False
-    for line in reversed(result[1].splitlines()):
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(payload, dict):
-            continue
-        failures = payload.get("failures")
-        return isinstance(failures, list) and len(failures) == 0
-    return False
+    lines = result[1].splitlines()
+    return bool(lines) and lines[-1] == pass_line
 
 
 def evaluate(checkpoint: object, submission: object) -> bool:
