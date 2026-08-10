@@ -1,0 +1,10 @@
+{
+  "name": "db-a6-lock-local",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local-play container for the db-a6-lock Drill: hold a row lock open in one session, watch a second session block waiting for it, identify the blocker via pg_locks/pg_stat_activity, then release it.",
+  "dependencies": {
+    "postgres": "3.4.5"
+  }
+}
