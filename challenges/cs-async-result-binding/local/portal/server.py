@@ -7,7 +7,9 @@ import os
 import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
+from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -18,6 +20,7 @@ from sandbox import normalize_source, run_source
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 MAX_BODY_BYTES = 256 * 1024
 REQUEST_TIMEOUT_SECONDS = 15
+VERIFIER_URL = os.environ.get("VERIFIER_URL")
 CHECKPOINTS = ("environment", "audit", "overlap", "bind", "failure", "generalize")
 CODE_CHECKPOINTS = frozenset(("overlap", "bind", "failure", "generalize"))
 LABELS = {
@@ -166,8 +169,48 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, run_public_tests(SEED, payload.get("files")))
         elif path == "/api/prepare":
             self._json(200, prepare_submissions(SEED, payload.get("files")))
+        elif path == "/verify" and VERIFIER_URL:
+            self._proxy_verify(payload)
         else:
             self._json(404, {"error": "not found"})
+
+    def _proxy_verify(self, payload: dict[str, object]) -> None:
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        request = Request(
+            VERIFIER_URL,
+            data=body,
+            headers={"content-type": "application/json"},
+            method="POST",
+        )
+        try:
+            # VERIFIER_URL is a trusted Compose-only environment value.
+            with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:  # noqa: S310
+                raw = response.read(MAX_BODY_BYTES + 1)
+                if len(raw) > MAX_BODY_BYTES:
+                    raise ValueError("verifier response too large")
+                verdict = json.loads(raw.decode("utf-8"))
+        except (
+            HTTPError,
+            URLError,
+            TimeoutError,
+            OSError,
+            ValueError,
+            UnicodeDecodeError,
+            json.JSONDecodeError,
+        ):
+            verdict = None
+        checkpoint = payload.get("checkpointId")
+        if (
+            not isinstance(verdict, dict)
+            or not isinstance(checkpoint, str)
+            or verdict.get("checkpointId") != checkpoint
+            or type(verdict.get("correct")) is not bool
+        ):
+            verdict = {
+                "checkpointId": checkpoint if isinstance(checkpoint, str) else "",
+                "correct": False,
+            }
+        self._json(200, verdict)
 
     def log_message(self, format: str, *args: object) -> None:
         return

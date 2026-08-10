@@ -7,8 +7,12 @@ services:
       target: participant
     environment:
       FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
+      VERIFIER_URL: http://verifier:8081/verify
     ports:
       - "127.0.0.1:18330:8080"
+    depends_on:
+      verifier:
+        condition: service_healthy
     read_only: true
     tmpfs:
       - "/tmp:rw,noexec,nosuid,size=32m,uid=10001,gid=10001"
@@ -25,7 +29,7 @@ services:
     pids_limit: 128
     restart: "no"
     networks:
-      - participant-isolated
+      - lab
       - participant-host
 
   verifier:
@@ -36,8 +40,6 @@ services:
       target: verifier
     environment:
       FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
-    ports:
-      - "127.0.0.1:18331:8081"
     read_only: true
     tmpfs:
       - "/tmp:rw,noexec,nosuid,size=32m,uid=10001,gid=10001"
@@ -54,20 +56,12 @@ services:
     pids_limit: 128
     restart: "no"
     networks:
-      - verifier-isolated
-      - verifier-host
+      - lab
 
 networks:
-  participant-isolated:
+  lab:
     internal: true
   participant-host:
-    driver: bridge
-    driver_opts:
-      com.docker.network.bridge.enable_ip_masquerade: "false"
-      com.docker.network.bridge.host_binding_ipv4: "127.0.0.1"
-  verifier-isolated:
-    internal: true
-  verifier-host:
     driver: bridge
     driver_opts:
       com.docker.network.bridge.enable_ip_masquerade: "false"

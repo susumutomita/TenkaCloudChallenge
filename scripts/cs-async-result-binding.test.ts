@@ -231,7 +231,7 @@ describe("cs-async-result-binding delivery boundary", () => {
     expect(metadata.runtime.challengeEndpoints).toEqual({
       "Participant Portal editor API": "http://127.0.0.1:18330/",
     });
-    expect(metadata.runtime.verifyUrl).toBe("http://127.0.0.1:18331/verify");
+    expect(metadata.runtime.verifyUrl).toBe("http://127.0.0.1:18330/verify");
   });
 
   it("keeps participant, verifier, and author materials in explicit disjoint targets", () => {
@@ -266,13 +266,17 @@ describe("cs-async-result-binding delivery boundary", () => {
     expect(source.match(/cap_drop:/g)).toHaveLength(2);
     expect(source.match(/healthcheck:/g)).toHaveLength(2);
     expect(source).toContain('"127.0.0.1:18330:8080"');
-    expect(source).toContain('"127.0.0.1:18331:8081"');
-    expect(source.match(/internal: true/g)).toHaveLength(2);
-    expect(source.match(/com\.docker\.network\.bridge\.enable_ip_masquerade: "false"/g)).toHaveLength(2);
-    expect(source).toContain("- participant-isolated");
+    expect(source).not.toContain('"127.0.0.1:18331:8081"');
+    expect(source).toContain("VERIFIER_URL: http://verifier:8081/verify");
+    expect(source.match(/internal: true/g)).toHaveLength(1);
+    expect(source.match(/com\.docker\.network\.bridge\.enable_ip_masquerade: "false"/g)).toHaveLength(1);
+    expect(source).toContain("- lab");
     expect(source).toContain("- participant-host");
-    expect(source).toContain("- verifier-isolated");
-    expect(source).toContain("- verifier-host");
+
+    const portal = readFileSync(join(LOCAL, "portal", "server.py"), "utf8");
+    expect(portal).toContain('elif path == "/verify" and VERIFIER_URL:');
+    expect(portal).toContain('verdict.get("checkpointId") != checkpoint');
+    expect(portal).toContain('type(verdict.get("correct")) is not bool');
   });
 
   it("registers curriculum order, solvability mirror, diagram, and generated catalog entry", () => {

@@ -100,7 +100,7 @@ Authors and CI only:
 make reference-test       # reference plus all seven mutations in the author image
 ```
 
-To exercise both APIs on loopback ports 18330 and 18331:
+To exercise the published Workbench on loopback port 18330 and its internal verifier:
 
 ```bash
 docker compose -f local/docker-compose.yml up --build

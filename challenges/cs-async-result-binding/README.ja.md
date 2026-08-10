@@ -98,7 +98,7 @@ make reset
 make reference-test       # author image 内で reference と 7 mutation を検査
 ```
 
-loopback の 18330 / 18331 で両 API を実行する:
+loopback 18330 の公開 Workbench と内部 verifier を実行する:
 
 ```bash
 docker compose -f local/docker-compose.yml up --build
