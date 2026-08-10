@@ -257,4 +257,34 @@ print(json.dumps({"payload": payload, "answer": answer, "events": events}))
     });
     expect(metadata.courseAlignment).toBeUndefined();
   });
+  /**
+   * Issue 440 / PR #437: 実 Portal の最初の提出で `prepare` が HTTP 502 を再現していた。
+   *
+   * Portal 側の 502 は `workbench_unavailable` / `invalid_workbench_response` のどちらかで、
+   * **Workbench が契約どおりの JSON を返せなかった**ことしか意味しない。 素の実装は
+   * `/api/test` と `/api/prepare` を try/except 無しで呼んでおり、 想定外の例外が出ると
+   * BaseHTTPRequestHandler が HTML の traceback を返す。 Portal 側は schema 検証に失敗して
+   * 502 を出すが、 **何が起きたかはどこにも残らない**。
+   *
+   * 例外を JSON の契約へ翻訳して型名を残す。 これは 502 の原因を特定したという主張ではなく、
+   * 「原因が残らない 502」を「読めるエラー」に変える変更である。
+   */
+  it("は POST handler の例外を契約どおりの JSON へ翻訳する", () => {
+    const server = readFileSync(join(PROBLEM, "local", "participant", "server.py"), "utf8");
+    const post = server.slice(server.indexOf("def do_POST"));
+    // test と prepare の両方が守られていること。 片方だけだともう片方で同じ 502 が出る。
+    expect(post).toContain('"passed": False, "output": f"public tests raised');
+    expect(post).toContain('"ok": False, "output": f"prepare raised');
+    // 例外の型名を残すこと。 握り潰して固定文言だけ返すと、502 が別の無情報エラーになるだけ。
+    expect(post).toContain("type(error).__name__");
+  });
+
+  it("は未知 path でもリクエスト本文を読み捨てる", () => {
+    // 読まずに応答すると本文が接続に残り、 接続を再利用するクライアントでは次の要求が
+    // 壊れて非 JSON になる。 それも Portal からは同じ 502 に見える。
+    const server = readFileSync(join(PROBLEM, "local", "participant", "server.py"), "utf8");
+    expect(server).toContain("def _drain_body");
+    const notFound = server.slice(server.indexOf('if path not in ("/verify"'));
+    expect(notFound.slice(0, 400)).toContain("self._drain_body()");
+  });
 });

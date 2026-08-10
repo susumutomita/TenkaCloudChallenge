@@ -8,6 +8,7 @@ the Participant Portal keeps one loopback URL without shipping hidden checks.
 from __future__ import annotations
 
 import json
+from contextlib import suppress
 import os
 import resource
 import subprocess
@@ -199,6 +200,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         path = urlsplit(self.path).path.rstrip("/") or "/"
         if path not in ("/verify", "/api/test", "/api/prepare"):
+            # 未知 path でも body は読み捨てる。 読まずに応答すると、 送られてきた本文が接続に
+            # 残り、 同じ接続を再利用するクライアントでは次の要求が壊れて読めない応答になる。
+            self._drain_body()
             self._respond(404, {"error": "not found"})
             return
         try:
@@ -219,11 +223,31 @@ class Handler(BaseHTTPRequestHandler):
             self._respond(400, {"error": "bad json"})
             return
 
+        # Issue 440 / #437: Portal 越しの `prepare` が 502 になっていた。 502 は Portal 側の
+        # `workbench_unavailable` / `invalid_workbench_response` で、 **この handler が JSON を
+        # 返せなかった**ことしか意味しない。 素の呼び出しでは try/except が無く、 ここで想定外の
+        # 例外が出ると BaseHTTPRequestHandler が HTML の traceback を返し、 Portal 側の schema
+        # 検証が落ちて 502 になる — 原因が一切残らない形で。
+        #
+        # 例外を握り潰すのではなく、 **契約どおりの JSON へ翻訳して型名を残す**。 これで失敗は
+        # 502 ではなく editor 上の読めるエラーになり、 実機で何が起きたか分かる。
         if path == "/api/test":
-            self._respond(200, run_public_tests(SEED, body.get("files")))
+            try:
+                self._respond(200, run_public_tests(SEED, body.get("files")))
+            except Exception as error:  # noqa: BLE001 - 契約を壊さないための境界
+                self._respond(
+                    200,
+                    {"passed": False, "output": f"public tests raised {type(error).__name__}"},
+                )
             return
         if path == "/api/prepare":
-            self._respond(200, prepare_submissions(SEED, body.get("files")))
+            try:
+                self._respond(200, prepare_submissions(SEED, body.get("files")))
+            except Exception as error:  # noqa: BLE001 - 契約を壊さないための境界
+                self._respond(
+                    200,
+                    {"ok": False, "output": f"prepare raised {type(error).__name__}"},
+                )
             return
 
         request = urllib.request.Request(
@@ -243,6 +267,15 @@ class Handler(BaseHTTPRequestHandler):
             self._respond(503, {"error": "verifier unavailable"})
             return
         self._raw(status, forwarded)
+
+    def _drain_body(self) -> None:
+        try:
+            length = int(self.headers.get("content-length", "0"))
+        except ValueError:
+            return
+        if 0 < length <= MAX_BODY_BYTES:
+            with suppress(OSError, TimeoutError):
+                self.rfile.read(length)
 
     def _respond(self, status: int, payload: object) -> None:
         self._raw(status, json.dumps(payload, ensure_ascii=False).encode("utf-8"))
