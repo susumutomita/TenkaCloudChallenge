@@ -1,0 +1,10 @@
+{
+  "name": "db-challenge-blocked-transaction-local",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local-play container for the db-challenge-blocked-transaction Challenge: a background payout write that hangs behind a leaked connection, which a participant must diagnose with pg_stat_activity/pg_locks and resolve without being told the cause.",
+  "dependencies": {
+    "postgres": "3.4.5"
+  }
+}

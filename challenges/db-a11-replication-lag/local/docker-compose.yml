@@ -1,0 +1,59 @@
+# Local-play problem containers for db-a11-replication-lag.
+#
+# Same 2-node shape as db-a10-primary-replica (this drill's prerequisite):
+# `primary` (participant terminal + info/verify) and `replica` (hot standby,
+# bootstrapped via pg_basebackup at boot — see local/entrypoint-replica.sh).
+# Deployed independently — this problem does not share containers with A10.
+#
+# `replica` only starts once `primary`'s healthcheck passes (compose's
+# `depends_on: condition: service_healthy`), and `primary`'s healthcheck only
+# goes green after local/entrypoint-primary.sh has finished applying the
+# schema — which is also where this drill grants `participant` the GUC
+# privilege it needs to throttle the replica's apply rate.
+#
+# Both services bind their host-published ports to 127.0.0.1 only; the
+# replica is also reachable from inside the primary's terminal via the
+# compose service name `replica` on its (unpublished) default port 5432.
+services:
+  primary:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: participant
+    environment:
+      # Unused by this drill (grading reads live DB/replication state, not a
+      # discovered flag) but injected by `make local` for every local-play
+      # problem.
+      FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
+    ports:
+      - "127.0.0.1:18490:8080" # info surface
+      - "127.0.0.1:18491:8081" # loopback /verify
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: "3s"
+      timeout: "5s"
+      retries: 60
+    restart: "no"
+
+  replica:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: replica
+    depends_on:
+      primary:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:18492:5432" # direct psql access to the standby
+    healthcheck:
+      test: ["CMD", "pg_isready", "-p", "5432"]
+      interval: "3s"
+      timeout: "5s"
+      retries: 60
+    restart: "no"
