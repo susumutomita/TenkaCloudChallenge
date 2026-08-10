@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import resource
+import secrets
 import subprocess
 import sys
 import tempfile
@@ -128,7 +129,12 @@ def _submission_sources(files: object) -> dict[str, str] | None:
 
 
 def _run_submission_script(
-    sources: dict[str, str], script: str, seed: str
+    sources: dict[str, str],
+    script: str,
+    seed: str,
+    *,
+    pass_record: bytes = b"",
+    fail_record: bytes = b"",
 ) -> tuple[int, str] | None:
     with tempfile.TemporaryDirectory() as workspace:
         for name, source in sources.items():
@@ -141,7 +147,13 @@ def _run_submission_script(
                         sys.executable,
                         "-I",
                         "-c",
-                        script.format(root=str(ROOT), workspace=workspace, seed=seed),
+                        script.format(
+                            root=str(ROOT),
+                            workspace=workspace,
+                            seed=seed,
+                            pass_record=pass_record,
+                            fail_record=fail_record,
+                        ),
                     ],
                     stdout=sink,
                     stderr=subprocess.STDOUT,
@@ -222,6 +234,9 @@ def _check_audit(submission: object) -> bool:
 
 RUNNER = """
 import json, os, sys
+hard_exit = os._exit
+trusted_stdout = sys.stdout
+trusted_write = sys.stdout.buffer.write
 sys.path.insert(0, {root!r})
 from tests.hidden import check_cache_policy
 private_checker = getattr(check_cache_policy, __PHASE__)
@@ -232,17 +247,31 @@ while {root!r} in sys.path:
     sys.path.remove({root!r})
 sys.path.insert(0, {workspace!r})
 
-def evaluate_submission(checker):
-    try:
-        import cache_policy
-    except Exception as error:
-        return ["submission could not be imported: " + type(error).__name__]
-    required = ("invalidate", "admit_fill")
-    if any(not hasattr(cache_policy, name) for name in required):
-        return ["submission does not define both required functions"]
-    return checker(cache_policy, {seed!r})
+try:
+    import cache_policy
+except Exception:
+    # submission could not be imported: emit only the private, nonce-bound failure record.
+    os._exit = hard_exit
+    sys.stdout = trusted_stdout
+    trusted_write({fail_record!r})
+    sys.stdout.flush()
+    os._exit(0)
 
-print(json.dumps({{"failures": evaluate_submission(private_checker)}}))
+required = ("invalidate", "admit_fill")
+if any(not hasattr(cache_policy, name) for name in required):
+    failures = ["submission does not define both required functions"]
+else:
+    try:
+        failures = private_checker(cache_policy, {seed!r})
+    except Exception:
+        failures = ["submission could not be checked"]
+
+# Participant imports may replace json.dumps, print, sys.stdout, or os._exit. Restore
+# the trusted C-backed output/exit handles and write a fixed record instead of calling
+# any participant-mutable serializer after grading.
+os._exit = hard_exit
+sys.stdout = trusted_stdout
+trusted_write({pass_record!r} if not failures else {fail_record!r})
 sys.stdout.flush()
 os._exit(0)
 """
@@ -251,18 +280,21 @@ os._exit(0)
 def _check_code(phase: str, submission: object) -> bool:
     if not isinstance(submission, str) or not submission.strip() or len(submission) > MAX_BODY_BYTES:
         return False
+    verdict_token = secrets.token_hex(32)
+    pass_line = f"TC-VERDICT:{verdict_token}:PASS"
+    fail_line = f"TC-VERDICT:{verdict_token}:FAIL"
     runner = RUNNER.replace("__PHASE__", repr(phase))
-    result = _run_submission_script({"cache_policy.py": submission}, runner, SEED)
+    result = _run_submission_script(
+        {"cache_policy.py": submission},
+        runner,
+        SEED,
+        pass_record=(pass_line + "\n").encode("utf-8"),
+        fail_record=(fail_line + "\n").encode("utf-8"),
+    )
     if result is None or result[0] != 0:
         return False
-    for line in reversed(result[1].splitlines()):
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        failures = payload.get("failures")
-        return isinstance(failures, list) and not failures
-    return False
+    lines = result[1].splitlines()
+    return bool(lines) and lines[-1] == pass_line
 
 
 def _check_basic_invalidate(submission: object) -> bool:

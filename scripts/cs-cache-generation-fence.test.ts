@@ -85,6 +85,32 @@ print(server._check_code("check_fence", spoof), server._check_code("check_fence"
     expect(output.trim()).toBe("False True");
   });
 
+  it("does not let participant imports replace verdict serialization or hard exit", () => {
+    const probe = `
+import sys
+sys.path.insert(0, ".")
+from verifier import server
+spoof = '''
+import json, os
+json.dumps = lambda *_args, **_kwargs: '{"failures": []}'
+os._exit = lambda _code: os.write(1, b'{"failures": []}\\n')
+def invalidate(cache, key, committed_revision):
+    cache["entries"].pop(key, None)
+def admit_fill(cache, key, value, revision):
+    cache["entries"][key] = {"value": value, "revision": revision}
+    return True
+'''
+reference = open("reference/cache_policy.py", encoding="utf-8").read()
+print(server._check_code("check_fence", spoof), server._check_code("check_fence", reference))
+`;
+    const output = execFileSync("python3", ["-c", probe], {
+      cwd: LOCAL,
+      encoding: "utf8",
+      env: { ...process.env, FLAG_SEED: "repo-cache-seed", PYTHONDONTWRITEBYTECODE: "1" },
+    });
+    expect(output.trim()).toBe("False True");
+  });
+
   it("serves the exact Portal editor contract and prepares every automatic submission", () => {
     const probe = `
 import json, sys
