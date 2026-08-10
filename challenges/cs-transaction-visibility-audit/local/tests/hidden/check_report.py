@@ -4,9 +4,51 @@ from __future__ import annotations
 
 from typing import Iterable, Protocol
 
-from fixtures.generate import ReportCase
-from tests.hidden.cases import snapshot_cases, transfer_cases
+from fixtures.generate import ReportCase, _history
 
+
+# hidden case の構築。 以前は `tests/hidden/cases.py` に分けていたが、 scaffold leftover
+# guard が hidden に check module 1 本だけを許すため、 ここへ畳んだ。 参加者 image へは
+# Docker が tests/hidden ごと入れないので、 未知の schedule が公開物へ出ないことは変わらない。
+def snapshot_cases(seed: str) -> tuple[ReportCase, ...]:
+    """Same accounts in three orders, with one commit during the report."""
+    history = _history(f"{seed}:snapshot")
+    accounts = tuple(history[0].balances)
+    rotations = (
+        accounts,
+        accounts[1:] + accounts[:1],
+        tuple(reversed(accounts)),
+    )
+    return tuple(
+        ReportCase(
+            f"snapshot-{index}",
+            history[:2],
+            order,
+            commit_after_reads=(1,),
+        )
+        for index, order in enumerate(rotations)
+    )
+
+
+def transfer_cases(seed: str) -> tuple[ReportCase, ...]:
+    """Unseen IDs, orders, revision gaps, and two commits for transfer testing."""
+    history = _history(f"{seed}:transfer")
+    accounts = tuple(history[0].balances)
+    return (
+        ReportCase("two commits", history, accounts, commit_after_reads=(1, 3)),
+        ReportCase(
+            "reverse order",
+            history,
+            tuple(reversed(accounts)),
+            commit_after_reads=(2, 3),
+        ),
+        ReportCase(
+            "subset and reorder",
+            history,
+            (accounts[2], accounts[0], accounts[3]),
+            commit_after_reads=(1, 2),
+        ),
+    )
 
 class Submission(Protocol):
     def build_report(self, ledger: object, account_ids: Iterable[str]) -> dict[str, object]: ...
