@@ -1725,7 +1725,7 @@
       "id": "cs-async-result-binding",
       "name": "先に返ったのは、どの request の結果だろう",
       "category": "Challenge",
-      "status": "draft",
+      "status": "ready",
       "visibility": "public",
       "track": {
         "id": "cs-foundations",
@@ -1755,7 +1755,7 @@
       "id": "cs-auth-claim-audit",
       "name": "署名は通った。それは、その要求を通してよいという意味ではない",
       "category": "Challenge",
-      "status": "draft",
+      "status": "ready",
       "visibility": "public",
       "track": {
         "id": "cs-foundations",
@@ -1784,7 +1784,7 @@
       "id": "cs-cache-generation-fence",
       "name": "消した。それでも古い値が戻ってきた",
       "category": "Challenge",
-      "status": "draft",
+      "status": "ready",
       "visibility": "public",
       "track": {
         "id": "cs-foundations",
@@ -1814,7 +1814,7 @@
       "id": "cs-http-retry-idempotency",
       "name": "応答が消えた。再送で同じ支払いを増やさない",
       "category": "Challenge",
-      "status": "draft",
+      "status": "ready",
       "visibility": "public",
       "track": {
         "id": "cs-foundations",
@@ -1845,7 +1845,7 @@
       "id": "cs-transaction-visibility-audit",
       "name": "どちらも committed。だが、その合計は一度も存在しない",
       "category": "Challenge",
-      "status": "draft",
+      "status": "ready",
       "visibility": "public",
       "track": {
         "id": "cs-foundations",

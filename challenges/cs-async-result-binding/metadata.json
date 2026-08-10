@@ -3,7 +3,7 @@
   "id": "cs-async-result-binding",
   "name": "先に返ったのは、どの request の結果だろう",
   "category": "Challenge",
-  "status": "draft",
+  "status": "ready",
   "visibility": "public",
   "track": {
     "id": "cs-foundations",
