@@ -130,6 +130,30 @@ print(server._check_code("check_replay", spoof), server._check_code("check_repla
     expect(output.trim()).toBe("False True");
   });
 
+  it("does not let participant imports replace verdict serialization or hard exit", () => {
+    const probe = `
+import sys
+sys.path.insert(0, ".")
+from verifier import server
+spoof = '''
+import json, os
+json.dumps = lambda *_args, **_kwargs: '{"failures": []}'
+os._exit = lambda _code: os.write(1, b'{"failures": []}\\n')
+def handle_request(*_args, **_kwargs):
+    return {"status": 500, "body": {}}
+'''
+reference = open("reference/idempotency.py", encoding="utf-8").read()
+print(server._check_code("check_replay", spoof), server._check_code("check_replay", reference))
+`;
+    const output = execFileSync("python3", ["-c", probe], {
+      cwd: LOCAL,
+      encoding: "utf8",
+      env: { ...process.env, FLAG_SEED: "repo-contract-seed", PYTHONDONTWRITEBYTECODE: "1" },
+      timeout: 120_000,
+    });
+    expect(output.trim()).toBe("False True");
+  });
+
   it("separates participant Workbench, hidden verifier, and author artifacts", () => {
     const dockerfile = readFileSync(join(LOCAL, "Dockerfile"), "utf8");
     const participantFixtures = readFileSync(join(LOCAL, "fixtures", "generate.py"), "utf8");
@@ -153,6 +177,7 @@ print(server._check_code("check_replay", spoof), server._check_code("check_repla
 
   it("publishes only loopback 18350 and runs read-only without an outbound-masqueraded network", () => {
     const compose = readFileSync(join(LOCAL, "docker-compose.yml"), "utf8");
+    const verifier = readFileSync(join(LOCAL, "verifier", "server.py"), "utf8");
     expect(compose).toContain('"127.0.0.1:18350:18350"');
     expect(compose).not.toContain("18351:18351");
     expect(compose.match(/read_only: true/g)?.length).toBe(2);
@@ -162,6 +187,8 @@ print(server._check_code("check_replay", spoof), server._check_code("check_repla
     expect(compose).toContain("target: participant");
     expect(compose).toContain("target: verifier");
     expect(compose).toContain("healthcheck:");
+    expect(compose.match(/pids_limit: 96/g)).toHaveLength(2);
+    expect(verifier).toContain("MAX_PROCESSES = 128");
   });
 
   it("ships six checkpoints worth 200 points at curriculum order 50", () => {

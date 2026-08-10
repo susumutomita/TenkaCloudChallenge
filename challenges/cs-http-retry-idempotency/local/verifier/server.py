@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import resource
+import secrets
 import subprocess
 import sys
 import tempfile
@@ -20,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 MAX_BODY_BYTES = 256 * 1024
 MAX_OUTPUT_BYTES = 64 * 1024
+MAX_PROCESSES = 128
 RUN_TIMEOUT_SECONDS = 15
 REQUEST_TIMEOUT_SECONDS = 15
 _ADDRESS_SPACE_CAPPABLE = sys.platform.startswith("linux")
@@ -51,7 +53,12 @@ PORTAL_ENGLISH_CONTRACT = {
 def _limits() -> None:
     if _ADDRESS_SPACE_CAPPABLE:
         resource.setrlimit(resource.RLIMIT_AS, (512 * 1024 * 1024, 512 * 1024 * 1024))
-    resource.setrlimit(resource.RLIMIT_NPROC, (64, 64))
+    # RLIMIT_NPROC counts every process and thread owned by the host uid, not only this
+    # child. A limit of 64 starved the eight-thread concurrency property on a shared CI
+    # runner before the submission started. The real Compose service has the tighter
+    # cgroup-local pids_limit=96, while 128 keeps direct author/CI runs bounded without
+    # charging unrelated runner services against the exercise's thread budget.
+    resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
     resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_BYTES, MAX_OUTPUT_BYTES))
 
 
@@ -83,6 +90,9 @@ def _check_audit(submission: object) -> bool:
 
 RUNNER = """
 import json, os, sys
+hard_exit = os._exit
+trusted_stdout = sys.stdout
+trusted_write = sys.stdout.buffer.write
 sys.path.insert(0, {root!r})
 from tests.hidden import check_idempotency
 private_checker = getattr(check_idempotency, {phase!r})
@@ -93,16 +103,30 @@ while {root!r} in sys.path:
     sys.path.remove({root!r})
 sys.path.insert(0, {workspace!r})
 
-def evaluate_submission(checker):
-    try:
-        import idempotency
-    except Exception as error:
-        return ["submission could not be imported: " + type(error).__name__]
-    if not hasattr(idempotency, "handle_request"):
-        return ["submission does not define handle_request()"]
-    return checker(idempotency, {seed!r})
+try:
+    import idempotency
+except Exception:
+    # submission could not be imported: emit only the private, nonce-bound failure record.
+    os._exit = hard_exit
+    sys.stdout = trusted_stdout
+    trusted_write({fail_record!r})
+    sys.stdout.flush()
+    os._exit(0)
 
-print(json.dumps({{"failures": evaluate_submission(private_checker)}}))
+if not hasattr(idempotency, "handle_request"):
+    failures = ["submission does not define handle_request()"]
+else:
+    try:
+        failures = private_checker(idempotency, {seed!r})
+    except Exception:
+        failures = ["submission could not be checked"]
+
+# Participant imports may replace json.dumps, print, sys.stdout, or os._exit. Restore
+# the trusted C-backed output/exit handles and write a fixed record instead of calling
+# any participant-mutable serializer after grading.
+os._exit = hard_exit
+sys.stdout = trusted_stdout
+trusted_write({pass_record!r} if not failures else {fail_record!r})
 sys.stdout.flush()
 os._exit(0)
 """
@@ -112,6 +136,9 @@ def _check_code(phase: str, submission: object) -> bool:
     if not isinstance(submission, str) or not submission.strip() or len(submission) > MAX_BODY_BYTES:
         return False
     with tempfile.TemporaryDirectory() as workspace:
+        verdict_token = secrets.token_hex(32)
+        pass_line = f"TC-VERDICT:{verdict_token}:PASS"
+        fail_line = f"TC-VERDICT:{verdict_token}:FAIL"
         Path(workspace, "idempotency.py").write_text(submission, encoding="utf-8")
         transcript = Path(workspace, "stdout")
         try:
@@ -121,7 +148,14 @@ def _check_code(phase: str, submission: object) -> bool:
                         sys.executable,
                         "-I",
                         "-c",
-                        RUNNER.format(root=str(ROOT), workspace=workspace, phase=phase, seed=SEED),
+                        RUNNER.format(
+                            root=str(ROOT),
+                            workspace=workspace,
+                            phase=phase,
+                            seed=SEED,
+                            pass_record=(pass_line + "\n").encode("utf-8"),
+                            fail_record=(fail_line + "\n").encode("utf-8"),
+                        ),
                     ],
                     stdout=sink,
                     stderr=subprocess.STDOUT,
@@ -137,14 +171,8 @@ def _check_code(phase: str, submission: object) -> bool:
             return False
     if completed.returncode != 0:
         return False
-    for line in reversed(output.splitlines()):
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        failures = payload.get("failures")
-        return isinstance(failures, list) and not failures
-    return False
+    lines = output.splitlines()
+    return bool(lines) and lines[-1] == pass_line
 
 
 def _check_replay(submission: object) -> bool:
