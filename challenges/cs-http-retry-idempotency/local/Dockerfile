@@ -32,4 +32,6 @@ FROM participant AS author
 COPY --chown=lab:lab tests/hidden/ ./tests/hidden/
 COPY --chown=lab:lab verifier/ ./verifier/
 COPY --chown=lab:lab reference/ ./reference/
+# mutation suite が読む author 専用の mutant。 参加者 stage には入らない。
+COPY --chown=lab:lab mutants/ ./mutants/
 COPY --chown=lab:lab mutation.py ./mutation.py

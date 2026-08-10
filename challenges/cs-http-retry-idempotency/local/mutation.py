@@ -11,7 +11,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from tests.hidden.check_idempotency import run
 
 REFERENCE = (Path(__file__).parent / "reference" / "idempotency.py").read_text(encoding="utf-8")
-SIDECAR_MUTANT = (Path(__file__).parent / "tests" / "hidden" / "sidecar_mutant.py").read_text(
+# Issue 440: scaffold-leftover guard は tests/hidden に check_*.py 1 本だけを許す。
+# これは hidden test ではなく mutation suite が読む author 専用の mutant なので、
+# reference/ と同格の mutants/ へ置く (参加者 image には元から入らない)。
+SIDECAR_MUTANT = (Path(__file__).parent / "mutants" / "sidecar_mutant.py").read_text(
     encoding="utf-8"
 )
 SEED = "mutation-suite-seed"
