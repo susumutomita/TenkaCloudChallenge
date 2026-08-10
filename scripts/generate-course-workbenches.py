@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """[#381] Generate the Portal editor language material from metadata, and prove it stayed generated.
 
-The verifier text a participant reads in the Portal editor (problem name, description,
-checkpoint labels) is embedded in each course problem's ``local/verifier/server.py``
-inside the ``BEGIN/END GENERATED PORTAL EDITOR API`` block. The source of truth for
-that text — Japanese and English both — is the problem's ``metadata.json``: ``name`` /
-``shortDescription`` / ``scoring.checks[].label`` and their ``i18n.en`` counterparts.
+The text a participant reads in the Portal editor (problem name, description,
+checkpoint labels) is embedded in each course problem's Portal server, normally
+``local/verifier/server.py``, inside the ``BEGIN/END GENERATED PORTAL EDITOR API``
+block. Split-boundary problems keep that public server under ``local/participant``.
+The source of truth for that text — Japanese and English both — is the problem's
+``metadata.json``: ``name`` / ``shortDescription`` / ``scoring.checks[].label`` and
+their ``i18n.en`` counterparts.
 
 Keeping the text in the block by hand is how the English got lost in the first place:
 34 verifiers shipped Japanese-only strings while the finished translations sat in
@@ -20,7 +22,8 @@ What it owns:
   language arguments — ``problem_name`` / ``description`` / ``checkpoint_labels`` and
   their ``_en`` twins — are regenerated from metadata. ``--check`` compares parsed
   values, so quoting style never matters; ``--write`` rewrites the lines.
-- **The vendored adapter** (``local/verifier/workbench.py``): every copy must be
+- **The vendored adapter** (normally ``local/verifier/workbench.py``; split-boundary
+  problems use ``local/participant/workbench.py``): every copy must be
   byte-identical to the canonical source in ``scripts/course-workbench/workbench.py``.
   Vendoring is the spec — each problem must deploy self-contained — so ``--write``
   re-distributes the canonical file rather than collapsing the copies into an import.
@@ -46,6 +49,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CANONICAL_ADAPTER = ROOT / "scripts" / "course-workbench" / "workbench.py"
 BLOCK_BEGIN = "# BEGIN GENERATED PORTAL EDITOR API"
 BLOCK_END = "# END GENERATED PORTAL EDITOR API"
+PORTAL_PACKAGES = {"cs-transaction-visibility-audit": "participant"}
 
 # The language arguments the generator owns, in the order they are emitted after
 # the anchor. Everything else in the block (root, seed, submitted_files, limits,
@@ -65,6 +69,18 @@ def problems_with_verifier() -> list[Path]:
         path.parents[2]
         for path in (ROOT / "challenges").glob("*/local/verifier/server.py")
     )
+
+
+def portal_package(problem: Path) -> str:
+    return PORTAL_PACKAGES.get(problem.name, "verifier")
+
+
+def portal_server_path(problem: Path) -> Path:
+    return problem / "local" / portal_package(problem) / "server.py"
+
+
+def portal_adapter_path(problem: Path) -> Path:
+    return problem / "local" / portal_package(problem) / "workbench.py"
 
 
 def language_material(problem: Path) -> dict[str, object]:
@@ -127,7 +143,7 @@ def regenerate_block(block: str, material: dict[str, object], problem_id: str) -
 
 def check_generated(problem: Path, failures: list[str]) -> None:
     problem_id = problem.name
-    server_path = problem / "local" / "verifier" / "server.py"
+    server_path = portal_server_path(problem)
     source = server_path.read_text(encoding="utf-8")
     _, block, _ = split_block(source, problem_id)
     material = language_material(problem)
@@ -148,7 +164,7 @@ def check_generated(problem: Path, failures: list[str]) -> None:
 
 
 def write_generated(problem: Path) -> bool:
-    server_path = problem / "local" / "verifier" / "server.py"
+    server_path = portal_server_path(problem)
     source = server_path.read_text(encoding="utf-8")
     before, block, after = split_block(source, problem.name)
     material = language_material(problem)
@@ -162,7 +178,8 @@ def write_generated(problem: Path) -> bool:
 def check_handwritten(problem: Path, failures: list[str]) -> None:
     """The five authored payloads: the English from metadata must appear verbatim."""
     problem_id = problem.name
-    source = (problem / "local" / "verifier" / "server.py").read_text(encoding="utf-8")
+    server_path = portal_server_path(problem)
+    source = server_path.read_text(encoding="utf-8")
     material = language_material(problem)
     missing = []
     for label, value in (
@@ -183,7 +200,7 @@ def check_handwritten(problem: Path, failures: list[str]) -> None:
     if missing:
         failures.append(
             f"{problem_id}: hand-written config_payload() drifted from metadata english — {'; '.join(missing)}. "
-            "This payload is authored, not generated: edit local/verifier/server.py so the Portal editor "
+            f"This payload is authored, not generated: edit {server_path.relative_to(problem)} so the Portal editor "
             "carries the same english the metadata does."
         )
 
@@ -192,7 +209,7 @@ def check_adapter_copies(failures: list[str], write: bool) -> int:
     canonical = CANONICAL_ADAPTER.read_bytes()
     rewritten = 0
     for problem in problems_with_verifier():
-        copy = problem / "local" / "verifier" / "workbench.py"
+        copy = portal_adapter_path(problem)
         if not copy.is_file():
             continue
         if copy.read_bytes() != canonical:
@@ -201,7 +218,8 @@ def check_adapter_copies(failures: list[str], write: bool) -> int:
                 rewritten += 1
             else:
                 failures.append(
-                    f"{problem.name}: local/verifier/workbench.py drifted from scripts/course-workbench/workbench.py — "
+                    f"{problem.name}: {copy.relative_to(problem)} drifted from "
+                    "scripts/course-workbench/workbench.py — "
                     "run scripts/generate-course-workbenches.py --write. The copies are the spec (each problem deploys "
                     "self-contained); the canonical source is where the adapter is edited."
                 )
@@ -221,7 +239,7 @@ def main() -> int:
     rewritten_blocks = 0
 
     for problem in problems_with_verifier():
-        source = (problem / "local" / "verifier" / "server.py").read_text(encoding="utf-8")
+        source = portal_server_path(problem).read_text(encoding="utf-8")
         if BLOCK_BEGIN in source:
             generated += 1
             if args.write:
