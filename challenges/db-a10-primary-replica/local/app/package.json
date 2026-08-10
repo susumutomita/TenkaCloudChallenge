@@ -1,0 +1,10 @@
+{
+  "name": "db-a10-primary-replica-local",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local-play container (primary side) for the db-a10-primary-replica Drill: confirm a streaming-replication standby actually follows writes made on the primary, rather than being a one-time copy.",
+  "dependencies": {
+    "postgres": "3.4.5"
+  }
+}

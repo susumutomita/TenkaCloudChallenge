@@ -1,0 +1,62 @@
+# Local-play problem containers for db-a10-primary-replica.
+#
+# Two postgres:16-alpine services instead of every prior Database Track
+# drill's one: `primary` (participant terminal + info/verify, exactly like
+# db-a1..a8/a12) and `replica` (a hot standby that bootstraps itself against
+# `primary` at boot via pg_basebackup — see local/entrypoint-replica.sh).
+#
+# `replica` only starts once `primary`'s healthcheck passes (compose's
+# `depends_on: condition: service_healthy`, a 1st-class compose feature) —
+# and `primary`'s healthcheck is the Node info server, which entrypoint-
+# primary.sh only starts *after* the replication role + slot exist (see that
+# file). So by the time `replica` even starts, everything it needs from
+# `primary` is already in place.
+#
+# Both services bind their host-published ports to 127.0.0.1 only; the
+# replica is reachable a second way, from inside the primary's terminal, via
+# the compose service name `replica` on the (unpublished, docker-network-only)
+# default port 5432 — no external network, no credential beyond the same
+# trust auth every prior Database Track drill already uses.
+services:
+  primary:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: participant
+    environment:
+      # Unused by this drill (grading reads live DB/replication state, not a
+      # discovered flag) but injected by `make local` for every local-play
+      # problem.
+      FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
+    ports:
+      - "127.0.0.1:18480:8080" # info surface
+      - "127.0.0.1:18481:8081" # loopback /verify
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: "3s"
+      timeout: "5s"
+      retries: 60
+    restart: "no"
+
+  replica:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: replica
+    depends_on:
+      primary:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:18482:5432" # direct psql access to the standby
+    healthcheck:
+      test: ["CMD", "pg_isready", "-p", "5432"]
+      interval: "3s"
+      timeout: "5s"
+      retries: 60
+    restart: "no"
