@@ -1,0 +1,10 @@
+{
+  "name": "db-challenge-slow-query-local",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local-play container for the db-challenge-slow-query Challenge: a customer order-history lookup that a participant must diagnose with EXPLAIN and fix without being told the cause.",
+  "dependencies": {
+    "postgres": "3.4.5"
+  }
+}
