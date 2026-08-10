@@ -121,6 +121,49 @@ def _has_sqlite_receipt(
     return False
 
 
+def _backup_sqlite(source: Path, destination: Path) -> bool:
+    """Copy only SQLite state, deliberately excluding adjacent sidecar files."""
+    try:
+        with sqlite3.connect(source) as source_connection:
+            with sqlite3.connect(destination) as destination_connection:
+                source_connection.backup(destination_connection)
+    except sqlite3.Error:
+        return False
+    return True
+
+
+def _sqlite_only_recovery_properties(
+    module: ModuleType,
+    db_path: Path,
+    key: str,
+    request: dict[str, object],
+    response: object,
+) -> list[str]:
+    """Prove the SQLite file alone is sufficient for replay and conflict.
+
+    A row scan alone can be gamed by mirroring receipt-looking columns into the
+    ledger while consulting an adjacent JSON file. Independent SQLite backups remove
+    every sibling file before fresh handler instances exercise both decision paths.
+    """
+    failures: list[str] = []
+    replay_copy = db_path.with_name(f"{db_path.stem}-sqlite-replay.sqlite")
+    conflict_copy = db_path.with_name(f"{db_path.stem}-sqlite-conflict.sqlite")
+    if not _backup_sqlite(db_path, replay_copy) or not _backup_sqlite(db_path, conflict_copy):
+        return ["the completed operation could not be recovered from a SQLite backup"]
+
+    replayed = _call(_fresh(module), replay_copy, key, request)
+    if replayed != response or _ledger_count(replay_copy) != 1:
+        failures.append("a SQLite-only backup did not replay the exact stored response")
+
+    changed = {**request, "amount": int(request["amount"]) + 1}
+    conflict = _call(_fresh(module), conflict_copy, key, changed)
+    if conflict != {"status": 409, "body": {"error": "idempotency_conflict"}}:
+        failures.append("a SQLite-only backup did not retain the key/request binding")
+    if _ledger_count(conflict_copy) != 1:
+        failures.append("a conflict recovered from SQLite changed the ledger")
+    return failures
+
+
 def _call(module: ModuleType, db_path: Path, key: object, request: object) -> object:
     try:
         return module.handle_request(db_path, key, request)
@@ -181,6 +224,7 @@ def _replay_properties(module: ModuleType, seed: str, phase: str) -> list[str]:
             failures.append("a sequential retry changed the ledger or did not leave one durable receipt")
         if not _has_sqlite_receipt(db_path, key, request_a, first):
             failures.append("the key, fingerprint, status, and body were not stored together in SQLite")
+        failures.extend(_sqlite_only_recovery_properties(module, db_path, key, request_a, first))
     return failures
 
 

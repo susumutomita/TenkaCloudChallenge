@@ -11,6 +11,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from tests.hidden.check_idempotency import run
 
 REFERENCE = (Path(__file__).parent / "reference" / "idempotency.py").read_text(encoding="utf-8")
+SIDECAR_MUTANT = (Path(__file__).parent / "tests" / "hidden" / "sidecar_mutant.py").read_text(
+    encoding="utf-8"
+)
 SEED = "mutation-suite-seed"
 
 MUTATIONS: list[tuple[str, str, str]] = [
@@ -106,10 +109,21 @@ def main() -> int:
             print(f"SURVIVED {name}")
             survivors.append(name)
 
+    sidecar_name = "uses a JSON sidecar as the receipt source of truth"
+    try:
+        failures = run(_load(SIDECAR_MUTANT), SEED)
+    except Exception as error:  # noqa: BLE001 - a crashing mutant is killed
+        failures = [type(error).__name__]
+    if failures:
+        print(f"killed {sidecar_name}")
+    else:
+        print(f"SURVIVED {sidecar_name}")
+        survivors.append(sidecar_name)
+
     if survivors:
         print(f"{len(survivors)} mutation(s) survived")
         return 1
-    print(f"all {len(MUTATIONS)} mutations killed.")
+    print(f"all {len(MUTATIONS) + 1} mutations killed.")
     return 0
 
 
