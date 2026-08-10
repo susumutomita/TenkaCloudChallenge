@@ -11,13 +11,13 @@ FROM base AS participant
 
 COPY --chown=lab:lab fixtures/ ./fixtures/
 COPY --chown=lab:lab tests/public/ ./tests/public/
-COPY --chown=lab:lab verifier/ ./verifier/
+COPY --chown=lab:lab participant/ ./participant/
 COPY --chown=lab:lab starter/ ./starter/
 COPY --chown=lab:lab show.py ./show.py
 
 USER lab
 
-CMD ["python", "verifier/server.py"]
+CMD ["python", "participant/server.py"]
 
 # Hidden grading runs in a separate, unpublished image. The participant Workbench has
 # public tests and the submission adapter, but no hidden checker or worked answer.
@@ -37,5 +37,6 @@ CMD ["python", "verifier/server.py"]
 FROM participant AS author
 
 COPY --chown=lab:lab tests/hidden/ ./tests/hidden/
+COPY --chown=lab:lab verifier/ ./verifier/
 COPY --chown=lab:lab reference/ ./reference/
 COPY --chown=lab:lab mutation.py ./mutation.py

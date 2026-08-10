@@ -9,7 +9,7 @@ services:
       target: participant
     environment:
       FLAG_SEED: ${FLAG_SEED:?FLAG_SEED must be provided by the platform}
-      VERIFY_PORT: "18320"
+      WORKBENCH_PORT: "18320"
       VERIFIER_URL: http://verifier:18321/verify
     ports:
       - "127.0.0.1:18320:18320"

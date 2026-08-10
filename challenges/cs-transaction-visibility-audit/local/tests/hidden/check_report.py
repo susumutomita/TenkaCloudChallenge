@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Iterable, Protocol
 
-from fixtures.generate import ReportCase, snapshot_cases, transfer_cases
+from fixtures.generate import ReportCase
+from tests.hidden.cases import snapshot_cases, transfer_cases
 
 
 class Submission(Protocol):

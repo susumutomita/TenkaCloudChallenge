@@ -1,4 +1,4 @@
-"""Break the reference nine intended ways and require the hidden suite to notice."""
+"""Break the reference eleven intended ways and require the hidden suite to notice."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from fixtures.generate import public_cases
-from tests.hidden.check_report import run
+from tests.hidden import check_report
 
 SEED = "transaction-visibility-mutation-seed"
 REFERENCE = (Path(__file__).parent / "reference" / "report.py").read_text(encoding="utf-8")
@@ -117,6 +117,40 @@ return {"revision": snapshot.revision, "balances": balances, "total": sum(balanc
     ),
 )
 
+# These two tempting workarounds were identified separately from the original suite.
+# Pin the hidden phase that must kill each one, so a later broad-phase failure cannot
+# conceal a regression in the property intended to catch it.
+TARGETED_MUTANTS: tuple[tuple[str, str, str], ...] = (
+    (
+        "ttl-wait",
+        _function(
+            """ids = tuple(account_ids)
+# Deterministically model "wait out the cache TTL" by burning scheduled live reads.
+# Time passing still cannot make separate reads one atomic observation.
+while ledger.has_pending_commits:
+    ledger.read_committed(ids[0])
+snapshot = ledger.snapshot()
+balances = {account_id: snapshot.read(account_id) for account_id in ids}
+return {"revision": snapshot.revision, "balances": balances, "total": sum(balances.values())}"""
+        ),
+        "check_snapshot",
+    ),
+    (
+        "pre-commit-invalidate",
+        _function(
+            """ids = tuple(account_ids)
+snapshot = ledger.snapshot()
+balances = {}
+for account_id in ids:
+    if ledger.has_pending_commits:
+        snapshot = ledger.snapshot()
+    balances[account_id] = snapshot.read(account_id)
+return {"revision": snapshot.revision, "balances": balances, "total": sum(balances.values())}"""
+        ),
+        "check_snapshot",
+    ),
+)
+
 
 def _load(source: str) -> types.ModuleType:
     module = types.ModuleType("report_mutant")
@@ -127,7 +161,7 @@ def _load(source: str) -> types.ModuleType:
 
 def main() -> int:
     reference = _load(REFERENCE)
-    baseline = run(reference, SEED)
+    baseline = check_report.run(reference, SEED)
     if baseline:
         print("the reference does not pass its hidden suite:")
         for failure in baseline:
@@ -138,7 +172,7 @@ def main() -> int:
     survivors: list[str] = []
     for name, source in MUTANTS:
         try:
-            failures = run(_load(source), SEED)
+            failures = check_report.run(_load(source), SEED)
         except Exception as error:  # noqa: BLE001 - an un-runnable mutant is killed
             failures = [type(error).__name__]
         if failures:
@@ -147,13 +181,24 @@ def main() -> int:
             print(f"SURVIVED {name}")
             survivors.append(name)
 
+    for name, source, phase in TARGETED_MUTANTS:
+        try:
+            failures = getattr(check_report, phase)(_load(source), SEED)
+        except Exception as error:  # noqa: BLE001 - an un-runnable mutant is killed
+            failures = [type(error).__name__]
+        if failures:
+            print(f"killed  {name} [{phase}]")
+        else:
+            print(f"SURVIVED {name} [{phase}]")
+            survivors.append(name)
+
     print()
     if survivors:
         print(f"{len(survivors)} mutation(s) survived:")
         for name in survivors:
             print(f"  {name}")
         return 1
-    print(f"all {len(MUTANTS)} mutations killed.")
+    print(f"all {len(MUTANTS) + len(TARGETED_MUTANTS)} mutations killed.")
     return 0
 
 

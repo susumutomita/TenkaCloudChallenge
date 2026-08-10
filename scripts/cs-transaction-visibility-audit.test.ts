@@ -153,7 +153,7 @@ print(server._run_submission(spoof, ("check_snapshot",), server.SEED), server._r
     expect(output.trim()).toBe("False True");
   });
 
-  it("は指定された 8 欠陥と writer freeze を mutation suite で殺す", () => {
+  it("は指定された欠陥、writer freeze、TTL wait、pre-commit invalidate を殺す", () => {
     const result = python("mutation.py");
     expect(result.output).toContain("reference: passes");
     for (const mutation of [
@@ -166,10 +166,12 @@ print(server._run_submission(spoof, ("check_snapshot",), server.SEED), server._r
       "refuse-when-a-commit-is-scheduled",
       "hardcoded-public-account-ids",
       "reader-wide-writer-freeze",
+      "ttl-wait [check_snapshot]",
+      "pre-commit-invalidate [check_snapshot]",
     ]) {
       expect(result.output).toContain(`killed  ${mutation}`);
     }
-    expect(result.output).toContain("all 9 mutations killed");
+    expect(result.output).toContain("all 11 mutations killed");
     expect(result.output).not.toContain("SURVIVED");
     expect(result.status).toBe(0);
   });
@@ -178,21 +180,22 @@ print(server._run_submission(spoof, ("check_snapshot",), server.SEED), server._r
     const probe = String.raw`
 import json, sys
 sys.path.insert(0, ".")
+from participant import server as participant_server
 from verifier import server
 seed = server.SEED
 other = seed + ":other"
-source = server._WORKBENCH.starter_payload()
+source = participant_server._WORKBENCH.starter_payload()
 manual = {
     "audit": json.dumps(server.audit_expected(seed)),
     "counterexample": json.dumps(server.counterexample_expected(seed)),
 }
-prepared = server._WORKBENCH.prepare_submissions(source, manual)
+prepared = participant_server._WORKBENCH.prepare_submissions(source, manual)
 unwrapped = {
-    checkpoint: server._WORKBENCH.unwrap_submission(checkpoint, value)
+    checkpoint: server._unwrap_submission(checkpoint, value)
     for checkpoint, value in prepared["submissions"].items()
 }
 print(json.dumps({
-    "config": server._WORKBENCH.config_payload(),
+    "config": participant_server._WORKBENCH.config_payload(),
     "prepared": prepared,
     "sameAccepted": {
         "audit": server.evaluate("audit", unwrapped["audit"]),
@@ -250,6 +253,41 @@ print(json.dumps({
     expect(result.sealedCode).toBe(true);
   });
 
+  it("は verifier URL 未設定・内部障害を全 checkpoint で fail closed する", () => {
+    const probe = String.raw`
+import json, sys
+sys.path.insert(0, ".")
+from participant import server
+bodies = [{"checkpointId": checkpoint, "submission": "anything"} for checkpoint in server.CHECKPOINTS]
+print(json.dumps({
+    "missing": [server.proxy_verdict(body, "") for body in bodies],
+    "unavailable": [server.proxy_verdict(body, "http://127.0.0.1:1/verify") for body in bodies],
+    "hasInlineEvaluator": hasattr(server, "evaluate") or hasattr(server, "audit_expected"),
+}))
+`;
+    const output = execFileSync("python3", ["-c", probe], {
+      cwd: LOCAL,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        FLAG_SEED: "transaction-repo-suite-seed",
+        PYTHONDONTWRITEBYTECODE: "1",
+      },
+      timeout: 120_000,
+    });
+    const result = JSON.parse(output.trim()) as {
+      missing: Array<{ checkpointId: string; correct: boolean }>;
+      unavailable: Array<{ checkpointId: string; correct: boolean }>;
+      hasInlineEvaluator: boolean;
+    };
+    const expected = ["audit", "counterexample", "snapshot", "transfer"].map(
+      (checkpointId) => ({ checkpointId, correct: false }),
+    );
+    expect(result.missing).toEqual(expected);
+    expect(result.unavailable).toEqual(expected);
+    expect(result.hasInlineEvaluator).toBe(false);
+  });
+
   it("は real thread / timing / network に依存しない", () => {
     const sources = [
       "fixtures/generate.py",
@@ -272,18 +310,44 @@ print(json.dumps({
       dockerfile.indexOf("FROM base AS verifier"),
     );
     expect(participant).not.toContain("tests/hidden");
+    expect(participant).not.toContain("COPY --chown=lab:lab verifier/");
     expect(participant).not.toContain("COPY --chown=lab:lab reference/");
     expect(participant).not.toContain("COPY --chown=lab:lab mutation.py");
     expect(participant).toContain("COPY --chown=lab:lab tests/public/");
+    expect(participant).toContain("COPY --chown=lab:lab participant/");
     const verifier = dockerfile.slice(
       dockerfile.indexOf("FROM base AS verifier"),
       dockerfile.indexOf("FROM participant AS author"),
     );
     expect(verifier).toContain("COPY --chown=lab:lab tests/hidden/");
+    expect(verifier).toContain("COPY --chown=lab:lab verifier/");
+    expect(verifier).not.toContain("COPY --chown=lab:lab participant/");
     expect(verifier).not.toContain("COPY --chown=lab:lab reference/");
     expect(verifier).not.toContain("COPY --chown=lab:lab mutation.py");
     expect(dockerfile).toContain("USER lab");
+    expect(dockerfile).toContain("COPY --chown=lab:lab verifier/ ./verifier/");
     expect(dockerfile).toContain("COPY --chown=lab:lab reference/ ./reference/");
+
+    const participantServer = readFileSync(join(LOCAL, "participant", "server.py"), "utf8");
+    const participantSupport = readFileSync(join(LOCAL, "participant", "workbench.py"), "utf8");
+    const publicFixtures = readFileSync(join(LOCAL, "fixtures", "generate.py"), "utf8");
+    const hiddenServer = readFileSync(join(LOCAL, "verifier", "server.py"), "utf8");
+    for (const source of [participantServer, participantSupport, publicFixtures]) {
+      expect(source).not.toContain("tests.hidden");
+      expect(source).not.toContain("def audit_expected");
+      expect(source).not.toContain("def counterexample_expected");
+    }
+    for (const answerField of ["badReportId", "badObservedRevisions", "crossingTransferId"]) {
+      expect(publicFixtures).not.toContain(answerField);
+    }
+    expect(publicFixtures).not.toContain("def snapshot_cases");
+    expect(publicFixtures).not.toContain("def transfer_cases");
+    expect(participantServer).not.toContain("def evaluate(");
+    expect(participantServer).not.toContain("from verifier");
+    expect(hiddenServer).not.toContain("/api/config");
+    expect(hiddenServer).not.toContain("/api/inspect");
+    expect(hiddenServer).toContain("from verifier.expected import");
+    expect(hiddenServer).toContain("from tests.hidden import check_report");
 
     const compose = readFileSync(join(LOCAL, "docker-compose.yml"), "utf8");
     for (const contract of [
@@ -302,10 +366,11 @@ print(json.dumps({
       expect(compose).toContain(contract);
     }
     expect(compose).not.toContain('"127.0.0.1:18321:18321"');
+    expect(compose.match(/ports:/g)).toHaveLength(1);
   });
 
   it("は Portal の 5 API と cs-foundations order 20 の教材導線を持つ", () => {
-    const server = readFileSync(join(LOCAL, "verifier", "server.py"), "utf8");
+    const server = readFileSync(join(LOCAL, "participant", "server.py"), "utf8");
     for (const endpoint of ["/api/config", "/api/starter", "/api/inspect", "/api/test", "/api/prepare", "/verify"]) {
       expect(server).toContain(endpoint);
     }

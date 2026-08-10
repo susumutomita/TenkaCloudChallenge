@@ -15,8 +15,13 @@ import {
  */
 let root: string;
 
-function writeCopy(category: string, problem: string, contents: string): void {
-  const dir = join(root, category, problem, "local", "verifier");
+function writeCopy(
+  category: string,
+  problem: string,
+  contents: string,
+  runtime = "verifier",
+): void {
+  const dir = join(root, category, problem, "local", runtime);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "workbench.py"), contents, "utf-8");
 }
@@ -39,6 +44,14 @@ describe("findVendoredCopies", () => {
       join("battles", "a-battle", "local", "verifier", "workbench.py"),
       join("challenges", "a-first", "local", "verifier", "workbench.py"),
       join("challenges", "b-second", "local", "verifier", "workbench.py"),
+    ]);
+  });
+
+  it("should include a participant-only copy from a split Workbench image", () => {
+    writeCopy("challenges", "split-boundary", "same\n", "participant");
+
+    expect(findVendoredCopies(root).map((c) => c.path)).toEqual([
+      join("challenges", "split-boundary", "local", "participant", "workbench.py"),
     ]);
   });
 

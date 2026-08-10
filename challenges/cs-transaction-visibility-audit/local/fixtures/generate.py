@@ -294,47 +294,6 @@ def public_cases(seed: str) -> tuple[ReportCase, ...]:
     )
 
 
-def snapshot_cases(seed: str) -> tuple[ReportCase, ...]:
-    """Focused hidden cases for the same accounts and one mid-report commit."""
-    history = _history(f"{seed}:snapshot")
-    accounts = tuple(history[0].balances)
-    rotations = (
-        accounts,
-        accounts[1:] + accounts[:1],
-        tuple(reversed(accounts)),
-    )
-    return tuple(
-        ReportCase(
-            f"snapshot-{index}",
-            history[:2],
-            order,
-            commit_after_reads=(1,),
-        )
-        for index, order in enumerate(rotations)
-    )
-
-
-def transfer_cases(seed: str) -> tuple[ReportCase, ...]:
-    """Unseen IDs, orders, revision gaps, and two commits for transfer testing."""
-    history = _history(f"{seed}:transfer")
-    accounts = tuple(history[0].balances)
-    return (
-        ReportCase("two commits", history, accounts, commit_after_reads=(1, 3)),
-        ReportCase(
-            "reverse order",
-            history,
-            tuple(reversed(accounts)),
-            commit_after_reads=(2, 3),
-        ),
-        ReportCase(
-            "subset and reorder",
-            history,
-            (accounts[2], accounts[0], accounts[3]),
-            commit_after_reads=(1, 2),
-        ),
-    )
-
-
 def audit_fixture(seed: str) -> dict[str, object]:
     """Committed states and report traces with exactly one impossible report."""
     history = _history(f"{seed}:audit")
@@ -363,8 +322,8 @@ def audit_fixture(seed: str) -> dict[str, object]:
     good_third = trace((third,) * len(accounts))
     # Transfer 1 moves points from accounts[0] to accounts[1].  Reading the source
     # before that commit and the destination after it counts the moved points twice.
-    bad = trace((first, second, second, second))
-    reports = [good_first, good_second, good_third, bad]
+    mixed = trace((first, second, second, second))
+    reports = [good_first, good_second, good_third, mixed]
     shift = stream.number(len(reports))
     reports = reports[shift:] + reports[:shift]
     return {
@@ -377,16 +336,6 @@ def audit_fixture(seed: str) -> dict[str, object]:
             for revision in history
         ],
         "reports": reports,
-        "badReportId": bad["reportId"],
-        "badObservedRevisions": [first.number, second.number],
-    }
-
-
-def audit_expected(seed: str) -> dict[str, object]:
-    fixture = audit_fixture(seed)
-    return {
-        "reportId": fixture["badReportId"],
-        "observedRevisions": fixture["badObservedRevisions"],
     }
 
 
@@ -403,7 +352,6 @@ def counterexample_fixture(seed: str) -> dict[str, object]:
         Transfer(stream.token("tx", 7), order[0], order[1], amount + 1),
         Transfer(stream.token("tx", 7), order[2], order[3], amount + 2),
     ]
-    crossing = candidates[0]
     candidate_shift = stream.number(len(candidates))
     candidates = candidates[candidate_shift:] + candidates[:candidate_shift]
     return {
@@ -418,16 +366,4 @@ def counterexample_fixture(seed: str) -> dict[str, object]:
             }
             for transfer in candidates
         ],
-        "crossingTransferId": crossing.transfer_id,
-    }
-
-
-def counterexample_expected(seed: str) -> dict[str, object]:
-    fixture = counterexample_fixture(seed)
-    order = fixture["readOrder"]
-    assert isinstance(order, list)
-    return {
-        "beforeCommit": order[:2],
-        "commit": fixture["crossingTransferId"],
-        "afterCommit": order[2:],
     }

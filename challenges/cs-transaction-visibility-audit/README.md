@@ -155,11 +155,14 @@ a commit is pending, and a reader-wide writer freeze.
 
 Local mode is self-paced, honor-system verification. Someone who owns the Docker daemon and image
 cannot be prevented from inspecting hidden properties. The boundary here is misdelivery: the
-normal participant image omits `reference/` and `mutation.py`; the author stage adds them for CI.
+participant Workbench contains public evidence, tests, and starter material only. Hidden checks,
+expected-answer derivation, and the verifier are in a separate internal image; the participant
+image also omits `reference/` and `mutation.py`. The author stage adds author-only material for CI.
 
 Local mode does **not** support competition ranking, examination, or completion certification.
 
-The service runs as non-root with a read-only root filesystem, all capabilities dropped,
-`no-new-privileges`, bounded memory and PIDs, and a loopback-only published port. An internal
-network and a publish-only bridge with masquerading disabled provide no required outbound path.
+Both services run as non-root with a read-only root filesystem, all capabilities dropped,
+`no-new-privileges`, bounded memory and PIDs. Only the Workbench has a loopback-published port; the
+verifier is reachable solely over an internal network. A publish-only bridge with masquerading
+disabled provides no required outbound path.
 Fixtures, public and hidden tests, and grading are all derived deterministically from the seed.

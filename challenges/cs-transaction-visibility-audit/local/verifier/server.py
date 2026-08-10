@@ -1,13 +1,15 @@
-"""Loopback Portal editor API and multi-checkpoint `/verify` seam.
+"""Compose-internal hidden verifier for transaction visibility.
 
-Learner code runs in a fresh temporary directory with a wall-clock timeout, memory,
-process, file-size, and output caps.  No submitted value is concatenated into a shell
-command.  Direct answers travel through the Portal prepare API and are sealed to this
-problem and deployment seed by the vendored workbench adapter.
+Only this image receives hidden properties and expected-answer derivation. Participant
+submissions execute in a temporary directory with bounded time, memory, processes,
+file size, and captured output. Every grading failure returns ``correct: false``.
 """
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import json
 import os
 import resource
@@ -17,19 +19,15 @@ import sys
 import tempfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fixtures.generate import (
-    audit_expected,
-    audit_fixture,
-    counterexample_expected,
-    counterexample_fixture,
-)
+from fixtures.generate import audit_fixture, counterexample_fixture
+from verifier.expected import audit_expected, counterexample_expected
 
 ROOT = Path(__file__).resolve().parents[1]
+PROBLEM_ID = "cs-transaction-visibility-audit"
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 MAX_BODY_BYTES = 256 * 1024
@@ -38,13 +36,13 @@ MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
 MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
 REQUEST_TIMEOUT_SECONDS = 15
-VERIFIER_URL = os.environ.get("VERIFIER_URL")
 
 CODE_CHECKPOINTS = {
     "snapshot": ("check_snapshot",),
     "transfer": ("check_transfer",),
 }
-CHECKPOINTS = ("audit", "counterexample", "snapshot", "transfer")
+MANUAL_CHECKPOINTS = ("audit", "counterexample")
+CHECKPOINTS = (*MANUAL_CHECKPOINTS, *CODE_CHECKPOINTS)
 _ADDRESS_SPACE_CAPPABLE = sys.platform.startswith("linux")
 
 
@@ -104,8 +102,8 @@ from tests.hidden import check_report
 checkers = tuple(getattr(check_report, phase) for phase in {phases!r})
 
 # Keep private callable references, then remove the checker package and path before
-# importing participant code. The submission must not be able to replace a hidden
-# check through Python's shared module cache.
+# importing participant code. The submission must not replace a hidden check through
+# Python's shared module cache.
 for module_name in tuple(sys.modules):
     if module_name == "tests" or module_name.startswith("tests."):
         sys.modules.pop(module_name, None)
@@ -131,8 +129,7 @@ else:
         failures.extend(checker(report, {seed!r}))
 
 # Participant imports may replace json.dumps, print, sys.stdout, or os._exit. Restore
-# the trusted C-backed output/exit handles and write a fixed record instead of calling
-# any participant-mutable serializer after grading.
+# trusted C-backed handles and emit a fixed nonce-bound record after grading.
 os._exit = hard_exit
 sys.stdout = trusted_stdout
 trusted_write({pass_record!r} if not failures else {fail_record!r})
@@ -154,7 +151,7 @@ def _run_submission(submission: object, phases: tuple[str, ...], seed: str) -> b
         verdict_token = secrets.token_hex(32)
         pass_line = f"TC-VERDICT:{verdict_token}:PASS"
         fail_line = f"TC-VERDICT:{verdict_token}:FAIL"
-        (Path(workspace) / "report.py").write_text(source, encoding="utf-8")
+        Path(workspace, "report.py").write_text(source, encoding="utf-8")
         script = RUNNER.format(
             root=str(ROOT),
             workspace=workspace,
@@ -192,81 +189,53 @@ def evaluate(checkpoint_id: str, submission: object) -> bool:
     if checkpoint_id == "counterexample":
         return _check_counterexample(submission)
     phases = CODE_CHECKPOINTS.get(checkpoint_id)
-    if phases is not None:
-        phase_seed = f"{SEED}:transfer" if checkpoint_id == "transfer" else SEED
-        return _run_submission(submission, phases, phase_seed)
-    return False
+    if phases is None:
+        return False
+    phase_seed = f"{SEED}:transfer" if checkpoint_id == "transfer" else SEED
+    return _run_submission(submission, phases, phase_seed)
 
 
-# BEGIN GENERATED PORTAL EDITOR API
-from verifier.workbench import PortalEditorSupport
-
-_WORKBENCH = PortalEditorSupport(
-    root=ROOT,
-    seed=SEED,
-    problem_id="cs-transaction-visibility-audit",
-    problem_name='どちらも committed。だが、その合計は一度も存在しない',
-    problem_name_en='Both reads were committed. The total never existed',
-    description='ポイント台帳の各 read は、その瞬間の committed 値を返している。公開テストも緑。それでも複数口座を束ねた report は、一度も存在しなかった合計を返せる。seed 固有の監査ログから反例を組み立て、1 revision の snapshot で report を直す。',
-    description_en='Every account read returns a committed value and the public tests are green. A multi-account report can still return a total that never existed. Audit seed-derived traces, construct the counterexample, and bind the report to one immutable snapshot revision.',
-    checkpoint_labels={'audit': 'audit — 一度も存在しない report と観測 revision を特定する', 'counterexample': 'counterexample — read の途中へ 1 commit を置き、反例を作る', 'snapshot': 'snapshot — report の全 row と revision を 1 つの view に固定する', 'transfer': 'transfer — 未見の ID・順序・複数 commit でも同じ性質を保つ'},
-    checkpoint_labels_en={'audit': 'audit - name the report that never existed and its observed revisions', 'counterexample': 'counterexample - place one commit inside the reads and build the failure', 'snapshot': 'snapshot - bind every row and the revision to one view', 'transfer': 'transfer - keep the property for unseen IDs, orders, and commits'},
-    submitted_files=("report.py",),
-    code_checkpoints=("snapshot", "transfer"),
-    checkpoints=CHECKPOINTS,
-    max_body_bytes=MAX_BODY_BYTES,
-    run_timeout_seconds=RUN_TIMEOUT_SECONDS,
-    max_output_bytes=MAX_OUTPUT_BYTES,
-    limit_fn=_limits,
-)
-# END GENERATED PORTAL EDITOR API
+def _unwrap_submission(checkpoint_id: str, submission: object) -> object:
+    if not isinstance(submission, str) or not submission.startswith("tcw1."):
+        return None if checkpoint_id in MANUAL_CHECKPOINTS else submission
+    try:
+        prefix, encoded_payload, encoded_signature = submission.split(".", 2)
+        if prefix != "tcw1":
+            return None
+        payload = base64.urlsafe_b64decode(encoded_payload + "=" * (-len(encoded_payload) % 4))
+        signature = base64.urlsafe_b64decode(
+            encoded_signature + "=" * (-len(encoded_signature) % 4)
+        )
+        key = hashlib.sha256((PROBLEM_ID + "\0" + SEED).encode("utf-8")).digest()
+        expected = hmac.new(key, payload, hashlib.sha256).digest()[:16]
+        if not hmac.compare_digest(signature, expected):
+            return None
+        decoded = json.loads(payload.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(decoded, dict):
+        return None
+    if decoded.get("v") != 1 or decoded.get("checkpointId") != checkpoint_id:
+        return None
+    return decoded.get("answer")
 
 
 class Handler(BaseHTTPRequestHandler):
     timeout = REQUEST_TIMEOUT_SECONDS
 
     def do_GET(self) -> None:  # noqa: N802 - stdlib handler API
-        from urllib.parse import urlsplit
-
-        path = urlsplit(self.path).path
-        if path == "/api/config":
-            self._respond(200, _WORKBENCH.config_payload())
-            return
-        if path == "/api/inspect":
-            self._respond(200, _WORKBENCH.inspect_payload())
-            return
-        if path == "/api/starter":
-            self._respond(200, _WORKBENCH.starter_payload())
-            return
-        if path == "/healthz":
+        if urlsplit(self.path).path == "/healthz":
             self._respond(200, {"ok": True})
             return
         self._respond(404, {"error": "not found"})
 
     def do_POST(self) -> None:  # noqa: N802 - stdlib handler API
-        from urllib.parse import urlsplit
-
-        path = urlsplit(self.path).path.rstrip("/") or "/"
-        if path not in ("/verify", "/api/test", "/api/prepare"):
+        if urlsplit(self.path).path.rstrip("/") != "/verify":
             self._respond(404, {"error": "not found"})
             return
         body = self._read_json_body()
         if body is None:
             return
-        if path == "/api/test":
-            self._respond(200, _WORKBENCH.run_public_tests(body.get("files")))
-            return
-        if path == "/api/prepare":
-            self._respond(
-                200,
-                _WORKBENCH.prepare_submissions(body.get("files"), body.get("manual")),
-            )
-            return
-
-        if VERIFIER_URL:
-            self._proxy_verify(body)
-            return
-
         checkpoint_id = body.get("checkpointId")
         if not isinstance(checkpoint_id, str) or checkpoint_id not in CHECKPOINTS:
             self._respond(
@@ -277,58 +246,12 @@ class Handler(BaseHTTPRequestHandler):
                 },
             )
             return
-        submission = _WORKBENCH.unwrap_submission(checkpoint_id, body.get("submission"))
+        submission = _unwrap_submission(checkpoint_id, body.get("submission"))
         try:
             correct = evaluate(checkpoint_id, submission)
-        except Exception:  # noqa: BLE001 - a checkpoint failure must fail closed
+        except Exception:  # noqa: BLE001 - every grader failure must fail closed
             correct = False
         self._respond(200, {"checkpointId": checkpoint_id, "correct": correct})
-
-    def _proxy_verify(self, body: dict[str, object]) -> None:
-        payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
-        request = Request(
-            VERIFIER_URL,
-            data=payload,
-            headers={"content-type": "application/json"},
-            method="POST",
-        )
-        try:
-            # VERIFIER_URL is a trusted Compose-only environment value, never participant input.
-            with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:  # noqa: S310
-                response_body = response.read(MAX_BODY_BYTES + 1)
-                if len(response_body) > MAX_BODY_BYTES:
-                    raise ValueError("verifier response too large")
-                decoded = json.loads(response_body.decode("utf-8"))
-        except (
-            HTTPError,
-            URLError,
-            TimeoutError,
-            OSError,
-            ValueError,
-            UnicodeDecodeError,
-            json.JSONDecodeError,
-        ):
-            checkpoint_id = body.get("checkpointId")
-            self._respond(
-                200,
-                {
-                    "checkpointId": checkpoint_id if isinstance(checkpoint_id, str) else "",
-                    "correct": False,
-                },
-            )
-            return
-        checkpoint_id = body.get("checkpointId")
-        if (
-            not isinstance(decoded, dict)
-            or not isinstance(checkpoint_id, str)
-            or decoded.get("checkpointId") != checkpoint_id
-            or type(decoded.get("correct")) is not bool
-        ):
-            decoded = {
-                "checkpointId": checkpoint_id if isinstance(checkpoint_id, str) else "",
-                "correct": False,
-            }
-        self._respond(200, decoded)
 
     def _read_json_body(self) -> dict[str, object] | None:
         try:
@@ -362,27 +285,14 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("content-length", str(len(content)))
         self.send_header("cache-control", "no-store")
         self.send_header("x-content-type-options", "nosniff")
-        self.send_header(
-            "content-security-policy",
-            "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; "
-            "img-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; "
-            "form-action 'self'",
-        )
         self.end_headers()
         self.wfile.write(content)
 
 
 def main() -> None:
-    port = int(os.environ.get("VERIFY_PORT", "18320"))
-    # Bind every interface *inside the container*, not the container's loopback. A published
-    # port is forwarded to the container's bridge address, so a server listening only on
-    # 127.0.0.1 inside the container accepts nothing from outside it — the connection is
-    # opened and closed without a response, and the platform can never score the problem.
-    #
-    # The loopback restriction that matters is on the host, and it lives in
-    # docker-compose.yml, which publishes `127.0.0.1:<port>:<port>`. Nothing outside this
-    # machine can reach the verifier either way.
-    HTTPServer(("0.0.0.0", port), Handler).serve_forever()  # noqa: S104 - see above
+    port = int(os.environ.get("VERIFY_PORT", "18321"))
+    # The Workbench reaches this address only through the internal Compose network.
+    HTTPServer(("0.0.0.0", port), Handler).serve_forever()  # noqa: S104
 
 
 if __name__ == "__main__":

@@ -156,10 +156,12 @@ make reference-test
 
 ローカル mode は self-paced な honor-system verification である。自分の Docker daemon と image を持つ人から
 hidden property を秘密にはできない。ここで守る境界は**誤配しないこと**で、通常の participant image は
-`reference/` と `mutation.py` を含まない。author stage は CI 用にそれらを追加する。
+公開 evidence・公開 test・starter だけを持つ。hidden check、期待値導出、verifier は内部 network 上の別 image
+に置き、participant image は `reference/` と `mutation.py` も含まない。author stage は CI 用 material を追加する。
 
 ローカル結果は競技順位・試験・修了判定は**支えません**。
 
-service は非 root、read-only root filesystem、capability 全 drop、`no-new-privileges`、bounded memory / PID、
-loopback publish で動く。内部 network と masquerade 無しの publish 専用 bridge を使い、外向き通信を必要と
-しない。fixture、公開・hidden test、採点のすべては seed から決定論的に作られる。
+両 service は非 root、read-only root filesystem、capability 全 drop、`no-new-privileges`、bounded memory /
+PID で動く。loopback port を公開するのは Workbench だけで、verifier は内部 network からだけ到達できる。
+masquerade 無しの publish 専用 bridge を使い、外向き通信を必要としない。fixture、公開・hidden test、採点の
+すべては seed から決定論的に作られる。

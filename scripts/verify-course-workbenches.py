@@ -48,6 +48,9 @@ SHARED_TARGETS = (
     "sha256-schedule-logic",
     "sha256-compress-digest",
 )
+SPLIT_PORTAL_MODULES = {
+    "cs-transaction-visibility-audit": "participant.server",
+}
 # Execute the heavier inspect/public-test adapter on representative problems from
 # each family. The catalogue's existing sharded suite executes every problem's own
 # public, reference, mutation, and verifier tests.
@@ -64,12 +67,15 @@ FORBIDDEN_DOC_TERMS = (
 )
 
 PROBE = r'''
+import importlib
 import json
 import sys
 from pathlib import Path
 
 sys.path.insert(0, ".")
-from verifier.server import CHECKPOINTS, _WORKBENCH
+server = importlib.import_module(sys.argv[1])
+CHECKPOINTS = server.CHECKPOINTS
+_WORKBENCH = server._WORKBENCH
 
 config = _WORKBENCH.config_payload()
 starter = _WORKBENCH.starter_payload()
@@ -130,7 +136,7 @@ for item in config["checkpoints"]:
         assert other.unwrap_submission(checkpoint, submission) is None
 
 result = {"config": config, "prepared": len(prepared["submissions"])}
-if sys.argv[1] == "heavy":
+if sys.argv[2] == "heavy":
     inspection = _WORKBENCH.inspect_payload()
     assert isinstance(inspection.get("output"), str) and inspection["output"].strip()
     public = _WORKBENCH.run_public_tests(starter)
@@ -241,12 +247,20 @@ def check_static(problem_id: str) -> None:
         f"{problem_id}: duplicate challenge endpoint remains",
     )
 
-    for relative in ("verifier/server.py",):
-        require((local / relative).is_file(), f"{problem_id}: missing local/{relative}")
+    require(
+        (local / "verifier" / "server.py").is_file(),
+        f"{problem_id}: missing local/verifier/server.py",
+    )
     require(not (local / "workbench").exists(), f"{problem_id}: duplicate UI assets remain")
+    portal_module = SPLIT_PORTAL_MODULES.get(problem_id, "verifier.server")
+    portal_package = portal_module.split(".")[0]
+    portal_server_path = (local / Path(*portal_module.split("."))).with_suffix(".py")
+    support_path = local / portal_package / "workbench.py"
+    if problem_id in SPLIT_PORTAL_MODULES:
+        require(portal_server_path.is_file(), f"{problem_id}: public participant API missing")
     if problem_id in SHARED_TARGETS:
         require(
-            (local / "verifier" / "workbench.py").is_file(),
+            support_path.is_file(),
             f"{problem_id}: shared Portal API adapter missing",
         )
 
@@ -257,20 +271,50 @@ def check_static(problem_id: str) -> None:
         f"{problem_id}: stage split lost",
     )
 
-    server = (local / "verifier" / "server.py").read_text(encoding="utf-8")
-    support_path = local / "verifier" / "workbench.py"
+    verifier_server = (local / "verifier" / "server.py").read_text(encoding="utf-8")
+    portal_server = portal_server_path.read_text(encoding="utf-8")
     support = support_path.read_text(encoding="utf-8") if support_path.is_file() else ""
-    require("/api/config" in server and "/api/inspect" in server, f"{problem_id}: GET APIs missing")
-    require("/api/test" in server and "/api/prepare" in server, f"{problem_id}: POST APIs missing")
-    require("content-security-policy" in server, f"{problem_id}: CSP missing")
-    require("WORKBENCH_ASSETS" not in server, f"{problem_id}: asset map remains")
-    require("_WORKBENCH.asset" not in server, f"{problem_id}: asset route remains")
-    require("shell=True" not in server + support, f"{problem_id}: shell=True introduced")
-    require("os.system" not in server + support, f"{problem_id}: os.system introduced")
     require(
-        "from reference" not in support and "tests.hidden" not in support,
+        "/api/config" in portal_server and "/api/inspect" in portal_server,
+        f"{problem_id}: GET APIs missing",
+    )
+    require(
+        "/api/test" in portal_server and "/api/prepare" in portal_server,
+        f"{problem_id}: POST APIs missing",
+    )
+    require("content-security-policy" in portal_server, f"{problem_id}: CSP missing")
+    require("WORKBENCH_ASSETS" not in portal_server, f"{problem_id}: asset map remains")
+    require("_WORKBENCH.asset" not in portal_server, f"{problem_id}: asset route remains")
+    require(
+        "shell=True" not in portal_server + verifier_server + support,
+        f"{problem_id}: shell=True introduced",
+    )
+    require(
+        "os.system" not in portal_server + verifier_server + support,
+        f"{problem_id}: os.system introduced",
+    )
+    adapter_source = portal_server + support if problem_id in SPLIT_PORTAL_MODULES else support
+    require(
+        "from reference" not in adapter_source and "tests.hidden" not in adapter_source,
         f"{problem_id}: answers leaked into adapter",
     )
+    if problem_id in SPLIT_PORTAL_MODULES:
+        require(
+            "/api/config" not in verifier_server
+            and "/api/inspect" not in verifier_server
+            and "/api/test" not in verifier_server
+            and "/api/prepare" not in verifier_server,
+            f"{problem_id}: participant APIs remain in hidden verifier",
+        )
+        participant_stage = dockerfile.split("FROM base AS participant", 1)[1].split(
+            "FROM base AS verifier", 1
+        )[0]
+        require("participant/" in participant_stage, f"{problem_id}: participant API not copied")
+        for forbidden in ("verifier/", "tests/hidden", "reference/", "mutation.py"):
+            require(
+                forbidden not in participant_stage,
+                f"{problem_id}: participant stage contains {forbidden}",
+            )
 
     instructions = str(metadata.get("instructions") or "")
     require(
@@ -292,8 +336,9 @@ def check_static(problem_id: str) -> None:
 
 def check_runtime(problem_id: str) -> None:
     mode = "heavy" if problem_id in REPRESENTATIVES else "light"
+    portal_module = SPLIT_PORTAL_MODULES.get(problem_id, "verifier.server")
     completed = subprocess.run(
-        [sys.executable, "-I", "-c", PROBE, mode],
+        [sys.executable, "-I", "-c", PROBE, portal_module, mode],
         cwd=ROOT / "challenges" / problem_id / "local",
         text=True,
         stdout=subprocess.PIPE,
