@@ -1845,6 +1845,72 @@
       }
     },
     {
+      "id": "db-a3-query-plan",
+      "name": "使い分けられない index — Query Plan と選択性",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "database-track",
+        "order": 30,
+        "chapter": "1. Storage Foundations"
+      },
+      "difficulty": 2,
+      "estimatedDuration": "10〜15 分",
+      "shortDescription": "30 万行の問い合わせテーブルには priority 列があり、index が既に張られている。同じ index つきの列でも、希少な値 (urgent) と大多数を占める値 (normal) では、EXPLAIN が示す実行計画がまったく違う。しかも今のままでは planner の row estimate 自体が壊れている ── ANALYZE を実行して統計を更新するところから始める。",
+      "tags": [
+        "database",
+        "postgresql",
+        "drill",
+        "local-play",
+        "container",
+        "sql",
+        "query-plan",
+        "statistics",
+        "performance"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "db-a4-transaction",
+      "name": "先に届いたお金 — Transaction と原子性",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "database-track",
+        "order": 40,
+        "chapter": "2. Transactions & Concurrency"
+      },
+      "difficulty": 2,
+      "estimatedDuration": "10〜15 分",
+      "shortDescription": "alice から bob への送金は、実際には 2 つの独立した UPDATE でしか表現できない。transaction で包まずに実行すると、片方だけ確定した不整合な状態が生まれる ── bob にはお金が届いたのに、alice からは引かれていない。BEGIN / ROLLBACK で同じ失敗を再現し、原子性が守られる様子を自分の目で見てから、正しく COMMIT する。",
+      "tags": [
+        "database",
+        "postgresql",
+        "drill",
+        "local-play",
+        "container",
+        "sql",
+        "transaction",
+        "rollback",
+        "atomicity"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "eventbridge-delivery-discipline",
       "name": "二度届いて、前後する",
       "category": "Challenge",
