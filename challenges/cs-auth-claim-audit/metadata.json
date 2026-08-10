@@ -2,7 +2,7 @@
   "id": "cs-auth-claim-audit",
   "name": "署名は通った。それは、その要求を通してよいという意味ではない",
   "category": "Challenge",
-  "status": "draft",
+  "status": "ready",
   "visibility": "public",
   "track": {
     "id": "cs-foundations",

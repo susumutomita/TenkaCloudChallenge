@@ -2,7 +2,7 @@
   "id": "cs-http-retry-idempotency",
   "name": "応答が消えた。再送で同じ支払いを増やさない",
   "category": "Challenge",
-  "status": "draft",
+  "status": "ready",
   "visibility": "public",
   "track": {
     "id": "cs-foundations",

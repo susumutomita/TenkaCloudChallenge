@@ -2,7 +2,7 @@
   "id": "cs-cache-generation-fence",
   "name": "消した。それでも古い値が戻ってきた",
   "category": "Challenge",
-  "status": "draft",
+  "status": "ready",
   "visibility": "public",
   "track": {
     "id": "cs-foundations",
