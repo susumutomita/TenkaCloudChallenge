@@ -17,6 +17,8 @@ import sys
 import tempfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -36,6 +38,7 @@ MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
 MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
 REQUEST_TIMEOUT_SECONDS = 15
+VERIFIER_URL = os.environ.get("VERIFIER_URL")
 
 CODE_CHECKPOINTS = {
     "snapshot": ("check_snapshot",),
@@ -235,6 +238,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/starter":
             self._respond(200, _WORKBENCH.starter_payload())
             return
+        if path == "/healthz":
+            self._respond(200, {"ok": True})
+            return
         self._respond(404, {"error": "not found"})
 
     def do_POST(self) -> None:  # noqa: N802 - stdlib handler API
@@ -257,6 +263,10 @@ class Handler(BaseHTTPRequestHandler):
             )
             return
 
+        if VERIFIER_URL:
+            self._proxy_verify(body)
+            return
+
         checkpoint_id = body.get("checkpointId")
         if not isinstance(checkpoint_id, str) or checkpoint_id not in CHECKPOINTS:
             self._respond(
@@ -273,6 +283,52 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:  # noqa: BLE001 - a checkpoint failure must fail closed
             correct = False
         self._respond(200, {"checkpointId": checkpoint_id, "correct": correct})
+
+    def _proxy_verify(self, body: dict[str, object]) -> None:
+        payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
+        request = Request(
+            VERIFIER_URL,
+            data=payload,
+            headers={"content-type": "application/json"},
+            method="POST",
+        )
+        try:
+            # VERIFIER_URL is a trusted Compose-only environment value, never participant input.
+            with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:  # noqa: S310
+                response_body = response.read(MAX_BODY_BYTES + 1)
+                if len(response_body) > MAX_BODY_BYTES:
+                    raise ValueError("verifier response too large")
+                decoded = json.loads(response_body.decode("utf-8"))
+        except (
+            HTTPError,
+            URLError,
+            TimeoutError,
+            OSError,
+            ValueError,
+            UnicodeDecodeError,
+            json.JSONDecodeError,
+        ):
+            checkpoint_id = body.get("checkpointId")
+            self._respond(
+                200,
+                {
+                    "checkpointId": checkpoint_id if isinstance(checkpoint_id, str) else "",
+                    "correct": False,
+                },
+            )
+            return
+        checkpoint_id = body.get("checkpointId")
+        if (
+            not isinstance(decoded, dict)
+            or not isinstance(checkpoint_id, str)
+            or decoded.get("checkpointId") != checkpoint_id
+            or type(decoded.get("correct")) is not bool
+        ):
+            decoded = {
+                "checkpointId": checkpoint_id if isinstance(checkpoint_id, str) else "",
+                "correct": False,
+            }
+        self._respond(200, decoded)
 
     def _read_json_body(self) -> dict[str, object] | None:
         try:

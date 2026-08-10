@@ -265,18 +265,32 @@ print(json.dumps({
     }
   });
 
-  it("は participant image から answer artifact を外し、runtime を harden する", () => {
+  it("は participant Workbench と hidden verifier を分離し、runtime を harden する", () => {
     const dockerfile = readFileSync(join(LOCAL, "Dockerfile"), "utf8");
-    const participant = dockerfile.slice(0, dockerfile.indexOf("FROM participant AS author"));
+    const participant = dockerfile.slice(
+      dockerfile.indexOf("FROM base AS participant"),
+      dockerfile.indexOf("FROM base AS verifier"),
+    );
+    expect(participant).not.toContain("tests/hidden");
     expect(participant).not.toContain("COPY --chown=lab:lab reference/");
     expect(participant).not.toContain("COPY --chown=lab:lab mutation.py");
+    expect(participant).toContain("COPY --chown=lab:lab tests/public/");
+    const verifier = dockerfile.slice(
+      dockerfile.indexOf("FROM base AS verifier"),
+      dockerfile.indexOf("FROM participant AS author"),
+    );
+    expect(verifier).toContain("COPY --chown=lab:lab tests/hidden/");
+    expect(verifier).not.toContain("COPY --chown=lab:lab reference/");
+    expect(verifier).not.toContain("COPY --chown=lab:lab mutation.py");
     expect(dockerfile).toContain("USER lab");
     expect(dockerfile).toContain("COPY --chown=lab:lab reference/ ./reference/");
 
     const compose = readFileSync(join(LOCAL, "docker-compose.yml"), "utf8");
     for (const contract of [
       "target: participant",
+      "target: verifier",
       '127.0.0.1:18320:18320',
+      "VERIFIER_URL: http://verifier:18321/verify",
       "read_only: true",
       "cap_drop:",
       "- ALL",
@@ -287,6 +301,7 @@ print(json.dumps({
     ]) {
       expect(compose).toContain(contract);
     }
+    expect(compose).not.toContain('"127.0.0.1:18321:18321"');
   });
 
   it("は Portal の 5 API と cs-foundations order 20 の教材導線を持つ", () => {
