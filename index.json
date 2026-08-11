@@ -1904,6 +1904,37 @@
       }
     },
     {
+      "id": "cs-protocol-state-guard",
+      "name": "ハンドシェイクは、結局なくてもよかった",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "cs-foundations",
+        "order": 80,
+        "chapter": "8. 状態機械と既定拒否"
+      },
+      "difficulty": 3,
+      "estimatedDuration": "45-75 分",
+      "shortDescription": "server が自分の手順を飛ばさせた session を監査し、状態とメッセージ型の全組合せに答える handler を書く。",
+      "tags": [
+        "cs-foundations",
+        "protocol",
+        "state-machine",
+        "validation",
+        "sessions",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "cs-transaction-visibility-audit",
       "name": "どちらも committed。だが、その合計は一度も存在しない",
       "category": "Challenge",
