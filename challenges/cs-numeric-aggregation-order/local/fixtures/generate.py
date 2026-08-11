@@ -111,13 +111,13 @@ QUESTIONS = {
     },
     "audit": {
         "question": (
-            "報告された合計が真の合計になり得ない run を、1 つ残らず挙げてください。 多数派が正しいとは限りませんが、少数派は少なくとも多数派と一致していません。"
+            "多数派として報告された合計と異なる run を、1 つ残らず挙げてください。 この観測だけでは、多数派が真の合計であることまでは証明できません。"
         ),
         "answerFormat": "[<index>, ...] (昇順、重複なし)",
         "i18n": {
             "en": {
                 "question": (
-                    "List every run whose reported total cannot be the true total. The majority value is not guaranteed correct, but the minority at least disagrees with it."
+                    "List every run whose reported total differs from the majority value. This observation alone does not prove that the majority value is the true total."
                 ),
                 "answerFormat": "[<index>, ...] (ascending, no duplicates)",
             }
