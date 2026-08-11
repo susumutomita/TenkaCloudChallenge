@@ -43,7 +43,7 @@ PORTAL_ENGLISH_CONTRACT = {
     "labels": {
         "environment": "environment - paste the Workbench pass phrase",
         "observe": "observe - name the report and what a disagreement between runs proves",
-        "audit": "audit - list the runs whose reported total cannot be the real one",
+        "audit": "audit - list the runs whose reported total differs from the majority value",
         "total": "total - make the total exact and independent of row order",
         "allocate": "allocate - report shares that add back up to exactly 100.00",
         "generalize": "generalize - hold for one row, all-zero rows and a long tail",
