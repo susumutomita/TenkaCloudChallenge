@@ -1842,6 +1842,37 @@
       }
     },
     {
+      "id": "cs-dst-daily-rollup",
+      "name": "年に 2 日だけ、日次レポートが合わない",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "cs-foundations",
+        "order": 90,
+        "chapter": "9. 暦の日と、86400 秒の塊"
+      },
+      "difficulty": 3,
+      "estimatedDuration": "45-75 分",
+      "shortDescription": "台帳と 1 日だけ食い違う日次レポートを監査し、固定 offset ではなく現地の暦の日で集計する rollup を書く。",
+      "tags": [
+        "cs-foundations",
+        "time",
+        "timezone",
+        "dst",
+        "aggregation",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "cs-http-retry-idempotency",
       "name": "応答が消えた。再送で同じ支払いを増やさない",
       "category": "Challenge",
