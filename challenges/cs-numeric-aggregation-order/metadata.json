@@ -1,0 +1,348 @@
+{
+  "id": "cs-numeric-aggregation-order",
+  "name": "誰も数字を変えていないのに、合計が変わった",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "cs-foundations",
+    "order": 70,
+    "chapter": "7. 集約の順序と精度"
+  },
+  "difficulty": 3,
+  "estimatedDuration": "45-75 分",
+  "shortDescription": "行の順序で合計が変わるレポートを監査し、厳密な合計と、丸めても 100% に戻る配分を実装する。",
+  "description": "合計が出ていることは、その合計が正しいことを意味しない。 この問題が扱うのは、同じ明細を同じ集計コードに通したのに、行を読む順序が違うだけで別の数字が出た、という事故である。\n\n壊れた starter は public test を 7 本すべて通る。 どのテストも似た桁の金額を 1 通りの順序で検証するだけで、float の誤差は桁が離れて初めて見え、配分のずれは割り切れない比率で初めて見えるからである。\n\n参加者は seed 由来の再集計ログと、合計が 100% にならない配分表を監査し、Python 標準ライブラリだけで集約を厳密にする。 到達点は「浮動小数は結合則を満たさない」の暗記ではなく、金額のように厳密さが要る領域では固定小数点を選ぶという判断である。\n\n誤差を小さくすることと、誤差を無くすことは別に採点する。 math.fsum や事前ソートは順序依存を消すが、精度は decimal 文字列が float になった時点で既に失われているため、厳密にはならない。",
+  "instructions": "## Participant Portal で解く\n\n問題を起動すると editor と証拠操作が同じページに出ます。「証拠を調べる」で再集計ログを読み、starter の aggregate.py を編集して public test を実行してください。direct-answer checkpoint は、この deploy のレポート ID と run の index から JSON で答えます。\n\n各 checkpoint の提出では Portal が現在の editor file を container の prepare API へ送り、その値を loopback の /verify へ渡します。 Workbench と hidden verifier は別 container です。",
+  "writeup": "## 順序で答えが変わるということ\n\n浮動小数の加算は結合則を満たさない。 1e14 の値に 0.01 を足しても表現できる最も近い値は変わらないので、その加算は消える。 小さい値を先に足し合わせてから大きい値に足せば残る。 同じ集合でも順序で答えが動く。\n\n## 誤差を減らすのと、無くすのは違う\n\nmath.fsum は float 列の総和を正しく丸める。 順序依存は消える。 それでも厳密ではない。 失われたのは加算ではなく、decimal 文字列を float にした瞬間だからである。 厳密さが要るなら、最初から Decimal か整数の最小単位で持つ。\n\n## 配分は必ず余る\n\n各行の割合を独立に丸めると、合計は 100.00 にならない。 余りは消えるのではなく、どこかへ割り当てられる。 最大剰余法なら、余った 1 cent を小数部の大きい行から順に配る。 どの行も自分の本当の割合から 1 cent 以上離れない。\n\n## 証明していないこと\n\n任意の実数演算を厳密にしたのではない。 2 桁の金額という定義域で、合計を厳密にし、配分を全体へ戻しただけである。",
+  "tags": [
+    "cs-foundations",
+    "numerics",
+    "decimal",
+    "rounding",
+    "aggregation",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18530,
+      "name": "Participant Workbench + verifier proxy (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "同じ集合でも加算順序で合計が変わる理由を説明できる",
+    "桁が離れた値を足すと小さい方が消える現象を指摘できる",
+    "誤差を小さくすることと厳密にすることの違いを説明できる",
+    "decimal 文字列を float にした時点で精度が失われると説明できる",
+    "金額のような領域で固定小数点を選ぶ判断ができる",
+    "割合を独立に丸めると合計が 100% にならない理由を説明できる",
+    "余りを配って各行を本当の割合から 1 cent 以内に収められる"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.cs-numeric-aggregation-order.order-dependence",
+        "description": "浮動小数の加算が順序に依存すると説明できる。"
+      },
+      {
+        "id": "lo.cs-numeric-aggregation-order.parse-loss",
+        "description": "精度が失われるのは加算ではなく変換時だと説明できる。"
+      },
+      {
+        "id": "lo.cs-numeric-aggregation-order.exact-domain",
+        "description": "厳密さが要る領域で固定小数点を選べる。"
+      },
+      {
+        "id": "lo.cs-numeric-aggregation-order.allocate-remainder",
+        "description": "丸めた配分の余りを配り、全体へ戻せる。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.floating-point-associativity",
+        "description": "浮動小数の加算は結合則を満たさない。"
+      },
+      {
+        "id": "concept.decimal-parse-loss",
+        "description": "decimal 文字列から float への変換で既に値が変わる。"
+      },
+      {
+        "id": "concept.largest-remainder",
+        "description": "丸めた配分の残余を小数部の大きい順に配る方法。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.cs-numeric-aggregation-order.observe",
+        "description": "run 同士の食い違いが順序依存を示すと判断できた。"
+      },
+      {
+        "id": "assessment.cs-numeric-aggregation-order.audit",
+        "description": "真の合計になり得ない run を特定できた。"
+      },
+      {
+        "id": "assessment.cs-numeric-aggregation-order.total",
+        "description": "順序に依存しない厳密な合計を実装できた。"
+      },
+      {
+        "id": "assessment.cs-numeric-aggregation-order.allocate",
+        "description": "丸めた配分を 100.00 へ戻せた。"
+      },
+      {
+        "id": "assessment.cs-numeric-aggregation-order.generalize",
+        "description": "1 行・全額ゼロ・長い裾でも成り立たせた。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.round-at-the-end",
+        "description": "最後に丸めれば誤差は消える、という誤解。"
+      },
+      {
+        "id": "misconception.fsum-is-exact",
+        "description": "fsum を使えば厳密になる、という誤解。"
+      },
+      {
+        "id": "misconception.shares-need-not-sum",
+        "description": "割合の合計が 100% でなくても丸め誤差だから良い、という誤解。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.cs-numeric-aggregation-order",
+      "target": "lo.cs-numeric-aggregation-order.order-dependence"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.cs-numeric-aggregation-order",
+      "target": "lo.cs-numeric-aggregation-order.parse-loss"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.cs-numeric-aggregation-order",
+      "target": "lo.cs-numeric-aggregation-order.exact-domain"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.cs-numeric-aggregation-order",
+      "target": "lo.cs-numeric-aggregation-order.allocate-remainder"
+    },
+    {
+      "type": "covers",
+      "source": "problem.cs-numeric-aggregation-order",
+      "target": "concept.floating-point-associativity"
+    },
+    {
+      "type": "covers",
+      "source": "problem.cs-numeric-aggregation-order",
+      "target": "concept.decimal-parse-loss"
+    },
+    {
+      "type": "covers",
+      "source": "problem.cs-numeric-aggregation-order",
+      "target": "concept.largest-remainder"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-numeric-aggregation-order",
+      "target": "assessment.cs-numeric-aggregation-order.observe"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-numeric-aggregation-order",
+      "target": "assessment.cs-numeric-aggregation-order.audit"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-numeric-aggregation-order",
+      "target": "assessment.cs-numeric-aggregation-order.total"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-numeric-aggregation-order",
+      "target": "assessment.cs-numeric-aggregation-order.allocate"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-numeric-aggregation-order",
+      "target": "assessment.cs-numeric-aggregation-order.generalize"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.cs-numeric-aggregation-order",
+      "target": "misconception.round-at-the-end"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.cs-numeric-aggregation-order",
+      "target": "misconception.fsum-is-exact"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.cs-numeric-aggregation-order",
+      "target": "misconception.shares-need-not-sum"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18530/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "environment",
+        "label": "environment — Workbench の合言葉を貼る",
+        "points": 15,
+        "wrongAnswerPenalty": 5
+      },
+      {
+        "id": "observe",
+        "label": "observe — 対象レポートと、run 同士の食い違いが示すことを答える",
+        "points": 20,
+        "wrongAnswerPenalty": 7,
+        "hints": [
+          {
+            "id": "observe-hint-1",
+            "content": "同じ明細・同じ件数で、違うのは読む順序だけです。 数字が動いたなら、動かしたのは入力ではありません。",
+            "penalty": 8
+          }
+        ]
+      },
+      {
+        "id": "audit",
+        "label": "audit — 報告値が真の合計になり得ない run を挙げる",
+        "points": 30,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "audit-hint-1",
+            "content": "多数派の値が正しいとは限りませんが、少数派は少なくとも多数派と一致していません。 どの run が他と違う値を出しましたか。",
+            "penalty": 12
+          }
+        ]
+      },
+      {
+        "id": "total",
+        "label": "total — 合計を厳密にし、行の順序に依存させない",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "total-hint-1",
+            "content": "金額は decimal 文字列で渡されています。 その文字列が float になるのはどこですか。 精度が失われるのは加算のときですか、それより前ですか。",
+            "penalty": 18
+          }
+        ]
+      },
+      {
+        "id": "allocate",
+        "label": "allocate — 各行の割合を丸めても合計 100.00 に戻す",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "allocate-hint-1",
+            "content": "各行を独立に丸めると余りが出ます。 その余りは消えません。 どの行に配れば、どの行も本当の割合から 1 cent 以上離れませんか。",
+            "penalty": 18
+          }
+        ]
+      },
+      {
+        "id": "generalize",
+        "label": "generalize — 1 行・全額ゼロ・長い裾でも成り立たせる",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "generalize-hint-1",
+            "content": "合計が 0 のときも配分表は出ます。 行が 1 つだけのときの割合は何ですか。 大きな 1 行に小額が数百並ぶ形でも合計は厳密ですか。",
+            "penalty": 18
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "The total changed when nobody changed the numbers",
+      "shortDescription": "Audit a report that totals differently depending on row order, then make the figure exact and the allocation add back up.",
+      "description": "A total being produced does not mean the total is right. This problem is about the accident where the same line items go through the same code and come out different, because the rows were read in a different order.\n\nThe broken starter passes all seven public tests. Each of them uses amounts of a similar size in one order, and float error only becomes visible once the magnitudes are far apart, just as an allocation only visibly fails to add up once the ratio is not clean.\n\nParticipants audit a seed-derived reconciliation log and an allocation sheet whose parts do not reach 100%, then make the aggregation exact using only the standard library. The destination is not memorising that floating point is not associative; it is the judgement to hold money in fixed point.\n\nReducing the error and removing it are scored apart. math.fsum, or sorting first, removes the order dependence but is still not exact, because the precision was lost when each decimal string became a float.",
+      "instructions": "## Solve in Participant Portal\n\nStarting the problem opens the editor and the evidence controls on one page. Use \"inspect evidence\" to read the reconciliation log, edit the starter's aggregate.py, and run the public tests. The direct-answer checkpoints are answered as JSON built from this deployment's report id and run indexes.\n\nEach submission sends the current editor file to the container's prepare API, which passes it to the loopback /verify. The Workbench and the hidden verifier are separate containers.",
+      "writeup": "## What order-dependence means\n\nFloating-point addition is not associative. Adding a cent to a number near 1e14 cannot change the nearest representable value, so that addition disappears. Add the small values to each other first and it survives. The same set gives different answers.\n\n## Less error is not no error\n\nmath.fsum rounds the sum of the floats correctly, and the order dependence goes away. It is still not exact, because what was lost was not the addition but the moment each decimal string became a float. If exactness is required, hold the value in Decimal or in integer minor units from the start.\n\n## An allocation always has a remainder\n\nRounding each share on its own does not add to 100.00. The remainder does not vanish; it gets assigned somewhere. Largest-remainder hands each leftover cent to the row with the biggest fractional part, so no row ends up more than a cent from its real percentage.\n\n## What this does not prove\n\nIt does not make arbitrary real arithmetic exact. Within one domain — amounts with two decimals — it makes the total exact and the allocation add back to the whole.",
+      "learningGoals": [
+        "Explain why the same set can total differently depending on addition order",
+        "Point at where a small value disappears into a much larger one",
+        "Explain the difference between reducing error and removing it",
+        "Explain that precision is lost when a decimal string becomes a float",
+        "Choose fixed point for a domain like money",
+        "Explain why independently rounded shares do not reach 100%",
+        "Distribute the remainder so every row stays within a cent of its real share"
+      ],
+      "checks": [
+        {
+          "id": "environment",
+          "label": "environment - paste the Workbench pass phrase"
+        },
+        {
+          "id": "observe",
+          "label": "observe - name the report and what a disagreement between runs proves",
+          "hints": [
+            {
+              "id": "observe-hint-1",
+              "content": "Same line items, same count; the only difference is the order they were read in. If the figure moved, the input is not what moved it."
+            }
+          ]
+        },
+        {
+          "id": "audit",
+          "label": "audit - list the runs whose reported total cannot be the real one",
+          "hints": [
+            {
+              "id": "audit-hint-1",
+              "content": "The majority value is not automatically right, but the minority at least disagrees with it. Which runs reported something different from the rest?"
+            }
+          ]
+        },
+        {
+          "id": "total",
+          "label": "total - make the total exact and independent of row order",
+          "hints": [
+            {
+              "id": "total-hint-1",
+              "content": "The amounts arrive as decimal strings. Where does that string become a float? Is precision lost during the addition, or before it?"
+            }
+          ]
+        },
+        {
+          "id": "allocate",
+          "label": "allocate - report shares that add back up to exactly 100.00",
+          "hints": [
+            {
+              "id": "allocate-hint-1",
+              "content": "Rounding each row on its own leaves a remainder, and it does not disappear. Which rows should it go to so that none ends up more than a cent from its real share?"
+            }
+          ]
+        },
+        {
+          "id": "generalize",
+          "label": "generalize - hold for one row, all-zero rows and a long tail",
+          "hints": [
+            {
+              "id": "generalize-hint-1",
+              "content": "The sheet is still produced when the total is zero. What is the share of a single row? Is the total still exact with hundreds of small rows under one large one?"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

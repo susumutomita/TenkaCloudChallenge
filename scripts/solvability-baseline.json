@@ -61,6 +61,13 @@
       "type": "answer-on-screen",
       "reason": "The environment checkpoint is proof that the container was started, not a question. The health token is printed by `make inspect` and by the Portal editor's inspect view precisely so the player can copy it, and it is seed-derived, so nothing carries between deployments. There is no answer here to leak. The two checkpoints that do carry answers -- `window` and `audit` -- were measured in the same sweep and are not on screen.",
       "recordedAtSeeds": 500
+    },
+    {
+      "problem": "cs-numeric-aggregation-order",
+      "checkpoint": "environment",
+      "type": "answer-on-screen",
+      "reason": "The environment checkpoint is proof that the container was started, not a question. The health token is printed by `make inspect` and by the Portal editor's inspect view precisely so the player can copy it, and it is seed-derived, so nothing carries between deployments. There is no answer here to leak. The two checkpoints that do carry answers -- `window` and `audit` -- were measured in the same sweep and are not on screen.",
+      "recordedAtSeeds": 500
     }
   ],
   "open": []
