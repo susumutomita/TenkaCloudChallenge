@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 
-from fixtures.generate import OBSERVE_QUESTION, allocation_sheet, disputed_report, health_token, reconciliation_runs
+from fixtures.generate import QUESTIONS, allocation_sheet, disputed_report, health_token, reconciliation_runs
 
 
 def main() -> None:
@@ -16,9 +16,10 @@ def main() -> None:
         "observe": {
             "report": disputed_report(seed),
             "runs": runs[:4],
-            "question": OBSERVE_QUESTION,
+            **QUESTIONS["observe"],
         },
         "audit": {
+            **QUESTIONS["audit"],
             "runs": [{"index": index, **row} for index, row in enumerate(runs)],
             "allocationSheet": allocation_sheet(seed),
         },

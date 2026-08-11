@@ -79,7 +79,7 @@
       },
       {
         "id": "assessment.cs-numeric-aggregation-order.audit",
-        "description": "真の合計になり得ない run を特定できた。"
+        "description": "多数派の報告値と異なる run を特定できた。"
       },
       {
         "id": "assessment.cs-numeric-aggregation-order.total",
@@ -219,7 +219,7 @@
       },
       {
         "id": "audit",
-        "label": "audit — 報告値が真の合計になり得ない run を挙げる",
+        "label": "audit — 報告値が多数派の報告値と異なる run を挙げる",
         "points": 30,
         "wrongAnswerPenalty": 10,
         "hints": [
@@ -304,7 +304,7 @@
         },
         {
           "id": "audit",
-          "label": "audit - list the runs whose reported total cannot be the real one",
+          "label": "audit - list the runs whose reported total differs from the majority value",
           "hints": [
             {
               "id": "audit-hint-1",

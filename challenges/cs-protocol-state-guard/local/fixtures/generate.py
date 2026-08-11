@@ -80,9 +80,29 @@ def session_transcript(seed: str) -> list[dict[str, object]]:
     return rows
 
 
-# The question the participant is asked. It lives here because both the CLI
-# (`show.py`) and the Portal (`workbench/server.py`) render it; when it lived only in
-# show.py the Portal silently dropped it and never asked the participant anything.
-OBSERVE_QUESTION = (
-    "Every reply here says ok. What did the server let this client do?"
-)
+# Every question the participant is asked, in one place because both the CLI (`show.py`)
+# and the Portal (`workbench/server.py`) render them. Japanese is the default and English
+# lives under `i18n.en`, the same convention metadata.json uses. Before this existed the
+# text sat in show.py alone and the Portal asked the participant nothing at all.
+QUESTIONS = {
+    "observe": {
+        "question": (
+            "返答はすべて ok です。 server はこの client に何を許してしまいましたか。"
+        ),
+        "i18n": {"en": {"question": "Every reply here says ok. What did the server let this client do?"}},
+    },
+    "audit": {
+        "question": (
+            "documentedOrder に照らして、届いた時点では受理されるべきでなかった交換を 1 つ残らず挙げてください。"
+        ),
+        "answerFormat": "[<index>, ...] (昇順、重複なし)",
+        "i18n": {
+            "en": {
+                "question": (
+                    "List every exchange that should not have been accepted at the point it arrived, judged against documentedOrder."
+                ),
+                "answerFormat": "[<index>, ...] (ascending, no duplicates)",
+            }
+        },
+    },
+}

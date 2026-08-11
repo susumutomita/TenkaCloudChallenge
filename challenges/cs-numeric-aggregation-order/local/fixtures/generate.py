@@ -98,10 +98,29 @@ def allocation_sheet(seed: str) -> list[dict[str, str]]:
     return shares
 
 
-# The question the participant is asked. It lives here because both the CLI
-# (`show.py`) and the Portal (`workbench/server.py`) render it; when it lived only in
-# show.py the Portal silently dropped it and never asked the participant anything.
-OBSERVE_QUESTION = (
-    "The same line items were totalled several times. "
-    "What does a disagreement between two of these runs prove?"
-)
+# Every question the participant is asked, in one place because both the CLI (`show.py`)
+# and the Portal (`workbench/server.py`) render them. Japanese is the default and English
+# lives under `i18n.en`, the same convention metadata.json uses. Before this existed the
+# text sat in show.py alone and the Portal asked the participant nothing at all.
+QUESTIONS = {
+    "observe": {
+        "question": (
+            "同じ明細を何度も合計しています。 2 つの run が食い違っていることは、何を証明しますか。"
+        ),
+        "i18n": {"en": {"question": "The same line items were totalled several times. " "What does a disagreement between two of these runs prove?"}},
+    },
+    "audit": {
+        "question": (
+            "多数派として報告された合計と異なる run を、1 つ残らず挙げてください。 この観測だけでは、多数派が真の合計であることまでは証明できません。"
+        ),
+        "answerFormat": "[<index>, ...] (昇順、重複なし)",
+        "i18n": {
+            "en": {
+                "question": (
+                    "List every run whose reported total differs from the majority value. This observation alone does not prove that the majority value is the true total."
+                ),
+                "answerFormat": "[<index>, ...] (ascending, no duplicates)",
+            }
+        },
+    },
+}
