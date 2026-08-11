@@ -21,7 +21,7 @@ from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fixtures.generate import audit_log, dropped_response_trace, health_token, public_operation
+from fixtures.generate import UNCERTAIN_QUESTION, audit_log, dropped_response_trace, health_token, public_operation
 
 ROOT = Path(__file__).resolve().parents[1]
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
@@ -92,6 +92,7 @@ def inspect_payload(seed: str) -> dict[str, object]:
     return {
         "environment": {"python": sys.version.split()[0], "healthToken": health_token(seed)},
         "uncertain": {
+            "question": UNCERTAIN_QUESTION,
             "operation": public_operation(seed),
             "firstAttempt": dropped_response_trace(seed)[0],
         },

@@ -197,6 +197,71 @@ print(json.dumps([server.evaluate(name, relabelled) for name in ("rollup", "tran
     expect(verdicts).toEqual([false, false, false]);
   });
 
+  it("asks the question in the Portal, not only in the CLI", () => {
+    // This is the defect that prompted the whole change: `question` and the column
+    // glossary lived in show.py, and the Workbench rebuilt the payload by hand without
+    // them. A participant solving in the Portal got raw JSON and was never told what
+    // was being asked. Both surfaces now come from one builder, so they cannot drift.
+    const both = JSON.parse(
+      probe(`
+import json, sys
+sys.path.insert(0, ".")
+sys.path.insert(0, "workbench")
+import server
+from fixtures.generate import evidence
+shared = evidence("repo-contract-seed")
+portal = server.inspect_payload("repo-contract-seed")
+portal["environment"].pop("python", None)
+print(json.dumps({
+  "identical": shared == portal,
+  "questions": [bool(portal[s].get("question")) for s in ("environment", "observe", "audit")],
+  "englishQuestions": [bool(portal[s]["i18n"]["en"].get("question")) for s in ("observe", "audit")],
+  "columns": [sorted(portal[s]["columns"]) for s in ("observe", "audit")],
+}))
+`),
+    ) as Record<string, unknown>;
+    expect(both.identical).toBe(true);
+    expect(both.questions).toEqual([true, true, true]);
+    expect(both.englishQuestions).toEqual([true, true]);
+    // Every column a participant is asked to reason about is explained.
+    expect(both.columns).toEqual([
+      ["day", "index", "ledgerTotal", "reportedTotal"],
+      ["day", "index", "ledgerTotal", "reportedTotal"],
+    ]);
+  });
+
+  it("always shows the disputed day in the observe evidence", () => {
+    // It used to send rows[:4] while the mismatch sat at index 2, 3 or 4 depending on
+    // the seed, so on 28 % of deployments the observe evidence contained no mismatching
+    // row at all and still asked what was different about the day that stopped matching.
+    const measured = JSON.parse(
+      probe(`
+import json, sys
+sys.path.insert(0, ".")
+from fixtures.generate import evidence, daily_report, reported_zone
+missing = 0
+leaks = 0
+for i in range(200):
+    seed = "s%03d" % i
+    observe = evidence(seed)["observe"]
+    shown = {row["index"] for row in observe["rows"]}
+    rows = daily_report(seed)
+    wrong = {j for j, r in enumerate(rows) if r["reportedTotal"] != r["ledgerTotal"]}
+    if not (shown & wrong):
+        missing += 1
+    # The audit answer is the whole set; observe must not hand over all of it.
+    if wrong <= shown:
+        leaks += 1
+    assert observe["report"]["disputedDay"] == reported_zone(seed)["disputedDay"]
+print(json.dumps({"missing": missing, "leaks": leaks}))
+`),
+    ) as Record<string, number>;
+    expect(measured.missing).toBe(0);
+    // Exactly one of the pair is shown: the day that lost. Finding the day that gained
+    // the same amount is the audit, so observe must not give the full answer away.
+    expect(measured.leaks).toBe(0);
+  });
+
   it("keeps the answer and the hidden properties out of the participant image", () => {
     const dockerfile = readFileSync(join(LOCAL, "Dockerfile"), "utf8");
     const participant = (dockerfile.split("FROM base AS participant")[1] ?? "").split(

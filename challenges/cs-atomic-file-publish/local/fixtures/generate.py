@@ -108,3 +108,12 @@ def crash_survivors(seed: str) -> list[dict[str, object]]:
             "leftoverFiles": [f".config-{_token(seed, 'name', 6)}.json.{_token(seed, 'debris', 6)}"],
         },
     ]
+
+
+# The question the participant is asked. It lives here because both the CLI
+# (`show.py`) and the Portal (`workbench/server.py`) render it; when it lived only in
+# show.py the Portal silently dropped it and never asked the participant anything.
+OBSERVE_QUESTION = (
+    "The writer reported success and the bytes on disk are correct. "
+    "What could this reader have been holding at t+120ms?"
+)

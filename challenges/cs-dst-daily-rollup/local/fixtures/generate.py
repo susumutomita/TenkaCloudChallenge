@@ -65,6 +65,19 @@ def reported_zone(seed: str) -> dict[str, object]:
     }
 
 
+def disputed_index(seed: str) -> int:
+    """Row number of the day whose published total is short.
+
+    The neighbour that gained the same amount sits at ``disputed_index + 1`` and is
+    deliberately not derived here: finding it is the audit.
+    """
+    day = str(reported_zone(seed)["disputedDay"])
+    for index, row in enumerate(daily_report(seed)):
+        if row["day"] == day:
+            return index
+    raise AssertionError("the report must contain the disputed day")
+
+
 def daily_report(seed: str) -> list[dict[str, object]]:
     """The published daily report next to the ledger's own count for each day.
 
@@ -115,3 +128,95 @@ def daily_report(seed: str) -> list[dict[str, object]]:
             }
         )
     return rows
+
+
+# Participant-visible evidence, built in one place so `make inspect` and the Portal
+# cannot drift apart. Japanese is the default and English lives under `i18n.en`, the
+# same convention metadata.json and the Workbench config use.
+COLUMN_GLOSSARY = {
+    "index": "audit で答えるときの行番号。",
+    "day": "レポートが集計対象とした現地の暦日。",
+    "reportedTotal": "日次ジョブが公開した値。 疑われているのはこちら。",
+    "ledgerTotal": "台帳自身が数えた値。 こちらが正しいものとして扱う。",
+}
+
+COLUMN_GLOSSARY_EN = {
+    "index": "Row number, which is what the audit checkpoint is answered with.",
+    "day": "The local calendar day the report totalled.",
+    "reportedTotal": "What the daily job published. This is the number in question.",
+    "ledgerTotal": "What the ledger itself counted. Treat this one as correct.",
+}
+
+
+def evidence(seed: str) -> dict[str, object]:
+    """Everything a participant may see. Contains no expected answer."""
+    rows = daily_report(seed)
+    zone = reported_zone(seed)
+    disputed = disputed_index(seed)
+    # Through the disputed day inclusive. The rows after it are held back because the
+    # amount this day lost turns up on a later one, and noticing that is the audit.
+    window = [{"index": index, **row} for index, row in enumerate(rows[: disputed + 1])]
+    return {
+        "environment": {
+            "healthToken": health_token(seed),
+            "question": "この合言葉をそのまま貼り、lab が起動していることを示してください。",
+            "i18n": {
+                "en": {
+                    "question": "Paste this pass phrase as-is to show the lab is running."
+                }
+            },
+        },
+        "observe": {
+            "report": {
+                "reportId": zone["reportId"],
+                "timezone": zone["timezone"],
+                "disputedDay": zone["disputedDay"],
+            },
+            "columns": COLUMN_GLOSSARY,
+            "rows": window,
+            "question": (
+                f"集計コードも台帳も変わっていません。 それでも {zone['disputedDay']} だけ "
+                f"reportedTotal が ledgerTotal に届いていません。 "
+                f"{zone['timezone']} の暦で、この日は他の日と何が違いますか。"
+            ),
+            "answerFormat": (
+                '["<reportId>", "<not-24-hours | missing-rows | double-counted | clock-skew '
+                'のいずれか 1 つ>"]'
+            ),
+            "i18n": {
+                "en": {
+                    "columns": COLUMN_GLOSSARY_EN,
+                    "question": (
+                        f"Neither the totalling code nor the ledger changed, yet on "
+                        f"{zone['disputedDay']} alone the reportedTotal falls short of the "
+                        f"ledgerTotal. In the {zone['timezone']} calendar, what is different "
+                        f"about that day?"
+                    ),
+                    "answerFormat": (
+                        '["<reportId>", "<one of: not-24-hours | missing-rows | '
+                        'double-counted | clock-skew>"]'
+                    ),
+                }
+            },
+        },
+        "audit": {
+            "timezone": zone["timezone"],
+            "columns": COLUMN_GLOSSARY,
+            "rows": [{"index": index, **row} for index, row in enumerate(rows)],
+            "question": (
+                "報告値が正しくあり得ない日を、1 つ残らず挙げてください。 "
+                "ある日が失った分は、消えたのではありません。"
+            ),
+            "answerFormat": "[<index>, ...] (index の昇順、重複なし)",
+            "i18n": {
+                "en": {
+                    "columns": COLUMN_GLOSSARY_EN,
+                    "question": (
+                        "List every day whose reported total cannot be right. The amount one "
+                        "day lost did not vanish."
+                    ),
+                    "answerFormat": "[<index>, ...] (ascending, no duplicates)",
+                }
+            },
+        },
+    }
