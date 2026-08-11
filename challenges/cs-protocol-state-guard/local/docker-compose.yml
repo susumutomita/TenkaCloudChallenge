@@ -1,0 +1,66 @@
+services:
+  workbench:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: participant
+    environment:
+      FLAG_SEED: ${FLAG_SEED:?FLAG_SEED must be provided by the platform}
+      WORKBENCH_PORT: "18540"
+      VERIFIER_URL: http://verifier:18541/verify
+    ports:
+      - "127.0.0.1:18540:18540"
+    depends_on:
+      verifier:
+        condition: service_healthy
+    networks:
+      - lab
+      - workshop-host
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=128m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:18540/api/config', timeout=2).read()"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    mem_limit: 768m
+    pids_limit: 96
+
+  verifier:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: verifier
+    environment:
+      FLAG_SEED: ${FLAG_SEED:?FLAG_SEED must be provided by the platform}
+      VERIFY_PORT: "18541"
+    networks:
+      - lab
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=128m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:18541/health', timeout=2).read()"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    mem_limit: 768m
+    pids_limit: 96
+
+networks:
+  lab:
+    internal: true
+  workshop-host:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+      com.docker.network.bridge.host_binding_ipv4: "127.0.0.1"
