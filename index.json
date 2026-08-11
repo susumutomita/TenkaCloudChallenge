@@ -1873,6 +1873,37 @@
       }
     },
     {
+      "id": "cs-numeric-aggregation-order",
+      "name": "誰も数字を変えていないのに、合計が変わった",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "cs-foundations",
+        "order": 70,
+        "chapter": "7. 集約の順序と精度"
+      },
+      "difficulty": 3,
+      "estimatedDuration": "45-75 分",
+      "shortDescription": "行の順序で合計が変わるレポートを監査し、厳密な合計と、丸めても 100% に戻る配分を実装する。",
+      "tags": [
+        "cs-foundations",
+        "numerics",
+        "decimal",
+        "rounding",
+        "aggregation",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "cs-transaction-visibility-audit",
       "name": "どちらも committed。だが、その合計は一度も存在しない",
       "category": "Challenge",
