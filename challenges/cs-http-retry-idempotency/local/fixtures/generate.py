@@ -107,3 +107,11 @@ def audit_log(seed: str) -> list[dict[str, object]]:
         *ordinary[second_position:],
     ]
     return rows
+
+
+# The question the participant is asked. It lives here because both the CLI
+# (`show.py`) and the Portal (`workbench/server.py`) render it; when it lived only in
+# show.py the Portal silently dropped it and never asked the participant anything.
+UNCERTAIN_QUESTION = (
+    "Immediately after the timeout, is server state created, not-created, or unknown?"
+)

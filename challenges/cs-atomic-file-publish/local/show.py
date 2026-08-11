@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 
-from fixtures.generate import crash_survivors, health_token, published_document, reader_observations
+from fixtures.generate import OBSERVE_QUESTION, crash_survivors, health_token, published_document, reader_observations
 
 
 def main() -> None:
@@ -16,10 +16,7 @@ def main() -> None:
         "observe": {
             "document": published_document(seed),
             "readerLog": observations[:4],
-            "question": (
-                "The writer reported success and the bytes on disk are correct. "
-                "What could this reader have been holding at t+120ms?"
-            ),
+            "question": OBSERVE_QUESTION,
         },
         "audit": {
             "readerLog": [{"index": index, **row} for index, row in enumerate(observations)],

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 
-from fixtures.generate import HAPPY_PATH, health_token, reported_session, session_transcript
+from fixtures.generate import OBSERVE_QUESTION, HAPPY_PATH, health_token, reported_session, session_transcript
 
 
 def main() -> None:
@@ -17,7 +17,7 @@ def main() -> None:
             "session": reported_session(seed),
             "documentedOrder": list(HAPPY_PATH),
             "transcript": transcript[:3],
-            "question": "Every reply here says ok. What did the server let this client do?",
+            "question": OBSERVE_QUESTION,
         },
         "audit": {
             "documentedOrder": list(HAPPY_PATH),

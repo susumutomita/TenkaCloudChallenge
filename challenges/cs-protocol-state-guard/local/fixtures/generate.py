@@ -78,3 +78,11 @@ def session_transcript(seed: str) -> list[dict[str, object]]:
         }
     )
     return rows
+
+
+# The question the participant is asked. It lives here because both the CLI
+# (`show.py`) and the Portal (`workbench/server.py`) render it; when it lived only in
+# show.py the Portal silently dropped it and never asked the participant anything.
+OBSERVE_QUESTION = (
+    "Every reply here says ok. What did the server let this client do?"
+)

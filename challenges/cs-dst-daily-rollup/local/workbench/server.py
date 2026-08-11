@@ -21,7 +21,7 @@ from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fixtures.generate import daily_report, health_token, reported_zone
+from fixtures.generate import evidence, health_token
 
 ROOT = Path(__file__).resolve().parents[1]
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
@@ -88,19 +88,16 @@ def config_payload() -> dict[str, object]:
 
 
 def inspect_payload(seed: str) -> dict[str, object]:
-    rows = daily_report(seed)
-    zone = reported_zone(seed)
-    return {
-        "environment": {"python": sys.version.split()[0], "healthToken": health_token(seed)},
-        "observe": {
-            "report": {key: zone[key] for key in ("reportId", "timezone")},
-            "rows": rows[:4],
-        },
-        "audit": {
-            "timezone": zone["timezone"],
-            "rows": [{"index": index, **row} for index, row in enumerate(rows)],
-        },
-    }
+    """The same evidence `make inspect` prints, plus this container's Python version.
+
+    Built from the shared builder rather than reassembled here. The previous copy
+    silently dropped every `question` and every column explanation, so a participant
+    solving in the Portal was handed raw JSON and never saw what was being asked.
+    """
+    payload = evidence(seed)
+    environment = payload["environment"]
+    assert isinstance(environment, dict)
+    return {**payload, "environment": {**environment, "python": sys.version.split()[0]}}
 
 
 def _submission_sources(files: object) -> dict[str, str] | None:

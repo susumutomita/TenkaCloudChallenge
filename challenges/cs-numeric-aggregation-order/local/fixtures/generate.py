@@ -96,3 +96,12 @@ def allocation_sheet(seed: str) -> list[dict[str, str]]:
         }
     )
     return shares
+
+
+# The question the participant is asked. It lives here because both the CLI
+# (`show.py`) and the Portal (`workbench/server.py`) render it; when it lived only in
+# show.py the Portal silently dropped it and never asked the participant anything.
+OBSERVE_QUESTION = (
+    "The same line items were totalled several times. "
+    "What does a disagreement between two of these runs prove?"
+)
