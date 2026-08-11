@@ -1,5 +1,4 @@
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "bun:test";
@@ -78,9 +77,14 @@ describe("cs-foundations evidence", () => {
     });
 
     it(`${problem}: the answer file the participant edits is tracked`, () => {
-      // Cheap guard on the other half of "the participant can actually work": reset
-      // restores the starter from git, so an untracked starter cannot be restored.
-      expect(existsSync(join(ROOT, "challenges", problem, "local", "starter"))).toBe(true);
+      // Reset restores the starter from git, so existence alone is insufficient:
+      // require at least one tracked path under the starter directory.
+      const starter = join("challenges", problem, "local", "starter");
+      const tracked = execFileSync("git", ["ls-files", "--cached", "--", starter], {
+        cwd: ROOT,
+        encoding: "utf8",
+      });
+      expect(tracked.trim().length).toBeGreaterThan(0);
     });
   }
 });
