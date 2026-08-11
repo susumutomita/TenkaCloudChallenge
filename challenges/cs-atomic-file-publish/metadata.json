@@ -1,0 +1,348 @@
+{
+  "id": "cs-atomic-file-publish",
+  "name": "半分のファイルは、ファイルではない",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "cs-foundations",
+    "order": 60,
+    "chapter": "6. 公開の不可分性"
+  },
+  "difficulty": 3,
+  "estimatedDuration": "45-75 分",
+  "shortDescription": "書き終えた内容は正しいのに読み手が半分を見たログを監査し、不可分な差し替えとしてファイルを公開する。",
+  "description": "書き終えたファイルの中身が正しいことは、公開が正しかったことを意味しない。この問題が扱うのは、writer が成功を報告し、ディスク上の bytes も期待どおりなのに、書いている最中に読んだ側が空または途中までのファイルを掴んでいた、という事故である。\n\n壊れた starter は新規作成、置き換え、縮小、UTF-8、入力検証の public test をすべて通る。public test はどれも publish が返った *後* のファイルしか見ないからで、これがこの問題の盲点そのものである。\n\n参加者は seed 由来の reader log と crash 後の各ホストの状態を監査し、Python 標準ライブラリだけで公開を不可分にする。同一ディレクトリの作業ファイルへ書き、medium へ確定させてから os.replace で名前を差し替え、ディレクトリエントリまで永続化する。どの時点で落ちても残るのは丸ごと古いか丸ごと新しいファイルだけで、作業ファイルは残らない。\n\n保証するのは、ファイルシステムが提供する範囲での不可分な差し替えと、fsync 後の耐久性である。ディスクが嘘をつく場合や、複数ファイルにまたがる一貫性は対象外である。",
+  "instructions": "## Participant Portal で解く\n\n問題を起動すると editor と証拠操作が同じページに出ます。「証拠を調べる」で reader log を読み、starter の publish.py を編集して public test を実行してください。direct-answer checkpoint は、この deploy の対象ファイルと reader log の index から JSON で答えます。\n\n各 checkpoint の提出では Portal が現在の editor file を container の prepare API へ送り、その値を loopback の /verify へ渡します。Workbench と hidden verifier は別 container で、host へ公開されるのは Portal が表示する Workbench URL だけです。",
+  "writeup": "## 「書けた」と「公開できた」は別\n\nopen(path, \"w\") はファイルを truncate してから書き始める。その瞬間から書き終わるまで、読み手には空または途中までのファイルが見える。書き終えた後の内容が正しくても、この窓は消えない。\n\n## 不可分な差し替え\n\n同じディレクトリの作業ファイルへ全部書き、os.replace で名前を差し替える。rename は同一ファイルシステム内でのみ不可分なので、作業ファイルを /tmp に置くと保証が消える。読み手が見るのは常に古い名前の中身か新しい名前の中身のどちらかになる。\n\n## 耐久性の順序\n\nデータが medium に届く前に名前を差し替えると、crash 後に「名前はあるが中身が無い」状態が作れてしまう。作業ファイルを fsync してから replace し、さらに rename が作ったディレクトリエントリを永続化するためディレクトリも fsync する。\n\n## 証明していないこと\n\nディスクが fsync に嘘をつく場合は守れない。また守ったのは 1 ファイルの差し替えであって、複数ファイルをまとめて切り替える一貫性ではない。",
+  "tags": [
+    "cs-foundations",
+    "filesystem",
+    "atomicity",
+    "durability",
+    "crash-consistency",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18520,
+      "name": "Participant Workbench + verifier proxy (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "書き終えた内容が正しいことと、公開が不可分であることは別だと説明できる",
+    "truncate してから書く実装が読み手に見せる窓を指摘できる",
+    "os.replace が同一ファイルシステム内でのみ不可分だと説明できる",
+    "データの fsync を rename より前に置く理由を説明できる",
+    "rename が作るディレクトリエントリを永続化する必要を説明できる",
+    "失敗した公開が作業ファイルを残さないことを設計に含められる",
+    "公開が重なっても互いの作業ファイルを壊さない命名を選べる"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.cs-atomic-file-publish.observe-partial",
+        "description": "書き込み中の読み手が半端なファイルを観測し得ると説明できる。"
+      },
+      {
+        "id": "lo.cs-atomic-file-publish.atomic-replace",
+        "description": "同一ディレクトリの作業ファイルと rename で不可分な差し替えを構成できる。"
+      },
+      {
+        "id": "lo.cs-atomic-file-publish.durability-order",
+        "description": "データの永続化を名前の差し替えより前に置く理由を説明できる。"
+      },
+      {
+        "id": "lo.cs-atomic-file-publish.no-debris",
+        "description": "失敗時に作業ファイルを残さない設計を選べる。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.torn-write-window",
+        "description": "truncate から書き終わりまでの間、読み手には不完全なファイルが見える。"
+      },
+      {
+        "id": "concept.rename-atomicity",
+        "description": "rename は同一ファイルシステム内でのみ不可分である。"
+      },
+      {
+        "id": "concept.fsync-ordering",
+        "description": "データの永続化とディレクトリエントリの永続化は別の操作である。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.cs-atomic-file-publish.observe",
+        "description": "成功報告の裏で読み手が半端なファイルを握り得たと判断できた。"
+      },
+      {
+        "id": "assessment.cs-atomic-file-publish.audit",
+        "description": "公開が不可分でなかった証拠になる観測を特定できた。"
+      },
+      {
+        "id": "assessment.cs-atomic-file-publish.publish",
+        "description": "読み手に半端なファイルを一度も見せない公開を実装できた。"
+      },
+      {
+        "id": "assessment.cs-atomic-file-publish.durable",
+        "description": "どの時点で落ちても丸ごと残り、作業ファイルが残らないことを示せた。"
+      },
+      {
+        "id": "assessment.cs-atomic-file-publish.generalize",
+        "description": "新規名・繰り返し・公開の重なりでも同じ性質を保てた。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.written-means-published",
+        "description": "書き終えた内容が正しければ公開は正しい、という誤解。"
+      },
+      {
+        "id": "misconception.tmp-then-move",
+        "description": "/tmp に書いて move すれば不可分になる、という誤解。"
+      },
+      {
+        "id": "misconception.fsync-file-is-enough",
+        "description": "ファイルを fsync すれば新しい名前も残る、という誤解。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.cs-atomic-file-publish",
+      "target": "lo.cs-atomic-file-publish.observe-partial"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.cs-atomic-file-publish",
+      "target": "lo.cs-atomic-file-publish.atomic-replace"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.cs-atomic-file-publish",
+      "target": "lo.cs-atomic-file-publish.durability-order"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.cs-atomic-file-publish",
+      "target": "lo.cs-atomic-file-publish.no-debris"
+    },
+    {
+      "type": "covers",
+      "source": "problem.cs-atomic-file-publish",
+      "target": "concept.torn-write-window"
+    },
+    {
+      "type": "covers",
+      "source": "problem.cs-atomic-file-publish",
+      "target": "concept.rename-atomicity"
+    },
+    {
+      "type": "covers",
+      "source": "problem.cs-atomic-file-publish",
+      "target": "concept.fsync-ordering"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-atomic-file-publish",
+      "target": "assessment.cs-atomic-file-publish.observe"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-atomic-file-publish",
+      "target": "assessment.cs-atomic-file-publish.audit"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-atomic-file-publish",
+      "target": "assessment.cs-atomic-file-publish.publish"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-atomic-file-publish",
+      "target": "assessment.cs-atomic-file-publish.durable"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-atomic-file-publish",
+      "target": "assessment.cs-atomic-file-publish.generalize"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.cs-atomic-file-publish",
+      "target": "misconception.written-means-published"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.cs-atomic-file-publish",
+      "target": "misconception.tmp-then-move"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.cs-atomic-file-publish",
+      "target": "misconception.fsync-file-is-enough"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18520/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "environment",
+        "label": "environment — Workbench の合言葉を貼る",
+        "points": 15,
+        "wrongAnswerPenalty": 5
+      },
+      {
+        "id": "observe",
+        "label": "observe — 読み手が握っていたものを、対象ファイルと合わせて答える",
+        "points": 20,
+        "wrongAnswerPenalty": 7,
+        "hints": [
+          {
+            "id": "observe-hint-1",
+            "content": "writer は成功を報告し、最終的な bytes も正しいままです。t+120ms の読み手は 0 bytes を読んでいます。書き終えた後ではなく、書いている最中に何が起きていたか考えてください。",
+            "penalty": 8
+          }
+        ]
+      },
+      {
+        "id": "audit",
+        "label": "audit — 公開が不可分でなかった証拠になる観測を挙げる",
+        "points": 30,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "audit-hint-1",
+            "content": "revision ではなく parsed を並べてください。古い revision を読めた観測と新しい revision を読めた観測は、どちらも「丸ごと」です。証拠になるのはどちらでもない観測です。",
+            "penalty": 12
+          }
+        ]
+      },
+      {
+        "id": "publish",
+        "label": "publish — 読み手に半端なファイルを一度も見せない",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "publish-hint-1",
+            "content": "対象ファイルを書き換える前に、読み手が見ている名前を変えずに済ませる方法を考えてください。書き込みと公開を別の操作に分けられますか。",
+            "penalty": 18
+          }
+        ]
+      },
+      {
+        "id": "durable",
+        "label": "durable — どの時点で落ちても丸ごと残し、作業ファイルを残さない",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "durable-hint-1",
+            "content": "名前が新しい中身を指した後に電源が落ちたとき、その中身は本当にディスクにありますか。順序を疑ってください。",
+            "penalty": 18
+          }
+        ]
+      },
+      {
+        "id": "generalize",
+        "label": "generalize — 新規名・繰り返し・公開の重なりでも成り立たせる",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "generalize-hint-1",
+            "content": "rename は新しいディレクトリエントリを作ります。そのエントリ自体は誰が永続化しますか。また、2 つの公開が同時に走ったとき作業ファイルの名前は衝突しませんか。",
+            "penalty": 18
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Half a file is not a file",
+      "shortDescription": "Audit a reader that saw a configuration file mid-write, then publish it as one indivisible replacement.",
+      "description": "Correct bytes on disk do not mean the publish was correct. This problem is about the accident where the writer reports success, the final file is exactly right, and a reader that looked while it was being written was holding an empty or half-finished file.\n\nThe broken starter passes every public test — create, replace, shrink, UTF-8, validation — because every one of them inspects the file only *after* publish returns. That is precisely the blind spot this problem is about.\n\nParticipants audit a seed-derived reader log and what three hosts held after a crash, then make the publish indivisible using only the standard library: write a work file in the destination directory, get it onto the medium, swap the name with os.replace, and make the directory entry durable too. A failure at any point must leave the whole old file or the whole new one, and no debris.\n\nWhat is guaranteed is an indivisible replacement within one filesystem and durability after fsync. A disk that lies about fsync, and consistency across several files, are out of scope.",
+      "instructions": "## Solve in Participant Portal\n\nStarting the problem opens the editor and the evidence controls on one page. Use \"inspect evidence\" to read the reader log, edit the starter's publish.py, and run the public tests. The direct-answer checkpoints are answered as JSON built from this deployment's target file and reader-log indexes.\n\nEach submission sends the current editor file to the container's prepare API, which passes it to the loopback /verify. The Workbench and the hidden verifier are separate containers; the only thing published to the host is the Workbench URL shown in the Portal.",
+      "writeup": "## \"Written\" and \"published\" are different\n\nopen(path, \"w\") truncates the file before writing a single byte. From that moment until the last byte lands, a reader sees an empty or partial file. Correct final contents do not close that window.\n\n## An indivisible replacement\n\nWrite the whole payload to a work file in the same directory, then swap the name with os.replace. A rename is only atomic within one filesystem, so staging in /tmp throws the guarantee away. A reader then always sees either the old contents or the new ones.\n\n## The order durability needs\n\nSwapping the name before the data reaches the medium allows a post-crash state where the name exists with nothing behind it. fsync the work file, then replace, then fsync the directory so the entry the rename created survives too.\n\n## What this does not prove\n\nIt does not survive a disk that lies about fsync, and it covers one file — not a consistent switch across several.",
+      "learningGoals": [
+        "Explain why correct final contents do not make a publish indivisible",
+        "Point at the window a truncate-then-write implementation shows readers",
+        "Explain why os.replace is only atomic within one filesystem",
+        "Explain why the data must be flushed before the name is swapped",
+        "Explain why the directory entry created by a rename needs its own flush",
+        "Design a failed publish that leaves no work file behind",
+        "Choose work-file names that survive overlapping publishes"
+      ],
+      "checks": [
+        {
+          "id": "environment",
+          "label": "environment - paste the Workbench pass phrase"
+        },
+        {
+          "id": "observe",
+          "label": "observe - name the file and what the reader could have been holding",
+          "hints": [
+            {
+              "id": "observe-hint-1",
+              "content": "The writer reported success and the final bytes are right. The reader at t+120ms read 0 bytes. Ask what was happening while it was being written, not after."
+            }
+          ]
+        },
+        {
+          "id": "audit",
+          "label": "audit - list the reader observations that prove the publish was not indivisible",
+          "hints": [
+            {
+              "id": "audit-hint-1",
+              "content": "Line up parsed, not revision. An observation of the old revision and one of the new revision are both whole files. The evidence is the observation that is neither."
+            }
+          ]
+        },
+        {
+          "id": "publish",
+          "label": "publish - never let a reader observe anything but a whole file",
+          "hints": [
+            {
+              "id": "publish-hint-1",
+              "content": "Find a way to write the new contents without touching the name the reader is looking at. Can writing and publishing be two separate operations?"
+            }
+          ]
+        },
+        {
+          "id": "durable",
+          "label": "durable - survive a crash at any point and leave no work file behind",
+          "hints": [
+            {
+              "id": "durable-hint-1",
+              "content": "Once the name points at the new contents, are those contents actually on the disk? Question the order."
+            }
+          ]
+        },
+        {
+          "id": "generalize",
+          "label": "generalize - hold for a new name, repeated publishes and overlapping writers",
+          "hints": [
+            {
+              "id": "generalize-hint-1",
+              "content": "A rename creates a new directory entry. Who makes that entry durable? And if two publishes run at once, do their work-file names collide?"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

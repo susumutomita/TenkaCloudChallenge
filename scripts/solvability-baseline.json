@@ -54,6 +54,13 @@
       "type": "answer-on-screen",
       "reason": "The environment checkpoint is proof that the separated Workbench started, not a reasoning question. Its seed-derived health token is intentionally shown for copying and does not carry across deployments. The uncertain and audit checkpoints still require interpreting the response-drop trace and identifying the later duplicate effect.",
       "recordedAtSeeds": 500
+    },
+    {
+      "problem": "cs-atomic-file-publish",
+      "checkpoint": "environment",
+      "type": "answer-on-screen",
+      "reason": "The environment checkpoint is proof that the container was started, not a question. The health token is printed by `make inspect` and by the Portal editor's inspect view precisely so the player can copy it, and it is seed-derived, so nothing carries between deployments. There is no answer here to leak. The two checkpoints that do carry answers -- `window` and `audit` -- were measured in the same sweep and are not on screen.",
+      "recordedAtSeeds": 500
     }
   ],
   "open": []

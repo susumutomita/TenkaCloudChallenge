@@ -1752,6 +1752,37 @@
       }
     },
     {
+      "id": "cs-atomic-file-publish",
+      "name": "半分のファイルは、ファイルではない",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "cs-foundations",
+        "order": 60,
+        "chapter": "6. 公開の不可分性"
+      },
+      "difficulty": 3,
+      "estimatedDuration": "45-75 分",
+      "shortDescription": "書き終えた内容は正しいのに読み手が半分を見たログを監査し、不可分な差し替えとしてファイルを公開する。",
+      "tags": [
+        "cs-foundations",
+        "filesystem",
+        "atomicity",
+        "durability",
+        "crash-consistency",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "cs-auth-claim-audit",
       "name": "署名は通った。それは、その要求を通してよいという意味ではない",
       "category": "Challenge",
