@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 
-from fixtures.generate import UNCERTAIN_QUESTION, audit_log, dropped_response_trace, health_token, public_operation
+from fixtures.generate import QUESTIONS, audit_log, dropped_response_trace, health_token, public_operation
 
 
 def main() -> None:
@@ -15,10 +15,11 @@ def main() -> None:
         "environment": {"healthToken": health_token(seed)},
         "uncertain": {
             "operation": public_operation(seed),
-            "trace": dropped_response_trace(seed)[:1],
-            "question": UNCERTAIN_QUESTION,
+            "firstAttempt": dropped_response_trace(seed)[0],
+            **QUESTIONS["uncertain"],
         },
         "audit": {
+            **QUESTIONS["audit"],
             "brokenGatewayTrace": dropped_response_trace(seed),
             "ledger": [{"index": index, **row} for index, row in enumerate(rows)],
         },

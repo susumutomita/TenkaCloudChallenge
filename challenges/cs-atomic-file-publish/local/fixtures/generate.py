@@ -110,10 +110,29 @@ def crash_survivors(seed: str) -> list[dict[str, object]]:
     ]
 
 
-# The question the participant is asked. It lives here because both the CLI
-# (`show.py`) and the Portal (`workbench/server.py`) render it; when it lived only in
-# show.py the Portal silently dropped it and never asked the participant anything.
-OBSERVE_QUESTION = (
-    "The writer reported success and the bytes on disk are correct. "
-    "What could this reader have been holding at t+120ms?"
-)
+# Every question the participant is asked, in one place because both the CLI (`show.py`)
+# and the Portal (`workbench/server.py`) render them. Japanese is the default and English
+# lives under `i18n.en`, the same convention metadata.json uses. Before this existed the
+# text sat in show.py alone and the Portal asked the participant nothing at all.
+QUESTIONS = {
+    "observe": {
+        "question": (
+            "writer は成功を報告し、ディスク上のバイト列も正しくなっています。 それでも t+120ms の reader は、何を掴んでいた可能性がありますか。"
+        ),
+        "i18n": {"en": {"question": "The writer reported success and the bytes on disk are correct. " "What could this reader have been holding at t+120ms?"}},
+    },
+    "audit": {
+        "question": (
+            "publish が atomic であったなら、そもそも起こり得なかった観測を 1 つ残らず挙げてください。"
+        ),
+        "answerFormat": "[<index>, ...] (昇順、重複なし)",
+        "i18n": {
+            "en": {
+                "question": (
+                    "List every observation that could not have happened if the publish had been atomic."
+                ),
+                "answerFormat": "[<index>, ...] (ascending, no duplicates)",
+            }
+        },
+    },
+}

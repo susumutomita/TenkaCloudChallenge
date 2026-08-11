@@ -109,9 +109,29 @@ def audit_log(seed: str) -> list[dict[str, object]]:
     return rows
 
 
-# The question the participant is asked. It lives here because both the CLI
-# (`show.py`) and the Portal (`workbench/server.py`) render it; when it lived only in
-# show.py the Portal silently dropped it and never asked the participant anything.
-UNCERTAIN_QUESTION = (
-    "Immediately after the timeout, is server state created, not-created, or unknown?"
-)
+# Every question the participant is asked, in one place because both the CLI (`show.py`)
+# and the Portal (`workbench/server.py`) render them. Japanese is the default and English
+# lives under `i18n.en`, the same convention metadata.json uses. Before this existed the
+# text sat in show.py alone and the Portal asked the participant nothing at all.
+QUESTIONS = {
+    "uncertain": {
+        "question": (
+            "timeout の直後、server 側の状態は created・not-created・unknown のどれですか。"
+        ),
+        "i18n": {"en": {"question": "Immediately after the timeout, is server state created, not-created, or unknown?"}},
+    },
+    "audit": {
+        "question": (
+            "1 つの論理操作を二重に記録してしまった ledger 行を、1 つ残らず挙げてください。"
+        ),
+        "answerFormat": "[<index>, ...] (昇順、重複なし)",
+        "i18n": {
+            "en": {
+                "question": (
+                    "List every ledger row that recorded one logical operation a second time."
+                ),
+                "answerFormat": "[<index>, ...] (ascending, no duplicates)",
+            }
+        },
+    },
+}
