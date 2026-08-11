@@ -222,7 +222,7 @@ describe("cs-async-result-binding delivery boundary", () => {
       runtime: { challengeEndpoints: Record<string, string>; verifyUrl: string };
     };
     const ids = ["environment", "audit", "overlap", "bind", "failure", "generalize"];
-    expect(metadata.status).toBe("ready");
+    expect(metadata.status).toBe("draft");
     expect(metadata.track).toEqual({ id: "cs-foundations", order: 30, chapter: "3. I/Oと並行性" });
     expect(metadata.scoring.kind).toBe("multi-verify");
     expect(metadata.scoring.checks.map((item) => item.id)).toEqual(ids);

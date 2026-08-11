@@ -2,7 +2,7 @@
   "id": "cs-transaction-visibility-audit",
   "name": "どちらも committed。だが、その合計は一度も存在しない",
   "category": "Challenge",
-  "status": "ready",
+  "status": "draft",
   "visibility": "public",
   "track": {
     "id": "cs-foundations",
