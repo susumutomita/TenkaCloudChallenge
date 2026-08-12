@@ -2,7 +2,8 @@
 
 This policy applies when a pull request adds a directory under `challenges/` or
 `battles/`, or promotes an existing problem from a non-ready status to
-`status: ready`.
+`status: ready`, or adds `scripts/<problem-id>.test.ts` under a matching
+`feat(<problem-id>):` / `test(<problem-id>):` title before metadata exists.
 
 Repository CI, mutation tests, reference runs and runtime tests remain required,
 but they are not a substitute for a participant actually solving the problem.
