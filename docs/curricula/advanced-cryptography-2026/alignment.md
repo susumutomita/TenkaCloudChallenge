@@ -10,6 +10,11 @@ publishes — makes the record hostage to somebody else's schedule. The companio
 were built and shipped regardless, so the reasoning behind them should be written
 down while it is still true, not when it is convenient.
 
+One of the three has since resolved: Week 2's material was published upstream and
+was read and re-pinned on 2026-08-12. Its section below is retitled **Resolved**
+and records how the basis was reconciled against the real material. Weeks 4 and 7
+remain as recorded.
+
 Policy is [`GOVERNANCE.md`](./GOVERNANCE.md). The drift procedure is
 [`SYNC.md`](./SYNC.md). The week-by-week mapping is
 [`curriculum.md`](./curriculum.md). This file is narrower than all three: it
@@ -32,12 +37,13 @@ State at that commit:
 - **Week 4** — same shape as Week 2.
 - **Week 7** — no directory at all.
 
-Every companion for those weeks pins that state rather than pretending to material:
-Weeks 2 and 4 pin their placeholder `README.md` with `kind: "placeholder"`, Week 7
-pins the repository `README.md` with `kind: "roadmap"` because there was no path to
-pin. `bun run course:drift` reports `PUBLISHED` rather than `DRIFT` when one of
-those pins moves, precisely so that this case is distinguishable from ordinary
-upstream churn.
+Every companion for those weeks pinned that state rather than pretending to
+material: Weeks 2 and 4 pinned their placeholder `README.md` with
+`kind: "placeholder"`, Week 7 pins the repository `README.md` with
+`kind: "roadmap"` because there was no path to pin. `bun run course:drift` reports
+`PUBLISHED` rather than `DRIFT` when one of those pins moves, precisely so that
+this case is distinguishable from ordinary upstream churn. That is what happened
+for Week 2 — see its resolved section below.
 
 **This record is not a claim about the state today.** It is a claim about the state
 at that commit, on that date, by that method. Nothing here should be read as
@@ -60,7 +66,7 @@ The guard keys on the pin's `kind`, not on the week number, so it stops applying
 itself the moment an author repins to real material — a rule that needs a human to
 remember to relax it eventually gets relaxed for the wrong reason.
 
-## Week 2 — MPC
+## Resolved — Week 2 (MPC)
 
 **Basis: derived from a published week, not guessed from an unpublished one.**
 
@@ -87,7 +93,28 @@ to reach Week 6.
 | `ac26-w2-privacy-audit` | `transfer` | the privacy boundary, applied to a case Week 6 does not cover |
 | `ac26-w2-private-aggregate` | `synthesis` | the five above, composed |
 
-None claims `assignment-companion`, and the guard keeps it that way.
+None claimed `assignment-companion` while the week was unpublished, and the guard
+enforced it. Since the pins moved (below), the guard no longer applies to this
+week; the roles stay unchanged by decision rather than by enforcement.
+
+### Resolution (2026-08-12)
+
+Week 2 published upstream. `week2/README.md` now carries the lecture material and
+the official exercise is `toy-mpc` (Part A: additive secret sharing and
+reconstruction, local addition on shares, and Beaver-triple multiplication over a
+finite field; Part B: 1-out-of-2 OT over a finite group and a GMW-style secret
+AND). Both files were read at `e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9`, and the
+five problems' pins moved to that commit: `week2/README.md` as `lecture`, the
+exercise README as `assignment`.
+
+The derived basis above held. Part A is the share / linear / Beaver sequence the
+table anticipated, so no problem was re-scoped. The roles also stay as they are —
+none was promoted to `assignment-companion`: the three `mechanism` problems
+accompany the lecture's constructions with independent APIs, fixtures and
+parameters, and the `transfer` / `synthesis` problems grade a disclosure
+discipline the official tests do not measure (triple reuse is forbidden in the
+exercise's text but not checked mechanically). Part B (OT / GMW) has no companion;
+that is new authoring work, tracked outside this record.
 
 ## Week 4 — proof systems
 
@@ -143,6 +170,9 @@ Demo Day submission format. Their exports are a generic evidence bundle rather
 than anything shaped to an unpublished rubric.
 
 ## When the material appears
+
+This procedure ran for Week 2 on 2026-08-12; its outcome is the resolved section
+above. Weeks 4 and 7 still await it.
 
 Do not reopen the issues that produced this record (#219, #229, #245). They
 recorded a decision, and the decision was correct for the evidence available.

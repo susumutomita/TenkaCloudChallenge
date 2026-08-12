@@ -65,12 +65,13 @@ hint は 5 つ中 3 つにあります (20 / 20 / 15)。すべて開いても 20
 
 ## Week 2 の対応づけ
 
-Week 2 の教材は、`curriculum.md` が記録している commit の時点で**未公開**です。そのためこの問題は
-`week2/README.md` を `kind: "placeholder"` で pin します。これは対応づけではなく、その commit 時点で
-教材が存在しなかったという事実の記録です。`status` は `draft` のままです。
-
-この pin があることで `bun run course:drift` は教材公開の日に `DRIFT` ではなく `PUBLISHED` を報告
-できます。その後 Week 2 の course-sync issue が計画行とこの問題の対応づけを確定し、draft を外します。
+Week 2 の教材は公開されました。公式演習は `toy-mpc` (Part A: 有限体上の加法的秘密分散と Beaver 乗算、
+Part B: 1-out-of-2 OT と GMW 型の秘密 AND) です。`courseAlignment` は commit
+`e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9` の `week2/README.md` を `lecture`、
+`week2/problems/toy-mpc/README.md` を `assignment` として pin します。以前の `placeholder` pin からの
+移動は、SYNC.md §3/§5 に従い教材を読んだ上で行いました。この問題は Part A の秘密分散の段の隣に置かれています。
+公式演習の prose・template・test は転載しません (GOVERNANCE.md の independent-reimplementation)。
+`status` はこの track の他の問題と同じく `draft` のままです。
 
 ## 保証範囲
 

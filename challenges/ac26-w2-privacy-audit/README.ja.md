@@ -111,11 +111,13 @@ simulator で観測できる leakage contract であって、security の主張�
 
 ## Week 2 の対応づけ
 
-Week 2 の教材は `curriculum.md` が記録している commit の時点で未公開です。`courseAlignment` は
-`week2/README.md` を `kind: "placeholder"` で pin し、`status` は `draft` のままです。この pin は
-対応づけではなく、その commit 時点で教材が存在しなかったという事実を記録します。これにより
-`bun run course:drift` は教材公開の日に `PUBLISHED` を報告できます。#219 が対応づけを確定してから
-draft を外します。
+Week 2 の教材は公開されました。公式演習は `toy-mpc` (Part A: 有限体上の加法的秘密分散と Beaver 乗算、
+Part B: 1-out-of-2 OT と GMW 型の秘密 AND) です。`courseAlignment` は commit
+`e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9` の `week2/README.md` を `lecture`、
+`week2/problems/toy-mpc/README.md` を `assignment` として pin します。以前の `placeholder` pin からの
+移動は、SYNC.md §3/§5 に従い教材を読んだ上で行いました。公式演習が採点するのは「乗算で公開してよいのは masked difference の 2 値だけ」という規律までで、この問題はその規律を、演習が採点しない監査という設定へ移します。
+公式演習の prose・template・test は転載しません (GOVERNANCE.md の independent-reimplementation)。
+`status` はこの track の他の問題と同じく `draft` のままです。
 
 ## 保証範囲
 

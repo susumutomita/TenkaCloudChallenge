@@ -306,16 +306,27 @@ describe("ac26-w2-privacy-audit: metadata contracts", () => {
     expect(metadata().scoring.checks.map((check) => check.id)).toEqual([...CHECKPOINTS]);
   });
 
-  it("should pin week 2's placeholder rather than an alignment", () => {
+  // Week 2 was unpublished when this problem was authored, so it pinned the placeholder
+  // README (SYNC.md §2). The material has since shipped upstream — week2/problems/toy-mpc —
+  // and the pins were moved after reading it, per SYNC.md §3/§5: the week README as
+  // `lecture`, the exercise README as `assignment`, both at the published commit. The
+  // exact sources are pinned here so a ref bumped without a review shows up as a diff.
+  it("should pin week 2's published lecture and exercise", () => {
     const { courseAlignment, status } = metadata();
     expect(courseAlignment.week).toBe(2);
     expect(courseAlignment.role).toBe("transfer");
     expect(courseAlignment.sources).toEqual([
       {
         repository: "zk-tokyo/advanced-cryptography-2026",
-        ref: "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        ref: "e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9",
         path: "week2/README.md",
-        kind: "placeholder",
+        kind: "lecture",
+      },
+      {
+        repository: "zk-tokyo/advanced-cryptography-2026",
+        ref: "e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9",
+        path: "week2/problems/toy-mpc/README.md",
+        kind: "assignment",
       },
     ]);
     expect(status).toBe("draft");

@@ -107,11 +107,14 @@ claim and not a model of a real deployment.
 
 ## Week 2 alignment
 
-Week 2's material was not published upstream at the commit `curriculum.md` records, so
-`courseAlignment` pins `week2/README.md` with `kind: "placeholder"`, and `status` stays `draft`.
-The pin records the *absence* of material at that commit rather than an alignment to it — which is
-what lets `bun run course:drift` report `PUBLISHED` the day the material appears. #219 reconciles
-the row before this leaves draft.
+Week 2's material is now published upstream. The official exercise is `toy-mpc` (Part A:
+additive secret sharing and Beaver multiplication over a finite field; Part B: 1-out-of-2 OT and
+a GMW-style secret AND). `courseAlignment` pins `week2/README.md` as `lecture` and
+`week2/problems/toy-mpc/README.md` as `assignment` at commit
+`e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9` — moved from the earlier `placeholder` pin after reading
+the material, per SYNC.md §3/§5. The exercise forbids Beaver-triple reuse in a note but does not check it mechanically; this problem is where that note becomes something graded.
+Nothing from the official exercise's prose, template or tests is reproduced (GOVERNANCE.md
+independent-reimplementation), and `status` stays `draft`, as it does across this track.
 
 ## Assurance scope
 

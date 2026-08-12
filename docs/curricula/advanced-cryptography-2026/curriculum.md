@@ -32,6 +32,13 @@ Everything below marked "published" was read directly at that commit. Everything
 marked "not published" was verified absent at that commit. Nothing is inferred
 from the public roadmap alone.
 
+One week has moved since the snapshot: Week 2 was published upstream on a later
+commit. Its five companion challenges now pin `week2/README.md` (`lecture`) and
+`week2/problems/toy-mpc/README.md` (`assignment`) at
+`e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9`, read on 2026-08-12. The
+publication-state table records both states; the Week 2 section below records
+what the published material contains.
+
 ### Week numbering
 
 The repository directory names and the course's week numbers agree: `week1/`
@@ -47,9 +54,9 @@ it, and it is not part of the numbered sequence. This track treats it as
 | Week | Theme | Official exercise | State at pinned commit |
 | --- | --- | --- | --- |
 | 1 | Programmable Cryptography / arithmetic circuits | `proof-of-exploit` | Published |
-| 2 | MPC | — | **Not published** — README says materials are in preparation; `problems/` holds only `.gitkeep` |
+| 2 | MPC | `toy-mpc` | **Not published at the snapshot** — published later; read and re-pinned at `e4f33fec` on 2026-08-12 (see the Week 2 section) |
 | 3 | Finite fields, elliptic curves, Sigma, Fiat–Shamir, Schnorr | `schnorr-from-scratch` | Published |
-| 4 | ZKP / SNARK / STARK | — | **Not published** — same state as Week 2 |
+| 4 | ZKP / SNARK / STARK | — | **Not published** — README says materials are in preparation; `problems/` holds only `.gitkeep` |
 | 5 | TFHE, Programmable Bootstrapping, HomNAND | `tfhe-toy-python` | Published |
 | 6 | Programmable Cryptography Stack Design | `co-snark-prove`, `zkvm-exploit` | Published |
 | 7 | Demo Day / capstone | — | **No `week7/` directory exists** |
@@ -247,17 +254,32 @@ Prerequisite for: every `ac26-*` challenge.
 
 ### Week 2 — MPC
 
-- **Source**: `week2/README.md`
-- **State**: not published. The README states materials are in preparation and
-  lists no goals, exercise, or submission target.
-- **Known only**: the theme is MPC — secure and collaborative computation.
-- **Not decided**: official goals, exercise, evaluation.
+- **Source**: `week2/README.md`, `week2/problems/toy-mpc/README.md` — read and
+  pinned at `e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9` (2026-08-12). Unpublished
+  at the track's snapshot commit; the five challenges were authored from the
+  publicly stated theme alone and carried `placeholder` pins until the material
+  appeared (#219).
+- **Official goals**: understand secret sharing and computing on shares, and
+  Arithmetic MPC evaluating an arithmetic circuit under additive sharing over a
+  finite field; understand the role and mechanism of Oblivious Transfer, and
+  GMW-style Boolean MPC computing a boolean circuit from XOR shares and OT.
+- **Official exercise**: `toy-mpc` — Part A: additive secret sharing and
+  reconstruction, local addition on shares, and Beaver-triple multiplication.
+  Part B: 1-out-of-2 OT over a finite group, and a GMW-style secret AND built
+  from two OTs.
+- **What the exercise does not force**: demonstrating that n−1 shares carry no
+  information (its tests grade splitting, reconstruction, normalization, and
+  input validation); measuring what a run *reveals* rather than what it returns —
+  Beaver-triple reuse is forbidden in a note in the problem text but not checked
+  mechanically.
 
-Companion challenges are authored from the publicly stated theme alone and make
-no claim about what the official exercise will require. Confirmation is tracked
-by #219, with a 2026-09-30 review cutoff. Each pins `week2/README.md` with
-`kind: "placeholder"`, so the day the material appears the drift check reports it
-as a publication rather than an edit — see [`SYNC.md`](./SYNC.md) §2.
+The five companions were authored before publication, from the stated theme.
+Read against the published exercise, the alignment holds: the three `mechanism`
+problems sit beside Part A's three steps (sharing, local linear operations,
+Beaver multiplication); the `transfer` and `synthesis` problems grade the
+disclosure discipline Part A states but does not measure. Part B (OT / GMW) has
+no companion yet — that is follow-up authoring work, not a re-scope of these
+five rows.
 
 | Order | Problem id | Role | Teaches | Issue |
 | --- | --- | --- | --- | --- |
@@ -290,11 +312,13 @@ as a publication rather than an edit — see [`SYNC.md`](./SYNC.md) §2.
 ### Week 4 — ZKP / SNARK / STARK
 
 - **Source**: `week4/README.md`
-- **State**: not published, identical in form to Week 2.
+- **State**: not published — the same shape Week 2 had before its material
+  shipped.
 - **Known only**: the theme is ZKP, with SNARK and STARK in scope.
 
-Confirmation is tracked by #229, with a 2026-09-30 review cutoff. As with Week 2,
-each challenge pins `week4/README.md` as `kind: "placeholder"`.
+Confirmation is tracked by #229, with a 2026-09-30 review cutoff. As Week 2 did
+before its material shipped, each challenge pins `week4/README.md` as
+`kind: "placeholder"`.
 
 | Order | Problem id | Role | Teaches | Issue |
 | --- | --- | --- | --- | --- |
@@ -343,8 +367,7 @@ a prerequisite for the next.
   multiplication), with the secret-sharing primitives supplied. `zkvm-exploit` —
   implement, in Rust, the guest program and its public/witness design; the zkVM
   itself is not run.
-- **Prerequisites**: Weeks 1–3, plus Week 2's Beaver multiplication. A learner who
-  met MPC only through the unpublished Week 2 arrives here without it, which is
+- **Prerequisites**: Weeks 1–3, plus Week 2's Beaver multiplication — which is
   why `ac26-w2-beaver-mul` is a hard prerequisite of `ac26-w6-cosnark-beaver`.
 - **What the exercises do not force**: noticing that a prover which opens one
   value too many silently destroys the privacy the whole construction exists for.

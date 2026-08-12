@@ -68,13 +68,14 @@ knows everything from the start. The hidden tests reject that case by name.
 
 ## Week 2 alignment
 
-Week 2's material was **not published upstream** at the commit `curriculum.md` records. This
-problem therefore pins `week2/README.md` with `kind: "placeholder"` — a record of the *absence* of
-material at that commit, not an alignment to it. `status` stays `draft`.
-
-That pin is what lets `bun run course:drift` report `PUBLISHED` rather than `DRIFT` the day the
-material appears; the Week 2 course-sync issue then reconciles the planned row and this problem's
-alignment before it leaves draft.
+Week 2's material is now published upstream. The official exercise is `toy-mpc` (Part A:
+additive secret sharing and Beaver multiplication over a finite field; Part B: 1-out-of-2 OT and
+a GMW-style secret AND). `courseAlignment` pins `week2/README.md` as `lecture` and
+`week2/problems/toy-mpc/README.md` as `assignment` at commit
+`e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9` — moved from the earlier `placeholder` pin after reading
+the material, per SYNC.md §3/§5. This problem sits beside Part A's sharing step.
+Nothing from the official exercise's prose, template or tests is reproduced (GOVERNANCE.md
+independent-reimplementation), and `status` stays `draft`, as it does across this track.
 
 ## Assurance scope
 
