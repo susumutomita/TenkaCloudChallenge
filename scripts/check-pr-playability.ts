@@ -23,11 +23,13 @@ export interface PlayabilityGateInput {
   readonly labels: readonly string[];
   readonly addedProblemIds: readonly string[];
   readonly promotedReadyProblemIds: readonly string[];
+  readonly contractOnlyProblemIds?: readonly string[];
 }
 
 export interface ProblemChanges {
   readonly addedProblemIds: readonly string[];
   readonly promotedReadyProblemIds: readonly string[];
+  readonly contractOnlyProblemIds: readonly string[];
 }
 
 const EVIDENCE_BLOCK =
@@ -79,9 +81,12 @@ function parseMetadata(
 export function classifyProblemChanges(
   nameStatus: string,
   readAtRef: (ref: "base" | "head", path: string) => string | undefined,
+  pullRequestTitle = "",
 ): ProblemChanges {
   const added = new Set<string>();
   const promoted = new Set<string>();
+  const contractOnly = new Set<string>();
+  const titleScope = /^(?:feat|test)\\(([a-z0-9][a-z0-9-]+)\\):/u.exec(pullRequestTitle)?.[1];
 
   for (const line of nameStatus.split("\n")) {
     if (line.trim().length === 0) continue;
@@ -106,6 +111,7 @@ export function classifyProblemChanges(
   return {
     addedProblemIds: [...added].sort(),
     promotedReadyProblemIds: [...promoted].sort(),
+    contractOnlyProblemIds: [...contractOnly].sort(),
   };
 }
 
@@ -144,7 +150,11 @@ function validateEvidenceProblem(problem: PlayabilityEvidenceProblem): string[] 
 
 export function evaluatePlayabilityGate(input: PlayabilityGateInput): string[] {
   const affected = [
-    ...new Set([...input.addedProblemIds, ...input.promotedReadyProblemIds]),
+    ...new Set([
+      ...input.addedProblemIds,
+      ...input.promotedReadyProblemIds,
+      ...(input.contractOnlyProblemIds ?? []),
+    ]),
   ].sort();
   if (affected.length === 0) return [];
 
@@ -217,6 +227,7 @@ function main(): void {
   const baseSha = requiredEnvironment("PR_BASE_SHA");
   const headSha = requiredEnvironment("PR_HEAD_SHA");
   const nameStatus = runGit(["diff", "--name-status", `${baseSha}...${headSha}`]);
+  const titleValue: unknown = JSON.parse(process.env.PR_TITLE_JSON ?? '""');
   const changes = classifyProblemChanges(nameStatus, (ref, path) => {
     const sha = ref === "base" ? baseSha : headSha;
     const result = Bun.spawnSync(["git", "show", `${sha}:${path}`], {
@@ -225,7 +236,7 @@ function main(): void {
     });
     if (result.exitCode !== 0) return undefined;
     return new TextDecoder().decode(result.stdout);
-  });
+  }, typeof titleValue === "string" ? titleValue : "");
 
   const bodyValue: unknown = JSON.parse(process.env.PR_BODY_JSON ?? '""');
   const labelsValue: unknown = JSON.parse(process.env.PR_LABELS_JSON ?? "[]");
@@ -244,7 +255,11 @@ function main(): void {
     process.exit(1);
   }
   const affected = [
-    ...new Set([...changes.addedProblemIds, ...changes.promotedReadyProblemIds]),
+    ...new Set([
+      ...changes.addedProblemIds,
+      ...changes.promotedReadyProblemIds,
+      ...changes.contractOnlyProblemIds,
+    ]),
   ];
   console.log(
     affected.length === 0
