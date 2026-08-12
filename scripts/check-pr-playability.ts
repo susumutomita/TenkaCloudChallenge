@@ -91,6 +91,9 @@ export function classifyProblemChanges(
   for (const line of nameStatus.split("\n")) {
     if (line.trim().length === 0) continue;
     const [status, path] = line.split("\t");
+    if (status === "A" && titleScope && path === `scripts/${titleScope}.test.ts`) {
+      contractOnly.add(titleScope);
+    }
     const match = path?.match(PROBLEM_METADATA);
     if (!match) continue;
     const problemId = match[1];
