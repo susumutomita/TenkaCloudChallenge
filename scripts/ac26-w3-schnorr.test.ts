@@ -324,6 +324,9 @@ describe("ac26-w3-schnorr: metadata contracts", () => {
     expect(courseAlignment.sources?.map((source) => source.kind)).toEqual([
       "lecture",
       "assignment",
+      // The lecture itself. Pinning only the README meant course:drift watched a 3 KB
+      // summary while the 106-slide deck it summarises could change unnoticed.
+      "slide",
     ]);
     for (const source of courseAlignment.sources ?? []) {
       expect(source.ref).toMatch(/^[0-9a-f]{40}$/);
