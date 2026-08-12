@@ -44,6 +44,7 @@ jobs:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_DRAFT: ${{ github.event.pull_request.draft }}
+          PR_TITLE_JSON: ${{ toJSON(github.event.pull_request.title) }}
           PR_BODY_JSON: ${{ toJSON(github.event.pull_request.body) }}
           PR_LABELS_JSON: ${{ toJSON(github.event.pull_request.labels.*.name) }}
         run: bun run scripts/check-pr-playability.ts
