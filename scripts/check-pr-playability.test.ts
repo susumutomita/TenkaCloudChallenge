@@ -67,21 +67,28 @@ describe("problem change classification", () => {
       [
         "A\tchallenges/new-problem/metadata.json",
         "M\tchallenges/promoted/metadata.json",
+        "A\tscripts/asm-worst-case-latency.test.ts",
         "M\tREADME.md",
       ].join("\n"),
       (ref, path) => metadata.get(`${ref}:${path}`),
+      "test(asm-worst-case-latency): define playable MVP contract",
     );
 
     expect(changes).toEqual({
       addedProblemIds: ["new-problem"],
       promotedReadyProblemIds: ["promoted"],
+      contractOnlyProblemIds: ["asm-worst-case-latency"],
     });
   });
 
   test("ignores ordinary edits and refuses malformed problem metadata", () => {
     expect(
       classifyProblemChanges("M\tchallenges/existing/README.md", () => undefined),
-    ).toEqual({ addedProblemIds: [], promotedReadyProblemIds: [] });
+    ).toEqual({
+      addedProblemIds: [],
+      promotedReadyProblemIds: [],
+      contractOnlyProblemIds: [],
+    });
 
     expect(() =>
       classifyProblemChanges(
@@ -113,6 +120,7 @@ describe("new-problem and ready-promotion gate", () => {
         labels: [],
         addedProblemIds: ["new-problem"],
         promotedReadyProblemIds: [],
+        contractOnlyProblemIds: ["asm-worst-case-latency"],
       }),
     ).toEqual(
       expect.arrayContaining([
