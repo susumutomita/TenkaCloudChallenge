@@ -124,6 +124,9 @@ order; `track.order` only sequences presentation.
 | `concept.beaver-triple` | Preprocessed randomness turning multiplication into one opening round |
 | `concept.over-opening` | Revealing more than the protocol requires, leaking the secret |
 | `concept.threat-model` | Actors, assets, trust boundaries, and what the adversary can do |
+| `concept.xor-sharing` | Splitting a secret bit into bits that XOR back to it; XOR is linear mod 2 and stays local |
+| `concept.oblivious-transfer` | A transfer where the sender cannot learn the choice and the receiver reads only the chosen message |
+| `concept.gmw-and` | Computing AND on XOR shares by carrying the cross terms through OT |
 
 ### Week 3 — fields, curves, signatures
 
@@ -277,9 +280,10 @@ The five companions were authored before publication, from the stated theme.
 Read against the published exercise, the alignment holds: the three `mechanism`
 problems sit beside Part A's three steps (sharing, local linear operations,
 Beaver multiplication); the `transfer` and `synthesis` problems grade the
-disclosure discipline Part A states but does not measure. Part B (OT / GMW) has
-no companion yet — that is follow-up authoring work, not a re-scope of these
-five rows.
+disclosure discipline Part A states but does not measure. Part B (OT / GMW) had
+no companion at re-pin time; `ac26-w2-gmw-and` (order 260) was authored
+afterwards, directly against the published material, and closes that gap —
+it is new authoring beside these five rows, not a re-scope of them.
 
 | Order | Problem id | Role | Teaches | Issue |
 | --- | --- | --- | --- | --- |
@@ -288,6 +292,7 @@ five rows.
 | 230 | `ac26-w2-beaver-mul` | `mechanism` | `concept.beaver-triple` | #222 |
 | 240 | `ac26-w2-privacy-audit` | `transfer` | `concept.over-opening`, `concept.privacy` | #223 |
 | 250 | `ac26-w2-private-aggregate` | `synthesis` | combines the four above | #224 |
+| 260 | `ac26-w2-gmw-and` | `mechanism` | `concept.xor-sharing`, `concept.oblivious-transfer`, `concept.gmw-and` | — |
 
 ### Week 3 — elliptic curves and Schnorr
 

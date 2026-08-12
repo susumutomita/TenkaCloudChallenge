@@ -227,6 +227,57 @@
       }
     },
     {
+      "id": "ac26-w2-gmw-and",
+      "name": "選ばなかった方は、開かない",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "advanced-cryptography-2026",
+        "order": 260,
+        "chapter": "Week 2 / Boolean MPC"
+      },
+      "courseAlignment": {
+        "courseId": "advanced-cryptography-program",
+        "edition": "2026",
+        "week": 2,
+        "role": "mechanism",
+        "sources": [
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9",
+            "path": "week2/README.md",
+            "kind": "lecture"
+          },
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9",
+            "path": "week2/problems/toy-mpc/README.md",
+            "kind": "assignment"
+          }
+        ]
+      },
+      "difficulty": 3,
+      "estimatedDuration": "50-70 分",
+      "shortDescription": "XOR シェアの AND を展開すると、どちらの手元にも材料がない積が 2 つ現れる。送る側は選択を知れず、受け取る側は片方しか読めない——1-out-of-2 OT の 2 つの約束を実装し、約束を破った実装から実際に選択を読み取り、OT 2 回で秘密の AND を組み立てる。",
+      "tags": [
+        "advanced-cryptography-2026",
+        "week2",
+        "mpc",
+        "oblivious-transfer",
+        "gmw",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "ac26-w2-linear-shares",
       "name": "誰とも話さずにできること",
       "category": "Challenge",

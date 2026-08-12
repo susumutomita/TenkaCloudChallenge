@@ -113,8 +113,12 @@ none was promoted to `assignment-companion`: the three `mechanism` problems
 accompany the lecture's constructions with independent APIs, fixtures and
 parameters, and the `transfer` / `synthesis` problems grade a disclosure
 discipline the official tests do not measure (triple reuse is forbidden in the
-exercise's text but not checked mechanically). Part B (OT / GMW) has no companion;
-that is new authoring work, tracked outside this record.
+exercise's text but not checked mechanically). Part B (OT / GMW) had no companion
+at resolution time; that gap has since been closed by `ac26-w2-gmw-and`
+(`mechanism`, order 260), authored directly against the published material — it
+never carried a placeholder pin, so it appears in `curriculum.md`'s Week 2 table
+rather than in the basis table above, which records only the problems that stood
+on an unpublished week.
 
 ## Week 4 — proof systems
 

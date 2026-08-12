@@ -1,0 +1,325 @@
+{
+  "id": "ac26-w2-gmw-and",
+  "name": "選ばなかった方は、開かない",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "advanced-cryptography-2026",
+    "order": 260,
+    "chapter": "Week 2 / Boolean MPC"
+  },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 2,
+    "role": "mechanism",
+    "spoilerPolicy": "independent-reimplementation",
+    "sources": [
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9",
+        "path": "week2/README.md",
+        "kind": "lecture"
+      },
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9",
+        "path": "week2/problems/toy-mpc/README.md",
+        "kind": "assignment"
+      }
+    ]
+  },
+  "difficulty": 3,
+  "estimatedDuration": "50-70 分",
+  "shortDescription": "XOR シェアの AND を展開すると、どちらの手元にも材料がない積が 2 つ現れる。送る側は選択を知れず、受け取る側は片方しか読めない——1-out-of-2 OT の 2 つの約束を実装し、約束を破った実装から実際に選択を読み取り、OT 2 回で秘密の AND を組み立てる。",
+  "description": "Week 2 の mechanism 問題。既存 5 問が扱う Arithmetic MPC (Part A) に対し、この問題は公式演習 toy-mpc の Part B——1-out-of-2 OT と GMW 型の秘密 AND——の段に対応する。\n\ncheckpoint はプロトコルの 2 つの約束を実行可能な形で検査する。ot-request の hidden test は b = 0 を必ず与える。b を 1..q-1 に「硬化」した実装は happy path のすべてを通し、choice=0 が出せない request と choice=1 が出せない request を 1 つずつ作ってしまう。choice-leak はその帰結を学習者自身に使わせる counterexample で、seed 依存の A から「観測すれば選択が確定する」request 値の対を提出させる。片方だけ・向きの逆はどちらも落とす。\n\not-round-trip は選んだ枝が開くことに加えて、選ばなかった枝が receiver の鍵で開かないことを検査する。request が choice を運ばず sender が 1 本の鍵で両方を封をする実装は、round trip だけなら両 choice で緑になる——wrong-branch 検査だけがそれを見る。mutation suite はこの「round trip は緑、OT ではない」変異を名指しで持ち、check_wrong_branch が落とすことを固定している。\n\ngmw-and の hidden test は 16 通りのシェアパターン全部で z0 ⊕ z1 = x ∧ y を見るだけでなく、各出力シェアを「その party が実際に持つ view」に対して検査する。XOR の合計は項をどう 2 つのシェアに再分配しても不変なので、マスクの打ち消し先を逆にした実装は合計検査を通ってしまう。per-share 検査と、mask0 を反転させた 2 組目のマスク対 (mask0 = mask1 の seed では逆転が見えないため) がそれを塞ぐ。OT 実行回数もカウントし、シミュレーション内で全部が見えることを利用してローカルに AND した実装は回数 0 で落ちる。\n\ncross-term-audit は predict。OT を省いた近道がどのシェアパターンで壊れるかを走らせる前に言わせ、この deploy の記録された run への判定を束ねることで、パターン集合の丸写しが seed を跨いで通らないようにしている。\n\nWeek 2 の教材は commit e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9 で公開された (演習は toy-mpc。Part A が有限体上の加法的秘密分散と Beaver 乗算、Part B が 1-out-of-2 OT と GMW 型の秘密 AND)。courseAlignment は week2/README.md を lecture、week2/problems/toy-mpc/README.md を assignment としてその commit で pin する。本問題は Part B の OT と GMW AND の段に対応する mechanism で、API・fixture・test はすべて独自に設計し、公式課題の prose・fixture・test は転載しない (GOVERNANCE.md の independent-reimplementation)。status は track の慣例どおり draft のまま。",
+  "instructions": "## はじめに\n\n前提から。シェアの世界を有限体からビットに移すと、秘密 x は x0 ⊕ x1 = x となる 2 ビットに分かれ、XOR は mod 2 の線形演算なので各自の手元で終わります。AND はそうはいきません。展開すると x ∧ y = (x0⊕x1)∧(y0⊕y1) = x0y0 ⊕ x0y1 ⊕ x1y0 ⊕ x1y1。外側の 2 項は手元で計算できますが、クロス項 x0y1 と x1y0 には、どちらの手元にも材料が揃いません。Beaver 乗算で通信が要ったのと同じ壁が、同じ場所に出ます。これを運ぶ道具が 1-out-of-2 OT です。OT は 2 つの約束を同時に守ります——sender は receiver がどちらを選んだか知れない。receiver は 2 通のうち選んだ 1 通しか読めない。普通の通信ではどちらかが必ず破れます (どちらが欲しいか言えば選択が漏れ、両方送れば両方読める)。トイ群 (p=23, q=11, g=2 の位数 11 部分群) 上で、receiver の秘密 b は **0 を含む** 0..q-1 から引きます。0 を「退化した秘密」に見えて外すと、choice=0 では出ない request と choice=1 では出ない request が 1 つずつ生まれ、request を見ただけで選択が確定します。最後に、OT の 2 通に混ぜるマスクは「入れた本人が自分の出力シェアで打ち消す」設計です。Beaver で d·e を片方の party だけが足したのと同じ教訓が、XOR の世界でも同じ形で現れます。\n\n## 最初の一手\n\n問題ランタイムを起動し、表示された **Participant Portal の問題エディタ** を開いてください。`inspect` を実行すると、この deploy のトイ群、監査対象の sender が公開している A、そして「OT を省いて各自ローカル AND した」壊れ実装が今夜走った記録のシェアが表示されます。走らせる前に紙に書いてください: b から 0 を外した receiver に対し、choice=0 がもう出せない request の値はどれか、choice=1 では。そして 16 通りのシェアパターン [x0, x1, y0, y1] のうち、近道が壊れるのはどれか。\n\n## 解き方\n\n問題エディタで `gmw.py` の 4 関数を実装します。`test` は公開テスト (round trip と 1 パターンの AND だけ) を実行し、`prepare` が code checkpoint の提出を作ります。starter は request が choice を無視し、encrypt は両方のメッセージを同じ鍵の下に置き、decrypt は復号せず、gmw_and は OT を省いてローカル AND します。`ot_request` は choice ∈ {0,1}・b ∈ 0..q-1 (0 込み)・A が位数 q の部分群の元であることを検査し、違反は ValueError にします。`ot_encrypt` は K0 = request^a と K1 = (request·A⁻¹)^a の 2 本の鍵で封をします (`_pad` の導出は starter に固定済み。両端が同じパッドに届く必要があるので変えないでください)。`gmw_and` は 2 回の OT で組みます——セッション 01 では P0 が (mask0 ⊕ x0·0, mask0 ⊕ x0·1) を送り P1 が y1 で選ぶ。セッション 10 は対称。各出力シェアは**その party が実際に持つ値だけ**から作ります。choice-leak は回答欄に JSON で `{\"requestRevealingChoiceZero\": <int>, \"requestRevealingChoiceOne\": <int>}` を、cross-term-audit は `{\"failingPatterns\": [[x0, x1, y0, y1], ...], \"thisRun\": {\"x0\": _, \"x1\": _, \"y0\": _, \"y1\": _, \"broken\": _, \"correct\": _}}` を入力します。\n\n## ゴール\n\nrequest の分布が選択を隠し (b=0 込みで両 choice とも部分群全体)、選ばなかった枝が receiver の鍵で開かず、16 通りすべてで z0 ⊕ z1 = x ∧ y が成立し、hidden test が数える OT 実行回数がちょうど 2 回になります。b の範囲から 0 を落とした「硬化」が選択を漏らすことを、自分で選択を読み取って示し、近道が壊れる 6 パターンを走らせる前に言い当てます。ここで作る OT と AND は講座の演習 Part B と同じ数学です——乱数の出どころが秘匿そのものだと分かった状態で、そちらに戻ってください。\n",
+  "writeup": "## 足し算の壁は、ビットの世界にもある\n\nXOR シェアの AND を展開すると、クロス項 x0y1 と x1y0 が現れる。どちらの手元にも材料が揃わない——Arithmetic MPC の乗算と同じ壁が、同じ場所に出る。壁の形が同じなら道具の形も似る。Beaver は前処理の三つ組で乗算を 1 round の開示に押し込み、GMW は OT でクロス項を運ぶ。\n\n## 「知れない」「読めない」の実行可能な定義\n\nsender が choice を知れないことの実体は、request の分布が choice=0 と choice=1 で同一集合になることだ。b が 0 を含む 0..q-1 から引かれる限り、どちらの choice でも request は部分群全体を走る。0 を 1 つ外すだけで両分布から 1 点ずつ欠け、request=A の観測が choice=0 を、request=1 の観測が choice=1 を確定させる。「乱数の範囲」は実装の細部ではなく、秘匿そのものである。receiver が片方しか読めないことの実体は、receiver の唯一の鍵 A^b が選んだ枝の鍵とだけ一致することで、これは選ばなかった枝を実際に開けようとして確かめる。round trip がどれだけ緑でも、この検査の代わりにはならない。\n\n## マスクの打ち消し先\n\nz0 ⊕ z1 だけを見るテストは、項をどう 2 つのシェアへ再分配しても通す。マスクの打ち消し先を逆にした実装は合計としては正しい AND を返し続ける——ただし各シェアが、その party が持っていない値に依存する。だから hidden test は各出力シェアを「その party の view」に対して検査する。マスクを入れた本人が自分の出力で打ち消す、が唯一実行可能な配置で、これは Beaver の d·e の足し先と同じ教訓の XOR 版だ。\n\n## 近道は混合シェアだけで壊れる\n\nOT を省いたローカル AND は 16 パターン中 10 で正しい答えを返す。happy path のテストが通す理由がそれで、壊れる 6 パターンはクロス項が生きているところに正確に一致する。どこが壊れるかを走らせる前に言えることが、この構成を理解したことの証拠になる。",
+  "tags": [
+    "advanced-cryptography-2026",
+    "week2",
+    "mpc",
+    "oblivious-transfer",
+    "gmw",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18126,
+      "name": "Portal editor API + /verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "1-out-of-2 OT をトイ群上で実装できる",
+    "request の分布が選択を隠すこと、0 の除外が選択を漏らすことを示せる",
+    "選ばなかった枝が receiver の鍵で開かないことを確かめられる",
+    "XOR シェアの AND のクロス項を OT で運び、マスクを入れた本人の出力で打ち消せる",
+    "OT を省いた実装がどのシェアパターンで壊れるかを予測できる"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.ac26-w2-gmw-and.ot-promises",
+        "description": "1-out-of-2 OT を実装し、2 つの約束を実行可能な検査として示せる。"
+      },
+      {
+        "id": "lo.ac26-w2-gmw-and.randomness-range",
+        "description": "receiver の乱数範囲が選択の秘匿を担うことを、狭めた実装から選択を読み取って示せる。"
+      },
+      {
+        "id": "lo.ac26-w2-gmw-and.cross-terms",
+        "description": "XOR シェアの AND のクロス項を OT で運び、マスクを入れた本人の出力シェアで打ち消せる。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.xor-sharing",
+        "description": "秘密のビットを、XOR が秘密に一致する 2 ビットへ分ける方式。 mod 2 の線形演算なので XOR は手元で終わる。"
+      },
+      {
+        "id": "concept.oblivious-transfer",
+        "description": "sender は選択を知れず、receiver は選んだ 1 通しか読めない転送。 どちらの約束も乱数の出どころに立つ。"
+      },
+      {
+        "id": "concept.gmw-and",
+        "description": "XOR シェアの AND を、クロス項を OT で運んで計算する構成。 マスクは入れた本人が自分の出力で打ち消す。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.ac26-w2-gmw-and.ot-request",
+        "description": "request が choice を正しく編み込み、b = 0 を含む正当な入力を受け、不正な入力を拒否した。"
+      },
+      {
+        "id": "assessment.ac26-w2-gmw-and.ot-round-trip",
+        "description": "選んだ枝が両 choice で開き、選ばなかった枝が receiver の鍵で開かなかった。"
+      },
+      {
+        "id": "assessment.ac26-w2-gmw-and.choice-leak",
+        "description": "b の範囲を狭めた実装に対し、選択を確定させる request 値の対を向きまで正しく提出できた。"
+      },
+      {
+        "id": "assessment.ac26-w2-gmw-and.gmw-and",
+        "description": "16 通りのシェアパターン全てで AND が成立し、各シェアが party の view から作られ、OT がちょうど 2 回だった。"
+      },
+      {
+        "id": "assessment.ac26-w2-gmw-and.cross-term-audit",
+        "description": "OT を省いた実装が壊れるパターン集合と、この deploy の記録された run への判定を提出できた。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.random-range-is-a-detail",
+        "description": "乱数の範囲は実装の細部だという誤解。 0 を 1 つ外すだけで request が選択を確定させる。"
+      },
+      {
+        "id": "misconception.xor-and-stays-local",
+        "description": "XOR が手元で終わるなら AND もそうだという誤解。 クロス項の材料はどちらの手元にも揃わない。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w2-gmw-and",
+      "target": "lo.ac26-w2-gmw-and.ot-promises"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w2-gmw-and",
+      "target": "lo.ac26-w2-gmw-and.randomness-range"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w2-gmw-and",
+      "target": "lo.ac26-w2-gmw-and.cross-terms"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w2-gmw-and",
+      "target": "concept.xor-sharing"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w2-gmw-and",
+      "target": "concept.oblivious-transfer"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w2-gmw-and",
+      "target": "concept.gmw-and"
+    },
+    {
+      "type": "requires",
+      "source": "problem.ac26-w2-gmw-and",
+      "target": "problem.ac26-w2-linear-shares"
+    },
+    {
+      "type": "requires",
+      "source": "lo.ac26-w2-gmw-and.cross-terms",
+      "target": "concept.oblivious-transfer"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w2-gmw-and",
+      "target": "assessment.ac26-w2-gmw-and.ot-request"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w2-gmw-and",
+      "target": "assessment.ac26-w2-gmw-and.ot-round-trip"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w2-gmw-and",
+      "target": "assessment.ac26-w2-gmw-and.choice-leak"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w2-gmw-and",
+      "target": "assessment.ac26-w2-gmw-and.gmw-and"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w2-gmw-and",
+      "target": "assessment.ac26-w2-gmw-and.cross-term-audit"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w2-gmw-and",
+      "target": "misconception.random-range-is-a-detail"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w2-gmw-and",
+      "target": "misconception.xor-and-stays-local"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18126/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "ot-request",
+        "input": "multiline",
+        "label": "選択を織り込み、それでも何も言わない request を作る",
+        "points": 40,
+        "wrongAnswerPenalty": 10
+      },
+      {
+        "id": "ot-round-trip",
+        "input": "multiline",
+        "label": "選んだ枝だけが開くことを確かめる",
+        "points": 50,
+        "wrongAnswerPenalty": 10
+      },
+      {
+        "id": "choice-leak",
+        "label": "0 を捨てた実装から、選択を読み取る",
+        "points": 35,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "choice-leak-hint-1",
+            "content": "b が 0..q-1 の全部を走るとき、g^b も A·g^b も部分群全体を走る。 0 を外すと、それぞれの集合から 1 点ずつ欠ける。 choice=0 の集合から欠けるのはどの値か。 choice=1 では。",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "gmw-and",
+        "input": "multiline",
+        "label": "OT を 2 回使って、秘密の AND を組み立てる",
+        "points": 45,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "gmw-and-hint-1",
+            "content": "セッション 01 で P0 が送る 2 通は (mask0 ⊕ x0·0, mask0 ⊕ x0·1)。 P1 が y1 で選ぶと、届くのは mask0 ⊕ (x0 ∧ y1)。 mask0 を打ち消せるのは、mask0 を知っている party だけ。",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "cross-term-audit",
+        "input": "multiline",
+        "label": "近道がどこで壊れるかを、走らせる前に言う",
+        "points": 30,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "cross-term-audit-hint-1",
+            "content": "ローカル AND が返すのは x0y0 ⊕ x1y1。 本当の AND との差は x0y1 ⊕ x1y0。 この差が 1 になるパターンだけが壊れる。",
+            "penalty": 15
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "The one you did not choose stays closed",
+      "shortDescription": "Expand an AND on XOR shares and two products appear that neither party can build alone. Implement the two promises of 1-out-of-2 OT — the sender cannot learn the choice, the receiver can read only one branch — read the choice off an implementation that broke one, and assemble the secret AND from two OTs.",
+      "description": "Week 2's Boolean-MPC mechanism problem. The five existing problems cover Arithmetic MPC (Part A); this one sits beside the official exercise toy-mpc's Part B — 1-out-of-2 OT and a GMW-style secret AND.\n\nThe checkpoints turn the protocol's two promises into executable checks. The ot-request hidden tests always include b = 0. An implementation that \"hardens\" b to 1..q-1 passes every happy-path test while creating one request value choice 0 can no longer send and one that choice 1 cannot. choice-leak makes the learner use that consequence: a counterexample checkpoint demanding the pair of request values that decide the choice, derived from the seed-dependent A. One value alone, or the two directions swapped, both fail.\n\not-round-trip checks that the chosen branch opens and that the branch the receiver did not choose stays closed to the receiver's key. An implementation whose request ignores the choice and whose sender seals both messages under one key round-trips green for both choices — only the wrong-branch probe sees it. The mutation suite carries that exact mutant and pins that check_wrong_branch is what kills it.\n\nThe gmw-and hidden tests sweep all 16 share patterns, and they verify each output share against the view its party actually holds rather than only the XOR of the two: the XOR total is invariant under redistributing terms between shares, so a mask cancelled in the wrong party's share passes any total-only test. The per-share check plus a second mask pair with mask0 flipped (on seeds where mask0 = mask1 the swap is invisible) closes that. The tests also count OT executions, so a gmw_and that computes the cross terms locally — it can, in simulation, since it sees everything — fails with a count of zero.\n\ncross-term-audit is a predict checkpoint: state which share patterns the OT-skipping shortcut breaks on before running it, bound to this deployment's recorded run so a pattern set copied across deployments does not carry.\n\nWeek 2's material was published upstream at commit e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9 (the exercise is toy-mpc: Part A is additive secret sharing over a finite field plus Beaver multiplication, Part B is 1-out-of-2 OT and a GMW-style secret AND). courseAlignment pins week2/README.md as lecture and week2/problems/toy-mpc/README.md as assignment at that commit. This problem is the mechanism piece beside Part B's OT and GMW AND steps; the APIs, fixtures and tests are designed independently and no prose, fixtures or tests from the official exercise are reproduced (GOVERNANCE.md independent-reimplementation). status stays draft, as it does across the track.",
+      "instructions": "## Start here\n\nThe premises first. Move sharing from a finite field to bits and a secret x splits into two bits with x0 ^ x1 = x; XOR is linear mod 2, so it finishes locally. AND does not. Expand it: x AND y = (x0^x1)(y0^y1) = x0y0 ^ x0y1 ^ x1y0 ^ x1y1. The outer terms are local. The cross terms x0y1 and x1y0 have their factors split across the two parties — the same wall that made Beaver multiplication need communication, in the same place. The tool that carries them is 1-out-of-2 OT, which keeps two promises at once: the sender cannot learn which message the receiver chose, and the receiver can read only the one it chose. Plain communication always breaks one of them — say which one you want and the choice leaks; send both and both are readable. Over the toy group (the order-11 subgroup of p=23, g=2), the receiver secret b is drawn from 0..q-1 **including 0**. Drop the 0 because it looks like a degenerate secret and each choice loses exactly one request value it can send — and observing either value on the wire decides the choice. Finally, the masks mixed into the OT messages follow one rule: the party that injected a mask cancels it in its own output share. The lesson of Beaver's d·e term — exactly one party adds it — reappears in the XOR world in the same shape.\n\n## First move\n\nStart the problem runtime and open the **Participant Portal problem editor**. Run `inspect` to see this deployment's toy group, the public value A of a sender you are auditing, and the recorded shares from tonight's run of a broken implementation that skipped the OTs and ANDed locally. Before running anything, write down: against a receiver whose b excludes 0, which request value can choice 0 no longer send? Which one can choice 1 not send? And which of the 16 share patterns [x0, x1, y0, y1] does the shortcut get wrong?\n\n## Workflow\n\nImplement the four functions in `gmw.py` in the Portal editor. `test` runs the public tests (a round trip and one AND pattern — that is all they check); `prepare` builds the code-checkpoint submissions. The starter's request ignores the choice, its encrypt puts both messages under one key, its decrypt does not decrypt, and its gmw_and skips the OTs. `ot_request` must validate: choice in {0,1}, b in 0..q-1 (0 included), A an element of the order-q subgroup — ValueError otherwise. `ot_encrypt` seals with two keys, K0 = request^a and K1 = (request·A⁻¹)^a, using the `_pad` derivation fixed in the starter (both ends must reach the same pad, so do not change it). `gmw_and` uses exactly two OTs — session 01: P0 sends (mask0 ^ x0·0, mask0 ^ x0·1) and P1 chooses with y1; session 10 is symmetric — and each output share is built **only from values that party actually holds**. choice-leak is a direct answer, entered as JSON: `{\"requestRevealingChoiceZero\": <int>, \"requestRevealingChoiceOne\": <int>}`. cross-term-audit likewise: `{\"failingPatterns\": [[x0, x1, y0, y1], ...], \"thisRun\": {\"x0\": _, \"x1\": _, \"y0\": _, \"y1\": _, \"broken\": _, \"correct\": _}}`.\n\n## Goal\n\nThe request distribution hides the choice (with b = 0 included, both choices range over the whole subgroup), the branch you did not choose stays closed to the receiver's key, z0 ^ z1 equals x AND y on all 16 share patterns, and the hidden tests count exactly two OT executions. You show that the \"hardened\" receiver leaks its choice by reading the choice yourself, and you name the six patterns the shortcut breaks on before running it. The OT and AND you build here are the same mathematics as the course exercise's Part B — go back to it knowing that where the randomness comes from is the whole point.\n",
+      "writeup": "## The multiplication wall exists in the bit world too\n\nExpand an AND on XOR shares and the cross terms x0y1 and x1y0 appear, with their factors split across the parties — the same wall that Arithmetic MPC's multiplication hit, in the same place. Same wall, similar tools: Beaver pushes multiplication into one opening round with a preprocessed triple; GMW carries the cross terms through OT.\n\n## Executable definitions of 'cannot learn' and 'cannot read'\n\nThat the sender cannot learn the choice is, concretely, that the request distribution is the same set for choice 0 and choice 1. As long as b is drawn from 0..q-1 including 0, the request ranges over the entire subgroup either way. Remove the single 0 and each distribution loses exactly one point: observing request = A decides choice 0, observing request = 1 decides choice 1. The range of a random value is not an implementation detail; it is the hiding itself. That the receiver reads only one branch is, concretely, that its only key A^b matches the key of the chosen branch alone — and that is checked by actually trying to open the other one. No amount of green round trips substitutes for that attempt.\n\n## Where a mask gets cancelled\n\nA test that looks only at z0 ^ z1 accepts any redistribution of the same terms between the two shares. Cancel each mask in the wrong party's output and the total is still a correct AND — but each share now depends on a value its party never held. So the hidden tests verify each output share against its party's view. The only executable arrangement is: the party that injected a mask cancels it in its own share — the XOR-world version of Beaver's d·e lesson.\n\n## The shortcut breaks only on mixed shares\n\nThe OT-skipping local AND returns the right answer on 10 of the 16 patterns. That is why happy-path tests wave it through — and the 6 failing patterns coincide exactly with where the cross terms are live. Being able to say where it breaks, before running it, is what evidences understanding of the construction.",
+      "learningGoals": [
+        "Implement 1-out-of-2 OT over a toy group",
+        "Show that the request distribution hides the choice, and that excluding 0 leaks it",
+        "Confirm the branch you did not choose stays closed to the receiver's key",
+        "Carry the AND's cross terms through OT and cancel each mask in its injector's share",
+        "Predict which share patterns an OT-skipping implementation breaks on"
+      ],
+      "checks": [
+        {
+          "id": "ot-request",
+          "label": "Build a request that carries the choice and says nothing"
+        },
+        {
+          "id": "ot-round-trip",
+          "label": "Confirm that only the chosen branch opens"
+        },
+        {
+          "id": "choice-leak",
+          "label": "Read the choice off an implementation that dropped zero",
+          "hints": [
+            {
+              "id": "choice-leak-hint-1",
+              "content": "When b runs over all of 0..q-1, both g^b and A·g^b run over the whole subgroup. Exclude 0 and each set loses exactly one point. Which value goes missing from choice 0's set? From choice 1's?"
+            }
+          ]
+        },
+        {
+          "id": "gmw-and",
+          "label": "Assemble the secret AND from two OTs",
+          "hints": [
+            {
+              "id": "gmw-and-hint-1",
+              "content": "In session 01, P0's two messages are (mask0 ^ x0·0, mask0 ^ x0·1). P1 chooses with y1 and receives mask0 ^ (x0 AND y1). Only the party that knows mask0 can cancel it."
+            }
+          ]
+        },
+        {
+          "id": "cross-term-audit",
+          "label": "Say where the shortcut breaks, before running it",
+          "hints": [
+            {
+              "id": "cross-term-audit-hint-1",
+              "content": "The local AND returns x0y0 ^ x1y1. Its difference from the real AND is x0y1 ^ x1y0. Only the patterns where that difference is 1 break."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
