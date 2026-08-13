@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
 import { localPlayProblemDirs } from "./lib/local-play-problems.ts";
 import { findings, type Report } from "./solvability-audit.ts";
-import { shardOf } from "./validate-shard.ts";
+import { shardableFiles, suiteFiles } from "./validate-shard.ts";
 
 /**
  * The solvability gate.
@@ -26,18 +26,15 @@ const ROOT = join(import.meta.dir, "..");
 const BASELINE = join(ROOT, "scripts", "solvability-baseline.json");
 
 /**
- * This test probes the whole catalog inside one test, so being one file among many buys
- * it nothing: its CI shard ran to the 15-minute cap while the other three finished in
- * five to nine minutes, and a cancelled shard reads as flake rather than as a budget
- * that no longer fits. `scripts/validate-shard.ts` publishes which suite shard is
- * running, and the audit partitions the catalog by the same rule, so each shard audits
- * its quarter and the four together still audit everything. Nothing is dropped and no
- * probe is made cheaper; run standalone (no `SUITE_SHARD`), it still sweeps the lot.
+ * This file gets its own CI job rather than a share of a suite shard, because it probes
+ * the whole catalog inside a single test: it lands wholly in one shard, grows with the
+ * catalog, and took that shard to the 15-minute cap while the other three finished in
+ * five to nine minutes. See `SEPARATELY_SCHEDULED_FILES` in `scripts/validate-shard.ts`
+ * for why splitting the gate's own work by suite shard is not the fix -- three of the
+ * four shards never execute this file at all, so they would probe nothing and still
+ * report "no findings".
  */
-function suiteShardArgs(): string[] {
-  const shard = process.env.SUITE_SHARD;
-  return shard ? [`--shard=${shard}`] : [];
-}
+const SEPARATE_JOB_FILE = "scripts/solvability-audit.test.ts";
 
 type BaselineEntry = {
   problem: string;
@@ -127,31 +124,19 @@ function replayOfTheKnownDefects(): Report {
   };
 }
 
-describe("the gate's suite-shard partition", () => {
-  it("covers every local-play problem exactly once at the shard count CI runs", () => {
-    // The failure this catches: the gate quietly auditing three quarters of the catalog
-    // and passing. Each shard reports "no findings" for what it looked at, so a dropped
-    // quarter is invisible in the output.
+describe("the gate's own CI job", () => {
+  it("is still scheduled, and still sweeps the whole catalog", () => {
+    // The failure this catches: this file leaving the suite glob and nothing running it,
+    // at which point every remaining job is green and the catalog is unaudited.
     const workflow = readFileSync(join(ROOT, ".github", "workflows", "ci.yml"), "utf8");
-    const totals = new Set(
-      [...workflow.matchAll(/--shard=.*?\/(\d+)/g)].map((match) => Number(match[1])),
-    );
-    expect(totals.size).toBe(1);
-    const total = [...totals][0] as number;
-
-    const problems = localPlayProblemDirs(ROOT);
-    const owner = new Map<string, number>();
-    for (let index = 1; index <= total; index += 1) {
-      const selected = shardOf(problems, index, total);
-      // An empty shard exits 0 having probed nothing, which looks exactly like a shard
-      // that probed everything and found nothing.
-      expect(selected.length, `shard ${index}/${total} is empty`).toBeGreaterThan(0);
-      for (const problem of selected) {
-        expect(owner.has(problem), `${problem} is in two shards`).toBe(false);
-        owner.set(problem, index);
-      }
-    }
-    expect(owner.size).toBe(problems.length);
+    expect(workflow).toContain(SEPARATE_JOB_FILE);
+    // Excluded from the sharded matrix on purpose -- shardable files are partitioned,
+    // and a partitioned copy of this file would run in one shard and nowhere else.
+    expect(shardableFiles(ROOT)).not.toContain(SEPARATE_JOB_FILE);
+    // Unsharded runs are what `make agent-gate` uses, and they must still include it.
+    expect(suiteFiles(ROOT)).toContain(SEPARATE_JOB_FILE);
+    // The audit itself takes no shard flag here, so it probes every problem.
+    expect(localPlayProblemDirs(ROOT).length).toBeGreaterThan(0);
   });
 });
 
@@ -178,11 +163,11 @@ describe("solvability gate", () => {
   it(
     "finds no unexplained solvability defect across the course catalog",
     () => {
-      // ~2.5 min. This file is picked up by scripts/validate-shard.ts's `scripts/*.test.ts`
-      // glob, so it shares a 15-minute CI shard with a sixth of the catalog suite; the
-      // code probes are what cost, and 10 seeds of them is what fits. At that size the
-      // run sees a defect present on >= 26 % of deploys, which is the gross-breakage
-      // band a newly added problem lands in. Anything rarer is `make solvability-sweep`.
+      // Four minutes locally, and it runs as its own CI job rather than inside a suite
+      // shard, so the budget is its own. The code probes are what cost, and 10 seeds of
+      // them is what fits on every push. At that size the run sees a defect present on
+      // >= 26 % of deploys, which is the gross-breakage band a newly added problem lands
+      // in. Anything rarer is `make solvability-sweep`.
       const result = spawnSync(
         "bun",
         [
@@ -194,7 +179,6 @@ describe("solvability gate", () => {
           "10",
           "--screen-seeds",
           "120",
-          ...suiteShardArgs(),
         ],
         {
           cwd: ROOT,

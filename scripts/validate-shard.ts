@@ -45,6 +45,30 @@ export function suiteFiles(cwd: string = REPO_ROOT): string[] {
 }
 
 /**
+ * Files that get their own CI job instead of a share of a shard.
+ *
+ * Sharding by file only spreads cost when the cost is spread across files. The
+ * solvability gate is one file that probes the whole catalog inside a single
+ * test, so it lands wholly in one shard and grows with the catalog: shard 1 ran
+ * to the 15-minute cap while the other three finished in five to nine minutes.
+ * Splitting the gate's own work by the suite shard does not help either, because
+ * the file is only ever executed by the one shard that owns it — the other three
+ * would probe nothing, and each would still report "no findings".
+ *
+ * So it runs as its own job with its own budget. That is a named exception, and
+ * a named exception is a way to drop a test silently, so `validate-shard.test.ts`
+ * requires every entry here to be named by a job in `ci.yml`. An unsharded run
+ * (`bun run validate`, `make agent-gate`) still runs these files.
+ */
+export const SEPARATELY_SCHEDULED_FILES = ["scripts/solvability-audit.test.ts"] as const;
+
+/** The files the CI matrix partitions: everything except the separately scheduled ones. */
+export function shardableFiles(cwd: string = REPO_ROOT): string[] {
+  const separate = new Set<string>(SEPARATELY_SCHEDULED_FILES);
+  return suiteFiles(cwd).filter((file) => !separate.has(file));
+}
+
+/**
  * Partition into `total` shards, round robin.
  *
  * Round robin rather than contiguous slices because the file list is sorted by
@@ -75,8 +99,11 @@ export function parseShard(argv: readonly string[]): { index: number; total: num
 
 if (import.meta.main) {
   const shard = parseShard(process.argv.slice(2));
-  const files = suiteFiles();
-  if (files.length === 0) throw new Error("no test files matched scripts/*.test.ts");
+  const all = suiteFiles();
+  if (all.length === 0) throw new Error("no test files matched scripts/*.test.ts");
+  // Unsharded means "run everything", so a local `bun run validate` still covers the
+  // separately scheduled files that CI gives their own job.
+  const files = shard === null ? all : shardableFiles();
   const selected = shard === null ? files : shardOf(files, shard.index, shard.total);
   // An empty shard would exit 0 having run nothing, which is the failure mode
   // this whole file exists to remove. More shards than files is a configuration
@@ -88,16 +115,6 @@ if (import.meta.main) {
   }
   const label = shard === null ? "all" : `${shard.index}/${shard.total}`;
   console.log(`running ${selected.length} of ${files.length} test files (shard ${label})`);
-  // Passed down so a test file that is itself a catalog-wide sweep can partition its
-  // own work the same way. `solvability-audit.test.ts` is the one that needs it: it
-  // probes every problem in a single test, so it does not shard by being one file
-  // among many, and its shard ran to the 15-minute cap while the other three finished
-  // in five to nine minutes. With this it audits its quarter, and
-  // `solvability-audit.test.ts` asserts the four quarters still cover the catalog.
-  const result = spawnSync("bun", ["test", ...selected], {
-    cwd: REPO_ROOT,
-    stdio: "inherit",
-    env: shard === null ? process.env : { ...process.env, SUITE_SHARD: label },
-  });
+  const result = spawnSync("bun", ["test", ...selected], { cwd: REPO_ROOT, stdio: "inherit" });
   process.exit(result.status ?? 1);
 }

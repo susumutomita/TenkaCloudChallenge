@@ -1,7 +1,13 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
-import { parseShard, shardOf, suiteFiles } from "./validate-shard.ts";
+import {
+  parseShard,
+  SEPARATELY_SCHEDULED_FILES,
+  shardOf,
+  shardableFiles,
+  suiteFiles,
+} from "./validate-shard.ts";
 
 /**
  * The sharded suite still runs everything.
@@ -85,9 +91,22 @@ describe("the shard partition", () => {
 
   it("should not leave a shard empty at the count CI uses", () => {
     // An empty shard exits 0 having run nothing. The runner throws rather than
-    // pass, but the count that matters is the one in the workflow.
+    // pass, but the count that matters is the one in the workflow. What CI
+    // partitions is `shardableFiles()`, not every test file.
+    const shardable = shardableFiles();
     for (let index = 1; index <= workflowShardTotal(); index += 1) {
-      expect(shardOf(files, index, workflowShardTotal()).length).toBeGreaterThan(0);
+      expect(shardOf(shardable, index, workflowShardTotal()).length).toBeGreaterThan(0);
+    }
+  });
+
+  it("should give every separately scheduled file a job that names it", () => {
+    // Keeping a file out of the matrix is how a test stops running while every
+    // check stays green. The exception is only safe while something else runs it.
+    expect(SEPARATELY_SCHEDULED_FILES.length).toBeGreaterThan(0);
+    for (const file of SEPARATELY_SCHEDULED_FILES) {
+      expect(files).toContain(file);
+      expect(shardableFiles()).not.toContain(file);
+      expect(WORKFLOW).toContain(file);
     }
   });
 });
@@ -124,21 +143,26 @@ describe("the CI workflow agrees with the partition", () => {
     // The aggregation job exists to keep one stable required-check name in front
     // of a matrix. It is only worth having if it actually fails when a shard
     // does — `needs:` alone does not, once `if: always()` is set.
-    expect(WORKFLOW).toMatch(
-      /needs:\s*\[suite, checks, rls-runtime, eventbridge-runtime, github-oidc-runtime, signed-npm-runtime\]/,
-    );
-    // Match the assertion, not the mention. Both job results are also echoed
-    // for the log, and a `toContain("needs.checks.result")` was satisfied by
-    // that echo alone — deleting the line that actually gates on it left this
-    // test green.
-    for (const job of [
-      "suite",
-      "checks",
-      "rls-runtime",
-      "eventbridge-runtime",
-      "github-oidc-runtime",
-      "signed-npm-runtime",
-    ]) {
+    //
+    // The job list is read out of the workflow rather than repeated here. A
+    // hand-written copy is the same defect this file exists for: adding a job and
+    // forgetting the gate leaves every check green and the new job unenforced,
+    // and a stale list in the test is exactly what would hide it.
+    const jobs = [...WORKFLOW.slice(WORKFLOW.indexOf("\njobs:\n")).matchAll(/^ {2}([\w-]+):$/gmu)]
+      .map((match) => match[1])
+      .filter((job) => job !== "validate");
+    expect(jobs.length).toBeGreaterThan(1);
+    expect(jobs).toContain("suite");
+
+    const needs = /needs:\s*\[([^\]]+)\]/.exec(WORKFLOW);
+    expect(needs).not.toBeNull();
+    const listed = (needs?.[1] ?? "").split(",").map((entry) => entry.trim());
+    expect(listed.sort()).toEqual([...jobs].sort());
+
+    // Match the assertion, not the mention. Every job result is also echoed for
+    // the log, and a `toContain("needs.checks.result")` was satisfied by that echo
+    // alone — deleting the line that actually gates on it left this test green.
+    for (const job of jobs) {
       expect(WORKFLOW).toContain(`test "\${{ needs.${job}.result }}" = "success"`);
     }
   });
