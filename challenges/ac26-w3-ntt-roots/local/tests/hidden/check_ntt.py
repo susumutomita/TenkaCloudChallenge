@@ -224,6 +224,52 @@ def check_roundtrip(module: ModuleType, seed: str) -> list[str]:
     return _roundtrip_failures(module, seed, "roundtrip-checkpoint", 10)
 
 
+def check_errors(module: ModuleType, seed: str) -> list[str]:
+    """Invalid parameters get their own names, on top of the properties above."""
+    failures = _roundtrip_failures(module, seed, "errors-checkpoint", 6)
+    if failures:
+        return failures
+    rng = _rng(seed, "errors-checkpoint:prime")
+    prime = PRIMES[rng.randrange(len(PRIMES))]
+    non_divisor = next((d for d in range(2, prime) if (prime - 1) % d != 0), None)
+    cases: list[tuple[tuple[object, ...], str]] = [
+        (([1], 4, 2), "invalid_prime"),
+        (([1], prime, 0), "invalid_order"),
+        ((["x"], prime, 2), "invalid_coefficients"),
+        (([prime], prime, 2), "invalid_coefficients"),
+    ]
+    if non_divisor is not None:
+        cases.append((([1], prime, non_divisor), "invalid_order"))
+    for args, expected in cases:
+        if _call(module, "transform", *args) != {"ok": False, "error": expected}:
+            failures.append(f"transform did not report {expected} for {args[1:]}")
+    return failures
+
+
+def check_odd_order(module: ModuleType, seed: str) -> list[str]:
+    """Orders that are not powers of two are legal whenever they divide p-1."""
+    failures = _roundtrip_failures(module, seed, "odd-order-checkpoint", 6)
+    if failures:
+        return failures
+    rng = _rng(seed, "odd-order-checkpoint:pick")
+    for prime in rng.sample(PRIMES, len(PRIMES)):
+        odd = [d for d in orders_of(prime) if d > 2 and d % 2 == 1]
+        if not odd:
+            continue
+        order = odd[rng.randrange(len(odd))]
+        result = _call(module, "transform", [1, 1], prime, order)
+        if not isinstance(result, dict) or result.get("ok") is not True:
+            failures.append(f"transform refused a legal odd order ({order} mod {prime})")
+        elif not has_order(result.get("omega", 0), order, prime):
+            failures.append(f"an odd order ({order} mod {prime}) did not get a real omega")
+        break
+
+    one = _call(module, "transform", [1], PRIMES[0], 1)
+    if not isinstance(one, dict) or one.get("ok") is not True or one.get("values") != [1]:
+        failures.append("transform with order 1 did not return the single evaluation")
+    return failures
+
+
 def check_transfer(module: ModuleType, seed: str) -> list[str]:
     return _transfer_failures(module, seed, "transfer-checkpoint")
 

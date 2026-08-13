@@ -42,13 +42,12 @@ REQUEST_TIMEOUT_SECONDS = 15
 # `axioms` runs under a seed the learner has never been shown, so the prime its field
 # is built over is one they cannot have special-cased.
 CODE_CHECKPOINTS = {
-    "normalize": ("check_normalize",),
-    "arithmetic": ("check_arithmetic",),
-    "egcd-trace": ("check_egcd_trace",),
-    "inverse": ("check_inverse",),
+    "roots": ("check_roots",),
+    "transform": ("check_transform",),
+    "roundtrip": ("check_roundtrip",),
     "errors": ("check_errors",),
-    "composite": ("check_composite",),
-    "axioms": ("check_axioms",),
+    "odd-order": ("check_odd_order",),
+    "transfer": ("check_transfer",),
 }
 CHECKPOINTS = tuple(CODE_CHECKPOINTS)
 
@@ -73,16 +72,16 @@ RUNNER = """
 import json, os, sys
 sys.path.insert(0, {root!r})
 sys.path.insert(0, {workspace!r})
-from tests.hidden import check_field
+from tests.hidden import check_ntt
 try:
-    import field
+    import ntt
 except Exception as error:
     print(json.dumps({{"failures": ["submission could not be imported: " + type(error).__name__]}}))
     sys.stdout.flush()
     os._exit(0)
 failures = []
 for name in {phases!r}:
-    failures.extend(getattr(check_field, name)(field, {seed!r}))
+    failures.extend(getattr(check_ntt, name)(ntt, {seed!r}))
 print(json.dumps({{"failures": failures}}))
 sys.stdout.flush()
 os._exit(0)
@@ -93,13 +92,13 @@ def _run_submission(submission: object, phases: tuple[str, ...], seed: str) -> b
     """Run the named hidden phases against the learner's file in a throwaway workspace."""
     source = submission
     if isinstance(source, dict):
-        source = source.get("field.py")
+        source = source.get("ntt.py")
     if not isinstance(source, str) or not source.strip():
         return False
     if len(source) > MAX_BODY_BYTES:
         return False
     with tempfile.TemporaryDirectory() as workspace:
-        (Path(workspace) / "field.py").write_text(source, encoding="utf-8")
+        (Path(workspace) / "ntt.py").write_text(source, encoding="utf-8")
         script = RUNNER.format(
             root=str(ROOT), workspace=workspace, phases=list(phases), seed=seed
         )
@@ -149,16 +148,16 @@ from verifier.workbench import PortalEditorSupport
 _WORKBENCH = PortalEditorSupport(
     root=ROOT,
     seed=SEED,
-    problem_id='ac26-w3-field-inverse',
-    problem_name='曲線の前に、体を作る',
-    problem_name_en='Build the field before the curve',
-    description='楕円曲線の式に入る前に、その下の有限体を手で作る。正規化、四則、そして拡張 Euclid による逆元。素数でない法では逆元が存在しない要素があり、それを見落とす実装がある。',
-    description_en='Before the curve equation, the field underneath it: normalization, arithmetic, and the inverse from the extended Euclidean algorithm. Over a composite modulus some elements have no inverse at all, and one popular implementation never notices.',
-    checkpoint_labels={'normalize': '整数を体の元にする', 'arithmetic': '加減乗算と体の公理', 'egcd-trace': '拡張 Euclid の各ステップを出す', 'inverse': '逆元と除算', 'errors': '存在しないものを存在しないと言う', 'composite': '素数でない法で反例を作る', 'axioms': '見たことのない素数で公理を通す'},
-    checkpoint_labels_en={'normalize': 'Turn an integer into a field element', 'arithmetic': 'Arithmetic, and the axioms it must satisfy', 'egcd-trace': 'Show every step of the extended algorithm', 'inverse': 'Inverse and division', 'errors': 'Say that something does not exist', 'composite': 'Build a counterexample over a non-prime modulus', 'axioms': 'Hold the axioms over a prime you have not seen'},
-    submitted_files=('field.py',),
-    code_checkpoints=('normalize', 'arithmetic', 'egcd-trace', 'inverse', 'errors', 'composite', 'axioms'),
-    checkpoints=('normalize', 'arithmetic', 'egcd-trace', 'inverse', 'errors', 'composite', 'axioms'),
+    problem_id='ac26-w3-ntt-roots',
+    problem_name='その omega は、本当に n 乗して初めて 1 になるか',
+    problem_name_en='Does that omega really take n powers to reach 1?',
+    description='有限体上の変換で omega を教科書式から作り、その位数を確かめずに使う実装を、位数の定義から直す。',
+    description_en='A transform over a finite field builds omega from the textbook formula and never checks its order. Fix it from the definition.',
+    checkpoint_labels={'roots': '原始 n 乗根を見つける', 'transform': '自分の omega の冪で評価する', 'roundtrip': '逆変換で係数へ戻す', 'errors': '存在しないものを存在しないと言う', 'odd-order': '2 冪でない n でも動かす', 'transfer': '見たことのない素数と次数で成り立たせる'},
+    checkpoint_labels_en={'roots': 'Find a primitive n-th root of unity', 'transform': 'Evaluate at the powers of your own omega', 'roundtrip': 'Turn the values back into coefficients', 'errors': 'Say that something does not exist', 'odd-order': 'Handle an n that is not a power of two', 'transfer': 'Hold for a prime and an order you have not seen'},
+    submitted_files=('ntt.py',),
+    code_checkpoints=('roots', 'transform', 'roundtrip', 'errors', 'odd-order', 'transfer'),
+    checkpoints=('roots', 'transform', 'roundtrip', 'errors', 'odd-order', 'transfer'),
     max_body_bytes=MAX_BODY_BYTES,
     run_timeout_seconds=RUN_TIMEOUT_SECONDS,
     max_output_bytes=MAX_OUTPUT_BYTES,
@@ -271,7 +270,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(content)
 
 def main() -> None:
-    port = int(os.environ.get("VERIFY_PORT", "18100"))
+    port = int(os.environ.get("VERIFY_PORT", "18130"))
     # Bind every interface *inside the container*, not the container's loopback. A published
     # port is forwarded to the container's bridge address, so a server listening only on
     # 127.0.0.1 inside the container accepts nothing from outside it — the connection is

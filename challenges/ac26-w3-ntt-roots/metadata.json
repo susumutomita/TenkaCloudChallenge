@@ -1,13 +1,13 @@
 {
-  "id": "ac26-w3-field-inverse",
-  "name": "曲線の前に、体を作る",
+  "id": "ac26-w3-ntt-roots",
+  "name": "その omega は、本当に n 乗して初めて 1 になるか",
   "category": "Challenge",
   "status": "draft",
   "visibility": "public",
   "track": {
     "id": "advanced-cryptography-2026",
-    "order": 310,
-    "chapter": "Week 3 / Finite Fields"
+    "order": 315,
+    "chapter": "Week 3 / Roots of Unity"
   },
   "courseAlignment": {
     "courseId": "advanced-cryptography-program",
@@ -37,242 +37,196 @@
     ]
   },
   "difficulty": 3,
-  "estimatedDuration": "45-60 分",
-  "shortDescription": "楕円曲線の式に入る前に、その下の有限体を手で作る。正規化、四則、そして拡張 Euclid による逆元。素数でない法では逆元が存在しない要素があり、それを見落とす実装がある。",
-  "description": "Week 3 の 1 問目。 楕円曲線の群演算へ進む前に、 F_p 上の正規化・加減乗算・逆元・除算を自分で実装する。 公式課題の template や test 値は一切参照せず、 異なる API と seed 由来 fixture で同じ数学的構造を扱う。\n\n中心にあるのは 2 つの区別。\n\n1. **integer と field element は違う**。 -5 と p-5 は同じ元だが、 -5 は正規形ではない。 hidden test は負値・法以上の値・法の整数倍を含む値の集合を与え、 すべてが [0, p) に落ちることを要求する。\n2. **`pow(a, p-2, p)` は逆元を返すとは限らない**。 p が素数なら返すが、 合成数なら 「何か数」 を返す。 拡張 Euclid は gcd を返すので、 逆元が存在しない場合をそれとして報告できる。 mutation suite の 1 つ目はまさに Fermat 版で、 素数側は全部通り合成数側で落ちる。\n\ncheckpoint は 7 つ。 正規化と等価性、 四則と体の公理 (単位元・逆元・分配・可換・結合)、 拡張 Euclid の trace、 逆元と除算、 zero と非可逆元の error、 未知素数上での全元 property、 合成数法での counterexample 提出。\n\ninverse checkpoint は素体の**全**非零元を検査する。 標本ではなく全数なので、 表を覚える戦略が成立しない。 axioms checkpoint はさらに逆元写像が非零元上の全単射になることまで見る。\n\ntrace checkpoint は Bezout 等式を各行で検査したうえで、 行列そのものを参照実装の step 列と突き合わせる。 最終行だけを持つ表は Bezout を満たしてしまうため、 それだけでは trace の検査にならない (mutation suite で実際に生き残ったので追加した)。\n\nshow.py が出す trace は algorithm 理解用であり、 入力に依存して分岐し実行時間も変わる。 constant-time 実装ではないことを participant 向けにも明記している。",
-  "instructions": "## Participant Portal で解く\n\nParticipant Portal で問題を起動すると、問題文と同じ画面に問題エディタが表示されます。\n「証拠を調べる」で deploy 固有の fixture と公開された証拠を確認し、starter ソースを編集して\n「公開テストを実行」を押します。コード以外の checkpoint は、証拠と実験結果から回答欄を\n埋めてください。object / array / number は JSON で入力します。\n\n各 checkpoint の提出ボタンは、現在のエディタ内容と回答欄を container の prepare API へ送り、\n生成された値をそのまま採点へ渡します。画面を移動したり提出値をコピーしたりする必要はありません。\n直接回答はこの deploy の seed に結び付くため、別の起動で作った値や概念名の暗記だけでは合格できません。\n",
-  "writeup": "## integer と field element\n\n-5 と p-5 は F_p の同じ元を指すが、 -5 は正規形ではない。 element を作った時点で [0, p) に落としておくと、 負の step も法以上の初期値も同じ経路で扱える。 Python の `%` は法が正なら非負を返すので、 これは 1 演算で済む。\n\n剰余を最後にまとめて取る実装は、 この問題の範囲では正しい答えを出す。 落ちるのは中間値そのものを検査されたときで、 hidden test は演算結果が [0, p) にあることを毎回見る。\n\n## 拡張 Euclid が Fermat より多くを語る理由\n\n`pow(a, p-2, p)` は p が素数のときだけ逆元になる。 合成数 n では `pow(a, n-2, n)` も数を返すが、 それは逆元ではない。 検算しなければ気づけない。\n\n拡張 Euclid は a*s + n*t = gcd(a, n) を返す。 gcd が 1 でなければ逆元は存在せず、 アルゴリズムがそれを教えてくれる。 「存在しないことが分かる」 のが Fermat 版との差で、 mutation suite の 1 つ目はこの差だけで落ちる。\n\n## trace を行列ごと突き合わせる理由\n\ntrace checkpoint は当初、 各行が Bezout 等式 a*s + p*t = r を満たすことと、 最終行が gcd と逆元に一致することだけを見ていた。 mutation suite に 「最終行だけを返す」 変異を入れたところ、 生き残った。 1 行だけの表はその条件をすべて満たすからだ。\n\n現在は step 数と各行の (q, r, s, t) を参照実装の列と突き合わせる。 floor 除算なので step 列は一意に決まり、 正解はちょうど 1 つある。\n\n## 全数検査\n\ninverse checkpoint は素体の全非零元 (p-1 個、 p は 3 桁) を回す。 標本ではないので、 一部の値だけ特別扱いする実装は通らない。 axioms checkpoint はさらに、 逆元写像が非零元上の全単射であることを検査する — 体では逆元は一意で、 異なる元が同じ逆元を持つことはない。\n\n## trace は constant-time ではない\n\nshow.py が出す trace は入力に依存して分岐し、 step 数も入力で変わる。 実際の鍵を扱う実装では、 この性質そのものが side-channel になる。 ここでは algorithm を読むためのものであり、 production 実装の参考にはならない。\n\n## 次につながるところ\n\n次の問題で曲線の群演算を作る。 点の加算は分母に体の逆元を持つので、 ここで作った inverse がそのまま使われ、 分母が 0 になる場合分けが群法則の場合分けそのものになる。",
+  "estimatedDuration": "45-75 分",
+  "shortDescription": "有限体上の変換で omega を教科書式から作り、その位数を確かめずに使う実装を、位数の定義から直す。",
+  "description": "zkSNARK の土台には、多項式を「係数」と「評価」の間で行き来させる変換がある。 その変換が変換であるためには、評価点が相異なっていなければならない。 相異なることを保証しているのは、omega の位数がちょうど n であるという一点だけである。\n\n壊れた starter は公開テストをすべて通る。 omega を 3 ** ((p-1)/n) で作っており、この式自体は間違っていない。 抜けているのは、出てきた omega の位数が本当に n かの確認だけである。 p=17, n=4 では位数 4 の正しい原始根が出る。 p=97, n=8 では位数 4 の元が出る。 p=13, n=4 では omega=1 が出て、評価点が 1 点に潰れる。 それでも返り値は体の中の整数が n 個で、形は完全に正常である。\n\n採点は書き方ではなく振る舞いで行う。 checkpoint は seed 由来の (p, n) を使い、教科書式が誤る組を必ず半分以上含む。 見た組に合わせただけの実装は、見ていない組で落ちる。",
+  "instructions": "## Participant Portal で解く\n\n問題を起動すると editor が開きます。 starter の ntt.py を編集し、公開テストを実行してください。 各 checkpoint の提出では、現在の editor file がそのまま hidden verifier へ渡ります。\n\n実装するのは transform(coefficients, prime, order) と inverse_transform(values, prime, order, omega) の 2 つです。 omega はどれを選んでも構いません。 位数がちょうど order でありさえすればよく、選んだ omega は返り値に含めます。",
+  "writeup": "## 1 に戻るだけでは足りない\n\npow(w, n, p) == 1 は、位数が n を割る元すべてが満たす。 位数 1 の元、つまり 1 そのものも満たす。 この条件だけで omega を受け入れると、評価点が重複した「変換ではないもの」を変換と呼ぶことになる。\n\n## 位数がちょうど n であることの確かめ方\n\nn の各素因数 q について pow(w, n//q, p) != 1 を確かめる。 これで、n より真に小さいどの約数でも 1 に戻らないことが言える。\n\n## 教科書式が正しいときと正しくないとき\n\n3 ** ((p-1)/n) は、3 が F_p* の生成元であれば位数 n の元を返す。 3 が生成元でない p では、より小さい部分群に落ちる。 式が悪いのではなく、確認が要るということである。\n\n## 証明していないこと\n\n高速化はしていない。 ここで決めたのは、変換が可逆であるための前提だけである。 FFT の蝶形も、多項式コミットも、その前提の上に乗っている。",
   "tags": [
     "advanced-cryptography-2026",
     "week3",
     "finite-field",
-    "modular-inverse",
+    "roots-of-unity",
+    "ntt",
+    "polynomial",
     "local-play",
     "container"
   ],
   "exposedPorts": [
     {
-      "port": 18100,
+      "port": 18130,
       "name": "Portal editor API + /verify (loopback only)"
     }
   ],
   "learningGoals": [
-    "integer と field element を区別できる",
-    "負数や法以上の値を正規形へ落とせる",
-    "加算・減算・乗算を法の下で実装できる",
-    "拡張 Euclid から乗法逆元を求められる",
-    "a * a^{-1} = 1 を property として検証できる",
-    "zero と非可逆元に逆元が無いことを明示的な error にできる",
-    "素数法と合成数法の違いを counterexample で示せる"
+    "位数がちょうど n であることと、n 乗して 1 になることの違いを説明できる",
+    "素因数ごとの確認で位数を確定できる",
+    "評価点が相異なることが逆変換の前提であることを説明できる",
+    "1/n を含む逆変換を実装できる",
+    "2 冪でない n でも成り立つ実装を書ける",
+    "不正な p・n・係数・omega をそれぞれ名前で拒否できる"
   ],
   "nodes": {
     "learning_objectives": [
       {
-        "id": "lo.ac26-w3-field-inverse.normalize",
-        "description": "任意の整数を体の正規形へ落とし、 integer と field element を区別できる。"
+        "id": "lo.ac26-w3-ntt-roots.order-vs-annihilation",
+        "description": "n 乗して 1 になることと、位数がちょうど n であることを区別できる"
       },
       {
-        "id": "lo.ac26-w3-field-inverse.arithmetic",
-        "description": "法の下での加減乗算を実装し、 体の公理が成り立つことを確認できる。"
+        "id": "lo.ac26-w3-ntt-roots.pin-the-order",
+        "description": "素因数ごとの確認で位数を確定できる"
       },
       {
-        "id": "lo.ac26-w3-field-inverse.extended-euclid",
-        "description": "拡張 Euclid の各ステップを追い、 Bezout 係数から逆元を導ける。"
+        "id": "lo.ac26-w3-ntt-roots.distinct-points",
+        "description": "評価点が相異なることが逆変換の前提だと説明できる"
       },
       {
-        "id": "lo.ac26-w3-field-inverse.non-invertible",
-        "description": "逆元が存在しない場合を判定し、 それを error として報告できる。"
+        "id": "lo.ac26-w3-ntt-roots.inverse-scaling",
+        "description": "1/n を含む逆変換を実装できる"
       }
     ],
     "concepts": [
       {
-        "id": "concept.finite-field",
-        "description": "有限個の元からなり、 零以外のすべての元が乗法逆元を持つ代数構造。 法が素数のとき Z_n はこれになる。"
+        "id": "concept.multiplicative-order",
+        "description": "位数は 1 に戻る最小の指数である。"
       },
       {
-        "id": "concept.modular-inverse",
-        "description": "a * x = 1 (mod n) を満たす x。 gcd(a, n) = 1 のときに限り存在する。"
+        "id": "concept.root-of-unity",
+        "description": "原始 n 乗根は位数がちょうど n の元である。"
       },
       {
-        "id": "concept.extended-euclid",
-        "description": "gcd と同時に a*s + b*t = gcd(a, b) を満たす係数を求める算法。 逆元の存在判定も同時に行える。"
-      },
-      {
-        "id": "concept.canonical-representative",
-        "description": "剰余類を代表する一意の値。 [0, n) に落とすことで等価判定と比較が定義できる。"
+        "id": "concept.evaluation-form",
+        "description": "多項式は係数表現と評価表現を行き来できる。"
       }
     ],
     "assessment_criteria": [
       {
-        "id": "assessment.ac26-w3-field-inverse.normalize",
-        "description": "負値・法以上の値を含むすべての入力を正規形へ落とし、 等価判定を正しく行えた。"
+        "id": "assessment.ac26-w3-ntt-roots.roots",
+        "description": "位数がちょうど n の元を選べた。"
       },
       {
-        "id": "assessment.ac26-w3-field-inverse.arithmetic",
-        "description": "加減乗算が正しく、 単位元・加法逆元・分配・可換・結合が成り立った。"
+        "id": "assessment.ac26-w3-ntt-roots.transform",
+        "description": "自分の omega の冪で評価できた。"
       },
       {
-        "id": "assessment.ac26-w3-field-inverse.egcd-trace",
-        "description": "拡張 Euclid の step 列を参照実装と一致させ、 各行で Bezout 等式を満たせた。"
+        "id": "assessment.ac26-w3-ntt-roots.roundtrip",
+        "description": "1/n を含めて係数へ戻せた。"
       },
       {
-        "id": "assessment.ac26-w3-field-inverse.inverse",
-        "description": "素体の全非零元で逆元を求め、 除算が元に戻ることを示せた。"
+        "id": "assessment.ac26-w3-ntt-roots.errors",
+        "description": "不正な入力をそれぞれの名前で拒否できた。"
       },
       {
-        "id": "assessment.ac26-w3-field-inverse.errors",
-        "description": "zero の逆元、 零除算、 異なる法の混在をすべて明示的な error にできた。"
+        "id": "assessment.ac26-w3-ntt-roots.odd-order",
+        "description": "2 冪でない n でも成り立たせた。"
       },
       {
-        "id": "assessment.ac26-w3-field-inverse.composite",
-        "description": "合成数法で最小の非可逆元を提出し、 素数法では存在しないことを示せた。"
-      },
-      {
-        "id": "assessment.ac26-w3-field-inverse.axioms",
-        "description": "未知の素数上で体の公理が成り立ち、 逆元写像が非零元上の全単射になった。"
+        "id": "assessment.ac26-w3-ntt-roots.transfer",
+        "description": "見ていない素数と次数でも成り立たせた。"
       }
     ],
     "misconceptions": [
       {
-        "id": "misconception.mod-is-only-the-final-step",
-        "description": "剰余は最後に 1 回取ればよいという誤解。 中間値も体の元でなければ等価判定が壊れる。"
+        "id": "misconception.annihilation-is-order",
+        "description": "n 乗して 1 になれば位数は n、という誤解。"
       },
       {
-        "id": "misconception.every-nonzero-value-has-an-inverse",
-        "description": "零でなければ逆元があるという誤解。 法と共通因数を持つ元には存在しない。"
+        "id": "misconception.textbook-formula-is-enough",
+        "description": "3 ** ((p-1)/n) と書けば原始根が得られる、という誤解。"
       },
       {
-        "id": "misconception.negative-values-are-outside-the-field",
-        "description": "負の値は体の外だという誤解。 -5 と p-5 は同じ元であり、 正規形が違うだけ。"
-      },
-      {
-        "id": "misconception.language-division-is-field-division",
-        "description": "プログラミング言語の除算が体の除算だという誤解。 体の除算は逆元の乗算である。"
+        "id": "misconception.radix-two-only",
+        "description": "n は 2 冪でなければならない、という誤解。"
       }
     ]
   },
   "relations": [
     {
       "type": "teaches",
-      "source": "problem.ac26-w3-field-inverse",
-      "target": "lo.ac26-w3-field-inverse.normalize"
+      "source": "problem.ac26-w3-ntt-roots",
+      "target": "lo.ac26-w3-ntt-roots.order-vs-annihilation"
     },
     {
       "type": "teaches",
-      "source": "problem.ac26-w3-field-inverse",
-      "target": "lo.ac26-w3-field-inverse.arithmetic"
+      "source": "problem.ac26-w3-ntt-roots",
+      "target": "lo.ac26-w3-ntt-roots.pin-the-order"
     },
     {
       "type": "teaches",
-      "source": "problem.ac26-w3-field-inverse",
-      "target": "lo.ac26-w3-field-inverse.extended-euclid"
+      "source": "problem.ac26-w3-ntt-roots",
+      "target": "lo.ac26-w3-ntt-roots.distinct-points"
     },
     {
       "type": "teaches",
-      "source": "problem.ac26-w3-field-inverse",
-      "target": "lo.ac26-w3-field-inverse.non-invertible"
+      "source": "problem.ac26-w3-ntt-roots",
+      "target": "lo.ac26-w3-ntt-roots.inverse-scaling"
     },
     {
       "type": "covers",
-      "source": "problem.ac26-w3-field-inverse",
-      "target": "concept.finite-field"
+      "source": "problem.ac26-w3-ntt-roots",
+      "target": "concept.multiplicative-order"
     },
     {
       "type": "covers",
-      "source": "problem.ac26-w3-field-inverse",
-      "target": "concept.modular-inverse"
+      "source": "problem.ac26-w3-ntt-roots",
+      "target": "concept.root-of-unity"
     },
     {
       "type": "covers",
-      "source": "problem.ac26-w3-field-inverse",
-      "target": "concept.extended-euclid"
-    },
-    {
-      "type": "covers",
-      "source": "problem.ac26-w3-field-inverse",
-      "target": "concept.canonical-representative"
-    },
-    {
-      "type": "requires",
-      "source": "lo.ac26-w3-field-inverse.normalize",
-      "target": "concept.modular-arithmetic"
-    },
-    {
-      "type": "requires",
-      "source": "lo.ac26-w3-field-inverse.non-invertible",
-      "target": "concept.extended-euclid"
-    },
-    {
-      "type": "requires",
-      "source": "lo.ac26-w3-field-inverse.arithmetic",
-      "target": "concept.canonical-representative"
+      "source": "problem.ac26-w3-ntt-roots",
+      "target": "concept.evaluation-form"
     },
     {
       "type": "assesses",
-      "source": "problem.ac26-w3-field-inverse",
-      "target": "assessment.ac26-w3-field-inverse.normalize"
+      "source": "problem.ac26-w3-ntt-roots",
+      "target": "assessment.ac26-w3-ntt-roots.roots"
     },
     {
       "type": "assesses",
-      "source": "problem.ac26-w3-field-inverse",
-      "target": "assessment.ac26-w3-field-inverse.arithmetic"
+      "source": "problem.ac26-w3-ntt-roots",
+      "target": "assessment.ac26-w3-ntt-roots.transform"
     },
     {
       "type": "assesses",
-      "source": "problem.ac26-w3-field-inverse",
-      "target": "assessment.ac26-w3-field-inverse.egcd-trace"
+      "source": "problem.ac26-w3-ntt-roots",
+      "target": "assessment.ac26-w3-ntt-roots.roundtrip"
     },
     {
       "type": "assesses",
-      "source": "problem.ac26-w3-field-inverse",
-      "target": "assessment.ac26-w3-field-inverse.inverse"
+      "source": "problem.ac26-w3-ntt-roots",
+      "target": "assessment.ac26-w3-ntt-roots.errors"
     },
     {
       "type": "assesses",
-      "source": "problem.ac26-w3-field-inverse",
-      "target": "assessment.ac26-w3-field-inverse.errors"
+      "source": "problem.ac26-w3-ntt-roots",
+      "target": "assessment.ac26-w3-ntt-roots.odd-order"
     },
     {
       "type": "assesses",
-      "source": "problem.ac26-w3-field-inverse",
-      "target": "assessment.ac26-w3-field-inverse.composite"
-    },
-    {
-      "type": "assesses",
-      "source": "problem.ac26-w3-field-inverse",
-      "target": "assessment.ac26-w3-field-inverse.axioms"
+      "source": "problem.ac26-w3-ntt-roots",
+      "target": "assessment.ac26-w3-ntt-roots.transfer"
     },
     {
       "type": "related_to",
-      "source": "problem.ac26-w3-field-inverse",
-      "target": "misconception.mod-is-only-the-final-step"
+      "source": "problem.ac26-w3-ntt-roots",
+      "target": "misconception.annihilation-is-order"
     },
     {
       "type": "related_to",
-      "source": "problem.ac26-w3-field-inverse",
-      "target": "misconception.every-nonzero-value-has-an-inverse"
+      "source": "problem.ac26-w3-ntt-roots",
+      "target": "misconception.textbook-formula-is-enough"
     },
     {
       "type": "related_to",
-      "source": "problem.ac26-w3-field-inverse",
-      "target": "misconception.negative-values-are-outside-the-field"
-    },
-    {
-      "type": "related_to",
-      "source": "problem.ac26-w3-field-inverse",
-      "target": "misconception.language-division-is-field-division"
-    },
-    {
-      "type": "related_to",
-      "source": "problem.ac26-w3-field-inverse",
-      "target": "misconception.public-tests-are-complete"
+      "source": "problem.ac26-w3-ntt-roots",
+      "target": "misconception.radix-two-only"
     }
   ],
   "runtime": {
     "provider": "docker",
     "engine": "compose",
     "entry": "local/docker-compose.yml",
-    "verifyUrl": "http://127.0.0.1:18100/verify",
+    "verifyUrl": "http://127.0.0.1:18130/verify",
     "secretEnv": [
       "FLAG_SEED"
     ]
@@ -281,51 +235,44 @@
     "kind": "multi-verify",
     "checks": [
       {
-        "id": "normalize",
+        "id": "roots",
         "input": "multiline",
-        "label": "整数を体の元にする",
-        "points": 25,
-        "wrongAnswerPenalty": 10,
+        "label": "原始 n 乗根を見つける",
+        "points": 35,
+        "wrongAnswerPenalty": 12,
         "hints": [
           {
-            "id": "normalize-hint-1",
-            "content": "-5 と p-5 は同じ元。 element を作った時点で [0, p) に落としておくと、 以降の場合分けが消える。",
+            "id": "roots-hint-1",
+            "content": "pow(w, n, p) == 1 は、位数が n を割る元すべてが満たす。 1 もそのひとつ。 n の各素因数 q について pow(w, n//q, p) != 1 まで見て、初めて位数が n と言える。",
             "penalty": 10
           }
         ]
       },
       {
-        "id": "arithmetic",
+        "id": "transform",
         "input": "multiline",
-        "label": "加減乗算と体の公理",
+        "label": "自分の omega の冪で評価する",
         "points": 30,
-        "wrongAnswerPenalty": 10
-      },
-      {
-        "id": "egcd-trace",
-        "input": "multiline",
-        "label": "拡張 Euclid の各ステップを出す",
-        "points": 35,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
-            "id": "egcd-hint-1",
-            "content": "各行で a*s + p*t = r が成り立つ。 最終行の r が gcd で、 s が逆元の候補になる。",
-            "penalty": 15
+            "id": "transform-hint-1",
+            "content": "返した omega と、評価に使った点が同じであることを確かめる。 values[i] は f(omega**i) でなければならない。",
+            "penalty": 8
           }
         ]
       },
       {
-        "id": "inverse",
+        "id": "roundtrip",
         "input": "multiline",
-        "label": "逆元と除算",
+        "label": "逆変換で係数へ戻す",
         "points": 35,
-        "wrongAnswerPenalty": 10,
+        "wrongAnswerPenalty": 12,
         "hints": [
           {
-            "id": "inverse-hint-1",
-            "content": "体の除算は逆元の乗算。 言語の `/` ではない。",
-            "penalty": 15
+            "id": "roundtrip-hint-1",
+            "content": "逆変換には 1/n が要る。 p は素数なので、n の逆元は Fermat でも拡張 Euclid でも作れる。 点が重複する omega を渡されたら、戻せないと言うこと。",
+            "penalty": 10
           }
         ]
       },
@@ -333,100 +280,121 @@
         "id": "errors",
         "input": "multiline",
         "label": "存在しないものを存在しないと言う",
-        "points": 25,
-        "wrongAnswerPenalty": 10
-      },
-      {
-        "id": "composite",
-        "input": "multiline",
-        "label": "素数でない法で反例を作る",
-        "points": 25,
+        "points": 30,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
-            "id": "composite-hint-1",
-            "content": "法と共通因数を持つ元を探す。 gcd が 1 でなければ逆元は無い。 素数法では見つからないはず。",
-            "penalty": 12
+            "id": "errors-hint-1",
+            "content": "p が素数でない、n が p-1 を割らない、係数が体の外。 それぞれ別の名前で拒否する。",
+            "penalty": 8
           }
         ]
       },
       {
-        "id": "axioms",
+        "id": "odd-order",
         "input": "multiline",
-        "label": "見たことのない素数で公理を通す",
-        "points": 25,
-        "wrongAnswerPenalty": 10
+        "label": "2 冪でない n でも動かす",
+        "points": 30,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "odd-order-hint-1",
+            "content": "n が p-1 を割りさえすれば、2 冪である必要はない。 radix-2 を前提にした実装はここで初めて落ちる。",
+            "penalty": 8
+          }
+        ]
+      },
+      {
+        "id": "transfer",
+        "input": "multiline",
+        "label": "見たことのない素数と次数で成り立たせる",
+        "points": 40,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "transfer-hint-1",
+            "content": "公開テストで見た p は、たまたま教科書式が正しい組だった。 seed が変われば別の組になる。",
+            "penalty": 13
+          }
+        ]
       }
     ]
   },
   "i18n": {
     "en": {
-      "name": "Build the field before the curve",
-      "shortDescription": "Before the curve equation, the field underneath it: normalization, arithmetic, and the inverse from the extended Euclidean algorithm. Over a composite modulus some elements have no inverse at all, and one popular implementation never notices.",
-      "description": "First problem of Week 3. Before moving on to the elliptic-curve group, implement normalisation, addition, subtraction, multiplication, inversion and division over F_p yourself. No template or test values from the official assignment are referenced; the same mathematical structure is covered with a different API and seed-derived fixtures.\n\nTwo distinctions sit at the centre.\n\n1. **An integer is not a field element.** -5 and p-5 are the same element, but -5 is not in normal form. The hidden tests supply sets including negatives, values above the modulus and integer multiples of it, and require everything to land in [0, p).\n2. **`pow(a, p-2, p)` does not necessarily return an inverse.** It does when p is prime; when p is composite it returns \"some number\". The extended Euclid returns a gcd, so it can report a non-existent inverse as exactly that. The first mutant in the mutation suite is precisely the Fermat version — it passes every prime case and fails on the composites.\n\nSeven checkpoints: normalisation and equivalence; the four operations and the field axioms (identity, inverses, distributivity, commutativity, associativity); the extended-Euclid trace; inversion and division; errors for zero and non-invertible elements; whole-field properties over an unseen prime; and a submitted counterexample under a composite modulus.\n\nThe inverse checkpoint checks **every** non-zero element of the prime field — exhaustive, not sampled, so memorising a table is not a strategy. The axioms checkpoint further checks that the inversion map is a bijection on the non-zero elements.\n\nThe trace checkpoint verifies the Bezout identity on every row and then matches the matrix itself against the reference implementation's step sequence. A table holding only the final row satisfies Bezout, so that alone is no trace check (added after it actually survived the mutation suite).\n\nThe trace show.py prints is for understanding the algorithm; it branches on the input and its running time varies. That this is not a constant-time implementation is stated to the participant as well.",
-      "instructions": "## Solve in Participant Portal\n\nStart the problem in Participant Portal. The problem editor appears on the same page as the\nstatement. Use **Inspect evidence** to read the deployment-specific fixture and published\nevidence, edit the starter sources, and select **Run public tests**. Fill any direct-answer\ncheckpoint from the evidence and your experiments; enter objects, arrays, and numbers as JSON.\n\nEach checkpoint's submit button sends the current editor files and answer fields through the\ncontainer prepare API, then submits the generated value directly for scoring. There is no second\nscreen and no submission value to copy. Direct answers are bound to this deployment's seed, so a\nvalue prepared for another run, or a remembered concept name on its own, cannot earn credit.\n",
-      "writeup": "## Integers and field elements\n\n`-5` and `p - 5` name the same element of `F_p`, but `-5` is not a canonical representative of it. Normalizing when the element is constructed means a negative input and an input past the modulus take the same path afterwards. Python's `%` returns a non-negative result for a positive modulus, so that is one operation.\n\nReducing only at the end produces the right final answer for this exercise. What it fails is being asked about an intermediate value, and the hidden tests check that every arithmetic result lands in `[0, p)`.\n\n## Why the extended algorithm says more than Fermat\n\n`pow(a, p - 2, p)` is an inverse only when `p` is prime. Over a composite `n`, `pow(a, n - 2, n)` still returns a number — it just is not an inverse, and nothing tells you unless you check.\n\nThe extended Euclidean algorithm returns `a*s + n*t = gcd(a, n)`. When the gcd is not 1 there is no inverse, and the algorithm has told you so. Knowing the answer does not exist is the difference, and the first mutation in the suite fails on that difference alone.\n\n## Why the trace is compared row by row\n\nThe trace checkpoint originally checked only that each row satisfies `a*s + p*t = r` and that the last row matches the gcd and the inverse. A mutation that returns *only the last row* survived that: a one-row table satisfies every one of those conditions.\n\nIt now compares the step count and each row's `(q, r, s, t)` against the reference sequence. Floor division makes that sequence deterministic, so there is exactly one right answer.\n\n## Exhaustive, not sampled\n\nThe inverse checkpoint runs every non-zero element of the prime field — `p - 1` of them, with `p` in the hundreds. Not a sample, so special-casing a few values is not a strategy. The axioms checkpoint goes further and checks that inversion is a bijection on the non-zero elements: in a field the inverse is unique, and two different elements never share one.\n\n## The trace is not constant-time\n\nThe trace `show.py` prints branches on its inputs, and its step count depends on them. In an implementation handling a real key, that property is itself a side channel. This is here to make the algorithm legible, not as a model for production code.\n\n## Where this leads\n\nThe next problem builds the curve's group law. Point addition has a field inverse in its denominator, so this `inverse` is used directly — and the cases where the denominator is zero turn out to be exactly the group law's case split.",
+      "name": "Does that omega really take n powers to reach 1?",
+      "shortDescription": "A transform over a finite field builds omega from the textbook formula and never checks its order. Fix it from the definition.",
+      "description": "Underneath zkSNARKs is a transform that moves a polynomial between its coefficients and its evaluations. For that to be a transform at all, the evaluation points have to be distinct, and the only thing making them distinct is that omega has order exactly n.\n\nThe broken starter passes every public test. It builds omega as 3 ** ((p-1)/n), which is not the wrong formula; what is missing is the check that the omega it produced has order n. For p=17, n=4 it gets a genuine primitive 4th root. For p=97, n=8 it gets an element of order 4. For p=13, n=4 it gets omega=1, collapsing every evaluation point onto one. The return value is still n integers inside the field.\n\nGrading is behavioural. The checkpoints draw (p, n) from the seed and at least half of every set is a pair the textbook rule gets wrong, so tuning to the pairs you were shown fails on the ones you were not.",
+      "instructions": "## Solve in Participant Portal\n\nStarting the problem opens the editor. Edit the starter's ntt.py and run the public tests. Each submission sends the current editor file to the hidden verifier.\n\nYou implement transform(coefficients, prime, order) and inverse_transform(values, prime, order, omega). Any omega will do as long as its order is exactly order; return the one you used.",
+      "writeup": "## Returning to 1 is not enough\n\npow(w, n, p) == 1 is satisfied by every element whose order divides n, including 1 itself. Accept omega on that alone and you will call something a transform when its evaluation points repeat.\n\n## Pinning the order to n\n\nCheck pow(w, n//q, p) != 1 for each prime factor q of n. That rules out every proper divisor at once.\n\n## When the textbook formula is right\n\n3 ** ((p-1)/n) gives an element of order n when 3 generates F_p*. For a p where it does not, the result falls into a smaller subgroup. The formula is fine; the check is what was missing.\n\n## What this does not prove\n\nNothing here is about speed. It settles the precondition that makes the transform invertible at all — the precondition the FFT butterfly and the polynomial commitment both stand on.",
       "learningGoals": [
-        "Tell an integer apart from a field element",
-        "Normalize negatives and values past the modulus to a canonical representative",
-        "Implement addition, subtraction and multiplication modulo p",
-        "Derive the multiplicative inverse from the extended Euclidean algorithm",
-        "Verify a * a^-1 = 1 as a property rather than on one example",
-        "Raise an explicit error for zero and for non-invertible elements",
-        "Show the difference between a prime and a composite modulus with a counterexample"
+        "Explain the difference between having order exactly n and merely satisfying w**n == 1",
+        "Pin an order down with a check per prime factor",
+        "Explain why distinct evaluation points are what the inverse needs",
+        "Implement an inverse that includes the 1/n factor",
+        "Write an implementation that holds when n is not a power of two",
+        "Reject an invalid p, n, coefficient or omega by name"
       ],
       "checks": [
         {
-          "id": "normalize",
-          "label": "Turn an integer into a field element",
+          "id": "roots",
+          "label": "Find a primitive n-th root of unity",
           "hints": [
             {
-              "id": "normalize-hint-1",
-              "content": "-5 and p-5 are the same element. Normalizing at construction removes every later special case."
+              "id": "roots-hint-1",
+              "content": "pow(w, n, p) == 1 holds for every element whose order divides n, 1 included. Only checking pow(w, n//q, p) != 1 for each prime factor q of n pins the order to n itself."
             }
           ]
         },
         {
-          "id": "arithmetic",
-          "label": "Arithmetic, and the axioms it must satisfy"
-        },
-        {
-          "id": "egcd-trace",
-          "label": "Show every step of the extended algorithm",
+          "id": "transform",
+          "label": "Evaluate at the powers of your own omega",
           "hints": [
             {
-              "id": "egcd-hint-1",
-              "content": "Every row satisfies a*s + p*t = r. The last row's r is the gcd, and its s is the inverse candidate."
+              "id": "transform-hint-1",
+              "content": "The omega you return and the points you evaluated at must be the same thing: values[i] has to be f(omega ** i)."
             }
           ]
         },
         {
-          "id": "inverse",
-          "label": "Inverse and division",
+          "id": "roundtrip",
+          "label": "Turn the values back into coefficients",
           "hints": [
             {
-              "id": "inverse-hint-1",
-              "content": "Field division is multiplication by the inverse. It is not the language's `/`."
+              "id": "roundtrip-hint-1",
+              "content": "The inverse needs 1/n. Since p is prime you can get it from Fermat or from the extended Euclidean algorithm. If the omega you are handed makes the points repeat, say so instead of returning numbers."
             }
           ]
         },
         {
           "id": "errors",
-          "label": "Say that something does not exist"
-        },
-        {
-          "id": "composite",
-          "label": "Build a counterexample over a non-prime modulus",
+          "label": "Say that something does not exist",
           "hints": [
             {
-              "id": "composite-hint-1",
-              "content": "Look for an element sharing a factor with the modulus. No gcd of 1 means no inverse — and over a prime you will not find one."
+              "id": "errors-hint-1",
+              "content": "A p that is not prime, an n that does not divide p-1, a coefficient outside the field. Each gets its own name."
             }
           ]
         },
         {
-          "id": "axioms",
-          "label": "Hold the axioms over a prime you have not seen"
+          "id": "odd-order",
+          "label": "Handle an n that is not a power of two",
+          "hints": [
+            {
+              "id": "odd-order-hint-1",
+              "content": "Any n that divides p-1 is legal; it does not have to be a power of two. An implementation that assumed a radix-2 shape fails here for the first time."
+            }
+          ]
+        },
+        {
+          "id": "transfer",
+          "label": "Hold for a prime and an order you have not seen",
+          "hints": [
+            {
+              "id": "transfer-hint-1",
+              "content": "The primes in the public tests are ones where the textbook rule happens to be right. A different seed draws different ones."
+            }
+          ]
         }
       ]
     }

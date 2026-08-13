@@ -10,9 +10,9 @@ services:
       target: participant
     environment:
       FLAG_SEED: ${FLAG_SEED:?FLAG_SEED must be provided by the platform}
-      VERIFY_PORT: "18100"
+      VERIFY_PORT: "18130"
     ports:
-      - "127.0.0.1:18100:18100"
+      - "127.0.0.1:18130:18130"
     read_only: true
     tmpfs:
       - /tmp
