@@ -62,7 +62,7 @@ Eight checkpoints, scored independently. Wrong answers cost 15 points each.
 | `cost` | 35 | The estimate matches the measurement |
 | `transfer` | 40 | All of it, under a seed you have never been shown |
 
-Hints on six of the eight, each inside that checkpoint's 50% cap.
+Every one of the 8 checkpoints carries three hints (hint 1 = what is being asked, hint 2 = how to think about it, hint 3 = a walkthrough you can follow to a solution). Each checkpoint's hint penalties stay inside its 50% cap; opening all 24 still leaves 160 of 300.
 
 ## Two of the three numbers are the same
 

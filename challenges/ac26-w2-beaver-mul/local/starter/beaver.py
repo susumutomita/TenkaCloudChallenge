@@ -1,29 +1,108 @@
-"""The only file you edit.
+"""あなたが編集する唯一のファイル。
 
-You have shares of x and shares of y, and a preprocessed triple (a, b, c) with
-c = a*b, also shared out. Nobody holds any of them in the clear.
+## この問題で使う仕組み (前提知識は不要)
 
-    d = x - a      e = y - b        (each party, locally)
-    open d, open e                  (one round of talking)
-    x*y = c + d*b + e*a + d*e       (linear again, now that d and e are public)
+共有されている値どうしの掛け算は、 各自では計算できない。 展開すると
+`a_0*b_1` のような **交差項** (party 0 の値と party 1 の値の積) が出るからで、
+どちらの party も片方しか持っていない。
 
-Three of the four steps you already know how to do. The fourth has a term in it
-that is not like the others.
+Beaver の三つ組は、 その難しさを **前もって**払っておく道具。 中身は誰も
+知らないが `c = a*b` の関係だけが保証された 3 つの値を、 入力とは無関係に
+作り置きしておく。 本番ではこうする。
+
+    1. 各自が自分の share で  [d] = [x] - [a],  [e] = [y] - [b]   (通信なし)
+    2. d と e を開示する                                          (1 ラウンド)
+    3. 公開された d, e で  [x*y] = [c] + d*[b] + e*[a] + d*e      (通信なし)
+
+なぜ d を公開してよいか: `d = x - a` で a は誰も知らないランダム値なので、
+d は x について何も語らない (一度きりのマスクを掛けた値)。 e も同じ。
+
+なぜ step 3 が通信なしか: d と e が公開値になった後は、 `d*[b]` も `e*[a]` も
+「公開定数 × share」で、 前の問題で 0 ラウンドと分類した操作だから。
+
+数値例 (p=101, x=7, y=9, 三つ組 a=3, b=5, c=15):
+
+    d = 7 - 3 = 4,  e = 9 - 5 = 4
+    c + d*b + e*a + d*e = 15 + 20 + 12 + 16 = 63 = 7*9
+
+最後の `d*e` は **公開値どうしの積** なので share ではない。 他の 3 項と
+種類が違う。 ここが `combine` の主題。
+
+## 4 つの関数の役割
+
+    mask / open_value   機械的な算術。 式は下の docstring にある
+    combine             式は書いてあるが、 d*e をどう扱うかは書いていない
+    rounds              自分で判断する
+
+## どの関数にも共通の約束
+
+  - list を返す関数は長さ n、 要素はすべて `% p` で 0..p-1 に正規化する。
+  - p と n は起動ごとに変わる。 数値を書き込まず、 引数と `len()` から取る。
+
+## 引数と返り値の形 (share なのか、公開値なのか)
+
+    mask(value_shares, mask_shares, p) -> list[int]   引数は 2 つとも share
+    open_value(shares, p)              -> int         返るのは **整数ひとつ**
+    combine(c_shares, a_shares, b_shares, d, e, p) -> list[int]
+        c_shares / a_shares / b_shares は share (長さ n の list)
+        d / e は **開示済みの公開整数**。 share ではない
+    rounds()                           -> int         1 以上でなければ落ちる
+
+この問題に、 JSON を手入力する checkpoint は無い。 4 つとも関数を書く。
 """
 
 from __future__ import annotations
 
 
 def mask(value_shares: list[int], mask_shares: list[int], p: int) -> list[int]:
-    """Shares of (value - mask). Each party acts on its own share."""
+    """[value] - [mask] を share のまま計算する。プロトコルの 1 歩目。
+
+    この関数は算術だけ。 通信は要らない (各 party が自分の行だけを触る)。
+
+    手順:
+      1. 2 つの list を同じ位置どうしで組にする
+      2. 各組について引き算して `% p` する
+      3. 長さ n の list にして返す
+
+    式:
+        out[i] = (value_shares[i] - mask_shares[i]) % p
+
+    なぜ正しいか:
+        sum(out) = sum(value_shares) - sum(mask_shares) = value - mask (mod p)
+
+    例: p=101, [x]=[30, 40, 39] (x = 109 % 101 = 8), [a]=[10, 20, 74] (a = 3)
+        out = [20, 20, (39 - 74) % 101] = [20, 20, 66]
+        検算: 20 + 20 + 66 = 106、 106 % 101 = 5 = 8 - 3
+
+    ありがちな失敗:
+      - `% p` を忘れて -35 のような負の値を返す
+        (Python の `%` は負の値でも 0..p-1 を返すので、付けるだけでよい)
+      - 長さの違う list を `zip` して短いほうに切り詰める
+    """
     return list(value_shares)
 
 
 def open_value(shares: list[int], p: int) -> int:
-    """The value behind a sharing, once the parties agree to reveal it.
+    """share の背後にある値を全員に見せる。返すのは整数ひとつ。
 
-    Only ever called on d and e, which are safe to reveal: each is a secret masked
-    by a fresh preprocessed value nobody knows.
+    この関数も算術だけ。 呼ばれるのは d と e に対してだけで、 どちらも
+    「秘密を、誰も知らない一度きりのマスクで覆った値」なので、 開示しても
+    元の秘密については何も分からない。
+
+    手順:
+      1. share を全部足す
+      2. `% p` して 0..p-1 の整数ひとつを返す (list ではない)
+
+    式:
+        value = sum(shares) % p
+
+    例: p=101, shares=[20, 20, 66] -> 106 % 101 = 5
+
+    ありがちな失敗:
+      - `% p` を忘れる。 返した値は次の式で **係数** として使われるので、
+        `d * b_i` が跳ね上がり、原因から遠い場所 (combine) で結果が合わなくなる
+      - list を返す (combine の d / e は整数を期待している)
+      - 人数を仮定して `shares[0] + shares[1] + shares[2]` と書く
     """
     return 0
 
@@ -36,15 +115,64 @@ def combine(
     e: int,
     p: int,
 ) -> list[int]:
-    """Shares of x*y, from the triple's shares and the two opened values.
+    """開示された d, e と三つ組の share から、x*y の share を組み立てる。
 
-    x*y = c + d*b + e*a + d*e
+    **ここがこの問題の中心**。 式は与える。 与えないのは、 4 つの項のうち
+    1 つをどう扱うかの判断。
 
-    Look carefully at the last term before you write this.
+    使う式:
+        x*y = c + d*b + e*a + d*e
+
+    導出 (d = x - a, e = y - b より x = a + d, y = b + e):
+        x*y = (a + d)(b + e) = a*b + a*e + d*b + d*e = c + e*a + d*b + d*e
+
+    項ごとに「誰が計算できるか」:
+        c     share。 各自が自分の c_i を出す
+        d*b   d は公開値、 b は share -> 各自が d * b_i を計算 (公開定数 × share)
+        e*a   同じく各自が e * a_i を計算
+        d*e   **公開値 × 公開値 = 公開定数**。 share ではない。 他の 3 つと種類が違う
+
+    採点のしかた:
+        (1) 返した list の合計が `(x*y) % p` であること
+        (2) 長さ n、 要素はすべて 0..p-1
+        (3) **合計が `(x*y + (n-1)*d*e) % p` になっていたら明示的に落とす**。
+            fixture は d != 0 かつ e != 0 を強制している —— もし d*e = 0 なら
+            この 2 つが区別できず、間違った実装が正しいと判定されてしまうため。
+
+    考える順序:
+        1. 上の 3 項だけを各自が計算したとき、合計はいくつか
+           (答えは c + d*b + e*a。 x*y との差はちょうど d*e)
+        2. その差を埋めるには d*e を足す。 では **誰が** 足すのか
+        3. 前の問題で公開定数を扱ったときの規則を思い出す
+
+    注意: `d` は `b` に、 `e` は `a` に掛かる。 取り違えると一般には x*y に
+    ならない (d == e の設定ではたまたま通ってしまうので気付きにくい)。
+
+    返り値の形:
+        長さ n の list。 要素は 0..p-1 の整数。
+
+    ありがちな失敗:
+      - `d*e` を足し忘れる (合計が x*y - d*e になる)
+      - `d*e` を全員に足す (合計が (n-1)*d*e だけずれる)
+      - `d` / `e` を list として扱う (どちらも開示済みの整数)
     """
     return list(c_shares)
 
 
 def rounds() -> int:
-    """How many openings a single Beaver multiplication needs."""
+    """Beaver 掛け算 1 回に必要な開示ラウンド数を返す。
+
+    採点のしかた:
+        1 以上の整数であることを要求する。 0 を返すと「掛け算は各自でできる」
+        と言っていることになり、明示的に落とされる (この問題が存在する理由
+        そのものを否定する答えなので)。
+
+    考える順序:
+        1. 上のプロトコルで、開示している値はいくつあるか
+        2. その 2 つの計算は互いに依存しているか。 d を出すのに e は要るか
+        3. 依存していないなら、同じ 1 回のやり取りでまとめて送れるか
+
+    返り値の形:
+        整数ひとつ (bool は不可)。
+    """
     return 0

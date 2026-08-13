@@ -34,8 +34,8 @@
   "estimatedDuration": "40-60 分",
   "shortDescription": "秘密を n 個に分けて配る。足せば戻る。それだけなら暗号ではない。n-1 個を持っていても何も分からないことを、証拠で示す。",
   "description": "Week 2 の mechanism 問題。 加法的秘密分散を F_p 上で実装する。 足し算で戻ることは数行で書けるので、 checkpoint はそこではなく「n-1 個では何も分からない」という性質を実行可能な形で示させることに置く。\n\nhides-the-secret checkpoint は participant の complete_shares を field の全要素に対して回す。 同じ n-1 個の share から、 どの秘密に対しても辻褄の合う最後の 1 個を作れるなら、 その n-1 個は秘密について 何の証拠でもない。 これが「漏れない」の実行可能な定義になる。\n\nthreshold checkpoint は必要数を答えるだけでは通らない。 同じ n-1 個と両立する相異なる 2 つの秘密を 提出させる。 数を当てるのは推測でできるが、 2 つの証人は理解がないと作れない。\n\nhidden test は starter の自明な分割 (party 0 に秘密をそのまま渡す) を明示的に落とす。 round trip だけを見る test はこれを通してしまい、 それは分散になっていない。\n\nWeek 2 の教材は pinned commit 時点で未公開のため courseAlignment.sources は持たない (schema は この場合のために sources を任意にしている)。 #219 が公開を検出した時点で対応づけを確定する。 status は draft のままにする。",
-  "instructions": "## Participant Portal で解く\n\nParticipant Portal で問題を起動すると、問題文と同じ画面に問題エディタが表示されます。\n「証拠を調べる」で deploy 固有の fixture と公開された証拠を確認し、starter ソースを編集して\n「公開テストを実行」を押します。コード以外の checkpoint は、証拠と実験結果から回答欄を\n埋めてください。object / array / number は JSON で入力します。\n\n各 checkpoint の提出ボタンは、現在のエディタ内容と回答欄を container の prepare API へ送り、\n生成された値をそのまま採点へ渡します。画面を移動したり提出値をコピーしたりする必要はありません。\n直接回答はこの deploy の seed に結び付くため、別の起動で作った値や概念名の暗記だけでは合格できません。\n",
-  "writeup": "## 足せば戻ることは、まだ何でもない\n\n加法的秘密分散の算術は数行で終わる。 価値があるのは「n-1 個では秘密について何も分からない」ほうで、 これは主張ではなく示すものだ。\n\n## 「漏れない」の実行可能な定義\n\n同じ n-1 個の share から、 field のどの秘密に対しても辻褄の合う 最後の 1 個を作れるなら、 その n-1 個は秘密の証拠になっていない。 complete_shares が全要素で成功する ことがそのまま証明になる。 これが Week 6 の over-opening (途中で share を開けてしまう) を 「なぜまずいか」で語れるようになる土台になる。\n\n## 自明な分割は分散ではない\n\nparty 0 に秘密をそのまま渡し、 残りを 0 にすれば足し算は合う。 round trip test は通る。 だが party 0 は最初から全部知っている。 hidden test がこれを明示的に落とすのは、 「テストが通る」と「性質が成り立つ」の差がこの問題でも同じ形で現れるからだ。\n\n## rerandomize\n\n和が 0 になる offset を足すと、 秘密は変わらないまま share は全部動く。 実プロトコルでは、 同じ share 集合がラウンドを跨いで結び付けられないようにするために使う。 固定の期待値ではなく「秘密が保たれ、 かつ全要素が動いた」という関係で検査している。",
+  "instructions": "## はじめに\n\n**加法的秘密分散 (additive secret sharing)** を、素数 p の有限体 F_p の上で作ります。前提知識は要りません。使う仕組みは次の 3 行がすべてです。\n\n- **分ける**: 秘密 s を n 人に配る。最初の n-1 人には乱数をそのまま渡し、最後の 1 人には「s から、それまでの合計を引いた値」を渡す。\n- **戻す**: 全員の share を足して `% p` する。定義からちょうど s に戻る。\n- **足りない集合**: n-1 人が集まっても、最後の 1 個を選び直せばどの秘密にも辻褄が合う。だから n-1 個は秘密について何の情報も持たない。\n\n数値例 (p = 101, n = 3, s = 5, 渡された乱数 = [70, 40]):\n\n```\nshare = [70, 40, (5 - 110) % 101] = [70, 40, 97]\n復元  = (70 + 40 + 97) % 101 = 207 % 101 = 5\n```\n\n足せば戻ることは数行で書けます。この問題の中身はそこではなく、**「n-1 個では何も分からない」を主張ではなく実行できる形にする**ことです。\n\n## 最初の一手\n\n**Participant Portal** で問題を起動すると、問題文と同じ画面に問題エディタが出ます。まず **「証拠を調べる」** を押してください。この deploy の modulus `p`、人数 `n`、n-1 人分の share、渡される乱数が表示されます。**p と n は起動ごとに変わる**ので、この 2 つを先に控えてください。以降の手順はすべてこの 2 つの数に合わせます。ホスト側のターミナルは要りません。\n\n## 解き方\n\nエディタで `sharing.py` の 4 つの関数を埋め、**「公開テストを実行」** で確認します。各 checkpoint の提出ボタンは、いまのエディタの中身をそのまま採点へ送ります。画面を移動したり値をコピーしたりする必要はありません。\n\n`threshold` だけはコードではなく **JSON を直接書く** checkpoint です。**回答欄は 1 行の入力欄**なので、改行を入れずに次の形で 1 行で貼ってください。\n\n```json\n{\"sharesNeeded\": 3, \"partial\": [11, 22], \"completions\": [{\"secret\": 0, \"lastShare\": 68}, {\"secret\": 40, \"lastShare\": 7}]}\n```\n\n読みやすく折り返すと次の構造です (**提出するときは上の 1 行の形で**)。\n\n```json\n{\n  \"sharesNeeded\": 3,\n  \"partial\": [11, 22],\n  \"completions\": [\n    {\"secret\": 0,  \"lastShare\": 68},\n    {\"secret\": 40, \"lastShare\": 7}\n  ]\n}\n```\n\n上は p = 101, n = 3 の場合の例です。キーの意味と制約:\n\n- `sharesNeeded` (整数) — **復元に必要な share の数、すなわち n**。t < n のしきい値ではありません。「証拠を調べる」で見た n をそのまま書きます。\n- `partial` (整数の配列) — 長さは **ちょうど n - 1**。中身は 0..p-1 の好きな値で構いません。n = 5 なら 4 個です。例の `[11, 22]` を長さを変えずに写すと落ちます。\n- `completions` (オブジェクトの配列) — **ちょうど 2 個**。各要素は `secret` と `lastShare` の 2 キーを持つ整数で、2 つの `secret` は**互いに異なる**値にします。\n- 合格条件は、各 completion について `(partial の合計 + lastShare) % p == secret` が成り立つことです。\n\n## ゴール\n\n分割と復元が任意の p・n で成立し、自明な分割 (誰か 1 人が秘密をそのまま持つ形) になっておらず、同じ n-1 個から F_p のどの秘密へも辻褄を合わせられ、秘密を保ったまま share を入れ替えられること。最後の transfer は、別の p と n で同じコードがそのまま動くことを確かめます。\n",
+  "writeup": "## 作ったもの\n\n秘密 s を n 人に配り、**全員が持ち寄ったときだけ** s に戻る仕組みを、有限体 F_p の上で作った。配り方はこれだけだった。\n\n```\nshare[0] .. share[n-2] = 渡された乱数をそのまま\nshare[n-1]             = (s - (share[0] + ... + share[n-2])) % p\n```\n\n## なぜこの式になるのか\n\n作りたいのは「合計が s になる n 個の数」だった。n 個のうち **n-1 個は好きに決めてよい**。決めたあと、残る 1 個には選択の余地がない。合計を s にするには\n\n```\nshare[n-1] = s - (それまでの合計)\n```\n\nでなければならないからだ。つまり最後の 1 個だけが「辻褄合わせ」で、それ以外の n-1 個は s と無関係に選べる。**この非対称が、この問題のすべての性質の出どころ**になる。\n\n最後に `% p` を付けるのは、F_p の元を 0..p-1 のちょうど 1 つの代表で表すと決めているから。-105 と -105 + 2*101 = 97 は F_101 では同じ元だが、同じ**表現**ではない。採点は代表を見るので、正規化を忘れると値が正しいのに落ちる。\n\n## 数値で 1 行ずつ追う (p = 101, n = 3, s = 5, 乱数 = [70, 40])\n\n```\nshare[0] = 70\nshare[1] = 40\nそれまでの合計 = 70 + 40 = 110\nshare[2] = (5 - 110) % 101 = (-105) % 101 = 97\n復元     = (70 + 40 + 97) % 101 = 207 % 101 = 5   ✓\n```\n\nここで share[0], share[1] = 70, 40 を見ても、5 を指す手がかりは何もない。理由は、**s が 5 でなく 42 だったとしても 70 と 40 はそのまま**で、変わるのは share[2] が (42 - 110) % 101 = 33 になることだけだからだ。\n\n```\ns = 5  のとき  [70, 40, 97]\ns = 42 のとき  [70, 40, 33]\ns = 0  のとき  [70, 40, (0-110) % 101] = [70, 40, 92]\n```\n\n先頭 2 個はどれも同じ。「70 と 40 を見た」という事実は、s の候補を 101 個から 1 個も減らしていない。これが「漏れない」の内容そのもので、口で言う代わりに **complete_shares という関数にした**のがこの問題だった。\n\n## 「漏れない」を実行可能にする\n\n上の観察をそのまま関数にすると、狙った秘密 c に対して\n\n```\nlast = (c - sum(partial)) % p\n```\n\nを返せばよい。すると `(sum(partial) + last) % p = c` が必ず成り立つ。c は 0..p-1 のどれでもよい。**どれでも作れるということは、その n-1 個が「c がどれか」を 1 つも排除していない**ということ。hides-the-secret checkpoint が field の全要素 0..p-1 を走査するのはこのためで、1 つの c で成功しても「絞っていない」の証拠にはならないからだ。\n\nthreshold checkpoint はそれを 2 点だけ、しかし**手で**作らせる。partial = [11, 22] (合計 33)、p = 101 なら\n\n```\nsecret = 0  → lastShare = (0 - 33) % 101 = 68     検算 (33 + 68) % 101 = 0   ✓\nsecret = 40 → lastShare = (40 - 33) % 101 = 7     検算 (33 + 7)  % 101 = 40  ✓\n```\n\n同じ [11, 22] が、0 とも 40 とも両立する。だから [11, 22] を見ても秘密は 0 かもしれないし 40 かもしれない。**数 (n) を当てるのは 2 択でも当たるが、この 2 つの証人は理解がないと作れない**。それが「必要数を、証人つきで答える」という形にした理由。\n\n## 各 checkpoint が守っているもの\n\n- **share-and-reconstruct** — 往復に加えて「自明な分割」を落とす。party 0 に s をそのまま渡し、残りを 0 にすれば合計は合い、往復テストは通る。だが party 0 は最初から全部知っている。**往復だけを見る検査は、分散していない実装を分散として通してしまう**。starter が出荷時にちょうどその形なのは、「テストが通る」と「性質が成り立つ」が別物であることを最初の一手で見せるため。\n- **hides-the-secret** — 上のとおり、field の全要素での構成可能性。1 例では足りない。\n- **threshold** — 数だけでは通らない。相異なる 2 つの秘密が同じ n-1 個と両立することを、実物で見せる。2 つの `secret` が同じ値だと落ちるのは、同じ秘密 2 つでは「どちらとも両立する」を示していないから。\n- **rerandomize** — 固定の期待値ではなく**関係**で検査する。「秘密が変わっていない」かつ「share が動いた」の 2 つ。期待値を 1 つ置くと、その値を返すだけの実装が通ってしまう。\n- **transfer** — 別 seed の p と n で全部を再実行する。この deploy の数字を焼き込んだ実装はここで落ちる。\n\n## 間違えるとどう壊れるか\n\n- **`% p` を忘れる** → `(5 - 110)` が -105 のまま返る。F_101 では 97 と同じ元だが表現が違うので、「0..p-1 の外」で落ちる。値が合っているのに落ちるので原因が見えにくい。\n- **randomness を使わず自前で乱数を作る** → 走らせるたびに share が変わり、採点が再現できない。同じ入力に同じ出力を返さない実装は、往復は通っても transfer で崩れる。\n- **rerandomize で全員に同じ値 r を足す** → 合計が s + n*r になる。n = 3, r = 4 なら秘密が 12 ずれる。足すべきは「**合計が 0 になる n 個**」で、n-1 個を乱数から取り、最後の 1 個を `(-それまでの合計) % p` にする。\n- **rerandomize で offset を全部 0 にする** → 秘密は保たれるが share が 1 個も動かず、「入れ替えた」ことにならない。何もしないのは、秘密を守る方法ではあっても、この checkpoint が求めているものではない。\n- **complete_shares を `secret` そのまま返す** → partial の合計を無視しているので、partial が全部 0 のときだけ通る。1 例で試すと通ってしまう種類の間違い。\n\n## 次への接続\n\n- 次の **ac26-w2-linear-shares** は、この share の上で「通信なしにできる演算」を切り分ける。公開定数 c を足す操作で、n 人全員が c を足すと x + n*c になってしまう —— **「最後の 1 個だけが辻褄合わせ」というこの問題の非対称が、そのまま次の落とし穴になる**。\n- **ac26-w2-beaver-mul** では、その公開定数 (d*e) が protocol の途中に現れる。同じ間違いが、はるかに見つけにくい場所で出る。\n- Week 6 の **over-opening** (途中の share を開けてしまう) を「規則だから駄目」ではなく「なぜまずいか」で語れるのは、n-1 個は何の証拠でもなく n 個そろえば全部分かる、というその境界をここで手で作ったからだ。上流課題 (toy-mpc) の Part A も、まずこの分け方の上に立っている。\n",
   "tags": [
     "advanced-cryptography-2026",
     "week2",
@@ -205,7 +205,24 @@
         "input": "multiline",
         "label": "分けて、集めて、戻す",
         "points": 50,
-        "wrongAnswerPenalty": 10
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "share-and-reconstruct-hint-1",
+            "content": "この checkpoint は 2 つを同時に見ています。 (1) 秘密 s を n 個に分けて、 全部足すと s に戻るか。 (2) その分け方が本当に「分散」になっているか —— つまり誰か 1 人が s をそのまま持つ形になっていないか。 starter は (1) だけを満たす形 (1 人に s、 残り全員に 0) で出荷されているので、 往復は合っているのに落ちます。 「テストが通る」と「性質が成り立つ」が別物だ、 というのがここで見るものです。",
+            "penalty": 10
+          },
+          {
+            "id": "share-and-reconstruct-hint-2",
+            "content": "n 個のうち **n-1 個は自由に決めてよく**、 最後の 1 個には選択の余地がありません —— 合計を s にするにはこの値しかない、 という 1 つの数になります。 自由に決める側には、 自前の乱数ではなく引数 `randomness` の値をそのまま使ってください (自分で乱数を作ると走らせるたびに答えが変わり、 採点が再現できません)。 復元は全部足して `% p` するだけ。 返す整数はすべて 0..p-1 に正規化します。",
+            "penalty": 9
+          },
+          {
+            "id": "share-and-reconstruct-hint-3",
+            "content": "手順どおりに書けば通ります。\n\n**share(secret, n, p, randomness)**\n1. `head = [r % p for r in randomness[:n-1]]` —— 先頭 n-1 個は渡された乱数をそのまま使う。\n2. `tail = (secret - sum(head)) % p` —— 最後の 1 個は「secret から head の合計を引いた値」。\n3. `[*head, tail]` を返す。長さはちょうど n。\n\n**reconstruct(shares, p)**\n1. `sum(shares) % p` を返す。それだけ。\n\n検算 (p=101, n=3, secret=5, randomness=[70,40]): head=[70,40]、 sum(head)=110、 tail=(5-110)%101=97、 返り値 [70,40,97]。 復元 (70+40+97)%101=5 ✓。\n\np と n は起動ごとに変わるので、 数値を書き込まず必ず引数から取ってください。",
+            "penalty": 6
+          }
+        ]
       },
       {
         "id": "hides-the-secret",
@@ -215,9 +232,19 @@
         "wrongAnswerPenalty": 10,
         "hints": [
           {
-            "id": "hides-hint-1",
-            "content": "同じ n-1 個を持ったまま、 狙った秘密になるよう最後の 1 個を選べるか。 選べるなら、 その n-1 個は秘密を絞っていない。",
-            "penalty": 20
+            "id": "hides-the-secret-hint-1",
+            "content": "確かめようとしているのは 1 つの文です —— **「n-1 個の share を持っていても、 秘密については何も分からない」**。 それを言葉ではなく実行できる形にすると、 こうなります。 同じ n-1 個を握ったまま、 こちらが指定したどの秘密に対しても、 辻褄の合う最後の 1 個を作って見せられるか。 作れるなら、 その n-1 個はどの秘密も排除していない = 何の証拠にもなっていない。 採点はこれを field の全要素 0..p-1 に対して回します。 1 つ通ればよい、 ではありません。",
+            "penalty": 10
+          },
+          {
+            "id": "hides-the-secret-hint-2",
+            "content": "`complete_shares(partial, secret, p)` が返すべき数を、 満たすべき条件から逆算してください。 条件は「`partial` の全部と、 返した 1 個を足して `% p` すると `secret` になる」です。 いま `partial` の合計は分かっている固定値で、 未知数は返り値ただ 1 つ。 つまり 1 元 1 次方程式で、 F_p では引き算がいつでもできるので解は必ず存在し、 しかもただ 1 つです。 「どの secret でも解ける」のは、 この式が secret に対して常に解を持つからです。",
+            "penalty": 8
+          },
+          {
+            "id": "hides-the-secret-hint-3",
+            "content": "**complete_shares(partial, secret, p)** の手順:\n1. `t = sum(partial) % p` —— いま持っている n-1 個の合計を出す。\n2. 求める最後の share は「t に足すと secret になる値」なので、 **secret から t を引く**。\n3. `% p` で 0..p-1 に正規化して返す。つまり返り値は `(secret - t) % p`。\n\n検算 (p=101, partial=[70,40], secret=5): t=110%101=9、 返り値=(5-9)%101=97。 (70+40+97)%101=207%101=5 ✓。\n同じ partial のまま secret=42 にすると 返り値=(42-9)%101=33 で、 (70+40+33)%101=42 ✓。 **partial を 1 個も変えずに秘密だけが変わった**ことを確認してください。 これがこの checkpoint の中身です。\n\n注意: `partial` の長さや p を関数内に書き込まないこと。 両方とも引数から来ます。",
+            "penalty": 4
           }
         ]
       },
@@ -229,8 +256,18 @@
         "hints": [
           {
             "id": "threshold-hint-1",
-            "content": "数を答えるだけでは通らない。 同じ n-1 個と両立する、 相異なる 2 つの秘密を実際に作る。",
-            "penalty": 20
+            "content": "ここは唯一、 コードではなく **JSON を手で書く** checkpoint です。 聞かれているのは 2 つ。 (a) 秘密を復元するのに share が何個要るか。 (b) その 1 つ手前の枚数 (n-1 個) が本当に何も語っていないことの**証拠**。 (a) は数を書くだけですが、 (b) は「同じ n-1 個が、 相異なる 2 つの秘密のどちらとも両立する」という実物を 2 つ作って出します。 数だけなら当てずっぽうでも当たるので、 数だけでは通りません。",
+            "penalty": 10
+          },
+          {
+            "id": "threshold-hint-2",
+            "content": "(a) 加法的秘密分散では、 1 個でも欠けると復元できません。 だから答えは **n そのもの** —— 「証拠を調べる」で見た人数です。 t < n のしきい値ではありません。\n\n(b) `partial` は自分で決めた n-1 個で構いません (0..p-1 の好きな値、 長さはちょうど n-1)。 そのうえで、 相異なる 2 つの秘密 A・B それぞれについて、 `(partial の合計 + lastShare) % p` がその秘密になるような `lastShare` を作ります。 合格条件がまさにその等式です。 2 つの `secret` が同じ値だと落ちます —— 同じ秘密 2 つでは「どちらとも両立する」を示していないからです。",
+            "penalty": 8
+          },
+          {
+            "id": "threshold-hint-3",
+            "content": "手順どおりに埋めれば通ります。 p と n は「証拠を調べる」で確認した**この deploy の値**を使ってください。\n\n1. `sharesNeeded` に **n** を書く。\n2. `partial` を作る。長さ **n-1** の整数配列。中身は何でもよいので、 例えば `[1, 2, ..., n-1]`。 n=5 なら `[1,2,3,4]`。\n3. `t = (partial の合計) % p` を計算する。 `[1,2,3,4]` なら t = 10 % p。\n4. 秘密 A を 1 つ選ぶ (例: `0`)。 `lastShareA = (A - t) % p` を計算する。\n5. A と**違う**秘密 B を選ぶ (例: `1`)。 `lastShareB = (B - t) % p` を計算する。\n6. `completions` に `{\"secret\": A, \"lastShare\": lastShareA}` と `{\"secret\": B, \"lastShare\": lastShareB}` の 2 つだけを入れる。\n7. 提出前に検算: `(t + lastShareA) % p == A` と `(t + lastShareB) % p == B` の両方が成り立つこと。\n8. **回答欄は 1 行の入力欄**です。 改行を入れずに 1 行で貼ってください。\n\n形の例 (p=101, n=3, partial=[1,2] で t=3 の場合。 このまま 1 行で入ります):\n```json\n{\"sharesNeeded\": 3, \"partial\": [1, 2], \"completions\": [{\"secret\": 0, \"lastShare\": 98}, {\"secret\": 1, \"lastShare\": 99}]}\n```\n`98` は `(0-3) % 101`、 `99` は `(1-3) % 101` です。 **あなたの p と n はこれとは違います**。 とくに `partial` の長さは n-1 なので、 n=6 なら 5 個です —— 上の 2 個をそのまま写すと落ちます。 長さも数値も自分の値で計算し直してください。",
+            "penalty": 4
           }
         ]
       },
@@ -243,8 +280,18 @@
         "hints": [
           {
             "id": "rerandomize-hint-1",
-            "content": "和が 0 になる値の組を足せば、 総和は動かない。",
-            "penalty": 15
+            "content": "同じ秘密を、 **share だけ全部入れ替えて**配り直す操作です。 実プロトコルでは、 同じ share の集合がラウンドを跨いで同一人物のものだと結び付けられないようにするために使います。 採点は固定の期待値ではなく 2 つの関係で見ます —— (1) 復元すると秘密が変わっていない、 (2) 返した share が入力とまったく同じではない。 何もしないで返すのは (1) は満たしますが (2) で落ちます。",
+            "penalty": 6
+          },
+          {
+            "id": "rerandomize-hint-2",
+            "content": "秘密は「share の合計」なので、 **合計が 0 になる値の組を足せば秘密は動きません**。 これを zero-sharing と呼びます。 全員に同じ r を足すのは駄目で、 合計が n*r になるので秘密が n*r ずれます。 作り方は share のときと同じ非対称です —— n-1 個は自由 (渡された randomness を使う)、 最後の 1 個だけが「合計を 0 にする」ための辻褄合わせになります。",
+            "penalty": 5
+          },
+          {
+            "id": "rerandomize-hint-3",
+            "content": "**rerandomize(shares, p, randomness)** の手順:\n1. `k = len(shares)` —— 人数は引数の長さから取る (n を書き込まない)。\n2. `offsets = [r % p for r in randomness[:k-1]]` —— 先頭 k-1 個の offset。\n3. `offsets.append((-sum(offsets)) % p)` —— 最後の 1 個で合計を 0 にする。\n4. `[(s + o) % p for s, o in zip(shares, offsets)]` を返す。\n\n検算 (p=101, shares=[70,40,97] (秘密 5), randomness=[3,8]): offsets=[3,8,(-11)%101=90]、 合計 3+8+90=101≡0 ✓。 新しい share は [73,48,(97+90)%101=86]。 復元 (73+48+86)%101=207%101=5 —— **秘密は 5 のまま、 3 個とも動いた** ✓。\n\n注意: randomness が全部 0 になる引きは採点側で避けられているので、 手順どおりなら (2) の「動いた」も満たされます。",
+            "penalty": 4
           }
         ]
       },
@@ -253,7 +300,24 @@
         "input": "multiline",
         "label": "見たことのない設定でも成立させる",
         "points": 30,
-        "wrongAnswerPenalty": 10
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "transfer-hint-1",
+            "content": "transfer は **新しく書くものがない** checkpoint です。 いま画面に見えている p と n ではなく、 別の seed から作られた別の modulus・別の人数で、 同じ 4 つの関数を全部走らせ直します。 確かめているのは 1 点だけ —— **この deploy の具体的な数字に依存していないか**。 概念を理解していれば自動的に通り、 見えた数を書き写していれば必ず落ちます。",
+            "penalty": 6
+          },
+          {
+            "id": "transfer-hint-2",
+            "content": "自分のコードを読み直して、 **引数から来ていない数**を探してください。 典型は 3 つ。 (1) modulus を 101 のようなリテラルで書いている。 (2) 人数を 3 のような定数にしている、 あるいは `shares[0], shares[1], shares[2]` と個別に触っている。 (3) 「証拠を調べる」で見た share の値そのものを埋め込んでいる。 modulus は必ず引数 `p`、 人数は `n` か `len(shares)` / `len(partial)+1` から取ります。",
+            "penalty": 5
+          },
+          {
+            "id": "transfer-hint-3",
+            "content": "4 つの関数を順に点検してください。 すべて満たしていればそのまま提出で通ります。\n\n1. **share** —— 人数は引数 `n`。 使う乱数は `randomness[:n-1]` (`[:2]` のような固定長にしない)。 最後の 1 個は `(secret - sum(head)) % p`。\n2. **reconstruct** —— `sum(shares) % p` だけ。 長さに触れない。\n3. **complete_shares** —— `(secret - sum(partial)) % p` だけ。 `partial` の長さを仮定しない。\n4. **rerandomize** —— 人数は `len(shares)`。 offset は `randomness[:len(shares)-1]` から取り、 最後に `(-sum(offsets)) % p` を足す。\n\n最後に、 4 つの関数の本文に **数値リテラルが `0` と `1` 以外に 1 つも残っていない**ことを目で確認してください。 残っていなければ transfer は通ります。",
+            "penalty": 4
+          }
+        ]
       }
     ]
   },
@@ -262,8 +326,8 @@
       "name": "Split it, and still nobody knows",
       "shortDescription": "Split a secret across n parties. Add them up and it comes back. If that were all, it would not be cryptography. Show, with evidence, that holding n-1 of them tells you nothing.",
       "description": "Week 2's mechanism problem. Implement additive secret sharing over F_p. That addition reassembles the secret takes a few lines, so the checkpoints sit elsewhere: demonstrating, in executable form, the property that n-1 shares reveal nothing.\n\nThe hides-the-secret checkpoint runs the participant's complete_shares against every element of the field. If, from the same n-1 shares, a consistent final share can be built for any secret whatsoever, those n-1 shares are evidence of nothing about the secret. That is the executable definition of \"does not leak\".\n\nThe threshold checkpoint cannot be passed by stating the required count. It demands two distinct secrets compatible with the same n-1 shares. Guessing a number is possible; producing two witnesses is not, without understanding.\n\nThe hidden tests explicitly fail the starter's trivial split (handing party 0 the secret as-is). A test that only checks the round trip passes it — and that is not sharing at all.\n\nWeek 2's course material was unpublished at the pinned commit, so there is no courseAlignment.sources (the schema makes sources optional exactly for this case). The alignment is finalised when #219 detects publication; status stays draft.",
-      "instructions": "## Solve in Participant Portal\n\nStart the problem in Participant Portal. The problem editor appears on the same page as the\nstatement. Use **Inspect evidence** to read the deployment-specific fixture and published\nevidence, edit the starter sources, and select **Run public tests**. Fill any direct-answer\ncheckpoint from the evidence and your experiments; enter objects, arrays, and numbers as JSON.\n\nEach checkpoint's submit button sends the current editor files and answer fields through the\ncontainer prepare API, then submits the generated value directly for scoring. There is no second\nscreen and no submission value to copy. Direct answers are bound to this deployment's seed, so a\nvalue prepared for another run, or a remembered concept name on its own, cannot earn credit.\n",
-      "writeup": "## Adding up to the secret is not yet anything\n\nThe arithmetic of additive sharing takes a few lines. What makes it worth anything is that n-1 shares carry no information about the secret — and that is something to demonstrate, not assert.\n\n## An executable definition of 'it does not leak'\n\nIf, holding the same n-1 shares, you can produce a consistent final share for *every* secret in the field, then those n-1 shares are not evidence about the secret. `complete_shares` succeeding across the whole field is the proof. That is the footing for talking about Week 6's over-opening in terms of why it is bad, rather than as a rule.\n\n## A trivial split is not a sharing\n\nHand the secret to party 0 and give everyone else zero: the sum still works and the round-trip test still passes. Party 0 knew everything from the start. The hidden tests reject that case explicitly, because the gap between 'the test passes' and 'the property holds' shows up here in the same shape as everywhere else in this track.\n\n## Rerandomizing\n\nAdd a set of offsets summing to zero and the secret is unchanged while every share moves. Real protocols use this so a set of shares cannot be linked across rounds. It is checked as a relation — secret preserved, every element moved — not against a fixed expected list.",
+      "instructions": "## Start here\n\nYou are building **additive secret sharing** over F_p, the field of integers modulo a prime p. No prior knowledge is needed; the whole mechanism is these three lines.\n\n- **Split**: to give a secret s to n parties, hand the first n-1 of them random values as they are, and hand the last one \"s minus the sum of what came before\".\n- **Reconstruct**: add every share and take `% p`. By construction this lands exactly on s.\n- **A short set**: n-1 parties together can be made consistent with *any* secret, by choosing the last share differently. So n-1 shares carry no information about the secret.\n\nA worked example (p = 101, n = 3, s = 5, randomness = [70, 40]):\n\n```\nshare = [70, 40, (5 - 110) % 101] = [70, 40, 97]\nrecover = (70 + 40 + 97) % 101 = 207 % 101 = 5\n```\n\nThat addition reassembles the secret takes a few lines. The content of this problem is elsewhere: making **\"n-1 shares reveal nothing\"** something you execute rather than something you assert.\n\n## First move\n\nStart the problem in **Participant Portal** and the editor appears on the same page as the statement. Press **Inspect evidence** first. It shows this deployment's modulus `p`, party count `n`, the shares n-1 parties hold between them, and the randomness you are given. **p and n change on every deployment**, so write those two down before anything else; every step below is sized by them. No terminal on your machine is required.\n\n## Workflow\n\nFill in the four functions in `sharing.py` in the editor and press **Run public tests**. Each checkpoint's submit button sends the current editor contents straight to scoring. There is no second screen and no value to copy.\n\n`threshold` is the one checkpoint that is **JSON you type**, not code. **The answer field is a single-line input**, so paste it on one line, with no newlines:\n\n```json\n{\"sharesNeeded\": 3, \"partial\": [11, 22], \"completions\": [{\"secret\": 0, \"lastShare\": 68}, {\"secret\": 40, \"lastShare\": 7}]}\n```\n\nWrapped for reading, that is the following structure (**submit the one-line form above**):\n\n```json\n{\n  \"sharesNeeded\": 3,\n  \"partial\": [11, 22],\n  \"completions\": [\n    {\"secret\": 0,  \"lastShare\": 68},\n    {\"secret\": 40, \"lastShare\": 7}\n  ]\n}\n```\n\nThat example is for p = 101, n = 3. What the keys mean:\n\n- `sharesNeeded` (integer) — **the number of shares needed to reconstruct, i.e. n**. Not a threshold t < n. Use the n you saw under Inspect evidence.\n- `partial` (array of integers) — length **exactly n - 1**. The values may be anything in 0..p-1. At n = 5 that is four entries; copying the two-element example unchanged fails.\n- `completions` (array of objects) — **exactly two**. Each has integer `secret` and `lastShare`, and the two `secret` values must **differ from each other**.\n- The acceptance condition is that for each completion, `(sum of partial + lastShare) % p == secret`.\n\n## Goal\n\nSplitting and reconstruction hold for any p and n; the split is not the trivial one where a single party holds the secret outright; the same n-1 shares can be completed to every secret in F_p; and shares can be refreshed without moving the secret. The final transfer checkpoint re-runs your code under a different p and n.\n",
+      "writeup": "## What you built\n\nA way to hand a secret s to n parties so that it comes back **only when all of them bring their piece**, over the finite field F_p. The whole split was this:\n\n```\nshare[0] .. share[n-2] = the randomness you were given, unchanged\nshare[n-1]             = (s - (share[0] + ... + share[n-2])) % p\n```\n\n## Why that is the formula\n\nWhat you needed was \"n numbers that sum to s\". Of those n, **n-1 may be chosen freely**. Once they are chosen, the remaining one has no freedom left: to make the total land on s it must be\n\n```\nshare[n-1] = s - (the sum of everything before it)\n```\n\nSo exactly one share is the \"settle-up\" value and the other n-1 are chosen without reference to s at all. **That asymmetry is where every property in this problem comes from.**\n\nThe trailing `% p` is there because an element of F_p is represented by exactly one representative in 0..p-1. In F_101, -105 and -105 + 2*101 = 97 are the same element but not the same *representation*. Scoring looks at the representative, so skipping normalization fails a value that is arithmetically right.\n\n## Following the numbers line by line (p = 101, n = 3, s = 5, randomness = [70, 40])\n\n```\nshare[0] = 70\nshare[1] = 40\nsum so far = 70 + 40 = 110\nshare[2] = (5 - 110) % 101 = (-105) % 101 = 97\nrecover  = (70 + 40 + 97) % 101 = 207 % 101 = 5   ✓\n```\n\nLooking at share[0], share[1] = 70, 40 gives you nothing that points at 5. The reason is that **had the secret been 42 instead of 5, those two would still be 70 and 40**; only share[2] would move, to (42 - 110) % 101 = 33.\n\n```\ns = 5   gives  [70, 40, 97]\ns = 42  gives  [70, 40, 33]\ns = 0   gives  [70, 40, (0-110) % 101] = [70, 40, 92]\n```\n\nThe first two entries are identical in all three. Having seen 70 and 40 rules out none of the 101 candidates for s. That is the entire content of \"it does not leak\", and this problem's move was to stop saying it and **turn it into a function**: `complete_shares`.\n\n## Making \"it does not leak\" executable\n\nWritten as a function, the observation above says: for a target secret c, return\n\n```\nlast = (c - sum(partial)) % p\n```\n\nand `(sum(partial) + last) % p = c` holds by construction. c may be any element of 0..p-1. **Being able to produce it for every c is exactly the statement that those n-1 shares eliminate no candidate.** That is why the hides-the-secret checkpoint sweeps all of 0..p-1: succeeding for one c is not evidence of anything.\n\nThe threshold checkpoint asks for the same thing at just two points, but **by hand**. With partial = [11, 22] (sum 33) and p = 101:\n\n```\nsecret = 0   -> lastShare = (0 - 33) % 101 = 68    check (33 + 68) % 101 = 0    ✓\nsecret = 40  -> lastShare = (40 - 33) % 101 = 7    check (33 + 7)  % 101 = 40   ✓\n```\n\nThe same [11, 22] is consistent with 0 and with 40. So seeing [11, 22] leaves both live. **Guessing the number n can succeed by luck; producing those two witnesses cannot.** That is why the checkpoint is phrased as \"answer how many are needed, with witnesses\".\n\n## What each checkpoint protects\n\n- **share-and-reconstruct** — the round trip, plus rejecting the trivial split. Hand party 0 the secret and everyone else zero and the sum still works: the round-trip test passes. But party 0 knew everything from the start. **A test that only checks the round trip certifies an implementation that never shared anything.** The starter ships in exactly that shape so the gap between \"the test passes\" and \"the property holds\" is visible on the first move.\n- **hides-the-secret** — completability across the whole field, as above. One example is not enough.\n- **threshold** — the number alone does not pass. Two *distinct* secrets consistent with the same n-1 shares are the demonstration. Two witnesses carrying the same secret are rejected, because agreeing with itself shows nothing.\n- **rerandomize** — checked as a **relation**, not against a fixed expected list: the secret must be unchanged and every share must have moved. A fixed expectation would be passed by an implementation that just returns that list.\n- **transfer** — everything re-run under another seed's p and n. An implementation with this deployment's numbers baked in dies here.\n\n## How it breaks when you get it wrong\n\n- **Forgetting `% p`** — `(5 - 110)` comes back as -105. In F_101 that is the same element as 97, but a different representation, so it fails as \"outside 0..p-1\". The value is right and the check is red, which makes the cause hard to see.\n- **Generating your own randomness instead of using the argument** — the shares move on every run and scoring cannot reproduce them. An implementation that is not a function of its inputs may pass the round trip and still break under transfer.\n- **Adding the same r to every share in rerandomize** — the total becomes s + n*r. At n = 3, r = 4 the secret moves by 12. What you must add is **n values that sum to zero**: take n-1 from the randomness and make the last one `(-sum of the others) % p`.\n- **Using all-zero offsets in rerandomize** — the secret survives but no share moves, so nothing was refreshed. Doing nothing protects the secret and still fails the checkpoint, because that is not what refreshing means.\n- **Returning `secret` straight out of complete_shares** — it ignores the sum of `partial`, so it is right only when `partial` happens to be all zeros. This is the class of mistake a single example passes.\n\n## Where this leads\n\n- **ac26-w2-linear-shares** next takes these shares and separates the operations that need no communication from the ones that do. Adding a public constant c to every share yields x + n*c — **the asymmetry from this problem, that only one share settles up, becomes the trap there.**\n- **ac26-w2-beaver-mul** puts that same public constant (d*e) in the middle of a protocol, where the same mistake is much harder to spot.\n- Being able to discuss Week 6's **over-opening** as \"here is why it is bad\" rather than \"the rule says no\" comes from having built, by hand, the boundary where n-1 shares are evidence of nothing and n shares are everything. Part A of the upstream toy-mpc exercise stands on this split too.\n",
       "learningGoals": [
         "Implement additive secret sharing over a finite field",
         "Confirm the secret returns only when every share is present",
@@ -274,15 +338,37 @@
       "checks": [
         {
           "id": "share-and-reconstruct",
-          "label": "Split it, collect it, get it back"
+          "label": "Split it, collect it, get it back",
+          "hints": [
+            {
+              "id": "share-and-reconstruct-hint-1",
+              "content": "This checkpoint watches two things at once. (1) Split the secret s into n pieces that add back up to s. (2) Is that split actually a *sharing* — that is, does it avoid handing one party s outright? The starter ships satisfying only (1) (s to one party, zero to everyone else), so the round trip is correct and the checkpoint is still red. The gap between 'the test passes' and 'the property holds' is the thing on display here."
+            },
+            {
+              "id": "share-and-reconstruct-hint-2",
+              "content": "Of the n values, **n-1 may be chosen freely** and the last has no freedom: there is exactly one number that makes the total land on s. For the free ones use the values in the `randomness` argument as they are, not your own random draw (your own draw changes the answer on every run and scoring cannot reproduce it). Reconstruction is just adding everything and taking `% p`. Every integer you return must be normalized into 0..p-1."
+            },
+            {
+              "id": "share-and-reconstruct-hint-3",
+              "content": "Follow the steps and it passes.\n\n**share(secret, n, p, randomness)**\n1. `head = [r % p for r in randomness[:n-1]]` — the first n-1 shares are the randomness you were handed.\n2. `tail = (secret - sum(head)) % p` — the last one is 'secret minus the sum of head'.\n3. Return `[*head, tail]`. Its length is exactly n.\n\n**reconstruct(shares, p)**\n1. Return `sum(shares) % p`. That is all.\n\nCheck it (p=101, n=3, secret=5, randomness=[70,40]): head=[70,40], sum(head)=110, tail=(5-110)%101=97, so [70,40,97], and (70+40+97)%101=5 ✓.\n\np and n change per deployment, so take them from the arguments and never write the numbers in."
+            }
+          ]
         },
         {
           "id": "hides-the-secret",
           "label": "Show that a short set says nothing",
           "hints": [
             {
-              "id": "hides-hint-1",
-              "content": "Holding the same n-1 shares, can you choose a final share that lands on any secret you like? If you can, those n-1 shares narrow nothing."
+              "id": "hides-the-secret-hint-1",
+              "content": "There is one sentence being checked: **holding n-1 shares tells you nothing about the secret**. Turned from a claim into something executable, it reads: holding the same n-1 shares, can you produce a consistent final share for *whatever* secret is named? If you can, those n-1 shares eliminate no candidate — they are evidence of nothing. Scoring runs this over every element of the field, 0..p-1. Succeeding once is not the bar."
+            },
+            {
+              "id": "hides-the-secret-hint-2",
+              "content": "Work out what `complete_shares(partial, secret, p)` must return from the condition it has to satisfy: adding all of `partial` and the one value you return, then taking `% p`, must give `secret`. The sum of `partial` is a known fixed number and the value you return is the only unknown — one linear equation in one unknown. Over F_p subtraction is always available, so a solution always exists and is unique. 'It works for every secret' is exactly the statement that this equation always has a solution."
+            },
+            {
+              "id": "hides-the-secret-hint-3",
+              "content": "**complete_shares(partial, secret, p)**, step by step:\n1. `t = sum(partial) % p` — the total of the n-1 shares you hold.\n2. The final share must be the value that, added to t, gives secret — so **subtract t from secret**.\n3. Normalize with `% p` into 0..p-1 and return it. The return value is `(secret - t) % p`.\n\nCheck it (p=101, partial=[70,40], secret=5): t=110%101=9, return (5-9)%101=97, and (70+40+97)%101=207%101=5 ✓.\nKeep the same partial and ask for secret=42: return (42-9)%101=33, and (70+40+33)%101=42 ✓. **Nothing in partial changed and the secret did.** That is the content of this checkpoint.\n\nDo not hard-code the length of `partial` or p; both arrive as arguments."
             }
           ]
         },
@@ -292,7 +378,15 @@
           "hints": [
             {
               "id": "threshold-hint-1",
-              "content": "The number alone does not pass. Build two different secrets that are both consistent with the same n-1 shares."
+              "content": "This is the one checkpoint where you type **JSON by hand** rather than code. Two things are being asked. (a) How many shares are needed to reconstruct the secret. (b) Evidence that one short of that (n-1 shares) genuinely says nothing. (a) is a number; (b) is two concrete objects showing that the same n-1 shares are consistent with two *different* secrets. A number alone can be guessed, so a number alone does not pass."
+            },
+            {
+              "id": "threshold-hint-2",
+              "content": "(a) In additive sharing, one missing piece is enough to make reconstruction impossible, so the answer is **n itself** — the party count you saw under Inspect evidence. Not a threshold t < n.\n\n(b) `partial` can be n-1 values of your own choosing (anything in 0..p-1, length exactly n-1). Then, for each of two *different* secrets A and B, build a `lastShare` such that `(sum of partial + lastShare) % p` equals that secret. That equation is literally the acceptance condition. Two `secret` values that are equal will be rejected — the same secret twice does not demonstrate 'consistent with either'."
+            },
+            {
+              "id": "threshold-hint-3",
+              "content": "Fill it in step by step and it passes. Use **this deployment's** p and n, from Inspect evidence.\n\n1. Put **n** in `sharesNeeded`.\n2. Build `partial`: an integer array of length **n-1**. The contents are free, e.g. `[1, 2, ..., n-1]`. At n=5 that is `[1,2,3,4]`.\n3. Compute `t = (sum of partial) % p`. For `[1,2,3,4]`, t = 10 % p.\n4. Pick a secret A (say `0`) and compute `lastShareA = (A - t) % p`.\n5. Pick a secret B **different from A** (say `1`) and compute `lastShareB = (B - t) % p`.\n6. Put exactly two entries in `completions`: `{\"secret\": A, \"lastShare\": lastShareA}` and `{\"secret\": B, \"lastShare\": lastShareB}`.\n7. Check before submitting: both `(t + lastShareA) % p == A` and `(t + lastShareB) % p == B`.\n8. **The answer field is a single-line input.** Paste it on one line, with no newlines.\n\nShape (for p=101, n=3, partial=[1,2] so t=3 — this fits on one line as written):\n```json\n{\"sharesNeeded\": 3, \"partial\": [1, 2], \"completions\": [{\"secret\": 0, \"lastShare\": 98}, {\"secret\": 1, \"lastShare\": 99}]}\n```\n`98` is `(0-3) % 101` and `99` is `(1-3) % 101`. **Your p and n differ from these.** In particular `partial` has length n-1, so at n=6 it holds five values — copying the two above fails. Recompute both the length and the numbers for your own deployment."
             }
           ]
         },
@@ -302,13 +396,35 @@
           "hints": [
             {
               "id": "rerandomize-hint-1",
-              "content": "Add a set of values that sums to zero and the total does not move."
+              "content": "This is re-dealing the **same secret with all-new shares**. Real protocols use it so that a set of shares cannot be linked to the same holder across rounds. Scoring checks two relations rather than a fixed expected list: (1) reconstructing still gives the same secret, and (2) what you return is not identical to what you were given. Returning the input untouched satisfies (1) and fails (2)."
+            },
+            {
+              "id": "rerandomize-hint-2",
+              "content": "The secret is the sum of the shares, so **adding a set of values that sums to zero leaves it untouched**. That set is called a zero-sharing. Adding the same r to everyone does not work: the offsets sum to n*r and the secret moves by n*r. Building it uses the same asymmetry as splitting — n-1 offsets are free (use the randomness you were handed) and only the last one settles up so the offsets total zero."
+            },
+            {
+              "id": "rerandomize-hint-3",
+              "content": "**rerandomize(shares, p, randomness)**, step by step:\n1. `k = len(shares)` — take the party count from the argument's length, never a hard-coded n.\n2. `offsets = [r % p for r in randomness[:k-1]]` — the first k-1 offsets.\n3. `offsets.append((-sum(offsets)) % p)` — the last one makes the offsets total zero.\n4. Return `[(s + o) % p for s, o in zip(shares, offsets)]`.\n\nCheck it (p=101, shares=[70,40,97] for secret 5, randomness=[3,8]): offsets=[3,8,(-11)%101=90] and 3+8+90=101≡0 ✓. New shares are [73,48,(97+90)%101=86], and (73+48+86)%101=207%101=5 — **the secret is still 5 and all three moved** ✓.\n\nThe fixtures avoid an all-zero draw, so following these steps also satisfies (2)."
             }
           ]
         },
         {
           "id": "transfer",
-          "label": "Hold up in settings you have not seen"
+          "label": "Hold up in settings you have not seen",
+          "hints": [
+            {
+              "id": "transfer-hint-1",
+              "content": "transfer is the checkpoint with **nothing new to write**. It re-runs all four of your functions under a different seed's modulus and party count, not the p and n on your screen. It checks exactly one thing: **that you did not depend on this deployment's specific numbers.** Understanding carries automatically; transcribing what you saw does not."
+            },
+            {
+              "id": "transfer-hint-2",
+              "content": "Re-read your own code and hunt for **any number that did not arrive as an argument**. Three typical ones: (1) a modulus written as a literal such as 101; (2) a party count fixed at 3, or touching `shares[0], shares[1], shares[2]` individually; (3) a share value copied out of Inspect evidence. The modulus must always be the `p` argument, and the party count must come from `n`, `len(shares)`, or `len(partial)+1`."
+            },
+            {
+              "id": "transfer-hint-3",
+              "content": "Audit the four functions in order. If all four hold, submitting as-is passes.\n\n1. **share** — the party count is the `n` argument; the randomness used is `randomness[:n-1]` (never a fixed slice like `[:2]`); the last share is `(secret - sum(head)) % p`.\n2. **reconstruct** — just `sum(shares) % p`, with no reference to the length.\n3. **complete_shares** — just `(secret - sum(partial)) % p`, assuming nothing about the length of `partial`.\n4. **rerandomize** — the party count is `len(shares)`; offsets come from `randomness[:len(shares)-1]`; the last offset is `(-sum(offsets)) % p`.\n\nFinally, read the four bodies and confirm **no numeric literal other than `0` and `1` survives anywhere**. If none does, transfer passes."
+            }
+          ]
         }
       ]
     }

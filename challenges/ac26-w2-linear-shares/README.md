@@ -58,7 +58,7 @@ Five checkpoints, scored independently. Wrong answers cost 10 points each.
 | `no-communication` | 40 | Which four this deployment selected, classified as 0 or non-zero rounds |
 | `transfer` | 35 | All of it, plus a composed expression, on an unseen setting |
 
-Hints on two of the five (20 / 15). Opening both still leaves 165 of 200.
+Every one of the 5 checkpoints carries three hints (hint 1 = what is being asked, hint 2 = how to think about it, hint 3 = a walkthrough you can follow to a solution). Each checkpoint's hint penalties stay inside its 50% cap; opening all 15 still leaves 106 of 200.
 
 ## The one that is not obvious
 

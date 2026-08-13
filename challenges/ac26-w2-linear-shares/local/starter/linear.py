@@ -1,39 +1,191 @@
-"""The only file you edit.
+"""あなたが編集する唯一のファイル。
 
-Some operations on additive shares need no communication at all: every party acts on
-its own share and the result is a valid sharing of the right value. Which operations
-those are -- and what "act on your own share" means for each -- is the point.
+## この問題で使う仕組み (前提知識は不要)
 
-`add_constant` is the one worth slowing down on. Three of these four functions are
-the obvious thing. One is not.
+秘密 x は n 人に配られていて、 `x = (share[0] + ... + share[n-1]) % p`。
+誰も x そのものは持っていない。 この形のまま、 **誰とも通信せずにできる演算**
+がいくつかある。
+
+    share どうしの足し算   out[i] = (a[i] + b[i]) % p     合計は x + y
+    公開定数の掛け算       out[i] = (shares[i] * c) % p   合計は x * c
+    公開定数の足し算       ここだけ「全員が同じことをする」と壊れる
+
+数値例 (p=101, n=3, x=5 の share = [70, 40, 97], c=4):
+
+    全員が c を足す -> [74, 44, (97+4) % 101 = 0]
+                       合計 74 + 44 + 0 = 118、 118 % 101 = 17
+                       正解は x + c = 9。 8 = (n-1)*c だけずれている
+
+この非対称がこの問題の主題。 4 つの関数のうち 3 つは素直な算術で、
+`add_constant` だけがそうではない。
+
+## どの関数にも共通の約束
+
+  - 返す list は長さ n、 要素はすべて `% p` で 0..p-1 に正規化する。
+  - p と n は起動ごとに変わる。 数値を書き込まず、 引数と `len()` から取る。
+
+## `communication_rounds` が受け取る文字列 (全 8 種)
+
+引数 `operation` に来るのは、 次の 8 つの**いずれか**。 この 8 つすべてに
+答えられる必要がある (「証拠を調べる」に出るのはこのうち 4 つだけだが、
+transfer checkpoint は 8 つ全部を呼ぶ)。
+
+    add-shared       share どうしの足し算
+    sub-shared       share どうしの引き算
+    negate-shared    share の符号反転
+    add-constant     公開定数を足す
+    mul-constant     公開定数を掛ける
+    mul-shared       共有されている値どうしの掛け算
+    square-shared    共有されている値の 2 乗
+    compare-shared   共有されている値どうしの比較
+
+返り値は 0 以上の整数。 各 party が自分の share だけで完結できるなら 0、
+誰かと値をやり取りする必要があるなら 1 以上。 採点は「0 か、 0 でないか」
+だけを見る (掛け算プロトコルのラウンド数は方式によるが、 通信が要るか
+どうかは方式によらないため)。 **どれが 0 でどれがそうでないかは、
+自分で判断すること。**
+
+## コードではない checkpoint がひとつある: `no-communication`
+
+`no-communication` だけは Portal の回答欄に **JSON を直接書く**。
+形は「operation 名 -> ラウンド数」の辞書で、 **キーは「証拠を調べる」に
+出た 4 つの名前ちょうど** (多くても少なくても落ちる)。 回答欄は
+**1 行の入力欄** なので、 改行を入れずに 1 行で貼ること。
+
+    {"add-constant": 0, "sub-shared": 0, "square-shared": 1, "compare-shared": 1}
+
+読みやすく折り返すと次の構造になる。
+
+    {
+      "add-constant": 0,      キーは文字列。 画面に出た 4 つを、
+      "sub-shared": 0,        表示されたとおりに写す
+      "square-shared": 1,     値は 0 以上の整数。 各自で完結するなら 0、
+      "compare-shared": 1     通信が要るなら 1 以上
+    }
+
+上の 4 つはあくまで**例**で、 あなたの deploy では別の組み合わせになる。
 """
 
 from __future__ import annotations
 
 
 def add_shares(a: list[int], b: list[int], p: int) -> list[int]:
-    """Shares of x + y, from shares of x and shares of y."""
+    """x の share と y の share から、x + y の share を作る。
+
+    この関数は算術だけ。 この問題の主題は下の add_constant のほう。
+
+    手順:
+      1. `a` と `b` を同じ位置どうしで組にする
+      2. 各組を足して `% p` する
+      3. 長さ n の list にして返す
+
+    式:
+        out[i] = (a[i] + b[i]) % p        (i = 0 .. n-1)
+
+    なぜ正しいか:
+        sum(out) = sum(a) + sum(b) = x + y   (mod p)
+        各 party は自分の行しか見ていないので、通信は要らない。
+
+    例: p=101, a=[70, 40, 97] (x=5), b=[10, 20, 30] (y=60)
+        out = [80, 60, (97+30) % 101 = 26]
+        検算: 80 + 60 + 26 = 166、 166 % 101 = 65 = (5 + 60) % 101
+
+    ありがちな失敗:
+      - `% p` を忘れて 127 のような値を返す
+      - 長さの違う list を `zip` して短いほうに切り詰める
+        (合計は合っているのに長さが n でなくなり落ちる)
+    """
     return list(a)
 
 
 def add_constant(shares: list[int], c: int, p: int) -> list[int]:
-    """Shares of x + c, where c is public and known to everyone.
+    """公開定数 c を、共有された秘密 x に足す。返すのは x + c の share。
 
-    Careful. The shares must still sum to x + c, not to something else.
+    **ここがこの問題の主題**なので、答えの式は書いていない。 代わりに、
+    採点のしかたと考える順序を書く。
+
+    c は公開値 —— 全員が知っている。 秘密ではない。
+
+    採点のしかた:
+        (1) 返した list の合計が `(x + c) % p` であること
+        (2) 長さ n、 要素はすべて 0..p-1
+        (3) **合計が `(x + n*c) % p` になっていたら明示的に落とす**。
+            これは「全員が自分の share に c を足した」ときの合計で、
+            不等号だけだと n=1 や c が p の倍数のときに偶然通ってしまう
+            ので、名指しで落としている。
+
+    考える順序:
+        1. 全員が c を足したとき、合計がいくつになるか紙の上で展開する
+           ((a[0]+c) + (a[1]+c) + ... を書き下す)
+        2. 掛け算のときは同じことをして正しかったのに、足し算では
+           そうならない。その違いがどこから来るか考える
+           (係数として 1 個か、項として n 個か)
+        3. c が合計に**ちょうど 1 回**だけ現れるようにするには、
+           誰が何をすればよいか
+
+    返り値の形:
+        長さ n の list。 要素は 0..p-1 の整数。
+
+    ありがちな失敗:
+      - 全員に c を足す (下の出荷時のコードがこれ。 だから落ちる)
+      - 同じ人に 2 回足す (合計が x + 2c になる)
     """
     return [(s + c) % p for s in shares]
 
 
 def mul_constant(shares: list[int], c: int, p: int) -> list[int]:
-    """Shares of x * c, where c is public."""
+    """公開定数 c を、共有された秘密 x に掛ける。返すのは x * c の share。
+
+    この関数も算術だけ。 c は公開値で、秘密ではない
+    (秘密どうしの掛け算は通信が要る別の話で、それは次の問題)。
+
+    手順:
+      1. 各 share に c を掛ける
+      2. `% p` で 0..p-1 に正規化する
+      3. 長さ n の list にして返す
+
+    式:
+        out[i] = (shares[i] * c) % p       (すべての i)
+
+    なぜ正しいか (分配法則):
+        sum(out) = c*a[0] + c*a[1] + ... = c * sum(a) = x * c   (mod p)
+        c は係数なので、n 個の項に配っても合計では 1 個ぶんにしかならない。
+        足し算の c が項として n 個に増えるのとは、そこが違う。
+
+    例: p=101, shares=[70, 40, 97] (x=5), c=4
+        out = [280 % 101, 160 % 101, 388 % 101] = [78, 59, 85]
+        検算: 78 + 59 + 85 = 222、 222 % 101 = 20 = 5 * 4
+
+    ありがちな失敗:
+      - `% p` を忘れる (掛け算は p を超えやすいので、ここが最も出やすい)
+      - 直前の add_constant と同じ形 (1 人だけに掛ける) にする。
+        掛け算では全員がやるのが正しい
+    """
     return list(shares)
 
 
 def communication_rounds(operation: str) -> int:
-    """How many rounds of talking each operation needs.
+    """その演算に必要な通信ラウンド数を返す。各自で完結するなら 0。
 
-    Operations may include add/subtract/negate shared values, add/multiply by a
-    public constant, or multiply/square/compare shared values.
-    Return 0 when every party can act alone.
+    引数に来る 8 つの文字列は、このファイル冒頭の docstring に列挙してある。
+    **8 つすべて**に答えられる必要がある (transfer checkpoint が全部呼ぶ)。
+
+    採点のしかた:
+        返り値そのものではなく、「0 か、0 でないか」だけを見る。
+        通信が要る側は 1 でも 2 でも構わない。負の数と非整数は落ちる。
+
+    考える順序:
+        1. その演算の結果を、share の合計の式として展開してみる
+        2. 展開した式の各項が、1 人の party の持ち物だけで書けるか見る
+        3. 2 人ぶんの値の積 (交差項) が出てくるなら、誰も自分だけでは
+           計算できない。そのときだけ通信が要る
+
+    返り値の形:
+        0 以上の整数ひとつ (bool は不可)。
+
+    ありがちな失敗:
+      - 「証拠を調べる」に出た 4 つだけを実装する。
+        3 つの checkpoint は通るが transfer だけが落ちる。原因が遠い
+      - 未知の名前で KeyError を投げる (辞書の引き方に注意)
     """
     return 1
