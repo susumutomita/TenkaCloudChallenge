@@ -90,6 +90,17 @@ Workbench の `inspect` が出す trace は入力に依存して分岐し、step
 では、その性質そのものが side-channel です。これはアルゴリズムを読むためのものであり、production
 実装の手本ではありません。
 
+## Week 3 の対応づけ
+
+Week 3 の公式演習は `schnorr-from-scratch` (有限体 → 楕円曲線 → シグマプロトコルと Fiat–Shamir、
+最後は secp256k1 上の Schnorr 署名) です。`courseAlignment` は commit
+`e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9` の `week3/README.md` を `lecture`、
+`week3/problems/schnorr-from-scratch/README.md` を `assignment` として pin します。作問時の commit
+からの再ピンは、SYNC.md §3/§5 に従い差分を読んだ上で行いました — 上流の変更は週 README への講義
+スライドリンクの追記のみで、課題 README は同一です。この問題は公式演習 Part 1 (有限体) の隣に置かれた `mechanism` 問題です。
+公式演習の prose・template・test は転載しません (GOVERNANCE.md の independent-reimplementation)。
+`status` はこの track の他の問題と同じく `draft` のままです。
+
 ## 保証範囲
 
 ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も

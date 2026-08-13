@@ -232,7 +232,7 @@
           {
             "id": "choice-leak-hint-1",
             "content": "b が 0..q-1 の全部を走るとき、g^b も A·g^b も部分群全体を走る。 0 を外すと、それぞれの集合から 1 点ずつ欠ける。 choice=0 の集合から欠けるのはどの値か。 choice=1 では。",
-            "penalty": 20
+            "penalty": 15
           }
         ]
       },

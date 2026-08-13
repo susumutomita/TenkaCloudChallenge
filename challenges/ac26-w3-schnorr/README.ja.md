@@ -104,6 +104,17 @@ verify」は**正しい実装でも** 40 回に 1 回通ります。これはパ
 検証式が成立しても、機密性については何も言えません。message は隠れておらず、verifier がすでに持って
 いる前提で、署名はそれに対する主張です。
 
+## Week 3 の対応づけ
+
+Week 3 の公式演習は `schnorr-from-scratch` (有限体 → 楕円曲線 → シグマプロトコルと Fiat–Shamir、
+最後は secp256k1 上の Schnorr 署名) です。`courseAlignment` は commit
+`e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9` の `week3/README.md` を `lecture`、
+`week3/problems/schnorr-from-scratch/README.md` を `assignment` として pin します。作問時の commit
+からの再ピンは、SYNC.md §3/§5 に従い差分を読んだ上で行いました — 上流の変更は週 README への講義
+スライドリンクの追記のみで、課題 README は同一です。この問題は公式演習 Part 3 (シグマプロトコルと Schnorr 署名) の `assignment-companion` で、課題の穴埋めに何を書くかは渡しません。
+公式演習の prose・template・test は転載しません (GOVERNANCE.md の independent-reimplementation)。
+`status` はこの track の他の問題と同じく `draft` のままです。
+
 ## 保証範囲
 
 ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も

@@ -217,7 +217,7 @@ Planned (not yet authored, tracked in Issue #177's Phase 2/3): remaining `ipa-we
     "sources": [
       {
         "repository": "zk-tokyo/advanced-cryptography-2026",
-        "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+        "ref": "e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9",
         "path": "week3/problems/schnorr-from-scratch/README.md",
         "kind": "assignment"
       }

@@ -330,17 +330,28 @@ describe("ac26-w3-nonce-reuse: metadata contracts", () => {
     expect(metadata().scoring.checks.map((check) => check.id)).toEqual([...CHECKPOINTS]);
   });
 
+  // The pins moved once since authoring: upstream added a lecture-slides link to
+  // week3/README.md (the exercise README is unchanged), and the ref was re-pinned after
+  // reading that diff, per SYNC.md §3/§5. The exact sources are pinned here so a ref
+  // bumped without a review shows up as a diff.
   it("should pin the published week 3 lecture and assignment", () => {
     const { courseAlignment, status } = metadata();
     expect(courseAlignment.week).toBe(3);
     expect(courseAlignment.role).toBe("transfer");
-    expect(courseAlignment.sources?.map((source) => source.kind)).toEqual([
-      "lecture",
-      "assignment",
+    expect(courseAlignment.sources).toEqual([
+      {
+        repository: "zk-tokyo/advanced-cryptography-2026",
+        ref: "e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9",
+        path: "week3/README.md",
+        kind: "lecture",
+      },
+      {
+        repository: "zk-tokyo/advanced-cryptography-2026",
+        ref: "e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9",
+        path: "week3/problems/schnorr-from-scratch/README.md",
+        kind: "assignment",
+      },
     ]);
-    for (const source of courseAlignment.sources ?? []) {
-      expect(source.ref).toMatch(/^[0-9a-f]{40}$/);
-    }
     expect(status).toBe("draft");
   });
 });

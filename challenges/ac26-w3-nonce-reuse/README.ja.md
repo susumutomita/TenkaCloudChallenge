@@ -101,6 +101,17 @@ truncation も「60 サンプルが全部相異なるか」では捕まりませ
 確率は約 97% で、大半の実行をすり抜けます。**値域**が決め手です。256 bit の位数に対して全出力が
 2^64 未満に収まる確率は 2^-11000 程度で、これは偶然ではなく証拠です。
 
+## Week 3 の対応づけ
+
+Week 3 の公式演習は `schnorr-from-scratch` (有限体 → 楕円曲線 → シグマプロトコルと Fiat–Shamir、
+最後は secp256k1 上の Schnorr 署名) です。`courseAlignment` は commit
+`e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9` の `week3/README.md` を `lecture`、
+`week3/problems/schnorr-from-scratch/README.md` を `assignment` として pin します。作問時の commit
+からの再ピンは、SYNC.md §3/§5 に従い差分を読んだ上で行いました — 上流の変更は週 README への講義
+スライドリンクの追記のみで、課題 README は同一です。この問題は公式演習の後に置かれた `transfer` 問題で、課題の test が実演する nonce 再利用攻撃を、noisy な監査ログという別設定で自分の手にやらせます。
+公式演習の prose・template・test は転載しません (GOVERNANCE.md の independent-reimplementation)。
+`status` はこの track の他の問題と同じく `draft` のままです。
+
 ## 保証範囲
 
 ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も

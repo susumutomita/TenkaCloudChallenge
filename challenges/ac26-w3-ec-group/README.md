@@ -81,6 +81,18 @@ Double-and-add branches on the scalar's bits, and how many additions it performs
 those bits fall. Against a real key that property is itself a side channel. This exists to make
 the algorithm legible, not as a model for production.
 
+## Week 3 alignment
+
+Week 3's official exercise is `schnorr-from-scratch` (finite field → elliptic curve → Sigma
+protocol and Fiat–Shamir, finishing with a Schnorr signature on secp256k1). `courseAlignment`
+pins `week3/README.md` as `lecture` and `week3/problems/schnorr-from-scratch/README.md` as
+`assignment` at commit `e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9` — re-pinned from the
+authoring-time commit after reading the diff, per SYNC.md §3/§5: the only upstream change is a
+lecture-slides link added to the week README, and the exercise README is unchanged. This problem
+is the `mechanism` problem beside Part 2 (the elliptic curve). Nothing from the official exercise's prose, template or tests is reproduced
+(GOVERNANCE.md independent-reimplementation), and `status` stays `draft`, as it does across this
+track.
+
 ## Assurance scope
 
 Local mode is **self-paced, honor-system verification**. You own the machine, the Docker

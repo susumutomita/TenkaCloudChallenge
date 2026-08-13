@@ -103,6 +103,17 @@ onboarding や key extraction 攻撃を再現しません。また修正前の e
 - [Unit 42 — Google Cloud Authenticator: The Hidden Mechanisms of Passwordless Authentication](https://unit42.paloaltonetworks.com/passwordless-authentication/)
 - [W3C Web Authentication Level 3](https://www.w3.org/TR/webauthn-3/)
 
+## Week 3 の対応づけ
+
+Week 3 の公式演習は `schnorr-from-scratch` (有限体 → 楕円曲線 → シグマプロトコルと Fiat–Shamir、
+最後は secp256k1 上の Schnorr 署名) です。`courseAlignment` は commit
+`e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9` の `week3/README.md` を `lecture`、
+`week3/problems/schnorr-from-scratch/README.md` を `assignment` として pin します。作問時の commit
+からの再ピンは、SYNC.md §3/§5 に従い差分を読んだ上で行いました — 上流の変更は週 README への講義
+スライドリンクの追記のみで、課題 README は同一です。この問題は公式演習の後に置かれた `transfer` 問題で、Week 3 の署名検証を WebAuthn / passkey assertion という実運用の設定へ運びます。
+公式演習の prose・template・test は転載しません (GOVERNANCE.md の independent-reimplementation)。
+`status` はこの track の他の問題と同じく `draft` のままです。
+
 ## 保証範囲
 
 ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も

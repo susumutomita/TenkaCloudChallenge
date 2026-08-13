@@ -49,6 +49,15 @@ for Week 2 — see its resolved section below.
 at that commit, on that date, by that method. Nothing here should be read as
 "Week 2 is still unpublished".
 
+The published weeks are tracked by the same pins, and two of them drifted after
+the snapshot: upstream added a lecture-slides link section to `week1/README.md`
+and `week3/README.md`. Both diffs were read and the Week 1 / Week 3 companions
+were re-pinned at `e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9` on 2026-08-13 —
+ordinary `DRIFT` resolved per `SYNC.md` §3/§5, with paths, kinds, and roles
+unchanged. That is a re-pin record, not a basis question, so it lives in
+`curriculum.md`'s source snapshot; this file's basis sections remain about the
+weeks that had nothing to pin.
+
 ## The rule these companions live under
 
 > A problem may not call itself an `assignment-companion` while the assignment it

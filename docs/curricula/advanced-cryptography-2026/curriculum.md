@@ -39,6 +39,13 @@ commit. Its five companion challenges now pin `week2/README.md` (`lecture`) and
 publication-state table records both states; the Week 2 section below records
 what the published material contains.
 
+Two already-published weeks also drifted after the snapshot: upstream added a
+lecture-slides link section to `week1/README.md` and `week3/README.md` (both
+changes are only that link section; the exercise READMEs are byte-identical).
+The Week 1 and Week 3 companions were re-pinned to
+`e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9` on 2026-08-13 after reading those
+diffs, per `SYNC.md` §3/§5 — paths, kinds, and roles unchanged.
+
 ### Week numbering
 
 The repository directory names and the course's week numbers agree: `week1/`
@@ -53,9 +60,9 @@ it, and it is not part of the numbered sequence. This track treats it as
 
 | Week | Theme | Official exercise | State at pinned commit |
 | --- | --- | --- | --- |
-| 1 | Programmable Cryptography / arithmetic circuits | `proof-of-exploit` | Published |
+| 1 | Programmable Cryptography / arithmetic circuits | `proof-of-exploit` | Published — slides link added later; re-pinned at `e4f33fec` on 2026-08-13 |
 | 2 | MPC | `toy-mpc` | **Not published at the snapshot** — published later; read and re-pinned at `e4f33fec` on 2026-08-12 (see the Week 2 section) |
-| 3 | Finite fields, elliptic curves, Sigma, Fiat–Shamir, Schnorr | `schnorr-from-scratch` | Published |
+| 3 | Finite fields, elliptic curves, Sigma, Fiat–Shamir, Schnorr | `schnorr-from-scratch` | Published — slides link added later; re-pinned at `e4f33fec` on 2026-08-13 |
 | 4 | ZKP / SNARK / STARK | — | **Not published** — README says materials are in preparation; `problems/` holds only `.gitkeep` |
 | 5 | TFHE, Programmable Bootstrapping, HomNAND | `tfhe-toy-python` | Published |
 | 6 | Programmable Cryptography Stack Design | `co-snark-prove`, `zkvm-exploit` | Published |
@@ -141,6 +148,9 @@ order; `track.order` only sequences presentation.
 | `concept.schnorr-signature` | The signature Fiat–Shamir produces from a Sigma protocol |
 | `concept.special-soundness` | Two transcripts sharing a commitment extract the witness |
 | `concept.nonce-reuse` | Reusing a nonce turns special soundness into key recovery |
+| `concept.webauthn-assertion` | The WebAuthn authentication response: authenticatorData, clientDataJSON, and the signature over them |
+| `concept.user-verification-flag` | The signed UV bit in authenticatorData saying the authenticator verified the user locally |
+| `concept.relying-party-validation` | The server-side checks — RP ID, origin, challenge, UP/UV, signature — that a valid signature does not replace |
 
 ### Week 4 — proof systems
 
@@ -296,7 +306,10 @@ it is new authoring beside these five rows, not a re-scope of them.
 
 ### Week 3 — elliptic curves and Schnorr
 
-- **Source**: `week3/README.md`, `week3/problems/schnorr-from-scratch/README.md`
+- **Source**: `week3/README.md`, `week3/problems/schnorr-from-scratch/README.md` —
+  read and re-pinned at `e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9` (2026-08-13).
+  The drift from the snapshot commit is a lecture-slides link added to the week
+  README; the exercise README is unchanged.
 - **Official goals**: implement finite-field arithmetic, including inversion by
   the extended Euclidean algorithm; understand that curve points form a group and
   that scalar multiplication is fast via double-and-add; understand the Sigma
@@ -307,12 +320,19 @@ it is new authoring beside these five rows, not a re-scope of them.
 - **What the exercise does not force**: seeing *why* the group law's case split
   exists, or recovering a key from two signatures rather than reasoning about it.
 
+A fact worth recording: the week README's theme is elliptic curves and Schnorr,
+while the slide deck it links (`week3_zksnark_slides.pdf`, "zkSNARK part 1" —
+polynomials, commitments, arithmetization) is a different topic, which belongs to
+the `ac26-w4-*` problems' territory; the Week 3 companions align to the README
+and exercise, not to the slides.
+
 | Order | Problem id | Role | Teaches | Issue |
 | --- | --- | --- | --- | --- |
 | 310 | `ac26-w3-field-inverse` | `mechanism` | `concept.finite-field`, `concept.modular-inverse` | #225 |
 | 320 | `ac26-w3-ec-group` | `mechanism` | `concept.elliptic-curve-group`, `concept.double-and-add` | #226 |
 | 330 | `ac26-w3-schnorr` | `assignment-companion` | `concept.sigma-protocol`, `concept.fiat-shamir`, `concept.schnorr-signature` | #227 |
 | 340 | `ac26-w3-nonce-reuse` | `transfer` | `concept.nonce-reuse`, `concept.special-soundness` | #228 |
+| 350 | `ac26-w3-passkey-assertion` | `transfer` | `concept.webauthn-assertion`, `concept.user-verification-flag`, `concept.relying-party-validation` | — |
 
 ### Week 4 — ZKP / SNARK / STARK
 

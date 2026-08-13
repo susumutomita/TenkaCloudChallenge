@@ -224,7 +224,24 @@ describe("ac26-w3-passkey-assertion: safety and metadata", () => {
     expect(metadata.scoring.checks.every((check) => check.input === "multiline")).toBe(true);
     expect(metadata.runtime.verifyUrl).toBe("http://127.0.0.1:18121/verify");
     expect(metadata.runtime.challengeEndpoints).toBeUndefined();
-    for (const source of metadata.courseAlignment.sources) expect(source.ref).toMatch(/^[0-9a-f]{40}$/);
+    // The pins moved once since authoring: upstream added a lecture-slides link to
+    // week3/README.md (the exercise README is unchanged), and the ref was re-pinned
+    // after reading that diff, per SYNC.md §3/§5. The exact sources are pinned here so
+    // a ref bumped without a review shows up as a diff.
+    expect(metadata.courseAlignment.sources).toEqual([
+      {
+        repository: "zk-tokyo/advanced-cryptography-2026",
+        ref: "e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9",
+        path: "week3/README.md",
+        kind: "lecture",
+      },
+      {
+        repository: "zk-tokyo/advanced-cryptography-2026",
+        ref: "e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9",
+        path: "week3/problems/schnorr-from-scratch/README.md",
+        kind: "assignment",
+      },
+    ]);
   });
 
   it("should state the incident prerequisites and primary sources without stale claims", () => {
