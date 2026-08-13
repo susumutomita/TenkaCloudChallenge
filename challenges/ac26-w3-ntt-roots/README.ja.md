@@ -51,3 +51,28 @@ omega はどれでも構いません。 位数がちょうど `order` であり�
 期待値を組み立てます。
 
 ## 作問者向けコマンド
+
+## 保証範囲
+
+ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も
+あなたの管理下にあるので、 image の中身はあなたに対して秘匿されていません。
+`reference/` と `tests/hidden/` を bind-mount しないのは、あなたの git checkout に
+紛れ込ませないためであって、手が届かなくするためではありません。
+
+verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
+ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。
+結果は期待値を漏らしません。 fixture はこのデプロイの seed 由来なので、暗記した答えは持ち越せません。
+
+これは自習と誠実な練習を支えます。競技順位・試験・修了判定は**支えません**。
+それらには participant が管理しない verifier が必要で、
+[#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271) で追跡しています。
+
+## コスト
+
+ゼロです。クラウドアカウントも AWS リソースも使いません。
+
+## 作問者向け
+
+`make reference-test` が mutation suite を実行します。壊した実装 8 種類があります。Fermat 版は素数の
+checkpoint を全部通り、最終行だけの trace は当初の checkpoint を生き延びました。後者が、列全体を
+突き合わせるようになった理由です。
