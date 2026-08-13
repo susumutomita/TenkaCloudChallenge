@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
 import { localPlayProblemDirs } from "./lib/local-play-problems.ts";
 import { findings, type Report } from "./solvability-audit.ts";
+import { shardOf } from "./validate-shard.ts";
 
 /**
  * The solvability gate.
@@ -23,6 +24,20 @@ import { findings, type Report } from "./solvability-audit.ts";
 
 const ROOT = join(import.meta.dir, "..");
 const BASELINE = join(ROOT, "scripts", "solvability-baseline.json");
+
+/**
+ * This test probes the whole catalog inside one test, so being one file among many buys
+ * it nothing: its CI shard ran to the 15-minute cap while the other three finished in
+ * five to nine minutes, and a cancelled shard reads as flake rather than as a budget
+ * that no longer fits. `scripts/validate-shard.ts` publishes which suite shard is
+ * running, and the audit partitions the catalog by the same rule, so each shard audits
+ * its quarter and the four together still audit everything. Nothing is dropped and no
+ * probe is made cheaper; run standalone (no `SUITE_SHARD`), it still sweeps the lot.
+ */
+function suiteShardArgs(): string[] {
+  const shard = process.env.SUITE_SHARD;
+  return shard ? [`--shard=${shard}`] : [];
+}
 
 type BaselineEntry = {
   problem: string;
@@ -112,6 +127,34 @@ function replayOfTheKnownDefects(): Report {
   };
 }
 
+describe("the gate's suite-shard partition", () => {
+  it("covers every local-play problem exactly once at the shard count CI runs", () => {
+    // The failure this catches: the gate quietly auditing three quarters of the catalog
+    // and passing. Each shard reports "no findings" for what it looked at, so a dropped
+    // quarter is invisible in the output.
+    const workflow = readFileSync(join(ROOT, ".github", "workflows", "ci.yml"), "utf8");
+    const totals = new Set(
+      [...workflow.matchAll(/--shard=.*?\/(\d+)/g)].map((match) => Number(match[1])),
+    );
+    expect(totals.size).toBe(1);
+    const total = [...totals][0] as number;
+
+    const problems = localPlayProblemDirs(ROOT);
+    const owner = new Map<string, number>();
+    for (let index = 1; index <= total; index += 1) {
+      const selected = shardOf(problems, index, total);
+      // An empty shard exits 0 having probed nothing, which looks exactly like a shard
+      // that probed everything and found nothing.
+      expect(selected.length, `shard ${index}/${total} is empty`).toBeGreaterThan(0);
+      for (const problem of selected) {
+        expect(owner.has(problem), `${problem} is in two shards`).toBe(false);
+        owner.set(problem, index);
+      }
+    }
+    expect(owner.size).toBe(problems.length);
+  });
+});
+
 describe("solvability thresholds still fire on the defects they were chosen for", () => {
   it("reports the sentinel-only answer as no-answer", () => {
     const types = findings(replayOfTheKnownDefects())
@@ -142,7 +185,17 @@ describe("solvability gate", () => {
       // band a newly added problem lands in. Anything rarer is `make solvability-sweep`.
       const result = spawnSync(
         "bun",
-        ["run", "scripts/solvability-audit.ts", "--seeds", "500", "--code-seeds", "10", "--screen-seeds", "120"],
+        [
+          "run",
+          "scripts/solvability-audit.ts",
+          "--seeds",
+          "500",
+          "--code-seeds",
+          "10",
+          "--screen-seeds",
+          "120",
+          ...suiteShardArgs(),
+        ],
         {
           cwd: ROOT,
           encoding: "utf8",

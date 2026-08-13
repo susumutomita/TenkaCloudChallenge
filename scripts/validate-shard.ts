@@ -88,6 +88,16 @@ if (import.meta.main) {
   }
   const label = shard === null ? "all" : `${shard.index}/${shard.total}`;
   console.log(`running ${selected.length} of ${files.length} test files (shard ${label})`);
-  const result = spawnSync("bun", ["test", ...selected], { cwd: REPO_ROOT, stdio: "inherit" });
+  // Passed down so a test file that is itself a catalog-wide sweep can partition its
+  // own work the same way. `solvability-audit.test.ts` is the one that needs it: it
+  // probes every problem in a single test, so it does not shard by being one file
+  // among many, and its shard ran to the 15-minute cap while the other three finished
+  // in five to nine minutes. With this it audits its quarter, and
+  // `solvability-audit.test.ts` asserts the four quarters still cover the catalog.
+  const result = spawnSync("bun", ["test", ...selected], {
+    cwd: REPO_ROOT,
+    stdio: "inherit",
+    env: shard === null ? process.env : { ...process.env, SUITE_SHARD: label },
+  });
   process.exit(result.status ?? 1);
 }
