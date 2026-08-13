@@ -351,6 +351,14 @@ describe("ac26-w3-nonce-reuse: metadata contracts", () => {
         path: "week3/problems/schnorr-from-scratch/README.md",
         kind: "assignment",
       },
+      // The lecture itself. Pinning only the README meant course:drift watched a 3 KB
+      // summary while the 106-slide deck it summarises could change unnoticed.
+      {
+        repository: "zk-tokyo/advanced-cryptography-2026",
+        ref: "e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9",
+        path: "week3/week3_zksnark_slides.pdf",
+        kind: "slide",
+      },
     ]);
     expect(status).toBe("draft");
   });

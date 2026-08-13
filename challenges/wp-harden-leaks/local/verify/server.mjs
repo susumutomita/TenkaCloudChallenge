@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { createServer } from "node:http";
 
 /**
@@ -21,6 +22,24 @@ import { createServer } from "node:http";
 
 const WP = "http://wordpress"; // compose service-name DNS, internal port 80
 const CHECKPOINTS = new Set(["close-backup", "close-config", "close-listing", "close-debug"]);
+
+/**
+ * The marker `wpinit` writes as the last thing it does, on the docroot volume this
+ * container mounts read-only.
+ *
+ * Every check below is "the scanner can no longer reach this", and **an unseeded site is
+ * indistinguishable from a perfectly remediated one**: nothing has been planted, so every
+ * probe 404s and every checkpoint reads as closed. Without this gate a scan that landed
+ * before `wpinit` finished would hand over all 200 points for doing nothing, and it would
+ * do it silently — a green result, no error anywhere.
+ *
+ * So the scanner refuses to score until the marker exists. Checked per request rather
+ * than once at boot, because the compose ordering is a `depends_on` condition and this is
+ * the check that has to hold even if that ordering is ever weakened. Failing this way
+ * costs a participant a confusing minute at startup; failing the other way costs the
+ * problem its entire meaning.
+ */
+const SEED_MARKER = "/wp/.tenkacloud-seeded";
 
 // Probe helper: fetch with a hard timeout, no redirect following, small body cap.
 // Returns { status, body }; status 0 means the site was unreachable (→ cannot confirm
@@ -118,6 +137,16 @@ const server = createServer(async (request, response) => {
   const submission = typeof body?.submission === "string" ? body.submission : "";
   if (submission.length < 1 || submission.length > 200) {
     return send(response, 400, { checkpointId, error: "invalid_submission" });
+  }
+
+  if (!existsSync(SEED_MARKER)) {
+    // Fail closed. 200 with correct:false keeps the platform contract (a not-yet-closed
+    // hole is not an error) while making it impossible to score an unseeded site.
+    return send(response, 200, {
+      checkpointId,
+      correct: false,
+      message: "The site is still starting up. Wait a moment, then re-scan.",
+    });
   }
 
   let closed = false;

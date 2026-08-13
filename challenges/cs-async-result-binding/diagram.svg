@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="360" viewBox="0 0 960 360" role="img" aria-labelledby="title desc">
+  <title id="title">Request identity and completion order</title>
+  <desc id="desc">Three jobs keep their own identity while Futures complete in the different order B, C, A.</desc>
+  <rect width="960" height="360" fill="#0b1220"/>
+  <style>
+    .label { fill: #e5eefb; font: 600 21px system-ui, sans-serif; }
+    .small { fill: #a9bdd8; font: 16px ui-monospace, monospace; }
+    .job { fill: #17243a; stroke: #547aa5; stroke-width: 2; }
+    .future { fill: #19352f; stroke: #55b89b; stroke-width: 2; }
+    .row { fill: #35283f; stroke: #b886cc; stroke-width: 2; }
+    .arrow { stroke: #89a8cc; stroke-width: 3; fill: none; marker-end: url(#head); }
+  </style>
+  <defs>
+    <marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#89a8cc"/>
+    </marker>
+  </defs>
+  <text class="label" x="55" y="48">input jobs</text>
+  <text class="label" x="390" y="48">bound Futures</text>
+  <text class="label" x="750" y="48">output rows</text>
+  <g transform="translate(45 78)">
+    <rect class="job" width="180" height="58" rx="10"/><text class="small" x="22" y="36">job A</text>
+    <rect class="job" y="86" width="180" height="58" rx="10"/><text class="small" x="22" y="122">job B</text>
+    <rect class="job" y="172" width="180" height="58" rx="10"/><text class="small" x="22" y="208">job C</text>
+  </g>
+  <g transform="translate(370 78)">
+    <rect class="future" width="220" height="58" rx="10"/><text class="small" x="20" y="36">A → Future A (3rd)</text>
+    <rect class="future" y="86" width="220" height="58" rx="10"/><text class="small" x="20" y="122">B → Future B (1st)</text>
+    <rect class="future" y="172" width="220" height="58" rx="10"/><text class="small" x="20" y="208">C → Future C (2nd)</text>
+  </g>
+  <g transform="translate(735 78)">
+    <rect class="row" width="180" height="58" rx="10"/><text class="small" x="22" y="36">row A</text>
+    <rect class="row" y="86" width="180" height="58" rx="10"/><text class="small" x="22" y="122">row B</text>
+    <rect class="row" y="172" width="180" height="58" rx="10"/><text class="small" x="22" y="208">row C</text>
+  </g>
+  <path class="arrow" d="M225 107 H370"/><path class="arrow" d="M225 193 H370"/><path class="arrow" d="M225 279 H370"/>
+  <path class="arrow" d="M590 107 H735"/><path class="arrow" d="M590 193 H735"/><path class="arrow" d="M590 279 H735"/>
+  <text class="small" x="360" y="338">completion order changes; identity binding does not</text>
+</svg>

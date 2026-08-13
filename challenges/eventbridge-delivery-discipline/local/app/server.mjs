@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { runStream, STARTER_POLICY } from "./engine.mjs";
+import { POLICY_VOCABULARY, runStream, STARTER_POLICY } from "./engine.mjs";
 
 const PORT = Number(process.env.PORT || 8080);
 const HEADER_LIMIT = 8 * 1024;
@@ -39,16 +39,46 @@ function sendJson(response, status, payload) {
   send(response, status, "application/json; charset=utf-8", JSON.stringify(payload));
 }
 
+
+/**
+ * `POLICY_VOCABULARY` をそのまま画面の表にする (Issue 416)。
+ *
+ * ここで値をベタ書きし直さないのは、書き写した瞬間に validator とずれるからで、
+ * ずれた表は「許容値が書かれていない」より悪い — 読んだ人が信じるぶん遠回りになる。
+ */
+function vocabularyRows() {
+  const escape = (text) =>
+    String(text).replace(/[&<>"]/g, (character) =>
+      character === "&" ? "&amp;" : character === "<" ? "&lt;" : character === ">" ? "&gt;" : "&quot;",
+    );
+  const cell = (value) =>
+    Array.isArray(value)
+      ? value.map((item) => `<code>${escape(JSON.stringify(item))}</code>`).join(" / ")
+      : escape(value);
+  const rows = [];
+  for (const [section, fields] of Object.entries(POLICY_VOCABULARY)) {
+    if (Array.isArray(fields)) {
+      rows.push(`<tr><td><code>${escape(section)}</code></td><td class="muted">(この語彙から重複なく選ぶ配列)</td><td>${cell(fields)}</td></tr>`);
+      continue;
+    }
+    for (const [field, allowed] of Object.entries(fields)) {
+      rows.push(`<tr><td><code>${escape(section)}</code></td><td><code>${escape(field)}</code></td><td>${cell(allowed)}</td></tr>`);
+    }
+  }
+  return rows.join("");
+}
+
 const HOME = `<!doctype html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>二度届いて、前後する — Browser Workbench</title><style>
 :root{color-scheme:dark}body{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;max-width:1040px;margin:2rem auto;padding:0 1rem;line-height:1.55;background:#071019;color:#e7f3fb}
-section{background:#0d2030;border:1px solid #29475c;border-radius:12px;padding:1rem;margin:1rem 0}textarea,pre{width:100%;box-sizing:border-box;background:#02070b;color:#d8eef9;border:1px solid #3a5f75;border-radius:8px;padding:.8rem;overflow:auto}textarea{min-height:31rem;tab-size:2}button{margin:.3rem;padding:.65rem 1rem;border-radius:8px;border:1px solid #71d6e5;background:#174b60;color:white;cursor:pointer}.muted{color:#abc2cf}.warn{color:#ffd07d}code{color:#8ee7f2}
+section{background:#0d2030;border:1px solid #29475c;border-radius:12px;padding:1rem;margin:1rem 0}textarea,pre{width:100%;box-sizing:border-box;background:#02070b;color:#d8eef9;border:1px solid #3a5f75;border-radius:8px;padding:.8rem;overflow:auto}textarea{min-height:31rem;tab-size:2}button{margin:.3rem;padding:.65rem 1rem;border-radius:8px;border:1px solid #71d6e5;background:#174b60;color:white;cursor:pointer}.muted{color:#abc2cf}.warn{color:#ffd07d}code{color:#8ee7f2}table{width:100%;border-collapse:collapse;margin-top:.6rem}th,td{border:1px solid #29475c;padding:.35rem .5rem;text-align:left;vertical-align:top;font-size:.9rem}th{color:#abc2cf}summary{cursor:pointer;color:#8ee7f2}
 </style></head><body>
 <h1>二度届いて、前後する</h1>
 <p>EventBridge風の配送列を、event ID・aggregate version・bounded retry・DLQで扱う状態機械に直します。実AWS、credential、外向きnetworkは使いません。</p>
 <section><h2>1. 壊れ方を観察</h2><p class="muted">到着順上書きconsumerで、重複課金とstate regressionを再現します。</p><button id="inspect">vulnerable streamを実行</button><pre id="observation">未実行</pre></section>
-<section><h2>2. Delivery policyを修正</h2><p class="warn">timestamp sort、event IDだけ、versionだけでは全checkpointを満たせません。</p><textarea id="policy"></textarea><button id="reset">starterへ戻す</button><button id="test">公開テスト</button><button id="prepare">提出値を作る</button><pre id="result">未実行</pre></section>
+<section><h2>2. Delivery policyを修正</h2><p class="warn">timestamp sort、event IDだけ、versionだけでは全checkpointを満たせません。</p>
+<details><summary>policy が受け付ける値 (7 セクション)</summary><p class="muted">どれを選ぶかがこの問題です。選択肢そのものは伏せません。<code>maxAttempts</code> 以外はすべてこの一覧の中から選びます。</p><table><thead><tr><th>セクション</th><th>フィールド</th><th>受け付ける値</th></tr></thead><tbody>${vocabularyRows()}</tbody></table></details><textarea id="policy"></textarea><button id="reset">starterへ戻す</button><button id="test">公開テスト</button><button id="prepare">提出値を作る</button><pre id="result">未実行</pre></section>
 <section><h2>3. Participant Portalへ提出</h2><p class="muted">生成された値を6つのcheckpointへ同じまま提出します。graderは各checkpointを独立に再実行します。</p><pre id="submission">公開テスト成功後に生成されます。</pre></section>
 <script src="/app.js"></script></body></html>`;
 

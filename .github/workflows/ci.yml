@@ -161,7 +161,16 @@ jobs:
           bun run cost:check \
             || { echo "::error::cost-report.json is stale. Run 'bun run reindex' and commit (or 'bun run setup' once to enable the auto-reindex hook)."; exit 1; }
 
+      # GITHUB_TOKEN only raises the anonymous rate limit; the source repositories are
+      # public and are read with contents:read. Without it this step ran on the
+      # unauthenticated 60-requests-an-hour budget, started getting 403 partway
+      # through, and reported the rest as `unreachable` — a different set on every run
+      # of the same commit. course-drift.yml has always passed the token; this step was
+      # the one that did not, which is why the scheduled job was green and every pull
+      # request was red.
       - name: Check course references do not drift
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: bun run course:drift
 
   rls-runtime:

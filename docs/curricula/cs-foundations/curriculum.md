@@ -1,0 +1,95 @@
+# cs-foundations — 動かして、壊して、監査する計算機科学の基礎
+
+Issue 407。`track.id` は `cs-foundations`。`index.json` から機械可読で、ポータルの「講座トラック」画面は
+この順序を読む。
+
+## なぜ作るか
+
+`advanced-cryptography-2026` (31 問) を通しで解いた結果、あの講座の**設計パターン**が題材から独立して
+効いていることが分かった。パターンはこう要約できる。
+
+> 壊れた実装の大半が、最終出力を見るテストを通過してしまう。監査系の checkpoint だけが本当の欠陥を
+> 検出できる。
+
+暗号が難しいから効いていたのではない。「動いているように見えるものを、動いていることを理由に信用して
+はいけない」を、**参加者自身のコードで一度証明させる**構造が効いていた。この構造は CS の基礎領域でも
+そのまま成立する。
+
+同時に、これは今の実務の需要と重なる。AI にコードを書かせる人が増えるほど、「動いた」と「正しい」の
+距離を測れることの価値が上がる。この track の切り口は「バイブコーダー向けのコンピューターサイエンス」
+であり、CS50 的な網羅ではなく**検証の作法**を軸に領域を選ぶ。
+
+## 設計上の約束
+
+`advanced-cryptography-2026` の [`TEMPLATE.md`](../advanced-cryptography-2026/TEMPLATE.md) の
+container / `/verify` 契約をそのまま使う。この track 固有の約束は次の 4 つ。
+
+1. **公開テストは、壊れた starter を通す。** 通してはいけない問題もあるが、この track の既定は「通す」で
+   ある。通してしまうことを公開テスト自身が明記し、著者ガードのテストがその性質を固定する。
+   「テストが緑」を一度壊しておかないと、監査 checkpoint が成立しない。
+2. **監査対象は、他人が下した判断である。** 参加者は自分のコードのバグを探すのではなく、**すでに本番で
+   動いている実装の決定ログ**を読む。答えは seed 由来で、別の起動の答えは当たらない。
+3. **答えは 1 問につき 1 つの飛躍に絞る。** 「A を検証した」から「B を保証できる」への飛躍を 1 つ選び、
+   その飛躍だけを問題全体で扱う。複数の欠陥を混ぜると、どれが主題だったのか分からなくなる。
+4. **`courseAlignment` は持たない。** この track は外部講座の伴走ではないので、上流 SHA を pin しない。
+   `scripts/check-course-drift.ts` の対象にもならない。
+
+## 章立て
+
+| order | 問題 | 難易度 | 章 | 扱う飛躍 |
+| --- | --- | --- | --- | --- |
+| 10 | `cs-auth-claim-audit` | d3 | 1. 信用の境界 | 署名が通った → その要求を通してよい |
+| 20 | `cs-transaction-visibility-audit` | d3 | 2. トランザクションと可視性 | 各 read が committed → 同じ瞬間を見た |
+| 30 | `cs-async-result-binding` | d3 | 3. I/Oと並行性 | 各 I/O が正しい → 完了結果を正しい request に結び付けた |
+| 40 | `cs-cache-generation-fence` | d3 | 4. キャッシュ無効化 | invalidate が完了した → 古い値は戻らない |
+| 50 | `cs-http-retry-idempotency` | d3 | 5. HTTP再送と冪等性 | 応答を受け取れなかった → 操作は起きなかった |
+
+第 1 章から第 5 章まで実装済み。時間や実 network に依存せず、immutable revision、明示的な
+`asyncio.Future` gate、late-fill schedule、commit後のresponse drop traceで境界の逆転を再現する。
+
+## これから作るもの
+
+Issue 407 は対象領域としてアルゴリズム / ネットワーク / DB / 並行性 / OS を挙げている。この track の
+判定基準は網羅ではなく「**壊れた実装が動作テストを通過するか**」なので、その基準で並べ替える。
+
+### 採らなかったもの: ソート・探索・グラフ
+
+Issue が最初に挙げている領域だが、この設計パターンには合わない。壊れたソートは公開テストで落ちる。
+`sorted()` と比べるテストを 1 行書けば終わりで、「監査でしか見つからない欠陥」を作るには、性能特性や
+安定性など**出力以外の性質**へ逃げるしかない。それは別の良い問題ではあるが、この track の軸ではない。
+
+### 順序と、その根拠
+
+1. **認証・トークン検証** (実装済み: `cs-auth-claim-audit`)
+   飛躍が最も短く、題材が最も具体的で、正しい実装と壊れた実装の出力差が **1 つの要求**に現れる。
+   最初の章に必要な条件をすべて満たす。
+2. **トランザクションと可視性** (実装済み: `cs-transaction-visibility-audit`)
+   「commit された」から「読んだ人が見た状態は正しかった」への飛躍。read committed で走るコードは、
+   commit が read 間に無い単体テストでも結合テストでも緑になり、read 間に commit が入ったときだけ
+   壊れる。実 thread や timing ではなく immutable revision と決定論的 schedule で、監査対象を
+   「一貫していないまま返された応答のログ」に固定する。
+3. **並行性 (I/O 境界)** (実装済み: `cs-async-result-binding`)
+   「各処理は正しい」から「並べても正しい」への飛躍。決定的に再現させる仕掛けが要るので、
+   トランザクションの後に置く。
+4. **キャッシュ無効化** (実装済み: `cs-cache-generation-fence`)
+   「cache に入っていた」から「その値は今も正しい」への飛躍。2 と 3 の語彙 (可視性、順序) が前提。
+5. **プロトコル (HTTP / 再送 / 冪等性)** (実装済み: `cs-http-retry-idempotency`)
+   「応答を受け取れなかった」から「操作は起きなかった」への飛躍。commit後にresponseだけが消えるtraceを
+   読み、同じlogical operationをdurable receiptからreplayする。保証はexactly-once transportではなく、
+   at-most-once business effectに限定する。前4章の語彙が再登場する位置なのでorder 50に置く。
+
+### 既知の断絶
+
+- **1 章の前に置く導入が無い。** `cs-auth-claim-audit` は難易度 3 で、Python を読み書きできることと、
+  HMAC が「鍵付きハッシュ」であることを知っていることを前提にしている。まったくの初学者はここから
+  始められない。`stackstack-route` の 1-2 章が近い役割を果たすが、あちらは AWS 運用の導線であって
+  この track の前提ではない。難易度 1-2 の導入問題が要る。
+
+## 関連
+
+- Issue 407 — この track の起票元
+- Issue 428 — cache generation fence の受け入れ条件
+- [`advanced-cryptography-2026/TEMPLATE.md`](../advanced-cryptography-2026/TEMPLATE.md) — container と
+  `/verify` の契約、assurance scope の正本
+- [`stackstack-route`](../stackstack-route/curriculum.md) — もう 1 つの学習ルート。目的地が AWS 運用で、
+  この track とは前提も終点も別

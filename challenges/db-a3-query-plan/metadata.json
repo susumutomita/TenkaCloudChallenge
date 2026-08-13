@@ -1,0 +1,144 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "db-a3-query-plan",
+  "name": "使い分けられない index — Query Plan と選択性",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 2,
+  "estimatedDuration": "10〜15 分",
+  "shortDescription": "30 万行の問い合わせテーブルには priority 列があり、index が既に張られている。同じ index つきの列でも、希少な値 (urgent) と大多数を占める値 (normal) では、EXPLAIN が示す実行計画がまったく違う。しかも今のままでは planner の row estimate 自体が壊れている ── ANALYZE を実行して統計を更新するところから始める。",
+  "instructions": "## はじめに\nDatabase Track・Drill A3。「index を張れば必ず速くなる」の続き ── 今度は「index があっても planner が必ずそれを選ぶわけではない」を、自分の目で見る。ブラウザは要らない。Portal のターミナルを開けば `psql` が使える状態で入る。\n\n## 最初の一手\n1. Portal のターミナルを開く。\n2. `psql -U participant -d drill` で接続する。\n3. 次の 2 つのクエリを実行し、実行計画を見比べる (どちらも `priority` 列への等値検索で、同じ index `idx_tickets_priority` の対象になる):\n   ```sql\n   explain (analyze, buffers)\n   select * from support.tickets where priority = 'urgent';   -- 希少値 (全体の約 0.02%)\n\n   explain (analyze, buffers)\n   select * from support.tickets where priority = 'normal';   -- 大多数を占める値 (全体の約 99.98%)\n   ```\n4. 出力の `rows=` (推定行数) と、実際に何行返ったかを見比べる。かなりズレていないだろうか。まだこのテーブルは一度も `ANALYZE` されていない ── planner は実際の分布を知らないまま、当てずっぽうの推定で計画を選んでいる。\n\n## ゴール\n1. `analyze support.tickets;` を実行し、統計を更新する。\n2. 同じ 2 つのクエリをもう一度実行する。今度は `rows=` の推定値が実際の行数に近づき、`urgent` は index を使う計画に、`normal` は `Seq Scan` に変わっているはずだ。\n3. なぜ `normal` (行の 99.98%) を index で拾うより Seq Scan の方が速いのか、自分の言葉で説明できるか考えてみる。\n4. 3 つのチェックポイントをポータルから再スキャンする — 提出内容そのものは採点されない (押すたびに実データベースの状態を見に行く)。\n\n手が止まったら各チェックポイントのヒントを開く (ペナルティ付き)。",
+  "description": "## 背景\n\n`support.tickets` は 30 万行あり、`priority` 列には最初から index (`idx_tickets_priority`) が張られている。この drill は index を作ることが目的ではない ── 「index が存在すること」と「planner がそれを実際に使うこと」は別問題だと体験させることが目的である。\n\n## ドリルの構造\n\n1. コンテナ起動直後、`support.tickets` は 30 万行を投入済みだが **意図的に一度も `ANALYZE` されていない** (db-a2-index-tradeoff の seed.sql とは対照的に、db-a3 の seed.sql は末尾で `ANALYZE` を呼ばない)。この状態では planner は `priority = 'urgent'` にも `priority = 'normal'` にも同じ (的外れな) 行数を見積もり、どちらも index を使う計画を選んでしまう ── 99.98% の行にマッチする `normal` に対してさえ。\n2. 参加者が `ANALYZE` を実行すると、planner は実際の分布 (`urgent` が希少、`normal` が大多数) を知る。同じ 2 クエリを再実行すると、`urgent` は index を使う計画のまま、`normal` は `Seq Scan` に切り替わる ── 選択性の低い条件では index よりテーブル全体を読む方が実際に安いから。\n3. 参加者は EXPLAIN の `rows=` (推定) と実際の行数の両方を見比べ、統計が row estimate の精度を直接左右することを確認する。\n\n## なぜ docker/compose か\n\n学習目標が Postgres のクエリプランナ・統計・コスト推定という engine 内部の意味論に依存し、AWS 固有の要素は無い。docker/compose の postgres:16 系コンテナ 1 つ (30 万行を数秒で生成できる規模) で完全に再現できるため、AWS 専用にする理由が無い (docs/authoring/runtime-and-style.md)。\n\n## 採点 (multi-verify, 3 checkpoints)\n\nコンテナ内の grader が、2 つの固定クエリ (`priority = 'urgent'` / `priority = 'normal'`) に対して毎回 `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)` を実際に実行し、実行計画そのものと `pg_stat_user_tables` から判定する。参加者の提出内容 (テキスト) 自体は読まれない。\n\n1. `table-statistics-collected` — `pg_stat_user_tables.last_analyze` に記録があるか (= 実際に `ANALYZE` が実行されたか)。\n2. `row-estimates-match-reality` — 両クエリについて、EXPLAIN が示す推定行数 (`Plan Rows`) が実際の行数 (`Actual Rows`) の 5 倍以内に収まっているか。ANALYZE 前は両クエリとも推定 938 行 (実際は urgent=50 行、normal=299,950 行) で大きく外れる。\n3. `scan-strategy-matches-selectivity` — `urgent` の実行計画が index を使い Seq Scan を含まない、かつ `normal` の実行計画が Seq Scan のみで index を含まないか。両方が揃って初めて「選択性に応じて使い分けている」と言える。\n\n自己申告や固定文字列の一致では通らない。3 つとも実際の `EXPLAIN` / カタログ問い合わせだけで判定する。\n\n## 安全方針\n\n訓練用ターゲット。compose は `127.0.0.1` のみに bind し外部公開しない。秘密のフラグは無く、課題は構造的 (統計が実際に更新され、実行計画が実際に選択性を反映しているか)。\n\n## コスト\n\nローカル Docker のみ。AWS リソースは作成しない (無料)。シード (30 万行) はコンテナ起動時に数秒で生成する。",
+  "writeup": "## 何が起きていたか\n\n`support.tickets` には最初から `priority` 列への index があった。しかし index の存在は「planner がそれを使う」ことを保証しない。テーブルが一度も `ANALYZE` されていない状態では、Postgres は `priority` の値ごとの分布 (どの値が何行あるか) をまったく知らない。そこで `urgent` にも `normal` にも同じ、統計に基づかない当てずっぽうの行数 (このドリルでは 938 行) を見積もる。この推定のもとでは、実際には全体の 99.98% を占める `normal` さえも「そこそこ絞り込める」ように見えてしまい、planner は両方に index を使う計画を選んでしまう。\n\n`ANALYZE` を実行すると、Postgres は実際のサンプリングに基づいて `priority` の値ごとの頻度 (histogram / MCV) を `pg_statistic` に記録する。同じ 2 クエリを再実行すると、`urgent` (希少) は引き続き index を使う計画のままだが、`normal` (大多数) は `Seq Scan` に切り替わる。これは統計不足による偶然の一致ではなく、コストベースの正しい判断である ── 行の 99.98% を拾うのに index を辿ってテーブル本体へ 1 行ずつ寄り道するより、テーブル全体を素直に読み切る方が実際に安い。\n\n## 一般化\n\n「index を張った」だけでは終わらない。planner が実際にその index を使うかどうかは、選択性 (その条件が全体のどれだけを絞り込むか) とコスト推定の両方に依存し、コスト推定は最新の統計 (`ANALYZE`) が無ければ正しく機能しない。バルクロード直後や大量更新の直後は、まさにこのドリルが再現した「統計が古いまま」の状態になりやすい。EXPLAIN の `rows=` (推定) と実際の行数を見比べる習慣は、A2 で身につけた「Seq Scan か Index Scan か」の確認をさらに一段深め、「なぜ planner はその計画を選んだのか」まで説明できるようにする。",
+  "tags": [
+    "database",
+    "postgresql",
+    "drill",
+    "local-play",
+    "container",
+    "sql",
+    "query-plan",
+    "statistics",
+    "performance"
+  ],
+  "exposedPorts": [
+    { "port": 18420, "name": "Info (challenge surface)" },
+    { "port": 18421, "name": "/verify (loopback grader)" }
+  ],
+  "learningGoals": [
+    "index が存在することと、query planner が実際にそれを使うことは別問題だと、自分の目で確認できる",
+    "ANALYZE が column の統計 (値ごとの分布) を更新し、それが row estimate の精度を直接左右することを説明できる",
+    "同じ index つきの列でも、選択性の低い条件では Seq Scan の方が実際にコストが低いことを、EXPLAIN の数字で確認できる",
+    "EXPLAIN の推定行数 (Plan Rows) と実際の行数 (Actual Rows) を見比べ、統計の鮮度を診断する習慣を身につける"
+  ],
+  "i18n": {
+    "en": {
+      "name": "The Index That Doesn't Get Used — Query Plans and Selectivity",
+      "shortDescription": "A 300,000-row ticket table already has an index on its `priority` column. The same indexed column produces completely different plans for a rare value (urgent) and a value that dominates the table (normal) — and right now, the planner's own row estimates are broken. Start by running ANALYZE to refresh the statistics.",
+      "instructions": "## Getting started\nDatabase Track, Drill A3. A follow-up to \"adding an index makes it faster\" — this time you watch, with your own eyes, that having an index does not mean the planner will always use it. No browser needed — open the Portal terminal and you land with `psql` ready to go.\n\n## First move\n1. Open the Portal terminal.\n2. Connect: `psql -U participant -d drill`.\n3. Run these two queries and compare their plans (both are equality lookups on `priority`, both eligible for the same index `idx_tickets_priority`):\n   ```sql\n   explain (analyze, buffers)\n   select * from support.tickets where priority = 'urgent';   -- rare (~0.02% of rows)\n\n   explain (analyze, buffers)\n   select * from support.tickets where priority = 'normal';   -- common (~99.98% of rows)\n   ```\n4. Compare the estimated `rows=` in the plan against how many rows actually came back. They should look quite far off. This table has never been `ANALYZE`d yet — the planner has no idea what the real distribution looks like and is guessing.\n\n## Goal\n1. Run `analyze support.tickets;` to refresh the statistics.\n2. Run the same two queries again. This time the estimated `rows=` should track reality much more closely, `urgent` should still use an index-based plan, and `normal` should switch to a `Seq Scan`.\n3. Think through, in your own words, why reading the whole table (Seq Scan) beats going through the index for `normal` — a condition that matches 99.98% of the rows.\n4. Re-scan the 3 checkpoints from the portal — the submission text itself is not graded (each click re-checks live database state).\n\nIf you get stuck, open a checkpoint's hints (penalty applies).",
+      "description": "## Background\n\n`support.tickets` has 300,000 rows, and `priority` already has an index (`idx_tickets_priority`) from the start. This drill is not about creating an index — it is about experiencing that \"an index exists\" and \"the planner actually uses it\" are two different questions.\n\n## Drill structure\n\n1. Right after boot, `support.tickets` is fully seeded but **deliberately never `ANALYZE`d** (contrast with db-a2-index-tradeoff's seed.sql, which ends with one — db-a3's does not). In this state, the planner estimates the same, statistics-free row count for both `priority = 'urgent'` and `priority = 'normal'`, and picks an index-based plan for both — including for `normal`, which actually matches 99.98% of the table.\n2. Once the participant runs `ANALYZE`, the planner learns the real distribution (`urgent` is rare, `normal` dominates). Re-running the same two queries now keeps `urgent` on an index-based plan but switches `normal` to a `Seq Scan` — because reading the whole table really is cheaper than detouring through the index for a condition that low-selectivity.\n3. The participant compares EXPLAIN's estimated `rows=` against the actual row count for both queries, confirming that statistics directly determine row-estimate accuracy.\n\n## Why docker/compose\n\nThe learning goal depends on Postgres query-planner, statistics, and cost-estimation semantics — engine internals with nothing AWS-specific. A single docker/compose postgres:16 container (300,000 rows generated in a few seconds) reproduces this completely, so there is no reason to make it AWS-only (docs/authoring/runtime-and-style.md).\n\n## Scoring (multi-verify, 3 checkpoints)\n\nA grader inside the container actually runs `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)` against two fixed target queries (`priority = 'urgent'` / `priority = 'normal'`) every time, and grades from the plan itself and from `pg_stat_user_tables`. The submission text itself is never read.\n\n1. `table-statistics-collected` — does `pg_stat_user_tables.last_analyze` show a value (= has `ANALYZE` actually run)?\n2. `row-estimates-match-reality` — for BOTH queries, is EXPLAIN's estimated row count (`Plan Rows`) within 5x of the actual row count (`Actual Rows`)? Before ANALYZE, both queries estimate 938 rows (reality: urgent=50, normal=299,950) — badly off in both directions.\n3. `scan-strategy-matches-selectivity` — does `urgent`'s plan use an index and contain no Seq Scan, AND does `normal`'s plan use ONLY a Seq Scan with no index-based node? Both conditions have to hold together for this to count as \"differentiated by selectivity.\"\n\nSelf-report or a fixed-string match cannot pass any of these. All three are answered purely by live `EXPLAIN` runs and catalog queries.\n\n## Safety policy\n\nA training target. The compose stack binds to `127.0.0.1` only and is never exposed externally. There is no secret flag; the challenge is structural (were statistics actually refreshed, and does the plan actually reflect selectivity?).\n\n## Cost\n\nLocal Docker only. No AWS resources are created (free). The 300,000-row seed generates in a few seconds at container boot.",
+      "writeup": "## What happened\n\n`support.tickets` had an index on `priority` from the very start. But an index existing does not guarantee the planner will use it. With the table never `ANALYZE`d, Postgres had no idea how `priority` values were actually distributed. So it estimated the same, statistics-free row count (938, in this drill) for both `urgent` and `normal`. Under that estimate, even `normal` — which actually matches 99.98% of the table — looked \"selective enough,\" and the planner picked an index-based plan for both.\n\nRunning `ANALYZE` makes Postgres sample the table and record the real per-value frequencies (a histogram / most-common-values list) in `pg_statistic`. Re-running the same two queries afterward keeps `urgent` (rare) on an index-based plan, but switches `normal` (common) to a `Seq Scan`. That is not a coincidence from thin statistics — it is the correct, cost-based call: reading the whole table straight through is genuinely cheaper than detouring through an index to fetch 99.98% of the rows one heap page at a time.\n\n## Generalizing\n\n\"I created the index\" is not the end of the story. Whether the planner actually uses it depends on both selectivity (how much of the table the condition actually narrows down) and accurate cost estimation, and cost estimation cannot work correctly without current statistics (`ANALYZE`). Right after a bulk load or a large batch of writes is exactly when a table is likely to be in the stale-statistics state this drill reproduced. Comparing EXPLAIN's estimated `rows=` against the real row count takes the habit you built in A2 (Seq Scan vs. Index Scan) one level deeper — now you can also explain *why* the planner picked the plan it did.",
+      "learningGoals": [
+        "Confirm, hands-on, that an index existing and the query planner actually using it are two different questions",
+        "Explain how ANALYZE refreshes a column's statistics (its value distribution) and how that directly determines row-estimate accuracy",
+        "Confirm, from EXPLAIN's numbers, that a Seq Scan can genuinely be cheaper than an index-based plan on the same indexed column when the predicate has low selectivity",
+        "Build the habit of comparing EXPLAIN's estimated row count (Plan Rows) against the actual row count (Actual Rows) to diagnose stale statistics"
+      ],
+      "checks": [
+        {
+          "id": "table-statistics-collected",
+          "label": "support.tickets's statistics (ANALYZE) have been refreshed",
+          "hints": [
+            {
+              "id": "a3-analyze-hint-1",
+              "content": "Run `analyze support.tickets;`. You can confirm it took effect with `select last_analyze from pg_stat_user_tables where relname = 'tickets';` in psql."
+            }
+          ]
+        },
+        {
+          "id": "row-estimates-match-reality",
+          "label": "The planner's row estimates are now close to reality",
+          "hints": [
+            {
+              "id": "a3-estimate-hint-1",
+              "content": "Before ANALYZE, both queries estimate the same (wrong) row count, since the planner has no per-value statistics to work from. Run `analyze support.tickets;` first, then compare the `rows=` in `explain (analyze, buffers) select * from support.tickets where priority = 'urgent';` against how many rows actually came back — do the same for `priority = 'normal'`."
+            }
+          ]
+        },
+        {
+          "id": "scan-strategy-matches-selectivity",
+          "label": "The rare value uses an index, the common value uses a Seq Scan",
+          "hints": [
+            {
+              "id": "a3-strategy-hint-1",
+              "content": "This checkpoint depends on the ANALYZE from the other two checkpoints having actually run — without it, the planner may pick an index-based plan for BOTH queries (including the common one, where that is the wrong call). After `analyze support.tickets;`, `priority = 'urgent'` should show an index-based node type and `priority = 'normal'` should show only `Seq Scan`."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Info": "http://127.0.0.1:18420"
+    },
+    "verifyUrl": "http://127.0.0.1:18421/verify",
+    "secretEnv": ["FLAG_SEED"],
+    "terminal": {
+      "service": "db-a3-query-plan"
+    }
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "table-statistics-collected",
+        "label": "support.tickets の統計 (ANALYZE) が更新されている",
+        "points": 30,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "a3-analyze-hint-1",
+            "content": "`analyze support.tickets;` を実行しよう。psql で `select last_analyze from pg_stat_user_tables where relname = 'tickets';` を打つと反映されたか確認できる。",
+            "penalty": 10
+          }
+        ]
+      },
+      {
+        "id": "row-estimates-match-reality",
+        "label": "プランナの row estimate が実際の行数に近づいている",
+        "points": 30,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "a3-estimate-hint-1",
+            "content": "ANALYZE 前は両クエリとも同じ (的外れな) 行数を推定する ── planner に値ごとの統計が無いから。まず `analyze support.tickets;` を実行し、`explain (analyze, buffers) select * from support.tickets where priority = 'urgent';` の `rows=` と実際の返り行数を見比べよう。`priority = 'normal'` でも同様に。",
+            "penalty": 10
+          }
+        ]
+      },
+      {
+        "id": "scan-strategy-matches-selectivity",
+        "label": "希少値は index、大多数を占める値は Seq Scan が選ばれている",
+        "points": 40,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "a3-strategy-hint-1",
+            "content": "このチェックポイントは他の 2 つで行った ANALYZE が前提になっている ── それが無いと planner は両クエリとも (normal を含めて) index を使う計画を選んでしまう。`analyze support.tickets;` の後は、`priority = 'urgent'` が index を使う計画に、`priority = 'normal'` が `Seq Scan` のみになっているはず。",
+            "penalty": 15
+          }
+        ]
+      }
+    ]
+  },
+  "track": {
+    "id": "database-track",
+    "order": 30,
+    "chapter": "1. Storage Foundations"
+  }
+}

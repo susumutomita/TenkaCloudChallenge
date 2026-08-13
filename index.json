@@ -234,7 +234,7 @@
       "visibility": "public",
       "track": {
         "id": "advanced-cryptography-2026",
-        "order": 260,
+        "order": 270,
         "chapter": "Week 2 / Boolean MPC"
       },
       "courseAlignment": {
@@ -316,6 +316,58 @@
         "week2",
         "mpc",
         "secret-sharing",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "ac26-w2-oblivious-transfer",
+      "name": "選んだことを言わずに、選ぶ",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "advanced-cryptography-2026",
+        "order": 260,
+        "chapter": "Week 2 / Oblivious Transfer"
+      },
+      "courseAlignment": {
+        "courseId": "advanced-cryptography-program",
+        "edition": "2026",
+        "week": 2,
+        "role": "mechanism",
+        "sources": [
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
+            "path": "week2/README.md",
+            "kind": "lecture"
+          },
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
+            "path": "week2/problems/toy-mpc/README.md",
+            "kind": "assignment"
+          }
+        ]
+      },
+      "difficulty": 3,
+      "estimatedDuration": "50-75 分",
+      "shortDescription": "公式 Week 2 Part B の oblivious transfer と GMW secret AND を 1 つの問題で組む。正しく動くことと、相手に秘密を渡さないことを別々に確かめる。",
+      "tags": [
+        "advanced-cryptography-2026",
+        "week2",
+        "mpc",
+        "oblivious-transfer",
+        "gmw",
+        "privacy",
         "local-play",
         "container"
       ],
@@ -508,6 +560,12 @@
             "ref": "e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9",
             "path": "week3/problems/schnorr-from-scratch/README.md",
             "kind": "assignment"
+          },
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9",
+            "path": "week3/week3_zksnark_slides.pdf",
+            "kind": "slide"
           }
         ]
       },
@@ -558,6 +616,12 @@
             "ref": "e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9",
             "path": "week3/problems/schnorr-from-scratch/README.md",
             "kind": "assignment"
+          },
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9",
+            "path": "week3/week3_zksnark_slides.pdf",
+            "kind": "slide"
           }
         ]
       },
@@ -608,6 +672,12 @@
             "ref": "e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9",
             "path": "week3/problems/schnorr-from-scratch/README.md",
             "kind": "assignment"
+          },
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9",
+            "path": "week3/week3_zksnark_slides.pdf",
+            "kind": "slide"
           }
         ]
       },
@@ -709,6 +779,12 @@
             "ref": "e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9",
             "path": "week3/problems/schnorr-from-scratch/README.md",
             "kind": "assignment"
+          },
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9",
+            "path": "week3/week3_zksnark_slides.pdf",
+            "kind": "slide"
           }
         ]
       },
@@ -751,7 +827,7 @@
         "sources": [
           {
             "repository": "zk-tokyo/advanced-cryptography-2026",
-            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
             "path": "week4/README.md",
             "kind": "placeholder"
           }
@@ -795,7 +871,7 @@
         "sources": [
           {
             "repository": "zk-tokyo/advanced-cryptography-2026",
-            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
             "path": "week4/README.md",
             "kind": "placeholder"
           }
@@ -839,7 +915,7 @@
         "sources": [
           {
             "repository": "zk-tokyo/advanced-cryptography-2026",
-            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
             "path": "week4/README.md",
             "kind": "placeholder"
           }
@@ -883,13 +959,13 @@
         "sources": [
           {
             "repository": "zk-tokyo/advanced-cryptography-2026",
-            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
             "path": "week5/README.md",
             "kind": "lecture"
           },
           {
             "repository": "zk-tokyo/advanced-cryptography-2026",
-            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
             "path": "week5/problems/tfhe-toy-python/README.md",
             "kind": "assignment"
           }
@@ -935,13 +1011,13 @@
         "sources": [
           {
             "repository": "zk-tokyo/advanced-cryptography-2026",
-            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
             "path": "week5/README.md",
             "kind": "lecture"
           },
           {
             "repository": "zk-tokyo/advanced-cryptography-2026",
-            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
             "path": "week5/problems/tfhe-toy-python/README.md",
             "kind": "assignment"
           }
@@ -986,13 +1062,13 @@
         "sources": [
           {
             "repository": "zk-tokyo/advanced-cryptography-2026",
-            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
             "path": "week5/README.md",
             "kind": "lecture"
           },
           {
             "repository": "zk-tokyo/advanced-cryptography-2026",
-            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
             "path": "week5/problems/tfhe-toy-python/README.md",
             "kind": "assignment"
           }
@@ -1038,13 +1114,13 @@
         "sources": [
           {
             "repository": "zk-tokyo/advanced-cryptography-2026",
-            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
             "path": "week5/README.md",
             "kind": "lecture"
           },
           {
             "repository": "zk-tokyo/advanced-cryptography-2026",
-            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
             "path": "week5/problems/tfhe-toy-python/README.md",
             "kind": "assignment"
           }
@@ -1089,13 +1165,13 @@
         "sources": [
           {
             "repository": "zk-tokyo/advanced-cryptography-2026",
-            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
             "path": "week5/README.md",
             "kind": "lecture"
           },
           {
             "repository": "zk-tokyo/advanced-cryptography-2026",
-            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
             "path": "week5/problems/tfhe-toy-python/README.md",
             "kind": "assignment"
           }
@@ -1142,13 +1218,13 @@
         "sources": [
           {
             "repository": "zk-tokyo/advanced-cryptography-2026",
-            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
             "path": "week5/README.md",
             "kind": "lecture"
           },
           {
             "repository": "zk-tokyo/advanced-cryptography-2026",
-            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
             "path": "week5/problems/tfhe-toy-python/README.md",
             "kind": "assignment"
           }
@@ -1193,13 +1269,13 @@
         "sources": [
           {
             "repository": "zk-tokyo/advanced-cryptography-2026",
-            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
             "path": "week6/README.md",
             "kind": "lecture"
           },
           {
             "repository": "zk-tokyo/advanced-cryptography-2026",
-            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
             "path": "week6/problems/co-snark-prove/README.md",
             "kind": "assignment"
           }
@@ -1246,13 +1322,13 @@
         "sources": [
           {
             "repository": "zk-tokyo/advanced-cryptography-2026",
-            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
             "path": "week6/README.md",
             "kind": "lecture"
           },
           {
             "repository": "zk-tokyo/advanced-cryptography-2026",
-            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
             "path": "week6/problems/co-snark-prove/README.md",
             "kind": "assignment"
           }
@@ -1298,13 +1374,13 @@
         "sources": [
           {
             "repository": "zk-tokyo/advanced-cryptography-2026",
-            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
             "path": "week6/README.md",
             "kind": "lecture"
           },
           {
             "repository": "zk-tokyo/advanced-cryptography-2026",
-            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
             "path": "week6/problems/co-snark-prove/README.md",
             "kind": "assignment"
           }
@@ -1351,7 +1427,7 @@
         "sources": [
           {
             "repository": "zk-tokyo/advanced-cryptography-2026",
-            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
             "path": "week6/README.md",
             "kind": "lecture"
           }
@@ -1398,13 +1474,13 @@
         "sources": [
           {
             "repository": "zk-tokyo/advanced-cryptography-2026",
-            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
             "path": "week6/README.md",
             "kind": "lecture"
           },
           {
             "repository": "zk-tokyo/advanced-cryptography-2026",
-            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
             "path": "week6/problems/zkvm-exploit/README.md",
             "kind": "assignment"
           }
@@ -1451,13 +1527,13 @@
         "sources": [
           {
             "repository": "zk-tokyo/advanced-cryptography-2026",
-            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
             "path": "week6/README.md",
             "kind": "lecture"
           },
           {
             "repository": "zk-tokyo/advanced-cryptography-2026",
-            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
             "path": "week6/problems/zkvm-exploit/README.md",
             "kind": "assignment"
           }
@@ -1504,7 +1580,7 @@
         "sources": [
           {
             "repository": "zk-tokyo/advanced-cryptography-2026",
-            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
             "path": "README.md",
             "kind": "roadmap"
           }
@@ -1549,7 +1625,7 @@
         "sources": [
           {
             "repository": "zk-tokyo/advanced-cryptography-2026",
-            "ref": "5e80999306608a45aecf9a0e4e3394a0b62f34d2",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
             "path": "README.md",
             "kind": "roadmap"
           }
@@ -1721,6 +1797,280 @@
       }
     },
     {
+      "id": "cs-async-result-binding",
+      "name": "先に返ったのは、どの request の結果だろう",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "cs-foundations",
+        "order": 30,
+        "chapter": "3. I/Oと並行性"
+      },
+      "difficulty": 3,
+      "estimatedDuration": "45-75 分",
+      "shortDescription": "async I/O の完了順と request identity を、推測ではなくコードで結び付ける。",
+      "tags": [
+        "cs-foundations",
+        "python",
+        "asyncio",
+        "concurrency",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "cs-atomic-file-publish",
+      "name": "半分のファイルは、ファイルではない",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "cs-foundations",
+        "order": 60,
+        "chapter": "6. 公開の不可分性"
+      },
+      "difficulty": 3,
+      "estimatedDuration": "45-75 分",
+      "shortDescription": "書き終えた内容は正しいのに読み手が半分を見たログを監査し、不可分な差し替えとしてファイルを公開する。",
+      "tags": [
+        "cs-foundations",
+        "filesystem",
+        "atomicity",
+        "durability",
+        "crash-consistency",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "cs-auth-claim-audit",
+      "name": "署名は通った。それは、その要求を通してよいという意味ではない",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "cs-foundations",
+        "order": 10,
+        "chapter": "1. 信用の境界"
+      },
+      "difficulty": 3,
+      "estimatedDuration": "45-75 分",
+      "shortDescription": "この gateway は期限切れの token を拒否し、改竄された token を拒否し、scope の無い操作を拒否する。そして数か月のあいだ、あるテナントに別のテナントの文書を読ませていた。決定ログを監査して、通り抜けた要求を特定し、止められる gateway を書く。",
+      "tags": [
+        "cs-foundations",
+        "authorization",
+        "audit",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "cs-cache-generation-fence",
+      "name": "消した。それでも古い値が戻ってきた",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "cs-foundations",
+        "order": 40,
+        "chapter": "4. キャッシュ無効化"
+      },
+      "difficulty": 3,
+      "estimatedDuration": "45-75 分",
+      "shortDescription": "商品価格を更新し、cache の古い値も削除した。それなのに少し後の要求へ旧価格が返った。決定ログから古い応答を特定し、invalidate 前に始まった fill を戻さない世代 fence を書く。",
+      "tags": [
+        "cs-foundations",
+        "cache",
+        "invalidation",
+        "concurrency",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "cs-dst-daily-rollup",
+      "name": "年に 2 日だけ、日次レポートが合わない",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "cs-foundations",
+        "order": 90,
+        "chapter": "9. 暦の日と、86400 秒の塊"
+      },
+      "difficulty": 3,
+      "estimatedDuration": "45-75 分",
+      "shortDescription": "台帳と 1 日だけ食い違う日次レポートを監査し、固定 offset ではなく現地の暦の日で集計する rollup を書く。",
+      "tags": [
+        "cs-foundations",
+        "time",
+        "timezone",
+        "dst",
+        "aggregation",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "cs-http-retry-idempotency",
+      "name": "応答が消えた。再送で同じ支払いを増やさない",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "cs-foundations",
+        "order": 50,
+        "chapter": "5. HTTP再送と冪等性"
+      },
+      "difficulty": 3,
+      "estimatedDuration": "45-75 分",
+      "shortDescription": "commit後にHTTP応答だけが消えたtraceを監査し、SQLite receiptで同じ論理操作を再生する。",
+      "tags": [
+        "cs-foundations",
+        "http",
+        "idempotency",
+        "sqlite",
+        "concurrency",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "cs-numeric-aggregation-order",
+      "name": "誰も数字を変えていないのに、合計が変わった",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "cs-foundations",
+        "order": 70,
+        "chapter": "7. 集約の順序と精度"
+      },
+      "difficulty": 3,
+      "estimatedDuration": "45-75 分",
+      "shortDescription": "行の順序で合計が変わるレポートを監査し、厳密な合計と、丸めても 100% に戻る配分を実装する。",
+      "tags": [
+        "cs-foundations",
+        "numerics",
+        "decimal",
+        "rounding",
+        "aggregation",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "cs-protocol-state-guard",
+      "name": "ハンドシェイクは、結局なくてもよかった",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "cs-foundations",
+        "order": 80,
+        "chapter": "8. 状態機械と既定拒否"
+      },
+      "difficulty": 3,
+      "estimatedDuration": "45-75 分",
+      "shortDescription": "server が自分の手順を飛ばさせた session を監査し、状態とメッセージ型の全組合せに答える handler を書く。",
+      "tags": [
+        "cs-foundations",
+        "protocol",
+        "state-machine",
+        "validation",
+        "sessions",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "cs-transaction-visibility-audit",
+      "name": "どちらも committed。だが、その合計は一度も存在しない",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "cs-foundations",
+        "order": 20,
+        "chapter": "2. トランザクションと可視性"
+      },
+      "difficulty": 3,
+      "estimatedDuration": "45-75 分",
+      "shortDescription": "ポイント台帳の各 read は、その瞬間の committed 値を返している。公開テストも緑。それでも複数口座を束ねた report は、一度も存在しなかった合計を返せる。seed 固有の監査ログから反例を組み立て、1 revision の snapshot で report を直す。",
+      "tags": [
+        "cs-foundations",
+        "transactions",
+        "mvcc",
+        "audit",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "csrf-demo",
       "name": "報告されたリンクの罠",
       "category": "Challenge",
@@ -1743,6 +2093,404 @@
         "container"
       ],
       "scoringKind": "verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "db-a1-table-primary-key",
+      "name": "重複した会員 — Table / Row / Primary Key",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "database-track",
+        "order": 10,
+        "chapter": "1. Storage Foundations"
+      },
+      "difficulty": 1,
+      "estimatedDuration": "10〜15 分",
+      "shortDescription": "前任者が作った会員名簿には、同じ人が 2 回、3 回と重複して登録されている。テーブルには行が並んでいるだけで、「この列が重複してはいけない」というルールはどこにも書かれていない。email を PRIMARY KEY とするテーブルを自分で作り、Postgres エンジンに一意性を強制させる。",
+      "tags": [
+        "database",
+        "postgresql",
+        "drill",
+        "local-play",
+        "container",
+        "sql",
+        "primary-key"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "db-a10-primary-replica",
+      "name": "Primary / Replica ── 複製は「コピー」ではなく「追従」",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "database-track",
+        "order": 80,
+        "chapter": "3. Scaling & Topology"
+      },
+      "difficulty": 2,
+      "estimatedDuration": "10〜15 分",
+      "shortDescription": "primary 1 台 + streaming replica 1 台の 2 ノード構成 (結線は自動) で、primary への書き込みが replica へどう届くかを自分の手で確認する。1 回だけでなく時間差のある 2 回の書き込みが両方とも届くことを見て、replica が「コピー」ではなく「変更を継続的に追従している」ことを、pg_stat_replication / pg_stat_wal_receiver の LSN で数字として理解する。",
+      "tags": [
+        "database",
+        "postgresql",
+        "drill",
+        "local-play",
+        "container",
+        "sql",
+        "replication",
+        "streaming-replication",
+        "primary-replica",
+        "wal"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "db-a11-replication-lag",
+      "name": "Replication Lag ── 発生させ、観測し、解消する",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "database-track",
+        "order": 90,
+        "chapter": "3. Scaling & Topology"
+      },
+      "difficulty": 2,
+      "estimatedDuration": "10〜15 分",
+      "shortDescription": "A10 と同じ primary + streaming replica 構成 (独立にもう一度自動セットアップ) で、replica の apply を recovery_min_apply_delay で意図的に絞り、primary への書き込みで実際に replication lag を発生させる。pg_stat_replication.replay_lag が伸びることを実測してから、delay を戻して lag が縮むこともあわせて実測する。",
+      "tags": [
+        "database",
+        "postgresql",
+        "drill",
+        "local-play",
+        "container",
+        "sql",
+        "replication",
+        "streaming-replication",
+        "replication-lag",
+        "wal"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "db-a12-partition",
+      "name": "大量削除の単位 ── row か partition か",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "database-track",
+        "order": 100,
+        "chapter": "3. Scaling & Topology"
+      },
+      "difficulty": 2,
+      "estimatedDuration": "10〜15 分",
+      "shortDescription": "6 か月分・計 12 万行に月別 native partitioning された時系列テーブルから、古い月のデータを (a) 通常の DELETE と (b) DETACH PARTITION (+ DROP TABLE) の 2 通りで実際に消し、同じ規模の作業でも所要時間がどれだけ違うかを自分の手で計測する。結論を先に教えない ── 両方の手順を実際に踏んでから、体感の差を自分の言葉で言語化する。",
+      "tags": [
+        "database",
+        "postgresql",
+        "drill",
+        "local-play",
+        "container",
+        "sql",
+        "partition",
+        "delete",
+        "scaling"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "db-a2-index-tradeoff",
+      "name": "遅い注文検索 — Index の read/write trade-off",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "database-track",
+        "order": 20,
+        "chapter": "1. Storage Foundations"
+      },
+      "difficulty": 2,
+      "estimatedDuration": "10〜15 分",
+      "shortDescription": "40 万件の注文テーブルから、注文番号 1 件を検索するだけの問い合わせが重い。EXPLAIN (ANALYZE, BUFFERS) で index が無い状態を自分の目で観測し、index を追加してもう一度観測する。結論を先には教えない ── 「速くなった」だけでなく「何が、どれだけ変わったか」を自分の数字で確認する。",
+      "tags": [
+        "database",
+        "postgresql",
+        "drill",
+        "local-play",
+        "container",
+        "sql",
+        "index",
+        "query-plan",
+        "performance"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "db-a3-query-plan",
+      "name": "使い分けられない index — Query Plan と選択性",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "database-track",
+        "order": 30,
+        "chapter": "1. Storage Foundations"
+      },
+      "difficulty": 2,
+      "estimatedDuration": "10〜15 分",
+      "shortDescription": "30 万行の問い合わせテーブルには priority 列があり、index が既に張られている。同じ index つきの列でも、希少な値 (urgent) と大多数を占める値 (normal) では、EXPLAIN が示す実行計画がまったく違う。しかも今のままでは planner の row estimate 自体が壊れている ── ANALYZE を実行して統計を更新するところから始める。",
+      "tags": [
+        "database",
+        "postgresql",
+        "drill",
+        "local-play",
+        "container",
+        "sql",
+        "query-plan",
+        "statistics",
+        "performance"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "db-a4-transaction",
+      "name": "先に届いたお金 — Transaction と原子性",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "database-track",
+        "order": 40,
+        "chapter": "2. Transactions & Concurrency"
+      },
+      "difficulty": 2,
+      "estimatedDuration": "10〜15 分",
+      "shortDescription": "alice から bob への送金は、実際には 2 つの独立した UPDATE でしか表現できない。transaction で包まずに実行すると、片方だけ確定した不整合な状態が生まれる ── bob にはお金が届いたのに、alice からは引かれていない。BEGIN / ROLLBACK で同じ失敗を再現し、原子性が守られる様子を自分の目で見てから、正しく COMMIT する。",
+      "tags": [
+        "database",
+        "postgresql",
+        "drill",
+        "local-play",
+        "container",
+        "sql",
+        "transaction",
+        "rollback",
+        "atomicity"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "db-a6-lock",
+      "name": "詰まっているのは query か、それとも lock 待ちか — Row Lock",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "database-track",
+        "order": 50,
+        "chapter": "2. Transactions & Concurrency"
+      },
+      "difficulty": 2,
+      "estimatedDuration": "10〜15 分",
+      "shortDescription": "2 つのセッションが同じ行を同時に UPDATE しようとするとどうなるか。片方を BEGIN で開いたまま放置し、もう片方が待たされる様子を pg_stat_activity から観測する。blocker の pid を pg_blocking_pids() で特定し、COMMIT して解放するまでを自分の手で辿る。",
+      "tags": [
+        "database",
+        "postgresql",
+        "drill",
+        "local-play",
+        "container",
+        "sql",
+        "lock",
+        "concurrency",
+        "pg-locks"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "db-a7-mvcc",
+      "name": "書き込み中でも読み取りは待たされない理由 — MVCC と行バージョン",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "database-track",
+        "order": 60,
+        "chapter": "2. Transactions & Concurrency"
+      },
+      "difficulty": 2,
+      "estimatedDuration": "10〜15 分",
+      "shortDescription": "A6 で見た「書き込み同士は待たされる」の対比として、読み取りが書き込み中の行でも一切ブロックされないことを観測する。xmin/xmax で行バージョンを直接確認したあと、repeatable read の長時間 transaction を開いたまま別セッションで churn すると VACUUM が dead tuple を回収できず、transaction を閉じて初めて回収されることを自分の手で確認する。",
+      "tags": [
+        "database",
+        "postgresql",
+        "drill",
+        "local-play",
+        "container",
+        "sql",
+        "mvcc",
+        "vacuum",
+        "xmin"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "db-a8-delete-vacuum",
+      "name": "DELETE したのに disk が減らない ── 論理削除と物理回収は別物",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "database-track",
+        "order": 70,
+        "chapter": "2. Transactions & Concurrency"
+      },
+      "difficulty": 2,
+      "estimatedDuration": "10〜15 分",
+      "shortDescription": "40 万行のイベントテーブルから retention cutoff より古い 30 万行を DELETE しても、テーブルのディスク使用量はすぐには縮まない。n_dead_tup が急増する様子を自分の目で観測してから、autovacuum を無効にした状態で自分で VACUUM を実行し、dead tuple が回収される (が、それでもファイルサイズ自体は変わらない) ことまで確認する。",
+      "tags": [
+        "database",
+        "postgresql",
+        "drill",
+        "local-play",
+        "container",
+        "sql",
+        "delete",
+        "vacuum",
+        "dead-tuple"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "db-challenge-blocked-transaction",
+      "name": "支払いの書き込みが止まったまま返ってこない",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "database-track",
+        "order": 120,
+        "chapter": "4. Challenges"
+      },
+      "difficulty": 2,
+      "estimatedDuration": "10〜15 分",
+      "shortDescription": "ある口座への出金処理が、ずっと保留のまま完了しない。原因は教えない ── A6 (Lock) で使った pg_stat_activity / pg_locks / pg_blocking_pids() を自分の手で使い、何が止めているのかを自力で突き止めて解消する。似たようなセッションが複数見えるが、全部が犯人とは限らない。",
+      "tags": [
+        "database",
+        "postgresql",
+        "challenge",
+        "local-play",
+        "container",
+        "sql",
+        "lock",
+        "concurrency",
+        "pg-locks",
+        "diagnostics"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "db-challenge-slow-query",
+      "name": "顧客の注文履歴が返ってこない",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "database-track",
+        "order": 110,
+        "chapter": "4. Challenges"
+      },
+      "difficulty": 2,
+      "estimatedDuration": "10〜15 分",
+      "shortDescription": "カスタマーサポートの管理画面で、ある顧客の注文履歴を開くといつまでも読み込みが終わらない。原因は教えない ── A2 (Index)・A3 (Query Plan) で使った EXPLAIN (ANALYZE, BUFFERS) を自分の手で使い、遅い理由を自力で突き止めて直す。テーブルは空ではない ── 既にインデックスが 1 つあるが、それで足りているとは誰も言っていない。",
+      "tags": [
+        "database",
+        "postgresql",
+        "challenge",
+        "local-play",
+        "container",
+        "sql",
+        "index",
+        "query-plan",
+        "performance",
+        "diagnostics"
+      ],
+      "scoringKind": "multi-verify",
       "cost": {
         "perHourUsd": 0,
         "perDayIfLeftRunningUsd": 0,
@@ -2373,7 +3121,7 @@
       },
       "difficulty": 1,
       "estimatedDuration": "15 分",
-      "shortDescription": "天下クラウド株式会社、 入社初日の午後。 前任の SRE はもういない。 AI Builder が作った社内掲示板が、 まだ誰にも投稿されないまま置いてある。\n\nCTO 曰く: 「本番の話は明日から。 今日はその板が動くところまで見ておいて。 見て、 ログを読んで、 設定をひとつ直して、 実際に書き込めるところまで」\n\n難しいことは何もない。 これは、 これから使う道具一式 ── ポータル、 アプリ、 ログ、 設定ファイル、 採点 ── を一周する 15 分だ。",
+      "shortDescription": "天下クラウド株式会社、 入社初日の午後。 前任の SRE はもういない。 AI Builder が作った社内掲示板が、 まだ誰にも投稿されないまま置いてある。\n\nCTO 曰く: 「本番の話は明日から。 今日はその板が動くところまで見ておいて。 見て、 ログを読んで、 設定をひとつ直して、 実際に書き込めるところまで」\n\n難しいことは何もない。 これは、 これから使う道具一式 ── ポータル、 アプリ、 ログ、 設定ファイル、 採点 ── を一周する 15 分だ。\n\n道具はすべて手元のコンテナで動く。 クラウドのアカウントも、 クレジットカードも、 課金も要らない。 壊しても、 環境を作り直せば元に戻る。",
       "tags": [
         "onboarding",
         "stackstack",

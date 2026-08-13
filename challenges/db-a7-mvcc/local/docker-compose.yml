@@ -1,0 +1,31 @@
+# Local-play problem container for db-a7-mvcc.
+# Bound to 127.0.0.1 only: the info page and /verify never leave the box.
+#
+# There is no bind-mounted solution file — the participant works directly against
+# the live database (psql, via the embedded Portal terminal), so all of the state
+# that matters lives inside the Postgres data directory this container owns.
+services:
+  db-a7-mvcc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: participant
+    environment:
+      # Unused by this drill (grading reads live DB state, not a discovered
+      # flag) but injected by `make local` for every local-play problem.
+      FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
+    ports:
+      - "127.0.0.1:18450:8080" # info surface
+      - "127.0.0.1:18451:8081" # loopback /verify
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: "3s"
+      timeout: "5s"
+      retries: 40
+    restart: "no"

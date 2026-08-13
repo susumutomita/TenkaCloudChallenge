@@ -1,0 +1,10 @@
+{
+  "name": "db-a4-transaction-local",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local-play container for the db-a4-transaction Drill: break a multi-row bank transfer without a transaction, watch BEGIN/ROLLBACK protect atomicity, then commit it correctly.",
+  "dependencies": {
+    "postgres": "3.4.5"
+  }
+}

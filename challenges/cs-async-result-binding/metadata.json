@@ -1,0 +1,354 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "cs-async-result-binding",
+  "name": "先に返ったのは、どの request の結果だろう",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "cs-foundations",
+    "order": 30,
+    "chapter": "3. I/Oと並行性"
+  },
+  "difficulty": 3,
+  "estimatedDuration": "45-75 分",
+  "shortDescription": "async I/O の完了順と request identity を、推測ではなくコードで結び付ける。",
+  "description": "5 件の I/O を同時に始める collector が、本番では結果を別の request ID に保存していた。個々の I/O は正しい値を返し、公開テストも緑である。壊れているのは、`asyncio.as_completed()` が返す**完了順**と、元の `jobs` の**入力順**を `zip` した 1 行だ。\n\nこの問題で扱う飛躍は 1 つだけである。**各非同期処理が正しい結果を返した → それを並べた collector も正しい request に結果を結び付ける**、とは限らない。URL や配列 index や「次に終わったもの」は identity ではない。request と Future の関係を、待つ前にコードへ残す必要がある。\n\n実験は Python 標準ライブラリだけで動く。`asyncio.Future` の gate が全 I/O の開始を記録した後、seed 由来の順番で Future を明示的に完了させる。`sleep`、実ネットワーク、偶然の scheduler 順序は使わない。公開テストは 1 件と入力順完了だけを見るため、壊れた starter が通る。hidden verifier は逆順、部分 permutation、同じ URL を持つ別 request、同時完了、途中失敗を別々に検査し、最初の完了前に複数 I/O が開始されていない逐次化も拒否する。\n\n参加者用 image には starter、公開テスト、Portal だけを入れ、hidden checker、reference、mutation suite は入れない。verifier は別 image と Compose 内部 service に置き、公開 Workbench だけが採点を中継する。両サービスは non-root、read-only、capability drop で動き、外向き通信の無い network に接続する。ローカル採点は教材上の誤配防止であり、author image を自分で build できる checkout に対する秘匿境界ではない。",
+  "instructions": "## Participant Portal で解く\n\n1. **証拠を調べる**で `jobs`、Future の completion trace、壊れた collector が保存した rows を比べる。`audit` には誤った request identity で保存された row index を昇順の JSON array で入力する。\n2. starter の `collector.py` を読み、公開テストを実行する。緑になることと、何をまだ検査していないかの両方を確認する。\n3. `collect(jobs, start_io)` を修正する。`start_io(job)` は直ちに `asyncio.Future` を返す。返り値は入力順で、成功は `{\"jobId\", \"ok\": true, \"value\"}`、失敗は `{\"jobId\", \"ok\": false, \"error\"}` である。\n4. **提出を準備**すると environment と 4 つの code checkpoint 用の値が作られる。audit は観察して自分で入力する。\n\n前提は Python の関数・list/dict・`async`/`await` の基本だけである。`Future` は「後で 1 回だけ結果または例外が入る箱」、request identity は「どの仕事を依頼したかを一意に表す値」として、この問題内で使う。",
+  "writeup": "## 完了順は identity ではない\n\n`as_completed()` が教えるのは、どの awaitable が**次に完了したか**である。元の list の何番目だったかは教えない。入力 list と completion iterator を `zip` すると、異なる二つの順番を同じ順番だと仮定したことになる。\n\n修正の核は、待つ前に job を coroutine の closure へ束縛することだ。1 job 分の helper が自分の job を保持したまま Future を待ち、成功または失敗 row を返す。それらを `asyncio.gather()` へ渡せば、I/O は並行に開始され、返り値は入力順にそろう。\n\n## URL も index counter も代わりにならない\n\n同じ URL へ別の query を送る request は別 identity である。completion counter は完了順の番号であって入力順の番号ではない。どちらも fixture を少し変えるだけで破綻する。必要なのは job とその Future の直接の関係である。\n\n## 失敗も identity を持つ\n\n途中の Future が例外になったとき、その row を落として後続値を詰めると、失敗以降の identity がすべてずれる。例外を collection 全体の失敗にする必要はないが、どの job が失敗したかは成功と同じ粒度で保存する。\n\n## 並行性を消すのは修正ではない\n\n1 件ずつ `await` すれば identity の混同は見えなくなる。しかし、それは I/O overlap という元の契約を削除している。deterministic gate は最初の Future を完了させる前に start ledger を読み、必要数が開始されていなければ拒否する。時間の長短ではなく観測可能な契約を検査している。\n\nEventBridge の再送・重複・business version を扱う `eventbridge-delivery-discipline` とは境界が異なる。この問題は process 内の Future と request identity だけを扱い、delivery ID、retry、DLQ、replay は扱わない。",
+  "tags": [
+    "cs-foundations",
+    "python",
+    "asyncio",
+    "concurrency",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18330,
+      "name": "Participant Portal editor API"
+    }
+  ],
+  "learningGoals": [
+    "入力順と完了順が独立した順序であることを、決定論的な Future 実験で説明できる",
+    "request identity を URL や completion index から推測せず、await 前に Future と直接結び付けられる",
+    "I/O overlap を保ったまま、成功と失敗の両方を元の request identity へ戻せる",
+    "同時完了には自然な全順序が無いことを理解し、scheduler 順序へ依存しない collector を書ける",
+    "公開テストが緑でも completion permutation を検査していなければ identity binding を保証しないと説明できる"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.cs-async-result-binding.separate-orders",
+        "description": "入力順と完了順を別の順序として観察し、暗黙に zip しない。"
+      },
+      {
+        "id": "lo.cs-async-result-binding.bind-request",
+        "description": "request identity を await 前に Future と結び付け、完了後まで保持する。"
+      },
+      {
+        "id": "lo.cs-async-result-binding.preserve-overlap",
+        "description": "逐次化せずに I/O overlap と正しい結果順の両方を維持する。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.completion-order",
+        "description": "非同期処理が ready になった順序。入力順や request identity とは独立している。"
+      },
+      {
+        "id": "concept.request-identity",
+        "description": "結果・失敗を元の依頼へ戻すための一意な関係。URL や完了 index の推測では代用できない。"
+      },
+      {
+        "id": "concept.deterministic-future-gate",
+        "description": "時間ではなく Future の明示的 release で completion permutation を再現する検証方法。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.cs-async-result-binding.overlap",
+        "description": "最初の completion 前に必要な I/O をすべて開始した。"
+      },
+      {
+        "id": "assessment.cs-async-result-binding.binding",
+        "description": "逆順と部分 permutation でも各値を正しい jobId へ結び付けた。"
+      },
+      {
+        "id": "assessment.cs-async-result-binding.failure",
+        "description": "途中失敗をその request の row に残し、後続 identity をずらさなかった。"
+      },
+      {
+        "id": "assessment.cs-async-result-binding.generalize",
+        "description": "同一 URL の別 request と同時完了を、scheduler 順序に頼らず処理した。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.completion-order-is-input-order",
+        "description": "非同期処理は投入した順に完了するので zip できるという誤解。"
+      },
+      {
+        "id": "misconception.url-is-request-identity",
+        "description": "同じ URL なら同じ request なので URL を identity にできるという誤解。"
+      },
+      {
+        "id": "misconception.serialization-fixes-concurrency",
+        "description": "順序バグを隠すために並行処理を逐次化しても元の契約を保った修正になるという誤解。"
+      }
+    ],
+    "audiences": [
+      {
+        "id": "audience.application-developer",
+        "description": "非同期 API や batch collector を実装し、AI 生成コードの並行性を検証する開発者。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.cs-async-result-binding",
+      "target": "lo.cs-async-result-binding.separate-orders"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.cs-async-result-binding",
+      "target": "lo.cs-async-result-binding.bind-request"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.cs-async-result-binding",
+      "target": "lo.cs-async-result-binding.preserve-overlap"
+    },
+    {
+      "type": "covers",
+      "source": "problem.cs-async-result-binding",
+      "target": "concept.completion-order"
+    },
+    {
+      "type": "covers",
+      "source": "problem.cs-async-result-binding",
+      "target": "concept.request-identity"
+    },
+    {
+      "type": "covers",
+      "source": "problem.cs-async-result-binding",
+      "target": "concept.deterministic-future-gate"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-async-result-binding",
+      "target": "assessment.cs-async-result-binding.overlap"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-async-result-binding",
+      "target": "assessment.cs-async-result-binding.binding"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-async-result-binding",
+      "target": "assessment.cs-async-result-binding.failure"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-async-result-binding",
+      "target": "assessment.cs-async-result-binding.generalize"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.cs-async-result-binding",
+      "target": "misconception.completion-order-is-input-order"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.cs-async-result-binding",
+      "target": "misconception.url-is-request-identity"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.cs-async-result-binding",
+      "target": "misconception.serialization-fixes-concurrency"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.cs-async-result-binding",
+      "target": "audience.application-developer"
+    },
+    {
+      "type": "requires",
+      "source": "lo.cs-async-result-binding.bind-request",
+      "target": "concept.completion-order"
+    },
+    {
+      "type": "requires",
+      "source": "lo.cs-async-result-binding.preserve-overlap",
+      "target": "concept.request-identity"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Participant Portal editor API": "http://127.0.0.1:18330/"
+    },
+    "verifyUrl": "http://127.0.0.1:18330/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "environment",
+        "label": "environment — Portal が表示する Future gate の合言葉",
+        "points": 10,
+        "wrongAnswerPenalty": 1
+      },
+      {
+        "id": "audit",
+        "label": "audit — 誤った request identity で保存された行番号（昇順）",
+        "points": 30,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "audit-hint-1",
+            "content": "stored row の jobId と、同じ receipt を作った completionTrace の sourceJobId を比較する。二つの配列で同じ index が同じ request を意味するとは限らない。",
+            "penalty": 6
+          }
+        ]
+      },
+      {
+        "id": "overlap",
+        "label": "overlap — 最初の完了前にすべての I/O を開始する collector.py",
+        "points": 30,
+        "wrongAnswerPenalty": 2,
+        "input": "multiline",
+        "hints": [
+          {
+            "id": "overlap-hint-1",
+            "content": "1 job ずつ await すると identity は混ざらないが、I/O overlap が消える。先に job ごとの awaitable を作れる形を考える。",
+            "penalty": 5
+          }
+        ]
+      },
+      {
+        "id": "bind",
+        "label": "bind — 完了順が変わっても結果を正しい request に結び付ける collector.py",
+        "points": 45,
+        "wrongAnswerPenalty": 2,
+        "input": "multiline",
+        "hints": [
+          {
+            "id": "bind-hint-1",
+            "content": "job を受け取る小さな async helper を作ると、その coroutine の closure は Future が終わるまで job を保持できる。",
+            "penalty": 8
+          }
+        ]
+      },
+      {
+        "id": "failure",
+        "label": "failure — 途中の失敗後も後続 identity をずらさない collector.py",
+        "points": 35,
+        "wrongAnswerPenalty": 2,
+        "input": "multiline",
+        "hints": [
+          {
+            "id": "failure-hint-1",
+            "content": "失敗 row を落とすと、後ろを詰める index 実装では identity がずれる。成功と同じ helper の中で jobId 付き failure row を返す。",
+            "penalty": 7
+          }
+        ]
+      },
+      {
+        "id": "generalize",
+        "label": "generalize — permutation・同一 URL・同時完了にも耐える完成版",
+        "points": 50,
+        "wrongAnswerPenalty": 3,
+        "input": "multiline",
+        "hints": [
+          {
+            "id": "generalize-hint-1",
+            "content": "`asyncio.gather()` は awaitable を並行に進めながら、返り値を渡した順にそろえる。completion timestamp や URL で並べ直す必要はない。",
+            "penalty": 10
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Which request did that early result belong to?",
+      "shortDescription": "Bind async I/O completion to request identity in code instead of guessing from order.",
+      "description": "A collector starts five I/O jobs together, yet production stored results under the wrong request IDs. Every I/O operation returns the right value and the public tests are green. The defect is one line that zips the completion order from `asyncio.as_completed()` with the input order from `jobs`.\n\nThis problem has one leap: **each async operation returned the right value, therefore the collector bound every value to the right request**. That conclusion does not follow. A URL, an array index, and 'whatever finished next' are not request identity. The request/Future relationship must be represented in code before waiting.\n\nThe experiment uses only the Python standard library. An `asyncio.Future` gate records every start, then explicitly resolves Futures in seed-derived orders. There is no sleep, real network, or accidental scheduler ordering. The public suite checks one job and in-order completion, so the broken starter passes. The hidden verifier checks reverse order, partial permutations, distinct requests sharing a URL, simultaneous readiness, and a middle failure. It also rejects serialization by requiring multiple starts before the first release.\n\nThe participant image contains only the starter, public suite, and Portal. The hidden checker, reference, and mutation suite are not copied there. A separate verifier image stays on the Compose-internal network, and only the published Workbench proxies grading to it. Both services run non-root and read-only with dropped capabilities and networks that have no outbound path. This prevents accidental delivery in the normal local flow; it is not a confidentiality boundary against someone who can build the author image from the checkout.",
+      "instructions": "## Solve in Participant Portal\n\n1. Use **Inspect evidence** to compare `jobs`, the Future completion trace, and rows stored by the broken collector. Enter the indices stored under the wrong identity as an ascending JSON array for `audit`.\n2. Read the starter `collector.py` and run the public suite. Notice both that it is green and what completion orders it does not test.\n3. Repair `collect(jobs, start_io)`. `start_io(job)` immediately returns an `asyncio.Future`. Return rows in input order. Success is `{\"jobId\", \"ok\": true, \"value\"}`; failure is `{\"jobId\", \"ok\": false, \"error\"}`.\n4. **Prepare submissions** creates the environment value and values for all four code checkpoints. Derive the audit answer yourself from the evidence.\n\nPrerequisites are Python functions, lists/dicts, and basic `async`/`await`. In this problem a Future is a box that later receives exactly one value or exception, and request identity is the unique relation saying which job was requested.",
+      "writeup": "## Completion order is not identity\n\n`as_completed()` tells you which awaitable became ready next. It does not tell you where that work appeared in the input list. Zipping the input list with a completion iterator assumes two independent orders are the same.\n\nBind the job before awaiting it. A one-job helper keeps its job in a coroutine closure while waiting on the Future, then returns a job-bound success or failure row. Passing those helpers to `asyncio.gather()` starts them concurrently while preserving input order in the returned list.\n\n## URL and counters are not substitutes\n\nTwo requests to the same URL can carry different queries and identities. A completion counter numbers completions, not inputs. Both fail as soon as the fixture changes. Preserve the direct job/Future relation instead.\n\n## Failure has identity too\n\nDropping a failed Future and shifting later values corrupts every identity after it. A failure need not abort the entire collection, but it must remain attached to the same job with the same granularity as a success.\n\n## Serialization is not a repair\n\nAwaiting one job at a time hides the mix-up by removing overlap, but it also removes the original I/O contract. The deterministic gate reads its start ledger before releasing the first Future and rejects insufficient overlap. It checks observable events, not elapsed time.\n\nThis differs from `eventbridge-delivery-discipline`, which handles delivery IDs, retry, DLQ, replay, and business versions. Here the boundary is only an in-process Future and request identity.",
+      "learningGoals": [
+        "Explain with a deterministic Future experiment that input order and completion order are independent",
+        "Bind request identity directly to a Future before awaiting instead of inferring it from a URL or completion index",
+        "Preserve both I/O overlap and the original request identity for successes and failures",
+        "Handle simultaneously ready Futures without inventing a scheduler-derived total order",
+        "Explain why a green public suite does not establish identity binding when it never permutes completion"
+      ],
+      "checks": [
+        {
+          "id": "environment",
+          "label": "environment — the Future gate pass phrase shown by Portal"
+        },
+        {
+          "id": "audit",
+          "label": "audit — indices stored under the wrong request identity, ascending",
+          "hints": [
+            {
+              "id": "audit-hint-1",
+              "content": "Compare each stored jobId with the sourceJobId that produced the same receipt in completionTrace. Equal array indices do not imply equal requests."
+            }
+          ]
+        },
+        {
+          "id": "overlap",
+          "label": "overlap — start every I/O before the first completion",
+          "hints": [
+            {
+              "id": "overlap-hint-1",
+              "content": "Awaiting one job at a time avoids mixing identities but removes I/O overlap. Build one awaitable per job first."
+            }
+          ]
+        },
+        {
+          "id": "bind",
+          "label": "bind — preserve request identity when completion order changes",
+          "hints": [
+            {
+              "id": "bind-hint-1",
+              "content": "A small async helper receiving one job can keep that job in its coroutine closure until its Future completes."
+            }
+          ]
+        },
+        {
+          "id": "failure",
+          "label": "failure — do not shift later identities after a middle failure",
+          "hints": [
+            {
+              "id": "failure-hint-1",
+              "content": "Dropping a failure shifts every later index-based association. Return a jobId-bound failure row from the same helper used for success."
+            }
+          ]
+        },
+        {
+          "id": "generalize",
+          "label": "generalize — handle permutations, shared URLs, and simultaneous completion",
+          "hints": [
+            {
+              "id": "generalize-hint-1",
+              "content": "`asyncio.gather()` progresses awaitables concurrently but returns values in argument order. No URL or completion-time sort is needed."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

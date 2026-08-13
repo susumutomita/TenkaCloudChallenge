@@ -35,6 +35,16 @@ Checked on 2026-07-25 against `zk-tokyo/advanced-cryptography-2026` at commit
 - the root `README.md` describes enrolment, forking, and submission mechanics
   only. It grants no reuse rights and names no reuse terms.
 
+Re-checked on 2026-08-09 at commit
+`a3aa4b56fa88fbe803b57d320fbc87c1a203b480`, when Week 2's material was published
+and the track's pins moved. Every finding above still holds: no licence file
+exists at any path, the repository metadata still reports no licence, and the
+root `README.md` still names no reuse terms. The classification is unchanged.
+
+The original 2026-07-25 record is kept rather than overwritten. This section is
+evidence of what was true when, and a licence check that silently adopts the
+latest date is no longer evidence of anything.
+
 No explicit permission has been requested from or granted by the course
 organizers, and none is assumed.
 

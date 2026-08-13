@@ -1,0 +1,10 @@
+{
+  "name": "db-a8-delete-vacuum-local",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local-play container for the db-a8-delete-vacuum Drill: DELETE a few hundred thousand rows, watch disk usage refuse to shrink and dead tuples pile up, then watch VACUUM reclaim them for reuse without shrinking the file either.",
+  "dependencies": {
+    "postgres": "3.4.5"
+  }
+}

@@ -6,7 +6,7 @@
   "visibility": "public",
   "track": {
     "id": "advanced-cryptography-2026",
-    "order": 260,
+    "order": 270,
     "chapter": "Week 2 / Boolean MPC"
   },
   "courseAlignment": {
@@ -77,10 +77,6 @@
       {
         "id": "concept.xor-sharing",
         "description": "秘密のビットを、XOR が秘密に一致する 2 ビットへ分ける方式。 mod 2 の線形演算なので XOR は手元で終わる。"
-      },
-      {
-        "id": "concept.oblivious-transfer",
-        "description": "sender は選択を知れず、receiver は選んだ 1 通しか読めない転送。 どちらの約束も乱数の出どころに立つ。"
       },
       {
         "id": "concept.gmw-and",

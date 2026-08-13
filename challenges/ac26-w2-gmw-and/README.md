@@ -5,7 +5,7 @@
 > code, fixtures, and figures here are written independently. Questions about this track go to
 > the TenkaCloud repository, not to the course operators.
 
-**Track:** `advanced-cryptography-2026` · **Order:** 260 · **Chapter:** Week 2 / Boolean MPC
+**Track:** `advanced-cryptography-2026` · **Order:** 270 · **Chapter:** Week 2 / Boolean MPC
 · **Role:** `mechanism` · **Time:** 50–70 minutes · **Points:** 200
 · **Status:** draft — see "Week 2 alignment" below
 

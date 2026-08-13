@@ -23,8 +23,8 @@ directory contains instruments, not findings.
 | Field | Value |
 | --- | --- |
 | Repository | `zk-tokyo/advanced-cryptography-2026` |
-| Commit | `5e80999306608a45aecf9a0e4e3394a0b62f34d2` |
-| Read on | 2026-07-25 |
+| Commit | `a3aa4b56fa88fbe803b57d320fbc87c1a203b480` |
+| Read on | 2026-08-09 |
 | Visibility | Public |
 | Licence | None found — see `GOVERNANCE.md` §1 |
 
@@ -61,7 +61,7 @@ it, and it is not part of the numbered sequence. This track treats it as
 | Week | Theme | Official exercise | State at pinned commit |
 | --- | --- | --- | --- |
 | 1 | Programmable Cryptography / arithmetic circuits | `proof-of-exploit` | Published — slides link added later; re-pinned at `e4f33fec` on 2026-08-13 |
-| 2 | MPC | `toy-mpc` | **Not published at the snapshot** — published later; read and re-pinned at `e4f33fec` on 2026-08-12 (see the Week 2 section) |
+| 2 | MPC (Arithmetic MPC / Boolean MPC) | `toy-mpc` | Published — read on 2026-08-09, re-pinned at `e4f33fec` on 2026-08-12; see the Week 2 section for what this track does and does not accompany |
 | 3 | Finite fields, elliptic curves, Sigma, Fiat–Shamir, Schnorr | `schnorr-from-scratch` | Published — slides link added later; re-pinned at `e4f33fec` on 2026-08-13 |
 | 4 | ZKP / SNARK / STARK | — | **Not published** — README says materials are in preparation; `problems/` holds only `.gitkeep` |
 | 5 | TFHE, Programmable Bootstrapping, HomNAND | `tfhe-toy-python` | Published |
@@ -134,6 +134,14 @@ order; `track.order` only sequences presentation.
 | `concept.xor-sharing` | Splitting a secret bit into bits that XOR back to it; XOR is linear mod 2 and stays local |
 | `concept.oblivious-transfer` | A transfer where the sender cannot learn the choice and the receiver reads only the chosen message |
 | `concept.gmw-and` | Computing AND on XOR shares by carrying the cross terms through OT |
+| `concept.gmw-and-gate` | Computing AND on XOR shares; each of the two cross terms is bought with one oblivious transfer |
+| `concept.indistinguishable-distribution` | A secret is hidden when the distribution the other party sees does not depend on it — separate from any single run being correct |
+
+`concept.gmw-and` and `concept.gmw-and-gate` both name the OT-based AND on XOR
+shares. They entered through two problems authored in parallel against the same
+Part B gap (`ac26-w2-gmw-and` and `ac26-w2-oblivious-transfer`). Ids are
+referenced by education graphs and are not renamed casually (see Maintenance);
+unifying the pair is a recorded follow-up, not a rename to do in passing.
 
 ### Week 3 — fields, curves, signatures
 
@@ -267,42 +275,88 @@ Prerequisite for: every `ac26-*` challenge.
 
 ### Week 2 — MPC
 
-- **Source**: `week2/README.md`, `week2/problems/toy-mpc/README.md` — read and
-  pinned at `e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9` (2026-08-12). Unpublished
-  at the track's snapshot commit; the five challenges were authored from the
-  publicly stated theme alone and carried `placeholder` pins until the material
-  appeared (#219).
+- **Source**: `week2/README.md`, `week2/problems/toy-mpc/README.md`
+- **State**: published. The five companions below were authored while this week
+  was still a "materials in preparation" placeholder, and were re-pinned to the
+  published material on 2026-08-09 after it was read. Their pins were moved
+  forward to `e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9` on 2026-08-12, when the
+  material was re-read at that commit.
 - **Official goals**: understand secret sharing and computing on shares, and
   Arithmetic MPC evaluating an arithmetic circuit under additive sharing over a
   finite field; understand the role and mechanism of Oblivious Transfer, and
   GMW-style Boolean MPC computing a boolean circuit from XOR shares and OT.
-- **Official exercise**: `toy-mpc` — Part A: additive secret sharing and
-  reconstruction, local addition on shares, and Beaver-triple multiplication.
-  Part B: 1-out-of-2 OT over a finite group, and a GMW-style secret AND built
-  from two OTs.
+- **Official exercise**: `toy-mpc`, in two halves.
+  - **Part A — Arithmetic MPC**: `share`, `reconstruct`, `add_shares`,
+    `beaver_multiply` over `F_p`.
+  - **Part B — Oblivious Transfer and Boolean MPC**: 1-out-of-2 OT over a finite
+    group, and a GMW-style secret AND built from two OT invocations.
 - **What the exercise does not force**: demonstrating that n−1 shares carry no
   information (its tests grade splitting, reconstruction, normalization, and
   input validation); measuring what a run *reveals* rather than what it returns —
   Beaver-triple reuse is forbidden in a note in the problem text but not checked
   mechanically.
 
-The five companions were authored before publication, from the stated theme.
-Read against the published exercise, the alignment holds: the three `mechanism`
-problems sit beside Part A's three steps (sharing, local linear operations,
-Beaver multiplication); the `transfer` and `synthesis` problems grade the
-disclosure discipline Part A states but does not measure. Part B (OT / GMW) had
-no companion at re-pin time; `ac26-w2-gmw-and` (order 260) was authored
-afterwards, directly against the published material, and closes that gap —
-it is new authoring beside these five rows, not a re-scope of them.
+#### What the re-pin found
 
-| Order | Problem id | Role | Teaches | Issue |
-| --- | --- | --- | --- | --- |
-| 210 | `ac26-w2-secret-sharing` | `mechanism` | `concept.additive-secret-sharing`, `concept.share-reconstruction` | #220 |
-| 220 | `ac26-w2-linear-shares` | `mechanism` | `concept.local-linear-operation` | #221 |
-| 230 | `ac26-w2-beaver-mul` | `mechanism` | `concept.beaver-triple` | #222 |
-| 240 | `ac26-w2-privacy-audit` | `transfer` | `concept.over-opening`, `concept.privacy` | #223 |
-| 250 | `ac26-w2-private-aggregate` | `synthesis` | combines the four above | #224 |
-| 260 | `ac26-w2-gmw-and` | `mechanism` | `concept.xor-sharing`, `concept.oblivious-transfer`, `concept.gmw-and` | — |
+The five companions were scoped against the stated theme alone, so the honest
+question on publication was not "does the SHA move" but "did we accompany the
+right thing". Read against the published exercise, the answer is *half*.
+
+**Part A is covered, and the alignment is closer than guessing had any right to
+produce.** The four Part A functions map onto the first three companions almost
+one-for-one, and `ac26-w2-private-aggregate` composes them the way the official
+exercise composes them.
+
+**Part B had no companion at all** when the material was read: nothing in this
+track taught Oblivious Transfer or GMW, so a learner who worked the track and
+then opened `toy-mpc` met OT for the first time in the official exercise. That
+was the gap Issue 412 recorded, and `ac26-w2-oblivious-transfer` (order 260)
+closes it.
+
+The new problem is not a translation of the official one. It takes the same two
+mechanisms — a 1-out-of-2 transfer in a prime-order subgroup, and a GMW AND gate
+built from two of them — and puts the weight on the property the arithmetic half
+never forces anyone to confront: **correct and private are different claims.**
+Two of its functions have implementations that are right on every input and still
+hand a secret across. Drawing the receiver's blind from `1..q-1` instead of
+`0..q-1` leaves two group elements reachable under one choice and not the other,
+which names the choice bit; reusing one mask across the gate's two transfers
+still cancels under XOR, so every gate reconstructs while each party's output
+share becomes a readout of the other party's bits. Neither is visible to a test
+that only checks the answer, which is why the hidden suite checks the
+distributions separately from the reconstructions.
+
+`ac26-w2-gmw-and` (order 270) was authored independently against the same
+published Part B and sits beside `ac26-w2-oblivious-transfer` rather than
+replacing it. It grades the construction side of the same two mechanisms:
+XOR-share bookkeeping, how many OT invocations a gate is allowed to spend, and
+per-party views checked share by share — which catches a mask cancelled against
+the wrong term even when every reconstruction succeeds. The problem above asks
+whether a distribution names the secret; this one asks whether the gate was
+assembled from exactly the pieces the protocol allows. The mechanism overlap
+between the two is real: they were written against the same gap without
+knowledge of each other, and both stay because they measure different failures.
+Their concept ids overlap the same way — see the note under the Week 2 concept
+registry.
+
+One thing the published material adds that no companion currently teaches, and
+that is not a scoping accident but a security property: a Beaver triple must
+never be reused across two multiplications. Reusing `([a],[b],[c])` publishes
+`d₁ = x₁ - a` and `d₂ = x₂ - a`, from which `x₁ - x₂ = d₁ - d₂` follows, leaking
+a relation between secret inputs. `ac26-w2-beaver-mul` currently treats triples
+as per-multiplication by construction without making reuse a failure the learner
+can observe. Recorded here rather than fixed in the re-pin, because changing what
+a challenge teaches is a content decision, not a pin update.
+
+| Order | Problem id | Role | Teaches | Official half | Issue |
+| --- | --- | --- | --- | --- | --- |
+| 210 | `ac26-w2-secret-sharing` | `mechanism` | `concept.additive-secret-sharing`, `concept.share-reconstruction` | A (`share`, `reconstruct`) | #220 |
+| 220 | `ac26-w2-linear-shares` | `mechanism` | `concept.local-linear-operation` | A (`add_shares`) | #221 |
+| 230 | `ac26-w2-beaver-mul` | `mechanism` | `concept.beaver-triple` | A (`beaver_multiply`) | #222 |
+| 240 | `ac26-w2-privacy-audit` | `transfer` | `concept.over-opening`, `concept.privacy` | A (privacy of the above) | #223 |
+| 250 | `ac26-w2-private-aggregate` | `synthesis` | combines the four above | A (composition) | #224 |
+| 260 | `ac26-w2-oblivious-transfer` | `mechanism` | `concept.oblivious-transfer`, `concept.gmw-and-gate`, `concept.indistinguishable-distribution` | B (`ot_*`, `gmw_and`) | Issue 412 |
+| 270 | `ac26-w2-gmw-and` | `mechanism` | `concept.xor-sharing`, `concept.oblivious-transfer`, `concept.gmw-and` | B (`ot_*`, `gmw_and`, construction side) | — |
 
 ### Week 3 — elliptic curves and Schnorr
 
@@ -337,13 +391,17 @@ and exercise, not to the slides.
 ### Week 4 — ZKP / SNARK / STARK
 
 - **Source**: `week4/README.md`
-- **State**: not published — the same shape Week 2 had before its material
-  shipped.
+- **State**: not published. The README states materials are in preparation and
+  `problems/` holds only `.gitkeep` — the form Week 2 was in until 2026-08-09.
 - **Known only**: the theme is ZKP, with SNARK and STARK in scope.
 
-Confirmation is tracked by #229, with a 2026-09-30 review cutoff. As Week 2 did
-before its material shipped, each challenge pins `week4/README.md` as
-`kind: "placeholder"`.
+Confirmation is tracked by #229, with a 2026-09-30 review cutoff. Each challenge
+pins `week4/README.md` as `kind: "placeholder"`, the way the Week 2 companions
+did before their material appeared.
+
+Week 2's publication is the worked example of what to expect here: Part A landed
+close to what had been guessed, and Part B was a half of the exercise nobody had
+accompanied. Budget for the second outcome, not just the first.
 
 | Order | Problem id | Role | Teaches | Issue |
 | --- | --- | --- | --- | --- |
@@ -392,8 +450,12 @@ a prerequisite for the next.
   multiplication), with the secret-sharing primitives supplied. `zkvm-exploit` —
   implement, in Rust, the guest program and its public/witness design; the zkVM
   itself is not run.
-- **Prerequisites**: Weeks 1–3, plus Week 2's Beaver multiplication — which is
-  why `ac26-w2-beaver-mul` is a hard prerequisite of `ac26-w6-cosnark-beaver`.
+- **Prerequisites**: Weeks 1–3, plus Week 2's Beaver multiplication. This was
+  written when Week 2 was unpublished and its companions were the only route to
+  Beaver multiplication; that is why `ac26-w2-beaver-mul` is a hard prerequisite
+  of `ac26-w6-cosnark-beaver`. Week 2's publication does not weaken the
+  requirement — the official `toy-mpc` Part A teaches the same construction, so a
+  learner now has two routes to it rather than none.
 - **What the exercises do not force**: noticing that a prover which opens one
   value too many silently destroys the privacy the whole construction exists for.
 
@@ -438,3 +500,11 @@ in [`ASSESSMENT.md`](./ASSESSMENT.md), which also fixes the rule that any
 - Adding a concept id means adding it to the registry above. Ids are referenced
   by education-graph `nodes` across many problems and must not be renamed
   casually.
+- A `PUBLISHED` row is a content question wearing a pin's clothes. The 2026-08-09
+  re-pin is the reference case: the SHA bump was the trivial half, and the half
+  worth the review was discovering that the official exercise had a Part B this
+  track did not accompany. Re-pinning without that reading would have turned the
+  check green and left the gap invisible, which is the outcome
+  [`SYNC.md`](./SYNC.md) §5 exists to forbid. The gap was closed afterwards by
+  `ac26-w2-oblivious-transfer` and, independently, `ac26-w2-gmw-and`; the review
+  is what found it, not the SHA.

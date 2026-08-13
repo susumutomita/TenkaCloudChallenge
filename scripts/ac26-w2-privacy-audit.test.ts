@@ -308,9 +308,11 @@ describe("ac26-w2-privacy-audit: metadata contracts", () => {
 
   // Week 2 was unpublished when this problem was authored, so it pinned the placeholder
   // README (SYNC.md §2). The material has since shipped upstream — week2/problems/toy-mpc —
-  // and the pins were moved after reading it, per SYNC.md §3/§5: the week README as
-  // `lecture`, the exercise README as `assignment`, both at the published commit. The
-  // exact sources are pinned here so a ref bumped without a review shows up as a diff.
+  // and was read on 2026-08-09: `course:drift` reported PUBLISHED, and the kind moved only
+  // after the reading. The pins then moved to the commit the whole track was re-read at on
+  // 2026-08-12, per SYNC.md §3/§5: the week README as `lecture`, the exercise README as
+  // `assignment`. The exact sources are pinned here so a ref bumped without a review
+  // shows up as a diff.
   it("should pin week 2's published lecture and exercise", () => {
     const { courseAlignment, status } = metadata();
     expect(courseAlignment.week).toBe(2);

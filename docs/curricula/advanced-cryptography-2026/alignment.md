@@ -5,15 +5,15 @@ companion track was authored. This file records what was actually checked, what
 each companion for those weeks stands on instead, and what a future author must
 do when the material appears.
 
+One of the three has since appeared. Week 2 published on 2026-08-09; its section
+below is kept and scored rather than removed, because a record of a bet is only
+worth keeping if it stays readable after the result is known. Weeks 4 and 7 are
+still open.
+
 It exists because the alternative — leaving the decision until the course
 publishes — makes the record hostage to somebody else's schedule. The companions
 were built and shipped regardless, so the reasoning behind them should be written
 down while it is still true, not when it is convenient.
-
-One of the three has since resolved: Week 2's material was published upstream and
-was read and re-pinned on 2026-08-12. Its section below is retitled **Resolved**
-and records how the basis was reconciled against the real material. Weeks 4 and 7
-remain as recorded.
 
 Policy is [`GOVERNANCE.md`](./GOVERNANCE.md). The drift procedure is
 [`SYNC.md`](./SYNC.md). The week-by-week mapping is
@@ -26,24 +26,26 @@ the week it accompanies is empty?*
 | | |
 | --- | --- |
 | Source repository | `zk-tokyo/advanced-cryptography-2026` (public) |
-| Commit checked | `5e80999306608a45aecf9a0e4e3394a0b62f34d2` |
-| Checked on | 2026-07-25 |
+| Commit checked | `a3aa4b56fa88fbe803b57d320fbc87c1a203b480` |
+| Checked on | 2026-08-09 |
 | Method | Repository tree read at that commit; recorded in `GOVERNANCE.md` §1 and `SYNC.md` §2 |
 
 State at that commit:
 
-- **Week 2** — `week2/README.md` says materials are in preparation. `week2/problems/`
+- **Week 2** — **published.** See "Resolved — MPC week" below. It was unpublished when
+  this record was first written on 2026-07-25 at commit
+  `5e80999306608a45aecf9a0e4e3394a0b62f34d2`, and that is the state the Week 2
+  section was reasoning about.
+- **Week 4** — `week4/README.md` says materials are in preparation. `week4/problems/`
   holds only `.gitkeep`.
-- **Week 4** — same shape as Week 2.
 - **Week 7** — no directory at all.
 
-Every companion for those weeks pinned that state rather than pretending to
-material: Weeks 2 and 4 pinned their placeholder `README.md` with
-`kind: "placeholder"`, Week 7 pins the repository `README.md` with
-`kind: "roadmap"` because there was no path to pin. `bun run course:drift` reports
-`PUBLISHED` rather than `DRIFT` when one of those pins moves, precisely so that
-this case is distinguishable from ordinary upstream churn. That is what happened
-for Week 2 — see its resolved section below.
+Every companion for a still-unpublished week pins that state rather than pretending
+to material: Week 4 pins its placeholder `README.md` with `kind: "placeholder"`,
+Week 7 pins the repository `README.md` with `kind: "roadmap"` because there is no
+path to pin. `bun run course:drift` reports `PUBLISHED` rather than `DRIFT` when one
+of those pins moves, precisely so that this case is distinguishable from ordinary
+upstream churn — which is how Week 2's publication was noticed.
 
 **This record is not a claim about the state today.** It is a claim about the state
 at that commit, on that date, by that method. Nothing here should be read as
@@ -54,7 +56,9 @@ the snapshot: upstream added a lecture-slides link section to `week1/README.md`
 and `week3/README.md`. Both diffs were read and the Week 1 / Week 3 companions
 were re-pinned at `e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9` on 2026-08-13 —
 ordinary `DRIFT` resolved per `SYNC.md` §3/§5, with paths, kinds, and roles
-unchanged. That is a re-pin record, not a basis question, so it lives in
+unchanged. The five Week 2 companions were moved to the same commit on 2026-08-12,
+when the material was re-read there (its publication is the resolved section
+below). These are re-pin records, not basis questions, so they live in
 `curriculum.md`'s source snapshot; this file's basis sections remain about the
 weeks that had nothing to pin.
 
@@ -75,7 +79,56 @@ The guard keys on the pin's `kind`, not on the week number, so it stops applying
 itself the moment an author repins to real material — a rule that needs a human to
 remember to relax it eventually gets relaxed for the wrong reason.
 
-## Resolved — Week 2 (MPC)
+## Resolved — MPC week, published 2026-08-09
+
+This week has left the list above, and the guard released with it: the pins moved
+to real material first, and this heading followed. It does not read `## Week 2 …`
+any more because
+[`course-alignment-basis.test.ts`](../../../scripts/course-alignment-basis.test.ts)
+reads this file's week headings to decide which weeks must still stand on an
+unpublished pin, and a published week left in that list fails the build for a
+reason that is not true.
+
+**The full retrospective — what the official exercise turned out to require, which
+companions match it, and what is uncovered — lives in
+[`curriculum.md`](./curriculum.md)'s Week 2 section**, because that is the
+week-by-week map and this file is only about weeks with nothing to map. Two
+conclusions belong here, though, because they are about *this record's method*:
+
+- **The derivation held.** The basis below was derived from published Week 6
+  rather than guessed, and the official exercise's first half asks for very nearly
+  the list below, item for item.
+- **The derivation was structurally incomplete.** The official exercise has a
+  second half — oblivious transfer and a GMW-style secret AND — that none of the
+  five companions below teaches. Deriving "what a learner must have to reach
+  Week 6" could never have produced it, because that half is not on the path to
+  Week 6. For Weeks 4 and 7 the lesson is exact: deriving from a published
+  neighbour bounds what a week *must* contain, never what it *will* contain.
+
+  A sixth companion, `ac26-w2-oblivious-transfer`, was written afterwards to cover
+  it (Issue 412), and a seventh, `ac26-w2-gmw-and`, was authored independently
+  against the same published material in the same window — the same two mechanisms,
+  graded from the construction side where the sixth grades them from the privacy
+  side. They close the coverage gap and do not retract the lesson: the derivation
+  still could not have found it, and the only reason anyone looked was that the
+  drift check reported a publication and somebody read the material.
+
+On step 4 of "When the material appears" — does any companion claim
+`assignment-companion`? **No, and that is a decision rather than an omission.** The
+role tells a reader *there is an official assignment and this accompanies it*, and
+a reader who takes that at face value expects a correspondence they can check
+item by item. These seven accompany the same two mechanisms by independent
+reimplementation, under different names and a different decomposition; the claim
+`assignment-companion` would invite a comparison that the problems are not built
+to survive. Revisit if the decomposition is ever aligned deliberately.
+
+On step 6 — nothing leaked. Only the two published README files were read; the
+official template, its given and public test modules, and every participant
+submission directory were left unread. All five companions were authored and
+shipped before this material existed, so no official solution could have reached
+them by any route.
+
+### The original basis, as written
 
 **Basis: derived from a published week, not guessed from an unpublished one.**
 
@@ -102,32 +155,7 @@ to reach Week 6.
 | `ac26-w2-privacy-audit` | `transfer` | the privacy boundary, applied to a case Week 6 does not cover |
 | `ac26-w2-private-aggregate` | `synthesis` | the five above, composed |
 
-None claimed `assignment-companion` while the week was unpublished, and the guard
-enforced it. Since the pins moved (below), the guard no longer applies to this
-week; the roles stay unchanged by decision rather than by enforcement.
-
-### Resolution (2026-08-12)
-
-Week 2 published upstream. `week2/README.md` now carries the lecture material and
-the official exercise is `toy-mpc` (Part A: additive secret sharing and
-reconstruction, local addition on shares, and Beaver-triple multiplication over a
-finite field; Part B: 1-out-of-2 OT over a finite group and a GMW-style secret
-AND). Both files were read at `e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9`, and the
-five problems' pins moved to that commit: `week2/README.md` as `lecture`, the
-exercise README as `assignment`.
-
-The derived basis above held. Part A is the share / linear / Beaver sequence the
-table anticipated, so no problem was re-scoped. The roles also stay as they are —
-none was promoted to `assignment-companion`: the three `mechanism` problems
-accompany the lecture's constructions with independent APIs, fixtures and
-parameters, and the `transfer` / `synthesis` problems grade a disclosure
-discipline the official tests do not measure (triple reuse is forbidden in the
-exercise's text but not checked mechanically). Part B (OT / GMW) had no companion
-at resolution time; that gap has since been closed by `ac26-w2-gmw-and`
-(`mechanism`, order 260), authored directly against the published material — it
-never carried a placeholder pin, so it appears in `curriculum.md`'s Week 2 table
-rather than in the basis table above, which records only the problems that stood
-on an unpublished week.
+None claims `assignment-companion`, and the guard keeps it that way.
 
 ## Week 4 — proof systems
 
@@ -184,8 +212,8 @@ than anything shaped to an unpublished rubric.
 
 ## When the material appears
 
-This procedure ran for Week 2 on 2026-08-12; its outcome is the resolved section
-above. Weeks 4 and 7 still await it.
+This procedure ran for Week 2; its outcome is the resolved section above. Weeks 4
+and 7 still await it.
 
 Do not reopen the issues that produced this record (#219, #229, #245). They
 recorded a decision, and the decision was correct for the evidence available.

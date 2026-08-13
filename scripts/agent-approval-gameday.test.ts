@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -23,9 +24,12 @@ import { fileURLToPath } from "node:url";
  *   **Security mutations** — for each guard (phase binding, digest freshness, preview
  *   required, revocation) there is a test that fails if the guard is removed.
  *
- * Not covered here: container isolation, the MCP client path, and human play. Those
- * need Docker and a person; they are named in the PR as unverified rather than
- * implied by a green suite.
+ * Container isolation is pinned only as far as it can be read statically — the compose
+ * and Dockerfile declarations, at the bottom of this file. Whether the sandbox actually
+ * holds needs Docker and a real container, and that is not run here.
+ *
+ * Not covered here: the MCP client path, and human play. Those need a person; they are
+ * named in the PR as unverified rather than implied by a green suite.
  */
 
 const APP = join(
@@ -657,5 +661,62 @@ describe("the browser workbench", () => {
     // 「AI を盲信するな」を結論として書くのではなく、危ない diff を実際に見せて判断させる。
     const context = openSession();
     expect(workbench.proposalPage(context.session)).toContain("この依頼をそのまま提案にする");
+  });
+});
+
+/**
+ * 参加者コンテナの隔離設定 (Issue 390 の red contract、PR #394 で提起されたもの)。
+ *
+ * 隔離が**実際に効くか**は Docker と実コンテナが要る。ここで固定するのはその手前の
+ * 「宣言が消えていないか」だけで、両方要る。宣言だけを見て隔離を検証したとは言わない。
+ *
+ * それでもここを固定する理由は、この問題が incident response の練習だからで、
+ * 呼び出せる範囲そのものが教材の一部になる。sandbox が外へ出られる状態で
+ * 「範囲を絞ってから実行する」を教えても、教えている内容と環境が矛盾する。
+ * compose の 1 行が消えても機能は何も壊れないので、通常のテストでは気付けない。
+ */
+describe("container isolation", () => {
+  const LOCAL = dirname(APP);
+  const compose = readFileSync(join(LOCAL, "docker-compose.yml"), "utf8");
+  const dockerfile = readFileSync(join(LOCAL, "Dockerfile"), "utf8");
+
+  it("should drop every capability and refuse privilege escalation", () => {
+    expect(compose).toMatch(/cap_drop:\s*\n\s*-\s*ALL/);
+    expect(compose).toContain("no-new-privileges:true");
+  });
+
+  it("should keep the root filesystem read-only, with only a bounded tmpfs to write to", () => {
+    expect(compose).toMatch(/read_only:\s*true/);
+    // 書ける場所が残るなら容量の上限が要る。無ければ read-only root の意味が薄れる。
+    expect(compose).toMatch(/tmpfs:\s*\n\s*-\s*\/tmp:size=\d+m/);
+  });
+
+  it("should publish both ports on loopback only, never on every interface", () => {
+    const published = [...compose.matchAll(/^\s*-\s*"([^"]+:\d+)"/gm)].map((match) => match[1]);
+    expect(published.length).toBe(2);
+    for (const mapping of published) expect(mapping).toMatch(/^127\.0\.0\.1:/);
+  });
+
+  it("should block outbound connections without taking the workbench away", () => {
+    // `network_mode: host` は publish された port の隔離ごと外す。
+    expect(compose).not.toMatch(/network_mode:\s*host/);
+    expect(compose).toContain("seccomp=./seccomp-no-connect.json");
+    const profile = JSON.parse(readFileSync(join(LOCAL, "seccomp-no-connect.json"), "utf8"));
+    const denied = profile.syscalls.flatMap((rule: { names: string[]; action: string }) =>
+      rule.action === "SCMP_ACT_ERRNO" ? rule.names : [],
+    );
+    expect(denied).toContain("connect");
+  });
+
+  it("should run as a non-root user", () => {
+    expect(dockerfile).toMatch(/^USER\s+(?!root\b)\S+/m);
+  });
+
+  it("should copy only the participant-facing app into the image", () => {
+    // grader material が build context に入ると、image を覗くだけで答えが出る。
+    // この問題は verifier を同じ process に置いているので、隔離しているのは
+    // 「`app/` の外を持ち込まない」ことのほうで、COPY の範囲がその境界になる。
+    const copied = [...dockerfile.matchAll(/^COPY\s+(\S+)/gm)].map((match) => match[1]);
+    expect(copied).toEqual(["app/"]);
   });
 });

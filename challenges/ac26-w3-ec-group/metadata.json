@@ -27,6 +27,12 @@
         "ref": "e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9",
         "path": "week3/problems/schnorr-from-scratch/README.md",
         "kind": "assignment"
+      },
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9",
+        "path": "week3/week3_zksnark_slides.pdf",
+        "kind": "slide"
       }
     ]
   },

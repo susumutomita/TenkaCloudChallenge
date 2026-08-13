@@ -212,6 +212,71 @@ export function localPlayableCheck(dir: string): CheckResult {
 }
 
 /**
+ * ホスト側のターミナルが要る問題が、そのことを参加者へ言っているか (Issue 415)。
+ *
+ * local play の売りは「ブラウザだけで完結する」こと。実際、大半の問題はそうで、
+ * `stackstack-onboarding` などは instructions で「ターミナルは不要です」と明言している。
+ * その前提で問題を選んだ人が、最初の一手で `docker compose logs` を要求されると詰まる。
+ *
+ * 実測 (Issue 415): `wp2shell-local-lab` の instructions は「シェルもコマンド実行も要らない」
+ * と書いた同じ文書の「最初の一手」で `docker compose logs wp2shell-local-lab` を要求していた。
+ * `wp-harden-leaks` は `docker compose exec wordpress bash` を進め方に書いているが、選ぶ前に
+ * それが要ると分かる場所には書いていない。
+ *
+ * 検出は docker CLI の呼び出しだけに絞る。`curl` は「叩いてみるとよい」程度の言及が多く、
+ * ホスト shell の要不要を判定できない。docker コマンドは曖昧さが無い —— 参加者の手元に
+ * ターミナルが要る。
+ *
+ * ポータル内蔵ターミナル (`runtime.terminal`) を宣言する道もあるが、`SCHEMA.json` に
+ * そのキーは無く、宣言側は platform の契約になる。ここで閉じるのは「黙っていない」ほうだけ。
+ */
+const HOST_TERMINAL_MARKER_JA = "ホスト側のターミナルが必要です";
+const HOST_TERMINAL_MARKER_EN = "requires a terminal on your machine";
+
+/** 参加者が自分の shell で打つほかない命令。 */
+const HOST_COMMAND = /\bdocker\s+(compose\s+)?(exec|logs|run|ps)\b/;
+
+export function hostTerminalCheck(dir: string): CheckResult {
+  const name = "host terminal disclosed";
+  const metadataPath = join(dir, "metadata.json");
+  if (!existsSync(metadataPath)) return { name, status: "skip", detail: "metadata.json が無い" };
+  const meta = JSON.parse(readFileSync(metadataPath, "utf8")) as {
+    instructions?: string;
+    i18n?: Record<string, { instructions?: string } | undefined>;
+  };
+
+  const surfaces: Array<[string, string, string]> = [
+    ["instructions", String(meta.instructions ?? ""), HOST_TERMINAL_MARKER_JA],
+  ];
+  for (const [lang, block] of Object.entries(meta.i18n ?? {})) {
+    if (typeof block?.instructions !== "string") continue;
+    surfaces.push([
+      `i18n.${lang}.instructions`,
+      block.instructions,
+      lang === "en" ? HOST_TERMINAL_MARKER_EN : HOST_TERMINAL_MARKER_JA,
+    ]);
+  }
+
+  const needsTerminal = surfaces.some(([, text]) => HOST_COMMAND.test(text));
+  if (!needsTerminal) return { name, status: "pass" };
+
+  const missing = surfaces
+    .filter(([, text, requiredMarker]) => !text.includes(requiredMarker))
+    .map(([surface]) => surface);
+  if (missing.length > 0) {
+    return {
+      name,
+      status: "fail",
+      detail:
+        `instructions が docker コマンドを要求しているのに、${missing.join(" / ")} が ` +
+        "ホスト側のターミナルが要ると書いていません。ブラウザだけで完結すると思って " +
+        "選んだ参加者が最初の一手で詰まります (Issue 415)",
+    };
+  }
+  return { name, status: "pass", detail: "ホスト側のターミナルが要ると明記されている" };
+}
+
+/**
  * 静的 solvability 監査 (`solvability-audit --static-only`)。
  *
  * この監査の対象は `local/verifier/server.py` を持つ問題 —— つまり学習者のコードを走らせる
@@ -260,6 +325,7 @@ export function checkProblem(problemId: string): ProblemReport {
       schemaCheck(dir),
       participantSurfaceCheck(dir),
       localPlayableCheck(dir),
+      hostTerminalCheck(dir),
       localPlayUrlCheck(dir),
       solvabilityStaticCheck(problemId, dir),
     ],

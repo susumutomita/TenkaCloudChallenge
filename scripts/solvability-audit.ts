@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { cpus } from "node:os";
 import { join } from "node:path";
 import { localPlayProblemDirs } from "./lib/local-play-problems.ts";
+import { parseShard, shardOf } from "./validate-shard.ts";
 
 /**
  * Is every course checkpoint actually answerable, on every seed it can ship with?
@@ -371,9 +372,24 @@ async function main(): Promise<number> {
       ? "code"
       : "all";
 
-  const dirs = localPlayProblemDirs(ROOT).filter((dir) => !only || dir.endsWith("/" + only));
-  if (dirs.length === 0) {
+  const matched = localPlayProblemDirs(ROOT).filter((dir) => !only || dir.endsWith("/" + only));
+  if (matched.length === 0) {
     console.error("no problems matched" + (only ? " --problem " + only : ""));
+    return 2;
+  }
+  // The sweep outgrew a single CI job: the nightly run on main was cancelled at the
+  // 30-minute cap on 2026-08-09 with no failing assertion, which reads as flake rather
+  // than as "the budget no longer fits". Sharding makes the per-job wall time a
+  // function of the shard count instead of the catalog size, so the answer to a slower
+  // sweep is one more shard rather than a bigger number in `timeout-minutes` — the same
+  // move scripts/validate-shard.ts already made for the test suite, reusing its
+  // partition so there is one definition of what a shard is.
+  const shard = parseShard(process.argv.slice(2));
+  const dirs = shard === null ? matched : shardOf(matched, shard.index, shard.total);
+  if (dirs.length === 0) {
+    console.error(
+      `shard ${shard?.index}/${shard?.total} is empty: ${matched.length} problems cannot fill ${shard?.total} shards`,
+    );
     return 2;
   }
 
@@ -397,10 +413,16 @@ async function main(): Promise<number> {
   // nobody remembers granting. Only a run at least as large as the one that recorded the
   // entry can say that, so the gate-sized run reports nothing here.
   const seen = new Set(all.map((finding) => key(finding.problem, finding.checkpoint, finding.type)));
+  // Only this run's problems. A run narrowed by `--problem` or `--shard` never probed
+  // the others, so calling their entries stale would report "the defect is fixed" on the
+  // sole evidence that nobody looked — and under sharding every shard would say it about
+  // every other shard's problems.
+  const probedProblems = new Set(reports.map((report) => report.problem));
   const stale =
     mode === "all"
       ? [...baseline.accepted, ...baseline.open].filter(
           (entry) =>
+            probedProblems.has(entry.problem) &&
             !seen.has(key(entry.problem, entry.checkpoint, entry.type)) &&
             // Against the budget that would actually have re-measured this entry. The two
             // budgets differ by an order of magnitude, so requiring both to clear the

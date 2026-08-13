@@ -1,0 +1,68 @@
+services:
+  participant:
+    image: "${ASYNC_BINDING_PARTICIPANT_IMAGE:-cs-async-result-binding-participant:local}"
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: participant
+    environment:
+      FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
+      VERIFIER_URL: http://verifier:8081/verify
+    ports:
+      - "127.0.0.1:18330:8080"
+    depends_on:
+      verifier:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - "/tmp:rw,noexec,nosuid,size=32m,uid=10001,gid=10001"
+    cap_drop:
+      - ALL
+    security_opt:
+      - "no-new-privileges:true"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/config', timeout=2).read()"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    mem_limit: 1g
+    pids_limit: 128
+    restart: "no"
+    networks:
+      - lab
+      - participant-host
+
+  verifier:
+    image: "${ASYNC_BINDING_VERIFIER_IMAGE:-cs-async-result-binding-verifier:local}"
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: verifier
+    environment:
+      FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
+    read_only: true
+    tmpfs:
+      - "/tmp:rw,noexec,nosuid,size=32m,uid=10001,gid=10001"
+    cap_drop:
+      - ALL
+    security_opt:
+      - "no-new-privileges:true"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/healthz', timeout=2).read()"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    mem_limit: 1g
+    pids_limit: 128
+    restart: "no"
+    networks:
+      - lab
+
+networks:
+  lab:
+    internal: true
+  participant-host:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+      com.docker.network.bridge.host_binding_ipv4: "127.0.0.1"

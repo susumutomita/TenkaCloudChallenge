@@ -26,6 +26,62 @@
       "type": "answer-on-screen",
       "reason": "The checkpoint is 'recover the witness from the public transcript you were shown', and the selected verifier's defect is that its transcript carries the witness. The answer being visible is the lesson; hiding it would make the checkpoint unanswerable instead.",
       "recordedAtSeeds": 2000
+    },
+    {
+      "problem": "cs-auth-claim-audit",
+      "checkpoint": "environment",
+      "type": "answer-on-screen",
+      "reason": "The environment checkpoint is proof that the container was started, not a question. The health token is printed by `make inspect` and by the Portal editor's inspect view precisely so the player can copy it, and it is seed-derived, so nothing carries between deployments. There is no answer here to leak. The two checkpoints that do carry answers -- `window` and `audit` -- were measured in the same sweep and are not on screen.",
+      "recordedAtSeeds": 500
+    },
+    {
+      "problem": "cs-async-result-binding",
+      "checkpoint": "environment",
+      "type": "answer-on-screen",
+      "reason": "The environment checkpoint is proof that the seeded Future-gate runtime started, not a reasoning question. Portal intentionally prints the health token for the learner to copy, and its seed binding prevents reuse across deployments. The audit and four code checkpoints carry the actual learning work and are measured separately.",
+      "recordedAtSeeds": 500
+    },
+    {
+      "problem": "cs-cache-generation-fence",
+      "checkpoint": "environment",
+      "type": "answer-on-screen",
+      "reason": "The environment checkpoint only proves that this deployment's container and Portal evidence are reachable. The health token is intentionally copied from inspect and is bound to the current seed. The audit answer is measured separately and is not marked on screen.",
+      "recordedAtSeeds": 500
+    },
+    {
+      "problem": "cs-http-retry-idempotency",
+      "checkpoint": "environment",
+      "type": "answer-on-screen",
+      "reason": "The environment checkpoint is proof that the separated Workbench started, not a reasoning question. Its seed-derived health token is intentionally shown for copying and does not carry across deployments. The uncertain and audit checkpoints still require interpreting the response-drop trace and identifying the later duplicate effect.",
+      "recordedAtSeeds": 500
+    },
+    {
+      "problem": "cs-atomic-file-publish",
+      "checkpoint": "environment",
+      "type": "answer-on-screen",
+      "reason": "The environment checkpoint is proof that the container was started, not a question. The health token is printed by `make inspect` and by the Portal editor's inspect view precisely so the player can copy it, and it is seed-derived, so nothing carries between deployments. There is no answer here to leak. The two checkpoints that do carry answers -- `window` and `audit` -- were measured in the same sweep and are not on screen.",
+      "recordedAtSeeds": 500
+    },
+    {
+      "problem": "cs-numeric-aggregation-order",
+      "checkpoint": "environment",
+      "type": "answer-on-screen",
+      "reason": "The environment checkpoint is proof that the container was started, not a question. The health token is printed by `make inspect` and by the Portal editor's inspect view precisely so the player can copy it, and it is seed-derived, so nothing carries between deployments. There is no answer here to leak. The two checkpoints that do carry answers -- `window` and `audit` -- were measured in the same sweep and are not on screen.",
+      "recordedAtSeeds": 500
+    },
+    {
+      "problem": "cs-protocol-state-guard",
+      "checkpoint": "environment",
+      "type": "answer-on-screen",
+      "reason": "The environment checkpoint is proof that the container was started, not a question. The health token is printed by `make inspect` and by the Portal editor's inspect view precisely so the player can copy it, and it is seed-derived, so nothing carries between deployments. There is no answer here to leak. The two checkpoints that do carry answers -- `window` and `audit` -- were measured in the same sweep and are not on screen.",
+      "recordedAtSeeds": 500
+    },
+    {
+      "problem": "cs-dst-daily-rollup",
+      "checkpoint": "environment",
+      "type": "answer-on-screen",
+      "reason": "The environment checkpoint is proof that the container was started, not a question. The health token is printed by `make inspect` and by the Portal editor's inspect view precisely so the player can copy it, and it is seed-derived, so nothing carries between deployments. There is no answer here to leak. The two checkpoints that do carry answers -- `observe` and `audit` -- were measured in the same sweep and are not on screen.",
+      "recordedAtSeeds": 500
     }
   ],
   "open": []

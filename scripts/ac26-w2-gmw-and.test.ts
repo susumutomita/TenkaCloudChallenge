@@ -335,8 +335,10 @@ describe("ac26-w2-gmw-and: metadata contracts", () => {
     expect(hintPenalty).toBeLessThanOrEqual(100);
   });
 
-  it("should sit at order 260, after the five Part A companions", () => {
-    expect(metadata().track.order).toBe(260);
+  // 260 belongs to ac26-w2-oblivious-transfer, the Part B privacy companion that landed
+  // first; this problem grades the construction side of the same half and sits after it.
+  it("should sit at order 270, after the five Part A companions and the OT companion", () => {
+    expect(metadata().track.order).toBe(270);
   });
 
   // This problem was authored against the published Part B (OT + GMW AND) of toy-mpc,

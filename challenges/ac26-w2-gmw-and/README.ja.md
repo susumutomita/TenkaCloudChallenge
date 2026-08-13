@@ -4,7 +4,7 @@
 > その運営者とは提携しておらず、承認も受けていません。問題文、コード、fixture、図はすべて独自に
 > 作成しています。このトラックに関する質問は講座運営ではなく TenkaCloud リポジトリへお願いします。
 
-**Track:** `advanced-cryptography-2026` · **Order:** 260 · **Chapter:** Week 2 / Boolean MPC
+**Track:** `advanced-cryptography-2026` · **Order:** 270 · **Chapter:** Week 2 / Boolean MPC
 · **Role:** `mechanism` · **想定時間:** 50〜70 分 · **配点:** 200
 · **Status:** draft — 後述の「Week 2 の対応づけ」を参照
 

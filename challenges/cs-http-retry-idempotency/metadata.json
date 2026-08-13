@@ -1,0 +1,356 @@
+{
+  "id": "cs-http-retry-idempotency",
+  "name": "応答が消えた。再送で同じ支払いを増やさない",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "cs-foundations",
+    "order": 50,
+    "chapter": "5. HTTP再送と冪等性"
+  },
+  "difficulty": 3,
+  "estimatedDuration": "45-75 分",
+  "shortDescription": "commit後にHTTP応答だけが消えたtraceを監査し、SQLite receiptで同じ論理操作を再生する。",
+  "description": "HTTP timeoutは操作が実行されなかった証拠ではなく、clientが結果を受け取れなかった証拠である。この問題では、ledger commitの直後にresponseだけが消えた同期HTTP操作を扱う。壊れたstarterはsingle success、invalid input、異なるkeyのpublic testをすべて通るが、同じ論理操作のretryを2件目のchargeとしてcommitする。\n\n参加者はseed由来のcommit-before-response-drop traceとledgerを監査し、Python標準ライブラリとSQLiteだけでdurable idempotency receiptを実装する。同じkeyとcanonical-equivalent requestは保存済みstatus/bodyを完全に再生し、同じkeyと異なるvalid requestは409 idempotency_conflictにする。validation errorはkeyを消費せず、concurrentな初回試行とhandler再生成でもledger副作用は1件だけになる。\n\n保証はexactly-once transportではない。配送回数は制御できず、保証するのは1つのvalidな論理操作についてのat-most-once business effectと、保存済み結果のreplayである。",
+  "instructions": "## Participant Portalで解く\n\n問題を起動するとeditorと証拠操作が同じページに出ます。「証拠を調べる」でfirst attemptがledgerをcommitした後にresponseだけを失った順序を読み、starterのidempotency.pyを編集してpublic testを実行してください。direct-answer checkpointはこのdeployのrequest idとledger indexからJSONで答えます。\n\n各checkpointの提出ではPortalが現在のeditor fileをcontainerのprepare APIへ送り、その値をloopbackの/verifyへ渡します。Workbenchとhidden verifierは別containerで、hostへ公開されるのはPortalが表示するWorkbench URLだけです。",
+  "writeup": "## timeoutが示す範囲\n\ntimeout後にclientが断言できるserver状態はunknownである。commit前に止まった可能性と、commit後に応答だけを失った可能性が同じ観測に対応する。そこでretryを止めるのではなく、同じ論理操作だとserverが判断できる識別子を送る。\n\n## durable receipt\n\nreceiptはkeyだけでなくcanonical requestのfingerprintを保存する。同じkeyと同じfingerprintなら最初にcommitしたstatus/bodyをそのまま返す。異なるfingerprintなら409を返す。ledger rowとreceiptは同じSQLite transactionで確定させるため、「副作用だけcommit」「receiptだけcommit」という中間状態を作らない。\n\n## concurrencyとrestart\n\ncheck-then-insertを別々に行うと、同時に来た2本が両方absenceを観測する。BEGIN IMMEDIATEなどでabsence checkからinsertまでを1つのserialized decisionにする。module-level cacheはprocess再生成で消えるので、正本はSQLiteに置く。\n\n## 証明していないこと\n\nHTTP deliveryをexactly onceにはしていない。応答は何度でも失われ得る。証明したのは、validな同一論理操作の業務副作用がat-most-onceであり、retryがdurable receiptから同じ結果を回収できることである。",
+  "tags": [
+    "cs-foundations",
+    "http",
+    "idempotency",
+    "sqlite",
+    "concurrency",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18350,
+      "name": "Participant Workbench + verifier proxy (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "HTTP timeoutからserverの実行有無を断言できないと説明できる",
+    "idempotency keyをcanonical request fingerprintへ結び付けられる",
+    "ledger副作用とdurable receiptを同じSQLite transactionで確定できる",
+    "same-key/same-requestを元のstatus/bodyで完全にreplayできる",
+    "same-key/different-requestを409にし、validation errorでkeyを消費しない",
+    "concurrent retryとhandler再生成でも業務副作用を1件に保てる",
+    "at-most-once business effectとexactly-once transportを区別できる"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.cs-http-retry-idempotency.read-timeout-as-unknown",
+        "description": "応答消失からserver状態を未実行と断定せず、結果不明として扱える。"
+      },
+      {
+        "id": "lo.cs-http-retry-idempotency.persist-receipt",
+        "description": "業務副作用とstatus/body receiptを同じdurable transactionで確定できる。"
+      },
+      {
+        "id": "lo.cs-http-retry-idempotency.bind-and-replay",
+        "description": "keyをfingerprintに結び、同一要求を再生し別要求をconflictにできる。"
+      },
+      {
+        "id": "lo.cs-http-retry-idempotency.serialize-first-attempt",
+        "description": "同時初回試行とprocess再生成を越えてat-most-once business effectを保てる。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.http-timeout-ambiguity",
+        "description": "client timeoutはresponse未受信を示すが、server-side commitの有無を示さない。"
+      },
+      {
+        "id": "concept.durable-idempotency-receipt",
+        "description": "logical operationのkey、request fingerprint、元のstatus/bodyをdurableに結ぶrecord。"
+      },
+      {
+        "id": "concept.at-most-once-business-effect",
+        "description": "delivery回数ではなく、1つのlogical operationが作る業務副作用を最大1件にする保証。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.cs-http-retry-idempotency.uncertain",
+        "description": "commit後response dropのtraceを結果不明と判断できた。"
+      },
+      {
+        "id": "assessment.cs-http-retry-idempotency.audit",
+        "description": "同じlogical operationを二重計上した後発ledger行を特定できた。"
+      },
+      {
+        "id": "assessment.cs-http-retry-idempotency.replay",
+        "description": "same-key/same-fingerprintで元のstatus/bodyを完全に返し、副作用を増やさなかった。"
+      },
+      {
+        "id": "assessment.cs-http-retry-idempotency.bind",
+        "description": "別fingerprintを409にし、validation失敗でkeyを消費しなかった。"
+      },
+      {
+        "id": "assessment.cs-http-retry-idempotency.generalize",
+        "description": "concurrent first attemptsとhandler再生成を越えてledgerとreceiptを1件に保った。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.timeout-means-not-executed",
+        "description": "timeoutならserverは操作していないという誤解。commit後のresponseだけが失われても同じ観測になる。"
+      },
+      {
+        "id": "misconception.idempotency-key-alone-is-enough",
+        "description": "keyだけを覚えればよいという誤解。別payloadのkey再利用をsilent replayするとcallerの誤りを隠す。"
+      },
+      {
+        "id": "misconception.in-memory-deduplication-is-durable",
+        "description": "process内cacheをdurable receiptとみなす誤解。handler再生成で消える。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.cs-http-retry-idempotency",
+      "target": "lo.cs-http-retry-idempotency.read-timeout-as-unknown"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.cs-http-retry-idempotency",
+      "target": "lo.cs-http-retry-idempotency.persist-receipt"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.cs-http-retry-idempotency",
+      "target": "lo.cs-http-retry-idempotency.bind-and-replay"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.cs-http-retry-idempotency",
+      "target": "lo.cs-http-retry-idempotency.serialize-first-attempt"
+    },
+    {
+      "type": "covers",
+      "source": "problem.cs-http-retry-idempotency",
+      "target": "concept.http-timeout-ambiguity"
+    },
+    {
+      "type": "covers",
+      "source": "problem.cs-http-retry-idempotency",
+      "target": "concept.durable-idempotency-receipt"
+    },
+    {
+      "type": "covers",
+      "source": "problem.cs-http-retry-idempotency",
+      "target": "concept.at-most-once-business-effect"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-http-retry-idempotency",
+      "target": "assessment.cs-http-retry-idempotency.uncertain"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-http-retry-idempotency",
+      "target": "assessment.cs-http-retry-idempotency.audit"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-http-retry-idempotency",
+      "target": "assessment.cs-http-retry-idempotency.replay"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-http-retry-idempotency",
+      "target": "assessment.cs-http-retry-idempotency.bind"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-http-retry-idempotency",
+      "target": "assessment.cs-http-retry-idempotency.generalize"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.cs-http-retry-idempotency",
+      "target": "misconception.timeout-means-not-executed"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.cs-http-retry-idempotency",
+      "target": "misconception.idempotency-key-alone-is-enough"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.cs-http-retry-idempotency",
+      "target": "misconception.in-memory-deduplication-is-durable"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.cs-http-retry-idempotency",
+      "target": "misconception.public-tests-are-complete"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18350/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "environment",
+        "label": "environment — Workbench の合言葉を貼る",
+        "points": 15,
+        "wrongAnswerPenalty": 5
+      },
+      {
+        "id": "uncertain",
+        "label": "uncertain — timeout直後にclientが断言できるserver状態を答える",
+        "points": 20,
+        "wrongAnswerPenalty": 7,
+        "hints": [
+          {
+            "id": "uncertain-hint-1",
+            "content": "clientが観測したのはtimeoutです。traceではledger commitがresponse dropより前にあります。未実行と実行済みのどちらを排除できますか。",
+            "penalty": 8
+          }
+        ]
+      },
+      {
+        "id": "audit",
+        "label": "audit — 同じ論理操作を二重計上した後発ledger行を挙げる",
+        "points": 30,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "audit-hint-1",
+            "content": "chargeIdではなくlogicalOperation、idempotencyKey、attemptを並べてください。attempt 2が別のledger行を増やしているlogical operationはどれですか。",
+            "penalty": 12
+          }
+        ]
+      },
+      {
+        "id": "replay",
+        "label": "replay — 同じkeyと同じ要求を保存済みstatus/bodyで再生する",
+        "points": 35,
+        "wrongAnswerPenalty": 12,
+        "input": "multiline",
+        "hints": [
+          {
+            "id": "replay-hint-1",
+            "content": "chargeを作った後でkeyだけを記録すると、間にcrashできる場所が残ります。ledger行とstatus/body receiptを同じtransactionへ置いてください。",
+            "penalty": 14
+          }
+        ]
+      },
+      {
+        "id": "bind",
+        "label": "bind — keyを要求fingerprintに結び、別要求を409にする",
+        "points": 40,
+        "wrongAnswerPenalty": 14,
+        "input": "multiline",
+        "hints": [
+          {
+            "id": "bind-hint-1",
+            "content": "同じkeyだけを見てreplayすると、amountを変えたcallerの誤りを隠します。正規化したrequestのfingerprintもreceiptに保存してください。",
+            "penalty": 16
+          }
+        ]
+      },
+      {
+        "id": "generalize",
+        "label": "generalize — 同時retryとhandler再生成でも副作用を一度にする",
+        "points": 60,
+        "wrongAnswerPenalty": 20,
+        "input": "multiline",
+        "hints": [
+          {
+            "id": "generalize-hint-1",
+            "content": "2つのtransactionがどちらもreceipt absentを読めるならcheck-then-insertです。absence checkからinsertまでをserialized decisionにし、状態はprocess memoryではなくSQLiteに残します。",
+            "penalty": 24
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "The response vanished. Do not create the payment again",
+      "shortDescription": "Audit a response lost after commit, then use a durable SQLite receipt to replay one logical operation.",
+      "description": "An HTTP timeout proves that the client did not receive a response; it does not prove that the server did nothing. Audit a synchronous operation whose ledger commit happened before its response disappeared, then implement a durable SQLite idempotency receipt. Same key and canonical request replays the exact stored status/body, another valid request conflicts with 409, invalid input does not consume a key, and concurrent retries plus handler recreation still create one business effect. The guarantee is at-most-once business effect, not exactly-once transport.",
+      "instructions": "## Solve in Participant Portal\n\nStart the problem and inspect the seeded first-attempt trace before editing idempotency.py. Run the intentionally incomplete public tests, answer the evidence checkpoints as JSON, and submit the current editor file through the Portal prepare and verify route. The participant Workbench and hidden verifier are separate containers; use the Workbench URL displayed by Portal.",
+      "writeup": "A timeout leaves server state unknown. A durable receipt binds the key to a canonical request fingerprint and to the original status/body in the same transaction as the ledger effect. Exact replay recovers that result; 409 exposes key reuse with another request. Serializing the absent-receipt decision prevents concurrent duplicates, and SQLite survives handler recreation. None of this makes HTTP delivery exactly once; it makes one valid logical operation's business effect at most once.",
+      "learningGoals": [
+        "Explain why an HTTP timeout cannot establish whether the server executed",
+        "Bind an idempotency key to a canonical request fingerprint",
+        "Commit the ledger effect and durable receipt in one SQLite transaction",
+        "Replay exact stored status/body for the same key and request",
+        "Return 409 for a different request and avoid consuming keys on validation errors",
+        "Keep one business effect across concurrent retries and handler recreation",
+        "Distinguish at-most-once business effect from exactly-once transport"
+      ],
+      "checks": [
+        {
+          "id": "environment",
+          "label": "environment - paste the Workbench pass phrase"
+        },
+        {
+          "id": "uncertain",
+          "label": "uncertain - state what server state the client can assert immediately after timeout",
+          "hints": [
+            {
+              "id": "uncertain-hint-1",
+              "content": "The client observed a timeout. The trace places the ledger commit before the response drop. Can either not-executed or executed be ruled out from the client's observation?"
+            }
+          ]
+        },
+        {
+          "id": "audit",
+          "label": "audit - list later ledger rows that duplicated one logical operation",
+          "hints": [
+            {
+              "id": "audit-hint-1",
+              "content": "Compare logicalOperation, idempotencyKey, and attempt rather than chargeId. Which attempt 2 added another row for the same operation?"
+            }
+          ]
+        },
+        {
+          "id": "replay",
+          "label": "replay - replay stored status/body for the same key and request",
+          "hints": [
+            {
+              "id": "replay-hint-1",
+              "content": "Recording the key after creating the charge leaves a crash point between them. Put the ledger row and status/body receipt in one transaction."
+            }
+          ]
+        },
+        {
+          "id": "bind",
+          "label": "bind - bind a key to the request fingerprint and return 409 for another request",
+          "hints": [
+            {
+              "id": "bind-hint-1",
+              "content": "Looking only at the key silently hides a caller that changed amount. Store the canonical request fingerprint in the receipt too."
+            }
+          ]
+        },
+        {
+          "id": "generalize",
+          "label": "generalize - keep one business effect across concurrent retries and handler recreation",
+          "hints": [
+            {
+              "id": "generalize-hint-1",
+              "content": "If two transactions can both read receipt absent, this is check-then-insert. Serialize that decision and keep state in SQLite, not process memory."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

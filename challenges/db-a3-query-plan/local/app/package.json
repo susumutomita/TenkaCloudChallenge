@@ -1,0 +1,10 @@
+{
+  "name": "db-a3-query-plan-local",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local-play container for the db-a3-query-plan Drill: watch the planner choose different scan strategies for the same indexed column depending on predicate selectivity and statistics freshness.",
+  "dependencies": {
+    "postgres": "3.4.5"
+  }
+}

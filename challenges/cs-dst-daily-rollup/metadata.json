@@ -1,0 +1,348 @@
+{
+  "id": "cs-dst-daily-rollup",
+  "name": "年に 2 日だけ、日次レポートが合わない",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "cs-foundations",
+    "order": 90,
+    "chapter": "9. 暦の日と、86400 秒の塊"
+  },
+  "difficulty": 3,
+  "estimatedDuration": "45-75 分",
+  "shortDescription": "台帳と 1 日だけ食い違う日次レポートを監査し、固定 offset ではなく現地の暦の日で集計する rollup を書く。",
+  "description": "集計の入力も、集計するコードも変わっていない。 それでも年に 2 日だけ、公開された日次レポートが台帳と一致しない。 この問題が扱うのは、その 2 日である。\n\n壊れた starter は public test を 7 本すべて通る。 どのテストも切替のない普通の週を集計しており、範囲の先頭で 1 回だけ読んだ offset をすべての瞬間に足す実装は、その週なら正しい答えを出すからである。\n\n参加者は seed 由来の日次レポートを監査し、Python 標準ライブラリだけで rollup を書き直す。 到達点は問題の日を if で特殊扱いすることではなく、瞬間から日付を計算するのをやめて、暦にその日を尋ねる形である。\n\n採点は書き方ではなく振る舞いで行う。 checkpoint は seed から選んだ実在の zone と切替日を使い、23 時間の日と 25 時間の日、その両方をまたぐ範囲まで走査する。 見た例に合わせて調整しただけの実装は、切替の向きが逆の日で落ちる。",
+  "instructions": "## Participant Portal で解く\n\n問題を起動すると editor と証拠操作が同じページに出ます。「証拠を調べる」で日次レポートと台帳の値を読み、starter の rollup.py を編集して public test を実行してください。direct-answer checkpoint は、この deploy のレポート ID と行の index から JSON で答えます。 observe の 2 つ目の値は \"not-24-hours\" / \"missing-rows\" / \"double-counted\" / \"clock-skew\" から 1 つ選びます。\n\n各 checkpoint の提出では Portal が現在の editor file を container の prepare API へ送り、その値を loopback の /verify へ渡します。 Workbench と hidden verifier は別 container です。",
+  "writeup": "## 瞬間から日付は計算できない\n\nUNIX 時刻を 86400 で割ると UTC の日が出る。 現地の日ではない。 現地の日は暦が決めるものであり、年に 2 日、23 時間や 25 時間になる。 割り算はその 2 日を知らないので、境界付近の event を隣の日へ運ぶ。\n\n## 固定 offset は、切替の前後どちらかで必ず外れる\n\n範囲の先頭で offset を 1 回読んで全体に使うと、切替をまたいだ側の event が 1 時間ずれる。 時計が戻る日は「その日の終わり」が翌日へ、進む日は「翌日の始まり」が前日へ流れる。 普通の週では両方とも起きないので、テストは全部通る。\n\n## 表示だけ変換しても直らない\n\nUTC の日で集計してからラベルだけ現地日付に付け替えると、ラベルは本物の現地日付になる。 束ねられている中身は違う。 見た目が正しくなるぶん、こちらの方が見つけにくい。\n\n## 証明していないこと\n\nすべての時刻計算を正しくしたのではない。 1 つの範囲の日次集計について、event がどの現地日に属するかを、切替日を含めて決めただけである。 存在しない壁時計時刻や、曖昧な壁時計時刻の扱いはここでは問うていない。",
+  "tags": [
+    "cs-foundations",
+    "time",
+    "timezone",
+    "dst",
+    "aggregation",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18550,
+      "name": "Participant Workbench + verifier proxy (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "現地の暦の日が常に 24 時間ではない理由を説明できる",
+    "瞬間を 86400 秒で割ると UTC の日しか出ないことを説明できる",
+    "範囲の先頭で読んだ offset を使い回すと切替日でずれる理由を説明できる",
+    "集計キーを暦から得る形で rollup を書ける",
+    "UTC で束ねてラベルだけ変換する実装が誤りである理由を説明できる",
+    "23 時間の日と 25 時間の日で日境界を正しく保てる",
+    "範囲外の event と空の日を契約どおり扱える"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.cs-dst-daily-rollup.calendar-not-arithmetic",
+        "description": "日付を瞬間から計算せず、暦に尋ねられる。"
+      },
+      {
+        "id": "lo.cs-dst-daily-rollup.offset-is-not-constant",
+        "description": "offset が範囲の中で変わることを前提に書ける。"
+      },
+      {
+        "id": "lo.cs-dst-daily-rollup.group-not-label",
+        "description": "束ねるキーと表示ラベルの違いを説明できる。"
+      },
+      {
+        "id": "lo.cs-dst-daily-rollup.range-contract",
+        "description": "範囲外 event と空の日を契約どおり扱える。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.local-calendar-day",
+        "description": "現地の暦の日は 23 時間にも 25 時間にもなる。"
+      },
+      {
+        "id": "concept.instant-vs-wall-clock",
+        "description": "瞬間と壁時計時刻は別の概念である。"
+      },
+      {
+        "id": "concept.tz-database",
+        "description": "切替の規則は tz database が持つ。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.cs-dst-daily-rollup.observe",
+        "description": "食い違った日が普通の日ではないと判断できた。"
+      },
+      {
+        "id": "assessment.cs-dst-daily-rollup.audit",
+        "description": "報告値が正しくあり得ない日を特定できた。"
+      },
+      {
+        "id": "assessment.cs-dst-daily-rollup.rollup",
+        "description": "現地の暦の日で集計できた。"
+      },
+      {
+        "id": "assessment.cs-dst-daily-rollup.transition",
+        "description": "23 時間と 25 時間の日で境界を保てた。"
+      },
+      {
+        "id": "assessment.cs-dst-daily-rollup.generalize",
+        "description": "複数 zone と両方の切替で契約どおり答えられた。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.day-is-86400-seconds",
+        "description": "1 日は必ず 86400 秒である、という誤解。"
+      },
+      {
+        "id": "misconception.one-offset-per-zone",
+        "description": "zone には 1 つの offset がある、という誤解。"
+      },
+      {
+        "id": "misconception.convert-for-display-is-enough",
+        "description": "表示のときだけ変換すれば足りる、という誤解。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.cs-dst-daily-rollup",
+      "target": "lo.cs-dst-daily-rollup.calendar-not-arithmetic"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.cs-dst-daily-rollup",
+      "target": "lo.cs-dst-daily-rollup.offset-is-not-constant"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.cs-dst-daily-rollup",
+      "target": "lo.cs-dst-daily-rollup.group-not-label"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.cs-dst-daily-rollup",
+      "target": "lo.cs-dst-daily-rollup.range-contract"
+    },
+    {
+      "type": "covers",
+      "source": "problem.cs-dst-daily-rollup",
+      "target": "concept.local-calendar-day"
+    },
+    {
+      "type": "covers",
+      "source": "problem.cs-dst-daily-rollup",
+      "target": "concept.instant-vs-wall-clock"
+    },
+    {
+      "type": "covers",
+      "source": "problem.cs-dst-daily-rollup",
+      "target": "concept.tz-database"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-dst-daily-rollup",
+      "target": "assessment.cs-dst-daily-rollup.observe"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-dst-daily-rollup",
+      "target": "assessment.cs-dst-daily-rollup.audit"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-dst-daily-rollup",
+      "target": "assessment.cs-dst-daily-rollup.rollup"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-dst-daily-rollup",
+      "target": "assessment.cs-dst-daily-rollup.transition"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-dst-daily-rollup",
+      "target": "assessment.cs-dst-daily-rollup.generalize"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.cs-dst-daily-rollup",
+      "target": "misconception.day-is-86400-seconds"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.cs-dst-daily-rollup",
+      "target": "misconception.one-offset-per-zone"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.cs-dst-daily-rollup",
+      "target": "misconception.convert-for-display-is-enough"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18550/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "environment",
+        "label": "environment — Workbench の合言葉を貼る",
+        "points": 15,
+        "wrongAnswerPenalty": 5
+      },
+      {
+        "id": "observe",
+        "label": "observe — 対象レポート ID と、その日に何があったのかを答える",
+        "points": 20,
+        "wrongAnswerPenalty": 7,
+        "hints": [
+          {
+            "id": "observe-hint-1",
+            "content": "台帳も集計コードも変わっていません。 食い違った日を、その zone の暦で 0 時から翌日の 0 時まで測ると何時間ありますか。",
+            "penalty": 8
+          }
+        ]
+      },
+      {
+        "id": "audit",
+        "label": "audit — 報告値が正しくあり得ない日を挙げる",
+        "points": 30,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "audit-hint-1",
+            "content": "各行には報告値と台帳の値が並んでいます。 ずれは 1 日では終わりません。 ある日が失った分は、どこへ行きましたか。",
+            "penalty": 12
+          }
+        ]
+      },
+      {
+        "id": "rollup",
+        "label": "rollup — 固定 offset ではなく現地の暦の日で集計する",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "rollup-hint-1",
+            "content": "starter は範囲の先頭で offset を 1 回だけ読み、すべての瞬間に足しています。 その offset は範囲の最後まで同じ値ですか。",
+            "penalty": 18
+          }
+        ]
+      },
+      {
+        "id": "transition",
+        "label": "transition — 23 時間の日と 25 時間の日で境界を保つ",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "transition-hint-1",
+            "content": "日付が変わるのは切替の瞬間ではなく現地の 0 時です。 時計が戻る日は「その日の終わり」、進む日は「翌日の始まり」を確かめてください。",
+            "penalty": 18
+          }
+        ]
+      },
+      {
+        "id": "generalize",
+        "label": "generalize — 複数 zone・両方の切替・それをまたぐ範囲でも成り立たせる",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "generalize-hint-1",
+            "content": "見た切替日に合わせて調整すると、向きが逆の日で同じことが起きます。 集計キーを自分で計算せず、暦に尋ねる形にできませんか。",
+            "penalty": 18
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Two days a year, the report is wrong",
+      "shortDescription": "Audit a daily report that disagrees with the ledger on one day, then total by the local calendar instead of by 86400-second blocks.",
+      "description": "The inputs did not change and neither did the code that totals them. Two days a year, the published daily report still disagrees with the ledger. This problem is about those two days.\n\nThe broken starter passes all seven public tests, because each of them totals an ordinary week with no switch in it, and an implementation that reads one offset at the start of the range and adds it to every instant is right for that week.\n\nParticipants audit a seed-derived daily report and rewrite the rollup using only the standard library. The destination is not special-casing the day that broke; it is giving up on computing a date from an instant and asking the calendar instead.\n\nGrading is behavioural, not stylistic. The checkpoints use real zones and real transition dates drawn from the seed, and sweep a 23-hour day, a 25-hour day and a range spanning both. An implementation tuned to the example it saw fails on the day the clocks move the other way.",
+      "instructions": "## Solve in Participant Portal\n\nStarting the problem opens the editor and the evidence controls on one page. Use \"inspect evidence\" to read the daily report next to the ledger's own count, edit the starter's rollup.py, and run the public tests. The direct-answer checkpoints are answered as JSON built from this deployment's report id and row indexes. The second value of `observe` is one of \"not-24-hours\", \"missing-rows\", \"double-counted\" or \"clock-skew\".\n\nEach submission sends the current editor file to the container's prepare API, which passes it to the loopback /verify. The Workbench and the hidden verifier are separate containers.",
+      "writeup": "## A date cannot be computed from an instant\n\nDividing a UNIX timestamp by 86400 gives you the UTC day, not the local one. The local day is whatever the calendar says it is, and twice a year that is 23 or 25 hours. The division does not know about those two days, so it carries events near the boundary into the neighbouring one.\n\n## A fixed offset is wrong on one side of the switch, always\n\nRead the offset once at the start of the range and use it throughout, and every event past the switch lands an hour out. When the clocks go back, the *end* of that day spills into the next one; when they go forward, the *start* of the following day spills back. An ordinary week does neither, so every test passes.\n\n## Converting for display does not fix it\n\nGroup by the UTC day and then relabel the buckets with local dates, and the labels become genuine local dates. What is inside them does not. That version is harder to spot precisely because the output looks right.\n\n## What this does not prove\n\nIt does not make every time calculation correct. For one daily report over one range, it settles which local day each event belongs to, transition days included. Wall-clock times that do not exist, or that happen twice, are not asked about here.",
+      "learningGoals": [
+        "Explain why a local calendar day is not always 24 hours",
+        "Explain why dividing an instant by 86400 yields the UTC day only",
+        "Explain why reusing the offset read at the start of a range breaks on a transition day",
+        "Write a rollup whose grouping key comes from the calendar",
+        "Explain why grouping in UTC and relabelling is still wrong",
+        "Keep the day boundary correct on a 23-hour and a 25-hour day",
+        "Handle out-of-range events and empty days per the contract"
+      ],
+      "checks": [
+        {
+          "id": "environment",
+          "label": "environment - paste the Workbench pass phrase"
+        },
+        {
+          "id": "observe",
+          "label": "observe - name the report and what happened that day",
+          "hints": [
+            {
+              "id": "observe-hint-1",
+              "content": "Neither the ledger nor the totalling code changed. Measure the day that disagreed in its own zone, from midnight to the next midnight. How many hours is that?"
+            }
+          ]
+        },
+        {
+          "id": "audit",
+          "label": "audit - list the days whose reported total cannot be right",
+          "hints": [
+            {
+              "id": "audit-hint-1",
+              "content": "Each row carries the reported total next to the ledger's own count. The discrepancy does not stop at one day. Where did the amount one day lost end up?"
+            }
+          ]
+        },
+        {
+          "id": "rollup",
+          "label": "rollup - total by the local calendar day, not by a fixed offset",
+          "hints": [
+            {
+              "id": "rollup-hint-1",
+              "content": "The starter reads one offset at the start of the range and adds it to every instant. Is that offset still the right one at the end of the range?"
+            }
+          ]
+        },
+        {
+          "id": "transition",
+          "label": "transition - keep the boundary correct on a 23- and a 25-hour day",
+          "hints": [
+            {
+              "id": "transition-hint-1",
+              "content": "The date changes at local midnight, not at the switch. Check the end of the day when the clocks go back, and the start of the following day when they go forward."
+            }
+          ]
+        },
+        {
+          "id": "generalize",
+          "label": "generalize - hold for several zones, both switches and a range spanning them",
+          "hints": [
+            {
+              "id": "generalize-hint-1",
+              "content": "Tuning for the transition you were shown leads to the same thing on the day the clocks move the other way. Can you stop computing the grouping key and ask the calendar for it?"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

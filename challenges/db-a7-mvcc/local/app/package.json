@@ -1,0 +1,10 @@
+{
+  "name": "db-a7-mvcc-local",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local-play container for the db-a7-mvcc Drill: watch a reader stay unblocked by an uncommitted writer, observe xmin/xmax directly, then watch a long-running transaction keep VACUUM from reclaiming dead tuples until it closes.",
+  "dependencies": {
+    "postgres": "3.4.5"
+  }
+}

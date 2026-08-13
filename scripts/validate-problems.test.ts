@@ -15,6 +15,7 @@ import {
   checkCompositeAppRunDescriptor,
   checkMultiVerifyStructure,
   checkMultiVerifyTranslations,
+  checkNativeCompatibility,
   checkParticipantVisibleSpoilerAdvisory,
   checkRequiredReadmes,
   checkScoringRegulation,
@@ -731,5 +732,87 @@ describe("checkSolutionDoesNotEditCatalog", () => {
     } as never);
     expect(errors).toHaveLength(1);
     expect(errors[0]).toContain("rewrite the problem's own source");
+  });
+});
+
+describe("runtime.compatibility (TenkaCloud#3008)", () => {
+  const containerRuntime = {
+    provider: "docker",
+    engine: "compose",
+    entry: "local/docker-compose.yml",
+  };
+  const withCompatibility = (compatibility: unknown, runtime = containerRuntime) =>
+    ({ runtime: { ...runtime, compatibility } }) as never;
+
+  it("should accept a problem that declares nothing (= 既存問題は全てこの形)", () => {
+    expect(checkNativeCompatibility({ runtime: containerRuntime } as never)).toEqual([]);
+    expect(checkNativeCompatibility({} as never)).toEqual([]);
+  });
+
+  it("should accept the declaration TenkaCloudChallenge#434 needs", () => {
+    // 実際に #434 が書く形。 platform 側 (TenkaCloud#3008) の parser と同じ規則で通ること。
+    expect(
+      checkNativeCompatibility(
+        withCompatibility({
+          nativeArchitectures: ["amd64"],
+          cpuFlags: ["rdtscp", "constant_tsc", "nonstop_tsc"],
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  it("should accept a declaration carrying only one of the two fields", () => {
+    expect(checkNativeCompatibility(withCompatibility({ nativeArchitectures: ["amd64"] }))).toEqual(
+      [],
+    );
+    expect(checkNativeCompatibility(withCompatibility({ cpuFlags: ["rdtscp"] }))).toEqual([]);
+  });
+
+  it("should reject an empty declaration instead of ignoring it", () => {
+    // 宣言したのに何も制約していない状態は、 起動が拒否されず emulation 上の値が出る。
+    const errors = checkNativeCompatibility(withCompatibility({}));
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain("must declare nativeArchitectures or cpuFlags");
+  });
+
+  it("should reject a declaration on an AWS problem, where nothing would check it", () => {
+    const errors = checkNativeCompatibility({
+      cfnTemplate: "template.yaml",
+      runtime: { provider: "aws", engine: "cloudformation", entry: "template.yaml" },
+      compatibility: undefined,
+      // biome-ignore lint/suspicious/noExplicitAny: raw metadata shape under test
+    } as any);
+    expect(errors).toEqual([]);
+    const declared = checkNativeCompatibility({
+      runtime: {
+        provider: "aws",
+        engine: "cloudformation",
+        entry: "template.yaml",
+        compatibility: { nativeArchitectures: ["amd64"] },
+      },
+    } as never);
+    expect(declared).toHaveLength(1);
+    expect(declared[0]).toContain("only meaningful for a container problem");
+  });
+
+  it.each([
+    ["非 object", "amd64", "must be an object"],
+    ["array", ["amd64"], "must be an object"],
+  ])("should reject compatibility that is %s", (_label, compatibility, expected) => {
+    const errors = checkNativeCompatibility(withCompatibility(compatibility));
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain(expected);
+  });
+
+  it.each([
+    ["空配列", { nativeArchitectures: [] }, "must not be empty"],
+    ["非配列", { cpuFlags: "rdtscp" }, "must be an array"],
+    ["大文字", { nativeArchitectures: ["AMD64"] }, "nativeArchitectures[0] must match"],
+    ["空白混じり", { cpuFlags: ["rdtscp "] }, "cpuFlags[0] must match"],
+    ["重複", { cpuFlags: ["rdtscp", "rdtscp"] }, "must not repeat a value"],
+  ])("should reject %s な token", (_label, compatibility, expected) => {
+    // どの host の報告値とも一致しない token は「常に拒否」になり、 問題が永久に起動できない。
+    const errors = checkNativeCompatibility(withCompatibility(compatibility));
+    expect(errors.some((error) => error.includes(expected))).toBe(true);
   });
 });

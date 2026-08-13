@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * `local/verifier/workbench.py` の vendoring 不変条件を守る gate。
+ * Portal 用 `workbench.py` の vendoring 不変条件を守る gate。
  *
  * この repo の問題は 1 問ずつ独立して deploy できなければならない。 だから
  * `PortalEditorSupport` を共有 package に切り出さず、 各問題へ同じ実装を複製している。
@@ -24,14 +24,17 @@ import { join, relative } from "node:path";
 
 const REPO_ROOT = new URL("..", import.meta.url).pathname;
 const CATEGORY_DIRS = ["battles", "challenges"] as const;
-const VENDORED_PATH = join("local", "verifier", "workbench.py");
+const VENDORED_PATHS = [
+  join("local", "verifier", "workbench.py"),
+  join("local", "participant", "workbench.py"),
+] as const;
 
 export interface VendoredCopy {
   readonly path: string;
   readonly digest: string;
 }
 
-/** `<category>/<problem>/local/verifier/workbench.py` を持つ問題を列挙する。 */
+/** `<category>/<problem>/local/{verifier,participant}/workbench.py` を列挙する。 */
 export function findVendoredCopies(root: string): VendoredCopy[] {
   const copies: VendoredCopy[] = [];
   for (const category of CATEGORY_DIRS) {
@@ -43,18 +46,20 @@ export function findVendoredCopies(root: string): VendoredCopy[] {
       continue; // category ごと無い repo 状態 (= submodule 未 checkout) でも落とさない。
     }
     for (const problem of problems.sort()) {
-      const file = join(categoryDir, problem, VENDORED_PATH);
-      let contents: Buffer;
-      try {
-        if (!statSync(file).isFile()) continue;
-        contents = readFileSync(file);
-      } catch {
-        continue; // workbench を持たない問題のほうが多い。 持たないことは違反ではない。
+      for (const vendoredPath of VENDORED_PATHS) {
+        const file = join(categoryDir, problem, vendoredPath);
+        let contents: Buffer;
+        try {
+          if (!statSync(file).isFile()) continue;
+          contents = readFileSync(file);
+        } catch {
+          continue; // workbench を持たない問題のほうが多い。 持たないことは違反ではない。
+        }
+        copies.push({
+          path: relative(root, file),
+          digest: createHash("sha256").update(contents).digest("hex"),
+        });
       }
-      copies.push({
-        path: relative(root, file),
-        digest: createHash("sha256").update(contents).digest("hex"),
-      });
     }
   }
   return copies;

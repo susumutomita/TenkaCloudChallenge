@@ -1,0 +1,315 @@
+{
+  "id": "cs-transaction-visibility-audit",
+  "name": "どちらも committed。だが、その合計は一度も存在しない",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "cs-foundations",
+    "order": 20,
+    "chapter": "2. トランザクションと可視性"
+  },
+  "difficulty": 3,
+  "estimatedDuration": "45-75 分",
+  "shortDescription": "ポイント台帳の各 read は、その瞬間の committed 値を返している。公開テストも緑。それでも複数口座を束ねた report は、一度も存在しなかった合計を返せる。seed 固有の監査ログから反例を組み立て、1 revision の snapshot で report を直す。",
+  "description": "cs-foundations 第 2 章。扱う飛躍は 1 つだけ — **各 read が committed なら、複数 read も同じ瞬間を表す**という誤りである。実 DB、SQL 方言、実 thread、lock の待ち時間は使わず、seed から作った immutable revision と決定論的な commit schedule だけで再現する。\n\n参加者が編集するのは `report.py` の `build_report(ledger, account_ids)`。starter は口座ごとに `read_committed` を呼び、最後に見た revision を report 全体の revision として返す。commit が read 間に入らない公開例では正しく見えるが、送金 commit が read 間に入ると、送金元の古い値と送金先の新しい値を同じ report に入れてしまう。\n\n採点は 4 checkpoint、合計 200 点。`audit` は一度も存在しない report を監査証拠から特定する。`counterexample` は固定された read 順と候補 transfer から、read / commit / read の反例を組む。`snapshot` は 1 つの非排他的 snapshot を report 冒頭で取得して全 row を読む。`transfer` は未見の account ID、順序、revision gap、複数 commit でも同じ性質を保つ。\n\nhidden は latest-per-row、row ごとの新規 snapshot、最初の live read 後の snapshot、snapshot 後の live read、値は正しいが revision が偽、公開 ID / total の固定、変更時の拒否、reader-wide writer freeze を拒否する。正解は writer の進行を止めず、全 balance と report revision を同じ immutable state に結び付ける。",
+  "instructions": "## Participant Portal で解く\n\nこの問題はブラウザ内の問題エディタだけで完結します。前提は Python の関数・辞書・for 文を読めることです。DB や SQL の経験は要りません。\n\n1. 「証拠を調べる」で、この deploy 固有の committed revision、旧 service の report、read 順、候補 transfer を読む。\n2. `audit` と `counterexample` の回答を、画面に示す形の JSON で入力する。\n3. `report.py` を編集し、「公開テストを実行」で戻り値の形を確かめる。公開テストは starter でも緑なので、それだけを完了根拠にしない。\n4. 4 つの checkpoint をそれぞれ提出する。Portal は現在のコードと直接回答を container の prepare API でこの deploy の seed に結び付けてから採点へ送る。\n\n目標は writer を止めることではありません。report の全 balance と `revision` を、1 つの snapshot が捕まえた同じ committed state から作ってください。",
+  "writeup": "## committed は 1 回の read についての事実\n\n`read_committed` が約束するのは、その呼び出しが未確定の値を返さないことだ。1 回目と 2 回目のあいだに別の transaction が commit できるなら、2 回とも約束を守りながら別々の revision を返せる。\n\nたとえば revision 10 が A=100, B=100 だとする。A を 100 と読んだ直後に A から B へ 10 移す transaction が commit し、revision 11 が A=90, B=110 になる。続いて B を読むと 110。どちらも committed だが report の 100+110=210 は revision 10 にも 11 にも存在しない。\n\n## snapshot が足す約束\n\nsnapshot は取得時の immutable revision を 1 つ保持する。取得後に writer が revision 11、12 と進んでも、同じ snapshot から A と B を読めば両方が revision 10 の値になる。report の `revision` も snapshot の revision を使うため、値と証拠が同じ瞬間を指す。\n\nrow ごとに snapshot を作ると、元の問題を API 名だけ変えて再現する。最初の row を live で読んでから snapshot を取る方法も、最初の row だけ別の瞬間になる。値を snapshot から読んでも `revision` を live ledger から取れば、今度は証拠だけが別の瞬間になる。\n\n## writer を止めない理由\n\nreport のあいだ writer 全体を止めれば見かけ上は揃うが、reader の都合で更新の進行を変えている。この問題の契約は、writer が進んでも reader が自分の見方を固定することだ。正解は `snapshot()` を 1 回だけ取得し、要求された全 account をその snapshot から読み、snapshot の revision と balance の合計を返す。\n\n## 公開テストが緑だった理由\n\n公開例は commit が report の前、後、または存在しない場合だけを見る。その範囲では latest-per-row も snapshot も同じ出力になる。テストが緑なのは、テスト作者が置いた schedule では差が出なかったという意味でしかない。どの性質をまだ訊いていないかを監査することが、この track の中心である。",
+  "tags": [
+    "cs-foundations",
+    "transactions",
+    "mvcc",
+    "audit",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18320,
+      "name": "Participant Portal editor API + /verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "1 回の committed read と、複数 read が同じ瞬間を表すことを区別できる",
+    "immutable revision の監査ログから、一度も存在しなかった report を特定できる",
+    "read 順と transfer の位置から、決定論的な visibility 反例を組み立てられる",
+    "report 冒頭で snapshot を 1 回だけ取得し、balance と revision を同じ state に結び付けられる",
+    "reader が writer を止める方法と、writer を進めたまま view を固定する方法を区別できる",
+    "公開テストが commit の interleaving を訊いていないとき、緑が何を保証しないか説明できる"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.cs-transaction-visibility-audit.read-scope",
+        "description": "committed という保証の範囲を、1 回の read と report 全体に分けて説明できる。"
+      },
+      {
+        "id": "lo.cs-transaction-visibility-audit.audit-impossible-state",
+        "description": "immutable revision と read trace を比較し、一度も存在しなかった report を特定できる。"
+      },
+      {
+        "id": "lo.cs-transaction-visibility-audit.construct-counterexample",
+        "description": "read 順と commit の位置から、mixed-revision report の反例を組み立てられる。"
+      },
+      {
+        "id": "lo.cs-transaction-visibility-audit.one-snapshot",
+        "description": "writer を止めず、1 snapshot から balance・total・revision を作れる。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.read-committed-per-read",
+        "description": "read committed は各 read が未確定値を返さないことを保証するが、複数 read の同時点性までは保証しない。"
+      },
+      {
+        "id": "concept.immutable-snapshot",
+        "description": "snapshot は取得した 1 revision の view を、後続 commit と独立して保持する。"
+      },
+      {
+        "id": "concept.conservation-counterexample",
+        "description": "保存される total を使うと、mixed revision が返した一度も存在しない state を観測できる。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.cs-transaction-visibility-audit.audit",
+        "description": "seed 固有の report trace から impossible report と観測 revision を過不足なく答えた。"
+      },
+      {
+        "id": "assessment.cs-transaction-visibility-audit.counterexample",
+        "description": "固定 read 順をまたぐ transfer を選び、commit 前後の read を正しく配置した。"
+      },
+      {
+        "id": "assessment.cs-transaction-visibility-audit.snapshot",
+        "description": "report 冒頭で 1 つの非排他的 snapshot を取得し、要求された全 row をそこから読んだ。"
+      },
+      {
+        "id": "assessment.cs-transaction-visibility-audit.transfer",
+        "description": "未見の ID・順序・revision・複数 commit でも balance、total、revision の結び付きを保った。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.committed-rows-form-one-state",
+        "description": "各 row が committed なら report 全体も 1 つの committed state だという誤解。"
+      },
+      {
+        "id": "misconception.snapshot-per-row-is-consistent",
+        "description": "snapshot という API を使いさえすればよく、row ごとに取り直しても同じだという誤解。"
+      },
+      {
+        "id": "misconception.stop-writers-for-read-consistency",
+        "description": "整合した report のためには reader が writer 全体を止める必要があるという誤解。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.cs-transaction-visibility-audit",
+      "target": "lo.cs-transaction-visibility-audit.read-scope"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.cs-transaction-visibility-audit",
+      "target": "lo.cs-transaction-visibility-audit.audit-impossible-state"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.cs-transaction-visibility-audit",
+      "target": "lo.cs-transaction-visibility-audit.construct-counterexample"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.cs-transaction-visibility-audit",
+      "target": "lo.cs-transaction-visibility-audit.one-snapshot"
+    },
+    {
+      "type": "covers",
+      "source": "problem.cs-transaction-visibility-audit",
+      "target": "concept.read-committed-per-read"
+    },
+    {
+      "type": "covers",
+      "source": "problem.cs-transaction-visibility-audit",
+      "target": "concept.immutable-snapshot"
+    },
+    {
+      "type": "covers",
+      "source": "problem.cs-transaction-visibility-audit",
+      "target": "concept.conservation-counterexample"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-transaction-visibility-audit",
+      "target": "assessment.cs-transaction-visibility-audit.audit"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-transaction-visibility-audit",
+      "target": "assessment.cs-transaction-visibility-audit.counterexample"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-transaction-visibility-audit",
+      "target": "assessment.cs-transaction-visibility-audit.snapshot"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-transaction-visibility-audit",
+      "target": "assessment.cs-transaction-visibility-audit.transfer"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.cs-transaction-visibility-audit",
+      "target": "misconception.committed-rows-form-one-state"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.cs-transaction-visibility-audit",
+      "target": "misconception.snapshot-per-row-is-consistent"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.cs-transaction-visibility-audit",
+      "target": "misconception.stop-writers-for-read-consistency"
+    },
+    {
+      "type": "requires",
+      "source": "lo.cs-transaction-visibility-audit.one-snapshot",
+      "target": "concept.read-committed-per-read"
+    },
+    {
+      "type": "requires",
+      "source": "lo.cs-transaction-visibility-audit.construct-counterexample",
+      "target": "concept.conservation-counterexample"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18320/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "audit",
+        "label": "audit — 一度も存在しない report と観測 revision を特定する",
+        "points": 35,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "transaction-audit-hint-1",
+            "content": "各 committed state の total は同じです。report の row を足した total が、そのどの state にも無いものを探してください。",
+            "penalty": 8
+          }
+        ]
+      },
+      {
+        "id": "counterexample",
+        "label": "counterexample — read の途中へ 1 commit を置き、反例を作る",
+        "points": 35,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "transaction-counterexample-hint-1",
+            "content": "commit より前に読まれる側から、commit より後に読まれる側へ points が移る candidate を探してください。",
+            "penalty": 8
+          }
+        ]
+      },
+      {
+        "id": "snapshot",
+        "label": "snapshot — report の全 row と revision を 1 つの view に固定する",
+        "input": "multiline",
+        "points": 80,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "transaction-snapshot-hint-1",
+            "content": "snapshot は loop の外で 1 回だけ取得します。balance だけでなく report の revision も、その同じ object から取ってください。",
+            "penalty": 18
+          }
+        ]
+      },
+      {
+        "id": "transfer",
+        "label": "transfer — 未見の ID・順序・複数 commit でも同じ性質を保つ",
+        "input": "multiline",
+        "points": 50,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "transaction-transfer-hint-1",
+            "content": "account ID や total を覚えず、引数の順に同じ snapshot から読む性質だけを実装してください。writer を止める option は不要です。",
+            "penalty": 16
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Both reads were committed. The total never existed",
+      "shortDescription": "Every account read returns a committed value and the public tests are green. A multi-account report can still return a total that never existed. Audit seed-derived traces, construct the counterexample, and bind the report to one immutable snapshot revision.",
+      "description": "Chapter 2 of cs-foundations. It teaches exactly one leap: **if every read is committed, all reads must describe the same moment**. It uses immutable seed-derived revisions and a deterministic commit schedule, not a real database, SQL dialect, thread, lock wait, or clock.\n\nParticipants edit `build_report(ledger, account_ids)` in `report.py`. The starter calls `read_committed` once per account and presents the last observed revision as the report revision. It looks correct whenever the public schedule places every commit before or after the report. If a transfer commits between reads, it can combine the source's old balance with the destination's new balance.\n\nFour checkpoints total 200 points. `audit` identifies the report that never matched a committed state. `counterexample` assembles a read / commit / read schedule from supplied pieces. `snapshot` captures one non-exclusive snapshot at the beginning and reads every row from it. `transfer` repeats the property with unseen account IDs, orderings, revision gaps, and multiple commits.\n\nHidden properties reject latest-per-row, one snapshot per row, snapshot after the first live read, live reads after a snapshot, correct balances with a false revision, public ID or total constants, refusing reports while a commit is pending, and freezing all writers. The valid repair lets writers progress while binding balances and the report revision to one immutable state.",
+      "instructions": "## Solve in Participant Portal\n\nThis problem is completed in the browser problem editor. You only need to read Python functions, dictionaries, and loops; no database or SQL experience is required.\n\n1. Use **Inspect evidence** to read this deployment's committed revisions, old reports, read order, and candidate transfers.\n2. Enter the `audit` and `counterexample` answers as JSON in the displayed shapes.\n3. Edit `report.py` and select **Run public tests** to check the return shape. The shipped starter is green there, so green alone is not completion evidence.\n4. Submit each checkpoint. Portal sends current code and direct answers through the container prepare API, which binds them to this deployment seed before grading.\n\nDo not solve this by stopping writers. Build every balance and `revision` from the same committed state captured by one snapshot.",
+      "writeup": "## Committed is a fact about one read\n\n`read_committed` promises that a call does not return an uncommitted value. If another transaction can commit between two calls, both calls can keep that promise while observing different revisions.\n\nSuppose revision 10 is A=100 and B=100. Read A as 100. A transaction then moves 10 from A to B and commits revision 11 as A=90 and B=110. Reading B now returns 110. Both reads were committed, but the reported 100+110=210 existed in neither revision.\n\n## What a snapshot adds\n\nA snapshot keeps one immutable revision. Writers can commit revisions 11 and 12 after it is captured; reads through that snapshot still return revision 10 values. The report's `revision` must also come from the snapshot, so values and evidence name the same moment.\n\nTaking a new snapshot per row recreates the original defect under a different API name. Taking the first row live and the rest from a snapshot leaves the first row at another moment. Reading values from a snapshot but using the ledger's live revision makes the evidence false instead.\n\n## Why writers keep moving\n\nFreezing every writer can make rows line up, but changes update progress for a reader's convenience. This contract requires the reader to hold its view steady while writers continue. The repair takes `snapshot()` once, reads every requested account through it, and returns that snapshot's revision and the sum of those balances.\n\n## Why public tests stayed green\n\nThe public schedules place commits before the report, after it, or omit them. In that scope, latest-per-row and one-snapshot return the same output. Green means the schedules the author wrote did not distinguish them. The course asks what property the tests have not yet asked about.",
+      "learningGoals": [
+        "Distinguish one committed read from multiple reads describing one moment",
+        "Identify a report that never existed by comparing immutable revisions and read traces",
+        "Construct a deterministic visibility counterexample from read order and a transfer",
+        "Capture one snapshot at report start and bind balances and revision to that state",
+        "Distinguish freezing writers from keeping a reader's view fixed while writers progress",
+        "Explain what green public tests do not guarantee when they omit a mid-report commit"
+      ],
+      "checks": [
+        {
+          "id": "audit",
+          "label": "audit - name the report that never existed and its observed revisions",
+          "hints": [
+            {
+              "id": "transaction-audit-hint-1",
+              "content": "Every committed state has the same total. Find the report whose row total belongs to none of those states."
+            }
+          ]
+        },
+        {
+          "id": "counterexample",
+          "label": "counterexample - place one commit inside the reads and build the failure",
+          "hints": [
+            {
+              "id": "transaction-counterexample-hint-1",
+              "content": "Find the candidate that moves points from an account read before the cut to one read after it."
+            }
+          ]
+        },
+        {
+          "id": "snapshot",
+          "label": "snapshot - bind every row and the revision to one view",
+          "hints": [
+            {
+              "id": "transaction-snapshot-hint-1",
+              "content": "Take one snapshot outside the loop. Read both balances and the report revision from that same object."
+            }
+          ]
+        },
+        {
+          "id": "transfer",
+          "label": "transfer - keep the property for unseen IDs, orders, and commits",
+          "hints": [
+            {
+              "id": "transaction-transfer-hint-1",
+              "content": "Do not remember account IDs or a total. Preserve only the property of reading the requested order from one snapshot; no writer-stopping option is needed."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
