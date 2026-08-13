@@ -107,7 +107,22 @@ QUESTIONS = {
         "question": (
             "同じ明細を何度も合計しています。 2 つの run が食い違っていることは、何を証明しますか。"
         ),
-        "i18n": {"en": {"question": "The same line items were totalled several times. " "What does a disagreement between two of these runs prove?"}},
+        "answerFormat": (
+            '["<report.reportId>", '
+            '"<order-dependent | missing-rows | duplicate-rows のいずれか 1 つ>"]'
+        ),
+        "i18n": {
+            "en": {
+                "question": (
+                    "The same line items were totalled several times. "
+                    "What does a disagreement between two of these runs prove?"
+                ),
+                "answerFormat": (
+                    '["<report.reportId>", '
+                    '"<one of: order-dependent | missing-rows | duplicate-rows>"]'
+                ),
+            }
+        },
     },
     "audit": {
         "question": (

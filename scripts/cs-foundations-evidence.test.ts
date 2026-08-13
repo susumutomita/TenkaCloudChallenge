@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "bun:test";
@@ -86,6 +87,28 @@ describe("cs-foundations evidence", () => {
         expect((block.question as string).length).toBeGreaterThan(10);
         // Japanese default with an English mirror, the convention metadata.json uses.
         expect(typeof block.i18n?.en?.question).toBe("string");
+      }
+    });
+
+    it(`${problem}: every direct-answer checkpoint states the shape it accepts`, () => {
+      const { portal } = surfaces(problem, serverDir);
+      const metadata = JSON.parse(
+        readFileSync(join(ROOT, "challenges", problem, "metadata.json"), "utf8"),
+      ) as { scoring: { checks: { id: string }[] } };
+      const graded = new Set(metadata.scoring.checks.map((check) => check.id));
+      // Only blocks that are themselves a checkpoint. An orientation block that is read
+      // but never submitted has no shape to declare, and `environment` is always the
+      // pass phrase pasted verbatim.
+      const answered = Object.keys(portal).filter(
+        (name) => name !== "environment" && graded.has(name),
+      );
+      expect(answered.length).toBeGreaterThan(0);
+      for (const name of answered) {
+        const block = portal[name] as Record<string, any>;
+        // Without this the verdict vocabulary is unguessable: these checkpoints compare
+        // against one exact string, and three of them never published the alternatives.
+        expect(typeof block.answerFormat).toBe("string");
+        expect(typeof block.i18n?.en?.answerFormat).toBe("string");
       }
     });
 
