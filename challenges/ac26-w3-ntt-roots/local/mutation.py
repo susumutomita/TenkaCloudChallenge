@@ -1,135 +1,112 @@
-"""Author-side check: break the reference on purpose and confirm the hidden tests notice.
-
-The two that matter most are the ones a working implementation is most likely to
-contain: computing the inverse by Fermat's little theorem (fine on a prime, silently
-wrong on a composite) and reducing only at the end (fine until a product overflows a
-comparison the tests make).
-"""
+"""Break the reference nine ways and require the hidden properties to notice."""
 
 from __future__ import annotations
 
 import sys
+import types
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from tests.hidden import check_field  # noqa: E402
+from tests.hidden.check_ntt import run
 
-REFERENCE = (ROOT / "reference" / "field.py").read_text(encoding="utf-8")
+REFERENCE = (Path(__file__).parent / "reference" / "ntt.py").read_text(encoding="utf-8")
 SEED = "mutation-suite-seed"
 
-MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
+MUTATIONS: list[tuple[str, str, str]] = [
     (
-        "inverts by Fermat's little theorem, so composites get a wrong answer",
-        [
-            (
-                "        g, s, _t = egcd(self.value, self.field.modulus)\n"
-                "        # gcd != 1 is the only honest answer for a composite modulus. Fermat's little\n"
-                "        # theorem would return a number here instead of raising.\n"
-                "        if g != 1:\n"
-                "            raise NotInvertible(\"element shares a factor with the modulus\")\n"
-                "        return FieldElement(self.field, s)",
-                "        return FieldElement(self.field, pow(self.value, self.field.modulus - 2,"
-                " self.field.modulus))",
-            )
-        ],
+        "accepts any element whose order merely divides n",
+        "    if pow(candidate, order, prime) != 1:\n"
+        "        return False\n"
+        "    return all(pow(candidate, order // q, prime) != 1 for q in _prime_factors(order))",
+        "    return pow(candidate, order, prime) == 1",
     ),
     (
-        "returns zero as its own inverse instead of raising",
-        [
-            (
-                '        if self.value == 0:\n            raise NotInvertible("zero has no multiplicative inverse")',
-                "        if self.value == 0:\n            return FieldElement(self.field, 0)",
-            )
-        ],
+        "keeps the textbook base-3 rule and never checks the result",
+        "    exponent = (prime - 1) // order\n"
+        "    for base in range(2, prime):\n"
+        "        candidate = pow(base, exponent, prime)\n"
+        "        if has_order(candidate, order, prime):\n"
+        "            return candidate\n"
+        "    return None",
+        "    return pow(3, (prime - 1) // order, prime)",
     ),
     (
-        "returns the Bezout coefficient even when the gcd is not 1",
-        [('        if g != 1:\n            raise NotInvertible("element shares a factor with the modulus")', "        pass")],
+        "checks only the smallest prime factor of n",
+        "    return all(pow(candidate, order // q, prime) != 1 for q in _prime_factors(order))",
+        "    return pow(candidate, order // min(_prime_factors(order)), prime) != 1",
     ),
     (
-        "does not normalize on construction",
-        [("        self.value = value % field.modulus", "        self.value = value")],
+        "drops the 1/n factor from the inverse",
+        "        coefficients.append(_evaluate(parsed, point, prime) * inverse_order % prime)",
+        "        coefficients.append(_evaluate(parsed, point, prime))",
     ),
     (
-        "forgets the reduction in multiplication only",
-        [
-            (
-                "    def __mul__(self, other: \"FieldElement\") -> \"FieldElement\":\n"
-                "        return FieldElement(self.field, self.value * self._same(other).value)",
-                "    def __mul__(self, other: \"FieldElement\") -> \"FieldElement\":\n"
-                "        out = FieldElement(self.field, 0)\n"
-                "        out.value = self.value * self._same(other).value\n"
-                "        return out",
-            )
-        ],
+        "walks the inverse forwards instead of backwards",
+        "    inverse_omega = pow(omega, prime - 2, prime)",
+        "    inverse_omega = omega",
     ),
     (
-        "allows elements of different moduli to be combined",
-        [
-            (
-                '        if not isinstance(other, FieldElement) or other.field.modulus != self.field.modulus:\n'
-                '            raise FieldMismatch("elements come from different moduli")',
-                "        pass",
-            )
-        ],
+        "trusts the omega it is handed",
+        "    if type(omega) is not int or not has_order(omega, order, prime):\n"
+        '        return _error("invalid_omega")',
+        "    if type(omega) is not int or omega % prime == 0:\n"
+        '        return _error("invalid_omega")',
     ),
     (
-        "reports a non-invertible element for a prime modulus",
-        [("        if g != 1:\n            return candidate", "        if g != 1 or candidate == 2:\n            return candidate")],
+        "lets the order skip the divisibility rule",
+        '    if (prime - 1) % order != 0:\n        return "invalid_order"',
+        '    if False:\n        return "invalid_order"',
     ),
     (
-        "emits only the last row of the extended Euclidean trace",
-        [
-            (
-                '        rows.append({"q": q, "r": old_r, "s": old_s, "t": old_t})\n    return rows',
-                '        rows.append({"q": q, "r": old_r, "s": old_s, "t": old_t})\n    return rows[-1:]',
-            )
-        ],
+        "evaluates at 0, 1, 2, ... instead of the powers of omega",
+        "        point = point * omega % prime",
+        "        point = (point + 1) % prime",
     ),
-)
+    (
+        "accepts a coefficient from outside the field",
+        "        if type(item) is not int or not 0 <= item < prime:",
+        "        if type(item) is not int:",
+    ),
+]
 
 
-def _load(source: str):
-    import types
-
+def _load(source: str) -> types.ModuleType:
     module = types.ModuleType("mutant")
-    exec(compile(source, "<mutant>", "exec"), module.__dict__)  # noqa: S102 - author tool
+    module.__dict__["__file__"] = "<mutant>"
+    exec(compile(source, "<mutant>", "exec"), module.__dict__)  # noqa: S102 - author-only test
     return module
 
 
 def main() -> int:
-    baseline = check_field.run(_load(REFERENCE), SEED)
+    baseline = run(_load(REFERENCE), SEED)
     if baseline:
-        print(f"FAIL reference implementation does not pass the hidden tests: {baseline}")
+        print("the reference does not pass its hidden suite:")
+        for failure in baseline:
+            print(f"  {failure}")
         return 1
-    print("PASS reference implementation passes the hidden tests")
+    print("reference: passes")
 
-    survivors = 0
-    for name, substitutions in MUTATIONS:
-        missing = [needle for needle, _ in substitutions if needle not in REFERENCE]
-        if missing:
-            print(f"SURVIVED {name} (the mutation no longer applies to the reference)")
-            survivors += 1
+    survivors: list[str] = []
+    for name, before, after in MUTATIONS:
+        if before not in REFERENCE:
+            print(f"BROKEN {name}: mutation target is missing")
+            survivors.append(name)
             continue
-        mutated = REFERENCE
-        for needle, replacement in substitutions:
-            mutated = mutated.replace(needle, replacement)
         try:
-            failures = check_field.run(_load(mutated), SEED)
-        except Exception as error:  # noqa: BLE001 - a mutation that crashes is caught
-            failures = [f"raised {type(error).__name__}"]
+            failures = run(_load(REFERENCE.replace(before, after, 1)), SEED)
+        except Exception as error:  # noqa: BLE001 - a crashing mutant is killed
+            failures = [type(error).__name__]
         if failures:
-            print(f"KILLED {name} ({failures[0]})")
+            print(f"killed {name}")
         else:
             print(f"SURVIVED {name}")
-            survivors += 1
+            survivors.append(name)
 
     if survivors:
-        print(f"\n{survivors} mutation(s) survived. The hidden tests have a hole.")
+        print(f"{len(survivors)} mutation(s) survived")
         return 1
-    print(f"\nAll {len(MUTATIONS)} mutations killed.")
+    print(f"all {len(MUTATIONS)} mutations killed.")
     return 0
 
 
