@@ -2,7 +2,7 @@
 #
 #   make test             run the public tests
 #   make test-one ID=...  re-run one public test by name substring
-#   make inspect          print your fixtures and the trace to reason about
+#   make inspect          print this deployment's fields and one worked transform
 #   make reset            restore starter/ to its shipped state
 #   make reference-test   authors / CI only: hidden + mutation suites, inside the image
 #
@@ -16,11 +16,6 @@ IMAGE := ac26-w3-ntt-roots
 # which keeps them out of the checkout rather than out of reach -- local mode is
 # honor-system verification. See TEMPLATE.md "Assurance scope".
 RUN := docker run --rm -e FLAG_SEED=$(FLAG_SEED) \
-	-v $(CURDIR)/local/starter:/problem/starter:ro $(IMAGE)
-
-# `make inspect A=17 P=101` traces any pair. The env flags have to precede the image
-# name, so this cannot reuse $(RUN) -- docker would read them as the command.
-RUN_INSPECT := docker run --rm -e FLAG_SEED=$(FLAG_SEED) -e A=$(A) -e P=$(P) \
 	-v $(CURDIR)/local/starter:/problem/starter:ro $(IMAGE)
 
 .PHONY: build test test-one inspect reset reference-test
@@ -37,7 +32,7 @@ test-one: build
 
 # A and P are optional; without them you get your own fixture's trace.
 inspect: build
-	$(RUN_INSPECT) python show.py
+	$(RUN) python show.py
 
 reset:
 	# The whole directory, not a named file: a problem may ship more than one

@@ -84,11 +84,58 @@ print(json.dumps(res))
     expect(output).not.toContain("SURVIVED");
   });
 
-  it("keeps the answer and the hidden properties out of the participant image", () => {
+  it("keeps the author-only artifacts out of the participant stage", () => {
+    // This assertion used to split on `FROM base AS participant` / `FROM base AS
+    // verifier`, markers this Dockerfile does not contain. Both splits missed, the
+    // section under test was the empty string, and every `not.toContain` passed while
+    // inspecting nothing. Slice on the markers that are actually there, and fail if the
+    // slice is empty, so a stage rename cannot make this silent again.
     const dockerfile = readFileSync(join(LOCAL, "Dockerfile"), "utf8");
-    const participant = (dockerfile.split("FROM base AS participant")[1] ?? "").split("FROM base AS verifier")[0] as string;
-    for (const forbidden of ["reference/", "tests/hidden/", "mutation.py"]) {
-      expect(participant).not.toContain(forbidden);
+    const afterParticipant = dockerfile.split(/^FROM .* AS participant$/m)[1];
+    expect(afterParticipant, "no participant stage found").toBeDefined();
+    const participant = (afterParticipant ?? "").split(/^FROM participant AS author$/m)[0] ?? "";
+    expect(participant.trim().length).toBeGreaterThan(0);
+    expect(participant).toContain("COPY starter/");
+
+    // Read the COPY sources rather than the section's text: the stage's own comment
+    // explains what it deliberately leaves out, so a substring search over the prose
+    // matches the word "reference/" in the explanation and says the opposite.
+    const copied = [...participant.matchAll(/^COPY\s+(?:--\S+\s+)*(\S+)/gmu)].map((m) => m[1]);
+    expect(copied).toContain("starter/");
+    // `reference/` and `mutation.py` are the author-only artifacts, the same pair
+    // scripts/author-artifact-separation.test.ts enforces across every problem.
+    for (const forbidden of ["reference/", "mutation.py"]) {
+      expect(copied).not.toContain(forbidden);
     }
+  });
+
+  it("does not hand the order check to the learner in the starter", () => {
+    // The gap this problem is built on is "the order divides n" versus "the order is n".
+    // A starter that already contains the second test leaves nothing to work out, which
+    // is what it shipped with: a complete `has_order`, docstring and all.
+    const starter = readFileSync(join(LOCAL, "starter", "ntt.py"), "utf8");
+    expect(starter).not.toContain("has_order");
+    expect(starter).not.toContain("_prime_factors");
+    // The reference does contain it; asserting that keeps this from passing because the
+    // whole problem was deleted.
+    const reference = readFileSync(join(LOCAL, "reference", "ntt.py"), "utf8");
+    expect(reference).toContain("def has_order");
+  });
+
+  it("ships an inspect path about this problem", () => {
+    // Both files started as copies of ac26-w3-field-inverse's and still described
+    // extended Euclid over prime and composite moduli, so `make inspect` taught a
+    // different problem than the one being graded.
+    const fixtures = readFileSync(join(LOCAL, "fixtures", "generate.py"), "utf8");
+    const show = readFileSync(join(LOCAL, "show.py"), "utf8");
+    for (const foreign of ["egcd", "composite_modulus", "non_invertible"]) {
+      expect(fixtures).not.toContain(foreign);
+      expect(show).not.toContain(foreign);
+    }
+    // ...and the participant image must still not be able to derive a primitive root,
+    // which is the answer. The worked example carries omega as a written-out constant.
+    expect(fixtures).not.toContain("def primitive_root_of_unity");
+    expect(fixtures).not.toContain("def has_order");
+    expect(fixtures).toContain("WORKED_EXAMPLE");
   });
 });

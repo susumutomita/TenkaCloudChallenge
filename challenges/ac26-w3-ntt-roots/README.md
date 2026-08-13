@@ -31,9 +31,9 @@ At `p=13, n=4` every evaluation point collapses onto 1. The return value is stil
 inside the field, and every public test still passes, because the public tests use the pairs in
 the top half of that table.
 
-`pow(w, n, p) == 1` cannot tell these apart: it is satisfied by every element of every smaller
-subgroup, 1 included. Only `pow(w, n // q, p) != 1` for each prime factor `q` of `n` pins the
-order to `n` itself.
+`pow(w, n, p) == 1` cannot tell these apart. It is satisfied by every element of every smaller
+subgroup, 1 included, so it says "the order divides `n`" and never "the order is `n`". Closing
+that gap is the exercise; nothing in the image does it for you.
 
 ## What you implement
 
@@ -55,7 +55,14 @@ textbook rule gets wrong**, so a submission that kept the rule fails for certain
 luck. The checker builds its expectations from the definition of multiplicative order, not from
 the reference.
 
-## Author commands
+## Commands
+
+```
+make build     build the participant image
+make test      run the public tests (the shipped starter passes all of them)
+make inspect   print this deployment's fields and one worked transform
+make reset     restore starter/ to its shipped state
+```
 
 ## Assurance scope
 
@@ -78,6 +85,8 @@ Zero. No cloud account, no AWS resources.
 
 ## For authors
 
-`make reference-test` runs the mutation suite: eight broken implementations. The Fermat-inverse
-one passes every prime checkpoint, and the last-row-only trace survived the original checkpoint
-and is why it now compares the whole sequence.
+`make reference-test` runs the mutation suite: nine broken implementations, all killed. Two of
+them are the reason the hidden phases are written the way they are. The one that keeps the
+textbook rule and never checks the result is the defect the shipped starter carries, and it
+survives every public test. The one that accepts any omega whose order merely divides `n`
+passes the forward transform and only shows up on the inverse.

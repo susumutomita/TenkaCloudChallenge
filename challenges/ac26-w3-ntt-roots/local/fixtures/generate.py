@@ -1,109 +1,96 @@
-"""Primes, composites, and the element sets the hidden tests exercise, from FLAG_SEED.
+"""Seeded orientation material for the roots-of-unity lab (stdlib only).
 
-Two families of modulus, and the difference between them is the point:
+What a learner needs before writing code is the shape of the problem: which fields the
+transform is defined over, which orders are legal in each of them, and what "evaluate at
+the powers of omega" produces concretely.
 
-  * a **prime** modulus makes every non-zero element invertible, so `F_p` is a field;
-  * a **composite** modulus does not. Any element sharing a factor with the modulus has
-    no inverse at all, and the extended Euclidean algorithm says so by returning a gcd
-    that is not 1 -- which an implementation that computes inverses by Fermat's little
-    theorem never notices, because `pow(a, n-2, n)` returns *something* regardless.
-
-Toy sizes: three-digit primes, small enough that a learner can check any inverse by hand
-and large enough that guessing is not a strategy. Not a cryptographic parameter set.
+What is deliberately *not* here is any way to decide whether a given element has the
+order it is supposed to have. That decision is the problem. The worked example below is
+a fixed triple with omega written out as a constant rather than derived, so nothing in
+the participant image computes a primitive root.
 """
 
 from __future__ import annotations
 
 import hashlib
 
-PRIMES = (101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179)
-# Composites with small prime factors, so a non-invertible element is easy to construct
-# and easy to check.
-COMPOSITES = (91, 95, 111, 115, 119, 121, 123, 129, 133, 141, 143, 145)
+#: The fields the transform is defined over. Toy sizes: small enough to check a claim by
+#: hand, large enough that the orders dividing p-1 are varied rather than all powers of
+#: two. The hidden phases draw from this family and from orders the public tests never use.
+PRIMES = (13, 17, 29, 41, 73, 97, 113, 193, 257, 337, 641, 769, 1009, 1153, 3457, 7681)
 
-
-def _stream(seed: str, label: str) -> list[int]:
-    out: list[int] = []
-    counter = 0
-    while len(out) < 128:
-        out.extend(hashlib.sha256(f"{seed}:{label}:{counter}".encode()).digest())
-        counter += 1
-    return out
-
-
-def _pick(s: list[int], i: int, low: int, high: int) -> int:
-    return low + ((s[i % 120] * 256 + s[(i + 1) % 120]) % (high - low + 1))
-
-
-def prime_modulus(seed: str, label: str = "public") -> int:
-    return PRIMES[_stream(seed, f"prime:{label}")[0] % len(PRIMES)]
-
-
-def composite_modulus(seed: str, label: str = "public") -> int:
-    return COMPOSITES[_stream(seed, f"composite:{label}")[0] % len(COMPOSITES)]
-
-
-def sample_values(seed: str, label: str, modulus: int, count: int = 12) -> list[int]:
-    """A spread of raw integers, deliberately including the awkward ones.
-
-    Negative values and values past the modulus are in here on purpose: "integer" and
-    "field element" are different things, and normalization is where that difference
-    first shows up.
-    """
-    s = _stream(seed, f"values:{label}")
-    generated = [_pick(s, 2 * i, -3 * modulus, 3 * modulus) for i in range(count)]
-    return [0, 1, modulus, modulus - 1, -1, -modulus, *generated]
-
-
-def non_invertible(seed: str, modulus: int) -> int:
-    """A non-zero element of Z_n with no inverse, for a composite n.
-
-    Returns the smallest such element, so the counterexample a learner submits can be
-    checked against a definite answer rather than a set.
-    """
-    for candidate in range(2, modulus):
-        if _gcd(candidate, modulus) != 1:
-            return candidate
-    raise ValueError(f"{modulus} has no non-invertible non-zero element; it is prime")
-
-
-def _gcd(a: int, b: int) -> int:
-    while b:
-        a, b = b, a % b
-    return a
-
-
-def egcd(a: int, b: int) -> tuple[int, int, int]:
-    """(g, s, t) with a*s + b*t == g == gcd(a, b). The trace the learner reproduces."""
-    old_r, r = a, b
-    old_s, s = 1, 0
-    old_t, t = 0, 1
-    while r:
-        q = old_r // r
-        old_r, r = r, old_r - q * r
-        old_s, s = s, old_s - q * s
-        old_t, t = t, old_t - q * t
-    return old_r, old_s, old_t
-
-
-def egcd_rows(a: int, b: int) -> list[dict[str, int]]:
-    """The full step sequence. Floor division makes it deterministic, so a learner's
-    trace must match it row for row -- which is what stops a one-row table that happens
-    to satisfy Bezout from passing as a trace."""
-    rows: list[dict[str, int]] = []
-    old_r, r = a, b
-    old_s, s = 1, 0
-    old_t, t = 0, 1
-    while r:
-        q = old_r // r
-        old_r, r = r, old_r - q * r
-        old_s, s = s, old_s - q * s
-        old_t, t = t, old_t - q * t
-        rows.append({"q": q, "r": old_r, "s": old_s, "t": old_t})
-    return rows
+#: The largest order the contract accepts in this lab's parameter range.
+MAX_ORDER = 128
 
 
 def health_token(seed: str) -> str:
-    return hashlib.sha256(
-        f"health:{seed}:{prime_modulus(seed)}:{composite_modulus(seed)}".encode()
-    ).hexdigest()[:16]
+    """A per-deploy string, so a printed transcript can be tied to one deployment.
+
+    No checkpoint scores it; this problem is graded entirely on submitted code.
+    """
+    return f"ntt-roots-{hashlib.sha256(seed.encode()).hexdigest()[:12]}"
+
+
+def orders_for(prime: int) -> list[int]:
+    """Every order the contract accepts over `prime`: the divisors of p-1, ascending.
+
+    An order is legal exactly when it divides p-1, because that is when the multiplicative
+    group has a subgroup of that size at all. Which elements sit in it is a separate
+    question, and not one this module answers.
+    """
+    return [d for d in range(1, min(prime - 1, MAX_ORDER) + 1) if (prime - 1) % d == 0]
+
+
+def lab_fields(seed: str, count: int = 4) -> list[dict[str, object]]:
+    """A seed-derived sample of the family, with the legal orders in each field.
+
+    Orientation only: knowing which orders are legal is the definition, not the answer.
+    Nothing here says which of them the textbook rule gets wrong.
+    """
+    digest = hashlib.sha256(f"{seed}:fields".encode()).digest()
+    picked, seen = [], set()
+    for index in range(len(PRIMES)):
+        prime = PRIMES[(digest[index % len(digest)] + index) % len(PRIMES)]
+        if prime in seen:
+            continue
+        seen.add(prime)
+        picked.append({"prime": prime, "legalOrders": orders_for(prime)})
+        if len(picked) == count:
+            break
+    return picked
+
+
+def evaluate(coefficients: list[int], point: int, prime: int) -> int:
+    """f(point) mod prime, by Horner. The mechanics of the transform, not its hard part."""
+    total = 0
+    for coefficient in reversed(coefficients):
+        total = (total * point + coefficient) % prime
+    return total
+
+
+#: One worked example, identical on every deploy. `omega` is a written-out constant, not
+#: something this module derives -- deriving it would put a working
+#: `primitive_root_of_unity` inside the participant image, which is the answer.
+#:
+#: (p=17, n=4, omega=13) is one of the pairs the public tests already use, so it reveals
+#: nothing the learner cannot read off `tests/public/test_ntt.py`.
+WORKED_EXAMPLE = {
+    "prime": 17,
+    "order": 4,
+    "omega": 13,
+    "coefficients": [1, 2, 3, 4],
+}
+
+
+def worked_example() -> dict[str, object]:
+    """The example expanded: the evaluation points, and the value at each of them."""
+    prime = int(WORKED_EXAMPLE["prime"])
+    order = int(WORKED_EXAMPLE["order"])
+    omega = int(WORKED_EXAMPLE["omega"])
+    coefficients = list(WORKED_EXAMPLE["coefficients"])  # type: ignore[arg-type]
+    points = [pow(omega, i, prime) for i in range(order)]
+    return {
+        **WORKED_EXAMPLE,
+        "points": points,
+        "values": [evaluate(coefficients, point, prime) for point in points],
+    }

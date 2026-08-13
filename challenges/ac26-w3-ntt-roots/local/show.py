@@ -1,12 +1,11 @@
-"""`make inspect` — your moduli, and a worked extended-Euclid trace.
+"""`make inspect` — the fields this deployment draws from, and one worked transform.
 
-    make inspect              your fixtures and a trace for a default value
-    make inspect A=17 P=101   the trace for any pair you like
+    make inspect
 
-The trace is here to make the algorithm legible. It is emphatically not a
-constant-time implementation: it branches on the values and its running time depends
-on them, which is fine for learning arithmetic and disqualifying for handling a real
-secret key.
+This prints orientation material only: which primes the hidden phases draw from, which
+orders are legal in each, and a single worked evaluation so the shape of the answer is
+concrete. It does not print which parameters the starter's rule gets wrong, and nothing
+it imports can decide that -- see `fixtures/generate.py`.
 """
 
 from __future__ import annotations
@@ -17,46 +16,44 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from fixtures.generate import (
-    composite_modulus,
-    egcd,
-    egcd_rows,
-    health_token,
-    non_invertible,
-    prime_modulus,
-)
+from fixtures.generate import PRIMES, health_token, lab_fields, worked_example
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 
-def main(argv: list[str]) -> None:
-    p = prime_modulus(SEED)
-    n = composite_modulus(SEED)
-    a = int(os.environ.get("A") or (argv[0] if argv else 0)) or (p // 3 + 1)
-    modulus = int(os.environ.get("P") or (argv[1] if len(argv) > 1 else 0)) or p
+def main() -> None:
+    print("deployment       :", health_token(SEED))
+    print("field family     :", ", ".join(str(prime) for prime in PRIMES))
+    print()
+    print("An order n is legal over p exactly when n divides p-1. A sample of this")
+    print("deployment's family, with the orders the contract accepts in each:")
+    print()
+    for field in lab_fields(SEED):
+        orders = field["legalOrders"]
+        assert isinstance(orders, list)
+        rendered = ", ".join(str(order) for order in orders)
+        print(f"  p = {field['prime']:<5} legal orders: {rendered}")
+    print()
 
-    print("health token     :", health_token(SEED))
-    print("prime modulus    :", p)
-    print("composite modulus:", n, f"(smallest non-invertible element: {non_invertible(SEED, n)})")
+    example = worked_example()
+    prime, order, omega = example["prime"], example["order"], example["omega"]
+    coefficients = example["coefficients"]
+    assert isinstance(coefficients, list)
+    points, values = example["points"], example["values"]
+    assert isinstance(points, list) and isinstance(values, list)
+
+    print(f"A worked transform, the same on every deployment: p = {prime}, n = {order}")
+    print(f"  f(x)           : {coefficients} (constant term first)")
+    print(f"  omega          : {omega}")
+    print("   i |  omega^i | f(omega^i)")
+    for index, (point, value) in enumerate(zip(points, values, strict=True)):
+        print(f"   {index} | {point:8d} | {value:10d}")
     print()
-    print(f"extended Euclid for a = {a}, modulus = {modulus}")
-    print(f"  normalized a   : {a % modulus}")
-    print("   step |     q |     r |     s |     t")
-    for index, row in enumerate(egcd_rows(a % modulus, modulus)):
-        print(f"   {index:4d} | {row['q']:5d} | {row['r']:5d} | {row['s']:5d} | {row['t']:5d}")
-    g, s, _t = egcd(a % modulus, modulus)
-    print(f"  gcd            : {g}")
-    if g == 1:
-        candidate = s % modulus
-        print(f"  inverse         : {candidate}")
-        print(f"  verification    : {a % modulus} * {candidate} mod {modulus}"
-              f" = {(a * candidate) % modulus}")
-    else:
-        print(f"  no inverse      : gcd is {g}, not 1")
+    print(f"  the {order} points are distinct, which is what makes this invertible.")
     print()
-    print("This trace branches on its inputs and its running time depends on them.")
-    print("It is for reading the algorithm, not for handling a real key.")
+    print("The hidden phases use primes and orders that are not in the public tests.")
+    print("Whether the omega your code picks is the right one for those is the problem.")
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    main()

@@ -6,7 +6,10 @@ The public contract is ``transform(coefficients, prime, order)`` and
 Every public test passes. The parameter sets they use are ones where the rule below
 happens to land on an element of the right order.
 
-TODO: omega comes out of a fixed rule and is used without checking what it actually is.
+TODO: omega comes out of a fixed rule and is used without checking what it actually is,
+and `inverse_transform` accepts whatever omega it is handed. Both are the same missing
+idea. Whatever you add to establish it, add it here -- nothing else in the image
+computes it for you.
 """
 
 from __future__ import annotations
@@ -29,35 +32,12 @@ def _is_prime(value: int) -> bool:
     return True
 
 
-def _prime_factors(value: int) -> set[int]:
-    factors: set[int] = set()
-    remaining, candidate = value, 2
-    while candidate * candidate <= remaining:
-        while remaining % candidate == 0:
-            factors.add(candidate)
-            remaining //= candidate
-        candidate += 1
-    if remaining > 1:
-        factors.add(remaining)
-    return factors
-
-
-def has_order(candidate: int, order: int, prime: int) -> bool:
-    """True when `candidate` has multiplicative order exactly `order` in F_prime.
-
-    Both halves are needed. ``candidate ** order == 1`` on its own is satisfied by every
-    element of every *smaller* subgroup, 1 included, so a rule that checks only that will
-    happily hand back an omega whose powers repeat.
-    """
-    if candidate % prime == 0:
-        return False
-    if pow(candidate, order, prime) != 1:
-        return False
-    return all(pow(candidate, order // q, prime) != 1 for q in _prime_factors(order))
-
-
 def primitive_root_of_unity(prime: int, order: int) -> int | None:
-    """The textbook one-liner: raise a small base to (p-1)/order."""
+    """The textbook one-liner: raise a small base to (p-1)/order.
+
+    TODO: this returns an element whose order *divides* `order`. Nothing here decides
+    whether it is `order` itself, and the two are not the same thing.
+    """
     if order == 1:
         return 1
     if (prime - 1) % order != 0:
