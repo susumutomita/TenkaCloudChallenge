@@ -86,7 +86,7 @@ export function classifyProblemChanges(
   const added = new Set<string>();
   const promoted = new Set<string>();
   const contractOnly = new Set<string>();
-  const titleScope = /^(?:feat|test)\\(([a-z0-9][a-z0-9-]+)\\):/u.exec(pullRequestTitle)?.[1];
+  const titleScope = /^(?:feat|test)\(([a-z0-9][a-z0-9-]+)\):/u.exec(pullRequestTitle)?.[1];
 
   for (const line of nameStatus.split("\n")) {
     if (line.trim().length === 0) continue;
