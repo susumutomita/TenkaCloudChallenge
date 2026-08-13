@@ -20,6 +20,7 @@ from urllib.request import Request, urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import show
 from participant.workbench import PortalEditorSupport
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -74,6 +75,19 @@ _WORKBENCH = PortalEditorSupport(
     max_output_bytes=MAX_OUTPUT_BYTES,
     limit_fn=_limits,
 )
+
+
+def inspect_payload(seed: str) -> dict[str, object]:
+    """Structured evidence, rather than the shared workbench's stdout capture.
+
+    `PortalEditorSupport.inspect_payload` runs `show.py` and returns its text as one
+    `output` string. That is fine for a problem whose inspect view is a transcript, but
+    here it left the browser with an English-only blob it could not render as evidence
+    and could not localize. Calling `show.evidence` directly keeps the two surfaces
+    identical -- `scripts/cs-foundations-evidence.test.ts` asserts exactly that -- while
+    giving the Portal the same JSON the rest of cs-foundations serves.
+    """
+    return show.evidence(seed)
 
 
 def failed_verdict(body: dict[str, object]) -> dict[str, object]:
@@ -134,7 +148,7 @@ class Handler(BaseHTTPRequestHandler):
             self._respond(200, _WORKBENCH.config_payload())
             return
         if path == "/api/inspect":
-            self._respond(200, _WORKBENCH.inspect_payload())
+            self._respond(200, inspect_payload(SEED))
             return
         if path == "/api/starter":
             self._respond(200, _WORKBENCH.starter_payload())

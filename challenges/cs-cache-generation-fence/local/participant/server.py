@@ -22,7 +22,8 @@ from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fixtures.generate import audit_trace, health_token, race_evidence
+import show
+from fixtures.generate import health_token
 
 ROOT = Path(__file__).resolve().parents[1]
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
@@ -100,18 +101,17 @@ def config_payload() -> dict[str, object]:
 
 
 def inspect_payload(seed: str) -> dict[str, object]:
-    rows = audit_trace(seed)
-    return {
-        "environment": {
-            "python": sys.version.split()[0],
-            "healthToken": health_token(seed),
-        },
-        "race": race_evidence(seed),
-        "audit": {
-            "rule": "A cache_hit is stale when its revision is lower than the latest earlier origin_commit for that key.",
-            "events": [{"index": index, **row} for index, row in enumerate(rows)],
-        },
-    }
+    """The browser's evidence view, built from the same function `show.py` prints.
+
+    Rebuilding it here by hand is what silently dropped the question text and the
+    vocabulary from the Portal, so this defers to `show.evidence` and only adds the
+    interpreter version, which the CLI has no reason to print.
+    """
+    payload = show.evidence(seed)
+    environment = payload["environment"]
+    assert isinstance(environment, dict)
+    payload["environment"] = {"python": sys.version.split()[0], **environment}
+    return payload
 
 
 def _submission_sources(files: object) -> dict[str, str] | None:

@@ -418,3 +418,48 @@ def health_token(seed: str) -> str:
     assert isinstance(claims, dict)
     payload = f"{claims['tenant']}:{claims['nbf']}:{claims['exp']}"
     return hashlib.sha256(f"health:{seed}:{payload}".encode()).hexdigest()[:16]
+
+
+# One source for the participant-facing wording, read by both `show.py` and the Portal's
+# `/api/inspect`. The evidence and the question travel together so the browser cannot
+# end up showing a decision log with nothing said about what to do with it.
+QUESTIONS = {
+    "window": {
+        "question": (
+            "この token が受け付けられる最初の now と最後の now を答えてください。 "
+            "nbf はその token が使える最初の瞬間、exp は使えなくなる瞬間です。 "
+            "この 2 文は同じ比較を使っていません。"
+        ),
+        "answerFormat": "[<first>, <last>] (整数 2 つ)",
+        "i18n": {
+            "en": {
+                "question": (
+                    "Give the first and the last `now` at which this token is accepted. "
+                    "`nbf` is the first instant the token is usable and `exp` is when it "
+                    "stops being usable. Those two sentences do not use the same comparison."
+                ),
+                "answerFormat": "[<first>, <last>] (two integers)",
+            }
+        },
+    },
+    "audit": {
+        "question": (
+            "この gateway は期限切れの token を拒否し、payload を書き換えた token を拒否し、 "
+            "token が持たない action を拒否します。 数か月動いていて苦情も出ていません。 "
+            "それでも allow した行の中に、正しい gateway なら拒否したはずのものがあります。 "
+            "その行番号を挙げてください。 keys は渡してあるので、MAC は自分で計算し直せます。"
+        ),
+        "answerFormat": "[<index>, ...] (昇順、重複なし)",
+        "i18n": {
+            "en": {
+                "question": (
+                    "This gateway refuses expired tokens, refuses tokens whose payload was "
+                    "edited, and refuses actions the token does not carry. It has run for "
+                    "months without a complaint. Some of the rows it allowed should not have "
+                    "been allowed. Name them. The keys are yours, so recompute the MACs."
+                ),
+                "answerFormat": "[<index>, ...] (ascending, no duplicates)",
+            }
+        },
+    },
+}
