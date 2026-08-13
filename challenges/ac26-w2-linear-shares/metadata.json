@@ -34,8 +34,8 @@
   "estimatedDuration": "35-50 分",
   "shortDescription": "share に対する操作のうち、いくつかは誰とも話さずに各自の手元だけでできる。どれがそうで、どれが違うのか。1 つだけ、素直にやると間違える。",
   "description": "Week 2 の 2 問目。加法的 share に対する線形操作を実装し、通信が要る操作と要らない操作を区別する。MPC が実用になるのは線形操作が通信不要だからで、その境界を手を動かして引く。\n\nadd-constant では、全 party が自分の share に c を足すと総和が x + n*c になる。正しくは 1 party だけが畳み込む。hidden test は複数設定を回し、この典型的な誤りを名指しで落とす。\n\nno-communication checkpoint は 8 操作の catalog から seed ごとにローカル 2・対話型 2 を選んで並べ替える。round 数の完全一致ではなく 0 か非 0 かで採点し、固定の 4 行や定数表を別 deploy へ持ち越せない。\n\nWeek 2 の教材は pinned commit 時点で未公開のため courseAlignment.sources は持たず、status は draft のままにする (#219 が公開を検出した時点で確定する)。",
-  "instructions": "## Participant Portal で解く\n\nParticipant Portal で問題を起動すると、問題文と同じ画面に問題エディタが表示されます。\n「証拠を調べる」で deploy 固有の fixture と公開された証拠を確認し、starter ソースを編集して\n「公開テストを実行」を押します。コード以外の checkpoint は、証拠と実験結果から回答欄を\n埋めてください。object / array / number は JSON で入力します。\n\n各 checkpoint の提出ボタンは、現在のエディタ内容と回答欄を container の prepare API へ送り、\n生成された値をそのまま採点へ渡します。画面を移動したり提出値をコピーしたりする必要はありません。\n直接回答はこの deploy の seed に結び付くため、別の起動で作った値や概念名の暗記だけでは合格できません。\n",
-  "writeup": "## 線形操作が通信不要であること\n\n加法的 share では、share 同士の加減算・符号反転・公開定数倍を各 party が自分の share だけで実行できる。乗算・二乗・比較のような非線形操作は対話を要する。\n\n## add-constant だけが違う理由\n\n公開定数 c を全 party が足すと総和は x + n*c になる。正しくは 1 party だけが c を畳み込む。\n\n## round 数ではなく 0 か非 0 か\n\nno-communication は catalog から seed ごとに 4 操作を選ぶ。対話型 protocol の正確な round 数は方式に依存するため、0 か非 0 かだけを採点する。\n\n## 次につながるところ\n\n非線形操作の対話を前処理へ追い出せないか、という問いが Beaver triple につながる。",
+  "instructions": "## はじめに\n\n前の問題で作った **加法的秘密分散** の上で計算をします。復習すると、秘密 x は n 人に配られていて、`x = (share[0] + ... + share[n-1]) % p` です。誰も x そのものは持っていません。\n\nMPC が実用になるのは、この形のまま **誰とも通信せずにできる演算** があるからです。この問題で扱うのは 3 つです。\n\n- **share どうしの足し算** — x の share と y の share があるとき、各自が自分の行どうしを足せば x + y の share になる。合計を取れば `(x の合計) + (y の合計) = x + y` だから。\n- **公開定数の掛け算** — 公開された c を各自が自分の share に掛ければ x*c の share になる。合計は `c * (x の合計) = x*c`。\n- **公開定数の足し算** — これだけが「同じことを全員がする」と**壊れます**。全員が c を足すと合計は x + n*c になり、x + c ではありません。ここがこの問題の主題です。\n\n数値例 (p = 101, n = 3, x = 5 の share が [70, 40, 97], c = 4):\n\n```\nshare どうしの足し算 / 公開定数の掛け算 は、各自が自分の行に同じ操作をするだけ\n全員が c=4 を足すと → [74, 44, (97+4) % 101 = 0]\n                      合計 74 + 44 + 0 = 118、 118 % 101 = 17\n                      だが x + c = 9。 8 = (n-1)*c = 2*4 だけずれている\n```\n\nさらに、演算を「通信が要る / 要らない」に分類します。**共有されている値どうしを掛ける**操作だけが通信を必要とします。積の和は和の積ではないからです。\n\n## 最初の一手\n\n**Participant Portal** で問題を起動し、**「証拠を調べる」** を押してください。この deploy の `p`、人数 `n`、公開定数 `c`、x の share、そして **分類して答える 4 つの operation 名** が表示されます。この 4 つの名前は起動ごとに変わるので、必ず控えてください。ホスト側のターミナルは要りません。\n\n## 解き方\n\nエディタで `linear.py` の 4 つの関数を埋め、**「公開テストを実行」** で確認します。提出ボタンは、いまのエディタの中身をそのまま採点へ送ります。\n\n`no-communication` だけは **JSON を直接書く** checkpoint です。形は「operation 名 → ラウンド数」の辞書で、**キーは「証拠を調べる」に出た 4 つの名前ちょうど**です (多くても少なくても落ちます)。**回答欄は 1 行の入力欄**なので、改行を入れずに 1 行で貼ってください。\n\n```json\n{\"add-constant\": 0, \"sub-shared\": 0, \"square-shared\": 1, \"compare-shared\": 1}\n```\n\n- キー (文字列) — 「証拠を調べる」に出た 4 つの operation 名を、表示されたとおりに写します。上の 4 つはあくまで例で、あなたの deploy では別の組み合わせです。\n- 値 (0 以上の整数) — その operation を実行するのに必要な通信ラウンド数。各自が自分の share だけで完結するなら **0**、誰かと値をやり取りする必要があるなら **1 以上**。採点は「0 かどうか」だけを見るので、通信が要る側は 1 でも 2 でも構いません。\n\nなお、コード側の `communication_rounds` 関数は、この 4 つだけでなく **8 つある operation 名すべて**について呼ばれます。名前の一覧は `linear.py` の docstring にあります。\n\n## ゴール\n\n3 つの線形演算が任意の p・n で正しい share を返し、公開定数の足し算が x + n*c にならず、どの演算が通信を必要とするかを分類できること。最後の transfer は、別の p と n で同じコードがそのまま動くこと、および 8 つの operation すべての分類を確かめます。\n",
+  "writeup": "## この問題の主題は 1 行に収まる\n\n**公開定数は、全員ではなく 1 人だけが足す。**\n\nこれだけです。ところが、この 1 行を外すと結果は「だいたい合っている」形で壊れ、往復テストでは見つかりません。なぜそうなるかを最後まで追います。\n\n## なぜ足し算と定数倍は通信なしにできるのか\n\n秘密は「share の合計」でした。だから、share に対する操作が合計に対してどう効くかを見ればよい。\n\n**share どうしの足し算**: 各自が `out[i] = (a[i] + b[i]) % p` とすると\n\n```\nsum(out) = sum(a) + sum(b) = x + y     (mod p)\n```\n\n合計は自動的に x + y になります。誰も他人の値を見ていません。\n\n**公開定数の掛け算**: 各自が `out[i] = (a[i] * c) % p` とすると\n\n```\nsum(out) = c*a[0] + c*a[1] + ... = c * sum(a) = x*c     (mod p)\n```\n\nこれも各自で閉じます。効いているのは**分配法則**で、c を n 個の項に配ると、まとめて c 倍したのと同じになる、ということです。\n\n## なぜ公開定数の足し算だけが壊れるのか\n\n同じことを足し算でやってみます。各自が `out[i] = (a[i] + c) % p` とすると\n\n```\nsum(out) = (a[0] + c) + (a[1] + c) + ... + (a[n-1] + c)\n         = sum(a) + n*c\n         = x + n*c     (mod p)\n```\n\nc が **n 回**足されてしまいました。掛け算のときの c は「係数」で 1 個ですが、足し算のときの c は「項」で、人数分だけ増えます。ここが非対称の正体です。\n\n直し方は、足す回数を 1 回にすること。誰か 1 人 (誰でもよい、例えば party 0) だけが自分の share に c を足す:\n\n```\nout[0] = (a[0] + c) % p、 out[i] = a[i] % p  (i >= 1)\nsum(out) = sum(a) + c = x + c     (mod p)     OK\n```\n\n## 数値で 1 行ずつ追う (p = 101, n = 3, x = 5 の share = [70, 40, 97], c = 4)\n\n```\n全員が足す:   [74, 44, 101 % 101 = 0]   合計 74 + 44 + 0 = 118 % 101 = 17\n              正解は x + c = 9。 ずれ幅 17 - 9 = 8 = (n-1)*c = 2*4  OK\n1 人だけ足す: [74, 40, 97]              合計 74 + 40 + 97 = 211 % 101 = 9  OK\n定数倍:       [70*4, 40*4, 97*4] % 101 = [78, 59, 85]\n              合計 78 + 59 + 85 = 222 % 101 = 20 = 5*4  OK\n```\n\n**n = 1 のとき、この間違いは消えます** ((n-1)*c = 0)。だから 1 人しか出てこないテストは、間違った実装を正しいと言います。この問題の隠しテストが必ず n >= 2 の設定を使うのはそのためです。\n\n## 通信が要るのはどれか\n\n判定基準はひとつです。**その操作が、共有されている値どうしの掛け算を含むか。**\n\n```\nadd-shared     share の足し算              0 ラウンド\nsub-shared     share の引き算              0 ラウンド (足し算と同じ形)\nnegate-shared  share の符号反転            0 ラウンド (-1 倍は公開定数倍)\nadd-constant   公開定数を足す              0 ラウンド (1 人だけが足す)\nmul-constant   公開定数を掛ける            0 ラウンド (分配法則)\nmul-shared     秘密どうしの掛け算          通信が要る\nsquare-shared  秘密の 2 乗                 通信が要る (自分自身との掛け算)\ncompare-shared 秘密どうしの比較            通信が要る (ビット分解を経て掛け算になる)\n```\n\nなぜ掛け算だけ駄目なのか。x = sum(a)、y = sum(b) のとき\n\n```\nx*y = (a[0] + a[1] + ...) * (b[0] + b[1] + ...)\n    = a[0]*b[0] + a[0]*b[1] + a[1]*b[0] + a[1]*b[1] + ...\n```\n\n**交差項** `a[0]*b[1]` は、party 0 の値と party 1 の値の積です。どちらの party も片方しか持っていないので、誰も自分だけでは計算できません。積の和は和の積ではない、というのはこの交差項のことです。次の問題 (Beaver) は、この交差項をどう買うかの話です。\n\n## 各 checkpoint が守っているもの\n\n- **add-shares / mul-constant** — 結果が「合計が合う数の集まり」であるだけでなく、**正規化された長さ n の list** であることまで見ます。長さや正規化を崩すと、次の演算に渡した瞬間に壊れるからです。\n- **add-constant** — 正しい合計 x + c を要求するのに加えて、**間違った合計 x + n*c を名指しで落とします**。不等号だけだと、n=1 や c=0 のような偶然で通ってしまう設定が残るためです。\n- **no-communication** — 「0 か 0 でないか」だけで採点します。掛け算のプロトコルが何ラウンドかは方式によりますが、**通信が要るかどうかは方式によりません**。問われているのは後者です。\n- **transfer** — 別 seed の p・n で 3 つの演算を再実行し、さらに **8 つの operation すべて**について `communication_rounds` を呼びます。4 つだけ覚えた実装はここで落ちます。\n\n## 間違えるとどう壊れるか\n\n- **公開定数を全員が足す** → 合計が (n-1)*c だけずれる。n=1 では気付けず、c が p の倍数のときも気付けない。「だいたい合っている」ので、値を 1 つ見ただけでは間違いに見えない。\n- **公開定数を 1 人に 2 回足す** → 合計は x + 2c になる。1 回だけ、が要件。\n- **`zip` で長さの違う list を足す** → 短いほうに切り詰められ、長さ n でなくなる。「合計は合っているのに落ちる」形の失敗になる。\n- **`% p` を忘れる** → `a[i] * c` は p より大きくなりやすいので、掛け算で最も出やすい。値は合同でも表現が外れて落ちる。\n- **`communication_rounds` を 4 つの名前だけ実装する** → 3 つの checkpoint は通り、transfer だけが落ちる。原因が遠いので見つけにくい典型。\n- **通信が要る側に 0 を返す** → 「掛け算も各自でできる」と言っていることになる。これは MPC の一番大きい誤解で、次の問題全体が存在する理由でもある。\n\n## 次への接続\n\n- **ac26-w2-beaver-mul** は、ここで「通信が要る」と分類した掛け算を、実際に 1 ラウンドで買います。そのとき現れる `d*e` は**公開定数**で、protocol の途中に出てきます。この問題の「1 人だけが足す」がそのまま必要になり、しかもずっと見つけにくい場所に置かれます。\n- **ac26-w2-private-aggregate** では、同じ規則が `add_public` として再登場し、掛け算 k 個と合わせて 1 つのプロトコルになります。\n- 上流課題 (toy-mpc Part A) の「線形演算は自由、掛け算だけが高い」というコスト感覚は、この分類そのものです。\n",
   "tags": [
     "advanced-cryptography-2026",
     "week2",
@@ -195,7 +195,24 @@
         "input": "multiline",
         "label": "share 同士を足す",
         "points": 40,
-        "wrongAnswerPenalty": 10
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "add-shares-hint-1",
+            "content": "確かめているのは 1 文です —— **x の share と y の share から、 誰とも通信せずに x + y の share を作れる**。 「作れる」の中身は、 返した list を全部足して `% p` すると (x + y) % p になり、 かつその list が長さ n の正規化された share の集まりであること。 誰かが他人の値を見る必要はありません。 各自が自分の行だけを触ります。",
+            "penalty": 8
+          },
+          {
+            "id": "add-shares-hint-2",
+            "content": "秘密は「share の合計」なので、 share に対する操作が合計にどう効くかを見ます。 `a` の合計は x、 `b` の合計は y。 同じ位置どうしを足した list を作れば、 その合計は `sum(a) + sum(b) = x + y` になります。 位置は 1 対 1 に対応させます —— party i は自分の `a[i]` と `b[i]` だけを使います。 各要素は最後に `% p` で 0..p-1 に正規化してください。",
+            "penalty": 6
+          },
+          {
+            "id": "add-shares-hint-3",
+            "content": "**add_shares(a, b, p)** の手順:\n1. `a` と `b` を同じ位置どうしで組にする (`zip(a, b)`)。\n2. 各組について `(x + y) % p` を計算する。\n3. その結果を list にして返す。長さは入力と同じ n。\n\n式: `out[i] = (a[i] + b[i]) % p`  (i = 0 .. n-1)\n\n検算 (p=101, a=[70,40,97] は x=5 の share、 b=[10,20,30] は合計 60 なので y=60):\n `out = [80, 60, (97+30)%101=26]`、 合計 80+60+26=166、 166%101=65 = (5+60)%101 = x+y ✓\n\n注意: `zip` は短いほうで止まります。 入力の長さが同じであることを前提にしてよいので、 返り値の長さが n のままであることだけ確認してください。",
+            "penalty": 5
+          }
+        ]
       },
       {
         "id": "add-constant",
@@ -206,8 +223,18 @@
         "hints": [
           {
             "id": "add-constant-hint-1",
-            "content": "全員が自分の share に c を足したら、 総和はいくつになるか。 紙で 3 人分やってみる。",
-            "penalty": 20
+            "content": "**この問題の主題です。** 公開された定数 c (全員が知っている値) を、 共有された秘密 x に足して x + c の share を作ります。 難しさは算術ではありません —— 前の 2 つと同じ「全員が自分の share に同じことをする」をやると、 **合計が x + c にならない**ところにあります。 採点は正しい合計を要求するだけでなく、 その間違った合計を名指しで落とします。 まず「全員が c を足したら合計はいくつになるか」を紙の上で出してみてください。",
+            "penalty": 10
+          },
+          {
+            "id": "add-constant-hint-2",
+            "content": "合計を展開してみます。 各自が c を足すと\n\n    (a[0] + c) + (a[1] + c) + ... + (a[n-1] + c) = sum(a) + n*c = x + n*c\n\nc が **n 回**足されています。 掛け算のときの c は係数なので 1 個で済みますが (分配法則)、 足し算のときの c は項なので人数分に増えます。 欲しいのは c が **ちょうど 1 回**足された状態です。 この非対称は前の問題と同じ形で、 「n 個のうち辻褄を合わせるのは 1 個だけ」の裏返しです。",
+            "penalty": 8
+          },
+          {
+            "id": "add-constant-hint-3",
+            "content": "**add_constant(shares, c, p)** の手順:\n1. 入力を正規化した list として写す —— `out = [s % p for s in shares]`。\n2. **誰か 1 人だけ**を選ぶ。 誰でもよいので、 index 0 でよい。\n3. その 1 人の share にだけ c を足す —— `out[0] = (out[0] + c) % p`。\n4. 残りの share はそのまま。 長さ n の list を返す。\n\n式: `out[0] = (shares[0] + c) % p`、 `out[i] = shares[i] % p` (i >= 1)\n\n検算 (p=101, shares=[70,40,97] (x=5), c=4):\n  全員が足すと [74,44,0]、 合計 118%101 = 17 —— x+c=9 ではない (ずれ 8 = (n-1)*c) ✗\n  1 人だけ足すと [74,40,97]、 合計 211%101 = 9 = x+c ✓\n\n2 人以上に足したり、 同じ人に 2 回足したりすると同じ理由で落ちます。 **足す回数がちょうど 1 回**であることだけが条件です。",
+            "penalty": 6
           }
         ]
       },
@@ -216,7 +243,24 @@
         "input": "multiline",
         "label": "公開された値を掛ける",
         "points": 35,
-        "wrongAnswerPenalty": 10
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "mul-constant-hint-1",
+            "content": "公開された定数 c を、 共有された秘密 x に掛けて x*c の share を作ります。 c は全員が知っている値で、 秘密ではありません (秘密どうしの掛け算は通信が要る別の話で、 それは次の問題)。 この checkpoint は「公開値との掛け算は各自で閉じる」を確かめます。 直前の add-constant とは**答えの形が違う**ので、 そのまま真似しないでください。",
+            "penalty": 7
+          },
+          {
+            "id": "mul-constant-hint-2",
+            "content": "合計を展開すると理由が見えます。\n\n    c*a[0] + c*a[1] + ... + c*a[n-1] = c * (a[0] + ... + a[n-1]) = c * x\n\n**分配法則**そのものです。 c は係数なので、 n 個の項に配っても合計では 1 個ぶんにしかなりません。 だから足し算のときと違って、 全員が同じことをして正しくなります。 掛け算の結果は p を超えやすいので、 `% p` の正規化を忘れないでください。",
+            "penalty": 5
+          },
+          {
+            "id": "mul-constant-hint-3",
+            "content": "**mul_constant(shares, c, p)** の手順:\n1. 各 share について `s * c` を計算する。\n2. `% p` で 0..p-1 に正規化する。\n3. 全員ぶんを list にして返す。 長さは n のまま。\n\n式: `out[i] = (shares[i] * c) % p`  (すべての i)\n\n検算 (p=101, shares=[70,40,97] (x=5), c=4):\n  out = [280%101, 160%101, 388%101] = [78, 59, 85]\n  合計 78+59+85 = 222、 222%101 = 20 = 5*4 ✓\n\n`% p` を忘れると 280 のような値が残り、 「0..p-1 の外」で落ちます。",
+            "penalty": 4
+          }
+        ]
       },
       {
         "id": "no-communication",
@@ -225,9 +269,19 @@
         "wrongAnswerPenalty": 10,
         "hints": [
           {
-            "id": "no-comm-hint-1",
-            "content": "和の積は積の和になるか。 ならない操作だけが通信を必要とする。",
-            "penalty": 15
+            "id": "no-communication-hint-1",
+            "content": "ここはコードではなく **JSON を手で書く** checkpoint です。 やることは分類です —— 「証拠を調べる」に出た 4 つの operation それぞれについて、 **各 party が自分の share だけで完結できるか、 それとも誰かと値をやり取りする必要があるか** を答えます。 採点が見るのは「0 か、 0 でないか」だけ。 掛け算のプロトコルが何ラウンドかは方式によりますが、 通信が要るかどうかは方式によらないからです。",
+            "penalty": 8
+          },
+          {
+            "id": "no-communication-hint-2",
+            "content": "判定基準はひとつです。 **その操作が「共有されている値どうしの掛け算」を含むか。**\n\n含まないもの (足し算・引き算・符号反転・公開定数との加減乗) は、 合計を展開すると各 party の行だけの式になるので 0 ラウンド。\n含むもの (秘密 × 秘密、 秘密の 2 乗、 秘密どうしの比較) は、 展開すると `a[0]*b[1]` のような **交差項**が出ます。 交差項は party 0 の値と party 1 の値の積なので、 どちらも片方しか持っておらず、 誰も自分だけでは計算できません。 だから通信が要ります。 比較も、 内部でビット分解して掛け算になるため同じ側です。",
+            "penalty": 6
+          },
+          {
+            "id": "no-communication-hint-3",
+            "content": "この deploy に出うる operation 名は次の 8 つで、 分類はこうなります。\n\n    0 ラウンド (各自で閉じる)\n      add-shared      share どうしの足し算\n      sub-shared      share どうしの引き算\n      negate-shared   符号反転 (-1 倍は公開定数倍)\n      add-constant    公開定数を足す (1 人だけが足す)\n      mul-constant    公開定数を掛ける\n\n    1 以上 (通信が要る)\n      mul-shared      秘密どうしの掛け算\n      square-shared   秘密の 2 乗\n      compare-shared  秘密どうしの比較\n\n**回答の手順**:\n1. 「証拠を調べる」に出ている **4 つの名前**を、 表示されたとおりに書き写す (この 4 つは起動ごとに変わる)。\n2. その 4 つだけをキーにした JSON オブジェクトを作る。 **多くても少なくても落ちます**。\n3. 上の表に従って、 0 ラウンド側には `0`、 通信が要る側には `1` を値として入れる。\n4. **回答欄は 1 行の入力欄**なので、 改行を入れずに 1 行で貼る。\n\n例 (4 つが add-constant / sub-shared / square-shared / compare-shared だった場合。 このまま 1 行で入ります):\n```json\n{\"add-constant\": 0, \"sub-shared\": 0, \"square-shared\": 1, \"compare-shared\": 1}\n```\n**あなたに出ている 4 つはこれとは違う可能性が高い**ので、 必ず画面の名前で作り直してください。\n\nなお、 コード側の `communication_rounds` は 4 つではなく **8 つすべて**について呼ばれます (transfer checkpoint)。 上の表をそのまま辞書にして実装してください。",
+            "penalty": 5
           }
         ]
       },
@@ -236,7 +290,24 @@
         "input": "multiline",
         "label": "見たことのない設定でも成立させる",
         "points": 35,
-        "wrongAnswerPenalty": 10
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "transfer-hint-1",
+            "content": "transfer は **2 つ**を同時に見ます。 (1) 3 つの線形演算を、 いま画面に見えている p・n ではなく別の seed の modulus・人数で全部走らせ直す。 (2) コードの `communication_rounds` を、 「証拠を調べる」に出た 4 つではなく **8 つある operation 名すべて**について呼ぶ。 3 つの checkpoint が緑なのに transfer だけ赤いときは、 まず (2) を疑ってください。 4 つしか実装していないと、 残り 4 つで例外か誤分類になります。",
+            "penalty": 7
+          },
+          {
+            "id": "transfer-hint-2",
+            "content": "(1) について: 自分のコードに **引数から来ていない数**が無いか探してください。 modulus は必ず引数 `p`、 人数は `len(shares)` や `len(a)` から。 `shares[0], shares[1], shares[2]` のように個別に触っていると、 人数が変わった瞬間に壊れます (`add_constant` は index 0 だけを特別扱いするので、 ここだけは 0 番を名指ししてよい)。\n\n(2) について: 8 つの名前を全部含む辞書を作り、 未知の名前が来ても例外にならない形にしてください。 判定基準は「秘密どうしの掛け算を含むか」です。",
+            "penalty": 5
+          },
+          {
+            "id": "transfer-hint-3",
+            "content": "順に点検してください。 すべて満たしていればそのまま提出で通ります。\n\n1. **add_shares** —— `[(x + y) % p for x, y in zip(a, b)]`。 長さも modulus も引数から。\n2. **mul_constant** —— `[(s * c) % p for s in shares]`。 同上。\n3. **add_constant** —— index 0 の share にだけ c を足し、 残りは `% p` で写すだけ。 全員に足さない。\n4. **communication_rounds(operation)** —— 次の 8 つを全部含む辞書を持ち、 引数の名前で引いて返す。\n\n```\nadd-shared: 0, sub-shared: 0, negate-shared: 0, add-constant: 0, mul-constant: 0,\nmul-shared: 1, square-shared: 1, compare-shared: 1\n```\n\n5. 最後に、 4 つの関数の本文に **数値リテラルが `0` と `1` 以外に残っていない**ことを目で確認する (上の辞書の 0 / 1 は除く)。 残っていなければ transfer は通ります。",
+            "penalty": 4
+          }
+        ]
       }
     ]
   },
@@ -245,8 +316,8 @@
       "name": "What you can do without talking to anyone",
       "shortDescription": "Some operations on shares are local and others require interaction. Each deployment selects a different balanced four-operation quiz from the catalog.",
       "description": "Second problem of Week 2. Implement the linear operations on additive shares, and separate the operations that need communication from those that do not. MPC is practical because linear operations are communication-free; draw that boundary with your own hands.\n\nIn add-constant, if every party adds c to its own share the total becomes x + n*c. Correctly, exactly one party folds it in. The hidden tests run several configurations and fail that classic mistake by name.\n\nThe no-communication checkpoint picks two local and two interactive operations per seed from a catalog of eight and shuffles them. It scores zero-versus-nonzero rounds rather than exact round counts, so a memorised four rows or a constant table does not carry to another deploy.\n\nWeek 2's course material was unpublished at the pinned commit, so there is no courseAlignment.sources and status stays draft (it is finalised when #219 detects publication).",
-      "instructions": "## Solve in Participant Portal\n\nStart the problem in Participant Portal. The problem editor appears on the same page as the\nstatement. Use **Inspect evidence** to read the deployment-specific fixture and published\nevidence, edit the starter sources, and select **Run public tests**. Fill any direct-answer\ncheckpoint from the evidence and your experiments; enter objects, arrays, and numbers as JSON.\n\nEach checkpoint's submit button sends the current editor files and answer fields through the\ncontainer prepare API, then submits the generated value directly for scoring. There is no second\nscreen and no submission value to copy. Direct answers are bound to this deployment's seed, so a\nvalue prepared for another run, or a remembered concept name on its own, cannot earn credit.\n",
-      "writeup": "## Why linear operations need no communication\n\nWith additive shares, addition, subtraction, negation, and public scaling are local. Non-linear operations such as multiplication, squaring, and comparison require interaction.\n\n## Why add-constant is the odd one\n\nIf every party adds public c, the total becomes x + n*c. Exactly one party must fold it in.\n\n## Zero versus non-zero, not an exact round count\n\nEach deployment selects two local and two interactive operations from the catalog. Exact positive round counts depend on the protocol, so grading distinguishes zero from non-zero.\n\n## Where this leads\n\nMoving interaction for non-linear work into preprocessing motivates Beaver triples for multiplication.",
+      "instructions": "## Start here\n\nThis problem computes on top of the **additive secret sharing** you built previously. As a reminder: a secret x is spread across n parties with `x = (share[0] + ... + share[n-1]) % p`, and nobody holds x itself.\n\nMPC is practical because some operations can be done **in this form with nobody talking to anybody**. Three of them appear here.\n\n- **Adding two shared values** — given shares of x and shares of y, each party adds its own row and the result is a sharing of x + y, because `(sum of x's shares) + (sum of y's shares) = x + y`.\n- **Multiplying by a public constant** — each party multiplies its own share by the public c, giving a sharing of x*c, since `c * (sum of x's shares) = x*c`.\n- **Adding a public constant** — this is the one that **breaks** if everyone does the same thing. If every party adds c, the total becomes x + n*c, not x + c. That is the subject of this problem.\n\nA worked example (p = 101, n = 3, x = 5 shared as [70, 40, 97], c = 4):\n\n```\nadding shares / scaling by a public constant: each party does the same thing to its own row\neveryone adds c=4 -> [74, 44, (97+4) % 101 = 0]\n                     total 74 + 44 + 0 = 118, and 118 % 101 = 17\n                     but x + c = 9, so it is off by 8 = (n-1)*c = 2*4\n```\n\nYou will also classify operations as needing communication or not. Only operations that **multiply two shared values** need it, because the product of the sums is not the sum of the products.\n\n## First move\n\nStart the problem in **Participant Portal** and press **Inspect evidence**. It shows this deployment's `p`, party count `n`, public constant `c`, the shares of x, and **the four operation names you must classify**. Those four names change per deployment, so write them down. No terminal on your machine is required.\n\n## Workflow\n\nFill in the four functions in `linear.py` in the editor and press **Run public tests**. The submit buttons send the current editor contents straight to scoring.\n\n`no-communication` is the one checkpoint where you type **JSON directly**. It is a dictionary from operation name to round count, and **the keys must be exactly the four names shown under Inspect evidence** — more or fewer both fail. **The answer field is a single-line input**, so paste it on one line, with no newlines.\n\n```json\n{\"add-constant\": 0, \"sub-shared\": 0, \"square-shared\": 1, \"compare-shared\": 1}\n```\n\n- Keys (strings) — the four operation names from Inspect evidence, copied verbatim. The four above are only an example; your deployment has a different combination.\n- Values (non-negative integers) — how many communication rounds the operation needs. **0** if each party can finish using only its own share; **1 or more** if values must be exchanged. Scoring only looks at whether the value is zero, so any positive number will do for the interactive side.\n\nNote that the `communication_rounds` function in code is called with **all eight operation names**, not just these four. The full list is in `linear.py`'s docstring.\n\n## Goal\n\nThe three linear operations return valid sharings for any p and n, adding a public constant does not land on x + n*c, and you can say which operations need communication. The final transfer checkpoint re-runs everything under a different p and n, and checks the classification of all eight operations.\n",
+      "writeup": "## The subject of this problem fits on one line\n\n**A public constant is added by exactly one party, not by everyone.**\n\nThat is all of it. But drop that line and the result breaks in a shape that looks \"almost right\", and a round-trip test does not catch it. Here is why.\n\n## Why addition and scaling need no communication\n\nThe secret is the sum of the shares, so to see what an operation on shares does, look at what it does to the sum.\n\n**Adding two shared values**: each party computes `out[i] = (a[i] + b[i]) % p`, so\n\n```\nsum(out) = sum(a) + sum(b) = x + y     (mod p)\n```\n\nThe total lands on x + y automatically, and nobody looked at anyone else's value.\n\n**Multiplying by a public constant**: each party computes `out[i] = (a[i] * c) % p`, so\n\n```\nsum(out) = c*a[0] + c*a[1] + ... = c * sum(a) = x*c     (mod p)\n```\n\nAlso purely local. What makes it work is **distributivity**: spreading c across n terms is the same as scaling the total by c.\n\n## Why adding a public constant is the one that breaks\n\nTry the same move with addition. Each party computes `out[i] = (a[i] + c) % p`, so\n\n```\nsum(out) = (a[0] + c) + (a[1] + c) + ... + (a[n-1] + c)\n         = sum(a) + n*c\n         = x + n*c     (mod p)\n```\n\nc got added **n times**. In the multiplication case c is a coefficient and there is one of it; in the addition case c is a term, and terms multiply with the number of parties. That is the asymmetry.\n\nThe fix is to make it happen once. One party — any one, say party 0 — folds c into its own share:\n\n```\nout[0] = (a[0] + c) % p, out[i] = a[i] % p for i >= 1\nsum(out) = sum(a) + c = x + c     (mod p)     correct\n```\n\n## Following the numbers (p = 101, n = 3, x = 5 shared as [70, 40, 97], c = 4)\n\n```\neveryone adds:  [74, 44, 101 % 101 = 0]   total 74 + 44 + 0 = 118 % 101 = 17\n                the right answer is x + c = 9; off by 17 - 9 = 8 = (n-1)*c = 2*4\none party adds: [74, 40, 97]              total 74 + 40 + 97 = 211 % 101 = 9   correct\nscaling:        [70*4, 40*4, 97*4] % 101 = [78, 59, 85]\n                total 78 + 59 + 85 = 222 % 101 = 20 = 5*4    correct\n```\n\n**At n = 1 the mistake disappears** ((n-1)*c = 0). So a test with a single party certifies the wrong implementation. That is why the hidden tests here always use n >= 2.\n\n## Which operations need communication\n\nThere is one criterion: **does the operation multiply two shared values?**\n\n```\nadd-shared      adding two sharings          0 rounds\nsub-shared      subtracting two sharings     0 rounds (same shape as addition)\nnegate-shared   negating a sharing           0 rounds (times -1 is a public scalar)\nadd-constant    adding a public constant     0 rounds (one party folds it in)\nmul-constant    scaling by a public constant 0 rounds (distributivity)\nmul-shared      multiplying two secrets      needs communication\nsquare-shared   squaring a secret            needs communication (a secret times itself)\ncompare-shared  comparing two secrets        needs communication (bit decomposition, hence products)\n```\n\nWhy is multiplication different? With x = sum(a) and y = sum(b),\n\n```\nx*y = (a[0] + a[1] + ...) * (b[0] + b[1] + ...)\n    = a[0]*b[0] + a[0]*b[1] + a[1]*b[0] + a[1]*b[1] + ...\n```\n\nThe **cross terms** like `a[0]*b[1]` pair party 0's value with party 1's. Neither party holds both, so nobody can compute them alone. \"The product of the sums is not the sum of the products\" means exactly these cross terms. The next problem, Beaver multiplication, is about how to buy them.\n\n## What each checkpoint protects\n\n- **add-shares / mul-constant** — not only that the total is right, but that the result is a **normalized list of length n**. Break the length or the normalization and the next operation you feed it into breaks.\n- **add-constant** — requires the correct total x + c *and* names the wrong total x + n*c explicitly as a failure. An inequality alone would leave settings (n=1, c a multiple of p) where the wrong answer passes by coincidence.\n- **no-communication** — graded on zero versus non-zero only. How many rounds a multiplication protocol takes depends on the protocol; **whether it needs to talk at all does not**, and that is what is being asked.\n- **transfer** — re-runs the three operations under another seed's p and n, and calls `communication_rounds` on **all eight** operation names. An implementation that learned only the four on screen fails here.\n\n## How it breaks when you get it wrong\n\n- **Everyone adds the public constant** — the total is off by (n-1)*c. Invisible at n=1, and invisible when c is a multiple of p. Because it is \"almost right\", one sample value does not look wrong.\n- **One party adds it twice** — the total is x + 2c. Once is the requirement.\n- **`zip` over lists of different lengths** — silently truncates to the shorter one, so the result is no longer length n. This produces the \"the total is right but it fails\" shape.\n- **Forgetting `% p`** — most likely in the scaling case, where `a[i] * c` easily exceeds p. Congruent value, wrong representation, red checkpoint.\n- **Implementing `communication_rounds` for only the four names you saw** — the three code checkpoints pass and only transfer fails. The cause is far from the symptom, which is what makes it hard.\n- **Returning 0 for an interactive operation** — that is the claim that multiplication is local too. It is the single largest misconception in MPC, and the reason the next problem exists at all.\n\n## Where this leads\n\n- **ac26-w2-beaver-mul** actually buys the multiplication you classified as interactive here, in one round. The `d*e` term that appears there is a **public constant**, arriving mid-protocol. The \"one party folds it in\" rule from this problem is needed again, in a place where it is far harder to spot.\n- **ac26-w2-private-aggregate** brings the same rule back as `add_public`, combined with k multiplications inside one protocol.\n- The cost intuition of the upstream toy-mpc Part A — linear operations are free, multiplication is what costs — is exactly this classification.\n",
       "learningGoals": [
         "Confirm that adding two sharings completes locally",
         "Confirm that scaling by a public constant needs no communication",
@@ -257,7 +328,21 @@
       "checks": [
         {
           "id": "add-shares",
-          "label": "Add two sharings"
+          "label": "Add two sharings",
+          "hints": [
+            {
+              "id": "add-shares-hint-1",
+              "content": "One sentence is being checked: **from shares of x and shares of y you can build shares of x + y with nobody talking to anybody**. Concretely: adding up the list you return and taking `% p` must give (x + y) % p, and the list must be a normalized sharing of length n. No party needs to see another's value; each touches only its own row."
+            },
+            {
+              "id": "add-shares-hint-2",
+              "content": "The secret is the sum of the shares, so ask what an operation on shares does to the sum. The total of `a` is x and the total of `b` is y. Build the list of position-wise sums and its total is `sum(a) + sum(b) = x + y`. Keep the positions aligned: party i uses only its own `a[i]` and `b[i]`. Normalize every element into 0..p-1 with `% p`."
+            },
+            {
+              "id": "add-shares-hint-3",
+              "content": "**add_shares(a, b, p)**, step by step:\n1. Pair `a` and `b` position by position (`zip(a, b)`).\n2. For each pair compute `(x + y) % p`.\n3. Return those values as a list. Its length is the same n as the inputs.\n\nFormula: `out[i] = (a[i] + b[i]) % p` for i = 0 .. n-1.\n\nCheck it (p=101, a=[70,40,97] shares x=5; b=[10,20,30] totals 60 so y=60):\n`out = [80, 60, (97+30)%101=26]`, total 80+60+26=166, and 166%101=65 = (5+60)%101 = x+y ✓\n\nNote that `zip` stops at the shorter list. The inputs are guaranteed to be the same length, so just confirm the result still has length n."
+            }
+          ]
         },
         {
           "id": "add-constant",
@@ -265,27 +350,71 @@
           "hints": [
             {
               "id": "add-constant-hint-1",
-              "content": "If every party adds c to its own share, what does the set sum to? Try it on paper with three parties."
+              "content": "**This is the subject of the problem.** A public constant c (known to everyone) must be added to the shared secret x to give a sharing of x + c. The difficulty is not the arithmetic: doing what worked for the previous two — every party applying the same operation to its own share — **does not land on x + c**. Scoring requires the correct total and separately names the wrong total as a failure. Work out on paper what the total becomes if every party adds c."
+            },
+            {
+              "id": "add-constant-hint-2",
+              "content": "Expand the total. If every party adds c,\n\n    (a[0] + c) + (a[1] + c) + ... + (a[n-1] + c) = sum(a) + n*c = x + n*c\n\nc was added **n times**. In the multiplication case c is a coefficient and one of it suffices (distributivity); in the addition case c is a term, so it multiplies with the party count. What you want is c appearing **exactly once**. This is the same asymmetry as the previous problem, seen from the other side: only one of the n values settles up."
+            },
+            {
+              "id": "add-constant-hint-3",
+              "content": "**add_constant(shares, c, p)**, step by step:\n1. Copy the input as a normalized list — `out = [s % p for s in shares]`.\n2. Pick **exactly one party**. Any one will do; index 0 is fine.\n3. Add c to that party's share only — `out[0] = (out[0] + c) % p`.\n4. Leave the rest untouched and return the length-n list.\n\nFormula: `out[0] = (shares[0] + c) % p` and `out[i] = shares[i] % p` for i >= 1.\n\nCheck it (p=101, shares=[70,40,97] so x=5, c=4):\n  everyone adds -> [74,44,0], total 118%101 = 17, which is not x+c=9 (off by 8 = (n-1)*c)\n  one party adds -> [74,40,97], total 211%101 = 9 = x+c  correct\n\nAdding it to two parties, or twice to one, fails for the same reason. The only requirement is that c is added **exactly once**."
             }
           ]
         },
         {
           "id": "mul-constant",
-          "label": "Scale by a value everyone already knows"
+          "label": "Scale by a value everyone already knows",
+          "hints": [
+            {
+              "id": "mul-constant-hint-1",
+              "content": "Multiply the shared secret x by a public constant c to get a sharing of x*c. c is known to everyone and is not a secret (multiplying two *secrets* needs communication — that is the next problem). This checkpoint confirms that multiplying by a public value stays local. The answer has a **different shape** from add-constant just above, so do not copy that one across."
+            },
+            {
+              "id": "mul-constant-hint-2",
+              "content": "Expanding the total shows why.\n\n    c*a[0] + c*a[1] + ... + c*a[n-1] = c * (a[0] + ... + a[n-1]) = c * x\n\nThat is **distributivity**. c is a coefficient, so spreading it over n terms still amounts to one factor of c in the total. Unlike the addition case, every party doing the same thing is correct here. Products overshoot p easily, so do not skip the `% p` normalization."
+            },
+            {
+              "id": "mul-constant-hint-3",
+              "content": "**mul_constant(shares, c, p)**, step by step:\n1. For each share compute `s * c`.\n2. Normalize with `% p` into 0..p-1.\n3. Return all of them as a list, still of length n.\n\nFormula: `out[i] = (shares[i] * c) % p` for every i.\n\nCheck it (p=101, shares=[70,40,97] so x=5, c=4):\n  out = [280%101, 160%101, 388%101] = [78, 59, 85]\n  total 78+59+85 = 222, and 222%101 = 20 = 5*4 ✓\n\nSkipping `% p` leaves values like 280 and fails as 'outside 0..p-1'."
+            }
+          ]
         },
         {
           "id": "no-communication",
           "label": "Name what needs no talking",
           "hints": [
             {
-              "id": "no-comm-hint-1",
-              "content": "Is the product of the sums the sum of the products? Only where it is not does anyone need to talk."
+              "id": "no-communication-hint-1",
+              "content": "This checkpoint is **JSON you type by hand**, not code. The task is a classification: for each of the four operations shown under Inspect evidence, say whether **each party can finish using only its own share, or whether values must be exchanged**. Scoring looks only at zero versus non-zero, because how many rounds a multiplication protocol takes depends on the protocol while whether it needs to talk at all does not."
+            },
+            {
+              "id": "no-communication-hint-2",
+              "content": "There is one criterion: **does the operation multiply two shared values?**\n\nOperations that do not (addition, subtraction, negation, adding or scaling by a public constant) expand into an expression over each party's own row alone: 0 rounds.\nOperations that do (secret times secret, squaring a secret, comparing two secrets) expand to **cross terms** like `a[0]*b[1]`. A cross term pairs party 0's value with party 1's, and neither holds both, so nobody can compute it alone — hence communication. Comparison lands on the same side because it decomposes into bits and therefore into products."
+            },
+            {
+              "id": "no-communication-hint-3",
+              "content": "The eight operation names this deployment can use, and their classification:\n\n    0 rounds (purely local)\n      add-shared      adding two sharings\n      sub-shared      subtracting two sharings\n      negate-shared   negation (times -1 is a public scalar)\n      add-constant    adding a public constant (one party folds it in)\n      mul-constant    scaling by a public constant\n\n    1 or more (needs communication)\n      mul-shared      multiplying two secrets\n      square-shared   squaring a secret\n      compare-shared  comparing two secrets\n\n**How to answer**:\n1. Copy the **four names** shown under Inspect evidence verbatim (they change per deployment).\n2. Build a JSON object whose keys are exactly those four. **More or fewer both fail.**\n3. Using the table above, put `0` on the local side and `1` on the interactive side.\n4. **The answer field is a single-line input**, so paste it on one line, with no newlines.\n\nExample (if the four were add-constant / sub-shared / square-shared / compare-shared — this fits on one line as written):\n```json\n{\"add-constant\": 0, \"sub-shared\": 0, \"square-shared\": 1, \"compare-shared\": 1}\n```\n**Your four are very likely different**, so rebuild it from the names on your screen.\n\nNote also that the `communication_rounds` function in code is called on **all eight**, not four (that is the transfer checkpoint). Implement the whole table as a dictionary."
             }
           ]
         },
         {
           "id": "transfer",
-          "label": "Hold up in settings you have not seen"
+          "label": "Hold up in settings you have not seen",
+          "hints": [
+            {
+              "id": "transfer-hint-1",
+              "content": "transfer watches **two** things at once. (1) It re-runs the three linear operations under another seed's modulus and party count, not the p and n on your screen. (2) It calls your `communication_rounds` on **all eight** operation names, not the four from Inspect evidence. If the three code checkpoints are green and only transfer is red, suspect (2) first: an implementation covering only four names raises or misclassifies on the rest."
+            },
+            {
+              "id": "transfer-hint-2",
+              "content": "For (1): hunt for **any number that did not arrive as an argument**. The modulus must be the `p` argument and the party count must come from `len(shares)` or `len(a)`. Touching `shares[0], shares[1], shares[2]` individually breaks the moment the party count changes (`add_constant` is the one place where naming index 0 is fine, since it deliberately singles out one party).\n\nFor (2): build a dictionary covering all eight names, in a form that does not raise on a name it has not seen. The criterion is whether the operation multiplies two shared values."
+            },
+            {
+              "id": "transfer-hint-3",
+              "content": "Audit them in order. If all hold, submitting as-is passes.\n\n1. **add_shares** — `[(x + y) % p for x, y in zip(a, b)]`. Length and modulus both from the arguments.\n2. **mul_constant** — `[(s * c) % p for s in shares]`. Likewise.\n3. **add_constant** — add c to the share at index 0 only and copy the rest through `% p`. Never to everyone.\n4. **communication_rounds(operation)** — hold a dictionary covering all eight names and look the argument up in it.\n\n```\nadd-shared: 0, sub-shared: 0, negate-shared: 0, add-constant: 0, mul-constant: 0,\nmul-shared: 1, square-shared: 1, compare-shared: 1\n```\n\n5. Finally, read the four bodies and confirm **no numeric literal other than `0` and `1` survives** (the 0/1 in that dictionary aside). If none does, transfer passes."
+            }
+          ]
         }
       ]
     }

@@ -48,7 +48,7 @@ Five checkpoints, scored independently. Wrong answers cost 10 points each.
 | `rerandomize` | 30 | Secret preserved, every share moved |
 | `transfer` | 30 | All of it, on a modulus and party count from an unseen seed |
 
-Hints on three of the five (20 / 20 / 15). Opening every one still leaves 145 of 200.
+Every one of the 5 checkpoints carries three hints (hint 1 = what is being asked, hint 2 = how to think about it, hint 3 = a walkthrough you can follow to a solution). Each checkpoint's hint penalties stay inside its 50% cap; opening all 15 still leaves 101 of 200.
 
 ## The two checkpoints that carry the problem
 

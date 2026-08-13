@@ -57,8 +57,7 @@ Five checkpoints, scored independently. Wrong answers cost 10 points each.
 | `protocol` | 30 | Your own four pieces run end to end, plus the round count |
 | `transfer` | 35 | All of it under a seed you have never been shown |
 
-Hints on two of the five (20 + 12 on `combine`, 10 on `protocol`). Opening all three still leaves
-158 of 200.
+Every one of the 5 checkpoints carries three hints (hint 1 = what is being asked, hint 2 = how to think about it, hint 3 = a walkthrough you can follow to a solution). Each checkpoint's hint penalties stay inside its 50% cap; opening all 15 still leaves 102 of 200.
 
 ## The term that is not like the others
 

@@ -34,8 +34,8 @@
   "estimatedDuration": "50-75 分",
   "shortDescription": "公式 Week 2 Part B の oblivious transfer と GMW secret AND を 1 つの問題で組む。正しく動くことと、相手に秘密を渡さないことを別々に確かめる。",
   "description": "Week 2 の 6 問目。 ここまでの 5 問は arithmetic MPC を扱ってきましたが、 公開された公式演習の Part B は oblivious transfer と GMW Boolean MPC を要求します。 この問題は既存 companion に無かったその半分を埋めます。\n\n位数 q の部分群で標準的な Diffie-Hellman 型の転送を組み、 その上に GMW の AND ゲートを載せます。 XOR は share に対して線形なので手元で済み、 AND だけが 2 回の転送を必要とします。\n\nこの問題の本題は、 **正しく動く実装が 2 通りあり、 隠せているのはその片方だけ** という点です。 受信者の blind を 0 から取るか 1 から取るか、 AND ゲートで mask を 1 つ引くか 2 つ引くか。 どちらも全部のメッセージが届き、 全部のゲートが復元します。 公開テストはどちらも通します。",
-  "instructions": "## Participant Portal で解く\n\nParticipant Portal で問題を起動すると、問題文と同じ画面に `oblivious.py` のエディタが表示されます。 **証拠を調べる**で deploy 固有の群、鍵、セッション、ゲートの share を確認し、starter を編集して **公開テストを実行**します。\n\n6 個の checkpoint はすべて code checkpoint です。各提出ボタンは現在のエディタ内容を container の prepare API へ送り、生成された値をそのまま採点へ渡します。checkout、ターミナル、別画面、提出値のコピペは不要です。\n\n## ゴール\n\n位数 q の部分群上の 1-out-of-2 転送と、その上に載る GMW の AND ゲートを完成させます。プライバシーは 1 回の実行ではなく分布の性質です。「メッセージが届いた」「ゲートが復元した」だけでは、秘密が隠れていることを証明できません。",
-  "writeup": "受信者の privacy は 「B が choice によらず同じ分布になる」 という主張で、 blind を 0..q-1 から一様に取ると B は部分群上一様になり両者が一致する。 1..q-1 にすると B = 1 は choice 1 でしか、 B = A は choice 0 でしか起こらなくなり、 q 個中 2 個の値が choice を名指しする。\n\nAND ゲートの mask も同じ形。 2 回の転送で同じ mask を使い回しても、 XOR したときに打ち消えるので復元は正しいまま。 しかし各 party の出力 share が相手の秘密ビットの関数になり、 例えば x0=0, y0=1 の party 0 は z0 からそのまま x1 を読める。\n\nどちらも 「テストが通る」 と 「秘密が守られている」 が別物であることの具体例で、 前者から後者は出てこない。",
+  "instructions": "## はじめに\n\nここまでの Week 2 の問題は、どれも「三つ組は誰かが前もって用意してある」ことにしていました。**では、その誰かがいないときはどうするのか。** 互いに何も信用していない 2 者が、何も共有していない状態から一緒に計算を始めるための原始的な部品が **Oblivious Transfer (OT)** です。前提知識は要りません。\n\n### OT とは何か\n\n送り手が 2 つのメッセージを持ち、受け手がそのうち 1 つを選びます。終わったあと:\n\n- 受け手は **選んだほうだけ**を持っていて、もう一方については何も分からない\n- 送り手は **どちらが選ばれたのか**を知らない\n\n### 使う群\n\n`p = 2q + 1` (どちらも素数) の `Z_p^*` の中の、**位数 q の部分群**を使います。`g` はその部分群の生成元です。「証拠を調べる」で `p`, `q`, `g` が表示されます。\n\n### プロトコル (Diffie-Hellman 風の標準構成)\n\n```\n送り手が公開:  A = g^a mod p          (a は送り手の秘密指数)\n受け手が送る:  B = g^t mod p          (メッセージ 0 が欲しいとき)\n               B = A * g^t mod p      (メッセージ 1 が欲しいとき)\n送り手が返す:  m_0 を鍵 H(B^a) で、 m_1 を鍵 H((B/A)^a) で暗号化\n受け手が開く:  鍵 H(A^t) で\n```\n\nどちらの枝を通っても、送り手の 2 つの鍵のうち **ちょうど 1 つ**が `H(A^t) = H(g^(a*t))` に一致します。もう一方を作るには離散対数を解く必要があります。暗号化と復号は XOR で、鍵の導出は `derive_key` が両側で共有されているので、ハッシュの流儀で悩む必要はありません。\n\n**`B` がどの値になりうるか**は、この問題でいちばん大事な観察です。受け手の秘匿は「1 通のメッセージ」の性質ではなく **分布** の性質だからです。\n\n### Part 2: AND ゲート (GMW)\n\nOT が手に入ると、2 者の間で任意のブール回路が計算できます。`x = x0 ^ x1`、`y = y0 ^ y1` と分けて、party 0 が `(x0, y0)`、party 1 が `(x1, y1)` を持ちます。XOR は各自が自分の行を XOR するだけで済みます。AND は違います。\n\n```\n(x0 ^ x1) & (y0 ^ y1) = x0y0 ^ x1y1 ^ x0y1 ^ x1y0\n                        \\__________/   \\__________/\n                          各自で計算可     クロス項。 1 つにつき OT が 1 回\n```\n\n## 最初の一手\n\n**Participant Portal** で問題を起動し、**「証拠を調べる」** を押してください。この deploy の群 `(p, q, g)`、送り手の公開鍵 `A`、あなたの choice と blind、2 つのメッセージ、そして AND ゲートの share が表示されます。ホスト側のターミナルは要りません。\n\n## 解き方\n\nエディタで `oblivious.py` の 7 つの関数を埋め、**「公開テストを実行」** で確認します。この問題に JSON を手入力する checkpoint はありません。7 つとも関数を書きます。返り値の形は次のとおりです。\n\n- `request(grp, public, choice, blind)` -> **整数ひとつ** (0..p-1 の、位数 q の部分群の元)。\n- `blind_range(grp)` -> **2 要素のタプル `(low, high)`**。両端を**含む**範囲です。\n- `encrypt(grp, secret, public, req, message_0, message_1)` -> **整数 2 個のタプル**。\n- `unwrap(grp, public, choice, blind, ciphertexts)` -> **整数ひとつ**。\n- `gate_masks(randomness)` -> **ビット 2 個のタプル**。`randomness` はビット 2 個のタプルです。\n- `offer(own_bit, mask)` -> **ビット 2 個のタプル**。相手のビットで添字を引かれます。\n- `output_share(own_x, own_y, own_mask, received)` -> **ビットひとつ**。\n- `needs_transfer(gate)` -> **bool**。引数に来る文字列は `\"xor\"` と `\"and\"` の 2 つだけです。\n\n## ゴール\n\n転送が端から端まで成立し、送り手が choice を読めず、AND ゲートがどの share 配置でも正しく再構成でき、しかも各自の view が相手の秘密ビットで動かないこと。最後の unseen は、別の群と別の share 配置で全部を再実行します。\n",
+  "writeup": "## なぜ OT が「原始的な部品」なのか\n\nWeek 2 のこれまでの問題は、どれも三つ組を「誰かが前もって用意した」ことにしていました。その誰かが信用できる第三者なら話は簡単ですが、**いないなら誰かが作らなければなりません**。互いに何も信用していない 2 者が、何も共有していない状態から始められる最小の道具が OT です。そして OT が 1 つあれば、任意のブール回路が 2 者間で計算できます (GMW)。だから OT は「便利な部品」ではなく **土台** です。\n\n## 転送の式が、なぜ成り立つのか\n\n受け手は `B` を送ります。\n\n```\nchoice = 0 のとき  B = g^t\nchoice = 1 のとき  B = A * g^t = g^(a+t)\n```\n\n送り手は 2 つの鍵を作ります。\n\n```\nK_0 = B^a          (choice 0 用)\nK_1 = (B/A)^a      (choice 1 用)\n```\n\n受け手が計算できるのは 1 つだけ、`A^t = g^(a*t)` です。両方の場合で確かめます。\n\n```\nchoice = 0:  K_0 = (g^t)^a       = g^(a*t)   <- 受け手の A^t と一致\n             K_1 = (g^t / g^a)^a = g^(a*t-a*a)   受け手は a を知らないので作れない\nchoice = 1:  K_0 = (g^(a+t))^a       = g^(a*a+a*t)  作れない\n             K_1 = (g^(a+t) / g^a)^a = g^(a*t)   <- 一致\n```\n\n**どちらの場合も、一致するのはちょうど 1 つ**です。もう一方を作るには `g^(a*a)` が要り、それには `A = g^a` から `a` を取り出す —— つまり離散対数を解く必要があります。\n\n### 小さい群で 1 行ずつ (p = 11, q = 5, g = 3)\n\n3 が生成する位数 5 の部分群は `{1, 3, 9, 5, 4}` です (3^0=1, 3^1=3, 3^2=9, 3^3=27%11=5, 3^4=81%11=4)。送り手の秘密を `a = 2` とすると `A = 3^2 = 9`。受け手の blind を `t = 3` とします (`g^t = 27 % 11 = 5`)。\n\n```\nchoice = 0:  B = 5\n  送り手  K_0 = 5^2 = 25 % 11 = 3\n          B/A = 5 * 9^-1 = 5 * 5 = 25 % 11 = 3   (9*5 = 45 = 44+1 なので 9^-1 = 5)\n          K_1 = 3^2 = 9\n  受け手  A^t = 9^3 = 729 % 11 = 3        -> K_0 と一致  OK\n\nchoice = 1:  B = 9 * 5 = 45 % 11 = 1\n  送り手  K_0 = 1^2 = 1\n          B/A = 1 * 5 = 5、 K_1 = 5^2 = 25 % 11 = 3\n  受け手  A^t = 3                          -> K_1 と一致  OK\n```\n\n## この問題の山: blind の範囲\n\n受け手の秘匿は「送り手が B を見て choice を当てられない」ことです。これは 1 通のメッセージの性質ではなく、**B の分布**の性質です。\n\n`t` を **0 を含む** `0..q-1` から一様に引くと、`g^t` は部分群の全体を一様に走ります。`A * g^t` も (A を掛けるのは部分群の置換なので) 全体を一様に走ります。**2 つの分布が完全に一致する**ので、送り手は B を見ても何も分かりません。\n\nところが「秘密の指数だから 0 は除く」という習慣で `1..q-1` にすると、こうなります。上の p=11 の群で `A = 9` として:\n\n```\nchoice = 0、 t ∈ 1..4:  B ∈ {3, 9, 5, 4}       <- 1 が出ない\nchoice = 1、 t ∈ 1..4:  B ∈ {5, 4, 1, 3}       <- 9 (= A) が出ない\n```\n\n`B = 1` は choice 1 でしか出ず、`B = 9` は choice 0 でしか出ません。**q 個のうち 2 個が choice をそのまま名指しします。** 1 回の転送は完璧に成功し、正しさのテストは全部通り、それでも秘匿が壊れています。これが「1 例の成功では性質を示せない」のこの問題での形です。\n\nだから採点は**プロトコルを走らせません**。宣言された範囲のすべての blind について、両方の choice で `request` が作りうる値の **集合を列挙して比較**します。受け手の完全な秘匿とは、まさに「2 つの集合が一致する」という文だからです。\n\nなお `request` が引数を無視して定数 1 を返すと 2 つの集合は `{1}` で一致しますが、それは何も転送していません。だから採点は「各 choice のもとで部分群の全体 (q 個) を走ること」も同時に要求します。\n\n## AND ゲート: クロス項を OT で買う\n\nXOR-share で `x = x0 ^ x1`、`y = y0 ^ y1` のとき\n\n```\nx & y = (x0 ^ x1) & (y0 ^ y1) = x0y0 ^ x1y1 ^ x0y1 ^ x1y0\n```\n\n`x0y0` は party 0 が、`x1y1` は party 1 が、自分だけで計算できます。残る `x0y1` と `x1y0` が **クロス項**で、これがちょうど前の問題の「和の積は積の和ではない」の 1 ビット版です。各クロス項を OT 1 回で買います。\n\n### 数値で追う (x0=1, x1=0, y0=1, y1=1、マスク (m0, m1) = (0, 1))\n\n```\nx = 1 ^ 0 = 1、 y = 1 ^ 1 = 0、 x & y = 0\nparty 1 が受け取る値 = offer(x0=1, m0=0)[y1=1] = (0, 0^1)[1] = 1\nparty 0 が受け取る値 = offer(x1=0, m1=1)[y0=1] = (1, 1^0)[1] = 1\nz0 = (x0 & y0) ^ m0 ^ (受け取った値) = 1 ^ 0 ^ 1 = 0\nz1 = (x1 & y1) ^ m1 ^ (受け取った値) = 0 ^ 1 ^ 1 = 0\nz0 ^ z1 = 0 = x & y   OK\n```\n\n## マスクを 1 つで済ませると、正しいまま漏れる\n\n2 回の転送に **同じマスク** を使っても、再構成は成功します。マスクは XOR で打ち消し合うので、1 個でも 2 個でも合計は同じだからです。だから正しさのテストは全部通ります。ところが `m0 = m1 = m` とすると、party 0 の出力 share は\n\n```\nz0 = (x0 & y0) ^ m ^ (m ^ (x1 & y0)) = (x0 & y0) ^ (x1 & y0) = (x0 ^ x1) & y0\n```\n\n**マスクが party 0 の中だけで打ち消えてしまいます。** すると z0 は `x1` に依存し、party 0 は自分の値と z0 から相手のビットを読み出せます。**ゲートは正しいまま、隠すのをやめる**わけです。\n\nだから gate-privacy checkpoint は、正しさとは別に、「相手の秘密ビットだけを動かしたとき、この party の view (受け取った値と自分の出力 share) の分布が動かないか」を見ます。しかも party 0 と party 1 の**両方向**で見ます —— 片方だけ見ると、party 1 にだけ漏らす実装が残るからです。\n\n## 各 checkpoint が守っているもの\n\n- **request** — 返した値が本当に位数 q の部分群の元であること、そして choice が「公開鍵ぶんのずれ」として符号化されていること。\n- **choice-privacy** — 上の集合比較。プロトコルを走らせずに、宣言された範囲を総当たりします。\n- **transfer** — 端から端まで。選んだメッセージが届くことに加えて、**宣言どおりの独立な 2 鍵構成**を使っていること、そして受け手の鍵でもう一方が開かないことを見ます。可逆な符号化で「XOR してみたら壊れている」だけを作るのでは、送り手の秘匿を示したことになりません。\n- **and-gate** — seed から来る 1 つの配置ではなく、`(x0, x1, y0, y1)` と乱数の **64 通り全部**で再構成を検査します。加えて `needs_transfer` の分類も見ます。\n- **gate-privacy** — 上の view の不変性。正しさとは別に測ります。\n- **unseen** — 別の群・別の配置で全部を再実行します。\n\n## 間違えるとどう壊れるか\n\n- **blind の範囲から 0 を除く** — 1 回の転送は成功し、正しさのテストは全通り。それでも 2 つの値が choice を名指しします。範囲は **両端を含む** ので、幅は `high - low + 1 = q` でなければなりません。\n- **`request` が定数を返す** — 2 つの集合は一致しますが部分群を走らないので落ちます。「完全に一致するが何も転送しない」を排除するための検査です。\n- **`B/A` を引き算で書く** — 群の演算は掛け算です。`B/A` は `B * A^-1 mod p` で、`A^-1` は `pow(A, p-2, p)`。`B - A` ではありません。\n- **鍵の導出を自作する** — `derive_key` を両側で使ってください。ここはハッシュの流儀を当てる問題ではありません。\n- **`unwrap` で `ciphertexts[0]` を決め打ちする** — choice に応じて選びます。\n- **マスクを 1 つだけ引く** — 再構成は成功し、gate-privacy だけが落ちます。`randomness` は 2 個渡されます。 2 個渡される理由がこれです。\n- **`needs_transfer` で両方 True を返す** — XOR は XOR-share の上では線形で、各自が自分の行を XOR するだけです。通信は要りません。\n\n## 次への接続\n\n- **ac26-w2-private-aggregate** で「前もって用意されている」ことにした三つ組は、信頼できる第三者がいない場合、まさにこの OT を土台とするプロトコルで作られます。円は閉じます。\n- **ac26-w3-*** は、ここで使った「位数 q の部分群」「離散対数の困難性」「`g^x` からは `x` が出ない」をそのまま引き継ぎ、楕円曲線と Schnorr 署名へ進みます。この問題の群演算に慣れておくことが、そこでの前提になります。\n- 上流課題 (toy-mpc) の Part B が扱うのが、まさにこの OT と GMW の AND です。\n",
   "tags": [
     "advanced-cryptography-2026",
     "week2",
@@ -76,7 +76,24 @@
         "input": "multiline",
         "label": "choice を隠した request を作る",
         "points": 30,
-        "wrongAnswerPenalty": 10
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "request-hint-1",
+            "content": "受け手として、 送り手に送る 1 個の値を作ります。 この値は **どちらのメッセージが欲しいのかを漏らしてはいけません**。 確かめられるのは 3 つ —— 返した値が (1) 群の元の範囲 0..p-1 に入っていること、 (2) 位数 q の**部分群**の元であること (`pow(値, q, p) == 1`)、 (3) choice を「送り手の公開鍵ぶんのずれ」として符号化していること。",
+            "penalty": 6
+          },
+          {
+            "id": "request-hint-2",
+            "content": "問題文と starter にある式そのままです。\n\n    choice = 0 のとき  B = g^t mod p\n    choice = 1 のとき  B = A * g^t mod p\n\n`g` は `grp[\"g\"]`、 `p` は `grp[\"p\"]`、 `A` は引数 `public`、 `t` は引数 `blind` です。 べき乗は `pow(底, 指数, p)` を使ってください (`**` だと巨大な整数になります)。 掛け算のあとも `% p` を忘れずに。\n\n`g^t` が部分群の元になるのは g がその生成元だからで、 `A` も部分群の元なので積も部分群に留まります。",
+            "penalty": 5
+          },
+          {
+            "id": "request-hint-3",
+            "content": "**request(grp, public, choice, blind)** の手順:\n1. `p, g = grp[\"p\"], grp[\"g\"]` を取る。\n2. `blinded = pow(g, blind, p)` を計算する。\n3. `choice` が 0 なら `blinded` をそのまま返す。\n4. `choice` が 0 でなければ `(public * blinded) % p` を返す。\n\n検算 (p=11, q=5, g=3, a=2 なので A=9, t=3):\n```\nblinded = 3^3 % 11 = 27 % 11 = 5\nchoice 0 -> 5          部分群 {1,3,9,5,4} の元  OK\nchoice 1 -> 9*5 = 45 % 11 = 1   これも部分群の元  OK\n```\n`p` や `g` を数値で書き込まないでください。 群は起動ごとに変わります。",
+            "penalty": 3
+          }
+        ]
       },
       {
         "id": "choice-privacy",
@@ -87,13 +104,18 @@
         "hints": [
           {
             "id": "choice-privacy-hint-1",
-            "content": "1 回の転送が成功するかではなく、 blind を範囲全体で動かしたとき request がどの元を取りうるかを、 choice 0 と choice 1 で比べる。",
-            "penalty": 12
+            "content": "**この問題の山です。** 確かめているのは「送り手が、 あなたの送った値を見て choice を当てられないこと」。 これは 1 通のメッセージの性質ではなく、 **分布** の性質です。 だから採点は **プロトコルを走らせません** —— `blind_range` が宣言した範囲のすべての blind について、 choice 0 と choice 1 それぞれで `request` が作りうる値の **集合を列挙して比較**します。 完全な受け手秘匿とは、 まさに「2 つの集合が一致する」という文だからです。",
+            "penalty": 8
           },
           {
             "id": "choice-privacy-hint-2",
-            "content": "blind から 0 を外すと、 choice 0 では作れないのに choice 1 では作れる元が現れる。 それがどの元か書き出してみる。",
-            "penalty": 8
+            "content": "`blind_range(grp)` は blind を引く範囲を **両端を含む** `(low, high)` で返します。 幅は `high - low + 1` で、 これが部分群の大きさ q と一致しなければなりません。\n\n考えどころは端点です。 「秘密の指数だから 0 は除く」という習慣が、 ここでは秘匿を壊します。 `g^t` が部分群**全体**を走るには t が何通り必要か、 そして t の範囲から 1 つ値を落としたとき、 choice 0 側と choice 1 側で **落ちる元が違う**ことを紙の上で確かめてください。 その 2 つの元が choice をそのまま名指しします。\n\nもうひとつ: `request` が引数を無視して定数を返すと 2 つの集合は一致しますが、 何も転送していません。 採点は「各 choice のもとで部分群の全体 (q 個) を走ること」も同時に要求します。",
+            "penalty": 6
+          },
+          {
+            "id": "choice-privacy-hint-3",
+            "content": "**blind_range(grp)** は `(0, grp[\"q\"] - 1)` を返してください。 両端を含むので幅は `q - 1 - 0 + 1 = q` になり、 部分群の大きさと一致します。\n\n**なぜ 0 を含めるのか** (p=11, q=5, g=3, A=9 で確かめます。 部分群は {1,3,9,5,4}):\n```\nt ∈ 0..4 (0 を含む)\n  choice 0: B ∈ {1, 3, 9, 5, 4}   部分群の全体\n  choice 1: B ∈ 9*{1,3,9,5,4} = {9, 5, 4, 1, 3}   同じく全体\n  -> 2 つの集合は完全に一致。 送り手は何も分からない  OK\n\nt ∈ 1..4 (0 を除いた場合)\n  choice 0: B ∈ {3, 9, 5, 4}      1 が出ない\n  choice 1: B ∈ {5, 4, 1, 3}      9 (= A) が出ない\n  -> B = 1 なら choice 1、 B = 9 なら choice 0 と分かってしまう  NG\n```\n`request` 側は前の checkpoint のままで構いません。 引数をきちんと使っていれば (定数を返していなければ)、 範囲を直すだけでここは通ります。 `q` は必ず `grp[\"q\"]` から取ってください。",
+            "penalty": 5
           }
         ]
       },
@@ -106,8 +128,18 @@
         "hints": [
           {
             "id": "transfer-hint-1",
-            "content": "送信者は 2 つの鍵を作る。 片方は request をそのまま、 もう片方は request から公開鍵を割り戻した元から。",
-            "penalty": 12
+            "content": "転送を端から端まで成立させます。 送り手側の `encrypt` と、 受け手側の `unwrap` の 2 つです。 確かめられるのは 3 つ —— (1) 選んだメッセージが正しく届くこと、 (2) **宣言どおりの、 枝ごとに独立な 2 つの鍵**で暗号化されていること、 (3) 受け手の鍵でもう一方の枝が開かないこと。 (2) があるのは、 可逆な符号化で「XOR してみたら壊れている」だけを作っても、 送り手の秘匿を示したことにならないからです。",
+            "penalty": 7
+          },
+          {
+            "id": "transfer-hint-2",
+            "content": "鍵は問題文の式そのままです。 `derive_key` は両側で共有されているので、 ハッシュの流儀で悩む必要はありません。\n\n    送り手  K_0 = derive_key(grp, B^a mod p)\n            K_1 = derive_key(grp, (B/A)^a mod p)\n    受け手  K   = derive_key(grp, A^t mod p)\n\n`B` は引数 `req`、 `a` は引数 `secret`、 `A` は引数 `public`、 `t` は引数 `blind` です。\n\n**`B/A` は掛け算です。** 群の演算は乗法なので、 `B/A = B * A^-1 mod p`。 `A^-1` は `pow(public, p - 2, p)` で得られます (p が素数なのでフェルマーの小定理)。 `B - A` ではありません。\n\n暗号化と復号は XOR です。",
+            "penalty": 5
+          },
+          {
+            "id": "transfer-hint-3",
+            "content": "**encrypt(grp, secret, public, req, message_0, message_1)** の手順:\n1. `p = grp[\"p\"]` を取る。\n2. `key_0 = derive_key(grp, pow(req, secret, p))`。\n3. `unshifted = (req * pow(public, p - 2, p)) % p` —— 公開鍵を割り戻した値 (B/A)。\n4. `key_1 = derive_key(grp, pow(unshifted, secret, p))`。\n5. `(message_0 ^ key_0, message_1 ^ key_1)` をタプルで返す。\n\n**unwrap(grp, public, choice, blind, ciphertexts)** の手順:\n1. `key = derive_key(grp, pow(public, blind, grp[\"p\"]))` —— 受け手が作れる唯一の鍵 A^t。\n2. `ciphertexts[choice] ^ key` を返す。\n\nなぜ 1 つの鍵で足りるのか (p=11, q=5, g=3, a=2 で A=9, t=3、 受け手の鍵は A^t = 9^3 % 11 = 3):\n```\nchoice 0: B = 5 -> K_0 = 5^2 % 11 = 3      受け手の鍵と一致\n                   K_1 = (5 * 5)^2 % 11 = 3^2 = 9   一致しない\nchoice 1: B = 1 -> K_0 = 1^2 % 11 = 1      一致しない\n                   K_1 = (1 * 5)^2 % 11 = 25 % 11 = 3   一致する\n```\nどちらの枝でも一致するのはちょうど 1 つ。 もう一方を作るには `A = g^a` から `a` を取り出す、 つまり離散対数を解く必要があります。",
+            "penalty": 4
           }
         ]
       },
@@ -120,8 +152,18 @@
         "hints": [
           {
             "id": "and-gate-hint-1",
-            "content": "(x0^x1)&(y0^y1) を展開すると 4 項。 2 項は手元で計算でき、 残る 2 項が交差項で 1 つにつき転送 1 回。",
-            "penalty": 15
+            "content": "Part 2 に入ります。 OT が手に入ったので、 2 者の間で AND ゲートを計算します。 `x = x0 ^ x1`、 `y = y0 ^ y1` と分かれていて、 party 0 が `(x0, y0)`、 party 1 が `(x1, y1)` を持ちます。 求めるのは `z0 ^ z1 = x & y` となる出力 share `z0`, `z1` です。\n\n採点は seed から来る 1 つの配置ではなく、 `(x0, x1, y0, y1)` と乱数 2 個の **64 通り全部**で再構成を検査します。 加えて `needs_transfer` の分類も同じ checkpoint で見ます (引数に来るのは `\"xor\"` と `\"and\"` の 2 つだけ)。",
+            "penalty": 9
+          },
+          {
+            "id": "and-gate-hint-2",
+            "content": "展開すると\n\n    (x0 ^ x1) & (y0 ^ y1) = x0y0 ^ x1y1 ^ x0y1 ^ x1y0\n\n最初の 2 項は各自が自分だけで計算できます。 残る `x0y1` と `x1y0` が **クロス項** で、 1 つにつき転送を 1 回使って買います。\n\n仕組みはこうです。 各 party は「自分のビットとマスクから作った 2 つのメッセージ」を転送に載せ、 相手は **自分のビットを添字にして** 1 つ取ります。 添字が 0 のときと 1 のときで何を渡せば、 相手が受け取る値に「自分のビット AND 相手のビット」が入るか —— それが `offer` の中身です。\n\n出力 share は 3 つの XOR です: 自分だけで計算できる項、 自分が送り手として使ったマスク、 自分が受け手として受け取った値。 2 者ぶんを XOR したときに何が残り何が消えるかを、 紙の上で追ってください。\n\n`needs_transfer` は、 XOR-share の上で XOR が線形である (各自が自分の行を XOR するだけ) ことを踏まえて分類します。",
+            "penalty": 7
+          },
+          {
+            "id": "and-gate-hint-3",
+            "content": "3 つの関数をこう書いてください。\n\n**gate_masks(randomness)** —— 転送 2 回それぞれに使うマスクを返す。\n  `(randomness[0], randomness[1])` を返す。 **2 個渡されているので 2 個とも使う**\n  (1 個を 2 回使っても再構成は成功しますが、 次の gate-privacy で落ちます)。\n\n**offer(own_bit, mask)** —— 転送に載せる 2 つのメッセージ。 相手のビットで引かれる。\n  `(mask, mask ^ own_bit)` を返す。\n  相手のビットが 0 なら `mask`、 1 なら `mask ^ own_bit` を受け取るので、\n  相手が受け取る値はちょうど `mask ^ (own_bit & 相手のビット)` になる。\n\n**output_share(own_x, own_y, own_mask, received)** —— 自分の出力 share。\n  `(own_x & own_y) ^ own_mask ^ received` を返す。\n\n**needs_transfer(gate)** —— `gate == \"and\"` を返す。 引数は `\"xor\"` と `\"and\"` の 2 つだけ。\n  XOR は XOR-share の上で線形なので通信不要、 AND だけが転送を要する。\n\n検算 (x0=1, x1=0, y0=1, y1=1、 マスク (m0, m1) = (0, 1)):\n```\nx = 1^0 = 1、 y = 1^1 = 0、 x & y = 0\nparty 1 が受け取る = offer(1, 0)[y1=1] = (0, 0^1)[1] = 1\nparty 0 が受け取る = offer(0, 1)[y0=1] = (1, 1^0)[1] = 1\nz0 = (1 & 1) ^ 0 ^ 1 = 0\nz1 = (0 & 1) ^ 1 ^ 1 = 0\nz0 ^ z1 = 0 = x & y   OK\n```\n2 者ぶんを XOR すると、 マスクは 2 個とも打ち消え、 クロス項 4 つが残ります。",
+            "penalty": 5
           }
         ]
       },
@@ -134,8 +176,18 @@
         "hints": [
           {
             "id": "gate-privacy-hint-1",
-            "content": "mask は XOR で打ち消えるので、 1 つでも 2 つでも復元は正しい。 復元が正しいことは隠せている証拠にならない。",
-            "penalty": 10
+            "content": "**正しさとは別に測られる checkpoint です。** ゲートが正しく再構成できても、 各 party の view (受け取った値と自分の出力 share) が **相手の秘密ビットで動いてしまう**実装があります。 動くということは、 自分の持ち物から相手のビットが読めるということです。 採点は、 自分の入力を固定したまま相手の入力だけを変え、 乱数を総当たりして view の分布が変わらないかを見ます。 しかも party 0 と party 1 の **両方向**で見ます —— 片方だけだと、 片方にだけ漏らす実装が残るからです。",
+            "penalty": 6
+          },
+          {
+            "id": "gate-privacy-hint-2",
+            "content": "問題は `gate_masks` にあります。 マスクは XOR で打ち消し合うので、 **2 回の転送に同じマスクを使っても再構成は成功します**。 だから正しさのテストは全部通ります。\n\nところが、 同じマスク `m` を両方に使うと、 party 0 の出力 share の中でマスクが **party 0 の内側だけで**打ち消えてしまいます。 打ち消えた後に何が残るかを、 z0 の式を展開して確かめてください。 残った式が相手のビットを含んでいれば、 それは party 0 が相手のビットを読めるということです。\n\n`randomness` が 2 個渡されているのは、 転送 1 回につき 1 個ずつ **新しい**マスクを使うためです。",
+            "penalty": 5
+          },
+          {
+            "id": "gate-privacy-hint-3",
+            "content": "**gate_masks(randomness)** は `(randomness[0], randomness[1])` を返してください。 転送 1 回につき新しいマスクを 1 個ずつ使います。 `(randomness[0], randomness[0])` のように 1 個を 2 回使うと、 ここだけが落ちます。\n\n**なぜ 1 個だと漏れるのか** —— `m0 = m1 = m` としたときの party 0 の出力 share を展開します。\n```\nparty 0 が受け取る値 = m ^ (x1 & y0)\nz0 = (x0 & y0) ^ m ^ (m ^ (x1 & y0))\n   = (x0 & y0) ^ (x1 & y0)          <- m が party 0 の中だけで打ち消えた\n   = (x0 ^ x1) & y0\n```\nz0 が `x1` に依存しています。 party 0 は自分の `x0`, `y0` と z0 を知っているので、 `y0 = 1` のときに `x1 = z0 ^ x0` として **相手のビットを読み出せます**。 ゲートは正しいまま、 隠すのをやめています。\n\nマスクを 2 個にすると `m0` と `m1` は別々の party の share に残り、 2 者ぶんを XOR したときにだけ打ち消えます。 だから各 party の view は相手のビットで動きません。\n\n`offer` と `output_share` は前の checkpoint のままで構いません。",
+            "penalty": 3
           }
         ]
       },
@@ -144,7 +196,24 @@
         "input": "multiline",
         "label": "見たことのない群でも成立させる",
         "points": 20,
-        "wrongAnswerPenalty": 10
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "unseen-hint-1",
+            "content": "unseen は **新しく書くものがない** checkpoint です。 いま画面に見えている群や share 配置ではなく、 別の seed の `(p, q, g)`・鍵・メッセージ・配置で、 7 つの関数と 2 つのプロトコルを全部やり直します。 確かめているのは 1 点 —— **この deploy の具体的な数字に依存していないか**。",
+            "penalty": 4
+          },
+          {
+            "id": "unseen-hint-2",
+            "content": "自分のコードから **引数から来ていない数** を探してください。 典型は 4 つ。 (1) `p` / `q` / `g` を数値リテラルで書いている。 (2) 「証拠を調べる」で見た `A` や blind の値を埋め込んでいる。 (3) `blind_range` が `q` ではなく固定の数を返している。 (4) `unwrap` で `ciphertexts[0]` を決め打ちしている (choice で選ぶ)。\n\n群の値は必ず `grp[\"p\"]` / `grp[\"q\"]` / `grp[\"g\"]` から取ってください。",
+            "penalty": 3
+          },
+          {
+            "id": "unseen-hint-3",
+            "content": "7 つの関数を順に点検してください。 すべて満たしていればそのまま提出で通ります。\n\n1. **request** —— `pow(grp[\"g\"], blind, grp[\"p\"])` を作り、 choice が 0 でなければ `public` を掛けて `% grp[\"p\"]`。\n2. **blind_range** —— `(0, grp[\"q\"] - 1)`。 数値を書かない。\n3. **encrypt** —— `pow(req, secret, p)` と `(req * pow(public, p - 2, p)) % p` の 2 つから `derive_key` で鍵を作り、 それぞれのメッセージと XOR。\n4. **unwrap** —— `derive_key(grp, pow(public, blind, grp[\"p\"]))` で鍵を作り、 `ciphertexts[choice]` と XOR。\n5. **gate_masks** —— `(randomness[0], randomness[1])`。\n6. **offer** —— `(mask, mask ^ own_bit)`。 **output_share** —— `(own_x & own_y) ^ own_mask ^ received`。\n7. **needs_transfer** —— `gate == \"and\"`。\n\n最後に、 7 つの関数の本文に **数値リテラルが `0`・`1`・`2` 以外に残っていない**ことを目で確認してください (`p - 2` の 2 はフェルマーの小定理の指数で、 群に依存しません)。 残っていなければ unseen は通ります。",
+            "penalty": 2
+          }
+        ]
       }
     ]
   },
@@ -324,8 +393,8 @@
       "name": "Choosing without saying which",
       "shortDescription": "Build the official Week 2 Part B topics — oblivious transfer and a GMW secret AND — in one problem, and test correctness separately from whether either party learns a secret.",
       "description": "Sixth problem of Week 2. The five earlier companions cover arithmetic MPC, while the published official assignment's Part B requires oblivious transfer and GMW Boolean MPC. This problem fills that missing half.\n\nBuild the standard Diffie-Hellman-flavoured transfer in a prime-order subgroup, then put a GMW AND gate on top of it. XOR is linear over XOR-shares and stays local; AND is the one that costs two transfers.\n\nThe real subject is that **two implementations work correctly and only one of them hides anything.** Draw the receiver's blind from 0 or from 1; draw one mask for the gate or two. Every message still arrives and every gate still reconstructs, and the public tests pass either way.",
-      "instructions": "## Solve in Participant Portal\n\nStart the problem in Participant Portal. The `oblivious.py` editor appears on the same page as the statement. Select **Inspect evidence** to see the deployment-specific group, key, session, and gate shares; edit the starter; then select **Run public tests**.\n\nAll six checkpoints are code checkpoints. Each submit button sends the current editor source through the container prepare API and submits the prepared value directly for scoring. No checkout, terminal, second screen, or copy-and-paste step is required.\n\n## Goal\n\nComplete the 1-out-of-2 transfer in a prime-order subgroup and the GMW AND gate built on it. Privacy is a property of a distribution, not of one run: delivery and correct reconstruction alone do not prove that either party's secret stayed hidden.",
-      "writeup": "Receiver privacy is the claim that B has the same distribution under both choices. With the blind uniform over 0..q-1, B is uniform over the subgroup either way and the two coincide. Restrict it to 1..q-1 and B = 1 becomes reachable only under choice 1, B = A only under choice 0 — two values out of q that name the bit.\n\nThe gate's masks have the same shape. Reusing one mask across both transfers still cancels under XOR, so reconstruction stays correct, while each party's output share becomes a function of the other party's secret bits: a party holding x0 = 0, y0 = 1 reads x1 straight off z0.\n\nBoth are concrete cases of \"the tests pass\" and \"the secret is safe\" being different statements, with no route from the first to the second.",
+      "instructions": "## Start here\n\nEvery Week 2 problem so far assumed that \"somebody prepared the triples in advance\". **What if there is no such somebody?** **Oblivious transfer (OT)** is the primitive that lets two mutually distrusting parties, sharing nothing, start computing together. No prior knowledge is needed.\n\n### What OT is\n\nA sender holds two messages and a receiver picks one. Afterwards:\n\n- the receiver has **exactly the one it chose** and learns nothing about the other;\n- the sender does not know **which one that was**.\n\n### The group\n\nWork inside the **order-q subgroup** of `Z_p^*` where `p = 2q + 1` and both are prime; `g` generates that subgroup. Inspect evidence shows you `p`, `q` and `g`.\n\n### The protocol (the standard Diffie-Hellman-flavoured one)\n\n```\nsender publishes:  A = g^a mod p          (a is the sender's secret exponent)\nreceiver sends:    B = g^t mod p          (to get message 0)\n                   B = A * g^t mod p      (to get message 1)\nsender replies:    m_0 under key H(B^a), m_1 under key H((B/A)^a)\nreceiver opens:    with key H(A^t)\n```\n\nWhichever branch was taken, **exactly one** of the sender's two keys equals `H(A^t) = H(g^(a*t))`; producing the other would mean solving a discrete log. Encryption and decryption are XOR, and `derive_key` is shared by both sides, so you never debug two hash conventions at once.\n\n**Which values `B` can take** is the most important observation in this problem, because the receiver's privacy is a property of a **distribution**, not of any single message.\n\n### Part 2: an AND gate (GMW)\n\nOnce you have OT you can compute any Boolean circuit between two parties. Split `x = x0 ^ x1` and `y = y0 ^ y1`, with party 0 holding `(x0, y0)` and party 1 holding `(x1, y1)`. XOR is free — each party XORs its own row. AND is not.\n\n```\n(x0 ^ x1) & (y0 ^ y1) = x0y0 ^ x1y1 ^ x0y1 ^ x1y0\n                        \\__________/   \\__________/\n                          local            cross terms; one transfer each\n```\n\n## First move\n\nStart the problem in **Participant Portal** and press **Inspect evidence**. It shows this deployment's group `(p, q, g)`, the sender's public key `A`, your choice and blind, the two messages on offer, and the AND gate's shares. No terminal on your machine is required.\n\n## Workflow\n\nFill in the seven functions in `oblivious.py` in the editor and press **Run public tests**. Nothing here is typed-in JSON; all the checkpoints are code. The return shapes are:\n\n- `request(grp, public, choice, blind)` -> a **single integer** in 0..p-1, inside the order-q subgroup.\n- `blind_range(grp)` -> a **two-element tuple `(low, high)`**, with both ends **inclusive**.\n- `encrypt(grp, secret, public, req, message_0, message_1)` -> a **tuple of two integers**.\n- `unwrap(grp, public, choice, blind, ciphertexts)` -> a **single integer**.\n- `gate_masks(randomness)` -> a **tuple of two bits**; `randomness` is a tuple of two bits.\n- `offer(own_bit, mask)` -> a **tuple of two bits**, indexed by the other party's bit.\n- `output_share(own_x, own_y, own_mask, received)` -> a **single bit**.\n- `needs_transfer(gate)` -> a **bool**. The only strings passed are `\"xor\"` and `\"and\"`.\n\n## Goal\n\nThe transfer works end to end; the sender cannot read the choice off the request; the AND gate reconstructs correctly under every share layout; and neither party's view moves with the other party's secret bits. The final unseen checkpoint re-runs everything under a different group and share layout.\n",
+      "writeup": "## Why OT is a foundation, not a convenience\n\nEvery Week 2 problem so far assumed someone prepared the triples in advance. If that someone is a trusted third party the story is easy — but **if there is none, somebody has to make them**. OT is the smallest tool with which two parties who trust each other with nothing, and share nothing, can begin. And given one OT, any Boolean circuit can be computed between two parties (GMW). So OT is not a handy component; it is **the floor**.\n\n## Why the transfer works\n\nThe receiver sends `B`:\n\n```\nchoice = 0:  B = g^t\nchoice = 1:  B = A * g^t = g^(a+t)\n```\n\nThe sender builds two keys:\n\n```\nK_0 = B^a          (for choice 0)\nK_1 = (B/A)^a      (for choice 1)\n```\n\nThe receiver can compute exactly one thing, `A^t = g^(a*t)`. Check both cases:\n\n```\nchoice = 0:  K_0 = (g^t)^a       = g^(a*t)       <- matches the receiver's A^t\n             K_1 = (g^t / g^a)^a = g^(a*t - a*a)    unreachable without a\nchoice = 1:  K_0 = (g^(a+t))^a       = g^(a*a + a*t)  unreachable\n             K_1 = (g^(a+t) / g^a)^a = g^(a*t)    <- matches\n```\n\n**Exactly one matches, in both cases.** Producing the other would need `g^(a*a)`, which means extracting `a` from `A = g^a` — a discrete log.\n\n### Line by line in a tiny group (p = 11, q = 5, g = 3)\n\nThe order-5 subgroup generated by 3 is `{1, 3, 9, 5, 4}` (3^0=1, 3^1=3, 3^2=9, 3^3=27%11=5, 3^4=81%11=4). Take the sender's secret `a = 2`, so `A = 3^2 = 9`, and the receiver's blind `t = 3`, so `g^t = 27 % 11 = 5`.\n\n```\nchoice = 0:  B = 5\n  sender    K_0 = 5^2 = 25 % 11 = 3\n            B/A = 5 * 9^-1 = 5 * 5 = 25 % 11 = 3   (9*5 = 45 = 44+1, so 9^-1 = 5)\n            K_1 = 3^2 = 9\n  receiver  A^t = 9^3 = 729 % 11 = 3        -> matches K_0   correct\n\nchoice = 1:  B = 9 * 5 = 45 % 11 = 1\n  sender    K_0 = 1^2 = 1\n            B/A = 1 * 5 = 5, so K_1 = 5^2 = 25 % 11 = 3\n  receiver  A^t = 3                          -> matches K_1   correct\n```\n\n## The hard part: the range of the blind\n\nThe receiver's privacy is the statement that the sender cannot read the choice off `B`. That is not a property of one message; it is a property of **the distribution of B**.\n\nDrawing `t` uniformly from `0..q-1` — **including 0** — makes `g^t` uniform over the whole subgroup, and `A * g^t` uniform too (multiplying by A permutes the subgroup). **The two distributions coincide exactly**, so B tells the sender nothing.\n\nExclude 0, the way one habitually does for a secret exponent, and with `A = 9` in the group above:\n\n```\nchoice = 0, t in 1..4:  B in {3, 9, 5, 4}       <- 1 never appears\nchoice = 1, t in 1..4:  B in {5, 4, 1, 3}       <- 9 (= A) never appears\n```\n\n`B = 1` can only mean choice 1 and `B = 9` can only mean choice 0. **Two values out of q name the choice bit outright.** A single transfer still succeeds perfectly, every correctness test passes, and the privacy is broken. This is what \"one successful example proves nothing about a property\" looks like here.\n\nSo the checkpoint **does not run the protocol**. It enumerates every blind in the declared range under both choices and **compares the two sets** of requests, because perfect receiver privacy *is* the statement that those sets coincide.\n\nNote that a `request` ignoring its arguments and returning the constant 1 makes both sets `{1}`, which agrees perfectly and transfers nothing. So the check simultaneously requires the request to range over the whole subgroup (all q elements) under each choice.\n\n## The AND gate: buying the cross terms with OT\n\nWith XOR-shares `x = x0 ^ x1` and `y = y0 ^ y1`,\n\n```\nx & y = (x0 ^ x1) & (y0 ^ y1) = x0y0 ^ x1y1 ^ x0y1 ^ x1y0\n```\n\nParty 0 can compute `x0y0` alone and party 1 can compute `x1y1` alone. What remains, `x0y1` and `x1y0`, are the **cross terms** — the one-bit version of the previous problem's \"the product of the sums is not the sum of the products\". Each is bought with one transfer.\n\n### Following the numbers (x0=1, x1=0, y0=1, y1=1, masks (m0, m1) = (0, 1))\n\n```\nx = 1 ^ 0 = 1, y = 1 ^ 1 = 0, so x & y = 0\nparty 1 receives  offer(x0=1, m0=0)[y1=1] = (0, 0^1)[1] = 1\nparty 0 receives  offer(x1=0, m1=1)[y0=1] = (1, 1^0)[1] = 1\nz0 = (x0 & y0) ^ m0 ^ received = 1 ^ 0 ^ 1 = 0\nz1 = (x1 & y1) ^ m1 ^ received = 0 ^ 1 ^ 1 = 0\nz0 ^ z1 = 0 = x & y   correct\n```\n\n## Reusing one mask stays correct and stops hiding\n\nUsing the **same mask** for both transfers still reconstructs. The masks cancel under XOR either way, so the total is unchanged and every correctness test passes. But with `m0 = m1 = m`, party 0's output share becomes\n\n```\nz0 = (x0 & y0) ^ m ^ (m ^ (x1 & y0)) = (x0 & y0) ^ (x1 & y0) = (x0 ^ x1) & y0\n```\n\n**The mask cancels inside party 0 alone.** Now z0 depends on `x1`, and party 0 can read the other party's bit off its own view. The gate stays correct and stops hiding.\n\nSo the gate-privacy checkpoint, separately from correctness, asks whether party's view (the message it received plus its own output share) keeps the same distribution as the *other* party's secrets vary — and it does so **in both directions**, because checking only party 0 leaves implementations that leak exclusively to party 1 undetected.\n\n## What each checkpoint protects\n\n- **request** — that the value returned really is an element of the order-q subgroup, and that the choice is encoded as a shift by the sender's public key.\n- **choice-privacy** — the set comparison above, by sweeping the declared range without running the protocol at all.\n- **transfer** — end to end. Beyond the chosen message arriving, it requires the **declared two-independent-key construction**, and that the other branch does not open under the receiver's key. A reversible encoding that merely makes one attempted XOR look broken has not demonstrated sender privacy.\n- **and-gate** — reconstruction over **all 64 combinations** of `(x0, x1, y0, y1)` and the randomness, not the one layout from the seed. It also checks the `needs_transfer` classification.\n- **gate-privacy** — the invariance of the views above, measured separately from correctness.\n- **unseen** — everything re-run under a different group and layout.\n\n## How it breaks when you get it wrong\n\n- **Excluding 0 from the blind's range** — the transfer succeeds and every correctness test passes, and yet two values name the choice. The range is **inclusive at both ends**, so its width must satisfy `high - low + 1 = q`.\n- **A `request` that returns a constant** — the two sets agree but do not cover the subgroup, and it fails. That check exists to rule out \"perfectly indistinguishable because nothing is transferred\".\n- **Writing `B/A` as a subtraction** — the group operation is multiplication. `B/A` is `B * A^-1 mod p` with `A^-1 = pow(A, p-2, p)`, not `B - A`.\n- **Rolling your own key derivation** — use `derive_key` on both sides. This problem is not about guessing a hash convention.\n- **Hard-coding `ciphertexts[0]` in `unwrap`** — pick according to the choice.\n- **Drawing only one mask** — reconstruction succeeds and only gate-privacy fails. Two values of `randomness` are supplied for exactly this reason.\n- **Returning True from `needs_transfer` for both gates** — XOR is linear over XOR-shares; each party XORs its own row and no one talks.\n\n## Where this leads\n\n- The triples that **ac26-w2-private-aggregate** assumed were \"prepared in advance\" are, with no trusted dealer, produced by protocols built on this very OT. The circle closes.\n- **ac26-w3-\\*** carries over the order-q subgroup, the hardness of discrete log, and \"you cannot get x back from g^x\", and moves on to elliptic curves and Schnorr signatures. Being comfortable with the group arithmetic here is the prerequisite there.\n- Part B of the upstream toy-mpc is exactly this OT and the GMW AND.\n",
       "learningGoals": [
         "Implement 1-out-of-2 oblivious transfer in a prime-order subgroup",
         "State the condition for the receiver's choice to be hidden as a property of the request's distribution, not of one run",
@@ -336,7 +405,21 @@
       "checks": [
         {
           "id": "request",
-          "label": "Build a request that hides the choice"
+          "label": "Build a request that hides the choice",
+          "hints": [
+            {
+              "id": "request-hint-1",
+              "content": "As the receiver, build the single value you send to the sender. That value **must not reveal which message you want**. Three things are checked: the returned value (1) lies in 0..p-1, (2) is an element of the **order-q subgroup** (`pow(value, q, p) == 1`), and (3) encodes the choice as a shift by the sender's public key."
+            },
+            {
+              "id": "request-hint-2",
+              "content": "The formula is exactly the one in the statement and the starter.\n\n    choice = 0:  B = g^t mod p\n    choice = 1:  B = A * g^t mod p\n\n`g` is `grp[\"g\"]`, `p` is `grp[\"p\"]`, `A` is the `public` argument and `t` is the `blind` argument. Use `pow(base, exponent, p)` (plain `**` builds a huge integer), and do not forget the `% p` after the multiplication.\n\n`g^t` is in the subgroup because g generates it, and `A` is in the subgroup too, so the product stays inside."
+            },
+            {
+              "id": "request-hint-3",
+              "content": "**request(grp, public, choice, blind)**, step by step:\n1. Take `p, g = grp[\"p\"], grp[\"g\"]`.\n2. Compute `blinded = pow(g, blind, p)`.\n3. If `choice` is 0, return `blinded` as it is.\n4. Otherwise return `(public * blinded) % p`.\n\nCheck it (p=11, q=5, g=3, a=2 so A=9, t=3):\n```\nblinded = 3^3 % 11 = 27 % 11 = 5\nchoice 0 -> 5          an element of the subgroup {1,3,9,5,4}   correct\nchoice 1 -> 9*5 = 45 % 11 = 1   also in the subgroup            correct\n```\nNever write `p` or `g` in as literals; the group changes per deployment."
+            }
+          ]
         },
         {
           "id": "choice-privacy",
@@ -344,11 +427,15 @@
           "hints": [
             {
               "id": "choice-privacy-hint-1",
-              "content": "Do not ask whether one transfer succeeds. Sweep the blind across its whole range and compare which elements the request can take under choice 0 against choice 1."
+              "content": "**This is the hard part of the problem.** What is checked is that the sender cannot read your choice off the value you sent. That is not a property of one message but of a **distribution**. So the checkpoint **does not run the protocol**: it sweeps every blind in the range `blind_range` declares, under choice 0 and choice 1, and **compares the two sets** of requests. Perfect receiver privacy *is* the statement that those sets coincide."
             },
             {
               "id": "choice-privacy-hint-2",
-              "content": "Drop 0 from the blind's range and some element becomes reachable under one choice but not the other. Write down which."
+              "content": "`blind_range(grp)` returns the range the blind is drawn from as an **inclusive** `(low, high)`. Its width is `high - low + 1`, and that must equal the subgroup size q.\n\nThe interesting question is the endpoints. The habit of excluding 0 from a secret exponent is what breaks privacy here. Work out on paper how many values of t are needed for `g^t` to cover the **whole** subgroup, and then, if one value is dropped from the range, note that **the element that disappears differs between choice 0 and choice 1**. Those two elements name the choice bit.\n\nOne more thing: a `request` that ignores its arguments and returns a constant makes the two sets agree while transferring nothing, so the check simultaneously requires the request to range over all q elements under each choice."
+            },
+            {
+              "id": "choice-privacy-hint-3",
+              "content": "**blind_range(grp)** should return `(0, grp[\"q\"] - 1)`. Both ends are inclusive, so the width is `q - 1 - 0 + 1 = q`, matching the subgroup size.\n\n**Why 0 must be included** (checked with p=11, q=5, g=3, A=9; the subgroup is {1,3,9,5,4}):\n```\nt in 0..4 (0 included)\n  choice 0: B in {1, 3, 9, 5, 4}   the whole subgroup\n  choice 1: B in 9*{1,3,9,5,4} = {9, 5, 4, 1, 3}   also the whole subgroup\n  -> the two sets coincide exactly; the sender learns nothing   correct\n\nt in 1..4 (0 excluded)\n  choice 0: B in {3, 9, 5, 4}      1 never appears\n  choice 1: B in {5, 4, 1, 3}      9 (= A) never appears\n  -> B = 1 means choice 1 and B = 9 means choice 0            broken\n```\nLeave `request` as it was in the previous checkpoint. As long as it genuinely uses its arguments (rather than returning a constant), fixing the range is enough. Always take `q` from `grp[\"q\"]`."
             }
           ]
         },
@@ -358,7 +445,15 @@
           "hints": [
             {
               "id": "transfer-hint-1",
-              "content": "The sender builds two keys: one from the request as it arrived, the other from the request with the public key divided back out."
+              "content": "Make the transfer work end to end: the sender's `encrypt` and the receiver's `unwrap`. Three things are checked: (1) the chosen message arrives; (2) the ciphertexts use **the declared pair of independent per-branch keys**; and (3) the other branch does not open under the receiver's key. (2) is there because a reversible encoding that merely makes one attempted XOR look broken has not demonstrated sender privacy."
+            },
+            {
+              "id": "transfer-hint-2",
+              "content": "The keys are exactly the formulas from the statement, and `derive_key` is shared by both sides so you never guess a hash convention.\n\n    sender    K_0 = derive_key(grp, B^a mod p)\n              K_1 = derive_key(grp, (B/A)^a mod p)\n    receiver  K   = derive_key(grp, A^t mod p)\n\n`B` is the `req` argument, `a` is `secret`, `A` is `public` and `t` is `blind`.\n\n**`B/A` is a multiplication.** The group operation is multiplicative, so `B/A = B * A^-1 mod p`, with `A^-1 = pow(public, p - 2, p)` (p is prime, so Fermat's little theorem). It is not `B - A`.\n\nEncryption and decryption are XOR."
+            },
+            {
+              "id": "transfer-hint-3",
+              "content": "**encrypt(grp, secret, public, req, message_0, message_1)**, step by step:\n1. Take `p = grp[\"p\"]`.\n2. `key_0 = derive_key(grp, pow(req, secret, p))`.\n3. `unshifted = (req * pow(public, p - 2, p)) % p` — the request with the public key divided back out (B/A).\n4. `key_1 = derive_key(grp, pow(unshifted, secret, p))`.\n5. Return the tuple `(message_0 ^ key_0, message_1 ^ key_1)`.\n\n**unwrap(grp, public, choice, blind, ciphertexts)**, step by step:\n1. `key = derive_key(grp, pow(public, blind, grp[\"p\"]))` — the one key the receiver can build, A^t.\n2. Return `ciphertexts[choice] ^ key`.\n\nWhy one key suffices (p=11, q=5, g=3, a=2 so A=9, t=3, and the receiver's key is A^t = 9^3 % 11 = 3):\n```\nchoice 0: B = 5 -> K_0 = 5^2 % 11 = 3      matches the receiver's key\n                   K_1 = (5 * 5)^2 % 11 = 3^2 = 9   does not match\nchoice 1: B = 1 -> K_0 = 1^2 % 11 = 1      does not match\n                   K_1 = (1 * 5)^2 % 11 = 25 % 11 = 3   matches\n```\nExactly one matches on either branch, and producing the other would mean extracting `a` from `A = g^a` — a discrete log."
             }
           ]
         },
@@ -368,7 +463,15 @@
           "hints": [
             {
               "id": "and-gate-hint-1",
-              "content": "Expand (x0^x1)&(y0^y1) into four terms. Two are local; the other two are the cross terms, one transfer each."
+              "content": "Part 2. With OT in hand, compute an AND gate between two parties. `x = x0 ^ x1` and `y = y0 ^ y1`, with party 0 holding `(x0, y0)` and party 1 holding `(x1, y1)`. You need output shares `z0`, `z1` with `z0 ^ z1 = x & y`.\n\nScoring checks reconstruction over **all 64 combinations** of `(x0, x1, y0, y1)` and the two randomness bits, not the one layout from the seed. The same checkpoint also checks the `needs_transfer` classification (the only strings passed are `\"xor\"` and `\"and\"`)."
+            },
+            {
+              "id": "and-gate-hint-2",
+              "content": "Expanding,\n\n    (x0 ^ x1) & (y0 ^ y1) = x0y0 ^ x1y1 ^ x0y1 ^ x1y0\n\nThe first two terms are local. The remaining `x0y1` and `x1y0` are the **cross terms**, and each is bought with one transfer.\n\nThe mechanism: each party puts two messages, built from its own bit and a mask, into a transfer, and the other party takes one **indexed by its own bit**. What must sit at index 0 and at index 1 so that the receiver ends up holding 'my bit AND your bit' — that is the content of `offer`.\n\nAn output share is the XOR of three things: the term you can compute alone, the mask you used as sender, and the value you received as receiver. Work out on paper what survives and what cancels when the two parties' shares are XORed.\n\nFor `needs_transfer`, classify with the fact that XOR is linear over XOR-shares — each party XORs its own row and nobody talks."
+            },
+            {
+              "id": "and-gate-hint-3",
+              "content": "Write the three functions like this.\n\n**gate_masks(randomness)** — the mask used by each of the two transfers.\n  Return `(randomness[0], randomness[1])`. **Two values are supplied, so use both** (reusing one twice still reconstructs, and fails the next checkpoint, gate-privacy).\n\n**offer(own_bit, mask)** — the two messages you put into your transfer, indexed by the other party's bit.\n  Return `(mask, mask ^ own_bit)`.\n  The other party takes `mask` when its bit is 0 and `mask ^ own_bit` when it is 1, so what it ends up holding is exactly `mask ^ (own_bit & their bit)`.\n\n**output_share(own_x, own_y, own_mask, received)** — your own output share.\n  Return `(own_x & own_y) ^ own_mask ^ received`.\n\n**needs_transfer(gate)** — return `gate == \"and\"`. The only arguments are `\"xor\"` and `\"and\"`; XOR is linear over XOR-shares and needs no communication, AND is the one that does.\n\nCheck it (x0=1, x1=0, y0=1, y1=1, masks (m0, m1) = (0, 1)):\n```\nx = 1^0 = 1, y = 1^1 = 0, so x & y = 0\nparty 1 receives  offer(1, 0)[y1=1] = (0, 0^1)[1] = 1\nparty 0 receives  offer(0, 1)[y0=1] = (1, 1^0)[1] = 1\nz0 = (1 & 1) ^ 0 ^ 1 = 0\nz1 = (0 & 1) ^ 1 ^ 1 = 0\nz0 ^ z1 = 0 = x & y   correct\n```\nXORing the two parties' shares cancels both masks and leaves the four cross terms."
             }
           ]
         },
@@ -378,13 +481,35 @@
           "hints": [
             {
               "id": "gate-privacy-hint-1",
-              "content": "The masks cancel under XOR, so reconstruction is correct with one mask or two. Correct reconstruction is not evidence that anything was hidden."
+              "content": "**This checkpoint is measured separately from correctness.** A gate can reconstruct perfectly while each party's view (the message it received plus its own output share) **moves with the other party's secret bits**. If it moves, the other party's bits are readable from what you hold. Scoring fixes your own inputs, varies only the other party's, sweeps the randomness, and asks whether the distribution of your view changes — and it does so **in both directions**, since checking one side leaves implementations that leak only to the other side undetected."
+            },
+            {
+              "id": "gate-privacy-hint-2",
+              "content": "The problem lives in `gate_masks`. Masks cancel under XOR, so **using the same mask for both transfers still reconstructs**, and every correctness test passes.\n\nBut with one mask `m` used twice, the mask cancels **inside party 0 alone** within party 0's output share. Expand the expression for z0 and see what is left once it cancels. If what remains contains the other party's bit, party 0 can read that bit.\n\nTwo values of `randomness` are supplied precisely so that each transfer gets its own **fresh** mask."
+            },
+            {
+              "id": "gate-privacy-hint-3",
+              "content": "**gate_masks(randomness)** should return `(randomness[0], randomness[1])` — one fresh mask per transfer. Reusing one, as in `(randomness[0], randomness[0])`, fails here and only here.\n\n**Why one mask leaks** — expand party 0's output share with `m0 = m1 = m`:\n```\nparty 0 receives  m ^ (x1 & y0)\nz0 = (x0 & y0) ^ m ^ (m ^ (x1 & y0))\n   = (x0 & y0) ^ (x1 & y0)          <- m cancelled inside party 0 alone\n   = (x0 ^ x1) & y0\n```\nz0 depends on `x1`. Party 0 knows its own `x0` and `y0` and sees z0, so whenever `y0 = 1` it recovers `x1 = z0 ^ x0` — **the other party's bit, in the clear**. The gate is still correct and has stopped hiding.\n\nWith two masks, `m0` and `m1` land in different parties' shares and cancel only when the two shares are XORed together, so neither party's view moves with the other's bits.\n\nLeave `offer` and `output_share` as they were in the previous checkpoint."
             }
           ]
         },
         {
           "id": "unseen",
-          "label": "Hold up in groups you have not seen"
+          "label": "Hold up in groups you have not seen",
+          "hints": [
+            {
+              "id": "unseen-hint-1",
+              "content": "unseen is the checkpoint with **nothing new to write**. It re-runs all seven functions and both protocols under another seed's `(p, q, g)`, keys, messages and share layout — not the ones on your screen. It checks exactly one thing: **that you did not depend on this deployment's specific numbers.**"
+            },
+            {
+              "id": "unseen-hint-2",
+              "content": "Hunt your code for **numbers that did not arrive as arguments**. Four typical ones: (1) `p`, `q` or `g` written as literals; (2) the `A` or blind value copied out of Inspect evidence; (3) a `blind_range` returning a fixed number instead of one derived from `q`; (4) `unwrap` hard-coding `ciphertexts[0]` instead of selecting on the choice.\n\nAlways take group values from `grp[\"p\"]`, `grp[\"q\"]` and `grp[\"g\"]`."
+            },
+            {
+              "id": "unseen-hint-3",
+              "content": "Audit the seven functions in order. If all hold, submitting as-is passes.\n\n1. **request** — build `pow(grp[\"g\"], blind, grp[\"p\"])`, and if the choice is non-zero multiply by `public` and take `% grp[\"p\"]`.\n2. **blind_range** — `(0, grp[\"q\"] - 1)`, with no literal numbers.\n3. **encrypt** — derive keys with `derive_key` from `pow(req, secret, p)` and from `(req * pow(public, p - 2, p)) % p`, and XOR each with its message.\n4. **unwrap** — derive the key from `derive_key(grp, pow(public, blind, grp[\"p\"]))` and XOR it with `ciphertexts[choice]`.\n5. **gate_masks** — `(randomness[0], randomness[1])`.\n6. **offer** — `(mask, mask ^ own_bit)`; **output_share** — `(own_x & own_y) ^ own_mask ^ received`.\n7. **needs_transfer** — `gate == \"and\"`.\n\nFinally, read the seven bodies and confirm **no numeric literal other than `0`, `1` and `2` survives** (the 2 in `p - 2` is Fermat's exponent and does not depend on the group). If none does, unseen passes."
+            }
+          ]
         }
       ]
     }
