@@ -238,6 +238,7 @@ describe("stackstack-onboarding first lap", () => {
 
   it("should keep every StackStack instruction and hint browser-solvable", () => {
     const problemIds = [
+      "stackstack-first-request",
       "stackstack-onboarding",
       "stackstack-defend",
       "stackstack-observability",
