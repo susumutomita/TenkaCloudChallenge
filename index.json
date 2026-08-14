@@ -2996,6 +2996,37 @@
       }
     },
     {
+      "id": "stackstack-first-request",
+      "name": "はじめてのリクエスト",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "track": {
+        "id": "stackstack-route",
+        "order": 2,
+        "chapter": "0. 安全に始める"
+      },
+      "difficulty": 1,
+      "estimatedDuration": "10 分",
+      "shortDescription": "明日が天下クラウド株式会社の入社初日。 夜、 CTO からメッセージが届く。 「明日から社内掲示板をまかせます。 練習用のデモ板を置いておいたので、 今夜はブラウザから触ってみてください。 壊しても大丈夫。 作り直せば戻ります」\n\nWeb アプリと話す方法は、 リクエストを送って、 レスポンスを読む。 それだけだ。 この 10 分で、 その一往復を 3 回体験する ── 読む、 断られて直す、 書く。\n\nすべて手元のコンテナで動く。 クラウドのアカウントも、 クレジットカードも、 課金も要らない。",
+      "tags": [
+        "stackstack",
+        "getting-started",
+        "local-play",
+        "container",
+        "web-app",
+        "http",
+        "beginner"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "stackstack-gameday",
       "name": "StackStack GameDay — 1 日ぶんを 1 本で",
       "category": "Battle",
