@@ -149,8 +149,12 @@ describe("eventbridge delivery metadata and image boundary", () => {
     const workflow = readFileSync(join(import.meta.dir, "../.github/workflows/ci.yml"), "utf8");
     expect(workflow).toContain("eventbridge-runtime:");
     expect(workflow).toContain("run: bun run eventbridge:runtime");
-    expect(workflow).toMatch(
-      /needs:\s*\[suite, checks, rls-runtime, eventbridge-runtime, github-oidc-runtime, signed-npm-runtime\]/,
+    // Assert this job's own dependency, not the whole list. Pinning every job name
+    // here made adding one unrelated job fail four unrelated suites, and the
+    // exhaustive "every job is listed and gated" check lives in
+    // scripts/validate-shard.test.ts, which reads the list out of the workflow.
+    expect(/needs:\s*\[([^\]]+)\]/.exec(workflow)?.[1]?.split(",").map((job) => job.trim())).toContain(
+      "eventbridge-runtime",
     );
     expect(workflow).toContain(
       'test "${{ needs.eventbridge-runtime.result }}" = "success"',

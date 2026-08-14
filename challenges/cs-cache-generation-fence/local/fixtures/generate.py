@@ -127,3 +127,57 @@ def race_evidence(seed: str) -> dict[str, object]:
             {"step": 6, "event": "next_cache_hit", "revision": old_revision, "value": old_value},
         ],
     }
+
+
+#: The rule the `audit` checkpoint is graded against, stated in the participant's words.
+#: `verifier/expected.py` derives the answer from exactly this condition.
+STALE_RULE = (
+    "A cache_hit is stale when its revision is lower than the latest earlier "
+    "origin_commit for that key."
+)
+
+# One source for the participant-facing wording, read by both `show.py` and the Portal's
+# `/api/inspect`. Rebuilding the evidence separately in the server is how the question
+# text went missing from the browser in earlier problems.
+QUESTIONS = {
+    "race": {
+        "question": (
+            "cache は invalidate されています。 それでも直後の cache_hit は更新前の値を返しました。 "
+            "その値を持ち込んだのは、どの step で始まった読み取りですか。"
+        ),
+        "glossary": {
+            "origin": "真実の置き場所。 cache はその写し。",
+            "revision": "commit されたたびに増える版番号。",
+            "fill": "cache_miss のあと、origin の値が cache へ戻ってくること。",
+        },
+        "i18n": {
+            "en": {
+                "question": (
+                    "The cache was invalidated, and the very next cache_hit still returned the "
+                    "pre-update value. Which step started the read that carried it in?"
+                ),
+                "glossary": {
+                    "origin": "Where the truth lives. The cache is a copy of it.",
+                    "revision": "A version number that increases on every commit.",
+                    "fill": "The origin value coming back into the cache after a cache_miss.",
+                },
+            }
+        },
+    },
+    "audit": {
+        "question": (
+            "この規則に当てはまる cache_hit を、events から 1 つ残らず挙げてください。 "
+            "どの行が答えかは印字されていません。"
+        ),
+        "answerFormat": "[<index>, ...] (昇順、重複なし)",
+        "i18n": {
+            "en": {
+                "question": (
+                    "List every cache_hit in events that the rule above calls stale. "
+                    "Which rows those are is not marked."
+                ),
+                "answerFormat": "[<index>, ...] (ascending, no duplicates)",
+            }
+        },
+    },
+}

@@ -89,7 +89,19 @@ QUESTIONS = {
         "question": (
             "返答はすべて ok です。 server はこの client に何を許してしまいましたか。"
         ),
-        "i18n": {"en": {"question": "Every reply here says ok. What did the server let this client do?"}},
+        "answerFormat": (
+            '["<session.sessionId>", '
+            '"<accepted-out-of-order | dropped-reply | duplicate-request のいずれか 1 つ>"]'
+        ),
+        "i18n": {
+            "en": {
+                "question": "Every reply here says ok. What did the server let this client do?",
+                "answerFormat": (
+                    '["<session.sessionId>", '
+                    '"<one of: accepted-out-of-order | dropped-reply | duplicate-request>"]'
+                ),
+            }
+        },
     },
     "audit": {
         "question": (

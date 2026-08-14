@@ -14,7 +14,8 @@ from urllib.request import Request, urlopen
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from fixtures.generate import audit_evidence, health_token
+import show
+from fixtures.generate import health_token
 from sandbox import normalize_source, run_source
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
@@ -69,14 +70,17 @@ def config_payload() -> dict[str, object]:
 
 
 def inspect_payload(seed: str) -> dict[str, object]:
-    return {
-        "environment": {
-            "python": sys.version.split()[0],
-            "healthToken": health_token(seed),
-            "gate": "asyncio.Future values are released explicitly; no sleep or network is used",
-        },
-        "audit": audit_evidence(seed),
-    }
+    """The browser's evidence view, built from the same function `show.py` prints.
+
+    Rebuilding it here by hand is what silently dropped the question text from the
+    Portal in earlier problems, so this defers to `show.evidence` and only adds the
+    interpreter version, which the CLI has no reason to print.
+    """
+    payload = show.evidence(seed)
+    environment = payload["environment"]
+    assert isinstance(environment, dict)
+    payload["environment"] = {"python": sys.version.split()[0], **environment}
+    return payload
 
 
 def run_public_tests(seed: str, files: object) -> dict[str, object]:

@@ -29,7 +29,8 @@ from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fixtures.generate import decision_log, health_token, keyring, public_request, validity_window
+import show
+from fixtures.generate import decision_log, health_token, validity_window
 
 ROOT = Path(__file__).resolve().parents[1]
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
@@ -143,20 +144,16 @@ def inspect_payload(seed: str) -> dict[str, object]:
     The gateway's signing keys are handed over deliberately. The learner is auditing
     this gateway, and an auditor who cannot recompute a MAC cannot separate a forged
     token from a genuine one -- withholding the keys would make the audit a guess.
+
+    Rebuilding the payload here by hand is what silently dropped the question text from
+    the Portal, so this defers to `show.evidence` and only adds the interpreter version,
+    which the CLI has no reason to print.
     """
-    request = public_request(seed)
-    entries, _wrong = decision_log(seed)
-    return {
-        "environment": {
-            "python": sys.version.split()[0],
-            "healthToken": health_token(seed),
-        },
-        "window": {"token": request["token"], "claims": request["claims"]},
-        "audit": {
-            "keys": keyring(seed),
-            "entries": [{"index": index, **entry} for index, entry in enumerate(entries)],
-        },
-    }
+    payload = show.evidence(seed)
+    environment = payload["environment"]
+    assert isinstance(environment, dict)
+    payload["environment"] = {"python": sys.version.split()[0], **environment}
+    return payload
 
 
 def _submission_sources(files: object) -> dict[str, str] | None:

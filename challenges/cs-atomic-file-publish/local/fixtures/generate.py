@@ -119,7 +119,20 @@ QUESTIONS = {
         "question": (
             "writer は成功を報告し、ディスク上のバイト列も正しくなっています。 それでも t+120ms の reader は、何を掴んでいた可能性がありますか。"
         ),
-        "i18n": {"en": {"question": "The writer reported success and the bytes on disk are correct. " "What could this reader have been holding at t+120ms?"}},
+        "answerFormat": (
+            '["<document.path>", "<whole-old | whole-new | partial のいずれか 1 つ>"]'
+        ),
+        "i18n": {
+            "en": {
+                "question": (
+                    "The writer reported success and the bytes on disk are correct. "
+                    "What could this reader have been holding at t+120ms?"
+                ),
+                "answerFormat": (
+                    '["<document.path>", "<one of: whole-old | whole-new | partial>"]'
+                ),
+            }
+        },
     },
     "audit": {
         "question": (

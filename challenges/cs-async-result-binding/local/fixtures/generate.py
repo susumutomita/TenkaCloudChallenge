@@ -73,3 +73,29 @@ def audit_evidence(seed: str) -> dict[str, Any]:
         "completionTrace": completion,
         "storedRows": stored,
     }
+
+
+# The single source of the participant-facing wording. `show.py` and the Portal's
+# `/api/inspect` both read it, so the browser can never end up handing someone raw
+# evidence with the question missing -- the defect that made five earlier problems
+# unreadable in the Portal while the CLI looked fine.
+QUESTIONS = {
+    "audit": {
+        "question": (
+            "storedRows の各行は、その行の jobId が出した値を持っているはずです。 "
+            "completionTrace はどの値がどの request から返ってきたかを記録しています。 "
+            "二つを突き合わせて、別の request の値が入っている行を挙げてください。"
+        ),
+        "answerFormat": "[<index>, ...] (昇順、重複なし)",
+        "i18n": {
+            "en": {
+                "question": (
+                    "Each row of storedRows should hold the value produced by that row's own "
+                    "jobId. completionTrace records which request each value came back from. "
+                    "Compare the two and name the rows holding another request's value."
+                ),
+                "answerFormat": "[<index>, ...] (ascending, no duplicates)",
+            }
+        },
+    },
+}

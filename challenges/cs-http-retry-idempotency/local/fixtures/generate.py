@@ -118,7 +118,20 @@ QUESTIONS = {
         "question": (
             "timeout の直後、server 側の状態は created・not-created・unknown のどれですか。"
         ),
-        "i18n": {"en": {"question": "Immediately after the timeout, is server state created, not-created, or unknown?"}},
+        "answerFormat": (
+            '["<operation.requestId>", "<created | not-created | unknown のいずれか 1 つ>"]'
+        ),
+        "i18n": {
+            "en": {
+                "question": (
+                    "Immediately after the timeout, is server state created, not-created, "
+                    "or unknown?"
+                ),
+                "answerFormat": (
+                    '["<operation.requestId>", "<one of: created | not-created | unknown>"]'
+                ),
+            }
+        },
     },
     "audit": {
         "question": (

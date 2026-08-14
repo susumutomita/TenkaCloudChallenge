@@ -1,0 +1,402 @@
+{
+  "id": "ac26-w3-ntt-roots",
+  "name": "その omega は、本当に n 乗して初めて 1 になるか",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "advanced-cryptography-2026",
+    "order": 315,
+    "chapter": "Week 3 / Roots of Unity"
+  },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 3,
+    "role": "mechanism",
+    "spoilerPolicy": "independent-reimplementation",
+    "sources": [
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
+        "path": "week3/README.md",
+        "kind": "lecture"
+      },
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
+        "path": "week3/problems/schnorr-from-scratch/README.md",
+        "kind": "assignment"
+      },
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9",
+        "path": "week3/week3_zksnark_slides.pdf",
+        "kind": "slide"
+      }
+    ]
+  },
+  "difficulty": 3,
+  "estimatedDuration": "45-75 分",
+  "shortDescription": "有限体上の変換で omega を教科書式から作り、その位数を確かめずに使う実装を、位数の定義から直す。",
+  "description": "zkSNARK の土台には、多項式を「係数」と「評価」の間で行き来させる変換がある。 その変換が変換であるためには、評価点が相異なっていなければならない。 相異なることを保証しているのは、omega の位数がちょうど n であるという一点だけである。\n\n壊れた starter は公開テストをすべて通る。 omega を 3 ** ((p-1)/n) で作っており、この式自体は間違っていない。 抜けているのは、出てきた omega の位数が本当に n かの確認だけである。 p=17, n=4 では位数 4 の正しい原始根が出る。 p=97, n=8 では位数 4 の元が出る。 p=13, n=4 では omega=1 が出て、評価点が 1 点に潰れる。 それでも返り値は体の中の整数が n 個で、形は完全に正常である。\n\n採点は書き方ではなく振る舞いで行う。 checkpoint は seed 由来の (p, n) を使い、教科書式が誤る組を必ず半分以上含む。 見た組に合わせただけの実装は、見ていない組で落ちる。",
+  "instructions": "## Participant Portal で解く\n\n問題を起動すると editor が開きます。 starter の ntt.py を編集し、公開テストを実行してください。 各 checkpoint の提出では、現在の editor file がそのまま hidden verifier へ渡ります。\n\n実装するのは transform(coefficients, prime, order) と inverse_transform(values, prime, order, omega) の 2 つです。 omega はどれを選んでも構いません。 位数がちょうど order でありさえすればよく、選んだ omega は返り値に含めます。",
+  "writeup": "## 1 に戻るだけでは足りない\n\npow(w, n, p) == 1 は、位数が n を割る元すべてが満たす。 位数 1 の元、つまり 1 そのものも満たす。 この条件だけで omega を受け入れると、評価点が重複した「変換ではないもの」を変換と呼ぶことになる。\n\n## 位数がちょうど n であることの確かめ方\n\nn の各素因数 q について pow(w, n//q, p) != 1 を確かめる。 これで、n より真に小さいどの約数でも 1 に戻らないことが言える。\n\n## 教科書式が正しいときと正しくないとき\n\n3 ** ((p-1)/n) は、3 が F_p* の生成元であれば位数 n の元を返す。 3 が生成元でない p では、より小さい部分群に落ちる。 式が悪いのではなく、確認が要るということである。\n\n## 証明していないこと\n\n高速化はしていない。 ここで決めたのは、変換が可逆であるための前提だけである。 FFT の蝶形も、多項式コミットも、その前提の上に乗っている。",
+  "tags": [
+    "advanced-cryptography-2026",
+    "week3",
+    "finite-field",
+    "roots-of-unity",
+    "ntt",
+    "polynomial",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18130,
+      "name": "Portal editor API + /verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "位数がちょうど n であることと、n 乗して 1 になることの違いを説明できる",
+    "素因数ごとの確認で位数を確定できる",
+    "評価点が相異なることが逆変換の前提であることを説明できる",
+    "1/n を含む逆変換を実装できる",
+    "2 冪でない n でも成り立つ実装を書ける",
+    "不正な p・n・係数・omega をそれぞれ名前で拒否できる"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.ac26-w3-ntt-roots.order-vs-annihilation",
+        "description": "n 乗して 1 になることと、位数がちょうど n であることを区別できる"
+      },
+      {
+        "id": "lo.ac26-w3-ntt-roots.pin-the-order",
+        "description": "素因数ごとの確認で位数を確定できる"
+      },
+      {
+        "id": "lo.ac26-w3-ntt-roots.distinct-points",
+        "description": "評価点が相異なることが逆変換の前提だと説明できる"
+      },
+      {
+        "id": "lo.ac26-w3-ntt-roots.inverse-scaling",
+        "description": "1/n を含む逆変換を実装できる"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.multiplicative-order",
+        "description": "位数は 1 に戻る最小の指数である。"
+      },
+      {
+        "id": "concept.root-of-unity",
+        "description": "原始 n 乗根は位数がちょうど n の元である。"
+      },
+      {
+        "id": "concept.evaluation-form",
+        "description": "多項式は係数表現と評価表現を行き来できる。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.ac26-w3-ntt-roots.roots",
+        "description": "位数がちょうど n の元を選べた。"
+      },
+      {
+        "id": "assessment.ac26-w3-ntt-roots.transform",
+        "description": "自分の omega の冪で評価できた。"
+      },
+      {
+        "id": "assessment.ac26-w3-ntt-roots.roundtrip",
+        "description": "1/n を含めて係数へ戻せた。"
+      },
+      {
+        "id": "assessment.ac26-w3-ntt-roots.errors",
+        "description": "不正な入力をそれぞれの名前で拒否できた。"
+      },
+      {
+        "id": "assessment.ac26-w3-ntt-roots.odd-order",
+        "description": "2 冪でない n でも成り立たせた。"
+      },
+      {
+        "id": "assessment.ac26-w3-ntt-roots.transfer",
+        "description": "見ていない素数と次数でも成り立たせた。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.annihilation-is-order",
+        "description": "n 乗して 1 になれば位数は n、という誤解。"
+      },
+      {
+        "id": "misconception.textbook-formula-is-enough",
+        "description": "3 ** ((p-1)/n) と書けば原始根が得られる、という誤解。"
+      },
+      {
+        "id": "misconception.radix-two-only",
+        "description": "n は 2 冪でなければならない、という誤解。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w3-ntt-roots",
+      "target": "lo.ac26-w3-ntt-roots.order-vs-annihilation"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w3-ntt-roots",
+      "target": "lo.ac26-w3-ntt-roots.pin-the-order"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w3-ntt-roots",
+      "target": "lo.ac26-w3-ntt-roots.distinct-points"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w3-ntt-roots",
+      "target": "lo.ac26-w3-ntt-roots.inverse-scaling"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w3-ntt-roots",
+      "target": "concept.multiplicative-order"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w3-ntt-roots",
+      "target": "concept.root-of-unity"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w3-ntt-roots",
+      "target": "concept.evaluation-form"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w3-ntt-roots",
+      "target": "assessment.ac26-w3-ntt-roots.roots"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w3-ntt-roots",
+      "target": "assessment.ac26-w3-ntt-roots.transform"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w3-ntt-roots",
+      "target": "assessment.ac26-w3-ntt-roots.roundtrip"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w3-ntt-roots",
+      "target": "assessment.ac26-w3-ntt-roots.errors"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w3-ntt-roots",
+      "target": "assessment.ac26-w3-ntt-roots.odd-order"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w3-ntt-roots",
+      "target": "assessment.ac26-w3-ntt-roots.transfer"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w3-ntt-roots",
+      "target": "misconception.annihilation-is-order"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w3-ntt-roots",
+      "target": "misconception.textbook-formula-is-enough"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w3-ntt-roots",
+      "target": "misconception.radix-two-only"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18130/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "roots",
+        "input": "multiline",
+        "label": "原始 n 乗根を見つける",
+        "points": 35,
+        "wrongAnswerPenalty": 12,
+        "hints": [
+          {
+            "id": "roots-hint-1",
+            "content": "pow(w, n, p) == 1 は、位数が n を割る元すべてが満たす。 1 もそのひとつ。 n の各素因数 q について pow(w, n//q, p) != 1 まで見て、初めて位数が n と言える。",
+            "penalty": 10
+          }
+        ]
+      },
+      {
+        "id": "transform",
+        "input": "multiline",
+        "label": "自分の omega の冪で評価する",
+        "points": 30,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "transform-hint-1",
+            "content": "返した omega と、評価に使った点が同じであることを確かめる。 values[i] は f(omega**i) でなければならない。",
+            "penalty": 8
+          }
+        ]
+      },
+      {
+        "id": "roundtrip",
+        "input": "multiline",
+        "label": "逆変換で係数へ戻す",
+        "points": 35,
+        "wrongAnswerPenalty": 12,
+        "hints": [
+          {
+            "id": "roundtrip-hint-1",
+            "content": "逆変換には 1/n が要る。 p は素数なので、n の逆元は Fermat でも拡張 Euclid でも作れる。 点が重複する omega を渡されたら、戻せないと言うこと。",
+            "penalty": 10
+          }
+        ]
+      },
+      {
+        "id": "errors",
+        "input": "multiline",
+        "label": "存在しないものを存在しないと言う",
+        "points": 30,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "errors-hint-1",
+            "content": "p が素数でない、n が p-1 を割らない、係数が体の外。 それぞれ別の名前で拒否する。",
+            "penalty": 8
+          }
+        ]
+      },
+      {
+        "id": "odd-order",
+        "input": "multiline",
+        "label": "2 冪でない n でも動かす",
+        "points": 30,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "odd-order-hint-1",
+            "content": "n が p-1 を割りさえすれば、2 冪である必要はない。 radix-2 を前提にした実装はここで初めて落ちる。",
+            "penalty": 8
+          }
+        ]
+      },
+      {
+        "id": "transfer",
+        "input": "multiline",
+        "label": "見たことのない素数と次数で成り立たせる",
+        "points": 40,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "transfer-hint-1",
+            "content": "公開テストで見た p は、たまたま教科書式が正しい組だった。 seed が変われば別の組になる。",
+            "penalty": 13
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Does that omega really take n powers to reach 1?",
+      "shortDescription": "A transform over a finite field builds omega from the textbook formula and never checks its order. Fix it from the definition.",
+      "description": "Underneath zkSNARKs is a transform that moves a polynomial between its coefficients and its evaluations. For that to be a transform at all, the evaluation points have to be distinct, and the only thing making them distinct is that omega has order exactly n.\n\nThe broken starter passes every public test. It builds omega as 3 ** ((p-1)/n), which is not the wrong formula; what is missing is the check that the omega it produced has order n. For p=17, n=4 it gets a genuine primitive 4th root. For p=97, n=8 it gets an element of order 4. For p=13, n=4 it gets omega=1, collapsing every evaluation point onto one. The return value is still n integers inside the field.\n\nGrading is behavioural. The checkpoints draw (p, n) from the seed and at least half of every set is a pair the textbook rule gets wrong, so tuning to the pairs you were shown fails on the ones you were not.",
+      "instructions": "## Solve in Participant Portal\n\nStarting the problem opens the editor. Edit the starter's ntt.py and run the public tests. Each submission sends the current editor file to the hidden verifier.\n\nYou implement transform(coefficients, prime, order) and inverse_transform(values, prime, order, omega). Any omega will do as long as its order is exactly order; return the one you used.",
+      "writeup": "## Returning to 1 is not enough\n\npow(w, n, p) == 1 is satisfied by every element whose order divides n, including 1 itself. Accept omega on that alone and you will call something a transform when its evaluation points repeat.\n\n## Pinning the order to n\n\nCheck pow(w, n//q, p) != 1 for each prime factor q of n. That rules out every proper divisor at once.\n\n## When the textbook formula is right\n\n3 ** ((p-1)/n) gives an element of order n when 3 generates F_p*. For a p where it does not, the result falls into a smaller subgroup. The formula is fine; the check is what was missing.\n\n## What this does not prove\n\nNothing here is about speed. It settles the precondition that makes the transform invertible at all — the precondition the FFT butterfly and the polynomial commitment both stand on.",
+      "learningGoals": [
+        "Explain the difference between having order exactly n and merely satisfying w**n == 1",
+        "Pin an order down with a check per prime factor",
+        "Explain why distinct evaluation points are what the inverse needs",
+        "Implement an inverse that includes the 1/n factor",
+        "Write an implementation that holds when n is not a power of two",
+        "Reject an invalid p, n, coefficient or omega by name"
+      ],
+      "checks": [
+        {
+          "id": "roots",
+          "label": "Find a primitive n-th root of unity",
+          "hints": [
+            {
+              "id": "roots-hint-1",
+              "content": "pow(w, n, p) == 1 holds for every element whose order divides n, 1 included. Only checking pow(w, n//q, p) != 1 for each prime factor q of n pins the order to n itself."
+            }
+          ]
+        },
+        {
+          "id": "transform",
+          "label": "Evaluate at the powers of your own omega",
+          "hints": [
+            {
+              "id": "transform-hint-1",
+              "content": "The omega you return and the points you evaluated at must be the same thing: values[i] has to be f(omega ** i)."
+            }
+          ]
+        },
+        {
+          "id": "roundtrip",
+          "label": "Turn the values back into coefficients",
+          "hints": [
+            {
+              "id": "roundtrip-hint-1",
+              "content": "The inverse needs 1/n. Since p is prime you can get it from Fermat or from the extended Euclidean algorithm. If the omega you are handed makes the points repeat, say so instead of returning numbers."
+            }
+          ]
+        },
+        {
+          "id": "errors",
+          "label": "Say that something does not exist",
+          "hints": [
+            {
+              "id": "errors-hint-1",
+              "content": "A p that is not prime, an n that does not divide p-1, a coefficient outside the field. Each gets its own name."
+            }
+          ]
+        },
+        {
+          "id": "odd-order",
+          "label": "Handle an n that is not a power of two",
+          "hints": [
+            {
+              "id": "odd-order-hint-1",
+              "content": "Any n that divides p-1 is legal; it does not have to be a power of two. An implementation that assumed a radix-2 shape fails here for the first time."
+            }
+          ]
+        },
+        {
+          "id": "transfer",
+          "label": "Hold for a prime and an order you have not seen",
+          "hints": [
+            {
+              "id": "transfer-hint-1",
+              "content": "The primes in the public tests are ones where the textbook rule happens to be right. A different seed draws different ones."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

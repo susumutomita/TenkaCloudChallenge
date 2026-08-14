@@ -367,3 +367,59 @@ def counterexample_fixture(seed: str) -> dict[str, object]:
             for transfer in candidates
         ],
     }
+
+
+# One source for the participant-facing wording, read by both `show.py` and the Portal's
+# `/api/inspect`. The submit shapes are the ones `verifier/server.py` actually accepts:
+# `_check_audit` requires exactly {reportId, observedRevisions} with two integers, and
+# `_check_counterexample` requires exactly {beforeCommit, commit, afterCommit} with two
+# account ids on each side.
+QUESTIONS = {
+    "audit": {
+        "question": (
+            "report のどの row も、読んだ瞬間には committed だった値です。 "
+            "それでも 1 つの report だけは、committed のどの状態とも一致しない balances を持っています。 "
+            "その report を挙げ、その report が読んだ revision も答えてください。"
+        ),
+        "answerFormat": (
+            '{"reportId": "...", "observedRevisions": [<1 つ目>, <2 つ目>]} '
+            "(revision は report の reads に出てきた順)"
+        ),
+        "i18n": {
+            "en": {
+                "question": (
+                    "Every row in a report was committed at the moment it was read. One "
+                    "report still has balances matching no committed state. Name that "
+                    "report, and the revisions it read."
+                ),
+                "answerFormat": (
+                    '{"reportId": "...", "observedRevisions": [<first>, <second>]} '
+                    "(revisions in the order they appear in the report's reads)"
+                ),
+            }
+        },
+    },
+    "counterexample": {
+        "question": (
+            "read はいつもこの順です。 read の途中に commit を 1 つだけ置いて、 "
+            "合計が一度も存在しなかった値になるようにしてください。 "
+            "候補のうち、それができるのは 1 つだけです。"
+        ),
+        "answerFormat": (
+            '{"beforeCommit": ["...", "..."], "commit": "tx-...", "afterCommit": ["...", "..."]}'
+        ),
+        "i18n": {
+            "en": {
+                "question": (
+                    "The reads always happen in this order. Place exactly one commit inside "
+                    "them so the total becomes a number that never existed. Only one of the "
+                    "candidates can do it."
+                ),
+                "answerFormat": (
+                    '{"beforeCommit": ["...", "..."], "commit": "tx-...", '
+                    '"afterCommit": ["...", "..."]}'
+                ),
+            }
+        },
+    },
+}

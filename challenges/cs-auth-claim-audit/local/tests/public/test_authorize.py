@@ -168,8 +168,23 @@ def test_the_gateway_in_the_log_looks_like_it_works() -> None:  # author guard
 def test_workbench_inspect_shows_evidence_without_answers() -> None:
     payload = inspect_payload(WORKBENCH_TEST_SEED)
     assert payload["environment"]["healthToken"] == health_token(WORKBENCH_TEST_SEED)
-    # The claims of the shown token are evidence. The window is the answer.
-    assert set(payload["window"]) == {"claims", "token"}
+    # A whitelist, not a sample: every field of the shown request is evidence, and the
+    # window itself is the answer, so a new key here has to be justified deliberately.
+    assert set(payload["window"]) == {
+        "question",
+        "answerFormat",
+        "i18n",
+        "token",
+        "header",
+        "claims",
+        "mac",
+        "handled",
+    }
+    # The evidence is useless without the question, and the Portal used to get one
+    # without the other. Both checkpoints state theirs, in both languages.
+    for block in ("window", "audit"):
+        assert payload[block]["question"]
+        assert payload[block]["i18n"]["en"]["question"]
     # The log rows are evidence. Which of them are wrong is the answer.
     rows = payload["audit"]["entries"]
     assert isinstance(rows, list) and rows

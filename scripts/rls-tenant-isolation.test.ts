@@ -60,8 +60,12 @@ describe("rls-tenant-isolation Docker proof is a required CI job", () => {
   });
 
   it("gates the stable validate check on the runtime proof", () => {
-    expect(workflow).toMatch(
-      /needs:\s*\[suite, checks, rls-runtime, eventbridge-runtime, github-oidc-runtime, signed-npm-runtime\]/,
+    // Assert this job's own dependency, not the whole list. Pinning every job name
+    // here made adding one unrelated job fail four unrelated suites, and the
+    // exhaustive "every job is listed and gated" check lives in
+    // scripts/validate-shard.test.ts, which reads the list out of the workflow.
+    expect(/needs:\s*\[([^\]]+)\]/.exec(workflow)?.[1]?.split(",").map((job) => job.trim())).toContain(
+      "rls-runtime",
     );
     expect(workflow).toContain('test "${{ needs.rls-runtime.result }}" = "success"');
   });

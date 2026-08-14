@@ -1,4 +1,11 @@
-"""`make inspect` — seeded evidence for the two direct-answer checkpoints."""
+"""`make inspect` — seeded evidence for the two direct-answer checkpoints.
+
+The shape here is the shape the Portal serves from `/api/inspect`; both build it from
+`evidence()` below, and `scripts/cs-foundations-evidence.test.ts` asserts the two are
+identical. The Portal used to serve this file's stdout as one English text blob, which
+made the browser copy readable only to English readers and impossible to render as
+structured evidence.
+"""
 
 from __future__ import annotations
 
@@ -9,46 +16,33 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from fixtures.generate import audit_fixture, counterexample_fixture
+from fixtures.generate import QUESTIONS, audit_fixture, counterexample_fixture
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 
+def evidence(seed: str) -> dict[str, object]:
+    """Everything a participant may see. Contains no expected answer."""
+    audit = audit_fixture(seed)
+    counterexample = counterexample_fixture(seed)
+    return {
+        "audit": {
+            **QUESTIONS["audit"],
+            "committed": audit["committed"],
+            "reports": audit["reports"],
+            "note": "committed states preserve the total; every report row was committed when read.",
+        },
+        "counterexample": {
+            **QUESTIONS["counterexample"],
+            "readOrder": counterexample["readOrder"],
+            "commitAfterRead": counterexample["commitAfterRead"],
+            "candidates": counterexample["candidates"],
+        },
+    }
+
+
 def main() -> None:
-    audit = audit_fixture(SEED)
-    counterexample = counterexample_fixture(SEED)
-
-    print("== checkpoint: audit ==")
-    print()
-    print("Committed ledger states. Every transfer preserves the total:")
-    print(json.dumps(audit["committed"], ensure_ascii=False, indent=2))
-    print()
-    print("Reports emitted by the old service. Each row read was committed when read:")
-    print(json.dumps(audit["reports"], ensure_ascii=False, indent=2))
-    print()
-    print("Submit JSON with exactly this shape:")
-    print('  {"reportId":"...","observedRevisions":[first,second]}')
-    print("Name the one report whose rows cannot describe any committed state.")
-    print()
-
-    print("== checkpoint: counterexample ==")
-    print()
-    print("The old service always reads accounts in this order:")
-    for index, account_id in enumerate(counterexample["readOrder"], start=1):
-        print(f"  read {index}: {account_id}")
-    print()
-    print(f"Place one candidate commit after read {counterexample['commitAfterRead']}:")
-    for candidate in counterexample["candidates"]:
-        assert isinstance(candidate, dict)
-        print(
-            f"  {candidate['transferId']}: {candidate['source']} -> "
-            f"{candidate['destination']} ({candidate['amount']} points)"
-        )
-    print()
-    print("Submit the schedule as JSON with exactly this shape:")
-    print('  {"beforeCommit":["...","..."],"commit":"tx-...",')
-    print('   "afterCommit":["...","..."]}')
-    print("Choose the commit that makes the mixed report total impossible.")
+    print(json.dumps(evidence(SEED), ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

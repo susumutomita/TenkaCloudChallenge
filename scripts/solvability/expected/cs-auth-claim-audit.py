@@ -17,9 +17,15 @@ def _window_visible(server, seed):
     answer is `[nbf, exp - 1]`, and the probe exists to catch the case where the second
     element coincides with the printed `exp` -- which would mean the checkpoint scores
     "I copied the claim" the same as "I worked out that `exp` is exclusive".
+
+    Imported from the fixture module rather than read off `verifier.server`'s namespace:
+    the server only happened to re-export it, so tidying an unused import there broke
+    this probe with an AttributeError instead of a solvability finding. Imported per
+    call, because the audit purges and re-imports `fixtures` between seeds.
     """
-    request = server.public_request(seed)
-    claims = request["claims"]
+    from fixtures.generate import public_request
+
+    claims = public_request(seed)["claims"]
     return {"nbf": claims["nbf"], "exp": claims["exp"]}
 
 

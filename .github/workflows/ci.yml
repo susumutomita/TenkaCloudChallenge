@@ -69,6 +69,39 @@ jobs:
       - name: Run catalog test suite
         run: bun run scripts/validate-shard.ts --shard=${{ matrix.shard }}/4
 
+  solvability:
+    runs-on: ubuntu-latest
+    # Its own job because sharding by file cannot split it: the gate probes every
+    # problem inside a single test, so it lands wholly in whichever shard owns the
+    # file and grows with the catalog. It took shard 1 to the 15-minute cap while
+    # the other three finished in five to nine minutes.
+    #
+    # Splitting the gate's own work by suite shard is not the fix either — the other
+    # three shards never execute the file, so they would probe nothing and each would
+    # still print "no findings". SEPARATELY_SCHEDULED_FILES in
+    # scripts/validate-shard.ts keeps it out of the matrix, and
+    # scripts/solvability-audit.test.ts fails if this job stops naming it.
+    timeout-minutes: 25
+    env:
+      CI: "true"
+      npm_config_ignore_scripts: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: "1.3.11"
+
+      - name: Install deps
+        run: bun install --ignore-scripts
+
+      - name: Run the solvability gate over the whole catalog
+        run: bun test scripts/solvability-audit.test.ts
+
   checks:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -261,15 +294,16 @@ jobs:
     # One stable name in front of the matrix. `if: always()` is what makes this
     # run when a shard fails — and it is also what makes `needs:` stop gating, so
     # the result has to be asserted explicitly rather than implied.
-    needs: [suite, checks, rls-runtime, eventbridge-runtime, github-oidc-runtime, signed-npm-runtime]
+    needs: [suite, solvability, checks, rls-runtime, eventbridge-runtime, github-oidc-runtime, signed-npm-runtime]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Require every job to have succeeded
         run: |
-          echo "suite=${{ needs.suite.result }} checks=${{ needs.checks.result }} rls-runtime=${{ needs.rls-runtime.result }} eventbridge-runtime=${{ needs.eventbridge-runtime.result }} github-oidc-runtime=${{ needs.github-oidc-runtime.result }} signed-npm-runtime=${{ needs.signed-npm-runtime.result }}"
+          echo "suite=${{ needs.suite.result }} solvability=${{ needs.solvability.result }} checks=${{ needs.checks.result }} rls-runtime=${{ needs.rls-runtime.result }} eventbridge-runtime=${{ needs.eventbridge-runtime.result }} github-oidc-runtime=${{ needs.github-oidc-runtime.result }} signed-npm-runtime=${{ needs.signed-npm-runtime.result }}"
           test "${{ needs.suite.result }}" = "success"
+          test "${{ needs.solvability.result }}" = "success"
           test "${{ needs.checks.result }}" = "success"
           test "${{ needs.rls-runtime.result }}" = "success"
           test "${{ needs.eventbridge-runtime.result }}" = "success"

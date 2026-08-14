@@ -223,8 +223,12 @@ describe("github-oidc-trust-boundary metadata and sources", () => {
     const workflow = readRoot(".github/workflows/ci.yml");
     expect(workflow).toContain("github-oidc-runtime:");
     expect(workflow).toContain("bun run github-oidc:runtime");
-    expect(workflow).toContain(
-      "needs: [suite, checks, rls-runtime, eventbridge-runtime, github-oidc-runtime, signed-npm-runtime]",
+    // Assert this job's own dependency, not the whole list. Pinning every job name
+    // here made adding one unrelated job fail four unrelated suites, and the
+    // exhaustive "every job is listed and gated" check lives in
+    // scripts/validate-shard.test.ts, which reads the list out of the workflow.
+    expect(/needs:\s*\[([^\]]+)\]/.exec(workflow)?.[1]?.split(",").map((job) => job.trim())).toContain(
+      "github-oidc-runtime",
     );
     expect(workflow).toContain('test "${{ needs.github-oidc-runtime.result }}" = "success"');
   });
