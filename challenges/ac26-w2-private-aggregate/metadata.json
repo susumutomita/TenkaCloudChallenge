@@ -34,8 +34,8 @@
   "estimatedDuration": "75-105 分",
   "shortDescription": "複数組織が件数と深刻度を出さずに加重リスクスコアだけを得る。Week 2 の 4 問を 1 つの application へ束ねる。乗算の数と round の数は同じではない。",
   "description": "Week 2 の総合問題、 role は synthesis。 share・線形演算・Beaver 乗算・open policy を個別に実装して終わりにせず、 複数 party の秘密入力から非線形な集計値だけを公開する小さな MPC application へ統合する。\n\n式は score = Σ_i (count_i * severity_i) + bias (bias は公開、 mod p)。 積の両側が秘密なので、 組織数 k に対して乗算が k 回必要になる。 一方 d と e の open は互いに独立なので、 全部まとめて 1 round に収まる。\n\n**この 2 つの数が違う**ことがこの問題の中心。 乗算ごとに open する実装は正しく、 privacy も保たれ、 latency だけが k 倍になる。 主張ではなく実測で採点するため、 開示経路を `io.open_batch()` 1 つに絞り、 呼び出し回数を round として数える。\n\ntriple の使い回しも同様に correctness では捕まらない。 Beaver は任意の妥当な triple で正しく動くため、 同じ triple を全積に使ってもスコアは合う。 壊れるのは privacy で、 同じ mask a が複数の秘密を覆うと transcript から秘密の差が出る。 hidden test は open された値の多重集合を、 供給された triple が含意する mask 差と厳密に照合するので、 使い回しはここで落ちる。\n\ncheckpoint は 8 つで、 correctness・privacy・communication cost を別々に採点する。 1 つの verdict にまとめると、 学習者が作ったのが 「正しいが高い」 のか 「正しいが漏れる」 のか 「安全だが誤り」 なのかを区別できないため。\n\nWeek 2 の教材は pinned commit 時点で未公開のため sources は placeholder pin であり、 status は draft のままにする (#219 が公開を検出した時点で確定する)。",
-  "instructions": "## Participant Portal で解く\n\nParticipant Portal で問題を起動すると、問題文と同じ画面に問題エディタが表示されます。\n「証拠を調べる」で deploy 固有の fixture と公開された証拠を確認し、starter ソースを編集して\n「公開テストを実行」を押します。コード以外の checkpoint は、証拠と実験結果から回答欄を\n埋めてください。object / array / number は JSON で入力します。\n\n各 checkpoint の提出ボタンは、現在のエディタ内容と回答欄を container の prepare API へ送り、\n生成された値をそのまま採点へ渡します。画面を移動したり提出値をコピーしたりする必要はありません。\n直接回答はこの deploy の seed に結び付くため、別の起動で作った値や概念名の暗記だけでは合格できません。\n",
-  "writeup": "## 式を分解する\n\nscore = Σ_i (count_i * severity_i) + bias。 総和は線形、 bias の加算も線形 (ただし 1 party だけが畳み込む)、 秘密同士の積だけが線形でない。 だから組織数 k に対して Beaver 乗算が k 回、 triple が k 個要る。\n\n## round が k ではなく 1 である理由\n\nk 個の積の d と e は、 どれも他の積の結果に依存しない。 だから全部を 1 回の open にまとめられる。 乗算ごとに open する実装は正しく、 privacy も保たれ、 latency だけが k 倍になる。\n\nこれが 「round 数 = 乗算数」 という誤解の実演で、 実際には round 数は乗算の**深さ**で決まる。 この式の深さは 1 なので、 幅がいくら増えても round は 1 のまま。 深さ D の回路なら D round になる。\n\n## triple 使い回しが correctness で捕まらない理由\n\nBeaver 乗算は c = a*b を満たす任意の triple で正しく動く。 同じ triple を全積に使ってもスコアは合う。 壊れるのは privacy で、 同じ a が x_1 と x_2 の両方を覆うと、 open された d_1 - d_2 = x_1 - x_2 がそのまま秘密の差になる。\n\nhidden test は open された値の多重集合を、 供給された triple が含意する mask 差と厳密に照合する。 blacklist ではなく完全一致なので、 「別の triple の d を出した」 も 「余計に何か出した」 も同じ検査で落ちる。 1 回の乗算に 1 つの triple が要るのはこのためで、 offline コストが乗算回数に比例するのもこのため。\n\n## 3 つを別々に採点する理由\n\n実装は 「正しいが高い」 「正しいが漏れる」 「安全だが誤り」 のいずれにもなり得る。 1 つの verdict にまとめると、 学習者は自分がどれを作ったのか分からない。 correctness・privacy・cost を別 checkpoint にしてあるのはそのため。\n\n## 固定期待値ではなく関係で検査する\n\nresult checkpoint は 3 つの関係を検査する。 randomness を変えて share し直してもスコアは動かない、 組織の順序を反転してもスコアは動かない、 1 組織の count を Δ 動かすとスコアは Δ * severity だけ動く。 1 回の出力を覚えても関係は満たせない。\n\n## 最終出力から不可避に漏れるもの\n\nscore を公開すると決めた時点で、 score から導けることは漏れる。 k=1 なら score - bias がその組織の積そのもの。 k が小さく severity の範囲が狭ければ、 count の候補は絞れる。 MPC が保証するのは 「計算過程から追加で漏れない」 ことであって、 「出力から何も分からない」 ことではない。 後者が要るなら別の仕組み (出力の摂動、 閾値化) が要る。\n\n## 次につながるところ\n\napplication 式を線形部分と乗算部分へ分解し、 コストを事前に見積もり、 実測と突き合わせる — この 3 つは Week 6 の co-SNARK でそのまま使う。",
+  "instructions": "## はじめに\n\n複数の組織が、それぞれ **インシデント件数 `count`** と **深刻度 `severity`** を持っています。どちらも外に出したくありません。全員が欲しいのは合計スコアだけです。\n\n```\nscore = sum_i (count_i * severity_i) + bias        (bias は公開、mod p)\n```\n\n前の 3 問で作った部品を、これで 1 つのアプリケーションに組み立てます。新しい概念はありません。\n\n- **秘密の分割** (ac26-w2-secret-sharing) — 各組織の 2 つの数字は、すでに share の形で配られています。\n- **公開定数の足し算** (ac26-w2-linear-shares) — `bias` を足すのは 1 人だけ。\n- **Beaver 掛け算** (ac26-w2-beaver-mul) — `count_i * severity_i` は**両方の因子が秘密**なので、組織ごとに 1 回の掛け算が要ります。三つ組も 1 組ずつ渡されます。\n\n新しいのは **コスト** の見方です。開示できる唯一の手段は `io.open_batch([...])` で、これは渡した share を全部まとめて開示し、**1 ラウンドとして数えられます**。\n\n```\nio.open_batch([sharing_a, sharing_b])   -> [value_a, value_b]      1 ラウンド\nio.open_batch([sharing_a])\nio.open_batch([sharing_b])              -> 同じ値が返る            2 ラウンド\n```\n\nどうまとめるかは**設計判断**で、聞かれるのではなく**測られます**。\n\n## 最初の一手\n\n**Participant Portal** で問題を起動し、**「証拠を調べる」** を押してください。この deploy の `p`、**組織の数**、公開 `bias`、そして渡される share と三つ組の実物が表示されます。ホスト側のターミナルは要りません。\n\n## 解き方\n\nエディタで `aggregate.py` の 4 つの関数を埋め、**「公開テストを実行」** で確認します。この問題に JSON を手入力する checkpoint はありません。4 つとも関数を書きます。\n\n**`spec` の中身**（4 つの関数のうち `plan` と `aggregate` が受け取ります）:\n\n```\n{\"p\": 2003,        int   法 (素数)\n \"parties\": 3,     int   **組織の数。 list ではなく整数**。 share の本数もこれと同じ\n \"bias\": 812}      int   公開されている加算定数\n```\n\n**返り値の形**:\n\n- `plan(spec)` -> `{\"multiplications\": int, \"triples\": int, \"rounds\": int}` の 3 キーちょうど。\n- `share_inputs(secrets, randoms, p)` -> **share の list の list**。`secrets[i]` に対応する share が `out[i]` で、長さは `spec[\"parties\"]`。`randoms[i]` は先頭 n-1 個ぶんの値で、**そのまま使う**必要があります (勝手に別の値にすると落ちます)。\n- `add_public(shares, constant, p)` -> 長さ n の list。\n- `aggregate(counts, severities, triple_list, spec, io)` -> **score の share** (長さ n の list)。開示はしないでください。最終スコアは採点側が開きます。\n\n**`aggregate` が受け取るもの**:\n\n```\ncounts[i]        組織 i の count の share (長さ n の list)\nseverities[i]    組織 i の severity の share (長さ n の list)\ntriple_list[i]   {\"a\": [...], \"b\": [...], \"c\": [...]}   c = a*b。 どれも share\nspec             上記の辞書\nio               開示の唯一の窓口。 io.open_batch(list of sharings) -> list of int\n```\n\n## ゴール\n\n正しいスコアの share を返すこと。ただし正しいだけでは足りません —— **開示してよいのはマスク済みの差分だけ**であること (privacy)、そして **開示ラウンドが 1 回で済んでいる**こと (cost) が、別々に測られます。最後の transfer は、別の p と組織数で全部を再実行します。\n",
+  "writeup": "## 3 つの部品が 1 つのアプリケーションになる\n\nこの問題に新しい暗号はありません。前の 3 問で作った部品を、実際の計算式に当てはめただけです。\n\n```\nscore = sum_i (count_i * severity_i) + bias\n        \\____________/   \\_______/\n         Beaver 掛け算     公開定数の足し算 (1 人だけが足す)\n```\n\nにもかかわらず、正しさ・秘匿・コストの 3 つが**別々に**採点されます。理由は単純で、**正しくて高い / 正しくて漏れる / 秘匿できていて間違い** のどれもが実際に起こるからです。1 つの判定にまとめてしまうと、学習者は自分が作ったのがどれなのか分かりません。\n\n## なぜ「掛け算の数」と「ラウンド数」が違う数なのか\n\n組織が k 個あれば掛け算は k 回で、Beaver 掛け算 1 回につき三つ組が 1 組要ります。だから\n\n```\nmultiplications = k\ntriples         = k\n```\n\nここまでは一致します。ところが **rounds は k ではなく 1** です。\n\n理由は、開示する値の間に依存関係が無いからです。組織 i の `d_i = count_i - a_i` を計算するのに、組織 j の値は 1 つも要りません。全部の `d` と `e` を**同時に**計算できるので、**全部まとめて 1 回のやり取りで開示できます**。\n\n```\n掛け算ごとに開示すると   k ラウンド、 開示する値 2k 個   <- 正しいが k 倍遅い\nまとめて開示すると       1 ラウンド、 開示する値 2k 個   <- 同じ情報量、 同じ正しさ\n```\n\n**開示する値の数は変わりません。変わるのは往復の回数だけ**です。分散システムでは往復の回数がそのまま遅延になるので、これは実装上の趣味ではなくコストです。だから `plan` を書くのは実装の**前**で、書いた見積りが実測と一致するかを cost checkpoint が突き合わせます。\n\n## 数値で 1 行ずつ追う (p = 101, 組織 2 個, bias = 7)\n\n```\ncount      = (3, 4)          severity = (5, 6)\n三つ組 0    a0=2, b0=3, c0=6         (6 = 2*3)\n三つ組 1    a1=5, b1=7, c1=35        (35 = 5*7)\n正解:  3*5 + 4*6 + 7 = 15 + 24 + 7 = 46\n```\n\nまず全部の差分をローカルに作ります。\n\n```\nd0 = 3 - 2 = 1        e0 = 5 - 3 = 2\nd1 = (4 - 5) % 101 = 100    e1 = (6 - 7) % 101 = 100\n```\n\n**この 4 つを 1 回の `open_batch` で開示します** (ここが 1 ラウンド)。あとは各組織の積を組み立てます。\n\n```\n積 0 = c0 + d0*b0 + e0*a0 + d0*e0 = 6 + 1*3 + 2*2 + 1*2 = 15        = 3*5   OK\n積 1 = c1 + d1*b1 + e1*a1 + d1*e1\n     = 35 + 100*7 + 100*5 + 100*100 = 35 + 700 + 500 + 10000 = 11235\n     11235 % 101 = 24                                                = 4*6   OK\n合計 = 15 + 24 = 39\nbias を 1 人だけが足す -> 39 + 7 = 46                                        OK\n```\n\n`d1` と `e1` が 100 という「大きい」値になっているのは、-1 が F_101 で 100 だからです。負の数が出たら `% p` で正規化する、という前の問題の約束がそのまま効いています。\n\n## 三つ組の使い回しが、なぜ「正しいのに漏れる」のか\n\n同じ三つ組 `(a, b, c)` を 2 つの積に使い回しても、**スコアは正しく出ます**。だから正しさの検査は何も言いません。ところが、\n\n```\nd_0 = count_0 - a          d_1 = count_1 - a        (同じ a を使った)\nd_0 - d_1 = count_0 - count_1\n```\n\n開示された 2 つの値の**差が、2 つの秘密の差そのもの**になります。マスクの役目は「1 回だけ使う」ことなので、2 回使うとマスクではなくなります。これは前問の「なぜ d を開示してよいのか」の裏返しです —— a が一度きりだからこそ d は無情報でした。\n\nprivacy checkpoint が「開示された値の集合が、供給された三つ組から決まる差分の集合と**厳密に一致する**」ことを要求するのはこのためです。ブラックリスト方式 (「これは開けるな」) では、使い回しは検出できません。使い回したときも、開示している値は「差分」ではあるからです。\n\n## 各 checkpoint が守っているもの\n\n- **plan** — 実装の**前**に見積りを書かせます。`multiplications` と `triples` は k で一致しますが、`rounds` は 1 です。3 つとも k と答える実装は、バッチ化を考えていないことになります。\n- **share-inputs** — 渡された `randoms[i]` を**そのまま**先頭 n-1 個に使うことを要求します。自前で乱数を作ると採点が再現できません。\n- **linear** — `add_public`。公開定数を全員が足すと `x + n*c` になる、という linear-shares の規則が、大きなプロトコルの中で再登場します。\n- **multiply** — スコアが平文計算と一致すること。ここは「正しさ」だけを見ます。\n- **result** — 固定の期待値ではなく**関係**で見ます。(1) 同じ入力を別の乱数で分け直してもスコアが動かない、(2) 組織の順序を逆にしてもスコアが動かない、(3) 1 つの組織の count を 3 増やすとスコアが `3 * その組織の severity` だけ動く。暗記した 1 つの数では、この 3 つを同時に満たせません。\n- **privacy** — 上記の厳密一致。使い回しはここでだけ落ちます。\n- **cost** — 見積りと実測を**両方向**で突き合わせます。`io.rounds == 1` であること、`plan()[\"rounds\"]` が実測と一致すること、そして開示した share の総数がちょうど `2k` であること。少なければ三つ組を使い回しており、多ければ余計なものを開示しています。\n- **transfer** — 別 seed の p と組織数で全部を再実行します。\n\n## 間違えるとどう壊れるか\n\n- **掛け算ごとに `open_batch` を呼ぶ** — 正しく、秘匿もでき、しかし k ラウンドかかります。cost だけが赤くなります。\n- **三つ組を 1 組だけ使い回す** — スコアは正しく、ラウンドも 1 回。privacy だけが赤くなります。「テストが通る」が「安全」を意味しないことの、この問題での形です。\n- **`bias` を全員に足す** — スコアが `(n-1)*bias` だけずれます。multiply と result が同時に赤くなります。\n- **`d*e` を全員に足す** — 積ごとに `(n-1)*d*e` ずれるので、組織数が増えるほど大きくずれます。\n- **最後にスコアを開いて返す** — `aggregate` が返すのは **share** です。開いてしまうと余計な開示になり、privacy と cost の両方が赤くなります。\n- **`spec[\"parties\"]` を list だと思って `len()` を取る** — これは**整数**です。`len(3)` は例外になります。\n- **`d` と `e` の順序を取り違えて `open_batch` に渡す** — 返る list の順序は渡した順序です。`opened[2*i]` が `d_i`、`opened[2*i+1]` が `e_i` のように、自分で決めた対応を守ってください。\n\n## 次への接続\n\n- **ac26-w2-privacy-audit** は、まさにこのプロトコルの**監査側**です。そこで「マスク済みの差分は開示してよい / 部分和は駄目」と判定した基準が、ここでは自分が守る側の制約になります。\n- **ac26-w2-oblivious-transfer** は、ここで「前もって用意されている」ことにした三つ組が、そもそもどこから来るのかに答えます。信頼できる第三者がいないとき、2 者が何も共有していない状態から計算を始めるための原始的な部品が OT です。\n- **ac26-w6-cosnark-*** では、この「k 個の掛け算を 1 ラウンドにまとめる」構造が、ZK 証明の分散生成でそのまま再現されます。\n- 上流課題 (toy-mpc) の「掛け算の回数とラウンド数を数える」という要求は、この plan / cost checkpoint そのものです。\n",
   "tags": [
     "advanced-cryptography-2026",
     "week2",
@@ -299,8 +299,18 @@
         "hints": [
           {
             "id": "plan-hint-1",
-            "content": "3 つのうち 2 つは同じ数になる。 残る 1 つは、 「どの open が他の open の結果を待つか」 で決まる。",
-            "penalty": 15
+            "content": "実装の **前** にコストを見積もらせる checkpoint です。 返すのは 3 つの数 —— **掛け算の回数**、 **必要な三つ組の数**、 **開示ラウンドの回数**。 3 つのうち 2 つは同じ数になり、 1 つは違います。 どれが違うのかを、 実装したあとではなく先に考えるのがこの checkpoint の狙いです。 返り値は `{\"multiplications\": ..., \"triples\": ..., \"rounds\": ...}` の 3 キーちょうどです。",
+            "penalty": 7
+          },
+          {
+            "id": "plan-hint-2",
+            "content": "式を見てください。 `score = sum_i (count_i * severity_i) + bias` で、 組織が k 個あれば積は k 個です (`bias` は公開定数なので掛け算ではありません)。 Beaver 掛け算 1 回につき三つ組は 1 組で、 **使い回しは禁止**です (同じマスクで 2 つの秘密を覆うと、 2 つの開示値の差が 2 つの秘密の差になって漏れます)。\n\nラウンド数だけが違います。 組織 i の差分を計算するのに、 組織 j の値は 1 つも要りません。 **互いに独立**なので同時に計算でき、 `io.open_batch` は渡した share を全部まとめて開示して 1 ラウンドと数えます。 組織の数 k は `spec[\"parties\"]` から取ります (**整数**であって list ではありません)。",
+            "penalty": 5
+          },
+          {
+            "id": "plan-hint-3",
+            "content": "**plan(spec)** の手順:\n1. `k = spec[\"parties\"]` を取る (整数)。\n2. `multiplications` に **k** を入れる (組織ごとに積が 1 つ)。\n3. `triples` に **k** を入れる (掛け算 1 回につき三つ組 1 組。 使い回し禁止)。\n4. `rounds` に **1** を入れる (すべての差分が互いに独立なので、 1 回の `open_batch` にまとめられる)。\n5. `{\"multiplications\": k, \"triples\": k, \"rounds\": 1}` を返す。\n\n`rounds` に k を入れると落ちます。 これがこの checkpoint の存在理由で、 「掛け算の数 = ラウンド数」という思い込みを外すためにあります。 開示する**値の数**は 2k で変わりませんが、 **往復の回数**は 1 回にできます。 分散システムでは往復の回数がそのまま遅延になります。\n\nこの `rounds` の値は、 後の cost checkpoint で **実測値と突き合わされます**。 見積りだけ 1 にして実装が k ラウンドなら、 そこで落ちます。",
+            "penalty": 4
           }
         ]
       },
@@ -309,7 +319,24 @@
         "input": "multiline",
         "label": "秘密を分割する",
         "points": 30,
-        "wrongAnswerPenalty": 15
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "share-inputs-hint-1",
+            "content": "secret-sharing でやったことを、 複数の秘密に対してまとめて行います。 `secrets` は秘密の list で、 それぞれを n 人ぶんの share に分け、 **share の list の list** を返します。 `out[i]` が `secrets[i]` の share で、 長さは `spec[\"parties\"]` と同じです。 新しい考え方はありません。",
+            "penalty": 6
+          },
+          {
+            "id": "share-inputs-hint-2",
+            "content": "`randoms[i]` には、 `secrets[i]` の **先頭 n-1 個ぶん**の値が入っています。 それを勝手に別の値に差し替えると落ちます —— 採点は「渡された乱数がそのまま先頭に並んでいるか」を確認するからです (自前で乱数を作ると走らせるたびに答えが変わり、 採点が再現できません)。\n\n残る 1 個は、 いつもどおり「合計を secret に合わせる辻褄合わせ」です。 すべての要素を `% p` で 0..p-1 に正規化してください。",
+            "penalty": 5
+          },
+          {
+            "id": "share-inputs-hint-3",
+            "content": "**share_inputs(secrets, randoms, p)** の手順:\n1. 空の list `out` を用意する。\n2. `secrets` を index つきで回す (`for index, secret in enumerate(secrets):`)。\n3. `head = [value % p for value in randoms[index]]` —— 渡された乱数をそのまま先頭に。\n4. `tail = (secret - sum(head)) % p` —— 最後の 1 個で合計を secret に合わせる。\n5. `out.append([*head, tail])`。\n6. `out` を返す。\n\n検算 (p=101, secret=5, randoms[i]=[70, 40]): head=[70,40]、 tail=(5-110)%101=97、\n  sharing = [70, 40, 97]、 合計 207%101 = 5 ✓\n\n長さは `len(head) + 1` になります。 `spec[\"parties\"]` を数値で書き込まないでください。",
+            "penalty": 3
+          }
+        ]
       },
       {
         "id": "linear",
@@ -320,8 +347,18 @@
         "hints": [
           {
             "id": "linear-hint-1",
-            "content": "Week 2 の 2 問目と同じ規則。 全員が足すと総和は x + n*c になる。",
-            "penalty": 12
+            "content": "ac26-w2-linear-shares の `add_constant` が、 大きなプロトコルの中に再登場します。 公開されている定数 (ここでは `bias`) を、 共有された値に足して、 その share を返します。 採点は正しい合計を要求するだけでなく、 **公開定数を全員が足したときの合計を名指しで落とします**。",
+            "penalty": 6
+          },
+          {
+            "id": "linear-hint-2",
+            "content": "全員が定数 c を自分の share に足すと、 合計は\n\n    (a[0] + c) + (a[1] + c) + ... + (a[n-1] + c) = sum(a) + n*c = x + n*c\n\nになり、 x + c ではありません。 c は**項**なので、 人数ぶんに増えます (掛け算の c は係数なので 1 個で済むのとは違います)。 欲しいのは c が **ちょうど 1 回**足された状態です。",
+            "penalty": 5
+          },
+          {
+            "id": "linear-hint-3",
+            "content": "**add_public(shares, constant, p)** の手順:\n1. `out = [share % p for share in shares]` —— 正規化して写す。\n2. **誰か 1 人だけ**を選ぶ (index 0 でよい)。\n3. `out[0] = (out[0] + constant) % p` —— その 1 人にだけ定数を足す。\n4. `out` を返す。\n\n検算 (p=101, shares=[70,40,97] (x=5), constant=4):\n  全員が足すと合計 118%101 = 17 —— x+c=9 ではない (ずれ 8 = (n-1)*c) ✗\n  1 人だけ足すと [74,40,97]、 合計 211%101 = 9 = x+c ✓\n\n`aggregate` の最後で `bias` を足すときも、 同じこの関数を使ってください。",
+            "penalty": 3
           }
         ]
       },
@@ -334,8 +371,18 @@
         "hints": [
           {
             "id": "multiply-hint-1",
-            "content": "積ごとに d と e を作り、 まとめて open し、 その後は線形。 d*e は公開スカラーで 1 party だけが畳み込む。",
-            "penalty": 25
+            "content": "ここでプロトコル本体 `aggregate` を書きます。 この checkpoint が見るのは **正しさだけ** —— 返した share を開くと平文で計算したスコアと一致するか、です (秘匿とコストは別の checkpoint が別々に測ります)。\n\n組み立てるのは `score = sum_i (count_i * severity_i) + bias`。 積は組織ごとに 1 つで、 **両方の因子が秘密**なので、 前の問題の Beaver 掛け算をそのまま使います。 三つ組は組織ごとに 1 組、 `triple_list[i]` として渡されます。 返すのは **share** です —— 開かないでください。",
+            "penalty": 11
+          },
+          {
+            "id": "multiply-hint-2",
+            "content": "1 つの積の手順は前の問題と同じです。 `triple_list[i]` は `{\"a\": [...], \"b\": [...], \"c\": [...]}` で、 3 つとも share (長さ n の list) です。\n\n    d_i = counts[i] - triple[\"a\"]        (各自ローカルに、 share のまま)\n    e_i = severities[i] - triple[\"b\"]    (同じく)\n    d_i と e_i を開示する\n    積の share = triple[\"c\"] + d_i*triple[\"b\"] + e_i*triple[\"a\"] + d_i*e_i\n\n最後の `d_i*e_i` は **公開値どうしの積 = 公開定数** なので、 前の問題と同じく **1 人だけ**が足します。 積が k 個できたら、 share どうしを位置ごとに足して合計の share にし、 最後に `add_public` で `bias` を足します。\n\n開示は `io.open_batch(sharings)` だけが窓口で、 渡した share の list に対応する値の list が同じ順序で返ります。",
+            "penalty": 9
+          },
+          {
+            "id": "multiply-hint-3",
+            "content": "**aggregate(counts, severities, triple_list, spec, io)** の手順:\n1. `p, k = spec[\"p\"], spec[\"parties\"]` を取る。\n2. 開示したい share を**全部**集める空の list `to_open` を用意する。\n3. `for index in range(k):` で組織ごとに:\n   - `triple = triple_list[index]`\n   - `to_open.append([(x - a) % p for x, a in zip(counts[index], triple[\"a\"])])`   (= d_i の share)\n   - `to_open.append([(y - b) % p for y, b in zip(severities[index], triple[\"b\"])])` (= e_i の share)\n4. **ループの外で 1 回だけ** `opened = io.open_batch(to_open)` を呼ぶ。\n   返る list の順序は渡した順序と同じなので、 `opened[2*index]` が `d_i`、 `opened[2*index+1]` が `e_i`。\n5. `total = [0] * k` を用意し、 もう一度 `for index in range(k):`:\n   - `d, e = opened[2*index], opened[2*index+1]`\n   - `product = [(c + d*b + e*a) % p for c, a, b in zip(triple[\"c\"], triple[\"a\"], triple[\"b\"])]`\n   - `product[0] = (product[0] + d*e) % p`   ← **1 人だけ**が公開定数を足す\n   - `total = [(t + q) % p for t, q in zip(total, product)]`\n6. `return add_public(total, spec[\"bias\"], p)`\n\n**`io.open_batch` をループの中で呼ばないこと。** 正しさは変わりませんが、 cost checkpoint が k ラウンドとして落とします。 また **三つ組は組織ごとに別のものを使うこと**。 使い回しても正しさは変わりませんが、 privacy checkpoint が落とします。\n\n数値検算 (p=101, k=2, bias=7, count=(3,4), severity=(5,6), 三つ組 (2,3,6) と (5,7,35)):\n```\nd0=1, e0=2, d1=(4-5)%101=100, e1=(6-7)%101=100     4 つを 1 回で開示\n積0 = 6 + 1*3 + 2*2 + 1*2 = 15 = 3*5\n積1 = 35 + 100*7 + 100*5 + 100*100 = 11235、 11235%101 = 24 = 4*6\n合計 15+24 = 39、 bias を 1 人だけ足して 46 = 3*5 + 4*6 + 7  OK\n```",
+            "penalty": 6
           }
         ]
       },
@@ -348,8 +395,18 @@
         "hints": [
           {
             "id": "result-hint-1",
-            "content": "share し直しても、 組織の順序を変えても、 スコアは動かないはず。 1 組織の count を Δ 動かしたときだけ、 Δ * severity 動く。",
-            "penalty": 15
+            "content": "この checkpoint は 1 つの期待値と突き合わせません。 **同じプロトコルを 3 回、 条件を変えて走らせ、 結果どうしの関係**を見ます。 暗記した数や、 特定の入力にだけ合う実装では、 3 つを同時には満たせません。 新しく書くものはなく、 `aggregate` が本当に「式を計算している」かを確かめる checkpoint です。",
+            "penalty": 7
+          },
+          {
+            "id": "result-hint-2",
+            "content": "検査される 3 つの関係はこれです。\n\n1. **同じ入力を別の乱数で分け直しても、 スコアは変わらない** —— share の分け方はスコアに影響しないので。 share の具体的な値に依存した実装はここで落ちます。\n2. **組織の順序を逆にしても、 スコアは変わらない** —— 和は順序に依存しないので。 index を決め打ちした実装、 特定の組織を特別扱いする実装が落ちます。\n3. **1 つの組織の count を 3 増やすと、 スコアが `3 * その組織の severity` だけ動く** —— 積の線形性そのもの。 count と severity を取り違えている実装がここで出ます。\n\nどれも「正しい式を実装していれば自動的に成り立つ」ものです。 落ちる場合は、 式ではなく特定の値に合わせにいっています。",
+            "penalty": 5
+          },
+          {
+            "id": "result-hint-3",
+            "content": "`aggregate` を次の観点で点検してください。 すべて満たしていればこの checkpoint は通ります。\n\n1. **組織の数を `spec[\"parties\"]` から取っているか。** 2 や 3 のような定数を書いていないか。 `spec[\"parties\"]` は **整数** なので `len()` は使えません。\n2. **全組織を同じ扱いで回しているか。** `for index in range(k):` の中で、 index による分岐が無いこと (公開定数を足す「1 人だけ」は party の index であって、 組織の index ではありません —— 混同しないこと)。\n3. **`counts[index]` を `triple[\"a\"]` と、 `severities[index]` を `triple[\"b\"]` と組にしているか。** 取り違えると関係 3 で落ちます。\n4. **積の式で `d` が `b` に、 `e` が `a` に掛かっているか。**\n5. **share の具体的な値に依存していないか。** 「証拠を調べる」で見た数値を書き込んでいないこと。\n6. **`bias` を最後に 1 回だけ、 1 人だけに足しているか。** 組織ごとに足すと k 倍入ります。\n\nmultiply checkpoint の手順どおりに書いてあれば、 この 6 つは自動的に満たされます。",
+            "penalty": 4
           }
         ]
       },
@@ -362,8 +419,18 @@
         "hints": [
           {
             "id": "privacy-hint-1",
-            "content": "1 つの triple を全部の積に使うとスコアは合う。 では open された d たちの差は何になるか。",
-            "penalty": 20
+            "content": "正しさとは別に、 **この実行が何を外に見せたか**だけを見る checkpoint です。 `io.open_batch` に渡した share は全部記録されており、 採点はその**実際に開示された値の集合**を検査します。 主張ではなく実測です。 正しいスコアを返していても、 開示した値が違えばここで落ちます。",
+            "penalty": 8
+          },
+          {
+            "id": "privacy-hint-2",
+            "content": "検査はブラックリスト (「これは開けるな」) ではなく **厳密一致** です —— 開示された値の集合が、 供給された三つ組から決まる差分の集合とちょうど同じでなければなりません。 なぜブラックリストでは駄目か。\n\n同じ三つ組を 2 つの積に使い回すと、 スコアは正しく出ます。 開示している値も「差分」ではあります。 ところが\n\n    d_0 = count_0 - a、 d_1 = count_1 - a   (同じ a)\n    d_0 - d_1 = count_0 - count_1\n\n**開示された 2 つの値の差が、 2 つの秘密の差そのもの**になります。 マスクは 1 回しか使えません。 だから「三つ組ごとに、 その三つ組に対応する差分だけが出ている」ことを厳密に要求します。",
+            "penalty": 6
+          },
+          {
+            "id": "privacy-hint-3",
+            "content": "次の 4 点を守れば通ります。\n\n1. **開示するのは差分だけ。** `io.open_batch` に渡してよいのは `d_i = counts[i] - triple_i[\"a\"]` と `e_i = severities[i] - triple_i[\"b\"]` の share だけです。\n2. **三つ組は組織ごとに別のものを使う。** ループの中で `triple_list[index]` を引くこと。 `triple_list[0]` を全組織に使い回すと、 スコアは正しいままここだけが落ちます。\n3. **入力そのものや途中の合計を開かない。** `counts[i]` / `severities[i]` の share、 積の share、 走行合計、 最終スコアの share —— どれも `open_batch` に渡してはいけません。 `aggregate` が返すのは **開いていない share** です。\n4. **開示するのはちょうど 2k 個。** 組織ごとに d と e の 2 個で、 それ以外は 1 つも足さない。\n\n点検のしかた: `to_open` に `append` している箇所を数えてください。 ループ 1 周につきちょうど 2 回、 それ以外の場所に `append` も `open_batch` も無ければ条件を満たしています。",
+            "penalty": 5
           }
         ]
       },
@@ -376,8 +443,18 @@
         "hints": [
           {
             "id": "cost-hint-1",
-            "content": "`io.open_batch()` の呼び出し 1 回が 1 round。 積ごとに呼ぶか、 全部まとめて 1 回呼ぶかで実測が変わる。",
-            "penalty": 15
+            "content": "見積り (`plan`) と実測 (`aggregate` が実際にかけたコスト) を **両方向で突き合わせる** checkpoint です。 「1 ラウンドでできます」と書いておいて実装が k ラウンドなら落ちますし、 実装が 1 ラウンドでも `plan` が k と書いてあれば落ちます。 コストは主張ではなく測るもの、 というのがここの主題です。",
+            "penalty": 7
+          },
+          {
+            "id": "cost-hint-2",
+            "content": "測られているのは 3 つです。\n\n1. **実測のラウンド数が 1 であること。** `io.open_batch` は 1 回の呼び出しにつき 1 ラウンドと数えます。 掛け算ごとに呼ぶと k ラウンドになります。\n2. **`plan()[\"rounds\"]` が実測と一致すること。**\n3. **開示した share の総数がちょうど 2k であること。** 少なければ三つ組を使い回しており (積 1 つあたり 2 個未満)、 多ければ余計なものを開示しています。\n\n1 回の `open_batch` にまとめられる理由は、 すべての差分が互いに独立だからです —— 組織 i の d を計算するのに組織 j の値は要りません。 **開示する値の数は変わらず、 変わるのは往復の回数だけ**です。",
+            "penalty": 5
+          },
+          {
+            "id": "cost-hint-3",
+            "content": "次の 5 点を守れば通ります。\n\n1. **`plan` の `rounds` に `1` を返す。**\n2. **`aggregate` で、開示したい share を全部 `to_open` に集めてから、 ループの外で `io.open_batch(to_open)` を 1 回だけ呼ぶ。**\n3. **`to_open` に入る share はちょうど 2k 個。** 組織ごとに `d_i` と `e_i` の 2 個だけを `append` し、 それ以外は 1 つも入れない。\n4. **組織ごとに `triple_list[index]` を引く。** 使い回すと開示が 2k 個より少なくなり、 ここでも落ちます。\n5. **返す前にスコアを開かない。** 開くと開示数が 2k を超えます。\n\n点検のしかた: ソース内の `io.open_batch` の出現箇所を数えてください。 **ちょうど 1 箇所**で、 しかも `for` ループの**外**にあれば条件 1・2 は満たされています。 次に `to_open.append` の出現を数えてください。 ループの中に **ちょうど 2 箇所**、 それ以外に無ければ条件 3 も満たされています。",
+            "penalty": 4
           }
         ]
       },
@@ -386,7 +463,24 @@
         "input": "multiline",
         "label": "見たことのない設定でも成立させる",
         "points": 40,
-        "wrongAnswerPenalty": 15
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "transfer-hint-1",
+            "content": "transfer は **新しく書くものがない** checkpoint です。 いま画面に見えている p や組織数ではなく、 別の seed の modulus・組織数・三つ組で、 4 つの関数と端から端までの実行を全部やり直します。 確かめているのは 1 点 —— **この deploy の具体的な数字に依存していないか**。",
+            "penalty": 8
+          },
+          {
+            "id": "transfer-hint-2",
+            "content": "自分のコードから **引数から来ていない数** を探してください。 典型は 4 つ。 (1) modulus を数値リテラルで書いている。 (2) 組織数を 2 や 3 で固定している、 あるいは `triple_list[0]`・`triple_list[1]` と個別に触っている。 (3) `bias` の値を書き込んでいる。 (4) 「証拠を調べる」で見た share の値を埋め込んでいる。\n\nもうひとつ注意: `spec[\"parties\"]` は **整数** です (組織の数)。 list ではないので `len()` は使えません。 share の本数もこれと同じ数ですが、 share の list に対しては `len(sharing)` が使えます。",
+            "penalty": 6
+          },
+          {
+            "id": "transfer-hint-3",
+            "content": "4 つの関数を順に点検してください。 すべて満たしていればそのまま提出で通ります。\n\n1. **plan** —— `k = spec[\"parties\"]` から `{\"multiplications\": k, \"triples\": k, \"rounds\": 1}` を作る。 k を数値で書かない。\n2. **share_inputs** —— `randoms[index]` をそのまま先頭に使い、 最後の 1 個を `(secret - sum(head)) % p` にする。 長さは `len(head)+1`。\n3. **add_public** —— index 0 にだけ定数を足し、 残りは `% p` で写す。\n4. **aggregate** —— `p, k = spec[\"p\"], spec[\"parties\"]` から始める。 `for index in range(k):` で全組織を同じ扱いで回す。 `io.open_batch` は **ループの外で 1 回だけ**。 `triple_list[index]` を組織ごとに引く。 `d*e` は index 0 にだけ足す。 最後に `add_public(total, spec[\"bias\"], p)`。\n\n最後に、 4 つの関数の本文に **数値リテラルが `0`・`1`・`2` 以外に残っていない**ことを目で確認してください (`2*index` と `2*index+1` の 2 は開示の並べ方であって、 組織数ではありません)。 残っていなければ transfer は通ります。",
+            "penalty": 5
+          }
+        ]
       }
     ]
   },
@@ -395,8 +489,8 @@
       "name": "Five multiplications, one round",
       "shortDescription": "Several organizations want a weighted risk score without handing over their incident counts or severities. Week 2's four problems, assembled into one application — where the number of multiplications and the number of rounds are not the same number.",
       "description": "Week 2's capstone; its role is synthesis. Rather than leaving shares, linear operations, Beaver multiplication and the open policy as separate exercises, integrate them into a small MPC application that publishes only a non-linear aggregate of several parties' secret inputs.\n\nThe formula is score = Σ_i (count_i * severity_i) + bias (bias public, mod p). Both sides of each product are secret, so k organisations need k multiplications. But the opens of d and e are mutually independent, so all of them fit in one round.\n\n**That those two numbers differ** is the centre of this problem. An implementation that opens per multiplication is correct, keeps privacy, and only multiplies latency by k. To grade by measurement rather than by claim, the disclosure path is narrowed to a single `io.open_batch()`, and the number of calls is counted as rounds.\n\nTriple reuse is likewise invisible to correctness. Beaver works with any valid triple, so using the same triple for every product still gives the right score. What breaks is privacy: when the same mask a covers several secrets, the transcript yields differences of secrets. The hidden tests match the multiset of opened values strictly against the mask differences implied by the supplied triples, so reuse fails there.\n\nEight checkpoints grade correctness, privacy and communication cost separately — folded into one verdict, a learner could not tell whether they built \"correct but slow\", \"correct but leaky\" or \"safe but wrong\".\n\nWeek 2's course material was unpublished at the pinned commit, so sources is a placeholder pin and status stays draft (finalised when #219 detects publication).",
-      "instructions": "## Solve in Participant Portal\n\nStart the problem in Participant Portal. The problem editor appears on the same page as the\nstatement. Use **Inspect evidence** to read the deployment-specific fixture and published\nevidence, edit the starter sources, and select **Run public tests**. Fill any direct-answer\ncheckpoint from the evidence and your experiments; enter objects, arrays, and numbers as JSON.\n\nEach checkpoint's submit button sends the current editor files and answer fields through the\ncontainer prepare API, then submits the generated value directly for scoring. There is no second\nscreen and no submission value to copy. Direct answers are bound to this deployment's seed, so a\nvalue prepared for another run, or a remembered concept name on its own, cannot earn credit.\n",
-      "writeup": "## Decomposing the expression\n\n`score = sum_i (count_i * severity_i) + bias`. The summation is linear, adding the bias is linear (with exactly one party folding it in), and only the products of two secrets are not. So `k` organizations means `k` Beaver multiplications and `k` triples.\n\n## Why the round count is one, not k\n\nNone of the `k` products' `d` and `e` values depends on any other product's result, so they all fit in a single opening. An implementation that opens per multiplication is correct, is private, and costs `k` times the latency.\n\nThat is the demonstration of \"rounds equals multiplications\": rounds are set by multiplicative **depth**, not count. This expression has depth 1, so the round count stays at one however wide it gets. A circuit of depth `D` costs `D` rounds.\n\n## Why reusing a triple is not caught by correctness\n\nBeaver multiplication works with any valid triple, so reusing one across every product still yields the right score. What breaks is privacy: with the same `a` masking both `x_1` and `x_2`, the opened `d_1 - d_2` is `x_1 - x_2` — a difference of secrets, straight out of the transcript.\n\nThe hidden tests match the multiset of opened values exactly against the masked differences the supplied triples imply. Being an exact match rather than a blacklist, it catches \"used another product's triple\" and \"revealed one extra thing\" with the same check. This is why each multiplication consumes its own triple, and why the offline cost scales with the number of multiplications.\n\n## Why the three are graded separately\n\nAn implementation can be correct and expensive, correct and leaky, or private and wrong. Folded into one verdict, a learner cannot tell which of those they built. Correctness, privacy and cost are separate checkpoints for that reason.\n\n## Relations rather than fixed expectations\n\nThe result checkpoint checks three relations: re-sharing with fresh randomness must not move the score, reversing the organizations must not move it, and moving one organization's count by Δ must move it by Δ times their severity. Memorizing one output satisfies none of those.\n\n## What the published output leaks by definition\n\nOnce you decide to publish the score, whatever follows from the score is public. At `k = 1`, `score - bias` is that organization's product outright. With small `k` and a narrow severity range, the candidate counts narrow considerably. MPC guarantees that the *process* adds no leakage. It does not guarantee that the output reveals nothing — for that you need a different mechanism, such as perturbing or thresholding the output.\n\n## Where this leads\n\nDecomposing an application expression into linear and multiplicative parts, estimating its cost in advance, and reconciling the estimate against a measurement — all three are used directly in Week 6's co-SNARK work.",
+      "instructions": "## Start here\n\nSeveral organizations each hold an **incident count** and a **severity**. Neither will be shared. All anyone wants is the total score:\n\n```\nscore = sum_i (count_i * severity_i) + bias        (bias public, mod p)\n```\n\nThis assembles the pieces from the previous three problems into one application. There is no new concept.\n\n- **Secret sharing** (ac26-w2-secret-sharing) — each organization's two figures arrive already split into shares.\n- **Adding a public constant** (ac26-w2-linear-shares) — `bias` is folded in by exactly one party.\n- **Beaver multiplication** (ac26-w2-beaver-mul) — `count_i * severity_i` has **two secret factors**, so each organization costs one multiplication, and one triple is supplied per organization.\n\nWhat is new is **cost**. The only way to reveal anything is `io.open_batch([...])`, which reveals every sharing you hand it and counts as **one round**.\n\n```\nio.open_batch([sharing_a, sharing_b])   -> [value_a, value_b]      1 round\nio.open_batch([sharing_a])\nio.open_batch([sharing_b])              -> same values             2 rounds\n```\n\nHow you group your openings is a **design decision**, and it is **measured**, not asked about.\n\n## First move\n\nStart the problem in **Participant Portal** and press **Inspect evidence**. It shows this deployment's `p`, the **number of organizations**, the public `bias`, and real examples of the shares and triples you will be handed. No terminal on your machine is required.\n\n## Workflow\n\nFill in the four functions in `aggregate.py` in the editor and press **Run public tests**. Nothing here is typed-in JSON; all four checkpoints are code.\n\n**What `spec` contains** (`plan` and `aggregate` receive it):\n\n```\n{\"p\": 2003,        int   the prime modulus\n \"parties\": 3,     int   **the number of organizations, as an integer, not a list**;\n                         the number of shares per sharing is the same number\n \"bias\": 812}      int   the public additive constant\n```\n\n**Return shapes**:\n\n- `plan(spec)` -> exactly the three keys `{\"multiplications\": int, \"triples\": int, \"rounds\": int}`.\n- `share_inputs(secrets, randoms, p)` -> a **list of sharings**: `out[i]` is the sharing of `secrets[i]` and has length `spec[\"parties\"]`. `randoms[i]` supplies the first n-1 share values and **must be used as given** (substituting your own values fails).\n- `add_public(shares, constant, p)` -> a list of length n.\n- `aggregate(counts, severities, triple_list, spec, io)` -> the **sharing of the score** (a list of length n). Do not open it; the harness opens the final score.\n\n**What `aggregate` is handed**:\n\n```\ncounts[i]        organization i's count, as a sharing (list of length n)\nseverities[i]    organization i's severity, as a sharing\ntriple_list[i]   {\"a\": [...], \"b\": [...], \"c\": [...]} with c = a*b, all shared out\nspec             the dictionary above\nio               the only channel for revealing anything: io.open_batch(list of sharings) -> list of int\n```\n\n## Goal\n\nReturn a sharing of the correct score — but correct is not enough. That **only the masked differences were revealed** (privacy) and that **the openings fit in a single round** (cost) are measured separately. The final transfer checkpoint re-runs everything under a different p and organization count.\n",
+      "writeup": "## Three pieces become one application\n\nThere is no new cryptography here. The pieces from the previous three problems are dropped into an actual expression:\n\n```\nscore = sum_i (count_i * severity_i) + bias\n        \\____________/   \\_______/\n         Beaver product    public constant (folded in by one party)\n```\n\nAnd yet correctness, privacy and cost are scored **separately**. The reason is simple: a submission can be **correct and expensive**, **correct and leaky**, or **private and wrong**, and all three actually happen. Folding them into one verdict would leave you unable to tell which one you built.\n\n## Why \"number of multiplications\" and \"number of rounds\" are different numbers\n\nWith k organizations there are k multiplications, and each Beaver multiplication consumes one triple. So\n\n```\nmultiplications = k\ntriples         = k\n```\n\nThose agree. But **rounds is 1, not k**.\n\nThe reason is that the opened values have no dependencies between them. Computing organization i's `d_i = count_i - a_i` requires nothing from organization j. Every `d` and `e` can be computed **simultaneously**, so they can all be **revealed in a single exchange**.\n\n```\nopen per multiplication   k rounds, 2k values revealed   <- correct, and k times slower\nopen all at once          1 round,  2k values revealed   <- same information, same correctness\n```\n\n**The number of revealed values does not change; only the number of round trips does.** In a distributed system round trips are latency, so this is cost, not taste. That is why `plan` is written *before* the implementation, and why the cost checkpoint reconciles the estimate against the measurement.\n\n## Following the numbers (p = 101, two organizations, bias = 7)\n\n```\ncount      = (3, 4)          severity = (5, 6)\ntriple 0    a0=2, b0=3, c0=6         (6 = 2*3)\ntriple 1    a1=5, b1=7, c1=35        (35 = 5*7)\ncorrect answer:  3*5 + 4*6 + 7 = 15 + 24 + 7 = 46\n```\n\nFirst build every masked difference locally:\n\n```\nd0 = 3 - 2 = 1        e0 = 5 - 3 = 2\nd1 = (4 - 5) % 101 = 100    e1 = (6 - 7) % 101 = 100\n```\n\n**Reveal all four in one `open_batch`** — that is the single round. Then assemble each product:\n\n```\nproduct 0 = c0 + d0*b0 + e0*a0 + d0*e0 = 6 + 1*3 + 2*2 + 1*2 = 15        = 3*5   correct\nproduct 1 = c1 + d1*b1 + e1*a1 + d1*e1\n          = 35 + 100*7 + 100*5 + 100*100 = 35 + 700 + 500 + 10000 = 11235\n          11235 % 101 = 24                                               = 4*6   correct\nsum = 15 + 24 = 39\none party folds in bias -> 39 + 7 = 46                                           correct\n```\n\n`d1` and `e1` come out as the \"large\" value 100 because -1 is 100 in F_101. The normalization rule from the earlier problems is doing its work.\n\n## Why reusing a triple is \"correct and leaky\"\n\nReusing the same triple `(a, b, c)` for two products still **produces the correct score**, so the correctness check says nothing. But\n\n```\nd_0 = count_0 - a          d_1 = count_1 - a        (the same a)\nd_0 - d_1 = count_0 - count_1\n```\n\nThe **difference of the two revealed values is the difference of the two secrets**. A mask's whole job is to be used once; used twice it is not a mask. This is the mirror image of the previous problem's \"why is d safe to reveal\" — d was uninformative precisely because a was fresh.\n\nThat is why the privacy checkpoint requires the multiset of opened values to **match exactly** the differences implied by the supplied triples. A blacklist (\"do not open these\") cannot catch reuse, because a reused triple still only reveals differences.\n\n## What each checkpoint protects\n\n- **plan** — an estimate written *before* the implementation. `multiplications` and `triples` are both k, but `rounds` is 1. Answering k three times is the shape of not having thought about batching.\n- **share-inputs** — requires the supplied `randoms[i]` to be used **verbatim** as the first n-1 shares. Your own draw makes scoring irreproducible.\n- **linear** — `add_public`. The linear-shares rule (adding a public constant everywhere gives `x + n*c`) reappears inside a bigger protocol.\n- **multiply** — that the score matches the plain computation. Correctness only.\n- **result** — checked as **relations**, not against one expected number: (1) re-sharing the same inputs with fresh randomness must not move the score; (2) reversing the organizations must not move it; (3) raising one organization's count by 3 must move the score by `3 * that organization's severity`. No memorized number satisfies all three at once.\n- **privacy** — the exact match above. Triple reuse fails here and only here.\n- **cost** — reconciles estimate and measurement in **both directions**: `io.rounds == 1`, `plan()[\"rounds\"]` equal to the measurement, and the total number of opened sharings exactly `2k`. Fewer means a triple was reused; more means something extra was revealed.\n- **transfer** — everything re-run under another seed's p and organization count.\n\n## How it breaks when you get it wrong\n\n- **Calling `open_batch` once per multiplication** — correct, private, and k rounds. Only cost goes red.\n- **Reusing a single triple** — correct score, one round. Only privacy goes red. This is what \"the tests pass\" failing to mean \"it is safe\" looks like in this problem.\n- **Folding `bias` into every share** — the score is off by `(n-1)*bias`; multiply and result go red together.\n- **Folding `d*e` into every share** — off by `(n-1)*d*e` per product, so the error grows with the organization count.\n- **Opening the score before returning it** — `aggregate` returns a **sharing**. Opening it is an extra disclosure and turns both privacy and cost red.\n- **Treating `spec[\"parties\"]` as a list and calling `len()`** — it is an **integer**; `len(3)` raises.\n- **Mixing up the order of `d` and `e` into `open_batch`** — the returned list follows the order you passed. Fix a convention (say `opened[2*i]` is `d_i` and `opened[2*i+1]` is `e_i`) and hold to it.\n\n## Where this leads\n\n- **ac26-w2-privacy-audit** is the **auditor's side** of this very protocol. The criterion used there — masked differences may be opened, partial sums may not — is the constraint you are obeying here.\n- **ac26-w2-oblivious-transfer** answers where the triples you assumed \"already prepared\" could come from. With no trusted dealer, OT is the primitive that lets two parties who share nothing compute together at all.\n- **ac26-w6-cosnark-\\*** reproduces this \"k multiplications batched into one round\" structure inside distributed generation of a ZK proof.\n- The upstream toy-mpc's requirement to count multiplications and rounds is exactly this plan / cost pair.\n",
       "learningGoals": [
         "Decompose an application expression into its linear and multiplicative parts",
         "Estimate the triple count and round count before implementing",
@@ -413,13 +507,35 @@
           "hints": [
             {
               "id": "plan-hint-1",
-              "content": "Two of the three are the same number. The third is decided by which openings have to wait for another opening's result."
+              "content": "This checkpoint makes you estimate the cost **before** implementing. Three numbers: the **number of multiplications**, the **number of triples needed**, and the **number of opening rounds**. Two of the three are the same number and one is not, and working out which — beforehand rather than afterwards — is the point. The return value has exactly the three keys `{\"multiplications\": ..., \"triples\": ..., \"rounds\": ...}`."
+            },
+            {
+              "id": "plan-hint-2",
+              "content": "Look at the expression: `score = sum_i (count_i * severity_i) + bias`, so k organizations means k products (`bias` is a public constant, not a multiplication). Each Beaver multiplication consumes one triple, and **reuse is forbidden** — covering two secrets with the same mask makes the difference of the two revealed values the difference of the two secrets.\n\nOnly the round count differs. Computing organization i's differences needs nothing from organization j: they are **independent**, so they can all be computed at once, and `io.open_batch` reveals everything you hand it as a single round. Take k from `spec[\"parties\"]` — an **integer**, not a list."
+            },
+            {
+              "id": "plan-hint-3",
+              "content": "**plan(spec)**, step by step:\n1. Take `k = spec[\"parties\"]` (an integer).\n2. Set `multiplications` to **k** (one product per organization).\n3. Set `triples` to **k** (one triple per multiplication; reuse is forbidden).\n4. Set `rounds` to **1** (all the differences are mutually independent, so they fit in one `open_batch`).\n5. Return `{\"multiplications\": k, \"triples\": k, \"rounds\": 1}`.\n\nPutting k in `rounds` fails, and that is why this checkpoint exists: to break the assumption that multiplications and rounds are the same count. The number of **values** revealed is 2k either way; the number of **round trips** can be one. In a distributed system round trips are latency.\n\nThis `rounds` value is later **reconciled against the measurement** by the cost checkpoint. Estimating 1 while implementing k rounds fails there."
             }
           ]
         },
         {
           "id": "share-inputs",
-          "label": "Split the secrets"
+          "label": "Split the secrets",
+          "hints": [
+            {
+              "id": "share-inputs-hint-1",
+              "content": "This is what you did in secret-sharing, applied to several secrets at once. `secrets` is a list of secrets; split each into n shares and return a **list of sharings**. `out[i]` is the sharing of `secrets[i]` and has the same length as `spec[\"parties\"]`. No new idea is involved."
+            },
+            {
+              "id": "share-inputs-hint-2",
+              "content": "`randoms[i]` holds the values for the **first n-1 shares** of `secrets[i]`. Substituting your own values fails, because scoring checks that the supplied randomness appears verbatim at the front (your own draw changes the answer on every run and cannot be reproduced).\n\nThe remaining share is, as always, the settle-up value that makes the total land on the secret. Normalize every element into 0..p-1 with `% p`."
+            },
+            {
+              "id": "share-inputs-hint-3",
+              "content": "**share_inputs(secrets, randoms, p)**, step by step:\n1. Start an empty list `out`.\n2. Iterate the secrets with their index (`for index, secret in enumerate(secrets):`).\n3. `head = [value % p for value in randoms[index]]` — the supplied randomness, verbatim, at the front.\n4. `tail = (secret - sum(head)) % p` — the settle-up share that makes the total land on the secret.\n5. `out.append([*head, tail])`.\n6. Return `out`.\n\nCheck it (p=101, secret=5, randoms[i]=[70, 40]): head=[70,40], tail=(5-110)%101=97,\nsharing = [70, 40, 97], total 207%101 = 5 ✓\n\nThe length comes out as `len(head) + 1`. Do not write `spec[\"parties\"]` in as a number."
+            }
+          ]
         },
         {
           "id": "linear",
@@ -427,7 +543,15 @@
           "hints": [
             {
               "id": "linear-hint-1",
-              "content": "Same rule as Week 2's second problem: if everyone adds it, the set sums to x + n*c."
+              "content": "The `add_constant` from ac26-w2-linear-shares reappears inside a larger protocol. Add a public constant (here the `bias`) to a shared value and return the resulting sharing. Scoring requires the correct total and separately **names the total you get by adding the constant everywhere** as a failure."
+            },
+            {
+              "id": "linear-hint-2",
+              "content": "If every party adds the constant c to its own share, the total is\n\n    (a[0] + c) + (a[1] + c) + ... + (a[n-1] + c) = sum(a) + n*c = x + n*c\n\nnot x + c. c is a **term**, so it multiplies with the party count (unlike the multiplication case where c is a coefficient and one of it suffices). What you want is c appearing **exactly once**."
+            },
+            {
+              "id": "linear-hint-3",
+              "content": "**add_public(shares, constant, p)**, step by step:\n1. `out = [share % p for share in shares]` — copy, normalized.\n2. Pick **exactly one party** (index 0 is fine).\n3. `out[0] = (out[0] + constant) % p` — add the constant to that one only.\n4. Return `out`.\n\nCheck it (p=101, shares=[70,40,97] so x=5, constant=4):\n  everyone adds -> total 118%101 = 17, which is not x+c=9 (off by 8 = (n-1)*c)\n  one party adds -> [74,40,97], total 211%101 = 9 = x+c  correct\n\nUse this same function when folding `bias` in at the end of `aggregate`."
             }
           ]
         },
@@ -437,7 +561,15 @@
           "hints": [
             {
               "id": "multiply-hint-1",
-              "content": "Make every product's d and e, open them together, and the rest is linear. d*e is a public scalar that exactly one party folds in."
+              "content": "This is where you write the protocol itself, `aggregate`. This checkpoint looks at **correctness only**: opening the sharing you return must match the score computed in the clear (privacy and cost are measured separately, by other checkpoints).\n\nWhat you assemble is `score = sum_i (count_i * severity_i) + bias`. There is one product per organization and **both factors are secret**, so each one is a Beaver multiplication exactly as in the previous problem. One triple per organization arrives as `triple_list[i]`. Return a **sharing** — do not open it."
+            },
+            {
+              "id": "multiply-hint-2",
+              "content": "One product works exactly as in the previous problem. `triple_list[i]` is `{\"a\": [...], \"b\": [...], \"c\": [...]}`, all three sharings (lists of length n).\n\n    d_i = counts[i] - triple[\"a\"]        (locally, still shared)\n    e_i = severities[i] - triple[\"b\"]    (likewise)\n    reveal d_i and e_i\n    the product's sharing = triple[\"c\"] + d_i*triple[\"b\"] + e_i*triple[\"a\"] + d_i*e_i\n\nThat last `d_i*e_i` is a product of two public numbers — a public constant — so as before **exactly one party** folds it in. Once you have k products, add the sharings position-wise into a total, and finally fold in `bias` with `add_public`.\n\nThe only channel for revealing anything is `io.open_batch(sharings)`, which returns the values in the same order as the sharings you passed."
+            },
+            {
+              "id": "multiply-hint-3",
+              "content": "**aggregate(counts, severities, triple_list, spec, io)**, step by step:\n1. Take `p, k = spec[\"p\"], spec[\"parties\"]`.\n2. Start an empty list `to_open` to collect **every** sharing you want revealed.\n3. `for index in range(k):`\n   - `triple = triple_list[index]`\n   - `to_open.append([(x - a) % p for x, a in zip(counts[index], triple[\"a\"])])`   (the sharing of d_i)\n   - `to_open.append([(y - b) % p for y, b in zip(severities[index], triple[\"b\"])])` (the sharing of e_i)\n4. **Outside the loop, exactly once**, call `opened = io.open_batch(to_open)`.\n   The returned list follows the order you passed, so `opened[2*index]` is `d_i` and `opened[2*index+1]` is `e_i`.\n5. Start `total = [0] * k` and loop again with `for index in range(k):`\n   - `d, e = opened[2*index], opened[2*index+1]`\n   - `product = [(c + d*b + e*a) % p for c, a, b in zip(triple[\"c\"], triple[\"a\"], triple[\"b\"])]`\n   - `product[0] = (product[0] + d*e) % p`   <- **one party only** folds in the public constant\n   - `total = [(t + q) % p for t, q in zip(total, product)]`\n6. `return add_public(total, spec[\"bias\"], p)`\n\n**Never call `io.open_batch` inside the loop.** Correctness is unaffected but the cost checkpoint fails you for k rounds. And **use a distinct triple per organization**: reuse leaves correctness intact and fails the privacy checkpoint.\n\nCheck it (p=101, k=2, bias=7, count=(3,4), severity=(5,6), triples (2,3,6) and (5,7,35)):\n```\nd0=1, e0=2, d1=(4-5)%101=100, e1=(6-7)%101=100     all four revealed in one call\nproduct0 = 6 + 1*3 + 2*2 + 1*2 = 15 = 3*5\nproduct1 = 35 + 100*7 + 100*5 + 100*100 = 11235, and 11235%101 = 24 = 4*6\ntotal 15+24 = 39; one party folds in bias -> 46 = 3*5 + 4*6 + 7   correct\n```"
             }
           ]
         },
@@ -447,7 +579,15 @@
           "hints": [
             {
               "id": "result-hint-1",
-              "content": "Re-sharing, and reversing the organizations, must both leave the score alone. Only moving one count by Δ moves it, by Δ times that severity."
+              "content": "This checkpoint does not compare against one expected number. It runs **the same protocol three times under changed conditions and checks the relations between the results**. A memorized number, or an implementation tuned to one input, cannot satisfy all three at once. There is nothing new to write; it verifies that `aggregate` really computes the expression."
+            },
+            {
+              "id": "result-hint-2",
+              "content": "The three relations checked are:\n\n1. **Re-sharing the same inputs with fresh randomness must not move the score** — how a value is split does not affect it. An implementation that depends on particular share values fails here.\n2. **Reversing the organizations must not move the score** — a sum does not depend on order. Hard-coded indices, or special-casing one organization, fail here.\n3. **Raising one organization's count by 3 must move the score by `3 * that organization's severity`** — the linearity of the product. An implementation that swapped count and severity surfaces here.\n\nAll three hold automatically once the correct expression is implemented. Failing means you fitted particular values rather than the expression."
+            },
+            {
+              "id": "result-hint-3",
+              "content": "Audit `aggregate` against these points; satisfying all of them passes this checkpoint.\n\n1. **Is the organization count taken from `spec[\"parties\"]`?** No literal 2 or 3. Note `spec[\"parties\"]` is an **integer**, so `len()` does not apply.\n2. **Are all organizations handled identically?** No branching on the index inside `for index in range(k):`. (The \"one party only\" that folds in a public constant is a *party* index, not an organization index — do not conflate them.)\n3. **Is `counts[index]` paired with `triple[\"a\"]` and `severities[index]` with `triple[\"b\"]`?** Swapping them fails relation 3.\n4. **In the product formula, does `d` multiply `b` and `e` multiply `a`?**\n5. **Does anything depend on particular share values?** No numbers copied out of Inspect evidence.\n6. **Is `bias` added once, at the end, by one party only?** Adding it per organization multiplies it by k.\n\nFollowing the multiply checkpoint's walkthrough satisfies all six automatically."
             }
           ]
         },
@@ -457,7 +597,15 @@
           "hints": [
             {
               "id": "privacy-hint-1",
-              "content": "One triple used for every product still gives the right score. So what is the difference between the opened d values?"
+              "content": "Separately from correctness, this checkpoint looks only at **what the run made visible**. Every sharing handed to `io.open_batch` is recorded, and scoring inspects the **set of values actually revealed**. It is a measurement, not a claim: a run can return the right score and still fail here on what it opened."
+            },
+            {
+              "id": "privacy-hint-2",
+              "content": "The check is not a blacklist (\"do not open these\") but an **exact match**: the multiset of revealed values must equal exactly the differences implied by the supplied triples. Why a blacklist would not do:\n\nReusing one triple across two products still produces the correct score, and the values revealed are still \"differences\". But\n\n    d_0 = count_0 - a and d_1 = count_1 - a   (the same a)\n    d_0 - d_1 = count_0 - count_1\n\nso **the difference of the two revealed values is the difference of the two secrets**. A mask is single-use. Hence the requirement that exactly the differences belonging to each triple, and nothing else, appear."
+            },
+            {
+              "id": "privacy-hint-3",
+              "content": "Four points, and it passes.\n\n1. **Reveal only the differences.** The only things that may go into `io.open_batch` are the sharings of `d_i = counts[i] - triple_i[\"a\"]` and `e_i = severities[i] - triple_i[\"b\"]`.\n2. **Use a distinct triple per organization.** Index `triple_list[index]` inside the loop. Reusing `triple_list[0]` everywhere leaves the score correct and fails only here.\n3. **Never open the inputs or any intermediate total.** The sharings of `counts[i]` / `severities[i]`, a product's sharing, the running total, the final score — none of them may be passed to `open_batch`. `aggregate` returns an **unopened** sharing.\n4. **Reveal exactly 2k sharings.** Two per organization, d and e, and nothing else.\n\nHow to audit it: count the places that `append` to `to_open`. Exactly twice per loop iteration, with no other `append` and no other `open_batch` anywhere, satisfies the condition."
             }
           ]
         },
@@ -467,13 +615,35 @@
           "hints": [
             {
               "id": "cost-hint-1",
-              "content": "One `io.open_batch()` call is one round. Calling it per product and calling it once for everything measure differently."
+              "content": "This checkpoint reconciles the estimate (`plan`) with the measurement (what `aggregate` actually cost) **in both directions**. Claiming one round while implementing k fails, and implementing one round while `plan` says k also fails. Cost is measured, not asserted — that is the subject here."
+            },
+            {
+              "id": "cost-hint-2",
+              "content": "Three things are measured.\n\n1. **The measured round count is 1.** `io.open_batch` counts one round per call, so calling it per multiplication costs k rounds.\n2. **`plan()[\"rounds\"]` equals the measurement.**\n3. **The total number of opened sharings is exactly 2k.** Fewer means a triple was reused (under two per product); more means something extra was revealed.\n\nThey fit in one `open_batch` because all the differences are mutually independent: computing organization i's d needs nothing from organization j. **The number of revealed values does not change; only the number of round trips does.**"
+            },
+            {
+              "id": "cost-hint-3",
+              "content": "Five points, and it passes.\n\n1. **Return `1` for `rounds` in `plan`.**\n2. **In `aggregate`, collect every sharing you want revealed into `to_open` first, then call `io.open_batch(to_open)` exactly once, outside the loop.**\n3. **`to_open` holds exactly 2k sharings.** Append only `d_i` and `e_i` per organization and nothing else.\n4. **Index `triple_list[index]` per organization.** Reuse drops the count below 2k and fails here too.\n5. **Do not open the score before returning it**, or the count exceeds 2k.\n\nHow to audit it: count the occurrences of `io.open_batch` in your source. **Exactly one**, and **outside** the `for` loop, satisfies points 1 and 2. Then count `to_open.append`: **exactly two** occurrences, both inside the loop and nowhere else, satisfies point 3."
             }
           ]
         },
         {
           "id": "transfer",
-          "label": "Hold up in settings you have not seen"
+          "label": "Hold up in settings you have not seen",
+          "hints": [
+            {
+              "id": "transfer-hint-1",
+              "content": "transfer is the checkpoint with **nothing new to write**. It re-runs all four functions, and the whole protocol, under another seed's modulus, organization count and triples — not the ones on your screen. It checks exactly one thing: **that you did not depend on this deployment's specific numbers.**"
+            },
+            {
+              "id": "transfer-hint-2",
+              "content": "Hunt your code for **numbers that did not arrive as arguments**. Four typical ones: (1) the modulus as a literal; (2) an organization count fixed at 2 or 3, or touching `triple_list[0]` and `triple_list[1]` individually; (3) the `bias` value written in; (4) a share value copied out of Inspect evidence.\n\nOne more: `spec[\"parties\"]` is an **integer** (the number of organizations), not a list, so `len()` does not apply to it. The number of shares per sharing is the same number, and there `len(sharing)` is fine."
+            },
+            {
+              "id": "transfer-hint-3",
+              "content": "Audit the four functions in order. If all hold, submitting as-is passes.\n\n1. **plan** — build `{\"multiplications\": k, \"triples\": k, \"rounds\": 1}` from `k = spec[\"parties\"]`. Never a literal k.\n2. **share_inputs** — use `randoms[index]` verbatim at the front and make the last share `(secret - sum(head)) % p`. The length is `len(head)+1`.\n3. **add_public** — add the constant at index 0 only and copy the rest through `% p`.\n4. **aggregate** — start from `p, k = spec[\"p\"], spec[\"parties\"]`; loop `for index in range(k):` treating all organizations identically; call `io.open_batch` **once, outside the loop**; index `triple_list[index]` per organization; fold `d*e` in at index 0 only; finish with `add_public(total, spec[\"bias\"], p)`.\n\nFinally, read the four bodies and confirm **no numeric literal other than `0`, `1` and `2` survives** (the 2 in `2*index` and `2*index+1` is the layout of the openings, not an organization count). If none does, transfer passes."
+            }
+          ]
         }
       ]
     }

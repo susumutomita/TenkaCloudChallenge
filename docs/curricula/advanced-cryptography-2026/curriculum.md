@@ -131,6 +131,9 @@ order; `track.order` only sequences presentation.
 | `concept.schnorr-signature` | The signature Fiat–Shamir produces from a Sigma protocol |
 | `concept.special-soundness` | Two transcripts sharing a commitment extract the witness |
 | `concept.nonce-reuse` | Reusing a nonce turns special soundness into key recovery |
+| `concept.webauthn-assertion` | The WebAuthn authentication response: authenticatorData, clientDataJSON, and the signature over them |
+| `concept.user-verification-flag` | The signed UV bit in authenticatorData saying the authenticator verified the user locally |
+| `concept.relying-party-validation` | The server-side checks — RP ID, origin, challenge, UP/UV, signature — that a valid signature does not replace |
 
 ### Week 4 — proof systems
 
@@ -324,6 +327,7 @@ a challenge teaches is a content decision, not a pin update.
 | 320 | `ac26-w3-ec-group` | `mechanism` | `concept.elliptic-curve-group`, `concept.double-and-add` | #226 |
 | 330 | `ac26-w3-schnorr` | `assignment-companion` | `concept.sigma-protocol`, `concept.fiat-shamir`, `concept.schnorr-signature` | #227 |
 | 340 | `ac26-w3-nonce-reuse` | `transfer` | `concept.nonce-reuse`, `concept.special-soundness` | #228 |
+| 350 | `ac26-w3-passkey-assertion` | `transfer` | `concept.webauthn-assertion`, `concept.user-verification-flag`, `concept.relying-party-validation` | — |
 
 ### Week 4 — ZKP / SNARK / STARK
 

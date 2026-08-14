@@ -61,7 +61,7 @@ Seven checkpoints, scored independently. Wrong answers cost 15 points each.
 | `repair` | 50 | The violation removed, and every legitimate observation kept |
 | `mutation` | 40 | Same verdicts under renamed labels, moved operations, an unseen seed |
 
-Hints on six of the seven, each inside that checkpoint's 50% cap.
+Every one of the 7 checkpoints carries three hints (hint 1 = what is being asked, hint 2 = how to think about it, hint 3 = a walkthrough you can follow to a solution). Each checkpoint's hint penalties stay inside its 50% cap; opening all 21 still leaves 159 of 300.
 
 ## A false positive costs what a miss costs
 

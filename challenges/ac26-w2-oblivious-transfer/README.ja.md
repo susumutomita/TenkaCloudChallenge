@@ -81,6 +81,8 @@ mutation の suite を image 内で回す。
 | `gate-privacy` | mask が独立で、 自分の view が相手の秘密で動かないか | 30 |
 | `unseen` | 見たことのない seed でも通しで成立するか | 20 |
 
+hint は 6 個の checkpoint すべてに 3 段ずつあります (hint1 = 何をしたいのか / hint2 = どう考えるか / hint3 = 読めば解けるウォークスルー)。減点は各 checkpoint の配点の 50% 以内で、18 個すべてを開いても 200 点中 107 点が残ります。
+
 ## 保証範囲
 
 ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も

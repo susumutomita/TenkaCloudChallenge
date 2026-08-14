@@ -87,6 +87,8 @@ runs the hidden and mutation suites inside the image.
 | `gate-privacy` | independent masks, so a party's view does not move with the other's secrets | 30 |
 | `unseen` | the whole thing under a seed you were never shown | 20 |
 
+Every one of the 6 checkpoints carries three hints (hint 1 = what is being asked, hint 2 = how to think about it, hint 3 = a walkthrough you can follow to a solution). Each checkpoint's hint penalties stay inside its 50% cap; opening all 18 still leaves 107 of 200.
+
 ## Assurance scope
 
 Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
