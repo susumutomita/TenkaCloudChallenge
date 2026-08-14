@@ -153,7 +153,7 @@ instructions には要ることを明記した (`check:problem` の `host termin
 
 1 問目は入った。**`stackstack-first-request` (order 2)** が「リクエストとレスポンスの往復」「ステータスコードの読み方」「query と body で情報を運ぶ」を、ブラウザの API コンソールだけで扱う (`stackstack-base` の scenario `first-request`)。
 
-残り 2 つは空席のままで、order 4 / 6 を確保してある。新規問題には human play evidence が要る (`docs/PLAYABILITY_GOVERNANCE.md`)。
+残り 2 つは空席のままで、order 4 / 6 を確保してある。1 問ずつ独立にレビューできるよう、別 PR で作る。
 
 - **課金アラートが鳴った朝** (d1、order 4 想定) — 架空の請求ダッシュボードをコンテナで再現し、請求明細とログから「どのリソースが、なぜ課金しているか」を読んで止める。課金の恐怖を「読める・止められる」に変える。実課金はゼロであることを問題文でも明示する。
 - **AI の書いた変更を検収する** (d1、order 6 想定) — AI が生成した (という設定の) 変更が 1 箇所だけ壊れている。ログと実際の挙動から気付いて直す。バイブコーディングの検収の最小形であり、`stackstack-vibe-build` (order 110) の前提を作る。
