@@ -60,11 +60,11 @@
     ],
     "concepts": [
       {
-        "id": "concept.multiplicative-order",
+        "id": "concept.order-exactly-n",
         "description": "元の位数は「初めて 1 に戻る冪」である。"
       },
       {
-        "id": "concept.evaluation-domain",
+        "id": "concept.verified-evaluation-domain",
         "description": "evaluation domain は位数ちょうど n の元の冪の集合である。"
       },
       {
@@ -133,12 +133,12 @@
     {
       "type": "covers",
       "source": "problem.ac26-w3-fft-domain",
-      "target": "concept.multiplicative-order"
+      "target": "concept.order-exactly-n"
     },
     {
       "type": "covers",
       "source": "problem.ac26-w3-fft-domain",
-      "target": "concept.evaluation-domain"
+      "target": "concept.verified-evaluation-domain"
     },
     {
       "type": "covers",
