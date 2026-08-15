@@ -2,7 +2,7 @@
   "id": "cs-atomic-file-publish",
   "name": "半分のファイルは、ファイルではない",
   "category": "Challenge",
-  "status": "draft",
+  "status": "ready",
   "visibility": "public",
   "track": {
     "id": "cs-foundations",

@@ -2,7 +2,7 @@
   "id": "cs-numeric-aggregation-order",
   "name": "誰も数字を変えていないのに、合計が変わった",
   "category": "Challenge",
-  "status": "draft",
+  "status": "ready",
   "visibility": "public",
   "track": {
     "id": "cs-foundations",
