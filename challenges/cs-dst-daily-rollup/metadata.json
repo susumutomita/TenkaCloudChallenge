@@ -2,7 +2,7 @@
   "id": "cs-dst-daily-rollup",
   "name": "年に 2 日だけ、日次レポートが合わない",
   "category": "Challenge",
-  "status": "ready",
+  "status": "draft",
   "visibility": "public",
   "track": {
     "id": "cs-foundations",
