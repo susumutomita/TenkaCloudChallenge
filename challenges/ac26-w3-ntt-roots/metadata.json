@@ -2,7 +2,7 @@
   "id": "ac26-w3-ntt-roots",
   "name": "その omega は、本当に n 乗して初めて 1 になるか",
   "category": "Challenge",
-  "status": "ready",
+  "status": "draft",
   "visibility": "public",
   "track": {
     "id": "advanced-cryptography-2026",
