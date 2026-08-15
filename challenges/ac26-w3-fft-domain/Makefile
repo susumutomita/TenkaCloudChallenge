@@ -1,6 +1,7 @@
 FLAG_SEED ?= local-dev-seed
 IMAGE := ac26-w3-fft-domain
-
+# The author stage is delivery hygiene, not confidentiality. See TEMPLATE.md "Assurance scope"
+# for the exact local-play claim.
 RUN := docker run --rm -e FLAG_SEED=$(FLAG_SEED) \
 	-v $(CURDIR)/local/starter:/problem/starter:ro $(IMAGE)
 
