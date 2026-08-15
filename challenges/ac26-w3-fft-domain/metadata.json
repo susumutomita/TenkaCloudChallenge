@@ -1,0 +1,359 @@
+{
+  "id": "ac26-w3-fft-domain",
+  "name": "その domain、本当に割り切れますか",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "advanced-cryptography-2026",
+    "order": 317,
+    "chapter": "Week 3 / FFT Domain and Interpolation"
+  },
+  "difficulty": 3,
+  "estimatedDuration": "45-60 分",
+  "shortDescription": "渡された omega を信じずに evaluation domain を検証し、FFT・逆変換・補間を本物の domain の上だけで動かす。",
+  "description": "多項式コミットも arithmetization も、その下では「n 個の相異なる評価点」が支えている。 この問題が扱うのは、omega ** n == 1 という 1 本の等式だけを確かめて evaluation domain を信じた実装である。\n\nその等式は、より小さい部分群のすべての元が満たす。 1 さえ満たす。 公開テストの domain はどれも本物なので、等式だけの実装と位数を確かめる実装は区別が付かず、壊れた starter は public test を全部通る。\n\n参加者は Python 標準ライブラリだけで、渡された (p, n, omega) を判定する validate_domain、その上での変換 fft と逆変換 ifft、そして domain の内外どちらの点にも答える interpolate_and_evaluate を書く。 到達点は「omega の位数がちょうど n」を n の各素因数 q について omega ** (n/q) != 1 まで確かめる形である。\n\n採点は書き方ではなく振る舞いで行う。 hidden phase のパラメータ集合は、教科書式がたまたま正しい素数と、形だけ正しい元を返す素数を半々以上で混ぜてあり、等式 1 本の実装は運ではなく必然で落ちる。",
+  "instructions": "## Participant Portal で解く\n\n問題を起動すると editor と証拠操作が同じページに出ます。「証拠を調べる」で field family と 2 つの例 (本物の domain と、形だけの domain) を読み、starter の fftdomain.py を編集して public test を実行してください。\n\n各 checkpoint の提出では Portal が現在の editor file を container の prepare API へ送り、その値を loopback の /verify へ渡します。 checkpoint はすべて code 提出です。",
+  "writeup": "## omega ** n == 1 は「n 乗すると 1」でしかない\n\nその等式は位数が n の約数だと言っているだけで、位数が n だとは言っていない。 位数 4 の元は 8 乗しても 1 になる。 1 はいつでも 1 になる。 等式 1 本で受け入れた omega の冪は繰り返し、n 点あるはずの評価は実際には 4 点や 1 点しかない。\n\n## 位数がちょうど n であることは 2 段で確かめる\n\nomega ** n == 1 に加えて、n の各素因数 q について omega ** (n/q) != 1 を確かめる。 これで「n 乗して初めて 1 になる」が言える。 n が p-1 を割ることは前提条件で、割らなければ位数 n の元はそもそも存在しない。\n\n## 逆変換と補間は domain の上に立つ\n\nifft は omega ** -1 の冪で回して n ** -1 を掛ける。 どちらを忘れても、形の正しい間違った係数が返る。 補間は係数へ戻ってから評価すれば、domain 上の点でも外の点でも同じ算術で答えられ、ゼロ除算の特別扱いが要らない。\n\n## 証明していないこと\n\nFFT を速くしたのではない。 渡された domain が本物かを判定し、本物の上でだけ変換・逆変換・補間が成り立つようにした。 その上に載る commitment や arithmetization の正しさは、それぞれの問題である。",
+  "tags": [
+    "advanced-cryptography-2026",
+    "fft",
+    "roots-of-unity",
+    "interpolation",
+    "finite-field",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18131,
+      "name": "Local verifier + Portal editor API (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "n | p-1 が evaluation domain の前提条件である理由を乗法群から説明できる",
+    "omega ** n == 1 だけでは位数が確かめられない理由を説明できる",
+    "n の素因数ごとの検査で位数がちょうど n であることを確かめられる",
+    "係数形と評価形を index を崩さずに往復できる",
+    "逆変換の omega ** -1 と n ** -1 を正しく置ける",
+    "domain 上の点と外の点を同じ算術で補間できる",
+    "検証できない domain を計算せずに拒否できる"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.ac26-w3-fft-domain.order-exactly-n",
+        "description": "渡された元の位数がちょうど n かを、定義から確かめられる。"
+      },
+      {
+        "id": "lo.ac26-w3-fft-domain.domain-preconditions",
+        "description": "n | p-1 と位数の関係を説明できる。"
+      },
+      {
+        "id": "lo.ac26-w3-fft-domain.index-preserving-transform",
+        "description": "評価と逆変換を index を保って実装できる。"
+      },
+      {
+        "id": "lo.ac26-w3-fft-domain.total-interpolation",
+        "description": "domain の内外どちらの点にも同じ算術で補間できる。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.multiplicative-order",
+        "description": "元の位数は「初めて 1 に戻る冪」である。"
+      },
+      {
+        "id": "concept.evaluation-domain",
+        "description": "evaluation domain は位数ちょうど n の元の冪の集合である。"
+      },
+      {
+        "id": "concept.inverse-transform-scaling",
+        "description": "逆変換は逆元の冪と 1/n の両方を要する。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.ac26-w3-fft-domain.domain",
+        "description": "形だけの omega を domain と呼ばず、計算もしなかった。"
+      },
+      {
+        "id": "assessment.ac26-w3-fft-domain.roundtrip",
+        "description": "本物の domain の上で係数を取り戻した。"
+      },
+      {
+        "id": "assessment.ac26-w3-fft-domain.ordering",
+        "description": "各値を index が指す冪に置いた。"
+      },
+      {
+        "id": "assessment.ac26-w3-fft-domain.interpolate",
+        "description": "domain の内外どちらの点にも多項式の値で答えた。"
+      },
+      {
+        "id": "assessment.ac26-w3-fft-domain.generalize",
+        "description": "未知の素数・次数・奇数次数でも成り立たせた。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.omega-n-equals-one-suffices",
+        "description": "omega ** n == 1 を見れば domain は正しい、という誤解。"
+      },
+      {
+        "id": "misconception.radix-2-only",
+        "description": "FFT の次数は 2 冪だけ、という誤解。"
+      },
+      {
+        "id": "misconception.member-points-need-special-cases",
+        "description": "domain 上の点の補間はゼロ除算を握り潰して済ます、という誤解。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w3-fft-domain",
+      "target": "lo.ac26-w3-fft-domain.order-exactly-n"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w3-fft-domain",
+      "target": "lo.ac26-w3-fft-domain.domain-preconditions"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w3-fft-domain",
+      "target": "lo.ac26-w3-fft-domain.index-preserving-transform"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w3-fft-domain",
+      "target": "lo.ac26-w3-fft-domain.total-interpolation"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w3-fft-domain",
+      "target": "concept.multiplicative-order"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w3-fft-domain",
+      "target": "concept.evaluation-domain"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w3-fft-domain",
+      "target": "concept.inverse-transform-scaling"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w3-fft-domain",
+      "target": "assessment.ac26-w3-fft-domain.domain"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w3-fft-domain",
+      "target": "assessment.ac26-w3-fft-domain.roundtrip"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w3-fft-domain",
+      "target": "assessment.ac26-w3-fft-domain.ordering"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w3-fft-domain",
+      "target": "assessment.ac26-w3-fft-domain.interpolate"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w3-fft-domain",
+      "target": "assessment.ac26-w3-fft-domain.generalize"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w3-fft-domain",
+      "target": "misconception.omega-n-equals-one-suffices"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w3-fft-domain",
+      "target": "misconception.radix-2-only"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w3-fft-domain",
+      "target": "misconception.member-points-need-special-cases"
+    }
+  ],
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 3,
+    "role": "mechanism",
+    "spoilerPolicy": "independent-reimplementation",
+    "sources": [
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
+        "path": "week3/README.md",
+        "kind": "lecture"
+      },
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9",
+        "path": "week3/week3_zksnark_slides.pdf",
+        "kind": "slide"
+      }
+    ]
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18131/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "domain",
+        "label": "domain — 渡された omega の位数を自分で確かめる",
+        "points": 40,
+        "wrongAnswerPenalty": 13,
+        "hints": [
+          {
+            "id": "domain-hint-1",
+            "content": "F_p の乗法群の要素数は p-1 です。 位数 n の元が存在する条件と、omega ** n == 1 を満たす元の集合を分けて考えてください。 位数が「ちょうど」n であることは、n の素因数 q ごとに omega ** (n/q) != 1 で確かめられます。",
+            "penalty": 16
+          }
+        ]
+      },
+      {
+        "id": "roundtrip",
+        "label": "roundtrip — 逆変換が係数を取り戻す",
+        "points": 40,
+        "wrongAnswerPenalty": 13,
+        "hints": [
+          {
+            "id": "roundtrip-hint-1",
+            "content": "逆変換は forward の根を逆にして回し、最後に n ** -1 を掛けます。 どちらか一方を忘れた実装は、長さも範囲も正しい間違った係数を返します。",
+            "penalty": 16
+          }
+        ]
+      },
+      {
+        "id": "ordering",
+        "label": "ordering — 値を index どおりの冪に置く",
+        "points": 30,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "ordering-hint-1",
+            "content": "values[i] が f(omega ** i) である、という index の意味を先に固定してください。 再帰の都合で生まれる並び替えは、境界の 1 か所へ閉じ込めます。 f(x) = x を変換すると、並びの崩れはそのまま見えます。",
+            "penalty": 12
+          }
+        ]
+      },
+      {
+        "id": "interpolate",
+        "label": "interpolate — domain の内外どちらの点にも答える",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "interpolate-hint-1",
+            "content": "domain 上の点は、その index の値そのものが答えです。 係数へ戻ってから評価すれば、内外どちらの点も同じ算術で通り、ゼロ除算の特別扱いが要りません。",
+            "penalty": 18
+          }
+        ]
+      },
+      {
+        "id": "generalize",
+        "label": "generalize — 見たことのない素数と次数でも成り立たせる",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "generalize-hint-1",
+            "content": "n は 2 冪とは限りません。 p-1 を割るなら奇数の n も合法で、hidden phase は実際に使います。 名前付きの拒否 (invalid_prime / invalid_order / invalid_omega / invalid_coefficients / invalid_values / invalid_point / invalid_domain) も契約の一部です。",
+            "penalty": 18
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Does Your Domain Actually Divide?",
+      "shortDescription": "Validate a handed evaluation domain instead of trusting it, and run the transform, its inverse, and interpolation only over real domains.",
+      "description": "Polynomial commitments and arithmetization both stand on one quiet fact: n *distinct* evaluation points. This problem is about the implementation that trusted an evaluation domain after checking a single equation, omega ** n == 1.\n\nThat equation is satisfied by every element of every smaller subgroup — including 1. Every domain in the public tests is real, so an equation-only implementation and an order-checking one are indistinguishable there, and the broken starter passes every public test.\n\nParticipants write, in the standard library only: validate_domain for a handed (p, n, omega); fft and ifft over it; and interpolate_and_evaluate, which answers points on and off the domain. The destination is checking that omega's order is *exactly* n — omega ** (n/q) != 1 for every prime factor q of n.\n\nGrading is behavioural, not stylistic. Every hidden parameter set mixes primes where the textbook rule happens to be right with primes where it returns a plausible fake, at least half the second kind, so trusting the one equation fails by necessity rather than by luck.",
+      "instructions": "## Solve in Participant Portal\n\nStarting the problem opens the editor and the evidence controls on one page. Use \"inspect evidence\" to read the field family and the two example domains — one real, one that only looks real — then edit the starter's fftdomain.py and run the public tests.\n\nEach submission sends the current editor file to the container's prepare API, which passes it to the loopback /verify. Every checkpoint is a code submission.",
+      "writeup": "## omega ** n == 1 only says \"n is a multiple of the order\"\n\nThe equation says the order divides n, not that it equals n. An element of order 4 also lands on 1 after 8 steps; the element 1 lands on 1 after any number of steps. Accept an omega on that one equation and its powers repeat: the n-point evaluation is really 4 points, or 1.\n\n## Order exactly n takes both halves\n\nBesides omega ** n == 1, check omega ** (n/q) != 1 for every prime factor q of n. That is what \"reaches 1 for the first time at n\" means. And n must divide p-1 first — otherwise no element of order n exists at all.\n\n## The inverse and the interpolation stand on the domain\n\nThe inverse runs at the powers of omega ** -1 and scales by n ** -1; forgetting either returns well-shaped wrong coefficients. Interpolation that goes back to coefficients answers members and non-members with the same arithmetic, and never needs to special-case a division by zero.\n\n## What this does not prove\n\nIt does not make the FFT fast. It decides whether a handed domain is real, and makes the transform, its inverse, and interpolation hold only over real ones. Whatever is built on top — commitments, arithmetization — is its own problem.",
+      "learningGoals": [
+        "Explain from the multiplicative group why n | p-1 is a precondition",
+        "Explain why omega ** n == 1 alone cannot establish the order",
+        "Check order exactly n with a per-prime-factor test",
+        "Round-trip coefficient and evaluation form without breaking the indexing",
+        "Place both omega ** -1 and n ** -1 correctly in the inverse",
+        "Interpolate members and non-members with the same arithmetic",
+        "Refuse a domain you cannot verify instead of computing on it"
+      ],
+      "checks": [
+        {
+          "id": "domain",
+          "label": "domain - check the order of the omega you were handed",
+          "hints": [
+            {
+              "id": "domain-hint-1",
+              "content": "The multiplicative group of F_p has p-1 elements. Separate \"an element of order n exists\" from \"this element satisfies omega ** n == 1\". Order exactly n is checked per prime factor q of n: omega ** (n/q) != 1."
+            }
+          ]
+        },
+        {
+          "id": "roundtrip",
+          "label": "roundtrip - turn the values back into the coefficients",
+          "hints": [
+            {
+              "id": "roundtrip-hint-1",
+              "content": "The inverse runs at the inverse root and scales by n ** -1 at the end. Forget either and you get wrong coefficients of the right length and range."
+            }
+          ]
+        },
+        {
+          "id": "ordering",
+          "label": "ordering - put each value at the power its index names",
+          "hints": [
+            {
+              "id": "ordering-hint-1",
+              "content": "Fix the meaning of the index first: values[i] is f(omega ** i). Confine any recursion-order shuffle to one boundary. Transforming f(x) = x makes a broken order directly visible."
+            }
+          ]
+        },
+        {
+          "id": "interpolate",
+          "label": "interpolate - answer points on and off the domain",
+          "hints": [
+            {
+              "id": "interpolate-hint-1",
+              "content": "A domain member's answer is its listed value. Going back to coefficients first answers both cases with the same arithmetic and never divides by zero."
+            }
+          ]
+        },
+        {
+          "id": "generalize",
+          "label": "generalize - hold for primes and orders you have not seen",
+          "hints": [
+            {
+              "id": "generalize-hint-1",
+              "content": "n is not always a power of two: any n dividing p-1 is legal, and the hidden phases use odd ones. The named refusals (invalid_prime / invalid_order / invalid_omega / invalid_coefficients / invalid_values / invalid_point / invalid_domain) are part of the contract too."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
