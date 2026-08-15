@@ -653,7 +653,7 @@
       "id": "ac26-w3-ntt-roots",
       "name": "その omega は、本当に n 乗して初めて 1 になるか",
       "category": "Challenge",
-      "status": "ready",
+      "status": "draft",
       "visibility": "public",
       "track": {
         "id": "advanced-cryptography-2026",
@@ -1837,7 +1837,7 @@
       "id": "cs-atomic-file-publish",
       "name": "半分のファイルは、ファイルではない",
       "category": "Challenge",
-      "status": "ready",
+      "status": "draft",
       "visibility": "public",
       "track": {
         "id": "cs-foundations",
@@ -1927,7 +1927,7 @@
       "id": "cs-dst-daily-rollup",
       "name": "年に 2 日だけ、日次レポートが合わない",
       "category": "Challenge",
-      "status": "ready",
+      "status": "draft",
       "visibility": "public",
       "track": {
         "id": "cs-foundations",
@@ -1989,7 +1989,7 @@
       "id": "cs-numeric-aggregation-order",
       "name": "誰も数字を変えていないのに、合計が変わった",
       "category": "Challenge",
-      "status": "ready",
+      "status": "draft",
       "visibility": "public",
       "track": {
         "id": "cs-foundations",
@@ -2051,7 +2051,7 @@
       "id": "cs-protocol-state-guard",
       "name": "ハンドシェイクは、結局なくてもよかった",
       "category": "Challenge",
-      "status": "ready",
+      "status": "draft",
       "visibility": "public",
       "track": {
         "id": "cs-foundations",
