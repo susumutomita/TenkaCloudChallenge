@@ -2017,6 +2017,37 @@
       }
     },
     {
+      "id": "cs-pagination-drift",
+      "name": "ページは正しい。一覧が揃わない",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "cs-foundations",
+        "order": 100,
+        "chapter": "10. 一覧の分割と動くデータ"
+      },
+      "difficulty": 3,
+      "estimatedDuration": "45-75 分",
+      "shortDescription": "動く表を offset で分割取得した一覧ジョブを監査し、位置ではなく行を指す cursor を配る paginator を書く。",
+      "tags": [
+        "cs-foundations",
+        "pagination",
+        "cursor",
+        "consistency",
+        "api-design",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "cs-protocol-state-guard",
       "name": "ハンドシェイクは、結局なくてもよかった",
       "category": "Challenge",

@@ -1,0 +1,348 @@
+{
+  "id": "cs-pagination-drift",
+  "name": "ページは正しい。一覧が揃わない",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "cs-foundations",
+    "order": 100,
+    "chapter": "10. 一覧の分割と動くデータ"
+  },
+  "difficulty": 3,
+  "estimatedDuration": "45-75 分",
+  "shortDescription": "動く表を offset で分割取得した一覧ジョブを監査し、位置ではなく行を指す cursor を配る paginator を書く。",
+  "description": "各ページの応答が正しいことは、一覧が正しいことを意味しない。 この問題が扱うのは、分割取得の合間に表へ書き込みが届き、同じ行が 2 ページに現れ、生きている行がどのページにも現れなかった、という事故である。\n\n壊れた starter は public test を 8 本すべて通る。 どのテストも止まった表に対して分割取得するだけで、止まった表の上では offset と cursor は区別が付かないからである。\n\n参加者は seed 由来の listing trace を監査し、Python 標準ライブラリだけで paginator を keyset 方式にする。 到達点は「どこまで読んだか」という位置ではなく「どの行まで読んだか」という行そのものを cursor に刻む形である。 位置は表と一緒に動くが、行の id は動かない。\n\n採点は書き方ではなく振る舞いで行う。 最後の checkpoint は作者が書き下していない挿入・削除スケジュールを seed から生成して走査し、生き残った行が 1 回ずつ届くこと、消えた行が届かないこと、cursor が終端を偽らないことを 1 スケジュールずつ突き合わせる。 例が通るまで直した実装は、誰も試さなかったスケジュールで落ちる。",
+  "instructions": "## Participant Portal で解く\n\n問題を起動すると editor と証拠操作が同じページに出ます。「証拠を調べる」で listing trace を読み、starter の pagination.py を編集して public test を実行してください。direct-answer checkpoint は、この deploy の listing ID と trace の row id から JSON で答えます。\n\n各 checkpoint の提出では Portal が現在の editor file を container の prepare API へ送り、その値を loopback の /verify へ渡します。 Workbench と hidden verifier は別 container です。",
+  "writeup": "## offset は位置を覚える。位置は動く\n\noffset paginator は「何行目まで読んだか」を覚える。 表の先頭に行が増えれば同じ位置は手前の行を指し直し、直前のページの末尾がもう一度届く。 読み終えた行が消えれば同じ位置は先の行を指し直し、まだ読んでいない行が窓の外へ落ちる。 各ページの応答はどれも、その瞬間の表に対しては正しい。\n\n## cursor は行を覚える。行は動かない\n\n最後に届けた行の id を cursor に刻み、次のページは「その id より古い行」を生きている表から読み直す。 挿入は境界より新しい側にしか入らず、削除された行は候補から消えるだけで、生き残りは必ず一度ずつ届く。\n\n## 黙って先頭に戻るのは修復ではない\n\n読めない cursor を 0 とみなして先頭から返すと、呼び出し側のバグが「静かに最初からやり直した一覧」に化ける。 発行した覚えのない入力は invalid_cursor として明示的に拒否し、拒否は進行中の反復を乱さない。\n\n## 証明していないこと\n\n表のトランザクション分離を強くしたのではない。 1 つの反復の中で、どの行が何回届くかを、表が動いても崩れない不変条件として決めただけである。",
+  "tags": [
+    "cs-foundations",
+    "pagination",
+    "cursor",
+    "consistency",
+    "api-design",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18560,
+      "name": "Participant Workbench + verifier proxy (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "offset ページネーションが挿入で重複を、削除で欠落を生む機構を説明できる",
+    "最後に届けた行の id を刻む keyset cursor を実装できる",
+    "「位置は動くが id は動かない」という不変条件を説明できる",
+    "読めない cursor を黙って先頭に戻さず、明示的に拒否できる",
+    "拒否が進行中の反復を乱さないよう実装できる",
+    "生き残った行が 1 回ずつ届くことを、動く表の上で保てる",
+    "削除済みの行を古いコピーから配り直さないようにできる"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.cs-pagination-drift.position-vs-identity",
+        "description": "位置ではなく行の同一性で読み進みを記録できる。"
+      },
+      {
+        "id": "lo.cs-pagination-drift.keyset-cursor",
+        "description": "keyset cursor を実装し、動く表で不変条件を保てる。"
+      },
+      {
+        "id": "lo.cs-pagination-drift.refuse-unknown-cursor",
+        "description": "発行していない cursor を明示的に拒否できる。"
+      },
+      {
+        "id": "lo.cs-pagination-drift.live-reads",
+        "description": "各ページを生きている表から読み直せる。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.offset-pagination-drift",
+        "description": "offset は表が動くと別の行を指す。"
+      },
+      {
+        "id": "concept.keyset-pagination",
+        "description": "keyset cursor は最後に届けた行そのものを指す。"
+      },
+      {
+        "id": "concept.explicit-refusal",
+        "description": "読めない入力は黙って作り直さず明示的に拒否する。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.cs-pagination-drift.observe",
+        "description": "ページの重なりが重複を生んだと判断できた。"
+      },
+      {
+        "id": "assessment.cs-pagination-drift.audit",
+        "description": "生き残ったのに届かなかった行を特定できた。"
+      },
+      {
+        "id": "assessment.cs-pagination-drift.paginate",
+        "description": "発行していない入力を拒否し、反復を乱さなかった。"
+      },
+      {
+        "id": "assessment.cs-pagination-drift.stability",
+        "description": "表が動いても生き残りを 1 回ずつ届けた。"
+      },
+      {
+        "id": "assessment.cs-pagination-drift.generalize",
+        "description": "未知のスケジュールでも不変条件を保てた。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.offset-is-a-cursor",
+        "description": "offset を返せば cursor になっている、という誤解。"
+      },
+      {
+        "id": "misconception.snapshot-fixes-pagination",
+        "description": "最初に全行を写し取れば一覧は正しくなる、という誤解。"
+      },
+      {
+        "id": "misconception.reset-on-bad-cursor",
+        "description": "読めない cursor は先頭扱いにすれば親切、という誤解。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.cs-pagination-drift",
+      "target": "lo.cs-pagination-drift.position-vs-identity"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.cs-pagination-drift",
+      "target": "lo.cs-pagination-drift.keyset-cursor"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.cs-pagination-drift",
+      "target": "lo.cs-pagination-drift.refuse-unknown-cursor"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.cs-pagination-drift",
+      "target": "lo.cs-pagination-drift.live-reads"
+    },
+    {
+      "type": "covers",
+      "source": "problem.cs-pagination-drift",
+      "target": "concept.offset-pagination-drift"
+    },
+    {
+      "type": "covers",
+      "source": "problem.cs-pagination-drift",
+      "target": "concept.keyset-pagination"
+    },
+    {
+      "type": "covers",
+      "source": "problem.cs-pagination-drift",
+      "target": "concept.explicit-refusal"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-pagination-drift",
+      "target": "assessment.cs-pagination-drift.observe"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-pagination-drift",
+      "target": "assessment.cs-pagination-drift.audit"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-pagination-drift",
+      "target": "assessment.cs-pagination-drift.paginate"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-pagination-drift",
+      "target": "assessment.cs-pagination-drift.stability"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.cs-pagination-drift",
+      "target": "assessment.cs-pagination-drift.generalize"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.cs-pagination-drift",
+      "target": "misconception.offset-is-a-cursor"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.cs-pagination-drift",
+      "target": "misconception.snapshot-fixes-pagination"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.cs-pagination-drift",
+      "target": "misconception.reset-on-bad-cursor"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18560/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "environment",
+        "label": "environment — Workbench の合言葉を貼る",
+        "points": 15,
+        "wrongAnswerPenalty": 5
+      },
+      {
+        "id": "observe",
+        "label": "observe — 対象の一覧と、ページの間に起きたことを答える",
+        "points": 20,
+        "wrongAnswerPenalty": 7,
+        "hints": [
+          {
+            "id": "observe-hint-1",
+            "content": "2 つのページを縦に並べ、同じ id が両方にいないか見てください。 その間に届いた書き込みは何を先頭に足しましたか。",
+            "penalty": 8
+          }
+        ]
+      },
+      {
+        "id": "audit",
+        "label": "audit — 生き残ったのに一度も現れなかった row を挙げる",
+        "points": 30,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "audit-hint-1",
+            "content": "initialIds と finalIds の両方にいる id だけが候補です。 その集合から、どこかのページに現れた id をすべて引いてください。",
+            "penalty": 12
+          }
+        ]
+      },
+      {
+        "id": "paginate",
+        "label": "paginate — 発行していない入力を黙って先頭に戻さない",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "paginate-hint-1",
+            "content": "starter は読めない cursor をどう扱っていますか。 呼び出し側から見ると、それは成功と区別が付きますか。",
+            "penalty": 18
+          }
+        ]
+      },
+      {
+        "id": "stability",
+        "label": "stability — 表が動いても、生き残りを 1 回ずつ届ける",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "stability-hint-1",
+            "content": "cursor が覚えているものは何ですか。 位置ですか、行ですか。 表の先頭に行が増えたとき、そのどちらが動きますか。",
+            "penalty": 18
+          }
+        ]
+      },
+      {
+        "id": "generalize",
+        "label": "generalize — 誰も書き下していないスケジュールでも保つ",
+        "points": 45,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "generalize-hint-1",
+            "content": "最初に表を写し取ると、写しの中の行は消えてくれません。 各ページを生きている表から読み直したうえで、境界だけを cursor に刻めませんか。",
+            "penalty": 18
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Every page is right. The listing is not",
+      "shortDescription": "Audit a listing job that paged a moving table by offset, then hand out a cursor that names a row instead of a position.",
+      "description": "Correct page responses do not add up to a correct listing. This problem is about the accident where writes land between page calls, the same row shows up on two pages, and a living row never shows up at all.\n\nThe broken starter passes all eight public tests, because each of them pages over a table that holds still — and over a still table, an offset is indistinguishable from a cursor.\n\nParticipants audit a seed-derived listing trace and turn the paginator into a keyset one using only the standard library. The destination is a cursor that records *which row* was served last rather than *how far* the iteration got. Positions move with the table; row ids do not.\n\nGrading is behavioural, not stylistic. The final checkpoint generates insert and delete schedules the author never wrote down and checks, schedule by schedule, that every surviving row arrives exactly once, that deleted rows do not arrive from a stale copy, and that the cursor never lies about the end. An implementation fixed until the examples passed fails on the schedule nobody tried.",
+      "instructions": "## Solve in Participant Portal\n\nStarting the problem opens the editor and the evidence controls on one page. Use \"inspect evidence\" to read the listing trace, edit the starter's pagination.py, and run the public tests. The direct-answer checkpoints are answered as JSON built from this deployment's listing id and the trace's row ids.\n\nEach submission sends the current editor file to the container's prepare API, which passes it to the loopback /verify. The Workbench and the hidden verifier are separate containers.",
+      "writeup": "## An offset remembers a position, and positions move\n\nAn offset paginator remembers how many rows it has read. Insert rows at the top and the same position points at earlier rows, so the previous page's tail arrives again. Delete rows you already read and the same position points past unread rows, so they fall out of the window. Every individual page response is correct for the table of that moment.\n\n## A cursor remembers a row, and rows do not move\n\nRecord the id of the last row served and read the next page as \"live rows older than that id\". Inserts only land above the boundary, deletes only remove candidates, and every survivor arrives exactly once.\n\n## Silently starting over is not a repair\n\nTreating an unreadable cursor as offset zero turns a caller's bug into a listing that quietly restarted. Refuse inputs you never issued with an explicit invalid_cursor, and let a refusal disturb nothing.\n\n## What this does not prove\n\nIt does not strengthen the table's transaction isolation. Within one iteration it settles how many times each row arrives, as an invariant that survives a moving table.",
+      "learningGoals": [
+        "Explain how offset pagination duplicates rows on insert and loses rows on delete",
+        "Implement a keyset cursor that records the last served row id",
+        "Explain the invariant: positions move, row ids do not",
+        "Refuse an unreadable cursor explicitly instead of silently restarting",
+        "Keep a refusal from disturbing the iteration in progress",
+        "Deliver every surviving row exactly once over a moving table",
+        "Never serve a deleted row from a stale copy"
+      ],
+      "checks": [
+        {
+          "id": "environment",
+          "label": "environment - paste the Workbench pass phrase"
+        },
+        {
+          "id": "observe",
+          "label": "observe - name the listing and what happened between its pages",
+          "hints": [
+            {
+              "id": "observe-hint-1",
+              "content": "Put the two pages side by side and look for an id that appears on both. What did the writes between them add at the top?"
+            }
+          ]
+        },
+        {
+          "id": "audit",
+          "label": "audit - list the surviving rows no page ever served",
+          "hints": [
+            {
+              "id": "audit-hint-1",
+              "content": "Only ids present in both initialIds and finalIds qualify. From that set, subtract every id that appeared on any page."
+            }
+          ]
+        },
+        {
+          "id": "paginate",
+          "label": "paginate - refuse inputs this paginator never issued",
+          "hints": [
+            {
+              "id": "paginate-hint-1",
+              "content": "What does the starter do with a cursor it cannot read? From the caller's side, can that be told apart from success?"
+            }
+          ]
+        },
+        {
+          "id": "stability",
+          "label": "stability - keep every surviving row exactly once while the table moves",
+          "hints": [
+            {
+              "id": "stability-hint-1",
+              "content": "What does your cursor remember — a position or a row? When rows are inserted at the top of the table, which of the two moves?"
+            }
+          ]
+        },
+        {
+          "id": "generalize",
+          "label": "generalize - hold those properties on schedules nobody wrote down",
+          "hints": [
+            {
+              "id": "generalize-hint-1",
+              "content": "A copy taken at the start never sees a row disappear. Re-read the live table for every page, and record only the boundary in the cursor."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

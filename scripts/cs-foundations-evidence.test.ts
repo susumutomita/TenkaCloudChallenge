@@ -27,6 +27,7 @@ const PROBLEMS = [
   { id: "cs-protocol-state-guard", serverDir: "workbench" },
   { id: "cs-http-retry-idempotency", serverDir: "workbench" },
   { id: "cs-dst-daily-rollup", serverDir: "workbench" },
+  { id: "cs-pagination-drift", serverDir: "workbench" },
   { id: "cs-async-result-binding", serverDir: "portal" },
   { id: "cs-auth-claim-audit", serverDir: "verifier" },
   { id: "cs-cache-generation-fence", serverDir: "participant" },
