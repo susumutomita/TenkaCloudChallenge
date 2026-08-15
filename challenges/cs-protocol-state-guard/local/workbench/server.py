@@ -59,8 +59,8 @@ def starter_payload() -> dict[str, str]:
 def config_payload() -> dict[str, object]:
     return {
         "id": "cs-protocol-state-guard",
-        "name": "応答が消えた。再送で同じ支払いを増やさない",
-        "description": "commit後にHTTP応答だけが消えたtraceを監査し、SQLite receiptで同じ論理操作を再生する。",
+        "name": "ハンドシェイクは、結局なくてもよかった",
+        "description": "server が自分の手順を飛ばさせた session を監査し、状態とメッセージ型の全組合せに答える handler を書く。",
         "submittedFiles": list(SUBMISSION_FILES),
         "checkpoints": [
             {
@@ -72,15 +72,15 @@ def config_payload() -> dict[str, object]:
         ],
         "i18n": {
             "en": {
-                "name": "The response vanished. Do not create the payment again",
+                "name": "The handshake was optional after all",
                 "description": "Audit a session the server let skip its own protocol, then make the handler answer the whole state space.",
                 "checkpointLabels": {
                     "environment": "environment - paste the Workbench pass phrase",
                     "observe": "observe - name the session and what the server let the client do",
-                    "audit": "audit - list later ledger rows that duplicated one logical operation",
+                    "audit": "audit - list the exchanges that should not have been accepted",
                     "guard": "guard - refuse a message that is not allowed from the current state",
                     "terminal": "terminal - keep a closed session closed and sessions apart",
-                    "generalize": "generalize - keep one business effect across concurrent retries and handler recreation",
+                    "generalize": "generalize - answer every state and message type, not just the examples",
                 },
             }
         },
