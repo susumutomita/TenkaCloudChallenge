@@ -21,27 +21,27 @@ from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fixtures.generate import QUESTIONS, HAPPY_PATH, health_token, reported_session, session_transcript
+from fixtures.generate import evidence_blocks, health_token
 
 ROOT = Path(__file__).resolve().parents[1]
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
-PORT = int(os.environ.get("WORKBENCH_PORT", "18540"))
-VERIFIER_URL = os.environ.get("VERIFIER_URL", "http://verifier:18541/verify")
+PORT = int(os.environ.get("WORKBENCH_PORT", "18560"))
+VERIFIER_URL = os.environ.get("VERIFIER_URL", "http://verifier:18561/verify")
 
 MAX_BODY_BYTES = 256 * 1024
 MAX_OUTPUT_BYTES = 64 * 1024
 RUN_TIMEOUT_SECONDS = 12
 REQUEST_TIMEOUT_SECONDS = 15
-SUBMISSION_FILES = ("session.py",)
-CHECKPOINTS = ("environment", "observe", "audit", "guard", "terminal", "generalize")
-CODE_CHECKPOINTS = frozenset(("guard", "terminal", "generalize"))
+SUBMISSION_FILES = ("pagination.py",)
+CHECKPOINTS = ("environment", "observe", "audit", "paginate", "stability", "generalize")
+CODE_CHECKPOINTS = frozenset(("paginate", "stability", "generalize"))
 CHECKPOINT_LABELS = {
     "environment": "environment — Workbench の合言葉を貼る",
-    "observe": "observe — 対象 session と、server が許してしまったことを答える",
-    "audit": "audit — 受理されるべきでなかった交換を挙げる",
-    "guard": "guard — 現在の状態から許されないメッセージを拒否する",
-    "terminal": "terminal — 閉じた session を閉じたまま保ち、session 同士を分ける",
-    "generalize": "generalize — 例だけでなく状態とメッセージ型の全組合せに答える",
+    "observe": "observe — 対象の一覧と、ページの間に起きたことを答える",
+    "audit": "audit — 生き残ったのに一度も現れなかった row を挙げる",
+    "paginate": "paginate — 発行していない入力を黙って先頭に戻さない",
+    "stability": "stability — 表が動いても、生き残りを 1 回ずつ届ける",
+    "generalize": "generalize — 誰も書き下していないスケジュールでも保つ",
 }
 
 
@@ -58,9 +58,9 @@ def starter_payload() -> dict[str, str]:
 
 def config_payload() -> dict[str, object]:
     return {
-        "id": "cs-protocol-state-guard",
-        "name": "ハンドシェイクは、結局なくてもよかった",
-        "description": "server が自分の手順を飛ばさせた session を監査し、状態とメッセージ型の全組合せに答える handler を書く。",
+        "id": "cs-pagination-drift",
+        "name": "ページは正しい。一覧が揃わない",
+        "description": "動く表を offset で分割取得した一覧ジョブを監査し、位置ではなく行を指す cursor を配る paginator を書く。",
         "submittedFiles": list(SUBMISSION_FILES),
         "checkpoints": [
             {
@@ -72,15 +72,15 @@ def config_payload() -> dict[str, object]:
         ],
         "i18n": {
             "en": {
-                "name": "The handshake was optional after all",
-                "description": "Audit a session the server let skip its own protocol, then make the handler answer the whole state space.",
+                "name": "Every page is right. The listing is not",
+                "description": "Audit a listing job that paged a moving table by offset, then hand out a cursor that names a row instead of a position.",
                 "checkpointLabels": {
                     "environment": "environment - paste the Workbench pass phrase",
-                    "observe": "observe - name the session and what the server let the client do",
-                    "audit": "audit - list the exchanges that should not have been accepted",
-                    "guard": "guard - refuse a message that is not allowed from the current state",
-                    "terminal": "terminal - keep a closed session closed and sessions apart",
-                    "generalize": "generalize - answer every state and message type, not just the examples",
+                    "observe": "observe - name the listing and what happened between its pages",
+                    "audit": "audit - list the surviving rows no page ever served",
+                    "paginate": "paginate - refuse inputs this paginator never issued",
+                    "stability": "stability - keep every surviving row exactly once while the table moves",
+                    "generalize": "generalize - hold those properties on schedules nobody wrote down",
                 },
             }
         },
@@ -88,30 +88,20 @@ def config_payload() -> dict[str, object]:
 
 
 def inspect_payload(seed: str) -> dict[str, object]:
-    transcript = session_transcript(seed)
-    return {
-        "environment": {"python": sys.version.split()[0], "healthToken": health_token(seed)},
-        "observe": {
-            **QUESTIONS["observe"],
-            "session": reported_session(seed),
-            "documentedOrder": list(HAPPY_PATH),
-            "transcript": transcript[:3],
-        },
-        "audit": {
-            **QUESTIONS["audit"],
-            "documentedOrder": list(HAPPY_PATH),
-            "transcript": [{"index": index, **row} for index, row in enumerate(transcript)],
-        },
-    }
+    payload = evidence_blocks(seed)
+    environment = dict(payload["environment"])  # type: ignore[arg-type]
+    environment["python"] = sys.version.split()[0]
+    payload["environment"] = environment
+    return payload
 
 
 def _submission_sources(files: object) -> dict[str, str] | None:
     if not isinstance(files, dict):
         return None
-    source = files.get("session.py")
+    source = files.get("pagination.py")
     if not isinstance(source, str) or not source.strip() or len(source) > MAX_BODY_BYTES:
         return None
-    return {"session.py": source}
+    return {"pagination.py": source}
 
 
 PUBLIC_SCRIPT = """
@@ -119,16 +109,16 @@ import os, runpy
 os.environ["FLAG_SEED"] = {seed!r}
 os.environ["SUBMISSION_DIR"] = {workspace!r}
 os.environ["BROWSER_PUBLIC_TESTS"] = "1"
-runpy.run_path({root!r} + "/tests/public/test_session.py", run_name="__main__")
+runpy.run_path({root!r} + "/tests/public/test_pagination.py", run_name="__main__")
 """
 
 
 def run_public_tests(seed: str, files: object) -> dict[str, object]:
     sources = _submission_sources(files)
     if sources is None:
-        return {"passed": False, "output": "session.py must be a non-empty Python file."}
+        return {"passed": False, "output": "pagination.py must be a non-empty Python file."}
     with tempfile.TemporaryDirectory() as workspace:
-        Path(workspace, "session.py").write_text(sources["session.py"], encoding="utf-8")
+        Path(workspace, "pagination.py").write_text(sources["pagination.py"], encoding="utf-8")
         transcript = Path(workspace, "stdout")
         try:
             with transcript.open("w", encoding="utf-8") as sink:
@@ -157,14 +147,14 @@ def run_public_tests(seed: str, files: object) -> dict[str, object]:
 def prepare_submissions(seed: str, files: object) -> dict[str, object]:
     sources = _submission_sources(files)
     if sources is None:
-        return {"ok": False, "output": "session.py must be a non-empty Python file."}
-    source = sources["session.py"]
+        return {"ok": False, "output": "pagination.py must be a non-empty Python file."}
+    source = sources["pagination.py"]
     return {
         "ok": True,
         "submissions": {
             "environment": health_token(seed),
-            "guard": source,
-            "terminal": source,
+            "paginate": source,
+            "stability": source,
             "generalize": source,
         },
     }

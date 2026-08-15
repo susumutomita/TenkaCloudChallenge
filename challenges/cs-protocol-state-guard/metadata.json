@@ -2,7 +2,7 @@
   "id": "cs-protocol-state-guard",
   "name": "ハンドシェイクは、結局なくてもよかった",
   "category": "Challenge",
-  "status": "draft",
+  "status": "ready",
   "visibility": "public",
   "track": {
     "id": "cs-foundations",
