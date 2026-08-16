@@ -538,6 +538,57 @@
       }
     },
     {
+      "id": "ac26-w3-fft-domain",
+      "name": "その domain、本当に割り切れますか",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "advanced-cryptography-2026",
+        "order": 317,
+        "chapter": "Week 3 / FFT Domain and Interpolation"
+      },
+      "courseAlignment": {
+        "courseId": "advanced-cryptography-program",
+        "edition": "2026",
+        "week": 3,
+        "role": "mechanism",
+        "sources": [
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
+            "path": "week3/README.md",
+            "kind": "lecture"
+          },
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9",
+            "path": "week3/week3_zksnark_slides.pdf",
+            "kind": "slide"
+          }
+        ]
+      },
+      "difficulty": 3,
+      "estimatedDuration": "45-60 分",
+      "shortDescription": "渡された omega を信じずに evaluation domain を検証し、FFT・逆変換・補間を本物の domain の上だけで動かす。",
+      "tags": [
+        "advanced-cryptography-2026",
+        "fft",
+        "roots-of-unity",
+        "interpolation",
+        "finite-field",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "ac26-w3-field-inverse",
       "name": "曲線の前に、体を作る",
       "category": "Challenge",
