@@ -413,18 +413,101 @@ jobs:
             down --volumes --remove-orphans --rmi local || true
           docker image rm -f "$IMAGE" >/dev/null 2>&1 || true
 
+  # Issue #477: stackstack-first-request shipped without runtime evidence. The
+  # parts of that list a machine can settle -- cold start, a fresh state that
+  # fails closed, negatives and inherited checkpoint ids that score nothing, a
+  # full lap worth exactly the declared points, per-deploy answers that differ,
+  # reset, cleanup -- are settled here on every head. The independent blind
+  # tester and the real browser rendering the issue also requires are not, and
+  # this job does not claim them.
+  stackstack-first-request-runtime:
+    name: stackstack-first-request Docker runtime
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      COMPOSE_FILE: challenges/stackstack-first-request/local/docker-compose.yml
+      COMPOSE_PROJECT_NAME: tcc-ssfr-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout exact event head
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      # A cold build from the exact head, then the participant's own path over
+      # the published loopback ports. The seed is per-run, so nothing that
+      # passes here could have been answered from a value in the repository.
+      - name: Cold start and play the lap
+        env:
+          FLAG_SEED: exact-head-a-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          docker compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" up --build --detach --wait
+          python3 scripts/stackstack-first-request-http-smoke.py | tee /tmp/seed-a.txt
+
+      # Restarting is the documented reset. The board keeps its answers, because
+      # the seed has not changed, but everything it measured must be gone.
+      - name: Prove a restart resets what was measured
+        env:
+          FLAG_SEED: exact-head-a-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          docker compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" restart
+          # The smoke waits for /healthz itself, so there is no second readiness
+          # poke here to go stale.
+          python3 scripts/stackstack-first-request-http-smoke.py --phase fresh
+
+      # A second deployment with a different seed must not share a single
+      # answer. Fingerprints are compared so neither seed's answers reach the log.
+      - name: Prove a second deployment agrees on nothing
+        env:
+          FLAG_SEED: exact-head-b-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          docker compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" down --volumes --remove-orphans
+          docker compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" up --build --detach --wait
+          python3 scripts/stackstack-first-request-http-smoke.py | tee /tmp/seed-b.txt
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          def prints(path):
+              for line in Path(path).read_text().splitlines():
+                  if line.startswith("{"):
+                      return json.loads(line)["fingerprints"]
+              raise SystemExit(f"{path} carried no fingerprints")
+
+          a, b = prints("/tmp/seed-a.txt"), prints("/tmp/seed-b.txt")
+          shared = sorted(name for name in a if a[name] == b[name])
+          if shared:
+              raise SystemExit(f"two seeds agreed on {shared}; answers are not per-deployment")
+          print(f"all {len(a)} answers differ between deployments")
+          PY
+
+      # `make local-down` is what the participant is told to run, so the promise
+      # is that nothing of this problem's is left behind.
+      - name: Remove the runtime resources and prove nothing is left
+        if: always()
+        run: |
+          docker compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" \
+            down --volumes --remove-orphans --rmi local || true
+          for kind in container network volume; do
+            left="$(docker "$kind" ls --quiet --filter "label=com.docker.compose.project=$COMPOSE_PROJECT_NAME")"
+            test -z "$left" || { echo "::error::$kind left behind: $left"; exit 1; }
+          done
+
   validate:
     # One stable name in front of the matrix. `if: always()` is what makes this
     # run when a shard fails — and it is also what makes `needs:` stop gating, so
     # the result has to be asserted explicitly rather than implied.
-    needs: [suite, solvability, checks, rls-runtime, eventbridge-runtime, github-oidc-runtime, signed-npm-runtime, asm-worst-case-latency-runtime]
+    needs: [suite, solvability, checks, rls-runtime, eventbridge-runtime, github-oidc-runtime, signed-npm-runtime, asm-worst-case-latency-runtime, stackstack-first-request-runtime]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Require every job to have succeeded
         run: |
-          echo "suite=${{ needs.suite.result }} solvability=${{ needs.solvability.result }} checks=${{ needs.checks.result }} rls-runtime=${{ needs.rls-runtime.result }} eventbridge-runtime=${{ needs.eventbridge-runtime.result }} github-oidc-runtime=${{ needs.github-oidc-runtime.result }} signed-npm-runtime=${{ needs.signed-npm-runtime.result }} asm-worst-case-latency-runtime=${{ needs.asm-worst-case-latency-runtime.result }}"
+          echo "suite=${{ needs.suite.result }} solvability=${{ needs.solvability.result }} checks=${{ needs.checks.result }} rls-runtime=${{ needs.rls-runtime.result }} eventbridge-runtime=${{ needs.eventbridge-runtime.result }} github-oidc-runtime=${{ needs.github-oidc-runtime.result }} signed-npm-runtime=${{ needs.signed-npm-runtime.result }} asm-worst-case-latency-runtime=${{ needs.asm-worst-case-latency-runtime.result }} stackstack-first-request-runtime=${{ needs.stackstack-first-request-runtime.result }}"
           test "${{ needs.suite.result }}" = "success"
           test "${{ needs.solvability.result }}" = "success"
           test "${{ needs.checks.result }}" = "success"
@@ -433,3 +516,4 @@ jobs:
           test "${{ needs.github-oidc-runtime.result }}" = "success"
           test "${{ needs.signed-npm-runtime.result }}" = "success"
           test "${{ needs.asm-worst-case-latency-runtime.result }}" = "success"
+          test "${{ needs.stackstack-first-request-runtime.result }}" = "success"

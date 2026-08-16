@@ -546,6 +546,36 @@ describe("stackstack-first-request wiring", () => {
     expect(shipped.acceptingPosts).toBe(true);
   });
 
+  // Issue #477 asks for runtime evidence this problem shipped without. The
+  // machine-checkable half of that list is a CI job driving the real container
+  // over HTTP; a source test cannot stand in for it, but it can make sure the
+  // job and its smoke script do not quietly stop being wired together.
+  it("should gate every head on a Docker runtime that plays the real lap", () => {
+    const workflow = readFileSync(join(REPO_ROOT, ".github", "workflows", "ci.yml"), "utf8");
+    expect(workflow).toContain("stackstack-first-request-runtime:");
+    expect(workflow).toContain("ref: ${{ github.event.pull_request.head.sha || github.sha }}");
+    expect(workflow).toContain("scripts/stackstack-first-request-http-smoke.py");
+    // The three claims a source test could never make on its own.
+    expect(workflow).toContain("--phase fresh");
+    expect(workflow).toContain("answers are not per-deployment");
+    expect(workflow).toContain("left behind");
+    // And the aggregate must actually require it, or the job is decoration.
+    const validate = workflow.slice(workflow.indexOf("\n  validate:"));
+    expect(validate).toContain('test "${{ needs.stackstack-first-request-runtime.result }}" = "success"');
+  });
+
+  it("should keep the runtime smoke free of any committed answer", () => {
+    // The smoke plays the lap the participant plays: every value it submits has
+    // to come back from the running app. A literal token here would mean the
+    // job could pass against an app that stopped deriving answers per deploy.
+    const smoke = readFileSync(join(REPO_ROOT, "scripts", "stackstack-first-request-http-smoke.py"), "utf8");
+    expect(smoke).not.toMatch(/TC\{[a-z]+_[0-9a-f]{8}/);
+    expect(smoke).not.toMatch(/postcard-[0-9a-f]{12}/);
+    expect(smoke).toContain('body["token"]');
+    expect(smoke).toContain('body["receipt"]');
+    expect(smoke).toContain('state["readyToken"]');
+  });
+
   it("should steer every participant-facing doc to the console, never to the checkout file", () => {
     const checkoutPath = "challenges/stackstack-first-request/local/config/app.json";
     for (const name of ["README.md", "README.ja.md", "metadata.json"]) {
