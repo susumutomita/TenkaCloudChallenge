@@ -201,7 +201,7 @@
       },
       {
         "repository": "zk-tokyo/advanced-cryptography-2026",
-        "ref": "e4f33fec97c7938f27d3c6dc8ea8b1aeceb0aec9",
+        "ref": "b1b46669949b5615be7941b2b62da4ea635e9c30",
         "path": "week3/week3_zksnark_slides.pdf",
         "kind": "slide"
       }

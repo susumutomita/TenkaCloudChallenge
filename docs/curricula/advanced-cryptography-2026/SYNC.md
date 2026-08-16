@@ -28,15 +28,26 @@ answer; an invented SHA is not.
 What keeps an unpinned problem accountable is `curriculum.md`'s "Maintenance"
 section: a problem whose week has no row there is an unmapped problem.
 
-As of 2026-08-09 the catalog carries **52 pins** across the Advanced Cryptography
+As of 2026-08-16 the catalog carries **63 pins** across the Advanced Cryptography
 track, so `bun run course:drift` does real work on every pull request that
 touches a `metadata.json`, the checker, or its workflow.
 
-The check has fired in anger once. On 2026-08-09 it reported seven `DRIFT` rows
+The check has fired in anger twice. On 2026-08-09 it reported seven `DRIFT` rows
 and five `PUBLISHED` rows; the drift turned out to be a lecture-slide link added
 to the Week 1 and Week 3 READMEs, and the publication was Week 2's material
 arriving. See `curriculum.md`'s Week 2 section for what the reading found — the
 SHA bump was the easy half.
+
+On 2026-08-15 it reported `DRIFT` on every Week 3 `slide` pin after upstream
+`b1b4666` rewrote `week3/week3_zksnark_slides.pdf`. Reading both decks page by
+page found a reorganisation and no revision: the extended-Euclid and
+Fourier-inversion slides moved from the main deck into the appendix with their
+bodies unchanged, and the `対話 ZK/FS` section moved to sit after
+`Arithmetization`. What arrived is new material rather than replacement — a
+Fiat–Shamir security caveat, an arithmetization comparison slide, a smaller
+group-work sudoku. No statement the
+six companions rely on was revised or retired, so the pins moved and the problems
+did not. The reading is recorded in #482.
 
 ## 2. Unpublished weeks
 
