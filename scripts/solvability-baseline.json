@@ -89,6 +89,20 @@
       "type": "answer-on-screen",
       "reason": "The environment checkpoint is proof that the container was started, not a question. The health token is printed by `make inspect` and by the Portal editor's inspect view precisely so the player can copy it, and it is seed-derived, so nothing carries between deployments. There is no answer here to leak. The two checkpoints that do carry answers -- `observe` and `audit` -- were measured in the same sweep and are not on screen.",
       "recordedAtSeeds": 500
+    },
+    {
+      "problem": "asm-worst-case-latency",
+      "checkpoint": "environment",
+      "type": "answer-on-screen",
+      "reason": "The environment checkpoint is proof that the measurement container started, not a reasoning question. The health token is printed by `make inspect` and by the Portal inspect view precisely so the player can copy it, and it is seed-derived, so nothing carries between deployments. The four checkpoints that decide this problem -- measure, dependency, miss and generalize -- are graded by building and running the submission and have no on-screen answer to copy.",
+      "recordedAtSeeds": 500
+    },
+    {
+      "problem": "asm-worst-case-latency",
+      "checkpoint": "-",
+      "type": "not-audited",
+      "reason": "This audit runs a reference by importing `reference/*.py` in-process. This problem's reference is `reference/candidate.S`: the thing being graded is a machine instruction, so there is no Python module to import and the code probes cannot run here. The same evidence is produced by `local/mutation.py`, which drives the shipped reference and the shipped starter through the real `verifier/grader.py` -- the production path -- and requires the reference to beat the threshold and the starter to sit at 1.0x. Extending the audit to build and run native references is a change to a shared script and is not in this problem's scope.",
+      "recordedAtSeeds": 500
     }
   ],
   "open": []
