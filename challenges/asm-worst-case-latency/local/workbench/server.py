@@ -19,8 +19,11 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "harness"))
 
 from fixtures.generate import evidence_blocks, health_token
+from splice import Rejected as SpliceRejected
+from splice import build as splice_build
 
 ROOT = Path(__file__).resolve().parents[1]
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
@@ -102,7 +105,11 @@ def run_public_tests(seed: str, files: object) -> dict[str, object]:
 
     with tempfile.TemporaryDirectory() as workspace:
         work = Path(workspace)
-        (work / "candidate.S").write_text(source, encoding="utf-8")
+        try:
+            spliced = splice_build(source)
+        except SpliceRejected as error:
+            return {"passed": False, "output": str(error)}
+        (work / "candidate.S").write_text(spliced, encoding="utf-8")
         binary = work / "measure"
         build = subprocess.run(
             [
