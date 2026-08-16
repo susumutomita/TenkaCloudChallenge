@@ -1826,6 +1826,38 @@
       }
     },
     {
+      "id": "asm-worst-case-latency",
+      "name": "1 命令を、どこまで遅くできるか",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "cs-foundations",
+        "order": 110,
+        "chapter": "11. 命令 1 個の最悪実行時間"
+      },
+      "difficulty": 4,
+      "estimatedDuration": "60-90 分",
+      "shortDescription": "単一命令の実行時間を正直に測るハーネスの上で、この機械が最も嫌がる 1 命令を見つける。",
+      "tags": [
+        "cs-foundations",
+        "assembly",
+        "cpu",
+        "cache",
+        "performance",
+        "wcet",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "cloudflare-api-security",
       "name": "Cloudflare Workers プロフィール API — 5 段階セキュリティ採点",
       "category": "Challenge",
