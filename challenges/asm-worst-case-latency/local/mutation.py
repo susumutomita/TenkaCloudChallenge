@@ -254,7 +254,10 @@ def main() -> int:
 
     result = grader.grade(reference, SEED)
     if result["normalizedScore"] < REFERENCE_SCORE_FLOOR:
-        print(\n            f"the reference only reached {result['normalizedScore']:.1f}x the baseline; "\n            f"the hardest checkpoint requires {REFERENCE_SCORE_FLOOR:.1f}x"\n        )
+        print(
+            f"the reference only reached {result['normalizedScore']:.1f}x the baseline; "
+            f"the hardest checkpoint requires {REFERENCE_SCORE_FLOOR:.1f}x"
+        )
         return 1
     print(f"reference: {result['normalizedScore']:.1f}x the baseline")
 
