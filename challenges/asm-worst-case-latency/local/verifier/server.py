@@ -130,8 +130,15 @@ class Handler(BaseHTTPRequestHandler):
 
 def main() -> None:
     port = int(os.environ.get("VERIFY_PORT", "18571"))
-    # Bind every interface inside the container; compose publishes only the
-    # Workbench, and only on host loopback.
+    # Bind every interface *inside the container*, not the container's loopback. A
+    # published port is forwarded to the container's bridge address, so a server listening
+    # only on 127.0.0.1 inside the container accepts nothing from outside it — the
+    # connection is opened and closed without a response, and the platform can never score
+    # the problem.
+    #
+    # The loopback restriction that matters is on the host, and it lives in
+    # docker-compose.yml, which publishes only the Workbench and only on 127.0.0.1. This
+    # verifier has no host port at all.
     HTTPServer(("0.0.0.0", port), Handler).serve_forever()  # noqa: S104 - see above
 
 
