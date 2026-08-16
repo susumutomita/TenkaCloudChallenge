@@ -18,9 +18,12 @@ services:
       - workshop-host
     read_only: true
     tmpfs:
-      # The measurement compiles and runs from here, so it needs exec. Everything
-      # else is still denied, and the arena wants room.
-      - /tmp:rw,nosuid,nodev,size=512m
+      # The measurement compiles and runs from here, so it needs exec. Docker
+      # mounts a tmpfs noexec by default and naming other options does not
+      # override that, so `exec` has to be said out loud or the compiled binary
+      # cannot be started at all. Everything else is still denied, and the arena
+      # wants room.
+      - /tmp:rw,exec,nosuid,nodev,size=512m
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -48,7 +51,8 @@ services:
       - lab
     read_only: true
     tmpfs:
-      - /tmp:rw,nosuid,nodev,size=512m
+      # Same as the Workbench: grading compiles and runs the measurement here.
+      - /tmp:rw,exec,nosuid,nodev,size=512m
     security_opt:
       - no-new-privileges:true
     cap_drop:

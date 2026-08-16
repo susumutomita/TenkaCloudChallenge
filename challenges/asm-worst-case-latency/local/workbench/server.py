@@ -125,6 +125,15 @@ def run_public_tests(seed: str, files: object) -> dict[str, object]:
             )
         except subprocess.TimeoutExpired:
             return {"passed": False, "output": "the measurement did not finish within its time limit."}
+        except OSError as error:
+            # Not the submission's fault: the lab could not start its own binary.
+            # Naming it beats dropping the connection, which is what an escaping
+            # OSError does here -- the handler thread dies mid-request and the
+            # participant sees no answer at all. /tmp mounted noexec lands here.
+            return {
+                "passed": False,
+                "output": f"this lab cannot run its own measurement: {error}",
+            }
         if completed.returncode != 0:
             return {"passed": False, "output": "the measurement did not complete."}
         try:

@@ -45,6 +45,16 @@ class Rejected(Exception):
     """The submission is not gradeable. The message is shown to the participant."""
 
 
+class HarnessUnusable(Exception):
+    """The lab could not run its own measurement.
+
+    Deliberately not a `Rejected`: nothing was learned about the submission, so
+    turning this into a verdict would report an environment fault as a wrong
+    answer. The verifier still fails closed on it, but the distinction is kept
+    where the cause is known.
+    """
+
+
 def well_formed_result(run: object, seed: int) -> dict:
     """Require the fixed harness schema before trusting any reported number."""
     if not isinstance(run, dict):
@@ -141,6 +151,12 @@ def build_and_run(source: str, seed: int) -> dict:
             )
         except subprocess.TimeoutExpired:
             raise Rejected("the measurement did not finish within its time limit") from None
+        except OSError as error:
+            # The lab could not start its own binary -- /tmp mounted noexec, for
+            # instance. That is an environment fault, not a submission that ran
+            # and lost, so it is raised as itself rather than swallowed into a
+            # verdict about the participant.
+            raise HarnessUnusable(f"this lab cannot run its own measurement: {error}") from None
         if completed.returncode < 0:
             why = {
                 4: "the instruction changed the fixed call frame, or this host cannot execute it",

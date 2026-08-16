@@ -250,6 +250,40 @@ describe("asm-worst-case-latency measurement boundary", () => {
     expect(verdict).toEqual({ passed: false, calls: 0 });
   });
 
+  // The lab compiles its measurement into /tmp and then executes it. Docker
+  // mounts a tmpfs noexec by default, and naming other options does not override
+  // that, so a compose file that omits `exec` ships a lab whose binary cannot be
+  // started -- the Workbench drops the connection mid-request and the verifier
+  // scores nothing. Every service that builds and runs needs it said out loud.
+  it("grants exec on the tmpfs the measurement is compiled and run from", () => {
+    const compose = readFileSync(join(LOCAL, "docker-compose.yml"), "utf8");
+    const mounts = compose.match(/^\s*-\s*\/tmp:.*$/gm) ?? [];
+    expect(mounts.length).toBe(2);
+    for (const mount of mounts) {
+      expect(mount.split(":")[1]!.split(",")).toContain("exec");
+    }
+  });
+
+  it("reports an unrunnable measurement instead of dropping the request", () => {
+    // An OSError escaping the handler kills the thread and closes the socket, so
+    // the participant sees no answer at all. It has to become an answer.
+    const verdict = runPython([
+      "import subprocess",
+      "from workbench import server",
+      "def refuse(command, **kwargs):",
+      "    if str(command[0]).endswith('measure'):",
+      "        raise PermissionError(13, 'Permission denied', str(command[0]))",
+      "    return real(command, **kwargs)",
+      "real = subprocess.run",
+      "server.subprocess.run = refuse",
+      "starter = open('starter/candidate.S', encoding='utf-8').read()",
+      "result = server.run_public_tests('seed', {'candidate.S': starter})",
+      "ok = result['passed'] is False and 'cannot run its own measurement' in result['output']",
+      "print('reported' if ok else f'leaked: {result!r}')",
+    ].join("\n"));
+    expect(verdict).toBe("reported");
+  });
+
   it("requires the author reference to clear the hardest real checkpoint", () => {
     const verdict = runPython([
       "from mutation import REFERENCE_SCORE_FLOOR",
