@@ -142,7 +142,12 @@ describe("asm-worst-case-latency measurement boundary", () => {
 
   it("bounds CPU, memory, and process use for both runtime services", () => {
     const compose = parse(read("local/docker-compose.yml")) as {
-      services: Record<string, { cpus?: string; mem_limit?: string; pids_limit?: number }>;
+      services: Record<string, {
+        cpus?: string;
+        mem_limit?: string;
+        pids_limit?: number;
+        tmpfs?: string[];
+      }>;
     };
 
     for (const name of ["workbench", "verifier"]) {
@@ -151,6 +156,11 @@ describe("asm-worst-case-latency measurement boundary", () => {
         mem_limit: "1g",
         pids_limit: 128,
       });
+      const tmp = compose.services[name].tmpfs?.find((entry) => entry.startsWith("/tmp:"));
+      expect(tmp).toBeDefined();
+      const options = new Set(tmp?.split(":", 2)[1]?.split(","));
+      expect(options).toContain("exec");
+      expect(options).not.toContain("noexec");
     }
   });
 
@@ -193,6 +203,8 @@ describe("asm-worst-case-latency measurement boundary", () => {
     expect(workflow).toContain("min(scores) < 40.0");
     expect(workflow).toContain("{{.HostConfig.NanoCpus}}");
     expect(workflow).toContain("= 1000000000");
+    expect(workflow).toContain('fields[1] == "/tmp"');
+    expect(workflow).toContain('"noexec" in options');
     expect(workflow).toContain("asm-worst-case-latency-http-smoke.py");
   });
 
@@ -270,11 +282,14 @@ describe("asm-worst-case-latency measurement boundary", () => {
     const verdict = runPython([
       "import subprocess",
       "from workbench import server",
+      "completed = subprocess.CompletedProcess",
+      "server.build_candidate_object = lambda source, output: output.write_bytes(b'')",
       "def refuse(command, **kwargs):",
+      "    if command[0] == 'gcc':",
+      "        return completed(command, 0, '', '')",
       "    if str(command[0]).endswith('measure'):",
       "        raise PermissionError(13, 'Permission denied', str(command[0]))",
-      "    return real(command, **kwargs)",
-      "real = subprocess.run",
+      "    raise AssertionError(f'unexpected command: {command!r}')",
       "server.subprocess.run = refuse",
       "starter = open('starter/candidate.S', encoding='utf-8').read()",
       "result = server.run_public_tests('seed', {'candidate.S': starter})",

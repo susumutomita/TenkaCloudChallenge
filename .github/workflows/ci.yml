@@ -394,6 +394,15 @@ jobs:
             container_id="$(docker compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" ps -q "$service")"
             test -n "$container_id"
             test "$(docker inspect "$container_id" --format '{{.HostConfig.NanoCpus}}')" = 1000000000
+            docker exec "$container_id" python3 -c '
+          from pathlib import Path
+          mounts = (line.split() for line in Path("/proc/mounts").read_text().splitlines())
+          options = next((set(fields[3].split(",")) for fields in mounts if fields[1] == "/tmp"), None)
+          if options is None:
+              raise SystemExit("/tmp is not a dedicated runtime mount")
+          if "noexec" in options or not {"rw", "nosuid", "nodev"}.issubset(options):
+              raise SystemExit(f"unsafe or non-executable /tmp mount: {sorted(options)}")
+          '
           done
           python3 scripts/asm-worst-case-latency-http-smoke.py
 
