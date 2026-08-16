@@ -39,10 +39,9 @@ const SPOOF = [
   "",
 ].join("\n");
 
-function runnerBlock(source: string): string {
+function runnerBlock(source: string): string | null {
   const match = /RUNNER = """\n([\s\S]*?)\n"""/.exec(source);
-  expect(match).not.toBeNull();
-  return (match as RegExpExecArray)[1];
+  return match?.[1] ?? null;
 }
 
 describe("local-play verifier verdict spoofing", () => {
@@ -55,6 +54,16 @@ describe("local-play verifier verdict spoofing", () => {
     describe(problem, () => {
       const source = readFileSync(join(REPO_ROOT, relative), "utf8");
       const runner = runnerBlock(source);
+
+      if (runner === null) {
+        it("should not interpret participant Python when no Python runner exists", () => {
+          // Native-code labs can grade assembly or another non-Python artifact directly.
+          // They are outside the atexit spoof described above, but must not silently
+          // replace the explicit runner with eval/exec of participant text.
+          expect(source).not.toMatch(/\b(?:eval|exec)\s*\(/);
+        });
+        return;
+      }
 
       it("should end the runner with a hard exit rather than falling off the script", () => {
         // Falling off the end runs atexit handlers, which can write after the verdict.
