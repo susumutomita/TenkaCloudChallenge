@@ -114,4 +114,14 @@ describe("asm-worst-case-latency grading boundary", () => {
     ].join("\n"));
     expect(verdict).toBe("isolated");
   });
+
+  it("requires the author reference to clear the hardest real checkpoint", () => {
+    const verdict = runPython([
+      "from mutation import REFERENCE_SCORE_FLOOR",
+      "from verifier.server import THRESHOLDS",
+      "print('aligned' if REFERENCE_SCORE_FLOOR >= max(THRESHOLDS.values()) else 'weaker')",
+    ].join("\n"));
+    expect(verdict).toBe("aligned");
+  });
+
 });
