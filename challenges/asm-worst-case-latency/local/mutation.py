@@ -29,8 +29,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / "harness"))
 import splice
 from tests.hidden import check_candidate as grader
 from tests.hidden.check_candidate import Rejected
+from verifier.server import THRESHOLDS
 
 SEED = 20260816
+
+#: The reference must clear the hardest checkpoint the participant will face.
+#: Derive this from the verifier contract so a scoring change cannot silently
+#: leave the author proof weaker than the problem it claims is solvable.
+REFERENCE_SCORE_FLOOR = max(THRESHOLDS.values())
 
 #: The layer that is not a Python function: the frame's zeroed registers, its
 #: read-only arena, and its refusal to return through a stack it did not leave.
@@ -247,8 +253,8 @@ def main() -> int:
     starter = (here / "starter" / "candidate.S").read_text(encoding="utf-8")
 
     result = grader.grade(reference, SEED)
-    if result["normalizedScore"] < 10.0:
-        print(f"the reference only reached {result['normalizedScore']:.1f}x the baseline")
+    if result["normalizedScore"] < REFERENCE_SCORE_FLOOR:
+        print(\n            f"the reference only reached {result['normalizedScore']:.1f}x the baseline; "\n            f"the hardest checkpoint requires {REFERENCE_SCORE_FLOOR:.1f}x"\n        )
         return 1
     print(f"reference: {result['normalizedScore']:.1f}x the baseline")
 
