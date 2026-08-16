@@ -130,13 +130,24 @@ def measured_source(submission: str) -> str:
 
 
 def check_no_directive(instruction: str) -> None:
-    """No assembler directive, of any kind, and no label.
+    """One statement, and that statement an instruction: no directive, no label.
 
     A directive is not an instruction, and `.byte` in particular hands the
     assembler an encoding that `check_operands` would never see: the decoded form
     would be a legal-looking instruction whose operands the participant chose in
     hex. There is no directive a single measured instruction needs.
+
+    `;` is checked first because it is what makes "one line" and "one statement"
+    different things. GAS separates statements on it, so `nop; .section
+    .init_array,"aw"; .quad ...` is one line, one *instruction* as far as a
+    disassembler is concerned, and a constructor that runs before the harness
+    does -- outside the measured region, with none of the frame's guarantees.
     """
+    if ";" in instruction:
+        raise Rejected(
+            f"'{instruction}' holds more than one statement; the assembler separates them on "
+            "';' and the contract is one instruction, not one line of them"
+        )
     if DIRECTIVE.match(instruction):
         raise Rejected(
             f"'{instruction}' is an assembler directive, not an instruction. The measured "

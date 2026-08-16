@@ -51,6 +51,7 @@ describe("asm-worst-case-latency grading boundary", () => {
   const refusals: Array<[string, string]> = [
     ["an encoding smuggled in as raw bytes", ".byte 0x90"],
     ["a store encoded as raw bytes", ".byte 0x48,0x89,0x04,0x24"],
+    ["a second statement behind the instruction", "nop; .globl smuggled"],
     ["an implicit stack write", "pushq %rax"],
     ["a string store to its implicit destination", "stosq"],
     ["a masked store to its implicit destination", "maskmovdqu %xmm0, %xmm1"],

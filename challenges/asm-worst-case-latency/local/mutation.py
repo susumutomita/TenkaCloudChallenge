@@ -157,6 +157,13 @@ CASES = [
     ("a store encoded as raw bytes",
      TEMPLATE.format(body="    .byte 0x48,0x89,0x04,0x24"),
      ("check_no_directive", "check_operands", FRAME)),
+    # One line is not one statement: GAS separates them on ';', and a directive
+    # riding along behind an instruction reaches the frame as data the
+    # disassembler never looks at. A constructor placed this way runs before the
+    # harness, outside the region, with none of the frame's guarantees.
+    ("a constructor smuggled in behind the instruction",
+     TEMPLATE.format(body='    nop; .section .init_array,"aw"; .quad tc_candidate'),
+     ("check_no_directive", FRAME)),
     ("an implicit stack write",
      TEMPLATE.format(body="    pushq %rax"),
      ("check_operands", FRAME)),
