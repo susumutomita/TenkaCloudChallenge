@@ -203,58 +203,58 @@
       {
         "id": "environment",
         "label": "environment — 合言葉を貼る",
-        "points": 15,
-        "wrongAnswerPenalty": 5
+        "points": 20,
+        "wrongAnswerPenalty": 15
       },
       {
         "id": "measure",
         "label": "measure — まず正直に測れている状態を作る",
-        "points": 25,
-        "wrongAnswerPenalty": 8,
+        "points": 40,
+        "wrongAnswerPenalty": 15,
         "hints": [
           {
             "id": "measure-hint-1",
             "content": "starter はそのまま提出しても通ります。 スコア 1.00 は「baseline と同じ命令を測った」という意味であり、失敗ではありません。 まずこの checkpoint で、計測が成立していることを確かめてください。",
-            "penalty": 10
+            "penalty": 15
           }
         ]
       },
       {
         "id": "dependency",
         "label": "dependency — レジスタ演算より遅くする",
-        "points": 50,
-        "wrongAnswerPenalty": 16,
+        "points": 75,
+        "wrongAnswerPenalty": 15,
         "hints": [
           {
             "id": "dependency-hint-1",
             "content": "命令は 1 個のままです。 レジスタだけで完結する演算は、この機械では 1 サイクル前後で終わります。 メモリに触れる命令は、当たり所によって桁が変わります。 %rdi には arena の先頭が入っています。",
-            "penalty": 20
+            "penalty": 35
           }
         ]
       },
       {
         "id": "miss",
         "label": "miss — 機械が予測できないメモリまで届かせる",
-        "points": 60,
-        "wrongAnswerPenalty": 20,
+        "points": 90,
+        "wrongAnswerPenalty": 15,
         "hints": [
           {
             "id": "miss-hint-1",
             "content": "固定アドレスや等間隔のアドレスは prefetcher に読まれます。 arena は「各行が次の行のアドレスを持つ環」です。 ロードの結果を次のロードのアドレスにすると、機械は次にどこを触るか知りようがありません。",
-            "penalty": 24
+            "penalty": 40
           }
         ]
       },
       {
         "id": "generalize",
         "label": "generalize — 見ていない seed でも成り立たせる",
-        "points": 50,
-        "wrongAnswerPenalty": 16,
+        "points": 75,
+        "wrongAnswerPenalty": 15,
         "hints": [
           {
             "id": "generalize-hint-1",
             "content": "この checkpoint は、あなたが一度も測っていない seed で採点します。 特定の seed の arena 形状に合わせた定数オフセットは効きません。 環そのものを辿る解答は seed に依存しません。",
-            "penalty": 20
+            "penalty": 35
           }
         ]
       }
