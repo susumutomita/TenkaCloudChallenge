@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fixtures.generate import health_token
-from verifier.grader import Rejected, grade
+from tests.hidden.check_candidate import Rejected, grade
 
 ROOT = Path(__file__).resolve().parents[1]
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")

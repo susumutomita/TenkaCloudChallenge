@@ -12,8 +12,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from verifier import grader
-from verifier.grader import Rejected
+from tests.hidden import check_candidate as grader
+from tests.hidden.check_candidate import Rejected
 
 SEED = 20260816
 

@@ -1,4 +1,6 @@
-"""Grade a candidate: read what it is before trusting what it measured.
+"""The hidden properties that decide the code checkpoints.
+
+Grade a candidate: read what it is before trusting what it measured.
 
 The order matters. A submission is disassembled and judged as text first, and
 only a submission that survives that is ever built and run. A candidate that
@@ -28,7 +30,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 HARNESS = ROOT / "harness"
 
 BEGIN = "tc_measured_begin"

@@ -23,10 +23,11 @@ USER lab
 CMD ["python3", "workbench/server.py"]
 
 # Hidden verifier: a separate image on the Compose-internal network. It carries
-# the grader and the harness, and it does not carry the reference answer.
+# the hidden checks and the harness, and it does not carry the reference answer.
 FROM base AS verifier
 COPY --chown=lab:lab fixtures/ ./fixtures/
 COPY --chown=lab:lab harness/ ./harness/
+COPY --chown=lab:lab tests/hidden/ ./tests/hidden/
 COPY --chown=lab:lab verifier/ ./verifier/
 USER lab
 CMD ["python3", "verifier/server.py"]
@@ -35,6 +36,7 @@ CMD ["python3", "verifier/server.py"]
 # accidental answer delivery, not a participant who controls Docker from
 # inspecting it. See TEMPLATE.md "Assurance scope" for the boundary claim.
 FROM participant AS author
+COPY --chown=lab:lab tests/hidden/ ./tests/hidden/
 COPY --chown=lab:lab verifier/ ./verifier/
 COPY --chown=lab:lab reference/ ./reference/
 COPY --chown=lab:lab mutation.py ./mutation.py
