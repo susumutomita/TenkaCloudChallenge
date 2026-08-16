@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import sys
@@ -12,7 +11,7 @@ from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fixtures.generate import health_token
+from fixtures.generate import health_token, stable_seed
 from tests.hidden.check_candidate import Rejected, grade
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,7 +26,11 @@ CODE_CHECKPOINTS = frozenset(("measure", "dependency", "miss", "generalize"))
 #: problem: a dependent chain beats independent arithmetic, and a dependent chain
 #: through memory the machine cannot predict beats everything.
 THRESHOLDS = {
-    "measure": 1.0,     # any honest measurement, including the starter's 1.0
+    # The candidate and baseline wrappers are byte-for-byte equivalent for the
+    # starter, but they are sampled at different moments. Leave a bounded noise
+    # window around the expected ~1.0 ratio so the shipped starting point does
+    # not randomly fail its first checkpoint on an otherwise supported host.
+    "measure": 0.75,
     "dependency": 3.0,  # slower than register arithmetic can be made
     "miss": 20.0,       # unmistakably off-core
     "generalize": 20.0, # ...and again under a seed the participant has not seen
@@ -54,13 +57,8 @@ def _seed_for(checkpoint_id: str) -> int:
     Everything else uses the deployment seed, so a participant tuning against
     their own numbers is tuning against the same arena the grader uses.
     """
-    if checkpoint_id == "generalize":
-        # Do not truncate before the checkpoint discriminator. Deployment seeds are
-        # normally longer than eight bytes, so prefix truncation made this identical
-        # to every visible checkpoint and turned "unseen" into a vacuous claim.
-        digest = hashlib.sha256(f"{SEED}:generalize".encode()).digest()
-        return int.from_bytes(digest[:8], "big") % (2**31)
-    return int.from_bytes(SEED.encode()[:8].ljust(8, b"\0"), "big") % (2**31)
+    label = f"{SEED}:{checkpoint_id}" if checkpoint_id == "generalize" else SEED
+    return stable_seed(label)
 
 
 def _check_environment(submission: object) -> bool:

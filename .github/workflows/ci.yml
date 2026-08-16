@@ -290,18 +290,132 @@ jobs:
       - name: Verify isolated npm-provenance triage runtime and cleanup
         run: bun run signed-npm:runtime
 
+  asm-worst-case-latency-runtime:
+    name: asm-worst-case-latency native-amd64 Docker runtime
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      IMAGE: tcc-asm-worst-case-latency:${{ github.run_id }}-${{ github.run_attempt }}
+      COMPOSE_FILE: challenges/asm-worst-case-latency/local/docker-compose.yml
+      COMPOSE_PROJECT_NAME: tcc-asm-latency-${{ github.run_id }}-${{ github.run_attempt }}
+      FLAG_SEED: exact-head-http-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      # Pull-request workflows normally checkout refs/pull/<n>/merge. Timing proof
+      # must name and execute the exact candidate head instead of a synthetic merge.
+      - name: Checkout exact event head
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Require the exact native-amd64 host contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(uname -s)" = Linux
+          test "$(uname -m)" = x86_64
+          case "$(docker version --format '{{.Server.Os}}/{{.Server.Arch}}')" in
+            linux/amd64|linux/x86_64) ;;
+            *) echo "Docker server is not native linux/amd64" >&2; exit 1 ;;
+          esac
+          uname -a
+          lscpu
+
+      - name: Build the exact-head author image
+        run: |
+          docker build --target author -t "$IMAGE" \
+            challenges/asm-worst-case-latency/local
+          test "$(docker image inspect "$IMAGE" --format '{{.Architecture}}')" = amd64
+
+      - name: Require declared CPU features inside the container
+        run: |
+          docker run --rm --network none "$IMAGE" python3 -c '
+          import json
+          from fixtures.generate import host_report
+          report = host_report()
+          print(json.dumps(report, indent=2, sort_keys=True))
+          required = ("rdtscp", "constant_tsc", "nonstop_tsc", "clflush")
+          if report["architecture"] != "x86_64":
+              raise SystemExit("container is not native x86_64")
+          missing = [name for name in required if not report["cpuFlags"].get(name)]
+          if missing:
+              raise SystemExit(f"missing required CPU flags: {missing}")
+          '
+          docker run --rm --network none "$IMAGE" sh -c \
+            'gcc --version | head -n1; objdump --version | head -n1; python3 --version; dpkg-query -W gcc binutils libc6-dev python3'
+
+      - name: Prove the reference margin across seeds and repeated clean runs
+        shell: bash
+        run: |
+          set -euo pipefail
+          scores="$RUNNER_TEMP/asm-worst-case-latency-reference-scores.txt"
+          : > "$scores"
+          for seed in 7 42 1234 20260816; do
+            for repetition in 1 2 3; do
+              score="$(docker run --rm --network none "$IMAGE" python3 -c '
+          from pathlib import Path
+          import sys
+          from tests.hidden.check_candidate import grade
+          from verifier.server import THRESHOLDS
+          expected = {"measure": 0.75, "dependency": 3.0, "miss": 20.0, "generalize": 20.0}
+          if THRESHOLDS != expected:
+              raise SystemExit(f"checkpoint contract drifted: {THRESHOLDS!r}")
+          score = grade(
+              Path("reference/candidate.S").read_text(encoding="utf-8"),
+              int(sys.argv[1]),
+          )["normalizedScore"]
+          print(f"{score:.8f}")
+          ' "$seed")"
+              printf 'seed=%s repetition=%s reference=%.2fx required-margin=40.00x\n' \
+                "$seed" "$repetition" "$score"
+              printf '%s\n' "$score" >> "$scores"
+            done
+          done
+          python3 - "$scores" <<'PY'
+          import sys
+          from pathlib import Path
+          scores = [float(line) for line in Path(sys.argv[1]).read_text().splitlines()]
+          if len(scores) != 12 or min(scores) < 40.0:
+              raise SystemExit(f"reference lacks a stable 2x margin over the 20x checkpoint: {scores}")
+          print(f"reference summary: runs={len(scores)} min={min(scores):.2f}x max={max(scores):.2f}x")
+          PY
+
+      - name: Reject boundary mutations and the former loop-count score bypass
+        run: docker run --rm --network none -e FLAG_SEED=exact-head-ci "$IMAGE" python3 mutation.py
+
+      - name: Exercise the real Compose Workbench and verifier HTTP path
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" up --build --detach
+          for service in workbench verifier; do
+            container_id="$(docker compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" ps -q "$service")"
+            test -n "$container_id"
+            test "$(docker inspect "$container_id" --format '{{.HostConfig.NanoCpus}}')" = 1000000000
+          done
+          python3 scripts/asm-worst-case-latency-http-smoke.py
+
+      - name: Remove the exact runtime resources
+        if: always()
+        run: |
+          docker compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" \
+            down --volumes --remove-orphans --rmi local || true
+          docker image rm -f "$IMAGE" >/dev/null 2>&1 || true
+
   validate:
     # One stable name in front of the matrix. `if: always()` is what makes this
     # run when a shard fails — and it is also what makes `needs:` stop gating, so
     # the result has to be asserted explicitly rather than implied.
-    needs: [suite, solvability, checks, rls-runtime, eventbridge-runtime, github-oidc-runtime, signed-npm-runtime]
+    needs: [suite, solvability, checks, rls-runtime, eventbridge-runtime, github-oidc-runtime, signed-npm-runtime, asm-worst-case-latency-runtime]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Require every job to have succeeded
         run: |
-          echo "suite=${{ needs.suite.result }} solvability=${{ needs.solvability.result }} checks=${{ needs.checks.result }} rls-runtime=${{ needs.rls-runtime.result }} eventbridge-runtime=${{ needs.eventbridge-runtime.result }} github-oidc-runtime=${{ needs.github-oidc-runtime.result }} signed-npm-runtime=${{ needs.signed-npm-runtime.result }}"
+          echo "suite=${{ needs.suite.result }} solvability=${{ needs.solvability.result }} checks=${{ needs.checks.result }} rls-runtime=${{ needs.rls-runtime.result }} eventbridge-runtime=${{ needs.eventbridge-runtime.result }} github-oidc-runtime=${{ needs.github-oidc-runtime.result }} signed-npm-runtime=${{ needs.signed-npm-runtime.result }} asm-worst-case-latency-runtime=${{ needs.asm-worst-case-latency-runtime.result }}"
           test "${{ needs.suite.result }}" = "success"
           test "${{ needs.solvability.result }}" = "success"
           test "${{ needs.checks.result }}" = "success"
@@ -309,3 +423,4 @@ jobs:
           test "${{ needs.eventbridge-runtime.result }}" = "success"
           test "${{ needs.github-oidc-runtime.result }}" = "success"
           test "${{ needs.signed-npm-runtime.result }}" = "success"
+          test "${{ needs.asm-worst-case-latency-runtime.result }}" = "success"

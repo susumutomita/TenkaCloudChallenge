@@ -19,24 +19,23 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 SUBMISSION = Path(os.environ.get("SUBMISSION_DIR", ROOT / "starter")) / "candidate.S"
 
-sys.path.insert(0, str(ROOT / "harness"))
-from splice import baseline_source  # noqa: E402 - path set above
-from splice import build as splice_build  # noqa: E402
+sys.path.insert(0, str(ROOT))
+from harness.candidate import CandidateFormatError, build_candidate_object, render_candidate
 
 
 def _build(workspace: Path) -> Path:
-    """Assemble what the grader assembles: the author's frame with your one
-    instruction spliced in. Nothing outside the markers reaches the assembler."""
-    spliced = workspace / "candidate.S"
-    spliced.write_text(splice_build(SUBMISSION.read_text(encoding="utf-8")), encoding="utf-8")
-    baseline = workspace / "baseline.S"
-    baseline.write_text(baseline_source(), encoding="utf-8")
+    candidate = workspace / "candidate.o"
+    try:
+        build_candidate_object(SUBMISSION.read_text(encoding="utf-8"), candidate)
+    except CandidateFormatError as error:
+        raise AssertionError(str(error)) from None
+
     binary = workspace / "measure"
     build = subprocess.run(
         [
             "gcc", "-O2", "-I", str(ROOT / "harness"), "-o", str(binary),
             str(ROOT / "harness" / "measure.c"), str(ROOT / "harness" / "arena.c"),
-            str(baseline), str(spliced),
+            str(ROOT / "harness" / "baseline.S"), str(candidate),
         ],
         capture_output=True, text=True, timeout=120, check=False,
     )
@@ -61,10 +60,11 @@ def test_the_candidate_assembles_with_the_harness() -> None:
         _build(Path(workspace))
 
 
-def test_the_measured_region_is_marked() -> None:
-    source = SUBMISSION.read_text(encoding="utf-8")
-    assert "tc_measured_begin" in source, "the measured region needs its opening marker"
-    assert "tc_measured_end" in source, "the measured region needs its closing marker"
+def test_the_submission_is_one_instruction() -> None:
+    rendered = render_candidate(SUBMISSION.read_text(encoding="utf-8"))
+    assert ".rept TC_SPIN_COUNT" in rendered
+    assert "tc_measured_begin" in rendered
+    assert "tc_measured_end" in rendered
 
 
 def test_the_measurement_produces_a_result() -> None:
@@ -81,18 +81,21 @@ def test_most_samples_stay_on_one_cpu() -> None:
 
 
 def test_the_score_is_a_ratio_not_a_cycle_count() -> None:
-    # Two seeds shuffle the arena differently. The baseline is the same
-    # instruction either way, so its ratio to itself stays 1.0 whatever the
-    # machine's absolute speed is.
+    # The harness reports the ratio it actually measured, not either raw cycle
+    # count. Two seeds make this load-bearing for both result objects.
     first = _measure(seed=1)
     second = _measure(seed=2)
-    assert first["baseline"]["robustCycles"] > 0 and second["baseline"]["robustCycles"] > 0
+    for result in (first, second):
+        baseline = result["baseline"]["robustCycles"]
+        candidate = result["candidate"]["robustCycles"]
+        assert baseline > 0
+        expected = candidate / baseline
+        assert abs(result["normalizedScore"] - expected) <= 0.0001
 
 
 def test_workbench_contract() -> None:
     if os.environ.get("BROWSER_PUBLIC_TESTS") == "1":
         return
-    sys.path.insert(0, str(ROOT))
     from workbench import server
 
     config = server.config_payload()

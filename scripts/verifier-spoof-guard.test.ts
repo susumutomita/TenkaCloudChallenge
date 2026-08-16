@@ -56,11 +56,19 @@ describe("local-play verifier verdict spoofing", () => {
       const runner = runnerBlock(source);
 
       if (runner === null) {
-        it("should not interpret participant Python when no Python runner exists", () => {
-          // Native-code labs can grade assembly or another non-Python artifact directly.
-          // They are outside the atexit spoof described above, but must not silently
-          // replace the explicit runner with eval/exec of participant text.
+        it("should be the reviewed native-code verifier, not a missing Python runner", () => {
+          // Keep this exception problem-specific: otherwise deleting RUNNER from
+          // any Python verifier would make the catalog-wide hard-exit gate vanish.
+          expect(problem).toBe("asm-worst-case-latency");
+          const checker = readFileSync(
+            join(REPO_ROOT, "challenges", problem, "local", "tests", "hidden", "check_candidate.py"),
+            "utf8",
+          );
+          expect(checker).toContain("build_candidate_object(source, obj)");
+          expect(checker).toContain("subprocess.run(");
+          expect(source).not.toContain("_run_submission");
           expect(source).not.toMatch(/\b(?:eval|exec)\s*\(/);
+          expect(checker).not.toMatch(/\b(?:eval|exec)\s*\(/);
         });
         return;
       }

@@ -1,8 +1,9 @@
-/* The measurement harness. The author owns this file; the participant owns only
- * candidate.S. Everything that makes a cycle count trustworthy lives here:
+/* The measurement harness. The participant supplies one instruction line; the
+ * shared safe builder places only that instruction in a fixed author wrapper.
+ * Everything that makes a cycle count trustworthy lives in author-owned code:
  * serialization around the fence posts, warm-up, a fixed repeat count, a robust
- * statistic over many samples, and the interrupt/migration evidence that decides
- * whether a sample may be counted at all.
+ * statistic over many samples, migration evidence, and a predeclared rule for
+ * discarding extreme high-side outliers consistent with an interrupt.
  *
  * The participant cannot make their instruction look slow by making the harness
  * sloppy, because they do not get to touch the harness.
@@ -18,15 +19,16 @@
 
 #include "arena.h"
 
-/* Provided by candidate.S and reference/solution.S: run the instruction under
- * test SPIN_COUNT times over the arena, and return the value it produced so the
- * compiler cannot decide the work was pointless. */
+/* Produced by the safe builder, never linked from the participant's original
+ * candidate.S: fixed prologue, exactly SPIN_COUNT copies, and fixed epilogue.
+ * The timer fences the whole call, so baseline.S has the same wrapper overhead. */
 extern uint64_t tc_candidate(void *arena, uint64_t seed);
 /* The fixed comparison point: a dependent chain of the cheapest arithmetic. */
 extern uint64_t tc_baseline(void *arena, uint64_t seed);
 
 #define SAMPLES 101
 #define WARMUP 8
+#define INTERRUPT_OUTLIER_MULTIPLIER 8
 
 static inline uint64_t fence_open(void) {
     unsigned lo, hi;
@@ -67,8 +69,31 @@ typedef struct {
     uint64_t cycles[SAMPLES];
     int kept;
     int rejected_migration;
+    int rejected_interrupt;
     uint64_t checksum;
 } run_t;
+
+/* A migration has direct TSC_AUX evidence. An interrupt does not, so do not
+ * pretend to identify one by name: after sorting, discard only an extreme
+ * high-side sample (more than 8x the run median). This predeclared rule cannot
+ * promote a lucky outlier into the score and leaves a consistently slow
+ * instruction untouched. */
+static void reject_interrupt_outliers(run_t *run) {
+    if (run->kept <= 0) return;
+    qsort(run->cycles, (size_t)run->kept, sizeof(uint64_t), compare_u64);
+    uint64_t median = run->cycles[run->kept / 2];
+    int retained = 0;
+    for (int i = 0; i < run->kept; i++) {
+        uint64_t value = run->cycles[i];
+        if (median > 0 && median <= UINT64_MAX / INTERRUPT_OUTLIER_MULTIPLIER &&
+            value > median * INTERRUPT_OUTLIER_MULTIPLIER) {
+            run->rejected_interrupt++;
+            continue;
+        }
+        run->cycles[retained++] = value;
+    }
+    run->kept = retained;
+}
 
 /* One measured run of `fn`. Samples that changed CPU mid-measurement are
  * rejected rather than kept: a migration inflates the delta, and rewarding it
@@ -79,13 +104,17 @@ static run_t measure(uint64_t (*fn)(void *, uint64_t), void *arena, uint64_t see
     memset(&run, 0, sizeof(run));
 
     for (int i = 0; i < WARMUP; i++) {
-        run.checksum ^= fn(tc_arena_entry(arena, -i - 1), seed);
+        void *entry = tc_arena_entry(arena, -i - 1);
+        tc_arena_prepare(entry);
+        run.checksum ^= fn(entry, seed);
     }
 
     for (int i = 0; i < SAMPLES; i++) {
         /* A fresh entry point per sample: see tc_arena_entry. Chosen before the
-         * fence posts so the address computation is not inside the measurement. */
+         * fence posts so address discovery and cache preparation are not inside
+         * the measurement. */
         void *entry = tc_arena_entry(arena, i);
+        tc_arena_prepare(entry);
         uint32_t cpu_before = current_cpu();
         uint64_t open = fence_open();
         run.checksum ^= fn(entry, seed);
@@ -99,7 +128,7 @@ static run_t measure(uint64_t (*fn)(void *, uint64_t), void *arena, uint64_t see
         run.cycles[run.kept++] = close - open;
     }
 
-    qsort(run.cycles, (size_t)run.kept, sizeof(uint64_t), compare_u64);
+    reject_interrupt_outliers(&run);
     return run;
 }
 
@@ -115,12 +144,31 @@ int main(int argc, char **argv) {
     uint64_t seed = 0;
     if (argc > 1) seed = strtoull(argv[1], NULL, 10);
 
-    /* Pin to one CPU so migrations are rare rather than routine. The rejection
-     * above is what makes the result honest; this only keeps the yield high. */
-    cpu_set_t set;
-    CPU_ZERO(&set);
-    CPU_SET(0, &set);
-    (void)sched_setaffinity(0, sizeof(set), &set);
+    /* Pin to the first CPU this container is actually allowed to use. CPU 0 is
+     * often outside a container's cpuset; silently ignoring EINVAL would make
+     * affinity a comment rather than a contract. */
+    cpu_set_t allowed, selected;
+    if (sched_getaffinity(0, sizeof(allowed), &allowed) != 0) {
+        perror("sched_getaffinity");
+        return 3;
+    }
+    int selected_cpu = -1;
+    for (int cpu = 0; cpu < CPU_SETSIZE; cpu++) {
+        if (CPU_ISSET(cpu, &allowed)) {
+            selected_cpu = cpu;
+            break;
+        }
+    }
+    if (selected_cpu < 0) {
+        fprintf(stderr, "no CPU is available to the measurement process\n");
+        return 3;
+    }
+    CPU_ZERO(&selected);
+    CPU_SET(selected_cpu, &selected);
+    if (sched_setaffinity(0, sizeof(selected), &selected) != 0) {
+        perror("sched_setaffinity");
+        return 3;
+    }
 
     void *arena = tc_arena_create(seed);
     if (arena == NULL) {
@@ -138,10 +186,16 @@ int main(int argc, char **argv) {
     printf("  \"seed\": %llu,\n", (unsigned long long)seed);
     printf("  \"spins\": %d,\n", TC_SPIN_COUNT);
     printf("  \"samples\": %d,\n", SAMPLES);
-    printf("  \"baseline\": {\"robustCycles\": %llu, \"kept\": %d, \"rejected\": %d},\n",
-           (unsigned long long)base_cycles, base.kept, base.rejected_migration);
-    printf("  \"candidate\": {\"robustCycles\": %llu, \"kept\": %d, \"rejected\": %d},\n",
-           (unsigned long long)cand_cycles, cand.kept, cand.rejected_migration);
+    printf("  \"baseline\": {\"robustCycles\": %llu, \"kept\": %d, "
+           "\"rejected\": %d, \"rejectedMigration\": %d, \"rejectedInterrupt\": %d},\n",
+           (unsigned long long)base_cycles, base.kept,
+           base.rejected_migration + base.rejected_interrupt,
+           base.rejected_migration, base.rejected_interrupt);
+    printf("  \"candidate\": {\"robustCycles\": %llu, \"kept\": %d, "
+           "\"rejected\": %d, \"rejectedMigration\": %d, \"rejectedInterrupt\": %d},\n",
+           (unsigned long long)cand_cycles, cand.kept,
+           cand.rejected_migration + cand.rejected_interrupt,
+           cand.rejected_migration, cand.rejected_interrupt);
     if (base_cycles > 0) {
         printf("  \"normalizedScore\": %.4f,\n", (double)cand_cycles / (double)base_cycles);
     } else {

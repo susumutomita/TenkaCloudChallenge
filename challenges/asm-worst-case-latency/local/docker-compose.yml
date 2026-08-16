@@ -30,10 +30,11 @@ services:
       interval: 2s
       timeout: 3s
       retries: 20
-    # The arena is 64 MiB and two of them can be live during a build; the limit
-    # is generous enough not to perturb the timing it is protecting.
+    # The arena is 64 MiB; the limit leaves headroom for its construction and
+    # for the compiler without perturbing the timing it is protecting.
     mem_limit: 1g
     pids_limit: 128
+    cpus: "1.0"
 
   verifier:
     build:
@@ -59,6 +60,7 @@ services:
       retries: 20
     mem_limit: 1g
     pids_limit: 128
+    cpus: "1.0"
 
 networks:
   lab:

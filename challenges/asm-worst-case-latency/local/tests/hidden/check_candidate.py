@@ -2,23 +2,23 @@
 
 Grade a candidate: read what it is before trusting what it measured.
 
-The order matters. A submission is disassembled and judged as text first, and
-only a submission that survives that is ever built and run. A candidate that
+The order matters. A submission is rendered into the fixed wrapper, assembled,
+then disassembled and judged before it is linked or run. A candidate that
 sleeps, syscalls, or unrolls its own loop must not get as far as producing a
 number, because a number is persuasive and the reason it is wrong is not.
 
 What the measured region must be:
 
-  exactly_one_instruction   between tc_measured_begin and tc_measured_end the
-                            frame emitted one instruction, repeated TC_SPIN_COUNT
-                            times, and it is not control flow
-  no_forbidden_instruction  no syscall, no privileged instruction, no timing
-                            instruction of the candidate's own, no fence that
-                            would let it measure something other than itself
+  exactly_one_instruction   one submitted instruction is expanded exactly the
+                            author-owned fixed count, and it is not control flow
+  reviewed_instruction_policy
+                            only the positive scalar-integer/GPR set; no syscall,
+                            privileged, SIMD/x87, random, timing, cache, or
+                            unknown instruction and no memory write
   reject_migration_or_interrupt
                             samples whose CPU changed mid-measurement are
-                            dropped by the harness; a run that kept too few
-                            samples is not a result
+                            dropped, as are extreme high-side outliers under a
+                            predeclared rule; too few clean samples is no result
   normalized_score          candidate cycles over baseline cycles, measured in
                             the same process on the same host
 """
@@ -26,199 +26,48 @@ What the measured region must be:
 from __future__ import annotations
 
 import json
-import re
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 
+from harness.candidate import (
+    SPIN_COUNT,
+    CandidateFormatError,
+    build_candidate_object,
+)
+from fixtures.generate import host_report
+
 ROOT = Path(__file__).resolve().parents[2]
 HARNESS = ROOT / "harness"
-
-sys.path.insert(0, str(HARNESS))
-
-from splice import SPIN_COUNT  # noqa: E402
-from splice import Rejected as SpliceRejected  # noqa: E402 - path set above
-from splice import baseline_source  # noqa: E402
-from splice import build as splice_build  # noqa: E402
-
-BEGIN = "tc_measured_begin"
-END = "tc_measured_end"
-
-#: Instructions that would make the measurement mean something else. Control
-#: flow is separate (see CONTROL_FLOW) because it is rejected for a different
-#: reason: it makes "one instruction" untrue rather than dishonest.
-FORBIDDEN = {
-    # asking the OS for time, or for anything at all
-    "syscall", "sysenter", "int", "int3", "int1", "into",
-    # timing instructions of the candidate's own: the harness owns the clock
-    "rdtsc", "rdtscp", "rdpmc", "rdpid",
-    # privileged / ring-0
-    "hlt", "cli", "sti", "wrmsr", "rdmsr", "invd", "wbinvd", "invlpg",
-    "lgdt", "lidt", "ltr", "lldt", "clts", "swapgs", "sysret", "sysexit",
-    "vmcall", "vmlaunch", "vmresume", "vmxon", "vmxoff", "monitor", "mwait",
-    # cache control: flushing a line you are about to load is measuring the
-    # flush, and the arena already guarantees the miss
-    "clflush", "clflushopt", "clwb", "wbnoinvd", "prefetchw",
-    # stalling on purpose without doing work
-    "pause", "tpause", "umwait", "umonitor",
-}
-
-CONTROL_FLOW_PREFIXES = ("j", "loop", "call", "ret", "iret")
-CONTROL_FLOW = {"jmp", "call", "ret", "retq", "iret", "iretq", "loop", "loope", "loopne"}
 
 
 class Rejected(Exception):
     """The submission is not gradeable. The message is shown to the participant."""
 
 
-def _objdump(obj: Path) -> list[tuple[str, str]]:
-    """Disassemble to (symbol-or-label, mnemonic) pairs, in address order."""
-    result = subprocess.run(
-        ["objdump", "-d", "--no-show-raw-insn", str(obj)],
-        capture_output=True,
-        text=True,
-        timeout=30,
-        check=False,
-    )
-    if result.returncode != 0:
-        raise Rejected("the submission could not be disassembled")
-
-    rows: list[tuple[str, str]] = []
-    for line in result.stdout.splitlines():
-        label = re.match(r"^[0-9a-f]+ <([^>]+)>:", line.strip())
-        if label is not None:
-            rows.append(("label:" + label.group(1), ""))
-            continue
-        body = re.match(r"^\s+[0-9a-f]+:\s+([a-z][a-z0-9.]*)", line)
-        if body is not None:
-            rows.append(("insn", body.group(1)))
-    return rows
-
-
-def measured_region(rows: list[tuple[str, str]]) -> list[str]:
-    """The instructions between the two markers, in order.
-
-    The markers are labels in the object file, so they survive assembly without
-    becoming instructions themselves.
-    """
-    inside = False
-    found = False
-    region: list[str] = []
-    for kind, value in rows:
-        if kind == "label:" + BEGIN:
-            inside, found = True, True
-            continue
-        if kind == "label:" + END:
-            inside = False
-            continue
-        if inside and kind == "insn":
-            region.append(value)
-    if not found:
-        raise Rejected(f"the {BEGIN} marker is missing from the submission")
-    return region
-
-
-def exactly_one_instruction(region: list[str]) -> None:
-    """One instruction, unrolled by the frame, and one that stays in the region.
-
-    The frame emits TC_SPIN_COUNT copies of the single spliced line rather than
-    looping, so the region read back from the object is that many copies of one
-    mnemonic. Anything else means the frame assembled something it was not given.
-    """
-    if len(region) == 0:
-        raise Rejected("the measured region is empty: there is nothing to time")
-    distinct = sorted(set(region))
-    if len(distinct) > 1:
-        raise Rejected(
-            f"the measured region holds {len(distinct)} different instructions "
-            f"({', '.join(distinct)}); the contract is exactly one"
-        )
-    if len(region) != SPIN_COUNT:
-        raise Rejected(
-            f"the measured region holds {len(region)} instructions; the frame repeats the "
-            f"one instruction {SPIN_COUNT} times"
-        )
-    mnemonic = distinct[0]
-    if mnemonic in CONTROL_FLOW or mnemonic.startswith(CONTROL_FLOW_PREFIXES):
-        raise Rejected(
-            f"'{mnemonic}' is control flow: the measured region would not be one instruction"
-        )
-
-
-def no_forbidden_instruction(region: list[str]) -> None:
-    for mnemonic in region:
-        base = mnemonic.rstrip("bwlqt") or mnemonic
-        if mnemonic in FORBIDDEN or base in FORBIDDEN:
-            raise Rejected(
-                f"'{mnemonic}' is not allowed in the measured region: the harness owns "
-                "the clock, the scheduler, and the cache state"
-            )
-
-
-def self_contained(rows: list[tuple[str, str]], obj: Path) -> None:
-    """The submission may not reach outside itself, anywhere in the file.
-
-    Restricting only the measured region is not enough. The submission is linked
-    into the harness and runs in its process, so setup code that can call libc can
-    also decide what the harness's verdict looks like: register an `atexit`
-    handler, write a fabricated result with raw `write(2)`, then `_exit(2)` to
-    discard the buffered real one, and the grader reads the fabrication as the
-    measurement. That is the same verdict-spoofing class
-    `scripts/verifier-spoof-guard.test.ts` exists for, arriving through native code
-    instead of a Python import.
-
-    Two rules close it. No `call` and no forbidden instruction anywhere in the
-    object, and no undefined symbol: a submission that references `atexit`,
-    `write` or anything else it did not define is asking the linker for a way out
-    of its own file. Setup needs registers and constants, not libc.
-    """
-    for kind, mnemonic in rows:
-        if kind != "insn":
-            continue
-        base = mnemonic.rstrip("bwlqt") or mnemonic
-        if mnemonic.startswith("call"):
-            raise Rejected(
-                f"'{mnemonic}' calls out of the submission; setup may use registers and "
-                "constants only, so that nothing here can outlive the measurement"
-            )
-        if mnemonic in FORBIDDEN or base in FORBIDDEN:
-            raise Rejected(
-                f"'{mnemonic}' is not allowed anywhere in the submission: the harness owns "
-                "the clock, the scheduler, and the cache state"
-            )
-
-    result = subprocess.run(
-        ["nm", "--undefined-only", str(obj)],
-        capture_output=True,
-        text=True,
-        timeout=30,
-        check=False,
-    )
-    undefined = [line.split()[-1] for line in result.stdout.splitlines() if line.strip()]
-    if undefined:
-        raise Rejected(
-            "the submission references symbols it does not define "
-            f"({', '.join(sorted(set(undefined))[:5])}); it must stand on its own"
-        )
-
-
-def well_formed_result(run: object) -> dict:
-    """The harness's output, checked before any of it is believed.
-
-    A submission influences what lands on stdout, so "it parsed as JSON" is not the
-    same as "it is a measurement". Anything missing or mistyped is a failed
-    checkpoint, not a crashed grader.
-    """
+def well_formed_result(run: object, seed: int) -> dict:
+    """Require the fixed harness schema before trusting any reported number."""
     if not isinstance(run, dict):
         raise Rejected("the measurement did not produce a result object")
+    if run.get("seed") != seed or run.get("spins") != SPIN_COUNT or run.get("samples") != 101:
+        raise Rejected("the measurement metadata does not match the fixed harness")
     for side in ("baseline", "candidate"):
         block = run.get(side)
         if not isinstance(block, dict):
             raise Rejected(f"the measurement reported no {side}")
-        for field in ("robustCycles", "kept", "rejected"):
-            if not isinstance(block.get(field), int):
-                raise Rejected(f"the measurement's {side}.{field} is not a number")
+        values = [block.get(field) for field in ("robustCycles", "kept", "rejected")]
+        if not all(isinstance(value, int) and not isinstance(value, bool) for value in values):
+            raise Rejected(f"the measurement's {side} fields are not integers")
+        if values[0] < 0 or values[1] < 0 or values[2] < 0 or values[1] + values[2] != 101:
+            raise Rejected(f"the measurement's {side} sample accounting is invalid")
+        breakdown = [block.get(field) for field in ("rejectedMigration", "rejectedInterrupt")]
+        if not all(isinstance(value, int) and not isinstance(value, bool) for value in breakdown):
+            raise Rejected(f"the measurement's {side} rejection evidence is missing")
+        if any(value < 0 for value in breakdown) or sum(breakdown) != values[2]:
+            raise Rejected(f"the measurement's {side} rejection evidence is invalid")
+    checksum = run.get("checksum")
+    if not isinstance(checksum, str) or not checksum or any(c not in "0123456789abcdef" for c in checksum):
+        raise Rejected("the measurement checksum is invalid")
     return run
 
 
@@ -226,8 +75,9 @@ def reject_migration_or_interrupt(run: dict) -> None:
     """A run that could not keep enough clean samples is not a result.
 
     The harness drops samples whose CPU changed mid-measurement. If most of them
-    went, the host was too busy for the number to mean anything, and reporting it
-    anyway would turn scheduler noise into a score.
+    or extreme interrupt-like outliers went, the host was too busy for the
+    number to mean anything, and reporting it anyway would turn scheduler noise
+    into a score.
     """
     for side in ("baseline", "candidate"):
         kept = int(run[side]["kept"])
@@ -256,43 +106,18 @@ def build_and_run(source: str, seed: int) -> dict:
     """Assemble the candidate with the author's harness and run one measurement."""
     with tempfile.TemporaryDirectory() as workspace:
         work = Path(workspace)
-        # Only the one instruction survives; everything else that gets assembled is
-        # the author's wrapper. See harness/splice.py for why.
-        try:
-            spliced = splice_build(source)
-        except SpliceRejected as error:
-            raise Rejected(str(error)) from None
-        candidate = work / "candidate.S"
-        candidate.write_text(spliced, encoding="utf-8")
-        # The comparison point is the same frame with the cheapest arithmetic in
-        # it, generated here rather than kept as a file, so the prologue and
-        # epilogue divide out of the ratio exactly instead of approximately.
-        baseline = work / "baseline.S"
-        baseline.write_text(baseline_source(), encoding="utf-8")
-
         obj = work / "candidate.o"
-        assemble = subprocess.run(
-            ["gcc", "-c", "-o", str(obj), str(candidate)],
-            capture_output=True,
-            text=True,
-            timeout=60,
-            check=False,
-        )
-        if assemble.returncode != 0:
-            raise Rejected("the submission does not assemble:\n" + assemble.stderr[-2000:])
-
-        rows = _objdump(obj)
-        self_contained(rows, obj)
-        region = measured_region(rows)
-        exactly_one_instruction(region)
-        no_forbidden_instruction(region)
+        try:
+            build_candidate_object(source, obj)
+        except CandidateFormatError as error:
+            raise Rejected(str(error)) from None
 
         binary = work / "measure"
         link = subprocess.run(
             [
                 "gcc", "-O2", "-I", str(HARNESS), "-o", str(binary),
                 str(HARNESS / "measure.c"), str(HARNESS / "arena.c"),
-                str(baseline), str(obj),
+                str(HARNESS / "baseline.S"), str(obj),
             ],
             capture_output=True,
             text=True,
@@ -317,13 +142,9 @@ def build_and_run(source: str, seed: int) -> dict:
         except subprocess.TimeoutExpired:
             raise Rejected("the measurement did not finish within its time limit") from None
         if completed.returncode < 0:
-            # The two the frame produces on purpose, named so the reason is usable.
-            # See harness/wrapper.S.in and harness/arena.c: the frame leaves the
-            # instruction no writable memory and no stack to move.
             why = {
-                4: "the instruction moved the stack pointer, or this host cannot execute it",
-                11: "the instruction addressed memory it may not reach; the arena is read-only "
-                    "and every register the contract does not define is zero",
+                4: "the instruction changed the fixed call frame, or this host cannot execute it",
+                11: "the instruction addressed memory it may not reach; the arena is read-only",
             }.get(-completed.returncode, "the instruction under test did not run to completion")
             raise Rejected(f"the measurement was killed by signal {-completed.returncode}: {why}")
         if completed.returncode != 0:
@@ -336,7 +157,7 @@ def build_and_run(source: str, seed: int) -> dict:
 
 def grade(source: str, seed: int) -> dict:
     """The whole judgement: shape first, then the number."""
-    run = well_formed_result(build_and_run(source, seed))
+    run = well_formed_result(build_and_run(source, seed), seed)
     reject_migration_or_interrupt(run)
     score = normalized_score(run)
     return {
@@ -344,4 +165,5 @@ def grade(source: str, seed: int) -> dict:
         "baselineCycles": int(run["baseline"]["robustCycles"]),
         "candidateCycles": int(run["candidate"]["robustCycles"]),
         "keptSamples": int(run["candidate"]["kept"]),
+        "host": host_report(),
     }

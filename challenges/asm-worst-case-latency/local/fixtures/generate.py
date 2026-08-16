@@ -12,10 +12,17 @@ import hashlib
 import os
 import platform
 import re
+from pathlib import Path
 
 
 def health_token(seed: str) -> str:
     return f"latency-lab-{hashlib.sha256(seed.encode()).hexdigest()[:12]}"
+
+
+def stable_seed(label: str) -> int:
+    """Derive the same bounded measurement seed in every Python process."""
+    digest = hashlib.sha256(label.encode()).digest()
+    return int.from_bytes(digest[:8], "big") % (2**31)
 
 
 def _cpuinfo() -> dict[str, str]:
@@ -34,6 +41,17 @@ def _cpuinfo() -> dict[str, str]:
     return fields
 
 
+def _read_host_value(*paths: str) -> str | None:
+    for path in paths:
+        try:
+            value = Path(path).read_text(encoding="utf-8").strip()
+        except OSError:
+            continue
+        if value:
+            return value
+    return None
+
+
 def host_report() -> dict[str, object]:
     """What the result is only meaningful against.
 
@@ -42,15 +60,28 @@ def host_report() -> dict[str, object]:
     """
     fields = _cpuinfo()
     flags = set(fields.get("flags", "").split())
+    if "hypervisor" in flags:
+        hypervisor = _read_host_value(
+            "/sys/hypervisor/type",
+            "/sys/devices/virtual/dmi/id/product_name",
+        ) or "present (vendor unavailable)"
+    else:
+        hypervisor = "none detected"
+    governor = _read_host_value(
+        "/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor",
+    ) or "unavailable"
     return {
         "architecture": platform.machine(),
         "cpuModel": fields.get("model name", "unknown"),
         "microcode": fields.get("microcode", "unknown"),
         "kernel": platform.release(),
+        "hypervisor": hypervisor,
+        "governor": governor,
         "cpuFlags": {
             "rdtscp": "rdtscp" in flags,
             "constant_tsc": "constant_tsc" in flags,
             "nonstop_tsc": "nonstop_tsc" in flags,
+            "clflush": "clflush" in flags,
         },
         "cpuCount": os.cpu_count(),
     }
@@ -72,14 +103,14 @@ LATENCY_LADDER = [
 QUESTIONS = {
     "measure": {
         "question": (
-            "starter のスコアは 1.00 です。 baseline と同じ命令を測っているからです。 "
+            "starter のスコアは 1.00 前後です。 baseline と同じ命令を測っているからです。 "
             "この deployment の合言葉を貼って、測定環境が立ち上がったことを示してください。"
         ),
         "answerFormat": "<environment.healthToken の値をそのまま>",
         "i18n": {
             "en": {
                 "question": (
-                    "The starter scores 1.00, because it measures the same instruction the "
+                    "The starter scores around 1.00, because it measures the same instruction the "
                     "baseline does. Paste this deployment's pass phrase to show the "
                     "measurement environment came up."
                 ),
@@ -97,19 +128,23 @@ def evidence_blocks(seed: str) -> dict[str, object]:
         "measure": {
             **QUESTIONS["measure"],
             "contract": {
-                "measuredRegion": "between tc_measured_begin and tc_measured_end",
+                "measuredRegion": "author-owned wrapper: 64 copies of the submitted instruction",
                 "instructionsAllowed": 1,
+                "instructionPolicy": (
+                    "reviewed scalar-integer mnemonic; GPR operands only; "
+                    "memory reads use only (%r8) and require an explicit GPR result"
+                ),
                 "repeatsPerSample": 64,
                 "samples": 101,
-                "statistic": "median of samples that stayed on one CPU",
+                "statistic": "median after migration and predeclared high-outlier rejection",
                 "score": "candidate robust cycles / baseline robust cycles",
             },
             "arena": {
                 "bytes": 64 * 1024 * 1024,
                 "shape": "a single seed-shuffled pointer ring, one link per 64-byte line",
                 "headRegister": "%r8",
-                "access": "read-only: the measured instruction may follow the ring, not write to it",
-                "note": "each sample starts somewhere new in the ring",
+                "access": "read-only during measurement",
+                "note": "each sample starts elsewhere; its fixed path is flushed before timing",
             },
             "latencyLadder": LATENCY_LADDER,
         },

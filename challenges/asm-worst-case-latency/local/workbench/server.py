@@ -19,12 +19,9 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "harness"))
 
-from fixtures.generate import evidence_blocks, health_token
-from splice import Rejected as SpliceRejected
-from splice import baseline_source
-from splice import build as splice_build
+from fixtures.generate import evidence_blocks, health_token, host_report, stable_seed
+from harness.candidate import CandidateFormatError, build_candidate_object
 
 ROOT = Path(__file__).resolve().parents[1]
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
@@ -107,17 +104,15 @@ def run_public_tests(seed: str, files: object) -> dict[str, object]:
     with tempfile.TemporaryDirectory() as workspace:
         work = Path(workspace)
         try:
-            spliced = splice_build(source)
-        except SpliceRejected as error:
+            build_candidate_object(source, work / "candidate.o")
+        except CandidateFormatError as error:
             return {"passed": False, "output": str(error)}
-        (work / "candidate.S").write_text(spliced, encoding="utf-8")
-        (work / "baseline.S").write_text(baseline_source(), encoding="utf-8")
         binary = work / "measure"
         build = subprocess.run(
             [
                 "gcc", "-O2", "-I", str(ROOT / "harness"), "-o", str(binary),
                 str(ROOT / "harness" / "measure.c"), str(ROOT / "harness" / "arena.c"),
-                str(work / "baseline.S"), str(work / "candidate.S"),
+                str(ROOT / "harness" / "baseline.S"), str(work / "candidate.o"),
             ],
             capture_output=True, text=True, timeout=120, check=False,
         )
@@ -125,20 +120,33 @@ def run_public_tests(seed: str, files: object) -> dict[str, object]:
             return {"passed": False, "output": build.stderr[-MAX_OUTPUT_BYTES:]}
         try:
             completed = subprocess.run(
-                [str(binary), str(abs(hash(seed)) % (2**31))],
+                [str(binary), str(stable_seed(seed))],
                 capture_output=True, text=True, timeout=RUN_TIMEOUT_SECONDS, check=False,
             )
         except subprocess.TimeoutExpired:
             return {"passed": False, "output": "the measurement did not finish within its time limit."}
         if completed.returncode != 0:
             return {"passed": False, "output": "the measurement did not complete."}
-        return {"passed": True, "output": completed.stdout[-MAX_OUTPUT_BYTES:]}
+        try:
+            result = json.loads(completed.stdout)
+        except json.JSONDecodeError:
+            return {"passed": False, "output": "the measurement produced no readable result."}
+        if not isinstance(result, dict):
+            return {"passed": False, "output": "the measurement produced no result object."}
+        result["host"] = host_report()
+        output = json.dumps(result, ensure_ascii=False, indent=2)
+        return {"passed": True, "output": output[-MAX_OUTPUT_BYTES:]}
 
 
 def prepare_submissions(seed: str, files: object) -> dict[str, object]:
     source = _submission_source(files)
     if source is None:
         return {"ok": False, "output": "candidate.S must be a non-empty assembly file."}
+    try:
+        with tempfile.TemporaryDirectory() as workspace:
+            build_candidate_object(source, Path(workspace) / "candidate.o")
+    except CandidateFormatError as error:
+        return {"ok": False, "output": str(error)}
     return {
         "ok": True,
         "submissions": {

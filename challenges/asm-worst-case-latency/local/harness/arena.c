@@ -6,8 +6,9 @@
 #include <string.h>
 #include <sys/mman.h>
 
-/* 64 MiB: larger than the last-level cache of every host this problem declares
- * support for, so the ring cannot be resident. */
+/* 64 MiB keeps consecutive sample entry points far apart. The measured path is
+ * also explicitly evicted by tc_arena_prepare(), so correctness does not depend
+ * on assuming that every supported host has a smaller last-level cache. */
 #define ARENA_BYTES (64ULL * 1024 * 1024)
 #define LINE_BYTES 64
 #define SLOTS (ARENA_BYTES / LINE_BYTES)
@@ -44,12 +45,10 @@ void *tc_arena_create(uint64_t seed) {
     if (block == MAP_FAILED) return NULL;
     build_ring((void **)block, seed);
 
-    /* Read-only for the measurement. The instruction under test runs in this
-     * process, and the arena is the only mapped memory the frame leaves it a
-     * pointer to (see wrapper.S.in: every other register is zero). Making it
-     * unwritable means a store through that pointer faults instead of changing
-     * what the next sample measures — the operand rules in splice.py refuse the
-     * stores they can see, and this refuses the ones they cannot. */
+    /* Read-only for the measurement. candidate.py rejects decoded stores before
+     * link; this mapping is defense in depth for any implicit write the static
+     * boundary does not yet understand. A store through the supplied arena
+     * pointer faults instead of changing what later samples measure. */
     if (mprotect(block, ARENA_BYTES, PROT_READ) != 0) {
         munmap(block, ARENA_BYTES);
         return NULL;
@@ -68,4 +67,21 @@ void *tc_arena_entry(void *arena, int index) {
      * 101 samples spread across the whole ring rather than clustering. */
     size_t slot = ((size_t)(index & 0xffff) * 8191u) % SLOTS;
     return &lines[slot * (LINE_BYTES / sizeof(void *))];
+}
+
+void tc_arena_prepare(void *entry) {
+    void *path[TC_SPIN_COUNT];
+    void *cursor = entry;
+
+    /* Discover the exact dependent path while it is outside the timing fence,
+     * then evict every line after discovery. Flushing as we discover would make
+     * the next pointer load bring a previously flushed line back into cache. */
+    for (int i = 0; i < TC_SPIN_COUNT; i++) {
+        path[i] = cursor;
+        cursor = *(void **)cursor;
+    }
+    for (int i = 0; i < TC_SPIN_COUNT; i++) {
+        __asm__ __volatile__("clflush (%0)" : : "r"(path[i]) : "memory");
+    }
+    __asm__ __volatile__("mfence" : : : "memory");
 }
