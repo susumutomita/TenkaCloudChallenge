@@ -9,8 +9,9 @@ number, because a number is persuasive and the reason it is wrong is not.
 
 What the measured region must be:
 
-  exactly_one_instruction   between tc_measured_begin and tc_measured_end there
-                            is one instruction, and it is not control flow
+  exactly_one_instruction   between tc_measured_begin and tc_measured_end the
+                            frame emitted one instruction, repeated TC_SPIN_COUNT
+                            times, and it is not control flow
   no_forbidden_instruction  no syscall, no privileged instruction, no timing
                             instruction of the candidate's own, no fence that
                             would let it measure something other than itself
@@ -36,7 +37,9 @@ HARNESS = ROOT / "harness"
 
 sys.path.insert(0, str(HARNESS))
 
+from splice import SPIN_COUNT  # noqa: E402
 from splice import Rejected as SpliceRejected  # noqa: E402 - path set above
+from splice import baseline_source  # noqa: E402
 from splice import build as splice_build  # noqa: E402
 
 BEGIN = "tc_measured_begin"
@@ -117,15 +120,26 @@ def measured_region(rows: list[tuple[str, str]]) -> list[str]:
 
 
 def exactly_one_instruction(region: list[str]) -> None:
-    """One instruction, and one that stays inside the measured region."""
+    """One instruction, unrolled by the frame, and one that stays in the region.
+
+    The frame emits TC_SPIN_COUNT copies of the single spliced line rather than
+    looping, so the region read back from the object is that many copies of one
+    mnemonic. Anything else means the frame assembled something it was not given.
+    """
     if len(region) == 0:
         raise Rejected("the measured region is empty: there is nothing to time")
-    if len(region) > 1:
+    distinct = sorted(set(region))
+    if len(distinct) > 1:
         raise Rejected(
-            f"the measured region holds {len(region)} instructions ({', '.join(region)}); "
-            "the contract is exactly one"
+            f"the measured region holds {len(distinct)} different instructions "
+            f"({', '.join(distinct)}); the contract is exactly one"
         )
-    mnemonic = region[0]
+    if len(region) != SPIN_COUNT:
+        raise Rejected(
+            f"the measured region holds {len(region)} instructions; the frame repeats the "
+            f"one instruction {SPIN_COUNT} times"
+        )
+    mnemonic = distinct[0]
     if mnemonic in CONTROL_FLOW or mnemonic.startswith(CONTROL_FLOW_PREFIXES):
         raise Rejected(
             f"'{mnemonic}' is control flow: the measured region would not be one instruction"
@@ -250,6 +264,11 @@ def build_and_run(source: str, seed: int) -> dict:
             raise Rejected(str(error)) from None
         candidate = work / "candidate.S"
         candidate.write_text(spliced, encoding="utf-8")
+        # The comparison point is the same frame with the cheapest arithmetic in
+        # it, generated here rather than kept as a file, so the prologue and
+        # epilogue divide out of the ratio exactly instead of approximately.
+        baseline = work / "baseline.S"
+        baseline.write_text(baseline_source(), encoding="utf-8")
 
         obj = work / "candidate.o"
         assemble = subprocess.run(
@@ -273,7 +292,7 @@ def build_and_run(source: str, seed: int) -> dict:
             [
                 "gcc", "-O2", "-I", str(HARNESS), "-o", str(binary),
                 str(HARNESS / "measure.c"), str(HARNESS / "arena.c"),
-                str(HARNESS / "baseline.S"), str(obj),
+                str(baseline), str(obj),
             ],
             capture_output=True,
             text=True,

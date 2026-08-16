@@ -5,9 +5,13 @@
  * ahead of. Its size is chosen to exceed any last-level cache this problem
  * supports, so a load that follows the ring misses all the way to DRAM.
  *
- * A candidate is handed the ring head in %rdi. What it does with it is the
- * problem: an instruction that ignores memory runs at its own latency, and one
- * that follows the ring pays for the miss.
+ * The measured instruction is handed the ring head in %r8. What it does with it
+ * is the problem: an instruction that ignores memory runs at its own latency,
+ * and one that follows the ring pays for the miss.
+ *
+ * The arena is mapped read-only once the ring is built. It is the only mapped
+ * memory the frame leaves the measured instruction a pointer to, so making it
+ * unwritable is what stops a store from changing what the next sample measures.
  */
 
 #ifndef TC_ARENA_H

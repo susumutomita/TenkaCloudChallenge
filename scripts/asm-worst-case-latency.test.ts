@@ -11,6 +11,9 @@ function runPython(program: string): string {
     encoding: "utf8",
     env: {
       ...process.env,
+      // The harness is what the container puts on the path; `splice` lives there.
+      PYTHONPATH: [LOCAL, join(LOCAL, "harness"), process.env.PYTHONPATH ?? ""]
+        .filter(Boolean).join(":"),
       FLAG_SEED: "local-dev-seed",
       PYTHONDONTWRITEBYTECODE: "1",
     },
@@ -28,16 +31,69 @@ describe("asm-worst-case-latency grading boundary", () => {
   });
 
   it("rejects jecxz because one control-flow instruction is still control flow", () => {
+    // A full region, so the refusal is the control-flow rule rather than the
+    // count rule that would refuse any short region.
     const verdict = runPython([
+      "from splice import SPIN_COUNT",
       "from tests.hidden.check_candidate import Rejected, exactly_one_instruction",
       "try:",
-      "    exactly_one_instruction(['jecxz'])",
-      "except Rejected:",
-      "    print('rejected')",
+      "    exactly_one_instruction(['jecxz'] * SPIN_COUNT)",
+      "except Rejected as error:",
+      "    print('rejected' if 'control flow' in str(error) else f'wrong reason: {error}')",
       "else:",
       "    print('accepted')",
     ].join("\n"));
     expect(verdict).toBe("rejected");
+  });
+
+  // The operand contract is checked on what the assembler built, not on what the
+  // participant typed, so an encoding chosen in hex is judged like any other.
+  const refusals: Array<[string, string]> = [
+    ["an encoding smuggled in as raw bytes", ".byte 0x90"],
+    ["a store encoded as raw bytes", ".byte 0x48,0x89,0x04,0x24"],
+    ["an implicit stack write", "pushq %rax"],
+    ["a string store to its implicit destination", "stosq"],
+    ["a masked store to its implicit destination", "maskmovdqu %xmm0, %xmm1"],
+    ["a symmetric instruction writing through its first operand", "xchg %rax, (%r8)"],
+  ];
+  for (const [what, instruction] of refusals) {
+    it(`refuses ${what} before it is ever assembled into the frame`, () => {
+      const verdict = runPython([
+        "from splice import Rejected, build",
+        "submission = 'tc_measured_begin:\\n" + instruction.replace(/\\/g, "\\\\") +
+          "\\ntc_measured_end:\\n'",
+        "try:",
+        "    build(submission)",
+        "except Rejected:",
+        "    print('refused')",
+        "else:",
+        "    print('spliced')",
+      ].join("\n"));
+      expect(verdict).toBe("refused");
+    });
+  }
+
+  it("keeps the repeat count out of any register the measured instruction can write", () => {
+    const verdict = runPython([
+      "from splice import SPIN_COUNT, build",
+      "frame = build('tc_measured_begin:\\n    addq $1, %rax\\ntc_measured_end:\\n')",
+      "region = frame.split('tc_measured_begin:')[1].split('tc_measured_end:')[0]",
+      // An assembler-time unroll has no counter at run time, so there is no
+      // repeat count in architectural state for the instruction to write to.
+      "print('unrolled' if f'.rept {SPIN_COUNT}' in region else 'counted')",
+    ].join("\n"));
+    expect(verdict).toBe("unrolled");
+  });
+
+  it("saves every callee-saved register the SysV ABI promises the harness", () => {
+    const verdict = runPython([
+      "from splice import build",
+      "frame = build('tc_measured_begin:\\n    addq $1, %rax\\ntc_measured_end:\\n')",
+      "saved = {r for r in ('%rbx', '%rbp', '%r12', '%r13', '%r14', '%r15')",
+      "         if f'pushq   {r}' in frame and f'popq    {r}' in frame}",
+      "print('saved' if len(saved) == 6 else f'missing: {saved}')",
+    ].join("\n"));
+    expect(verdict).toBe("saved");
   });
 
   it("runs Workbench public tests through the same author-owned splice boundary", () => {

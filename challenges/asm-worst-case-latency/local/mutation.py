@@ -1,8 +1,20 @@
-"""Break the grader eight ways and require its own properties to notice.
+"""Break the grader one layer at a time and require the next layer to notice.
 
-Each mutation removes one guarantee the grader claims to enforce, and a
-submission that the intact grader rejects is used to prove the guarantee was
-load-bearing. A mutation that nothing catches means the property was decoration.
+The defence here is deliberately layered: text rules on the decoded instruction,
+then the author-owned frame the instruction is spliced into (`harness/wrapper.S.in`),
+then the memory the frame leaves reachable (`harness/arena.c` maps the arena
+read-only). Attributing a refusal to a single guard would therefore be a lie —
+several of these are refused twice over.
+
+So each case names its layers in order. Every layer is disabled in turn, and the
+case must stay refused with a *different* reason each time: a layer that does not
+change the reason was shadowed by the one above it and was never load-bearing.
+When the last named layer is disabled the case must get through, which is what
+proves the list is the whole defence rather than a comfortable subset of it.
+
+`FRAME` is the layer that cannot be disabled from Python. It refuses with a
+signal rather than a message, and it is why the text rules are a contract instead
+of an enumeration.
 """
 
 from __future__ import annotations
@@ -20,25 +32,25 @@ from tests.hidden.check_candidate import Rejected
 
 SEED = 20260816
 
+#: The layer that is not a Python function: the frame's zeroed registers, its
+#: read-only arena, and its refusal to return through a stack it did not leave.
+FRAME = "the frame itself"
+
 TEMPLATE = """    .text
     .globl tc_candidate
 tc_candidate:
     movq %rdi, %r8
     movq %rsi, %rax
-    movl $64, %ecx
-1:
 tc_measured_begin:
 {body}
 tc_measured_end:
-    decl %ecx
-    jnz 1b
     ret
     .section .note.GNU-stack,"",@progbits
 """
 
 
-#: The verdict-spoofing case, kept here because it is the one that would not merely
-#: score a bad answer but replace the measurement outright. See `self_contained`.
+#: The verdict-spoofing case, kept apart because it would not merely score a bad
+#: answer but replace the measurement outright. See `self_contained`.
 SPOOF = r"""
     .section .rodata
 fake:
@@ -76,69 +88,156 @@ tc_measured_end:
     .section .note.GNU-stack,"",@progbits
 """
 
-#: (name, what the intact grader must refuse, how the mutant breaks it)
+#: A submission the grader must accept, and the property its acceptance proves.
+#: These are the other half of the argument: a boundary that refuses everything
+#: is not a boundary, it is a wall.
+ACCEPTED = [
+    ("clobbering a callee-saved register does not corrupt the harness",
+     "movq %rax, %rbx",
+     lambda score: score <= 2.0),
+    ("clobbering every callee-saved register does not corrupt the harness",
+     "xorq %r15, %r15",
+     lambda score: score <= 2.0),
+    # If the repeat count still lived in a register, writing zero to it would cut
+    # the measured region short and the score would collapse towards 1/64.
+    ("writing to %ecx cannot cut the repeat count short",
+     "movl $0, %ecx",
+     lambda score: score > 0.5),
+]
+
+#: (name, submission, the layers that refuse it, outermost first)
 CASES = [
-    ("accepts more than one instruction in the measured region",
+    ("more than one instruction in the measured region",
      TEMPLATE.format(body="    movq (%r8), %r8\n    addq $1, %rax"),
-     None),
-    ("accepts an empty measured region",
+     ("measured_source", "decoded_form", "exactly_one_instruction")),
+    ("an empty measured region",
      TEMPLATE.format(body=""),
-     None),
-    ("accepts control flow as the measured instruction",
+     ("measured_source", "decoded_form", "exactly_one_instruction")),
+    ("control flow as the measured instruction",
      TEMPLATE.format(body="    jmp 2f\n2:"),
-     None),
-    ("accepts a syscall inside the measured region",
+     ("measured_source", "check_no_directive", "check_operands", "exactly_one_instruction")),
+    ("a syscall inside the measured region",
      TEMPLATE.format(body="    syscall"),
-     "no_forbidden_instruction"),
-    ("accepts the candidate reading the clock itself",
+     ("self_contained", "no_forbidden_instruction")),
+    ("the candidate reading the clock itself",
      TEMPLATE.format(body="    rdtsc"),
-     "no_forbidden_instruction"),
-    ("accepts a stall instruction standing in for work",
+     ("self_contained", "no_forbidden_instruction")),
+    ("a stall instruction standing in for work",
      TEMPLATE.format(body="    pause"),
-     "no_forbidden_instruction"),
-    ("accepts the candidate flushing its own cache line",
+     ("self_contained", "no_forbidden_instruction")),
+    ("the candidate flushing its own cache line",
      TEMPLATE.format(body="    clflush (%r8)"),
-     "no_forbidden_instruction"),
-    ("accepts a privileged instruction",
+     ("check_operands", "self_contained", "no_forbidden_instruction")),
+    ("a privileged instruction",
      TEMPLATE.format(body="    hlt"),
-     "no_forbidden_instruction"),
-    # Neutralised rather than refused: with the wrapper owning everything outside
-    # the measured region, the payload never reaches the assembler at all. The
-    # check for it is not "rejected" but "scored honestly" -- see main().
-    ("lets the instruction write to the wrapper's own stack",
-     TEMPLATE.format(body="    movq %rax, (%rsp)"),
-     None),
-    # The integrity boundary the wrapper exists for: the submission runs in the
-    # harness's address space, so anything it can write to, it can bias.
-    ("lets the instruction read through the stack pointer",
-     TEMPLATE.format(body="    movq (%rsp), %rax"),
-     "check_operands"),
-    ("lets the instruction reach the frame pointer",
-     TEMPLATE.format(body="    movq %rbp, %rax"),
-     "check_operands"),
-    ("lets the instruction store into harness memory",
+     ("self_contained", "no_forbidden_instruction", FRAME)),
+    # The advertised operand contract: what the participant is told the one
+    # instruction may touch.
+    ("a store into harness memory",
      TEMPLATE.format(body="    movq %rax, (%r8)"),
-     "check_operands"),
-    ("lets control leave the measured region indirectly",
+     ("check_operands", FRAME)),
+    ("a read through the stack pointer",
+     TEMPLATE.format(body="    movq (%rsp), %rax"),
+     ("check_operands",)),
+    ("a read of the frame pointer",
+     TEMPLATE.format(body="    movq %rbp, %rax"),
+     ("check_operands",)),
+    ("an indirect branch out of the measured region",
      TEMPLATE.format(body="    jmp *%rax"),
-     None),
-    ("lets the submission smuggle a second body past the one-line rule",
-     TEMPLATE.format(body="    .byte 0x90\n    .byte 0x90"),
-     None),
+     ("check_operands", "exactly_one_instruction", FRAME)),
+    # The ways an instruction writes memory without an operand that says so.
+    # These are why the contract is checked on the decoded form and why the frame
+    # exists: the text rules alone would not see any of them.
+    ("an encoding smuggled in as raw bytes",
+     TEMPLATE.format(body="    .byte 0x90"),
+     ("check_no_directive",)),
+    # The one the decoded-form check exists for: the text rules see a directive,
+    # and once that is gone what they would see is a byte list. The assembler is
+    # asked what it built, and the answer is a store through %rsp.
+    ("a store encoded as raw bytes",
+     TEMPLATE.format(body="    .byte 0x48,0x89,0x04,0x24"),
+     ("check_no_directive", "check_operands", FRAME)),
+    ("an implicit stack write",
+     TEMPLATE.format(body="    pushq %rax"),
+     ("check_operands", FRAME)),
+    ("a string store to its implicit destination",
+     TEMPLATE.format(body="    stosq"),
+     ("check_operands", FRAME)),
+    ("a masked store to its implicit destination",
+     TEMPLATE.format(body="    maskmovdqu %xmm0, %xmm1"),
+     ("check_operands", FRAME)),
+    ("a symmetric instruction writing through its first operand",
+     TEMPLATE.format(body="    xchg %rax, (%r8)"),
+     ("check_operands", FRAME)),
 ]
 
 
-def rejects(source: str) -> bool:
+def _region_verbatim(submission: str) -> str:
+    """`measured_source` with only its one-instruction rule removed.
+
+    Disabling a guard has to remove the property and nothing else. Replacing the
+    extraction outright would hand the next layer nothing to judge, and a layer
+    that refuses an empty hand has not been tested.
+    """
+    lines = submission.splitlines()
+    marks = [index for index, line in enumerate(lines) if line.strip() in ("tc_measured_begin:", "tc_measured_end:")]
+    return "\n".join(line.strip() for line in lines[marks[0] + 1 : marks[1]] if line.strip())
+
+
+#: How a layer is removed. The default stand-in returns None, which is right for a
+#: check: it decides nothing. A layer that also produces a value needs one that
+#: keeps producing it.
+STAND_IN = {"measured_source": _region_verbatim}
+
+
+def refusal(source: str) -> str | None:
+    """The reason the grader gives, or None if it graded the submission."""
     try:
         grader.grade(source, SEED)
-        return False
-    except Rejected:
-        return True
+        return None
+    except Rejected as error:
+        return str(error)
+
+
+def check_layers(name: str, source: str, layers: tuple[str, ...]) -> bool:
+    restored: list[tuple[object, str, object]] = []
+    seen: list[str] = []
+    try:
+        for layer in layers:
+            gone = ", ".join(entry[1] for entry in restored) or "nothing"
+            reason = refusal(source)
+            if reason is None:
+                print(f"SURVIVED {name}: nothing refused it with {gone} disabled")
+                return False
+            if reason in seen:
+                print(f"SURVIVED {name}: {layer} never refused it; the layer above shadows it")
+                return False
+            seen.append(reason)
+            if layer == FRAME:
+                print(f"killed {name} (down to {FRAME}: {reason.splitlines()[0][:70]})")
+                return True
+            holder = splice if hasattr(splice, layer) else grader
+            restored.append((holder, layer, getattr(holder, layer)))
+            setattr(holder, layer, STAND_IN.get(layer, lambda *args, **kwargs: None))
+
+        # Every named layer is gone. The submission must now get through: if
+        # something unnamed still refuses it, the list above is not the defence.
+        leftover = refusal(source)
+        if leftover is not None:
+            print(f"SURVIVED {name}: refused by something its layers do not name ({leftover[:60]})")
+            return False
+    finally:
+        for holder, layer, original in restored:
+            setattr(holder, layer, original)
+
+    print(f"killed {name} (by {' then '.join(layers)})")
+    return True
 
 
 def main() -> int:
-    reference = (Path(__file__).parent / "reference" / "candidate.S").read_text(encoding="utf-8")
-    starter = (Path(__file__).parent / "starter" / "candidate.S").read_text(encoding="utf-8")
+    here = Path(__file__).parent
+    reference = (here / "reference" / "candidate.S").read_text(encoding="utf-8")
+    starter = (here / "starter" / "candidate.S").read_text(encoding="utf-8")
 
     result = grader.grade(reference, SEED)
     if result["normalizedScore"] < 10.0:
@@ -161,39 +260,28 @@ def main() -> int:
         return 1
     print(f"neutralised the verdict-fabricating payload: it scores {spoofed:.2f}, not 9999")
 
-    survivors: list[str] = []
-    for name, source, guard in CASES:
-        if not rejects(source):
-            print(f"SURVIVED {name}")
-            survivors.append(name)
-            continue
-
-        # ...and the rejection must come from the named guard, not by accident.
-        if guard is None:
-            print(f"killed {name} (refused by more than one layer)")
-            continue
-        holder = splice if hasattr(splice, guard) else grader
-        original = getattr(holder, guard)
-        setattr(holder, guard, lambda *args, **kwargs: None)
+    failures: list[str] = []
+    for name, body, holds in ACCEPTED:
         try:
-            still_rejected = rejects(source)
-        finally:
-            setattr(holder, guard, original)
+            score = grader.grade(TEMPLATE.format(body="    " + body), SEED)["normalizedScore"]
+        except Rejected as error:
+            print(f"REFUSED  {name}: {error}")
+            failures.append(name)
+            continue
+        if not holds(score):
+            print(f"BROKEN   {name}: scored {score:.2f}")
+            failures.append(name)
+            continue
+        print(f"held     {name} (scored {score:.2f})")
 
-        if still_rejected and guard == "no_forbidden_instruction":
-            # A forbidden instruction may also fail to assemble or to run; that is
-            # not the property under test, so the mutation did not prove anything.
-            print(f"killed {name} (also caught outside {guard})")
-        elif still_rejected:
-            print(f"SURVIVED {name}: {guard} was not what refused it")
-            survivors.append(name)
-        else:
-            print(f"killed {name} (by {guard})")
+    for name, source, layers in CASES:
+        if not check_layers(name, source, layers):
+            failures.append(name)
 
-    if survivors:
-        print(f"{len(survivors)} mutation(s) survived")
+    if failures:
+        print(f"{len(failures)} propert(ies) did not hold")
         return 1
-    print(f"all {len(CASES)} mutations killed.")
+    print(f"all {len(CASES)} mutations killed, all {len(ACCEPTED)} accepted properties held.")
     return 0
 
 

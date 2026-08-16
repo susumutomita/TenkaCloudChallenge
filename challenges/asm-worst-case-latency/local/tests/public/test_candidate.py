@@ -20,20 +20,23 @@ ROOT = Path(__file__).resolve().parents[2]
 SUBMISSION = Path(os.environ.get("SUBMISSION_DIR", ROOT / "starter")) / "candidate.S"
 
 sys.path.insert(0, str(ROOT / "harness"))
-from splice import build as splice_build  # noqa: E402 - path set above
+from splice import baseline_source  # noqa: E402 - path set above
+from splice import build as splice_build  # noqa: E402
 
 
 def _build(workspace: Path) -> Path:
-    """Assemble what the grader assembles: the author's wrapper with your one
+    """Assemble what the grader assembles: the author's frame with your one
     instruction spliced in. Nothing outside the markers reaches the assembler."""
     spliced = workspace / "candidate.S"
     spliced.write_text(splice_build(SUBMISSION.read_text(encoding="utf-8")), encoding="utf-8")
+    baseline = workspace / "baseline.S"
+    baseline.write_text(baseline_source(), encoding="utf-8")
     binary = workspace / "measure"
     build = subprocess.run(
         [
             "gcc", "-O2", "-I", str(ROOT / "harness"), "-o", str(binary),
             str(ROOT / "harness" / "measure.c"), str(ROOT / "harness" / "arena.c"),
-            str(ROOT / "harness" / "baseline.S"), str(spliced),
+            str(baseline), str(spliced),
         ],
         capture_output=True, text=True, timeout=120, check=False,
     )

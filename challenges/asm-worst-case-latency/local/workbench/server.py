@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "harness"))
 
 from fixtures.generate import evidence_blocks, health_token
 from splice import Rejected as SpliceRejected
+from splice import baseline_source
 from splice import build as splice_build
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -110,12 +111,13 @@ def run_public_tests(seed: str, files: object) -> dict[str, object]:
         except SpliceRejected as error:
             return {"passed": False, "output": str(error)}
         (work / "candidate.S").write_text(spliced, encoding="utf-8")
+        (work / "baseline.S").write_text(baseline_source(), encoding="utf-8")
         binary = work / "measure"
         build = subprocess.run(
             [
                 "gcc", "-O2", "-I", str(ROOT / "harness"), "-o", str(binary),
                 str(ROOT / "harness" / "measure.c"), str(ROOT / "harness" / "arena.c"),
-                str(ROOT / "harness" / "baseline.S"), str(work / "candidate.S"),
+                str(work / "baseline.S"), str(work / "candidate.S"),
             ],
             capture_output=True, text=True, timeout=120, check=False,
         )

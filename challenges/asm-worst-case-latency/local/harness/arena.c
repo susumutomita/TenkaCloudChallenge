@@ -1,7 +1,10 @@
+#define _GNU_SOURCE /* MAP_ANONYMOUS */
+
 #include "arena.h"
 
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
 
 /* 64 MiB: larger than the last-level cache of every host this problem declares
  * support for, so the ring cannot be resident. */
@@ -36,14 +39,27 @@ static void build_ring(void **arena, uint64_t seed) {
 }
 
 void *tc_arena_create(uint64_t seed) {
-    void **arena = aligned_alloc(4096, ARENA_BYTES);
-    if (arena == NULL) return NULL;
-    memset(arena, 0, ARENA_BYTES);
-    build_ring(arena, seed);
-    return arena;
+    void *block = mmap(NULL, ARENA_BYTES, PROT_READ | PROT_WRITE,
+                       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (block == MAP_FAILED) return NULL;
+    build_ring((void **)block, seed);
+
+    /* Read-only for the measurement. The instruction under test runs in this
+     * process, and the arena is the only mapped memory the frame leaves it a
+     * pointer to (see wrapper.S.in: every other register is zero). Making it
+     * unwritable means a store through that pointer faults instead of changing
+     * what the next sample measures — the operand rules in splice.py refuse the
+     * stores they can see, and this refuses the ones they cannot. */
+    if (mprotect(block, ARENA_BYTES, PROT_READ) != 0) {
+        munmap(block, ARENA_BYTES);
+        return NULL;
+    }
+    return block;
 }
 
-void tc_arena_destroy(void *arena) { free(arena); }
+void tc_arena_destroy(void *arena) {
+    if (arena != NULL) munmap(arena, ARENA_BYTES);
+}
 
 void *tc_arena_entry(void *arena, int index) {
     void **lines = (void **)arena;

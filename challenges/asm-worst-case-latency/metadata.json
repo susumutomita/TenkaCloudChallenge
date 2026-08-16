@@ -227,7 +227,7 @@
         "hints": [
           {
             "id": "dependency-hint-1",
-            "content": "命令は 1 個のままです。 レジスタだけで完結する演算は、この機械では 1 サイクル前後で終わります。 メモリに触れる命令は、当たり所によって桁が変わります。 %rdi には arena の先頭が入っています。",
+            "content": "命令は 1 個のままです。 レジスタだけで完結する演算は、この機械では 1 サイクル前後で終わります。 メモリに触れる命令は、当たり所によって桁が変わります。 %r8 に arena の先頭が入っています。 それ以外のレジスタは 0 です。",
             "penalty": 35
           }
         ]
@@ -297,7 +297,7 @@
           "hints": [
             {
               "id": "dependency-hint-1",
-              "content": "Still one instruction. Anything that stays in registers finishes in about a cycle on this machine. An instruction that touches memory varies by orders of magnitude depending on where it lands. %rdi holds the head of the arena."
+              "content": "Still one instruction. Anything that stays in registers finishes in about a cycle on this machine. An instruction that touches memory varies by orders of magnitude depending on where it lands. %r8 holds the head of the arena. Every other register is zero."
             }
           ]
         },
