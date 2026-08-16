@@ -9,14 +9,21 @@
  *     %rax  whatever your instruction produced. Return it — the harness folds
  *           it into a checksum so nothing here can be optimised away.
  *
- * Between the label `tc_measured_begin` and `tc_measured_end` you may place
- * **exactly one** instruction, and the loop repeats it 64 times. Everything
- * outside that region is setup and is not measured.
+ * Between the label `tc_measured_begin` and `tc_measured_end` you place
+ * **exactly one** instruction, and the loop repeats it 64 times.
  *
- * The rules the grader enforces on the measured region:
- *   - exactly one instruction, and it is not control flow (no jmp/call/ret/loop)
+ * That one line is the only thing that runs. The grader lifts it out and splices
+ * it into the harness's own wrapper, which sets up the registers below and owns
+ * the loop and the return. Everything else in this file — including the setup
+ * lines you can see — is yours to read and scribble on, and none of it is
+ * assembled. That is deliberate: your code shares a process with the thing
+ * measuring it, so the measurement cannot also be yours to touch.
+ *
+ * The rules the grader enforces on that one instruction:
+ *   - exactly one, and not control flow (no jmp/call/ret/loop, direct or indirect)
  *   - no syscall, no privileged instruction, no rdtsc family of your own
- *   - no sleep, no signal games, no self-modifying code
+ *   - nothing touching %rsp or %rbp, and no writing to memory: it may read memory
+ *     freely, but its result has to land in a register
  * Break any of them and the checkpoint fails before the timing is even read.
  *
  * This starter is correct and honest: it adds one. It is also the fastest thing

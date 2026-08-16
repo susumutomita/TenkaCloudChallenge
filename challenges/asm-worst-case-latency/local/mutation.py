@@ -12,6 +12,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+sys.path.insert(0, str(Path(__file__).resolve().parent / "harness"))
+
+import splice
 from tests.hidden import check_candidate as grader
 from tests.hidden.check_candidate import Rejected
 
@@ -77,13 +80,13 @@ tc_measured_end:
 CASES = [
     ("accepts more than one instruction in the measured region",
      TEMPLATE.format(body="    movq (%r8), %r8\n    addq $1, %rax"),
-     "exactly_one_instruction"),
+     None),
     ("accepts an empty measured region",
      TEMPLATE.format(body=""),
-     "exactly_one_instruction"),
+     None),
     ("accepts control flow as the measured instruction",
      TEMPLATE.format(body="    jmp 2f\n2:"),
-     "exactly_one_instruction"),
+     None),
     ("accepts a syscall inside the measured region",
      TEMPLATE.format(body="    syscall"),
      "no_forbidden_instruction"),
@@ -99,9 +102,29 @@ CASES = [
     ("accepts a privileged instruction",
      TEMPLATE.format(body="    hlt"),
      "no_forbidden_instruction"),
-    ("lets a submission fabricate the verdict instead of earning it",
-     SPOOF,
-     "self_contained"),
+    # Neutralised rather than refused: with the wrapper owning everything outside
+    # the measured region, the payload never reaches the assembler at all. The
+    # check for it is not "rejected" but "scored honestly" -- see main().
+    ("lets the instruction write to the wrapper's own stack",
+     TEMPLATE.format(body="    movq %rax, (%rsp)"),
+     None),
+    # The integrity boundary the wrapper exists for: the submission runs in the
+    # harness's address space, so anything it can write to, it can bias.
+    ("lets the instruction read through the stack pointer",
+     TEMPLATE.format(body="    movq (%rsp), %rax"),
+     "check_operands"),
+    ("lets the instruction reach the frame pointer",
+     TEMPLATE.format(body="    movq %rbp, %rax"),
+     "check_operands"),
+    ("lets the instruction store into harness memory",
+     TEMPLATE.format(body="    movq %rax, (%r8)"),
+     "check_operands"),
+    ("lets control leave the measured region indirectly",
+     TEMPLATE.format(body="    jmp *%rax"),
+     None),
+    ("lets the submission smuggle a second body past the one-line rule",
+     TEMPLATE.format(body="    .byte 0x90\n    .byte 0x90"),
+     None),
 ]
 
 
@@ -129,6 +152,15 @@ def main() -> int:
         return 1
     print(f"starter:   {starter_result['normalizedScore']:.2f}x the baseline")
 
+    try:
+        spoofed = grader.grade(SPOOF, SEED)["normalizedScore"]
+    except Rejected:
+        spoofed = None
+    if spoofed is None or spoofed > 2.0:
+        print(f"SURVIVED the verdict-fabricating payload reached the run (score {spoofed})")
+        return 1
+    print(f"neutralised the verdict-fabricating payload: it scores {spoofed:.2f}, not 9999")
+
     survivors: list[str] = []
     for name, source, guard in CASES:
         if not rejects(source):
@@ -137,12 +169,16 @@ def main() -> int:
             continue
 
         # ...and the rejection must come from the named guard, not by accident.
-        original = getattr(grader, guard)
-        setattr(grader, guard, lambda *args, **kwargs: None)
+        if guard is None:
+            print(f"killed {name} (refused by more than one layer)")
+            continue
+        holder = splice if hasattr(splice, guard) else grader
+        original = getattr(holder, guard)
+        setattr(holder, guard, lambda *args, **kwargs: None)
         try:
             still_rejected = rejects(source)
         finally:
-            setattr(grader, guard, original)
+            setattr(holder, guard, original)
 
         if still_rejected and guard == "no_forbidden_instruction":
             # A forbidden instruction may also fail to assemble or to run; that is

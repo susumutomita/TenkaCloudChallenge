@@ -27,11 +27,17 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 HARNESS = ROOT / "harness"
+
+sys.path.insert(0, str(HARNESS))
+
+from splice import Rejected as SpliceRejected  # noqa: E402 - path set above
+from splice import build as splice_build  # noqa: E402
 
 BEGIN = "tc_measured_begin"
 END = "tc_measured_end"
@@ -236,8 +242,14 @@ def build_and_run(source: str, seed: int) -> dict:
     """Assemble the candidate with the author's harness and run one measurement."""
     with tempfile.TemporaryDirectory() as workspace:
         work = Path(workspace)
+        # Only the one instruction survives; everything else that gets assembled is
+        # the author's wrapper. See harness/splice.py for why.
+        try:
+            spliced = splice_build(source)
+        except SpliceRejected as error:
+            raise Rejected(str(error)) from None
         candidate = work / "candidate.S"
-        candidate.write_text(source, encoding="utf-8")
+        candidate.write_text(spliced, encoding="utf-8")
 
         obj = work / "candidate.o"
         assemble = subprocess.run(

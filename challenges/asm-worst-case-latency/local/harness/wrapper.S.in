@@ -1,0 +1,39 @@
+/* The author-owned wrapper. Everything here is fixed; the participant contributes
+ * exactly one instruction, spliced in at @INSTRUCTION@.
+ *
+ * Why the wrapper exists rather than assembling the participant's file: the
+ * submitted code is linked into the harness and runs in its address space, so
+ * anything the participant is allowed to place outside the measured region can
+ * reach the harness's own state — the stack, the return address, the sample
+ * buffer. Refusing `call` and undefined symbols closed the libc route, and left
+ * plain stores and indirect jumps open. Owning the wrapper closes the class
+ * instead of enumerating it: there is no participant setup, no participant loop,
+ * and no participant epilogue to abuse.
+ *
+ * The registers the measured instruction may use are set up here:
+ *   %r8   the arena entry point for this sample (the pointer ring's head)
+ *   %r9   the seed
+ *   %rax  the running value that becomes the return, so nothing is dead code
+ *   %ecx  the repeat counter (author-owned; the participant never sees it)
+ */
+
+    .text
+    .globl tc_candidate
+    .type tc_candidate, @function
+tc_candidate:
+    movq    %rdi, %r8
+    movq    %rsi, %r9
+    movq    %rsi, %rax
+    movl    $64, %ecx               /* TC_SPIN_COUNT */
+1:
+tc_measured_begin:
+@INSTRUCTION@
+tc_measured_end:
+    decl    %ecx
+    jnz     1b
+    /* Fold whatever the instruction left in %r8 into the result, so a load that
+     * chases the ring cannot be optimised away and the checksum sees it. */
+    xorq    %r8, %rax
+    ret
+    .size tc_candidate, .-tc_candidate
+    .section .note.GNU-stack,"",@progbits
