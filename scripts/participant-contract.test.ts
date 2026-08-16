@@ -1,4 +1,4 @@
-import { existsSync, globSync, readFileSync } from "node:fs";
+import { existsSync, globSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "bun:test";
@@ -73,7 +73,17 @@ describe("local-play participant contract", () => {
       });
 
       it("should keep every starter file tracked, so reset can actually restore it", () => {
-        const starters = globSync(`${problem.dir}/local/starter/**/*.py`, { cwd: REPO_ROOT });
+        // Every file, not just `*.py`. What matters is that `make reset` can restore
+        // whatever the participant edits, and that is not always Python:
+        // `asm-worst-case-latency` hands over a single assembly file, because the
+        // thing being graded is a machine instruction. Globbing one extension
+        // silently found nothing there, which is the failure mode this assertion
+        // exists to prevent.
+        // `__pycache__` is created by running the problem locally and is deliberately
+        // untracked; it is not something a participant edits.
+        const starters = globSync(`${problem.dir}/local/starter/**/*`, { cwd: REPO_ROOT }).filter(
+          (path) => statSync(join(REPO_ROOT, path)).isFile() && !path.includes("__pycache__"),
+        );
         expect(starters.length).toBeGreaterThan(0);
         const tracked = execFileSync("git", ["ls-files", "--", `${problem.dir}/local/starter`], {
           cwd: REPO_ROOT,

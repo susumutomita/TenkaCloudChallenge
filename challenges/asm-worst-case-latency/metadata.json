@@ -1,0 +1,328 @@
+{
+  "id": "asm-worst-case-latency",
+  "name": "1 命令を、どこまで遅くできるか",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "cs-foundations",
+    "order": 110,
+    "chapter": "11. 命令 1 個の最悪実行時間"
+  },
+  "difficulty": 4,
+  "estimatedDuration": "60-90 分",
+  "shortDescription": "単一命令の実行時間を正直に測るハーネスの上で、この機械が最も嫌がる 1 命令を見つける。",
+  "description": "「1 命令は一瞬で終わる」という前提は、どこで壊れるのか。 この問題は命令を速くするのではなく、**遅くする** ことで CPU の内部構造を掘り出す。\n\n参加者が編集する `candidate.S` は関数ではなく、**許可された scalar integer 命令 1 行だけ** である。 作者所有の builder が setup、固定 64 回の展開、marker、return を与える。 計測ハーネス (直列化、warm-up、101 サンプル、CPU 移動と事前規則を超える上側外れ値の棄却、中央値) も作者が所有し、参加者は触れない。 つまり「ハーネスを雑にして遅く見せる」道は最初から塞がれている。\n\n配点は絶対サイクル数ではなく、同一 host・同一プロセスで測った baseline との比 (normalized score) である。 速い機械と遅い機械はサイクル数では一致しないが、比では一致する。\n\nstarter は正直だが最速の命令 (`addq $1`) を測るので、スコアは 1.00 前後になる。 そこが出発点である。 到達点は、提出する命令そのものは 1 個のまま、アドレスの依存関係によって機械が先読みできないメモリまで届かせ、同じ 1 命令を 2 桁倍遅くすることである。\n\n採点は書き方ではなく振る舞いで行うが、その前に **形** を見る。 builder が生成した object は逆アセンブルされ、同じ bytes の非制御フロー命令が固定 64 個であること、relocation・syscall・特権命令・自前の rdtsc・cache 操作を含まないことが確認されてから初めて link・実行される。 参加者の元のファイル自体は実行しない。 数値は説得力があるので、間違った数値は出させない。",
+  "instructions": "## Participant Portal で解く\n\n問題を起動すると editor と証拠操作が同じページに出ます。「証拠を調べる」で計測環境 (CPU、TSC の性質、latency の階梯) を読み、starter の candidate.S を編集して public test を実行してください。 public test はスコアも表示します。\n\n`candidate.S` には、`#` コメントを除いて許可された scalar integer 命令を 1 行だけ書きます。対象は scalar 算術、move と read-only load、shift/rotate、bit scan、条件付き move/set、NOP で、operand は GPR に限ります。SIMD/x87、乱数、system-state、未知の命令は拒否されます。 setup、固定 64 回の展開、計測 marker、return は作者所有の wrapper が供給するため、追加すると拒否されます。提出命令には arena の入口が `%r8`、seed が `%rax` で渡され、`%r15` は call-frame guard 専用です。メモリ operand は作者所有 arena の `(%r8)` だけを読み、結果は明示的な GPR に置いてください。store と read-modify-write は実行前に拒否されます。\n\n**この問題は native amd64 host でのみ結果に意味があります。** Apple Silicon 等での emulation は「動いてしまう」うえに無意味な数値を出すため、platform が起動前に拒否します。",
+  "writeup": "## 測れていないものは速くも遅くもできない\n\n最初の関門は命令ではなく計測である。 rdtsc は投機実行を跨いで並べ替わるので、開いた側は `lfence` で、閉じた側は `rdtscp` で囲う必要がある。 サンプルの途中で別 CPU へ移動したら、その差分は命令の時間ではなくスケジューラの時間である。 ハーネスは rdtscp が返す CPU id を開始時と終了時で突き合わせ、動いたサンプルを捨てている。\n\n## 遅さは命令ではなく依存関係から来る\n\n`addq` は 1 サイクル、`movq (%r8), %r8` は L1 に当たれば 4 サイクル、DRAM まで行けば 200 サイクル以上になる。 同じ 1 命令である。 違うのはアドレスがどこから来るかだけで、前回のロード結果がアドレスになっていると、機械は次のロードを先に始められない。 out-of-order 実行も prefetcher も、次に触る場所が分からなければ働けない。\n\n## 64 MiB のリングが効く理由\n\narena は 64 バイト行ごとに次の行のアドレスを持つ 1 本の巨大な環である。 順番は seed でシャッフルしてあるので stride prefetcher は追えない。 ハーネスはサンプルごとに環の別の場所から歩き始め、計測前にその 64 行を明示的に flush する。 そのため last-level cache が 64 MiB より大きい host でも、計測区間は cold path から始まる。 これが無いと、同じ 64 行を 101 回辿ることになり、2 回目以降は L1 に載っていて「DRAM を測ったつもりの L1 の値」が出る。\n\n## これは何の話だったか\n\nworst-case execution time の話である。 リアルタイム制御、watchdog、lock を握っている区間、timeout 設計。 どれも「この処理は普通これくらいで終わる」という前提の上に立っているが、平均は保証ではない。 1 命令ですら 2 桁倍ぶれる。\n\n## 証明していないこと\n\n機械間の比較はしていない。 normalized score は同じ host の同じプロセスで測った 2 つの数の比であり、別の機械の score と大小を競うためのものではない。",
+  "tags": [
+    "cs-foundations",
+    "assembly",
+    "cpu",
+    "cache",
+    "performance",
+    "wcet",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18570,
+      "name": "Participant Workbench + verifier proxy (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "rdtsc と rdtscp を直列化なしに使うと何が測れていないのか説明できる",
+    "CPU 移動したサンプルを棄却する理由を説明できる",
+    "throughput と latency の違いを依存チェーンで示せる",
+    "アドレス依存が out-of-order 実行と prefetcher を無効化する仕組みを説明できる",
+    "cache 階層と DRAM のレイテンシ差を実測で示せる",
+    "絶対サイクル数ではなく正規化スコアで比較する理由を説明できる",
+    "worst-case execution time が設計上の前提を壊す例を挙げられる"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.asm-worst-case-latency.honest-measurement",
+        "description": "直列化と棄却規則を伴う正直な計測を説明できる。"
+      },
+      {
+        "id": "lo.asm-worst-case-latency.dependency-latency",
+        "description": "依存チェーンが latency を露出させることを示せる。"
+      },
+      {
+        "id": "lo.asm-worst-case-latency.unpredictable-memory",
+        "description": "予測できないアドレスが機械の並列性を奪う仕組みを説明できる。"
+      },
+      {
+        "id": "lo.asm-worst-case-latency.normalized-comparison",
+        "description": "host 間で意味を持つ比較の形を選べる。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.instruction-latency-vs-throughput",
+        "description": "latency と throughput は別の量である。"
+      },
+      {
+        "id": "concept.pointer-chase-dependency",
+        "description": "アドレス依存は先読みを不可能にする。"
+      },
+      {
+        "id": "concept.worst-case-execution-time",
+        "description": "平均実行時間は保証ではない。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.asm-worst-case-latency.measure",
+        "description": "正直な計測を成立させた。"
+      },
+      {
+        "id": "assessment.asm-worst-case-latency.dependency",
+        "description": "レジスタ演算より遅い 1 命令を作った。"
+      },
+      {
+        "id": "assessment.asm-worst-case-latency.miss",
+        "description": "予測できないメモリまで届かせた。"
+      },
+      {
+        "id": "assessment.asm-worst-case-latency.generalize",
+        "description": "見ていない seed でも成り立たせた。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.one-instruction-is-fast",
+        "description": "1 命令は必ず一瞬で終わる、という誤解。"
+      },
+      {
+        "id": "misconception.raw-cycles-are-comparable",
+        "description": "生のサイクル数は機械を跨いで比べられる、という誤解。"
+      },
+      {
+        "id": "misconception.noise-is-a-score",
+        "description": "外れ値の大きさは実力である、という誤解。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.asm-worst-case-latency",
+      "target": "lo.asm-worst-case-latency.honest-measurement"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.asm-worst-case-latency",
+      "target": "lo.asm-worst-case-latency.dependency-latency"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.asm-worst-case-latency",
+      "target": "lo.asm-worst-case-latency.unpredictable-memory"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.asm-worst-case-latency",
+      "target": "lo.asm-worst-case-latency.normalized-comparison"
+    },
+    {
+      "type": "covers",
+      "source": "problem.asm-worst-case-latency",
+      "target": "concept.instruction-latency-vs-throughput"
+    },
+    {
+      "type": "covers",
+      "source": "problem.asm-worst-case-latency",
+      "target": "concept.pointer-chase-dependency"
+    },
+    {
+      "type": "covers",
+      "source": "problem.asm-worst-case-latency",
+      "target": "concept.worst-case-execution-time"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.asm-worst-case-latency",
+      "target": "assessment.asm-worst-case-latency.measure"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.asm-worst-case-latency",
+      "target": "assessment.asm-worst-case-latency.dependency"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.asm-worst-case-latency",
+      "target": "assessment.asm-worst-case-latency.miss"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.asm-worst-case-latency",
+      "target": "assessment.asm-worst-case-latency.generalize"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.asm-worst-case-latency",
+      "target": "misconception.one-instruction-is-fast"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.asm-worst-case-latency",
+      "target": "misconception.raw-cycles-are-comparable"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.asm-worst-case-latency",
+      "target": "misconception.noise-is-a-score"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18570/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ],
+    "compatibility": {
+      "nativeArchitectures": [
+        "amd64"
+      ],
+      "cpuFlags": [
+        "rdtscp",
+        "constant_tsc",
+        "nonstop_tsc",
+        "clflush"
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "environment",
+        "label": "environment — 合言葉を貼る",
+        "points": 20,
+        "wrongAnswerPenalty": 15
+      },
+      {
+        "id": "measure",
+        "label": "measure — まず正直に測れている状態を作る",
+        "points": 40,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "measure-hint-1",
+            "content": "starter はそのまま提出しても通ります。 スコアが 1.00 前後なら「baseline と同じ命令を測った」という意味であり、失敗ではありません。 まずこの checkpoint で、計測が成立していることを確かめてください。",
+            "penalty": 15
+          }
+        ]
+      },
+      {
+        "id": "dependency",
+        "label": "dependency — レジスタ演算より遅くする",
+        "points": 75,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "dependency-hint-1",
+            "content": "命令は 1 個のままです。 レジスタだけで完結する演算は、この機械では 1 サイクル前後で終わります。 メモリに触れる命令は、当たり所によって桁が変わります。 %r8 には arena の入口が入っています。",
+            "penalty": 35
+          }
+        ]
+      },
+      {
+        "id": "miss",
+        "label": "miss — 機械が予測できないメモリまで届かせる",
+        "points": 90,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "miss-hint-1",
+            "content": "固定アドレスや等間隔のアドレスは prefetcher に読まれます。 arena は「各行が次の行のアドレスを持つ環」です。 ロードの結果を次のロードのアドレスにすると、機械は次にどこを触るか知りようがありません。",
+            "penalty": 40
+          }
+        ]
+      },
+      {
+        "id": "generalize",
+        "label": "generalize — 見ていない seed でも成り立たせる",
+        "points": 75,
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "generalize-hint-1",
+            "content": "この checkpoint は、あなたが一度も測っていない seed で採点します。 特定の seed の arena 形状に合わせた定数オフセットは効きません。 環そのものを辿る解答は seed に依存しません。",
+            "penalty": 35
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "One instruction, as slow as you can make it",
+      "shortDescription": "On a harness that measures a single instruction honestly, find the one this machine hates most.",
+      "description": "Where does \"one instruction finishes instantly\" stop being true? This problem digs into the machine not by making instructions fast but by making one **slow**.\n\nParticipants edit `candidate.S`, which is not a function: it contains **one approved scalar-integer instruction line**. An author-owned builder supplies setup, a fixed 64-copy expansion, markers, and return. The measurement harness — serialisation, warm-up, 101 samples, rejection of migrated and predeclared extreme high-side samples, the median — also belongs to the author and cannot be touched. Making the measurement sloppy to look slow is closed off from the start.\n\nScoring is not raw cycles but the ratio to a baseline measured on the same host in the same process. A fast machine and a slow machine disagree about cycles and agree about the ratio.\n\nThe starter is honest and measures the fastest thing available (`addq $1`), so it scores around 1.00. That is the starting line. The destination is to keep the submitted instruction at one while reaching, through address dependency, memory the machine cannot predict — and make that same single instruction tens of times slower.\n\nGrading is behavioural, but shape comes first. The generated object is disassembled and checked for exactly 64 byte-identical copies of the same non-control-flow instruction, with no relocation, syscall, privileged instruction, home-made rdtsc or cache manipulation, before it is linked or run. The original participant file is never executed. Numbers are persuasive, so wrong ones are not produced at all.",
+      "instructions": "## Solve in Participant Portal\n\nStarting the problem opens the editor and the evidence controls on one page. Use \"inspect evidence\" to read the measurement environment (CPU, TSC properties, the latency ladder), then edit the starter's candidate.S and run the public tests — they print your score too.\n\nWrite exactly one approved scalar-integer instruction line in `candidate.S` (`#` comments are allowed). The reviewed set covers scalar arithmetic, moves and read-only loads, shifts/rotates, bit scans, conditional moves/sets and NOP, with GPR operands only; SIMD/x87, random, system-state and unknown instructions are rejected. The author-owned wrapper supplies setup, the fixed 64-copy expansion, measurement markers, and return, so adding any of those is rejected. The submitted instruction receives the arena entry in `%r8` and the seed in `%rax`; `%r15` is reserved for the call-frame guard. A memory operand may only read the author-owned arena at `(%r8)` into an explicit GPR destination; stores and read-modify-write operations are rejected before execution.\n\n**This problem only produces meaningful results on a native amd64 host.** Emulation on Apple Silicon and similar would run and report plausible nonsense, so the platform refuses before the container starts.",
+      "writeup": "## You cannot speed up or slow down what you are not measuring\n\nThe first obstacle is not the instruction but the clock. rdtsc reorders across speculation, so the opening post needs an `lfence` and the closing one needs `rdtscp`. If a sample moves to another CPU midway, its delta is the scheduler's time, not the instruction's. The harness compares the CPU id rdtscp returns at both ends and throws away the samples that moved.\n\n## Slowness comes from dependency, not from the opcode\n\n`addq` takes about a cycle; `movq (%r8), %r8` takes four if L1 has it and two hundred if DRAM does. Same one instruction. The only difference is where the address came from — when it is the previous load's result, the machine cannot start the next load early. Out-of-order execution and the prefetcher both need to know where you are going next.\n\n## Why the 64 MiB ring matters\n\nThe arena is one huge ring where every 64-byte line holds the address of another. The order is seed-shuffled, so no stride prefetcher can follow it. The harness starts each sample elsewhere in the ring and explicitly flushes that 64-line path before timing, so the measured region starts cold even when the host's last-level cache is larger than 64 MiB. Without that, 101 samples would walk the same 64 lines and every one after the first would be an L1 hit reported as a DRAM measurement.\n\n## What this was really about\n\nWorst-case execution time. Real-time control, watchdogs, the span where a lock is held, timeout design: each stands on an assumption about how long something usually takes, and an average is not a guarantee. Even one instruction can vary by tens of times.\n\n## What this does not prove\n\nIt does not compare machines. The normalized score is the ratio of two numbers taken on one host in one process, not a figure to rank against someone else's hardware.",
+      "learningGoals": [
+        "Explain what rdtsc without serialisation fails to measure",
+        "Explain why samples that changed CPU must be rejected",
+        "Demonstrate latency versus throughput with a dependency chain",
+        "Explain how address dependency defeats out-of-order execution and prefetching",
+        "Show the cache-to-DRAM latency gap by measurement",
+        "Explain why comparison uses a normalized score rather than raw cycles",
+        "Give examples where worst-case execution time breaks a design assumption"
+      ],
+      "checks": [
+        {
+          "id": "environment",
+          "label": "environment - paste the pass phrase"
+        },
+        {
+          "id": "measure",
+          "label": "measure - produce an honest measurement at all",
+          "hints": [
+            {
+              "id": "measure-hint-1",
+              "content": "The starter passes this as shipped. A score around 1.00 means \"measured the same instruction as the baseline\", not failure. Use this checkpoint to confirm the measurement works."
+            }
+          ]
+        },
+        {
+          "id": "dependency",
+          "label": "dependency - beat register arithmetic",
+          "hints": [
+            {
+              "id": "dependency-hint-1",
+              "content": "Still one instruction. Anything that stays in registers finishes in about a cycle on this machine. An instruction that touches memory varies by orders of magnitude depending on where it lands. %r8 holds the entry to the arena."
+            }
+          ]
+        },
+        {
+          "id": "miss",
+          "label": "miss - reach memory the machine cannot predict",
+          "hints": [
+            {
+              "id": "miss-hint-1",
+              "content": "Fixed or evenly spaced addresses are read by the prefetcher. The arena is a ring where each line holds the address of the next. Make the result of the load be the address of the next load, and the machine has no way to know where you are going."
+            }
+          ]
+        },
+        {
+          "id": "generalize",
+          "label": "generalize - hold up under an unseen seed",
+          "hints": [
+            {
+              "id": "generalize-hint-1",
+              "content": "This checkpoint grades on a seed you have never measured against. Constant offsets tuned to one arena's shape will not carry. A solution that follows the ring itself does not depend on the seed."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
