@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
@@ -53,8 +54,13 @@ def _seed_for(checkpoint_id: str) -> int:
     Everything else uses the deployment seed, so a participant tuning against
     their own numbers is tuning against the same arena the grader uses.
     """
-    label = f"{SEED}:{checkpoint_id}" if checkpoint_id == "generalize" else SEED
-    return int.from_bytes(label.encode()[:8].ljust(8, b"\0"), "big") % (2**31)
+    if checkpoint_id == "generalize":
+        # Do not truncate before the checkpoint discriminator. Deployment seeds are
+        # normally longer than eight bytes, so prefix truncation made this identical
+        # to every visible checkpoint and turned "unseen" into a vacuous claim.
+        digest = hashlib.sha256(f"{SEED}:generalize".encode()).digest()
+        return int.from_bytes(digest[:8], "big") % (2**31)
+    return int.from_bytes(SEED.encode()[:8].ljust(8, b"\0"), "big") % (2**31)
 
 
 def _check_environment(submission: object) -> bool:
