@@ -317,10 +317,15 @@ def build_and_run(source: str, seed: int) -> dict:
         except subprocess.TimeoutExpired:
             raise Rejected("the measurement did not finish within its time limit") from None
         if completed.returncode < 0:
-            raise Rejected(
-                f"the measurement was killed by signal {-completed.returncode}: "
-                "the instruction under test did not run to completion"
-            )
+            # The two the frame produces on purpose, named so the reason is usable.
+            # See harness/wrapper.S.in and harness/arena.c: the frame leaves the
+            # instruction no writable memory and no stack to move.
+            why = {
+                4: "the instruction moved the stack pointer, or this host cannot execute it",
+                11: "the instruction addressed memory it may not reach; the arena is read-only "
+                    "and every register the contract does not define is zero",
+            }.get(-completed.returncode, "the instruction under test did not run to completion")
+            raise Rejected(f"the measurement was killed by signal {-completed.returncode}: {why}")
         if completed.returncode != 0:
             raise Rejected("the measurement did not complete")
         try:

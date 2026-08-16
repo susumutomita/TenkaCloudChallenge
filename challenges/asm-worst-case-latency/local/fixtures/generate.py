@@ -107,7 +107,8 @@ def evidence_blocks(seed: str) -> dict[str, object]:
             "arena": {
                 "bytes": 64 * 1024 * 1024,
                 "shape": "a single seed-shuffled pointer ring, one link per 64-byte line",
-                "headRegister": "%rdi",
+                "headRegister": "%r8",
+                "access": "read-only: the measured instruction may follow the ring, not write to it",
                 "note": "each sample starts somewhere new in the ring",
             },
             "latencyLadder": LATENCY_LADDER,
