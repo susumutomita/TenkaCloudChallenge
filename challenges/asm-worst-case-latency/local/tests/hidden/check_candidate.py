@@ -120,9 +120,7 @@ def exactly_one_instruction(region: list[str]) -> None:
             "the contract is exactly one"
         )
     mnemonic = region[0]
-    if mnemonic in CONTROL_FLOW or (
-        mnemonic.startswith(CONTROL_FLOW_PREFIXES) and mnemonic not in ("jecxz",)
-    ):
+    if mnemonic in CONTROL_FLOW or mnemonic.startswith(CONTROL_FLOW_PREFIXES):
         raise Rejected(
             f"'{mnemonic}' is control flow: the measured region would not be one instruction"
         )
