@@ -33,6 +33,46 @@ tc_measured_end:
     .section .note.GNU-stack,"",@progbits
 """
 
+
+#: The verdict-spoofing case, kept here because it is the one that would not merely
+#: score a bad answer but replace the measurement outright. See `self_contained`.
+SPOOF = r"""
+    .section .rodata
+fake:
+    .ascii "{\"seed\":1,\"spins\":64,\"samples\":101,"
+    .ascii "\"baseline\":{\"robustCycles\":1,\"kept\":101,\"rejected\":0},"
+    .ascii "\"candidate\":{\"robustCycles\":9999,\"kept\":101,\"rejected\":0},"
+    .ascii "\"normalizedScore\":9999.0,\"checksum\":\"0\"}
+"
+fake_end:
+    .text
+handler:
+    subq    $8, %rsp
+    leaq    fake(%rip), %rsi
+    movl    $1, %edi
+    movl    $fake_end-fake, %edx
+    call    write@PLT
+    xorl    %edi, %edi
+    call    _exit@PLT
+    .globl tc_candidate
+tc_candidate:
+    pushq   %rbx
+    movq    %rsi, %rbx
+    leaq    handler(%rip), %rdi
+    call    atexit@PLT
+    movq    %rbx, %rax
+    movl    $64, %ecx
+1:
+tc_measured_begin:
+    addq    $1, %rax
+tc_measured_end:
+    decl    %ecx
+    jnz     1b
+    popq    %rbx
+    ret
+    .section .note.GNU-stack,"",@progbits
+"""
+
 #: (name, what the intact grader must refuse, how the mutant breaks it)
 CASES = [
     ("accepts more than one instruction in the measured region",
@@ -59,6 +99,9 @@ CASES = [
     ("accepts a privileged instruction",
      TEMPLATE.format(body="    hlt"),
      "no_forbidden_instruction"),
+    ("lets a submission fabricate the verdict instead of earning it",
+     SPOOF,
+     "self_contained"),
 ]
 
 

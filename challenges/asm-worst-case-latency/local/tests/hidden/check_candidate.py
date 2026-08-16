@@ -136,6 +136,72 @@ def no_forbidden_instruction(region: list[str]) -> None:
             )
 
 
+def self_contained(rows: list[tuple[str, str]], obj: Path) -> None:
+    """The submission may not reach outside itself, anywhere in the file.
+
+    Restricting only the measured region is not enough. The submission is linked
+    into the harness and runs in its process, so setup code that can call libc can
+    also decide what the harness's verdict looks like: register an `atexit`
+    handler, write a fabricated result with raw `write(2)`, then `_exit(2)` to
+    discard the buffered real one, and the grader reads the fabrication as the
+    measurement. That is the same verdict-spoofing class
+    `scripts/verifier-spoof-guard.test.ts` exists for, arriving through native code
+    instead of a Python import.
+
+    Two rules close it. No `call` and no forbidden instruction anywhere in the
+    object, and no undefined symbol: a submission that references `atexit`,
+    `write` or anything else it did not define is asking the linker for a way out
+    of its own file. Setup needs registers and constants, not libc.
+    """
+    for kind, mnemonic in rows:
+        if kind != "insn":
+            continue
+        base = mnemonic.rstrip("bwlqt") or mnemonic
+        if mnemonic.startswith("call"):
+            raise Rejected(
+                f"'{mnemonic}' calls out of the submission; setup may use registers and "
+                "constants only, so that nothing here can outlive the measurement"
+            )
+        if mnemonic in FORBIDDEN or base in FORBIDDEN:
+            raise Rejected(
+                f"'{mnemonic}' is not allowed anywhere in the submission: the harness owns "
+                "the clock, the scheduler, and the cache state"
+            )
+
+    result = subprocess.run(
+        ["nm", "--undefined-only", str(obj)],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    undefined = [line.split()[-1] for line in result.stdout.splitlines() if line.strip()]
+    if undefined:
+        raise Rejected(
+            "the submission references symbols it does not define "
+            f"({', '.join(sorted(set(undefined))[:5])}); it must stand on its own"
+        )
+
+
+def well_formed_result(run: object) -> dict:
+    """The harness's output, checked before any of it is believed.
+
+    A submission influences what lands on stdout, so "it parsed as JSON" is not the
+    same as "it is a measurement". Anything missing or mistyped is a failed
+    checkpoint, not a crashed grader.
+    """
+    if not isinstance(run, dict):
+        raise Rejected("the measurement did not produce a result object")
+    for side in ("baseline", "candidate"):
+        block = run.get(side)
+        if not isinstance(block, dict):
+            raise Rejected(f"the measurement reported no {side}")
+        for field in ("robustCycles", "kept", "rejected"):
+            if not isinstance(block.get(field), int):
+                raise Rejected(f"the measurement's {side}.{field} is not a number")
+    return run
+
+
 def reject_migration_or_interrupt(run: dict) -> None:
     """A run that could not keep enough clean samples is not a result.
 
@@ -185,6 +251,7 @@ def build_and_run(source: str, seed: int) -> dict:
             raise Rejected("the submission does not assemble:\n" + assemble.stderr[-2000:])
 
         rows = _objdump(obj)
+        self_contained(rows, obj)
         region = measured_region(rows)
         exactly_one_instruction(region)
         no_forbidden_instruction(region)
@@ -212,6 +279,7 @@ def build_and_run(source: str, seed: int) -> dict:
                 [str(binary), str(seed)],
                 capture_output=True,
                 text=True,
+                errors="replace",
                 timeout=180,
                 check=False,
             )
@@ -232,7 +300,7 @@ def build_and_run(source: str, seed: int) -> dict:
 
 def grade(source: str, seed: int) -> dict:
     """The whole judgement: shape first, then the number."""
-    run = build_and_run(source, seed)
+    run = well_formed_result(build_and_run(source, seed))
     reject_migration_or_interrupt(run)
     score = normalized_score(run)
     return {
