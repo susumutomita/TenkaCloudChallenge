@@ -51,7 +51,7 @@ def config_payload() -> dict[str, object]:
     return {
         "id": "asm-worst-case-latency",
         "name": "1 命令を、どこまで遅くできるか",
-        "description": "単一命令の実行時間を正直に測り、この機械が最も嫌がる 1 命令を見つける。",
+        "description": "単一命令の実行時間を正直に測るハーネスの上で、この機械が最も嫌がる 1 命令を見つける。",
         "submittedFiles": list(SUBMISSION_FILES),
         "checkpoints": [
             {
@@ -64,7 +64,7 @@ def config_payload() -> dict[str, object]:
         "i18n": {
             "en": {
                 "name": "One instruction, as slow as you can make it",
-                "description": "Measure a single instruction honestly, then find the one this machine hates.",
+                "description": "On a harness that measures a single instruction honestly, find the one this machine hates most.",
                 "checkpointLabels": {
                     "environment": "environment - paste the pass phrase",
                     "measure": "measure - produce an honest measurement at all",

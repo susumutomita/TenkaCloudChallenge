@@ -32,9 +32,11 @@ THRESHOLDS = {
     "generalize": 20.0, # ...and again under a seed the participant has not seen
 }
 
+# Metadata parity guard (#381) reads this authored verifier source: the English here
+# must be the English metadata.json carries, verbatim.
 PORTAL_ENGLISH_CONTRACT = {
     "name": "One instruction, as slow as you can make it",
-    "description": "Measure a single instruction honestly, then find the one this machine hates.",
+    "description": "On a harness that measures a single instruction honestly, find the one this machine hates most.",
     "labels": {
         "environment": "environment - paste the pass phrase",
         "measure": "measure - produce an honest measurement at all",
