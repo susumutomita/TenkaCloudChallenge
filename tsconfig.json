@@ -15,7 +15,7 @@
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true
   },
-  "include": ["scripts/**/*.ts"],
+  "include": ["scripts/**/*.ts", "battles/ac26-crypto-battle/game/**/*.ts"],
   "exclude": [
     "node_modules",
     "dist",
