@@ -67,21 +67,97 @@ free, on a Contract Queue entry that cost nothing to earn. Voiding the
 pre-rotate queue makes ROTATE cost something concrete beyond the cooldown: a
 team that rotates has to let its in-flight Contract Queue go and wait for new
 contracts under the new generation, exactly as Issue #486 frames ROTATE
-carrying a real time cost, not just a timer.
+carrying a real time cost, not just a timer. Rotate also re-derives the
+team's Schnorr public commitment (see below) in the same transition, so a
+pre-rotate PROVE proof stops verifying exactly when a pre-rotate LEAK share
+stops reconstructing anything real.
+
+## PROVE's Schnorr proof (Issue #486 PR2)
+
+PROVE is a Fiat-Shamir-transformed, non-interactive **Schnorr proof of
+knowledge**, fixed to one statement: "team T knows the witness behind the
+public commitment `Y_{T,g} = g^w mod p` for its current generation `g`."
+The scheme is split across five small modules under `game/src/`, each with a
+single job:
+
+- [`group.ts`](./game/src/group.ts) -- RFC 3526 Group 14 (2048-bit safe-prime
+  MODP group) constants, verified against Node's own `crypto.getDiffieHellman("modp14")`
+  plus a from-scratch Miller-Rabin check rather than hand-transcribed from the
+  RFC text (a single wrong hex digit in a 512-digit constant would not fail
+  loudly). Uses generator `g = 4` (not RFC 3526's own `g = 2`) to land
+  unconditionally in the order-`q` quadratic-residue subgroup -- see the
+  module's header for the squaring argument.
+- [`schnorr-witness.ts`](./game/src/schnorr-witness.ts) -- `deriveWitness(secret, generation, teamId)`
+  and `derivePublicCommitment(...)`. **The witness is a SHA-256 hash of the
+  secret, never the secret itself.** The Shamir secret lives in a 61-bit
+  field (`field.ts`'s `P`); using it as a discrete-log exponent directly
+  (`Y = g^secret`) would let baby-step giant-step recover it in ~2^31 group
+  operations -- a successful PROVE would then itself leak the secret it was
+  supposed to protect. Hashing first turns "recover secret from Y" into a
+  SHA-256 preimage search over that same 61-bit space, which is not
+  feasible within a match.
+- [`schnorr-transcript.ts`](./game/src/schnorr-transcript.ts) -- the shared
+  Fiat-Shamir challenge computation, domain-separated (`ac26-crypto-battle/prove/v1`)
+  and length-prefixed on every variable-length field (teamId, contractId,
+  the domain string itself), following `challenges/ac26-w3-schnorr/local/reference/schnorr.py`'s
+  `challenge_preimage` convention -- without length-prefixing, `("ab","cd")`
+  and `("a","bcd")` would hash to the same challenge.
+- [`schnorr-prover.ts`](./game/src/schnorr-prover.ts) -- `createProof(secret, generation, teamId, contractId, group)`,
+  participant-facing tooling (needs only a team's own already-visible
+  secret). Nonce `k` is RFC-6979-style deterministic (hashed from the
+  witness + statement), never `Date.now()` / `Math.random()`.
+- [`schnorr-verifier.ts`](./game/src/schnorr-verifier.ts) -- `verifyProof(publicCommitmentY, proof, statement, group)`,
+  the trusted verifier `reducer.ts`'s `validateOp` calls from its `"prove"`
+  branch. **This module never imports a secret, `deriveWitness`, or
+  `schnorr-prover.ts`** -- it only ever sees public inputs (a public
+  commitment already stored in `state.publicCommitments`, and the proof a
+  team submitted). `schnorr.test.ts`'s module-separation test statically
+  greps its import statements to keep this true; PR3's coordination plugin
+  will run this exact function on the trusted dispatcher, unchanged.
+
+`CryptoBattleState.publicCommitments: Record<teamId, string>` holds every
+team's current-generation `Y`, derived once at `initialState` and
+re-derived on every `applyRotate` (see above). It lives at the state's top
+level rather than inside `TeamState` specifically so it reads as
+unambiguously public, unlike everything else `TeamState` holds --
+`projectForTeam` passes it through unredacted to every team.
+
+**Replay/reuse is prevented structurally, not by a separate guard list.** A
+successful PROVE marks its Contract `"completed"`, so resubmitting the same
+proof hits the same "not open" rejection LEAK's replay already relies on. A
+proof built for one Contract fails Fiat-Shamir verification against a
+different one, because `contractId` is bound into the challenge. A proof
+built before a ROTATE fails after one, because the `Y` it is checked
+against changes (see above) -- there is no separate "used proofs" set to
+keep in sync.
+
+**A successful PROVE still posts to the Public Ledger -- as an audit
+artifact, not a leak.** `applyOp`'s `"prove"` branch appends a
+`ProofArtifact { teamId, generation, contractId, commitment, response,
+postedAtMs }` -- never a share value, never the secret or witness. Issue
+#486's trusted-verification minimum bar asks for a replayable transcript /
+audit evidence; recording the (public, harmless) commitment/response pair
+is what makes a PROVE completion independently re-checkable after the fact,
+the same way a LEAK's revealed share is independently re-checkable, without
+the transcript itself teaching an observer anything about the secret
+(`schnorr.test.ts` / `prove.test.ts` pin this with a serialized-JSON
+substring check, same style as `adversarial.test.ts`'s "adversarial 5").
+
+**Scoring parity is structural, not a separate rule to keep in sync.**
+`applyProve` pays exactly `contract.points` -- the same field `applyLeak`
+reads -- with no separate "PROVE bonus" term. Issue #486's Scoring MUST
+("PROVE と LEAK の同一 Contract の基本得点は原則同じ", "PROVE 自体への教育
+ボーナスを付けない") falls out of reusing the field rather than needing an
+explicit equality check anywhere.
 
 ## Implementation roadmap (Issue #486)
 
 | PR  | Scope                                                                 | Status  |
 | --- | ---------------------------------------------------------------------- | ------- |
-| PR1 | Pure game model: types, Shamir + Lagrange reference implementation, LEAK / HUNT / ROTATE reducer, unit + adversarial tests | **this PR** |
-| PR2 | PROVE op + its verifier                                                | not started |
+| PR1 | Pure game model: types, Shamir + Lagrange reference implementation, LEAK / HUNT / ROTATE reducer, unit + adversarial tests | done |
+| PR2 | PROVE op + its Fiat-Shamir Schnorr verifier                            | **done (this PR)** |
 | PR3 | Coordination-plugin wiring (`interTeamCoordination.plugin`, dispatcher integration) | not started |
 | PR4 | Portal UI (`dashboard.slots`: Contract Queue / My Vault / Public Ledger panels) | not started |
-
-`CryptoBattleOp` in `game/src/types.ts` deliberately has no `"prove"`
-discriminant yet -- adding it without a working verifier would let `applyOp`
-accept an op it cannot honestly score. Do not add PROVE to the op union
-before PR2 ships its verifier alongside it.
 
 `metadata.json` declares no `scoring`, `endpoints`, or `interTeamCoordination`
 block -- those are meaningless (and, for `interTeamCoordination.plugin`,
@@ -116,8 +192,11 @@ for exactly this kind of per-event tuning without touching the defaults.
 
 ## Known gaps (by design, not oversight)
 
-- **No PROVE.** See the roadmap above -- PR2's scope, together with its
-  verifier.
+- **No participant-facing PROVE tool yet.** `schnorr-prover.ts`'s
+  `createProof` is the tool a participant script would call, but there is no
+  CLI wrapper or portal button to run it from -- that surface arrives with
+  PR4's UI (the same gap LEAK/HUNT/ROTATE already have; see "No live
+  coordination plugin, no portal UI" below).
 - **No compute-budget economy for ROTATE.** PR1 represents ROTATE's cost as
   a cooldown (`rotateCooldownMs`) plus voiding the team's own in-flight
   Contract Queue (see "ROTATE's time cost" above) -- not a metered compute

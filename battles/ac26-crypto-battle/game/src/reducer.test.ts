@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { reconstruct } from "./shamir.ts";
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
-import type { CryptoBattleOp } from "./types.ts";
+import type { CryptoBattleOp, PublicArtifact, ShareArtifact } from "./types.ts";
+
+/** Type-narrowing predicate: `PublicArtifact` is a `ShareArtifact | ProofArtifact` union since PR2 (PROVE artifacts). */
+function isShareArtifact(a: PublicArtifact): a is ShareArtifact {
+  return a.kind === "share";
+}
 
 const CTX = { eventId: "match-basic", teamIds: ["teamA", "teamB"] } as const;
 
@@ -150,6 +155,7 @@ describe("leak", () => {
     expect(next.publicLedger).toHaveLength(contract.requestedShareIndices.length);
     const posted = next.publicLedger[0];
     if (!posted) throw new Error("expected a posted artifact");
+    if (posted.kind !== "share") throw new Error("expected a share artifact");
     expect(posted.teamId).toBe("teamA");
     expect(posted.generation).toBe(1);
     const teamShare = state.teams.teamA?.shares.find((s) => s.index === posted.shareIndex);
@@ -171,7 +177,7 @@ describe("hunt", () => {
   test("recovering the actual secret succeeds and moves both scores", () => {
     let state = tick(initialState(CTX), 0);
     state = leakThreshold(state, "teamB");
-    const leaked = state.publicLedger.filter((a) => a.teamId === "teamB");
+    const leaked = state.publicLedger.filter((a) => a.teamId === "teamB").filter(isShareArtifact);
     const shares = leaked.map((a) => ({ index: a.shareIndex, value: BigInt(a.value) }));
     const recoveredSecret = reconstruct(shares, state.config.prime);
     const teamB = state.teams.teamB;
@@ -200,6 +206,7 @@ describe("hunt", () => {
     state = leakThreshold(state, "teamB");
     const shares = state.publicLedger
       .filter((a) => a.teamId === "teamB")
+      .filter(isShareArtifact)
       .map((a) => ({ index: a.shareIndex, value: BigInt(a.value) }));
     const recoveredSecret = reconstruct(shares, state.config.prime);
     const next = applyOp(state, "teamA", {
@@ -222,6 +229,7 @@ describe("hunt", () => {
     state = leakThreshold(state, "c");
     const shares = state.publicLedger
       .filter((a) => a.teamId === "c")
+      .filter(isShareArtifact)
       .map((a) => ({ index: a.shareIndex, value: BigInt(a.value) }));
     const recoveredSecret = reconstruct(shares, state.config.prime);
 

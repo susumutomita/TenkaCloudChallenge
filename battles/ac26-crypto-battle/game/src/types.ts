@@ -10,9 +10,10 @@
  * content, not platform packages -- see this repo's AGENTS.md "Repository
  * boundary") and MUST NOT be imported here.
  *
- * PROVE is intentionally absent from `CryptoBattleOp` -- it ships in PR2 with
- * its verifier. Adding the discriminant without a working verifier would let
- * `applyOp` accept an op it cannot honestly score.
+ * PROVE (Issue #486 PR2) is a `CryptoBattleOp` discriminant backed by a real
+ * Fiat-Shamir Schnorr verifier (schnorr-verifier.ts) -- see that module and
+ * schnorr-prover.ts / schnorr-witness.ts / schnorr-transcript.ts / group.ts
+ * for the scheme.
  */
 
 import type { Share } from "./shamir.ts";
@@ -80,7 +81,7 @@ export type ContractStatus = "open" | "completed" | "expired";
 
 export interface Contract {
   readonly id: string;
-  /** The team this contract was issued to (only that team may LEAK against it). */
+  /** The team this contract was issued to (only that team may LEAK/PROVE against it). */
   readonly teamId: string;
   readonly kind: ContractKind;
   readonly points: number;
@@ -88,11 +89,25 @@ export interface Contract {
   readonly issuedAtMs: number;
   readonly expiresAtMs: number;
   readonly status: ContractStatus;
-  readonly resolution?: "leak";
+  readonly resolution?: "leak" | "prove";
+}
+
+/**
+ * A non-interactive Fiat-Shamir Schnorr proof, as PROVE submits it and as
+ * the Public Ledger's `ProofArtifact` records it -- see schnorr-prover.ts /
+ * schnorr-verifier.ts. Both fields are stringified bigints (same convention
+ * as `ShareArtifact.value` below): a decimal `Contract.id`-sized JSON payload
+ * stays JSON-safe without a bigint-aware serializer.
+ */
+export interface SchnorrProof {
+  /** The Schnorr commitment R = g^k mod p. */
+  readonly commitment: string;
+  /** The response z = k + e*w mod group.order. */
+  readonly response: string;
 }
 
 /** One entry in the Public Ledger: a share value a team chose to reveal via LEAK. */
-export interface PublicArtifact {
+export interface ShareArtifact {
   readonly id: string;
   readonly teamId: string;
   /** The team's secret generation this share belongs to (see ROTATE). */
@@ -104,6 +119,31 @@ export interface PublicArtifact {
   readonly contractId: string;
   readonly postedAtMs: number;
 }
+
+/**
+ * One entry in the Public Ledger: an audit-only record that a team completed
+ * a Contract via PROVE. Deliberately holds ONLY the proof transcript
+ * (`commitment` / `response`) -- never a share value and never the secret or
+ * witness those were derived from. Recording the transcript at all (rather
+ * than nothing) is what makes a PROVE completion independently replay-
+ * verifiable after the fact (Issue #486's trusted-verification minimum bar),
+ * while the transcript itself carries no cryptographic material a viewer
+ * could use to reconstruct anything (see schnorr.test.ts's secret-non-
+ * leakage test).
+ */
+export interface ProofArtifact {
+  readonly id: string;
+  readonly teamId: string;
+  /** The team's secret generation the proven public commitment Y belongs to. */
+  readonly generation: number;
+  readonly kind: "proof";
+  readonly contractId: string;
+  readonly commitment: string;
+  readonly response: string;
+  readonly postedAtMs: number;
+}
+
+export type PublicArtifact = ShareArtifact | ProofArtifact;
 
 /**
  * Per-team private state, held only by the trusted pure-model runtime (the
@@ -138,6 +178,19 @@ export interface CryptoBattleState {
   readonly publicLedger: readonly PublicArtifact[];
   readonly teams: Readonly<Record<string, TeamState>>;
   /**
+   * Every team's current-generation Schnorr public commitment
+   * `Y = g^w mod p` (stringified bigint), keyed by teamId -- PROVE's
+   * verifier checks a submitted proof against this. Public by construction
+   * (unlike `TeamState.secret` / `.shares`): derived once per team at
+   * `initialState` and re-derived on every ROTATE (see reducer.ts's
+   * `applyRotate`), so it always reflects the team's *current* generation
+   * the same way `TeamState.generation` does. Lives at the state's top
+   * level, not inside `TeamState`, specifically so it is unambiguous that
+   * this field -- unlike everything else `TeamState` holds -- is always safe
+   * to hand to every team via `projectForTeam`.
+   */
+  readonly publicCommitments: Readonly<Record<string, string>>;
+  /**
    * Replay guard: `JSON.stringify([attackerTeamId, targetTeamId, generation])`
    * for every successful HUNT. JSON-encoded (not `|`-joined) so a team id
    * that happens to contain `|` can never collide with a different triple.
@@ -153,7 +206,8 @@ export type CryptoBattleOp =
       readonly generation: number;
       readonly recoveredSecret: bigint;
     }
-  | { readonly kind: "rotate" };
+  | { readonly kind: "rotate" }
+  | { readonly kind: "prove"; readonly contractId: string; readonly proof: SchnorrProof };
 
 export interface VaultProjection {
   readonly teamId: string;
@@ -198,4 +252,6 @@ export interface CryptoBattleProjection {
   readonly otherOpenContractCount: number;
   readonly publicLedger: readonly PublicArtifact[];
   readonly teams: Readonly<Record<string, TeamSummaryProjection>>;
+  /** Every team's current-generation Schnorr public commitment -- see CryptoBattleState's field of the same name. Public by construction, safe for every team to see. */
+  readonly publicCommitments: Readonly<Record<string, string>>;
 }

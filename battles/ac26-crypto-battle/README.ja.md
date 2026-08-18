@@ -32,8 +32,10 @@ Contract が届き続けます。share を公開する・相手の隙を突く�
   何も復元できません。ROTATE にはクールダウンがあり、防御として連発する
   ことはできません。
 - **PROVE** — secret を一切明かさずに、その知識を持っているという証明
-  (zero-knowledge 的な主張) だけで得点する手段。LEAK と違い、成功した
-  PROVE は Public Ledger に一切触れません。
+  (非対話型 Schnorr proof) だけで得点する手段。同じ Contract を LEAK で
+  完了した場合と全く同じ得点になります。LEAK と違い secret を復元できる
+  material は一切公開されません — ただし証明そのもの (proof transcript) は
+  監査のために Public Ledger に記録され、誰でも検証を再実行できます。
 
 ## 3 つのレーン
 
@@ -42,17 +44,45 @@ Contract が届き続けます。share を公開する・相手の隙を突く�
   応じないと失効します。
 - **My Vault** — 自チームの現行 secret、この世代の全 share、スコア、
   ROTATE クールダウンの残り時間。他チームには一切見えません。
-- **Public Ledger** — 全チームがこれまでに LEAK した share の全公開履歴。
-  HUNT はここから始まります — 相手チームが現行世代のしきい値を超えて
-  share を晒していないか監視してください。
+- **Public Ledger** — 全チームがこれまでに LEAK した share と、PROVE した
+  proof transcript の全公開履歴。HUNT はここから始まります — 相手チームが
+  現行世代のしきい値を超えて share を晒していないか監視してください。
+  PROVE のエントリには、secret の復元に使える情報は一切含まれません。
+
+## PROVE の実際の手順
+
+PROVE は LEAK の代替となる雰囲気だけの手段ではなく、実際の暗号プロトコル
+です — `ac26-w3-schnorr` で学ぶのと同じ、非対話型 **Schnorr 知識証明**
+です。ある Contract を PROVE で完了するには、次の 3 ステップを踏みます。
+
+1. **witness を導出する。** 自チームの実際の `secret` をそのまま指数として
+   使うことはありません — 空間が小さすぎて安全ではないためです
+   (理由は `game/src/schnorr-witness.ts` のコメントを参照)。代わりに
+   secret とチーム id、現行世代をハッシュして、2048-bit 群 (RFC 3526
+   Group 14) 上の witness `w` を導出します。
+2. **proof を組み立てる。** `w` から、完了しようとしている特定の Contract
+   に紐づいた Schnorr commitment / response のペアを構築します —
+   `game/src/schnorr-prover.ts` の `createProof(secret, generation, teamId,
+   contractId)` がこれを決定的に (ランダム性を一切使わずに) 行います。
+3. **提出する。** 自チーム宛の open な Contract に対して有効な proof を
+   提出すると、その Contract を LEAK で完了した場合と全く同じ得点が入り
+   ます。proof transcript は Public Ledger に記録され誰でも独立に再検証
+   できますが、transcript 単体からは secret や share を復元するための
+   情報は一切得られません。
+
+proof は特定の Contract id に紐づいているため、別の Contract への
+使い回しはできません。また witness は ROTATE のたびに変わるため、
+ROTATE 前に作った proof は ROTATE 後には検証を通りません。
 
 ## スコアリング、一言で
 
-LEAK は完了した瞬間に得点、HUNT は検証済みの正しい復元でのみ得点、
-ROTATE はクールダウンというコストを払う代わりに、それ以前に漏洩した
-全 share を遡って無価値にします。「LEAK で今すぐ稼ぐ」と「ROTATE で
-安全を確保する」の間のテンポを読みながら Public Ledger で相手の隙を
-監視し続けたチームが勝ちます。
+LEAK と PROVE は同じ Contract を完了した場合、全く同じ得点になります —
+PROVE だからといって難しい分だけ多く得点することはありません。HUNT は
+検証済みの正しい復元でのみ得点、ROTATE はクールダウンというコストを払う
+代わりに、それ以前に漏洩した全 share を遡って無価値にします。「LEAK で
+今すぐ稼ぐ」「PROVE で安全に稼ぐ」「ROTATE で安全を確保する」の間の
+テンポを読みながら Public Ledger で相手の隙を監視し続けたチームが
+勝ちます。
 
 ## 学習目的
 
@@ -63,6 +93,9 @@ ROTATE はクールダウンというコストを払う代わりに、それ以�
 - しきい値未満の share が秘密について何も語らないことを実行可能な形で
   確認する。
 - secret rotation が過去に漏洩した share を無効化する仕組みを体験する。
+- 非対話型 Schnorr 知識証明 (PROVE) を実際に構築・検証し、それが特定の
+  Contract と特定の secret generation に Fiat–Shamir で紐づけられている
+  理由を体感する。
 
 ## 関連ファイル
 

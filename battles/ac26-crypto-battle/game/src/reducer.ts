@@ -1,5 +1,5 @@
 /**
- * Pure game model for the PROVE / LEAK / HUNT / ROTATE Battle (Issue #486, PR1).
+ * Pure game model for the PROVE / LEAK / HUNT / ROTATE Battle (Issue #486, PR1 + PR2).
  *
  * `initialState` / `validateOp` / `applyOp` / `tick` / `projectForTeam` below
  * are plain functions with the exact shape a `@tenkacloud/coordination-plugin-sdk`
@@ -29,12 +29,19 @@
  *   - Given the same seed and the same ordered sequence of tick/op calls, two
  *     independent replays produce deeply-equal state, always.
  *
- * PROVE is intentionally not implemented here (see types.ts's CryptoBattleOp
- * doc comment) -- it lands in PR2 together with its verifier.
+ * PROVE (PR2) validates a submitted proof via schnorr-verifier.ts's
+ * `verifyProof` -- a trusted verifier that never imports a secret, a witness,
+ * or the prover module (see that file's header for why). `applyOp`'s "prove"
+ * branch never re-derives or reasons about the underlying secret: it only
+ * ever sees `state.publicCommitments[teamId]` (public) and the submitted
+ * `SchnorrProof` (public once submitted).
  */
 
 import { deriveContractPlan, deriveTeamGeneration } from "./fixtures.ts";
 import { mod, P } from "./field.ts";
+import { RFC3526_GROUP14 } from "./group.ts";
+import { derivePublicCommitment } from "./schnorr-witness.ts";
+import { verifyProof } from "./schnorr-verifier.ts";
 import type {
   Contract,
   CoordinationContext,
@@ -43,6 +50,7 @@ import type {
   CryptoBattleProjection,
   CryptoBattleState,
   Phase,
+  ProofArtifact,
   PublicArtifact,
   TeamState,
   TeamSummaryProjection,
@@ -89,6 +97,7 @@ export function initialState(
 ): CryptoBattleState {
   const mergedConfig = mergeConfig(config);
   const teams: Record<string, TeamState> = {};
+  const publicCommitments: Record<string, string> = {};
   for (const teamId of ctx.teamIds) {
     const { secret, shares } = deriveTeamGeneration(ctx.eventId, teamId, 1, mergedConfig);
     teams[teamId] = {
@@ -101,6 +110,7 @@ export function initialState(
       completedContractIds: [],
       huntedGenerations: [],
     };
+    publicCommitments[teamId] = derivePublicCommitment(secret, 1, teamId, RFC3526_GROUP14).toString();
   }
   return {
     config: mergedConfig,
@@ -112,6 +122,7 @@ export function initialState(
     contracts: [],
     publicLedger: [],
     teams,
+    publicCommitments,
     successfulHunts: [],
   };
 }
@@ -252,6 +263,36 @@ export function validateOp(state: CryptoBattleState, teamId: string, op: CryptoB
       }
       return { ok: true };
     }
+    case "prove": {
+      // Same "own open contract" precondition as leak -- PROVE is a second
+      // way to complete a Contract, not a different queue of things to
+      // complete.
+      const contract = state.contracts.find((c) => c.id === op.contractId);
+      if (!contract) return { ok: false, error: `contract "${op.contractId}" not found` };
+      if (contract.teamId !== teamId) {
+        return { ok: false, error: `contract "${op.contractId}" belongs to another team` };
+      }
+      if (contract.status !== "open") {
+        return { ok: false, error: `contract "${op.contractId}" is ${contract.status}, not open` };
+      }
+      const publicCommitmentY = state.publicCommitments[teamId];
+      if (publicCommitmentY === undefined) {
+        // Cannot happen for a known team -- initialState/applyRotate always
+        // set this alongside TeamState. Fail loudly rather than silently
+        // treating a missing commitment as "nothing to check against".
+        return { ok: false, error: `no public commitment on record for team "${teamId}"` };
+      }
+      const verified = verifyProof(
+        BigInt(publicCommitmentY),
+        op.proof,
+        { teamId, contractId: op.contractId, generation: team.generation },
+        RFC3526_GROUP14,
+      );
+      if (!verified) {
+        return { ok: false, error: "proof failed verification" };
+      }
+      return { ok: true };
+    }
     default: {
       const exhaustive: never = op;
       return { ok: false, error: `unknown op kind ${JSON.stringify(exhaustive)}` };
@@ -360,7 +401,62 @@ function applyRotate(state: CryptoBattleState, teamId: string): CryptoBattleStat
   const contracts = state.contracts.map((c) =>
     c.teamId === teamId && c.status === "open" ? { ...c, status: "expired" as const } : c,
   );
-  return { ...state, contracts, teams: { ...state.teams, [teamId]: updatedTeam } };
+  // The Schnorr public commitment is generation-scoped (see
+  // schnorr-witness.ts's derivePublicCommitment): rederiving it here is what
+  // makes a pre-rotate PROVE proof fail verification post-rotate, the same
+  // way rotate already invalidates pre-rotate LEAK shares for HUNT above.
+  const publicCommitments = {
+    ...state.publicCommitments,
+    [teamId]: derivePublicCommitment(secret, generation, teamId, RFC3526_GROUP14).toString(),
+  };
+  return { ...state, contracts, teams: { ...state.teams, [teamId]: updatedTeam }, publicCommitments };
+}
+
+function applyProve(
+  state: CryptoBattleState,
+  teamId: string,
+  op: Extract<CryptoBattleOp, { kind: "prove" }>,
+): CryptoBattleState {
+  const contract = state.contracts.find((c) => c.id === op.contractId);
+  const team = state.teams[teamId];
+  if (!contract || !team) {
+    throw new Error("applyOp(prove): invalid op reached apply -- call validateOp() first");
+  }
+
+  const nowMs = state.nowMs ?? contract.issuedAtMs;
+  // Audit-only transcript: commitment/response only, NEVER a share value or
+  // the secret/witness they were derived from -- see types.ts's
+  // ProofArtifact doc comment and schnorr.test.ts's secret-non-leakage test.
+  const artifact: ProofArtifact = {
+    id: `${contract.id}-proof`,
+    teamId,
+    generation: team.generation,
+    kind: "proof",
+    contractId: contract.id,
+    commitment: op.proof.commitment,
+    response: op.proof.response,
+    postedAtMs: nowMs,
+  };
+
+  const contracts = state.contracts.map((c) =>
+    c.id === contract.id ? { ...c, status: "completed" as const, resolution: "prove" as const } : c,
+  );
+  const updatedTeam: TeamState = {
+    ...team,
+    // Same points as LEAK for the same Contract -- PROVE is a second way to
+    // complete a Contract honestly, not a differently-scored one (Issue #486
+    // Scoring MUST: no separate "PROVE bonus" for the educational value of
+    // proving instead of leaking).
+    score: team.score + contract.points,
+    completedContractIds: [...team.completedContractIds, contract.id],
+  };
+
+  return {
+    ...state,
+    contracts,
+    publicLedger: [...state.publicLedger, artifact],
+    teams: { ...state.teams, [teamId]: updatedTeam },
+  };
 }
 
 /**
@@ -378,6 +474,8 @@ export function applyOp(state: CryptoBattleState, teamId: string, op: CryptoBatt
       return applyHunt(state, teamId, op);
     case "rotate":
       return applyRotate(state, teamId);
+    case "prove":
+      return applyProve(state, teamId, op);
     default: {
       const exhaustive: never = op;
       throw new Error(`applyOp: unknown op kind ${JSON.stringify(exhaustive)}`);
@@ -388,10 +486,13 @@ export function applyOp(state: CryptoBattleState, teamId: string, op: CryptoBatt
 /**
  * The only sanctioned read path for a participant. Redacts every team's
  * state down to what `teamId` is allowed to see: their own vault in full,
- * every team's public score/generation, and the full Public Ledger (it is
- * public by construction -- every entry got there via a LEAK). No other
- * team's `secret` or un-leaked `shares` ever appear here (adversarial test #5
- * asserts this by scanning the serialized JSON).
+ * every team's public score/generation, the full Public Ledger (public by
+ * construction -- every entry got there via a LEAK's revealed share or a
+ * PROVE's proof transcript), and every team's Schnorr public commitment
+ * (also public by construction). No other team's `secret` or un-leaked
+ * `shares` -- and no team's witness -- ever appear here (adversarial test #5
+ * / prove.test.ts's secret-non-leakage test assert this by scanning the
+ * serialized JSON).
  */
 export function projectForTeam(state: CryptoBattleState, teamId: string): CryptoBattleProjection {
   const team = state.teams[teamId];
@@ -449,5 +550,9 @@ export function projectForTeam(state: CryptoBattleState, teamId: string): Crypto
     otherOpenContractCount,
     publicLedger: state.publicLedger,
     teams,
+    // Public by construction (see CryptoBattleState.publicCommitments) --
+    // passed through unredacted, unlike `teams` above it does not need a
+    // per-team summary shape.
+    publicCommitments: state.publicCommitments,
   };
 }

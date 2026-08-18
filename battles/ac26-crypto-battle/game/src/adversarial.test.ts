@@ -9,12 +9,17 @@
 import { describe, expect, test } from "bun:test";
 import { completeShares, reconstruct, type Share } from "./shamir.ts";
 import { applyOp, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
-import type { CryptoBattleOp, CryptoBattleState } from "./types.ts";
+import type { CryptoBattleOp, CryptoBattleState, PublicArtifact, ShareArtifact } from "./types.ts";
 
 const P101 = 101n;
 
 function ctx(eventId: string, teamIds: readonly string[] = ["teamA", "teamB"]) {
   return { eventId, teamIds };
+}
+
+/** Type-narrowing predicate: `PublicArtifact` is a `ShareArtifact | ProofArtifact` union since PR2 (PROVE artifacts). */
+function isShareArtifact(a: PublicArtifact): a is ShareArtifact {
+  return a.kind === "share";
 }
 
 /**
@@ -85,7 +90,10 @@ test("adversarial 2: LEAK x3 -> HUNT end-to-end (real contract issuance, real re
   let guard = 0;
   while (true) {
     const distinctIndices = new Set(
-      state.publicLedger.filter((a) => a.teamId === target).map((a) => a.shareIndex),
+      state.publicLedger
+        .filter((a) => a.teamId === target)
+        .filter(isShareArtifact)
+        .map((a) => a.shareIndex),
     );
     if (distinctIndices.size >= state.config.threshold) break;
     if (guard >= GUARD_LIMIT) {
@@ -99,7 +107,7 @@ test("adversarial 2: LEAK x3 -> HUNT end-to-end (real contract issuance, real re
   }
 
   const byIndex = new Map<number, Share>();
-  for (const artifact of state.publicLedger.filter((a) => a.teamId === target)) {
+  for (const artifact of state.publicLedger.filter((a) => a.teamId === target).filter(isShareArtifact)) {
     byIndex.set(artifact.shareIndex, { index: artifact.shareIndex, value: BigInt(artifact.value) });
   }
   const shares = [...byIndex.values()].slice(0, state.config.threshold);
@@ -142,8 +150,12 @@ test("adversarial 3: ROTATE invalidates old leaks -- mixed old+new generations d
   // 1 share leaked under the NEW generation, at an index not already used above.
   state = leakShareIndex(state, target, 3);
 
-  const oldLeaks = state.publicLedger.filter((a) => a.teamId === target && a.generation === 1);
-  const newLeaks = state.publicLedger.filter((a) => a.teamId === target && a.generation === 2);
+  const oldLeaks = state.publicLedger
+    .filter((a) => a.teamId === target && a.generation === 1)
+    .filter(isShareArtifact);
+  const newLeaks = state.publicLedger
+    .filter((a) => a.teamId === target && a.generation === 2)
+    .filter(isShareArtifact);
   expect(oldLeaks).toHaveLength(2);
   expect(newLeaks).toHaveLength(1);
 
@@ -174,6 +186,7 @@ test("adversarial 3: ROTATE invalidates old leaks -- mixed old+new generations d
   state = leakShareIndex(state, target, 5);
   const cleanNewLeaks = state.publicLedger
     .filter((a) => a.teamId === target && a.generation === 2)
+    .filter(isShareArtifact)
     .map((a) => ({ index: a.shareIndex, value: BigInt(a.value) }));
   expect(cleanNewLeaks.length).toBeGreaterThanOrEqual(state.config.threshold);
   const cleanRecovered = reconstruct(cleanNewLeaks.slice(0, state.config.threshold), state.config.prime);
@@ -195,6 +208,7 @@ test("adversarial 4: a successful HUNT cannot be replayed for the same (attacker
   }
   const shares: Share[] = state.publicLedger
     .filter((a) => a.teamId === target)
+    .filter(isShareArtifact)
     .slice(0, state.config.threshold)
     .map((a) => ({ index: a.shareIndex, value: BigInt(a.value) }));
   const recoveredSecret = reconstruct(shares, state.config.prime);
