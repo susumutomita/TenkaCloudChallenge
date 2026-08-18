@@ -154,6 +154,7 @@ export function initialState(
     teams,
     publicCommitments,
     successfulHunts: [],
+    huntLog: [],
   };
 }
 
@@ -420,6 +421,13 @@ function applyHunt(
     ...state,
     teams: { ...state.teams, [teamId]: updatedAttacker, [op.targetTeamId]: updatedTarget },
     successfulHunts: [...state.successfulHunts, huntKey(teamId, op.targetTeamId, op.generation)],
+    // Additive audit trail for replay.ts -- see HuntLogEntry's doc comment
+    // in types.ts for why this exists alongside (not instead of)
+    // successfulHunts above.
+    huntLog: [
+      ...state.huntLog,
+      { attackerTeamId: teamId, targetTeamId: op.targetTeamId, generation: op.generation, atMs: state.nowMs ?? 0 },
+    ],
   };
 }
 
