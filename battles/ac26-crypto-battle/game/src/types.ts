@@ -4,19 +4,39 @@
  *
  * `CoordinationContext` and the `ValidateResult` shape below intentionally
  * mirror what `@tenkacloud/coordination-plugin-sdk` expects a CoordinationPlugin
- * to consume/return (see AGENTS.md ADR-028 note in SCHEMA.json), so that PR3
- * can wrap `reducer.ts`'s exports directly without reshaping them. That SDK
- * package does not exist in this repository (TenkaCloudChallenge owns problem
- * content, not platform packages -- see this repo's AGENTS.md "Repository
- * boundary") and MUST NOT be imported here.
+ * to consume/return (see AGENTS.md ADR-028 note in SCHEMA.json), which is why
+ * `coordination/crypto-battle.ts` (PR3) wraps `reducer.ts`'s exports directly
+ * without reshaping them. That SDK package does not exist in this repository
+ * (TenkaCloudChallenge owns problem content, not platform packages -- see
+ * this repo's AGENTS.md "Repository boundary") and MUST NOT be imported here.
  *
  * PROVE (Issue #486 PR2) is a `CryptoBattleOp` discriminant backed by a real
  * Fiat-Shamir Schnorr verifier (schnorr-verifier.ts) -- see that module and
  * schnorr-prover.ts / schnorr-witness.ts / schnorr-transcript.ts / group.ts
  * for the scheme.
+ *
+ * JSON-SAFETY INVARIANT (Issue #486 PR3 review fix): `CryptoBattleState` and
+ * `CryptoBattleOp` MUST both round-trip cleanly through `JSON.stringify` /
+ * `JSON.parse` -- no field anywhere in either type may be a raw `bigint`.
+ * This is not a style preference: the platform dispatcher receives `op` as
+ * plain parsed-JSON `unknown` off the wire (TenkaCloud's
+ * `CoordinationOpBodySchema` is `{ op: z.unknown() }`, no shape validation
+ * happens before it reaches this package's `validateOp`) and persists `state`
+ * through backends that cannot carry a `bigint` either (Turso:
+ * `JSON.stringify` throws on one outright; DynamoDB: round-tripping through
+ * `Number` silently loses precision above 2^53-1, well under this package's
+ * 2048-bit Schnorr group elements and even under `field.ts`'s own 61-bit
+ * `P`). So every bigint that used to live in `CryptoBattleState` /
+ * `CryptoBattleOp` (`TeamState.secret`, `TeamState.shares[].value`,
+ * `CryptoBattleConfig.prime`, the hunt op's `recoveredSecret`) is a
+ * stringified decimal here instead -- the same convention `SchnorrProof` /
+ * `ShareArtifact` / `ProofArtifact` / `publicCommitments` already used from
+ * PR1/PR2. `game/src`'s pure crypto modules (`field.ts`, `shamir.ts`,
+ * `group.ts`, `schnorr-*.ts`, `prng.ts`, `fixtures.ts`) are unaffected and
+ * keep working in `bigint` internally -- only the shapes that cross the
+ * state/op boundary changed; `reducer.ts` converts at that boundary
+ * (`BigInt(...)` on the way in, `.toString()` on the way out).
  */
-
-import type { Share } from "./shamir.ts";
 
 /** What the platform dispatcher hands a CoordinationPlugin for one event. */
 export interface CoordinationContext {
@@ -56,7 +76,8 @@ export interface PhaseBoundaries {
  * and `disruptions[]` timings get tuned (see other battles/*\/metadata.json).
  */
 export interface CryptoBattleConfig {
-  readonly prime: bigint;
+  /** Stringified bigint -- see this file's header "JSON-SAFETY INVARIANT". */
+  readonly prime: string;
   readonly threshold: number;
   readonly shareCount: number;
   readonly matchDurationMs: number;
@@ -146,6 +167,18 @@ export interface ProofArtifact {
 export type PublicArtifact = ShareArtifact | ProofArtifact;
 
 /**
+ * A Shamir share as it lives in `CryptoBattleState` / `CryptoBattleProjection`
+ * -- `value` is a stringified bigint (see this file's header "JSON-SAFETY
+ * INVARIANT"), unlike `shamir.ts`'s own `Share`, which stays `bigint` because
+ * it is that module's pure internal computation type, never part of the
+ * state/op wire shape directly.
+ */
+export interface StoredShare {
+  readonly index: number;
+  readonly value: string;
+}
+
+/**
  * Per-team private state, held only by the trusted pure-model runtime (the
  * platform dispatcher Lambda), never sent to a participant directly --
  * `projectForTeam` is the only sanctioned read path, and it redacts every
@@ -156,9 +189,10 @@ export interface TeamState {
   readonly score: number;
   /** Increments on every successful ROTATE; shares/secret below are for THIS generation. */
   readonly generation: number;
-  readonly secret: bigint;
+  /** Stringified bigint -- see this file's header "JSON-SAFETY INVARIANT". */
+  readonly secret: string;
   /** All `shareCount` shares for the current generation (only some may have been LEAKed). */
-  readonly shares: readonly Share[];
+  readonly shares: readonly StoredShare[];
   readonly lastRotateAtMs: number | undefined;
   readonly completedContractIds: readonly string[];
   /** This team's OWN generations that some attacker has successfully HUNTed. */
@@ -204,7 +238,14 @@ export type CryptoBattleOp =
       readonly kind: "hunt";
       readonly targetTeamId: string;
       readonly generation: number;
-      readonly recoveredSecret: bigint;
+      /**
+       * Stringified bigint -- see this file's header "JSON-SAFETY INVARIANT".
+       * `validateOp`'s "hunt" branch parses this with `schnorr-verifier.ts`'s
+       * `parseCanonicalDecimal` (the same untrusted-decimal-parsing gate
+       * PROVE's proof fields already go through) and rejects a malformed
+       * value with `{ ok: false }` rather than throwing.
+       */
+      readonly recoveredSecret: string;
     }
   | { readonly kind: "rotate" }
   | { readonly kind: "prove"; readonly contractId: string; readonly proof: SchnorrProof };
@@ -212,7 +253,7 @@ export type CryptoBattleOp =
 export interface VaultProjection {
   readonly teamId: string;
   readonly secret: string;
-  readonly shares: readonly { readonly index: number; readonly value: string }[];
+  readonly shares: readonly StoredShare[];
   readonly generation: number;
   readonly lastRotateAtMs: number | undefined;
   readonly rotateCooldownRemainingMs: number;

@@ -97,6 +97,37 @@
  * supports it if the SDK ever grows that capability, without any change
  * needed here.
  *
+ * ## Wire safety (Issue #486 PR3 independent review, High #1 + #2)
+ *
+ * `../game/src/types.ts`'s `CryptoBattleState` / `CryptoBattleOp` are
+ * JSON-safe by construction (every field that used to be a raw `bigint` --
+ * `TeamState.secret`, `StoredShare.value`, `CryptoBattleConfig.prime`, the
+ * hunt op's `recoveredSecret` -- is a stringified decimal instead; see that
+ * file's "JSON-SAFETY INVARIANT" doc comment). That is load-bearing here,
+ * not incidental: TenkaCloud's `CoordinationOpBodySchema` is
+ * `{ op: z.unknown() }` (no shape validation before `op` reaches
+ * `validateOp` below), and `CryptoBattleState` has to round-trip through
+ * Turso/DynamoDB between calls -- neither can carry a `bigint`. Nothing in
+ * THIS file has to know that; it is `reducer.ts`'s `validateOp` "hunt"
+ * branch that parses the untrusted `recoveredSecret` string (via
+ * `schnorr-verifier.ts`'s exported `parseCanonicalDecimal`) and
+ * `reducer.ts`'s other functions that convert at the `bigint` <-> string
+ * boundary, so this wrapper stays a pure forward either way.
+ *
+ * ## Known upstream gap: HUNT cannot succeed against the live dispatcher yet
+ *
+ * TenkaCloud's `coordination-handler.ts` currently resolves
+ * `ctx.teamIds: [item.teamId]` -- only the requesting team, not the full
+ * event roster (that file's own comment flags this as provisional). Since
+ * `initialState` below builds one `TeamState` per `ctx.teamIds` entry, a
+ * live match's `state.teams` in practice only ever contains the caller, so
+ * `validateOp`'s hunt branch can never resolve a real
+ * `state.teams[op.targetTeamId]`. This is a TenkaCloud-side gap, not
+ * something fixable from this file or this repository -- tracked as
+ * TenkaCloud#3053 (see OPERATOR.md's "Known gaps" for the full citation).
+ * LEAK / PROVE / ROTATE and every `game/src` / `coordination-plugin.test.ts`
+ * test are unaffected (they construct `ctx.teamIds` directly).
+ *
  * ## projectForTeam: not defensively wrapped here, on purpose
  *
  * `reducer.ts`'s `projectForTeam` throws only for a `teamId` outside

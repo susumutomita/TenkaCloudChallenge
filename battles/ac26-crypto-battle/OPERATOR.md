@@ -220,12 +220,56 @@ repo depending on that package. `game/src/coordination-plugin.test.ts` stubs
 the same SDK surface at runtime via `bun:test`'s `mock.module` (loaded before
 a dynamic `import()` of the plugin, since `mock.module` must run before the
 mocked specifier is first imported) and drives the plugin's default export
-through a full 2-team `tick -> leak -> prove -> hunt` match, plus an
-eventId-determinism check.
+through `dispatchOp` / `runTick` (the SDK's own validate-then-apply / tick
+composition, mocked with real -- not dead -- reimplementations) across a full
+2-team `tick -> leak -> prove -> hunt` match, an eventId-determinism check, a
+JSON round-trip check, and a wire-shaped HUNT check (see "Wire safety" below).
 
 **Seed.** `initialState`'s seed is `ctx.eventId` -- `reducer.ts`'s
 `initialState` already sets `seed: ctx.eventId` directly, so this needed no
 change in `game/src` and nothing extra in the plugin wrapper.
+
+**Wire safety: `CryptoBattleOp` / `CryptoBattleState` must survive JSON
+end-to-end** (Issue #486 PR3 independent review, High #1 + #2). PR3's first
+draft carried `TeamState.secret`, `TeamState.shares[].value`,
+`CryptoBattleConfig.prime`, and the hunt op's `recoveredSecret` as raw
+`bigint` -- which cannot cross either boundary this plugin actually sits
+between:
+
+- **Op in.** TenkaCloud's `CoordinationOpBodySchema` is `{ op: z.unknown() }`
+  (`participant-handler/schemas.ts`) -- the dispatcher does zero shape
+  validation before `dispatchOp` hands `op` straight to this plugin's
+  `validateOp`. A JSON body can never contain a `bigint`, so a hunt op's
+  `recoveredSecret` arrives as a `string` (or, from a buggy/malicious client,
+  a `number` or something else entirely) -- never a `bigint` `validateOp`
+  could safely `mod()` against without checking first.
+- **State across calls.** The dispatcher persists `CryptoBattleState` between
+  every op/tick (Turso: `JSON.stringify` throws outright on a `bigint`;
+  DynamoDB: a round-trip through `Number` silently loses precision above
+  2^53-1, well under both `field.ts`'s 61-bit `P` and this package's
+  2048-bit Schnorr group elements).
+
+Fix: `CryptoBattleOp`'s `recoveredSecret` and every bigint field reachable
+from `CryptoBattleState` (`TeamState.secret`, the new `StoredShare.value`,
+`CryptoBattleConfig.prime`) are now stringified decimals -- the same
+convention `SchnorrProof` / `ShareArtifact` / `ProofArtifact` /
+`publicCommitments` already used from PR1/PR2 (see types.ts's "JSON-SAFETY
+INVARIANT" doc comment). `reducer.ts` converts at the boundary
+(`BigInt(...)` in, `.toString()` out); `game/src`'s pure crypto modules
+(`field.ts`, `shamir.ts`, `group.ts`, `schnorr-*.ts`, `prng.ts`,
+`fixtures.ts`) are untouched and keep working in `bigint` internally.
+`validateOp`'s "hunt" branch parses the untrusted `recoveredSecret` string
+through `schnorr-verifier.ts`'s `parseCanonicalDecimal` (now exported and
+shared, rather than duplicated) -- the exact `/^\d{1,700}$/` gate PROVE's
+proof fields already went through -- and rejects a malformed value with
+`{ ok: false }` instead of throwing. `parseCanonicalDecimal` itself now takes
+`unknown`, not `string`, and explicitly checks `typeof value === "string"`
+first: without that, `RegExp.test()`'s implicit `ToString` coercion would
+have silently accepted a JSON *number* as if it were the equivalent decimal
+string, exactly the wire-type confusion this fix closes.
+`coordination-plugin.test.ts`'s "state survives a JSON round-trip" and "HUNT
+works with recoveredSecret in its real wire shape" tests pin both halves of
+this down directly.
 
 ## Implementation roadmap (Issue #486)
 
@@ -299,3 +343,25 @@ per-match override.
   probe/flag-based `scoring` schema, so `metadata.json` intentionally omits
   `scoring` / `endpoints`; there is nothing for a CFn Output or an
   `endpoints[]` entry to expose.
+- **HUNT cannot succeed in production yet -- TenkaCloud's `ctx.teamIds` is
+  only the requesting team, not the full event roster** (Issue #486 PR3
+  independent review, Medium #3; cross-repo, cannot be fixed from this
+  repo). `TenkaCloud/infrastructure/lib/problem-deploy/handlers/participant-handler/coordination-handler.ts:139`
+  builds `ctx: { eventId: item.eventId, teamIds: [item.teamId] }` -- a
+  single-element array, always just the calling team -- when resolving a
+  request's `CoordinationScope`; that file's own comment at line 121
+  already flags this as provisional ("`ctx.teamIds` は現状 requester 自身のみ。
+  full event roster の解決は importer 配線と同 increment で拡張する"). Since this
+  plugin's `initialState` builds one `TeamState` per `ctx.teamIds` entry
+  (see `game/src/reducer.ts`), a live match's `state.teams` would in
+  practice only ever contain the requesting team -- `validateOp`'s "hunt"
+  branch's `state.teams[op.targetTeamId]` lookup can never resolve to a real
+  target team, so every HUNT is rejected with "unknown target team" against
+  the live dispatcher, independent of whether the recovered secret is
+  correct. `game/src/coordination-plugin.test.ts` and `game/src` unit tests
+  are unaffected (they construct `ctx.teamIds` directly, the way a full
+  roster resolver eventually will), so this gap is invisible to `bun test`
+  -- it only shows up once TenkaCloud's roster resolution ships. Tracked
+  upstream: [TenkaCloud#3053](https://github.com/susumutomita/TenkaCloud/issues/3053).
+  No code change is possible on this side; this Battle's HUNT/LEAK/PROVE/
+  ROTATE loop is otherwise fully wired and ready as soon as that lands.

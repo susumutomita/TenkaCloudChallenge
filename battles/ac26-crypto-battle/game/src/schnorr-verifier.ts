@@ -34,7 +34,12 @@ export interface ProveStatement {
 /**
  * The largest decimal value this 2048-bit group's modulus `p` ever needs to
  * represent has 617 digits (`floor(2048 * log10(2)) + 1`); 700 leaves
- * comfortable margin without opening the door to an absurdly long input.
+ * comfortable margin without opening the door to an absurdly long input. This
+ * is also the cap `reducer.ts`'s "hunt" branch reuses for `recoveredSecret`
+ * (see `parseCanonicalDecimal` below) -- that value only ever needs ~19
+ * digits for `field.ts`'s 61-bit `P`, so 700 stays a generous, not tight,
+ * bound there too; one shared untrusted-decimal gate is simpler to reason
+ * about than a second cap tuned per value space.
  */
 const MAX_PROOF_FIELD_DECIMAL_DIGITS = 700;
 
@@ -42,28 +47,43 @@ const MAX_PROOF_FIELD_DECIMAL_DIGITS = 700;
 const CANONICAL_DECIMAL = new RegExp(`^\\d{1,${MAX_PROOF_FIELD_DECIMAL_DIGITS}}$`);
 
 /**
- * Parse a participant-submitted `proof.commitment` / `proof.response` string
- * into a `bigint`, or `undefined` if it is not a canonical, length-bounded
- * decimal literal. MUST run before any `BigInt()` call on untrusted input:
- * `BigInt()`'s parse cost is superlinear in input length. Measured on this
- * runtime (Bun / JavaScriptCore): a 300,000-digit string takes ~565ms to
- * parse directly, and JavaScriptCore additionally enforces its own hard
- * BigInt size cap somewhere between 300,000 and 400,000 decimal digits,
- * throwing `RangeError: Out of memory` past it -- so an unguarded
- * `BigInt()` call on untrusted input is a CPU-exhaustion vector well within
- * that cap, not only for inputs large enough to hit it. (Other JS engines
- * cap BigInt size much higher or not at all, so an input long enough to be
- * slow there without ever throwing is easy to construct -- the length bound
- * below does not depend on any particular engine's cap.) Rejecting anything
- * that is not `/^\d{1,700}$/` up front closes this off before `BigInt()`
- * ever runs, and as a side effect also rejects every non-canonical encoding
- * `BigInt()` would otherwise happily accept -- a `"0x..."` hex literal, a
- * leading `"+"`, embedded/trailing whitespace, or a `"-"` sign -- so there is
+ * Parse an untrusted, participant-submitted decimal string into a `bigint`,
+ * or `undefined` if it is not a canonical, length-bounded decimal literal.
+ * MUST run before any `BigInt()` call on untrusted input: `BigInt()`'s parse
+ * cost is superlinear in input length. Measured on this runtime (Bun /
+ * JavaScriptCore): a 300,000-digit string takes ~565ms to parse directly,
+ * and JavaScriptCore additionally enforces its own hard BigInt size cap
+ * somewhere between 300,000 and 400,000 decimal digits, throwing
+ * `RangeError: Out of memory` past it -- so an unguarded `BigInt()` call on
+ * untrusted input is a CPU-exhaustion vector well within that cap, not only
+ * for inputs large enough to hit it. (Other JS engines cap BigInt size much
+ * higher or not at all, so an input long enough to be slow there without
+ * ever throwing is easy to construct -- the length bound below does not
+ * depend on any particular engine's cap.) Rejecting anything that is not
+ * `/^\d{1,700}$/` up front closes this off before `BigInt()` ever runs, and
+ * as a side effect also rejects every non-canonical encoding `BigInt()`
+ * would otherwise happily accept -- a `"0x..."` hex literal, a leading
+ * `"+"`, embedded/trailing whitespace, or a `"-"` sign -- so there is
  * exactly one parse path this module trusts. See schnorr.test.ts's
  * "input format/size validation" tests for the measured guarded-vs-unguarded
  * timing gap.
+ *
+ * Exported (Issue #486 PR3 review fix) so `reducer.ts`'s "hunt" branch can
+ * reuse the exact same untrusted-decimal gate for `CryptoBattleOp`'s
+ * `recoveredSecret` instead of a second, drifting copy -- `verifyProof`
+ * below was its first and remains its only other caller.
+ *
+ * `value` is typed `unknown`, not `string` (Issue #486 PR3 review fix): every
+ * caller here sits right at a JSON wire boundary (a participant-submitted
+ * `SchnorrProof` field, or `CryptoBattleOp`'s hunt `recoveredSecret`), where
+ * TypeScript's static `string` annotation on the surrounding type is not a
+ * runtime guarantee -- `RegExp.prototype.test` coerces a non-string argument
+ * via `ToString` before matching, so a JSON *number* like `123` would
+ * otherwise sail through as `"123"` instead of being rejected as the wrong
+ * wire type. The explicit `typeof` check below closes that off.
  */
-function parseCanonicalDecimal(value: string): bigint | undefined {
+export function parseCanonicalDecimal(value: unknown): bigint | undefined {
+  if (typeof value !== "string") return undefined;
   if (!CANONICAL_DECIMAL.test(value)) return undefined;
   return BigInt(value);
 }

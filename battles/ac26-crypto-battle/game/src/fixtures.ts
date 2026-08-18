@@ -3,11 +3,25 @@
  * string: per-team secrets, Shamir coefficients, and the LEAK contract
  * schedule. All of it goes through prng.ts's SHA-256 counter stream -- see
  * that file for why (purity contract for the whole reducer).
+ *
+ * Field-space params here (`FieldConfig.prime`) stay `bigint`, deliberately
+ * decoupled from `CryptoBattleConfig.prime` (a stringified bigint -- see
+ * types.ts's "JSON-SAFETY INVARIANT"): this module is one of `game/src`'s
+ * pure crypto modules, not a state/op boundary, so it keeps working directly
+ * in `bigint` the same way `field.ts` / `shamir.ts` do. `reducer.ts` is what
+ * converts `CryptoBattleConfig.prime` to `bigint` before calling in here.
  */
 
 import { deriveBigInt, deriveStream } from "./prng.ts";
 import { share, type Share } from "./shamir.ts";
-import type { ContractKind, CryptoBattleConfig } from "./types.ts";
+import type { ContractKind } from "./types.ts";
+
+/** The bigint-space subset of `CryptoBattleConfig` this module's derivations need. */
+export interface FieldConfig {
+  readonly prime: bigint;
+  readonly threshold: number;
+  readonly shareCount: number;
+}
 
 /** This team's secret for this generation, as a field element. */
 export function deriveSecret(seed: string, teamId: string, generation: number, p: bigint): bigint {
@@ -30,7 +44,7 @@ export function deriveTeamGeneration(
   seed: string,
   teamId: string,
   generation: number,
-  config: Pick<CryptoBattleConfig, "prime" | "threshold" | "shareCount">,
+  config: FieldConfig,
 ): { readonly secret: bigint; readonly shares: readonly Share[] } {
   const secret = deriveSecret(seed, teamId, generation, config.prime);
   const coeffs = deriveCoefficients(seed, teamId, generation, config.threshold, config.prime);
@@ -57,7 +71,7 @@ export function deriveContractPlan(
   seed: string,
   teamId: string,
   sequenceIndex: number,
-  config: Pick<CryptoBattleConfig, "prime" | "shareCount">,
+  config: Pick<FieldConfig, "prime" | "shareCount">,
 ): ContractPlan {
   const RUSH_MODULUS = 5n;
   const kindRoll = deriveBigInt(seed, `contract-kind:${teamId}`, sequenceIndex, config.prime);
