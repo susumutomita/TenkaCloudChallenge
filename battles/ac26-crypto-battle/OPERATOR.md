@@ -22,8 +22,9 @@ projectForTeam(state, teamId)       -> CryptoBattleProjection
 
 This shape is deliberate: it matches what a `@tenkacloud/coordination-plugin-sdk`
 CoordinationPlugin needs (see ADR-028's description of `interTeamCoordination`
-in `SCHEMA.json`) so that a later PR can wrap these exports into a plugin file
-directly, with no reshaping. That SDK package is **not** a dependency here --
+in `SCHEMA.json`), which is exactly why `coordination/crypto-battle.ts` (PR3)
+could wrap these exports into a plugin file directly, with no reshaping. That
+SDK package is **not** a dependency of `game/` --
 TenkaCloudChallenge owns problem content, not platform packages (see this
 repo's `AGENTS.md`), and importing it would violate that boundary. Nothing
 under `game/src/` imports anything outside this package.
@@ -42,8 +43,8 @@ data source), that is a deliberate addition, not a gap being filled in.
 **Trust boundary.** `TeamState` (in `game/src/types.ts`) holds real
 cryptographic material -- `secret` and every current `Share`, leaked or not.
 This is safe only because the whole `game/` package runs exclusively on the
-trusted side (the platform dispatcher Lambda that will own the coordination
-plugin in PR3). A participant never receives a `CryptoBattleState` directly;
+trusted side (the platform dispatcher Lambda, via `coordination/crypto-battle.ts`
+since PR3). A participant never receives a `CryptoBattleState` directly;
 `projectForTeam` is the only sanctioned read path, and it redacts every team
 but the caller's down to a public score/generation summary (see
 `adversarial.test.ts`'s "adversarial 5" for the test that pins this).
@@ -112,8 +113,8 @@ single job:
   `schnorr-prover.ts`** -- it only ever sees public inputs (a public
   commitment already stored in `state.publicCommitments`, and the proof a
   team submitted). `schnorr.test.ts`'s module-separation test statically
-  greps its import statements to keep this true; PR3's coordination plugin
-  will run this exact function on the trusted dispatcher, unchanged.
+  greps its import statements to keep this true; `coordination/crypto-battle.ts`
+  (PR3) runs this exact function on the trusted dispatcher, unchanged.
 
 `CryptoBattleState.publicCommitments: Record<teamId, string>` holds every
 team's current-generation `Y`, derived once at `initialState` and
@@ -150,22 +151,101 @@ reads -- with no separate "PROVE bonus" term. Issue #486's Scoring MUST
 ボーナスを付けない") falls out of reusing the field rather than needing an
 explicit equality check anywhere.
 
+## Coordination plugin wiring (Issue #486 PR3)
+
+`coordination/crypto-battle.ts` is a **thin wrapper**, not a reimplementation:
+it forwards `game/src/reducer.ts`'s `initialState` / `validateOp` / `applyOp`
+/ `tick` / `projectForTeam` straight through `defineCoordinationPlugin`, with
+no reshaping and no logic duplicated between `game/src` and `coordination/`.
+`metadata.json`'s `interTeamCoordination.plugin` points at it.
+
+**How the platform actually loads this file** (investigated read-only against
+the TenkaCloud checkout, since that repo owns the dispatcher):
+
+- At CDK synth time, `TenkaCloud/infrastructure/lib/utils/bundle-coordination-plugins.ts`
+  esbuild-`buildSync`s the declared plugin entry with
+  `{ bundle: true, format: "esm", platform: "node" }`. `bundle: true` resolves
+  and inlines every relative import the entry file makes, however deep --
+  confirmed locally by pointing the identical esbuild config at this file's
+  whole `game/src` import graph (`reducer.ts` -> `fixtures.ts` / `field.ts` /
+  `group.ts` / `schnorr-witness.ts` / `schnorr-verifier.ts` -> `prng.ts` /
+  `schnorr-transcript.ts` / ...): it bundles cleanly into one ~21.6 KB ESM
+  file, no resolution errors. That is why `crypto-battle.ts` imports
+  `../game/src/reducer.ts` directly (a relative import reaching a sibling
+  directory within this same problem, not vendoring a copy) instead of
+  hand-copying the reducer's logic the way
+  `battles/microservice-migration-battle/coordination/router.ts` and
+  TenkaCloud's own `packs/reference-coordination-battle/.../sector-control.ts`
+  are self-contained -- those two simply never had a sibling game package to
+  reuse, they are not evidence of a single-file requirement.
+- The bare `@tenkacloud/coordination-plugin-sdk` import resolves because
+  `problems/` is a git submodule *inside* the TenkaCloud checkout
+  (`TenkaCloud/.gitmodules`), so this file's real on-disk path at bundle time
+  is `TenkaCloud/problems/battles/ac26-crypto-battle/coordination/crypto-battle.ts`.
+  esbuild's bare-specifier resolution walks up parent directories'
+  `node_modules` from there, past the submodule boundary (a filesystem walk
+  does not stop at a `.git` boundary), and lands on
+  `TenkaCloud/node_modules/@tenkacloud/coordination-plugin-sdk` -- a
+  bun/npm workspace symlink to `TenkaCloud/packages/coordination-plugin-sdk`
+  (`TenkaCloud/package.json`'s `workspaces: ["infrastructure", "apps/*",
+  "packages/*"]`). This is the same mechanism `router.ts` already relies on.
+- `platform: "node"` leaves Node built-ins external instead of bundling or
+  erroring on them -- confirmed locally (esbuild 0.23.1): a probe file
+  importing `node:crypto`'s `createHash` under the identical `buildSync`
+  config keeps `import { createHash } from "node:crypto"` in the output. That
+  matters because `game/src/prng.ts` and `game/src/schnorr-witness.ts` both
+  import `createHash` from `node:crypto` for their SHA-256 derivations. The
+  bundled `.mjs` is later `import()`-ed by
+  `TenkaCloud/infrastructure/lib/problem-deploy/handlers/coordination-dispatcher-handler/index.ts`,
+  a `hono/aws-lambda` app running on the Node.js AWS Lambda runtime, and that
+  same handler's `s3-plugin-importer.ts` already imports `createHash` /
+  `timingSafeEqual` from `node:crypto` itself (to verify the downloaded
+  bundle's digest before `import()`-ing it) -- i.e. the dispatcher's own
+  trusted-side code already depends on `node:crypto` being available in that
+  Lambda, so this plugin doing the same needs no special-casing and **no
+  pure-JS SHA-256 vendoring** was needed.
+- `coordination-plugin-loader.ts`'s `isCoordinationPlugin` (participant
+  handler, TenkaCloud side) only checks the default export structurally has
+  `initialState` / `validateOp` / `applyOp` / `projectForTeam` functions
+  (`tick` optional) -- exactly the five hooks forwarded.
+
+**Typecheck.** `battles/` is outside the repo root `tsconfig.json`'s scope, so
+`game/tsconfig.json`'s `include` was extended to also cover
+`../coordination/**/*.ts`, and a local, types-only ambient declaration
+(`coordination/coordination-plugin-sdk.d.ts`, explicitly commented as a stub
+that must stay in sync with TenkaCloud's real
+`packages/coordination-plugin-sdk/src/index.ts`) lets `bun run typecheck`
+resolve the bare `@tenkacloud/coordination-plugin-sdk` import without this
+repo depending on that package. `game/src/coordination-plugin.test.ts` stubs
+the same SDK surface at runtime via `bun:test`'s `mock.module` (loaded before
+a dynamic `import()` of the plugin, since `mock.module` must run before the
+mocked specifier is first imported) and drives the plugin's default export
+through a full 2-team `tick -> leak -> prove -> hunt` match, plus an
+eventId-determinism check.
+
+**Seed.** `initialState`'s seed is `ctx.eventId` -- `reducer.ts`'s
+`initialState` already sets `seed: ctx.eventId` directly, so this needed no
+change in `game/src` and nothing extra in the plugin wrapper.
+
 ## Implementation roadmap (Issue #486)
 
 | PR  | Scope                                                                 | Status  |
 | --- | ---------------------------------------------------------------------- | ------- |
 | PR1 | Pure game model: types, Shamir + Lagrange reference implementation, LEAK / HUNT / ROTATE reducer, unit + adversarial tests | done |
-| PR2 | PROVE op + its Fiat-Shamir Schnorr verifier                            | **done (this PR)** |
-| PR3 | Coordination-plugin wiring (`interTeamCoordination.plugin`, dispatcher integration) | not started |
+| PR2 | PROVE op + its Fiat-Shamir Schnorr verifier                            | done |
+| PR3 | Coordination-plugin wiring (`interTeamCoordination.plugin`, dispatcher integration) | **done (this PR)** |
 | PR4 | Portal UI (`dashboard.slots`: Contract Queue / My Vault / Public Ledger panels) | not started |
 
-`metadata.json` declares no `scoring`, `endpoints`, or `interTeamCoordination`
-block -- those are meaningless (and, for `interTeamCoordination.plugin`,
-`scripts/validate-problems.ts` would reject a path that does not exist yet)
-until PR3 gives the reducer a real host to run inside. `status: "draft"` and
-`visibility: "public"` follow this catalog's convention for a problem that is
-real content but not yet playtested end-to-end (see other `battles/*/metadata.json`
-with `status: "draft"`, e.g. `agent-approval-gameday`, `stackstack-gameday`).
+`metadata.json` now declares `interTeamCoordination` (this PR) but still no
+`scoring` / `endpoints` block -- this Battle's scoring lives entirely inside
+the coordination plugin's own state (`TeamState.score`, updated by
+`applyOp`), not the probe/flag-based `scoring` schema those keys describe;
+there is still nothing for a CFn Output or an `endpoints[]` entry to expose.
+`status: "draft"` and `visibility: "public"` remain unchanged from PR1/PR2 --
+following this catalog's convention for a problem that is real content but
+not yet playtested end-to-end (see other `battles/*/metadata.json` with
+`status: "draft"`, e.g. `agent-approval-gameday`, `stackstack-gameday`); PR4's
+portal UI is still outstanding.
 
 ## Config / balance knobs
 
@@ -188,26 +268,34 @@ These are Issue #486's playtest seed values, not a locked-in balance spec.
 Expect them to move once this Battle gets an actual playtest, the same way
 other Battles tune `phases[].afterMinutes` / `disruptions[]` timings after
 running live. `initialState(ctx, configOverride)` accepts a partial override
-for exactly this kind of per-event tuning without touching the defaults.
+for exactly this kind of per-event tuning -- but note the SDK's
+`CoordinationPlugin.initialState(ctx)` contract takes only `ctx` (see PR3's
+"Coordination plugin wiring" section above), so the dispatcher never actually
+supplies `configOverride` today; the plugin always runs with `DEFAULT_CONFIG`
+until the SDK's `initialState` contract grows a config parameter. Per-event
+tuning therefore currently means changing `DEFAULT_CONFIG` itself, not a
+per-match override.
 
 ## Known gaps (by design, not oversight)
 
 - **No participant-facing PROVE tool yet.** `schnorr-prover.ts`'s
   `createProof` is the tool a participant script would call, but there is no
   CLI wrapper or portal button to run it from -- that surface arrives with
-  PR4's UI (the same gap LEAK/HUNT/ROTATE already have; see "No live
-  coordination plugin, no portal UI" below).
+  PR4's UI (the same gap LEAK/HUNT/ROTATE already have; see "No portal UI
+  yet" below).
 - **No compute-budget economy for ROTATE.** PR1 represents ROTATE's cost as
   a cooldown (`rotateCooldownMs`) plus voiding the team's own in-flight
   Contract Queue (see "ROTATE's time cost" above) -- not a metered compute
-  budget. Issue #486 mentions a fuller compute-economy treatment as a
-  PR3/PR6-era idea; nothing here blocks that from replacing or augmenting
-  the cooldown/expiry pair later.
-- **No live coordination plugin, no portal UI.** The reducer is fully
-  testable and deterministic today (`bun test` under `game/`), but nothing
-  currently calls it from a running match -- that wiring is PR3 (dispatcher
-  integration) and PR4 (participant-facing panels).
-- **`template.yaml` has no scoring surface.** Because scoring is
-  coordination-plugin-driven (PR3), `metadata.json` intentionally omits
-  `scoring` for now; there is nothing yet for a CFn Output or an
+  budget. Issue #486 mentions a fuller compute-economy treatment as a later
+  idea; nothing here blocks that from replacing or augmenting the
+  cooldown/expiry pair later.
+- **No portal UI yet.** The coordination plugin (PR3) is live and fully
+  testable/deterministic (`bun test` under `game/`, plus
+  `coordination-plugin.test.ts`'s plugin-wiring coverage), but participants
+  have no Contract Queue / My Vault / Public Ledger panels to act through --
+  that surface is PR4.
+- **`template.yaml` has no scoring surface.** Scoring is coordination-plugin-
+  driven (`TeamState.score`, inside the plugin's own state) rather than the
+  probe/flag-based `scoring` schema, so `metadata.json` intentionally omits
+  `scoring` / `endpoints`; there is nothing for a CFn Output or an
   `endpoints[]` entry to expose.

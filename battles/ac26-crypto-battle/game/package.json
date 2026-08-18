@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Pure game model (state / op / reducer) for the PROVE / LEAK / HUNT advanced-cryptography Battle. No AWS, no network, no coordination-plugin SDK import -- see AGENTS.md.",
+  "description": "Pure game model (state / op / reducer) for the PROVE / LEAK / HUNT advanced-cryptography Battle. No AWS, no network -- reducer.ts / types.ts never import @tenkacloud/coordination-plugin-sdk (see AGENTS.md). src/coordination-plugin.test.ts is the one exception: it exercises ../../coordination/crypto-battle.ts's plugin wrapper against a bun:test-mocked stub of that SDK (Issue #486 PR3), never the real package.",
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit"
