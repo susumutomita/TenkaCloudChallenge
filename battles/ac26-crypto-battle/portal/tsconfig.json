@@ -1,0 +1,52 @@
+{
+  // Issue #486 PR4: module-resolution-only config, NOT a second typecheck
+  // project. `bun run --cwd ../game typecheck` (`tsc -p ../game/tsconfig.json`)
+  // is the one place these files actually get type-checked -- that project's
+  // own "include" already covers "../portal/**/*.tsx" (see its comment).
+  //
+  // This file exists ONLY because both `tsc` and `bun test`/`bun run` resolve
+  // a bare "react" import using the NEAREST tsconfig.json found by walking up
+  // from the IMPORTING FILE's own directory -- not from wherever `tsc -p` or
+  // `bun test` was invoked. `../game/tsconfig.json`'s "paths" mapping (which
+  // correctly resolves "react" for game/src/*.ts, since that tsconfig lives
+  // right there) has no effect on portal/*.tsx, because portal/ is a SIBLING
+  // of game/, not a descendant -- walking up from a file in portal/ never
+  // reaches game/tsconfig.json at all, it would otherwise land on this repo's
+  // root tsconfig.json (which declares no such "paths"). Verified empirically
+  // against a scratch alias probe before landing on this fix; every simpler
+  // alternative was tried and rejected first:
+  //   - a `"react/*"` glob path entry (works for the bare "react" specifier,
+  //     but not reliably for automatic-JSX-runtime subpath imports like
+  //     "react/jsx-dev-runtime" -- Bun's `paths` glob substitution does not
+  //     re-run full module resolution, i.e. extension lookup, on the result).
+  //   - a `battles/ac26-crypto-battle/package.json` declaring
+  //     `"workspaces": ["game"]`, hoping `bun install --cwd game`'s
+  //     ancestor-workspace detection would hoist a shared node_modules here.
+  //     It does NOT: Bun's linker only ever creates the named `react` /
+  //     `react-dom` symlinks inside the WORKSPACE MEMBER's own node_modules
+  //     (`game/node_modules/react`), never in the workspace root's, so
+  //     portal/'s upward node_modules walk still finds nothing.
+  //
+  // react / react-dom are installed ONLY in `../game/node_modules` (see
+  // `../game/package.json`'s devDependencies doc comment) -- this repo does
+  // not run a second `bun install` here, and the root `validate:crypto-battle`
+  // script (which this repo's AGENTS.md forbids editing) only ever installs
+  // `../game`'s dependency tree. Pointing "paths" at that one real install,
+  // by exact subpath (not a glob, per the note above), is what actually
+  // resolves for both `tsc` and `bun test` without a second install step.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "react": ["../game/node_modules/react"],
+      "react/jsx-runtime": ["../game/node_modules/react/jsx-runtime"],
+      "react/jsx-dev-runtime": ["../game/node_modules/react/jsx-dev-runtime"],
+      "react-dom": ["../game/node_modules/react-dom"],
+      "react-dom/server": ["../game/node_modules/react-dom/server"]
+    }
+  }
+}

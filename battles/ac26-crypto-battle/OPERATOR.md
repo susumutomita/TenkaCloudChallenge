@@ -271,25 +271,131 @@ string, exactly the wire-type confusion this fix closes.
 works with recoveredSecret in its real wire shape" tests pin both halves of
 this down directly.
 
+## Portal UI wiring (Issue #486 PR4)
+
+`metadata.json`'s `dashboard.slots` names 3 files under `portal/`, following
+`battles/microservice-migration-battle/portal/*.tsx`'s precedent and the
+`@tenkacloud/portal-plugin-sdk` contract exactly (see
+`portal/portal-plugin-sdk.d.ts`'s header for the same "types-only ambient
+stub" treatment `coordination/coordination-plugin-sdk.d.ts` already gets):
+
+```
+StatusPanel.tsx        Score / Time / Phase header + 3 lanes (Contract Queue / My Vault / Public Ledger)
+RegistrationPanel.tsx  4 op submission forms: LEAK / PROVE / HUNT / ROTATE
+HelpDrawer.tsx          static 1-screen rules reference (no coordinationClient needed)
+```
+
+**Data flow.** `StatusPanel.tsx` and `RegistrationPanel.tsx` both poll
+`props.coordinationClient.getProjection()` every 30s
+(`portal/coordination.ts`'s `usePolledProjection` -- ADR-014 / polling-over-SSE,
+no SSE/WebSocket, same cadence microservice-migration-battle's `StatusPanel`
+uses) and narrow the SDK's `unknown` projection to this problem's own
+`CryptoBattleProjection` via that same module's `isCryptoBattleProjection`.
+Factoring the polling + narrowing into one shared, non-`.tsx` module (so the
+participant-portal plugin loader's `portal/*.tsx`-only glob never mistakes it
+for a 4th slot) means there is exactly one place that has to get the 30s
+cadence and the narrowing right, instead of two copies drifting.
+`props.coordinationClient` undefined -- coordination unwired for this
+deployment/session -- fail-closes both panels to a short notice; unlike
+microservice-migration-battle's StatusPanel (which still has `props.endpoints`
+to fall back to), every field either panel here renders comes from the one
+projection, so there is no partial content to show without a client.
+
+**RegistrationPanel never computes crypto on the participant's behalf.**
+PROVE needs a `SchnorrProof { commitment, response }`; HUNT needs a
+`recoveredSecret`. Both are built locally by the participant (via
+`game/src/schnorr-prover.ts`'s `createProof` / `game/src/shamir.ts`'s
+`reconstruct`, or an equivalent tool they write) and only pasted into the
+form. This is Issue #486's actual design, not a missing convenience feature:
+PROVE's local proof construction and HUNT's local Lagrange reconstruction
+*are* those two moves' compute cost -- a portal button that ran either
+computation for you would erase it. `RegistrationPanel.tsx`'s 4 `submit*`
+helpers (`submitLeak` / `submitProve` / `submitHunt` / `submitRotate`) only
+ever forward already-built values into the `CryptoBattleOp` shape
+`game/src/types.ts` declares.
+
+**"Does not leak the answer" (Issue #486 UI principle).** The Public Ledger
+lane renders raw `PublicArtifact` fields (teamId / generation / shareIndex /
+value for a LEAK, or teamId / generation / commitment / response for a
+PROVE) and nothing else -- no "threshold reached", no "N of M shares
+exposed", no computed exploitability verdict. `CryptoBattleProjection` does
+not even carry `config.threshold`, which structurally rules out the panel
+computing such a verdict even by accident. The same principle applies to My
+Vault: it is a plain data readout (secret / shares / generation / rotate
+cooldown), never an automated "you are at risk" judgement.
+`game/src/portal.test.ts`'s "does not leak the answer" test renders the
+Public Ledger with a fabricated projection that deliberately leaks exactly
+`DEFAULT_CONFIG.threshold`-many shares for one team, then greps the rendered
+output for exactly this class of string.
+
+**Error handling (Issue #486's 3-way split).** `RegistrationPanel.tsx`'s
+`describeOutcome` branches every `PortalCoordinationOutcome`: `rejected` ->
+`validateOp`'s error string shown as-is (a cryptographic failure or game-rule
+rejection); `unavailable` / `conflict` / `unauthorized` -> a generic
+infra-retry message; `not_configured` -> the same fail-closed framing as no
+`coordinationClient` at all.
+
+**Typecheck: the same "battles/ is outside the repo root tsconfig" problem
+PR3 solved for `coordination/`, plus one more wrinkle.** `game/tsconfig.json`'s
+`include` was extended to also cover `../portal/**/*.tsx` (and `.ts`), the
+same reasoning as `../coordination/**/*.ts` (see that section above).
+`portal/*.tsx` additionally needed `"jsx": "react-jsx"` on that same
+tsconfig, and `game/package.json` gained `react` / `react-dom` /
+`@types/react` / `@types/react-dom` as devDependencies purely so `tsc
+--noEmit` and `game/src/portal.test.ts` (which renders the plugins via
+`react-dom/server`) have something to check against -- `game/src` itself
+still imports neither, and the real runtime is TenkaCloud's own
+`apps/participant-portal` React tree, exactly as `coordination/crypto-battle.ts`
+is a thin wrapper the platform dispatcher actually loads, not this repo's
+runtime.
+
+The one new wrinkle PR3's precedent did not have: `game/tsconfig.json`
+type-checks `portal/*.tsx` as part of the SAME project as `game/src/*.ts`,
+but Node-style module resolution is per-FILE-location, not per-project --
+`portal/` is a *sibling* of `game/` (not a descendant), so a bare `import
+... from "react"` in `portal/StatusPanel.tsx` cannot walk up to
+`game/node_modules/react` the way `game/src/*.ts` files can. Two small,
+purpose-built fixes, verified empirically (see `game/tsconfig.json`'s and
+`portal/tsconfig.json`'s own comments for the alternatives tried and
+rejected first -- a `"react/*"` glob path entry, and a
+`battles/ac26-crypto-battle/package.json` workspace root hoping for shared
+`node_modules`, neither actually worked):
+
+- `game/tsconfig.json` gained a `"paths"` map from `react` / `react-dom` /
+  their subpaths to `node_modules/@types/react(-dom)` -- `tsc -p` applies
+  ONE project's `compilerOptions` to every included file regardless of its
+  physical location, so this is what lets it resolve `portal/*.tsx`'s
+  `import ... from "react"` to real declaration files instead of erroring.
+- `portal/tsconfig.json` (new; module-resolution-only, not a second
+  typecheck project) gained the same map, pointed at
+  `../game/node_modules/react(-dom)` instead. This is for `bun test`'s
+  SEPARATE runtime resolution: Bun (like Node) picks the *nearest*
+  tsconfig.json by walking up from each imported file's own directory, so
+  without this file, `portal/coordination.ts`'s `import ... from "react"`
+  would fall through to the *repository root's* tsconfig.json (no such
+  mapping) when `game/src/portal.test.ts` imports it transitively at
+  runtime -- confirmed by reproducing exactly that failure first.
+
 ## Implementation roadmap (Issue #486)
 
 | PR  | Scope                                                                 | Status  |
 | --- | ---------------------------------------------------------------------- | ------- |
 | PR1 | Pure game model: types, Shamir + Lagrange reference implementation, LEAK / HUNT / ROTATE reducer, unit + adversarial tests | done |
 | PR2 | PROVE op + its Fiat-Shamir Schnorr verifier                            | done |
-| PR3 | Coordination-plugin wiring (`interTeamCoordination.plugin`, dispatcher integration) | **done (this PR)** |
-| PR4 | Portal UI (`dashboard.slots`: Contract Queue / My Vault / Public Ledger panels) | not started |
+| PR3 | Coordination-plugin wiring (`interTeamCoordination.plugin`, dispatcher integration) | done |
+| PR4 | Portal UI (`dashboard.slots`: Contract Queue / My Vault / Public Ledger panels) | **done (this PR)** |
 
-`metadata.json` now declares `interTeamCoordination` (this PR) but still no
-`scoring` / `endpoints` block -- this Battle's scoring lives entirely inside
-the coordination plugin's own state (`TeamState.score`, updated by
-`applyOp`), not the probe/flag-based `scoring` schema those keys describe;
-there is still nothing for a CFn Output or an `endpoints[]` entry to expose.
-`status: "draft"` and `visibility: "public"` remain unchanged from PR1/PR2 --
-following this catalog's convention for a problem that is real content but
-not yet playtested end-to-end (see other `battles/*/metadata.json` with
-`status: "draft"`, e.g. `agent-approval-gameday`, `stackstack-gameday`); PR4's
-portal UI is still outstanding.
+`metadata.json` declares `interTeamCoordination` (PR3) and now `dashboard.slots`
+(this PR) but still no `scoring` / `endpoints` block -- this Battle's scoring
+lives entirely inside the coordination plugin's own state (`TeamState.score`,
+updated by `applyOp`), not the probe/flag-based `scoring` schema those keys
+describe; there is still nothing for a CFn Output or an `endpoints[]` entry to
+expose. `status: "draft"` and `visibility: "public"` remain unchanged from
+PR1-PR3 -- following this catalog's convention for a problem that is real,
+end-to-end content but not yet playtested live (see other
+`battles/*/metadata.json` with `status: "draft"`, e.g. `agent-approval-gameday`,
+`stackstack-gameday`); flipping to `"ready"` is an operator call after a real
+playtest, not something this PR's code change implies on its own.
 
 ## Config / balance knobs
 
@@ -322,22 +428,18 @@ per-match override.
 
 ## Known gaps (by design, not oversight)
 
-- **No participant-facing PROVE tool yet.** `schnorr-prover.ts`'s
+- **No participant-facing PROVE tool ships in this repo.** `schnorr-prover.ts`'s
   `createProof` is the tool a participant script would call, but there is no
-  CLI wrapper or portal button to run it from -- that surface arrives with
-  PR4's UI (the same gap LEAK/HUNT/ROTATE already have; see "No portal UI
-  yet" below).
+  CLI wrapper published from this repo. This is deliberate, not a gap PR4
+  closes: see "Portal UI wiring (Issue #486 PR4)" below on why
+  `RegistrationPanel.tsx` never builds a proof (or a HUNT `recoveredSecret`)
+  on the participant's behalf.
 - **No compute-budget economy for ROTATE.** PR1 represents ROTATE's cost as
   a cooldown (`rotateCooldownMs`) plus voiding the team's own in-flight
   Contract Queue (see "ROTATE's time cost" above) -- not a metered compute
   budget. Issue #486 mentions a fuller compute-economy treatment as a later
   idea; nothing here blocks that from replacing or augmenting the
   cooldown/expiry pair later.
-- **No portal UI yet.** The coordination plugin (PR3) is live and fully
-  testable/deterministic (`bun test` under `game/`, plus
-  `coordination-plugin.test.ts`'s plugin-wiring coverage), but participants
-  have no Contract Queue / My Vault / Public Ledger panels to act through --
-  that surface is PR4.
 - **`template.yaml` has no scoring surface.** Scoring is coordination-plugin-
   driven (`TeamState.score`, inside the plugin's own state) rather than the
   probe/flag-based `scoring` schema, so `metadata.json` intentionally omits

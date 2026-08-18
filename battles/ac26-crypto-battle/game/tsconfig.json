@@ -10,7 +10,49 @@
     "noUncheckedIndexedAccess": true,
     "allowImportingTsExtensions": true,
     "noEmit": true,
-    "types": ["bun"]
+    "types": ["bun"],
+    // Issue #486 PR4: portal/*.tsx (StatusPanel / RegistrationPanel /
+    // HelpDrawer) are React components -- see "../portal/**/*.tsx" below.
+    // "react-jsx" (automatic runtime) matches TenkaCloud's own
+    // apps/participant-portal/tsconfig.json, which is what actually compiles
+    // these files at build time; game/tsconfig.json only needs to agree with
+    // it well enough for `tsc --noEmit` to typecheck the same JSX shape.
+    "jsx": "react-jsx",
+    // @types/react(-dom) live only in ./node_modules (installed here, not at
+    // battles/ac26-crypto-battle/ or repo root -- see game/package.json's
+    // devDependencies doc comment). `tsc -p` type-checks every file in
+    // "include" below (game/src/*.ts AND ../portal/*.tsx) against this ONE
+    // config's compilerOptions -- a nested tsconfig.json inside portal/
+    // (../portal/tsconfig.json, present only to fix `bun test`'s SEPARATE,
+    // per-file nearest-tsconfig module resolution -- see that file's own
+    // comment for why the two mechanisms need two configs) has no effect
+    // here. Without "paths" below, portal/*.tsx's `import ... from "react"`
+    // would fail `tsc --noEmit` even though it resolves fine at the
+    // game/src/*.ts callsites right next to node_modules/ (Node's normal
+    // upward node_modules walk from a game/src/*.ts file already lands on
+    // this same @types/react without any alias needed -- these entries only
+    // matter for files outside game/, i.e. ../portal/*.tsx).
+    //
+    // Mapped straight at @types/react(-dom) (NOT node_modules/react itself,
+    // unlike ../portal/tsconfig.json's mapping for Bun -- see that file's
+    // comment): `tsc --noEmit` only ever needs a `.d.ts` to check against and
+    // never touches runtime JS, and the plain "react"/"react-dom" packages
+    // ship none of their own (confirmed empirically: no `.d.ts` file exists
+    // anywhere under node_modules/react/ or node_modules/react-dom/ -- all
+    // typings come from the separate @types packages). Pointing "paths" at
+    // node_modules/react directly resolves fine for VALUES but leaves tsc
+    // unable to find a declaration file for it (TS does not also fall back
+    // to the sibling @types/* package once a bare specifier has been
+    // redirected through "paths" -- verified by hitting exactly that
+    // "Could not find a declaration file" error before landing on this).
+    "baseUrl": ".",
+    "paths": {
+      "react": ["node_modules/@types/react"],
+      "react/jsx-runtime": ["node_modules/@types/react/jsx-runtime"],
+      "react/jsx-dev-runtime": ["node_modules/@types/react/jsx-dev-runtime"],
+      "react-dom": ["node_modules/@types/react-dom"],
+      "react-dom/server": ["node_modules/@types/react-dom/server"]
+    }
   },
   "include": [
     "src/**/*.ts",
@@ -22,6 +64,13 @@
     // of the plugin silently drifting from reducer.ts unnoticed (battles/
     // is outside the repo root tsconfig's typecheck scope, so this is the
     // only place that can catch it).
-    "../coordination/**/*.ts"
+    "../coordination/**/*.ts",
+    // Issue #486 PR4: portal/ (dashboard.slots plugins) is a sibling of
+    // coordination/, same reasoning -- battles/ is outside the repo root
+    // tsconfig's scope, so this is the only place a portal/game shape
+    // mismatch (e.g. against ../game/src/types.ts's CryptoBattleProjection)
+    // gets caught before it ships.
+    "../portal/**/*.ts",
+    "../portal/**/*.tsx"
   ]
 }
