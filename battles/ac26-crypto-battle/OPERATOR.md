@@ -451,9 +451,25 @@ field:
   `successfulHunts`, unchanged -- `huntLog` is read-only audit trail, never
   consulted for any game-rule decision. JSON-safety is preserved (every
   field is already a string/number, see types.ts's "JSON-SAFETY INVARIANT"
-  header); `initialState` seeds it `[]`, `coordination-plugin.test.ts`'s
-  JSON-round-trip test covers it automatically (no bigint anywhere in it to
-  begin with).
+  header); `initialState` seeds it `[]`, and
+  `coordination-plugin.test.ts`'s JSON-round-trip test now round-trips
+  state with a NON-empty `huntLog` (post-hunt), not only the empty-array
+  case an earlier draft of this note over-claimed coverage for.
+- **`validateOp`'s "hunt" branch now rejects before the first `tick()`,
+  closing an actual gap found during this PR's own review, not merely a
+  defensive-style cleanup.** Unlike "rotate"'s cooldown check, nothing in
+  "hunt" previously read `state.nowMs` at all -- a hunt op supplying the
+  target's secret directly (rather than reconstructing it via Lagrange
+  interpolation from leaked shares, which requires a Contract, which
+  requires a `tick()`) validated and applied successfully with
+  `state.nowMs === undefined`. This is the same class of gap PR1's own
+  rotate-cooldown fix already closed for "rotate" (see this file's
+  "ROTATE's time cost" note above); `reducer.test.ts`'s "is rejected before
+  any tick() has run" hunt test pins the regression directly. `applyHunt`
+  additionally throws (rather than silently recording `atMs: 0`) if it is
+  ever reached with `state.nowMs === undefined` anyway -- unreachable
+  through the validateOp -> applyOp path now that the guard above exists,
+  matching every other `applyX` function's "invalid op reached apply" throw.
 
 ## Implementation roadmap (Issue #486)
 
@@ -567,22 +583,34 @@ With `EVENT_ID = "vertical-playtest-486-pr5"`, `TEAMS = ["alpha", "bravo"]`:
   from exactly `threshold` = 3 public ledger shares): alpha 30 -> 20
   (-10 `huntPenalty`), bravo 40 -> 60 (+20 `huntBonus`). **Final score:
   alpha 20, bravo 60.**
-- A single successful HUNT was worth a **30-point net swing** between the
-  two teams in this run -- roughly 2x a "standard" contract's own value (10
-  pts) or 1x a "rush" contract's (20 pts). At this run's actual contract mix
-  (`~12` pts/contract average, weighting the observed 1-rush-in-6 ratio),
-  one HUNT was worth close to **2.5 average contracts'** worth of score
-  swing in a single op. Whether that feels like "a satisfying big play" or
-  "one hunt undoes 2-3 minutes of honest work" is exactly the kind of
-  judgment call this repo's AGENTS.md reserves for a real playtest, not a
-  script.
+- A single successful HUNT changed the **score GAP between the two teams**
+  by a **30-point net swing** in this run (target -10 `huntPenalty`,
+  attacker +20 `huntBonus`, 10 + 20 = 30). Two different bases give two
+  different, both-correct ratios, and this note keeps them explicitly
+  separate rather than mixing them:
+  - **Against the 30-point net swing itself**: a "standard" contract's
+    value (10 pts) is 1/3 of the swing (the swing is **3x** a standard
+    contract), and a "rush" contract's (20 pts) is 2/3 of it (the swing is
+    **1.5x** a rush contract).
+  - **Against the attacker's own gain only** (`huntBonus` = 20 pts, setting
+    the target's -10 aside): that is **2x** a standard contract's value, or
+    exactly **1x** a rush contract's value.
+  At this run's actual contract mix (`~12` pts/contract average, weighting
+  the observed 1-rush-in-6 ratio), the 30-point net swing was worth close
+  to **2.5 average contracts'** worth of combined score movement in a
+  single op. Whether that feels like "a satisfying big play" or "one hunt
+  undoes 2-3 minutes of honest work" is exactly the kind of judgment call
+  this repo's AGENTS.md reserves for a real playtest, not a script.
 - After the HUNT + ROTATE beats (by t=3:00), the script stops taking
-  further LEAK/PROVE actions and jumps straight to match end -- **19 of 25
-  contracts per team ended `"expired"`, 6 of 25 stayed `"open"`** at match
-  end. **This is a scripted-fixture authoring artifact, not a balance
+  further LEAK/PROVE actions and jumps straight to match end -- **3 of 25
+  contracts per team ended `"completed"`, 16 of 25 ended `"expired"`, and 6
+  of 25 stayed `"open"`** at match end (re-run `buildVerticalPlaytestScript()`
+  yourself and tally `result.finalState.contracts` by `teamId` + `status` to
+  reproduce these numbers -- they are this run's actual output, not an
+  estimate). **This is a scripted-fixture authoring artifact, not a balance
   finding**: the script stops acting once it has demonstrated every MUST
   item once, it is not attempting to play optimally or continuously the way
-  a real team would. Do not read "25 idle minutes" out of this number --
+  a real team would. Do not read "16 idle minutes" out of this number --
   see the Playtest Gates discussion below for why Gate 2 specifically
   cannot be checked this way.
 

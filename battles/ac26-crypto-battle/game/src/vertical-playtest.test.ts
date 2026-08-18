@@ -46,7 +46,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { initialState, projectForTeam } from "./reducer.ts";
+import { initialState } from "./reducer.ts";
 import { isTickStep, runScript, type PlaytestOpStep } from "./playtest.ts";
 import {
   ATTACKER,
@@ -121,12 +121,35 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
     // "public information only": the recoveredSecret was Lagrange-interpolated
     // by buildHuntOp from projectForTeam("bravo").publicLedger -- a value
     // buildHuntOp (see playtest.ts) can only ever compute from ledger shares,
-    // never from state.teams.alpha.secret directly. Independently confirm
-    // bravo's own projection carries alpha's PUBLIC commitment (never its
-    // secret) at match start, the same public surface buildHuntOp relies on.
-    const bravoView = projectForTeam(initialState({ eventId: EVENT_ID, teamIds: TEAMS }, VERTICAL_CONFIG), ATTACKER);
-    expect(bravoView.publicCommitments[DEFENDER]).toBeDefined();
-    expect(JSON.stringify(bravoView)).not.toContain(huntStep.op.recoveredSecret);
+    // never from state.teams.alpha.secret directly. Assert this against the
+    // ACTUAL projection buildHuntOp was called with (built.bravoProjectionBeforeHunt,
+    // captured by the fixture at that exact moment) -- not a fresh/empty
+    // initialState projection, which would pass this check trivially
+    // because it never had alpha's secret material to leak in the first
+    // place. At the point this projection was captured, alpha had already
+    // leaked `threshold` shares onto the Public Ledger (that is what made
+    // the hunt buildable at all) and alpha's `secret` / un-leaked shares
+    // must still not appear anywhere in it.
+    const bravoProjection = built.bravoProjectionBeforeHunt;
+    expect(bravoProjection.publicCommitments[DEFENDER]).toBeDefined();
+    const alphaLeakedShareCount = bravoProjection.publicLedger.filter(
+      (a) => a.kind === "share" && a.teamId === DEFENDER,
+    ).length;
+    expect(alphaLeakedShareCount).toBeGreaterThanOrEqual(result.finalState.config.threshold);
+
+    const alphaSecretAtHuntTime = (() => {
+      // Independently derive alpha's pre-hunt (generation-1) secret from the
+      // real reducer, purely to have something concrete to assert absence
+      // of below -- this does NOT feed into how the hunt op itself was
+      // built (that already happened, live, inside buildVerticalPlaytestScript).
+      const fresh = initialState({ eventId: EVENT_ID, teamIds: TEAMS }, VERTICAL_CONFIG);
+      const alpha = fresh.teams[DEFENDER];
+      if (!alpha) throw new Error("test setup: expected team alpha");
+      return alpha.secret;
+    })();
+    const projectionJson = JSON.stringify(bravoProjection);
+    expect(projectionJson).not.toContain(alphaSecretAtHuntTime);
+    expect(projectionJson).not.toContain(huntStep.op.recoveredSecret);
 
     const before = result.timeline[huntStepIndex - 1];
     const after = result.timeline[huntStepIndex];
@@ -200,13 +223,19 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
     expect(result.finalState.teams[ATTACKER]?.score).toBe(expected[ATTACKER]);
   });
 
-  test("narrative sanity: the built script tells a coherent LEAK -> PROVE -> HUNT -> ROTATE -> rejected-hunt -> match-end story", () => {
-    expect(built.narrative.length).toBeGreaterThan(0);
-    const joined = built.narrative.join("\n");
-    expect(joined).toContain("LEAK");
-    expect(joined).toContain("PROVE");
-    expect(joined).toContain("HUNT");
-    expect(joined).toContain("ROTATE");
-    expect(joined).toMatch(/rejected/);
+  test("narrative sanity: the built script actually contains every op kind, and at least one rejected step", () => {
+    // Checks the script's real data (op.kind / expect), not narrative prose
+    // strings -- a wording change to buildVerticalPlaytestScript's `label`
+    // text must never be able to silently make this test meaningless.
+    const opSteps = built.script.steps.filter((s): s is PlaytestOpStep => !isTickStep(s));
+    expect(opSteps.length).toBeGreaterThan(0);
+    const kinds = new Set(opSteps.map((s) => s.op.kind));
+    expect(kinds).toEqual(new Set(["leak", "prove", "hunt", "rotate"]));
+    expect(opSteps.some((s) => s.expect === "rejected")).toBe(true);
+    expect(opSteps.some((s) => s.expect === "ok")).toBe(true);
+
+    // narrative is still produced (README/OPERATOR.md-facing readability),
+    // just not what this test's pass/fail depends on.
+    expect(built.narrative).toHaveLength(opSteps.length);
   });
 });

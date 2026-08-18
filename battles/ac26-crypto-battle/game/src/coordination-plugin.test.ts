@@ -229,6 +229,47 @@ describe("coordination/crypto-battle.ts plugin wiring (Issue #486 PR3)", () => {
     expect(afterRedLeak.teams.red?.score).toBe(redContract.points);
   });
 
+  it("state with a NON-EMPTY huntLog (Issue #486 PR5) also survives a JSON round-trip, not only the empty-huntLog case", () => {
+    // The round-trip test above never triggers a HUNT, so it only ever
+    // round-trips `huntLog: []` -- that alone cannot back a claim that
+    // `huntLog` entries themselves survive JSON.stringify/JSON.parse
+    // (they are plain string/number fields, see HuntLogEntry in types.ts,
+    // but "the array is empty either way" is a different, weaker fact than
+    // "an actual entry round-trips intact"). This test drives a successful
+    // HUNT first, so `huntLog` has a real `{ attackerTeamId, targetTeamId,
+    // generation, atMs }` entry, THEN round-trips.
+    let state = plugin.initialState(CTX);
+    state = runTick(plugin, state, 0);
+    const redTeam = state.teams.red;
+    if (!redTeam) throw new Error("test setup: expected a red team");
+    const redShares = bigintShares(redTeam.shares).slice(0, state.config.threshold);
+    const recoveredSecret = reconstruct(redShares, BigInt(state.config.prime));
+    const huntOp: CryptoBattleOp = {
+      kind: "hunt",
+      targetTeamId: "red",
+      generation: redTeam.generation,
+      recoveredSecret: recoveredSecret.toString(),
+    };
+    state = expectDispatched(dispatchOp(plugin, state, "blue", huntOp));
+    expect(state.huntLog).toHaveLength(1);
+
+    if (state.nowMs === undefined) throw new Error("test setup: expected state.nowMs to be set after tick()");
+    const roundTripped = JSON.parse(JSON.stringify(state)) as CryptoBattleState;
+    expect(roundTripped).toEqual(state);
+    expect(roundTripped.huntLog).toEqual(state.huntLog);
+    expect(roundTripped.huntLog[0]).toEqual({
+      attackerTeamId: "blue",
+      targetTeamId: "red",
+      generation: redTeam.generation,
+      atMs: state.nowMs,
+    });
+
+    // Round-tripped state must still be usable, same bar as the test above --
+    // a further tick works on it exactly as it would on the original.
+    const ticked = runTick(plugin, roundTripped, state.config.contractIntervalMs);
+    expect(ticked.contracts.length).toBeGreaterThan(state.contracts.length);
+  });
+
   it("HUNT works with recoveredSecret in its real wire shape, and rejects a JSON number or a non-canonical string [PR3 review High #1]", () => {
     let state = plugin.initialState(CTX);
     state = runTick(plugin, state, 0);

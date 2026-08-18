@@ -27,7 +27,7 @@ import {
   type PlaytestStep,
   type PublicHuntParams,
 } from "./playtest.ts";
-import type { CryptoBattleConfig, CryptoBattleOp } from "./types.ts";
+import type { CryptoBattleConfig, CryptoBattleOp, CryptoBattleProjection } from "./types.ts";
 
 export const EVENT_ID = "vertical-playtest-486-pr5";
 export const TEAMS: readonly [string, string] = ["alpha", "bravo"];
@@ -62,6 +62,17 @@ export interface BuiltVerticalScript {
   readonly alphaContractVoidedByRotateId: string;
   /** `buildHuntOp`'s result immediately after alpha's rotate, before any new-generation share has been leaked -- must be `undefined` (see vertical-playtest.test.ts's "MUST 9" test). */
   readonly huntAttemptBeforeNewGenerationThreshold: CryptoBattleOp | undefined;
+  /**
+   * The ACTUAL `projectForTeam(state, "bravo")` value `buildHuntOp` was
+   * called against to build the successful hunt op (captured at the exact
+   * moment, not re-derived from a fresh/empty `initialState` later) --
+   * exposed so a consumer can assert "the public-information surface the
+   * real hunt was built from never contained alpha's secret or an
+   * un-leaked share value" against the real thing, not a stand-in that
+   * would pass trivially because it never had anything to leak in the
+   * first place (see vertical-playtest.test.ts's "MUST 6/7/8" test).
+   */
+  readonly bravoProjectionBeforeHunt: CryptoBattleProjection;
 }
 
 /**
@@ -274,5 +285,6 @@ export function buildVerticalPlaytestScript(): BuiltVerticalScript {
     narrative,
     alphaContractVoidedByRotateId: alphaOpenBeforeRotate.id,
     huntAttemptBeforeNewGenerationThreshold,
+    bravoProjectionBeforeHunt,
   };
 }
