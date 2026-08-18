@@ -58,6 +58,17 @@ they are given -- every update is built via `{ ...state, ... }` /
 `[...array, ...]`. See `adversarial.test.ts`'s tests 7 and 8 for the tests
 that pin both properties.
 
+**ROTATE's time cost is more than the cooldown.** `applyRotate` marks every
+still-`"open"` contract addressed to the rotating team as `"expired"` in the
+same state transition that advances the generation. Without this, a team
+could rotate away from an exposed generation and then LEAK a contract that
+was issued *before* the rotate -- publishing a fresh, post-rotate share for
+free, on a Contract Queue entry that cost nothing to earn. Voiding the
+pre-rotate queue makes ROTATE cost something concrete beyond the cooldown: a
+team that rotates has to let its in-flight Contract Queue go and wait for new
+contracts under the new generation, exactly as Issue #486 frames ROTATE
+carrying a real time cost, not just a timer.
+
 ## Implementation roadmap (Issue #486)
 
 | PR  | Scope                                                                 | Status  |
@@ -91,6 +102,9 @@ with `status: "draft"`, e.g. `agent-approval-gameday`, `stackstack-gameday`).
   build -> pressure -> endgame phase transitions.
 - `contractIntervalMs`, `contractTtlMs` -- how often Contracts are issued per
   team, and how long an unclaimed one stays open.
+- `rushContractTtlMs` -- how long a "rush" contract stays open, shorter than
+  `contractTtlMs` so `scores.rushContract`'s extra points are genuinely
+  time-pressured rather than a same-deadline flat bonus.
 - `rotateCooldownMs` -- minimum gap between two ROTATE ops for one team.
 - `scores.{contract,rushContract,huntBonus,huntPenalty}` -- point values.
 
@@ -104,10 +118,12 @@ for exactly this kind of per-event tuning without touching the defaults.
 
 - **No PROVE.** See the roadmap above -- PR2's scope, together with its
   verifier.
-- **No compute-budget economy for ROTATE.** PR1 represents ROTATE's cost
-  purely as a cooldown (`rotateCooldownMs`). Issue #486 mentions a fuller
-  compute-economy treatment as a PR3/PR6-era idea; nothing here blocks that
-  from replacing or augmenting the cooldown later.
+- **No compute-budget economy for ROTATE.** PR1 represents ROTATE's cost as
+  a cooldown (`rotateCooldownMs`) plus voiding the team's own in-flight
+  Contract Queue (see "ROTATE's time cost" above) -- not a metered compute
+  budget. Issue #486 mentions a fuller compute-economy treatment as a
+  PR3/PR6-era idea; nothing here blocks that from replacing or augmenting
+  the cooldown/expiry pair later.
 - **No live coordination plugin, no portal UI.** The reducer is fully
   testable and deterministic today (`bun test` under `game/`), but nothing
   currently calls it from a running match -- that wiring is PR3 (dispatcher

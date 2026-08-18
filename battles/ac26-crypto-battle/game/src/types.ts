@@ -64,6 +64,12 @@ export interface CryptoBattleConfig {
   readonly contractIntervalMs: number;
   /** How long (ms) an issued contract stays "open" before it expires unclaimed. */
   readonly contractTtlMs: number;
+  /**
+   * How long (ms) a "rush" contract stays open. Shorter than `contractTtlMs`
+   * so the extra `scores.rushContract` points are genuinely time-pressured,
+   * not just a flat bonus with the same deadline as a standard contract.
+   */
+  readonly rushContractTtlMs: number;
   /** Minimum time (ms) between two ROTATE ops for the same team. */
   readonly rotateCooldownMs: number;
   readonly scores: ScoreRules;
@@ -131,7 +137,11 @@ export interface CryptoBattleState {
   readonly contracts: readonly Contract[];
   readonly publicLedger: readonly PublicArtifact[];
   readonly teams: Readonly<Record<string, TeamState>>;
-  /** Replay guard: `${attackerTeamId}|${targetTeamId}|${generation}` for every successful HUNT. */
+  /**
+   * Replay guard: `JSON.stringify([attackerTeamId, targetTeamId, generation])`
+   * for every successful HUNT. JSON-encoded (not `|`-joined) so a team id
+   * that happens to contain `|` can never collide with a different triple.
+   */
   readonly successfulHunts: readonly string[];
 }
 

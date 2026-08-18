@@ -64,6 +64,7 @@ export const DEFAULT_CONFIG: CryptoBattleConfig = {
   },
   contractIntervalMs: 2 * 60_000,
   contractTtlMs: 5 * 60_000,
+  rushContractTtlMs: 2.5 * 60_000,
   rotateCooldownMs: 3 * 60_000,
   scores: {
     contract: 10,
@@ -151,6 +152,7 @@ export function tick(state: CryptoBattleState, eventNowMs: number): CryptoBattle
     for (const teamId of Object.keys(state.teams)) {
       const sequenceIndex = issuedCountByTeam.get(teamId) ?? 0;
       const plan = deriveContractPlan(state.seed, teamId, sequenceIndex, state.config);
+      const ttlMs = plan.kind === "rush" ? state.config.rushContractTtlMs : state.config.contractTtlMs;
       issued.push({
         id: `${teamId}-c${sequenceIndex}`,
         teamId,
@@ -158,7 +160,7 @@ export function tick(state: CryptoBattleState, eventNowMs: number): CryptoBattle
         points: plan.kind === "rush" ? state.config.scores.rushContract : state.config.scores.contract,
         requestedShareIndices: plan.requestedShareIndices,
         issuedAtMs: nextContractAtMs,
-        expiresAtMs: nextContractAtMs + state.config.contractTtlMs,
+        expiresAtMs: nextContractAtMs + ttlMs,
         status: "open",
       });
       issuedCountByTeam.set(teamId, sequenceIndex + 1);
@@ -176,13 +178,27 @@ export function tick(state: CryptoBattleState, eventNowMs: number): CryptoBattle
   };
 }
 
+/**
+ * JSON-encoded rather than `|`-joined: a delimiter-joined key would let a
+ * team id containing `|` collide with an unrelated (attacker, target,
+ * generation) triple and cause a false "already hunted" rejection.
+ * `JSON.stringify` on an array of two strings + a number has no such
+ * ambiguity (each string element is quoted and escaped independently).
+ */
 function huntKey(attackerTeamId: string, targetTeamId: string, generation: number): string {
-  return `${attackerTeamId}|${targetTeamId}|${generation}`;
+  return JSON.stringify([attackerTeamId, targetTeamId, generation]);
 }
 
 export function validateOp(state: CryptoBattleState, teamId: string, op: CryptoBattleOp): ValidateResult {
   const team = state.teams[teamId];
   if (!team) return { ok: false, error: `unknown team "${teamId}"` };
+
+  // No op of any kind is legal once the match clock has run out -- without
+  // this, a team could keep LEAKing / HUNTing / ROTATEing past `matchDurationMs`
+  // simply because nothing else told the reducer to stop accepting ops.
+  if (state.phase === "ended") {
+    return { ok: false, error: "match has ended" };
+  }
 
   switch (op.kind) {
     case "leak": {
@@ -217,7 +233,15 @@ export function validateOp(state: CryptoBattleState, teamId: string, op: CryptoB
       return { ok: true };
     }
     case "rotate": {
-      if (team.lastRotateAtMs !== undefined && state.nowMs !== undefined) {
+      // Before the first tick(), `state.nowMs` is undefined and so is every
+      // team's `lastRotateAtMs`, which used to make the cooldown check below
+      // vacuously pass -- a team could ROTATE any number of times before the
+      // match clock ever advances. Reject outright instead of silently
+      // skipping the cooldown it cannot yet measure.
+      if (state.nowMs === undefined) {
+        return { ok: false, error: "match has not started yet (no tick() has run)" };
+      }
+      if (team.lastRotateAtMs !== undefined) {
         const sinceLastRotateMs = state.nowMs - team.lastRotateAtMs;
         if (sinceLastRotateMs < state.config.rotateCooldownMs) {
           return {
@@ -327,7 +351,16 @@ function applyRotate(state: CryptoBattleState, teamId: string): CryptoBattleStat
     shares,
     lastRotateAtMs: state.nowMs,
   };
-  return { ...state, teams: { ...state.teams, [teamId]: updatedTeam } };
+  // Rotate's time cost isn't only the cooldown: every contract issued to
+  // this team before the rotate is voided along with the old generation.
+  // Without this, LEAKing a pre-rotate contract after rotating would just
+  // publish a fresh-generation share for free -- a shortcut that defeats the
+  // whole point of rotating away from exposure (Issue #486 frames ROTATE as
+  // carrying a real compute/time cost; see OPERATOR.md's design note).
+  const contracts = state.contracts.map((c) =>
+    c.teamId === teamId && c.status === "open" ? { ...c, status: "expired" as const } : c,
+  );
+  return { ...state, contracts, teams: { ...state.teams, [teamId]: updatedTeam } };
 }
 
 /**
