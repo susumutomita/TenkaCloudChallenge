@@ -19,7 +19,18 @@ import {
   modPow,
   tryHexToBigint,
 } from "../battles/ac26-crypto-battle/game/crypto/modmath.ts";
+import { sha256 } from "../battles/ac26-crypto-battle/game/crypto/sha256.ts";
 import {
+  POK_DOMAIN,
+  buildContextParts,
+  challengeScalar,
+  encodeGroupElement,
+  proveKnowledge,
+  verifyKnowledge,
+  type ProofContext,
+} from "../battles/ac26-crypto-battle/game/crypto/schnorr.ts";
+import {
+  CONTRACT_SUCCESS_POINTS,
   DEFAULT_THRESHOLD,
   DEFAULT_TOTAL_SHARES,
   HUNT_BONUS_POINTS,
@@ -31,8 +42,10 @@ import {
   createRng,
   huntOpFor,
   initOpFor,
+  issueProveContract,
   issueStandardLeakContracts,
   leakOpFor,
+  proveOpFor,
   rotateOpFor,
 } from "../battles/ac26-crypto-battle/game/fixtures.ts";
 import { projectForTeam } from "../battles/ac26-crypto-battle/game/projection.ts";
@@ -44,6 +57,10 @@ import {
   validateOp,
 } from "../battles/ac26-crypto-battle/game/reducer.ts";
 import type { ContractSpec, CryptoBattleOp } from "../battles/ac26-crypto-battle/game/types.ts";
+
+function hex(bytes: Uint8Array): string {
+  return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 /**
  * ac26-crypto-battle の game model (PR1: state/op/reducer + Shamir/Feldman + fixtures)
@@ -96,6 +113,48 @@ describe("crypto/modmath", () => {
 
   it("bigintToHex throws on negative input (programmer error, not adversarial input)", () => {
     expect(() => bigintToHex(-1n)).toThrow();
+  });
+});
+
+// ---- crypto/sha256 -------------------------------------------------------------------
+
+describe("crypto/sha256", () => {
+  const enc = new TextEncoder();
+
+  it("matches the NIST vector for the empty input", () => {
+    expect(hex(sha256(enc.encode("")))).toBe(
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    );
+  });
+
+  it("matches the NIST vector for \"abc\"", () => {
+    expect(hex(sha256(enc.encode("abc")))).toBe(
+      "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+    );
+  });
+
+  it("matches the NIST two-block vector", () => {
+    // FIPS 180-2 の標準テストベクタ (56 byte -> padding 込みで2 block になる)。
+    const message = "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq";
+    expect(hex(sha256(enc.encode(message)))).toBe(
+      "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1",
+    );
+  });
+
+  it("handles an input longer than one block (>64 bytes)", () => {
+    const message = "a".repeat(100);
+    // NIST の公表テストベクタではないが、python3 hashlib.sha256 と照合済みの値
+    // (padding が複数 block にまたがるケースの回帰検出用)。
+    expect(hex(sha256(enc.encode(message)))).toBe(
+      "2816597888e4a0d3a36b82b83316ab32680eb8f00f8cd3b904d681246d285a0e",
+    );
+  });
+
+  it("is deterministic and sensitive to every input byte", () => {
+    const a = sha256(enc.encode("hunt-team-a"));
+    const b = sha256(enc.encode("hunt-team-b"));
+    expect(hex(sha256(enc.encode("hunt-team-a")))).toBe(hex(a)); // deterministic
+    expect(hex(a)).not.toBe(hex(b));
   });
 });
 
@@ -238,6 +297,126 @@ describe("crypto/feldman", () => {
   });
 });
 
+// ---- crypto/schnorr -------------------------------------------------------------------
+
+describe("crypto/schnorr", () => {
+  const baseContext: ProofContext = {
+    purpose: "contract",
+    teamId: "team-a",
+    generation: 0,
+    contractId: "contract-1",
+  };
+
+  function fixtureFor(seed: string): { secret: bigint; nonce: bigint; c0Hex: string } {
+    const rng = createRng(seed);
+    const secret = rng.nextScalar();
+    const nonceRaw = rng.nextScalar();
+    const nonce = nonceRaw === 0n ? 1n : nonceRaw;
+    const c0Hex = bigintToHex(modPow(G, secret, P));
+    return { secret, nonce, c0Hex };
+  }
+
+  const seeds = ["schnorr-seed-a", "schnorr-seed-b", "schnorr-seed-c"];
+
+  it.each(seeds)("prove/verify roundtrip holds (seed=%s)", (seed) => {
+    const { secret, nonce, c0Hex } = fixtureFor(seed);
+    const proof = proveKnowledge(secret, nonce, baseContext);
+    expect(verifyKnowledge(c0Hex, proof, baseContext)).toBe(true);
+  });
+
+  // 以降のテストは1つの proof を使い回す (2048-bit modPow のコストを抑えるため —
+  // モジュールレベルで1回だけ作る)。
+  const shared = fixtureFor("schnorr-shared-seed");
+  const sharedProof = proveKnowledge(shared.secret, shared.nonce, baseContext);
+
+  it("verifies the legitimate proof", () => {
+    expect(verifyKnowledge(shared.c0Hex, sharedProof, baseContext)).toBe(true);
+  });
+
+  it("rejects a tampered commitment (R)", () => {
+    const tampered = {
+      ...sharedProof,
+      commitment: bigintToHex(mod(BigInt(`0x${sharedProof.commitment}`) + 1n, P)),
+    };
+    expect(verifyKnowledge(shared.c0Hex, tampered, baseContext)).toBe(false);
+  });
+
+  it("rejects a tampered response (s)", () => {
+    const tampered = {
+      ...sharedProof,
+      response: bigintToHex(mod(BigInt(`0x${sharedProof.response}`) + 1n, Q)),
+    };
+    expect(verifyKnowledge(shared.c0Hex, tampered, baseContext)).toBe(false);
+  });
+
+  it("rejects R outside the subgroup without throwing (adversarial boundary)", () => {
+    // 11 は範囲内だが部分群外 (crypto/group テストで確認済み)。
+    const forged = { ...sharedProof, commitment: bigintToHex(11n) };
+    expect(() => verifyKnowledge(shared.c0Hex, forged, baseContext)).not.toThrow();
+    expect(verifyKnowledge(shared.c0Hex, forged, baseContext)).toBe(false);
+  });
+
+  it("a proof for contract A does not verify against contract B (replay across contracts)", () => {
+    const contextB: ProofContext = { ...baseContext, contractId: "contract-2" };
+    expect(verifyKnowledge(shared.c0Hex, sharedProof, contextB)).toBe(false);
+  });
+
+  it("a proof made under team A's context does not verify under team B's context", () => {
+    const contextTeamB: ProofContext = { ...baseContext, teamId: "team-b" };
+    expect(verifyKnowledge(shared.c0Hex, sharedProof, contextTeamB)).toBe(false);
+  });
+
+  it("a proof for generation 0 fails verification under generation 1 (post-rotate context)", () => {
+    const initContext: ProofContext = { purpose: "init", teamId: "team-a", generation: 0, contractId: "" };
+    const proof = proveKnowledge(shared.secret, shared.nonce, initContext);
+    const rotateContext: ProofContext = { ...initContext, purpose: "rotate", generation: 1 };
+    expect(verifyKnowledge(shared.c0Hex, proof, rotateContext)).toBe(false);
+  });
+
+  it("nonce reuse across two different contexts leaks the secret (special soundness attack)", () => {
+    // 同じ nonce を異なる context で使い回すと、2つの (e, s) から
+    // x = (s1-s2) / (e1-e2) mod q で秘密が復元できてしまう — これは実装のバグではなく
+    // Schnorr proof の数学的性質そのもの (special soundness)。 このテストは
+    // 「なぜ proveKnowledge の nonce を context ごとに変えなければならないか」を
+    // 実際に攻撃を実行して実演する (ac26-w3-nonce-reuse と同じ原理)。
+    const attackSecret = createRng("schnorr-attack-secret").nextScalar();
+    const attackNonceRaw = createRng("schnorr-attack-nonce").nextScalar();
+    const attackNonce = attackNonceRaw === 0n ? 1n : attackNonceRaw;
+    const c0 = modPow(G, attackSecret, P);
+    const c0Hex = bigintToHex(c0);
+
+    const contextX: ProofContext = {
+      purpose: "contract",
+      teamId: "victim",
+      generation: 0,
+      contractId: "contract-x",
+    };
+    const contextY: ProofContext = { ...contextX, contractId: "contract-y" };
+
+    // 攻撃者から見て: victim が同じ nonce を使い回して2つの異なる contract の proof を
+    // 提出してしまった、という想定。
+    const proofX = proveKnowledge(attackSecret, attackNonce, contextX);
+    const proofY = proveKnowledge(attackSecret, attackNonce, contextY);
+    expect(verifyKnowledge(c0Hex, proofX, contextX)).toBe(true);
+    expect(verifyKnowledge(c0Hex, proofY, contextY)).toBe(true);
+
+    const r = BigInt(`0x${proofX.commitment}`);
+    expect(proofY.commitment).toBe(bigintToHex(r)); // 同じ nonce -> 同じ R (公開情報から見て取れる)
+
+    // 攻撃者は challengeScalar を自分でも計算できる (公開 API、秘密は要らない)。
+    const eX = challengeScalar(POK_DOMAIN, buildContextParts(contextX, c0, r));
+    const eY = challengeScalar(POK_DOMAIN, buildContextParts(contextY, c0, r));
+    expect(eX).not.toBe(eY);
+
+    const sX = BigInt(`0x${proofX.response}`);
+    const sY = BigInt(`0x${proofY.response}`);
+    const recoveredSecret = mod((sX - sY) * modInv(mod(eX - eY, Q), Q), Q);
+
+    expect(recoveredSecret).toBe(attackSecret); // 本物の secret を復元できてしまった
+    expect(modPow(G, recoveredSecret, P)).toBe(c0); // 復元した secret は C_0 を再現する (本物の攻撃)
+  });
+});
+
 // ---- reducer: shared two-team fixture ------------------------------------------------
 
 const MATCH_START = 1_000_000;
@@ -330,7 +509,7 @@ describe("reducer: adversarial inputs never throw and return explicit error code
       ok: false,
       error: "not_initialized",
     });
-    expect(validateOp(fresh, TEAM_A, rotateOpFor(base.teamA), MATCH_START)).toEqual({
+    expect(validateOp(fresh, TEAM_A, rotateOpFor(base.teamA, 1), MATCH_START)).toEqual({
       ok: false,
       error: "not_initialized",
     });
@@ -543,12 +722,12 @@ describe("reducer: adversarial inputs never throw and return explicit error code
   });
 
   it("rotate_cooldown: rotating immediately after init is rejected", () => {
-    expect(validateOp(base.state, TEAM_A, rotateOpFor(base.teamA), MATCH_START + 1)).toEqual({
+    expect(validateOp(base.state, TEAM_A, rotateOpFor(base.teamA, 1), MATCH_START + 1)).toEqual({
       ok: false,
       error: "rotate_cooldown",
     });
     expect(
-      validateOp(base.state, TEAM_A, rotateOpFor(base.teamA), MATCH_START + ROTATE_COOLDOWN_MS),
+      validateOp(base.state, TEAM_A, rotateOpFor(base.teamA, 1), MATCH_START + ROTATE_COOLDOWN_MS),
     ).toEqual({ ok: true });
   });
 
@@ -618,7 +797,7 @@ describe("reducer: rotate invalidates the old generation for hunting", () => {
   }
 
   const rotateAt = MATCH_START + ROTATE_COOLDOWN_MS + 1;
-  const afterRotate = applyOp(afterLeaks, TEAM_A, rotateOpFor(teamAGen1), rotateAt);
+  const afterRotate = applyOp(afterLeaks, TEAM_A, rotateOpFor(teamAGen1, 1), rotateAt);
 
   it("rotate advances currentGeneration and appends a new commitment set", () => {
     expect(afterRotate.teams[TEAM_A].currentGeneration).toBe(1);
@@ -650,6 +829,164 @@ describe("reducer: rotate invalidates the old generation for hunting", () => {
   it("hunting the current generation 1 with its real secret succeeds", () => {
     const huntOp = huntOpFor(TEAM_A, 1, teamAGen1.secret);
     expect(validateOp(afterRotate, TEAM_B, huntOp, rotateAt + 1_000)).toEqual({ ok: true });
+  });
+});
+
+// ---- reducer: prove path ---------------------------------------------------------------
+
+describe("reducer: prove path (Schnorr proof of knowledge fulfils prove-knowledge contracts)", () => {
+  const proveAt = MATCH_START + 5_000;
+  const expiresAt = MATCH_START + 60_000;
+  const { state: withContract, contractId } = issueProveContract(base.state, TEAM_A, MATCH_START, expiresAt);
+  const proveOp = proveOpFor(base.teamA, contractId, 0);
+
+  it("happy path: a valid Schnorr proof fulfils the contract and pays out points", () => {
+    expect(validateOp(withContract, TEAM_A, proveOp, proveAt)).toEqual({ ok: true });
+    const afterProve = applyOp(withContract, TEAM_A, proveOp, proveAt);
+    const contract = afterProve.contracts.find((c) => c.id === contractId) as ContractSpec;
+    expect(contract.status).toBe("fulfilled");
+    expect(afterProve.teams[TEAM_A].score).toBe(CONTRACT_SUCCESS_POINTS);
+
+    const ledgerEntry = afterProve.publicLedger.find((e) => e.kind === "prove");
+    expect(ledgerEntry).toBeDefined();
+    expect(ledgerEntry?.contractId).toBe(contractId);
+    expect(ledgerEntry?.generation).toBe(0);
+    expect(ledgerEntry?.points).toBe(CONTRACT_SUCCESS_POINTS);
+    // ledger entry には proof の中身 (R, s) も secret も一切含まれない (leak 専用フィールド)。
+    expect(ledgerEntry).not.toHaveProperty("shareValue");
+    expect(ledgerEntry).not.toHaveProperty("shareIndex");
+  });
+
+  it("invalid_proof: a forged response is rejected", () => {
+    const forged = {
+      ...proveOp,
+      response: bigintToHex(mod(BigInt(`0x${proveOp.response}`) + 1n, Q)),
+    };
+    expect(validateOp(withContract, TEAM_A, forged, proveAt)).toEqual({
+      ok: false,
+      error: "invalid_proof",
+    });
+  });
+
+  it("invalid_proof: malformed hex never throws", () => {
+    const malformed = { ...proveOp, commitment: "not-hex" };
+    expect(() => validateOp(withContract, TEAM_A, malformed, proveAt)).not.toThrow();
+    expect(validateOp(withContract, TEAM_A, malformed, proveAt)).toEqual({
+      ok: false,
+      error: "invalid_proof",
+    });
+  });
+
+  it("replaying the same proof against a second prove-knowledge contract fails (contractId is bound into the challenge)", () => {
+    // issuedAtMs をずらして、元の contractId (`${TEAM_A}-prove-${MATCH_START}`) と
+    // 衝突しない別 contract を作る。
+    const { state: withSecondContract, contractId: secondContractId } = issueProveContract(
+      withContract,
+      TEAM_A,
+      MATCH_START + 1,
+      expiresAt,
+    );
+    expect(secondContractId).not.toBe(contractId);
+    const replay: CryptoBattleOp = { ...proveOp, contractId: secondContractId };
+    expect(validateOp(withSecondContract, TEAM_A, replay, proveAt)).toEqual({
+      ok: false,
+      error: "invalid_proof",
+    });
+  });
+
+  it("wrong_contract_kind: a prove op against a leak-share contract is rejected", () => {
+    const { state: withLeakContract, contractIds } = issueStandardLeakContracts(
+      base.state,
+      TEAM_A,
+      [1],
+      MATCH_START,
+      expiresAt,
+    );
+    const op: CryptoBattleOp = {
+      type: "prove",
+      contractId: contractIds[0],
+      commitment: proveOp.commitment,
+      response: proveOp.response,
+    };
+    expect(validateOp(withLeakContract, TEAM_A, op, proveAt)).toEqual({
+      ok: false,
+      error: "wrong_contract_kind",
+    });
+  });
+
+  it("contract_expired: proving after the deadline is rejected", () => {
+    const shortExpiry = MATCH_START + 1_000;
+    const { state: withShortContract, contractId: shortContractId } = issueProveContract(
+      base.state,
+      TEAM_A,
+      MATCH_START,
+      shortExpiry,
+    );
+    const shortOp = proveOpFor(base.teamA, shortContractId, 0);
+    expect(validateOp(withShortContract, TEAM_A, shortOp, shortExpiry + 1)).toEqual({
+      ok: false,
+      error: "contract_expired",
+    });
+  });
+});
+
+// ---- reducer: init/rotate commitment cloning -------------------------------------------
+
+describe("reducer: init/rotate proof of knowledge blocks commitment cloning", () => {
+  it("team B replaying team A's init op (commitments + proof) verbatim fails: context binds teamId into the challenge", () => {
+    const teamA = buildTeamFixture("clone-team-a", "clone-seed-a");
+    const initOpA = initOpFor(teamA);
+    const freshState = initialState(["clone-team-a", "clone-team-b"], MATCH_START);
+    // team B は自分の commitments を作らず、team A の (commitments, proof) をそのまま
+    // 提出する — proof の challenge は teamId を束縛しているので、送信元が変わると
+    // 同じ (R,s) では通らない。
+    expect(validateOp(freshState, "clone-team-b", initOpA, MATCH_START)).toEqual({
+      ok: false,
+      error: "invalid_proof",
+    });
+  });
+
+  it("team B cannot forge its own proof for team A's commitments without team A's secret", () => {
+    const teamA = buildTeamFixture("clone2-team-a", "clone2-seed-a");
+    // team B は team A の commitments (公開情報) は知っているが secret は知らない —
+    // 「自分の (間違った) secret」でしか proof を作れない、という状況をモデル化する。
+    const wrongSecret = createRng("clone2-wrong-secret").nextScalar();
+    const nonceRaw = createRng("clone2-wrong-nonce").nextScalar();
+    const nonce = nonceRaw === 0n ? 1n : nonceRaw;
+    const context: ProofContext = {
+      purpose: "init",
+      teamId: "clone2-team-b",
+      generation: 0,
+      contractId: "",
+    };
+    const forgedProof = proveKnowledge(wrongSecret, nonce, context);
+    const op: CryptoBattleOp = {
+      type: "init",
+      commitments: teamA.commitments.map(bigintToHex),
+      proofCommitment: forgedProof.commitment,
+      proofResponse: forgedProof.response,
+    };
+    const freshState = initialState(["clone2-team-a", "clone2-team-b"], MATCH_START);
+    expect(validateOp(freshState, "clone2-team-b", op, MATCH_START)).toEqual({
+      ok: false,
+      error: "invalid_proof",
+    });
+  });
+
+  it("rotate is symmetrically protected: team B cannot rotate into team A's commitments + proof either", () => {
+    const teamA = buildTeamFixture("clone3-team-a", "clone3-seed-a");
+    const teamB = buildTeamFixture("clone3-team-b", "clone3-seed-b");
+    let state = initialState(["clone3-team-a", "clone3-team-b"], MATCH_START);
+    state = applyOp(state, "clone3-team-a", initOpFor(teamA), MATCH_START);
+    state = applyOp(state, "clone3-team-b", initOpFor(teamB), MATCH_START);
+
+    const rotateAt = MATCH_START + ROTATE_COOLDOWN_MS + 1;
+    const rotateOpA = rotateOpFor(teamA, 1); // team A 自身の real proof (generation=1 向け)
+    // team B が team A の commitments + proof をそのまま自分の rotate として提出する。
+    expect(validateOp(state, "clone3-team-b", rotateOpA, rotateAt)).toEqual({
+      ok: false,
+      error: "invalid_proof",
+    });
   });
 });
 
@@ -698,6 +1035,31 @@ describe("projection: no unleaked share value or other team's contract queue lea
     const projection = projectForTeam(afterLeak, TEAM_B);
     const teamAEntry = projection.scoreboard.find((s) => s.teamId === TEAM_A);
     expect(teamAEntry?.score).toBe(afterLeak.teams[TEAM_A].score);
+  });
+
+  it("a 'prove' ledger entry carries no proof material and no secret (zero-knowledge, and nothing worth publishing)", () => {
+    const proveExpiresAt = MATCH_START + 60_000;
+    const { state: withProveContract, contractId } = issueProveContract(
+      base.state,
+      TEAM_A,
+      MATCH_START,
+      proveExpiresAt,
+    );
+    const proveOp = proveOpFor(base.teamA, contractId, 0);
+    const afterProve = applyOp(withProveContract, TEAM_A, proveOp, MATCH_START + 1_000);
+    const projection = projectForTeam(afterProve, TEAM_B);
+    const json = JSON.stringify(projection);
+    expect(json).not.toContain(proveOp.commitment);
+    expect(json).not.toContain(proveOp.response);
+    expect(json).not.toContain(bigintToHex(base.teamA.secret));
+
+    const ledgerEntry = projection.publicLedger.find((e) => e.kind === "prove");
+    expect(ledgerEntry).toBeDefined();
+    // contractId/generation/points/at/teamId/kind 以外のフィールドは載らない
+    // (shareIndex/shareValue/targetTeamId は leak/hunt 専用)。
+    expect(Object.keys(ledgerEntry as object).sort()).toEqual(
+      ["at", "contractId", "generation", "kind", "points", "teamId"].sort(),
+    );
   });
 });
 

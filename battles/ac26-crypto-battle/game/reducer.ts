@@ -38,6 +38,7 @@ import {
 import { verifyShare, verifySecret } from "./crypto/feldman.ts";
 import { tryHexToBigint } from "./crypto/modmath.ts";
 import { tryParseScalar, tryParseSubgroupElement } from "./crypto/group.ts";
+import { verifyKnowledge, type ProofContext } from "./crypto/schnorr.ts";
 import type {
   ContractSpec,
   CryptoBattleOp,
@@ -104,12 +105,38 @@ export function initialState(
 
 // --- validateOp -------------------------------------------------------------------
 
+/**
+ * op.proofCommitment/op.proofResponse を新しい C_0 (= commitments[0]) の離散対数の
+ * proof of knowledge として検証する共通ヘルパー (init/rotate 共通)。 これがないと
+ * 他チームの commitments をそのままコピーして「自分の commitments」として登録する
+ * commitment cloning が可能になってしまう (types.ts のコメント参照)。
+ */
+function validateKnowledgeProof(
+  commitments: readonly string[],
+  proofCommitment: unknown,
+  proofResponse: unknown,
+  context: ProofContext,
+): ValidationResult {
+  if (typeof proofCommitment !== "string" || typeof proofResponse !== "string") {
+    return err("invalid_proof");
+  }
+  const c0 = commitments[0];
+  if (c0 === undefined) return err("invalid_commitments");
+  const proof = { commitment: proofCommitment, response: proofResponse };
+  if (!verifyKnowledge(c0, proof, context)) return err("invalid_proof");
+  return ok;
+}
+
 function validateInit(
   team: TeamState,
+  teamId: string,
   op: Extract<CryptoBattleOp, { type: "init" }>,
 ): ValidationResult {
   if (team.initialized) return err("already_initialized");
-  return validateCommitments(op.commitments);
+  const commitmentsCheck = validateCommitments(op.commitments);
+  if (!commitmentsCheck.ok) return commitmentsCheck;
+  const context: ProofContext = { purpose: "init", teamId, generation: 0, contractId: "" };
+  return validateKnowledgeProof(op.commitments, op.proofCommitment, op.proofResponse, context);
 }
 
 function validateLeak(
@@ -205,6 +232,7 @@ function validateHunt(
 
 function validateRotate(
   team: TeamState,
+  teamId: string,
   op: Extract<CryptoBattleOp, { type: "rotate" }>,
   nowMs: number,
 ): ValidationResult {
@@ -214,7 +242,45 @@ function validateRotate(
   const currentGen = team.generations[team.currentGeneration];
   if (currentGen === undefined) return err("not_initialized");
   if (nowMs - currentGen.createdAtMs < ROTATE_COOLDOWN_MS) return err("rotate_cooldown");
-  return ok;
+  const newGeneration = team.currentGeneration + 1;
+  const context: ProofContext = { purpose: "rotate", teamId, generation: newGeneration, contractId: "" };
+  return validateKnowledgeProof(op.commitments, op.proofCommitment, op.proofResponse, context);
+}
+
+/**
+ * "prove" op: contract kind "prove-knowledge" を Schnorr proof of knowledge で
+ * 充足する。 検証対象はチームの CURRENT generation の C_0 (= commitments[0]) —
+ * ROTATE 後に古い generation の proof を使い回すことはできない (context.generation
+ * が currentGeneration に束縛されるため)。 基本点は leak と同じく contract.points
+ * からそのまま読む (issue: PROVE と LEAK の同一 contract の基本得点は原則同じ —
+ * contract 発行側が points を決めるので、この関数は contract.points を信頼するだけ)。
+ */
+function validateProve(
+  state: CryptoBattleState,
+  team: TeamState,
+  teamId: string,
+  op: Extract<CryptoBattleOp, { type: "prove" }>,
+  nowMs: number,
+): ValidationResult {
+  if (!team.initialized) return err("not_initialized");
+  if (!isValidId(op.contractId)) return err("unknown_contract");
+  const contract = state.contracts.find((c) => c.id === op.contractId);
+  if (contract === undefined) return err("unknown_contract");
+  if (contract.teamId !== teamId) return err("not_your_contract");
+  if (contract.kind !== "prove-knowledge") return err("wrong_contract_kind");
+  if (contract.status === "expired") return err("contract_expired");
+  if (contract.status !== "open") return err("contract_not_open");
+  if (nowMs >= contract.expiresAtMs) return err("contract_expired");
+
+  const generation = team.generations[team.currentGeneration];
+  if (generation === undefined) return err("not_initialized");
+  const context: ProofContext = {
+    purpose: "contract",
+    teamId,
+    generation: team.currentGeneration,
+    contractId: op.contractId,
+  };
+  return validateKnowledgeProof(generation.commitments, op.commitment, op.response, context);
 }
 
 /**
@@ -240,7 +306,7 @@ export function validateOp(
 
   switch (op.type) {
     case "init":
-      return validateInit(team, op);
+      return validateInit(team, teamId, op);
     case "leak":
       return validateLeak(state, team, teamId, op, nowMs);
     case "skip":
@@ -248,11 +314,13 @@ export function validateOp(
     case "hunt":
       return validateHunt(state, teamId, op);
     case "rotate":
-      return validateRotate(team, op, nowMs);
+      return validateRotate(team, teamId, op, nowMs);
+    case "prove":
+      return validateProve(state, team, teamId, op, nowMs);
     default: {
-      // union に新しい op 種別 (例: "prove", PR2) が増えたらここが型エラーになる
-      // — 網羅性チェックをコンパイル時に強制しつつ、万一型を経由しない不正な
-      // op.type が実行時に来ても throw せず error code を返す二重の安全策。
+      // union に新しい op 種別が増えたらここが型エラーになる — 網羅性チェックを
+      // コンパイル時に強制しつつ、万一型を経由しない不正な op.type が実行時に来ても
+      // throw せず error code を返す二重の安全策。
       const _exhaustive: never = op;
       return err("unknown_op_type");
     }
@@ -405,6 +473,45 @@ function applyRotate(
 }
 
 /**
+ * "prove" op を適用する。 leak と異なり shareValue のような秘密由来の値は一切
+ * ledger に残さない (zero-knowledge proof なので R/s 自体は秘密を漏らさないが、
+ * そもそも ledger に載せる意味がないので contractId/generation/points のみ記録する)。
+ */
+function applyProve(
+  state: CryptoBattleState,
+  teamId: string,
+  op: Extract<CryptoBattleOp, { type: "prove" }>,
+  nowMs: number,
+): CryptoBattleState {
+  const team = state.teams[teamId];
+  if (team === undefined) return state;
+  const contractIndex = state.contracts.findIndex((c) => c.id === op.contractId);
+  if (contractIndex === -1) return state;
+  const contract = state.contracts[contractIndex];
+
+  const contracts = [...state.contracts];
+  contracts[contractIndex] = { ...contract, status: "fulfilled" };
+
+  const updatedTeam: TeamState = { ...team, score: team.score + contract.points };
+
+  const ledgerEntry: LedgerEntry = {
+    at: nowMs,
+    teamId,
+    kind: "prove",
+    contractId: op.contractId,
+    generation: team.currentGeneration,
+    points: contract.points,
+  };
+
+  return {
+    ...state,
+    contracts,
+    teams: { ...state.teams, [teamId]: updatedTeam },
+    publicLedger: [...state.publicLedger, ledgerEntry],
+  };
+}
+
+/**
  * op を state へ適用する。 validateOp を内部で必ず再実行してから分岐する — 直接
  * applyOp を (validateOp を経ずに) 不正な入力で呼んでも state は変化しない
  * no-op になるだけで、決して throw しない。
@@ -429,6 +536,8 @@ export function applyOp(
       return applyHunt(state, teamId, op, nowMs);
     case "rotate":
       return applyRotate(state, teamId, op, nowMs);
+    case "prove":
+      return applyProve(state, teamId, op, nowMs);
     default: {
       const _exhaustive: never = op;
       return state;
