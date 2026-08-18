@@ -45,6 +45,13 @@ export const COORDINATION_POLL_MS = 30_000;
  * individually well-formed. A narrowing failure here is treated as "unknown
  * data format" by both plugins (see `usePolledProjection` below), never a
  * crash and never a guess at a fabricated projection.
+ *
+ * `vault.huntedGenerations` and `vault.completedContractIds` are checked
+ * too (both `Array.isArray`, not just present) -- `StatusPanel.tsx`'s
+ * `VaultLane` reads `vault.huntedGenerations.length` / `.join(...)`
+ * unconditionally, so a malformed/missing value here would previously pass
+ * this guard and then throw inside the render, contradicting this file's
+ * own "never a crash" guarantee above (Issue #486 PR4 review, medium #2).
  */
 export function isCryptoBattleProjection(value: unknown): value is CryptoBattleProjection {
   if (typeof value !== "object" || value === null) return false;
@@ -62,6 +69,8 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
   if (!Array.isArray(vaultRecord.shares)) return false;
   if (typeof vaultRecord.generation !== "number") return false;
   if (typeof vaultRecord.rotateCooldownRemainingMs !== "number") return false;
+  if (!Array.isArray(vaultRecord.completedContractIds)) return false;
+  if (!Array.isArray(vaultRecord.huntedGenerations)) return false;
 
   if (!Array.isArray(v.myContracts)) return false;
   if (!Array.isArray(v.publicLedger)) return false;
@@ -99,6 +108,20 @@ export interface ProjectionPollState {
  * rather than flashing to empty on one transient poll failure, the same
  * belt-and-suspenders choice microservice-migration-battle's `StatusPanel`
  * makes for its `directory` state.
+ *
+ * `client.getProjection()` itself can REJECT, not just resolve to a non-"ok"
+ * outcome -- the SDK's real implementation is a plain `fetch`, so a network
+ * failure (offline, DNS, CORS) throws rather than returning a
+ * `PortalCoordinationOutcome`. Without the `try/catch` below, that would
+ * both leave the UI silently stuck on its last state forever (no `status`
+ * ever gets set, so no retry-hint copy ever shows) and log an unhandled
+ * rejection to the console every `COORDINATION_POLL_MS` (Issue #486 PR4
+ * review, low #4). Caught here and folded into the same `"unavailable"`
+ * status the SDK itself would return for a live-but-erroring dispatcher --
+ * the next scheduled poll naturally retries, same as any other transient
+ * `"unavailable"`. (microservice-migration-battle's `StatusPanel.tsx` has
+ * the identical unguarded-`await` structure; fixing it is out of scope for
+ * this file and is left as a follow-up there.)
  */
 export function usePolledProjection(client: PortalCoordinationClient | undefined): ProjectionPollState {
   const [projection, setProjection] = useState<CryptoBattleProjection | null>(null);
@@ -108,7 +131,13 @@ export function usePolledProjection(client: PortalCoordinationClient | undefined
     if (!client) return;
     let active = true;
     const poll = async () => {
-      const outcome = await client.getProjection();
+      let outcome: PortalCoordinationOutcome;
+      try {
+        outcome = await client.getProjection();
+      } catch {
+        if (active) setStatus("unavailable");
+        return;
+      }
       if (!active) return;
       if (outcome.kind === "ok") {
         if (isCryptoBattleProjection(outcome.projection)) {

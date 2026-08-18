@@ -32,7 +32,14 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { PortalCoordinationClient, PortalCoordinationOutcome, PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 import { isCryptoBattleProjection } from "../../portal/coordination.ts";
 import HelpDrawer from "../../portal/HelpDrawer.tsx";
-import RegistrationPanel, { submitHunt, submitLeak, submitProve, submitRotate } from "../../portal/RegistrationPanel.tsx";
+import RegistrationPanel, {
+  COPY as REGISTRATION_COPY,
+  describeOutcome,
+  submitHunt,
+  submitLeak,
+  submitProve,
+  submitRotate,
+} from "../../portal/RegistrationPanel.tsx";
 import StatusPanel, { StatusPanelBody } from "../../portal/StatusPanel.tsx";
 import type { CryptoBattleProjection } from "./types.ts";
 
@@ -206,6 +213,33 @@ describe("portal/coordination.ts isCryptoBattleProjection", () => {
     expect(isCryptoBattleProjection(broken)).toBe(false);
   });
 
+  it("rejects a projection whose vault.huntedGenerations is missing or non-array, even with every other vault field well-formed [Issue #486 PR4 review, medium #2]", () => {
+    // Deliberately NOT the "everything missing" broken vault above --
+    // StatusPanel.tsx's VaultLane reads `vault.huntedGenerations.length` /
+    // `.join(...)` unconditionally, so this is the specific gap where a
+    // narrowing bug would previously let a malformed projection through and
+    // throw inside the render instead of being caught here.
+    const { huntedGenerations, ...vaultWithoutHunted } = fixtureProjection().vault;
+    expect(isCryptoBattleProjection({ ...fixtureProjection(), vault: vaultWithoutHunted })).toBe(false);
+    expect(
+      isCryptoBattleProjection({
+        ...fixtureProjection(),
+        vault: { ...fixtureProjection().vault, huntedGenerations: "not-an-array" },
+      }),
+    ).toBe(false);
+  });
+
+  it("rejects a projection whose vault.completedContractIds is missing or non-array, even with every other vault field well-formed [Issue #486 PR4 review, medium #2]", () => {
+    const { completedContractIds, ...vaultWithoutCompleted } = fixtureProjection().vault;
+    expect(isCryptoBattleProjection({ ...fixtureProjection(), vault: vaultWithoutCompleted })).toBe(false);
+    expect(
+      isCryptoBattleProjection({
+        ...fixtureProjection(),
+        vault: { ...fixtureProjection().vault, completedContractIds: "not-an-array" },
+      }),
+    ).toBe(false);
+  });
+
   it("rejects a projection whose myContracts/publicLedger are not arrays", () => {
     expect(isCryptoBattleProjection({ ...fixtureProjection(), myContracts: "nope" })).toBe(false);
     expect(isCryptoBattleProjection({ ...fixtureProjection(), publicLedger: "nope" })).toBe(false);
@@ -364,4 +398,30 @@ describe("RegistrationPanel.tsx submit* helpers build the correct CryptoBattleOp
     const outcome = await submitLeak(client, "x");
     expect(outcome).toEqual({ kind: "rejected", error: 'contract "x" is completed, not open' });
   });
+});
+
+describe("RegistrationPanel.tsx describeOutcome -- localized display text for every outcome kind [Issue #486 PR4 review, medium #1]", () => {
+  for (const locale of ["ja", "en"] as const) {
+    const copy = REGISTRATION_COPY[locale];
+
+    it(`shows the localized success message for "ok", not the literal string "ok" (${locale})`, () => {
+      expect(describeOutcome({ kind: "ok", projection: {} }, copy)).toBe(copy.submitted);
+      expect(describeOutcome({ kind: "ok", projection: {} }, copy)).not.toBe("ok");
+    });
+
+    it(`prefixes a rejected outcome's error with the localized "rejected" label (${locale})`, () => {
+      expect(describeOutcome({ kind: "rejected", error: "boom" }, copy)).toBe(`${copy.rejectedPrefix}boom`);
+    });
+
+    it(`maps every infra-side outcome to the same localized retry message, distinct from "rejected" (${locale})`, () => {
+      for (const kind of ["unavailable", "conflict", "unauthorized"] as const) {
+        expect(describeOutcome({ kind }, copy)).toBe(copy.infraIssue);
+      }
+      expect(copy.infraIssue).not.toBe(copy.rejectedPrefix);
+    });
+
+    it(`maps "not_configured" to the localized fail-closed message (${locale})`, () => {
+      expect(describeOutcome({ kind: "not_configured" }, copy)).toBe(copy.notConfiguredResult);
+    });
+  }
 });

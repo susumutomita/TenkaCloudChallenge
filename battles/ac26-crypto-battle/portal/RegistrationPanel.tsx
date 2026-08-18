@@ -66,6 +66,7 @@ interface Copy {
   readonly notConfigured: string;
   readonly loadingContracts: string;
   readonly submitting: string;
+  readonly submitted: string;
   readonly rejectedPrefix: string;
   readonly infraIssue: string;
   readonly notConfiguredResult: string;
@@ -93,13 +94,20 @@ interface Copy {
   readonly rotateSubmit: string;
 }
 
-const COPY: Record<Locale, Copy> = {
+/**
+ * Exported (Issue #486 PR4 review, medium #1) so `game/src/portal.test.ts`
+ * can assert `describeOutcome`'s actual localized output against the real
+ * ja/en strings, rather than duplicating them as separate expected-value
+ * literals in the test that could silently drift from this file's copy.
+ */
+export const COPY: Record<Locale, Copy> = {
   en: {
     title: "PROVE / LEAK / HUNT -- Submit a move",
     intro: "Every move below goes straight to the match. There is no undo.",
     notConfigured: "Coordination is not wired up for this session -- moves cannot be submitted here.",
     loadingContracts: "Loading your open contracts…",
     submitting: "Submitting…",
+    submitted: "Submitted -- the match applied your move.",
     rejectedPrefix: "Rejected: ",
     infraIssue: "The coordination service had a problem on its side -- please retry.",
     notConfiguredResult: "Coordination is not available for this session.",
@@ -134,6 +142,7 @@ const COPY: Record<Locale, Copy> = {
     notConfigured: "この session では coordination が未配線のため、操作を送信できません。",
     loadingContracts: "open な contract を読み込み中…",
     submitting: "送信中…",
+    submitted: "送信しました — 試合に反映されました。",
     rejectedPrefix: "却下されました: ",
     infraIssue: "coordination service 側で問題が発生しました。しばらくしてから再試行してください。",
     notConfiguredResult: "この session では coordination を利用できません。",
@@ -225,11 +234,20 @@ export function submitRotate(client: PortalCoordinationClient): Promise<PortalCo
   return client.submitOp(op);
 }
 
-/** Issue #486's 3-way error split -- see this file's header. Shared by all 4 forms below. */
-function describeOutcome(outcome: PortalCoordinationOutcome, copy: Copy): string {
+/**
+ * Issue #486's 3-way error split -- see this file's header. Shared by all 4
+ * forms below. Exported (alongside `COPY`) so `game/src/portal.test.ts` can
+ * verify the actual displayed text for every outcome kind directly --
+ * including `"ok"`, which previously fell through to the literal string
+ * `"ok"` instead of a localized success message (Issue #486 PR4 review,
+ * medium #1) -- without needing a DOM click-simulation harness this repo
+ * doesn't have (see this file's header on why `submit*` are exported the
+ * same way).
+ */
+export function describeOutcome(outcome: PortalCoordinationOutcome, copy: Copy): string {
   switch (outcome.kind) {
     case "ok":
-      return "ok";
+      return copy.submitted;
     case "rejected":
       return `${copy.rejectedPrefix}${outcome.error}`;
     case "not_configured":
@@ -317,8 +335,10 @@ function ProveForm({
       if (typeof parsed.commitment !== "string" || typeof parsed.response !== "string") {
         throw new Error("missing commitment/response");
       }
-      setCommitment(parsed.commitment);
-      setResponse(parsed.response);
+      // Trimmed on the way in (same as the manual-entry path below) so the
+      // field always shows exactly what will be submitted.
+      setCommitment(parsed.commitment.trim());
+      setResponse(parsed.response.trim());
       setParseError(null);
     } catch {
       setParseError(copy.proveJsonError);
@@ -326,10 +346,18 @@ function ProveForm({
   };
 
   const onSubmit = () => {
-    if (!selected || !commitment || !response || submitting) return;
+    // Trimmed here, not on every keystroke (which would fight the cursor
+    // while typing): a copy-pasted commitment/response with a trailing
+    // newline or leading space is otherwise well-formed, and untrimmed
+    // would fail Schnorr verification exactly like a genuinely wrong proof
+    // -- indistinguishable from a real cryptographic error (Issue #486 PR4
+    // review, low #3; HUNT's recoveredSecret gets the same treatment below).
+    const trimmedCommitment = commitment.trim();
+    const trimmedResponse = response.trim();
+    if (!selected || !trimmedCommitment || !trimmedResponse || submitting) return;
     setSubmitting(true);
     setResult(null);
-    void submitProve(client, selected, { commitment, response }).then((outcome) => {
+    void submitProve(client, selected, { commitment: trimmedCommitment, response: trimmedResponse }).then((outcome) => {
       setResult(describeOutcome(outcome, copy));
       setSubmitting(false);
     });
@@ -378,7 +406,12 @@ function ProveForm({
             </button>
             {parseError && <p style={errStyle}>{parseError}</p>}
           </details>
-          <button type="button" style={fieldStyle} onClick={onSubmit} disabled={submitting || !commitment || !response}>
+          <button
+            type="button"
+            style={fieldStyle}
+            onClick={onSubmit}
+            disabled={submitting || !commitment.trim() || !response.trim()}
+          >
             {submitting ? copy.submitting : copy.proveSubmit}
           </button>
         </>
