@@ -64,6 +64,36 @@ describe("prove: happy path", () => {
   });
 });
 
+describe("prove: ProofArtifact normalization [independent review, low #4]", () => {
+  test("a proof submitted with a leading zero (still /^\\d{1,700}$/-canonical and still numerically valid) is stored in the Public Ledger in normalized decimal form, not verbatim", () => {
+    const state = tick(initialState(CTX), 0);
+    const contract = state.contracts.find((c) => c.teamId === "teamA");
+    if (!contract) throw new Error("expected a contract for teamA");
+    const team = state.teams.teamA;
+    if (!team) throw new Error("expected teamA");
+
+    const proof = createProof(team.secret, team.generation, "teamA", contract.id);
+    // A leading zero doesn't violate schnorr-verifier.ts's `/^\d{1,700}$/`
+    // format check, and BigInt("0" + x) === BigInt(x), so this still
+    // verifies correctly -- it is exactly the kind of "not wrong, but not
+    // the canonical form either" input applyProve's BigInt(...).toString()
+    // round-trip guards against landing in the ledger unnormalized.
+    const paddedProof = { commitment: `0${proof.commitment}`, response: `0${proof.response}` };
+    expect(
+      validateOp(state, "teamA", { kind: "prove", contractId: contract.id, proof: paddedProof }),
+    ).toEqual({ ok: true });
+
+    const next = applyOp(state, "teamA", { kind: "prove", contractId: contract.id, proof: paddedProof });
+    const posted = next.publicLedger[0];
+    if (!posted) throw new Error("expected a posted artifact");
+    if (posted.kind !== "proof") throw new Error("expected a proof artifact");
+    expect(posted.commitment).toBe(proof.commitment);
+    expect(posted.response).toBe(proof.response);
+    expect(posted.commitment.startsWith("0")).toBe(false);
+    expect(posted.response.startsWith("0")).toBe(false);
+  });
+});
+
 describe("prove: invalid proof is rejected", () => {
   test("a tampered response is rejected by validateOp and the contract stays open", () => {
     const state = tick(initialState(CTX), 0);
@@ -146,6 +176,56 @@ describe("prove: replay", () => {
     expect(replay.ok).toBe(false);
     if (!replay.ok) {
       expect(replay.error).toMatch(/completed/);
+    }
+  });
+});
+
+describe("prove: cross-resolution double-completion is rejected [independent review, low #6]", () => {
+  // LEAK and PROVE share the exact same "status !== 'open'" guard in
+  // validateOp -- these two tests pin the cross-resolution case directly
+  // (a Contract completed by ONE method cannot then be completed by the
+  // OTHER), rather than relying on it as an untested side effect of the
+  // same-method replay tests above.
+
+  test("a Contract already completed via PROVE cannot then be LEAKed", () => {
+    const state = tick(initialState(CTX), 0);
+    const contract = state.contracts.find((c) => c.teamId === "teamA");
+    if (!contract) throw new Error("expected a contract for teamA");
+    const team = state.teams.teamA;
+    if (!team) throw new Error("expected teamA");
+
+    const proof = createProof(team.secret, team.generation, "teamA", contract.id);
+    const provedState = applyOp(state, "teamA", { kind: "prove", contractId: contract.id, proof });
+    expect(provedState.contracts.find((c) => c.id === contract.id)?.resolution).toBe("prove");
+
+    const leakResult = validateOp(provedState, "teamA", { kind: "leak", contractId: contract.id });
+    expect(leakResult.ok).toBe(false);
+    if (!leakResult.ok) {
+      expect(leakResult.error).toMatch(/completed/);
+    }
+    // No share ever gets published as a side effect of the rejected LEAK attempt.
+    expect(provedState.publicLedger.some((a) => a.kind === "share")).toBe(false);
+  });
+
+  test("a Contract already completed via LEAK cannot then be PROVEn", () => {
+    const state = tick(initialState(CTX), 0);
+    const contract = state.contracts.find((c) => c.teamId === "teamA");
+    if (!contract) throw new Error("expected a contract for teamA");
+    const team = state.teams.teamA;
+    if (!team) throw new Error("expected teamA");
+
+    const leakedState = applyOp(state, "teamA", { kind: "leak", contractId: contract.id });
+    expect(leakedState.contracts.find((c) => c.id === contract.id)?.resolution).toBe("leak");
+
+    // A proof built against the now-leaked contract would verify on its own
+    // cryptographic merits (the witness/statement binding is unaffected by
+    // LEAK) -- it is the shared "contract must be open" guard, not proof
+    // validity, that must reject this.
+    const proof = createProof(team.secret, team.generation, "teamA", contract.id);
+    const proveResult = validateOp(leakedState, "teamA", { kind: "prove", contractId: contract.id, proof });
+    expect(proveResult.ok).toBe(false);
+    if (!proveResult.ok) {
+      expect(proveResult.error).toMatch(/completed/);
     }
   });
 });

@@ -27,6 +27,22 @@
  * schnorr-witness.ts / schnorr-prover.ts / schnorr-verifier.ts sound: with a
  * prime group order, every non-identity element generates the whole
  * subgroup and there is no small-subgroup confusion to worry about.
+ *
+ * A note on effective security: do not read "2048-bit group" as a claim
+ * that values flowing through this module carry 2048-bit (or even the
+ * ~112-bit classical index-calculus estimate for a modulus this size)
+ * strength. Every value that acts as this scheme's secret material -- the
+ * witness `w` (schnorr-witness.ts's `deriveWitness`), the nonce `k`
+ * (schnorr-prover.ts's `deriveNonce`), and the Fiat-Shamir challenge `e`
+ * (schnorr-transcript.ts's `computeChallenge`) -- is derived through
+ * SHA-256 before it is ever reduced into this group. None of those
+ * derivations can carry more entropy or collision resistance than SHA-256's
+ * 256-bit output provides, and a generic birthday-bound attack against a
+ * 256-bit hash costs on the order of 2^128, not 2^2048. Effective security
+ * here is therefore bounded at roughly 128-bit by construction, not by
+ * omission -- this Battle's threat model is a competing team within a
+ * ~90-minute match, not a resourced cryptanalytic adversary, and 128-bit of
+ * margin is already far more than that requires.
  */
 
 import { pow } from "./field.ts";

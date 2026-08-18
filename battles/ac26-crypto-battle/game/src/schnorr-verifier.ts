@@ -32,6 +32,43 @@ export interface ProveStatement {
 }
 
 /**
+ * The largest decimal value this 2048-bit group's modulus `p` ever needs to
+ * represent has 617 digits (`floor(2048 * log10(2)) + 1`); 700 leaves
+ * comfortable margin without opening the door to an absurdly long input.
+ */
+const MAX_PROOF_FIELD_DECIMAL_DIGITS = 700;
+
+/** Digits only, no sign, no leading/embedded/trailing whitespace, length-bounded. */
+const CANONICAL_DECIMAL = new RegExp(`^\\d{1,${MAX_PROOF_FIELD_DECIMAL_DIGITS}}$`);
+
+/**
+ * Parse a participant-submitted `proof.commitment` / `proof.response` string
+ * into a `bigint`, or `undefined` if it is not a canonical, length-bounded
+ * decimal literal. MUST run before any `BigInt()` call on untrusted input:
+ * `BigInt()`'s parse cost is superlinear in input length. Measured on this
+ * runtime (Bun / JavaScriptCore): a 300,000-digit string takes ~565ms to
+ * parse directly, and JavaScriptCore additionally enforces its own hard
+ * BigInt size cap somewhere between 300,000 and 400,000 decimal digits,
+ * throwing `RangeError: Out of memory` past it -- so an unguarded
+ * `BigInt()` call on untrusted input is a CPU-exhaustion vector well within
+ * that cap, not only for inputs large enough to hit it. (Other JS engines
+ * cap BigInt size much higher or not at all, so an input long enough to be
+ * slow there without ever throwing is easy to construct -- the length bound
+ * below does not depend on any particular engine's cap.) Rejecting anything
+ * that is not `/^\d{1,700}$/` up front closes this off before `BigInt()`
+ * ever runs, and as a side effect also rejects every non-canonical encoding
+ * `BigInt()` would otherwise happily accept -- a `"0x..."` hex literal, a
+ * leading `"+"`, embedded/trailing whitespace, or a `"-"` sign -- so there is
+ * exactly one parse path this module trusts. See schnorr.test.ts's
+ * "input format/size validation" tests for the measured guarded-vs-unguarded
+ * timing gap.
+ */
+function parseCanonicalDecimal(value: string): bigint | undefined {
+  if (!CANONICAL_DECIMAL.test(value)) return undefined;
+  return BigInt(value);
+}
+
+/**
  * Verify that `proof` proves knowledge of the discrete log of
  * `publicCommitmentY` (`= g^w mod p`) bound to `statement`, under this
  * package's Fiat-Shamir Schnorr scheme. Checks `g^z == R * Y^e (mod p)`,
@@ -52,20 +89,23 @@ export function verifyProof(
   statement: ProveStatement,
   group: Group = RFC3526_GROUP14,
 ): boolean {
-  let commitmentR: bigint;
-  let response: bigint;
-  try {
-    commitmentR = BigInt(proof.commitment);
-    response = BigInt(proof.response);
-  } catch {
-    return false;
-  }
+  const commitmentR = parseCanonicalDecimal(proof.commitment);
+  const response = parseCanonicalDecimal(proof.response);
+  if (commitmentR === undefined || response === undefined) return false;
 
-  // Range checks before any group arithmetic: an out-of-range commitment or
-  // response is never a valid proof, whatever it happens to hash to.
-  if (commitmentR < 0n || commitmentR >= group.p) return false;
+  // Range checks before any group arithmetic. `<= 1n` (not just `< 0n`)
+  // rejects the group identity (1) in addition to 0: a forged proof against
+  // Y = 1 would otherwise verify for ANY response z by simply setting
+  // R = g^z (since Y^e = 1^e = 1 makes the check g^z == R unconditionally),
+  // a complete forgery. Y is only ever produced by `derivePublicCommitment`
+  // today, so landing on 1 has probability ~2^-256, but the reference
+  // implementation (`challenges/ac26-w3-schnorr/local/reference/schnorr.py`'s
+  // `validate_public_key` / `verify_transcript`) rejects the identity
+  // explicitly rather than relying on that -- this mirrors it, and applies
+  // the same rejection to the commitment R for consistency.
+  if (commitmentR <= 1n || commitmentR >= group.p) return false;
   if (response < 0n || response >= group.order) return false;
-  if (publicCommitmentY <= 0n || publicCommitmentY >= group.p) return false;
+  if (publicCommitmentY <= 1n || publicCommitmentY >= group.p) return false;
 
   const challengeInput: ChallengeInput = {
     teamId: statement.teamId,

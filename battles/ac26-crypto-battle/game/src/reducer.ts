@@ -427,14 +427,23 @@ function applyProve(
   // Audit-only transcript: commitment/response only, NEVER a share value or
   // the secret/witness they were derived from -- see types.ts's
   // ProofArtifact doc comment and schnorr.test.ts's secret-non-leakage test.
+  //
+  // Re-serialized via BigInt(...).toString() rather than storing op.proof's
+  // raw strings verbatim: validateOp()'s verifyProof() call already forces
+  // both fields to match `/^\d{1,700}$/` before this is ever reached (see
+  // schnorr-verifier.ts's parseCanonicalDecimal), so this round-trip is
+  // defense-in-depth, not a correctness fix -- it guarantees the Public
+  // Ledger only ever holds the canonical decimal form of a value, never
+  // whatever incidental (but still-canonical) formatting a submitted string
+  // happened to carry, should that guarantee ever change upstream.
   const artifact: ProofArtifact = {
     id: `${contract.id}-proof`,
     teamId,
     generation: team.generation,
     kind: "proof",
     contractId: contract.id,
-    commitment: op.proof.commitment,
-    response: op.proof.response,
+    commitment: BigInt(op.proof.commitment).toString(),
+    response: BigInt(op.proof.response).toString(),
     postedAtMs: nowMs,
   };
 
