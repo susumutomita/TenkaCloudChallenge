@@ -143,7 +143,36 @@ to reach Week 6.
 
 None claims `assignment-companion`, and the guard keeps it that way.
 
-## Week 4 — proof systems
+## Resolved — Week 4 — proof systems, published 2026-08-18
+
+This week has left the list above the same way Week 2 did: the lecture (`week4/README.md`
+and `week4/acp-2026-week4-redacted.pdf`, 38 slides, upstream commit `c088f8e6f301dedcd80b6dd9c321a1cd83410637`)
+was published on 2026-08-18, the three companions re-pinned to it, and this heading
+followed so that `course-alignment-basis.test.ts` stops requiring an unpublished pin here.
+The official exercise is still `WIP` in that README, so no companion claims
+`assignment-companion`; all three stay `transfer`.
+
+**What the lecture turned out to teach, and how the companions map** (the retrospective
+lives in [`curriculum.md`](./curriculum.md)'s Week 4 section): the lecture is "proof" and
+"zero-knowledge" — proofs as five parts, P / NP / IP / PCP / IOP, then GKR, STARK and PLONK
+each described as A. arithmetization / B. commitment scheme / C. proof system, then the
+zero-knowledge transformation by polynomial masking. Against that:
+
+- `ac26-w4-arithmetization` matches the STARK section's first two steps (execution trace,
+  AIR — slides 19–21) and adds the boundary constraint the lecture's toy AIR lacks.
+- `ac26-w4-commit-open` matches the commitment-scheme slide (4), "oracle ≈ commitment"
+  (10, 12) and the Merkle commitment (22).
+- `ac26-w4-proof-pipeline` matches the three-box decomposition (13, 19, 25), the summary
+  "shared frame, varied combinations" (33–34) and the recurring cost question.
+- **Uncovered**: SumCheck (GKR, slides 14–17), the PLONK gate/copy constraints and grand
+  product (26–29), FRI folding (23) and the zero-knowledge masking (31–32). Tracked in #494.
+
+The derivation lesson from Week 2 held again: deriving from the published neighbours
+bounded what the week *must* contain (trace, commitment, pipeline) and could not have
+produced its actual centre of gravity (SumCheck / FRI / PLONK as three instances of one
+frame).
+
+### The original basis, as written
 
 **Basis: the gap between two published weeks.**
 
