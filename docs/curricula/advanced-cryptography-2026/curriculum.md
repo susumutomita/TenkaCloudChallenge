@@ -440,6 +440,28 @@ in [`ASSESSMENT.md`](./ASSESSMENT.md), which also fixes the rule that any
 `assignment-companion` challenge must include at least one `predict` or
 `counterexample` checkpoint — the two kinds that a copied solution cannot satisfy.
 
+## Instructions start from school math
+
+A problem whose first line already assumes its own vocabulary ("F_p", "witness",
+"commitment") is readable only by someone who could already solve it (#493). Every
+problem of a published week therefore opens its `instructions` (ja and en) with a
+fixed "前提 — 中学・高校の数学から" / "Before you start — from school math" section
+of four bullets, placed *before* "はじめに" / "Start here":
+
+1. **学校で習ったこと** — the school fact this rests on (remainders → mod, reciprocal
+   → inverse, gcd algorithm → extended Euclid, slope / tangent → point addition,
+   simultaneous equations → nonce reuse or under-constraint, distributive law →
+   linear shares, expansion → Beaver, exponent law → Diffie–Hellman / OT).
+2. **教材のどこ** — lecture slide numbers and the assignment part / function names.
+3. **1 桁の例** — a worked example in mod 7 / 11 / 13 / 17, preferring the lecture's
+   own numbers.
+4. **言葉** — each technical term restated in plain language.
+
+`scripts/ac26-premises.test.ts` enforces the shape for Weeks 1–4. Weeks 5–7 are added
+to its `PUBLISHED_WEEKS` as their material is published and their instructions are
+rewritten in this form. The self-study note series that the bridge was modelled on is
+at https://susumutomita.github.io/notes/ (Week 0 "土台編" onwards).
+
 ## Maintenance
 
 - Re-pin the source commit only through the drift review in `GOVERNANCE.md` §5,
