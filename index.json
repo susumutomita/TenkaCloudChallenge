@@ -885,9 +885,15 @@
         "sources": [
           {
             "repository": "zk-tokyo/advanced-cryptography-2026",
-            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
+            "ref": "c088f8e6f301dedcd80b6dd9c321a1cd83410637",
             "path": "week4/README.md",
-            "kind": "placeholder"
+            "kind": "lecture"
+          },
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "c088f8e6f301dedcd80b6dd9c321a1cd83410637",
+            "path": "week4/acp-2026-week4-redacted.pdf",
+            "kind": "slide"
           }
         ]
       },
@@ -929,9 +935,15 @@
         "sources": [
           {
             "repository": "zk-tokyo/advanced-cryptography-2026",
-            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
+            "ref": "c088f8e6f301dedcd80b6dd9c321a1cd83410637",
             "path": "week4/README.md",
-            "kind": "placeholder"
+            "kind": "lecture"
+          },
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "c088f8e6f301dedcd80b6dd9c321a1cd83410637",
+            "path": "week4/acp-2026-week4-redacted.pdf",
+            "kind": "slide"
           }
         ]
       },
@@ -973,9 +985,15 @@
         "sources": [
           {
             "repository": "zk-tokyo/advanced-cryptography-2026",
-            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
+            "ref": "c088f8e6f301dedcd80b6dd9c321a1cd83410637",
             "path": "week4/README.md",
-            "kind": "placeholder"
+            "kind": "lecture"
+          },
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "c088f8e6f301dedcd80b6dd9c321a1cd83410637",
+            "path": "week4/acp-2026-week4-redacted.pdf",
+            "kind": "slide"
           }
         ]
       },
