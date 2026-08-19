@@ -95,6 +95,7 @@ order; `track.order` only sequences presentation.
 | `concept.correctness` | The construction produces the right answer on honest inputs |
 | `concept.soundness` | A false statement cannot be made to pass |
 | `concept.privacy` | The transcript reveals nothing beyond what is intended |
+| `concept.repl-drill` | "Type one line, paste the value it printed, read the one sentence about that value" — the result and its explanation next to each other, before any vocabulary |
 
 ### Week 1 — circuits
 
@@ -323,6 +324,7 @@ a challenge teaches is a content decision, not a pin update.
 
 | Order | Problem id | Role | Teaches | Issue |
 | --- | --- | --- | --- | --- |
+| 305 | `ac26-w3-schnorr-drill` | `mechanism` | `concept.repl-drill` — twelve lines typed into the learner's own Python (field → curve → order → Schnorr → nonce reuse → transfer), eight graded as direct answers | #494 |
 | 310 | `ac26-w3-field-inverse` | `mechanism` | `concept.finite-field`, `concept.modular-inverse` | #225 |
 | 320 | `ac26-w3-ec-group` | `mechanism` | `concept.elliptic-curve-group`, `concept.double-and-add` | #226 |
 | 330 | `ac26-w3-schnorr` | `assignment-companion` | `concept.sigma-protocol`, `concept.fiat-shamir`, `concept.schnorr-signature` | #227 |

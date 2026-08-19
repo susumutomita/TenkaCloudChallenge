@@ -867,6 +867,65 @@
       }
     },
     {
+      "id": "ac26-w3-schnorr-drill",
+      "name": "1 行打って、出た値を貼る — 有限体から nonce 再利用まで 12 行",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "advanced-cryptography-2026",
+        "order": 305,
+        "chapter": "Week 3 / Drill: twelve lines from field to nonce reuse"
+      },
+      "courseAlignment": {
+        "courseId": "advanced-cryptography-program",
+        "edition": "2026",
+        "week": 3,
+        "role": "mechanism",
+        "sources": [
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
+            "path": "week3/README.md",
+            "kind": "lecture"
+          },
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
+            "path": "week3/problems/schnorr-from-scratch/README.md",
+            "kind": "assignment"
+          },
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "b1b46669949b5615be7941b2b62da4ea635e9c30",
+            "path": "week3/week3_zksnark_slides.pdf",
+            "kind": "slide"
+          }
+        ]
+      },
+      "difficulty": 3,
+      "estimatedDuration": "40-60 分",
+      "shortDescription": "手元の Python で 1 行打って、出た値を貼る。12 行で、有限体の逆元 → 曲線の足し算 → 位数 → 公開鍵 → Schnorr の 3 手 → 検証式 → nonce 再利用で秘密が出る → 別の曲線、を自分の手で出した数だけで通す。",
+      "tags": [
+        "advanced-cryptography-2026",
+        "week3",
+        "drill",
+        "finite-field",
+        "elliptic-curve",
+        "schnorr",
+        "nonce-reuse",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "ac26-w4-arithmetization",
       "name": "多項式にしただけでは証明ではない",
       "category": "Challenge",
