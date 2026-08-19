@@ -274,19 +274,26 @@ describe("ac26-w4-commit-open: metadata contracts", () => {
     expect(metadata().scoring.checks.map((check) => check.id)).toEqual([...CHECKPOINTS]);
   });
 
-  // Week 4 is unpublished upstream, so this pins the placeholder. GOVERNANCE.md
-  // section 6 permits only `diagnostic` or `transfer` for an unpublished week, and
-  // `transfer` is also what this problem actually is.
-  it("should pin week 4's placeholder and take a role its governance permits", () => {
+  // Week 4's lecture (slides + README) was published upstream on 2026-08-18, so the
+  // pin moved from the placeholder to the real material. The official exercise is
+  // still WIP in that README, so the role stays `transfer` (it carries the lecture's
+  // idea into a different setting) rather than `assignment-companion`.
+  it("should pin week 4's published lecture and keep a role that claims no assignment", () => {
     const { courseAlignment, status } = metadata();
     expect(courseAlignment.week).toBe(4);
     expect(["diagnostic", "transfer"]).toContain(courseAlignment.role);
     expect(courseAlignment.sources).toEqual([
       {
         repository: "zk-tokyo/advanced-cryptography-2026",
-        ref: "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
+        ref: "c088f8e6f301dedcd80b6dd9c321a1cd83410637",
         path: "week4/README.md",
-        kind: "placeholder",
+        kind: "lecture",
+      },
+      {
+        repository: "zk-tokyo/advanced-cryptography-2026",
+        ref: "c088f8e6f301dedcd80b6dd9c321a1cd83410637",
+        path: "week4/acp-2026-week4-redacted.pdf",
+        kind: "slide",
       },
     ]);
     expect(status).toBe("draft");

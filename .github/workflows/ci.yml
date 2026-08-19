@@ -197,17 +197,13 @@ jobs:
           bun run cost:check \
             || { echo "::error::cost-report.json is stale. Run 'bun run reindex' and commit (or 'bun run setup' once to enable the auto-reindex hook)."; exit 1; }
 
-      # GITHUB_TOKEN only raises the anonymous rate limit; the source repositories are
-      # public and are read with contents:read. Without it this step ran on the
-      # unauthenticated 60-requests-an-hour budget, started getting 403 partway
-      # through, and reported the rest as `unreachable` — a different set on every run
-      # of the same commit. course-drift.yml has always passed the token; this step was
-      # the one that did not, which is why the scheduled job was green and every pull
-      # request was red.
-      - name: Check course references do not drift
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: bun run course:drift
+      # course:drift は course-drift.yml (schedule / workflow_dispatch / pin か
+      # checker 自体が変わった PR のみ) が独立して担う。ここでも走らせると、
+      # upstream 教材が動くたびに無関係な PR 全部が course:drift のためだけに
+      # red になる (#488, #499) — validate-problems 等と違い、pin の SHA を
+      # 直さない限り docs/curricula/<track>/SYNC.md の判断待ちのまま止まり
+      # 続けることがあるチェックなので、他の全ゲートと同じ「全 PR 必須」枠に
+      # 同居させない。
 
   rls-runtime:
     name: rls-tenant-isolation runtime
