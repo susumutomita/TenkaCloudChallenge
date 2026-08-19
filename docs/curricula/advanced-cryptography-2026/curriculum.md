@@ -49,7 +49,7 @@ it, and it is not part of the numbered sequence. This track treats it as
 | 1 | Programmable Cryptography / arithmetic circuits | `proof-of-exploit` | Published |
 | 2 | MPC (Arithmetic MPC / Boolean MPC) | `toy-mpc` | Published — see the Week 2 section for what this track does and does not accompany |
 | 3 | Finite fields, elliptic curves, Sigma, Fiat–Shamir, Schnorr | `schnorr-from-scratch` | Published |
-| 4 | ZKP / SNARK / STARK | — | **Not published** — README says materials are in preparation; `problems/` holds only `.gitkeep` |
+| 4 | ZKP / SNARK / STARK — "proof" and "zero-knowledge" | — (README says `WIP`) | Lecture published 2026-08-18 at `c088f8e6f301dedcd80b6dd9c321a1cd83410637` (`week4/README.md` + `week4/acp-2026-week4-redacted.pdf`); the official exercise is not yet published |
 | 5 | TFHE, Programmable Bootstrapping, HomNAND | `tfhe-toy-python` | Published |
 | 6 | Programmable Cryptography Stack Design | `co-snark-prove`, `zkvm-exploit` | Published |
 | 7 | Demo Day / capstone | — | **No `week7/` directory exists** |
@@ -331,31 +331,39 @@ a challenge teaches is a content decision, not a pin update.
 
 ### Week 4 — ZKP / SNARK / STARK
 
-- **Source**: `week4/README.md`
-- **State**: not published. The README states materials are in preparation and
-  `problems/` holds only `.gitkeep` — the form Week 2 was in until 2026-08-09.
-- **Known only**: the theme is ZKP, with SNARK and STARK in scope.
+- **Source**: `week4/README.md` and `week4/acp-2026-week4-redacted.pdf` (38 slides; slides
+  3, 18, 24 and 30 are withheld for the workshop) at upstream commit
+  `c088f8e6f301dedcd80b6dd9c321a1cd83410637`, read on 2026-08-18.
+- **State**: lecture published 2026-08-18; the official exercise is still `WIP` in the
+  README. Each challenge pins the README as `kind: "lecture"` and the slide deck as
+  `kind: "slide"`.
+- **What the lecture teaches**: (1) proof as five parts — prover, method, statement,
+  verification, verifier; (2) computational complexity — P, NP as "the standard proof
+  system", IP / PCP / IOP as NP plus interaction, randomness and oracle access, oracle ≈
+  commitment; (3) properties — completeness, soundness, prover/verifier cost, proof size;
+  (4) GKR, STARK and PLONK, each as A. arithmetization / B. commitment scheme / C. proof
+  system, with one toy computation `f = (x1 + x2) + (x3 · x4)` worked in F_11 (GKR:
+  layered circuit → multilinear extension → SumCheck → line reduction) and F_17 (STARK:
+  execution trace → AIR → quotient polynomial → Merkle → FRI; PLONK: gate table → 11
+  polynomials → KZG → gate and copy constraints via grand product); (5) making the
+  schemes zero-knowledge by masking polynomials `f + Z_H · R`; (6) "shared frame, varied
+  combinations"; workshop "ZK, or not ZK — AI-agent insurance".
 
-Confirmation is tracked by #229, with a 2026-09-30 review cutoff. Each challenge
-pins `week4/README.md` as `kind: "placeholder"`, the way the Week 2 companions
-did before their material appeared.
+| Order | Problem id | Role | Teaches | Lecture slides | Issue |
+| --- | --- | --- | --- | --- | --- |
+| 410 | `ac26-w4-arithmetization` | `transfer` | `concept.arithmetization`, `concept.execution-trace`, `concept.transition-constraint`, `concept.boundary-constraint`, `concept.evaluation-domain` | 19–21 (STARK: trace, AIR); adds the boundary constraint the toy AIR lacks | #230, #494 |
+| 420 | `ac26-w4-commit-open` | `transfer` | `concept.merkle-commitment`, `concept.commitment-binding`, `concept.challenge-ordering`, `concept.authentication-path` | 4 (commitment scheme), 10 and 12 (oracle ≈ commitment), 22 (Merkle) | #231, #494 |
+| 430 | `ac26-w4-proof-pipeline` | `transfer` | `concept.proof-pipeline-stage`, `concept.artifact-flow`, `concept.stage-contract`, `concept.trusted-setup`, `concept.transparent-setup`, `concept.succinctness` | 13, 19, 25 (three boxes), 33–34 (summary), the recurring cost question | #232, #494 |
 
-Week 2's publication is the worked example of what to expect here: Part A landed
-close to what had been guessed, and Part B was a half of the exercise nobody had
-accompanied. Budget for the second outcome, not just the first.
+**Uncovered by any companion** (tracked in #494): SumCheck as the verifier's protocol
+(slides 14–17), PLONK's gate/copy constraints and the grand product (26–29), FRI folding
+(23), and the zero-knowledge masking (31–32). New companions there need human play
+evidence (#465) before leaving `draft`.
 
-| Order | Problem id | Role | Teaches | Issue |
-| --- | --- | --- | --- | --- |
-| 410 | `ac26-w4-arithmetization` | `transfer` | `concept.arithmetization`, `concept.execution-trace`, `concept.transition-constraint`, `concept.boundary-constraint`, `concept.evaluation-domain` | #230 |
-| 420 | `ac26-w4-commit-open` | `transfer` | `concept.merkle-commitment`, `concept.commitment-binding`, `concept.challenge-ordering`, `concept.authentication-path` | #231 |
-| 430 | `ac26-w4-proof-pipeline` | `transfer` | `concept.proof-pipeline-stage`, `concept.artifact-flow`, `concept.stage-contract`, `concept.trusted-setup`, `concept.transparent-setup`, `concept.succinctness` | #232 |
-
-All three shipped as `transfer` rather than the `mechanism` this table originally
-planned. GOVERNANCE.md §6 permits only `diagnostic` or `transfer` for a week whose
-material is unpublished, and `transfer` is also what these three are: they carry Week 1's
-constraints, Week 3's field, and Week 3's Fiat–Shamir into a new setting rather than
-reconstructing a mechanism the course has taught. The role reverts to a claim about the
-official material only when #229 confirms what Week 4 actually covers.
+All three remain `transfer` rather than `assignment-companion`: there is no official
+exercise yet to accompany, and each carries a lecture idea into a different setting (a
+different state machine; a table rather than a polynomial; unnamed pipelines rather than
+the three named schemes). Revisit the roles when the exercise is published.
 
 ### Week 5 — TFHE
 
