@@ -18,6 +18,7 @@
 
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
+import { inv, mod, mul, sub } from "./field.ts";
 import { RFC3526_GROUP14, groupPow } from "./group.ts";
 import { deriveWitness, derivePublicCommitment } from "./schnorr-witness.ts";
 import { challengePreimage, computeChallenge, type ChallengeInput } from "./schnorr-transcript.ts";
@@ -82,6 +83,36 @@ describe("deriveWitness / derivePublicCommitment", () => {
     }
     expect(y).toBe(expected);
     expect(y > 0n && y < G.p).toBe(true);
+  });
+});
+
+describe("nonce reuse is a special-soundness break (why schnorr-prover.ts's deriveNonce must be deterministic-per-statement)", () => {
+  test("two responses to the SAME commitment R (same nonce k) under two different challenges e1 != e2 solve two linear equations for the witness: w = (z1 - z2) / (e1 - e2) mod order -- this is exactly what schnorr-prover.ts's deriveNonce header describes and its (witness, teamId, contractId, generation) binding rules out in practice", () => {
+    // This test never calls createProof / deriveNonce: those are structurally
+    // immune to this attack (see schnorr-prover.ts's header), because k is
+    // bound to (witness, teamId, contractId, generation), and the same
+    // witness only ever gets a fresh challenge via a different contractId,
+    // which itself derives a different k. To demonstrate the special-
+    // soundness break the deterministic design rules out, this test plays
+    // the part of a hypothetical prover who (incorrectly) reused one nonce
+    // `k` across two Fiat-Shamir challenges for this Battle's real witness
+    // space, and shows that doing so recovers the exact same witness
+    // deriveWitness() computes from the secret.
+    const secret = 555555555n;
+    const generation = 2;
+    const teamId = "teamNonceReuse";
+    const witness = deriveWitness(secret, generation, teamId, G);
+
+    const order = G.order;
+    const k = mod(123456789012345678901234567890n, order); // one nonce, reused
+    const e1 = 111n;
+    const e2 = 222n;
+    const z1 = mod(k + e1 * witness, order);
+    const z2 = mod(k + e2 * witness, order);
+
+    const recoveredWitness = mul(sub(z1, z2, order), inv(sub(e1, e2, order), order), order);
+
+    expect(recoveredWitness).toBe(witness);
   });
 });
 
