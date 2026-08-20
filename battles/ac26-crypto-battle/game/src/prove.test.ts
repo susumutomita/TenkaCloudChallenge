@@ -27,7 +27,7 @@ describe("prove: happy path", () => {
     const team = state.teams.teamA;
     if (!team) throw new Error("expected teamA");
 
-    const proof = createProof(team.secret, team.generation, "teamA", contract.id);
+    const proof = createProof(BigInt(team.secret), team.generation, "teamA", contract.id);
     const op: CryptoBattleOp = { kind: "prove", contractId: contract.id, proof };
 
     expect(validateOp(state, "teamA", op)).toEqual({ ok: true });
@@ -57,7 +57,7 @@ describe("prove: happy path", () => {
     const team = state.teams.teamA;
     if (!team) throw new Error("expected teamA");
 
-    const proof = createProof(team.secret, team.generation, "teamA", contract.id);
+    const proof = createProof(BigInt(team.secret), team.generation, "teamA", contract.id);
     const next = applyOp(state, "teamA", { kind: "prove", contractId: contract.id, proof });
 
     expect(next.publicLedger.some((a) => a.kind === "share")).toBe(false);
@@ -72,7 +72,7 @@ describe("prove: ProofArtifact normalization [independent review, low #4]", () =
     const team = state.teams.teamA;
     if (!team) throw new Error("expected teamA");
 
-    const proof = createProof(team.secret, team.generation, "teamA", contract.id);
+    const proof = createProof(BigInt(team.secret), team.generation, "teamA", contract.id);
     // A leading zero doesn't violate schnorr-verifier.ts's `/^\d{1,700}$/`
     // format check, and BigInt("0" + x) === BigInt(x), so this still
     // verifies correctly -- it is exactly the kind of "not wrong, but not
@@ -102,7 +102,7 @@ describe("prove: invalid proof is rejected", () => {
     const team = state.teams.teamA;
     if (!team) throw new Error("expected teamA");
 
-    const proof = createProof(team.secret, team.generation, "teamA", contract.id);
+    const proof = createProof(BigInt(team.secret), team.generation, "teamA", contract.id);
     const tampered = { ...proof, response: (BigInt(proof.response) + 1n).toString() };
     const result = validateOp(state, "teamA", { kind: "prove", contractId: contract.id, proof: tampered });
     expect(result.ok).toBe(false);
@@ -116,7 +116,7 @@ describe("prove: invalid proof is rejected", () => {
     const team = state.teams.teamA;
     if (!team) throw new Error("expected teamA");
 
-    const proof = createProof(team.secret, team.generation, "teamA", contract.id);
+    const proof = createProof(BigInt(team.secret), team.generation, "teamA", contract.id);
     const tampered = { ...proof, commitment: (BigInt(proof.commitment) + 1n).toString() };
     expect(validateOp(state, "teamA", { kind: "prove", contractId: contract.id, proof: tampered }).ok).toBe(false);
   });
@@ -129,7 +129,7 @@ describe("prove: invalid proof is rejected", () => {
     if (!teamB) throw new Error("expected teamB");
 
     // teamB's own valid witness, submitted as if it proved teamA's contract.
-    const wrongProof = createProof(teamB.secret, teamB.generation, "teamA", contract.id);
+    const wrongProof = createProof(BigInt(teamB.secret), teamB.generation, "teamA", contract.id);
     expect(validateOp(state, "teamA", { kind: "prove", contractId: contract.id, proof: wrongProof }).ok).toBe(
       false,
     );
@@ -148,7 +148,7 @@ describe("prove: wrong-contract binding", () => {
     const team = state.teams.teamA;
     if (!team) throw new Error("expected teamA");
 
-    const proofForA = createProof(team.secret, team.generation, "teamA", contractA.id);
+    const proofForA = createProof(BigInt(team.secret), team.generation, "teamA", contractA.id);
     const result = validateOp(state, "teamA", {
       kind: "prove",
       contractId: contractB.id,
@@ -166,7 +166,7 @@ describe("prove: replay", () => {
     const team = state.teams.teamA;
     if (!team) throw new Error("expected teamA");
 
-    const proof = createProof(team.secret, team.generation, "teamA", contract.id);
+    const proof = createProof(BigInt(team.secret), team.generation, "teamA", contract.id);
     const op: CryptoBattleOp = { kind: "prove", contractId: contract.id, proof };
     expect(validateOp(state, "teamA", op)).toEqual({ ok: true });
     const next = applyOp(state, "teamA", op);
@@ -194,7 +194,7 @@ describe("prove: cross-resolution double-completion is rejected [independent rev
     const team = state.teams.teamA;
     if (!team) throw new Error("expected teamA");
 
-    const proof = createProof(team.secret, team.generation, "teamA", contract.id);
+    const proof = createProof(BigInt(team.secret), team.generation, "teamA", contract.id);
     const provedState = applyOp(state, "teamA", { kind: "prove", contractId: contract.id, proof });
     expect(provedState.contracts.find((c) => c.id === contract.id)?.resolution).toBe("prove");
 
@@ -221,7 +221,7 @@ describe("prove: cross-resolution double-completion is rejected [independent rev
     // cryptographic merits (the witness/statement binding is unaffected by
     // LEAK) -- it is the shared "contract must be open" guard, not proof
     // validity, that must reject this.
-    const proof = createProof(team.secret, team.generation, "teamA", contract.id);
+    const proof = createProof(BigInt(team.secret), team.generation, "teamA", contract.id);
     const proveResult = validateOp(leakedState, "teamA", { kind: "prove", contractId: contract.id, proof });
     expect(proveResult.ok).toBe(false);
     if (!proveResult.ok) {
@@ -250,7 +250,7 @@ describe("prove: wrong generation", () => {
 
     // Attacker who captured the pre-rotate secret, still trying to prove
     // against the NEW contract with the OLD generation's witness.
-    const staleProof = createProof(preRotateSecret, preRotateGeneration, "teamA", postRotateContract.id);
+    const staleProof = createProof(BigInt(preRotateSecret), preRotateGeneration, "teamA", postRotateContract.id);
     const staleResult = validateOp(state, "teamA", {
       kind: "prove",
       contractId: postRotateContract.id,
@@ -262,7 +262,7 @@ describe("prove: wrong generation", () => {
     const postRotateTeam = state.teams.teamA;
     if (!postRotateTeam) throw new Error("expected teamA");
     const freshProof = createProof(
-      postRotateTeam.secret,
+      BigInt(postRotateTeam.secret),
       postRotateTeam.generation,
       "teamA",
       postRotateContract.id,
@@ -284,10 +284,10 @@ describe("prove: secret non-leakage", () => {
     const team = state.teams.teamA;
     if (!team) throw new Error("expected teamA");
 
-    const secretDecimal = team.secret.toString();
-    const shareValues = team.shares.map((s) => s.value.toString());
+    const secretDecimal = team.secret;
+    const shareValues = team.shares.map((s) => s.value);
 
-    const proof = createProof(team.secret, team.generation, "teamA", contract.id);
+    const proof = createProof(BigInt(team.secret), team.generation, "teamA", contract.id);
     const next = applyOp(state, "teamA", { kind: "prove", contractId: contract.id, proof });
 
     const ledgerJson = JSON.stringify(next.publicLedger);
@@ -340,7 +340,7 @@ describe("prove: Scoring MUST -- PROVE pays the same as LEAK for an equal-value 
     const afterLeak = applyOp(state, "teamA", { kind: "leak", contractId: leakContract.id });
     const leakDelta = (afterLeak.teams.teamA?.score ?? 0) - scoreBefore;
 
-    const proof = createProof(team.secret, team.generation, "teamA", proveContract.id);
+    const proof = createProof(BigInt(team.secret), team.generation, "teamA", proveContract.id);
     const afterProve = applyOp(state, "teamA", { kind: "prove", contractId: proveContract.id, proof });
     const proveDelta = (afterProve.teams.teamA?.score ?? 0) - scoreBefore;
 
@@ -364,7 +364,7 @@ describe("prove: match end", () => {
       expiresAtMs: (state.nowMs ?? 0) + state.config.contractTtlMs,
       status: "open" as const,
     };
-    const proof = createProof(team.secret, team.generation, "teamA", stillOpenContract.id);
+    const proof = createProof(BigInt(team.secret), team.generation, "teamA", stillOpenContract.id);
     state = { ...state, contracts: [...state.contracts, stillOpenContract] };
     state = tick(state, state.config.matchDurationMs);
     expect(state.phase).toBe("ended");

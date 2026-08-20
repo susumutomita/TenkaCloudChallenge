@@ -1,5 +1,5 @@
 /**
- * Pure game model for the PROVE / LEAK / HUNT / ROTATE Battle (Issue #486, PR1 + PR2).
+ * Pure game model for the PROVE / LEAK / HUNT / ROTATE Battle (Issue #486, PR1-PR3).
  *
  * `initialState` / `validateOp` / `applyOp` / `tick` / `projectForTeam` below
  * are plain functions with the exact shape a `@tenkacloud/coordination-plugin-sdk`
@@ -7,17 +7,32 @@
  * in SCHEMA.json): the platform's dispatcher Lambda drives a single tenant/event
  * row through validate -> apply -> project. That SDK package is NOT a dependency
  * of this repository (TenkaCloudChallenge owns problem content, not platform
- * packages) and is deliberately never imported here -- PR3 wires these exports
- * into a thin plugin file, without reshaping them.
+ * packages) and is deliberately never imported here -- `coordination/crypto-battle.ts`
+ * (PR3) wires these exports into a thin plugin file, without reshaping them.
  *
  * Trust model: this whole `game/` package runs only on the trusted side (the
  * platform dispatcher). `TeamState.secret` / `TeamState.shares` are real
  * cryptographic material and this reducer computes with them directly -- that
  * is safe *only* because a participant never receives raw `CryptoBattleState`,
  * only what `projectForTeam` redacts down to (see that function, and
- * adversarial test #5). Nothing here parses participant input as trusted; the
- * boundary that turns participant HTTP requests into a validated `CryptoBattleOp`
- * is the coordination plugin's job (PR3), not this package's.
+ * adversarial test #5).
+ *
+ * WIRE BOUNDARY (Issue #486 PR3 review fix): `validateOp` below IS the
+ * boundary that turns a participant's untrusted request into something this
+ * reducer trusts -- there is no separate parsing layer upstream. The
+ * coordination plugin (`coordination/crypto-battle.ts`) is a bare passthrough
+ * (`dispatchOp` calls `validateOp` directly on whatever arrived as
+ * JSON-parsed `unknown` off the wire; TenkaCloud's `CoordinationOpBodySchema`
+ * is `{ op: z.unknown() }`, no shape validation happens before this package
+ * ever sees `op`), and `CryptoBattleState` itself has to survive a real
+ * database round-trip between calls (Turso / DynamoDB -- see
+ * `CryptoBattleOp` / `CryptoBattleState`'s "JSON-SAFETY INVARIANT" in
+ * types.ts). Concretely: `CryptoBattleOp`'s hunt variant carries
+ * `recoveredSecret` as a string, and `validateOp`'s "hunt" branch parses it
+ * with `schnorr-verifier.ts`'s `parseCanonicalDecimal` -- the same
+ * untrusted-decimal gate PROVE's proof fields already went through -- and
+ * rejects a malformed value with `{ ok: false }` instead of a `mod()` call
+ * throwing on a non-bigint value it was never guaranteed to receive.
  *
  * Purity contract (see adversarial tests #7 / #8):
  *   - `applyOp` and `tick` never mutate the `state` they are given; they return
@@ -37,11 +52,11 @@
  * `SchnorrProof` (public once submitted).
  */
 
-import { deriveContractPlan, deriveTeamGeneration } from "./fixtures.ts";
+import { deriveContractPlan, deriveTeamGeneration, type FieldConfig } from "./fixtures.ts";
 import { mod, P } from "./field.ts";
 import { RFC3526_GROUP14 } from "./group.ts";
 import { derivePublicCommitment } from "./schnorr-witness.ts";
-import { verifyProof } from "./schnorr-verifier.ts";
+import { parseCanonicalDecimal, verifyProof } from "./schnorr-verifier.ts";
 import type {
   Contract,
   CoordinationContext,
@@ -52,6 +67,7 @@ import type {
   Phase,
   ProofArtifact,
   PublicArtifact,
+  StoredShare,
   TeamState,
   TeamSummaryProjection,
   ValidateResult,
@@ -59,10 +75,12 @@ import type {
 
 /**
  * Issue #486 playtest seed values. Not a locked-in balance spec -- see
- * `CryptoBattleConfig`'s doc comment in types.ts.
+ * `CryptoBattleConfig`'s doc comment in types.ts. `prime` is `P.toString()`,
+ * not `P`, because `CryptoBattleConfig.prime` is a stringified bigint (see
+ * types.ts's "JSON-SAFETY INVARIANT").
  */
 export const DEFAULT_CONFIG: CryptoBattleConfig = {
-  prime: P,
+  prime: P.toString(),
   threshold: 3,
   shareCount: 5,
   matchDurationMs: 90 * 60_000,
@@ -91,21 +109,33 @@ function mergeConfig(config: Partial<CryptoBattleConfig> | undefined): CryptoBat
   };
 }
 
+/**
+ * Boundary conversion (Issue #486 PR3 review fix): `fixtures.ts`'s
+ * derivations are pure `bigint` functions (see that file's header), but
+ * `CryptoBattleConfig.prime` is a stringified bigint for JSON-safety. This is
+ * the one place that bridges the two, so every `fixtures.ts` call site below
+ * converts through it rather than re-deriving `BigInt(config.prime)` inline.
+ */
+function fieldConfigOf(config: CryptoBattleConfig): FieldConfig {
+  return { prime: BigInt(config.prime), threshold: config.threshold, shareCount: config.shareCount };
+}
+
 export function initialState(
   ctx: CoordinationContext,
   config?: Partial<CryptoBattleConfig>,
 ): CryptoBattleState {
   const mergedConfig = mergeConfig(config);
+  const fieldConfig = fieldConfigOf(mergedConfig);
   const teams: Record<string, TeamState> = {};
   const publicCommitments: Record<string, string> = {};
   for (const teamId of ctx.teamIds) {
-    const { secret, shares } = deriveTeamGeneration(ctx.eventId, teamId, 1, mergedConfig);
+    const { secret, shares } = deriveTeamGeneration(ctx.eventId, teamId, 1, fieldConfig);
     teams[teamId] = {
       teamId,
       score: 0,
       generation: 1,
-      secret,
-      shares,
+      secret: secret.toString(),
+      shares: shares.map((s): StoredShare => ({ index: s.index, value: s.value.toString() })),
       lastRotateAtMs: undefined,
       completedContractIds: [],
       huntedGenerations: [],
@@ -158,11 +188,12 @@ export function tick(state: CryptoBattleState, eventNowMs: number): CryptoBattle
   }
 
   const issued: Contract[] = [];
+  const fieldConfig = fieldConfigOf(state.config);
   let nextContractAtMs = state.nextContractAtMs ?? startedAtMs;
   while (nextContractAtMs <= eventNowMs && nextContractAtMs < matchEndAtMs) {
     for (const teamId of Object.keys(state.teams)) {
       const sequenceIndex = issuedCountByTeam.get(teamId) ?? 0;
-      const plan = deriveContractPlan(state.seed, teamId, sequenceIndex, state.config);
+      const plan = deriveContractPlan(state.seed, teamId, sequenceIndex, fieldConfig);
       const ttlMs = plan.kind === "rush" ? state.config.rushContractTtlMs : state.config.contractTtlMs;
       issued.push({
         id: `${teamId}-c${sequenceIndex}`,
@@ -238,7 +269,18 @@ export function validateOp(state: CryptoBattleState, teamId: string, op: CryptoB
       if (state.successfulHunts.includes(huntKey(teamId, op.targetTeamId, op.generation))) {
         return { ok: false, error: "this generation was already hunted successfully by this team" };
       }
-      if (mod(op.recoveredSecret, state.config.prime) !== target.secret) {
+      // `op.recoveredSecret` is untrusted wire input (a participant-submitted
+      // string -- see this file's header "WIRE BOUNDARY"), never a `bigint`
+      // this reducer can assume it already has. Parse it through the same
+      // gate PROVE's proof fields use before doing any bigint arithmetic on
+      // it -- a malformed value (wrong JS type after JSON round-trip, a
+      // non-canonical literal, an absurdly long string) is rejected here,
+      // not left to throw out of `mod()` / `BigInt()` uncaught.
+      const recoveredSecret = parseCanonicalDecimal(op.recoveredSecret);
+      if (recoveredSecret === undefined) {
+        return { ok: false, error: "recoveredSecret must be a canonical, length-bounded decimal integer" };
+      }
+      if (mod(recoveredSecret, BigInt(state.config.prime)) !== BigInt(target.secret)) {
         return { ok: false, error: "recovered secret does not match the target's actual secret" };
       }
       return { ok: true };
@@ -325,7 +367,10 @@ function applyLeak(
       generation: team.generation,
       kind: "share",
       shareIndex,
-      value: shareEntry.value.toString(),
+      // `shareEntry.value` is already a stringified bigint (`StoredShare`,
+      // see types.ts) -- no `.toString()` needed to reach the ledger's own
+      // stringified-bigint `ShareArtifact.value`.
+      value: shareEntry.value,
       contractId: contract.id,
       postedAtMs: nowMs,
     };
@@ -384,12 +429,12 @@ function applyRotate(state: CryptoBattleState, teamId: string): CryptoBattleStat
     throw new Error("applyOp(rotate): invalid op reached apply -- call validateOp() first");
   }
   const generation = team.generation + 1;
-  const { secret, shares } = deriveTeamGeneration(state.seed, teamId, generation, state.config);
+  const { secret, shares } = deriveTeamGeneration(state.seed, teamId, generation, fieldConfigOf(state.config));
   const updatedTeam: TeamState = {
     ...team,
     generation,
-    secret,
-    shares,
+    secret: secret.toString(),
+    shares: shares.map((s): StoredShare => ({ index: s.index, value: s.value.toString() })),
     lastRotateAtMs: state.nowMs,
   };
   // Rotate's time cost isn't only the cooldown: every contract issued to
@@ -547,8 +592,11 @@ export function projectForTeam(state: CryptoBattleState, teamId: string): Crypto
     matchEndsAtMs: state.startedAtMs === undefined ? undefined : state.startedAtMs + state.config.matchDurationMs,
     vault: {
       teamId,
-      secret: team.secret.toString(),
-      shares: team.shares.map((s) => ({ index: s.index, value: s.value.toString() })),
+      // team.secret / team.shares are already stringified bigints
+      // (TeamState / StoredShare, see types.ts) -- VaultProjection uses the
+      // exact same wire shape, so no conversion is needed here.
+      secret: team.secret,
+      shares: team.shares,
       generation: team.generation,
       lastRotateAtMs: team.lastRotateAtMs,
       rotateCooldownRemainingMs,
