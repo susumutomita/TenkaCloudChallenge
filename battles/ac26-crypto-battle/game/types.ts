@@ -7,14 +7,18 @@
  * JSON-serializable であることが必須の制約: group / field の元 (bigint) はすべて
  * hex 文字列として保持する。 bigint を state / op の型に直接持ち込まない。
  *
- * PR1 では "prove" op は扱わない (PR2 で ZK 証明を追加)。 CryptoBattleOp は
- * union なので、追加時は reducer.ts の switch が網羅性チェックで検出する。
+ * PR2: "prove" op (Schnorr proof of knowledge の contract 充足) を追加。 また
+ * init/rotate は commitment cloning (他チームの commitments をコピーして登録する
+ * 攻撃) を防ぐため、新しい C_0 の離散対数の proof of knowledge を必須にした
+ * (proofCommitment/proofResponse — crypto/schnorr.ts の KnowledgeProof)。
+ * CryptoBattleOp は union なので、追加時は reducer.ts の switch が網羅性チェックで
+ * 検出する。
  */
 
 /** マッチの進行フェーズ。 tick scheduling (PR3) が遷移させる想定。 */
 export type Phase = "build" | "pressure" | "endgame";
 
-/** contract の種別。 PR1 は leak-share のみ扱う ("prove-knowledge" は PR2)。 */
+/** contract の種別。 "prove-knowledge" は PR2 の "prove" op で充足する。 */
 export type ContractKind = "leak-share" | "prove-knowledge";
 
 export type ContractStatus = "open" | "fulfilled" | "expired" | "skipped";
@@ -57,12 +61,15 @@ export interface TeamState {
   readonly initialized: boolean;
 }
 
-export type LedgerEntryKind = "leak" | "hunt-success" | "rotate";
+export type LedgerEntryKind = "leak" | "hunt-success" | "rotate" | "prove";
 
 /**
  * 公開 transcript の1行。 replay/debrief 用 (例: "34:10 Team A LEAK share #1")。
  * hunt-success は generation は含むが、復元された secret 値そのものは含めない
  * (issue: 再公開の必要はない — 既に leaked share から公開情報のみで検証できる)。
+ * prove は zero-knowledge proof なので R/s (proof の中身) はそもそも秘密を含まないが、
+ * ledger に載せる必要もない情報なので contractId/generation/points だけを記録する
+ * (shareIndex/shareValue は使わない — leak 専用)。
  */
 export interface LedgerEntry {
   readonly at: number;
@@ -72,7 +79,7 @@ export interface LedgerEntry {
   readonly shareIndex?: number;
   readonly shareValue?: string; // leak のみ。 leak = 公開情報なのでそのまま載せる
   readonly targetTeamId?: string; // hunt-success のみ
-  readonly generation?: number; // hunt-success / rotate
+  readonly generation?: number; // hunt-success / rotate / prove
   readonly points?: number;
 }
 
@@ -87,12 +94,23 @@ export interface CryptoBattleState {
 }
 
 /**
- * team が送る operation。 "prove" は PR2 で追加 (この union は閉じている前提で
- * reducer.ts の switch が網羅性チェックを行うので、追加時はそちらもコンパイル
- * エラーで検出される)。
+ * team が送る operation。 この union は閉じている前提で reducer.ts の switch が
+ * 網羅性チェックを行うので、追加時はそちらもコンパイルエラーで検出される。
+ *
+ * init/rotate は PR2 で proofCommitment/proofResponse (新しい C_0 の離散対数の
+ * Schnorr proof of knowledge) が必須になった — これがないと、他チームの
+ * commitments をそのままコピーして自分の commitments として登録する
+ * "commitment cloning" が可能になってしまう (secret を知らないのに他人の C_0 を
+ * 名乗れる。 hunt の正当性は「C_0 の secret を知っているのはその team だけ」という
+ * 前提に依存するため、この前提が崩れると hunt semantics 自体が壊れる)。
  */
 export type CryptoBattleOp =
-  | { readonly type: "init"; readonly commitments: readonly string[] }
+  | {
+      readonly type: "init";
+      readonly commitments: readonly string[];
+      readonly proofCommitment: string;
+      readonly proofResponse: string;
+    }
   | {
       readonly type: "leak";
       readonly contractId: string;
@@ -106,6 +124,17 @@ export type CryptoBattleOp =
       readonly generation: number;
       readonly secret: string;
     }
-  | { readonly type: "rotate"; readonly commitments: readonly string[] };
+  | {
+      readonly type: "rotate";
+      readonly commitments: readonly string[];
+      readonly proofCommitment: string;
+      readonly proofResponse: string;
+    }
+  | {
+      readonly type: "prove";
+      readonly contractId: string;
+      readonly commitment: string;
+      readonly response: string;
+    };
 
 export type ValidationResult = { readonly ok: true } | { readonly ok: false; readonly error: string };
