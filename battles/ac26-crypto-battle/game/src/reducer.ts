@@ -154,6 +154,7 @@ export function initialState(
     teams,
     publicCommitments,
     successfulHunts: [],
+    huntLog: [],
   };
 }
 
@@ -255,6 +256,22 @@ export function validateOp(state: CryptoBattleState, teamId: string, op: CryptoB
       return { ok: true };
     }
     case "hunt": {
+      // Same gap "rotate" below already had fixed (Issue #486 PR1 review):
+      // before the first tick(), state.nowMs is undefined. Unlike rotate's
+      // cooldown check, nothing else in this branch reads state.nowMs at
+      // all -- a hunt op supplying the target's ACTUAL secret directly
+      // (rather than reconstructing it via Lagrange interpolation from
+      // leaked shares, which requires a Contract, which requires a tick())
+      // would otherwise validate and apply before the match clock has ever
+      // started, leaving applyHunt's huntLog entry with no real elapsed-time
+      // meaning to timestamp (see applyHunt's own comment on why it now
+      // throws instead of silently recording `atMs: 0` for that case).
+      // Rejecting here is what makes that throw structurally unreachable
+      // through the validateOp -> applyOp path, the same contract every
+      // other applyX function's "invalid op reached apply" throw relies on.
+      if (state.nowMs === undefined) {
+        return { ok: false, error: "match has not started yet (no tick() has run)" };
+      }
       if (op.targetTeamId === teamId) {
         return { ok: false, error: "cannot hunt your own team" };
       }
@@ -403,6 +420,18 @@ function applyHunt(
   if (!attacker || !target) {
     throw new Error("applyOp(hunt): invalid op reached apply -- call validateOp() first");
   }
+  // validateOp's "hunt" branch (above) now rejects before the first tick(),
+  // so `state.nowMs` is always defined here for any op that reached this
+  // point through the intended validateOp -> applyOp path -- throw loudly
+  // (matching the "invalid op reached apply" throw above and every other
+  // applyX function's identical pattern) rather than silently recording an
+  // untimestamped `huntLog` entry with `atMs: 0`, which would misrepresent
+  // when the hunt happened instead of admitting the caller skipped
+  // validateOp.
+  if (state.nowMs === undefined) {
+    throw new Error("applyOp(hunt): invalid op reached apply -- call validateOp() first (match has not started)");
+  }
+  const nowMs = state.nowMs;
 
   const updatedAttacker: TeamState = {
     ...attacker,
@@ -420,6 +449,13 @@ function applyHunt(
     ...state,
     teams: { ...state.teams, [teamId]: updatedAttacker, [op.targetTeamId]: updatedTarget },
     successfulHunts: [...state.successfulHunts, huntKey(teamId, op.targetTeamId, op.generation)],
+    // Additive audit trail for replay.ts -- see HuntLogEntry's doc comment
+    // in types.ts for why this exists alongside (not instead of)
+    // successfulHunts above.
+    huntLog: [
+      ...state.huntLog,
+      { attackerTeamId: teamId, targetTeamId: op.targetTeamId, generation: op.generation, atMs: nowMs },
+    ],
   };
 }
 

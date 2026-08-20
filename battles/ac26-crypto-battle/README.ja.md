@@ -97,6 +97,46 @@ PROVE だからといって難しい分だけ多く得点することはあり�
   Contract と特定の secret generation に Fiat–Shamir で紐づけられている
   理由を体感する。
 
+## Portal の使い方
+
+デプロイ後、Participant Portal では 3 つの panel からこの Battle を操作します。
+
+- **Status** — スコア / 残り時間 / フェーズのヘッダに続けて、上記の 3 レーン
+  (Contract Queue / My Vault / Public Ledger) を 30 秒ごとに更新表示します。
+  Public Ledger に表示されるのは生データのみです — LEAK なら teamId / 世代 /
+  share index / 値、PROVE なら commitment / response の transcript — 「今
+  復元可能」といった判定結果を計算して見せることはありません。判断は
+  あなた自身が行います。
+- **Submit a move** — 操作ごとに 1 つずつ form があります。
+  - **LEAK** は自チームの open な contract を一覧から選ぶだけです。
+  - **PROVE** には `{ commitment, response }` の proof、**HUNT** には
+    復元した secret が必要です。どちらも **form を開く前にローカルで
+    作成してください** — `game/src/schnorr-prover.ts` の `createProof` と
+    `game/src/shamir.ts` の `reconstruct` がその計算の参照実装です
+    (PROVE の手順は上記「PROVE の実際の手順」を参照)。この portal が
+    代わりに計算することはありません — そのローカル計算自体が各操作の
+    本来のコストであり、UI が省略してよい作業ではありません。
+  - **ROTATE** は実行前に確認を求めます。実行すると自チーム宛の open な
+    contract がすべて無効化されるためです。
+  - 却下された送信には理由が表示されます (例: 「contract は既に
+    completed」「proof が検証に失敗」)。これは基盤側の一時的な不調とは
+    別物で、その場合は代わりに再試行を促す一般的なメッセージが表示されます。
+- **Help** — 上記のルールを 1 画面に凝縮した、試合中にすぐ参照できる
+  早見表です。
+
+## 試合後: replay と debrief
+
+試合は時間切れで終わっても、そこで記録が終わるわけではありません。あなたの
+チームが行った LEAK・PROVE・HUNT 成功・ROTATE はすべて、実際の時刻付きで
+時系列に残ります — debrief の時間にファシリテーターがこの記録を辿りながら、
+「このどの LEAK が最終的に threshold を超えて secret を復元可能にしたか」
+「ROTATE によって実際に何枚の leak 済み share が無効化されたか」を具体的に
+指し示すことができます。この replay は試合中に実際に起きたことだけから
+構築されます — 起きていないことを見せることはなく、あなたのチームが自ら
+leak していない secret や share を明かすこともありません。これは debrief
+専用のツールであり、試合中に Portal 上で見えるものではありません。事後に
+生成されるものです。
+
 ## 関連ファイル
 
 - [`metadata.json`](./metadata.json) — 問題メタデータ (UI / scoring engine の

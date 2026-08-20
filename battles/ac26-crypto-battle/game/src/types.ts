@@ -230,6 +230,28 @@ export interface CryptoBattleState {
    * that happens to contain `|` can never collide with a different triple.
    */
   readonly successfulHunts: readonly string[];
+  /**
+   * Ordered log of successful HUNTs, WITH a timestamp (Issue #486 PR5,
+   * `replay.ts`). `successfulHunts` above deliberately carries only the
+   * replay-guard KEY, no `atMs` -- it cannot answer "when did this HUNT
+   * succeed?" on its own, and every other `PublicArtifact` on the ledger
+   * already has a `postedAtMs` a debrief/replay can use, but a HUNT posts no
+   * ledger artifact at all (see reducer.ts's `applyHunt`). This field exists
+   * purely so `replay.ts`'s post-match debrief (Issue #486's "120分 debrief
+   * / Replay" -- the worked example is literally "58:01 Team B HUNT
+   * success") can be honest about hunt timing instead of omitting it or
+   * guessing. Purely additive: `validateOp`'s replay guard still reads only
+   * `successfulHunts` above, never this field -- see `applyHunt`.
+   */
+  readonly huntLog: readonly HuntLogEntry[];
+}
+
+/** One entry in `CryptoBattleState.huntLog` -- see that field's doc comment. */
+export interface HuntLogEntry {
+  readonly attackerTeamId: string;
+  readonly targetTeamId: string;
+  readonly generation: number;
+  readonly atMs: number;
 }
 
 export type CryptoBattleOp =

@@ -3,13 +3,17 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Pure game model (state / op / reducer) for the PROVE / LEAK / HUNT advanced-cryptography Battle. No AWS, no network -- reducer.ts / types.ts never import @tenkacloud/coordination-plugin-sdk (see AGENTS.md). src/coordination-plugin.test.ts is the one exception: it exercises ../../coordination/crypto-battle.ts's plugin wrapper against a bun:test-mocked stub of that SDK (Issue #486 PR3), never the real package.",
+  "description": "Pure game model (state / op / reducer) for the PROVE / LEAK / HUNT advanced-cryptography Battle. No AWS, no network -- reducer.ts / types.ts never import @tenkacloud/coordination-plugin-sdk (see AGENTS.md). src/coordination-plugin.test.ts is the one exception: it exercises ../../coordination/crypto-battle.ts's plugin wrapper against a bun:test-mocked stub of that SDK (Issue #486 PR3), never the real package. react / react-dom / their @types below are devDependencies only, needed because game/tsconfig.json's include also typechecks ../portal/**/*.tsx (Issue #486 PR4) and src/portal.test.ts renders those plugins via react-dom/server -- game/src itself imports neither.",
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/bun": "1.3.11",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "react": "^19",
+    "react-dom": "^19",
     "typescript": "5.9.3"
   },
   "trustedDependencies": []

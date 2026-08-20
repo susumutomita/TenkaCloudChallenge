@@ -106,6 +106,48 @@ wins.
   see first-hand why it is Fiat-Shamir-bound to one specific Contract and one
   specific secret generation.
 
+## Using the Portal
+
+Once your team is deployed, the Participant Portal shows this Battle through
+three panels:
+
+- **Status** -- your Score / Time left / Phase, then the three lanes above
+  (Contract Queue / My Vault / Public Ledger), refreshed every 30 seconds.
+  The Public Ledger shown there is raw data only -- team id, generation,
+  share index and value for a LEAK, or the commitment/response transcript
+  for a PROVE -- never a computed "you can reconstruct this now" verdict.
+  Reading it is on you.
+- **Submit a move** -- one form per move.
+  - **LEAK** just needs picking one of your open contracts from a list.
+  - **PROVE** needs a `{ commitment, response }` proof, and **HUNT** needs a
+    recovered secret. Build both **locally, before you open the form** --
+    this repo's `game/src/schnorr-prover.ts`'s `createProof` and
+    `game/src/shamir.ts`'s `reconstruct` are the reference implementations
+    of that math (see "How PROVE works" above for PROVE's steps). The
+    portal never computes either one for you: that local computation is the
+    move's actual cost, not busywork the UI could shortcut.
+  - **ROTATE** asks for a confirmation before it fires, since it voids every
+    currently-open contract addressed to you.
+  - A rejected submission shows the reason (e.g. "contract already
+    completed", "proof failed verification") -- that is different from an
+    infrastructure hiccup, which shows a generic retry message instead.
+- **Help** -- the rules above, condensed to one screen inside the portal
+  itself, for a quick refresher mid-match.
+
+## After the match: replay and debrief
+
+The match does not end when the clock hits zero. Every LEAK, PROVE, HUNT
+success, and ROTATE your team made is still there afterward, in order, with
+real timestamps -- a facilitator can walk through it during the debrief
+window and point at exactly where things turned: which LEAK is the one that
+finally crossed the threshold and made your secret reconstructable, and how
+many of your leaked shares a ROTATE actually invalidated. This replay is
+built entirely from what already happened during the match -- it does not
+show anything that was not already true, and it never reveals a secret or
+share value your team did not already leak yourselves. It is a *debrief*
+tool, not a live one: it is generated after the fact, not exposed anywhere
+in the Portal while the match is running.
+
 ## Related files
 
 - [`metadata.json`](./metadata.json) -- problem metadata (source of truth for
