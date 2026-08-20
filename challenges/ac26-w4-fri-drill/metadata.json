@@ -192,7 +192,7 @@
     {
       "type": "requires",
       "source": "problem.ac26-w4-fri-drill",
-      "target": "concept.polynomial-commitment"
+      "target": "concept.merkle-commitment"
     },
     {
       "type": "assesses",
