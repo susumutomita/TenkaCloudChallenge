@@ -75,6 +75,32 @@
       }
     },
     {
+      "id": "ac26-crypto-battle",
+      "name": "PROVE / LEAK / HUNT — 暗号リアルタイム判断 Battle",
+      "category": "Battle",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 4,
+      "estimatedDuration": "120 分",
+      "shortDescription": "天下クラウド暗号セキュリティ道場、実戦編。あなたのチームは Shamir (t, n) しきい値秘密分散で secret を分割して保持している。時間とともに届く Contract を LEAK で処理すれば得点になるが、公開した share は Public Ledger に残り、相手チームの HUNT 材料になる。しきい値分の share を Lagrange 補間で復元されると減点。危なくなったら ROTATE で secret を更新し、過去の漏洩を無効化できる。暗号の正しさは運にしない — 実際に成立した計算だけが得点になる。",
+      "tags": [
+        "advanced-cryptography",
+        "advanced-cryptography-2026",
+        "secret-sharing",
+        "shamir",
+        "zero-knowledge",
+        "battle",
+        "real-time"
+      ],
+      "scoringKind": "none",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "ac26-w1-constraint-lab",
       "name": "0 になるべき式の集まり",
       "category": "Challenge",

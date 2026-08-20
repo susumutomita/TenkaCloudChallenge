@@ -1,0 +1,87 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud problem -- ac26-crypto-battle (PROVE / LEAK / HUNT). PR1 scope only:
+  this stack grants the standard participant access baseline (AssumeRole into
+  the team's own AWS account) and creates no other resource. The Battle's
+  actual match state -- secrets, shares, contracts, the Public Ledger -- is not
+  per-team AWS infrastructure: it lives in the platform's coordination-plugin
+  state (see battles/ac26-crypto-battle/game/ and OPERATOR.md), which a later
+  PR wires this event into. There is nothing here for a red team to target and
+  nothing here that participants deploy into or configure -- the Battle is
+  played entirely through the Participant Portal once PR3/PR4 land.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy-battles.sh script auto-injects
+      this value, you do not need to set it manually.
+    Description: >
+      Common prefix attached to all resource names. Used to prevent collisions
+      when multiple teams' stacks coexist in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+
+Resources:
+  # Participant access baseline only (same shape as every other problem in this
+  # catalog -- see e.g. challenges/hello-world/template.yaml). No game state,
+  # no billable resource: see the top-level Description for why.
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      # Participant access baseline (same across every problem in this catalog):
+      #   * SignInLocalDevelopmentAccess -- `aws login` (2025-11) OAuth2 flow
+      #     needs signin:* on the role's own oauth2/public-client/{localhost,remote}.
+      #     AWS-managed policy scoped narrowly to exactly that.
+      #   * cloudshell:* allow-list below -- browser shell with this role's
+      #     creds. Resource:* is unavoidable (environments are per-identity);
+      #     action set narrowed to the interactive open / use / close cycle +
+      #     credential rotation.
+      # Both are validated by scripts/validate-problems.ts; do not remove.
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+Outputs:
+  NamePrefix:
+    Description: Common resource prefix that this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN that competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

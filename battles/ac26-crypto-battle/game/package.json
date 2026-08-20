@@ -1,0 +1,16 @@
+{
+  "name": "tenkacloud-ac26-crypto-battle-game",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Pure game model (state / op / reducer) for the PROVE / LEAK / HUNT advanced-cryptography Battle. No AWS, no network, no coordination-plugin SDK import -- see AGENTS.md.",
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.11",
+    "typescript": "5.9.3"
+  },
+  "trustedDependencies": []
+}

@@ -171,6 +171,9 @@ jobs:
       - name: Check simulator workload
         run: bun run validate:simulator-workload
 
+      - name: Check crypto battle game model
+        run: bun run validate:crypto-battle
+
       # Cross-repository capability coverage needs an immutable Simulator
       # checkout and is enforced by simulator-compatibility.yml. Do not replace
       # that pinned proof with a moving branch or a hidden clone in this job.
