@@ -1026,6 +1026,58 @@
       }
     },
     {
+      "id": "ac26-w4-plonk-drill",
+      "name": "1 行打って、出た値を貼る — PLONK の 2 本の制約と大積",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "advanced-cryptography-2026",
+        "order": 435,
+        "chapter": "Week 4 / Drill: PLONK's two constraints"
+      },
+      "courseAlignment": {
+        "courseId": "advanced-cryptography-program",
+        "edition": "2026",
+        "week": 4,
+        "role": "mechanism",
+        "sources": [
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "c088f8e6f301dedcd80b6dd9c321a1cd83410637",
+            "path": "week4/README.md",
+            "kind": "lecture"
+          },
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "c088f8e6f301dedcd80b6dd9c321a1cd83410637",
+            "path": "week4/acp-2026-week4-redacted.pdf",
+            "kind": "slide"
+          }
+        ]
+      },
+      "difficulty": 3,
+      "estimatedDuration": "40-60 分",
+      "shortDescription": "手元の Python で 1 行打って、出た値を貼る。12 行で、ゲート表 → ゲート方程式 → ゲートだけ守る嘘の表 → 番地と σ → 指紋の大積が正直な表で一致・嘘の表で不一致 → どの (β, γ) なら見逃したか、を自分の手で出した数だけで通す。",
+      "tags": [
+        "advanced-cryptography-2026",
+        "week4",
+        "drill",
+        "plonk",
+        "copy-constraint",
+        "grand-product",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "ac26-w4-proof-pipeline",
       "name": "9 層ある 1 個の箱",
       "category": "Challenge",
