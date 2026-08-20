@@ -1,0 +1,464 @@
+{
+  "id": "ac26-w4-sumcheck-drill",
+  "name": "1 行打って、出た値を貼る — SumCheck を 2 ラウンド回して嘘を数える",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "advanced-cryptography-2026",
+    "order": 405,
+    "chapter": "Week 4 / Drill: SumCheck by hand"
+  },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 4,
+    "role": "mechanism",
+    "spoilerPolicy": "independent-reimplementation",
+    "sources": [
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "c088f8e6f301dedcd80b6dd9c321a1cd83410637",
+        "path": "week4/README.md",
+        "kind": "lecture"
+      },
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "c088f8e6f301dedcd80b6dd9c321a1cd83410637",
+        "path": "week4/acp-2026-week4-redacted.pdf",
+        "kind": "slide"
+      }
+    ]
+  },
+  "difficulty": 3,
+  "estimatedDuration": "40-60 分",
+  "shortDescription": "手元の Python で 1 行打って、出た値を貼る。12 行で、回路 → MLE → 配線の多項式 → 証明者の p₁・p₂ を 2 点の和とランダム 1 点で検査 → 最後の 1 点 → 嘘の証明者が水増しした主張の見逃しを数える、を自分の手で出した数だけで通す。",
+  "description": "Week 4 のドリル。関数を書く問題ではなく、「1 行打って、出た値を貼る」を 12 行繰り返して SumCheck を端から端まで回す。前半 9 行はあなたが検証者（回路の値 → MLE → 配線の多項式 → 証明者の p₁・p₂ を 2 点の和とランダム 1 点で検査 → 最後に g₀ を 1 回だけ自分で計算）、後半 3 行はあなたが嘘の証明者（主張を d 水増しして和の検査を通す → 辻褄合わせの果てに最後の 1 点で落ちる → どの r₂ なら見逃したかを数える）。\n\n形の根拠は ac26-w3-schnorr-drill と同じ（自習ノートで「1 行打って、出た値を貼って、その値を指す 1 文を読む」が本人検証で機能した形）。この問題は講義の GKR / SumCheck の節（スライド 12〜17）の F₁₁ の例と同じ回路・同じ手順を、seed 由来の体と入力・乱数・証明者メッセージで回す。証明者のメッセージは係数の形（c0, c1, c2 / b1, b2）で渡す — プロトコルで実際に流れるのは多項式そのものではなく係数列だから。\n\n12 行のうち回答欄は 8 行（platform の checkpoint 上限）。回答欄の無い 4 行（4 項の和、p₁ の 2 点和、全点検算、p₂ の 2 点和）は、直前の行の値と一致するか、次の行で正否が表に出る材料の行。嘘のパラメータ d・m も seed 由来なので、見逃しの 2 点（t = 1 と sh + m·t ≡ 0 の解）は deploy ごとに変わり、暗記では通らない。",
+  "instructions": "## 前提 — 中学・高校の数学から\n\n- **学校で習ったこと**: 「2 点を通る直線は 1 本に決まる」（中 2）。だから 2 マスの表は直線に伸ばせて、表に無い点の値も決まる。「違う 2 次式どうしが一致できる点は高々 2 つ」（差がまた 2 次式で、2 次式の根は 2 個まで — 中 3 の因数分解の延長）。だから全部の点を見なくても、ランダムな 1 点で嘘はほぼ確実にばれる。「見逃しは p 点中 2 点」は場合の数の話（数 A）。この 3 つだけで SumCheck は全部組めます。\n- **教材のどこ**: Week 4 講義スライド 12〜17 枚目（IOP と GKR: 多重線形拡張、SumCheck のラウンド、線形削減）。講義の F₁₁ の例 `f = (x₁+x₂) + (x₃·x₄)`、p₁ = 1 + 3x + 7x² と同じ回路・同じ手順を、この deploy の数でもう一度回します。課題は WIP（公開され次第この問題から接続します）。\n- **1 桁の例**: mod 11 で y₀ = 4, y₁ = 8 → 出力 1。証明者の p₁ = 1 + 3t + 7t² は p₁(0) + p₁(1) = 1 + 0 = 1 で主張と一致。検証者が r₁ = 2 を選ぶと p₁(2) = 1 + 6 + 28 = 35 ≡ 2 — これが次の主張。\n- **言葉**: SumCheck = 「大きな和の主張を、足さずに確かめる対話」。MLE（多重線形拡張）= 「表を、格子の外でも値が決まる式に伸ばしたもの」。ラウンド = 「和の検査 → ランダム 1 点 → 変数を 1 つ固定」の 1 周。健全性エラー = 嘘が見逃される確率（ここでは 2/p）。\n\n## はじめに\n\n- この問題は関数を書く問題ではありません。**1 行打って、出た値を貼る**を繰り返します。12 行のうち 8 行に回答欄（checkpoint）があり、残り 4 行は次の行の材料です（材料の行にも「この行の意味」と「出たら読む」が付いています）。\n- 使うのは手元の Python です。ターミナルで `python3` と打ち、「証拠を調べる」に出た代入文を貼ってから始めます。\n- 12 行で通る道: 回路の値 → 表を直線に伸ばす（MLE）→ 配線を式に → 4 項の和 → 証明者の p₁ を受け取る → 検算 → ランダムな 1 点 r₁ → p₂ → 最後の 1 点で g₀ を自分で計算 → 嘘の証明者になって主張を水増し → 辻褄合わせの果てに最後の 1 点で落ちる → どの r₂ なら見逃したかを数える。\n- 前半（1〜9 行目）はあなたが検証者、後半（10〜12 行目）はあなたが嘘の証明者です。両方の椅子に座ると、「どこで嘘が止まるのか」が数として見えます。\n- 数は deploy ごとに変わります。ノートや他人の答えを写しても通りません。自分の Python が出した値だけが通ります。\n\n## 最初の一手\n\n**Participant Portal** で問題を起動し、**「証拠を調べる」** を押してください。この deploy の体 p、回路の入力 x1〜x4、検証者の乱数 r1・r2、証明者から届いた 2 通のメッセージの係数（p₁ = c0 + c1·t + c2·t²、p₂ = b1·t + b2·t²）、嘘の証明者のパラメータ d・m が、**そのまま Python に貼れる代入文**で表示されます。まずそれを全部 Python に貼ってください。ホスト側のターミナルは、その Python 1 つだけです。\n\n## 解き方 — 12 行\n\n各行: **打つ行**(コピーして貼る) → **この行の意味** → Python が出した値を **その checkpoint の回答欄に貼る** → 合ったら **「合ったら読む」** を読んで次へ。回答欄は 1 行の入力欄です。\n\n### 1. 回路の値 — 2 つのゲートと出力  (checkpoint `circuit`)\n\n入力は「証拠を調べる」の x1〜x4。レイヤー 1 は y₀ = x₁ + x₂、y₁ = x₃·x₄。出力はその和。全部 mod p。\n\n```python\ny0 = (x1 + x2) % p; y1 = (x3 * x4) % p; (y0, y1, (y0 + y1) % p)\n```\n\n- **この行の意味**: 足し算ゲートと掛け算ゲートを 1 回ずつ通し、最後に足す。\n- **回答欄**: checkpoint `circuit` に 組を `[a, b]` の形で（`(a, b)` でも可、要素 3 個）\n- **合ったら読む**: 3 つ目の数がこの回路の出力で、証明者の主張は「出力はこれだ」。いまは検証者が y₀ + y₁ を自分で足せば確かめられそうに見えますが、本物の回路では足す項が 2ᵏ 個（何百万）あって、全部足すのは計算のやり直しと同じです。「全部足さずに主張を確かめる」のが SumCheck の仕事で、残りの 11 行でそれを自分の手で回します。\n\n### 2. 表を直線に伸ばす（MLE）  (checkpoint `mle`)\n\n表 {0 → y₀, 1 → y₁} を、0 でも 1 でもない z にも値が決まる 1 次式にします（2 点で直線が 1 本、中 2）。\n\n```python\nW1 = lambda z: (y0 * (1 - z) + y1 * z) % p; (W1(0), W1(1), W1(2))\n```\n\n- **この行の意味**: z = 0 で y₀、z = 1 で y₁ になる直線を、0, 1, 2 で評価。\n- **回答欄**: checkpoint `mle` に 組を `[a, b]` の形で（`(a, b)` でも可、要素 3 個）\n- **合ったら読む**: 最初の 2 つは表の値そのもの。3 つ目 W₁(2) = 2y₁ − y₀ は「表に無い点」の値で、直線を伸ばしたから決まりました。あとで検証者はランダムな点 r を選んで「r のところの値は？」と聞きます — 表のままでは 0 と 1 しか聞けないので、先に式へ伸ばしておくのです。これが多重線形拡張（MLE）で、SumCheck の準備の半分はこれだけです。\n\n### 3. 配線も式にする — g₀ の 4 つの格子点  (checkpoint `grid`)\n\n「番地 0 と番地 1 を足すゲート」を g₀(a, b) = (1−a)·b·(W₁(a) + W₁(b)) と書きます。(1−a)·b は (a, b) = (0, 1) のときだけ 1、他の格子点では 0。\n\n```python\ng0 = lambda a, b: ((1 - a) * b * (W1(a) + W1(b))) % p; (g0(0,0), g0(0,1), g0(1,0), g0(1,1))\n```\n\n- **この行の意味**: 4 つの格子点で g₀ を評価。\n- **回答欄**: checkpoint `grid` に 組を `[a, b]` の形で（`(a, b)` でも可、要素 4 個）\n- **合ったら読む**: (0, 1) のところだけ y₀ + y₁ = 出力、他は 0。つまり主張が「ある多項式 g₀ を 0/1 の全組み合わせで足すと出力になる」という形に書き直せました。レイヤーが深い本物の回路でも、各レイヤーの主張は必ずこの「格子点全部の和」の形になります。SumCheck はこの形だけを相手にする道具です。\n\n### 4. 4 項の和  （回答欄なし）\n\n実際に足してみます（検証者はこれをやりたくない側）。\n\n```python\nsum(g0(a, b) for a in (0, 1) for b in (0, 1)) % p\n```\n\n- **この行の意味**: 格子点 4 つの和。\n- **回答欄**: なし — 次の行の材料。値は画面に残しておく\n- **出たら読む**: 1 行目の出力と同じ数が出たはずです。ここまでが問題の設定。ここからが本番 — この和を、4 項を足さずに確かめます。私たちはいま 4 項だから足せましたが、検証者の立場では項が 2ᵏ 個あると思って読み進めてください。\n\n### 5. ラウンド 1 — 証明者の p₁ を受け取る  （回答欄なし）\n\n証明者から 1 変数多項式 p₁(t) = c0 + c1·t + c2·t² が届きました（係数は「証拠を調べる」の c0, c1, c2）。検証者はまず p₁(0) + p₁(1) だけ見ます。\n\n```python\nP1 = lambda t: (c0 + c1*t + c2*t**2) % p; (P1(0) + P1(1)) % p\n```\n\n- **この行の意味**: 届いた多項式の、2 点の和。\n- **回答欄**: なし — 次の行の材料。値は画面に残しておく\n- **出たら読む**: 主張（1 行目の出力）と一致。もし p₁ が本当に「b だけ足して a を変数として残した式」Σ_b g₀(t, b) なら、p₁(0) + p₁(1) は 4 項の和そのもの（a = 0 の 2 項 + a = 1 の 2 項）なので、一致して当然です。検証者がやったのは 2 点の足し算 1 回だけ。問題は「p₁ が本当にその式か」— それをこの後、ランダムな 1 点で確かめます。\n\n### 6. 検算 — p₁ は本物か  （回答欄なし）\n\np₁ が Σ_b g₀(t, b) と全部の t で一致するか（これは検算で、検証者はやりません）。\n\n```python\n[P1(t) == (g0(t, 0) + g0(t, 1)) % p for t in range(p)]\n```\n\n- **この行の意味**: 0..p−1 の全点で比較。\n- **回答欄**: なし — 次の行の材料。値は画面に残しておく\n- **出たら読む**: 全部 True — この deploy の証明者は正直で、p₁ は本物でした。ただし全点の検算は、本物の体では点が 2²⁵⁴ 個あるので不可能です。だから検証者は次の行で「ランダムな 1 点」だけ見ます。1 点で足りる理由: 違う 2 次式どうしが一致できる点は高々 2 つ（差が 2 次式で、2 次式の根は 2 個まで — 中 3 の因数分解の延長）。p 点から選べば、嘘は (p−2)/p 以上の確率で露見します。\n\n### 7. ランダムな 1 点 r₁  (checkpoint `round1`)\n\n検証者が r₁（「証拠を調べる」の値）を選び、p₁(r₁) を計算します。これが次のラウンドの主張になります。\n\n```python\nP1(r1)\n```\n\n- **この行の意味**: 届いた p₁ を r₁ で評価。\n- **回答欄**: checkpoint `round1` に 整数 1 つ\n- **合ったら読む**: 次の主張は「Σ_b g₀(r₁, b) = この値」。変数が 1 つ減りました。これがラウンドの型です: 和の検査（2 点の足し算）→ ランダムな 1 点で評価 → 変数を 1 つ固定した新しい主張。変数の数だけ繰り返せば、2ᵏ 項の和が k 回のラウンドに化けます。\n\n### 8. ラウンド 2 — 証明者の p₂  （回答欄なし）\n\n証明者から p₂(t) = b1·t + b2·t² が届きます（b1, b2 は「証拠を調べる」の値）。前ラウンドの主張と辻褄が合うか、また 2 点の和だけ見ます。\n\n```python\nP2 = lambda t: (b1*t + b2*t**2) % p; (P2(0) + P2(1)) % p\n```\n\n- **この行の意味**: p₂ の 2 点の和。\n- **回答欄**: なし — 次の行の材料。値は画面に残しておく\n- **出たら読む**: 7 行目の p₁(r₁) と同じ数 — 辻褄が合っています。ここでも検証者の仕事は足し算 1 回。変数は 2 つだったので、これで「格子点全部の和」は全部「1 変数多項式の 2 点の和」に分解されました。残るは、p₂ が本物かを確かめる最後の検問だけです。\n\n### 9. 最後の 1 点 — 検証者が自分で g₀ を 1 回計算する  (checkpoint `final-check`)\n\n検証者が r₂ を選び、証明者の p₂(r₂) と、自分で計算した g₀(r₁, r₂) を比べます。\n\n```python\n(P2(r2), g0(r1, r2))\n```\n\n- **この行の意味**: 左: 証明者の多項式の値。右: 検証者がこのプロトコルで唯一自分で計算する値。\n- **回答欄**: checkpoint `final-check` に 組を `[a, b]` の形で（`(a, b)` でも可、要素 2 個）\n- **合ったら読む**: 一致。検証者がやったことの全部: 2 点の和を 2 回、1 点の評価を 2 回、最後に g₀ を 1 回。4 項の和は一度も足していません。項が 2ᵏ 個でも、ラウンド数は k（変数の数）で済む — これが SumCheck です。ここからは嘘の証明者になって、この検問を破りに行きます。\n\n### 10. 嘘の証明者 — 主張を d だけ水増しする  (checkpoint `lie`)\n\n「出力は本当より d 大きい」と偽ります。和の検査を通すには、p₁ に d·(1 − t) を足せばよい（t = 0 で +d、t = 1 で +0 なので、2 点の和がちょうど d 増える）。\n\n```python\nP1c = lambda t: (P1(t) + d * (1 - t)) % p; ((P1c(0) + P1c(1)) % p, P1c(r1))\n```\n\n- **この行の意味**: 左: 偽物の 2 点の和（= 水増しした主張）。右: 偽物の r₁ での値。\n- **回答欄**: checkpoint `lie` に 組を `[a, b]` の形で（`(a, b)` でも可、要素 2 個）\n- **合ったら読む**: 和の検査は水増しした主張とぴったり合ってしまいました — 「和の検査」だけでは嘘を止められません。でも偽物は本物と違う多項式になったので、r₁ での値が 7 行目とずれています。次のラウンドの主張がこの偽の値になり、証明者は p₂ にも細工をして辻褄を合わせ続けるしかない。嘘は嘘を呼びます。\n\n### 11. 辻褄合わせの果て — 最後の 1 点で落ちる  (checkpoint `lie-caught`)\n\n証明者は p₂ にも細工して和の検査を通します（sh がずれの分。m·t·(1−t) は 2 点の和を変えない自由な項で、「証拠を調べる」の m）。最後に検証者が r₂ で自分の g₀ と比べます。\n\n```python\nsh = (P1c(r1) - (P2(0) + P2(1))) % p; P2c = lambda t: (P2(t) + sh*(1 - t) + m*t*(1 - t)) % p; ((P2c(0) + P2c(1)) % p, P2c(r2), g0(r1, r2))\n```\n\n- **この行の意味**: 左から: 偽 p₂′ の 2 点の和（辻褄は合う）、偽物の r₂ での値、検証者自身の g₀。\n- **回答欄**: checkpoint `lie-caught` に 組を `[a, b]` の形で（`(a, b)` でも可、要素 3 個）\n- **合ったら読む**: 1 つ目は 10 行目の右の値と同じで、和の検査はまた通ってしまう。でも 2 つ目 ≠ 3 つ目 — 検証者が自分で計算する最後の 1 点で拒否されました。嘘をつき通すには多項式そのものを変えるしかなく、違う多項式はランダムな点でほぼ必ずずれる。「検証者が最後に 1 回だけ自分の手で計算する」が、この 12 行全体を支えています。\n\n### 12. どの r₂ なら見逃したか — 数える  (checkpoint `miss-points`)\n\nr₂ を 0..p−1 全部試して、偽物が本物と一致してしまう点を列挙します。\n\n```python\nsorted(t for t in range(p) if P2c(t) == g0(r1, t))\n```\n\n- **この行の意味**: 見逃しになる r₂ の一覧。\n- **回答欄**: checkpoint `miss-points` に 一覧を `[a, b]` の形で（小さい順）\n- **合ったら読む**: ちょうど 2 点だけ。偽 p₂′ − 本物 = (1 − t)(sh + m·t) は 2 次式なので、0 になる点は高々 2 つです（t = 1 と、sh + m·t ≡ 0 の解）。見逃し確率は 2/p — この小さな体でも 1 割前後、体を 2²⁵⁴ 個にすれば事実上 0。「絶対に落ちる」ではなく「ランダムな点で聞くから、ほぼ確実に落ちる」— この確率的健全性が、Week 4 に出てくる全スキーム（GKR・STARK・PLONK）の共通の土台です。\n\n## ゴール\n\n12 行が全部通れば、SumCheck の 1 ラウンドの型（和の検査 → ランダム 1 点 → 変数を 1 つ固定）と、「検証者は最後に 1 回だけ自分の手で計算する」こと、嘘が (1 − t)(sh + m·t) の根の 2 点でしか生き残れないことを、**自分の手で出した数で 1 回ずつ**確かめたことになります。この確率的健全性は、Week 4 に出てくる GKR・STARK・PLONK すべての土台です。エディタの `sumcheck_drill.py` は Python を開けない人のための代替で、12 関数を埋めれば「公開テストを実行」がこの deploy の値を出します。\n",
+  "writeup": "## この問題の形\n\n12 行を打ち、8 行に回答欄があります。前半はあなたが検証者、後半はあなたが嘘の証明者。順番は、回路（1）→ MLE（2）→ 配線の多項式（3〜4）→ ラウンド 1（5〜7）→ ラウンド 2 と最後の検問（8〜9）→ 嘘（10〜12）。\n\n## 各行が守っているもの\n\n- 1〜4: 主張が「多項式を格子点全部で足した和」の形に書き直せること。SumCheck はこの形だけを相手にする。\n- 5〜7: ラウンドの型 = 和の検査（2 点の足し算 1 回）→ ランダム 1 点で評価 → 変数を 1 つ固定した新しい主張。\n- 8〜9: 最後に検証者が g₀ を 1 回だけ自分で計算する。4 項の和は一度も足さない。\n- 10〜12: 和の検査は嘘でも通せる。でも嘘は多項式そのものを変えるので、ランダムな点でずれる。見逃しは (1 − t)(sh + m·t) の根の 2 点だけ — 確率 2/p。\n\n## 間違えるとどう壊れるか\n\nMLE の表を逆に貼る／(1−a)·b の角を間違える／t² を落とす／sh の引き算を逆にする — どれも値が 1 つずれて、その行で止まります。止まった行の「この行の意味」を読み直すのがこの形式の学び方です。\n\n## 次への接続\n\nSTARK の「H の全点で 0 ⇔ Z_H で割り切れる」も、PLONK の大積も、最後は同じ「ランダムな 1 点で聞く」に落ちます。GKR はこのドリルのラウンドをレイヤーの数だけ繰り返すだけ。課題が公開されたら、この 12 行がそのまま検算器になります。",
+  "tags": [
+    "advanced-cryptography-2026",
+    "week4",
+    "drill",
+    "sumcheck",
+    "gkr",
+    "probabilistic-soundness",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18133,
+      "name": "Portal editor API + /verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "2 マスの表を MLE で直線に伸ばし、格子の外の値が決まる理由を言える",
+    "「格子点全部の和」という主張の形と、SumCheck がその形だけを相手にすることを説明できる",
+    "ラウンドの型（和の検査 → ランダム 1 点 → 変数を 1 つ固定）を自分の手で 2 周回せる",
+    "検証者が自分で計算するのは最後の g₀ 1 回だけであることを、行数を数えて言える",
+    "和の検査だけでは嘘を止められないこと、嘘はランダムな点で落ちることを、水増しした主張で実演できる",
+    "見逃しが (1 − t)(sh + m·t) の根の 2 点だけであることを列挙で確かめ、健全性エラー 2/p を言える"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.ac26-w4-sumcheck-drill.setup-lines",
+        "description": "回路の値・MLE・配線の多項式を 1 行ずつ出し、主張を「格子点全部の和」の形に書き直せる。"
+      },
+      {
+        "id": "lo.ac26-w4-sumcheck-drill.verifier-lines",
+        "description": "p₁・p₂ を 2 点の和とランダム 1 点で検査し、最後に g₀ を 1 回だけ自分で計算できる。"
+      },
+      {
+        "id": "lo.ac26-w4-sumcheck-drill.prover-lines",
+        "description": "主張を水増しした偽の p₁′・p₂′ を作って和の検査を通し、最後の 1 点で落ちることを確かめられる。"
+      },
+      {
+        "id": "lo.ac26-w4-sumcheck-drill.soundness-count",
+        "description": "見逃しになる r₂ を列挙し、健全性エラーが 2/p であることを数として言える。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.sumcheck",
+        "description": "「多項式を格子点全部で足した和」の主張を、ラウンドごとに変数を 1 つ固定しながら、足さずに確かめる対話プロトコル。"
+      },
+      {
+        "id": "concept.multilinear-extension",
+        "description": "格子上の表を、格子の外でも値が決まる多重線形多項式に伸ばしたもの。検証者がランダムな点で質問するための前提。"
+      },
+      {
+        "id": "concept.probabilistic-soundness",
+        "description": "嘘が絶対に落ちるのではなく、ランダムな点で聞くから高確率で落ちるという健全性。エラーは（次数）/（体の大きさ）。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.ac26-w4-sumcheck-drill.circuit",
+        "description": "回路の値 — 2 つのゲートと出力の値を、この deploy の数で自分の Python から出して貼れた。"
+      },
+      {
+        "id": "assessment.ac26-w4-sumcheck-drill.mle",
+        "description": "表を直線に伸ばす（MLE）の値を、この deploy の数で自分の Python から出して貼れた。"
+      },
+      {
+        "id": "assessment.ac26-w4-sumcheck-drill.grid",
+        "description": "配線も式にする — g₀ の 4 つの格子点の値を、この deploy の数で自分の Python から出して貼れた。"
+      },
+      {
+        "id": "assessment.ac26-w4-sumcheck-drill.round1",
+        "description": "ランダムな 1 点 r₁の値を、この deploy の数で自分の Python から出して貼れた。"
+      },
+      {
+        "id": "assessment.ac26-w4-sumcheck-drill.final-check",
+        "description": "最後の 1 点 — 検証者が自分で g₀ を 1 回計算するの値を、この deploy の数で自分の Python から出して貼れた。"
+      },
+      {
+        "id": "assessment.ac26-w4-sumcheck-drill.lie",
+        "description": "嘘の証明者 — 主張を d だけ水増しするの値を、この deploy の数で自分の Python から出して貼れた。"
+      },
+      {
+        "id": "assessment.ac26-w4-sumcheck-drill.lie-caught",
+        "description": "辻褄合わせの果て — 最後の 1 点で落ちるの値を、この deploy の数で自分の Python から出して貼れた。"
+      },
+      {
+        "id": "assessment.ac26-w4-sumcheck-drill.miss-points",
+        "description": "どの r₂ なら見逃したか — 数えるの値を、この deploy の数で自分の Python から出して貼れた。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.sum-check-catches-lies",
+        "description": "「和の検査が嘘を見つける」と思う。和の検査は偽多項式でも必ず通せる。嘘が落ちるのはランダムな 1 点での評価。"
+      },
+      {
+        "id": "misconception.verifier-recomputes",
+        "description": "検証者がどこかで和を計算し直していると思う。検証者が自分で計算するのは最後の g₀ 1 回だけ。"
+      },
+      {
+        "id": "misconception.mle-is-the-table",
+        "description": "W₁(2) を「表の値の続き」だと思う。格子の外の値は表には無く、直線に伸ばしたから決まる（W₁(2) = 2y₁ − y₀）。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w4-sumcheck-drill",
+      "target": "lo.ac26-w4-sumcheck-drill.setup-lines"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w4-sumcheck-drill",
+      "target": "lo.ac26-w4-sumcheck-drill.verifier-lines"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w4-sumcheck-drill",
+      "target": "lo.ac26-w4-sumcheck-drill.prover-lines"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w4-sumcheck-drill",
+      "target": "lo.ac26-w4-sumcheck-drill.soundness-count"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w4-sumcheck-drill",
+      "target": "concept.sumcheck"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w4-sumcheck-drill",
+      "target": "concept.multilinear-extension"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w4-sumcheck-drill",
+      "target": "concept.probabilistic-soundness"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w4-sumcheck-drill",
+      "target": "concept.repl-drill"
+    },
+    {
+      "type": "requires",
+      "source": "problem.ac26-w4-sumcheck-drill",
+      "target": "concept.finite-field"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w4-sumcheck-drill",
+      "target": "assessment.ac26-w4-sumcheck-drill.circuit"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w4-sumcheck-drill",
+      "target": "assessment.ac26-w4-sumcheck-drill.mle"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w4-sumcheck-drill",
+      "target": "assessment.ac26-w4-sumcheck-drill.grid"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w4-sumcheck-drill",
+      "target": "assessment.ac26-w4-sumcheck-drill.round1"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w4-sumcheck-drill",
+      "target": "assessment.ac26-w4-sumcheck-drill.final-check"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w4-sumcheck-drill",
+      "target": "assessment.ac26-w4-sumcheck-drill.lie"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w4-sumcheck-drill",
+      "target": "assessment.ac26-w4-sumcheck-drill.lie-caught"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w4-sumcheck-drill",
+      "target": "assessment.ac26-w4-sumcheck-drill.miss-points"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w4-sumcheck-drill",
+      "target": "misconception.sum-check-catches-lies"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w4-sumcheck-drill",
+      "target": "misconception.verifier-recomputes"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w4-sumcheck-drill",
+      "target": "misconception.mle-is-the-table"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18133/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "circuit",
+        "label": "回路の値 — 2 つのゲートと出力",
+        "points": 20,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "circuit-hint-1",
+            "content": "y₀ は足し算、y₁ は掛け算。3 つとも `% p` を忘れずに。3 つ目は (y0 + y1) % p。",
+            "penalty": 6
+          }
+        ]
+      },
+      {
+        "id": "mle",
+        "label": "表を直線に伸ばす（MLE）",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "mle-hint-1",
+            "content": "W1 = y0·(1−z) + y1·z。z = 2 では y0·(−1) + y1·2 なので、負の数が出ないよう式全体に `% p`。",
+            "penalty": 6
+          }
+        ]
+      },
+      {
+        "id": "grid",
+        "label": "配線も式にする — g₀ の 4 つの格子点",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "grid-hint-1",
+            "content": "(1−a)·b が 0 になる格子点では値も 0。4 つのうち値を持つのは (0, 1) だけで、その値は W1(0) + W1(1)。",
+            "penalty": 6
+          }
+        ]
+      },
+      {
+        "id": "round1",
+        "label": "ランダムな 1 点 r₁",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "round1-hint-1",
+            "content": "P1(r1) = (c0 + c1·r1 + c2·r1²) % p。r1 は「証拠を調べる」の値。t² は `r1*r1` か `r1**2`。",
+            "penalty": 6
+          }
+        ]
+      },
+      {
+        "id": "final-check",
+        "label": "最後の 1 点 — 検証者が自分で g₀ を 1 回計算する",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "final-check-hint-1",
+            "content": "左は P2(r2)、右は g0(r1, r2) — 引数の順番に注意（r1 が先）。同じ数が 2 つ並ぶのが正解です。",
+            "penalty": 6
+          }
+        ]
+      },
+      {
+        "id": "lie",
+        "label": "嘘の証明者 — 主張を d だけ水増しする",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "lie-hint-1",
+            "content": "P1c = P1 + d·(1−t)。1 つ目は (P1c(0) + P1c(1)) % p（= 主張 + d）、2 つ目は P1c(r1)。",
+            "penalty": 6
+          }
+        ]
+      },
+      {
+        "id": "lie-caught",
+        "label": "辻褄合わせの果て — 最後の 1 点で落ちる",
+        "points": 30,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "lie-caught-hint-1",
+            "content": "sh は「偽の主張 − p₂ の 2 点の和」。P2c = P2 + sh·(1−t) + m·t·(1−t)。3 つ目だけ g0 で、あなた（検証者）の値。",
+            "penalty": 6
+          }
+        ]
+      },
+      {
+        "id": "miss-points",
+        "label": "どの r₂ なら見逃したか — 数える",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "miss-points-hint-1",
+            "content": "`sorted(t for t in range(p) if P2c(t) == g0(r1, t))`。t = 1 は必ず入ります（覆いの因子 (1−t) が消える点）。もう 1 点は sh + m·t ≡ 0 の解。",
+            "penalty": 6
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Type one line, paste the value — two rounds of SumCheck, then count the misses",
+      "shortDescription": "Type one line in your own Python, paste the value it prints. Twelve lines: the circuit → MLE → the wiring polynomial → checking the prover's p₁ and p₂ by two-point sums and one random point → the last point → counting where an inflated claim would have slipped through — on numbers you produced yourself.",
+      "description": "A Week 4 drill. Not a write-a-function problem: you type one line, paste the value it prints, twelve times, and run SumCheck end to end. For nine lines you are the verifier (circuit values → MLE → the wiring polynomial → checking the prover's p₁ and p₂ by two-point sums and one random point → computing g₀ once, yourself). For the last three you are the lying prover (inflate the claim by d and pass the sum check → the cover-up dies at the last point → count which r₂ would have missed).\n\nThe format is the same as ac26-w3-schnorr-drill (the \"type one line, paste the value, read the one sentence about that value\" shape validated in the companion self-study notes). The circuit and procedure match the lecture's F₁₁ GKR/SumCheck example (slides 12–17), run on a seed-derived field, inputs, randomness, and prover messages. The prover's messages arrive as coefficients (c0, c1, c2 / b1, b2) — what actually travels in the protocol is the coefficient list, not the polynomial as an idea.\n\nEight of the twelve lines have an answer field (the platform's per-problem maximum). The four ungraded lines (the four-term sum, p₁'s two-point sum, the all-points check, p₂'s two-point sum) either equal a value already produced or surface their mistake on the next line. The lie parameters d and m are seed-derived too, so the two miss points (t = 1 and the root of sh + m·t ≡ 0) change per deployment and memorization does not pass.",
+      "instructions": "## Before you start — from school math\n\n- **What you already know**: \"two points fix a line\", so a two-cell table can be stretched into a line and gains values at points the table never had. \"Two different quadratics can agree on at most 2 points\" (their difference is again a quadratic, and a quadratic has at most 2 roots — school factoring, extended). So a lie is caught at one random point almost surely, without checking every point. \"2 misses out of p points\" is plain counting. These three facts are the whole of SumCheck.\n- **Where in the course**: Week 4 lecture slides 12–17 (IOP and GKR: multilinear extension, the SumCheck rounds, linear reduction). The same circuit and procedure as the lecture's F₁₁ example `f = (x₁+x₂) + (x₃·x₄)` with p₁ = 1 + 3x + 7x² — run again on this deployment's numbers. The assignment is still WIP; this problem connects to it once published.\n- **A one-digit example**: mod 11, y₀ = 4, y₁ = 8 → output 1. The prover's p₁ = 1 + 3t + 7t² has p₁(0) + p₁(1) = 1 + 0 = 1, matching the claim. The verifier picks r₁ = 2: p₁(2) = 1 + 6 + 28 = 35 ≡ 2 — the next claim.\n- **Words**: SumCheck = \"an interaction that checks a huge-sum claim without adding\". MLE (multilinear extension) = \"the table stretched into a polynomial that has values off the grid\". round = one pass of \"sum check → random point → fix one variable\". soundness error = the probability a lie slips through (here 2/p).\n\n## Start here\n\n- This is not a write-a-function problem. You **type one line, paste the value it prints**, over and over. Eight of the twelve lines have an answer field (a checkpoint); the other four feed the line after them (they still come with \"what this line means\" and \"read once it prints\").\n- You use your own Python: type `python3` in a terminal and paste the assignment statements from inspect first.\n- The twelve lines walk: the circuit's values → the table stretched into a line (MLE) → the wiring as a polynomial → the four-term sum → receive the prover's p₁ → a sanity check → one random point r₁ → p₂ → the last point, where the verifier computes g₀ itself → switch sides, inflate the claim → the cover-up dies at the last point → count which r₂ would have missed.\n- Lines 1–9 seat you as the verifier; lines 10–12 as the lying prover. Sitting in both chairs shows you, as numbers, exactly where a lie stops.\n- Numbers change per deployment. Copying notes or someone else's answers does not pass; only values your own Python printed do.\n\n## First move\n\nStart the problem in the **Participant Portal** and press **inspect**. It shows this deployment's field p, the circuit inputs x1–x4, the verifier's random points r1 and r2, the coefficients of the prover's two messages (p₁ = c0 + c1·t + c2·t², p₂ = b1·t + b2·t²), and the lying prover's parameters d and m — all as **assignment statements you can paste straight into Python**. Paste them all first. The only terminal you need is that one Python.\n\n## Workflow — twelve lines\n\nEach line: **the line to type** (copy and paste) → **what this line means** → paste the value Python printed into **that checkpoint's answer field** → once it matches, read **\"read after it matches\"** and move on. Answer fields are one-line inputs.\n\n### 1. The circuit — two gates and the output  (checkpoint `circuit`)\n\nInputs x1–x4 from inspect. Layer 1: y₀ = x₁ + x₂ and y₁ = x₃·x₄. The output is their sum, all mod p.\n\n```python\ny0 = (x1 + x2) % p; y1 = (x3 * x4) % p; (y0, y1, (y0 + y1) % p)\n```\n\n- **What this line means**: One addition gate, one multiplication gate, then add the two.\n- **Answer**: the tuple as `[a, b, ...]` (3 elements; `(a, b, ...)` also accepted), into checkpoint `circuit`\n- **Read after it matches**: The third number is the circuit's output, and the prover's claim is \"the output is this\". Right now the verifier could just add y₀ + y₁ — but a real circuit has 2ᵏ terms (millions), and adding them all is the same work as redoing the computation. Checking the claim *without* adding them is SumCheck's job, and the remaining eleven lines run it with your own hands.\n\n### 2. Stretch the table into a line (MLE)  (checkpoint `mle`)\n\nTurn the table {0 → y₀, 1 → y₁} into a degree-1 polynomial that also has a value at z ≠ 0, 1 (two points fix a line).\n\n```python\nW1 = lambda z: (y0 * (1 - z) + y1 * z) % p; (W1(0), W1(1), W1(2))\n```\n\n- **What this line means**: A line that is y₀ at z = 0 and y₁ at z = 1, evaluated at 0, 1, 2.\n- **Answer**: the tuple as `[a, b, ...]` (3 elements; `(a, b, ...)` also accepted), into checkpoint `mle`\n- **Read after it matches**: The first two are the table itself. The third, W₁(2) = 2y₁ − y₀, is a value at a point the table never had — it exists because we stretched the table into a line. Later the verifier picks a random point r and asks \"what is the value at r?\" — a table can only answer at 0 and 1, so we extend it to a polynomial first. That is the multilinear extension (MLE), and it is half of SumCheck's setup.\n\n### 3. Wire the gate into a polynomial — g₀ on the four grid points  (checkpoint `grid`)\n\nWrite \"the gate that adds address 0 and address 1\" as g₀(a, b) = (1−a)·b·(W₁(a) + W₁(b)). The factor (1−a)·b is 1 only at (a, b) = (0, 1) and 0 on every other grid point.\n\n```python\ng0 = lambda a, b: ((1 - a) * b * (W1(a) + W1(b))) % p; (g0(0,0), g0(0,1), g0(1,0), g0(1,1))\n```\n\n- **What this line means**: g₀ on the four grid points.\n- **Answer**: the tuple as `[a, b, ...]` (4 elements; `(a, b, ...)` also accepted), into checkpoint `grid`\n- **Read after it matches**: Only (0, 1) carries y₀ + y₁ = the output; the rest are 0. The claim has been rewritten as \"summing a polynomial g₀ over all 0/1 combinations gives the output\". However deep the real circuit is, each layer's claim takes exactly this \"sum over the whole grid\" shape — and SumCheck is the tool built for that one shape.\n\n### 4. The four-term sum  (no answer field)\n\nAdd them for real (the verifier is the party that does not want to).\n\n```python\nsum(g0(a, b) for a in (0, 1) for b in (0, 1)) % p\n```\n\n- **What this line means**: The sum over the four grid points.\n- **Answer**: none — feeds the next line; keep the value on screen\n- **Read once it prints**: Same number as line 1's output. That completes the setup; now the real thing — confirming this sum without adding the four terms. We could add them because there are four; read on as the verifier, for whom there are 2ᵏ.\n\n### 5. Round 1 — receive the prover's p₁  (no answer field)\n\nThe prover sends a one-variable polynomial p₁(t) = c0 + c1·t + c2·t² (coefficients c0, c1, c2 from inspect). The verifier looks only at p₁(0) + p₁(1).\n\n```python\nP1 = lambda t: (c0 + c1*t + c2*t**2) % p; (P1(0) + P1(1)) % p\n```\n\n- **What this line means**: The two-point sum of the polynomial that arrived.\n- **Answer**: none — feeds the next line; keep the value on screen\n- **Read once it prints**: It matches the claim (line 1's output). If p₁ really is \"sum over b, leave a as the variable\" — Σ_b g₀(t, b) — then p₁(0) + p₁(1) is literally the four-term sum (two terms at a = 0 plus two at a = 1), so agreement is automatic. The verifier did one addition of two points. The open question is whether p₁ really is that polynomial — a random point settles it next.\n\n### 6. A check — is p₁ genuine?  (no answer field)\n\nCompare p₁ with Σ_b g₀(t, b) at every t (a sanity check; the verifier never does this).\n\n```python\n[P1(t) == (g0(t, 0) + g0(t, 1)) % p for t in range(p)]\n```\n\n- **What this line means**: All p points compared.\n- **Answer**: none — feeds the next line; keep the value on screen\n- **Read once it prints**: All True — this deployment's prover is honest and p₁ is genuine. But checking all points is impossible in a real field with 2²⁵⁴ of them. So the verifier looks at one *random* point instead, next line. Why one point is enough: two different quadratics can agree on at most 2 points (their difference is a quadratic, and a quadratic has at most 2 roots — school factoring, extended). Chosen from p points, a lie is exposed with probability at least (p−2)/p.\n\n### 7. One random point r₁  (checkpoint `round1`)\n\nThe verifier picks r₁ (from inspect) and evaluates p₁(r₁). This becomes the next round's claim.\n\n```python\nP1(r1)\n```\n\n- **What this line means**: The received p₁, evaluated at r₁.\n- **Answer**: one integer, into checkpoint `round1`\n- **Read after it matches**: The next claim is \"Σ_b g₀(r₁, b) = this value\" — one variable is gone. That is the round pattern: a sum check (adding two points) → an evaluation at one random point → a new claim with one variable fixed. Repeat once per variable, and a 2ᵏ-term sum becomes k rounds.\n\n### 8. Round 2 — the prover's p₂  (no answer field)\n\nThe prover sends p₂(t) = b1·t + b2·t² (b1, b2 from inspect). The verifier again looks only at the two-point sum, against the previous round's claim.\n\n```python\nP2 = lambda t: (b1*t + b2*t**2) % p; (P2(0) + P2(1)) % p\n```\n\n- **What this line means**: The two-point sum of p₂.\n- **Answer**: none — feeds the next line; keep the value on screen\n- **Read once it prints**: The same number as line 7's p₁(r₁) — consistent. Again the verifier's work is one addition. With two variables, the whole grid sum has now been decomposed into two-point sums of one-variable polynomials. What remains is the final checkpoint: is p₂ genuine?\n\n### 9. The last point — the verifier computes g₀ once, itself  (checkpoint `final-check`)\n\nThe verifier picks r₂ and compares the prover's p₂(r₂) with its own evaluation g₀(r₁, r₂).\n\n```python\n(P2(r2), g0(r1, r2))\n```\n\n- **What this line means**: Left: the prover's polynomial. Right: the only value the verifier ever computes itself.\n- **Answer**: the tuple as `[a, b, ...]` (2 elements; `(a, b, ...)` also accepted), into checkpoint `final-check`\n- **Read after it matches**: Equal. Everything the verifier did: two two-point sums, two single evaluations, and one g₀ at the end. It never added the four terms. With 2ᵏ terms the rounds still number k (the variables) — that is SumCheck. Now switch sides and try to break this checkpoint as a lying prover.\n\n### 10. A lying prover — inflate the claim by d  (checkpoint `lie`)\n\nClaim the output is d more than it really is. To pass the sum check, add d·(1 − t) to p₁: +d at t = 0, +0 at t = 1, so the two-point sum grows by exactly d.\n\n```python\nP1c = lambda t: (P1(t) + d * (1 - t)) % p; ((P1c(0) + P1c(1)) % p, P1c(r1))\n```\n\n- **What this line means**: Left: the fake two-point sum (the inflated claim). Right: the fake polynomial at r₁.\n- **Answer**: the tuple as `[a, b, ...]` (2 elements; `(a, b, ...)` also accepted), into checkpoint `lie`\n- **Read after it matches**: The sum check agrees perfectly with the inflated claim — the sum check alone cannot stop a lie. But the fake is now a *different polynomial*, and its value at r₁ differs from line 7. The next round's claim becomes this fake value, and the prover must doctor p₂ too, to keep the story straight. One lie breeds the next.\n\n### 11. Where the cover-up ends — the last point  (checkpoint `lie-caught`)\n\nThe prover doctors p₂ as well and passes the sum check (sh covers the gap; m·t·(1−t) is a free term that leaves the two-point sum unchanged — m is in inspect). Then the verifier compares against its own g₀ at r₂.\n\n```python\nsh = (P1c(r1) - (P2(0) + P2(1))) % p; P2c = lambda t: (P2(t) + sh*(1 - t) + m*t*(1 - t)) % p; ((P2c(0) + P2c(1)) % p, P2c(r2), g0(r1, r2))\n```\n\n- **What this line means**: Left to right: the fake p₂′'s two-point sum (consistent), the fake at r₂, the verifier's own g₀.\n- **Answer**: the tuple as `[a, b, ...]` (3 elements; `(a, b, ...)` also accepted), into checkpoint `lie-caught`\n- **Read after it matches**: The first equals line 10's right value, so the sum check passes again. But the second ≠ the third — rejected at the one point the verifier computes itself. To sustain the lie the prover had to change the polynomial, and a different polynomial misses at a random point almost surely. \"The verifier computes one value with its own hands, once\" is what holds these twelve lines up.\n\n### 12. Count the r₂ that would have missed  (checkpoint `miss-points`)\n\nTry every r₂ in 0..p−1 and list where the fake agrees with the truth.\n\n```python\nsorted(t for t in range(p) if P2c(t) == g0(r1, t))\n```\n\n- **What this line means**: The list of r₂ values that let the lie through.\n- **Answer**: the list as `[a, b]`, ascending, into checkpoint `miss-points`\n- **Read after it matches**: Exactly two points. Fake p₂′ − truth = (1 − t)(sh + m·t) is a quadratic, so it has at most two zeros (t = 1, and the root of sh + m·t ≡ 0). The miss probability is 2/p — around ten percent in this toy field, effectively zero once the field has 2²⁵⁴ elements. Not \"always caught\" but \"asked at a random point, so almost surely caught\" — this probabilistic soundness is the shared foundation of every Week 4 scheme (GKR, STARK, PLONK).\n\n## Goal\n\nWhen all twelve lines pass, you have confirmed — **once each, on numbers you produced yourself** — the shape of a SumCheck round (sum check → random point → fix one variable), the fact that the verifier computes exactly one value with its own hands, and that a lie survives only at the 2 roots of (1 − t)(sh + m·t). This probabilistic soundness is the foundation under every Week 4 scheme (GKR, STARK, PLONK). The editor's `sumcheck_drill.py` is the fallback for people who cannot open Python: fill in the twelve functions and \"run the public tests\" prints this deployment's values.\n",
+      "writeup": "## The shape of this problem\n\nTwelve lines are typed; eight have an answer field. First you are the verifier, then the lying prover. The order: the circuit (1) → MLE (2) → the wiring polynomial (3–4) → round 1 (5–7) → round 2 and the final checkpoint (8–9) → the lie (10–12).\n\n## What each line protects\n\n- 1–4: the claim can be rewritten as \"a polynomial summed over the whole grid\" — the one shape SumCheck handles.\n- 5–7: the round pattern = a sum check (one addition of two points) → an evaluation at one random point → a new claim with one variable fixed.\n- 8–9: at the end the verifier computes g₀ once, itself. The four-term sum is never added.\n- 10–12: the sum check passes even for a lie — but a lie changes the polynomial, and a different polynomial misses at a random point. The misses are exactly the 2 roots of (1 − t)(sh + m·t): probability 2/p.\n\n## How it breaks\n\nThe MLE with the table swapped / the wrong corner in (1−a)·b / a dropped square / the subtraction in sh reversed — each shifts one value and stops at that line. Re-reading that line's \"what this line means\" is how this format teaches.\n\n## Where this leads\n\nSTARK's \"zero on all of H ⇔ divisible by Z_H\" and PLONK's grand product both end at the same \"ask at one random point\". GKR is this drill's round repeated once per layer. Once the Week 4 assignment is published, these twelve lines are its ready-made sanity checker.",
+      "learningGoals": [
+        "Stretch a two-cell table into a line by MLE and say why values off the grid exist",
+        "State the \"sum over the whole grid\" claim shape and that SumCheck handles exactly that shape",
+        "Run the round pattern (sum check → random point → fix one variable) twice with your own hands",
+        "Say, by counting the lines, that the verifier computes only the final g₀ itself",
+        "Demonstrate with an inflated claim that the sum check alone stops nothing and the random point does",
+        "List the misses as the 2 roots of (1 − t)(sh + m·t) and state the soundness error 2/p"
+      ],
+      "checks": [
+        {
+          "id": "circuit",
+          "label": "The circuit — two gates and the output",
+          "hints": [
+            {
+              "id": "circuit-hint-1",
+              "content": "y₀ is the addition, y₁ the multiplication, and all three need `% p`. The third is (y0 + y1) % p."
+            }
+          ]
+        },
+        {
+          "id": "mle",
+          "label": "Stretch the table into a line (MLE)",
+          "hints": [
+            {
+              "id": "mle-hint-1",
+              "content": "W1 = y0·(1−z) + y1·z. At z = 2 that is y0·(−1) + 2·y1, so keep the `% p` around the whole expression."
+            }
+          ]
+        },
+        {
+          "id": "grid",
+          "label": "Wire the gate into a polynomial — g₀ on the four grid points",
+          "hints": [
+            {
+              "id": "grid-hint-1",
+              "content": "Where (1−a)·b is 0 the value is 0. Only (0, 1) carries a value, and it is W1(0) + W1(1)."
+            }
+          ]
+        },
+        {
+          "id": "round1",
+          "label": "One random point r₁",
+          "hints": [
+            {
+              "id": "round1-hint-1",
+              "content": "P1(r1) = (c0 + c1·r1 + c2·r1²) % p, with r1 from inspect. Write the square as `r1*r1` or `r1**2`."
+            }
+          ]
+        },
+        {
+          "id": "final-check",
+          "label": "The last point — the verifier computes g₀ once, itself",
+          "hints": [
+            {
+              "id": "final-check-hint-1",
+              "content": "Left is P2(r2); right is g0(r1, r2) — mind the argument order (r1 first). The right answer is the same number twice."
+            }
+          ]
+        },
+        {
+          "id": "lie",
+          "label": "A lying prover — inflate the claim by d",
+          "hints": [
+            {
+              "id": "lie-hint-1",
+              "content": "P1c = P1 + d·(1−t). The first is (P1c(0) + P1c(1)) % p (= the claim + d), the second P1c(r1)."
+            }
+          ]
+        },
+        {
+          "id": "lie-caught",
+          "label": "Where the cover-up ends — the last point",
+          "hints": [
+            {
+              "id": "lie-caught-hint-1",
+              "content": "sh is \"the fake claim minus p₂'s two-point sum\". P2c = P2 + sh·(1−t) + m·t·(1−t). Only the third element is g0 — the verifier's own value."
+            }
+          ]
+        },
+        {
+          "id": "miss-points",
+          "label": "Count the r₂ that would have missed",
+          "hints": [
+            {
+              "id": "miss-points-hint-1",
+              "content": "`sorted(t for t in range(p) if P2c(t) == g0(r1, t))`. t = 1 is always in it (the cover's (1−t) factor vanishes there); the other point solves sh + m·t ≡ 0."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1052,6 +1052,110 @@
       }
     },
     {
+      "id": "ac26-w4-fri-drill",
+      "name": "1 行打って、出た値を貼る — FRI の折り畳みとクエリ検査",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "advanced-cryptography-2026",
+        "order": 425,
+        "chapter": "Week 4 / Drill: FRI folding"
+      },
+      "courseAlignment": {
+        "courseId": "advanced-cryptography-program",
+        "edition": "2026",
+        "week": 4,
+        "role": "mechanism",
+        "sources": [
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "c088f8e6f301dedcd80b6dd9c321a1cd83410637",
+            "path": "week4/README.md",
+            "kind": "lecture"
+          },
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "c088f8e6f301dedcd80b6dd9c321a1cd83410637",
+            "path": "week4/acp-2026-week4-redacted.pdf",
+            "kind": "slide"
+          }
+        ]
+      },
+      "difficulty": 3,
+      "estimatedDuration": "40-60 分",
+      "shortDescription": "手元の Python で 1 行打って、出た値を貼る。12 行で、コミット済み Q₀ の偶奇分解 → β で折って次数半分 → 定数まで → x と −x の開示から両半分を復元 → クエリ検査 → 同じ次数のすり替えが捕まる → 見逃しは ±x の 1 組だけ、を自分の手で出した数だけで通す。",
+      "tags": [
+        "advanced-cryptography-2026",
+        "week4",
+        "drill",
+        "fri",
+        "low-degree-test",
+        "folding",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "ac26-w4-plonk-drill",
+      "name": "1 行打って、出た値を貼る — PLONK の 2 本の制約と大積",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "advanced-cryptography-2026",
+        "order": 435,
+        "chapter": "Week 4 / Drill: PLONK's two constraints"
+      },
+      "courseAlignment": {
+        "courseId": "advanced-cryptography-program",
+        "edition": "2026",
+        "week": 4,
+        "role": "mechanism",
+        "sources": [
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "c088f8e6f301dedcd80b6dd9c321a1cd83410637",
+            "path": "week4/README.md",
+            "kind": "lecture"
+          },
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "c088f8e6f301dedcd80b6dd9c321a1cd83410637",
+            "path": "week4/acp-2026-week4-redacted.pdf",
+            "kind": "slide"
+          }
+        ]
+      },
+      "difficulty": 3,
+      "estimatedDuration": "40-60 分",
+      "shortDescription": "手元の Python で 1 行打って、出た値を貼る。12 行で、ゲート表 → ゲート方程式 → ゲートだけ守る嘘の表 → 番地と σ → 指紋の大積が正直な表で一致・嘘の表で不一致 → どの (β, γ) なら見逃したか、を自分の手で出した数だけで通す。",
+      "tags": [
+        "advanced-cryptography-2026",
+        "week4",
+        "drill",
+        "plonk",
+        "copy-constraint",
+        "grand-product",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "ac26-w4-proof-pipeline",
       "name": "9 層ある 1 個の箱",
       "category": "Challenge",
@@ -1090,6 +1194,58 @@
         "week4",
         "zkp",
         "proof-system",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
+      "id": "ac26-w4-sumcheck-drill",
+      "name": "1 行打って、出た値を貼る — SumCheck を 2 ラウンド回して嘘を数える",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "advanced-cryptography-2026",
+        "order": 405,
+        "chapter": "Week 4 / Drill: SumCheck by hand"
+      },
+      "courseAlignment": {
+        "courseId": "advanced-cryptography-program",
+        "edition": "2026",
+        "week": 4,
+        "role": "mechanism",
+        "sources": [
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "c088f8e6f301dedcd80b6dd9c321a1cd83410637",
+            "path": "week4/README.md",
+            "kind": "lecture"
+          },
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "c088f8e6f301dedcd80b6dd9c321a1cd83410637",
+            "path": "week4/acp-2026-week4-redacted.pdf",
+            "kind": "slide"
+          }
+        ]
+      },
+      "difficulty": 3,
+      "estimatedDuration": "40-60 分",
+      "shortDescription": "手元の Python で 1 行打って、出た値を貼る。12 行で、回路 → MLE → 配線の多項式 → 証明者の p₁・p₂ を 2 点の和とランダム 1 点で検査 → 最後の 1 点 → 嘘の証明者が水増しした主張の見逃しを数える、を自分の手で出した数だけで通す。",
+      "tags": [
+        "advanced-cryptography-2026",
+        "week4",
+        "drill",
+        "sumcheck",
+        "gkr",
+        "probabilistic-soundness",
         "local-play",
         "container"
       ],
