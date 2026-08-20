@@ -47,6 +47,10 @@ jobs:
     # catalog only grows, and a partition that clears it by two minutes is one problem
     # away from being cancelled again with no failing assertion to point at.
     #
+    # Five as of 2026-08-20: the four ac26 drill problems (#506/#507) grew the catalog to
+    # 40 local-play problems and shard 1/4 hit the cap — exactly the failure mode the
+    # paragraph above predicts. Same remedy as last time: a shard, not minutes.
+    #
     # The cap below is a runaway guard, not a budget. When the catalog grows, add a
     # shard rather than minutes; scripts/solvability-shard.test.ts checks the matrix and
     # the denominator stay in agreement, so a half-done bump fails loudly instead of
@@ -55,7 +59,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5]
     env:
       CI: "true"
       npm_config_ignore_scripts: "true"
@@ -81,7 +85,7 @@ jobs:
       - name: Run the deep solvability sweep
         run: |
           make solvability-sweep \
-            SOLVABILITY_SHARD=--shard=${{ matrix.shard }}/4 \
+            SOLVABILITY_SHARD=--shard=${{ matrix.shard }}/5 \
             SOLVABILITY_REPORT=reports/solvability-${{ matrix.shard }}.json \
             | tee "$RUNNER_TEMP/sweep.txt"
 
@@ -89,7 +93,7 @@ jobs:
         if: always()
         run: |
           {
-            echo "## Solvability sweep (shard ${{ matrix.shard }}/4)"
+            echo "## Solvability sweep (shard ${{ matrix.shard }}/5)"
             echo
             echo '```text'
             cat "$RUNNER_TEMP/sweep.txt" 2>/dev/null || echo "(no output produced)"
