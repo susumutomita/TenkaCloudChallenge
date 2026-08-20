@@ -1076,6 +1076,58 @@
       }
     },
     {
+      "id": "ac26-w4-sumcheck-drill",
+      "name": "1 行打って、出た値を貼る — SumCheck を 2 ラウンド回して嘘を数える",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "advanced-cryptography-2026",
+        "order": 405,
+        "chapter": "Week 4 / Drill: SumCheck by hand"
+      },
+      "courseAlignment": {
+        "courseId": "advanced-cryptography-program",
+        "edition": "2026",
+        "week": 4,
+        "role": "mechanism",
+        "sources": [
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "c088f8e6f301dedcd80b6dd9c321a1cd83410637",
+            "path": "week4/README.md",
+            "kind": "lecture"
+          },
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "c088f8e6f301dedcd80b6dd9c321a1cd83410637",
+            "path": "week4/acp-2026-week4-redacted.pdf",
+            "kind": "slide"
+          }
+        ]
+      },
+      "difficulty": 3,
+      "estimatedDuration": "40-60 分",
+      "shortDescription": "手元の Python で 1 行打って、出た値を貼る。12 行で、回路 → MLE → 配線の多項式 → 証明者の p₁・p₂ を 2 点の和とランダム 1 点で検査 → 最後の 1 点 → 嘘の証明者が水増しした主張の見逃しを数える、を自分の手で出した数だけで通す。",
+      "tags": [
+        "advanced-cryptography-2026",
+        "week4",
+        "drill",
+        "sumcheck",
+        "gkr",
+        "probabilistic-soundness",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "ac26-w5-cmux-blind-rotation",
       "name": "誰も知らない角度で回す",
       "category": "Challenge",

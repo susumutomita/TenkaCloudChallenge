@@ -140,6 +140,9 @@ order; `track.order` only sequences presentation.
 
 | Concept id | Meaning |
 | --- | --- |
+| `concept.sumcheck` | Checking a "sum over the whole grid" claim without adding, one variable per round |
+| `concept.multilinear-extension` | A grid table stretched into a polynomial with values off the grid |
+| `concept.probabilistic-soundness` | A lie survives only at the few roots of a low-degree difference — soundness error degree/field |
 | `concept.arithmetization` | Turning an execution trace into polynomial relations |
 | `concept.polynomial-commitment` | Committing to a polynomial, opening it at a point |
 | `concept.binding` | A commitment cannot later be opened to a different value |
@@ -353,6 +356,7 @@ a challenge teaches is a content decision, not a pin update.
 
 | Order | Problem id | Role | Teaches | Lecture slides | Issue |
 | --- | --- | --- | --- | --- | --- |
+| 405 | `ac26-w4-sumcheck-drill` | `mechanism` | `concept.sumcheck`, `concept.multilinear-extension`, `concept.probabilistic-soundness`, `concept.repl-drill` — twelve lines typed into the learner's own Python, nine as the verifier and three as the lying prover | 12–17 (IOP and GKR: MLE, the SumCheck rounds) | #494 |
 | 410 | `ac26-w4-arithmetization` | `transfer` | `concept.arithmetization`, `concept.execution-trace`, `concept.transition-constraint`, `concept.boundary-constraint`, `concept.evaluation-domain` | 19–21 (STARK: trace, AIR); adds the boundary constraint the toy AIR lacks | #230, #494 |
 | 420 | `ac26-w4-commit-open` | `transfer` | `concept.merkle-commitment`, `concept.commitment-binding`, `concept.challenge-ordering`, `concept.authentication-path` | 4 (commitment scheme), 10 and 12 (oracle ≈ commitment), 22 (Merkle) | #231, #494 |
 | 430 | `ac26-w4-proof-pipeline` | `transfer` | `concept.proof-pipeline-stage`, `concept.artifact-flow`, `concept.stage-contract`, `concept.trusted-setup`, `concept.transparent-setup`, `concept.succinctness` | 13, 19, 25 (three boxes), 33–34 (summary), the recurring cost question | #232, #494 |

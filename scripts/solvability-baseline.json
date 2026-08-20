@@ -110,6 +110,13 @@
       "type": "not-audited",
       "reason": "This problem is a drill: all eight checkpoints are direct answers (the value one line of Python prints against the deployment's numbers), so there is no code checkpoint for the code probes to run and nothing is lost by that -- every checkpoint is covered by the value probes through scripts/solvability/expected/ac26-w3-schnorr-drill.py (oracle, replay, sentinel, visible-field), which is the half with teeth for a direct-answer problem. The shipped reference/ and starter/ exist for the Portal's 'run the public tests' path only; local/mutation.py and scripts/ac26-w3-schnorr-drill.test.ts drive them (reference passes the hidden suite on 2000 seeds, starter fails the public tests, nineteen mutants killed).",
       "recordedAtSeeds": 500
+    },
+    {
+      "problem": "ac26-w4-sumcheck-drill",
+      "checkpoint": "-",
+      "type": "not-audited",
+      "reason": "This problem is a drill: all eight checkpoints are direct answers (the value one line of Python prints against the deployment's numbers), so there is no code checkpoint for the code probes to run and nothing is lost by that -- every checkpoint is covered by the value probes through scripts/solvability/expected/ac26-w4-sumcheck-drill.py (oracle, replay, sentinel, visible-field), which is the half with teeth for a direct-answer problem. The shipped reference/ and starter/ exist for the Portal's 'run the public tests' path only; local/mutation.py and scripts/ac26-w4-sumcheck-drill.test.ts drive them (reference passes the hidden suite on 2000 seeds, starter fails the public tests, twenty mutants killed).",
+      "recordedAtSeeds": 500
     }
   ],
   "open": []
