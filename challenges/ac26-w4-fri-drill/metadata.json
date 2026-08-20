@@ -1,0 +1,465 @@
+{
+  "id": "ac26-w4-fri-drill",
+  "name": "1 行打って、出た値を貼る — FRI の折り畳みとクエリ検査",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "advanced-cryptography-2026",
+    "order": 425,
+    "chapter": "Week 4 / Drill: FRI folding"
+  },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 4,
+    "role": "mechanism",
+    "spoilerPolicy": "independent-reimplementation",
+    "sources": [
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "c088f8e6f301dedcd80b6dd9c321a1cd83410637",
+        "path": "week4/README.md",
+        "kind": "lecture"
+      },
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "c088f8e6f301dedcd80b6dd9c321a1cd83410637",
+        "path": "week4/acp-2026-week4-redacted.pdf",
+        "kind": "slide"
+      }
+    ]
+  },
+  "difficulty": 3,
+  "estimatedDuration": "40-60 分",
+  "shortDescription": "手元の Python で 1 行打って、出た値を貼る。12 行で、コミット済み Q₀ の偶奇分解 → β で折って次数半分 → 定数まで → x と −x の開示から両半分を復元 → クエリ検査 → 同じ次数のすり替えが捕まる → 見逃しは ±x の 1 組だけ、を自分の手で出した数だけで通す。",
+  "description": "Week 4 のドリル。関数を書く問題ではなく、「1 行打って、出た値を貼る」を 12 行繰り返して、FRI — コミットした多項式の次数が低いことを数点の開示で確かめる手順 — を端から端まで回す。前半は正直な 1 周: コミット済みの Q₀ を偶数次と奇数次に分け、検証者の β で折って次数を半分にし、もう 1 回折って定数（平文で送れる）に落とし、クエリ点 x と −x の開示から連立方程式で両方の部分を復元して、Q₁ の開示と突き合わせる。後半は嘘: Q₁ の代わりに**同じ次数の別の多項式**をコミットするすり替えを仕込み、同じクエリ検査がそれを捕まえること、見逃しが ±x の 1 組だけであることを数える。\n\n形の根拠は ac26-w3-schnorr-drill / ac26-w4-sumcheck-drill / ac26-w4-plonk-drill と同じ（自習ノートで本人検証済みの「1 行打って、出た値を貼って、その値を指す 1 文を読む」）。手順は講義の FRI の節（スライド 22〜23）と同じで、講義の F₁₇ の数値例（Q₀ = 15 + 5X + 5X²、Q₁ = 5Y + 13、x = 8）は公開テスト part 1 に固定収録。deploy の値（体・Q₀ の係数・β・β₂・x・すり替えの差分）はすべて seed 由来で、見逃しの 2 点も deploy ごとに変わる。\n\n12 行のうち回答欄は 8 行（platform の checkpoint 上限）。回答欄の無い 4 行（偶奇の分解、全点の検算、すり替えの設定、正直なら全点で通る閉じの検算）は、値がその場の材料か構成上の確認で、意味は問題文がその場で説明する。すり替えの差分 d0 + d1·Y は「消える Y がちょうど 1 つ = 見逃しの x が ±1 組」になるよう d0 = −d1·s² の形で生成し、クエリ点は見逃しに落ちないことを全 seed で保証している。",
+  "instructions": "## 前提 — 中学・高校の数学から\n\n- **学校で習ったこと**: 展開すると (x)² と (−x)² は同じ（中 3）。だから多項式を偶数次と奇数次に分けると、Q(x) + Q(−x) では奇数次が消え、Q(x) − Q(−x) では偶数次が消える — ただの符号の相殺です。「未知数 2 つに式 2 本なら解ける」（中 2 の連立方程式）— x と −x の 2 点の開示から、偶数部分と奇数部分の両方が復元できる理由はこれだけ。「1 次式が 0 になる点は 1 つ」— 見逃しを数える行はこれで読めます。\n- **教材のどこ**: Week 4 講義スライド 22〜23 枚目（STARK: Merkle コミットメントと FRI — 偶奇分解、β での折り畳み、Q₁ = 5Y + 13 の例）。講義の F₁₇ の数値例（Q₀ = 15 + 5X + 5X²、β = 3、x = 8）は公開テストの part 1 にそのまま入っています。課題は WIP（公開され次第この問題から接続します）。\n- **1 桁の例**: F₁₇ で Q₀ = 15 + 5X + 5X²。偶数部分は 15 + 5Y、奇数部分は 5。β = 3 で折ると Q₁ = (15 + 3·5) + 5Y = 13 + 5Y — 次数 2 が 1 に。x = 8 の開示は (Q₀(8), Q₀(9)) = (1, 6) で、足して 2 で割ると 7·9... ではなく (1+6)·2⁻¹ = 7·9 = 63 ≡ 12 = Q_even(64 mod 17 = 13)。\n- **言葉**: FRI = 「コミットした多項式の次数が低いことを、数点の開示で確かめる手順」。折り畳み（fold）= 「偶数部分 + β·奇数部分 — 次数を半分にする 1 手」。クエリ = 「検証者が選んだ x と −x の 2 点を開示させ、各段の辻褄を見る検査」。開示（open）= 「コミットから特定の点の値を Merkle 経路つきで見せること」。\n\n## はじめに\n\n- この問題は関数を書く問題ではありません。**1 行打って、出た値を貼る**を繰り返します。12 行のうち 8 行に回答欄（checkpoint）があり、残り 4 行は「出たら読む」付きの材料です。\n- 使うのは手元の Python です。`python3` と打ち、「証拠を調べる」の代入文を貼ってから始めます。\n- 12 行で通る道: コミット済みの Q₀ → 偶数次と奇数次に分ける → 全点で検算 → β で折って次数半分 → もう 1 回折ると定数 → x と −x の 2 点を開かせる → 連立方程式で偶数部分と奇数部分を復元 → 復元した材料と Q₁ の開示を突き合わせる（クエリ検査）→ 嘘の折り畳みを仕込む → 同じ検査が嘘を捕まえる → 見逃しの x を数える → 正直なら全点で通る。\n- STARK の最後のピース「Q は本当に低次数か」を、Merkle の中身を全部開かずに確かめる手順が FRI です。前半で正直な折り畳みを 1 周し、後半で嘘の折り畳みがどの点で捕まるかを数えます。\n- 数は deploy ごとに変わります。ノートや他人の答えを写しても通りません。\n\n## 最初の一手\n\n**Participant Portal** で問題を起動し、**「証拠を調べる」** を押してください。体 p、コミット済みの Q₀ の係数 q0〜q3、検証者の折り畳みチャレンジ beta・beta2、クエリ点 x、嘘の折り畳みの差分 d0・d1 が、**そのまま Python に貼れる代入文**で表示されます。まずそれを全部 Python に貼ってください。ホスト側のターミナルは、その Python 1 つだけです。\n\n## 解き方 — 12 行\n\n各行: **打つ行**(コピーして貼る) → **この行の意味** → Python が出した値を **その checkpoint の回答欄に貼る** → 合ったら **「合ったら読む」** を読んで次へ。回答欄は 1 行の入力欄です。\n\n### 1. コミット済みの多項式 Q₀  (checkpoint `poly`)\n\nSTARK の商多項式 Q₀ が Merkle でコミットされた場面から始めます。係数は「証拠を調べる」の q0〜q3。証明者の主張は「Q₀ の次数は 3 以下」。まず手元に作って 3 点で評価します。\n\n```python\nQ = lambda X: (q0 + q1*X + q2*X**2 + q3*X**3) % p; (Q(0), Q(1), Q(2))\n```\n\n- **この行の意味**: Q₀ を 0, 1, 2 で評価。\n- **回答欄**: checkpoint `poly` に 組を `[a, b, ...]` の形で（`(a, b, ...)` でも可、要素 3 個）\n- **合ったら読む**: 検証者の残った仕事は「コミットされた Q₀ の次数が本当に低いか」の確認です。全点を開示させたら Merkle にした意味が無い。数点の開示だけで次数を確かめる — それが FRI（Fast Reed-Solomon IOP）で、これからの 11 行がその全部です。ここでは検証のために手元に Q₀ を持ちますが、本物の検証者は持っていません。\n\n### 2. 偶数次と奇数次に分ける  （回答欄なし）\n\nQ₀(X) = Q_even(X²) + X·Q_odd(X²)。偶数次の項 (q0, q2) と奇数次の項 (q1, q3) を分けると、次数 3 が次数 1 の 2 本になります。\n\n```python\nQe = lambda Y: (q0 + q2*Y) % p; Qo = lambda Y: (q1 + q3*Y) % p; (Qe(1), Qo(1))\n```\n\n- **この行の意味**: 偶数部分と奇数部分を Y = 1 で。\n- **回答欄**: なし — 次の行の材料。値は画面に残しておく\n- **出たら読む**: q0 + q2 と q1 + q3 が出ました。X² を新しい変数 Y と見ると、Q_even(Y) = q0 + q2·Y、Q_odd(Y) = q1 + q3·Y はどちらも 1 次 — **次数がちょうど半分**になっています。この分解が正しいことを次の行で全点で確かめます。\n\n### 3. 検算 — 分解は全点で成り立つか  （回答欄なし）\n\nQ₀(X) = Q_even(X²) + X·Q_odd(X²) を 0..p−1 の全部で（これは検算。検証者はやりません）。\n\n```python\n[Q(X) == (Qe(X*X % p) + X*Qo(X*X % p)) % p for X in range(p)]\n```\n\n- **この行の意味**: 全点で左辺と右辺を比較。\n- **回答欄**: なし — 次の行の材料。値は画面に残しておく\n- **出たら読む**: 全部 True。恒等式なので当然ですが、自分の手で確かめると「偶数次と奇数次に分けただけ」が腑に落ちます。ここからが FRI の本体: この 2 本を検証者の乱数で 1 本に混ぜて、次数を半分にします。\n\n### 4. 折り畳み — 検証者の β で 1 本に混ぜる  (checkpoint `fold`)\n\n検証者が β（「証拠を調べる」の beta）を選び、証明者は Q₁(Y) = Q_even(Y) + β·Q_odd(Y) を作って新しくコミットします。\n\n```python\nQ1 = lambda Y: (Qe(Y) + beta*Qo(Y)) % p; (Q1(0), Q1(1), Q1(2))\n```\n\n- **この行の意味**: 折り畳んだ Q₁ を 0, 1, 2 で。\n- **回答欄**: checkpoint `fold` に 組を `[a, b, ...]` の形で（`(a, b, ...)` でも可、要素 3 個）\n- **合ったら読む**: Q₁ は 1 次 — 次数 3 が 1 回の折り畳みで 1 になりました。β を検証者が選ぶのが肝心です: 証明者が先に Q₁ を固定してから β が来るので、「都合のいい混ぜ方」を仕込めません（commit → challenge の順序、Week 3 の Fiat-Shamir と同じ理屈）。折り畳むたびに次数が半分になるので、log 回で定数まで落ちます。\n\n### 5. もう 1 回折ると定数  (checkpoint `fold2`)\n\nQ₁ = c + d·Y をもう一度偶奇に分けると、偶数部分は定数 c、奇数部分は定数 d。2 つ目の乱数 β₂（beta2）で混ぜます。\n\n```python\nc, d = Q1(0), (Q1(1) - Q1(0)) % p; (c + beta2 * d) % p\n```\n\n- **この行の意味**: c = Q₁(0)、d は 1 次の係数。折り畳むと c + β₂·d。\n- **回答欄**: checkpoint `fold2` に 整数 1 つ\n- **合ったら読む**: 定数が 1 個出ました。定数はもうコミットする必要がなく、**平文でそのまま送れます**。ここで折り畳みの列が終わり、証明者の送ったものは「コミット 2 つ + 定数 1 個」。残る仕事は、この折り畳みが**本当に申告どおりに行われたか**を数点の開示で確かめること — それがクエリです。\n\n### 6. クエリ — x と −x の 2 点を開かせる  (checkpoint `query`)\n\n検証者がランダムな x（「証拠を調べる」の x）を選び、コミット済みの Q₀ から 2 点 Q₀(x) と Q₀(−x) を（Merkle 経路つきで）開示させます。\n\n```python\n(Q(x), Q((-x) % p))\n```\n\n- **この行の意味**: 開示された 2 つの値。\n- **回答欄**: checkpoint `query` に 組を `[a, b, ...]` の形で（`(a, b, ...)` でも可、要素 2 個）\n- **合ったら読む**: なぜ x と −x のペアなのか: x² = (−x)² なので、2 点は**同じ Y = x² の上**にあります。そして Q₀(x) = Q_even(x²) + x·Q_odd(x²)、Q₀(−x) = Q_even(x²) − x·Q_odd(x²) — 未知数 2 つ（偶数部分と奇数部分の値）に式が 2 本。連立方程式（中 2）で両方が復元できます。それが次の行。\n\n### 7. 2 点から偶数部分と奇数部分を復元  (checkpoint `recover`)\n\n足すと奇数部分が消え、引くと偶数部分が消えます。2 の逆元と (2x) の逆元で割って取り出し、直接計算と並べます。\n\n```python\ninv2 = pow(2, p - 2, p); re = (Q(x) + Q((-x) % p)) * inv2 % p; ro = (Q(x) - Q((-x) % p)) * pow(2*x, p - 2, p) % p; (re, ro, Qe(x*x % p), Qo(x*x % p))\n```\n\n- **この行の意味**: 左 2 つ: 開示 2 点から復元した値。右 2 つ: 直接計算（検算用 — 検証者はできない）。\n- **回答欄**: checkpoint `recover` に 組を `[a, b, ...]` の形で（`(a, b, ...)` でも可、要素 4 個）\n- **合ったら読む**: 復元と直接計算が一致。検証者は Q_even と Q_odd を**持っていないのに**、開示された 2 点だけからその値を作れました。和で奇数が消えるのは Q₀(x) + Q₀(−x) = 2·Q_even(x²) だから — 展開すれば中 3 の式変形です。これで「折り畳む前の材料」が検証者の手に入りました。\n\n### 8. クエリ検査 — 復元した材料と Q₁ の開示を突き合わせる  (checkpoint `consistency`)\n\n折り畳みが申告どおりなら、Q₁(x²) = Q_even(x²) + β·Q_odd(x²) のはず。左辺は Q₁ のコミットから開示させ、右辺は復元した re, ro から検証者が自分で組みます。\n\n```python\n((re + beta*ro) % p, Q1(x*x % p))\n```\n\n- **この行の意味**: 左: 復元材料から組んだ値。右: Q₁ の開示。\n- **回答欄**: checkpoint `consistency` に 組を `[a, b, ...]` の形で（`(a, b, ...)` でも可、要素 2 個）\n- **合ったら読む**: 一致 — この x での折り畳みは本物でした。これが FRI のクエリ 1 回分の全部です: Q₀ から 2 点、Q₁ から 1 点、足し引きと掛け算が数回。数か所で繰り返せば「コミットされた列は本当に半分の次数に折り畳まれている」に高い確信が持てます。次は、嘘の折り畳みがこの検査にどう捕まるかを見ます。\n\n### 9. 嘘の折り畳み — 別の低次多項式にすり替える  （回答欄なし）\n\n証明者が Q₁ の代わりに Q₁′ = Q₁ + d0 + d1·Y をコミットしたとします（d0, d1 は「証拠を調べる」の値）。次数は同じ 1 次 — 次数だけ見ても分かりません。\n\n```python\nQ1c = lambda Y: (Q1(Y) + d0 + d1*Y) % p; (Q1c(0), Q1c(1))\n```\n\n- **この行の意味**: すり替えた Q₁′ の 2 点。\n- **回答欄**: なし — 次の行の材料。値は画面に残しておく\n- **出たら読む**: Q₁′ も立派な 1 次式なので、「低次数であること」自体は満たしています。FRI が捕まえるのは「低次数でない」だけではなく、**「折り畳みの材料と辻褄が合わない」**です。クエリ検査の右辺が Q₁′ の開示になると何が起きるか — 次の行。\n\n### 10. クエリ検査が嘘を捕まえる  (checkpoint `cheat-caught`)\n\n同じ x で、復元した材料と Q₁′ の開示を突き合わせます。\n\n```python\n((re + beta*ro) % p, Q1c(x*x % p))\n```\n\n- **この行の意味**: 左: 復元材料から組んだ値（8 行目と同じ）。右: すり替えた Q₁′ の開示。\n- **回答欄**: checkpoint `cheat-caught` に 組を `[a, b, ...]` の形で（`(a, b, ...)` でも可、要素 2 個）\n- **合ったら読む**: ずれました。左辺は Q₀ の開示から組んだ値なので、証明者が Q₁ をすり替えても動きません。ずれの正体は d0 + d1·x² — すり替えの差がそのまま現れます。Q₀ と Q₁ は**別々にコミット済み**なので、後からどちらかを都合よく直すこともできない（binding、Week 4 の commit-open の話）。嘘はこの 1 点で拒否されました。\n\n### 11. どの x なら見逃したか — 数える  (checkpoint `miss-points`)\n\nx を 1..p−1 の全部で試して、すり替えが検査を通ってしまう点を列挙します。\n\n```python\nsorted(xx for xx in range(1, p) if (d0 + d1 * (xx*xx % p)) % p == 0)\n```\n\n- **この行の意味**: ずれ d0 + d1·x² が 0 になる x の一覧。\n- **回答欄**: checkpoint `miss-points` に 組を `[a, b, ...]` の形で（`(a, b, ...)` でも可、要素 2 個）\n- **合ったら読む**: ちょうど 2 点（±x のペア 1 組）だけ。ずれは Y = x² の 1 次式なので、消える Y は 1 つ、対応する x は ±1 組です。見逃し確率は 2/(p−1) — クエリを k 回別々の x で繰り返せば (2/(p−1))ᵏ に落ちます。SumCheck の 2 点、PLONK の「指紋が 0」と同じく、**嘘が生き残れる場所は少数の点だけ**という確率的健全性です。\n\n### 12. 正直なら全点で通る — 閉じの検算  （回答欄なし）\n\n本物の Q₁ で、クエリ検査に失敗する x があるか全部見ます。\n\n```python\n[xx for xx in range(1, p) if ((Q(xx) + Q((-xx) % p)) * inv2 + beta * (Q(xx) - Q((-xx) % p)) * pow(2*xx, p - 2, p) - Q1(xx*xx % p)) % p != 0]\n```\n\n- **この行の意味**: 正直な折り畳みで検査に落ちる x の一覧。\n- **回答欄**: なし — 次の行の材料。値は画面に残しておく\n- **出たら読む**: 空 — 正直なら**どの x でも**通ります（完全性）。まとめると FRI は: 偶奇に分けて β で混ぜる（次数半分）→ 定数まで折る → x と −x の開示から材料を復元して各段の辻褄を数点で検査。STARK の「Q は低次数か」はこれで閉じ、Week 4 の 3 スキームの部品が全部そろいました。\n\n## ゴール\n\n12 行が全部通れば、偶奇分解が符号の相殺だけでできること、折り畳み 1 回で次数が半分になり log 回で定数に落ちること、x と −x の 2 点から折り畳みの材料が復元できること、クエリ検査が「低次数のすり替え」さえ捕まえること、見逃しが ±x の 1 組だけであることを、**自分の手で出した数で 1 回ずつ**確かめたことになります。SumCheck の 2 点・PLONK の「指紋が 0」と同じ確率的健全性の、FRI での姿です。エディタの `fri_drill.py` は Python を開けない人のための代替で、12 関数を埋めれば「公開テストを実行」がこの deploy の値を出します。\n",
+  "writeup": "## この問題の形\n\n12 行を打ち、8 行に回答欄があります。順番は、コミット済みの Q₀（1）→ 偶奇分解（2〜3）→ 折り畳み（4〜5）→ クエリと復元（6〜8）→ すり替え（9〜10）→ 見逃しと完全性（11〜12）。\n\n## 各行が守っているもの\n\n- 1〜3: 偶奇分解はただの係数の仕分けで、恒等式 Q₀(X) = Q_even(X²) + X·Q_odd(X²) が全点で成り立つ。\n- 4〜5: 折り畳み = 偶数部分 + β·奇数部分。次数が半分になり、log 回で定数。β は commit の後に来る（順序が健全性を支える）。\n- 6〜8: x² = (−x)² なので 2 点は同じ Y の上。和と差で両半分が復元でき、Q₁ の開示と突き合わせられる — クエリ 1 回の全部。\n- 9〜10: 次数だけ見ても捕まらないすり替えが、材料との辻褄（クエリ検査）で捕まる。左辺は Q₀ の開示由来なので動かせない。\n- 11〜12: 見逃しは差分 d0 + d1·x² の根 = ±x の 1 組だけ。正直なら全点で通る（完全性）。\n\n## 間違えるとどう壊れるか\n\n奇数部分を偶数の係数で作る／折り畳みで両半分を逆にする／(2x)⁻¹ を x⁻¹ にする／2 点目を Q(x) にする — どれも値が 1 つずれて、その行で止まります。\n\n## 次への接続\n\nSTARK は「トレース → 制約 → 商 Q → Merkle → FRI」で閉じます。SumCheck の 2 点・PLONK の「指紋が 0」と同じく、嘘が生き残れるのは少数の点だけ — Week 4 の 3 スキームは全部この確率的健全性の上に立っています。",
+  "tags": [
+    "advanced-cryptography-2026",
+    "week4",
+    "drill",
+    "fri",
+    "low-degree-test",
+    "folding",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18135,
+      "name": "Portal editor API + /verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "多項式を偶数次と奇数次に分け、Q₀(X) = Q_even(X²) + X·Q_odd(X²) を恒等式として確かめられる",
+    "折り畳み（偶数部分 + β·奇数部分）で次数が半分になり、log 回で定数に落ちることを実演できる",
+    "x と −x の 2 点の開示から、連立方程式で偶数部分と奇数部分を復元できる",
+    "復元した材料と Q₁ の開示を突き合わせるクエリ検査を、1 回分まるごと自分の手で回せる",
+    "次数の等しいすり替えがクエリ検査で捕まることと、その理由（左辺は Q₀ の開示由来）を言える",
+    "見逃しが差分の根 ±x の 1 組だけであることを列挙で確かめ、クエリ k 回で (2/(p−1))ᵏ に落ちると言える"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.ac26-w4-fri-drill.fold-lines",
+        "description": "偶奇分解と β での折り畳みを 1 行ずつ出し、次数が半分になることを確かめられる。"
+      },
+      {
+        "id": "lo.ac26-w4-fri-drill.query-lines",
+        "description": "x と −x の開示から両半分を復元し、Q₁ の開示との辻褄をクエリ検査で確かめられる。"
+      },
+      {
+        "id": "lo.ac26-w4-fri-drill.cheat-lines",
+        "description": "同じ次数のすり替えを仕込み、クエリ検査がそれを捕まえることを確かめられる。"
+      },
+      {
+        "id": "lo.ac26-w4-fri-drill.miss-line",
+        "description": "見逃しの x を列挙し、±x の 1 組だけであることと確率を言える。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.fri-folding",
+        "description": "偶数部分 + β·奇数部分で次数を半分にする 1 手。log 回繰り返すと定数に落ち、定数は平文で送れる。"
+      },
+      {
+        "id": "concept.low-degree-test",
+        "description": "コミットした列が低次数の多項式であることを、全点を開かずに数点の開示で確かめる検査。"
+      },
+      {
+        "id": "concept.query-consistency",
+        "description": "x と −x の開示から復元した材料と、次の段の開示との辻褄を見るクエリ検査。すり替えは材料と合わない。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.ac26-w4-fri-drill.poly",
+        "description": "コミット済みの多項式 Q₀の値を、この deploy の数で自分の Python から出して貼れた。"
+      },
+      {
+        "id": "assessment.ac26-w4-fri-drill.fold",
+        "description": "折り畳み — 検証者の β で 1 本に混ぜるの値を、この deploy の数で自分の Python から出して貼れた。"
+      },
+      {
+        "id": "assessment.ac26-w4-fri-drill.fold2",
+        "description": "もう 1 回折ると定数の値を、この deploy の数で自分の Python から出して貼れた。"
+      },
+      {
+        "id": "assessment.ac26-w4-fri-drill.query",
+        "description": "クエリ — x と −x の 2 点を開かせるの値を、この deploy の数で自分の Python から出して貼れた。"
+      },
+      {
+        "id": "assessment.ac26-w4-fri-drill.recover",
+        "description": "2 点から偶数部分と奇数部分を復元の値を、この deploy の数で自分の Python から出して貼れた。"
+      },
+      {
+        "id": "assessment.ac26-w4-fri-drill.consistency",
+        "description": "クエリ検査 — 復元した材料と Q₁ の開示を突き合わせるの値を、この deploy の数で自分の Python から出して貼れた。"
+      },
+      {
+        "id": "assessment.ac26-w4-fri-drill.cheat-caught",
+        "description": "クエリ検査が嘘を捕まえるの値を、この deploy の数で自分の Python から出して貼れた。"
+      },
+      {
+        "id": "assessment.ac26-w4-fri-drill.miss-points",
+        "description": "どの x なら見逃したか — 数えるの値を、この deploy の数で自分の Python から出して貼れた。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.fri-checks-degree-directly",
+        "description": "FRI が「次数を直接測る」と思う。実際は折り畳みの各段の辻褄を数点で見るだけで、次数の低いすり替えも辻褄で捕まる。"
+      },
+      {
+        "id": "misconception.opening-everything",
+        "description": "検証者がコミットの中身を全部見ると思う。開くのはクエリ点の x・−x と各段の 1 点だけ — 全部開いたらコミットの意味が無い。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w4-fri-drill",
+      "target": "lo.ac26-w4-fri-drill.fold-lines"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w4-fri-drill",
+      "target": "lo.ac26-w4-fri-drill.query-lines"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w4-fri-drill",
+      "target": "lo.ac26-w4-fri-drill.cheat-lines"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w4-fri-drill",
+      "target": "lo.ac26-w4-fri-drill.miss-line"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w4-fri-drill",
+      "target": "concept.fri-folding"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w4-fri-drill",
+      "target": "concept.low-degree-test"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w4-fri-drill",
+      "target": "concept.query-consistency"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w4-fri-drill",
+      "target": "concept.probabilistic-soundness"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w4-fri-drill",
+      "target": "concept.repl-drill"
+    },
+    {
+      "type": "requires",
+      "source": "problem.ac26-w4-fri-drill",
+      "target": "concept.finite-field"
+    },
+    {
+      "type": "requires",
+      "source": "problem.ac26-w4-fri-drill",
+      "target": "concept.polynomial-commitment"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w4-fri-drill",
+      "target": "assessment.ac26-w4-fri-drill.poly"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w4-fri-drill",
+      "target": "assessment.ac26-w4-fri-drill.fold"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w4-fri-drill",
+      "target": "assessment.ac26-w4-fri-drill.fold2"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w4-fri-drill",
+      "target": "assessment.ac26-w4-fri-drill.query"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w4-fri-drill",
+      "target": "assessment.ac26-w4-fri-drill.recover"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w4-fri-drill",
+      "target": "assessment.ac26-w4-fri-drill.consistency"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w4-fri-drill",
+      "target": "assessment.ac26-w4-fri-drill.cheat-caught"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w4-fri-drill",
+      "target": "assessment.ac26-w4-fri-drill.miss-points"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w4-fri-drill",
+      "target": "misconception.fri-checks-degree-directly"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w4-fri-drill",
+      "target": "misconception.opening-everything"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18135/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "poly",
+        "label": "コミット済みの多項式 Q₀",
+        "points": 20,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "poly-hint-1",
+            "content": "X³ は `X**3`。式全体に `% p`。3 点は 0, 1, 2 の順です。",
+            "penalty": 6
+          }
+        ]
+      },
+      {
+        "id": "fold",
+        "label": "折り畳み — 検証者の β で 1 本に混ぜる",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "fold-hint-1",
+            "content": "Q1 = Qe + beta·Qo。Y に入れるのは 0, 1, 2 そのまま（x² ではありません — Y が新しい変数）。",
+            "penalty": 6
+          }
+        ]
+      },
+      {
+        "id": "fold2",
+        "label": "もう 1 回折ると定数",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "fold2-hint-1",
+            "content": "c = Q1(0)、d = (Q1(1) − Q1(0)) % p が 1 次の係数。答えは (c + beta2·d) % p の 1 個の数。",
+            "penalty": 6
+          }
+        ]
+      },
+      {
+        "id": "query",
+        "label": "クエリ — x と −x の 2 点を開かせる",
+        "points": 20,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "query-hint-1",
+            "content": "2 点目は Q((-x) % p) — 括弧を忘れると Python の演算順序で壊れます。",
+            "penalty": 6
+          }
+        ]
+      },
+      {
+        "id": "recover",
+        "label": "2 点から偶数部分と奇数部分を復元",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "recover-hint-1",
+            "content": "和 × 2⁻¹ が偶数部分、差 × (2x)⁻¹ が奇数部分。逆元は `pow(2, p - 2, p)` と `pow(2*x, p - 2, p)`。4 つ組で、後ろ 2 つは検算用の直接計算。",
+            "penalty": 6
+          }
+        ]
+      },
+      {
+        "id": "consistency",
+        "label": "クエリ検査 — 復元した材料と Q₁ の開示を突き合わせる",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "consistency-hint-1",
+            "content": "左は (re + beta·ro) % p、右は Q1(x*x % p)。同じ数が 2 つ並ぶのが正解です。",
+            "penalty": 6
+          }
+        ]
+      },
+      {
+        "id": "cheat-caught",
+        "label": "クエリ検査が嘘を捕まえる",
+        "points": 30,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "cheat-caught-hint-1",
+            "content": "左は 8 行目と同じ値（Q₀ の開示から組んだので動かない）。右だけ Q1c(x*x % p) に変わり、ずれます。",
+            "penalty": 6
+          }
+        ]
+      },
+      {
+        "id": "miss-points",
+        "label": "どの x なら見逃したか — 数える",
+        "points": 30,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "miss-points-hint-1",
+            "content": "d0 + d1·x² ≡ 0 になる x を 1..p−1 で探す。±x のペア 1 組（2 個）が出ます。`sorted(...)` で小さい順に。",
+            "penalty": 6
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Type one line, paste the value — FRI folding and the query check",
+      "shortDescription": "Type one line in your own Python, paste the value it prints. Twelve lines: split the committed Q₀ even/odd → fold with β, halving the degree → down to a constant → recover both halves from the openings at x and −x → the query check → a same-degree swap gets caught → the misses are one ±x pair — on numbers you produced yourself.",
+      "description": "A Week 4 drill. Not a write-a-function problem: you type one line, paste the value it prints, twelve times, and run FRI — checking a committed polynomial's degree from a few openings — end to end. First an honest lap: split the committed Q₀ into even and odd parts, fold with the verifier's β to halve the degree, fold once more to a constant (sent in the clear), recover both halves from the openings at x and −x by simultaneous equations, and set them against Q₁'s opening. Then the lie: swap in a **different polynomial of the same degree** for Q₁, watch the same query check catch it, and count that the misses are a single ±x pair.\n\nThe format matches ac26-w3-schnorr-drill / ac26-w4-sumcheck-drill / ac26-w4-plonk-drill (the learner-validated \"type one line, paste the value, read the one sentence about that value\"). The procedure follows the lecture's FRI section (slides 22–23), and the lecture's F₁₇ numbers (Q₀ = 15 + 5X + 5X², Q₁ = 5Y + 13, x = 8) sit verbatim in the public test's part 1. The deployment's values — the field, Q₀'s coefficients, β, β₂, x, the swap's difference — are all seed-derived, and so are the two miss points.\n\nEight of the twelve lines have an answer field (the platform's per-problem maximum). The four ungraded lines (the even/odd split, the all-points check, the swap's setup, the closing completeness sweep) are material or construction-level confirmations, explained in place. The swap's difference d0 + d1·Y is generated as d0 = −d1·s² so its vanishing Y is exactly one square — one ±x miss pair — and the query point is guaranteed off the miss pair on every seed.",
+      "instructions": "## Before you start — from school math\n\n- **What you already know**: (x)² and (−x)² are the same (school expansion). So after splitting a polynomial into even and odd parts, the odd part cancels in Q(x) + Q(−x) and the even part in Q(x) − Q(−x) — pure sign cancellation. \"Two unknowns, two equations — solvable\" (simultaneous equations): that alone is why the two openings at x and −x recover both halves. \"A degree-1 expression vanishes at one point\" — the miss-counting line reads with just that.\n- **Where in the course**: Week 4 lecture slides 22–23 (STARK: Merkle commitment and FRI — the even/odd split, folding with β, the Q₁ = 5Y + 13 example). The lecture's F₁₇ numbers (Q₀ = 15 + 5X + 5X², β = 3, x = 8) sit verbatim in the public test's part 1. The assignment is still WIP; this problem connects to it once published.\n- **A one-digit example**: over F₁₇, Q₀ = 15 + 5X + 5X² splits into even 15 + 5Y and odd 5. Folding with β = 3 gives Q₁ = (15 + 3·5) + 5Y = 13 + 5Y — degree 2 down to 1. The query x = 8 opens (Q₀(8), Q₀(9)) = (1, 6), and (1 + 6)·2⁻¹ = 7·9 = 63 ≡ 12 = Q_even(64 mod 17 = 13).\n- **Words**: FRI = \"a procedure that checks a committed polynomial's degree is low, from a few openings\". fold = \"even part + β·odd part — one move that halves the degree\". query = \"open the verifier's chosen x and −x and check each stage's consistency\". open = \"reveal one point's value from the commitment, with its Merkle path\".\n\n## Start here\n\n- This is not a write-a-function problem. You **type one line, paste the value it prints**, over and over. Eight of the twelve lines have an answer field (a checkpoint); the other four are material with \"read once it prints\".\n- You use your own Python: type `python3` and paste the assignment statements from inspect first.\n- The twelve lines walk: the committed Q₀ → split even/odd → check the split everywhere → fold with β, halving the degree → fold once more to a constant → open x and −x → recover both halves by simultaneous equations → set the recovered material against Q₁'s opening (the query check) → plant a dishonest fold → the same check catches it → count the x that would have missed → honesty passes everywhere.\n- FRI is STARK's last piece — \"is Q really low-degree\" — checked without opening the whole Merkle tree. You run one honest lap first, then count exactly where a dishonest fold gets caught.\n- Numbers change per deployment. Copying notes or someone else's answers does not pass.\n\n## First move\n\nStart the problem in the **Participant Portal** and press **inspect**. It shows the field p, the committed Q₀'s coefficients q0–q3, the verifier's folding challenges beta and beta2, the query point x, and the dishonest fold's difference d0, d1 — all as **assignment statements you can paste straight into Python**. Paste them all first. The only terminal you need is that one Python.\n\n## Workflow — twelve lines\n\nEach line: **the line to type** (copy and paste) → **what this line means** → paste the value Python printed into **that checkpoint's answer field** → once it matches, read **\"read after it matches\"** and move on. Answer fields are one-line inputs.\n\n### 1. The committed polynomial Q₀  (checkpoint `poly`)\n\nStart where STARK left off: the quotient Q₀ is Merkle-committed. Coefficients q0–q3 from inspect. The prover's claim: deg Q₀ ≤ 3. Build it and evaluate at three points.\n\n```python\nQ = lambda X: (q0 + q1*X + q2*X**2 + q3*X**3) % p; (Q(0), Q(1), Q(2))\n```\n\n- **What this line means**: Q₀ at 0, 1, 2.\n- **Answer**: the tuple as `[a, b, ...]` (3 elements; `(a, b, ...)` also accepted), into checkpoint `poly`\n- **Read after it matches**: What remains for the verifier is checking that the committed Q₀ really has low degree. Opening every point would defeat the Merkle commitment; checking the degree from a few openings is FRI (Fast Reed-Solomon IOP) — the rest of these twelve lines. We hold Q₀ locally to check our own work; the real verifier never does.\n\n### 2. Split into even and odd parts  (no answer field)\n\nQ₀(X) = Q_even(X²) + X·Q_odd(X²): separating the even-degree coefficients (q0, q2) from the odd ones (q1, q3) turns one degree-3 polynomial into two of degree 1.\n\n```python\nQe = lambda Y: (q0 + q2*Y) % p; Qo = lambda Y: (q1 + q3*Y) % p; (Qe(1), Qo(1))\n```\n\n- **What this line means**: The even and odd parts at Y = 1.\n- **Answer**: none — feeds the next line; keep the value on screen\n- **Read once it prints**: q0 + q2 and q1 + q3. Reading X² as a new variable Y, both Q_even(Y) = q0 + q2·Y and Q_odd(Y) = q1 + q3·Y have degree 1 — **exactly half**. The next line confirms the split at every point.\n\n### 3. A check — the split holds everywhere  (no answer field)\n\nQ₀(X) = Q_even(X²) + X·Q_odd(X²) over all of 0..p−1 (a sanity check; the verifier never does this).\n\n```python\n[Q(X) == (Qe(X*X % p) + X*Qo(X*X % p)) % p for X in range(p)]\n```\n\n- **What this line means**: Both sides at every point.\n- **Answer**: none — feeds the next line; keep the value on screen\n- **Read once it prints**: All True — it is an identity, but checking it by hand makes \"just the even and odd parts\" concrete. Now FRI proper: mix the two halves into one with the verifier's randomness, halving the degree.\n\n### 4. Fold — mix into one with the verifier's β  (checkpoint `fold`)\n\nThe verifier picks β (beta in inspect); the prover forms Q₁(Y) = Q_even(Y) + β·Q_odd(Y) and commits to it.\n\n```python\nQ1 = lambda Y: (Qe(Y) + beta*Qo(Y)) % p; (Q1(0), Q1(1), Q1(2))\n```\n\n- **What this line means**: The folded Q₁ at 0, 1, 2.\n- **Answer**: the tuple as `[a, b, ...]` (3 elements; `(a, b, ...)` also accepted), into checkpoint `fold`\n- **Read after it matches**: Q₁ has degree 1 — one fold took the degree from 3 to 1. That the *verifier* picks β is the point: the prover commits before β arrives, so no convenient mixing can be engineered (commit before challenge — the same ordering logic as Week 3's Fiat–Shamir). Each fold halves the degree, so log-many folds reach a constant.\n\n### 5. Fold once more — a constant  (checkpoint `fold2`)\n\nSplit Q₁ = c + d·Y even/odd again: the even part is the constant c, the odd part the constant d. Mix with the second randomness β₂ (beta2).\n\n```python\nc, d = Q1(0), (Q1(1) - Q1(0)) % p; (c + beta2 * d) % p\n```\n\n- **What this line means**: c = Q₁(0), d the linear coefficient; the fold is c + β₂·d.\n- **Answer**: one integer, into checkpoint `fold2`\n- **Read after it matches**: A single constant. A constant needs no commitment — **it is sent in the clear**. The folding chain ends here: the prover has sent two commitments and one constant. What remains is checking that the folds were performed **as declared**, from a few openings — the queries.\n\n### 6. Query — open the pair x and −x  (checkpoint `query`)\n\nThe verifier picks a random x (from inspect) and has the prover open Q₀(x) and Q₀(−x) from the commitment (with Merkle paths).\n\n```python\n(Q(x), Q((-x) % p))\n```\n\n- **What this line means**: The two opened values.\n- **Answer**: the tuple as `[a, b, ...]` (2 elements; `(a, b, ...)` also accepted), into checkpoint `query`\n- **Read after it matches**: Why the pair x, −x: since x² = (−x)², both points sit **over the same Y = x²**. And Q₀(x) = Q_even(x²) + x·Q_odd(x²) while Q₀(−x) = Q_even(x²) − x·Q_odd(x²) — two equations, two unknowns (the even and odd values). Simultaneous equations recover both. Next line.\n\n### 7. Recover the even and odd parts from the two openings  (checkpoint `recover`)\n\nAdding kills the odd part; subtracting kills the even part. Divide by 2 and by 2x (their inverses) and set the results beside the direct computation.\n\n```python\ninv2 = pow(2, p - 2, p); re = (Q(x) + Q((-x) % p)) * inv2 % p; ro = (Q(x) - Q((-x) % p)) * pow(2*x, p - 2, p) % p; (re, ro, Qe(x*x % p), Qo(x*x % p))\n```\n\n- **What this line means**: First two: recovered from the openings. Last two: computed directly (our check — the verifier cannot).\n- **Answer**: the tuple as `[a, b, ...]` (4 elements; `(a, b, ...)` also accepted), into checkpoint `recover`\n- **Read after it matches**: They agree. The verifier does **not have** Q_even or Q_odd, yet built their values from two openings alone. The odd part cancels in the sum because Q₀(x) + Q₀(−x) = 2·Q_even(x²) — school algebra once expanded. The raw material of the fold is now in the verifier's hands.\n\n### 8. The query check — recovered material vs the opening of Q₁  (checkpoint `consistency`)\n\nIf the fold was honest, Q₁(x²) = Q_even(x²) + β·Q_odd(x²). The left side is opened from Q₁'s commitment; the right side the verifier assembles itself from re, ro.\n\n```python\n((re + beta*ro) % p, Q1(x*x % p))\n```\n\n- **What this line means**: Left: assembled from the recovered material. Right: Q₁'s opening.\n- **Answer**: the tuple as `[a, b, ...]` (2 elements; `(a, b, ...)` also accepted), into checkpoint `consistency`\n- **Read after it matches**: Equal — the fold at this x is genuine. That is one complete FRI query: two openings of Q₀, one of Q₁, a few additions and multiplications. Repeated at a handful of points it gives high confidence that the committed sequence really folds down in degree. Next: how a dishonest fold gets caught by this very check.\n\n### 9. A dishonest fold — swap in a different low-degree polynomial  (no answer field)\n\nSuppose the prover commits Q₁′ = Q₁ + d0 + d1·Y instead (d0, d1 from inspect). Same degree 1 — degree alone cannot tell.\n\n```python\nQ1c = lambda Y: (Q1(Y) + d0 + d1*Y) % p; (Q1c(0), Q1c(1))\n```\n\n- **What this line means**: Two points of the swapped Q₁′.\n- **Answer**: none — feeds the next line; keep the value on screen\n- **Read once it prints**: Q₁′ is a perfectly good degree-1 polynomial, so \"is low-degree\" is satisfied. What FRI catches is not only high degree but **inconsistency with the fold's raw material**. What happens when the query check's right side opens Q₁′ instead — next line.\n\n### 10. The query check catches the lie  (checkpoint `cheat-caught`)\n\nSame x: the recovered material against the opening of Q₁′.\n\n```python\n((re + beta*ro) % p, Q1c(x*x % p))\n```\n\n- **What this line means**: Left: assembled from recovered material (same as line 8). Right: the swapped Q₁′'s opening.\n- **Answer**: the tuple as `[a, b, ...]` (2 elements; `(a, b, ...)` also accepted), into checkpoint `cheat-caught`\n- **Read after it matches**: They differ. The left side is built from Q₀'s openings, so swapping Q₁ cannot move it. The gap is exactly d0 + d1·x² — the swap's difference, in the open. And since Q₀ and Q₁ are **committed separately**, neither can be conveniently revised afterwards (binding — Week 4's commit-open). The lie is rejected at this one point.\n\n### 11. Count the x that would have missed  (checkpoint `miss-points`)\n\nTry every x in 1..p−1 and list where the swap passes the check.\n\n```python\nsorted(xx for xx in range(1, p) if (d0 + d1 * (xx*xx % p)) % p == 0)\n```\n\n- **What this line means**: The x where the gap d0 + d1·x² vanishes.\n- **Answer**: the tuple as `[a, b, ...]` (2 elements; `(a, b, ...)` also accepted), into checkpoint `miss-points`\n- **Read after it matches**: Exactly two (one ±x pair). The gap is degree 1 in Y = x², so it vanishes at one Y — one pair of x. The miss probability is 2/(p−1), and k queries at independent x drive it to (2/(p−1))ᵏ. Like SumCheck's two points and PLONK's zeroed fingerprint: **a lie survives only on a small set of points** — probabilistic soundness again.\n\n### 12. Honest folds pass everywhere — the closing check  (no answer field)\n\nWith the genuine Q₁, look for any x where the query check fails.\n\n```python\n[xx for xx in range(1, p) if ((Q(xx) + Q((-xx) % p)) * inv2 + beta * (Q(xx) - Q((-xx) % p)) * pow(2*xx, p - 2, p) - Q1(xx*xx % p)) % p != 0]\n```\n\n- **What this line means**: The x where an honest fold fails.\n- **Answer**: none — feeds the next line; keep the value on screen\n- **Read once it prints**: Empty — honesty passes at **every** x (completeness). In sum, FRI: split even/odd and mix with β (degree halves) → fold to a constant → recover the material from x/−x openings and spot-check each stage's consistency. STARK's \"is Q low-degree\" closes here, and every part of Week 4's three schemes is now in your hands.\n\n## Goal\n\nWhen all twelve lines pass, you have confirmed — **once each, on numbers you produced yourself** — that the even/odd split is pure sign cancellation, that one fold halves the degree and log-many reach a constant, that the two openings at x and −x recover the fold's raw material, that the query check catches even a low-degree swap, and that the misses are a single ±x pair. It is the FRI face of the same probabilistic soundness as SumCheck's two points and PLONK's zeroed fingerprint. The editor's `fri_drill.py` is the fallback for people who cannot open Python: fill in the twelve functions and \"run the public tests\" prints this deployment's values.\n",
+      "writeup": "## The shape of this problem\n\nTwelve lines are typed; eight have an answer field. The order: the committed Q₀ (1) → the even/odd split (2–3) → folding (4–5) → the query and recovery (6–8) → the swap (9–10) → misses and completeness (11–12).\n\n## What each line protects\n\n- 1–3: the split is mere coefficient sorting, and Q₀(X) = Q_even(X²) + X·Q_odd(X²) holds at every point.\n- 4–5: a fold = even + β·odd. Degree halves; log-many folds reach a constant. β arrives after the commitment (the ordering carries the soundness).\n- 6–8: x² = (−x)², so both openings sit over one Y. Sum and difference recover both halves, to be set against Q₁'s opening — one complete query.\n- 9–10: a swap invisible to degree alone is caught by consistency with the raw material. The left side comes from Q₀'s openings and cannot be moved.\n- 11–12: the misses are the roots of d0 + d1·x² — one ±x pair. Honesty passes everywhere (completeness).\n\n## How it breaks\n\nThe odd part from the even coefficients / the halves swapped in the fold / (2x)⁻¹ as x⁻¹ / the second opening at Q(x) — each shifts one value and stops at that line.\n\n## Where this leads\n\nSTARK closes as trace → constraints → quotient Q → Merkle → FRI. As with SumCheck's two points and PLONK's zeroed fingerprint, a lie survives only on a small set of points — all three Week 4 schemes stand on this probabilistic soundness.",
+      "learningGoals": [
+        "Split a polynomial even/odd and confirm Q₀(X) = Q_even(X²) + X·Q_odd(X²) as an identity",
+        "Demonstrate that a fold (even + β·odd) halves the degree and log-many folds reach a constant",
+        "Recover both halves from the openings at x and −x by simultaneous equations",
+        "Run one complete FRI query — recovered material against Q₁'s opening — by hand",
+        "Say why a same-degree swap is caught: the check's left side comes from Q₀'s openings",
+        "List the misses as one ±x pair and state that k queries drive the error to (2/(p−1))ᵏ"
+      ],
+      "checks": [
+        {
+          "id": "poly",
+          "label": "The committed polynomial Q₀",
+          "hints": [
+            {
+              "id": "poly-hint-1",
+              "content": "Write X³ as `X**3` and keep the `% p` around the whole expression. The three points are 0, 1, 2 in order."
+            }
+          ]
+        },
+        {
+          "id": "fold",
+          "label": "Fold — mix into one with the verifier's β",
+          "hints": [
+            {
+              "id": "fold-hint-1",
+              "content": "Q1 = Qe + beta·Qo, evaluated at Y = 0, 1, 2 directly (not x² — Y is the new variable)."
+            }
+          ]
+        },
+        {
+          "id": "fold2",
+          "label": "Fold once more — a constant",
+          "hints": [
+            {
+              "id": "fold2-hint-1",
+              "content": "c = Q1(0); d = (Q1(1) − Q1(0)) % p is the linear coefficient. The answer is the single number (c + beta2·d) % p."
+            }
+          ]
+        },
+        {
+          "id": "query",
+          "label": "Query — open the pair x and −x",
+          "hints": [
+            {
+              "id": "query-hint-1",
+              "content": "The second opening is Q((-x) % p) — without the parentheses Python's precedence breaks it."
+            }
+          ]
+        },
+        {
+          "id": "recover",
+          "label": "Recover the even and odd parts from the two openings",
+          "hints": [
+            {
+              "id": "recover-hint-1",
+              "content": "Sum × 2⁻¹ gives the even part, difference × (2x)⁻¹ the odd. Inverses via `pow(2, p - 2, p)` and `pow(2*x, p - 2, p)`. Four elements; the last two are the direct computation, for comparison."
+            }
+          ]
+        },
+        {
+          "id": "consistency",
+          "label": "The query check — recovered material vs the opening of Q₁",
+          "hints": [
+            {
+              "id": "consistency-hint-1",
+              "content": "Left is (re + beta·ro) % p, right Q1(x*x % p). The right answer is the same number twice."
+            }
+          ]
+        },
+        {
+          "id": "cheat-caught",
+          "label": "The query check catches the lie",
+          "hints": [
+            {
+              "id": "cheat-caught-hint-1",
+              "content": "The left equals line 8's value (built from Q₀'s openings, it cannot move). Only the right becomes Q1c(x*x % p) — and differs."
+            }
+          ]
+        },
+        {
+          "id": "miss-points",
+          "label": "Count the x that would have missed",
+          "hints": [
+            {
+              "id": "miss-points-hint-1",
+              "content": "Search 1..p−1 for x with d0 + d1·x² ≡ 0. One ±x pair (two values) comes out; `sorted(...)` puts them ascending."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

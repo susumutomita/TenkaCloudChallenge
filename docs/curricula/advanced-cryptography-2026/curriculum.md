@@ -148,6 +148,9 @@ order; `track.order` only sequences presentation.
 | `concept.binding` | A commitment cannot later be opened to a different value |
 | `concept.challenge-ordering` | Why the challenge must come after the commitment |
 | `concept.proof-pipeline` | Trace → constraints → commitment → opening → verification |
+| `concept.fri-folding` | Even part + β·odd part — one move that halves a committed polynomial's degree |
+| `concept.low-degree-test` | Checking a committed sequence is a low-degree polynomial from a few openings |
+| `concept.query-consistency` | Recovering the fold's material from x/−x openings and spot-checking each stage |
 | `concept.gate-constraint` | One selector-steered equation checking a row's type, blind to other rows |
 | `concept.copy-constraint` | Cells that must agree across rows really do — set equality of (value, address) pairs |
 | `concept.grand-product` | The copy constraint collapsed into one number, Π(value + β·address + γ) |
@@ -362,6 +365,7 @@ a challenge teaches is a content decision, not a pin update.
 | 405 | `ac26-w4-sumcheck-drill` | `mechanism` | `concept.sumcheck`, `concept.multilinear-extension`, `concept.probabilistic-soundness`, `concept.repl-drill` — twelve lines typed into the learner's own Python, nine as the verifier and three as the lying prover | 12–17 (IOP and GKR: MLE, the SumCheck rounds) | #494 |
 | 410 | `ac26-w4-arithmetization` | `transfer` | `concept.arithmetization`, `concept.execution-trace`, `concept.transition-constraint`, `concept.boundary-constraint`, `concept.evaluation-domain` | 19–21 (STARK: trace, AIR); adds the boundary constraint the toy AIR lacks | #230, #494 |
 | 420 | `ac26-w4-commit-open` | `transfer` | `concept.merkle-commitment`, `concept.commitment-binding`, `concept.challenge-ordering`, `concept.authentication-path` | 4 (commitment scheme), 10 and 12 (oracle ≈ commitment), 22 (Merkle) | #231, #494 |
+| 425 | `ac26-w4-fri-drill` | `mechanism` | `concept.fri-folding`, `concept.low-degree-test`, `concept.query-consistency`, `concept.repl-drill` — twelve lines typed into the learner's own Python: one honest FRI lap, then a dishonest fold caught by the query check | 22–23 (STARK: Merkle and FRI) | #494 |
 | 430 | `ac26-w4-proof-pipeline` | `transfer` | `concept.proof-pipeline-stage`, `concept.artifact-flow`, `concept.stage-contract`, `concept.trusted-setup`, `concept.transparent-setup`, `concept.succinctness` | 13, 19, 25 (three boxes), 33–34 (summary), the recurring cost question | #232, #494 |
 | 435 | `ac26-w4-plonk-drill` | `mechanism` | `concept.gate-constraint`, `concept.copy-constraint`, `concept.grand-product`, `concept.repl-drill` — twelve lines typed into the learner's own Python: an honest gate table, a lying one built by hand, and the grand product that tells them apart | 24–29 (PLONK: gate table, selectors, σ, grand product) | #494 |
 

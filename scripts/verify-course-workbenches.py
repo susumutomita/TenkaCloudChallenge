@@ -29,6 +29,7 @@ SHARED_TARGETS = (
     "ac26-w3-schnorr-drill",
     "ac26-w4-sumcheck-drill",
     "ac26-w4-plonk-drill",
+    "ac26-w4-fri-drill",
     "ac26-w4-arithmetization",
     "ac26-w4-commit-open",
     "ac26-w4-proof-pipeline",

@@ -1026,6 +1026,58 @@
       }
     },
     {
+      "id": "ac26-w4-fri-drill",
+      "name": "1 行打って、出た値を貼る — FRI の折り畳みとクエリ検査",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "advanced-cryptography-2026",
+        "order": 425,
+        "chapter": "Week 4 / Drill: FRI folding"
+      },
+      "courseAlignment": {
+        "courseId": "advanced-cryptography-program",
+        "edition": "2026",
+        "week": 4,
+        "role": "mechanism",
+        "sources": [
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "c088f8e6f301dedcd80b6dd9c321a1cd83410637",
+            "path": "week4/README.md",
+            "kind": "lecture"
+          },
+          {
+            "repository": "zk-tokyo/advanced-cryptography-2026",
+            "ref": "c088f8e6f301dedcd80b6dd9c321a1cd83410637",
+            "path": "week4/acp-2026-week4-redacted.pdf",
+            "kind": "slide"
+          }
+        ]
+      },
+      "difficulty": 3,
+      "estimatedDuration": "40-60 分",
+      "shortDescription": "手元の Python で 1 行打って、出た値を貼る。12 行で、コミット済み Q₀ の偶奇分解 → β で折って次数半分 → 定数まで → x と −x の開示から両半分を復元 → クエリ検査 → 同じ次数のすり替えが捕まる → 見逃しは ±x の 1 組だけ、を自分の手で出した数だけで通す。",
+      "tags": [
+        "advanced-cryptography-2026",
+        "week4",
+        "drill",
+        "fri",
+        "low-degree-test",
+        "folding",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "ac26-w4-plonk-drill",
       "name": "1 行打って、出た値を貼る — PLONK の 2 本の制約と大積",
       "category": "Challenge",
