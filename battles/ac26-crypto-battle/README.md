@@ -134,6 +134,20 @@ three panels:
 - **Help** -- the rules above, condensed to one screen inside the portal
   itself, for a quick refresher mid-match.
 
+## After the match: replay and debrief
+
+The match does not end when the clock hits zero. Every LEAK, PROVE, HUNT
+success, and ROTATE your team made is still there afterward, in order, with
+real timestamps -- a facilitator can walk through it during the debrief
+window and point at exactly where things turned: which LEAK is the one that
+finally crossed the threshold and made your secret reconstructable, and how
+many of your leaked shares a ROTATE actually invalidated. This replay is
+built entirely from what already happened during the match -- it does not
+show anything that was not already true, and it never reveals a secret or
+share value your team did not already leak yourselves. It is a *debrief*
+tool, not a live one: it is generated after the fact, not exposed anywhere
+in the Portal while the match is running.
+
 ## Related files
 
 - [`metadata.json`](./metadata.json) -- problem metadata (source of truth for

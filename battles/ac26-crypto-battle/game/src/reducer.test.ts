@@ -199,6 +199,41 @@ describe("hunt", () => {
     expect(next.teams.teamA?.score).toBe(before.attacker + state.config.scores.huntBonus);
     expect(next.teams.teamB?.score).toBe(Math.max(0, before.target - state.config.scores.huntPenalty));
     expect(next.teams.teamB?.huntedGenerations).toContain(1);
+    // huntLog (Issue #486 PR5) is timestamped from the real match clock, not
+    // a silent `?? 0` fallback -- see applyHunt's own comment.
+    if (state.nowMs === undefined) throw new Error("expected state.nowMs to be set after tick()");
+    expect(next.huntLog).toEqual([
+      { attackerTeamId: "teamA", targetTeamId: "teamB", generation: 1, atMs: state.nowMs },
+    ]);
+  });
+
+  test("is rejected before any tick() has run, even with the target's ACTUAL secret as the guess [reachability fix]", () => {
+    // Before the first tick(), validateOp's "hunt" branch used to check
+    // nothing about state.nowMs at all -- unlike "rotate"'s cooldown guard,
+    // nothing else in the hunt branch reads it either, so a hunt supplying
+    // the CORRECT secret directly (not reconstructed via Lagrange
+    // interpolation from leaked shares, which requires a Contract, which
+    // requires a tick()) used to validate and apply before the match clock
+    // had ever started. This pins the fix: rejected outright, the same way
+    // "rotate" already was.
+    const state = initialState(CTX);
+    expect(state.nowMs).toBeUndefined();
+    const teamB = state.teams.teamB;
+    if (!teamB) throw new Error("expected teamB");
+    const op: CryptoBattleOp = {
+      kind: "hunt",
+      targetTeamId: "teamB",
+      generation: 1,
+      recoveredSecret: teamB.secret,
+    };
+    const result = validateOp(state, "teamA", op);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/not started/);
+    }
+    // applyOp itself throws loudly (never a silent, untimestamped huntLog
+    // entry) if handed this op anyway, without going through validateOp first.
+    expect(() => applyOp(state, "teamA", op)).toThrow();
   });
 
   test("a wrong guess is rejected by validateOp and never reaches applyOp", () => {
