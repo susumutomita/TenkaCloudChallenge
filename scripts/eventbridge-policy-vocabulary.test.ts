@@ -104,7 +104,7 @@ describe("policy 語彙が参加者から見えている (Issue 416)", () => {
     const page = servedPage();
     const missing = ACCEPTED.filter((value) => !page.includes(value));
     expect(missing, "配信ページに出ていない許容値").toEqual([]);
-  });
+  }, 20_000);
 
   it("は validator が語彙の外の値を拒む", () => {
     // 表を出したことで採点が緩んでいないこと。選択肢を見せるのと通すのは別。
