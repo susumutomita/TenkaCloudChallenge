@@ -1,0 +1,482 @@
+{
+  "id": "ac26-w3-schnorr-drill",
+  "name": "1 行打って、出た値を貼る — 有限体から nonce 再利用まで 12 行",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "advanced-cryptography-2026",
+    "order": 305,
+    "chapter": "Week 3 / Drill: twelve lines from field to nonce reuse"
+  },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 3,
+    "role": "mechanism",
+    "spoilerPolicy": "independent-reimplementation",
+    "sources": [
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
+        "path": "week3/README.md",
+        "kind": "lecture"
+      },
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
+        "path": "week3/problems/schnorr-from-scratch/README.md",
+        "kind": "assignment"
+      },
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "b1b46669949b5615be7941b2b62da4ea635e9c30",
+        "path": "week3/week3_zksnark_slides.pdf",
+        "kind": "slide"
+      }
+    ]
+  },
+  "difficulty": 3,
+  "estimatedDuration": "40-60 分",
+  "shortDescription": "手元の Python で 1 行打って、出た値を貼る。12 行で、有限体の逆元 → 曲線の足し算 → 位数 → 公開鍵 → Schnorr の 3 手 → 検証式 → nonce 再利用で秘密が出る → 別の曲線、を自分の手で出した数だけで通す。",
+  "description": "Week 3 のドリル。関数を書く問題ではなく、「1 行打って、出た値を貼る」を 12 回繰り返す。有限体の負数の正規化と逆元 → 2 点の傾き → G + Q → 2G → 一周して O に戻る回数（位数）→ 公開鍵 → R = r·G → s = r + e·x → 検証式 s·G = R + e·P → nonce を使い回した鍵から秘密を取り出す → 別の曲線で同じこと、の順。\n\n形の根拠: 自習ノート側で、自己チェック問題を 7 問まとめて出したときは理解が止まり、「この 1 行を打って、出た値を貼って、その値を指す 1 文を読む」に変えた瞬間に通った（結果と解説が隣にあるから）。この問題はその形をそのまま checkpoint 列にしたもので、各 checkpoint の label が打つ行、問題文の「この行の意味」「合ったら読む」が解説にあたる。\n\n値はすべて seed 由来（検証済みの素数位数の小曲線 5 本、t・Q・x・r・e・攻撃鍵・転移曲線）。公式課題のテスト値（p = 1009 の TOY 曲線など）は使わない（independent-reimplementation）。答えは 1 行につき 1 つで、手元の Python が出した値だけが通る。Python を開けない人のために、エディタの `schnorr_drill.py` に同じ 12 行を関数として書けば「公開テストを実行」がこの deploy の値を出す。\n\ncheckpoint は 8 個すべて直接回答（predict / construct / trace / counterexample / transfer の 5 種）。12 行のうち 4 行（負数の正規化、λ、P、R）は回答欄を持たない材料の行で、その正否は次の行で表に出る（platform の checkpoint 上限は 8）。ec_add から急に難しくなる、という受講者の指摘に合わせて、ec_add は 3〜5 行目で λ → x₃ → y₃ を手で出してから 6 行目で関数にする。",
+  "instructions": "## 前提 — 中学・高校の数学から\n\n- **学校で習ったこと**: 「13 ÷ 7 の余りは 6」（小 5）、「割り算は逆数を掛けること」（小 6）、「2 点を通る直線の傾き = y の増分 ÷ x の増分」（中 2）、「接線の傾きは微分」（数 II）、「3 次方程式の 3 つの解の和は係数で決まる」（数 II、解と係数の関係）、「未知数 2 つなら式が 2 本要る」（中 2、連立方程式）。この 6 つだけで、有限体 → 楕円曲線の足し算 → Schnorr の 3 手 → nonce 再利用で秘密が割れる、まで全部つながります。\n- **教材のどこ**: 講義スライド「zkSNARK part 1」13〜14 枚目（有限体・逆元）、22〜28 枚目（群・楕円曲線・加法公式・スカラー倍）、33〜41 枚目（Schnorr の commitment / challenge / response、nonce 再利用）。課題 `schnorr-from-scratch` の `field_inv` / `ec_add` / `ec_scalar_mul` / `schnorr_prove` / `schnorr_verify` / `recover_secret` を、関数を書く代わりに 1 行ずつ手で打ちます。\n- **1 桁の例**: 講義と同じ y² = x³ + x + 6 (mod 11)、P = (2, 7) なら接線の傾き λ = (3·4 + 1)/(2·7) = 13/14 ≡ 2·3⁻¹ = 2·4 = 8、2P = (8² − 4, 8·(2 − 5) − 7) = (5, 2)。Schnorr は s = r + e·x (mod n): r = 3, e = 2, x = 4, n = 13 なら s = 11。\n- **言葉**: 逆元 = 「掛けて 1 になる相手」。無限遠点 O = 点の足し算の 0（垂直な直線が交わる先）。位数 n = 何回足すと O に戻るか。nonce r = 毎回新しく引く乱数。commitment R = r·G = 先に渡す封筒。challenge e = 検証者の質問。response s = 封筒を開けずに質問に答える 1 つの数。\n\n## はじめに\n\n- この問題は関数を書く問題ではありません。**1 行打って、出た値を貼る**を繰り返します。12 行のうち 8 行に回答欄（checkpoint）があり、残り 4 行は次の行の材料です（材料の行にも「この行の意味」と「出たら読む」が付いています）。各行に「この行の意味」が付いていて、貼った値が合っていれば次の行へ進めます。\n- 使うのは手元の Python です。ターミナルで `python3` と打つだけ（宿題の `solution.py` があるなら `python3 -i solution.py` でも同じ）。「証拠を調べる」に出た数を、最初に変数として打ち込んでから始めます（その行も表示されます）。\n- 12 行で通る道: 負の数を 0..p−1 に直す → 逆元 → 2 点の傾き → G + Q → 2G → 一周して O に戻る回数（位数 n）→ 公開鍵 P = x·G → R = r·G → s = r + e·x → 検証式 s·G = R + e·P → nonce を使い回した鍵から秘密を取り出す → 別の曲線で同じこと。\n- 数は deploy ごとに変わります。ノートや他人の答えを写しても通りません。自分の Python が出した値だけが通ります。\n- 行頭に空白を入れると `IndentationError`。`def` のブロックを貼ったあとは空行を 1 つ入れてから次を打ちます。\n\n## 最初の一手\n\n**Participant Portal** で問題を起動し、**「証拠を調べる」** を押してください。この deploy の曲線 (p, a, b, G)、試しの数 t、2 つ目の点 Q、秘密 x、nonce r、challenge e、攻撃用データ（同じ r で 2 回署名した鍵の P′ と (e1, s1), (e2, s2)）、転移用の曲線 2 と (x2, r2, e2′) が、**そのまま Python に貼れる代入文**で表示されます。まずその代入文を全部 Python に貼ってください。ホスト側のターミナルは、その Python 1 つだけです。\n\n## 解き方 — 12 行\n\n各行: **打つ行**（コピーして貼る）→ **この行の意味** → Python が出した値を **その checkpoint の回答欄に貼る** → 合ったら **「合ったら読む」** を読んで次へ。回答欄は 1 行の入力欄です。\n\n### 1. 負の数を 0..p−1 に直す  （回答欄なし）\n\n「証拠を調べる」の t と p を使う。\n\n```python\n(-t) % p\n```\n\n- **この行の意味**: Python の % は、負の数でも 0..p−1 の値を返す。−t を「p で割った余り」に直している。\n- **回答欄**: なし — 次の行の材料。値は画面に残しておく\n- **出たら読む**: −t と p − t は、mod p の世界では同じ数。有限体の元は 0..p−1 の p 個だけで、どんな整数もこの中の 1 つに落ちる。宿題の `field_add` の docstring「(a+b) mod p を 0..p−1 の範囲で返す」はこの意味。検算: 出た値は p − t に等しいはず（`p - t` と打って比べる）。\n\n### 2. 逆元 — 掛けて 1 になる相手  (checkpoint `field-inv`)\n\nt の逆元。\n\n```python\npow(t, p - 2, p)\n```\n\n- **この行の意味**: フェルマーの小定理 t^(p−1) ≡ 1 (mod p) から、t^(p−2) が t の逆元。pow の第 3 引数は「掛けるたびに p で余りを取る」。\n- **回答欄**: checkpoint `field-inv` に 整数 1 つ\n- **合ったら読む**: 出た値を t に掛けて `t * 値 % p` と打つと 1。「割り算 = 逆数を掛ける」の逆数の役がこれ。宿題の `field_inv` は拡張ユークリッドで同じ値を出す（どちらも答えは 1 つ）。曲線の足し算の λ の分母はこの逆元で消す。\n\n### 3. 2 点を通る直線の傾き  （回答欄なし）\n\nG = (Gx, Gy) と Q = (Qx, Qy)。\n\n```python\nlam = ((Qy - Gy) * pow(Qx - Gx, p - 2, p)) % p; lam\n```\n\n- **この行の意味**: 中 2 の「傾き = y の増分 ÷ x の増分」。÷ は逆元を掛けること。\n- **回答欄**: なし — 次の行の材料。値は画面に残しておく\n- **出たら読む**: これが弦の傾き λ。直線 y = λ(x − Gx) + Gy は曲線 y² = x³ + ax + b と、G・Q のほかにもう 1 点で交わる（3 次式 = 2 次式 なので解は 3 つ）。その 3 つ目が次の行。この行の検算は次の行で: 4 行目の点が曲線に乗れば λ も正しい。\n\n### 4. 3 つ目の交点を折り返す = G + Q  (checkpoint `add-points`)\n\nλ から x₃, y₃。\n\n```python\nx3 = (lam*lam - Gx - Qx) % p; y3 = (lam*(Gx - x3) - Gy) % p; (x3, y3)\n```\n\n- **この行の意味**: 解と係数の関係（数 II）: 3 つの交点の x の和は λ²。だから x₃ = λ² − Gx − Qx。y₃ は直線に x₃ を入れて符号を反転（x 軸で折り返す）。\n- **回答欄**: checkpoint `add-points` に 点を `[x, y]` の形で（`(x, y)` でも可）\n- **合ったら読む**: (x₃, y₃) が G + Q。「点を足す」とは座標を足すことではなく、この手順で出る点をそう**呼ぶことにした**。宿題 `ec_add` の本体はこの 2 行と、場合分け（O・同じ点・逆元）だけ。検算: `(y3*y3 - (x3**3 + a*x3 + b)) % p` は 0。\n\n### 5. 同じ点を 2 回 = 接線  (checkpoint `double`)\n\nG + G。\n\n```python\nlam = ((3*Gx*Gx + a) * pow(2*Gy, p - 2, p)) % p; x3 = (lam*lam - 2*Gx) % p; y3 = (lam*(Gx - x3) - Gy) % p; (x3, y3)\n```\n\n- **この行の意味**: 同じ点で「2 点を通る直線」は引けないので接線。接線の傾きは微分 (3x² + a)/(2y)（数 II）。あとは同じ。\n- **回答欄**: checkpoint `double` に 点を `[x, y]` の形で（`(x, y)` でも可）\n- **合ったら読む**: 2G が出た。弦と接線で λ の式だけが違い、x₃・y₃ の式は同じ。宿題 `ec_add` の `if P == Q:` 分岐がこれ。Gy = 0 なら接線が垂直で 2G = O（無限遠点）— 分母 2·0 の逆元が無いことと対応している。\n\n### 6. 一周して O に戻るまでの回数 = 位数 n  (checkpoint `order`)\n\nまず ec_add を定義（def の後は空行を 1 つ）。それから G を足し続けて、O（None）になる回数を数える。\n\n```python\ndef ec_add(P, Q):\n    if P is None: return Q\n    if Q is None: return P\n    if P[0] == Q[0] and (P[1] + Q[1]) % p == 0: return None\n    lam = ((3*P[0]*P[0] + a) * pow(2*P[1], p - 2, p)) % p if P == Q else ((Q[1] - P[1]) * pow(Q[0] - P[0], p - 2, p)) % p\n    x3 = (lam*lam - P[0] - Q[0]) % p\n    return (x3, (lam*(P[0] - x3) - P[1]) % p)\n\nR, k = G, 1\nwhile R is not None: R = ec_add(R, G); k += 1\n\nk\n```\n\n- **この行の意味**: ec_add は行 4・5 の公式に、O の扱い（None は足し算の 0）と「x が同じで y が逆 → O」を足しただけ。ループは G, 2G, 3G, … と進み、O に落ちた回数が位数 n。\n- **回答欄**: checkpoint `order` に 整数 1 つ\n- **合ったら読む**: n 回足すと O に戻る（時計が一周する）。だから「k·G」の k は mod n で考える — Schnorr の s は mod n で取る理由がこれ。位数が素数なら G の何倍も全部位数 n で、どの倍数も生成元になる。\n\n### 7. 公開鍵 P = x·G  （回答欄なし）\n\nec_mul を定義して（def の後は空行）、秘密 x 倍。\n\n```python\ndef ec_mul(k, P):\n    R = None\n    for _ in range(k): R = ec_add(R, P)\n    return R\n\nP = ec_mul(x, G); P\n```\n\n- **この行の意味**: k 倍 = k 回足す（ここでは小さいので素朴に）。宿題の double-and-add は同じ答えを log k 回で出す。\n- **回答欄**: なし — 次の行の材料。値は画面に残しておく\n- **出たら読む**: これが公開鍵 P。x から P は一瞬で出るが、P から x を戻すには「何倍で P になるか」を 1, 2, 3, … と試すしかない（離散対数）。この曲線なら n 通りで済むが、本物は 2²⁵⁶ 通り。秘密鍵を公開鍵にする一方通行がここ。P の検算は 10 行目で（P が違えば R + e·P が s·G に合わない）。\n\n### 8. 手 1: コミット R = r·G  （回答欄なし）\n\nnonce r を点にする。\n\n```python\nR = ec_mul(r, G); R\n```\n\n- **この行の意味**: r は証明者が毎回新しく引く乱数。それを G 倍した点 R を先に渡す。\n- **回答欄**: なし — 次の行の材料。値は画面に残しておく\n- **出たら読む**: R が commitment。r は見せないが R は見せる — 「先に封をして、後から質問を受ける」の封筒。r は x と同じ一方通行で守られている。次に検証者が challenge e を出す（ここでは「証拠を調べる」の e）。R の検算も 10 行目で。\n\n### 9. 手 3: レスポンス s = r + e·x (mod n)  (checkpoint `response`)\n\n一次式。法は n。\n\n```python\ns = (r + e * x) % n; s\n```\n\n- **この行の意味**: s は r（乱数）に e·x を足したもの。mod は p ではなく n — s は「G を何倍するか」の数だから。\n- **回答欄**: checkpoint `response` に 整数 1 つ\n- **合ったら読む**: s は x を e 倍して r で覆った値。r がランダムなら s から x は分からない。でも r を 2 回使うと 11 行目で x が割れる。宿題 `schnorr_prove` の return はこの 1 行。\n\n### 10. 検証式 s·G = R + e·P  (checkpoint `verify`)\n\n左辺を出す。\n\n```python\nec_mul(s, G)\n```\n\n- **この行の意味**: 検証者は s, R, e, P だけ持っている。s·G を自分で計算する。\n- **回答欄**: checkpoint `verify` に 点を `[x, y]` の形で（`(x, y)` でも可）\n- **合ったら読む**: `ec_add(R, ec_mul(e, P))` を打つと同じ点になる（右辺）。理由: s·G = (r + e·x)·G = r·G + e·(x·G) = R + e·P — 分配法則を点の足し算に使っただけ。検証者は x も r も知らずに等式を確かめた。宿題 `schnorr_verify` はこの比較 1 つ。\n\n### 11. nonce を使い回した鍵から秘密を取り出す  (checkpoint `nonce-reuse`)\n\n「証拠を調べる」の攻撃用データ: 同じ r で 2 回署名した (e1, s1), (e2, s2)。秘密 x′ は見せていない。\n\n```python\n((s1 - s2) * pow(e1 - e2, n - 2, n)) % n\n```\n\n- **この行の意味**: s1 = r + e1·x′、s2 = r + e2·x′ を引き算すると r が消えて (e1 − e2)·x′。両辺を (e1 − e2) で割る（逆元を掛ける、mod n）。中 2 の連立方程式。\n- **回答欄**: checkpoint `nonce-reuse` に 整数 1 つ\n- **合ったら読む**: 出た値が x′。`ec_mul(値, G)` を打つと攻撃用の公開鍵 P′ に一致する。r を 1 回しか使わなければ未知数 2 つ（r, x′）に式 1 本で解けない。2 回使うと式が 2 本になり解ける。PS3 の鍵が割れたのもこれ。宿題 `recover_secret` はこの 1 行。\n\n### 12. 別の曲線で同じ 12 行 — s を出す  (checkpoint `transfer`)\n\n「証拠を調べる」の曲線 2 (p2, a2, b2, G2) と (x2, r2, e2′)。p, a を差し替えて ec_add を使い回し、位数 n2 を数え直してから s2′。\n\n```python\np, a, G = p2, a2, G2\nR, k = G, 1\nwhile R is not None: R = ec_add(R, G); k += 1\n\n(r2 + e2p * x2) % k\n```\n\n- **この行の意味**: ec_add と ec_mul は p と a をグローバルに見ているので、差し替えるだけで別の曲線になる。n2 は数え直す（曲線が変われば位数も変わる）。\n- **回答欄**: checkpoint `transfer` に 整数 1 つ\n- **合ったら読む**: 同じ手順が別の数でも通った。暗記では出ない数。本物の secp256k1 でも手順は 1 文字も変わらず、変わるのは p, a, b, G, n の大きさだけ。\n\n## ゴール\n\n12 行が全部通れば、有限体の逆元・曲線の足し算（弦・接線・O）・位数・公開鍵・Schnorr の 3 手・検証式・nonce 再利用攻撃を、**自分の手で出した数で 1 回ずつ**通ったことになります。最後の transfer は別の曲線で同じ行が通ることを確かめるので、数の暗記は持ち越せません。課題 `schnorr-from-scratch` の 10 関数は、この 12 行を関数の形に写したものです。\n",
+  "writeup": "## この問題の形\n\n12 行を打ち、8 行に回答欄があります。すべて「1 行打って、出た値を貼る」です。解説は値の後に読む。順番は、有限体（1〜2）→ 曲線の足し算（3〜6）→ 鍵と Schnorr の 3 手（7〜10）→ 攻撃（11）→ 別の曲線（12）。\n\n## 各行が守っているもの\n\n- 1〜2: Python の `%` は負でも 0..p−1。逆元はフェルマー（pow）でも拡張ユークリッドでも同じ 1 つの値。\n- 3〜5: 弦の傾き・解と係数の関係・折り返し・接線。`ec_add` の本体はこの 3 行。\n- 6: O（None）の扱いと「同じ x で逆の y → O」を足して関数にし、一周の回数 = 位数 n。s が mod n である理由。\n- 7〜8: 公開鍵と commitment は「秘密 × G」。逆向き（離散対数）は総当たりしかない。\n- 9〜10: s = r + e·x (mod n)、s·G = R + e·P は分配法則。検証者は x も r も知らない。\n- 11: 同じ r で 2 回 → 2 本の一次式 → 引き算で r が消えて x′ が出る（special soundness の攻撃面）。\n- 12: 同じ 12 行が別の数で通る。暗記は持ち越せない。\n\n## 間違えるとどう壊れるか\n\ns を mod p で取る／接線の a を忘れる／y₃ の折り返しを忘れる／位数を 0 から数える — どれも値が 1 つずれ、その行で止まる。止まった行の「この行の意味」を読み直すのが、この形式の学び方です。\n\n## 次への接続\n\n課題 `schnorr-from-scratch` の `field_inv` / `ec_add` / `ec_scalar_mul` / `schnorr_prove` / `schnorr_verify` / `recover_secret` は、この 12 行をそのまま関数の形にしたもの。ac26-w3-field-inverse 以降の問題は、同じ行を「壊す・直す」側から扱います。",
+  "tags": [
+    "advanced-cryptography-2026",
+    "week3",
+    "drill",
+    "finite-field",
+    "elliptic-curve",
+    "schnorr",
+    "nonce-reuse",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18132,
+      "name": "Portal editor API + /verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "負の数を 0..p−1 に直し、逆元を「掛けて 1 になる相手」として自分で出せる",
+    "2 点の傾き・接線・折り返しから、曲線の足し算 G + Q と 2G を手で出せる",
+    "O（無限遠点）の扱いを足して ec_add を関数にし、一周の回数として位数 n を数えられる",
+    "公開鍵 P = x·G、commitment R = r·G、response s = r + e·x (mod n) を出し、s·G = R + e·P を両辺で確かめられる",
+    "同じ nonce の 2 署名から秘密を (s1 − s2)/(e1 − e2) で取り出し、公開鍵で確認できる",
+    "同じ 12 行を別の曲線で通し、手順と数を切り離して理解していることを示せる"
+  ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.ac26-w3-schnorr-drill.field-lines",
+        "description": "負数の正規化と逆元を 1 行ずつ自分の Python で出し、出た値の意味を言える。"
+      },
+      {
+        "id": "lo.ac26-w3-schnorr-drill.curve-lines",
+        "description": "弦・接線・折り返しで G + Q と 2G を出し、O を足して ec_add にし、位数を数えられる。"
+      },
+      {
+        "id": "lo.ac26-w3-schnorr-drill.schnorr-lines",
+        "description": "P・R・s を出し、s·G = R + e·P を両辺で確かめられる。"
+      },
+      {
+        "id": "lo.ac26-w3-schnorr-drill.nonce-reuse-line",
+        "description": "同じ nonce の 2 署名から秘密を取り出し、公開鍵で確認できる。"
+      },
+      {
+        "id": "lo.ac26-w3-schnorr-drill.transfer-line",
+        "description": "同じ行を別の曲線で通せる（手順と数を切り離して理解している）。"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.repl-drill",
+        "description": "「1 行打って、出た値を貼って、その値を指す 1 文を読む」を繰り返す学習形式。結果と解説が隣にあるので、用語より先に体験が来る。"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.ac26-w3-schnorr-drill.field-inv",
+        "description": "逆元 — 掛けて 1 になる相手の値を、この deploy の数で自分の Python から出して貼れた。"
+      },
+      {
+        "id": "assessment.ac26-w3-schnorr-drill.add-points",
+        "description": "3 つ目の交点を折り返す = G + Qの値を、この deploy の数で自分の Python から出して貼れた。"
+      },
+      {
+        "id": "assessment.ac26-w3-schnorr-drill.double",
+        "description": "同じ点を 2 回 = 接線の値を、この deploy の数で自分の Python から出して貼れた。"
+      },
+      {
+        "id": "assessment.ac26-w3-schnorr-drill.order",
+        "description": "一周して O に戻るまでの回数 = 位数 nの値を、この deploy の数で自分の Python から出して貼れた。"
+      },
+      {
+        "id": "assessment.ac26-w3-schnorr-drill.response",
+        "description": "手 3: レスポンス s = r + e·x (mod n)の値を、この deploy の数で自分の Python から出して貼れた。"
+      },
+      {
+        "id": "assessment.ac26-w3-schnorr-drill.verify",
+        "description": "検証式 s·G = R + e·Pの値を、この deploy の数で自分の Python から出して貼れた。"
+      },
+      {
+        "id": "assessment.ac26-w3-schnorr-drill.nonce-reuse",
+        "description": "nonce を使い回した鍵から秘密を取り出すの値を、この deploy の数で自分の Python から出して貼れた。"
+      },
+      {
+        "id": "assessment.ac26-w3-schnorr-drill.transfer",
+        "description": "別の曲線で同じ 12 行 — s を出すの値を、この deploy の数で自分の Python から出して貼れた。"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.response-mod-p",
+        "description": "s = r + e·x を p で reduce してしまう。s はスカラー（G を何倍するか）なので法は位数 n。"
+      },
+      {
+        "id": "misconception.point-addition-is-coordinate-addition",
+        "description": "「点を足す」を座標の足し算だと思う。実際は 2 点を通る直線の 3 つ目の交点を x 軸で折り返した点。"
+      },
+      {
+        "id": "misconception.order-counted-from-zero",
+        "description": "位数を 0 から数えて 1 小さい値を出す。G 自身が 1 回目。"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w3-schnorr-drill",
+      "target": "lo.ac26-w3-schnorr-drill.field-lines"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w3-schnorr-drill",
+      "target": "lo.ac26-w3-schnorr-drill.curve-lines"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w3-schnorr-drill",
+      "target": "lo.ac26-w3-schnorr-drill.schnorr-lines"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w3-schnorr-drill",
+      "target": "lo.ac26-w3-schnorr-drill.nonce-reuse-line"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.ac26-w3-schnorr-drill",
+      "target": "lo.ac26-w3-schnorr-drill.transfer-line"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w3-schnorr-drill",
+      "target": "concept.repl-drill"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w3-schnorr-drill",
+      "target": "concept.finite-field"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w3-schnorr-drill",
+      "target": "concept.modular-inverse"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w3-schnorr-drill",
+      "target": "concept.elliptic-curve-group"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w3-schnorr-drill",
+      "target": "concept.sigma-protocol"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w3-schnorr-drill",
+      "target": "concept.nonce-reuse"
+    },
+    {
+      "type": "covers",
+      "source": "problem.ac26-w3-schnorr-drill",
+      "target": "concept.special-soundness"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w3-schnorr-drill",
+      "target": "assessment.ac26-w3-schnorr-drill.field-inv"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w3-schnorr-drill",
+      "target": "assessment.ac26-w3-schnorr-drill.add-points"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w3-schnorr-drill",
+      "target": "assessment.ac26-w3-schnorr-drill.double"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w3-schnorr-drill",
+      "target": "assessment.ac26-w3-schnorr-drill.order"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w3-schnorr-drill",
+      "target": "assessment.ac26-w3-schnorr-drill.response"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w3-schnorr-drill",
+      "target": "assessment.ac26-w3-schnorr-drill.verify"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w3-schnorr-drill",
+      "target": "assessment.ac26-w3-schnorr-drill.nonce-reuse"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.ac26-w3-schnorr-drill",
+      "target": "assessment.ac26-w3-schnorr-drill.transfer"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w3-schnorr-drill",
+      "target": "misconception.response-mod-p"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w3-schnorr-drill",
+      "target": "misconception.point-addition-is-coordinate-addition"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.ac26-w3-schnorr-drill",
+      "target": "misconception.order-counted-from-zero"
+    }
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18132/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "field-inv",
+        "label": "逆元 — 掛けて 1 になる相手",
+        "points": 15,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "field-inv-hint-1",
+            "content": "`pow(t, p - 2, p)` の 3 つ目の引数が p。出た値 v に対して `t * v % p` が 1 になるか確かめてから貼ってください。",
+            "penalty": 6
+          }
+        ]
+      },
+      {
+        "id": "add-points",
+        "label": "3 つ目の交点を折り返す = G + Q",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "add-points-hint-1",
+            "content": "x₃ = λ² − Gx − Qx、y₃ = λ·(Gx − x₃) − Gy。y₃ の引き算の向き（Gx − x₃、Gy を引く）を確かめて。検算は曲線の式に代入して 0。",
+            "penalty": 6
+          }
+        ]
+      },
+      {
+        "id": "double",
+        "label": "同じ点を 2 回 = 接線",
+        "points": 20,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "double-hint-1",
+            "content": "接線の傾きは (3·Gx² + a) / (2·Gy)。a を足し忘れる、分母を Gy にする、が定番の間違い。x₃ = λ² − 2·Gx。",
+            "penalty": 6
+          }
+        ]
+      },
+      {
+        "id": "order",
+        "label": "一周して O に戻るまでの回数 = 位数 n",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "order-hint-1",
+            "content": "`R, k = G, 1` から始めて、R が None になった時点の k が位数。0 から数えると 1 ずれます。def のあとは空行を 1 つ。",
+            "penalty": 6
+          }
+        ]
+      },
+      {
+        "id": "response",
+        "label": "手 3: レスポンス s = r + e·x (mod n)",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "response-hint-1",
+            "content": "法は n（位数、6 行目で数えた数）であって p ではない。`(r + e * x) % n`。",
+            "penalty": 6
+          }
+        ]
+      },
+      {
+        "id": "verify",
+        "label": "検証式 s·G = R + e·P",
+        "points": 30,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "verify-hint-1",
+            "content": "`ec_mul(s, G)` の s は 9 行目の値。右辺 `ec_add(R, ec_mul(e, P))` と同じ点になるはず。違ったら s か R か P のどれかが違う。",
+            "penalty": 6
+          }
+        ]
+      },
+      {
+        "id": "nonce-reuse",
+        "label": "nonce を使い回した鍵から秘密を取り出す",
+        "points": 30,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "nonce-reuse-hint-1",
+            "content": "(s1 − s2)/(e1 − e2) を mod n で。逆元は `pow(e1 - e2, n - 2, n)`、最後に `% n`。出た値 v で `ec_mul(v, G) == P1` が True になるか確かめて。",
+            "penalty": 6
+          }
+        ]
+      },
+      {
+        "id": "transfer",
+        "label": "別の曲線で同じ 12 行 — s を出す",
+        "points": 30,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "transfer-hint-1",
+            "content": "p, a, G を p2, a2, G2 に差し替えてから位数を数え直す（曲線が変わると n も変わる）。最後は `% k`（新しい位数）。",
+            "penalty": 6
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Type one line, paste the value — twelve lines from the field to nonce reuse",
+      "shortDescription": "Type one line in your own Python, paste the value it prints. Twelve lines: the field inverse → point addition → the order → the public key → Schnorr's three moves → the check → the secret falls out of a reused nonce → another curve — on numbers you produced yourself.",
+      "description": "A Week 3 drill. Not a write-a-function problem: you type one line, paste the value it prints, twelve times. Normalising a negative field element and the inverse → the slope through two points → G + Q → 2G → how many additions return to O (the order) → the public key → R = r·G → s = r + e·x → the check s·G = R + e·P → extracting the secret from a key that reused its nonce → the same thing on another curve.\n\nWhy this shape: in the companion self-study notes, seven self-check questions handed over at once stalled understanding; switching to \"type this one line, paste the value, read the one sentence about that value\" worked immediately, because the result and its explanation sit next to each other. This problem is that shape as a checkpoint sequence: each checkpoint's label is the line to type, and the statement's \"what this line means\" / \"read after it matches\" are the explanation.\n\nEvery number is seed-derived (five verified prime-order toy curves; t, Q, x, r, e, the attack key, the transfer curve). The official assignment's test values (the p = 1009 TOY curve, etc.) are not used (independent reimplementation). There is one right value per line, and only the value your own Python printed passes. For those who cannot open Python, writing the same twelve lines as functions in the editor's `schnorr_drill.py` makes \"run the public tests\" print this deployment's values.\n\nAll eight checkpoints are direct answers (five evidence kinds: predict / construct / trace / counterexample / transfer). Four of the twelve lines (the negative, λ, P, R) have no answer field — they are material for the line after, where a mistake surfaces (the platform caps a problem at eight checkpoints). Following the learner observation that \"it gets hard suddenly at ec_add\", the addition is built by hand on lines 3–5 (λ → x₃ → y₃) before becoming a function on line 6.",
+      "instructions": "## Before you start — from school math\n\n- **What you already know**: \"13 ÷ 7 leaves remainder 6\", \"dividing is multiplying by the reciprocal\", \"the slope of a line through two points is rise over run\", \"the slope of a tangent is the derivative\", \"the three roots of a cubic sum to a coefficient\" (Vieta), \"two unknowns need two equations\" (simultaneous equations). These six facts connect everything here: finite field → adding points on an elliptic curve → the three moves of Schnorr → extracting a secret from a reused nonce.\n- **Where in the course**: lecture deck \"zkSNARK part 1\", slides 13–14 (finite field, inverse), 22–28 (group, elliptic curve, addition formula, scalar multiplication), 33–41 (Schnorr commitment / challenge / response, nonce reuse). The assignment `schnorr-from-scratch` functions `field_inv` / `ec_add` / `ec_scalar_mul` / `schnorr_prove` / `schnorr_verify` / `recover_secret`, typed one line at a time instead of written as functions.\n- **A one-digit example**: the lecture's y² = x³ + x + 6 (mod 11), P = (2, 7): tangent slope λ = (3·4 + 1)/(2·7) = 13/14 ≡ 2·3⁻¹ = 2·4 = 8, so 2P = (8² − 4, 8·(2 − 5) − 7) = (5, 2). Schnorr: s = r + e·x (mod n); with r = 3, e = 2, x = 4, n = 13, s = 11.\n- **Words**: inverse = \"the partner that multiplies to 1\". point at infinity O = the zero of point addition (where a vertical line meets the curve). order n = how many additions return to O. nonce r = a fresh random number each time. commitment R = r·G = the envelope handed over first. challenge e = the verifier's question. response s = one number that answers the question without opening the envelope.\n\n## Start here\n\n- This is not a write-a-function problem. You **type one line, paste the value it prints**, over and over. Eight of the twelve lines have an answer field (a checkpoint); the other four feed the next line (they still come with \"what this line means\" and \"read once it prints\"). A matching value unlocks the next line.\n- You use your own Python: just type `python3` in a terminal (or `python3 -i solution.py` if you have the assignment file). Paste the numbers from inspect as variables first (they are shown as assignment statements).\n- The twelve lines walk: a negative number into 0..p−1 → inverse → slope through two points → G + Q → 2G → how many additions return to O (the order n) → public key P = x·G → R = r·G → s = r + e·x → the check s·G = R + e·P → extract the secret from a key that reused its nonce → the same thing on another curve.\n- Numbers change per deployment. Copying notes or someone else's answers does not pass; only values your own Python printed do.\n- A leading space gives `IndentationError`. After pasting a `def` block, press Enter once on an empty line before the next command.\n\n## First move\n\nStart the problem in the **Participant Portal** and press **inspect**. It shows this deployment's curve (p, a, b, G), a trial number t, a second point Q, the secret x, the nonce r, the challenge e, the attack data (a key P′ that signed twice with the same r: (e1, s1), (e2, s2)), and the transfer curve 2 with (x2, r2, e2′) — all as **assignment statements you can paste straight into Python**. Paste them all first. The only terminal you need is that one Python.\n\n## Workflow — twelve lines\n\nEach line: **the line to type** (copy and paste) → **what this line means** → paste the value Python printed into **that checkpoint's answer field** → once it matches, read **\"read after it matches\"** and move on. Answer fields are one-line inputs.\n\n### 1. Bring a negative number into 0..p−1  (no answer field)\n\nUse t and p from inspect.\n\n```python\n(-t) % p\n```\n\n- **What this line means**: Python's % returns a value in 0..p−1 even for a negative input. This is −t reduced to its remainder mod p.\n- **Answer**: none — feeds the next line; keep the value on screen\n- **Read once it prints**: −t and p − t are the same number mod p. A finite field has exactly p elements, 0..p−1, and every integer lands on one of them. The assignment's `field_add` docstring — \"return (a+b) mod p in 0..p−1\" — means exactly this. Check: the value equals p − t (type `p - t` and compare).\n\n### 2. The inverse — the partner that multiplies to 1  (checkpoint `field-inv`)\n\nThe inverse of t.\n\n```python\npow(t, p - 2, p)\n```\n\n- **What this line means**: Fermat's little theorem, t^(p−1) ≡ 1 (mod p), makes t^(p−2) the inverse of t. The third argument of pow means \"reduce mod p after every multiplication\".\n- **Answer**: one integer, into checkpoint `field-inv`\n- **Read after it matches**: Type `t * value % p` and you get 1. This plays the role of the reciprocal in \"dividing is multiplying by the reciprocal\". The assignment's `field_inv` reaches the same value by extended Euclid (the answer is unique). Every λ in point addition divides by exactly this.\n\n### 3. Slope of the line through two points  (no answer field)\n\nG = (Gx, Gy) and Q = (Qx, Qy).\n\n```python\nlam = ((Qy - Gy) * pow(Qx - Gx, p - 2, p)) % p; lam\n```\n\n- **What this line means**: School slope: rise over run. \"Over\" means multiply by the inverse.\n- **Answer**: none — feeds the next line; keep the value on screen\n- **Read once it prints**: This is the chord slope λ. The line y = λ(x − Gx) + Gy meets the curve y² = x³ + ax + b at one more point besides G and Q (a cubic equals a quadratic, so three roots). That third point is the next line. This line is checked by the next one: if line 4's point lies on the curve, λ was right.\n\n### 4. Reflect the third intersection = G + Q  (checkpoint `add-points`)\n\nx₃, y₃ from λ.\n\n```python\nx3 = (lam*lam - Gx - Qx) % p; y3 = (lam*(Gx - x3) - Gy) % p; (x3, y3)\n```\n\n- **What this line means**: Vieta: the three intersection x's sum to λ², so x₃ = λ² − Gx − Qx. y₃ is the line at x₃ with the sign flipped (reflect across the x-axis).\n- **Answer**: the point as `[x, y]` (`(x, y)` also accepted), into checkpoint `add-points`\n- **Read after it matches**: (x₃, y₃) is G + Q. \"Adding points\" is not adding coordinates — we *define* the sum to be the point this procedure yields. The assignment's `ec_add` is these two lines plus case splits (O, same point, inverse). Check: `(y3*y3 - (x3**3 + a*x3 + b)) % p` is 0.\n\n### 5. The same point twice = tangent  (checkpoint `double`)\n\nG + G.\n\n```python\nlam = ((3*Gx*Gx + a) * pow(2*Gy, p - 2, p)) % p; x3 = (lam*lam - 2*Gx) % p; y3 = (lam*(Gx - x3) - Gy) % p; (x3, y3)\n```\n\n- **What this line means**: You cannot draw \"the line through two points\" when they coincide, so use the tangent. Its slope is the derivative, (3x² + a)/(2y). The rest is unchanged.\n- **Answer**: the point as `[x, y]` (`(x, y)` also accepted), into checkpoint `double`\n- **Read after it matches**: This is 2G. Chord and tangent differ only in λ; the x₃/y₃ formulas are the same. This is the `if P == Q:` branch of the assignment's `ec_add`. If Gy = 0 the tangent is vertical and 2G = O (the point at infinity) — matching the fact that 2·0 has no inverse.\n\n### 6. How many steps until O = the order n  (checkpoint `order`)\n\nDefine ec_add first (one blank line after the def). Then keep adding G and count when it becomes O (None).\n\n```python\ndef ec_add(P, Q):\n    if P is None: return Q\n    if Q is None: return P\n    if P[0] == Q[0] and (P[1] + Q[1]) % p == 0: return None\n    lam = ((3*P[0]*P[0] + a) * pow(2*P[1], p - 2, p)) % p if P == Q else ((Q[1] - P[1]) * pow(Q[0] - P[0], p - 2, p)) % p\n    x3 = (lam*lam - P[0] - Q[0]) % p\n    return (x3, (lam*(P[0] - x3) - P[1]) % p)\n\nR, k = G, 1\nwhile R is not None: R = ec_add(R, G); k += 1\n\nk\n```\n\n- **What this line means**: ec_add is the formulas of lines 4 and 5 plus the handling of O (None is the zero of this addition) and \"same x, opposite y → O\". The loop walks G, 2G, 3G, … and the count at which it falls to O is the order n.\n- **Answer**: one integer, into checkpoint `order`\n- **Read after it matches**: After n additions you are back at O (the clock has gone round once). So the k in k·G lives mod n — that is why Schnorr's s is reduced mod n. With prime order every multiple of G also has order n, so every multiple is a generator.\n\n### 7. Public key P = x·G  (no answer field)\n\nDefine ec_mul (blank line after the def), then multiply by the secret x.\n\n```python\ndef ec_mul(k, P):\n    R = None\n    for _ in range(k): R = ec_add(R, P)\n    return R\n\nP = ec_mul(x, G); P\n```\n\n- **What this line means**: k times = add k times (naively, since everything is small). The assignment's double-and-add gives the same answer in log k steps.\n- **Answer**: none — feeds the next line; keep the value on screen\n- **Read once it prints**: This is the public key P. Going from x to P is instant; going back from P to x means trying 1, 2, 3, … until something equals P (the discrete log). On this curve that is n tries; on a real curve 2²⁵⁶. This is the one-way street from private key to public key. P is checked on line 10 (a wrong P makes R + e·P miss s·G).\n\n### 8. Move 1: commit R = r·G  (no answer field)\n\nTurn the nonce r into a point.\n\n```python\nR = ec_mul(r, G); R\n```\n\n- **What this line means**: r is a fresh random number the prover draws every time. The prover sends R = r·G first.\n- **Answer**: none — feeds the next line; keep the value on screen\n- **Read once it prints**: R is the commitment. r stays hidden, R is shown — the sealed envelope you hand over before the question is asked. r is protected by the same one-way street as x. Next the verifier issues the challenge e (here: the e from inspect). R too is checked on line 10.\n\n### 9. Move 3: response s = r + e·x (mod n)  (checkpoint `response`)\n\nA linear expression. The modulus is n.\n\n```python\ns = (r + e * x) % n; s\n```\n\n- **What this line means**: s is r (random) plus e·x. Reduce mod n, not p — s is \"how many times G\", a scalar.\n- **Answer**: one integer, into checkpoint `response`\n- **Read after it matches**: s is x scaled by e and covered by r. With r random, s reveals nothing about x. Reuse r twice, and line 11 extracts x. The assignment's `schnorr_prove` returns exactly this.\n\n### 10. The check s·G = R + e·P  (checkpoint `verify`)\n\nCompute the left side.\n\n```python\nec_mul(s, G)\n```\n\n- **What this line means**: The verifier holds only s, R, e, P, and computes s·G itself.\n- **Answer**: the point as `[x, y]` (`(x, y)` also accepted), into checkpoint `verify`\n- **Read after it matches**: Type `ec_add(R, ec_mul(e, P))` and you get the same point (the right side). Why: s·G = (r + e·x)·G = r·G + e·(x·G) = R + e·P — the distributive law applied to point addition. The verifier confirmed the equation without knowing x or r. The assignment's `schnorr_verify` is this one comparison.\n\n### 11. Extract the secret from a key that reused its nonce  (checkpoint `nonce-reuse`)\n\nThe attack data in inspect: two signatures with the same r, (e1, s1) and (e2, s2). The secret x′ is not shown.\n\n```python\n((s1 - s2) * pow(e1 - e2, n - 2, n)) % n\n```\n\n- **What this line means**: Subtract s1 = r + e1·x′ and s2 = r + e2·x′: r cancels, leaving (e1 − e2)·x′. Divide both sides by (e1 − e2) (multiply by its inverse mod n). School simultaneous equations.\n- **Answer**: one integer, into checkpoint `nonce-reuse`\n- **Read after it matches**: That value is x′. Type `ec_mul(value, G)` and you get the attack public key P′. With r used once there are two unknowns (r, x′) and one equation — unsolvable. Used twice, two equations — solvable. This is how the PS3 signing key was extracted. The assignment's `recover_secret` is this one line.\n\n### 12. The same 12 lines on another curve — produce s  (checkpoint `transfer`)\n\nCurve 2 from inspect (p2, a2, b2, G2) and (x2, r2, e2′). Rebind p, a, reuse ec_add, recount the order n2, then s2′.\n\n```python\np, a, G = p2, a2, G2\nR, k = G, 1\nwhile R is not None: R = ec_add(R, G); k += 1\n\n(r2 + e2p * x2) % k\n```\n\n- **What this line means**: ec_add and ec_mul read p and a as globals, so rebinding them moves you to another curve. Recount n2 (a different curve has a different order).\n- **Answer**: one integer, into checkpoint `transfer`\n- **Read after it matches**: The same procedure went through on different numbers — a value no memorization produces. On the real secp256k1 not one character of the procedure changes; only the sizes of p, a, b, G, n do.\n\n## Goal\n\nWhen all twelve lines pass, you have walked the field inverse, point addition (chord, tangent, O), the order, the public key, Schnorr's three moves, the verification equation, and the nonce-reuse attack — **once each, on numbers you produced yourself**. The final transfer repeats the lines on another curve, so memorized numbers do not carry over. The ten functions of the assignment `schnorr-from-scratch` are these twelve lines written as functions.\n",
+      "writeup": "## The shape of this problem\n\nTwelve lines are typed; eight have an answer field. All of them are \"type one line, paste the value\". The explanation is read after the value. The order: the field (1–2) → point addition (3–6) → keys and Schnorr's three moves (7–10) → the attack (11) → another curve (12).\n\n## What each line protects\n\n- 1–2: Python's `%` lands in 0..p−1 even for negatives. The inverse is one value whether by Fermat (pow) or extended Euclid.\n- 3–5: chord slope, Vieta, reflection, tangent. The body of `ec_add` is these three lines.\n- 6: add the handling of O (None) and \"same x, opposite y → O\" to make the function; the count to O is the order n — the reason s lives mod n.\n- 7–8: public key and commitment are \"secret × G\". The reverse (discrete log) is brute force only.\n- 9–10: s = r + e·x (mod n); s·G = R + e·P is the distributive law. The verifier knows neither x nor r.\n- 11: the same r twice → two linear equations → subtract, r cancels, x′ falls out (the attack side of special soundness).\n- 12: the same twelve lines pass on other numbers. Memorised values do not carry.\n\n## How it breaks\n\ns reduced mod p / the tangent without a / y₃ without the reflection / the order counted from 0 — each shifts one value and stops at that line. Re-reading that line's \"what this line means\" is how this format teaches.\n\n## Where this leads\n\nThe assignment's `field_inv` / `ec_add` / `ec_scalar_mul` / `schnorr_prove` / `schnorr_verify` / `recover_secret` are these twelve lines written as functions. From ac26-w3-field-inverse onward the same lines are handled from the break-and-repair side.",
+      "learningGoals": [
+        "Bring a negative number into 0..p−1 and produce the inverse as \"the partner that multiplies to 1\"",
+        "Produce G + Q and 2G by hand from the slope through two points, the tangent, and the reflection",
+        "Add the handling of O (the point at infinity) to make ec_add a function, and count the order n as the number of steps back to O",
+        "Produce P = x·G, R = r·G, s = r + e·x (mod n), and confirm s·G = R + e·P on both sides",
+        "Extract the secret from two signatures with the same nonce via (s1 − s2)/(e1 − e2) and confirm it against the public key",
+        "Run the same twelve lines on another curve, showing the procedure is understood apart from the numbers"
+      ],
+      "checks": [
+        {
+          "id": "field-inv",
+          "label": "The inverse — the partner that multiplies to 1",
+          "hints": [
+            {
+              "id": "field-inv-hint-1",
+              "content": "The third argument of `pow(t, p - 2, p)` is p. Before pasting, check `t * v % p` is 1 for your value v."
+            }
+          ]
+        },
+        {
+          "id": "add-points",
+          "label": "Reflect the third intersection = G + Q",
+          "hints": [
+            {
+              "id": "add-points-hint-1",
+              "content": "x₃ = λ² − Gx − Qx and y₃ = λ·(Gx − x₃) − Gy. Check the direction of the subtractions (Gx − x₃, minus Gy). Substitute into the curve equation: it must give 0."
+            }
+          ]
+        },
+        {
+          "id": "double",
+          "label": "The same point twice = tangent",
+          "hints": [
+            {
+              "id": "double-hint-1",
+              "content": "The tangent slope is (3·Gx² + a) / (2·Gy). Forgetting the `+ a` or using Gy instead of 2·Gy are the usual slips. x₃ = λ² − 2·Gx."
+            }
+          ]
+        },
+        {
+          "id": "order",
+          "label": "How many steps until O = the order n",
+          "hints": [
+            {
+              "id": "order-hint-1",
+              "content": "Start at `R, k = G, 1`; the order is k at the moment R becomes None. Counting from 0 is off by one. One blank line after the def."
+            }
+          ]
+        },
+        {
+          "id": "response",
+          "label": "Move 3: response s = r + e·x (mod n)",
+          "hints": [
+            {
+              "id": "response-hint-1",
+              "content": "Reduce by n (the order you counted on line 6), not by p: `(r + e * x) % n`."
+            }
+          ]
+        },
+        {
+          "id": "verify",
+          "label": "The check s·G = R + e·P",
+          "hints": [
+            {
+              "id": "verify-hint-1",
+              "content": "s in `ec_mul(s, G)` is line 9's value. It must equal the right side `ec_add(R, ec_mul(e, P))`; if not, one of s, R, P is off."
+            }
+          ]
+        },
+        {
+          "id": "nonce-reuse",
+          "label": "Extract the secret from a key that reused its nonce",
+          "hints": [
+            {
+              "id": "nonce-reuse-hint-1",
+              "content": "(s1 − s2)/(e1 − e2) mod n: the inverse is `pow(e1 - e2, n - 2, n)`, then `% n`. Check `ec_mul(v, G) == P1` for your value v."
+            }
+          ]
+        },
+        {
+          "id": "transfer",
+          "label": "The same 12 lines on another curve — produce s",
+          "hints": [
+            {
+              "id": "transfer-hint-1",
+              "content": "Rebind p, a, G to p2, a2, G2, then recount the order (a different curve has a different n). Reduce by the new order."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

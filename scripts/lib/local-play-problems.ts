@@ -24,7 +24,11 @@ export function localPlayProblemDirs(repoRoot: string): readonly string[] {
     .sort();
 }
 
-/** The same problems, as paths to their verifier. */
+/**
+ * The same problems, as paths to their verifier — derived from the directory list so the
+ * two stay in the same order. Sorting the full paths would not: `ac26-w3-schnorr-drill/`
+ * sorts before `ac26-w3-schnorr/` as a path (`-` < `/`) and after it as a name.
+ */
 export function localPlayVerifiers(repoRoot: string): readonly string[] {
-  return globSync("challenges/*/local/verifier/server.py", { cwd: repoRoot }).sort();
+  return localPlayProblemDirs(repoRoot).map((dir) => `${dir}/local/verifier/server.py`);
 }

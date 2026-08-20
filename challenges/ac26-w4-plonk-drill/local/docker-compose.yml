@@ -1,0 +1,27 @@
+# Every port binds to 127.0.0.1 only. This problem has no network surface for the
+# learner to attack; the whole challenge is local reasoning.
+services:
+  verifier:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # The participant stage, explicitly. Without this, compose builds the
+      # LAST stage -- `author` -- which carries reference/ and mutation.py.
+      target: participant
+    environment:
+      FLAG_SEED: ${FLAG_SEED:?FLAG_SEED must be provided by the platform}
+      VERIFY_PORT: "18134"
+    ports:
+      - "127.0.0.1:18134:18134"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # The rlimits in verifier/server.py bound the submission's child process. These bound
+    # the verifier itself, which is the process that would still be standing if a
+    # submission found a way past them.
+    mem_limit: 1g
+    pids_limit: 128
