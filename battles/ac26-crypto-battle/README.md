@@ -37,9 +37,11 @@ luck: only a computation that actually checks out moves the score.
   anything real. ROTATE has a cooldown, so you cannot spam it as a blanket
   defense.
 - **PROVE** -- score by demonstrating knowledge of your secret without
-  revealing it at all -- a zero-knowledge-style claim, rather than a direct
-  disclosure. Unlike LEAK, a successful PROVE never touches the Public
-  Ledger.
+  revealing it at all: a non-interactive Schnorr proof, not a direct
+  disclosure. It pays exactly what LEAKing the same Contract would. Unlike
+  LEAK, nothing that could reconstruct your secret ever goes public -- but
+  the proof itself is still posted to the Public Ledger, for audit, so
+  anyone can independently replay the check and confirm it actually holds.
 
 ## The three lanes
 
@@ -49,17 +51,47 @@ luck: only a computation that actually checks out moves the score.
 - **My Vault** -- your team's current secret, this generation's shares, your
   score, and how long until your ROTATE cooldown clears. Nobody else can see
   any of this.
-- **Public Ledger** -- every share every team has ever LEAKed, in the open,
-  forever. This is where a HUNT starts: watch it for another team crossing
-  the threshold of exposed shares for their current generation.
+- **Public Ledger** -- every share every team has ever LEAKed, and every
+  proof transcript every team has ever PROVEn, in the open, forever. This is
+  where a HUNT starts: watch it for another team crossing the threshold of
+  exposed shares for their current generation. A PROVE entry, by contrast,
+  never carries anything that helps reconstruct a secret.
+
+## How PROVE works
+
+PROVE is a real cryptographic protocol, not a flavor-text alternative to
+LEAK -- it is a non-interactive **Schnorr proof of knowledge**, the same
+construction taught in `ac26-w3-schnorr`. Completing a Contract with PROVE
+instead of LEAK follows three steps:
+
+1. **Derive your witness.** Your team's actual `secret` is never used as an
+   exponent directly -- it lives in too small a space for that to be safe
+   (see `game/src/schnorr-witness.ts`'s doc comment for why). Instead, hash
+   your secret together with your team id and current generation into a
+   witness `w` over a 2048-bit group (RFC 3526 Group 14).
+2. **Build a proof.** From `w`, construct a Schnorr commitment/response pair
+   bound to the specific Contract you are completing -- `game/src/schnorr-prover.ts`'s
+   `createProof(secret, generation, teamId, contractId)` does exactly this,
+   deterministically (no randomness to leak).
+3. **Submit it.** Submitting a valid proof for an open Contract addressed to
+   you scores exactly what LEAKing that same Contract would. The proof
+   transcript is posted to the Public Ledger so anyone can independently
+   re-check it -- but the transcript alone gives an observer nothing they
+   could use to reconstruct your secret or a share.
+
+Because the proof is bound to one specific Contract id, it cannot be
+replayed against a different Contract; because your witness changes on every
+ROTATE, a proof built before a ROTATE stops verifying after one.
 
 ## Scoring, in one sentence
 
-LEAK pays out on completion; HUNT only pays out on an exact, verified
-reconstruction; ROTATE costs a cooldown but retroactively devalues every
-share you leaked before it. The team that plays the tempo between "score now
-with LEAK" and "stay safe with ROTATE" while reading the Public Ledger for
-the other team's exposure wins.
+LEAK and PROVE pay identically for completing the same Contract -- PROVE is
+never worth more just for being the harder path; HUNT only pays out on an
+exact, verified reconstruction; ROTATE costs a cooldown but retroactively
+devalues every share you leaked before it. The team that plays the tempo
+between "score now with LEAK", "score safely with PROVE", and "stay safe
+with ROTATE" while reading the Public Ledger for the other team's exposure
+wins.
 
 ## Learning goals
 
@@ -70,6 +102,9 @@ the other team's exposure wins.
 - Verify, executably, that fewer than the threshold of shares reveal nothing
   about the secret.
 - Experience how secret rotation invalidates previously leaked shares.
+- Build and check a non-interactive Schnorr proof of knowledge (PROVE), and
+  see first-hand why it is Fiat-Shamir-bound to one specific Contract and one
+  specific secret generation.
 
 ## Related files
 

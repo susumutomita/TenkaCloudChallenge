@@ -12,5 +12,16 @@
     "noEmit": true,
     "types": ["bun"]
   },
-  "include": ["src/**/*.ts"]
+  "include": [
+    "src/**/*.ts",
+    // Issue #486 PR3: coordination/crypto-battle.ts lives one level up from
+    // game/ (sibling to it, not under src/), but it thinly wraps this
+    // package's reducer -- see that file's header. Including it here (and
+    // its local @tenkacloud/coordination-plugin-sdk ambient .d.ts stub) so
+    // `bun run typecheck` catches a shape mismatch between the two, instead
+    // of the plugin silently drifting from reducer.ts unnoticed (battles/
+    // is outside the repo root tsconfig's typecheck scope, so this is the
+    // only place that can catch it).
+    "../coordination/**/*.ts"
+  ]
 }

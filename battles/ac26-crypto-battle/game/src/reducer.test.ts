@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { reconstruct } from "./shamir.ts";
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
-import type { CryptoBattleOp } from "./types.ts";
+import type { CryptoBattleOp, PublicArtifact, ShareArtifact } from "./types.ts";
+
+/** Type-narrowing predicate: `PublicArtifact` is a `ShareArtifact | ProofArtifact` union since PR2 (PROVE artifacts). */
+function isShareArtifact(a: PublicArtifact): a is ShareArtifact {
+  return a.kind === "share";
+}
 
 const CTX = { eventId: "match-basic", teamIds: ["teamA", "teamB"] } as const;
 
@@ -56,8 +61,10 @@ describe("initialState", () => {
   test("each team's shares actually reconstruct that team's secret", () => {
     const state = initialState(CTX);
     for (const team of Object.values(state.teams)) {
-      const some = team.shares.slice(0, state.config.threshold);
-      expect(reconstruct(some, state.config.prime)).toBe(team.secret);
+      const some = team.shares
+        .slice(0, state.config.threshold)
+        .map((s) => ({ index: s.index, value: BigInt(s.value) }));
+      expect(reconstruct(some, BigInt(state.config.prime))).toBe(BigInt(team.secret));
     }
   });
 
@@ -150,11 +157,12 @@ describe("leak", () => {
     expect(next.publicLedger).toHaveLength(contract.requestedShareIndices.length);
     const posted = next.publicLedger[0];
     if (!posted) throw new Error("expected a posted artifact");
+    if (posted.kind !== "share") throw new Error("expected a share artifact");
     expect(posted.teamId).toBe("teamA");
     expect(posted.generation).toBe(1);
     const teamShare = state.teams.teamA?.shares.find((s) => s.index === posted.shareIndex);
     if (!teamShare) throw new Error("expected a matching share on the team");
-    expect(posted.value).toBe(teamShare.value.toString());
+    expect(posted.value).toBe(teamShare.value);
   });
 
   test("the same contract cannot be leaked twice", () => {
@@ -171,14 +179,19 @@ describe("hunt", () => {
   test("recovering the actual secret succeeds and moves both scores", () => {
     let state = tick(initialState(CTX), 0);
     state = leakThreshold(state, "teamB");
-    const leaked = state.publicLedger.filter((a) => a.teamId === "teamB");
+    const leaked = state.publicLedger.filter((a) => a.teamId === "teamB").filter(isShareArtifact);
     const shares = leaked.map((a) => ({ index: a.shareIndex, value: BigInt(a.value) }));
-    const recoveredSecret = reconstruct(shares, state.config.prime);
+    const recoveredSecret = reconstruct(shares, BigInt(state.config.prime));
     const teamB = state.teams.teamB;
     if (!teamB) throw new Error("expected teamB");
-    expect(recoveredSecret).toBe(teamB.secret);
+    expect(recoveredSecret).toBe(BigInt(teamB.secret));
 
-    const op: CryptoBattleOp = { kind: "hunt", targetTeamId: "teamB", generation: 1, recoveredSecret };
+    const op: CryptoBattleOp = {
+      kind: "hunt",
+      targetTeamId: "teamB",
+      generation: 1,
+      recoveredSecret: recoveredSecret.toString(),
+    };
     expect(validateOp(state, "teamA", op)).toEqual({ ok: true });
 
     const before = { attacker: state.teams.teamA?.score ?? 0, target: state.teams.teamB?.score ?? 0 };
@@ -190,7 +203,7 @@ describe("hunt", () => {
 
   test("a wrong guess is rejected by validateOp and never reaches applyOp", () => {
     const state = tick(initialState(CTX), 0);
-    const wrong: CryptoBattleOp = { kind: "hunt", targetTeamId: "teamB", generation: 1, recoveredSecret: 0n };
+    const wrong: CryptoBattleOp = { kind: "hunt", targetTeamId: "teamB", generation: 1, recoveredSecret: "0" };
     const result = validateOp(state, "teamA", wrong);
     expect(result.ok).toBe(false);
   });
@@ -200,13 +213,14 @@ describe("hunt", () => {
     state = leakThreshold(state, "teamB");
     const shares = state.publicLedger
       .filter((a) => a.teamId === "teamB")
+      .filter(isShareArtifact)
       .map((a) => ({ index: a.shareIndex, value: BigInt(a.value) }));
-    const recoveredSecret = reconstruct(shares, state.config.prime);
+    const recoveredSecret = reconstruct(shares, BigInt(state.config.prime));
     const next = applyOp(state, "teamA", {
       kind: "hunt",
       targetTeamId: "teamB",
       generation: 1,
-      recoveredSecret,
+      recoveredSecret: recoveredSecret.toString(),
     });
     expect(next.teams.teamB?.score).toBeGreaterThanOrEqual(0);
   });
@@ -222,8 +236,9 @@ describe("hunt", () => {
     state = leakThreshold(state, "c");
     const shares = state.publicLedger
       .filter((a) => a.teamId === "c")
+      .filter(isShareArtifact)
       .map((a) => ({ index: a.shareIndex, value: BigInt(a.value) }));
-    const recoveredSecret = reconstruct(shares, state.config.prime);
+    const recoveredSecret = reconstruct(shares, BigInt(state.config.prime));
 
     // "a|b" successfully hunts "c" generation 1 -- this records a replay-guard
     // entry that, under the old scheme, would stringify identically to
@@ -232,7 +247,7 @@ describe("hunt", () => {
       kind: "hunt",
       targetTeamId: "c",
       generation: 1,
-      recoveredSecret,
+      recoveredSecret: recoveredSecret.toString(),
     });
 
     // "a" now attempts to hunt the UNRELATED team "b|c" with a deliberately
@@ -243,7 +258,7 @@ describe("hunt", () => {
       kind: "hunt",
       targetTeamId: "b|c",
       generation: 1,
-      recoveredSecret: 0n,
+      recoveredSecret: "0",
     });
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -361,7 +376,7 @@ describe("match end", () => {
 
     expect(validateOp(state, "teamA", { kind: "leak", contractId: stillOpenContract.id }).ok).toBe(false);
     expect(
-      validateOp(state, "teamA", { kind: "hunt", targetTeamId: "teamB", generation: 1, recoveredSecret: 0n })
+      validateOp(state, "teamA", { kind: "hunt", targetTeamId: "teamB", generation: 1, recoveredSecret: "0" })
         .ok,
     ).toBe(false);
     expect(validateOp(state, "teamA", { kind: "rotate" }).ok).toBe(false);
@@ -375,7 +390,7 @@ describe("projectForTeam", () => {
     const teamA = state.teams.teamA;
     if (!teamA) throw new Error("expected teamA");
     expect(projection.vault.teamId).toBe("teamA");
-    expect(projection.vault.secret).toBe(teamA.secret.toString());
+    expect(projection.vault.secret).toBe(teamA.secret);
     expect(projection.vault.shares).toHaveLength(state.config.shareCount);
   });
 

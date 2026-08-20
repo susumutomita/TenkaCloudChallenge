@@ -4,18 +4,39 @@
  *
  * `CoordinationContext` and the `ValidateResult` shape below intentionally
  * mirror what `@tenkacloud/coordination-plugin-sdk` expects a CoordinationPlugin
- * to consume/return (see AGENTS.md ADR-028 note in SCHEMA.json), so that PR3
- * can wrap `reducer.ts`'s exports directly without reshaping them. That SDK
- * package does not exist in this repository (TenkaCloudChallenge owns problem
- * content, not platform packages -- see this repo's AGENTS.md "Repository
- * boundary") and MUST NOT be imported here.
+ * to consume/return (see AGENTS.md ADR-028 note in SCHEMA.json), which is why
+ * `coordination/crypto-battle.ts` (PR3) wraps `reducer.ts`'s exports directly
+ * without reshaping them. That SDK package does not exist in this repository
+ * (TenkaCloudChallenge owns problem content, not platform packages -- see
+ * this repo's AGENTS.md "Repository boundary") and MUST NOT be imported here.
  *
- * PROVE is intentionally absent from `CryptoBattleOp` -- it ships in PR2 with
- * its verifier. Adding the discriminant without a working verifier would let
- * `applyOp` accept an op it cannot honestly score.
+ * PROVE (Issue #486 PR2) is a `CryptoBattleOp` discriminant backed by a real
+ * Fiat-Shamir Schnorr verifier (schnorr-verifier.ts) -- see that module and
+ * schnorr-prover.ts / schnorr-witness.ts / schnorr-transcript.ts / group.ts
+ * for the scheme.
+ *
+ * JSON-SAFETY INVARIANT (Issue #486 PR3 review fix): `CryptoBattleState` and
+ * `CryptoBattleOp` MUST both round-trip cleanly through `JSON.stringify` /
+ * `JSON.parse` -- no field anywhere in either type may be a raw `bigint`.
+ * This is not a style preference: the platform dispatcher receives `op` as
+ * plain parsed-JSON `unknown` off the wire (TenkaCloud's
+ * `CoordinationOpBodySchema` is `{ op: z.unknown() }`, no shape validation
+ * happens before it reaches this package's `validateOp`) and persists `state`
+ * through backends that cannot carry a `bigint` either (Turso:
+ * `JSON.stringify` throws on one outright; DynamoDB: round-tripping through
+ * `Number` silently loses precision above 2^53-1, well under this package's
+ * 2048-bit Schnorr group elements and even under `field.ts`'s own 61-bit
+ * `P`). So every bigint that used to live in `CryptoBattleState` /
+ * `CryptoBattleOp` (`TeamState.secret`, `TeamState.shares[].value`,
+ * `CryptoBattleConfig.prime`, the hunt op's `recoveredSecret`) is a
+ * stringified decimal here instead -- the same convention `SchnorrProof` /
+ * `ShareArtifact` / `ProofArtifact` / `publicCommitments` already used from
+ * PR1/PR2. `game/src`'s pure crypto modules (`field.ts`, `shamir.ts`,
+ * `group.ts`, `schnorr-*.ts`, `prng.ts`, `fixtures.ts`) are unaffected and
+ * keep working in `bigint` internally -- only the shapes that cross the
+ * state/op boundary changed; `reducer.ts` converts at that boundary
+ * (`BigInt(...)` on the way in, `.toString()` on the way out).
  */
-
-import type { Share } from "./shamir.ts";
 
 /** What the platform dispatcher hands a CoordinationPlugin for one event. */
 export interface CoordinationContext {
@@ -55,7 +76,8 @@ export interface PhaseBoundaries {
  * and `disruptions[]` timings get tuned (see other battles/*\/metadata.json).
  */
 export interface CryptoBattleConfig {
-  readonly prime: bigint;
+  /** Stringified bigint -- see this file's header "JSON-SAFETY INVARIANT". */
+  readonly prime: string;
   readonly threshold: number;
   readonly shareCount: number;
   readonly matchDurationMs: number;
@@ -80,7 +102,7 @@ export type ContractStatus = "open" | "completed" | "expired";
 
 export interface Contract {
   readonly id: string;
-  /** The team this contract was issued to (only that team may LEAK against it). */
+  /** The team this contract was issued to (only that team may LEAK/PROVE against it). */
   readonly teamId: string;
   readonly kind: ContractKind;
   readonly points: number;
@@ -88,11 +110,25 @@ export interface Contract {
   readonly issuedAtMs: number;
   readonly expiresAtMs: number;
   readonly status: ContractStatus;
-  readonly resolution?: "leak";
+  readonly resolution?: "leak" | "prove";
+}
+
+/**
+ * A non-interactive Fiat-Shamir Schnorr proof, as PROVE submits it and as
+ * the Public Ledger's `ProofArtifact` records it -- see schnorr-prover.ts /
+ * schnorr-verifier.ts. Both fields are stringified bigints (same convention
+ * as `ShareArtifact.value` below): a decimal `Contract.id`-sized JSON payload
+ * stays JSON-safe without a bigint-aware serializer.
+ */
+export interface SchnorrProof {
+  /** The Schnorr commitment R = g^k mod p. */
+  readonly commitment: string;
+  /** The response z = k + e*w mod group.order. */
+  readonly response: string;
 }
 
 /** One entry in the Public Ledger: a share value a team chose to reveal via LEAK. */
-export interface PublicArtifact {
+export interface ShareArtifact {
   readonly id: string;
   readonly teamId: string;
   /** The team's secret generation this share belongs to (see ROTATE). */
@@ -106,6 +142,43 @@ export interface PublicArtifact {
 }
 
 /**
+ * One entry in the Public Ledger: an audit-only record that a team completed
+ * a Contract via PROVE. Deliberately holds ONLY the proof transcript
+ * (`commitment` / `response`) -- never a share value and never the secret or
+ * witness those were derived from. Recording the transcript at all (rather
+ * than nothing) is what makes a PROVE completion independently replay-
+ * verifiable after the fact (Issue #486's trusted-verification minimum bar),
+ * while the transcript itself carries no cryptographic material a viewer
+ * could use to reconstruct anything (see schnorr.test.ts's secret-non-
+ * leakage test).
+ */
+export interface ProofArtifact {
+  readonly id: string;
+  readonly teamId: string;
+  /** The team's secret generation the proven public commitment Y belongs to. */
+  readonly generation: number;
+  readonly kind: "proof";
+  readonly contractId: string;
+  readonly commitment: string;
+  readonly response: string;
+  readonly postedAtMs: number;
+}
+
+export type PublicArtifact = ShareArtifact | ProofArtifact;
+
+/**
+ * A Shamir share as it lives in `CryptoBattleState` / `CryptoBattleProjection`
+ * -- `value` is a stringified bigint (see this file's header "JSON-SAFETY
+ * INVARIANT"), unlike `shamir.ts`'s own `Share`, which stays `bigint` because
+ * it is that module's pure internal computation type, never part of the
+ * state/op wire shape directly.
+ */
+export interface StoredShare {
+  readonly index: number;
+  readonly value: string;
+}
+
+/**
  * Per-team private state, held only by the trusted pure-model runtime (the
  * platform dispatcher Lambda), never sent to a participant directly --
  * `projectForTeam` is the only sanctioned read path, and it redacts every
@@ -116,9 +189,10 @@ export interface TeamState {
   readonly score: number;
   /** Increments on every successful ROTATE; shares/secret below are for THIS generation. */
   readonly generation: number;
-  readonly secret: bigint;
+  /** Stringified bigint -- see this file's header "JSON-SAFETY INVARIANT". */
+  readonly secret: string;
   /** All `shareCount` shares for the current generation (only some may have been LEAKed). */
-  readonly shares: readonly Share[];
+  readonly shares: readonly StoredShare[];
   readonly lastRotateAtMs: number | undefined;
   readonly completedContractIds: readonly string[];
   /** This team's OWN generations that some attacker has successfully HUNTed. */
@@ -138,6 +212,19 @@ export interface CryptoBattleState {
   readonly publicLedger: readonly PublicArtifact[];
   readonly teams: Readonly<Record<string, TeamState>>;
   /**
+   * Every team's current-generation Schnorr public commitment
+   * `Y = g^w mod p` (stringified bigint), keyed by teamId -- PROVE's
+   * verifier checks a submitted proof against this. Public by construction
+   * (unlike `TeamState.secret` / `.shares`): derived once per team at
+   * `initialState` and re-derived on every ROTATE (see reducer.ts's
+   * `applyRotate`), so it always reflects the team's *current* generation
+   * the same way `TeamState.generation` does. Lives at the state's top
+   * level, not inside `TeamState`, specifically so it is unambiguous that
+   * this field -- unlike everything else `TeamState` holds -- is always safe
+   * to hand to every team via `projectForTeam`.
+   */
+  readonly publicCommitments: Readonly<Record<string, string>>;
+  /**
    * Replay guard: `JSON.stringify([attackerTeamId, targetTeamId, generation])`
    * for every successful HUNT. JSON-encoded (not `|`-joined) so a team id
    * that happens to contain `|` can never collide with a different triple.
@@ -151,14 +238,22 @@ export type CryptoBattleOp =
       readonly kind: "hunt";
       readonly targetTeamId: string;
       readonly generation: number;
-      readonly recoveredSecret: bigint;
+      /**
+       * Stringified bigint -- see this file's header "JSON-SAFETY INVARIANT".
+       * `validateOp`'s "hunt" branch parses this with `schnorr-verifier.ts`'s
+       * `parseCanonicalDecimal` (the same untrusted-decimal-parsing gate
+       * PROVE's proof fields already go through) and rejects a malformed
+       * value with `{ ok: false }` rather than throwing.
+       */
+      readonly recoveredSecret: string;
     }
-  | { readonly kind: "rotate" };
+  | { readonly kind: "rotate" }
+  | { readonly kind: "prove"; readonly contractId: string; readonly proof: SchnorrProof };
 
 export interface VaultProjection {
   readonly teamId: string;
   readonly secret: string;
-  readonly shares: readonly { readonly index: number; readonly value: string }[];
+  readonly shares: readonly StoredShare[];
   readonly generation: number;
   readonly lastRotateAtMs: number | undefined;
   readonly rotateCooldownRemainingMs: number;
@@ -198,4 +293,6 @@ export interface CryptoBattleProjection {
   readonly otherOpenContractCount: number;
   readonly publicLedger: readonly PublicArtifact[];
   readonly teams: Readonly<Record<string, TeamSummaryProjection>>;
+  /** Every team's current-generation Schnorr public commitment -- see CryptoBattleState's field of the same name. Public by construction, safe for every team to see. */
+  readonly publicCommitments: Readonly<Record<string, string>>;
 }
