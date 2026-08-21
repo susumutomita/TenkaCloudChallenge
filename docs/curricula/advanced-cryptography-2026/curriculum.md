@@ -471,10 +471,12 @@ of four bullets, placed *before* "はじめに" / "Start here":
    own numbers.
 4. **言葉** — each technical term restated in plain language.
 
-`scripts/ac26-premises.test.ts` enforces the shape for Weeks 1–4. Weeks 5–7 are added
-to its `PUBLISHED_WEEKS` as their material is published and their instructions are
-rewritten in this form. The self-study note series that the bridge was modelled on is
-at https://susumutomita.github.io/notes/ (Week 0 "土台編" onwards).
+`scripts/ac26-premises.test.ts` enforces the shape for Weeks 1–6 (Weeks 5 and 6 joined on
+2026-08-22). Week 7 stays out while its problems pin `README.md` as `roadmap` — with no
+`week7/` directory upstream, the "where in the course" bullet has nothing to name; it joins
+when that directory is published. The self-study note series that the bridge was modelled on
+is at https://susumutomita.github.io/notes/ (Week 0 "土台編" onwards), and every week of it
+now opens with the same REPL drill format the premise bullets are written to feed.
 
 ## Maintenance
 

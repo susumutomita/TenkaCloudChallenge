@@ -15,15 +15,19 @@ import { describe, expect, it } from "bun:test";
  *
  * This test is the machine-checkable half of #493's acceptance criteria. It
  * covers the weeks whose material is published and whose problems have been
- * rewritten (Weeks 1–4). Weeks 5–7 are added here as their material is
- * published and their instructions rewritten — extending PUBLISHED_WEEKS is the
- * deliberate act, not a silent default.
+ * rewritten: Weeks 1–4, and since 2026-08-22 Weeks 5 and 6 as well.
+ *
+ * Week 7 is deliberately absent. Its problems pin `README.md` with
+ * `kind: "roadmap"` because no `week7/` directory exists upstream (see the
+ * publication table in `curriculum.md`), so the "where in the course" bullet
+ * has nothing to name. It joins the list when a week 7 directory is published —
+ * extending PUBLISHED_WEEKS is the deliberate act, not a silent default.
  */
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const CHALLENGES = join(REPO_ROOT, "challenges");
 
-const PUBLISHED_WEEKS = ["w1", "w2", "w3", "w4"];
+const PUBLISHED_WEEKS = ["w1", "w2", "w3", "w4", "w5", "w6"];
 
 const JA_HEADING = "## 前提 — 中学・高校の数学から";
 const EN_HEADING = "## Before you start — from school math";
@@ -45,7 +49,7 @@ function section(text: string, heading: string, next: string): string {
 
 describe("ac26 published weeks start from school math (#493)", () => {
   it("covers the expected problems", () => {
-    expect(problems.length).toBeGreaterThanOrEqual(18);
+    expect(problems.length).toBeGreaterThanOrEqual(30);
   });
 
   for (const id of problems) {
