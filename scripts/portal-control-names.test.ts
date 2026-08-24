@@ -76,3 +76,43 @@ describe("Portal controls are named as the Portal names them", () => {
     });
   }
 });
+
+/**
+ * A drill points at its answer boxes the way the Portal shows them.
+ *
+ * Same playthrough, second finding: the statements said "paste it into checkpoint
+ * `circuit`", but the Portal never shows a checkpoint id — it shows the Japanese
+ * label and the boxes in order. With eight identically-styled boxes whose only
+ * placeholder is 「値を入力」, a player had to map id → label themselves. The drills
+ * now name the ordinal and the on-screen heading, and the heading must match the
+ * checkpoint's own label so the two cannot drift apart.
+ */
+const DRILLS = [
+  "ac26-w3-schnorr-drill",
+  "ac26-w4-sumcheck-drill",
+  "ac26-w4-fri-drill",
+  "ac26-w4-plonk-drill",
+];
+
+describe("drills point at answer boxes by position and on-screen heading", () => {
+  for (const id of DRILLS) {
+    const meta = JSON.parse(readFileSync(join(CHALLENGES, id, "metadata.json"), "utf8"));
+    const ja: string = meta.instructions ?? "";
+    const en: string = meta.i18n?.en?.instructions ?? "";
+    const checks: { id: string; label: string }[] = meta.scoring.checks;
+    const enChecks: { label: string }[] = meta.i18n.en.checks;
+
+    it(`${id} never points at a checkpoint id`, () => {
+      expect(ja.includes("checkpoint `"), `${id}: ja still names a checkpoint id`).toBe(false);
+      expect(en.includes("checkpoint `"), `${id}: en still names a checkpoint id`).toBe(false);
+    });
+
+    it(`${id} gives every answer box its position and the heading the Portal shows`, () => {
+      checks.forEach((check, index) => {
+        const position = index + 1;
+        expect(ja).toContain(`上から **${position} 番目**の欄（画面の見出し「${check.label}」）`);
+        expect(en).toContain(`box **${position} of ${checks.length}** (heading "${enChecks[index].label}")`);
+      });
+    });
+  }
+});
