@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "bun:test";
 
 /**
- * Every published-week ac26 problem must start from school math (#493).
+ * Every ac26 problem must start from school math (#493).
  *
  * The problems were written by someone who already knew the vocabulary, and a
  * learner who does not reads "F_p", "witness", "commitment" in the first line
@@ -14,20 +14,36 @@ import { describe, expect, it } from "bun:test";
  * language. The same four bullets in English.
  *
  * This test is the machine-checkable half of #493's acceptance criteria. It
- * covers the weeks whose material is published and whose problems have been
- * rewritten: Weeks 1–4, and since 2026-08-22 Weeks 5 and 6 as well.
+ * covers every `ac26-*` problem in the catalog: the two Bridge 0 diagnostics
+ * (`ac26-bridge-experiment`, `ac26-bridge-properties`), Weeks 1–6 (34
+ * problems), and — since 2026-08-24 — the two Week 7 capstones as well.
  *
- * Week 7 is deliberately absent. Its problems pin `README.md` with
- * `kind: "roadmap"` because no `week7/` directory exists upstream (see the
- * publication table in `curriculum.md`), so the "where in the course" bullet
- * has nothing to name. It joins the list when a week 7 directory is published —
- * extending PUBLISHED_WEEKS is the deliberate act, not a silent default.
+ * Week 7's "教材のどこ" bullet cannot name a lecture slide or assignment
+ * function the way Weeks 1–6 do: `courseAlignment.sources` pins the upstream
+ * repository's `README.md` with `kind: "roadmap"` because no `week7/`
+ * directory exists there (see the publication table in `curriculum.md`). The
+ * bullet names that pin honestly instead of pretending to a course section
+ * that does not exist — a roadmap line is a real, checkable citation, just a
+ * thin one. If `week7/` is ever published upstream, replace the citation with
+ * the real material; do not drop the section.
+ *
+ * EXCLUDE lists a problem out of this contract only with a reason attached.
+ * There are currently none — every ac26-* directory in `challenges/` is
+ * covered.
  */
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const CHALLENGES = join(REPO_ROOT, "challenges");
 
-const PUBLISHED_WEEKS = ["w1", "w2", "w3", "w4", "w5", "w6"];
+// problemId -> reason. Keep empty unless a specific ac26-* problem genuinely
+// cannot carry this section (e.g. it is withdrawn). Excluding a problem here
+// must not be how a hard case gets out of the contract — fix the problem
+// instead, the way Bridge 0 and Week 7 were fixed rather than excluded.
+const EXCLUDE: Record<string, string> = {};
+
+const problems = readdirSync(CHALLENGES)
+  .filter((name) => name.startsWith("ac26-") && !(name in EXCLUDE))
+  .sort();
 
 const JA_HEADING = "## 前提 — 中学・高校の数学から";
 const EN_HEADING = "## Before you start — from school math";
@@ -36,10 +52,6 @@ const EN_BULLETS = ["**What you already know**", "**Where in the course**", "**A
 const JA_NEXT = "## はじめに";
 const EN_NEXT = "## Start here";
 
-const problems = readdirSync(CHALLENGES)
-  .filter((name) => PUBLISHED_WEEKS.some((w) => name.startsWith(`ac26-${w}-`)))
-  .sort();
-
 function section(text: string, heading: string, next: string): string {
   const i = text.indexOf(heading);
   if (i < 0) return "";
@@ -47,9 +59,9 @@ function section(text: string, heading: string, next: string): string {
   return j < 0 ? text.slice(i) : text.slice(i, j);
 }
 
-describe("ac26 published weeks start from school math (#493)", () => {
+describe("ac26 problems start from school math (#493)", () => {
   it("covers the expected problems", () => {
-    expect(problems.length).toBeGreaterThanOrEqual(30);
+    expect(problems.length).toBeGreaterThanOrEqual(38);
   });
 
   for (const id of problems) {
