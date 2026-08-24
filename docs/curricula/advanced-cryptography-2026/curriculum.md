@@ -458,24 +458,45 @@ in [`ASSESSMENT.md`](./ASSESSMENT.md), which also fixes the rule that any
 
 A problem whose first line already assumes its own vocabulary ("F_p", "witness",
 "commitment") is readable only by someone who could already solve it (#493). Every
-problem of a published week therefore opens its `instructions` (ja and en) with a
-fixed "前提 — 中学・高校の数学から" / "Before you start — from school math" section
-of four bullets, placed *before* "はじめに" / "Start here":
+`ac26-*` problem — the two Bridge 0 diagnostics, Weeks 1–6, and the two Week 7
+capstones — therefore opens its `instructions` (ja and en) with a fixed "前提 —
+中学・高校の数学から" / "Before you start — from school math" section of four
+bullets, placed *before* "はじめに" / "Start here":
 
 1. **学校で習ったこと** — the school fact this rests on (remainders → mod, reciprocal
    → inverse, gcd algorithm → extended Euclid, slope / tangent → point addition,
    simultaneous equations → nonce reuse or under-constraint, distributive law →
-   linear shares, expansion → Beaver, exponent law → Diffie–Hellman / OT).
-2. **教材のどこ** — lecture slide numbers and the assignment part / function names.
-3. **1 桁の例** — a worked example in mod 7 / 11 / 13 / 17, preferring the lecture's
-   own numbers.
+   linear shares, expansion → Beaver, exponent law → Diffie–Hellman / OT, number
+   decomposition + transposition → secret shares, counting principle → covering-set
+   selection).
+2. **教材のどこ** — lecture slide numbers and the assignment part / function names,
+   for the problems that have those to cite. Bridge 0 has no `courseAlignment.sources`
+   at all (it sits before Week 1, diagnosing readiness rather than accompanying a
+   lecture) and Week 7 pins only the upstream repository's `README.md` roadmap line
+   (no `week7/` directory exists there) — both bullets say so plainly rather than
+   inventing a course section that is not there. A thin, honest citation beats a
+   confident, false one.
+3. **1 桁の例** — a worked example in mod 7 / 11 / 13 / 17 (or the problem's own small
+   numbers, e.g. Week 7's toy mod-3 aggregation and its 2^6 = 64 primitive
+   combinations), preferring the lecture's own numbers where one exists.
 4. **言葉** — each technical term restated in plain language.
 
-`scripts/ac26-premises.test.ts` enforces the shape for Weeks 1–6 (Weeks 5 and 6 joined on
-2026-08-22). Week 7 stays out while its problems pin `README.md` as `roadmap` — with no
-`week7/` directory upstream, the "where in the course" bullet has nothing to name; it joins
-when that directory is published. The self-study note series that the bridge was modelled on
-is at https://susumutomita.github.io/notes/ (Week 0 "土台編" onwards), and every week of it
+`scripts/ac26-premises.test.ts` enforces the shape across the whole `ac26-*` catalog
+(38 problems as of 2026-08-24, when the two Bridge 0 problems and the two Week 7
+capstones joined Weeks 1–6). The test enumerates every `ac26-*` directory rather than
+an explicit week list, with an `EXCLUDE` map for any future problem that genuinely
+cannot carry the section — empty today.
+
+Week 7 previously sat outside this contract because its problems pin `README.md` as
+`roadmap` and the "where in the course" bullet had nothing to name. That reasoning
+under-served #493: a boilerplate-only problem is the exact failure #493 was filed
+against, and naming the roadmap pin honestly is not the same claim as citing a lecture
+— it just has to say which one it is. Week 7's "教材のどこ" bullet now names the
+roadmap pin directly. When `week7/` is published upstream, replace that citation with
+the real material; the section itself does not get dropped in the meantime.
+
+The self-study note series that the bridge was modelled on is at
+https://susumutomita.github.io/notes/ (Week 0 "土台編" onwards), and every week of it
 now opens with the same REPL drill format the premise bullets are written to feed.
 
 ## Maintenance
