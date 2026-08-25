@@ -21,14 +21,19 @@ def audit(circuit: list[dict]) -> list[str]:
 
 
 def forge_witness(circuit: list[dict], params: dict[str, int]) -> dict[str, int]:
-    """Claim ok = 1 (and so granted = 1) while revoked != 0.
+    """A witness satisfying `circuit` (deployed) while failing the intended one.
 
-    Which helper value makes that consistent depends on which constraint is gone:
+    That structural condition is the checkpoint's actual definition of "false
+    claim" -- it is not always "ok = 1 despite revoked != 0" (see #527). Which
+    shape the forgery takes depends on which constraint survives:
 
-      iszero_b missing -> only A survives: revoked*inv + 1 - 1 = 0, so inv = 0.
-      iszero_a missing -> only B survives. B never reads inv, so replacing the
-        honest revoked credential's seeded inverse with zero still satisfies the
-        deployed circuit while A would reject it.
+      iszero_b missing -> only A survives: revoked*inv + 1 - 1 = 0 is satisfied
+        by inv = 0 once ok is claimed to be 1, so a revoked credential is
+        granted access it should not have.
+      iszero_a missing -> only B survives, and B never reads inv. The honest
+        decision (ok = 0, access denied) does not have to change at all: the
+        false claim here is that `inv` still means "the inverse of revoked",
+        when the surviving circuit no longer checks that in any way.
     """
     p = params["p"]
     revoked = params["revoked"] % p

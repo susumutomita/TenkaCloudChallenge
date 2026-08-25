@@ -20,11 +20,11 @@ from urllib.parse import urlsplit
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fixtures.generate import (
+    DROPPABLE,
     clean_witness,
     health_token,
     honest_witness,
     params,
-    root_cause_diagnosis,
     vulnerable_circuit,
 )
 
@@ -224,6 +224,73 @@ def prepare_submissions(seed: str, files: object) -> dict[str, object]:
     }
 
 
+def _missing_constraint_id(seed: str, label: str = "public") -> str:
+    """Which half of the is-zero gadget this deployment lacks.
+
+    Read off the deployed circuit's own ids, not computed a second time from the
+    seed independently of `vulnerable_circuit` -- if the two ever disagreed,
+    grading would silently drift from the circuit the participant is actually
+    looking at. This is the root-cause checkpoint's own ground truth, so unlike
+    `vulnerable_circuit` it is not exported from `fixtures/generate.py`.
+    """
+    present = {str(c["id"]) for c in vulnerable_circuit(seed, label)}
+    missing = [cid for cid in DROPPABLE if cid not in present]
+    if len(missing) != 1:
+        raise AssertionError(f"vulnerable_circuit for {seed!r}/{label!r} did not drop exactly one constraint")
+    return missing[0]
+
+
+_ALL_SIGNALS = frozenset({"revoked", "inv", "ok", "issuer_ok", "granted"})
+
+
+def _referenced_signals(circuit: list[dict[str, object]]) -> set[str]:
+    keys = ("signal", "value", "inv", "out", "left", "right")
+    return {str(c[key]) for c in circuit for key in keys if key in c}
+
+
+def _unconstrained_signals(seed: str, label: str = "public") -> frozenset[str]:
+    """Signals the deployed circuit's surviving constraints never reference at all.
+
+    Computed from the circuit's own structure so it cannot drift from what
+    `vulnerable_circuit` actually ships. When `c-iszero-a` is missing, only `B`
+    (`revoked * ok = 0`) survives and it never reads `inv` -- so *any* value
+    other than the honest one is an equally correct root-cause diagnosis for
+    that signal, which is why `_check_root_cause` treats membership here as a
+    wildcard rather than requiring one canonical number (#527).
+    """
+    return frozenset(_ALL_SIGNALS - _referenced_signals(vulnerable_circuit(seed, label)))
+
+
+def _expected_root_cause(seed: str) -> dict[str, object]:
+    """The verifier's own ground truth for the root-cause checkpoint.
+
+    Unlike `vulnerable_circuit`, this function's entire purpose is to know the
+    answer, so -- unlike the input generators -- it is not exported from
+    `fixtures/generate.py` and nothing on the participant's reading path (the
+    public tests, the hidden tests) imports it. Only this checkpoint's own
+    grading does.
+    """
+    prm = params(seed)
+    p = prm["p"]
+    baseline = honest_witness(prm)
+    missing = _missing_constraint_id(seed)
+    if missing == "c-iszero-b":
+        after = {"ok": 1, "granted": prm["issuer_ok"] % p, "inv": 0}
+    else:
+        # c-iszero-a missing: only B survives, and B never reads `inv`. The
+        # decision (ok, granted) does not have to move at all -- the exploit is
+        # that `inv` stops meaning "the inverse of revoked" and nothing checks
+        # it any more. `0` here is only a canonical example; `_check_root_cause`
+        # accepts any value other than the honest one (#527).
+        after = {"inv": 0}
+    changes = [
+        {"signal": name, "before": baseline[name], "after": value}
+        for name, value in after.items()
+        if baseline[name] != value
+    ]
+    return {"missingConstraintId": missing, "manipulatedSignals": changes}
+
+
 def _check_root_cause(submission: object) -> bool:
     answer = submission
     if isinstance(answer, str):
@@ -233,7 +300,33 @@ def _check_root_cause(submission: object) -> bool:
             return False
     if not isinstance(answer, dict):
         return False
-    return answer == root_cause_diagnosis(SEED)
+    expected = _expected_root_cause(SEED)
+    if answer.get("missingConstraintId") != expected["missingConstraintId"]:
+        return False
+    expected_by_signal = {c["signal"]: c for c in expected["manipulatedSignals"]}
+    submitted = answer.get("manipulatedSignals")
+    if not isinstance(submitted, list) or len(submitted) != len(expected_by_signal):
+        return False
+    wildcard = _unconstrained_signals(SEED)
+    seen: set[str] = set()
+    for entry in submitted:
+        if not isinstance(entry, dict):
+            return False
+        name = entry.get("signal")
+        if name not in expected_by_signal or name in seen:
+            return False
+        seen.add(name)
+        exp = expected_by_signal[name]
+        if entry.get("before") != exp["before"]:
+            return False
+        if name in wildcard:
+            # Unconstrained by the deployed circuit: any value actually
+            # different from the honest one is an equally valid diagnosis.
+            if entry.get("after") == exp["before"]:
+                return False
+        elif entry.get("after") != exp["after"]:
+            return False
+    return True
 
 
 RUNNER = """
