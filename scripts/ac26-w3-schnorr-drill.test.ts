@@ -54,11 +54,15 @@ function evaluate(checkpointId: string, submission: string): boolean {
   return JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "null") === true;
 }
 
-/** This seed's expected values and public numbers, as JSON.
+/**
+ * This seed's expected values and public numbers, as JSON.
  *
- * `expected` comes from `verifier.expected`, not `fixtures.generate`: since #537, the
- * fixtures module hands back public state only, and the checkpoints' ground truth is
- * computed only inside the verifier (see that module's docstring).
+ * `expected_for` lives only in `verifier/expected.py` (Issue 543/537): reading it here
+ * from the checkout, rather than the participant Docker image, is deliberate -- this
+ * helper is test-only tooling with full repository access, the same way
+ * `mutation.py` and `tests/hidden/check_schnorr_drill.py` are. What must NOT resolve
+ * `expected_for` is the participant image itself; that boundary is asserted separately
+ * in the "participant/verifier separation" describe block below.
  */
 function deployment(seed = SEED): { expected: Record<string, unknown>; public: Record<string, unknown> } {
   const script = [
@@ -89,7 +93,9 @@ describe("ac26-w3-schnorr-drill: participant contract", () => {
       "local/tests/public/test_schnorr_drill.py",
       "local/tests/hidden/check_schnorr_drill.py",
       "local/verifier/server.py",
-      "local/verifier/workbench.py",
+      "local/verifier/expected.py",
+      "local/participant/server.py",
+      "local/participant/workbench.py",
       "local/starter/schnorr_drill.py",
       "local/reference/schnorr_drill.py",
     ]) {
@@ -119,8 +125,8 @@ describe("ac26-w3-schnorr-drill: participant contract", () => {
     expect(participantCopies.some((line) => line.includes("starter/"))).toBe(true);
     expect(participantCopies.some((line) => line.includes("reference/"))).toBe(false);
     expect(participantCopies.some((line) => line.includes("mutation.py"))).toBe(false);
-    expect(author).toContain("COPY reference/");
-    expect(author).toContain("COPY mutation.py");
+    expect(author).toContain("COPY --chown=lab:lab reference/ ./reference/");
+    expect(author).toContain("COPY --chown=lab:lab mutation.py ./mutation.py");
   });
 });
 
@@ -147,6 +153,103 @@ describe("ac26-w3-schnorr-drill: container safety", () => {
     expect(verifier).toContain("shell=False");
     expect(verifier).not.toContain("os.system");
     expect(verifier).not.toContain("shell=True");
+  });
+});
+
+describe("ac26-w3-schnorr-drill: participant/verifier separation (Issue 543/537)", () => {
+  it("keeps the answer derivation and hidden suite out of the participant Docker stage", () => {
+    const dockerfile = read("local/Dockerfile");
+    const participantStage = dockerfile.slice(
+      dockerfile.indexOf("FROM base AS participant"),
+      dockerfile.indexOf("FROM base AS verifier"),
+    );
+    expect(participantStage).not.toContain("tests/hidden");
+    expect(participantStage).not.toContain("COPY --chown=lab:lab verifier/");
+    expect(participantStage).not.toContain("COPY --chown=lab:lab reference/");
+    expect(participantStage).not.toContain("COPY --chown=lab:lab mutation.py");
+    expect(participantStage).toContain("COPY --chown=lab:lab tests/public/");
+    expect(participantStage).toContain("COPY --chown=lab:lab participant/");
+
+    const verifierStage = dockerfile.slice(
+      dockerfile.indexOf("FROM base AS verifier"),
+      dockerfile.indexOf("FROM participant AS author"),
+    );
+    expect(verifierStage).toContain("COPY --chown=lab:lab tests/hidden/");
+    expect(verifierStage).toContain("COPY --chown=lab:lab verifier/");
+    expect(verifierStage).not.toContain("COPY --chown=lab:lab participant/");
+    expect(verifierStage).not.toContain("COPY --chown=lab:lab reference/");
+    expect(verifierStage).not.toContain("COPY --chown=lab:lab mutation.py");
+  });
+
+  it("never defines expected_for outside verifier/expected.py", () => {
+    const fixtures = read("local/fixtures/generate.py");
+    const participantServer = read("local/participant/server.py");
+    const participantWorkbench = read("local/participant/workbench.py");
+    for (const source of [fixtures, participantServer, participantWorkbench]) {
+      expect(source).not.toContain("def expected_for");
+      expect(source).not.toContain("tests.hidden");
+    }
+    expect(read("local/verifier/expected.py")).toContain("def expected_for");
+  });
+
+  it("keeps the Portal editor API out of the hidden verifier and grading out of the Workbench", () => {
+    const participantServer = read("local/participant/server.py");
+    const hiddenServer = read("local/verifier/server.py");
+    for (const endpoint of ["/api/config", "/api/inspect", "/api/starter", "/api/test", "/api/prepare"]) {
+      expect(participantServer).toContain(endpoint);
+      expect(hiddenServer).not.toContain(endpoint);
+    }
+    expect(participantServer).not.toContain("def evaluate(");
+    expect(participantServer).not.toContain("from verifier");
+    expect(hiddenServer).toContain("from verifier.expected import expected_for");
+    expect(hiddenServer).toContain("/verify");
+    expect(hiddenServer).toContain("/healthz");
+  });
+
+  it("proxies /verify to the internal verifier and fails closed when it is unreachable", () => {
+    const probe = String.raw`
+import json, sys
+sys.path.insert(0, ".")
+from participant import server
+bodies = [{"checkpointId": checkpoint, "submission": "anything"} for checkpoint in server.CHECKPOINTS]
+print(json.dumps({
+    "missing": [server.proxy_verdict(body, "") for body in bodies],
+    "unavailable": [server.proxy_verdict(body, "http://127.0.0.1:1/verify") for body in bodies],
+    "hasInlineEvaluator": hasattr(server, "expected_for") or hasattr(server, "_check_line"),
+}))
+`;
+    const result = python(["-c", probe]);
+    expect(result.status).toBe(0);
+    const output = JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "{}") as {
+      missing: Array<{ checkpointId: string; correct: boolean }>;
+      unavailable: Array<{ checkpointId: string; correct: boolean }>;
+      hasInlineEvaluator: boolean;
+    };
+    const expectedVerdicts = LINES.map((checkpointId) => ({ checkpointId, correct: false }));
+    expect(output.missing).toEqual(expectedVerdicts);
+    expect(output.unavailable).toEqual(expectedVerdicts);
+    expect(output.hasInlineEvaluator).toBe(false);
+  });
+
+  it("compose builds the right target for each service, publishes only the Workbench port, and isolates the verifier network", () => {
+    const compose = read("local/docker-compose.yml");
+    for (const contract of [
+      "target: participant",
+      "target: verifier",
+      '"127.0.0.1:18132:18132"',
+      "VERIFIER_URL: http://verifier:18138/verify",
+      "read_only: true",
+      "cap_drop:",
+      "- ALL",
+      "no-new-privileges:true",
+      "healthcheck:",
+      "internal: true",
+      'com.docker.network.bridge.enable_ip_masquerade: "false"',
+    ]) {
+      expect(compose).toContain(contract);
+    }
+    expect(compose).not.toContain('"127.0.0.1:18138:18138"');
+    expect(compose.match(/ports:/g)).toHaveLength(1);
   });
 });
 

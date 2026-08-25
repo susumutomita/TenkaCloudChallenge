@@ -77,18 +77,23 @@ One hint per checkpoint (penalty 6), naming the usual slip on that line.
 
 ## Assurance scope
 
-Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
-daemon, and the image, so nothing inside that image is hidden from you: `reference/` and
-`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than
-out of reach.
+Local mode is **self-paced, honor-system verification**. Someone who owns the Docker daemon
+and every image in the compose stack cannot be prevented from inspecting hidden material.
+The boundary here is misdelivery, not confidentiality against that person: the participant
+Workbench image contains public fixtures, tests, and starter material only. The eight lines'
+expected-value derivation (`verifier/expected.py`) and the hidden suite live in a separate,
+unpublished verifier image, reachable only over the Compose-internal network; `reference/`
+and `mutation.py` are added only to the `author` stage.
 
-What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
-a checkpoint can only credit the id it echoes, results do not leak expected values, and the
+Only the Workbench is published, at host `127.0.0.1:18132`; the verifier has no host port.
+Both services run non-root with a read-only root filesystem, no capabilities, `no-new-
+privileges`, and bounded memory/PIDs. A submission cannot hang or crash the verifier, a
+checkpoint can only credit the id it echoes, results do not leak expected values, and the
 fixtures come from this deployment's seed so a memorized answer does not carry.
 
 That supports self-study and honest practice. It does **not** support competition ranking,
 examination, or completion certification — those need a verifier the participant does not
-administer, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
+administer at all, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
 
 ## Cost
 

@@ -3,17 +3,7 @@
     {
       "problem": "ac26-w3-schnorr-drill",
       "issue": 537,
-      "reason": "Drill shape: CODE_CHECKPOINTS is empty, so every graded line is compared against fixtures.generate.setting(SEED)[\"expected\"][line], which the participant image can import directly."
-    },
-    {
-      "problem": "ac26-w4-fri-drill",
-      "issue": 537,
-      "reason": "Same drill shape as ac26-w3-schnorr-drill: CODE_CHECKPOINTS is empty and every graded line resolves through a reachable fixtures.generate expected-value table."
-    },
-    {
-      "problem": "ac26-w4-plonk-drill",
-      "issue": 537,
-      "reason": "Same drill shape as ac26-w3-schnorr-drill: CODE_CHECKPOINTS is empty and every graded line resolves through a reachable fixtures.generate expected-value table."
+      "reason": "Residual after the Issue 543 Option B split (the expected-value path is closed: verifier/ no longer ships in the participant stage). What remains is a different class the container split cannot reach: starter/schnorr_drill.py asks the learner to write ec_add and ec_mul, and fixtures/generate.py needs working same-named implementations at participant runtime to derive this deployment's public numbers, so both ship in the participant image. Closing this needs a decision on the stub-vs-implementation class, not another container boundary."
     },
     {
       "problem": "sha256-schedule-logic",
