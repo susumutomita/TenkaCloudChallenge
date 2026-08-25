@@ -1,3 +1,8 @@
+# Compose の既定 project 名はディレクトリの basename で、この repo は全問題の
+# local-play ディレクトリを `local` と名付けている。宣言しないと 2 問を同時に
+# 立てたとき project 名が衝突し、片方の `down --remove-orphans` がもう片方の
+# コンテナごと消す (実際に起きた。TenkaCloudChallenge#521)。
+name: acm-validation-migration
 services:
   workbench:
     build:
