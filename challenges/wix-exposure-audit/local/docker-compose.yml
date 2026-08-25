@@ -1,5 +1,6 @@
 # Local-play problem container for wix-exposure-audit.
 # Bound to 127.0.0.1 only: the site and /verify never leave the box.
+name: wix-exposure-audit
 services:
   wix-exposure-audit:
     build:

@@ -1,5 +1,6 @@
 # Six-service, AWS-free OTA lab. Only the workshop and verifier are published,
 # and both are bound to loopback. The internal network has no external egress.
+name: secure-ota-rollback
 x-service-defaults: &service-defaults
   build:
     context: .

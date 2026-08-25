@@ -1,3 +1,4 @@
+name: asm-worst-case-latency
 services:
   workbench:
     build:

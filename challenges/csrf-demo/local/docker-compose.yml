@@ -1,5 +1,6 @@
 # Local-play problem container for csrf-demo.
 # Bound to 127.0.0.1 only: the challenge surface and /verify never leave the box.
+name: csrf-demo
 services:
   csrf-demo:
     build:

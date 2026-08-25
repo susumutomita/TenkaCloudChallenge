@@ -14,6 +14,7 @@
 # Both services bind their host-published ports to 127.0.0.1 only; the
 # replica is also reachable from inside the primary's terminal via the
 # compose service name `replica` on its (unpublished) default port 5432.
+name: db-a11-replication-lag
 services:
   primary:
     build:

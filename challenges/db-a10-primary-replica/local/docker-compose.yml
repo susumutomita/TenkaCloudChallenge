@@ -17,6 +17,7 @@
 # the compose service name `replica` on the (unpublished, docker-network-only)
 # default port 5432 — no external network, no credential beyond the same
 # trust auth every prior Database Track drill already uses.
+name: db-a10-primary-replica
 services:
   primary:
     build:

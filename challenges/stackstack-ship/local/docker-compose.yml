@@ -7,6 +7,7 @@
 # Both published ports are bound to 127.0.0.1 only: nothing here leaves the box.
 # There is no third port — the "published site" is a separate surface on the same
 # origin (`/site`), not a separate network. The READMEs say so plainly.
+name: stackstack-ship
 services:
   stackstack-ship:
     build:

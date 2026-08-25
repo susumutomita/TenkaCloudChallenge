@@ -8,6 +8,7 @@
 # Both published ports are bound to 127.0.0.1 only: nothing here leaves the box.
 # There is no monitoring stack and no third port — `/metrics` is a surface on the
 # same origin, scraped by nobody. The READMEs say so plainly.
+name: stackstack-observability
 services:
   stackstack-observability:
     build:

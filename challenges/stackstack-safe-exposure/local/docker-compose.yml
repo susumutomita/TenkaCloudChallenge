@@ -8,6 +8,7 @@
 # Both published ports are bound to 127.0.0.1 only: nothing here leaves the box.
 # There is no identity provider and no second network — the four accounts are
 # Bearer keys derived inside the container, and the READMEs say so plainly.
+name: stackstack-safe-exposure
 services:
   stackstack-safe-exposure:
     build:

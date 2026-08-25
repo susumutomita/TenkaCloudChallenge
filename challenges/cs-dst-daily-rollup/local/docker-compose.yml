@@ -1,3 +1,4 @@
+name: cs-dst-daily-rollup
 services:
   workbench:
     build:

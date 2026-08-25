@@ -11,6 +11,7 @@
 # phase is judged on is real HTTP that the drill inside `defend.mjs` sends to
 # this same listener, and the READMEs say so plainly rather than implying a
 # separate adversary.
+name: stackstack-gameday
 services:
   stackstack-gameday:
     build:

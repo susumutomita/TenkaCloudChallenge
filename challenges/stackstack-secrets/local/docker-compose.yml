@@ -9,6 +9,7 @@
 # There is no key material in this directory — the leaked credential, the
 # break-glass credential and every receipt are derived from FLAG_SEED inside the
 # container, so no two deploys share an answer and none is committed.
+name: stackstack-secrets
 services:
   stackstack-secrets:
     build:

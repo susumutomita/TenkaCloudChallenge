@@ -4,6 +4,7 @@
 # There is no bind-mounted solution file — the participant works directly against
 # the live database (psql, via the embedded Portal terminal), so all of the state
 # that matters lives inside the Postgres data directory this container owns.
+name: db-a12-partition
 services:
   db-a12-partition:
     build:

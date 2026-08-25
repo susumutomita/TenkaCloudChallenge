@@ -1,3 +1,4 @@
+name: cs-atomic-file-publish
 services:
   workbench:
     build:

@@ -1,6 +1,7 @@
 # The service is reachable only through a host-loopback publish path and has no
 # masqueraded route to the outside world.  The internal network carries no gateway;
 # workshop-host exists only because Docker cannot publish from an internal-only network.
+name: cs-transaction-visibility-audit
 services:
   workbench:
     build:

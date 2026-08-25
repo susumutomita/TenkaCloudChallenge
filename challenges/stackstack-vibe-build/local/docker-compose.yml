@@ -10,6 +10,7 @@
 # the participant's own `renderResults` returns without escaping it — that is the
 # thing being graded — so the response carries a Content-Security-Policy that
 # permits nothing, and the port never leaves loopback.
+name: stackstack-vibe-build
 services:
   stackstack-vibe-build:
     build:

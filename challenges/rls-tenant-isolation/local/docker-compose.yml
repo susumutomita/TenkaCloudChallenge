@@ -4,6 +4,7 @@
 # The participant edits ./solution/policies.sql on the host (bind-mounted in) and
 # restarts the container to re-grade. Postgres state lives in a named volume so a
 # restart re-applies schema/seed/policies cleanly.
+name: rls-tenant-isolation
 services:
   rls-tenant-isolation:
     build:

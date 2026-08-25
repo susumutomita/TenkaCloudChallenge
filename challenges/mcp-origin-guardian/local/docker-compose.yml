@@ -1,3 +1,4 @@
+name: mcp-origin-guardian
 services:
   participant:
     build:

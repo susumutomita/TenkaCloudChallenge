@@ -1,3 +1,4 @@
+name: github-oidc-trust-boundary
 services:
   participant:
     image: "${GITHUB_OIDC_PARTICIPANT_IMAGE:-github-oidc-trust-boundary-participant:local}"

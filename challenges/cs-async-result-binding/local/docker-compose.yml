@@ -1,3 +1,4 @@
+name: cs-async-result-binding
 services:
   participant:
     image: "${ASYNC_BINDING_PARTICIPANT_IMAGE:-cs-async-result-binding-participant:local}"
