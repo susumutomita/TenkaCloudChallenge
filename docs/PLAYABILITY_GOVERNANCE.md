@@ -14,7 +14,11 @@ This policy applies when a pull request does any of the following:
 3. rewrites a participant-facing file (`README.md`, `README.ja.md`,
    `local/starter/**`, `local/workbench/**`, `local/portal/**`) belonging to a
    problem that is **already** `status: ready` — i.e. a problem participants can
-   already play;
+   already play, **or** rewrites a participant-facing *field* purely inside
+   that problem's `metadata.json` (`name`, `shortDescription`, `instructions`,
+   `writeup`, any scoring `hints`, or a `checks[]`/`flags[]` `label`/`hints`,
+   including their `i18n.en` translations) without touching any of those files
+   at all;
 4. adds `scripts/<problem-id>.test.ts` under a matching `feat(<problem-id>):` /
    `test(<problem-id>):` title before that problem's `metadata.json` exists (the
    RED-only-commit shape from #459).
@@ -22,7 +26,18 @@ This policy applies when a pull request does any of the following:
 Case 3 exists because of PR #473: it rewrote hints and starter material for six
 already-shipped problems, and the version of this check running at the time
 only looked at cases 1/2/4, so it reported "no new problem or ready promotion"
-and let the rewrite through untouched.
+and let the rewrite through untouched. Issue #523 later found a narrower variant
+of the same gap: `hints` lives inside `metadata.json`, which was never on the
+file-path list case 3 checks, so a PR that rewrote only `metadata.json`'s
+`hints` — touching no README/starter/workbench/portal file — still slipped
+through. The fix compares `metadata.json`'s participant-facing *fields* by
+value (base vs head), not just whether the file changed; deploy/catalog-only
+fields (`status`, `courseAlignment`, `nodes`/`relations`, `runtime`,
+`cfnTemplate`, `exposedPorts`, `learningGoals`, `description`) are deliberately
+excluded so that e.g. a pure learning-graph addition (PR #520's shape) does not
+require a human blind-play. See `scripts/check-pr-playability.ts`'s
+`extractParticipantFacingProjection` for the exact field list and the evidence
+behind each inclusion/exclusion.
 
 Repository CI, mutation tests, reference runs and runtime tests remain
 required, but they are not a substitute for a participant actually solving the
@@ -149,6 +164,17 @@ boundary.
   adds [Scope](#scope) case 3 to close the #473 gap. It does not relax any of
   the field-level evidence validation; if anything that got stricter (see the
   placeholder/template rejection above).
+- **Issue #523** (2026-08-25, found before merge while reviewing PR #520):
+  case 3's own file-path list (`README.md`/`README.ja.md`/`local/starter/**`/
+  `local/workbench/**`/`local/portal/**`) never included `metadata.json`, so a
+  PR that rewrote only `metadata.json`'s `hints` on an already-`status: ready`
+  problem reported "no participant-facing change" — the same class of gap as
+  #473, one directory level narrower. Fixed by comparing `metadata.json`'s
+  participant-facing fields by value (base vs head) instead of only checking
+  `status` transitions and file paths, while deliberately keeping
+  `courseAlignment`/`nodes`/`relations`/`status` and similar deploy-or-catalog-
+  only fields out of scope so a learning-graph-only PR (#520's shape) still
+  does not require a human blind-play.
 
 **Do not delete or weaken this gate to unblock an in-progress PR.** If a
 legitimate PR is stuck on this check, the fix is almost always "the PR is not

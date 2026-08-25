@@ -26,6 +26,17 @@
  *     participant-facing な面 (README / hint / starter / workbench / portal) を
  *     書き換える PR も対象にする。PR #473 はこの種の変更で 6 問の hint / starter を
  *     書き換えたが、当時の検出器は「新規問題でも ready 昇格でもない」として素通りした。
+ *   - Issue #523 が指摘した、上記の一段狭い抜け穴も塞ぐ: `hints` は
+ *     `metadata.json` の中にしかないので、README / starter を一切触らず
+ *     `metadata.json` 内の hint / instructions / shortDescription / name /
+ *     writeup / checkpoint label だけを書き換える PR は、ファイルパスの列挙
+ *     (`PARTICIPANT_FACING_SUBPATHS`) では検出できなかった。`metadata.json` を
+ *     まるごと対象ファイルに足すのではなく、base/head の `metadata.json` から
+ *     participant-facing なフィールドだけを projection して値で比較する
+ *     (`extractParticipantFacingProjection`)。`status` の付け替え・
+ *     `courseAlignment` 再ピン・`nodes`/`relations` (learning graph) の追加は
+ *     この projection に含めない — PR #520 (learning graph 追加のみ) まで
+ *     human blind play を要求してしまうため。
  *
  * ## このゲートが決定論的である理由
  *
@@ -104,6 +115,12 @@ const GITHUB_EVIDENCE_URL =
 // 採点コードは対象にしない (そちらは mutation test / solvability audit という
 // 既存の決定論的ゲートが担当しており、二重に人間 evidence を要求すると新規の
 // 誤検知源になる)。
+//
+// これはファイルパス軸の検出であり、`metadata.json` は意図的にここへ含めない
+// (`metadata.json` 自体は participant がファイルとして読むものではなく、
+// author-only なフィールドも同居する)。`metadata.json` 内の participant-facing
+// なフィールドの変更は、値ベースの `participantFacingMetadataFieldsChanged`
+// (Issue #523) が別軸として検出する。
 const PARTICIPANT_FACING_SUBPATHS: readonly RegExp[] = [
   /^README\.md$/u,
   /^README\.ja\.md$/u,
@@ -118,6 +135,132 @@ function isParticipantFacingSubPath(subPath: string): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// Issue #523: `PARTICIPANT_FACING_SUBPATHS` only ever looked at *which files*
+// changed, so a PR that rewrites `hints` (or `instructions`/`shortDescription`/
+// `name`/a checkpoint `label`) purely inside an already-`status: ready`
+// problem's `metadata.json` reported "no participant-facing change" — the same
+// class of gap PR #473 exploited, just one directory level narrower (#473 also
+// touched README/starter, so case 3 above already caught it; this closes the
+// "metadata.json only" variant).
+//
+// The fix is field-level, not file-level: adding the whole of `metadata.json`
+// to `PARTICIPANT_FACING_SUBPATHS` was considered and rejected (Issue #523) —
+// it would also require a human blind-play + `playtest-verified` label for
+// edits that never reach a participant, e.g. `status` bookkeeping,
+// `courseAlignment` re-pinning, or adding `nodes`/`relations` (PR #520's shape,
+// a pure learning-graph addition with zero participant-facing change).
+//
+// The field list below was derived by reading SCHEMA.json's own field
+// descriptions plus AGENT.md's authoring guide and a running
+// `local/workbench/server.py` (the container that actually serves the
+// participant Portal UI locally), not by trusting a fixed guess:
+//
+//   - `name`, `shortDescription`, `instructions` — SCHEMA.json and AGENT.md
+//     §"Edit metadata.json" both mark these player-facing in as many words;
+//     `local/workbench/server.py`'s `config_payload()` (the JSON the Portal
+//     actually fetches) literally echoes `shortDescription` back as its
+//     `description` key.
+//   - `writeup` — SCHEMA.json says it is withheld during play but "shown to
+//     the participant after a correct answer"; `scripts/validate-problems.ts`
+//     enforces ja/en parity on it for exactly that reason, and
+//     `docs/curricula/.../pilot/analysis-plan.md` classifies a wrong writeup
+//     as the same "content-bug" class as a wrong `instructions` or hint. It is
+//     participant-facing, just gated behind solving rather than behind
+//     `status: ready`.
+//   - `scoring.hints[]` / `scoring.checks[].label` / `scoring.checks[].hints[]`
+//     / `scoring.flags[].label` / `scoring.flags[].hints[]` — every scoring
+//     `kind` in SCHEMA.json that carries hint text (flag / verify / uptime /
+//     uptime-flat / uptime-multi / phased-polling / attack-detection /
+//     composite-probe at the top level, multi-verify/multi-flag inside each
+//     `checks[]`/`flags[]` entry) documents `hints` as competitor-visible
+//     progressive hints, and AGENT.md marks `checks[].label` explicitly
+//     `"<player-facing>"`. This is the exact field #473 leaked an answer
+//     through.
+//   - `i18n.en.*` mirrors of all of the above — SCHEMA.json's own `i18n`
+//     description calls these "competitor-facing field" translations.
+//
+// Explicitly excluded, with the evidence read before excluding it:
+//   - `description` (top-level) — SCHEMA.json states in as many words that the
+//     fairness contract (platform #1124) keeps this out of the participant
+//     Portal; AGENT.md calls it "author/admin-only" in the same sentence it
+//     calls `instructions` player-facing. `i18n.en.description` is excluded to
+//     match (translating admin-only text does not make it participant-facing).
+//   - `learningGoals` — despite living beside `shortDescription`/`instructions`
+//     in the required-fields list, SCHEMA.json's own description calls it "the
+//     author's intended learning objectives" with no mention of Portal
+//     display, AGENT.md's scaffolding step groups it with `tags` (a catalog/
+//     search field) rather than with the player-facing fields it lists two
+//     sentences earlier, and `local/workbench/server.py`'s `config_payload()`
+//     does not echo it anywhere the running container's own
+//     participant-visible payload can be inspected. Absence of proof is not
+//     proof of absence, but every source that documents what the Portal
+//     renders is silent on it, and every source that talks about who it is
+//     *for* says "the author" — so it is treated as author/graph-side
+//     metadata, the same bucket as `courseAlignment` and `tags`.
+//   - `status` / `visibility` / `difficulty` / `estimatedDuration` /
+//     `courseAlignment` / `nodes` / `relations` / `runtime` / `cfnTemplate` /
+//     `exposedPorts` — none of these render as participant-read text; they are
+//     deploy/catalog/graph metadata (this is also PR #520's shape: a
+//     `nodes`/`relations`-only change, which must stay unflagged).
+//   - `phases[].name` / `phases[].description` — SCHEMA.json shows these are
+//     participant-visible *only* when `publicHint: true` on that phase, a
+//     conditional the field-diff below does not attempt to evaluate. Left as a
+//     known follow-up rather than folded into this fix (see PR body).
+const PARTICIPANT_FACING_METADATA_TEXT_KEYS = ["name", "shortDescription", "instructions", "writeup"] as const;
+
+function extractHintBearingScoringFields(scoring: unknown): unknown {
+  if (!isRecord(scoring)) return undefined;
+  const projected: Record<string, unknown> = {};
+  if ("hints" in scoring) projected.hints = scoring.hints;
+  if (Array.isArray(scoring.checks)) {
+    projected.checks = scoring.checks.map((check) =>
+      isRecord(check) ? { label: check.label, hints: check.hints } : check,
+    );
+  }
+  if (Array.isArray(scoring.flags)) {
+    projected.flags = scoring.flags.map((flag) =>
+      isRecord(flag) ? { label: flag.label, hints: flag.hints } : flag,
+    );
+  }
+  return projected;
+}
+
+function extractLocalizedParticipantFacingFields(i18n: unknown): unknown {
+  if (!isRecord(i18n) || !isRecord(i18n.en)) return undefined;
+  const en = i18n.en;
+  return {
+    name: en.name,
+    shortDescription: en.shortDescription,
+    instructions: en.instructions,
+    writeup: en.writeup,
+    hints: en.hints,
+    checks: en.checks,
+  };
+}
+
+// Projects only the participant-facing subset of a `metadata.json` object so
+// two versions can be compared by value instead of by which file moved.
+function extractParticipantFacingProjection(metadata: Record<string, unknown> | undefined): unknown {
+  if (metadata === undefined) return undefined;
+  const projection: Record<string, unknown> = {};
+  for (const key of PARTICIPANT_FACING_METADATA_TEXT_KEYS) {
+    projection[key] = metadata[key];
+  }
+  projection.scoring = extractHintBearingScoringFields(metadata.scoring);
+  projection.i18nEn = extractLocalizedParticipantFacingFields(metadata.i18n);
+  return projection;
+}
+
+function participantFacingMetadataFieldsChanged(
+  base: Record<string, unknown> | undefined,
+  head: Record<string, unknown> | undefined,
+): boolean {
+  return (
+    JSON.stringify(extractParticipantFacingProjection(base)) !==
+    JSON.stringify(extractParticipantFacingProjection(head))
+  );
 }
 
 export function parsePlayabilityEvidence(body: string): PlayabilityEvidence {
@@ -189,6 +332,16 @@ export function classifyProblemChanges(
       const head = parseMetadata(readAtRef("head", path), "head", path);
       if (base?.status !== "ready" && head?.status === "ready") {
         promoted.add(problemId);
+        continue;
+      }
+      // Issue #523: the problem was already `status: ready` on both sides (not
+      // a promotion, so `promoted` above did not fire) — check whether the
+      // edit touched a participant-facing field (hints, instructions, etc.)
+      // purely inside metadata.json, e.g. a `hints`-only rewrite of a shipped
+      // problem, or PR #520's `nodes`/`relations`-only addition (which must
+      // stay unflagged).
+      if (head?.status === "ready" && participantFacingMetadataFieldsChanged(base, head)) {
+        participantFacing.add(problemId);
       }
       continue;
     }

@@ -148,6 +148,100 @@ describe("problem change classification", () => {
   });
 });
 
+// Issue #523: `PARTICIPANT_FACING_SUBPATHS` only ever looked at *which files*
+// changed. A PR that rewrites a hint (or `instructions`/`shortDescription`/
+// `name`/a checkpoint `label`) purely inside an already-`status: ready`
+// problem's `metadata.json` — touching no README, starter, workbench, or
+// portal file at all — reported "no participant-facing change", the same
+// class of gap PR #473 exploited one directory level up. These fixtures pin
+// the field-level fix: it must compare metadata.json *values*, not just
+// notice that the file changed.
+describe("problem change classification — metadata.json field-level participant-facing diff (Issue #523)", () => {
+  const readyMetadata = (hints: unknown, extra: Record<string, unknown> = {}) =>
+    JSON.stringify({
+      id: "shipped-hints",
+      status: "ready",
+      name: "Shipped",
+      shortDescription: "A shipped problem.",
+      instructions: "Read the evidence and submit the flag.",
+      scoring: { kind: "flag", flagOutputKey: "Flag", points: 100, hints },
+      ...extra,
+    });
+
+  test("positive: flags a hints-only rewrite inside metadata.json of an already-ready problem", () => {
+    const metadata = new Map([
+      ["base:challenges/shipped-hints/metadata.json", readyMetadata(["generic hint"])],
+      ["head:challenges/shipped-hints/metadata.json", readyMetadata(["the flag equals the DB password"])],
+    ]);
+    const changes = classifyProblemChanges("M\tchallenges/shipped-hints/metadata.json", (ref, path) =>
+      metadata.get(`${ref}:${path}`),
+    );
+
+    expect(changes.participantFacingReadyProblemIds).toEqual(["shipped-hints"]);
+    expect(changes.promotedReadyProblemIds).toEqual([]);
+    expect(changes.addedProblemIds).toEqual([]);
+  });
+
+  test("negative (PR #520 shape): a nodes/relations-only addition to an already-ready problem is not flagged", () => {
+    const metadata = new Map([
+      ["base:challenges/shipped-hints/metadata.json", readyMetadata(["generic hint"])],
+      [
+        "head:challenges/shipped-hints/metadata.json",
+        readyMetadata(["generic hint"], {
+          nodes: { concepts: [{ id: "concept.foo", description: "author-facing graph node" }] },
+          relations: [{ type: "covers", source: "problem.shipped-hints", target: "concept.foo" }],
+          courseAlignment: {
+            courseId: "advanced-cryptography-program",
+            edition: "2026",
+            week: 3,
+            role: "mechanism",
+            spoilerPolicy: "independent-reimplementation",
+          },
+        }),
+      ],
+    ]);
+    const changes = classifyProblemChanges("M\tchallenges/shipped-hints/metadata.json", (ref, path) =>
+      metadata.get(`${ref}:${path}`),
+    );
+
+    expect(changes.participantFacingReadyProblemIds).toEqual([]);
+    expect(changes.promotedReadyProblemIds).toEqual([]);
+  });
+
+  test("negative: a hints rewrite on a problem that is still status: draft is not flagged", () => {
+    const draftMetadata = (hints: unknown) =>
+      JSON.stringify({
+        id: "in-progress-hints",
+        status: "draft",
+        scoring: { kind: "flag", flagOutputKey: "Flag", points: 100, hints },
+      });
+    const metadata = new Map([
+      ["base:challenges/in-progress-hints/metadata.json", draftMetadata(["old hint"])],
+      ["head:challenges/in-progress-hints/metadata.json", draftMetadata(["a completely different hint"])],
+    ]);
+    const changes = classifyProblemChanges("M\tchallenges/in-progress-hints/metadata.json", (ref, path) =>
+      metadata.get(`${ref}:${path}`),
+    );
+
+    expect(changes.participantFacingReadyProblemIds).toEqual([]);
+  });
+
+  test("negative: an author-only field change (learningGoals) on an already-ready problem is not flagged", () => {
+    const metadata = new Map([
+      ["base:challenges/shipped-hints/metadata.json", readyMetadata(["generic hint"], { learningGoals: ["old goal"] })],
+      [
+        "head:challenges/shipped-hints/metadata.json",
+        readyMetadata(["generic hint"], { learningGoals: ["old goal", "a new goal added"] }),
+      ],
+    ]);
+    const changes = classifyProblemChanges("M\tchallenges/shipped-hints/metadata.json", (ref, path) =>
+      metadata.get(`${ref}:${path}`),
+    );
+
+    expect(changes.participantFacingReadyProblemIds).toEqual([]);
+  });
+});
+
 describe("new-problem / ready-promotion / participant-facing gate", () => {
   // This is the exact regression this Issue exists to prevent: #476 removed the
   // whole gate because it kept a legitimately in-progress Draft PR permanently red.
