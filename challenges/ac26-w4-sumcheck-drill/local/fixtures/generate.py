@@ -1,11 +1,12 @@
-"""This deployment's numbers, and the twelve values the SumCheck drill expects.
+"""This deployment's numbers for the SumCheck drill.
 
 Everything the learner types is decided here from FLAG_SEED: a small prime field, the
 four circuit inputs, the verifier's two random points, the honest prover's two messages
 (as coefficients — what actually travels in the protocol), and the lying prover's two
 fudge parameters. The learner never sees the expected values — they see the assignment
 statements (``show.py``) and produce every value with their own Python, one line at a
-time.
+time. The twelve lines' expected values live only in ``verifier/expected.py``, which is
+never copied into the participant Docker stage.
 
 The circuit is the two-gate toy from the Week 4 lecture's GKR section — y₀ = x₁ + x₂,
 y₁ = x₃·x₄, output y₀ + y₁ — but the inputs, the field, and the verifier's randomness
@@ -14,17 +15,15 @@ lecture's, the numbers are not.
 
 Nothing here is cryptographic. Toy parameters are for observability.
 
-This module hands back the PUBLIC state only (what ``show.py`` prints). It no longer
-computes or exports the twelve lines' expected values as their own callable result:
-before #537, that dict shipped here and could be read back with one import, which was
-the entire drill for free. ``verifier/expected.py`` recomputes each checkpoint's value
-from this public state at grading time instead -- but read that module's own docstring
-before assuming this closes the leak: it does not. This module and the participant-
-facing tests no longer point at the answer by accident; a participant who deliberately
-imports ``verifier.expected`` instead still gets it, because this single-stage drill
-template has no isolated verifier container to keep it out of. See #537 and
-scripts/ac26-w4-sumcheck-drill.test.ts for the regression
-test pinning the values this move must not change.
+History (#537/#543): this module used to compute and return the twelve lines' expected
+values directly, so `setting(FLAG_SEED)["expected"]` handed back every graded answer
+with one import. A first pass moved that computation into ``verifier/expected.py`` but
+left it in the same single, participant-runnable Docker stage as everything else, so the
+answer stayed reachable one import away. This problem's ``local/`` now splits into a
+public ``participant/`` Workbench stage (this module, ``tests/public/``, ``starter/``)
+and a separate, unpublished ``verifier`` stage that alone carries
+``verifier/expected.py`` and ``tests/hidden/`` — see ``../Dockerfile`` and
+``../docker-compose.yml``.
 """
 
 from __future__ import annotations
@@ -83,9 +82,14 @@ def _draw(seed: str, label: str, low: int, high: int) -> int:
 
 
 def setting(seed: str) -> dict:
-    """Everything public — what show.py prints. See the module docstring: the expected
-    value of each graded line is computed only by verifier/expected.py, from this
-    return value, and is not part of it."""
+    """Everything public: the assignment statements `show.py` prints.
+
+    The twelve lines' expected values are NOT computed here. They live in
+    `verifier/expected.py`, which the participant Docker stage never copies in (Issue
+    543/537): a single file that both defined this deployment's numbers *and* the
+    values a graded line must equal is exactly what let `docker exec` into the
+    participant image import the answer directly.
+    """
     p = PRIMES[_draw(seed, "field", 0, len(PRIMES) - 1)]
 
     x1 = _draw(seed, "x1", 1, p - 1)

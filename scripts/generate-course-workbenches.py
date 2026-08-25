@@ -49,7 +49,10 @@ ROOT = Path(__file__).resolve().parents[1]
 CANONICAL_ADAPTER = ROOT / "scripts" / "course-workbench" / "workbench.py"
 BLOCK_BEGIN = "# BEGIN GENERATED PORTAL EDITOR API"
 BLOCK_END = "# END GENERATED PORTAL EDITOR API"
-PORTAL_PACKAGES = {"cs-transaction-visibility-audit": "participant"}
+PORTAL_PACKAGES = {
+    "cs-transaction-visibility-audit": "participant",
+    "ac26-w4-sumcheck-drill": "participant",
+}
 
 # The language arguments the generator owns, in the order they are emitted after
 # the anchor. Everything else in the block (root, seed, submitted_files, limits,

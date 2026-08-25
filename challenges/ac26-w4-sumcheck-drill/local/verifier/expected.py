@@ -1,37 +1,21 @@
-"""The SumCheck drill's ground truth for the twelve lines, computed from public state.
+"""Hidden derivation of the twelve SumCheck drill lines' values.
 
-`fixtures/generate.py` hands back only what `show.py` prints: `setting(seed)["public"]`.
-This module is the only place that turns those public numbers into the value each
-graded line is checked against. It is not exported from `fixtures/generate.py` and
-nothing on the participant's reading path (`show.py`, the public tests) imports it —
-see #537 and docs/curricula/advanced-cryptography-2026/TEMPLATE.md "Assurance scope".
+The participant image carries `fixtures/generate.py`'s public assignment statements
+only (Issue 543/537): the field, the circuit inputs, the verifier's random points, the
+honest prover's coefficients, and the lying prover's fudge parameters. This module is
+never copied into the participant Docker stage (see ../Dockerfile) -- it re-derives
+every line's value from those same public numbers, with the exact arithmetic the
+problem statement walks the learner through by hand. Nothing here is a second source of
+entropy: every value below is a pure function of `setting(seed)["public"]`.
 
-Before #537, `fixtures/generate.py::setting()` returned this same dict directly, so
-`from fixtures.generate import setting; setting(FLAG_SEED)["expected"]` handed back
-every graded answer with no cryptography at all. Every value below is a pure function
-of the public dict — the circuit's own inputs, and the honest/lying prover messages the
-statement already shows — so recomputing it here, instead of shipping a precomputed
-table, costs nothing except the one-import shortcut.
-
-Same standing as `verifier/server.py` itself, and this residual is real, not closed:
-this module still ships inside the SAME participant-runnable image as everything else in
-this drill template, because the template has no isolated verifier container to exclude
-it from (single stage, by design — "no network surface to attack"; see the AC26
-template's Assurance scope). A participant who deliberately imports `verifier.expected`
-instead of `fixtures.generate` gets the identical dict from an equally simple one-call,
-one-argument import, and that argument (FLAG_SEED) is already sitting in their own
-container's environment. That path is NOT closed by this file's existence, and closing
-it would need splitting this template into an isolated participant/verifier container
-pair (see `cs-async-result-binding`'s two-stage split for the pattern) — a template-wide
-change out of scope for #537's four confirmed drills, tracked separately.
-
-What #537 did fix here: the answer is no longer exported from `fixtures/generate.py`
-(the module `show.py` and the public tests point a participant toward — the module that
-falsely claimed "the learner never sees the expected values" while doing exactly that),
-and `tests/hidden/check_*.py` (documented as non-confidential by the AC26 template, but
-not a module a participant has any ordinary reason to read) no longer imports it either.
-Both were *accidental*-discovery paths. Deliberate extraction from the verifier's own
-grading internals remains possible, exactly as it always was for `verifier/server.py`.
+History (#537/#543): a first pass moved this computation out of `fixtures/generate.py`
+and into this module, but left it inside the same single, participant-runnable Docker
+stage as everything else, so `from verifier.expected import expected_for` still worked
+from inside a learner's own container -- the module name changed, the leak did not. This
+problem's `local/` now splits into a public `participant/` Workbench stage and a
+separate, unpublished `verifier` stage that alone carries this file and
+`tests/hidden/` (see ../Dockerfile and ../docker-compose.yml), so this module is no
+longer reachable from the participant image at all.
 """
 
 from __future__ import annotations
@@ -40,7 +24,13 @@ from fixtures.generate import setting
 
 
 def expected_for(seed: str) -> dict[str, object]:
-    """Every drill line's value, recomputed from `setting(seed)["public"]`."""
+    """Every one of the twelve lines' values, keyed by line id.
+
+    Four of the twelve (`grid-total`, `p1-sum`, `p1-check`, `p2-sum`) are ungraded --
+    the platform's per-problem checkpoint maximum is eight -- but `tests/hidden/
+    check_sumcheck_drill.py` still checks the reference implementation produces them,
+    so they are derived here too rather than only the eight in `fixtures.generate.GRADED`.
+    """
     pub = setting(seed)["public"]
     p = pub["p"]
     x1, x2, x3, x4 = pub["x1"], pub["x2"], pub["x3"], pub["x4"]
@@ -52,7 +42,6 @@ def expected_for(seed: str) -> dict[str, object]:
     y0 = (x1 + x2) % p
     y1 = (x3 * x4) % p
     out = (y0 + y1) % p
-    sh = (d * (1 - r1)) % p
 
     def w1(z: int) -> int:
         return (y0 * (1 - z) + y1 * z) % p
@@ -68,6 +57,10 @@ def expected_for(seed: str) -> dict[str, object]:
 
     def p1c(t: int) -> int:
         return (p1(t) + d * (1 - t)) % p
+
+    # p1c(r1) is the cover story's first round; the second round covers the gap between
+    # it and the honest p2's own sum, then adds a two-point-sum-neutral term.
+    sh = (d * (1 - r1)) % p
 
     def p2c(t: int) -> int:
         return (p2(t) + sh * (1 - t) + m * t * (1 - t)) % p

@@ -16,11 +16,6 @@
       "reason": "Same drill shape as ac26-w3-schnorr-drill: CODE_CHECKPOINTS is empty and every graded line resolves through a reachable fixtures.generate expected-value table."
     },
     {
-      "problem": "ac26-w4-sumcheck-drill",
-      "issue": 537,
-      "reason": "Same drill shape as ac26-w3-schnorr-drill: CODE_CHECKPOINTS is empty and every graded line resolves through a reachable fixtures.generate expected-value table."
-    },
-    {
       "problem": "sha256-schedule-logic",
       "issue": 537,
       "reason": "verifier/server.py defines a full, non-underscored message-schedule reference function that ships in the single participant stage and backs the dependency checkpoint's comparison."
