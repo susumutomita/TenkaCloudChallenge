@@ -2,7 +2,7 @@
 
 
 def _root_cause(server, seed):
-    return server.root_cause_diagnosis(seed)
+    return server._expected_root_cause(seed)  # noqa: SLF001 - the mirror deliberately reads the real grader's own ground truth
 
 
 EXPECTED = {"root-cause": _root_cause}

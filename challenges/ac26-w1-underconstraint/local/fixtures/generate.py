@@ -13,6 +13,17 @@ statement, because a constraint system is not a program.
 
 The vulnerable variant drops exactly one of them. Which one is seed-dependent, so a
 memorised counterexample does not carry.
+
+This module hands back INPUTS only: the deployed (already-broken) circuit and the
+honest witnesses for it. It deliberately does not export the complete/intended
+circuit, which constraint a given deployment is missing, or any pre-built forgery
+as their own callable values -- those are the answers to the build, audit and
+exploit checkpoints, and this module ships inside the participant's own image
+(see docs/curricula/advanced-cryptography-2026/TEMPLATE.md "Assurance scope").
+`vulnerable_circuit` below still has to make the same seed-derived choice
+internally to build the deployed circuit; it just never returns that choice, or
+the circuit it was chosen from, as a separate, directly reusable value. See
+scripts/ac26-w1-underconstraint.test.ts for the regression test pinning this.
 """
 
 from __future__ import annotations
@@ -20,9 +31,15 @@ from __future__ import annotations
 import hashlib
 
 PRIMES = (97, 101, 103, 107, 109, 113, 127, 131, 137, 139)
-# The two constraints that make up the is-zero gadget. Dropping either is a real,
-# exploitable underconstraint -- with a *different* forged witness for each.
+# The two constraints that make up the is-zero gadget. Naming the two candidates
+# is not an answer -- which one is actually missing for a given seed is (that is
+# the audit checkpoint), and nothing here returns that choice on its own.
 DROPPABLE = ("c-iszero-a", "c-iszero-b")
+
+_ISZERO_HALVES: dict[str, dict[str, object]] = {
+    "c-iszero-a": {"id": "c-iszero-a", "kind": "iszero_a", "value": "revoked", "inv": "inv", "out": "ok"},
+    "c-iszero-b": {"id": "c-iszero-b", "kind": "iszero_b", "value": "revoked", "out": "ok"},
+}
 
 
 def _stream(seed: str, label: str) -> list[int]:
@@ -45,24 +62,23 @@ def params(seed: str, label: str = "public") -> dict[str, int]:
     return {"p": p, "revoked": _pick(s, 2, 1, p - 1), "issuer_ok": 1}
 
 
-def dropped_constraint(seed: str, label: str = "public") -> str:
-    return DROPPABLE[_stream(seed, f"drop:{label}")[0] % len(DROPPABLE)]
+def vulnerable_circuit(seed: str, label: str = "public") -> list[dict[str, object]]:
+    """The circuit actually deployed for this case.
 
-
-def intended_circuit() -> list[dict[str, object]]:
-    """The circuit as the policy intends it. This is the answer to checkpoint 1."""
+    The full policy circuit with one of the two is-zero constraints missing.
+    Which one is seed-dependent -- finding out which is the audit checkpoint, so
+    this only ever returns the *result* of that choice (the four remaining
+    constraints), never the choice, or the complete circuit it was chosen from,
+    as a separate value someone could import instead of deriving it.
+    """
+    drop_index = _stream(seed, f"drop:{label}")[0] % len(DROPPABLE)
+    kept = [cid for index, cid in enumerate(DROPPABLE) if index != drop_index]
     return [
         {"id": "c-issuer-bool", "kind": "boolean", "signal": "issuer_ok"},
         {"id": "c-ok-bool", "kind": "boolean", "signal": "ok"},
-        {"id": "c-iszero-a", "kind": "iszero_a", "value": "revoked", "inv": "inv", "out": "ok"},
-        {"id": "c-iszero-b", "kind": "iszero_b", "value": "revoked", "out": "ok"},
+        *(_ISZERO_HALVES[cid] for cid in kept),
         {"id": "c-grant", "kind": "mul", "left": "ok", "right": "issuer_ok", "out": "granted"},
     ]
-
-
-def vulnerable_circuit(seed: str, label: str = "public") -> list[dict[str, object]]:
-    dropped = dropped_constraint(seed, label)
-    return [c for c in intended_circuit() if c["id"] != dropped]
 
 
 def honest_witness(prm: dict[str, int]) -> dict[str, int]:
@@ -89,34 +105,6 @@ def clean_witness(prm: dict[str, int]) -> dict[str, int]:
         "ok": 1,
         "issuer_ok": prm["issuer_ok"] % p,
         "granted": prm["issuer_ok"] % p,
-    }
-
-
-def forgery_case(
-    seed: str, label: str = "public"
-) -> tuple[dict[str, int], dict[str, int]]:
-    """Return the honest baseline and a witness accepted only by the short circuit."""
-    prm = params(seed, label)
-    baseline = honest_witness(prm)
-    forged = dict(baseline)
-    forged["inv"] = 0
-    if dropped_constraint(seed, label) == "c-iszero-b":
-        forged["ok"] = 1
-        forged["granted"] = prm["issuer_ok"] % prm["p"]
-    return baseline, forged
-
-
-def root_cause_diagnosis(seed: str, label: str = "public") -> dict[str, object]:
-    """The missing constraint plus the seeded before/after values it left movable."""
-    baseline, forged = forgery_case(seed, label)
-    changes = [
-        {"signal": name, "before": baseline[name], "after": forged[name]}
-        for name in sorted(baseline)
-        if baseline[name] != forged[name]
-    ]
-    return {
-        "missingConstraintId": dropped_constraint(seed, label),
-        "manipulatedSignals": changes,
     }
 
 

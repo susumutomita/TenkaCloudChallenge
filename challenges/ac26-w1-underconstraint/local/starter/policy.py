@@ -44,10 +44,15 @@ def audit(circuit: list[dict]) -> list[str]:
 def forge_witness(circuit: list[dict], params: dict[str, int]) -> dict[str, int]:
     """A witness satisfying `circuit` while the statement it claims is false.
 
-    False here means: `granted` is 1 even though `params["revoked"]` is not zero.
+    "False" is structural, not one fixed shape: `forged` must satisfy `circuit`
+    (the deployed, one-constraint-short circuit) while failing the circuit
+    `intended_circuit()` builds when nothing is missing. Do not assume `granted`
+    has to end up 1 — depending on which half of the is-zero gadget survives, the
+    honest access decision can stay exactly as it was while a different signal
+    (one the surviving constraint never reads) stops meaning what it claims to.
 
     `circuit` is missing one constraint, and which one changes with the seed — so
-    derive the forgery from what is actually absent, not from a remembered answer.
+    derive the forgery from what is actually absent, not from a remembered shape.
     """
     return {}
 
