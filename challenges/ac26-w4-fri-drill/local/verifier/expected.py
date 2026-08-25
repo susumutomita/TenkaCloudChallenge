@@ -19,10 +19,25 @@ constructed (see `fixtures/generate.py`) as a square s^2, so its two square root
 the pair of points the drill names. p is a small toy prime, so scanning for the roots
 is exact and cheap — the same brute force the drill statement itself suggests.
 
-Same standing as `verifier/server.py` itself: this module still ships inside the
-participant's own image (see the AC26 template's Assurance scope). That is misdelivery
-prevention, not confidentiality — the difference #537 closes is that the answer is no
-longer sitting behind a single, argument-free, participant-facing function call.
+Same standing as `verifier/server.py` itself, and this residual is real, not closed:
+this module still ships inside the SAME participant-runnable image as everything else in
+this drill template, because the template has no isolated verifier container to exclude
+it from (single stage, by design — "no network surface to attack"; see the AC26
+template's Assurance scope). A participant who deliberately imports `verifier.expected`
+instead of `fixtures.generate` gets the identical dict from an equally simple one-call,
+one-argument import, and that argument (FLAG_SEED) is already sitting in their own
+container's environment. That path is NOT closed by this file's existence, and closing
+it would need splitting this template into an isolated participant/verifier container
+pair (see `cs-async-result-binding`'s two-stage split for the pattern) — a template-wide
+change out of scope for #537's four confirmed drills, tracked separately.
+
+What #537 did fix here: the answer is no longer exported from `fixtures/generate.py`
+(the module `show.py` and the public tests point a participant toward — the module that
+falsely claimed "the learner never sees the expected values" while doing exactly that),
+and `tests/hidden/check_*.py` (documented as non-confidential by the AC26 template, but
+not a module a participant has any ordinary reason to read) no longer imports it either.
+Both were *accidental*-discovery paths. Deliberate extraction from the verifier's own
+grading internals remains possible, exactly as it always was for `verifier/server.py`.
 """
 
 from __future__ import annotations

@@ -13,13 +13,17 @@ deployment's own (the independent-reimplementation rule).
 
 Nothing here is cryptographic. Toy parameters are for observability.
 
-This module hands back the PUBLIC state only (what ``show.py`` prints). It deliberately
-does not compute or export the twelve lines' expected values as their own callable
-result: that dict shipped inside the participant's own image and could be read back with
-one import, which is the entire drill for free (#537). ``verifier/expected.py``
-recomputes each checkpoint's value from this public state at grading time instead; see
-that module's docstring and scripts/ac26-w4-fri-drill.test.ts for the regression test
-pinning this.
+This module hands back the PUBLIC state only (what ``show.py`` prints). It no longer
+computes or exports the twelve lines' expected values as their own callable result:
+before #537, that dict shipped here and could be read back with one import, which was
+the entire drill for free. ``verifier/expected.py`` recomputes each checkpoint's value
+from this public state at grading time instead -- but read that module's own docstring
+before assuming this closes the leak: it does not. This module and the participant-
+facing tests no longer point at the answer by accident; a participant who deliberately
+imports ``verifier.expected`` instead still gets it, because this single-stage drill
+template has no isolated verifier container to keep it out of. See #537 and
+scripts/ac26-w4-fri-drill.test.ts for the regression
+test pinning the values this move must not change.
 """
 
 from __future__ import annotations
