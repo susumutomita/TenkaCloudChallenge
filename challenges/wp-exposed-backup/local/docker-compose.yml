@@ -13,6 +13,7 @@
 #   wpinit       one-shot WP-CLI: installs WordPress and seeds a little content so
 #               the site is a working install, not the setup wizard.
 #   verify      loopback /verify the TenkaCloud scorer delegates to.
+name: wp-exposed-backup
 services:
   db:
     image: mariadb:11

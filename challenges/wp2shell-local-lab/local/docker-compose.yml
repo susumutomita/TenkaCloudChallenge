@@ -28,6 +28,7 @@
 #     top-of-file comment and scripts/wp2shell-local-lab.test.ts, which greps the
 #     shipped source for child_process/exec/eval/spawn and fails the build if any
 #     of them appear.
+name: wp2shell-local-lab
 services:
   wp2shell-local-lab:
     build:

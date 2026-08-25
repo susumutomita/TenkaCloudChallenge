@@ -1,6 +1,7 @@
 # Local-only screen-controller repair lab. No host device, FPGA, or display is used.
 # The lab network has no external egress; workshop-host exists only so Docker can
 # publish the UI and verifier to host loopback without masquerading container traffic.
+name: ai-riscv-screen-repair
 services:
   ai-riscv-screen-repair:
     build:

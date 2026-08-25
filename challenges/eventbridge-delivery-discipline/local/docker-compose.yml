@@ -1,3 +1,4 @@
+name: eventbridge-delivery-discipline
 services:
   participant:
     image: "${EVENTBRIDGE_PARTICIPANT_IMAGE:-eventbridge-delivery-discipline-participant:local}"

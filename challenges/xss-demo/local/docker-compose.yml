@@ -1,5 +1,6 @@
 # Local-play problem container for xss-demo.
 # Bound to 127.0.0.1 only: the challenge surface and /verify never leave the box.
+name: xss-demo
 services:
   xss-demo:
     build:

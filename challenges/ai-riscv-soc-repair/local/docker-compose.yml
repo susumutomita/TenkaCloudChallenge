@@ -1,4 +1,5 @@
 # Local-only RTL repair lab. No host devices, privileged mode, or FPGA are used.
+name: ai-riscv-soc-repair
 services:
   ai-riscv-soc-repair:
     build:

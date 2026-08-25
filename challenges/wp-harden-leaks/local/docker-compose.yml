@@ -16,6 +16,7 @@
 #   wpinit      one-shot WP-CLI: installs WordPress and seeds content so it is a working site.
 #   verify      loopback /verify = the "external scanner": probes http://wordpress/ and
 #               judges each hole CLOSED by the live response.
+name: wp-harden-leaks
 services:
   db:
     image: mariadb:11

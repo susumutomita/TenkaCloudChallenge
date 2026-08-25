@@ -1,3 +1,4 @@
+name: signed-does-not-mean-safe
 services:
   participant:
     image: "${SIGNED_NPM_PARTICIPANT_IMAGE:-signed-does-not-mean-safe-participant:local}"

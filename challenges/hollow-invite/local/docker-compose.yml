@@ -1,6 +1,7 @@
 # Local-play container for the "Hollow Invite" IR GameDay.
 # Bound to 127.0.0.1 only: the investigation surface and /verify never leave the
 # box, and the app itself makes no outbound connections (no external egress).
+name: hollow-invite
 services:
   hollow-invite:
     build:

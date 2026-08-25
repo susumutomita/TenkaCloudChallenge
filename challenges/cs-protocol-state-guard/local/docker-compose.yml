@@ -1,3 +1,4 @@
+name: cs-protocol-state-guard
 services:
   workbench:
     build:

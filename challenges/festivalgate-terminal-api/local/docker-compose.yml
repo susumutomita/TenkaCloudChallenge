@@ -1,5 +1,6 @@
 # Local-play problem container for festivalgate-terminal-api.
 # Bound to 127.0.0.1 only: the terminal API and /verify never leave the box.
+name: festivalgate-terminal-api
 services:
   festivalgate-terminal-api:
     build:

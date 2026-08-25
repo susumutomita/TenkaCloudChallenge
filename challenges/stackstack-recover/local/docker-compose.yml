@@ -9,6 +9,7 @@
 # There is no load balancer and no cloud account — the entrance, the watchdog and
 # the write-permission check are all modelled inside this one process, and the
 # READMEs say so plainly.
+name: stackstack-recover
 services:
   stackstack-recover:
     build:

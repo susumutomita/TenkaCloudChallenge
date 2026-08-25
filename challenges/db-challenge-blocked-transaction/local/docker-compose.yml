@@ -5,6 +5,7 @@
 # against the live database (psql, via the embedded Portal terminal), so all
 # of the state that matters lives inside the Postgres data directory this
 # container owns.
+name: db-challenge-blocked-transaction
 services:
   db-challenge-blocked-transaction:
     build:

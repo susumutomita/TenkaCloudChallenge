@@ -14,6 +14,7 @@
 # No model API key, no AWS credential, no GitHub token is requested or accepted. The
 # agent side of this problem is *tools and scope*, not a model — the whole thing plays
 # from the browser with no MCP client at all.
+name: agent-approval-gameday
 services:
   agent-approval-gameday:
     build:

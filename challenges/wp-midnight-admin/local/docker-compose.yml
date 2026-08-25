@@ -16,6 +16,7 @@
 #   wpinit       one-shot WP-CLI: installs WordPress, seeds content, and plants the
 #               two WordPress-content signals (the rogue admin and the spam post).
 #   verify      loopback /verify the TenkaCloud scorer delegates to.
+name: wp-midnight-admin
 services:
   db:
     image: mariadb:11

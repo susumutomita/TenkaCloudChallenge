@@ -1,5 +1,6 @@
 # Every port binds to 127.0.0.1 only. This problem has no network surface for the
 # learner to attack; the whole challenge is local reasoning.
+name: ac26-w2-privacy-audit
 services:
   verifier:
     build:

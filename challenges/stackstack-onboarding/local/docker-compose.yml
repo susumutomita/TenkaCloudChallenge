@@ -8,6 +8,7 @@
 #
 # Both published ports are bound to 127.0.0.1 only: neither the board nor
 # /verify leaves the box.
+name: stackstack-onboarding
 services:
   stackstack-onboarding:
     build:

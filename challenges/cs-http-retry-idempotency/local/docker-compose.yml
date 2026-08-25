@@ -1,3 +1,4 @@
+name: cs-http-retry-idempotency
 services:
   workbench:
     build:
