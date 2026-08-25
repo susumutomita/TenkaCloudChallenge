@@ -1,0 +1,10 @@
+{
+  "name": "db-battle-slow-apparently-api",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Order API for db-battle-slow-apparently: writes to the primary, reads from primary or replica at random, exposes rolling p50/p95/p99 + error rate.",
+  "dependencies": {
+    "postgres": "3.4.5"
+  }
+}

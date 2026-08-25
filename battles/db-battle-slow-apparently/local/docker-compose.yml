@@ -1,0 +1,129 @@
+# Local-play problem containers for db-battle-slow-apparently.
+#
+# `name:` pins the compose project name explicitly (TenkaCloudChallenge#521):
+# every local-play problem's compose file lives at a path ending in
+# `.../local/docker-compose.yml`, so without this, `docker compose`'s default
+# project-name-from-directory-name makes EVERY problem's project "local",
+# and a `docker compose down --remove-orphans` run from any one of them can
+# sweep up every other problem's unrelated containers on a shared host.
+name: db-battle-slow-apparently
+#
+# 5 services reproduce the whole incident locally with real Postgres
+# semantics, at lab scale (see local/db/seed.sql for the actual row counts):
+#
+#   primary            -- Postgres 16 + Node info/verify/diagnosis surface.
+#                          The terminal target (runtime.terminal.service).
+#   replica             -- streaming hot standby, bootstrapped via
+#                          pg_basebackup at boot (same shape as db-a10/a11).
+#   api                 -- the order service production traffic hits.
+#   load-generator      -- stands in for production traffic.
+#   retention-worker    -- the scenario's incident: ships with the buggy
+#                          purge strategy, fixable via `ops.retention_config`.
+#
+# cpu limits on primary/replica are deliberate, not incidental: they are
+# what turns "delete 120,000 rows in one uncommitted transaction" into a
+# real, measurable, but bounded production incident on a laptop, instead of
+# either "instant, nothing to diagnose" or "the whole box falls over" — the
+# same "same failure mechanics at lab scale via resource limits" call the
+# parent Issue makes for row counts.
+#
+# Every host-published port binds 127.0.0.1 only; api/load-generator/
+# retention-worker are reachable solely over the compose network.
+services:
+  primary:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: participant
+    environment:
+      # Unused by this Battle (grading reads live DB/replication/API state,
+      # not a discovered flag) but injected by `make local` for every
+      # local-play problem.
+      FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+    ports:
+      - "127.0.0.1:18580:8080" # info surface
+      - "127.0.0.1:18581:8081" # loopback /verify + /diagnosis
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: "3s"
+      timeout: "5s"
+      retries: 60
+    restart: "no"
+
+  replica:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: replica
+    depends_on:
+      primary:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "0.35"
+    ports:
+      - "127.0.0.1:18582:5432" # direct psql access to the standby
+    healthcheck:
+      test: ["CMD", "pg_isready", "-p", "5432"]
+      interval: "3s"
+      timeout: "5s"
+      retries: 60
+    restart: "no"
+
+  api:
+    build:
+      context: ./api
+    depends_on:
+      primary:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgres://app_service@primary:5432/incident"
+      REPLICA_DATABASE_URL: "postgres://app_service@replica:5432/incident"
+      PORT: "3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: "3s"
+      timeout: "5s"
+      retries: 40
+    restart: "no"
+
+  load-generator:
+    build:
+      context: ./load-generator
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      API_URL: "http://api:3000"
+      REQUESTS_PER_SECOND: "12"
+    restart: "no"
+
+  retention-worker:
+    build:
+      context: ./retention-worker
+    depends_on:
+      primary:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgres://retention_service@primary:5432/incident"
+      RETENTION_TICK_MS: "5000"
+      RETENTION_COOLDOWN_MS: "45000"
+      RETENTION_START_DELAY_MS: "5000"
+    restart: "no"

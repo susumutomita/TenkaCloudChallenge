@@ -2839,6 +2839,42 @@
       }
     },
     {
+      "id": "db-battle-slow-apparently",
+      "name": "DBが遅いらしい",
+      "category": "Battle",
+      "status": "draft",
+      "visibility": "public",
+      "track": {
+        "id": "database-track",
+        "order": 130,
+        "chapter": "5. Battle"
+      },
+      "difficulty": 4,
+      "estimatedDuration": "45〜75 分",
+      "shortDescription": "03:00 頃から注文 API の p99 latency が SLO を超えている。一部ユーザーからは「更新した内容がすぐ表示されない」という報告も来ている。production traffic は止められない。画面には『DB CPU が高いので scale-up を検討してください』という運用メモが出ているが、これは正解ではなく、現場でありがちな早すぎる診断。原因を自分で特定し、production を止めずに正常状態へ戻し、翌日また同じことが起きないようにする。",
+      "tags": [
+        "database",
+        "postgresql",
+        "battle",
+        "local-play",
+        "container",
+        "sql",
+        "production-incident",
+        "replication",
+        "partition",
+        "sre",
+        "gameday",
+        "diagnosis"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "db-challenge-blocked-transaction",
       "name": "支払いの書き込みが止まったまま返ってこない",
       "category": "Challenge",
