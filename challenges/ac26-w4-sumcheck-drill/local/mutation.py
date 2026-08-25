@@ -109,6 +109,7 @@ def main() -> int:
 
     # Verifier-level: the value grader must refuse what a learner would paste by mistake.
     os.environ["FLAG_SEED"] = SEED
+    from verifier.expected import expected_for  # noqa: PLC0415 - imported after sys.path and env
     from verifier.server import evaluate  # noqa: PLC0415 - imported after sys.path and env
 
     pub = setting(SEED)["public"]

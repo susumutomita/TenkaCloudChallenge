@@ -10,7 +10,10 @@ from it, not from `verifier.server`): this mirror exists to catch a bug the prod
 checker's own ground truth could carry, and importing that ground truth here would make
 the audit's `oracle` check compare the checker to itself (#537 review). Only the *public*
 state (`fixtures.generate.setting(seed)["public"]`) is shared with the checker — that is
-the deployment's input, not its answer.
+the deployment's input, not its answer. `verifier/expected.py` itself (Issue 543/537) now
+lives only in a separate, unpublished verifier Docker stage that the participant image
+never carries; `server`, the loaded `verifier.server` module, is accepted for interface
+parity with every other problem's mirror but is not read here.
 """
 
 

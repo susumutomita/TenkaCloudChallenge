@@ -58,6 +58,10 @@ SPLIT_PORTAL_MODULES = {
     # 別の集合 (問題 id の frozenset) を足していたが、 main 側はこの map へ
     # 一般化済みなので、 古い機構を戻さずここへ寄せる。
     "cs-cache-generation-fence": "participant.server",
+    # Issue 543/537: 単一 stage の drill を、生成された Portal editor API を持つ他の
+    # split-boundary 問題と同じ形へ分離した。 answer 導出は verifier/expected.py のみに
+    # 残る。
+    "ac26-w4-sumcheck-drill": "participant.server",
 }
 # Execute the heavier inspect/public-test adapter on representative problems from
 # each family. The catalogue's existing sharded suite executes every problem's own

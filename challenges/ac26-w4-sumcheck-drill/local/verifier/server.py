@@ -1,4 +1,4 @@
-"""POST /verify — the scoring seam. Loopback only, stdlib only.
+"""POST /verify -- the scoring seam. Compose-internal only, stdlib only.
 
 Security contract (docs/curricula/advanced-cryptography-2026/TEMPLATE.md §/verify):
   - `checkpointId` is required and is echoed back verbatim. The platform fails closed
@@ -14,15 +14,28 @@ Security contract (docs/curricula/advanced-cryptography-2026/TEMPLATE.md §/veri
     names, the expected values, or reference output.
   - Malformed input produces a failed checkpoint, never a crashed process.
 
-This problem is a drill: every checkpoint is a direct answer — the value one line of
-Python printed on the learner's own screen — so the sandboxed runner below is used by
+This problem is a drill: every checkpoint is a direct answer -- the value one line of
+Python printed on the learner's own screen -- so the sandboxed runner below is used by
 the author tooling (mutation suite, CI) and by nothing the learner submits. The grader
 for every checkpoint is `_check_line`: the pasted value, normalised, against the value
 this deployment's seed decides. Nothing about the learner's code is ever executed here.
+
+Issue 543/537: this used to be the same process that also served the Participant
+Portal's config, inspect, starter, public-test, and prepare endpoints, in the single
+Docker stage a learner's own `make build` produced -- so the expected values this file
+compares against (then a plain function in `fixtures/generate.py`) were importable from
+inside the learner's own container. That Portal-facing surface now lives in
+`participant/server.py`, in a separate image (see ../Dockerfile) that this process's own
+container never builds; this file and its `verifier/expected.py` import are reachable
+only over the Compose-internal network (see ../docker-compose.yml), never from the
+participant container's filesystem.
 """
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import json
 import os
 import resource
@@ -31,6 +44,7 @@ import sys
 import tempfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -38,6 +52,7 @@ from fixtures.generate import GRADED, LINES, normalize_answer
 from verifier.expected import expected_for
 
 ROOT = Path(__file__).resolve().parents[1]
+PROBLEM_ID = "ac26-w4-sumcheck-drill"
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 MAX_BODY_BYTES = 256 * 1024
@@ -53,6 +68,7 @@ REQUEST_TIMEOUT_SECONDS = 15
 #: the twelve drill lines have an answer field (the platform's maximum per problem).
 CODE_CHECKPOINTS: dict[str, tuple[str, ...]] = {}
 CHECKPOINTS = GRADED
+MANUAL_CHECKPOINTS = GRADED
 
 
 # Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still
@@ -178,69 +194,59 @@ def evaluate(checkpoint_id: str, submission: object) -> bool:
         return _run_submission(submission, CODE_CHECKPOINTS[checkpoint_id], SEED)
     return False
 
-# BEGIN GENERATED PORTAL EDITOR API
-from verifier.workbench import PortalEditorSupport
 
-_WORKBENCH = PortalEditorSupport(
-    root=ROOT,
-    seed=SEED,
-    problem_id='ac26-w4-sumcheck-drill',
-    problem_name='和を確かめるのに、和を計算しない',
-    problem_name_en='Check a sum without computing the sum',
-    description='手元の Python で 1 行打って、出た値を貼る。12 行で、回路 → MLE → 配線の多項式 → 証明者の p₁・p₂ を 2 点の和とランダム 1 点で検査 → 最後の 1 点 → 嘘の証明者が水増しした主張の見逃しを数える、を自分の手で出した数だけで通す。',
-    description_en="Type one line in your own Python, paste the value it prints. Twelve lines: the circuit → MLE → the wiring polynomial → checking the prover's p₁ and p₂ by two-point sums and one random point → the last point → counting where an inflated claim would have slipped through — on numbers you produced yourself.",
-    checkpoint_labels={'circuit': '回路の値 — 2 つのゲートと出力', 'mle': '表を直線に伸ばす（MLE）', 'grid': '配線も式にする — g₀ の 4 つの格子点', 'round1': 'ランダムな 1 点 r₁', 'final-check': '最後の 1 点 — 検証者が自分で g₀ を 1 回計算する', 'lie': '嘘の証明者 — 主張を d だけ水増しする', 'lie-caught': '辻褄合わせの果て — 最後の 1 点で落ちる', 'miss-points': 'どの r₂ なら見逃したか — 数える'},
-    checkpoint_labels_en={'circuit': 'The circuit — two gates and the output', 'mle': 'Stretch the table into a line (MLE)', 'grid': 'Wire the gate into a polynomial — g₀ on the four grid points', 'round1': 'One random point r₁', 'final-check': 'The last point — the verifier computes g₀ once, itself', 'lie': 'A lying prover — inflate the claim by d', 'lie-caught': 'Where the cover-up ends — the last point', 'miss-points': 'Count the r₂ that would have missed'},
-    submitted_files=('sumcheck_drill.py',),
-    code_checkpoints=(),
-    checkpoints=CHECKPOINTS,
-    max_body_bytes=MAX_BODY_BYTES,
-    run_timeout_seconds=RUN_TIMEOUT_SECONDS,
-    max_output_bytes=MAX_OUTPUT_BYTES,
-    limit_fn=_limits,
-)
-# END GENERATED PORTAL EDITOR API
+def _b64decode(value: str) -> bytes:
+    padding = "=" * (-len(value) % 4)
+    return base64.urlsafe_b64decode(value + padding)
+
+
+def _unwrap_submission(checkpoint_id: str, submission: object) -> object:
+    """Undo the Workbench's `tcw1.` seal and check it against this deployment.
+
+    A direct-answer submission is HMAC-bound to `PROBLEM_ID` and `SEED` by
+    `participant/workbench.py`'s `PortalEditorSupport._seal_manual` -- the same
+    derivation, duplicated here rather than imported, because that module lives only
+    in the participant image (see ../Dockerfile) and this process must not trust an
+    unsealed value for any of this problem's checkpoints, all of which are manual.
+    """
+    if not isinstance(submission, str) or not submission.startswith("tcw1."):
+        return None if checkpoint_id in MANUAL_CHECKPOINTS else submission
+    try:
+        prefix, encoded_payload, encoded_signature = submission.split(".", 2)
+        if prefix != "tcw1":
+            return None
+        payload = _b64decode(encoded_payload)
+        signature = _b64decode(encoded_signature)
+        key = hashlib.sha256((PROBLEM_ID + "\0" + SEED).encode("utf-8")).digest()
+        expected_signature = hmac.new(key, payload, hashlib.sha256).digest()[:16]
+        if not hmac.compare_digest(signature, expected_signature):
+            return None
+        decoded = json.loads(payload.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(decoded, dict):
+        return None
+    if decoded.get("v") != 1 or decoded.get("checkpointId") != checkpoint_id:
+        return None
+    return decoded.get("answer")
+
 
 class Handler(BaseHTTPRequestHandler):
-    """Serve the Portal editor API and preserve the existing /verify contract."""
-
     timeout = REQUEST_TIMEOUT_SECONDS
 
-    def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's API
-        from urllib.parse import urlsplit
-
-        path = urlsplit(self.path).path
-        if path == "/api/config":
-            self._respond(200, _WORKBENCH.config_payload())
-            return
-        if path == "/api/inspect":
-            self._respond(200, _WORKBENCH.inspect_payload())
-            return
-        if path == "/api/starter":
-            self._respond(200, _WORKBENCH.starter_payload())
+    def do_GET(self) -> None:  # noqa: N802 - stdlib handler API
+        if urlsplit(self.path).path == "/healthz":
+            self._respond(200, {"ok": True})
             return
         self._respond(404, {"error": "not found"})
 
-    def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's API
-        from urllib.parse import urlsplit
-
-        path = urlsplit(self.path).path.rstrip("/") or "/"
-        if path not in ("/verify", "/api/test", "/api/prepare"):
+    def do_POST(self) -> None:  # noqa: N802 - stdlib handler API
+        if urlsplit(self.path).path.rstrip("/") != "/verify":
             self._respond(404, {"error": "not found"})
             return
         body = self._read_json_body()
         if body is None:
             return
-        if path == "/api/test":
-            self._respond(200, _WORKBENCH.run_public_tests(body.get("files")))
-            return
-        if path == "/api/prepare":
-            self._respond(
-                200,
-                _WORKBENCH.prepare_submissions(body.get("files"), body.get("manual")),
-            )
-            return
-
         checkpoint_id = body.get("checkpointId")
         if not isinstance(checkpoint_id, str) or checkpoint_id not in CHECKPOINTS:
             self._respond(
@@ -251,7 +257,7 @@ class Handler(BaseHTTPRequestHandler):
                 },
             )
             return
-        submission = _WORKBENCH.unwrap_submission(checkpoint_id, body.get("submission"))
+        submission = _unwrap_submission(checkpoint_id, body.get("submission"))
         try:
             correct = evaluate(checkpoint_id, submission)
         except Exception:  # noqa: BLE001 - a broken checkpoint must fail closed
@@ -284,29 +290,18 @@ class Handler(BaseHTTPRequestHandler):
         """Do not echo source submissions into the access log."""
 
     def _respond(self, status: int, payload: dict[str, object]) -> None:
-        self._respond_bytes(
-            status,
-            json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-            "application/json; charset=utf-8",
-        )
-
-    def _respond_bytes(self, status: int, content: bytes, content_type: str) -> None:
+        content = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
-        self.send_header("content-type", content_type)
+        self.send_header("content-type", "application/json; charset=utf-8")
         self.send_header("content-length", str(len(content)))
         self.send_header("cache-control", "no-store")
         self.send_header("x-content-type-options", "nosniff")
-        self.send_header(
-            "content-security-policy",
-            "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; "
-            "img-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; "
-            "form-action 'self'",
-        )
         self.end_headers()
         self.wfile.write(content)
 
+
 def main() -> None:
-    port = int(os.environ.get("VERIFY_PORT", "18133"))
+    port = int(os.environ.get("VERIFY_PORT", "18138"))
     # Bind every interface *inside the container*, not the container's loopback. A published
     # port is forwarded to the container's bridge address, so a server listening only on
     # 127.0.0.1 inside the container accepts nothing from outside it — the connection is
