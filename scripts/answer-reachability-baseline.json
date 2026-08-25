@@ -1,0 +1,104 @@
+{
+  "known": [
+    {
+      "problem": "ac26-w3-schnorr-drill",
+      "issue": 537,
+      "reason": "Drill shape: CODE_CHECKPOINTS is empty, so every graded line is compared against fixtures.generate.setting(SEED)[\"expected\"][line], which the participant image can import directly."
+    },
+    {
+      "problem": "ac26-w4-fri-drill",
+      "issue": 537,
+      "reason": "Same drill shape as ac26-w3-schnorr-drill: CODE_CHECKPOINTS is empty and every graded line resolves through a reachable fixtures.generate expected-value table."
+    },
+    {
+      "problem": "ac26-w4-plonk-drill",
+      "issue": 537,
+      "reason": "Same drill shape as ac26-w3-schnorr-drill: CODE_CHECKPOINTS is empty and every graded line resolves through a reachable fixtures.generate expected-value table."
+    },
+    {
+      "problem": "ac26-w4-sumcheck-drill",
+      "issue": 537,
+      "reason": "Same drill shape as ac26-w3-schnorr-drill: CODE_CHECKPOINTS is empty and every graded line resolves through a reachable fixtures.generate expected-value table."
+    },
+    {
+      "problem": "sha256-schedule-logic",
+      "issue": 537,
+      "reason": "verifier/server.py defines a full, non-underscored message-schedule reference function that ships in the single participant stage and backs the dependency checkpoint's comparison."
+    },
+    {
+      "problem": "ac26-w5-lwe-rlwe",
+      "issue": 537,
+      "reason": "starter/*.py ships trivial-placeholder stubs for ring/lwe/rlwe primitives while fixtures/generate.py already defines complete, same-named implementations reachable from the participant image."
+    },
+    {
+      "problem": "ac26-w4-commit-open",
+      "issue": 537,
+      "reason": "starter's node_hash stub is a placeholder while fixtures/generate.py already ships a complete, same-named Merkle node_hash implementation reachable from the participant image."
+    },
+    {
+      "problem": "cs-auth-claim-audit",
+      "issue": 537,
+      "reason": "The only cs-* local-play problem that does not split verifier into its own Docker stage; its window/audit checkpoints compare directly against fixtures.generate functions reachable from the participant image."
+    },
+    {
+      "problem": "ac26-bridge-properties",
+      "issue": 537,
+      "reason": "_check_privacy_leak compares the submission directly against fixtures.generate.instance(SEED).witness, a precomputed field reachable from the participant image."
+    },
+    {
+      "problem": "ac26-w1-constraint-lab",
+      "issue": 537,
+      "reason": "_check_first_broken compares the submission directly against fixtures.generate.broken_diagnosis(SEED), reachable from the participant image."
+    },
+    {
+      "problem": "ac26-bridge-experiment",
+      "issue": 537,
+      "reason": "_check_first_broken compares the submission directly against a value unpacked from fixtures.generate.corrupted_trace(seed), reachable from the participant image. This is also the template every other local-play problem is scaffolded from."
+    },
+    {
+      "problem": "ac26-w5-cmux-blind-rotation",
+      "issue": 537,
+      "reason": "Listed in #537 as a suspected (unverified) case sharing helper names with ac26-w5-lwe-rlwe; this detector independently confirms the same stub-vs-implementation shape (cmux, blind_rotate and siblings)."
+    },
+    {
+      "problem": "ac26-w5-encoding-noise",
+      "issue": 537,
+      "reason": "Listed in #537 as a suspected (unverified) case sharing helper names with ac26-w5-lwe-rlwe; this detector independently confirms the same stub-vs-implementation shape (encode/decode/centered)."
+    },
+    {
+      "problem": "ac26-w5-extract-key-switch",
+      "issue": 537,
+      "reason": "Listed in #537 as a suspected (unverified) case sharing helper names with ac26-w5-lwe-rlwe; this detector independently confirms the same stub-vs-implementation shape (key_switch and siblings)."
+    },
+    {
+      "problem": "ac26-w5-pbs-homnand",
+      "issue": 537,
+      "reason": "Listed in #537 as a suspected (unverified) case sharing helper names with ac26-w5-lwe-rlwe; this detector independently confirms the same stub-vs-implementation shape (blind_rotate and siblings)."
+    },
+    {
+      "problem": "ac26-w5-rgsw-external",
+      "issue": 537,
+      "reason": "Listed in #537 as a suspected (unverified) case sharing helper names with ac26-w5-lwe-rlwe; this detector independently confirms the same stub-vs-implementation shape (rgsw_encrypt, external_product and siblings)."
+    },
+    {
+      "problem": "ac26-w3-passkey-assertion",
+      "issue": 538,
+      "reason": "Not named in #537. starter's signed_message stub raises NotImplementedError while fixtures/generate.py already ships a complete, same-named implementation reachable from the participant image."
+    },
+    {
+      "problem": "sha256-bytes-padding",
+      "issue": 538,
+      "reason": "Not named in #537. _check_byte_length compares against a precomputed field on fixtures.generate.text_case(SEED), and _check_padded_length compares against fixtures.generate.padded_length, a complete padding-length formula reachable from the participant image."
+    },
+    {
+      "problem": "sha256-compress-digest",
+      "issue": 538,
+      "reason": "Not named in #537. _check_avalanche compares against a seed-independent, non-underscored function defined directly in verifier/server.py; _check_properties/_check_storage compare against fixtures.generate.quiz_answer, reachable from the participant image."
+    },
+    {
+      "problem": "ac26-w2-linear-shares",
+      "issue": 538,
+      "reason": "Not named in #537. Detector attribution is imprecise (cites operations(), which only supplies the key set); the real concern is fixtures.generate.OPERATION_ROUNDS, a seed-independent constant classification table reachable from the participant image. Needs human confirmation."
+    }
+  ]
+}

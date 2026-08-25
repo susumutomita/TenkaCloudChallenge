@@ -1,8 +1,9 @@
-import { globSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "bun:test";
-import { localPlayProblemDirs } from "./lib/local-play-problems";
+import { brings, copySources, stages } from "./lib/dockerfile-stages";
+import { localPlayProblemDirs, participantPythonFiles } from "./lib/local-play-problems";
 
 /**
  * The reference solution does not ship to learners.
@@ -43,66 +44,9 @@ const PARTICIPANT_STAGE = "participant";
 /** The stage `make reference-test` produces. */
 const AUTHOR_STAGE = "author";
 
-/**
- * Split a Dockerfile into its stages, keyed by stage name.
- *
- * Naive, because these Dockerfiles are: one `FROM ... AS <name>` per stage and no
- * `COPY --from`. A more general parser would be pretending to a generality the
- * catalog does not have.
- */
-function stages(source: string): Map<string, string> {
-  const found = new Map<string, string>();
-  let current: string | null = null;
-  const lines: string[] = [];
-  const flush = () => {
-    if (current !== null) found.set(current, lines.join("\n"));
-    lines.length = 0;
-  };
-  for (const line of source.split("\n")) {
-    const from = /^FROM\s+\S+(?:\s+AS\s+(\S+))?\s*$/.exec(line);
-    if (from) {
-      flush();
-      current = from[1] ?? "";
-      continue;
-    }
-    lines.push(line);
-  }
-  flush();
-  return found;
-}
-
-/**
- * The source paths a stage copies in.
- *
- * Parsed rather than string-matched. `expect(stage).not.toContain("COPY reference/")`
- * reads like it checks something and does not: `COPY ./reference/ ./reference/`,
- * `COPY --chown=1000:1000 reference/ ./reference/` and `COPY . .` all ship the
- * answer and all pass it. The last one is the one that would actually happen,
- * because `COPY . .` is what somebody writes when adding a file is fiddly.
- */
-function copySources(stage: string): string[] {
-  const sources: string[] = [];
-  for (const line of stage.split("\n")) {
-    const copy = /^\s*COPY\s+(.*)$/i.exec(line);
-    if (copy === null) continue;
-    const words = (copy[1] ?? "")
-      .trim()
-      .split(/\s+/)
-      .filter((word) => !word.startsWith("--"));
-    // Last word is the destination; everything before it is a source.
-    sources.push(...words.slice(0, -1));
-  }
-  return sources;
-}
-
-/** Does this COPY source bring `artifact` into the image? */
-function brings(source: string, artifact: string): boolean {
-  const normalised = source.replace(/^\.\//, "").replace(/\/$/, "");
-  const target = artifact.replace(/\/$/, "");
-  // A whole-context copy brings everything, including both author artifacts.
-  if (normalised === "." || normalised === "./") return true;
-  return normalised === target || normalised.startsWith(`${target}/`);
-}
+// `stages`, `copySources` and `brings` now live in `./lib/dockerfile-stages` — moved
+// there so `check-answer-reachability.test.ts` can derive the same participant stage
+// without re-implementing (and risking re-diverging from) this parsing.
 
 describe("author-only artifacts do not ship in the participant image", () => {
   it("should find the local-play images to check, so a glob matching nothing cannot pass", () => {
@@ -198,16 +142,7 @@ describe("the participant path does not need what was removed", () => {
    */
   const PARTICIPANT_SOURCES = [
     ...new Set(
-      DOCKERFILES.flatMap((relative) => {
-        const parsed = stages(readFileSync(join(REPO_ROOT, relative), "utf8"));
-        const local = dirname(relative);
-        return copySources(parsed.get(PARTICIPANT_STAGE) ?? "").flatMap((source) => {
-          const cleaned = source.replace(/^\.\//, "").replace(/\/$/, "");
-          return globSync(`${local}/${cleaned}/**/*.py`, { cwd: REPO_ROOT }).concat(
-            cleaned.endsWith(".py") ? [`${local}/${cleaned}`] : [],
-          );
-        });
-      }),
+      localPlayProblemDirs(REPO_ROOT).flatMap((dir) => participantPythonFiles(REPO_ROOT, dir)),
     ),
   ].sort();
 

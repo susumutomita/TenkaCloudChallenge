@@ -1,5 +1,6 @@
-import { globSync } from "node:fs";
-import { dirname } from "node:path";
+import { globSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { copySources, stages } from "./dockerfile-stages";
 
 /**
  * Which problems the local-play template contract applies to.
@@ -31,4 +32,35 @@ export function localPlayProblemDirs(repoRoot: string): readonly string[] {
  */
 export function localPlayVerifiers(repoRoot: string): readonly string[] {
   return localPlayProblemDirs(repoRoot).map((dir) => `${dir}/local/verifier/server.py`);
+}
+
+/** The stage a learner's `make build` produces — kept in sync with the guard that owns it. */
+const PARTICIPANT_STAGE = "participant";
+
+/**
+ * Every Python file one problem's participant stage copies in, as repo-root-relative paths.
+ *
+ * Derived from the `participant` stage's own COPY sources rather than a hand-written glob
+ * pair, for the reason `author-artifact-separation.test.ts` derives its combined
+ * `PARTICIPANT_SOURCES` the same way: a hand-written list drifts from what the Dockerfile
+ * actually ships (it missed `local/show.py` once), and this cannot, because it reads the
+ * same COPY lines a learner's `docker build` does. `check-answer-reachability.test.ts` needs
+ * this per-problem rather than flattened across the whole catalog, to ask "reachable from
+ * *this* problem's image" instead of "reachable from some image somewhere".
+ */
+export function participantPythonFiles(repoRoot: string, dir: string): readonly string[] {
+  const relativeDockerfile = `${dir}/local/Dockerfile`;
+  const parsed = stages(readFileSync(join(repoRoot, relativeDockerfile), "utf8"));
+  const sources = copySources(parsed.get(PARTICIPANT_STAGE) ?? "");
+  const local = `${dir}/local`;
+  return [
+    ...new Set(
+      sources.flatMap((source) => {
+        const cleaned = source.replace(/^\.\//, "").replace(/\/$/, "");
+        return globSync(`${local}/${cleaned}/**/*.py`, { cwd: repoRoot }).concat(
+          cleaned.endsWith(".py") ? [`${local}/${cleaned}`] : [],
+        );
+      }),
+    ),
+  ].sort();
 }
