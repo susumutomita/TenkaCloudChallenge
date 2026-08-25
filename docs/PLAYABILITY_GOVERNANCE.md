@@ -15,10 +15,13 @@ This policy applies when a pull request does any of the following:
    `local/starter/**`, `local/workbench/**`, `local/portal/**`) belonging to a
    problem that is **already** `status: ready` — i.e. a problem participants can
    already play, **or** rewrites a participant-facing *field* purely inside
-   that problem's `metadata.json` (`name`, `shortDescription`, `instructions`,
-   `writeup`, any scoring `hints`, or a `checks[]`/`flags[]` `label`/`hints`,
-   including their `i18n.en` translations) without touching any of those files
-   at all;
+   that problem's `metadata.json` — `name`, `shortDescription`, `instructions`,
+   `writeup`, any scoring `hints`, a `checks[]`/`flags[]` `label`/`hints` (all
+   of these including their `i18n.en` translation), or — whenever that entry's
+   own `publicHint` is `true` on the base side, the head side, or both — a
+   `phases[]`/`disruptions[]` entry's `name`/`description`, or
+   `interTeamCoordination.name`/`.description` — without touching any of those
+   files at all;
 4. adds `scripts/<problem-id>.test.ts` under a matching `feat(<problem-id>):` /
    `test(<problem-id>):` title before that problem's `metadata.json` exists (the
    RED-only-commit shape from #459).
@@ -38,6 +41,20 @@ excluded so that e.g. a pure learning-graph addition (PR #520's shape) does not
 require a human blind-play. See `scripts/check-pr-playability.ts`'s
 `extractParticipantFacingProjection` for the exact field list and the evidence
 behind each inclusion/exclusion.
+
+A follow-up review of Issue #523 found this was not yet complete:
+`phases[]`/`disruptions[]`/`interTeamCoordination` each carry a `publicHint`
+boolean, and SCHEMA.json documents the same policy on all three — `true`
+reveals that entry's `name`/`description` on the participant Portal's
+StatusPanel, default (`false`/absent) hides it. This is not hypothetical: on
+`main` right now, `hello-world-battle`'s `disruptions[0]` and
+`microservice-migration-battle`'s `interTeamCoordination` both carry
+`publicHint: true` on `status: ready` problems, so that text is already live
+on a participant Portal. The comparison is gated per entry by whichever side
+(base or head) has `publicHint: true` — this also catches a PR that only flips
+`publicHint` itself (`false`/absent → `true`, or the reverse) with the
+name/description text left untouched, since that flip alone changes what a
+participant can see.
 
 Repository CI, mutation tests, reference runs and runtime tests remain
 required, but they are not a substitute for a participant actually solving the
@@ -175,6 +192,17 @@ boundary.
   `courseAlignment`/`nodes`/`relations`/`status` and similar deploy-or-catalog-
   only fields out of scope so a learning-graph-only PR (#520's shape) still
   does not require a human blind-play.
+- **Issue #523 follow-up** (same day): the first pass at the fix above treated
+  `phases[].name`/`.description` as an out-of-scope rare case (gated behind
+  `publicHint`, judged to matter only for `phased-polling` Battles). A
+  coordinator review found `publicHint` is not rare and not limited to
+  `phases[]` — it also gates `disruptions[]` and `interTeamCoordination`, and
+  two live `status: ready` problems (`hello-world-battle`'s `disruptions[0]`,
+  `microservice-migration-battle`'s `interTeamCoordination`) already carry
+  `publicHint: true`, so their `name`/`description` are on a participant
+  Portal today. Fixed by projecting all three per-entry, gated by that entry's
+  own `publicHint` on whichever side (base or head) has it `true` — which also
+  catches a PR that only flips `publicHint` itself, text left untouched.
 
 **Do not delete or weaken this gate to unblock an in-progress PR.** If a
 legitimate PR is stuck on this check, the fix is almost always "the PR is not

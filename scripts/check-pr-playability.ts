@@ -204,10 +204,44 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 //     `exposedPorts` — none of these render as participant-read text; they are
 //     deploy/catalog/graph metadata (this is also PR #520's shape: a
 //     `nodes`/`relations`-only change, which must stay unflagged).
-//   - `phases[].name` / `phases[].description` — SCHEMA.json shows these are
-//     participant-visible *only* when `publicHint: true` on that phase, a
-//     conditional the field-diff below does not attempt to evaluate. Left as a
-//     known follow-up rather than folded into this fix (see PR body).
+//   - `phases[].publicHint` / `disruptions[].publicHint` /
+//     `interTeamCoordination.publicHint` themselves — the boolean gate is
+//     deploy-time behavior, not participant-read text. It matters only
+//     through what it reveals, which is handled below.
+//
+// Three more locations are participant-facing *conditionally*, gated by their
+// own `publicHint: true` (found live on `status: ready` problems, not just in
+// the schema: `hello-world-battle`'s `disruptions[0]` and
+// `microservice-migration-battle`'s `interTeamCoordination` both currently
+// carry `publicHint: true`, so their text is on the participant Portal's
+// StatusPanel right now):
+//
+//   - `phases[i].name` / `phases[i].description` when `phases[i].publicHint`
+//     is `true` — SCHEMA.json: "true のとき participant-portal の StatusPanel
+//     に phase 詳細 (name + description) を予告表示する。 default (=
+//     undefined / false) では ... hide."
+//   - `disruptions[i].name` / `disruptions[i].description` when
+//     `disruptions[i].publicHint` is `true` — same wording, same StatusPanel.
+//     SCHEMA.json's `publicHint` description also lists `defaultAfterMinutes`
+//     as revealed ("name + description + defaultAfterMinutes"); that field is
+//     deliberately left out of the projection below (a schedule number is a
+//     balance/timing value, not read text a hint-style rewrite can leak an
+//     answer through) — flagged here rather than silently dropped, since it
+//     is a real asymmetry with what SCHEMA.json documents as shown.
+//   - `interTeamCoordination.name` / `interTeamCoordination.description` when
+//     `interTeamCoordination.publicHint` is `true` — SCHEMA.json: "[same
+//     policy as disruptions.publicHint] true で participant-portal に
+//     coordination の存在 + description を予告表示する."
+//
+// Each of these three is projected from *each side independently* (base's own
+// `publicHint`, head's own `publicHint`) before the two projections are
+// compared. That is what makes the comparison behave as the required base/head
+// OR: flipping `publicHint` from `false`/absent to `true` with the text left
+// untouched still changes the projection (undefined → `{name, description}`,
+// text newly exposed) exactly as flipping it the other way changes the
+// projection back (text newly hidden, still a real change to what's on the
+// Portal at the ready-check boundary) — without any extra "was it true on
+// either side" branch to get wrong.
 const PARTICIPANT_FACING_METADATA_TEXT_KEYS = ["name", "shortDescription", "instructions", "writeup"] as const;
 
 function extractHintBearingScoringFields(scoring: unknown): unknown {
@@ -240,6 +274,27 @@ function extractLocalizedParticipantFacingFields(i18n: unknown): unknown {
   };
 }
 
+// `phases[]` / `disruptions[]` entries only reach the participant Portal's
+// StatusPanel when that entry's own `publicHint` is `true` (SCHEMA.json).
+// Projected per-entry, independently for whichever side (base or head) is
+// being read — see the comment above `PARTICIPANT_FACING_METADATA_TEXT_KEYS`
+// for why that alone gives the required base/head OR semantics without an
+// explicit combinator.
+function extractPublicHintGatedEntries(items: unknown): unknown {
+  if (!Array.isArray(items)) return undefined;
+  return items.map((item) => {
+    if (!isRecord(item) || item.publicHint !== true) return undefined;
+    return { name: item.name, description: item.description };
+  });
+}
+
+// Same `publicHint`-gated reveal as `extractPublicHintGatedEntries`, but
+// `interTeamCoordination` is a single object, not an array.
+function extractPublicHintGatedObject(value: unknown): unknown {
+  if (!isRecord(value) || value.publicHint !== true) return undefined;
+  return { name: value.name, description: value.description };
+}
+
 // Projects only the participant-facing subset of a `metadata.json` object so
 // two versions can be compared by value instead of by which file moved.
 function extractParticipantFacingProjection(metadata: Record<string, unknown> | undefined): unknown {
@@ -250,6 +305,9 @@ function extractParticipantFacingProjection(metadata: Record<string, unknown> | 
   }
   projection.scoring = extractHintBearingScoringFields(metadata.scoring);
   projection.i18nEn = extractLocalizedParticipantFacingFields(metadata.i18n);
+  projection.phases = extractPublicHintGatedEntries(metadata.phases);
+  projection.disruptions = extractPublicHintGatedEntries(metadata.disruptions);
+  projection.interTeamCoordination = extractPublicHintGatedObject(metadata.interTeamCoordination);
   return projection;
 }
 

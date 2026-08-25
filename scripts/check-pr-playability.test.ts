@@ -242,6 +242,80 @@ describe("problem change classification — metadata.json field-level participan
   });
 });
 
+// Coordinator follow-up on Issue #523: `publicHint` gates participant
+// visibility in three places in SCHEMA.json (`phases[]`, `disruptions[]`,
+// `interTeamCoordination`), all with the same "true reveals name+description
+// on the participant Portal's StatusPanel, default hides" policy. This is not
+// hypothetical — `hello-world-battle`'s `disruptions[0]` and
+// `microservice-migration-battle`'s `interTeamCoordination` both currently
+// carry `publicHint: true` on `status: ready` problems, so their text is
+// already on a live participant Portal.
+describe("problem change classification — publicHint-gated text (disruptions/phases/interTeamCoordination)", () => {
+  const readyWithDisruption = (description: string, publicHint: boolean | undefined) =>
+    JSON.stringify({
+      id: "battle-with-disruption",
+      status: "ready",
+      name: "Battle With Disruption",
+      shortDescription: "A battle with a disruption.",
+      instructions: "Keep the service up.",
+      disruptions: [
+        {
+          id: "content-swap",
+          name: "Content swap",
+          eventDetailType: "tenkacloud.disruption.content-swap",
+          description,
+          ...(publicHint === undefined ? {} : { publicHint }),
+        },
+      ],
+    });
+
+  test("positive: rewriting a publicHint:true disruption's description on a ready problem is flagged", () => {
+    const metadata = new Map([
+      ["base:battles/battle-with-disruption/metadata.json", readyWithDisruption("A generic disruption warning.", true)],
+      [
+        "head:battles/battle-with-disruption/metadata.json",
+        readyWithDisruption("The disruption swaps in the file containing the admin password.", true),
+      ],
+    ]);
+    const changes = classifyProblemChanges("M	battles/battle-with-disruption/metadata.json", (ref, path) =>
+      metadata.get(`${ref}:${path}`),
+    );
+
+    expect(changes.participantFacingReadyProblemIds).toEqual(["battle-with-disruption"]);
+  });
+
+  test("negative: rewriting the same field on the same problem is not flagged while publicHint stays false/absent", () => {
+    const metadata = new Map([
+      ["base:battles/battle-with-disruption/metadata.json", readyWithDisruption("A generic disruption warning.", undefined)],
+      [
+        "head:battles/battle-with-disruption/metadata.json",
+        readyWithDisruption("The disruption swaps in the file containing the admin password.", undefined),
+      ],
+    ]);
+    const changes = classifyProblemChanges("M	battles/battle-with-disruption/metadata.json", (ref, path) =>
+      metadata.get(`${ref}:${path}`),
+    );
+
+    expect(changes.participantFacingReadyProblemIds).toEqual([]);
+  });
+
+  // This is the base/head OR case: the description text never changes, but
+  // flipping publicHint from false/absent to true newly exposes it on the
+  // participant Portal. A projection that only looked at head's publicHint
+  // (or only at whether the text itself changed) would miss this.
+  test("positive: flipping publicHint from false/absent to true is flagged even with unchanged text", () => {
+    const metadata = new Map([
+      ["base:battles/battle-with-disruption/metadata.json", readyWithDisruption("A generic disruption warning.", undefined)],
+      ["head:battles/battle-with-disruption/metadata.json", readyWithDisruption("A generic disruption warning.", true)],
+    ]);
+    const changes = classifyProblemChanges("M	battles/battle-with-disruption/metadata.json", (ref, path) =>
+      metadata.get(`${ref}:${path}`),
+    );
+
+    expect(changes.participantFacingReadyProblemIds).toEqual(["battle-with-disruption"]);
+  });
+});
+
 describe("new-problem / ready-promotion / participant-facing gate", () => {
   // This is the exact regression this Issue exists to prevent: #476 removed the
   // whole gate because it kept a legitimately in-progress Draft PR permanently red.
