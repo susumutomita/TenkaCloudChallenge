@@ -24,10 +24,15 @@ class EmptyClient {
   }
 }
 
-/** A table exists but has no PRIMARY KEY at all (e.g. a plain CREATE TABLE). */
+/** A table exists but has no PRIMARY KEY at all (e.g. a plain CREATE TABLE).
+ *  Distinct from EmptyClient: the relation itself exists, so
+ *  membersPrimaryKeyColumns() must return `[]`, not `null` — conflating the
+ *  two used to make /verify claim "training.members がまだ存在しない" (the
+ *  table does not exist) even when it plainly did; see grade.mjs's `[] =
+ *  table exists with no PRIMARY KEY at all` contract note. */
 class NoPkClient {
   async membersPrimaryKeyColumns() {
-    return null;
+    return [];
   }
   async membersRowCount() {
     return 7;
@@ -108,6 +113,20 @@ describe("members-table-has-primary-key", () => {
   it("passes when email is (part of) the primary key", async () => {
     const result = await CHECKS[0].run(new SolvedClient());
     expect(result.passed).toBe(true);
+  });
+
+  it("distinguishes 'table missing' from 'table exists with no PRIMARY KEY' in the message", async () => {
+    // Regression test: membersPrimaryKeyColumns() used to return `null` for
+    // BOTH states, so the "table missing" message was shown even when the
+    // table genuinely existed and merely lacked a primary key. The two must
+    // now produce different, individually accurate messages.
+    const missingTable = await CHECKS[0].run(new EmptyClient());
+    const existsNoPk = await CHECKS[0].run(new NoPkClient());
+    expect(missingTable.passed).toBe(false);
+    expect(existsNoPk.passed).toBe(false);
+    expect(missingTable.detail).not.toBe(existsNoPk.detail);
+    expect(missingTable.detail).toMatch(/存在しない/);
+    expect(existsNoPk.detail).not.toMatch(/存在しない/);
   });
 });
 

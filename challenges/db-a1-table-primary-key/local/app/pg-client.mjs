@@ -13,17 +13,30 @@
 export function createPgGraderClient(sql) {
   return {
     async membersPrimaryKeyColumns() {
+      // Bug fixed here: this used to return `null` whenever the primary-key
+      // query came back empty, which conflated two different database states
+      // — "training.members does not exist at all" and "training.members
+      // exists but has no PRIMARY KEY at all" — behind the same `null`, even
+      // though the JSDoc contract above (and grade.mjs's message branches)
+      // always assumed null meant "table missing". Reproduced live: creating
+      // `training.members` with no PRIMARY KEY made /verify's
+      // members-table-has-primary-key checkpoint report "training.members が
+      // まだ存在しない" (the table does not exist) even though the table
+      // genuinely existed. The pass/fail boolean was always correct (false in
+      // both cases); only the diagnostic message was wrong. Checking table
+      // existence separately, via to_regclass, makes the two states
+      // distinguishable: null only when the relation itself is absent, and a
+      // (possibly empty) array whenever it exists.
+      const [{ reg }] = await sql`select to_regclass('training.members') as reg`;
+      if (reg === null) return null;
       const rows = await sql`
         select a.attname as column_name
         from pg_index i
         join pg_attribute a on a.attrelid = i.indrelid and a.attnum = any(i.indkey)
-        join pg_class c on c.oid = i.indrelid
-        join pg_namespace n on n.oid = c.relnamespace
-        where i.indisprimary
-          and n.nspname = 'training'
-          and c.relname = 'members'
+        where i.indrelid = 'training.members'::regclass
+          and i.indisprimary
       `;
-      return rows.length === 0 ? null : rows.map((r) => r.column_name);
+      return rows.map((r) => r.column_name);
     },
 
     async membersRowCount() {

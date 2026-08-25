@@ -5,7 +5,7 @@
  * connection itself. It drives an injected `client` that reads live database
  * state, exactly the way the participant left it:
  *
- *   client.membersPrimaryKeyColumns()  -> string[] | null   (null = table missing)
+ *   client.membersPrimaryKeyColumns()  -> string[] | null   (null = table missing, [] = table exists with no PRIMARY KEY at all)
  *   client.membersRowCount()           -> number | null     (null = table missing)
  *   client.unkeyedDistinctEmailCount() -> number
  *   client.attemptDuplicateInsert()    -> { rejected: boolean, sqlState?: string, reason?: string }
@@ -31,8 +31,10 @@ export const CHECKS = [
       let detail;
       if (pk === null) {
         detail = "training.members がまだ存在しない。CREATE TABLE から始めよう。";
+      } else if (pk.length === 0) {
+        detail = "training.members は存在するが、PRIMARY KEY がまだ無い。";
       } else if (!passed) {
-        detail = `training.members に PRIMARY KEY はあるが email を含んでいない (現在のキー: ${pk.join(", ") || "なし"})。`;
+        detail = `training.members に PRIMARY KEY はあるが email を含んでいない (現在のキー: ${pk.join(", ")})。`;
       } else {
         detail = `training.members の PRIMARY KEY に email が含まれている (${pk.join(", ")})。`;
       }
