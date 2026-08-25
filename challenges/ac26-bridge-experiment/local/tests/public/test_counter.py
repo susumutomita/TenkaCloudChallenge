@@ -138,12 +138,14 @@ def test_workbench_starter_returns_the_editable_file() -> None:
     assert "def advance" in payload["counter.py"]
 
 
-def test_workbench_public_tests_fail_the_shipped_starter() -> None:
-    # The starter never reduces mod `modulus`, so the range test must fail. If
-    # this starts passing, the starter no longer demonstrates the misconception.
-    result = run_public_tests(WORKBENCH_TEST_SEED, starter_payload())
-    assert result["passed"] is False
-    assert "FAIL test_every_entry_is_in_range" in result["output"]
+# There is deliberately no "the shipped starter fails" self-check in this file.
+# `starter_payload()` reads whatever is on disk under `starter/` right now, and `make
+# test` bind-mounts the learner's own working copy over that path. A self-check built
+# on `starter_payload()` therefore inverts into a false failure the instant a learner
+# solves the problem correctly (Issue #526). The author-time version of this
+# invariant -- the checked-out, as-shipped `starter/counter.py` must fail the public
+# suite -- lives in `scripts/ac26-bridge-experiment.test.ts`, which reads the real
+# repository file directly instead of going through the workbench server.
 
 
 def test_workbench_public_tests_reject_a_single_subtraction_solution() -> None:

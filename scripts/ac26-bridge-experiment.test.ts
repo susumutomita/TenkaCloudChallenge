@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
 import { parse as parseYaml } from "yaml";
@@ -130,9 +130,35 @@ describe("ac26-bridge-experiment: fixtures are seed-derived", () => {
 
 describe("ac26-bridge-experiment: the problem is actually solvable and actually fails", () => {
   it("should fail the public tests in the shipped starter state", () => {
+    // This is the author-time half of the invariant that used to live inside
+    // tests/public/test_counter.py itself, as a self-check built on starter_payload()
+    // (Issue #526). That self-check read whatever was on disk under local/starter/ at
+    // the moment it ran -- which is exactly what `make test` bind-mounts read-write
+    // over, so it inverted into a false failure the instant a learner solved the
+    // problem correctly. Checking the real repository file here, with no bind mount in
+    // the way, gets the same guarantee without that failure mode.
     const result = python(["tests/public/test_counter.py"]);
     expect(result.status).not.toBe(0);
-    expect(result.stdout).toContain("FAIL");
+    expect(result.stdout).toContain("FAIL test_every_entry_is_in_range");
+  });
+
+  it("should pass the public tests once the starter has been correctly solved", () => {
+    // The regression this guards against: a self-check re-added inside
+    // tests/public/test_counter.py that reads the live starter/ directory (via
+    // starter_payload() or any other on-disk read) rather than a fixed, as-shipped
+    // baseline. Swapping the reference solution into starter/ reproduces exactly what
+    // `make test` sees once a participant has solved the problem -- restored in
+    // `finally` so a failed assertion here can never leave the repository dirty.
+    const starterPath = join(LOCAL, "starter", "counter.py");
+    const original = readFileSync(starterPath, "utf8");
+    try {
+      writeFileSync(starterPath, read("local/reference/counter.py"), "utf8");
+      const result = python(["tests/public/test_counter.py"]);
+      expect(result.stdout).toContain("public tests: all passed");
+      expect(result.status).toBe(0);
+    } finally {
+      writeFileSync(starterPath, original, "utf8");
+    }
   });
 
   it("should kill every intended defect in the mutation suite", () => {

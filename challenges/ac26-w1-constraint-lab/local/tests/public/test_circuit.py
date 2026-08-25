@@ -85,12 +85,14 @@ def test_workbench_starter_returns_all_editable_files() -> None:
     assert "def boolean_constraint" in payload["gadgets.py"]
 
 
-def test_workbench_public_tests_fail_the_shipped_starter() -> None:
-    # The starter's normalize is deliberately a no-op, so the field test must
-    # fail. If this starts passing, the starter no longer leaves work to do.
-    result = run_public_tests(WORKBENCH_TEST_SEED, starter_payload())
-    assert result["passed"] is False
-    assert "FAIL test_normalize_maps_into_the_field" in result["output"]
+# There is deliberately no "the shipped starter fails" self-check in this file.
+# `starter_payload()` reads whatever is on disk under `starter/` right now, and `make
+# test` bind-mounts the learner's own working copy over that path. A self-check built
+# on `starter_payload()` therefore inverts into a false failure the instant a learner
+# solves the problem correctly (Issue #526). The author-time version of this
+# invariant -- the checked-out, as-shipped `starter/field.py` must fail the public
+# suite -- lives in `scripts/ac26-w1-constraint-lab.test.ts`, which reads the real
+# repository file directly instead of going through the workbench server.
 
 
 def test_workbench_public_tests_report_invalid_browser_source() -> None:
