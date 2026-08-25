@@ -23,9 +23,9 @@ if wp core is-installed --allow-root >/dev/null 2>&1; then
   exit 0
 fi
 
+# ポートを焼き込まない (Issue 399)。実際の配信 URL は wp-config.php の WP_HOME /
+# WP_SITEURL が Host から毎回決めるので、ここは install を通すための値でよい。
 wp core install --allow-root \
-  # ポートを焼き込まない (Issue 399)。実際の配信 URL は wp-config.php の WP_HOME /
-  # WP_SITEURL が Host から毎回決めるので、ここは install を通すための値でよい。
   --url="http://localhost" \
   --title="Aoi Corp" \
   --admin_user="admin" \
