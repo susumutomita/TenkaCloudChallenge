@@ -1,0 +1,10 @@
+{
+  "name": "db-battle-slow-apparently-local",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local-play container for db-battle-slow-apparently: info/verify/diagnosis surface plus the continuous metrics sampler every checkpoint grades from.",
+  "dependencies": {
+    "postgres": "3.4.5"
+  }
+}

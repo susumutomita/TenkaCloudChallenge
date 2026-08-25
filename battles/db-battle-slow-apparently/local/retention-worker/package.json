@@ -1,0 +1,10 @@
+{
+  "name": "db-battle-slow-apparently-retention-worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "The scenario's retention/purge job for db-battle-slow-apparently. Ships with the bug (unsafe_full_delete); participant fixes it via ops.retention_config.",
+  "dependencies": {
+    "postgres": "3.4.5"
+  }
+}
