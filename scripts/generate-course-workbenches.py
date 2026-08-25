@@ -52,6 +52,9 @@ BLOCK_END = "# END GENERATED PORTAL EDITOR API"
 PORTAL_PACKAGES = {
     "cs-transaction-visibility-audit": "participant",
     "ac26-w4-sumcheck-drill": "participant",
+    "ac26-w3-schnorr-drill": "participant",
+    "ac26-w4-plonk-drill": "participant",
+    "ac26-w4-fri-drill": "participant",
 }
 
 # The language arguments the generator owns, in the order they are emitted after

@@ -68,17 +68,21 @@ hint は各 checkpoint に 1 つ（減点 6）。その行で起きやすい打�
 
 ## 保証範囲
 
-ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も
-あなたの管理下にあるので、 image の中身はあなたに対して秘匿されていません。
-`reference/` と `tests/hidden/` を bind-mount しないのは、あなたの git checkout に
-紛れ込ませないためであって、手が届かなくするためではありません。
+ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも compose stack の
+全 image もあなたの管理下にあるので、その人物に対して中身を秘匿することはできません。ここでの
+境界は誤配防止であり、その人物に対する秘匿ではありません。参加者用 Workbench image に入るのは
+公開 fixture・公開 test・starter だけです。8 行の期待値導出（`verifier/expected.py`）と hidden
+suite は、Compose 内部 network 上でしか到達できない別の verifier image に置きます。`reference/`
+と `mutation.py` は `author` stage にだけ追加します。
 
-verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
-ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。
-結果は期待値を漏らしません。 fixture はこのデプロイの seed 由来なので、暗記した答えは持ち越せません。
+host の `127.0.0.1:18134` に公開するのは Workbench だけで、verifier に host port はありません。
+両 service は non-root、read-only filesystem、capabilities なし、no-new-privileges、
+メモリ・PID 上限つきで動きます。提出コードは verifier をハングさせたりクラッシュさせたりできません。
+checkpoint は echo した id しか加点できません。結果は期待値を漏らしません。fixture はこのデプロイの
+seed 由来なので、暗記した答えは持ち越せません。
 
 これは自習と誠実な練習を支えます。競技順位・試験・修了判定は**支えません**。
-それらには participant が管理しない verifier が必要で、
+それらには participant が一切管理しない verifier が必要で、
 [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271) で追跡しています。
 
 ## コスト

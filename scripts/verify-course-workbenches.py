@@ -60,8 +60,11 @@ SPLIT_PORTAL_MODULES = {
     "cs-cache-generation-fence": "participant.server",
     # Issue 543/537: 単一 stage の drill を、生成された Portal editor API を持つ他の
     # split-boundary 問題と同じ形へ分離した。 answer 導出は verifier/expected.py のみに
-    # 残る。
+    # 残る。 #546 が sumcheck、 本 PR が残り 3 問。
     "ac26-w4-sumcheck-drill": "participant.server",
+    "ac26-w3-schnorr-drill": "participant.server",
+    "ac26-w4-plonk-drill": "participant.server",
+    "ac26-w4-fri-drill": "participant.server",
 }
 # Execute the heavier inspect/public-test adapter on representative problems from
 # each family. The catalogue's existing sharded suite executes every problem's own
