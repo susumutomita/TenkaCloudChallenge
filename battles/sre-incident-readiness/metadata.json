@@ -1,0 +1,172 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "sre-incident-readiness",
+  "name": "見えるものしか守れない",
+  "category": "Battle",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 4,
+  "estimatedDuration": "90〜120 分",
+  "shortDescription": "正常に稼働している注文サービスがあります。まず、あなたのチームで監視・耐障害性を作ってください。そのあとで、原因を伏せたインシデントが発生します。\n\n平時にどれだけ「見える」状態を、どれだけ「壊れにくい」状態を作れたかが、そのままインシデント対応の速さと被害の小ささに直結します。ダッシュボードの数や設定ファイルの行数では採点しません。実際のトラフィックに対して、作った仕組みが本当に機能したかどうかで採点します。",
+  "instructions": "## 前提 — 中学・高校の数学から\n\n- **学校で習ったこと**: 「平均」（小5・小6の算数）と、「全体をならすと一部だけ極端な値は隠れてしまう」という感覚（中学2年の数学「資料の散らばりと代表値」で習う、平均値・中央値・最大値の違い）。あわせて「割合（%）」（小5・小6）と、「1回起きるごとにX回繰り返すと全部で何回になるか」という掛け算の文章題。\n- **この問題のどこで使うか**: サービスが順調に見えるかどうかを判断する数字は、結局ぜんぶ「平均」か「割合」です。平均だけを見ていると、一部の注文だけがひどく遅くなっていても隠れてしまいます。また、「1回失敗したら3回までやり直す」という設定にすると、1件の注文が最大で何回問い合わせを発生させるかは掛け算で決まります。この2つが分かれば、この問題で必要な考え方は全部揃っています。\n- **1桁の例**: 5件の注文の待ち時間が 1秒・1秒・1秒・1秒・10秒 だったとします。平均は (1+1+1+1+10) ÷ 5 = 2.8秒で、「まあまあ速い」ように見えます。しかし実際には5件のうち1件、つまり20%が10秒も待たされています。平均だけを見ていると、この1件の存在に気づけません。掛け算の例: 1件の注文が失敗するたびに最大3回までやり直す設定で、10件が同時に失敗すると、実際に飛ぶ問い合わせは元の1回+やり直し3回で1件あたり最大4回、10件で最大40回になります。\n- **言葉**: 平均 = 全部足して件数で割った値。割合(%) = 全体のうち何パーセントか。代表値 = データ全体を1つの数で代表させたもの（平均・中央値・最大値など、何を選ぶかで見える景色が変わる）。タイムアウト = 「これ以上は待たない」と決めておく時間。リトライ = 失敗したときにもう一度やり直すこと。サーキットブレーカー = 相手が調子悪いと分かったら、しばらく呼び出すのをやめて様子を見る仕組み。\n\n## はじめに\n\n架空の注文サービスがあります。今のところ元気に動いていますが、備えが薄い状態です。プロセスが生きているかしか見ていない health check、注文が通ったか失敗したかの内訳が分からないメトリクス、1行の生テキストのログ、アラートは1つも無し。\n\nこの問題は4つの時間帯（フェーズ）で進みます。\n\n1. **Build** — サービスは正常です。この時間で監視や耐障害性を作ります。\n2. **Calibrate** — 無害な揺れ（アクセス増加や、1回だけの遅延など）を流します。ここで「鳴りすぎるアラート」を調整します。\n3. **Incident** — 何かが起こります。原因は教えません。\n4. **Stabilize** — 本当に落ち着いたことを確認してから、インシデントを閉じます。\n\nこの問題の中心的な主張はひとつです。**Build で何を作ったかが、Incident でどれだけ速く気づけて、どれだけ被害を小さくできるかにそのまま効きます。** そして、Incident が始まってから慌てて監視を追加しても、それより前の証拠は手に入りません。\n\n## 最初の一手\n\nポータルに表示されている **アクセス先 URL** を開くと概要画面が出ます。`POST /orders` を1回叩いて、サービスとつながっていることを確認してください（これは動作確認用で、採点対象のトラフィックは自動で継続的に流れています）。\n\n次に「Build」画面を開いてください。timeoutMs・maxRetries・circuit breaker・observability の切り替え・アラートのルールを、ここから作れます。\n\n## Incident Room\n\nアラートが鳴ったからといって、自動でインシデント扱いにはなりません。**チームが「Incident Room」で明示的に宣言する**必要があります。役割（Incident Commander / Operations Lead / Communications Lead / Scribe）を割り当て、事実（fact）と仮説（hypothesis）は自由記述ではなく、根拠となる証跡 ID とセットで提出してください。証拠のない「たぶんこれが原因」は採点されません。\n\n対応の操作（サーキットブレーカーを開く、再起動する、全停止する、など）も Incident Room から行います。**サービスを全停止する操作や load generator を止めようとする操作は、封じ込めとしては評価されず、記録が残ります。**\n\n収束したと思ったら、Structured update を1件以上投稿してから resolve してください。SLO が実際に戻っていない状態や、宣言していない状態では resolve できません。\n\n## ゴール\n\nこの問題には6つの checkpoint があります。作った監視が実際に機能したか、正しく宣言・組織できたか、証拠に基づいて診断できたか、顧客影響を小さく抑えられたか、安全に封じ込められたか、正しく収束できたか。それぞれの受領証は「スコア」画面に出ます。\n\nチームの人数が3人の場合は、Communications Lead と Scribe を兼任してかまいません。役割の人数そのものは採点しません。",
+  "description": "SRE Battle #1（Issue 470）。ゲーム内の 4 フェーズ (Build → Calibrate → Incident → Stabilize) と Variant A (slow dependency → retry storm) を実装した垂直スライス (Milestone 1 相当)。\n\n## なぜ config API であって参加者コードの実行ではないか\n\nIssue は `observability/otel-collector.yaml` のような参加者編集ファイルを候補として挙げているが、同じ Issue の Fairness 節が「特定の製品や実装を唯一解にしない」と明言している。`stackstack-observability` (#288) と `agent-approval-gameday` (#390) はどちらもこれを「in-memory の per-session config を HTTP 経由で変える」形で解決しており、本問題も同じ形を踏襲した。参加者コードを実行しないことで、任意コード実行のサンドボックス問題そのものが発生しない。\n\n## シミュレーションの中心的な仕掛け\n\n`local/app/world.mjs` の `step()` が 1 tick (=1 秒) ごとに実トラフィックを生成する。payment-gateway 系の依存先が `incidentPlan.startTick` から `healTick` まで完全に詰まる。1 件の checkout がその依存先を呼ぶと、`(1 + maxRetries) * ceil(timeoutMs/1000)` tick だけ共有 pool のスロットを占有する。既定 (starter) の timeoutMs=15000 / maxRetries=6 / circuit breaker 無効では、この占有時間が長すぎて数 tick で pool (30 スロット) が枯渇し、依存先を呼ばない order-status route まで巻き込まれて拒否される。timeoutMs を短く、maxRetries を小さく、circuit breaker を有効にした場合は、数回の失敗で breaker が開いて依存先呼び出し自体をスキップするため、pool は枯渇せず正常系が維持される。この差は完全に決定論的で、seed ごとに再現する。\n\n## 「後から見えるようにしても過去は見えない」の実装\n\n`world.mjs` の `recordEvidence` は、証跡を記録する **その tick の時点** で該当 capability (dependencyMetrics または structured logs) が有効かどうかだけを見る。過去に遡って evidence 配列を書き足すコードパスは存在しない。したがって、インシデント発生後に capability を有効にしても、発生前後の証跡は増えない。evidence-based-diagnosis checkpoint は実在する evidence id を要求するため、この制約は自動的に効く。\n\n## ノイズの検出に静的解析を使わない理由\n\n「常時発火するアラート」「CPU だけを見るアラート」を判定する専用ロジックは書いていない。前者は、Build/Calibrate 中に一度でも発火した rule を `noisy` として永久にマークすることで、後者は「CPU を見るメトリクスがそもそも存在しない」という closed なメトリクス enum (`config-store.mjs`) で自然に無効化している。どちらも「実際のトラフィックに対する挙動」で判定されており、ルールの書き方を目視で採点していない。\n\n## Scoring は Issue 本文の表と 1:1\n\nReadiness efficacy 150 / Detection-declaration 150 / Evidence-based diagnosis 150 / Customer impact 250 / Safe containment 200 / Incident command closure 100 = 1000 点。Battle カテゴリのため `checkScoringRegulation` の tier 制約は対象外 (validate-problems.ts が category==='Challenge' のみを見る)。\n\n## この PR で実装していないもの (Milestone 2/3 相当、follow-up)\n\nVariant B (bad revision / partial failure)、OTel 分散トレース伝播、Runbook 実行エンジン、AAR の自動生成、実 Prometheus/Alertmanager/Grafana、TenkaCloud portal 統合 (dashboard.slots / interTeamCoordination)、自由形式のカスタムメトリクスラベル。理由と詳細は PR 本文の Known incomplete work を参照。",
+  "writeup": "## この問題が測っていたもの\n\n「監視を触ったことがあるか」ではなく、**平時に何を作ったかが、有事にそのまま効くか**でした。\n\n### 1. 平均は嘘をつかないが、隠す\n\nチェックアウトの平均レイテンシが正常に見えても、一部の route・tenant・revision だけが壊れていることはあります。全体平均しか見ていない health check は、この問題の starter がまさにそれでした。route 別・依存先別のメトリクスを Build フェーズで用意していたチームだけが、Incident フェーズでその内訳を見られました。\n\n### 2. 遅い依存先そのものより、それに対する反応が被害を決める\n\ndependency が詰まること自体は避けられません。しかし、長い timeout と多すぎる retry は、1 件の失敗を最大 (1+maxRetries) 倍の共有リソース占有に変えます。それが積み重なると、依存先を呼んですらいない別の route まで巻き添えになります。短い timeout、少ない retry、そして corcuit breaker (連続失敗を見て自動的に呼び出しを止める仕組み) の組み合わせだけが、この増幅を止められました。\n\n### 3. 後から仕込んだ観測は、過去には効かない\n\nインシデントが始まってから慌てて証跡を有効にしても、それより前の記録は手に入りません。平時の準備と有事の追加実装は、同じ条件にはなりませんでした。\n\n### 4. アラートは「鳴ること」ではなく「必要な時だけ鳴ること」\n\nCalibrate フェーズの無害な揺れで一度でも発火したルールは、readiness の得点対象から外れました。閾値を低くしすぎれば鳴りすぎ、高くしすぎれば気づけない。ちょうどいい場所を探すこと自体が、この問題の一部でした。\n\n### 5. 宣言しなければ、時計は動かない\n\nアラートが鳴っていても、チームが明示的に宣言するまでインシデント対応の evidence-based diagnosis も安全な封じ込めも始まりません。気づいていることと、組織として対応を始めることは別の行為でした。\n\n### 6. 「止める」ことは「直す」ことではない\n\n全サービス停止や、load generator を止めようとする操作は、封じ込めとしては評価されず、記録に残りました。再起動だけの対応は、根本原因 (詰まった依存先とその呼び方) を変えない限り、同じ被害がすぐに再発しました。\n\n## 現場に持ち帰るもの\n\n- 全体平均だけでなく、route・依存先別の内訳を見られるようにしておく\n- timeout と retry の上限を決め、依存先の不調を自動的に検知して呼び出しを止める仕組みを用意する\n- アラートは「鳴るか」ではなく「必要な時だけ鳴るか」で評価する\n- インシデントは検知して終わりではなく、明示的に宣言し、組織して対応する\n- 「止める」「再起動する」は根本原因への対応ではないと理解しておく",
+  "tags": [
+    "sre",
+    "observability",
+    "incident-response",
+    "reliability",
+    "circuit-breaker",
+    "alerting",
+    "local-play",
+    "container",
+    "multi-verify",
+    "team-battle"
+  ],
+  "exposedPorts": [
+    { "port": 18080, "name": "Browser Workbench + /metrics + /orders" },
+    { "port": 18081, "name": "/verify (loopback)" }
+  ],
+  "learningGoals": [
+    "全体平均やプロセス liveness だけでは、一部の route・依存先だけが壊れている状況を見つけられないと理解する",
+    "RED (Rate/Errors/Duration) の考え方で、route・依存先別に内訳を見えるようにする",
+    "timeout・retry の上限・circuit breaker を組み合わせ、遅い依存先への呼び出しが引き起こす被害の増幅を止められるようになる",
+    "アラートを「発火するか」ではなく「必要な時だけ発火するか」で評価できるようになる",
+    "証跡 ID に基づいて事実と仮説を分け、根拠のない原因断定を避けられるようになる",
+    "インシデントは検知だけでなく明示的な宣言と役割分担から始まると理解する",
+    "全停止や再起動だけの対応が、根本原因を残したままの見せかけの回復であると理解する",
+    "平時に用意した観測は有事に始めて追加しても遡って手に入らないと理解する"
+  ],
+  "i18n": {
+    "en": {
+      "name": "You Can Only Defend What You Can See",
+      "description": "SRE Battle #1 (Issue 470). A vertical slice (Milestone 1) implementing the four in-game phases (Build -> Calibrate -> Incident -> Stabilize) and Variant A (slow dependency -> retry storm).\n\n## Why a config API instead of executing participant code\n\nThe issue lists participant-edited files like `observability/otel-collector.yaml` as candidates, but its own Fairness section is explicit that no particular product or implementation is the one true answer. `stackstack-observability` (#288) and `agent-approval-gameday` (#390) both resolve this the same way: an HTTP API mutating in-memory, per-session config. Running no participant code at all removes the arbitrary-code-execution sandboxing problem entirely.\n\n## The central mechanism\n\n`local/app/world.mjs`'s `step()` generates real traffic every tick (1 tick = 1 simulated second). A downstream dependency is completely stuck from `incidentPlan.startTick` to `healTick`. Every checkout that calls it occupies a shared-pool slot for `(1 + maxRetries) * ceil(timeoutMs/1000)` ticks. At the starter's defaults (timeoutMs 15000, maxRetries 6, circuit breaker disabled) that is long enough to empty the 30-slot pool within a handful of ticks, at which point every route is rejected — including `order-status`, which never calls the dependency at all. A short timeout, a small retry budget and an enabled circuit breaker keep the pool from ever saturating. The difference is fully deterministic given the config, so it reproduces on every seed.\n\n## No retroactive observability, by construction\n\n`recordEvidence` only checks whether the relevant capability (dependencyMetrics or structured logs) is on **at the tick the event happens**. There is no code path that walks history backward to backfill it, so enabling a capability after the incident starts never produces evidence for what happened before.\n\n## Why alert noise is detected behaviorally, not by static analysis\n\nThere is no analyzer for \"always-firing\" or \"CPU-only\" rules. The former is caught by marking any rule that ever fires during Build/Calibrate as permanently noisy; the latter is structurally impossible because the alert-rule metric enum (`config-store.mjs`) simply does not include a CPU metric — this incident is never CPU-bound.\n\n## Scoring maps 1:1 onto the issue's own table\n\nReadiness efficacy 150 / Detection-declaration 150 / Evidence-based diagnosis 150 / Customer impact 250 / Safe containment 200 / Incident command closure 100 = 1000. Battle category, so `SCORING.md`'s tier-points regulation does not apply (`checkScoringRegulation` only checks `category === \"Challenge\"`).\n\n## Not implemented in this PR (Milestone 2/3, follow-up)\n\nVariant B (bad revision / partial failure), OTel trace propagation, a Runbook execution engine, real Prometheus/Alertmanager/Grafana, TenkaCloud portal integration (dashboard.slots / interTeamCoordination), and free-form custom metric labels. See the PR's Known incomplete work.",
+      "writeup": "## What this problem was measuring\n\nNot whether you had touched monitoring tools before — whether **what you built during peacetime actually held up under an unknown incident**.\n\n### 1. An average tells the truth, and hides it\n\nAn overall-healthy average checkout latency can still mean one route, tenant or revision is badly broken. The starter's own health check — liveness only — was exactly that failure mode. Only teams that had route- and dependency-level metrics ready during Build could see the real breakdown once Incident began.\n\n### 2. What matters is not that a dependency got slow, but how you responded to it\n\nA stuck dependency cannot be prevented. But a long timeout and too many retries turn one failure into up to (1 + maxRetries) times the shared-resource hold time. Compounded across concurrent requests, that spills into routes that never even called the dependency. Only a short timeout, a small retry budget, and a circuit breaker (which stops calling a dependency once it sees repeated failures) together kept that amplification from happening.\n\n### 3. Observability added after the fact cannot see the past\n\nSwitching on evidence capture after the incident starts gets you the rest of the incident — never the part you missed. Peacetime preparation and wartime scrambling were never on equal footing.\n\n### 4. An alert should fire when needed, not just fire\n\nAny rule that fired even once during Calibrate's harmless wobbles was excluded from readiness credit for the rest of the run. Too sensitive and it cries wolf; too lax and you never notice. Finding the right point was part of the problem.\n\n### 5. Nothing starts until someone declares it\n\nAn alert firing did not start evidence-based diagnosis or safe containment on its own. The team had to explicitly declare, assign roles, and back every claim with real evidence ids.\n\n### 6. Stopping is not the same as fixing\n\nStopping the whole service, or attempting to stop the load generator, was never credited as containment and was recorded either way. Restart-only remediation cleared the symptom but not the cause, and the same damage reappeared shortly after.\n\n## What to take back to work\n\n- See more than the aggregate: build route- and dependency-level breakdowns, not just an overall average\n- Bound timeouts and retries, and let a circuit breaker cut off a failing dependency automatically\n- Judge an alert by whether it stays quiet when nothing is wrong, not just whether it fires when something is\n- Treat incident response as starting from an explicit declaration and organized roles, not from noticing\n- Recognize that stopping everything, or just restarting, is not a fix for the root cause",
+      "shortDescription": "A toy order service is running fine. Your team builds monitoring and resilience into it first. Then an incident with a hidden root cause hits. How much you could actually *see*, and how well the service degraded instead of breaking, decides how fast you notice and how much damage the incident does. Scoring never counts dashboards or config lines — only whether what you built actually worked against real traffic.",
+      "instructions": "## Prerequisite — from middle/high school math\n\n- **What you learned in school**: \"average\" (elementary math) and the idea that averaging hides a single extreme value (middle-school statistics: mean vs. median vs. max as different ways to summarize the same data). Also percentages, and simple multiplication word problems (if one event repeats N times, how many total).\n- **Where this problem uses it**: every number that tells you whether the service is healthy is either an average or a percentage. Watching only the average lets a badly-hurting minority of requests hide completely. And if you retry a failed call up to 3 times, simple multiplication decides how many calls one failure actually generates.\n- **A single-digit example**: five orders wait 1, 1, 1, 1, and 10 seconds. The average is 2.8s — looks fine. But 1 of 5 (20%) waited 10 seconds, and the average alone never shows you that. Multiplication example: with up to 3 retries per failure, 10 simultaneous failures can generate up to 10 x 4 = 40 calls (1 original + 3 retries each).\n- **Terms**: average = sum divided by count. Percentage = share of the whole. A timeout is a limit on how long you wait before giving up. A retry is trying again after a failure. A circuit breaker stops calling a dependency for a while once it notices repeated failures.\n\n## Introduction\n\nA toy order service is running. It works, but it is barely instrumented: a health check that only knows the process is alive, metrics with no breakdown by route or dependency, one line of raw text per log entry, and no alerts at all.\n\nThe round has four phases: **Build** (the service is healthy; build monitoring and resilience), **Calibrate** (harmless traffic wobbles arrive; tune out alerts that fire on nothing), **Incident** (something happens; the cause is not told to you), and **Stabilize** (confirm it actually recovered before closing the incident).\n\nThe central claim of this problem: **what you build during Build determines how fast you notice, and how much damage Incident does.** Observability added after the incident starts cannot see what happened before it was turned on.\n\n## First move\n\nOpen the Workbench URL from the portal. `POST /orders` once to confirm connectivity (this is a connectivity check only — the graded traffic runs continuously and automatically). Then open the Build page to configure resilience, observability toggles, and alert rules.\n\n## Incident Room\n\nAn alert firing does not start the incident clock by itself. Your team has to declare it explicitly, assign roles, and back every fact and hypothesis with real evidence ids — unsupported guesses are not scored. Containment actions (opening the circuit breaker, restarting, stopping the service entirely) are also issued from the Incident Room. Stopping the whole service, or attempting to stop the load generator, is never credited as containment and is recorded.\n\nPost at least one structured update before you resolve. Resolve is refused while the SLO has not actually recovered.\n\n## Goal\n\nSix checkpoints: whether what you built actually worked, whether you declared and organized correctly, whether your diagnosis was evidence-backed, how small you kept customer impact, whether containment was safe, and whether you closed the incident correctly. Receipts appear on the Score page. A 3-person team may combine Communications Lead and Scribe — headcount itself is not graded.",
+      "learningGoals": [
+        "Recognize that an overall average or process liveness cannot reveal that one route or dependency is broken",
+        "Build RED (Rate/Errors/Duration) breakdowns by route and dependency",
+        "Combine timeouts, bounded retries and a circuit breaker to stop a slow dependency's failures from amplifying",
+        "Judge an alert by whether it fires only when needed, not by whether it fires",
+        "Separate facts from hypotheses using evidence ids instead of unsupported guesses",
+        "Treat incident response as starting from an explicit declaration and role assignment, not from noticing",
+        "Recognize that stopping everything or just restarting is not a fix for the root cause",
+        "Understand that observability added after the fact cannot see what happened before it existed"
+      ],
+      "checks": [
+        { "id": "readiness-efficacy", "label": "An alert you built actually caught the incident", "hints": [
+          { "id": "re-1", "content": "A rule that fires during Build or Calibrate is marked noisy for the rest of the run, even if it later fires correctly too." },
+          { "id": "re-2", "content": "Route-level or dependency-level signal, not the aggregate, is what stays quiet during Calibrate's harmless wobbles yet reacts to the real thing." },
+          { "id": "re-3", "content": "`circuit_breaker_state` (once you have a breaker) or `http_error_ratio` both work; `dependency_error_ratio` alone can go quiet exactly when things are at their worst, since a fully saturated pool stops even reaching the dependency. Give whichever you pick a `forTicks` long enough to survive Calibrate's single-tick blip." }
+        ] },
+        { "id": "detection-declaration", "label": "The incident was explicitly declared, with roles assigned", "hints": [
+          { "id": "dd-1", "content": "Noticing is not the same as declaring. The Incident Room's declare action is what starts the clock this checkpoint measures." },
+          { "id": "dd-2", "content": "At least two distinct roles need a named owner." },
+          { "id": "dd-3", "content": "From the Incident Room, declare a severity, then assign at least two of ic/ops/comms/scribe." }
+        ] },
+        { "id": "evidence-based-diagnosis", "label": "The hypothesis named the real dependency and mechanism, backed by evidence", "hints": [
+          { "id": "ed-1", "content": "Free text is not read. The dependency and mechanism fields must match real facts, and at least one cited evidence id must be real." },
+          { "id": "ed-2", "content": "Evidence only exists for ticks where dependency metrics or structured logs were already on — turning them on after the fact does not backfill it." },
+          { "id": "ed-3", "content": "Enable dependency metrics or structured logs before you expect trouble, then submit the hypothesis with an evidence id copied from the Evidence page." }
+        ] },
+        { "id": "customer-impact", "label": "Customer impact stayed inside budget", "hints": [
+          { "id": "ci-1", "content": "The budget only ever spends, from the real onset onward — it never recovers on its own." },
+          { "id": "ci-2", "content": "A hard checkout failure costs more than a clean circuit-open degrade, and any order-status rejection (collateral on an unrelated route) costs the most." },
+          { "id": "ci-3", "content": "Keep the shared pool from saturating and the order-status route from ever being rejected." }
+        ] },
+        { "id": "safe-containment", "label": "Contained without stopping everything", "hints": [
+          { "id": "sc-1", "content": "Stopping the service, or attempting to stop the load generator, disqualifies this checkpoint outright, however good the rest looks." },
+          { "id": "sc-2", "content": "The order-status route (it never calls the dependency) should stay almost entirely healthy throughout." },
+          { "id": "sc-3", "content": "A short timeout, a small retry budget, and an enabled circuit breaker keep the shared pool from spending much of the incident saturated." }
+        ] },
+        { "id": "incident-command-closure", "label": "Resolved only after verified recovery", "hints": [
+          { "id": "cc-1", "content": "Resolve is refused while a manual circuit-breaker override is still open, before any structured update, or while the SLO has not actually recovered." },
+          { "id": "cc-2", "content": "Post at least one structured update — customer impact, confirmed facts, active hypothesis, owner, and next update time — before resolving." },
+          { "id": "cc-3", "content": "Close any manual override, confirm order-status and checkout are both back near 100%, then resolve." }
+        ] }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Browser Workbench": "http://127.0.0.1:18080"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": ["FLAG_SEED"]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "readiness-efficacy",
+        "label": "作った監視が実際に機能したか",
+        "points": 150,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          { "id": "re-1", "content": "Build や Calibrate 中に一度でも発火したルールは、その後正しく発火しても noisy 扱いのままです。", "penalty": 0 },
+          { "id": "re-2", "content": "全体平均ではなく route 別・依存先別の signal のほうが、Calibrate の無害な揺れでは静かで、本物には反応します。", "penalty": 15 },
+          { "id": "re-3", "content": "circuit breaker を有効にしているなら `circuit_breaker_state`、そうでなければ `http_error_ratio` が扱いやすいです。`dependency_error_ratio` は、pool が完全に枯渇して依存先へ到達すらしなくなった瞬間にかえって静かになることがあります。どれを選んでも、Calibrate の1 tick だけの揺れでは発火しない程度に forTicks を長めにしてください。", "penalty": 30 }
+        ]
+      },
+      {
+        "id": "detection-declaration",
+        "label": "宣言と役割分担ができたか",
+        "points": 150,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          { "id": "dd-1", "content": "気づくことと宣言することは別です。この checkpoint が測っているのは Incident Room の declare 操作です。", "penalty": 0 },
+          { "id": "dd-2", "content": "少なくとも2つの異なる役割に担当者が必要です。", "penalty": 15 },
+          { "id": "dd-3", "content": "Incident Room で severity を declare し、ic / ops / comms / scribe のうち少なくとも2つを assign してください。", "penalty": 30 }
+        ]
+      },
+      {
+        "id": "evidence-based-diagnosis",
+        "label": "証跡に基づいて診断できたか",
+        "points": 150,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          { "id": "ed-1", "content": "自由記述は読まれません。dependency と mechanism は実際の事実と一致し、引用した evidence id のうち少なくとも1つは本物である必要があります。", "penalty": 0 },
+          { "id": "ed-2", "content": "証跡は、dependency metrics か structured logs がその時点で有効だった tick にしか記録されません。後から有効にしても過去分は増えません。", "penalty": 15 },
+          { "id": "ed-3", "content": "問題が起きる前に dependency metrics か structured logs を有効にしておき、証跡ページからコピーした evidence id と一緒に hypothesis を提出してください。", "penalty": 30 }
+        ]
+      },
+      {
+        "id": "customer-impact",
+        "label": "顧客影響を予算内に抑えられたか",
+        "points": 250,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          { "id": "ci-1", "content": "予算は本当のインシデント開始以降、使われる一方で自然回復しません。", "penalty": 0 },
+          { "id": "ci-2", "content": "checkout の完全な失敗はコストが大きく、circuit breaker によるきれいな degrade は小さく、依存先を呼んでいない order-status route の拒否は最もコストが大きい設計です。", "penalty": 25 },
+          { "id": "ci-3", "content": "共有 pool を枯渇させず、order-status route を一度も拒否させないことを目指してください。", "penalty": 50 }
+        ]
+      },
+      {
+        "id": "safe-containment",
+        "label": "全停止せずに安全に封じ込められたか",
+        "points": 200,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          { "id": "sc-1", "content": "サービス全停止や load generator を止めようとする操作は、他がどれだけ良くてもこの checkpoint を失格にします。", "penalty": 0 },
+          { "id": "sc-2", "content": "依存先を呼ばない order-status route は、インシデント中もほぼ健全なまま維持できるはずです。", "penalty": 20 },
+          { "id": "sc-3", "content": "短い timeout・少ない retry・有効な circuit breaker の組み合わせが、共有 pool がインシデントの大半で枯渇し続ける状態を防ぎます。", "penalty": 40 }
+        ]
+      },
+      {
+        "id": "incident-command-closure",
+        "label": "検証済みの回復後に正しく収束できたか",
+        "points": 100,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          { "id": "cc-1", "content": "circuit breaker の手動 override が開いたまま、structured update が1件も無い状態、または SLO が実際には戻っていない状態では resolve は拒否されます。", "penalty": 0 },
+          { "id": "cc-2", "content": "resolve の前に、customer impact / confirmed facts / active hypothesis / owner / next update time を含む structured update を少なくとも1件投稿してください。", "penalty": 10 },
+          { "id": "cc-3", "content": "手動 override を閉じ、order-status と checkout の両方がほぼ100%に戻っていることを確認してから resolve してください。", "penalty": 20 }
+        ]
+      }
+    ]
+  }
+}

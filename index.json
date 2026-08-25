@@ -3368,6 +3368,35 @@
       }
     },
     {
+      "id": "sre-incident-readiness",
+      "name": "見えるものしか守れない",
+      "category": "Battle",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 4,
+      "estimatedDuration": "90〜120 分",
+      "shortDescription": "正常に稼働している注文サービスがあります。まず、あなたのチームで監視・耐障害性を作ってください。そのあとで、原因を伏せたインシデントが発生します。\n\n平時にどれだけ「見える」状態を、どれだけ「壊れにくい」状態を作れたかが、そのままインシデント対応の速さと被害の小ささに直結します。ダッシュボードの数や設定ファイルの行数では採点しません。実際のトラフィックに対して、作った仕組みが本当に機能したかどうかで採点します。",
+      "tags": [
+        "sre",
+        "observability",
+        "incident-response",
+        "reliability",
+        "circuit-breaker",
+        "alerting",
+        "local-play",
+        "container",
+        "multi-verify",
+        "team-battle"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "stackstack",
       "name": "StackStack — Vibe to Production",
       "category": "Battle",
