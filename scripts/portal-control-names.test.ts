@@ -116,3 +116,38 @@ describe("drills point at answer boxes by position and on-screen heading", () =>
     });
   }
 });
+
+/**
+ * Titles have to be distinguishable in the list the player actually sees.
+ *
+ * Third finding from the same playthrough: `tenkacloud local list` and the Portal's
+ * quest list show the title and nothing else, and four drills all began with the same
+ * 15 characters (「1 行打って、出た値を貼る — 」) — the format, not the subject. In a
+ * 38-row list they were one indistinguishable block. Titles now name a claim about the
+ * problem, and this keeps them apart.
+ */
+describe("ac26 titles are distinguishable in a list", () => {
+  const titles = problems.map((id) => ({
+    id,
+    ja: JSON.parse(readFileSync(join(CHALLENGES, id, "metadata.json"), "utf8")).name as string,
+  }));
+
+  it("has no duplicate title", () => {
+    const seen = new Map<string, string>();
+    for (const { id, ja } of titles) {
+      expect(seen.has(ja), `${id} and ${seen.get(ja)} share the title 「${ja}」`).toBe(false);
+      seen.set(ja, id);
+    }
+  });
+
+  it("has no two titles sharing their first twelve characters", () => {
+    const byPrefix = new Map<string, string[]>();
+    for (const { id, ja } of titles) {
+      const prefix = ja.slice(0, 12);
+      byPrefix.set(prefix, [...(byPrefix.get(prefix) ?? []), id]);
+    }
+    for (const [prefix, ids] of byPrefix) {
+      expect(ids.length, `「${prefix}…」 opens ${ids.length} titles: ${ids.join(", ")}`).toBe(1);
+    }
+  });
+});

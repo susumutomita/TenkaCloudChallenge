@@ -894,7 +894,7 @@
     },
     {
       "id": "ac26-w3-schnorr-drill",
-      "name": "1 行打って、出た値を貼る — 有限体から nonce 再利用まで 12 行",
+      "name": "ec_add は、4 行の計算に場合分けを足しただけ",
       "category": "Challenge",
       "status": "draft",
       "visibility": "public",
@@ -1053,7 +1053,7 @@
     },
     {
       "id": "ac26-w4-fri-drill",
-      "name": "1 行打って、出た値を貼る — FRI の折り畳みとクエリ検査",
+      "name": "2 点開ければ、折り畳みが本物か分かる",
       "category": "Challenge",
       "status": "draft",
       "visibility": "public",
@@ -1105,7 +1105,7 @@
     },
     {
       "id": "ac26-w4-plonk-drill",
-      "name": "1 行打って、出た値を貼る — PLONK の 2 本の制約と大積",
+      "name": "ゲートは全部通る。配線が違う",
       "category": "Challenge",
       "status": "draft",
       "visibility": "public",
@@ -1207,7 +1207,7 @@
     },
     {
       "id": "ac26-w4-sumcheck-drill",
-      "name": "1 行打って、出た値を貼る — SumCheck を 2 ラウンド回して嘘を数える",
+      "name": "和を確かめるのに、和を計算しない",
       "category": "Challenge",
       "status": "draft",
       "visibility": "public",
