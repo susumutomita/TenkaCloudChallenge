@@ -155,8 +155,10 @@ make reference-test   # reference + hidden properties + nine killed mutations
 
 `preserve-identity`, `publish-records`, and `verify-renewal` all passing, together with a total of
 160/200 or more, is the bar for treating this migration as "complete". The untouched starter does
-not clear it: `publish-records` fails (a delegated SAN's record lands in the wrong zone) and
-`verify-renewal` fails (it reports done without confirming validation).
+not clear it: for any certificate that also carries SANs, it calls `request_certificate` as a
+"clean slate" instead of trusting `update_certificate_options` alone, so `preserve-identity` fails
+outright; `publish-records` fails too (a delegated SAN's record lands in the wrong zone), and so
+does `verify-renewal` (it reports done without confirming validation).
 
 ## Assurance scope
 

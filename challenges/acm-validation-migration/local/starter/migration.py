@@ -12,18 +12,39 @@ This starter switches every certificate that is still on EMAIL validation over t
 and publishes a CNAME for each domain it finds. It passes the public tests, which only cover a
 single certificate with a single domain in a single hosted zone. It has not been checked against a
 certificate with multiple SANs split across hosted zones, against the 72-hour migration deadline,
-or against what "done" should actually mean.
+or against what "done" should actually mean. For a certificate that also covers SANs, it reaches
+for ``request_certificate`` instead of trusting ``update_certificate_options`` alone — which is
+exactly the shortcut this migration must not take.
 """
 
 from __future__ import annotations
 
 
+def _already_has_a_replacement(cert: dict, all_certs: list[dict]) -> bool:
+    return any(
+        other["arn"] != cert["arn"] and other["domainName"] == cert["domainName"]
+        for other in all_certs
+    )
+
+
 def migrate_step(client) -> dict:
     results: dict[str, dict] = {}
-    for cert in client.list_certificates():
-        arn = cert["arn"]
+    all_certs = client.list_certificates()
 
-        if cert["validationMethod"] != "DNS":
+    for cert in all_certs:
+        arn = cert["arn"]
+        needs_migration = cert["validationMethod"] != "DNS"
+
+        # TODO: a certificate with extra SANs looks harder to switch safely in one place, so this
+        # requests a brand-new certificate covering the same domains as a "clean slate" instead of
+        # trusting update_certificate_options to carry every SAN across. Like the real API, the
+        # call itself succeeds — it just mints a new ARN. Every ALB listener, CloudFront
+        # distribution, or API Gateway domain that still points at the old ARN now points at a
+        # certificate that will never finish migrating, and the old ARN is never cleaned up.
+        if needs_migration and cert["sans"] and not _already_has_a_replacement(cert, all_certs):
+            client.request_certificate(cert["domainName"], cert["sans"], "DNS")
+
+        if needs_migration:
             client.update_certificate_options(arn, "DNS")
 
         # TODO: this policy is broader than any single migration needs.

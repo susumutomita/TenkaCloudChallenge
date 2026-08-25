@@ -148,8 +148,10 @@ make reference-test   # reference + hidden properties + 9 mutations kill
 
 `preserve-identity` / `publish-records` / `verify-renewal` の3つがすべてpassし、かつ合計
 160/200以上になることが、この移行が「完了した」とみなせる目安である。未編集のstarterは
+SANを持つ証明書に対して `update_certificate_options` だけに頼らず「クリーンスタート」の
+つもりで `request_certificate` を呼んでしまうため `preserve-identity` がそもそも落ち、
 `publish-records` (delegated zoneのSANが間違ったzoneに届く) と `verify-renewal`
-(検証を確認せずに done を返す) が落ちるため、この基準を満たさない。
+(検証を確認せずに done を返す) も落ちるため、この基準を満たさない。
 
 ## 保証範囲
 
