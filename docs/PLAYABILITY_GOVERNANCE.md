@@ -19,7 +19,8 @@ This policy applies when a pull request does any of the following:
    `writeup`, any scoring `hints`, a `checks[]`/`flags[]` `label`/`hints` (all
    of these including their `i18n.en` translation), or — whenever that entry's
    own `publicHint` is `true` on the base side, the head side, or both — a
-   `phases[]`/`disruptions[]` entry's `name`/`description`, or
+   `phases[]` entry's `name`/`description`, a `disruptions[]` entry's
+   `name`/`description`/`defaultAfterMinutes`, or
    `interTeamCoordination.name`/`.description` — without touching any of those
    files at all;
 4. adds `scripts/<problem-id>.test.ts` under a matching `feat(<problem-id>):` /
@@ -55,6 +56,25 @@ on a participant Portal. The comparison is gated per entry by whichever side
 `publicHint` itself (`false`/absent → `true`, or the reverse) with the
 name/description text left untouched, since that flip alone changes what a
 participant can see.
+
+A second follow-up added the one field SCHEMA.json names as revealed under
+`disruptions[].publicHint` that is not prose: `defaultAfterMinutes`
+("name + description + defaultAfterMinutes" — the disruption's own countdown
+timing, announced on the same StatusPanel). It is treated exactly like the
+`name`/`description` on that same entry — gated by the same per-side
+`publicHint`, included in the same base/head comparison. This gate's scope is
+"does the field reach a participant", not "is the field text": a rewritten
+countdown changes the difficulty/pacing a participant is told to expect just
+as much as a rewritten hint changes what a participant is told to solve, and
+metadata's declared timing can also drift from the actual EventBridge
+Scheduler trigger baked into `template.yaml` (SCHEMA.json: the metadata field
+is the *announcement*, the CFn resource is the *trigger*) — a distinct failure
+mode from a leaked answer, but one where a participant is shown information
+that no longer matches what will actually happen, which this gate should
+still catch. `phases[].publicHint` does not name any such extra field in
+SCHEMA.json, so `phases[]` entries stay `name`/`description` only. Every field
+SCHEMA.json documents as participant-revealed under any of the three
+`publicHint` locations is now in the projection.
 
 Repository CI, mutation tests, reference runs and runtime tests remain
 required, but they are not a substitute for a participant actually solving the
@@ -203,6 +223,19 @@ boundary.
   Portal today. Fixed by projecting all three per-entry, gated by that entry's
   own `publicHint` on whichever side (base or head) has it `true` — which also
   catches a PR that only flips `publicHint` itself, text left untouched.
+- **Issue #523 second follow-up** (same day): that fix's own
+  `defaultAfterMinutes` field was initially left out of the projection —
+  reasoned to be a schedule number, not hint-style leakable text. A
+  coordinator review rejected the number-vs-text distinction: the gate exists
+  to stop an already-shipped participant experience from changing without a
+  replay, and a rewritten disruption countdown changes the difficulty/pacing a
+  participant is told to expect at least as much as a rewritten hint changes
+  what they are told to solve — plus SCHEMA.json names `defaultAfterMinutes`
+  as revealed by the same `publicHint` that reveals `name`/`description`, so
+  leaving it out meant the projection did not yet cover everything SCHEMA.json
+  itself documents as participant-visible. Fixed by including
+  `disruptions[i].defaultAfterMinutes` in the same per-entry, per-side
+  `publicHint`-gated projection as that entry's `name`/`description`.
 
 **Do not delete or weaken this gate to unblock an in-progress PR.** If a
 legitimate PR is stuck on this check, the fix is almost always "the PR is not

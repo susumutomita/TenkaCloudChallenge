@@ -251,7 +251,11 @@ describe("problem change classification — metadata.json field-level participan
 // carry `publicHint: true` on `status: ready` problems, so their text is
 // already on a live participant Portal.
 describe("problem change classification — publicHint-gated text (disruptions/phases/interTeamCoordination)", () => {
-  const readyWithDisruption = (description: string, publicHint: boolean | undefined) =>
+  const readyWithDisruption = (
+    description: string,
+    publicHint: boolean | undefined,
+    defaultAfterMinutes = 30,
+  ) =>
     JSON.stringify({
       id: "battle-with-disruption",
       status: "ready",
@@ -264,6 +268,7 @@ describe("problem change classification — publicHint-gated text (disruptions/p
           name: "Content swap",
           eventDetailType: "tenkacloud.disruption.content-swap",
           description,
+          defaultAfterMinutes,
           ...(publicHint === undefined ? {} : { publicHint }),
         },
       ],
@@ -307,6 +312,31 @@ describe("problem change classification — publicHint-gated text (disruptions/p
     const metadata = new Map([
       ["base:battles/battle-with-disruption/metadata.json", readyWithDisruption("A generic disruption warning.", undefined)],
       ["head:battles/battle-with-disruption/metadata.json", readyWithDisruption("A generic disruption warning.", true)],
+    ]);
+    const changes = classifyProblemChanges("M	battles/battle-with-disruption/metadata.json", (ref, path) =>
+      metadata.get(`${ref}:${path}`),
+    );
+
+    expect(changes.participantFacingReadyProblemIds).toEqual(["battle-with-disruption"]);
+  });
+
+  // Coordinator follow-up: `disruptions[].publicHint`'s own SCHEMA.json
+  // description names `defaultAfterMinutes` as revealed alongside name and
+  // description ("name + description + defaultAfterMinutes"). The countdown
+  // timing is participant-read information exactly like the prose is — a
+  // rewrite that only changes it changes what pacing/difficulty a participant
+  // is told to expect, without touching a word of text. It must be treated
+  // the same as a prose rewrite, not excluded for being a number.
+  test("positive: rewriting only a publicHint:true disruption's defaultAfterMinutes is flagged", () => {
+    const metadata = new Map([
+      [
+        "base:battles/battle-with-disruption/metadata.json",
+        readyWithDisruption("A generic disruption warning.", true, 30),
+      ],
+      [
+        "head:battles/battle-with-disruption/metadata.json",
+        readyWithDisruption("A generic disruption warning.", true, 5),
+      ],
     ]);
     const changes = classifyProblemChanges("M	battles/battle-with-disruption/metadata.json", (ref, path) =>
       metadata.get(`${ref}:${path}`),

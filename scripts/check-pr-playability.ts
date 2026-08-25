@@ -220,14 +220,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 //     is `true` — SCHEMA.json: "true のとき participant-portal の StatusPanel
 //     に phase 詳細 (name + description) を予告表示する。 default (=
 //     undefined / false) では ... hide."
-//   - `disruptions[i].name` / `disruptions[i].description` when
-//     `disruptions[i].publicHint` is `true` — same wording, same StatusPanel.
-//     SCHEMA.json's `publicHint` description also lists `defaultAfterMinutes`
-//     as revealed ("name + description + defaultAfterMinutes"); that field is
-//     deliberately left out of the projection below (a schedule number is a
-//     balance/timing value, not read text a hint-style rewrite can leak an
-//     answer through) — flagged here rather than silently dropped, since it
-//     is a real asymmetry with what SCHEMA.json documents as shown.
+//   - `disruptions[i].name` / `disruptions[i].description` /
+//     `disruptions[i].defaultAfterMinutes` when `disruptions[i].publicHint`
+//     is `true` — SCHEMA.json's `publicHint` description names all three as
+//     revealed ("name + description + defaultAfterMinutes"). The countdown
+//     timing is participant-read information exactly like the prose: it is
+//     what the Portal tells a participant to expect, so a rewrite that only
+//     changes it changes the difficulty/pacing a participant is told to plan
+//     around, without touching a word of text. The rule this gate applies is
+//     "does it reach a participant", not "is it text" — a revealed number is
+//     as in-scope as a revealed sentence. Rewriting only this field can also
+//     desync display from the actual EventBridge Scheduler trigger baked
+//     into `template.yaml` (SCHEMA.json: metadata's declaration is the
+//     *announcement*, not the trigger itself), which is a distinct failure
+//     mode from a leaked answer but one this gate should still catch — a
+//     participant would be shown a countdown that does not match reality.
 //   - `interTeamCoordination.name` / `interTeamCoordination.description` when
 //     `interTeamCoordination.publicHint` is `true` — SCHEMA.json: "[same
 //     policy as disruptions.publicHint] true で participant-portal に
@@ -280,11 +287,25 @@ function extractLocalizedParticipantFacingFields(i18n: unknown): unknown {
 // being read — see the comment above `PARTICIPANT_FACING_METADATA_TEXT_KEYS`
 // for why that alone gives the required base/head OR semantics without an
 // explicit combinator.
-function extractPublicHintGatedEntries(items: unknown): unknown {
+//
+// `extraKeys` covers fields SCHEMA.json documents as revealed by the same
+// `publicHint` alongside `name`/`description`, but only for some callers:
+// `disruptions[].publicHint`'s own description names "name + description +
+// defaultAfterMinutes" — the disruption's countdown timing is itself shown to
+// participants once `publicHint` is true, and rewriting only that timing
+// changes what a participant is told to expect (a different tempo/difficulty
+// than whatever was actually played) without touching a single word of prose.
+// The gate's job is "does this reach a participant", not "is this text" — a
+// revealed number is exactly as in-scope as a revealed sentence.
+// `phases[].publicHint` documents no such extra field, so `phases[]` calls
+// this with no `extraKeys`.
+function extractPublicHintGatedEntries(items: unknown, extraKeys: readonly string[] = []): unknown {
   if (!Array.isArray(items)) return undefined;
   return items.map((item) => {
     if (!isRecord(item) || item.publicHint !== true) return undefined;
-    return { name: item.name, description: item.description };
+    const revealed: Record<string, unknown> = { name: item.name, description: item.description };
+    for (const key of extraKeys) revealed[key] = item[key];
+    return revealed;
   });
 }
 
@@ -306,7 +327,7 @@ function extractParticipantFacingProjection(metadata: Record<string, unknown> | 
   projection.scoring = extractHintBearingScoringFields(metadata.scoring);
   projection.i18nEn = extractLocalizedParticipantFacingFields(metadata.i18n);
   projection.phases = extractPublicHintGatedEntries(metadata.phases);
-  projection.disruptions = extractPublicHintGatedEntries(metadata.disruptions);
+  projection.disruptions = extractPublicHintGatedEntries(metadata.disruptions, ["defaultAfterMinutes"]);
   projection.interTeamCoordination = extractPublicHintGatedObject(metadata.interTeamCoordination);
   return projection;
 }
