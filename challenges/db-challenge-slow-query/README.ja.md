@@ -81,6 +81,15 @@ index を対象クエリに対して選ぶ ── (heap より幅の狭い) こ�
 を合格条件にはできない ── 下の「採点の仕組み」で実際に何を見ているかを説明
 する。
 
+## この README について
+
+この Challenge 自身の「原因を渡さない」という設計 (症状と上記の罠が
+`instructions`/`description` の全て ── 詳細は Epic #431 を参照) に合わせ、
+この README では勝つための修正内容や正確な合否の閾値をあえて書いていない。
+この文書を読むこと自体が診断の近道にならないようにするためである。閾値の
+実測根拠を含む詳細な種明かしは、下の 3 チェックポイントを実際にすべてクリ
+アした後にだけ表示される `writeup` (`metadata.json`) に収録している。
+
 ## 採点の仕組み
 
 プラットフォームは答えを持たず、提出テキストも読まない。「提出」のたびに
@@ -93,50 +102,10 @@ index を対象クエリに対して選ぶ ── (heap より幅の狭い) こ�
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
 | `orders-customer-id-leads-an-index`     | `storefront.orders` の index のうち、列リストが `customer_id` で始まるものが実在するか (「含んでいる」ではない ── 赤いニシンも含んではいるが先頭ではない) |
 | `target-query-uses-customer-id-led-index` | 実行計画が実際に選んだ index (`Index Name`) が、`customer_id` を先頭列とする index の集合に含まれるか (「Seq Scan が無いか」ではない ── 上記の罠を参照) |
-| `buffers-dramatically-reduced`          | 現在のバッファ数が `max(100, baseline * 0.3)` 以下か。baseline はコンテナ初回起動時 (赤いニシンの index しか無い、参加者がまだ何もしていない状態) に自動で一度だけ記録される |
+| `buffers-dramatically-reduced`          | 現在のバッファ数が、コンテナ初回起動時 (赤いニシンの index しか無い、参加者がまだ何もしていない状態) に自動で一度だけ記録された baseline と比べて大きく下がっているか |
 
 何度でも再スキャンしてよい。各 checkpoint は独立しており、満点 100 点のうち
 30 / 30 / 40 点を占める。
-
-### なぜ「とにかく index を足す」「Seq Scan さえ消えれば」では通らないか
-
-3 つの checkpoint はどれか 1 つの浅い行動だけでは全て通らないよう意図的に重
-ねてある。
-
-- 赤いニシンをそのまま放置する、または無関係な列 (例: `total_cents`) に
-  index を足す ── `orders-customer-id-leads-an-index` (先頭列が `customer_id`
-  でない) と `target-query-uses-customer-id-led-index` (実行計画は相変わら
-  ず赤いニシンを使っており、その `Index Name` は customer_id 先頭の集合に
-  無い) の両方で落ちる。
-- 先頭列が違う**別の** index に手を出す (例: `(created_at desc, customer_id)`
-  ── `order by` に合わせたつもりの、それらしく見える罠)。プランナが赤いニシ
-  ンの代わりにこちらを選ぶことすらあるが、実測ではむしろ悪化する (下記)。ど
-  ちらにせよ `Index Name` は customer_id 先頭の集合に無いため checkpoint 2
-  はバッファ数に関係なく落ちる。
-- 正しい列順の index を作ったが `ANALYZE` を忘れる ── checkpoint 1 (index
-  は先頭列 `customer_id` で実在する) は通るが、統計が古いままだとプランナが
-  赤いニシンを選び続けることがあり、checkpoint 2 で落ちうる (A3 と同じ教訓)。
-- 本当の対策 (`customer_id` を先頭列とする index を、プランナが実際に選び、
-  バッファ数が実測で減った) だけが 3 つとも通る。
-
-### 閾値の根拠
-
-このチャレンジを作成する過程で、実際の Postgres 16 に対して計測した数値
-(配布する Docker image そのものに対してではない ── 理由はこの問題が乗った
-PR の「検証」節を参照)。赤いニシンが (上記の理由で) それ自体である程度の改
-善を偶然もたらしてしまうため、baseline は db-a2-index-tradeoff の「index が
-一切無い」baseline よりずっと低い:
-
-| 状態                                                          | 実行計画 (Index Name)                        | バッファ数 (shared hit + read) |
-| ------------------------------------------------------------------ | ------------------------------------------------ | -------------------------------- |
-| 赤いニシンの index しか無い (baseline)                              | `idx_orders_status_customer` (先頭列が違う、それでも Seq Scan は無い) | 386                               |
-| 先頭列が違う**別の** index (`(created_at desc, customer_id)`)        | `idx_orders_created_customer` (これも間違い)         | 396 ── 実測ではむしろ悪化           |
-| `customer_id` 単体の index + `ANALYZE` 後                          | `idx_orders_customer_id` (Bitmap Heap/Index Scan) | 65                                |
-| `(customer_id, created_at desc)` の複合 index + `ANALYZE` 後        | `idx_orders_customer_created` (Index Scan、Sort 無し) | 26                                |
-
-`buffers-dramatically-reduced` の閾値 (`max(100, baseline * 0.3)` ≈ この
-baseline では約 116) は、本当の対策 (65、26) の上に余裕を持ちつつ、対策に
-なっていない 2 つ (386、396) の下に十分な余裕を持つ位置にある。
 
 ## 提供形態
 

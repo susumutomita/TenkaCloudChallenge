@@ -84,6 +84,17 @@ query, even in the untouched starting state, before the participant does
 anything. So "is Seq Scan gone" cannot be the pass condition — see "How
 scoring works" below for what the grader checks instead.
 
+## Design note
+
+Consistent with this Challenge's own "don't hand over the cause" design (the
+symptom and the trap above are genuinely all `instructions`/`description`
+say — see Epic #431), this README stops short of stating the winning fix or
+the exact grading thresholds — reading this file should not be a shortcut
+around diagnosing it yourself. The full breakdown, including the measured
+numbers behind the thresholds, ships in this problem's post-solve `writeup`
+(`metadata.json`), unlocked once you actually clear all three checkpoints
+below.
+
 ## How scoring works
 
 The platform holds no answer and never reads the submission text. On each
@@ -96,52 +107,10 @@ fixed target query and returns `{ checkpointId, correct, message }`:
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `orders-customer-id-leads-an-index`     | does some index on `storefront.orders` have a column list that OPENS with `customer_id`? (Not "contains" — the red herring contains it too, just not first.) |
 | `target-query-uses-customer-id-led-index` | does the plan's ACTUAL chosen index (its `Index Name`) belong to the set of indexes led by `customer_id`? (Not "is there no Seq Scan" — see the trap above.) |
-| `buffers-dramatically-reduced`          | has the current buffer count dropped to `<= max(100, baseline * 0.3)`, where `baseline` was captured once at container boot (red herring index only, before any fix)? |
+| `buffers-dramatically-reduced`          | has the current buffer count dropped sharply below a baseline captured once at container boot (red herring index only, before any fix)? |
 
 You can re-scan as many times as you like; each checkpoint is independent
 and worth 30 / 30 / 40 of the 100-point total.
-
-### Why "just add any index" — or "make the Seq Scan go away" — does not pass
-
-The three checkpoints above are deliberately layered so that no single
-shallow action passes all of them:
-
-- Leaving the red herring alone, or adding an index on an unrelated column
-  (say `total_cents` alone) — fails `orders-customer-id-leads-an-index` (its
-  column list doesn't open with `customer_id`) AND fails
-  `target-query-uses-customer-id-led-index` (the plan is still using the red
-  herring, whose `Index Name` is not in the customer_id-led set).
-- Reaching for a DIFFERENT index that still doesn't lead with `customer_id`
-  (e.g. `(created_at desc, customer_id)`, a plausible-looking attempt that
-  matches the `ORDER BY`) — the planner may even pick this one over the red
-  herring, but it measures WORSE (see below), and its `Index Name` still
-  isn't in the customer_id-led set, so checkpoint 2 fails regardless of
-  buffers.
-- Adding a correctly-ordered index but forgetting to `ANALYZE` — can pass
-  checkpoint 1 (the index exists and leads with `customer_id`) but fails
-  checkpoint 2 if stale statistics leave the planner still choosing the red
-  herring (the same lesson as A3).
-- Only a real fix — an index that leads with `customer_id`, actually chosen
-  by the planner, with a measured buffer drop — passes all three.
-
-### Numbers behind the thresholds
-
-Measured against a real Postgres 16 instance while authoring this Challenge
-(not against the shipped Docker image itself — see "Verification" in the PR
-this problem shipped in for why). The red herring's partial, accidental
-benefit (explained above) is why the baseline here is much lower than
-db-a2-index-tradeoff's true "no index at all" baseline:
-
-| state                                                        | plan (Index Name)                    | buffers (shared hit + read) |
-| ---------------------------------------------------------------- | ------------------------------------------- | ------------------------------ |
-| red herring index only (baseline)                                | `idx_orders_status_customer` (wrong leading column, still no Seq Scan) | 386                             |
-| a DIFFERENT wrong-leading-column index (`(created_at desc, customer_id)`) | `idx_orders_created_customer` (also wrong)  | 396 — measured WORSE, not better |
-| plain single-column `customer_id` index + `ANALYZE`               | `idx_orders_customer_id` (Bitmap Heap/Index Scan) | 65                              |
-| composite `(customer_id, created_at desc)` index + `ANALYZE`      | `idx_orders_customer_created` (Index Scan, no separate Sort) | 26                              |
-
-`buffers-dramatically-reduced`'s threshold (`max(100, baseline * 0.3)` ≈ 116
-for this baseline) sits comfortably above both real fixes (65, 26) and
-comfortably below both non-fixes (386, 396).
 
 ## Delivery model
 
