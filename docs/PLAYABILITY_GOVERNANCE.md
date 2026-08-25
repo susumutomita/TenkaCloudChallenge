@@ -14,7 +14,15 @@ This policy applies when a pull request does any of the following:
 3. rewrites a participant-facing file (`README.md`, `README.ja.md`,
    `local/starter/**`, `local/workbench/**`, `local/portal/**`) belonging to a
    problem that is **already** `status: ready` — i.e. a problem participants can
-   already play;
+   already play, **or** rewrites a participant-facing *field* purely inside
+   that problem's `metadata.json` — `name`, `shortDescription`, `instructions`,
+   `writeup`, any scoring `hints`, a `checks[]`/`flags[]` `label`/`hints` (all
+   of these including their `i18n.en` translation), or — whenever that entry's
+   own `publicHint` is `true` on the base side, the head side, or both — a
+   `phases[]` entry's `name`/`description`, a `disruptions[]` entry's
+   `name`/`description`/`defaultAfterMinutes`, or
+   `interTeamCoordination.name`/`.description` — without touching any of those
+   files at all;
 4. adds `scripts/<problem-id>.test.ts` under a matching `feat(<problem-id>):` /
    `test(<problem-id>):` title before that problem's `metadata.json` exists (the
    RED-only-commit shape from #459).
@@ -22,7 +30,51 @@ This policy applies when a pull request does any of the following:
 Case 3 exists because of PR #473: it rewrote hints and starter material for six
 already-shipped problems, and the version of this check running at the time
 only looked at cases 1/2/4, so it reported "no new problem or ready promotion"
-and let the rewrite through untouched.
+and let the rewrite through untouched. Issue #523 later found a narrower variant
+of the same gap: `hints` lives inside `metadata.json`, which was never on the
+file-path list case 3 checks, so a PR that rewrote only `metadata.json`'s
+`hints` — touching no README/starter/workbench/portal file — still slipped
+through. The fix compares `metadata.json`'s participant-facing *fields* by
+value (base vs head), not just whether the file changed; deploy/catalog-only
+fields (`status`, `courseAlignment`, `nodes`/`relations`, `runtime`,
+`cfnTemplate`, `exposedPorts`, `learningGoals`, `description`) are deliberately
+excluded so that e.g. a pure learning-graph addition (PR #520's shape) does not
+require a human blind-play. See `scripts/check-pr-playability.ts`'s
+`extractParticipantFacingProjection` for the exact field list and the evidence
+behind each inclusion/exclusion.
+
+A follow-up review of Issue #523 found this was not yet complete:
+`phases[]`/`disruptions[]`/`interTeamCoordination` each carry a `publicHint`
+boolean, and SCHEMA.json documents the same policy on all three — `true`
+reveals that entry's `name`/`description` on the participant Portal's
+StatusPanel, default (`false`/absent) hides it. This is not hypothetical: on
+`main` right now, `hello-world-battle`'s `disruptions[0]` and
+`microservice-migration-battle`'s `interTeamCoordination` both carry
+`publicHint: true` on `status: ready` problems, so that text is already live
+on a participant Portal. The comparison is gated per entry by whichever side
+(base or head) has `publicHint: true` — this also catches a PR that only flips
+`publicHint` itself (`false`/absent → `true`, or the reverse) with the
+name/description text left untouched, since that flip alone changes what a
+participant can see.
+
+A second follow-up added the one field SCHEMA.json names as revealed under
+`disruptions[].publicHint` that is not prose: `defaultAfterMinutes`
+("name + description + defaultAfterMinutes" — the disruption's own countdown
+timing, announced on the same StatusPanel). It is treated exactly like the
+`name`/`description` on that same entry — gated by the same per-side
+`publicHint`, included in the same base/head comparison. This gate's scope is
+"does the field reach a participant", not "is the field text": a rewritten
+countdown changes the difficulty/pacing a participant is told to expect just
+as much as a rewritten hint changes what a participant is told to solve, and
+metadata's declared timing can also drift from the actual EventBridge
+Scheduler trigger baked into `template.yaml` (SCHEMA.json: the metadata field
+is the *announcement*, the CFn resource is the *trigger*) — a distinct failure
+mode from a leaked answer, but one where a participant is shown information
+that no longer matches what will actually happen, which this gate should
+still catch. `phases[].publicHint` does not name any such extra field in
+SCHEMA.json, so `phases[]` entries stay `name`/`description` only. Every field
+SCHEMA.json documents as participant-revealed under any of the three
+`publicHint` locations is now in the projection.
 
 Repository CI, mutation tests, reference runs and runtime tests remain
 required, but they are not a substitute for a participant actually solving the
@@ -149,6 +201,41 @@ boundary.
   adds [Scope](#scope) case 3 to close the #473 gap. It does not relax any of
   the field-level evidence validation; if anything that got stricter (see the
   placeholder/template rejection above).
+- **Issue #523** (2026-08-25, found before merge while reviewing PR #520):
+  case 3's own file-path list (`README.md`/`README.ja.md`/`local/starter/**`/
+  `local/workbench/**`/`local/portal/**`) never included `metadata.json`, so a
+  PR that rewrote only `metadata.json`'s `hints` on an already-`status: ready`
+  problem reported "no participant-facing change" — the same class of gap as
+  #473, one directory level narrower. Fixed by comparing `metadata.json`'s
+  participant-facing fields by value (base vs head) instead of only checking
+  `status` transitions and file paths, while deliberately keeping
+  `courseAlignment`/`nodes`/`relations`/`status` and similar deploy-or-catalog-
+  only fields out of scope so a learning-graph-only PR (#520's shape) still
+  does not require a human blind-play.
+- **Issue #523 follow-up** (same day): the first pass at the fix above treated
+  `phases[].name`/`.description` as an out-of-scope rare case (gated behind
+  `publicHint`, judged to matter only for `phased-polling` Battles). A
+  coordinator review found `publicHint` is not rare and not limited to
+  `phases[]` — it also gates `disruptions[]` and `interTeamCoordination`, and
+  two live `status: ready` problems (`hello-world-battle`'s `disruptions[0]`,
+  `microservice-migration-battle`'s `interTeamCoordination`) already carry
+  `publicHint: true`, so their `name`/`description` are on a participant
+  Portal today. Fixed by projecting all three per-entry, gated by that entry's
+  own `publicHint` on whichever side (base or head) has it `true` — which also
+  catches a PR that only flips `publicHint` itself, text left untouched.
+- **Issue #523 second follow-up** (same day): that fix's own
+  `defaultAfterMinutes` field was initially left out of the projection —
+  reasoned to be a schedule number, not hint-style leakable text. A
+  coordinator review rejected the number-vs-text distinction: the gate exists
+  to stop an already-shipped participant experience from changing without a
+  replay, and a rewritten disruption countdown changes the difficulty/pacing a
+  participant is told to expect at least as much as a rewritten hint changes
+  what they are told to solve — plus SCHEMA.json names `defaultAfterMinutes`
+  as revealed by the same `publicHint` that reveals `name`/`description`, so
+  leaving it out meant the projection did not yet cover everything SCHEMA.json
+  itself documents as participant-visible. Fixed by including
+  `disruptions[i].defaultAfterMinutes` in the same per-entry, per-side
+  `publicHint`-gated projection as that entry's `name`/`description`.
 
 **Do not delete or weaken this gate to unblock an in-progress PR.** If a
 legitimate PR is stuck on this check, the fix is almost always "the PR is not
