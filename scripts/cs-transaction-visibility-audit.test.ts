@@ -253,6 +253,106 @@ print(json.dumps({
     expect(result.sealedCode).toBe(true);
   });
 
+  it("hands the participant everything audit and counterexample need, across many seeds (Issue 457)", () => {
+    // Both direct-answer checkpoints are graded against `audit_expected` /
+    // `counterexample_expected`, but this does not call either one -- it reimplements
+    // the questions' own stated rules ("one report matches no committed state"; "only
+    // one candidate crosses the single commit") against the Portal-visible evidence
+    // fields only. A future change that lets grading depend on something the evidence
+    // does not carry, or that silently drops a report/candidate before it reaches the
+    // Portal, fails here even though CLI/Portal parity would stay green.
+    const probe = String.raw`
+import json, sys
+sys.path.insert(0, ".")
+from participant.server import inspect_payload
+from verifier.expected import audit_expected, counterexample_expected
+seeds = [f"evidence-chain-txn-{i:03d}" for i in range(50)]
+out = []
+for seed in seeds:
+    evidence = inspect_payload(seed)
+    out.append({
+        "seed": seed,
+        "committed": evidence["audit"]["committed"],
+        "reports": evidence["audit"]["reports"],
+        "readOrder": evidence["counterexample"]["readOrder"],
+        "commitAfterRead": evidence["counterexample"]["commitAfterRead"],
+        "candidates": evidence["counterexample"]["candidates"],
+        "auditAnswer": audit_expected(seed),
+        "counterexampleAnswer": counterexample_expected(seed),
+    })
+print(json.dumps(out))
+`;
+    const output = execFileSync("python3", ["-c", probe], {
+      cwd: LOCAL,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        FLAG_SEED: "transaction-repo-suite-seed",
+        PYTHONDONTWRITEBYTECODE: "1",
+      },
+      timeout: 120_000,
+    });
+    type Report = {
+      reportId: string;
+      reads: Array<{ accountId: string; balance: number; revision: number }>;
+    };
+    type Committed = { revision: number; balances: Record<string, number> };
+    type Candidate = { transferId: string; source: string; destination: string };
+    const rows = JSON.parse(output.trim()) as Array<{
+      seed: string;
+      committed: Committed[];
+      reports: Report[];
+      readOrder: string[];
+      commitAfterRead: number;
+      candidates: Candidate[];
+      auditAnswer: { reportId: string; observedRevisions: number[] };
+      counterexampleAnswer: { beforeCommit: string[]; commit: string; afterCommit: string[] };
+    }>;
+    expect(rows.length).toBeGreaterThan(0);
+    const sameBalances = (a: Record<string, number>, b: Record<string, number>): boolean => {
+      const aKeys = Object.keys(a).toSorted();
+      const bKeys = Object.keys(b).toSorted();
+      return aKeys.length === bKeys.length && aKeys.every((key, i) => key === bKeys[i] && a[key] === b[key]);
+    };
+    for (const row of rows) {
+      // audit: exactly one report's balances match no committed revision's snapshot.
+      const impossible = row.reports.filter((report) => {
+        const observed: Record<string, number> = {};
+        for (const read of report.reads) observed[read.accountId] = read.balance;
+        return !row.committed.some((state) => sameBalances(state.balances, observed));
+      });
+      expect(impossible.length, row.seed).toBe(1);
+      const seen = new Set<number>();
+      const observedRevisions: number[] = [];
+      for (const read of impossible[0].reads) {
+        if (!seen.has(read.revision)) {
+          seen.add(read.revision);
+          observedRevisions.push(read.revision);
+        }
+      }
+      expect(
+        { reportId: impossible[0].reportId, observedRevisions },
+        row.seed,
+      ).toEqual(row.auditAnswer);
+
+      // counterexample: exactly one candidate has its source and destination split
+      // across the single commit placed after `commitAfterRead` reads.
+      const before = new Set(row.readOrder.slice(0, row.commitAfterRead));
+      const crossing = row.candidates.filter(
+        (candidate) => before.has(candidate.source) !== before.has(candidate.destination),
+      );
+      expect(crossing.length, row.seed).toBe(1);
+      expect(
+        {
+          beforeCommit: row.readOrder.slice(0, row.commitAfterRead),
+          commit: crossing[0].transferId,
+          afterCommit: row.readOrder.slice(row.commitAfterRead),
+        },
+        row.seed,
+      ).toEqual(row.counterexampleAnswer);
+    }
+  });
+
   it("は verifier URL 未設定・内部障害を全 checkpoint で fail closed する", () => {
     const probe = String.raw`
 import json, sys

@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -142,6 +143,124 @@ print(json.dumps({
     expect(serialized).not.toContain(`"wrong"`);
     expect(JSON.stringify(payload.audit)).not.toContain(JSON.stringify(wrong));
     expect(JSON.stringify(payload.window)).not.toContain(JSON.stringify(window));
+  });
+
+  it("hands the participant everything window and audit need, across many seeds (Issue 457)", () => {
+    // `window` and `audit` are direct-answer checkpoints graded against
+    // `validity_window` / `decision_log`, but neither is called here. This
+    // reimplements, in a different language and independently of the Python
+    // fixtures, exactly what the question text tells the participant to do:
+    // read `nbf`/`exp` off the shown claims, and recompute each row's MAC with the
+    // shown keys to tell a forged or cross-tenant request from a genuine one. If a
+    // future change ever let grading depend on something not on this wire -- an
+    // un-shown key, a claim field the payload stops printing, a rule the question
+    // does not state -- this fails even though CLI/Portal parity stays green.
+    const probe = String.raw`
+import json, sys
+sys.path.insert(0, ".")
+from verifier.server import inspect_payload
+from fixtures.generate import decision_log, validity_window
+seeds = [f"evidence-chain-auth-{i:03d}" for i in range(50)]
+out = []
+for seed in seeds:
+    payload = inspect_payload(seed)
+    _entries, wrong = decision_log(seed)
+    out.append({
+        "seed": seed,
+        "claims": payload["window"]["claims"],
+        "keys": payload["audit"]["keys"],
+        "entries": payload["audit"]["entries"],
+        "window": validity_window(seed),
+        "wrong": wrong,
+    })
+print(json.dumps(out))
+`;
+    const output = execFileSync("python3", ["-c", probe], {
+      cwd: LOCAL,
+      encoding: "utf8",
+      env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" },
+      timeout: 120_000,
+    });
+    type Entry = {
+      index: number;
+      token: string;
+      action: string;
+      resource: { id: string; tenant: string };
+      now: number;
+      gatewayDecision: string;
+    };
+    const rows = JSON.parse(output.trim()) as Array<{
+      seed: string;
+      claims: { nbf: number; exp: number };
+      keys: Record<string, string>;
+      entries: Entry[];
+      window: [number, number];
+      wrong: number[];
+    }>;
+    expect(rows.length).toBeGreaterThan(0);
+
+    const decodeSegment = (segment: string): unknown => {
+      try {
+        return JSON.parse(Buffer.from(segment, "base64url").toString("utf8"));
+      } catch {
+        return null;
+      }
+    };
+
+    const allowedCounts: number[] = [];
+    for (const row of rows) {
+      // window: nbf is inclusive, exp is exclusive, so the last accepted instant is
+      // exp - 1. This is read straight off the claims the Portal already shows.
+      expect([row.claims.nbf, row.claims.exp - 1], row.seed).toEqual(row.window);
+
+      // audit: recompute, from the shown keys and each token's own bytes, whether the
+      // gateway's decision was the one a correct gateway would have made.
+      const derivedWrong: number[] = [];
+      let allowedCount = 0;
+      for (const entry of row.entries) {
+        if (entry.gatewayDecision === "allow") allowedCount += 1;
+        const parts = entry.token.split(".");
+        let shouldAllow = false;
+        if (parts.length === 3) {
+          const [head, body, mac] = parts as [string, string, string];
+          const header = decodeSegment(head) as { alg?: unknown; kid?: unknown } | null;
+          const claims = decodeSegment(body) as
+            | { nbf?: unknown; exp?: unknown; scope?: unknown; tenant?: unknown }
+            | null;
+          const kid = typeof header?.kid === "string" ? header.kid : undefined;
+          const secretHex = kid ? row.keys[kid] : undefined;
+          let validSignature = false;
+          if (header?.alg === "hs256" && secretHex) {
+            const expected = createHmac("sha256", Buffer.from(secretHex, "hex"))
+              .update(`${head}.${body}`, "utf8")
+              .digest();
+            try {
+              const actual = Buffer.from(mac, "base64url");
+              validSignature = actual.length === expected.length && actual.equals(expected);
+            } catch {
+              validSignature = false;
+            }
+          }
+          const nbf = claims?.nbf;
+          const exp = claims?.exp;
+          const timeValid =
+            typeof nbf === "number" && typeof exp === "number" && nbf <= entry.now && entry.now < exp;
+          const scope = Array.isArray(claims?.scope) ? (claims?.scope as unknown[]) : [];
+          const scopeValid = scope.includes(entry.action);
+          const tenantValid = claims?.tenant === entry.resource.tenant;
+          shouldAllow = validSignature && timeValid && scopeValid && tenantValid;
+        }
+        if (entry.gatewayDecision === "allow" && !shouldAllow) derivedWrong.push(entry.index);
+      }
+      expect(derivedWrong, row.seed).toEqual(row.wrong);
+      allowedCounts.push(allowedCount);
+    }
+    // The audit answer is never the whole log and never empty: a log with nothing the
+    // gateway got wrong, or nothing it got right, would not be an audit.
+    for (const row of rows) {
+      expect(row.wrong.length, row.seed).toBeGreaterThan(0);
+    }
+    expect(rows.every((row, i) => row.wrong.length < allowedCounts[i])).toBe(true);
   });
 
   it("は track の curriculum を持つ", () => {
