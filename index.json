@@ -1969,6 +1969,34 @@
       }
     },
     {
+      "id": "acm-validation-migration",
+      "name": "証明書のARNは変えずに、検証方式だけを乗り換える",
+      "category": "Challenge",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "45-60 分",
+      "shortDescription": "既存ACM証明書のARNを変えずに、email validationからDNS validationへ移行する計画を、オフラインのローカルsimulatorで実装する。",
+      "tags": [
+        "aws",
+        "acm",
+        "dns",
+        "route53",
+        "certificate-lifecycle",
+        "least-privilege",
+        "state-machine",
+        "local-play",
+        "container"
+      ],
+      "scoringKind": "multi-verify",
+      "cost": {
+        "perHourUsd": 0,
+        "perDayIfLeftRunningUsd": 0,
+        "freeTierEligible": true,
+        "alwaysOnResources": []
+      }
+    },
+    {
       "id": "agent-approval-gameday",
       "name": "Enter を押す前に",
       "category": "Battle",

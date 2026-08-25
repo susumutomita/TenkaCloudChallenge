@@ -1,0 +1,71 @@
+# Compose の既定 project 名はディレクトリの basename で、この repo は全問題の
+# local-play ディレクトリを `local` と名付けている。宣言しないと 2 問を同時に
+# 立てたとき project 名が衝突し、片方の `down --remove-orphans` がもう片方の
+# コンテナごと消す (実際に起きた。TenkaCloudChallenge#521)。
+name: acm-validation-migration
+services:
+  workbench:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: participant
+    environment:
+      FLAG_SEED: ${FLAG_SEED:?FLAG_SEED must be provided by the platform}
+      WORKBENCH_PORT: "18620"
+      VERIFIER_URL: http://verifier:18621/verify
+    ports:
+      - "127.0.0.1:18620:18620"
+    depends_on:
+      verifier:
+        condition: service_healthy
+    networks:
+      - lab
+      - workshop-host
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=128m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:18620/api/config', timeout=2).read()"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    mem_limit: 768m
+    pids_limit: 96
+
+  verifier:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: verifier
+    environment:
+      FLAG_SEED: ${FLAG_SEED:?FLAG_SEED must be provided by the platform}
+      VERIFY_PORT: "18621"
+    networks:
+      - lab
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=128m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:18621/health', timeout=2).read()"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    mem_limit: 768m
+    pids_limit: 96
+
+networks:
+  lab:
+    internal: true
+  workshop-host:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+      com.docker.network.bridge.host_binding_ipv4: "127.0.0.1"

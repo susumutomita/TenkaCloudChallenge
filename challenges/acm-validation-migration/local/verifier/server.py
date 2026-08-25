@@ -1,0 +1,297 @@
+"""Separated hidden verifier for the ACM validation-method migration lab."""
+
+from __future__ import annotations
+
+import json
+import os
+import resource
+import secrets
+import subprocess
+import sys
+import tempfile
+from functools import partial
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
+from urllib.parse import urlsplit
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from fixtures.aws_lab import expected_inventory_answer
+
+ROOT = Path(__file__).resolve().parents[1]
+SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
+MAX_BODY_BYTES = 256 * 1024
+MAX_OUTPUT_BYTES = 64 * 1024
+MAX_PROCESSES = 128
+RUN_TIMEOUT_SECONDS = 20
+REQUEST_TIMEOUT_SECONDS = 25
+_ADDRESS_SPACE_CAPPABLE = sys.platform.startswith("linux")
+CHECKPOINTS = (
+    "inventory",
+    "preserve-identity",
+    "publish-records",
+    "least-privilege",
+    "deadline-retry",
+    "verify-renewal",
+)
+CODE_CHECKPOINT_PHASES = {
+    "preserve-identity": "check_preserve_identity",
+    "publish-records": "check_publish_records",
+    "least-privilege": "check_least_privilege",
+    "deadline-retry": "check_deadline_retry",
+    "verify-renewal": "check_verify_renewal",
+}
+CODE_CHECKPOINTS = frozenset(CODE_CHECKPOINT_PHASES)
+
+# Metadata parity guard (#381) reads this authored verifier source. The participant renders the
+# same strings from workbench/server.py; keeping the full English material here makes drift
+# visible even though the two responsibilities are separate images.
+PORTAL_ENGLISH_CONTRACT = {
+    "name": "Keep the certificate ARN. Switch only the validation method",
+    "description": "Migrate an existing ACM certificate from email validation to DNS validation without ever changing its ARN, in an offline local simulator.",
+    "labels": {
+        "inventory": "inventory - enumerate certificates, SANs, dependents, and DNS owners",
+        "preserve-identity": "preserve-identity - never replace the certificate ARN",
+        "publish-records": "publish-records - publish every domain's correct CNAME into its correct zone",
+        "least-privilege": "least-privilege - scope DNS write access to only the zones/records needed",
+        "deadline-retry": "deadline-retry - treat the 72-hour deadline and retry/abort as a state machine",
+        "verify-renewal": "verify-renewal - confirm every domain validated and renewal eligibility from external state",
+    },
+}
+
+
+def _uid_task_count() -> int:
+    """Count Linux tasks charged to this real uid before the submission starts."""
+    if not _ADDRESS_SPACE_CAPPABLE:
+        return 0
+    total = 0
+    try:
+        processes = os.scandir("/proc")
+    except OSError:
+        return 0
+    with processes:
+        for process in processes:
+            if not process.name.isdigit():
+                continue
+            try:
+                if process.stat(follow_symlinks=False).st_uid != os.getuid():
+                    continue
+                with os.scandir(f"{process.path}/task") as tasks:
+                    total += sum(1 for task in tasks if task.name.isdigit())
+            except OSError:
+                # Processes can exit between the two /proc reads.
+                continue
+    return total
+
+
+def _nproc_limit() -> int:
+    """Give this submission bounded headroom without charging the host baseline."""
+    baseline = _uid_task_count()
+    desired = MAX_PROCESSES if baseline == 0 else baseline + MAX_PROCESSES
+    _soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
+    return desired if hard == resource.RLIM_INFINITY else min(desired, hard)
+
+
+def _limits(nproc_limit: int) -> None:
+    if _ADDRESS_SPACE_CAPPABLE:
+        resource.setrlimit(resource.RLIMIT_AS, (512 * 1024 * 1024, 512 * 1024 * 1024))
+    resource.setrlimit(resource.RLIMIT_NPROC, (nproc_limit, nproc_limit))
+    resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_BYTES, MAX_OUTPUT_BYTES))
+
+
+def _json_value(value: object) -> object:
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return value.strip()
+    return value
+
+
+def _check_inventory(submission: object) -> bool:
+    value = _json_value(submission)
+    if not isinstance(value, dict):
+        return False
+    expected = expected_inventory_answer(SEED)
+    if set(value) != set(expected):
+        return False
+    for key, expected_value in expected.items():
+        actual = value.get(key)
+        if isinstance(expected_value, list):
+            if not isinstance(actual, list) or [str(item) for item in actual] != list(expected_value):
+                return False
+        elif actual != expected_value:
+            return False
+    return True
+
+
+RUNNER = """
+import json, os, sys
+hard_exit = os._exit
+trusted_stdout = sys.stdout
+trusted_write = sys.stdout.buffer.write
+sys.path.insert(0, {root!r})
+from tests.hidden import check_migration
+private_checker = getattr(check_migration, {phase!r})
+for module_name in tuple(sys.modules):
+    if module_name == "tests" or module_name.startswith("tests.") or module_name == "fixtures" or module_name.startswith("fixtures."):
+        sys.modules.pop(module_name, None)
+while {root!r} in sys.path:
+    sys.path.remove({root!r})
+sys.path.insert(0, {workspace!r})
+
+try:
+    import migration
+except Exception:
+    # submission could not be imported: emit only the private, nonce-bound failure record.
+    os._exit = hard_exit
+    sys.stdout = trusted_stdout
+    trusted_write({fail_record!r})
+    sys.stdout.flush()
+    os._exit(0)
+
+if not hasattr(migration, "migrate_step"):
+    failures = ["submission does not define migrate_step()"]
+else:
+    try:
+        failures = private_checker(migration, {seed!r})
+    except Exception:
+        failures = ["submission could not be checked"]
+
+# Participant imports may replace json.dumps, print, sys.stdout, or os._exit. Restore the trusted
+# C-backed output/exit handles and write a fixed record instead of calling any participant-mutable
+# serializer after grading.
+os._exit = hard_exit
+sys.stdout = trusted_stdout
+trusted_write({pass_record!r} if not failures else {fail_record!r})
+sys.stdout.flush()
+os._exit(0)
+"""
+
+
+def _check_code(phase: str, submission: object) -> bool:
+    if not isinstance(submission, str) or not submission.strip() or len(submission) > MAX_BODY_BYTES:
+        return False
+    with tempfile.TemporaryDirectory() as workspace:
+        verdict_token = secrets.token_hex(32)
+        pass_line = f"TC-VERDICT:{verdict_token}:PASS"
+        fail_line = f"TC-VERDICT:{verdict_token}:FAIL"
+        nproc_limit = _nproc_limit()
+        Path(workspace, "migration.py").write_text(submission, encoding="utf-8")
+        transcript = Path(workspace, "stdout")
+        try:
+            with transcript.open("w", encoding="utf-8") as sink:
+                completed = subprocess.run(
+                    [
+                        sys.executable,
+                        "-I",
+                        "-c",
+                        RUNNER.format(
+                            root=str(ROOT),
+                            workspace=workspace,
+                            phase=phase,
+                            seed=SEED,
+                            pass_record=(pass_line + "\n").encode("utf-8"),
+                            fail_record=(fail_line + "\n").encode("utf-8"),
+                        ),
+                    ],
+                    stdout=sink,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    timeout=RUN_TIMEOUT_SECONDS,
+                    preexec_fn=partial(_limits, nproc_limit),
+                    cwd=workspace,
+                    # glibc otherwise creates a large malloc arena for each checker thread. The
+                    # concurrency-free ticking here does not need many arenas.
+                    env={
+                        "PATH": "/usr/local/bin:/usr/bin:/bin",
+                        "MALLOC_ARENA_MAX": "2",
+                    },
+                    check=False,
+                )
+            output = transcript.read_text(encoding="utf-8", errors="replace")[-MAX_OUTPUT_BYTES:]
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            return False
+    if completed.returncode != 0:
+        return False
+    lines = output.splitlines()
+    return bool(lines) and lines[-1] == pass_line
+
+
+def _make_code_checker(checkpoint_id: str):
+    phase = CODE_CHECKPOINT_PHASES[checkpoint_id]
+
+    def checker(submission: object) -> bool:
+        return _check_code(phase, submission) and bool(SEED)
+
+    return checker
+
+
+_CODE_CHECKERS = {
+    checkpoint_id: _make_code_checker(checkpoint_id) for checkpoint_id in CODE_CHECKPOINTS
+}
+
+
+def evaluate(checkpoint_id: str, submission: object) -> bool:
+    if checkpoint_id == "inventory":
+        return _check_inventory(submission)
+    checker = _CODE_CHECKERS.get(checkpoint_id)
+    return bool(checker(submission)) if checker is not None else False
+
+
+class Handler(BaseHTTPRequestHandler):
+    timeout = REQUEST_TIMEOUT_SECONDS
+
+    def do_GET(self) -> None:  # noqa: N802
+        if urlsplit(self.path).path == "/health":
+            self._respond(200, {"ok": True})
+            return
+        self._respond(404, {"error": "not found"})
+
+    def do_POST(self) -> None:  # noqa: N802
+        if urlsplit(self.path).path.rstrip("/") != "/verify":
+            self._respond(404, {"error": "not found"})
+            return
+        try:
+            length = int(self.headers.get("content-length", "0"))
+        except ValueError:
+            self._respond(400, {"error": "bad content-length"})
+            return
+        if length <= 0 or length > MAX_BODY_BYTES:
+            self._respond(400, {"error": "bad content-length"})
+            return
+        try:
+            body = json.loads(self.rfile.read(length).decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError, OSError, TimeoutError):
+            self._respond(400, {"error": "bad json"})
+            return
+        if not isinstance(body, dict):
+            self._respond(400, {"error": "bad json"})
+            return
+        checkpoint_id = body.get("checkpointId")
+        submission = body.get("submission")
+        correct = isinstance(checkpoint_id, str) and evaluate(checkpoint_id, submission)
+        self._respond(200, {"checkpointId": checkpoint_id, "correct": correct})
+
+    def _respond(self, status: int, payload: object) -> None:
+        encoded = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self.send_header("content-type", "application/json; charset=utf-8")
+        self.send_header("content-length", str(len(encoded)))
+        self.end_headers()
+        self.wfile.write(encoded)
+
+    def log_message(self, _format: str, *_args: object) -> None:
+        return
+
+
+def main() -> None:
+    port = int(os.environ.get("VERIFY_PORT", "18621"))
+    # Inside the container, the Workbench reaches this verifier over the Compose bridge, so it
+    # must listen on every interface rather than only its own loopback. docker-compose.yml
+    # publishes only the Workbench on host loopback; the verifier has no host port.
+    HTTPServer(("0.0.0.0", port), Handler).serve_forever()  # noqa: S104 - see above
+
+
+if __name__ == "__main__":
+    main()
