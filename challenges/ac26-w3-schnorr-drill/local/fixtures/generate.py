@@ -14,6 +14,14 @@ are not.
 
 Nothing here is constant-time or random in the cryptographic sense. Toy parameters are
 for observability.
+
+This module hands back the PUBLIC state only (what ``show.py`` prints). It deliberately
+does not compute or export the twelve lines' expected values as their own callable
+result: that dict shipped inside the participant's own image and could be read back with
+one import, which is the entire drill for free (#537). ``verifier/expected.py``
+recomputes each checkpoint's value from this public state at grading time instead; see
+that module's docstring and scripts/ac26-w3-schnorr-drill.test.ts for the regression
+test pinning this.
 """
 
 from __future__ import annotations
@@ -118,7 +126,9 @@ def on_curve(P, p: int, a: int, b: int) -> bool:
 
 
 def setting(seed: str) -> dict:
-    """Everything public (shown by show.py) and everything expected (kept by server.py)."""
+    """Everything public — what show.py prints. See the module docstring: the expected
+    value of each graded line is computed only by verifier/expected.py, from this
+    return value, and is not part of it."""
     i = _draw(seed, "curve", 0, len(TOY_GROUPS) - 1)
     p, a, b, gx, gy, n = TOY_GROUPS[i]
     G = (gx, gy)
@@ -162,28 +172,6 @@ def setting(seed: str) -> dict:
     while (r2 + e2p * x2) % n2 in (0, x2, r2, e2p):
         e2p = e2p + 1 if e2p < n2 - 2 else 2
 
-    # --- expected values, computed exactly the way the drill lines compute them ---
-    lam = ((Q[1] - G[1]) * inv(Q[0] - G[0], p)) % p
-    GQ = ec_add(G, Q, p, a)
-    G2x = ec_add(G, G, p, a)
-    P = ec_mul(x, G, p, a)
-    R = ec_mul(r, G, p, a)
-    s = (r + e * x) % n
-    sG = ec_mul(s, G, p, a)
-    expected = {
-        "field-neg": (-t) % p,
-        "field-inv": inv(t, p),
-        "lambda-chord": lam,
-        "add-points": GQ,
-        "double": G2x,
-        "order": n,
-        "pubkey": P,
-        "commit": R,
-        "response": s,
-        "verify": sG,
-        "nonce-reuse": x_attack,
-        "transfer": (r2 + e2p * x2) % n2,
-    }
     public = {
         "p": p, "a": a, "b": b, "G": G, "Gx": gx, "Gy": gy,
         "t": t, "Q": Q, "Qx": Q[0], "Qy": Q[1],
@@ -191,7 +179,7 @@ def setting(seed: str) -> dict:
         "P1": P_attack, "e1": e1, "s1": s1, "e2": e2, "s2": s2,
         "p2": p2, "a2": a2, "b2": b2, "G2": G2, "x2": x2, "r2": r2, "e2p": e2p,
     }
-    return {"curve": i, "curve2": j, "n": n, "n2": n2, "public": public, "expected": expected}
+    return {"public": public}
 
 
 def assignments(seed: str) -> str:

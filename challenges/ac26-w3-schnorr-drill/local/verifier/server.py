@@ -34,7 +34,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fixtures.generate import GRADED, LINES, normalize_answer, setting
+from fixtures.generate import GRADED, LINES, normalize_answer
+from verifier.expected import expected_for
 
 ROOT = Path(__file__).resolve().parents[1]
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
@@ -90,7 +91,7 @@ def _check_line(line: str, submission: object) -> bool:
     got = normalize_answer(line, answer)
     if got is None:
         return False
-    expected = setting(SEED)["expected"][line]
+    expected = expected_for(SEED)[line]
     return got == expected
 
 

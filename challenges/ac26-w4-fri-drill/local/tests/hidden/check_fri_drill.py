@@ -15,6 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from fixtures.generate import setting  # noqa: E402
+from verifier.expected import expected_for  # noqa: E402
 
 
 def _call(module, name, *args):
@@ -39,8 +40,8 @@ def _compare(line: str, got, expected) -> list[str]:
 
 
 def check_fold(module, seed: str) -> list[str]:
-    cfg = setting(seed)
-    pub, exp = cfg["public"], cfg["expected"]
+    pub = setting(seed)["public"]
+    exp = expected_for(seed)
     p = pub["p"]
     qs = (pub["q0"], pub["q1"], pub["q2"], pub["q3"])
     failures: list[str] = []
@@ -58,8 +59,8 @@ def check_fold(module, seed: str) -> list[str]:
 
 
 def check_query(module, seed: str) -> list[str]:
-    cfg = setting(seed)
-    pub, exp = cfg["public"], cfg["expected"]
+    pub = setting(seed)["public"]
+    exp = expected_for(seed)
     p = pub["p"]
     qs = (pub["q0"], pub["q1"], pub["q2"], pub["q3"])
     failures: list[str] = []
@@ -73,8 +74,8 @@ def check_query(module, seed: str) -> list[str]:
 
 
 def check_cheat(module, seed: str) -> list[str]:
-    cfg = setting(seed)
-    pub, exp = cfg["public"], cfg["expected"]
+    pub = setting(seed)["public"]
+    exp = expected_for(seed)
     p = pub["p"]
     qs = (pub["q0"], pub["q1"], pub["q2"], pub["q3"])
     failures: list[str] = []

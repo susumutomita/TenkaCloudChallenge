@@ -13,6 +13,14 @@ are this deployment's own (the independent-reimplementation rule): the procedure
 lecture's, the numbers are not.
 
 Nothing here is cryptographic. Toy parameters are for observability.
+
+This module hands back the PUBLIC state only (what ``show.py`` prints). It deliberately
+does not compute or export the twelve lines' expected values as their own callable
+result: that dict shipped inside the participant's own image and could be read back with
+one import, which is the entire drill for free (#537). ``verifier/expected.py``
+recomputes each checkpoint's value from this public state at grading time instead; see
+that module's docstring and scripts/ac26-w4-sumcheck-drill.test.ts for the regression
+test pinning this.
 """
 
 from __future__ import annotations
@@ -71,7 +79,9 @@ def _draw(seed: str, label: str, low: int, high: int) -> int:
 
 
 def setting(seed: str) -> dict:
-    """Everything public (shown by show.py) and everything expected (kept by server.py)."""
+    """Everything public — what show.py prints. See the module docstring: the expected
+    value of each graded line is computed only by verifier/expected.py, from this
+    return value, and is not part of it."""
     p = PRIMES[_draw(seed, "field", 0, len(PRIMES) - 1)]
 
     x1 = _draw(seed, "x1", 1, p - 1)
@@ -92,9 +102,6 @@ def setting(seed: str) -> dict:
 
     def w1(z: int) -> int:
         return (y0 * (1 - z) + y1 * z) % p
-
-    def g0(a: int, b: int) -> int:
-        return ((1 - a) * b * (w1(a) + w1(b))) % p
 
     # The honest prover's messages, as the coefficients that travel in the protocol.
     # p1(t) = sum_b g0(t, b) = (1 - t)(W1(t) + y1) expands to:
@@ -123,39 +130,13 @@ def setting(seed: str) -> dict:
     while r2 in (1, t_star):
         r2 = r2 % (p - 2) + 2
 
-    def p1(t: int) -> int:
-        return (c0 + c1 * t + c2 * t * t) % p
-
-    def p2(t: int) -> int:
-        return (b1 * t + b2 * t * t) % p
-
-    def p1c(t: int) -> int:
-        return (p1(t) + d * (1 - t)) % p
-
-    def p2c(t: int) -> int:
-        return (p2(t) + sh * (1 - t) + m * t * (1 - t)) % p
-
-    expected = {
-        "circuit": (y0, y1, out),
-        "mle": (w1(0), w1(1), w1(2)),
-        "grid": (g0(0, 0), g0(0, 1), g0(1, 0), g0(1, 1)),
-        "grid-total": sum(g0(a, b) for a in (0, 1) for b in (0, 1)) % p,
-        "p1-sum": (p1(0) + p1(1)) % p,
-        "p1-check": True,
-        "round1": p1(r1),
-        "p2-sum": (p2(0) + p2(1)) % p,
-        "final-check": (p2(r2), g0(r1, r2)),
-        "lie": ((p1c(0) + p1c(1)) % p, p1c(r1)),
-        "lie-caught": ((p2c(0) + p2c(1)) % p, p2c(r2), g0(r1, r2)),
-        "miss-points": tuple(sorted(t for t in range(p) if p2c(t) == g0(r1, t))),
-    }
     public = {
         "p": p, "x1": x1, "x2": x2, "x3": x3, "x4": x4,
         "r1": r1, "r2": r2,
         "c0": c0, "c1": c1, "c2": c2, "b1": b1, "b2": b2,
         "d": d, "m": m,
     }
-    return {"public": public, "expected": expected}
+    return {"public": public}
 
 
 def assignments(seed: str) -> str:
