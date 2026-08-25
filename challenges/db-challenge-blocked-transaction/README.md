@@ -66,20 +66,16 @@ technique) would silently return zero rows for `participant`, because
 `pg_read_all_stats` to `participant` for this reason (read-only: it exposes
 no write or signal capability by itself).
 
-## What's actually running behind the symptom
+## Design note
 
-The Node app orchestrates the whole incident itself, at container boot:
-
-1. **A leaked blocker** — opens a transaction, debits account 1, and never
-   commits or rolls back ("a previous deploy left a connection open
-   mid-transaction"). Sits `idle in transaction`, holding the row lock.
-2. **A harmless decoy** — same `app_service` role, but runs one query and
-   goes idle. No transaction, no lock. Terminating it changes nothing — it's
-   the red herring: a participant who sees "an `app_service` session" and
-   guesses has real odds of picking this one.
-3. **A retrying waiter** — the app's actual write against account 1, blocked
-   on the leaked transaction's row lock, retried automatically if its own
-   backend is ever killed by mistake (so a wrong guess is not a dead end).
+Consistent with this Challenge's own "don't hand over the cause" design (the
+symptom above is genuinely all `instructions`/`description` say — see Epic
+#431), this README does not restate what's actually causing the incident or
+the winning fix — reading this file should not be a shortcut around
+diagnosing it yourself. The full breakdown, including why a shallow
+"terminate something" guess doesn't pass every checkpoint, ships in this
+problem's post-solve `writeup` (`metadata.json`), unlocked once you actually
+clear all three checkpoints below.
 
 ## How scoring works
 
@@ -93,25 +89,10 @@ and returns `{ checkpointId, correct, message }`:
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `blocking-session-cleared`       | has the SPECIFIC backend pid recorded once, at incident start, actually stopped existing in `pg_stat_activity`? |
 | `genuine-wait-then-resolution`   | did the pending write stay genuinely blocked for a meaningful, app-recorded duration before completing (not millisecond-scale noise)? |
-| `stuck-write-completed`          | does account 1's balance reflect exactly the waiter's debit (100000 → 95000 cents)?                       |
+| `stuck-write-completed`          | does account 1's balance reflect only the pending write's own debit (not the blocker's)?                  |
 
 You can re-scan as many times as you like; each checkpoint is independent
 and worth 30 / 30 / 40 of the 100-point total.
-
-### Why "terminate something" alone does not pass
-
-- Terminating the harmless decoy — the recorded blocker pid is untouched, so
-  `blocking-session-cleared` fails, and the write never completes so the
-  other two fail as well.
-- Waiting and doing nothing — same as above; nothing about this incident
-  self-resolves.
-- "There was never really a problem" (a hypothetical bug where the write
-  completes near-instantly with no real contention) — `genuine-wait-then-resolution`
-  specifically rejects a near-zero elapsed time, because that duration comes
-  from the app's own trusted code (when it issued the write vs. when it
-  actually returned), not from anything a participant can influence.
-- Only genuinely identifying the real blocker via `pg_blocking_pids()` and
-  terminating THAT pid passes all three.
 
 ## Delivery model
 
