@@ -27,6 +27,15 @@ Issue 382 が候補として挙げた 4 つを、**強制する場所**で分類
 | deploy が成功する / 採点が実際に加点される | `/validate-problem` の手順 (人が起動) | 実 AWS デプロイと課金 |
 
 **`check:problem` が緑でも「解ける」証明にはならない。** 静的に確実に分かることだけを見ている。
+
+### `/validate-problem` を実行した記録自体は誰が強制するか (Issue 463)
+
+上の表の最後の行は「人が起動する」であって「起動したかどうかは誰も見ない」ではない。新規問題の
+PR、`status: ready` への昇格、そして既に `status: ready` な問題の participant-facing な書き換え
+(README / hint / starter / workbench / portal) は、`playability-gate` (required check,
+`scripts/check-pr-playability.ts`) が **PR が Draft でなくなった時点**で machine-readable な
+evidence block と `playtest-verified` label を要求する。詳細は
+[`docs/PLAYABILITY_GOVERNANCE.md`](../PLAYABILITY_GOVERNANCE.md)。
 出力の末尾もそう読めない文言にしてある。
 
 ### `check:problem` が実際に見るもの
