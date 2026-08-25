@@ -210,6 +210,65 @@ print(json.dumps([shape("failure-seed-a"), shape("failure-seed-b")]))
     expect(new Set(second.positions).size).toBe(3);
     expect(first).not.toEqual(second);
   });
+
+  it("hands the participant everything the audit answer needs, across many seeds (Issue 457)", () => {
+    // The audit checkpoint asks the participant to cross-reference completionTrace
+    // against storedRows by hand. This does not call `audit_answer` -- it reimplements
+    // its rule independently from the Portal-visible fields only, so a future change
+    // that lets the graded answer depend on something not shown (or that silently
+    // truncates one of the two evidence arrays) fails here even though the CLI/Portal
+    // parity check above would still pass.
+    const probe = String.raw`
+import json, sys
+sys.path.insert(0, ".")
+from portal.server import inspect_payload
+from verifier.expected import audit_answer
+seeds = [f"evidence-chain-async-{i:03d}" for i in range(40)]
+out = []
+for seed in seeds:
+    evidence = inspect_payload(seed)["audit"]
+    out.append({
+        "seed": seed,
+        "jobCount": len(evidence["jobs"]),
+        "completionTrace": evidence["completionTrace"],
+        "storedRows": evidence["storedRows"],
+        "answer": audit_answer(seed),
+    })
+print(json.dumps(out))
+`;
+    const output = execFileSync("python3", ["-c", probe], {
+      cwd: LOCAL,
+      encoding: "utf8",
+      env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" },
+      timeout: 120_000,
+    });
+    const rows = JSON.parse(output) as Array<{
+      seed: string;
+      jobCount: number;
+      completionTrace: Array<{ sourceJobId: string; value: { receipt: string } }>;
+      storedRows: Array<{ index: number; jobId: string; value: { receipt: string } }>;
+      answer: number[];
+    }>;
+    expect(rows.length).toBeGreaterThan(0);
+    const answers: string[] = [];
+    for (const row of rows) {
+      const sourceAt = new Map<string, string>();
+      for (const completed of row.completionTrace) {
+        sourceAt.set(completed.value.receipt, completed.sourceJobId);
+      }
+      const derived = row.storedRows
+        .filter((stored) => sourceAt.get(stored.value.receipt) !== stored.jobId)
+        .map((stored) => stored.index)
+        .toSorted((a, b) => a - b);
+      expect(derived, row.seed).toEqual(row.answer.toSorted((a, b) => a - b));
+      // Some request was misfiled, but not every request -- otherwise "which rows"
+      // degenerates into "all of them" and the checkpoint stops discriminating.
+      expect(derived.length, row.seed).toBeGreaterThan(0);
+      expect(derived.length, row.seed).toBeLessThan(row.jobCount);
+      answers.push(derived.join(","));
+    }
+    expect(new Set(answers).size).toBeGreaterThan(1);
+  });
 });
 
 describe("cs-async-result-binding delivery boundary", () => {
