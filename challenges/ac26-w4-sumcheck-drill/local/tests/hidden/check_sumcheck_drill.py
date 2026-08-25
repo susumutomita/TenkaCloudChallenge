@@ -15,6 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from fixtures.generate import setting  # noqa: E402
+from verifier.expected import expected_for  # noqa: E402
 
 
 def _call(module, name, *args):
@@ -36,8 +37,8 @@ def _compare(line: str, got, expected) -> list[str]:
 
 
 def check_setup(module, seed: str) -> list[str]:
-    cfg = setting(seed)
-    pub, exp = cfg["public"], cfg["expected"]
+    pub = setting(seed)["public"]
+    exp = expected_for(seed)
     p = pub["p"]
     y0, y1, _out = exp["circuit"]
     failures: list[str] = []
@@ -53,8 +54,8 @@ def check_setup(module, seed: str) -> list[str]:
 
 
 def check_rounds(module, seed: str) -> list[str]:
-    cfg = setting(seed)
-    pub, exp = cfg["public"], cfg["expected"]
+    pub = setting(seed)["public"]
+    exp = expected_for(seed)
     p = pub["p"]
     y0, y1, _out = exp["circuit"]
     failures: list[str] = []
@@ -72,8 +73,8 @@ def check_rounds(module, seed: str) -> list[str]:
 
 
 def check_lie(module, seed: str) -> list[str]:
-    cfg = setting(seed)
-    pub, exp = cfg["public"], cfg["expected"]
+    pub = setting(seed)["public"]
+    exp = expected_for(seed)
     p = pub["p"]
     y0, y1, _out = exp["circuit"]
     failures: list[str] = []

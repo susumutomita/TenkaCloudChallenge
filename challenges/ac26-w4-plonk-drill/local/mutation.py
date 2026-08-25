@@ -23,6 +23,7 @@ sys.path.insert(0, str(ROOT))
 
 from fixtures.generate import GRADED, setting  # noqa: E402
 from tests.hidden import check_plonk_drill  # noqa: E402
+from verifier.expected import expected_for  # noqa: E402
 
 REFERENCE = (ROOT / "reference" / "plonk_drill.py").read_text(encoding="utf-8")
 SEED = "mutation-suite-seed"
@@ -110,9 +111,9 @@ def main() -> int:
     os.environ["FLAG_SEED"] = SEED
     from verifier.server import evaluate  # noqa: PLC0415 - imported after sys.path and env
 
-    cfg = setting(SEED)
-    pub, exp = cfg["public"], cfg["expected"]
-    other = setting("another-deployment")["expected"]
+    pub = setting(SEED)["public"]
+    exp = expected_for(SEED)
+    other = expected_for("another-deployment")
     near_misses = {
         "outputs accepts the inputs": ("outputs", [pub["a0"], pub["b0"], pub["a1"]]),
         "bad-row accepts the honest gate-2 row": (

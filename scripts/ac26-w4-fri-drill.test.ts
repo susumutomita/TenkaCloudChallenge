@@ -54,14 +54,20 @@ function evaluate(checkpointId: string, submission: string): boolean {
   return JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "null") === true;
 }
 
-/** This seed's expected values and public numbers, as JSON. */
+/** This seed's expected values and public numbers, as JSON.
+ *
+ * `expected` comes from `verifier.expected`, not `fixtures.generate`: since #537, the
+ * fixtures module hands back public state only, and the checkpoints' ground truth is
+ * computed only inside the verifier (see that module's docstring).
+ */
 function deployment(seed = SEED): { expected: Record<string, unknown>; public: Record<string, unknown> } {
   const script = [
     "import json, sys",
     "sys.path.insert(0, '.')",
     "from fixtures.generate import setting",
-    "cfg = setting(sys.argv[1])",
-    "print(json.dumps({'expected': cfg['expected'], 'public': cfg['public']}))",
+    "from verifier.expected import expected_for",
+    "pub = setting(sys.argv[1])['public']",
+    "print(json.dumps({'expected': expected_for(sys.argv[1]), 'public': pub}))",
   ].join("\n");
   const result = python(["-c", script, seed]);
   expect(result.status).toBe(0);
@@ -151,13 +157,14 @@ describe("ac26-w4-fri-drill: fixtures are seed-derived", () => {
       "sys.path.insert(0, '.')",
       "from tests.hidden import check_fri_drill",
       "from fixtures.generate import setting",
+      "from verifier.expected import expected_for",
       "spec = importlib.util.spec_from_file_location('ref', 'reference/fri_drill.py')",
       "ref = importlib.util.module_from_spec(spec); spec.loader.exec_module(ref)",
       "bad = {}",
       "for i in range(2000):",
       "    seed = f'solvability-{i}'",
       "    failures = check_fri_drill.run(ref, seed)",
-      "    cfg = setting(seed); pub = cfg['public']; exp = cfg['expected']",
+      "    pub = setting(seed)['public']; exp = expected_for(seed)",
       "    p = pub['p']",
       "    if (pub['q2'] + pub['beta'] * pub['q3']) % p == 0 or pub['q3'] == 0:",
       "        failures.append('degenerate fold: Q1 not degree 1, or Q0 not degree 3')",

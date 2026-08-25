@@ -12,12 +12,23 @@ deployment's own (the independent-reimplementation rule): the procedure is the l
 the numbers are not.
 
 Nothing here is cryptographic. Toy parameters are for observability.
+
+This module hands back the PUBLIC state only (what ``show.py`` prints). It no longer
+computes or exports the twelve lines' expected values as their own callable result:
+before #537, that dict shipped here and could be read back with one import, which was
+the entire drill for free. ``verifier/expected.py`` recomputes each checkpoint's value
+from this public state at grading time instead -- but read that module's own docstring
+before assuming this closes the leak: it does not. This module and the participant-
+facing tests no longer point at the answer by accident; a participant who deliberately
+imports ``verifier.expected`` instead still gets it, because this single-stage drill
+template has no isolated verifier container to keep it out of. See #537 and
+scripts/ac26-w4-plonk-drill.test.ts for the regression
+test pinning the values this move must not change.
 """
 
 from __future__ import annotations
 
 import hashlib
-import math
 
 GATE_PRIMES = (11, 13, 17, 19, 23)
 PRODUCT_PRIMES = (101, 103, 107, 109, 113)
@@ -80,7 +91,9 @@ def _draw(seed: str, label: str, low: int, high: int) -> int:
 
 
 def setting(seed: str) -> dict:
-    """Everything public (shown by show.py) and everything expected (kept by server.py)."""
+    """Everything public — what show.py prints. See the module docstring: the expected
+    value of each graded line is computed only by verifier/expected.py, from this
+    return value, and is not part of it."""
     p = GATE_PRIMES[_draw(seed, "gate-field", 0, len(GATE_PRIMES) - 1)]
     q = PRODUCT_PRIMES[_draw(seed, "product-field", 0, len(PRODUCT_PRIMES) - 1)]
 
@@ -135,42 +148,11 @@ def setting(seed: str) -> dict:
     while not all_marks_nonzero(beta, gamma):
         gamma = (gamma + 1) % q
 
-    def product(values: list[int], addresses: list[int], b: int, c: int) -> int:
-        return math.prod((v + b * a + c) % q for v, a in zip(values, addresses)) % q
-
-    marks = [(v + beta * a + gamma) % q for v, a in zip(vals, addr)]
-    f = product(vals, addr, beta, gamma)
-    fs = product(vals, saddr, beta, gamma)
-    fb = product(vb, addr, beta, gamma)
-    gb = product(vb, saddr, beta, gamma)
-
-    # The miss count. fb == gb exactly when some fingerprint SHARED by both products is 0
-    # (both sides collapse to 0): the difference factor β(B−A)(x−y) is non-zero for every
-    # β ≥ 1 since the swapped addresses differ and the two values differ by g < p < q. So
-    # count, per b, the distinct c that zero a shared (value, address) pair. The brute
-    # force over (q−1)·q pairs — what the learner types — agrees; the test proves it.
-    shared = [pair for i, pair in enumerate(zip(vb, addr)) if i not in (2, 6)]
-    miss = sum(len({(-(v + b * a)) % q for v, a in shared}) for b in range(1, q))
-
-    expected = {
-        "outputs": (o0, o1, o2),
-        "gate-eq": (0, 0, 0),
-        "copy": (True, True),
-        "bad-row": bad2,
-        "bad-passes": ((0, 0, 0), (False, True)),
-        "addresses": tuple(addr),
-        "sigma-addresses": tuple(saddr),
-        "marks": tuple(marks[:3]),
-        "grand-product": (f, fs),
-        "bad-product": (fb, gb),
-        "multiset": (True, False),
-        "miss-count": miss,
-    }
     public = {
         "p": p, "a0": a0, "b0": b0, "a1": a1, "b1": b1, "g": g,
         "q": q, "w": w, "beta": beta, "gamma": gamma,
     }
-    return {"public": public, "expected": expected}
+    return {"public": public}
 
 
 def assignments(seed: str) -> str:

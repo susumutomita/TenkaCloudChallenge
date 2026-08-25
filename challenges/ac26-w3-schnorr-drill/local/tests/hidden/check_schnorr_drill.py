@@ -14,7 +14,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from fixtures.generate import LINES, setting  # noqa: E402
+from fixtures.generate import LINES, order_of, setting  # noqa: E402
+from verifier.expected import expected_for  # noqa: E402
 
 
 def _call(module, name, *args):
@@ -36,8 +37,9 @@ def _compare(line: str, got, expected) -> list[str]:
 
 
 def _expected(seed: str):
-    cfg = setting(seed)
-    return cfg["public"], cfg["expected"], cfg["n"]
+    pub = setting(seed)["public"]
+    n = order_of(pub["G"], pub["p"], pub["a"])
+    return pub, expected_for(seed), n
 
 
 def check_field(module, seed: str) -> list[str]:

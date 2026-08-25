@@ -12,6 +12,18 @@ the consistency check — is the Week 4 lecture's FRI section; the numbers are t
 deployment's own (the independent-reimplementation rule).
 
 Nothing here is cryptographic. Toy parameters are for observability.
+
+This module hands back the PUBLIC state only (what ``show.py`` prints). It no longer
+computes or exports the twelve lines' expected values as their own callable result:
+before #537, that dict shipped here and could be read back with one import, which was
+the entire drill for free. ``verifier/expected.py`` recomputes each checkpoint's value
+from this public state at grading time instead -- but read that module's own docstring
+before assuming this closes the leak: it does not. This module and the participant-
+facing tests no longer point at the answer by accident; a participant who deliberately
+imports ``verifier.expected`` instead still gets it, because this single-stage drill
+template has no isolated verifier container to keep it out of. See #537 and
+scripts/ac26-w4-fri-drill.test.ts for the regression
+test pinning the values this move must not change.
 """
 
 from __future__ import annotations
@@ -70,7 +82,9 @@ def _draw(seed: str, label: str, low: int, high: int) -> int:
 
 
 def setting(seed: str) -> dict:
-    """Everything public (shown by show.py) and everything expected (kept by server.py)."""
+    """Everything public — what show.py prints. See the module docstring: the expected
+    value of each graded line is computed only by verifier/expected.py, from this
+    return value, and is not part of it."""
     p = PRIMES[_draw(seed, "field", 0, len(PRIMES) - 1)]
 
     q0 = _draw(seed, "q0", 0, p - 1)
@@ -97,46 +111,11 @@ def setting(seed: str) -> dict:
     while x in (s, p - s):
         x = x % (p - 1) + 1
 
-    def Q(X: int) -> int:
-        return (q0 + q1 * X + q2 * X * X + q3 * X * X * X) % p
-
-    def Qe(Y: int) -> int:
-        return (q0 + q2 * Y) % p
-
-    def Qo(Y: int) -> int:
-        return (q1 + q3 * Y) % p
-
-    def Q1(Y: int) -> int:
-        return (Qe(Y) + beta * Qo(Y)) % p
-
-    def Q1c(Y: int) -> int:
-        return (Q1(Y) + d0 + d1 * Y) % p
-
-    inv2 = pow(2, p - 2, p)
-    xx = x * x % p
-    re = (Q(x) + Q((-x) % p)) * inv2 % p
-    ro = (Q(x) - Q((-x) % p)) * pow(2 * x, p - 2, p) % p
-    c, d = Q1(0), (Q1(1) - Q1(0)) % p
-
-    expected = {
-        "poly": (Q(0), Q(1), Q(2)),
-        "split": (Qe(1), Qo(1)),
-        "identity": True,
-        "fold": (Q1(0), Q1(1), Q1(2)),
-        "fold2": (c + beta2 * d) % p,
-        "query": (Q(x), Q((-x) % p)),
-        "recover": (re, ro, Qe(xx), Qo(xx)),
-        "consistency": ((re + beta * ro) % p, Q1(xx)),
-        "cheat": (Q1c(0), Q1c(1)),
-        "cheat-caught": ((re + beta * ro) % p, Q1c(xx)),
-        "miss-points": (min(s, p - s), max(s, p - s)),
-        "honest-all": (),
-    }
     public = {
         "p": p, "q0": q0, "q1": q1, "q2": q2, "q3": q3,
         "beta": beta, "beta2": beta2, "x": x, "d0": d0, "d1": d1,
     }
-    return {"public": public, "expected": expected}
+    return {"public": public}
 
 
 def assignments(seed: str) -> str:

@@ -54,14 +54,20 @@ function evaluate(checkpointId: string, submission: string): boolean {
   return JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "null") === true;
 }
 
-/** This seed's expected values and public numbers, as JSON. */
+/** This seed's expected values and public numbers, as JSON.
+ *
+ * `expected` comes from `verifier.expected`, not `fixtures.generate`: since #537, the
+ * fixtures module hands back public state only, and the checkpoints' ground truth is
+ * computed only inside the verifier (see that module's docstring).
+ */
 function deployment(seed = SEED): { expected: Record<string, unknown>; public: Record<string, unknown> } {
   const script = [
     "import json, sys",
     "sys.path.insert(0, '.')",
     "from fixtures.generate import setting",
-    "cfg = setting(sys.argv[1])",
-    "print(json.dumps({'expected': cfg['expected'], 'public': cfg['public']}))",
+    "from verifier.expected import expected_for",
+    "pub = setting(sys.argv[1])['public']",
+    "print(json.dumps({'expected': expected_for(sys.argv[1]), 'public': pub}))",
   ].join("\n");
   const result = python(["-c", script, seed]);
   expect(result.status).toBe(0);
@@ -150,19 +156,23 @@ describe("ac26-w3-schnorr-drill: fixtures are seed-derived", () => {
       "import importlib.util, sys",
       "sys.path.insert(0, '.')",
       "from tests.hidden import check_schnorr_drill",
-      "from fixtures.generate import setting, on_curve, order_of",
+      "from fixtures.generate import setting, on_curve, order_of, TOY_GROUPS",
       "spec = importlib.util.spec_from_file_location('ref', 'reference/schnorr_drill.py')",
       "ref = importlib.util.module_from_spec(spec); spec.loader.exec_module(ref)",
+      "def table_order(p, a, b, gx, gy):",
+      "    return next(n for (p_, a_, b_, gx_, gy_, n) in TOY_GROUPS if (p_, a_, b_, gx_, gy_) == (p, a, b, gx, gy))",
       "bad = {}",
       "for i in range(2000):",
       "    seed = f'solvability-{i}'",
       "    failures = check_schnorr_drill.run(ref, seed)",
-      "    cfg = setting(seed); pub = cfg['public']",
+      "    pub = setting(seed)['public']",
       "    if not on_curve(pub['Q'], pub['p'], pub['a'], pub['b']) or pub['Q'][0] == pub['Gx']:",
       "        failures.append('Q degenerate')",
       "    if pub['e1'] == pub['e2']:",
       "        failures.append('e1 == e2')",
-      "    if order_of(pub['G'], pub['p'], pub['a']) != cfg['n'] or order_of(pub['G2'], pub['p2'], pub['a2']) != cfg['n2']:",
+      "    n = table_order(pub['p'], pub['a'], pub['b'], pub['Gx'], pub['Gy'])",
+      "    n2 = table_order(pub['p2'], pub['a2'], pub['b2'], pub['G2'][0], pub['G2'][1])",
+      "    if order_of(pub['G'], pub['p'], pub['a']) != n or order_of(pub['G2'], pub['p2'], pub['a2']) != n2:",
       "        failures.append('order table wrong')",
       "    if failures:",
       "        bad[seed] = failures",

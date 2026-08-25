@@ -15,6 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from fixtures.generate import setting  # noqa: E402
+from verifier.expected import expected_for  # noqa: E402
 
 
 def _call(module, name, *args):
@@ -38,8 +39,8 @@ def _compare(line: str, got, expected) -> list[str]:
     return []
 
 
-def _tables(cfg):
-    pub, exp = cfg["public"], cfg["expected"]
+def _tables(seed: str):
+    pub, exp = setting(seed)["public"], expected_for(seed)
     o0, o1, o2 = exp["outputs"]
     rows = [(pub["a0"], pub["b0"], o0), (pub["a1"], pub["b1"], o1), (o0, o1, o2)]
     bad = [rows[0], rows[1], exp["bad-row"]]
@@ -47,7 +48,7 @@ def _tables(cfg):
 
 
 def check_table(module, seed: str) -> list[str]:
-    pub, exp, rows, bad = _tables(setting(seed))
+    pub, exp, rows, bad = _tables(seed)
     p = pub["p"]
     failures: list[str] = []
     got, err = _call(module, "outputs", pub["a0"], pub["b0"], pub["a1"], pub["b1"], p)
@@ -64,7 +65,7 @@ def check_table(module, seed: str) -> list[str]:
 
 
 def check_product(module, seed: str) -> list[str]:
-    pub, exp, rows, bad = _tables(setting(seed))
+    pub, exp, rows, bad = _tables(seed)
     q, w, beta, gamma = pub["q"], pub["w"], pub["beta"], pub["gamma"]
     failures: list[str] = []
     got, err = _call(module, "addresses", w, q)
@@ -83,7 +84,7 @@ def check_product(module, seed: str) -> list[str]:
 
 
 def check_miss(module, seed: str) -> list[str]:
-    pub, exp, _rows, bad = _tables(setting(seed))
+    pub, exp, _rows, bad = _tables(seed)
     got, err = _call(module, "miss_count", bad, pub["w"], pub["q"])
     return [err] if err else _compare("miss-count", got, exp["miss-count"])
 
