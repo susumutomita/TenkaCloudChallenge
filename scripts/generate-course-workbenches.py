@@ -49,12 +49,27 @@ ROOT = Path(__file__).resolve().parents[1]
 CANONICAL_ADAPTER = ROOT / "scripts" / "course-workbench" / "workbench.py"
 BLOCK_BEGIN = "# BEGIN GENERATED PORTAL EDITOR API"
 BLOCK_END = "# END GENERATED PORTAL EDITOR API"
+# Which package holds the *participant-facing* Portal for a problem. The default
+# ("verifier") is the single-stage shape. Getting an entry wrong is not cosmetic: the
+# language checks below then inspect the hidden verifier instead of the page a
+# participant actually reads, and pass while the Portal shows the wrong text. That is
+# exactly how cs-atomic-file-publish and cs-numeric-aggregation-order came to display
+# cs-http-retry-idempotency's title and description to participants (Issue 449) with
+# every gate green -- their Portal is `workbench/`, which was not listed here.
 PORTAL_PACKAGES = {
     "cs-transaction-visibility-audit": "participant",
     "ac26-w4-sumcheck-drill": "participant",
     "ac26-w3-schnorr-drill": "participant",
     "ac26-w4-plonk-drill": "participant",
     "ac26-w4-fri-drill": "participant",
+    "acm-validation-migration": "workbench",
+    "asm-worst-case-latency": "workbench",
+    "cs-atomic-file-publish": "workbench",
+    "cs-dst-daily-rollup": "workbench",
+    "cs-http-retry-idempotency": "workbench",
+    "cs-numeric-aggregation-order": "workbench",
+    "cs-pagination-drift": "workbench",
+    "cs-protocol-state-guard": "workbench",
 }
 
 # The language arguments the generator owns, in the order they are emitted after
