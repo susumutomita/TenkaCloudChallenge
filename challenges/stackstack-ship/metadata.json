@@ -37,6 +37,175 @@
     "秘密を値で渡すか参照で渡すかで、 入れ替え時の壊れ方が変わることを挙動で説明できる",
     "デプロイの成功記録ではなく、 公開側の応答で正常性を確認する習慣をつける"
   ],
+  "nodes": {
+    "learning_objectives": [
+      {
+        "id": "lo.stackstack-ship.separate-build-from-deploy",
+        "description": "ビルド済みの成果物が存在することと、それが配られていることが別の事実だと区別できる"
+      },
+      {
+        "id": "lo.stackstack-ship.diagnose-staged-pipeline-failure",
+        "description": "stage 単位のデプロイログから、止まった原因と次に直す場所を切り分けられる"
+      },
+      {
+        "id": "lo.stackstack-ship.choose-secret-reference-over-value",
+        "description": "秘密を値で渡すか参照で渡すかで、入れ替え時の壊れ方が変わることを挙動で説明できる"
+      },
+      {
+        "id": "lo.stackstack-ship.verify-by-external-response",
+        "description": "デプロイの成功記録ではなく、公開側の応答で正常性を確認する"
+      }
+    ],
+    "concepts": [
+      {
+        "id": "concept.build-deploy-separation",
+        "description": "ビルド済み成果物が存在することと、それが配布・公開されていることは別の事実であるという区別"
+      },
+      {
+        "id": "concept.staged-deploy-pipeline",
+        "description": "デプロイが順に通過する複数 stage のどこで失敗したかによって、直す場所が変わるという構造"
+      },
+      {
+        "id": "concept.secret-reference-vs-value",
+        "description": "秘密を値そのもので渡すか参照 (名前・ARN 等) で渡すかで、入れ替え時の壊れ方が変わるという区別"
+      }
+    ],
+    "assessment_criteria": [
+      {
+        "id": "assessment.stackstack-ship.trace-failed-stage-to-next-fix",
+        "description": "stage 名を名指ししたデプロイログから、止まった原因と次に直す場所を特定できる"
+      },
+      {
+        "id": "assessment.stackstack-ship.confirm-liveness-via-public-response",
+        "description": "デプロイパイプラインの成功記録ではなく、公開側への実際の HTTP 応答で正常性を確認できる"
+      },
+      {
+        "id": "assessment.stackstack-ship.cleanup-preserves-availability",
+        "description": "失敗した記録を片付ける操作が、動いている公開面を落とさないことを示せる"
+      }
+    ],
+    "misconceptions": [
+      {
+        "id": "misconception.build-success-means-deployed",
+        "description": "ビルド成果物が存在すれば、それが配られて公開されているはずだという思い込み"
+      },
+      {
+        "id": "misconception.deploy-success-record-means-live",
+        "description": "デプロイパイプラインが成功を記録すれば、公開側から実際に到達可能だという思い込み"
+      },
+      {
+        "id": "misconception.cleanup-means-delete-everything",
+        "description": "失敗した後片付けは、動いているものも含めて全部消せばよいという思い込み"
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "teaches",
+      "source": "problem.stackstack-ship",
+      "target": "lo.stackstack-ship.separate-build-from-deploy"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.stackstack-ship",
+      "target": "lo.stackstack-ship.diagnose-staged-pipeline-failure"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.stackstack-ship",
+      "target": "lo.stackstack-ship.choose-secret-reference-over-value"
+    },
+    {
+      "type": "teaches",
+      "source": "problem.stackstack-ship",
+      "target": "lo.stackstack-ship.verify-by-external-response"
+    },
+    {
+      "type": "covers",
+      "source": "problem.stackstack-ship",
+      "target": "concept.build-deploy-separation"
+    },
+    {
+      "type": "covers",
+      "source": "problem.stackstack-ship",
+      "target": "concept.staged-deploy-pipeline"
+    },
+    {
+      "type": "covers",
+      "source": "problem.stackstack-ship",
+      "target": "concept.secret-reference-vs-value"
+    },
+    {
+      "type": "requires",
+      "source": "lo.stackstack-ship.separate-build-from-deploy",
+      "target": "concept.build-deploy-separation"
+    },
+    {
+      "type": "requires",
+      "source": "lo.stackstack-ship.diagnose-staged-pipeline-failure",
+      "target": "concept.staged-deploy-pipeline"
+    },
+    {
+      "type": "requires",
+      "source": "lo.stackstack-ship.choose-secret-reference-over-value",
+      "target": "concept.secret-reference-vs-value"
+    },
+    {
+      "type": "requires",
+      "source": "lo.stackstack-ship.verify-by-external-response",
+      "target": "concept.measured-state"
+    },
+    {
+      "type": "requires",
+      "source": "lo.stackstack-ship.verify-by-external-response",
+      "target": "concept.health-check"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.stackstack-ship",
+      "target": "assessment.stackstack-ship.trace-failed-stage-to-next-fix"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.stackstack-ship",
+      "target": "assessment.stackstack-ship.confirm-liveness-via-public-response"
+    },
+    {
+      "type": "assesses",
+      "source": "problem.stackstack-ship",
+      "target": "assessment.stackstack-ship.cleanup-preserves-availability"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.stackstack-ship",
+      "target": "problem.stackstack"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.stackstack-ship",
+      "target": "misconception.build-success-means-deployed"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.stackstack-ship",
+      "target": "misconception.deploy-success-record-means-live"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.stackstack-ship",
+      "target": "misconception.cleanup-means-delete-everything"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.stackstack-ship",
+      "target": "audience.platform-engineer"
+    },
+    {
+      "type": "related_to",
+      "source": "problem.stackstack-ship",
+      "target": "audience.vibe-coder"
+    }
+  ],
   "i18n": {
     "en": {
       "name": "As Far As the Outside",

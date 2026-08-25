@@ -43,11 +43,24 @@ container / `/verify` 契約をそのまま使う。この track 固有の約束
 | 30 | `cs-async-result-binding` | d3 | 3. I/Oと並行性 | 各 I/O が正しい → 完了結果を正しい request に結び付けた |
 | 40 | `cs-cache-generation-fence` | d3 | 4. キャッシュ無効化 | invalidate が完了した → 古い値は戻らない |
 | 50 | `cs-http-retry-idempotency` | d3 | 5. HTTP再送と冪等性 | 応答を受け取れなかった → 操作は起きなかった |
+| 60 | `cs-atomic-file-publish` | d3 | 6. 公開の不可分性 | 書き終えた内容は正しい → 公開そのものが不可分だった |
+| 70 | `cs-numeric-aggregation-order` | d3 | 7. 集約の順序と精度 | 各値は正しい → 合計は行の順序に依存しない |
+| 80 | `cs-protocol-state-guard` | d3 | 8. 状態機械と既定拒否 | 正常系の手順は通る → 手順を飛ばした相手も既定で拒否される |
+| 90 | `cs-dst-daily-rollup` | d3 | 9. 暦の日と、86400 秒の塊 | 固定 offset で日を切れる → 暦日は必ず 86400 秒とは限らない |
+| 100 | `cs-pagination-drift` | d3 | 10. 一覧の分割と動くデータ | 位置で分割すれば全件揃う → 動くデータでは位置が意味を変える |
+| 110 | `asm-worst-case-latency` | d4 | 11. 命令 1 個の最悪実行時間 | 1 命令は一瞬で終わる → 依存関係が先読みを止めると 2 桁遅くなる |
 
-第 1 章から第 5 章まで実装済み。時間や実 network に依存せず、immutable revision、明示的な
-`asyncio.Future` gate、late-fill schedule、commit後のresponse drop traceで境界の逆転を再現する。
+第 1 章から第 11 章まで実装済み。1-5 章は時間や実 network に依存せず、immutable revision、明示的な
+`asyncio.Future` gate、late-fill schedule、commit 後の response drop trace で境界の逆転を再現する。
+6-10 章 (第 2 期・第 3 期) も同じ制約を守り、rename の原子性、Kahan 和と Largest Remainder、状態機械の
+全遷移表、tz database ベースの暦日境界、keyset pagination をそれぞれ決定論的な fixture と hidden
+phase で再現する。11 章 (`asm-worst-case-latency`) だけは「監査対象の決定ログを読む」形ではなく、
+作者所有のハーネス上で参加者が命令 1 つのレイテンシを実測して押し上げる形式で、この track のもう 1 つの
+軸——**動作すること (速く終わる) と、設計が前提にしていること (最悪ケースの実行時間) が別物である**
+——を扱う。「壊れた実装が公開テストを通過する」という 1-10 章の形そのものではない派生形なので、次に
+章を足すときは 1-10 章の形へ戻すか、11 章のような派生形を明示的な選択として扱うかを先に決める。
 
-## これから作るもの
+## 実装した章の根拠
 
 Issue 407 は対象領域としてアルゴリズム / ネットワーク / DB / 並行性 / OS を挙げている。この track の
 判定基準は網羅ではなく「**壊れた実装が動作テストを通過するか**」なので、その基準で並べ替える。
@@ -78,12 +91,48 @@ Issue が最初に挙げている領域だが、この設計パターンには�
    読み、同じlogical operationをdurable receiptからreplayする。保証はexactly-once transportではなく、
    at-most-once business effectに限定する。前4章の語彙が再登場する位置なのでorder 50に置く。
 
+第 2 期 (order 60-90) は Issue 407 コメントで事前に相談してから着手した。基準は 1 期と同じ
+「**出力は正しいのに性質が壊れている**」領域だけを選ぶこと。
+
+6. **ファイル公開の atomicity** (実装済み: `cs-atomic-file-publish`)
+   書き終えたファイルの中身は正しい。書いている最中に読んだ側が半分のファイルを見る。
+   `db-a4-transaction` は SQL transaction の可視性を扱うが、こちらは filesystem の可視性境界で非重複。
+7. **数値集約の順序と精度** (実装済み: `cs-numeric-aggregation-order`)
+   合計は出るし小さい入力では一致する。桁が離れると加算順序で結果が変わる。新規領域。
+8. **プロトコル状態機械** (実装済み: `cs-protocol-state-guard`)
+   正常系のハンドシェイクは通る。状態を飛ばした遷移も受理してしまう。`signed-does-not-mean-safe` は
+   署名検証、こちらは順序と状態で非重複。
+9. **時刻境界の日次集計** (実装済み: `cs-dst-daily-rollup`)
+   集計値は出るし固定日付のテストは通る。DST の日だけ二重計上または欠落する。新規領域。
+
+第 3 期 (order 100-110) は Issue 407 上の事前相談を経ずに追加された (`cs-pagination-drift` は
+PR #479、`asm-worst-case-latency` は PR #484)。**既知の断絶**に記録する。
+
+10. **一覧のページネーションと動くデータ** (実装済み: `cs-pagination-drift`)
+    offset ページネーションは静止データでは全件揃う。動くデータでは行の挿入・削除で位置がずれ、
+    同じ行を二重に見せるか、1 行を丸ごと飛ばす。1-9 章の「出力は正しいのに性質が壊れている」型を
+    維持している。
+11. **命令 1 個の最悪実行時間** (実装済み: `asm-worst-case-latency`)
+    「1 命令は一瞬で終わる」という前提を、命令を遅くする側から壊す。1-10 章とは形が異なる派生章
+    (上の章立て表の注記を参照)。
+
 ### 既知の断絶
 
 - **1 章の前に置く導入が無い。** `cs-auth-claim-audit` は難易度 3 で、Python を読み書きできることと、
   HMAC が「鍵付きハッシュ」であることを知っていることを前提にしている。まったくの初学者はここから
   始められない。`stackstack-route` の 1-2 章が近い役割を果たすが、あちらは AWS 運用の導線であって
   この track の前提ではない。難易度 1-2 の導入問題が要る。
+- **第 3 期は Issue 407 上の事前相談を経ていない。** 1 期・2 期は「領域選定 → コメントで合意 → 個別
+  Issue 分割 → 実装」の順を踏んだが、`cs-pagination-drift` と `asm-worst-case-latency` は Issue へ
+  相談コメントを残さないまま追加された。両方とも実装内容はこの curriculum の判定基準に沿っているが、
+  章立ての合意プロセス自体は途切れている。次の章を足す前に、この断絶を埋めるか、恒久的な運用として
+  追認するかを決める。
+- **この文書と `challenges/cs-*/metadata.json` の突き合わせは、これまで手作業だった。** 1 期
+  (order 10-50) を書いた後、2 期・3 期が実装されてからも表が更新されないまま 3 回のリリースが進んだ
+  (commits `9d308e3`..`5c518f6` で表を書き、その後 `#435`-`#438`、`#479`、`#472`、`#484` で
+  order 60-110 の 6 章が増えたが、この文書は order 50 のまま止まっていた)。
+  `scripts/cs-foundations-learning-path.test.ts` がこの表と `track.order` / `track.chapter` の一致を
+  機械的に固定し、この drift を再発させない。
 
 ## 関連
 
