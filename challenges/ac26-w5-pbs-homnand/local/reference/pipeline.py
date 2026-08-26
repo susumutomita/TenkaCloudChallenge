@@ -32,7 +32,7 @@ next stage will combine with a ciphertext it does not match, silently.
 
 from __future__ import annotations
 
-from fixtures.generate import (
+from participant.fhe import (
     blind_rotation_noise,
     cmux,
     encode,
