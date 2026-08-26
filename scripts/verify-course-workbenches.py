@@ -107,6 +107,13 @@ SPLIT_PORTAL_MODULES = {
     # the verifier now. The supplied Week 5 stack stayed behind in `participant/fhe.py`,
     # which is where the starter and the public tests import it from.
     "ac26-w5-pbs-homnand": "participant.server",
+    # Issue 537/538 (Issue 543 option B2): same move. tests/hidden/check_commit.py
+    # grades every checkpoint and fixtures/generate.py implements node_hash under the
+    # exact name starter/commit.py's own node_hash stub asks the learner to write, both
+    # of which shipped in the single participant stage.
+    # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
+    # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
+    "ac26-w4-commit-open": "participant.server",
 }
 # Execute the heavier inspect/public-test adapter on representative problems from
 # each family. The catalogue's existing sharded suite executes every problem's own

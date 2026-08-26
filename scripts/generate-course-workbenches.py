@@ -83,6 +83,11 @@ PORTAL_PACKAGES = {
     # Same option B2 split, same reason: the hidden suite grades all eight checkpoints and
     # fixtures/ implements seven of the twelve stubs starter/pipeline.py ships.
     "ac26-w5-pbs-homnand": "participant",
+    # Issue 537/538 (Issue 543 option B2): the hidden suite grades every checkpoint and
+    # fixtures/generate.py implements node_hash under the exact name starter/commit.py's
+    # own node_hash stub asks the learner to write, so both left the participant stage
+    # and the Portal moved with them.
+    "ac26-w4-commit-open": "participant",
     "ac26-w4-sumcheck-drill": "participant",
     "ac26-w3-schnorr-drill": "participant",
     "ac26-w4-plonk-drill": "participant",

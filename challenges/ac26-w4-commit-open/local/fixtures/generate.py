@@ -114,3 +114,46 @@ def weak_leaf(index: int, value: int) -> bytes:
 def health_token(seed: str) -> str:
     cfg = setting(seed)
     return hashlib.sha256(f"health:{seed}:{cfg['length']}".encode()).hexdigest()[:16]
+
+
+def public_payload(seed: str) -> dict[str, object]:
+    """Everything a participant may see for this deployment. Contains no answer.
+
+    The single source `show.py`, `verifier/server.py`'s `GET /public`, and
+    `tests/public/test_commit.py` all build their payload from. What is deliberately
+    absent is `node_hash` (and every other function this module defines) itself --
+    Issue 537/538's stub-vs-implementation finding is that the starter's `node_hash`
+    stub shares its name with this module's complete Merkle node-combining function, so
+    handing this module to a learner's own container handed over a working
+    implementation for the price of one import. This payload carries only the VALUES
+    `build_tree`/`root_of`/`opening_for` produce -- the vector, the query, the leaf
+    hashes, the root, and the opening path for the query index -- never the functions
+    that derive them. None of those values is a checkpoint's answer either: the root
+    and the opening path are exactly what `show.py` has always printed, and a learner
+    is graded on whether their own code reproduces them, not on knowing them.
+
+    Issue 543 option B2: `fixtures/` -- this module -- does not ship in the participant
+    Docker stage at all (see ../Dockerfile). `participant/server.py`, `show.py` and the
+    public tests fetch this payload from the verifier at runtime instead of importing
+    it directly.
+    """
+    cfg = setting(seed)
+    values = list(cfg["values"])
+    levels = build_tree(values)
+    opening = opening_for(values, cfg["query"])
+    return {
+        "setting": {
+            "length": cfg["length"],
+            "values": values,
+            "query": cfg["query"],
+            "domain": cfg["domain"],
+        },
+        "leafHashesHex": [leaf.hex() for leaf in levels[0]],
+        "rootHex": root_of(values).hex(),
+        "treeLevels": len(levels),
+        "openingForQuery": [
+            {"hashHex": entry["hash"].hex(), "siblingIsLeft": entry["sibling_is_left"]}
+            for entry in opening
+        ],
+        "healthToken": health_token(seed),
+    }
