@@ -164,15 +164,37 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   named `ac26-w5-lwe-rlwe` as outstanding after #572 had merged it — the same staleness
   that this section already records as having cost a run.
 
-  What is left, with the detector's count each — `ac26-w3-passkey-assertion` (1),
-  `ac26-w3-field-inverse` (1). Landed so far: `cs-auth-claim-audit` and
+  **Nothing is left in this class.** Landed: `cs-auth-claim-audit` and
   `ac26-bridge-experiment` (#562), `ac26-w3-schnorr-drill` (#570), `ac26-w5-lwe-rlwe`
   (#572), `ac26-w5-rgsw-external` (#573), `ac26-w5-cmux-blind-rotation` (#579),
   `ac26-w5-pbs-homnand` (#581), `ac26-w4-commit-open` (#582, split out of #578),
-  `ac26-w5-extract-key-switch` (#584), `ac26-w5-encoding-noise` (#586).
-  Catalog count is 12 as of #586, down from 39. Runs have taken the largest count first,
-  so the two singletons are what is left — and both are single findings, so neither
-  says much about its own points until measured (see #582 and #584 below).
+  `ac26-w5-extract-key-switch` (#584), `ac26-w5-encoding-noise` (#586),
+  `ac26-w3-passkey-assertion` (#590), `ac26-w3-field-inverse` (#594).
+  Catalog count is 6 as of #594 and #564, down from 39; the six that remain are
+  `sha256-schedule-logic`'s and `sha256-compress-digest`'s `direct-value-comparison`
+  findings, a different class (`sha256-bytes-padding`'s four closed with #564). Runs took
+  the largest count first, so the last two here were singletons — and a single finding
+  said nothing about its own points until measured (see #582, #584 and #594 below).
+
+  #594 is the first in this class whose **public half takes arguments**. `make inspect
+  A=17 P=101` traces any pair the learner names, and `starter/field.py`'s own docstring
+  points at it, so the trace is participant surface by design and had to survive the
+  split: `GET /public` there takes the same optional `a`/`modulus`, and the default the
+  learner gets when they name neither (`p // 3 + 1`, `p`) moved into `fixtures/` beside
+  it rather than staying in `show.py`, which no longer has a prime to compute it from.
+  Copy it, not #586, for any problem whose `make inspect` accepts arguments.
+
+  #594 is also the first to measure **both** probes and act on the second. Its
+  participant-image free score needed two probes to state honestly: the shipped fixtures
+  module handed straight to the hidden suite passes **0 of 7**, because it defines no
+  `Field` or `FieldElement` at all; the starter with its three stubs delegated to that
+  module — the cheapest real use of the leak — passes **1 of 7, 35 of 200 points**, the
+  `egcd-trace` checkpoint. That is lower than the 70–145 the baseline entry carried from
+  #537's estimate: report the measurement, not the estimate you inherited. And the
+  submission-side probe (§ below, Issue #591) still scored that same **35 of 200** after
+  the split, so #594 ported #590's `sys.path`/`sys.modules` guard into its runner and
+  re-measured at 0. A split that closes only the participant image is half a fix on a
+  problem where the two probes disagree — measure both before claiming a leak is closed.
 
   #586 is the last of the Week 5 chain and the first in this class with **no supplied
   half at all**: `fixtures/generate.py` there is entirely seed derivation plus the graded
@@ -212,11 +234,11 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   whenever a rule stops being blind: never report a rise as a regression, or a fall as a
   closure.
 
-  **Both remaining are `status: draft`.** Since the gate's removal that no longer changes
-  what an agent may merge, but it still changes what the PR body has to say: a `draft`
-  problem carries no claim that anyone played it, so a split there needs no play evidence
-  — only an honest note that none was gathered. Never drop a needed README correction to
-  make a PR look smaller.
+  Both of the last two were `status: draft`. Since the gate's removal that no longer
+  changes what an agent may merge, but it still changes what the PR body has to say: a
+  `draft` problem carries no claim that anyone played it, so a split there needs no play
+  evidence — only an honest note that none was gathered. Never drop a needed README
+  correction to make a PR look smaller.
 
   `ac26-w5-pbs-homnand` (#581) is worth reading before the next one, because it is the
   first in this class whose supplied half was not already a separate file. Five earlier
