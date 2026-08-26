@@ -3,10 +3,17 @@ name: simulator-compatibility
 permissions:
   contents: read
 
+# Scoped to main for the same reason as ci.yml: a bare `push:` ran this twice for every
+# commit on a branch that had a pull request open.
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
+
+concurrency:
+  group: simulator-compatibility-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   # Full immutable commit. Update this only after the corresponding Simulator
