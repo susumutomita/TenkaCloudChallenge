@@ -62,6 +62,7 @@ PORTAL_PACKAGES = {
     "ac26-bridge-experiment": "participant",
     "ac26-bridge-properties": "participant",
     "ac26-w1-constraint-lab": "participant",
+    "ac26-w2-linear-shares": "participant",
     "ac26-w4-sumcheck-drill": "participant",
     "ac26-w3-schnorr-drill": "participant",
     "ac26-w4-plonk-drill": "participant",

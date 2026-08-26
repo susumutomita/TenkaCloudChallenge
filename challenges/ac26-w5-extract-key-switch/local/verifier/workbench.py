@@ -102,6 +102,28 @@ class PortalEditorSupport:
             for name in self.submitted_files
         }
 
+    def _child_env(self, **extra: str) -> dict[str, str]:
+        """The fixed environment `show.py` and the public tests run under.
+
+        Deliberately built from nothing rather than inherited, so a Portal run cannot
+        pick up whatever the server process happens to carry. The one value forwarded
+        from this process is `VERIFIER_PUBLIC_URL`, and only when it is set: a problem
+        whose `fixtures/` no longer ships in the participant image (Issue 543/537) has
+        no local way to derive this deployment's public evidence, and fetches it from
+        its own Compose-internal verifier's `GET /public` instead. Problems that still
+        carry `fixtures/` never set it and see exactly the environment they saw before.
+        """
+        env = {
+            "PATH": "/usr/local/bin:/usr/bin:/bin",
+            "FLAG_SEED": self.seed,
+            "PYTHONDONTWRITEBYTECODE": "1",
+            **extra,
+        }
+        verifier_public_url = os.environ.get("VERIFIER_PUBLIC_URL")
+        if verifier_public_url:
+            env["VERIFIER_PUBLIC_URL"] = verifier_public_url
+        return env
+
     def inspect_payload(self) -> dict[str, object]:
         show = self.root / "show.py"
         if not show.exists():
@@ -115,11 +137,7 @@ class PortalEditorSupport:
         result = self._run_process(
             [sys.executable, "-I", str(show)],
             cwd=self.root,
-            env={
-                "PATH": "/usr/local/bin:/usr/bin:/bin",
-                "FLAG_SEED": self.seed,
-                "PYTHONDONTWRITEBYTECODE": "1",
-            },
+            env=self._child_env(),
             timeout=self.run_timeout_seconds,
         )
         if result is None:
@@ -173,12 +191,7 @@ class PortalEditorSupport:
                 result = self._run_process(
                     [sys.executable, "-I", str(test_file)],
                     cwd=copied_root,
-                    env={
-                        "PATH": "/usr/local/bin:/usr/bin:/bin",
-                        "FLAG_SEED": self.seed,
-                        "PYTHONDONTWRITEBYTECODE": "1",
-                        "BROWSER_PUBLIC_TESTS": "1",
-                    },
+                    env=self._child_env(BROWSER_PUBLIC_TESTS="1"),
                     timeout=self.run_timeout_seconds,
                 )
                 transcript.append(f"== {test_file.name} ==")

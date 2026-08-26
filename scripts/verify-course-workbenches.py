@@ -73,6 +73,11 @@ SPLIT_PORTAL_MODULES = {
     "ac26-bridge-experiment": "participant.server",
     "ac26-bridge-properties": "participant.server",
     "ac26-w1-constraint-lab": "participant.server",
+    # Issue 537/538/543: same move, one problem at a time. This one keeps the shared
+    # adapter (it is in SHARED_TARGETS above), so the Portal API moved to
+    # participant/server.py together with the vendored participant/workbench.py, while
+    # the `tcw1.` seal is re-checked independently in verifier/server.py.
+    "ac26-w2-linear-shares": "participant.server",
 }
 # Execute the heavier inspect/public-test adapter on representative problems from
 # each family. The catalogue's existing sharded suite executes every problem's own
