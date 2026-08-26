@@ -8,7 +8,7 @@
  *   - SecureClient:  RLS enforced (cross-tenant + role + anon attacks all blocked)
  *
  * The grader's job is to turn those behaviours into a verdict, so the tests pin
- * exactly that: the secure state passes all 7, the broken state fails, and each
+ * exactly that: the secure state passes all 8, the broken state fails, and each
  * individual leak is attributed to the right assertion.
  */
 import { describe, expect, it } from "bun:test";
@@ -36,8 +36,9 @@ const allDocs = () => [
 
 /**
  * A correctly-RLS'd backend: a row is only visible/mutable when the actor's
- * organization matches the row's organization, delete is owner-only, INSERT is
- * pinned to the actor's own org (WITH CHECK), and the anon client sees nothing.
+ * organization matches the row's organization, delete is owner-only, INSERT and
+ * UPDATE are both pinned to the actor's own org (WITH CHECK), and the anon
+ * client sees nothing.
  */
 class SecureClient {
   constructor() {
@@ -53,7 +54,12 @@ class SecureClient {
   }
   async patchDocument(actor, id, patch) {
     const row = this.#find(id);
+    // USING: only rows already in the actor's own org can be targeted.
     if (!row || row.organization_id !== actor.organizationId) return { ok: true, rowsAffected: 0 };
+    // WITH CHECK: the row may not be rewritten into another org.
+    if (patch.organization_id !== undefined && patch.organization_id !== actor.organizationId) {
+      throw new Error("new row violates row-level security policy");
+    }
     Object.assign(row, patch);
     return { ok: true, rowsAffected: 1 };
   }
@@ -96,7 +102,7 @@ class BrokenClient {
     const row = this.#find(id);
     if (!row) return { ok: true, rowsAffected: 0 };
     Object.assign(row, patch);
-    return { ok: true, rowsAffected: 1 }; // patches ANY org's row
+    return { ok: true, rowsAffected: 1 }; // patches ANY org's row, org_id included
   }
   async insertDocument(_actor, doc) {
     this.rows.push({ id: `doc-${this.rows.length + 1}`, ...doc });
@@ -112,30 +118,31 @@ class BrokenClient {
 }
 
 describe("rls-tenant-isolation grader", () => {
-  it("should declare exactly the 7 issue assertions in order", () => {
+  it("should declare exactly the 8 issue assertions in order", () => {
     expect(ASSERTIONS.map((a) => a.id)).toEqual([
       "a-user-reads-own-doc",
       "a-user-cannot-read-b-doc",
       "a-user-cannot-patch-b-doc",
       "a-user-cannot-insert-into-b",
+      "a-owner-cannot-move-doc-to-b",
       "member-cannot-delete",
       "owner-can-delete",
       "anon-cannot-read",
     ]);
   });
 
-  it("should mark a correctly-RLS'd backend as correct with all 7 passing", async () => {
+  it("should mark a correctly-RLS'd backend as correct with all 8 passing", async () => {
     const verdict = await runGrader(new SecureClient(), { actors, docs });
     expect(verdict.correct).toBe(true);
-    expect(verdict.passedCount).toBe(7);
-    expect(verdict.total).toBe(7);
+    expect(verdict.passedCount).toBe(8);
+    expect(verdict.total).toBe(8);
     expect(verdict.results.every((r) => r.passed)).toBe(true);
   });
 
   it("should mark the vulnerable starter backend as incorrect", async () => {
     const verdict = await runGrader(new BrokenClient(), { actors, docs });
     expect(verdict.correct).toBe(false);
-    expect(verdict.passedCount).toBeLessThan(7);
+    expect(verdict.passedCount).toBeLessThan(8);
   });
 
   it("should fail every leak/role assertion on the broken backend and only pass the two legitimate-access ones", async () => {
@@ -145,6 +152,7 @@ describe("rls-tenant-isolation grader", () => {
       "a-user-cannot-read-b-doc",
       "a-user-cannot-patch-b-doc",
       "a-user-cannot-insert-into-b",
+      "a-owner-cannot-move-doc-to-b",
       "member-cannot-delete",
       "anon-cannot-read",
     ]);
@@ -177,6 +185,29 @@ describe("rls-tenant-isolation grader", () => {
     overRestrictive.deleteDocument = async () => ({ ok: true, rowsAffected: 0 }); // nobody can delete
     const verdict = await runGrader(overRestrictive, { actors, docs });
     expect(verdict.results.find((r) => r.id === "owner-can-delete").passed).toBe(false);
+    expect(verdict.correct).toBe(false);
+  });
+
+  it("should fail a backend that lets an own-org row be reassigned to another org", async () => {
+    // Issue #542: the 7-assertion grader scored a policy set as fully correct
+    // even though it left organization_id reassignable on UPDATE — the starter
+    // file's requirement #4 says it must not be. This pins the gap: a backend
+    // that is right about everything else must now fail, and fail on exactly
+    // that assertion.
+    const reassignable = new SecureClient();
+    reassignable.patchDocument = async (actor, id, _patch) => {
+      const row = reassignable.rows.find((r) => r.id === id);
+      // Still blocks another org's rows (the UPDATE policy's `using` half)...
+      if (!row || row.organization_id !== actor.organizationId) return { ok: true, rowsAffected: 0 };
+      // ...but accepts any organization_id on the row it does admit. Not
+      // persisted here: the live adapter rolls every grader probe back, so the
+      // later assertions see the untouched seed either way.
+      return { ok: true, rowsAffected: 1 };
+    };
+    const verdict = await runGrader(reassignable, { actors, docs });
+    expect(verdict.results.filter((r) => !r.passed).map((r) => r.id)).toEqual([
+      "a-owner-cannot-move-doc-to-b",
+    ]);
     expect(verdict.correct).toBe(false);
   });
 

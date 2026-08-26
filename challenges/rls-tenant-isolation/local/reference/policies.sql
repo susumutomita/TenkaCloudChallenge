@@ -39,6 +39,16 @@ create policy documents_insert_own_org on public.documents
 -- UPDATE: USING limits which rows can be targeted (own org only); WITH CHECK
 -- limits what they can become — organization_id may not be moved to another org,
 -- which blocks reassigning ownership across the tenant boundary.
+--
+-- Operator note (Issue #542): omitting this WITH CHECK does not by itself open
+-- the boundary. Postgres reuses the USING expression as the WITH CHECK
+-- expression when none is given, and the new row must also satisfy the SELECT
+-- policies — with a tenant-scoped SELECT policy either rule alone already
+-- rejects the moved row. It is spelled out anyway because those are incidental
+-- guards: a SELECT policy that also admits rows by author, plus a WITH CHECK
+-- that does not name organization_id, is enough to make the row movable. The
+-- grader's `a-owner-cannot-move-doc-to-b` assertion checks that behaviour
+-- directly rather than trusting the spelling.
 create policy documents_update_own_org on public.documents
   for update
   using (

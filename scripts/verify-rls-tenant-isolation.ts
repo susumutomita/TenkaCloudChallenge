@@ -15,12 +15,63 @@ const project = `tcc-rls-${process.pid}`;
 const temporary = mkdtempSync(join(LOCAL_DIR, ".rls-runtime-"));
 const starterDirectory = join(temporary, "starter");
 const referenceDirectory = join(temporary, "reference");
+const unpinnedUpdateDirectory = join(temporary, "unpinned-update");
 mkdirSync(starterDirectory);
 mkdirSync(referenceDirectory);
+mkdirSync(unpinnedUpdateDirectory);
 writeFileSync(join(starterDirectory, "policies.sql"), "-- intentionally vulnerable starter\n");
 writeFileSync(
   join(referenceDirectory, "policies.sql"),
   readFileSync(join(LOCAL_DIR, "reference/policies.sql"), "utf8"),
+);
+
+// Issue #542: a WRONG answer that the 7-assertion grader scored as fully
+// correct. SELECT is scoped to "my org's documents, plus documents I created"
+// and UPDATE carries a WITH CHECK that forgot to pin organization_id — so the
+// caller can hand one of their own rows to the other tenant, and because the
+// moved row is still visible to its creator, nothing else in the policy set
+// stops it. Every other assertion passes on this policy set, which is what makes
+// it the regression fixture for the 8th.
+writeFileSync(
+  join(unpinnedUpdateDirectory, "policies.sql"),
+  `-- Issue #542 regression fixture: NOT a reference answer. Deliberately leaves
+-- organization_id reassignable on UPDATE while satisfying every other rule.
+alter table public.documents enable row level security;
+alter table public.documents force row level security;
+
+create policy documents_select_own_or_authored on public.documents
+  for select
+  using (
+    app.is_authenticated()
+    and (
+      organization_id in (select app.current_org_ids())
+      or created_by = app.current_user_id()
+    )
+  );
+
+create policy documents_insert_own_org on public.documents
+  for insert
+  with check (
+    app.is_authenticated()
+    and organization_id in (select app.current_org_ids())
+  );
+
+-- The gap: WITH CHECK is present but does not constrain organization_id.
+create policy documents_update_unpinned on public.documents
+  for update
+  using (
+    app.is_authenticated()
+    and organization_id in (select app.current_org_ids())
+  )
+  with check (app.is_authenticated());
+
+create policy documents_delete_owner_only on public.documents
+  for delete
+  using (
+    app.is_authenticated()
+    and app.is_owner_of(organization_id)
+  );
+`,
 );
 
 async function availablePort(): Promise<number> {
@@ -93,14 +144,20 @@ async function waitForHealth(): Promise<void> {
   throw new Error(`RLS app did not become healthy: ${last}`);
 }
 
-async function verdict(): Promise<{ correct?: boolean; message?: string }> {
+type Verdict = {
+  correct?: boolean;
+  message?: string;
+  results?: { id: string; passed: boolean }[];
+};
+
+async function verdict(): Promise<Verdict> {
   const response = await fetch(`http://127.0.0.1:${verifyPort}/verify`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: "{}",
   });
   if (!response.ok) throw new Error(`/verify returned HTTP ${response.status}`);
-  return (await response.json()) as { correct?: boolean; message?: string };
+  return (await response.json()) as Verdict;
 }
 
 function assertNoProjectResources(): void {
@@ -131,6 +188,25 @@ try {
   console.log(`starter verdict: correct=false (${negative.message ?? "no message"})`);
   compose(["down", "--volumes", "--remove-orphans"]);
 
+  // Issue #542 regression: a policy set that leaves organization_id reassignable
+  // on UPDATE must be rejected, and rejected on exactly that assertion — it
+  // satisfies every other rule, so any other failure means the fixture drifted.
+  environment.RLS_SOLUTION_DIR = unpinnedUpdateDirectory;
+  compose(["up", "-d", "--no-build"]);
+  await waitForHealth();
+  const unpinned = await verdict();
+  const unpinnedFailures = (unpinned.results ?? []).filter((r) => !r.passed).map((r) => r.id);
+  if (unpinned.correct !== false) {
+    throw new Error(`reassignable organization_id unexpectedly passed: ${JSON.stringify(unpinned)}`);
+  }
+  if (unpinnedFailures.length !== 1 || unpinnedFailures[0] !== "a-owner-cannot-move-doc-to-b") {
+    throw new Error(
+      `reassignable organization_id failed the wrong assertions: ${JSON.stringify(unpinnedFailures)}`,
+    );
+  }
+  console.log("unpinned-UPDATE verdict: correct=false, failing only a-owner-cannot-move-doc-to-b");
+  compose(["down", "--volumes", "--remove-orphans"]);
+
   environment.RLS_SOLUTION_DIR = referenceDirectory;
   compose(["up", "-d", "--no-build"]);
   await waitForHealth();
@@ -145,6 +221,11 @@ try {
   const positive = await verdict();
   if (positive.correct !== true) {
     throw new Error(`reference solution failed: ${JSON.stringify(positive)}`);
+  }
+  if (!(positive.results ?? []).some((r) => r.id === "a-owner-cannot-move-doc-to-b" && r.passed)) {
+    throw new Error(
+      `reference verdict did not report a passing a-owner-cannot-move-doc-to-b: ${JSON.stringify(positive.results)}`,
+    );
   }
   console.log(`reference verdict: correct=true (${positive.message ?? "no message"})`);
 } finally {

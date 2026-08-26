@@ -2,8 +2,9 @@
  * pg-client — the live Postgres adapter the grader drives inside the container.
  *
  * It implements the same control surface the grader expects (getDocument /
- * patchDocument / insertDocument / deleteDocument / anonGetDocuments) by running
- * each call in a transaction where the request identity is bound to the two
+ * patchDocument / insertDocument / deleteDocument / anonGetDocuments) — where a
+ * patch may rewrite organization_id, which is the UPDATE side of WITH CHECK — by
+ * running each call in a transaction where the request identity is bound to the two
  * Supabase/PostgREST GUCs:
  *
  *   request.jwt.role  -> 'authenticated' for a signed-in actor, 'anon' otherwise
@@ -40,10 +41,16 @@ export function createPgGraderClient(sql) {
 
     async patchDocument(actor, documentId, patch) {
       return runWrite(sql, authenticated(actor), async (tx) => {
+        // `organization_id` is settable here on purpose: it is the probe for the
+        // UPDATE half of the WITH CHECK requirement (moving an own-org row into
+        // another org). A policy with only a `using` clause accepts it; one with
+        // `with check` raises "new row violates row-level security policy",
+        // which the grader reads as a blocked attack.
         const updated = await tx`
           update public.documents
           set title = coalesce(${patch.title ?? null}, title),
-              body  = coalesce(${patch.body ?? null}, body)
+              body  = coalesce(${patch.body ?? null}, body),
+              organization_id = coalesce(${patch.organization_id ?? null}::uuid, organization_id)
           where id = ${documentId}
           returning id`;
         return { ok: true, rowsAffected: updated.count };

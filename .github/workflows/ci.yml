@@ -289,7 +289,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.rls == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # 12 rather than 10: the runtime proof now boots a third policy variant (the
+    # Issue #542 regression fixture) on top of the starter and the reference.
+    timeout-minutes: 12
     env:
       CI: "true"
       npm_config_ignore_scripts: "true"
@@ -303,6 +305,12 @@ jobs:
         uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
         with:
           bun-version: "1.3.11"
+
+      # The grader's own unit tests (fake clients, no Postgres). The README tells
+      # authors to run these, but nothing ran them in CI, so a broken assertion
+      # only surfaced in the slower container proof below — or not at all.
+      - name: Run the grader unit tests
+        run: bun test challenges/rls-tenant-isolation/local/grader
 
       - name: Verify clean RLS startup and scoring
         run: bun run rls:runtime

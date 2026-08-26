@@ -8,6 +8,8 @@
  *
  *   client.getDocument(actor, documentId)        -> { rows: Doc[] }            | throws
  *   client.patchDocument(actor, documentId, p)   -> { ok, rowsAffected }       | throws
+ *       (a patch may carry `organization_id`, which is how the UPDATE half of
+ *        the WITH CHECK requirement is exercised)
  *   client.insertDocument(actor, doc)            -> { ok }                      | throws
  *   client.deleteDocument(actor, documentId)     -> { ok, rowsAffected }       | throws
  *   client.anonGetDocuments()                    -> { rows: Doc[] }            | throws
@@ -16,9 +18,9 @@
  * actors from the seed; the client binds them to the right authenticated session
  * (a real JWT/role in the container, a fake in unit tests).
  *
- * Each of the 7 attack assertions resolves to a `{ id, label, passed, detail }`
+ * Each of the 8 attack assertions resolves to a `{ id, label, passed, detail }`
  * result. A blocked attack (RLS did its job) is a PASS. The overall verdict is
- * "all 7 passed". `/verify` reports it; the platform records the verdict and
+ * "all 8 passed". `/verify` reports it; the platform records the verdict and
  * never sees the policies themselves.
  *
  * Why this shape: the same control surface is enforceable both ways. App-side
@@ -60,7 +62,7 @@ async function attempt(fn) {
 }
 
 /**
- * The 7 attack assertions, in issue order. Each takes the injected `client` and
+ * The 8 attack assertions, in issue order. Each takes the injected `client` and
  * the resolved `actors`/`docs` from the seed and returns a result object.
  *
  * actors: { aMember, aOwner, bMember, bOwner }
@@ -129,6 +131,30 @@ export const ASSERTIONS = [
         detail: passed
           ? "INSERT with a foreign organization_id was blocked (WITH CHECK)."
           : "LEAK: A-user inserted a row into company B by setting organization_id.",
+      };
+    },
+  },
+  {
+    id: "a-owner-cannot-move-doc-to-b",
+    label: "A-user JWT UPDATE own doc -> B org_id -> fails (WITH CHECK blocks reassignment)",
+    async run(client, actors, docs) {
+      // The other half of the same requirement as `a-user-cannot-insert-into-b`:
+      // WITH CHECK constrains what a row may BECOME, not only which rows a
+      // statement may target. A policy with `using` but no `with check` on
+      // UPDATE still blocks writes to another org's rows (that is the `using`
+      // clause, covered by `a-user-cannot-patch-b-doc`) yet lets the caller hand
+      // one of their OWN rows to another org by rewriting organization_id.
+      const outcome = await attempt(() =>
+        client.patchDocument(actors.aOwner, docs.aDoc.id, {
+          organization_id: docs.bDoc.organization_id,
+        }),
+      );
+      const passed = writeWasBlocked(outcome);
+      return {
+        passed,
+        detail: passed
+          ? "Reassigning organization_id on an own-org row was blocked (UPDATE ... WITH CHECK)."
+          : "LEAK: A-user handed their own document to company B by rewriting organization_id.",
       };
     },
   },

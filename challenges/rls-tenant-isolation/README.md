@@ -17,7 +17,7 @@ make local PROBLEM=rls-tenant-isolation   # from the TenkaCloud repo root
 
 - **Challenge surface:** <http://127.0.0.1:18080> — the documents API.
 - **Goal:** make every company's documents invisible and immutable to the other
-  company, enforced in the database, then submit to pass all 7 attack tests.
+  company, enforced in the database, then submit to pass all 8 attack tests.
 
 ## The story
 
@@ -105,7 +105,7 @@ empty → the container loads the vulnerable state), then restart:
 make local PROBLEM=rls-tenant-isolation   # rebuild/restart to re-apply policies
 ```
 
-Your policies must satisfy all seven checks:
+Your policies must satisfy all eight checks:
 
 1. RLS **enabled** on `public.documents` (and `force` so the table owner is bound too).
 2. `SELECT` only your own org's rows.
@@ -123,7 +123,7 @@ in policies: `app.current_user_id()`, `app.is_authenticated()`,
 
 The platform holds no answer. On submit, the local scoring API forwards to the
 container's loopback `/verify` (`POST http://127.0.0.1:18081/verify`), which runs
-the grader's **7 attack assertions** against live Postgres and returns
+the grader's **8 attack assertions** against live Postgres and returns
 `{ "correct": boolean }`:
 
 | # | assertion                                       | expected |
@@ -132,11 +132,12 @@ the grader's **7 attack assertions** against live Postgres and returns
 | 2 | A-user GET B-doc                                | blocked  |
 | 3 | A-user PATCH B-doc                              | blocked  |
 | 4 | A-user INSERT with B `org_id`                   | blocked  |
-| 5 | member DELETE own doc                           | blocked  |
-| 6 | owner DELETE own doc                            | succeeds |
-| 7 | anon GET documents                              | blocked  |
+| 5 | A-user UPDATE own doc to B `org_id`             | blocked  |
+| 6 | member DELETE own doc                           | blocked  |
+| 7 | owner DELETE own doc                            | succeeds |
+| 8 | anon GET documents                              | blocked  |
 
-All seven must pass. A correct fix scores 300 points; a wrong submission costs 10.
+All eight must pass. A correct fix scores 300 points; a wrong submission costs 10.
 
 ## Delivery model
 
@@ -166,7 +167,7 @@ rls-tenant-isolation/
     │   ├── pg-client.mjs          # live Postgres adapter the grader drives (RLS-bound role)
     │   └── package.json           # the `postgres` JS driver
     ├── grader/
-    │   ├── grade.mjs              # the 7 attack assertions (pure, dependency-injected)
+    │   ├── grade.mjs              # the 8 attack assertions (pure, dependency-injected)
     │   └── grade.test.mjs         # unit tests with fake clients (bun test, no live DB)
     ├── db/
     │   ├── schema.sql             # tables + identity helpers + app_api role
