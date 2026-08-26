@@ -198,11 +198,11 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   `cs-auth-claim-audit` and `ac26-bridge-experiment` (#562), `ac26-w3-schnorr-drill`
   (#570), `ac26-w5-lwe-rlwe` (#572), `ac26-w5-rgsw-external` (#573),
   `ac26-w5-cmux-blind-rotation` (#579), `ac26-w5-pbs-homnand` (#581),
-  `ac26-w4-commit-open` (#582, split out of #578), `ac26-w5-extract-key-switch` (#583).
-  Catalog count is 17 as of #583, down from 39. Runs have taken the largest count first,
+  `ac26-w4-commit-open` (#582, split out of #578), `ac26-w5-extract-key-switch` (#584).
+  Catalog count is 17 as of #584, down from 39. Runs have taken the largest count first,
   so `ac26-w5-encoding-noise` is next.
 
-  #583 is the opposite pole from #582 on the measurement below: its free score was the
+  #584 is the opposite pole from #582 on the measurement below: its free score was the
   whole problem. All six names `starter/extract.py` asks for are implemented complete in
   `fixtures/generate.py` under those exact names, so handing that module straight to the
   hidden suite passed **all eight checkpoints, 300 of 300 points**, for nothing written —
@@ -238,9 +238,9 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   Week 5 problems' machinery lived inside `fixtures/generate.py` alongside the graded
   pipeline, so B2 there meant splitting that file along the line the problem already drew
   (`participant/fhe.py` supplied, `fixtures/generate.py` graded and re-exporting it) rather
-  than moving an existing module. #583 copied that shape verbatim for
+  than moving an existing module. #584 copied that shape verbatim for
   `ac26-w5-extract-key-switch`, down to the file name, and `ac26-w5-encoding-noise` is the
-  same again — copy #581 or #583 rather than designing a third one. It is also the first
+  same again — copy #581 or #584 rather than designing a third one. It is also the first
   where handing
   `fixtures.generate` straight to the hidden suite does **not** pass everything — the
   artifacts carry an envelope the bare functions do not attach, so the measured free score
