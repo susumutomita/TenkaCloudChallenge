@@ -107,9 +107,20 @@ verify」は**正しい実装でも** 40 回に 1 回通ります。これはパ
 ## 保証範囲
 
 ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も
-あなたの管理下にあるので、 image の中身はあなたに対して秘匿されていません。
-`reference/` と `tests/hidden/` を bind-mount しないのは、あなたの git checkout に
-紛れ込ませないためであって、手が届かなくするためではありません。
+あなたの管理下にあるので、どの stage も自分でビルドできます。image の中身が
+あなたに対して秘匿されているわけではありません。
+
+その前提の上で、配置は 2 つの container に分かれています。あなたが起動する
+Workbench (公開 port 18102) には starter・公開テスト・`fixtures/`・`show.py` だけが
+入ります。採点する verifier は別 image で、`tests/hidden/` と一緒に
+`internal` なネットワーク上にあり、host には 1 つも port を publish しません。
+`/verify` の宛先は今までどおり 18102 で、Workbench が内側へ転送します。
+
+これは**誤配送の防止**であって機密性ではありません。8 つの checkpoint はすべて
+`tests/hidden/` をあなたの提出コードに対して走らせて判定するので、その中身が
+同じ image に入っていると、これから何が assert されるかが読めてしまいます
+(hint の penalty を払わずに済んでしまう箇所が 2 つありました)。それを塞いだのが
+この分割です。`reference/` と `mutation.py` は従来どおり author stage だけにあります。
 
 verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
 ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。

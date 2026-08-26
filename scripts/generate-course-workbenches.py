@@ -68,6 +68,10 @@ PORTAL_PACKAGES = {
     # grader stopped shipping there.
     "ac26-w1-underconstraint": "participant",
     "ac26-w2-linear-shares": "participant",
+    # Issue 537/543: every checkpoint here is graded by running tests/hidden/, which
+    # shipped in the single participant stage alongside the Portal. The Portal moved to
+    # participant/ when the hidden suite stopped shipping there.
+    "ac26-w3-schnorr": "participant",
     "ac26-w4-sumcheck-drill": "participant",
     "ac26-w3-schnorr-drill": "participant",
     "ac26-w4-plonk-drill": "participant",

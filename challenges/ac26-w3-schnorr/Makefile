@@ -12,9 +12,15 @@ FLAG_SEED ?= local-dev-seed
 IMAGE := ac26-w3-schnorr
 
 # starter/ is bind-mounted read-only: the learner edits their checkout, the container
-# reads it. reference/ and tests/hidden/ stay inside the image and are not bind-mounted,
-# which keeps them out of the checkout rather than out of reach -- local mode is
-# honor-system verification. See TEMPLATE.md "Assurance scope".
+# reads it.
+#
+# Issue 543/537: `tests/hidden/` and `verifier/` are no longer in the participant image
+# at all -- they are built into the separate `verifier` stage that only Compose starts
+# (see local/Dockerfile and local/docker-compose.yml). `make test` and `make inspect`
+# still run against the participant image alone, because `fixtures/` ships there and
+# neither one needs a verdict. `reference/` and `mutation.py` remain author-stage only.
+# Whoever controls the Docker daemon can still build any stage: this is misdelivery
+# prevention, not confidentiality. See TEMPLATE.md "Assurance scope".
 RUN := docker run --rm -e FLAG_SEED=$(FLAG_SEED) \
 	-v $(CURDIR)/local/starter:/problem/starter:ro $(IMAGE)
 
