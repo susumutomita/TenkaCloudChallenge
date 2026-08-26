@@ -54,11 +54,93 @@ the arithmetic rather than trusting this paragraph.
 
 None of this is secure. The parameters are small enough to enumerate and the secret falls
 to linear algebra. It is a toy of the mechanism.
+
+## Where this module lives, since Issue 543 option B2
+
+It implements `rlwe_add`, `rlwe_sub`, `cmux`, `monomial_rotate`, `rotate_ciphertext`,
+`conditional_rotate`, `blind_rotate` and `blind_rotate_trace` -- the eight names
+`starter/cmux.py` asks the learner to write -- because it cannot derive a deployment's CMUX
+demonstration or its blind-rotation trace without them. So it ships in the `verifier` and
+`author` Docker stages only (see ../Dockerfile), never in the participant one.
+`public_payload` at the bottom is what `show.py` and the public tests read instead, over the
+verifier's `GET /public`. The supplied half a participant still needs lives in
+`participant/ring.py` and is imported below rather than restated, so the ring the learner
+builds on and the ring the hidden suite grades against are the same functions.
 """
 
 from __future__ import annotations
 
 import hashlib
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+# The supplied half, single-sourced. `participant/ring.py` is the copy that ships in the
+# participant image.
+from participant.ring import (  # noqa: E402 - after the sys.path insert above
+    centered,
+    decode,
+    decompose,
+    decompose_poly,
+    digest,
+    encode,
+    external_product,
+    gadget_vector,
+    normalize,
+    pad as _pad,
+    ring_add,
+    ring_mul,
+    ring_sub,
+    rgsw_encrypt,
+    rlwe_decrypt,
+    rlwe_encrypt,
+    rlwe_phase,
+    rlwe_trivial,
+)
+
+__all__ = [
+    "VIABLE",
+    "blind_rotate",
+    "blind_rotate_trace",
+    "bootstrap_key",
+    "centered",
+    "cmux",
+    "conditional_rotate",
+    "decode",
+    "decompose",
+    "decompose_poly",
+    "digest",
+    "encode",
+    "external_product",
+    "gadget_vector",
+    "health_token",
+    "lwe_phase",
+    "lwe_sample",
+    "lwe_secret",
+    "monomial_rotate",
+    "noise_bound",
+    "normalize",
+    "params",
+    "public_payload",
+    "reference_model",
+    "rgsw_encrypt",
+    "rgsw_material",
+    "ring_add",
+    "ring_mul",
+    "ring_noise",
+    "ring_random",
+    "ring_sub",
+    "rlwe_add",
+    "rlwe_decrypt",
+    "rlwe_encrypt",
+    "rlwe_phase",
+    "rlwe_secret",
+    "rlwe_sub",
+    "rlwe_trivial",
+    "rotate_ciphertext",
+    "test_vector",
+]
 
 #: (base, levels, degree, lwe_dimension) whose blind-rotation noise provably fits the budget.
 #: Enumerated rather than sampled: most combinations do not fit, and a parameter set that
@@ -118,89 +200,6 @@ def noise_bound(par: dict) -> int:
     return par["dimension"] * per_cmux
 
 
-# ---------------------------------------------------------------------------
-# Supplied: the ring and the encoding
-# ---------------------------------------------------------------------------
-
-
-def normalize(par: dict, coefficients) -> tuple[int, ...]:
-    """Fold a raw coefficient list into `Z_q[X]/(X^N+1)`.
-
-    Index `i` beyond the degree wraps to `i % N` with the sign `(-1)^(i // N)`. That is the
-    whole negacyclic rule, and monomial rotation is nothing more than this applied to a list
-    that has been shifted right by the exponent.
-    """
-    n, q = par["degree"], par["modulus"]
-    out = [0] * n
-    for index, value in enumerate(coefficients):
-        sign = -1 if (index // n) % 2 else 1
-        out[index % n] = (out[index % n] + sign * value) % q
-    return tuple(out)
-
-
-def _pad(par: dict, coefficients) -> list[int]:
-    values = list(coefficients)[: par["degree"]]
-    return values + [0] * (par["degree"] - len(values))
-
-
-def ring_add(par: dict, a, b) -> tuple[int, ...]:
-    return normalize(par, [x + y for x, y in zip(_pad(par, a), _pad(par, b))])
-
-
-def ring_sub(par: dict, a, b) -> tuple[int, ...]:
-    return normalize(par, [x - y for x, y in zip(_pad(par, a), _pad(par, b))])
-
-
-def ring_mul(par: dict, a, b) -> tuple[int, ...]:
-    left, right = _pad(par, a), _pad(par, b)
-    raw = [0] * (2 * par["degree"] - 1)
-    for i, x in enumerate(left):
-        for j, y in enumerate(right):
-            raw[i + j] += x * y
-    return normalize(par, raw)
-
-
-def encode(par: dict, m: int) -> int:
-    return (m % par["plaintext_modulus"]) * par["delta"] % par["modulus"]
-
-
-def decode(par: dict, c: int) -> int:
-    delta = par["delta"]
-    return ((c % par["modulus"]) + delta // 2) // delta % par["plaintext_modulus"]
-
-
-def centered(par: dict, x: int) -> int:
-    q = par["modulus"]
-    value = x % q
-    return value - q if value >= (q + 1) // 2 else value
-
-
-# ---------------------------------------------------------------------------
-# Supplied: the gadget and RGSW (ac26-w5-rgsw-external's output)
-# ---------------------------------------------------------------------------
-
-
-def gadget_vector(par: dict) -> tuple[int, ...]:
-    return tuple(par["base"] ** i for i in range(par["levels"]))
-
-
-def decompose(par: dict, value: int) -> tuple[int, ...]:
-    base, remaining = par["base"], value % par["modulus"]
-    digits = []
-    for _ in range(par["levels"]):
-        digits.append(remaining % base)
-        remaining //= base
-    return tuple(digits)
-
-
-def decompose_poly(par: dict, poly) -> tuple[tuple[int, ...], ...]:
-    per_coefficient = [decompose(par, c) for c in _pad(par, poly)]
-    return tuple(
-        tuple(per_coefficient[k][i] for k in range(par["degree"]))
-        for i in range(par["levels"])
-    )
-
-
 def rlwe_secret(seed: str, par: dict, label: str = "public") -> tuple[int, ...]:
     """0/1 coefficients, never all zero -- an all-zero secret degenerates the scheme."""
     s = _stream(seed, f"secret:{label}")
@@ -220,38 +219,6 @@ def ring_noise(seed: str, par: dict, label: str) -> tuple[int, ...]:
     return tuple(_pick(s, 2 * i, -NOISE_RANGE, NOISE_RANGE) for i in range(par["degree"]))
 
 
-def rlwe_encrypt(par: dict, secret, messages, mask, noise) -> dict:
-    product = ring_mul(par, mask, secret)
-    encoded = [encode(par, m) for m in _pad(par, messages)]
-    return {
-        "a": normalize(par, mask),
-        "b": normalize(
-            par, [p + e + n for p, e, n in zip(product, encoded, _pad(par, noise))]
-        ),
-    }
-
-
-def rlwe_trivial(par: dict, messages) -> dict:
-    """A ciphertext of `messages` with no mask and no noise: `a = 0`, `b = encoded`.
-
-    It decrypts under every secret, which is exactly why the accumulator starts here -- the
-    test vector is public, and starting it noiseless is what leaves the whole noise budget
-    to the CMUXes.
-    """
-    return {
-        "a": tuple([0] * par["degree"]),
-        "b": normalize(par, [encode(par, m) for m in _pad(par, messages)]),
-    }
-
-
-def rlwe_phase(par: dict, secret, ciphertext: dict) -> tuple[int, ...]:
-    return ring_sub(par, ciphertext["b"], ring_mul(par, ciphertext["a"], secret))
-
-
-def rlwe_decrypt(par: dict, secret, ciphertext: dict) -> tuple[int, ...]:
-    return tuple(decode(par, value) for value in rlwe_phase(par, secret, ciphertext))
-
-
 def rgsw_material(seed: str, par: dict, label: str) -> dict:
     """The randomness an RGSW encryption consumes: one mask and one noise per row."""
     rows = 2 * par["levels"]
@@ -259,59 +226,6 @@ def rgsw_material(seed: str, par: dict, label: str) -> dict:
         "masks": tuple(ring_random(seed, par, f"{label}:m{j}") for j in range(rows)),
         "noises": tuple(ring_noise(seed, par, f"{label}:n{j}") for j in range(rows)),
     }
-
-
-def rgsw_encrypt(par: dict, secret, selector: int, material: dict) -> tuple:
-    """2L rows of (a, b). Rows below L carry the gadget in `a`, rows above it in `b`."""
-    levels, gadget = par["levels"], gadget_vector(par)
-    rows = []
-    for j in range(2 * levels):
-        mask, noise = material["masks"][j], material["noises"][j]
-        body = normalize(
-            par, [x + y for x, y in zip(ring_mul(par, mask, secret), _pad(par, noise))]
-        )
-        if j < levels:
-            rows.append(
-                (normalize(par, [mask[0] + selector * gadget[j], *mask[1:]]), body)
-            )
-        else:
-            rows.append(
-                (
-                    normalize(par, mask),
-                    normalize(par, [body[0] + selector * gadget[j - levels], *body[1:]]),
-                )
-            )
-    return tuple(rows)
-
-
-def external_product(par: dict, rgsw, ciphertext: dict) -> dict:
-    """`d . RGSW`, with `d` the two decomposed halves concatenated. No secret, by design."""
-    digits = list(decompose_poly(par, ciphertext["a"])) + list(
-        decompose_poly(par, ciphertext["b"])
-    )
-    left = right = tuple([0] * par["degree"])
-    for j in range(2 * par["levels"]):
-        left = ring_add(par, left, ring_mul(par, digits[j], rgsw[j][0]))
-        right = ring_add(par, right, ring_mul(par, digits[j], rgsw[j][1]))
-    return {"a": left, "b": right}
-
-
-# ---------------------------------------------------------------------------
-# Supplied: the ciphertext digest the trace reports
-# ---------------------------------------------------------------------------
-
-
-def digest(par: dict, ciphertext: dict) -> str:
-    """A short, stable fingerprint of a ciphertext. Supplied so the format is not guesswork.
-
-    It is a hash of the ciphertext, so two ciphertexts that decrypt to the same plaintext
-    still have different digests. That is the point: a CMUX output that shares a digest with
-    one of its candidates is that candidate, which is the shape of a plaintext branch.
-    """
-    payload = ":".join(
-        str(value) for value in (*_pad(par, ciphertext["a"]), *_pad(par, ciphertext["b"]))
-    )
-    return hashlib.sha256(payload.encode()).hexdigest()[:12]
 
 
 # ---------------------------------------------------------------------------
@@ -472,6 +386,131 @@ def reference_model(par: dict, secret, sample: dict, plaintext) -> tuple[int, ..
     phase = lwe_phase(par, secret, sample)
     rotated = monomial_rotate(par, [encode(par, m) for m in plaintext], -phase)
     return tuple(decode(par, value) for value in rotated)
+
+
+def public_payload(seed: str) -> dict:
+    """Everything the participant image is allowed to see, and nothing else.
+
+    This is the single place that decides what "public" means for this problem, and it is
+    exactly two things:
+
+    - **The demonstration `show.py` has always printed.** The rotation table, the two-branch
+      CMUX row, and the step-by-step blind-rotation trace were participant-visible before
+      Issue 543 and stay participant-visible after it. The split moved where they are
+      computed, not who may read them. Both `CASE` variants are carried, because `make
+      inspect CASE=0` is part of that demonstration and this process cannot ask the
+      verifier a second question.
+    - **The inputs the public tests feed into the learner's own functions.** Parameters,
+      secrets, the LWE sample, the bootstrapping key, the RGSW material and the test vector
+      -- arguments the graded functions receive anyway.
+
+    What is deliberately absent is any checkpoint's ground truth. Every checkpoint is graded
+    by running `tests/hidden/check_cmux.py` against the learner's file on values derived
+    here from the seed; `transfer` runs under a derived seed whose parameters appear nowhere
+    below. The digests in the trace are hashes of ciphertexts, not the ciphertexts: a
+    learner cannot invert one into an output their own loop failed to produce.
+    """
+    par = params(seed)
+    degree = par["degree"]
+    unit = tuple([1] + [0] * (degree - 1))
+    secret = rlwe_secret(seed, par)
+    m0 = tuple((index + 1) % par["plaintext_modulus"] for index in range(degree))
+    m1 = tuple((value + 2) % par["plaintext_modulus"] for value in m0)
+    ct0 = rlwe_encrypt(par, secret, m0, ring_random(seed, par, "s0"), ring_noise(seed, par, "s0"))
+    ct1 = rlwe_encrypt(par, secret, m1, ring_random(seed, par, "s1"), ring_noise(seed, par, "s1"))
+
+    branches = []
+    for selector in (0, 1):
+        rgsw = rgsw_encrypt(par, secret, selector, rgsw_material(seed, par, f"show{selector}"))
+        out = cmux(par, rgsw, ct0, ct1)
+        branches.append(
+            {
+                "selector": selector,
+                "digest": digest(par, out),
+                "decrypts": list(rlwe_decrypt(par, secret, out)),
+                "equalsACandidate": (out["a"], out["b"])
+                in ((ct0["a"], ct0["b"]), (ct1["a"], ct1["b"])),
+            }
+        )
+
+    ring_secret = rlwe_secret(seed, par, "ring")
+    plaintext = test_vector(seed, par, "show")
+    accumulator = rlwe_trivial(par, plaintext)
+    cases = {}
+    for case, bits in (
+        ("1", lwe_secret(seed, par)),
+        ("0", tuple([0] * par["dimension"])),
+    ):
+        key = bootstrap_key(seed, par, ring_secret, bits, "show")
+        sample = lwe_sample(seed, par, bits, "show")
+        phase = lwe_phase(par, bits, sample)
+        rotated = monomial_rotate(par, [encode(par, m) for m in plaintext], -phase)
+        cases[case] = {
+            "sample": {"mask": list(sample["mask"]), "body": sample["body"], "modulus": sample["modulus"]},
+            "trace": [dict(record) for record in blind_rotate_trace(par, key, sample, accumulator)],
+            "decrypts": list(rlwe_decrypt(par, ring_secret, blind_rotate(par, key, sample, accumulator))),
+            "model": list(reference_model(par, bits, sample, plaintext)),
+            "phase": phase,
+            "rotatedDecodes": [decode(par, value) for value in rotated],
+        }
+
+    return {
+        "healthToken": health_token(seed),
+        "params": dict(par),
+        "noiseBound": noise_bound(par),
+        "budget": par["delta"] // 2,
+        "rotationTable": {
+            "unit": list(unit),
+            "steps": [
+                {"exponent": k, "result": list(monomial_rotate(par, unit, k))}
+                for k in range(2 * degree + 1)
+            ],
+            "inverse": {
+                "exponent": 2 * degree - 1,
+                "result": list(monomial_rotate(par, unit, -1)),
+            },
+        },
+        "branchDemo": {
+            "m0": list(m0),
+            "m1": list(m1),
+            "rows": branches,
+        },
+        "accumulator": {"plaintext": list(plaintext), "a": list(accumulator["a"]), "b": list(accumulator["b"])},
+        "cases": cases,
+        # The public tests build their own ciphertexts and RGSW rows from these, using the
+        # supplied `participant/ring.py` -- the same arguments the graded functions are
+        # handed, and nothing that says what those functions should return.
+        "testInputs": {
+            "secret": list(secret),
+            "ringSecret": list(ring_secret),
+            "lweSecret": list(lwe_secret(seed, par)),
+            "publicMask": list(ring_random(seed, par, "public")),
+            "pair": {
+                "m0": list(m0),
+                "m1": list(m1),
+                "masks": [list(ring_random(seed, par, f"pub{which}")) for which in (0, 1)],
+                "noises": [list(ring_noise(seed, par, f"pub{which}")) for which in (0, 1)],
+            },
+            "rgswMaterial": _material_payload(rgsw_material(seed, par, "pub")),
+            "bootstrapMaterial": [
+                _material_payload(rgsw_material(seed, par, f"public:bk{index}"))
+                for index in range(par["dimension"])
+            ],
+            "sample": _sample_payload(lwe_sample(seed, par, lwe_secret(seed, par))),
+            "testVector": list(test_vector(seed, par)),
+        },
+    }
+
+
+def _material_payload(material: dict) -> dict:
+    return {
+        "masks": [list(mask) for mask in material["masks"]],
+        "noises": [list(noise) for noise in material["noises"]],
+    }
+
+
+def _sample_payload(sample: dict) -> dict:
+    return {"mask": list(sample["mask"]), "body": sample["body"], "modulus": sample["modulus"]}
 
 
 def health_token(seed: str) -> str:

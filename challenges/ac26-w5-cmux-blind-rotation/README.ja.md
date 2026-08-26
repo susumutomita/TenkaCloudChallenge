@@ -15,7 +15,7 @@ Blind Rotation · **Role:** `mechanism` · **想定時間:** 75〜105 分 · **�
 その角度を知りません。
 
 環や RLWE や RGSW や external product を作り直すわけではありません。
-`fixtures.generate` がすべて正しい形で提供します。それらは `ac26-w5-lwe-rlwe` と
+`participant.ring` がすべて正しい形で提供します。それらは `ac26-w5-lwe-rlwe` と
 `ac26-w5-rgsw-external` の成果物です。この問題は選択そのものと、その選択が積み上がる先です。
 
 ## CMUX は 1 行
@@ -136,10 +136,20 @@ Week 5 の教材は公開済みなので、 `courseAlignment` は `week5/README.
 
 ## 保証範囲
 
-ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も
-あなたの管理下にあるので、 image の中身はあなたに対して秘匿されていません。
+ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも
+あなたの管理下にあるので、あなたが build したものはあなたに対して秘匿されていません。
 `reference/` と `tests/hidden/` を bind-mount しないのは、あなたの git checkout に
 紛れ込ませないためであって、手が届かなくするためではありません。
+
+そのうえでデプロイが行うのは、事故で手渡さないことです。 container は 2 つです。
+あなたが話す Workbench は starter、public test、`participant/ring.py`、`show.py` を持ちます。
+採点側の image は `fixtures/`、`tests/hidden/`、verifier を持ち、ポートを一切公開せず、
+gateway のない Docker network に置かれます。 `show.py` と public test は、このデプロイの
+パラメータ・回転表・trace を verifier の `GET /public` から読みます。そこが返すのは問題であって
+checkpoint の期待値ではありません。 `fixtures/generate.py` はそれらを導出するために
+`starter/cmux.py` が書かせる 8 個の関数をすべて実装する必要があるので、あなたが実行する
+image には入りません
+（[#543](https://github.com/susumutomita/TenkaCloudChallenge/issues/543)）。
 
 verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
 ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。

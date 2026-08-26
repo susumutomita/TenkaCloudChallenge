@@ -11,6 +11,7 @@ anything you wrote, and they check selector 0 as carefully as selector 1.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -20,32 +21,87 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "starter"))
 
 import cmux as submission  # noqa: E402
-from fixtures.generate import (  # noqa: E402
-    bootstrap_key,
-    lwe_sample,
-    lwe_secret,
-    monomial_rotate,
-    params,
+
+# The supplied half of the problem, and only that: the ring, RLWE, RGSW and the external
+# product this problem does not ask you to write. It ships in the participant image;
+# `fixtures/generate.py`, which implements the eight graded names, does not.
+from participant.ring import (  # noqa: E402
     rgsw_encrypt,
-    rgsw_material,
-    ring_noise,
-    ring_random,
     rlwe_decrypt,
     rlwe_encrypt,
-    rlwe_secret,
     rlwe_trivial,
-    test_vector,
 )
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 
+def _public_payload() -> dict:
+    """This deployment's parameters, secrets, sample, key material and test vector.
+
+    Issue 543 option B2: this file used to import `fixtures.generate` directly. That module
+    derives a deployment's rotation table, CMUX rows and blind-rotation trace, which it
+    cannot do without working `rlwe_add`, `rlwe_sub`, `cmux`, `monomial_rotate`,
+    `rotate_ciphertext`, `conditional_rotate`, `blind_rotate` and `blind_rotate_trace` --
+    the eight names `starter/cmux.py` asks the learner to write. It does not ship in the
+    `participant` Docker stage any more (see ../../Dockerfile), so this deployment's own
+    verifier is the only source for the values below: `PUBLIC_EVIDENCE_JSON` when
+    `participant/server.py` has already fetched it (the Portal path, which the sandboxed
+    run behind `make test` also takes), `VERIFIER_PUBLIC_URL` fetched directly when it has
+    not.
+    """
+    injected = os.environ.get("PUBLIC_EVIDENCE_JSON")
+    if injected:
+        return json.loads(injected)
+    verifier_public_url = os.environ.get("VERIFIER_PUBLIC_URL")
+    if verifier_public_url:
+        from urllib.error import HTTPError, URLError
+        from urllib.request import urlopen
+
+        try:
+            with urlopen(verifier_public_url, timeout=10) as response:  # noqa: S310
+                return json.loads(response.read().decode("utf-8"))
+        except (HTTPError, URLError, TimeoutError, OSError, ValueError) as error:
+            # Same message as show.py, for the same reason: an unreachable verifier is a
+            # torn-down deployment, not a failing submission, and a urllib traceback reads
+            # like the latter.
+            raise SystemExit(
+                "cannot reach this deployment's verifier "
+                f"({verifier_public_url}): {type(error).__name__}.\n"
+                "The parameters these tests run on live there since Issue 543 option B2. "
+                "Start it with `make verifier-up` and try again."
+            ) from error
+    # Neither is set: this only resolves where `fixtures/` is actually on disk, which is a
+    # checkout (this file run directly, e.g. by
+    # scripts/ac26-w5-cmux-blind-rotation.test.ts) or the verifier/author Docker stage, and
+    # never inside a built `participant` image -- so this branch existing does not reopen
+    # the leak above.
+    from fixtures.generate import public_payload
+
+    return public_payload(SEED)
+
+
+PUBLIC = _public_payload()
+INPUTS = PUBLIC["testInputs"]
+
+
+def params(_seed: str = SEED) -> dict:
+    """The deployment's parameters, as served. Signature kept so the checks read the same."""
+    return dict(PUBLIC["params"])
+
+
+def _material(payload: dict) -> dict:
+    return {
+        "masks": tuple(tuple(mask) for mask in payload["masks"]),
+        "noises": tuple(tuple(noise) for noise in payload["noises"]),
+    }
+
+
 def _pair(par: dict) -> tuple:
-    secret = rlwe_secret(SEED, par)
-    m0 = tuple((index + 1) % par["plaintext_modulus"] for index in range(par["degree"]))
-    m1 = tuple((value + 2) % par["plaintext_modulus"] for value in m0)
+    secret = tuple(INPUTS["secret"])
+    pair = INPUTS["pair"]
+    m0, m1 = tuple(pair["m0"]), tuple(pair["m1"])
     ciphertexts = tuple(
-        rlwe_encrypt(par, secret, messages, ring_random(SEED, par, f"pub{which}"), ring_noise(SEED, par, f"pub{which}"))
+        rlwe_encrypt(par, secret, messages, tuple(pair["masks"][which]), tuple(pair["noises"][which]))
         for which, messages in enumerate((m0, m1))
     )
     return secret, m0, m1, ciphertexts
@@ -53,7 +109,7 @@ def _pair(par: dict) -> tuple:
 
 def check_rotation_by_zero_is_identity() -> str:
     par = params(SEED)
-    poly = ring_random(SEED, par, "public")
+    poly = tuple(INPUTS["publicMask"])
     if tuple(submission.monomial_rotate(par, poly, 0)) != tuple(poly):
         return "rotating by zero changed the polynomial"
     return ""
@@ -61,7 +117,7 @@ def check_rotation_by_zero_is_identity() -> str:
 
 def check_rotation_wraps_with_a_sign() -> str:
     par = params(SEED)
-    poly = ring_random(SEED, par, "public")
+    poly = tuple(INPUTS["publicMask"])
     got = tuple(submission.monomial_rotate(par, poly, par["degree"]))
     want = tuple((-value) % par["modulus"] for value in poly)
     if got != want:
@@ -72,7 +128,7 @@ def check_rotation_wraps_with_a_sign() -> str:
 def check_selector_one_takes_the_second_branch() -> str:
     par = params(SEED)
     secret, _, m1, (ct0, ct1) = _pair(par)
-    rgsw = rgsw_encrypt(par, secret, 1, rgsw_material(SEED, par, "pub"))
+    rgsw = rgsw_encrypt(par, secret, 1, _material(INPUTS["rgswMaterial"]))
     product = submission.cmux(par, rgsw, ct0, ct1)
     got = rlwe_decrypt(par, secret, {"a": tuple(product["a"]), "b": tuple(product["b"])})
     if got != m1:
@@ -83,11 +139,20 @@ def check_selector_one_takes_the_second_branch() -> str:
 def check_blind_rotation_agrees_with_its_own_steps() -> str:
     """Compares the loop against `conditional_rotate` applied by hand — self-consistency only."""
     par = params(SEED)
-    ring_secret = rlwe_secret(SEED, par, "ring")
-    bits = lwe_secret(SEED, par)
-    key = bootstrap_key(SEED, par, ring_secret, bits)
-    sample = lwe_sample(SEED, par, bits)
-    accumulator = rlwe_trivial(par, test_vector(SEED, par))
+    ring_secret = tuple(INPUTS["ringSecret"])
+    bits = tuple(INPUTS["lweSecret"])
+    # The key is the supplied `rgsw_encrypt` applied to each secret bit -- the same thing
+    # `bootstrap_key` did, built here from the material the verifier served.
+    key = tuple(
+        rgsw_encrypt(par, ring_secret, bit, _material(material))
+        for bit, material in zip(bits, INPUTS["bootstrapMaterial"])
+    )
+    sample = {
+        "mask": tuple(INPUTS["sample"]["mask"]),
+        "body": INPUTS["sample"]["body"],
+        "modulus": INPUTS["sample"]["modulus"],
+    }
+    accumulator = rlwe_trivial(par, tuple(INPUTS["testVector"]))
 
     current = submission.rotate_ciphertext(par, accumulator, -sample["body"])
     for index, mask in enumerate(sample["mask"]):
@@ -98,7 +163,9 @@ def check_blind_rotation_agrees_with_its_own_steps() -> str:
     got = rlwe_decrypt(par, ring_secret, {"a": tuple(looped["a"]), "b": tuple(looped["b"])})
     if got != stepwise:
         return f"the loop gave {got}, its own steps gave {stepwise}"
-    if got == tuple(monomial_rotate(par, [0] * par["degree"], 0)):
+    # Not `monomial_rotate([0] * N, 0)`: that is one of the graded functions, and this
+    # process no longer has an implementation of it that is not the learner's own.
+    if got == tuple([0] * par["degree"]):
         return "the blind rotation decrypted to all zeroes"
     return ""
 

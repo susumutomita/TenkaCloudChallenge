@@ -100,6 +100,7 @@ SPLIT_PORTAL_MODULES = {
     # left that stage too. `show.py` and the public tests read `GET /public` from the
     # verifier now. The supplied ring stayed behind in `participant/ring.py`.
     "ac26-w5-rgsw-external": "participant.server",
+    "ac26-w5-cmux-blind-rotation": "participant.server",
 }
 # Execute the heavier inspect/public-test adapter on representative problems from
 # each family. The catalogue's existing sharded suite executes every problem's own

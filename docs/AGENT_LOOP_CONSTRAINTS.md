@@ -178,14 +178,14 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   named `ac26-w5-lwe-rlwe` as outstanding after #572 had merged it — the same staleness
   that this section already records as having cost a run.
 
-  What is left, with the detector's count each — `ac26-w5-cmux-blind-rotation` (8),
-  `ac26-w5-pbs-homnand` (7), `ac26-w5-extract-key-switch` (6),
-  `ac26-w5-encoding-noise` (5), `ac26-w4-commit-open` (1),
-  `ac26-w3-passkey-assertion` (1), `ac26-w3-field-inverse` (1). Landed so far:
-  `cs-auth-claim-audit` and `ac26-bridge-experiment` (#562), `ac26-w3-schnorr-drill`
-  (#570), `ac26-w5-lwe-rlwe` (#572), `ac26-w5-rgsw-external` (#573). Catalog count is 39
-  as of #576. Runs have taken the largest count first, so `ac26-w5-cmux-blind-rotation`
-  is next.
+  What is left, with the detector's count each — `ac26-w5-pbs-homnand` (7),
+  `ac26-w5-extract-key-switch` (6), `ac26-w5-encoding-noise` (5),
+  `ac26-w4-commit-open` (1), `ac26-w3-passkey-assertion` (1),
+  `ac26-w3-field-inverse` (1). Landed so far: `cs-auth-claim-audit` and
+  `ac26-bridge-experiment` (#562), `ac26-w3-schnorr-drill` (#570), `ac26-w5-lwe-rlwe`
+  (#572), `ac26-w5-rgsw-external` (#573), `ac26-w5-cmux-blind-rotation` (#579). Catalog
+  count is 31 as of #579, down from 39. Runs have taken the largest count first, so
+  `ac26-w5-pbs-homnand` is next.
 
   The last two entries are new to this list, and neither is new work landing on it —
   #576 only made them **visible** (§2). `ac26-w3-field-inverse` is the `egcd` placeholder
