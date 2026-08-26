@@ -71,7 +71,13 @@ make inspect
 make test
 make test-one ID=signature
 make reset
+make verifier-down   # stop the grading container these three start
 ```
+
+Those three commands run through `docker compose`: the Workbench container they start has the
+starter and the public tests, and reads this deployment's fixtures from a second, unpublished
+container over the compose network. `make verifier-up` starts that second container on its own,
+and `make verifier-down` stops the stack.
 
 Complete these functions in `local/starter/assertion.py`:
 
@@ -106,10 +112,13 @@ Primary sources:
 
 ## Assurance scope
 
-Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
-daemon, and the image, so nothing inside that image is hidden from you: `reference/` and
-`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than
-out of reach.
+Local mode is **self-paced, honor-system verification**. Someone who owns the Docker daemon and
+every container in the compose stack cannot be prevented from inspecting hidden material. The
+boundary here is misdelivery, not confidentiality against that person: the Workbench container
+you build and run carries the starter and the public tests only — no fixtures, no hidden tests,
+no reference solution, no verifier. Those live only in a second, unpublished container the
+Workbench reaches over the compose network, and in the author-only image `make reference-test`
+builds.
 
 The verifier's narrower guarantees still matter: participant source runs with time, memory,
 process and output caps; a checkpoint can only credit the id it echoes; verdicts do not reveal
