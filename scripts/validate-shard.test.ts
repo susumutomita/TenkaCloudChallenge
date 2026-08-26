@@ -28,6 +28,14 @@ import {
 const REPO_ROOT = new URL("..", import.meta.url).pathname;
 const WORKFLOW = readFileSync(join(REPO_ROOT, ".github/workflows/ci.yml"), "utf8");
 
+/** The slice of `text` from the first line containing `start` up to the next `end`. */
+function between(text: string, start: string, end: string): string {
+  const from = text.indexOf(start);
+  if (from === -1) return "";
+  const to = text.indexOf(end, from);
+  return to === -1 ? text.slice(from) : text.slice(from, to);
+}
+
 describe("the shard partition", () => {
   const files = suiteFiles();
 
@@ -159,11 +167,43 @@ describe("the CI workflow agrees with the partition", () => {
     const listed = (needs?.[1] ?? "").split(",").map((entry) => entry.trim());
     expect(listed.sort()).toEqual([...jobs].sort());
 
-    // Match the assertion, not the mention. Every job result is also echoed for
-    // the log, and a `toContain("needs.checks.result")` was satisfied by that echo
-    // alone — deleting the line that actually gates on it left this test green.
+    // Match the decision, not the mention. Every job result is also echoed for the
+    // log, and a `toContain("needs.checks.result")` was satisfied by that echo alone —
+    // deleting the line that actually gated on it left this test green. So require two
+    // things per job: its result is bound to an environment variable of its own, and
+    // that variable is named in one of the aggregation job's two assertion lists.
+    const strict = between(WORKFLOW, 'for pair in "changes:', "done");
+    const tolerant = between(WORKFLOW, 'for pair in "rls-runtime:', "done");
     for (const job of jobs) {
-      expect(WORKFLOW).toContain(`test "\${{ needs.${job}.result }}" = "success"`);
+      const binding = new RegExp(String.raw`^\s+([A-Z_]+): \$\{\{ needs\.${job}\.result \}\}$`, "mu").exec(
+        WORKFLOW,
+      );
+      expect(binding, `${job}'s result is not bound to an environment variable`).not.toBeNull();
+      const term = `"${job}:$${binding?.[1]}"`;
+      expect(
+        strict.includes(term) || tolerant.includes(term),
+        `${job} is never asserted — it is bound to ${binding?.[1]} but that never reaches the verdict`,
+      ).toBe(true);
+    }
+
+    // `skipped` counts as a pass only in the tolerant list, and only the jobs gated on
+    // `changes` may appear there. A job that always runs must not drift into it, or a
+    // real skip (a cancelled dependency, a bad `if:`) would read as a pass.
+    const gated = new Set(
+      jobs.filter((job) => {
+        const start = WORKFLOW.indexOf(`\n  ${job}:\n`);
+        const rest = WORKFLOW.slice(start + 1);
+        const next = /^ {2}[\w-]+:$/mu.exec(rest.slice(rest.indexOf("\n")));
+        const block = next === null ? rest : rest.slice(0, rest.indexOf("\n") + next.index);
+        return block.includes("if: needs.changes.outputs.");
+      }),
+    );
+    expect(gated.size).toBeGreaterThan(0);
+    for (const job of jobs) {
+      if (gated.has(job)) continue;
+      expect(tolerant, `${job} is not gated on changes, so skipped must not pass for it`).not.toContain(
+        `"${job}:$`,
+      );
     }
   });
 });

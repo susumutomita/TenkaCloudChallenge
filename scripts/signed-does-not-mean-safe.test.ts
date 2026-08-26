@@ -592,7 +592,13 @@ describe("signed-does-not-mean-safe metadata and sources", () => {
     expect(/needs:\s*\[([^\]]+)\]/.exec(workflow)?.[1]?.split(",").map((job) => job.trim())).toContain(
       "signed-npm-runtime",
     );
-    expect(workflow).toContain('test "${{ needs.signed-npm-runtime.result }}" = "success"');
+    // `validate` no longer asserts this job with an inline expression: the runtime jobs
+    // are now skipped when the diff cannot reach them, so the aggregation reads each
+    // result from an environment binding and decides in a list. Require both halves --
+    // the binding, and the name actually reaching the verdict -- because either one
+    // alone can be present while the job goes ungated.
+    expect(workflow).toContain("SIGNED_NPM: ${{ needs.signed-npm-runtime.result }}");
+    expect(workflow).toContain('"signed-npm-runtime:$SIGNED_NPM"');
     expect(JSON.parse(readRoot("package.json")).scripts["signed-npm:runtime"]).toBe(
       "bun run scripts/verify-signed-does-not-mean-safe.ts",
     );
