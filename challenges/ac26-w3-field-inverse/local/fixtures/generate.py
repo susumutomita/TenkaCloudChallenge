@@ -107,3 +107,61 @@ def health_token(seed: str) -> str:
     return hashlib.sha256(
         f"health:{seed}:{prime_modulus(seed)}:{composite_modulus(seed)}".encode()
     ).hexdigest()[:16]
+
+
+def default_trace_subject(seed: str) -> tuple[int, int]:
+    """The pair `make inspect` traces when the learner names neither A nor P.
+
+    Lifted verbatim out of `show.py`, which used to compute it from an imported
+    `prime_modulus`. The rule is unchanged; only the side of the split it runs on is.
+    """
+    p = prime_modulus(seed)
+    return p // 3 + 1, p
+
+
+def public_payload(seed: str, a: int | None = None, modulus: int | None = None) -> dict[str, object]:
+    """Everything a participant may see for this deployment. Carries values, not functions.
+
+    The single source `show.py`, `verifier/server.py`'s `GET /public` and
+    `tests/public/test_field.py` all build their view from. Every field below is
+    something `make inspect` already printed before Issue 543 option B2, so the split
+    changes where a participant reads it, not what they may see -- including the trace,
+    which `make inspect A=<value> P=<modulus>` has always printed for any pair the
+    learner names, and which `starter/field.py`'s own docstring points them at.
+
+    What is deliberately absent is this module itself. Issue 537/538's
+    stub-vs-implementation finding is that `egcd` above is a complete implementation
+    under the exact name `starter/field.py`'s own stub asks the learner to write, and
+    `egcd_rows` is the row-for-row trace its `egcd_trace` stub asks for -- so while
+    `fixtures/` shipped in the participant image, the `egcd-trace` checkpoint (35 of
+    this problem's 200 points) was one `import` away, with no comparison anywhere near
+    it. Serving the derived values keeps `make inspect` and the public tests working
+    without shipping the derivation.
+
+    `PRIMES` and `COMPOSITES` are not here either: which moduli other deployments draw
+    from is not something this deployment's `make inspect` has ever printed.
+    """
+    subject_a, subject_modulus = default_trace_subject(seed)
+    chosen_modulus = modulus or subject_modulus
+    chosen_a = a or subject_a
+    if chosen_modulus < 1:
+        raise ValueError("modulus must be positive")
+    normalized = chosen_a % chosen_modulus
+    gcd, coefficient, _t = egcd(normalized, chosen_modulus)
+    composite = composite_modulus(seed)
+    inverse = coefficient % chosen_modulus if gcd == 1 else None
+    return {
+        "healthToken": health_token(seed),
+        "primeModulus": prime_modulus(seed),
+        "compositeModulus": composite,
+        "smallestNonInvertible": non_invertible(seed, composite),
+        "trace": {
+            "a": chosen_a,
+            "modulus": chosen_modulus,
+            "normalized": normalized,
+            "rows": egcd_rows(normalized, chosen_modulus),
+            "gcd": gcd,
+            "inverse": inverse,
+            "verification": None if inverse is None else (chosen_a * inverse) % chosen_modulus,
+        },
+    }

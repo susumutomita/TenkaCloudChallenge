@@ -19,11 +19,6 @@
       "problem": "sha256-compress-digest",
       "issue": 538,
       "reason": "Not named in #537. _check_avalanche compares against a seed-independent, non-underscored function defined directly in verifier/server.py; _check_properties/_check_storage compare against fixtures.generate.quiz_answer, reachable from the participant image."
-    },
-    {
-      "problem": "ac26-w3-field-inverse",
-      "issue": 537,
-      "reason": "Confirmed in #537 (70/200 certain, up to 145/200) and reported by this detector for the first time now: the trivial-literal list held `return 0` but not `return (0, 0, 0)`, so `egcd`'s placeholder tuple read as a real implementation. starter/ asks the learner to write `egcd` while fixtures/generate.py ships a complete same-named one into the participant stage. stub-vs-implementation class — awaiting the #543 B2 rollout, not a detector defect."
     }
   ]
 }

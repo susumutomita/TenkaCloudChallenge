@@ -7,6 +7,7 @@ Fermat's little theorem, passes this file completely.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -16,13 +17,45 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "starter"))
 
 import field as submission  # noqa: E402
-from fixtures.generate import prime_modulus  # noqa: E402
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 
+def _load_public_evidence() -> dict:
+    """This deployment's moduli -- what `show.py` prints.
+
+    Issue 537/538 (Issue 543 option B2): this file used to import `fixtures.generate`
+    directly. That module implements `egcd` under the exact name the starter's own stub
+    asks the learner to write, and `egcd_rows` supplies the trace its `egcd_trace` stub
+    asks for, so it does not ship in the `participant` Docker stage at all any more (see
+    ../../Dockerfile). This deployment's own verifier is the only source for the public
+    half now: `PUBLIC_EVIDENCE_JSON` when the Portal has already fetched it, or
+    `VERIFIER_PUBLIC_URL` fetched directly when it has not.
+    """
+    injected = os.environ.get("PUBLIC_EVIDENCE_JSON")
+    if injected:
+        return json.loads(injected)
+    verifier_public_url = os.environ.get("VERIFIER_PUBLIC_URL")
+    if verifier_public_url:
+        from urllib.request import urlopen
+
+        with urlopen(verifier_public_url, timeout=10) as response:  # noqa: S310
+            return json.loads(response.read().decode("utf-8"))
+    # Neither is set: this only resolves when `fixtures/` is actually on disk, which is
+    # true for a checkout (this file run directly, e.g. by
+    # scripts/ac26-w3-field-inverse.test.ts) and the verifier/author Docker stages, and
+    # never inside a built `participant` image -- so this branch does not reopen the
+    # leak above.
+    from fixtures.generate import public_payload
+
+    return public_payload(SEED)
+
+
+PUBLIC = _load_public_evidence()
+
+
 def check_elements_are_canonical() -> str:
-    p = prime_modulus(SEED)
+    p = PUBLIC["primeModulus"]
     f = submission.Field(p)
     for raw in (0, 1, p, p + 1, -1):
         element = f.element(raw)
@@ -32,7 +65,7 @@ def check_elements_are_canonical() -> str:
 
 
 def check_arithmetic_on_small_values() -> str:
-    p = prime_modulus(SEED)
+    p = PUBLIC["primeModulus"]
     f = submission.Field(p)
     a, b = f.element(6), f.element(7)
     if (a + b).value != 13 % p:
@@ -43,7 +76,7 @@ def check_arithmetic_on_small_values() -> str:
 
 
 def check_inverse_of_one_element() -> str:
-    p = prime_modulus(SEED)
+    p = PUBLIC["primeModulus"]
     f = submission.Field(p)
     a = f.element(6)
     if (a * a.inverse()).value != 1:
