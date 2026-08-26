@@ -114,9 +114,9 @@ Blocked on an owner decision — **do not start these**:
 Previously blocked by `playability-gate`, now unblocked: PR #564 (`sha256-bytes-padding`)
 and PR #578 (`sha256-schedule-logic`) were held because they rewrite a `status: ready`
 problem's READMEs and the gate demanded a human `playtest-verified` label. The gate was
-deleted on 2026-08-27, so both are ordinary PRs again — rebase them onto `main` and merge
-when their checks are green. The same wall is gone from `sha256-compress-digest` and the
-rest of that class.
+deleted on 2026-08-27, so both are ordinary PRs again. **#564 has since merged**
+(`e007a5c`); #578 is still open — rebase it onto `main` and merge when its checks are
+green. The same wall is gone from `sha256-compress-digest` and the rest of that class.
 
 What the gate's removal does **not** change: §1 and §3 still hold. Nothing machine-checks
 them now, so a PR that rewrites a `ready` problem's participant surface should say, in its
@@ -174,9 +174,11 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   Check `git ls-remote --heads origin` before starting anything here: two sessions
   work this list with no claim mechanism, and #583 was thrown away for duplicating #584.
   Pushing the branch before doing the work is what #590 did to claim it.
-  Catalog count is 11 as of #590, down from 39. Runs have taken the
-  largest count first, so one singleton is what is left — and a single finding says
-  nothing about its own points until measured (see #582 and #584 below).
+  Catalog count is 7 after #590 and #564, down from 39: `ac26-w3-field-inverse` (1,
+  this class) plus `sha256-schedule-logic` (3) and `sha256-compress-digest` (3), which are
+  `direct-value-comparison` and now unblocked. Runs have taken the
+  largest count first, so one singleton is what is left in this class — and a single
+  finding says nothing about its own points until measured (see #582 and #584 below).
 
   **What a B2 split does not close, measured.** The split takes the material out of the
   *participant image*. It does not take it out of the image the *submission runs in*:
@@ -189,7 +191,8 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   3/3 (200/200) the same way until #590 added the guard `cs-transaction-visibility-audit`
   already uses: drop the `fixtures`/`tests` modules and the problem root from `sys.path`
   and `sys.modules` before importing the submission. 41 verifiers still lack it; Issue
-  #591 carries the evidence and the proposed catalog-wide test.
+  #591 carries the evidence and the proposed catalog-wide test. #564 landed without the
+  guard, so it is one of those 41 — that is Issue #591's work, not a defect in #564.
 
   Two consequences for reporting. `scripts/check-answer-reachability.ts` only ever sees
   the participant image, so a finding count says nothing about this path — never write
