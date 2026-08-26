@@ -204,15 +204,38 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   named `ac26-w5-lwe-rlwe` as outstanding after #572 had merged it — the same staleness
   that this section already records as having cost a run.
 
-  What is left, with the detector's count each — `ac26-w3-passkey-assertion` (1),
-  `ac26-w3-field-inverse` (1). Landed so far: `cs-auth-claim-audit` and
+  What is left, with the detector's count each — `ac26-w3-field-inverse` (1). Landed so
+  far: `cs-auth-claim-audit` and
   `ac26-bridge-experiment` (#562), `ac26-w3-schnorr-drill` (#570), `ac26-w5-lwe-rlwe`
   (#572), `ac26-w5-rgsw-external` (#573), `ac26-w5-cmux-blind-rotation` (#579),
   `ac26-w5-pbs-homnand` (#581), `ac26-w4-commit-open` (#582, split out of #578),
   `ac26-w5-extract-key-switch` (#584), `ac26-w5-encoding-noise` (#586).
-  Catalog count is 12 as of #586, down from 39. Runs have taken the largest count first,
-  so the two singletons are what is left — and both are single findings, so neither
-  says much about its own points until measured (see #582 and #584 below).
+  `ac26-w3-passkey-assertion` is PR #590, Draft while CI decides — do not start it again,
+  and check `git ls-remote --heads origin` before starting anything here: two sessions
+  work this list with no claim mechanism, and #583 was thrown away for duplicating #584.
+  Catalog count is 11 with #590 applied, 12 on main, down from 39. Runs have taken the
+  largest count first, so one singleton is what is left — and a single finding says
+  nothing about its own points until measured (see #582 and #584 below).
+
+  **What a B2 split does not close, measured.** The split takes the material out of the
+  *participant image*. It does not take it out of the image the *submission runs in*:
+  every verifier's runner does `sys.path.insert(0, {root!r})` before importing the
+  submitted file, and `fixtures/` and `tests/hidden/` are on that path because grading
+  needs them. So a one-line submission — `from fixtures.generate import *`, nothing
+  implemented — still scores, after the split, on merged problems: **8/8 checkpoints
+  (300/300) on #584**, **4/7 (115/200) on #586**, 0/8 on #582 — in each case exactly the
+  free score that was measured *before* the split. `ac26-w3-passkey-assertion` was
+  3/3 (200/200) the same way until #590 added the guard `cs-transaction-visibility-audit`
+  already uses: drop the `fixtures`/`tests` modules and the problem root from `sys.path`
+  and `sys.modules` before importing the submission. 41 verifiers still lack it; Issue
+  #591 carries the evidence and the proposed catalog-wide test.
+
+  Two consequences for reporting. `scripts/check-answer-reachability.ts` only ever sees
+  the participant image, so a finding count says nothing about this path — never write
+  "N fewer findings" as if it were the closure (§2 already says this; here is why it
+  bites). And measure **two** probes per split, not one: the participant image's
+  reachability *and* a submission that imports the material at grading time. A PR body
+  that reports only the first, as the merged ones above do, overstates what landed.
 
   #586 is the last of the Week 5 chain and the first in this class with **no supplied
   half at all**: `fixtures/generate.py` there is entirely seed derivation plus the graded
