@@ -22,7 +22,7 @@ make local PROBLEM=sqli-demo
 
 プラットフォームは正解を保持しません。提出内容をループバックの
 `POST http://127.0.0.1:18081/verify`へ転送し、コンテナが返す
-`{ "correct": boolean }`を採点します。正解は200点、誤答は10点減点です。
+`{ "correct": boolean }`を採点します。正解は100点、誤答は5点減点です。
 
 フラグと管理者パスワードはデプロイごとのランダムな`FLAG_SEED`から導出するため、
 実行ごとに変わり、秘密値はリポジトリに保存されません。
@@ -42,8 +42,8 @@ make local PROBLEM=sqli-demo
 },
 "scoring": {
   "kind": "verify",
-  "points": 200,
-  "wrongAnswerPenalty": 10,
+  "points": 100,
+  "wrongAnswerPenalty": 5,
   "hints": [ … ]
 }
 ```

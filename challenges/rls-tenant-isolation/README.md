@@ -137,7 +137,7 @@ the grader's **8 attack assertions** against live Postgres and returns
 | 7 | anon GET documents                              | blocked  |
 | 8 | owner direct SQL UPDATE own doc's `org_id`      | blocked  |
 
-All eight must pass. A correct fix scores 300 points; a wrong submission costs 10.
+All eight must pass. A correct fix scores 200 points; a wrong submission costs 10.
 
 Check 8 exists because `patchDocument`/check 3 only exercises the fields the
 app's PATCH endpoint forwards (`title`, `body` — it never forwards
@@ -176,7 +176,7 @@ future reviewer — can verify just by reading the policy.
   "verifyUrl": "http://127.0.0.1:18081/verify",
   "secretEnv": ["FLAG_SEED"]
 },
-"scoring": { "kind": "verify", "points": 300, "wrongAnswerPenalty": 10, "hints": [ … ] }
+"scoring": { "kind": "verify", "points": 200, "wrongAnswerPenalty": 10, "hints": [ … ] }
 ```
 
 ```
