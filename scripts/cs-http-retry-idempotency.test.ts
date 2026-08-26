@@ -42,7 +42,7 @@ print(json.dumps({
     ) as Record<string, number>;
     expect(Object.keys(failures).toSorted()).toEqual(["bind", "generalize", "replay"]);
     for (const count of Object.values(failures)) expect(count).toBeGreaterThan(0);
-  });
+  }, 180_000);
 
   it("passes the reference and kills durable, binding, replay, race, and validation mutants", () => {
     const output = python("mutation.py");
@@ -50,7 +50,11 @@ print(json.dumps({
     expect(output).toContain("uses a JSON sidecar as the receipt source of truth");
     expect(output).toContain("all 9 mutations killed");
     expect(output).not.toContain("SURVIVED");
-  });
+    // `python()` allows this 180s; without the argument below Bun stops the test at its
+    // own 5s default, so the budget the helper declares is not the budget that binds.
+    // The nine-mutant run takes ~2s on an idle machine and was measured at 6399ms on a
+    // loaded CI runner, which turned main red with no failing assertion.
+  }, 180_000);
 
   it("grades the documented behavior without requiring an unpublished receipt table name", () => {
     const probe = `
@@ -69,7 +73,7 @@ with tempfile.TemporaryDirectory() as directory:
     print(json.dumps(check.check_generalize(module, "alternate-schema-seed")))
 `;
     expect(JSON.parse(python("-c", [probe]))).toEqual([]);
-  });
+  }, 180_000);
 
   it("shows commit before response drop and varies the audit answer by seed", () => {
     const probe = `
@@ -88,7 +92,7 @@ print(json.dumps({"trace": trace, "answers": answers}))
     expect(JSON.stringify(evidence.trace[1])).toContain("ledger_committed");
     expect(evidence.trace[2]).toBe("response_dropped_before_client_received_it");
     expect(new Set(evidence.answers.map(JSON.stringify)).size).toBeGreaterThanOrEqual(5);
-  });
+  }, 180_000);
 
   it("derives every hidden operation field from the verifier seed", () => {
     const probe = `
@@ -126,7 +130,7 @@ print(json.dumps({"distinct": distinct, "samples": samples}))
     }
     const oneSeed = evidence.samples.map(JSON.stringify);
     expect(new Set(oneSeed).size).toBe(oneSeed.length);
-  });
+  }, 180_000);
 
   it("does not expose hidden checker modules to participant imports", () => {
     const probe = `
@@ -148,7 +152,7 @@ print(server._check_code("check_replay", spoof), server._check_code("check_repla
       timeout: 120_000,
     });
     expect(output.trim()).toBe("False True");
-  });
+  }, 180_000);
 
   it("does not let participant imports replace verdict serialization or hard exit", () => {
     const probe = `
@@ -172,7 +176,7 @@ print(server._check_code("check_replay", spoof), server._check_code("check_repla
       timeout: 120_000,
     });
     expect(output.trim()).toBe("False True");
-  });
+  }, 180_000);
 
   it("separates participant Workbench, hidden verifier, and author artifacts", () => {
     const dockerfile = readFileSync(join(LOCAL, "Dockerfile"), "utf8");
@@ -235,7 +239,7 @@ finally:
       env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" },
     });
     expect(output.trim()).toBe("368");
-  });
+  }, 180_000);
 
   it("accepts valid concurrency when the shared Linux uid already owns 129 threads", () => {
     const probe = `

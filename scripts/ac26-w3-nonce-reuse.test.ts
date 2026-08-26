@@ -153,7 +153,13 @@ describe("ac26-w3-nonce-reuse: the log contains exactly one solvable reuse", () 
       "print(json.dumps({name: rows[:5] for name, rows in bad.items() if rows}))",
     ].join("\n");
     expect(JSON.parse(python(["-c", script]).stdout.trim())).toEqual({});
-  });
+    // `python()` above allows the sweep 180s; without this argument Bun stops the test
+    // at its own 5s default, so the budget the helper declares is not the budget that
+    // binds. This sweep finishes well inside a second alone and was observed at 5017ms
+    // -- a timeout, with no failing assertion -- when the whole 125-file suite ran
+    // concurrently on a loaded machine. Same fix, same reason, as the eight tests in
+    // scripts/cs-http-retry-idempotency.test.ts, one of which did turn main red.
+  }, 180_000);
 
   // Two same-signer reuse groups would make "find the reuse" ambiguous: the attack would
   // recover a key, just not reliably the victim's. On a group this small a hash-derived
