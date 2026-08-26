@@ -230,7 +230,13 @@ describe("github-oidc-trust-boundary metadata and sources", () => {
     expect(/needs:\s*\[([^\]]+)\]/.exec(workflow)?.[1]?.split(",").map((job) => job.trim())).toContain(
       "github-oidc-runtime",
     );
-    expect(workflow).toContain('test "${{ needs.github-oidc-runtime.result }}" = "success"');
+    // `validate` no longer asserts this job with an inline expression: the runtime jobs
+    // are now skipped when the diff cannot reach them, so the aggregation reads each
+    // result from an environment binding and decides in a list. Require both halves --
+    // the binding, and the name actually reaching the verdict -- because either one
+    // alone can be present while the job goes ungated.
+    expect(workflow).toContain("OIDC: ${{ needs.github-oidc-runtime.result }}");
+    expect(workflow).toContain('"github-oidc-runtime:$OIDC"');
   });
 
   it("uses the exact documented condition keys in the reference", () => {

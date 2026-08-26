@@ -157,7 +157,8 @@ describe("eventbridge delivery metadata and image boundary", () => {
       "eventbridge-runtime",
     );
     expect(workflow).toContain(
-      'test "${{ needs.eventbridge-runtime.result }}" = "success"',
+      "EVENTBRIDGE: ${{ needs.eventbridge-runtime.result }}",
+      '"eventbridge-runtime:$EVENTBRIDGE"',
     );
   });
 });
