@@ -40,6 +40,41 @@ const moveStyle = {
 } as const;
 const laneStyle = { margin: "0 0 6px 0", fontSize: "13px" } as const;
 
+const PYTHON_SNIPPET = String.raw`# PROVE -- everything below is public; only 'secret' is yours.
+import hashlib
+p = <RFC 3526 Group 14 prime>        # a published standard, 2048-bit
+q, g = (p - 1) // 2, 4               # prime-order subgroup, generator
+n = (p.bit_length() + 7) // 8
+
+def derive(seed, label, counter, m):                      # the only hash rule used
+    h = hashlib.sha256(f"{seed}|{label}|{counter}".encode()).digest()
+    return int.from_bytes(h, "big") % m
+
+lp = lambda t: len(t.encode()).to_bytes(4, "big") + t.encode()   # length-prefixed utf8
+fw = lambda v: v.to_bytes(n, "big")                              # fixed width, left 0-pad
+
+w = derive(str(secret), f"schnorr-witness:{team}", generation, q)
+Y = pow(g, w, p)
+r = derive(str(w), f"schnorr-nonce:{team}:{contract}", generation, q)
+R = pow(g, r, p)
+e = int.from_bytes(hashlib.sha256(
+        lp("ac26-crypto-battle/prove/v1") + lp(team) + lp(contract)
+        + lp(str(generation)) + fw(R) + fw(Y)).digest(), "big") % q
+s = (r + e * w) % q
+# submit {"commitment": str(R), "response": str(s)}
+
+# HUNT -- Lagrange interpolation at x = 0 over P = 2**61 - 1
+P = 2**61 - 1
+def reconstruct(shares):             # shares: [(index, value), ...], threshold-many
+    total = 0
+    for xi, yi in shares:
+        num = den = 1
+        for xj, _ in shares:
+            if xj != xi:
+                num, den = num * -xj % P, den * (xi - xj) % P
+        total = (total + yi * num * pow(den, P - 2, P)) % P
+    return total`;
+
 const COPY = {
   en: {
     title: "How this Battle works",
@@ -70,6 +105,17 @@ const COPY = {
         body: "Advance your own secret to a fresh generation. Every share you leaked before this point stops reconstructing anything real. Has a cooldown, and voids every currently-open Contract addressed to you.",
       },
     ],
+    prereqTitle: "Before you start",
+    prereq: [
+      "PROVE is the same non-interactive Schnorr proof as the ac26-w3-schnorr challenge -- same challenge preimage, same framing. Do that one first and PROVE here is the same six lines.",
+      "HUNT is Shamir reconstruction, the same one ac26-w2-secret-sharing builds. Do that one first and HUNT here is one Lagrange evaluation.",
+    ],
+    computeTitle: "Computing PROVE and HUNT yourself",
+    computeIntro:
+      "This portal never computes a proof or a reconstruction for you -- doing it yourself is the real cost of each move. Everything you need is below: the group is a published standard (RFC 3526 Group 14) and the derivation is one hash rule applied four times. Any language works; this is Python for concreteness.",
+    computeCode: PYTHON_SNIPPET,
+    computeNote:
+      "The 2048-bit modulus is not an obstacle -- pow(g, w, p) is one call at any size. What matters is the exact framing: every variable-length field is length-prefixed so that no two different statements can hash to the same challenge.",
     scoringTitle: "Scoring, in short",
     scoring: [
       "LEAK and PROVE pay identically for the same Contract -- PROVE is never worth extra just for being the harder path.",
@@ -106,6 +152,17 @@ const COPY = {
         body: "自チームの secret を新しい世代に更新します。この時点より前に漏洩した share は、それ以降 secret の復元には使えなくなります。クールダウンがあり、実行すると現在 open な自チーム宛 contract はすべて無効化されます。",
       },
     ],
+    prereqTitle: "始める前に",
+    prereq: [
+      "PROVE は ac26-w3-schnorr と同じ非対話型 Schnorr 証明です。challenge の preimage も framing も同一なので、あちらを先にやれば PROVE はここでも同じ 6 行です。",
+      "HUNT は ac26-w2-secret-sharing が組み立てるのと同じ Shamir 復元です。あちらを先にやれば HUNT は Lagrange の 1 回評価です。",
+    ],
+    computeTitle: "PROVE と HUNT を自分で計算する",
+    computeIntro:
+      "このポータルが代わりに proof や復元を計算することはありません — 自分で計算すること自体が各操作の本来のコストだからです。必要なものは下に全部あります。群は公開標準 (RFC 3526 Group 14) で、導出は 1 つのハッシュ規則を 4 回使うだけです。言語は問いません。具体性のため Python で書いています。",
+    computeCode: PYTHON_SNIPPET,
+    computeNote:
+      "2048 bit は障害になりません — pow(g, w, p) は桁数に関係なく 1 呼び出しです。効いてくるのは framing の厳密さで、可変長の項はすべて長さ前置されており、異なる主張が同じ challenge にハッシュされないようになっています。",
     scoringTitle: "スコアリング、要点だけ",
     scoring: [
       "同じ Contract であれば LEAK と PROVE は全く同じ得点です — PROVE だからといって難しい分だけ多く得点することはありません。",
@@ -136,6 +193,30 @@ export default function HelpDrawer(props: PortalSlotProps) {
           <p style={{ margin: "4px 0 0 0", fontSize: "13px" }}>{move.body}</p>
         </div>
       ))}
+
+      <h4 style={sectionTitleStyle}>{copy.prereqTitle}</h4>
+      <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "13px" }}>
+        {copy.prereq.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+      </ul>
+
+      <h4 style={sectionTitleStyle}>{copy.computeTitle}</h4>
+      <p style={{ margin: "0 0 8px 0", fontSize: "13px" }}>{copy.computeIntro}</p>
+      <pre
+        style={{
+          margin: "0 0 8px 0",
+          padding: "10px",
+          background: "#f4f4f4",
+          borderRadius: "4px",
+          fontSize: "12px",
+          overflowX: "auto",
+          whiteSpace: "pre",
+        }}
+      >
+        <code>{copy.computeCode}</code>
+      </pre>
+      <p style={{ margin: "0 0 8px 0", fontSize: "13px", color: "#5f6b7a" }}>{copy.computeNote}</p>
 
       <h4 style={sectionTitleStyle}>{copy.scoringTitle}</h4>
       <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "13px" }}>
