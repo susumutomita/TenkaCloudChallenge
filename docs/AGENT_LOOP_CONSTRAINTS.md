@@ -134,7 +134,8 @@ Not closable by one agent playing alone — say so rather than producing a weake
 
 Reachable, and the largest block of work left — **do not skip these as "owner's call"**:
 
-- The `stub-vs-implementation` class: 47 of the detector's findings, across 8 problems.
+- The `stub-vs-implementation` class: originally 47 of the detector's findings across 8
+  problems; 26 across 6 problems as of #573.
   An earlier version of this file said the owner had not chosen and told you not to
   start. That is out of date, and it cost at least one run: the owner picked **option
   B2** on Issue #543 (2026-08-26), and named the order — `cs-auth-claim-audit`, then
@@ -147,15 +148,26 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   `VERIFIER_PUBLIC_URL` → a function-scoped `fixtures` fallback that only ever resolves
   in a checkout or the `author` stage). `make test` / `test-one` / `inspect` then run
   through Compose, and `verifier-up` / `verifier-down` are added to the problem
-  Makefile. `ac26-bridge-properties` and `ac26-w3-schnorr-drill` (#570) are the worked
-  examples; copy their shape rather than designing another one.
+  Makefile. `ac26-w5-lwe-rlwe` (#572) and `ac26-w5-rgsw-external` (#573) are the closest
+  worked examples: both had the two-leaks-at-once shape, and both carried a *supplied*
+  half — the part the problem deliberately does not grade — that had to survive the split
+  as its own participant module (`participant/wrong_ring.py`, `participant/ring.py`).
+  Copy one of them rather than designing another one.
 
-  What is left, with the detector's count each — `ac26-w5-lwe-rlwe` (11),
-  `ac26-w5-rgsw-external` (10), `ac26-w5-cmux-blind-rotation` (8),
+  **Update the list below when you land one.** An earlier version of this paragraph still
+  named `ac26-w5-lwe-rlwe` as outstanding after #572 had merged it — the same staleness
+  that this section already records as having cost a run.
+
+  What is left, with the detector's count each — `ac26-w5-cmux-blind-rotation` (8),
   `ac26-w5-pbs-homnand` (7), `ac26-w5-extract-key-switch` (6),
   `ac26-w5-encoding-noise` (3), `ac26-w4-commit-open` (1),
-  `ac26-w3-passkey-assertion` (1). **All eight are `status: draft`**, so none of them
-  hits the `playtest-verified` wall of §4 — a B2 split there is a PR an agent can carry
+  `ac26-w3-passkey-assertion` (1). Landed so far: `cs-auth-claim-audit` and
+  `ac26-bridge-experiment` (#562), `ac26-w3-schnorr-drill` (#570), `ac26-w5-lwe-rlwe`
+  (#572), `ac26-w5-rgsw-external` (#573). Catalog count is 36 as of #573. Runs have taken
+  the largest count first, so `ac26-w5-cmux-blind-rotation` is next.
+
+  **All six remaining are `status: draft`**, so none of them hits the
+  `playtest-verified` wall of §4 — a B2 split there is a PR an agent can carry
   to merge on its own, README correction included. Do not drop a needed README
   correction to stay under the gate (§4); on a `draft` problem it does not fire anyway.
 
@@ -163,7 +175,8 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   report "N fewer findings" as if it were the closure; and prove the boundary per
   problem, by showing the path that reached the answer before no longer reaching it.
   #570's regression test does both — it fails, and the catalog count goes back up, the
-  moment `COPY fixtures/` returns to the participant stage.
+  moment `COPY fixtures/` returns to the participant stage. #573 ran that revert both
+  ways to check it: 36 → 46 findings, and the new test red.
 
 ## 6. Environment traps
 
@@ -171,6 +184,15 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   exceeds the timeout. Use the individual commands instead
   (`bun run check:problem`, `scripts/validate-problems.ts`,
   `scripts/solvability-audit.ts --problem <id>`).
+- **There may be no Docker daemon at all.** The hourly cloud routine's container has run
+  without one (`/var/run/docker.sock` absent), so `make build`, `make test` and
+  `docker compose` cannot run there — a container split cannot be validated by starting
+  the deployment. What does work, and is what #573 used: build two directory trees whose
+  contents are exactly each Dockerfile stage's `COPY` list, start `verifier/server.py`
+  and `participant/server.py` from them as real processes, and drive the actual
+  `VERIFIER_PUBLIC_URL` / `/verify` paths between them. That reproduces the boundary
+  without an image. Say plainly in the PR that `docker compose` itself is unverified and
+  that CI is what decides it — do not describe the deployment as working (§7).
 - Always pass `docker compose -p <unique-name>`. **Never use `--remove-orphans`**: every
   problem's directory is named `local`, so the default project name collides and a `down`
   in one problem deletes another's running containers. This has already happened once.
