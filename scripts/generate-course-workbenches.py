@@ -112,6 +112,12 @@ PORTAL_PACKAGES = {
     "ac26-w3-schnorr-drill": "participant",
     "ac26-w4-plonk-drill": "participant",
     "ac26-w4-fri-drill": "participant",
+    # Issue 537/538: verifier/server.py's own _check_rotate/_check_mux compared a
+    # submission directly against fixtures/generate.py's rotate_case/mux_case, and
+    # _check_dependency compared against first_affected_index, defined directly in
+    # verifier/server.py -- all reachable from the single participant stage. The
+    # Portal moved to participant/ when fixtures/ stopped shipping there.
+    "sha256-schedule-logic": "participant",
     "sha256-bytes-padding": "participant",
     "acm-validation-migration": "workbench",
     "asm-worst-case-latency": "workbench",

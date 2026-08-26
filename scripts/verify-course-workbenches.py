@@ -78,6 +78,13 @@ SPLIT_PORTAL_MODULES = {
     "ac26-bridge-experiment": "participant.server",
     "ac26-bridge-properties": "participant.server",
     "ac26-w1-constraint-lab": "participant.server",
+    # Issue 537/538: same move. verifier/server.py's _check_rotate/_check_mux compared a
+    # submission directly against fixtures/generate.py's rotate_case/mux_case, and
+    # _check_dependency compared against first_affected_index, defined directly in
+    # verifier/server.py -- all reachable from the single participant stage.
+    # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
+    # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
+    "sha256-schedule-logic": "participant.server",
     # Issue 525: same move, for the reason #533 did not finish -- the answer functions
     # left fixtures/generate.py but the grader that derives `root-cause`'s accepted JSON
     # kept shipping to the participant stage alongside the Portal.

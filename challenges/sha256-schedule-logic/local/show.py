@@ -11,22 +11,57 @@ sigma: those are the answers.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from fixtures.generate import (
-    WORD_BITS,
-    WORDS_PER_BLOCK,
-    dependency_case,
-    health_token,
-    mux_case,
-    rotate_case,
-)
-
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
+WORD_BITS = 32
+
+
+def _public_payload() -> dict[str, object]:
+    """This deployment's public evidence -- the rotate, mux and dependency cases and
+    the health token, the same things `verifier/server.py`'s `GET /public` serves.
+
+    Issue 537/538: `fixtures/generate.py` does not ship in the `participant` Docker
+    stage any more (see local/Dockerfile). Keeping it reachable here, even with every
+    checkpoint's own comparison staying in `verifier/server.py`, still handed a learner
+    the derivation functions the checkpoints exercise -- `rotate_case`/`mux_case` are
+    `rotate`/`mux`'s expected values directly, and `dependency_case` is
+    `first_affected_index`'s only input. `make inspect` now runs through Compose (see
+    the Makefile) so this process can reach the verifier over the network instead.
+    """
+    injected = os.environ.get("PUBLIC_EVIDENCE_JSON")
+    if injected:
+        return json.loads(injected)
+    verifier_public_url = os.environ.get("VERIFIER_PUBLIC_URL")
+    if verifier_public_url:
+        from urllib.error import HTTPError, URLError
+        from urllib.request import urlopen
+
+        try:
+            with urlopen(verifier_public_url, timeout=10) as response:  # noqa: S310
+                return json.loads(response.read().decode("utf-8"))
+        except (HTTPError, URLError, TimeoutError, OSError, ValueError) as error:
+            # Compose health-gates the workbench on the verifier, so this normally
+            # cannot happen. When it does -- a `docker compose run` against a torn-down
+            # deployment -- say which service is missing instead of printing a urllib
+            # traceback at somebody trying to read their fixtures.
+            raise SystemExit(
+                "cannot reach this deployment's verifier "
+                f"({verifier_public_url}): {type(error).__name__}.\n"
+                "The public evidence lives there since Issue 537/538. "
+                "Start it with `make verifier-up` and try again."
+            ) from error
+    # Neither is set: this resolves only where `fixtures/` is actually on disk -- a
+    # checkout, or the verifier/author Docker stage -- and never inside a built
+    # `participant` image, so this branch does not reopen the leak above.
+    from fixtures.generate import public_payload
+
+    return public_payload(SEED)
 
 
 def _bits(word: int) -> str:
@@ -40,33 +75,35 @@ def _row(label: str, word: int) -> str:
 
 
 def main() -> None:
+    payload = _public_payload()
     print(f"python        {sys.version.split()[0]}")
-    print(f"health token  {health_token(SEED)}")
+    print(f"health token  {payload['healthToken']}")
     print()
 
-    rotate = rotate_case(SEED)
+    rotate = payload["rotate"]
     print("== checkpoint: rotate ==")
-    print(_row("word", rotate.word))
-    print(f"  Rotate it right by {rotate.rotate_by}, then shift it right by {rotate.shift_by}.")
+    print(_row("word", rotate["word"]))
+    print(f"  Rotate it right by {rotate['rotateBy']}, then shift it right by {rotate['shiftBy']}.")
     print("  Submit both results as 8 hex characters each, rotation first, comma separated.")
     print("  A rotation keeps every bit. A shift does not. Count the set bits if unsure.")
     print()
 
-    mux = mux_case(SEED)
+    mux = payload["mux"]
     print("== checkpoint: mux ==")
-    print(_row("e (select)", mux.e))
-    print(_row("f", mux.f))
-    print(_row("g", mux.g))
+    print(_row("e (select)", mux["e"]))
+    print(_row("f", mux["f"]))
+    print(_row("g", mux["g"]))
     print("  Submit Ch(e, f, g) as 8 hex characters.")
     print("  f and g are exact complements here, so every bit position is decided by e.")
     print()
 
-    dependency = dependency_case(SEED)
+    dependency = payload["dependency"]
+    words = dependency["words"]
     print("== checkpoint: dependency ==")
-    print(f"  These are W[0] through W[{WORDS_PER_BLOCK - 1}] of one block:")
-    for index, word in enumerate(dependency.words):
+    print(f"  These are W[0] through W[{len(words) - 1}] of one block:")
+    for index, word in enumerate(words):
         print(_row(f"W[{index}]", word))
-    print(f"  Flip bit {dependency.bit} of W[{dependency.index}] (bit 0 is the least significant).")
+    print(f"  Flip bit {dependency['bit']} of W[{dependency['index']}] (bit 0 is the least significant).")
     print("  Submit the index of the FIRST word in the 64-word schedule that changes.")
     print("  You can work this out from the recurrence without expanding anything.")
     print()

@@ -1,11 +1,6 @@
 {
   "known": [
     {
-      "problem": "sha256-schedule-logic",
-      "issue": 537,
-      "reason": "verifier/server.py defines a full, non-underscored message-schedule reference function that ships in the single participant stage and backs the dependency checkpoint's comparison."
-    },
-    {
       "problem": "sha256-compress-digest",
       "issue": 538,
       "reason": "Not named in #537. _check_avalanche compares against a seed-independent, non-underscored function defined directly in verifier/server.py; _check_properties/_check_storage compare against fixtures.generate.quiz_answer, reachable from the participant image."
