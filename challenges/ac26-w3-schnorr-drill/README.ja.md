@@ -74,9 +74,15 @@ hint は各 checkpoint に 1 つ（減点 6）。その行で起きやすい打�
 ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも compose stack の
 全 image もあなたの管理下にあるので、その人物に対して中身を秘匿することはできません。ここでの
 境界は誤配防止であり、その人物に対する秘匿ではありません。参加者用 Workbench image に入るのは
-公開 fixture・公開 test・starter だけです。8 行の期待値導出（`verifier/expected.py`）と hidden
+公開 test・starter・Workbench だけです。8 行の期待値導出（`verifier/expected.py`）と hidden
 suite は、Compose 内部 network 上でしか到達できない別の verifier image に置きます。`reference/`
 と `mutation.py` は `author` stage にだけ追加します。
+
+fixture の生成コード（`fixtures/generate.py`）も verifier 側です（Issue #543 の option B2）。
+このデプロイの公開値を作るには動く `ec_add` / `ec_mul` / `order_of` が要りますが、それは
+starter があなたに書かせる関数そのものなので、参加者 image に置くと `add-points` / `double` /
+`order` が import 1 行で取れてしまいます。`make inspect` と公開 test は、代わりに verifier の
+`GET /public` からこのデプロイの公開値だけを取得します（そのため両者は Compose 経由で動きます）。
 
 host の `127.0.0.1:18132` に公開するのは Workbench だけで、verifier に host port はありません。
 両 service は non-root、read-only filesystem、capabilities なし、no-new-privileges、

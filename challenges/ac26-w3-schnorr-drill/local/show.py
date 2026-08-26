@@ -8,24 +8,66 @@ printed either — extracting it is line 11.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from fixtures.generate import assignments, setting
-
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 
+def _public_payload() -> dict:
+    """This deployment's public numbers and the block to paste.
+
+    Issue 543 option B2: `fixtures/generate.py` does not ship in the `participant`
+    Docker stage any more (see local/Dockerfile). It has to define working `ec_add`,
+    `ec_mul` and `order_of` to derive the numbers below -- exactly the functions
+    `starter/schnorr_drill.py` asks the learner to write -- so leaving it reachable here
+    handed over the point lines for the price of one import. The verifier, which is the
+    only image that still carries `fixtures/`, serves the public half over
+    `GET /public`: `PUBLIC_EVIDENCE_JSON` when the Portal has already fetched it,
+    `VERIFIER_PUBLIC_URL` when this process must fetch it itself.
+    """
+    injected = os.environ.get("PUBLIC_EVIDENCE_JSON")
+    if injected:
+        return json.loads(injected)
+    verifier_public_url = os.environ.get("VERIFIER_PUBLIC_URL")
+    if verifier_public_url:
+        from urllib.request import urlopen
+
+        with urlopen(verifier_public_url, timeout=10) as response:  # noqa: S310
+            return json.loads(response.read().decode("utf-8"))
+    # Neither is set: this resolves only where `fixtures/` is actually on disk -- a
+    # checkout, or the verifier/author Docker stage -- and never inside a built
+    # `participant` image, so this branch does not reopen the leak above.
+    from fixtures.generate import public_payload
+
+    return public_payload(SEED)
+
+
+def _points_restored(payload: dict) -> dict:
+    """The payload's public dict with its curve points back as tuples.
+
+    JSON has no tuple, so a payload fetched over `GET /public` hands `G`, `Q`, `P1` and
+    `G2` back as lists. Which keys those are is carried by the payload itself rather
+    than restated here.
+    """
+    point_keys = frozenset(payload.get("pointKeys", ()))
+    return {
+        key: (tuple(value) if key in point_keys else value)
+        for key, value in payload["public"].items()
+    }
+
+
 def main() -> None:
-    cfg = setting(SEED)
-    pub = cfg["public"]
+    payload = _public_payload()
+    pub = _points_restored(payload)
     print("== この deploy の数（そのまま Python に貼る） ==")
     print("== paste this block into python3 first ==")
     print()
-    print(assignments(SEED))
+    print(payload["assignments"])
     print()
     print("== what each name is ==")
     print(f"  curve      : y^2 = x^3 + {pub['a']}x + {pub['b']}  (mod {pub['p']}),  G = {pub['G']}")

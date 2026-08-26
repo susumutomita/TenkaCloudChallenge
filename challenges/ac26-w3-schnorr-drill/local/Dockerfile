@@ -7,12 +7,22 @@ RUN useradd --create-home --uid 10001 lab
 WORKDIR /problem
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 
-# Participant Workbench: public materials only. The eight-line value grader's answers
-# (verifier/expected.py) and the hidden suite are not copied into this stage -- see
-# Issue 543/537: a single participant-facing stage that also carried the answer
-# derivation is exactly the shape that leaked every drill checkpoint.
+# Participant Workbench: public materials only, and NOT `fixtures/`. The eight-line
+# value grader's answers (verifier/expected.py) and the hidden suite are not copied into
+# this stage -- see Issue 543/537: a single participant-facing stage that also carried
+# the answer derivation is exactly the shape that leaked every drill checkpoint.
+#
+# Issue 543's option B2 is why `fixtures/` is gone too. Moving the expected values into
+# verifier/expected.py closed the comparison but not the drill: `fixtures/generate.py`
+# defines working `ec_add`, `ec_mul` and `order_of` -- the very functions
+# `starter/schnorr_drill.py` asks the learner to write -- because it needs them to
+# derive this deployment's public numbers. While it shipped here, `add-points`,
+# `double`, `order` and the three lines built on them were one import away, with no
+# comparison anywhere near them. `show.py` and the public tests now fetch this
+# deployment's public half from the verifier's `GET /public` over the Compose-internal
+# network instead (see show.py, tests/public/test_schnorr_drill.py, and the
+# VERIFIER_PUBLIC_URL wiring in docker-compose.yml).
 FROM base AS participant
-COPY --chown=lab:lab fixtures/ ./fixtures/
 COPY --chown=lab:lab tests/public/ ./tests/public/
 COPY --chown=lab:lab participant/ ./participant/
 COPY --chown=lab:lab starter/ ./starter/
@@ -41,6 +51,7 @@ CMD ["python", "verifier/server.py"]
 # participant-facing boundary claim.
 FROM participant AS author
 
+COPY --chown=lab:lab fixtures/ ./fixtures/
 COPY --chown=lab:lab tests/hidden/ ./tests/hidden/
 COPY --chown=lab:lab verifier/ ./verifier/
 COPY --chown=lab:lab reference/ ./reference/
