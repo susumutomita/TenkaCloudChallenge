@@ -1,9 +1,3 @@
 {
-  "known": [
-    {
-      "problem": "sha256-schedule-logic",
-      "issue": 537,
-      "reason": "verifier/server.py defines a full, non-underscored message-schedule reference function that ships in the single participant stage and backs the dependency checkpoint's comparison."
-    }
-  ]
+  "known": []
 }
