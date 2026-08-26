@@ -5,6 +5,7 @@ import { describe, expect, it } from "bun:test";
 import {
   findAnswerReachabilityIssues,
   isStubBody,
+  isTrivialCollectionReturn,
   parseFromImports,
   topLevelFunctions,
 } from "./check-answer-reachability";
@@ -127,6 +128,43 @@ describe("isStubBody", () => {
   it("treats a single non-trivial statement as not a stub", () => {
     const body = 'def f(a, b):\n    return hashlib.sha256(a + b).digest()';
     expect(isStubBody(body)).toBe(false);
+  });
+
+  // Regression: `ac26-w3-field-inverse`'s `egcd` stub returns a 3-tuple of zeros.
+  // Issue 537 records that problem as a confirmed leak of 70-145 of its 200 points,
+  // and this detector reported it zero times, because the literal list held `return 0`
+  // but not `return (0, 0, 0)`.
+  it("treats a placeholder tuple as a stub, the way it treats a placeholder scalar", () => {
+    expect(isStubBody("def egcd(a, b):\n    return (0, 0, 0)")).toBe(true);
+  });
+});
+
+describe("isTrivialCollectionReturn", () => {
+  const placeholders = ["return (0, 0, 0)", "return (0, 0)", "return [0, 0]", "return (False, None)"];
+  for (const statement of placeholders) {
+    it(`treats ${JSON.stringify(statement)} as a placeholder`, () => {
+      expect(isTrivialCollectionReturn(statement)).toBe(true);
+    });
+  }
+
+  // The point of the structural check is that it stays narrow. Widening it until a
+  // computed return counts as a placeholder would silence real implementations
+  // instead of catching stubs, which is the opposite of what this detector is for.
+  const realWork = [
+    "return (a, b)", // names, not literals
+    "return [egcd(a, b)]", // a call
+    "return (0, x)", // one literal, one name
+    "return (a + b, 0)", // an operator
+    "return ((0, 0), 0)", // nested: this check does not judge structure
+  ];
+  for (const statement of realWork) {
+    it(`treats ${JSON.stringify(statement)} as real work`, () => {
+      expect(isTrivialCollectionReturn(statement)).toBe(false);
+    });
+  }
+
+  it("ignores a statement that is not a return at all", () => {
+    expect(isTrivialCollectionReturn("x = 0")).toBe(false);
   });
 });
 
