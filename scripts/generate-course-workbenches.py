@@ -60,6 +60,7 @@ PORTAL_PACKAGES = {
     "cs-transaction-visibility-audit": "participant",
     "cs-auth-claim-audit": "participant",
     "ac26-bridge-experiment": "participant",
+    "ac26-bridge-properties": "participant",
     "ac26-w4-sumcheck-drill": "participant",
     "ac26-w3-schnorr-drill": "participant",
     "ac26-w4-plonk-drill": "participant",

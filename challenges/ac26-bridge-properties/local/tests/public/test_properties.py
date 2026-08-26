@@ -1,7 +1,7 @@
 """Public tests: answer shape and the browser-only participant contract.
 
 They confirm classify() returns the three keys and that your generators return
-integers. They cannot tell you whether the unsound verifier accepts your out-of-range witness —
+integers. They cannot tell you whether the unsound verifier accepts your out-of-range witness --
 that is what the hidden verifier does, deliberately.
 """
 
@@ -17,60 +17,88 @@ SUBMISSION_DIR = os.environ.get("SUBMISSION_DIR")
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, SUBMISSION_DIR or str(ROOT / "starter"))
 
-from fixtures.generate import instance, protocol_for, protocol_ids  # noqa: E402
 from classify import PROPERTIES, classify  # noqa: E402
 from counterexamples import (  # noqa: E402
     extract_witness,
     incompleteness_witness,
     unsoundness_witness,
 )
-from verifier.server import (  # noqa: E402
-    inspect_payload,
-    prepare_submissions,
-    run_public_tests,
-    starter_payload,
-)
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
-WORKBENCH_TEST_SEED = "public-workbench-test"
+
+
+def _load_public_evidence() -> dict[str, object]:
+    """This deployment's public evidence -- the statement, what each verifier checks,
+    and a leaky transcript, the same things `show.py` and the Portal both print.
+
+    Issue 543/537: this file used to import `fixtures.generate` directly. `fixtures/`
+    does not ship in the `participant` Docker stage at all any more (see
+    ../../Dockerfile) -- keeping the seed-keyed generators reachable here is what let a
+    learner skip straight past `privacy-leak` (and `incompleteness`, whose boundary
+    instance was never even shown) with nothing but their own container's `FLAG_SEED`.
+    This deployment's own verifier is the only source for this evidence now:
+    `PUBLIC_EVIDENCE_JSON` when `participant/server.py` has already fetched it (the
+    Portal path, and the sandboxed run `make test` also uses), or `VERIFIER_PUBLIC_URL`
+    fetched directly when neither is true.
+    """
+    injected = os.environ.get("PUBLIC_EVIDENCE_JSON")
+    if injected:
+        return json.loads(injected)
+    verifier_public_url = os.environ.get("VERIFIER_PUBLIC_URL")
+    if verifier_public_url:
+        from urllib.request import urlopen
+
+        with urlopen(verifier_public_url, timeout=10) as response:  # noqa: S310
+            return json.loads(response.read().decode("utf-8"))
+    # Neither is set: this only resolves when `fixtures/` is actually on disk, which is
+    # true for a checkout (this file run directly, e.g. by
+    # scripts/ac26-bridge-properties.test.ts) or the verifier/author Docker stage, and
+    # never true inside a built `participant` image -- so this branch existing does not
+    # reopen Issue 543/537's leak.
+    from fixtures.generate import public_payload
+
+    return public_payload(SEED)
+
+
+PUBLIC = _load_public_evidence()
 
 
 def test_classify_answers_every_protocol() -> None:
-    for protocol_id in protocol_ids(SEED):
+    for protocol_id in PUBLIC["verifiers"]:
         answer = classify(protocol_id)
         assert set(answer) == set(PROPERTIES), f"{protocol_id}: expected keys {PROPERTIES}"
 
 
 def test_classify_returns_booleans() -> None:
-    for protocol_id in protocol_ids(SEED):
+    for protocol_id in PUBLIC["verifiers"]:
         for prop, value in classify(protocol_id).items():
             assert isinstance(value, bool), f"{protocol_id}.{prop} is not a boolean"
 
 
 def test_generators_return_integers() -> None:
-    statement = instance(SEED).as_public()
+    statement = PUBLIC["statement"]
     assert isinstance(incompleteness_witness(statement), int)
     assert isinstance(unsoundness_witness(statement), int)
 
 
 def test_extractor_returns_an_integer() -> None:
-    from fixtures.generate import verify
-
-    inst = instance(SEED)
-    _accepted, transcript = verify(protocol_for(SEED, "leaky"), inst, inst.witness)
-    assert isinstance(extract_witness(transcript), int)
+    assert isinstance(extract_witness(PUBLIC["transcript"]), int)
 
 
 def test_workbench_inspect_explains_properties_and_seeded_evidence() -> None:
-    payload = inspect_payload(WORKBENCH_TEST_SEED)
+    from participant.server import inspect_payload
+
+    payload = inspect_payload()
     assert set(payload["definitions"]) == {"complete", "sound", "private"}
-    assert set(payload["verifiers"]) == set(protocol_ids(WORKBENCH_TEST_SEED))
+    assert set(payload["verifiers"]) == set(PUBLIC["verifiers"])
     assert set(payload["statement"]) == {"a", "b", "c", "p", "lo", "hi"}
     assert "boundaryStatement" not in payload
-    assert payload["transcript"]["protocol"] == protocol_for(WORKBENCH_TEST_SEED, "leaky")
+    assert payload["transcript"]["protocol"] == PUBLIC["privacyProtocol"]
 
 
 def test_workbench_starter_returns_both_editable_files() -> None:
+    from participant.server import starter_payload
+
     payload = starter_payload()
     assert set(payload) == {"classify.py", "counterexamples.py"}
     assert "def classify" in payload["classify.py"]
@@ -78,21 +106,27 @@ def test_workbench_starter_returns_both_editable_files() -> None:
 
 
 def test_workbench_public_tests_run_browser_sources() -> None:
-    result = run_public_tests(WORKBENCH_TEST_SEED, starter_payload())
+    from participant.server import run_public_tests, starter_payload
+
+    result = run_public_tests(starter_payload())
     assert result["passed"] is True
     assert "public tests: all passed" in result["output"]
 
 
 def test_workbench_public_tests_report_invalid_browser_source() -> None:
+    from participant.server import run_public_tests, starter_payload
+
     sources = starter_payload()
     sources["classify.py"] = "def classify(:\n"
-    result = run_public_tests(WORKBENCH_TEST_SEED, sources)
+    result = run_public_tests(sources)
     assert result["passed"] is False
     assert result["output"]
 
 
 def test_workbench_prepare_returns_all_portal_checkpoints() -> None:
-    result = prepare_submissions(WORKBENCH_TEST_SEED, starter_payload())
+    from participant.server import prepare_submissions, starter_payload
+
+    result = prepare_submissions(starter_payload())
     assert result["ok"] is True
     submissions = result["submissions"]
     assert set(submissions) == {
@@ -120,7 +154,7 @@ def test_workbench_prepare_returns_all_portal_checkpoints() -> None:
 
 def test_portal_editor_replaces_static_assets() -> None:
     assert not (ROOT / "workbench").exists()
-    server = (ROOT / "verifier" / "server.py").read_text(encoding="utf-8")
+    server = (ROOT / "participant" / "server.py").read_text(encoding="utf-8")
     for endpoint in ("/api/config", "/api/starter", "/api/inspect", "/api/test", "/api/prepare"):
         assert endpoint in server
 

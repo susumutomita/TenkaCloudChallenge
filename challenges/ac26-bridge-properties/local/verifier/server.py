@@ -1,4 +1,4 @@
-"""POST /verify — the scoring seam. Loopback only, stdlib only.
+"""POST /verify -- the scoring seam. Compose-internal only, stdlib only.
 
 Same security contract as the AC26 template (docs/curricula/advanced-cryptography-2026/
 TEMPLATE.md): required and echoed `checkpointId`, throwaway workspace, wall-clock
@@ -9,6 +9,16 @@ The grading rule specific to this problem: a label is never accepted on its own.
 `False` in the property matrix has a matching counterexample checkpoint, and the
 transfer checkpoint re-runs the learner's own generators against instances they have
 never seen.
+
+Issue 543/537: this used to be the same process that also served the Participant
+Portal's config, inspect, starter, public-test, and prepare endpoints, in the single
+Docker stage a learner's own `make build` produced -- so `privacy-leak`'s expected
+value (`instance(seed).witness`) was importable from inside the learner's own
+container, and `incompleteness`'s undisclosed boundary instance was too. That
+Portal-facing surface now lives in `participant/server.py`, in a separate image (see
+../Dockerfile) that this process's own container never builds; this file is reachable
+only over the Compose-internal network (see ../docker-compose.yml), never from the
+participant container's filesystem.
 """
 
 from __future__ import annotations
@@ -28,12 +38,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from fixtures.generate import (
     TRUTH,
     boundary_instance,
-    health_token,
     in_range,
     instance,
     is_true_statement,
     protocol_for,
     protocol_ids,
+    public_payload,
     verify,
 )
 
@@ -52,13 +62,6 @@ CHECKPOINTS = ("incompleteness", "unsoundness", "privacy-leak", "property-matrix
 PROPERTIES = ("complete", "sound", "private")
 SUBMISSION_FILES = ("classify.py", "counterexamples.py")
 CODE_CHECKPOINTS = frozenset(("transfer",))
-CHECKPOINT_LABELS = {
-    "incompleteness": "正しい入力が弾かれる場面を作る",
-    "unsoundness": "主張の範囲外を通してしまう例を作る",
-    "privacy-leak": "transcript から秘密を取り出す",
-    "property-matrix": "3 つの verifier を性質で分類する",
-    "transfer": "見たことのない instance でも成立させる",
-}
 
 # Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still
 # reporting RLIM_INFINITY for it. Setting it anyway raises inside `preexec_fn` and
@@ -87,64 +90,6 @@ def _normalized_int(value: object) -> int | None:
         except ValueError:
             return None
     return None
-
-
-def starter_payload() -> dict[str, str]:
-    """Return the two editable files shipped to the Portal editor."""
-    return {
-        name: (ROOT / "starter" / name).read_text(encoding="utf-8") for name in SUBMISSION_FILES
-    }
-
-
-def config_payload() -> dict[str, object]:
-    """Declare the generic editor contract consumed by the Participant Portal."""
-    return {
-        "id": "ac26-bridge-properties",
-        "name": "満たす性質、破る性質",
-        "description": "反例を作り、completeness・soundness・privacy を区別する。",
-        "submittedFiles": list(SUBMISSION_FILES),
-        "checkpoints": [
-            {
-                "id": checkpoint,
-                "label": CHECKPOINT_LABELS[checkpoint],
-                "kind": "code" if checkpoint in CODE_CHECKPOINTS else "answer",
-            }
-            for checkpoint in CHECKPOINTS
-        ],
-        # 英語は Portal 側の locale が選ぶ (共有 workbench.py の config_payload と同じ契約)。
-        # 文言の正本は metadata.json — scripts/generate-course-workbenches.py --check が
-        # 乖離を落とす (#381)。 この payload は手書きなので、 直すときはここを編集する。
-        "i18n": {
-            "en": {
-                "name": 'What it holds, what it breaks',
-                "description": 'Three toy verifiers arrive for audit. All of them pass the happy-path tests. They are broken in different ways. Build counterexamples and classify what each one holds and what it breaks.',
-                "checkpointLabels": {'incompleteness': 'Make a valid input get rejected', 'unsoundness': 'Get something outside the claim accepted', 'privacy-leak': 'Pull the secret out of a transcript', 'property-matrix': 'Classify the three verifiers by property', 'transfer': 'Hold up on instances you have not seen'},
-            }
-        },
-    }
-
-
-def inspect_payload(seed: str) -> dict[str, object]:
-    """Build the theory and seeded evidence shown by the browser's inspect command."""
-    inst = instance(seed)
-    verifiers: dict[str, object] = {}
-    for protocol_id in protocol_ids(seed):
-        _accepted, transcript = verify(protocol_id, inst, inst.witness)
-        verifiers[protocol_id] = transcript["checked"]
-    privacy_protocol = protocol_for(seed, "leaky")
-    _accepted, transcript = verify(privacy_protocol, inst, inst.witness)
-    return {
-        "definitions": {
-            "complete": "正しい主張と正直な witness を、検証者が必ず受理する性質",
-            "sound": "主張を満たさない witness を、検証者が受理しない性質",
-            "private": "観察者が transcript だけから秘密の witness を復元できない性質",
-        },
-        "claim": "a*w + b == c (mod p) and lo <= w <= hi",
-        "statement": inst.as_public(),
-        "verifiers": verifiers,
-        "privacyProtocol": privacy_protocol,
-        "transcript": transcript,
-    }
 
 
 def _submission_sources(files: object) -> dict[str, str] | None:
@@ -191,26 +136,6 @@ def _run_submission_script(
     return completed.returncode, captured[-MAX_OUTPUT_BYTES:]
 
 
-PUBLIC_TEST_SCRIPT = """
-import os, runpy
-os.environ["FLAG_SEED"] = {seed!r}
-os.environ["SUBMISSION_DIR"] = {workspace!r}
-os.environ["BROWSER_PUBLIC_TESTS"] = "1"
-runpy.run_path({root!r} + "/tests/public/test_properties.py", run_name="__main__")
-"""
-
-
-def run_public_tests(seed: str, files: object) -> dict[str, object]:
-    """Run the same shape checks as `make test` against Portal-edited sources."""
-    sources = _submission_sources(files)
-    if sources is None:
-        return {"passed": False, "output": "Both editable Python files are required."}
-    result = _run_submission_script(sources, PUBLIC_TEST_SCRIPT, seed)
-    if result is None:
-        return {"passed": False, "output": "Public tests timed out or could not start."}
-    return {"passed": result[0] == 0, "output": result[1]}
-
-
 PREPARE_SCRIPT = """
 import json, sys
 sys.path.insert(0, {root!r})
@@ -235,7 +160,13 @@ print(json.dumps({{"submissions": submissions}}, separators=(",", ":")))
 
 
 def prepare_submissions(seed: str, files: object) -> dict[str, object]:
-    """Evaluate learner functions and format values for the five portal fields."""
+    """Evaluate learner functions and format values for the five portal fields.
+
+    Runs the submitted `classify.py` / `counterexamples.py` against `boundary_instance`
+    -- deliberately never disclosed elsewhere (see `fixtures.generate.public_payload`)
+    -- which is why this has to happen here rather than in `participant/server.py`:
+    that process does not carry `fixtures/` at all (Issue 543/537).
+    """
     sources = _submission_sources(files)
     if sources is None:
         return {"ok": False, "output": "Both editable Python files are required."}
@@ -370,20 +301,17 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's name
         path = urlsplit(self.path).path
-        if path == "/api/config":
-            self._respond(200, config_payload())
+        if path == "/healthz":
+            self._respond(200, {"ok": True})
             return
-        if path == "/api/inspect":
-            self._respond(200, inspect_payload(SEED))
-            return
-        if path == "/api/starter":
-            self._respond(200, starter_payload())
+        if path == "/public":
+            self._respond(200, public_payload(SEED))
             return
         self._respond(404, {"error": "not found"})
 
     def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's name
         path = urlsplit(self.path).path.rstrip("/") or "/"
-        if path not in ("/verify", "/api/test", "/api/prepare"):
+        if path not in ("/verify", "/prepare"):
             self._respond(404, {"error": "not found"})
             return
         try:
@@ -407,10 +335,7 @@ class Handler(BaseHTTPRequestHandler):
             self._respond(400, {"error": "bad json"})
             return
 
-        if path == "/api/test":
-            self._respond(200, run_public_tests(SEED, body.get("files")))
-            return
-        if path == "/api/prepare":
+        if path == "/prepare":
             self._respond(200, prepare_submissions(SEED, body.get("files")))
             return
 
@@ -454,15 +379,16 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    port = int(os.environ.get("VERIFY_PORT", "18092"))
-    # Bind every interface *inside the container*, not the container's loopback. A published
-    # port is forwarded to the container's bridge address, so a server listening only on
-    # 127.0.0.1 inside the container accepts nothing from outside it — the connection is
-    # opened and closed without a response, and the platform can never score the problem.
+    port = int(os.environ.get("VERIFY_PORT", "18093"))
+    # Bind every interface *inside the container*, not the container's loopback. The
+    # Workbench reaches this process as `verifier:<port>` over the Compose network, which
+    # resolves to this container's bridge address -- a server listening only on
+    # 127.0.0.1 inside the container would accept nothing from it, and the platform
+    # could never score the problem.
     #
-    # The loopback restriction that matters is on the host, and it lives in
-    # docker-compose.yml, which publishes `127.0.0.1:<port>:<port>`. Nothing outside this
-    # machine can reach the verifier either way.
+    # Since Issue 543/537 this service publishes no host port at all (see
+    # docker-compose.yml): it sits on the `lab` network, which is `internal: true` and so
+    # carries no gateway. Nothing but the Workbench container can reach it.
     HTTPServer(("0.0.0.0", port), Handler).serve_forever()  # noqa: S104 - see above
 
 
