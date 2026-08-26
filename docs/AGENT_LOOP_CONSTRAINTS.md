@@ -209,11 +209,12 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   `ac26-bridge-experiment` (#562), `ac26-w3-schnorr-drill` (#570), `ac26-w5-lwe-rlwe`
   (#572), `ac26-w5-rgsw-external` (#573), `ac26-w5-cmux-blind-rotation` (#579),
   `ac26-w5-pbs-homnand` (#581), `ac26-w4-commit-open` (#582, split out of #578),
-  `ac26-w5-extract-key-switch` (#584), `ac26-w5-encoding-noise` (#586).
-  `ac26-w3-passkey-assertion` is PR #590, Draft while CI decides — do not start it again,
-  and check `git ls-remote --heads origin` before starting anything here: two sessions
+  `ac26-w5-extract-key-switch` (#584), `ac26-w5-encoding-noise` (#586),
+  `ac26-w3-passkey-assertion` (#590).
+  Check `git ls-remote --heads origin` before starting anything here: two sessions
   work this list with no claim mechanism, and #583 was thrown away for duplicating #584.
-  Catalog count is 11 with #590 applied, 12 on main, down from 39. Runs have taken the
+  Pushing the branch before doing the work is what #590 did to claim it.
+  Catalog count is 11 as of #590, down from 39. Runs have taken the
   largest count first, so one singleton is what is left — and a single finding says
   nothing about its own points until measured (see #582 and #584 below).
 
