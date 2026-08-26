@@ -33,23 +33,29 @@
  *     `participant` Docker stage copies in (derived from the Dockerfile itself, see
  *     `lib/local-play-problems.ts#participantPythonFiles` — the same derivation
  *     `author-artifact-separation.test.ts` uses for its own participant-path check), or
- *   - a **non-underscore** top-level function defined directly in `verifier/server.py`.
+ *   - **any** top-level function defined directly in `verifier/server.py`, underscore-
+ *     prefixed or not.
  *
- * The underscore distinction is not invented for this file — it is how the one leak in
- * #537's table that is already fixed (`ac26-w1-underconstraint`, #525/#533) marks the
- * difference itself. Its `_expected_root_cause` says, in its own docstring: "unlike the
- * input generators, it is not exported from `fixtures/generate.py` and nothing on the
- * participant's reading path ... imports it." A leading underscore plus "defined only
- * here, not re-exported" is this catalog's own convention for "verifier-internal", and
- * `sha256-schedule-logic`'s leak (`reference_schedule`, no underscore, defined directly
- * in `verifier/server.py`) shows the convention actually being violated, not a shape
- * this rule invented to catch it.
+ * That second bullet used to say *non-underscore*, on the reading that a leading
+ * underscore is this catalog's own marker for "verifier-internal" — which it is, but
+ * only in the sense `ac26-w1-underconstraint`'s `_expected_root_cause` states in its own
+ * docstring: "it is not exported from `fixtures/generate.py` and nothing on the
+ * participant's reading path ... imports it." That is a claim about `fixtures`, not
+ * about the Docker stage. When `verifier/server.py` itself ships to the participant —
+ * the precondition this rule already tests for — the learner imports the module and
+ * calls the underscore name directly, so the prefix protects nothing. Reading it as a
+ * boundary is exactly why the detector stayed silent on `ac26-w1-underconstraint` after
+ * #533 moved its derivation from `fixtures/generate.py` into the (still-shipping)
+ * verifier, leaving 40 of 300 points one import away until the #567 container split
+ * (Issue #525, condition 3).
  *
  * Two functions are excluded from being *sources* of a match:
  *
  *   - Sandboxed code-checkpoint runners (a body containing `subprocess.run(` or
  *     `TemporaryDirectory(`) — these execute the learner's own submitted code; an
  *     `==` inside one checks a subprocess exit code or a JSON shape, not a secret.
+ *     This exclusion only holds if the runner's body is actually read to the end, which
+ *     is why `topLevelFunctions` has to follow a wrapped `def` signature.
  *   - `_check_environment` by name. Every local-play verifier that has one grades a
  *     liveness/setup token (`health_token` and equivalents) that `show.py` already
  *     prints to the participant directly (verified against the catalog, not assumed);
@@ -165,6 +171,16 @@ function moduleFile(dir: string, moduleDotted: string): string {
  * above rather than chased with indentation-tracking that the rest of the catalog does
  * not need.
  */
+/**
+ * Net `(`-minus-`)` on one line, ignoring parentheses inside quoted defaults such as
+ * `sep: str = ")"`. Single-quoted literals only — triple-quoted ones are already blanked
+ * by `stripTripleQuoted` before this file sees them.
+ */
+function parenDepth(line: string): number {
+  const bare = line.replace(/#.*$/, "").replace(/"[^"\n]*"|'[^'\n]*'/g, "");
+  return (bare.match(/\(/g) ?? []).length - (bare.match(/\)/g) ?? []).length;
+}
+
 export function topLevelFunctions(source: string): Map<string, string> {
   const lines = source.split("\n");
   const result = new Map<string, string>();
@@ -179,6 +195,21 @@ export function topLevelFunctions(source: string): Map<string, string> {
     const name = match[1] ?? "";
     const bodyLines = [line];
     i++;
+    // A wrapped signature closes on a line starting at column 0 (`) -> bool:`), which
+    // the indentation test below reads as "next top-level statement" and stops on,
+    // leaving a body of nothing but the first signature line. Everything downstream
+    // then draws the wrong conclusion from it: `isStubBody` sees zero statements and
+    // calls a fully implemented function a stub, and a sandbox runner whose
+    // `subprocess.run(` sits past the wrap stops looking like a runner
+    // (`ac26-w3-passkey-assertion`'s `_run_submission_script`, found while widening
+    // Rule 1 for Issue #525). Consume continuation lines until the parentheses close.
+    let depth = parenDepth(line);
+    while (depth > 0 && i < lines.length) {
+      const continuation = lines[i] ?? "";
+      bodyLines.push(continuation);
+      depth += parenDepth(continuation);
+      i++;
+    }
     while (i < lines.length) {
       const next = lines[i] ?? "";
       if (next.trim() !== "" && !/^[ \t]/.test(next)) break;
@@ -265,9 +296,15 @@ export function findDirectValueComparisons(
 
   const fns = moduleLevelDefs(source);
   const runnerNames = sandboxRunnerNames(fns);
-  const reachableLocal = new Set(
-    [...fns.keys()].filter((name) => !name.startsWith("_") && !runnerNames.has(name)),
-  );
+  // Every top-level function in this file, underscore-prefixed or not. Rule 1 only runs
+  // at all when `verifier/server.py` is itself in the participant image (the guard
+  // above), and at that point a leading underscore protects nothing: the learner's own
+  // container can `import` the module and call `_expected_root_cause` exactly as it
+  // calls `reference_schedule`. Treating the prefix as a boundary here is what let
+  // `ac26-w1-underconstraint` sit unflagged through #533 while 40 of its 300 points were
+  // one import away (Issue #525); the convention marks "not re-exported from
+  // `fixtures/generate.py`", which is a statement about `fixtures`, not about what ships.
+  const reachableLocal = new Set([...fns.keys()].filter((name) => !runnerNames.has(name)));
   const reachableNames = new Map<string, string>(reachableImported);
   for (const name of reachableLocal) {
     if (!reachableNames.has(name)) reachableNames.set(name, verifierRelative);
