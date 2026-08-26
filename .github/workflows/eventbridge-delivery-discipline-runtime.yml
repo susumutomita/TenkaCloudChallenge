@@ -1,0 +1,60 @@
+name: eventbridge-delivery-discipline-runtime
+
+# Split out of ci.yml so an unrelated PR no longer pays for this problem's
+# runtime proof. Shape matches the existing mcp-origin-guardian-runtime.yml
+# precedent: its own workflow, scoped to main, path-filtered to what this
+# proof actually depends on, with its own concurrency group.
+# scripts/eventbridge-delivery-discipline-integration.test.ts asserts this
+# workflow exists with this shape instead of asserting job wiring inside
+# ci.yml.
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/eventbridge-delivery-discipline-runtime.yml"
+      - "challenges/eventbridge-delivery-discipline/**"
+      - "scripts/verify-eventbridge-delivery-discipline.ts"
+      - "scripts/eventbridge-delivery-discipline.test.ts"
+      - "scripts/eventbridge-delivery-discipline-integration.test.ts"
+      - "scripts/eventbridge-policy-vocabulary.test.ts"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/eventbridge-delivery-discipline-runtime.yml"
+      - "challenges/eventbridge-delivery-discipline/**"
+      - "scripts/verify-eventbridge-delivery-discipline.ts"
+      - "scripts/eventbridge-delivery-discipline.test.ts"
+      - "scripts/eventbridge-delivery-discipline-integration.test.ts"
+      - "scripts/eventbridge-policy-vocabulary.test.ts"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eventbridge-delivery-discipline-runtime-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  eventbridge-runtime:
+    name: eventbridge-delivery-discipline runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CI: "true"
+      npm_config_ignore_scripts: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: "1.3.11"
+
+      - name: Verify isolated local runtime and scoring
+        run: bun run eventbridge:runtime

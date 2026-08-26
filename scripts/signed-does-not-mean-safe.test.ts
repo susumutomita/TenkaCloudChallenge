@@ -581,18 +581,30 @@ describe("signed-does-not-mean-safe metadata and sources", () => {
     }
   });
 
-  it("makes the clean Docker proof a required stable CI dependency", () => {
-    const workflow = readRoot(".github/workflows/ci.yml");
+  it("makes the clean Docker proof a required check in its own path-filtered workflow", () => {
+    // The runtime proof used to be an unconditional job inside ci.yml, gated
+    // through the `validate` aggregate. It now lives in its own path-filtered
+    // workflow (the mcp-origin-guardian-runtime.yml shape) so an unrelated PR
+    // does not boot this problem's Docker Compose lab.
+    const ciWorkflow = readRoot(".github/workflows/ci.yml");
+    const workflow = readRoot(".github/workflows/signed-does-not-mean-safe-runtime.yml");
     expect(workflow).toContain("signed-npm-runtime:");
     expect(workflow).toContain("bun run signed-npm:runtime");
-    // Assert this job's own dependency, not the whole list. Pinning every job name
-    // here made adding one unrelated job fail four unrelated suites, and the
-    // exhaustive "every job is listed and gated" check lives in
-    // scripts/validate-shard.test.ts, which reads the list out of the workflow.
-    expect(/needs:\s*\[([^\]]+)\]/.exec(workflow)?.[1]?.split(",").map((job) => job.trim())).toContain(
-      "signed-npm-runtime",
-    );
-    expect(workflow).toContain('test "${{ needs.signed-npm-runtime.result }}" = "success"');
+
+    // Leaving the job in both places would silently reintroduce the double-run
+    // cost this split exists to remove.
+    expect(ciWorkflow).not.toContain("signed-npm-runtime:");
+
+    // A path filter narrower than what the proof depends on lets a real
+    // regression merge unchecked, which is worse than no filter at all.
+    expect(workflow).toContain("challenges/signed-does-not-mean-safe/**");
+    expect(workflow).toContain("scripts/verify-signed-does-not-mean-safe.ts");
+    expect(workflow).toContain(".github/workflows/signed-does-not-mean-safe-runtime.yml");
+
+    expect(workflow).toMatch(/push:\s*\n\s*branches:\s*\n\s*-\s*main/);
+    expect(workflow).toContain("concurrency:");
+    expect(workflow).toMatch(/cancel-in-progress:\s*true/);
+
     expect(JSON.parse(readRoot("package.json")).scripts["signed-npm:runtime"]).toBe(
       "bun run scripts/verify-signed-does-not-mean-safe.ts",
     );

@@ -145,19 +145,31 @@ describe("eventbridge delivery metadata and image boundary", () => {
     }
   });
 
-  it("requires the clean Docker proof in the stable CI aggregate", () => {
-    const workflow = readFileSync(join(import.meta.dir, "../.github/workflows/ci.yml"), "utf8");
+  it("requires the clean Docker proof in its own path-filtered workflow", () => {
+    // The runtime proof used to be an unconditional job inside ci.yml, gated
+    // through the `validate` aggregate. It now lives in its own path-filtered
+    // workflow (the mcp-origin-guardian-runtime.yml shape) so an unrelated PR
+    // does not boot this problem's Docker Compose lab.
+    const ciWorkflow = readFileSync(join(import.meta.dir, "../.github/workflows/ci.yml"), "utf8");
+    const workflow = readFileSync(
+      join(import.meta.dir, "../.github/workflows/eventbridge-delivery-discipline-runtime.yml"),
+      "utf8",
+    );
     expect(workflow).toContain("eventbridge-runtime:");
     expect(workflow).toContain("run: bun run eventbridge:runtime");
-    // Assert this job's own dependency, not the whole list. Pinning every job name
-    // here made adding one unrelated job fail four unrelated suites, and the
-    // exhaustive "every job is listed and gated" check lives in
-    // scripts/validate-shard.test.ts, which reads the list out of the workflow.
-    expect(/needs:\s*\[([^\]]+)\]/.exec(workflow)?.[1]?.split(",").map((job) => job.trim())).toContain(
-      "eventbridge-runtime",
-    );
-    expect(workflow).toContain(
-      'test "${{ needs.eventbridge-runtime.result }}" = "success"',
-    );
+
+    // Leaving the job in both places would silently reintroduce the double-run
+    // cost this split exists to remove.
+    expect(ciWorkflow).not.toContain("eventbridge-runtime:");
+
+    // A path filter narrower than what the proof depends on lets a real
+    // regression merge unchecked, which is worse than no filter at all.
+    expect(workflow).toContain("challenges/eventbridge-delivery-discipline/**");
+    expect(workflow).toContain("scripts/verify-eventbridge-delivery-discipline.ts");
+    expect(workflow).toContain(".github/workflows/eventbridge-delivery-discipline-runtime.yml");
+
+    expect(workflow).toMatch(/push:\s*\n\s*branches:\s*\n\s*-\s*main/);
+    expect(workflow).toContain("concurrency:");
+    expect(workflow).toMatch(/cancel-in-progress:\s*true/);
   });
 });

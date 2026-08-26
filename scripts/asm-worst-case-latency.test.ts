@@ -190,9 +190,30 @@ describe("asm-worst-case-latency measurement boundary", () => {
   });
 
   it("gates the exact PR head on a native-amd64 Docker runtime", () => {
-    const workflow = readFileSync(join(ROOT, ".github", "workflows", "ci.yml"), "utf8");
+    // The runtime proof used to be an unconditional job inside ci.yml, gated
+    // through the `validate` aggregate. It now lives in its own path-filtered
+    // workflow (the mcp-origin-guardian-runtime.yml shape) so an unrelated PR
+    // does not pay for this native-amd64 Docker build and timing proof.
+    const ciWorkflow = readFileSync(join(ROOT, ".github", "workflows", "ci.yml"), "utf8");
+    const workflow = readFileSync(
+      join(ROOT, ".github", "workflows", "asm-worst-case-latency-runtime.yml"),
+      "utf8",
+    );
     expect(workflow).toContain("asm-worst-case-latency-runtime:");
     expect(workflow).toContain("ref: ${{ github.event.pull_request.head.sha || github.sha }}");
+
+    // Leaving the job in both places would silently reintroduce the double-run
+    // cost this split exists to remove.
+    expect(ciWorkflow).not.toContain("asm-worst-case-latency-runtime:");
+
+    // A path filter narrower than what the proof depends on lets a real
+    // regression merge unchecked, which is worse than no filter at all.
+    expect(workflow).toContain("challenges/asm-worst-case-latency/**");
+    expect(workflow).toContain("scripts/asm-worst-case-latency-http-smoke.py");
+    expect(workflow).toContain(".github/workflows/asm-worst-case-latency-runtime.yml");
+    expect(workflow).toMatch(/push:\s*\n\s*branches:\s*\n\s*-\s*main/);
+    expect(workflow).toContain("concurrency:");
+    expect(workflow).toMatch(/cancel-in-progress:\s*true/);
     expect(workflow).toContain('test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"');
     expect(workflow).toContain('test "$(uname -m)" = x86_64');
     for (const flag of ["rdtscp", "constant_tsc", "nonstop_tsc", "clflush"]) {

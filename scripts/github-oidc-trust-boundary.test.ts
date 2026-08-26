@@ -219,18 +219,29 @@ describe("github-oidc-trust-boundary metadata and sources", () => {
     }
   });
 
-  it("makes the clean Docker proof a required stable CI dependency", () => {
-    const workflow = readRoot(".github/workflows/ci.yml");
+  it("makes the clean Docker proof a required check in its own path-filtered workflow", () => {
+    // The runtime proof used to be an unconditional job inside ci.yml, gated
+    // through the `validate` aggregate. It now lives in its own path-filtered
+    // workflow (the mcp-origin-guardian-runtime.yml shape) so an unrelated PR
+    // does not boot this problem's Docker Compose lab.
+    const ciWorkflow = readRoot(".github/workflows/ci.yml");
+    const workflow = readRoot(".github/workflows/github-oidc-trust-boundary-runtime.yml");
     expect(workflow).toContain("github-oidc-runtime:");
     expect(workflow).toContain("bun run github-oidc:runtime");
-    // Assert this job's own dependency, not the whole list. Pinning every job name
-    // here made adding one unrelated job fail four unrelated suites, and the
-    // exhaustive "every job is listed and gated" check lives in
-    // scripts/validate-shard.test.ts, which reads the list out of the workflow.
-    expect(/needs:\s*\[([^\]]+)\]/.exec(workflow)?.[1]?.split(",").map((job) => job.trim())).toContain(
-      "github-oidc-runtime",
-    );
-    expect(workflow).toContain('test "${{ needs.github-oidc-runtime.result }}" = "success"');
+
+    // Leaving the job in both places would silently reintroduce the double-run
+    // cost this split exists to remove.
+    expect(ciWorkflow).not.toContain("github-oidc-runtime:");
+
+    // A path filter narrower than what the proof depends on lets a real
+    // regression merge unchecked, which is worse than no filter at all.
+    expect(workflow).toContain("challenges/github-oidc-trust-boundary/**");
+    expect(workflow).toContain("scripts/verify-github-oidc-trust-boundary.ts");
+    expect(workflow).toContain(".github/workflows/github-oidc-trust-boundary-runtime.yml");
+
+    expect(workflow).toMatch(/push:\s*\n\s*branches:\s*\n\s*-\s*main/);
+    expect(workflow).toContain("concurrency:");
+    expect(workflow).toMatch(/cancel-in-progress:\s*true/);
   });
 
   it("uses the exact documented condition keys in the reference", () => {
