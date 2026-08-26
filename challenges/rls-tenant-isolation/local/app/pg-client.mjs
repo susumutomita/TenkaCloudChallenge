@@ -2,9 +2,9 @@
  * pg-client — the live Postgres adapter the grader drives inside the container.
  *
  * It implements the same control surface the grader expects (getDocument /
- * patchDocument / insertDocument / deleteDocument / anonGetDocuments) by running
- * each call in a transaction where the request identity is bound to the two
- * Supabase/PostgREST GUCs:
+ * patchDocument / insertDocument / deleteDocument / anonGetDocuments /
+ * updateDocumentOrganization) by running each call in a transaction where the
+ * request identity is bound to the two Supabase/PostgREST GUCs:
  *
  *   request.jwt.role  -> 'authenticated' for a signed-in actor, 'anon' otherwise
  *   app.user_id       -> the actor's user id ('' for the anon/public client)
@@ -65,6 +65,21 @@ export function createPgGraderClient(sql) {
         const deleted = await tx`
           delete from public.documents where id = ${documentId} returning id`;
         return { ok: true, rowsAffected: deleted.count };
+      });
+    },
+
+    // Unlike patchDocument (which mirrors the app's title/body-only PATCH body),
+    // this sets organization_id directly. The app never exposes that column, so
+    // this probes the database's own WITH CHECK independent of the app's
+    // allow-list — the same column any future/loosened code path could reach.
+    async updateDocumentOrganization(actor, documentId, newOrganizationId) {
+      return runWrite(sql, authenticated(actor), async (tx) => {
+        const updated = await tx`
+          update public.documents
+          set organization_id = ${newOrganizationId}
+          where id = ${documentId}
+          returning id`;
+        return { ok: true, rowsAffected: updated.count };
       });
     },
   };

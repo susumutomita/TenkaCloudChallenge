@@ -12,7 +12,7 @@
  * non-superuser `app_api` role so that, once the participant enables RLS, the
  * boundary is enforced underneath the app no matter which code path is hit.
  *
- * `/verify` runs the 7 attack assertions (grade.mjs) against live Postgres
+ * `/verify` runs the 8 attack assertions (grade.mjs) against live Postgres
  * through pg-client.mjs and returns `{ correct }`. The platform records the
  * verdict and never sees the policies. There is no per-deploy flag here: the
  * challenge is structural (is the boundary enforced?), so FLAG_SEED is unused.

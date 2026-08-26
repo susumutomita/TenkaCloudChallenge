@@ -17,7 +17,7 @@ make local PROBLEM=rls-tenant-isolation   # from the TenkaCloud repo root
 
 - **Challenge surface:** <http://127.0.0.1:18080> — the documents API.
 - **Goal:** make every company's documents invisible and immutable to the other
-  company, enforced in the database, then submit to pass all 7 attack tests.
+  company, enforced in the database, then submit to pass all 8 attack tests.
 
 ## The story
 
@@ -105,7 +105,7 @@ empty → the container loads the vulnerable state), then restart:
 make local PROBLEM=rls-tenant-isolation   # rebuild/restart to re-apply policies
 ```
 
-Your policies must satisfy all seven checks:
+Your policies must satisfy all eight checks:
 
 1. RLS **enabled** on `public.documents` (and `force` so the table owner is bound too).
 2. `SELECT` only your own org's rows.
@@ -123,7 +123,7 @@ in policies: `app.current_user_id()`, `app.is_authenticated()`,
 
 The platform holds no answer. On submit, the local scoring API forwards to the
 container's loopback `/verify` (`POST http://127.0.0.1:18081/verify`), which runs
-the grader's **7 attack assertions** against live Postgres and returns
+the grader's **8 attack assertions** against live Postgres and returns
 `{ "correct": boolean }`:
 
 | # | assertion                                       | expected |
@@ -135,8 +135,33 @@ the grader's **7 attack assertions** against live Postgres and returns
 | 5 | member DELETE own doc                           | blocked  |
 | 6 | owner DELETE own doc                            | succeeds |
 | 7 | anon GET documents                              | blocked  |
+| 8 | owner direct SQL UPDATE own doc's `org_id`      | blocked  |
 
-All seven must pass. A correct fix scores 300 points; a wrong submission costs 10.
+All eight must pass. A correct fix scores 300 points; a wrong submission costs 10.
+
+Check 8 exists because `patchDocument`/check 3 only exercises the fields the
+app's PATCH endpoint forwards (`title`, `body` — it never forwards
+`organization_id`, see `local/app/server.mjs`), so the grader issues a direct
+`UPDATE ... SET organization_id` itself, at the SQL layer, the same way checks
+1–7 do (`local/app/pg-client.mjs`).
+
+This is worth being precise about, because PostgreSQL's own semantics are easy
+to get backwards here: if an `UPDATE` policy has **no** `WITH CHECK` clause at
+all, PostgreSQL reuses its `USING` expression as the check applied to the new
+row — so a policy whose `USING` is correctly scoped by `organization_id`
+already blocks a same-row reassignment even without a separate `WITH CHECK`
+(confirmed against a live database, not just inferred from the docs).
+*Omitting* `WITH CHECK` on `UPDATE` is not, by itself, the hole requirement 4
+warns about.
+
+What check 8 actually catches is a `WITH CHECK` clause that **is present** but
+doesn't constrain `organization_id` — for example, one that only re-checks
+`app.is_authenticated()`. Writing an explicit `WITH CHECK` replaces the
+implicit USING-based protection entirely, so if that explicit clause doesn't
+look at `organization_id`, nothing else in the policy will. That's exactly why
+requirement 4 asks you to write `WITH CHECK` explicitly rather than relying on
+`USING` alone: an implicit, unwritten protection isn't something you — or a
+future reviewer — can verify just by reading the policy.
 
 ## Delivery model
 
@@ -166,7 +191,7 @@ rls-tenant-isolation/
     │   ├── pg-client.mjs          # live Postgres adapter the grader drives (RLS-bound role)
     │   └── package.json           # the `postgres` JS driver
     ├── grader/
-    │   ├── grade.mjs              # the 7 attack assertions (pure, dependency-injected)
+    │   ├── grade.mjs              # the 8 attack assertions (pure, dependency-injected)
     │   └── grade.test.mjs         # unit tests with fake clients (bun test, no live DB)
     ├── db/
     │   ├── schema.sql             # tables + identity helpers + app_api role
