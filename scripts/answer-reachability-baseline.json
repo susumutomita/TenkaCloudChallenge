@@ -1,16 +1,6 @@
 {
   "known": [
     {
-      "problem": "sha256-schedule-logic",
-      "issue": 537,
-      "reason": "verifier/server.py defines a full, non-underscored message-schedule reference function that ships in the single participant stage and backs the dependency checkpoint's comparison."
-    },
-    {
-      "problem": "ac26-w4-commit-open",
-      "issue": 537,
-      "reason": "starter's node_hash stub is a placeholder while fixtures/generate.py already ships a complete, same-named Merkle node_hash implementation reachable from the participant image."
-    },
-    {
       "problem": "ac26-w5-cmux-blind-rotation",
       "issue": 537,
       "reason": "Listed in #537 as a suspected (unverified) case sharing helper names with ac26-w5-lwe-rlwe; this detector independently confirms the same stub-vs-implementation shape (cmux, blind_rotate and siblings)."

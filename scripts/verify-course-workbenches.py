@@ -73,6 +73,13 @@ SPLIT_PORTAL_MODULES = {
     "ac26-bridge-experiment": "participant.server",
     "ac26-bridge-properties": "participant.server",
     "ac26-w1-constraint-lab": "participant.server",
+    # Issue 537/538: same move. verifier/server.py's _check_rotate/_check_mux compared a
+    # submission directly against fixtures/generate.py's rotate_case/mux_case, and
+    # _check_dependency compared against first_affected_index, defined directly in
+    # verifier/server.py -- all reachable from the single participant stage.
+    # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
+    # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
+    "sha256-schedule-logic": "participant.server",
     # Issue 525: same move, for the reason #533 did not finish -- the answer functions
     # left fixtures/generate.py but the grader that derives `root-cause`'s accepted JSON
     # kept shipping to the participant stage alongside the Portal.
@@ -100,6 +107,13 @@ SPLIT_PORTAL_MODULES = {
     # left that stage too. `show.py` and the public tests read `GET /public` from the
     # verifier now. The supplied ring stayed behind in `participant/ring.py`.
     "ac26-w5-rgsw-external": "participant.server",
+    # Issue 537/538 (Issue 543 option B2): same move. tests/hidden/check_commit.py
+    # grades every checkpoint and fixtures/generate.py implements node_hash under the
+    # exact name starter/commit.py's own node_hash stub asks the learner to write, both
+    # of which shipped in the single participant stage.
+    # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
+    # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
+    "ac26-w4-commit-open": "participant.server",
 }
 # Execute the heavier inspect/public-test adapter on representative problems from
 # each family. The catalogue's existing sharded suite executes every problem's own

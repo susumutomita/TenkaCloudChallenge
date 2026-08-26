@@ -79,10 +79,21 @@ PORTAL_PACKAGES = {
     # Same option B2 split, same reason: the hidden suite grades all eight checkpoints
     # and fixtures/ implements the ten stubs starter/rgsw.py ships.
     "ac26-w5-rgsw-external": "participant",
+    # Issue 537/538 (Issue 543 option B2): the hidden suite grades every checkpoint and
+    # fixtures/generate.py implements node_hash under the exact name starter/commit.py's
+    # own node_hash stub asks the learner to write, so both left the participant stage
+    # and the Portal moved with them.
+    "ac26-w4-commit-open": "participant",
     "ac26-w4-sumcheck-drill": "participant",
     "ac26-w3-schnorr-drill": "participant",
     "ac26-w4-plonk-drill": "participant",
     "ac26-w4-fri-drill": "participant",
+    # Issue 537/538: verifier/server.py's own _check_rotate/_check_mux compared a
+    # submission directly against fixtures/generate.py's rotate_case/mux_case, and
+    # _check_dependency compared against first_affected_index, defined directly in
+    # verifier/server.py -- all reachable from the single participant stage. The
+    # Portal moved to participant/ when fixtures/ stopped shipping there.
+    "sha256-schedule-logic": "participant",
     "acm-validation-migration": "workbench",
     "asm-worst-case-latency": "workbench",
     "cs-atomic-file-publish": "workbench",
