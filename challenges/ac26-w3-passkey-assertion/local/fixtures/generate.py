@@ -240,6 +240,44 @@ def fixture(seed: str) -> Fixture:
     return Fixture(record, tuple(assertions), aliases_by_kind)
 
 
+#: The seed the public worked example is built from.  Fixed, and deliberately not the
+#: deployment's: `tests/public/test_assertion.py` is a worked example, so its expected
+#: answers may be known.  Nothing derived from this seed says anything about the
+#: assertions a deployment serves — the kind labels come out of `random.Random` keyed by
+#: the seed, and the hidden suite grades on `FLAG_SEED`-derived seeds only.
+PUBLIC_EXAMPLE_SEED = "public-worked-example"
+
+
+def public_payload(seed: str) -> dict[str, object]:
+    """Everything the participant image is allowed to see, in one document.
+
+    Issue 543 option B2: `fixtures/` does not ship in the participant Docker stage any
+    more (see ../Dockerfile), because `signed_message` here is one of the four functions
+    `starter/assertion.py` asks the learner to write, and `fixture()` derives the kind of
+    every assertion — which is the answer to two of the three checkpoints for any seed a
+    learner can name.  The verifier serves this document over `GET /public` instead, and
+    `show.py` and the public tests read it from there.
+
+    Two halves, and neither carries a credential private key:
+
+    * ``deployment`` is exactly what `GET /api/inspect` has always returned for this
+      deployment — the relying-party record and the four received assertions, with no
+      kind labels.  Which one is signed without user verification stays for the
+      learner's code to work out.
+    * ``workedExample`` is the fixed public example the public tests assert against,
+      including its kind labels, exactly as those tests computed them locally before.
+    """
+    example = fixture(PUBLIC_EXAMPLE_SEED)
+    return {
+        "deployment": fixture(seed).public_dict(),
+        "workedExample": {
+            "seed": PUBLIC_EXAMPLE_SEED,
+            **example.public_dict(),
+            "aliasesByKind": dict(example.aliases_by_kind),
+        },
+    }
+
+
 def reference_signature_valid(server_record: dict[str, object], assertion: dict[str, object]) -> bool:
     public_key = server_record.get("publicKey")
     signature = assertion.get("signature")

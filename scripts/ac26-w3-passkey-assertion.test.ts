@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
 import { parse as parseYaml } from "yaml";
+import { participantPythonFiles } from "./lib/local-play-problems";
 
 /**
  * Issue #363's hard boundary is not merely "one UV test passes".  Every seed must
@@ -235,5 +236,239 @@ describe("ac26-w3-passkey-assertion: safety and metadata", () => {
     expect(docs).toContain("malware");
     expect(docs).toMatch(/eBay[\s\S]{0,120}(fixed|修正)/);
     expect(docs).toContain('The result is not "passkeys are broken."');
+  });
+});
+
+
+describe("ac26-w3-passkey-assertion: participant/verifier separation (Issue 537/538)", () => {
+  it("keeps fixtures/, the hidden suite and the verifier out of the participant Docker stage", () => {
+    const dockerfile = read("local/Dockerfile");
+    const participantStage = dockerfile.slice(
+      dockerfile.indexOf("FROM base AS participant"),
+      dockerfile.indexOf("FROM base AS verifier"),
+    );
+    // The shape this problem shipped before this fix: one stage carrying
+    // `tests/hidden/check_assertion.py` -- which grades all three checkpoints, and
+    // states the one-reason verdict strings the starter only describes in prose -- next
+    // to `fixtures/generate.py`, which defines `signed_message` under the exact name the
+    // starter's own stub asks for and labels every assertion by kind for any seed.
+    expect(participantStage).not.toContain("COPY fixtures/");
+    expect(participantStage).not.toContain("tests/hidden");
+    expect(participantStage).not.toContain("COPY verifier/");
+    expect(participantStage).not.toContain("COPY reference/");
+    expect(participantStage).not.toContain("COPY mutation.py");
+    expect(participantStage).toContain("COPY tests/public/");
+    expect(participantStage).toContain("COPY participant/");
+
+    const verifierStage = dockerfile.slice(
+      dockerfile.indexOf("FROM base AS verifier"),
+      dockerfile.indexOf("FROM participant AS author"),
+    );
+    expect(verifierStage).toContain("COPY fixtures/");
+    expect(verifierStage).toContain("COPY tests/hidden/");
+    expect(verifierStage).toContain("COPY verifier/");
+    expect(verifierStage).not.toContain("COPY participant/");
+    expect(verifierStage).not.toContain("COPY reference/");
+    expect(verifierStage).not.toContain("COPY mutation.py");
+  });
+
+  it("reproduces the original leak: nothing the participant image carries reaches signed_message or the assertion kinds", () => {
+    // The file list comes from the Dockerfile's participant stage, via the same
+    // derivation `check-answer-reachability.ts` uses, rather than being restated here --
+    // so a COPY that puts `fixtures/` or `tests/hidden/` back fails this test.
+    const participantFiles = participantPythonFiles(
+      join(import.meta.dir, ".."),
+      "challenges/ac26-w3-passkey-assertion",
+    );
+    expect(participantFiles).not.toContain(
+      "challenges/ac26-w3-passkey-assertion/local/fixtures/generate.py",
+    );
+    expect(participantFiles).not.toContain(
+      "challenges/ac26-w3-passkey-assertion/local/tests/hidden/check_assertion.py",
+    );
+    expect(participantFiles).toContain(
+      "challenges/ac26-w3-passkey-assertion/local/tests/public/test_assertion.py",
+    );
+    for (const file of participantFiles) {
+      const source = readFileSync(join(import.meta.dir, "..", file), "utf8");
+      // The one permitted mention is the lazy, function-scoped checkout/author
+      // fallback: never a module-level import, which is what would fail loudly the
+      // moment it ran inside a participant image that carries no `fixtures/` at all.
+      expect(source).not.toMatch(/^from fixtures/m);
+      expect(source).not.toMatch(/^import fixtures/m);
+    }
+    // The starter's own stubs stay -- that is the file the learner edits, and it never
+    // held a working implementation.
+    const starter = bundle("starter");
+    for (const name of [
+      "signed_message",
+      "verify_signature",
+      "user_verified",
+      "find_signed_without_user_verification",
+    ]) {
+      expect(starter).toContain(`def ${name}(`);
+      const rest = starter.slice(starter.indexOf(`def ${name}(`) + 1);
+      const nextDef = rest.indexOf("\ndef ");
+      const body = nextDef === -1 ? rest : rest.slice(0, nextDef);
+      expect(body).toContain("raise NotImplementedError");
+    }
+  });
+
+  it("keeps the Portal editor API and the fixtures import on opposite sides of the split", () => {
+    const participantServer = read("local/participant/server.py");
+    const hiddenServer = read("local/verifier/server.py");
+    for (const endpoint of [
+      "/api/config",
+      "/api/inspect",
+      "/api/starter",
+      "/api/test",
+      "/api/prepare",
+    ]) {
+      expect(participantServer).toContain(endpoint);
+      expect(hiddenServer).not.toContain(endpoint);
+    }
+    expect(participantServer).not.toContain("def evaluate(");
+    expect(participantServer).not.toContain("def _check_source(");
+    expect(participantServer).not.toMatch(/^from fixtures/m);
+    expect(participantServer).not.toContain("tests.hidden");
+    expect(hiddenServer).toContain("from fixtures.generate import public_payload");
+    expect(hiddenServer).toContain("/verify");
+    expect(hiddenServer).toContain("/healthz");
+    expect(hiddenServer).toContain("/public");
+  });
+
+  it("does not let a submission import what the participant image stopped shipping", () => {
+    // The grading process runs in the image that still carries `fixtures/` and
+    // `tests/hidden/`, so the split alone would leave them one `import` away from the
+    // submitted file. The runner drops both packages and the problem root before
+    // importing it. This is the one-import path, not the filesystem: honor-system local
+    // mode is unchanged (TEMPLATE.md "Assurance scope").
+    const runner = read("local/verifier/server.py");
+    expect(runner).toContain("sys.modules.pop(module_name, None)");
+    expect(runner).toContain("sys.path.remove({root!r})");
+    for (const checkpoint of CHECKPOINTS) {
+      expect(evaluate(checkpoint, "from fixtures.generate import *\n")).toBe(false);
+      expect(evaluate(checkpoint, "from tests.hidden.check_assertion import *\n")).toBe(false);
+    }
+  }, 120_000);
+
+  it("proxies /verify to the internal verifier and fails closed when it is unreachable", () => {
+    const script = String.raw`
+import json, sys
+sys.path.insert(0, ".")
+from participant import server
+bodies = [{"checkpointId": checkpoint, "submission": "anything"} for checkpoint in server.CHECKPOINTS]
+print(json.dumps({
+    "missing": [server.proxy_verdict(body, "") for body in bodies],
+    "unavailable": [server.proxy_verdict(body, "http://127.0.0.1:1/verify") for body in bodies],
+    "hasInlineEvaluator": hasattr(server, "evaluate") or hasattr(server, "_check_source"),
+}))
+`;
+    const result = python(["-c", script]);
+    expect(result.status).toBe(0);
+    const output = JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "{}") as {
+      missing: Array<{ checkpointId: string; correct: boolean }>;
+      unavailable: Array<{ checkpointId: string; correct: boolean }>;
+      hasInlineEvaluator: boolean;
+    };
+    const expectedVerdicts = CHECKPOINTS.map((checkpointId) => ({ checkpointId, correct: false }));
+    expect(output.missing).toEqual(expectedVerdicts);
+    expect(output.unavailable).toEqual(expectedVerdicts);
+    expect(output.hasInlineEvaluator).toBe(false);
+  });
+
+  it("serves the deployment's public half without its kind labels, and the worked example with them", () => {
+    const script = [
+      "import json, sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import public_payload",
+      "payload = public_payload('public-payload-check')",
+      "print(json.dumps({",
+      "  'deploymentKeys': sorted(payload['deployment']),",
+      "  'deploymentText': json.dumps(payload['deployment']),",
+      "  'exampleKeys': sorted(payload['workedExample']),",
+      "  'exampleKinds': sorted(payload['workedExample']['aliasesByKind']),",
+      "}))",
+    ].join("\n");
+    const result = python(["-c", script]);
+    expect(result.status).toBe(0);
+    const payload = JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "{}") as {
+      deploymentKeys: string[];
+      deploymentText: string;
+      exampleKeys: string[];
+      exampleKinds: string[];
+    };
+    expect(payload.deploymentKeys).toEqual(["assertions", "serverRecord"]);
+    // Which assertion is which is the answer to two of the three checkpoints.
+    expect(payload.deploymentText).not.toContain("aliasesByKind");
+    expect(payload.deploymentText).not.toContain("no-uv");
+    expect(payload.exampleKeys).toEqual(["aliasesByKind", "assertions", "seed", "serverRecord"]);
+    expect(payload.exampleKinds).toEqual(["bad-signature", "honest", "no-uv", "wrong-rp"]);
+  });
+
+  it("reads the public evidence over the network, and names the missing service when it cannot", () => {
+    const injected = python([
+      "-c",
+      [
+        "import json, sys",
+        "sys.path.insert(0, '.')",
+        "from fixtures.generate import public_payload",
+        "print(json.dumps(public_payload('injected-evidence-seed')))",
+      ].join("\n"),
+    ]);
+    expect(injected.status).toBe(0);
+    const payload = injected.stdout.trim().split("\n").at(-1) ?? "{}";
+    const shown = spawnSync("python3", ["show.py"], {
+      cwd: LOCAL,
+      encoding: "utf8",
+      env: { PATH: process.env.PATH ?? "", PUBLIC_EVIDENCE_JSON: payload },
+      timeout: 180_000,
+    });
+    expect(shown.status).toBe(0);
+    expect(shown.stdout).toContain((JSON.parse(payload) as {
+      deployment: { serverRecord: { rpId: string } };
+    }).deployment.serverRecord.rpId);
+
+    const unreachable = spawnSync("python3", ["show.py"], {
+      cwd: LOCAL,
+      encoding: "utf8",
+      env: { PATH: process.env.PATH ?? "", VERIFIER_PUBLIC_URL: "http://127.0.0.1:1/public" },
+      timeout: 180_000,
+    });
+    expect(unreachable.status).not.toBe(0);
+    expect(`${unreachable.stdout}${unreachable.stderr}`).toContain("make verifier-up");
+    expect(unreachable.stderr).not.toContain("Traceback");
+  }, 120_000);
+
+  it("runs the participant path through Compose, with the verifier as a health-gated dependency", () => {
+    const makefile = read("Makefile");
+    for (const target of ["verifier-up:", "verifier-down:", "docker compose -f local/docker-compose.yml -p"]) {
+      expect(makefile).toContain(target);
+    }
+    for (const target of ["test: build verifier-up", "test-one: build verifier-up", "inspect: build verifier-up"]) {
+      expect(makefile).toContain(target);
+    }
+
+    const compose = read("local/docker-compose.yml");
+    for (const contract of [
+      "target: participant",
+      "target: verifier",
+      '"127.0.0.1:18121:18121"',
+      "VERIFIER_URL: http://verifier:18146/verify",
+      "VERIFIER_PUBLIC_URL: http://verifier:18146/public",
+      "condition: service_healthy",
+      "internal: true",
+      'com.docker.network.bridge.enable_ip_masquerade: "false"',
+    ]) {
+      expect(compose).toContain(contract);
+    }
+    // The verifier is reachable from the Workbench and from nowhere else.
+    expect(compose).not.toContain('"127.0.0.1:18146:18146"');
+    const parsed = parseYaml(compose) as {
+      services: Record<string, { ports?: string[]; networks?: string[] }>;
+    };
+    expect(Object.keys(parsed.services).sort()).toEqual(["verifier", "workbench"]);
+    expect(parsed.services.verifier?.ports).toBeUndefined();
+    expect(parsed.services.verifier?.networks).toEqual(["lab"]);
   });
 });

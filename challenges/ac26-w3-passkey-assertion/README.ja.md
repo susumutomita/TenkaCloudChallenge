@@ -69,7 +69,13 @@ make inspect
 make test
 make test-one ID=signature
 make reset
+make verifier-down   # 上の 3 つが起動する採点 container を止める
 ```
+
+この 3 つは `docker compose` 経由で動きます。起動する Workbench container が持つのは starter と
+公開テストだけで、この deployment の fixture は compose network 越しに、公開されていない 2 つ目の
+container から読みます。 `make verifier-up` はその 2 つ目だけを起動し、 `make verifier-down` が
+stack を止めます。
 
 `local/starter/assertion.py` の次の関数を完成させます。
 
@@ -105,10 +111,13 @@ onboarding や key extraction 攻撃を再現しません。また修正前の e
 
 ## 保証範囲
 
-ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も
-あなたの管理下にあるので、image の中身はあなたに対して秘匿されていません。
-`reference/` と `tests/hidden/` を bind-mount しないのは、あなたの git checkout に
-紛れ込ませないためであって、手が届かなくするためではありません。
+ローカル実行は**自習用の honor-system 検証**です。 Docker デーモンと compose stack の全
+container を管理する人に対して、隠し材料を秘匿することはできません。ここでの境界は
+誤配 (misdelivery) の防止であって、その人に対する機密性ではありません。あなたが build して
+実行する Workbench container が持つのは starter と公開テストだけで、fixtures・hidden test・
+reference・verifier は入っていません。それらは Workbench が compose network 越しに参照する、
+公開されていない 2 つ目の container と、 `make reference-test` が build する author 専用 image に
+だけあります。
 
 verifier の保証はもっと狭いものです。提出 source は時間・memory・process・output の上限付きで
 実行され、checkpoint は echo した id しか加点できず、verdict は期待値を漏らしません。hidden check

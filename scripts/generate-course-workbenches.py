@@ -72,6 +72,13 @@ PORTAL_PACKAGES = {
     # shipped in the single participant stage alongside the Portal. The Portal moved to
     # participant/ when the hidden suite stopped shipping there.
     "ac26-w3-schnorr": "participant",
+    # Issue 537/538 (Issue 543 option B2): the hidden suite grades all three checkpoints
+    # and fixtures/generate.py defines signed_message under the exact name
+    # starter/assertion.py's own stub asks the learner to write, so both left the
+    # participant stage and the Portal moved with them. Its config_payload is authored
+    # per problem rather than generated, so the hand-written English check follows it to
+    # participant/server.py.
+    "ac26-w3-passkey-assertion": "participant",
     # Issue 543 option B2: the hidden suite grades every checkpoint and fixtures/
     # implements every stub, so both left the participant stage and the Portal moved
     # with them.
