@@ -8,8 +8,11 @@
  *   - SecureClient:  RLS enforced (cross-tenant + role + anon attacks all blocked)
  *
  * The grader's job is to turn those behaviours into a verdict, so the tests pin
- * exactly that: the secure state passes all 7, the broken state fails, and each
- * individual leak is attributed to the right assertion.
+ * exactly that: the secure state passes all 8, the broken state fails, and each
+ * individual leak is attributed to the right assertion. A third fixture,
+ * UpdateMissingWithCheckClient, targets one specific regression (issue #542):
+ * an UPDATE policy with `USING` but no `WITH CHECK` used to score 7/7 because
+ * nothing exercised UPDATE's WITH CHECK directly.
  */
 import { describe, expect, it } from "bun:test";
 import { ASSERTIONS, runGrader } from "./grade.mjs";
@@ -75,6 +78,16 @@ class SecureClient {
   async anonGetDocuments() {
     return { rows: [] }; // RLS denies the anon/public role
   }
+  async updateDocumentOrganization(actor, id, newOrganizationId) {
+    const row = this.#find(id);
+    if (!row || row.organization_id !== actor.organizationId) return { ok: true, rowsAffected: 0 }; // USING gates the target row
+    // WITH CHECK: the row's new organization_id must still be the actor's own org.
+    if (newOrganizationId !== actor.organizationId) {
+      throw new Error("new row violates row-level security policy");
+    }
+    row.organization_id = newOrganizationId;
+    return { ok: true, rowsAffected: 1 };
+  }
 }
 
 /**
@@ -109,10 +122,35 @@ class BrokenClient {
   async anonGetDocuments() {
     return { rows: this.rows }; // anon lists everything
   }
+  async updateDocumentOrganization(_actor, id, newOrganizationId) {
+    const row = this.#find(id);
+    if (!row) return { ok: true, rowsAffected: 0 };
+    row.organization_id = newOrganizationId; // no RLS — reassigns ANY row's org
+    return { ok: true, rowsAffected: 1 };
+  }
+}
+
+/**
+ * Regression fixture for issue #542: an UPDATE policy that has `USING` but no
+ * `WITH CHECK`. This is otherwise a fully correct SecureClient — cross-tenant
+ * reads/writes are blocked, INSERT enforces its own separate WITH CHECK, delete
+ * is owner-only, anon reads nothing — except that reassigning a user's OWN
+ * document to another org's organization_id via UPDATE succeeds, because
+ * nothing constrains what the row is allowed to become. This is the exact
+ * submission that used to score 7/7 before the grader checked UPDATE's WITH
+ * CHECK directly.
+ */
+class UpdateMissingWithCheckClient extends SecureClient {
+  async updateDocumentOrganization(actor, id, newOrganizationId) {
+    const row = this.rows.find((r) => r.id === id);
+    if (!row || row.organization_id !== actor.organizationId) return { ok: true, rowsAffected: 0 }; // USING still gates the target row
+    row.organization_id = newOrganizationId; // no WITH CHECK on UPDATE — reassignment succeeds
+    return { ok: true, rowsAffected: 1 };
+  }
 }
 
 describe("rls-tenant-isolation grader", () => {
-  it("should declare exactly the 7 issue assertions in order", () => {
+  it("should declare exactly the 8 issue assertions in order", () => {
     expect(ASSERTIONS.map((a) => a.id)).toEqual([
       "a-user-reads-own-doc",
       "a-user-cannot-read-b-doc",
@@ -121,21 +159,36 @@ describe("rls-tenant-isolation grader", () => {
       "member-cannot-delete",
       "owner-can-delete",
       "anon-cannot-read",
+      "owner-cannot-reassign-doc-org",
     ]);
   });
 
-  it("should mark a correctly-RLS'd backend as correct with all 7 passing", async () => {
+  it("should mark a correctly-RLS'd backend as correct with all 8 passing", async () => {
     const verdict = await runGrader(new SecureClient(), { actors, docs });
     expect(verdict.correct).toBe(true);
-    expect(verdict.passedCount).toBe(7);
-    expect(verdict.total).toBe(7);
+    expect(verdict.passedCount).toBe(8);
+    expect(verdict.total).toBe(8);
     expect(verdict.results.every((r) => r.passed)).toBe(true);
   });
 
   it("should mark the vulnerable starter backend as incorrect", async () => {
     const verdict = await runGrader(new BrokenClient(), { actors, docs });
     expect(verdict.correct).toBe(false);
-    expect(verdict.passedCount).toBeLessThan(7);
+    expect(verdict.passedCount).toBeLessThan(8);
+  });
+
+  it("should fail ONLY the WITH-CHECK-on-UPDATE assertion when the UPDATE policy has USING but no WITH CHECK (issue #542)", async () => {
+    const verdict = await runGrader(new UpdateMissingWithCheckClient(), { actors, docs });
+    const failed = verdict.results.filter((r) => !r.passed).map((r) => r.id);
+    expect(failed).toEqual(["owner-cannot-reassign-doc-org"]);
+    expect(verdict.passedCount).toBe(7);
+    expect(verdict.correct).toBe(false);
+  });
+
+  it("should pass the WITH-CHECK-on-UPDATE assertion when UPDATE enforces WITH CHECK", async () => {
+    const verdict = await runGrader(new SecureClient(), { actors, docs });
+    const check = verdict.results.find((r) => r.id === "owner-cannot-reassign-doc-org");
+    expect(check.passed).toBe(true);
   });
 
   it("should fail every leak/role assertion on the broken backend and only pass the two legitimate-access ones", async () => {
@@ -147,6 +200,7 @@ describe("rls-tenant-isolation grader", () => {
       "a-user-cannot-insert-into-b",
       "member-cannot-delete",
       "anon-cannot-read",
+      "owner-cannot-reassign-doc-org",
     ]);
     // The two assertions that test legitimate access still pass on the broken app.
     const passed = verdict.results.filter((r) => r.passed).map((r) => r.id);

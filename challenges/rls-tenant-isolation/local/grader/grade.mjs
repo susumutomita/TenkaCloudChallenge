@@ -11,14 +11,24 @@
  *   client.insertDocument(actor, doc)            -> { ok }                      | throws
  *   client.deleteDocument(actor, documentId)     -> { ok, rowsAffected }       | throws
  *   client.anonGetDocuments()                    -> { rows: Doc[] }            | throws
+ *   client.updateDocumentOrganization(actor, documentId, newOrgId)
+ *                                                 -> { ok, rowsAffected }       | throws
  *
  * An `actor` is `{ jwt, userId, organizationId, role }`. The grader supplies the
  * actors from the seed; the client binds them to the right authenticated session
  * (a real JWT/role in the container, a fake in unit tests).
  *
- * Each of the 7 attack assertions resolves to a `{ id, label, passed, detail }`
+ * `updateDocumentOrganization` exists because `patchDocument` mirrors the app's
+ * PATCH surface, which never forwards `organization_id` (see server.mjs) — so an
+ * attack that rewrites `organization_id` through the app is not reachable today.
+ * It IS reachable at the database layer: any code path, future endpoint, or a
+ * loosened allow-list that reaches Postgres with an UPDATE naming that column
+ * must still be denied by `WITH CHECK`, so the grader drives that column
+ * directly rather than only exercising the field the app happens to expose.
+ *
+ * Each of the 8 attack assertions resolves to a `{ id, label, passed, detail }`
  * result. A blocked attack (RLS did its job) is a PASS. The overall verdict is
- * "all 7 passed". `/verify` reports it; the platform records the verdict and
+ * "all 8 passed". `/verify` reports it; the platform records the verdict and
  * never sees the policies themselves.
  *
  * Why this shape: the same control surface is enforceable both ways. App-side
@@ -60,7 +70,11 @@ async function attempt(fn) {
 }
 
 /**
- * The 7 attack assertions, in issue order. Each takes the injected `client` and
+ * The 8 attack assertions. The first 7 are in issue order; the 8th (added for
+ * issue #542) closes a gap in the original set: requirement 4 in the starter's
+ * comment promises `WITH CHECK` on both INSERT and UPDATE, but only INSERT was
+ * ever checked, so a submission with `USING` and no `WITH CHECK` on the UPDATE
+ * policy scored full marks. Each assertion takes the injected `client` and
  * the resolved `actors`/`docs` from the seed and returns a result object.
  *
  * actors: { aMember, aOwner, bMember, bOwner }
@@ -171,6 +185,22 @@ export const ASSERTIONS = [
         detail: passed
           ? "The anonymous/public client read no documents."
           : "LEAK: the anon key listed documents; RLS is not enabled or a policy allows anon.",
+      };
+    },
+  },
+  {
+    id: "owner-cannot-reassign-doc-org",
+    label: "owner direct SQL UPDATE own doc's organization_id -> fails (WITH CHECK blocks reassignment)",
+    async run(client, actors, docs) {
+      const outcome = await attempt(() =>
+        client.updateDocumentOrganization(actors.bOwner, docs.bDoc.id, docs.aDoc.organization_id),
+      );
+      const passed = writeWasBlocked(outcome);
+      return {
+        passed,
+        detail: passed
+          ? "UPDATE reassigning organization_id to another org was blocked (WITH CHECK)."
+          : "LEAK: an owner moved their own document into another org by rewriting organization_id — the UPDATE policy has no WITH CHECK.",
       };
     },
   },

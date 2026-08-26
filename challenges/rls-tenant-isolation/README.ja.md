@@ -14,7 +14,7 @@ make local PROBLEM=rls-tenant-isolation   # TenkaCloud リポジトリのルー�
 ```
 
 - **challenge 表面:** <http://127.0.0.1:18080> — ドキュメント API。
-- **ゴール:** 各社のドキュメントを相手社から不可視・不可変にし、 それをデータベースで enforce する。 7 件の攻撃テストを全て通せば正解。
+- **ゴール:** 各社のドキュメントを相手社から不可視・不可変にし、 それをデータベースで enforce する。 8 件の攻撃テストを全て通せば正解。
 
 ## ストーリー
 
@@ -79,7 +79,7 @@ Postgres で境界を enforce する。 `local/solution/policies.sql` (空で始
 make local PROBLEM=rls-tenant-isolation   # 再ビルド / 再起動でポリシーを再適用
 ```
 
-ポリシーは 7 件の検査を満たすこと:
+ポリシーは 8 件の検査を満たすこと:
 
 1. `public.documents` で RLS を **有効化** (テーブル所有者も縛るよう `force` も)。
 2. `SELECT` は自社の行のみ。
@@ -91,7 +91,9 @@ schema (`local/db/schema.sql`) にポリシーで使う identity ヘルパが定
 
 ## 採点
 
-platform は答えを持たない。 提出時、 ローカル採点 API がコンテナの loopback `/verify` (`POST http://127.0.0.1:18081/verify`) に委譲し、 grader が **7 件の攻撃 assertion** を live Postgres に対して実行して `{ "correct": boolean }` を返す。 全 7 件 PASS で正解。 正解は 300 点、 誤答は 10 点減点。
+platform は答えを持たない。 提出時、 ローカル採点 API がコンテナの loopback `/verify` (`POST http://127.0.0.1:18081/verify`) に委譲し、 grader が **8 件の攻撃 assertion** を live Postgres に対して実行して `{ "correct": boolean }` を返す。 全 8 件 PASS で正解。 正解は 300 点、 誤答は 10 点減点。
+
+8 件目が要る理由: `patchDocument` (検査 3) はアプリの PATCH endpoint が転送するフィールド (`title`、`body`) しか叩かない (`organization_id` は転送しない、 `local/app/server.mjs` 参照)。 そのため `UPDATE` ポリシーに `USING` だけ書いて `WITH CHECK` を書かない解答はアプリからは見えないが、 データベースには直接届く。 grader は検査 1〜7 と同じ仕組み (`local/app/pg-client.mjs`) で、 その `UPDATE ... SET organization_id` を SQL レベルで直接実行して確認する。
 
 ## grader の単体テスト
 

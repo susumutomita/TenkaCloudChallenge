@@ -1,10 +1,10 @@
 -- rls-tenant-isolation — YOUR ANSWER GOES HERE.
 --
 -- This file starts empty. While it is empty, the container loads the vulnerable
--- broken-policies.sql (RLS disabled) and the grader's 7 attack assertions FAIL.
+-- broken-policies.sql (RLS disabled) and the grader's 8 attack assertions FAIL.
 --
 -- Your task: enforce the tenant boundary at the DATABASE layer with Postgres
--- Row Level Security, then restart the container. The grader re-runs and all 7
+-- Row Level Security, then restart the container. The grader re-runs and all 8
 -- assertions must pass.
 --
 -- The identity helpers you can use are already defined in schema.sql:
