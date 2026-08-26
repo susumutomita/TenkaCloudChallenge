@@ -145,6 +145,32 @@ source text alone — so passing it is necessary and not sufficient. What is suf
 under `local/fixtures/`, `local/verifier/`, or `local/tests/hidden/` may appear in the
 `participant` Dockerfile stage's `COPY` sources.
 
+#### What this section does not yet cover
+
+The shape above closes the *direct-value-comparison* leak: a checker comparing against a value
+`fixtures/` derives. It is not the whole of Issue 537/543.
+
+A second class is still open and is the larger one — roughly three quarters of what
+`scripts/check-answer-reachability.ts` currently reports, including every `ac26-w5-*` problem.
+There, the checker does not compare against a fixtures-derived value at all. The leak is that
+`starter/` asks a learner to implement a helper while `fixtures/generate.py` already defines a
+working one under the same name, and the participant image needs that generator at runtime to
+derive this deployment's public numbers. Precomputing the numbers at build time does not help,
+because `FLAG_SEED` is chosen at run time.
+
+Removing `fixtures/` from the `participant` stage is the approach recorded for that class too,
+but it has not been carried out, and the choice is recorded on
+[Issue 543](https://github.com/susumutomita/TenkaCloudChallenge/issues/543) as a proposal rather
+than an owner ruling. Do not read this section as having settled it. If you are scaffolding a
+problem whose starter stubs share names with `fixtures/generate.py`, say so on that issue instead
+of assuming the answer.
+
+Two further caveats about the detector, so its count is not mistaken for the remaining surface:
+it matches on names, so a `fixtures/` helper whose name differs from the starter's stub is
+invisible to it; and it does not report an answer-bearing helper defined beside the check function
+in the same file under a `_` prefix. Entries in `scripts/answer-reachability-baseline.json` mean
+*known and unresolved*, never *resolved*.
+
 ## Participant contract
 
 Identical across every AC26 problem, so a learner learns the commands once:
