@@ -55,6 +55,26 @@ blind spot is what hid `ac26-w1-underconstraint` after #533; Issue #525 conditio
 `topLevelFunctions` now reads past a wrapped `def` signature instead of truncating the
 body at its column-0 closing line. Neither added a finding to the catalog.
 
+#576 is the first widening that did. `isStubBody` enumerated trivial placeholders
+literally, so `return 0` was a stub but `return (0, 0, 0)` was not — which is why
+`ac26-w3-field-inverse` read as implemented and this detector reported it **zero times**
+while #537 recorded it as a confirmed leak of 70–145 of its 200 points. Deciding
+structurally (a lone `return` of a flat display whose every element is a trivial literal)
+took the catalog from 36 to 39 findings and lost none of the previous 36.
+
+Those three findings went into the baseline as entries, which is the one narrow exception
+to "never add an entry" — and it is narrow on purpose:
+
+- the widening must *only* add findings, never remove one (diff the two finding lists and
+  show the `comm` result, as #576 did),
+- every new entry must already belong to a class with a decided, ordered rollout — here
+  `stub-vs-implementation` under #543 B2 — and say so in its `reason`, and
+- the entry must be added to the §5 work list in the same breath, so it is queued work
+  and not a permission.
+
+Anything outside that is the thing §2 forbids. A finding you cannot place in a queued
+class is a finding you fix, not baseline.
+
 ## 3. Do not promote a problem on machine evidence alone
 
 Automated checks are source evidence only. `status: draft` → `ready` and the
@@ -160,13 +180,21 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
 
   What is left, with the detector's count each — `ac26-w5-cmux-blind-rotation` (8),
   `ac26-w5-pbs-homnand` (7), `ac26-w5-extract-key-switch` (6),
-  `ac26-w5-encoding-noise` (3), `ac26-w4-commit-open` (1),
-  `ac26-w3-passkey-assertion` (1). Landed so far: `cs-auth-claim-audit` and
-  `ac26-bridge-experiment` (#562), `ac26-w3-schnorr-drill` (#570), `ac26-w5-lwe-rlwe`
-  (#572), `ac26-w5-rgsw-external` (#573). Catalog count is 36 as of #573. Runs have taken
-  the largest count first, so `ac26-w5-cmux-blind-rotation` is next.
+  `ac26-w5-encoding-noise` (5), `ac26-w4-commit-open` (1),
+  `ac26-w3-passkey-assertion` (1), `ac26-w3-field-inverse` (1). Landed so far:
+  `cs-auth-claim-audit` and `ac26-bridge-experiment` (#562), `ac26-w3-schnorr-drill`
+  (#570), `ac26-w5-lwe-rlwe` (#572), `ac26-w5-rgsw-external` (#573). Catalog count is 39
+  as of #576. Runs have taken the largest count first, so `ac26-w5-cmux-blind-rotation`
+  is next.
 
-  **All six remaining are `status: draft`**, so none of them hits the
+  The last two entries are new to this list, and neither is new work landing on it —
+  #576 only made them **visible** (§2). `ac26-w3-field-inverse` is the `egcd` placeholder
+  tuple; `ac26-w5-encoding-noise` went 3 → 5 with `first_failure` and `success_interval`,
+  the same class it was already listed for. So the catalog count rose while nothing got
+  worse, which is the shape to expect whenever a rule stops being blind: never report a
+  rise as a regression, or a fall as a closure.
+
+  **All seven remaining are `status: draft`**, so none of them hits the
   `playtest-verified` wall of §4 — a B2 split there is a PR an agent can carry
   to merge on its own, README correction included. Do not drop a needed README
   correction to stay under the gate (§4); on a `draft` problem it does not fire anyway.
