@@ -83,6 +83,9 @@ PORTAL_PACKAGES = {
     # Same option B2 split, same reason: the hidden suite grades all eight checkpoints and
     # fixtures/ implements seven of the twelve stubs starter/pipeline.py ships.
     "ac26-w5-pbs-homnand": "participant",
+    # Same option B2 split, same reason: the hidden suite grades all eight checkpoints and
+    # fixtures/ implements all six stubs starter/extract.py ships.
+    "ac26-w5-extract-key-switch": "participant",
     # Issue 537/538 (Issue 543 option B2): the hidden suite grades every checkpoint and
     # fixtures/generate.py implements node_hash under the exact name starter/commit.py's
     # own node_hash stub asks the learner to write, so both left the participant stage

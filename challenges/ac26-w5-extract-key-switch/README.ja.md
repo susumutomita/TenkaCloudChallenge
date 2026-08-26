@@ -14,7 +14,7 @@ blind rotation は RLWE 暗号文を残します。使えるようになるま�
 係数 1 つを LWE sample として取り出すことと、その sample を別の鍵・別の次元へ移すこと。
 **中身を変えずに**。
 
-その手前を作り直すわけではありません。`fixtures.generate` が環・RLWE・RGSW・
+その手前を作り直すわけではありません。`participant.fhe` が環・RLWE・RGSW・
 external product・CMUX・回転ループをすべて正しい形で提供します。扱う accumulator は
 本物の blind rotation の出力で、それが持つ noise もそのまま乗っています。
 
@@ -136,10 +136,22 @@ Week 5 の教材は公開済みなので、 `courseAlignment` は `week5/README.
 
 ## 保証範囲
 
-ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も
-あなたの管理下にあるので、 image の中身はあなたに対して秘匿されていません。
+ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも
+あなたの管理下にあるので、 あなたが build したものはあなたに対して秘匿されていません。
 `reference/` と `tests/hidden/` を bind-mount しないのは、あなたの git checkout に
 紛れ込ませないためであって、手が届かなくするためではありません。
+
+そのうえでデプロイが行うのは、事故で手渡さないことです。 container は 2 つです。
+あなたが話す Workbench は starter、 public test、 供給される TFHE 一式である
+`participant/fhe.py`、 `show.py` を持ちます。 採点側の image は `fixtures/`、
+`tests/hidden/`、 verifier を持ち、 ポートを一切公開せず、 gateway のない Docker network に
+置かれます。 `show.py` は、 このデプロイのパラメータ・抽出 trace・鍵切り替え後の sample を
+verifier の `GET /public` から読みます。 そこが返すのは実演であって checkpoint の期待値では
+ありません。 `fixtures/generate.py` はそれらを導出するために `phase_coefficient`、
+`extract_sample`、 `extract_trace`、 `decompose_mask`、 `key_switch`、 `domain_report` を
+実装する必要があります。 これは `starter/extract.py` が書かせる名前のすべてなので、
+あなたが実行する image には入りません
+（[#543](https://github.com/susumutomita/TenkaCloudChallenge/issues/543)）。
 
 verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
 ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。

@@ -193,15 +193,23 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   named `ac26-w5-lwe-rlwe` as outstanding after #572 had merged it — the same staleness
   that this section already records as having cost a run.
 
-  What is left, with the detector's count each — `ac26-w5-extract-key-switch` (6),
-  `ac26-w5-encoding-noise` (5), `ac26-w3-passkey-assertion` (1),
-  `ac26-w3-field-inverse` (1). Landed so far:
+  What is left, with the detector's count each — `ac26-w5-encoding-noise` (5),
+  `ac26-w3-passkey-assertion` (1), `ac26-w3-field-inverse` (1). Landed so far:
   `cs-auth-claim-audit` and `ac26-bridge-experiment` (#562), `ac26-w3-schnorr-drill`
   (#570), `ac26-w5-lwe-rlwe` (#572), `ac26-w5-rgsw-external` (#573),
   `ac26-w5-cmux-blind-rotation` (#579), `ac26-w5-pbs-homnand` (#581),
-  `ac26-w4-commit-open` (#582, split out of #578). Catalog count is 23 as of #582, down
-  from 39. Runs have taken the largest count first, so `ac26-w5-extract-key-switch` is
-  next.
+  `ac26-w4-commit-open` (#582, split out of #578), `ac26-w5-extract-key-switch` (#584).
+  Catalog count is 17 as of #584, down from 39. Runs have taken the largest count first,
+  so `ac26-w5-encoding-noise` is next.
+
+  #584 is the opposite pole from #582 on the measurement below: its free score was the
+  whole problem. All six names `starter/extract.py` asks for are implemented complete in
+  `fixtures/generate.py` under those exact names, so handing that module straight to the
+  hidden suite passed **all eight checkpoints, 300 of 300 points**, for nothing written —
+  and what the participant image ships after the split (`participant/fhe.py`) defines none
+  of the six, so the same probe scores 0. That is the range this class spans: 0/300 at
+  #582, 70/300 at #581, 300/300 here. It is why the rule is to measure per problem rather
+  than to infer from the finding count.
 
   #582 is also the first in this class whose measured free score was **zero**. Handing
   the shipped fixtures module straight to the hidden suite scored 0 of 8 checkpoints, and
@@ -220,7 +228,7 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   whenever a rule stops being blind: never report a rise as a regression, or a fall as a
   closure.
 
-  **All four remaining are `status: draft`**, so none of them hits the
+  **All three remaining are `status: draft`**, so none of them hits the
   `playtest-verified` wall of §4 — a B2 split there is a PR an agent can carry
   to merge on its own, README correction included. Do not drop a needed README
   correction to stay under the gate (§4); on a `draft` problem it does not fire anyway.
@@ -230,8 +238,10 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   Week 5 problems' machinery lived inside `fixtures/generate.py` alongside the graded
   pipeline, so B2 there meant splitting that file along the line the problem already drew
   (`participant/fhe.py` supplied, `fixtures/generate.py` graded and re-exporting it) rather
-  than moving an existing module. `ac26-w5-extract-key-switch` and
-  `ac26-w5-encoding-noise` have the same shape. It is also the first where handing
+  than moving an existing module. #584 copied that shape verbatim for
+  `ac26-w5-extract-key-switch`, down to the file name, and `ac26-w5-encoding-noise` is the
+  same again — copy #581 or #584 rather than designing a third one. It is also the first
+  where handing
   `fixtures.generate` straight to the hidden suite does **not** pass everything — the
   artifacts carry an envelope the bare functions do not attach, so the measured free score
   was 2 of 8 checkpoints, not all of them. Measure it per problem; do not carry #573's
