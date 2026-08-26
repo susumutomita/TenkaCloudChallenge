@@ -30,6 +30,16 @@ import {
 const REPO_ROOT = new URL("..", import.meta.url).pathname;
 const WORKFLOW = readFileSync(join(REPO_ROOT, ".github/workflows/ci.yml"), "utf8");
 
+/** The lines of one job's definition, from its header to the next job header. */
+function jobBlock(workflow: string, job: string): string {
+  const start = workflow.indexOf(`\n  ${job}:\n`);
+  if (start === -1) return "";
+  const rest = workflow.slice(start + 1);
+  const body = rest.slice(rest.indexOf("\n"));
+  const next = /^ {2}[\w-]+:$/mu.exec(body);
+  return next === null ? rest : rest.slice(0, rest.indexOf("\n") + next.index);
+}
+
 /** The slice of `text` from the first line containing `start` up to the next `end`. */
 function between(text: string, start: string, end: string): string {
   const from = text.indexOf(start);
@@ -203,6 +213,33 @@ describe("the CI workflow agrees with the partition", () => {
     expect(values).toEqual(
       Array.from({ length: workflowShardTotal() }, (_, offset) => offset + 1),
     );
+  });
+
+  it("should give no verdict for a run that was cancelled, and still one when a job fails", () => {
+    // Issue 557. The `concurrency` group cancels a pull request's superseded run, and
+    // under `if: always()` this job still ran there, read `cancelled` off the jobs that
+    // had not finished, and reported a red `validate` for a commit nothing was wrong
+    // with — indistinguishable, in the checks list, from a real failure.
+    //
+    // The condition must still be a status-check function. Drop that and GitHub applies
+    // an implicit `success()`, so the aggregation stops running exactly when a shard
+    // fails — the one case it exists for. `!cancelled()` satisfies both.
+    const block = jobBlock(WORKFLOW, "validate");
+    const condition = /^ {4}if: (.+)$/mu.exec(block)?.[1]?.trim();
+    expect(condition, "validate has no if: condition").toBeDefined();
+    expect(condition, "validate would stop running when a shard fails").toMatch(
+      /cancelled\(\)|always\(\)|success\(\)|failure\(\)/u,
+    );
+    expect(condition, "always() makes a superseded run report a false failure (Issue 557)").not.toBe(
+      "always()",
+    );
+    expect(condition).toContain("cancelled()");
+
+    // And `cancelled` must not become a pass: this job is skipped when the run itself
+    // was cancelled, so a `cancelled` result reaching the script means one job was
+    // stopped on its own, which is a real failure.
+    expect(block).not.toContain("cancelled) ;;");
+    expect(block).not.toContain("success|cancelled)");
   });
 
   it("should gate on every job, so a failing shard cannot be ignored", () => {

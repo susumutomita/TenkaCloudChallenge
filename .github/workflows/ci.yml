@@ -517,11 +517,23 @@ jobs:
           docker image rm -f "$IMAGE" >/dev/null 2>&1 || true
 
   validate:
-    # One stable name in front of the matrix. `if: always()` is what makes this
+    # One stable name in front of the matrix. The condition below is what makes this
     # run when a shard fails — and it is also what makes `needs:` stop gating, so
     # the result has to be asserted explicitly rather than implied.
+    #
+    # `!cancelled()` rather than `always()` (Issue 557). The `concurrency` group added
+    # in #550 cancels a pull request's superseded run, and under `always()` this job
+    # still ran there, read `cancelled` off the jobs that had not finished, and reported
+    # a red `validate` for a commit that nothing was wrong with. A cancelled run has no
+    # verdict to give: the verdict belongs to the run for the current head.
+    #
+    # It is a status-check function, so it still removes the implicit `success()` and
+    # this job runs on failure — which is the whole point of the aggregation. What it
+    # does NOT do is make `cancelled` a pass: a job result of `cancelled` when the run
+    # itself was not cancelled means something else stopped that job, and the script
+    # below still fails on it.
     needs: [changes, suite, solvability, checks, rls-runtime, eventbridge-runtime, github-oidc-runtime, signed-npm-runtime, asm-worst-case-latency-runtime]
-    if: always()
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -541,7 +553,10 @@ jobs:
           echo "changes=$CHANGES suite=$SUITE solvability=$SOLVABILITY checks=$CHECKS rls=$RLS eventbridge=$EVENTBRIDGE oidc=$OIDC signed-npm=$SIGNED_NPM asm=$ASM"
 
           failed=0
-          # These always run, so only success passes.
+          # These always run, so only success passes. `cancelled` reaches here only when
+          # the run itself was NOT cancelled (this job is skipped in that case), so it
+          # means that one job was stopped on its own -- a lost runner, a step-level
+          # cancel -- and that is a failure, not a supersession.
           for pair in "changes:$CHANGES" "suite:$SUITE" "solvability:$SOLVABILITY" "checks:$CHECKS"; do
             name="${pair%%:*}"; result="${pair#*:}"
             if [ "$result" != "success" ]; then
