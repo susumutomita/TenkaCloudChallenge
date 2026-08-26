@@ -32,7 +32,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "starter"))
 
 import pipeline as submission  # noqa: E402
-from fixtures.generate import (  # noqa: E402
+from participant.fhe import (  # noqa: E402 - the supplied Week 5 stack, not the ground truth
     bootstrap_key,
     key_id,
     lwe_decrypt,

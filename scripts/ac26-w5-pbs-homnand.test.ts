@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
+import { participantPythonFiles } from "./lib/local-play-problems";
 import { parse as parseYaml } from "yaml";
 
 /**
@@ -797,5 +798,194 @@ describe("ac26-w5-pbs-homnand: metadata contracts", () => {
       "problem.ac26-w5-lwe-rlwe",
       "problem.ac26-w5-rgsw-external",
     ]);
+  });
+});
+
+describe("ac26-w5-pbs-homnand: participant/verifier separation (Issue 543/537)", () => {
+  it("keeps the fixture derivation and hidden suite out of the participant Docker stage", () => {
+    const dockerfile = read("local/Dockerfile");
+    const participantStage = dockerfile.slice(
+      dockerfile.indexOf("FROM base AS participant"),
+      dockerfile.indexOf("FROM base AS verifier"),
+    );
+    expect(participantStage).not.toContain("COPY tests/hidden/");
+    expect(participantStage).not.toContain("COPY verifier/");
+    expect(participantStage).not.toContain("COPY reference/");
+    expect(participantStage).not.toContain("COPY mutation.py");
+    // Issue 543 option B2: `fixtures/` is on the verifier's side of the boundary too.
+    expect(participantStage).not.toContain("COPY fixtures/");
+    expect(participantStage).toContain("COPY tests/public/");
+    expect(participantStage).toContain("COPY participant/");
+    expect(participantStage).toContain("COPY starter/");
+
+    const verifierStage = dockerfile.slice(
+      dockerfile.indexOf("FROM base AS verifier"),
+      dockerfile.indexOf("FROM participant AS author"),
+    );
+    expect(verifierStage).toContain("COPY fixtures/");
+    expect(verifierStage).toContain("COPY tests/hidden/");
+    expect(verifierStage).toContain("COPY verifier/");
+    // The supplied Week 5 stack, and only that: the Portal server and its adapter must not
+    // reach the grading image, so the whole `participant/` package is never copied.
+    expect(verifierStage).toContain("COPY participant/fhe.py");
+    expect(verifierStage).not.toContain("COPY participant/ ");
+    expect(verifierStage).not.toContain("COPY reference/");
+    expect(verifierStage).not.toContain("COPY mutation.py");
+
+    // The author target is `FROM participant`, so dropping fixtures/ above takes it out of
+    // the author image too unless it is copied back -- and mutation.py, the hidden suite
+    // and the seed sweep all need it.
+    const authorStage = dockerfile.slice(dockerfile.indexOf("FROM participant AS author"));
+    expect(authorStage).toContain("COPY fixtures/");
+    expect(authorStage).toContain("COPY tests/hidden/");
+  });
+
+  it("reproduces the original leak: the seven graded functions are no longer in the participant image", () => {
+    // Before Issue 543's option B2, `fixtures/generate.py` shipped in the single participant
+    // stage. It has to implement working `lookup_accumulator`, `to_rotation_domain`,
+    // `blind_rotate`, `output_noise_bound`, `correctness_bound`, `refresh_report` and
+    // `nand_combine` to derive this deployment's trace rows and noise contract -- the same
+    // names `starter/pipeline.py` asks the learner to write -- so every one of them was a
+    // single import away. The file list below comes from the Dockerfile via the same
+    // derivation `check-answer-reachability.ts` uses, so a COPY that puts `fixtures/` back
+    // fails this test.
+    const repoRoot = join(import.meta.dir, "..");
+    const participantFiles = participantPythonFiles(repoRoot, "challenges/ac26-w5-pbs-homnand");
+    expect(participantFiles).not.toContain(
+      "challenges/ac26-w5-pbs-homnand/local/fixtures/generate.py",
+    );
+    expect(participantFiles).toContain(
+      "challenges/ac26-w5-pbs-homnand/local/tests/public/test_pipeline.py",
+    );
+    expect(participantFiles).toContain("challenges/ac26-w5-pbs-homnand/local/show.py");
+    // The ten stage contracts `tests/hidden/check_pipeline.py` grades, not just the seven
+    // the detector names: `bootstrap`, `homomorphic_nand` and `pipeline_trace` compose the
+    // others and shipping any of them is the same leak one level up.
+    const graded = [
+      "lookup_accumulator",
+      "to_rotation_domain",
+      "blind_rotate",
+      "bootstrap",
+      "nand_combine",
+      "homomorphic_nand",
+      "pipeline_trace",
+      "output_noise_bound",
+      "correctness_bound",
+      "refresh_report",
+    ];
+    for (const file of participantFiles) {
+      const source = readFileSync(join(repoRoot, file), "utf8");
+      // The one permitted mention is the lazy, function-scoped checkout/author fallback in
+      // show.py: never a module-level import, which is what would fail loudly the moment it
+      // ran inside a participant image that carries no `fixtures/` at all.
+      expect(source).not.toMatch(/^from fixtures/m);
+      expect(source).not.toMatch(/^import fixtures/m);
+      // `starter/pipeline.py` is the one file that may define these names -- as the empty
+      // stubs the learner fills in. Anywhere else in the participant image, a definition of
+      // the same name is a working implementation of the problem.
+      if (file.includes("/starter/")) continue;
+      for (const name of graded) expect(source).not.toContain(`def ${name}(`);
+    }
+
+    // And the leak is real, not hypothetical. Unlike the other problems in this class the
+    // artifacts here carry an envelope (`kind`, `keyId`, `dimension`, `modulus`,
+    // `parameterSetId`, `noiseBound`) that `fixtures.generate`'s bare functions do not
+    // attach, so handing that module to the hidden suite unmodified does not pass
+    // everything -- it passes `evaluate` and `refresh`, 70 of this problem's 300 points,
+    // for nothing written. The rest of the leak is that the same file, while it shipped,
+    // supplied the mathematics of the other six checkpoints in readable form; that part is
+    // what the file-list assertion above closes. Measured, not asserted: this probe runs in
+    // the checkout, where `fixtures/` is on disk.
+    const free = JSON.parse(
+      probe([
+        "import json",
+        "from tests.hidden import check_pipeline",
+        "from fixtures import generate",
+        "phases = ('check_lut', 'check_domain', 'check_rotate', 'check_extract',",
+        "          'check_switch', 'check_evaluate', 'check_refresh', 'check_combine',",
+        "          'check_nand', 'check_transfer')",
+        `print(json.dumps({p: getattr(check_pipeline, p)(generate, ${JSON.stringify(SEED)}) for p in phases}))`,
+      ]),
+    ) as Record<string, string[]>;
+    const passed = Object.entries(free)
+      .filter(([, failures]) => failures.length === 0)
+      .map(([phase]) => phase)
+      .sort();
+    expect(passed).toEqual(["check_evaluate", "check_refresh"]);
+  });
+
+  it("serves the public half over the verifier's GET /public, and no checkpoint's answer", () => {
+    const payload = JSON.parse(
+      probe([
+        "import json",
+        "from fixtures.generate import public_payload",
+        `print(json.dumps(public_payload(${JSON.stringify(SEED)}, 'always-one', 0)))`,
+      ]),
+    ) as Record<string, unknown>;
+    // Everything `show.py` printed before the split, and nothing else. The three graded
+    // numbers and the trace come back as values, never as the functions that produce them.
+    for (const key of ["healthToken", "params", "noise", "rows", "refreshReport", "gate"]) {
+      expect(payload).toHaveProperty(key);
+    }
+    const rows = payload.rows as Array<Record<string, unknown>>;
+    expect(rows.map((row) => row.stage)).toEqual([
+      "input",
+      "rotation-domain",
+      "accumulator",
+      "blind-rotation",
+      "extraction",
+      "key-switch",
+    ]);
+    // Ciphertexts are not returned at all: `show.py` printed decoded bits, centered phases
+    // and digests, so that is the whole of what crosses the boundary.
+    const serialized = JSON.stringify(payload);
+    expect(serialized).not.toContain('"mask"');
+    expect(serialized).not.toContain('"body"');
+    // `transfer` runs under a derived seed, whose parameter set appears nowhere here.
+    const transferSetId = probe([
+      "from participant.fhe import params",
+      `print(params(${JSON.stringify(`${SEED}:transfer`)})["parameterSetId"])`,
+    ]);
+    const publicSetId = (payload.params as Record<string, unknown>).parameterSetId as string;
+    if (transferSetId !== publicSetId) expect(serialized).not.toContain(transferSetId);
+  });
+
+  it("keeps show.py byte-identical across the split, on every variant", () => {
+    // The split moved where these numbers are computed, not who may read them. Both
+    // resolution paths -- the checkout fallback and an injected PUBLIC_EVIDENCE_JSON, which
+    // is what the Portal forwards -- must print the same thing.
+    for (const [f, m] of [
+      ["identity", "1"],
+      ["always-one", "0"],
+    ] as const) {
+      const direct = python(["show.py"], LOCAL);
+      const viaEnv = spawnSync("python3", ["show.py"], {
+        cwd: LOCAL,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          FLAG_SEED: SEED,
+          F: f,
+          M: m,
+          PYTHONDONTWRITEBYTECODE: "1",
+          PUBLIC_EVIDENCE_JSON: probe([
+            "import json",
+            "from fixtures.generate import public_payload",
+            `print(json.dumps(public_payload(${JSON.stringify(SEED)}, ${JSON.stringify(f)}, ${Number(m)})))`,
+          ]),
+        },
+        timeout: SLOW,
+      });
+      expect(viaEnv.status).toBe(0);
+      const fallback = spawnSync("python3", ["show.py"], {
+        cwd: LOCAL,
+        encoding: "utf8",
+        env: { ...process.env, FLAG_SEED: SEED, F: f, M: m, PYTHONDONTWRITEBYTECODE: "1" },
+        timeout: SLOW,
+      });
+      expect(fallback.status).toBe(0);
+      expect(viaEnv.stdout).toBe(fallback.stdout);
+      expect(direct.status).toBe(0);
+    }
   });
 });

@@ -18,52 +18,84 @@ Nothing in the pipeline above it is handed a key.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
+from urllib.parse import urlencode, urlsplit, urlunsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from fixtures.generate import (
-    UNARY,
-    blind_rotation_noise,
-    bootstrap,
-    bootstrap_key,
-    centered,
-    correctness_bound,
-    decode,
-    health_token,
-    homomorphic_nand,
-    key_id,
-    key_switch_noise,
-    lwe_decrypt,
-    lwe_encrypt,
-    lwe_phase,
-    lwe_secret,
-    output_noise_bound,
-    params,
-    pipeline_trace,
-    refresh_report,
-    ring_secret,
-    switching_key,
-)
-
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
+# `or` rather than a default argument: the Makefile always passes -e F and -e M, so an
+# unset knob arrives as the empty string rather than as an absent variable.
+FUNCTION = (os.environ.get("F") or "identity").strip()
+try:
+    MESSAGE = 1 if int((os.environ.get("M") or "1").strip()) else 0
+except ValueError:
+    MESSAGE = 1
+
+
+def _public_payload() -> dict:
+    """This deployment's public half, and every value printed below.
+
+    Issue 543 option B2: `fixtures/generate.py` does not ship in the `participant` Docker
+    stage any more (see local/Dockerfile). It has to implement `lookup_accumulator`,
+    `to_rotation_domain`, `blind_rotate`, `output_noise_bound`, `correctness_bound`,
+    `refresh_report` and `nand_combine` to derive the numbers below -- seven of the twelve
+    names `starter/pipeline.py` asks the learner to write -- so leaving it reachable here
+    handed over most of the problem for the price of one import. The verifier, which is the
+    only image that still carries `fixtures/`, serves the public half over `GET /public`:
+    `PUBLIC_EVIDENCE_JSON` when the Portal has already fetched it, `VERIFIER_PUBLIC_URL`
+    when this process must fetch it itself.
+
+    The `f` and `m` knobs travel in the query string, because unlike the other problems in
+    this class the demonstration has eight variants rather than one, and which variant a
+    learner is looking at is the whole point of the `F=always-one` instruction above.
+    """
+    injected = os.environ.get("PUBLIC_EVIDENCE_JSON")
+    if injected:
+        return json.loads(injected)
+    verifier_public_url = os.environ.get("VERIFIER_PUBLIC_URL")
+    if verifier_public_url:
+        from urllib.error import HTTPError, URLError
+        from urllib.request import urlopen
+
+        parts = urlsplit(verifier_public_url)
+        url = urlunsplit(
+            parts._replace(query=urlencode({"f": FUNCTION, "m": str(MESSAGE)}))
+        )
+        try:
+            with urlopen(url, timeout=30) as response:  # noqa: S310
+                return json.loads(response.read().decode("utf-8"))
+        except (HTTPError, URLError, TimeoutError, OSError, ValueError) as error:
+            # Compose health-gates the workbench on the verifier, so this normally cannot
+            # happen. When it does -- a `docker compose run` against a torn-down deployment
+            # -- say which service is missing instead of printing a urllib traceback at
+            # somebody trying to read their fixtures.
+            raise SystemExit(
+                "cannot reach this deployment's verifier "
+                f"({verifier_public_url}): {type(error).__name__}.\n"
+                "The public evidence lives there since Issue 543 option B2. "
+                "Start it with `make verifier-up` and try again."
+            ) from error
+    # Neither is set: this resolves only where `fixtures/` is actually on disk -- a
+    # checkout, or the verifier/author Docker stage -- and never inside a built
+    # `participant` image, so this branch does not reopen the leak above.
+    from fixtures.generate import public_payload
+
+    return public_payload(SEED, FUNCTION, MESSAGE)
 
 
 def main() -> None:
-    par = params(SEED)
-    name = os.environ.get("F", "identity")
-    if name not in UNARY:
-        name = "identity"
-    function = UNARY[name]
-    table = {0: function(0), 1: function(1)}
-    try:
-        message = 1 if int(os.environ.get("M", "1")) else 0
-    except ValueError:
-        message = 1
+    payload = _public_payload()
+    par = payload["params"]
+    name = payload["function"]
+    message = payload["message"]
+    table = payload["table"]
+    noise = payload["noise"]
 
-    print("health token :", health_token(SEED))
+    print("health token :", payload["healthToken"])
     print()
     print(f"  parameter set     {par['parameterSetId']}")
     print(f"  base B            {par['base']}")
@@ -73,26 +105,17 @@ def main() -> None:
     print(f"  LWE dimension n   {par['dimension']}")
     print(f"  encoding          {par['encodingId']}   encode(1) = +q/8 = {par['delta']}, encode(0) = -q/8")
     print()
-    print(f"  blind rotation adds at most  {blind_rotation_noise(par)}")
-    print(f"  key switch adds at most      {key_switch_noise(par)}")
-    print(f"  so a bootstrapped ciphertext {output_noise_bound(par)}")
-    print(f"  and one tolerates            {correctness_bound(par)}   <- the correctness bound")
+    print(f"  blind rotation adds at most  {noise['blindRotation']}")
+    print(f"  key switch adds at most      {noise['keySwitch']}")
+    print(f"  so a bootstrapped ciphertext {noise['output']}")
+    print(f"  and one tolerates            {noise['correctness']}   <- the correctness bound")
     print()
 
-    ring_key = ring_secret(SEED, par, "ring")
-    lwe_key = lwe_secret(SEED, par, "lwe")
-    source_id, target_id = key_id(SEED, "ring"), key_id(SEED, "lwe")
-    key = bootstrap_key(SEED, par, ring_key, lwe_key, "show")
-    switch = switching_key(SEED, par, ring_key, lwe_key, source_id, target_id, "show")
-
-    sample = lwe_encrypt(SEED, par, lwe_key, message, "show")
-    sample = {**sample, "keyId": target_id, "dimension": par["dimension"]}
-
-    print(f"  f = {name}, m = {message}, so f(m) = {function(message)}")
-    print(f"  the lookup table is {{0: {table[0]}, 1: {table[1]}}}")
+    print(f"  f = {name}, m = {message}, so f(m) = {payload['applied']}")
+    print(f"  the lookup table is {{0: {table['0']}, 1: {table['1']}}}")
     print()
 
-    rows = pipeline_trace(par, key, switch, sample, table)
+    rows = payload["rows"]
     print("  stage             kind  dimension  modulus  noise<=  message      where          key")
     for row in rows:
         located = row["located"] or "-"
@@ -118,15 +141,15 @@ def main() -> None:
     print("  Those digests name the artifacts this run produced, not a diagram of the pipeline.")
     print()
 
-    result = bootstrap(par, key, switch, sample, table)
+    before, after = payload["before"], payload["after"]
     print("  before and after:")
-    print(f"    input phase   {centered(par, lwe_phase(par, lwe_key, sample)):>8}  -> decodes {decode(par, lwe_phase(par, lwe_key, sample))}")
-    print(f"    output phase  {centered(par, lwe_phase(par, lwe_key, result)):>8}  -> decodes {lwe_decrypt(par, lwe_key, result)}   (f(m) = {function(message)})")
-    print(f"    output key    {result['keyId'][:8]}  <- the same key the input came under")
-    print(f"    last digest   {rows[-1]['digest']}")
+    print(f"    input phase   {before['phase']:>8}  -> decodes {before['decodes']}")
+    print(f"    output phase  {after['phase']:>8}  -> decodes {after['decodes']}   (f(m) = {payload['applied']})")
+    print(f"    output key    {after['keyId'][:8]}  <- the same key the input came under")
+    print(f"    last digest   {after['lastDigest']}")
     print()
 
-    report = refresh_report(par, correctness_bound(par) // 2)
+    report = payload["refreshReport"]
     print("  the refresh, as numbers:")
     for field in ("inputNoise", "correctnessBound", "outputNoiseBound", "withinContract", "secondPassFits"):
         print(f"    {field:<18} {report[field]}")
@@ -134,22 +157,12 @@ def main() -> None:
     print()
 
     print("  HomNAND, all four rows:")
-    for left_bit in (0, 1):
-        for right_bit in (0, 1):
-            left = lwe_encrypt(SEED, par, lwe_key, left_bit, f"show:{left_bit}{right_bit}:l")
-            right = lwe_encrypt(SEED, par, lwe_key, right_bit, f"show:{left_bit}{right_bit}:r")
-            left = {**left, "keyId": target_id}
-            right = {**right, "keyId": target_id}
-            gate = homomorphic_nand(par, key, switch, left, right)
-            combined = centered(
-                par,
-                (par["delta"] - lwe_phase(par, lwe_key, left) - lwe_phase(par, lwe_key, right))
-                % par["modulus"],
-            )
-            print(
-                f"    NAND({left_bit},{right_bit}) = {lwe_decrypt(par, lwe_key, gate)}"
-                f"   combined phase {combined:>8}  ({'+' if combined > 0 else '-'})"
-            )
+    for gate in payload["gate"]:
+        combined = gate["combinedPhase"]
+        print(
+            f"    NAND({gate['left']},{gate['right']}) = {gate['value']}"
+            f"   combined phase {combined:>8}  ({'+' if combined > 0 else '-'})"
+        )
     print()
     print("  The sign of that phase is the gate. One linear combination, then one bootstrap")
     print("  with the identity table -- there is no plaintext NAND anywhere in it.")

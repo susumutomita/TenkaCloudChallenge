@@ -74,7 +74,7 @@ to linear algebra. It is a toy of the mechanism.
 
 from __future__ import annotations
 
-from fixtures.generate import (  # noqa: F401 - the supplied Week 5 stack
+from participant.fhe import (  # noqa: F401 - the supplied Week 5 stack
     blind_rotation_noise,
     cmux,
     encode,

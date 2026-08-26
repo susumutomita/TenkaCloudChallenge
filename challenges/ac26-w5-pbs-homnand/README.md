@@ -196,10 +196,21 @@ original, and no function name, fixture, or skeleton is taken from the official 
 
 ## Assurance scope
 
-Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
-daemon, and the image, so nothing inside that image is hidden from you: `reference/` and
-`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than
-out of reach.
+Local mode is **self-paced, honor-system verification**. You own the machine and the Docker
+daemon, so nothing you build is hidden from you: `reference/` and `tests/hidden/` are not
+bind-mounted, which keeps them out of your git checkout rather than out of reach.
+
+What the deployment does do is stop handing them to you by accident. It runs two
+containers. The Workbench you talk to carries the starter, the public tests,
+`participant/fhe.py` — the supplied Week 5 stack — and `show.py`; the grading image carries
+`fixtures/`, `tests/hidden/` and the verifier, publishes no port, and sits on a Docker
+network with no gateway. `show.py` reads this deployment's parameters, trace rows and noise
+contract from that verifier's `GET /public`, which serves the demonstration and never a
+checkpoint's expected value — `fixtures/generate.py` has to implement `lookup_accumulator`,
+`to_rotation_domain`, `blind_rotate`, `output_noise_bound`, `correctness_bound`,
+`refresh_report` and `nand_combine` in order to derive them, and those are seven of the
+names `starter/pipeline.py` asks you to write, so it is not in the image you run
+([#543](https://github.com/susumutomita/TenkaCloudChallenge/issues/543)).
 
 What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
 a checkpoint can only credit the id it echoes, results do not leak expected values, and the
