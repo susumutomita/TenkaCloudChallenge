@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
 import { parse as parseYaml } from "yaml";
+import { participantPythonFiles } from "./lib/local-play-problems";
 
 /**
  * CI for `sha256-bytes-padding`, problem 1 of the SHA-256 series.
@@ -75,6 +76,8 @@ describe("sha256-bytes-padding: participant contract", () => {
       "local/tests/public/test_padding.py",
       "local/tests/hidden/check_padding.py",
       "local/verifier/server.py",
+      "local/participant/server.py",
+      "local/participant/workbench.py",
     ]) {
       expect(existsSync(join(ROOT, path))).toBe(true);
     }
@@ -467,6 +470,279 @@ describe("sha256-bytes-padding: /verify contract", () => {
     expect(read("local/verifier/server.py")).toContain(
       '{"checkpointId": checkpoint_id, "correct": correct}',
     );
+  });
+});
+
+describe("sha256-bytes-padding: participant/verifier separation (Issue 543/537)", () => {
+  it("keeps fixtures/, the answer derivation and the hidden suite out of the participant Docker stage", () => {
+    const dockerfile = read("local/Dockerfile");
+    const participantStage = dockerfile.slice(
+      dockerfile.indexOf("FROM base AS participant"),
+      dockerfile.indexOf("FROM base AS verifier"),
+    );
+    // The shape this problem shipped in before the split: one stage carrying both the
+    // Portal and the grader, so `padded_length` and `broken_pad_zeros_only` — the
+    // answers to `padded-length` and `collision`, and plain functions that do not even
+    // need the seed — were importable from inside the learner's own container.
+    expect(participantStage).not.toContain("COPY --chown=lab:lab fixtures/");
+    expect(participantStage).not.toContain("tests/hidden");
+    expect(participantStage).not.toContain("COPY --chown=lab:lab verifier/");
+    expect(participantStage).not.toContain("COPY --chown=lab:lab reference/");
+    expect(participantStage).not.toContain("COPY --chown=lab:lab mutation.py");
+    expect(participantStage).toContain("COPY --chown=lab:lab tests/public/");
+    expect(participantStage).toContain("COPY --chown=lab:lab participant/");
+
+    const verifierStage = dockerfile.slice(
+      dockerfile.indexOf("FROM base AS verifier"),
+      dockerfile.indexOf("FROM participant AS author"),
+    );
+    expect(verifierStage).toContain("COPY --chown=lab:lab fixtures/");
+    expect(verifierStage).toContain("COPY --chown=lab:lab tests/hidden/");
+    expect(verifierStage).toContain("COPY --chown=lab:lab verifier/");
+    expect(verifierStage).not.toContain("COPY --chown=lab:lab participant/");
+    expect(verifierStage).not.toContain("COPY --chown=lab:lab reference/");
+    expect(verifierStage).not.toContain("COPY --chown=lab:lab mutation.py");
+  });
+
+  it("reproduces the original leak: no file the participant image carries defines the padding rule", () => {
+    // The file list comes from the Dockerfile's participant stage, via the same
+    // derivation `check-answer-reachability.ts` uses, rather than being restated here —
+    // so a COPY that puts `fixtures/` back fails this test. Before the split
+    // `fixtures/generate.py` was in this list, and `padded_length` in it answered the
+    // `padded-length` checkpoint outright.
+    const participantFiles = participantPythonFiles(
+      join(import.meta.dir, ".."),
+      "challenges/sha256-bytes-padding",
+    );
+    expect(participantFiles).not.toContain(
+      "challenges/sha256-bytes-padding/local/fixtures/generate.py",
+    );
+    expect(participantFiles).toContain(
+      "challenges/sha256-bytes-padding/local/tests/public/test_padding.py",
+    );
+    for (const file of participantFiles) {
+      const source = readFileSync(join(import.meta.dir, "..", file), "utf8");
+      // The one permitted mention is the lazy, function-scoped checkout/author
+      // fallback: never a module-level import, which is what would fail loudly the
+      // moment it ran inside a participant image that carries no `fixtures/` at all.
+      expect(source).not.toMatch(/^from fixtures/m);
+      expect(source).not.toMatch(/^import fixtures/m);
+      expect(source).not.toContain("def padded_length");
+      expect(source).not.toContain("def broken_pad_zeros_only");
+    }
+  });
+
+  it("keeps the Portal editor API and the fixtures import on opposite sides of the split", () => {
+    const participantServer = read("local/participant/server.py");
+    const hiddenServer = read("local/verifier/server.py");
+    for (const endpoint of [
+      "/api/config",
+      "/api/inspect",
+      "/api/starter",
+      "/api/test",
+      "/api/prepare",
+    ]) {
+      expect(participantServer).toContain(endpoint);
+      expect(hiddenServer).not.toContain(endpoint);
+    }
+    expect(participantServer).not.toContain("def evaluate(");
+    expect(participantServer).not.toContain("def _check_");
+    expect(participantServer).not.toMatch(/^from fixtures/m);
+    expect(hiddenServer).toContain("from fixtures.generate import");
+    expect(hiddenServer).toContain("/verify");
+    expect(hiddenServer).toContain("/healthz");
+    expect(hiddenServer).toContain("/public");
+  });
+
+  it("re-checks the answer seal in the verifier, so bypassing the Workbench does not credit a bare answer", () => {
+    // The Workbench unwraps nothing before proxying: a `padded-length` list that never
+    // went through prepare must be rejected by the verifier itself.
+    const script = [
+      "import json, sys",
+      "sys.path.insert(0, '.')",
+      "from verifier.server import _unwrap_submission",
+      "print(json.dumps({",
+      "  'bare': _unwrap_submission('padded-length', '64,128'),",
+      "  'forged': _unwrap_submission('padded-length', 'tcw1.eyJ2IjoxfQ.AAAA'),",
+      "  'code': _unwrap_submission('pad', 'def pad_message(m): pass'),",
+      "}))",
+    ].join("\n");
+    const result = python(["-c", script]);
+    expect(result.status).toBe(0);
+    const output = JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "{}") as {
+      bare: unknown;
+      forged: unknown;
+      code: unknown;
+    };
+    expect(output.bare).toBeNull();
+    expect(output.forged).toBeNull();
+    expect(output.code).toBe("def pad_message(m): pass");
+  });
+
+  it("accepts a sealed answer end to end, Workbench seal through verifier unwrap", () => {
+    const script = [
+      "import json, os, sys",
+      "sys.path.insert(0, '.')",
+      "from participant.server import _WORKBENCH",
+      "from verifier.server import _unwrap_submission, evaluate",
+      "from fixtures.generate import length_quiz, padded_length",
+      "seed = os.environ['FLAG_SEED']",
+      "answer = ','.join(str(padded_length(n)) for n in length_quiz(seed))",
+      "prepared = _WORKBENCH.prepare_submissions(_WORKBENCH.starter_payload(),",
+      "                                          {'padded-length': answer})",
+      "sealed = prepared['submissions']['padded-length']",
+      "unwrapped = _unwrap_submission('padded-length', sealed)",
+      "print(json.dumps({'sealed': sealed.startswith('tcw1.'),",
+      "                  'correct': evaluate('padded-length', unwrapped)}))",
+    ].join("\n");
+    const result = python(["-c", script]);
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "{}")).toEqual({
+      sealed: true,
+      correct: true,
+    });
+  });
+
+  it("proxies /verify to the internal verifier and fails closed when it is unreachable", () => {
+    const script = String.raw`
+import json, sys
+sys.path.insert(0, ".")
+from participant import server
+bodies = [{"checkpointId": checkpoint, "submission": "anything"} for checkpoint in server.CHECKPOINTS]
+print(json.dumps({
+    "missing": [server.proxy_verdict(body, "") for body in bodies],
+    "unavailable": [server.proxy_verdict(body, "http://127.0.0.1:1/verify") for body in bodies],
+    "hasInlineEvaluator": hasattr(server, "evaluate") or any(name.startswith("_check_") for name in dir(server)),
+}))
+`;
+    const result = python(["-c", script]);
+    expect(result.status).toBe(0);
+    const output = JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "{}") as {
+      missing: Array<{ checkpointId: string; correct: boolean }>;
+      unavailable: Array<{ checkpointId: string; correct: boolean }>;
+      hasInlineEvaluator: boolean;
+    };
+    const expectedVerdicts = [
+      "byte-length",
+      "padded-length",
+      "length-field",
+      "pad",
+      "words",
+      "collision",
+    ].map((checkpointId) => ({ checkpointId, correct: false }));
+    expect(output.missing).toEqual(expectedVerdicts);
+    expect(output.unavailable).toEqual(expectedVerdicts);
+    expect(output.hasInlineEvaluator).toBe(false);
+  });
+
+  it("compose builds the right target for each service, publishes only the Workbench port, and isolates the verifier network", () => {
+    const compose = read("local/docker-compose.yml");
+    for (const contract of [
+      "target: participant",
+      "target: verifier",
+      '"127.0.0.1:18091:18091"',
+      "VERIFIER_URL: http://verifier:18092/verify",
+      "VERIFIER_PUBLIC_URL: http://verifier:18092/public",
+      "read_only: true",
+      "cap_drop:",
+      "- ALL",
+      "no-new-privileges:true",
+      "healthcheck:",
+      "internal: true",
+      'com.docker.network.bridge.enable_ip_masquerade: "false"',
+    ]) {
+      expect(compose).toContain(contract);
+    }
+    expect(compose).not.toContain('"127.0.0.1:18092:18092"');
+    expect(compose.match(/ports:/g)).toHaveLength(1);
+  });
+
+  it("serves the public evidence without any value a checkpoint is graded on", () => {
+    const script = [
+      "import json, sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import LENGTH_FIELD_BYTES, length_field_case, length_quiz, padded_length, public_payload, text_case",
+      "seed = sys.argv[1]",
+      "payload = public_payload(seed)",
+      "print(json.dumps({",
+      "  'keys': sorted(payload),",
+      "  'blob': json.dumps(payload),",
+      "  'paddedLengths': [padded_length(n) for n in length_quiz(seed)],",
+      "  'byteLength': text_case(seed).byte_length,",
+      "  'lengthField': (length_field_case(seed) * 8).to_bytes(LENGTH_FIELD_BYTES, 'big').hex(),",
+      "}))",
+    ].join("\n");
+    const result = python(["-c", script, SEED]);
+    expect(result.status).toBe(0);
+    const output = JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "{}") as {
+      keys: string[];
+      blob: string;
+      paddedLengths: number[];
+      byteLength: number;
+      lengthField: string;
+    };
+    expect(output.keys).toEqual([
+      "blockBytes",
+      "charLength",
+      "collisionMessageHex",
+      "healthToken",
+      "lengthFieldCase",
+      "lengthQuiz",
+      "text",
+      "wordBlockHex",
+    ]);
+    // The evidence carries the questions — the string, the six lengths, the block, the
+    // message to collide with — and none of the six answers derived from them. The
+    // padded lengths are all multiples of 64 while every quiz length is 55 or 56 past a
+    // block boundary, so a match here would be a real leak rather than a coincidence.
+    const numbers = JSON.parse(output.blob) as Record<string, unknown>;
+    const quiz = numbers.lengthQuiz as number[];
+    for (const answer of output.paddedLengths) {
+      expect(quiz).not.toContain(answer);
+      expect(numbers.lengthFieldCase).not.toBe(answer);
+      expect(numbers.charLength).not.toBe(answer);
+    }
+    expect(output.blob).not.toContain(output.lengthField);
+    expect(numbers.charLength).not.toBe(output.byteLength);
+  });
+
+  it("lets show.py and the public tests read the evidence the verifier serves", () => {
+    // `make inspect` and `make test` run inside the Workbench container, which has no
+    // fixtures/: both must work from PUBLIC_EVIDENCE_JSON / VERIFIER_PUBLIC_URL alone.
+    // Injecting the payload here is exactly what PortalEditorSupport does after
+    // fetching it, so this exercises the participant-image path from a checkout.
+    const payload = pythonValue([
+      "import json",
+      "from fixtures.generate import public_payload",
+      "print(json.dumps(public_payload(sys.argv[1])))",
+    ], SEED);
+    const injected = {
+      ...process.env,
+      FLAG_SEED: "a-seed-the-evidence-does-not-come-from",
+      PUBLIC_EVIDENCE_JSON: payload,
+      PYTHONDONTWRITEBYTECODE: "1",
+    };
+    const shown = spawnSync("python3", ["show.py"], {
+      cwd: LOCAL,
+      encoding: "utf8",
+      env: injected,
+      timeout: 120_000,
+    });
+    expect(shown.status).toBe(0);
+    // Printed from the injected evidence, not re-derived from FLAG_SEED — which is a
+    // different seed here precisely so a re-derivation would show up.
+    expect(shown.stdout).toContain(String((JSON.parse(payload) as { healthToken: string }).healthToken));
+
+    const tested = spawnSync("python3", ["tests/public/test_padding.py"], {
+      cwd: LOCAL,
+      encoding: "utf8",
+      env: injected,
+      timeout: 120_000,
+    });
+    // The shipped starter still fails the byte-order test; what matters is that the
+    // suite ran at all without importing fixtures.
+    expect(tested.stdout).toContain("PASS test_padding_keeps_the_message_as_its_prefix");
+    expect(tested.stderr).toBe("");
   });
 });
 
