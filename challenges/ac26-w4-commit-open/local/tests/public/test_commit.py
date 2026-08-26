@@ -9,6 +9,7 @@ An implementation whose leaves do not bind their index passes this file complete
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -18,20 +19,52 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "starter"))
 
 import commit as submission  # noqa: E402
-from fixtures.generate import root_of, setting  # noqa: E402
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 
+def _load_public_evidence() -> dict[str, object]:
+    """This deployment's vector, query, and root -- the same things `show.py` prints.
+
+    Issue 537/538 (Issue 543 option B2): this file used to import `fixtures.generate`
+    directly. That module also implements `node_hash` under the exact name the
+    starter's own `node_hash` stub asks the learner to write, so it does not ship in
+    the `participant` Docker stage at all any more (see ../../Dockerfile). This
+    deployment's own verifier is the only source for the public half now:
+    `PUBLIC_EVIDENCE_JSON` when the Portal has already fetched it, or
+    `VERIFIER_PUBLIC_URL` fetched directly when it has not.
+    """
+    injected = os.environ.get("PUBLIC_EVIDENCE_JSON")
+    if injected:
+        return json.loads(injected)
+    verifier_public_url = os.environ.get("VERIFIER_PUBLIC_URL")
+    if verifier_public_url:
+        from urllib.request import urlopen
+
+        with urlopen(verifier_public_url, timeout=10) as response:  # noqa: S310
+            return json.loads(response.read().decode("utf-8"))
+    # Neither is set: this only resolves when `fixtures/` is actually on disk, which is
+    # true for a checkout (this file run directly, e.g. by
+    # scripts/ac26-w4-commit-open.test.ts) and the verifier/author Docker stages, and
+    # never inside a built `participant` image -- so this branch does not reopen the
+    # leak above.
+    from fixtures.generate import public_payload
+
+    return public_payload(SEED)
+
+
+PUBLIC = _load_public_evidence()
+
+
 def check_root_matches() -> str:
-    cfg = setting(SEED)
-    if submission.merkle_root(list(cfg["values"])) != root_of(cfg["values"]):
+    cfg = PUBLIC["setting"]
+    if submission.merkle_root(list(cfg["values"])).hex() != PUBLIC["rootHex"]:
         return "the root does not match the committed vector"
     return ""
 
 
 def check_an_honest_opening_verifies() -> str:
-    cfg = setting(SEED)
+    cfg = PUBLIC["setting"]
     values, index = list(cfg["values"]), cfg["query"]
     root = submission.merkle_root(values)
     path = submission.open_at(values, index)

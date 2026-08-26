@@ -155,11 +155,13 @@ Blocked on an owner decision — **do not start these**:
   its READMEs are rewritten). It is Draft again, so the required check is green-by-
   default and nothing is red; the decision is the owner's, exactly as for #564.
 
-  Two things follow for a later run. **`ac26-w4-commit-open` is already implemented
-  there** — do not write it a second time from the §5 work list below; split it out of
-  #578 into its own PR instead, which is a `draft`-only change an agent can carry to
-  merge. And a bundled PR inherits the strictest problem in it: keep one problem per PR
-  when their `status` differs, or the reachable half is held hostage by the blocked one.
+  That split-out has since been done: PR #582 carries #578's `ac26-w4-commit-open` half
+  on its own, and it is a `draft`-only change an agent can take to merge. What is left in
+  #578 is the `sha256-schedule-logic` half, still waiting on the same owner decision as
+  #564 — do not re-derive `ac26-w4-commit-open` from the work list below, and do not
+  undraft #578. The general rule the bundling taught: a bundled PR inherits the strictest
+  problem in it, so keep one problem per PR when their `status` differs, or the reachable
+  half is held hostage by the blocked one.
 
 Not closable by one agent playing alone — say so rather than producing a weaker artifact:
 
@@ -192,14 +194,23 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   that this section already records as having cost a run.
 
   What is left, with the detector's count each — `ac26-w5-extract-key-switch` (6),
-  `ac26-w5-encoding-noise` (5), `ac26-w4-commit-open` (1, **already written — it is the
-  reachable half of #578**, see the blocked list above),
-  `ac26-w3-passkey-assertion` (1), `ac26-w3-field-inverse` (1). Landed so far:
+  `ac26-w5-encoding-noise` (5), `ac26-w3-passkey-assertion` (1),
+  `ac26-w3-field-inverse` (1). Landed so far:
   `cs-auth-claim-audit` and `ac26-bridge-experiment` (#562), `ac26-w3-schnorr-drill`
   (#570), `ac26-w5-lwe-rlwe` (#572), `ac26-w5-rgsw-external` (#573),
-  `ac26-w5-cmux-blind-rotation` (#579), `ac26-w5-pbs-homnand` (#581). Catalog count is 24
-  as of #581, down from 39. Runs have taken the largest count first, so
-  `ac26-w5-extract-key-switch` is next.
+  `ac26-w5-cmux-blind-rotation` (#579), `ac26-w5-pbs-homnand` (#581),
+  `ac26-w4-commit-open` (#582, split out of #578). Catalog count is 23 as of #582, down
+  from 39. Runs have taken the largest count first, so `ac26-w5-extract-key-switch` is
+  next.
+
+  #582 is also the first in this class whose measured free score was **zero**. Handing
+  the shipped fixtures module straight to the hidden suite scored 0 of 8 checkpoints, and
+  so did the starter with only its `node_hash` stub delegated to the shipped same-named
+  implementation — every checkpoint still needed the rest of the file. What the single
+  stage actually handed over there was the hidden checker's own assertions, plus one of
+  the three functions the starter asks for. The finding count (1) does not scale with the
+  points at risk in either direction: measure it per problem, and do not describe a split
+  as recovering points you have not measured.
 
   `ac26-w3-field-inverse` and `ac26-w5-encoding-noise`'s last two findings are not new
   work landing on this list — #576 only made them **visible** (§2).
@@ -209,7 +220,7 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   whenever a rule stops being blind: never report a rise as a regression, or a fall as a
   closure.
 
-  **All five remaining are `status: draft`**, so none of them hits the
+  **All four remaining are `status: draft`**, so none of them hits the
   `playtest-verified` wall of §4 — a B2 split there is a PR an agent can carry
   to merge on its own, README correction included. Do not drop a needed README
   correction to stay under the gate (§4); on a `draft` problem it does not fire anyway.
