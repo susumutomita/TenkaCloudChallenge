@@ -92,10 +92,17 @@ signal 名**で作り、公式課題自身の解答経路の手前で止まり�
 
 ## 保証範囲
 
-ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も
-あなたの管理下にあるので、 image の中身はあなたに対して秘匿されていません。
-`reference/` と `tests/hidden/` を bind-mount しないのは、あなたの git checkout に
-紛れ込ませないためであって、手が届かなくするためではありません。
+ローカル実行は**自習用の honor-system 検証**です。compose stack のすべてのコンテナと
+Docker デーモンを管理する人を、中身の閲覧から止める手立てはありません。ここにある境界は
+秘匿ではなく誤配送の防止です。build して動かす Workbench コンテナに入っているのは
+starter と公開テスト、そして設問そのものである fixture だけで、採点器も hidden test も
+参照解答も入っていません。それらは Workbench がネットワーク越しに話す、公開されていない
+second container と、`make reference-test` が build する author 専用 image にだけあります。
+
+fixture が手元に届くのは意図どおりです。[#533](https://github.com/susumutomita/TenkaCloudChallenge/pull/533)
+以降、fixture が返すのは入力だけ — デプロイされた回路、パラメータ、2 つの正直な witness —
+で、これは `make inspect` が表示する内容そのものです。外へ出したのは、
+正解がどういう形かを知っているコードのほうです。
 
 verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
 ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。

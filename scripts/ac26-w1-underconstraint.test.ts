@@ -390,6 +390,166 @@ describe("ac26-w1-underconstraint: /verify contract", () => {
   });
 });
 
+describe("ac26-w1-underconstraint: participant/verifier separation (Issue 525/543/537)", () => {
+  /** The file set a stage actually carries, in COPY order, for one Dockerfile stage. */
+  function stage(name: "participant" | "verifier" | "author"): string {
+    const dockerfile = read("local/Dockerfile");
+    const starts = [
+      ["participant", "FROM base AS participant"],
+      ["verifier", "FROM base AS verifier"],
+      ["author", "FROM participant AS author"],
+    ] as const;
+    const index = starts.findIndex(([id]) => id === name);
+    const from = dockerfile.indexOf(starts[index][1]);
+    const next = index + 1 < starts.length ? dockerfile.indexOf(starts[index + 1][1]) : -1;
+    return next < 0 ? dockerfile.slice(from) : dockerfile.slice(from, next);
+  }
+
+  it("keeps the grader and the hidden suite out of the participant Docker stage", () => {
+    // This is the leak #533 did not close. It moved `intended_circuit`,
+    // `dropped_constraint`, `forgery_case` and `root_cause_diagnosis` out of
+    // `fixtures/generate.py`, but the derivation that replaced them --
+    // `verifier/server.py`'s `_expected_root_cause`, which returns exactly the JSON
+    // `root-cause` accepts for a given seed -- kept shipping in the one stage a
+    // learner's own `make build` produced, keyed by the FLAG_SEED already in their
+    // container's environment.
+    const participant = stage("participant");
+    expect(participant).not.toContain("COPY verifier/");
+    expect(participant).not.toContain("tests/hidden");
+    expect(participant).not.toContain("COPY reference/");
+    expect(participant).not.toContain("COPY mutation.py");
+    expect(participant).toContain("COPY participant/");
+    expect(participant).toContain("COPY tests/public/");
+    // `fixtures/` is the problem statement here, not an answer: after #533 it returns
+    // the deployed circuit, the parameters and the two honest witnesses, all of which
+    // `make inspect` prints. Dropping it would hide the question, not the answer.
+    expect(participant).toContain("COPY fixtures/");
+
+    const verifier = stage("verifier");
+    expect(verifier).toContain("COPY verifier/");
+    expect(verifier).toContain("COPY tests/hidden/");
+    expect(verifier).toContain("COPY fixtures/");
+    expect(verifier).not.toContain("COPY participant/");
+    expect(verifier).not.toContain("COPY starter/");
+    expect(verifier).not.toContain("COPY reference/");
+    expect(verifier).not.toContain("COPY mutation.py");
+
+    const author = stage("author");
+    for (const copied of ["COPY verifier/", "COPY tests/hidden/", "COPY reference/", "COPY mutation.py"]) {
+      expect(author).toContain(copied);
+    }
+  });
+
+  it("reproduces the original leak: the participant stage's own files cannot derive root-cause", () => {
+    // The point of the split, executed rather than read. Everything the participant
+    // stage carries is importable here; `_expected_root_cause` must not be reachable
+    // from any of it, and no other module may have grown a copy of the derivation.
+    // The file set comes from the Dockerfile's own participant stage, not a list
+    // repeated here: a COPY that puts the grader back must make this fail, not pass
+    // against a hardcoded set that no longer describes the image.
+    const shipped = [...stage("participant").matchAll(/^COPY (\S+)/gm)].map((m) => m[1]);
+    expect(shipped.length).toBeGreaterThan(0);
+    const probe = String.raw`
+import json, pathlib, re, sys
+root = pathlib.Path(".").resolve()
+shipped = json.loads(sys.argv[1])
+sources = []
+for entry in shipped:
+    path = root / entry
+    sources.extend(p for p in ([path] if path.is_file() else sorted(path.rglob("*.py"))))
+text = "\n".join(p.read_text(encoding="utf-8") for p in sources)
+print(json.dumps({
+    "files": sorted(str(p.relative_to(root)) for p in sources),
+    "mentionsExpectedRootCause": "_expected_root_cause" in text,
+    "importsVerifier": bool(re.search(r"^\s*(from|import)\s+verifier", text, re.M)),
+    "definesManipulatedSignals": "manipulatedSignals" in text,
+}))
+`;
+    const result = python(["-c", probe, JSON.stringify(shipped)]);
+    expect(result.status).toBe(0);
+    const output = JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "{}") as {
+      files: string[];
+      mentionsExpectedRootCause: boolean;
+      importsVerifier: boolean;
+      definesManipulatedSignals: boolean;
+    };
+    expect(output.files.length).toBeGreaterThan(0);
+    expect(output.files).not.toContain("verifier/server.py");
+    expect(output.mentionsExpectedRootCause).toBe(false);
+    expect(output.importsVerifier).toBe(false);
+    // The key the grader compares on. Naming it anywhere in the participant file set
+    // would mean a second derivation had grown there.
+    expect(output.definesManipulatedSignals).toBe(false);
+  });
+
+  it("keeps the Portal editor API in the Workbench and grading out of it", () => {
+    const workbench = read("local/participant/server.py");
+    const grader = read("local/verifier/server.py");
+    for (const endpoint of ["/api/config", "/api/inspect", "/api/starter", "/api/test", "/api/prepare"]) {
+      expect(workbench).toContain(endpoint);
+      expect(grader).not.toContain(endpoint);
+    }
+    expect(workbench).not.toContain("def evaluate(");
+    expect(workbench).not.toContain("def _check_");
+    expect(workbench).not.toContain("_expected_root_cause");
+    expect(grader).toContain("/verify");
+    expect(grader).toContain("/healthz");
+  });
+
+  it("proxies /verify to the internal verifier and fails closed when it is unreachable", () => {
+    const probe = String.raw`
+import json, sys
+sys.path.insert(0, ".")
+from participant import server
+bodies = [{"checkpointId": checkpoint, "submission": "anything"} for checkpoint in server.CHECKPOINTS]
+print(json.dumps({
+    "missing": [server.proxy_verdict(body, "") for body in bodies],
+    "unavailable": [server.proxy_verdict(body, "http://127.0.0.1:1/verify") for body in bodies],
+    "hasInlineEvaluator": hasattr(server, "evaluate") or any(name.startswith("_check_") for name in dir(server)),
+}))
+`;
+    const result = python(["-c", probe]);
+    expect(result.status).toBe(0);
+    const output = JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "{}") as {
+      missing: Array<{ checkpointId: string; correct: boolean }>;
+      unavailable: Array<{ checkpointId: string; correct: boolean }>;
+      hasInlineEvaluator: boolean;
+    };
+    const expectedVerdicts = [
+      "build",
+      "audit",
+      "exploit",
+      "root-cause",
+      "repair",
+      "mutation-transfer",
+    ].map((checkpointId) => ({ checkpointId, correct: false }));
+    expect(output.missing).toEqual(expectedVerdicts);
+    expect(output.unavailable).toEqual(expectedVerdicts);
+    expect(output.hasInlineEvaluator).toBe(false);
+  });
+
+  it("compose builds the right target per service, publishes only the Workbench, and isolates the verifier", () => {
+    const compose = read("local/docker-compose.yml");
+    for (const contract of [
+      "target: participant",
+      "target: verifier",
+      '"127.0.0.1:18094:18094"',
+      "VERIFIER_URL: http://verifier:18095/verify",
+      "read_only: true",
+      "no-new-privileges:true",
+      "healthcheck:",
+      "internal: true",
+      'com.docker.network.bridge.enable_ip_masquerade: "false"',
+    ]) {
+      expect(compose).toContain(contract);
+    }
+    // The verifier's port is never published: reaching it means going through the
+    // Workbench, which does not grade.
+    expect(compose).not.toContain('"127.0.0.1:18095:18095"');
+    expect(compose.match(/ports:/g)).toHaveLength(1);
+  });
+});
+
 describe("ac26-w1-underconstraint: root-cause accepts every equally-correct diagnosis (#527)", () => {
   // When `c-iszero-a` is the missing constraint, only B survives, and B never reads
   // `inv` -- so the deployed circuit leaves it completely unconstrained. Any value
