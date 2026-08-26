@@ -170,10 +170,11 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   `ac26-w5-pbs-homnand` (#581), `ac26-w4-commit-open` (#582, split out of #578),
   `ac26-w5-extract-key-switch` (#584), `ac26-w5-encoding-noise` (#586),
   `ac26-w3-passkey-assertion` (#590), `ac26-w3-field-inverse` (#594).
-  Catalog count is 10 as of #594, down from 39; the ten that remain are the three
-  `sha256-*` problems' `direct-value-comparison` findings, a different class. Runs took
-  the largest count first, so the last two were singletons — and a single finding said
-  nothing about its own points until measured (see #582, #584 and #594 below).
+  Catalog count is 6 as of #594 and #564, down from 39; the six that remain are
+  `sha256-schedule-logic`'s and `sha256-compress-digest`'s `direct-value-comparison`
+  findings, a different class (`sha256-bytes-padding`'s four closed with #564). Runs took
+  the largest count first, so the last two here were singletons — and a single finding
+  said nothing about its own points until measured (see #582, #584 and #594 below).
 
   #594 is the first in this class whose **public half takes arguments**. `make inspect
   A=17 P=101` traces any pair the learner names, and `starter/field.py`'s own docstring
