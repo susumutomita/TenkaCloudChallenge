@@ -149,6 +149,14 @@ SPLIT_PORTAL_MODULES = {
     # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
     # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
     "ac26-w5-encoding-noise": "participant.server",
+    # Issue 537/538 (Issue 543 option B2): same move. tests/hidden/check_field.py grades
+    # every checkpoint and fixtures/generate.py implements egcd under the exact name
+    # starter/field.py's own stub asks the learner to write, with egcd_rows supplying
+    # the row-for-row trace its egcd_trace stub asks for, all of which shipped in the
+    # single participant stage.
+    # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
+    # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
+    "ac26-w3-field-inverse": "participant.server",
 }
 # Execute the heavier inspect/public-test adapter on representative problems from
 # each family. The catalogue's existing sharded suite executes every problem's own
