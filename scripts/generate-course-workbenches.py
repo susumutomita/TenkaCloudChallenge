@@ -111,6 +111,11 @@ PORTAL_PACKAGES = {
     # the single participant stage. The Portal moved to participant/ when fixtures/
     # stopped shipping there.
     "sha256-compress-digest": "participant",
+    # Issue 537/538 (Issue 543 option B2): the hidden suite grades every checkpoint and
+    # fixtures/generate.py implements egcd under the exact name starter/field.py's own
+    # stub asks the learner to write, with egcd_rows supplying the trace its egcd_trace
+    # stub asks for, so both left the participant stage and the Portal moved with them.
+    "ac26-w3-field-inverse": "participant",
     "ac26-w4-sumcheck-drill": "participant",
     "ac26-w3-schnorr-drill": "participant",
     "ac26-w4-plonk-drill": "participant",
