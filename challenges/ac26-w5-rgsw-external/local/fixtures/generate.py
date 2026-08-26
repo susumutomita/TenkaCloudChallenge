@@ -5,8 +5,19 @@ no skeleton. The parameters are generated from the seed and the conventions are 
 in full below, so a learner who has read the official material gains no shortcut.
 
 The ring and the RLWE scheme are **supplied**. This problem is not about re-deriving them
--- `ac26-w5-lwe-rlwe` is -- so `ring_mul`, `rlwe_encrypt` and friends are here, correct, for
-the learner to build on.
+-- `ac26-w5-lwe-rlwe` is -- so `ring_mul`, `rlwe_encrypt` and friends are correct and ready
+to build on. They live in `participant/ring.py` and are imported below rather than restated,
+so the ring a learner builds on is the same object the hidden suite grades against.
+
+## Which side of the boundary this file is on
+
+Issue 543 option B2: this module implements `gadget_vector`, `decompose`, `recompose`,
+`decompose_poly`, `recompose_poly`, `levels_needed`, `smallest_unrepresentable`,
+`rgsw_encrypt`, `external_product` and `external_trace` -- the ten names `starter/rgsw.py`
+asks the learner to write -- because it cannot derive a deployment's rows, traces and
+boundary witness without them. It therefore ships only in the verifier and author images
+(see ../Dockerfile), never in the participant one. `public_payload` at the bottom is what
+`show.py` and the public tests read instead, over the verifier's `GET /public`.
 
 ## The decomposition convention, fixed
 
@@ -52,6 +63,58 @@ to linear algebra. It is a toy of the mechanism.
 from __future__ import annotations
 
 import hashlib
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+# The supplied half, single-sourced. `participant/ring.py` is the copy that ships in the
+# participant image; importing it here rather than restating it is what keeps the ring the
+# learner builds on and the ring the hidden suite grades against the same functions.
+from participant.ring import (  # noqa: E402 - after the sys.path insert above
+    centered,
+    decode,
+    encode,
+    normalize,
+    pad as _pad,
+    ring_add,
+    ring_mul,
+    ring_sub,
+    rlwe_decrypt,
+    rlwe_encrypt,
+    rlwe_phase,
+)
+
+__all__ = [
+    "centered",
+    "decode",
+    "decompose",
+    "decompose_poly",
+    "encode",
+    "external_product",
+    "external_trace",
+    "gadget_vector",
+    "health_token",
+    "levels_needed",
+    "noise_bound",
+    "normalize",
+    "params",
+    "public_payload",
+    "recompose",
+    "recompose_poly",
+    "rgsw_encrypt",
+    "rgsw_material",
+    "ring_add",
+    "ring_mul",
+    "ring_noise",
+    "ring_random",
+    "ring_sub",
+    "rlwe_decrypt",
+    "rlwe_encrypt",
+    "rlwe_phase",
+    "rlwe_secret",
+    "smallest_unrepresentable",
+]
 
 #: (base, levels, degree) triples whose external-product noise provably fits the budget.
 #: Enumerated rather than sampled: most combinations do not fit, and a parameter set that
@@ -103,57 +166,6 @@ def params(seed: str, label: str = "public") -> dict:
 def noise_bound(par: dict) -> int:
     """The most the external product's noise term can be, over 2L rows."""
     return 2 * par["levels"] * par["degree"] * (par["base"] - 1) * NOISE_RANGE
-
-
-# ---------------------------------------------------------------------------
-# Supplied: the ring and the encoding (same conventions as ac26-w5-lwe-rlwe)
-# ---------------------------------------------------------------------------
-
-
-def normalize(par: dict, coefficients) -> tuple[int, ...]:
-    n, q = par["degree"], par["modulus"]
-    out = [0] * n
-    for index, value in enumerate(coefficients):
-        sign = -1 if (index // n) % 2 else 1
-        out[index % n] = (out[index % n] + sign * value) % q
-    return tuple(out)
-
-
-def _pad(par: dict, coefficients) -> list[int]:
-    values = list(coefficients)[: par["degree"]]
-    return values + [0] * (par["degree"] - len(values))
-
-
-def ring_add(par: dict, a, b) -> tuple[int, ...]:
-    return normalize(par, [x + y for x, y in zip(_pad(par, a), _pad(par, b))])
-
-
-def ring_sub(par: dict, a, b) -> tuple[int, ...]:
-    return normalize(par, [x - y for x, y in zip(_pad(par, a), _pad(par, b))])
-
-
-def ring_mul(par: dict, a, b) -> tuple[int, ...]:
-    left, right = _pad(par, a), _pad(par, b)
-    raw = [0] * (2 * par["degree"] - 1)
-    for i, x in enumerate(left):
-        for j, y in enumerate(right):
-            raw[i + j] += x * y
-    return normalize(par, raw)
-
-
-def encode(par: dict, m: int) -> int:
-    return (m % par["plaintext_modulus"]) * par["delta"] % par["modulus"]
-
-
-def decode(par: dict, c: int) -> int:
-    delta = par["delta"]
-    return ((c % par["modulus"]) + delta // 2) // delta % par["plaintext_modulus"]
-
-
-def centered(par: dict, x: int) -> int:
-    q = par["modulus"]
-    value = x % q
-    return value - q if value >= (q + 1) // 2 else value
 
 
 # ---------------------------------------------------------------------------
@@ -242,23 +254,9 @@ def ring_noise(seed: str, par: dict, label: str) -> tuple[int, ...]:
     return tuple(_pick(s, 2 * i, -NOISE_RANGE, NOISE_RANGE) for i in range(par["degree"]))
 
 
-def rlwe_encrypt(par: dict, secret, messages, mask, noise) -> dict:
-    product = ring_mul(par, mask, secret)
-    encoded = [encode(par, m) for m in _pad(par, messages)]
-    return {
-        "a": normalize(par, mask),
-        "b": normalize(
-            par, [p + e + n for p, e, n in zip(product, encoded, _pad(par, noise))]
-        ),
-    }
-
-
-def rlwe_phase(par: dict, secret, ciphertext: dict) -> tuple[int, ...]:
-    return ring_sub(par, ciphertext["b"], ring_mul(par, ciphertext["a"], secret))
-
-
-def rlwe_decrypt(par: dict, secret, ciphertext: dict) -> tuple[int, ...]:
-    return tuple(decode(par, value) for value in rlwe_phase(par, secret, ciphertext))
+# `rlwe_encrypt`, `rlwe_phase` and `rlwe_decrypt` are imported from `participant.ring` at
+# the top of this file: the scheme is supplied, so the learner's image and this one run the
+# same three functions.
 
 
 # ---------------------------------------------------------------------------
@@ -338,3 +336,94 @@ def health_token(seed: str) -> str:
     return hashlib.sha256(
         f"health:{seed}:{par['base']}:{par['levels']}:{par['degree']}".encode()
     ).hexdigest()[:16]
+
+
+# ---------------------------------------------------------------------------
+# The public half of a deployment (Issue 543 option B2)
+# ---------------------------------------------------------------------------
+
+
+def _case(seed: str, par: dict, secret, ciphertext: dict, selector: int) -> dict:
+    """One selector's worth of what `make inspect` has always printed."""
+    rgsw = rgsw_encrypt(par, secret, selector, rgsw_material(seed, par, "show"))
+    product = external_product(par, rgsw, ciphertext)
+    return {
+        "rows": len(rgsw),
+        "trace": [
+            {
+                "row": record["row"],
+                "slot": record["slot"],
+                "level": record["level"],
+                "accumulated_a": list(record["accumulated_a"]),
+                "accumulated_b": list(record["accumulated_b"]),
+            }
+            for record in external_trace(par, rgsw, ciphertext)
+        ],
+        "product": {"a": list(product["a"]), "b": list(product["b"])},
+        "decrypted": list(rlwe_decrypt(par, secret, product)),
+    }
+
+
+def public_payload(seed: str) -> dict:
+    """Everything the participant image is allowed to see, and nothing else.
+
+    This is the single place that decides what "public" means for this problem. It is
+    exactly two things:
+
+    - **The demonstration `show.py` has always printed.** The gadget, one decomposition,
+      the RGSW row layout, the accumulation trace and the level-exhaustion witness were
+      participant-visible before Issue 543 and stay participant-visible after it. The
+      split moved where they are computed, not who may read them.
+    - **The inputs the public tests feed into the learner's own functions.** The
+      parameters, the secret, the mask, the noise and the RGSW material -- arguments the
+      graded functions receive anyway.
+
+    What is deliberately absent is any checkpoint's ground truth on the *submission's*
+    parameter set. Every checkpoint is graded by running `tests/hidden/check_rgsw.py`
+    against the learner's file, on values derived here from the seed; `transfer` runs
+    under a derived seed whose parameters appear nowhere below.
+    """
+    par = params(seed)
+    base, levels, q = par["base"], par["levels"], par["modulus"]
+    secret = rlwe_secret(seed, par)
+    messages = tuple((i + 1) % par["plaintext_modulus"] for i in range(par["degree"]))
+    ciphertext = rlwe_encrypt(
+        par, secret, messages, ring_random(seed, par, "show"), ring_noise(seed, par, "show")
+    )
+    value = q // 3
+    short = max(1, levels_needed(base, q) - 2)
+    material = rgsw_material(seed, par, "pub")
+    return {
+        "healthToken": health_token(seed),
+        "params": dict(par),
+        "gadget": list(gadget_vector(par)),
+        "noiseBound": noise_bound(par),
+        "budget": par["delta"] // 2,
+        "decomposition": {
+            "value": value,
+            "digits": list(decompose(par, value)),
+            "recomposed": recompose(par, decompose(par, value)),
+        },
+        "ciphertext": {
+            "messages": list(messages),
+            "a": list(ciphertext["a"]),
+            "b": list(ciphertext["b"]),
+            "levels": [list(level) for level in decompose_poly(par, ciphertext["a"])],
+        },
+        "cases": {str(selector): _case(seed, par, secret, ciphertext, selector) for selector in (0, 1)},
+        "exhaustion": {
+            "shortLevels": short,
+            "levelsNeeded": levels_needed(base, q),
+            "witness": smallest_unrepresentable(base, short, q),
+        },
+        "inputs": {
+            "secret": list(secret),
+            "publicPoly": list(ring_random(seed, par, "public")),
+            "mask": list(ring_random(seed, par, "pub")),
+            "noise": list(ring_noise(seed, par, "pub")),
+            "rgswMaterial": {
+                "masks": [list(mask) for mask in material["masks"]],
+                "noises": [list(noise) for noise in material["noises"]],
+            },
+        },
+    }

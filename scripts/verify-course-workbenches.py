@@ -94,6 +94,12 @@ SPLIT_PORTAL_MODULES = {
     # learner to write, so it left that stage too. `show.py` and the public tests read
     # `GET /public` from the verifier now.
     "ac26-w5-lwe-rlwe": "participant.server",
+    # Issue 543 option B2, the same two leaks: `tests/hidden/check_rgsw.py` grades all
+    # eight checkpoints and shipped in the participant stage, and `fixtures/generate.py`
+    # implements the ten functions `starter/rgsw.py` asks the learner to write, so it
+    # left that stage too. `show.py` and the public tests read `GET /public` from the
+    # verifier now. The supplied ring stayed behind in `participant/ring.py`.
+    "ac26-w5-rgsw-external": "participant.server",
 }
 # Execute the heavier inspect/public-test adapter on representative problems from
 # each family. The catalogue's existing sharded suite executes every problem's own

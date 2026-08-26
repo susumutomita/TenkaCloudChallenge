@@ -31,11 +31,6 @@
       "reason": "Listed in #537 as a suspected (unverified) case sharing helper names with ac26-w5-lwe-rlwe; this detector independently confirms the same stub-vs-implementation shape (blind_rotate and siblings)."
     },
     {
-      "problem": "ac26-w5-rgsw-external",
-      "issue": 537,
-      "reason": "Listed in #537 as a suspected (unverified) case sharing helper names with ac26-w5-lwe-rlwe; this detector independently confirms the same stub-vs-implementation shape (rgsw_encrypt, external_product and siblings)."
-    },
-    {
       "problem": "ac26-w3-passkey-assertion",
       "issue": 538,
       "reason": "Not named in #537. starter's signed_message stub raises NotImplementedError while fixtures/generate.py already ships a complete, same-named implementation reachable from the participant image."
