@@ -114,7 +114,11 @@ Workbench's `/api/inspect` all fetch that evidence at runtime instead of computi
   that returns exactly the fields a learner is shown — never a checkpoint's answer.
 - `verifier/expected.py` derives any checkpoint answer that needs more than the arithmetic the
   problem statement already walks the learner through (contrast with a `predict`-shaped checkpoint,
-  where comparing against arithmetic over disclosed inputs is the exercise itself, not a leak).
+  where comparing against arithmetic over disclosed inputs is the exercise itself, not a leak). This
+  file is a naming convention, not a mandatory one: once `fixtures/` ships only to the `verifier`
+  stage, a checker comparing against a value computed inline in `verifier/server.py` is equally
+  closed (`ac26-bridge-properties` and `ac26-w1-constraint-lab` do exactly this). Reach for a
+  separate `expected.py` when the derivation is substantial enough to want its own module.
 - `participant/server.py`, `show.py`, and `tests/public/*.py` fetch `public_payload` from the
   verifier's `/public` at runtime (`fetch_public` / `_public_evidence` / `_load_public_evidence`),
   with a **lazy, function-scoped** fallback import of `fixtures.generate` for the one case where
@@ -126,6 +130,12 @@ Workbench's `/api/inspect` all fetch that evidence at runtime instead of computi
 - `make test`, `make test-one` and `make inspect` run through `docker compose run` against the
   Workbench service rather than a bare `docker run`, because the Workbench now needs the verifier
   — declared as a health-gated Compose dependency — up and reachable to do any of this.
+- If `POST /api/prepare` needs to run the learner's own submission against something `fixtures/`
+  derives (`ac26-bridge-properties`'s `incompleteness` is checked against an undisclosed
+  `boundary_instance`, so preparing it means executing the learner's `counterexamples.py` against
+  that instance), that execution moves to a new verifier `POST /prepare` route the same way
+  `/verify` already proxies, rather than running in the Workbench. A `prepare` step that only
+  bundles the learner's own files (`ac26-w1-constraint-lab`) needs no such route at all.
 
 `scripts/check-answer-reachability.ts` is the detector for the narrower case this fixes
 (`direct-value-comparison`: a checker compares against a value one hop from a name reachable in
