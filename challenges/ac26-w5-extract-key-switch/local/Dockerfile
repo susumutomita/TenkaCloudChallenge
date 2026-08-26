@@ -1,39 +1,76 @@
 # Pinned digest, not a floating tag: the fixtures a learner debugs must not change
 # because a base image moved underneath them.
-#
-# This is the digest ac26-w7-capstone-design and -demo pin, chosen because it still
-# resolves. The one the rest of the Week 5 chain carries no longer does, which is a
-# catalog-wide problem rather than this problem's -- do not copy it forward from a
-# sibling without checking that `docker manifest inspect` still finds it.
-FROM python:3.13-slim@sha256:6771159cd4fa5d9bba1258caf0b82e6b73458c694d178ad97c5e925c2d0e1a91 AS participant
+FROM python:3.13-slim@sha256:6771159cd4fa5d9bba1258caf0b82e6b73458c694d178ad97c5e925c2d0e1a91 AS base
+
+RUN useradd --create-home --uid 10001 lab
 
 WORKDIR /problem
-
-COPY fixtures/ ./fixtures/
-COPY tests/ ./tests/
-COPY verifier/ ./verifier/
-COPY starter/ ./starter/
-COPY show.py ./show.py
-
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+
+# Participant Workbench: public materials only, and NOT `fixtures/`, `tests/hidden/` or
+# `verifier/`.
+#
+# Issue 543/537: this single stage used to carry the hidden suite and the process that
+# runs it. All eight of this problem's checkpoints are graded by running
+# `tests/hidden/check_extract.py` against the learner's file, so shipping that file handed
+# the person being graded the exact assertions.
+#
+# Issue 543's option B2 is why `fixtures/` is gone too. `fixtures/generate.py` has to
+# implement working `phase_coefficient`, `extract_sample`, `extract_trace`,
+# `decompose_mask`, `key_switch` and `domain_report` to derive this deployment's extraction
+# trace, switched sample and domain report -- the six names `starter/extract.py` asks the
+# learner to write. While it shipped here every one of
+# them was a single import away, with no comparison anywhere near them. `show.py` and the
+# public tests now fetch this deployment's public half from the verifier's `GET /public`
+# over the Compose-internal network (see show.py, tests/public/test_extract.py, and the
+# VERIFIER_PUBLIC_URL wiring in docker-compose.yml).
+#
+# `participant/ring.py` stays -- it is the ring, the encoding, the gadget and the two phases
+# this problem explicitly supplies rather than grades (`ac26-w5-lwe-rlwe`,
+# `ac26-w5-rgsw-external` and `ac26-w5-cmux-blind-rotation` are where those are the
+# exercise), and `starter/extract.py` imports from it on its first line.
+FROM base AS participant
+COPY --chown=lab:lab tests/public/ ./tests/public/
+COPY --chown=lab:lab participant/ ./participant/
+COPY --chown=lab:lab starter/ ./starter/
+COPY --chown=lab:lab show.py ./show.py
+
+USER lab
+
+CMD ["python", "participant/server.py"]
+
+# Hidden grading runs in a separate, unpublished image reachable only over the
+# Compose-internal network (see docker-compose.yml). The Workbench above has the public
+# tests and the answer-sealing adapter, but no fixture derivation, no hidden checker and
+# no scoring process.
+#
+# The single file below is not the participant package: it holds the supplied ring, the
+# gadget and the phases, which the fixture generator, the reference and the hidden
+# checker all import so that the arithmetic a learner builds on and the one they are graded
+# against cannot drift apart. The Portal server and its adapter are deliberately absent
+# from this stage.
+FROM base AS verifier
+COPY --chown=lab:lab participant/ring.py ./participant/ring.py
+COPY --chown=lab:lab fixtures/ ./fixtures/
+COPY --chown=lab:lab tests/hidden/ ./tests/hidden/
+COPY --chown=lab:lab verifier/ ./verifier/
+
+USER lab
 
 CMD ["python", "verifier/server.py"]
 
-# Two stages, because two different audiences build this image.
+# Author-only target. Local mode remains honor-system verification for whoever controls
+# Docker; the stage split prevents accidental answer delivery, not inspection by
+# somebody controlling Docker. See TEMPLATE.md "Assurance scope" for the
+# participant-facing boundary claim.
 #
-# `participant` is what `make build` produces and what a learner runs. It carries
-# the fixtures, the public and hidden tests, the verifier and the starter -- and
-# NOT the reference solution or the mutation suite, because a learner has no use
-# for either and shipping them is a way to hand over an answer by accident.
-#
-# `author` adds them back for `make reference-test`, which is the authoring and CI
-# path. Nothing in the participant path loads `reference/`: only mutation.py does,
-# which is why the split is clean rather than a compromise.
-#
-# This is misdelivery prevention, not confidentiality. Whoever builds the author
-# stage can read everything in it, and a participant can build it too. See
-# TEMPLATE.md "Assurance scope" -- the boundary claim there has not changed.
+# This target is `FROM participant`, so dropping `fixtures/` above takes it out of the
+# author image too unless it is copied back -- and mutation.py, the hidden suite and the
+# seed sweep all need it.
 FROM participant AS author
 
-COPY reference/ ./reference/
-COPY mutation.py ./mutation.py
+COPY --chown=lab:lab fixtures/ ./fixtures/
+COPY --chown=lab:lab tests/hidden/ ./tests/hidden/
+COPY --chown=lab:lab verifier/ ./verifier/
+COPY --chown=lab:lab reference/ ./reference/
+COPY --chown=lab:lab mutation.py ./mutation.py

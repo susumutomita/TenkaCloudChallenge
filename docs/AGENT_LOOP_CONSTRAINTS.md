@@ -191,15 +191,14 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   named `ac26-w5-lwe-rlwe` as outstanding after #572 had merged it — the same staleness
   that this section already records as having cost a run.
 
-  What is left, with the detector's count each — `ac26-w5-extract-key-switch` (6),
-  `ac26-w5-encoding-noise` (5), `ac26-w4-commit-open` (1, **already written — it is the
-  reachable half of #578**, see the blocked list above),
-  `ac26-w3-passkey-assertion` (1), `ac26-w3-field-inverse` (1). Landed so far:
-  `cs-auth-claim-audit` and `ac26-bridge-experiment` (#562), `ac26-w3-schnorr-drill`
-  (#570), `ac26-w5-lwe-rlwe` (#572), `ac26-w5-rgsw-external` (#573),
-  `ac26-w5-cmux-blind-rotation` (#579), `ac26-w5-pbs-homnand` (#581). Catalog count is 24
-  as of #581, down from 39. Runs have taken the largest count first, so
-  `ac26-w5-extract-key-switch` is next.
+  What is left, with the detector's count each — `ac26-w5-encoding-noise` (5),
+  `ac26-w4-commit-open` (1, **already written — it is the reachable half of #578**, see
+  the blocked list above), `ac26-w3-passkey-assertion` (1), `ac26-w3-field-inverse` (1).
+  Landed so far: `cs-auth-claim-audit` and `ac26-bridge-experiment` (#562),
+  `ac26-w3-schnorr-drill` (#570), `ac26-w5-lwe-rlwe` (#572), `ac26-w5-rgsw-external`
+  (#573), `ac26-w5-cmux-blind-rotation` (#579), `ac26-w5-pbs-homnand` (#581),
+  `ac26-w5-extract-key-switch` (#583). Catalog count is 18 as of #583, down from 39. Runs
+  have taken the largest count first, so `ac26-w5-encoding-noise` is next.
 
   `ac26-w3-field-inverse` and `ac26-w5-encoding-noise`'s last two findings are not new
   work landing on this list — #576 only made them **visible** (§2).

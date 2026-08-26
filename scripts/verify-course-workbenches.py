@@ -101,6 +101,7 @@ SPLIT_PORTAL_MODULES = {
     # verifier now. The supplied ring stayed behind in `participant/ring.py`.
     "ac26-w5-rgsw-external": "participant.server",
     "ac26-w5-cmux-blind-rotation": "participant.server",
+    "ac26-w5-extract-key-switch": "participant.server",
     # Same option B2 split, same two leaks: `tests/hidden/check_pipeline.py` grades all
     # eight checkpoints, and `fixtures/generate.py` implements seven of the twelve names
     # `starter/pipeline.py` asks the learner to write. `show.py` reads `GET /public` from

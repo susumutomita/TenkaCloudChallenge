@@ -4,9 +4,9 @@ Blind rotation leaves an RLWE ciphertext. Two things still have to happen before
 useful: one coefficient of it has to come out as an LWE sample, and that sample has to move
 to a different key and a different dimension — **without changing what it says**.
 
-You are not rebuilding anything before that. `fixtures.generate` supplies the ring, RLWE,
-RGSW, the external product, CMUX and the rotation loop, all correct. This problem is the two
-steps after.
+You are not rebuilding anything before that. `participant.ring` supplies the ring, RLWE,
+the gadget and the phases, all correct, and the accumulator you work on is a real
+blind-rotation output. This problem is the two steps after.
 
 ## Extraction
 
@@ -54,7 +54,7 @@ to linear algebra. It is a toy of the mechanism.
 
 from __future__ import annotations
 
-from fixtures.generate import decompose, rlwe_phase  # noqa: F401 - the supplied layer
+from participant.ring import decompose, rlwe_phase  # noqa: F401 - the supplied layer
 
 
 # ---------------------------------------------------------------------------

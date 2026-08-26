@@ -12,6 +12,7 @@ that preserves the number.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -21,26 +22,77 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "starter"))
 
 import extract as submission  # noqa: E402
-from fixtures.generate import (  # noqa: E402
-    key_id,
-    lwe_decrypt,
-    params,
-    rlwe_secret,
-    rotated_accumulator,
-    switching_key,
-    target_secret,
-)
+
+# The supplied half of the problem, and only that: the ring, the gadget and the phases this
+# problem does not ask you to write. It ships in the participant image;
+# `fixtures/generate.py`, which implements the six graded names, does not.
+from participant.ring import decode, lwe_decrypt  # noqa: E402
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 
+def _public_payload() -> dict:
+    """This deployment's parameters, secrets, accumulator and switching key.
+
+    Issue 543 option B2: this file used to import `fixtures.generate` directly. That module
+    derives a deployment's extraction trace, switched sample and domain report, which it
+    cannot do without working `phase_coefficient`, `extract_sample`, `extract_trace`,
+    `decompose_mask`, `key_switch` and `domain_report` -- the six names
+    `starter/extract.py` asks the learner to write. It does not ship in the `participant`
+    Docker stage any more (see ../../Dockerfile), so this deployment's own verifier is the
+    only source for the values below: `PUBLIC_EVIDENCE_JSON` when `participant/server.py`
+    has already fetched it (the Portal path, which the sandboxed run behind `make test`
+    also takes), `VERIFIER_PUBLIC_URL` fetched directly when it has not.
+    """
+    injected = os.environ.get("PUBLIC_EVIDENCE_JSON")
+    if injected:
+        return json.loads(injected)
+    verifier_public_url = os.environ.get("VERIFIER_PUBLIC_URL")
+    if verifier_public_url:
+        from urllib.error import HTTPError, URLError
+        from urllib.request import urlopen
+
+        try:
+            with urlopen(verifier_public_url, timeout=10) as response:  # noqa: S310
+                return json.loads(response.read().decode("utf-8"))
+        except (HTTPError, URLError, TimeoutError, OSError, ValueError) as error:
+            # Same message as show.py, for the same reason: an unreachable verifier is a
+            # torn-down deployment, not a failing submission, and a urllib traceback reads
+            # like the latter.
+            raise SystemExit(
+                "cannot reach this deployment's verifier "
+                f"({verifier_public_url}): {type(error).__name__}.\n"
+                "The parameters these tests run on live there since Issue 543 option B2. "
+                "Start it with `make verifier-up` and try again."
+            ) from error
+    # Neither is set: this only resolves where `fixtures/` is actually on disk, which is a
+    # checkout (this file run directly, e.g. by scripts/ac26-w5-extract-key-switch.test.ts)
+    # or the verifier/author Docker stage, and never inside a built `participant` image --
+    # so this branch existing does not reopen the leak above.
+    from fixtures.generate import public_payload
+
+    return public_payload(SEED)
+
+
+PUBLIC = _public_payload()
+INPUTS = PUBLIC["testInputs"]
+
+
 def _scene() -> tuple:
-    par = params(SEED)
-    ring_key = rlwe_secret(SEED, par, "ring")
-    target = target_secret(SEED, par, "target")
-    source_id, target_id = key_id(SEED, "ring"), key_id(SEED, "target")
-    accumulator = rotated_accumulator(SEED, par, ring_key)
-    key = switching_key(SEED, par, ring_key, target, source_id, target_id, "public")
+    par = dict(PUBLIC["params"])
+    ring_key = tuple(INPUTS["ringKey"])
+    target = tuple(INPUTS["targetKey"])
+    source_id = PUBLIC["keyIds"]["source"]
+    accumulator = {
+        "a": tuple(INPUTS["accumulator"]["a"]),
+        "b": tuple(INPUTS["accumulator"]["b"]),
+    }
+    raw = INPUTS["switchingKey"]
+    key = dict(raw)
+    key["entries"] = tuple(
+        tuple({"mask": tuple(entry["mask"]), "body": entry["body"]} for entry in row)
+        for row in raw["entries"]
+    )
     return par, ring_key, target, source_id, accumulator, key
 
 
@@ -50,8 +102,6 @@ def check_extraction_preserves_the_last_coefficient() -> str:
     sample = submission.extract_sample(par, accumulator, last)
     got = lwe_decrypt(par, ring_key, {"mask": tuple(sample["mask"]), "body": sample["body"]})
     want = submission.phase_coefficient(par, ring_key, accumulator, last)
-    from fixtures.generate import decode
-
     if got != decode(par, want):
         return f"the extracted sample decrypts to {got}, the coefficient says {decode(par, want)}"
     return ""

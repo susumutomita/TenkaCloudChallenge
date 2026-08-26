@@ -67,6 +67,41 @@ to linear algebra. It is a toy of the mechanism.
 from __future__ import annotations
 
 import hashlib
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+# The supplied half, single-sourced. `participant/ring.py` is the copy that ships in the
+# participant image; importing it here rather than restating it is what keeps the ring the
+# learner builds on and the ring the hidden suite grades against the same functions.
+#
+# Issue 543 option B2: this module implements `phase_coefficient`, `extract_sample`,
+# `extract_trace`, `decompose_mask`, `key_switch` and `domain_report` -- the six names
+# `starter/extract.py` asks the learner to write -- because it cannot derive this
+# deployment's trace, switched sample or domain report without them. So it ships in the
+# `verifier` and `author` Docker stages only (see ../Dockerfile), never in the participant
+# one, and `public_payload` at the bottom is what `show.py` and the public tests read
+# instead, over the verifier's `GET /public`.
+from participant.ring import (  # noqa: E402 - after the sys.path insert above
+    centered,
+    decode,
+    decompose,
+    decompose_poly,
+    encode,
+    gadget_vector,
+    lwe_decrypt,
+    lwe_phase_of,
+    normalize,
+    pad as _pad,
+    ring_add,
+    ring_mul,
+    ring_sub,
+    rlwe_decrypt,
+    rlwe_encrypt,
+    rlwe_phase,
+    rlwe_trivial,
+)
 
 #: (base, levels, degree, dimension, target_dimension) whose end-to-end noise fits the budget.
 #: Enumerated rather than sampled: most combinations do not fit, and a parameter set that
@@ -138,79 +173,6 @@ def noise_bound(par: dict) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Supplied: the ring, the encoding, the gadget
-# ---------------------------------------------------------------------------
-
-
-def normalize(par: dict, coefficients) -> tuple[int, ...]:
-    n, q = par["degree"], par["modulus"]
-    out = [0] * n
-    for index, value in enumerate(coefficients):
-        sign = -1 if (index // n) % 2 else 1
-        out[index % n] = (out[index % n] + sign * value) % q
-    return tuple(out)
-
-
-def _pad(par: dict, coefficients) -> list[int]:
-    values = list(coefficients)[: par["degree"]]
-    return values + [0] * (par["degree"] - len(values))
-
-
-def ring_add(par: dict, a, b) -> tuple[int, ...]:
-    return normalize(par, [x + y for x, y in zip(_pad(par, a), _pad(par, b))])
-
-
-def ring_sub(par: dict, a, b) -> tuple[int, ...]:
-    return normalize(par, [x - y for x, y in zip(_pad(par, a), _pad(par, b))])
-
-
-def ring_mul(par: dict, a, b) -> tuple[int, ...]:
-    left, right = _pad(par, a), _pad(par, b)
-    raw = [0] * (2 * par["degree"] - 1)
-    for i, x in enumerate(left):
-        for j, y in enumerate(right):
-            raw[i + j] += x * y
-    return normalize(par, raw)
-
-
-def encode(par: dict, m: int) -> int:
-    return (m % par["plaintext_modulus"]) * par["delta"] % par["modulus"]
-
-
-def decode(par: dict, c: int) -> int:
-    delta = par["delta"]
-    return ((c % par["modulus"]) + delta // 2) // delta % par["plaintext_modulus"]
-
-
-def centered(par: dict, x: int) -> int:
-    q = par["modulus"]
-    value = x % q
-    return value - q if value >= (q + 1) // 2 else value
-
-
-def gadget_vector(par: dict) -> tuple[int, ...]:
-    return tuple(par["base"] ** i for i in range(par["levels"]))
-
-
-def decompose(par: dict, value: int) -> tuple[int, ...]:
-    """Unsigned base-B digits of `value mod q`, least significant first, exactly L of them."""
-    base, remaining = par["base"], value % par["modulus"]
-    digits = []
-    for _ in range(par["levels"]):
-        digits.append(remaining % base)
-        remaining //= base
-    return tuple(digits)
-
-
-def decompose_poly(par: dict, poly) -> tuple[tuple[int, ...], ...]:
-    per_coefficient = [decompose(par, c) for c in _pad(par, poly)]
-    return tuple(
-        tuple(per_coefficient[k][i] for k in range(par["degree"]))
-        for i in range(par["levels"])
-    )
-
-
-# ---------------------------------------------------------------------------
 # Supplied: RLWE, RGSW, the external product, CMUX and blind rotation
 # ---------------------------------------------------------------------------
 
@@ -231,32 +193,6 @@ def ring_random(seed: str, par: dict, label: str) -> tuple[int, ...]:
 def ring_noise(seed: str, par: dict, label: str) -> tuple[int, ...]:
     s = _stream(seed, f"noise:{label}")
     return tuple(_pick(s, 2 * i, -NOISE_RANGE, NOISE_RANGE) for i in range(par["degree"]))
-
-
-def rlwe_encrypt(par: dict, secret, messages, mask, noise) -> dict:
-    product = ring_mul(par, mask, secret)
-    encoded = [encode(par, m) for m in _pad(par, messages)]
-    return {
-        "a": normalize(par, mask),
-        "b": normalize(
-            par, [p + e + n for p, e, n in zip(product, encoded, _pad(par, noise))]
-        ),
-    }
-
-
-def rlwe_trivial(par: dict, messages) -> dict:
-    return {
-        "a": tuple([0] * par["degree"]),
-        "b": normalize(par, [encode(par, m) for m in _pad(par, messages)]),
-    }
-
-
-def rlwe_phase(par: dict, secret, ciphertext: dict) -> tuple[int, ...]:
-    return ring_sub(par, ciphertext["b"], ring_mul(par, ciphertext["a"], secret))
-
-
-def rlwe_decrypt(par: dict, secret, ciphertext: dict) -> tuple[int, ...]:
-    return tuple(decode(par, value) for value in rlwe_phase(par, secret, ciphertext))
 
 
 def rgsw_material(seed: str, par: dict, label: str) -> dict:
@@ -417,16 +353,6 @@ def extract_trace(par: dict, ciphertext: dict, index: int) -> tuple[dict, ...]:
     return tuple(records)
 
 
-def lwe_phase_of(par: dict, secret, sample: dict) -> int:
-    """`body - <mask, secret>` in `Z_q`. The same shape at either dimension."""
-    inner = sum(m * s for m, s in zip(sample["mask"], secret))
-    return (sample["body"] - inner) % par["modulus"]
-
-
-def lwe_decrypt(par: dict, secret, sample: dict) -> int:
-    return decode(par, lwe_phase_of(par, secret, sample))
-
-
 # ---------------------------------------------------------------------------
 # Ground truth: key switching
 # ---------------------------------------------------------------------------
@@ -547,6 +473,104 @@ def domain_report(par: dict, sample: dict, key: dict) -> dict:
 def digest(par: dict, sample: dict) -> str:
     payload = ":".join(str(value) for value in (*sample["mask"], sample["body"]))
     return hashlib.sha256(payload.encode()).hexdigest()[:12]
+
+
+def _key_payload(key: dict) -> dict:
+    """A switching key as JSON: the same object, with its tuples spelled as lists."""
+    return {
+        "entries": [
+            [{"mask": list(entry["mask"]), "body": entry["body"]} for entry in row]
+            for row in key["entries"]
+        ],
+        "sourceKeyId": key["sourceKeyId"],
+        "targetKeyId": key["targetKeyId"],
+        "sourceDimension": key["sourceDimension"],
+        "targetDimension": key["targetDimension"],
+        "base": key["base"],
+        "levels": key["levels"],
+        "modulus": key["modulus"],
+    }
+
+
+def public_payload(seed: str) -> dict:
+    """Everything the participant image is allowed to see, and nothing else.
+
+    This is the single place that decides what "public" means for this problem, and it is
+    exactly two things:
+
+    - **The demonstration `show.py` has always printed.** The accumulator, the extraction
+      trace for every index, the decomposed mask, the switched sample and the domain report
+      were participant-visible before Issue 543 and stay participant-visible after it. The
+      split moved where they are computed, not who may read them. Every index is carried
+      because `make inspect INDEX=k` is part of that demonstration and this process cannot
+      ask the verifier a second question.
+    - **The inputs the public tests feed into the learner's own functions.** The parameters,
+      the two secrets, the accumulator and the switching key -- arguments the graded
+      functions receive anyway, and the secrets are what a public test needs to check that
+      a message survived the switch.
+
+    What is deliberately absent is any checkpoint's ground truth on a submission's own
+    parameter set: every checkpoint is graded by running `tests/hidden/check_extract.py`
+    against the learner's file, and `transfer` runs under a derived seed whose parameters
+    appear nowhere below.
+    """
+    par = params(seed)
+    degree = par["degree"]
+    ring_key = rlwe_secret(seed, par, "ring")
+    target = target_secret(seed, par, "target")
+    source_id, target_id = key_id(seed, "ring"), key_id(seed, "target")
+
+    show_accumulator = rotated_accumulator(seed, par, ring_key, "show")
+    show_key = switching_key(seed, par, ring_key, target, source_id, target_id, "show")
+
+    indices = {}
+    for index in range(degree):
+        sample = dict(extract_sample(par, show_accumulator, index))
+        sample["keyId"] = source_id
+        switched = key_switch(par, show_key, sample)
+        indices[str(index)] = {
+            "trace": [dict(record) for record in extract_trace(par, show_accumulator, index)],
+            "sample": {"mask": list(sample["mask"]), "body": sample["body"], "keyId": source_id},
+            "phase": lwe_phase_of(par, ring_key, sample),
+            "coefficient": phase_coefficient(par, ring_key, show_accumulator, index),
+            "digits": [list(row) for row in decompose_mask(par, sample["mask"])],
+            "switched": {
+                "mask": list(switched["mask"]),
+                "body": switched["body"],
+                "keyId": switched["keyId"],
+            },
+            "report": dict(domain_report(par, sample, show_key)),
+            "decoded": {
+                "coefficient": decode(par, phase_coefficient(par, ring_key, show_accumulator, index)),
+                "extracted": lwe_decrypt(par, ring_key, sample),
+                "switched": lwe_decrypt(par, target, switched),
+            },
+        }
+
+    return {
+        "healthToken": health_token(seed),
+        "params": dict(par),
+        "noiseBound": noise_bound(par),
+        "budget": par["delta"] // 2,
+        "accumulator": {"a": list(show_accumulator["a"]), "b": list(show_accumulator["b"])},
+        "keyIds": {"source": source_id, "target": target_id},
+        "indices": indices,
+        # The public tests build their own scene from these, using the supplied
+        # `participant/ring.py`: the same arguments the graded functions are handed, and
+        # nothing that says what those functions should return.
+        "testInputs": {
+            "ringKey": list(ring_key),
+            "targetKey": list(target),
+            "accumulator": _accumulator_payload(rotated_accumulator(seed, par, ring_key)),
+            "switchingKey": _key_payload(
+                switching_key(seed, par, ring_key, target, source_id, target_id, "public")
+            ),
+        },
+    }
+
+
+def _accumulator_payload(accumulator: dict) -> dict:
+    return {"a": list(accumulator["a"]), "b": list(accumulator["b"])}
 
 
 def health_token(seed: str) -> str:
