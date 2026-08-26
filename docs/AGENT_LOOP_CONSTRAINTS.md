@@ -147,6 +147,19 @@ Blocked on an owner decision — **do not start these**:
   findings, and both are `status: ready` — the split cannot be done there without
   correcting their READMEs either, so the outcome is another Draft PR waiting on the
   same decision. Do not start them until #564 is decided.
+- PR #578 is that outcome, and it arrived before this paragraph was read: it carries a
+  finished `sha256-schedule-logic` split **bundled with** a finished
+  `ac26-w4-commit-open` one. It was undrafted at 14:54 on 2026-08-26 and
+  `playability-gate` went red on the `ready_for_review` re-evaluation — the same two
+  lines #564 gets, for the same reason (`sha256-schedule-logic` is `status: ready` and
+  its READMEs are rewritten). It is Draft again, so the required check is green-by-
+  default and nothing is red; the decision is the owner's, exactly as for #564.
+
+  Two things follow for a later run. **`ac26-w4-commit-open` is already implemented
+  there** — do not write it a second time from the §5 work list below; split it out of
+  #578 into its own PR instead, which is a `draft`-only change an agent can carry to
+  merge. And a bundled PR inherits the strictest problem in it: keep one problem per PR
+  when their `status` differs, or the reachable half is held hostage by the blocked one.
 
 Not closable by one agent playing alone — say so rather than producing a weaker artifact:
 
@@ -180,21 +193,24 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
 
   What is left, with the detector's count each — `ac26-w5-pbs-homnand` (7),
   `ac26-w5-extract-key-switch` (6), `ac26-w5-encoding-noise` (5),
-  `ac26-w4-commit-open` (1), `ac26-w3-passkey-assertion` (1),
+  `ac26-w4-commit-open` (1, **already written — it is the reachable half of #578**, see
+  the blocked list above), `ac26-w3-passkey-assertion` (1),
   `ac26-w3-field-inverse` (1). Landed so far: `cs-auth-claim-audit` and
   `ac26-bridge-experiment` (#562), `ac26-w3-schnorr-drill` (#570), `ac26-w5-lwe-rlwe`
   (#572), `ac26-w5-rgsw-external` (#573), `ac26-w5-cmux-blind-rotation` (#579). Catalog
   count is 31 as of #579, down from 39. Runs have taken the largest count first, so
   `ac26-w5-pbs-homnand` is next.
 
-  The last two entries are new to this list, and neither is new work landing on it —
+  `ac26-w3-field-inverse` and `ac26-w5-encoding-noise`'s rise are new to this list, and
+  neither is new work landing on it —
   #576 only made them **visible** (§2). `ac26-w3-field-inverse` is the `egcd` placeholder
   tuple; `ac26-w5-encoding-noise` went 3 → 5 with `first_failure` and `success_interval`,
   the same class it was already listed for. So the catalog count rose while nothing got
   worse, which is the shape to expect whenever a rule stops being blind: never report a
   rise as a regression, or a fall as a closure.
 
-  **All seven remaining are `status: draft`**, so none of them hits the
+  **All six remaining are `status: draft`** (seven until #579 took
+  `ac26-w5-cmux-blind-rotation` off the list), so none of them hits the
   `playtest-verified` wall of §4 — a B2 split there is a PR an agent can carry
   to merge on its own, README correction included. Do not drop a needed README
   correction to stay under the gate (§4); on a `draft` problem it does not fire anyway.
