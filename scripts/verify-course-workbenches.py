@@ -73,6 +73,10 @@ SPLIT_PORTAL_MODULES = {
     "ac26-bridge-experiment": "participant.server",
     "ac26-bridge-properties": "participant.server",
     "ac26-w1-constraint-lab": "participant.server",
+    # Issue 525: same move, for the reason #533 did not finish -- the answer functions
+    # left fixtures/generate.py but the grader that derives `root-cause`'s accepted JSON
+    # kept shipping to the participant stage alongside the Portal.
+    "ac26-w1-underconstraint": "participant.server",
     # Issue 537/538/543: same move, one problem at a time. This one keeps the shared
     # adapter (it is in SHARED_TARGETS above), so the Portal API moved to
     # participant/server.py together with the vendored participant/workbench.py, while

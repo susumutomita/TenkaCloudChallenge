@@ -1,19 +1,34 @@
-# Every port binds to 127.0.0.1 only. This problem has no network surface for the
-# learner to attack; the whole challenge is local reasoning.
+# The Workbench is the only service published to the host, and only on loopback. The
+# verifier is not published at all: it is reachable from the Workbench over the internal
+# `lab` network, which carries no gateway -- `workshop-host` exists only because Docker
+# cannot publish a port from an internal-only network.
+#
+# Issue 525/543/537: this used to be a single service that was both the participant-facing
+# Portal and the answer-checking verifier, so `root-cause`'s expected JSON
+# (`verifier/server.py`'s `_expected_root_cause`) shipped in the same image a learner's
+# own `make build` produced. This is the same plain two-service split already used by
+# ac26-w1-constraint-lab and the Week 3/4 drills -- not a new mechanism.
+#
+# The published port stays 18094 so metadata.json's `exposedPorts` and `verifyUrl` are
+# unchanged: the Workbench now answers on it and forwards `/verify` inward.
 name: ac26-w1-underconstraint
 services:
-  verifier:
+  workbench:
     build:
       context: .
       dockerfile: Dockerfile
       # The participant stage, explicitly. Without this, compose builds the
-      # LAST stage -- `author` -- which carries reference/ and mutation.py.
+      # LAST stage -- `author` -- which carries verifier/, reference/ and mutation.py.
       target: participant
     environment:
       FLAG_SEED: ${FLAG_SEED:?FLAG_SEED must be provided by the platform}
-      VERIFY_PORT: "18094"
+      WORKBENCH_PORT: "18094"
+      VERIFIER_URL: http://verifier:18095/verify
     ports:
       - "127.0.0.1:18094:18094"
+    depends_on:
+      verifier:
+        condition: service_healthy
     read_only: true
     tmpfs:
       - /tmp
@@ -21,8 +36,64 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    # The rlimits in verifier/server.py bound the submission's child process. These bound
-    # the verifier itself, which is the process that would still be standing if a
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:18094/healthz', timeout=2).read()",
+        ]
+      interval: "2s"
+      timeout: "3s"
+      retries: 20
+      start_period: "2s"
+    # The rlimits in participant/server.py bound the public-test child process. These
+    # bound the Workbench itself, which is the process that would still be standing if a
     # submission found a way past them.
     mem_limit: 1g
     pids_limit: 128
+    networks:
+      - lab
+      - workshop-host
+
+  verifier:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: verifier
+    environment:
+      FLAG_SEED: ${FLAG_SEED:?FLAG_SEED must be provided by the platform}
+      VERIFY_PORT: "18095"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:18095/healthz', timeout=2).read()",
+        ]
+      interval: "2s"
+      timeout: "3s"
+      retries: 20
+      start_period: "2s"
+    mem_limit: 1g
+    pids_limit: 128
+    networks:
+      - lab
+
+networks:
+  lab:
+    internal: true
+  workshop-host:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+      com.docker.network.bridge.host_binding_ipv4: "127.0.0.1"

@@ -96,10 +96,18 @@ see `GOVERNANCE.md` §2 and §4.
 
 ## Assurance scope
 
-Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
-daemon, and the image, so nothing inside that image is hidden from you: `reference/` and
-`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than
-out of reach.
+Local mode is **self-paced, honor-system verification**. Someone who owns the Docker daemon
+and every container in the compose stack cannot be prevented from inspecting hidden material.
+The boundary here is misdelivery, not confidentiality against that person: the Workbench
+container you build and run carries the starter, the public tests and the fixtures that make
+up the question — and no grader, no hidden checks, no reference solution. Those live only in a
+second, unpublished container the Workbench reaches over the compose network, and in the
+author-only image `make reference-test` builds.
+
+The fixtures do ship to you on purpose. After [#533](https://github.com/susumutomita/TenkaCloudChallenge/pull/533)
+they hand back inputs only — the deployed circuit, the parameters, and the two honest witnesses
+— which is exactly what `make inspect` prints. What moved out is the code that knows what a
+correct answer looks like.
 
 What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
 a checkpoint can only credit the id it echoes, results do not leak expected values, and the

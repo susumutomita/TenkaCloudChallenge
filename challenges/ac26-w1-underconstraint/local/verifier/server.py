@@ -1,8 +1,18 @@
-"""POST /verify — the scoring seam. Loopback only, stdlib only.
+"""POST /verify — the scoring seam. Compose-internal only, stdlib only.
 
 Same security contract as the AC26 template. Five of the six checkpoints run the
 learner's policy.py against seeded circuits; `root-cause` grades a structured answer,
 because the issue asks for a diagnosis that is machine-checkable rather than prose.
+
+Issue 525/543/537: this file used to ship in the participant Docker stage, alongside
+the Portal editor API it also hosted. `_expected_root_cause` below returns exactly the
+JSON the `root-cause` checkpoint accepts, keyed by a seed the learner already holds in
+their own container's `FLAG_SEED` — so a learner who opened this file could copy that
+checkpoint's answer out of the image their own `make build` produced. It now runs in a
+separate image that is never published to the host: the participant-facing Workbench
+(`participant/server.py`) owns the Portal editor routes and forwards `/verify` here
+over the internal Compose network. Nothing participant-facing is served from this
+process any more.
 """
 
 from __future__ import annotations
@@ -21,8 +31,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fixtures.generate import (
     DROPPABLE,
-    clean_witness,
-    health_token,
     honest_witness,
     params,
     vulnerable_circuit,
@@ -48,17 +56,6 @@ CODE_CHECKPOINTS = {
 }
 CHECKPOINTS = ("build", "audit", "exploit", "root-cause", "repair", "mutation-transfer")
 SUBMISSION_FILES = ("policy.py",)
-#: The five checkpoints whose portal submission is the learner's policy.py source.
-CODE_CHECKPOINT_IDS = ("build", "audit", "exploit", "repair", "mutation-transfer")
-CODE_CHECKPOINTS_FOR_PORTAL = frozenset(CODE_CHECKPOINT_IDS)
-CHECKPOINT_LABELS = {
-    "build": "ポリシーどおりの回路を組む",
-    "audit": "足りない制約を特定する",
-    "exploit": "偽の主張を通す witness を作る",
-    "root-cause": "原因を構造化して提出する",
-    "repair": "正常系を壊さずに塞ぐ",
-    "mutation-transfer": "別の欠落でも成立させる",
-}
 
 # Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still
 # reporting RLIM_INFINITY for it. Setting it anyway raises inside `preexec_fn` and
@@ -74,64 +71,6 @@ def _limits() -> None:
         resource.setrlimit(resource.RLIMIT_AS, (MAX_ADDRESS_SPACE_BYTES, MAX_ADDRESS_SPACE_BYTES))
     resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
     resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_BYTES, MAX_OUTPUT_BYTES))
-
-
-def starter_payload() -> dict[str, str]:
-    """Return the editable file shipped to the Portal editor."""
-    return {
-        name: (ROOT / "starter" / name).read_text(encoding="utf-8") for name in SUBMISSION_FILES
-    }
-
-
-def config_payload() -> dict[str, object]:
-    """Declare the generic editor contract consumed by the Participant Portal."""
-    return {
-        "id": "ac26-w1-underconstraint",
-        "name": "通るのに、守れていない",
-        "description": "不足した constraint を監査・悪用し、正常系を保ったまま修復する。",
-        "submittedFiles": list(SUBMISSION_FILES),
-        "checkpoints": [
-            {
-                "id": checkpoint,
-                "label": CHECKPOINT_LABELS[checkpoint],
-                "kind": "code" if checkpoint in CODE_CHECKPOINTS_FOR_PORTAL else "answer",
-            }
-            for checkpoint in CHECKPOINTS
-        ],
-        # 英語は Portal 側の locale が選ぶ (共有 workbench.py の config_payload と同じ契約)。
-        # 文言の正本は metadata.json — scripts/generate-course-workbenches.py --check が
-        # 乖離を落とす (#381)。 この payload は手書きなので、 直すときはここを編集する。
-        "i18n": {
-            "en": {
-                "name": 'It passes, but it does not protect',
-                "description": 'A credential circuit was stopped by audit just before production. Ordinary holders are judged correctly. But a forged witness may be able to walk around the condition. Build it, break it, fix it.',
-                "checkpointLabels": {'build': 'Build the circuit the policy intends', 'audit': 'Identify the missing constraint', 'exploit': 'Forge a witness that carries a false claim', 'root-cause': 'Submit the root cause in structured form', 'repair': 'Close the gap without breaking the honest cases', 'mutation-transfer': 'Hold up when a different constraint is missing'},
-            }
-        },
-    }
-
-
-def inspect_payload(seed: str) -> dict[str, object]:
-    """Build the seeded evidence shown by the browser's inspect command.
-
-    Same facts as `show.py`. The id of the dropped constraint stays out of the
-    payload: finding it is the audit checkpoint.
-    """
-    prm = params(seed)
-    return {
-        "policy": "grant access iff the revocation counter is zero AND the issuer is recognised",
-        "parameters": prm,
-        "deployedCircuit": vulnerable_circuit(seed),
-        "honestWitnesses": {
-            "revokedCredential": honest_witness(prm),
-            "cleanCredential": clean_witness(prm),
-        },
-        "iszeroGadget": {
-            "iszero_a": "value * inv + out - 1 = 0",
-            "iszero_b": "value * out = 0",
-        },
-        "healthToken": health_token(seed),
-    }
 
 
 def _submission_sources(files: object) -> dict[str, str] | None:
@@ -181,47 +120,6 @@ def _run_submission_script(
         except (subprocess.TimeoutExpired, OSError, ValueError):
             return None
     return completed.returncode, captured[-MAX_OUTPUT_BYTES:]
-
-
-PUBLIC_TEST_SCRIPT = """
-import os, runpy
-os.environ["FLAG_SEED"] = {seed!r}
-os.environ["SUBMISSION_DIR"] = {workspace!r}
-os.environ["BROWSER_PUBLIC_TESTS"] = "1"
-runpy.run_path({root!r} + "/tests/public/test_policy.py", run_name="__main__")
-"""
-
-
-def run_public_tests(seed: str, files: object) -> dict[str, object]:
-    """Run the same checks as `make test` against the Portal-edited source."""
-    sources = _submission_sources(files)
-    if sources is None:
-        return {"passed": False, "output": "policy.py must be a non-empty Python file."}
-    result = _run_submission_script(sources, PUBLIC_TEST_SCRIPT, seed)
-    if result is None:
-        return {"passed": False, "output": "Public tests timed out or could not start."}
-    return {"passed": result[0] == 0, "output": result[1]}
-
-
-def prepare_submissions(seed: str, files: object) -> dict[str, object]:
-    """Format the policy.py source the five code checkpoints take.
-
-    `root-cause` is deliberately absent: its JSON names the dropped constraint
-    and the manipulated signals, which is the diagnosis the learner derives from
-    their own audit and forgery. Producing it here would erase what that
-    checkpoint measures. The seed does not enter the values; it stays in the
-    signature so every Portal prepare API has the same shape.
-    """
-    del seed
-    sources = _submission_sources(files)
-    if sources is None:
-        return {"ok": False, "output": "policy.py must be a non-empty Python file."}
-    return {
-        "ok": True,
-        "submissions": {
-            checkpoint: sources["policy.py"] for checkpoint in CODE_CHECKPOINT_IDS
-        },
-    }
 
 
 def _missing_constraint_id(seed: str, label: str = "public") -> str:
@@ -394,20 +292,18 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's name
         path = urlsplit(self.path).path
-        if path == "/api/config":
-            self._respond(200, config_payload())
-            return
-        if path == "/api/inspect":
-            self._respond(200, inspect_payload(SEED))
-            return
-        if path == "/api/starter":
-            self._respond(200, starter_payload())
+        # Compose's healthcheck, and nothing else. The Portal editor routes moved to
+        # participant/server.py with the split: serving any of them from here would put
+        # this image back on the participant's reading path, which is the whole thing
+        # Issue 525/543 is about.
+        if path == "/healthz":
+            self._respond(200, {"ok": True})
             return
         self._respond(404, {"error": "not found"})
 
     def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's name
         path = urlsplit(self.path).path.rstrip("/") or "/"
-        if path not in ("/verify", "/api/test", "/api/prepare"):
+        if path != "/verify":
             self._respond(404, {"error": "not found"})
             return
         try:
@@ -429,13 +325,6 @@ class Handler(BaseHTTPRequestHandler):
             return
         if not isinstance(body, dict):
             self._respond(400, {"error": "bad json"})
-            return
-
-        if path == "/api/test":
-            self._respond(200, run_public_tests(SEED, body.get("files")))
-            return
-        if path == "/api/prepare":
-            self._respond(200, prepare_submissions(SEED, body.get("files")))
             return
 
         checkpoint_id = body.get("checkpointId")

@@ -19,7 +19,7 @@ sys.path.insert(0, SUBMISSION_DIR or str(ROOT / "starter"))
 from fixtures.evaluator import satisfies  # noqa: E402
 from fixtures.generate import clean_witness, honest_witness, params, vulnerable_circuit  # noqa: E402
 import policy  # noqa: E402
-from verifier.server import (  # noqa: E402
+from participant.server import (  # noqa: E402
     inspect_payload,
     prepare_submissions,
     run_public_tests,
@@ -112,9 +112,23 @@ def test_workbench_prepare_rejects_an_empty_source() -> None:
 
 def test_portal_editor_replaces_static_assets() -> None:
     assert not (ROOT / "workbench").exists()
-    server = (ROOT / "verifier" / "server.py").read_text(encoding="utf-8")
+    server = (ROOT / "participant" / "server.py").read_text(encoding="utf-8")
     for endpoint in ("/api/config", "/api/starter", "/api/inspect", "/api/test", "/api/prepare"):
         assert endpoint in server
+
+
+def test_workbench_cannot_derive_a_verdict_by_itself() -> None:
+    """Issue 525/543: the Workbench forwards `/verify`, it never grades.
+
+    Runs inside the participant image, where `verifier/` does not exist at all -- so
+    this also fails loudly if a future change copies the grader back in.
+    """
+    from participant import server
+
+    assert not hasattr(server, "evaluate")
+    assert not any(name.startswith("_check_") for name in dir(server))
+    body = {"checkpointId": "root-cause", "submission": "anything"}
+    assert server.proxy_verdict(body, "") == {"checkpointId": "root-cause", "correct": False}
 
 
 def main() -> int:

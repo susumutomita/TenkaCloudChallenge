@@ -62,6 +62,11 @@ PORTAL_PACKAGES = {
     "ac26-bridge-experiment": "participant",
     "ac26-bridge-properties": "participant",
     "ac26-w1-constraint-lab": "participant",
+    # Issue 525: #533 moved the four answer functions out of fixtures/generate.py, but
+    # the derivation they moved into (verifier/server.py's `_expected_root_cause`) still
+    # shipped in the single participant stage. The Portal moved to participant/ when the
+    # grader stopped shipping there.
+    "ac26-w1-underconstraint": "participant",
     "ac26-w2-linear-shares": "participant",
     "ac26-w4-sumcheck-drill": "participant",
     "ac26-w3-schnorr-drill": "participant",
