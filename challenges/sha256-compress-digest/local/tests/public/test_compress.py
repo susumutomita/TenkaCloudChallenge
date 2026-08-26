@@ -7,13 +7,13 @@ compresses only the first block, because every message here fits in one block.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from fixtures.generate import round_case  # noqa: E402
 from given.primitives import INITIAL_STATE, K, MASK, message_schedules  # noqa: E402
 from starter.compress import (  # noqa: E402
     compress_block,
@@ -29,9 +29,43 @@ SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 ABC_DIGEST = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
 
 
+def _load_public_evidence() -> dict[str, object]:
+    """This deployment's round fixture -- the same one `show.py` prints.
+
+    Issue 543/537: this file used to `from fixtures.generate import round_case`. That
+    module also defines `avalanche_distance` (via the verifier) and ships every quiz
+    statement's correct verdict in plaintext, so it does not ship in the `participant`
+    Docker stage at all any more (see ../../Dockerfile). This deployment's own verifier
+    is the only source for the public half now: `PUBLIC_EVIDENCE_JSON` when the Portal
+    has already fetched it, or `VERIFIER_PUBLIC_URL` fetched directly when it has not.
+    """
+    injected = os.environ.get("PUBLIC_EVIDENCE_JSON")
+    if injected:
+        return json.loads(injected)
+    verifier_public_url = os.environ.get("VERIFIER_PUBLIC_URL")
+    if verifier_public_url:
+        from urllib.request import urlopen
+
+        with urlopen(verifier_public_url, timeout=10) as response:  # noqa: S310
+            return json.loads(response.read().decode("utf-8"))
+    # Neither is set: this only resolves when `fixtures/` is actually on disk, which is
+    # true for a checkout (this file run directly, e.g. by
+    # scripts/sha256-compress-digest.test.ts) and the verifier/author Docker stages, and
+    # never inside a built `participant` image -- so this branch existing does not
+    # reopen the leak above.
+    from fixtures.generate import public_payload
+
+    return public_payload(SEED)
+
+
+PUBLIC = _load_public_evidence()
+ROUND_STATE = tuple(PUBLIC["round"]["state"])
+ROUND_INDEX = PUBLIC["round"]["roundIndex"]
+ROUND_SCHEDULE_WORD = PUBLIC["round"]["scheduleWord"]
+
+
 def test_a_round_returns_eight_words() -> None:
-    case = round_case(SEED)
-    result = round_step(case.state, K[case.round_index], case.schedule_word)
+    result = round_step(ROUND_STATE, K[ROUND_INDEX], ROUND_SCHEDULE_WORD)
     assert len(result) == 8
     for word in result:
         assert 0 <= word <= MASK
@@ -39,34 +73,30 @@ def test_a_round_returns_eight_words() -> None:
 
 def test_a_round_shifts_six_words_along() -> None:
     # b, c, d and f, g, h of the result are just a, b, c and e, f, g of the input.
-    case = round_case(SEED)
-    a, b, c, _d, e, f, g, _h = case.state
-    result = round_step(case.state, K[case.round_index], case.schedule_word)
+    a, b, c, _d, e, f, g, _h = ROUND_STATE
+    result = round_step(ROUND_STATE, K[ROUND_INDEX], ROUND_SCHEDULE_WORD)
     assert tuple(result[1:4]) == (a, b, c)
     assert tuple(result[5:8]) == (e, f, g)
 
 
 def test_sixty_four_rounds_keep_the_state_a_state() -> None:
-    case = round_case(SEED)
     schedule = message_schedules(b"abc")[0]
-    result = compress_rounds(case.state, schedule)
+    result = compress_rounds(ROUND_STATE, schedule)
     assert len(result) == 8
     for word in result:
         assert 0 <= word <= MASK
 
 
 def test_inverting_one_round_restores_the_state() -> None:
-    case = round_case(SEED)
-    forward = round_step(case.state, K[case.round_index], case.schedule_word)
-    back = invert_round(forward, K[case.round_index], case.schedule_word)
-    assert tuple(back) == tuple(case.state)
+    forward = round_step(ROUND_STATE, K[ROUND_INDEX], ROUND_SCHEDULE_WORD)
+    back = invert_round(forward, K[ROUND_INDEX], ROUND_SCHEDULE_WORD)
+    assert tuple(back) == tuple(ROUND_STATE)
 
 
 def test_inverting_the_rounds_restores_the_state() -> None:
-    case = round_case(SEED)
     schedule = message_schedules(b"abc")[0]
-    forward = compress_rounds(case.state, schedule)
-    assert tuple(invert_rounds(forward, schedule)) == tuple(case.state)
+    forward = compress_rounds(ROUND_STATE, schedule)
+    assert tuple(invert_rounds(forward, schedule)) == tuple(ROUND_STATE)
 
 
 def test_a_block_compression_returns_eight_words() -> None:

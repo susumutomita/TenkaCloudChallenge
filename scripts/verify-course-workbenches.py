@@ -149,6 +149,15 @@ SPLIT_PORTAL_MODULES = {
     # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
     # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
     "ac26-w5-encoding-noise": "participant.server",
+    # Issue 537/538: same move. verifier/server.py's own _check_avalanche compared a
+    # submission directly against a plain, seed-derived avalanche_distance defined in
+    # the same file, and _check_properties/_check_storage compared against
+    # fixtures/generate.py's quiz_answer over PROPERTY_STATEMENTS/STORAGE_STATEMENTS,
+    # which ship every statement's correct verdict in plaintext -- all reachable from
+    # the single participant stage.
+    # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
+    # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
+    "sha256-compress-digest": "participant.server",
     # Issue 537/538 (Issue 543 option B2): same move. tests/hidden/check_field.py grades
     # every checkpoint and fixtures/generate.py implements egcd under the exact name
     # starter/field.py's own stub asks the learner to write, with egcd_rows supplying

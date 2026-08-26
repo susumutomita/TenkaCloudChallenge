@@ -103,6 +103,14 @@ PORTAL_PACKAGES = {
     # first_failure under the exact five names starter/encoding.py's own stubs ask the
     # learner to write, so both left the participant stage and the Portal moved with them.
     "ac26-w5-encoding-noise": "participant",
+    # Issue 537/538: verifier/server.py's own _check_avalanche compared a submission
+    # directly against a plain, seed-derived avalanche_distance defined in the same
+    # file, and _check_properties/_check_storage compared against
+    # fixtures/generate.py's quiz_answer over PROPERTY_STATEMENTS/STORAGE_STATEMENTS,
+    # which ship every statement's correct verdict in plaintext -- all reachable from
+    # the single participant stage. The Portal moved to participant/ when fixtures/
+    # stopped shipping there.
+    "sha256-compress-digest": "participant",
     # Issue 537/538 (Issue 543 option B2): the hidden suite grades every checkpoint and
     # fixtures/generate.py implements egcd under the exact name starter/field.py's own
     # stub asks the learner to write, with egcd_rows supplying the trace its egcd_trace
