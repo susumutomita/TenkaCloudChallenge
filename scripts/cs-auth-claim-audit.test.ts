@@ -115,11 +115,12 @@ print(json.dumps({
     const probe = `
 import json, sys
 sys.path.insert(0, ".")
-from verifier.server import inspect_payload
-from fixtures.generate import decision_log, validity_window
+from participant.server import inspect_payload
+from fixtures.generate import validity_window
+from verifier.expected import audit_wrong_rows
 seed = "repo-suite-seed"
 payload = inspect_payload(seed)
-_entries, wrong = decision_log(seed)
+wrong = audit_wrong_rows(seed)
 print(json.dumps({
     "serialized": json.dumps(payload, sort_keys=True),
     "wrong": wrong,
@@ -158,13 +159,14 @@ print(json.dumps({
     const probe = String.raw`
 import json, sys
 sys.path.insert(0, ".")
-from verifier.server import inspect_payload
-from fixtures.generate import decision_log, validity_window
+from participant.server import inspect_payload
+from fixtures.generate import validity_window
+from verifier.expected import audit_wrong_rows
 seeds = [f"evidence-chain-auth-{i:03d}" for i in range(50)]
 out = []
 for seed in seeds:
     payload = inspect_payload(seed)
-    _entries, wrong = decision_log(seed)
+    wrong = audit_wrong_rows(seed)
     out.append({
         "seed": seed,
         "claims": payload["window"]["claims"],
@@ -277,5 +279,264 @@ print(json.dumps(out))
     // 上流 SHA を pin していないので course:drift の対象にはならない。持っていたら
     // 到達できない upstream を毎回 CI が問い合わせることになる。
     expect(metadata.courseAlignment).toBeUndefined();
+  });
+});
+
+describe("cs-auth-claim-audit: participant/verifier separation (Issue 543/537)", () => {
+  it("keeps fixtures/, the answer derivation and the hidden suite out of the participant Docker stage", () => {
+    const dockerfile = readFileSync(join(LOCAL, "Dockerfile"), "utf8");
+    const participantStage = dockerfile.slice(
+      dockerfile.indexOf("FROM base AS participant"),
+      dockerfile.indexOf("FROM base AS verifier"),
+    );
+    // The class this problem was scaffolded from before this fix: `fixtures/` shipping
+    // to the participant stage handed over `validity_window` and the decision-log
+    // generation behind `audit`, both plain seed-keyed functions, which was enough to
+    // answer both checkpoints on their own even once each checkpoint's own comparison
+    // moved into `verifier/expected.py` / stayed a named function.
+    expect(participantStage).not.toContain("COPY --chown=lab:lab fixtures/");
+    expect(participantStage).not.toContain("tests/hidden");
+    expect(participantStage).not.toContain("COPY --chown=lab:lab verifier/");
+    expect(participantStage).not.toContain("COPY --chown=lab:lab reference/");
+    expect(participantStage).not.toContain("COPY --chown=lab:lab mutation.py");
+    expect(participantStage).toContain("COPY --chown=lab:lab tests/public/");
+    expect(participantStage).toContain("COPY --chown=lab:lab participant/");
+
+    const verifierStage = dockerfile.slice(
+      dockerfile.indexOf("FROM base AS verifier"),
+      dockerfile.indexOf("FROM participant AS author"),
+    );
+    expect(verifierStage).toContain("COPY --chown=lab:lab fixtures/");
+    expect(verifierStage).toContain("COPY --chown=lab:lab tests/hidden/");
+    expect(verifierStage).toContain("COPY --chown=lab:lab verifier/");
+    expect(verifierStage).not.toContain("COPY --chown=lab:lab participant/");
+    expect(verifierStage).not.toContain("COPY --chown=lab:lab reference/");
+    expect(verifierStage).not.toContain("COPY --chown=lab:lab mutation.py");
+  });
+
+  it("never returns the audit answer from fixtures/generate.py's public decision_log, and derives it only in verifier/expected.py", () => {
+    const fixtures = readFileSync(join(LOCAL, "fixtures", "generate.py"), "utf8");
+    const participantServer = readFileSync(join(LOCAL, "participant", "server.py"), "utf8");
+    const show = readFileSync(join(LOCAL, "show.py"), "utf8");
+    for (const source of [fixtures, participantServer, show]) {
+      expect(source).not.toContain("def audit_wrong_rows");
+    }
+    expect(readFileSync(join(LOCAL, "verifier", "expected.py"), "utf8")).toContain(
+      "def audit_wrong_rows",
+    );
+
+    // `decision_log` -- the function that stays in fixtures/generate.py, and so stays
+    // reachable were `fixtures/` ever mistakenly copied into the participant stage
+    // again -- returns the log rows only, never a second, answer-carrying element.
+    const signature = fixtures
+      .split("\n")
+      .find((line) => line.trimStart().startsWith("def decision_log("));
+    expect(signature).toContain("list[dict[str, object]]");
+    expect(signature).not.toContain("tuple");
+  });
+
+  it("keeps the Portal editor API and fixtures import out of the hidden verifier, and grading out of the Workbench", () => {
+    const participantServer = readFileSync(join(LOCAL, "participant", "server.py"), "utf8");
+    const hiddenServer = readFileSync(join(LOCAL, "verifier", "server.py"), "utf8");
+    for (const endpoint of ["/api/config", "/api/inspect", "/api/starter", "/api/test", "/api/prepare"]) {
+      expect(participantServer).toContain(endpoint);
+      expect(hiddenServer).not.toContain(endpoint);
+    }
+    expect(participantServer).not.toContain("def evaluate(");
+    expect(participantServer).not.toContain("def _check_");
+    // The only `fixtures` reference in the Workbench is the lazy, function-scoped
+    // CI/author fallback inside `fetch_public` -- never a module-level import, which
+    // is what would make it resolve eagerly (and fail loudly) the moment this file
+    // runs inside a built participant image that does not carry `fixtures/` at all.
+    expect(participantServer).not.toMatch(/^from fixtures/m);
+    expect(participantServer).toContain("from fixtures.generate import public_payload");
+    expect(hiddenServer).toContain("from fixtures.generate import");
+    expect(hiddenServer).toContain("from verifier.expected import audit_wrong_rows");
+    expect(hiddenServer).toContain("/verify");
+    expect(hiddenServer).toContain("/healthz");
+    expect(hiddenServer).toContain("/public");
+  });
+
+  it("proxies /verify to the internal verifier and fails closed when it is unreachable", () => {
+    const probe = String.raw`
+import json, sys
+sys.path.insert(0, ".")
+from participant import server
+bodies = [{"checkpointId": checkpoint, "submission": "anything"} for checkpoint in server.CHECKPOINTS]
+print(json.dumps({
+    "missing": [server.proxy_verdict(body, "") for body in bodies],
+    "unavailable": [server.proxy_verdict(body, "http://127.0.0.1:1/verify") for body in bodies],
+    "hasInlineEvaluator": hasattr(server, "evaluate") or any(name.startswith("_check_") for name in dir(server)),
+}))
+`;
+    const run = execFileSync("python3", ["-c", probe], {
+      cwd: LOCAL,
+      encoding: "utf8",
+      env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" },
+      timeout: 120_000,
+    });
+    const output = JSON.parse(run.trim()) as {
+      missing: Array<{ checkpointId: string; correct: boolean }>;
+      unavailable: Array<{ checkpointId: string; correct: boolean }>;
+      hasInlineEvaluator: boolean;
+    };
+    const checkpoints = ["environment", "window", "audit", "verify", "isolate", "generalize"];
+    const expectedVerdicts = checkpoints.map((checkpointId) => ({ checkpointId, correct: false }));
+    expect(output.missing).toEqual(expectedVerdicts);
+    expect(output.unavailable).toEqual(expectedVerdicts);
+    expect(output.hasInlineEvaluator).toBe(false);
+  });
+
+  it("cannot reach the audit answer from fixtures/generate.py alone, even with the seed in hand", () => {
+    // The exact shape #543 flagged as unclosed by a container split on its own: with
+    // nothing but FLAG_SEED (which a learner's own container already has as an
+    // environment variable) and fixtures/generate.py (which used to ship to the
+    // participant stage), `decision_log(seed)` used to hand back the audit answer
+    // directly as its second element. It still runs from a checkout -- this file has
+    // full repository access, the same as mutation.py -- but it can no longer produce
+    // the answer by itself: `decision_log` now returns one value, not two, and finding
+    // the audit answer needs `verifier/expected.py`, which never ships to the
+    // participant image at all (see the Dockerfile assertions above).
+    const probe = python("-c", [
+      [
+        "import sys",
+        "sys.path.insert(0, '.')",
+        "from fixtures.generate import decision_log",
+        "entries = decision_log('repo-suite-seed')",
+        "print(len(entries))",
+      ].join("\n"),
+    ]);
+    expect(probe.status).toBe(0);
+    // The old call shape: unpack `(entries, wrong)`. `decision_log` returns a plain
+    // list of however many rows this seed's log has -- never exactly two elements --
+    // so the unpack itself is what now fails, before any comparison against `wrong`
+    // could even be attempted.
+    const attempt = python("-c", [
+      "import sys; sys.path.insert(0, '.'); from fixtures.generate import decision_log; entries, wrong = decision_log('repo-suite-seed')",
+    ]);
+    expect(attempt.status).not.toBe(0);
+    expect(attempt.output).toContain("ValueError");
+  });
+
+  it("compose builds the right target for each service, publishes only the Workbench port, and isolates the verifier network", () => {
+    const compose = readFileSync(join(LOCAL, "docker-compose.yml"), "utf8");
+    for (const contract of [
+      "target: participant",
+      "target: verifier",
+      '"127.0.0.1:18300:18300"',
+      "VERIFIER_URL: http://verifier:18301/verify",
+      "VERIFIER_PUBLIC_URL: http://verifier:18301/public",
+      "read_only: true",
+      "cap_drop:",
+      "- ALL",
+      "no-new-privileges:true",
+      "healthcheck:",
+      "internal: true",
+      'com.docker.network.bridge.enable_ip_masquerade: "false"',
+    ]) {
+      expect(compose).toContain(contract);
+    }
+    expect(compose).not.toContain('"127.0.0.1:18301:18301"');
+    expect(compose.match(/ports:/g)).toHaveLength(1);
+  });
+});
+
+describe("cs-auth-claim-audit: fixture invariants (moved from tests/public, Issue 543/537)", () => {
+  // These used to be "author guard" tests inside tests/public/test_authorize.py,
+  // sweeping seeds unrelated to this deployment's own FLAG_SEED. They needed
+  // fixtures.generate for an arbitrary seed, which tests/public cannot do any more
+  // (fixtures/ does not ship to the participant Docker stage) and never needed to:
+  // they are properties of the fixture generator, not of a learner's submission.
+
+  it("keeps the shown window half-open and never a round number, across many seeds", () => {
+    const probe = `
+import sys
+sys.path.insert(0, ".")
+from fixtures.generate import public_request, validity_window
+bad = []
+for index in range(200):
+    seed = f"window-guard-{index}"
+    first, last = validity_window(seed)
+    claims = public_request(seed)["claims"]
+    if first != claims["nbf"] or last != int(claims["exp"]) - 1 or last - first < 100:
+        bad.append(index)
+print(len(bad))
+`;
+    const output = execFileSync("python3", ["-c", probe], {
+      cwd: LOCAL,
+      encoding: "utf8",
+      env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" },
+      timeout: 120_000,
+    });
+    expect(output.trim()).toBe("0");
+  });
+
+  it("keeps the decision log an actual question, across many seeds", () => {
+    // If every allowed row were wrong, or none were, the audit checkpoint would not
+    // be one.
+    const probe = `
+import sys
+sys.path.insert(0, ".")
+from fixtures.generate import decision_log
+from verifier.expected import audit_wrong_rows
+bad = []
+for index in range(200):
+    seed = f"audit-guard-{index}"
+    entries = decision_log(seed)
+    wrong = audit_wrong_rows(seed)
+    allowed = [i for i, entry in enumerate(entries) if entry["gatewayDecision"] == "allow"]
+    if len(wrong) < 2 or len(allowed) <= len(wrong) or wrong != sorted(wrong):
+        bad.append(index)
+print(len(bad))
+`;
+    const output = execFileSync("python3", ["-c", probe], {
+      cwd: LOCAL,
+      encoding: "utf8",
+      env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" },
+      timeout: 120_000,
+    });
+    expect(output.trim()).toBe("0");
+  });
+
+  it("varies the audit answer across deployments", () => {
+    const probe = `
+import sys
+sys.path.insert(0, ".")
+from verifier.expected import audit_wrong_rows
+answers = {tuple(audit_wrong_rows(f"audit-spread-{index}")) for index in range(120)}
+print(len(answers))
+`;
+    const output = execFileSync("python3", ["-c", probe], {
+      cwd: LOCAL,
+      encoding: "utf8",
+      env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" },
+      timeout: 120_000,
+    });
+    expect(Number(output.trim())).toBeGreaterThan(60);
+  });
+
+  it("keeps the gateway in the log looking like it works", () => {
+    const probe = `
+import sys
+sys.path.insert(0, ".")
+from fixtures.generate import decision_log, keyring
+from reference.authorize import authorize
+seed = "audit-guard-0"
+entries = decision_log(seed)
+denied = [entry for entry in entries if entry["gatewayDecision"] == "deny"]
+assert denied, "the log contains no refusals at all"
+keys = keyring(seed)
+for entry in denied:
+    decision = authorize(entry["token"], entry["action"], entry["resource"], entry["now"], keys)
+    assert decision["allowed"] is False, "the log refuses a request that should be allowed"
+print("ok")
+`;
+    const output = execFileSync("python3", ["-c", probe], {
+      cwd: LOCAL,
+      encoding: "utf8",
+      env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" },
+      timeout: 120_000,
+    });
+    expect(output.trim()).toBe("ok");
   });
 });

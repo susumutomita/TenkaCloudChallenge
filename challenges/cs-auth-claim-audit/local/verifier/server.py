@@ -1,4 +1,4 @@
-"""POST /verify — the scoring seam. Loopback only, stdlib only.
+"""POST /verify -- the scoring seam. Compose-internal only, stdlib only.
 
 Security contract (docs/curricula/advanced-cryptography-2026/TEMPLATE.md §/verify):
   - `checkpointId` is required and is echoed back verbatim. The platform fails closed
@@ -13,6 +13,16 @@ Security contract (docs/curricula/advanced-cryptography-2026/TEMPLATE.md §/veri
   - Responses carry `correct` and, at most, a property name. Never the hidden test
     names, the expected values, or reference output.
   - Malformed input produces a failed checkpoint, never a crashed process.
+
+Issue 543/537: this used to be the same process that also served the Participant
+Portal's config, inspect, starter, public-test, and prepare endpoints, in the single
+Docker stage a learner's own `make build` produced -- so `window`'s and `audit`'s
+expected values (`validity_window`, and the second element of what `decision_log` used
+to return) were importable from inside the learner's own container. That Portal-facing
+surface now lives in `participant/server.py`, in a separate image (see ../Dockerfile)
+that this process's own container never builds; this file and its `verifier/expected.py`
+import are reachable only over the Compose-internal network (see ../docker-compose.yml),
+never from the participant container's filesystem.
 """
 
 from __future__ import annotations
@@ -29,8 +39,8 @@ from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import show
-from fixtures.generate import decision_log, health_token, validity_window
+from fixtures.generate import decision_log, health_token, public_payload, validity_window
+from verifier.expected import audit_wrong_rows
 
 ROOT = Path(__file__).resolve().parents[1]
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
@@ -53,14 +63,6 @@ CODE_CHECKPOINT_PHASES = {
     "generalize": "check_generalize",
 }
 CODE_CHECKPOINTS = frozenset(CODE_CHECKPOINT_PHASES)
-CHECKPOINT_LABELS = {
-    "environment": "environment — Portal editor が出す合言葉を、そのまま貼る",
-    "window": "window — この token が通る最初と最後の now を [最初, 最後] で",
-    "audit": "audit — gateway が allow したうち、通してはいけなかった行の番号を昇順で",
-    "verify": "verify — この gateway が発行した token かどうかを判定できる authorize.py",
-    "isolate": "isolate — token は本物として、この要求を通してよいかを判定できる authorize.py",
-    "generalize": "generalize — 書き上げた authorize.py の中身を、全部",
-}
 
 # Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still
 # reporting RLIM_INFINITY for it. Setting it anyway raises inside `preexec_fn`,
@@ -98,74 +100,23 @@ def _normalized_int(value: object) -> int | None:
     return None
 
 
-def starter_payload() -> dict[str, str]:
-    """Return the editable file shipped to the Portal editor."""
-    return {
-        name: (ROOT / "starter" / name).read_text(encoding="utf-8") for name in SUBMISSION_FILES
-    }
-
-
-def config_payload() -> dict[str, object]:
-    """Declare the generic editor contract consumed by the Participant Portal."""
-    return {
-        "id": "cs-auth-claim-audit",
-        "name": "署名は通った。それは、その要求を通してよいという意味ではない",
-        "description": "壊れた API gateway の決定ログを監査し、署名検証を通り抜けた要求を特定して、gateway を書き直す。",
-        "submittedFiles": list(SUBMISSION_FILES),
-        "checkpoints": [
-            {
-                "id": checkpoint,
-                "label": CHECKPOINT_LABELS[checkpoint],
-                "kind": "code" if checkpoint in CODE_CHECKPOINTS else "answer",
-            }
-            for checkpoint in CHECKPOINTS
-        ],
-        # 英語は Portal 側の locale が選ぶ (共有 workbench.py の config_payload と同じ契約)。
-        # 文言の正本は metadata.json — scripts/generate-course-workbenches.py --check が
-        # 乖離を落とす (#381)。 この payload は手書きなので、 直すときはここを編集する。
-        "i18n": {
-            "en": {
-                "name": 'The signature checked out. That is not the same as the request being allowed',
-                "description": "A gateway refuses expired tokens, refuses forged ones, refuses actions outside a token's scope -- and has been letting one tenant read another tenant's documents for months. Audit its decision log, find the requests that got through, and write the gateway that would have stopped them.",
-                "checkpointLabels": {'environment': 'environment - the pass phrase the Portal editor prints, pasted exactly', 'window': 'window - the first and last `now` this token is accepted at, as [first, last]', 'audit': 'audit - the indices the gateway allowed that it should have refused, ascending', 'verify': 'verify - an authorize.py that can tell whether this gateway issued the token', 'isolate': 'isolate - an authorize.py that decides, given a genuine token, whether the request may proceed', 'generalize': 'generalize - your finished authorize.py, all of it'},
-            }
-        },
-    }
-
-
-def inspect_payload(seed: str) -> dict[str, object]:
-    """Build the seeded evidence shown by the browser's inspect command.
-
-    Evidence, never answers. The shown token's claims are here because a learner
-    cannot reason about a validity window they cannot read; the window itself is the
-    `window` checkpoint. The decision log's rows are here for the same reason; which
-    of the allowed rows are wrong is the `audit` checkpoint and is not on the wire.
-
-    The gateway's signing keys are handed over deliberately. The learner is auditing
-    this gateway, and an auditor who cannot recompute a MAC cannot separate a forged
-    token from a genuine one -- withholding the keys would make the audit a guess.
-
-    Rebuilding the payload here by hand is what silently dropped the question text from
-    the Portal, so this defers to `show.evidence` and only adds the interpreter version,
-    which the CLI has no reason to print.
-    """
-    payload = show.evidence(seed)
-    environment = payload["environment"]
-    assert isinstance(environment, dict)
-    payload["environment"] = {"python": sys.version.split()[0], **environment}
-    return payload
-
-
-def _submission_sources(files: object) -> dict[str, str] | None:
-    if not isinstance(files, dict):
+def _normalized_int_list(submission: object) -> list[int] | None:
+    """Accept a JSON array of integers, or the same thing as a string. No eval, ever."""
+    value = submission
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError:
+            return None
+    if not isinstance(value, list):
         return None
-    sources = {name: files.get(name) for name in SUBMISSION_FILES}
-    if any(not isinstance(text, str) or not text.strip() for text in sources.values()):
-        return None
-    normalized = {name: text for name, text in sources.items() if isinstance(text, str)}
-    if sum(len(text) for text in normalized.values()) > MAX_BODY_BYTES:
-        return None
-    return normalized
+    out: list[int] = []
+    for item in value:
+        number = _normalized_int(item)
+        if number is None:
+            return None
+        out.append(number)
+    return out
 
 
 def _run_submission_script(
@@ -205,74 +156,8 @@ def _run_submission_script(
     return completed.returncode, captured[-MAX_OUTPUT_BYTES:]
 
 
-PUBLIC_TEST_SCRIPT = """
-import os, runpy
-os.environ["FLAG_SEED"] = {seed!r}
-os.environ["SUBMISSION_DIR"] = {workspace!r}
-os.environ["BROWSER_PUBLIC_TESTS"] = "1"
-runpy.run_path({root!r} + "/tests/public/test_authorize.py", run_name="__main__")
-"""
-
-
-def run_public_tests(seed: str, files: object) -> dict[str, object]:
-    """Run the same checks as `make test` against the Portal-edited source."""
-    sources = _submission_sources(files)
-    if sources is None:
-        return {"passed": False, "output": "authorize.py must be a non-empty Python file."}
-    result = _run_submission_script(sources, PUBLIC_TEST_SCRIPT, seed)
-    if result is None:
-        return {"passed": False, "output": "Public tests timed out or could not start."}
-    return {"passed": result[0] == 0, "output": result[1]}
-
-
-def prepare_submissions(seed: str, files: object) -> dict[str, object]:
-    """Format the portal values the workbench can produce from the editor.
-
-    `window` and `audit` are deliberately absent. The first is read off the claims and
-    turned into a half-open interval by hand; the second is the audit itself. Producing
-    either here would erase exactly what those two checkpoints measure, and they are
-    the two that carry the point of the problem.
-
-    The three code checkpoints all submit the same file. They are separate checkpoints
-    because they are scored against different hidden phases, not because they take
-    different input.
-    """
-    sources = _submission_sources(files)
-    if sources is None:
-        return {"ok": False, "output": "authorize.py must be a non-empty Python file."}
-    source = sources["authorize.py"]
-    return {
-        "ok": True,
-        "submissions": {
-            "environment": health_token(seed),
-            "verify": source,
-            "isolate": source,
-            "generalize": source,
-        },
-    }
-
-
 def _check_environment(submission: object) -> bool:
     return isinstance(submission, str) and submission.strip() == health_token(SEED)
-
-
-def _normalized_int_list(submission: object) -> list[int] | None:
-    """Accept a JSON array of integers, or the same thing as a string. No eval, ever."""
-    value = submission
-    if isinstance(value, str):
-        try:
-            value = json.loads(value)
-        except json.JSONDecodeError:
-            return None
-    if not isinstance(value, list):
-        return None
-    out: list[int] = []
-    for item in value:
-        number = _normalized_int(item)
-        if number is None:
-            return None
-        out.append(number)
-    return out
 
 
 def _check_window(submission: object) -> bool:
@@ -295,8 +180,7 @@ def _check_audit(submission: object) -> bool:
     value = _normalized_int_list(submission)
     if value is None or len(set(value)) != len(value):
         return False
-    _entries, wrong = decision_log(SEED)
-    return sorted(value) == wrong
+    return sorted(value) == audit_wrong_rows(SEED)
 
 
 RUNNER = """
@@ -364,20 +248,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's name
         path = urlsplit(self.path).path
-        if path == "/api/config":
-            self._respond(200, config_payload())
+        if path == "/healthz":
+            self._respond(200, {"ok": True})
             return
-        if path == "/api/inspect":
-            self._respond(200, inspect_payload(SEED))
-            return
-        if path == "/api/starter":
-            self._respond(200, starter_payload())
+        if path == "/public":
+            self._respond(200, public_payload(SEED))
             return
         self._respond(404, {"error": "not found"})
 
     def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's name
-        path = urlsplit(self.path).path.rstrip("/") or "/"
-        if path not in ("/verify", "/api/test", "/api/prepare"):
+        if urlsplit(self.path).path.rstrip("/") != "/verify":
             self._respond(404, {"error": "not found"})
             return
         try:
@@ -399,13 +279,6 @@ class Handler(BaseHTTPRequestHandler):
             return
         if not isinstance(body, dict):
             self._respond(400, {"error": "bad json"})
-            return
-
-        if path == "/api/test":
-            self._respond(200, run_public_tests(SEED, body.get("files")))
-            return
-        if path == "/api/prepare":
-            self._respond(200, prepare_submissions(SEED, body.get("files")))
             return
 
         checkpoint_id = body.get("checkpointId")
@@ -451,15 +324,16 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    port = int(os.environ.get("VERIFY_PORT", "18300"))
-    # Bind every interface *inside the container*, not the container's loopback. A published
-    # port is forwarded to the container's bridge address, so a server listening only on
-    # 127.0.0.1 inside the container accepts nothing from outside it — the connection is
-    # opened and closed without a response, and the platform can never score the problem.
+    port = int(os.environ.get("VERIFY_PORT", "18301"))
+    # Bind every interface *inside the container*, not the container's loopback. The
+    # Workbench reaches this process as `verifier:<port>` over the Compose network, which
+    # resolves to this container's bridge address -- a server listening only on
+    # 127.0.0.1 inside the container would accept nothing from it, and the platform
+    # could never score the problem.
     #
-    # The loopback restriction that matters is on the host, and it lives in
-    # docker-compose.yml, which publishes `127.0.0.1:<port>:<port>`. Nothing outside this
-    # machine can reach the verifier either way.
+    # Since Issue 543/537 this service publishes no host port at all (see
+    # docker-compose.yml): it sits on the `lab` network, which is `internal: true` and so
+    # carries no gateway. Nothing but the Workbench container can reach it.
     HTTPServer(("0.0.0.0", port), Handler).serve_forever()  # noqa: S104 - see above
 
 
