@@ -301,7 +301,7 @@ beforeAll(async () => {
   });
   await waitForListener(PORT);
   await waitForListener(FRESH_PORT);
-});
+}, 60_000);
 
 afterAll(() => {
   server?.kill();

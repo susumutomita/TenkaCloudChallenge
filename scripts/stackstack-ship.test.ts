@@ -288,7 +288,7 @@ describe("stackstack-ship, one full pass", () => {
 
   beforeAll(async () => {
     instance = await startInstance("pass", 18310, 18311);
-  });
+  }, 60_000);
   afterAll(() => instance?.kill());
 
   it("should change and reset the release manifest through the API without touching its source", async () => {
@@ -788,7 +788,7 @@ describe("stackstack-ship gates on a fresh instance", () => {
 
   beforeAll(async () => {
     instance = await startInstance("gates", 18312, 18313);
-  });
+  }, 60_000);
   afterAll(() => instance?.kill());
 
   it("should change the manifest through the API, refuse a bad value, and reset to the mount", async () => {
@@ -917,7 +917,7 @@ describe("stackstack-ship manifest hygiene", () => {
 
   beforeAll(async () => {
     instance = await startInstance("manifest", 18314, 18315);
-  });
+  }, 60_000);
   afterAll(() => instance?.kill());
 
   const cases: ReadonlyArray<[string, string, string, string]> = [
@@ -1053,7 +1053,7 @@ describe("stackstack-ship probes are real, and cost the participant nothing", ()
 
   beforeAll(async () => {
     instance = await startInstance("probe", 18316, 18317);
-  });
+  }, 60_000);
   afterAll(() => instance?.kill());
 
   it("should probe the entrance on the port the app was told to listen on", async () => {

@@ -445,7 +445,9 @@ describe("signed-does-not-mean-safe spawned runtime contract", () => {
       waitFor(`http://127.0.0.1:${workbenchPort}/healthz`),
       waitFor(`http://127.0.0.1:${verifyPort}/healthz`),
     ]);
-  });
+    // `waitFor` gives each spawned server 15s of its own, so this hook must outlive
+    // bun's 5s default or a loaded runner kills it before its own diagnostic fires.
+  }, 60_000);
 
   afterAll(() => {
     participant?.kill();
