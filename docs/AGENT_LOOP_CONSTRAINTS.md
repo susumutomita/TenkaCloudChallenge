@@ -183,8 +183,8 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   `ac26-w4-commit-open` (1), `ac26-w3-passkey-assertion` (1),
   `ac26-w3-field-inverse` (1). Landed so far: `cs-auth-claim-audit` and
   `ac26-bridge-experiment` (#562), `ac26-w3-schnorr-drill` (#570), `ac26-w5-lwe-rlwe`
-  (#572), `ac26-w5-rgsw-external` (#573), `ac26-w5-cmux-blind-rotation` (#578). Catalog
-  count is 31 as of #578, down from 39. Runs have taken the largest count first, so
+  (#572), `ac26-w5-rgsw-external` (#573), `ac26-w5-cmux-blind-rotation` (#579). Catalog
+  count is 31 as of #579, down from 39. Runs have taken the largest count first, so
   `ac26-w5-pbs-homnand` is next.
 
   The last two entries are new to this list, and neither is new work landing on it —
