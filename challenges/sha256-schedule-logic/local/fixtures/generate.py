@@ -175,3 +175,34 @@ def health_token(seed: str) -> str:
     """Proof the learner actually started the container rather than reading the README."""
     case = rotate_case(seed)
     return hashlib.sha256(f"health:{seed}:{case.word:08x}".encode()).hexdigest()[:16]
+
+
+def public_payload(seed: str) -> dict[str, object]:
+    """Everything a participant may see for this deployment. Contains no answer.
+
+    The single source `show.py`, `verifier/server.py`'s `GET /public`, and
+    `tests/public/test_schedule.py` all build their payload from. What is deliberately
+    absent is anything derived from the recurrence itself: no sigma output and no
+    expanded schedule (those are `sigma` and `schedule`'s answers), and no
+    `first_affected_index` (that is `dependency`'s answer, computed in
+    `verifier/server.py`, which never ships here). The rotate, mux and dependency cases
+    below are the *inputs* those three checkpoints hand the learner, not their answers.
+
+    Issue 537/538: `fixtures/` -- this module -- does not ship in the participant Docker
+    stage at all (see ../Dockerfile). `participant/server.py`, `show.py` and the public
+    tests fetch this payload from the verifier at runtime instead of importing it
+    directly.
+    """
+    rotate = rotate_case(seed)
+    mux = mux_case(seed)
+    dependency = dependency_case(seed)
+    return {
+        "rotate": {"word": rotate.word, "rotateBy": rotate.rotate_by, "shiftBy": rotate.shift_by},
+        "mux": {"e": mux.e, "f": mux.f, "g": mux.g},
+        "dependency": {
+            "words": list(dependency.words),
+            "index": dependency.index,
+            "bit": dependency.bit,
+        },
+        "healthToken": health_token(seed),
+    }

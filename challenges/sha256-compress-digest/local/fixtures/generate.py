@@ -306,3 +306,43 @@ def health_token(seed: str) -> str:
     """Proof the learner actually started the container rather than reading the README."""
     case = round_case(seed)
     return hashlib.sha256(f"health:{seed}:{case.state[0]:08x}".encode()).hexdigest()[:16]
+
+
+def public_payload(seed: str) -> dict[str, object]:
+    """Everything a participant may see for this deployment. Contains no answer.
+
+    The single source `show.py`, `verifier/server.py`'s `GET /public` and
+    `tests/public/test_compress.py` all build their input from.
+
+    What is deliberately absent: the avalanche distance (`avalanche_distance`, the whole
+    of `avalanche`) and each quiz's per-statement `true` verdict (the whole of
+    `properties` and `storage` -- only the statement text travels here, never
+    `Statement.true`). This payload carries the round/feedforward fixtures and the two
+    quizzes' text in this deployment's order, which is what a learner is shown anyway.
+
+    Issue 543/537: `fixtures/` -- this module -- does not ship in the participant Docker
+    stage at all (see ../Dockerfile), because `avalanche_distance` was a plain,
+    seed-derived function reachable for one import, and `PROPERTY_STATEMENTS` /
+    `STORAGE_STATEMENTS` ship every statement's correct verdict in plaintext.
+    `participant/server.py`, `show.py` and the public tests fetch this payload from the
+    verifier at runtime instead of building it locally.
+    """
+    round_ = round_case(seed)
+    state, schedule = inversion_case(seed)
+    avalanche = avalanche_case(seed)
+    return {
+        "healthToken": health_token(seed),
+        "round": {
+            "state": list(round_.state),
+            "roundIndex": round_.round_index,
+            "scheduleWord": round_.schedule_word,
+        },
+        "feedforward": {"state": list(state), "schedule": list(schedule)},
+        "avalanche": {"messageHex": avalanche.message.hex(), "bit": avalanche.bit},
+        "propertyStatements": [
+            {"text": statement.text, "textJa": statement.text_ja} for statement in property_quiz(seed)
+        ],
+        "storageStatements": [
+            {"text": statement.text, "textJa": statement.text_ja} for statement in storage_quiz(seed)
+        ],
+    }

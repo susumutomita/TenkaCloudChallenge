@@ -103,10 +103,30 @@ PORTAL_PACKAGES = {
     # first_failure under the exact five names starter/encoding.py's own stubs ask the
     # learner to write, so both left the participant stage and the Portal moved with them.
     "ac26-w5-encoding-noise": "participant",
+    # Issue 537/538: verifier/server.py's own _check_avalanche compared a submission
+    # directly against a plain, seed-derived avalanche_distance defined in the same
+    # file, and _check_properties/_check_storage compared against
+    # fixtures/generate.py's quiz_answer over PROPERTY_STATEMENTS/STORAGE_STATEMENTS,
+    # which ship every statement's correct verdict in plaintext -- all reachable from
+    # the single participant stage. The Portal moved to participant/ when fixtures/
+    # stopped shipping there.
+    "sha256-compress-digest": "participant",
+    # Issue 537/538 (Issue 543 option B2): the hidden suite grades every checkpoint and
+    # fixtures/generate.py implements egcd under the exact name starter/field.py's own
+    # stub asks the learner to write, with egcd_rows supplying the trace its egcd_trace
+    # stub asks for, so both left the participant stage and the Portal moved with them.
+    "ac26-w3-field-inverse": "participant",
     "ac26-w4-sumcheck-drill": "participant",
     "ac26-w3-schnorr-drill": "participant",
     "ac26-w4-plonk-drill": "participant",
     "ac26-w4-fri-drill": "participant",
+    # Issue 537/538: verifier/server.py's own _check_rotate/_check_mux compared a
+    # submission directly against fixtures/generate.py's rotate_case/mux_case, and
+    # _check_dependency compared against first_affected_index, defined directly in
+    # verifier/server.py -- all reachable from the single participant stage. The
+    # Portal moved to participant/ when fixtures/ stopped shipping there.
+    "sha256-schedule-logic": "participant",
+    "sha256-bytes-padding": "participant",
     "acm-validation-migration": "workbench",
     "asm-worst-case-latency": "workbench",
     "cs-atomic-file-publish": "workbench",

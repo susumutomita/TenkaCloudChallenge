@@ -17,25 +17,31 @@ stands on its own. Five functions to write, all five shipped wrong.
 
 ## What gets deployed
 
-A single container, no cloud account, no network surface. Everything is local:
+Two containers on one machine, no cloud account, no network surface. Everything is local:
 
 ```text
 local/
-├── starter/compress.py   ← the only file you edit
-├── given/primitives.py      parts 1 and 2, already correct -- do not edit
-├── fixtures/generate.py     every fixture, derived from your per-deploy seed
-├── tests/public/            the tests you can read
-├── tests/hidden/            the tests the verifier runs (in the image, not bind-mounted)
-├── reference/               the answer -- NOT in the image `make build` gives you
-├── verifier/server.py       POST /verify on 127.0.0.1:18091
-└── mutation.py              proves the hidden tests can actually fail a wrong answer
+├── starter/compress.py      ← the only file you edit
+├── given/primitives.py         parts 1 and 2, already correct -- do not edit
+├── participant/server.py       the Workbench you talk to, on 127.0.0.1:18091
+├── tests/public/                the tests you can read
+├── fixtures/generate.py        every fixture, derived from your per-deploy seed
+│                                (verifier container only)
+├── tests/hidden/                the tests the verifier runs (verifier container only)
+├── verifier/server.py          POST /verify, reachable only from the Workbench
+├── reference/                   the answer -- NOT in either container you run
+└── mutation.py                  proves the hidden tests can actually fail a wrong answer
 ```
 
-`make build` builds the `participant` stage of the Dockerfile, which carries the fixtures, both
-test suites, the verifier, the given primitives and the starter. `reference/` and `mutation.py` are
-added only by the `author` stage that `make reference-test` builds, so the answer is not sitting in
-the image you were told to run. That is misdelivery prevention, not confidentiality — see Assurance
-scope.
+`make build` builds the `participant` stage of the Dockerfile: the given primitives, the starter,
+the public tests and the Workbench, and nothing else. The fixtures, the hidden tests and the
+verifier live in a second `verifier` stage that runs as an unpublished compose service on an
+internal network. The Workbench fetches this deployment's public evidence from it over `GET
+/public` and forwards your submissions to `POST /verify`; `make test` and `make inspect` start it
+the same way, which is why they go through compose rather than a bare `docker run`. `reference/`
+and `mutation.py` are added only by the `author` stage that `make reference-test` builds, so the
+answer is not sitting in the image you were told to run. That is misdelivery prevention, not
+confidentiality — see Assurance scope.
 
 Your fixtures come from `FLAG_SEED`, injected fresh at deploy. Same seed, same numbers, so your
 session is reproducible and debuggable. Different seed, different numbers — and for the two quizzes,
@@ -113,11 +119,13 @@ an inverse that only agrees with your own broken forward pass does not pass.
 
 ## Assurance scope
 
-Local mode is **self-paced, honor-system verification**. You own the machine, the Docker daemon,
-and the image, so nothing here is hidden from you: `tests/hidden/` is not bind-mounted and
-`reference/` is not in the participant image at all, which keeps them out of your way rather than
-out of reach. The source is in this repository either way, and you can build the `author` stage
-yourself.
+Local mode is **self-paced, honor-system verification**. Someone who owns the Docker daemon and
+every container in the compose stack cannot be prevented from inspecting hidden material, and the
+source is in this repository either way. The boundary here is misdelivery, not confidentiality
+against that person: the Workbench container you build and run carries the given primitives, the
+starter and the public tests only — no fixtures, no hidden tests, no reference solution, no
+verifier. Those live only in a second, unpublished container the Workbench reaches over the
+compose network, and in the author-only image `make reference-test` builds.
 
 What the verifier does guarantee is narrower and real: a submission cannot hang or crash it, a
 checkpoint can only credit the id it echoes, results do not leak expected values, and the fixtures

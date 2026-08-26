@@ -53,6 +53,11 @@ SHARED_TARGETS = (
     "sha256-compress-digest",
 )
 SPLIT_PORTAL_MODULES = {
+    # Issue 537/538/543: same move, one problem at a time. `padded_length` and
+    # `broken_pad_zeros_only` are plain functions in fixtures/generate.py, so the split
+    # had to take `fixtures/` out of the participant stage entirely -- show.py and the
+    # public tests read this deployment's evidence from the verifier's GET /public.
+    "sha256-bytes-padding": "participant.server",
     "cs-transaction-visibility-audit": "participant.server",
     # Issue 440: #437 は participant/ に公開 Workbench を置く分離型。 元の branch は
     # 別の集合 (問題 id の frozenset) を足していたが、 main 側はこの map へ
@@ -73,6 +78,13 @@ SPLIT_PORTAL_MODULES = {
     "ac26-bridge-experiment": "participant.server",
     "ac26-bridge-properties": "participant.server",
     "ac26-w1-constraint-lab": "participant.server",
+    # Issue 537/538: same move. verifier/server.py's _check_rotate/_check_mux compared a
+    # submission directly against fixtures/generate.py's rotate_case/mux_case, and
+    # _check_dependency compared against first_affected_index, defined directly in
+    # verifier/server.py -- all reachable from the single participant stage.
+    # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
+    # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
+    "sha256-schedule-logic": "participant.server",
     # Issue 525: same move, for the reason #533 did not finish -- the answer functions
     # left fixtures/generate.py but the grader that derives `root-cause`'s accepted JSON
     # kept shipping to the participant stage alongside the Portal.
@@ -137,6 +149,23 @@ SPLIT_PORTAL_MODULES = {
     # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
     # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
     "ac26-w5-encoding-noise": "participant.server",
+    # Issue 537/538: same move. verifier/server.py's own _check_avalanche compared a
+    # submission directly against a plain, seed-derived avalanche_distance defined in
+    # the same file, and _check_properties/_check_storage compared against
+    # fixtures/generate.py's quiz_answer over PROPERTY_STATEMENTS/STORAGE_STATEMENTS,
+    # which ship every statement's correct verdict in plaintext -- all reachable from
+    # the single participant stage.
+    # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
+    # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
+    "sha256-compress-digest": "participant.server",
+    # Issue 537/538 (Issue 543 option B2): same move. tests/hidden/check_field.py grades
+    # every checkpoint and fixtures/generate.py implements egcd under the exact name
+    # starter/field.py's own stub asks the learner to write, with egcd_rows supplying
+    # the row-for-row trace its egcd_trace stub asks for, all of which shipped in the
+    # single participant stage.
+    # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
+    # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
+    "ac26-w3-field-inverse": "participant.server",
 }
 # Execute the heavier inspect/public-test adapter on representative problems from
 # each family. The catalogue's existing sharded suite executes every problem's own
