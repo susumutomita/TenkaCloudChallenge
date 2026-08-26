@@ -6,9 +6,9 @@ file before doing anything else in a run.
 
 ## 1. Do not read the answer, then claim you did not
 
-`docs/PLAYABILITY_GOVERNANCE.md` requires a `blind` play, and
-`scripts/check-pr-playability.ts` requires `blind` to be **`true`** — there is no
-"partially blind". So the only way to earn it is to not look.
+A play is either blind or it is not; there is no "partially blind". Nothing in CI
+checks this any more (the gate was retired), so the only thing keeping it true is that
+you do not look.
 
 **Issue bodies contain solutions.** Issue #448 states the intended fix in prose
 (the technique, the ordering, and the seven mutations). #449, #450, #451, #466 and
@@ -77,71 +77,39 @@ class is a finding you fix, not baseline.
 
 ## 3. Do not promote a problem on machine evidence alone
 
-Automated checks are source evidence only. `status: draft` → `ready` and the
-`playtest-verified` label require a real play. PR #479 promoted without one and was
-reverted by PR #481; do not repeat it.
+Automated checks are source evidence only (Issue #448). `status: draft` → `ready`
+still needs a real play. PR #479 promoted without one and was reverted by PR #481; do
+not repeat it.
 
-When you do record a play, write the `tester` field honestly:
-`Claude — agent play, authorized by @susumutomita 2026-08-26`. The owner authorised an
-agent to play; the governance document still says human-only, so a promotion PR must
-also amend the relevant paragraph of `docs/PLAYABILITY_GOVERNANCE.md`. Do not leave the
-divergence implicit — that gap is what produced the #465 → #476 → rebuild cycle.
+**This is now a judgement rule, not a machine-enforced one.** The `playability-gate`
+required check was retired on the owner's instruction, so nothing will stop a promotion
+that skips the play. That makes the rule weaker to violate and no less true. Say plainly
+in the PR body what evidence you actually have and what you did not do, and leave the
+promotion decision to the owner when you have not played.
 
 ## 4. Merging
 
 The owner authorised self-merge on 2026-08-26 **for this goal in this repository only**.
 Conditions, all required:
 
-- The **required** check (`playability-gate`) must be green, and **no** check may have
-  actually failed. Do not wait for every shard of the ~28-job matrix to report — waiting
-  on non-required checks that are merely still running buys nothing and costs ~10 minutes
-  a PR (owner's call, 2026-08-26).
+- **No** check may have actually failed. Do not wait for every shard of the ~28-job
+  matrix to report — waiting on non-required checks that are merely still running buys
+  nothing and costs ~10 minutes a PR (owner's call, 2026-08-26).
 - Read the status correctly: an in-progress check reports `conclusion` as the **empty
   string**, not `null`. Treating that as a failure blocks green PRs; treating a real
   failure as "still running" merges broken ones. Filter on
   `select((.conclusion // "") | . != "" and . != "SUCCESS" and . != "SKIPPED" and . != "NEUTRAL")`.
-- Never merge with the required `playability-gate` check failing.
 - Squash only (the branch ruleset permits nothing else).
 - Never pass `--delete-branch` when merging the base of a stacked PR.
-
-### Check the gate before you take a PR out of Draft
-
-`playability-gate` passes unconditionally **while the PR is Draft** — that is the
-whole point of the #476 rebuild. It is re-evaluated on `ready_for_review`, and only
-then does it decide whether the change needs play evidence. So a Draft PR's green
-gate says nothing about whether it can merge, and undrafting to find out leaves a
-**red required check you may not be able to clear**. PR #564 was undrafted on this
-assumption and went red on the next run.
-
-Before undrafting, diff the PR against its base and check whether it touches, for a
-problem whose `metadata.json` says `status: ready`:
-
-- `README.md`, `README.ja.md`, `local/starter/`, `local/workbench/`, `local/portal/`
-  (`PARTICIPANT_FACING_SUBPATHS` in `scripts/check-pr-playability.ts`), or
-- the participant-facing fields of `metadata.json` (`name`, `shortDescription`,
-  `instructions`, `writeup`, any `hints`, any check/flag `label`, the `i18n.en`
-  mirrors, and the three `publicHint`-gated blocks).
-
-If it does, the gate demands an evidence block **and** the `playtest-verified`
-label, and `docs/PLAYABILITY_GOVERNANCE.md` restricts applying that label to human
-maintainers. An agent cannot turn such a PR green on its own: leave it Draft, say on
-the PR what is blocking, and hand the decision to the owner.
-
-Note what is *not* on that list: `local/Dockerfile`, `local/docker-compose.yml`,
-`local/fixtures/`, `local/participant/`, `local/verifier/`, `local/show.py`,
-`local/tests/`, and the problem `Makefile`. A container split confined to those, on a
-`status: draft` problem, does not trip the gate — that is why #562 and #563 merged and
-#564 did not. Do not reach for the difference by dropping a needed README correction
-from a PR: that is evading the gate, not passing it (§2).
 
 ## 5. What is and is not reachable
 
 Blocked on an owner decision — **do not start these**:
 
 - PR #564 (`sha256-bytes-padding` container split). The code is complete and every
-  check is green, but it rewrites the problem's two READMEs and the problem is
-  `status: ready`, so `playability-gate` requires the human-only `playtest-verified`
-  label (§4). Do not undraft it again, and do not apply that label yourself.
+  check is green. It was blocked behind the retired `playability-gate`; with the gate
+  gone it merges on its own checks. Its own body still records one real gap: nobody has
+  built the split images on a Docker daemon.
 - The same wall stands in front of the rest of that class. `sha256-schedule-logic` and
   `sha256-compress-digest` carry the last of the detector's `direct-value-comparison`
   findings, and both are `status: ready` — the split cannot be done there without
@@ -149,11 +117,9 @@ Blocked on an owner decision — **do not start these**:
   same decision. Do not start them until #564 is decided.
 - PR #578 is that outcome, and it arrived before this paragraph was read: it carries a
   finished `sha256-schedule-logic` split **bundled with** a finished
-  `ac26-w4-commit-open` one. It was undrafted at 14:54 on 2026-08-26 and
-  `playability-gate` went red on the `ready_for_review` re-evaluation — the same two
-  lines #564 gets, for the same reason (`sha256-schedule-logic` is `status: ready` and
-  its READMEs are rewritten). It is Draft again, so the required check is green-by-
-  default and nothing is red; the decision is the owner's, exactly as for #564.
+  `ac26-w4-commit-open` one. It hit the same retired gate on 2026-08-26 and was put
+  back to Draft. With the gate gone it merges on its own checks; unlike #564 its author
+  did build and run both split stacks on a real Docker daemon.
 
   That split-out has since been done: PR #582 carries #578's `ac26-w4-commit-open` half
   on its own, and it is a `draft`-only change an agent can take to merge. What is left in
@@ -252,10 +218,8 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   whenever a rule stops being blind: never report a rise as a regression, or a fall as a
   closure.
 
-  **Both remaining are `status: draft`**, so neither hits the
-  `playtest-verified` wall of §4 — a B2 split there is a PR an agent can carry
-  to merge on its own, README correction included. Do not drop a needed README
-  correction to stay under the gate (§4); on a `draft` problem it does not fire anyway.
+  Both remaining are `status: draft`. No check gates a README correction any more, so
+  never drop one to keep a diff small — §3 still holds even though nothing enforces it.
 
   `ac26-w5-pbs-homnand` (#581) is worth reading before the next one, because it is the
   first in this class whose supplied half was not already a separate file. Five earlier
@@ -314,8 +278,8 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
     API refuses `rerun` (`403 This workflow run cannot be retried`), a companion run
     stuck in `queued` refuses both `cancel` (`409 Cannot cancel a workflow run that has
     not been queued yet`) and `rerun` (`403 This workflow is already running`), and a
-    `converted_to_draft` → `ready_for_review` toggle did **not** re-fire it even though
-    `playability-gate` lists both events. What recovers such a PR is a new commit
+    `converted_to_draft` → `ready_for_review` toggle did **not** re-fire a workflow that
+    listed both events. What recovers such a PR is a new commit
     (`synchronize`). Do not reach for an empty one — §4 forbids it and it is not needed:
     an incident worth recording here is itself the commit, which is how this entry got
     written.

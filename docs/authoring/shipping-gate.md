@@ -30,13 +30,12 @@ Issue 382 が候補として挙げた 4 つを、**強制する場所**で分類
 
 ### `/validate-problem` を実行した記録自体は誰が強制するか (Issue 463)
 
-上の表の最後の行は「人が起動する」であって「起動したかどうかは誰も見ない」ではない。新規問題の
-PR、`status: ready` への昇格、そして既に `status: ready` な問題の participant-facing な書き換え
-(README / hint / starter / workbench / portal) は、`playability-gate` (required check,
-`scripts/check-pr-playability.ts`) が **PR が Draft でなくなった時点**で machine-readable な
-evidence block と `playtest-verified` label を要求する。詳細は
-[`docs/PLAYABILITY_GOVERNANCE.md`](../PLAYABILITY_GOVERNANCE.md)。
-出力の末尾もそう読めない文言にしてある。
+上の表の最後の行は「人が起動する」であって「起動したかどうかは誰も見ない」ではない。ただし
+**それを機械で強制する仕組みは現在ない**。新規問題の PR、`status: ready` への昇格、既に
+`status: ready` な問題の participant-facing な書き換え (README / hint / starter / workbench /
+portal) のいずれについても、人が実際に遊んだことを CI は確認しない。ここに挙がっている
+機械チェックは source evidence であって、supported learner-path proof の代わりではない
+(Issue #448)。判断は author と reviewer が負う。出力の末尾もそう読めない文言にしてある。
 
 ### `check:problem` が実際に見るもの
 
