@@ -1,10 +1,12 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
+import { costOfFile } from "./lib/shard-cost-table.ts";
 import {
   parseShard,
   SEPARATELY_SCHEDULED_FILES,
   shardOf,
+  shardsByCost,
   shardableFiles,
   suiteFiles,
 } from "./validate-shard.ts";
@@ -62,26 +64,43 @@ describe("the shard partition", () => {
     },
   );
 
-  it("should separate neighbours, which is the whole reason it is round robin", () => {
-    // Exhaustiveness above is satisfied by a contiguous partition too — and a
-    // contiguous partition is exactly what must not happen. The list is sorted
-    // by name, name order correlates with cost, and the expensive `ac26-*` files
-    // sit together alphabetically; slicing contiguously hands one shard almost
-    // all of them and recreates the timeout this PR removes.
+  it("should keep every shard's total cost within one file's cost of every other (the LPT bound)", () => {
+    // This replaces an older assertion that no two alphabetically-adjacent files
+    // shared a shard — a proxy for "the slow ac26-* files, which sit together
+    // alphabetically, don't pile into one shard" that was true only because the
+    // old partition was `position % total` round robin. It stopped being the
+    // right thing to assert once the partition started reading actual cost
+    // (scripts/lib/shard-cost-table.ts): round robin's failure mode was never
+    // "adjacent files share a shard", it was "shard TOTALS are uneven" — and
+    // round robin's own docstring incident is proof the two are not the same
+    // thing. `scripts/ac26-w5-pbs-homnand.test.ts` and
+    // `scripts/ac26-w6-cosnark-privacy.test.ts` are not alphabetically adjacent
+    // (several files sort between them) and still landed in the same shard,
+    // because round robin never looked at cost, only position.
     //
-    // So assert the property rather than the arithmetic. Restating
-    // `position % total` here would pass for any refactor that kept the formula
-    // and fail for a correct one that did not; "adjacent files land in different
-    // shards" is the thing actually being bought.
+    // The property cost-aware packing actually buys is the LPT bound proved in
+    // shardsByCost's docstring: greedy least-loaded-shard assignment can never
+    // leave two shards more than one file's cost apart. Assert that directly
+    // against the real cost table, on the real file set, at the real shard
+    // count CI uses.
+    const shardable = shardableFiles();
     const total = workflowShardTotal();
-    const owner = new Map<string, number>();
-    for (let index = 1; index <= total; index += 1) {
-      for (const file of shardOf(files, index, total)) owner.set(file, index);
-    }
-    const together = files.filter(
-      (file, position) => position > 0 && owner.get(file) === owner.get(files[position - 1] ?? ""),
-    );
-    expect(together).toEqual([]);
+    const bins = shardsByCost(shardable, total);
+    const totals = bins.map((bin) => bin.reduce((sum, file) => sum + costOfFile(file), 0));
+    const heaviestFile = Math.max(...shardable.map((file) => costOfFile(file)));
+    expect(Math.max(...totals) - Math.min(...totals)).toBeLessThanOrEqual(heaviestFile + 1e-9);
+  });
+
+  it("should assign the same shards on repeated calls (determinism)", () => {
+    // shardsByCost has no source of randomness or wall-clock input of its own —
+    // it reads a table fixed at import time — but a partition that is
+    // deterministic in principle and flaky in practice (e.g. an unstable sort,
+    // or a tie-break that reads Map iteration order) would be worse than an
+    // honest round robin, because a shard assignment that moves between runs
+    // makes a CI failure hard to reproduce locally.
+    const shardable = shardableFiles();
+    const total = workflowShardTotal();
+    expect(shardsByCost(shardable, total)).toEqual(shardsByCost(shardable, total));
   });
 
   it("should reject a shard index outside the range", () => {
@@ -116,6 +135,45 @@ describe("the shard partition", () => {
       expect(shardableFiles()).not.toContain(file);
       expect(WORKFLOW).toContain(file);
     }
+  });
+});
+
+describe("cost-aware packing catches what alphabetical-adjacency avoidance could not", () => {
+  it("does not let two heavy files collide the way position % total did", () => {
+    // Reconstructs the shape of the actual incident: two heavy files whose
+    // positions in the sorted file list differ by exactly `total`, so the old
+    // `position % total` round robin placed both in the same shard regardless
+    // of how expensive either one was. `a-heavy` and `e-heavy` sit 4 apart in
+    // an 8-file, 4-shard list — the same relationship `ac26-w5-pbs-homnand`
+    // and `ac26-w6-cosnark-privacy` happened to have.
+    const files = [
+      "a-heavy.test.ts",
+      "b.test.ts",
+      "c.test.ts",
+      "d.test.ts",
+      "e-heavy.test.ts",
+      "f.test.ts",
+      "g.test.ts",
+      "h.test.ts",
+    ];
+    const total = 4;
+    const cost = (file: string): number => (file.includes("heavy") ? 100 : 1);
+
+    // Prove the fixture actually reproduces the incident before proving the fix:
+    // the old algorithm, restated here rather than imported, since the whole
+    // point is that it no longer exists to import.
+    const oldRoundRobin = (index: number): string[] =>
+      files.filter((_, position) => position % total === index);
+    expect(oldRoundRobin(0)).toEqual(["a-heavy.test.ts", "e-heavy.test.ts"]);
+
+    // The replacement must not reproduce that collision: each heavy file should
+    // land in a shard of its own.
+    const bins = shardsByCost(files, total, cost);
+    const heavyOwners = bins
+      .map((bin, index) => (bin.some((file) => file.includes("heavy")) ? index : null))
+      .filter((index): index is number => index !== null);
+    expect(heavyOwners.length).toBe(2);
+    expect(new Set(heavyOwners).size).toBe(2);
   });
 });
 
