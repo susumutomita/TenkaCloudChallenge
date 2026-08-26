@@ -31,11 +31,14 @@ Issue 382 が候補として挙げた 4 つを、**強制する場所**で分類
 ### `/validate-problem` を実行した記録自体は誰が強制するか (Issue 463)
 
 上の表の最後の行は「人が起動する」であって「起動したかどうかは誰も見ない」ではない。新規問題の
-PR、`status: ready` への昇格、そして既に `status: ready` な問題の participant-facing な書き換え
-(README / hint / starter / workbench / portal) は、`playability-gate` (required check,
-`scripts/check-pr-playability.ts`) が **PR が Draft でなくなった時点**で machine-readable な
-evidence block と `playtest-verified` label を要求する。詳細は
-[`docs/PLAYABILITY_GOVERNANCE.md`](../PLAYABILITY_GOVERNANCE.md)。
+新問題、`status: ready` への昇格、既に `status: ready` な問題の participant-facing な書き換え
+(README / hint / starter / workbench / portal) を、機械が止める仕組みは**もう無い**。
+`playability-gate` と `scripts/check-pr-playability.ts`、`docs/PLAYABILITY_GOVERNANCE.md` は
+2026-08-27 に削除した — 人間の blind play を待つ間 Issue が閉じられず、実際の運用で
+ボトルネックになっていたため。
+
+したがって「参加者が実際に解けるか」は**書いた人の申告が唯一の担保**になった。
+`status: ready` へ上げるとき、その問題を解いた事実が無いなら上げない。
 出力の末尾もそう読めない文言にしてある。
 
 ### `check:problem` が実際に見るもの
