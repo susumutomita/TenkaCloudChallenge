@@ -59,11 +59,6 @@
       "problem": "sha256-compress-digest",
       "issue": 538,
       "reason": "Not named in #537. _check_avalanche compares against a seed-independent, non-underscored function defined directly in verifier/server.py; _check_properties/_check_storage compare against fixtures.generate.quiz_answer, reachable from the participant image."
-    },
-    {
-      "problem": "ac26-w2-linear-shares",
-      "issue": 538,
-      "reason": "Not named in #537. Detector attribution is imprecise (cites operations(), which only supplies the key set); the real concern is fixtures.generate.OPERATION_ROUNDS, a seed-independent constant classification table reachable from the participant image. Needs human confirmation."
     }
   ]
 }

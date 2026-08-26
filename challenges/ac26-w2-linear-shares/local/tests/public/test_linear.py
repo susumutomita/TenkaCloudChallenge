@@ -6,6 +6,7 @@ with the plausible wrong one. The hidden verifier does both.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -14,19 +15,59 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "starter"))
 
-from fixtures.generate import operations, reconstruct, setting, shares_of  # noqa: E402
 import linear  # noqa: E402
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
-CFG = setting(SEED)
+
+
+def _load_public_evidence() -> dict[str, object]:
+    """This deployment's setting, shares and operation names -- the same things
+    `show.py` and the Portal print.
+
+    Issue 543/537: this file used to import `fixtures.generate` directly. That module
+    also derives what the `no-communication` checkpoint is graded against, as plain
+    module data, so it does not ship in the `participant` Docker stage at all any more
+    (see ../../Dockerfile). This
+    deployment's own verifier is the only source for the public half now:
+    `PUBLIC_EVIDENCE_JSON` when the Portal has already fetched it, or
+    `VERIFIER_PUBLIC_URL` fetched directly when it has not.
+    """
+    injected = os.environ.get("PUBLIC_EVIDENCE_JSON")
+    if injected:
+        return json.loads(injected)
+    verifier_public_url = os.environ.get("VERIFIER_PUBLIC_URL")
+    if verifier_public_url:
+        from urllib.request import urlopen
+
+        with urlopen(verifier_public_url, timeout=10) as response:  # noqa: S310
+            return json.loads(response.read().decode("utf-8"))
+    # Neither is set: this only resolves when `fixtures/` is actually on disk, which is
+    # true for a checkout (this file run directly, e.g. by
+    # scripts/ac26-w2-linear-shares.test.ts) and the verifier/author Docker stages, and
+    # never inside a built `participant` image -- so this branch existing does not
+    # reopen Issue 543/537's leak.
+    from fixtures.generate import public_payload
+
+    return public_payload(SEED)
+
+
+PUBLIC = _load_public_evidence()
+CFG = PUBLIC["setting"]
+OPERATIONS = PUBLIC["operations"]
+
+
+def reconstruct(shares: list[int], p: int) -> int:
+    """Add the shares up modulo p. The whole point of an additive sharing -- and no
+    longer imported from `fixtures.generate`, which does not ship here (see above)."""
+    return sum(shares) % p
 
 
 def _sx() -> list[int]:
-    return shares_of(SEED, "public-x", CFG["x"], CFG["n"], CFG["p"])
+    return list(PUBLIC["sharesOfX"])
 
 
 def _sy() -> list[int]:
-    return shares_of(SEED, "public-y", CFG["y"], CFG["n"], CFG["p"])
+    return list(PUBLIC["sharesOfY"])
 
 
 def test_add_shares_reconstructs_to_the_sum() -> None:
@@ -44,7 +85,7 @@ def test_add_constant_returns_one_value_per_party() -> None:
 
 
 def test_communication_rounds_answers_every_operation() -> None:
-    for operation in operations(SEED):
+    for operation in OPERATIONS:
         assert isinstance(linear.communication_rounds(operation), int)
 
 

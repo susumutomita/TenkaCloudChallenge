@@ -85,3 +85,34 @@ def reconstruct(shares: list[int], p: int) -> int:
 def health_token(seed: str) -> str:
     cfg = setting(seed)
     return hashlib.sha256(f"health:{seed}:{cfg['p']}:{cfg['n']}".encode()).hexdigest()[:16]
+
+
+def public_payload(seed: str) -> dict[str, object]:
+    """Everything a participant may see for this deployment. Contains no answer.
+
+    The single source `show.py`, `verifier/server.py`'s `GET /public`, and the Portal's
+    `/api/inspect` all build their payload from.
+
+    What is deliberately absent is the classification itself: `LOCAL_OPERATIONS`,
+    `INTERACTIVE_OPERATIONS` and `OPERATION_ROUNDS` are the answer to the
+    `no-communication` checkpoint, and this payload carries only the four operation
+    *names* the deployment asks about, in a hash-derived display order that says
+    nothing about which side each one falls on.
+
+    `x` and `y` are in here and are not a secret a learner could not already have: the
+    shares of both are printed by `show.py`, and reconstructing a sharing is a public
+    sum modulo p -- the first thing this problem teaches. The public tests need them to
+    assert what an operation reconstructs to, and no checkpoint is graded on them.
+
+    Issue 543/537: `fixtures/` -- this module -- does not ship in the participant Docker
+    stage at all (see ../Dockerfile). `participant/server.py`, `show.py` and the public
+    tests fetch this payload from the verifier at runtime instead of building it locally.
+    """
+    cfg = setting(seed)
+    return {
+        "setting": dict(cfg),
+        "sharesOfX": shares_of(seed, "public-x", cfg["x"], cfg["n"], cfg["p"]),
+        "sharesOfY": shares_of(seed, "public-y", cfg["y"], cfg["n"], cfg["p"]),
+        "operations": list(operations(seed)),
+        "healthToken": health_token(seed),
+    }
