@@ -193,14 +193,27 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   named `ac26-w5-lwe-rlwe` as outstanding after #572 had merged it — the same staleness
   that this section already records as having cost a run.
 
-  What is left, with the detector's count each — `ac26-w5-encoding-noise` (5),
-  `ac26-w3-passkey-assertion` (1), `ac26-w3-field-inverse` (1). Landed so far:
-  `cs-auth-claim-audit` and `ac26-bridge-experiment` (#562), `ac26-w3-schnorr-drill`
-  (#570), `ac26-w5-lwe-rlwe` (#572), `ac26-w5-rgsw-external` (#573),
-  `ac26-w5-cmux-blind-rotation` (#579), `ac26-w5-pbs-homnand` (#581),
-  `ac26-w4-commit-open` (#582, split out of #578), `ac26-w5-extract-key-switch` (#584).
-  Catalog count is 17 as of #584, down from 39. Runs have taken the largest count first,
-  so `ac26-w5-encoding-noise` is next.
+  What is left, with the detector's count each — `ac26-w3-passkey-assertion` (1),
+  `ac26-w3-field-inverse` (1). Landed so far: `cs-auth-claim-audit` and
+  `ac26-bridge-experiment` (#562), `ac26-w3-schnorr-drill` (#570), `ac26-w5-lwe-rlwe`
+  (#572), `ac26-w5-rgsw-external` (#573), `ac26-w5-cmux-blind-rotation` (#579),
+  `ac26-w5-pbs-homnand` (#581), `ac26-w4-commit-open` (#582, split out of #578),
+  `ac26-w5-extract-key-switch` (#584), `ac26-w5-encoding-noise` (#585).
+  Catalog count is 12 as of #585, down from 39. Runs have taken the largest count first,
+  so the two singletons are what is left — and both are single findings, so neither
+  says much about its own points until measured (see #582 and #584 below).
+
+  #585 is the last of the Week 5 chain and the first in this class with **no supplied
+  half at all**: `fixtures/generate.py` there is entirely seed derivation plus the graded
+  arithmetic, so unlike #581 and #584 nothing had to be carved out into a
+  `participant/*.py`. B2 was the plain move — `fixtures/`, `tests/hidden/` and
+  `verifier/` out of the participant stage, `GET /public` in, `show.py` and the public
+  tests reading the deployment's public half over the network. Its free score is the
+  middle of the range: handing the shipped fixtures module to the hidden suite passed 4
+  of 7 checkpoints, **115 of 200 points**, because that module implements five of the
+  seven names the starter asks for but not `add_noise` or `validate_params` — which is
+  what held `noise`, `transfer` and `validate` shut. Copy #582 for a problem with no
+  supplied half and #581/#584 for one that has.
 
   #584 is the opposite pole from #582 on the measurement below: its free score was the
   whole problem. All six names `starter/extract.py` asks for are implemented complete in
@@ -220,7 +233,7 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   points at risk in either direction: measure it per problem, and do not describe a split
   as recovering points you have not measured.
 
-  `ac26-w3-field-inverse` and `ac26-w5-encoding-noise`'s last two findings are not new
+  `ac26-w3-field-inverse` and `ac26-w5-encoding-noise`'s last two findings were not new
   work landing on this list — #576 only made them **visible** (§2).
   `ac26-w3-field-inverse` is the `egcd` placeholder tuple; `ac26-w5-encoding-noise` went
   3 → 5 with `first_failure` and `success_interval`, the same class it was already listed
@@ -228,7 +241,7 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   whenever a rule stops being blind: never report a rise as a regression, or a fall as a
   closure.
 
-  **All three remaining are `status: draft`**, so none of them hits the
+  **Both remaining are `status: draft`**, so neither hits the
   `playtest-verified` wall of §4 — a B2 split there is a PR an agent can carry
   to merge on its own, README correction included. Do not drop a needed README
   correction to stay under the gate (§4); on a `draft` problem it does not fire anyway.

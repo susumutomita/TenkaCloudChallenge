@@ -124,3 +124,64 @@ VALID_PARAMS: tuple[dict, ...] = (
 def health_token(seed: str) -> str:
     par = params(seed)
     return hashlib.sha256(f"health:{seed}:{par['q']}".encode()).hexdigest()[:16]
+
+
+#: The message `show.py` walks across its upper boundary, so the flip is visible rather
+#: than asserted. Seed-derived, and deliberately not the same message every deployment.
+def walk_subject(seed: str, p: int) -> int:
+    return sum(seed.encode()) % p
+
+
+def public_payload(seed: str) -> dict[str, object]:
+    """Everything a participant may see for this deployment. Carries values, not functions.
+
+    The single source `show.py`, `verifier/server.py`'s `GET /public` and
+    `tests/public/test_encoding.py` all build their view from. Every field below is
+    something `make inspect` already printed before Issue 543 option B2, so the split
+    changes where a participant reads it, not what they may see.
+
+    What is deliberately absent is this module itself. Issue 537/538's
+    stub-vs-implementation finding is that `encode`, `centered`, `decode`,
+    `success_interval` and `first_failure` above are complete implementations under the
+    exact five names `starter/encoding.py`'s own stubs ask the learner to write -- so
+    while `fixtures/` shipped in the participant image, four of the seven checkpoints
+    (115 of the 200 points) were one `import` away, with no comparison anywhere near
+    them. Serving the derived values keeps `make inspect` and the public tests working
+    without shipping the derivation.
+
+    `VALID_PARAMS` is not here either: `validate_params` is graded, and the accepted-set
+    table is the half of that answer `show.py` has never printed.
+    """
+    par = params(seed)
+    p, q = par["p"], par["q"]
+    low, high = success_interval(par)
+    subject = walk_subject(seed, p)
+    return {
+        "params": {"p": p, "delta": par["delta"], "q": q},
+        "healthToken": health_token(seed),
+        "successInterval": {"low": low, "high": high},
+        "points": [
+            {
+                "m": m,
+                "encode": encode(par, m),
+                "centered": centered(par, encode(par, m)),
+                "decode": decode(par, encode(par, m)),
+            }
+            for m in range(p)
+        ],
+        "walk": {
+            "subject": subject,
+            "steps": [
+                {
+                    "noise": noise,
+                    "value": (encode(par, subject) + noise) % q,
+                    "decode": decode(par, (encode(par, subject) + noise) % q),
+                }
+                for noise in range(high - 2, high + 4)
+            ],
+        },
+        "invalidParams": [
+            {"reason": reason, "p": bad["p"], "delta": bad["delta"], "q": bad["q"]}
+            for reason, bad in INVALID_PARAMS
+        ],
+    }

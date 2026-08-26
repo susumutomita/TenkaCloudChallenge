@@ -91,6 +91,11 @@ PORTAL_PACKAGES = {
     # own node_hash stub asks the learner to write, so both left the participant stage
     # and the Portal moved with them.
     "ac26-w4-commit-open": "participant",
+    # Issue 537/538 (Issue 543 option B2): the hidden suite grades every checkpoint and
+    # fixtures/generate.py implements encode, centered, decode, success_interval and
+    # first_failure under the exact five names starter/encoding.py's own stubs ask the
+    # learner to write, so both left the participant stage and the Portal moved with them.
+    "ac26-w5-encoding-noise": "participant",
     "ac26-w4-sumcheck-drill": "participant",
     "ac26-w3-schnorr-drill": "participant",
     "ac26-w4-plonk-drill": "participant",
