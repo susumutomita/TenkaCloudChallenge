@@ -1,4 +1,4 @@
-"""POST /verify — the scoring seam. Loopback only, stdlib only.
+"""POST /verify — the scoring seam. Compose-internal only, stdlib only.
 
 Security contract (docs/curricula/advanced-cryptography-2026/TEMPLATE.md §/verify):
   - `checkpointId` is required and is echoed back verbatim. The platform fails closed
@@ -13,6 +13,24 @@ Security contract (docs/curricula/advanced-cryptography-2026/TEMPLATE.md §/veri
   - Responses carry `correct` and, at most, a property name. Never the hidden test
     names, the expected values, or reference output.
   - Malformed input produces a failed checkpoint, never a crashed process.
+
+Issue 537/538 (Issue 543 option B2): this used to be the same process that also served
+the Participant Portal's config, inspect, starter, public-test and prepare endpoints, in
+the single Docker stage a learner's own `make build` produced -- so
+`tests/hidden/check_assertion.py` shipped in the learner's own image alongside it, and
+all three checkpoints are graded by running that suite. `fixtures/generate.py` shipped
+there too: it defines `signed_message` under the exact name `starter/assertion.py`'s own
+stub asks the learner to write, and `fixture()` labels every assertion by kind for any
+seed a caller names -- and a learner knows their own `FLAG_SEED`, from which the hidden
+suite's derived seeds follow. Together those two answered all three checkpoints from a
+lookup table with no WebAuthn reasoning at all. That Portal-facing surface now lives in
+`participant/server.py`, in a separate image (see ../Dockerfile) that this process's own
+container never builds; this file, `fixtures/` and `tests/hidden/` are reachable only
+over the Compose-internal network (see ../docker-compose.yml), never from the participant
+container's filesystem.
+
+`GET /public` below is what the participant image reads instead of importing
+`fixtures.generate`.
 """
 
 from __future__ import annotations
@@ -29,7 +47,7 @@ from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fixtures.generate import fixture
+from fixtures.generate import public_payload
 
 ROOT = Path(__file__).resolve().parents[1]
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
@@ -43,8 +61,10 @@ MAX_OUTPUT_BYTES = 64 * 1024
 REQUEST_TIMEOUT_SECONDS = 15
 
 CHECKPOINTS = ("signature", "find-uv-gap", "enforce-uv")
+#: Every checkpoint is graded by running the hidden suite against the learner's file, so
+#: this process only ever receives source. The Portal editor contract -- config, starter,
+#: inspect, public tests, prepare -- lives in `participant/server.py` since Issue 543 B2.
 CODE_CHECKPOINTS = CHECKPOINTS
-SUBMISSION_FILES = ("assertion.py",)
 
 # Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still
 # reporting RLIM_INFINITY for it. Setting it anyway raises inside `preexec_fn`,
@@ -65,59 +85,6 @@ def _limits() -> None:
         resource.setrlimit(resource.RLIMIT_AS, (MAX_ADDRESS_SPACE_BYTES, MAX_ADDRESS_SPACE_BYTES))
     resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
     resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_BYTES, MAX_OUTPUT_BYTES))
-
-
-def config_payload() -> dict[str, object]:
-    """Declare the generic Participant Portal editor contract."""
-    return {
-        "id": "ac26-w3-passkey-assertion",
-        "name": "署名は正しい。それでも拒否する。",
-        "description": "パスキー assertion の署名検証と UV 必須ポリシーを分けて実装する。",
-        "submittedFiles": list(SUBMISSION_FILES),
-        "checkpoints": [
-            {"id": checkpoint, "label": checkpoint, "kind": "code"}
-            for checkpoint in CHECKPOINTS
-        ],
-        # 英語は Portal 側の locale が選ぶ (共有 workbench.py の config_payload と同じ契約)。
-        # 文言の正本は metadata.json — scripts/generate-course-workbenches.py --check が
-        # 乖離を落とす (#381)。 この payload は手書きなので、 直すときはここを編集する。
-        "i18n": {
-            "en": {
-                "name": 'The signature is valid. Reject it anyway.',
-                "description": 'Verify a passkey assertion on the server with only the public key. Then find a cryptographically valid assertion whose user-verification bit is zero and reject it under a UV-required policy. Keep cryptographic validity separate from authentication policy.',
-                "checkpointLabels": {'signature': 'Verify the assertion signature with the public key', 'find-uv-gap': 'Select the valid signature made without user verification', 'enforce-uv': 'Complete a server verdict that requires user verification'},
-            }
-        },
-    }
-
-
-def starter_payload() -> dict[str, str]:
-    """Return the editable file shipped to the Portal editor."""
-    return {
-        name: (ROOT / "starter" / name).read_text(encoding="utf-8") for name in SUBMISSION_FILES
-    }
-
-
-def inspect_payload(seed: str) -> dict[str, object]:
-    """Return only the relying-party record and received assertions.
-
-    The credential private key is not in this payload.  Nor are the fixture kind
-    labels: the learner's code has to determine which assertion has a valid
-    signature and UV=0.
-    """
-    return fixture(seed).public_dict()
-
-
-def _submission_sources(files: object) -> dict[str, str] | None:
-    if not isinstance(files, dict):
-        return None
-    sources = {name: files.get(name) for name in SUBMISSION_FILES}
-    if any(not isinstance(text, str) or not text.strip() for text in sources.values()):
-        return None
-    normalized = {name: text for name, text in sources.items() if isinstance(text, str)}
-    if sum(len(text) for text in normalized.values()) > MAX_BODY_BYTES:
-        return None
-    return normalized
 
 
 def _run_submission_script(
@@ -157,44 +124,30 @@ def _run_submission_script(
     return completed.returncode, captured[-MAX_OUTPUT_BYTES:]
 
 
-PUBLIC_TEST_SCRIPT = """
-import os, runpy
-os.environ["FLAG_SEED"] = {seed!r}
-os.environ["SUBMISSION_DIR"] = {workspace!r}
-os.environ["BROWSER_PUBLIC_TESTS"] = "1"
-runpy.run_path({root!r} + "/tests/public/test_assertion.py", run_name="__main__")
-"""
-
-
-def run_public_tests(seed: str, files: object) -> dict[str, object]:
-    """Run the same checks as `make test` against the Portal-edited source."""
-    sources = _submission_sources(files)
-    if sources is None:
-        return {"passed": False, "output": "assertion.py must be a non-empty Python file."}
-    result = _run_submission_script(sources, PUBLIC_TEST_SCRIPT, seed)
-    if result is None:
-        return {"passed": False, "output": "Public tests timed out or could not start."}
-    return {"passed": result[0] == 0, "output": result[1]}
-
-
-def prepare_submissions(seed: str, files: object) -> dict[str, object]:
-    """The same source is evaluated independently by all three checkpoints."""
-    sources = _submission_sources(files)
-    if sources is None:
-        return {"ok": False, "output": "assertion.py must be a non-empty Python file."}
-    source = sources["assertion.py"]
-    return {
-        "ok": True,
-        "submissions": {checkpoint: source for checkpoint in CHECKPOINTS},
-    }
-
-
 RUNNER = """
 import json, os, sys
 from pathlib import Path
 sys.path.insert(0, {root!r})
-sys.path.insert(0, {workspace!r})
 from tests.hidden.check_assertion import run
+
+# Keep the private callable reference, then drop the answer packages and the problem root
+# before importing participant code -- the same guard cs-transaction-visibility-audit's
+# verifier applies for the same reason. `fixtures/` and `tests/hidden/` are on disk *in
+# this image* because grading needs them, so without this the submission itself could
+# import exactly what the participant image stopped shipping (Issue 543 option B2), and
+# read this deployment's assertion kinds or the hidden suite's own expectations out of
+# them. `run` already holds its references, so removing these does not affect grading.
+#
+# This closes the one-import path, not the filesystem: a submission that deliberately
+# puts the root back on `sys.path` can still reach those files. Local mode is honor-system
+# verification for whoever controls the image -- see TEMPLATE.md "Assurance scope".
+for module_name in tuple(sys.modules):
+    if module_name in ("fixtures", "tests") or module_name.startswith(("fixtures.", "tests.")):
+        sys.modules.pop(module_name, None)
+while {root!r} in sys.path:
+    sys.path.remove({root!r})
+sys.path.insert(0, {workspace!r})
+
 try:
     import assertion
 except Exception as error:
@@ -233,6 +186,13 @@ def evaluate(checkpoint_id: str, submission: object) -> bool:
 
 
 class Handler(BaseHTTPRequestHandler):
+    """Serve the /verify contract, and nothing a participant-facing client needs.
+
+    The Portal editor API is deliberately absent: it lives in `participant/server.py`,
+    which runs in the image a learner builds. Everything here runs in the image that
+    carries `fixtures/` and `tests/hidden/`, and is never published to the host.
+    """
+
     #: `StreamRequestHandler.setup` applies this to the socket before `rfile` is created,
     #: so it bounds `rfile.read` inside `do_POST` -- which a client that sends a
     #: content-length and then stops sending would otherwise block on forever, pinning
@@ -242,20 +202,17 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's name
         path = urlsplit(self.path).path
-        if path == "/api/config":
-            self._respond(200, config_payload())
+        if path == "/healthz":
+            self._respond(200, {"ok": True})
             return
-        if path == "/api/inspect":
-            self._respond(200, inspect_payload(SEED))
-            return
-        if path == "/api/starter":
-            self._respond(200, starter_payload())
+        if path == "/public":
+            self._respond(200, public_payload(SEED))
             return
         self._respond(404, {"error": "not found"})
 
     def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's name
         path = urlsplit(self.path).path.rstrip("/") or "/"
-        if path not in ("/verify", "/api/test", "/api/prepare"):
+        if path != "/verify":
             self._respond(404, {"error": "not found"})
             return
         try:
@@ -277,13 +234,6 @@ class Handler(BaseHTTPRequestHandler):
             return
         if not isinstance(body, dict):
             self._respond(400, {"error": "bad json"})
-            return
-
-        if path == "/api/test":
-            self._respond(200, run_public_tests(SEED, body.get("files")))
-            return
-        if path == "/api/prepare":
-            self._respond(200, prepare_submissions(SEED, body.get("files")))
             return
 
         checkpoint_id = body.get("checkpointId")
@@ -329,15 +279,16 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    port = int(os.environ.get("VERIFY_PORT", "18121"))
-    # Bind every interface *inside the container*, not the container's loopback. A published
-    # port is forwarded to the container's bridge address, so a server listening only on
-    # 127.0.0.1 inside the container accepts nothing from outside it — the connection is
-    # opened and closed without a response, and the platform can never score the problem.
+    port = int(os.environ.get("VERIFY_PORT", "18146"))
+    # Bind every interface *inside the container*, not the container's loopback: the
+    # Workbench reaches this process as `verifier:<port>` over the Compose network, which
+    # resolves to this container's bridge address — a server listening only on 127.0.0.1
+    # inside the container would accept nothing from it, and the platform could never
+    # score the problem.
     #
-    # The loopback restriction that matters is on the host, and it lives in
-    # docker-compose.yml, which publishes `127.0.0.1:<port>:<port>`. Nothing outside this
-    # machine can reach the verifier either way.
+    # Since Issue 537/538 this service publishes no host port at all (see
+    # docker-compose.yml): it sits on the `lab` network, which is `internal: true` and so
+    # carries no gateway. Nothing but the Workbench container can reach it.
     HTTPServer(("0.0.0.0", port), Handler).serve_forever()  # noqa: S104 - see above
 
 

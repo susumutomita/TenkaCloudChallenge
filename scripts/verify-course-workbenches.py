@@ -88,6 +88,15 @@ SPLIT_PORTAL_MODULES = {
     # stage (it derives the statement, not a verdict), so only the hidden suite and the
     # scoring process moved.
     "ac26-w3-schnorr": "participant.server",
+    # Issue 537/538 (Issue 543 option B2): same move, and both leaks at once —
+    # `tests/hidden/check_assertion.py` grades all three checkpoints and shipped in the
+    # participant stage, and `fixtures/generate.py` defines `signed_message` under the
+    # exact name `starter/assertion.py` asks the learner to write while labelling every
+    # assertion by kind for any seed. `show.py` and the public tests read `GET /public`
+    # from the verifier now. generate-course-workbenches.py の PORTAL_PACKAGES と対で
+    # 更新する必要がある — 片方だけだと、この checker が verifier.server を見に行って
+    # "GET APIs missing" で落ちる。
+    "ac26-w3-passkey-assertion": "participant.server",
     # Issue 543 option B2: both leaks at once here — `tests/hidden/check_lwe.py` grades
     # all eight checkpoints and shipped in the participant stage, and
     # `fixtures/generate.py` implements the eleven functions `starter/lwe.py` asks the
@@ -277,12 +286,20 @@ print(json.dumps(config, ensure_ascii=False))
 '''
 
 PASSKEY_PROBE = r'''
+import importlib
 import json
 import sys
 from pathlib import Path
 
 sys.path.insert(0, ".")
-from verifier.server import CHECKPOINTS, config_payload, prepare_submissions, starter_payload
+# The module is passed in rather than hard-coded: Issue 543 option B2 moved this
+# problem's Portal editor API out of the hidden verifier and into participant/server.py,
+# and SPLIT_PORTAL_MODULES is the one place that records where a problem's Portal lives.
+server = importlib.import_module(sys.argv[1])
+CHECKPOINTS = server.CHECKPOINTS
+config_payload = server.config_payload
+prepare_submissions = server.prepare_submissions
+starter_payload = server.starter_payload
 
 config = config_payload()
 starter = starter_payload()
@@ -472,7 +489,13 @@ def check_legacy_input_contract(problem_id: str, code_checkpoints: set[str]) -> 
 
 def check_passkey_contract() -> None:
     completed = subprocess.run(
-        [sys.executable, "-I", "-c", PASSKEY_PROBE],
+        [
+            sys.executable,
+            "-I",
+            "-c",
+            PASSKEY_PROBE,
+            SPLIT_PORTAL_MODULES.get(PASSKEY_TARGET, "verifier.server"),
+        ],
         cwd=ROOT / "challenges" / PASSKEY_TARGET / "local",
         text=True,
         stdout=subprocess.PIPE,

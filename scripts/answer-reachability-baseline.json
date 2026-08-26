@@ -6,11 +6,6 @@
       "reason": "verifier/server.py defines a full, non-underscored message-schedule reference function that ships in the single participant stage and backs the dependency checkpoint's comparison."
     },
     {
-      "problem": "ac26-w3-passkey-assertion",
-      "issue": 538,
-      "reason": "Not named in #537. starter's signed_message stub raises NotImplementedError while fixtures/generate.py already ships a complete, same-named implementation reachable from the participant image."
-    },
-    {
       "problem": "sha256-bytes-padding",
       "issue": 538,
       "reason": "Not named in #537. _check_byte_length compares against a precomputed field on fixtures.generate.text_case(SEED), and _check_padded_length compares against fixtures.generate.padded_length, a complete padding-length formula reachable from the participant image."
