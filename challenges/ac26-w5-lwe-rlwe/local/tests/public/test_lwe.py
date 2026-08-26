@@ -12,6 +12,7 @@ cannot survive.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -21,32 +22,72 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "starter"))
 
 import lwe as submission  # noqa: E402
-from fixtures.generate import (  # noqa: E402
-    lwe_mask,
-    lwe_secret,
-    normalize as reference_normalize,
-    params,
-    rlwe_mask,
-    rlwe_secret,
-)
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 
+def _public_payload() -> dict:
+    """This deployment's parameters, secrets, masks and the one normalize probe.
+
+    Issue 543 option B2: this file used to import `fixtures.generate` directly. That
+    module derives a deployment's fixtures, which it cannot do without working
+    `normalize`, `ring_mul`, `lwe_encrypt`, `lwe_decrypt`, `rlwe_encrypt`,
+    `rlwe_decrypt`, `encode`, `decode` and `centered` -- the eleven names
+    `starter/lwe.py` asks the learner to write. It does not ship in the `participant`
+    Docker stage any more (see ../../Dockerfile), so this deployment's own verifier is
+    the only source for the values below: `PUBLIC_EVIDENCE_JSON` when
+    `participant/server.py` has already fetched it (the Portal path, which the sandboxed
+    run behind `make test` also takes), `VERIFIER_PUBLIC_URL` fetched directly when it
+    has not.
+    """
+    injected = os.environ.get("PUBLIC_EVIDENCE_JSON")
+    if injected:
+        return json.loads(injected)
+    verifier_public_url = os.environ.get("VERIFIER_PUBLIC_URL")
+    if verifier_public_url:
+        from urllib.error import HTTPError, URLError
+        from urllib.request import urlopen
+
+        try:
+            with urlopen(verifier_public_url, timeout=10) as response:  # noqa: S310
+                return json.loads(response.read().decode("utf-8"))
+        except (HTTPError, URLError, TimeoutError, OSError, ValueError) as error:
+            # Same message as show.py, for the same reason: an unreachable verifier is
+            # a torn-down deployment, not a failing submission, and a urllib traceback
+            # reads like the latter.
+            raise SystemExit(
+                "cannot reach this deployment's verifier "
+                f"({verifier_public_url}): {type(error).__name__}.\n"
+                "The parameters and masks these tests run on live there since Issue 543 "
+                "option B2. Start it with `make verifier-up` and try again."
+            ) from error
+    # Neither is set: this only resolves where `fixtures/` is actually on disk, which is
+    # a checkout (this file run directly, e.g. by scripts/ac26-w5-lwe-rlwe.test.ts) or
+    # the verifier/author Docker stage, and never inside a built `participant` image --
+    # so this branch existing does not reopen the leak above.
+    from fixtures.generate import public_payload
+
+    return public_payload(SEED)
+
+
+PUBLIC = _public_payload()
+
+
 def check_normalize_produces_n_coefficients() -> str:
-    par = params(SEED)
-    got = submission.normalize(par, list(range(3 * par["degree"])))
+    par = PUBLIC["params"]
+    probe = PUBLIC["inputs"]["normalizeProbe"]
+    got = submission.normalize(par, list(probe["input"]))
     if len(tuple(got)) != par["degree"]:
         return f"normalizing produced {len(tuple(got))} coefficients, not {par['degree']}"
-    if tuple(got) != reference_normalize(par, list(range(3 * par["degree"]))):
+    if tuple(got) != tuple(probe["expected"]):
         return "the normalized coefficients do not match the ring"
     return ""
 
 
 def check_lwe_round_trip() -> str:
-    par = params(SEED)
-    secret = lwe_secret(SEED, par)
-    mask = lwe_mask(SEED, par, "public")
+    par = PUBLIC["params"]
+    secret = tuple(PUBLIC["inputs"]["lweSecret"])
+    mask = tuple(PUBLIC["inputs"]["lweMask"])
     for message in range(par["plaintext_modulus"]):
         ciphertext = submission.lwe_encrypt(par, secret, message, mask, 0)
         if submission.lwe_decrypt(par, secret, ciphertext)["message"] != message:
@@ -55,10 +96,10 @@ def check_lwe_round_trip() -> str:
 
 
 def check_rlwe_round_trip() -> str:
-    par = params(SEED)
+    par = PUBLIC["params"]
     n = par["degree"]
-    secret = rlwe_secret(SEED, par)
-    mask = rlwe_mask(SEED, par, "public")
+    secret = tuple(PUBLIC["inputs"]["rlweSecret"])
+    mask = tuple(PUBLIC["inputs"]["rlweMask"])
     messages = tuple((position + 1) % par["plaintext_modulus"] for position in range(n))
     ciphertext = submission.rlwe_encrypt(par, secret, messages, mask, [0] * n)
     if tuple(submission.rlwe_decrypt(par, secret, ciphertext)["message"]) != messages:

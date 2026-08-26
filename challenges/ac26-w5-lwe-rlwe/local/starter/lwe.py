@@ -17,9 +17,10 @@ The ring is `R_q = Z_q[X] / (X^N + 1)`, so:
 
 A coefficient that wraps past degree N comes back **negated**. That single sign is the
 difference between a negacyclic product and a cyclic one, and a cyclic ring is perfectly
-self-consistent — it will round-trip your own tests happily. `fixtures.generate.cyclic_mul`
+self-consistent — it will round-trip your own tests happily. `participant.wrong_ring.cyclic_mul`
 is the wrong one, written out, so you can compare against a stated weakness rather than
-against code you deliberately broke.
+against code you deliberately broke. `make inspect` prints both products of the same
+input, side by side.
 
 `encode`, `decode`, and `centered` are the same as in `ac26-w5-encoding-noise`, ties
 included: an exact half-way value rounds **up**, so the tolerated interval is asymmetric

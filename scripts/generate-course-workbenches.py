@@ -72,6 +72,10 @@ PORTAL_PACKAGES = {
     # shipped in the single participant stage alongside the Portal. The Portal moved to
     # participant/ when the hidden suite stopped shipping there.
     "ac26-w3-schnorr": "participant",
+    # Issue 543 option B2: the hidden suite grades every checkpoint and fixtures/
+    # implements every stub, so both left the participant stage and the Portal moved
+    # with them.
+    "ac26-w5-lwe-rlwe": "participant",
     "ac26-w4-sumcheck-drill": "participant",
     "ac26-w3-schnorr-drill": "participant",
     "ac26-w4-plonk-drill": "participant",

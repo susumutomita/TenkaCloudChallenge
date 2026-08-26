@@ -44,9 +44,9 @@ So every round trip in the hidden suite is run **crossed**: encrypt here, decryp
 the fixtures, and the other way round. A scheme that is only self-consistent does not
 survive that, and a scheme that is actually right does not notice.
 
-The wrong product is written out for you as `fixtures.generate.cyclic_mul`, so the
+The wrong product is written out for you as `participant.wrong_ring.cyclic_mul`, so the
 counterexample is against a **stated** weakness rather than against code you deliberately
-broke.
+broke. `make inspect` also prints both products of the same input, side by side.
 
 ## Not sampled — given
 
@@ -107,10 +107,19 @@ official exercise.
 
 ## Assurance scope
 
-Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
-daemon, and the image, so nothing inside that image is hidden from you: `reference/` and
-`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than
-out of reach.
+Local mode is **self-paced, honor-system verification**. You own the machine and the Docker
+daemon, so nothing you build is hidden from you: `reference/` and `tests/hidden/` are not
+bind-mounted, which keeps them out of your git checkout rather than out of reach.
+
+What the deployment does do is stop handing them to you by accident. It runs two
+containers. The Workbench you talk to carries the starter, the public tests,
+`participant/wrong_ring.py` and `show.py`; the grading image carries `fixtures/`,
+`tests/hidden/` and the verifier, publishes no port, and sits on a Docker network with no
+gateway. `show.py` and the public tests read this deployment's parameters, traces and
+boundary samples from that verifier's `GET /public`, which serves the question and never a
+checkpoint's expected value — `fixtures/generate.py` has to implement all eleven functions
+`starter/lwe.py` asks you to write in order to derive them, so it is not in the image you
+run ([#543](https://github.com/susumutomita/TenkaCloudChallenge/issues/543)).
 
 What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
 a checkpoint can only credit the id it echoes, results do not leak expected values, and the

@@ -10,31 +10,12 @@ shows the key teaches the wrong reflex. `MODE=debug` opts in explicitly.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-from fixtures.generate import (
-    boundary_samples,
-    centered,
-    cyclic_mul,
-    encode,
-    health_token,
-    lwe_decrypt,
-    lwe_encrypt,
-    lwe_mask,
-    lwe_secret,
-    params,
-    ring_mul,
-    rlwe_decrypt,
-    rlwe_encrypt,
-    rlwe_mask,
-    rlwe_secret,
-    small_noise,
-    success_interval,
-)
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 # `or` rather than a default argument: the Makefile always passes -e MODE, so an
@@ -42,99 +23,142 @@ SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 MODE = (os.environ.get("MODE") or "both").lower()
 
 
-def _ring(par: dict) -> None:
+def _public_payload() -> dict:
+    """This deployment's public half, and every value printed below.
+
+    Issue 543 option B2: `fixtures/generate.py` does not ship in the `participant`
+    Docker stage any more (see local/Dockerfile). It has to define working `normalize`,
+    `ring_mul`, `lwe_encrypt`, `lwe_decrypt`, `rlwe_encrypt`, `rlwe_decrypt`, `encode`,
+    `decode` and `centered` to derive the numbers below -- exactly the names
+    `starter/lwe.py` asks the learner to write -- so leaving it reachable here handed
+    over eleven stubs for the price of one import. The verifier, which is the only image
+    that still carries `fixtures/`, serves the public half over `GET /public`:
+    `PUBLIC_EVIDENCE_JSON` when the Portal has already fetched it, `VERIFIER_PUBLIC_URL`
+    when this process must fetch it itself.
+    """
+    injected = os.environ.get("PUBLIC_EVIDENCE_JSON")
+    if injected:
+        return json.loads(injected)
+    verifier_public_url = os.environ.get("VERIFIER_PUBLIC_URL")
+    if verifier_public_url:
+        from urllib.error import HTTPError, URLError
+        from urllib.request import urlopen
+
+        try:
+            with urlopen(verifier_public_url, timeout=10) as response:  # noqa: S310
+                return json.loads(response.read().decode("utf-8"))
+        except (HTTPError, URLError, TimeoutError, OSError, ValueError) as error:
+            # Compose health-gates the workbench on the verifier, so this normally
+            # cannot happen. When it does -- a `docker compose run` against a torn-down
+            # deployment -- say which service is missing instead of printing a urllib
+            # traceback at somebody trying to read their fixtures.
+            raise SystemExit(
+                "cannot reach this deployment's verifier "
+                f"({verifier_public_url}): {type(error).__name__}.\n"
+                "The public evidence lives there since Issue 543 option B2. "
+                "Start it with `make verifier-up` and try again."
+            ) from error
+    # Neither is set: this resolves only where `fixtures/` is actually on disk -- a
+    # checkout, or the verifier/author Docker stage -- and never inside a built
+    # `participant` image, so this branch does not reopen the leak above.
+    from fixtures.generate import public_payload
+
+    return public_payload(SEED)
+
+
+def _tuple(values) -> tuple:
+    """JSON has no tuple, so a payload fetched over `GET /public` hands back lists.
+
+    Every vector and polynomial below was printed as a tuple before the split, and the
+    shape of a ring element is part of what the trace is teaching.
+    """
+    return tuple(values)
+
+
+def _ring(payload: dict) -> None:
+    par = payload["params"]
     n = par["degree"]
     print(f"  R_q = Z_{par['modulus']}[X] / (X^{n} + 1)")
     print(f"  degree N      {n}     X^{n} = -1, so a coefficient that wraps comes back negated")
     print(f"  modulus q     {par['modulus']}  = plaintext modulus {par['plaintext_modulus']} * delta {par['delta']}")
     print(f"  dimension n   {par['dimension']}     (LWE only)")
-    low, high = success_interval(par)
+    low, high = payload["interval"]
     print(f"  noise budget  {low} .. {high}")
     print()
 
     # The wrap, shown rather than described: X^(N-1) * X.
-    top = tuple([0] * (n - 1) + [1])
-    x = tuple([0, 1] + [0] * (n - 2)) if n > 1 else (1,)
-    print(f"  X^{n - 1} * X  negacyclic -> {ring_mul(par, top, x)}")
-    print(f"  X^{n - 1} * X  cyclic     -> {cyclic_mul(par, top, x)}   <- the wrong ring")
+    ring = payload["ring"]
+    print(f"  X^{n - 1} * X  negacyclic -> {_tuple(ring['negacyclic'])}")
+    print(f"  X^{n - 1} * X  cyclic     -> {_tuple(ring['cyclic'])}   <- the wrong ring")
     print("  Same inputs, different sign. Everything downstream inherits whichever you pick.")
+    print("  The cyclic product is written out in participant/wrong_ring.py.")
     print()
 
 
-def _lwe(par: dict) -> None:
-    secret = lwe_secret(SEED, par)
-    mask = lwe_mask(SEED, par, "show")
-    noise = small_noise(SEED, par, "show", 1)[0]
-    message = 1 % par["plaintext_modulus"]
-    ciphertext = lwe_encrypt(par, secret, message, mask, noise)
-    result = lwe_decrypt(par, secret, ciphertext)
-    product = (ciphertext["b"] - result["phase"]) % par["modulus"]
-
+def _lwe(payload: dict) -> None:
+    par = payload["params"]
+    trace = payload["lwe"]
     print("LWE")
-    print(f"  message              {message}")
-    print(f"  encoded message      {encode(par, message)}")
+    print(f"  message              {trace['message']}")
+    print(f"  encoded message      {trace['encoded']}")
     print(f"  secret shape         vector of {par['dimension']} bits (not shown)")
-    print(f"  mask a               {ciphertext['a']}")
-    print(f"  inner product <a,s>  {product}")
-    print(f"  noise e              {noise}")
-    print(f"  ciphertext b         {ciphertext['b']}   = <a,s> + encoded + e")
-    print(f"  phase b - <a,s>      {result['phase']}")
-    print(f"  centered phase       {result['centered_phase']}")
-    print(f"  decoded              {result['message']}")
+    print(f"  mask a               {_tuple(trace['mask'])}")
+    print(f"  inner product <a,s>  {trace['product']}")
+    print(f"  noise e              {trace['noise']}")
+    print(f"  ciphertext b         {trace['body']}   = <a,s> + encoded + e")
+    print(f"  phase b - <a,s>      {trace['phase']}")
+    print(f"  centered phase       {trace['centeredPhase']}")
+    print(f"  decoded              {trace['decoded']}")
     print()
 
 
-def _rlwe(par: dict) -> None:
+def _rlwe(payload: dict) -> None:
+    par = payload["params"]
     n = par["degree"]
-    secret = rlwe_secret(SEED, par)
-    mask = rlwe_mask(SEED, par, "show")
-    noise = small_noise(SEED, par, "show", n)
-    messages = tuple((position + 1) % par["plaintext_modulus"] for position in range(n))
-    ciphertext = rlwe_encrypt(par, secret, messages, mask, noise)
-    result = rlwe_decrypt(par, secret, ciphertext)
-    product = ring_mul(par, ciphertext["a"], secret)
-
+    trace = payload["rlwe"]
     print("RLWE")
-    print(f"  messages             {messages}      <- {n} of them, in one ciphertext")
-    print(f"  encoded messages     {tuple(encode(par, m) for m in messages)}")
+    print(f"  messages             {_tuple(trace['messages'])}      <- {n} of them, in one ciphertext")
+    print(f"  encoded messages     {_tuple(trace['encoded'])}")
     print(f"  secret shape         polynomial with {n} bit coefficients (not shown)")
-    print(f"  mask A               {ciphertext['a']}")
-    print(f"  product A*S          {product}")
-    print(f"  noise E              {noise}")
-    print(f"  ciphertext B         {ciphertext['b']}   = A*S + encoded + E")
-    print(f"  phase B - A*S        {result['phase']}")
-    print(f"  centered phase       {result['centered_phase']}")
-    print(f"  decoded              {result['message']}")
+    print(f"  mask A               {_tuple(trace['mask'])}")
+    print(f"  product A*S          {_tuple(trace['product'])}")
+    print(f"  noise E              {_tuple(trace['noise'])}")
+    print(f"  ciphertext B         {_tuple(trace['body'])}   = A*S + encoded + E")
+    print(f"  phase B - A*S        {_tuple(trace['phase'])}")
+    print(f"  centered phase       {_tuple(trace['centeredPhase'])}")
+    print(f"  decoded              {_tuple(trace['decoded'])}")
     print()
 
 
-def _boundary(par: dict) -> None:
-    low, high = success_interval(par)
+def _boundary(payload: dict) -> None:
+    low, high = payload["interval"]
     print(f"boundary samples (budget {low} .. {high}, order is seed-derived, not sorted):")
     print("    index   noise   decodes")
-    for sample in boundary_samples(SEED, par):
+    for sample in payload["boundary"]:
         print(f"    {sample['index']:<7} {sample['noise']:<7} {sample['decodes']}")
     print("  Which is the FIRST one out of budget, in this order?")
     print()
 
 
 def main() -> None:
-    par = params(SEED)
-    print("health token :", health_token(SEED))
+    payload = _public_payload()
+    print("health token :", payload["healthToken"])
     print()
-    _ring(par)
+    _ring(payload)
     if MODE in ("both", "lwe", "debug"):
-        _lwe(par)
+        _lwe(payload)
     if MODE in ("both", "rlwe", "debug"):
-        _rlwe(par)
-    _boundary(par)
+        _rlwe(payload)
+    _boundary(payload)
 
     if MODE == "debug":
         # Explicit opt-in, and only here. Seeing the key is occasionally useful while
-        # debugging and never useful while learning what the scheme protects.
+        # debugging and never useful while learning what the scheme protects. Both
+        # secrets are arguments the graded functions receive anyway, which is why they
+        # can travel in the public payload at all.
         print("debug: secrets")
-        print(f"  LWE  s = {lwe_secret(SEED, par)}")
-        print(f"  RLWE S = {rlwe_secret(SEED, par)}")
+        print(f"  LWE  s = {_tuple(payload['inputs']['lweSecret'])}")
+        print(f"  RLWE S = {_tuple(payload['inputs']['rlweSecret'])}")
         print()
 
     print("Same shape both times: secret-product + encoded message + noise.")
