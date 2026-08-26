@@ -127,14 +127,43 @@ Blocked on an owner decision — **do not start these**:
   findings, and both are `status: ready` — the split cannot be done there without
   correcting their READMEs either, so the outcome is another Draft PR waiting on the
   same decision. Do not start them until #564 is decided.
-- The `stub-vs-implementation` class (~45 of the detector's findings, including every
-  `ac26-w5-*`). A container split does not reach it, because `fixtures/generate.py` must
-  stay in the participant image to derive the deployment's public values at runtime. The
-  options are recorded on Issue #543; the owner has not chosen.
 
 Not closable by one agent playing alone — say so rather than producing a weaker artifact:
 
 - #486, #430, #470 are **battles**: 120-minute, multi-team competitions.
+
+Reachable, and the largest block of work left — **do not skip these as "owner's call"**:
+
+- The `stub-vs-implementation` class: 47 of the detector's findings, across 8 problems.
+  An earlier version of this file said the owner had not chosen and told you not to
+  start. That is out of date, and it cost at least one run: the owner picked **option
+  B2** on Issue #543 (2026-08-26), and named the order — `cs-auth-claim-audit`, then
+  `ac26-bridge-experiment`, then the rest. The first two landed in #562 before that
+  paragraph was written.
+
+  B2 is: take `fixtures/` out of the participant Docker stage too, add `GET /public` to
+  the verifier, and have `show.py` and the public tests read the deployment's public
+  half over the Compose-internal network (`PUBLIC_EVIDENCE_JSON` →
+  `VERIFIER_PUBLIC_URL` → a function-scoped `fixtures` fallback that only ever resolves
+  in a checkout or the `author` stage). `make test` / `test-one` / `inspect` then run
+  through Compose, and `verifier-up` / `verifier-down` are added to the problem
+  Makefile. `ac26-bridge-properties` and `ac26-w3-schnorr-drill` (#570) are the worked
+  examples; copy their shape rather than designing another one.
+
+  What is left, with the detector's count each — `ac26-w5-lwe-rlwe` (11),
+  `ac26-w5-rgsw-external` (10), `ac26-w5-cmux-blind-rotation` (8),
+  `ac26-w5-pbs-homnand` (7), `ac26-w5-extract-key-switch` (6),
+  `ac26-w5-encoding-noise` (3), `ac26-w4-commit-open` (1),
+  `ac26-w3-passkey-assertion` (1). **All eight are `status: draft`**, so none of them
+  hits the `playtest-verified` wall of §4 — a B2 split there is a PR an agent can carry
+  to merge on its own, README correction included. Do not drop a needed README
+  correction to stay under the gate (§4); on a `draft` problem it does not fire anyway.
+
+  Two things that stay true regardless: the count is a **lower bound** (§2), so never
+  report "N fewer findings" as if it were the closure; and prove the boundary per
+  problem, by showing the path that reached the answer before no longer reaching it.
+  #570's regression test does both — it fails, and the catalog count goes back up, the
+  moment `COPY fixtures/` returns to the participant stage.
 
 ## 6. Environment traps
 
