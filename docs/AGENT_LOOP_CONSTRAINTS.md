@@ -77,10 +77,44 @@ Conditions, all required:
 - Squash only (the branch ruleset permits nothing else).
 - Never pass `--delete-branch` when merging the base of a stacked PR.
 
+### Check the gate before you take a PR out of Draft
+
+`playability-gate` passes unconditionally **while the PR is Draft** — that is the
+whole point of the #476 rebuild. It is re-evaluated on `ready_for_review`, and only
+then does it decide whether the change needs play evidence. So a Draft PR's green
+gate says nothing about whether it can merge, and undrafting to find out leaves a
+**red required check you may not be able to clear**. PR #564 was undrafted on this
+assumption and went red on the next run.
+
+Before undrafting, diff the PR against its base and check whether it touches, for a
+problem whose `metadata.json` says `status: ready`:
+
+- `README.md`, `README.ja.md`, `local/starter/`, `local/workbench/`, `local/portal/`
+  (`PARTICIPANT_FACING_SUBPATHS` in `scripts/check-pr-playability.ts`), or
+- the participant-facing fields of `metadata.json` (`name`, `shortDescription`,
+  `instructions`, `writeup`, any `hints`, any check/flag `label`, the `i18n.en`
+  mirrors, and the three `publicHint`-gated blocks).
+
+If it does, the gate demands an evidence block **and** the `playtest-verified`
+label, and `docs/PLAYABILITY_GOVERNANCE.md` restricts applying that label to human
+maintainers. An agent cannot turn such a PR green on its own: leave it Draft, say on
+the PR what is blocking, and hand the decision to the owner.
+
+Note what is *not* on that list: `local/Dockerfile`, `local/docker-compose.yml`,
+`local/fixtures/`, `local/participant/`, `local/verifier/`, `local/show.py`,
+`local/tests/`, and the problem `Makefile`. A container split confined to those, on a
+`status: draft` problem, does not trip the gate — that is why #562 and #563 merged and
+#564 did not. Do not reach for the difference by dropping a needed README correction
+from a PR: that is evading the gate, not passing it (§2).
+
 ## 5. What is and is not reachable
 
 Blocked on an owner decision — **do not start these**:
 
+- PR #564 (`sha256-bytes-padding` container split). The code is complete and every
+  check is green, but it rewrites the problem's two READMEs and the problem is
+  `status: ready`, so `playability-gate` requires the human-only `playtest-verified`
+  label (§4). Do not undraft it again, and do not apply that label yourself.
 - The `stub-vs-implementation` class (~45 of the detector's findings, including every
   `ac26-w5-*`). A container split does not reach it, because `fixtures/generate.py` must
   stay in the participant image to derive the deployment's public values at runtime. The
