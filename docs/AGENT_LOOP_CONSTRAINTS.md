@@ -167,6 +167,17 @@ Not closable by one agent playing alone — say so rather than producing a weake
 
 - #486, #430, #470 are **battles**: 120-minute, multi-team competitions.
 
+  That is not the same as "nothing in them is reachable". #585 landed against #486 and
+  merged: playing the deployed portal as a participant showed two of the four moves were
+  impossible to perform, because the participant surface named a repository file the cloud
+  participant does not have and `HelpDrawer` carried none of the construction. Making a
+  move *performable* is a participant-surface repair an agent can do and verify — there,
+  by reimplementing the construction from the panel text alone and matching it against the
+  shipped prover. **Do not close #486 on it**: the issue asks for a 120-minute competition
+  actually being run, the engine-side half is a separate TenkaCloud PR (#3077), and no
+  live match has been played. So: take the reachable repair, leave the issue open, and say
+  which half is still missing.
+
 Reachable, and the largest block of work left — **do not skip these as "owner's call"**:
 
 - The `stub-vs-implementation` class: originally 47 of the detector's findings across 8
