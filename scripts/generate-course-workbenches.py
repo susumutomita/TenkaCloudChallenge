@@ -79,6 +79,7 @@ PORTAL_PACKAGES = {
     # Same option B2 split, same reason: the hidden suite grades all eight checkpoints
     # and fixtures/ implements the ten stubs starter/rgsw.py ships.
     "ac26-w5-rgsw-external": "participant",
+    "ac26-w5-cmux-blind-rotation": "participant",
     "ac26-w4-sumcheck-drill": "participant",
     "ac26-w3-schnorr-drill": "participant",
     "ac26-w4-plonk-drill": "participant",

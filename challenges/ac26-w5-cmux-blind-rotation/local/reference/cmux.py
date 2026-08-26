@@ -3,7 +3,7 @@
 Used by two things: the mutation suite (which breaks copies of this file and asserts the
 hidden tests catch each break), and the `reference-test` CI target.
 
-The ring, RLWE, RGSW and the external product are supplied by `fixtures.generate` -- this
+The ring, RLWE, RGSW and the external product are supplied by `participant.ring` -- this
 problem is CMUX, monomial rotation, and the loop that chains them, not a re-derivation of
 Week 5's second and third problems. Nothing here hardcodes a degree, a base, a level count
 or an LWE dimension, because `transfer` runs the whole file under parameters derived from a
@@ -12,7 +12,7 @@ different seed.
 
 from __future__ import annotations
 
-from fixtures.generate import external_product, normalize, ring_add, ring_sub
+from participant.ring import external_product, normalize, ring_add, ring_sub
 
 
 # ---------------------------------------------------------------------------
@@ -137,7 +137,7 @@ def blind_rotate_trace(params: dict, key, sample: dict, accumulator: dict) -> tu
     CMUX those three are always different -- an output equal to one of its candidates is a
     branch that was taken in the clear.
     """
-    from fixtures.generate import digest
+    from participant.ring import digest
 
     modulus = 2 * params["degree"]
     rotated = rotate_ciphertext(params, accumulator, -sample["body"])

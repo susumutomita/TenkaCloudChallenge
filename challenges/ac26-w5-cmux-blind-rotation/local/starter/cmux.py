@@ -4,7 +4,7 @@ The goal: rotate an encrypted polynomial by an amount **nobody in the computatio
 The rotation amount lives in an LWE phase; the bits that determine it are encrypted; and
 the loop that applies it never branches on any of them.
 
-You are not rebuilding the ring, RLWE, RGSW or the external product — `fixtures.generate`
+You are not rebuilding the ring, RLWE, RGSW or the external product — `participant.ring`
 supplies all of them, correct. `ac26-w5-lwe-rlwe` and `ac26-w5-rgsw-external` are where they
 come from. This problem is CMUX, monomial rotation, and the loop.
 
@@ -51,7 +51,7 @@ to linear algebra. It is a toy of the mechanism.
 
 from __future__ import annotations
 
-from fixtures.generate import (  # noqa: F401 - the supplied ring, RLWE and RGSW layer
+from participant.ring import (  # noqa: F401 - the supplied ring, RLWE and RGSW layer
     external_product,
     normalize,
     ring_add,
@@ -177,7 +177,7 @@ def blind_rotate_trace(params: dict, key, sample: dict, accumulator: dict) -> tu
     output        digest of this step's result
     ```
 
-    `digest(params, ciphertext)` is supplied by `fixtures.generate`, so the format is not
+    `digest(params, ciphertext)` is supplied by `participant.ring`, so the format is not
     yours to guess. Note what a digest can show: for a real CMUX the output matches neither
     candidate. No plaintext bit appears anywhere, and none can — the trace never sees the
     secret.
