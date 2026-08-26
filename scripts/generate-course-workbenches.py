@@ -72,6 +72,13 @@ PORTAL_PACKAGES = {
     # shipped in the single participant stage alongside the Portal. The Portal moved to
     # participant/ when the hidden suite stopped shipping there.
     "ac26-w3-schnorr": "participant",
+    # Issue 537/538 (Issue 543 option B2): the hidden suite grades all three checkpoints
+    # and fixtures/generate.py defines signed_message under the exact name
+    # starter/assertion.py's own stub asks the learner to write, so both left the
+    # participant stage and the Portal moved with them. Its config_payload is authored
+    # per problem rather than generated, so the hand-written English check follows it to
+    # participant/server.py.
+    "ac26-w3-passkey-assertion": "participant",
     # Issue 543 option B2: the hidden suite grades every checkpoint and fixtures/
     # implements every stub, so both left the participant stage and the Portal moved
     # with them.
@@ -79,11 +86,23 @@ PORTAL_PACKAGES = {
     # Same option B2 split, same reason: the hidden suite grades all eight checkpoints
     # and fixtures/ implements the ten stubs starter/rgsw.py ships.
     "ac26-w5-rgsw-external": "participant",
+    "ac26-w5-cmux-blind-rotation": "participant",
+    # Same option B2 split, same reason: the hidden suite grades all eight checkpoints and
+    # fixtures/ implements seven of the twelve stubs starter/pipeline.py ships.
+    "ac26-w5-pbs-homnand": "participant",
+    # Same option B2 split, same reason: the hidden suite grades all eight checkpoints and
+    # fixtures/ implements all six stubs starter/extract.py ships.
+    "ac26-w5-extract-key-switch": "participant",
     # Issue 537/538 (Issue 543 option B2): the hidden suite grades every checkpoint and
     # fixtures/generate.py implements node_hash under the exact name starter/commit.py's
     # own node_hash stub asks the learner to write, so both left the participant stage
     # and the Portal moved with them.
     "ac26-w4-commit-open": "participant",
+    # Issue 537/538 (Issue 543 option B2): the hidden suite grades every checkpoint and
+    # fixtures/generate.py implements encode, centered, decode, success_interval and
+    # first_failure under the exact five names starter/encoding.py's own stubs ask the
+    # learner to write, so both left the participant stage and the Portal moved with them.
+    "ac26-w5-encoding-noise": "participant",
     "ac26-w4-sumcheck-drill": "participant",
     "ac26-w3-schnorr-drill": "participant",
     "ac26-w4-plonk-drill": "participant",

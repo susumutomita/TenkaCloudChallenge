@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
+import { participantPythonFiles } from "./lib/local-play-problems";
 import { parse as parseYaml } from "yaml";
 
 /**
@@ -528,6 +529,238 @@ describe("ac26-w5-cmux-blind-rotation: the verifier is reachable, not only corre
     expect(JSON.parse(read("metadata.json")).runtime.verifyUrl).toBe(
       `http://127.0.0.1:${port}/verify`,
     );
+  });
+});
+
+describe("ac26-w5-cmux-blind-rotation: participant/verifier separation (Issue 543/537)", () => {
+  it("keeps the fixture derivation and hidden suite out of the participant Docker stage", () => {
+    const dockerfile = read("local/Dockerfile");
+    const participantStage = dockerfile.slice(
+      dockerfile.indexOf("FROM base AS participant"),
+      dockerfile.indexOf("FROM base AS verifier"),
+    );
+    expect(participantStage).not.toContain("COPY --chown=lab:lab tests/hidden/");
+    expect(participantStage).not.toContain("COPY --chown=lab:lab verifier/");
+    expect(participantStage).not.toContain("COPY --chown=lab:lab reference/");
+    expect(participantStage).not.toContain("COPY --chown=lab:lab mutation.py");
+    // Issue 543 option B2: `fixtures/` is on the verifier's side of the boundary too.
+    expect(participantStage).not.toContain("COPY --chown=lab:lab fixtures/");
+    expect(participantStage).toContain("COPY --chown=lab:lab tests/public/");
+    expect(participantStage).toContain("COPY --chown=lab:lab participant/");
+    expect(participantStage).toContain("COPY --chown=lab:lab starter/");
+
+    const verifierStage = dockerfile.slice(
+      dockerfile.indexOf("FROM base AS verifier"),
+      dockerfile.indexOf("FROM participant AS author"),
+    );
+    expect(verifierStage).toContain("COPY --chown=lab:lab fixtures/");
+    expect(verifierStage).toContain("COPY --chown=lab:lab tests/hidden/");
+    expect(verifierStage).toContain("COPY --chown=lab:lab verifier/");
+    // The supplied ring, and only that: the Portal server and its adapter must not reach
+    // the grading image, so the whole `participant/` package is never copied.
+    expect(verifierStage).toContain("COPY --chown=lab:lab participant/ring.py");
+    expect(verifierStage).not.toContain("COPY --chown=lab:lab participant/ ");
+    expect(verifierStage).not.toContain("COPY --chown=lab:lab reference/");
+    expect(verifierStage).not.toContain("COPY --chown=lab:lab mutation.py");
+
+    // The author target is `FROM participant`, so dropping fixtures/ above takes it out
+    // of the author image too unless it is copied back -- and mutation.py, the hidden
+    // suite and the seed sweep all need it.
+    const authorStage = dockerfile.slice(dockerfile.indexOf("FROM participant AS author"));
+    expect(authorStage).toContain("COPY --chown=lab:lab fixtures/");
+    expect(authorStage).toContain("COPY --chown=lab:lab tests/hidden/");
+  });
+
+  it("reproduces the original leak: the eight graded functions are no longer in the participant image", () => {
+    // Before Issue 543's option B2, `fixtures/generate.py` shipped in the single
+    // participant stage. It has to implement working `rlwe_add`, `rlwe_sub`, `cmux`,
+    // `monomial_rotate`, `rotate_ciphertext`, `conditional_rotate`, `blind_rotate` and
+    // `blind_rotate_trace` to derive this deployment's rotation table, CMUX rows and
+    // trace -- the same names `starter/cmux.py` asks the learner to write -- so every one
+    // of them was a single import away. The file list below comes from the Dockerfile via
+    // the same derivation `check-answer-reachability.ts` uses, so a COPY that puts
+    // `fixtures/` back fails this test.
+    const repoRoot = join(import.meta.dir, "..");
+    const participantFiles = participantPythonFiles(
+      repoRoot,
+      "challenges/ac26-w5-cmux-blind-rotation",
+    );
+    expect(participantFiles).not.toContain(
+      "challenges/ac26-w5-cmux-blind-rotation/local/fixtures/generate.py",
+    );
+    expect(participantFiles).toContain(
+      "challenges/ac26-w5-cmux-blind-rotation/local/tests/public/test_cmux.py",
+    );
+    expect(participantFiles).toContain("challenges/ac26-w5-cmux-blind-rotation/local/show.py");
+    const graded = [
+      "rlwe_add",
+      "rlwe_sub",
+      "cmux",
+      "monomial_rotate",
+      "rotate_ciphertext",
+      "conditional_rotate",
+      "blind_rotate",
+      "blind_rotate_trace",
+    ];
+    for (const file of participantFiles) {
+      const source = readFileSync(join(repoRoot, file), "utf8");
+      // The one permitted mention is the lazy, function-scoped checkout/author fallback:
+      // never a module-level import, which is what would fail loudly the moment it ran
+      // inside a participant image that carries no `fixtures/` at all.
+      expect(source).not.toMatch(/^from fixtures/m);
+      expect(source).not.toMatch(/^import fixtures/m);
+      // `starter/cmux.py` is the one file that may define these names -- as the empty
+      // stubs the learner fills in. Anywhere else in the participant image, a definition
+      // of the same name is a working implementation of the problem.
+      if (file.includes("/starter/")) continue;
+      for (const name of graded) expect(source).not.toContain(`def ${name}(`);
+    }
+
+    // And the leak is real, not hypothetical. Hand `fixtures.generate` itself to the
+    // hidden suite as if it were the learner's file and every one of the eight
+    // checkpoints passes with nothing written: the whole 300 points for one import.
+    const free = JSON.parse(
+      probe([
+        "import json",
+        "from tests.hidden import check_cmux",
+        "from fixtures import generate",
+        "phases = ('check_combine', 'check_cmux', 'check_constant', 'check_rotate',",
+        "          'check_conditional', 'check_blind', 'check_trace', 'check_transfer')",
+        "print(json.dumps({p: getattr(check_cmux, p)(generate, 'ci-fixed-seed') for p in phases}))",
+      ]),
+    ) as Record<string, string[]>;
+    expect(Object.values(free).every((failures) => failures.length === 0)).toBe(true);
+  });
+
+  it("serves the public half over the verifier's GET /public, and no expected value", () => {
+    const payload = JSON.parse(
+      probe([
+        "import json",
+        "from fixtures.generate import public_payload",
+        `print(json.dumps(public_payload(${JSON.stringify(SEED)})))`,
+      ]),
+    ) as Record<string, unknown>;
+    expect(Object.keys(payload).sort()).toEqual([
+      "accumulator",
+      "branchDemo",
+      "budget",
+      "cases",
+      "healthToken",
+      "noiseBound",
+      "params",
+      "rotationTable",
+      "testInputs",
+    ]);
+    // Every key above was already printed by `make inspect` before the split, or is an
+    // argument the graded functions receive anyway. What must not appear is a value the
+    // hidden suite compares a submission against on a parameter set the submission is
+    // graded on: `transfer` runs under a derived seed, so its parameters -- and the trace
+    // and rotation table derived from them -- are absent here.
+    const transfer = JSON.parse(
+      probe([
+        "import json",
+        "from fixtures.generate import params, public_payload",
+        `print(json.dumps([params(${JSON.stringify(SEED)} + ':transfer'), public_payload(${JSON.stringify(SEED)})['params']]))`,
+      ]),
+    ) as [Record<string, number>, Record<string, number>];
+    expect(transfer[0]).not.toEqual(transfer[1]);
+
+    const verifier = read("local/verifier/server.py");
+    expect(verifier).toContain('path == "/public"');
+    expect(verifier).toContain('path == "/healthz"');
+    // The Portal surface belongs to the participant image, not here.
+    for (const route of ["/api/config", "/api/inspect", "/api/starter", "/api/test", "/api/prepare"]) {
+      expect(verifier).not.toContain(route);
+    }
+  });
+
+  it("prints the same inspect output it printed before the split", () => {
+    // The payload is a boundary move, not a content change: `make inspect` is the
+    // participant's whole view of this problem, and both CASE variants have to survive
+    // it. This runs show.py against the injected payload rather than a live verifier,
+    // which is the same path `participant/server.py` takes after fetching it.
+    for (const testCase of ["1", "0"]) {
+      const injected = spawnSync("python3", ["show.py"], {
+        cwd: LOCAL,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          FLAG_SEED: "a-seed-the-payload-does-not-come-from",
+          CASE: testCase,
+          PUBLIC_EVIDENCE_JSON: probe([
+            "import json",
+            "from fixtures.generate import public_payload",
+            `print(json.dumps(public_payload(${JSON.stringify(SEED)})))`,
+          ]),
+          PYTHONDONTWRITEBYTECODE: "1",
+        },
+        timeout: 120_000,
+      });
+      expect(injected.stderr).toBe("");
+      expect(injected.status).toBe(0);
+      // Printed from the injected payload, not re-derived from FLAG_SEED -- which is a
+      // different seed here precisely so a re-derivation would show up.
+      expect(injected.stdout).toContain("blind rotation, step by step:");
+      expect(injected.stdout).toContain("plaintext model");
+    }
+  });
+
+  it("wires the Workbench to the verifier over an internal-only network", () => {
+    const compose = parseYaml(read("local/docker-compose.yml")) as {
+      services: Record<
+        string,
+        { ports?: string[]; networks?: string[]; environment?: Record<string, string> }
+      >;
+      networks: Record<string, { internal?: boolean }>;
+    };
+    expect(Object.keys(compose.services).sort()).toEqual(["verifier", "workbench"]);
+    // The published port and the /verify URL the platform holds are unchanged.
+    expect(compose.services.workbench.ports).toEqual(["127.0.0.1:18110:18110"]);
+    expect(compose.services.verifier.ports ?? []).toEqual([]);
+    expect(compose.services.workbench.environment?.VERIFIER_URL).toBe(
+      "http://verifier:18142/verify",
+    );
+    expect(compose.services.workbench.environment?.VERIFIER_PUBLIC_URL).toBe(
+      "http://verifier:18142/public",
+    );
+    expect(compose.services.verifier.networks).toEqual(["lab"]);
+    expect(compose.networks.lab.internal).toBe(true);
+  });
+
+  it("fails a checkpoint closed when the verifier cannot be reached", () => {
+    const script = [
+      "import json, sys",
+      "sys.path.insert(0, '.')",
+      "from participant.server import proxy_verdict",
+      "body = {'checkpointId': 'blind', 'submission': 'whatever'}",
+      // An address nothing is listening on, and the empty URL a mis-wired deployment
+      // would hand this process.
+      "print(json.dumps([",
+      "  proxy_verdict(body, 'http://127.0.0.1:1/verify'),",
+      "  proxy_verdict(body, ''),",
+      "]))",
+    ];
+    const verdicts = JSON.parse(probe(script)) as { checkpointId: string; correct: boolean }[];
+    for (const verdict of verdicts) {
+      expect(verdict).toEqual({ checkpointId: "blind", correct: false });
+    }
+  });
+
+  it("keeps the supplied ring readable, with one definition behind it", () => {
+    // `starter/cmux.py` imports the ring on its first line, so it has to survive the
+    // split -- and it has to be the same code the fixtures and the hidden suite use, or a
+    // learner would be graded against arithmetic they cannot run.
+    expect(existsSync(join(LOCAL, "participant", "ring.py"))).toBe(true);
+    for (const path of ["local/starter/cmux.py", "local/reference/cmux.py"]) {
+      expect(read(path)).not.toContain("fixtures.generate");
+    }
+    const definitions = probe([
+      "import json",
+      "from fixtures.generate import ring_mul as viaFixtures, external_product as extFixtures",
+      "from participant.ring import ring_mul as viaParticipant, external_product as extParticipant",
+      "print(json.dumps(viaFixtures is viaParticipant and extFixtures is extParticipant))",
+    ]);
+    expect(JSON.parse(definitions)).toBe(true);
   });
 });
 

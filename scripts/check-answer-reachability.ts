@@ -261,7 +261,49 @@ export function isStubBody(body: string): boolean {
   if (statements.length === 0) return true; // docstring-only body, no statement at all
   if (statements.length > 1) return false;
   const only = statements[0] ?? "";
-  return TRIVIAL_STUB_STATEMENTS.has(only) || /^raise\s+NotImplementedError\b/.test(only);
+  return (
+    TRIVIAL_STUB_STATEMENTS.has(only) ||
+    isTrivialCollectionReturn(only) ||
+    /^raise\s+NotImplementedError\b/.test(only)
+  );
+}
+
+/**
+ * `return (0, 0, 0)` is as much a placeholder as `return 0`, but enumerating every
+ * arity and element type in TRIVIAL_STUB_STATEMENTS does not scale — the list already
+ * missed `ac26-w3-field-inverse`'s `egcd`, which Issue 537 records as a confirmed leak
+ * of 70-145 of its 200 points. That stub sat undetected purely because its placeholder
+ * is a 3-tuple rather than a bare scalar.
+ *
+ * So decide structurally instead: a single `return` of a tuple, list, set, or dict
+ * display whose every element is itself a trivial literal is a placeholder. A
+ * collection holding anything computed (a name, a call, an operator) is not, and stays
+ * substantive — `return (a, b)` and `return [egcd(a, b)]` are real work, not stubs.
+ */
+export function isTrivialCollectionReturn(statement: string): boolean {
+  const match = /^return\s+(.+)$/.exec(statement);
+  if (!match) return false;
+  const expression = (match[1] ?? "").trim();
+
+  const pairs: readonly (readonly [string, string])[] = [
+    ["(", ")"],
+    ["[", "]"],
+    ["{", "}"],
+  ];
+  const pair = pairs.find(([open, close]) => expression.startsWith(open) && expression.endsWith(close));
+  if (!pair) return false;
+
+  const inner = expression.slice(1, -1).trim();
+  if (inner.length === 0) return true; // `return ()` / `return []` / `return {}`
+
+  // Only flat displays: a nested bracket means structure this check should not judge.
+  if (/[([{)\]}]/.test(inner)) return false;
+
+  return inner
+    .split(",")
+    .map((element) => element.trim())
+    .filter((element) => element.length > 0)
+    .every((element) => TRIVIAL_STUB_STATEMENTS.has(`return ${element}`));
 }
 
 // ---------------------------------------------------------------------------

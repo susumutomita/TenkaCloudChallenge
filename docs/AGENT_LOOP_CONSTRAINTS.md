@@ -6,9 +6,11 @@ file before doing anything else in a run.
 
 ## 1. Do not read the answer, then claim you did not
 
-`docs/PLAYABILITY_GOVERNANCE.md` requires a `blind` play, and
-`scripts/check-pr-playability.ts` requires `blind` to be **`true`** — there is no
-"partially blind". So the only way to earn it is to not look.
+Nothing machine-checks this any more. The `playability-gate` workflow, its checker and
+`docs/PLAYABILITY_GOVERNANCE.md` were deleted on 2026-08-27 (owner's call: waiting on a
+human blind play kept Issues open indefinitely). That removes the enforcement, not the
+requirement — it is now entirely on you not to look, and nothing will catch you if you do.
+There is no "partially blind".
 
 **Issue bodies contain solutions.** Issue #448 states the intended fix in prose
 (the technique, the ordering, and the seven mutations). #449, #450, #451, #466 and
@@ -55,82 +57,86 @@ blind spot is what hid `ac26-w1-underconstraint` after #533; Issue #525 conditio
 `topLevelFunctions` now reads past a wrapped `def` signature instead of truncating the
 body at its column-0 closing line. Neither added a finding to the catalog.
 
+#576 is the first widening that did. `isStubBody` enumerated trivial placeholders
+literally, so `return 0` was a stub but `return (0, 0, 0)` was not — which is why
+`ac26-w3-field-inverse` read as implemented and this detector reported it **zero times**
+while #537 recorded it as a confirmed leak of 70–145 of its 200 points. Deciding
+structurally (a lone `return` of a flat display whose every element is a trivial literal)
+took the catalog from 36 to 39 findings and lost none of the previous 36.
+
+Those three findings went into the baseline as entries, which is the one narrow exception
+to "never add an entry" — and it is narrow on purpose:
+
+- the widening must *only* add findings, never remove one (diff the two finding lists and
+  show the `comm` result, as #576 did),
+- every new entry must already belong to a class with a decided, ordered rollout — here
+  `stub-vs-implementation` under #543 B2 — and say so in its `reason`, and
+- the entry must be added to the §5 work list in the same breath, so it is queued work
+  and not a permission.
+
+Anything outside that is the thing §2 forbids. A finding you cannot place in a queued
+class is a finding you fix, not baseline.
+
 ## 3. Do not promote a problem on machine evidence alone
 
-Automated checks are source evidence only. `status: draft` → `ready` and the
-`playtest-verified` label require a real play. PR #479 promoted without one and was
-reverted by PR #481; do not repeat it.
+Automated checks are source evidence only. They show a problem builds, grades and cleans
+up; they never show it is solvable, that the hints hold on every seed, or that a correct
+answer is called correct. PR #479 promoted on machine evidence alone and was reverted by
+PR #481.
 
-When you do record a play, write the `tester` field honestly:
-`Claude — agent play, authorized by @susumutomita 2026-08-26`. The owner authorised an
-agent to play; the governance document still says human-only, so a promotion PR must
-also amend the relevant paragraph of `docs/PLAYABILITY_GOVERNANCE.md`. Do not leave the
-divergence implicit — that gap is what produced the #465 → #476 → rebuild cycle.
+Since 2026-08-27 no gate stops that repeat. So: do not raise `status` to `ready` unless
+you actually solved the problem, blind, from the participant surface. If you did, say so
+in the PR body in your own words — who played, from what starting state, what the run
+produced. If you did not, leave it at `draft` and say why.
 
 ## 4. Merging
 
 The owner authorised self-merge on 2026-08-26 **for this goal in this repository only**.
 Conditions, all required:
 
-- The **required** check (`playability-gate`) must be green, and **no** check may have
-  actually failed. Do not wait for every shard of the ~28-job matrix to report — waiting
-  on non-required checks that are merely still running buys nothing and costs ~10 minutes
-  a PR (owner's call, 2026-08-26).
+- **No** check may have actually failed. `main` has no required status check since
+  2026-08-27, so nothing blocks a merge for you — read the checks yourself. Do not wait
+  for every shard of the ~28-job matrix to report: waiting on checks that are merely
+  still running buys nothing and costs ~10 minutes a PR (owner's call, 2026-08-26).
 - Read the status correctly: an in-progress check reports `conclusion` as the **empty
   string**, not `null`. Treating that as a failure blocks green PRs; treating a real
   failure as "still running" merges broken ones. Filter on
   `select((.conclusion // "") | . != "" and . != "SUCCESS" and . != "SKIPPED" and . != "NEUTRAL")`.
-- Never merge with the required `playability-gate` check failing.
 - Squash only (the branch ruleset permits nothing else).
 - Never pass `--delete-branch` when merging the base of a stacked PR.
-
-### Check the gate before you take a PR out of Draft
-
-`playability-gate` passes unconditionally **while the PR is Draft** — that is the
-whole point of the #476 rebuild. It is re-evaluated on `ready_for_review`, and only
-then does it decide whether the change needs play evidence. So a Draft PR's green
-gate says nothing about whether it can merge, and undrafting to find out leaves a
-**red required check you may not be able to clear**. PR #564 was undrafted on this
-assumption and went red on the next run.
-
-Before undrafting, diff the PR against its base and check whether it touches, for a
-problem whose `metadata.json` says `status: ready`:
-
-- `README.md`, `README.ja.md`, `local/starter/`, `local/workbench/`, `local/portal/`
-  (`PARTICIPANT_FACING_SUBPATHS` in `scripts/check-pr-playability.ts`), or
-- the participant-facing fields of `metadata.json` (`name`, `shortDescription`,
-  `instructions`, `writeup`, any `hints`, any check/flag `label`, the `i18n.en`
-  mirrors, and the three `publicHint`-gated blocks).
-
-If it does, the gate demands an evidence block **and** the `playtest-verified`
-label, and `docs/PLAYABILITY_GOVERNANCE.md` restricts applying that label to human
-maintainers. An agent cannot turn such a PR green on its own: leave it Draft, say on
-the PR what is blocking, and hand the decision to the owner.
-
-Note what is *not* on that list: `local/Dockerfile`, `local/docker-compose.yml`,
-`local/fixtures/`, `local/participant/`, `local/verifier/`, `local/show.py`,
-`local/tests/`, and the problem `Makefile`. A container split confined to those, on a
-`status: draft` problem, does not trip the gate — that is why #562 and #563 merged and
-#564 did not. Do not reach for the difference by dropping a needed README correction
-from a PR: that is evading the gate, not passing it (§2).
 
 ## 5. What is and is not reachable
 
 Blocked on an owner decision — **do not start these**:
 
-- PR #564 (`sha256-bytes-padding` container split). The code is complete and every
-  check is green, but it rewrites the problem's two READMEs and the problem is
-  `status: ready`, so `playability-gate` requires the human-only `playtest-verified`
-  label (§4). Do not undraft it again, and do not apply that label yourself.
-- The same wall stands in front of the rest of that class. `sha256-schedule-logic` and
-  `sha256-compress-digest` carry the last of the detector's `direct-value-comparison`
-  findings, and both are `status: ready` — the split cannot be done there without
-  correcting their READMEs either, so the outcome is another Draft PR waiting on the
-  same decision. Do not start them until #564 is decided.
+- (none right now)
+
+Previously blocked by `playability-gate`, now unblocked: PR #564 (`sha256-bytes-padding`)
+and PR #578 (`sha256-schedule-logic`) were held because they rewrite a `status: ready`
+problem's READMEs and the gate demanded a human `playtest-verified` label. The gate was
+deleted on 2026-08-27, so both are ordinary PRs again — rebase them onto `main` and merge
+when their checks are green. The same wall is gone from `sha256-compress-digest` and the
+rest of that class.
+
+What the gate's removal does **not** change: §1 and §3 still hold. Nothing machine-checks
+them now, so a PR that rewrites a `ready` problem's participant surface should say, in its
+own body, whether anyone actually played it and from what starting state. "The gate is
+gone" is not the same as "it is verified".
 
 Not closable by one agent playing alone — say so rather than producing a weaker artifact:
 
 - #486, #430, #470 are **battles**: 120-minute, multi-team competitions.
+
+  That is not the same as "nothing in them is reachable". #585 landed against #486 and
+  merged: playing the deployed portal as a participant showed two of the four moves were
+  impossible to perform, because the participant surface named a repository file the cloud
+  participant does not have and `HelpDrawer` carried none of the construction. Making a
+  move *performable* is a participant-surface repair an agent can do and verify — there,
+  by reimplementing the construction from the panel text alone and matching it against the
+  shipped prover. **Do not close #486 on it**: the issue asks for a 120-minute competition
+  actually being run, the engine-side half is a separate TenkaCloud PR (#3077), and no
+  live match has been played. So: take the reachable repair, leave the issue open, and say
+  which half is still missing.
 
 Reachable, and the largest block of work left — **do not skip these as "owner's call"**:
 
@@ -158,18 +164,73 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   named `ac26-w5-lwe-rlwe` as outstanding after #572 had merged it — the same staleness
   that this section already records as having cost a run.
 
-  What is left, with the detector's count each — `ac26-w5-cmux-blind-rotation` (8),
-  `ac26-w5-pbs-homnand` (7), `ac26-w5-extract-key-switch` (6),
-  `ac26-w5-encoding-noise` (3), `ac26-w4-commit-open` (1),
-  `ac26-w3-passkey-assertion` (1). Landed so far: `cs-auth-claim-audit` and
+  What is left, with the detector's count each — `ac26-w3-passkey-assertion` (1),
+  `ac26-w3-field-inverse` (1). Landed so far: `cs-auth-claim-audit` and
   `ac26-bridge-experiment` (#562), `ac26-w3-schnorr-drill` (#570), `ac26-w5-lwe-rlwe`
-  (#572), `ac26-w5-rgsw-external` (#573). Catalog count is 36 as of #573. Runs have taken
-  the largest count first, so `ac26-w5-cmux-blind-rotation` is next.
+  (#572), `ac26-w5-rgsw-external` (#573), `ac26-w5-cmux-blind-rotation` (#579),
+  `ac26-w5-pbs-homnand` (#581), `ac26-w4-commit-open` (#582, split out of #578),
+  `ac26-w5-extract-key-switch` (#584), `ac26-w5-encoding-noise` (#586).
+  Catalog count is 12 as of #586, down from 39. Runs have taken the largest count first,
+  so the two singletons are what is left — and both are single findings, so neither
+  says much about its own points until measured (see #582 and #584 below).
 
-  **All six remaining are `status: draft`**, so none of them hits the
-  `playtest-verified` wall of §4 — a B2 split there is a PR an agent can carry
-  to merge on its own, README correction included. Do not drop a needed README
-  correction to stay under the gate (§4); on a `draft` problem it does not fire anyway.
+  #586 is the last of the Week 5 chain and the first in this class with **no supplied
+  half at all**: `fixtures/generate.py` there is entirely seed derivation plus the graded
+  arithmetic, so unlike #581 and #584 nothing had to be carved out into a
+  `participant/*.py`. B2 was the plain move — `fixtures/`, `tests/hidden/` and
+  `verifier/` out of the participant stage, `GET /public` in, `show.py` and the public
+  tests reading the deployment's public half over the network. Its free score is the
+  middle of the range: handing the shipped fixtures module to the hidden suite passed 4
+  of 7 checkpoints, **115 of 200 points**, because that module implements five of the
+  seven names the starter asks for but not `add_noise` or `validate_params` — which is
+  what held `noise`, `transfer` and `validate` shut. Copy #582 for a problem with no
+  supplied half and #581/#584 for one that has.
+
+  #584 is the opposite pole from #582 on the measurement below: its free score was the
+  whole problem. All six names `starter/extract.py` asks for are implemented complete in
+  `fixtures/generate.py` under those exact names, so handing that module straight to the
+  hidden suite passed **all eight checkpoints, 300 of 300 points**, for nothing written —
+  and what the participant image ships after the split (`participant/fhe.py`) defines none
+  of the six, so the same probe scores 0. That is the range this class spans: 0/300 at
+  #582, 70/300 at #581, 300/300 here. It is why the rule is to measure per problem rather
+  than to infer from the finding count.
+
+  #582 is also the first in this class whose measured free score was **zero**. Handing
+  the shipped fixtures module straight to the hidden suite scored 0 of 8 checkpoints, and
+  so did the starter with only its `node_hash` stub delegated to the shipped same-named
+  implementation — every checkpoint still needed the rest of the file. What the single
+  stage actually handed over there was the hidden checker's own assertions, plus one of
+  the three functions the starter asks for. The finding count (1) does not scale with the
+  points at risk in either direction: measure it per problem, and do not describe a split
+  as recovering points you have not measured.
+
+  `ac26-w3-field-inverse` and `ac26-w5-encoding-noise`'s last two findings were not new
+  work landing on this list — #576 only made them **visible** (§2).
+  `ac26-w3-field-inverse` is the `egcd` placeholder tuple; `ac26-w5-encoding-noise` went
+  3 → 5 with `first_failure` and `success_interval`, the same class it was already listed
+  for. So the catalog count rose while nothing got worse, which is the shape to expect
+  whenever a rule stops being blind: never report a rise as a regression, or a fall as a
+  closure.
+
+  **Both remaining are `status: draft`.** Since the gate's removal that no longer changes
+  what an agent may merge, but it still changes what the PR body has to say: a `draft`
+  problem carries no claim that anyone played it, so a split there needs no play evidence
+  — only an honest note that none was gathered. Never drop a needed README correction to
+  make a PR look smaller.
+
+  `ac26-w5-pbs-homnand` (#581) is worth reading before the next one, because it is the
+  first in this class whose supplied half was not already a separate file. Five earlier
+  Week 5 problems' machinery lived inside `fixtures/generate.py` alongside the graded
+  pipeline, so B2 there meant splitting that file along the line the problem already drew
+  (`participant/fhe.py` supplied, `fixtures/generate.py` graded and re-exporting it) rather
+  than moving an existing module. #584 copied that shape verbatim for
+  `ac26-w5-extract-key-switch`, down to the file name, and `ac26-w5-encoding-noise` is the
+  same again — copy #581 or #584 rather than designing a third one. It is also the first
+  where handing
+  `fixtures.generate` straight to the hidden suite does **not** pass everything — the
+  artifacts carry an envelope the bare functions do not attach, so the measured free score
+  was 2 of 8 checkpoints, not all of them. Measure it per problem; do not carry #573's
+  "the whole problem for one import" sentence forward without checking it.
 
   Two things that stay true regardless: the count is a **lower bound** (§2), so never
   report "N fewer findings" as if it were the closure; and prove the boundary per
@@ -204,6 +265,24 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   (`asm-worst-case-latency`) may be blocked by network policy. That is not a defect in
   the problem — the same job succeeds in CI. If you substitute a host-side service, say
   so explicitly in the report.
+- **Actions itself can be the failure.** Between 15:01 and ~16:35 on 2026-08-26 no job in
+  this repository was picked up by a runner. Two things that looked like defects were not:
+  - A run whose jobs never started is reported `conclusion: failure` while **every job
+    says `cancelled`** — they wait ~15 minutes for a runner and are then killed. Read the
+    jobs, never the run's conclusion, before calling a red run a test failure. `main`'s
+    run for the #579 merge looked like a broken merge and was thirteen cancelled jobs.
+  - A required check can land in `startup_failure`, and that state is a dead end: the
+    API refuses `rerun` (`403 This workflow run cannot be retried`), a companion run
+    stuck in `queued` refuses both `cancel` (`409 Cannot cancel a workflow run that has
+    not been queued yet`) and `rerun` (`403 This workflow is already running`), and a
+    `converted_to_draft` → `ready_for_review` toggle did **not** re-fire it even though
+    the workflow listed both events. What recovers such a PR is a new commit
+    (`synchronize`). Do not reach for an empty one — §4 forbids it and it is not needed:
+    an incident worth recording here is itself the commit, which is how this entry got
+    written.
+
+  Wait for the outage to pass rather than working around it. Nothing merges while it
+  lasts, and a green check obtained during it says nothing.
 
 ## 7. Reporting
 
