@@ -18,10 +18,24 @@ name: ci
 permissions:
   contents: read
 
+# `push:` is scoped to main on purpose. A bare `push:` fires on every branch, so a
+# branch that also has a pull request ran this entire workflow TWICE for the same commit
+# -- once for the push event and once for the pull_request event. Measured on
+# 907bd4b6 (PR #547): 12 jobs and ~41 runner-minutes, charged twice, on 34 of the last
+# 100 branch pushes. Scoping to main keeps the post-merge run and drops the duplicate.
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
+
+# Superseding a pull request's own earlier run is safe and is most of the saving: a
+# force-push or a quick follow-up commit used to leave the previous full matrix running
+# to completion. Pushes to main are NOT cancelled -- each merge commit's run is the
+# record for that commit, and two merges landing close together must both finish.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   suite:
