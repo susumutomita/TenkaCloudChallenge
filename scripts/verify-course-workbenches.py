@@ -107,6 +107,12 @@ SPLIT_PORTAL_MODULES = {
     # the verifier now. The supplied Week 5 stack stayed behind in `participant/fhe.py`,
     # which is where the starter and the public tests import it from.
     "ac26-w5-pbs-homnand": "participant.server",
+    # Same option B2 split, same two leaks: `tests/hidden/check_extract.py` grades all
+    # eight checkpoints, and `fixtures/generate.py` implements every one of the six names
+    # `starter/extract.py` asks the learner to write. `show.py` reads `GET /public` from
+    # the verifier now. The supplied TFHE layer stayed behind in `participant/fhe.py`,
+    # which is where the starter and the public tests import it from.
+    "ac26-w5-extract-key-switch": "participant.server",
     # Issue 537/538 (Issue 543 option B2): same move. tests/hidden/check_commit.py
     # grades every checkpoint and fixtures/generate.py implements node_hash under the
     # exact name starter/commit.py's own node_hash stub asks the learner to write, both

@@ -3,7 +3,7 @@
 Used by two things: the mutation suite (which breaks copies of this file and asserts the
 hidden tests catch each break), and the `reference-test` CI target.
 
-Everything through blind rotation is supplied by `fixtures.generate`. This problem is the
+Everything through blind rotation is supplied by `participant.fhe`. This problem is the
 two steps that come after it. Nothing here hardcodes a degree, a dimension, a base or a
 level count, because `transfer` runs the whole file under parameters derived from a
 different seed.
@@ -11,7 +11,7 @@ different seed.
 
 from __future__ import annotations
 
-from fixtures.generate import decompose, rlwe_phase
+from participant.fhe import decompose, rlwe_phase
 
 
 # ---------------------------------------------------------------------------

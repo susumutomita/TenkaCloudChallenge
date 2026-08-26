@@ -1,4 +1,24 @@
-"""POST /verify — the scoring seam. Loopback only, stdlib only.
+"""POST /verify — the scoring seam. Compose-internal only, stdlib only.
+
+Issue 543/537: this used to be the same process that also served the Participant Portal's
+config, inspect, starter, public-test and prepare endpoints, in the single Docker stage a
+learner's own `make build` produced -- so `tests/hidden/check_extract.py` shipped in the
+learner's own image alongside it, and all eight checkpoints are graded by running that
+suite. Option B2 moved `fixtures/` to this side of the boundary as well: it has to
+implement `phase_coefficient`, `extract_sample`, `extract_trace`, `decompose_mask`,
+`key_switch` and `domain_report` to derive a deployment's trace, switched sample and domain
+report, and those are every one of the six names `starter/extract.py` asks the learner to
+write. The Portal-facing surface now lives in `participant/server.py`, in a separate image
+(see ../Dockerfile) that this process's own container never builds; this file, `fixtures/`
+and `tests/hidden/` are reachable only over the Compose-internal network (see
+../docker-compose.yml), never from the participant container's filesystem.
+
+The supplied half did not move: `participant/fhe.py` is copied into both stages, because
+the arithmetic a learner builds on and the one they are graded against have to be the same
+code.
+
+`GET /public` below is what the participant image reads instead of importing
+`fixtures.generate`.
 
 Security contract (docs/curricula/advanced-cryptography-2026/TEMPLATE.md §/verify):
   - `checkpointId` is required and is echoed back verbatim. The platform fails closed
@@ -25,8 +45,11 @@ import sys
 import tempfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from fixtures.generate import public_payload
 
 ROOT = Path(__file__).resolve().parents[1]
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
@@ -148,67 +171,48 @@ def evaluate(checkpoint_id: str, submission: object) -> bool:
         return _run_submission(submission, CODE_CHECKPOINTS[checkpoint_id], seed)
     return False
 
-# BEGIN GENERATED PORTAL EDITOR API
-from verifier.workbench import PortalEditorSupport
-
-_WORKBENCH = PortalEditorSupport(
-    root=ROOT,
-    seed=SEED,
-    problem_id='ac26-w5-extract-key-switch',
-    problem_name='同じ数を、別の鍵の言葉で言う',
-    problem_name_en="Say the same number in another key's words",
-    description='blind rotation が残した多項式から 1 係数を LWE sample として取り出し、 別の鍵・別の次元へ移す。 どちらの段階でも復号は 1 回も起きない。',
-    description_en='Take one coefficient out of what blind rotation left behind as an LWE sample, then move it to a different key and dimension. Nothing is decrypted at either step.',
-    checkpoint_labels={'phase': '保つべき数を書き下す', 'extract': '1 係数を取り出す', 'trace': '対応を見せる', 'decompose': 'mask を桁へ分解する', 'switch': '別の鍵へ移す', 'domains': 'どの鍵の話かを分類する', 'endtoend': '3 通りが同じ答えになる', 'transfer': '見たことのない設定で成立させる'},
-    checkpoint_labels_en={'phase': 'Write down the number to preserve', 'extract': 'Take one coefficient out', 'trace': 'Show the mapping', 'decompose': 'Break the mask into digits', 'switch': 'Move it to another key', 'domains': 'Classify which key it is about', 'endtoend': 'Three routes, one answer', 'transfer': 'Hold up in a setting you have not seen'},
-    submitted_files=('extract.py',),
-    code_checkpoints=('phase', 'extract', 'trace', 'decompose', 'switch', 'domains', 'endtoend', 'transfer'),
-    checkpoints=('phase', 'extract', 'trace', 'decompose', 'switch', 'domains', 'endtoend', 'transfer'),
-    max_body_bytes=MAX_BODY_BYTES,
-    run_timeout_seconds=RUN_TIMEOUT_SECONDS,
-    max_output_bytes=MAX_OUTPUT_BYTES,
-    limit_fn=_limits,
-)
-# END GENERATED PORTAL EDITOR API
 
 class Handler(BaseHTTPRequestHandler):
-    """Serve the Portal editor API and preserve the existing /verify contract."""
+    """Serve /verify and the public half. The Portal editor API is not here.
+
+    It moved to `participant/server.py`, which runs in the image a learner builds. This
+    process is reachable only over the Compose-internal network.
+    """
 
     timeout = REQUEST_TIMEOUT_SECONDS
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's API
-        from urllib.parse import urlsplit
-
-        path = urlsplit(self.path).path
-        if path == "/api/config":
-            self._respond(200, _WORKBENCH.config_payload())
+        parts = urlsplit(self.path)
+        if parts.path == "/healthz":
+            self._respond(200, {"ok": True})
             return
-        if path == "/api/inspect":
-            self._respond(200, _WORKBENCH.inspect_payload())
-            return
-        if path == "/api/starter":
-            self._respond(200, _WORKBENCH.starter_payload())
+        if parts.path == "/public":
+            # The public half of the deployment, and only that: the values `show.py` has
+            # always printed. Issue 543's option B2 -- `fixtures/` does not ship in the
+            # participant image, so this route is where `show.py` gets them from.
+            # `fixtures.generate.public_payload` is the one place that decides what counts
+            # as public; no checkpoint's expected value is derived there.
+            #
+            # `index` selects which coefficient of the ring the demonstration extracts,
+            # because `make inspect INDEX=...` has always been able to ask for any of them.
+            # `public_payload` clamps it the way `show.py` clamped it before the split, so a
+            # malformed query returns the default view rather than an error.
+            query = parse_qs(parts.query)
+            try:
+                index = int((query.get("index") or ["0"])[0])
+            except ValueError:
+                index = 0
+            self._respond(200, public_payload(SEED, index))
             return
         self._respond(404, {"error": "not found"})
 
     def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's API
-        from urllib.parse import urlsplit
-
         path = urlsplit(self.path).path.rstrip("/") or "/"
-        if path not in ("/verify", "/api/test", "/api/prepare"):
+        if path != "/verify":
             self._respond(404, {"error": "not found"})
             return
         body = self._read_json_body()
         if body is None:
-            return
-        if path == "/api/test":
-            self._respond(200, _WORKBENCH.run_public_tests(body.get("files")))
-            return
-        if path == "/api/prepare":
-            self._respond(
-                200,
-                _WORKBENCH.prepare_submissions(body.get("files"), body.get("manual")),
-            )
             return
 
         checkpoint_id = body.get("checkpointId")
@@ -221,7 +225,10 @@ class Handler(BaseHTTPRequestHandler):
                 },
             )
             return
-        submission = _WORKBENCH.unwrap_submission(checkpoint_id, body.get("submission"))
+        # Every checkpoint here is a code checkpoint, so a submission is the file itself --
+        # `participant/server.py`'s Portal adapter is what formats it, and this process
+        # never sees a direct-answer envelope to unwrap.
+        submission = body.get("submission")
         try:
             correct = evaluate(checkpoint_id, submission)
         except Exception:  # noqa: BLE001 - a broken checkpoint must fail closed
@@ -276,15 +283,14 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(content)
 
 def main() -> None:
-    port = int(os.environ.get("VERIFY_PORT", "18111"))
-    # Bind every interface *inside the container*, not the container's loopback. A published
-    # port is forwarded to the container's bridge address, so a server listening only on
-    # 127.0.0.1 inside the container accepts nothing from outside it — the connection is
-    # opened and closed without a response, and the platform can never score the problem.
+    port = int(os.environ.get("VERIFY_PORT", "18144"))
+    # Bind every interface *inside the container*, not the container's loopback: the
+    # Workbench reaches this process over the Compose-internal network, which arrives on the
+    # container's bridge address rather than on 127.0.0.1.
     #
-    # The loopback restriction that matters is on the host, and it lives in
-    # docker-compose.yml, which publishes `127.0.0.1:<port>:<port>`. Nothing outside this
-    # machine can reach the verifier either way.
+    # This port is not published at all (see ../docker-compose.yml). The `lab` network is
+    # `internal: true`, so nothing on the host or beyond it can open a connection here --
+    # only the Workbench container can.
     HTTPServer(("0.0.0.0", port), Handler).serve_forever()  # noqa: S104 - see above
 
 

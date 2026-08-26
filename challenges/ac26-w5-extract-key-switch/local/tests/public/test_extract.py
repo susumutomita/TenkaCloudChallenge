@@ -21,7 +21,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "starter"))
 
 import extract as submission  # noqa: E402
-from fixtures.generate import (  # noqa: E402
+from participant.fhe import (  # noqa: E402
     key_id,
     lwe_decrypt,
     params,
@@ -50,7 +50,7 @@ def check_extraction_preserves_the_last_coefficient() -> str:
     sample = submission.extract_sample(par, accumulator, last)
     got = lwe_decrypt(par, ring_key, {"mask": tuple(sample["mask"]), "body": sample["body"]})
     want = submission.phase_coefficient(par, ring_key, accumulator, last)
-    from fixtures.generate import decode
+    from participant.fhe import decode
 
     if got != decode(par, want):
         return f"the extracted sample decrypts to {got}, the coefficient says {decode(par, want)}"

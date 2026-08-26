@@ -15,7 +15,7 @@ Blind rotation leaves an RLWE ciphertext. Two things still have to happen before
 useful: one coefficient of it has to come out as an LWE sample, and that sample has to move
 to a different key and a different dimension — **without changing what it says**.
 
-You are not rebuilding anything before that. `fixtures.generate` supplies the ring, RLWE,
+You are not rebuilding anything before that. `participant.fhe` supplies the ring, RLWE,
 RGSW, the external product, CMUX and the rotation loop, all correct, and the accumulator you
 work on is a real blind-rotation output with all the noise that implies.
 
@@ -138,10 +138,21 @@ original, and no function name, fixture, or skeleton is taken from the official 
 
 ## Assurance scope
 
-Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
-daemon, and the image, so nothing inside that image is hidden from you: `reference/` and
-`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than
-out of reach.
+Local mode is **self-paced, honor-system verification**. You own the machine and the Docker
+daemon, so nothing you build is hidden from you: `reference/` and `tests/hidden/` are not
+bind-mounted, which keeps them out of your git checkout rather than out of reach.
+
+What the deployment does do is stop handing them to you by accident. It runs two
+containers. The Workbench you talk to carries the starter, the public tests,
+`participant/fhe.py` — the supplied TFHE layer — and `show.py`; the grading image carries
+`fixtures/`, `tests/hidden/` and the verifier, publishes no port, and sits on a Docker
+network with no gateway. `show.py` reads this deployment's parameters, extraction trace and
+switched sample from that verifier's `GET /public`, which serves the demonstration and never
+a checkpoint's expected value — `fixtures/generate.py` has to implement `phase_coefficient`,
+`extract_sample`, `extract_trace`, `decompose_mask`, `key_switch` and `domain_report` in
+order to derive them, and those are every one of the names `starter/extract.py` asks you to
+write, so it is not in the image you run
+([#543](https://github.com/susumutomita/TenkaCloudChallenge/issues/543)).
 
 What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
 a checkpoint can only credit the id it echoes, results do not leak expected values, and the
