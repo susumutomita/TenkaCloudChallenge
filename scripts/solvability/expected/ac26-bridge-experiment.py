@@ -11,7 +11,11 @@ EXPECTED = {
     # container was started. It is listed so the sweep records that on purpose.
     "environment": lambda server, seed: server.health_token(seed),
     "predict": _predict,
-    "first-broken": lambda server, seed: server.corrupted_trace(seed)[2],
+    # Issue 543/537: `corrupted_trace` no longer returns the broken index at all (it
+    # ships to the participant image; see fixtures/generate.py). `first_broken_index`
+    # -- imported into `verifier.server`'s namespace from `verifier/expected.py`, which
+    # does not ship there -- is the only place that derivation still exists.
+    "first-broken": lambda server, seed: server.first_broken_index(seed),
 }
 
 
@@ -21,9 +25,12 @@ def _public_fields(server, seed):
 
 
 def _corrupt_fields(server, seed):
-    case, trace, _broke = server.corrupted_trace(seed)
-    fields = case.as_dict()
-    fields["traceLength"] = len(trace)
+    # `server.public_payload` is the same dict the Workbench fetches from the verifier
+    # at `GET /public` and `show.py` prints; `trace` itself is dropped (as before) so
+    # the visibility check runs over the same small field set as the other checkpoints.
+    payload = server.public_payload(seed)["firstBroken"]
+    fields = {key: value for key, value in payload.items() if key != "trace"}
+    fields["traceLength"] = len(payload["trace"])
     return fields
 
 

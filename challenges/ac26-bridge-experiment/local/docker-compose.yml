@@ -1,28 +1,108 @@
-# Every port binds to 127.0.0.1 only. This problem has no network surface for the
-# learner to attack; the whole challenge is local reasoning.
+# The Workbench is reachable only through a host-loopback publish path and has no
+# masqueraded route to the outside world. The verifier is not published at all: it is
+# reachable only from the Workbench, over the internal `lab` network, which carries no
+# gateway -- `workshop-host` exists only because Docker cannot publish a port from an
+# internal-only network.
+#
+# Issue 543/537: this used to be a single service that was both the participant-facing
+# Portal and the answer-checking verifier, so `first-broken`'s expected value (then a
+# plain function in `fixtures/generate.py`) shipped in the same image a learner's own
+# `make build` produced. Splitting the two services was not enough by itself:
+# `fixtures/` stayed reachable from the Workbench for `show.py` and the public tests, so
+# a learner still had the seed-keyed generator one `import` away. The Workbench fetches
+# its public evidence from the verifier's `GET /public` instead (see
+# participant/server.py, show.py). This is a plain, non-general two-service split (see
+# cs-transaction-visibility-audit / cs-cache-generation-fence / cs-async-result-binding
+# for the same shape elsewhere in this catalog) -- not a new mechanism.
 name: ac26-bridge-experiment
 services:
+  workbench:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # The participant stage, explicitly. Without this, compose builds the LAST
+      # stage -- `author` -- which carries reference/ and mutation.py.
+      target: participant
+    environment:
+      FLAG_SEED: ${FLAG_SEED:?FLAG_SEED must be provided by the platform}
+      WORKBENCH_PORT: "18091"
+      VERIFIER_URL: http://verifier:18092/verify
+      # Public evidence for show.py and the public tests, which do not go through
+      # participant/server.py at all when run via `make inspect` / `make test` -- see
+      # the Makefile. Kept as an explicit second variable rather than derived only
+      # inside participant/server.py, since those two entry points need it too.
+      VERIFIER_PUBLIC_URL: http://verifier:18092/public
+    ports:
+      - "127.0.0.1:18091:18091"
+    depends_on:
+      verifier:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - "/tmp:rw,noexec,nosuid,size=64m,uid=10001,gid=10001"
+    cap_drop:
+      - ALL
+    security_opt:
+      - "no-new-privileges:true"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:18091/api/config', timeout=2).read()",
+        ]
+      interval: "2s"
+      timeout: "3s"
+      retries: 20
+      start_period: "2s"
+    mem_limit: "1g"
+    pids_limit: 128
+    cpus: "1.0"
+    restart: "no"
+    networks:
+      - lab
+      - workshop-host
+
   verifier:
     build:
       context: .
       dockerfile: Dockerfile
-      # The participant stage, explicitly. Without this, compose builds the
-      # LAST stage -- `author` -- which carries reference/ and mutation.py.
-      target: participant
+      target: verifier
     environment:
       FLAG_SEED: ${FLAG_SEED:?FLAG_SEED must be provided by the platform}
-      VERIFY_PORT: "18091"
-    ports:
-      - "127.0.0.1:18091:18091"
+      VERIFY_PORT: "18092"
     read_only: true
     tmpfs:
-      - /tmp
-    security_opt:
-      - no-new-privileges:true
+      - "/tmp:rw,noexec,nosuid,size=64m,uid=10001,gid=10001"
     cap_drop:
       - ALL
-    # The rlimits in verifier/server.py bound the submission's child process. These bound
-    # the verifier itself, which is the process that would still be standing if a
-    # submission found a way past them.
-    mem_limit: 1g
+    security_opt:
+      - "no-new-privileges:true"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:18092/healthz', timeout=2).read()",
+        ]
+      interval: "2s"
+      timeout: "3s"
+      retries: 20
+      start_period: "2s"
+    mem_limit: "1g"
     pids_limit: 128
+    cpus: "1.0"
+    restart: "no"
+    networks:
+      - lab
+
+networks:
+  lab:
+    internal: true
+  workshop-host:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+      com.docker.network.bridge.host_binding_ipv4: "127.0.0.1"
