@@ -12,6 +12,7 @@ Run with `make test`, or press "run the public tests" in the Portal editor.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -23,9 +24,45 @@ sys.path.insert(0, str(ROOT))
 
 import schnorr_drill as drill  # noqa: E402
 
-from fixtures.generate import LINES, setting  # noqa: E402
-
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
+
+
+def _public_payload() -> dict:
+    """This deployment's public numbers, from the verifier rather than from `fixtures/`.
+
+    Issue 543 option B2: this file used to `from fixtures.generate import LINES,
+    setting`. `fixtures/generate.py` does not ship in the `participant` Docker stage any
+    more (see ../../Dockerfile), because it must define working `ec_add`, `ec_mul` and
+    `order_of` -- the drill's own subject -- to derive these numbers. An import from here
+    handed over `add-points`, `double` and `order` outright, and with them the three
+    lines built on the order. `PUBLIC_EVIDENCE_JSON` is set when the Portal already
+    fetched the payload; `VERIFIER_PUBLIC_URL` is fetched directly otherwise.
+    """
+    injected = os.environ.get("PUBLIC_EVIDENCE_JSON")
+    if injected:
+        return json.loads(injected)
+    verifier_public_url = os.environ.get("VERIFIER_PUBLIC_URL")
+    if verifier_public_url:
+        from urllib.request import urlopen
+
+        with urlopen(verifier_public_url, timeout=10) as response:  # noqa: S310
+            return json.loads(response.read().decode("utf-8"))
+    # Resolves only against a checkout or the verifier/author stage, where `fixtures/`
+    # is on disk; never inside a built `participant` image.
+    from fixtures.generate import public_payload
+
+    return public_payload(SEED)
+
+
+def _points_restored(payload: dict) -> dict:
+    """The payload's public dict with `G`, `Q`, `P1`, `G2` back as tuples (JSON has no
+    tuple, and the drill's own functions compare and print points)."""
+    point_keys = frozenset(payload.get("pointKeys", ()))
+    return {
+        key: (tuple(value) if key in point_keys else value)
+        for key, value in payload["public"].items()
+    }
+
 
 # The lecture's curve, y^2 = x^3 + x + 6 (mod 11), generator P = (2, 7) of order 13.
 LECTURE = dict(p=11, a=1, b=6, G=(2, 7), n=13)
@@ -66,7 +103,9 @@ def part1() -> bool:
 
 
 def part2() -> None:
-    pub = setting(SEED)["public"]
+    payload = _public_payload()
+    pub = _points_restored(payload)
+    lines = payload["lines"]
     p, a, G = pub["p"], pub["a"], pub["G"]
     calls = {
         "field-neg": lambda: drill.field_neg(pub["t"], p),
@@ -90,7 +129,7 @@ def part2() -> None:
     }
     print()
     print("== your values on THIS deployment (paste each into its answer field) ==")
-    for line in LINES:
+    for line in lines:
         try:
             value = calls[line]()
         except Exception as error:  # noqa: BLE001 - show the learner what broke

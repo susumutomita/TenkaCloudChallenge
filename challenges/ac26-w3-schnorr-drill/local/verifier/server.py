@@ -29,6 +29,11 @@ inside the learner's own container. That Portal-facing surface now lives in
 container never builds; this file and its `verifier/expected.py` import are reachable
 only over the Compose-internal network (see ../docker-compose.yml), never from the
 participant container's filesystem.
+
+Issue 543's option B2 moved `fixtures/` to this side of the boundary as well, because
+deriving the deployment's public numbers needs working `ec_add` / `ec_mul` / `order_of`
+-- the drill's own subject. `GET /public` below is what the participant image reads
+instead of importing them.
 """
 
 from __future__ import annotations
@@ -48,7 +53,7 @@ from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fixtures.generate import GRADED, LINES, normalize_answer
+from fixtures.generate import GRADED, LINES, normalize_answer, public_payload
 from verifier.expected import expected_for
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -235,8 +240,19 @@ class Handler(BaseHTTPRequestHandler):
     timeout = REQUEST_TIMEOUT_SECONDS
 
     def do_GET(self) -> None:  # noqa: N802 - stdlib handler API
-        if urlsplit(self.path).path == "/healthz":
+        path = urlsplit(self.path).path
+        if path == "/healthz":
             self._respond(200, {"ok": True})
+            return
+        if path == "/public":
+            # The public half of the deployment, and only that: the numbers a learner is
+            # shown anyway. Issue 543's option B2 -- `fixtures/` does not ship in the
+            # participant image, so this route is where `show.py` and the public tests
+            # get those numbers from. `fixtures.generate.public_payload` is the one
+            # place that decides what counts as public; the order `n`, the attack
+            # signer's secret and every graded line's value are derived only in
+            # `verifier/expected.py` and never reach this response.
+            self._respond(200, public_payload(SEED))
             return
         self._respond(404, {"error": "not found"})
 

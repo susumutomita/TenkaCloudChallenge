@@ -19,13 +19,19 @@ This module hands back the PUBLIC state only (what ``show.py`` prints). It no lo
 computes or exports the twelve lines' expected values as their own callable result:
 before #537, that dict shipped here and could be read back with one import, which was
 the entire drill for free. ``verifier/expected.py`` recomputes each checkpoint's value
-from this public state at grading time instead -- but read that module's own docstring
-before assuming this closes the leak: it does not. This module and the participant-
-facing tests no longer point at the answer by accident; a participant who deliberately
-imports ``verifier.expected`` instead still gets it, because this single-stage drill
-template has no isolated verifier container to keep it out of. See #537 and
-scripts/ac26-w3-schnorr-drill.test.ts for the regression
-test pinning the values this move must not change.
+from this public state at grading time instead.
+
+Issue 543/537, second half: this module does not ship in the ``participant`` Docker
+stage any more either (see ../Dockerfile). Moving the expected values out was not
+enough, because the drill *is* ``ec_add`` / ``ec_mul`` / ``order_of`` and this module
+needs working implementations of exactly those to derive the deployment's public
+numbers -- so shipping it handed a learner ``add-points``, ``double`` and ``order``
+outright for the price of one import, and with ``order_of`` the three lines built on
+the order, all with no comparison anywhere near them. ``show.py`` and the public tests
+now read :func:`public_payload` from the verifier's ``GET /public`` over the
+Compose-internal network instead. See #543 (option B2) and
+scripts/ac26-w3-schnorr-drill.test.ts for the regression test pinning both the values
+this move must not change and the stage the file may not re-enter.
 """
 
 from __future__ import annotations
@@ -202,6 +208,41 @@ def assignments(seed: str) -> str:
         f"x2, r2, e2p = {pub['x2']}, {pub['r2']}, {pub['e2p']}",
     ]
     return "\n".join(lines)
+
+
+#: The keys of :func:`setting`'s ``public`` dict whose value is a curve point. JSON has
+#: no tuple, so a payload that has been through the verifier's ``GET /public`` hands
+#: these back as two-element lists; consumers turn them back into tuples with this list
+#: rather than restating it, so adding a public point cannot leave one of them behind.
+PUBLIC_POINT_KEYS = ("G", "Q", "P1", "G2")
+
+
+def public_payload(seed: str) -> dict:
+    """The public half of this deployment, JSON-safe, for the participant image.
+
+    This is everything ``show.py`` prints and everything the public tests need to call
+    the learner's twelve functions on this deployment's numbers -- and nothing else.
+    None of the eight graded lines' values are in here, and neither is the order ``n``
+    of ``G`` (line 6 is to count it) or the attack signer's secret (line 11 is to
+    extract it). Both are derived only in ``verifier/expected.py``, which lives in the
+    verifier image alone.
+
+    Serving this over ``GET /public`` is what lets ``fixtures/`` stay out of the
+    participant stage: the values below are the ones a learner is shown anyway, while
+    the ``ec_add`` / ``ec_mul`` / ``order_of`` implementations that produce them -- the
+    same names ``starter/schnorr_drill.py`` asks the learner to write -- stay on the
+    verifier side of the boundary.
+    """
+    public = setting(seed)["public"]
+    return {
+        "public": {
+            key: (list(value) if key in PUBLIC_POINT_KEYS else value)
+            for key, value in public.items()
+        },
+        "pointKeys": list(PUBLIC_POINT_KEYS),
+        "assignments": assignments(seed),
+        "lines": list(LINES),
+    }
 
 
 def normalize_answer(line: str, raw: object):

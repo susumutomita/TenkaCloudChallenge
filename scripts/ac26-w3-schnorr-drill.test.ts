@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
 import { parse as parseYaml } from "yaml";
+import { participantPythonFiles } from "./lib/local-play-problems";
 
 /**
  * ac26-w3-schnorr-drill is a drill: twelve lines typed into the learner's own Python, eight
@@ -167,6 +168,8 @@ describe("ac26-w3-schnorr-drill: participant/verifier separation (Issue 543/537)
     expect(participantStage).not.toContain("COPY --chown=lab:lab verifier/");
     expect(participantStage).not.toContain("COPY --chown=lab:lab reference/");
     expect(participantStage).not.toContain("COPY --chown=lab:lab mutation.py");
+    // Issue 543 option B2: `fixtures/` is on the verifier's side of the boundary too.
+    expect(participantStage).not.toContain("COPY --chown=lab:lab fixtures/");
     expect(participantStage).toContain("COPY --chown=lab:lab tests/public/");
     expect(participantStage).toContain("COPY --chown=lab:lab participant/");
 
@@ -174,11 +177,131 @@ describe("ac26-w3-schnorr-drill: participant/verifier separation (Issue 543/537)
       dockerfile.indexOf("FROM base AS verifier"),
       dockerfile.indexOf("FROM participant AS author"),
     );
+    expect(verifierStage).toContain("COPY --chown=lab:lab fixtures/");
     expect(verifierStage).toContain("COPY --chown=lab:lab tests/hidden/");
     expect(verifierStage).toContain("COPY --chown=lab:lab verifier/");
     expect(verifierStage).not.toContain("COPY --chown=lab:lab participant/");
     expect(verifierStage).not.toContain("COPY --chown=lab:lab reference/");
     expect(verifierStage).not.toContain("COPY --chown=lab:lab mutation.py");
+
+    // The author target is `FROM participant`, so dropping fixtures/ above takes it out
+    // of the author image too unless it is copied back -- and mutation.py, the hidden
+    // suite and the 2000-seed sweep all need it.
+    const authorStage = dockerfile.slice(dockerfile.indexOf("FROM participant AS author"));
+    expect(authorStage).toContain("COPY --chown=lab:lab fixtures/");
+  });
+
+  it("reproduces the original leak: the drill's own functions are no longer in the participant image", () => {
+    // Before Issue 543's option B2, `fixtures/generate.py` shipped in the participant
+    // stage. It has to define working `ec_add`, `ec_mul` and `order_of` to derive this
+    // deployment's public numbers -- the same names `starter/schnorr_drill.py` asks the
+    // learner to write -- so `add-points`, `double` and `order` were one import away,
+    // with no comparison anywhere near them. The file list below comes from the
+    // Dockerfile via the same derivation `check-answer-reachability.ts` uses, so a COPY
+    // that puts `fixtures/` back fails this test.
+    const repoRoot = join(import.meta.dir, "..");
+    const participantFiles = participantPythonFiles(repoRoot, "challenges/ac26-w3-schnorr-drill");
+    expect(participantFiles).not.toContain(
+      "challenges/ac26-w3-schnorr-drill/local/fixtures/generate.py",
+    );
+    expect(participantFiles).toContain(
+      "challenges/ac26-w3-schnorr-drill/local/tests/public/test_schnorr_drill.py",
+    );
+    expect(participantFiles).toContain("challenges/ac26-w3-schnorr-drill/local/show.py");
+    for (const file of participantFiles) {
+      const source = readFileSync(join(repoRoot, file), "utf8");
+      // The one permitted mention is the lazy, function-scoped checkout/author
+      // fallback: never a module-level import, which is what would fail loudly the
+      // moment it ran inside a participant image that carries no `fixtures/` at all.
+      expect(source).not.toMatch(/^from fixtures/m);
+      expect(source).not.toMatch(/^import fixtures/m);
+      // `starter/schnorr_drill.py` is the one file that may define these names -- as the
+      // empty stubs the learner fills in. Anywhere else in the participant image, a
+      // definition of the same name is a working implementation of the drill.
+      if (file.includes("/starter/")) continue;
+      expect(source).not.toContain("def ec_add");
+      expect(source).not.toContain("def ec_mul");
+      expect(source).not.toContain("def order_of");
+    }
+
+    // And the leak is real, not hypothetical: with fixtures/ on the path those three
+    // functions still reproduce three graded checkpoints exactly.
+    const probe = [
+      "import json, sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import ec_add, order_of, setting",
+      "from verifier.expected import expected_for",
+      "pub = setting(sys.argv[1])['public']",
+      "G, Q, p, a = tuple(pub['G']), tuple(pub['Q']), pub['p'], pub['a']",
+      "exp = expected_for(sys.argv[1])",
+      "print(json.dumps({",
+      "  'add-points': list(ec_add(G, Q, p, a)) == list(exp['add-points']),",
+      "  'double': list(ec_add(G, G, p, a)) == list(exp['double']),",
+      "  'order': order_of(G, p, a) == exp['order'],",
+      "}))",
+    ].join("\n");
+    const result = python(["-c", probe, SEED]);
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "{}")).toEqual({
+      "add-points": true,
+      double: true,
+      order: true,
+    });
+  });
+
+  it("serves the public half over GET /public, and only the public half", () => {
+    const hiddenServer = read("local/verifier/server.py");
+    expect(hiddenServer).toContain("/public");
+    expect(hiddenServer).toContain("public_payload");
+
+    // The payload must be exactly the surface show.py already printed before the split:
+    // adding a field here is how a graded value would slip across the boundary. A
+    // value-by-value comparison against the answers would prove nothing -- every number
+    // lives on a curve with p < 32, so small integers collide by chance.
+    const probe = [
+      "import json, sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import GRADED, LINES, assignments, public_payload, setting",
+      "seed = sys.argv[1]",
+      "payload = public_payload(seed)",
+      "print(json.dumps({",
+      "  'keys': sorted(payload),",
+      "  'publicMatchesSetting': payload['public'] == json.loads(json.dumps(setting(seed)['public'])),",
+      "  'assignmentsUnchanged': payload['assignments'] == assignments(seed),",
+      "  'linesUnchanged': payload['lines'] == list(LINES),",
+      "  'carriesOrderN': 'n' in payload['public'],",
+      "  'gradedIdsInPublic': sorted(set(GRADED) & set(payload['public'])),",
+      "}))",
+    ].join("\n");
+    const result = python(["-c", probe, SEED]);
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "{}")).toEqual({
+      keys: ["assignments", "lines", "pointKeys", "public"],
+      publicMatchesSetting: true,
+      assignmentsUnchanged: true,
+      linesUnchanged: true,
+      carriesOrderN: false,
+      gradedIdsInPublic: [],
+    });
+  });
+
+  it("routes show.py and the public tests through the verifier, with a checkout-only fallback", () => {
+    for (const path of ["local/show.py", "local/tests/public/test_schnorr_drill.py"]) {
+      const source = read(path);
+      expect(source).toContain("PUBLIC_EVIDENCE_JSON");
+      expect(source).toContain("VERIFIER_PUBLIC_URL");
+      // The fixtures fallback is function-scoped, so it resolves in a checkout or the
+      // author stage and is simply never reached inside a participant image.
+      expect(source).toContain("    from fixtures.generate import public_payload");
+    }
+    // `make test` / `make inspect` need a live verifier now, so they run through Compose
+    // rather than a bare `docker run` against a standalone image.
+    const makefile = read("Makefile");
+    expect(makefile).toContain("docker compose -f local/docker-compose.yml -p $(IMAGE)");
+    expect(makefile).toContain("verifier-up:");
+    expect(makefile).toContain("verifier-down:");
+    expect(makefile).toContain("test: build verifier-up");
+    expect(makefile).toContain("inspect: build verifier-up");
   });
 
   it("never defines expected_for outside verifier/expected.py", () => {
@@ -238,6 +361,7 @@ print(json.dumps({
       "target: verifier",
       '"127.0.0.1:18132:18132"',
       "VERIFIER_URL: http://verifier:18138/verify",
+      "VERIFIER_PUBLIC_URL: http://verifier:18138/public",
       "read_only: true",
       "cap_drop:",
       "- ALL",

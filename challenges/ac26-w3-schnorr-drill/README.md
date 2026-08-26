@@ -80,10 +80,18 @@ One hint per checkpoint (penalty 6), naming the usual slip on that line.
 Local mode is **self-paced, honor-system verification**. Someone who owns the Docker daemon
 and every image in the compose stack cannot be prevented from inspecting hidden material.
 The boundary here is misdelivery, not confidentiality against that person: the participant
-Workbench image contains public fixtures, tests, and starter material only. The eight lines'
-expected-value derivation (`verifier/expected.py`) and the hidden suite live in a separate,
-unpublished verifier image, reachable only over the Compose-internal network; `reference/`
-and `mutation.py` are added only to the `author` stage.
+Workbench image contains the public tests, the starter material and the Workbench only. The
+eight lines' expected-value derivation (`verifier/expected.py`) and the hidden suite live in
+a separate, unpublished verifier image, reachable only over the Compose-internal network;
+`reference/` and `mutation.py` are added only to the `author` stage.
+
+The fixture generator (`fixtures/generate.py`) is on the verifier's side too (Issue #543,
+option B2): deriving this deployment's public numbers needs working `ec_add`, `ec_mul` and
+`order_of`, which are the very functions the starter asks you to write, so shipping it in
+the participant image would hand over `add-points`, `double` and `order` for the price of
+one import. `make inspect` and the public tests fetch this deployment's public numbers —
+and only those — from the verifier's `GET /public` instead, which is why both now run
+through Compose.
 
 Only the Workbench is published, at host `127.0.0.1:18132`; the verifier has no host port.
 Both services run non-root with a read-only root filesystem, no capabilities, `no-new-

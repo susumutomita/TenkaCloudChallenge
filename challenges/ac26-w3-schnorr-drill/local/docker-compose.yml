@@ -23,6 +23,11 @@ services:
       FLAG_SEED: ${FLAG_SEED:?FLAG_SEED must be provided by the platform}
       WORKBENCH_PORT: "18132"
       VERIFIER_URL: http://verifier:18138/verify
+      # Issue 543 option B2: `fixtures/` is not in the participant image any more, so
+      # `show.py` and the public tests read this deployment's public numbers from the
+      # verifier instead. PortalEditorSupport forwards this one variable (and only this
+      # one) into those subprocesses.
+      VERIFIER_PUBLIC_URL: http://verifier:18138/public
     ports:
       - "127.0.0.1:18132:18132"
     depends_on:
