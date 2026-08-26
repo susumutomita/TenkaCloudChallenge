@@ -77,6 +77,24 @@ describe("topLevelFunctions", () => {
     const source = "class Field:\n    def inverse(self):\n        return 0\n";
     expect(topLevelFunctions(source).has("inverse")).toBe(false);
   });
+
+  it("keeps the body of a function whose signature wraps across lines", () => {
+    // The closing `) -> ...:` sits at column 0, which the "next top-level statement"
+    // test used to stop on — handing every caller a body of just the first signature
+    // line. Both rules then misread it: `isStubBody` counts zero statements and calls a
+    // real implementation a stub, and a sandbox runner's `subprocess.run(` disappears.
+    const source =
+      "def run(\n    sources: dict[str, str], script: str\n) -> tuple[int, str] | None:\n" +
+      "    completed = subprocess.run([script], check=False)\n    return completed.returncode\n";
+    const body = topLevelFunctions(source).get("run") ?? "";
+    expect(body).toContain("subprocess.run(");
+    expect(isStubBody(body)).toBe(false);
+  });
+
+  it("does not mistake a parenthesis inside a quoted default for the signature closing", () => {
+    const source = 'def join(parts, sep: str = ")"):\n    return sep.join(parts)\n';
+    expect(topLevelFunctions(source).get("join")).toContain("sep.join(parts)");
+  });
 });
 
 describe("isStubBody", () => {
@@ -247,6 +265,81 @@ def _check_threshold(submission):
         // \`cfg\`, not directly out of the call), which single-hop tracking does not
         // follow — matching the real problem's \`show.py\`, which already prints \`n\`
         // directly, so echoing it back is not a spoiler either way.
+        expect(findAnswerReachabilityIssues(repoRoot, dir)).toEqual([]);
+      },
+    );
+  });
+
+  it("catches an underscore-prefixed derivation defined in a verifier that ships (ac26-w1-underconstraint shape, Issue #525 condition 3)", () => {
+    // The gap #525's follow-up found: #533 moved the four leaking functions out of
+    // `fixtures/generate.py`, and the derivation landed in `verifier/server.py` — which
+    // this problem's Dockerfile still copied into the `participant` stage. Every name
+    // involved starts with an underscore, so the rule read them as verifier-internal and
+    // stayed silent while 40 of 300 points were one `import` away. Reverting the rule to
+    // its `!name.startsWith("_")` form makes this expectation fail.
+    withFixture(
+      {
+        "local/Dockerfile": SINGLE_STAGE_DOCKERFILE,
+        "local/fixtures/generate.py": `def params(seed):
+    return {"p": 23}
+`,
+        "local/verifier/server.py": `from fixtures.generate import params
+
+
+def _expected_root_cause(seed):
+    """Unlike the input generators, this is not exported from fixtures.generate."""
+    return {"signal": "is-zero", "half": "inverse"}
+
+
+def _check_root_cause(submission):
+    expected = _expected_root_cause(SEED)
+    return submission == expected
+`,
+      },
+      (repoRoot, dir) => {
+        const findings = findAnswerReachabilityIssues(repoRoot, dir);
+        expect(findings.map((f) => [f.rule, f.checkpoint])).toEqual([
+          ["direct-value-comparison", "_check_root_cause"],
+        ]);
+        expect(findings[0]?.module).toBe(`${dir}/local/verifier/server.py`);
+      },
+    );
+  });
+
+  it("does not flag a code checkpoint that reaches its sandbox through a helper (ac26-w3-passkey-assertion shape)", () => {
+    // The false positive the widened rule above would otherwise create. `_check_source`
+    // holds no expected value at all: it assigns the result of a subprocess run and
+    // tests the exit code. What keeps it quiet is the runner exclusion actually seeing
+    // the helper's `subprocess.run(`, which needs the wrapped `def` signature parsed
+    // past its column-0 closing line — the two fixes in this change meeting.
+    withFixture(
+      {
+        "local/Dockerfile": SINGLE_STAGE_DOCKERFILE,
+        "local/fixtures/generate.py": `def params(seed):
+    return {"p": 23}
+`,
+        "local/verifier/server.py": `import subprocess
+import tempfile
+
+
+def _run_submission_script(
+    sources: dict[str, str], script: str, seed: str
+) -> tuple[int, str] | None:
+    with tempfile.TemporaryDirectory() as workspace:
+        completed = subprocess.run(
+            [sys.executable, "-I", "-c", script], cwd=workspace, check=False
+        )
+        return completed.returncode, ""
+
+
+def _check_source(checkpoint_id, submission):
+    result = _run_submission_script({"a.py": submission}, RUNNER, SEED)
+    if result is None or result[0] != 0:
+        return False
+    return len(json.loads(result[1]).get("failures")) == 0
+`,
+      },
+      (repoRoot, dir) => {
         expect(findAnswerReachabilityIssues(repoRoot, dir)).toEqual([]);
       },
     );

@@ -48,6 +48,13 @@ name-matching misses it, or relax a threshold.
 The reported count is a **lower bound**, not the real number: the rules are name-based
 and miss semantically-equivalent implementations under a different name.
 
+Widening the *rule* to catch a shape it was blind to is the opposite of silencing it, and
+is expected work — but only together with whatever it newly flags. Rule 1 no longer
+treats a leading underscore inside a shipping `verifier/server.py` as a boundary (that
+blind spot is what hid `ac26-w1-underconstraint` after #533; Issue #525 condition 3), and
+`topLevelFunctions` now reads past a wrapped `def` signature instead of truncating the
+body at its column-0 closing line. Neither added a finding to the catalog.
+
 ## 3. Do not promote a problem on machine evidence alone
 
 Automated checks are source evidence only. `status: draft` → `ready` and the
