@@ -65,8 +65,14 @@ divergence implicit — that gap is what produced the #465 → #476 → rebuild 
 The owner authorised self-merge on 2026-08-26 **for this goal in this repository only**.
 Conditions, all required:
 
-- CI fully green — check `gh pr view <n> --json statusCheckRollup` and confirm zero
-  non-success conclusions.
+- The **required** check (`playability-gate`) must be green, and **no** check may have
+  actually failed. Do not wait for every shard of the ~28-job matrix to report — waiting
+  on non-required checks that are merely still running buys nothing and costs ~10 minutes
+  a PR (owner's call, 2026-08-26).
+- Read the status correctly: an in-progress check reports `conclusion` as the **empty
+  string**, not `null`. Treating that as a failure blocks green PRs; treating a real
+  failure as "still running" merges broken ones. Filter on
+  `select((.conclusion // "") | . != "" and . != "SUCCESS" and . != "SKIPPED" and . != "NEUTRAL")`.
 - Never merge with the required `playability-gate` check failing.
 - Squash only (the branch ruleset permits nothing else).
 - Never pass `--delete-branch` when merging the base of a stacked PR.
