@@ -137,7 +137,6 @@ export const SHARD_COST_SECONDS: Readonly<Record<string, number>> = {
   "scripts/check-course-drift.test.ts": 0.4,
   "scripts/check-local-play-urls.test.ts": 0.4,
   "scripts/check-participant-surface.test.ts": 0.1,
-  "scripts/check-pr-playability.test.ts": 0.1,
   "scripts/check-problem.test.ts": 1.1,
   "scripts/check-simulator-compatibility.test.ts": 0.4,
   "scripts/check-workbench-vendoring.test.ts": 0.1,
