@@ -37,6 +37,18 @@ of the hardness.
 from __future__ import annotations
 
 import hashlib
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+# The deliberately-wrong product. It lives on the participant's side of the container
+# boundary (Issue 543 option B2 -- see participant/wrong_ring.py and ../Dockerfile),
+# because the problem statement tells a learner to read it: it is a stated weakness to
+# build a counterexample against, not an answer. Imported rather than copied so the
+# implementation a learner reads and the one `tests/hidden/check_lwe.py` compares
+# against cannot drift apart.
+from participant.wrong_ring import cyclic_mul  # noqa: E402
 
 #: Powers of two only. The negacyclic wrap is defined by X^N = -1, and N must divide the
 #: coefficient indexing cleanly for the fold to be a fold rather than a special case.
@@ -151,21 +163,6 @@ def ring_mul(par: dict, a, b) -> tuple[int, ...]:
         for j, y in enumerate(right):
             raw[i + j] += x * y
     return normalize(par, raw)
-
-
-def cyclic_mul(par: dict, a, b) -> tuple[int, ...]:
-    """The WRONG product, kept here so the counterexample is against a stated weakness.
-
-    X^N = +1 rather than -1. Every ring axiom still holds and most products still agree,
-    which is exactly why a learner who writes this passes their own round-trip test.
-    """
-    n, q = par["degree"], par["modulus"]
-    left, right = _pad(par, a), _pad(par, b)
-    out = [0] * n
-    for i, x in enumerate(left):
-        for j, y in enumerate(right):
-            out[(i + j) % n] = (out[(i + j) % n] + x * y) % q
-    return tuple(out)
 
 
 def _pad(par: dict, coefficients) -> list[int]:
@@ -353,3 +350,111 @@ def wellformed(seed: str, par: dict) -> tuple[tuple[str, dict], ...]:
 def health_token(seed: str) -> str:
     par = params(seed)
     return hashlib.sha256(f"health:{seed}:{par['modulus']}:{par['degree']}".encode()).hexdigest()[:16]
+
+
+# ---------------------------------------------------------------------------
+# The public half of a deployment
+# ---------------------------------------------------------------------------
+
+
+def public_payload(seed: str) -> dict:
+    """Everything `show.py` prints and everything the public tests need as input.
+
+    Issue 543 option B2. This module does not ship in the participant image any more:
+    it has to define working `normalize`, `ring_mul`, `lwe_encrypt`, `lwe_decrypt`,
+    `rlwe_encrypt`, `rlwe_decrypt`, `encode`, `decode` and `centered` to derive a
+    deployment's fixtures, and those are exactly the names `starter/lwe.py` asks the
+    learner to write -- eleven stubs, one import away, with no comparison anywhere near
+    them. `verifier/server.py` serves this dict on `GET /public` over the
+    Compose-internal network instead, and `show.py` and `tests/public/test_lwe.py` read
+    it from there.
+
+    What is in here is the *question*, not an answer:
+
+    - the parameters, the noise budget, the health token and the two traces are what
+      `show.py` has always printed;
+    - the ring demonstration is the same single wrap `show.py` has always printed, with
+      the negacyclic and the cyclic product side by side;
+    - the boundary samples carry `index`, `noise` and `decodes` -- the three columns
+      `show.py` has always printed. The `boundary` checkpoint asks which one crosses
+      first *in this order*, which is a reading of that table by design;
+    - the secrets and masks under `inputs` are *arguments* the graded functions receive.
+      Every hidden phase passes the secret in, so knowing it decides nothing, and
+      `make inspect MODE=debug` has always printed both.
+
+    `normalizeProbe` is the one addition: the fold of a single concrete input, so the
+    public test that checks `normalize` against the ring keeps the strength it had when
+    it could import the reference. It is a worked example of the same kind as the ring
+    demonstration above -- the graded phases run across five parameter sets that vary
+    degree, dimension, plaintext modulus and delta together, on inputs this one pair
+    does not determine.
+
+    Nothing derived under a non-`public` label appears here, and no checkpoint's
+    expected value is computed at all.
+    """
+    par = params(seed)
+    n = par["degree"]
+    low, high = success_interval(par)
+
+    top = tuple([0] * (n - 1) + [1])
+    unit_x = tuple([0, 1] + [0] * (n - 2)) if n > 1 else (1,)
+
+    lwe_key = lwe_secret(seed, par)
+    show_lwe_mask = lwe_mask(seed, par, "show")
+    show_lwe_noise = small_noise(seed, par, "show", 1)[0]
+    lwe_message = 1 % par["plaintext_modulus"]
+    lwe_ciphertext = lwe_encrypt(par, lwe_key, lwe_message, show_lwe_mask, show_lwe_noise)
+    lwe_result = lwe_decrypt(par, lwe_key, lwe_ciphertext)
+
+    rlwe_key = rlwe_secret(seed, par)
+    show_rlwe_mask = rlwe_mask(seed, par, "show")
+    show_rlwe_noise = small_noise(seed, par, "show", n)
+    rlwe_messages = tuple((position + 1) % par["plaintext_modulus"] for position in range(n))
+    rlwe_ciphertext = rlwe_encrypt(par, rlwe_key, rlwe_messages, show_rlwe_mask, show_rlwe_noise)
+    rlwe_result = rlwe_decrypt(par, rlwe_key, rlwe_ciphertext)
+
+    probe = list(range(3 * n))
+    return {
+        "params": dict(par),
+        "healthToken": health_token(seed),
+        "interval": [low, high],
+        "ring": {
+            "top": list(top),
+            "x": list(unit_x),
+            "negacyclic": list(ring_mul(par, top, unit_x)),
+            "cyclic": list(cyclic_mul(par, top, unit_x)),
+        },
+        "lwe": {
+            "message": lwe_message,
+            "encoded": encode(par, lwe_message),
+            "mask": list(lwe_ciphertext["a"]),
+            "product": (lwe_ciphertext["b"] - lwe_result["phase"]) % par["modulus"],
+            "noise": show_lwe_noise,
+            "body": lwe_ciphertext["b"],
+            "phase": lwe_result["phase"],
+            "centeredPhase": lwe_result["centered_phase"],
+            "decoded": lwe_result["message"],
+        },
+        "rlwe": {
+            "messages": list(rlwe_messages),
+            "encoded": [encode(par, message) for message in rlwe_messages],
+            "mask": list(rlwe_ciphertext["a"]),
+            "product": list(ring_mul(par, rlwe_ciphertext["a"], rlwe_key)),
+            "noise": list(show_rlwe_noise),
+            "body": list(rlwe_ciphertext["b"]),
+            "phase": list(rlwe_result["phase"]),
+            "centeredPhase": list(rlwe_result["centered_phase"]),
+            "decoded": list(rlwe_result["message"]),
+        },
+        "boundary": [
+            {"index": sample["index"], "noise": sample["noise"], "decodes": sample["decodes"]}
+            for sample in boundary_samples(seed, par)
+        ],
+        "inputs": {
+            "lweSecret": list(lwe_key),
+            "rlweSecret": list(rlwe_key),
+            "lweMask": list(lwe_mask(seed, par, "public")),
+            "rlweMask": list(rlwe_mask(seed, par, "public")),
+            "normalizeProbe": {"input": probe, "expected": list(normalize(par, probe))},
+        },
+    }

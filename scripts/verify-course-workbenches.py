@@ -88,6 +88,12 @@ SPLIT_PORTAL_MODULES = {
     # stage (it derives the statement, not a verdict), so only the hidden suite and the
     # scoring process moved.
     "ac26-w3-schnorr": "participant.server",
+    # Issue 543 option B2: both leaks at once here — `tests/hidden/check_lwe.py` grades
+    # all eight checkpoints and shipped in the participant stage, and
+    # `fixtures/generate.py` implements the eleven functions `starter/lwe.py` asks the
+    # learner to write, so it left that stage too. `show.py` and the public tests read
+    # `GET /public` from the verifier now.
+    "ac26-w5-lwe-rlwe": "participant.server",
 }
 # Execute the heavier inspect/public-test adapter on representative problems from
 # each family. The catalogue's existing sharded suite executes every problem's own

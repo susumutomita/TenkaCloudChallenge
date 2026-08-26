@@ -41,8 +41,9 @@ negacyclic な積と cyclic な積の違いで、そして cyclic な環も立�
 そこで hidden test の往復はすべて**交差**させて走ります。こちらで暗号化して fixture 側で復号し、
 その逆も行います。自己整合的なだけの方式はこれを越えられず、本当に正しい方式は何も気づきません。
 
-間違った積は `fixtures.generate.cyclic_mul` として書き出してあります。反例を、
+間違った積は `participant.wrong_ring.cyclic_mul` として書き出してあります。反例を、
 自分でわざと壊したコードにではなく、**明示された**弱点に対して作れるようにするためです。
+`make inspect` も、同じ入力に対する 2 つの積を並べて表示します。
 
 ## sample せず、渡す
 
@@ -100,10 +101,20 @@ Week 5 の教材は公開済みなので、 `courseAlignment` は `week5/README.
 
 ## 保証範囲
 
-ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も
-あなたの管理下にあるので、 image の中身はあなたに対して秘匿されていません。
+ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも
+あなたの管理下にあるので、あなたが build したものはあなたに対して秘匿されていません。
 `reference/` と `tests/hidden/` を bind-mount しないのは、あなたの git checkout に
 紛れ込ませないためであって、手が届かなくするためではありません。
+
+デプロイが行うのは、うっかり答えを渡してしまわないことです。 container は 2 つあります。
+あなたが触る Workbench が持つのは starter・公開テスト・`participant/wrong_ring.py`・`show.py` で、
+採点側の image が `fixtures/`・`tests/hidden/`・verifier を持ち、 port を publish せず、
+gateway のない Docker network 上にいます。 `show.py` と公開テストは、この deploy の
+パラメータ・trace・boundary sample を verifier の `GET /public` から読みます。 ここが返すのは
+設問であって、 checkpoint の期待値は 1 つも含みません。 `fixtures/generate.py` はそれらを導出するために
+`starter/lwe.py` が書けと言う 11 個の関数をすべて実装しなければならないので、
+あなたが動かす image には入っていません
+([#543](https://github.com/susumutomita/TenkaCloudChallenge/issues/543))。
 
 verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
 ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。

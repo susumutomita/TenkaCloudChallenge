@@ -6,11 +6,6 @@
       "reason": "verifier/server.py defines a full, non-underscored message-schedule reference function that ships in the single participant stage and backs the dependency checkpoint's comparison."
     },
     {
-      "problem": "ac26-w5-lwe-rlwe",
-      "issue": 537,
-      "reason": "starter/*.py ships trivial-placeholder stubs for ring/lwe/rlwe primitives while fixtures/generate.py already defines complete, same-named implementations reachable from the participant image."
-    },
-    {
       "problem": "ac26-w4-commit-open",
       "issue": 537,
       "reason": "starter's node_hash stub is a placeholder while fixtures/generate.py already ships a complete, same-named Merkle node_hash implementation reachable from the participant image."
