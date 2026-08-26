@@ -1,4 +1,4 @@
-"""POST /verify — the scoring seam. Loopback only, stdlib only.
+"""POST /verify -- the scoring seam. Compose-internal only, stdlib only.
 
 Same security contract as the AC26 template: required and echoed `checkpointId`,
 throwaway workspace, wall-clock timeout, memory / process / output caps, no shell,
@@ -7,6 +7,16 @@ process.
 
 Four of the five checkpoints run the learner's own three files against hidden
 fields, circuits and orderings; the fifth is a direct answer about a trace.
+
+Issue 543/537: this used to be the same process that also served the Participant
+Portal's config, inspect, starter, public-test, and prepare endpoints, in the single
+Docker stage a learner's own `make build` produced -- so `first-broken`'s expected
+value (`broken_diagnosis`) was importable from inside the learner's own container,
+straight out of `fixtures/generate.py`. That Portal-facing surface now lives in
+`participant/server.py`, in a separate image (see ../Dockerfile) that this process's
+own container never builds; this file is reachable only over the Compose-internal
+network (see ../docker-compose.yml), never from the participant container's
+filesystem.
 """
 
 from __future__ import annotations
@@ -23,15 +33,7 @@ from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fixtures.generate import (
-    allowed_set,
-    broken_diagnosis,
-    broken_witness,
-    circuit,
-    field_modulus,
-    health_token,
-    honest_witness,
-)
+from fixtures.generate import broken_diagnosis, public_payload
 
 ROOT = Path(__file__).resolve().parents[1]
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
@@ -53,16 +55,6 @@ CODE_CHECKPOINTS = {
     "transfer": (),  # empty tuple means "the whole suite"
 }
 CHECKPOINTS = ("residuals", "first-broken", "boolean", "membership", "transfer")
-#: The four checkpoints whose portal submission is the learner's three files as JSON.
-FILE_CHECKPOINTS = ("residuals", "boolean", "membership", "transfer")
-CODE_CHECKPOINTS_FOR_PORTAL = frozenset(FILE_CHECKPOINTS)
-CHECKPOINT_LABELS = {
-    "residuals": "residual を計算して trace を出す",
-    "first-broken": "最初の違反箇所と residual を言う",
-    "boolean": "signal を 0 か 1 だけに縛る",
-    "membership": "許可された値だけを通す",
-    "transfer": "見たことのない回路でも成立させる",
-}
 
 # Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still
 # reporting RLIM_INFINITY for it. Setting it anyway raises inside `preexec_fn` and
@@ -96,60 +88,6 @@ def _check_first_broken(submission: object) -> bool:
     return answer == broken_diagnosis(SEED)
 
 
-def starter_payload() -> dict[str, str]:
-    """Return the three editable files shipped to the Portal editor."""
-    return {
-        name: (ROOT / "starter" / name).read_text(encoding="utf-8") for name in SUBMITTED_FILES
-    }
-
-
-def config_payload() -> dict[str, object]:
-    """Declare the generic editor contract consumed by the Participant Portal."""
-    return {
-        "id": "ac26-w1-constraint-lab",
-        "name": "0 になるべき式の集まり",
-        "description": "constraint の residual と最初の破綻を読み、gadget を完成させる。",
-        "submittedFiles": list(SUBMITTED_FILES),
-        "checkpoints": [
-            {
-                "id": checkpoint,
-                "label": CHECKPOINT_LABELS[checkpoint],
-                "kind": "code" if checkpoint in CODE_CHECKPOINTS_FOR_PORTAL else "answer",
-            }
-            for checkpoint in CHECKPOINTS
-        ],
-        # 英語は Portal 側の locale が選ぶ (共有 workbench.py の config_payload と同じ契約)。
-        # 文言の正本は metadata.json — scripts/generate-course-workbenches.py --check が
-        # 乖離を落とす (#381)。 この payload は手書きなので、 直すときはここを編集する。
-        "i18n": {
-            "en": {
-                "name": 'A set of things that must be zero',
-                "description": 'The new policy engine expresses access decisions as an arithmetic circuit instead of if-statements. The monitor only prints pass or fail. Make the residuals visible so a witness can be diagnosed.',
-                "checkpointLabels": {'residuals': 'Compute residuals and emit a trace', 'first-broken': 'Name the first violation and its residual', 'boolean': 'Bind a signal to 0 or 1 only', 'membership': 'Admit only the allowed values', 'transfer': 'Hold up on circuits you have not seen'},
-            }
-        },
-    }
-
-
-def inspect_payload(seed: str) -> dict[str, object]:
-    """Build the seeded evidence shown by the browser's inspect command.
-
-    Same facts as `show.py`. The id of the first violated constraint stays out of
-    the payload: it is the answer to the `first-broken` checkpoint.
-    """
-    witness, _expected = broken_witness(seed)
-    return {
-        "field": {
-            "p": field_modulus(seed),
-            "allowedSet": allowed_set(seed),
-        },
-        "circuit": circuit(seed),
-        "honestWitness": honest_witness(seed),
-        "brokenWitness": witness,
-        "healthToken": health_token(seed),
-    }
-
-
 def _submission_sources(files: object) -> dict[str, str] | None:
     if not isinstance(files, dict):
         return None
@@ -171,11 +109,6 @@ def _run_submission_script(
             (Path(workspace) / name).write_text(text, encoding="utf-8")
         transcript = Path(workspace) / "stdout"
         try:
-            # stdout goes to a real file, not a pipe. RLIMIT_FSIZE only bounds writes to
-            # files, so with `capture_output=True` a submission that printed gigabytes
-            # would have them buffered in THIS process before the tail slice threw them
-            # away. Writing to a file inside the workspace makes the cap actually bind:
-            # the child is killed by SIGXFSZ at the limit instead.
             with transcript.open("w", encoding="utf-8") as sink:
                 completed = subprocess.run(  # noqa: S603 - argument list, shell=False
                     [
@@ -197,45 +130,6 @@ def _run_submission_script(
         except (subprocess.TimeoutExpired, OSError, ValueError):
             return None
     return completed.returncode, captured[-MAX_OUTPUT_BYTES:]
-
-
-PUBLIC_TEST_SCRIPT = """
-import os, runpy
-os.environ["FLAG_SEED"] = {seed!r}
-os.environ["SUBMISSION_DIR"] = {workspace!r}
-os.environ["BROWSER_PUBLIC_TESTS"] = "1"
-runpy.run_path({root!r} + "/tests/public/test_circuit.py", run_name="__main__")
-"""
-
-
-def run_public_tests(seed: str, files: object) -> dict[str, object]:
-    """Run the same checks as `make test` against the Portal-edited sources."""
-    sources = _submission_sources(files)
-    if sources is None:
-        return {"passed": False, "output": "All three editable Python files are required."}
-    result = _run_submission_script(sources, PUBLIC_TEST_SCRIPT, seed)
-    if result is None:
-        return {"passed": False, "output": "Public tests timed out or could not start."}
-    return {"passed": result[0] == 0, "output": result[1]}
-
-
-def prepare_submissions(seed: str, files: object) -> dict[str, object]:
-    """Format the JSON bundle the four code checkpoints take.
-
-    `first-broken` is deliberately absent: it is read off the broken witness's
-    trace by the learner. Producing it here would erase what that checkpoint
-    measures. The seed does not enter the bundle; it stays in the signature so
-    every Portal prepare API has the same shape.
-    """
-    del seed
-    sources = _submission_sources(files)
-    if sources is None:
-        return {"ok": False, "output": "All three editable Python files are required."}
-    bundle = json.dumps(sources, separators=(",", ":"))
-    return {
-        "ok": True,
-        "submissions": {checkpoint: bundle for checkpoint in FILE_CHECKPOINTS},
-    }
 
 
 RUNNER = """
@@ -312,20 +206,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's name
         path = urlsplit(self.path).path
-        if path == "/api/config":
-            self._respond(200, config_payload())
+        if path == "/healthz":
+            self._respond(200, {"ok": True})
             return
-        if path == "/api/inspect":
-            self._respond(200, inspect_payload(SEED))
-            return
-        if path == "/api/starter":
-            self._respond(200, starter_payload())
+        if path == "/public":
+            self._respond(200, public_payload(SEED))
             return
         self._respond(404, {"error": "not found"})
 
     def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's name
-        path = urlsplit(self.path).path.rstrip("/") or "/"
-        if path not in ("/verify", "/api/test", "/api/prepare"):
+        if urlsplit(self.path).path.rstrip("/") != "/verify":
             self._respond(404, {"error": "not found"})
             return
         try:
@@ -347,13 +237,6 @@ class Handler(BaseHTTPRequestHandler):
             return
         if not isinstance(body, dict):
             self._respond(400, {"error": "bad json"})
-            return
-
-        if path == "/api/test":
-            self._respond(200, run_public_tests(SEED, body.get("files")))
-            return
-        if path == "/api/prepare":
-            self._respond(200, prepare_submissions(SEED, body.get("files")))
             return
 
         checkpoint_id = body.get("checkpointId")
@@ -396,15 +279,16 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    port = int(os.environ.get("VERIFY_PORT", "18093"))
-    # Bind every interface *inside the container*, not the container's loopback. A published
-    # port is forwarded to the container's bridge address, so a server listening only on
-    # 127.0.0.1 inside the container accepts nothing from outside it — the connection is
-    # opened and closed without a response, and the platform can never score the problem.
+    port = int(os.environ.get("VERIFY_PORT", "18094"))
+    # Bind every interface *inside the container*, not the container's loopback. The
+    # Workbench reaches this process as `verifier:<port>` over the Compose network, which
+    # resolves to this container's bridge address -- a server listening only on
+    # 127.0.0.1 inside the container would accept nothing from it, and the platform
+    # could never score the problem.
     #
-    # The loopback restriction that matters is on the host, and it lives in
-    # docker-compose.yml, which publishes `127.0.0.1:<port>:<port>`. Nothing outside this
-    # machine can reach the verifier either way.
+    # Since Issue 543/537 this service publishes no host port at all (see
+    # docker-compose.yml): it sits on the `lab` network, which is `internal: true` and so
+    # carries no gateway. Nothing but the Workbench container can reach it.
     HTTPServer(("0.0.0.0", port), Handler).serve_forever()  # noqa: S104 - see above
 
 

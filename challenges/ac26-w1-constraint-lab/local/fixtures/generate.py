@@ -123,3 +123,28 @@ def health_token(seed: str) -> str:
     return hashlib.sha256(
         f"health:{seed}:{field_modulus(seed)}".encode()
     ).hexdigest()[:16]
+
+
+def public_payload(seed: str) -> dict[str, object]:
+    """Everything a participant may see for this deployment. Contains no answer.
+
+    The single source `show.py`, `verifier/server.py`'s `GET /public`, and the Portal's
+    `/api/inspect` all build their payload from. `broken_witness`'s constraint id and
+    `broken_diagnosis` are deliberately absent -- they are the answer to `first-broken`,
+    not what a learner is shown to work from.
+
+    Issue 543/537: `fixtures/` -- this module -- does not ship in the participant Docker
+    stage at all (see ../Dockerfile). `participant/server.py` and `show.py` fetch this
+    payload from the verifier at runtime instead of building it locally.
+    """
+    witness, _expected = broken_witness(seed)
+    return {
+        "field": {
+            "p": field_modulus(seed),
+            "allowedSet": allowed_set(seed),
+        },
+        "circuit": circuit(seed),
+        "honestWitness": honest_witness(seed),
+        "brokenWitness": witness,
+        "healthToken": health_token(seed),
+    }

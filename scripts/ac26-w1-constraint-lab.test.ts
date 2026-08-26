@@ -74,6 +74,7 @@ describe("ac26-w1-constraint-lab: participant contract", () => {
       "local/tests/public/test_circuit.py",
       "local/tests/hidden/check_circuit.py",
       "local/verifier/server.py",
+      "local/participant/server.py",
       ...SUBMITTED.flatMap((name) => [`local/starter/${name}`, `local/reference/${name}`]),
     ]) {
       expect(existsSync(join(ROOT, path))).toBe(true);
@@ -253,6 +254,107 @@ describe("ac26-w1-constraint-lab: /verify contract", () => {
     expect(read("local/verifier/server.py")).toContain(
       '{"checkpointId": checkpoint_id, "correct": correct}',
     );
+  });
+});
+
+describe("ac26-w1-constraint-lab: participant/verifier separation (Issue 543/537)", () => {
+  it("keeps fixtures/, the answer derivation and the hidden suite out of the participant Docker stage", () => {
+    const dockerfile = read("local/Dockerfile");
+    const participantStage = dockerfile.slice(
+      dockerfile.indexOf("FROM base AS participant"),
+      dockerfile.indexOf("FROM base AS verifier"),
+    );
+    // The class this problem was scaffolded from before this fix: `fixtures/` shipping
+    // to the participant stage handed over `broken_witness` and `broken_diagnosis`
+    // directly, so a learner with nothing but their own container's FLAG_SEED could
+    // reconstruct `first-broken`'s answer even with `evaluate` staying out of reach.
+    expect(participantStage).not.toContain("COPY --chown=lab:lab fixtures/");
+    expect(participantStage).not.toContain("tests/hidden");
+    expect(participantStage).not.toContain("COPY --chown=lab:lab verifier/");
+    expect(participantStage).not.toContain("COPY --chown=lab:lab reference/");
+    expect(participantStage).not.toContain("COPY --chown=lab:lab mutation.py");
+    expect(participantStage).toContain("COPY --chown=lab:lab tests/public/");
+    expect(participantStage).toContain("COPY --chown=lab:lab participant/");
+
+    const verifierStage = dockerfile.slice(
+      dockerfile.indexOf("FROM base AS verifier"),
+      dockerfile.indexOf("FROM participant AS author"),
+    );
+    expect(verifierStage).toContain("COPY --chown=lab:lab fixtures/");
+    expect(verifierStage).toContain("COPY --chown=lab:lab tests/hidden/");
+    expect(verifierStage).toContain("COPY --chown=lab:lab verifier/");
+    expect(verifierStage).not.toContain("COPY --chown=lab:lab participant/");
+    expect(verifierStage).not.toContain("COPY --chown=lab:lab reference/");
+    expect(verifierStage).not.toContain("COPY --chown=lab:lab mutation.py");
+  });
+
+  it("keeps the Portal editor API and fixtures import out of the hidden verifier, and grading out of the Workbench", () => {
+    const participantServer = read("local/participant/server.py");
+    const hiddenServer = read("local/verifier/server.py");
+    for (const endpoint of ["/api/config", "/api/inspect", "/api/starter", "/api/test", "/api/prepare"]) {
+      expect(participantServer).toContain(endpoint);
+      expect(hiddenServer).not.toContain(endpoint);
+    }
+    expect(participantServer).not.toContain("def evaluate(");
+    expect(participantServer).not.toContain("def _check_");
+    // The only `fixtures` reference in the Workbench is the lazy, function-scoped
+    // CI/author fallback inside `fetch_public` -- never a module-level import, which
+    // is what would make it resolve eagerly (and fail loudly) the moment this file
+    // runs inside a built participant image that does not carry `fixtures/` at all.
+    expect(participantServer).not.toMatch(/^from fixtures/m);
+    expect(participantServer).toContain("from fixtures.generate import public_payload");
+    expect(hiddenServer).toContain("from fixtures.generate import");
+    expect(hiddenServer).toContain("/verify");
+    expect(hiddenServer).toContain("/healthz");
+    expect(hiddenServer).toContain("/public");
+  });
+
+  it("proxies /verify to the internal verifier and fails closed when it is unreachable", () => {
+    const probe = String.raw`
+import json, sys
+sys.path.insert(0, ".")
+from participant import server
+bodies = [{"checkpointId": checkpoint, "submission": "anything"} for checkpoint in server.CHECKPOINTS]
+print(json.dumps({
+    "missing": [server.proxy_verdict(body, "") for body in bodies],
+    "unavailable": [server.proxy_verdict(body, "http://127.0.0.1:1/verify") for body in bodies],
+    "hasInlineEvaluator": hasattr(server, "evaluate") or any(name.startswith("_check_") for name in dir(server)),
+}))
+`;
+    const result = python(["-c", probe]);
+    expect(result.status).toBe(0);
+    const output = JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "{}") as {
+      missing: Array<{ checkpointId: string; correct: boolean }>;
+      unavailable: Array<{ checkpointId: string; correct: boolean }>;
+      hasInlineEvaluator: boolean;
+    };
+    const checkpoints = ["residuals", "first-broken", "boolean", "membership", "transfer"];
+    const expectedVerdicts = checkpoints.map((checkpointId) => ({ checkpointId, correct: false }));
+    expect(output.missing).toEqual(expectedVerdicts);
+    expect(output.unavailable).toEqual(expectedVerdicts);
+    expect(output.hasInlineEvaluator).toBe(false);
+  });
+
+  it("compose builds the right target for each service, publishes only the Workbench port, and isolates the verifier network", () => {
+    const compose = read("local/docker-compose.yml");
+    for (const contract of [
+      "target: participant",
+      "target: verifier",
+      '"127.0.0.1:18093:18093"',
+      "VERIFIER_URL: http://verifier:18094/verify",
+      "VERIFIER_PUBLIC_URL: http://verifier:18094/public",
+      "read_only: true",
+      "cap_drop:",
+      "- ALL",
+      "no-new-privileges:true",
+      "healthcheck:",
+      "internal: true",
+      'com.docker.network.bridge.enable_ip_masquerade: "false"',
+    ]) {
+      expect(compose).toContain(contract);
+    }
+    expect(compose).not.toContain('"127.0.0.1:18094:18094"');
+    expect(compose.match(/ports:/g)).toHaveLength(1);
   });
 });
 

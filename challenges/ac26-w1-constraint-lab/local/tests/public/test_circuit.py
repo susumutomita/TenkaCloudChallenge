@@ -18,47 +18,74 @@ SUBMISSION_DIR = os.environ.get("SUBMISSION_DIR")
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, SUBMISSION_DIR or str(ROOT / "starter"))
 
-from fixtures.generate import circuit, field_modulus, honest_witness  # noqa: E402
 import circuit as circuit_module  # noqa: E402
 import field as field_module  # noqa: E402
 import gadgets as gadgets_module  # noqa: E402
-from verifier.server import (  # noqa: E402
-    inspect_payload,
-    prepare_submissions,
-    run_public_tests,
-    starter_payload,
-)
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
-WORKBENCH_TEST_SEED = "public-workbench-test"
+
+
+def _load_public_evidence() -> dict[str, object]:
+    """This deployment's public evidence -- the field, the circuit, and an honest and
+    a broken witness to compare, the same things `show.py` and the Portal both print.
+
+    Issue 543/537: this file used to import `fixtures.generate` directly. `fixtures/`
+    does not ship in the `participant` Docker stage at all any more (see
+    ../../Dockerfile) -- keeping the seed-keyed generators reachable here is what let a
+    learner skip straight past `first-broken` with nothing but their own container's
+    `FLAG_SEED`. This deployment's own verifier is the only source for this evidence
+    now: `PUBLIC_EVIDENCE_JSON` when `participant/server.py` has already fetched it
+    (the Portal path, and the sandboxed run `make test` also uses), or
+    `VERIFIER_PUBLIC_URL` fetched directly when neither is true.
+    """
+    injected = os.environ.get("PUBLIC_EVIDENCE_JSON")
+    if injected:
+        return json.loads(injected)
+    verifier_public_url = os.environ.get("VERIFIER_PUBLIC_URL")
+    if verifier_public_url:
+        from urllib.request import urlopen
+
+        with urlopen(verifier_public_url, timeout=10) as response:  # noqa: S310
+            return json.loads(response.read().decode("utf-8"))
+    # Neither is set: this only resolves when `fixtures/` is actually on disk, which is
+    # true for a checkout (this file run directly, e.g. by
+    # scripts/ac26-w1-constraint-lab.test.ts) or the verifier/author Docker stage, and
+    # never true inside a built `participant` image -- so this branch existing does not
+    # reopen Issue 543/537's leak.
+    from fixtures.generate import public_payload
+
+    return public_payload(SEED)
+
+
+PUBLIC = _load_public_evidence()
 
 
 def _field():
-    return field_module.Field(field_modulus(SEED))
+    return field_module.Field(PUBLIC["field"]["p"])
 
 
 def test_normalize_maps_into_the_field() -> None:
-    p = field_modulus(SEED)
+    p = PUBLIC["field"]["p"]
     f = _field()
     assert f.normalize(p) == 0, "the modulus itself should normalize to zero"
     assert f.normalize(-1) == p - 1, "a negative value should normalize into [0, p)"
 
 
 def test_trace_has_one_entry_per_constraint() -> None:
-    circ = circuit(SEED)
-    entries = circuit_module.trace(circ, honest_witness(SEED), _field())
+    circ = PUBLIC["circuit"]
+    entries = circuit_module.trace(circ, PUBLIC["honestWitness"], _field())
     assert len(entries) == len(circ), "one entry per constraint"
 
 
 def test_trace_preserves_circuit_order() -> None:
-    circ = circuit(SEED)
-    entries = circuit_module.trace(circ, honest_witness(SEED), _field())
+    circ = PUBLIC["circuit"]
+    entries = circuit_module.trace(circ, PUBLIC["honestWitness"], _field())
     assert [e["id"] for e in entries] == [c["id"] for c in circ]
 
 
 def test_honest_witness_has_no_broken_constraint() -> None:
-    circ = circuit(SEED)
-    assert circuit_module.first_broken(circ, honest_witness(SEED), _field()) is None
+    circ = PUBLIC["circuit"]
+    assert circuit_module.first_broken(circ, PUBLIC["honestWitness"], _field()) is None
 
 
 def test_gadgets_return_constraint_dicts() -> None:
@@ -67,10 +94,12 @@ def test_gadgets_return_constraint_dicts() -> None:
 
 
 def test_workbench_inspect_shows_seeded_evidence_without_answers() -> None:
-    payload = inspect_payload(WORKBENCH_TEST_SEED)
-    assert payload["field"]["p"] == field_modulus(WORKBENCH_TEST_SEED)
+    from participant.server import inspect_payload
+
+    payload = inspect_payload()
+    assert payload["field"]["p"] == PUBLIC["field"]["p"]
     assert isinstance(payload["field"]["allowedSet"], list)
-    assert [c["id"] for c in payload["circuit"]] == [c["id"] for c in circuit(WORKBENCH_TEST_SEED)]
+    assert [c["id"] for c in payload["circuit"]] == [c["id"] for c in PUBLIC["circuit"]]
     assert isinstance(payload["honestWitness"], dict)
     # The broken witness is evidence; the id of the first violated constraint is
     # the answer to first-broken, so only the witness may appear.
@@ -78,6 +107,8 @@ def test_workbench_inspect_shows_seeded_evidence_without_answers() -> None:
 
 
 def test_workbench_starter_returns_all_editable_files() -> None:
+    from participant.server import starter_payload
+
     payload = starter_payload()
     assert set(payload) == {"field.py", "circuit.py", "gadgets.py"}
     assert "class Field" in payload["field.py"]
@@ -96,15 +127,19 @@ def test_workbench_starter_returns_all_editable_files() -> None:
 
 
 def test_workbench_public_tests_report_invalid_browser_source() -> None:
+    from participant.server import run_public_tests, starter_payload
+
     sources = starter_payload()
     sources["field.py"] = "class Field(:\n"
-    result = run_public_tests(WORKBENCH_TEST_SEED, sources)
+    result = run_public_tests(sources)
     assert result["passed"] is False
     assert result["output"]
 
 
 def test_workbench_prepare_returns_the_file_checkpoints() -> None:
-    result = prepare_submissions(WORKBENCH_TEST_SEED, starter_payload())
+    from participant.server import prepare_submissions, starter_payload
+
+    result = prepare_submissions(starter_payload())
     assert result["ok"] is True
     submissions = result["submissions"]
     # first-broken is read off the trace by the learner, never produced here.
@@ -114,15 +149,17 @@ def test_workbench_prepare_returns_the_file_checkpoints() -> None:
 
 
 def test_workbench_prepare_rejects_a_missing_file() -> None:
+    from participant.server import prepare_submissions, starter_payload
+
     sources = starter_payload()
     del sources["gadgets.py"]
-    result = prepare_submissions(WORKBENCH_TEST_SEED, sources)
+    result = prepare_submissions(sources)
     assert result["ok"] is False
 
 
 def test_portal_editor_replaces_static_assets() -> None:
     assert not (ROOT / "workbench").exists()
-    server = (ROOT / "verifier" / "server.py").read_text(encoding="utf-8")
+    server = (ROOT / "participant" / "server.py").read_text(encoding="utf-8")
     for endpoint in ("/api/config", "/api/starter", "/api/inspect", "/api/test", "/api/prepare"):
         assert endpoint in server
 
