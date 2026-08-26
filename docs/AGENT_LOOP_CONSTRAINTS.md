@@ -198,12 +198,12 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   `ac26-bridge-experiment` (#562), `ac26-w3-schnorr-drill` (#570), `ac26-w5-lwe-rlwe`
   (#572), `ac26-w5-rgsw-external` (#573), `ac26-w5-cmux-blind-rotation` (#579),
   `ac26-w5-pbs-homnand` (#581), `ac26-w4-commit-open` (#582, split out of #578),
-  `ac26-w5-extract-key-switch` (#584), `ac26-w5-encoding-noise` (#585).
-  Catalog count is 12 as of #585, down from 39. Runs have taken the largest count first,
+  `ac26-w5-extract-key-switch` (#584), `ac26-w5-encoding-noise` (#586).
+  Catalog count is 12 as of #586, down from 39. Runs have taken the largest count first,
   so the two singletons are what is left — and both are single findings, so neither
   says much about its own points until measured (see #582 and #584 below).
 
-  #585 is the last of the Week 5 chain and the first in this class with **no supplied
+  #586 is the last of the Week 5 chain and the first in this class with **no supplied
   half at all**: `fixtures/generate.py` there is entirely seed derivation plus the graded
   arithmetic, so unlike #581 and #584 nothing had to be carved out into a
   `participant/*.py`. B2 was the plain move — `fixtures/`, `tests/hidden/` and
