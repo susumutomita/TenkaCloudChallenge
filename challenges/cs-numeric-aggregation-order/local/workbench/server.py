@@ -38,7 +38,7 @@ CODE_CHECKPOINTS = frozenset(("total", "allocate", "generalize"))
 CHECKPOINT_LABELS = {
     "environment": "environment — Workbench の合言葉を貼る",
     "observe": "observe — 対象レポートと、run 同士の食い違いが示すことを答える",
-    "audit": "audit — 報告値が真の合計になり得ない run を挙げる",
+    "audit": "audit — 報告値が多数派の報告値と異なる run を挙げる",
     "total": "total — 合計を厳密にし、行の順序に依存させない",
     "allocate": "allocate — 各行の割合を丸めても合計 100.00 に戻す",
     "generalize": "generalize — 1 行・全額ゼロ・長い裾でも成り立たせる",
@@ -59,8 +59,8 @@ def starter_payload() -> dict[str, str]:
 def config_payload() -> dict[str, object]:
     return {
         "id": "cs-numeric-aggregation-order",
-        "name": "応答が消えた。再送で同じ支払いを増やさない",
-        "description": "commit後にHTTP応答だけが消えたtraceを監査し、SQLite receiptで同じ論理操作を再生する。",
+        "name": "誰も数字を変えていないのに、合計が変わった",
+        "description": "行の順序で合計が変わるレポートを監査し、厳密な合計と、丸めても 100% に戻る配分を実装する。",
         "submittedFiles": list(SUBMISSION_FILES),
         "checkpoints": [
             {
@@ -72,15 +72,15 @@ def config_payload() -> dict[str, object]:
         ],
         "i18n": {
             "en": {
-                "name": "The response vanished. Do not create the payment again",
+                "name": "The total changed when nobody changed the numbers",
                 "description": "Audit a report that totals differently depending on row order, then make the figure exact and the allocation add back up.",
                 "checkpointLabels": {
                     "environment": "environment - paste the Workbench pass phrase",
                     "observe": "observe - name the report and what a disagreement between runs proves",
-                    "audit": "audit - list later ledger rows that duplicated one logical operation",
+                    "audit": "audit - list the runs whose reported total differs from the majority value",
                     "total": "total - make the total exact and independent of row order",
                     "allocate": "allocate - report shares that add back up to exactly 100.00",
-                    "generalize": "generalize - keep one business effect across concurrent retries and handler recreation",
+                    "generalize": "generalize - hold for one row, all-zero rows and a long tail",
                 },
             }
         },

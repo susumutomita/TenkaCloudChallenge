@@ -59,8 +59,8 @@ def starter_payload() -> dict[str, str]:
 def config_payload() -> dict[str, object]:
     return {
         "id": "cs-atomic-file-publish",
-        "name": "応答が消えた。再送で同じ支払いを増やさない",
-        "description": "commit後にHTTP応答だけが消えたtraceを監査し、SQLite receiptで同じ論理操作を再生する。",
+        "name": "半分のファイルは、ファイルではない",
+        "description": "書き終えた内容は正しいのに読み手が半分を見たログを監査し、不可分な差し替えとしてファイルを公開する。",
         "submittedFiles": list(SUBMISSION_FILES),
         "checkpoints": [
             {
@@ -72,15 +72,15 @@ def config_payload() -> dict[str, object]:
         ],
         "i18n": {
             "en": {
-                "name": "The response vanished. Do not create the payment again",
+                "name": "Half a file is not a file",
                 "description": "Audit a reader that saw a configuration file mid-write, then publish it as one indivisible replacement.",
                 "checkpointLabels": {
                     "environment": "environment - paste the Workbench pass phrase",
                     "observe": "observe - name the file and what the reader could have been holding",
-                    "audit": "audit - list later ledger rows that duplicated one logical operation",
+                    "audit": "audit - list the reader observations that prove the publish was not indivisible",
                     "publish": "publish - never let a reader observe anything but a whole file",
                     "durable": "durable - survive a crash at any point and leave no work file behind",
-                    "generalize": "generalize - keep one business effect across concurrent retries and handler recreation",
+                    "generalize": "generalize - hold for a new name, repeated publishes and overlapping writers",
                 },
             }
         },
