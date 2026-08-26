@@ -540,6 +540,22 @@ describe("ac26-w3-field-inverse: participant/verifier separation (Issue 537/538)
     expect(traced.fallback.modulus).toBe(traced.default.modulus);
   });
 
+  it("does not leave the answer one import away inside the grading image either (Issue #591)", () => {
+    // The split takes fixtures/ out of the PARTICIPANT image. The grading image still
+    // has it, because the hidden suite needs it, and the runner used to put the problem
+    // root on sys.path before importing the submission -- so a submission could import
+    // `egcd`/`egcd_rows` itself and take the egcd-trace checkpoint (measured at 35 of
+    // this problem's 200 points). The runner now drops those packages and the root
+    // before the import, the same guard cs-transaction-visibility-audit uses.
+    const leaky = "from fixtures.generate import egcd, egcd_rows as egcd_trace\n";
+    expect(evaluate("egcd-trace", leaky)).toBe(false);
+    // Grading itself is unaffected: check_field binds what it needs at module scope.
+    expect(evaluate("egcd-trace", bundle("reference"))).toBe(true);
+    const hiddenServer = read("local/verifier/server.py");
+    expect(hiddenServer).toContain("sys.modules.pop(module_name, None)");
+    expect(hiddenServer).toContain("sys.path.remove");
+  });
+
   it("renders the whole `make inspect` page from the public half alone, with no fixtures import", () => {
     // Every section show.py has always printed is still there, built only from what
     // `GET /public` serves. That the page is byte-identical to the pre-split one is

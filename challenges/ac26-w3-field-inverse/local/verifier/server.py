@@ -104,8 +104,30 @@ def _limits() -> None:
 RUNNER = """
 import json, os, sys
 sys.path.insert(0, {root!r})
-sys.path.insert(0, {workspace!r})
 from tests.hidden import check_field
+checkers = tuple(getattr(check_field, name) for name in {phases!r})
+
+# Keep the private callable references, then drop the answer packages and the problem
+# root before importing participant code -- the same guard
+# cs-transaction-visibility-audit's verifier applies, and ac26-w3-passkey-assertion's,
+# for the same reason. `fixtures/` and `tests/hidden/` are on disk *in this image*
+# because grading needs them, so without this the submission itself could import exactly
+# what the participant image stopped shipping (Issue 543 option B2): `fixtures.generate`
+# defines `egcd` and `egcd_rows` complete, which is worth this problem's `egcd-trace`
+# checkpoint on its own -- measured at 35 of 200 points. `check_field` imports what it
+# needs at module scope, so removing these does not affect grading.
+#
+# This closes the one-import path, not the filesystem: a submission that deliberately
+# puts the root back on `sys.path` can still reach those files. Local mode is
+# honor-system verification for whoever controls the image -- see TEMPLATE.md
+# "Assurance scope".
+for module_name in tuple(sys.modules):
+    if module_name in ("fixtures", "tests") or module_name.startswith(("fixtures.", "tests.")):
+        sys.modules.pop(module_name, None)
+while {root!r} in sys.path:
+    sys.path.remove({root!r})
+sys.path.insert(0, {workspace!r})
+
 try:
     import field
 except Exception as error:
@@ -113,8 +135,8 @@ except Exception as error:
     sys.stdout.flush()
     os._exit(0)
 failures = []
-for name in {phases!r}:
-    failures.extend(getattr(check_field, name)(field, {seed!r}))
+for checker in checkers:
+    failures.extend(checker(field, {seed!r}))
 print(json.dumps({{"failures": failures}}))
 sys.stdout.flush()
 os._exit(0)
