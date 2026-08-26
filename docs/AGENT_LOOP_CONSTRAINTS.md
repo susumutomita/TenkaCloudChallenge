@@ -115,6 +115,11 @@ Blocked on an owner decision — **do not start these**:
   check is green, but it rewrites the problem's two READMEs and the problem is
   `status: ready`, so `playability-gate` requires the human-only `playtest-verified`
   label (§4). Do not undraft it again, and do not apply that label yourself.
+- The same wall stands in front of the rest of that class. `sha256-schedule-logic` and
+  `sha256-compress-digest` carry the last of the detector's `direct-value-comparison`
+  findings, and both are `status: ready` — the split cannot be done there without
+  correcting their READMEs either, so the outcome is another Draft PR waiting on the
+  same decision. Do not start them until #564 is decided.
 - The `stub-vs-implementation` class (~45 of the detector's findings, including every
   `ac26-w5-*`). A container split does not reach it, because `fixtures/generate.py` must
   stay in the participant image to derive the deployment's public values at runtime. The
