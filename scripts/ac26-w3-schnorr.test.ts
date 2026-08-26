@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
 import { parse as parseYaml } from "yaml";
+import { participantPythonFiles } from "./lib/local-play-problems";
 
 /**
  * ac26-w3-schnorr is Week 3's assignment-companion. Its sharpest assertions cover the
@@ -83,6 +84,8 @@ describe("ac26-w3-schnorr: participant contract", () => {
       "local/tests/public/test_schnorr.py",
       "local/tests/hidden/check_schnorr.py",
       "local/verifier/server.py",
+      "local/participant/server.py",
+      "local/participant/workbench.py",
       "local/starter/schnorr.py",
       "local/reference/schnorr.py",
     ]) {
@@ -119,6 +122,136 @@ describe("ac26-w3-schnorr: participant contract", () => {
     const printedNumbers = new Set(output.match(/\b\d+\b/g) ?? []);
     expect(printedNumbers.has(secret)).toBe(false);
     expect(printedNumbers.has(nonceValue)).toBe(false);
+  });
+});
+
+describe("ac26-w3-schnorr: the hidden suite is not in the image a learner builds", () => {
+  /**
+   * Issue 543/537. Every one of the eight checkpoints is graded by running
+   * `tests/hidden/check_schnorr.py` against the submitted file, and that file used to
+   * ship in the one `participant` stage a learner's own `make build` produced —
+   * together with the process that runs it. Reading it gave away what each checkpoint
+   * is about to assert, including counts two paid hints charge a penalty to reveal.
+   *
+   * `fixtures/` deliberately stays on the participant side: it derives the statement
+   * (the group, the domains, and the `"public"`-label secret and nonce the public
+   * tests sign with), never a graded value, and `show.py` and the public tests import
+   * it directly.
+   */
+  it("keeps the hidden suite and the grading process out of the participant Docker stage", () => {
+    const dockerfile = read("local/Dockerfile");
+    const participantStage = dockerfile.slice(
+      dockerfile.indexOf("FROM base AS participant"),
+      dockerfile.indexOf("FROM base AS verifier"),
+    );
+    expect(participantStage).not.toContain("tests/hidden");
+    expect(participantStage).not.toContain("COPY --chown=lab:lab verifier/");
+    expect(participantStage).not.toContain("COPY --chown=lab:lab reference/");
+    expect(participantStage).not.toContain("COPY --chown=lab:lab mutation.py");
+    // The old single stage copied the whole `tests/` tree, which is how the hidden
+    // suite travelled. Only the public half may be named here.
+    expect(participantStage).toContain("COPY --chown=lab:lab tests/public/");
+    expect(participantStage).not.toMatch(/COPY[^\n]*\stests\/\s/);
+    expect(participantStage).toContain("COPY --chown=lab:lab participant/");
+    expect(participantStage).toContain("COPY --chown=lab:lab fixtures/");
+
+    const verifierStage = dockerfile.slice(
+      dockerfile.indexOf("FROM base AS verifier"),
+      dockerfile.indexOf("FROM participant AS author"),
+    );
+    expect(verifierStage).toContain("COPY --chown=lab:lab tests/hidden/");
+    expect(verifierStage).toContain("COPY --chown=lab:lab verifier/");
+    expect(verifierStage).toContain("COPY --chown=lab:lab fixtures/");
+    expect(verifierStage).not.toContain("COPY --chown=lab:lab participant/");
+    expect(verifierStage).not.toContain("COPY --chown=lab:lab reference/");
+  });
+
+  it("reproduces the original leak: no file the participant image carries can reach the hidden checks", () => {
+    // The file list is derived from the Dockerfile's own participant stage, via the
+    // same helper `check-answer-reachability.ts` uses, rather than restated here — so a
+    // COPY that puts `tests/hidden/` back fails this test instead of passing against a
+    // stale hand-written list. Before the split, `verifier/server.py` was in this list
+    // and its RUNNER imported `tests.hidden.check_schnorr` from inside the learner's
+    // own container.
+    const participantFiles = participantPythonFiles(
+      join(import.meta.dir, ".."),
+      "challenges/ac26-w3-schnorr",
+    );
+    expect(participantFiles).toContain(
+      "challenges/ac26-w3-schnorr/local/tests/public/test_schnorr.py",
+    );
+    expect(participantFiles).toContain("challenges/ac26-w3-schnorr/local/participant/server.py");
+    for (const file of participantFiles) {
+      expect(file).not.toContain("/tests/hidden/");
+      expect(file).not.toContain("/local/verifier/");
+      // Prose may name the file this split removed — that is what the comments are
+      // for. What must not appear is a way to reach it: an import of the package, or a
+      // call against the module the runner used to load.
+      const source = readFileSync(join(import.meta.dir, "..", file), "utf8");
+      expect(source).not.toMatch(/^\s*(?:from|import)\s+tests\.hidden\b/m);
+      expect(source).not.toMatch(/^\s*from\s+tests\.hidden\s+import/m);
+      // The runner's own two shapes: importing the module inside an embedded script,
+      // and reaching a phase on it by name.
+      expect(source).not.toMatch(/from tests\.hidden import/);
+      expect(source).not.toMatch(/getattr\(\s*check_schnorr/);
+    }
+  });
+
+  it("keeps the Portal editor API and the hidden runner on opposite sides of the split", () => {
+    const participantServer = read("local/participant/server.py");
+    const hiddenServer = read("local/verifier/server.py");
+    for (const endpoint of [
+      "/api/config",
+      "/api/inspect",
+      "/api/starter",
+      "/api/test",
+      "/api/prepare",
+    ]) {
+      expect(participantServer).toContain(endpoint);
+      expect(hiddenServer).not.toContain(endpoint);
+    }
+    expect(participantServer).not.toContain("def evaluate(");
+    expect(participantServer).not.toContain("def _run_submission(");
+    expect(participantServer).toContain("def proxy_verdict(");
+    expect(hiddenServer).toContain("tests.hidden");
+    expect(hiddenServer).toContain("/verify");
+    expect(hiddenServer).toContain("/healthz");
+  });
+
+  it("fails a verdict closed when the verifier cannot be reached", () => {
+    // The Workbench must never fall back to grading locally: it has nothing to grade
+    // with, and a missing verifier has to read as "not correct", not as an error the
+    // platform might interpret as a pass.
+    const script = [
+      "import json, sys",
+      "sys.path.insert(0, '.')",
+      "sys.path.insert(0, 'participant')",
+      "from participant.server import proxy_verdict",
+      "print(json.dumps({",
+      "  'unset': proxy_verdict({'checkpointId': 'sigma', 'submission': 'x'}, ''),",
+      "  'unreachable': proxy_verdict({'checkpointId': 'sigma', 'submission': 'x'},",
+      "      'http://127.0.0.1:1/verify'),",
+      "}))",
+    ].join("\n");
+    const result = python(["-c", script]);
+    expect(result.status).toBe(0);
+    const verdicts = JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "null");
+    expect(verdicts.unset).toEqual({ checkpointId: "sigma", correct: false });
+    expect(verdicts.unreachable).toEqual({ checkpointId: "sigma", correct: false });
+  });
+
+  it("publishes the Workbench and keeps the verifier on an internal network only", () => {
+    const compose = parseYaml(read("local/docker-compose.yml")) as {
+      services: Record<string, { ports?: string[]; networks?: string[] }>;
+      networks: Record<string, { internal?: boolean } | null>;
+    };
+    expect(Object.keys(compose.services).sort()).toEqual(["verifier", "workbench"]);
+    // The platform's contract is the published port and the /verify URL; both are
+    // unchanged by the split, because the Workbench answers /verify and forwards it.
+    expect(compose.services.workbench.ports).toEqual(["127.0.0.1:18102:18102"]);
+    expect(compose.services.verifier.ports).toBeUndefined();
+    expect(compose.services.verifier.networks).toEqual(["lab"]);
+    expect(compose.networks.lab?.internal).toBe(true);
   });
 });
 

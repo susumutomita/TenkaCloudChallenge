@@ -109,10 +109,19 @@ the verifier is assumed to have it, and the signature is a claim about it.
 
 ## Assurance scope
 
-Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
-daemon, and the image, so nothing inside that image is hidden from you: `reference/` and
-`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than
-out of reach.
+Local mode is **self-paced, honor-system verification**. You own the machine and the Docker
+daemon, so you can build any stage yourself; nothing here is hidden from you in the sense
+that matters to a cryptographer.
+
+Within that, the layout is two containers. The Workbench you start (published on 18102)
+carries the starter, the public tests, `fixtures/` and `show.py`. The verifier that grades
+is a separate image, holding `tests/hidden/`, on an `internal` network with no published
+port at all. `/verify` still answers on 18102 — the Workbench forwards it inward.
+
+This is **misdelivery prevention**, not confidentiality. All eight checkpoints are graded by
+running `tests/hidden/` against your submission, so shipping it in the same image told you
+what each checkpoint was about to assert — in two places, that saved a hint penalty. That is
+what the split closes. `reference/` and `mutation.py` remain author-stage only, as before.
 
 What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
 a checkpoint can only credit the id it echoes, results do not leak expected values, and the

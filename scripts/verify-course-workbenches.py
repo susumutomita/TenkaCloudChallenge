@@ -82,6 +82,12 @@ SPLIT_PORTAL_MODULES = {
     # participant/server.py together with the vendored participant/workbench.py, while
     # the `tcw1.` seal is re-checked independently in verifier/server.py.
     "ac26-w2-linear-shares": "participant.server",
+    # Issue 537/543: same move again. Here the leak is not a fixtures-derived value but
+    # `tests/hidden/check_schnorr.py` itself — all eight checkpoints are graded by
+    # running it, and it shipped in the participant stage. `fixtures/` stays in that
+    # stage (it derives the statement, not a verdict), so only the hidden suite and the
+    # scoring process moved.
+    "ac26-w3-schnorr": "participant.server",
 }
 # Execute the heavier inspect/public-test adapter on representative problems from
 # each family. The catalogue's existing sharded suite executes every problem's own
