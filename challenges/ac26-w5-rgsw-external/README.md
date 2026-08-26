@@ -16,7 +16,7 @@ selector 0 turns the ciphertext into an encryption of zero, selector 1 leaves th
 alone. The arithmetic is identical either way, so nothing about the result says which
 happened — that is the whole trick, and it is what makes encrypted branching possible.
 
-You are not rebuilding the ring or RLWE. `fixtures.generate` supplies `ring_mul`,
+You are not rebuilding the ring or RLWE. `participant.ring` supplies `ring_mul`,
 `rlwe_encrypt` and the rest, correct; `ac26-w5-lwe-rlwe` is where they come from. This
 problem is the gadget and the product.
 
@@ -137,10 +137,19 @@ original, and no function name, fixture, or skeleton is taken from the official 
 
 ## Assurance scope
 
-Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
-daemon, and the image, so nothing inside that image is hidden from you: `reference/` and
-`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than
-out of reach.
+Local mode is **self-paced, honor-system verification**. You own the machine and the Docker
+daemon, so nothing you build is hidden from you: `reference/` and `tests/hidden/` are not
+bind-mounted, which keeps them out of your git checkout rather than out of reach.
+
+What the deployment does do is stop handing them to you by accident. It runs two
+containers. The Workbench you talk to carries the starter, the public tests,
+`participant/ring.py` and `show.py`; the grading image carries `fixtures/`,
+`tests/hidden/` and the verifier, publishes no port, and sits on a Docker network with no
+gateway. `show.py` and the public tests read this deployment's parameters, rows and traces
+from that verifier's `GET /public`, which serves the question and never a checkpoint's
+expected value — `fixtures/generate.py` has to implement all ten functions
+`starter/rgsw.py` asks you to write in order to derive them, so it is not in the image you
+run ([#543](https://github.com/susumutomita/TenkaCloudChallenge/issues/543)).
 
 What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
 a checkpoint can only credit the id it echoes, results do not leak expected values, and the

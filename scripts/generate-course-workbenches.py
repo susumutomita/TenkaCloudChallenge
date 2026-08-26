@@ -76,6 +76,9 @@ PORTAL_PACKAGES = {
     # implements every stub, so both left the participant stage and the Portal moved
     # with them.
     "ac26-w5-lwe-rlwe": "participant",
+    # Same option B2 split, same reason: the hidden suite grades all eight checkpoints
+    # and fixtures/ implements the ten stubs starter/rgsw.py ships.
+    "ac26-w5-rgsw-external": "participant",
     "ac26-w4-sumcheck-drill": "participant",
     "ac26-w3-schnorr-drill": "participant",
     "ac26-w4-plonk-drill": "participant",

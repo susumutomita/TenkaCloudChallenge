@@ -5,7 +5,7 @@ which way it went. Selector 0 turns the ciphertext into an encryption of zero; s
 leaves the message alone; and the arithmetic is identical either way, so nothing about the
 result says which happened.
 
-You are not rebuilding the ring or RLWE — `fixtures.generate` supplies `ring_add`,
+You are not rebuilding the ring or RLWE — `participant.ring` supplies `ring_add`,
 `ring_mul`, `rlwe_encrypt` and the rest, correct. `ac26-w5-lwe-rlwe` is where those come
 from. This problem is the gadget and the product.
 
@@ -53,7 +53,7 @@ to linear algebra. It is a toy of the mechanism.
 
 from __future__ import annotations
 
-from fixtures.generate import ring_add, ring_mul  # noqa: F401 - the supplied ring
+from participant.ring import ring_add, ring_mul  # noqa: F401 - the supplied ring
 
 
 # ---------------------------------------------------------------------------

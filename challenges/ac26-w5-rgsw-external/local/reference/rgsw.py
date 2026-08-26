@@ -3,15 +3,19 @@
 Used by two things: the mutation suite (which breaks copies of this file and asserts the
 hidden tests catch each break), and the `reference-test` CI target.
 
-The ring and the RLWE scheme are supplied by `fixtures.generate` -- this problem is about
+The ring and the RLWE scheme are supplied by `participant.ring` -- this problem is about
 the gadget and the external product, not about re-deriving Week 5's second problem. Nothing
 here hardcodes a base, a level count, or a degree, because `transfer` runs the whole file
 under parameters derived from a different seed.
+
+The import below is the same line `starter/rgsw.py` ships with, and has to be: a submission
+is run from a throwaway workspace against the verifier image's `/problem`, where
+`participant/ring.py` is present and `fixtures/` is only reachable to the grader.
 """
 
 from __future__ import annotations
 
-from fixtures.generate import ring_add, ring_mul
+from participant.ring import ring_add, ring_mul
 
 
 # ---------------------------------------------------------------------------
