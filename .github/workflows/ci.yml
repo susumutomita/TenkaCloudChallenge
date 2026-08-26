@@ -219,8 +219,75 @@ jobs:
       # 続けることがあるチェックなので、他の全ゲートと同じ「全 PR 必須」枠に
       # 同居させない。
 
+  # Which of the five per-problem runtime jobs below this pull request can actually
+  # affect. Each of those jobs boots one problem's stack and scores it; none of them
+  # installs dependencies, and each verify script imports only node builtins plus files
+  # under its own challenges/<problem>/ directory (checked: no shared internal module),
+  # so "did anything that job reads change?" is answerable from the diff alone.
+  #
+  # This job always runs and reports true for everything outside a pull request, so a
+  # push to main still verifies all five and `needs:` never skips a dependent job for
+  # the wrong reason. Costs about twenty seconds; saves up to five jobs.
+  changes:
+    name: changed paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      rls: ${{ steps.filter.outputs.rls }}
+      eventbridge: ${{ steps.filter.outputs.eventbridge }}
+      oidc: ${{ steps.filter.outputs.oidc }}
+      signed_npm: ${{ steps.filter.outputs.signed_npm }}
+      asm: ${{ steps.filter.outputs.asm }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Work out which runtime jobs this change can affect
+        id: filter
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+
+          emit() { printf '%s=%s\n' "$1" "$2" >> "$GITHUB_OUTPUT"; }
+
+          # Outside a pull request there is no base to diff against, and a push to main
+          # is the post-merge record for that commit: verify everything.
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            for key in rls eventbridge oidc signed_npm asm; do emit "$key" true; done
+            exit 0
+          fi
+
+          git fetch --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+          base="$(git merge-base "origin/${BASE_REF}" HEAD)"
+          changed="$(git diff --name-only "$base" HEAD)"
+          printf 'changed files:\n%s\n' "$changed"
+
+          # A change to this workflow or to the script aliases can alter how any of them
+          # runs, so either one turns all five back on.
+          if printf '%s\n' "$changed" | grep -qE '^(\.github/workflows/ci\.yml|package\.json)$'; then
+            for key in rls eventbridge oidc signed_npm asm; do emit "$key" true; done
+            exit 0
+          fi
+
+          affected() {
+            if printf '%s\n' "$changed" | grep -qE "$1"; then echo true; else echo false; fi
+          }
+
+          emit rls         "$(affected '^(challenges/rls-tenant-isolation/|scripts/verify-rls-tenant-isolation\.ts$)')"
+          emit eventbridge "$(affected '^(challenges/eventbridge-delivery-discipline/|scripts/verify-eventbridge-delivery-discipline\.ts$)')"
+          emit oidc        "$(affected '^(challenges/github-oidc-trust-boundary/|scripts/verify-github-oidc-trust-boundary\.ts$)')"
+          emit signed_npm  "$(affected '^(challenges/signed-does-not-mean-safe/|scripts/verify-signed-does-not-mean-safe\.ts$)')"
+          emit asm         "$(affected '^challenges/asm-worst-case-latency/')"
+
   rls-runtime:
     name: rls-tenant-isolation runtime
+    needs: changes
+    if: needs.changes.outputs.rls == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -242,6 +309,8 @@ jobs:
 
   eventbridge-runtime:
     name: eventbridge-delivery-discipline runtime
+    needs: changes
+    if: needs.changes.outputs.eventbridge == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -263,6 +332,8 @@ jobs:
 
   github-oidc-runtime:
     name: github-oidc-trust-boundary runtime
+    needs: changes
+    if: needs.changes.outputs.oidc == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -284,6 +355,8 @@ jobs:
 
   signed-npm-runtime:
     name: signed-does-not-mean-safe runtime
+    needs: changes
+    if: needs.changes.outputs.signed_npm == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -305,6 +378,8 @@ jobs:
 
   asm-worst-case-latency-runtime:
     name: asm-worst-case-latency native-amd64 Docker runtime
+    needs: changes
+    if: needs.changes.outputs.asm == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
@@ -430,19 +505,47 @@ jobs:
     # One stable name in front of the matrix. `if: always()` is what makes this
     # run when a shard fails — and it is also what makes `needs:` stop gating, so
     # the result has to be asserted explicitly rather than implied.
-    needs: [suite, solvability, checks, rls-runtime, eventbridge-runtime, github-oidc-runtime, signed-npm-runtime, asm-worst-case-latency-runtime]
+    needs: [changes, suite, solvability, checks, rls-runtime, eventbridge-runtime, github-oidc-runtime, signed-npm-runtime, asm-worst-case-latency-runtime]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Require every job to have succeeded
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          SUITE: ${{ needs.suite.result }}
+          SOLVABILITY: ${{ needs.solvability.result }}
+          CHECKS: ${{ needs.checks.result }}
+          RLS: ${{ needs.rls-runtime.result }}
+          EVENTBRIDGE: ${{ needs.eventbridge-runtime.result }}
+          OIDC: ${{ needs.github-oidc-runtime.result }}
+          SIGNED_NPM: ${{ needs.signed-npm-runtime.result }}
+          ASM: ${{ needs.asm-worst-case-latency-runtime.result }}
         run: |
-          echo "suite=${{ needs.suite.result }} solvability=${{ needs.solvability.result }} checks=${{ needs.checks.result }} rls-runtime=${{ needs.rls-runtime.result }} eventbridge-runtime=${{ needs.eventbridge-runtime.result }} github-oidc-runtime=${{ needs.github-oidc-runtime.result }} signed-npm-runtime=${{ needs.signed-npm-runtime.result }} asm-worst-case-latency-runtime=${{ needs.asm-worst-case-latency-runtime.result }}"
-          test "${{ needs.suite.result }}" = "success"
-          test "${{ needs.solvability.result }}" = "success"
-          test "${{ needs.checks.result }}" = "success"
-          test "${{ needs.rls-runtime.result }}" = "success"
-          test "${{ needs.eventbridge-runtime.result }}" = "success"
-          test "${{ needs.github-oidc-runtime.result }}" = "success"
-          test "${{ needs.signed-npm-runtime.result }}" = "success"
-          test "${{ needs.asm-worst-case-latency-runtime.result }}" = "success"
+          set -uo pipefail
+          echo "changes=$CHANGES suite=$SUITE solvability=$SOLVABILITY checks=$CHECKS rls=$RLS eventbridge=$EVENTBRIDGE oidc=$OIDC signed-npm=$SIGNED_NPM asm=$ASM"
+
+          failed=0
+          # These always run, so only success passes.
+          for pair in "changes:$CHANGES" "suite:$SUITE" "solvability:$SOLVABILITY" "checks:$CHECKS"; do
+            name="${pair%%:*}"; result="${pair#*:}"
+            if [ "$result" != "success" ]; then
+              echo "::error::$name did not succeed (result: $result)"
+              failed=1
+            fi
+          done
+
+          # The five per-problem runtime jobs are gated on `changes`, so `skipped` here
+          # means this pull request cannot affect that problem — a pass, not a gap. It
+          # can only mean that: `changes` is asserted to have succeeded above, so a
+          # skip caused by a failure further up would already have failed this job.
+          for pair in "rls-runtime:$RLS" "eventbridge-runtime:$EVENTBRIDGE" "github-oidc-runtime:$OIDC" "signed-npm-runtime:$SIGNED_NPM" "asm-worst-case-latency-runtime:$ASM"; do
+            name="${pair%%:*}"; result="${pair#*:}"
+            case "$result" in
+              success) ;;
+              skipped) echo "$name skipped: nothing this pull request changed can affect it" ;;
+              *) echo "::error::$name did not succeed (result: $result)"; failed=1 ;;
+            esac
+          done
+
+          exit "$failed"
