@@ -114,9 +114,9 @@ Blocked on an owner decision — **do not start these**:
 Previously blocked by `playability-gate`, now unblocked: PR #564 (`sha256-bytes-padding`)
 and PR #578 (`sha256-schedule-logic`) were held because they rewrite a `status: ready`
 problem's READMEs and the gate demanded a human `playtest-verified` label. The gate was
-deleted on 2026-08-27, so both are ordinary PRs again — rebase them onto `main` and merge
-when their checks are green. The same wall is gone from `sha256-compress-digest` and the
-rest of that class.
+deleted on 2026-08-27, so both are ordinary PRs again. **#564 has since merged**
+(`e007a5c`); #578 is still open — rebase it onto `main` and merge when its checks are
+green. The same wall is gone from `sha256-compress-digest` and the rest of that class.
 
 What the gate's removal does **not** change: §1 and §3 still hold. Nothing machine-checks
 them now, so a PR that rewrites a `ready` problem's participant surface should say, in its
@@ -195,6 +195,32 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   the split, so #594 ported #590's `sys.path`/`sys.modules` guard into its runner and
   re-measured at 0. A split that closes only the participant image is half a fix on a
   problem where the two probes disagree — measure both before claiming a leak is closed.
+
+  Check `git ls-remote --heads origin` before starting anything here: two sessions
+  work this list with no claim mechanism, and #583 was thrown away for duplicating #584.
+  Pushing the branch before doing the work is what #590 did to claim it.
+
+  **What a B2 split does not close, measured.** The split takes the material out of the
+  *participant image*. It does not take it out of the image the *submission runs in*:
+  every verifier's runner does `sys.path.insert(0, {root!r})` before importing the
+  submitted file, and `fixtures/` and `tests/hidden/` are on that path because grading
+  needs them. So a one-line submission — `from fixtures.generate import *`, nothing
+  implemented — still scores, after the split, on merged problems: **8/8 checkpoints
+  (300/300) on #584**, **4/7 (115/200) on #586**, 0/8 on #582 — in each case exactly the
+  free score that was measured *before* the split. `ac26-w3-passkey-assertion` was
+  3/3 (200/200) the same way until #590 added the guard `cs-transaction-visibility-audit`
+  already uses: drop the `fixtures`/`tests` modules and the problem root from `sys.path`
+  and `sys.modules` before importing the submission. #594 ported that guard, and re-measured
+  at 0. Every other verifier still lacks it — 40 of them as of #594 — and Issue #591 carries
+  the evidence and the proposed catalog-wide test. #564 landed without the guard, so it is
+  one of those 39: that is #591's work, not a defect in #564.
+
+  Two consequences for reporting. `scripts/check-answer-reachability.ts` only ever sees
+  the participant image, so a finding count says nothing about this path — never write
+  "N fewer findings" as if it were the closure (§2 already says this; here is why it
+  bites). And measure **two** probes per split, not one: the participant image's
+  reachability *and* a submission that imports the material at grading time. A PR body
+  that reports only the first, as the merged ones above do, overstates what landed.
 
   #586 is the last of the Week 5 chain and the first in this class with **no supplied
   half at all**: `fixtures/generate.py` there is entirely seed derivation plus the graded
