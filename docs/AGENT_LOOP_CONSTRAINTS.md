@@ -178,26 +178,39 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   named `ac26-w5-lwe-rlwe` as outstanding after #572 had merged it — the same staleness
   that this section already records as having cost a run.
 
-  What is left, with the detector's count each — `ac26-w5-pbs-homnand` (7),
-  `ac26-w5-extract-key-switch` (6), `ac26-w5-encoding-noise` (5),
-  `ac26-w4-commit-open` (1), `ac26-w3-passkey-assertion` (1),
-  `ac26-w3-field-inverse` (1). Landed so far: `cs-auth-claim-audit` and
-  `ac26-bridge-experiment` (#562), `ac26-w3-schnorr-drill` (#570), `ac26-w5-lwe-rlwe`
-  (#572), `ac26-w5-rgsw-external` (#573), `ac26-w5-cmux-blind-rotation` (#579). Catalog
-  count is 31 as of #579, down from 39. Runs have taken the largest count first, so
-  `ac26-w5-pbs-homnand` is next.
+  What is left, with the detector's count each — `ac26-w5-extract-key-switch` (6),
+  `ac26-w5-encoding-noise` (5), `ac26-w4-commit-open` (1),
+  `ac26-w3-passkey-assertion` (1), `ac26-w3-field-inverse` (1). Landed so far:
+  `cs-auth-claim-audit` and `ac26-bridge-experiment` (#562), `ac26-w3-schnorr-drill`
+  (#570), `ac26-w5-lwe-rlwe` (#572), `ac26-w5-rgsw-external` (#573),
+  `ac26-w5-cmux-blind-rotation` (#579), `ac26-w5-pbs-homnand` (#581). Catalog count is 24
+  as of #581, down from 39. Runs have taken the largest count first, so
+  `ac26-w5-extract-key-switch` is next.
 
-  The last two entries are new to this list, and neither is new work landing on it —
-  #576 only made them **visible** (§2). `ac26-w3-field-inverse` is the `egcd` placeholder
-  tuple; `ac26-w5-encoding-noise` went 3 → 5 with `first_failure` and `success_interval`,
-  the same class it was already listed for. So the catalog count rose while nothing got
-  worse, which is the shape to expect whenever a rule stops being blind: never report a
-  rise as a regression, or a fall as a closure.
+  `ac26-w3-field-inverse` and `ac26-w5-encoding-noise`'s last two findings are not new
+  work landing on this list — #576 only made them **visible** (§2).
+  `ac26-w3-field-inverse` is the `egcd` placeholder tuple; `ac26-w5-encoding-noise` went
+  3 → 5 with `first_failure` and `success_interval`, the same class it was already listed
+  for. So the catalog count rose while nothing got worse, which is the shape to expect
+  whenever a rule stops being blind: never report a rise as a regression, or a fall as a
+  closure.
 
-  **All seven remaining are `status: draft`**, so none of them hits the
+  **All five remaining are `status: draft`**, so none of them hits the
   `playtest-verified` wall of §4 — a B2 split there is a PR an agent can carry
   to merge on its own, README correction included. Do not drop a needed README
   correction to stay under the gate (§4); on a `draft` problem it does not fire anyway.
+
+  `ac26-w5-pbs-homnand` (#581) is worth reading before the next one, because it is the
+  first in this class whose supplied half was not already a separate file. Five earlier
+  Week 5 problems' machinery lived inside `fixtures/generate.py` alongside the graded
+  pipeline, so B2 there meant splitting that file along the line the problem already drew
+  (`participant/fhe.py` supplied, `fixtures/generate.py` graded and re-exporting it) rather
+  than moving an existing module. `ac26-w5-extract-key-switch` and
+  `ac26-w5-encoding-noise` have the same shape. It is also the first where handing
+  `fixtures.generate` straight to the hidden suite does **not** pass everything — the
+  artifacts carry an envelope the bare functions do not attach, so the measured free score
+  was 2 of 8 checkpoints, not all of them. Measure it per problem; do not carry #573's
+  "the whole problem for one import" sentence forward without checking it.
 
   Two things that stay true regardless: the count is a **lower bound** (§2), so never
   report "N fewer findings" as if it were the closure; and prove the boundary per

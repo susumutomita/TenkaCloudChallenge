@@ -187,10 +187,23 @@ Week 5 の教材は公開済みなので、`courseAlignment` は `week5/README.m
 
 ## 保証範囲
 
-ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も
-あなたの管理下にあるので、image の中身はあなたに対して秘匿されていません。
+ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも
+あなたの管理下にあるので、あなたが build したものはあなたに対して秘匿されていません。
 `reference/` と `tests/hidden/` を bind-mount しないのは、あなたの git checkout に
 紛れ込ませないためであって、手が届かなくするためではありません。
+
+そのうえでデプロイが行うのは、事故で手渡さないことです。 container は 2 つです。
+あなたが話す Workbench は starter、public test、供給される Week 5 の部品一式である
+`participant/fhe.py`、`show.py` を持ちます。 採点側の image は `fixtures/`、
+`tests/hidden/`、verifier を持ち、ポートを一切公開せず、gateway のない Docker network に
+置かれます。 `show.py` は、このデプロイのパラメータ・trace row・noise 契約を verifier の
+`GET /public` から読みます。そこが返すのは実演であって checkpoint の期待値ではありません。
+`fixtures/generate.py` はそれらを導出するために `lookup_accumulator`、
+`to_rotation_domain`、`blind_rotate`、`output_noise_bound`、`correctness_bound`、
+`refresh_report`、`nand_combine` を実装する必要があります。これは
+`starter/pipeline.py` が書かせる名前のうち 7 個なので、あなたが実行する image には
+入りません
+（[#543](https://github.com/susumutomita/TenkaCloudChallenge/issues/543)）。
 
 verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
 ハングさせたりクラッシュさせたりできません。checkpoint は echo した id しか加点できません。
