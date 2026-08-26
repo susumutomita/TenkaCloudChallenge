@@ -115,6 +115,7 @@ PORTAL_PACKAGES = {
     "ac26-w3-schnorr-drill": "participant",
     "ac26-w4-plonk-drill": "participant",
     "ac26-w4-fri-drill": "participant",
+    "sha256-bytes-padding": "participant",
     "acm-validation-migration": "workbench",
     "asm-worst-case-latency": "workbench",
     "cs-atomic-file-publish": "workbench",

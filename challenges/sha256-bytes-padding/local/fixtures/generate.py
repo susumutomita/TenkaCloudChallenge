@@ -185,3 +185,36 @@ def health_token(seed: str) -> str:
     """Proof the learner actually started the container rather than reading the README."""
     case = text_case(seed)
     return hashlib.sha256(f"health:{seed}:{case.text}".encode()).hexdigest()[:16]
+
+
+def public_payload(seed: str) -> dict[str, object]:
+    """Everything a participant may see for this deployment. Contains no answer.
+
+    The single source `show.py`, `verifier/server.py`'s `GET /public` and the Portal's
+    `/api/inspect` all build their output from.
+
+    What is deliberately absent is every graded value: `padded_length` (the whole of
+    `padded-length`), the trailing bit-length field (`length-field`), the byte count of
+    `text` (`byte-length`) and `broken_pad_zeros_only` (`collision`). This payload
+    carries only the inputs the checkpoints ask a learner to reason *from* -- the
+    string, the six message lengths, the one length for the trailing field, the block to
+    split into words, and the message to collide with.
+
+    Issue 543/537: `fixtures/` -- this module -- does not ship in the participant Docker
+    stage at all (see ../Dockerfile), because `padded_length` and
+    `broken_pad_zeros_only` are plain, seed-independent functions: leaving them
+    reachable handed over two checkpoints for the price of one `import`, no matter where
+    the comparison itself lived. `participant/server.py`, `show.py` and the public tests
+    fetch this payload from the verifier at runtime instead of building it locally.
+    """
+    case = text_case(seed)
+    return {
+        "blockBytes": BLOCK_BYTES,
+        "text": case.text,
+        "charLength": case.char_length,
+        "lengthQuiz": length_quiz(seed),
+        "lengthFieldCase": length_field_case(seed),
+        "wordBlockHex": word_case(seed).hex(),
+        "collisionMessageHex": collision_message(seed).hex(),
+        "healthToken": health_token(seed),
+    }

@@ -53,6 +53,11 @@ SHARED_TARGETS = (
     "sha256-compress-digest",
 )
 SPLIT_PORTAL_MODULES = {
+    # Issue 537/538/543: same move, one problem at a time. `padded_length` and
+    # `broken_pad_zeros_only` are plain functions in fixtures/generate.py, so the split
+    # had to take `fixtures/` out of the participant stage entirely -- show.py and the
+    # public tests read this deployment's evidence from the verifier's GET /public.
+    "sha256-bytes-padding": "participant.server",
     "cs-transaction-visibility-audit": "participant.server",
     # Issue 440: #437 は participant/ に公開 Workbench を置く分離型。 元の branch は
     # 別の集合 (問題 id の frozenset) を足していたが、 main 側はこの map へ
