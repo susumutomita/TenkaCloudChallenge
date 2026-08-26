@@ -113,6 +113,7 @@ PORTAL_PACKAGES = {
     # verifier/server.py -- all reachable from the single participant stage. The
     # Portal moved to participant/ when fixtures/ stopped shipping there.
     "sha256-schedule-logic": "participant",
+    "sha256-bytes-padding": "participant",
     "acm-validation-migration": "workbench",
     "asm-worst-case-latency": "workbench",
     "cs-atomic-file-publish": "workbench",
