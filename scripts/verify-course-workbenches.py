@@ -120,6 +120,14 @@ SPLIT_PORTAL_MODULES = {
     # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
     # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
     "ac26-w4-commit-open": "participant.server",
+    # Issue 537/538 (Issue 543 option B2): same move. tests/hidden/check_encoding.py
+    # grades every checkpoint and fixtures/generate.py implements encode, centered,
+    # decode, success_interval and first_failure under the exact five names
+    # starter/encoding.py's own stubs ask the learner to write, all of which shipped in
+    # the single participant stage.
+    # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
+    # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
+    "ac26-w5-encoding-noise": "participant.server",
 }
 # Execute the heavier inspect/public-test adapter on representative problems from
 # each family. The catalogue's existing sharded suite executes every problem's own

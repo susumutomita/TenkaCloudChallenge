@@ -6,11 +6,6 @@
       "reason": "verifier/server.py defines a full, non-underscored message-schedule reference function that ships in the single participant stage and backs the dependency checkpoint's comparison."
     },
     {
-      "problem": "ac26-w5-encoding-noise",
-      "issue": 537,
-      "reason": "Listed in #537 as a suspected (unverified) case sharing helper names with ac26-w5-lwe-rlwe; this detector independently confirms the same stub-vs-implementation shape (encode/decode/centered). Additionally: Two further stub-vs-implementation pairs (`first_failure`, `success_interval`) surfaced by the same placeholder-tuple fix. This problem was already baselined for `encode`/`decode`/`centered`; these are additional reachable names in the same class, not a new class."
-    },
-    {
       "problem": "ac26-w3-passkey-assertion",
       "issue": 538,
       "reason": "Not named in #537. starter's signed_message stub raises NotImplementedError while fixtures/generate.py already ships a complete, same-named implementation reachable from the participant image."
