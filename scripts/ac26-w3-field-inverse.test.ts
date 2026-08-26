@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
 import { parse as parseYaml } from "yaml";
+import { participantPythonFiles } from "./lib/local-play-problems";
 
 /**
  * ac26-w3-field-inverse is Week 3's first problem. The assertions that carry weight run
@@ -84,6 +85,8 @@ describe("ac26-w3-field-inverse: participant contract", () => {
       "local/verifier/server.py",
       "local/starter/field.py",
       "local/reference/field.py",
+      "local/participant/server.py",
+      "local/participant/workbench.py",
     ]) {
       expect(existsSync(join(ROOT, path))).toBe(true);
     }
@@ -321,5 +324,274 @@ describe("ac26-w3-field-inverse: metadata contracts", () => {
       expect(source.ref).toMatch(/^[0-9a-f]{40}$/);
     }
     expect(status).toBe("draft");
+  });
+});
+
+/**
+ * Issue 537/538 (Issue 543 option B2). Before this split the single `participant` stage
+ * carried `fixtures/`, `tests/hidden/` and `verifier/` together: every checkpoint is
+ * graded by running `tests/hidden/check_field.py` against the learner's file, and
+ * `fixtures/generate.py` implements `egcd` under the exact name `starter/field.py`'s own
+ * stub asks the learner to write, with `egcd_rows` supplying the row-for-row trace its
+ * `egcd_trace` stub asks for. The assertions below fail the moment either directory is
+ * copied back into that stage.
+ */
+function probe(lines: string[]): string {
+  const result = python(["-c", lines.join("\n")]);
+  expect(result.stderr).toBe("");
+  expect(result.status).toBe(0);
+  return result.stdout.trim().split("\n").at(-1) ?? "";
+}
+
+describe("ac26-w3-field-inverse: participant/verifier separation (Issue 537/538)", () => {
+  it("keeps fixtures/, the graded egcd implementation and the hidden suite out of the participant Docker stage", () => {
+    const dockerfile = read("local/Dockerfile");
+    const participantStage = dockerfile.slice(
+      dockerfile.indexOf("FROM base AS participant"),
+      dockerfile.indexOf("FROM base AS verifier"),
+    );
+    expect(participantStage).not.toContain("COPY fixtures/");
+    expect(participantStage).not.toContain("tests/hidden");
+    expect(participantStage).not.toContain("COPY verifier/");
+    expect(participantStage).not.toContain("COPY reference/");
+    expect(participantStage).not.toContain("COPY mutation.py");
+    expect(participantStage).toContain("COPY tests/public/");
+    expect(participantStage).toContain("COPY participant/");
+
+    const verifierStage = dockerfile.slice(
+      dockerfile.indexOf("FROM base AS verifier"),
+      dockerfile.indexOf("FROM participant AS author"),
+    );
+    expect(verifierStage).toContain("COPY fixtures/");
+    expect(verifierStage).toContain("COPY tests/hidden/");
+    expect(verifierStage).toContain("COPY verifier/");
+    expect(verifierStage).not.toContain("COPY participant/");
+    expect(verifierStage).not.toContain("COPY reference/");
+    expect(verifierStage).not.toContain("COPY mutation.py");
+  });
+
+  it("reproduces the original leak: no file the participant image carries reaches a working egcd or egcd_rows", () => {
+    // The file list comes from the Dockerfile's participant stage, via the same
+    // derivation `check-answer-reachability.ts` uses, rather than being restated here --
+    // so a COPY that puts `fixtures/` or `tests/hidden/` back fails this test.
+    const participantFiles = participantPythonFiles(
+      join(import.meta.dir, ".."),
+      "challenges/ac26-w3-field-inverse",
+    );
+    expect(participantFiles).not.toContain(
+      "challenges/ac26-w3-field-inverse/local/fixtures/generate.py",
+    );
+    expect(participantFiles).not.toContain(
+      "challenges/ac26-w3-field-inverse/local/tests/hidden/check_field.py",
+    );
+    expect(participantFiles).toContain(
+      "challenges/ac26-w3-field-inverse/local/tests/public/test_field.py",
+    );
+    for (const file of participantFiles) {
+      const source = readFileSync(join(import.meta.dir, "..", file), "utf8");
+      // The one permitted mention is the lazy, function-scoped checkout/author
+      // fallback: never a module-level import, which is what would fail loudly the
+      // moment it ran inside a participant image that carries no `fixtures/` at all.
+      expect(source).not.toMatch(/^from fixtures/m);
+      expect(source).not.toMatch(/^import fixtures/m);
+    }
+    // The starter's own stubs stay -- that is the file the learner edits, and it never
+    // held a working implementation. What must not be reachable is a WORKING one, which
+    // only ever lived in `fixtures/generate.py`, asserted absent above.
+    const starter = bundle("starter");
+    expect(starter).toContain("def egcd(");
+    expect(starter).toContain("    return (0, 0, 0)");
+    expect(starter).toContain("def egcd_trace(");
+    expect(starter).toContain("    return []");
+  });
+
+  it("keeps the Portal editor API and the fixtures import on opposite sides of the split", () => {
+    const participantServer = read("local/participant/server.py");
+    const hiddenServer = read("local/verifier/server.py");
+    for (const endpoint of [
+      "/api/config",
+      "/api/inspect",
+      "/api/starter",
+      "/api/test",
+      "/api/prepare",
+    ]) {
+      expect(participantServer).toContain(endpoint);
+      expect(hiddenServer).not.toContain(endpoint);
+    }
+    expect(participantServer).not.toContain("def evaluate(");
+    expect(participantServer).not.toContain("def _run_submission(");
+    expect(participantServer).not.toMatch(/^from fixtures/m);
+    expect(hiddenServer).toContain("from fixtures.generate import");
+    expect(hiddenServer).toContain("/verify");
+    expect(hiddenServer).toContain("/healthz");
+    expect(hiddenServer).toContain("/public");
+  });
+
+  it("re-checks the answer seal in the verifier, so bypassing the Workbench does not credit a bare answer", () => {
+    const output = JSON.parse(
+      probe([
+        "import json, sys",
+        "sys.path.insert(0, '.')",
+        "from verifier.server import _unwrap_submission",
+        "print(json.dumps({",
+        "  'forged': _unwrap_submission('inverse', 'tcw1.eyJ2IjoxfQ.AAAA'),",
+        "  'code': _unwrap_submission('inverse', 'class Field: pass'),",
+        "}))",
+      ]),
+    ) as { forged: unknown; code: unknown };
+    expect(output.forged).toBeNull();
+    expect(output.code).toBe("class Field: pass");
+  });
+
+  it("proxies /verify to the internal verifier and fails closed when it is unreachable", () => {
+    const output = JSON.parse(
+      probe([
+        "import json, sys",
+        'sys.path.insert(0, ".")',
+        "from participant import server",
+        'bodies = [{"checkpointId": c, "submission": "anything"} for c in server.CHECKPOINTS]',
+        "print(json.dumps({",
+        '    "missing": [server.proxy_verdict(body, "") for body in bodies],',
+        '    "unavailable": [server.proxy_verdict(body, "http://127.0.0.1:1/verify") for body in bodies],',
+        '    "hasInlineEvaluator": hasattr(server, "evaluate") or hasattr(server, "_run_submission"),',
+        "}))",
+      ]),
+    ) as {
+      missing: Array<{ checkpointId: string; correct: boolean }>;
+      unavailable: Array<{ checkpointId: string; correct: boolean }>;
+      hasInlineEvaluator: boolean;
+    };
+    const expectedVerdicts = CHECKPOINTS.map((checkpointId) => ({ checkpointId, correct: false }));
+    expect(output.missing).toEqual(expectedVerdicts);
+    expect(output.unavailable).toEqual(expectedVerdicts);
+    expect(output.hasInlineEvaluator).toBe(false);
+  });
+
+  it("compose builds the right target for each service, publishes only the Workbench port, and isolates the verifier network", () => {
+    const compose = read("local/docker-compose.yml");
+    for (const contract of [
+      "target: participant",
+      "target: verifier",
+      '"127.0.0.1:18100:18100"',
+      "VERIFIER_URL: http://verifier:18146/verify",
+      "VERIFIER_PUBLIC_URL: http://verifier:18146/public",
+      "read_only: true",
+      "cap_drop:",
+      "- ALL",
+      "no-new-privileges:true",
+      "healthcheck:",
+      "internal: true",
+      'com.docker.network.bridge.enable_ip_masquerade: "false"',
+    ]) {
+      expect(compose).toContain(contract);
+    }
+    expect(compose).not.toContain('"127.0.0.1:18146:18146"');
+    expect(compose.match(/ports:/g)).toHaveLength(1);
+  });
+
+  it("serves the public half without any function a learner is graded on writing", () => {
+    const payload = JSON.parse(
+      probe([
+        "import json",
+        "from fixtures.generate import public_payload",
+        "print(json.dumps(public_payload('ci-fixed-seed')))",
+      ]),
+    ) as Record<string, unknown>;
+    expect(Object.keys(payload).sort()).toEqual([
+      "compositeModulus",
+      "healthToken",
+      "primeModulus",
+      "smallestNonInvertible",
+      "trace",
+    ]);
+    // Values only. `PRIMES` and `COMPOSITES` are the pools other deployments draw from,
+    // which this deployment's `make inspect` has never printed, so they are not in here.
+    expect(JSON.stringify(payload)).not.toContain("def ");
+    expect(payload).not.toHaveProperty("primes");
+    expect(payload).not.toHaveProperty("composites");
+  });
+
+  it("traces whatever pair `make inspect A=.. P=..` names, and defaults to this deployment's own", () => {
+    const traced = JSON.parse(
+      probe([
+        "import json",
+        "from fixtures.generate import default_trace_subject, public_payload",
+        "chosen = public_payload('ci-fixed-seed', 17, 101)",
+        "fallback = public_payload('ci-fixed-seed', 0, 0)",
+        "a, modulus = default_trace_subject('ci-fixed-seed')",
+        "print(json.dumps({",
+        "  'chosen': chosen['trace'], 'fallback': fallback['trace'],",
+        "  'default': {'a': a, 'modulus': modulus},",
+        "}))",
+      ]),
+    ) as {
+      chosen: { a: number; modulus: number; gcd: number; inverse: number; verification: number };
+      fallback: { a: number; modulus: number };
+      default: { a: number; modulus: number };
+    };
+    expect(traced.chosen.a).toBe(17);
+    expect(traced.chosen.modulus).toBe(101);
+    expect(traced.chosen.gcd).toBe(1);
+    expect((17 * traced.chosen.inverse) % 101).toBe(1);
+    expect(traced.chosen.verification).toBe(1);
+    // A zero means "this deployment's default", exactly as it did when show.py computed
+    // the default itself from an imported prime_modulus.
+    expect(traced.fallback.a).toBe(traced.default.a);
+    expect(traced.fallback.modulus).toBe(traced.default.modulus);
+  });
+
+  it("does not leave the answer one import away inside the grading image either (Issue #591)", () => {
+    // The split takes fixtures/ out of the PARTICIPANT image. The grading image still
+    // has it, because the hidden suite needs it, and the runner used to put the problem
+    // root on sys.path before importing the submission -- so a submission could import
+    // `egcd`/`egcd_rows` itself and take the egcd-trace checkpoint (measured at 35 of
+    // this problem's 200 points). The runner now drops those packages and the root
+    // before the import, the same guard cs-transaction-visibility-audit uses.
+    const leaky = "from fixtures.generate import egcd, egcd_rows as egcd_trace\n";
+    expect(evaluate("egcd-trace", leaky)).toBe(false);
+    // Grading itself is unaffected: check_field binds what it needs at module scope.
+    expect(evaluate("egcd-trace", bundle("reference"))).toBe(true);
+    const hiddenServer = read("local/verifier/server.py");
+    expect(hiddenServer).toContain("sys.modules.pop(module_name, None)");
+    expect(hiddenServer).toContain("sys.path.remove");
+  });
+
+  it("renders the whole `make inspect` page from the public half alone, with no fixtures import", () => {
+    // Every section show.py has always printed is still there, built only from what
+    // `GET /public` serves. That the page is byte-identical to the pre-split one is
+    // checked against the previous revision by hand (see the PR), not here: this file
+    // can only see the current one.
+    const rendered = JSON.parse(
+      probe([
+        "import io, json, os, contextlib, importlib",
+        "from fixtures.generate import public_payload",
+        "import show",
+        "out = {}",
+        'for seed in ("ci-fixed-seed", "seed-b", "12345", "xyz"):',
+        '    os.environ["PUBLIC_EVIDENCE_JSON"] = json.dumps(public_payload(seed))',
+        "    importlib.reload(show)",
+        "    buffer = io.StringIO()",
+        "    with contextlib.redirect_stdout(buffer):",
+        "        show.main([])",
+        "    out[seed] = buffer.getvalue()",
+        "print(json.dumps(out))",
+      ]),
+    ) as Record<string, string>;
+    for (const page of Object.values(rendered)) {
+      for (const section of [
+        "health token     :",
+        "prime modulus    :",
+        "composite modulus:",
+        "smallest non-invertible element:",
+        "extended Euclid for a =",
+        "   step |     q |     r |     s |     t",
+        "  gcd            :",
+        "  inverse         :",
+        "  verification    :",
+      ]) {
+        expect(page).toContain(section);
+      }
+    }
+    expect(new Set(Object.values(rendered)).size).toBe(Object.keys(rendered).length);
   });
 });

@@ -164,21 +164,41 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   named `ac26-w5-lwe-rlwe` as outstanding after #572 had merged it — the same staleness
   that this section already records as having cost a run.
 
-  What is left, with the detector's count each — `ac26-w3-field-inverse` (1). Landed so
-  far: `cs-auth-claim-audit` and
+  **Nothing is left in this class.** Landed: `cs-auth-claim-audit` and
   `ac26-bridge-experiment` (#562), `ac26-w3-schnorr-drill` (#570), `ac26-w5-lwe-rlwe`
   (#572), `ac26-w5-rgsw-external` (#573), `ac26-w5-cmux-blind-rotation` (#579),
   `ac26-w5-pbs-homnand` (#581), `ac26-w4-commit-open` (#582, split out of #578),
   `ac26-w5-extract-key-switch` (#584), `ac26-w5-encoding-noise` (#586),
-  `ac26-w3-passkey-assertion` (#590).
+  `ac26-w3-passkey-assertion` (#590), `ac26-w3-field-inverse` (#594).
+  Catalog count is 6 as of #594 and #564, down from 39; the six that remain are
+  `sha256-schedule-logic`'s and `sha256-compress-digest`'s `direct-value-comparison`
+  findings, a different class (`sha256-bytes-padding`'s four closed with #564). Runs took
+  the largest count first, so the last two here were singletons — and a single finding
+  said nothing about its own points until measured (see #582, #584 and #594 below).
+
+  #594 is the first in this class whose **public half takes arguments**. `make inspect
+  A=17 P=101` traces any pair the learner names, and `starter/field.py`'s own docstring
+  points at it, so the trace is participant surface by design and had to survive the
+  split: `GET /public` there takes the same optional `a`/`modulus`, and the default the
+  learner gets when they name neither (`p // 3 + 1`, `p`) moved into `fixtures/` beside
+  it rather than staying in `show.py`, which no longer has a prime to compute it from.
+  Copy it, not #586, for any problem whose `make inspect` accepts arguments.
+
+  #594 is also the first to measure **both** probes and act on the second. Its
+  participant-image free score needed two probes to state honestly: the shipped fixtures
+  module handed straight to the hidden suite passes **0 of 7**, because it defines no
+  `Field` or `FieldElement` at all; the starter with its three stubs delegated to that
+  module — the cheapest real use of the leak — passes **1 of 7, 35 of 200 points**, the
+  `egcd-trace` checkpoint. That is lower than the 70–145 the baseline entry carried from
+  #537's estimate: report the measurement, not the estimate you inherited. And the
+  submission-side probe (§ below, Issue #591) still scored that same **35 of 200** after
+  the split, so #594 ported #590's `sys.path`/`sys.modules` guard into its runner and
+  re-measured at 0. A split that closes only the participant image is half a fix on a
+  problem where the two probes disagree — measure both before claiming a leak is closed.
+
   Check `git ls-remote --heads origin` before starting anything here: two sessions
   work this list with no claim mechanism, and #583 was thrown away for duplicating #584.
   Pushing the branch before doing the work is what #590 did to claim it.
-  Catalog count is 7 after #590 and #564, down from 39: `ac26-w3-field-inverse` (1,
-  this class) plus `sha256-schedule-logic` (3) and `sha256-compress-digest` (3), which are
-  `direct-value-comparison` and now unblocked. Runs have taken the
-  largest count first, so one singleton is what is left in this class — and a single
-  finding says nothing about its own points until measured (see #582 and #584 below).
 
   **What a B2 split does not close, measured.** The split takes the material out of the
   *participant image*. It does not take it out of the image the *submission runs in*:
@@ -190,9 +210,10 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   free score that was measured *before* the split. `ac26-w3-passkey-assertion` was
   3/3 (200/200) the same way until #590 added the guard `cs-transaction-visibility-audit`
   already uses: drop the `fixtures`/`tests` modules and the problem root from `sys.path`
-  and `sys.modules` before importing the submission. 41 verifiers still lack it; Issue
-  #591 carries the evidence and the proposed catalog-wide test. #564 landed without the
-  guard, so it is one of those 41 — that is Issue #591's work, not a defect in #564.
+  and `sys.modules` before importing the submission. #594 ported that guard, and re-measured
+  at 0. Every other verifier still lacks it — 40 of them as of #594 — and Issue #591 carries
+  the evidence and the proposed catalog-wide test. #564 landed without the guard, so it is
+  one of those 39: that is #591's work, not a defect in #564.
 
   Two consequences for reporting. `scripts/check-answer-reachability.ts` only ever sees
   the participant image, so a finding count says nothing about this path — never write
@@ -239,11 +260,11 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   whenever a rule stops being blind: never report a rise as a regression, or a fall as a
   closure.
 
-  **Both remaining are `status: draft`.** Since the gate's removal that no longer changes
-  what an agent may merge, but it still changes what the PR body has to say: a `draft`
-  problem carries no claim that anyone played it, so a split there needs no play evidence
-  — only an honest note that none was gathered. Never drop a needed README correction to
-  make a PR look smaller.
+  Both of the last two were `status: draft`. Since the gate's removal that no longer
+  changes what an agent may merge, but it still changes what the PR body has to say: a
+  `draft` problem carries no claim that anyone played it, so a split there needs no play
+  evidence — only an honest note that none was gathered. Never drop a needed README
+  correction to make a PR look smaller.
 
   `ac26-w5-pbs-homnand` (#581) is worth reading before the next one, because it is the
   first in this class whose supplied half was not already a separate file. Five earlier
