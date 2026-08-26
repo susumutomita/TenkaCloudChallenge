@@ -73,9 +73,19 @@ async function attempt(fn) {
  * The 8 attack assertions. The first 7 are in issue order; the 8th (added for
  * issue #542) closes a gap in the original set: requirement 4 in the starter's
  * comment promises `WITH CHECK` on both INSERT and UPDATE, but only INSERT was
- * ever checked, so a submission with `USING` and no `WITH CHECK` on the UPDATE
- * policy scored full marks. Each assertion takes the injected `client` and
- * the resolved `actors`/`docs` from the seed and returns a result object.
+ * ever checked.
+ *
+ * Note (confirmed against a live database, not just inferred): omitting
+ * `WITH CHECK` on `UPDATE` entirely is NOT itself the hole — PostgreSQL reuses
+ * the `USING` expression as the check applied to the new row when `WITH CHECK`
+ * is absent, so a correctly org-scoped `USING` already blocks a same-row
+ * `organization_id` reassignment even without a separate `WITH CHECK`. What
+ * was never verified is a `WITH CHECK` clause that IS present but does not
+ * constrain `organization_id` (e.g. one that only checks authentication) —
+ * that explicit clause replaces the implicit protection, and nothing else in
+ * the policy stops `organization_id` from moving. Each assertion takes the
+ * injected `client` and the resolved `actors`/`docs` from the seed and
+ * returns a result object.
  *
  * actors: { aMember, aOwner, bMember, bOwner }
  * docs:   { aDoc, bDoc } — a document owned by org A / org B respectively
@@ -199,8 +209,8 @@ export const ASSERTIONS = [
       return {
         passed,
         detail: passed
-          ? "UPDATE reassigning organization_id to another org was blocked (WITH CHECK)."
-          : "LEAK: an owner moved their own document into another org by rewriting organization_id — the UPDATE policy has no WITH CHECK.",
+          ? "UPDATE reassigning organization_id to another org was blocked."
+          : "LEAK: an owner moved their own document into another org by rewriting organization_id — the UPDATE policy's WITH CHECK does not constrain organization_id.",
       };
     },
   },

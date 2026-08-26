@@ -93,7 +93,11 @@ schema (`local/db/schema.sql`) にポリシーで使う identity ヘルパが定
 
 platform は答えを持たない。 提出時、 ローカル採点 API がコンテナの loopback `/verify` (`POST http://127.0.0.1:18081/verify`) に委譲し、 grader が **8 件の攻撃 assertion** を live Postgres に対して実行して `{ "correct": boolean }` を返す。 全 8 件 PASS で正解。 正解は 300 点、 誤答は 10 点減点。
 
-8 件目が要る理由: `patchDocument` (検査 3) はアプリの PATCH endpoint が転送するフィールド (`title`、`body`) しか叩かない (`organization_id` は転送しない、 `local/app/server.mjs` 参照)。 そのため `UPDATE` ポリシーに `USING` だけ書いて `WITH CHECK` を書かない解答はアプリからは見えないが、 データベースには直接届く。 grader は検査 1〜7 と同じ仕組み (`local/app/pg-client.mjs`) で、 その `UPDATE ... SET organization_id` を SQL レベルで直接実行して確認する。
+8 件目が要る理由: `patchDocument` (検査 3) はアプリの PATCH endpoint が転送するフィールド (`title`、`body`) しか叩かない (`organization_id` は転送しない、 `local/app/server.mjs` 参照)。 そのため grader は検査 1〜7 と同じ仕組み (`local/app/pg-client.mjs`) で、 `UPDATE ... SET organization_id` を SQL レベルで直接実行して確認する。
+
+ここは Postgres の意味論を正確に書いておく価値がある。 `UPDATE` ポリシーに `WITH CHECK` を**一切書かない**場合、 Postgres は `USING` 式を新しい行のチェックにも再利用する — そのため `USING` が `organization_id` で正しく絞られていれば、 別途 `WITH CHECK` を書かなくても同じ行の `organization_id` 付け替えは既に拒否される (これは実際に live database に対して実測して確認済みであり、 ドキュメントからの推測ではない)。 つまり `UPDATE` の `WITH CHECK` を**省略すること自体**は、 要件 4 が警告している穴ではない。
+
+8 件目が実際に捕まえるのは、 `WITH CHECK` 句が**存在するのに** `organization_id` を制約していないケースである — 例えば `app.is_authenticated()` しか再チェックしない場合。 明示的な `WITH CHECK` を書くと、 それが暗黙の (USING 由来の) 保護を完全に置き換えてしまうため、 その明示句が `organization_id` を見ていなければ、 ポリシーの他のどこもそれを止めない。 これが要件 4 が `USING` に任せず `WITH CHECK` を明示的に書くよう求めている理由そのものである — 暗黙の、書かれていない保護は、 あなた自身や後でレビューする人がポリシーを読むだけでは検証できない。
 
 ## grader の単体テスト
 

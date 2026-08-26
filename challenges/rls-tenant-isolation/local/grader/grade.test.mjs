@@ -10,9 +10,13 @@
  * The grader's job is to turn those behaviours into a verdict, so the tests pin
  * exactly that: the secure state passes all 8, the broken state fails, and each
  * individual leak is attributed to the right assertion. A third fixture,
- * UpdateMissingWithCheckClient, targets one specific regression (issue #542):
- * an UPDATE policy with `USING` but no `WITH CHECK` used to score 7/7 because
- * nothing exercised UPDATE's WITH CHECK directly.
+ * UpdateWithCheckIgnoresOrgClient, targets one specific regression (issue
+ * #542): an UPDATE policy whose WITH CHECK is present but does not constrain
+ * organization_id, which used to score 7/7 because nothing exercised UPDATE's
+ * WITH CHECK directly. (Omitting WITH CHECK on UPDATE entirely is NOT this
+ * bug — verified against live Postgres, an absent WITH CHECK falls back to
+ * re-checking the policy's own USING against the new row, so a correctly
+ * org-scoped USING already blocks the reassignment on its own.)
  */
 import { describe, expect, it } from "bun:test";
 import { ASSERTIONS, runGrader } from "./grade.mjs";
@@ -131,20 +135,22 @@ class BrokenClient {
 }
 
 /**
- * Regression fixture for issue #542: an UPDATE policy that has `USING` but no
- * `WITH CHECK`. This is otherwise a fully correct SecureClient — cross-tenant
- * reads/writes are blocked, INSERT enforces its own separate WITH CHECK, delete
- * is owner-only, anon reads nothing — except that reassigning a user's OWN
- * document to another org's organization_id via UPDATE succeeds, because
- * nothing constrains what the row is allowed to become. This is the exact
- * submission that used to score 7/7 before the grader checked UPDATE's WITH
- * CHECK directly.
+ * Regression fixture for issue #542: the UPDATE policy HAS a WITH CHECK
+ * clause, but it does not constrain organization_id (e.g. it only re-checks
+ * authentication, the same way requirement 4 was satisfied for INSERT without
+ * carrying the same constraint over to UPDATE). This is otherwise a fully
+ * correct SecureClient — cross-tenant reads/writes are blocked, INSERT
+ * enforces its own separate WITH CHECK, delete is owner-only, anon reads
+ * nothing — except that reassigning a user's OWN document to another org's
+ * organization_id via UPDATE succeeds, because the UPDATE policy's WITH CHECK
+ * never looks at organization_id. This is the exact submission shape that
+ * used to score 7/7 before the grader checked UPDATE's WITH CHECK directly.
  */
-class UpdateMissingWithCheckClient extends SecureClient {
+class UpdateWithCheckIgnoresOrgClient extends SecureClient {
   async updateDocumentOrganization(actor, id, newOrganizationId) {
     const row = this.rows.find((r) => r.id === id);
     if (!row || row.organization_id !== actor.organizationId) return { ok: true, rowsAffected: 0 }; // USING still gates the target row
-    row.organization_id = newOrganizationId; // no WITH CHECK on UPDATE — reassignment succeeds
+    row.organization_id = newOrganizationId; // WITH CHECK exists but never inspects organization_id — reassignment succeeds
     return { ok: true, rowsAffected: 1 };
   }
 }
@@ -177,8 +183,8 @@ describe("rls-tenant-isolation grader", () => {
     expect(verdict.passedCount).toBeLessThan(8);
   });
 
-  it("should fail ONLY the WITH-CHECK-on-UPDATE assertion when the UPDATE policy has USING but no WITH CHECK (issue #542)", async () => {
-    const verdict = await runGrader(new UpdateMissingWithCheckClient(), { actors, docs });
+  it("should fail ONLY the WITH-CHECK-on-UPDATE assertion when UPDATE's WITH CHECK does not constrain organization_id (issue #542)", async () => {
+    const verdict = await runGrader(new UpdateWithCheckIgnoresOrgClient(), { actors, docs });
     const failed = verdict.results.filter((r) => !r.passed).map((r) => r.id);
     expect(failed).toEqual(["owner-cannot-reassign-doc-org"]);
     expect(verdict.passedCount).toBe(7);
