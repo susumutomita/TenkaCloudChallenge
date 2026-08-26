@@ -16,24 +16,30 @@
 
 ## 何がデプロイされるか
 
-コンテナが 1 つだけです。クラウドアカウントも、外部ネットワーク面もありません。
+1 台のマシン上のコンテナ 2 つです。クラウドアカウントも、外部ネットワーク面もありません。
 
 ```text
 local/
-├── starter/compress.py   ← 編集するのはこのファイルだけ
-├── given/primitives.py      1 問目と 2 問目。正しい実装。編集しない
-├── fixtures/generate.py     全 fixture を deploy ごとの seed から導出する
-├── tests/public/            読めるテスト
-├── tests/hidden/            verifier が実行するテスト (image 内のみ。bind-mount しない)
-├── reference/               解答。`make build` が作る image には入らない
-├── verifier/server.py       POST /verify。127.0.0.1:18091
-└── mutation.py              hidden test が誤答を本当に落とせるかを証明する
+├── starter/compress.py      ← 編集するのはこのファイルだけ
+├── given/primitives.py         1 問目と 2 問目。正しい実装。編集しない
+├── participant/server.py       あなたが話す Workbench。127.0.0.1:18091
+├── tests/public/                読めるテスト
+├── fixtures/generate.py        全 fixture を deploy ごとの seed から導出する
+│                                (verifier コンテナのみ)
+├── tests/hidden/                verifier が実行するテスト (verifier コンテナのみ)
+├── verifier/server.py          POST /verify。Workbench からしか届かない
+├── reference/                   解答。あなたが動かすどちらのコンテナにも入らない
+└── mutation.py                  hidden test が誤答を本当に落とせるかを証明する
 ```
 
-`make build` は Dockerfile の `participant` stage を作ります。fixture・両方のテスト・verifier・
-given の primitives・starter が入り、`reference/` と `mutation.py` は `make reference-test` が作る
-`author` stage でだけ追加されます。つまり「走らせろと言われた image」の中に解答は入っていません。
-これは誤配の防止であって秘匿ではありません (保証範囲を参照)。
+`make build` は Dockerfile の `participant` stage を作ります。入るのは given の primitives・
+starter・公開テスト・Workbench だけです。fixture・hidden test・verifier は 2 つ目の `verifier`
+stage にあり、internal network 上の非公開 compose service として動きます。Workbench はそこから
+`GET /public` でこの deploy の公開証拠を取り、提出を `POST /verify` へ転送します。`make test` と
+`make inspect` も同じ経路で verifier を起動するので、単独の `docker run` ではなく compose 経由に
+なります。`reference/` と `mutation.py` は `make reference-test` が作る `author` stage でだけ
+追加されます。つまり「走らせろと言われた image」の中に解答は入っていません。これは誤配の防止で
+あって秘匿ではありません (保証範囲を参照)。
 
 fixture は deploy 時に注入される `FLAG_SEED` から導出されます。同じ seed なら同じ数値、違う seed なら
 違う数値です。2 つのクイズは順序も変わるので、他の人の答えの並びは、その人の推論が正しくても
@@ -109,10 +115,12 @@ T と F を並べて提出してください。
 
 ## 保証範囲
 
-ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image もあなたの管理下に
-あるので、ここには秘匿されているものはありません。`tests/hidden/` を bind-mount せず `reference/` を
-participant image に入れないのは、あなたの作業に紛れ込ませないためであって、手が届かなくするためでは
-ありません。ソースはどちらにせよこのリポジトリにありますし、`author` stage は自分でビルドできます。
+ローカル実行は**自習用の honor-system 検証**です。compose stack のすべてのコンテナと Docker デーモンを
+管理する人を、中身の閲覧から止める手立てはありません。ソースもどちらにせよこのリポジトリにあります。
+ここにある境界は秘匿ではなく誤配送の防止です。build して動かす Workbench コンテナには given の
+primitives・starter・公開テストしか入っておらず、fixture も hidden test も参照解答も verifier 本体も
+入っていません。それらは Workbench がネットワーク越しに話す、公開されていない second container と、
+`make reference-test` が build する author 専用 image にだけあります。
 
 verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier をハングさせたり
 クラッシュさせたりできません。checkpoint は echo した id しか加点できません。結果は期待値を漏らし

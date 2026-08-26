@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
 import { parse as parseYaml } from "yaml";
+import { participantPythonFiles } from "./lib/local-play-problems";
 
 /**
  * CI for `sha256-compress-digest`, problem 3 of the SHA-256 series.
@@ -116,7 +117,7 @@ describe("sha256-compress-digest: participant contract", () => {
   it("should copy given/ into the participant stage, since the starter imports it", () => {
     // Without this the image builds and then every run dies on ModuleNotFoundError, which
     // reads as a broken problem rather than a missing COPY.
-    expect(read("local/Dockerfile")).toMatch(/^COPY given\/ \.\/given\/$/m);
+    expect(read("local/Dockerfile")).toMatch(/^COPY (?:--chown=\S+ )?given\/ \.\/given\/$/m);
   });
 
   it("should declare the same six functions in the starter and the reference", () => {
@@ -162,6 +163,150 @@ describe("sha256-compress-digest: participant contract", () => {
     for (const value of leaks) {
       expect(printed).not.toContain(value);
     }
+  });
+});
+
+describe("sha256-compress-digest: fixtures/ and verifier/ are gone from the participant image (Issue 537/538/543)", () => {
+  it("reproduces the original leak: the graded checkpoints' answers are no longer in the participant image", () => {
+    // Before this fix, `verifier/server.py` (and therefore the `fixtures/generate.py`
+    // it imports) shipped in the single participant stage. `avalanche_distance` was a
+    // plain, seed-derived function defined directly in verifier/server.py, and
+    // `PROPERTY_STATEMENTS`/`STORAGE_STATEMENTS` in fixtures/generate.py ship every
+    // statement's correct `true` verdict in plaintext -- the whole quiz for one import.
+    // The file list below comes from the Dockerfile via the same derivation
+    // check-answer-reachability.ts uses, so a COPY that puts either module back fails
+    // this test.
+    const repoRoot = join(import.meta.dir, "..");
+    const participantFiles = participantPythonFiles(repoRoot, "challenges/sha256-compress-digest");
+    expect(participantFiles).not.toContain(
+      "challenges/sha256-compress-digest/local/fixtures/generate.py",
+    );
+    expect(participantFiles).not.toContain(
+      "challenges/sha256-compress-digest/local/verifier/server.py",
+    );
+    expect(participantFiles).toContain(
+      "challenges/sha256-compress-digest/local/tests/public/test_compress.py",
+    );
+    expect(participantFiles).toContain("challenges/sha256-compress-digest/local/show.py");
+
+    // And the leak is real, not hypothetical: with fixtures/ and verifier/ both on the
+    // path, `fixtures.generate` alone (no verifier-internal knowledge) reproduces the
+    // exact submission the verifier's own three checkpoints accept.
+    const probe = [
+      "import json, sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import avalanche_case, property_quiz, quiz_answer, storage_quiz",
+      "from verifier.server import evaluate",
+      "seed = sys.argv[1]",
+      "case = avalanche_case(seed)",
+      "import hashlib",
+      "left = hashlib.sha256(case.message).digest()",
+      "right = hashlib.sha256(case.flipped).digest()",
+      "distance = sum(bin(a ^ b).count('1') for a, b in zip(left, right))",
+      "print(json.dumps({",
+      "  'avalanche': evaluate('avalanche', str(distance)),",
+      "  'properties': evaluate('properties', quiz_answer(property_quiz(seed))),",
+      "  'storage': evaluate('storage', quiz_answer(storage_quiz(seed))),",
+      "}))",
+    ].join("\n");
+    const result = python(["-c", probe, SEED]);
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "{}")).toEqual({
+      avalanche: true,
+      properties: true,
+      storage: true,
+    });
+  });
+
+  it("serves the public half over GET /public on the verifier, and never the graded values", () => {
+    const verifierServer = read("local/verifier/server.py");
+    expect(verifierServer).toContain("/public");
+    expect(verifierServer).toContain("public_payload");
+    expect(verifierServer).not.toContain("BEGIN GENERATED PORTAL EDITOR API");
+
+    const probe = [
+      "import json, sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import public_payload",
+      "seed = sys.argv[1]",
+      "payload = public_payload(seed)",
+      "print(json.dumps({",
+      "  'keys': sorted(payload),",
+      "  'avalancheKeys': sorted(payload['avalanche']),",
+      "  'propertyStatementsCarryTrue': any('true' in statement for statement in payload['propertyStatements']),",
+      "  'storageStatementsCarryTrue': any('true' in statement for statement in payload['storageStatements']),",
+      "}))",
+    ].join("\n");
+    const result = python(["-c", probe, SEED]);
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "{}")).toEqual({
+      keys: [
+        "avalanche",
+        "feedforward",
+        "healthToken",
+        "propertyStatements",
+        "round",
+        "storageStatements",
+      ],
+      // Only the message and the bit to flip -- never the precomputed distance, which
+      // is the whole of the checkpoint.
+      avalancheKeys: ["bit", "messageHex"],
+      propertyStatementsCarryTrue: false,
+      storageStatementsCarryTrue: false,
+    });
+  });
+
+  it("routes show.py and the public tests through the verifier, with a checkout-only fallback", () => {
+    const participantServer = read("local/participant/server.py");
+    expect(participantServer).not.toContain("from fixtures");
+    expect(participantServer).not.toContain("import fixtures");
+
+    for (const path of ["local/show.py", "local/tests/public/test_compress.py"]) {
+      const source = read(path);
+      expect(source).toContain("PUBLIC_EVIDENCE_JSON");
+      expect(source).toContain("VERIFIER_PUBLIC_URL");
+      // The fixtures fallback is function-scoped, so it resolves in a checkout or the
+      // author stage and is simply never reached inside a participant image.
+      expect(source).toContain("    from fixtures.generate import public_payload");
+    }
+    // `make test` / `make inspect` need a live verifier now, so they run through Compose
+    // rather than a bare `docker run` against a standalone image.
+    const makefile = read("Makefile");
+    expect(makefile).toContain("docker compose -f local/docker-compose.yml -p $(IMAGE)");
+    expect(makefile).toContain("verifier-up:");
+    expect(makefile).toContain("verifier-down:");
+    expect(makefile).toContain("test: build verifier-up");
+    expect(makefile).toContain("inspect: build verifier-up");
+  });
+
+  it("keeps the author stage FROM participant, with fixtures/tests/hidden/verifier copied back for mutation.py", () => {
+    const dockerfile = read("local/Dockerfile");
+    const participantStage = dockerfile.slice(
+      dockerfile.indexOf("FROM base AS participant"),
+      dockerfile.indexOf("FROM base AS verifier"),
+    );
+    expect(participantStage).not.toContain("COPY --chown=lab:lab fixtures/");
+    expect(participantStage).not.toContain("COPY --chown=lab:lab verifier/");
+    expect(participantStage).not.toContain("COPY --chown=lab:lab reference/");
+    expect(participantStage).not.toContain("COPY --chown=lab:lab mutation.py");
+    expect(participantStage).toContain("COPY --chown=lab:lab tests/public/");
+    expect(participantStage).toContain("COPY --chown=lab:lab participant/");
+
+    const verifierStage = dockerfile.slice(
+      dockerfile.indexOf("FROM base AS verifier"),
+      dockerfile.indexOf("FROM participant AS author"),
+    );
+    expect(verifierStage).toContain("COPY --chown=lab:lab fixtures/");
+    expect(verifierStage).toContain("COPY --chown=lab:lab tests/hidden/");
+    expect(verifierStage).toContain("COPY --chown=lab:lab verifier/");
+    expect(verifierStage).not.toContain("COPY --chown=lab:lab participant/");
+
+    const authorStage = dockerfile.slice(dockerfile.indexOf("FROM participant AS author"));
+    expect(authorStage).toContain("COPY --chown=lab:lab fixtures/");
+    expect(authorStage).toContain("COPY --chown=lab:lab tests/hidden/");
+    expect(authorStage).toContain("COPY --chown=lab:lab verifier/");
+    expect(authorStage).toContain("COPY --chown=lab:lab reference/");
+    expect(authorStage).toContain("COPY --chown=lab:lab mutation.py");
   });
 });
 
