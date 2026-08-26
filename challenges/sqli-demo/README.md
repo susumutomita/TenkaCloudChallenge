@@ -24,7 +24,7 @@ make local PROBLEM=sqli-demo   # from the TenkaCloud repo root
 The platform holds no answer. On submit, the local scoring API forwards your
 submission to the container's loopback `/verify`
 (`POST http://127.0.0.1:18081/verify`), which judges it and returns
-`{ "correct": boolean }`. A correct flag scores 200 points; a wrong one costs 10.
+`{ "correct": boolean }`. A correct flag scores 100 points; a wrong one costs 5.
 
 The flag and the admin password are derived from a per-deploy random `FLAG_SEED`,
 so every run is unique and nothing secret is committed.
@@ -42,7 +42,7 @@ so every run is unique and nothing secret is committed.
   "verifyUrl": "http://127.0.0.1:18081/verify",
   "secretEnv": ["FLAG_SEED"]
 },
-"scoring": { "kind": "verify", "points": 200, "wrongAnswerPenalty": 10, "hints": [ … ] }
+"scoring": { "kind": "verify", "points": 100, "wrongAnswerPenalty": 5, "hints": [ … ] }
 ```
 
 ```

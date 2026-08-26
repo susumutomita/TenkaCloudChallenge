@@ -91,7 +91,7 @@ schema (`local/db/schema.sql`) にポリシーで使う identity ヘルパが定
 
 ## 採点
 
-platform は答えを持たない。 提出時、 ローカル採点 API がコンテナの loopback `/verify` (`POST http://127.0.0.1:18081/verify`) に委譲し、 grader が **8 件の攻撃 assertion** を live Postgres に対して実行して `{ "correct": boolean }` を返す。 全 8 件 PASS で正解。 正解は 300 点、 誤答は 10 点減点。
+platform は答えを持たない。 提出時、 ローカル採点 API がコンテナの loopback `/verify` (`POST http://127.0.0.1:18081/verify`) に委譲し、 grader が **8 件の攻撃 assertion** を live Postgres に対して実行して `{ "correct": boolean }` を返す。 全 8 件 PASS で正解。 正解は 200 点、 誤答は 10 点減点。
 
 8 件目が要る理由: `patchDocument` (検査 3) はアプリの PATCH endpoint が転送するフィールド (`title`、`body`) しか叩かない (`organization_id` は転送しない、 `local/app/server.mjs` 参照)。 そのため grader は検査 1〜7 と同じ仕組み (`local/app/pg-client.mjs`) で、 `UPDATE ... SET organization_id` を SQL レベルで直接実行して確認する。
 

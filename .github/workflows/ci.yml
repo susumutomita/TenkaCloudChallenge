@@ -170,6 +170,11 @@ jobs:
       - name: Check no participant surface pins a reassignable port
         run: bun run check:local-play-urls
 
+      # 配点は README と metadata.json の 2 箇所に独立して書かれている。採点に使われるのは
+      # metadata.json だけなので、ずれると参加者は実際と違う点数を期待して解く (Issue 555)。
+      - name: Check README scores match metadata.json
+        run: bun run check:readme-scoring
+
       # 出荷ゲートを 1 問ずつ回す (Issue 382)。第三者の PR / 独自問題という想定ケースで
       # 実際に使われるのと同じ入口を CI でも通し、「1 問だけ緑」と「カタログ全体が緑」が
       # 同じ検出ロジックで決まるようにする。列挙は index.json ではなく filesystem なので、
