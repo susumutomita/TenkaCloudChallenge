@@ -11,6 +11,7 @@ through on paper, or the trace teaches nothing.
 from __future__ import annotations
 
 import hashlib
+import sys
 from dataclasses import dataclass
 
 
@@ -156,12 +157,19 @@ def hidden_cases(seed: str) -> list[Case]:
     return cases
 
 
-def corrupted_trace(seed: str) -> tuple[Case, list[int], int]:
+def corrupted_trace(seed: str) -> tuple[Case, list[int]]:
     """A trace with the modulus skipped on exactly one round.
 
-    Returns the case, the corrupted trace, and the 0-based index where the trace
-    first stops satisfying `0 <= value < modulus` — the answer to the first-broken
-    checkpoint.
+    Returns the case and the corrupted trace -- exactly the evidence `show.py` and the
+    Workbench's `inspect` view print. It deliberately stops there: which position is
+    the answer to the `first-broken` checkpoint, and this function ships in the
+    participant image (see ../Dockerfile), so it must never be able to name that
+    position itself. `verifier/expected.py`'s `first_broken_index` holds that
+    derivation instead, and that module never leaves the verifier-only Docker stage
+    (Issue 543/537 -- the class this problem was scaffolded from before that fix:
+    `corrupted_trace` used to return the broken index as a third tuple element, and
+    that alone made the checkpoint's answer one `import` away inside a learner's own
+    container, `show.py`'s call site notwithstanding).
 
     The checkpoint asks which entry first leaves `[0, modulus)`, so the trace has to
     contain such an entry. Skipping the reduction only produces one on a round that
@@ -197,15 +205,12 @@ def corrupted_trace(seed: str) -> tuple[Case, list[int], int]:
 
     trace: list[int] = []
     value = case.start % modulus
-    broke_at = -1
     for index in range(case.rounds):
         value = value + case.step
         if index != skip_at:
             value = value % modulus
         trace.append(value)
-        if broke_at == -1 and not 0 <= trace[index] < modulus:
-            broke_at = index
-    return case, trace, broke_at
+    return case, trace
 
 
 def _values_before_each_round(start: int, step: int, rounds: int, modulus: int) -> list[int]:
@@ -223,3 +228,30 @@ def health_token(seed: str) -> str:
     case = public_case(seed)
     payload = f"{case.start}:{case.step}:{case.rounds}:{case.modulus}"
     return hashlib.sha256(f"health:{seed}:{payload}".encode()).hexdigest()[:16]
+
+
+def public_payload(seed: str) -> dict[str, object]:
+    """Every piece of evidence a learner is shown for this deployment -- nothing more.
+
+    `show.py` and the Workbench's `inspect` view are built from exactly this dict, which
+    is also every field this function's own module ships to. It never carries `predict`'s
+    final value or `first-broken`'s index; those are the answers, not the evidence.
+
+    Issue 543/537: `fixtures/` -- this module -- does not ship in the participant Docker
+    stage at all (see ../Dockerfile). The `participant` Workbench fetches this payload
+    from the verifier at runtime instead of building it locally; see
+    `participant/server.py`'s `fetch_public` and `verifier/server.py`'s `/public` route.
+    The version below runs inside the verifier, which is the one process this catalog's
+    seed-derived fixtures may still execute in.
+    """
+    case = public_case(seed)
+    bad_case, trace = corrupted_trace(seed)
+    return {
+        "environment": {
+            "python": sys.version.split()[0],
+            "healthToken": health_token(seed),
+        },
+        "predict": case.as_dict(),
+        "walkback": walkback_case(seed),
+        "firstBroken": {**bad_case.as_dict(), "trace": trace},
+    }

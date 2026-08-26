@@ -14,15 +14,40 @@ counter.py, after the four numbers have already been explained in words.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
+from urllib.request import urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from fixtures.generate import corrupted_trace, health_token, public_case, walkback_case
-
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
+
+
+def _public_evidence() -> dict[str, object]:
+    """This deployment's public evidence.
+
+    Issue 543/537: `fixtures/generate.py` does not ship in the `participant` Docker
+    stage any more (see local/Dockerfile) -- keeping its seed-keyed generator
+    reachable here, even with `first-broken`'s own answer moved out to
+    `verifier/expected.py`, still handed a learner the broken index for the price of
+    one extra line over what `corrupted_trace` already gave them. `make inspect` now
+    runs through Compose (see the Makefile) so this process can reach the verifier,
+    which is the only place `fixtures/` still lives, over the network instead.
+    """
+    injected = os.environ.get("PUBLIC_EVIDENCE_JSON")
+    if injected:
+        return json.loads(injected)
+    verifier_public_url = os.environ.get("VERIFIER_PUBLIC_URL")
+    if verifier_public_url:
+        with urlopen(verifier_public_url, timeout=10) as response:  # noqa: S310
+            return json.loads(response.read().decode("utf-8"))
+    # Resolves only against a checkout with fixtures/ still on disk (never true inside
+    # a built participant image -- see the docstring above).
+    from fixtures.generate import public_payload
+
+    return public_payload(SEED)
 
 
 def numbered_list(values: list[int]) -> tuple[str, str]:
@@ -54,41 +79,42 @@ def add_once(value: int, step: int, modulus: int) -> str:
 
 
 def main() -> None:
-    case = public_case(SEED)
+    evidence = _public_evidence()
+    case = evidence["predict"]
     print("== what goes in the environment box ==")
-    print(f"  python       {sys.version.split()[0]}")
-    print(f"  pass phrase  {health_token(SEED)}")
+    print(f"  python       {evidence['environment']['python']}")
+    print(f"  pass phrase  {evidence['environment']['healthToken']}")
     print("  Paste that phrase into the environment box in the Portal, exactly as printed.")
     print("  It is only proof that this container really ran.")
     print()
 
-    modulus = case.modulus
+    modulus = case["modulus"]
     print("== what goes in the predict box ==")
     print(f"  Only the numbers 0 to {modulus - 1} are used here. Like a clock, where three hours after")
     print(f"  10 o'clock is 1 o'clock and not 13: as soon as a number reaches {modulus}, take {modulus} off")
     print(f"  it. (That is the same thing as the remainder after dividing by {modulus}.)")
     print()
-    width = len(str(max(case.start, case.step, case.rounds, modulus)))
-    print(f"    {case.start:>{width}}  is where you start")
-    print(f"    {case.step:>{width}}  gets added each time")
-    print(f"    {case.rounds:>{width}}  times in total")
+    width = len(str(max(case["start"], case["step"], case["rounds"], modulus)))
+    print(f"    {case['start']:>{width}}  is where you start")
+    print(f"    {case['step']:>{width}}  gets added each time")
+    print(f"    {case['rounds']:>{width}}  times in total")
     print(f"    {modulus:>{width}}  gets taken off whenever a number reaches it")
     print("    (counter.py calls those four start / step / rounds / modulus)")
     print()
     print("  The first two additions, done for you:")
-    first = (case.start + case.step) % modulus
-    print(f"    {add_once(case.start, case.step, modulus)}")
-    print(f"    {add_once(first, case.step, modulus)}")
-    if case.start + case.step < modulus and first + case.step < modulus:
-        print(f"    (one that does reach {modulus}: {modulus - 1} + {case.step} = "
-              f"{modulus - 1 + case.step}, so {modulus - 1 + case.step} - {modulus} = {case.step - 1})")
+    first = (case["start"] + case["step"]) % modulus
+    print(f"    {add_once(case['start'], case['step'], modulus)}")
+    print(f"    {add_once(first, case['step'], modulus)}")
+    if case["start"] + case["step"] < modulus and first + case["step"] < modulus:
+        print(f"    (one that does reach {modulus}: {modulus - 1} + {case['step']} = "
+              f"{modulus - 1 + case['step']}, so {modulus - 1 + case['step']} - {modulus} = {case['step'] - 1})")
     print()
-    print(f"  Carry on the same way to the end. The number you are on after the {case.rounds}th addition")
+    print(f"  Carry on the same way to the end. The number you are on after the {case['rounds']}th addition")
     print("  is what goes in the predict box: one number, not the list of all of them. Work")
     print("  it out on paper before you run anything -- that is the whole point of this box.")
     print()
 
-    walk = walkback_case(SEED)
+    walk = evidence["walkback"]
     gap = (walk["final"] - walk["start"]) % walk["modulus"]
     product = gap * walk["undoStep"]
     undone = walk["step"] * walk["undoStep"]
@@ -109,20 +135,21 @@ def main() -> None:
     print("  called an elliptic curve -- so that last calculation has no practical answer.")
     print()
 
-    bad_case, trace, _broke_at = corrupted_trace(SEED)
+    bad_case = evidence["firstBroken"]
+    trace = bad_case["trace"]
     listing, positions = numbered_list(trace)
     print("== what goes in the first-broken box ==")
     print("  Someone else played the same game and wrote down every number they got:")
-    print(f"  start at {bad_case.start}, add {bad_case.step} each time, take {bad_case.modulus} off whenever a "
-          f"number reaches it, {bad_case.rounds} times.")
-    print(f"  On one of those {bad_case.rounds} additions they forgot to take the {bad_case.modulus} off. "
+    print(f"  start at {bad_case['start']}, add {bad_case['step']} each time, take {bad_case['modulus']} off "
+          f"whenever a number reaches it, {bad_case['rounds']} times.")
+    print(f"  On one of those {bad_case['rounds']} additions they forgot to take the {bad_case['modulus']} off. "
           f"So exactly one")
-    print(f"  number in the list below is not between 0 and {bad_case.modulus - 1}.")
+    print(f"  number in the list below is not between 0 and {bad_case['modulus'] - 1}.")
     print()
     print(f"    {listing}")
     print(f"    {positions}    <- positions, counting 0, 1, 2 ... from the left")
     print()
-    print(f"  Which position is the number that is not between 0 and {bad_case.modulus - 1}?")
+    print(f"  Which position is the number that is not between 0 and {bad_case['modulus'] - 1}?")
     print("  Write that one number (the leftmost is 0) in the first-broken box.")
 
 

@@ -6,6 +6,7 @@ tests pass for at least one implementation that the hidden tests reject.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -16,139 +17,104 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, SUBMISSION_DIR or str(ROOT / "starter"))
 
 from counter import advance  # noqa: E402
-from fixtures.generate import (  # noqa: E402
-    Case,
-    corrupted_trace,
-    health_token,
-    public_case,
-    walkback_case,
-)
-from verifier.server import (  # noqa: E402
-    inspect_payload,
-    prepare_submissions,
-    run_public_tests,
-    starter_payload,
-)
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
-WORKBENCH_TEST_SEED = "public-workbench-test"
 
 
-def _assert_contract_shape_and_range(case: Case) -> None:
-    numbers = advance(**case.as_dict())
-    assert len(numbers) == case.rounds
+def _load_public_evidence() -> dict[str, object]:
+    """This deployment's public evidence -- the case, the walkback, and the corrupted
+    trace `show.py` and the Portal both print.
+
+    Issue 543/537: this file used to import `fixtures.generate` directly. `fixtures/`
+    does not ship in the `participant` Docker stage at all any more (see
+    ../../Dockerfile) -- keeping the seed-keyed generator reachable here is what let a
+    learner skip straight past `first-broken` with nothing but their own container's
+    `FLAG_SEED`, even after the checkpoint's own answer moved into
+    `verifier/expected.py`. This deployment's own verifier is the only source for this
+    evidence now: `PUBLIC_EVIDENCE_JSON` when `participant/server.py` has already
+    fetched it (the Portal path, and the sandboxed run `make test` also uses), or
+    `VERIFIER_PUBLIC_URL` fetched directly when neither is true.
+    """
+    injected = os.environ.get("PUBLIC_EVIDENCE_JSON")
+    if injected:
+        return json.loads(injected)
+    verifier_public_url = os.environ.get("VERIFIER_PUBLIC_URL")
+    if verifier_public_url:
+        from urllib.request import urlopen
+
+        with urlopen(verifier_public_url, timeout=10) as response:  # noqa: S310
+            return json.loads(response.read().decode("utf-8"))
+    # Neither is set: this only resolves when `fixtures/` is actually on disk, which is
+    # true for a checkout (this file run directly, e.g. by
+    # scripts/ac26-bridge-experiment.test.ts) or the verifier/author Docker stage, and
+    # never true inside a built `participant` image -- so this branch existing does not
+    # reopen Issue 543/537's leak.
+    from fixtures.generate import public_payload
+
+    return public_payload(SEED)
+
+
+PUBLIC = _load_public_evidence()
+CASE = PUBLIC["predict"]
+
+
+def _assert_contract_shape_and_range(case: dict[str, int]) -> None:
+    numbers = advance(case["start"], case["step"], case["rounds"], case["modulus"])
+    assert len(numbers) == case["rounds"]
     for value in numbers:
-        assert 0 <= value < case.modulus
+        assert 0 <= value < case["modulus"]
 
 
 def test_the_list_has_one_number_per_round() -> None:
-    case = public_case(SEED)
-    assert len(advance(**case.as_dict())) == case.rounds
+    assert len(advance(**CASE)) == CASE["rounds"]
 
 
 def test_zero_rounds_is_empty() -> None:
-    case = public_case(SEED)
-    assert advance(case.start, case.step, 0, case.modulus) == []
+    assert advance(CASE["start"], CASE["step"], 0, CASE["modulus"]) == []
 
 
 def test_every_entry_is_in_range() -> None:
-    case = public_case(SEED)
-    _assert_contract_shape_and_range(case)
+    _assert_contract_shape_and_range(CASE)
 
 
 def test_negative_step_stays_in_range() -> None:
-    case = public_case(SEED)
-    _assert_contract_shape_and_range(
-        Case(start=0, step=-case.step, rounds=case.rounds, modulus=case.modulus)
-    )
+    _assert_contract_shape_and_range({**CASE, "start": 0, "step": -CASE["step"]})
 
 
 def test_start_larger_than_modulus_stays_in_range() -> None:
-    case = public_case(SEED)
-    _assert_contract_shape_and_range(
-        Case(
-            start=case.start + case.modulus * 3,
-            step=case.step,
-            rounds=case.rounds,
-            modulus=case.modulus,
-        )
-    )
+    _assert_contract_shape_and_range({**CASE, "start": CASE["start"] + CASE["modulus"] * 3})
 
 
 def test_step_larger_than_modulus_stays_in_range() -> None:
-    case = public_case(SEED)
-    _assert_contract_shape_and_range(
-        Case(
-            start=case.start,
-            step=case.step + case.modulus * 3,
-            rounds=case.rounds,
-            modulus=case.modulus,
-        )
-    )
+    _assert_contract_shape_and_range({**CASE, "step": CASE["step"] + CASE["modulus"] * 3})
 
 
 def test_first_entry_is_start_plus_step() -> None:
-    case = public_case(SEED)
-    numbers = advance(**case.as_dict())
-    assert numbers[0] == (case.start + case.step) % case.modulus
+    numbers = advance(**CASE)
+    assert numbers[0] == (CASE["start"] + CASE["step"]) % CASE["modulus"]
 
 
-def test_workbench_inspect_shows_seeded_evidence_without_answers() -> None:
-    payload = inspect_payload(WORKBENCH_TEST_SEED)
-    assert payload["environment"]["healthToken"] == health_token(WORKBENCH_TEST_SEED)
-    assert set(payload["predict"]) == {"start", "step", "rounds", "modulus"}
-    # The list of numbers ("trace" on the wire) is evidence; the broken position
-    # and the predicted final value are the answers, so they must not appear.
-    assert set(payload["firstBroken"]) == {"start", "step", "rounds", "modulus", "trace"}
-    assert isinstance(payload["firstBroken"]["trace"], list)
-
-
-def test_the_broken_list_really_has_a_number_outside_the_range() -> None:
-    # first-broken asks which number in the list is the first to leave
-    # [0, modulus). If skipping the reduction happened on a round that would not
-    # have wrapped, the corrupted list equals the clean one and the question has
-    # no answer at all. Pin the property over many seeds, because a per-deploy
-    # seed picks a different case every time.
-    for index in range(200):
-        case, trace, broke_at = corrupted_trace(f"range-guard-{index}")
-        outside = [i for i, value in enumerate(trace) if not 0 <= value < case.modulus]
-        assert outside == [broke_at], f"seed {index}: outside={outside} broke_at={broke_at}"
-
-
-def test_the_predict_fixture_does_not_answer_itself() -> None:
-    # If the walk ends where it started, `predict` can be answered by copying `start`,
-    # and the checkpoint that carries the point of the problem measures nothing.
-    for index in range(200):
-        case = public_case(f"predict-guard-{index}")
-        assert (case.start + case.step * case.rounds) % case.modulus != case.start
-
-
-def test_the_walkback_case_really_walks_back() -> None:
-    # The motivation for the whole problem is that this walk is reversible. If the
-    # printed arithmetic did not actually recover `rounds`, the evidence would be
-    # telling the learner something false.
-    walk = walkback_case(WORKBENCH_TEST_SEED)
-    assert walk["step"] * walk["undoStep"] % walk["modulus"] == 1
-    assert walk["recoveredRounds"] == walk["rounds"]
+# Three invariants used to live here as sweeps over hundreds of seeds unrelated to this
+# deployment's own FLAG_SEED: "the corrupted trace always has exactly one entry outside
+# [0, modulus)", "predict never answers itself", and "the walkback case really walks
+# back". All three needed `fixtures.generate` with an arbitrary seed, which this file
+# cannot do any more (Issue 543/537 -- see `_load_public_evidence` above) and never
+# needed to: they are properties of the fixture generator, not of a learner's
+# submission, and they already run at repository/CI scope in
+# scripts/ac26-bridge-experiment.test.ts, over more seeds than they did here.
 
 
 def test_workbench_starter_returns_the_editable_file() -> None:
+    from participant.server import starter_payload
+
     payload = starter_payload()
     assert set(payload) == {"counter.py"}
     assert "def advance" in payload["counter.py"]
 
 
-# There is deliberately no "the shipped starter fails" self-check in this file.
-# `starter_payload()` reads whatever is on disk under `starter/` right now, and `make
-# test` bind-mounts the learner's own working copy over that path. A self-check built
-# on `starter_payload()` therefore inverts into a false failure the instant a learner
-# solves the problem correctly (Issue #526). The author-time version of this
-# invariant -- the checked-out, as-shipped `starter/counter.py` must fail the public
-# suite -- lives in `scripts/ac26-bridge-experiment.test.ts`, which reads the real
-# repository file directly instead of going through the workbench server.
-
-
 def test_workbench_public_tests_reject_a_single_subtraction_solution() -> None:
+    from participant.server import run_public_tests
+
     source = """def advance(start, step, rounds, modulus):
     trace = []
     value = start
@@ -159,7 +125,7 @@ def test_workbench_public_tests_reject_a_single_subtraction_solution() -> None:
         trace.append(value)
     return trace
 """
-    result = run_public_tests(WORKBENCH_TEST_SEED, {"counter.py": source})
+    result = run_public_tests({"counter.py": source})
     assert result["passed"] is False
     assert "FAIL test_negative_step_stays_in_range" in result["output"]
     assert "FAIL test_start_larger_than_modulus_stays_in_range" in result["output"]
@@ -167,29 +133,35 @@ def test_workbench_public_tests_reject_a_single_subtraction_solution() -> None:
 
 
 def test_workbench_public_tests_report_invalid_browser_source() -> None:
-    result = run_public_tests(WORKBENCH_TEST_SEED, {"counter.py": "def advance(:\n"})
+    from participant.server import run_public_tests
+
+    result = run_public_tests({"counter.py": "def advance(:\n"})
     assert result["passed"] is False
     assert result["output"]
 
 
 def test_workbench_prepare_returns_the_producible_portal_values() -> None:
-    result = prepare_submissions(WORKBENCH_TEST_SEED, starter_payload())
+    from participant.server import prepare_submissions, starter_payload
+
+    result = prepare_submissions(starter_payload())
     assert result["ok"] is True
     submissions = result["submissions"]
     # predict and first-broken are worked out by the learner, never produced here.
     assert set(submissions) == {"environment", "generalize"}
-    assert submissions["environment"] == health_token(WORKBENCH_TEST_SEED)
+    assert submissions["environment"] == PUBLIC["environment"]["healthToken"]
     assert "def advance" in submissions["generalize"]
 
 
 def test_workbench_prepare_rejects_an_empty_source() -> None:
-    result = prepare_submissions(WORKBENCH_TEST_SEED, {"counter.py": "   "})
+    from participant.server import prepare_submissions
+
+    result = prepare_submissions({"counter.py": "   "})
     assert result["ok"] is False
 
 
 def test_portal_editor_replaces_static_assets() -> None:
     assert not (ROOT / "workbench").exists()
-    server = (ROOT / "verifier" / "server.py").read_text(encoding="utf-8")
+    server = (ROOT / "participant" / "server.py").read_text(encoding="utf-8")
     for endpoint in ("/api/config", "/api/starter", "/api/inspect", "/api/test", "/api/prepare"):
         assert endpoint in server
 

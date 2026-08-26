@@ -110,12 +110,12 @@ hidden phase が違うからであって、入力が違うからではない。
 
 ## 保証範囲
 
-ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も
-あなたの管理下にあるので、 image の中身はあなたに対して秘匿されていません。
-`reference/` と `tests/hidden/` を bind-mount しないのは、あなたの git checkout に
-紛れ込ませないためであって、手が届かなくするためではありません。参加者用 image には
-`reference/` も mutation suite も入っていませんが (`local/Dockerfile` の `author` stage を
-参照)、 これは誤配の防止であって秘匿ではなく、 その stage をビルドすれば中身はすべて読めます。
+ローカル実行は**自習用の honor-system 検証**です。compose stack のすべてのコンテナと
+Docker デーモンを管理する人を、中身の閲覧から止める手立てはありません。ここにある境界は
+秘匿ではなく誤配送の防止です。build して動かす Workbench コンテナには starter と公開テスト
+しか入っておらず、fixture も hidden test も参照解答も verifier 本体も入っていません。
+それらは Workbench がネットワーク越しに話す、公開されていない second container と、
+`make reference-test` が build する author 専用 image にだけあります。
 
 verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
 ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。

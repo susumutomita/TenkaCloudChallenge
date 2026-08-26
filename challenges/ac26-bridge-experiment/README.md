@@ -66,18 +66,24 @@ you already work that way.
 
 ## What gets deployed
 
-A single container, no cloud account, no network surface. Everything is local:
+Two containers, no cloud account, no network surface reaching outside your machine. Everything
+is local:
 
 ```text
 local/
-├── starter/counter.py    ← the only file you edit
-├── fixtures/generate.py     every fixture, derived from your per-deploy seed
+├── starter/counter.py       ← the only file you edit
+├── participant/server.py    the Workbench you actually talk to, on 127.0.0.1:18091
+├── fixtures/generate.py     every fixture, derived from your per-deploy seed (verifier only)
 ├── tests/public/            the tests you can read
-├── tests/hidden/            the tests the verifier runs (in the image, not mounted)
-├── reference/               the answer (in the image, not mounted -- see Assurance scope)
-├── verifier/server.py       POST /verify on 127.0.0.1:18091
+├── tests/hidden/            the tests the verifier runs (verifier only, not mounted)
+├── reference/               the answer (author-only image, not mounted -- see Assurance scope)
+├── verifier/server.py       POST /verify, reachable only from the Workbench container
 └── mutation.py              proves the hidden tests can actually fail a wrong answer
 ```
+
+The Workbench you build and run never has `fixtures/`, `verifier/`, or `tests/hidden/` on its
+filesystem at all: it asks the second, unpublished container for the evidence it shows you, over
+a network nothing outside this machine can reach either.
 
 Your fixtures come from `FLAG_SEED`, injected fresh at deploy. Same seed, same numbers, so your
 session is reproducible and debuggable. Different seed, different numbers, so a value copied from
@@ -150,10 +156,13 @@ that stays in budget for the example and blows past it for anything else.
 
 ## Assurance scope
 
-Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
-daemon, and the image, so nothing inside that image is hidden from you: `reference/` and
-`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than
-out of reach.
+Local mode is **self-paced, honor-system verification**. Someone who owns the Docker daemon and
+every container in the compose stack cannot be prevented from inspecting hidden material. The
+boundary here is misdelivery, not confidentiality against that person: the Workbench container
+you build and run carries the starter, the public tests, and nothing else — no fixtures, no
+hidden tests, no reference solution, no verifier. Those live only in a second, unpublished
+container the Workbench reaches over the compose network, and in the author-only image
+`make reference-test` builds.
 
 What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
 a checkpoint can only credit the id it echoes, results do not leak expected values, and the

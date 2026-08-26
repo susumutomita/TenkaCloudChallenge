@@ -6,7 +6,11 @@ EXPECTED = {
     # container was started. It is listed so the sweep records that on purpose.
     "environment": lambda server, seed: server.health_token(seed),
     "window": lambda server, seed: server.validity_window(seed),
-    "audit": lambda server, seed: server.decision_log(seed)[1],
+    # Issue 543/537: `decision_log` no longer returns the audit answer at all (it ships
+    # to the participant image; see fixtures/generate.py). `audit_wrong_rows` --
+    # imported into `verifier.server`'s namespace from `verifier/expected.py`, which
+    # never ships there -- is the only place that derivation still exists.
+    "audit": lambda server, seed: server.audit_wrong_rows(seed),
 }
 
 
@@ -37,7 +41,7 @@ def _audit_visible(server, seed):
     every allowed row" -- at which point the audit degenerates into copying a column
     instead of recomputing the MACs and comparing tenants.
     """
-    entries, _wrong = server.decision_log(seed)
+    entries = server.decision_log(seed)
     return {
         "allowedIndices": [
             index for index, entry in enumerate(entries) if entry["gatewayDecision"] == "allow"

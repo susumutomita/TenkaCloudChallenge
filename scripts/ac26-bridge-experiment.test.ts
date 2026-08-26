@@ -61,6 +61,8 @@ describe("ac26-bridge-experiment: participant contract", () => {
       "local/tests/public/test_counter.py",
       "local/tests/hidden/check_counter.py",
       "local/verifier/server.py",
+      "local/verifier/expected.py",
+      "local/participant/server.py",
       "local/mutation.py",
     ]) {
       expect(existsSync(join(ROOT, path))).toBe(true);
@@ -107,6 +109,157 @@ describe("ac26-bridge-experiment: container safety", () => {
     expect(verifier).toContain("shell=False");
     expect(verifier).not.toContain("os.system");
     expect(verifier).not.toContain("shell=True");
+  });
+});
+
+describe("ac26-bridge-experiment: participant/verifier separation (Issue 543/537)", () => {
+  it("keeps fixtures/, the answer derivation and the hidden suite out of the participant Docker stage", () => {
+    const dockerfile = read("local/Dockerfile");
+    const participantStage = dockerfile.slice(
+      dockerfile.indexOf("FROM base AS participant"),
+      dockerfile.indexOf("FROM base AS verifier"),
+    );
+    // The class this problem was scaffolded from before this fix: `fixtures/` shipping
+    // to the participant stage handed over `corrupted_trace`, a plain seed-keyed
+    // function, which was enough to answer `first-broken` on its own even once the
+    // checkpoint's own comparison moved into `verifier/expected.py`.
+    expect(participantStage).not.toContain("COPY --chown=lab:lab fixtures/");
+    expect(participantStage).not.toContain("tests/hidden");
+    expect(participantStage).not.toContain("COPY --chown=lab:lab verifier/");
+    expect(participantStage).not.toContain("COPY --chown=lab:lab reference/");
+    expect(participantStage).not.toContain("COPY --chown=lab:lab mutation.py");
+    expect(participantStage).toContain("COPY --chown=lab:lab tests/public/");
+    expect(participantStage).toContain("COPY --chown=lab:lab participant/");
+
+    const verifierStage = dockerfile.slice(
+      dockerfile.indexOf("FROM base AS verifier"),
+      dockerfile.indexOf("FROM participant AS author"),
+    );
+    expect(verifierStage).toContain("COPY --chown=lab:lab fixtures/");
+    expect(verifierStage).toContain("COPY --chown=lab:lab tests/hidden/");
+    expect(verifierStage).toContain("COPY --chown=lab:lab verifier/");
+    expect(verifierStage).not.toContain("COPY --chown=lab:lab participant/");
+    expect(verifierStage).not.toContain("COPY --chown=lab:lab reference/");
+    expect(verifierStage).not.toContain("COPY --chown=lab:lab mutation.py");
+  });
+
+  it("never returns the first-broken answer from fixtures/generate.py, and derives it only in verifier/expected.py", () => {
+    const fixtures = read("local/fixtures/generate.py");
+    const participantServer = read("local/participant/server.py");
+    const show = read("local/show.py");
+    for (const source of [fixtures, participantServer, show]) {
+      expect(source).not.toContain("def first_broken_index");
+    }
+    expect(read("local/verifier/expected.py")).toContain("def first_broken_index");
+
+    // `corrupted_trace` -- the function that stays in fixtures/generate.py, and so
+    // stays reachable were `fixtures/` ever mistakenly copied into the participant
+    // stage again -- returns the case and the trace only, never a third element.
+    const signature = fixtures
+      .split("\n")
+      .find((line) => line.trimStart().startsWith("def corrupted_trace("));
+    expect(signature).toContain("tuple[Case, list[int]]");
+  });
+
+  it("keeps the Portal editor API and fixtures import out of the hidden verifier, and grading out of the Workbench", () => {
+    const participantServer = read("local/participant/server.py");
+    const hiddenServer = read("local/verifier/server.py");
+    for (const endpoint of ["/api/config", "/api/inspect", "/api/starter", "/api/test", "/api/prepare"]) {
+      expect(participantServer).toContain(endpoint);
+      expect(hiddenServer).not.toContain(endpoint);
+    }
+    expect(participantServer).not.toContain("def evaluate(");
+    expect(participantServer).not.toContain("def _check_");
+    // The only `fixtures` reference in the Workbench is the lazy, function-scoped
+    // CI/author fallback inside `fetch_public` -- never a module-level import, which
+    // is what would make it resolve eagerly (and fail loudly) the moment this file
+    // runs inside a built participant image that does not carry `fixtures/` at all.
+    expect(participantServer).not.toMatch(/^from fixtures/m);
+    expect(participantServer).toContain("from fixtures.generate import public_payload");
+    expect(hiddenServer).toContain("from fixtures.generate import");
+    expect(hiddenServer).toContain("from verifier.expected import first_broken_index");
+    expect(hiddenServer).toContain("/verify");
+    expect(hiddenServer).toContain("/healthz");
+    expect(hiddenServer).toContain("/public");
+  });
+
+  it("proxies /verify to the internal verifier and fails closed when it is unreachable", () => {
+    const probe = String.raw`
+import json, sys
+sys.path.insert(0, ".")
+from participant import server
+bodies = [{"checkpointId": checkpoint, "submission": "anything"} for checkpoint in server.CHECKPOINTS]
+print(json.dumps({
+    "missing": [server.proxy_verdict(body, "") for body in bodies],
+    "unavailable": [server.proxy_verdict(body, "http://127.0.0.1:1/verify") for body in bodies],
+    "hasInlineEvaluator": hasattr(server, "evaluate") or any(name.startswith("_check_") for name in dir(server)),
+}))
+`;
+    const result = python(["-c", probe]);
+    expect(result.status).toBe(0);
+    const output = JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "{}") as {
+      missing: Array<{ checkpointId: string; correct: boolean }>;
+      unavailable: Array<{ checkpointId: string; correct: boolean }>;
+      hasInlineEvaluator: boolean;
+    };
+    const checkpoints = ["environment", "predict", "first-broken", "generalize"];
+    const expectedVerdicts = checkpoints.map((checkpointId) => ({ checkpointId, correct: false }));
+    expect(output.missing).toEqual(expectedVerdicts);
+    expect(output.unavailable).toEqual(expectedVerdicts);
+    expect(output.hasInlineEvaluator).toBe(false);
+  });
+
+  it("cannot reach the first-broken answer from fixtures/generate.py alone, even with the seed in hand", () => {
+    // The exact shape #543 flagged as unclosed by a container split on its own: with
+    // nothing but FLAG_SEED (which a learner's own container already has as an
+    // environment variable) and fixtures/generate.py (which used to ship to the
+    // participant stage), `corrupted_trace(seed)` used to hand back the answer
+    // directly. It still runs from a checkout -- this file has full repository
+    // access, the same as mutation.py -- but it can no longer produce the answer by
+    // itself: the third tuple element is gone, and finding it now needs
+    // verifier/expected.py, which never ships to the participant image at all (see
+    // the Dockerfile assertions above).
+    const probe = python([
+      "-c",
+      [
+        "import sys",
+        "sys.path.insert(0, '.')",
+        "from fixtures.generate import corrupted_trace",
+        "case, trace = corrupted_trace(sys.argv[1])",
+        "print(len(trace))",
+      ].join("\n"),
+      SEED,
+    ]);
+    expect(probe.status).toBe(0);
+    const attempt = python([
+      "-c",
+      "import sys; sys.path.insert(0, '.'); from fixtures.generate import corrupted_trace; corrupted_trace(sys.argv[1])[2]",
+      SEED,
+    ]);
+    expect(attempt.status).not.toBe(0);
+    expect(attempt.stderr).toContain("IndexError");
+  });
+
+  it("compose builds the right target for each service, publishes only the Workbench port, and isolates the verifier network", () => {
+    const compose = read("local/docker-compose.yml");
+    for (const contract of [
+      "target: participant",
+      "target: verifier",
+      '"127.0.0.1:18091:18091"',
+      "VERIFIER_URL: http://verifier:18092/verify",
+      "VERIFIER_PUBLIC_URL: http://verifier:18092/public",
+      "read_only: true",
+      "cap_drop:",
+      "- ALL",
+      "no-new-privileges:true",
+      "healthcheck:",
+      "internal: true",
+      'com.docker.network.bridge.enable_ip_masquerade: "false"',
+    ]) {
+      expect(compose).toContain(contract);
+    }
+    expect(compose).not.toContain('"127.0.0.1:18092:18092"');
+    expect(compose.match(/ports:/g)).toHaveLength(1);
   });
 });
 
@@ -251,19 +404,23 @@ describe("ac26-bridge-experiment: /verify contract", () => {
   // command and the make target that show the evidence. Players read the two as one
   // thing. The checkpoint was the half that moved.
   it("should score the broken index under `first-broken`, not under `inspect`", () => {
+    // `first_broken_index` lives only in `verifier/expected.py` (Issue 543/537) --
+    // reading it here from the checkout, rather than the participant Docker image, is
+    // deliberate: this helper is test-only tooling with full repository access, the
+    // same way `mutation.py` is. What must NOT resolve it is the participant image
+    // itself; that boundary is asserted separately below.
     const brokenIndex = python([
       "-c",
       [
         "import sys",
         "sys.path.insert(0, '.')",
-        "from fixtures.generate import corrupted_trace",
-        "print(corrupted_trace(sys.argv[1])[2])",
+        "from verifier.expected import first_broken_index",
+        "print(first_broken_index(sys.argv[1]))",
       ].join("\n"),
       SEED,
     ]);
     expect(brokenIndex.status).toBe(0);
     const answer = brokenIndex.stdout.trim().split("\n").at(-1) ?? "";
-    expect(answer).not.toBe("-1");
     expect(evaluate("first-broken", answer)).toBe(true);
     expect(evaluate("inspect", answer)).toBe(false);
   });
@@ -283,10 +440,13 @@ describe("ac26-bridge-experiment: /verify contract", () => {
         "import sys",
         "sys.path.insert(0, '.')",
         "from fixtures.generate import corrupted_trace",
+        "from verifier.expected import first_broken_index",
         "bad = []",
         "for index in range(400):",
-        "    case, trace, broke_at = corrupted_trace(f'sweep-{index}')",
+        "    seed = f'sweep-{index}'",
+        "    case, trace = corrupted_trace(seed)",
         "    outside = [i for i, v in enumerate(trace) if not 0 <= v < case.modulus]",
+        "    broke_at = first_broken_index(seed)",
         "    if outside != [broke_at]:",
         "        bad.append((index, outside, broke_at))",
         "print(bad[:5])",

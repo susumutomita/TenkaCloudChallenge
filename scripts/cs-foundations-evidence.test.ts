@@ -29,7 +29,7 @@ const PROBLEMS = [
   { id: "cs-dst-daily-rollup", serverDir: "workbench" },
   { id: "cs-pagination-drift", serverDir: "workbench" },
   { id: "cs-async-result-binding", serverDir: "portal" },
-  { id: "cs-auth-claim-audit", serverDir: "verifier" },
+  { id: "cs-auth-claim-audit", serverDir: "participant" },
   { id: "cs-cache-generation-fence", serverDir: "participant" },
   { id: "cs-transaction-visibility-audit", serverDir: "participant" },
 ] as const;

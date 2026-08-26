@@ -65,6 +65,14 @@ SPLIT_PORTAL_MODULES = {
     "ac26-w3-schnorr-drill": "participant.server",
     "ac26-w4-plonk-drill": "participant.server",
     "ac26-w4-fri-drill": "participant.server",
+    # Issue 537/538/543: these four moved their Portal to participant/ when
+    # fixtures/ stopped shipping to the participant image. generate-course-workbenches.py
+    # の PORTAL_PACKAGES と対で更新する必要がある — 片方だけだと、この checker が
+    # verifier.server を見に行って "GET APIs missing" で落ちる。
+    "cs-auth-claim-audit": "participant.server",
+    "ac26-bridge-experiment": "participant.server",
+    "ac26-bridge-properties": "participant.server",
+    "ac26-w1-constraint-lab": "participant.server",
 }
 # Execute the heavier inspect/public-test adapter on representative problems from
 # each family. The catalogue's existing sharded suite executes every problem's own

@@ -21,26 +21,6 @@
       "reason": "starter's node_hash stub is a placeholder while fixtures/generate.py already ships a complete, same-named Merkle node_hash implementation reachable from the participant image."
     },
     {
-      "problem": "cs-auth-claim-audit",
-      "issue": 537,
-      "reason": "The only cs-* local-play problem that does not split verifier into its own Docker stage; its window/audit checkpoints compare directly against fixtures.generate functions reachable from the participant image."
-    },
-    {
-      "problem": "ac26-bridge-properties",
-      "issue": 537,
-      "reason": "_check_privacy_leak compares the submission directly against fixtures.generate.instance(SEED).witness, a precomputed field reachable from the participant image."
-    },
-    {
-      "problem": "ac26-w1-constraint-lab",
-      "issue": 537,
-      "reason": "_check_first_broken compares the submission directly against fixtures.generate.broken_diagnosis(SEED), reachable from the participant image."
-    },
-    {
-      "problem": "ac26-bridge-experiment",
-      "issue": 537,
-      "reason": "_check_first_broken compares the submission directly against a value unpacked from fixtures.generate.corrupted_trace(seed), reachable from the participant image. This is also the template every other local-play problem is scaffolded from."
-    },
-    {
       "problem": "ac26-w5-cmux-blind-rotation",
       "issue": 537,
       "reason": "Listed in #537 as a suspected (unverified) case sharing helper names with ac26-w5-lwe-rlwe; this detector independently confirms the same stub-vs-implementation shape (cmux, blind_rotate and siblings)."

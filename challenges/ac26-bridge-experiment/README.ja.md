@@ -60,18 +60,23 @@ Workflow · **Role:** `diagnostic` · **想定時間:** 20〜30 分 · **配点:
 
 ## 何がデプロイされるか
 
-コンテナが 1 つだけです。クラウドアカウントも、外部ネットワーク面もありません。
+コンテナが 2 つです。クラウドアカウントも、このマシンの外へ出るネットワーク面もありません。
 
 ```text
 local/
-├── starter/counter.py    ← 編集するのはこのファイルだけ
-├── fixtures/generate.py     全 fixture を deploy ごとの seed から導出する
+├── starter/counter.py       ← 編集するのはこのファイルだけ
+├── participant/server.py    実際に話す相手の Workbench。127.0.0.1:18091
+├── fixtures/generate.py     全 fixture を deploy ごとの seed から導出する (verifier 専用)
 ├── tests/public/            読めるテスト
-├── tests/hidden/            verifier が実行するテスト (image 内のみ)
-├── reference/               解答 (image 内のみ。host へは mount しない)
-├── verifier/server.py       POST /verify。127.0.0.1:18091
+├── tests/hidden/            verifier が実行するテスト (verifier 専用。mount しない)
+├── reference/               解答 (author 専用 image。mount しない)
+├── verifier/server.py       POST /verify。Workbench コンテナからしか届かない
 └── mutation.py              hidden test が誤答を本当に落とせるかを証明する
 ```
+
+あなたが build して動かす Workbench には、`fixtures/`・`verifier/`・`tests/hidden/` がそもそも
+入っていません。表示する証拠は、このマシンの外からは届かない second container へ、ネットワーク
+越しに問い合わせて取得しています。
 
 fixture は deploy 時に注入される `FLAG_SEED` から導出されます。同じ seed なら同じ数値なので、
 自分のセッションは再現でき、デバッグできます。seed が違えば数値も変わるので、他の人の実行結果から
@@ -138,10 +143,12 @@ Week 1 では「充足しているが under-constrained な constraint」とし�
 
 ## 保証範囲
 
-ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も
-あなたの管理下にあるので、 image の中身はあなたに対して秘匿されていません。
-`reference/` と `tests/hidden/` を bind-mount しないのは、あなたの git checkout に
-紛れ込ませないためであって、手が届かなくするためではありません。
+ローカル実行は**自習用の honor-system 検証**です。compose stack のすべてのコンテナと
+Docker デーモンを管理する人を、中身の閲覧から止める手立てはありません。ここにある境界は
+秘匿ではなく誤配送の防止です。build して動かす Workbench コンテナには starter と公開テスト
+しか入っておらず、fixture も hidden test も参照解答も verifier 本体も入っていません。
+それらは Workbench がネットワーク越しに話す、公開されていない second container と、
+`make reference-test` が build する author 専用 image にだけあります。
 
 verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
 ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。

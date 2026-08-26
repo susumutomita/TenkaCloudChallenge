@@ -189,3 +189,41 @@ def health_token(seed: str) -> str:
     return hashlib.sha256(
         f"health:{seed}:{inst.p}:{inst.a}:{inst.c}".encode()
     ).hexdigest()[:16]
+
+
+def public_payload(seed: str) -> dict[str, object]:
+    """Everything a participant may see for this deployment. Contains no answer.
+
+    The single source `show.py`, `verifier/server.py`'s `GET /public`, and the Portal's
+    `/api/inspect` all build their payload from. `boundary_instance` and the raw witness
+    are deliberately absent -- they are what the `incompleteness` and `privacy-leak`
+    checkpoints are about, not what a learner is shown to work from.
+
+    Issue 543/537: `fixtures/` -- this module -- does not ship in the participant Docker
+    stage at all (see ../Dockerfile). `participant/server.py` and `show.py` fetch this
+    payload from the verifier at runtime instead of building it locally.
+    """
+    inst = instance(seed)
+    verifiers: dict[str, object] = {}
+    for protocol_id in protocol_ids(seed):
+        _accepted, transcript = verify(protocol_id, inst, inst.witness)
+        verifiers[protocol_id] = transcript["checked"]
+    privacy_protocol = protocol_for(seed, "leaky")
+    _accepted, transcript = verify(privacy_protocol, inst, inst.witness)
+    return {
+        "definitions": {
+            "complete": "正しい主張と正直な witness を、検証者が必ず受理する性質",
+            "sound": "主張を満たさない witness を、検証者が受理しない性質",
+            "private": "観察者が transcript だけから秘密の witness を復元できない性質",
+        },
+        "claim": "a*w + b == c (mod p) and lo <= w <= hi",
+        "statement": inst.as_public(),
+        "verifiers": verifiers,
+        "privacyProtocol": privacy_protocol,
+        "transcript": transcript,
+        # Not part of any checkpoint (this problem has no `environment` checkpoint) --
+        # `show.py` prints it as a courtesy proof-of-boot line, the same as it always
+        # has. Kept as a plain top-level field rather than invented structure, since
+        # nothing on the Portal side reads it.
+        "healthToken": health_token(seed),
+    }

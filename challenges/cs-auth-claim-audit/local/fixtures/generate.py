@@ -286,11 +286,25 @@ def _gateway_allowed(kind: str) -> bool:
     return kind not in ("expired", "out-of-scope", "tampered")
 
 
-def decision_log(seed: str) -> tuple[list[dict[str, object]], list[int]]:
+def decision_log(seed: str) -> list[dict[str, object]]:
+    """The gateway's log -- evidence only, never the audit answer.
+
+    Issue 543/537: this function used to return `(entries, wrong)`, and `wrong` -- the
+    answer to the `audit` checkpoint -- was one call away from inside the participant
+    image, the same shape as `ac26-bridge-experiment`'s `corrupted_trace`. `fixtures/`
+    does not ship to the participant stage at all any more (see ../Dockerfile), but the
+    split stays even so: `_decision_log_full` is the one place `wrong` is computed, and
+    only `verifier/expected.py` -- which never leaves the verifier stage either --
+    imports it.
+    """
+    return _decision_log_full(seed)[0]
+
+
+def _decision_log_full(seed: str) -> tuple[list[dict[str, object]], list[int]]:
     """The gateway's log, and the indices it allowed that a correct gateway would refuse.
 
-    The second element is the answer to the `audit` checkpoint and is never put on the
-    wire by `inspect_payload`.
+    The second element is the answer to the `audit` checkpoint. Not exported from
+    `decision_log` -- see that function's docstring.
     """
     entries: list[dict[str, object]] = []
     wrong: list[int] = []
@@ -463,3 +477,50 @@ QUESTIONS = {
         },
     },
 }
+
+
+def _decode_segment(segment: str) -> object:
+    """Best-effort JWT segment decode for display -- `inspect` shows what is there,
+    including junk a malformed or forged token might carry."""
+    padded = segment + "=" * (-len(segment) % 4)
+    try:
+        return json.loads(base64.urlsafe_b64decode(padded.encode("ascii")))
+    except Exception:  # noqa: BLE001
+        return "<not decodable>"
+
+
+def public_payload(seed: str) -> dict[str, object]:
+    """Everything a participant may see for this deployment. Contains no answer.
+
+    The single source `show.py`, `verifier/server.py`'s `GET /public`, and the Portal's
+    `/api/inspect` all build their payload from -- previously duplicated by hand as
+    `show.evidence`, which is how the question text once silently dropped off the
+    Portal while the CLI kept it (Issue 449-shaped drift). Kept in `fixtures/generate.py`
+    rather than `show.py` now that `fixtures/` is verifier-only (Issue 543/537): this is
+    the one function the verifier's `/public` route needs, and `show.py` and the
+    Workbench fetch this same payload over the network instead of importing it.
+    """
+    request = public_request(seed)
+    token = str(request["token"])
+    head, body, mac = token.split(".")
+    entries = decision_log(seed)
+    return {
+        "environment": {"healthToken": health_token(seed)},
+        "window": {
+            **QUESTIONS["window"],
+            "token": token,
+            "header": _decode_segment(head),
+            "claims": request["claims"],
+            "mac": mac,
+            "handled": {
+                "action": request["action"],
+                "resource": request["resource"],
+                "now": request["now"],
+            },
+        },
+        "audit": {
+            **QUESTIONS["audit"],
+            "keys": keyring(seed),
+            "entries": [{"index": index, **entry} for index, entry in enumerate(entries)],
+        },
+    }
