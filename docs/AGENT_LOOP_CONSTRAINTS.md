@@ -248,6 +248,24 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   (`asm-worst-case-latency`) may be blocked by network policy. That is not a defect in
   the problem — the same job succeeds in CI. If you substitute a host-side service, say
   so explicitly in the report.
+- **Actions itself can be the failure.** Between 15:01 and ~16:35 on 2026-08-26 no job in
+  this repository was picked up by a runner. Two things that looked like defects were not:
+  - A run whose jobs never started is reported `conclusion: failure` while **every job
+    says `cancelled`** — they wait ~15 minutes for a runner and are then killed. Read the
+    jobs, never the run's conclusion, before calling a red run a test failure. `main`'s
+    run for the #579 merge looked like a broken merge and was thirteen cancelled jobs.
+  - A required check can land in `startup_failure`, and that state is a dead end: the
+    API refuses `rerun` (`403 This workflow run cannot be retried`), a companion run
+    stuck in `queued` refuses both `cancel` (`409 Cannot cancel a workflow run that has
+    not been queued yet`) and `rerun` (`403 This workflow is already running`), and a
+    `converted_to_draft` → `ready_for_review` toggle did **not** re-fire it even though
+    `playability-gate` lists both events. What recovers such a PR is a new commit
+    (`synchronize`). Do not reach for an empty one — §4 forbids it and it is not needed:
+    an incident worth recording here is itself the commit, which is how this entry got
+    written.
+
+  Wait for the outage to pass rather than working around it. Nothing merges while it
+  lasts, and a green check obtained during it says nothing.
 
 ## 7. Reporting
 
