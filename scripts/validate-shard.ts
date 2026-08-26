@@ -29,6 +29,7 @@
 import { globSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { costOfFile } from "./lib/shard-cost-table.ts";
 
 /**
  * `fileURLToPath` rather than `.pathname`, which keeps percent-encoding: a
@@ -69,23 +70,100 @@ export function shardableFiles(cwd: string = REPO_ROOT): string[] {
 }
 
 /**
- * Partition into `total` shards, round robin.
+ * Partition into `total` shards by estimated wall-clock cost, heaviest file
+ * first (Longest Processing Time / LPT), packed onto the currently
+ * least-loaded shard.
  *
- * Round robin rather than contiguous slices because the file list is sorted by
- * name and name order correlates with cost: `ac26-*` are the slow ones and they
- * sit together alphabetically. Contiguous slices would hand one shard most of
- * them. Round robin has no such correlation, and it is deterministic, which
- * matters more here than a perfect balance — a shard assignment that moved
- * between runs would make a failure hard to reproduce.
+ * This used to be `position % total` round robin over the alphabetically
+ * sorted file list — deliberately not contiguous slicing, because the slow
+ * `ac26-*` files sit together alphabetically and a contiguous slice would hand
+ * one shard most of them. Round robin fixed clustering but not coincidence: it
+ * balances FILE COUNT, not wall time, so two slow files landing at the same
+ * `position % total` still collide in one shard purely by chance. That
+ * happened — see `scripts/lib/shard-cost-table.ts`'s docstring for the
+ * measured incident this replaces.
+ *
+ * ## Why greedy-least-loaded-first (LPT) rather than something more clever
+ *
+ * Bin packing for minimal makespan is NP-hard in general, but LPT (sort
+ * heaviest-first, always place the next item on the lightest bin) has a
+ * simple, provable bound that is exactly the property that matters here: for
+ * any two shards, their final totals differ by at most the cost of the single
+ * heaviest file assigned to either one.
+ *
+ * Proof sketch: consider the shard S with the largest final total, and let `c`
+ * be the cost of the last file placed on it. At the moment that file was
+ * placed, S was chosen because its running total was then <= every other
+ * shard's running total at that same moment (a tie is broken by lowest index,
+ * which does not affect the inequality). Every other shard's total can only
+ * grow after that moment, so every other shard's FINAL total is >= S's total
+ * immediately before `c` was added, i.e. >= S's final total minus `c`. So no
+ * other shard's final total can be more than `c` below S's — and `c` is at
+ * most the heaviest single cost in the whole file list.
+ *
+ * That bound holds for greedy-least-loaded assignment regardless of
+ * processing order; sorting heaviest-first (true LPT) additionally tends to
+ * produce a tighter result in practice, because it resolves the
+ * hardest-to-place items while every shard is still empty.
+ *
+ * ## Determinism
+ *
+ * `costOf` is a pure function of the file's name against a table fixed at
+ * import time; ties in cost are broken by filename; and ties in shard load are
+ * broken by which shard has fewer files so far, then by lowest shard index —
+ * so this function is a pure function of (`files`, `total`, the cost table),
+ * independent of `files`' input order and of anything about the environment
+ * it runs in. A file the cost table does not name (a new test, or a stale
+ * table) falls back to a fixed default rather than throwing or silently
+ * weighing zero — see `costOfFile`'s docstring.
+ *
+ * The file-count tie-break matters for a run of exactly tied costs (every
+ * default-weighted file ties with every other one): comparing only shard
+ * totals would let the very first shard "win" every tie forever, since adding
+ * a cost that ties with everyone else's never changes who looks least loaded.
+ * Breaking ties by count instead makes an all-tied run degenerate to plain
+ * round robin — the LPT bound above still holds either way, since it only
+ * requires the chosen shard to be among the minimum-cost ones, not which one.
  *
  * `index` is 1-based to match the CI matrix values a human reads.
  */
+export function shardsByCost(
+  files: readonly string[],
+  total: number,
+  costOf: (file: string) => number = costOfFile,
+): string[][] {
+  if (!Number.isInteger(total) || total < 1) throw new Error(`shard count must be >= 1: ${total}`);
+  const heaviestFirst = [...files].sort((a, b) => costOf(b) - costOf(a) || a.localeCompare(b));
+  const shards: { cost: number; files: string[] }[] = Array.from({ length: total }, () => ({
+    cost: 0,
+    files: [],
+  }));
+  for (const file of heaviestFirst) {
+    // Tie-break on file count, not just "keep the incumbent", so a run of
+    // exactly tied costs still cycles through every shard instead of
+    // collapsing onto shard 0 forever. Ties in cost are common by
+    // construction (every file `SHARD_COST_SECONDS` does not name shares
+    // `DEFAULT_SECONDS`), and a tie of exactly 0 -- an empty table, or a
+    // legitimately near-instant file -- would otherwise never move the
+    // reduce's running "lightest" candidate away from its very first pick,
+    // since adding a zero-cost item never changes what "least loaded" means.
+    const shard = shards.reduce((lightest, candidate) => {
+      if (candidate.cost !== lightest.cost) return candidate.cost < lightest.cost ? candidate : lightest;
+      return candidate.files.length < lightest.files.length ? candidate : lightest;
+    });
+    shard.files.push(file);
+    shard.cost += costOf(file);
+  }
+  return shards.map((shard) => [...shard.files].sort());
+}
+
+/** The one shard `shardsByCost` assigns to `index` — see its docstring for the algorithm. */
 export function shardOf(files: readonly string[], index: number, total: number): string[] {
   if (!Number.isInteger(total) || total < 1) throw new Error(`shard count must be >= 1: ${total}`);
   if (!Number.isInteger(index) || index < 1 || index > total) {
     throw new Error(`shard index must be in 1..${total}: ${index}`);
   }
-  return files.filter((_, position) => position % total === index - 1);
+  return shardsByCost(files, total)[index - 1] ?? [];
 }
 
 /** `--shard=2/4` → `{index: 2, total: 4}`; absent → the whole suite. */
