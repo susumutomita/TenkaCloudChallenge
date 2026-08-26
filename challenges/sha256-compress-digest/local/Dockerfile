@@ -46,8 +46,8 @@ CMD ["python", "verifier/server.py"]
 
 # Author-only target, for `make reference-test`. Local mode remains honor-system
 # verification for whoever controls Docker; the stage split prevents accidental answer
-# delivery, not inspection by somebody controlling Docker. See TEMPLATE.md "Assurance
-# scope" for the participant-facing boundary claim.
+# delivery, not inspection by somebody controlling Docker. See TEMPLATE.md "Assurance scope"
+# for the participant-facing boundary claim.
 FROM participant AS author
 
 COPY --chown=lab:lab fixtures/ ./fixtures/
