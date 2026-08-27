@@ -188,6 +188,20 @@ SPLIT_PORTAL_MODULES = {
     # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
     # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
     "ac26-w6-cosnark-linear": "participant.server",
+    # Issue 537/538 (Issue 543 option B2): same move, and the last of the Week 6 co-SNARK
+    # trio. tests/hidden/check_prover.py holds the rules every checkpoint is graded against
+    # -- _expected_class is classify's answer, _authorized is open-set's, _expected_leakage
+    # is leakage's -- and fixtures/specimens.py's GROUND_TRUTH names, per specimen, the
+    # capabilities reached, the unauthorized openings, the disclosed (channel, name) pairs
+    # and the recoverable secret, for exactly the eight provers the problem asks about.
+    # fixtures/generate.py carries the setting, coefficients, witness, relation and
+    # value_catalog the hidden labels h0..h3 are drawn from. All three shipped in the single
+    # participant stage, and a submission transcribed from two of them scored six of eight
+    # checkpoints, 230 of 300 points.
+    # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
+    # 片方だけだと、この checker が verifier.server を見に行って "shared Portal API adapter
+    # missing" で落ちる。
+    "ac26-w6-cosnark-privacy": "participant.server",
     # Issue 537/538 (Issue 543 option B2): same move. tests/hidden/check_encoding.py
     # grades every checkpoint and fixtures/generate.py implements encode, centered,
     # decode, success_interval and first_failure under the exact five names
