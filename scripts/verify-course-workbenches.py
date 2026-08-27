@@ -159,6 +159,16 @@ SPLIT_PORTAL_MODULES = {
     # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
     # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
     "ac26-w4-arithmetization": "participant.server",
+    # Issue 537/538 (Issue 543 option B2): same move. tests/hidden/check_pipeline.py grades
+    # every checkpoint and holds _reference_first_fault -- a complete, correct
+    # implementation of every layer contract starter/pipeline.py asks the learner to write
+    # -- while fixtures/generate.py carries UNSUPPORTED_CLAIMS, the cost checkpoint's
+    # ground truth, and FAULTS, the layer first_fault must report and the single field
+    # repair may touch per fault. Both shipped in the single participant stage, and a
+    # submission transcribed from the two scored 7 of 8 checkpoints.
+    # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
+    # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
+    "ac26-w4-proof-pipeline": "participant.server",
     # Issue 537/538 (Issue 543 option B2): same move. tests/hidden/check_encoding.py
     # grades every checkpoint and fixtures/generate.py implements encode, centered,
     # decode, success_interval and first_failure under the exact five names
