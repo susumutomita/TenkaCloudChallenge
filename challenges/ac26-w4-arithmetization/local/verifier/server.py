@@ -1,4 +1,23 @@
-"""POST /verify — the scoring seam. Loopback only, stdlib only.
+"""POST /verify — the scoring seam. Compose-internal only, stdlib only.
+
+Issue 537/538 (Issue 543 option B2): this used to be the same process that also served the
+Participant Portal's config, inspect, starter, public-test and prepare endpoints, in the
+single Docker stage a learner's own `make build` produced -- so `tests/hidden/check_air.py`
+shipped in the learner's own image alongside it. That file states, checkpoint by
+checkpoint, what `starter/air.py` refuses to: `check_transition` requires `steps - 1`
+residuals, which is the count the starter tells the learner to work out ("it is not the
+number of rows"), and pins the first non-zero residual to the tampered step; the module
+docstring says "the transition out of row i breaks row i+1", which is what `first_violation`
+is graded on; and `check_underconstrained` writes out all four conditions a witness is
+accepted on, down to naming the constraint that had to be missing. `fixtures/generate.py`
+shipped there too, and its `honest_trace` is by its own docstring the reference answer for
+the trace checkpoint. That Portal-facing surface now lives in `participant/server.py`, in a
+separate image (see ../Dockerfile) that this process's own container never builds; this
+file, `fixtures/` and `tests/hidden/` are reachable only over the Compose-internal network
+(see ../docker-compose.yml), never from the participant container's filesystem.
+
+`GET /public` below is what `show.py` and `tests/public/test_air.py` read instead of
+importing `fixtures.generate`.
 
 Security contract (docs/curricula/advanced-cryptography-2026/TEMPLATE.md §/verify):
   - `checkpointId` is required and is echoed back verbatim. The platform fails closed
@@ -17,6 +36,9 @@ Security contract (docs/curricula/advanced-cryptography-2026/TEMPLATE.md §/veri
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import json
 import os
 import resource
@@ -25,10 +47,14 @@ import sys
 import tempfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from fixtures.generate import public_payload  # noqa: E402 - after the sys.path insert
+
 ROOT = Path(__file__).resolve().parents[1]
+PROBLEM_ID = "ac26-w4-arithmetization"
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 MAX_BODY_BYTES = 256 * 1024
@@ -52,6 +78,10 @@ CODE_CHECKPOINTS = {
     "transfer": (),
 }
 CHECKPOINTS = tuple(CODE_CHECKPOINTS)
+#: Every checkpoint here is answered by submitting a file, so this set is empty today.
+#: It is derived rather than written out so that adding a direct-answer checkpoint later
+#: cannot silently skip the seal check in `_unwrap_submission`.
+MANUAL_CHECKPOINTS = frozenset(CHECKPOINTS) - frozenset(CODE_CHECKPOINTS)
 
 
 # Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still
@@ -160,67 +190,72 @@ def evaluate(checkpoint_id: str, submission: object) -> bool:
         return _run_submission(submission, CODE_CHECKPOINTS[checkpoint_id], seed)
     return False
 
-# BEGIN GENERATED PORTAL EDITOR API
-from verifier.workbench import PortalEditorSupport
+def _b64decode(value: str) -> bytes:
+    padding = "=" * (-len(value) % 4)
+    return base64.urlsafe_b64decode(value + padding)
 
-_WORKBENCH = PortalEditorSupport(
-    root=ROOT,
-    seed=SEED,
-    problem_id='ac26-w4-arithmetization',
-    problem_name='多項式にしただけでは証明ではない',
-    problem_name_en='Turning it into a polynomial is not a proof',
-    description='「プログラムを証明する」とき、実行そのものは証明に入らない。小さな状態機械の trace を有限体上の多項式関係へ変換し、変換が何を失わないか、何を保証しないかを確かめる。',
-    description_en="Proving a program ran does not put the program into the proof. Translate a small state machine's trace into polynomial relations over a finite field, and find out what the translation preserves and what it does not guarantee.",
-    checkpoint_labels={'trace': '実行 trace を作る', 'transition': '隣り合う行の関係を式にする', 'boundary': 'どこから始まったかを固定する', 'interpolate': '列を多項式にする', 'compose': 'domain 上で関係が消えることを見る', 'locate': '最初に壊れた行を特定する', 'underconstrained': '多項式が正しくても文が違う例を作る', 'transfer': '見たことのない設定でも成立させる'},
-    checkpoint_labels_en={'trace': 'Produce the execution trace', 'transition': 'Turn adjacent rows into a relation', 'boundary': 'Pin where it started', 'interpolate': 'Turn a column into a polynomial', 'compose': 'Watch the relation vanish on the domain', 'locate': 'Locate the first row that breaks', 'underconstrained': 'Build a valid proof of the wrong statement', 'transfer': 'Hold up in a setting you have not seen'},
-    submitted_files=('air.py',),
-    code_checkpoints=('trace', 'transition', 'boundary', 'interpolate', 'compose', 'locate', 'underconstrained', 'transfer'),
-    checkpoints=('trace', 'transition', 'boundary', 'interpolate', 'compose', 'locate', 'underconstrained', 'transfer'),
-    max_body_bytes=MAX_BODY_BYTES,
-    run_timeout_seconds=RUN_TIMEOUT_SECONDS,
-    max_output_bytes=MAX_OUTPUT_BYTES,
-    limit_fn=_limits,
-)
-# END GENERATED PORTAL EDITOR API
+
+def _unwrap_submission(checkpoint_id: str, submission: object) -> object:
+    """Undo the Workbench's `tcw1.` seal and check it against this deployment.
+
+    The derivation is duplicated from `participant/workbench.py`'s `unwrap_submission`,
+    which lives in the participant image now (see ../Dockerfile). Repeating it here rather
+    than trusting an already-unwrapped value from the Workbench is what keeps the seal
+    meaningful: a caller who skips the Workbench is judged by the same rule. Same shape as
+    ac26-w3-ntt-roots's and ac26-w4-commit-open's verifiers, for the same reason.
+
+    Every checkpoint here is a code checkpoint, so `MANUAL_CHECKPOINTS` is empty and an
+    unsealed submission keeps its historical raw-source format. The seal path is still
+    honoured, so a Portal that seals a code submission is graded rather than rejected.
+    """
+    if not isinstance(submission, str) or not submission.startswith("tcw1."):
+        return None if checkpoint_id in MANUAL_CHECKPOINTS else submission
+    try:
+        prefix, encoded_payload, encoded_signature = submission.split(".", 2)
+        if prefix != "tcw1":
+            return None
+        payload = _b64decode(encoded_payload)
+        signature = _b64decode(encoded_signature)
+        key = hashlib.sha256((PROBLEM_ID + "\0" + SEED).encode("utf-8")).digest()
+        expected_signature = hmac.new(key, payload, hashlib.sha256).digest()[:16]
+        if not hmac.compare_digest(signature, expected_signature):
+            return None
+        decoded = json.loads(payload.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(decoded, dict):
+        return None
+    if decoded.get("v") != 1 or decoded.get("checkpointId") != checkpoint_id:
+        return None
+    return decoded.get("answer")
+
 
 class Handler(BaseHTTPRequestHandler):
-    """Serve the Portal editor API and preserve the existing /verify contract."""
+    """Serve the /verify contract, and nothing a participant-facing client needs.
+
+    The Portal editor API this class used to carry moved to `participant/server.py`, which
+    reaches this process over the Compose-internal network. Everything left here either
+    grades a submission or hands out the public half of this deployment.
+    """
 
     timeout = REQUEST_TIMEOUT_SECONDS
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's API
-        from urllib.parse import urlsplit
-
         path = urlsplit(self.path).path
-        if path == "/api/config":
-            self._respond(200, _WORKBENCH.config_payload())
+        if path == "/healthz":
+            self._respond(200, {"ok": True})
             return
-        if path == "/api/inspect":
-            self._respond(200, _WORKBENCH.inspect_payload())
-            return
-        if path == "/api/starter":
-            self._respond(200, _WORKBENCH.starter_payload())
+        if path == "/public":
+            self._respond(200, public_payload(SEED))
             return
         self._respond(404, {"error": "not found"})
 
     def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's API
-        from urllib.parse import urlsplit
-
-        path = urlsplit(self.path).path.rstrip("/") or "/"
-        if path not in ("/verify", "/api/test", "/api/prepare"):
+        if urlsplit(self.path).path.rstrip("/") != "/verify":
             self._respond(404, {"error": "not found"})
             return
         body = self._read_json_body()
         if body is None:
-            return
-        if path == "/api/test":
-            self._respond(200, _WORKBENCH.run_public_tests(body.get("files")))
-            return
-        if path == "/api/prepare":
-            self._respond(
-                200,
-                _WORKBENCH.prepare_submissions(body.get("files"), body.get("manual")),
-            )
             return
 
         checkpoint_id = body.get("checkpointId")
@@ -233,7 +268,7 @@ class Handler(BaseHTTPRequestHandler):
                 },
             )
             return
-        submission = _WORKBENCH.unwrap_submission(checkpoint_id, body.get("submission"))
+        submission = _unwrap_submission(checkpoint_id, body.get("submission"))
         try:
             correct = evaluate(checkpoint_id, submission)
         except Exception:  # noqa: BLE001 - a broken checkpoint must fail closed
@@ -288,15 +323,16 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(content)
 
 def main() -> None:
-    port = int(os.environ.get("VERIFY_PORT", "18104"))
+    port = int(os.environ.get("VERIFY_PORT", "18154"))
     # Bind every interface *inside the container*, not the container's loopback. A published
     # port is forwarded to the container's bridge address, so a server listening only on
     # 127.0.0.1 inside the container accepts nothing from outside it — the connection is
     # opened and closed without a response, and the platform can never score the problem.
     #
-    # The loopback restriction that matters is on the host, and it lives in
-    # docker-compose.yml, which publishes `127.0.0.1:<port>:<port>`. Nothing outside this
-    # machine can reach the verifier either way.
+    # Since Issue 543 option B2 this service is not published to the host at all: it sits
+    # on the Compose-internal `lab` network, which carries no gateway, and the only client
+    # is the Workbench (see ../docker-compose.yml). Nothing outside this machine can reach
+    # the verifier, and nothing on this machine can either except through the Workbench.
     HTTPServer(("0.0.0.0", port), Handler).serve_forever()  # noqa: S104 - see above
 
 

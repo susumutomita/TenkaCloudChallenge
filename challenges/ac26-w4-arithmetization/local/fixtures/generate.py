@@ -119,3 +119,40 @@ def tampered_trace(seed: str, label: str, setting_dict: dict) -> tuple[list[tupl
 def health_token(seed: str) -> str:
     cfg = setting(seed)
     return hashlib.sha256(f"health:{seed}:{cfg['p']}:{cfg['steps']}".encode()).hexdigest()[:16]
+
+
+def public_payload(seed: str) -> dict[str, object]:
+    """Everything a participant may see for this deployment. Carries values, not code.
+
+    This is the `public` label only, and it is exactly what `make inspect` has always
+    printed and what `tests/public/test_air.py` has always used: the setting, the
+    evaluation domain, and the trace the machine produces from that setting. Every
+    checkpoint is graded on the `h0`, `h1` and `h2` labels (see tests/hidden/check_air.py),
+    and `transfer` on a different seed again, each of which derives a different prime, a
+    different trace length, a different transition weight and a different starting state --
+    so no value below narrows a graded run.
+
+    Within the `public` label the trace travels as values because it always has: `make
+    inspect` prints every row beside its domain point, and the recurrence that produces it
+    is written out in `starter/air.py`, in this file's own module docstring and in the
+    README. Handing over one label's rows is not handing over `execute`.
+
+    What does not travel is the code. `honest_trace` -- which this module's own docstring
+    calls the reference answer for the trace checkpoint -- and the seed derivation that
+    decides the hidden labels stay in the verifier image, beside
+    `tests/hidden/check_air.py`, which states the residual count, the row a transition
+    failure is attributed to, and the four conditions an underconstrained witness is
+    accepted on. Those are the things `starter/air.py` asks the learner to work out.
+    """
+    cfg = setting(seed)
+    return {
+        "healthToken": health_token(seed),
+        "setting": {
+            "p": cfg["p"],
+            "steps": cfg["steps"],
+            "weight": cfg["weight"],
+            "start": list(cfg["start"]),
+        },
+        "domain": domain(cfg),
+        "trace": [list(row) for row in honest_trace(cfg)],
+    }

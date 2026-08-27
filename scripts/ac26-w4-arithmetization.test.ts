@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
 import { parse as parseYaml } from "yaml";
+import { participantPythonFiles } from "./lib/local-play-problems";
 
 /**
  * ac26-w4-arithmetization is Week 4's bridge problem. The assertions that carry weight
@@ -322,5 +323,349 @@ describe("ac26-w4-arithmetization: metadata contracts", () => {
       },
     ]);
     expect(status).toBe("draft");
+  });
+});
+
+const DIR = "challenges/ac26-w4-arithmetization";
+const REPO_ROOT = join(import.meta.dir, "..");
+
+/**
+ * The transcription probe (docs/AGENT_LOOP_CONSTRAINTS.md §5, as on ac26-w2-privacy-audit,
+ * ac26-w3-ec-group and ac26-w3-fft-domain). Neither standard probe says anything here,
+ * because the leaked material is a set of rules nobody imports by name. Every clause below
+ * is copied out of the two files the participant stage used to ship, with no reasoning past
+ * copying: `execute` is `fixtures.generate.honest_trace` verbatim -- its docstring there
+ * calls it the reference answer for the trace checkpoint -- and the rest comes from
+ * `tests/hidden/check_air.py`: the `steps - 1` residual count `check_transition` requires,
+ * "the transition out of row i breaks row i+1" from that file's module docstring, the
+ * boundary residual `check_boundary` constructs, and the four conditions
+ * `check_underconstrained` accepts a witness on. It is kept here rather than under `local/`
+ * because it is a probe, not a reference solution: it interpolates nothing, because neither
+ * shipped file contains an interpolation.
+ */
+const TRANSCRIBED = [
+  "def execute(setting):",
+  "    p, steps, weight = setting['p'], setting['steps'], setting['weight']",
+  "    a, b = setting['start']",
+  "    rows = [(a % p, b % p)]",
+  "    for _ in range(steps - 1):",
+  "        a, b = (a + b) % p, (b + weight * a) % p",
+  "        rows.append((a, b))",
+  "    return rows",
+  "",
+  "def transition_residuals(trace, setting):",
+  "    p, weight = setting['p'], setting['weight']",
+  "    out = []",
+  "    for index in range(len(trace) - 1):",
+  "        a, b = trace[index]",
+  "        next_a, next_b = trace[index + 1]",
+  "        out.append((((a + b) - next_a) % p, ((b + weight * a) - next_b) % p))",
+  "    return out",
+  "",
+  "def boundary_residuals(trace, setting):",
+  "    p = setting['p']",
+  "    start_a, start_b = setting['start']",
+  "    return [(trace[0][0] - start_a) % p, (trace[0][1] - start_b) % p]",
+  "",
+  "def interpolate(values, points, p):",
+  "    return []",
+  "",
+  "def evaluate(coefficients, x, p):",
+  "    return sum(c * pow(x, degree, p) for degree, c in enumerate(coefficients)) % p",
+  "",
+  "def column_polynomials(trace, points, p):",
+  "    return []",
+  "",
+  "def first_violation(trace, setting):",
+  "    p = setting['p']",
+  "    start_a, start_b = setting['start']",
+  "    if (trace[0][0] - start_a) % p != 0 or (trace[0][1] - start_b) % p != 0:",
+  "        return {'row': 0, 'kind': 'boundary'}",
+  "    for position, pair in enumerate(transition_residuals(trace, setting)):",
+  "        if any(value % p != 0 for value in pair):",
+  "            return {'row': position + 1, 'kind': 'transition'}",
+  "    return None",
+  "",
+  "def underconstrained_witness(setting):",
+  "    p = setting['p']",
+  "    start_a, start_b = setting['start']",
+  "    moved = dict(setting)",
+  "    moved['start'] = ((start_a + 1) % p, start_b)",
+  "    return {'trace': execute(moved), 'constraint_dropped': 'boundary'}",
+  "",
+].join("\n");
+
+/** The five checkpoints the transcription above reaches: 185 of this problem's 300 points. */
+const TRANSCRIBED_CHECKPOINTS = [
+  "trace",
+  "transition",
+  "boundary",
+  "locate",
+  "underconstrained",
+] as const;
+
+describe("ac26-w4-arithmetization: the participant image carries nothing that grades", () => {
+  it("keeps fixtures/, the hidden suite and the verifier out of the participant Docker stage", () => {
+    const dockerfile = read("local/Dockerfile");
+    const participantStage = dockerfile.slice(
+      dockerfile.indexOf("FROM base AS participant"),
+      dockerfile.indexOf("FROM base AS verifier"),
+    );
+    expect(participantStage).not.toContain("COPY fixtures/");
+    expect(participantStage).not.toContain("tests/hidden");
+    expect(participantStage).not.toContain("COPY verifier/");
+    expect(participantStage).not.toContain("COPY reference/");
+    expect(participantStage).not.toContain("COPY mutation.py");
+    expect(participantStage).toContain("COPY tests/public/");
+    expect(participantStage).toContain("COPY participant/");
+
+    const verifierStage = dockerfile.slice(
+      dockerfile.indexOf("FROM base AS verifier"),
+      dockerfile.indexOf("FROM participant AS author"),
+    );
+    expect(verifierStage).toContain("COPY fixtures/");
+    expect(verifierStage).toContain("COPY tests/hidden/");
+    expect(verifierStage).toContain("COPY verifier/");
+    // Unlike ac26-w2-private-aggregate there is no supplied half here: every graded
+    // function is handed its setting, its trace and its domain, so the verifier stage must
+    // not pull `participant/` in at all.
+    expect(verifierStage).not.toContain("COPY participant/");
+    expect(verifierStage).not.toContain("COPY reference/");
+    expect(verifierStage).not.toContain("COPY mutation.py");
+  });
+
+  it("reproduces the original leak: no file the participant image carries states a grading rule", () => {
+    // The file list comes from the Dockerfile's participant stage, via the same derivation
+    // `check-answer-reachability.ts` uses, rather than being restated here -- so a COPY
+    // that puts `fixtures/` or `tests/hidden/` back fails this test.
+    const participantFiles = participantPythonFiles(REPO_ROOT, DIR);
+    expect(participantFiles).not.toContain(`${DIR}/local/fixtures/generate.py`);
+    expect(participantFiles).not.toContain(`${DIR}/local/tests/hidden/check_air.py`);
+    expect(participantFiles).not.toContain(`${DIR}/local/verifier/server.py`);
+    expect(participantFiles).toContain(`${DIR}/local/tests/public/test_air.py`);
+    expect(participantFiles).toContain(`${DIR}/local/participant/server.py`);
+    for (const file of participantFiles) {
+      const source = readFileSync(join(REPO_ROOT, file), "utf8");
+      // The one permitted mention is the lazy, function-scoped checkout/author fallback in
+      // show.py and tests/public/test_air.py: never a module-level import, which is what
+      // would fail loudly the moment it ran inside a participant image that carries no
+      // `fixtures/` at all.
+      expect(source).not.toMatch(/^from fixtures/m);
+      expect(source).not.toMatch(/^import fixtures/m);
+      expect(source).not.toMatch(/^from tests\.hidden/m);
+      expect(source).not.toMatch(/^from verifier/m);
+      // The machine itself: honest_trace is the trace checkpoint's answer, and
+      // tampered_trace decides where `locate` has to point.
+      expect(source).not.toContain("def honest_trace");
+      expect(source).not.toContain("def tampered_trace");
+      // The residual count is the thing starter/air.py tells the learner to work out.
+      expect(source).not.toContain("def check_transition");
+      expect(source).not.toContain("def check_underconstrained");
+    }
+  });
+
+  it("publishes only the Workbench, and reaches the verifier over an internal network", () => {
+    const compose = parseYaml(read("local/docker-compose.yml")) as {
+      services: Record<string, Record<string, unknown>>;
+      networks: Record<string, Record<string, unknown>>;
+    };
+    expect(Object.keys(compose.services).sort()).toEqual(["verifier", "workbench"]);
+    // The published port and the /verify URL are what metadata.json's runtime declares, and
+    // they did not move: the Workbench answers on 18104 and forwards inward.
+    expect(compose.services.workbench.ports).toEqual(["127.0.0.1:18104:18104"]);
+    expect(compose.services.verifier.ports).toBeUndefined();
+    expect(compose.networks.lab.internal).toBe(true);
+    expect(compose.services.verifier.networks).toEqual(["lab"]);
+    const runtime = JSON.parse(read("metadata.json")).runtime as { verifyUrl: string };
+    expect(runtime.verifyUrl).toBe("http://127.0.0.1:18104/verify");
+  });
+
+  it("brings the verifier up for every target that needs public evidence", () => {
+    // Since the split `show.py` and the public tests read this deployment's public half
+    // over the compose network, so a bare `docker run` against the participant image cannot
+    // serve them.
+    const makefile = read("Makefile");
+    for (const target of [
+      "test: build verifier-up",
+      "test-one: build verifier-up",
+      "inspect: build verifier-up",
+    ]) {
+      expect(makefile).toContain(target);
+    }
+    expect(makefile).toContain("verifier-up:");
+    expect(makefile).toContain("verifier-down:");
+    // Every problem's compose directory is named `local`, so an unqualified project name
+    // collides across problems -- and `--remove-orphans` then deletes another problem's
+    // running containers (docs/AGENT_LOOP_CONSTRAINTS.md §6).
+    expect(makefile).toContain("-p $(IMAGE)");
+    expect(makefile).not.toContain("--remove-orphans");
+  });
+});
+
+describe("ac26-w4-arithmetization: what the split does and does not close", () => {
+  it("scores zero for a submission that imports the graded material at grading time", () => {
+    // Issue 591: `fixtures/` and `tests/hidden/` are on the runner's sys.path because
+    // grading needs them, so the guard in verifier/server.py's RUNNER -- not the Docker
+    // split -- is what closes this path. Measured, not assumed.
+    for (const checkpoint of CHECKPOINTS) {
+      expect(evaluate(checkpoint, "from fixtures.generate import *\n")).toBe(false);
+    }
+  }, 300_000);
+
+  it("scores zero for the module the participant image ships", () => {
+    // The other probe: the participant reads what their own container carries and pastes
+    // it, so the RUNNER guard -- which only blocks `import` -- is not in the path. The
+    // reference passing every checkpoint (below) is this probe's positive control
+    // (docs/AGENT_LOOP_CONSTRAINTS.md §5), because the guard-removal control is flat here:
+    // nothing the participant stage ships defines any name the hidden suite calls, so
+    // without the reference a silently broken probe would report the same zero.
+    const shipped = read("local/participant/workbench.py");
+    for (const checkpoint of CHECKPOINTS) {
+      expect(evaluate(checkpoint, shipped)).toBe(false);
+    }
+  }, 300_000);
+
+  it("scores five eighths of the problem for a submission transcribed out of the two shipped files", () => {
+    // What the split closes, asserted as a live measurement rather than a claim: the
+    // transcription still scores -- grading did not change -- and the files it was
+    // transcribed from are no longer in the participant image (the tests above). It stops
+    // at five checkpoints because neither shipped file contains an interpolation, which is
+    // what `interpolate`, `compose` and `transfer` need.
+    for (const checkpoint of CHECKPOINTS) {
+      expect(evaluate(checkpoint, TRANSCRIBED)).toBe(
+        (TRANSCRIBED_CHECKPOINTS as readonly string[]).includes(checkpoint),
+      );
+    }
+    const checks = JSON.parse(read("metadata.json")).scoring.checks as Array<{
+      id: string;
+      points: number;
+    }>;
+    const scored = checks.filter((check) =>
+      (TRANSCRIBED_CHECKPOINTS as readonly string[]).includes(check.id),
+    );
+    expect(scored.reduce((sum, check) => sum + check.points, 0)).toBe(185);
+  }, 300_000);
+
+  it("is a probe that can score: the reference passes every checkpoint", () => {
+    // The positive control for the two zeros above. Without it, a probe broken in some way
+    // that has nothing to do with the split reports the same 0 as a closed problem.
+    for (const checkpoint of CHECKPOINTS) {
+      expect(evaluate(checkpoint, bundle("reference"))).toBe(true);
+    }
+  }, 300_000);
+});
+
+describe("ac26-w4-arithmetization: the public half survives the split", () => {
+  it("serves show.py and the public tests every value they used to import, and nothing else", () => {
+    const script = [
+      "import json, sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import public_payload, domain, honest_trace, setting, health_token",
+      "seed = sys.argv[1]",
+      "cfg = setting(seed)",
+      "payload = public_payload(seed)",
+      "print(json.dumps({",
+      "  'health': payload['healthToken'] == health_token(seed),",
+      "  'setting': payload['setting'] == {'p': cfg['p'], 'steps': cfg['steps'],",
+      "      'weight': cfg['weight'], 'start': list(cfg['start'])},",
+      "  'domain': payload['domain'] == domain(cfg),",
+      "  'trace': payload['trace'] == [list(row) for row in honest_trace(cfg)],",
+      // The hidden labels are what every checkpoint is graded on, and none of them travels.
+      "  'publicLabelOnly': all(",
+      "      json.dumps(public_payload(seed)) != json.dumps({",
+      "          'healthToken': payload['healthToken'],",
+      "          'setting': {'p': setting(seed, label)['p'],",
+      "              'steps': setting(seed, label)['steps'],",
+      "              'weight': setting(seed, label)['weight'],",
+      "              'start': list(setting(seed, label)['start'])},",
+      "          'domain': domain(setting(seed, label)),",
+      "          'trace': [list(r) for r in honest_trace(setting(seed, label))],",
+      "      }) for label in ('h0', 'h1', 'h2')),",
+      "}))",
+    ].join("\n");
+    const result = python(["-c", script, SEED]);
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "{}")).toEqual({
+      health: true,
+      setting: true,
+      domain: true,
+      trace: true,
+      publicLabelOnly: true,
+    });
+  });
+
+  it("prints exactly what it printed before the split, on every seed shape", () => {
+    // show.py reads `GET /public` now instead of importing `fixtures.generate`. What a
+    // learner sees must not have moved with it, so the payload path is driven straight
+    // through show.py -- via PUBLIC_EVIDENCE_JSON, the same value the network branch
+    // returns -- and compared against the derivation, across seeds.
+    const script = [
+      "import io, json, os, contextlib, sys",
+      "sys.path.insert(0, '.')",
+      "import show",
+      "from fixtures.generate import public_payload",
+      "disagreed = []",
+      "for index in range(30):",
+      "    seed = 'show-%d' % index",
+      "    os.environ['PUBLIC_EVIDENCE_JSON'] = json.dumps(public_payload(seed))",
+      "    injected = io.StringIO()",
+      "    with contextlib.redirect_stdout(injected):",
+      "        show.main()",
+      "    del os.environ['PUBLIC_EVIDENCE_JSON']",
+      "    show.SEED = seed",
+      "    direct = io.StringIO()",
+      "    with contextlib.redirect_stdout(direct):",
+      "        show.main()",
+      "    if injected.getvalue() != direct.getvalue():",
+      "        disagreed.append(index)",
+      "print(json.dumps({'disagreed': disagreed}))",
+    ].join("\n");
+    const result = python(["-c", script]);
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "null")).toEqual({
+      disagreed: [],
+    });
+  });
+
+  it("tells a learner which service is missing when the verifier is not running", () => {
+    // show.py inside a participant image has no `fixtures/` to fall back to, so an
+    // unreachable verifier must say so rather than raise a urllib traceback at somebody
+    // trying to read their own fixtures.
+    const result = spawnSync("python3", ["show.py"], {
+      cwd: LOCAL,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        FLAG_SEED: SEED,
+        PYTHONDONTWRITEBYTECODE: "1",
+        // Nothing listens on the discard port.
+        VERIFIER_PUBLIC_URL: "http://127.0.0.1:9/public",
+      },
+      timeout: 60_000,
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("cannot reach this deployment's verifier");
+    expect(result.stderr).toContain("make verifier-up");
+  });
+
+  it("forwards a verdict inward and fails closed when the verifier does not answer", () => {
+    // Nothing in the Workbench decides a checkpoint. A missing verifier must read as a
+    // wrong answer, never as a correct one and never as a crash.
+    const script = [
+      "import json, sys",
+      "sys.path.insert(0, '.')",
+      "from participant.server import proxy_verdict",
+      "body = {'checkpointId': 'trace', 'submission': 'x'}",
+      "print(json.dumps({",
+      "  'unset': proxy_verdict(body, ''),",
+      "  'unreachable': proxy_verdict(body, 'http://127.0.0.1:9/verify'),",
+      "}))",
+    ].join("\n");
+    const result = python(["-c", script]);
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "{}")).toEqual({
+      unset: { checkpointId: "trace", correct: false },
+      unreachable: { checkpointId: "trace", correct: false },
+    });
   });
 });
