@@ -103,14 +103,25 @@ truncation も「60 サンプルが全部相異なるか」では捕まりませ
 
 ## 保証範囲
 
-ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も
-あなたの管理下にあるので、 image の中身はあなたに対して秘匿されていません。
-`reference/` と `tests/hidden/` を bind-mount しないのは、あなたの git checkout に
-紛れ込ませないためであって、手が届かなくするためではありません。
+ローカル実行は**自習用の honor-system 検証**です。Docker デーモンと compose stack の全
+container を管理している人に対して、隠した材料を秘匿することはできません。ここでの境界は
+「誤配の防止」であって、その人に対する機密性ではありません。あなたが build して動かす
+Workbench container が持つのは starter、公開テスト、提供済みのプロトコル
+(`local/participant/schnorr.py` — 群・challenge・署名ルーチン・collision checkpoint で
+測る truncated 生成器) と `make inspect` の表示だけです。audit log の生成、鍵の導出、
+直した生成器、hidden test、reference 解、verifier は**入っていません**。それらは
+Workbench が compose network 越しに参照する、公開されない 2 つ目の container と、
+`make reference-test` が build する作問者専用 image にだけ存在します。
+
+そのため `make test` / `make test-one` / `make inspect` は先に verifier を起動します
+(`make verifier-up` を自動で実行します)。`make inspect` はこのデプロイの log をローカルで
+生成せず、compose network 越しに verifier から取得します。停止は `make verifier-down` です。
 
 verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
 ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。
 結果は期待値を漏らしません。 fixture はこのデプロイの seed 由来なので、暗記した答えは持ち越せません。
+提出コードは時間・メモリ・プロセス数・出力量の上限つきで動きます。 2 つの container はどちらも
+非 root・read-only・特権なしで動き、公開されるのは Workbench のみ、loopback だけです。
 
 これは自習と誠実な練習を支えます。競技順位・試験・修了判定は**支えません**。
 それらには participant が管理しない verifier が必要で、

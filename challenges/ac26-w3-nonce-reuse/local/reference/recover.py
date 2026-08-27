@@ -53,7 +53,7 @@ def _point(value, group):
 def accepts(parsed, group) -> bool:
     """Whether this record is an accepting transcript. Reuse in a rejected transcript
     proves nothing, so this has to be checked before the pair is attacked."""
-    from fixtures.generate import DOMAINS, challenge
+    from participant.schnorr import DOMAINS, challenge
 
     e = challenge(DOMAINS[0], parsed["commitment"], parsed["public_key"], parsed["message"], group)
     left = group.generator.scalar_mul(parsed["response"])
@@ -95,7 +95,7 @@ def recover_secret(first, second, group) -> int:
     So x = (z1 - z2) * (e1 - e2)^-1 mod n. The inverse is why e1 must differ from e2:
     two responses to the SAME challenge are one equation written twice.
     """
-    from fixtures.generate import DOMAINS, challenge
+    from participant.schnorr import DOMAINS, challenge
 
     if first["commitment"] != second["commitment"]:
         raise MalformedRecord("the two transcripts do not share a commitment")
@@ -138,7 +138,7 @@ def collision_experiment(seed: str, group, samples: int) -> dict:
     Every one of its outputs looks like hash output, and the log gives no hint that
     anything is wrong. The collision arrives on the birthday schedule regardless.
     """
-    from fixtures.generate import NONCE_SPACE, messages, truncated_nonce
+    from participant.schnorr import NONCE_SPACE, truncated_nonce
 
     secret = 12345 % (group.n - 1) + 1
     seen: dict[int, int] = {}

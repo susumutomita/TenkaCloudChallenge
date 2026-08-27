@@ -17,7 +17,9 @@ share a commitment and differ in the challenge yield the witness. That property 
 makes the protocol a proof of knowledge — the same fact that makes it sound is the fact
 that makes nonce reuse fatal.
 
-`fixtures.generate` gives you the group, the challenge function, and the log.
+`participant.schnorr` gives you the group, the challenge function, and the signing
+routine the log records. The log itself is handed to you as an argument, and
+`make inspect` prints this deployment's.
 """
 
 from __future__ import annotations
@@ -76,7 +78,7 @@ def attack_log(records, group) -> dict:
 
 
 def collision_experiment(seed: str, group, samples: int) -> dict:
-    """Measure `fixtures.generate.truncated_nonce`.
+    """Measure `participant.schnorr.truncated_nonce`.
 
     Return {"collisions", "distinct", "space"}. Predict the number before you run it —
     the generator's output looks like hash output, because it is.

@@ -151,6 +151,14 @@ PORTAL_PACKAGES = {
     # learner. fixtures/generate.py left the participant stage with it; there is no
     # supplied half to carve out here, and the Portal moved to participant/.
     "ac26-w3-fft-domain": "participant",
+    # Issue 537/538 (Issue 543 option B2): fixtures/generate.py's audit_log returns
+    # victim_secret and victim_public beside the records -- the hunt checkpoint's answer
+    # as a value -- secret_key derives every key in this deployment from the FLAG_SEED
+    # the participant container already carries, and deterministic_nonce is the repair
+    # checkpoint's answer with a docstring explaining it. The supplied half (group,
+    # challenge, sign_with, and the truncated generator the collision checkpoint
+    # measures) moved to participant/schnorr.py, and the Portal moved to participant/.
+    "ac26-w3-nonce-reuse": "participant",
     # Issue 537/538: verifier/server.py's own _check_avalanche compared a submission
     # directly against a plain, seed-derived avalanche_distance defined in the same
     # file, and _check_properties/_check_storage compared against
