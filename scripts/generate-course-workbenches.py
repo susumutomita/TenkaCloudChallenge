@@ -170,6 +170,17 @@ PORTAL_PACKAGES = {
     # transcribed from the two scored 5 of 8 checkpoints, 185 of 300 points. There is no
     # supplied half to carve out here, and the Portal moved to participant/.
     "ac26-w4-arithmetization": "participant",
+    # Issue 537/538 (Issue 543 option B2): tests/hidden/check_pipeline.py grades all eight
+    # checkpoints and holds _reference_first_fault -- a complete, correct implementation of
+    # every layer contract starter/pipeline.py asks the learner to write -- while
+    # check_graph, check_assumptions and check_diagnose write out the graph construction,
+    # the assumption matrix and the layer order beside it. fixtures/generate.py left the
+    # participant stage with it: UNSUPPORTED_CLAIMS is the cost checkpoint's ground truth,
+    # and FAULTS maps every injected fault to the layer first_fault must report and to the
+    # single field repair may touch. A submission transcribed from the two scored 7 of 8
+    # checkpoints, 270 of 300 points. There is no supplied half to carve out here, and the
+    # Portal moved to participant/.
+    "ac26-w4-proof-pipeline": "participant",
     # Issue 537/538 (Issue 543 option B2): fixtures/generate.py's audit_log returns
     # victim_secret and victim_public beside the records -- the hunt checkpoint's answer
     # as a value -- secret_key derives every key in this deployment from the FLAG_SEED

@@ -194,7 +194,7 @@ describe("ac26-w4-proof-pipeline: each fault damages exactly one field", () => {
       "    for fault in applicable_faults(name):",
       "        run = faulted_run('s', name, fault)",
       "        base = honest_run('s', name, 'public:' + fault)",
-      "        changed = sorted(k for k in base if base[k] != run[k] and k != 'label')",
+      "        changed = sorted(k for k in base if base[k] != run[k])",
       "        if changed != [FAULTS[fault]['damages']]:",
       "            bad.append([name, fault, changed])",
       "print(json.dumps(bad))",
@@ -393,6 +393,135 @@ describe("ac26-w4-proof-pipeline: /verify contract", () => {
     expect(read("local/verifier/server.py")).toContain(
       '{"checkpointId": checkpoint_id, "correct": correct}',
     );
+  });
+});
+
+/**
+ * Issue 537/538, Issue 543 option B2. Until this split the problem had one Docker stage,
+ * and it carried `tests/hidden/check_pipeline.py` — whose `_reference_first_fault` is a
+ * complete and correct implementation of every layer contract the starter asks a learner
+ * to write — beside `fixtures/generate.py`, which carries `UNSUPPORTED_CLAIMS` (the
+ * `cost` checkpoint's ground truth) and `FAULTS` (the layer `first_fault` must report,
+ * and the single field `repair` may touch, for every injected fault). A submission
+ * transcribed from those two files, with no reasoning past copying, scored 7 of 8
+ * checkpoints.
+ *
+ * These assertions fail the moment either file goes back into the participant stage, or
+ * the public payload starts carrying the half that decides a checkpoint.
+ */
+describe("ac26-w4-proof-pipeline: the answer is not in the participant image", () => {
+  function participantStage(): string {
+    const dockerfile = read("local/Dockerfile");
+    const start = dockerfile.indexOf("FROM base AS participant");
+    const end = dockerfile.indexOf("FROM base AS verifier");
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    return dockerfile.slice(start, end);
+  }
+
+  it("should copy neither fixtures/, tests/hidden/ nor verifier/ into the participant stage", () => {
+    const stage = participantStage();
+    expect(stage).toContain("COPY tests/public/");
+    for (const forbidden of ["COPY fixtures/", "COPY tests/ ", "COPY tests/hidden/", "COPY verifier/"]) {
+      expect(stage).not.toContain(forbidden);
+    }
+  });
+
+  it("should serve the Portal from the participant image, not from the grading one", () => {
+    expect(existsSync(join(ROOT, "local/participant/server.py"))).toBe(true);
+    expect(existsSync(join(ROOT, "local/participant/workbench.py"))).toBe(true);
+    expect(existsSync(join(ROOT, "local/verifier/workbench.py"))).toBe(false);
+    // Nothing in the participant image may decide a checkpoint: it forwards instead.
+    const server = read("local/participant/server.py");
+    expect(server).toContain("proxy_verdict");
+    expect(server).not.toContain("tests.hidden");
+    expect(server).not.toContain("fixtures.generate");
+  });
+
+  it("should keep the verifier off the host and reachable only from the Workbench", () => {
+    const compose = parseYaml(read("local/docker-compose.yml")) as {
+      services: Record<string, { ports?: string[]; environment?: Record<string, string> }>;
+      networks: Record<string, { internal?: boolean }>;
+    };
+    expect(compose.services.verifier.ports).toBeUndefined();
+    expect(compose.services.workbench.environment?.VERIFIER_PUBLIC_URL).toContain("/public");
+    expect(compose.networks.lab.internal).toBe(true);
+  });
+
+  it("should keep the ground truth and the fault table out of GET /public", () => {
+    const payload = probe([
+      "import json, os",
+      "from fixtures.generate import public_payload",
+      "print(json.dumps(public_payload(os.environ['FLAG_SEED'])))",
+    ]);
+    // Serialised, so a nested key or a value carrying one of these is caught too.
+    for (const forbidden of [
+      "UNSUPPORTED_CLAIMS",
+      "repair_field",
+      "damages",
+      "claim-a-is-assumption-free\", \"claim-a-prover",
+    ]) {
+      expect(payload).not.toContain(forbidden);
+    }
+    const decoded = JSON.parse(payload) as Record<string, unknown>;
+    expect(Object.keys(decoded).sort()).toEqual([
+      "claims",
+      "faultedRun",
+      "healthToken",
+      "honestRun",
+      "pipelines",
+    ]);
+  });
+
+  // The record used to carry its own `label`, and `faulted_run` labels a faulted run
+  // `"<label>:<fault>"` — so the run handed to `first_fault` and `repair` named the fault
+  // they were being asked to diagnose, on the graded h0/h1/h2 labels as much as on the
+  // public one. Removing that field alone took the transcription probe above from 7/8 to
+  // 6/8: `diagnose` is 50 of this problem's 300 points.
+  it("should hand the submission a run that does not name its own fault", () => {
+    const answer = probe([
+      "import json",
+      "from fixtures.generate import applicable_faults, faulted_run, honest_run",
+      "leaks = []",
+      "for name in ('A', 'B'):",
+      "    for label in ('public', 'h0', 'h1', 'h2'):",
+      "        runs = [honest_run('s', name, label)]",
+      "        runs += [faulted_run('s', name, f, label) for f in applicable_faults(name)]",
+      "        for run in runs:",
+      "            blob = json.dumps(run)",
+      "            leaks += [f for f in applicable_faults(name) if f in blob]",
+      "            leaks += [k for k in run if k == 'label']",
+      "print(json.dumps(sorted(set(leaks))))",
+    ]);
+    expect(JSON.parse(answer)).toEqual([]);
+  });
+
+  // The payload is the only source in the participant image, so it has to carry exactly
+  // what `show.py` printed before the split — on every seed, not just this one.
+  it("should print the same inspect output from the payload as from the fixtures", () => {
+    const answer = probe([
+      "import io, json, os, contextlib, importlib",
+      "import show",
+      "from fixtures.generate import public_payload",
+      "diffs = []",
+      "for i in range(30):",
+      "    seed = f'seed-{i}'",
+      "    os.environ['FLAG_SEED'] = seed",
+      "    importlib.reload(show)",
+      "    os.environ.pop('PUBLIC_EVIDENCE_JSON', None)",
+      "    direct = io.StringIO()",
+      "    with contextlib.redirect_stdout(direct):",
+      "        show.main()",
+      "    os.environ['PUBLIC_EVIDENCE_JSON'] = json.dumps(public_payload(seed))",
+      "    injected = io.StringIO()",
+      "    with contextlib.redirect_stdout(injected):",
+      "        show.main()",
+      "    os.environ.pop('PUBLIC_EVIDENCE_JSON', None)",
+      "    if direct.getvalue() != injected.getvalue():",
+      "        diffs.append(seed)",
+      "print(json.dumps(diffs))",
+    ]);
+    expect(JSON.parse(answer)).toEqual([]);
   });
 });
 
