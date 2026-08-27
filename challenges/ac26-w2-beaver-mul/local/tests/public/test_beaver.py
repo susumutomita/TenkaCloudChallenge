@@ -6,6 +6,7 @@ deciding you are done.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -14,30 +15,65 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "starter"))
 
-from fixtures.generate import reconstruct, setting, shares_of, triple_shares  # noqa: E402
 import beaver  # noqa: E402
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
-CFG = setting(SEED)
-TRIPLE = triple_shares(SEED, "public")
+
+
+def _load_public_evidence() -> dict:
+    """This deployment's modulus, party count, triple shares and shares of x -- what
+    `show.py` prints, plus the two values this file has always compared `mask` against.
+
+    Issue 537/538 (Issue 543 option B2): this file used to import `fixtures.generate`
+    directly. That module's `setting()` returns x, y, a, b and c in the clear, and it
+    shipped in the same image as `tests/hidden/check_beaver.py`, so it does not ship in
+    the `participant` Docker stage at all any more (see ../../Dockerfile). This
+    deployment's own verifier is the only source for the public half now:
+    `PUBLIC_EVIDENCE_JSON` when the Portal has already fetched it, or
+    `VERIFIER_PUBLIC_URL` fetched directly when it has not.
+    """
+    injected = os.environ.get("PUBLIC_EVIDENCE_JSON")
+    if injected:
+        return json.loads(injected)
+    verifier_public_url = os.environ.get("VERIFIER_PUBLIC_URL")
+    if verifier_public_url:
+        from urllib.request import urlopen
+
+        with urlopen(verifier_public_url, timeout=10) as response:  # noqa: S310
+            return json.loads(response.read().decode("utf-8"))
+    # Neither is set: this only resolves when `fixtures/` is actually on disk, which is
+    # true for a checkout (this file run directly, e.g. by
+    # scripts/ac26-w2-beaver-mul.test.ts) and the verifier/author Docker stages, and
+    # never inside a built `participant` image -- so this branch does not reopen the
+    # leak above.
+    from fixtures.generate import public_payload
+
+    return public_payload(SEED)
+
+
+PUBLIC = _load_public_evidence()
+TRIPLE = PUBLIC["triple"]
 
 
 def _sx() -> list[int]:
-    return shares_of(SEED, "public-x", CFG["x"], CFG["n"], CFG["p"])
+    return list(PUBLIC["xShares"])
 
 
 def test_mask_reconstructs_to_value_minus_mask() -> None:
-    out = beaver.mask(_sx(), TRIPLE["a"], CFG["p"])
-    assert reconstruct(out, CFG["p"]) == (CFG["x"] - CFG["a"]) % CFG["p"]
+    p = PUBLIC["params"]["p"]
+    out = beaver.mask(_sx(), TRIPLE["a"], p)
+    assert sum(out) % p == (PUBLIC["x"] - PUBLIC["a"]) % p
 
 
 def test_open_value_returns_the_shared_value() -> None:
-    assert beaver.open_value(_sx(), CFG["p"]) == CFG["x"] % CFG["p"]
+    p = PUBLIC["params"]["p"]
+    assert beaver.open_value(_sx(), p) == PUBLIC["x"] % p
 
 
 def test_combine_returns_one_value_per_party() -> None:
-    out = beaver.combine(TRIPLE["c"], TRIPLE["a"], TRIPLE["b"], 1, 1, CFG["p"])
-    assert len(out) == CFG["n"]
+    par = PUBLIC["params"]
+    out = beaver.combine(TRIPLE["c"], TRIPLE["a"], TRIPLE["b"], 1, 1, par["p"])
+    assert len(out) == par["n"]
 
 
 def test_rounds_is_an_integer() -> None:

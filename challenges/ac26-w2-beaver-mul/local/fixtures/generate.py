@@ -86,3 +86,42 @@ def triple_shares(seed: str, label: str) -> dict[str, list[int]]:
 def health_token(seed: str) -> str:
     cfg = setting(seed)
     return hashlib.sha256(f"health:{seed}:{cfg['p']}:{cfg['n']}".encode()).hexdigest()[:16]
+
+
+def public_payload(seed: str) -> dict[str, object]:
+    """Everything a participant may see for this deployment. Carries values, not functions.
+
+    The single source `show.py`, `verifier/server.py`'s `GET /public` and
+    `tests/public/test_beaver.py` all build their view from. Every field below is
+    something `make inspect` already printed or the public tests already imported before
+    Issue 543 option B2, so the split changes where a participant reads it, not what they
+    may see.
+
+    What is deliberately absent is this module itself. `setting()` returns x, y, a, b and
+    c in the clear, so a learner holding it could print this deployment's product without
+    writing `combine` at all -- and it shipped beside `tests/hidden/check_beaver.py`,
+    whose `check_combine` states the reconstruction rule and whose `check_rounds` carries
+    the round count. Serving the derived values keeps `make inspect` and the public tests
+    working without shipping the derivation.
+
+    `x` and `a` are here because they always were: `tests/public/test_beaver.py` asserts
+    that `mask` reconstructs to `x - a`, so both have been reachable from the participant
+    surface since the problem was written. Neither is worth points on its own, and both
+    are already a plain sum away from the share lists below, which `show.py` prints.
+    `y` is not here, and `triple` carries shares rather than values: without y there is no
+    way to name this deployment's product without running the protocol, which is what
+    keeps `combine` worth its points.
+    """
+    cfg = setting(seed)
+    p, n = cfg["p"], cfg["n"]
+    return {
+        "params": {"p": p, "n": n},
+        # The masked difference the public tests check `mask` against. `a` is the shared
+        # value the triple's `a` shares already reconstruct to, and `x` the one the
+        # `xShares` below already reconstruct to -- neither adds a reach.
+        "x": cfg["x"],
+        "a": cfg["a"],
+        "healthToken": health_token(seed),
+        "triple": triple_shares(seed, "public"),
+        "xShares": shares_of(seed, "public-x", cfg["x"], n, p),
+    }

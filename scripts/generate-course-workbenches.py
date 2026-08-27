@@ -108,6 +108,11 @@ PORTAL_PACKAGES = {
     # this deployment's secret, so both left the participant stage and the Portal moved
     # with them.
     "ac26-w2-secret-sharing": "participant",
+    # Issue 537/538 (Issue 543 option B2): every one of the five checkpoints is graded by
+    # running tests/hidden/check_beaver.py against the submitted file, and
+    # fixtures/generate.py's setting() returns x, y, a, b and c in the clear, so both
+    # left the participant stage and the Portal moved with them.
+    "ac26-w2-beaver-mul": "participant",
     # Issue 537/538: verifier/server.py's own _check_avalanche compared a submission
     # directly against a plain, seed-derived avalanche_distance defined in the same
     # file, and _check_properties/_check_storage compared against
