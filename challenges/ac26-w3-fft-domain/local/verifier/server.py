@@ -1,4 +1,22 @@
-"""POST /verify — the scoring seam. Loopback only, stdlib only.
+"""POST /verify — the scoring seam. Compose-internal only, stdlib only.
+
+Issue 537/538 (Issue 543 option B2): this used to be the same process that also served
+the Participant Portal's config, inspect, starter, public-test and prepare endpoints, in
+the single Docker stage a learner's own `make build` produced -- so
+`tests/hidden/check_fftdomain.py` shipped in the learner's own image alongside it. That
+file holds `has_order`: "order exactly n" written out from the definition, a power that
+returns 1 and no smaller one that does, with the prime factorisation it needs beside it.
+It also holds `naive_omega` -- the rule the shipped starter trusts -- and `real_omega`,
+which names an element of each kind for any (p, n). `starter/fftdomain.py` tells the
+learner that whatever establishes "order exactly n" has to be added by them because
+"nothing else in the image decides it for you"; that sentence was false while this file
+and the hidden checker were in the image with it. `fixtures/generate.py` shipped there
+too. That Portal-facing surface now lives in `participant/server.py`, in a separate image
+(see ../Dockerfile) that this process's own container never builds; this file,
+`fixtures/` and `tests/hidden/` are reachable only over the Compose-internal network (see
+../docker-compose.yml), never from the participant container's filesystem.
+
+`GET /public` below is what `show.py` reads instead of importing `fixtures.generate`.
 
 Security contract (docs/curricula/advanced-cryptography-2026/TEMPLATE.md §/verify):
   - `checkpointId` is required and is echoed back verbatim. The platform fails closed
@@ -17,6 +35,9 @@ Security contract (docs/curricula/advanced-cryptography-2026/TEMPLATE.md §/veri
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import json
 import os
 import resource
@@ -25,10 +46,14 @@ import sys
 import tempfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from fixtures.generate import public_payload  # noqa: E402 - after the sys.path insert
+
 ROOT = Path(__file__).resolve().parents[1]
+PROBLEM_ID = "ac26-w3-fft-domain"
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 MAX_BODY_BYTES = 256 * 1024
@@ -47,6 +72,10 @@ CODE_CHECKPOINTS = {
     "generalize": ("check_generalize",),
 }
 CHECKPOINTS = tuple(CODE_CHECKPOINTS)
+#: Every checkpoint here is answered by submitting a file, so this set is empty today.
+#: It is derived rather than written out so that adding a direct-answer checkpoint later
+#: cannot silently skip the seal check in `_unwrap_submission`.
+MANUAL_CHECKPOINTS = frozenset(CHECKPOINTS) - frozenset(CODE_CHECKPOINTS)
 
 
 # Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still
@@ -150,67 +179,73 @@ def evaluate(checkpoint_id: str, submission: object) -> bool:
         return _run_submission(submission, CODE_CHECKPOINTS[checkpoint_id], SEED)
     return False
 
-# BEGIN GENERATED PORTAL EDITOR API
-from verifier.workbench import PortalEditorSupport
 
-_WORKBENCH = PortalEditorSupport(
-    root=ROOT,
-    seed=SEED,
-    problem_id='ac26-w3-fft-domain',
-    problem_name='その domain、本当に割り切れますか',
-    problem_name_en='Does that domain actually divide?',
-    description='渡された omega を信じずに evaluation domain を検証し、FFT・逆変換・補間を本物の domain の上だけで動かす。',
-    description_en='Validate a handed evaluation domain instead of trusting it, and run the transform, its inverse, and interpolation only over real domains.',
-    checkpoint_labels={'domain': 'domain — 渡された omega の位数を自分で確かめる', 'roundtrip': 'roundtrip — 逆変換が係数を取り戻す', 'ordering': 'ordering — 値を index どおりの冪に置く', 'interpolate': 'interpolate — domain の内外どちらの点にも答える', 'generalize': 'generalize — 見たことのない素数と次数でも成り立たせる'},
-    checkpoint_labels_en={'domain': 'domain - check the order of the omega you were handed', 'roundtrip': 'roundtrip - turn the values back into the coefficients', 'ordering': 'ordering - put each value at the power its index names', 'interpolate': 'interpolate - answer points on and off the domain', 'generalize': 'generalize - hold for primes and orders you have not seen'},
-    submitted_files=('fftdomain.py',),
-    code_checkpoints=('domain', 'roundtrip', 'ordering', 'interpolate', 'generalize'),
-    checkpoints=('domain', 'roundtrip', 'ordering', 'interpolate', 'generalize'),
-    max_body_bytes=MAX_BODY_BYTES,
-    run_timeout_seconds=RUN_TIMEOUT_SECONDS,
-    max_output_bytes=MAX_OUTPUT_BYTES,
-    limit_fn=_limits,
-)
-# END GENERATED PORTAL EDITOR API
+def _b64decode(value: str) -> bytes:
+    padding = "=" * (-len(value) % 4)
+    return base64.urlsafe_b64decode(value + padding)
+
+
+def _unwrap_submission(checkpoint_id: str, submission: object) -> object:
+    """Undo the Workbench's `tcw1.` seal and check it against this deployment.
+
+    The derivation is duplicated from `participant/workbench.py`'s `unwrap_submission`,
+    which lives in the participant image now (see ../Dockerfile). Repeating it here
+    rather than trusting an already-unwrapped value from the Workbench is what keeps the
+    seal meaningful: a caller who skips the Workbench is judged by the same rule. Same
+    shape as ac26-w3-ec-group's and ac26-w4-commit-open's verifiers, for the same reason.
+
+    Every checkpoint here is a code checkpoint, so `MANUAL_CHECKPOINTS` is empty and an
+    unsealed submission keeps its historical raw-source format. The seal path is still
+    honoured, so a Portal that seals a code submission is graded rather than rejected.
+    """
+    if not isinstance(submission, str) or not submission.startswith("tcw1."):
+        return None if checkpoint_id in MANUAL_CHECKPOINTS else submission
+    try:
+        prefix, encoded_payload, encoded_signature = submission.split(".", 2)
+        if prefix != "tcw1":
+            return None
+        payload = _b64decode(encoded_payload)
+        signature = _b64decode(encoded_signature)
+        key = hashlib.sha256((PROBLEM_ID + "\0" + SEED).encode("utf-8")).digest()
+        expected_signature = hmac.new(key, payload, hashlib.sha256).digest()[:16]
+        if not hmac.compare_digest(signature, expected_signature):
+            return None
+        decoded = json.loads(payload.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(decoded, dict):
+        return None
+    if decoded.get("v") != 1 or decoded.get("checkpointId") != checkpoint_id:
+        return None
+    return decoded.get("answer")
+
 
 class Handler(BaseHTTPRequestHandler):
-    """Serve the Portal editor API and preserve the existing /verify contract."""
+    """Serve the /verify contract, and nothing a participant-facing client needs.
+
+    The Portal editor API this class used to carry moved to `participant/server.py`,
+    which reaches this process over the Compose-internal network. Everything left here
+    either grades a submission or hands out the public half of this deployment.
+    """
 
     timeout = REQUEST_TIMEOUT_SECONDS
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's API
-        from urllib.parse import urlsplit
-
         path = urlsplit(self.path).path
-        if path == "/api/config":
-            self._respond(200, _WORKBENCH.config_payload())
+        if path == "/healthz":
+            self._respond(200, {"ok": True})
             return
-        if path == "/api/inspect":
-            self._respond(200, _WORKBENCH.inspect_payload())
-            return
-        if path == "/api/starter":
-            self._respond(200, _WORKBENCH.starter_payload())
+        if path == "/public":
+            self._respond(200, public_payload(SEED))
             return
         self._respond(404, {"error": "not found"})
 
     def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's API
-        from urllib.parse import urlsplit
-
-        path = urlsplit(self.path).path.rstrip("/") or "/"
-        if path not in ("/verify", "/api/test", "/api/prepare"):
+        if urlsplit(self.path).path.rstrip("/") != "/verify":
             self._respond(404, {"error": "not found"})
             return
         body = self._read_json_body()
         if body is None:
-            return
-        if path == "/api/test":
-            self._respond(200, _WORKBENCH.run_public_tests(body.get("files")))
-            return
-        if path == "/api/prepare":
-            self._respond(
-                200,
-                _WORKBENCH.prepare_submissions(body.get("files"), body.get("manual")),
-            )
             return
 
         checkpoint_id = body.get("checkpointId")
@@ -223,7 +258,7 @@ class Handler(BaseHTTPRequestHandler):
                 },
             )
             return
-        submission = _WORKBENCH.unwrap_submission(checkpoint_id, body.get("submission"))
+        submission = _unwrap_submission(checkpoint_id, body.get("submission"))
         try:
             correct = evaluate(checkpoint_id, submission)
         except Exception:  # noqa: BLE001 - a broken checkpoint must fail closed

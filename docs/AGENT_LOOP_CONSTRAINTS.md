@@ -257,9 +257,9 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   `sha256-compress-digest`, `ac26-w2-linear-shares`, split by #590, #564, #596 and #563).
   #538 was closed on that evidence.
 
-  What the sweep does **not** settle, and what keeps #543 open: **13 problems still
+  What the sweep does **not** settle, and what keeps #543 open: **12 problems still
   `COPY verifier/` into their participant stage** —
-  `ac26-w3-{fft-domain,nonce-reuse,ntt-roots}`, `ac26-w4-{arithmetization,proof-pipeline}`,
+  `ac26-w3-{nonce-reuse,ntt-roots}`, `ac26-w4-{arithmetization,proof-pipeline}`,
   and the eight `ac26-w6`/`w7` ones above. That is the structural shape #543 was opened on,
   and the owner chose B (separate verifier container) over A (accept and document).
   Grep for the shape rather than trusting a plain `^COPY verifier/`:
@@ -392,6 +392,35 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   it does without a payload change, because the scalar is the learner's and only the
   curve comes from `GET /public`. Copy #586 for the stage layout and #594 only if the
   *payload* has to vary with the argument.
+
+  `ac26-w3-fft-domain` came off the list in #607, and it is the sharpest case yet of the
+  #603/#606 reading — *the starter's own text names the leak*. `starter/fftdomain.py`
+  tells the learner that whatever establishes "order exactly n" has to be added by them
+  because "nothing else in the image decides it for you", and that sentence was false:
+  the single stage also carried `tests/hidden/check_fftdomain.py`, whose `has_order` is
+  that decision written out from the definition, beside `naive_omega` (the rule the
+  shipped starter trusts) and `real_omega` (an element of each kind for any p, n). When
+  a starter makes a claim about what the image does not contain, check the claim before
+  measuring anything — it points straight at the file to look in.
+
+  Both standard probes read **0 of 200 before the split as well as after**, the
+  guard-removal control is flat, and the reference at 5/5 (200/200) is the positive
+  control. The third probe: the starter with that predicate copied into its own
+  `_domain_ok`, no reasoning past copying, scores **5 of 5 checkpoints, 200 of 200
+  points**. The reachability count is unchanged at 0 throughout — the detector is blind
+  to this problem in both directions, which the restore-the-leak run shows: put
+  `COPY fixtures/ tests/ verifier/` back into the participant stage and the count stays
+  0 while two of the new tests go red.
+
+  Two things it adds to the worked examples. Its **public tests need no payload at all**
+  — every domain in `tests/public/test_fftdomain.py` is written out in that file — so
+  only `show.py` reads `GET /public`, and `PUBLIC_EVIDENCE_JSON` is what makes that path
+  testable without a daemon (the test drives `show.main()` through both branches and
+  diffs them across 30 seeds). And its `fixtures/generate.py` is **orientation only**: it
+  deliberately computes no order, so unlike #606 nothing in it was ever the answer — the
+  payload is the field family, the legal orders in each (divisibility, the necessary
+  half, always printed), and the two fixed example domains. Reach for that reading when
+  the fixtures module is innocent and the hidden checker is not.
 
   Two consequences for reporting. `scripts/check-answer-reachability.ts` only ever sees
   the participant image, so a finding count says nothing about this path — never write

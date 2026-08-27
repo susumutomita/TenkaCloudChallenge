@@ -108,3 +108,27 @@ def broken_domain() -> dict[str, object]:
         "omegaToTheN": pow(omega, order, prime),
         "points": [pow(omega, i, prime) for i in range(order)],
     }
+
+
+def public_payload(seed: str) -> dict[str, object]:
+    """Everything a participant may see for this deployment. Carries values, not code.
+
+    This is exactly what `make inspect` has always printed and nothing more: the field
+    family, this deployment's sample of it with the orders that divide p-1 in each, the
+    one worked domain that is real, and the one that only looks real. Both example
+    domains are fixed constants on every deploy, so neither narrows a graded run.
+
+    What does not travel is the decision procedure. Divisibility -- `orders_for` -- is
+    the necessary half and was always printed; deciding whether a handed omega has the
+    order it claims is the problem, and the module that answers it
+    (`tests/hidden/check_fftdomain.py`, whose `has_order` is that decision written from
+    the definition, next to `real_omega` and `naive_omega`) stays in the verifier image.
+    """
+    return {
+        "healthToken": health_token(seed),
+        "primes": list(PRIMES),
+        "maxOrder": MAX_ORDER,
+        "labFields": lab_fields(seed),
+        "workedDomain": worked_domain(),
+        "brokenDomain": broken_domain(),
+    }
