@@ -70,10 +70,16 @@ const NO_RUNNER_EXCEPTION = "asm-worst-case-latency";
  * which is not what the guard evicts, so the guard closes the submission-side path there
  * without breaking the reference. Take a problem off this list only together with its
  * split -- never to make the guard test go green.
+ *
+ * `ac26-w6-cosnark-beaver` came off it the same way: the whole supplied sharing layer, the
+ * `field_id` its reference imports included, moved to `participant/mpc.py`. That module is
+ * preloaded in the runner before the guard runs and stays in `sys.modules` across it, so
+ * the reference still grades 8/8 with the guard in place -- verified against the reference,
+ * not by inspection, because the guard drops the problem root from `sys.path` during the
+ * submission import and a supplied module can then resolve only through the module cache.
  */
 const FIXTURES_DEPENDENT_SUBMISSION_EXCEPTIONS = [
   "ac26-bridge-properties",
-  "ac26-w6-cosnark-beaver",
   "ac26-w6-cosnark-linear",
   "ac26-w6-cosnark-privacy",
   "ac26-w6-stack-design",

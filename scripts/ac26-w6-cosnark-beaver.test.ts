@@ -320,6 +320,182 @@ describe("ac26-w6-cosnark-beaver: what each checkpoint is worth", () => {
   }, 120_000);
 });
 
+/**
+ * Issue 537/538, Issue 543 option B2. Until this split the problem had one Docker stage,
+ * and it carried `tests/hidden/check_prover.py` — which states, phase by phase, what every
+ * one of the eight checkpoints is graded on: `check_plan`'s expected table is the whole
+ * plan, `check_masks` writes out `A - x` and `B - y`, `check_product`'s two named defects
+ * spell the fold-it-once rule, `check_artifact` lists the artifact's keys and `check_audit`
+ * gives the six values an honest run reports — beside `fixtures/generate.py`, whose
+ * `setting`, `coefficients`, `witness` and `relation` are what the hidden labels `h0`..`h3`
+ * are drawn from. A submission transcribed from those two files, with no reasoning past
+ * copying, scored all eight checkpoints, 300 of 300 points.
+ *
+ * These assertions fail the moment either file goes back into the participant stage, or the
+ * public payload starts carrying the half that decides a checkpoint.
+ */
+describe("ac26-w6-cosnark-beaver: the answer is not in the participant image", () => {
+  function participantStage(): string {
+    const dockerfile = read("local/Dockerfile");
+    const start = dockerfile.indexOf("FROM base AS participant");
+    const end = dockerfile.indexOf("FROM base AS verifier");
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    return dockerfile.slice(start, end);
+  }
+
+  it("should copy neither fixtures/, tests/hidden/ nor verifier/ into the participant stage", () => {
+    const stage = participantStage();
+    expect(stage).toContain("COPY tests/public/");
+    expect(stage).toContain("COPY participant/");
+    for (const forbidden of [
+      "COPY fixtures/",
+      "COPY tests/ ",
+      "COPY tests/hidden/",
+      "COPY verifier/",
+    ]) {
+      expect(stage).not.toContain(forbidden);
+    }
+  });
+
+  it("should serve the Portal from the participant image, not from the grading one", () => {
+    expect(existsSync(join(ROOT, "local/participant/server.py"))).toBe(true);
+    expect(existsSync(join(ROOT, "local/participant/workbench.py"))).toBe(true);
+    expect(existsSync(join(ROOT, "local/participant/mpc.py"))).toBe(true);
+    expect(existsSync(join(ROOT, "local/verifier/workbench.py"))).toBe(false);
+    // Nothing in the participant image may decide a checkpoint: it forwards instead.
+    const server = read("local/participant/server.py");
+    expect(server).toContain("proxy_verdict");
+    expect(server).not.toContain("tests.hidden");
+    expect(server).not.toContain("fixtures.generate");
+  });
+
+  it("should keep the derivation out of the supplied layer the participant image ships", () => {
+    // `participant/mpc.py` is the half this problem hands over on purpose. What must not
+    // travel with it is the seed derivation every checkpoint is graded on.
+    // Top-level definitions only: `ParticipantRuntime.setting` is a property forwarding
+    // the setting it was handed, which is not a derivation.
+    const supplied = read("local/participant/mpc.py");
+    for (const forbidden of ["setting", "witness", "relation", "coefficients"]) {
+      expect(supplied).not.toMatch(new RegExp(`^def ${forbidden}\\(`, "m"));
+    }
+  });
+
+  it("should keep the verifier off the host and reachable only from the Workbench", () => {
+    const compose = parseYaml(read("local/docker-compose.yml")) as {
+      services: Record<string, { ports?: string[]; environment?: Record<string, string> }>;
+      networks: Record<string, { internal?: boolean }>;
+    };
+    expect(compose.services.verifier.ports).toBeUndefined();
+    expect(compose.services.workbench.environment?.VERIFIER_PUBLIC_URL).toContain("/public");
+    expect(compose.networks.lab.internal).toBe(true);
+  });
+
+  it("should guard the submission import against fixtures/ and tests/ on the grading path", () => {
+    // Issue 591. `fixtures.generate` re-exports the supplied layer, so an unguarded
+    // `from fixtures.generate import *` would also pull in `setting`, `witness` and
+    // `relation` — the three the hidden labels are drawn from.
+    const verifier = read("local/verifier/server.py");
+    expect(verifier).toContain(
+      'if name in ("tests", "fixtures") or name.startswith(("tests.", "fixtures."))',
+    );
+    // The supplied module is preloaded before the guard and survives it, which is what
+    // keeps `reference/prover.py`'s own top-level import resolvable while it is graded.
+    expect(verifier).toContain("import participant.mpc");
+    expect(read("local/reference/prover.py")).toContain("from participant.mpc import field_id");
+  });
+
+  it("should keep the graded labels' derivation out of GET /public", () => {
+    const payload = python([
+      "-c",
+      [
+        "import json, os, sys",
+        "sys.path.insert(0, '.')",
+        "from fixtures.generate import public_payload",
+        "print(json.dumps(public_payload(os.environ['FLAG_SEED'])))",
+      ].join("\n"),
+    ]);
+    expect(payload.status).toBe(0);
+    const decoded = JSON.parse(payload.stdout.trim().split("\n").at(-1) ?? "null") as Record<
+      string,
+      unknown
+    >;
+    expect(Object.keys(decoded).sort()).toEqual([
+      "healthToken",
+      "rows",
+      "setting",
+      "shapes",
+      "witness",
+    ]);
+    // The public label only. Nothing any checkpoint is graded on travels.
+    const serialised = JSON.stringify(decoded);
+    for (const label of ["h0", "h1", "h2", "h3"]) {
+      expect(serialised).not.toContain(`R-${label}-`);
+    }
+    expect(serialised).not.toContain("transfer");
+  });
+
+  it("should carry the public label's material and no other label's, on every seed", () => {
+    const script = [
+      "import json, sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import public_payload, relation, setting, witness",
+      "bad = []",
+      "for i in range(30):",
+      "    seed = f'seed-{i}'",
+      "    payload = public_payload(seed)",
+      "    cfg = setting(seed)",
+      "    if payload['setting'] != cfg:",
+      "        bad.append([seed, 'setting'])",
+      "    if tuple(payload['witness']) != witness(seed, 'public', cfg):",
+      "        bad.append([seed, 'witness'])",
+      "    for shape in payload['shapes']:",
+      "        row = relation(seed, 'public', cfg, shape)",
+      "        if [list(payload['rows'][shape]['a']), list(payload['rows'][shape]['b'])] != [list(row['a']), list(row['b'])]:",
+      "            bad.append([seed, shape])",
+      "    for label in ('h0', 'h1', 'h2', 'h3'):",
+      "        other = witness(seed, label, setting(seed, label))",
+      "        if json.dumps(list(other)) in json.dumps(payload):",
+      "            bad.append([seed, label])",
+      "print(json.dumps(bad))",
+    ].join("\n");
+    const result = python(["-c", script]);
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "null")).toEqual([]);
+  });
+
+  // The payload is the only source in the participant image, so it has to carry exactly
+  // what `show.py` printed before the split — on every seed, not just this one.
+  it("should print the same inspect output from the payload as from the fixtures", () => {
+    const script = [
+      "import io, json, os, contextlib, importlib, sys",
+      "sys.path.insert(0, '.')",
+      "import show",
+      "from fixtures.generate import public_payload",
+      "diffs = []",
+      "for i in range(30):",
+      "    seed = f'seed-{i}'",
+      "    os.environ['FLAG_SEED'] = seed",
+      "    importlib.reload(show)",
+      "    os.environ.pop('PUBLIC_EVIDENCE_JSON', None)",
+      "    direct = io.StringIO()",
+      "    with contextlib.redirect_stdout(direct):",
+      "        show.main()",
+      "    os.environ['PUBLIC_EVIDENCE_JSON'] = json.dumps(public_payload(seed))",
+      "    injected = io.StringIO()",
+      "    with contextlib.redirect_stdout(injected):",
+      "        show.main()",
+      "    os.environ.pop('PUBLIC_EVIDENCE_JSON', None)",
+      "    if direct.getvalue() != injected.getvalue():",
+      "        diffs.append(seed)",
+      "print(json.dumps(diffs))",
+    ].join("\n");
+    const result = python(["-c", script]);
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "null")).toEqual([]);
+  }, 120_000);
+});
+
 describe("ac26-w6-cosnark-beaver: metadata contracts", () => {
   function metadata() {
     return JSON.parse(read("metadata.json")) as {
@@ -425,10 +601,11 @@ describe("ac26-w6-cosnark-beaver: metadata contracts", () => {
   it("should not hand the participant runtime a way to reconstruct", () => {
     // The audit rests on the facade not forwarding it. A future edit that adds the method
     // for convenience makes the whole no-reconstruction story unfalsifiable.
-    const fixtures = read("local/fixtures/generate.py");
-    const facade = fixtures.slice(fixtures.indexOf("class ParticipantRuntime"));
+    // Issue 543 option B2: the supplied sharing layer lives in `participant/mpc.py` now.
+    const supplied = read("local/participant/mpc.py");
+    const facade = supplied.slice(supplied.indexOf("class ParticipantRuntime"));
     expect(facade).not.toMatch(/def reconstruct/);
-    expect(fixtures).toMatch(/class Runtime[\s\S]*?def reconstruct/);
+    expect(supplied).toMatch(/class Runtime[\s\S]*?def reconstruct/);
   });
 
   it("should refuse to hand the same triple out twice", () => {
