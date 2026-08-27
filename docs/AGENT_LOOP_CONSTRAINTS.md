@@ -260,11 +260,12 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   What the sweep does **not** settle, and what keeps #543 open: **17 problems still
   `COPY verifier/` into their participant stage** — `ac26-w2-{oblivious-transfer,privacy-audit,private-aggregate}`,
   `ac26-w3-{ec-group,fft-domain,nonce-reuse,ntt-roots}`, `ac26-w4-{arithmetization,proof-pipeline}`,
-  and the eight `ac26-w6`/`w7` ones above. Grep for the shape rather than trusting a
-  plain `^COPY verifier/`: `ac26-w2-oblivious-transfer` writes `COPY --chown=lab:lab
-  verifier/`, and a scan that misses it will report this list as shorter than it is. That is the structural shape #543 was opened on,
+  and the eight `ac26-w6`/`w7` ones above. That is the structural shape #543 was opened on,
   and the owner chose B (separate verifier container) over A (accept and document).
-  Measuring 0 says no graded answer is reachable *today*; it does not convert those 18 to
+  Grep for the shape rather than trusting a plain `^COPY verifier/`:
+  `ac26-w2-oblivious-transfer` writes `COPY --chown=lab:lab verifier/`, and a scan that
+  misses it will report this list as shorter than it is.
+  Measuring 0 says no graded answer is reachable *today*; it does not convert those 17 to
   option A. Closing #543 needs either the split or the owner writing the narrower boundary
   into `TEMPLATE.md` — so it is reachable work, not an owner block.
   **Update this list when you land one.** `ac26-w2-secret-sharing` came off it in #599 —
