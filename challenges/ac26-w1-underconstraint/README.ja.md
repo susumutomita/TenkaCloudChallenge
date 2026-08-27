@@ -48,7 +48,12 @@ Participant Portal で問題を起動すると、`policy.py` のエディタが�
 make inspect            # ポリシー、deploy 済み回路、正常な witness 2 種類
 make test               # 公開テスト
 make reset              # starter/policy.py を元に戻す
+make verifier-down      # inspect / test が起動した verifier を止める
 ```
+
+`inspect` と `test` は compose 経由で動き、先にこの deployment の verifier を起動します。
+設問そのもの（パラメータ、deploy 済み回路、正常な witness）は verifier が配信するもので、
+Workbench 側で計算しているわけではありません（後述の「保証範囲」を参照）。
 
 Portal のエディタまたは作問用 checkout で編集するのは `local/starter/policy.py` の 1 ファイル、4 つの関数です。
 `intended_circuit()`・`audit()`・`forge_witness()`・`repair()`。
@@ -95,18 +100,22 @@ signal 名**で作り、公式課題自身の解答経路の手前で止まり�
 ローカル実行は**自習用の honor-system 検証**です。compose stack のすべてのコンテナと
 Docker デーモンを管理する人を、中身の閲覧から止める手立てはありません。ここにある境界は
 秘匿ではなく誤配送の防止です。build して動かす Workbench コンテナに入っているのは
-starter と公開テスト、そして設問そのものである fixture だけで、採点器も hidden test も
-参照解答も入っていません。それらは Workbench がネットワーク越しに話す、公開されていない
+starter と公開テスト、そして与えられた residual evaluator だけで、採点器も hidden test も
+参照解答も generator も入っていません。それらは Workbench がネットワーク越しに話す、公開されていない
 second container と、`make reference-test` が build する author 専用 image にだけあります。
 
-fixture が手元に届くのは意図どおりです。[#533](https://github.com/susumutomita/TenkaCloudChallenge/pull/533)
-以降、fixture が返すのは入力だけ — デプロイされた回路、パラメータ、2 つの正直な witness —
-で、これは `make inspect` が表示する内容そのものです。外へ出したのは、
-正解がどういう形かを知っているコードのほうです。
+以前は fixture も手元に届いていました。[#533](https://github.com/susumutomita/TenkaCloudChallenge/pull/533)
+以降 fixture が返すのは入力だけ、という理由でしたが、それは正しくありませんでした。
+同じ module には is-zero gadget の両半分が、checkpoint が要求する id そのままの constraint dict として
+入っていました。これは `intended_circuit()` の答えであり、deploy 済み回路との差集合を取るだけで
+`audit()` と `repair()` も出てしまいます。ここではそれを修正しています。
+設問自体は動いていません。ポリシー、パラメータ、deploy 済み回路、2 つの正直な witness は
+`make inspect` が表示する内容のままで、Workbench はそれを手元で計算せず compose 網越しに
+verifier から読むようになりました。
 
 verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
 ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。
-結果は期待値を漏らしません。 fixture はこのデプロイの seed 由来なので、暗記した答えは持ち越せません。
+結果は期待値を漏らしません。 設問はこのデプロイの seed 由来なので、暗記した答えは持ち越せません。
 
 これは自習と誠実な練習を支えます。競技順位・試験・修了判定は**支えません**。
 それらには participant が管理しない verifier が必要で、

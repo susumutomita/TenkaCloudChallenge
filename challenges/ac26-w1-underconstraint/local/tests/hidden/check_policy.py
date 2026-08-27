@@ -20,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from fixtures.evaluator import residual, satisfies  # noqa: E402
+from participant.evaluator import residual, satisfies  # noqa: E402
 from fixtures.generate import (  # noqa: E402
     DROPPABLE,
     clean_witness,

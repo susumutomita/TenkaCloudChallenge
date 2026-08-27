@@ -132,7 +132,11 @@ describe("ac26-w1-underconstraint: participant contract", () => {
       "local/fixtures/generate.py",
       "local/tests/public/test_policy.py",
       "local/tests/hidden/check_policy.py",
-      "local/fixtures/evaluator.py",
+      // The supplied residual evaluator moved out of fixtures/ with the Issue 543
+      // option B2 split: it is the half this problem deliberately hands over, so it
+      // has to stay in the participant image while fixtures/ leaves it.
+      "local/participant/evaluator.py",
+      "local/participant/evidence.py",
       "local/verifier/server.py",
       "local/starter/policy.py",
       "local/reference/policy.py",
@@ -232,6 +236,158 @@ describe("ac26-w1-underconstraint: fixtures are seed-derived", () => {
     expect(distribution.distinct).toBeGreaterThan(100);
     expect(distribution.max / 2000).toBeLessThan(0.05);
   });
+});
+
+describe("ac26-w1-underconstraint: fixtures do not ship in the participant image (#537/#543 B2)", () => {
+  /**
+   * #533 stopped `fixtures/generate.py` exporting the complete circuit, the missing id,
+   * a forgery or the root-cause diagnosis as callable values, and the tests below still
+   * pin that. What it did not stop is `_ISZERO_HALVES`: both halves of the is-zero
+   * gadget as dicts, under the exact `c-iszero-a` / `c-iszero-b` ids the checkpoints
+   * require. `intended_circuit()` was a copy out of that dict, and `audit` and `repair`
+   * fell out of it as a set difference against the deployed circuit. Measured on the
+   * shipped image: transcription alone scored 3 of 6 checkpoints (160/300), and
+   * transcription plus a scan over the supplied evaluator scored 5 of 6 (260/300) --
+   * every checkpoint a code submission can reach, the same score as the reference.
+   *
+   * These tests fail, and that path reopens, the moment `COPY fixtures/` returns to the
+   * participant stage.
+   */
+  function participantStage(): string {
+    const dockerfile = read("local/Dockerfile");
+    const stage = /\nFROM base AS participant\n([\s\S]*?)\nFROM /.exec(dockerfile);
+    expect(stage).not.toBeNull();
+    return stage?.[1] ?? "";
+  }
+
+  it("should copy neither fixtures/, tests/hidden/ nor verifier/ into the participant stage", () => {
+    const stage = participantStage();
+    expect(stage).toContain("COPY tests/public/");
+    expect(stage).toContain("COPY participant/");
+    expect(stage).toContain("COPY starter/");
+    for (const forbidden of ["COPY fixtures/", "COPY tests/ ", "COPY tests/hidden/", "COPY verifier/"]) {
+      expect(stage).not.toContain(forbidden);
+    }
+  });
+
+  it("should leave nothing on the participant side importing fixtures at module level", () => {
+    for (const path of ["local/show.py", "local/participant/server.py", "local/tests/public/test_policy.py"]) {
+      // `participant/evidence.py` has the one deliberate function-scoped fallback, which
+      // resolves in a checkout or the author stage and never inside a participant image.
+      expect(read(path)).not.toContain("from fixtures.");
+      expect(read(path)).not.toContain("import fixtures");
+    }
+    const evidence = read("local/participant/evidence.py");
+    expect(evidence).toContain("from fixtures.generate import public_payload");
+    // Function-scoped: it must not be reachable at import time.
+    expect(evidence).not.toMatch(/^from fixtures\./m);
+  });
+
+  it("should serve the public half from the verifier and wire the workbench to it", () => {
+    expect(read("local/verifier/server.py")).toContain('if path == "/public":');
+    expect(read("local/verifier/server.py")).toContain("public_payload(SEED)");
+    const compose = read("local/docker-compose.yml");
+    expect(compose).toContain("VERIFIER_PUBLIC_URL: http://verifier:18095/public");
+    // The verifier is still not published to the host, so that URL only resolves inside `lab`.
+    const parsed = parseYaml(compose) as { services: Record<string, { ports?: string[] }> };
+    expect(parsed.services.verifier.ports).toBeUndefined();
+    const makefile = read("Makefile");
+    for (const target of ["verifier-up:", "verifier-down:"]) expect(makefile).toContain(target);
+  });
+
+  it("should keep the second is-zero half out of the public payload on every seed", () => {
+    // The deployed circuit carries exactly one of the two halves -- that is the problem
+    // statement. Serving both would put `intended_circuit()`'s answer back on the wire.
+    const script = [
+      "import json, sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import public_payload",
+      "seen = set()",
+      "for i in range(40):",
+      "    payload = public_payload(f'payload-seed-{i}')",
+      "    blob = json.dumps(payload)",
+      "    kinds = sorted(c['kind'] for c in payload['deployedCircuit'] if c['kind'].startswith('iszero'))",
+      "    assert len(kinds) == 1, kinds",
+      "    seen.update(kinds)",
+      "    assert 'DROPPABLE' not in blob and '_ISZERO_HALVES' not in blob",
+      "print(','.join(sorted(seen)))",
+    ].join("\n");
+    const result = python(["-c", script]);
+    expect(result.status).toBe(0);
+    // Both branches occur across seeds, so the single-half assertion above is not
+    // passing because one branch never happens.
+    expect(result.stdout.trim()).toBe("iszero_a,iszero_b");
+  }, 60_000);
+
+  it("should refuse a submission that reaches for the fixtures at grading time", () => {
+    // The renamed import, not a star one: `fixtures/generate.py` defines none of the four
+    // names the starter asks for, so `from fixtures.generate import *` scores 0 whether
+    // the Issue 591 guard is there or not. Importing `_ISZERO_HALVES` under another name
+    // and building the four functions from it is the reachability measurement -- it scores
+    // 5 of 6 checkpoints with the guard removed, and must score nothing with it in place.
+    const cheat = [
+      "from fixtures.generate import _ISZERO_HALVES as HALVES, DROPPABLE as CANDIDATES",
+      "BASE = [",
+      "    {'id': 'c-issuer-bool', 'kind': 'boolean', 'signal': 'issuer_ok'},",
+      "    {'id': 'c-ok-bool', 'kind': 'boolean', 'signal': 'ok'},",
+      "    {'id': 'c-grant', 'kind': 'mul', 'left': 'ok', 'right': 'issuer_ok', 'out': 'granted'},",
+      "]",
+      "INTENDED = BASE[:2] + [dict(HALVES[c]) for c in CANDIDATES] + BASE[2:]",
+      "def intended_circuit():",
+      "    return [dict(c) for c in INTENDED]",
+      "def audit(circuit):",
+      "    present = {str(c['id']) for c in circuit}",
+      "    return sorted(str(c['id']) for c in INTENDED if str(c['id']) not in present)",
+      "def forge_witness(circuit, params):",
+      "    return {}",
+      "def repair(circuit):",
+      "    present = {str(c['id']) for c in circuit}",
+      "    return [dict(c) for c in circuit] + [dict(c) for c in INTENDED if str(c['id']) not in present]",
+    ].join("\n");
+    for (const checkpoint of ["build", "audit", "repair"]) {
+      expect(evaluate(checkpoint, cheat)).toBe(false);
+    }
+  }, 120_000);
+
+  it("should guard the submission import against fixtures/ and tests/ on the grading path", () => {
+    const verifier = read("local/verifier/server.py");
+    expect(verifier).toContain(
+      'if name in ("tests", "fixtures") or name.startswith(("tests.", "fixtures."))',
+    );
+    // The supplied evaluator is preloaded ahead of the guard, so a submission's own
+    // top-level import of it still resolves (#608's rule).
+    expect(verifier).toContain("import participant.evaluator");
+  });
+
+  it("should print the same evidence from GET /public as from the checkout's fixtures", () => {
+    // `show.py` has three resolution branches; this drives the injected one against the
+    // fixtures one and diffs them, which is what makes the wire form testable with no
+    // Docker daemon.
+    const script = [
+      "import io, json, os, sys",
+      "from contextlib import redirect_stdout",
+      "sys.path.insert(0, '.')",
+      "import show",
+      "from fixtures.generate import public_payload",
+      "for i in range(20):",
+      "    seed = f'show-seed-{i}'",
+      "    os.environ['FLAG_SEED'] = seed",
+      "    os.environ.pop('PUBLIC_EVIDENCE_JSON', None)",
+      "    os.environ.pop('VERIFIER_PUBLIC_URL', None)",
+      "    local = io.StringIO()",
+      "    with redirect_stdout(local):",
+      "        show.main()",
+      "    os.environ['PUBLIC_EVIDENCE_JSON'] = json.dumps(public_payload(seed))",
+      "    wire = io.StringIO()",
+      "    with redirect_stdout(wire):",
+      "        show.main()",
+      "    assert local.getvalue() == wire.getvalue(), seed",
+      "print('identical')",
+    ].join("\n");
+    const result = python(["-c", script]);
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim().split("\n").at(-1)).toBe("identical");
+  }, 60_000);
 });
 
 describe("ac26-w1-underconstraint: fixtures do not ship checkpoint answers (#525)", () => {
@@ -420,16 +576,21 @@ describe("ac26-w1-underconstraint: participant/verifier separation (Issue 525/54
     expect(participant).not.toContain("COPY mutation.py");
     expect(participant).toContain("COPY participant/");
     expect(participant).toContain("COPY tests/public/");
-    // `fixtures/` is the problem statement here, not an answer: after #533 it returns
-    // the deployed circuit, the parameters and the two honest witnesses, all of which
-    // `make inspect` prints. Dropping it would hide the question, not the answer.
-    expect(participant).toContain("COPY fixtures/");
+    // `fixtures/` used to stay here, on the grounds that after #533 it returned the
+    // deployed circuit, the parameters and the two honest witnesses -- all of which
+    // `make inspect` prints -- so dropping it would hide the question, not the answer.
+    // That was wrong: `_ISZERO_HALVES` is both halves of the gadget as dicts under the
+    // exact ids the checkpoints require, which is `intended_circuit()`'s answer. The
+    // public half moved to the verifier's `GET /public` (Issue 543 option B2).
+    expect(participant).not.toContain("COPY fixtures/");
 
     const verifier = stage("verifier");
     expect(verifier).toContain("COPY verifier/");
     expect(verifier).toContain("COPY tests/hidden/");
     expect(verifier).toContain("COPY fixtures/");
-    expect(verifier).not.toContain("COPY participant/");
+    // The supplied evaluator, and only it: the Workbench and the starter stay out.
+    expect(verifier).toContain("COPY participant/evaluator.py");
+    expect(verifier).not.toContain("COPY participant/ ");
     expect(verifier).not.toContain("COPY starter/");
     expect(verifier).not.toContain("COPY reference/");
     expect(verifier).not.toContain("COPY mutation.py");
