@@ -341,7 +341,7 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   the `bravo` transcript stay in the verifier, because either would answer a checkpoint
   outright.
 
-  `ac26-w2-private-aggregate` came off the list in #604, on the same shape as #603 and
+  `ac26-w2-private-aggregate` came off the list in #605, on the same shape as #603 and
   with the same numbers: both standard probes **0 of 300 before the split as well as
   after**, the reference at 8/8 (300/300) as the positive control, the guard-removal
   control flat, and the reachability count unchanged at 0 throughout — the detector is
