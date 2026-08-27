@@ -109,7 +109,18 @@ Conditions, all required:
 
 Blocked on an owner decision — **do not start these**:
 
-- (none right now)
+- **PR #604 (`chore/prune-extra-ci`, "reduce catalog to problem payloads").** Open since
+  2026-08-27 06:00, `+36 / -90063` over 275 files. It deletes every root script, every
+  validator, the whole `.github/workflows` CI, the root `Makefile` — and with it
+  `make agent-gate`, which `AGENTS.md` names as the completion contract — plus the
+  authoring docs and skills. It is a proposal to move validation out of this repository
+  and onto the platform's publish path. That is the owner's call about what this
+  repository *is*, not a PR an agent may self-merge under §4, and its
+  `mergeable_state: dirty` conflict must not be resolved by an agent either: every merge
+  since it was opened adds scripts and tests it deletes, so resolving the conflict *is*
+  deciding whether that new work survives. It also carries no CI signal to read (it
+  removes the workflows, so only GitGuardian reports). Leave it open; do not count it
+  against the zero-PR goal and do not re-derive this every run.
 
 Previously blocked by `playability-gate`, now unblocked: PR #564 (`sha256-bytes-padding`)
 and PR #578 (`sha256-schedule-logic`) were held because they rewrite a `status: ready`
