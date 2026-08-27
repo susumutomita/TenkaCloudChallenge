@@ -269,9 +269,16 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   #538 was closed on that evidence.
 
   What the sweep does **not** settle, and what keeps #543 open: **7 problems still
-  `COPY verifier/` into their participant stage** — the `ac26-w6`/`w7` ones above, less
-  `ac26-w6-cosnark-beaver` (`ac26-w4-proof-pipeline` came off in #611,
-  `ac26-w6-cosnark-beaver` in #613). That is the structural shape #543 was opened on,
+  `COPY verifier/` into their participant stage** — **6** as of #614: the `ac26-w6`/`w7`
+  ones above, less `ac26-w6-cosnark-beaver` and `ac26-w6-cosnark-linear`
+  (`ac26-w4-proof-pipeline` came off in #611, `ac26-w6-cosnark-beaver` in #613,
+  `ac26-w6-cosnark-linear` in #614). The six left, scanned on `cb88c63`, are
+  `ac26-w6-cosnark-privacy`, `ac26-w6-stack-design`, `ac26-w6-zkvm-exploit-predicate`,
+  `ac26-w6-zkvm-witness-binding`, `ac26-w7-capstone-demo` and `ac26-w7-capstone-design`
+  — count them yourself rather than trusting this sentence; the one-line check is
+  a per-stage scan of each `local/Dockerfile`'s `COPY` list, not a `grep` over the whole
+  file, because every problem's `verifier` and `author` stages copy `verifier/` legitimately.
+  That is the structural shape #543 was opened on,
   and the owner chose B (separate verifier container) over A (accept and document).
   Grep for the shape rather than trusting a plain `^COPY verifier/`:
   `ac26-w2-oblivious-transfer` writes `COPY --chown=lab:lab verifier/`, and a scan that
@@ -605,6 +612,45 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   from that witness straight to the graded functions, so a submission holds them at runtime
   by construction); what stays behind is the derivation, which is what makes `h0`..`h3`
   unreachable rather than merely unnamed.
+
+  `ac26-w6-cosnark-linear` came off the list in #614, and it is the **#609 pairing rule
+  applied to a whole-file split**: same week, same `fixtures/generate.py` layout, same
+  supplied layer, and #613's diff with names changed. Reading that PR first was cheaper than
+  re-deriving the shape, and this one is the cheapest confirmation the rule holds — the two
+  problems' `Share`, `Runtime` and `ParticipantRuntime` are the same classes, so the carve
+  line was already drawn. It also came off Issue #591's ten-verifier exception list in the
+  same PR, on #613's pairing: `field_id` moved with the layer, so the guard became
+  applicable and leaving it out would have been the half a fix this section warns about.
+  Verified against the reference, not by inspection — **8/8 (300/300) with the guard in
+  place**, which is the only way to see that the runner's `import participant.mpc` preload
+  is what keeps `reference/prover.py`'s own top-level import resolvable.
+
+  Both standard probes read **0 of 300 before the split as well as after**
+  (`fixtures/generate.py` defines none of the six names `starter/prover.py` asks for, so the
+  name-based detector reported it zero times), the guard-removal control is flat, and the
+  reachability count is unchanged at 0 throughout in both directions — the restore-the-leak
+  run puts `COPY fixtures/ tests/ verifier/` back into the participant stage and the count
+  stays 0 while the new stage test goes red. #603's third probe is what speaks: a submission
+  transcribed from the two shipped files, with no reasoning past copying, scored **8 of 8
+  checkpoints, 300 of 300 points** — the #584 pole. `_Scenario.canonical` *is*
+  `parse_relation`'s answer and the `malformed` list beside it enumerates all eight refusals;
+  `check_witness` writes out the four reported keys and the five tamperings; `_trace_failures`
+  computes `operations`, `rounds`, `messages`, `parties` and `localOnly` in the report's own
+  terms, so the trace stage — the one the problem's own docstring says is worth no points if
+  asserted rather than measured — was copyable line for line; and `check_audit` gives the five
+  values an honest run reports beside `_GhostRuntime`, `_LeakyRuntime` and `_OpenRuntime`,
+  each **named for the property it catches**. #613's rule generalizes past error strings: a
+  hidden checker's *class and helper names* name the answer too.
+
+  One thing it adds to the worked examples. Its `mutation.py` pinned the reference's import
+  as a **literal string** (`_IMPORT = "from fixtures.generate import field_id"`) and rewrote
+  it to widen it for the reshare mutant, which needs `Share`. A split that moves the import
+  and leaves that string alone does not fail loudly: `str.replace` finds nothing, so the
+  mutant keeps the reference's own import, `Share` is undefined in it, and it dies on a
+  `NameError` instead of on the reshare defect it exists to demonstrate. Measured both ways
+  here — the suite prints **All 25 mutations killed** with the stale string and with the
+  updated one, so its summary line cannot tell you which happened. Grep the whole problem
+  directory for the moved import **as a string literal**, not only as an import statement.
 
   #586 is the last of the Week 5 chain and the first in this class with **no supplied
   half at all**: `fixtures/generate.py` there is entirely seed derivation plus the graded

@@ -8,7 +8,11 @@ implementer believes it says.
 
 from __future__ import annotations
 
-from fixtures.generate import field_id
+# Issue 543 option B2: the supplied layer moved out of `fixtures/` into
+# `participant/mpc.py`, which is what the participant image ships. `verifier/server.py`'s
+# runner preloads it before the Issue 591 guard drops the problem root from `sys.path`, so
+# this top-level import resolves when the reference is graded as a submission.
+from participant.mpc import field_id
 
 
 def parse_relation(relation: dict) -> dict:

@@ -77,10 +77,13 @@ const NO_RUNNER_EXCEPTION = "asm-worst-case-latency";
  * the reference still grades 8/8 with the guard in place -- verified against the reference,
  * not by inspection, because the guard drops the problem root from `sys.path` during the
  * submission import and a supplied module can then resolve only through the module cache.
+ *
+ * `ac26-w6-cosnark-linear` is the same pairing again, on the same shape: `field_id` and the
+ * rest of the supplied layer moved to `participant/mpc.py`, the runner preloads it ahead of
+ * the guard, and the reference measured 8/8 (300/300) with the guard in place.
  */
 const FIXTURES_DEPENDENT_SUBMISSION_EXCEPTIONS = [
   "ac26-bridge-properties",
-  "ac26-w6-cosnark-linear",
   "ac26-w6-cosnark-privacy",
   "ac26-w6-stack-design",
   "ac26-w6-zkvm-exploit-predicate",

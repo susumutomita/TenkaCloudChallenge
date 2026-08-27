@@ -136,14 +136,24 @@ Week 6 の教材は上流で公開されているので、`courseAlignment` は 
 
 ## 保証範囲
 
-ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も
-あなたの管理下にあるので、 image の中身はあなたに対して秘匿されていません。
-`reference/` と `tests/hidden/` を bind-mount しないのは、あなたの git checkout に
-紛れ込ませないためであって、手が届かなくするためではありません。
+ローカル実行は**自習用の honor-system 検証**です。 Docker デーモンと compose stack の
+全コンテナを持っている人に対して、隠された材料の閲覧を防ぐことはできません。ここでの境界は
+誤配防止であって、その人に対する秘匿ではありません。あなたが build して動かす Workbench
+コンテナが持つのは starter、公開テスト、`make inspect` の表示、そして支給される sharing 層
+(`participant/mpc.py` — share、計測付き runtime、participant facade。 これは先行 2 問の答えで、
+意図して渡しています) だけです。 seed 導出、隠しテスト、reference solution、verifier は
+**入っていません**。それらは Workbench が compose network 越しに叩く、公開されない 2 つ目の
+コンテナと、`make reference-test` が build する author 専用 image にしかありません。
+
+そのため `make test` / `make test-one` / `make inspect` は先に verifier を起動します
+(`make verifier-up` が自動で走ります)。`make inspect` はこのデプロイの setting・行・witness を
+ローカルで導出せず、compose network 越しに verifier から読みます。停止は `make verifier-down` です。
 
 verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
 ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。
 結果は期待値を漏らしません。 fixture はこのデプロイの seed 由来なので、暗記した答えは持ち越せません。
+提出は時間・メモリ・プロセス数・出力量の上限つきで実行され、両コンテナとも非 root・read-only・
+特権なしで動き、host に公開されるのは Workbench だけ、しかも loopback だけです。
 
 これは自習と誠実な練習を支えます。競技順位・試験・修了判定は**支えません**。
 それらには participant が管理しない verifier が必要で、

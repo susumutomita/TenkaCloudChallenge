@@ -192,6 +192,18 @@ PORTAL_PACKAGES = {
     # triples, the instrumented runtime and linear_halves -- stayed with the participant as
     # participant/mpc.py, and the Portal moved to participant/.
     "ac26-w6-cosnark-beaver": "participant",
+    # Issue 537/538 (Issue 543 option B2): tests/hidden/check_prover.py states, phase by
+    # phase, what every one of the eight checkpoints is graded on -- _Scenario.canonical is
+    # the parser's answer and the malformed list beside it is the whole of what that stage
+    # must refuse, check_witness writes out the reported keys and the five tamperings,
+    # _trace_failures computes operations, rounds, messages, parties and localOnly in the
+    # report's own terms, and check_audit gives the five values an honest run reports.
+    # fixtures/generate.py left the participant stage with it: setting, coefficients,
+    # witness and relation are what the hidden labels h0..h3 are drawn from. A submission
+    # transcribed from the two scored all eight checkpoints, 300 of 300 points. The supplied
+    # half -- the shares, the instrumented runtime and the participant facade -- stayed with
+    # the participant as participant/mpc.py, and the Portal moved to participant/.
+    "ac26-w6-cosnark-linear": "participant",
     # Issue 537/538 (Issue 543 option B2): fixtures/generate.py's audit_log returns
     # victim_secret and victim_public beside the records -- the hunt checkpoint's answer
     # as a value -- secret_key derives every key in this deployment from the FLAG_SEED
