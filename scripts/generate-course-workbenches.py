@@ -151,6 +151,14 @@ PORTAL_PACKAGES = {
     # learner. fixtures/generate.py left the participant stage with it; there is no
     # supplied half to carve out here, and the Portal moved to participant/.
     "ac26-w3-fft-domain": "participant",
+    # Issue 537/538 (Issue 543 option B2): tests/hidden/check_ntt.py grades all six
+    # checkpoints and holds has_order -- "order exactly n" written out from the definition
+    # -- beside naive_omega, named there as "the rule the broken starter uses", and the
+    # invalid_omega rejection inverse_transform is graded on. That order test is the one
+    # thing starter/ntt.py says nothing else in the image will compute for the learner.
+    # fixtures/generate.py left the participant stage with it; there is no supplied half
+    # to carve out here, and the Portal moved to participant/.
+    "ac26-w3-ntt-roots": "participant",
     # Issue 537/538 (Issue 543 option B2): fixtures/generate.py's audit_log returns
     # victim_secret and victim_public beside the records -- the hunt checkpoint's answer
     # as a value -- secret_key derives every key in this deployment from the FLAG_SEED

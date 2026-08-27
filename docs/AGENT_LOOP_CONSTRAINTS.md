@@ -257,9 +257,9 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   `sha256-compress-digest`, `ac26-w2-linear-shares`, split by #590, #564, #596 and #563).
   #538 was closed on that evidence.
 
-  What the sweep does **not** settle, and what keeps #543 open: **11 problems still
+  What the sweep does **not** settle, and what keeps #543 open: **10 problems still
   `COPY verifier/` into their participant stage** —
-  `ac26-w3-ntt-roots`, `ac26-w4-{arithmetization,proof-pipeline}`,
+  `ac26-w4-{arithmetization,proof-pipeline}`,
   and the eight `ac26-w6`/`w7` ones above. That is the structural shape #543 was opened on,
   and the owner chose B (separate verifier container) over A (accept and document).
   Grep for the shape rather than trusting a plain `^COPY verifier/`:
@@ -453,6 +453,34 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   never evicts. Measured: a submission that writes only `collision_experiment` with that
   top-level import scores 1 of 8, and `from fixtures.generate import *` still scores 0.
   Check this whenever the split moves something the *starter* tells the learner to call.
+
+  `ac26-w3-ntt-roots` came off the list in #609, and it is the **twin of #607**: same
+  week, same family, same leaked predicate, and the same reading — the starter's own text
+  names the file to look in. `starter/ntt.py` tells the learner that whatever establishes
+  the order has to be added by them because "nothing else in the image computes it for
+  you", and the single stage also carried `tests/hidden/check_ntt.py`, whose `has_order`
+  is that decision written out from the definition, beside `naive_omega` (labelled there
+  "the rule the broken starter uses") and the `invalid_omega` rejection
+  `inverse_transform` is graded on. Both standard probes read **0 of 200 before the split
+  as well as after**, the guard-removal control is flat (the verifier already carried
+  #597's guard), and the reference at 6/6 (200/200) is the positive control. The third
+  probe: the starter with that predicate copied in and scanned over — no reasoning past
+  copying and a `range` — scores **6 of 6 checkpoints, 200 of 200 points**. The
+  reachability count is unchanged at 0 throughout, in both directions (the restore-the-leak
+  run puts `COPY fixtures/ tests/ verifier/` back and the count stays 0 while two of the
+  new tests go red).
+
+  What it adds to the worked examples is the *pairing rule*: when two problems in a week
+  are built on the same misconception, the second split is #607's diff with names changed,
+  and reading the first one's PR is cheaper than re-deriving the shape. It is otherwise
+  #607 exactly — no supplied half, so the verifier stage copies no participant file, and
+  the public tests need no payload because every parameter set is written out in
+  `tests/public/test_ntt.py`. One thing to copy regardless of shape: with no Docker daemon
+  (§6), build one directory tree per stage from that stage's own `COPY` list, start
+  `verifier/server.py` and `participant/server.py` from them as real processes, and drive
+  `GET /public` and `/verify` between them. That showed the participant tree at five files
+  with the order test in none of them, the reference at 6/6 through the Workbench proxy
+  and the shipped starter at 0/6 — which no file-list assertion on its own establishes.
 
   Two consequences for reporting. `scripts/check-answer-reachability.ts` only ever sees
   the participant image, so a finding count says nothing about this path — never write
