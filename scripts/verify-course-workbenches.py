@@ -185,6 +185,15 @@ SPLIT_PORTAL_MODULES = {
     # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
     # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
     "ac26-w2-private-aggregate": "participant.server",
+    # Issue 537/538 (Issue 543 option B2): same move. tests/hidden/check_curve.py grades
+    # all eight checkpoints and holds _ReferenceCurve, a complete group law -- the
+    # identity, the inverse, the chord and tangent formulas, the vertical tangent and
+    # double-and-add, which is the whole of what starter/curve.py asks for;
+    # fixtures/generate.py derives the curve, the sample points and the scalars behind the
+    # graded labels, and both shipped in the single participant stage.
+    # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
+    # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
+    "ac26-w3-ec-group": "participant.server",
     # Issue 537/538: same move. verifier/server.py's own _check_avalanche compared a
     # submission directly against a plain, seed-derived avalanche_distance defined in
     # the same file, and _check_properties/_check_storage compared against

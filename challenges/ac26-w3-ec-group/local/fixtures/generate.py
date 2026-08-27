@@ -91,3 +91,34 @@ def scalars(seed: str, label: str, count: int = 6) -> list[int]:
 def health_token(seed: str) -> str:
     p, a, b = curve_params(seed)
     return hashlib.sha256(f"health:{seed}:{p}:{a}:{b}".encode()).hexdigest()[:16]
+
+
+def public_payload(seed: str) -> dict[str, object]:
+    """Everything a participant may see for this deployment. Carries values, not code.
+
+    This is the `public` label only, and it is the one `make inspect` and the public
+    tests have always printed and used. Every checkpoint is graded on the `h0`, `h1` and
+    `h2` labels, and `properties` on a fourth (see tests/hidden/check_curve.py), each of
+    which derives a different curve, different sample points and different scalars from
+    the same seed -- so nothing below narrows a graded run.
+
+    Within the `public` label it carries the whole curve and every affine point on it.
+    That is not a concession: the curve equation and the modulus are printed by
+    `make inspect` and handed to `Curve(p, a, b)` by the public tests, and these curves
+    are chosen small enough to enumerate by hand -- which is the point of them. Trial
+    division over 47 values of x is not the thing this problem asks a learner to do.
+
+    What does not travel is the seed derivation itself (`_stream`, `_pick`,
+    `curve_params`, `sample_points`, `scalars`), which decides the hidden labels too, and
+    the module it lives in ships beside `tests/hidden/check_curve.py` -- whose
+    `_ReferenceCurve` is a complete, correct group law: the identity, the inverse, the
+    doubling formula, the vertical-tangent case and double-and-add, which are the five
+    things this problem exists to make a learner build.
+    """
+    p, a, b = curve_params(seed)
+    return {
+        "params": {"p": p, "a": a, "b": b},
+        "points": [list(coords) for coords in points_on(p, a, b)],
+        "orderTwoPoints": [list(coords) for coords in order_two_points(p, a, b)],
+        "healthToken": health_token(seed),
+    }

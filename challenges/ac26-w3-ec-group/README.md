@@ -83,10 +83,17 @@ the algorithm legible, not as a model for production.
 
 ## Assurance scope
 
-Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
-daemon, and the image, so nothing inside that image is hidden from you: `reference/` and
-`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than
-out of reach.
+Local mode is **self-paced, honor-system verification**. Someone who owns the Docker daemon and
+every container in the compose stack cannot be prevented from inspecting hidden material. The
+boundary here is misdelivery, not confidentiality against that person: the Workbench container
+you build and run carries the starter and the public tests only — no fixtures, no hidden tests,
+no reference solution, no verifier. Those live only in a second, unpublished container the
+Workbench reaches over the compose network, and in the author-only image `make reference-test`
+builds.
+
+Because of that, `make test`, `make test-one` and `make inspect` bring the verifier up first
+(`make verifier-up`, run for you): they read this deployment's curve and its points from it
+over the compose network instead of computing them locally. `make verifier-down` stops it.
 
 What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
 a checkpoint can only credit the id it echoes, results do not leak expected values, and the
