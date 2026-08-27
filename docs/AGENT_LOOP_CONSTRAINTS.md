@@ -257,9 +257,8 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   `sha256-compress-digest`, `ac26-w2-linear-shares`, split by #590, #564, #596 and #563).
   #538 was closed on that evidence.
 
-  What the sweep does **not** settle, and what keeps #543 open: **10 problems still
-  `COPY verifier/` into their participant stage** —
-  `ac26-w4-{arithmetization,proof-pipeline}`,
+  What the sweep does **not** settle, and what keeps #543 open: **9 problems still
+  `COPY verifier/` into their participant stage** — `ac26-w4-proof-pipeline`,
   and the eight `ac26-w6`/`w7` ones above. That is the structural shape #543 was opened on,
   and the owner chose B (separate verifier container) over A (accept and document).
   Grep for the shape rather than trusting a plain `^COPY verifier/`:
@@ -481,6 +480,38 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   `GET /public` and `/verify` between them. That showed the participant tree at five files
   with the order test in none of them, the reference at 6/6 through the Workbench proxy
   and the shipped starter at 0/6 — which no file-list assertion on its own establishes.
+
+  `ac26-w4-arithmetization` came off the list in #610, and it is the first in this class
+  whose third probe scored **part** of the problem rather than all or nothing — which is
+  the reading to take from it. Both standard probes read **0 of 300 before the split as
+  well as after** (`fixtures/generate.py` defines none of the eight names
+  `starter/air.py` asks for), the guard-removal control is flat, and the reference at 8/8
+  (300/300) is the positive control; the reachability count is unchanged at 0 throughout,
+  in both directions — the restore-the-leak run puts `COPY fixtures/ tests/ verifier/`
+  back and the count stays 0 while the two new boundary tests go red. #603's third probe
+  is what speaks: a submission transcribed from the two shipped files, with no reasoning
+  past copying, scores **5 of 8 checkpoints, 185 of 300 points**. `fixtures/generate.py`'s
+  `honest_trace` is, by its own docstring there, "the reference answer for the trace
+  checkpoint"; `tests/hidden/check_air.py`'s `check_transition` requires `steps - 1`
+  residuals, which is exactly the count `starter/air.py` tells the learner to work out
+  ("it is not the number of rows"); that checker's module docstring says "the transition
+  out of row i breaks row i+1", which is the whole of what `first_violation` is graded on;
+  and `check_underconstrained` writes out all four conditions a witness is accepted on,
+  down to naming the constraint that had to be missing. It stops at five because neither
+  shipped file contains an interpolation, so `interpolate`, `compose` and `transfer` were
+  never reachable by copying. **Report the fraction, not a verdict**: "the transcription
+  scored" and "the transcription scored everything" are different findings, and only the
+  measurement separates them.
+
+  Its public payload is the first in this class to carry the **answer to a graded
+  checkpoint as values, deliberately**. `make inspect` has always printed the rows the
+  machine produces, so withholding them would have changed the participant surface; what
+  makes that safe is that every checkpoint is graded on the `h0`/`h1`/`h2` labels, each a
+  different prime, trace length, weight and starting state, and the recurrence that
+  produces the rows is public in `starter/air.py` and the README anyway. Reach for #605's
+  reading — the public label is not the graded one — before withholding a value the
+  learner already sees. There is no supplied half (every graded function is handed its
+  setting, its trace and its domain), so the verifier stage copies no participant file.
 
   Two consequences for reporting. `scripts/check-answer-reachability.ts` only ever sees
   the participant image, so a finding count says nothing about this path — never write

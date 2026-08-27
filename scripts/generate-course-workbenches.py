@@ -159,6 +159,17 @@ PORTAL_PACKAGES = {
     # fixtures/generate.py left the participant stage with it; there is no supplied half
     # to carve out here, and the Portal moved to participant/.
     "ac26-w3-ntt-roots": "participant",
+    # Issue 537/538 (Issue 543 option B2): tests/hidden/check_air.py grades all eight
+    # checkpoints and states the rules starter/air.py withholds -- check_transition wants
+    # steps - 1 residuals, which is the count the starter says to work out ("it is not the
+    # number of rows"); that file's module docstring says "the transition out of row i
+    # breaks row i+1", which is what first_violation is graded on; and
+    # check_underconstrained writes out all four conditions a witness is accepted on.
+    # fixtures/generate.py left the participant stage with it -- its honest_trace is by its
+    # own docstring the reference answer for the trace checkpoint -- and a submission
+    # transcribed from the two scored 5 of 8 checkpoints, 185 of 300 points. There is no
+    # supplied half to carve out here, and the Portal moved to participant/.
+    "ac26-w4-arithmetization": "participant",
     # Issue 537/538 (Issue 543 option B2): fixtures/generate.py's audit_log returns
     # victim_secret and victim_public beside the records -- the hunt checkpoint's answer
     # as a value -- secret_key derives every key in this deployment from the FLAG_SEED

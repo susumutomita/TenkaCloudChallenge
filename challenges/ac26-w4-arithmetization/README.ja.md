@@ -95,14 +95,23 @@ companion に許す 2 つの role のうちの 1 つであり、Week 1 の const
 
 ## 保証範囲
 
-ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も
-あなたの管理下にあるので、 image の中身はあなたに対して秘匿されていません。
-`reference/` と `tests/hidden/` を bind-mount しないのは、あなたの git checkout に
-紛れ込ませないためであって、手が届かなくするためではありません。
+ローカル実行は**自習用の honor-system 検証**です。Docker デーモンと compose stack の全 container を
+管理する人に対しては、hidden material の閲覧を防げません。ここでの境界は誤配の防止であって、
+その人に対する秘匿ではありません。あなたが build して動かす Workbench container が載せるのは
+starter、public test、orientation printer だけで、fixtures、hidden test、reference、verifier は
+載りません。それらは、Workbench が compose network ごしに参照する公開しない 2 つ目の container と、
+`make reference-test` が build する作問者専用 image にだけ存在します。
+
+そのため `make test`、`make test-one`、`make inspect` は先に verifier を起動します
+（`make verifier-up` が自動で走ります）。`make inspect` はこのデプロイの設定・evaluation domain・
+機械が実際に出す行を、ローカルで計算せずに compose network ごしに読みます。
+停止は `make verifier-down` です。
 
 verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
 ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。
 結果は期待値を漏らしません。 fixture はこのデプロイの seed 由来なので、暗記した答えは持ち越せません。
+提出コードには時間・memory・process・output の上限をかけ、両 container は read-only で、
+権限昇格も Linux capability も無しで動き、公開されるのは Workbench の loopback だけです。
 
 これは自習と誠実な練習を支えます。競技順位・試験・修了判定は**支えません**。
 それらには participant が管理しない verifier が必要で、

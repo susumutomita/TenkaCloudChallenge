@@ -17,7 +17,11 @@ each row follows from the one before it. Boundary constraints say where the mach
 started. Neither implies the other, and a system with only the first is satisfied by a
 trace of the same machine started from somewhere else entirely.
 
-`fixtures.generate` gives you the setting, the evaluation domain, and the traces.
+Every function below is handed what it needs: the setting, and where the shape of the
+answer depends on them, the trace and the evaluation domain. `make inspect` prints this
+deployment's setting, its domain and the rows the machine produces from it, so you can
+reason about a concrete case before you write anything. Nothing in this image runs the
+machine for you, and nothing in it counts the residuals for you.
 """
 
 from __future__ import annotations

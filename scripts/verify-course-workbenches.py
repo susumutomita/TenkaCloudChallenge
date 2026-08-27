@@ -149,6 +149,16 @@ SPLIT_PORTAL_MODULES = {
     # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
     # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
     "ac26-w4-commit-open": "participant.server",
+    # Issue 537/538 (Issue 543 option B2): same move. tests/hidden/check_air.py grades every
+    # checkpoint and states the rules starter/air.py withholds -- check_transition requires
+    # steps - 1 residuals, that file's module docstring says "the transition out of row i
+    # breaks row i+1", and check_underconstrained writes out every condition a witness is
+    # accepted on -- while fixtures/generate.py's honest_trace is by its own docstring the
+    # reference answer for the trace checkpoint. Both shipped in the single participant
+    # stage, and a submission transcribed from the two scored 5 of 8 checkpoints.
+    # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
+    # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
+    "ac26-w4-arithmetization": "participant.server",
     # Issue 537/538 (Issue 543 option B2): same move. tests/hidden/check_encoding.py
     # grades every checkpoint and fixtures/generate.py implements encode, centered,
     # decode, success_interval and first_failure under the exact five names
