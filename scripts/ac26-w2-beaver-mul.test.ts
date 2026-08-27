@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
 import { parse as parseYaml } from "yaml";
+import { participantPythonFiles } from "./lib/local-play-problems";
 
 /**
  * ac26-w2-beaver-mul is the third Week 2 problem. The interesting assertions run its
@@ -61,6 +62,8 @@ describe("ac26-w2-beaver-mul: participant contract", () => {
       "local/tests/public/test_beaver.py",
       "local/tests/hidden/check_beaver.py",
       "local/verifier/server.py",
+      "local/participant/server.py",
+      "local/participant/workbench.py",
       "local/starter/beaver.py",
       "local/reference/beaver.py",
     ]) {
@@ -335,5 +338,200 @@ describe("ac26-w2-beaver-mul: metadata contracts", () => {
       },
     ]);
     expect(status).toBe("draft");
+  });
+});
+
+/**
+ * Issue 537/538 (Issue 543 option B2). This problem shipped as a single Docker stage
+ * that carried `fixtures/`, `tests/hidden/` and `verifier/` in the same image a
+ * learner's own `make build` produced. Every one of the five checkpoints is graded by
+ * running `tests/hidden/check_beaver.py` against the submitted file, so the person being
+ * graded was shipped the assertions -- `check_combine` names the folding rule the whole
+ * problem asks them to derive, and `check_rounds` states its acceptance rule outright.
+ * `fixtures/generate.py` was there too, and its `setting()` returns x, y, a, b and c in
+ * the clear, which is enough to build a sharing of the product without running the
+ * protocol at all.
+ *
+ * The tests below pin the boundary that fix put in, in the two ways it can be checked
+ * without a Docker daemon: the Dockerfile's own COPY lists, and the participant stage's
+ * real file list run through the same derivation `check-answer-reachability.ts` uses.
+ * Restoring any of the three COPY lines turns them red.
+ */
+
+const REPO = join(import.meta.dir, "..");
+const DIR = "challenges/ac26-w2-beaver-mul";
+
+describe("ac26-w2-beaver-mul: the participant image carries nothing that grades", () => {
+  it("keeps fixtures/, the hidden suite and the verifier out of the participant Docker stage", () => {
+    const dockerfile = read("local/Dockerfile");
+    const participantStage = dockerfile.slice(
+      dockerfile.indexOf("FROM base AS participant"),
+      dockerfile.indexOf("FROM base AS verifier"),
+    );
+    expect(participantStage).not.toContain("COPY fixtures/");
+    expect(participantStage).not.toContain("tests/hidden");
+    expect(participantStage).not.toContain("COPY verifier/");
+    expect(participantStage).not.toContain("COPY reference/");
+    expect(participantStage).not.toContain("COPY mutation.py");
+    expect(participantStage).toContain("COPY tests/public/");
+    expect(participantStage).toContain("COPY participant/");
+
+    const verifierStage = dockerfile.slice(
+      dockerfile.indexOf("FROM base AS verifier"),
+      dockerfile.indexOf("FROM participant AS author"),
+    );
+    expect(verifierStage).toContain("COPY fixtures/");
+    expect(verifierStage).toContain("COPY tests/hidden/");
+    expect(verifierStage).toContain("COPY verifier/");
+    expect(verifierStage).not.toContain("COPY participant/");
+    expect(verifierStage).not.toContain("COPY reference/");
+    expect(verifierStage).not.toContain("COPY mutation.py");
+  });
+
+  it("reproduces the original leak: no file the participant image carries reaches the derivation or the hidden assertions", () => {
+    // The file list comes from the Dockerfile's participant stage, via the same
+    // derivation `check-answer-reachability.ts` uses, rather than being restated here --
+    // so a COPY that puts `fixtures/` or `tests/hidden/` back fails this test.
+    const participantFiles = participantPythonFiles(REPO, DIR);
+    expect(participantFiles).not.toContain(`${DIR}/local/fixtures/generate.py`);
+    expect(participantFiles).not.toContain(`${DIR}/local/tests/hidden/check_beaver.py`);
+    expect(participantFiles).not.toContain(`${DIR}/local/verifier/server.py`);
+    expect(participantFiles).toContain(`${DIR}/local/tests/public/test_beaver.py`);
+    expect(participantFiles).toContain(`${DIR}/local/participant/server.py`);
+    for (const file of participantFiles) {
+      const source = readFileSync(join(REPO, file), "utf8");
+      // The one permitted mention is the lazy, function-scoped checkout/author fallback
+      // in show.py and the public tests: never a module-level import, which is what
+      // would fail loudly the moment it ran inside a participant image that carries no
+      // `fixtures/` at all.
+      expect(source).not.toMatch(/^from fixtures/m);
+      expect(source).not.toMatch(/^import fixtures/m);
+      expect(source).not.toMatch(/^from tests\.hidden/m);
+      expect(source).not.toMatch(/^from verifier/m);
+    }
+  });
+
+  it("publishes only the Workbench, and reaches the verifier over an internal network", () => {
+    const compose = parseYaml(read("local/docker-compose.yml")) as {
+      services: Record<string, Record<string, unknown>>;
+      networks: Record<string, Record<string, unknown>>;
+    };
+    expect(Object.keys(compose.services).sort()).toEqual(["verifier", "workbench"]);
+    // The published port and the /verify URL are what metadata.json's runtime declares,
+    // and they did not move: the Workbench answers on 18097 and forwards inward.
+    expect(compose.services.workbench.ports).toEqual(["127.0.0.1:18097:18097"]);
+    expect(compose.services.verifier.ports).toBeUndefined();
+    expect(compose.networks.lab.internal).toBe(true);
+    expect(compose.services.verifier.networks).toEqual(["lab"]);
+    const runtime = JSON.parse(read("metadata.json")).runtime as { verifyUrl: string };
+    expect(runtime.verifyUrl).toBe("http://127.0.0.1:18097/verify");
+  });
+});
+
+describe("ac26-w2-beaver-mul: what the split does and does not close", () => {
+  it("scores zero for a submission that imports the graded material at grading time", () => {
+    // Issue 591: `fixtures/` and `tests/hidden/` are on the runner's sys.path because
+    // grading needs them, so the guard in verifier/server.py's RUNNER -- not the Docker
+    // split -- is what closes this path. Measured, not assumed.
+    for (const checkpoint of CHECKPOINTS) {
+      expect(evaluate(checkpoint, "from fixtures.generate import *\n")).toBe(false);
+    }
+  }, 120_000);
+
+  it("scores zero for the module the participant image ships", () => {
+    // The other probe: the participant reads what their own container carries and
+    // pastes it, so the RUNNER guard -- which only blocks `import` -- is not in the
+    // path. The reference passing every checkpoint above is this probe's positive
+    // control (docs/AGENT_LOOP_CONSTRAINTS.md §5): without one, a silently broken probe
+    // reports the same zero as a closed problem.
+    const shipped = readFileSync(join(LOCAL, "participant", "workbench.py"), "utf8");
+    for (const checkpoint of CHECKPOINTS) {
+      expect(evaluate(checkpoint, shipped)).toBe(false);
+    }
+  }, 120_000);
+});
+
+describe("ac26-w2-beaver-mul: the public half survives the split", () => {
+  it("serves show.py and the public tests every value they used to import", () => {
+    const script = [
+      "import json, sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import public_payload, setting, shares_of, triple_shares",
+      "from fixtures.generate import health_token",
+      "payload = public_payload(sys.argv[1])",
+      "cfg = setting(sys.argv[1])",
+      "p, n = cfg['p'], cfg['n']",
+      "print(json.dumps({",
+      "  'params': payload['params'] == {'p': p, 'n': n},",
+      "  'x': payload['x'] == cfg['x'],",
+      "  'a': payload['a'] == cfg['a'],",
+      "  'triple': payload['triple'] == triple_shares(sys.argv[1], 'public'),",
+      "  'xShares': payload['xShares'] == shares_of(sys.argv[1], 'public-x', cfg['x'], n, p),",
+      "  'health': payload['healthToken'] == health_token(sys.argv[1]),",
+      // y, b and c are the half that must not travel: with y in hand a learner could
+      // name this deployment's product without deriving the protocol.
+      "  'withheld': not ({'y', 'b', 'c'} & set(payload)),",
+      "}))",
+    ].join("\n");
+    const result = python(["-c", script, SEED]);
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "{}")).toEqual({
+      params: true,
+      x: true,
+      a: true,
+      triple: true,
+      xShares: true,
+      health: true,
+      withheld: true,
+    });
+  });
+
+  it("prints exactly what it printed before the split, on every seed shape", () => {
+    // show.py reads `GET /public` now instead of importing `fixtures.generate`. What a
+    // learner sees must not have moved with it, so the payload path is compared against
+    // the derivation directly across seeds spanning both ends of p and n.
+    const script = [
+      "import json, sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import public_payload, setting, shares_of, triple_shares",
+      "rows = []",
+      "for index in range(60):",
+      "    seed = 'show-%d' % index",
+      "    payload = public_payload(seed)",
+      "    cfg = setting(seed)",
+      "    rows.append([",
+      "        payload['params']['p'] == cfg['p'],",
+      "        payload['params']['n'] == cfg['n'],",
+      "        payload['triple'] == triple_shares(seed, 'public'),",
+      "        payload['xShares'] == shares_of(seed, 'public-x', cfg['x'], cfg['n'], cfg['p']),",
+      "    ])",
+      "print(json.dumps({'disagreed': [i for i, row in enumerate(rows) if not all(row)]}))",
+    ].join("\n");
+    const result = python(["-c", script]);
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "null")).toEqual({
+      disagreed: [],
+    });
+  });
+
+  it("tells a learner which service is missing when the verifier is not running", () => {
+    // show.py inside a participant image has no `fixtures/` to fall back to, so an
+    // unreachable verifier must say so rather than raise a urllib traceback at somebody
+    // trying to read their own fixtures.
+    const result = spawnSync("python3", ["show.py"], {
+      cwd: LOCAL,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        FLAG_SEED: SEED,
+        PYTHONDONTWRITEBYTECODE: "1",
+        // Nothing listens on the discard port.
+        VERIFIER_PUBLIC_URL: "http://127.0.0.1:9/public",
+      },
+      timeout: 60_000,
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("cannot reach this deployment's verifier");
+    expect(result.stderr).toContain("make verifier-up");
   });
 });
