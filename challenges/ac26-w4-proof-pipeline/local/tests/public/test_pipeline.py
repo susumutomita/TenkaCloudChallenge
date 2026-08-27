@@ -8,6 +8,7 @@ because a contract that never fires is not a contract.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -17,9 +18,50 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "starter"))
 
 import pipeline as submission  # noqa: E402
-from fixtures.generate import honest_run, pipeline as definition_for  # noqa: E402
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
+
+
+def _load_public_evidence() -> dict:
+    """This deployment's two pipeline definitions and its one honest run of A -- what
+    `show.py` prints, and what this file has always handed to the submission.
+
+    Issue 537/538 (Issue 543 option B2): this file used to import `fixtures.generate`
+    directly. That module carries `UNSUPPORTED_CLAIMS` -- the `cost` checkpoint's ground
+    truth -- and `FAULTS`, which maps every injected fault to the layer `first_fault`
+    must report and to the single field `repair` may touch, and it shipped in the same
+    image as `tests/hidden/check_pipeline.py`, whose `_reference_first_fault` implements
+    every layer contract this problem asks a learner to write. So it does not ship in
+    the `participant` Docker stage at all any more (see ../../Dockerfile). This
+    deployment's own verifier is the only source for the public half now:
+    `PUBLIC_EVIDENCE_JSON` when the Portal has already fetched it, or
+    `VERIFIER_PUBLIC_URL` fetched directly when it has not.
+    """
+    injected = os.environ.get("PUBLIC_EVIDENCE_JSON")
+    if injected:
+        return json.loads(injected)
+    verifier_public_url = os.environ.get("VERIFIER_PUBLIC_URL")
+    if verifier_public_url:
+        from urllib.request import urlopen
+
+        with urlopen(verifier_public_url, timeout=10) as response:  # noqa: S310
+            return json.loads(response.read().decode("utf-8"))
+    # Neither is set: this only resolves when `fixtures/` is actually on disk, which is
+    # true for a checkout (this file run directly, e.g. by
+    # scripts/ac26-w4-proof-pipeline.test.ts) and the verifier/author Docker stages, and
+    # never inside a built `participant` image -- so this branch does not reopen the
+    # leak above.
+    from fixtures.generate import public_payload
+
+    return public_payload(SEED)
+
+
+PUBLIC = _load_public_evidence()
+
+
+def definition_for(name: str) -> dict:
+    """A copy, so a check mutating one cannot poison the next."""
+    return json.loads(json.dumps(PUBLIC["pipelines"][name]))
 
 
 def check_graph_has_a_node_per_artifact() -> str:
@@ -41,7 +83,7 @@ def check_layer_order_starts_at_the_boundary() -> str:
 
 def check_an_honest_run_is_clean() -> str:
     definition = definition_for("A")
-    run = honest_run(SEED, "A")
+    run = json.loads(json.dumps(PUBLIC["honestRun"]))
     if submission.first_fault(definition, run) is not None:
         return "an honest run was diagnosed with a fault"
     return ""

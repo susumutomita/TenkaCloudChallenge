@@ -270,7 +270,14 @@ def honest_run(seed: str, name: str, label: str = "public") -> dict:
 
     return {
         "pipeline": name,
-        "label": label,
+        # The `label` argument seeds the stream above; it is deliberately NOT a field of
+        # the record. `faulted_run` labels its runs `"<label>:<fault>"`, so a record
+        # carrying its own label named the injected fault to the very submission being
+        # asked to diagnose it -- on the graded `h0`/`h1`/`h2` labels as much as on the
+        # public one. A transcription probe read it straight out of `run` and repaired
+        # each fault by looking the name up in `FAULTS`. Nothing else ever read it:
+        # `show.py` does not print it, the hidden checker does not consult it, and
+        # `reference/pipeline.py` works from the definition and the record's own fields.
         # What reaches the verifier -- exactly its inputs, no more. Note that A's setup
         # produces two keys and only one of them is here: the proving key is the
         # prover's, and a run that published it would be leaking.
@@ -504,3 +511,44 @@ UNSUPPORTED_CLAIMS: tuple[str, ...] = (
 def health_token(seed: str) -> str:
     run = honest_run(seed, "A")
     return hashlib.sha256(f"health:{seed}:{run['queries']}".encode()).hexdigest()[:16]
+
+
+def inspected_fault(seed: str) -> str:
+    """The one B fault `make inspect` shows, chosen deterministically from the seed.
+
+    Named nowhere a participant can read it. The record it produces travels in
+    `public_payload`; which of B's eight faults it is does not.
+    """
+    faults = applicable_faults("B")
+    return faults[sum(seed.encode()) % len(faults)]
+
+
+def public_payload(seed: str) -> dict[str, object]:
+    """Everything a participant may see for this deployment. Carries values, not code.
+
+    This is the `public` label only. Every checkpoint is graded on the `h0`, `h1` and
+    `h2` labels (see tests/hidden/check_pipeline.py), each of which draws a different
+    constraint count and a different query count from the same seed, and grades against
+    every applicable fault rather than the single one shown below.
+
+    What travels is exactly what `make inspect` has always printed: the two pipeline
+    definitions, one honest run of A, one run of B with something wrong, and the claims
+    to sort. The definitions are the `definition` argument every graded function is
+    handed, so withholding them would hide them from the participant and from nobody
+    else, and the two runs are records to audit rather than answers -- the `wiring`
+    checkpoint exists precisely because a record can under-declare its own secrets.
+
+    What does not travel is this module's other half, which is the answer:
+    `UNSUPPORTED_CLAIMS` is the `cost` checkpoint's ground truth outright, `FAULTS` maps
+    each fault to the layer `first_fault` must report and to the single field `repair`
+    may touch, and `_secret_artifacts`, `non_setup_inputs` and `constraint_artifact`
+    are the derivations `check_inputs` and `check_commitment` are graded on. Nor does
+    the name of the fault below: `inspected_fault` stays in this image.
+    """
+    return {
+        "healthToken": health_token(seed),
+        "pipelines": {name: pipeline(name) for name in PIPELINES},
+        "honestRun": honest_run(seed, "A"),
+        "faultedRun": faulted_run(seed, "B", inspected_fault(seed)),
+        "claims": [dict(claim) for claim in CLAIMS],
+    }
