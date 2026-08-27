@@ -257,8 +257,8 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   `sha256-compress-digest`, `ac26-w2-linear-shares`, split by #590, #564, #596 and #563).
   #538 was closed on that evidence.
 
-  What the sweep does **not** settle, and what keeps #543 open: **16 problems still
-  `COPY verifier/` into their participant stage** — `ac26-w2-{privacy-audit,private-aggregate}`,
+  What the sweep does **not** settle, and what keeps #543 open: **15 problems still
+  `COPY verifier/` into their participant stage** — `ac26-w2-private-aggregate`,
   `ac26-w3-{ec-group,fft-domain,nonce-reuse,ntt-roots}`, `ac26-w4-{arithmetization,proof-pipeline}`,
   and the eight `ac26-w6`/`w7` ones above. That is the structural shape #543 was opened on,
   and the owner chose B (separate verifier container) over A (accept and document).
@@ -322,6 +322,24 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   cannot be named without running the protocol, which is what keeps `combine` worth its
   points. Copy it for any problem whose `make inspect` prints one side of a two-input
   computation.
+
+  `ac26-w2-privacy-audit` came off the list in #603, and is the one to copy when the
+  material at risk is the **hidden checker rather than the fixtures**. Both of §5's
+  probes read **0 of 300 before the split as well as after**, with the reference at 7/7
+  (300/300) as the positive control both times and the guard-removal control flat, so
+  a report that stopped at those two numbers would have said nothing was leaked. What
+  the single stage actually handed over was the decision rule itself: the hidden
+  checker's own `_expected_index` and `_leaks` state, event kind by event kind, the rule
+  `first_violation` is graded on; `check_repair` states `repair`'s acceptance rule; and
+  `fixtures/generate.py`'s `TRUTH` names the verdict for each of the seven programs by
+  id. An auditor **transcribed from those two shipped files** — no reasoning past
+  copying them — scored **7 of 7 checkpoints, 300 of 300 points**, which is the #584 pole
+  reached by a path neither standard probe walks. So: when a problem grades by running a
+  hidden suite whose assertions *are* the rule, add a third probe that transcribes what
+  the participant stage ships, and report that number. `public_payload` there is the
+  spec, the one clean run's trace and the health token — the six leaking programs and
+  the `bravo` transcript stay in the verifier, because either would answer a checkpoint
+  outright.
 
   Two consequences for reporting. `scripts/check-answer-reachability.ts` only ever sees
   the participant image, so a finding count says nothing about this path — never write

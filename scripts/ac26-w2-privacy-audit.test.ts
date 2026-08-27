@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
 import { parse as parseYaml } from "yaml";
+import { participantPythonFiles } from "./lib/local-play-problems";
 
 /**
  * ac26-w2-privacy-audit is Week 2's transfer problem. The assertions that matter run its
@@ -69,6 +70,8 @@ describe("ac26-w2-privacy-audit: participant contract", () => {
       "local/tests/public/test_auditor.py",
       "local/tests/hidden/check_auditor.py",
       "local/verifier/server.py",
+      "local/participant/server.py",
+      "local/participant/workbench.py",
       "local/starter/auditor.py",
       "local/reference/auditor.py",
     ]) {
@@ -336,5 +339,181 @@ describe("ac26-w2-privacy-audit: metadata contracts", () => {
       },
     ]);
     expect(status).toBe("draft");
+  });
+});
+
+const REPO = join(import.meta.dir, "..");
+const DIR = "challenges/ac26-w2-privacy-audit";
+
+describe("ac26-w2-privacy-audit: the participant image carries nothing that grades", () => {
+  it("keeps fixtures/, the hidden suite and the verifier out of the participant Docker stage", () => {
+    const dockerfile = read("local/Dockerfile");
+    const participantStage = dockerfile.slice(
+      dockerfile.indexOf("FROM base AS participant"),
+      dockerfile.indexOf("FROM base AS verifier"),
+    );
+    expect(participantStage).not.toContain("COPY fixtures/");
+    expect(participantStage).not.toContain("tests/hidden");
+    expect(participantStage).not.toContain("COPY verifier/");
+    expect(participantStage).not.toContain("COPY reference/");
+    expect(participantStage).not.toContain("COPY mutation.py");
+    expect(participantStage).toContain("COPY tests/public/");
+    expect(participantStage).toContain("COPY participant/");
+
+    const verifierStage = dockerfile.slice(
+      dockerfile.indexOf("FROM base AS verifier"),
+      dockerfile.indexOf("FROM participant AS author"),
+    );
+    expect(verifierStage).toContain("COPY fixtures/");
+    expect(verifierStage).toContain("COPY tests/hidden/");
+    expect(verifierStage).toContain("COPY verifier/");
+    expect(verifierStage).not.toContain("COPY participant/");
+    expect(verifierStage).not.toContain("COPY reference/");
+    expect(verifierStage).not.toContain("COPY mutation.py");
+  });
+
+  it("reproduces the original leak: no file the participant image carries reaches the derivation or the hidden assertions", () => {
+    // The file list comes from the Dockerfile's participant stage, via the same
+    // derivation `check-answer-reachability.ts` uses, rather than being restated here --
+    // so a COPY that puts `fixtures/` or `tests/hidden/` back fails this test.
+    const participantFiles = participantPythonFiles(REPO, DIR);
+    expect(participantFiles).not.toContain(`${DIR}/local/fixtures/generate.py`);
+    expect(participantFiles).not.toContain(`${DIR}/local/tests/hidden/check_auditor.py`);
+    expect(participantFiles).not.toContain(`${DIR}/local/verifier/server.py`);
+    expect(participantFiles).toContain(`${DIR}/local/tests/public/test_auditor.py`);
+    expect(participantFiles).toContain(`${DIR}/local/participant/server.py`);
+    for (const file of participantFiles) {
+      const source = readFileSync(join(REPO, file), "utf8");
+      // The one permitted mention is the lazy, function-scoped checkout/author fallback
+      // in show.py and the public tests: never a module-level import, which is what
+      // would fail loudly the moment it ran inside a participant image that carries no
+      // `fixtures/` at all.
+      expect(source).not.toMatch(/^from fixtures/m);
+      expect(source).not.toMatch(/^import fixtures/m);
+      expect(source).not.toMatch(/^from tests\.hidden/m);
+      expect(source).not.toMatch(/^from verifier/m);
+    }
+  });
+
+  it("publishes only the Workbench, and reaches the verifier over an internal network", () => {
+    const compose = parseYaml(read("local/docker-compose.yml")) as {
+      services: Record<string, Record<string, unknown>>;
+      networks: Record<string, Record<string, unknown>>;
+    };
+    expect(Object.keys(compose.services).sort()).toEqual(["verifier", "workbench"]);
+    // The published port and the /verify URL are what metadata.json's runtime declares,
+    // and they did not move: the Workbench answers on 18098 and forwards inward.
+    expect(compose.services.workbench.ports).toEqual(["127.0.0.1:18098:18098"]);
+    expect(compose.services.verifier.ports).toBeUndefined();
+    expect(compose.networks.lab.internal).toBe(true);
+    expect(compose.services.verifier.networks).toEqual(["lab"]);
+    const runtime = JSON.parse(read("metadata.json")).runtime as { verifyUrl: string };
+    expect(runtime.verifyUrl).toBe("http://127.0.0.1:18098/verify");
+  });
+});
+
+describe("ac26-w2-privacy-audit: what the split does and does not close", () => {
+  it("scores zero for a submission that imports the graded material at grading time", () => {
+    // Issue 591: `fixtures/` and `tests/hidden/` are on the runner's sys.path because
+    // grading needs them, so the guard in verifier/server.py's RUNNER -- not the Docker
+    // split -- is what closes this path. Measured, not assumed.
+    for (const checkpoint of CHECKPOINTS) {
+      expect(evaluate(checkpoint, "from fixtures.generate import *\n")).toBe(false);
+    }
+  }, 180_000);
+
+  it("scores zero for the modules the participant image ships", () => {
+    // The other probe: the participant reads what their own container carries and
+    // pastes it, so the RUNNER guard -- which only blocks `import` -- is not in the
+    // path. The reference passing every checkpoint above is this probe's positive
+    // control (docs/AGENT_LOOP_CONSTRAINTS.md §5): the guard-removal control is flat on
+    // this problem, because `fixtures/generate.py` defines none of the four names
+    // `starter/auditor.py` asks for.
+    for (const shipped of ["participant/workbench.py", "participant/server.py", "show.py"]) {
+      const source = readFileSync(join(LOCAL, ...shipped.split("/")), "utf8");
+      for (const checkpoint of CHECKPOINTS) {
+        expect(evaluate(checkpoint, source)).toBe(false);
+      }
+    }
+  }, 300_000);
+
+  it("no longer ships the decision rule the graded checkpoints exist to make a learner derive", () => {
+    // What the single stage actually handed over. `_expected_index` and `_leaks` in the
+    // hidden checker state the rule `first_violation` is graded on, kind by kind, and
+    // `TRUTH` in the fixtures names the verdict for each program by id. Transcribing
+    // those two files scored 7/7 checkpoints -- the whole 300 points -- before the split.
+    // Asserted on the rule itself rather than on the identifiers, because
+    // participant/server.py's own docstring names them when it explains what moved.
+    const hidden = read("local/tests/hidden/check_auditor.py");
+    expect(hidden).toContain('event["party"] != event["owner"]');
+    expect(hidden).toContain("def _expected_index");
+    expect(read("local/fixtures/generate.py")).toMatch(/^TRUTH: /m);
+    for (const file of participantPythonFiles(REPO, DIR)) {
+      const source = readFileSync(join(REPO, file), "utf8");
+      expect(source).not.toContain('event["party"] != event["owner"]');
+      expect(source).not.toContain('op[1] not in allowed');
+      // `VIOLATIONS` itself is participant surface -- the starter declares the four
+      // names. What must not be here is the rule that maps an event to one of them.
+      expect(source).not.toMatch(/^TRUTH/m);
+      expect(source).not.toMatch(/^def _expected_index/m);
+    }
+  });
+});
+
+describe("ac26-w2-privacy-audit: the public half survives the split", () => {
+  it("serves show.py and the public tests every value they used to import", () => {
+    const script = [
+      "import json, sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import execute, health_token, program, spec, spec_as_public",
+      "from fixtures.generate import PROGRAM_IDS, public_payload",
+      "payload = public_payload(sys.argv[1])",
+      "sp = spec(sys.argv[1])",
+      "print(json.dumps({",
+      "  'spec': payload['spec'] == spec_as_public(sp),",
+      "  'cleanEvents': payload['cleanEvents'] == execute(program(sp, 'alpha'), sp).events,",
+      "  'health': payload['healthToken'] == health_token(sys.argv[1]),",
+      // The private half, the verdict table and the six leaking programs are what must
+      // not travel: with any of them a learner could answer a graded checkpoint from
+      // `make inspect` alone.
+      "  'withheld': not ({'private', 'masks', 'weights', 'truth', 'programs'} & set(payload)),",
+      "  'oneProgramOnly': len(PROGRAM_IDS) == 7,",
+      "}))",
+    ].join("\n");
+    const result = python(["-c", script, SEED]);
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "{}")).toEqual({
+      spec: true,
+      cleanEvents: true,
+      health: true,
+      withheld: true,
+      oneProgramOnly: true,
+    });
+  });
+
+  it("carries only the clean program's trace, never a leaking one", () => {
+    // `show.py` printed exactly one run before the split -- the clean one -- and the
+    // payload must not widen that. A leaking trace in here would answer `opened-secret`,
+    // `cross-party` or `log-leak` outright, and a `bravo` transcript would answer
+    // `transcript`.
+    const script = [
+      "import json, sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import public_payload, spec",
+      "payload = public_payload(sys.argv[1])",
+      "sp = spec(sys.argv[1])",
+      "allowed = {*sp.public_inputs, *sp.masked, sp.result}",
+      "leaks = [e for e in payload['cleanEvents']",
+      "         if (e['kind'] in ('open', 'emit', 'fail') and e['label'] not in allowed)",
+      "         or (e['kind'] == 'peek' and e['party'] != e['owner'])]",
+      "print(json.dumps({'leakingEvents': len(leaks)}))",
+    ].join("\n");
+    for (const seed of ["seed-a", "seed-b", "seed-c", "seed-d", "seed-e"]) {
+      const result = python(["-c", script, seed]);
+      expect(result.status).toBe(0);
+      expect(JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "{}")).toEqual({
+        leakingEvents: 0,
+      });
+    }
   });
 });
