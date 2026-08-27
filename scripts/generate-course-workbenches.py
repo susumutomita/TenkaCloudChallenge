@@ -239,6 +239,18 @@ PORTAL_PACKAGES = {
     # runner -- stayed with the participant as participant/lab.py, and the Portal moved to
     # participant/.
     "ac26-w6-zkvm-witness-binding": "participant",
+    # Issue 537/538 (Issue 543 option B2): fixtures/generate.py is this problem's entire ground
+    # truth under other names -- constrained is carried, underwritten is underwrites,
+    # load_bearing is property_map, violations is contract_violations, first_broken is
+    # first_failure, selection_truth is select, and _one_change_neighbours with
+    # local_checks_pass and _whole is the search counterexample and repair are graded on --
+    # beside BREAKS, which names per variant, identically on every seed, which node or edge each
+    # deployment broke. tests/hidden/check_stack.py shipped with it. A submission transcribed
+    # from the two scored 8 of 8 checkpoints (300 of 300 points). The supplied half -- the
+    # closed vocabularies, the three levels of contract, the boundary classes and four graph
+    # accessors -- stayed with the participant as participant/lab.py, and the Portal moved to
+    # participant/.
+    "ac26-w6-stack-design": "participant",
     # Issue 537/538 (Issue 543 option B2): tests/hidden/check_prover.py states, phase by
     # phase, what every one of the eight checkpoints is graded on -- _Scenario.canonical is
     # the parser's answer and the malformed list beside it is the whole of what that stage

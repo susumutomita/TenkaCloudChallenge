@@ -198,11 +198,27 @@ deployment、 brief、 解答はすべて独立に書かれています。 主�
 ## 保証範囲
 
 ローカルモードは **自習向けの honor-system 検証** です。 マシンも Docker daemon も image も
-あなたのものなので、 image の中にあるものはどれも手の届かないところにはありません。
-`reference/` と `tests/hidden/` を bind-mount していないのは、 あなたの git checkout に紛れ
-込ませないためであって、 遠ざけるためではありません。 hidden checker が突き合わせる ground
-truth 関数も同じです — それを import したモデルは何もモデル化しておらず、 そうしないと決められる
-のはあなただけです。
+あなたのものなので、 あなたがビルドする image の中身は秘匿されていません。
+
+Issue 537/538 で変わったのは、 **どの image が何を持つか** です。 採点は publish されない 2 つめの
+container で走ります。 `fixtures/`、 `tests/hidden/`、 `verifier/` はそちらにしか存在せず、
+Workbench からは internal network 越しにしか届かず、 Workbench の filesystem にはありません。
+そのため `make test` と `make inspect` はその container も起動します (`make verifier-up` で単独
+起動、 `make verifier-down` で停止)。 `show.py` と公開テストは、 この deployment の 3 つの健全な
+architecture、 診断対象の 13 個の deployment、 8 つの brief を、 fixtures の import ではなく
+`GET /public` から読みます。 hidden checker が突き合わせる ground truth 関数はすべてその境界の
+向こうに残ります。 どの variant がどの node / edge を壊したかを書いた表も同じです — その表は
+どの seed でも同じなので、 目の前の deployment だけでなく hidden の deployment についても
+`contracts` と `diagnosis` に答えていました。 `reference/` と mutation suite はもともと入って
+いません。
+
+意図的にあなたの image に残しているのは `participant/lab.py` — 閉じた語彙、 3 段階の contract、
+11 個の boundary class と 1 つ壊したときの代償、 そして typed graph を歩くための 4 つの
+accessor です。 これはこの問題が意図的に渡す側の半分で、 採点対象は 1 つもありません。 採点中の
+あなたの提出コード自身がこれを import します。
+
+これは誤配防止の境界であって、 機密性の境界ではありません。 `verifier` stage や `author` stage を
+自分でビルドすれば、 すべて読めます。
 
 verifier が保証するのはもっと狭く、 そして本物です。 提出物は verifier を hang させたり
 crash させたりできません。 checkpoint は echo した id しか credit できません。 結果は期待値を

@@ -22,7 +22,11 @@ the cheapest way to fix one are the same kind of move, and only the direction di
 
 from __future__ import annotations
 
-from fixtures.generate import (
+# Issue 543 option B2: the supplied vocabulary moved out of `fixtures/generate.py`, which does
+# not ship in the participant image any more. This is the module a learner's own submission
+# imports, and it is the one the verifier's runner preloads before dropping the problem root
+# from `sys.path` -- see verifier/server.py's RUNNER.
+from participant.lab import (
     ALGEBRAS,
     ATTRIBUTES,
     AUTHORISED,

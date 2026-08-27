@@ -239,12 +239,24 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   submission scores **0** on every one of the ten. Do not re-measure these; do not add the
   guard to them.
 
-  Eight of those ten have since come off that list, each in the same PR as its own B2 split
+  Nine of those ten have since come off that list, each in the same PR as its own B2 split
   and never on its own (`ac26-w2-oblivious-transfer`, `ac26-w6-cosnark-{beaver,linear,privacy}`,
-  `ac26-w7-capstone-{demo,design}`, `ac26-w6-zkvm-{exploit-predicate,witness-binding}`): the
+  `ac26-w7-capstone-{demo,design}`, `ac26-w6-zkvm-{exploit-predicate,witness-binding}`,
+  `ac26-w6-stack-design`): the
   split moves the supplied helper out of `fixtures/`, which is exactly the objection the
   exception recorded, so the guard becomes applicable and leaving it out would be half a fix.
-  `ac26-bridge-properties` and `ac26-w6-stack-design` are what is left.
+  `ac26-bridge-properties` is what is left.
+
+  **The sentence above — "a `from fixtures.generate import *` submission scores 0 on every
+  one of the ten" — is true and was the wrong measurement.** `ac26-w6-stack-design` reads 0
+  on it with the guard and without it, and the reason is not that its fixtures hold nothing:
+  it is that they hold **all eight answers under different names**. Rename them in the import
+  (`from fixtures.generate import constrained as carried, ...`) and the same submission scores
+  **8 of 8 checkpoints, 300 of 300 points** with the guard removed, and 0 with it in place.
+  So one of the ten exceptions was worth the whole problem and the standard probe could not
+  see it. **On any problem whose `fixtures/` implements the graded work under other names,
+  rename the import before recording a flat control** — a star import is a name match, not a
+  reachability measurement. `ac26-bridge-properties` has not been re-measured this way.
 
   **How to measure a probe without Docker** (§6 says there may be no daemon). Import the
   problem's `verifier/server.py` as a module with `FLAG_SEED` set and call its own
@@ -276,15 +288,15 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   #538 was closed on that evidence.
 
   What the sweep does **not** settle, and what keeps #543 open: **7 problems still
-  `COPY verifier/` into their participant stage** — **1** as of the witness-binding split:
+  `COPY verifier/` into their participant stage** — **0** as of the stack-design split:
   the `ac26-w6`/`w7`
   ones above, less the three cosnark problems and both capstones
   (`ac26-w4-proof-pipeline` came off in #611, `ac26-w6-cosnark-beaver` in #613,
   `ac26-w6-cosnark-linear` in #614, `ac26-w6-cosnark-privacy` in #615,
   `ac26-w7-capstone-demo` in #616, `ac26-w7-capstone-design` in #617,
-  `ac26-w6-zkvm-exploit-predicate` in #618, `ac26-w6-zkvm-witness-binding` in the PR this
-  paragraph was written for). The one left, scanned on `accb4c8`, is
-  `ac26-w6-stack-design`
+  `ac26-w6-zkvm-exploit-predicate` in #618, `ac26-w6-zkvm-witness-binding` in #620, and
+  `ac26-w6-stack-design` in the PR this paragraph was written for). **The list is empty**,
+  scanned on `1830d30`
   — count it yourself rather than trusting this sentence; the one-line check is
   a per-stage scan of each `local/Dockerfile`'s `COPY` list, not a `grep` over the whole
   file, because every problem's `verifier` and `author` stages copy `verifier/` legitimately.
@@ -850,6 +862,51 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   the reference happens to import passes the reference and breaks a learner whose own
   top-level import the starter told them to write. Verified against the reference with a
   top-level `participant.guests` import added: 8/8 with the guard in place.
+
+  `ac26-w6-stack-design` came off the list **last**, closing the `COPY verifier/` shape
+  entirely, and it is the one to read for **what the two standard probes are actually
+  measuring**. Both read 0 of 300 before the split as well as after — and on this problem
+  that number was worth nothing, because `fixtures/generate.py` implements every graded
+  function under a *different* name: `constrained` is `carried`, `underwritten` is
+  `underwrites`, `load_bearing` is `property_map`, `violations` is `contract_violations`,
+  `first_broken` is `first_failure`, `selection_truth` is `select`, and
+  `_one_change_neighbours` with `local_checks_pass`, `properties_at_risk` and `_whole` is
+  the search the remaining two are graded on. The name-based detector therefore reported it
+  zero times and the reachability count is unchanged at 0 across the whole PR in both
+  directions (the restore-the-leak run puts `COPY fixtures/ tests/ verifier/` back and the
+  count stays 0 while the new stage test goes red), and `from fixtures.generate import *`
+  scored 0 throughout. **Three measurements say what was there.** #603's third probe: the
+  inlined source of the shipped `fixtures/generate.py`, six alias lines and two three-line
+  loops copied from `_one_change_neighbours`, with no reasoning past copying, scored **8 of
+  8 checkpoints, 300 of 300 points** — the #584 pole, from a single shipped file. The
+  submission-side probe with its import **renamed** scored the same **8 of 8 (300/300)**
+  with the guard removed and 0 with it in place, which is what took this problem off Issue
+  #591's exception list (see the note there: a star import is a name match, not a
+  reachability measurement). And the participant-image probe on what the stage ships *after*
+  the split — `participant/lab.py` inlined — scores **0 of 8**. The guard-removal control is
+  flat on the star import and not on the renamed one, so use the renamed one; the reference
+  at 8/8 (300/300) with the guard in place is the positive control either way.
+
+  Two things it adds to the worked examples. Its carve line is **code versus data**, as in
+  #620, but for a different reason: three of the names `starter/stack.py`'s import list
+  handed over (`graph`, `broken`, `use_cases`) were never helpers — they are this
+  deployment's own objects, and they travel in `GET /public` as the three sound
+  architectures, the thirteen broken deployments and the eight briefs, rebuilt by four
+  helpers in `show.py` the public tests import. What stays behind is `BREAKS`, and it is the
+  sharpest instance yet of #620's "data can carry a verdict implicitly" in reverse: `BREAKS`
+  names, per variant, which node or edge was changed and which attribute — **identically on
+  every seed**, so it answered `contracts` and `diagnosis` on `h0`..`h3` as much as on the
+  one deployment a learner can see. A per-seed answer is a leak of one deployment; a
+  seed-independent table is a leak of all of them. Look for that shape before deciding a
+  fixtures module only leaks what is in front of the learner.
+
+  Second: `show.py` prints a **crossing count** and a **contracts-broken count** on the
+  sound architectures. The first travels as the plain list of boundary-crossing edge ids it
+  has always been, because what decides `cost-communication-boundary` is that list measured
+  against `policy["maxCrossings"]` and the comparison stays behind; the second is printed as
+  the literal `0`, because computing it means shipping the counter, which *is*
+  `contract_violations`. Reach for that split — carry the input to a verdict, never the
+  verdict — whenever `make inspect` prints a number a checkpoint is graded on.
 
   #586 is the last of the Week 5 chain and the first in this class with **no supplied
   half at all**: `fixtures/generate.py` there is entirely seed derivation plus the graded

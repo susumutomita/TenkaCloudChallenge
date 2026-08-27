@@ -71,139 +71,57 @@ from __future__ import annotations
 import hashlib
 
 # ---------------------------------------------------------------------------
-# What a value is while it is in flight
+# The supplied half, imported rather than defined here
+#
+# Issue 537/538 (Issue 543 option B2): the vocabulary a boundary contract is written in lives in
+# `participant/lab.py` now, because a learner has to be able to import it and this file does not
+# ship in the participant image any more. Importing it back here rather than restating it keeps
+# one implementation, graded and inspected, instead of two that can drift -- `participant/lab.py`
+# is copied into the `verifier` Docker stage for exactly that reason (see ../Dockerfile).
+#
+# Everything below this import is the half that does NOT ship: the seed derivation, the three
+# architectures, the table of breaks, and every ground-truth function the hidden checker grades
+# against.
 # ---------------------------------------------------------------------------
 
-#: What a value physically is on a wire. The vocabulary is closed: a representation this stack
-#: has never heard of is not a forward-compatible edge, it is a wire nobody wrote a contract for.
-REPRESENTATIONS = (
-    "plaintext",
-    "secret-share",
-    "ciphertext",
-    "commitment",
-    "proof",
-    "journal",
+from participant.lab import (  # noqa: F401 - re-exported for the hidden checker and show.py
+    ALGEBRAS,
+    ATTRIBUTES,
+    AUTHORISED,
+    BOUNDARY_CLASSES,
+    CASES,
+    CLASS_OF,
+    CLASSIFICATIONS,
+    COMPUTED_BY,
+    CONSUMES,
+    COST_OF,
+    COST_ORDER,
+    COUNTEREXAMPLE_TARGETS,
+    EDGE_FIELDS,
+    KEY_DOMAINS,
+    LAYERS,
+    LICENCE,
+    NODE_FIELDS,
+    PRIMITIVES,
+    PROPERTIES,
+    PROPERTY_OF,
+    REPRESENTATIONS,
+    RESULT_VISIBLE,
+    SERIALIZATIONS,
+    TRANSFORMATIONS,
+    TRUST_OF,
+    USE_CASE_FIELDS,
+    VARIANTS,
+    edges_by_id,
+    incoming,
+    nodes_by_id,
+    outgoing,
 )
 
-#: Whether a value may be seen by somebody outside the trust domain that produced it. Two values,
-#: because a third ("internal, but it would be fine") is how the first leak gets written down.
-CLASSIFICATIONS = ("public", "secret")
 
-#: Where a computation runs. This is the distinction Week 6 is built around, and it is not the
-#: same as "who owns the machine": a guest runs inside a primitive on hardware the host owns.
-LAYERS = ("primitive-inside", "primitive-above", "host-orchestration")
-
-#: The end-to-end properties an architecture is judged on. They fail independently, which is the
-#: whole reason they are five names rather than one word.
-PROPERTIES = ("correctness", "soundness", "privacy", "binding", "availability")
-
-#: The kinds of contract an edge can break. A repair that fixes the wrong class is a repair that
-#: moved the failure rather than removed it.
-BOUNDARY_CLASSES = (
-    "data-classification",
-    "statement-witness-binding",
-    "field-algebra-domain",
-    "key-ciphertext-domain",
-    "program-version-identity",
-    "serialization-canonicalization",
-    "open-reconstruct-policy",
-    "randomness-preprocessing-lifetime",
-    "trust-collusion-assumption",
-    "artifact-publication",
-    "cost-communication-boundary",
-)
-
-#: Every field of an edge's contract, in the order a canonical listing emits them.
-EDGE_FIELDS = (
-    "id",
-    "source",
-    "target",
-    "representation",
-    "classification",
-    "algebra",
-    "keyDomain",
-    "identity",
-    "serialization",
-)
-
-#: Every field of a node.
-NODE_FIELDS = ("id", "layer", "domain", "transformation")
-
-#: The five things a value is at once, plus the dialect it is framed in. These are the attributes
-#: a boundary contract is written about, and the order a canonical listing emits them.
-ATTRIBUTES = (
-    "representation",
-    "classification",
-    "algebra",
-    "keyDomain",
-    "identity",
-    "serialization",
-)
-
-#: The transformations a node may apply to the value crossing it. Everything not on this list
-#: leaves all five attributes alone, which is the default a contract has to be able to assume.
-TRANSFORMATIONS = (
-    "carry",  # changes nothing
-    "split",  # plaintext -> secret-share
-    "combine",  # secret-share -> plaintext, and only where the open policy allows it
-    "encrypt",  # plaintext -> ciphertext, entering a key domain
-    "decrypt",  # ciphertext -> plaintext, leaving one
-    "key-switch",  # ciphertext -> ciphertext, changing keyDomain and nothing else
-    "lift",  # changes algebra, and nothing else
-    "commit",  # -> commitment, and fixes an identity
-    "prove",  # -> proof, carrying the identity it was made about
-    "seal",  # -> journal, carrying the identity it was made about
-    "declassify",  # secret -> public, and the only node allowed to do it
-)
-
-#: Which transformations are allowed to change which attribute. Everything else is a violation,
-#: and the class it violates is the one this table names.
-LICENCE = {
-    "representation": ("split", "combine", "encrypt", "decrypt", "commit", "prove", "seal"),
-    "classification": ("declassify",),
-    "algebra": ("lift",),
-    "keyDomain": ("encrypt", "decrypt", "key-switch"),
-    "identity": ("commit", "prove", "seal"),
-    "serialization": (),
-}
-
-#: Which boundary class an unlicensed change to each attribute belongs to.
-CLASS_OF = {
-    "representation": "open-reconstruct-policy",
-    "classification": "data-classification",
-    "algebra": "field-algebra-domain",
-    "keyDomain": "key-ciphertext-domain",
-    "identity": "program-version-identity",
-    "serialization": "serialization-canonicalization",
-}
-
-#: The four transformations an architecture has to authorise **by node**, and the class a node
-#: holding one it was never authorised to hold belongs to. Being licensed to open a secret is a
-#: statement about the operation; being allowed to is a statement about who is running it.
-AUTHORISED = {
-    "declassify": ("mayDeclassify", "open-reconstruct-policy"),
-    "combine": ("mayCombine", "open-reconstruct-policy"),
-    "key-switch": ("mayKeySwitch", "key-ciphertext-domain"),
-    "lift": ("mayLift", "field-algebra-domain"),
-}
-
-#: What each transformation is able to consume. This is the whole of a node's **local** check:
-#: a primitive validates the shape of what arrived and nothing else about it. Classification, key
-#: domain, identity and dialect are invisible here, which is why every composition failure in
-#: this problem can happen with every local check passing.
-CONSUMES = {
-    "carry": REPRESENTATIONS,
-    "split": ("plaintext",),
-    "combine": ("secret-share",),
-    "encrypt": ("plaintext",),
-    "decrypt": ("ciphertext",),
-    "key-switch": ("ciphertext",),
-    "lift": REPRESENTATIONS,
-    "commit": REPRESENTATIONS,
-    "prove": REPRESENTATIONS,
-    "seal": REPRESENTATIONS,
-    "declassify": REPRESENTATIONS,
-}
+# ---------------------------------------------------------------------------
+# Drawing one deployment from a seed
+# ---------------------------------------------------------------------------
 
 
 def _stream(seed: str, label: str) -> list[int]:
@@ -220,23 +138,8 @@ def _pick(s: list[int], i: int, choices):
 
 
 # ---------------------------------------------------------------------------
-# Naming the domains a deployment happens to draw
+# Building one node and one edge
 # ---------------------------------------------------------------------------
-
-#: Prime-ish moduli, named rather than valued: the point is that two of them are different, not
-#: what either of them is. A stack that hard-codes one is describing somebody else's deployment.
-ALGEBRAS = ("F-a1", "F-a2", "F-b1", "F-b2", "F-c1")
-
-#: Key domains. `key-client` is the one a result has to come back under; `key-eval` is the one the
-#: server works in; `key-boot` is what a bootstrap leaves behind. Coming home under the wrong one
-#: is not a bug the client can detect by looking at the ciphertext.
-KEY_DOMAINS = ("key-client", "key-eval", "key-boot")
-
-#: Serialization dialects. Two encoders that disagree about framing are two protocols that agree
-#: most of the time, which is worse than two that never agree.
-SERIALIZATIONS = ("canonical-v1", "canonical-v2", "adhoc")
-
-CASES = ("mpc-prover", "zkvm-exploit", "fhe-service")
 
 
 def _node(node_id: str, layer: str, domain: str, transformation: str) -> dict:
@@ -482,28 +385,12 @@ def graph(seed: str, case_id: str) -> dict:
     return _BUILDERS[case_id](seed)
 
 
-def nodes_by_id(built: dict) -> dict:
-    return {node["id"]: node for node in built["nodes"]}
-
-
-def edges_by_id(built: dict) -> dict:
-    return {edge["id"]: edge for edge in built["edges"]}
-
-
 # ---------------------------------------------------------------------------
 # Ground truth: what a boundary contract actually says
 #
 # Everything from here down exists so a hidden checker can tell a right answer from a
 # convincing one. The hidden checker imports this; a submission module must not.
 # ---------------------------------------------------------------------------
-
-
-def incoming(built: dict, node_id: str) -> tuple:
-    return tuple(edge for edge in built["edges"] if edge["target"] == node_id)
-
-
-def outgoing(built: dict, node_id: str) -> tuple:
-    return tuple(edge for edge in built["edges"] if edge["source"] == node_id)
 
 
 def _expected(arrivals: tuple, attribute: str):
@@ -774,22 +661,6 @@ def underwritten(built: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 #: Which boundary classes, when broken, cost which end-to-end property. One class can cost two,
-#: and that is the point: a repair chosen for privacy can leave soundness where it was.
-PROPERTY_OF = {
-    "data-classification": ("privacy",),
-    "statement-witness-binding": ("soundness", "binding"),
-    "field-algebra-domain": ("correctness", "soundness"),
-    "key-ciphertext-domain": ("correctness", "privacy"),
-    "program-version-identity": ("binding", "soundness"),
-    "serialization-canonicalization": ("binding",),
-    "open-reconstruct-policy": ("privacy",),
-    "randomness-preprocessing-lifetime": ("soundness", "privacy"),
-    "trust-collusion-assumption": ("privacy",),
-    "artifact-publication": ("privacy",),
-    "cost-communication-boundary": ("availability",),
-}
-
-
 def properties_at_risk(built: dict) -> tuple[str, ...]:
     """Every end-to-end property this architecture no longer has, sorted."""
     out: set = set()
@@ -893,7 +764,11 @@ BREAKS = {
     "a-party-cannot-run-what-it-was-handed": ("mpc-prover", "node", "party-b", "transformation"),
 }
 
-VARIANTS = tuple(BREAKS)
+# `VARIANTS` is the participant-visible half of this table -- the names, which `make inspect` has
+# always printed -- so it is defined in `participant/lab.py` and imported above. What each name
+# breaks is not, and the pairing is pinned here rather than derived so that adding a variant on
+# one side and forgetting the other fails at import rather than at grading time.
+assert tuple(BREAKS) == VARIANTS, "BREAKS and participant.lab.VARIANTS have drifted apart"
 
 #: What each node-level break moves its target to. Written out rather than derived, because the
 #: interesting thing about each of these is which specific place it ended up in.
@@ -1245,3 +1120,91 @@ def selection_truth(use_case: dict) -> dict:
 def health_token(seed: str) -> str:
     joined = "|".join(f"{case}:{len(graph(seed, case)['edges'])}" for case in CASES)
     return hashlib.sha256(f"health:{seed}:{joined}".encode()).hexdigest()[:16]
+
+
+# ---------------------------------------------------------------------------
+# What a participant may see for this deployment
+# ---------------------------------------------------------------------------
+
+
+def _wire_graph(built: dict) -> dict:
+    """One architecture as JSON: the same nodes, edges, policy and obligations, as plain data.
+
+    `show.py` turns it back into the dict shape the starter is written against (see
+    `show.architecture`). Nothing is dropped and nothing is added -- the round trip is pinned by
+    `tests/public/test_stack.py` and by `scripts/ac26-w6-stack-design.test.ts`.
+    """
+    return {
+        "caseId": built["caseId"],
+        "nodes": [dict(node) for node in built["nodes"]],
+        "edges": [dict(edge) for edge in built["edges"]],
+        "policy": {
+            key: (
+                value
+                if isinstance(value, int)
+                else [list(group) for group in value]
+                if key == "distinctDomains"
+                else list(value)
+            )
+            for key, value in built["policy"].items()
+        },
+        "obligations": {
+            edge_id: {
+                attribute: [value, boundary]
+                for attribute, (value, boundary) in promises.items()
+            }
+            for edge_id, promises in built["obligations"].items()
+        },
+    }
+
+
+def public_payload(seed: str) -> dict:
+    """Everything a participant may see for this deployment. Carries data, not code.
+
+    Exactly what `make inspect` has always printed and what the starter's own import list has
+    always handed over: the three sound architectures, the thirteen deployments to diagnose, and
+    the eight briefs. The public tests hand the sound `mpc-prover` graph and the briefs straight
+    to the learner's own functions as their arguments, so a submission holds them at runtime by
+    construction; withholding them here would hide them from `show.py` and from nobody else (the
+    same reading as ac26-w2-private-aggregate's shares).
+
+    The broken architectures travel for the same reason. Diagnosing them **is** the exercise, and
+    `starter/stack.py` has always named `broken(seed, variant)` as something a learner is given.
+    What does not travel is the rule that made them: `BREAKS` names, per variant, which node or
+    edge was changed and which attribute -- identically on every seed -- so it answers `contracts`
+    and `diagnosis` on the hidden labels as well as on this one. `_MOVED` and `_break_value` go
+    with it.
+
+    Nor does any verdict about what is here. `violations`, `first_broken`, `properties_at_risk`,
+    `constrained`, `underwritten`, `load_bearing`, `repair_cost`, `counterexample_exists` and
+    `selection_truth` are the eight checkpoints, so none of them is computed into this payload --
+    including the crossing count, which `show.py` has always printed and which is therefore
+    carried as the plain list of boundary-crossing edge ids it has always been, not as the
+    `maxCrossings` comparison that decides `cost-communication-boundary`.
+
+    And none of `h0`..`h3` -- each a different draw of every architecture, every break and every
+    brief, and every checkpoint is graded on those and on `transfer`'s own derived seed -- is
+    reachable from this payload, which is what makes them unreachable rather than merely unnamed.
+    """
+    return {
+        "healthToken": health_token(seed),
+        "cases": [_wire_graph(graph(seed, case)) for case in CASES],
+        # The crossing count `make inspect` prints, as the ids it counts. A structural fact about
+        # a graph a learner is holding, and no part of any answer: what decides
+        # `cost-communication-boundary` is this list measured against `policy["maxCrossings"]`,
+        # and that comparison stays behind with `_cost_violations`.
+        "crossings": {case: list(crossings(graph(seed, case))) for case in CASES},
+        "variants": {variant: _wire_graph(broken(seed, variant)) for variant in VARIANTS},
+        "useCases": [
+            {
+                "id": use_case["id"],
+                "holders": use_case["holders"],
+                "computedBy": use_case["computedBy"],
+                "checkedByOutsider": use_case["checkedByOutsider"],
+                "resultVisibleTo": use_case["resultVisibleTo"],
+                "publishes": list(use_case["publishes"]),
+                "holds": list(use_case["holds"]),
+            }
+            for use_case in use_cases(seed)
+        ],
+    }
