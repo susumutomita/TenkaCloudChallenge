@@ -104,8 +104,14 @@ checkers = tuple(getattr(check_report, phase) for phase in {phases!r})
 # Keep private callable references, then remove the checker package and path before
 # importing participant code. The submission must not replace a hidden check through
 # Python's shared module cache.
+#
+# Issue 591: this used to scrub only "tests" -- but check_report already resolved
+# `from fixtures.generate import ...` while loading, which leaves fixtures and
+# fixtures.generate cached in sys.modules. Python's import statement checks that cache
+# before sys.path, so a submission's own `import fixtures` returned the cached module
+# regardless of the path removal below. Evicting fixtures too closes that.
 for module_name in tuple(sys.modules):
-    if module_name == "tests" or module_name.startswith("tests."):
+    if module_name == "tests" or module_name.startswith("tests.") or module_name == "fixtures" or module_name.startswith("fixtures."):
         sys.modules.pop(module_name, None)
 while {root!r} in sys.path:
     sys.path.remove({root!r})
