@@ -1,19 +1,35 @@
-"""The group, the signing service, and the audit log the learner is handed.
+"""Seed derivation, the audit log, and the two generators that are not measured.
 
-The curve arithmetic and the signature scheme are provided here: the previous two
-problems built them. What the learner writes is the attack, and then the fix.
+The curve arithmetic and the signature scheme are provided to the learner: the previous
+two problems built them. They live in `participant/schnorr.py` and are re-exported here,
+so this module and the hidden suite keep importing them under the names they always had.
+What the learner writes is the attack, and then the fix.
 
 The scenario is an audit log. It holds what such a log usually holds -- message, public
 key, commitment R, response z -- and not the secret key. Somewhere in it, one signer
 reused a commitment. Two accepting transcripts under the same R are two equations in two
 unknowns, and the unknown you do not already have is the secret key.
 
-Three nonce generators are shipped, and the difference between them is the whole of the
-last two checkpoints:
+Issue 537/538 (Issue 543 option B2): this module does **not** ship in the participant
+image any more (see ../Dockerfile). What it holds that a learner must not be handed:
+
+  * `audit_log` returns `victim_secret` and `victim_public` beside the records. That is
+    the `hunt` checkpoint's answer, as a value.
+  * `secret_key` derives every key in this deployment from the seed and a label, and the
+    participant container has `FLAG_SEED` in its environment. With this function a
+    learner could compute the hidden labels' keys in their own container and hard-code
+    them into a submission rather than attacking anything.
+  * `deterministic_nonce` is the `repair` checkpoint's answer, with a docstring saying
+    why it works and what has to go into the hash.
+
+Three nonce generators exist, and the difference between them is the whole of the last
+two checkpoints:
 
   * `fixed_nonce`      -- the same k every time. Fails immediately.
   * `truncated_nonce`  -- a real hash, then thrown away down to a handful of bits. Looks
-                          random in a log and collides by the birthday bound.
+                          random in a log and collides by the birthday bound. This is the
+                          one the `collision` checkpoint measures, so it is the one that
+                          lives in `participant/schnorr.py`.
   * `deterministic_nonce` -- a hash of the secret key AND the message. Deterministic,
                           which sounds alarming, and is the one that does not collide.
 
@@ -24,6 +40,20 @@ model for signing anything real.
 from __future__ import annotations
 
 import hashlib
+
+# The supplied half. Re-exported rather than redefined so there is exactly one
+# definition of the protocol the log records, and the participant image and the grading
+# image cannot drift apart.
+from participant.schnorr import (  # noqa: F401 - re-exported for the hidden suite
+    DOMAINS,
+    NONCE_SPACE,
+    Group,
+    Point,
+    _encode_point,
+    challenge,
+    sign_with,
+    truncated_nonce,
+)
 
 # (p, a, b, gx, gy, n): toy curves whose generator has the stated PRIME order, so every
 # non-zero scalar mod n is usable and z = k + e*x mod n behaves like the real thing.
@@ -47,104 +77,6 @@ SECP256K1 = (
     0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8,
     0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141,
 )
-
-DOMAINS = ("tenkacloud/ac26/schnorr/v1", "tenkacloud/ac26/other-protocol/v1")
-
-
-class Point:
-    __slots__ = ("params", "x", "y")
-
-    def __init__(self, params, x, y) -> None:
-        self.params = params
-        self.x = x
-        self.y = y
-
-    @property
-    def is_infinity(self) -> bool:
-        return self.x is None
-
-    def __eq__(self, other) -> bool:
-        return (
-            isinstance(other, Point)
-            and other.params == self.params
-            and (other.x, other.y) == (self.x, self.y)
-        )
-
-    def __hash__(self) -> int:
-        return hash((self.params, self.x, self.y))
-
-    def __repr__(self) -> str:
-        return "O" if self.is_infinity else f"({self.x}, {self.y})"
-
-    def __neg__(self):
-        return self if self.is_infinity else Point(self.params, self.x, (-self.y) % self.params[0])
-
-    def __add__(self, other):
-        p, a = self.params[0], self.params[1]
-        if self.is_infinity:
-            return other
-        if other.is_infinity:
-            return self
-        if self.x == other.x and (self.y + other.y) % p == 0:
-            return Point(self.params, None, None)
-        if self == other:
-            slope = (3 * self.x * self.x + a) * pow(2 * self.y, -1, p) % p
-        else:
-            slope = (other.y - self.y) * pow(other.x - self.x, -1, p) % p
-        x = (slope * slope - self.x - other.x) % p
-        return Point(self.params, x, (slope * (self.x - x) - self.y) % p)
-
-    def __rmul__(self, scalar: int):
-        return self.scalar_mul(scalar)
-
-    def scalar_mul(self, scalar: int):
-        if scalar < 0:
-            return (-self).scalar_mul(-scalar)
-        result = Point(self.params, None, None)
-        addend = self
-        while scalar:
-            if scalar & 1:
-                result = result + addend
-            addend = addend + addend
-            scalar >>= 1
-        return result
-
-
-class Group:
-    """A curve, its generator, and the generator's order."""
-
-    def __init__(self, p, a, b, gx, gy, n) -> None:
-        self.p, self.a, self.b, self.n = p, a, b, n
-        self.params = (p, a, b)
-        self.generator = Point(self.params, gx, gy)
-
-    def contains(self, point: Point) -> bool:
-        if not isinstance(point, Point) or point.params != self.params:
-            return False
-        if point.is_infinity:
-            return True
-        left = (point.y * point.y) % self.p
-        right = (point.x**3 + self.a * point.x + self.b) % self.p
-        return left == right
-
-    def point(self, x, y) -> Point:
-        return Point(self.params, x % self.p, y % self.p)
-
-    def infinity(self) -> Point:
-        return Point(self.params, None, None)
-
-    def as_public(self) -> dict:
-        """What a submission is handed. Never a secret."""
-        return {
-            "p": self.p,
-            "a": self.a,
-            "b": self.b,
-            "n": self.n,
-            "gx": self.generator.x,
-            "gy": self.generator.y,
-            "coordinate_bytes": (self.p.bit_length() + 7) // 8,
-            "scalar_bytes": (self.n.bit_length() + 7) // 8,
-        }
 
 
 def _stream(seed: str, label: str) -> list[int]:
@@ -181,35 +113,6 @@ def messages(seed: str, label: str, count: int = 4) -> list[bytes]:
     return [bytes(s[4 * i : 4 * i + 1 + (s[i] % 20)]) for i in range(count)]
 
 
-def challenge(domain: str, commitment: Point, public: Point, message: bytes, group: Group) -> int:
-    """The Fiat-Shamir challenge, with everything bound. Built in the previous problem."""
-    domain_bytes = domain.encode("utf-8")
-    preimage = b"".join(
-        [
-            len(domain_bytes).to_bytes(4, "big"),
-            domain_bytes,
-            len(message).to_bytes(4, "big"),
-            message,
-            _encode_point(commitment, group),
-            _encode_point(public, group),
-        ]
-    )
-    return int.from_bytes(hashlib.sha256(preimage).digest(), "big") % group.n
-
-
-def sign_with(nonce_value: int, secret: int, message: bytes, group: Group) -> dict:
-    """One audit-log record. Note what it does NOT contain."""
-    public = group.generator.scalar_mul(secret)
-    commitment = group.generator.scalar_mul(nonce_value)
-    e = challenge(DOMAINS[0], commitment, public, message, group)
-    return {
-        "message": message,
-        "public_key": (public.x, public.y),
-        "commitment": (commitment.x, commitment.y),
-        "response": (nonce_value + e * secret) % group.n,
-    }
-
-
 def message_with_different_challenge(
     first: bytes,
     candidate: bytes,
@@ -241,18 +144,6 @@ def fixed_nonce(secret: int, message: bytes, group: Group) -> int:
     return 1 + (secret % 1)  # always 1
 
 
-def truncated_nonce(seed: str, secret: int, message: bytes, group: Group) -> int:
-    """A genuine hash, then thrown away down to a few bits.
-
-    This is the interesting failure: the log looks fine. Every k is different-looking,
-    every signature verifies, and nothing is obviously wrong -- but the nonce space is
-    small enough that two of them collide by the birthday bound long before anyone
-    worries about it. "Looks random" is not entropy.
-    """
-    digest = hashlib.sha256(f"{seed}:{secret}:{message!r}".encode()).digest()
-    return 1 + (int.from_bytes(digest, "big") % NONCE_SPACE)
-
-
 def deterministic_nonce(secret: int, message: bytes, group: Group) -> int:
     """A hash of the secret AND the message.
 
@@ -261,15 +152,13 @@ def deterministic_nonce(secret: int, message: bytes, group: Group) -> int:
     and the same signature, and two DIFFERENT messages cannot collide without a hash
     collision. Binding the key matters too -- hashing the message alone would give two
     signers the same nonce for the same message.
+
+    This is the `repair` checkpoint's answer. It stays out of the participant image.
     """
     digest = hashlib.sha256(
         b"nonce/v1" + secret.to_bytes(32, "big") + len(message).to_bytes(4, "big") + message
     ).digest()
     return 1 + (int.from_bytes(digest, "big") % (group.n - 1))
-
-
-# Small enough that a collision turns up within a log a learner can actually read.
-NONCE_SPACE = 64
 
 
 def audit_log(seed: str, label: str, group: Group) -> dict:
@@ -336,14 +225,67 @@ def audit_log(seed: str, label: str, group: Group) -> dict:
     }
 
 
-
-def _encode_point(point: Point, group: Group) -> bytes:
-    width = (group.p.bit_length() + 7) // 8
-    if point.is_infinity:
-        return b"\x00" * (2 * width)
-    return point.x.to_bytes(width, "big") + point.y.to_bytes(width, "big")
-
-
 def health_token(seed: str) -> str:
     group = toy_group(seed)
     return hashlib.sha256(f"health:{seed}:{group.p}:{group.n}".encode()).hexdigest()[:16]
+
+
+def _record_as_public(record: dict) -> dict[str, object]:
+    """One log row, as JSON. Exactly the four fields the log has always shown.
+
+    A malformed row travels as the malformed thing it is -- a missing field is missing
+    here too -- because "some rows are broken" is a fact about the log that `make
+    inspect` has always shown and that `parse_record` is graded on handling.
+    """
+
+    def _point(value: object) -> object:
+        if not isinstance(value, (tuple, list)) or len(value) != 2:
+            return value
+        return list(value)
+
+    payload: dict[str, object] = {}
+    if "message" in record:
+        message = record["message"]
+        payload["message"] = message.hex() if isinstance(message, bytes) else message
+    for name in ("public_key", "commitment"):
+        if name in record:
+            payload[name] = _point(record[name])
+    if "response" in record:
+        payload["response"] = record["response"]
+    return payload
+
+
+def public_payload(seed: str) -> dict[str, object]:
+    """Everything a participant may see for this deployment. Carries values, not code.
+
+    This is exactly what `make inspect` has always printed and nothing more: the health
+    token, this deployment's group, the public label's audit log row by row, and the size
+    of the truncated generator's output space.
+
+    What does not travel is `audit_log`'s other two return values. `victim_secret` is the
+    `hunt` checkpoint's answer outright, and `victim_public` names which of the log's
+    keys is the one to recover -- half of the same answer, since confirming a candidate
+    against a named public key is the check the attack is supposed to arrive at. The
+    records themselves are the material the learner is meant to work on, including the
+    malformed rows, the row that parses and does not verify, and the second signer under
+    the same commitment; none of them says which pair is the solvable one.
+
+    The public label is not a graded label. The hidden phases draw `h0`, `h1` and `h2`,
+    each with its own group, its own keys and its own log, from the same seed by a
+    derivation (`secret_key`, `audit_log`) that ships only in the verifier image.
+    """
+    group = toy_group(seed)
+    log = audit_log(seed, "public", group)
+    return {
+        "healthToken": health_token(seed),
+        "group": {
+            "p": group.p,
+            "a": group.a,
+            "b": group.b,
+            "n": group.n,
+            "gx": group.generator.x,
+            "gy": group.generator.y,
+        },
+        "nonceSpace": NONCE_SPACE,
+        "records": [_record_as_public(record) for record in log["records"]],
+    }

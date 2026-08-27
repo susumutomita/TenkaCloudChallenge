@@ -257,9 +257,9 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   `sha256-compress-digest`, `ac26-w2-linear-shares`, split by #590, #564, #596 and #563).
   #538 was closed on that evidence.
 
-  What the sweep does **not** settle, and what keeps #543 open: **12 problems still
+  What the sweep does **not** settle, and what keeps #543 open: **11 problems still
   `COPY verifier/` into their participant stage** —
-  `ac26-w3-{nonce-reuse,ntt-roots}`, `ac26-w4-{arithmetization,proof-pipeline}`,
+  `ac26-w3-ntt-roots`, `ac26-w4-{arithmetization,proof-pipeline}`,
   and the eight `ac26-w6`/`w7` ones above. That is the structural shape #543 was opened on,
   and the owner chose B (separate verifier container) over A (accept and document).
   Grep for the shape rather than trusting a plain `^COPY verifier/`:
@@ -421,6 +421,38 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   payload is the field family, the legal orders in each (divisibility, the necessary
   half, always printed), and the two fixed example domains. Reach for that reading when
   the fixtures module is innocent and the hidden checker is not.
+
+  `ac26-w3-nonce-reuse` came off the list in #608, and it is the first in this class
+  whose leaked material was an **answer as a value in `fixtures/`**, not a rule in the
+  hidden checker. Both standard probes read **0 of 300 before the split as well as
+  after** — `fixtures/generate.py` defines none of the eight names `starter/recover.py`
+  asks for, so the name-based detector reported it zero times and the reachability count
+  is unchanged at 0 across the PR, in both directions (the restore-the-leak run puts
+  `COPY fixtures/ tests/ verifier/` back and the count stays 0 while the two new tests go
+  red). The guard-removal control is flat, so the reference at 8/8 (300/300) is the
+  positive control. #603's third probe is what speaks: a submission transcribed from the
+  two shipped files — `deterministic_nonce` copied verbatim as `safe_nonce`, and the
+  hidden checker's `_really_accepts` copied verbatim beside the three conditions
+  `check_detect`'s own failure branches state — scores **2 of 8 checkpoints, 70 of 300
+  points** (`detect` and `repair`), with no reasoning past copying. Worse than the points:
+  `audit_log` returns `victim_secret` and `victim_public`, and `secret_key` derives every
+  key in the deployment from the `FLAG_SEED` the participant container carries in its
+  environment — so the hidden labels' keys were computable in the learner's own container
+  and hard-codable into a submission. That path is not measurable by any of the three
+  probes (the grading subprocess gets `PATH` only, no seed), which is why the file list,
+  not a score, is the evidence for it.
+
+  It also adds one thing to the worked examples that every later split on this list needs
+  to check: **a supplied half the submission itself must import**. `collision` grades a
+  measurement of `truncated_nonce`, so `starter/recover.py` names the module by name.
+  #597's guard takes the problem root off `sys.path` for the submission's import, so after
+  the move a learner's natural top-level `from participant.schnorr import ...` resolves to
+  nothing and *every* checkpoint fails on an import error — the reference only survives
+  because it imports inside function bodies. The fix is one line in the RUNNER: preload
+  `participant.schnorr` before the guard and leave it in `sys.modules`, which the guard
+  never evicts. Measured: a submission that writes only `collision_experiment` with that
+  top-level import scores 1 of 8, and `from fixtures.generate import *` still scores 0.
+  Check this whenever the split moves something the *starter* tells the learner to call.
 
   Two consequences for reporting. `scripts/check-answer-reachability.ts` only ever sees
   the participant image, so a finding count says nothing about this path — never write

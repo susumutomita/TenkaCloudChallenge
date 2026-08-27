@@ -194,6 +194,18 @@ SPLIT_PORTAL_MODULES = {
     # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
     # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
     "ac26-w3-ec-group": "participant.server",
+    # Issue 537/538 (Issue 543 option B2): same move. fixtures/generate.py's audit_log
+    # returns victim_secret and victim_public beside the records the hunt checkpoint is
+    # graded on, secret_key derives every key in the deployment from the FLAG_SEED the
+    # participant container already carries, and deterministic_nonce is the repair
+    # checkpoint's answer with a docstring explaining it; tests/hidden/check_recover.py
+    # holds _really_accepts, the acceptance rule detect is graded on. All shipped in the
+    # single participant stage. The supplied half (group, challenge, sign_with, and the
+    # truncated generator the collision checkpoint measures) moved to
+    # participant/schnorr.py, which the verifier stage copies on its own.
+    # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
+    # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
+    "ac26-w3-nonce-reuse": "participant.server",
     # Issue 537/538: same move. verifier/server.py's own _check_avalanche compared a
     # submission directly against a plain, seed-derived avalanche_distance defined in
     # the same file, and _check_properties/_check_storage compared against

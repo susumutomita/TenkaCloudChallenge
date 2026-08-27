@@ -1,8 +1,22 @@
-# Every port binds to 127.0.0.1 only. This problem has no network surface for the
-# learner to attack; the whole challenge is local reasoning.
+# The Workbench is reachable only through a host-loopback publish path and has no
+# masqueraded route to the outside world. The verifier is not published at all: it is
+# reachable only from the Workbench, over the internal `lab` network, which carries no
+# gateway -- `workshop-host` exists only because Docker cannot publish a port from an
+# internal-only network.
+#
+# Issue 537/538: this used to be a single service that was both the participant-facing
+# Portal and the process that runs the hidden suite, so `fixtures/generate.py` and
+# `tests/hidden/check_recover.py` shipped in the same image a learner's own `make build`
+# produced. `audit_log` there returns `victim_secret` -- the `hunt` checkpoint's answer
+# as a value -- and `secret_key` derives every key in this deployment from the seed the
+# participant container already has in its environment. This is a plain, non-general
+# two-service split (see ac26-w3-fft-domain / ac26-w3-ec-group /
+# ac26-w2-private-aggregate / ac26-w4-commit-open for the same shape elsewhere in this
+# catalog) -- not a new mechanism. The published port and the `/verify` URL are
+# unchanged: the Workbench accepts `/verify` on 18103 as before and forwards it inward.
 name: ac26-w3-nonce-reuse
 services:
-  verifier:
+  workbench:
     build:
       context: .
       dockerfile: Dockerfile
@@ -11,9 +25,18 @@ services:
       target: participant
     environment:
       FLAG_SEED: ${FLAG_SEED:?FLAG_SEED must be provided by the platform}
-      VERIFY_PORT: "18103"
+      WORKBENCH_PORT: "18103"
+      VERIFIER_URL: http://verifier:18152/verify
+      # Issue 543 option B2: `fixtures/` is not in the participant image any more, so
+      # `show.py` reads this deployment's public half from the verifier instead.
+      # PortalEditorSupport forwards this one variable (and only this one) into those
+      # subprocesses.
+      VERIFIER_PUBLIC_URL: http://verifier:18152/public
     ports:
       - "127.0.0.1:18103:18103"
+    depends_on:
+      verifier:
+        condition: service_healthy
     read_only: true
     tmpfs:
       - /tmp
@@ -21,8 +44,69 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:18103/api/config', timeout=2).read()",
+        ]
+      interval: "2s"
+      timeout: "3s"
+      retries: 20
+      start_period: "2s"
+    # The rlimits in participant/server.py bound the child processes it starts. These
+    # bound the server itself, which is the process that would still be standing if a
+    # submission found a way past them.
+    mem_limit: 1g
+    pids_limit: 128
+    restart: "no"
+    networks:
+      - lab
+      - workshop-host
+
+  verifier:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: verifier
+    environment:
+      FLAG_SEED: ${FLAG_SEED:?FLAG_SEED must be provided by the platform}
+      VERIFY_PORT: "18152"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:18152/healthz', timeout=2).read()",
+        ]
+      interval: "2s"
+      timeout: "3s"
+      retries: 20
+      start_period: "2s"
     # The rlimits in verifier/server.py bound the submission's child process. These bound
     # the verifier itself, which is the process that would still be standing if a
     # submission found a way past them.
     mem_limit: 1g
     pids_limit: 128
+    restart: "no"
+    networks:
+      - lab
+
+networks:
+  lab:
+    internal: true
+  workshop-host:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+      com.docker.network.bridge.host_binding_ipv4: "127.0.0.1"
