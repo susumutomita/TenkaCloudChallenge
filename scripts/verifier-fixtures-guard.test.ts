@@ -141,6 +141,17 @@ const NO_RUNNER_EXCEPTION = "asm-worst-case-latency";
  * `fixtures/` holds the answers under other names, rename the import before concluding the
  * control is flat.
  *
+ * `ac26-bridge-properties` is the one entry left, and it was re-measured on that reading
+ * rather than inherited: its `fixtures/generate.py` carries `TRUTH`, the property matrix
+ * `classify` is graded on, and its reference imports that exact name, so it looks like the same
+ * shape. It is not. Four of its five checkpoints are *answer* checkpoints, which no
+ * submission-side import reaches; only `transfer` (40 of 200) is code, and `transfer` re-runs
+ * the learner's own counterexample generators. Measured: shipped starter 0/200, a
+ * `from fixtures.generate import TRUTH` submission beside the shipped generators **0/200**,
+ * the same submission beside correct generators 40/200, the reference 40/200, the star import
+ * 0/200. The 40 is only reachable by having already done the other four checkpoints' work for
+ * real, so the exception is what it says it is.
+ *
  * `ac26-w6-cosnark-privacy` completes the Week 6 co-SNARK trio. Its split moved three
  * modules rather than one -- `participant/mpc.py` (the supplied sharing runtime, sink and
  * policy vocabulary), `participant/specimens.py` (the eight provers as runnable objects,

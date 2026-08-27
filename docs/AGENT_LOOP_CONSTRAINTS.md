@@ -256,7 +256,22 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   So one of the ten exceptions was worth the whole problem and the standard probe could not
   see it. **On any problem whose `fixtures/` implements the graded work under other names,
   rename the import before recording a flat control** — a star import is a name match, not a
-  reachability measurement. `ac26-bridge-properties` has not been re-measured this way.
+  reachability measurement.
+
+  `ac26-bridge-properties`, the one entry left, **was re-measured on that reading and the
+  exception holds** — do not repeat this. Its `fixtures/generate.py` carries `TRUTH`, the
+  property matrix `classify` is graded on, seed-independent, and its reference imports that
+  exact name, so it looks like the same shape. It is not, for two reasons that are worth
+  separating. Four of its five checkpoints are **answer** checkpoints, which no submission-side
+  import reaches at all; only `transfer` (40 of 200) is code. And `transfer` re-runs the
+  learner's own counterexample generators, so a `from fixtures.generate import TRUTH`
+  submission scores **0 of 200 beside the shipped starter's generators** and 40 only beside
+  correct ones — the same 40 the reference scores, reached by having already done the other
+  four checkpoints' work for real. Measured: shipped starter 0/200, `TRUTH` + shipped
+  generators 0/200, `TRUTH` + correct generators 40/200, reference 40/200, star import 0/200.
+  Its participant stage is already B2-split (`tests/public/`, `participant/`, `starter/`,
+  `show.py` and nothing else), so the participant-image path is closed too. The exception is
+  what it says it is.
 
   **How to measure a probe without Docker** (§6 says there may be no daemon). Import the
   problem's `verifier/server.py` as a module with `FLAG_SEED` set and call its own
