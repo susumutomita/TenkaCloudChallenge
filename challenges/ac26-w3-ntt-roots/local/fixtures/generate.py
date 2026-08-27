@@ -94,3 +94,26 @@ def worked_example() -> dict[str, object]:
         "points": points,
         "values": [evaluate(coefficients, point, prime) for point in points],
     }
+
+
+def public_payload(seed: str) -> dict[str, object]:
+    """Everything a participant may see for this deployment. Carries values, not code.
+
+    This is exactly what `make inspect` has always printed and nothing more: the field
+    family, this deployment's sample of it with the orders that divide p-1 in each, and
+    the one worked transform. The example is a fixed triple on every deploy and is one of
+    the pairs `tests/public/test_ntt.py` already uses, so it narrows no graded run.
+
+    What does not travel is the decision procedure. Divisibility -- `orders_for` -- is the
+    necessary half and was always printed; deciding whether an element has the order it is
+    supposed to have is the problem, and the module that answers it
+    (`tests/hidden/check_ntt.py`, whose `has_order` is that decision written out from the
+    definition, next to `naive_omega`) stays in the verifier image.
+    """
+    return {
+        "healthToken": health_token(seed),
+        "primes": list(PRIMES),
+        "maxOrder": MAX_ORDER,
+        "labFields": lab_fields(seed),
+        "workedExample": worked_example(),
+    }
