@@ -269,13 +269,14 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   #538 was closed on that evidence.
 
   What the sweep does **not** settle, and what keeps #543 open: **7 problems still
-  `COPY verifier/` into their participant stage** — **5** as of #615: the `ac26-w6`/`w7`
-  ones above, less the three cosnark problems
+  `COPY verifier/` into their participant stage** — **4** as of #616: the `ac26-w6`/`w7`
+  ones above, less the three cosnark problems and `ac26-w7-capstone-demo`
   (`ac26-w4-proof-pipeline` came off in #611, `ac26-w6-cosnark-beaver` in #613,
-  `ac26-w6-cosnark-linear` in #614, `ac26-w6-cosnark-privacy` in #615). The five left,
-  scanned on `c86cd00`, are
+  `ac26-w6-cosnark-linear` in #614, `ac26-w6-cosnark-privacy` in #615,
+  `ac26-w7-capstone-demo` in #616). The four left,
+  scanned on `533fcc4`, are
   `ac26-w6-stack-design`, `ac26-w6-zkvm-exploit-predicate`,
-  `ac26-w6-zkvm-witness-binding`, `ac26-w7-capstone-demo` and `ac26-w7-capstone-design`
+  `ac26-w6-zkvm-witness-binding` and `ac26-w7-capstone-design`
   — count them yourself rather than trusting this sentence; the one-line check is
   a per-stage scan of each `local/Dockerfile`'s `COPY` list, not a `grep` over the whole
   file, because every problem's `verifier` and `author` stages copy `verifier/` legitimately.
@@ -689,6 +690,41 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   transcription probe stalls at a checkpoint whose rule you did copy, check the starter
   before concluding the material was not reachable — the participant surface is part of what
   a transcriber reads.
+
+  `ac26-w7-capstone-demo` came off the list in #616, and it is the one to read when the
+  supplied half is **named by the starter's own stubs**. `starter/capstone.py` tells the
+  learner that `experiment_privacy` is written against `tiny_settings()` and
+  `randomness_space`, and every stub is typed on `Setting`, so the submission itself imports
+  the supplied module at grading time — #608's rule, and the reason the runner preloads
+  `participant.lab` ahead of #597's guard. That pairing is also what took this problem off
+  Issue #591's ten-verifier exception list, verified against the reference rather than by
+  inspection: **8/8 (300/300) with the guard in place**.
+
+  Both standard probes read **0 of 300 before the split as well as after**
+  (`fixtures/generate.py` defines none of the ten names `starter/capstone.py` asks for, so
+  the name-based detector reported it zero times), the guard-removal control is flat — so the
+  reference is the usable positive control, as with #600 — and the reachability count is
+  unchanged at 0 throughout in both directions: the restore-the-leak run puts
+  `COPY fixtures/ tests/ verifier/` back into the participant stage and the count stays 0
+  while the new stage test **and** `scripts/verify-course-workbenches.py` both go red.
+  #603's third probe is what speaks: a submission transcribed from the two shipped files,
+  with no reasoning past copying, scored **8 of 8 checkpoints, 300 of 300 points** — the
+  #584 pole. `_spec_well_formed` is the whole transcript rule `check_transcript` applies and
+  therefore the spec `run` is built from; `_spec_view` is `view`'s answer verbatim; `_leaks`
+  is `experiment_privacy` verbatim, down to the coalition sweep the problem exists to make a
+  learner discover; `check_threshold` states the threshold; `check_scope` names the two
+  property sets; and `_mutants` enumerates the nine defects `detects` is graded against, so
+  the suite could be written to exactly the shape it is scored on.
+
+  Two things it adds to the worked examples. Its `GET /public` carries a **vocabulary that is
+  already an answer** — `scope`'s `claims` and `non_goals` are `PROVIDED` and `NOT_PROVIDED`,
+  and `make inspect` has always printed both, because the problem asks the learner to work out
+  *why* the missing pair is missing rather than which pair it is. #605's reading applies:
+  withholding it would hide it from `show.py` and from nobody else. What stays behind is
+  `hidden_settings`, the six settings every checkpoint is actually graded on. And with no
+  Docker daemon (§6), the two-tree probe showed the participant tree at five modules with none
+  of the hidden material in it, the reference at 8/8 through the Workbench proxy into the
+  verifier, and the shipped starter at 0/8 — which no file-list assertion establishes on its own.
 
   #586 is the last of the Week 5 chain and the first in this class with **no supplied
   half at all**: `fixtures/generate.py` there is entirely seed derivation plus the graded
