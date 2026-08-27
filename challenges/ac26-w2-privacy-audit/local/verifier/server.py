@@ -80,12 +80,24 @@ import json, os, sys
 sys.path.insert(0, {root!r})
 sys.path.insert(0, {workspace!r})
 from tests.hidden import check_auditor
+# Issue 591: fixtures/ and tests/hidden/ stay on disk in this image for grading (Issue 543
+# option B2 only stopped shipping them to the participant image), so without this the
+# submission's own import statement could reach them directly.
+_hidden_modules = {{
+    name: sys.modules.pop(name)
+    for name in tuple(sys.modules)
+    if name in ("tests", "fixtures") or name.startswith(("tests.", "fixtures."))
+}}
+while {root!r} in sys.path:
+    sys.path.remove({root!r})
 try:
     import auditor
 except Exception as error:
     print(json.dumps({{"failures": ["submission could not be imported: " + type(error).__name__]}}))
     sys.stdout.flush()
     os._exit(0)
+sys.path.insert(0, {root!r})
+sys.modules.update(_hidden_modules)
 failures = []
 for name in {phases!r}:
     failures.extend(getattr(check_auditor, name)(auditor, {seed!r}))
