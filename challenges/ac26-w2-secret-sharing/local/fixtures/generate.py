@@ -82,3 +82,40 @@ def reference_shares(seed: str, label: str = "public") -> list[int]:
 def health_token(seed: str) -> str:
     cfg = setting(seed)
     return hashlib.sha256(f"health:{seed}:{cfg['p']}:{cfg['n']}".encode()).hexdigest()[:16]
+
+
+def public_payload(seed: str) -> dict[str, object]:
+    """Everything a participant may see for this deployment. Carries values, not functions.
+
+    The single source `show.py`, `verifier/server.py`'s `GET /public` and
+    `tests/public/test_sharing.py` all build their view from. Every field below is
+    something `make inspect` already printed or the public tests already imported before
+    Issue 543 option B2, so the split changes where a participant reads it, not what they
+    may see.
+
+    What is deliberately absent is this module itself. `reference_shares` above builds a
+    correct split -- the `share` half of the `share-and-reconstruct` checkpoint -- and the
+    two `*_randomness` helpers are the retry loops the graded run draws from. Shipping the
+    module put all of that, and `tests/hidden/check_sharing.py`'s assertions beside it, in
+    the image a learner's own `make build` produced. Serving the derived values keeps
+    `make inspect` and the public tests working without shipping the derivation.
+
+    `secret` is here because it always was: `tests/public/test_sharing.py` has to hand a
+    secret to `share()` to check the round trip at all, so this value has been reachable
+    from the participant surface since the problem was written. It is not worth points --
+    `complete_shares` is graded against every element of F_p, not this one -- and `show.py`
+    still does not print it, which is what keeps the `hides-the-secret` reasoning intact.
+    """
+    cfg = setting(seed)
+    p, n, secret = cfg["p"], cfg["n"], cfg["secret"]
+    return {
+        "params": {"p": p, "n": n},
+        "secret": secret,
+        "healthToken": health_token(seed),
+        "shareRandomness": share_randomness(seed, "public", n - 1, p, secret),
+        "rerandomizationRandomness": rerandomization_randomness(seed, "rr", n - 1, p),
+        # The n-1 shares `show.py` displays. The last one is withheld here as well as
+        # there: printing it would hand over the answer to `complete_shares` for this
+        # deployment's own secret.
+        "partialShares": reference_shares(seed)[:-1],
+    }

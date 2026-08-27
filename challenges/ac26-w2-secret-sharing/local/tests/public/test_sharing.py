@@ -6,6 +6,7 @@ property that makes secret sharing worth doing. The hidden verifier does.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -14,50 +15,79 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "starter"))
 
-from fixtures.generate import (  # noqa: E402
-    rerandomization_randomness,
-    setting,
-    share_randomness,
-)
 import sharing  # noqa: E402
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 
+def _load_public_evidence() -> dict:
+    """This deployment's modulus, party count and drawn randomness -- what `show.py`
+    prints, plus the secret this file has always had to hand `share()` to check a round
+    trip at all.
+
+    Issue 537/538 (Issue 543 option B2): this file used to import `fixtures.generate`
+    directly. That module's `reference_shares` builds a correct split of this
+    deployment's secret, and it shipped in the same image as
+    `tests/hidden/check_sharing.py`, so it does not ship in the `participant` Docker
+    stage at all any more (see ../../Dockerfile). This deployment's own verifier is the
+    only source for the public half now: `PUBLIC_EVIDENCE_JSON` when the Portal has
+    already fetched it, or `VERIFIER_PUBLIC_URL` fetched directly when it has not.
+    """
+    injected = os.environ.get("PUBLIC_EVIDENCE_JSON")
+    if injected:
+        return json.loads(injected)
+    verifier_public_url = os.environ.get("VERIFIER_PUBLIC_URL")
+    if verifier_public_url:
+        from urllib.request import urlopen
+
+        with urlopen(verifier_public_url, timeout=10) as response:  # noqa: S310
+            return json.loads(response.read().decode("utf-8"))
+    # Neither is set: this only resolves when `fixtures/` is actually on disk, which is
+    # true for a checkout (this file run directly, e.g. by
+    # scripts/ac26-w2-secret-sharing.test.ts) and the verifier/author Docker stages, and
+    # never inside a built `participant` image -- so this branch does not reopen the
+    # leak above.
+    from fixtures.generate import public_payload
+
+    return public_payload(SEED)
+
+
+PUBLIC = _load_public_evidence()
+
+
 def _shares() -> list[int]:
-    cfg = setting(SEED)
+    par = PUBLIC["params"]
     return sharing.share(
-        cfg["secret"],
-        cfg["n"],
-        cfg["p"],
-        share_randomness(SEED, "public", cfg["n"] - 1, cfg["p"], cfg["secret"]),
+        PUBLIC["secret"],
+        par["n"],
+        par["p"],
+        PUBLIC["shareRandomness"],
     )
 
 
 def test_share_returns_one_value_per_party() -> None:
-    cfg = setting(SEED)
-    assert len(_shares()) == cfg["n"]
+    assert len(_shares()) == PUBLIC["params"]["n"]
 
 
 def test_shares_are_field_elements() -> None:
-    cfg = setting(SEED)
+    p = PUBLIC["params"]["p"]
     for value in _shares():
-        assert isinstance(value, int) and 0 <= value < cfg["p"]
+        assert isinstance(value, int) and 0 <= value < p
 
 
 def test_the_full_set_reconstructs_the_secret() -> None:
-    cfg = setting(SEED)
-    assert sharing.reconstruct(_shares(), cfg["p"]) == cfg["secret"] % cfg["p"]
+    p = PUBLIC["params"]["p"]
+    assert sharing.reconstruct(_shares(), p) == PUBLIC["secret"] % p
 
 
 def test_rerandomize_returns_one_value_per_party() -> None:
-    cfg = setting(SEED)
+    par = PUBLIC["params"]
     fresh = sharing.rerandomize(
         _shares(),
-        cfg["p"],
-        rerandomization_randomness(SEED, "rr", cfg["n"] - 1, cfg["p"]),
+        par["p"],
+        PUBLIC["rerandomizationRandomness"],
     )
-    assert len(fresh) == cfg["n"]
+    assert len(fresh) == par["n"]
 
 
 def main() -> int:
