@@ -401,6 +401,14 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   exceeds the timeout. Use the individual commands instead
   (`bun run check:problem`, `scripts/validate-problems.ts`,
   `scripts/solvability-audit.ts --problem <id>`).
+- **`bun run validate` takes ~40 minutes here and ends red on a test that is green in
+  CI.** Measured on `dde79a5` (2026-08-27): 5715 pass, 1 fail, 2308s. The one failure is
+  `scripts/stackstack-ship.test.ts` — `startInstance`, "the pass instance never became
+  healthy" — and the same commit's `main` run passed all thirteen CI jobs, `suite (1..4/4)`
+  included. So it is this container, not a regression: do not "fix" it, and do not read a
+  local red `validate` as a reason to hold a PR. Run the individual validators plus
+  `bun test scripts/<the files you touched>.test.ts`, which is what actually covers a
+  catalog change and finishes in seconds.
 - **There may be no Docker daemon at all.** The hourly cloud routine's container has run
   without one (`/var/run/docker.sock` absent), so `make build`, `make test` and
   `docker compose` cannot run there — a container split cannot be validated by starting
