@@ -91,13 +91,12 @@ operation を suppress したりしません。この分離により、permissio
 - 1 MiB 超の overlay または 16 MiB 超の artifact
 - metadata から参照されていない `simulation.json`
 
-compatibility workflow は pin した TenkaCloudSimulator revision を checkout し、Simulator
-capability manifest を生成してこの checkout を scan します。missing、insufficient、invalid
+platform のcompatibility processはpinしたTenkaCloudSimulator revisionからSimulator
+capability manifestを生成し、catalogをscanします。missing、insufficient、invalid
 requirement は simulation world 作成前に loud に失敗します。report は決定論的で、credential
 や答えを含みません。
-`bun run validate` は catalog 所有 workload workspace も lifecycle script 無効の
-frozen lockfile から install してから test と strict typecheck を実行します。そのため、
-fresh clone が残存する nested dependency に依存しません。
+runtime固有のtestは問題workspace内に残し、そのruntimeを変更するときに実行します。
+catalog全体のvalidatorでは実行しません。
 
 ## 現行 cloud catalog の監査
 

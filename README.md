@@ -2,173 +2,32 @@
 
 > 日本語版: [README.ja.md](./README.ja.md)
 
-[![CI](https://github.com/susumutomita/TenkaCloudChallenge/actions/workflows/ci.yml/badge.svg)](https://github.com/susumutomita/TenkaCloudChallenge/actions/workflows/ci.yml)
-[![License: Apache 2.0](https://img.shields.io/github/license/susumutomita/TenkaCloudChallenge)](./LICENSE)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#contributing)
-[![Bun](https://img.shields.io/badge/Bun-1.3.11-black?logo=bun)](https://bun.sh)
-[![AWS CloudFormation](https://img.shields.io/badge/AWS-CloudFormation-orange?logo=amazonaws)](https://aws.amazon.com/cloudformation/)
+This repository is the public problem catalog for the [TenkaCloud](https://github.com/susumutomita/TenkaCloud) platform. It contains the problem payloads that the platform packages and deploys; the platform repository owns deployment, scoring dispatch, and integration.
 
-> **Open problem library for the [TenkaCloud](https://github.com/susumutomita/TenkaCloud) platform** — real-time AWS competition problems (CTF / SRE / migration) deployed straight from this repo via CloudFormation.
+## Catalog layout
 
-TenkaCloud runs head-to-head **Battles** and self-paced **Challenges** on real AWS accounts. One problem = one directory under this repo. The platform mounts this repo as a git submodule, bundles it into `source.zip`, and deploys each problem's `template.yaml` into the participant's account. **You can ship a new problem with a PR to this repo alone** — no platform-repo changes needed.
+- [`challenges/`](./challenges/) contains self-paced problems.
+- [`battles/`](./battles/) contains head-to-head problems.
+- Each problem owns its `metadata.json` and runtime artifacts (`template.yaml`, `local/`, portal components, or services as applicable).
+- [`stackstack-base/`](./stackstack-base/) is the shared runtime used by the StackStack problem family.
+- [`SCHEMA.json`](./SCHEMA.json) and [`SIMULATION_SCHEMA.json`](./SIMULATION_SCHEMA.json) define the catalog contracts.
+- [`index.json`](./index.json) and [`cost-report.json`](./cost-report.json) are generated catalog artifacts consumed by downstream tooling.
 
-## ✨ Why this repo exists
-
-- **Authoring without platform context.** Adding a problem requires only `metadata.json` + `template.yaml` (+ optional portal slot UI and side services). Everything else — scoring, portal rendering, disruption scheduling — is driven generically by the platform from your metadata.
-- **One source of truth.** `metadata.json` powers the catalog UI, the scoring engine, and the participant portal wiring. The platform side is a generic dispatcher (ADR-012).
-- **Schema-validated in CI.** Every problem is checked against [`SCHEMA.json`](./SCHEMA.json) on every push and PR.
-- **Simulator compatibility is explicit.** Cloud problems are checked against a pinned TenkaCloudSimulator capability manifest; only behavior that IaC/metadata cannot express goes in a versioned [`simulation.json` overlay](./SIMULATION.md).
-- **Open by design.** This repo holds the **base problem set** that ships under Apache 2.0 (matching the TenkaCloud platform repo). Spoiler-bearing private problems get a separate private repo via the ADR-008 S3 path.
-
-Each problem ships with a per-problem README (English primary, Japanese mirror) describing the story, the solve path, and the learning goals. Browse [`battles/`](./battles/) and [`challenges/`](./challenges/) for the live catalog.
-
-## 🚀 Quick start
+## Validation
 
 ```bash
-# 1. Install Bun (one-time)
-curl -fsSL https://bun.sh/install | bash
-
-# 2. Clone and install
-git clone https://github.com/susumutomita/TenkaCloudChallenge.git
-cd TenkaCloudChallenge
-bun install
-
-# 3. Validate every problem against the schema + cross-refs
+bun install --frozen-lockfile --ignore-scripts
 bun run validate
 ```
 
-That's all you need for authoring. AWS credentials are only required when running the *platform* (CDK / Lambda) — not for catalog work in this repo.
+The root validator checks metadata, required bilingual READMEs, simulation overlays, and catalog cross-references. The pull-request CI runs only this lightweight validation. Runtime code and participant-facing tests stay with the problem that owns them and should be run when that problem changes.
 
-## ➕ Add a new problem
-
-Decide in this order: **what to teach → which runtime that needs → which scoring format.**
-Runtime (Docker / real cloud / Simulator / composite) and game style (Challenge / Battle)
-are two independent axes — `Challenge` and `Battle` describe scoring, not where the problem
-runs. The full decision guide is [`docs/authoring/runtime-and-style.md`](./docs/authoring/runtime-and-style.md).
+After adding or changing a problem, regenerate the machine-readable catalog:
 
 ```bash
-bun install
-bun run setup                          # one-time: enable the auto-reindex git hook
-bun run new --runtimes                 # what each runtime is for, and what it costs you
-bun run new my-cool-problem --runtime docker/compose --style challenge
+bun run reindex
 ```
 
-`bun run new <id> --runtime <runtime> --style <challenge|battle>` copies the smallest
-real problem for that runtime (so it passes validation from the start) and regenerates
-the catalog index for you. A Docker author never starts from a CloudFormation starter.
-Both flags are non-interactive, so CI and agents can scaffold deterministically. Then:
+Do not expose secrets, flags, hidden checks, or reference answers on participant-visible surfaces. Deployment, production operations, and platform integration remain the responsibility of the TenkaCloud repository.
 
-1. **Edit `metadata.json`.** Conform to [`SCHEMA.json`](./SCHEMA.json). Key fields: `id`, `name`, `category`, `difficulty`, `scoring`, `endpoints`, `disruptions`. (Use `--from <sampleId>` to start from a closer example.)
-2. **Edit the runtime artifacts.** `local/docker-compose.yml` + `local/app/` for `docker/compose`; `template.yaml` for `aws/cloudformation` (it must accept `NamePrefix` / `TenkaCloudAccountId` / `ExternalId` and create the required `ParticipantViewerRole`).
-3. **(Optional) Add `portal/<slot>.tsx`** for problem-specific UI in the participant portal, and **`services/`** for any docker-compose / Lambda code your template pulls down (e.g. via EC2 UserData).
-4. **`bun run check:problem <id>`** for your problem alone, then **`bun run validate`** for the whole catalog. Set `status` to `ready`, then open a PR.
-
-`bun run new <battles|challenges> <id>` still works during the migration and prints a
-warning pointing at the new form.
-
-You never hand-edit `index.json` / `cost-report.json` — `bun run new` regenerates
-them, and after `bun run setup` the pre-commit hook keeps them fresh on every commit.
-(Skipped the hook? Run `bun run reindex` before committing — CI verifies the catalog
-matches your metadata with `--check`.)
-
-A platform-repo maintainer then bumps the submodule pointer and the next `make deploy` ships your problem.
-
-> For full schema documentation and worked examples see [`CATALOG.md`](./CATALOG.md).
-
-## 🏗️ Repo layout
-
-```
-.
-├── battles/                       # Battle (real-time, head-to-head)
-│   └── <id>/
-│       ├── metadata.json          # Source of truth (catalog + scoring + portal wiring)
-│       ├── template.yaml          # Single-page CFn template (the deploy body)
-│       ├── portal/                # Optional: <slot>.tsx (participant portal UI)
-│       └── services/              # Optional: docker-compose / Lambda code
-├── challenges/                    # Challenge (self-paced)
-│   └── <id>/
-│       ├── metadata.json
-│       └── template.yaml
-├── SCHEMA.json                    # JSON Schema for metadata.json (synced with platform)
-├── SIMULATION_SCHEMA.json         # Versioned optional Simulator overlay contract
-├── index.json                     # Catalog index (built from every metadata.json)
-├── CATALOG.md                     # Full catalog docs + schema walkthrough
-├── scripts/validate-problems.ts   # Local + CI validator
-└── .github/workflows/ci.yml       # Schema + cross-ref CI
-```
-
-## 🎮 The design bar — fun, not a drill
-
-New competition problems are held to one bar: a player should call them **fun**, not homework. Four properties — codified in the [`new-problem`](./.claude/skills/new-problem/SKILL.md) authoring skill:
-
-1. **Discovered flag, never a memorized one.** The flag is a random per-deploy value you can only obtain by *performing the intended AWS operation* — never a concept name typed from memory.
-2. **Fix by settings, never create-by-hand.** The template deploys resources in a broken state; the solve is to *modify* an existing resource. Players never create top-level resources, so `delete-stack` leaves no orphaned, billable garbage.
-3. **A real "aha".** A production skill felt viscerally — `curl` that *hangs* vs *refuses*, an incident reconstructed from evidence — not a flashcard.
-4. **Story with stakes.** The shared TenkaCloud world (the previous SRE's leftovers, the CTO), with a fresh incident every time.
-
-## 🎯 Catalog
-
-The live catalog is the set of problem directories: browse [`challenges/`](./challenges/) and [`battles/`](./battles/) — one directory = one problem, each with its own `metadata.json` + `template.yaml`. `index.json` is the generated machine index (run `bun run reindex` after adding/removing a problem; do not hand-edit). This README intentionally does not duplicate the per-problem list, so the catalog never drifts from the source.
-
-## 🔄 Delivery flow
-
-```
-[contributor] open a PR that adds or updates problems
-       │
-       ▼
-[merge to main] CI runs `bun run validate` against every metadata.json
-       │
-       ▼
-[platform repo (= TenkaCloud) bumps the submodule pointer]
-       │   git submodule update --remote problems
-       │
-       ▼
-[make deploy] prepare-source-bundle.sh bundles `problems/`
-       into source.zip → S3 → CodeBuild deploys template.yaml
-```
-
-## 🧠 Architecture references (platform side)
-
-These ADRs live in the [platform repo](https://github.com/susumutomita/TenkaCloud) and explain the runtime contract this repo plugs into:
-
-- **ADR-008** — Private problem payload separation (S3 path for spoiler-bearing add-on problems)
-- **ADR-010** — API-first operator path (CLI / MCP)
-- **ADR-012** — One problem = one plugin (3-asset model: `metadata.json` + `template.yaml` + optional `portal/services`)
-
-## 🤝 Contributing
-
-PRs are welcome — especially new problems, schema fixes, and English-doc polish.
-
-**Read [`AGENT.md`](./AGENT.md) before opening your first PR** — it documents the invariants the validator enforces and the footguns that have bitten this repo before. If you use Claude Code, type **`/new-problem challenge`** or **`/new-problem battle`** to scaffold a new problem interactively (the skill lives at `.claude/skills/new-problem/`). See the [skill usage guide](./.claude/skills/new-problem/README.md) for invocation details and the non–Claude-Code path.
-
-- Run `bun run validate` locally before opening a PR.
-- Keep `metadata.json` Japanese at the top level and English under `i18n.en` (the platform's locale fallback chain is `en → ja → top-level`). README files are English-primary with `README.ja.md` mirrors.
-- One problem per PR keeps reviews tractable.
-- Discuss new problem ideas in an Issue first if they need new scoring kinds or portal slots — those touch the platform repo.
-
-See [`CATALOG.md`](./CATALOG.md) for the full schema walkthrough.
-
-## 🏢 Enterprise / internal training
-
-If you are considering TenkaCloud (and this problem catalog) for enterprise or
-internal training use — hands-on security/operations drills, evaluation or
-onboarding exercises, custom/private problem sets, or instructor-led workshops —
-please feel free to reach out via the
-[contact form](https://forms.gle/djVprYmq3hFgJA7P9) or
-[GitHub Discussions](https://github.com/susumutomita/TenkaCloud/discussions).
-
-TenkaCloud is open source, but we would love to learn more about real-world
-training needs, custom exercise requirements, and how organizations want to run
-hands-on operations/security drills.
-
-## 📜 License
-
-[Apache License 2.0](./LICENSE) — problems and tooling alike. Matches the [TenkaCloud platform repo](https://github.com/susumutomita/TenkaCloud)'s license so contributions can flow between the two without compatibility friction. If you ship problems with spoiler content, host them in a separate private repo and deliver them via the ADR-008 S3 path.
-
-## 🔗 Related
-
-- **Platform repo (CDK / Lambda / 3 SPAs):** <https://github.com/susumutomita/TenkaCloud>
-- **JSON Schema:** [`SCHEMA.json`](./SCHEMA.json)
-- **Simulator overlay contract:** [`SIMULATION.md`](./SIMULATION.md)
-- **Full catalog docs:** [`CATALOG.md`](./CATALOG.md)
-- **Authoring design bar (skill):** [`.claude/skills/new-problem/SKILL.md`](./.claude/skills/new-problem/SKILL.md)
+The catalog is licensed under Apache-2.0.

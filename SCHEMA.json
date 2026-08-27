@@ -711,7 +711,7 @@
       "description": "同一ディレクトリからの相対パスで指す CFn テンプレートファイル (ペライチ)。デプロイ時にこのテンプレートが competitor account の CFn にアップロードされる。 [ADR-023] 新規問題は `runtime.entry` の宣言を推奨。 両方宣言する場合は `runtime.entry === cfnTemplate` でなければ validator が reject する (= 互換期間の整合性制約)。"
     },
     "runtime": {
-      "description": "[ADR-023 / Composite Runtime (TenkaCloud#2058)] 問題が deploy される対象 cloud と engine を宣言する optional field。 単一 provider 形式 (`{provider, engine, entry}`) と複合形式 (`{kind:'composite', targets:[...]}`) の oneOf。 単一形式で現在 executable な組み合わせは `provider=aws` + `engine=cloudformation` と `provider=docker` + `engine=compose` (local play)。 schema は将来の provider / engine 値を reject せず受理する (= reservation)。 実行可否は CLI validator (= `scripts/tenkacloud-problem.ts validate`) と deploy worker で enforce する。 未宣言の問題は legacy `cfnTemplate` から `{provider:'aws', engine:'cloudformation', entry:cfnTemplate}` に正規化される (= 後方互換)。",
+      "description": "[ADR-023 / Composite Runtime (TenkaCloud#2058)] 問題が deploy される対象 cloud と engine を宣言する optional field。 単一 provider 形式 (`{provider, engine, entry}`) と複合形式 (`{kind:'composite', targets:[...]}`) の oneOf。 単一形式で現在 executable な組み合わせは `provider=aws` + `engine=cloudformation` と `provider=docker` + `engine=compose` (local play)。 schema は将来の provider / engine 値を reject せず受理する (= reservation)。 実行可否は platform validator と deploy worker で enforce する。 未宣言の問題は legacy `cfnTemplate` から `{provider:'aws', engine:'cloudformation', entry:cfnTemplate}` に正規化される (= 後方互換)。",
       "oneOf": [
         {
           "type": "object",
@@ -1082,7 +1082,7 @@
             "kind": {
               "const": "multi-verify",
               "description": "[TenkaCloud#2252] container 問題の複数チェックポイント版。 各 check の提出を問題コンテナの /verify に checkpointId 付きで委譲し、 check 単位で部分加点する。 runtime.provider=docker と併用する (CFn 問題では使えない)。 配点の正本は metadata (= container の points override は無効)。",
-              "aiContext": "checks[].label と hints は競技者に見える。 脆弱性名 (SQLi / XSS 等) を書かない (= AGENT.md §10 非スポイラー)。「公開バックアップ」のように現象・対象で書く。"
+              "aiContext": "checks[].label と hints は競技者に見える。脆弱性名 (SQLi / XSS 等) を書かない。「公開バックアップ」のように現象・対象で書く。"
             },
             "checks": {
               "type": "array",

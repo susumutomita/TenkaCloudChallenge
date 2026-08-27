@@ -123,8 +123,7 @@ problem has stopped teaching the distinction it exists to teach.
 Companion to Week 2 of the Advanced Cryptography Program 2026, pinned to
 `week2/README.md` and `week2/problems/toy-mpc/README.md`. It accompanies the official
 exercise's Part B (oblivious transfer and the GMW secret AND), which the rest of this
-track's Week 2 problems do not reach — see
-[`docs/curricula/advanced-cryptography-2026/curriculum.md`](../../docs/curricula/advanced-cryptography-2026/curriculum.md).
+track's Week 2 problems do not reach.
 
 Written without reading the official solution, template, or test modules;
 `spoilerPolicy` is `independent-reimplementation`.
