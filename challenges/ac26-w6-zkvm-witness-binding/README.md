@@ -200,11 +200,25 @@ own README, so nothing here is a shortcut through that assignment.
 ## Assurance scope
 
 Local mode is **self-paced, honor-system verification**. You own the machine, the Docker daemon,
-and the image, so nothing inside that image is out of your reach: `reference/` and
-`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than out
-of your way. The same is true of the replay verdicts and the disclosure answers the hidden
-checker compares against — a contract that imports them has bound nothing, and only you can
-decide not to.
+and the image, so nothing inside the image you build is hidden from you.
+
+What changed with Issue 537/538 is **which image holds what**. Grading runs in a second,
+unpublished container. `fixtures/`, `tests/hidden/` and `verifier/` exist only there, reachable
+from the Workbench over an internal network and never present on the Workbench's filesystem — so
+`make test` and `make inspect` start that container too (`make verifier-up` on its own starts it,
+`make verifier-down` stops it), and `show.py` and the public tests read this deployment's
+statement, image, siblings, witness, colliding pair and audited runs from its `GET /public`
+instead of importing the fixtures. Which of the fifteen receipts a verifier may accept and which
+of the ten runs gave the witness away stay behind that boundary, and so does the toy runner's own
+arithmetic; `reference/` and the mutation suite were already out of the image you build.
+
+What is still in your image on purpose is `participant/lab.py`: the vocabulary, the semantics
+profiles, the commitment, the image decoder, the two encoders and the toy `Env`. That is the half
+this problem hands over — nothing in it is graded, and your own submission imports it while it is
+being graded.
+
+That is a misdelivery boundary, not a confidentiality one: build the `verifier` or `author` stage
+yourself and you can read all of it.
 
 What the verifier does guarantee is narrower and real: a submission cannot hang or crash it, a
 checkpoint can only credit the id it echoes, results do not leak expected values, and the width,

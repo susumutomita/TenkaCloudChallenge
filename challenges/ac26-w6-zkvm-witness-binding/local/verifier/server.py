@@ -1,4 +1,23 @@
-"""POST /verify — the scoring seam. Loopback only, stdlib only.
+"""POST /verify — the scoring seam. Compose-internal only, stdlib only.
+
+Issue 537/538 (Issue 543 option B2): this used to be the same process that also served the
+Participant Portal's config, inspect, starter, public-test and prepare endpoints, in the single
+Docker stage a learner's own `make build` produced -- so `tests/hidden/check_guest.py` shipped
+in the learner's own image alongside it. That file holds a complete and correct implementation
+of four of the eight graded functions: `_encode` is `encode_statement`, `_run` is `run_guest`,
+`_journal` is `seal_journal`, and `_leaks` is the policy `leak_report` applies, with
+`_not_statements` and `_not_witnesses` enumerating every refusal three more of them are graded
+on. `fixtures/generate.py` shipped beside it with `_machine` (the same run again),
+`replay_truth` and `disclosure_truth`. A submission transcribed from those two files, with no
+reasoning past copying, scored 8 of 8 checkpoints (300 of 300 points).
+
+That Portal-facing surface now lives in `participant/server.py`, in a separate image (see
+../Dockerfile) that this process's own container never builds; this file, `fixtures/` and
+`tests/hidden/` are reachable only over the Compose-internal network (see
+../docker-compose.yml), never from the participant container's filesystem.
+
+`GET /public` below is what the participant image reads instead of importing
+`fixtures.generate`.
 
 Security contract (docs/curricula/advanced-cryptography-2026/TEMPLATE.md §/verify):
   - `checkpointId` is required and is echoed back verbatim. The platform fails closed
@@ -25,8 +44,11 @@ import sys
 import tempfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from fixtures.generate import public_payload  # noqa: E402 - after the sys.path insert above
 
 ROOT = Path(__file__).resolve().parents[1]
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
@@ -80,12 +102,33 @@ import json, os, sys
 sys.path.insert(0, {root!r})
 sys.path.insert(0, {workspace!r})
 from tests.hidden import check_guest
+# Issue 543 option B2: the supplied half lives outside `fixtures/` now, in `participant/lab.py`,
+# and `starter/guest.py` names it in its own docstring -- so a submission's natural top-level
+# `from participant.lab import ...` has to keep resolving. The guard below takes the problem
+# root off `sys.path`, so without preloading it here that import would fail and every
+# checkpoint would fail with it. It stays in `sys.modules` across the guard on purpose;
+# `fixtures` and `tests` do not.
+import participant.lab  # noqa: F401
+# Issue 591: fixtures/ and tests/hidden/ stay on disk in this image for grading (Issue 543
+# option B2 only stopped shipping them to the participant image), so without this the
+# submission's own import statement could reach them directly -- and `fixtures.generate` holds
+# `_machine`, `replay_truth` and `disclosure_truth`, while `tests.hidden.check_guest`
+# implements four of the eight graded functions outright.
+_hidden_modules = {{
+    name: sys.modules.pop(name)
+    for name in tuple(sys.modules)
+    if name in ("tests", "fixtures") or name.startswith(("tests.", "fixtures."))
+}}
+while {root!r} in sys.path:
+    sys.path.remove({root!r})
 try:
     import guest
 except Exception as error:
     print(json.dumps({{"failures": ["submission could not be imported: " + type(error).__name__]}}))
     sys.stdout.flush()
     os._exit(0)
+sys.path.insert(0, {root!r})
+sys.modules.update(_hidden_modules)
 phases = {phases!r}
 if phases:
     failures = []
@@ -155,67 +198,34 @@ def evaluate(checkpoint_id: str, submission: object) -> bool:
         return _run_submission(submission, CODE_CHECKPOINTS[checkpoint_id], SEED)
     return False
 
-# BEGIN GENERATED PORTAL EDITOR API
-from verifier.workbench import PortalEditorSupport
-
-_WORKBENCH = PortalEditorSupport(
-    root=ROOT,
-    seed=SEED,
-    problem_id='ac26-w6-zkvm-witness-binding',
-    problem_name='証明は valid だった。 ただし、 別の口座についての証明だった',
-    problem_name_en='The proof was valid. It was a proof about a different account',
-    description='zkVM が証明するのは 「そのプログラムが走った」 ことだけである。 **どの**プログラムか、 **どの**入力についてか、 **何を**主張しているのかは、 guest が bytes で言い切るしかない。 その contract — public statement・private witness・public journal — を書く。',
-    description_en='A zkVM proves that a program ran, and nothing else. Which program, about which inputs, asserting what — the guest has to say all of that out loud, in bytes. Write the contract: public statement, private witness, public journal.',
-    checkpoint_labels={'encoding': '同じ statement は同じ bytes、 違う statement は違う bytes', 'identity': 'どのプログラムの話かを、 走る bytes で名指す', 'ingestion': 'witness を通す扉は 1 つだけ', 'reexec': 'host の言い分は入力であって答えではない', 'journal': '公開してよいのは、 読者がすでに計算できるものだけ', 'replay': 'その receipt は、 その statement の証拠か', 'privacy': '承認された名前は、 承認ではない', 'transfer': '見たことのない target・claim・protocol version で'},
-    checkpoint_labels_en={'encoding': 'Same statement, same bytes; different statement, different bytes', 'identity': 'Name the program by the bytes that run', 'ingestion': 'The witness goes through one door', 'reexec': "The host's account is an input, not the answer", 'journal': 'Publish only what a reader could already compute', 'replay': 'Is this receipt evidence for this statement?', 'privacy': 'An approved name is not an approval', 'transfer': 'A target, a claim and a protocol version you have not seen'},
-    submitted_files=('guest.py',),
-    code_checkpoints=('encoding', 'identity', 'ingestion', 'reexec', 'journal', 'replay', 'privacy', 'transfer'),
-    checkpoints=('encoding', 'identity', 'ingestion', 'reexec', 'journal', 'replay', 'privacy', 'transfer'),
-    max_body_bytes=MAX_BODY_BYTES,
-    run_timeout_seconds=RUN_TIMEOUT_SECONDS,
-    max_output_bytes=MAX_OUTPUT_BYTES,
-    limit_fn=_limits,
-)
-# END GENERATED PORTAL EDITOR API
 
 class Handler(BaseHTTPRequestHandler):
-    """Serve the Portal editor API and preserve the existing /verify contract."""
+    """Serve the /verify contract, and nothing a participant-facing client needs.
+
+    The Portal editor API is deliberately absent: it lives in `participant/server.py`, which
+    runs in the image a learner builds. Everything here runs in the image that carries
+    `fixtures/` and `tests/hidden/`, and is never published to the host.
+    """
 
     timeout = REQUEST_TIMEOUT_SECONDS
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's API
-        from urllib.parse import urlsplit
-
         path = urlsplit(self.path).path
-        if path == "/api/config":
-            self._respond(200, _WORKBENCH.config_payload())
+        if path == "/healthz":
+            self._respond(200, {"ok": True})
             return
-        if path == "/api/inspect":
-            self._respond(200, _WORKBENCH.inspect_payload())
-            return
-        if path == "/api/starter":
-            self._respond(200, _WORKBENCH.starter_payload())
+        if path == "/public":
+            self._respond(200, public_payload(SEED))
             return
         self._respond(404, {"error": "not found"})
 
     def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's API
-        from urllib.parse import urlsplit
-
         path = urlsplit(self.path).path.rstrip("/") or "/"
-        if path not in ("/verify", "/api/test", "/api/prepare"):
+        if path != "/verify":
             self._respond(404, {"error": "not found"})
             return
         body = self._read_json_body()
         if body is None:
-            return
-        if path == "/api/test":
-            self._respond(200, _WORKBENCH.run_public_tests(body.get("files")))
-            return
-        if path == "/api/prepare":
-            self._respond(
-                200,
-                _WORKBENCH.prepare_submissions(body.get("files"), body.get("manual")),
-            )
             return
 
         checkpoint_id = body.get("checkpointId")
@@ -228,7 +238,11 @@ class Handler(BaseHTTPRequestHandler):
                 },
             )
             return
-        submission = _WORKBENCH.unwrap_submission(checkpoint_id, body.get("submission"))
+        # Every checkpoint here is a code checkpoint, so a submission is raw source. The
+        # Workbench's `tcw1.` seal path has nothing to unwrap for this problem; if a manual
+        # checkpoint is ever added, duplicate ac26-w4-commit-open's seal check into this file
+        # rather than trusting an already-unwrapped value from the Workbench.
+        submission = body.get("submission")
         try:
             correct = evaluate(checkpoint_id, submission)
         except Exception:  # noqa: BLE001 - a broken checkpoint must fail closed
@@ -283,15 +297,13 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(content)
 
 def main() -> None:
-    port = int(os.environ.get("VERIFY_PORT", "18117"))
-    # Bind every interface *inside the container*, not the container's loopback. A published
-    # port is forwarded to the container's bridge address, so a server listening only on
-    # 127.0.0.1 inside the container accepts nothing from outside it — the connection is
-    # opened and closed without a response, and the platform can never score the problem.
+    port = int(os.environ.get("VERIFY_PORT", "18161"))
+    # Bind every interface *inside the container*, not the container's loopback: the Workbench
+    # reaches this process over the Compose-internal `lab` network, and a server listening only
+    # on 127.0.0.1 inside the container would accept nothing from it.
     #
-    # The loopback restriction that matters is on the host, and it lives in
-    # docker-compose.yml, which publishes `127.0.0.1:<port>:<port>`. Nothing outside this
-    # machine can reach the verifier either way.
+    # This service publishes no port at all (see ../docker-compose.yml). Nothing outside the
+    # `lab` network can reach the verifier, and that network carries no gateway.
     HTTPServer(("0.0.0.0", port), Handler).serve_forever()  # noqa: S104 - see above
 
 

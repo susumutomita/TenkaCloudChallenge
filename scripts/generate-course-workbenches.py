@@ -228,6 +228,17 @@ PORTAL_PACKAGES = {
     # participant/lab.py beside the eight practice guests, and the Portal moved to
     # participant/.
     "ac26-w6-zkvm-exploit-predicate": "participant",
+    # Issue 537/538 (Issue 543 option B2): tests/hidden/check_guest.py implements four of the
+    # eight graded functions outright -- _encode is encode_statement, _run is run_guest,
+    # _journal is seal_journal and _leaks is the policy leak_report applies -- and
+    # _not_statements/_not_witnesses enumerate every refusal three more are graded on.
+    # fixtures/generate.py left the participant stage with it: it holds _machine (the same run
+    # again), replay_truth and disclosure_truth. A submission transcribed from the two scored
+    # 8 of 8 checkpoints (300 of 300 points). The supplied half -- the vocabulary, the
+    # semantics profiles, the commitment, the image decoder, the two encoders and the toy
+    # runner -- stayed with the participant as participant/lab.py, and the Portal moved to
+    # participant/.
+    "ac26-w6-zkvm-witness-binding": "participant",
     # Issue 537/538 (Issue 543 option B2): tests/hidden/check_prover.py states, phase by
     # phase, what every one of the eight checkpoints is graded on -- _Scenario.canonical is
     # the parser's answer and the malformed list beside it is the whole of what that stage

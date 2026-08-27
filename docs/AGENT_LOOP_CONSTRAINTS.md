@@ -239,6 +239,13 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   submission scores **0** on every one of the ten. Do not re-measure these; do not add the
   guard to them.
 
+  Eight of those ten have since come off that list, each in the same PR as its own B2 split
+  and never on its own (`ac26-w2-oblivious-transfer`, `ac26-w6-cosnark-{beaver,linear,privacy}`,
+  `ac26-w7-capstone-{demo,design}`, `ac26-w6-zkvm-{exploit-predicate,witness-binding}`): the
+  split moves the supplied helper out of `fixtures/`, which is exactly the objection the
+  exception recorded, so the guard becomes applicable and leaving it out would be half a fix.
+  `ac26-bridge-properties` and `ac26-w6-stack-design` are what is left.
+
   **How to measure a probe without Docker** (§6 says there may be no daemon). Import the
   problem's `verifier/server.py` as a module with `FLAG_SEED` set and call its own
   `evaluate(checkpoint_id, submission)` for each id in `CODE_CHECKPOINTS`. That is the real
@@ -269,16 +276,16 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   #538 was closed on that evidence.
 
   What the sweep does **not** settle, and what keeps #543 open: **7 problems still
-  `COPY verifier/` into their participant stage** — **2** as of the exploit-predicate split:
+  `COPY verifier/` into their participant stage** — **1** as of the witness-binding split:
   the `ac26-w6`/`w7`
   ones above, less the three cosnark problems and both capstones
   (`ac26-w4-proof-pipeline` came off in #611, `ac26-w6-cosnark-beaver` in #613,
   `ac26-w6-cosnark-linear` in #614, `ac26-w6-cosnark-privacy` in #615,
   `ac26-w7-capstone-demo` in #616, `ac26-w7-capstone-design` in #617,
-  `ac26-w6-zkvm-exploit-predicate` in the PR this paragraph was written for). The two left,
-  scanned on `ed39da3`, are
-  `ac26-w6-stack-design` and `ac26-w6-zkvm-witness-binding`
-  — count them yourself rather than trusting this sentence; the one-line check is
+  `ac26-w6-zkvm-exploit-predicate` in #618, `ac26-w6-zkvm-witness-binding` in the PR this
+  paragraph was written for). The one left, scanned on `accb4c8`, is
+  `ac26-w6-stack-design`
+  — count it yourself rather than trusting this sentence; the one-line check is
   a per-stage scan of each `local/Dockerfile`'s `COPY` list, not a `grep` over the whole
   file, because every problem's `verifier` and `author` stages copy `verifier/` legitimately.
   That is the structural shape #543 was opened on,
@@ -767,6 +774,44 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   the image a participant builds — the #585 shape, a participant surface naming a repository
   file the cloud participant does not have. **Check the READMEs for that sentence on every
   remaining split**: the Docker change is what makes an already-loose sentence false.
+
+  `ac26-w6-zkvm-witness-binding` came off the list next — the twin of
+  `ac26-w6-zkvm-exploit-predicate` and the last of the `COPY verifier/` shape but one — and it
+  is the one to read when **the starter's import list names data rather than helpers**. Nine of
+  the names it told a learner to import (`scenario`, `statement`, `image`, `sibling_images`,
+  `disclosures`, `replay_cases`, and the colliding pair it names in prose) are this deployment's
+  own objects, not code, so the carve line is not "supplied vs graded" but **code vs data**: the
+  vocabulary, the semantics profiles, the commitment, the image decoder, `naive_encode`,
+  `shuffled` and the toy `Env` moved to `participant/lab.py`, and the objects travel as values in
+  `GET /public` (image bodies as hex, the ten `Disclosure`s as their six channels), rebuilt on
+  the participant side by three small helpers in `show.py` the public tests import. #609's
+  pairing rule held again — this is #618's diff with names changed — and it came off Issue #591's
+  exception list on #613's pairing, verified against the reference rather than by inspection:
+  **8/8 (300/300) with the guard in place**, the runner preloading `participant.lab` ahead of it.
+
+  Both standard probes read **0 of 300 before the split as well as after**
+  (`fixtures/generate.py` defines none of the eight names `starter/guest.py` asks for, so the
+  name-based detector reported it zero times), there was no guard to remove beforehand so the
+  reference at 8/8 is the positive control, and the reachability count is unchanged at 0
+  throughout in both directions — the restore-the-leak run puts `COPY fixtures/ tests/ verifier/`
+  back into the participant stage and the count stays 0 while the new stage test goes red.
+  #603's third probe is what speaks: a submission transcribed from the two shipped files, with no
+  reasoning past copying, scored **8 of 8 checkpoints, 300 of 300 points** — the #584 pole. It is
+  the first on this list where the *same* answer was written out twice, once on each side of the
+  boundary: `tests/hidden/check_guest.py`'s `_run` and `fixtures/generate.py`'s `_machine` are
+  both `run_guest`, and beside them `_encode` is `encode_statement`, `_journal` is `seal_journal`,
+  `_leaks` is the policy `leak_report` applies, and `_not_statements`/`_not_witnesses` enumerate
+  every refusal three more checkpoints are graded on.
+
+  What it adds to the worked examples is a rule about the payload itself: **data can carry a
+  verdict implicitly**. `replay_truth` is not a table here, it is one line computed from the
+  fifteen replay rows (`sealed == offered and not edit and not drop`), so shipping the *rows* in
+  `GET /public` would have shipped the `replay` answer while looking like data. Only the ids
+  travel, which is also exactly what `make inspect` has always printed — check the payload for
+  values a verdict is a one-liner away from, not only for the verdict tables themselves. The ten
+  audited runs travel in full for the opposite reason: `leak_report` is developed against them
+  and the public tests hand one straight to it, while `disclosure_truth` — which `(channel,
+  name)` pair each gave away — stays behind.
 
   `ac26-w6-zkvm-exploit-predicate` came off the list next, and it is the one to read when
   **the split does not close the problem and the report has to say so**. The stage carried

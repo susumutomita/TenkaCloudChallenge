@@ -16,7 +16,6 @@ checkpoint at a time.
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
@@ -24,21 +23,32 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "starter"))
 
-from fixtures.generate import (  # noqa: E402
+from participant.lab import (  # noqa: E402
     DIGEST_HEX_LENGTH,
     JOURNAL_FIELDS,
     RUN_FIELDS,
     STATEMENT_FIELDS,
     Env,
-    disclosures,
-    scenario,
     shuffled,
+)
+from show import (  # noqa: E402
+    disclosure_record,
+    image_record,
+    public_evidence,
+    witness_record,
 )
 import guest  # noqa: E402
 
-SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
-BUILT = scenario(SEED, "public")
-IMAGE, STATEMENT, WITNESS = BUILT["image"], BUILT["statement"], BUILT["witness"]
+# Issue 537/538 (Issue 543 option B2): `fixtures/generate.py` does not ship in the participant
+# image any more -- it holds `_machine` (the whole of `run_guest`), `replay_truth` and
+# `disclosure_truth`. `show.public_evidence` reads `GET /public` over the Compose-internal
+# network (or `PUBLIC_EVIDENCE_JSON`, or the checkout's own fixtures when neither is set), and
+# this deployment's statement, image, witness and audited runs come from there.
+EVIDENCE = public_evidence()
+IMAGE = image_record(EVIDENCE["image"])
+STATEMENT = EVIDENCE["statement"]
+WITNESS = witness_record(EVIDENCE["witness"])
+DISCLOSURES = [disclosure_record(entry["disclosure"]) for entry in EVIDENCE["disclosures"]]
 
 
 def _loaded() -> Env:
@@ -95,9 +105,7 @@ def test_accept_receipt_takes_a_receipt_sealed_under_this_statement() -> None:
 
 
 def test_leak_report_returns_channel_and_name_pairs() -> None:
-    reported = guest.leak_report(
-        disclosures(SEED, "public")[0]["disclosure"], dict(STATEMENT), dict(IMAGE)
-    )
+    reported = guest.leak_report(DISCLOSURES[0], dict(STATEMENT), dict(IMAGE))
     assert isinstance(reported, (list, tuple))
     for pair in reported:
         assert isinstance(pair, (list, tuple)) and len(pair) == 2
