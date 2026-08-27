@@ -33,6 +33,7 @@ from fixtures.generate import (
     DROPPABLE,
     honest_witness,
     params,
+    public_payload,
     vulnerable_circuit,
 )
 
@@ -232,6 +233,11 @@ import json, os, sys
 sys.path.insert(0, {root!r})
 sys.path.insert(0, {workspace!r})
 from tests.hidden import check_policy
+# The residual evaluator is the supplied half -- given, not written by the learner -- so a
+# submission may legitimately import it by name. The guard below takes the problem root off
+# sys.path for the submission's own import, so preload it here and leave it in sys.modules,
+# which the guard never evicts (Issue 608's rule).
+import participant.evaluator  # noqa: F401
 # Issue 591: fixtures/ and tests/hidden/ stay on disk in this image for grading (Issue 543
 # option B2 only stopped shipping them to the participant image), so without this the
 # submission's own import statement could reach them directly.
@@ -304,12 +310,20 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's name
         path = urlsplit(self.path).path
-        # Compose's healthcheck, and nothing else. The Portal editor routes moved to
-        # participant/server.py with the split: serving any of them from here would put
-        # this image back on the participant's reading path, which is the whole thing
-        # Issue 525/543 is about.
+        # Compose's healthcheck and this deployment's public half, and nothing else. The
+        # Portal editor routes moved to participant/server.py with the split: serving any
+        # of them from here would put this image back on the participant's reading path,
+        # which is the whole thing Issue 525/543 is about.
         if path == "/healthz":
             self._respond(200, {"ok": True})
+            return
+        # `fixtures/generate.py` stopped shipping in the participant stage (Issue 543
+        # option B2) because `_ISZERO_HALVES` is `intended_circuit()`'s answer. The
+        # participant image reads the public half -- the parameters, the deployed
+        # circuit, the honest witnesses -- from here instead. `public_payload` carries
+        # no part of `_ISZERO_HALVES` beyond the half already in the deployed circuit.
+        if path == "/public":
+            self._respond(200, public_payload(SEED))
             return
         self._respond(404, {"error": "not found"})
 

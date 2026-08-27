@@ -24,6 +24,11 @@ services:
       FLAG_SEED: ${FLAG_SEED:?FLAG_SEED must be provided by the platform}
       WORKBENCH_PORT: "18094"
       VERIFIER_URL: http://verifier:18095/verify
+      # Issue 537/543 option B2: `fixtures/` does not ship in the participant image any
+      # more, so `show.py`, the Portal's inspect endpoint and the public tests read this
+      # deployment's parameters, deployed circuit and honest witnesses from here. The
+      # verifier is not published to the host, so this URL only resolves inside `lab`.
+      VERIFIER_PUBLIC_URL: http://verifier:18095/public
     ports:
       - "127.0.0.1:18094:18094"
     depends_on:

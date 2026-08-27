@@ -14,16 +14,22 @@ statement, because a constraint system is not a program.
 The vulnerable variant drops exactly one of them. Which one is seed-dependent, so a
 memorised counterexample does not carry.
 
-This module hands back INPUTS only: the deployed (already-broken) circuit and the
-honest witnesses for it. It deliberately does not export the complete/intended
-circuit, which constraint a given deployment is missing, or any pre-built forgery
-as their own callable values -- those are the answers to the build, audit and
-exploit checkpoints, and this module ships inside the participant's own image
-(see docs/curricula/advanced-cryptography-2026/TEMPLATE.md "Assurance scope").
-`vulnerable_circuit` below still has to make the same seed-derived choice
-internally to build the deployed circuit; it just never returns that choice, or
-the circuit it was chosen from, as a separate, directly reusable value. See
-scripts/ac26-w1-underconstraint.test.ts for the regression test pinning this.
+This module does not ship in the participant Docker stage (Issue 543 option B2).
+#533 stopped it exporting the complete circuit, the missing id, a forgery or the
+root-cause diagnosis as their own callable values, and that is still true -- but
+`_ISZERO_HALVES` below is both halves of the gadget as dicts, under the exact ids
+the checkpoints require, so `intended_circuit()` was a copy out of this file and
+`audit` and `repair` fell out of it as a set difference. Measured on the shipped
+image: transcription alone scored 3 of 6 checkpoints, and transcription plus a scan
+over the supplied evaluator scored 5 of 6 -- every checkpoint a code submission can
+reach. The participant image now reads this deployment's public half from the
+verifier's `GET /public` (see `public_payload` at the end of this file,
+participant/evidence.py and ../Dockerfile).
+
+`vulnerable_circuit` still makes the same seed-derived choice internally to build
+the deployed circuit; it just never returns that choice, or the circuit it was
+chosen from, as a separate, directly reusable value. See
+scripts/ac26-w1-underconstraint.test.ts for the regression tests pinning both.
 """
 
 from __future__ import annotations
@@ -110,3 +116,35 @@ def clean_witness(prm: dict[str, int]) -> dict[str, int]:
 
 def health_token(seed: str) -> str:
     return hashlib.sha256(f"health:{seed}:{params(seed)['p']}".encode()).hexdigest()[:16]
+
+
+def public_payload(seed: str) -> dict[str, object]:
+    """This deployment's public half, served by the verifier's `GET /public`.
+
+    Exactly what `make inspect` has always printed, and nothing this module knows
+    beyond it: the policy in words, the parameters, the circuit that was actually
+    deployed, the two honest witnesses, the is-zero gadget's two formulas (which
+    `starter/policy.py`'s own docstring already states) and the health token.
+
+    What stays behind is `_ISZERO_HALVES` and `DROPPABLE`. Between them they are the
+    two is-zero constraints as dicts, under the exact ids the checkpoints require --
+    which is `intended_circuit()`'s answer, and with it `audit` and `repair` as a set
+    difference. The deployed circuit below carries the surviving half, so a learner
+    still sees one of the two in its concrete form; deriving the other from the
+    formulas is the `build` checkpoint. See scripts/ac26-w1-underconstraint.test.ts.
+    """
+    prm = params(seed)
+    return {
+        "policy": "grant access iff the revocation counter is zero AND the issuer is recognised",
+        "parameters": prm,
+        "deployedCircuit": vulnerable_circuit(seed),
+        "honestWitnesses": {
+            "revokedCredential": honest_witness(prm),
+            "cleanCredential": clean_witness(prm),
+        },
+        "iszeroGadget": {
+            "iszero_a": "value * inv + out - 1 = 0",
+            "iszero_b": "value * out = 0",
+        },
+        "healthToken": health_token(seed),
+    }

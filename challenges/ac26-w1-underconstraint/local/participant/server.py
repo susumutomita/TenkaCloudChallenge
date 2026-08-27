@@ -14,10 +14,15 @@ derivation that replaced them lives in the grader, so shipping the grader alongs
 Workbench simply relocated the leak. The answer-deriving half now runs in a separate,
 unpublished image (see ../Dockerfile, ../docker-compose.yml).
 
-`fixtures/` deliberately stays in the participant stage, unlike the constraint-lab
-split: after #533 it hands back INPUTS only -- the deployed circuit, the policy
-parameters and the two honest witnesses, all of which `make inspect` prints for the
-learner anyway. Removing it would hide the problem statement, not an answer.
+Issue 537/543 option B2: `fixtures/` used to stay in this stage on the grounds that
+after #533 it handed back INPUTS only. That was wrong. `_ISZERO_HALVES` there is both
+halves of the is-zero gadget as dicts under the exact ids the checkpoints require, so
+`intended_circuit()` was a copy out of it and `audit` and `repair` fell out as a set
+difference; measured on the shipped image, transcription alone scored 3 of 6
+checkpoints and transcription plus a scan over the supplied evaluator scored 5 of 6 --
+every checkpoint a code submission can reach. `fixtures/` is out of this stage now, and
+the public half it also held is read from the verifier's `GET /public` (see
+evidence.py, ../show.py and the VERIFIER_PUBLIC_URL wiring in ../docker-compose.yml).
 """
 
 from __future__ import annotations
@@ -36,13 +41,7 @@ from urllib.request import Request, urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fixtures.generate import (
-    clean_witness,
-    health_token,
-    honest_witness,
-    params,
-    vulnerable_circuit,
-)
+from participant.evidence import public_evidence
 
 ROOT = Path(__file__).resolve().parents[1]
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
@@ -121,29 +120,16 @@ def config_payload() -> dict[str, object]:
     }
 
 
-def inspect_payload(seed: str) -> dict[str, object]:
-    """Build the seeded evidence shown by the browser's inspect command.
+def inspect_payload() -> dict[str, object]:
+    """The seeded evidence shown by the browser's inspect command.
 
-    Same facts as `show.py`, from the same input generators. The id of the dropped
-    constraint stays out of the payload: finding it is the audit checkpoint. The
-    root-cause diagnosis is not derivable here at all -- the function that knows it
-    lives in the verifier image, which this process only ever talks to over HTTP.
+    Same facts as `show.py`, from the same place: this deployment's own verifier over
+    the internal network. It used to be built here from `fixtures.generate`, which is
+    what Issue 543 option B2 took out of this image. The id of the dropped constraint
+    stays out of the payload -- finding it is the audit checkpoint -- and the
+    root-cause diagnosis is not derivable here at all.
     """
-    prm = params(seed)
-    return {
-        "policy": "grant access iff the revocation counter is zero AND the issuer is recognised",
-        "parameters": prm,
-        "deployedCircuit": vulnerable_circuit(seed),
-        "honestWitnesses": {
-            "revokedCredential": honest_witness(prm),
-            "cleanCredential": clean_witness(prm),
-        },
-        "iszeroGadget": {
-            "iszero_a": "value * inv + out - 1 = 0",
-            "iszero_b": "value * out = 0",
-        },
-        "healthToken": health_token(seed),
-    }
+    return public_evidence()
 
 
 def _submission_sources(files: object) -> dict[str, str] | None:
@@ -156,6 +142,24 @@ def _submission_sources(files: object) -> dict[str, str] | None:
     if sum(len(text) for text in normalized.values()) > MAX_BODY_BYTES:
         return None
     return normalized
+
+
+def _child_env() -> dict[str, str]:
+    """The fixed environment the public-test child runs under.
+
+    Deliberately built from nothing rather than inherited, so a Portal run cannot pick
+    up whatever this server process happens to carry. The two values forwarded, and
+    only when set, are how the child reaches this deployment's public half: since
+    Issue 543 option B2 the participant image has no `fixtures/` to derive it from, so
+    `tests/public/test_policy.py` fetches it from the Compose-internal verifier the
+    same way `show.py` does (see evidence.py).
+    """
+    env = {"PATH": "/usr/local/bin:/usr/bin:/bin"}
+    for name in ("PUBLIC_EVIDENCE_JSON", "VERIFIER_PUBLIC_URL"):
+        value = os.environ.get(name)
+        if value:
+            env[name] = value
+    return env
 
 
 def _run_submission_script(
@@ -191,7 +195,7 @@ def _run_submission_script(
                     timeout=RUN_TIMEOUT_SECONDS,
                     preexec_fn=_limits,
                     cwd=workspace,
-                    env={"PATH": "/usr/local/bin:/usr/bin:/bin"},
+                    env=_child_env(),
                     check=False,
                 )
             captured = transcript.read_text(encoding="utf-8", errors="replace")
@@ -311,7 +315,7 @@ class Handler(BaseHTTPRequestHandler):
             self._respond(200, config_payload())
             return
         if path == "/api/inspect":
-            self._respond(200, inspect_payload(SEED))
+            self._respond(200, inspect_payload())
             return
         if path == "/api/starter":
             self._respond(200, starter_payload())

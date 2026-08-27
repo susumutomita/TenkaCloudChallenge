@@ -16,8 +16,8 @@ SUBMISSION_DIR = os.environ.get("SUBMISSION_DIR")
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, SUBMISSION_DIR or str(ROOT / "starter"))
 
-from fixtures.evaluator import satisfies  # noqa: E402
-from fixtures.generate import clean_witness, honest_witness, params, vulnerable_circuit  # noqa: E402
+from participant.evaluator import satisfies  # noqa: E402
+from participant.evidence import public_evidence  # noqa: E402
 import policy  # noqa: E402
 from participant.server import (  # noqa: E402
     inspect_payload,
@@ -26,8 +26,20 @@ from participant.server import (  # noqa: E402
     starter_payload,
 )
 
+# Issue 537/543 option B2: `fixtures/generate.py` does not ship in the participant image
+# any more -- `_ISZERO_HALVES` there is both halves of the is-zero gadget as dicts, under
+# the exact ids the checkpoints require, which is `intended_circuit()`'s answer.
+# `public_evidence()` reads this deployment's public half from the verifier's `GET /public`
+# over the Compose-internal network (or `PUBLIC_EVIDENCE_JSON`, or the checkout's own
+# fixtures when neither is set) and hands back the same parameters, deployed circuit and
+# honest witnesses this file has always used.
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 WORKBENCH_TEST_SEED = "public-workbench-test"
+EVIDENCE = public_evidence()
+PARAMS = EVIDENCE["parameters"]
+DEPLOYED_CIRCUIT = EVIDENCE["deployedCircuit"]
+REVOKED_WITNESS = EVIDENCE["honestWitnesses"]["revokedCredential"]
+CLEAN_WITNESS = EVIDENCE["honestWitnesses"]["cleanCredential"]
 
 
 def test_intended_circuit_returns_constraints() -> None:
@@ -37,29 +49,26 @@ def test_intended_circuit_returns_constraints() -> None:
 
 
 def test_intended_circuit_accepts_a_revoked_credential() -> None:
-    prm = params(SEED)
-    assert satisfies(policy.intended_circuit(), honest_witness(prm), prm["p"])
+    assert satisfies(policy.intended_circuit(), REVOKED_WITNESS, PARAMS["p"])
 
 
 def test_intended_circuit_accepts_a_clean_credential() -> None:
-    prm = params(SEED)
-    assert satisfies(policy.intended_circuit(), clean_witness(prm), prm["p"])
+    assert satisfies(policy.intended_circuit(), CLEAN_WITNESS, PARAMS["p"])
 
 
 def test_audit_returns_a_list() -> None:
-    assert isinstance(policy.audit(vulnerable_circuit(SEED)), list)
+    assert isinstance(policy.audit([dict(c) for c in DEPLOYED_CIRCUIT]), list)
 
 
 def test_repair_returns_constraints() -> None:
-    repaired = policy.repair(vulnerable_circuit(SEED))
+    repaired = policy.repair([dict(c) for c in DEPLOYED_CIRCUIT])
     assert isinstance(repaired, list) and repaired
 
 
 def test_workbench_inspect_shows_seeded_evidence_without_answers() -> None:
-    payload = inspect_payload(WORKBENCH_TEST_SEED)
-    assert payload["parameters"] == params(WORKBENCH_TEST_SEED)
-    deployed = payload["deployedCircuit"]
-    assert [c["id"] for c in deployed] == [c["id"] for c in vulnerable_circuit(WORKBENCH_TEST_SEED)]
+    payload = inspect_payload()
+    assert payload["parameters"] == PARAMS
+    assert [c["id"] for c in payload["deployedCircuit"]] == [c["id"] for c in DEPLOYED_CIRCUIT]
     assert set(payload["honestWitnesses"]) == {"revokedCredential", "cleanCredential"}
     assert set(payload["iszeroGadget"]) == {"iszero_a", "iszero_b"}
     # The deployed circuit is evidence; the id of the dropped constraint is the
@@ -72,6 +81,14 @@ def test_workbench_inspect_shows_seeded_evidence_without_answers() -> None:
         "iszeroGadget",
         "healthToken",
     }
+    # Exactly one half of the is-zero gadget survives in the deployed circuit. The
+    # other one is `intended_circuit()`'s answer and is what left the image with
+    # `fixtures/` -- so it must not come back over the wire either.
+    kinds = [c.get("kind") for c in payload["deployedCircuit"]]
+    assert sorted(k for k in kinds if k in ("iszero_a", "iszero_b")) in (
+        ["iszero_a"],
+        ["iszero_b"],
+    )
 
 
 def test_workbench_starter_returns_the_editable_file() -> None:

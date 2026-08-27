@@ -50,7 +50,12 @@ Only when authoring or verifying straight from the repository, run these in the 
 make inspect            # policy, deployed circuit, both honest witnesses
 make test               # public tests
 make reset              # restore starter/policy.py
+make verifier-down      # stop the verifier `inspect` and `test` start for you
 ```
+
+`inspect` and `test` run through compose and start this deployment's verifier first: the
+question's own parameters, deployed circuit and honest witnesses are served by it, not
+derived inside the Workbench (see *Assurance scope* below).
 
 In the Portal editor or author checkout you edit one file, `local/starter/policy.py`, with four functions:
 `intended_circuit()` · `audit()` · `forge_witness()` · `repair()`.
@@ -99,19 +104,24 @@ see `GOVERNANCE.md` §2 and §4.
 Local mode is **self-paced, honor-system verification**. Someone who owns the Docker daemon
 and every container in the compose stack cannot be prevented from inspecting hidden material.
 The boundary here is misdelivery, not confidentiality against that person: the Workbench
-container you build and run carries the starter, the public tests and the fixtures that make
-up the question — and no grader, no hidden checks, no reference solution. Those live only in a
-second, unpublished container the Workbench reaches over the compose network, and in the
-author-only image `make reference-test` builds.
+container you build and run carries the starter, the public tests and the supplied residual
+evaluator — and no grader, no hidden checks, no reference solution, and no generators. Those
+live only in a second, unpublished container the Workbench reaches over the compose network,
+and in the author-only image `make reference-test` builds.
 
-The fixtures do ship to you on purpose. After [#533](https://github.com/susumutomita/TenkaCloudChallenge/pull/533)
-they hand back inputs only — the deployed circuit, the parameters, and the two honest witnesses
-— which is exactly what `make inspect` prints. What moved out is the code that knows what a
-correct answer looks like.
+The fixtures used to ship to you as well, on the grounds that after
+[#533](https://github.com/susumutomita/TenkaCloudChallenge/pull/533) they handed back inputs
+only. That was not right, and it is fixed here: the same module also held both halves of the
+is-zero gadget as constraint dicts, under the exact ids the checkpoints require — which is
+`intended_circuit()`'s answer, and with it `audit()` and `repair()` as a set difference
+against the deployed circuit. The question itself has not moved: the policy, the parameters,
+the deployed circuit and the two honest witnesses are what `make inspect` prints, and the
+Workbench now reads them from the verifier over the compose network instead of computing
+them beside you.
 
 What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
 a checkpoint can only credit the id it echoes, results do not leak expected values, and the
-fixtures come from this deployment's seed so a memorized answer does not carry.
+question comes from this deployment's seed so a memorized answer does not carry.
 
 That supports self-study and honest practice. It does **not** support competition ranking,
 examination, or completion certification — those need a verifier the participant does not
