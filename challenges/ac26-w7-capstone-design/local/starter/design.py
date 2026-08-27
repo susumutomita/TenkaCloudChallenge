@@ -9,7 +9,7 @@ Your job is to turn a brief into a design, as code. Eight functions, each one de
 answer from the brief in front of it. Write them that way and the last checkpoint costs you
 nothing; write down an answer instead and the last checkpoint is where that shows.
 
-`fixtures.generate` gives you the vocabulary:
+`participant.lab` gives you the vocabulary:
 
     PROPERTIES     the six properties a design can be required to hold
     PRIMITIVES     each option, what it provides, what it makes you trust, what it does not do

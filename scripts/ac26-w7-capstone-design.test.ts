@@ -99,6 +99,9 @@ describe("ac26-w7-capstone-design: participant contract", () => {
       "local/show.py",
       "local/mutation.py",
       "local/fixtures/generate.py",
+      "local/participant/lab.py",
+      "local/participant/server.py",
+      "local/participant/workbench.py",
       "local/tests/public/test_design.py",
       "local/tests/hidden/check_design.py",
       "local/verifier/server.py",
@@ -420,6 +423,172 @@ describe("ac26-w7-capstone-design: the verifier is reachable, not only correct",
   it("should keep the host-side loopback restriction in the compose file", () => {
     expect(read("local/docker-compose.yml")).toContain("127.0.0.1:18119:18119");
   });
+});
+
+describe("ac26-w7-capstone-design: the answer is not in the participant image", () => {
+  function participantStage(): string {
+    const dockerfile = read("local/Dockerfile");
+    const start = dockerfile.indexOf("FROM base AS participant");
+    const end = dockerfile.indexOf("FROM base AS verifier");
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    return dockerfile.slice(start, end);
+  }
+
+  // Issue 537/538 (Issue 543 option B2). Before this split the single stage carried
+  // `tests/hidden/check_design.py`, which states in full the rule each of the eight
+  // checkpoints is graded on: `_spec_requirements` is `required_properties`' answer written
+  // out, `_spec_admissible` is the `admissible` column of `compare_alternatives`,
+  // `_selection_failures` states the four conditions `select_primitive` is accepted on,
+  // `_graph_failures` states every condition an `architecture` must meet, and
+  // `_matrix_failures` states each row's contract — beside `fixtures/generate.py`, which
+  // draws the whole population every checkpoint is graded over. A submission transcribed
+  // from those two files, with no reasoning past copying, scored 4 of 8 checkpoints
+  // (155 of 300 points) from the stated rules alone, and 8 of 8 (300 of 300) once the
+  // remaining four artifacts were built to the conditions the same file writes out.
+  // Putting either `COPY` back turns this test red.
+  it("should copy neither fixtures/, tests/hidden/ nor verifier/ into the participant stage", () => {
+    const stage = participantStage();
+    expect(stage).toContain("COPY tests/public/");
+    expect(stage).toContain("COPY participant/");
+    for (const forbidden of [
+      "COPY fixtures/",
+      "COPY tests/ ",
+      "COPY tests/hidden/",
+      "COPY verifier/",
+    ]) {
+      expect(stage).not.toContain(forbidden);
+    }
+  });
+
+  it("should serve the Portal from the participant image, not from the grading one", () => {
+    expect(existsSync(join(ROOT, "local/participant/server.py"))).toBe(true);
+    expect(existsSync(join(ROOT, "local/participant/workbench.py"))).toBe(true);
+    expect(existsSync(join(ROOT, "local/participant/lab.py"))).toBe(true);
+    expect(existsSync(join(ROOT, "local/verifier/workbench.py"))).toBe(false);
+    // Nothing in the participant image may decide a checkpoint: it forwards instead.
+    const server = read("local/participant/server.py");
+    expect(server).toContain("proxy_verdict");
+    expect(server).not.toContain("tests.hidden");
+    expect(server).not.toContain("import fixtures");
+  });
+
+  it("should keep the brief population out of the supplied layer the participant image ships", () => {
+    // `participant/lab.py` is the half this problem hands over on purpose — `starter/design.py`'s
+    // own docstring names all four of these, so a submission has to be able to import them.
+    // What must not travel with them is the population the checkpoints are graded over.
+    const supplied = read("local/participant/lab.py");
+    for (const name of ["PROPERTIES", "PRIMITIVES", "ACTOR_TRUSTS", "OPERATOR_ROLES"]) {
+      expect(supplied).toContain(name);
+    }
+    for (const forbidden of [
+      "all_briefs",
+      "synthetic_briefs",
+      "variants",
+      "public_brief",
+      "_stream",
+    ]) {
+      expect(supplied).not.toContain(forbidden);
+    }
+  });
+
+  it("should keep the verifier off the host and reachable only from the Workbench", () => {
+    const compose = parseYaml(read("local/docker-compose.yml")) as {
+      services: Record<string, { ports?: string[]; environment?: Record<string, string> }>;
+      networks: Record<string, { internal?: boolean }>;
+    };
+    expect(compose.services.verifier.ports).toBeUndefined();
+    expect(compose.services.workbench.environment?.VERIFIER_PUBLIC_URL).toContain("/public");
+    expect(compose.networks.lab.internal).toBe(true);
+  });
+
+  it("should guard the submission import against fixtures/ and tests/ on the grading path", () => {
+    // Issue 591. `fixtures.generate` re-exports the supplied vocabulary, so an unguarded
+    // `from fixtures.generate import *` would also pull in `all_briefs`, `variants` and
+    // `synthetic_briefs` — the population every checkpoint is graded over.
+    const verifier = read("local/verifier/server.py");
+    expect(verifier).toContain(
+      'if name in ("tests", "fixtures") or name.startswith(("tests.", "fixtures."))',
+    );
+    // The supplied module is preloaded before the guard and survives it, which is what keeps
+    // `reference/design.py`'s own top-level import resolvable while it is graded.
+    expect(verifier).toContain("import participant.lab");
+    expect(read("local/reference/design.py")).toContain("from participant.lab import ");
+  });
+
+  it("should keep the graded population's derivation out of GET /public", () => {
+    const payload = python([
+      "-c",
+      [
+        "import json, os, sys",
+        "sys.path.insert(0, '.')",
+        "from fixtures.generate import public_payload",
+        "print(json.dumps(public_payload(os.environ['FLAG_SEED'])))",
+      ].join("\n"),
+    ]);
+    expect(payload.status).toBe(0);
+    const decoded = JSON.parse(payload.stdout.trim().split("\n").at(-1) ?? "null") as Record<
+      string,
+      unknown
+    >;
+    expect(Object.keys(decoded).sort()).toEqual(["brief", "healthToken", "reviewVariant"]);
+  });
+
+  // The public label is not the graded one: every checkpoint is graded over all thirty-six
+  // briefs, and the twelve synthetic ones exist in no file at all. Pinned across seeds so a
+  // payload change cannot quietly start shipping them.
+  it("should carry the public brief and no synthetic brief, on every seed", () => {
+    const script = [
+      "import json, sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import public_brief, public_payload, synthetic_briefs",
+      "bad = []",
+      "for i in range(30):",
+      "    seed = f'seed-{i}'",
+      "    payload = public_payload(seed)",
+      "    if payload['brief'] != public_brief(seed):",
+      "        bad.append([seed, 'brief'])",
+      "    serialised = json.dumps(payload)",
+      "    for index, brief in enumerate(synthetic_briefs(seed)):",
+      "        if brief['id'] in serialised:",
+      "            bad.append([seed, index])",
+      "print(json.dumps(bad))",
+    ].join("\n");
+    const result = python(["-c", script]);
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "null")).toEqual([]);
+  });
+
+  // The payload is the only source in the participant image, so it has to carry exactly what
+  // `show.py` printed before the split — on every seed, not just this one.
+  it("should print the same inspect output from the payload as from the fixtures", () => {
+    const script = [
+      "import io, json, os, contextlib, importlib, sys",
+      "sys.path.insert(0, '.')",
+      "import show",
+      "from fixtures.generate import public_payload",
+      "diffs = []",
+      "for i in range(30):",
+      "    seed = f'seed-{i}'",
+      "    os.environ['FLAG_SEED'] = seed",
+      "    importlib.reload(show)",
+      "    os.environ.pop('PUBLIC_EVIDENCE_JSON', None)",
+      "    direct = io.StringIO()",
+      "    with contextlib.redirect_stdout(direct):",
+      "        show.main()",
+      "    os.environ['PUBLIC_EVIDENCE_JSON'] = json.dumps(public_payload(seed))",
+      "    injected = io.StringIO()",
+      "    with contextlib.redirect_stdout(injected):",
+      "        show.main()",
+      "    os.environ.pop('PUBLIC_EVIDENCE_JSON', None)",
+      "    if direct.getvalue() != injected.getvalue():",
+      "        diffs.append(seed)",
+      "print(json.dumps(diffs))",
+    ].join("\n");
+    const result = python(["-c", script]);
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "null")).toEqual([]);
+  }, 120_000);
 });
 
 describe("ac26-w7-capstone-design: metadata contracts", () => {

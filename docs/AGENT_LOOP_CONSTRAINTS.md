@@ -269,14 +269,14 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   #538 was closed on that evidence.
 
   What the sweep does **not** settle, and what keeps #543 open: **7 problems still
-  `COPY verifier/` into their participant stage** — **4** as of #616: the `ac26-w6`/`w7`
-  ones above, less the three cosnark problems and `ac26-w7-capstone-demo`
+  `COPY verifier/` into their participant stage** — **3** as of #617: the `ac26-w6`/`w7`
+  ones above, less the three cosnark problems and both capstones
   (`ac26-w4-proof-pipeline` came off in #611, `ac26-w6-cosnark-beaver` in #613,
   `ac26-w6-cosnark-linear` in #614, `ac26-w6-cosnark-privacy` in #615,
-  `ac26-w7-capstone-demo` in #616). The four left,
-  scanned on `533fcc4`, are
-  `ac26-w6-stack-design`, `ac26-w6-zkvm-exploit-predicate`,
-  `ac26-w6-zkvm-witness-binding` and `ac26-w7-capstone-design`
+  `ac26-w7-capstone-demo` in #616, `ac26-w7-capstone-design` in #617). The three left,
+  scanned on `5a28f53`, are
+  `ac26-w6-stack-design`, `ac26-w6-zkvm-exploit-predicate` and
+  `ac26-w6-zkvm-witness-binding`
   — count them yourself rather than trusting this sentence; the one-line check is
   a per-stage scan of each `local/Dockerfile`'s `COPY` list, not a `grep` over the whole
   file, because every problem's `verifier` and `author` stages copy `verifier/` legitimately.
@@ -725,6 +725,47 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   Docker daemon (§6), the two-tree probe showed the participant tree at five modules with none
   of the hidden material in it, the reference at 8/8 through the Workbench proxy into the
   verifier, and the shipped starter at 0/8 — which no file-list assertion establishes on its own.
+
+  `ac26-w7-capstone-design` came off the list in #617, and it is the one to read when the
+  question is **how much of a problem transcription actually buys**. It is #616's twin —
+  same week, same `COPY verifier/` shape, same supplied-half-named-by-the-starter pairing —
+  so #609's rule held again and the split was that PR's diff with names changed, down to
+  `participant/lab.py` and the runner's preload. It came off Issue #591's exception list in
+  the same PR on #613's pairing, verified against the reference rather than by inspection:
+  **8/8 (300/300) with the guard in place**.
+
+  Both standard probes read **0 of 300 before the split as well as after**
+  (`fixtures/generate.py` defines none of the eight names `starter/design.py` asks for, so the
+  name-based detector reported it zero times), the guard-removal control is flat — so the
+  reference is the usable positive control, as with #600 — and the reachability count is
+  unchanged at 0 throughout in both directions: the restore-the-leak run puts
+  `COPY fixtures/ tests/ verifier/` back into the participant stage and the count stays 0
+  while the new stage test goes red.
+
+  #603's third probe is what speaks, and here it is worth running **twice**, because the two
+  runs disagree and the gap is the finding. `tests/hidden/check_design.py` writes out the rule
+  for every checkpoint — `_spec_requirements` is `required_properties`' answer,
+  `_spec_admissible` is the `admissible` column of `compare_alternatives`,
+  `_selection_failures` is `select_primitive`'s four acceptance conditions, `_graph_failures`
+  and `_matrix_failures` state every condition an architecture and a matrix row must meet. A
+  submission that copies only the *stated rules*, with no reasoning past copying, scores
+  **4 of 8 checkpoints, 155 of 300 points** — exactly the four whose answer is a rule. Building
+  the remaining four artifacts to satisfy the conditions the same file writes out takes it to
+  **8 of 8, 300 of 300**, the #584 pole. #610 says report the fraction; this problem says
+  report *which* fraction you measured, because "a rule is stated" and "an artifact is
+  constructible from the stated conditions" are two different leaks and only the second reaches
+  the pole.
+
+  Two things it adds to the worked examples. Its `GET /public` carries the **question, not an
+  answer**: the public brief and its review variant, which are what `make inspect` has always
+  printed and which the public tests hand straight to the learner's own functions as their
+  argument. What stays behind is the rest of the population — the other seventeen variants and
+  the twelve synthetic briefs, which exist in no file at all. Reach for that reading whenever
+  the material at risk is a *problem statement* rather than a value. And both READMEs named
+  `local/fixtures/generate.py` as where the six briefs live without saying that file is not in
+  the image a participant builds — the #585 shape, a participant surface naming a repository
+  file the cloud participant does not have. **Check the READMEs for that sentence on every
+  remaining split**: the Docker change is what makes an already-loose sentence false.
 
   #586 is the last of the Week 5 chain and the first in this class with **no supplied
   half at all**: `fixtures/generate.py` there is entirely seed derivation plus the graded

@@ -1,4 +1,4 @@
-"""Seed-derived design briefs, and the primitive capability table they are designed against.
+"""Seed-derived design briefs: the population every checkpoint is graded on.
 
 Everything a learner reasons about here is data: a *brief* states who the actors are, what
 the assets are, who may learn what, and who relies on what. Nothing in a brief names a
@@ -6,9 +6,17 @@ cryptographic primitive — that is the whole point of the exercise. The primiti
 only in `PRIMITIVES`, as a table of what each one actually provides and what it makes you
 trust in exchange.
 
-Toy warning: `PRIMITIVES` is a teaching abstraction. Real deployments differ in ways this
-table flattens (setup assumptions, malicious-versus-semi-honest security, circuit size,
-ciphertext expansion). It is chosen for observability, not as production guidance.
+Issue 537/538 (Issue 543 option B2): this module does not ship in the `participant` Docker
+stage any more (see ../Dockerfile). It draws the brief population — the six written briefs,
+their eighteen variants, and the twelve briefs generated from the per-deploy seed — that every
+checkpoint is graded over, and it shipped beside `tests/hidden/check_design.py`, which states
+the rule for each of the eight checkpoints in full. The participant reads this deployment's
+public half from `GET /public` instead (see `public_payload` below, ../show.py, and
+../verifier/server.py).
+
+`PRIMITIVES` and the rest of the vocabulary are the supplied half and stayed with the
+participant, in `participant/lab.py`. They are re-exported here so the hidden checker, the
+reference and the learner all read one table rather than two that can drift.
 """
 
 from __future__ import annotations
@@ -17,82 +25,22 @@ import copy
 import hashlib
 from typing import Any
 
-# ---------------------------------------------------------------------------
-# The property vocabulary. A design says which of these the brief requires.
-# ---------------------------------------------------------------------------
+from participant.lab import ACTOR_TRUSTS, OPERATOR_ROLES, PRIMITIVES, PROPERTIES
 
-PROPERTIES: tuple[str, ...] = (
-    "correctness",
-    "privacy",
-    "soundness",
-    "zero_knowledge",
-    "binding",
-    "availability",
-)
-
-# ---------------------------------------------------------------------------
-# What each primitive provides, and what it makes you trust to get it.
-#
-# `provides`    — properties the primitive delivers when used as intended.
-# `trusts`      — what has to hold. An entry in ACTOR_TRUSTS names a *party*; anything else
-#                 names an assumption about the world.
-# `assumptions` — stated in words, for the design document.
-# `non_goals`   — what the primitive is routinely, wrongly, assumed to give you.
-#
-# The `non_goals` are the misconceptions this problem targets. FHE does not remove key
-# management: somebody still holds the decryption key, and that somebody is an actor in the
-# threat model. MPC does not remove the collusion assumption, it relocates it. A ZK proof
-# does not hide the public inputs, only the witness.
-# ---------------------------------------------------------------------------
-
-PRIMITIVES: dict[str, dict[str, Any]] = {
-    "none": {
-        "provides": ("correctness", "availability"),
-        "trusts": ("operator",),
-        "assumptions": ("the operator is honest and its host is not compromised",),
-        "non_goals": ("privacy from the operator", "soundness against the operator"),
-    },
-    "mpc": {
-        "provides": ("correctness", "privacy"),
-        "trusts": ("non_collusion",),
-        "assumptions": ("fewer than the threshold number of parties collude",),
-        "non_goals": (
-            "removing the collusion assumption",
-            "soundness against a lying input provider",
-        ),
-    },
-    "fhe": {
-        "provides": ("correctness", "privacy"),
-        "trusts": ("key_holder",),
-        "assumptions": ("the decryption key holder is not the evaluator",),
-        "non_goals": ("removing key management", "access control on the decrypted result"),
-    },
-    "zk": {
-        "provides": ("correctness", "soundness", "zero_knowledge"),
-        "trusts": (),
-        "assumptions": ("the statement is the one the verifier believes it is",),
-        "non_goals": ("hiding the public inputs", "privacy of an input held by another party"),
-    },
-    "commitment": {
-        "provides": ("binding",),
-        "trusts": (),
-        "assumptions": ("the commitment is opened by the party that made it",),
-        "non_goals": ("privacy of the committed value after it is opened",),
-    },
-    "threshold": {
-        "provides": ("availability",),
-        "trusts": ("non_collusion",),
-        "assumptions": ("at least the threshold number of parties stay reachable",),
-        "non_goals": ("privacy on its own",),
-    },
-}
-
-#: `trusts` entries that name a party rather than an assumption about the world. A brief can
-#: rule these out: you cannot trust an operator that somebody's asset must be hidden from.
-ACTOR_TRUSTS: frozenset[str] = frozenset({"operator", "key_holder"})
-
-#: Roles that run infrastructure, and are therefore what "the operator" resolves to.
-OPERATOR_ROLES: frozenset[str] = frozenset({"operator", "evaluator"})
+__all__ = [
+    "ACTOR_TRUSTS",
+    "OPERATOR_ROLES",
+    "PRIMITIVES",
+    "PROPERTIES",
+    "all_briefs",
+    "brief",
+    "health_token",
+    "public_brief",
+    "public_payload",
+    "review_variant",
+    "synthetic_briefs",
+    "variants",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -543,3 +491,38 @@ def synthetic_briefs(seed: str, count: int = 12) -> list[dict[str, Any]]:
             )
         )
     return produced
+
+
+# ---------------------------------------------------------------------------
+# The public half
+# ---------------------------------------------------------------------------
+
+
+def health_token(seed: str) -> str:
+    brief_id = public_brief(seed)["id"]
+    return hashlib.sha256(f"health:{seed}:{brief_id}".encode()).hexdigest()[:16]
+
+
+def public_payload(seed: str) -> dict[str, Any]:
+    """Everything a participant may see for this deployment. Carries data, not code.
+
+    Exactly the two briefs `make inspect` has always printed: this deployment's public brief,
+    and the one variant of it the worked example walks through. They travel because a brief is
+    the *question* — `show.py` prints both in full, and the public tests hand the first one
+    straight to the learner's own functions as their argument, so a submission holds it at
+    runtime by construction. Withholding it here would hide it from `show.py` and from nobody
+    else (the same reading as ac26-w2-private-aggregate's shares).
+
+    What does not travel is the rest of the population: `all_briefs`, the other seventeen
+    variants and `synthetic_briefs`. Every checkpoint is graded over all thirty-six, and the
+    twelve generated ones exist in no file at all — which is what makes them unreachable
+    rather than merely unnamed.
+
+    The vocabulary does not travel either, because it never left: it is the supplied half and
+    lives in `participant/lab.py`, which the participant image still ships.
+    """
+    return {
+        "healthToken": health_token(seed),
+        "brief": public_brief(seed),
+        "reviewVariant": review_variant(seed),
+    }
