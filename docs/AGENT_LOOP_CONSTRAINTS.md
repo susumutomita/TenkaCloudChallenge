@@ -257,9 +257,9 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   `sha256-compress-digest`, `ac26-w2-linear-shares`, split by #590, #564, #596 and #563).
   #538 was closed on that evidence.
 
-  What the sweep does **not** settle, and what keeps #543 open: **9 problems still
-  `COPY verifier/` into their participant stage** — `ac26-w4-proof-pipeline`,
-  and the eight `ac26-w6`/`w7` ones above. That is the structural shape #543 was opened on,
+  What the sweep does **not** settle, and what keeps #543 open: **8 problems still
+  `COPY verifier/` into their participant stage** — the eight `ac26-w6`/`w7` ones above
+  (`ac26-w4-proof-pipeline` came off in #611). That is the structural shape #543 was opened on,
   and the owner chose B (separate verifier container) over A (accept and document).
   Grep for the shape rather than trusting a plain `^COPY verifier/`:
   `ac26-w2-oblivious-transfer` writes `COPY --chown=lab:lab verifier/`, and a scan that
@@ -519,6 +519,39 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   bites). And measure **two** probes per split, not one: the participant image's
   reachability *and* a submission that imports the material at grading time. A PR body
   that reports only the first, as the merged ones above do, overstates what landed.
+
+  `ac26-w4-proof-pipeline` came off the list in #611, and it is the one to read for a
+  leak that is **not in the image at all**. It is otherwise #603/#606 exactly: both
+  standard probes read **0 of 300 before the split as well as after**, the guard-removal
+  control is flat (the verifier already carried #597's guard), the reference at 8/8
+  (300/300) is the positive control, and the reachability count is unchanged at 0
+  throughout, in both directions — the restore-the-leak run puts `COPY fixtures/ tests/
+  verifier/` back and the count stays 0 while two of the new tests go red. #603's third
+  probe is what speaks: `tests/hidden/check_pipeline.py`'s `_reference_first_fault` is a
+  complete and correct implementation of every layer contract `starter/pipeline.py` asks
+  the learner to write, and `check_graph`, `check_assumptions` and `check_diagnose` write
+  out the graph construction, the assumption matrix and the layer order beside it, while
+  `fixtures/generate.py` carries `UNSUPPORTED_CLAIMS` (the `cost` checkpoint's ground
+  truth) and `FAULTS` (the layer `first_fault` must report, and the single field `repair`
+  may touch, per fault). A submission transcribed from the two, with no reasoning past
+  copying, scores **7 of 8 checkpoints, 270 of 300 points**. It stops at seven because
+  the hidden checker probes `cost` with synthetic claims, so copying the ground-truth id
+  list does not survive.
+
+  What it adds to the worked examples is a **fourth place to look, which no probe finds
+  and no Docker split closes: the record the submission is handed**. `faulted_run` labels
+  a faulted run `"<label>:<fault>"` and that label travelled as a field of the run, so
+  `first_fault` and `repair` were passed the name of the fault they were being asked to
+  diagnose — on the graded `h0`/`h1`/`h2` labels as much as on the public one. Dropping
+  that one field takes the transcription probe from 7/8 to 6/8; `diagnose` is 50 of the
+  300 points. Nothing else read it. **Check the arguments a graded function receives, not
+  only the files the stage ships**: a split that closes the image while the record still
+  names its own answer is the "half a fix" this section already warns about, and the two
+  standard probes report the same 0 either way.
+
+  It is otherwise the plain move — no supplied half (every graded function is handed its
+  definition and its run), so the verifier stage copies no participant file; the public
+  tests do need the payload, so copy #605's wiring for those rather than #607's.
 
   #586 is the last of the Week 5 chain and the first in this class with **no supplied
   half at all**: `fixtures/generate.py` there is entirely seed derivation plus the graded
