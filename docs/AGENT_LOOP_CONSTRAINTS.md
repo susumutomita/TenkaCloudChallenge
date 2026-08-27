@@ -302,6 +302,41 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   `sha256-compress-digest`, `ac26-w2-linear-shares`, split by #590, #564, #596 and #563).
   #538 was closed on that evidence.
 
+  **That sweep ran only the two standard probes, and "score 0" there does not mean
+  closed.** #622 is the counterexample. `ac26-w1-underconstraint` was one of the 31: both
+  standard probes read 0 of 300 on it, before the split as well as after. Its
+  `fixtures/generate.py` had already been through #533, which took the complete circuit,
+  the missing id, a forgery and the root-cause diagnosis out of it as callable values —
+  and its Dockerfile, both READMEs and `participant/server.py` all said in as many words
+  that what was left was inputs only, so removing it would hide the problem statement
+  rather than an answer. What was left was also `_ISZERO_HALVES`: both halves of the
+  is-zero gadget as constraint dicts, under the exact `c-iszero-a` / `c-iszero-b` ids the
+  checkpoints require. #603's third probe measured it — transcription alone scored 3 of 6
+  checkpoints (160 of 300), and transcription plus a two-`range` scan over the supplied
+  evaluator scored 5 of 6 (260 of 300), which on this problem is *every* checkpoint a code
+  submission can reach and the same score as the reference. Seed-independent over five
+  seeds. So: **the third probe is not optional on the problems this sweep called 0**, and
+  a file that survived an earlier answer-removal audit is not thereby clean — #533 removed
+  the answers that were functions and left the one that was a dict.
+
+  It is also the sharpest instance of §2's lower-bound caveat as a number. The
+  restore-the-leak run with **only** `COPY fixtures/` put back — the exact leak that
+  measured 260 of 300 — leaves `scripts/check-answer-reachability.ts` reporting **0**. The
+  count only moves if `COPY verifier/` goes back too. Never read a flat finding count as
+  evidence about this class.
+
+  **15 problems still carry `fixtures/` in their participant stage** after #622, scanned
+  on `6a95551`: `ac26-w3-schnorr`, the three `ac26-w4-*-drill`s, `acm-validation-migration`,
+  `asm-worst-case-latency`, and nine `cs-*` (`cs-async-result-binding`,
+  `cs-atomic-file-publish`, `cs-cache-generation-fence`, `cs-dst-daily-rollup`,
+  `cs-http-retry-idempotency`, `cs-numeric-aggregation-order`, `cs-pagination-drift`,
+  `cs-protocol-state-guard`, `cs-transaction-visibility-audit`). Count it yourself rather
+  than trusting this sentence — the one-line check is a per-stage scan of each
+  `local/Dockerfile`'s `COPY` list resolved through its `FROM` chain, not a `grep` over the
+  whole file, because every problem's `verifier` and `author` stages copy `fixtures/`
+  legitimately, and it has to catch `COPY --chown=lab:lab fixtures/` as well as the plain
+  form. **Update this list when you land one.**
+
   What the sweep does **not** settle, and what keeps #543 open: **7 problems still
   `COPY verifier/` into their participant stage** — **0** as of the stack-design split:
   the `ac26-w6`/`w7`
