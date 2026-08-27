@@ -114,9 +114,9 @@ Blocked on an owner decision — **do not start these**:
 Previously blocked by `playability-gate`, now unblocked: PR #564 (`sha256-bytes-padding`)
 and PR #578 (`sha256-schedule-logic`) were held because they rewrite a `status: ready`
 problem's READMEs and the gate demanded a human `playtest-verified` label. The gate was
-deleted on 2026-08-27, so both are ordinary PRs again. **#564 has since merged**
-(`e007a5c`); #578 is still open — rebase it onto `main` and merge when its checks are
-green. The same wall is gone from `sha256-compress-digest` and the rest of that class.
+deleted on 2026-08-27, so both are ordinary PRs again. **Both have since merged** — #564
+(`e007a5c`) and #578 (`c981e44`) — and `sha256-compress-digest` followed in #596
+(`55635df`). That wall is gone from the whole class.
 
 What the gate's removal does **not** change: §1 and §3 still hold. Nothing machine-checks
 them now, so a PR that rewrites a `ready` problem's participant surface should say, in its
@@ -170,9 +170,11 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   `ac26-w5-pbs-homnand` (#581), `ac26-w4-commit-open` (#582, split out of #578),
   `ac26-w5-extract-key-switch` (#584), `ac26-w5-encoding-noise` (#586),
   `ac26-w3-passkey-assertion` (#590), `ac26-w3-field-inverse` (#594).
-  Catalog count is 6 as of #594 and #564, down from 39; the six that remain are
-  `sha256-schedule-logic`'s and `sha256-compress-digest`'s `direct-value-comparison`
-  findings, a different class (`sha256-bytes-padding`'s four closed with #564). Runs took
+  **The catalog count is 0 and `scripts/answer-reachability-baseline.json` is `{"known": []}`**,
+  down from 39: the last six were `sha256-schedule-logic`'s and `sha256-compress-digest`'s
+  `direct-value-comparison` findings, a different class, closed by #578 and #596
+  (`sha256-bytes-padding`'s four closed with #564). Do not read the empty baseline as
+  "nothing is reachable" — §2's lower-bound caveat still holds. Runs took
   the largest count first, so the last two here were singletons — and a single finding
   said nothing about its own points until measured (see #582, #584 and #594 below).
 
@@ -211,9 +213,58 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   3/3 (200/200) the same way until #590 added the guard `cs-transaction-visibility-audit`
   already uses: drop the `fixtures`/`tests` modules and the problem root from `sys.path`
   and `sys.modules` before importing the submission. #594 ported that guard, and re-measured
-  at 0. Every other verifier still lacks it — 40 of them as of #594 — and Issue #591 carries
-  the evidence and the proposed catalog-wide test. #564 landed without the guard, so it is
-  one of those 39: that is #591's work, not a defect in #564.
+  at 0.
+
+  **#597 (`d46b8b9`) closed that path catalog-wide and Issue #591 with it.** 52 verifiers
+  have the root-on-`sys.path` pattern; 41 needed the guard (40 unguarded plus the
+  `cs-transaction-visibility-audit` precedent, which evicted `tests` but not `fixtures` —
+  so the leak stayed open there). 31 got it, and `scripts/verifier-fixtures-guard.test.ts`
+  pins the shape. The 10 left out are deliberate and now **measured**, not asserted:
+  `ac26-bridge-properties`, `ac26-w2-oblivious-transfer`, `ac26-w6-cosnark-{beaver,linear,privacy}`,
+  `ac26-w6-stack-design`, `ac26-w6-zkvm-{exploit-predicate,witness-binding}` and
+  `ac26-w7-capstone-{demo,design}` all pre-date the B2 split and their reference solutions
+  import `fixtures.generate` for a legitimate supplied helper, so the guard would break
+  correct grading rather than close anything. A `from fixtures.generate import *`
+  submission scores **0** on every one of the ten. Do not re-measure these; do not add the
+  guard to them.
+
+  **How to measure a probe without Docker** (§6 says there may be no daemon). Import the
+  problem's `verifier/server.py` as a module with `FLAG_SEED` set and call its own
+  `evaluate(checkpoint_id, submission)` for each id in `CODE_CHECKPOINTS`. That is the real
+  grading path — the same `RUNNER`, the same subprocess, the same guard — so no separate
+  harness has to be trusted. Two probes, per §5: **submission-side**, whose submission is
+  `from fixtures.generate import *`; and **participant-image**, whose submission is the
+  *inlined source* of whatever that problem's participant stage actually ships (its
+  `fixtures/generate.py` where the stage still carries it, its `participant/*.py` where B2
+  has split it). Inlining is what makes the second probe answer the right question: the
+  participant reads the file in their own container and pastes it, so the guard — which only
+  blocks `import` — is not in the path.
+
+  **Always run a positive control**, or a probe that is silently broken reports the same 0 as
+  a problem that is closed. Delete the `_hidden_modules` guard from one verifier, re-run, and
+  show the score come back. On `ac26-w5-extract-key-switch` that is **8/8 without the guard,
+  0/8 with it**, which is the #584 free score reappearing exactly. A guard-removal control
+  that stays 0 proves nothing about the probe: `sha256-compress-digest` reads 0/4 either way,
+  because its hidden checker imports its entry point before the submission.
+
+  **Measured 2026-08-27, catalog-wide — do not repeat this sweep.** 35 problems still carry
+  `fixtures/` in their participant stage. One (`acm-validation-migration`) has no
+  `verifier/server.py` and is out of scope for this probe, and three drills
+  (`ac26-w4-fri-drill`, `ac26-w4-plonk-drill`, `ac26-w4-sumcheck-drill`) declare **no code
+  checkpoints at all**, so the probe is vacuous there and says nothing — count them as
+  unmeasured, not as closed. The remaining **31 score 0**, as do both probes on all four of
+  Issue #538's problems (`ac26-w3-passkey-assertion`, `sha256-bytes-padding`,
+  `sha256-compress-digest`, `ac26-w2-linear-shares`, split by #590, #564, #596 and #563).
+  #538 was closed on that evidence.
+
+  What the sweep does **not** settle, and what keeps #543 open: **19 problems still
+  `COPY verifier/` into their participant stage** — `ac26-w2-{beaver-mul,oblivious-transfer,privacy-audit,private-aggregate,secret-sharing}`,
+  `ac26-w3-{ec-group,fft-domain,nonce-reuse,ntt-roots}`, `ac26-w4-{arithmetization,proof-pipeline}`,
+  and the eight `ac26-w6`/`w7` ones above. That is the structural shape #543 was opened on,
+  and the owner chose B (separate verifier container) over A (accept and document).
+  Measuring 0 says no graded answer is reachable *today*; it does not convert those 19 to
+  option A. Closing #543 needs either the split or the owner writing the narrower boundary
+  into `TEMPLATE.md` — so it is reachable work, not an owner block.
 
   Two consequences for reporting. `scripts/check-answer-reachability.ts` only ever sees
   the participant image, so a finding count says nothing about this path — never write
