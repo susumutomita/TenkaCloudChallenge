@@ -144,6 +144,13 @@ PORTAL_PACKAGES = {
     # left the participant stage and the Portal moved with them; there is no supplied half
     # to carve out here.
     "ac26-w3-ec-group": "participant",
+    # Issue 537/538 (Issue 543 option B2): tests/hidden/check_fftdomain.py grades all five
+    # checkpoints and holds has_order -- "order exactly n" written out from the definition,
+    # beside naive_omega (the rule the shipped starter trusts) and real_omega -- which is
+    # the one thing starter/fftdomain.py says nothing else in the image will decide for the
+    # learner. fixtures/generate.py left the participant stage with it; there is no
+    # supplied half to carve out here, and the Portal moved to participant/.
+    "ac26-w3-fft-domain": "participant",
     # Issue 537/538: verifier/server.py's own _check_avalanche compared a submission
     # directly against a plain, seed-derived avalanche_distance defined in the same
     # file, and _check_properties/_check_storage compared against
