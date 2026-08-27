@@ -24,7 +24,8 @@ local/tests/public/           tests the broken starter passes
 local/tests/hidden/           the properties that actually decide the checkpoints
 local/mutation.py             breaks the reference eight ways and requires each to be caught
 local/fixtures/generate.py    orientation: field family, one real and one fake domain
-local/verifier/server.py      loopback /verify plus the Portal editor API
+local/participant/server.py   the Workbench: Portal editor API, and /verify forwarded inward
+local/verifier/server.py      /verify and GET /public, in a second, unpublished container
 local/show.py                 `make inspect` — participant-visible orientation only
 ```
 
@@ -45,17 +46,27 @@ make build           # participant image
 make test            # public tests against local/starter
 make inspect         # print the participant-visible orientation
 make reference-test  # reference passes its hidden suite, all eight mutations die
-make up / make down  # run the Compose lab locally
+make verifier-up     # start the verifier container the two above read from
+make verifier-down   # stop it
 ```
 
 ## Assurance scope
 
-Local mode is self-paced, honor-system verification. The participant owns the machine, the Docker
-daemon, and the image. The participant image does not contain the reference or the mutation
-suite; hidden tests ride in the same image as the verifier that runs them. A person who controls
-Docker can build the author stage and read everything in it. The separation prevents accidental
-delivery, not a malicious host owner. Submissions run with time, memory, process, and output
-caps; the container runs non-root, read-only, without privileges, loopback-published only.
+Local mode is self-paced, honor-system verification. Someone who owns the Docker daemon and every
+container in the compose stack cannot be prevented from inspecting hidden material. The boundary
+here is misdelivery, not confidentiality against that person: the Workbench container you build
+and run carries the starter, the public tests and the orientation printer only — no fixtures, no
+hidden tests, no reference solution, no verifier. Those live only in a second, unpublished
+container the Workbench reaches over the compose network, and in the author-only image
+`make reference-test` builds.
+
+Because of that, `make test`, `make test-one` and `make inspect` bring the verifier up first
+(`make verifier-up`, run for you): `make inspect` reads this deployment's field family and its two
+example domains from it over the compose network instead of computing them locally.
+`make verifier-down` stops it.
+
+Submissions run with time, memory, process, and output caps; both containers run non-root,
+read-only, without privileges, and only the Workbench is published, on loopback.
 
 It does **not** support competition ranking, examination, or completion certification. Those uses
 need a verifier the participant does not administer, tracked in
