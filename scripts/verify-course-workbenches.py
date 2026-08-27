@@ -177,6 +177,14 @@ SPLIT_PORTAL_MODULES = {
     # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
     # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
     "ac26-w2-privacy-audit": "participant.server",
+    # Issue 537/538 (Issue 543 option B2): same move. tests/hidden/check_aggregate.py
+    # grades all eight checkpoints and its check_plan, check_cost and check_privacy state
+    # the three numbers plan() must return, the round and opening counts, and the exact
+    # multiset a run may reveal; fixtures/generate.py derives the secret counts and
+    # severities behind plain_score, all of which shipped in the single participant stage.
+    # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
+    # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
+    "ac26-w2-private-aggregate": "participant.server",
     # Issue 537/538: same move. verifier/server.py's own _check_avalanche compared a
     # submission directly against a plain, seed-derived avalanche_distance defined in
     # the same file, and _check_properties/_check_storage compared against
