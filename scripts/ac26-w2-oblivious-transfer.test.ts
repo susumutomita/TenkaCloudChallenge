@@ -1,8 +1,10 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "bun:test";
+import { parse as parseYaml } from "yaml";
+import { participantPythonFiles } from "./lib/local-play-problems";
 
 /**
  * `ac26-w2-oblivious-transfer` — the Week 2 Part B companion (Issue 412).
@@ -55,19 +57,27 @@ print(json.dumps(run(module, "pinned-suite-seed")))
 }
 
 function portalContract(): { id: string; checkpoints: string[]; prepared: string[] } {
+  // The Portal editor API lives in participant/server.py since the Issue 543 option B2
+  // split; the verifier keeps only the scoring seam. Both sides of the seal are checked
+  // here, because the verifier now duplicates the unwrap rather than importing it -- if
+  // the two derivations drifted, a Portal-prepared submission would stop scoring.
   const script = `
 import json, sys
 from pathlib import Path
 sys.path.insert(0, ${JSON.stringify(LOCAL)})
-from verifier.server import CHECKPOINTS, _WORKBENCH
+from participant.server import CHECKPOINTS, _WORKBENCH
+from verifier.server import CHECKPOINTS as VERIFIER_CHECKPOINTS, _unwrap_submission
 source = Path(${JSON.stringify(join(LOCAL, "reference", "oblivious.py"))}).read_text()
 config = _WORKBENCH.config_payload()
 prepared = _WORKBENCH.prepare_submissions({"oblivious.py": source}, {})
 assert prepared["ok"] is True
 assert tuple(item["id"] for item in config["checkpoints"]) == CHECKPOINTS
+assert VERIFIER_CHECKPOINTS == CHECKPOINTS
 assert set(prepared["submissions"]) == set(CHECKPOINTS)
 for checkpoint, submission in prepared["submissions"].items():
     assert _WORKBENCH.unwrap_submission(checkpoint, submission) == source
+    assert _unwrap_submission(checkpoint, submission) == source
+    assert _unwrap_submission(checkpoint, source) == source
 print(json.dumps({
     "id": config["id"],
     "checkpoints": [item["id"] for item in config["checkpoints"]],
@@ -210,4 +220,227 @@ describe("ac26-w2-oblivious-transfer: the problem holds up (Issue 412)", () => {
     expect(surface).not.toContain("mask ^ own_bit");
     expect(surface).not.toContain("(own_x & own_y) ^ own_mask ^ received");
   });
+});
+
+/**
+ * Issue 537/538 (Issue 543 option B2). This problem shipped as a single Docker stage that
+ * carried `fixtures/`, `tests/` and `verifier/` in the same image a learner's own
+ * `make build` produced. All six checkpoints are graded by running
+ * `tests/hidden/check_oblivious.py` against the submitted file, so the person being graded
+ * was shipped the assertions — including `check_receiver_privacy` and `check_gate_privacy`,
+ * which state the two properties the problem exists to make a learner derive. It came off
+ * the `COPY verifier/` list in docs/AGENT_LOOP_CONSTRAINTS.md §5 with this change.
+ *
+ * The tests below pin the boundary that fix put in, in the two ways it can be checked
+ * without a Docker daemon: the Dockerfile's own COPY lists, and the participant stage's
+ * real file list run through the same derivation `check-answer-reachability.ts` uses.
+ * Restoring any of the three COPY lines turns them red.
+ */
+
+const REPO = join(import.meta.dir, "..");
+const DIR = "challenges/ac26-w2-oblivious-transfer";
+const CHECKPOINT_IDS = [
+  "request",
+  "choice-privacy",
+  "transfer",
+  "and-gate",
+  "gate-privacy",
+  "unseen",
+] as const;
+
+function python(args: string[], cwd = LOCAL) {
+  return spawnSync("python3", args, {
+    cwd,
+    encoding: "utf8",
+    env: { ...process.env, FLAG_SEED: "ci-fixed-seed", PYTHONDONTWRITEBYTECODE: "1" },
+    timeout: 180_000,
+  });
+}
+
+function evaluate(checkpointId: string, submission: string): boolean {
+  const script = [
+    "import json, sys",
+    "sys.path.insert(0, '.')",
+    "from verifier.server import evaluate",
+    "print(json.dumps(evaluate(sys.argv[1], sys.argv[2])))",
+  ].join("\n");
+  const result = python(["-c", script, checkpointId, submission]);
+  expect(result.status).toBe(0);
+  return JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "null") === true;
+}
+
+describe("ac26-w2-oblivious-transfer: the participant image carries nothing that grades", () => {
+  it("keeps fixtures/, the hidden suite and the verifier out of the participant Docker stage", () => {
+    const dockerfile = readFileSync(join(LOCAL, "Dockerfile"), "utf8");
+    const participantStage = dockerfile.slice(
+      dockerfile.indexOf("FROM base AS participant"),
+      dockerfile.indexOf("FROM base AS verifier"),
+    );
+    expect(participantStage).not.toContain("COPY --chown=lab:lab fixtures/");
+    expect(participantStage).not.toContain("tests/hidden");
+    expect(participantStage).not.toContain("COPY --chown=lab:lab verifier/");
+    expect(participantStage).not.toContain("COPY --chown=lab:lab reference/");
+    expect(participantStage).not.toContain("COPY --chown=lab:lab mutation.py");
+    expect(participantStage).toContain("COPY --chown=lab:lab tests/public/");
+    expect(participantStage).toContain("COPY --chown=lab:lab participant/");
+
+    const verifierStage = dockerfile.slice(
+      dockerfile.indexOf("FROM base AS verifier"),
+      dockerfile.indexOf("FROM participant AS author"),
+    );
+    expect(verifierStage).toContain("COPY --chown=lab:lab fixtures/");
+    expect(verifierStage).toContain("COPY --chown=lab:lab tests/hidden/");
+    expect(verifierStage).toContain("COPY --chown=lab:lab verifier/");
+    // The supplied key derivation, and only that: the Portal server and its adapter stay
+    // out of the grading image.
+    expect(verifierStage).toContain("COPY --chown=lab:lab participant/ot.py");
+    expect(verifierStage).not.toContain("COPY --chown=lab:lab participant/\n");
+    expect(verifierStage).not.toContain("COPY --chown=lab:lab reference/");
+    expect(verifierStage).not.toContain("COPY --chown=lab:lab mutation.py");
+  });
+
+  it("reproduces the original leak: no file the participant image carries reaches the derivation or the hidden assertions", () => {
+    // The file list comes from the Dockerfile's participant stage, via the same
+    // derivation `check-answer-reachability.ts` uses, rather than being restated here --
+    // so a COPY that puts `fixtures/` or `tests/hidden/` back fails this test.
+    const participantFiles = participantPythonFiles(REPO, DIR);
+    expect(participantFiles).not.toContain(`${DIR}/local/fixtures/generate.py`);
+    expect(participantFiles).not.toContain(`${DIR}/local/tests/hidden/check_oblivious.py`);
+    expect(participantFiles).not.toContain(`${DIR}/local/verifier/server.py`);
+    expect(participantFiles).toContain(`${DIR}/local/tests/public/test_oblivious.py`);
+    expect(participantFiles).toContain(`${DIR}/local/participant/server.py`);
+    expect(participantFiles).toContain(`${DIR}/local/participant/ot.py`);
+    for (const file of participantFiles) {
+      const source = readFileSync(join(REPO, file), "utf8");
+      // The one permitted mention is the lazy, function-scoped checkout/author fallback
+      // in show.py and the public tests: never a module-level import, which is what
+      // would fail loudly the moment it ran inside a participant image that carries no
+      // `fixtures/` at all.
+      expect(source).not.toMatch(/^from fixtures/m);
+      expect(source).not.toMatch(/^import fixtures/m);
+      expect(source).not.toMatch(/^from tests\.hidden/m);
+      expect(source).not.toMatch(/^from verifier/m);
+    }
+  });
+
+  it("publishes only the Workbench, and reaches the verifier over an internal network", () => {
+    const compose = parseYaml(readFileSync(join(LOCAL, "docker-compose.yml"), "utf8")) as {
+      services: Record<string, Record<string, unknown>>;
+      networks: Record<string, Record<string, unknown>>;
+    };
+    expect(Object.keys(compose.services).sort()).toEqual(["verifier", "workbench"]);
+    // The published port and the /verify URL are what metadata.json's runtime declares,
+    // and they did not move: the Workbench answers on 18310 and forwards inward.
+    expect(compose.services.workbench.ports).toEqual(["127.0.0.1:18310:18310"]);
+    expect(compose.services.verifier.ports).toBeUndefined();
+    expect(compose.networks.lab.internal).toBe(true);
+    expect(compose.services.verifier.networks).toEqual(["lab"]);
+    const runtime = JSON.parse(readFileSync(join(PROBLEM, "metadata.json"), "utf8")).runtime as {
+      verifyUrl: string;
+    };
+    expect(runtime.verifyUrl).toBe("http://127.0.0.1:18310/verify");
+  });
+});
+
+describe("ac26-w2-oblivious-transfer: what the split does and does not close", () => {
+  it("scores zero for a submission that imports the graded material at grading time", () => {
+    // Issue 591: `fixtures/` and `tests/hidden/` are on the runner's sys.path because
+    // grading needs them, so the guard in verifier/server.py's RUNNER -- not the Docker
+    // split -- is what closes this path. This problem was one of the ten Issue 591 left
+    // unguarded, because its reference imported `derive_key` from `fixtures.generate`;
+    // the split moved that helper to `participant/ot.py`, which the guard does not evict,
+    // so the guard could go in. Measured, not assumed.
+    for (const checkpoint of CHECKPOINT_IDS) {
+      expect(evaluate(checkpoint, "from fixtures.generate import *\n")).toBe(false);
+    }
+  }, 180_000);
+
+  it("scores zero for the module the participant image ships", () => {
+    // The other probe: the participant reads what their own container carries and
+    // pastes it, so the RUNNER guard -- which only blocks `import` -- is not in the
+    // path. The reference passing every checkpoint above is this probe's positive
+    // control (docs/AGENT_LOOP_CONSTRAINTS.md §5): without one, a silently broken probe
+    // reports the same zero as a closed problem.
+    const shipped = readFileSync(join(LOCAL, "participant", "ot.py"), "utf8");
+    for (const checkpoint of CHECKPOINT_IDS) {
+      expect(evaluate(checkpoint, shipped)).toBe(false);
+    }
+  }, 180_000);
+
+  it("still grades the reference through the guard", () => {
+    // The guard removes the problem root from sys.path while the submission is imported.
+    // The reference's own `from participant.ot import derive_key` has to keep resolving
+    // through the module cache, or every checkpoint would fail for the wrong reason --
+    // which is exactly the breakage that kept this problem on Issue 591's exception list.
+    expect(evaluate("unseen", REFERENCE)).toBe(true);
+  }, 180_000);
+});
+
+describe("ac26-w2-oblivious-transfer: the public half survives the split", () => {
+  it("serves show.py and the public tests every value they used to import", () => {
+    const script = [
+      "import json, sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import public_payload, group, keypair, session, wires, health_token",
+      "seed = sys.argv[1]",
+      "payload = public_payload(seed)",
+      "print(json.dumps({",
+      "  'group': payload['group'] == group(seed),",
+      "  'senderKey': payload['senderKey'] == keypair(seed),",
+      "  'session': payload['session'] == session(seed, 'public'),",
+      "  'wires': payload['wires'] == wires(seed, 'public'),",
+      "  'healthToken': payload['healthToken'] == health_token(seed),",
+      // Nothing under a hidden label travels: the suite grades h0..h3 and `unseen`
+      // grades under a seed suffix that is never served.
+      "  'noHiddenLabels': all(",
+      "     payload['session'] != session(seed, label) for label in ('h0','h1','h2','h3')",
+      "  ),",
+      "}))",
+    ].join("\n");
+    const result = python(["-c", script, "ci-fixed-seed"]);
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "{}")).toEqual({
+      group: true,
+      senderKey: true,
+      session: true,
+      wires: true,
+      healthToken: true,
+      noHiddenLabels: true,
+    });
+  });
+
+  it("prints exactly what it printed before the split, on every seed shape", () => {
+    // show.py reads `GET /public` now instead of importing `fixtures.generate`. What a
+    // learner sees must not have moved with it, so the injected-payload path is compared
+    // against the checkout fallback across seeds spanning several of the ten groups.
+    for (const seed of ["ci-fixed-seed", "seed-a", "seed-b", "seed-c"]) {
+      const direct = spawnSync("python3", ["show.py"], {
+        cwd: LOCAL,
+        encoding: "utf8",
+        env: { ...process.env, FLAG_SEED: seed, PYTHONDONTWRITEBYTECODE: "1" },
+        timeout: 60_000,
+      });
+      expect(direct.status).toBe(0);
+
+      const payload = python([
+        "-c",
+        "import json,sys; sys.path.insert(0,'.'); from fixtures.generate import public_payload; print(json.dumps(public_payload(sys.argv[1])))",
+        seed,
+      ]);
+      expect(payload.status).toBe(0);
+      const injected = spawnSync("python3", ["show.py"], {
+        cwd: LOCAL,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          FLAG_SEED: seed,
+          PYTHONDONTWRITEBYTECODE: "1",
+          PUBLIC_EVIDENCE_JSON: payload.stdout.trim().split("\n").at(-1) ?? "",
+        },
+        timeout: 60_000,
+      });
+      expect(injected.status).toBe(0);
+      expect(injected.stdout).toBe(direct.stdout);
+    }
+  }, 120_000);
 });

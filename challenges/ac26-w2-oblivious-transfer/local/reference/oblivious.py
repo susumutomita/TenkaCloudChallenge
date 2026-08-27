@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fixtures.generate import derive_key
+from participant.ot import derive_key
 
 
 def request(grp: dict[str, int], public: int, choice: int, blind: int) -> int:

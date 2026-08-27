@@ -257,8 +257,8 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   `sha256-compress-digest`, `ac26-w2-linear-shares`, split by #590, #564, #596 and #563).
   #538 was closed on that evidence.
 
-  What the sweep does **not** settle, and what keeps #543 open: **17 problems still
-  `COPY verifier/` into their participant stage** — `ac26-w2-{oblivious-transfer,privacy-audit,private-aggregate}`,
+  What the sweep does **not** settle, and what keeps #543 open: **16 problems still
+  `COPY verifier/` into their participant stage** — `ac26-w2-{privacy-audit,private-aggregate}`,
   `ac26-w3-{ec-group,fft-domain,nonce-reuse,ntt-roots}`, `ac26-w4-{arithmetization,proof-pipeline}`,
   and the eight `ac26-w6`/`w7` ones above. That is the structural shape #543 was opened on,
   and the owner chose B (separate verifier container) over A (accept and document).
@@ -282,6 +282,31 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   #599 is also the first in the class with a **direct-answer checkpoint** (`threshold`), so
   the `tcw1.` seal check had to be duplicated into the verifier the way ac26-w4-commit-open
   does it — copy that pair for any of the 17 whose scoring has a non-code checkpoint.
+
+  `ac26-w2-oblivious-transfer` came off the list next, and is the first one that also
+  **came off Issue #591's ten-verifier exception list** (`scripts/verifier-fixtures-guard.test.ts`).
+  Those ten were left unguarded because each one's reference imports `fixtures.generate`
+  for a legitimate supplied helper, so evicting `fixtures` would fail the reference. The
+  B2 split is what removes that objection: the supplied half — here `derive_key` — moves
+  into `participant/ot.py`, which the guard does not evict, so the guard goes in and the
+  submission-side probe is closed structurally rather than by measurement alone. **Check
+  this before deciding a split is done on any of the other nine**: if the split moves the
+  supplied helper out of `fixtures/`, the guard becomes applicable in the same PR, and
+  leaving it out is the "half a fix" §5 already warns about. Verify it with the reference,
+  not by inspection — the guard drops the problem root from `sys.path` during the
+  submission import, so the supplied module resolves only through the module cache the
+  hidden checker's own import populated.
+
+  Its measured free score was **0 on both probes before the split as well as after**,
+  with the reference at 6/6 (200/200) as the positive control both times — the
+  guard-removal control is flat here, so the reference is the only usable one, as with
+  #600. `fixtures/generate.py` defines none of the seven names `starter/oblivious.py`
+  asks for, so the name-based detector reported it zero times and the reachability count
+  is unchanged at 0 across the PR. What the single stage actually handed over was
+  `tests/hidden/check_oblivious.py`, whose assertions decide all six checkpoints —
+  including `check_receiver_privacy` and `check_gate_privacy`, which between them state
+  the two properties the problem exists to make a learner derive. A points figure is the
+  wrong measure of that leak; say what was readable instead.
 
   `ac26-w2-beaver-mul` came off the list in #600, on the same `COPY verifier/` shape and
   with the same measured result: **0 on both probes before the split as well as after**,
