@@ -257,9 +257,9 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   `sha256-compress-digest`, `ac26-w2-linear-shares`, split by #590, #564, #596 and #563).
   #538 was closed on that evidence.
 
-  What the sweep does **not** settle, and what keeps #543 open: **14 problems still
+  What the sweep does **not** settle, and what keeps #543 open: **13 problems still
   `COPY verifier/` into their participant stage** —
-  `ac26-w3-{ec-group,fft-domain,nonce-reuse,ntt-roots}`, `ac26-w4-{arithmetization,proof-pipeline}`,
+  `ac26-w3-{fft-domain,nonce-reuse,ntt-roots}`, `ac26-w4-{arithmetization,proof-pipeline}`,
   and the eight `ac26-w6`/`w7` ones above. That is the structural shape #543 was opened on,
   and the owner chose B (separate verifier container) over A (accept and document).
   Grep for the shape rather than trusting a plain `^COPY verifier/`:
@@ -367,6 +367,31 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   and `fixtures/generate.py` imports it, so the round counting a learner sees is the
   round counting they are graded by. The verifier stage copies that one file, not
   `participant/`.
+
+  `ac26-w3-ec-group` came off the list in #PENDING, and it is the **cleanest measurement
+  of what this class leaks** so far — the one to point at when somebody asks whether a
+  `COPY verifier/` problem is really giving anything away. Both standard probes read
+  **0 of 300 before the split as well as after**, the reference is 8/8 (300/300) as the
+  positive control, the guard-removal control is flat (the verifier already carried
+  #597's guard), and the reachability count is unchanged at 0 throughout. #603's third
+  probe is what speaks: `tests/hidden/check_curve.py` carries `_ReferenceCurve`, a
+  complete and correct group law — the identity kept distinct from every affine point,
+  the inverse, the chord formula, the tangent formula, the vertical-tangent case at
+  y = 0, and double-and-add including a negative scalar. Those are, verbatim, the five
+  things `starter/curve.py` tells the learner the problem will not let them skip. A
+  submission that copies that class and wires it to the starter's own declared API,
+  with no reasoning past copying, scores **8 of 8 checkpoints, 300 of 300 points** — the
+  #584 pole again, reached by transcription rather than by import. When a problem's
+  hidden checker holds its own ground-truth implementation, that class *is* the answer;
+  do not let two zero probes talk you out of measuring the third.
+
+  It is also the first in this class with **no supplied half and an argument-taking
+  `make inspect`** at once: `fixtures/generate.py` is seed derivation and point
+  enumeration only, so nothing had to move to `participant/` and the verifier stage
+  copies no participant file at all — while `make inspect K=13` still has to work, which
+  it does without a payload change, because the scalar is the learner's and only the
+  curve comes from `GET /public`. Copy #586 for the stage layout and #594 only if the
+  *payload* has to vary with the argument.
 
   Two consequences for reporting. `scripts/check-answer-reachability.ts` only ever sees
   the participant image, so a finding count says nothing about this path — never write

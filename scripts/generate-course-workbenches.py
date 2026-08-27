@@ -135,6 +135,15 @@ PORTAL_PACKAGES = {
     # behind plain_score. Both left the participant stage and the Portal moved with them;
     # the supplied opening handle stayed behind in participant/protocol.py.
     "ac26-w2-private-aggregate": "participant",
+    # Issue 537/538 (Issue 543 option B2): tests/hidden/check_curve.py grades all eight
+    # checkpoints and holds _ReferenceCurve -- a complete group law, with the identity
+    # kept distinct from every affine point, the inverse, the chord and tangent formulas,
+    # the vertical-tangent case and double-and-add -- which is the whole of what
+    # starter/curve.py asks a learner to build. fixtures/generate.py shipped there too and
+    # derives the curve, the sample points and the scalars behind the graded labels. Both
+    # left the participant stage and the Portal moved with them; there is no supplied half
+    # to carve out here.
+    "ac26-w3-ec-group": "participant",
     # Issue 537/538: verifier/server.py's own _check_avalanche compared a submission
     # directly against a plain, seed-derived avalanche_distance defined in the same
     # file, and _check_properties/_check_storage compared against

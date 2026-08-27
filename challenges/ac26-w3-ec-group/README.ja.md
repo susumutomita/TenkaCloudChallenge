@@ -80,10 +80,17 @@ production の手本ではありません。
 
 ## 保証範囲
 
-ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も
-あなたの管理下にあるので、 image の中身はあなたに対して秘匿されていません。
-`reference/` と `tests/hidden/` を bind-mount しないのは、あなたの git checkout に
-紛れ込ませないためであって、手が届かなくするためではありません。
+ローカル実行は**自習用の honor-system 検証**です。 compose stack のすべての container と
+Docker デーモンを管理している人に対して、隠した材料を秘匿することはできません。
+ここでの境界は秘匿ではなく誤配の防止です。 あなたが build して動かす Workbench container が
+持つのは starter と public tests だけで、 fixtures も hidden tests も reference solution も
+verifier も入っていません。 それらは Workbench が compose network 越しに参照する
+非公開の 2 つ目の container と、 `make reference-test` が build する author 専用 image に
+だけ存在します。
+
+そのため `make test` / `make test-one` / `make inspect` は先に verifier を起動します
+(`make verifier-up` が自動で走ります)。 このデプロイの曲線とその点は、ローカルで計算する
+のではなく compose network 越しに verifier から読みます。 停止は `make verifier-down` です。
 
 verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
 ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。

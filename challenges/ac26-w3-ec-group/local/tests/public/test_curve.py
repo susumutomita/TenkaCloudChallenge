@@ -8,6 +8,7 @@ file and fails four of the eight checkpoints.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -17,14 +18,49 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "starter"))
 
 import curve as submission  # noqa: E402
-from fixtures.generate import curve_params, points_on  # noqa: E402
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 
+def _load_public_evidence() -> dict:
+    """This deployment's curve and its affine points -- what `show.py` prints, and what
+    this file has always handed to `Curve(p, a, b)`.
+
+    Issue 537/538 (Issue 543 option B2): this file used to import `fixtures.generate`
+    directly. That module derives the curve, the sample points and the scalars every
+    checkpoint is graded against, and it shipped in the same image as
+    `tests/hidden/check_curve.py`, whose `_ReferenceCurve` is a complete group law --
+    so neither ships in the `participant` Docker stage any more (see ../../Dockerfile).
+    This deployment's own verifier is the only source for the public half now:
+    `PUBLIC_EVIDENCE_JSON` when the Portal has already fetched it, or
+    `VERIFIER_PUBLIC_URL` fetched directly when it has not.
+    """
+    injected = os.environ.get("PUBLIC_EVIDENCE_JSON")
+    if injected:
+        return json.loads(injected)
+    verifier_public_url = os.environ.get("VERIFIER_PUBLIC_URL")
+    if verifier_public_url:
+        from urllib.request import urlopen
+
+        with urlopen(verifier_public_url, timeout=10) as response:  # noqa: S310
+            return json.loads(response.read().decode("utf-8"))
+    # Neither is set: this only resolves when `fixtures/` is actually on disk, which is
+    # true for a checkout (this file run directly, e.g. by
+    # scripts/ac26-w3-ec-group.test.ts) and the verifier/author Docker stages, and never
+    # inside a built `participant` image -- so this branch does not reopen the leak
+    # above.
+    from fixtures.generate import public_payload
+
+    return public_payload(SEED)
+
+
+PUBLIC = _load_public_evidence()
+
+
 def _curve():
-    p, a, b = curve_params(SEED)
-    return submission.Curve(p, a, b), points_on(p, a, b)
+    params = PUBLIC["params"]
+    every = [tuple(coords) for coords in PUBLIC["points"]]
+    return submission.Curve(params["p"], params["a"], params["b"]), every
 
 
 def check_points_are_recognized() -> str:

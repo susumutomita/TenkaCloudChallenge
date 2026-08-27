@@ -53,7 +53,7 @@
   "exposedPorts": [
     {
       "port": 18101,
-      "name": "Portal editor API + /verify (loopback only)"
+      "name": "Participant Workbench: Portal editor API + /verify proxy (loopback only)"
     }
   ],
   "learningGoals": [
