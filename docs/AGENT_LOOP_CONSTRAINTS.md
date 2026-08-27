@@ -257,8 +257,8 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   `sha256-compress-digest`, `ac26-w2-linear-shares`, split by #590, #564, #596 and #563).
   #538 was closed on that evidence.
 
-  What the sweep does **not** settle, and what keeps #543 open: **15 problems still
-  `COPY verifier/` into their participant stage** — `ac26-w2-private-aggregate`,
+  What the sweep does **not** settle, and what keeps #543 open: **14 problems still
+  `COPY verifier/` into their participant stage** —
   `ac26-w3-{ec-group,fft-domain,nonce-reuse,ntt-roots}`, `ac26-w4-{arithmetization,proof-pipeline}`,
   and the eight `ac26-w6`/`w7` ones above. That is the structural shape #543 was opened on,
   and the owner chose B (separate verifier container) over A (accept and document).
@@ -340,6 +340,33 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   spec, the one clean run's trace and the health token — the six leaking programs and
   the `bravo` transcript stay in the verifier, because either would answer a checkpoint
   outright.
+
+  `ac26-w2-private-aggregate` came off the list in #605, on the same shape as #603 and
+  with the same numbers: both standard probes **0 of 300 before the split as well as
+  after**, the reference at 8/8 (300/300) as the positive control, the guard-removal
+  control flat, and the reachability count unchanged at 0 throughout — the detector is
+  blind to this problem in **both** directions, which the restore-the-leak run shows.
+  The third probe is the one that says what was leaked: a submission **transcribed from
+  the two shipped files**, with no reasoning past copying them, scored **8 of 8
+  checkpoints, 300 of 300 points**. `tests/hidden/check_aggregate.py`'s `check_plan`
+  states the three numbers `plan()` must return — the numbers the starter deliberately
+  withholds, because estimating them *is* the problem — while `check_cost` states the
+  round count and the opening count it accepts and `check_privacy` states the exact
+  multiset a run may reveal.
+
+  Two things it adds to the worked examples. First, its `GET /public` carries the
+  **whole** input rather than a withheld half like #600's: the public tests hand exactly
+  these shares to `aggregate` as its arguments, so a submission holds every one of them
+  at runtime by construction and withholding them here would hide them from the tests and
+  from nobody else. What stays behind is the seed derivation — the hidden `h0`/`h1`/`h2`
+  labels every checkpoint is actually graded on derive a different modulus, a different
+  organization count and different secrets from the same seed. Reach for that reading
+  whenever a problem's public label is not the graded one. Second, the supplied half was
+  the **opening handle itself** (`Protocol`, `ForbiddenOpen`), which the public tests
+  construct and the hidden checker grades through; it moved to `participant/protocol.py`
+  and `fixtures/generate.py` imports it, so the round counting a learner sees is the
+  round counting they are graded by. The verifier stage copies that one file, not
+  `participant/`.
 
   Two consequences for reporting. `scripts/check-answer-reachability.ts` only ever sees
   the participant image, so a finding count says nothing about this path — never write

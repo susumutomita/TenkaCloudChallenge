@@ -127,6 +127,14 @@ PORTAL_PACKAGES = {
     # Both left the participant stage and the Portal moved with them; the supplied key
     # derivation stayed behind in participant/ot.py.
     "ac26-w2-oblivious-transfer": "participant",
+    # Issue 537/538 (Issue 543 option B2): all eight checkpoints are graded by running
+    # tests/hidden/check_aggregate.py against the submitted file, and that checker's
+    # check_plan states the three numbers plan() must return, check_cost the round and
+    # opening counts it accepts, and check_privacy the exact multiset a run may reveal.
+    # fixtures/generate.py shipped there too and derives the secret counts and severities
+    # behind plain_score. Both left the participant stage and the Portal moved with them;
+    # the supplied opening handle stayed behind in participant/protocol.py.
+    "ac26-w2-private-aggregate": "participant",
     # Issue 537/538: verifier/server.py's own _check_avalanche compared a submission
     # directly against a plain, seed-derived avalanche_distance defined in the same
     # file, and _check_properties/_check_storage compared against

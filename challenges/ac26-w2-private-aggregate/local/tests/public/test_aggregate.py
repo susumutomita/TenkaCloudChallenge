@@ -10,6 +10,7 @@ reuses a single triple for everything. Both are correct. Neither is finished.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -19,38 +20,74 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "starter"))
 
 import aggregate  # noqa: E402
-from fixtures.generate import (  # noqa: E402
-    Protocol,
-    inputs_shared,
-    plain_score,
-    reconstruct,
-    setting,
-    triples,
-)
+
+from participant.protocol import Protocol, reconstruct  # noqa: E402
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 
+def _load_public_evidence() -> dict:
+    """This deployment's modulus, organization count, bias, shared inputs and triples --
+    what `show.py` prints a row of, and what this file has always handed to `aggregate`.
+
+    Issue 537/538 (Issue 543 option B2): this file used to import `fixtures.generate`
+    directly. That module derives the secret counts and severities every checkpoint is
+    graded against, and it shipped in the same image as
+    `tests/hidden/check_aggregate.py`, whose assertions state this problem's answers
+    outright -- so it does not ship in the `participant` Docker stage at all any more
+    (see ../../Dockerfile). This deployment's own verifier is the only source for the
+    public half now: `PUBLIC_EVIDENCE_JSON` when the Portal has already fetched it, or
+    `VERIFIER_PUBLIC_URL` fetched directly when it has not.
+    """
+    injected = os.environ.get("PUBLIC_EVIDENCE_JSON")
+    if injected:
+        return json.loads(injected)
+    verifier_public_url = os.environ.get("VERIFIER_PUBLIC_URL")
+    if verifier_public_url:
+        from urllib.request import urlopen
+
+        with urlopen(verifier_public_url, timeout=10) as response:  # noqa: S310
+            return json.loads(response.read().decode("utf-8"))
+    # Neither is set: this only resolves when `fixtures/` is actually on disk, which is
+    # true for a checkout (this file run directly, e.g. by
+    # scripts/ac26-w2-private-aggregate.test.ts) and the verifier/author Docker stages,
+    # and never inside a built `participant` image -- so this branch does not reopen the
+    # leak above.
+    from fixtures.generate import public_payload
+
+    return public_payload(SEED)
+
+
+PUBLIC = _load_public_evidence()
+
+
 def _run():
-    st = setting(SEED)
-    shared = inputs_shared(SEED, "public", st)
-    triple_list = [
-        {"a": t.a, "b": t.b, "c": t.c} for t in triples(SEED, "public", st, st.parties)
-    ]
-    io = Protocol(p=st.p)
+    params = PUBLIC["params"]
+    io = Protocol(p=params["p"])
     out = aggregate.aggregate(
-        [list(s) for s in shared["counts"]],
-        [list(s) for s in shared["severities"]],
-        triple_list,
-        st.as_public(),
+        [list(s) for s in PUBLIC["counts"]],
+        [list(s) for s in PUBLIC["severities"]],
+        [dict(t) for t in PUBLIC["triples"]],
+        dict(params),
         io,
     )
-    return st, io, out
+    return params, io, out
+
+
+def _plain_score() -> int:
+    """The score the way the README states it, computed from the shares this file was
+    handed: `sum_i (count_i * severity_i) + bias`, mod p. No hidden expectation, and no
+    `fixtures.generate` -- every value here is one that `aggregate` receives anyway."""
+    params = PUBLIC["params"]
+    p = params["p"]
+    total = 0
+    for count, severity in zip(PUBLIC["counts"], PUBLIC["severities"]):
+        total += reconstruct(count, p) * reconstruct(severity, p)
+    return (total + params["bias"]) % p
 
 
 def check_plan_is_filled_in() -> str:
-    st = setting(SEED)
-    got = aggregate.plan(st.as_public())
+    got = aggregate.plan(dict(PUBLIC["params"]))
     if not isinstance(got, dict):
         return "plan did not return a cost estimate"
     if any(got.get(key) in (None, 0) for key in ("multiplications", "triples", "rounds")):
@@ -59,10 +96,10 @@ def check_plan_is_filled_in() -> str:
 
 
 def check_score_is_right() -> str:
-    st, _io, out = _run()
-    if not isinstance(out, list) or len(out) != st.parties:
+    params, _io, out = _run()
+    if not isinstance(out, list) or len(out) != params["parties"]:
         return "the protocol did not return one share per party"
-    if reconstruct(out, st.p) != plain_score(st):
+    if reconstruct(out, params["p"]) != _plain_score():
         return "the score does not match the plain computation"
     return ""
 

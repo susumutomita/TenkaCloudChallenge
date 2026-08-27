@@ -22,12 +22,48 @@ instead of assertable.
 
 Toy parameters, small enough to check by hand. Not secure and not a model of a real
 deployment.
+
+Issue 537/538 (Issue 543 option B2): this module derives every setting a checkpoint is
+graded against -- the secret counts and severities behind `plain_score`, and the triples
+`check_privacy` builds its expected opening set from -- so it does not ship in the
+`participant` Docker stage any more (see ../Dockerfile). The opening handle a learner is
+handed is not part of that and stayed behind in `participant/protocol.py`, which is
+imported below rather than restated. `public_payload` at the bottom is what the
+participant image reads over the network instead of importing this file.
 """
 
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass, field
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+# The supplied half, single-sourced. `participant/protocol.py` is the copy that ships in
+# the participant image; importing it here rather than restating it is what keeps the
+# round counting a learner sees identical to the round counting they are graded by.
+from participant.protocol import (  # noqa: E402 - after the sys.path insert above
+    ForbiddenOpen,
+    Protocol,
+    reconstruct,
+)
+
+__all__ = [
+    "ForbiddenOpen",
+    "Protocol",
+    "Setting",
+    "Triple",
+    "health_token",
+    "inputs_shared",
+    "plain_score",
+    "public_payload",
+    "reconstruct",
+    "setting",
+    "shares_of",
+    "triples",
+]
 
 PRIMES = (2003, 2011, 2017, 2027, 2029, 2039, 2053, 2063)
 
@@ -83,10 +119,6 @@ def shares_of(seed: str, label: str, secret: int, n: int, p: int) -> list[int]:
     return [*head, (secret - sum(head)) % p]
 
 
-def reconstruct(shares: list[int], p: int) -> int:
-    return sum(shares) % p
-
-
 @dataclass(frozen=True)
 class Triple:
     a: list[int]
@@ -126,41 +158,37 @@ def inputs_shared(seed: str, label: str, st: Setting) -> dict[str, list[list[int
     }
 
 
-class ForbiddenOpen(Exception):
-    """Raised when the protocol asks to reveal something it has no business revealing."""
-
-
-@dataclass
-class Protocol:
-    """The only way a submission is allowed to reveal anything.
-
-    `open_batch` reveals several sharings at once and counts as **one** round. That is
-    the entire cost model: a submission that calls it once per multiplication pays `k`
-    rounds for work that fits in one, and the count is measured rather than claimed.
-
-    Every opened sharing is recorded, so the privacy checkpoint audits what a run
-    actually revealed rather than what it says it revealed.
-    """
-
-    p: int
-    rounds: int = 0
-    opened: list[list[int]] = field(default_factory=list)
-    batch_sizes: list[int] = field(default_factory=list)
-
-    def open_batch(self, sharings: list[list[int]]) -> list[int]:
-        if not isinstance(sharings, list) or not sharings:
-            raise ForbiddenOpen("an opening round must reveal at least one sharing")
-        values = []
-        for sharing in sharings:
-            if not isinstance(sharing, list) or not sharing:
-                raise ForbiddenOpen("that is not a sharing")
-            self.opened.append(list(sharing))
-            values.append(sum(sharing) % self.p)
-        self.rounds += 1
-        self.batch_sizes.append(len(sharings))
-        return values
-
-
 def health_token(seed: str) -> str:
     st = setting(seed)
     return hashlib.sha256(f"health:{seed}:{st.p}:{st.parties}".encode()).hexdigest()[:16]
+
+
+def public_payload(seed: str) -> dict[str, object]:
+    """Everything a participant may see for this deployment. Carries values, not code.
+
+    This is the `public` label only. Every checkpoint is graded on the `h0`, `h1` and
+    `h2` labels (see tests/hidden/check_aggregate.py), which derive a different modulus,
+    a different organization count and different secrets from the same seed -- so nothing
+    below narrows a graded run.
+
+    Within the `public` label it carries the whole input, because the public tests hand
+    exactly this to `aggregate` as its arguments: a submission holds every share of every
+    count and severity at runtime by construction, and a sharing is a sum away from its
+    value in a single process. Withholding it here would hide it from the tests and from
+    nobody else. `show.py` prints one organization's row of it, as it always did.
+
+    What does not travel is the seed derivation itself. `setting`, `inputs_shared`,
+    `triples` and `plain_score` decide the hidden labels too, and the module they live in
+    ships beside `tests/hidden/check_aggregate.py`, whose assertions state this problem's
+    answers outright -- the three numbers `plan` must return among them.
+    """
+    st = setting(seed)
+    shared = inputs_shared(seed, "public", st)
+    triple_list = triples(seed, "public", st, st.parties)
+    return {
+        "params": {"p": st.p, "parties": st.parties, "bias": st.bias},
+        "counts": [list(sharing) for sharing in shared["counts"]],
+        "severities": [list(sharing) for sharing in shared["severities"]],
+        "triples": [{"a": list(t.a), "b": list(t.b), "c": list(t.c)} for t in triple_list],
+        "healthToken": health_token(seed),
+    }
