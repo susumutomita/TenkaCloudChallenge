@@ -16,8 +16,8 @@ COMPOSE := FLAG_SEED=$(FLAG_SEED) docker compose -f local/docker-compose.yml -p 
 # reads it. Issue 525/543: the grader (verifier/), the hidden checks and reference/ are
 # not in this image at all any more -- they build into the separate `verifier` and
 # `author` stages. Local mode is still honor-system verification: nothing stops whoever
-# owns the Docker daemon from building the author stage. See TEMPLATE.md "Assurance
-# scope".
+# owns the Docker daemon from building the author stage.
+# See TEMPLATE.md "Assurance scope".
 #
 # Issue 537/543 option B2: `fixtures/` does not ship in the participant image either any
 # more, so `show.py` and the public tests need a live verifier to fetch this deployment's
