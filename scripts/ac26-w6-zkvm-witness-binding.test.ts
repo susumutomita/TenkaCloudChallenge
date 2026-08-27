@@ -99,6 +99,8 @@ describe("ac26-w6-zkvm-witness-binding: participant contract", () => {
       "local/show.py",
       "local/mutation.py",
       "local/fixtures/generate.py",
+      "local/participant/lab.py",
+      "local/participant/server.py",
       "local/tests/public/test_guest.py",
       "local/tests/hidden/check_guest.py",
       "local/verifier/server.py",
@@ -121,6 +123,202 @@ describe("ac26-w6-zkvm-witness-binding: participant contract", () => {
     expect(makefile).toContain("local/starter:/problem/starter:ro");
     expect(makefile).not.toContain("local/reference:");
     expect(makefile).not.toContain("tests/hidden:");
+  });
+
+  it("should run the participant targets through Compose, so the verifier is up for them", () => {
+    // Issue 543 option B2: `show.py` and the public tests read this deployment's statement,
+    // image, siblings, witness, colliding pair and audited runs from the verifier's
+    // `GET /public` now, so a bare `docker run` against the participant image cannot serve them.
+    const makefile = read("Makefile");
+    for (const target of ["verifier-up:", "verifier-down:"]) {
+      expect(makefile).toContain(target);
+    }
+    for (const line of ["test: build verifier-up", "inspect: build verifier-up"]) {
+      expect(makefile).toContain(line);
+    }
+  });
+});
+
+describe("ac26-w6-zkvm-witness-binding: the answer is not in the participant image", () => {
+  function participantStage(): string {
+    const dockerfile = read("local/Dockerfile");
+    const start = dockerfile.indexOf("FROM base AS participant");
+    const end = dockerfile.indexOf("FROM base AS verifier");
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    return dockerfile.slice(start, end);
+  }
+
+  // Issue 537/538 (Issue 543 option B2). Before this split the single stage carried
+  // `tests/hidden/check_guest.py`, which implements four of the eight graded functions
+  // outright — `_encode` is `encode_statement`, `_run` is `run_guest`, `_journal` is
+  // `seal_journal`, `_leaks` is the policy `leak_report` applies — with `_not_statements` and
+  // `_not_witnesses` enumerating every refusal three more of them are graded on, beside
+  // `fixtures/generate.py`, which holds `_machine` (the same run again), `replay_truth` and
+  // `disclosure_truth`. A submission transcribed from those two files, with no reasoning past
+  // copying, scored 8 of 8 checkpoints (300 of 300 points). Putting either `COPY` back turns
+  // this test red.
+  it("should copy neither fixtures/, tests/hidden/ nor verifier/ into the participant stage", () => {
+    const stage = participantStage();
+    expect(stage).toContain("COPY tests/public/");
+    expect(stage).toContain("COPY participant/");
+    for (const forbidden of [
+      "COPY fixtures/",
+      "COPY tests/ ",
+      "COPY tests/hidden/",
+      "COPY verifier/",
+    ]) {
+      expect(stage).not.toContain(forbidden);
+    }
+  });
+
+  it("should serve the Portal from the participant image, not from the grading one", () => {
+    expect(existsSync(join(ROOT, "local/participant/server.py"))).toBe(true);
+    expect(existsSync(join(ROOT, "local/participant/workbench.py"))).toBe(true);
+    expect(existsSync(join(ROOT, "local/verifier/workbench.py"))).toBe(false);
+    // Nothing in the participant image may decide a checkpoint: it forwards instead.
+    const server = read("local/participant/server.py");
+    expect(server).toContain("proxy_verdict");
+    expect(server).not.toContain("tests.hidden");
+    expect(server).not.toContain("import fixtures");
+  });
+
+  it("should keep every verdict and every derivation out of the supplied layer", () => {
+    // `participant/lab.py` is the half this problem hands over on purpose — `starter/guest.py`'s
+    // own docstring names every one of these, so a submission has to be able to import them.
+    // What must not travel with them is anything a checkpoint is graded on. Asserted over the
+    // module's own namespace rather than its source text, so a prose mention of a name that is
+    // not there does not read as the name being there.
+    const script = [
+      "import json, sys",
+      "sys.path.insert(0, '.')",
+      "import participant.lab as lab",
+      "print(json.dumps(sorted(n for n in dir(lab) if not n.startswith('__'))))",
+    ].join("\n");
+    const exported = JSON.parse(python(["-c", script]).stdout.trim()) as string[];
+    for (const name of [
+      "CHANNELS",
+      "Disclosure",
+      "Env",
+      "JOURNAL_FIELDS",
+      "PUBLIC_NAMES",
+      "SEMANTICS",
+      "STATEMENT_FIELDS",
+      "claim_site",
+      "commit",
+      "decode_program",
+      "is_well_formed",
+      "naive_encode",
+      "shuffled",
+      "witness",
+    ]) {
+      expect(exported).toContain(name);
+    }
+    for (const forbidden of [
+      "collision_pair",
+      "disclosure_truth",
+      "disclosures",
+      "exploit_quantity",
+      "exploit_witness",
+      "image",
+      "naive_collisions",
+      "public_payload",
+      "replay_cases",
+      "replay_truth",
+      "scenario",
+      "sibling_images",
+      "statement",
+      "statement_family",
+    ]) {
+      expect(exported).not.toContain(forbidden);
+    }
+  });
+
+  it("should keep the verifier off the host and reachable only from the Workbench", () => {
+    const compose = parseYaml(read("local/docker-compose.yml")) as {
+      services: Record<string, { ports?: string[]; environment?: Record<string, string> }>;
+      networks: Record<string, { internal?: boolean }>;
+    };
+    expect(compose.services.verifier.ports).toBeUndefined();
+    expect(compose.services.workbench.environment?.VERIFIER_PUBLIC_URL).toContain("/public");
+    expect(compose.networks.lab.internal).toBe(true);
+  });
+
+  it("should guard the submission import against fixtures/ and tests/ on the grading path", () => {
+    // Issue 591. `fixtures/` and `tests/hidden/` stay on disk in the grading image, so without
+    // this a submission's own import statement reaches `_machine`, `replay_truth`,
+    // `disclosure_truth` and the hidden checker's own implementation of four graded functions.
+    const verifier = read("local/verifier/server.py");
+    expect(verifier).toContain(
+      'if name in ("tests", "fixtures") or name.startswith(("tests.", "fixtures."))',
+    );
+    // The supplied module is preloaded before the guard and survives it, which is what keeps
+    // `reference/guest.py`'s own top-level import — and a learner's — resolvable while graded.
+    expect(verifier).toContain("import participant.lab");
+    expect(read("local/reference/guest.py")).toContain("from participant.lab import ");
+  });
+
+  it("should refuse a submission that reaches for the fixtures at grading time", () => {
+    // The submission-side probe of Issue 591, run for real. It scored 0 before this split as
+    // well (this problem's `fixtures/generate.py` defines none of the eight graded names), so
+    // the guard is what makes that structural rather than a measurement that could change.
+    expect(evaluate("encoding", "from fixtures.generate import *\n")).toBe(false);
+    expect(evaluate("privacy", "from tests.hidden.check_guest import *\n")).toBe(false);
+  }, 300_000);
+
+  it("should keep the verdicts and the graded labels out of GET /public", () => {
+    // `h0`..`h3` and `transfer`'s own derived seed are what every checkpoint is graded on. The
+    // payload carries the public label only — the same statement, machine, image, siblings,
+    // colliding pair and ids `make inspect` has always printed — and never which receipt a
+    // verifier may accept or which run gave the witness away.
+    const script = [
+      "import json, os, sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import public_payload, statement, statement_id",
+      "seed = os.environ['FLAG_SEED']",
+      "print(json.dumps({",
+      "    'payload': public_payload(seed),",
+      "    'hidden': [statement_id(statement(seed, label)) for label in ('h0','h1','h2','h3')],",
+      "    'hiddenDigests': [statement(seed, label)['imageDigest'] for label in ('h0','h1','h2','h3')],",
+      "}))",
+    ].join("\n");
+    const probe = JSON.parse(python(["-c", script]).stdout.trim()) as {
+      payload: {
+        disclosures: { id: string; disclosure: Record<string, unknown> }[];
+        replayCaseIds: string[];
+      };
+      hidden: string[];
+      hiddenDigests: string[];
+    };
+    expect(Object.keys(probe.payload).sort()).toEqual([
+      "collisionPair",
+      "disclosures",
+      "healthToken",
+      "image",
+      "replayCaseIds",
+      "siblings",
+      "statement",
+      "statementFamilySize",
+      "witness",
+    ]);
+    // The receipts travel as ids and nothing else: what each was sealed under and what it is
+    // offered against is the replay checkpoint.
+    for (const id of probe.payload.replayCaseIds) expect(typeof id).toBe("string");
+    // A run travels as its six channels, never beside the leaks behind it.
+    for (const entry of probe.payload.disclosures) {
+      expect(Object.keys(entry).sort()).toEqual(["disclosure", "id"]);
+      expect(Object.keys(entry.disclosure).sort()).toEqual([
+        "error",
+        "journal",
+        "stderr",
+        "stdout",
+        "temp",
+        "trace",
+      ]);
+    }
+    const serialized = JSON.stringify(probe.payload);
+    for (const name of probe.hidden) expect(serialized).not.toContain(name);
+    for (const digest of probe.hiddenDigests) expect(serialized).not.toContain(digest);
   });
 });
 
@@ -427,6 +625,49 @@ describe("ac26-w6-zkvm-witness-binding: the problem is solvable and actually fai
     expect(result.stdout).toContain("== the runner's two doors ==");
     expect(result.stdout).toContain("health token:");
   });
+
+  it("should print the same evidence from GET /public as from the checkout's fixtures", () => {
+    // The participant image has no `fixtures/` (Issue 543 option B2), so `show.py` reads this
+    // deployment's public half over the network. `PUBLIC_EVIDENCE_JSON` is the same payload
+    // injected directly, which is what makes both branches testable without a daemon: if they
+    // ever disagree, a learner's `make inspect` and an author's checkout are showing two
+    // different deployments.
+    for (const seed of ["evidence-a", "evidence-b", "evidence-c"]) {
+      const payload = spawnSync(
+        "python3",
+        [
+          "-c",
+          [
+            "import json, sys",
+            "sys.path.insert(0, '.')",
+            "from fixtures.generate import public_payload",
+            "print(json.dumps(public_payload(sys.argv[1])))",
+          ].join("\n"),
+          seed,
+        ],
+        { cwd: LOCAL, encoding: "utf8", env: { ...process.env, FLAG_SEED: seed } },
+      );
+      expect(payload.status).toBe(0);
+      const fromFixtures = spawnSync("python3", ["show.py"], {
+        cwd: LOCAL,
+        encoding: "utf8",
+        env: { ...process.env, FLAG_SEED: seed, PYTHONDONTWRITEBYTECODE: "1" },
+      });
+      const fromPublic = spawnSync("python3", ["show.py"], {
+        cwd: LOCAL,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          FLAG_SEED: seed,
+          PYTHONDONTWRITEBYTECODE: "1",
+          PUBLIC_EVIDENCE_JSON: payload.stdout.trim(),
+        },
+      });
+      expect(fromFixtures.status).toBe(0);
+      expect(fromPublic.status).toBe(0);
+      expect(fromPublic.stdout).toBe(fromFixtures.stdout);
+    }
+  }, 120_000);
 
   it("should never let make inspect print an exploit quantity or an answer", () => {
     // `inspect` is the one place a learner sees the objects before writing anything, and it has

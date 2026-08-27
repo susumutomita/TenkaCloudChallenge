@@ -110,6 +110,16 @@ const NO_RUNNER_EXCEPTION = "asm-worst-case-latency";
  * of the seven graded names, so the guard-removal control is flat here — the reference is the
  * usable positive control, as with ac26-w2-beaver-mul).
  *
+ * `ac26-w6-zkvm-witness-binding` came off it on the same pairing as its Week 6 twin. Its
+ * supplied half — the vocabulary, the semantics profiles, the commitment, the image decoder,
+ * the two encoders and the toy `Env`, all of which `starter/guest.py`'s own docstring names —
+ * moved to `participant/lab.py`, which the runner preloads ahead of the guard and which the
+ * guard does not evict. Verified against the reference rather than by inspection: 8/8
+ * (300/300) with the guard in place, and a `from fixtures.generate import *` submission at 0/8
+ * with it and without it (this problem's `fixtures/generate.py` defines none of the eight
+ * graded names, so the guard-removal control is flat here — the reference is the usable
+ * positive control, as with ac26-w2-beaver-mul).
+ *
  * `ac26-w6-cosnark-privacy` completes the Week 6 co-SNARK trio. Its split moved three
  * modules rather than one -- `participant/mpc.py` (the supplied sharing runtime, sink and
  * policy vocabulary), `participant/specimens.py` (the eight provers as runnable objects,
@@ -120,7 +130,6 @@ const NO_RUNNER_EXCEPTION = "asm-worst-case-latency";
 const FIXTURES_DEPENDENT_SUBMISSION_EXCEPTIONS = [
   "ac26-bridge-properties",
   "ac26-w6-stack-design",
-  "ac26-w6-zkvm-witness-binding",
 ];
 
 /**

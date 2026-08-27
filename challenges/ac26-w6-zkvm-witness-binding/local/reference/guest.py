@@ -22,7 +22,11 @@ takes the hint is fast, is right almost always, and proves nothing at all.
 
 from __future__ import annotations
 
-from fixtures.generate import (
+# Issue 543 option B2: the supplied half lives in `participant/lab.py`, not in `fixtures/`.
+# `starter/guest.py` names these, so a learner's own top-level import is the same one -- the
+# verifier's runner preloads this module before the Issue 591 guard takes the problem root off
+# `sys.path` (see ../verifier/server.py).
+from participant.lab import (
     BYTE_ORDER,
     CLAIMS,
     DIGEST_HEX_LENGTH,

@@ -192,11 +192,25 @@ fixtures、disclosure、解答はすべて独自に書いており、公式課�
 ## 保証範囲
 
 ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も
-あなたの管理下にあるので、image の中身はあなたに対して秘匿されていません。
-`reference/` と `tests/hidden/` を bind-mount しないのは、あなたの git checkout に
-紛れ込ませないためであって、手が届かなくするためではありません。hidden checker が持つ
-replay の判定や disclosure の答えも同じです。それを import した contract は何も bind して
-いませんが、そうしないと決められるのはあなただけです。
+あなたの管理下にあるので、あなたがビルドする image の中身は秘匿されていません。
+
+Issue 537/538 で変わったのは、**どの image が何を持つか**です。採点は publish されない
+2 つめの container で走ります。`fixtures/`、`tests/hidden/`、`verifier/` はそちらにしか
+存在せず、Workbench からは internal network 越しにしか届かず、Workbench の filesystem には
+ありません。そのため `make test` と `make inspect` はその container も起動します
+(`make verifier-up` で単独起動、`make verifier-down` で停止)。`show.py` と公開テストは、
+この deploy の statement・image・sibling・witness・衝突する 2 口座・監査対象の 10 本を
+fixtures の import ではなく `GET /public` から読みます。15 本の receipt のどれを verifier が
+受け入れてよいか、10 本のうちどれが witness を漏らしたか、そして toy runner 自身の演算は
+その境界の向こうに残ります。`reference/` と mutation suite はもともと入っていません。
+
+意図的にあなたの image に残しているのは `participant/lab.py` — 語彙、semantics profile、
+commitment、image decoder、2 つの encoder、そして toy `Env` です。これはこの問題が意図的に
+渡す側の半分で、採点対象は 1 つもありません。採点中のあなたの提出コード自身がこれを
+import します。
+
+これは誤配防止の境界であって、機密性の境界ではありません。`verifier` stage や `author`
+stage を自分でビルドすれば、すべて読めます。
 
 verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
 ハングさせたりクラッシュさせたりできません。checkpoint は echo した id しか加点できません。

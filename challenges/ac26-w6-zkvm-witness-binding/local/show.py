@@ -16,13 +16,14 @@ reference guest, so running this gives away no part of the file you are asked to
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from fixtures.generate import (
+from participant.lab import (
     CHANNELS,
     DOMAINS,
     GUEST_VERSIONS,
@@ -36,27 +37,88 @@ from fixtures.generate import (
     STATEMENT_COMMITMENT_DOMAIN,
     STATEMENT_FIELDS,
     WIDTHS,
-    collision_pair,
+    Disclosure,
     decode_program,
-    disclosures,
-    health_token,
-    image,
     naive_encode,
-    replay_cases,
-    sibling_images,
-    statement,
-    statement_family,
 )
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 
+def public_evidence() -> dict:
+    """This deployment's public half -- the same values `verifier/server.py`'s `GET /public`
+    serves, and the same statement, machine, image and ids this file has always printed.
+
+    Issue 537/538 (Issue 543 option B2): `fixtures/generate.py` does not ship in the
+    `participant` Docker stage any more (see local/Dockerfile). It holds `_machine` -- which is
+    the whole of `run_guest` -- as well as `replay_truth` and `disclosure_truth`, and it shipped
+    beside `tests/hidden/check_guest.py`, whose `_encode`, `_run`, `_journal` and `_leaks` are
+    four more of the eight answers. `make inspect` now runs through Compose (see the Makefile)
+    so this process can reach the verifier over the network instead.
+    """
+    injected = os.environ.get("PUBLIC_EVIDENCE_JSON")
+    if injected:
+        return json.loads(injected)
+    verifier_public_url = os.environ.get("VERIFIER_PUBLIC_URL")
+    if verifier_public_url:
+        from urllib.error import HTTPError, URLError
+        from urllib.request import urlopen
+
+        try:
+            with urlopen(verifier_public_url, timeout=10) as response:  # noqa: S310
+                return json.loads(response.read().decode("utf-8"))
+        except (HTTPError, URLError, TimeoutError, OSError, ValueError) as error:
+            # Compose health-gates the workbench on the verifier, so this normally cannot
+            # happen. When it does -- a `docker compose run` against a torn-down deployment --
+            # say which service is missing instead of printing a urllib traceback at somebody
+            # trying to read their own statement.
+            raise SystemExit(
+                "cannot reach this deployment's verifier "
+                f"({verifier_public_url}): {type(error).__name__}.\n"
+                "The public evidence lives there since Issue 537/538. "
+                "Start it with `make verifier-up` and try again."
+            ) from error
+    # Neither is set: this resolves only where `fixtures/` is actually on disk -- a checkout,
+    # or the verifier/author Docker stage -- and never inside a built `participant` image, so
+    # this branch does not reopen the leak above.
+    from fixtures.generate import public_payload
+
+    return public_payload(SEED)
+
+
+def image_record(over_the_wire: dict) -> dict:
+    """One image as the fixtures used to hand it over: the body as bytes again."""
+    return {**over_the_wire, "body": bytes.fromhex(over_the_wire["body"])}
+
+
+def witness_record(over_the_wire: dict) -> dict:
+    """One witness as the fixtures used to hand it over: the search trail as a tuple again."""
+    return {
+        "quantity": over_the_wire["quantity"],
+        "aux": dict(over_the_wire["aux"]),
+        "search": tuple(over_the_wire["search"]),
+    }
+
+
+def disclosure_record(over_the_wire: dict) -> Disclosure:
+    """One audited run as the `Disclosure` your `leak_report` is called with."""
+    return Disclosure(
+        journal=over_the_wire["journal"],
+        stdout=tuple(over_the_wire["stdout"]),
+        stderr=tuple(over_the_wire["stderr"]),
+        error=over_the_wire["error"],
+        trace=tuple(over_the_wire["trace"]),
+        temp=tuple(over_the_wire["temp"]),
+    )
+
+
 def main() -> None:
-    record = statement(SEED, "public")
+    evidence = public_evidence()
+    record = evidence["statement"]
     profile = SEMANTICS[record["semantics"]]
-    built = image(SEED, "public")
+    built = image_record(evidence["image"])
     program = decode_program(built["body"])
-    left, right = collision_pair(SEED, "public")
+    left, right = evidence["collisionPair"]
 
     print("== the public statement ==")
     for field in STATEMENT_FIELDS:
@@ -107,8 +169,8 @@ def main() -> None:
     print("  parameters with no lengths between them and the two disagreements cancel, digit")
     print("  for digit -- so a proof about one verifies against the other, and nothing in the")
     print("  cryptography is broken while that happens.")
-    family = len(statement_family(SEED, "public"))
-    print(f"  the statement family your encoder has to separate: {family} members")
+    print(f"  the statement family your encoder has to separate: "
+          f"{evidence['statementFamilySize']} members")
     print()
 
     print("== the image, and the four next to it ==")
@@ -117,7 +179,7 @@ def main() -> None:
     print(f"  buildId     {built['buildId']}")
     print(f"  steps       {len(program)}   {' -> '.join(program)}")
     print("  the four siblings, each differing in exactly one way:")
-    for name, sibling in sibling_images(SEED, "public").items():
+    for name, sibling in evidence["siblings"].items():
         print(f"    {name:11s} sourcePath={sibling['sourcePath']!r} buildId={sibling['buildId']}")
     print("  Which of them are the same program is the checkpoint, so it is not printed here.")
     print(f"  commitment domains: image={IMAGE_COMMITMENT_DOMAIN}")
@@ -143,20 +205,20 @@ def main() -> None:
     print()
 
     print("== the receipts you will be offered ==")
-    print(f"  {', '.join(case['id'] for case in replay_cases(SEED, 'public'))}")
+    print(f"  {', '.join(evidence['replayCaseIds'])}")
     print("  Each is sealed under one statement and offered against another, or sealed and")
     print("  then edited. Which of them a verifier may accept is the checkpoint.")
     print()
 
     print("== the runs you will audit ==")
-    print(f"  {', '.join(entry['id'] for entry in disclosures(SEED, 'public'))}")
+    print(f"  {', '.join(entry['id'] for entry in evidence['disclosures'])}")
     print(f"  channels      {', '.join(CHANNELS)}")
     print(f"  public names  {', '.join(PUBLIC_NAMES)}")
     print("  All of them produced the same journal claim and all of them are correct. Which")
     print("  ones gave the witness away, and under which approved name, is the checkpoint.")
     print()
 
-    print(f"health token: {health_token(SEED)}")
+    print(f"health token: {evidence['healthToken']}")
 
 
 if __name__ == "__main__":

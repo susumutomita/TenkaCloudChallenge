@@ -68,7 +68,7 @@ different program under the same path. The same bytes copied elsewhere are the s
 ## The runner has two doors
 
 ```python
-from fixtures.generate import Env
+from participant.lab import Env
 ```
 
 ```text
@@ -86,14 +86,16 @@ auditor gets `env.transcript()` and `env.writes()`, and gets neither the hints n
 
 ## What you are handed
 
+The vocabulary and the supplied helpers are code, and they are in the image with you:
+
 ```python
-from fixtures.generate import (
+from participant.lab import (
     BYTE_ORDER, CLAIMS, CHANNELS, DIGEST_HEX_LENGTH, DOMAINS, GUARDS, GUEST_VERSIONS,
     IMAGE_COMMITMENT_DOMAIN, INTEGER_BYTES, JOURNAL_FIELDS, LENGTH_PREFIX_BYTES,
     MEASUREMENT_NAMES, PARAM_NAMES, PUBLIC_NAMES, RECEIPT_FIELDS, RUN_FIELDS, SEMANTICS,
-    STATEMENT_COMMITMENT_DOMAIN, STATEMENT_FIELDS, WRAP_SITE_OF,
-    claim_site, commit, decode_program, is_well_formed, scenario, statement, image,
-    sibling_images, naive_encode, shuffled, disclosures, replay_cases,
+    STATEMENT_COMMITMENT_DOMAIN, STATEMENT_FIELDS, WIDTHS, WRAP_SITE_OF,
+    Disclosure, Env, claim_site, commit, decode_program, is_well_formed, naive_encode,
+    shuffled, witness,
 )
 ```
 
@@ -102,9 +104,29 @@ commit(payload, domain)    a domain-separated digest over bytes. The hash is not
 decode_program(body)       the steps an image body holds, or a refusal
 is_well_formed(w, profile) whether a witness is in this machine's domain at all
 claim_site(claim)          which wrap site a claim names
-scenario(seed, label)      one image, one statement, and a witness that proves its claim
 naive_encode(statement)    every field concatenated. What a sloppy encoder does
 ```
+
+This deployment's own objects are data, and they come from the deployment rather than from a
+module you import. `make inspect` prints them, the public tests hand them to your functions,
+and `show.py` is where the reading happens:
+
+```python
+from show import public_evidence, image_record, witness_record, disclosure_record
+
+evidence = public_evidence()
+statement = evidence["statement"]                       # the public statement
+image = image_record(evidence["image"])                 # the program it names
+witness = witness_record(evidence["witness"])           # a witness that proves its claim
+siblings = evidence["siblings"]                         # the four images next to it
+left, right = evidence["collisionPair"]                 # two accounts, one encoder
+runs = [disclosure_record(e["disclosure"]) for e in evidence["disclosures"]]
+```
+
+The ids of the receipts you will be offered are in `evidence["replayCaseIds"]`. What each of
+them was sealed under and what it is offered against is not: which of the fifteen a verifier
+may accept is the sixth checkpoint, and so is which of the ten runs above gave the witness
+away.
 
 A `statement`: `domain`, `guestVersion`, `imageDigest`, `semantics`, `claim`, `params`, where
 `params` is `price` / `spent` / `budget`. A `witness`: `quantity`, `aux`
@@ -125,8 +147,8 @@ from __future__ import annotations
 def encode_statement(statement: dict) -> bytes:
     """One statement as bytes, in a way that means exactly one statement.
 
-    The shape this problem uses, and the constants for it are in the fixtures rather than in
-    your file so that you and the checker are reading the same numbers:
+    The shape this problem uses, and the constants for it are in `participant/lab.py` rather
+    than in your file so that you and the checker are reading the same numbers:
 
     ```text
     every field is emitted as <length><payload>, the length being LENGTH_PREFIX_BYTES
@@ -147,8 +169,8 @@ def encode_statement(statement: dict) -> bytes:
     same bytes. Both are real accounts. Both have real exploits. A proof about one verifies
     against the other, and nothing in the cryptography is broken while that happens.
 
-    `fixtures.generate.collision_pair` is that pair, drawn from your seed. Your encoding has to
-    keep them apart, and it has to keep apart every other pair too — including the two that
+    `public_evidence()["collisionPair"]` is that pair, drawn from your seed, and `make inspect`
+    prints it. Your encoding has to keep them apart, and it has to keep apart every other pair too — including the two that
     differ only in `domain` and only in `guestVersion`, which are the two people leave out
     because they "do not affect the computation".
 
@@ -178,8 +200,8 @@ def image_digest(image: dict) -> str:
     An image record is `{"imageId", "sourcePath", "buildId", "body"}`. Three of those are what
     a build system wrote down about the fourth.
 
-    `sibling_images(seed, label)` hands you four images next to the base one, each differing in
-    exactly one way:
+    `public_evidence()["siblings"]` hands you four images next to the base one, each differing
+    in exactly one way:
 
     ```text
     rebuilt     the same source path, one comparison changed, a new stamp
@@ -353,8 +375,8 @@ def accept_receipt(receipt: object, statement: object) -> bool:
     cryptography already does for you. What it does not do is notice that a perfectly valid
     seal is being shown to you next to a statement it was never about.
 
-    `replay_cases(seed, label)` re-offers receipts against things one field away from what
-    sealed them: another program, another claim, another integer width, another overflow
+    The hidden checker re-offers receipts against things one field away from what sealed them,
+    and `make inspect` prints the id of each: another program, another claim, another integer width, another overflow
     behaviour, another protocol version, another guest build. Two of the rows are honest.
 
     One row is the reason checkpoint 1 exists. `other-params` is the colliding pair, offered
@@ -395,8 +417,8 @@ def leak_report(disclosure, statement: dict, image: dict) -> tuple[tuple[str, st
     temp     the temporary artifacts it left on disk
     ```
 
-    A correctness test reads the first one. Six of the ten runs in `disclosures(seed, label)`
-    are spotless there and are not spotless. Every one of the ten produced the same journal
+    A correctness test reads the first one. Six of the ten runs in
+    `public_evidence()["disclosures"]` are spotless there and are not spotless. Every one of the ten produced the same journal
     claim, and every one of them is correct.
 
     Channels other than `journal` and `error` are tuples of `{"label", "values"}` records, and
