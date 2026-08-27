@@ -158,15 +158,27 @@ the code this one grades.
 
 ## Assurance scope
 
-Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
-daemon, and the image, so nothing inside that image is hidden from you: `reference/` and
-`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than
-out of reach. The same is true of the ground truth the hidden checker reads — an audit that
-imports it has not audited anything, and only you can decide not to.
+Local mode is **self-paced, honor-system verification**. Someone who owns the Docker daemon and
+every container in the compose stack cannot be prevented from inspecting hidden material. The
+boundary here is misdelivery, not confidentiality against that person: the Workbench container
+you build and run carries the starter, the public tests, the orientation printer, the supplied
+layer (`participant/mpc.py` — the sharing runtime, the disclosure sink and the policy
+vocabulary, plus the two answers this problem hands over), the bench (`participant/lab.py`) and
+the eight specimens as runnable objects (`participant/specimens.py`). It does **not** carry the
+seed derivation, the ground truth about those eight, the hidden tests, the reference solution or
+the verifier. Those live only in a second, unpublished container the Workbench reaches over the
+compose network, and in the author-only image `make reference-test` builds.
+
+Because of that, `make test`, `make test-one` and `make inspect` bring the verifier up first
+(`make verifier-up`, run for you): `make inspect` reads this deployment's setting, row, witness
+and catalog from it over the compose network instead of deriving them locally. `make
+verifier-down` stops it.
 
 What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
 a checkpoint can only credit the id it echoes, results do not leak expected values, and the
-fixtures come from this deployment's seed so a memorized answer does not carry.
+fixtures come from this deployment's seed so a memorized answer does not carry. Submissions run
+with time, memory, process and output caps; both containers run non-root, read-only, without
+privileges, and only the Workbench is published, on loopback.
 
 That supports self-study and honest practice. It does **not** support competition ranking,
 examination, or completion certification — those need a verifier the participant does not

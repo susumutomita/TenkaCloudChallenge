@@ -11,7 +11,7 @@ A = sum_j a_j w_j        B = sum_j b_j w_j        C = A * B        (mod p)
 
 The two problems before this one are **supplied**. `ac26-w6-cosnark-linear` built `[A]` and
 `[B]`; `ac26-w6-cosnark-beaver` built the one multiplication that has to communicate, and
-`fixtures.generate.beaver_product` is that answer, handed over. You are not computing `C`
+`participant.mpc.beaver_product` is that answer, handed over. You are not computing `C`
 again. You are asking what a prover built on top of it is allowed to say out loud.
 
 ## What you may not do
@@ -23,7 +23,7 @@ need is in the record a run leaves behind.
 ## The bench
 
 ```python
-from fixtures.lab import malformed_row, probe_factory, serialized
+from participant.lab import malformed_row, probe_factory, serialized
 ```
 
 ```text
@@ -55,7 +55,7 @@ is recorded, and what a prover does next with what it read is the question you a
 ## The policy
 
 ```python
-from fixtures.generate import ALLOWED_NAMES, SHARING_ONLY_NAMES, CHANNELS, is_sharing
+from participant.mpc import ALLOWED_NAMES, SHARING_ONLY_NAMES, CHANNELS, is_sharing
 ```
 
 `ALLOWED_NAMES` is every field name a prover may put in front of a participant, whichever
@@ -74,7 +74,7 @@ from __future__ import annotations
 
 
 def classify(entry: dict, row: dict) -> str:
-    """Put one value from `fixtures.generate.value_catalog` into exactly one of six classes.
+    """Put one value from `participant.lab.value_catalog` into exactly one of six classes.
 
     ```text
     public-input            known to everyone before the run
@@ -118,7 +118,7 @@ def classify(entry: dict, row: dict) -> str:
 def capability_audit(probe, specimen_id: str) -> tuple[str, ...]:
     """Every capability this specimen reaches, beyond the ones the protocol reaches anyway.
 
-    Sorted, no duplicates. `fixtures.generate.PROTOCOL_CAPABILITIES` is the baseline: one
+    Sorted, no duplicates. `participant.mpc.PROTOCOL_CAPABILITIES` is the baseline: one
     authorized multiplication opens `d` and `e` and does nothing else, so anything else in
     `reached()` is something the prover on top decided to do.
 

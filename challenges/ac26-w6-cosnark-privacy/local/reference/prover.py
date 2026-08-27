@@ -15,7 +15,7 @@ not an economy; it is the statement that those two questions are the same questi
 
 from __future__ import annotations
 
-from fixtures.generate import (
+from participant.mpc import (
     ALLOWED_NAMES,
     AUDIENCES,
     FORMS,
@@ -27,7 +27,7 @@ from fixtures.generate import (
     is_sharing,
     round_id_for,
 )
-from fixtures.lab import malformed_row
+from participant.lab import malformed_row
 
 
 # ---------------------------------------------------------------------------

@@ -83,8 +83,12 @@ describe("ac26-w6-cosnark-privacy: participant contract", () => {
       "local/show.py",
       "local/mutation.py",
       "local/fixtures/generate.py",
-      "local/fixtures/lab.py",
       "local/fixtures/specimens.py",
+      "local/participant/mpc.py",
+      "local/participant/specimens.py",
+      "local/participant/lab.py",
+      "local/participant/server.py",
+      "local/participant/workbench.py",
       "local/tests/public/test_prover.py",
       "local/tests/hidden/check_prover.py",
       "local/verifier/server.py",
@@ -211,7 +215,7 @@ describe("ac26-w6-cosnark-privacy: the premise holds", () => {
       "import sys",
       "sys.path.insert(0, '.')",
       "from fixtures.generate import SHAPES",
-      "from fixtures.lab import Scenario, run_on",
+      "from participant.lab import Scenario, run_on",
       "from fixtures.specimens import SPECIMEN_IDS",
       "agree = total = 0",
       "for i in range(3):",
@@ -244,7 +248,7 @@ describe("ac26-w6-cosnark-privacy: the premise holds", () => {
     const script = [
       "import ast, inspect, sys",
       "sys.path.insert(0, '.')",
-      "from fixtures.lab import Scenario, run_on",
+      "from participant.lab import Scenario, run_on",
       "from fixtures.specimens import SPECIMEN_IDS, specimen",
       "hidden = 0",
       "for name in SPECIMEN_IDS:",
@@ -411,6 +415,183 @@ describe("ac26-w6-cosnark-privacy: what each checkpoint is worth", () => {
   }, 300_000);
 });
 
+describe("ac26-w6-cosnark-privacy: the answer is not in the participant image", () => {
+  function participantStage(): string {
+    const dockerfile = read("local/Dockerfile");
+    const start = dockerfile.indexOf("FROM base AS participant");
+    const end = dockerfile.indexOf("FROM base AS verifier");
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    return dockerfile.slice(start, end);
+  }
+
+  it("should copy neither fixtures/, tests/hidden/ nor verifier/ into the participant stage", () => {
+    const stage = participantStage();
+    expect(stage).toContain("COPY tests/public/");
+    expect(stage).toContain("COPY participant/");
+    for (const forbidden of [
+      "COPY fixtures/",
+      "COPY tests/ ",
+      "COPY tests/hidden/",
+      "COPY verifier/",
+    ]) {
+      expect(stage).not.toContain(forbidden);
+    }
+  });
+
+  it("should serve the Portal from the participant image, not from the grading one", () => {
+    expect(existsSync(join(ROOT, "local/verifier/workbench.py"))).toBe(false);
+    // Nothing in the participant image may decide a checkpoint: it forwards instead.
+    const server = read("local/participant/server.py");
+    expect(server).toContain("proxy_verdict");
+    expect(server).not.toContain("tests.hidden");
+    expect(server).not.toContain("fixtures.generate");
+  });
+
+  it("should keep the derivation and the ground truth out of what the participant ships", () => {
+    // `participant/` is the half this problem hands over on purpose: the sharing runtime,
+    // the disclosure sink, the policy vocabulary, the bench, and the eight specimens as
+    // runnable objects. What must not travel with them is the seed derivation every
+    // checkpoint is graded on, or the table of answers about the specimens.
+    const supplied = [
+      read("local/participant/mpc.py"),
+      read("local/participant/lab.py"),
+      read("local/participant/specimens.py"),
+    ].join("\n");
+    for (const forbidden of ["setting", "witness", "relation", "coefficients", "dot"]) {
+      expect(supplied).not.toMatch(new RegExp(`^def ${forbidden}\\(`, "m"));
+    }
+    for (const forbidden of ["GROUND_TRUTH", "MALFORMED_TRUTH", "MALFORMED_SPECIMENS"]) {
+      expect(supplied).not.toContain(`${forbidden} = `);
+    }
+    // The rules the checkpoints are graded against live in the hidden checker only. Named
+    // rather than defined is fine and is what the docstrings above do — the assertion is
+    // that no implementation of them travels.
+    for (const rule of ["_expected_class", "_expected_leakage", "_authorized"]) {
+      expect(supplied).not.toMatch(new RegExp(`^def ${rule}\\(`, "m"));
+    }
+  });
+
+  it("should keep the verifier off the host and reachable only from the Workbench", () => {
+    const compose = parseYaml(read("local/docker-compose.yml")) as {
+      services: Record<string, { ports?: string[]; environment?: Record<string, string> }>;
+      networks: Record<string, { internal?: boolean }>;
+    };
+    expect(compose.services.verifier.ports).toBeUndefined();
+    expect(compose.services.workbench.environment?.VERIFIER_PUBLIC_URL).toContain("/public");
+    expect(compose.networks.lab.internal).toBe(true);
+  });
+
+  it("should guard the submission import against fixtures/ and tests/ on the grading path", () => {
+    // Issue 591. `fixtures.specimens` carries GROUND_TRUTH and `fixtures.generate` carries
+    // the five derivations the hidden labels are drawn from, so an unguarded
+    // `from fixtures.specimens import *` would reach both.
+    const verifier = read("local/verifier/server.py");
+    expect(verifier).toContain(
+      'if name in ("tests", "fixtures") or name.startswith(("tests.", "fixtures."))',
+    );
+    // The supplied modules are preloaded before the guard and survive it, which is what
+    // keeps `reference/prover.py`'s own top-level imports resolvable while it is graded.
+    for (const module of ["participant.mpc", "participant.specimens", "participant.lab"]) {
+      expect(verifier).toContain(`import ${module}`);
+    }
+    const reference = read("local/reference/prover.py");
+    expect(reference).toContain("from participant.mpc import");
+    expect(reference).toContain("from participant.lab import malformed_row");
+  });
+
+  it("should keep the graded labels' derivation out of GET /public", () => {
+    const payload = python([
+      "-c",
+      [
+        "import json, os, sys",
+        "sys.path.insert(0, '.')",
+        "from fixtures.generate import public_payload",
+        "print(json.dumps(public_payload(os.environ['FLAG_SEED'])))",
+      ].join("\n"),
+    ]);
+    expect(payload.status).toBe(0);
+    const decoded = JSON.parse(payload.stdout.trim().split("\n").at(-1) ?? "null") as Record<
+      string,
+      unknown
+    >;
+    expect(Object.keys(decoded).sort()).toEqual([
+      "catalogs",
+      "healthToken",
+      "rows",
+      "setting",
+      "shapes",
+      "witness",
+    ]);
+  });
+
+  it("should carry the public label's material and no other label's, on every seed", () => {
+    const script = [
+      "import json, sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import public_payload, relation, setting, value_catalog, witness",
+      "bad = []",
+      "for i in range(30):",
+      "    seed = f'seed-{i}'",
+      "    payload = public_payload(seed)",
+      "    cfg = setting(seed)",
+      "    if payload['setting'] != cfg:",
+      "        bad.append([seed, 'setting'])",
+      "    if tuple(payload['witness']) != witness(seed, 'public', cfg):",
+      "        bad.append([seed, 'witness'])",
+      "    for shape in payload['shapes']:",
+      "        row = relation(seed, 'public', cfg, shape)",
+      "        if [list(payload['rows'][shape]['a']), list(payload['rows'][shape]['b'])] != [list(row['a']), list(row['b'])]:",
+      "            bad.append([seed, shape])",
+      "        catalog = value_catalog(seed, 'public', row)",
+      "        if [entry['id'] for entry in payload['catalogs'][row['relationId']]] != [entry['id'] for entry in catalog]:",
+      "            bad.append([seed, shape, 'catalog'])",
+      "    for label in ('h0', 'h1', 'h2', 'h3'):",
+      "        other = witness(seed, label, setting(seed, label))",
+      "        if json.dumps(list(other)) in json.dumps(payload):",
+      "            bad.append([seed, label])",
+      "print(json.dumps(bad))",
+    ].join("\n");
+    const result = python(["-c", script]);
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "null")).toEqual([]);
+  }, 120_000);
+
+  // The payload is the only source in the participant image, so it has to carry exactly
+  // what `show.py` printed before the split — on every seed, not just this one, and with a
+  // specimen run as well as without one.
+  it("should print the same inspect output from the payload as from the fixtures", () => {
+    const script = [
+      "import io, json, os, contextlib, importlib, sys",
+      "sys.path.insert(0, '.')",
+      "import show",
+      "from fixtures.generate import public_payload",
+      "diffs = []",
+      "for i in range(15):",
+      "    seed = f'seed-{i}'",
+      "    for named in ('', 'S3'):",
+      "        os.environ['FLAG_SEED'] = seed",
+      "        os.environ['P'] = named",
+      "        importlib.reload(show)",
+      "        os.environ.pop('PUBLIC_EVIDENCE_JSON', None)",
+      "        direct = io.StringIO()",
+      "        with contextlib.redirect_stdout(direct):",
+      "            show.main()",
+      "        os.environ['PUBLIC_EVIDENCE_JSON'] = json.dumps(public_payload(seed))",
+      "        injected = io.StringIO()",
+      "        with contextlib.redirect_stdout(injected):",
+      "            show.main()",
+      "        os.environ.pop('PUBLIC_EVIDENCE_JSON', None)",
+      "        if direct.getvalue() != injected.getvalue():",
+      "            diffs.append([seed, named])",
+      "print(json.dumps(diffs))",
+    ].join("\n");
+    const result = python(["-c", script]);
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "null")).toEqual([]);
+  }, 180_000);
+});
+
 describe("ac26-w6-cosnark-privacy: metadata contracts", () => {
   function metadata() {
     return JSON.parse(read("metadata.json")) as {
@@ -481,7 +662,7 @@ describe("ac26-w6-cosnark-privacy: metadata contracts", () => {
     const script = [
       "import sys",
       "sys.path.insert(0, '.')",
-      "from fixtures.lab import Scenario, run_on",
+      "from participant.lab import Scenario, run_on",
       "from fixtures.specimens import SPECIMEN_IDS",
       "for name in SPECIMEN_IDS:",
       "    scenario = Scenario('probe-seed', 'p', 'signed')",
@@ -506,8 +687,10 @@ describe("ac26-w6-cosnark-privacy: metadata contracts", () => {
     // shortcut was unwritable; here the whole class of defect has to be writable or it
     // cannot be audited. An edit that "restored" the previous default would silently make
     // three specimens impossible to write and the checkpoints impossible to fail.
-    const fixtures = read("local/fixtures/generate.py");
-    const facade = fixtures.slice(fixtures.indexOf("class AuditRuntime"));
+    // The facade moved to `participant/mpc.py` with the rest of the supplied layer in the
+    // Issue 543 option B2 split; `fixtures/generate.py` re-exports it.
+    const supplied = read("local/participant/mpc.py");
+    const facade = supplied.slice(supplied.indexOf("class AuditRuntime"));
     expect(facade).toMatch(/def reconstruct/);
     expect(facade).toMatch(/def peek/);
     expect(facade).toContain('_reach("reconstruct"');
@@ -519,7 +702,7 @@ describe("ac26-w6-cosnark-privacy: metadata contracts", () => {
     const script = [
       "import sys",
       "sys.path.insert(0, '.')",
-      "from fixtures.lab import Scenario, run_on, serialized",
+      "from participant.lab import Scenario, run_on, serialized",
       "scenario = Scenario('probe-seed', 'p', 'dense')",
       "view = serialized(run_on(scenario, 'S1').disclosure)",
       "assert all(isinstance(item, str) for item in view.artifact['A'])",
