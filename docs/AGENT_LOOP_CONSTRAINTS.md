@@ -368,7 +368,7 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   round counting they are graded by. The verifier stage copies that one file, not
   `participant/`.
 
-  `ac26-w3-ec-group` came off the list in #PENDING, and it is the **cleanest measurement
+  `ac26-w3-ec-group` came off the list in #606, and it is the **cleanest measurement
   of what this class leaks** so far — the one to point at when somebody asks whether a
   `COPY verifier/` problem is really giving anything away. Both standard probes read
   **0 of 300 before the split as well as after**, the reference is 8/8 (300/300) as the
