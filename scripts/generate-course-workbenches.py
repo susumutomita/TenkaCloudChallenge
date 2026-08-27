@@ -216,6 +216,18 @@ PORTAL_PACKAGES = {
     # vocabulary and the option table -- stayed with the participant as participant/lab.py,
     # and the Portal moved to participant/.
     "ac26-w7-capstone-design": "participant",
+    # Issue 537/538 (Issue 543 option B2): tests/hidden/check_guest.py is a complete and
+    # correct implementation of every graded function -- _reference is reference_order,
+    # _machine and _wrapped are machine_order, _rows is trace_evidence, _predicate is
+    # verify_exploit, _verdict is triage down to the order the five verdicts have to be asked
+    # in, and _probe_inputs/_separates are counterexample. fixtures/generate.py left the
+    # participant stage with it: it holds exploit_quantity, candidate_truth and the
+    # classification that draws one candidate of every verdict. A submission transcribed from
+    # the two scored 8 of 8 checkpoints (300 of 300 points). The supplied half -- the
+    # vocabulary, the two shapes and the domain check -- stayed with the participant as
+    # participant/lab.py beside the eight practice guests, and the Portal moved to
+    # participant/.
+    "ac26-w6-zkvm-exploit-predicate": "participant",
     # Issue 537/538 (Issue 543 option B2): tests/hidden/check_prover.py states, phase by
     # phase, what every one of the eight checkpoints is graded on -- _Scenario.canonical is
     # the parser's answer and the malformed list beside it is the whole of what that stage
