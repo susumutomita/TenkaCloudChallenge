@@ -149,6 +149,13 @@ SPLIT_PORTAL_MODULES = {
     # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
     # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
     "ac26-w5-encoding-noise": "participant.server",
+    # Issue 537/538 (Issue 543 option B2): same move. tests/hidden/check_sharing.py
+    # grades four of the five checkpoints and fixtures/generate.py's reference_shares
+    # builds a correct split of this deployment's secret, all of which shipped in the
+    # single participant stage.
+    # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
+    # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
+    "ac26-w2-secret-sharing": "participant.server",
     # Issue 537/538: same move. verifier/server.py's own _check_avalanche compared a
     # submission directly against a plain, seed-derived avalanche_distance defined in
     # the same file, and _check_properties/_check_storage compared against

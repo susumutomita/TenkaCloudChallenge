@@ -257,14 +257,28 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   `sha256-compress-digest`, `ac26-w2-linear-shares`, split by #590, #564, #596 and #563).
   #538 was closed on that evidence.
 
-  What the sweep does **not** settle, and what keeps #543 open: **19 problems still
-  `COPY verifier/` into their participant stage** — `ac26-w2-{beaver-mul,oblivious-transfer,privacy-audit,private-aggregate,secret-sharing}`,
+  What the sweep does **not** settle, and what keeps #543 open: **18 problems still
+  `COPY verifier/` into their participant stage** — `ac26-w2-{beaver-mul,oblivious-transfer,privacy-audit,private-aggregate}`,
   `ac26-w3-{ec-group,fft-domain,nonce-reuse,ntt-roots}`, `ac26-w4-{arithmetization,proof-pipeline}`,
   and the eight `ac26-w6`/`w7` ones above. That is the structural shape #543 was opened on,
   and the owner chose B (separate verifier container) over A (accept and document).
-  Measuring 0 says no graded answer is reachable *today*; it does not convert those 19 to
+  Measuring 0 says no graded answer is reachable *today*; it does not convert those 18 to
   option A. Closing #543 needs either the split or the owner writing the narrower boundary
   into `TEMPLATE.md` — so it is reachable work, not an owner block.
+  **Update this list when you land one.** `ac26-w2-secret-sharing` came off it in #599 —
+  the first B2 split driven by the `COPY verifier/` shape rather than by a detector
+  finding, and the first whose measured free score was **zero on both probes before the
+  split as well as after**. `fixtures/generate.py` there defines none of the four names
+  `starter/sharing.py` asks for, so the name-based detector reported it zero times and
+  still does: the reachability count is unchanged at 0 across that whole PR, which is §2's
+  lower-bound caveat showing up as a number. What the single stage actually handed over was
+  `tests/hidden/check_sharing.py`'s assertions for four of the five checkpoints, plus
+  `_check_threshold` — the acceptance rule for the fifth — and a `reference_shares` that
+  builds a correct split of the deployment's secret. Do not expect a points figure from
+  every problem on this list; report the one you measure, including when it is 0.
+  #599 is also the first in the class with a **direct-answer checkpoint** (`threshold`), so
+  the `tcw1.` seal check had to be duplicated into the verifier the way ac26-w4-commit-open
+  does it — copy that pair for any of the 18 whose scoring has a non-code checkpoint.
 
   Two consequences for reporting. `scripts/check-answer-reachability.ts` only ever sees
   the participant image, so a finding count says nothing about this path — never write

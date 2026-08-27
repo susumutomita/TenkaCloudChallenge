@@ -103,6 +103,11 @@ PORTAL_PACKAGES = {
     # first_failure under the exact five names starter/encoding.py's own stubs ask the
     # learner to write, so both left the participant stage and the Portal moved with them.
     "ac26-w5-encoding-noise": "participant",
+    # Issue 537/538 (Issue 543 option B2): the hidden suite grades four of the five
+    # checkpoints and fixtures/generate.py's reference_shares builds a correct split of
+    # this deployment's secret, so both left the participant stage and the Portal moved
+    # with them.
+    "ac26-w2-secret-sharing": "participant",
     # Issue 537/538: verifier/server.py's own _check_avalanche compared a submission
     # directly against a plain, seed-derived avalanche_distance defined in the same
     # file, and _check_properties/_check_storage compared against
