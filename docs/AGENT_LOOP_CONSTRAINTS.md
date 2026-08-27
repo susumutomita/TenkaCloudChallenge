@@ -268,9 +268,10 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   `sha256-compress-digest`, `ac26-w2-linear-shares`, split by #590, #564, #596 and #563).
   #538 was closed on that evidence.
 
-  What the sweep does **not** settle, and what keeps #543 open: **8 problems still
-  `COPY verifier/` into their participant stage** — the eight `ac26-w6`/`w7` ones above
-  (`ac26-w4-proof-pipeline` came off in #611). That is the structural shape #543 was opened on,
+  What the sweep does **not** settle, and what keeps #543 open: **7 problems still
+  `COPY verifier/` into their participant stage** — the `ac26-w6`/`w7` ones above, less
+  `ac26-w6-cosnark-beaver` (`ac26-w4-proof-pipeline` came off in #611,
+  `ac26-w6-cosnark-beaver` in #613). That is the structural shape #543 was opened on,
   and the owner chose B (separate verifier container) over A (accept and document).
   Grep for the shape rather than trusting a plain `^COPY verifier/`:
   `ac26-w2-oblivious-transfer` writes `COPY --chown=lab:lab verifier/`, and a scan that
@@ -563,6 +564,47 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   It is otherwise the plain move — no supplied half (every graded function is handed its
   definition and its run), so the verifier stage copies no participant file; the public
   tests do need the payload, so copy #605's wiring for those rather than #607's.
+
+  `ac26-w6-cosnark-beaver` came off the list in #613, and it is the first one in this class
+  to come off **Issue #591's ten-verifier exception list as well** since
+  `ac26-w2-oblivious-transfer` — check that pairing on every remaining one, because the
+  guard test's own canary is what signals it: the exception entry asserts the reference
+  still imports `fixtures`, so the moment the split moves the supplied helper it goes red,
+  and the fix is to add the guard and drop the entry, never to relax the check. Here the
+  helper was `field_id`, and the whole supplied sharing layer moved with it into
+  `participant/mpc.py`. Verify the pairing with the reference, not by inspection: the guard
+  drops the problem root from `sys.path` during the submission import, so the reference's
+  own top-level `from participant.mpc import field_id` resolves only because the runner
+  preloads that module before the guard (#608's rule), and the reference measured 8/8
+  (300/300) with the guard in place.
+
+  It is also the sharpest **transcription** measurement on this list so far: both standard
+  probes read **0 of 300 before the split as well as after** (`fixtures/generate.py` defines
+  none of the eight names `starter/prover.py` asks for, so the name-based detector reported
+  it zero times), the guard-removal control is flat, and the reachability count is unchanged
+  at 0 throughout in both directions — the restore-the-leak run puts `COPY fixtures/ tests/
+  verifier/` back into the participant stage and the count stays 0 while the new stage test
+  goes red. #603's third probe is what speaks: a submission transcribed from the two shipped
+  files, with no reasoning past copying, scored **8 of 8 checkpoints, 300 of 300 points** —
+  the #584 pole. `tests/hidden/check_prover.py` writes out `check_plan`'s whole expected
+  table, `check_masks`'s `A - x` and `B - y`, `check_artifact`'s key list and `check_audit`'s
+  six values, and `check_product`'s two *named* failure messages ("every party folded the
+  public d\*e into its own share", "the public d\*e term is missing") between them state the
+  correct fold; the Beaver identity itself was written out in prose in the shipped
+  `fixtures/generate.py` docstring. **A failure message that names the defect names the
+  answer** — read a hidden checker's error strings, not only its assertions, before
+  concluding a problem leaks nothing.
+
+  What it adds to the worked examples: the supplied half here is a whole *layer*, not a
+  helper — `Share`, `Triple`, `Runtime`, `ParticipantRuntime` and `linear_halves`, plus the
+  `_stream`/`_pick` seed helpers they need — and the hidden checker builds its scenarios on
+  the same objects, so the verifier stage copies `participant/mpc.py` in and
+  `fixtures/generate.py` re-exports it. One implementation, graded and inspected, rather than
+  two that can drift. Its `GET /public` carries the setting, the four coefficient shapes and
+  the public label's witness, on #605's reading (the public tests hand the sharings built
+  from that witness straight to the graded functions, so a submission holds them at runtime
+  by construction); what stays behind is the derivation, which is what makes `h0`..`h3`
+  unreachable rather than merely unnamed.
 
   #586 is the last of the Week 5 chain and the first in this class with **no supplied
   half at all**: `fixtures/generate.py` there is entirely seed derivation plus the graded

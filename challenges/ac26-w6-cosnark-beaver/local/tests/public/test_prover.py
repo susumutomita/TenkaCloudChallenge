@@ -7,6 +7,7 @@ separates a private prover from a correct one is the last of them.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -15,24 +16,52 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "starter"))
 
-from fixtures.generate import (  # noqa: E402
-    ParticipantRuntime,
-    Runtime,
-    linear_halves,
-    relation,
-    setting,
-    witness,
-)
+from participant.mpc import ParticipantRuntime, Runtime, linear_halves  # noqa: E402
 import prover  # noqa: E402
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
-CFG = setting(SEED)
+
+
+def _load_public_evidence() -> dict:
+    """This deployment's setting, row and witness -- what `show.py` prints, and what this
+    file has always built its runtime from.
+
+    Issue 537/538 (Issue 543 option B2): this file used to import `fixtures.generate`
+    directly. That module carries `setting`, `coefficients`, `witness` and `relation` -- the
+    four derivations the hidden labels `h0`..`h3` are drawn from, and therefore the four
+    every checkpoint is graded on -- and it shipped in the same image as
+    `tests/hidden/check_prover.py`, which states phase by phase what each of those
+    checkpoints accepts. So it does not ship in the `participant` Docker stage at all any
+    more (see ../../Dockerfile). This deployment's own verifier is the only source for the
+    public half now: `PUBLIC_EVIDENCE_JSON` when the Portal has already fetched it, or
+    `VERIFIER_PUBLIC_URL` fetched directly when it has not.
+    """
+    injected = os.environ.get("PUBLIC_EVIDENCE_JSON")
+    if injected:
+        return json.loads(injected)
+    verifier_public_url = os.environ.get("VERIFIER_PUBLIC_URL")
+    if verifier_public_url:
+        from urllib.request import urlopen
+
+        with urlopen(verifier_public_url, timeout=10) as response:  # noqa: S310
+            return json.loads(response.read().decode("utf-8"))
+    # Neither is set: this only resolves when `fixtures/` is actually on disk, which is true
+    # for a checkout (this file run directly, e.g. by scripts/ac26-w6-cosnark-beaver.test.ts)
+    # and the verifier/author Docker stages, and never inside a built `participant` image --
+    # so this branch does not reopen the leak above.
+    from fixtures.generate import public_payload
+
+    return public_payload(SEED)
+
+
+PUBLIC = _load_public_evidence()
+CFG = PUBLIC["setting"]
 
 
 def _fresh():
     runtime = Runtime(CFG)
-    shares = runtime.deal_witness(SEED, witness(SEED, "public", CFG), label="pw")
-    row = relation(SEED, "public", CFG, "dense")
+    shares = runtime.deal_witness(SEED, PUBLIC["witness"], label="pw")
+    row = PUBLIC["rows"]["dense"]
     halves = linear_halves(runtime, row, shares)
     triple = runtime.deal_triple(SEED, "public")
     return runtime, row, halves, triple
