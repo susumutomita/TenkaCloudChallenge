@@ -22,7 +22,10 @@ from tests.hidden.check_prover import LABELS, _Scenario, _valid_sharing, run  # 
 SEED = "mutation-suite-seed"
 REFERENCE = (Path(__file__).resolve().parent / "reference" / "prover.py").read_text("utf-8")
 
-_IMPORT = "from fixtures.generate import field_id"
+# Issue 543 option B2: the supplied layer moved to `participant/mpc.py`, so the
+# reference imports `field_id` from there. This string has to track it, or the
+# reshare mutant below silently stops replacing anything and stops being a mutant.
+_IMPORT = "from participant.mpc import field_id"
 
 _RESHARE = '''def shared_linear_combination(runtime, coefficients, shares) -> tuple:
     prime = runtime.setting["p"]
@@ -164,7 +167,7 @@ def _mutations() -> list[tuple[str, str]]:
         ),
         (
             "witness reconstructed, folded in the clear, and re-shared",
-            REFERENCE.replace(_IMPORT, "from fixtures.generate import Share, field_id").replace(
+            REFERENCE.replace(_IMPORT, "from participant.mpc import Share, field_id").replace(
                 _HONEST_COMBINATION, _RESHARE
             ),
         ),

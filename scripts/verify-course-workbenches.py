@@ -177,6 +177,17 @@ SPLIT_PORTAL_MODULES = {
     # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
     # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
     "ac26-w6-cosnark-beaver": "participant.server",
+    # Issue 537/538 (Issue 543 option B2): same move. tests/hidden/check_prover.py states,
+    # phase by phase, what every one of the eight checkpoints is graded on -- _Scenario.canonical
+    # is the parser's answer, check_witness writes out the reported keys and the five
+    # tamperings, _trace_failures computes the whole trace report in its own terms, and
+    # check_audit gives the five values an honest run reports. fixtures/generate.py carries the
+    # setting, coefficients, witness and relation the hidden labels h0..h3 are drawn from. Both
+    # shipped in the single participant stage, and a submission transcribed from the two scored
+    # all eight checkpoints, 300 of 300 points.
+    # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
+    # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
+    "ac26-w6-cosnark-linear": "participant.server",
     # Issue 537/538 (Issue 543 option B2): same move. tests/hidden/check_encoding.py
     # grades every checkpoint and fixtures/generate.py implements encode, centered,
     # decode, success_interval and first_failure under the exact five names
