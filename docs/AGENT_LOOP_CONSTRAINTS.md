@@ -269,14 +269,15 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   #538 was closed on that evidence.
 
   What the sweep does **not** settle, and what keeps #543 open: **7 problems still
-  `COPY verifier/` into their participant stage** — **3** as of #617: the `ac26-w6`/`w7`
+  `COPY verifier/` into their participant stage** — **2** as of the exploit-predicate split:
+  the `ac26-w6`/`w7`
   ones above, less the three cosnark problems and both capstones
   (`ac26-w4-proof-pipeline` came off in #611, `ac26-w6-cosnark-beaver` in #613,
   `ac26-w6-cosnark-linear` in #614, `ac26-w6-cosnark-privacy` in #615,
-  `ac26-w7-capstone-demo` in #616, `ac26-w7-capstone-design` in #617). The three left,
-  scanned on `5a28f53`, are
-  `ac26-w6-stack-design`, `ac26-w6-zkvm-exploit-predicate` and
-  `ac26-w6-zkvm-witness-binding`
+  `ac26-w7-capstone-demo` in #616, `ac26-w7-capstone-design` in #617,
+  `ac26-w6-zkvm-exploit-predicate` in the PR this paragraph was written for). The two left,
+  scanned on `ed39da3`, are
+  `ac26-w6-stack-design` and `ac26-w6-zkvm-witness-binding`
   — count them yourself rather than trusting this sentence; the one-line check is
   a per-stage scan of each `local/Dockerfile`'s `COPY` list, not a `grep` over the whole
   file, because every problem's `verifier` and `author` stages copy `verifier/` legitimately.
@@ -766,6 +767,44 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   the image a participant builds — the #585 shape, a participant surface naming a repository
   file the cloud participant does not have. **Check the READMEs for that sentence on every
   remaining split**: the Docker change is what makes an already-loose sentence false.
+
+  `ac26-w6-zkvm-exploit-predicate` came off the list next, and it is the one to read when
+  **the split does not close the problem and the report has to say so**. The stage carried
+  `tests/hidden/check_guest.py`, which is not a rule but a complete and correct
+  implementation of every graded function -- `_reference` is `reference_order`, `_machine`
+  and `_wrapped` are `machine_order`, `_rows` is `trace_evidence`, `_predicate` is
+  `verify_exploit`, `_verdict` is `triage` down to the order the five verdicts have to be
+  asked in, and `_probe_inputs`/`_separates` are `counterexample` -- beside
+  `fixtures/generate.py`'s `exploit_quantity` and `candidate_truth`. #603's third probe:
+  a submission transcribed from those two, with no reasoning past copying, scored **8 of 8
+  checkpoints, 300 of 300 points**, the #584 pole. Both standard probes read **0 of 300
+  before the split as well as after** (`fixtures/generate.py` defines none of the seven names
+  `starter/guest.py` asks for), the reference at 8/8 (300/300) is the positive control with
+  the guard in place, and the reachability count is unchanged at 0 throughout in both
+  directions -- the restore-the-leak run puts `COPY fixtures/ tests/ verifier/` back and the
+  count stays 0 while the new stage test goes red.
+
+  **What it adds is a fourth probe, and a finding the split does not close.** The eight
+  practice guests the `audit` checkpoint is about are material the learner *runs*, so they
+  moved to `participant/guests.py` on #615's reading rather than behind the verifier. Each is
+  "the correct predicate with exactly one thing changed" and **one of them is unchanged**, so
+  that file is a worked `verify_exploit` and a worked `machine_order`/`trace_evidence`
+  besides. Measured: a submission transcribed from `participant/guests.py` **alone** --
+  `_sound`, `_rows`, `_binds`, `_in_domain` copied, the rest a scan over them -- scores **8
+  of 8, 300 of 300, after the split as well as before**. So this problem's split closes the
+  hidden-checker path and the Issue 591 submission-side path and changes the measured free
+  score not at all. Removing the practice set is a participant-surface decision the problem
+  documents deliberately (`participant/guests.py`'s own docstring defends its readability),
+  so it was reported rather than taken: see the follow-up issue. **When a problem ships
+  near-correct implementations of the thing it grades, measure them as their own probe** --
+  two zero probes and a closed hidden checker would otherwise read as a closed problem.
+
+  It is also worth copying for the preload: `starter/guest.py` names **two** participant
+  modules (`participant.lab` and `participant.guests`), so the runner preloads both ahead of
+  #597's guard and the `verifier` stage copies both in -- a guard that preloads only the one
+  the reference happens to import passes the reference and breaks a learner whose own
+  top-level import the starter told them to write. Verified against the reference with a
+  top-level `participant.guests` import added: 8/8 with the guard in place.
 
   #586 is the last of the Week 5 chain and the first in this class with **no supplied
   half at all**: `fixtures/generate.py` there is entirely seed derivation plus the graded

@@ -194,6 +194,14 @@ SPLIT_PORTAL_MODULES = {
     # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
     # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
     "ac26-w7-capstone-design": "participant.server",
+    # Issue 537/538 (Issue 543 option B2): same move. tests/hidden/check_guest.py is a
+    # complete implementation of every graded function, and fixtures/generate.py holds the
+    # exploit quantities and the verdict behind each candidate. Both shipped in the single
+    # participant stage, and a submission transcribed from the two scored 8 of 8 checkpoints
+    # (300 of 300 points).
+    # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
+    # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
+    "ac26-w6-zkvm-exploit-predicate": "participant.server",
     # Issue 537/538 (Issue 543 option B2): same move. tests/hidden/check_prover.py states,
     # phase by phase, what every one of the eight checkpoints is graded on -- _Scenario.canonical
     # is the parser's answer, check_witness writes out the reported keys and the five
