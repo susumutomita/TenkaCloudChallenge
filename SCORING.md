@@ -2,7 +2,7 @@
 
 > Audience: anyone (human or AI agent) authoring or editing a problem. This is the
 > competition ruleset for **points, hint penalties, and wrong-answer penalties**.
-> The rules for Challenges are **enforced by `bun run validate`** (AGENT.md §14);
+> The rules for Challenges are **enforced by `bun run validate`**;
 > breaking them fails CI.
 
 The catalog is a competition. If two problems of the same difficulty are worth wildly

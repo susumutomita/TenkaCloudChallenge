@@ -97,13 +97,12 @@ that permission breadth equals runtime use.
 - an overlay larger than 1 MiB or an artifact larger than 16 MiB;
 - a `simulation.json` file that is not referenced from its problem metadata.
 
-The compatibility workflow checks out a pinned TenkaCloudSimulator revision,
-generates the Simulator capability manifest, and scans this checkout. Missing,
+The platform compatibility process checks a pinned TenkaCloudSimulator revision,
+generates the Simulator capability manifest, and scans the catalog. Missing,
 insufficient, or invalid requirements fail loudly before a simulation world is
 created. The report is deterministic and does not contain credentials or answers.
-`bun run validate` also installs the catalog-owned workload workspace from its
-frozen lockfile with lifecycle scripts disabled before running its test and strict
-typecheck, so a fresh clone cannot rely on residual nested dependencies.
+Runtime-specific tests remain in the problem workspace and are run when that
+runtime changes; they are not part of the catalog-wide validator.
 
 ## Current cloud-catalog audit
 

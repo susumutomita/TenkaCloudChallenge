@@ -117,8 +117,6 @@ verifier が実際に保証するのはもっと狭く、そして本物です�
 Advanced Cryptography Program 2026 の Week 2 に対応する companion で、 `week2/README.md` と
 `week2/problems/toy-mpc/README.md` に pin している。 公式課題の **Part B (oblivious transfer と
 GMW の秘密 AND)** に伴走する問題で、 この track の他の Week 2 問題はそこまで届いていない。
-詳細は
-[`docs/curricula/advanced-cryptography-2026/curriculum.md`](../../docs/curricula/advanced-cryptography-2026/curriculum.md)。
 
 公式の解答、 テンプレート、 テストモジュールは読まずに書いている (`spoilerPolicy` は
 `independent-reimplementation`)。
