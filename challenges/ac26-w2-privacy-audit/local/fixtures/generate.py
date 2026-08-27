@@ -335,3 +335,33 @@ def spec_as_public(sp: Spec) -> dict[str, object]:
 def health_token(seed: str) -> str:
     sp = spec(seed)
     return hashlib.sha256(f"health:{seed}:{sp.p}".encode()).hexdigest()[:16]
+
+
+def public_payload(seed: str) -> dict[str, object]:
+    """Everything a participant may see for this deployment. Carries values, not functions.
+
+    The single source `show.py`, `verifier/server.py`'s `GET /public` and
+    `tests/public/test_auditor.py` all build their view from. Every field below is
+    something `make inspect` already printed or the public tests already imported before
+    Issue 543 option B2, so the split changes where a participant reads it, not what they
+    may see.
+
+    What is deliberately absent is this module itself. `TRUTH` states the verdict for
+    every one of the seven programs by id, and `program()`'s own comments name the
+    violation each one carries -- and it shipped beside `tests/hidden/check_auditor.py`,
+    whose `_expected_index` and `_leaks` spell out the decision rule `first_violation`
+    exists to make the learner derive. Serving the derived values keeps `make inspect`
+    and the public tests working without shipping any of that.
+
+    `cleanEvents` is the trace of the one program that leaks nothing -- the same one
+    `show.py` has always printed, and the only one the public tests run. The six that
+    the graded checkpoints actually audit are not here, and neither is the transcript
+    `derive_secret` works from: those are built inside the verifier, from a `spec()` this
+    payload does not carry the private half of.
+    """
+    sp = spec(seed)
+    return {
+        "spec": spec_as_public(sp),
+        "cleanEvents": execute(program(sp, "alpha"), sp).events,
+        "healthToken": health_token(seed),
+    }

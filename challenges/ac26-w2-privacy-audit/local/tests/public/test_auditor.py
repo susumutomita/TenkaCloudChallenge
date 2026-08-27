@@ -12,6 +12,8 @@ written an auditor that says "fine" to everything.
 
 from __future__ import annotations
 
+import json
+import os
 import sys
 from pathlib import Path
 
@@ -20,14 +22,47 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "starter"))
 
 import auditor  # noqa: E402
-from fixtures.generate import execute, program, spec, spec_as_public  # noqa: E402
 
-SEED = __import__("os").environ.get("FLAG_SEED", "local-dev-seed")
+SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
+
+
+def _load_public_evidence() -> dict:
+    """This deployment's specification and the one clean run's trace -- what `show.py`
+    prints, and the only two things this file has ever needed.
+
+    Issue 537/538 (Issue 543 option B2): this file used to import `fixtures.generate`
+    directly. That module's `TRUTH` names the verdict for each of the seven programs by
+    id, and it shipped in the same image as `tests/hidden/check_auditor.py`, whose
+    `_expected_index` and `_leaks` state the decision rule `first_violation` exists to
+    make a learner derive -- so it does not ship in the `participant` Docker stage at all
+    any more (see ../../Dockerfile). This deployment's own verifier is the only source
+    for the public half now: `PUBLIC_EVIDENCE_JSON` when the Portal has already fetched
+    it, or `VERIFIER_PUBLIC_URL` fetched directly when it has not.
+    """
+    injected = os.environ.get("PUBLIC_EVIDENCE_JSON")
+    if injected:
+        return json.loads(injected)
+    verifier_public_url = os.environ.get("VERIFIER_PUBLIC_URL")
+    if verifier_public_url:
+        from urllib.request import urlopen
+
+        with urlopen(verifier_public_url, timeout=10) as response:  # noqa: S310
+            return json.loads(response.read().decode("utf-8"))
+    # Neither is set: this only resolves when `fixtures/` is actually on disk, which is
+    # true for a checkout (this file run directly, e.g. by
+    # scripts/ac26-w2-privacy-audit.test.ts) and the verifier/author Docker stages, and
+    # never inside a built `participant` image -- so this branch does not reopen the
+    # leak above.
+    from fixtures.generate import public_payload
+
+    return public_payload(SEED)
+
+
+PUBLIC = _load_public_evidence()
 
 
 def check_allowed_opens_is_not_empty() -> str:
-    sp = spec(SEED)
-    got = auditor.allowed_opens(spec_as_public(sp))
+    got = auditor.allowed_opens(dict(PUBLIC["spec"]))
     if not isinstance(got, list) or not got:
         return "allowed_opens returned no labels"
     if any(not isinstance(item, str) for item in got):
@@ -36,9 +71,7 @@ def check_allowed_opens_is_not_empty() -> str:
 
 
 def check_clean_run_is_not_flagged() -> str:
-    sp = spec(SEED)
-    run = execute(program(sp, "alpha"), sp)
-    if auditor.first_violation(run.events, spec_as_public(sp)) is not None:
+    if auditor.first_violation(list(PUBLIC["cleanEvents"]), dict(PUBLIC["spec"])) is not None:
         return "a run that leaks nothing was reported as a violation"
     return ""
 
