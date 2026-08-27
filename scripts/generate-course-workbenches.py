@@ -204,6 +204,20 @@ PORTAL_PACKAGES = {
     # half -- the shares, the instrumented runtime and the participant facade -- stayed with
     # the participant as participant/mpc.py, and the Portal moved to participant/.
     "ac26-w6-cosnark-linear": "participant",
+    # Issue 537/538 (Issue 543 option B2): all eight checkpoints are graded by running
+    # tests/hidden/check_prover.py against the submitted file, and that checker holds the
+    # rules -- _expected_class is classify's answer, _authorized is open-set's,
+    # _expected_leakage is leakage's. fixtures/specimens.py left the participant stage with
+    # it: GROUND_TRUTH names, per specimen, the capabilities reached, the unauthorized
+    # openings, the disclosed (channel, name) pairs and the recoverable secret, for exactly
+    # the eight provers the problem asks about. A submission transcribed from the two scored
+    # six of eight checkpoints, 230 of 300 points. fixtures/generate.py left as well:
+    # setting, coefficients, witness, relation and value_catalog are what the hidden labels
+    # h0..h3 are drawn from. The supplied half -- the sharing runtime, the disclosure sink,
+    # the policy vocabulary, the bench, and the eight specimens as runnable objects -- stayed
+    # with the participant as participant/mpc.py, participant/lab.py and
+    # participant/specimens.py, and the Portal moved to participant/.
+    "ac26-w6-cosnark-privacy": "participant",
     # Issue 537/538 (Issue 543 option B2): fixtures/generate.py's audit_log returns
     # victim_secret and victim_public beside the records -- the hunt checkpoint's answer
     # as a value -- secret_key derives every key in this deployment from the FLAG_SEED

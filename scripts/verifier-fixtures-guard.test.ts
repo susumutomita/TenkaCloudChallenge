@@ -81,10 +81,16 @@ const NO_RUNNER_EXCEPTION = "asm-worst-case-latency";
  * `ac26-w6-cosnark-linear` is the same pairing again, on the same shape: `field_id` and the
  * rest of the supplied layer moved to `participant/mpc.py`, the runner preloads it ahead of
  * the guard, and the reference measured 8/8 (300/300) with the guard in place.
+ *
+ * `ac26-w6-cosnark-privacy` completes the Week 6 co-SNARK trio. Its split moved three
+ * modules rather than one -- `participant/mpc.py` (the supplied sharing runtime, sink and
+ * policy vocabulary), `participant/specimens.py` (the eight provers as runnable objects,
+ * without `GROUND_TRUTH`) and `participant/lab.py` (the bench) -- and its reference imports
+ * from two of them at module level, so all three are preloaded ahead of the guard. Verified
+ * against the reference rather than by inspection: 8/8 (300/300) with the guard in place.
  */
 const FIXTURES_DEPENDENT_SUBMISSION_EXCEPTIONS = [
   "ac26-bridge-properties",
-  "ac26-w6-cosnark-privacy",
   "ac26-w6-stack-design",
   "ac26-w6-zkvm-exploit-predicate",
   "ac26-w6-zkvm-witness-binding",

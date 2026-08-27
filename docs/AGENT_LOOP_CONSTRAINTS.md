@@ -269,11 +269,12 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   #538 was closed on that evidence.
 
   What the sweep does **not** settle, and what keeps #543 open: **7 problems still
-  `COPY verifier/` into their participant stage** — **6** as of #614: the `ac26-w6`/`w7`
-  ones above, less `ac26-w6-cosnark-beaver` and `ac26-w6-cosnark-linear`
+  `COPY verifier/` into their participant stage** — **5** as of #615: the `ac26-w6`/`w7`
+  ones above, less the three cosnark problems
   (`ac26-w4-proof-pipeline` came off in #611, `ac26-w6-cosnark-beaver` in #613,
-  `ac26-w6-cosnark-linear` in #614). The six left, scanned on `cb88c63`, are
-  `ac26-w6-cosnark-privacy`, `ac26-w6-stack-design`, `ac26-w6-zkvm-exploit-predicate`,
+  `ac26-w6-cosnark-linear` in #614, `ac26-w6-cosnark-privacy` in #615). The five left,
+  scanned on `c86cd00`, are
+  `ac26-w6-stack-design`, `ac26-w6-zkvm-exploit-predicate`,
   `ac26-w6-zkvm-witness-binding`, `ac26-w7-capstone-demo` and `ac26-w7-capstone-design`
   — count them yourself rather than trusting this sentence; the one-line check is
   a per-stage scan of each `local/Dockerfile`'s `COPY` list, not a `grep` over the whole
@@ -651,6 +652,43 @@ Reachable, and the largest block of work left — **do not skip these as "owner'
   here — the suite prints **All 25 mutations killed** with the stale string and with the
   updated one, so its summary line cannot tell you which happened. Grep the whole problem
   directory for the moved import **as a string literal**, not only as an import statement.
+
+  `ac26-w6-cosnark-privacy` came off the list in #615, closing the Week 6 co-SNARK trio, and
+  it is the one to read when **the participant has to keep running the very things the
+  problem is about**. Its eight specimens are runnable objects a learner audits — `make
+  inspect P=S3` runs one, the public tests run several — so unlike every earlier split here
+  the material could not all move behind the verifier. Three modules moved to the
+  participant side (`participant/mpc.py`, `participant/lab.py`, `participant/specimens.py`),
+  and what stayed behind is the **table of answers about** those objects rather than the
+  objects: `fixtures/specimens.py` now holds only `GROUND_TRUTH` and `MALFORMED_TRUTH`, which
+  name per specimen the capabilities reached, the unauthorized openings, the disclosed
+  `(channel, name)` pairs and the recoverable secret. Reach for that carve line whenever a
+  problem's subject is a thing the learner must execute.
+
+  Both standard probes read **0 of 300 before the split as well as after**
+  (`fixtures/generate.py` defines none of the seven names `starter/prover.py` asks for, so the
+  name-based detector reported it zero times), the guard-removal control is flat, and the
+  reachability count is unchanged at 0 throughout in both directions — the restore-the-leak
+  run puts `COPY fixtures/ tests/ verifier/` back into the participant stage and the count
+  stays 0 while the new stage test goes red. #603's third probe is what speaks, and this is
+  the first one on this list where it scored a **majority but not all** of the problem: a
+  submission transcribed from the two shipped files, with no reasoning past copying, scored
+  **6 of 8 checkpoints, 230 of 300 points**. `tests/hidden/check_prover.py`'s
+  `_expected_class` is `classify`'s answer written out, `_authorized` is `open-set`'s, and
+  `_expected_leakage` is `leakage`'s; `fixtures/specimens.py`'s two tables answer
+  `capability`; `show.py`'s own clean prover answers `repair`; and `check_prover.py`'s
+  `_HIDDEN_TRUTH` extends the tables to the four provers `transfer` was supposed to hold
+  back. It stops at six because `evidence` is handed a **serialized** disclosure, so its
+  value has to be derived rather than looked up, and `transfer` re-runs `evidence`. **Report
+  the fraction** (#610's rule) — and note where the two survivors were: both are the
+  checkpoints whose answer is not a value in either file.
+
+  One thing it adds to the worked examples. `classify` had to raise on an out-of-vocabulary
+  entry, which the *starter* asks for and neither shipped file states; the transcription
+  scored 5 of 8 until that one refusal was copied from the starter's own docstring. When a
+  transcription probe stalls at a checkpoint whose rule you did copy, check the starter
+  before concluding the material was not reachable — the participant surface is part of what
+  a transcriber reads.
 
   #586 is the last of the Week 5 chain and the first in this class with **no supplied
   half at all**: `fixtures/generate.py` there is entirely seed derivation plus the graded

@@ -8,6 +8,12 @@ gives away nothing about which of the eight are honest.
     make inspect            the dense coefficient vectors
     make inspect S=sparse   any of dense, sparse, signed, unit
     make inspect P=S3       also run one specimen and print everything it left behind
+
+Issue 537/538 (Issue 543 option B2): the setting, the row, the witness and the catalog below
+come from the verifier's `GET /public` over the Compose-internal network, not from
+`fixtures/generate.py`, which does not ship in the participant image any more (see
+local/Dockerfile and participant/lab.py). `make inspect` therefore runs through Compose --
+see the Makefile.
 """
 
 from __future__ import annotations
@@ -18,21 +24,25 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from fixtures.generate import (
+from participant.mpc import (
     ALLOWED_NAMES,
     CHANNELS,
     CLASSES,
     PROTOCOL_CAPABILITIES,
-    SHAPES,
     SHARING_ONLY_NAMES,
     beaver_product,
     clean_artifact,
-    health_token,
     round_id_for,
+)
+from participant.lab import (
+    Scenario,
+    health_token,
+    run_on,
+    serialized,
+    shapes,
     value_catalog,
 )
-from fixtures.lab import Scenario, run_on, serialized
-from fixtures.specimens import SPECIMEN_IDS
+from participant.specimens import SPECIMEN_IDS
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
@@ -49,9 +59,10 @@ def _clean_run(scenario: Scenario) -> None:
 
 
 def main() -> None:
+    available = shapes(SEED)
     shape = os.environ.get("S") or "dense"
-    if shape not in SHAPES:
-        print(f"unknown shape {shape!r}; try one of {', '.join(SHAPES)}")
+    if shape not in available:
+        print(f"unknown shape {shape!r}; try one of {', '.join(available)}")
         raise SystemExit(1)
 
     scenario = Scenario(SEED, "public", shape)

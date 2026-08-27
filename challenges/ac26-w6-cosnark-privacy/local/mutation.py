@@ -17,7 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from fixtures.generate import SHAPES  # noqa: E402
-from fixtures.lab import Scenario, probe_factory, run_on  # noqa: E402
+from participant.lab import Scenario, probe_factory, run_on  # noqa: E402
 from fixtures.specimens import GROUND_TRUTH, MALFORMED_TRUTH, SPECIMEN_IDS  # noqa: E402
 from tests.hidden.check_prover import CROSS_PARTY, run  # noqa: E402
 

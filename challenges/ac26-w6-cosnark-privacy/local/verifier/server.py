@@ -1,4 +1,24 @@
-"""POST /verify — the scoring seam. Loopback only, stdlib only.
+"""POST /verify — the scoring seam. Compose-internal only, stdlib only.
+
+Issue 537/538 (Issue 543 option B2): this used to be the same process that also served the
+Participant Portal's config, inspect, starter, public-test and prepare endpoints, in the
+single Docker stage a learner's own `make build` produced -- so `tests/hidden/check_prover.py`
+shipped in the learner's own image alongside it. That file holds the rules every checkpoint is
+graded against: `_expected_class` is `classify`'s answer, `_authorized` is `open-set`'s, and
+`_expected_leakage` is `leakage`'s. `fixtures/specimens.py` shipped there too, and its
+`GROUND_TRUTH` names -- per specimen -- the capabilities reached beyond the protocol's own,
+how many openings were unauthorized, the disclosed `(channel, name)` pairs and the recoverable
+secret, for exactly the eight provers the problem asks about; so did `fixtures/generate.py`,
+with the `setting`, `coefficients`, `witness`, `relation` and `value_catalog` the hidden labels
+`h0`..`h3` are drawn from.
+
+That Portal-facing surface now lives in `participant/server.py`, in a separate image (see
+../Dockerfile) that this process's own container never builds; this file, `fixtures/` and
+`tests/hidden/` are reachable only over the Compose-internal network (see
+../docker-compose.yml), never from the participant container's filesystem.
+
+`GET /public` below is what the participant image reads instead of importing
+`fixtures.generate`.
 
 Security contract (docs/curricula/advanced-cryptography-2026/TEMPLATE.md §/verify):
   - `checkpointId` is required and is echoed back verbatim. The platform fails closed
@@ -17,6 +37,9 @@ Security contract (docs/curricula/advanced-cryptography-2026/TEMPLATE.md §/veri
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import json
 import os
 import resource
@@ -25,10 +48,14 @@ import sys
 import tempfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from fixtures.generate import public_payload  # noqa: E402 - after the sys.path insert
+
 ROOT = Path(__file__).resolve().parents[1]
+PROBLEM_ID = "ac26-w6-cosnark-privacy"
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 MAX_BODY_BYTES = 256 * 1024
@@ -57,6 +84,7 @@ CODE_CHECKPOINTS = {
     "transfer": ("check_transfer",),
 }
 CHECKPOINTS = tuple(CODE_CHECKPOINTS)
+MANUAL_CHECKPOINTS = frozenset(CHECKPOINTS) - frozenset(CODE_CHECKPOINTS)
 
 
 # Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still
@@ -80,12 +108,36 @@ import json, os, sys
 sys.path.insert(0, {root!r})
 sys.path.insert(0, {workspace!r})
 from tests.hidden import check_prover
+# Issue 543 option B2: the supplied half lives outside `fixtures/` now, in
+# `participant/mpc.py`, `participant/specimens.py` and `participant/lab.py`, and
+# `reference/prover.py` imports from two of them at module level -- as does any learner who
+# follows the starter's own instructions. The guard below takes the problem root off
+# `sys.path`, so without preloading them here those imports would not resolve and every
+# checkpoint would fail on an import error. They stay in `sys.modules` across the guard on
+# purpose; `fixtures` and `tests` do not.
+import participant.mpc  # noqa: F401
+import participant.specimens  # noqa: F401
+import participant.lab  # noqa: F401
+# Issue 591: fixtures/ and tests/hidden/ stay on disk in this image for grading (Issue 543
+# option B2 only stopped shipping them to the participant image), so without this the
+# submission's own import statement could reach them directly -- `fixtures.specimens`
+# carries `GROUND_TRUTH`, and `fixtures.generate` carries `setting`, `witness`, `relation`
+# and `value_catalog`, which are what the hidden labels are drawn from.
+_hidden_modules = {{
+    name: sys.modules.pop(name)
+    for name in tuple(sys.modules)
+    if name in ("tests", "fixtures") or name.startswith(("tests.", "fixtures."))
+}}
+while {root!r} in sys.path:
+    sys.path.remove({root!r})
 try:
     import prover
 except Exception as error:
     print(json.dumps({{"failures": ["submission could not be imported: " + type(error).__name__]}}))
     sys.stdout.flush()
     os._exit(0)
+sys.path.insert(0, {root!r})
+sys.modules.update(_hidden_modules)
 phases = {phases!r}
 if phases:
     failures = []
@@ -155,67 +207,74 @@ def evaluate(checkpoint_id: str, submission: object) -> bool:
         return _run_submission(submission, CODE_CHECKPOINTS[checkpoint_id], SEED)
     return False
 
-# BEGIN GENERATED PORTAL EDITOR API
-from verifier.workbench import PortalEditorSupport
 
-_WORKBENCH = PortalEditorSupport(
-    root=ROOT,
-    seed=SEED,
-    problem_id='ac26-w6-cosnark-privacy',
-    problem_name='同じ答えを返す 8 つの prover が、 それぞれ別のことを言っている',
-    problem_name_en='Eight provers that agree on the answer and disagree on what they say',
-    description='8 つの co-SNARK prover はどれも同じ `C = A × B` を返す。 違うのは何を、 どの出口から外へ出すかだけ。 最初の privacy violation を記録から特定し、 correctness と round 数を保ったまま塞ぐ。',
-    description_en='All eight co-SNARK provers return the same `C = A * B`. What differs is what each one lets out, and through which exit. Find the first privacy violation in the record and close it without changing the answer or the round count.',
-    checkpoint_labels={'classify': 'どの値が、 誰のものか', 'capability': '1 回動かして分かることと、 分からないこと', 'open-set': '話してよかった値と、 そうでない値', 'cross-party': '何も言わずに、 読むだけの実装', 'leakage': '答えを見る test が、 見ていない 3 つの出口', 'evidence': '漏れた値から、 秘密を組み立てる', 'repair': '同じ答えを返し、 何も言わない prover', 'transfer': '見たことのない設定と、 見たことのない実装で'},
-    checkpoint_labels_en={'classify': 'Which values belong to whom', 'capability': 'What one run tells you, and what it does not', 'open-set': 'The values it was allowed to say, and the ones it was not', 'cross-party': 'The implementation that says nothing and reads everything', 'leakage': 'The three exits a correctness test never looks at', 'evidence': 'Build the secret out of what leaked', 'repair': 'Same answer, nothing said', 'transfer': 'A setting you have not seen, and provers you have not seen'},
-    submitted_files=('prover.py',),
-    code_checkpoints=('classify', 'capability', 'open-set', 'cross-party', 'leakage', 'evidence', 'repair', 'transfer'),
-    checkpoints=('classify', 'capability', 'open-set', 'cross-party', 'leakage', 'evidence', 'repair', 'transfer'),
-    max_body_bytes=MAX_BODY_BYTES,
-    run_timeout_seconds=RUN_TIMEOUT_SECONDS,
-    max_output_bytes=MAX_OUTPUT_BYTES,
-    limit_fn=_limits,
-)
-# END GENERATED PORTAL EDITOR API
+def _b64decode(value: str) -> bytes:
+    padding = "=" * (-len(value) % 4)
+    return base64.urlsafe_b64decode(value + padding)
+
+
+def _unwrap_submission(checkpoint_id: str, submission: object) -> object:
+    """Undo the Workbench's `tcw1.` seal and check it against this deployment.
+
+    The derivation is duplicated from `participant/workbench.py`'s
+    `PortalEditorSupport._seal_manual` rather than imported, because that module lives only
+    in the participant image (see ../Dockerfile). Repeating it here rather than trusting an
+    already-unwrapped value from the Workbench is what keeps the seal meaningful: a caller
+    who skips the Workbench is judged by the same rule. Same shape as
+    ac26-w6-cosnark-beaver's and ac26-w4-commit-open's verifiers, for the same reason.
+
+    Every checkpoint here is a code checkpoint, so `MANUAL_CHECKPOINTS` is empty and an
+    unsealed submission keeps its historical raw-source format. The seal path is still
+    honoured, so a Portal that seals a code submission is graded rather than rejected.
+    """
+    if not isinstance(submission, str) or not submission.startswith("tcw1."):
+        return None if checkpoint_id in MANUAL_CHECKPOINTS else submission
+    try:
+        prefix, encoded_payload, encoded_signature = submission.split(".", 2)
+        if prefix != "tcw1":
+            return None
+        payload = _b64decode(encoded_payload)
+        signature = _b64decode(encoded_signature)
+        key = hashlib.sha256((PROBLEM_ID + "\0" + SEED).encode("utf-8")).digest()
+        expected_signature = hmac.new(key, payload, hashlib.sha256).digest()[:16]
+        if not hmac.compare_digest(signature, expected_signature):
+            return None
+        decoded = json.loads(payload.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(decoded, dict):
+        return None
+    if decoded.get("v") != 1 or decoded.get("checkpointId") != checkpoint_id:
+        return None
+    return decoded.get("answer")
+
 
 class Handler(BaseHTTPRequestHandler):
-    """Serve the Portal editor API and preserve the existing /verify contract."""
+    """Serve the /verify contract, and nothing a participant-facing client needs.
+
+    The Portal editor API is deliberately absent: it lives in `participant/server.py`,
+    which runs in the image a learner builds. Everything here runs in the image that
+    carries `fixtures/` and `tests/hidden/`, and is never published to the host.
+    """
 
     timeout = REQUEST_TIMEOUT_SECONDS
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's API
-        from urllib.parse import urlsplit
-
         path = urlsplit(self.path).path
-        if path == "/api/config":
-            self._respond(200, _WORKBENCH.config_payload())
+        if path == "/healthz":
+            self._respond(200, {"ok": True})
             return
-        if path == "/api/inspect":
-            self._respond(200, _WORKBENCH.inspect_payload())
-            return
-        if path == "/api/starter":
-            self._respond(200, _WORKBENCH.starter_payload())
+        if path == "/public":
+            self._respond(200, public_payload(SEED))
             return
         self._respond(404, {"error": "not found"})
 
     def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's API
-        from urllib.parse import urlsplit
-
-        path = urlsplit(self.path).path.rstrip("/") or "/"
-        if path not in ("/verify", "/api/test", "/api/prepare"):
+        if urlsplit(self.path).path.rstrip("/") != "/verify":
             self._respond(404, {"error": "not found"})
             return
         body = self._read_json_body()
         if body is None:
-            return
-        if path == "/api/test":
-            self._respond(200, _WORKBENCH.run_public_tests(body.get("files")))
-            return
-        if path == "/api/prepare":
-            self._respond(
-                200,
-                _WORKBENCH.prepare_submissions(body.get("files"), body.get("manual")),
-            )
             return
 
         checkpoint_id = body.get("checkpointId")
@@ -228,7 +287,7 @@ class Handler(BaseHTTPRequestHandler):
                 },
             )
             return
-        submission = _WORKBENCH.unwrap_submission(checkpoint_id, body.get("submission"))
+        submission = _unwrap_submission(checkpoint_id, body.get("submission"))
         try:
             correct = evaluate(checkpoint_id, submission)
         except Exception:  # noqa: BLE001 - a broken checkpoint must fail closed
@@ -282,16 +341,16 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(content)
 
+
 def main() -> None:
-    port = int(os.environ.get("VERIFY_PORT", "18115"))
-    # Bind every interface *inside the container*, not the container's loopback. A published
-    # port is forwarded to the container's bridge address, so a server listening only on
-    # 127.0.0.1 inside the container accepts nothing from outside it — the connection is
-    # opened and closed without a response, and the platform can never score the problem.
+    port = int(os.environ.get("VERIFY_PORT", "18159"))
+    # Bind every interface *inside the container*, not the container's loopback: the
+    # Workbench reaches this process by service name over the Compose-internal `lab`
+    # network, and a server listening only on 127.0.0.1 inside the container would accept
+    # nothing from it.
     #
-    # The loopback restriction that matters is on the host, and it lives in
-    # docker-compose.yml, which publishes `127.0.0.1:<port>:<port>`. Nothing outside this
-    # machine can reach the verifier either way.
+    # This port is never published to the host at all (see ../docker-compose.yml). The only
+    # published port is the Workbench's, on loopback, and it forwards `/verify` inward.
     HTTPServer(("0.0.0.0", port), Handler).serve_forever()  # noqa: S104 - see above
 
 

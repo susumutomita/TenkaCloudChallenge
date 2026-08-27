@@ -2,7 +2,7 @@
 
 They never say which specimens leak, never check a channel, never check an opening record,
 and never check a recovered value against anything. The hidden verifier does all four, one
-checkpoint at a time.
+checkpoint at a time -- in a separate image this one cannot read (see ../../Dockerfile).
 """
 
 from __future__ import annotations
@@ -15,19 +15,23 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "starter"))
 
-from fixtures.generate import (  # noqa: E402
-    CLASSES,
-    relation,
-    setting,
+from participant.mpc import CLASSES  # noqa: E402
+from participant.lab import (  # noqa: E402
+    Scenario,
+    deployment,
+    probe_factory,
+    run_on,
+    serialized,
     value_catalog,
 )
-from fixtures.lab import Scenario, probe_factory, run_on, serialized  # noqa: E402
-from fixtures.specimens import SPECIMEN_IDS  # noqa: E402
+from participant.specimens import SPECIMEN_IDS  # noqa: E402
 import prover  # noqa: E402
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
-CFG = setting(SEED, "public")
-ROW = dict(relation(SEED, "public", CFG, "dense"))
+# Issue 537/538 (Issue 543 option B2): the setting and the row come from the verifier's
+# `GET /public` over the Compose-internal network now, not from `fixtures/generate.py`, which
+# does not ship in the participant image any more. See ../../participant/lab.py.
+CFG, ROW = deployment(SEED, "dense")
 
 
 def _evidence(specimen_id: str = "S1"):

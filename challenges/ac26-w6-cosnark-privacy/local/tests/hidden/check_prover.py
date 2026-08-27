@@ -45,7 +45,7 @@ from fixtures.generate import (  # noqa: E402
     setting,
     value_catalog,
 )
-from fixtures.lab import (  # noqa: E402
+from participant.lab import (  # noqa: E402
     Scenario,
     malformed_row,
     probe_factory,
