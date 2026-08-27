@@ -14,7 +14,7 @@ from __future__ import annotations
 from itertools import combinations
 from typing import Any, Callable
 
-from fixtures.generate import (
+from participant.lab import (
     CLAIMABLE,
     NOT_PROVIDED,
     PROVIDED,

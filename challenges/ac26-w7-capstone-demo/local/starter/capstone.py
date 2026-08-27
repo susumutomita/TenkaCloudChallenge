@@ -39,7 +39,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from fixtures.generate import Setting
+from participant.lab import Setting
 
 Protocol = Callable[[Setting, tuple[int, ...]], Any]
 
@@ -48,7 +48,7 @@ def scope(setting: Setting) -> dict[str, Any]:
     """What this build claims, and what it explicitly does not.
 
     Return {"claims", "non_goals", "threshold", "parameters"}. `claims` and `non_goals` are
-    lists drawn from `fixtures.generate.CLAIMABLE`; `parameters` is `setting.as_dict()`.
+    lists drawn from `participant.lab.CLAIMABLE`; `parameters` is `setting.as_dict()`.
 
     Two of the four properties this construction genuinely provides, and two it does not.
     Work out which before writing them down — one of the two it lacks is missing because
@@ -112,7 +112,7 @@ def recover(observed: dict[str, Any], coalition: tuple[int, ...], setting: Setti
 def experiment_privacy() -> dict[str, Any]:
     """Measure privacy rather than assert it.
 
-    Return {"id", "ran", "passed", "space"}. `fixtures.generate.tiny_settings()` gives two
+    Return {"id", "ran", "passed", "space"}. `participant.lab.tiny_settings()` gives two
     settings with the same sum and different honest inputs, and `randomness_space` gives
     every randomness either one admits.
 

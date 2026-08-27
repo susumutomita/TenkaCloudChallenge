@@ -9,18 +9,14 @@ A protocol that opens every raw share passes every test in this file.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from fixtures.generate import (  # noqa: E402
-    CLAIMABLE,
-    honest_sum,
-    public_setting,
-    sample_randomness,
-)
+from participant.lab import honest_sum, sample_randomness, setting_from_payload  # noqa: E402
 from starter.capstone import (  # noqa: E402
     detects,
     evidence,
@@ -36,8 +32,42 @@ from starter.capstone import (  # noqa: E402
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 
+def _load_public_evidence() -> dict:
+    """This deployment's setting and vocabulary -- what `show.py` prints, and what this file
+    has always run its one honest round trip on.
+
+    Issue 537/538 (Issue 543 option B2): this file used to import `fixtures.generate`
+    directly. That module carries `hidden_settings` -- the six settings every checkpoint is
+    graded on -- and it shipped in the same image as `tests/hidden/check_capstone.py`, which
+    states phase by phase what each of those checkpoints accepts. So it does not ship in the
+    `participant` Docker stage at all any more (see ../../Dockerfile). This deployment's own
+    verifier is the only source for the public half now: `PUBLIC_EVIDENCE_JSON` when the
+    Portal has already fetched it, or `VERIFIER_PUBLIC_URL` fetched directly when it has not.
+    """
+    injected = os.environ.get("PUBLIC_EVIDENCE_JSON")
+    if injected:
+        return json.loads(injected)
+    verifier_public_url = os.environ.get("VERIFIER_PUBLIC_URL")
+    if verifier_public_url:
+        from urllib.request import urlopen
+
+        with urlopen(verifier_public_url, timeout=10) as response:  # noqa: S310
+            return json.loads(response.read().decode("utf-8"))
+    # Neither is set: this only resolves when `fixtures/` is actually on disk, which is true
+    # for a checkout (this file run directly, e.g. by scripts/ac26-w7-capstone-demo.test.ts)
+    # and the verifier/author Docker stages, and never inside a built `participant` image --
+    # so this branch does not reopen the leak above.
+    from fixtures.generate import public_payload
+
+    return public_payload(SEED)
+
+
+PUBLIC_EVIDENCE = _load_public_evidence()
+CLAIMABLE = tuple(PUBLIC_EVIDENCE["vocabulary"]["claimable"])
+
+
 def _setting():
-    return public_setting(SEED)
+    return setting_from_payload(PUBLIC_EVIDENCE["setting"])
 
 
 def _transcript():

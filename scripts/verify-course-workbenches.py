@@ -177,6 +177,14 @@ SPLIT_PORTAL_MODULES = {
     # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
     # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
     "ac26-w6-cosnark-beaver": "participant.server",
+    # Issue 537/538 (Issue 543 option B2): same move. tests/hidden/check_capstone.py states,
+    # phase by phase, what every one of the eight checkpoints is graded on, and
+    # fixtures/generate.py carries the six hidden_settings every checkpoint is graded on. Both
+    # shipped in the single participant stage, and a submission transcribed from the two
+    # scored all eight checkpoints, 300 of 300 points.
+    # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
+    # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
+    "ac26-w7-capstone-demo": "participant.server",
     # Issue 537/538 (Issue 543 option B2): same move. tests/hidden/check_prover.py states,
     # phase by phase, what every one of the eight checkpoints is graded on -- _Scenario.canonical
     # is the parser's answer, check_witness writes out the reported keys and the five

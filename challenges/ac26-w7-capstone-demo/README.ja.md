@@ -101,9 +101,17 @@ protocol は semi-honest 前提でもあり、自分の入力について嘘を�
 ## 保証範囲
 
 ローカルモードは **自習向けの honor-system verification** です。マシンも Docker daemon も
-image もあなたのものなので、image の中に隠れているものはありません。`reference/` と
-`tests/hidden/` を bind-mount しないのは、git checkout に紛れ込ませないためであって、
-手が届かないようにするためではありません。
+image もあなたのものなので、自分でビルドした image の中に隠れているものはありません。
+
+Issue 537/538 で変わったのは、**どの image が何を持つか**です。採点は公開されない 2 つ目の
+container で動きます。`fixtures/`、`tests/hidden/`、`verifier/` はそちらにしか存在せず、
+Workbench からは内部ネットワーク経由でしか届かず、Workbench の filesystem には置かれません。
+そのため `make test` と `make inspect` はその container も起動します（`make verifier-up` 単体でも
+起動でき、`make verifier-down` で停止します）。`show.py` と public tests は fixtures を import
+する代わりに、その `GET /public` からこのデプロイの setting を読みます。
+
+これは誤配防止の境界であって、機密性の境界ではありません。`verifier` / `author` stage を
+自分でビルドすれば、中身はすべて読めます。
 
 verifier が実際に保証するのは、もっと狭く、そして本物です。提出物が verifier を停止させたり
 落としたりできないこと、checkpoint が echo した id 以外を加点できないこと、応答が期待値を

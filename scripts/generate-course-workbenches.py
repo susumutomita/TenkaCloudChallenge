@@ -192,6 +192,17 @@ PORTAL_PACKAGES = {
     # triples, the instrumented runtime and linear_halves -- stayed with the participant as
     # participant/mpc.py, and the Portal moved to participant/.
     "ac26-w6-cosnark-beaver": "participant",
+    # Issue 537/538 (Issue 543 option B2): tests/hidden/check_capstone.py states, phase by
+    # phase, what every one of the eight checkpoints is graded on -- _spec_well_formed is the
+    # whole transcript rule, _spec_view is view's answer written out, _leaks is the privacy
+    # experiment, check_threshold states where the threshold sits and _mutants enumerates the
+    # nine defects detects is graded against. fixtures/generate.py left the participant stage
+    # with it: hidden_settings draws the six settings every checkpoint is graded on. A
+    # submission transcribed from the two scored all eight checkpoints, 300 of 300 points.
+    # The supplied half -- the setting object, the vocabulary, the tiny settings and the
+    # randomness contract -- stayed with the participant as participant/lab.py, and the
+    # Portal moved to participant/.
+    "ac26-w7-capstone-demo": "participant",
     # Issue 537/538 (Issue 543 option B2): tests/hidden/check_prover.py states, phase by
     # phase, what every one of the eight checkpoints is graded on -- _Scenario.canonical is
     # the parser's answer and the malformed list beside it is the whole of what that stage

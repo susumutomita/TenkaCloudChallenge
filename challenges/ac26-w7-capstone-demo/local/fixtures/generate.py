@@ -1,69 +1,52 @@
-"""Seed-derived settings for the capstone, and the randomness contract they run under.
+"""Seed-derived settings for the capstone. Verifier-side only.
 
 The scenario is the one Week 7's design problem ends on: several parties each hold a number,
 they want the sum, and nobody will hand their number to anybody. This is the implementation.
 
-The randomness contract below is the part worth reading twice. Privacy here is not asserted,
-it is *measured* — by enumerating every possible randomness and comparing what a coalition
-sees across two different honest inputs with the same sum. That enumeration only exists
-because the randomness is an explicit, fixed-length tuple rather than a call to `random`.
+Issue 537/538 (Issue 543 option B2): this module no longer ships in the participant image (see
+../Dockerfile). What it carries is the *derivation* — `hidden_settings` draws the party counts,
+the fields and the inputs every checkpoint is graded on, and it shipped beside
+`tests/hidden/check_capstone.py`, whose `_spec_well_formed`, `_spec_view` and `_leaks` write out
+the acceptance rule for the transcript, the view and the privacy experiment in full. A
+submission transcribed from the two shipped files, with no reasoning past copying, scored all
+eight checkpoints, 300 of 300 points.
 
-Toy warning: the moduli are small enough to enumerate, which means they are far too small to
-be secure. That is the trade — observability, not security. Nothing here is production
-guidance.
+`public_payload` below is what the participant image reads instead of importing this module,
+over the Compose-internal network (see verifier/server.py's `GET /public`, show.py, and
+tests/public/test_capstone.py).
+
+The supplied half — `Setting`, the vocabulary, the tiny settings and the randomness contract —
+lives in `participant/lab.py` and is re-exported here, so `tests/hidden/check_capstone.py`,
+`reference/capstone.py` and `mutation.py` keep importing it from one place. One implementation,
+graded and inspected, rather than two that can drift.
 """
 
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
-from itertools import product
-from typing import Iterator
+import sys
+from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-@dataclass(frozen=True)
-class Setting:
-    """One run's parameters: who is playing, over what field, with what inputs."""
-
-    parties: int
-    modulus: int
-    inputs: tuple[int, ...]
-
-    @property
-    def randomness_length(self) -> int:
-        """How many field elements one run consumes.
-
-        Each party needs `parties - 1` random values to split its input; the last share is
-        whatever makes the parts add back up, so it is not drawn.
-        """
-        return self.parties * (self.parties - 1)
-
-    def slice_for(self, party: int) -> tuple[int, int]:
-        """The half-open range of the randomness tuple that this party draws from."""
-        width = self.parties - 1
-        return party * width, (party + 1) * width
-
-    def as_dict(self) -> dict[str, object]:
-        return {"parties": self.parties, "modulus": self.modulus, "inputs": list(self.inputs)}
-
-
-#: The properties this capstone can claim. `scope` says which of them it does claim.
-CLAIMABLE: tuple[str, ...] = ("correctness", "privacy", "availability", "soundness")
-
-#: What the protocol genuinely provides, and what it does not. The two `non_goals` are the
-#: honest limits of additive sharing with no authentication: a party that lies about its own
-#: input is not detected (there is nothing to check it against), and a party that walks away
-#: stops the protocol dead.
-PROVIDED: frozenset[str] = frozenset({"correctness", "privacy"})
-NOT_PROVIDED: frozenset[str] = frozenset({"soundness", "availability"})
+# Re-exported: the module lives under `participant/` because that is the image it ships in;
+# it is not participant-only material to this side.
+from participant.lab import (  # noqa: E402,F401 - re-export, after the sys.path insert
+    CLAIMABLE,
+    NOT_PROVIDED,
+    PROVIDED,
+    TINY,
+    Setting,
+    honest_sum,
+    randomness_space,
+    sample_randomness,
+    setting_from_payload,
+    tiny_settings,
+)
+from participant.lab import _stream  # noqa: E402 - the seed derivation below shares it
 
 #: Small primes, all big enough that the sum is not forced and small enough to reason about.
 MODULI: tuple[int, ...] = (7, 11, 13, 17, 19, 23)
-
-
-def _stream(seed: str, label: str) -> int:
-    digest = hashlib.sha256(f"{seed}/{label}".encode()).digest()
-    return int.from_bytes(digest[:8], "big")
 
 
 def _setting(seed: str, label: str, parties: int, modulus: int) -> Setting:
@@ -103,52 +86,39 @@ def hidden_settings(seed: str) -> list[Setting]:
     return settings
 
 
-#: Small enough that every randomness can be enumerated: 3 parties over F_3 is 3^6 = 729
-#: runs, which is the whole probability space, not a sample. Privacy is checked exactly.
-#:
-#: The field is this small for a reason that is not cryptographic. `detects` runs the whole
-#: enumeration once per candidate protocol, and the hidden suite hands it ten of them across
-#: three coalitions and two settings, so the space is multiplied by sixty before anything
-#: else happens. At F_5 that is 937,500 protocol runs and the catalog's ten-minute CI budget
-#: is gone; at F_3 it is 43,740. The experiment is exactly as exact either way — the whole
-#: space is the whole space.
-#:
-#: The sum is deliberately not zero. At a sum of zero, a transcript with every value doubled
-#: still totals the same thing, so the consistency check that catches a faked transcript
-#: stops firing — a whole class of breakage would become invisible because of the fixture
-#: rather than because of the protocol.
-TINY = Setting(parties=3, modulus=3, inputs=(1, 2, 1))
+def health_token(seed: str) -> str:
+    setting = public_setting(seed)
+    return hashlib.sha256(
+        f"health:{seed}:{setting.parties}:{setting.modulus}".encode()
+    ).hexdigest()[:16]
 
 
-def tiny_settings() -> list[Setting]:
-    """Two settings with the same output and different honest inputs.
+def public_payload(seed: str) -> dict:
+    """Everything a participant may see for this deployment. Carries values, not code.
 
-    This pair is the privacy experiment: a coalition's view must be distributed identically
-    across them. If it is not, the view depends on more than the output, and something the
-    coalition should not learn is reaching it.
+    This is the `public` label only. Every checkpoint is graded on `public_setting` *and* the
+    six `hidden_settings` above — other party counts, other fields, and the two edge input
+    vectors — so a protocol tuned to what travels below does not pass. What does not travel is
+    `_setting` and `hidden_settings` themselves: the derivation, which is what makes those six
+    unreachable rather than merely unnamed.
 
-    Party 0 holds the same input in both, so it is the coalition whose view is compared; what
-    moves is what the *honest* parties hold, with the sum held fixed.
+    The vocabulary travels because `make inspect` has always printed it. `show.py` prints
+    `claimable`, `this build gives` and `and does not give` verbatim, and the starter asks the
+    learner to work out *why* the missing pair is missing, not which pair it is — withholding
+    it here would hide it from `show.py` and from nobody else (the same reading as
+    ac26-w2-private-aggregate's shares).
+
+    The public setting's inputs travel for the same reason: `make inspect` has always printed
+    them, and the public tests hand them straight to the learner's `run` as `setting.inputs`,
+    so a submission holds them at runtime by construction.
     """
-    return [TINY, Setting(parties=3, modulus=3, inputs=(1, 0, 0))]
-
-
-def randomness_space(setting: Setting) -> Iterator[tuple[int, ...]]:
-    """Every randomness tuple this setting admits, in a fixed order.
-
-    Only tractable for `tiny_settings`; the hidden tests never enumerate a large field.
-    """
-    return product(range(setting.modulus), repeat=setting.randomness_length)
-
-
-def sample_randomness(seed: str, setting: Setting, label: str = "run") -> tuple[int, ...]:
-    """One reproducible randomness tuple, for the runs that are not enumerated."""
-    return tuple(
-        _stream(seed, f"{label}/{index}") % setting.modulus
-        for index in range(setting.randomness_length)
-    )
-
-
-def honest_sum(setting: Setting) -> int:
-    """What the protocol is supposed to produce."""
-    return sum(setting.inputs) % setting.modulus
+    setting = public_setting(seed)
+    return {
+        "healthToken": health_token(seed),
+        "setting": setting.as_dict(),
+        "vocabulary": {
+            "claimable": list(CLAIMABLE),
+            "provided": sorted(PROVIDED),
+            "notProvided": sorted(NOT_PROVIDED),
+        },
+    }
