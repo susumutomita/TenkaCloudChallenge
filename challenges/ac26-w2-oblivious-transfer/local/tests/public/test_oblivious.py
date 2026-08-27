@@ -8,6 +8,7 @@ why a protocol can pass every test here and still be broken.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -16,13 +17,49 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "starter"))
 
-from fixtures.generate import group, keypair, session  # noqa: E402
 import oblivious  # noqa: E402
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
-GRP = group(SEED)
-KEY = keypair(SEED)
-SES = session(SEED, "public")
+
+
+def _load_public_evidence() -> dict:
+    """This deployment's group, sender key, session and gate shares -- what `show.py`
+    prints, plus the sender's exponent, which this file has always needed to call
+    `encrypt` at all. A learner implements both roles here, so the sender's step is
+    theirs to run; `show.py` still does not print it, because the transfer's privacy
+    claim is about the receiver.
+
+    Issue 537/538 (Issue 543 option B2): this file used to import `fixtures.generate`
+    directly. That module shipped in the same image as
+    `tests/hidden/check_oblivious.py`, whose assertions decide all six checkpoints, so
+    it does not ship in the `participant` Docker stage at all any more (see
+    ../../Dockerfile). This deployment's own verifier is the only source for the public
+    half now: `PUBLIC_EVIDENCE_JSON` when the Portal has already fetched it, or
+    `VERIFIER_PUBLIC_URL` fetched directly when it has not.
+    """
+    injected = os.environ.get("PUBLIC_EVIDENCE_JSON")
+    if injected:
+        return json.loads(injected)
+    verifier_public_url = os.environ.get("VERIFIER_PUBLIC_URL")
+    if verifier_public_url:
+        from urllib.request import urlopen
+
+        with urlopen(verifier_public_url, timeout=10) as response:  # noqa: S310
+            return json.loads(response.read().decode("utf-8"))
+    # Neither is set: this only resolves when `fixtures/` is actually on disk, which is
+    # true for a checkout (this file run directly, e.g. by
+    # scripts/ac26-w2-oblivious-transfer.test.ts) and the verifier/author Docker stages,
+    # and never inside a built `participant` image -- so this branch does not reopen the
+    # leak above.
+    from fixtures.generate import public_payload
+
+    return public_payload(SEED)
+
+
+PUBLIC = _load_public_evidence()
+GRP = PUBLIC["group"]
+KEY = PUBLIC["senderKey"]
+SES = PUBLIC["session"]
 
 
 def test_request_is_in_the_group() -> None:

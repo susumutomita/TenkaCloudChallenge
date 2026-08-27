@@ -1,12 +1,28 @@
-"""POST /verify — the scoring seam. Loopback only, stdlib only.
+"""POST /verify — the scoring seam. Compose-internal only, stdlib only.
 
 Same security contract as the AC26 template. Every checkpoint runs the learner's
 oblivious.py against seeded settings; they differ in which hidden phases they run, and
-`transfer` runs the whole suite under a seed the learner has never been shown.
+`unseen` runs the whole suite under a seed the learner has never been shown.
+
+Issue 537/538 (Issue 543 option B2): this used to be the same process that also served
+the Participant Portal's config, inspect, starter, public-test and prepare endpoints, in
+the single Docker stage a learner's own `make build` produced -- so
+`tests/hidden/check_oblivious.py` shipped in the learner's own image alongside it, and
+all six checkpoints are graded by running that suite. `fixtures/generate.py` shipped
+there too. That Portal-facing surface now lives in `participant/server.py`, in a
+separate image (see ../Dockerfile) that this process's own container never builds; this
+file, `fixtures/` and `tests/hidden/` are reachable only over the Compose-internal
+network (see ../docker-compose.yml), never from the participant container's filesystem.
+
+`GET /public` below is what the participant image reads instead of importing
+`fixtures.generate`.
 """
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import json
 import os
 import resource
@@ -15,12 +31,14 @@ import sys
 import tempfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fixtures.generate import group
+from fixtures.generate import public_payload
 
 ROOT = Path(__file__).resolve().parents[1]
+PROBLEM_ID = "ac26-w2-oblivious-transfer"
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 MAX_BODY_BYTES = 256 * 1024
@@ -70,12 +88,30 @@ import json, os, sys
 sys.path.insert(0, {root!r})
 sys.path.insert(0, {workspace!r})
 from tests.hidden import check_oblivious
+# Issue 591: fixtures/ and tests/hidden/ stay on disk in this image for grading (Issue 543
+# option B2 only stopped shipping them to the participant image), so without this the
+# submission's own import statement could reach them directly.
+#
+# `participant.ot` is deliberately left in sys.modules: it is the supplied key derivation
+# the starter, the reference and the hidden suite all import, and it ships to the
+# participant anyway. check_oblivious's own import of fixtures.generate has already put it
+# there, which is what keeps the submission's `from participant.ot import derive_key`
+# working while ROOT is off sys.path below.
+_hidden_modules = {{
+    name: sys.modules.pop(name)
+    for name in tuple(sys.modules)
+    if name in ("tests", "fixtures") or name.startswith(("tests.", "fixtures."))
+}}
+while {root!r} in sys.path:
+    sys.path.remove({root!r})
 try:
     import oblivious
 except Exception as error:
     print(json.dumps({{"failures": ["submission could not be imported: " + type(error).__name__]}}))
     sys.stdout.flush()
     os._exit(0)
+sys.path.insert(0, {root!r})
+sys.modules.update(_hidden_modules)
 phases = {phases!r}
 if phases:
     failures = []
@@ -142,67 +178,73 @@ def evaluate(checkpoint_id: str, submission: object) -> bool:
         return _run_submission(submission, CODE_CHECKPOINTS[checkpoint_id], seed)
     return False
 
-# BEGIN GENERATED PORTAL EDITOR API
-from verifier.workbench import PortalEditorSupport
+def _b64decode(value: str) -> bytes:
+    padding = "=" * (-len(value) % 4)
+    return base64.urlsafe_b64decode(value + padding)
 
-_WORKBENCH = PortalEditorSupport(
-    root=ROOT,
-    seed=SEED,
-    problem_id='ac26-w2-oblivious-transfer',
-    problem_name='選んだことを言わずに、選ぶ',
-    problem_name_en='Choosing without saying which',
-    description='公式 Week 2 Part B の oblivious transfer と GMW secret AND を 1 つの問題で組む。正しく動くことと、相手に秘密を渡さないことを別々に確かめる。',
-    description_en='Build the official Week 2 Part B topics — oblivious transfer and a GMW secret AND — in one problem, and test correctness separately from whether either party learns a secret.',
-    checkpoint_labels={'request': 'choice を隠した request を作る', 'choice-privacy': 'choice が request から読めない範囲を選ぶ', 'transfer': '片方だけを渡す', 'and-gate': '転送 2 回で AND を作る', 'gate-privacy': 'ゲートが相手の秘密を渡さないようにする', 'unseen': '見たことのない群でも成立させる'},
-    checkpoint_labels_en={'request': 'Build a request that hides the choice', 'choice-privacy': 'Pick a range that keeps the choice unreadable', 'transfer': 'Hand over exactly one of the two', 'and-gate': 'Build AND from two transfers', 'gate-privacy': "Stop the gate handing over the other party's secret", 'unseen': 'Hold up in groups you have not seen'},
-    submitted_files=('oblivious.py',),
-    code_checkpoints=CHECKPOINTS,
-    checkpoints=CHECKPOINTS,
-    max_body_bytes=MAX_BODY_BYTES,
-    run_timeout_seconds=RUN_TIMEOUT_SECONDS,
-    max_output_bytes=MAX_OUTPUT_BYTES,
-    limit_fn=_limits,
-)
-# END GENERATED PORTAL EDITOR API
+
+def _unwrap_submission(checkpoint_id: str, submission: object) -> object:
+    """Undo the Workbench's `tcw1.` seal and check it against this deployment.
+
+    The derivation is duplicated from `participant/workbench.py`'s
+    `PortalEditorSupport._seal_manual` rather than imported, because that module lives
+    only in the participant image (see ../Dockerfile). Repeating it here rather than
+    trusting an already-unwrapped value from the Workbench is what keeps the seal
+    meaningful: a caller who skips the Workbench is judged by the same rule. Same shape
+    as ac26-w2-secret-sharing's and ac26-w4-commit-open's verifiers, for the same reason.
+
+    Every checkpoint here is a code checkpoint, so an unsealed submission is the file
+    itself and is passed through unchanged -- which is exactly what
+    `PortalEditorSupport.unwrap_submission` did for this problem before the split.
+    """
+    if not isinstance(submission, str) or not submission.startswith("tcw1."):
+        return submission
+    try:
+        prefix, encoded_payload, encoded_signature = submission.split(".", 2)
+        if prefix != "tcw1":
+            return None
+        payload = _b64decode(encoded_payload)
+        signature = _b64decode(encoded_signature)
+        key = hashlib.sha256((PROBLEM_ID + "\0" + SEED).encode("utf-8")).digest()
+        expected_signature = hmac.new(key, payload, hashlib.sha256).digest()[:16]
+        if not hmac.compare_digest(signature, expected_signature):
+            return None
+        decoded = json.loads(payload.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(decoded, dict):
+        return None
+    if decoded.get("v") != 1 or decoded.get("checkpointId") != checkpoint_id:
+        return None
+    return decoded.get("answer")
+
 
 class Handler(BaseHTTPRequestHandler):
-    """Serve the Portal editor API and preserve the existing /verify contract."""
+    """Serve the /verify contract, and nothing a participant-facing client needs.
+
+    The Portal editor API is deliberately absent: it lives in `participant/server.py`,
+    which runs in the image a learner builds. Everything here runs in the image that
+    carries `fixtures/` and `tests/hidden/`, and is never published to the host.
+    """
 
     timeout = REQUEST_TIMEOUT_SECONDS
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's API
-        from urllib.parse import urlsplit
-
         path = urlsplit(self.path).path
-        if path == "/api/config":
-            self._respond(200, _WORKBENCH.config_payload())
+        if path == "/healthz":
+            self._respond(200, {"ok": True})
             return
-        if path == "/api/inspect":
-            self._respond(200, _WORKBENCH.inspect_payload())
-            return
-        if path == "/api/starter":
-            self._respond(200, _WORKBENCH.starter_payload())
+        if path == "/public":
+            self._respond(200, public_payload(SEED))
             return
         self._respond(404, {"error": "not found"})
 
     def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's API
-        from urllib.parse import urlsplit
-
-        path = urlsplit(self.path).path.rstrip("/") or "/"
-        if path not in ("/verify", "/api/test", "/api/prepare"):
+        if urlsplit(self.path).path.rstrip("/") != "/verify":
             self._respond(404, {"error": "not found"})
             return
         body = self._read_json_body()
         if body is None:
-            return
-        if path == "/api/test":
-            self._respond(200, _WORKBENCH.run_public_tests(body.get("files")))
-            return
-        if path == "/api/prepare":
-            self._respond(
-                200,
-                _WORKBENCH.prepare_submissions(body.get("files"), body.get("manual")),
-            )
             return
 
         checkpoint_id = body.get("checkpointId")
@@ -215,7 +257,7 @@ class Handler(BaseHTTPRequestHandler):
                 },
             )
             return
-        submission = _WORKBENCH.unwrap_submission(checkpoint_id, body.get("submission"))
+        submission = _unwrap_submission(checkpoint_id, body.get("submission"))
         try:
             correct = evaluate(checkpoint_id, submission)
         except Exception:  # noqa: BLE001 - a broken checkpoint must fail closed
@@ -270,7 +312,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(content)
 
 def main() -> None:
-    port = int(os.environ.get("VERIFY_PORT", "18310"))
+    port = int(os.environ.get("VERIFY_PORT", "18311"))
     # Bind every interface *inside the container*, not the container's loopback. A published
     # port is forwarded to the container's bridge address, so a server listening only on
     # 127.0.0.1 inside the container accepts nothing from outside it — the connection is

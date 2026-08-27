@@ -113,6 +113,13 @@ PORTAL_PACKAGES = {
     # fixtures/generate.py's setting() returns x, y, a, b and c in the clear, so both
     # left the participant stage and the Portal moved with them.
     "ac26-w2-beaver-mul": "participant",
+    # Issue 537/538 (Issue 543 option B2): every one of the six checkpoints is graded by
+    # running tests/hidden/check_oblivious.py against the submitted file, so its
+    # assertions -- the two privacy properties included -- shipped in the learner's own
+    # image, and fixtures/generate.py derives every setting they are graded against.
+    # Both left the participant stage and the Portal moved with them; the supplied key
+    # derivation stayed behind in participant/ot.py.
+    "ac26-w2-oblivious-transfer": "participant",
     # Issue 537/538: verifier/server.py's own _check_avalanche compared a submission
     # directly against a plain, seed-derived avalanche_distance defined in the same
     # file, and _check_properties/_check_storage compared against

@@ -91,10 +91,13 @@ Every one of the 6 checkpoints carries three hints (hint 1 = what is being asked
 
 ## Assurance scope
 
-Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
-daemon, and the image, so nothing inside that image is hidden from you: `reference/` and
-`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than
-out of reach.
+Local mode is **self-paced, honor-system verification**. Someone who owns the Docker daemon
+and every container in the compose stack cannot be prevented from inspecting hidden material.
+The boundary here is misdelivery, not confidentiality against that person: the Workbench
+container you build and run carries the starter, the public tests and the supplied key
+derivation only — no fixtures, no hidden tests, no reference solution, no verifier. Those
+live only in a second, unpublished container the Workbench reaches over the compose network,
+and in the author-only image `make reference-test` builds.
 
 What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
 a checkpoint can only credit the id it echoes, results do not leak expected values, and the

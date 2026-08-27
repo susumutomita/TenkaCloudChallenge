@@ -37,11 +37,30 @@ only when the choice was 0. Two values out of q now name the choice bit outright
 The parameters are small enough to read and far too small to use: discrete log here
 is a few hundred trial multiplications. The point is to make the failure observable,
 not to withstand anything.
+
+## Where this file does and does not run
+
+Issue 537/538 (Issue 543 option B2): this module does **not** ship in the `participant`
+Docker stage any more (see ../Dockerfile). It shipped there beside
+`tests/hidden/check_oblivious.py`, whose assertions decide every one of this problem's
+six checkpoints, in the single image a learner's own `make build` produced. `show.py`
+and the public tests read `public_payload` below from this deployment's verifier over
+`GET /public` instead of importing it.
+
+The supplied half -- the key derivation both sides of a transfer agree on -- moved to
+`participant/ot.py` and is re-exported below, because the starter imports it and the
+starter does ship to the participant. Everything else here is seed derivation.
 """
 
 from __future__ import annotations
 
 import hashlib
+
+from participant.ot import (  # noqa: F401 - re-exported for the hidden suite and mutation
+    KEY_BYTES,
+    MESSAGE_MAX,
+    derive_key,
+)
 
 #: (p, q, g) with p = 2q + 1 and g of order q. Small, and verified at import time
 #: below rather than trusted -- a mistyped generator would silently produce a group
@@ -126,28 +145,40 @@ def wires(seed: str, label: str) -> dict[str, int]:
     }
 
 
-#: Key and message width, in bytes. Four rather than one on purpose: with a one-byte
-#: key the sender's two branch keys collide by chance about once in 256 transfers, and
-#: a checker asking "does the other message stay shut" would then fail a correct
-#: implementation roughly one seed in thirty. Widening removes that flake instead of
-#: teaching the checker to tolerate it.
-KEY_BYTES = 4
-MESSAGE_MAX = 256**KEY_BYTES - 1
-
-
-def derive_key(grp: dict[str, int], element: int) -> int:
-    """The symmetric key a group element stands for.
-
-    Shared by both sides so a learner is never debugging two different hash
-    conventions at once: the exercise is the protocol, not the KDF.
-    """
-    digest = hashlib.sha256(f"ot-key:{grp['p']}:{element % grp['p']}".encode()).digest()
-    return int.from_bytes(digest[:KEY_BYTES], "big")
-
-
 def health_token(seed: str) -> str:
     grp = group(seed)
     return hashlib.sha256(f"health:{seed}:{grp['p']}".encode()).hexdigest()[:16]
+
+
+def public_payload(seed: str) -> dict[str, object]:
+    """Everything a participant may see for this deployment. Values, not functions.
+
+    Issue 543 option B2: `show.py` and `tests/public/test_oblivious.py` used to import
+    this module directly. They read this instead, over the Compose-internal network,
+    because the module itself no longer ships in the participant image.
+
+    Every value here is under the `public` label. The hidden suite grades against
+    `h0`..`h3` (see tests/hidden/check_oblivious.py) and `unseen` runs under a seed
+    derived from a suffix a participant is never served, so nothing below names any
+    graded setting.
+
+    `senderKey.secret` is served, and that is not a leak of the receiver's-eye framing
+    `show.py` prints. A learner implements both roles here: `encrypt` is the sender's
+    step and takes the sender's exponent as an argument, so the public tests cannot call
+    it without one. It stays out of `show.py`'s output for the same reason it always
+    has -- the receiver is the role the transfer's privacy claim is about -- and holding
+    it advances no checkpoint, because every graded call is handed its own parameters.
+    """
+    grp = group(seed)
+    key = keypair(seed)
+    ses = session(seed, "public")
+    return {
+        "group": grp,
+        "senderKey": key,
+        "session": ses,
+        "wires": wires(seed, "public"),
+        "healthToken": health_token(seed),
+    }
 
 
 def _verify_groups() -> None:

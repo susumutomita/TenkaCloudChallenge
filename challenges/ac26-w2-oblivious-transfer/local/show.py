@@ -2,22 +2,63 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from fixtures.generate import group, health_token, keypair, session, wires
-
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 
+def _public_payload() -> dict:
+    """This deployment's public half -- the same values `verifier/server.py`'s
+    `GET /public` serves, and the same ones this file has always printed.
+
+    Issue 537/538 (Issue 543 option B2): `fixtures/generate.py` does not ship in the
+    `participant` Docker stage any more (see local/Dockerfile). It shipped beside
+    `tests/hidden/check_oblivious.py`, whose assertions decide all six checkpoints --
+    including the two properties the problem is actually about, which a learner is meant
+    to derive rather than read. `make inspect` now runs through Compose (see the
+    Makefile) so this process can reach the verifier over the network instead.
+    """
+    injected = os.environ.get("PUBLIC_EVIDENCE_JSON")
+    if injected:
+        return json.loads(injected)
+    verifier_public_url = os.environ.get("VERIFIER_PUBLIC_URL")
+    if verifier_public_url:
+        from urllib.error import HTTPError, URLError
+        from urllib.request import urlopen
+
+        try:
+            with urlopen(verifier_public_url, timeout=10) as response:  # noqa: S310
+                return json.loads(response.read().decode("utf-8"))
+        except (HTTPError, URLError, TimeoutError, OSError, ValueError) as error:
+            # Compose health-gates the workbench on the verifier, so this normally
+            # cannot happen. When it does -- a `docker compose run` against a torn-down
+            # deployment -- say which service is missing instead of printing a urllib
+            # traceback at somebody trying to read their fixtures.
+            raise SystemExit(
+                "cannot reach this deployment's verifier "
+                f"({verifier_public_url}): {type(error).__name__}.\n"
+                "The public evidence lives there since Issue 537/538. "
+                "Start it with `make verifier-up` and try again."
+            ) from error
+    # Neither is set: this resolves only where `fixtures/` is actually on disk -- a
+    # checkout, or the verifier/author Docker stage -- and never inside a built
+    # `participant` image, so this branch does not reopen the leak above.
+    from fixtures.generate import public_payload
+
+    return public_payload(SEED)
+
+
 def main() -> None:
-    grp = group(SEED)
-    key = keypair(SEED)
-    ses = session(SEED, "public")
-    gate = wires(SEED, "public")
+    payload = _public_payload()
+    grp = payload["group"]
+    key = payload["senderKey"]
+    ses = payload["session"]
+    gate = payload["wires"]
 
     print("== your group ==")
     print(f"  p = {grp['p']}   q = {grp['q']}   g = {grp['g']}")
@@ -53,7 +94,7 @@ def main() -> None:
     print("  Both masks cancel when the shares are XORed. That is true whether you draw")
     print("  one mask or two, so reconstruction cannot tell you which you should draw.")
     print()
-    print(f"health token: {health_token(SEED)}")
+    print(f"health token: {payload['healthToken']}")
 
 
 if __name__ == "__main__":

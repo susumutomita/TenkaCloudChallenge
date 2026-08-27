@@ -85,10 +85,13 @@ hint は 6 個の checkpoint すべてに 3 段ずつあります (hint1 = 何�
 
 ## 保証範囲
 
-ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも image も
-あなたの管理下にあるので、 image の中身はあなたに対して秘匿されていません。
-`reference/` と `tests/hidden/` を bind-mount しないのは、あなたの git checkout に
-紛れ込ませないためであって、手が届かなくするためではありません。
+ローカル実行は**自習用の honor-system 検証**です。 compose stack のすべてのコンテナと
+Docker デーモンを持つ人に対して、 隠された素材の閲覧を防ぐことはできません。 ここでの
+境界は秘匿ではなく誤配送の防止です。 build して動かす Workbench コンテナには starter と
+公開テスト、 そして問題が採点しない「与えられる側」の鍵導出しか入っていません。 fixture も
+hidden test も reference も verifier もありません。 それらは Workbench がネットワーク越しに
+話す、 公開されていない second container と、 `make reference-test` が build する
+author 専用 image にだけ存在します。
 
 verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
 ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。

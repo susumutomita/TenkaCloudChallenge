@@ -134,6 +134,14 @@ SPLIT_PORTAL_MODULES = {
     # the verifier now. The supplied TFHE layer stayed behind in `participant/fhe.py`,
     # which is where the starter and the public tests import it from.
     "ac26-w5-extract-key-switch": "participant.server",
+    # Issue 537/538 (Issue 543 option B2): same move, driven by the `COPY verifier/` shape
+    # rather than by a detector finding. `tests/hidden/check_oblivious.py` grades all six
+    # checkpoints and shipped in the single participant stage together with the process
+    # that runs it, so its assertions -- including the two privacy properties the problem
+    # asks a learner to derive -- were readable in the learner's own image. `show.py` and
+    # the public tests read `GET /public` from the verifier now, and the supplied key
+    # derivation stayed behind in `participant/ot.py`.
+    "ac26-w2-oblivious-transfer": "participant.server",
     # Issue 537/538 (Issue 543 option B2): same move. tests/hidden/check_commit.py
     # grades every checkpoint and fixtures/generate.py implements node_hash under the
     # exact name starter/commit.py's own node_hash stub asks the learner to write, both

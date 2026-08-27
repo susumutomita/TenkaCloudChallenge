@@ -64,10 +64,15 @@ const NO_RUNNER_EXCEPTION = "asm-worst-case-latency";
  * the already-guarded problems have, which is a larger, separate change than a sys.path/
  * sys.modules guard -- left open here and called out in the Issue 591 PR body as a known
  * limitation, not silently dropped.
+ *
+ * `ac26-w2-oblivious-transfer` came off this list when it got that split: the supplied
+ * helper its starter and reference imported (`derive_key`) moved to `participant/ot.py`,
+ * which is not what the guard evicts, so the guard closes the submission-side path there
+ * without breaking the reference. Take a problem off this list only together with its
+ * split -- never to make the guard test go green.
  */
 const FIXTURES_DEPENDENT_SUBMISSION_EXCEPTIONS = [
   "ac26-bridge-properties",
-  "ac26-w2-oblivious-transfer",
   "ac26-w6-cosnark-beaver",
   "ac26-w6-cosnark-linear",
   "ac26-w6-cosnark-privacy",
