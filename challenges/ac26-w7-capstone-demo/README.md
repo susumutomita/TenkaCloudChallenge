@@ -109,9 +109,17 @@ the run. Both are in `scope` as non-goals, and claiming either fails that checkp
 ## Assurance scope
 
 Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
-daemon, and the image, so nothing inside that image is hidden from you: `reference/` and
-`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than
-out of reach.
+daemon, and the images, so nothing inside an image you build is hidden from you.
+
+What changed with Issue 537/538 is *which* image carries what. Grading runs in a second,
+unpublished container: `fixtures/`, `tests/hidden/` and `verifier/` live only there, reachable
+from your Workbench over an internal network and not present on your Workbench's filesystem at
+all. `make test` and `make inspect` therefore start that container too (`make verifier-up`
+does it on its own; `make verifier-down` stops it), and `show.py` and the public tests read
+this deployment's setting from its `GET /public` instead of importing the fixtures.
+
+That is a misdelivery boundary, not a confidentiality one: you can still build the `verifier`
+or `author` stage yourself and read everything in it.
 
 What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
 a checkpoint can only credit the id it echoes, results do not leak expected values, and the

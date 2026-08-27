@@ -82,6 +82,15 @@ const NO_RUNNER_EXCEPTION = "asm-worst-case-latency";
  * rest of the supplied layer moved to `participant/mpc.py`, the runner preloads it ahead of
  * the guard, and the reference measured 8/8 (300/300) with the guard in place.
  *
+ * `ac26-w7-capstone-demo` came off it on the same pairing. Its supplied half — the `Setting`
+ * object, the vocabulary, the tiny settings and the randomness contract, all of which
+ * `starter/capstone.py`'s own stubs name — moved to `participant/lab.py`, which the runner
+ * preloads ahead of the guard and which the guard does not evict. Verified against the
+ * reference rather than by inspection: 8/8 (300/300) with the guard in place, and a
+ * `from fixtures.generate import *` submission at 0/8 with it and without it (this problem's
+ * `fixtures/generate.py` defines none of the graded names, so the guard-removal control is
+ * flat here — the reference is the usable positive control, as with ac26-w2-beaver-mul).
+ *
  * `ac26-w6-cosnark-privacy` completes the Week 6 co-SNARK trio. Its split moved three
  * modules rather than one -- `participant/mpc.py` (the supplied sharing runtime, sink and
  * policy vocabulary), `participant/specimens.py` (the eight provers as runnable objects,
@@ -94,7 +103,6 @@ const FIXTURES_DEPENDENT_SUBMISSION_EXCEPTIONS = [
   "ac26-w6-stack-design",
   "ac26-w6-zkvm-exploit-predicate",
   "ac26-w6-zkvm-witness-binding",
-  "ac26-w7-capstone-demo",
   "ac26-w7-capstone-design",
 ];
 
