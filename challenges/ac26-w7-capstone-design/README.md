@@ -51,7 +51,7 @@ Hints on four of the eight, each inside that checkpoint's 50% cap.
 
 | Population | Count | Where it lives |
 |---|---:|---|
-| Briefs in the repository | 6 | `local/fixtures/generate.py` |
+| Briefs in the repository | 6 | `local/fixtures/generate.py`, in a checkout — not in your image |
 | Variants — one fact moved | 18 | derived from those six |
 | Briefs generated from the seed | 12 | nowhere; they exist only at grading time |
 
@@ -74,9 +74,17 @@ It is not production guidance, and a real deployment differs.
 ## Assurance scope
 
 Local mode is **self-paced, honor-system verification**. You own the machine, the Docker
-daemon, and the image, so nothing inside that image is hidden from you: `reference/` and
-`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than
-out of reach.
+daemon, and the image, so nothing inside the image you build is hidden from you.
+
+What changed with Issue 537/538 is **which image holds what**. Grading runs in a second,
+unpublished container. `fixtures/`, `tests/hidden/` and `verifier/` exist only there, reachable
+from the Workbench over an internal network and never present on the Workbench's filesystem —
+so `make test` and `make inspect` start that container too (`make verifier-up` on its own
+starts it, `make verifier-down` stops it), and `show.py` and the public tests read this
+deployment's brief from its `GET /public` instead of importing the fixtures.
+
+That is a misdelivery boundary, not a confidentiality one: build the `verifier` or `author`
+stage yourself and you can read all of it.
 
 What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
 a checkpoint can only credit the id it echoes, results do not leak expected values, and the

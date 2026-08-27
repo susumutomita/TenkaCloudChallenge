@@ -10,13 +10,13 @@ Read `misconception.public-tests-are-complete` in the README before trusting a g
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from fixtures.generate import PRIMITIVES, PROPERTIES, public_brief  # noqa: E402
+from participant.lab import PRIMITIVES, PROPERTIES  # noqa: E402
+from show import public_evidence  # noqa: E402
 from starter.design import (  # noqa: E402
     architecture,
     attack_plan,
@@ -28,11 +28,16 @@ from starter.design import (  # noqa: E402
     select_primitive,
 )
 
-SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
-
 
 def _brief() -> dict:
-    return public_brief(SEED)
+    """This deployment's brief, read from the verifier rather than derived here.
+
+    Issue 537/538 (Issue 543 option B2): `fixtures/generate.py` does not ship in the
+    participant image any more -- it draws the whole population every checkpoint is graded
+    over. `show.public_evidence` reads `GET /public` over the Compose-internal network (or
+    `PUBLIC_EVIDENCE_JSON`, or the checkout's own fixtures when neither is set).
+    """
+    return public_evidence()["brief"]
 
 
 def test_every_asset_is_classified() -> None:

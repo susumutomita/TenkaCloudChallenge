@@ -7,15 +7,58 @@ dozen briefs generated from the seed that exist in no file at all.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from fixtures.generate import PRIMITIVES, PROPERTIES, public_brief, review_variant
+from participant.lab import PRIMITIVES, PROPERTIES
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
+
+
+def public_evidence() -> dict:
+    """This deployment's public half -- the same values `verifier/server.py`'s `GET /public`
+    serves, and the same two briefs this file has always printed.
+
+    Issue 537/538 (Issue 543 option B2): `fixtures/generate.py` does not ship in the
+    `participant` Docker stage any more (see local/Dockerfile). It draws the whole population
+    every checkpoint is graded over -- the six written briefs, their eighteen variants and the
+    twelve generated from the seed -- and it shipped beside `tests/hidden/check_design.py`,
+    which states the rule each of the eight checkpoints is graded on. `make inspect` now runs
+    through Compose (see the Makefile) so this process can reach the verifier over the network
+    instead.
+    """
+    injected = os.environ.get("PUBLIC_EVIDENCE_JSON")
+    if injected:
+        return json.loads(injected)
+    verifier_public_url = os.environ.get("VERIFIER_PUBLIC_URL")
+    if verifier_public_url:
+        from urllib.error import HTTPError, URLError
+        from urllib.request import urlopen
+
+        try:
+            with urlopen(verifier_public_url, timeout=10) as response:  # noqa: S310
+                return json.loads(response.read().decode("utf-8"))
+        except (HTTPError, URLError, TimeoutError, OSError, ValueError) as error:
+            # Compose health-gates the workbench on the verifier, so this normally cannot
+            # happen. When it does -- a `docker compose run` against a torn-down deployment
+            # -- say which service is missing instead of printing a urllib traceback at
+            # somebody trying to read their brief.
+            raise SystemExit(
+                "cannot reach this deployment's verifier "
+                f"({verifier_public_url}): {type(error).__name__}.\n"
+                "The public evidence lives there since Issue 537/538. "
+                "Start it with `make verifier-up` and try again."
+            ) from error
+    # Neither is set: this resolves only where `fixtures/` is actually on disk -- a checkout,
+    # or the verifier/author Docker stage -- and never inside a built `participant` image, so
+    # this branch does not reopen the leak above.
+    from fixtures.generate import public_payload
+
+    return public_payload(SEED)
 
 
 def _show_brief(brief: dict) -> None:
@@ -37,6 +80,8 @@ def _show_brief(brief: dict) -> None:
 
 
 def main() -> None:
+    payload = public_evidence()
+
     print("== the vocabulary ==")
     print(f"  properties   {', '.join(PROPERTIES)}")
     print("  options")
@@ -50,14 +95,14 @@ def main() -> None:
     print()
 
     print("== your brief ==")
-    _show_brief(public_brief(SEED))
+    _show_brief(payload["brief"])
     print()
 
     print("== the same brief, after one fact changes ==")
     print("  The scenario review hands you briefs like this one. Nothing about the")
     print("  requirements is restated — you re-read the facts and see what follows.")
     print()
-    _show_brief(review_variant(SEED))
+    _show_brief(payload["reviewVariant"])
     print()
     print("  Compare the two by hand before you write any code. If your answer for the")
     print("  second is not a consequence of the first, the last checkpoint will say so.")

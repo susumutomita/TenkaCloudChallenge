@@ -50,7 +50,7 @@ checkout、ターミナル、ローカルエディタ、別画面、コピペは
 
 | 対象 | 件数 | どこにあるか |
 |---|---:|---|
-| repository にある brief | 6 | `local/fixtures/generate.py` |
+| repository にある brief | 6 | checkout の `local/fixtures/generate.py`。 image には入りません |
 | 前提が 1 つ動いた変種 | 18 | その 6 つから導出 |
 | seed から生成される brief | 12 | どこにも無い。採点時にだけ存在する |
 
@@ -72,9 +72,17 @@ malicious / semi-honest の別、回路規模、ciphertext の膨張は落とし
 ## 保証範囲
 
 ローカルモードは **自習向けの honor-system verification** です。マシンも Docker daemon も
-image もあなたのものなので、image の中に隠れているものはありません。`reference/` と
-`tests/hidden/` を bind-mount しないのは、git checkout に紛れ込ませないためであって、
-手が届かないようにするためではありません。
+image もあなたのものなので、自分でビルドした image の中に隠れているものはありません。
+
+Issue 537/538 で変わったのは、**どの image が何を持つか**です。採点は公開されない 2 つ目の
+container で動きます。`fixtures/`、`tests/hidden/`、`verifier/` はそちらにしか存在せず、
+Workbench からは内部ネットワーク経由でしか届かず、Workbench の filesystem には置かれません。
+そのため `make test` と `make inspect` はその container も起動します（`make verifier-up` 単体でも
+起動でき、`make verifier-down` で停止します）。`show.py` と public tests は fixtures を import
+する代わりに、その `GET /public` からこのデプロイの brief を読みます。
+
+これは誤配防止の境界であって、機密性の境界ではありません。`verifier` / `author` stage を
+自分でビルドすれば、中身はすべて読めます。
 
 verifier が実際に保証するのは、もっと狭く、そして本物です。提出物が verifier を停止させたり
 落としたりできないこと、checkpoint が echo した id 以外を加点できないこと、応答が期待値を

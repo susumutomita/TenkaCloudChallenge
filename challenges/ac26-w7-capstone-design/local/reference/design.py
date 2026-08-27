@@ -11,7 +11,7 @@ from __future__ import annotations
 from itertools import combinations
 from typing import Any
 
-from fixtures.generate import ACTOR_TRUSTS, OPERATOR_ROLES, PRIMITIVES, PROPERTIES
+from participant.lab import ACTOR_TRUSTS, OPERATOR_ROLES, PRIMITIVES, PROPERTIES
 
 #: Roles that take part in producing the result. Hiding an asset from one of these is a
 #: privacy requirement; hiding it from a party that only reads the answer is not — that is

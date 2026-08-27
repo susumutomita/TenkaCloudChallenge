@@ -203,6 +203,19 @@ PORTAL_PACKAGES = {
     # randomness contract -- stayed with the participant as participant/lab.py, and the
     # Portal moved to participant/.
     "ac26-w7-capstone-demo": "participant",
+    # Issue 537/538 (Issue 543 option B2): tests/hidden/check_design.py states, in full, the
+    # rule each of the eight checkpoints is graded on -- _spec_requirements is
+    # required_properties' answer written out, _spec_admissible is the admissible column of
+    # compare_alternatives, _selection_failures states the four conditions select_primitive is
+    # accepted on, _graph_failures states every condition an architecture must meet, and
+    # _matrix_failures states each row's contract. fixtures/generate.py left the participant
+    # stage with it: it draws the whole population every checkpoint is graded over. A
+    # submission transcribed from the two scored 4 of 8 checkpoints (155 of 300 points) from
+    # the stated rules alone, and 8 of 8 (300 of 300) once the remaining four artifacts were
+    # built to the conditions the same file writes out. The supplied half -- the property
+    # vocabulary and the option table -- stayed with the participant as participant/lab.py,
+    # and the Portal moved to participant/.
+    "ac26-w7-capstone-design": "participant",
     # Issue 537/538 (Issue 543 option B2): tests/hidden/check_prover.py states, phase by
     # phase, what every one of the eight checkpoints is graded on -- _Scenario.canonical is
     # the parser's answer and the malformed list beside it is the whole of what that stage
