@@ -98,6 +98,9 @@ describe("ac26-w6-stack-design: participant contract", () => {
       "local/tests/public/test_stack.py",
       "local/tests/hidden/check_stack.py",
       "local/verifier/server.py",
+      "local/participant/lab.py",
+      "local/participant/server.py",
+      "local/participant/workbench.py",
       "local/starter/stack.py",
       "local/reference/stack.py",
     ]) {
@@ -112,11 +115,233 @@ describe("ac26-w6-stack-design: participant contract", () => {
     }
   });
 
+  it("should run the participant targets through Compose, so the verifier is up for them", () => {
+    // Issue 543 option B2: `fixtures/` is not in the participant image any more, so `show.py`
+    // and the public tests need a live verifier to read this deployment's architectures,
+    // deployments and briefs from. A `docker run` against the participant image alone would
+    // leave them with nowhere to read from.
+    const makefile = read("Makefile");
+    expect(makefile).toContain("verifier-up:");
+    expect(makefile).toContain("verifier-down:");
+    for (const target of ["test:", "test-one:", "inspect:"]) {
+      const line = makefile.split("\n").find((entry) => entry.startsWith(target)) ?? "";
+      expect(line).toContain("verifier-up");
+    }
+    expect(makefile).toContain("$(COMPOSE) run --rm");
+  });
+
   it("should mount only starter/, keeping the answer out of the checkout", () => {
     const makefile = read("Makefile");
     expect(makefile).toContain("local/starter:/problem/starter:ro");
     expect(makefile).not.toContain("local/reference:");
     expect(makefile).not.toContain("tests/hidden:");
+  });
+});
+
+describe("ac26-w6-stack-design: the answer is not in the participant image", () => {
+  /**
+   * Issue 537/538 (Issue 543 option B2). The single participant stage used to carry
+   * `fixtures/generate.py`, which is this problem's entire ground truth under other names --
+   * `constrained` is `carried`, `underwritten` is `underwrites`, `load_bearing` is
+   * `property_map`, `violations` is `contract_violations`, `first_broken` is `first_failure`,
+   * `selection_truth` is `select`, and `_one_change_neighbours` with `local_checks_pass`,
+   * `properties_at_risk` and `_whole` is the whole search `counterexample` and `repair` are
+   * graded on -- beside `BREAKS`, which names per variant, and identically on every seed, which
+   * node or edge each deployment broke and which attribute it changed. `tests/hidden/check_stack.py`
+   * shipped with it. A submission transcribed from those two files, with no reasoning past
+   * copying, scored 8 of 8 checkpoints (300 of 300 points).
+   *
+   * These assertions fail the moment any of that comes back.
+   */
+  function participantStage(): string {
+    const dockerfile = read("local/Dockerfile");
+    const start = dockerfile.indexOf("FROM base AS participant");
+    const end = dockerfile.indexOf("FROM base AS verifier");
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    return dockerfile.slice(start, end);
+  }
+
+  it("should copy neither fixtures/, tests/hidden/ nor verifier/ into the participant stage", () => {
+    const stage = participantStage();
+    expect(stage).toContain("COPY tests/public/");
+    expect(stage).toContain("COPY participant/");
+    for (const forbidden of [
+      "COPY fixtures/",
+      "COPY tests/ ",
+      "COPY tests/hidden/",
+      "COPY verifier/",
+    ]) {
+      expect(stage).not.toContain(forbidden);
+    }
+  });
+
+  it("should serve the Portal from the participant image, not from the grading one", () => {
+    expect(existsSync(join(ROOT, "local/participant/server.py"))).toBe(true);
+    expect(existsSync(join(ROOT, "local/participant/workbench.py"))).toBe(true);
+    expect(existsSync(join(ROOT, "local/verifier/workbench.py"))).toBe(false);
+    // Nothing in the participant image may decide a checkpoint: it forwards instead.
+    const server = read("local/participant/server.py");
+    expect(server).toContain("proxy_verdict");
+    expect(server).not.toContain("tests.hidden");
+    expect(server).not.toContain("import fixtures");
+  });
+
+  it("should keep every verdict and every derivation out of the supplied layer", () => {
+    // `participant/lab.py` is the half this problem hands over on purpose -- `starter/stack.py`'s
+    // own docstring names every one of these, so a submission has to be able to import them.
+    // What must not travel with them is anything a checkpoint is graded on, or the rule that
+    // decides what each variant broke. Asserted over the module's own namespace rather than its
+    // source text, so a prose mention of a name that is not there does not read as the name
+    // being there.
+    const script = [
+      "import json, sys",
+      "sys.path.insert(0, '.')",
+      "import participant.lab as lab",
+      "print(json.dumps(sorted(n for n in dir(lab) if not n.startswith('__'))))",
+    ].join("\n");
+    const exported = JSON.parse(python(["-c", script]).stdout.trim()) as string[];
+    for (const name of [
+      "ATTRIBUTES",
+      "AUTHORISED",
+      "BOUNDARY_CLASSES",
+      "CLASS_OF",
+      "CONSUMES",
+      "COUNTEREXAMPLE_TARGETS",
+      "LICENCE",
+      "PROPERTY_OF",
+      "TRUST_OF",
+      "VARIANTS",
+      "edges_by_id",
+      "incoming",
+      "nodes_by_id",
+      "outgoing",
+    ]) {
+      expect(exported).toContain(name);
+    }
+    for (const forbidden of [
+      "BREAKS",
+      "break_truth",
+      "broken",
+      "changes",
+      "constrained",
+      "counterexample_exists",
+      "crossings",
+      "first_broken",
+      "graph",
+      "load_bearing",
+      "local_checks_pass",
+      "preserved",
+      "properties_at_risk",
+      "public_payload",
+      "repair_cost",
+      "selection_truth",
+      "underwritten",
+      "use_cases",
+      "violations",
+    ]) {
+      expect(exported).not.toContain(forbidden);
+    }
+  });
+
+  it("should keep the verifier off the host and reachable only from the Workbench", () => {
+    const compose = parseYaml(read("local/docker-compose.yml")) as {
+      services: Record<string, { ports?: string[]; environment?: Record<string, string> }>;
+      networks: Record<string, { internal?: boolean }>;
+    };
+    expect(compose.services.verifier.ports).toBeUndefined();
+    expect(compose.networks.lab.internal).toBe(true);
+    expect(compose.services.workbench.environment?.VERIFIER_URL).toContain("//verifier:");
+    expect(compose.services.workbench.environment?.VERIFIER_PUBLIC_URL).toContain("//verifier:");
+  });
+
+  it("should guard the submission import against fixtures/ and tests/ on the grading path", () => {
+    // Issue 591: both stay on disk in the grading image, so the guard is what stops a
+    // submission's own import statement reaching them. `participant.lab` is preloaded ahead of
+    // it and deliberately survives, because `starter/stack.py` tells a learner to import it.
+    const verifier = read("local/verifier/server.py");
+    expect(verifier).toContain("import participant.lab");
+    expect(verifier).toContain(
+      'if name in ("tests", "fixtures") or name.startswith(("tests.", "fixtures."))',
+    );
+    expect(verifier).toContain("while {root!r} in sys.path:\n    sys.path.remove({root!r})");
+  });
+
+  it("should refuse a submission that reaches for the fixtures at grading time", () => {
+    // The renamed import, not the plain star one. `fixtures/generate.py` defines none of the
+    // eight graded names and all eight answers under other names, so
+    // `from fixtures.generate import *` scores 0 whether the guard is there or not -- while
+    // this submission scored 8/8 (300/300) with the guard removed.
+    const reaching = [
+      "from fixtures.generate import (",
+      "    constrained as carried,",
+      "    underwritten as underwrites,",
+      "    load_bearing as property_map,",
+      "    violations as contract_violations,",
+      "    first_broken as first_failure,",
+      "    selection_truth as select,",
+      ")",
+      "def counterexample(built, prop): return built",
+      "def repair(built): return built",
+    ].join("\n");
+    for (const checkpoint of CHECKPOINTS) {
+      expect(evaluate(checkpoint, reaching)).toBe(false);
+    }
+  });
+
+  it("should keep every verdict and the graded labels out of GET /public", () => {
+    const script = [
+      "import json, sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import public_payload",
+      "print(json.dumps(public_payload(sys.argv[1])))",
+    ].join("\n");
+    const payload = python(["-c", script, SEED]).stdout.trim();
+    const parsed = JSON.parse(payload) as Record<string, unknown>;
+    expect(Object.keys(parsed).sort()).toEqual([
+      "cases",
+      "crossings",
+      "healthToken",
+      "useCases",
+      "variants",
+    ]);
+    // No verdict travels: not which contract a deployment breaks, not where it broke first,
+    // not what a repair costs, not which primitives a brief needs.
+    for (const verdict of [
+      "violations",
+      "firstBroken",
+      "properties",
+      "repairCost",
+      "primitives",
+      "dominantCost",
+      "trust",
+    ]) {
+      expect(payload).not.toContain(`"${verdict}"`);
+    }
+    // And none of the labels every checkpoint is actually graded on.
+    for (const label of ["h0", "h1", "h2", "h3"]) {
+      expect(payload).not.toContain(`${SEED}:${label}`);
+    }
+  });
+
+  it("should print the same evidence from GET /public as from the checkout's fixtures", () => {
+    // The two branches of `show.public_evidence` have to agree, or `make inspect` says one
+    // thing in a checkout and another in the deployment.
+    const script = [
+      "import json, os, subprocess, sys",
+      "sys.path.insert(0, '.')",
+      "from fixtures.generate import public_payload",
+      "seed = sys.argv[1]",
+      "env = dict(os.environ, FLAG_SEED=seed)",
+      "direct = subprocess.run([sys.executable, 'show.py'], capture_output=True, text=True, env=env)",
+      "injected = subprocess.run([sys.executable, 'show.py'], capture_output=True, text=True,",
+      "                          env=dict(env, PUBLIC_EVIDENCE_JSON=json.dumps(public_payload(seed))))",
+      "print(json.dumps({'same': direct.stdout == injected.stdout, 'rc': [direct.returncode, injected.returncode]}))",
+    ].join("\n");
+    for (const seed of [SEED, "another-seed", "third-seed"]) {
+      const result = JSON.parse(python(["-c", script, seed]).stdout.trim().split("\n").at(-1) ?? "null");
+      expect(result).toEqual({ same: true, rc: [0, 0] });
+    }
   });
 });
 

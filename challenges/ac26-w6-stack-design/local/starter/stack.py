@@ -68,23 +68,41 @@ a smaller deployment.
 
 ## What is supplied
 
+The vocabulary, and four accessors for walking a graph:
+
 ```python
-from fixtures.generate import (
+from participant.lab import (
     ATTRIBUTES, AUTHORISED, BOUNDARY_CLASSES, CASES, CLASSIFICATIONS, CLASS_OF, CONSUMES,
     COST_OF, COST_ORDER, LAYERS, LICENCE, PROPERTIES, PROPERTY_OF, REPRESENTATIONS,
-    SERIALIZATIONS, ALGEBRAS, KEY_DOMAINS, TRANSFORMATIONS, TRUST_OF,
-    edges_by_id, nodes_by_id, incoming, outgoing, graph, broken, use_cases,
+    SERIALIZATIONS, ALGEBRAS, KEY_DOMAINS, TRANSFORMATIONS, TRUST_OF, VARIANTS,
+    COUNTEREXAMPLE_TARGETS, edges_by_id, nodes_by_id, incoming, outgoing,
 )
 ```
 
 ```text
-graph(seed, case)      the sound architecture for one of the three cases
-broken(seed, variant)  the same architecture with exactly one thing wrong with it
 incoming/outgoing      the edges arriving at and leaving one node
 CLASS_OF               attribute -> the boundary class an unlicensed change to it belongs to
 PROPERTY_OF            boundary class -> the end-to-end properties breaking it costs
 CONSUMES               transformation -> the representations it is able to take in
+VARIANTS               the names of the thirteen deployments you diagnose
 ```
+
+The deployments themselves — three sound architectures, thirteen broken ones, eight briefs —
+are **this deployment's own data**, and they arrive from it rather than being rebuilt from the
+seed:
+
+```python
+from show import broken_architectures, briefs, public_evidence, sound_architectures
+
+evidence = public_evidence()
+sound_architectures(evidence)["mpc-prover"]              # a sound architecture
+broken_architectures(evidence)["the-triple-has-a-name"]  # one with exactly one thing wrong
+briefs(evidence)                                         # the eight use cases
+```
+
+Each is the same dict `make inspect` prints. Only the reading changed: the rule that decides
+which node or edge each variant broke is not in this image, so a diagnosis has to come from
+reading the graph rather than from the recipe that produced it.
 
 ## First move
 

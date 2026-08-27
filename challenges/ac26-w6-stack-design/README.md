@@ -205,10 +205,27 @@ computations that run inside a primitive versus on top of one, and what breaks w
 ## Assurance scope
 
 Local mode is **self-paced, honor-system verification**. You own the machine, the Docker daemon,
-and the image, so nothing inside that image is out of your reach: `reference/` and
-`tests/hidden/` are not bind-mounted, which keeps them out of your git checkout rather than out
-of your way. The same is true of the ground-truth functions the hidden checker compares against
-— a model that imports them has modelled nothing, and only you can decide not to.
+and the image, so nothing inside the image you build is hidden from you.
+
+What changed with Issue 537/538 is **which image holds what**. Grading runs in a second,
+unpublished container. `fixtures/`, `tests/hidden/` and `verifier/` exist only there, reachable
+from the Workbench over an internal network and never present on the Workbench's filesystem — so
+`make test` and `make inspect` start that container too (`make verifier-up` on its own starts it,
+`make verifier-down` stops it), and `show.py` and the public tests read this deployment's three
+sound architectures, its thirteen deployments to diagnose and its eight briefs from its
+`GET /public` instead of importing the fixtures. Every ground-truth function the hidden checker
+compares against stays behind that boundary, and so does the table that says which node or edge
+each variant broke — a table that is the same on every seed, so it answered `contracts` and
+`diagnosis` on the hidden deployments as much as on the one in front of you. `reference/` and the
+mutation suite were already out of the image you build.
+
+What is still in your image on purpose is `participant/lab.py`: the closed vocabularies, the
+three levels of contract, the eleven boundary classes and what breaking one costs, and four
+accessors for walking a typed graph. That is the half this problem hands over — nothing in it is
+graded, and your own submission imports it while it is being graded.
+
+That is a misdelivery boundary, not a confidentiality one: build the `verifier` or `author` stage
+yourself and you can read all of it.
 
 What the verifier does guarantee is narrower and real: a submission cannot hang or crash it, a
 checkpoint can only credit the id it echoes, results do not leak expected values, and the field

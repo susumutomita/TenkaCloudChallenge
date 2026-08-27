@@ -210,6 +210,15 @@ SPLIT_PORTAL_MODULES = {
     # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
     # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
     "ac26-w6-zkvm-witness-binding": "participant.server",
+    # Issue 537/538 (Issue 543 option B2): same move. fixtures/generate.py is this problem's
+    # whole ground truth under other names (constrained, underwritten, load_bearing, violations,
+    # first_broken, selection_truth) beside BREAKS, the per-variant break table, which is the
+    # same on every seed; tests/hidden/check_stack.py shipped with it. Both were in the single
+    # participant stage, and a submission transcribed from the two scored 8 of 8 checkpoints
+    # (300 of 300 points).
+    # generate-course-workbenches.py の PORTAL_PACKAGES と対で更新する必要がある —
+    # 片方だけだと、この checker が verifier.server を見に行って "GET APIs missing" で落ちる。
+    "ac26-w6-stack-design": "participant.server",
     # Issue 537/538 (Issue 543 option B2): same move. tests/hidden/check_prover.py states,
     # phase by phase, what every one of the eight checkpoints is graded on -- _Scenario.canonical
     # is the parser's answer, check_witness writes out the reported keys and the five

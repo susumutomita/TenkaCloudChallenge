@@ -23,16 +23,29 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "starter"))
 
-from fixtures.generate import (  # noqa: E402
+from participant.lab import (  # noqa: E402
+    ATTRIBUTES,
     BOUNDARY_CLASSES,
+    CASES,
+    EDGE_FIELDS,
+    NODE_FIELDS,
     PROPERTIES,
-    graph,
-    use_cases,
+    VARIANTS,
 )
+from show import briefs, public_evidence, sound_architectures  # noqa: E402
 import stack  # noqa: E402
 
+# Issue 537/538 (Issue 543 option B2): `fixtures/generate.py` does not ship in the participant
+# image any more -- it holds this problem's whole ground truth under other names (`constrained`
+# is `carried`, `violations` is `contract_violations`, `first_broken` is `first_failure`,
+# `selection_truth` is `select`, and so on) as well as `BREAKS`, which names what each variant
+# broke on every seed at once. `show.public_evidence` reads `GET /public` over the
+# Compose-internal network (or `PUBLIC_EVIDENCE_JSON`, or the checkout's own fixtures when
+# neither is set), and hands back the same architectures and briefs this file has always used.
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
-SOUND = graph(SEED, "mpc-prover")
+EVIDENCE = public_evidence()
+SOUND = sound_architectures(EVIDENCE)["mpc-prover"]
+BRIEFS = briefs(EVIDENCE)
 EDGE_IDS = {edge["id"] for edge in SOUND["edges"]}
 NODE_IDS = {node["id"] for node in SOUND["nodes"]}
 
@@ -92,8 +105,36 @@ def test_repair_returns_an_architecture_rather_than_an_edit() -> None:
     assert {node["id"] for node in built["nodes"]} == NODE_IDS
 
 
+def test_every_variant_rebuilds_into_an_architecture_you_can_read() -> None:
+    # Issue 543 option B2: the thirteen deployments arrive as data now rather than from
+    # `broken(seed, variant)`. This pins the round trip -- the shape the starter is written
+    # against, not the diagnosis, which is the checkpoint.
+    from show import broken_architectures
+
+    deployments = broken_architectures(EVIDENCE)
+    assert set(deployments) == set(VARIANTS)
+    for built in deployments.values():
+        assert built["caseId"] in CASES
+        assert isinstance(built["nodes"], tuple) and isinstance(built["edges"], tuple)
+        for node in built["nodes"]:
+            assert set(node) == set(NODE_FIELDS)
+        for edge in built["edges"]:
+            assert set(edge) == set(EDGE_FIELDS)
+
+
+def test_a_policy_and_its_obligations_survive_the_wire() -> None:
+    assert isinstance(SOUND["policy"]["maxCrossings"], int)
+    for group in SOUND["policy"]["distinctDomains"]:
+        assert isinstance(group, tuple)
+    for promises in SOUND["obligations"].values():
+        for attribute, promise in promises.items():
+            assert attribute in ATTRIBUTES
+            assert isinstance(promise, tuple) and len(promise) == 2
+            assert promise[1] in BOUNDARY_CLASSES
+
+
 def test_select_names_all_five_fields_of_a_design() -> None:
-    design = stack.select(dict(use_cases(SEED)[0]))
+    design = stack.select(dict(BRIEFS[0]))
     assert isinstance(design, dict)
     assert set(design) == {"primitives", "public", "secret", "trust", "dominantCost"}
 

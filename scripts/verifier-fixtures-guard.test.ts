@@ -120,6 +120,38 @@ const NO_RUNNER_EXCEPTION = "asm-worst-case-latency";
  * graded names, so the guard-removal control is flat here — the reference is the usable
  * positive control, as with ac26-w2-beaver-mul).
  *
+ * `ac26-w6-stack-design` came off it on the same pairing, and it is the last one but one. Its
+ * supplied half — the closed vocabularies, the three levels of contract, the eleven boundary
+ * classes and what breaking one costs, and four accessors for walking a typed graph, all of
+ * which `starter/stack.py`'s own docstring names — moved to `participant/lab.py`, which the
+ * runner preloads ahead of the guard and which the guard does not evict. Verified against the
+ * reference rather than by inspection: 8/8 (300/300) with the guard in place.
+ *
+ * It is also the one to read for **why a flat `from fixtures.generate import *` control proves
+ * nothing**. That submission reads 0/8 here with the guard and without it, which on every
+ * earlier problem on this list meant the fixtures defined none of the graded names. Here it
+ * means something else: this `fixtures/generate.py` defines all eight answers under *different*
+ * names — `constrained` is `carried`, `underwritten` is `underwrites`, `load_bearing` is
+ * `property_map`, `violations` is `contract_violations`, `first_broken` is `first_failure`,
+ * `selection_truth` is `select`, and `_one_change_neighbours` with `local_checks_pass` and
+ * `_whole` is the search the remaining two are graded on. A submission whose import renames them
+ * (`from fixtures.generate import constrained as carried, ...`) scores **8/8, 300/300 with the
+ * guard removed and 0/8 with it in place**. So the submission-side path this exception left open
+ * was worth the whole problem, and the standard probe could not see it. When a problem's
+ * `fixtures/` holds the answers under other names, rename the import before concluding the
+ * control is flat.
+ *
+ * `ac26-bridge-properties` is the one entry left, and it was re-measured on that reading
+ * rather than inherited: its `fixtures/generate.py` carries `TRUTH`, the property matrix
+ * `classify` is graded on, and its reference imports that exact name, so it looks like the same
+ * shape. It is not. Four of its five checkpoints are *answer* checkpoints, which no
+ * submission-side import reaches; only `transfer` (40 of 200) is code, and `transfer` re-runs
+ * the learner's own counterexample generators. Measured: shipped starter 0/200, a
+ * `from fixtures.generate import TRUTH` submission beside the shipped generators **0/200**,
+ * the same submission beside correct generators 40/200, the reference 40/200, the star import
+ * 0/200. The 40 is only reachable by having already done the other four checkpoints' work for
+ * real, so the exception is what it says it is.
+ *
  * `ac26-w6-cosnark-privacy` completes the Week 6 co-SNARK trio. Its split moved three
  * modules rather than one -- `participant/mpc.py` (the supplied sharing runtime, sink and
  * policy vocabulary), `participant/specimens.py` (the eight provers as runnable objects,
@@ -127,10 +159,7 @@ const NO_RUNNER_EXCEPTION = "asm-worst-case-latency";
  * from two of them at module level, so all three are preloaded ahead of the guard. Verified
  * against the reference rather than by inspection: 8/8 (300/300) with the guard in place.
  */
-const FIXTURES_DEPENDENT_SUBMISSION_EXCEPTIONS = [
-  "ac26-bridge-properties",
-  "ac26-w6-stack-design",
-];
+const FIXTURES_DEPENDENT_SUBMISSION_EXCEPTIONS = ["ac26-bridge-properties"];
 
 /**
  * The three exact shapes this guard takes across the catalog, rather than one loose regex
