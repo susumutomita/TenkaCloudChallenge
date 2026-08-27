@@ -453,7 +453,7 @@ describe("stackstack-safe-exposure as it ships", () => {
 
   beforeAll(async () => {
     instance = await startInstance("ships", 18320, 18321);
-  });
+  }, 60_000);
   afterAll(() => instance?.kill());
 
   it("should change the document through the API, refuse a bad value, and reset to the mount", async () => {
@@ -601,7 +601,7 @@ describe("stackstack-safe-exposure 認証 (authentication)", () => {
     instance = await startInstance("authn", 18322, 18323);
     ids = await app.ids();
     app.writePolicy(referencePolicy());
-  });
+  }, 60_000);
   afterAll(() => instance?.kill());
 
   const PROTECTED = () => [
@@ -763,7 +763,7 @@ describe("stackstack-safe-exposure 認可 (authorization)", () => {
     instance = await startInstance("authz", 18324, 18325);
     ids = await app.ids();
     app.writePolicy(referencePolicy());
-  });
+  }, 60_000);
   afterAll(() => instance?.kill());
 
   it("should decide the whole caller-by-object matrix the way the document says", async () => {
@@ -943,7 +943,7 @@ describe("stackstack-safe-exposure 正常系 (normal use)", () => {
   beforeAll(async () => {
     instance = await startInstance("normal", 18326, 18327);
     app.writePolicy(referencePolicy());
-  });
+  }, 60_000);
   afterAll(() => instance?.kill());
 
   it("should carry a member through write, read back, list and remove", async () => {

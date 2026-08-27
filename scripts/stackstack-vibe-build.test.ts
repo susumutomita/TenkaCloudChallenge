@@ -522,7 +522,9 @@ beforeAll(async () => {
     if (Date.now() > deadline) throw new Error("the board never became healthy");
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-});
+  // The 6s deadline above outlives bun's 5s default, so without this the hook is
+  // killed before it can ever report why the board did not come up.
+}, 60_000);
 
 afterAll(() => {
   server?.kill();
