@@ -145,28 +145,48 @@ class PortalEditorSupport:
         _status, output = result
         return {"output": output or "inspect produced no output."}
 
-    def _normalize_files(self, files: object) -> dict[str, str] | None:
+    def _normalize_files(self, files: object) -> dict[str, str] | str:
+        """Validate a Portal editor payload.
+
+        Returns the normalized sources, or a message naming which condition
+        failed. One message used to cover four unrelated causes, so a payload
+        carrying an extra file was told it "must contain a non-empty source
+        file" while every file it sent was non-empty -- which sends the player
+        to look at the wrong thing. Nothing here reveals hidden material: the
+        expected file names are already published by `/api/config`.
+        """
+        expected = ", ".join(sorted(self.submitted_files))
         if not isinstance(files, dict):
-            return None
-        if set(files) != set(self.submitted_files):
-            return None
+            return f"The editor payload must be an object keyed by file name ({expected})."
+        missing = sorted(set(self.submitted_files) - set(files))
+        unexpected = sorted(set(files) - set(self.submitted_files))
+        if missing or unexpected:
+            detail = []
+            if missing:
+                detail.append("missing " + ", ".join(missing))
+            if unexpected:
+                detail.append("unexpected " + ", ".join(unexpected))
+            return f"This problem is edited as exactly {expected} ({'; '.join(detail)})."
         normalized: dict[str, str] = {}
         for name in self.submitted_files:
             value = files.get(name)
-            if not isinstance(value, str) or not value.strip():
-                return None
+            if not isinstance(value, str):
+                return f"{name} must be sent as text."
+            if not value.strip():
+                return f"{name} is empty. Every Portal editor must contain a non-empty source file."
             normalized[name] = value
-        if sum(len(value.encode("utf-8")) for value in normalized.values()) > self.max_body_bytes:
-            return None
+        total = sum(len(value.encode("utf-8")) for value in normalized.values())
+        if total > self.max_body_bytes:
+            return (
+                f"The submitted sources total {total} bytes, over this lab's "
+                f"{self.max_body_bytes}-byte limit."
+            )
         return normalized
 
     def run_public_tests(self, files: object) -> dict[str, object]:
         sources = self._normalize_files(files)
-        if sources is None:
-            return {
-                "passed": False,
-                "output": "Every Portal editor must contain a non-empty source file.",
-            }
+        if isinstance(sources, str):
+            return {"passed": False, "output": sources}
         with tempfile.TemporaryDirectory() as temp_directory:
             copied_root = Path(temp_directory) / "problem"
             shutil.copytree(
@@ -210,11 +230,8 @@ class PortalEditorSupport:
 
     def prepare_submissions(self, files: object, manual: object) -> dict[str, object]:
         sources = self._normalize_files(files)
-        if sources is None:
-            return {
-                "ok": False,
-                "output": "Every Portal editor must contain a non-empty source file.",
-            }
+        if isinstance(sources, str):
+            return {"ok": False, "output": sources}
         manual_values = manual if isinstance(manual, dict) else {}
 
         def supplied(checkpoint: str) -> bool:

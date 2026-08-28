@@ -11,7 +11,8 @@
 
 import { createHash } from "node:crypto";
 import { alertCaughtIncident } from "./alerts.mjs";
-import { impactBudgetRemaining } from "./world.mjs";
+import { declarationDeadline } from "./incident.mjs";
+import { impactBudgetRemaining, incidentWindowElapsed } from "./world.mjs";
 
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 
@@ -42,11 +43,24 @@ function gateReadinessEfficacy(world) {
   return alertCaughtIncident(world) !== null;
 }
 
-/** Explicit declaration, at or after the real onset, with more than one role staffed. */
+/**
+ * Explicit declaration, inside the window where there was still an incident to detect,
+ * with more than one role staffed.
+ *
+ * Both ends are real, and neither is a trap. Declaring before the hidden onset is a
+ * guess rather than detection, so it does not count — but it is recoverable, because
+ * `withdrawDeclaration` (incident.mjs) lets a team stand a premature declaration down
+ * and declare the real thing when it arrives; one twitchy reaction to Calibrate's benign
+ * wobble must not cost the checkpoint for the rest of the run. Declaring after
+ * `declarationDeadline` is not detection either: the dependency healed itself and the
+ * SLO window used to judge recovery has fully turned over, so nothing remained to
+ * notice.
+ */
 function gateDetectionDeclaration(world) {
   const inc = world.incident;
   if (!inc.declared || inc.declaredAtTick === null) return false;
   if (inc.declaredAtTick < world.incidentPlan.startTick) return false;
+  if (inc.declaredAtTick > declarationDeadline(world)) return false;
   return Object.keys(inc.roles).length >= 2;
 }
 
@@ -54,9 +68,20 @@ function gateEvidenceBasedDiagnosis(world) {
   return world.incident.hypotheses.some((entry) => entry.accepted === true);
 }
 
-/** Cumulative customer-impact budget: monotonically spent from the real onset onward,
- * never restored. See `world.mjs` `updateImpactBudget`. */
+/**
+ * Cumulative customer-impact budget: monotonically spent from the real onset onward,
+ * never restored. See `world.mjs` `updateImpactBudget`.
+ *
+ * The budget threshold alone is not a gate — it is unspent, and therefore trivially
+ * above any threshold, from tick 1 of Build until the onset. This is the one checkpoint
+ * whose subject is an *outcome*, so it also requires the run to have lived through the
+ * whole incident window (`incidentWindowElapsed`, ground truth the participant never
+ * sees). Under multi-verify's cleared-stays-cleared semantics the two conditions have to
+ * be read together: without the window condition, a receipt banked in Build would
+ * survive an incident that then destroys the service.
+ */
 function gateCustomerImpact(world) {
+  if (!incidentWindowElapsed(world)) return false;
   return impactBudgetRemaining(world) >= 700;
 }
 
