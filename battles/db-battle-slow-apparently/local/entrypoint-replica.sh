@@ -5,8 +5,9 @@
 # `pg_basebackup -R` against the primary on first boot, then just start
 # Postgres on every later boot (standby.signal already exists from boot 1).
 #
-# No Node app here — only the primary's container is the terminal target /
-# info+verify surface. This container's only job is being a real, second,
+# No Node app here — the info/verify surface and the grader live in the
+# `primary` container, and the participant's shell lives in `workstation`
+# (local/Dockerfile). This container's only job is being a real, second,
 # streaming PostgreSQL server whose apply capacity is genuinely limited by
 # docker-compose's cpu/mem limits (local/docker-compose.yml), not by any
 # artificial delay knob — the lag the participant observes here is a real
