@@ -35,6 +35,9 @@ RUN_TIMEOUT_SECONDS = 10
 MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
 MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
+#: Cap for the verdict's optional human-readable failure summary. Kept under the
+#: platform's 2000-character message limit with room to spare.
+MAX_MESSAGE_CHARS = 1900
 REQUEST_TIMEOUT_SECONDS = 15
 
 CODE_CHECKPOINTS = {
@@ -119,10 +122,15 @@ sys.path.insert(0, {workspace!r})
 
 try:
     import report
-except Exception:
-    # submission could not be imported: emit only the private, nonce-bound failure record.
+except Exception as error:
+    # submission could not be imported: emit only private, nonce-bound records.
     os._exit = hard_exit
     sys.stdout = trusted_stdout
+    trusted_write(
+        {detail_record!r}
+        + ("submission could not be imported: " + type(error).__name__).encode("utf-8")
+        + b"\\n"
+    )
     trusted_write({fail_record!r})
     sys.stdout.flush()
     os._exit(0)
@@ -135,28 +143,38 @@ else:
         failures.extend(checker(report, {seed!r}))
 
 # Participant imports may replace json.dumps, print, sys.stdout, or os._exit. Restore
-# trusted C-backed handles and emit a fixed nonce-bound record after grading.
+# trusted C-backed handles and emit fixed nonce-bound records after grading. The failure
+# summary travels on its own nonce-bound line: a submission that prints a look-alike
+# cannot forge it without the nonce, and the verdict itself stays on the verdict record.
 os._exit = hard_exit
 sys.stdout = trusted_stdout
+if failures:
+    detail = "; ".join(item for item in failures if isinstance(item, str))
+    detail = " ".join(detail.split())[:{max_message_chars}]
+    if detail:
+        trusted_write({detail_record!r} + detail.encode("utf-8", "replace") + b"\\n")
 trusted_write({pass_record!r} if not failures else {fail_record!r})
 sys.stdout.flush()
 os._exit(0)
 """
 
 
-def _run_submission(submission: object, phases: tuple[str, ...], seed: str) -> bool:
+def _run_submission(
+    submission: object, phases: tuple[str, ...], seed: str
+) -> tuple[bool, str | None]:
     source = submission
     if isinstance(source, dict):
         source = source.get("report.py")
     if not isinstance(source, str) or not source.strip():
-        return False
+        return False, None
     if len(source.encode("utf-8")) > MAX_BODY_BYTES:
-        return False
+        return False, None
 
     with tempfile.TemporaryDirectory() as workspace:
         verdict_token = secrets.token_hex(32)
         pass_line = f"TC-VERDICT:{verdict_token}:PASS"
         fail_line = f"TC-VERDICT:{verdict_token}:FAIL"
+        detail_prefix = f"TC-DETAIL:{verdict_token}:"
         Path(workspace, "report.py").write_text(source, encoding="utf-8")
         script = RUNNER.format(
             root=str(ROOT),
@@ -165,6 +183,8 @@ def _run_submission(submission: object, phases: tuple[str, ...], seed: str) -> b
             seed=seed,
             pass_record=(pass_line + "\n").encode("utf-8"),
             fail_record=(fail_line + "\n").encode("utf-8"),
+            detail_record=detail_prefix.encode("utf-8"),
+            max_message_chars=MAX_MESSAGE_CHARS,
         )
         transcript = Path(workspace) / "stdout"
         try:
@@ -182,21 +202,37 @@ def _run_submission(submission: object, phases: tuple[str, ...], seed: str) -> b
                 )
             output = transcript.read_text(encoding="utf-8", errors="replace")
         except (subprocess.TimeoutExpired, OSError, ValueError):
-            return False
+            return False, None
     if completed.returncode != 0:
-        return False
+        return False, None
     lines = output[-MAX_OUTPUT_BYTES:].splitlines()
-    return bool(lines) and lines[-1] == pass_line
+    if bool(lines) and lines[-1] == pass_line:
+        return True, None
+    # The failure summary is trusted only on its own nonce-bound record: the nonce
+    # never reaches the submission, so a printed look-alike cannot land here.
+    message: str | None = None
+    for line in lines:
+        if line.startswith(detail_prefix):
+            message = line[len(detail_prefix) :][:MAX_MESSAGE_CHARS] or None
+    return False, message
 
 
 def evaluate(checkpoint_id: str, submission: object) -> bool:
+    """Boolean verdict for callers that need only pass/fail."""
+    correct, _message = evaluate_with_message(checkpoint_id, submission)
+    return correct
+
+
+def evaluate_with_message(
+    checkpoint_id: str, submission: object
+) -> tuple[bool, str | None]:
     if checkpoint_id == "audit":
-        return _check_audit(submission)
+        return _check_audit(submission), None
     if checkpoint_id == "counterexample":
-        return _check_counterexample(submission)
+        return _check_counterexample(submission), None
     phases = CODE_CHECKPOINTS.get(checkpoint_id)
     if phases is None:
-        return False
+        return False, None
     phase_seed = f"{SEED}:transfer" if checkpoint_id == "transfer" else SEED
     return _run_submission(submission, phases, phase_seed)
 
@@ -254,10 +290,13 @@ class Handler(BaseHTTPRequestHandler):
             return
         submission = _unwrap_submission(checkpoint_id, body.get("submission"))
         try:
-            correct = evaluate(checkpoint_id, submission)
+            correct, message = evaluate_with_message(checkpoint_id, submission)
         except Exception:  # noqa: BLE001 - every grader failure must fail closed
-            correct = False
-        self._respond(200, {"checkpointId": checkpoint_id, "correct": correct})
+            correct, message = False, None
+        verdict: dict[str, object] = {"checkpointId": checkpoint_id, "correct": correct}
+        if not correct and message:
+            verdict["message"] = message
+        self._respond(200, verdict)
 
     def _read_json_body(self) -> dict[str, object] | None:
         try:
