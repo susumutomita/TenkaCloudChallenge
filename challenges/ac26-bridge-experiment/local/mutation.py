@@ -140,13 +140,13 @@ def main() -> int:
     # that a wrong submission is rejected end to end.
     from verifier.server import evaluate  # noqa: PLC0415 - imported late, after sys.path
 
-    if evaluate("generalize", "def advance(a, b, c, d):\n    return []\n"):
+    if evaluate("generalize", "def advance(a, b, c, d):\n    return []\n")[0]:
         survivors.append("verifier accepts a submission that fails the hidden tests")
         print("SURVIVED verifier accepts an empty-trace submission")
     else:
         print("KILLED verifier accepts an empty-trace submission")
 
-    if evaluate("environment", "not-the-token"):
+    if evaluate("environment", "not-the-token")[0]:
         survivors.append("verifier accepts a wrong health token")
         print("SURVIVED verifier accepts a wrong health token")
     else:

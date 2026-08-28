@@ -141,7 +141,14 @@ def check_exploit(module, seed: str) -> list[str]:
             continue
         if not satisfies(circuit, forged, p):
             failures.append("the forged witness does not satisfy the deployed circuit")
-        if _passes_intended_gadget(forged, p):
+        try:
+            claims_nothing_false = _passes_intended_gadget(forged, p)
+        except Exception:  # noqa: BLE001 - a witness missing gadget signals used to crash the
+            # whole run into a bare `correct: false`; keep the same failed verdict but let
+            # /verify surface a property-level reason for it (AGENTS.md §15).
+            failures.append("the forged witness is missing signals the is-zero gadget needs")
+            continue
+        if claims_nothing_false:
             failures.append("the forged witness also satisfies the intended circuit, so it claims nothing false")
     return failures
 
@@ -174,7 +181,9 @@ def check_repair(module, seed: str) -> list[str]:
         except Exception:  # noqa: BLE001 - forge failures are the exploit checkpoint's problem
             pass
         if len(repaired) > len(circuit) + 1:
-            failures.append("the repair adds more constraints than the intended circuit has")
+            # /verify surfaces this string (AGENTS.md §15): state the public "don't overload"
+            # property (README scoring table), not the exact bound, which is hint material.
+            failures.append("the repair adds too many constraints")
     return failures
 
 

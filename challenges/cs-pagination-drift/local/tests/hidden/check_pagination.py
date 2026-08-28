@@ -65,7 +65,8 @@ def _alive(store: MemoryStore) -> set[int]:
 
 def _well_formed(reply: object) -> str | None:
     if not isinstance(reply, dict) or reply.get("ok") is not True:
-        return f"a valid page call did not return ok: {reply!r}"
+        # §15: a full reply repr can dump table rows wholesale; name the property only.
+        return "a valid page call did not return ok"
     items = reply.get("items")
     if not isinstance(items, list):
         return "a page reply carried no items list"
@@ -171,21 +172,22 @@ def _paginate_properties(module: ModuleType, seed: str, phase: str) -> list[str]
     store = _store([])
     reply = _call(_new(module, store), 3, None)
     if _well_formed(reply) is not None or reply.get("items") != [] or reply.get("cursor") is not None:
-        failures.append(f"an empty table did not produce an empty final page: {reply!r}")
+        failures.append("an empty table did not produce an empty final page")
 
     store = _store(ids)
     paginator = _new(module, store)
     for size in BAD_SIZES:
         reply = _call(paginator, size, None)
         if reply != {"ok": False, "error": "invalid_size"}:
-            failures.append(f"size {size!r} was not refused with invalid_size: {reply!r}")
+            failures.append("a size that is not a usable page size was not refused with invalid_size")
             return failures
     for cursor in BAD_CURSORS:
         reply = _call(paginator, 3, cursor)
         if reply != {"ok": False, "error": "invalid_cursor"}:
             failures.append(
-                f"cursor {cursor!r}, which this paginator never issued, was not refused "
-                f"with invalid_cursor: {reply!r}"
+                # §15: the probe cursors are hidden test data; naming one invites refusing
+                # exactly it instead of validating cursors.
+                "a cursor this paginator never issued was not refused with invalid_cursor"
             )
             return failures
 

@@ -94,11 +94,13 @@ def _window_case(
         return failures
     assert isinstance(result, dict)
     if result.get("start") != start.isoformat():
-        failures.append(f"{label}: the reported first day of the window is not {start.isoformat()}")
+        # §15: the correct first day / end / length are exactly what the checkpoint
+        # grades, so the messages name the broken field but never the expected value.
+        failures.append(f"{label}: the reported first day of the window does not match the contract")
     if result.get("end") != today.isoformat():
-        failures.append(f"{label}: the reported end of the window is not {today.isoformat()}")
+        failures.append(f"{label}: the reported end of the window does not match the contract")
     if result.get("days") != days:
-        failures.append(f"{label}: the reported window length is not {days}")
+        failures.append(f"{label}: the reported window length does not match the contract")
     if result.get("total") != expected_total:
         failures.append(f"{label}: the total covers a different set of days than the contract")
     if result.get("rows") != expected_rows:

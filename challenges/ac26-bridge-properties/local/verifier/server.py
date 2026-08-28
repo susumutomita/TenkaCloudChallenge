@@ -2,8 +2,9 @@
 
 Same security contract as the AC26 template (docs/curricula/advanced-cryptography-2026/
 TEMPLATE.md): required and echoed `checkpointId`, throwaway workspace, wall-clock
-timeout, memory / process / output caps, no shell, nothing leaked back but a property
-name, and malformed input can never kill the process.
+timeout, memory / process / output caps, no shell, nothing leaked back but property
+names (a failed `transfer` additionally carries the checker's property-level failure
+list as `message`, AGENTS.md §15), and malformed input can never kill the process.
 
 The grading rule specific to this problem: a label is never accepted on its own. Every
 `False` in the property matrix has a matching counterexample checkpoint, and the
@@ -57,6 +58,8 @@ MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
 #: Wall clock for reading a request body, so a stalled client cannot pin the server.
 REQUEST_TIMEOUT_SECONDS = 15
+#: Cap for the failed-code-checkpoint `message`, under the platform's 2000-char schema.
+MAX_MESSAGE_CHARS = 1900
 
 CHECKPOINTS = ("incompleteness", "unsoundness", "privacy-leak", "property-matrix", "transfer")
 PROPERTIES = ("complete", "sound", "private")
@@ -253,42 +256,62 @@ os._exit(0)
 """
 
 
-def _check_transfer(submission: object) -> bool:
-    """Run the learner's own classify + generators against unseen instances."""
+def _failure_detail(failures: list[object]) -> str:
+    """Join the checker's property-level failure strings for the response `message`.
+
+    The checker's strings name broken properties, never expected values (AGENTS.md
+    §15). Non-string entries are dropped rather than serialized.
+    """
+    return "; ".join(item for item in failures if isinstance(item, str))[:MAX_MESSAGE_CHARS]
+
+
+def _check_transfer(submission: object) -> tuple[bool, str]:
+    """Run the learner's own classify + generators against unseen instances.
+
+    Returns the verdict and, on failure, the checker's failure summary for the
+    response `message`. An empty string means no detail is surfaced.
+    """
     files = submission
     if isinstance(files, str):
         try:
             files = json.loads(files)
         except json.JSONDecodeError:
-            return False
+            return False, ""
     sources = _submission_sources(files)
     if sources is None:
-        return False
+        return False, ""
     result = _run_submission_script(sources, RUNNER, f"{SEED}:transfer")
     if result is None or result[0] != 0:
-        return False
+        return False, ""
     for line in reversed(result[1].splitlines()):
         try:
             payload = json.loads(line)
         except json.JSONDecodeError:
             continue
         failures = payload.get("failures")
-        return isinstance(failures, list) and len(failures) == 0
-    return False
+        if not isinstance(failures, list):
+            return False, ""
+        return len(failures) == 0, _failure_detail(failures)
+    return False, ""
 
 
-def evaluate(checkpoint_id: str, submission: object) -> bool:
+def evaluate(checkpoint_id: str, submission: object) -> tuple[bool, str]:
+    """Verdict plus, for a failed code checkpoint, a property-level failure summary.
+
+    Direct-answer checkpoints never carry detail: a reason would narrow their
+    expected value (AGENTS.md §15).
+    """
     if checkpoint_id == "incompleteness":
-        return _check_incompleteness(submission)
+        return _check_incompleteness(submission), ""
     if checkpoint_id == "unsoundness":
-        return _check_unsoundness(submission)
+        return _check_unsoundness(submission), ""
     if checkpoint_id == "privacy-leak":
-        return _check_privacy_leak(submission)
+        return _check_privacy_leak(submission), ""
     if checkpoint_id == "property-matrix":
-        return _check_property_matrix(submission)
+        return _check_property_matrix(submission), ""
     if checkpoint_id == "transfer":
         return _check_transfer(submission)
-    return False
+    return False, ""
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -350,10 +373,13 @@ class Handler(BaseHTTPRequestHandler):
             )
             return
         try:
-            correct = evaluate(checkpoint_id, body.get("submission"))
+            correct, detail = evaluate(checkpoint_id, body.get("submission"))
         except Exception:  # noqa: BLE001 - a broken checkpoint must not kill the verifier
-            correct = False
-        self._respond(200, {"checkpointId": checkpoint_id, "correct": correct})
+            correct, detail = False, ""
+        payload: dict[str, object] = {"checkpointId": checkpoint_id, "correct": correct}
+        if not correct and detail:
+            payload["message"] = detail
+        self._respond(200, payload)
 
     def log_message(self, *_args: object) -> None:
         """Silence the default access log; it would echo submissions."""

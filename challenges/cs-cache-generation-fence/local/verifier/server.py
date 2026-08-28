@@ -26,6 +26,8 @@ RUN_TIMEOUT_SECONDS = 10
 MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
 MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
+#: Cap for the failed-code-checkpoint `message`, under the platform's 2000-char schema.
+MAX_MESSAGE_CHARS = 1900
 REQUEST_TIMEOUT_SECONDS = 15
 
 CHECKPOINTS = (
@@ -102,6 +104,12 @@ import json, os, sys
 hard_exit = os._exit
 trusted_stdout = sys.stdout
 trusted_write = sys.stdout.buffer.write
+# Trusted C-backed str handles, captured before any participant code can run: the
+# failure detail below rides the nonce-bound record, and its serialization must not
+# call a participant-mutable callable (json.dumps, print, builtins.str, ...). Bound
+# methods of real str objects cannot be monkeypatched in CPython.
+trusted_join = "; ".join
+trusted_str = str
 sys.path.insert(0, {root!r})
 from tests.hidden import check_cache_policy
 private_checker = getattr(check_cache_policy, __PHASE__)
@@ -118,7 +126,7 @@ except Exception:
     # Submission could not be imported: emit only the private, nonce-bound failure record.
     os._exit = hard_exit
     sys.stdout = trusted_stdout
-    trusted_write({fail_record!r})
+    trusted_write({fail_record!r}[:-1] + b":submission could not be imported\\n")
     sys.stdout.flush()
     os._exit(0)
 
@@ -136,7 +144,19 @@ else:
 # any participant-mutable serializer after grading.
 os._exit = hard_exit
 sys.stdout = trusted_stdout
-trusted_write({pass_record!r} if not failures else {fail_record!r})
+if not failures:
+    trusted_write({pass_record!r})
+else:
+    # AGENTS.md §15: surface the checker's property-level failure list. The detail is
+    # appended to the nonce-bound FAIL record so a participant print cannot forge it,
+    # is built only from real str items via trusted C-backed methods, and never
+    # changes the verdict — a tampering failure downgrades to a bare FAIL record.
+    try:
+        detail = trusted_join(item for item in failures[:40] if item.__class__ is trusted_str)
+        detail_bytes = detail.replace("\\r", " ").replace("\\n", " ")[:1900].encode("utf-8", "replace")
+    except Exception:
+        detail_bytes = b""
+    trusted_write({fail_record!r}[:-1] + b":" + detail_bytes + b"\\n")
 sys.stdout.flush()
 os._exit(0)
 """
@@ -183,9 +203,9 @@ def _run_submission_script(
     return completed.returncode, captured[-MAX_OUTPUT_BYTES:]
 
 
-def _check_code(phase: str, submission: object) -> bool:
+def _check_code(phase: str, submission: object) -> tuple[bool, str]:
     if not isinstance(submission, str) or not submission.strip() or len(submission) > MAX_BODY_BYTES:
-        return False
+        return False, ''
     verdict_token = secrets.token_hex(32)
     pass_line = f"TC-VERDICT:{verdict_token}:PASS"
     fail_line = f"TC-VERDICT:{verdict_token}:FAIL"
@@ -198,39 +218,56 @@ def _check_code(phase: str, submission: object) -> bool:
         fail_record=(fail_line + "\n").encode("utf-8"),
     )
     if result is None or result[0] != 0:
-        return False
+        return False, ""
     lines = result[1].splitlines()
-    return bool(lines) and lines[-1] == pass_line
+    if not lines:
+        return False, ""
+    last = lines[-1]
+    if last == pass_line:
+        return True, ""
+    if last.startswith(fail_line + ":"):
+        # Failure detail the checker chose to surface, riding the nonce-bound record
+        # (AGENTS.md §15): a forged line cannot name the nonce, and the verdict above
+        # never depends on the detail.
+        return False, last[len(fail_line) + 1 :][:MAX_MESSAGE_CHARS]
+    return False, ""
 
 
-def _check_basic_invalidate(submission: object) -> bool:
+def _check_basic_invalidate(submission: object) -> tuple[bool, str]:
     return _check_code(CODE_CHECKPOINT_PHASES["basic-invalidate"], submission)
 
 
-def _check_fence(submission: object) -> bool:
+def _check_fence(submission: object) -> tuple[bool, str]:
     return _check_code(CODE_CHECKPOINT_PHASES["fence"], submission)
 
 
-def _check_per_key(submission: object) -> bool:
+def _check_per_key(submission: object) -> tuple[bool, str]:
     return _check_code(CODE_CHECKPOINT_PHASES["per-key"], submission)
 
 
-def _check_generalize(submission: object) -> bool:
+def _check_generalize(submission: object) -> tuple[bool, str]:
     return _check_code(CODE_CHECKPOINT_PHASES["generalize"], submission)
 
 
-def evaluate(checkpoint_id: str, submission: object) -> bool:
+def evaluate(checkpoint_id: str, submission: object) -> tuple[bool, str]:
+    """Verdict plus, for a failed code checkpoint, the checker's failure summary.
+
+    Direct-answer checkpoints never carry detail: a reason would narrow their
+    expected value (AGENTS.md §15).
+    """
     if checkpoint_id == "environment":
-        return _check_environment(submission)
+        return _check_environment(submission), ''
     if checkpoint_id == "audit":
-        return _check_audit(submission)
+        return _check_audit(submission), ''
     checker = {
         "basic-invalidate": _check_basic_invalidate,
         "fence": _check_fence,
         "per-key": _check_per_key,
         "generalize": _check_generalize,
     }.get(checkpoint_id)
-    return checker(submission) if checker is not None else False
+    if checker is None:
+        return False, ''
+    return checker(submission)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -274,10 +311,13 @@ class Handler(BaseHTTPRequestHandler):
             )
             return
         try:
-            correct = evaluate(checkpoint_id, body.get("submission"))
+            correct, detail = evaluate(checkpoint_id, body.get("submission"))
         except Exception:  # noqa: BLE001 - verifier failures fail closed
-            correct = False
-        self._respond(200, {"checkpointId": checkpoint_id, "correct": correct})
+            correct, detail = False, ""
+        payload: dict[str, object] = {"checkpointId": checkpoint_id, "correct": correct}
+        if not correct and detail:
+            payload["message"] = detail
+        self._respond(200, payload)
 
     def log_message(self, *_args: object) -> None:
         """Do not echo learner submissions to stderr."""

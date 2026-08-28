@@ -158,7 +158,9 @@ def _terminal_properties(module: ModuleType, seed: str, phase: str) -> list[str]
     ):
         reply = _call(session, malformed)
         if reply != {"ok": False, "error": "malformed_message"}:
-            failures.append(f"a malformed message was not reported as such: {malformed!r}")
+            # §15: the malformed probe's exact shape is hidden test data; naming it would
+            # invite special-casing that probe instead of validating the message shape.
+            failures.append("a malformed message was not reported as such")
     accepted = _accepted(_call(session, _message("DATA", seed, f"{phase}:still")))
     if accepted != 1:
         failures.append("a malformed message changed what the session had accepted")
@@ -205,7 +207,9 @@ def _generalize_properties(module: ModuleType, seed: str, phase: str) -> list[st
             actual = _call(session, message)
             if actual != expected:
                 failures.append(
-                    f"from {state}, {kind} gave {actual!r} instead of {expected!r}"
+                    # §15: the submission's own reply may be echoed; the expected verdict is the
+                    # checkpoint's answer for this (state, kind) pair and stays hidden.
+                    f"from {state}, {kind} gave {actual!r}, which is not the required outcome"
                 )
                 # One example per cell is enough to explain the gap.
                 return failures
