@@ -8,11 +8,15 @@
 # sweep up every other problem's unrelated containers on a shared host.
 name: db-battle-slow-apparently
 #
-# 5 services reproduce the whole incident locally with real Postgres
+# 6 services reproduce the whole incident locally with real Postgres
 # semantics, at lab scale (see local/db/seed.sql for the actual row counts):
 #
-#   primary            -- Postgres 16 + Node info/verify/diagnosis surface.
-#                          The terminal target (runtime.terminal.service).
+#   primary             -- Postgres 16 + Node info/verify/diagnosis surface
+#                          + the grader. NOT a terminal target: nobody gets a
+#                          shell where the answer key and the schema live.
+#   workstation         -- the participant's shell (runtime.terminal.service).
+#                          psql + node + bin/diagnose.mjs and nothing else;
+#                          see local/Dockerfile's banner for the boundary.
 #   replica             -- streaming hot standby, bootstrapped via
 #                          pg_basebackup at boot (same shape as db-a10/a11).
 #   api                 -- the order service production traffic hits.
@@ -34,11 +38,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: participant
+      target: primary
     environment:
-      # Unused by this Battle (grading reads live DB/replication/API state,
-      # not a discovered flag) but injected by `make local` for every
-      # local-play problem.
+      # Injected per run by the platform for every local-play problem. This
+      # Battle has no discovered flag (grading reads live DB/replication/API
+      # state), but entrypoint-primary.sh derives the Postgres superuser
+      # password from it — which is exactly why `workstation` below does NOT
+      # receive it.
       FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
     deploy:
       resources:
@@ -58,6 +64,38 @@ services:
       interval: "3s"
       timeout: "5s"
       retries: 60
+    restart: "no"
+
+  # The participant's terminal (metadata.json runtime.terminal.service). It
+  # is a separate service precisely so the shell the participant gets is NOT
+  # the container holding grader/grade.mjs's answer key or db/schema.sql's
+  # scenario narration, and so reaching Postgres from it goes through
+  # pg_hba + role GRANTs rather than a local superuser socket.
+  #
+  # Deliberately absent here: FLAG_SEED (the superuser password is derived
+  # from it) and any published port (nothing in this container listens).
+  workstation:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: participant
+    depends_on:
+      primary:
+        condition: service_healthy
+    environment:
+      PGHOST: "primary"
+      PGPORT: "5432"
+      PGUSER: "participant"
+      PGDATABASE: "incident"
+      DIAGNOSIS_URL: "http://primary:8081/diagnosis"
+    # A real check of the thing this container exists to do: log in to the
+    # incident database as `participant` across the compose network, through
+    # the pg_hba rules entrypoint-primary.sh writes.
+    healthcheck:
+      test: ["CMD", "psql", "-X", "-q", "-t", "-c", "select 1"]
+      interval: "10s"
+      timeout: "5s"
+      retries: 12
     restart: "no"
 
   replica:
