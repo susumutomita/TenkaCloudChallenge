@@ -2,12 +2,19 @@
  * db-battle-slow-apparently — local-play container entrypoint (Node half, primary side).
  *
  * Same 2-server shape as every Database Track drill/Challenge (:8080 info,
- * :8081 loopback /verify) plus one addition this Battle needs: :8081 also
- * serves POST /diagnosis, the Phase 1 structured-evidence submission (see
+ * :8081 /verify) plus one addition this Battle needs: :8081 also serves POST
+ * /diagnosis, the Phase 1 structured-evidence submission (see
  * local/grader/grade.mjs's file banner for why it's structured fields, not
  * free text). The background metrics sampler (local/app/pg-client.mjs)
  * starts as soon as the primary connection is up and runs for the whole
  * container lifetime.
+ *
+ * :8081 is published to the host on 127.0.0.1 (the platform's verifyUrl) and
+ * is reachable on the compose network, because bin/diagnose.mjs now submits
+ * from the separate `workstation` container. That is not a widening: this
+ * endpoint only reports a verdict computed from live DB state, and the
+ * participant could always reach it. The grader module itself is copied into
+ * THIS image only — see local/Dockerfile's banner.
  */
 import { createServer } from "node:http";
 import postgres from "postgres";

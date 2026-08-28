@@ -1,8 +1,11 @@
 /**
  * pg-client — the live Postgres (+ order API) adapter for db-battle-slow-apparently.
  *
- * Connects as the `postgres` superuser (no tenant/authorization boundary is
- * this Battle's subject — production diagnosis is) and:
+ * Connects as the `postgres` superuser, using the per-run password
+ * entrypoint-primary.sh derives from FLAG_SEED — the participant's own
+ * container has neither that secret nor a route to a superuser session (see
+ * that file's pg_hba rules), which is what keeps the audit.* history below
+ * unforgeable. It:
  *
  *   1. Runs a background sampler (startMetricsSampler) that writes ONE row to
  *      `audit.metrics_samples` roughly every second, for the whole container

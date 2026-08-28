@@ -31,8 +31,9 @@ name: db-battle-slow-apparently
 # same "same failure mechanics at lab scale via resource limits" call the
 # parent Issue makes for row counts.
 #
-# Every host-published port binds 127.0.0.1 only; api/load-generator/
-# retention-worker are reachable solely over the compose network.
+# Every host-published port binds 127.0.0.1 only; workstation/api/
+# load-generator/retention-worker publish nothing and are reachable solely
+# over the compose network.
 services:
   primary:
     build:
@@ -52,7 +53,7 @@ services:
           cpus: "1.0"
     ports:
       - "127.0.0.1:18580:8080" # info surface
-      - "127.0.0.1:18581:8081" # loopback /verify + /diagnosis
+      - "127.0.0.1:18581:8081" # /verify + /diagnosis (published to loopback only)
     healthcheck:
       test:
         [

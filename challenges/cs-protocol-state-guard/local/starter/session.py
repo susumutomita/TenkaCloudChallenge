@@ -25,7 +25,18 @@ class Session:
     def handle(self, message: object) -> dict[str, object]:
         """Process one message and return the reply.
 
-        The reply for a message that is not allowed from the current state must be
+        A message is exactly ``{"type": str}``, and ``DATA`` is exactly
+        ``{"type": "DATA", "payload": str}``. Anything else about its *shape* makes it
+        malformed: a non-dict, a missing or empty ``type``, a ``DATA`` whose payload is
+        absent, not a string, empty, or longer than 4096 characters -- and a message
+        carrying any key beyond the ones listed for its type.
+
+        Shape is judged first. A message that is not well-formed is
+        ``{"ok": False, "error": "malformed_message"}`` whatever state the session is
+        in, even when its type would also have been refused from that state.
+
+        Only then does the state matter. The reply for a well-formed message that is
+        not allowed from the current state must be
         ``{"ok": False, "error": "unexpected_message"}``, and such a message must
         change nothing: not the state, and not the data the session has accepted.
 

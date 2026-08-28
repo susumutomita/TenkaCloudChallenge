@@ -80,13 +80,24 @@ export function evaluateRules(world, tick) {
   }
 }
 
-/** A rule "caught the incident" if it is firing, or has fired and not yet resolved,
- * within a reasonable window after the real onset — and was never marked noisy. */
+/** A rule "caught the incident" if it existed before the incident began, is firing or
+ * has fired and not yet resolved within a reasonable window after the real onset, and
+ * was never marked noisy.
+ *
+ * The first clause is what makes this checkpoint about *readiness*. Without it a team
+ * could watch the incident unfold, write a rule matching what they were already
+ * looking at, and be credited with having caught it — which is the opposite of the
+ * thing the Build phase exists to reward. `createdAtTick` is stamped when a rule is
+ * added; rules present at world init carry none and count as pre-existing.
+ *
+ * `startTick` stays hidden from the participant, so the way to be safe is to build
+ * the monitoring before anything is wrong. That is the battle's whole premise. */
 export function alertCaughtIncident(world) {
   const plan = world.incidentPlan;
   for (const rule of world.config.alerts.rules) {
     const state = world.alerts.states[rule.id];
     if (!state || state.noisy) continue;
+    if ((rule.createdAtTick ?? 0) >= plan.startTick) continue;
     const firstFiringAfterOnset = world.alerts.events.find(
       (event) => event.ruleId === rule.id && event.kind === "firing" && event.tick >= plan.startTick && !event.noisy,
     );

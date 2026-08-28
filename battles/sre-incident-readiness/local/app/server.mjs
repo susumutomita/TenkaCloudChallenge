@@ -211,7 +211,11 @@ export function createGatewayServer(session) {
       if (world().config.alerts.rules.length >= 10) {
         return sendHtml(response, 200, alertsPage(world(), notice("error", "ルールは最大 10 件です。")));
       }
-      world().config.alerts.rules.push(result.value);
+      // Stamped so `alertCaughtIncident` can tell monitoring that was built in
+      // advance from monitoring added once the incident was already visible. The
+      // checkpoint is about readiness, and a rule written after the fact
+      // demonstrates none.
+      world().config.alerts.rules.push({ ...result.value, createdAtTick: world().tick });
       return sendHtml(response, 200, alertsPage(world(), notice("ok", "ルールを追加しました。")));
     }
 

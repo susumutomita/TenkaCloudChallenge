@@ -1,7 +1,16 @@
-"""Intentionally incomplete public tests: the shipped starter passes all of them.
+"""Intentionally incomplete public tests.
 
-Every conversation here follows the documented order. That is the blind spot: a
-handler that never asks what state it is in serves a well-behaved client perfectly.
+Every *conversation* here follows the documented order, and the shipped starter
+passes all of those. That is the blind spot the problem is about: a handler that
+never asks what state it is in serves a well-behaved client perfectly.
+
+One test is not about order at all. `test_a_message_with_an_unexpected_key_is_malformed`
+covers a shape rule the starter does not implement, and it fails until you do. It is
+here because the rule is graded and a participant could otherwise only discover it by
+losing points: a message carrying a key beyond the ones its type declares is
+malformed, and shape is judged before the state is consulted. Getting the state
+machine right while leaving the shape check out is exactly the near-miss this test
+exists to catch early.
 """
 
 from __future__ import annotations
@@ -58,6 +67,25 @@ def test_a_malformed_message_is_reported() -> None:
     session = module.new_session()
     for malformed in ("HELLO", {}, {"type": ""}, {"payload": "x"}):
         assert session.handle(malformed) == {"ok": False, "error": "malformed_message"}
+
+
+def test_a_message_with_an_unexpected_key_is_malformed() -> None:
+    # A key beyond the ones its type declares is a shape error, not an extra the
+    # handler may ignore. The starter accepts both of these, so this one does fail
+    # until the shape is actually checked.
+    module = _load()
+    session = module.new_session()
+    assert session.handle({"type": "HELLO", "extra": 1}) == {
+        "ok": False,
+        "error": "malformed_message",
+    }
+    session = module.new_session()
+    session.handle({"type": "HELLO"})
+    session.handle({"type": "AUTH"})
+    assert session.handle({"type": "DATA", "payload": "x", "extra": 1}) == {
+        "ok": False,
+        "error": "malformed_message",
+    }
 
 
 def test_data_without_a_payload_is_malformed() -> None:

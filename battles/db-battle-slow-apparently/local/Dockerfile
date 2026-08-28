@@ -54,6 +54,8 @@ FROM pgbase AS participant
 RUN adduser -D -u 10001 lab
 
 WORKDIR /app
+# The participant lands here and will want somewhere to keep scratch queries.
+RUN chown lab:lab /app
 COPY --chown=lab:lab bin/ ./bin/
 COPY --chown=lab:lab entrypoint-workstation.sh /entrypoint-workstation.sh
 RUN chmod +x /entrypoint-workstation.sh
