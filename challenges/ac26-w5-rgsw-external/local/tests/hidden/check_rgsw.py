@@ -103,7 +103,7 @@ def check_decompose(module, seed: str) -> list[str]:
             elif any(not 0 <= digit < base for d in got for digit in d):
                 failures.append("a digit is outside [0, base)")
             elif got == [tuple(reversed(d)) for d in want]:
-                failures.append("the digits are most-significant first, not least")
+                failures.append("the digits are least-significant first, not most")
             else:
                 failures.append("a decomposition does not match the base-B digits")
             continue
@@ -135,7 +135,7 @@ def check_gadget(module, seed: str) -> list[str]:
         want = reference_gadget(par)
         if got != want:
             if got == tuple(reversed(want)):
-                failures.append("the gadget vector is descending, not ascending")
+                failures.append("the gadget vector is ascending, not descending")
             else:
                 failures.append("the gadget vector is not the powers of the base")
             continue

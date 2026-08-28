@@ -31,12 +31,14 @@ Move a sample from `s_old` (dimension `n_old`) to `s_new` (dimension `n_new`). T
 key holds, for every old index `j` and level `l`:
 
 ```text
-ksk[j][l] = LWE_(s_new)( B^l * s_old[j] )
+ksk[j][l] = LWE_(s_new)( B^(L-1-l) * s_old[j] )
 ```
 
 Decompose the old mask, subtract the matching entries, and read what happens to the phase.
 The convention is `ac26-w5-rgsw-external`'s, unchanged: `q = base ** levels`, unsigned,
-LSB-first, exactly `levels` digits, gadget `(1, B, B^2, ...)`. `decompose` is supplied.
+most-significant weight first, exactly `levels` digits, gadget `(B^(L-1), ..., B, 1)`
+descending. That is lecture slide 30's order: with `B = 4`, `L = 3`, `q = 64`,
+`decompose(47) == (2, 3, 3)` — `47 = 2*16 + 3*4 + 3*1`. `decompose` is supplied.
 
 You are given **no secret at either end**. Not the ring secret, not the source key, not the
 target key. If you find yourself wanting one, the design is telling you something: key
@@ -118,7 +120,7 @@ def extract_trace(params: dict, ciphertext: dict, index: int) -> tuple[dict, ...
 
 
 def decompose_mask(params: dict, mask) -> tuple[tuple[int, ...], ...]:
-    """One digit tuple **per mask coefficient**, LSB-first, exactly `levels` of them.
+    """One digit tuple **per mask coefficient**, most significant first, exactly `levels` of them.
 
     Watch the shape against `ac26-w5-rgsw-external`. That problem wanted one ring element
     per level, because the external product multiplied a level by a ring element. Here each
@@ -133,7 +135,7 @@ def key_switch(params: dict, switching_key: dict, sample: dict) -> dict:
 
     ```text
     switching_key["entries"][j][l]   {"mask": (...target_dimension...), "body": ...}
-                                     an LWE encryption under the target key of B^l * source[j]
+                                     an LWE encryption under the target key of B^(L-1-l) * source[j]
     switching_key["sourceKeyId"]     which key the input is expected to be under
     switching_key["targetKeyId"]     which key the output lands under
     switching_key["sourceDimension"] / ["targetDimension"] / ["base"] / ["levels"] / ["modulus"]

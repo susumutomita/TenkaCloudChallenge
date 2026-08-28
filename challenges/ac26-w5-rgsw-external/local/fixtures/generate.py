@@ -21,10 +21,14 @@ boundary witness without them. It therefore ships only in the verifier and autho
 
 ## The decomposition convention, fixed
 
-    q = base ** levels                unsigned, LSB-first, exactly `levels` digits
-    gadget = (1, B, B^2, ..., B^(L-1))
-    decompose(x)  = the base-B digits of x mod q, least significant first
+    q = base ** levels                unsigned, most-significant weight first, exactly `levels` digits
+    gadget = (B^(L-1), ..., B, 1)     descending -- (q/B, q/B^2, ..., q/B^L) under q = B^L
+    decompose(x)  = the base-B digits of x mod q, most significant first
     recompose(d)  = sum(d[i] * gadget[i]) mod q
+
+With `B = 4`, `L = 3`, `q = 64`: `decompose(47) = (2, 3, 3)`, because
+`47 = 2*(64/4) + 3*(64/16) + 3*(64/64) = 2*16 + 3*4 + 3*1` -- lecture slide 30's worked
+example, digit for digit.
 
 `q = base ** levels` is what makes recomposition **exact** for every value in `[0, q)`.
 That is a choice, and the `failure` checkpoint is where it stops holding: give the same
@@ -174,17 +178,17 @@ def noise_bound(par: dict) -> int:
 
 
 def gadget_vector(par: dict) -> tuple[int, ...]:
-    return tuple(par["base"] ** i for i in range(par["levels"]))
+    return tuple(par["base"] ** i for i in reversed(range(par["levels"])))
 
 
 def decompose(par: dict, value: int) -> tuple[int, ...]:
-    """Unsigned base-B digits of `value mod q`, least significant first, exactly L of them."""
+    """Unsigned base-B digits of `value mod q`, most significant first, exactly L of them."""
     base, remaining = par["base"], value % par["modulus"]
     digits = []
     for _ in range(par["levels"]):
         digits.append(remaining % base)
         remaining //= base
-    return tuple(digits)
+    return tuple(reversed(digits))
 
 
 def recompose(par: dict, digits) -> int:

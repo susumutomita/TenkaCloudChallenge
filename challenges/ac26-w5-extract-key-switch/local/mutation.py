@@ -150,7 +150,7 @@ MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
         ],
     ),
     (
-        "decomposes most-significant first",
+        "decomposes least-significant first",
         [
             (
                 "    return tuple(decompose(params, value) for value in mask)",
@@ -173,7 +173,7 @@ MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
         [
             (
                 "    return tuple(decompose(params, value) for value in mask)",
-                "    return tuple(decompose(params, value)[:-1] for value in mask)",
+                "    return tuple(decompose(params, value)[1:] for value in mask)",
             )
         ],
     ),

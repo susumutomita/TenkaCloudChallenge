@@ -35,23 +35,25 @@ what makes the next step necessary: it is not the key the rest of the system use
 
 Move an LWE sample from `s_old` (dimension `n_old`) to `s_new` (dimension `n_new`), with the
 same message. The switching key holds, for every old index `j` and every level `l`, an LWE
-encryption **under the new key** of the scalar `B^l * s_old[j]`:
+encryption **under the new key** of the scalar `B^(L-1-l) * s_old[j]`:
 
-    ksk[j][l] = LWE_(s_new)( B^l * s_old[j] )
+    ksk[j][l] = LWE_(s_new)( B^(L-1-l) * s_old[j] )
 
 Decompose each old mask coefficient into base-B digits and subtract the matching entries:
 
-    c_j = sum_l d_(j,l) * B^l
+    c_j = sum_l d_(j,l) * B^(L-1-l)
     result = (0, body) - sum_(j,l) d_(j,l) * ksk[j][l]
 
-The result's phase is `body - sum_(j,l) d_(j,l) * B^l * s_old[j] - noise`, and that sum is
-exactly `<c, s_old>`. So the phase is the original one, less the noise the entries carried.
-Nothing was decrypted: `s_old` appears only inside ciphertexts, and `s_new` never appears at
-all. Key switching is not a decrypt-and-re-encrypt, and the absence of any decryption in
-that derivation is the whole reason it is usable.
+The result's phase is `body - sum_(j,l) d_(j,l) * B^(L-1-l) * s_old[j] - noise`, and that
+sum is exactly `<c, s_old>`. So the phase is the original one, less the noise the entries
+carried. Nothing was decrypted: `s_old` appears only inside ciphertexts, and `s_new` never
+appears at all. Key switching is not a decrypt-and-re-encrypt, and the absence of any
+decryption in that derivation is the whole reason it is usable.
 
 The decomposition convention is `ac26-w5-rgsw-external`'s, unchanged: `q = base ** levels`,
-unsigned, LSB-first, exactly `levels` digits, gadget `(1, B, B^2, ...)`.
+unsigned, most-significant weight first, exactly `levels` digits, gadget
+`(B^(L-1), ..., B, 1)` descending -- lecture slide 30's order, in which `B = 4`, `L = 3`,
+`q = 64` decomposes 47 to `(2, 3, 3)` because `47 = 2*16 + 3*4 + 3*1`.
 
 None of this is secure. The parameters are small enough to enumerate and both secrets fall
 to linear algebra. It is a toy of the mechanism.
@@ -159,7 +161,7 @@ def extract_trace(par: dict, ciphertext: dict, index: int) -> tuple[dict, ...]:
 
 
 def decompose_mask(par: dict, mask) -> tuple[tuple[int, ...], ...]:
-    """One digit tuple per mask coefficient, LSB-first, exactly `levels` of them."""
+    """One digit tuple per mask coefficient, most significant first, exactly `levels` of them."""
     return tuple(decompose(par, value) for value in mask)
 
 

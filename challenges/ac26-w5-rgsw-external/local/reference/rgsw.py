@@ -24,18 +24,24 @@ from participant.ring import ring_add, ring_mul
 
 
 def gadget_vector(params: dict) -> tuple[int, ...]:
-    """`(1, B, B^2, ..., B^(L-1))` -- least significant first, matching `decompose`.
+    """`(B^(L-1), ..., B, 1)` -- most significant weight first, matching `decompose`.
 
-    The order is a convention, and the only thing that makes it a convention rather than an
-    arbitrary choice is that `decompose` and this agree. Reverse one and not the other and
-    every recomposition is wrong; reverse both and the round trip still passes, which is why
-    the hidden tests check this vector directly rather than only through a round trip.
+    Descending, the way lecture slide 30 writes the weights (`q/B, q/B^2, ..., q/B^L`,
+    which under `q = B^L` is the same tuple). The order is a convention, and the only thing
+    that makes it a convention rather than an arbitrary choice is that `decompose` and this
+    agree. Reverse one and not the other and every recomposition is wrong; reverse both and
+    the round trip still passes, which is why the hidden tests check this vector directly
+    rather than only through a round trip.
     """
-    return tuple(params["base"] ** index for index in range(params["levels"]))
+    return tuple(params["base"] ** index for index in reversed(range(params["levels"])))
 
 
 def decompose(params: dict, value: int) -> tuple[int, ...]:
-    """Unsigned base-B digits of `value mod q`, least significant first, exactly L of them.
+    """Unsigned base-B digits of `value mod q`, most significant first, exactly L of them.
+
+    The digit order follows lecture slide 30's worked example: with `B = 4`, `L = 3`,
+    `q = 64`, the value 47 decomposes to `(2, 3, 3)` -- `47 = 2*16 + 3*4 + 3*1`, largest
+    weight first.
 
     `value % q` first: the digits describe a ring element, and a caller handing over a raw
     integer should get the same answer as one handing over its representative. Under these
@@ -49,7 +55,7 @@ def decompose(params: dict, value: int) -> tuple[int, ...]:
     for _ in range(params["levels"]):
         digits.append(remaining % base)
         remaining //= base
-    return tuple(digits)
+    return tuple(reversed(digits))
 
 
 def recompose(params: dict, digits) -> int:

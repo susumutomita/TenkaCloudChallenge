@@ -318,7 +318,7 @@ def check_decompose(module, seed: str) -> list[str]:
             elif any(len(row) != par["levels"] for row in got[0]):
                 failures.append("a coefficient's digits are not exactly `levels` of them")
             elif got[0] == tuple(tuple(reversed(row)) for row in want[0]):
-                failures.append("the digits are most-significant first, not least")
+                failures.append("the digits are least-significant first, not most")
             else:
                 failures.append("a coefficient's digits are not its base-B digits")
             continue

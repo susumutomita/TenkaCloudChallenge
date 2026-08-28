@@ -19,6 +19,14 @@ Both lines stay in the reference. They say what is meant and they would be load-
 under an approximate gadget, which is what a real implementation uses. They are simply not
 detectable here, and an unkillable entry in this list would teach that a SURVIVED line can
 be ignored.
+
+A third candidate joined them when the convention flipped to descending (lecture slide
+30's order): stopping the accumulation one row short of the end. Under the descending
+layout the last row carries weight `B^0 = 1`, so dropping it perturbs the phase by at most
+`(B-1)` plus that row's noise -- inside the decode budget on every viable parameter set,
+verified exhaustively. That is precisely the approximation a real gadget makes by dropping
+its least significant level, so it is not semantically detectable here. The truncation
+mutant skips the *first* row instead, whose weight is `B^(L-1)`.
 """
 
 from __future__ import annotations
@@ -36,20 +44,20 @@ SEED = "mutation-suite-seed"
 
 MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
     (
-        "builds the gadget vector most-significant first",
+        "builds the gadget vector least-significant first",
         [
             (
-                '    return tuple(params["base"] ** index for index in range(params["levels"]))',
                 '    return tuple(params["base"] ** index for index in reversed(range(params["levels"])))',
+                '    return tuple(params["base"] ** index for index in range(params["levels"]))',
             )
         ],
     ),
     (
-        "reverses the digit order, which a round trip alone cannot see",
+        "reverses the digit order to least-significant first, which a round trip alone cannot see",
         [
             (
-                "        digits.append(remaining % base)\n        remaining //= base\n    return tuple(digits)",
                 "        digits.append(remaining % base)\n        remaining //= base\n    return tuple(reversed(digits))",
+                "        digits.append(remaining % base)\n        remaining //= base\n    return tuple(digits)",
             )
         ],
     ),
@@ -172,12 +180,12 @@ MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
         ],
     ),
     (
-        "stops one row short of the end",
+        "skips the first row, which carries the heaviest gadget weight",
         [
             (
                 '    for j in range(2 * params["levels"]):\n'
                 "        left = ring_add(params, left, ring_mul(params, digits[j], rgsw[j][0]))",
-                '    for j in range(2 * params["levels"] - 1):\n'
+                '    for j in range(1, 2 * params["levels"]):\n'
                 "        left = ring_add(params, left, ring_mul(params, digits[j], rgsw[j][0]))",
             )
         ],

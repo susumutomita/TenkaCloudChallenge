@@ -23,10 +23,14 @@ problem is the gadget and the product.
 ## The convention, fixed
 
 ```text
-q = base ** levels           unsigned, LSB-first, exactly `levels` digits
-gadget = (1, B, B^2, ..., B^(L-1))
+q = base ** levels           unsigned, most-significant weight first, exactly `levels` digits
+gadget = (B^(L-1), ..., B, 1)       descending — (q/B, q/B^2, ..., q/B^L) under q = B^L
 recompose(decompose(x)) == x        for every x in [0, q)
 ```
+
+With `B = 4`, `L = 3`, `q = 64`: `decompose(47) = (2, 3, 3)`, because
+`47 = 2·(64/4) + 3·(64/16) + 3·(64/64) = 2·16 + 3·4 + 3·1` — lecture slide 30's worked
+example, digit for digit.
 
 `q = base ** levels` is what makes that exact. It is a choice, and the `failure` checkpoint
 is where you find out what it was buying — real implementations use an approximate gadget
@@ -88,8 +92,8 @@ Eight checkpoints, scored independently. Wrong answers cost 15 points each.
 
 | Checkpoint | Points | What is checked |
 |---|---:|---|
-| `decompose` | 35 | Exactly L digits in `[0, base)`, LSB-first, zero to all-zero, reduction before decomposing |
-| `gadget` | 30 | The vector itself, ascending — not inferred from a round trip |
+| `decompose` | 35 | Exactly L digits in `[0, base)`, MSB-first, zero to all-zero, reduction before decomposing |
+| `gadget` | 30 | The vector itself, descending — not inferred from a round trip |
 | `polynomial` | 30 | One ring element per level, coefficient order preserved, not transposed |
 | `rgsw` | 40 | 2L rows, the right slot per half, selector rejected unless it is a bit, nothing else in the structure |
 | `external` | 50 | Selector 0 → zero, selector 1 → the message, crossed both ways, and not the input handed back |
@@ -117,6 +121,14 @@ in the list would teach that a `SURVIVED` line can be ignored.
 The float-logarithm mutation nearly joined them: `int(ceil(log(m, b)))` agrees with counting
 on every power of 2 and 4. It only separates at `(5, 125)` and `(6, 216)`, which is why both
 are now in the test cases.
+
+A third candidate joined the dropped list when the convention flipped to descending
+(lecture slide 30's order): stopping the external product's accumulation one row short of
+the end. The last row now carries weight `B^0 = 1`, so dropping it perturbs the phase by at
+most `B - 1` plus that row's noise — inside the decode budget on every viable parameter
+set, verified exhaustively. That is exactly the approximation a real gadget makes by
+dropping its least significant level. The truncation mutant in the suite skips the
+**first** row instead, whose weight is `B^(L-1)`.
 
 ## Not in scope
 

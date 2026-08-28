@@ -96,7 +96,7 @@ def main() -> None:
 
     decomposition = payload["decomposition"]
     print(f"  decomposing {decomposition['value']}:")
-    print(f"    digits (LSB first)  {_tuple(decomposition['digits'])}")
+    print(f"    digits (MSB first)  {_tuple(decomposition['digits'])}")
     print(f"    gadget              {gadget}")
     print(f"    inner product       {decomposition['recomposed']}   <- back to {decomposition['value']}")
     print()
@@ -108,7 +108,7 @@ def main() -> None:
     print()
     print(f"  decompose(a) gives {levels} ring elements, one per level:")
     for index, level in enumerate(ciphertext["levels"]):
-        print(f"    level {index}  x B^{index} = {gadget[index]:<8} {_tuple(level)}")
+        print(f"    level {index}  x B^{levels - 1 - index} = {gadget[index]:<8} {_tuple(level)}")
     print("  Each level is a ring element of N coefficients -- not one coefficient's digits.")
     print()
 

@@ -41,11 +41,12 @@ negacyclic なので、そのうちいくつかは符号が反転して届きま
 switching key は old index `j` と level `l` ごとに次を持ちます。
 
 ```text
-ksk[j][l] = LWE_(s_new)( B^l * s_old[j] )
+ksk[j][l] = LWE_(s_new)( B^(L-1-l) * s_old[j] )
 ```
 
 old の mask を分解して対応する entry を引くと、phase から `<mask, s_old>` がちょうど消えます。
-分解の規約は `ac26-w5-rgsw-external` のままです。
+分解の規約は `ac26-w5-rgsw-external` のままです。桁は大きい重みが先頭 (MSB 先頭)、
+gadget は `(B^(L-1), ..., B, 1)` の降順 — 講義スライド 30 の並びです。
 
 **どちらの端の secret も渡りません。** 環の secret も、source key も、target key も。
 それでも phase は通ります。key switching が復号して再暗号化する操作に見えるなら、
@@ -83,7 +84,7 @@ checkout、ターミナル、ローカルエディタ、別画面、コピペは
 | `phase` | 30 | `b - a*s` の全係数。accumulator と新規暗号文の両方、index 範囲の拒否 |
 | `extract` | 50 | **全 index** で phase を保存、mask は secret の係数ごとに 1 スロット、body は `b` 由来、結果は既約 |
 | `trace` | 35 | スロットごとに 1 レコード、値が mask そのもの、wrap の境界が index に一致 |
-| `decompose` | 25 | 係数ごとに 1 タプル、LSB 先頭、ちょうど `levels` 個、桁は `[0, base)` |
+| `decompose` | 25 | 係数ごとに 1 タプル、MSB 先頭、ちょうど `levels` 個、桁は `[0, base)` |
 | `switch` | 55 | 全 index で target key の下に message が残る、両方向の交差、不整合な鍵の拒否、鍵 ID を名乗り secret を持ち出さない |
 | `domains` | 35 | source・target・次元、整合 1 件と不整合 2 件の区別、noise の bound |
 | `endtoend` | 40 | RLWE 係数・extracted・switched の 3 つが一致し、switch が実際に動かしている |
