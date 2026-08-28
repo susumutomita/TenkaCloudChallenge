@@ -240,7 +240,9 @@ def _property_failures(module, drawn: str) -> list[str]:
                 )
             else:
                 failures.append(
-                    f"property_map left {prop} off {missed[0]} of {name}, which carries it"
+                    # Issue 630: participant-visible now -- the missed edge id is the
+                    # checkpoint's answer, so only the property and the case travel.
+                    f"property_map left {prop} off an edge of {name} that carries it"
                 )
             break
     return failures
@@ -288,7 +290,9 @@ def _contract_failures(module, drawn: str) -> list[str]:
         invented = sorted(set(reported) - set(want))
         if missed:
             failures.append(
-                f"contract_violations missed {missed[0][1]} on {missed[0][0]} of {name}"
+                # Issue 630: participant-visible now -- the missed edge id is the
+                # checkpoint's answer; the violation class names the broken rule.
+                f"contract_violations missed a {missed[0][1]} in {name}"
             )
         if invented:
             failures.append(
@@ -458,11 +462,17 @@ def _selection_failures(module, drawn: str) -> list[str]:
             if theirs == mine:
                 continue
             if field == "primitives":
+                # Issue 630: participant-visible now -- echo their choice, not how many
+                # primitives the brief's truth holds.
                 failures.append(
-                    f"select chose {theirs} where the brief needs {len(mine)} of them; the three "
+                    f"select chose {theirs}, which is not the set this brief needs; the three "
                     "questions are answered independently"
                 )
             else:
+                # Issue 630: participant-visible now, and still leak-free -- this branch
+                # is only reachable after the primitives field matched, so
+                # want['primitives'] here is the learner's own answer, echoed to say
+                # which brief this is about.
                 failures.append(
                     f"select got {field} wrong on a brief it answered with {want['primitives']}"
                 )
