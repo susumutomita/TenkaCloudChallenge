@@ -50,16 +50,29 @@ An alert firing does not start the clock. The team declares explicitly (`POST
 /incident/declare`), assigns roles (`ic`/`ops`/`comms`/`scribe` — a 3-person team may
 combine `comms` and `scribe`), and backs every fact and hypothesis with real evidence
 ids. `gradeHypothesis` (`local/app/incident.mjs`) never reads free text — it checks the
-named dependency, the named mechanism, and that at least one cited evidence id is real.
+named dependency, the named mechanism, and that at least one cited evidence id is real
+*and dated inside the real incident window*, so Calibrate's benign blip cannot stand in
+for the incident. The two dropdown fields are the whole enumerable answer surface, so
+`addHypothesis` records an escalating penalty (-25, -50, -75, …) for each wrong guess at
+one of them until the checkpoint is earned; a malformed or unsupported citation is a
+mistake about your own evidence, not a probe at the answer, and stays free.
+
+Declaring is recoverable in one direction and bounded in the other. `declare` still
+refuses a second declaration while one is in force, but `withdrawDeclaration` (`POST
+/incident/withdraw`) stands one down at no cost, so a team that reacted to Calibrate's
+benign wobble can declare the real thing when it arrives instead of forfeiting the
+checkpoint for the rest of the run. Credit requires the declaration in force to sit
+inside `[startTick, healTick + DECLARATION_GRACE_TICKS]` — declaring once the dependency
+has healed itself and the SLO window has fully turned over is bookkeeping, not detection.
 
 ## Scoring — 1000 points, mapped 1:1 onto the issue's own table
 
 | Checkpoint | Points | Cleared when |
 | --- | ---: | --- |
 | `readiness-efficacy` | 150 | A rule you built caught the real onset without ever firing on Build/Calibrate traffic |
-| `detection-declaration` | 150 | Explicit declare at/after the real onset, with 2+ roles staffed |
-| `evidence-based-diagnosis` | 150 | An accepted hypothesis: right dependency, right mechanism, real evidence |
-| `customer-impact` | 250 | The cumulative impact budget stayed above 700/1000 |
+| `detection-declaration` | 150 | The declaration in force lands in `[real onset, natural heal + one SLO window]`, with 2+ roles staffed (a premature one can be withdrawn and re-declared) |
+| `evidence-based-diagnosis` | 150 | An accepted hypothesis: right dependency, right mechanism, real evidence dated inside the incident window |
+| `customer-impact` | 250 | The cumulative impact budget was still above 700/1000 once the whole incident window had elapsed |
 | `safe-containment` | 200 | `order-status` stayed healthy and the pool spent under 10% of the window saturated, with no stop-service/injector-reachability attempt |
 | `incident-command-closure` | 100 | Resolved only after: declared, override reverted, a structured update posted, and the SLO actually holding |
 

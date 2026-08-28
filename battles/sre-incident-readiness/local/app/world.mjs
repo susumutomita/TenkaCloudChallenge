@@ -101,6 +101,7 @@ export function createWorld(seed, options = {}) {
       hypotheses: [],
       actions: [],
       updates: [],
+      withdrawals: [],
       resolved: false,
       resolvedAtTick: null,
       resolveRejections: [],
@@ -347,6 +348,23 @@ function updateImpactBudget(world, tick, entry) {
 
 export function impactBudgetRemaining(world) {
   return IMPACT_BUDGET_START - world.impactBudgetUsed;
+}
+
+/**
+ * Ground truth for "the incident actually happened, and it is over": the whole
+ * stuck-dependency window has been lived through (`healTick` reached, so every tick that
+ * could ever charge the impact budget has been charged) *and* the run has moved on to
+ * Stabilize, the phase whose entire job is confirming recovery. Neither half is visible
+ * to the participant.
+ *
+ * Any gate that judges *the outcome of the incident* has to consult this rather than a
+ * budget threshold alone. "The budget has not been spent yet" and "the budget survived
+ * the incident" are the same number at tick 1 of Build and mean opposite things; without
+ * this predicate a full-marks outcome gate is satisfied before there is anything to
+ * have an outcome about.
+ */
+export function incidentWindowElapsed(world, tick = world.tick) {
+  return tick >= world.incidentPlan.healTick && currentPhase(world, tick) === "stabilize";
 }
 
 // --- alerts -------------------------------------------------------------------

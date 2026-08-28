@@ -15,7 +15,7 @@
 import { createServer } from "node:http";
 import { createWorld, step, currentPhase, applyAction } from "./world.mjs";
 import { validateResilience, validateObservability, validateAlertRule } from "./config-store.mjs";
-import { declare, assignRole, addFact, addHypothesis, addUpdate, attemptResolve } from "./incident.mjs";
+import { declare, withdrawDeclaration, assignRole, addFact, addHypothesis, addUpdate, attemptResolve } from "./incident.mjs";
 import { CHECKPOINTS, posture } from "./scoring.mjs";
 import { renderPrometheus } from "./metrics.mjs";
 import {
@@ -231,6 +231,20 @@ export function createGatewayServer(session) {
       return sendHtml(response, 200, incidentPage(world(), result.ok ? notice("ok", "宣言しました。") : notice("error", `宣言できませんでした: ${result.error}`)));
     }
 
+    if (method === "POST" && path === "/incident/withdraw") {
+      const result = withdrawDeclaration(world(), world().tick);
+      return sendHtml(
+        response,
+        200,
+        incidentPage(
+          world(),
+          result.ok
+            ? notice("ok", "宣言を取り下げました。あらためて declare できます。")
+            : notice("error", `取り下げできませんでした: ${result.error}`),
+        ),
+      );
+    }
+
     if (method === "POST" && path === "/incident/assign") {
       const form = await readForm(request);
       if (!form) return sendJson(response, 400, { error: "invalid_form" });
@@ -253,10 +267,16 @@ export function createGatewayServer(session) {
         mechanism: form.get("mechanism"),
         evidenceIds: csvOf(form.get("evidenceIds")),
       });
+      const penaltyNote = result.penaltyPoints < 0 ? `（当てずっぽうの提出として ${result.penaltyPoints} 点を記録しました）` : "";
       return sendHtml(
         response,
         200,
-        incidentPage(world(), result.accepted ? notice("ok", "hypothesis を受理しました。") : notice("error", `hypothesis は不採用でした: ${result.reason}`)),
+        incidentPage(
+          world(),
+          result.accepted
+            ? notice("ok", "hypothesis を受理しました。")
+            : notice("error", `hypothesis は不採用でした: ${result.reason}${penaltyNote}`),
+        ),
       );
     }
 

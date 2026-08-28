@@ -383,7 +383,8 @@ QUESTIONS = {
         ),
         "answerFormat": (
             '{"reportId": "...", "observedRevisions": [<1 つ目>, <2 つ目>]} '
-            "(revision は report の reads に出てきた順)"
+            "(その report が読んだ revision を、重複を除いて最初に現れた順に並べる。"
+            "read の回数とは一致しません)"
         ),
         "i18n": {
             "en": {
@@ -394,7 +395,8 @@ QUESTIONS = {
                 ),
                 "answerFormat": (
                     '{"reportId": "...", "observedRevisions": [<first>, <second>]} '
-                    "(revisions in the order they appear in the report's reads)"
+                    "(the distinct revisions that report read, in order of first "
+                    "appearance -- not one per read)"
                 ),
             }
         },
@@ -407,6 +409,8 @@ QUESTIONS = {
         ),
         "answerFormat": (
             '{"beforeCommit": ["...", "..."], "commit": "tx-...", "afterCommit": ["...", "..."]}'
+            " (beforeCommit と afterCommit は readOrder をそのまま 2 つに分けたもの。"
+            "読み飛ばしも並べ替えもしません)"
         ),
         "i18n": {
             "en": {
@@ -418,6 +422,8 @@ QUESTIONS = {
                 "answerFormat": (
                     '{"beforeCommit": ["...", "..."], "commit": "tx-...", '
                     '"afterCommit": ["...", "..."]}'
+                    " (beforeCommit and afterCommit are readOrder itself, split in two"
+                    " -- nothing dropped, nothing reordered)"
                 ),
             }
         },

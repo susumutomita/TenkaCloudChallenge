@@ -11,9 +11,13 @@
  *     --trigger <manual-admin-action|scheduled-retention-job|traffic-spike|unknown> \
  *     --first-action <restart-primary|stop-replica|terminate-application-writes|cancel-offending-transaction>
  *
- * Posts straight to this same container's own loopback :8081/diagnosis —
- * nothing the grader could not also verify independently later; this is
- * just the intake form. See local/grader/grade.mjs for how it is graded.
+ * Posts to the primary service's :8081/diagnosis intake endpoint (overridable
+ * via DIAGNOSIS_URL, which local/docker-compose.yml sets for this container).
+ * This script is the whole of what the workstation image carries: it submits
+ * four fields the participant chose and prints the verdict back. It holds no
+ * grading logic and no answer — nothing here could not also be typed by hand
+ * with `curl`. The grader itself lives only in the primary image (see
+ * local/Dockerfile's banner).
  */
 function parseArgs(argv) {
   const out = {};
@@ -38,8 +42,10 @@ const body = {
   firstAction: args["first-action"] ?? null,
 };
 
+const DIAGNOSIS_URL = process.env.DIAGNOSIS_URL ?? "http://primary:8081/diagnosis";
+
 try {
-  const res = await fetch("http://127.0.0.1:8081/diagnosis", {
+  const res = await fetch(DIAGNOSIS_URL, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),

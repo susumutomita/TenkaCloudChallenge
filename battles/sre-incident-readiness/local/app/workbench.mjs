@@ -234,12 +234,16 @@ function incidentSummary(world) {
   const updates = inc.updates
     .map((u) => `<li>[t${u.tick}] impact=${escapeHtml(u.customerImpact)} / hypothesis=${escapeHtml(u.activeHypothesis)} / owner=${escapeHtml(u.owner)}</li>`)
     .join("");
+  const withdrawals = inc.withdrawals
+    .map((w) => `<li>[t${w.withdrawnAtTick}] tick ${w.declaredAtTick} の宣言 (severity ${escapeHtml(w.severity ?? "-")}) を取り下げ</li>`)
+    .join("");
   return `
 <p>状態: ${inc.declared ? `宣言済み (severity ${escapeHtml(inc.severity)}, tick ${inc.declaredAtTick})` : "未宣言"} / resolved: ${inc.resolved ? `済み (tick ${inc.resolvedAtTick})` : "未"}</p>
 <p>役割: ${roles}</p>
 <h3>Facts</h3><ul>${facts || "<li>(なし)</li>"}</ul>
 <h3>Hypotheses</h3><ul>${hyps || "<li>(なし)</li>"}</ul>
 <h3>Updates</h3><ul>${updates || "<li>(なし)</li>"}</ul>
+${withdrawals ? `<h3>取り下げた宣言</h3><ul>${withdrawals}</ul>` : ""}
 `;
 }
 
@@ -254,10 +258,15 @@ ${phaseBanner(world)}
 ${incidentSummary(world)}
 
 <h2>宣言する</h2>
+<p>宣言は「気づいた」ことを記録する操作です。まだ何も起きていない時点の宣言や、事象がすっかり収まったあとの宣言は検知として扱われません。</p>
 <form method="post" action="./incident/declare">
 <label>severity<select name="severity"><option value="SEV1">SEV1</option><option value="SEV2" selected>SEV2</option><option value="SEV3">SEV3</option><option value="SEV4">SEV4</option></select></label>
 <button type="submit">declare</button>
 </form>
+
+<h2>宣言を取り下げる</h2>
+<p>早すぎた宣言は取り下げて、あらためて declare し直せます。取り下げ自体に減点はありません。</p>
+<form method="post" action="./incident/withdraw"><button type="submit">withdraw</button></form>
 
 <h2>役割を割り当てる</h2>
 <form method="post" action="./incident/assign">
@@ -274,6 +283,7 @@ ${incidentSummary(world)}
 </form>
 
 <h2>Hypothesis を提出する</h2>
+<p>dependency と mechanism を当てずっぽうに変えて出し直すと、外すたびに大きくなる減点が記録されます。証跡を読んでから提出してください。</p>
 <form method="post" action="./incident/hypothesis">
 <label>dependency<select name="dependency">${depOptions}</select></label>
 <label>mechanism<select name="mechanism">${mechOptions}</select></label>

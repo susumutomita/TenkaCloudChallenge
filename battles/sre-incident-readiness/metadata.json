@@ -61,17 +61,17 @@
           { "id": "re-3", "content": "`circuit_breaker_state` (once you have a breaker) or `http_error_ratio` both work; `dependency_error_ratio` alone can go quiet exactly when things are at their worst, since a fully saturated pool stops even reaching the dependency. Give whichever you pick a `forTicks` long enough to survive Calibrate's single-tick blip." }
         ] },
         { "id": "detection-declaration", "label": "The incident was explicitly declared, with roles assigned", "hints": [
-          { "id": "dd-1", "content": "Noticing is not the same as declaring. The Incident Room's declare action is what starts the clock this checkpoint measures." },
+          { "id": "dd-1", "content": "Noticing is not the same as declaring. The Incident Room's declare action is what starts the clock this checkpoint measures — a declaration made before anything is wrong, or long after it is over, is not detection. A premature one can be withdrawn and re-declared at no cost." },
           { "id": "dd-2", "content": "At least two distinct roles need a named owner." },
           { "id": "dd-3", "content": "From the Incident Room, declare a severity, then assign at least two of ic/ops/comms/scribe." }
         ] },
         { "id": "evidence-based-diagnosis", "label": "The hypothesis named the real dependency and mechanism, backed by evidence", "hints": [
-          { "id": "ed-1", "content": "Free text is not read. The dependency and mechanism fields must match real facts, and at least one cited evidence id must be real." },
+          { "id": "ed-1", "content": "Free text is not read. The dependency and mechanism fields must match real facts, and at least one cited evidence id must be real evidence of the incident itself. Guessing at the two dropdowns costs more every time you get one wrong." },
           { "id": "ed-2", "content": "Evidence only exists for ticks where dependency metrics or structured logs were already on — turning them on after the fact does not backfill it." },
           { "id": "ed-3", "content": "Enable dependency metrics or structured logs before you expect trouble, then submit the hypothesis with an evidence id copied from the Evidence page." }
         ] },
         { "id": "customer-impact", "label": "Customer impact stayed inside budget", "hints": [
-          { "id": "ci-1", "content": "The budget only ever spends, from the real onset onward — it never recovers on its own." },
+          { "id": "ci-1", "content": "The budget only ever spends, from the real onset onward — it never recovers on its own, and this checkpoint is only decided once the incident is over." },
           { "id": "ci-2", "content": "A hard checkout failure costs more than a clean circuit-open degrade, and any order-status rejection (collateral on an unrelated route) costs the most." },
           { "id": "ci-3", "content": "Keep the shared pool from saturating and the order-status route from ever being rejected." }
         ] },
@@ -118,7 +118,7 @@
         "points": 150,
         "wrongAnswerPenalty": 2,
         "hints": [
-          { "id": "dd-1", "content": "気づくことと宣言することは別です。この checkpoint が測っているのは Incident Room の declare 操作です。", "penalty": 0 },
+          { "id": "dd-1", "content": "気づくことと宣言することは別です。この checkpoint が測っているのは Incident Room の declare 操作です。まだ何も起きていない時点の宣言も、すっかり収まったあとの宣言も検知としては扱われません。早すぎた宣言は減点なしで取り下げて declare し直せます。", "penalty": 0 },
           { "id": "dd-2", "content": "少なくとも2つの異なる役割に担当者が必要です。", "penalty": 15 },
           { "id": "dd-3", "content": "Incident Room で severity を declare し、ic / ops / comms / scribe のうち少なくとも2つを assign してください。", "penalty": 30 }
         ]
@@ -129,7 +129,7 @@
         "points": 150,
         "wrongAnswerPenalty": 2,
         "hints": [
-          { "id": "ed-1", "content": "自由記述は読まれません。dependency と mechanism は実際の事実と一致し、引用した evidence id のうち少なくとも1つは本物である必要があります。", "penalty": 0 },
+          { "id": "ed-1", "content": "自由記述は読まれません。dependency と mechanism は実際の事実と一致し、引用した evidence id のうち少なくとも1つはインシデント本体の本物の証跡である必要があります。2つの選択肢を当てずっぽうで変えて出し直すと、外すたびに減点が大きくなります。", "penalty": 0 },
           { "id": "ed-2", "content": "証跡は、dependency metrics か structured logs がその時点で有効だった tick にしか記録されません。後から有効にしても過去分は増えません。", "penalty": 15 },
           { "id": "ed-3", "content": "問題が起きる前に dependency metrics か structured logs を有効にしておき、証跡ページからコピーした evidence id と一緒に hypothesis を提出してください。", "penalty": 30 }
         ]
@@ -140,7 +140,7 @@
         "points": 250,
         "wrongAnswerPenalty": 2,
         "hints": [
-          { "id": "ci-1", "content": "予算は本当のインシデント開始以降、使われる一方で自然回復しません。", "penalty": 0 },
+          { "id": "ci-1", "content": "予算は本当のインシデント開始以降、使われる一方で自然回復しません。この checkpoint の判定は、インシデントが収束したあとに確定します。", "penalty": 0 },
           { "id": "ci-2", "content": "checkout の完全な失敗はコストが大きく、circuit breaker によるきれいな degrade は小さく、依存先を呼んでいない order-status route の拒否は最もコストが大きい設計です。", "penalty": 25 },
           { "id": "ci-3", "content": "共有 pool を枯渇させず、order-status route を一度も拒否させないことを目指してください。", "penalty": 50 }
         ]

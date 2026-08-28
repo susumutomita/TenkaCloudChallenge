@@ -48,7 +48,6 @@ const PURGE_TARGET_PARTITIONS = [
   "orders_2024_06",
 ];
 const HELD_BACK_PARTITION = "orders_2024_07";
-const ORIGINAL_CUTOFF = "2024-07-01";
 const WIDENED_CUTOFF = "2024-08-01";
 const SEEDED_HELD_BACK_ROWS = 20_000;
 
@@ -191,9 +190,12 @@ export const CHECKS = [
       const [episodes, samples] = await Promise.all([client.incidentEpisodes(), client.metricsSamples()]);
       const episode = findUnsafeCancelledEpisode(episodes);
       if (!episode) {
+        // Says WHAT is missing, not HOW to produce it. Naming the containment
+        // function here would hand out contain-hint-2 (15 points) for the
+        // price of a 3-point wrong-answer penalty.
         return {
           passed: false,
-          detail: "unsafe_full_delete の episode がまだキャンセルされて終わっていない。pg_stat_activity で backend pid を見つけ、pg_cancel_backend() しよう。",
+          detail: "悪化の原因になっている処理が「途中で中断されて終了した」という記録が、まだ残っていない。",
         };
       }
       const windowSamples = samplesInWindow(samples, episode.startedAtMs, (episode.endedAtMs ?? Date.now()) + CONTAINMENT_GRACE_MS);
@@ -281,11 +283,16 @@ export const CHECKS = [
         return state.exists && state.attached;
       });
       const passed = remaining.length === 0;
+      // The failure message states the unmet condition (these are still
+      // partitions of commerce.orders) and stops there. Telling the
+      // participant to remove them wholesale instead of row by row is
+      // strategy-hint-2 (20 points) / strategy-hint-3 (30 points), which this
+      // checkpoint's 3-point wrong-answer penalty must not undercut.
       return {
         passed,
         detail: passed
           ? "2024-01〜06 の partition は全て DETACH または DROP 済みだ。"
-          : `まだ attach されたままの partition がある: ${remaining.join(", ")}。row 単位の DELETE ではなく、partition ごと外す方法を検討しよう。`,
+          : `次の対象がまだ commerce.orders の partition として残っている: ${remaining.join(", ")}。この checkpoint は行数ではなく catalog 上の状態を見ている。`,
       };
     },
   },
@@ -293,9 +300,9 @@ export const CHECKS = [
     id: "purge-completion-correctness",
     label: "対象データは残さず消し、対象外データは 1 件も壊さなかった",
     async run(client) {
-      const [catalog, config, samples] = await Promise.all([
+      const [catalog, episodes, samples] = await Promise.all([
         client.partitionCatalog(),
-        client.retentionConfig(),
+        client.incidentEpisodes(),
         client.metricsSamples(),
       ]);
       const leftoverRows = [];
@@ -309,10 +316,19 @@ export const CHECKS = [
       const problems = [];
       if (leftoverRows.length > 0) problems.push(`まだ行が残っている: ${leftoverRows.join(", ")}`);
 
-      // The held-back partition must stay fully intact for as long as the
-      // ORIGINAL cutoff is still in effect — touching it before Phase 4 is
-      // exactly the "deleted data that wasn't due yet" mistake.
-      if (config.cutoffDate === ORIGINAL_CUTOFF) {
+      // The held-back partition must stay fully intact until the retention
+      // job ITSELF has legitimately processed it — i.e. until there is a
+      // recorded partition_aware, committed episode covering it (Phase 4).
+      //
+      // Deliberately NOT gated on `ops.retention_config.cutoffDate`: that row
+      // is the one piece of state this problem hands the participant UPDATE
+      // on, so gating on it meant "damage the held-back data, then widen your
+      // own cutoff" erased the evidence and the checkpoint passed. Episodes
+      // come from audit.incident_log, which only retention_service can INSERT
+      // into (db/schema.sql), so the release condition is something the
+      // participant can trigger but cannot forge.
+      const heldBackReleasedByJob = findRecurrencePreventionEpisode(episodes) !== undefined;
+      if (!heldBackReleasedByJob) {
         const heldBack = catalog[HELD_BACK_PARTITION];
         if (!heldBack.exists || !heldBack.attached) {
           problems.push(`${HELD_BACK_PARTITION} はまだ対象外のはずなのに attach されていない`);

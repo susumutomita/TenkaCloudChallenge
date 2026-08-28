@@ -1,0 +1,119 @@
+import { describe, expect, test } from "bun:test";
+import { applyOp, DEFAULT_CONFIG, initialState, tick } from "./reducer.ts";
+import type { CryptoBattleState } from "./types.ts";
+
+/**
+ * Issue #486 Gate 2 / Definition of Done: "90 分本戦で idle を発生させない
+ * contract cadence がある".
+ *
+ * Gate 2's full claim has two halves. The half a test can decide is the
+ * Contract lane: does the queue actually keep supplying work for the whole
+ * 90 minutes, and how long is a team left with nothing in it? The other half
+ * -- that Vault and Ledger still offer a meaningful choice while the Contract
+ * lane is empty -- is a design property about what a player finds worth doing,
+ * and no assertion here decides it. These tests pin the cadence so a later
+ * tuning pass cannot silently open a hole in it.
+ *
+ * Everything below walks the real reducer clock rather than reasoning about
+ * DEFAULT_CONFIG arithmetic, so a change to issuance, expiry, or phase
+ * boundaries is caught even when the constants still look reasonable.
+ */
+
+const CTX = { eventId: "match-no-idle", teamIds: ["teamA", "teamB"] } as const;
+
+/** 15 s: fine enough that a gap shorter than a quarter-minute cannot hide between samples. */
+const SAMPLE_MS = 15_000;
+
+function openContractsFor(state: CryptoBattleState, teamId: string) {
+  return state.contracts.filter((c) => c.teamId === teamId && c.status === "open");
+}
+
+/**
+ * Walk the whole match at `SAMPLE_MS` resolution.
+ *
+ * `clearImmediately` models the worst case for the supply side: a team so fast
+ * it resolves every contract the moment it appears, which is the team most
+ * likely to run out of work. Passing false models a team that never acts, which
+ * is the worst case for the *expiry* side.
+ */
+function walkMatch(clearImmediately: boolean) {
+  const config = DEFAULT_CONFIG;
+  let state = tick(initialState(CTX), 0);
+  const samples: { atMs: number; open: number; phase: string }[] = [];
+
+  for (let atMs = 0; atMs <= config.matchDurationMs; atMs += SAMPLE_MS) {
+    state = tick(state, atMs);
+    samples.push({ atMs, open: openContractsFor(state, "teamA").length, phase: state.phase });
+    if (clearImmediately) {
+      for (const contract of openContractsFor(state, "teamA")) {
+        state = applyOp(state, "teamA", { kind: "leak", contractId: contract.id });
+      }
+    }
+  }
+  return { samples, finalState: state };
+}
+
+/** Longest run of consecutive samples with an empty queue, in ms. */
+function longestEmptyRunMs(samples: { open: number }[]) {
+  let longest = 0;
+  let current = 0;
+  for (const sample of samples) {
+    current = sample.open === 0 ? current + SAMPLE_MS : 0;
+    if (current > longest) longest = current;
+  }
+  return longest;
+}
+
+describe("90-minute contract cadence leaves no idle window", () => {
+  test("a team that never acts always has an open contract after the first issue", () => {
+    const { samples } = walkMatch(false);
+    // The first tick issues immediately, so even t=0 is non-empty.
+    const empty = samples.filter((s) => s.open === 0);
+    expect(empty).toEqual([]);
+  });
+
+  test("a team that clears every contract instantly waits at most one issue interval", () => {
+    const { samples } = walkMatch(true);
+    const longest = longestEmptyRunMs(samples);
+    // This is the design's accepted Contract-lane gap: the fastest possible
+    // team spends it on Vault or Ledger, which is exactly the tension Gate 2
+    // asks for. It must never exceed the issue interval -- if it does, the
+    // queue is starving rather than pacing.
+    expect(longest).toBeLessThanOrEqual(DEFAULT_CONFIG.contractIntervalMs);
+  });
+
+  test("every phase issues contracts, so no phase is dead time", () => {
+    const { finalState } = walkMatch(false);
+    const boundaries = DEFAULT_CONFIG.phaseBoundaries;
+    const issuedIn = (fromMs: number, toMs: number) =>
+      finalState.contracts.filter(
+        (c) => c.teamId === "teamA" && c.issuedAtMs >= fromMs && c.issuedAtMs < toMs,
+      ).length;
+
+    expect(issuedIn(0, boundaries.buildToPressureMs)).toBeGreaterThan(0);
+    expect(issuedIn(boundaries.buildToPressureMs, boundaries.pressureToEndgameMs)).toBeGreaterThan(0);
+    expect(issuedIn(boundaries.pressureToEndgameMs, DEFAULT_CONFIG.matchDurationMs)).toBeGreaterThan(0);
+  });
+
+  test("supply runs to the final minutes rather than stopping early", () => {
+    const { finalState } = walkMatch(false);
+    const lastIssuedAtMs = Math.max(
+      ...finalState.contracts.filter((c) => c.teamId === "teamA").map((c) => c.issuedAtMs),
+    );
+    // Within one interval of the end: a team is still being handed work in the
+    // closing minutes, which is what keeps the endgame a decision rather than a
+    // countdown.
+    expect(DEFAULT_CONFIG.matchDurationMs - lastIssuedAtMs).toBeLessThanOrEqual(
+      DEFAULT_CONFIG.contractIntervalMs,
+    );
+  });
+
+  test("both TTLs exceed the issue interval, or a passive team's queue empties", () => {
+    // The margin is thin by design (rush is 2.5 min against a 2 min interval).
+    // Tuning either number without the other is the concrete way a future
+    // balance pass would reintroduce idle, so pin the relationship, not the
+    // values.
+    expect(DEFAULT_CONFIG.contractTtlMs).toBeGreaterThan(DEFAULT_CONFIG.contractIntervalMs);
+    expect(DEFAULT_CONFIG.rushContractTtlMs).toBeGreaterThan(DEFAULT_CONFIG.contractIntervalMs);
+  });
+});
