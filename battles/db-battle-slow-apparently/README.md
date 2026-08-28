@@ -48,6 +48,32 @@ cannot write to (`incident_log`, `metrics_samples`, `diagnosis_log`,
 `deleted_orders_log`). Nothing passes on self-report or a fixed-string match. See
 `metadata.json`'s `description` field for the full breakdown.
 
+One rule is worth calling out because it looks like it could be read off
+`ops.retention_config` and must not be: the held-back 2024-07 partition's "still
+intact" requirement is released by a recorded `audit.incident_log` episode (a
+`partition_aware` run that actually committed against it), never by the configured
+cutoff date. The cutoff is the one row the participant is handed `UPDATE` on, so gating
+on it would let "destroy the held-back data first, then widen your own cutoff" pass
+unpunished.
+
+## Runtime boundary (what the participant's container holds)
+
+The Portal terminal attaches to the `workstation` service, built from the Dockerfile's
+`participant` stage. That image holds `psql`, `node`, and `bin/diagnose.mjs` -- and
+deliberately not `grader/` (which contains the Phase 1 answer key, the purge-target
+partition list and the widened cutoff) or `db/schema.sql` (whose banner narrates the
+whole scenario). Those are copied only into the `primary` image, which runs Postgres and
+the grader and which nobody gets a shell on.
+
+The database enforces the same split at the connection layer: `local/entrypoint-primary.sh`
+writes `pg_hba.conf` wholesale so that only `participant`, `app_service` and
+`retention_service` may run SQL across the compose network, and the `postgres` superuser
+needs either the primary container's own local socket or a password derived from the
+per-run `FLAG_SEED` (which the workstation never receives). The lab stays fully playable
+from the workstation: `participant` keeps `pg_read_all_stats`, `pg_signal_backend`,
+`SELECT`/`UPDATE` on `ops.retention_config`, and `DETACH`/`DROP`/`DELETE` on the commerce
+leaf partitions through `orders_owner` -- but `SELECT` only on `audit.*`.
+
 ## Local play
 
 ```bash
@@ -55,7 +81,14 @@ cd local
 docker compose -p db-battle-slow-apparently up -d
 # Info:   http://127.0.0.1:18580
 # Verify: POST http://127.0.0.1:18581/verify {"checkpointId": "..."}
+# Play:   docker compose -p db-battle-slow-apparently exec workstation sh
 docker compose -p db-battle-slow-apparently down --volumes --remove-orphans
+```
+
+The grader's unit tests need neither Docker nor Postgres:
+
+```bash
+bun test battles/db-battle-slow-apparently/local/grader/grade.test.mjs
 ```
 
 Always pass `-p db-battle-slow-apparently` explicitly (TenkaCloudChallenge#521): every

@@ -445,6 +445,97 @@ describe("purge-completion-correctness", () => {
     });
     expect((await byId["purge-completion-correctness"].run(client)).passed).toBe(true);
   });
+
+  // The held-back-data rule must not be gated on `ops.retention_config`:
+  // the cutoff is the one field the participant is handed UPDATE on, so
+  // gating on it let "destroy the held-back partition, THEN widen your own
+  // cutoff" pass unpunished.
+  const purgedTargets = {
+    orders_2024_01: { exists: false, attached: false },
+    orders_2024_02: { exists: false, attached: false },
+    orders_2024_03: { exists: false, attached: false },
+    orders_2024_04: { exists: false, attached: false },
+    orders_2024_05: { exists: false, attached: false },
+    orders_2024_06: { exists: false, attached: false },
+  };
+
+  it("still fails when the held-back partition was destroyed and the cutoff was then widened", async () => {
+    const client = new Client({
+      catalog: attachedCatalog({ ...purgedTargets, orders_2024_07: { exists: false, attached: false } }),
+      // Widened AFTER the damage, and no job run ever covered the partition.
+      config: { strategy: "partition_aware", cutoffDate: "2024-08-01" },
+      episodes: [],
+      samples: [sample({}, 1, 0), sample({}, 2, 1000)],
+    });
+    expect((await byId["purge-completion-correctness"].run(client)).passed).toBe(false);
+  });
+
+  it("still fails when the held-back partition's rows were removed and the cutoff was then widened", async () => {
+    const client = new Client({
+      catalog: attachedCatalog(purgedTargets),
+      rowCounts: { orders_2024_07: 0 },
+      config: { strategy: "partition_aware", cutoffDate: "2024-08-01" },
+      episodes: [],
+      samples: [sample({}, 1, 0), sample({}, 2, 1000)],
+    });
+    const result = await byId["purge-completion-correctness"].run(client);
+    expect(result.passed).toBe(false);
+    expect(result.detail).toContain("orders_2024_07");
+  });
+
+  it("accepts the held-back partition being gone once the job's own recorded replay removed it", async () => {
+    const client = new Client({
+      catalog: attachedCatalog({ ...purgedTargets, orders_2024_07: { exists: false, attached: false } }),
+      config: { strategy: "partition_aware", cutoffDate: "2024-08-01" },
+      episodes: [recurrenceEpisode(500, 1500)],
+      samples: [sample({}, 1, 0), sample({}, 2, 1000)],
+    });
+    expect((await byId["purge-completion-correctness"].run(client)).passed).toBe(true);
+  });
+
+  it("does not accept a widened cutoff alone as the job's release of the held-back partition", async () => {
+    // An unsafe_full_delete replay against the widened cutoff destroys the
+    // held-back rows rather than releasing the partition, so it must not
+    // count as the legitimising episode.
+    const client = new Client({
+      catalog: attachedCatalog({ ...purgedTargets, orders_2024_07: { exists: false, attached: false } }),
+      config: { strategy: "partition_aware", cutoffDate: "2024-08-01" },
+      episodes: [
+        {
+          ...recurrenceEpisode(500, 1500),
+          strategy: "unsafe_full_delete",
+        },
+      ],
+      samples: [sample({}, 1, 0), sample({}, 2, 1000)],
+    });
+    expect((await byId["purge-completion-correctness"].run(client)).passed).toBe(false);
+  });
+});
+
+/**
+ * The /verify failure text is the cheapest thing a participant can buy: a
+ * wrong-answer scan costs 2-3 points, while the hints these messages used to
+ * paraphrase cost 15-30. A failure message must say WHAT is not satisfied,
+ * never which function to call or which strategy to choose.
+ */
+describe("failure messages do not give away paid hints", () => {
+  it("safe-containment names neither the containment function nor the buggy strategy", async () => {
+    const client = new Client({ episodes: [], samples: fullRunSamples() });
+    const { passed, detail } = await byId["safe-containment"].run(client);
+    expect(passed).toBe(false);
+    expect(detail).not.toMatch(/pg_cancel_backend|pg_terminate_backend/);
+    expect(detail).not.toContain("unsafe_full_delete");
+  });
+
+  it("correct-purge-strategy names the unmet condition without naming the cleanup method", async () => {
+    const client = new Client({ catalog: attachedCatalog() });
+    const { passed, detail } = await byId["correct-purge-strategy"].run(client);
+    expect(passed).toBe(false);
+    expect(detail).not.toMatch(/detach|drop|delete/i);
+    // ...but it still has to tell the participant which objects failed.
+    expect(detail).toContain("orders_2024_01");
+    expect(detail).toContain("orders_2024_06");
+  });
 });
 
 describe("recurrence-prevention", () => {

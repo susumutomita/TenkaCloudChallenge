@@ -64,6 +64,15 @@
 --                                commerce.orders ONLY (no DELETE/DDL) — the
 --                                same least-privilege posture a real app tier
 --                                would run under.
+--
+-- These GRANTs are only half the boundary; the other half is who may open a
+-- session at all. local/entrypoint-primary.sh writes pg_hba.conf so that the
+-- three roles above are the ONLY ones that can run SQL from the compose
+-- network, and `postgres` needs either this container's local socket (no
+-- participant has a shell here) or a password derived from the per-run
+-- FLAG_SEED. Without that, a participant could simply connect as the
+-- superuser and rewrite the audit.* history below — which is exactly what
+-- every checkpoint treats as unforgeable.
 create schema if not exists commerce;
 create schema if not exists ops;
 create schema if not exists audit;

@@ -43,6 +43,29 @@ cancel し、安い方法 (`DETACH PARTITION` + `DROP TABLE`、row 単位の `DE
 (`incident_log` / `metrics_samples` / `diagnosis_log` / `deleted_orders_log`) だけを見る。
 自己申告や固定文字列一致では一切通らない。詳細は `metadata.json` の `description` を参照。
 
+1 点だけ明示しておく。held-back partition (2024-07) の「無傷であること」という条件は、
+`ops.retention_config.cutoff_date` ではなく `audit.incident_log` に記録された episode
+(実際に commit した `partition_aware` の実行) によって解除される。cutoff は参加者に
+`UPDATE` を渡している唯一の行なので、そこを条件にすると「先に held-back のデータを壊してから、
+自分で cutoff を広げる」が無罰で通ってしまう。
+
+## 実行時の境界 (参加者のコンテナに入るもの)
+
+Portal のターミナルが繋がるのは `workstation` service (Dockerfile の `participant` stage)
+だけ。この image が持つのは `psql` と `node` と `bin/diagnose.mjs` のみで、`grader/`
+(Phase 1 の正解キー・purge 対象 partition 一覧・widened cutoff) と `db/schema.sql`
+(banner がシナリオ全体を解説している) は意図的に入れない。これらは Postgres と grader を
+動かす `primary` image にだけ入り、そちらには誰も shell を持たない。
+
+DB 側も同じ境界を張る。`local/entrypoint-primary.sh` が `pg_hba.conf` を全面的に書き、
+compose network から SQL を実行できるのは `participant` / `app_service` /
+`retention_service` の 3 role だけ、superuser (`postgres`) は primary コンテナ内の local
+socket か per-run の `FLAG_SEED` から導出したパスワードでしか到達できない (`FLAG_SEED` は
+workstation には渡さない)。ラボとしては従来どおり遊べる: `participant` は
+`pg_read_all_stats`・`pg_signal_backend`・`ops.retention_config` の `SELECT`/`UPDATE`・
+`orders_owner` 経由の leaf partition への `DETACH`/`DROP`/`DELETE` を保持し、`audit.*` は
+`SELECT` のみ。
+
 ## ローカルプレイ
 
 ```bash
@@ -50,7 +73,14 @@ cd local
 docker compose -p db-battle-slow-apparently up -d
 # Info:   http://127.0.0.1:18580
 # Verify: POST http://127.0.0.1:18581/verify {"checkpointId": "..."}
+# 参加者の端末: docker compose -p db-battle-slow-apparently exec workstation sh
 docker compose -p db-battle-slow-apparently down --volumes --remove-orphans
+```
+
+grader の unit test は Docker も Postgres も要らない。
+
+```bash
+bun test battles/db-battle-slow-apparently/local/grader/grade.test.mjs
 ```
 
 必ず `-p db-battle-slow-apparently` を明示すること (TenkaCloudChallenge#521)。全ての
