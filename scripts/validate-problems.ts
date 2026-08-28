@@ -12,7 +12,7 @@
  */
 
 import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
 import Ajv2020 from "ajv";
 import addFormats from "ajv-formats";
 import { checkSimulationOverlay } from "./validate-simulation-overlay";
@@ -466,6 +466,36 @@ export function checkCompositeAppRunDescriptor(
   }
 }
 
+
+/**
+ * [contract / Issue #493] ac26 の Challenge は、instructions の先頭に「前提」節
+ * (中学・高校数学からの橋、教材内の位置、用語の言い換え) を持つ。用語から
+ * 始まる問題文は解ける人にしか読めない、という指摘への恒久対応。
+ * scripts/ac26-premises.test.ts が #604 で撤去されたため、カタログ契約として
+ * ここで検査する。対象は challenges/ 配下の ac26-* のみ (battle は対象外)。
+ */
+function checkAc26PremiseSection(dir: string, meta: Metadata): ValidationError[] {
+  const id = typeof meta.id === "string" ? meta.id : "";
+  if (!id.startsWith("ac26-") || !dir.includes(`challenges${sep}`)) return [];
+  const errors: ValidationError[] = [];
+  const ja = typeof meta.instructions === "string" ? meta.instructions : "";
+  const en =
+    ((meta.i18n as { en?: { instructions?: unknown } } | undefined)?.en?.instructions as
+      | string
+      | undefined) ?? "";
+  if (!ja.includes("## 前提")) {
+    errors.push(
+      'ac26 instructions must open with a "## 前提" section bridging school math to the topic (Issue #493)',
+    );
+  }
+  if (!en.includes("## Before you start") && !en.includes("## Prerequisites")) {
+    errors.push(
+      'ac26 i18n.en.instructions must carry the premise section ("## Before you start" / "## Prerequisites") (Issue #493)',
+    );
+  }
+  return errors;
+}
+
 function checkCompositeRefs(dir: string, meta: Metadata): CrossRefResult {
   const errors: ValidationError[] = [
     ...checkInstructionsPresent(meta),
@@ -621,6 +651,7 @@ function checkContainerRefs(dir: string, meta: Metadata): CrossRefResult {
   const runtime = meta.runtime as { entry?: unknown } | undefined;
   const errors: ValidationError[] = [
     ...checkInstructionsPresent(meta),
+    ...checkAc26PremiseSection(dir, meta),
     ...checkWriteupTranslations(meta),
     ...checkDescriptionTranslations(meta),
     ...checkHintTranslations(meta),
