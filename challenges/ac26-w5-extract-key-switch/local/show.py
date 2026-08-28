@@ -123,7 +123,7 @@ def main() -> None:
     print()
 
     digits = payload["digits"]
-    print(f"  decomposing the mask, base {par['base']}, {par['levels']} levels, LSB first:")
+    print(f"  decomposing the mask, base {par['base']}, {par['levels']} levels, MSB first:")
     for j, row in enumerate(digits[: min(3, len(digits))]):
         print(f"    coefficient {j}  {mask[j]:<8} -> {tuple(row)}")
     if len(digits) > 3:

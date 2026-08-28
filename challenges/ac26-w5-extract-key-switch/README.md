@@ -42,11 +42,13 @@ uses. Hence the second half.
 The switching key holds, for every old index `j` and level `l`:
 
 ```text
-ksk[j][l] = LWE_(s_new)( B^l * s_old[j] )
+ksk[j][l] = LWE_(s_new)( B^(L-1-l) * s_old[j] )
 ```
 
 Decompose the old mask, subtract the matching entries, and `<mask, s_old>` cancels out of
-the phase. The decomposition convention is `ac26-w5-rgsw-external`'s, unchanged.
+the phase. The decomposition convention is `ac26-w5-rgsw-external`'s, unchanged: digits
+most-significant weight first against the descending gadget `(B^(L-1), ..., B, 1)` —
+lecture slide 30's order.
 
 You are given **no secret at either end**. Not the ring secret, not the source key, not the
 target key — and the phase still comes through. If key switching looks like a decrypt
@@ -84,7 +86,7 @@ Eight checkpoints, scored independently. Wrong answers cost 15 points each.
 | `phase` | 30 | Every coefficient of `b - a*s`, on the accumulator and on a fresh ciphertext, index range refused |
 | `extract` | 50 | The phase preserved at **every** index, mask one slot per secret coefficient, body from `b`, result reduced |
 | `trace` | 35 | One record per slot, the values are the mask, and the wrap boundary sits exactly at the index |
-| `decompose` | 25 | One digit tuple per coefficient, LSB-first, exactly `levels`, digits in `[0, base)` |
+| `decompose` | 25 | One digit tuple per coefficient, MSB-first, exactly `levels`, digits in `[0, base)` |
 | `switch` | 55 | The message survives under the target key at every index, crossed both ways, mismatched keys refused, the result names its key and carries no secret |
 | `domains` | 35 | Source, target, dimensions, `compatible` separating a matching key from two mismatched ones, and the noise bound |
 | `endtoend` | 40 | The RLWE coefficient, the extracted sample and the switched sample all agree, and the switch moved something |

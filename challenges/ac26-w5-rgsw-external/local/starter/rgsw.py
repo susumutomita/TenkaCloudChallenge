@@ -12,10 +12,13 @@ from. This problem is the gadget and the product.
 ## The decomposition convention, fixed
 
 ```text
-q = base ** levels           unsigned, LSB-first, exactly `levels` digits
-gadget = (1, B, B^2, ..., B^(L-1))
+q = base ** levels           unsigned, most-significant weight first, exactly `levels` digits
+gadget = (B^(L-1), ..., B, 1)       descending — (q/B, q/B^2, ..., q/B^L) under q = B^L
 recompose(decompose(x)) == x        for every x in [0, q)
 ```
+
+With `B = 4`, `L = 3`, `q = 64`: `decompose(47) = (2, 3, 3)`, because
+`47 = 2*16 + 3*4 + 3*1` — lecture slide 30's worked example, digit for digit.
 
 `q = base ** levels` is what makes that exact. It is a choice, and the `failure` checkpoint
 is where you find out what it was buying.
@@ -62,7 +65,7 @@ from participant.ring import ring_add, ring_mul  # noqa: F401 - the supplied rin
 
 
 def gadget_vector(params: dict) -> tuple[int, ...]:
-    """`(1, B, B^2, ..., B^(L-1))`.
+    """`(B^(L-1), ..., B, 1)` — descending, most significant weight first.
 
     The order has to agree with `decompose`. Reversing both leaves the round trip working
     and every other thing in this file broken, so it is graded directly.
@@ -71,7 +74,10 @@ def gadget_vector(params: dict) -> tuple[int, ...]:
 
 
 def decompose(params: dict, value: int) -> tuple[int, ...]:
-    """Unsigned base-B digits of `value`, least significant first, exactly `levels` of them.
+    """Unsigned base-B digits of `value`, most significant first, exactly `levels` of them.
+
+    The order matches lecture slide 30's worked example: with `B = 4`, `L = 3`, `q = 64`,
+    `decompose(47) == (2, 3, 3)` — `47 = 2*16 + 3*4 + 3*1`, largest weight first.
 
     A value outside `[0, q)` is reduced first, not rejected.
     """

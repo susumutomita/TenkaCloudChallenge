@@ -102,9 +102,10 @@ def extract_trace(params: dict, ciphertext: dict, index: int) -> tuple[dict, ...
 
 
 def decompose_mask(params: dict, mask) -> tuple[tuple[int, ...], ...]:
-    """One digit tuple per mask coefficient, LSB-first, exactly `levels` of them.
+    """One digit tuple per mask coefficient, most significant first, exactly `levels` of them.
 
-    Same convention as `ac26-w5-rgsw-external`, and `decompose` is supplied. The shape is
+    Same convention as `ac26-w5-rgsw-external` -- lecture slide 30's order, largest weight
+    first -- and `decompose` is supplied. The shape is
     the part worth getting right: one tuple **per coefficient**, not one per level. The
     external product wanted the transpose of this, because it multiplied a level by a ring
     element; here each coefficient's digits index into that coefficient's own key entries.
@@ -115,9 +116,10 @@ def decompose_mask(params: dict, mask) -> tuple[tuple[int, ...], ...]:
 def key_switch(params: dict, switching_key: dict, sample: dict) -> dict:
     """`(0, body) - sum d[j][l] * ksk[j][l]`, which lands under the target key.
 
-    The switching key holds `ksk[j][l] = LWE_target(B^l * source[j])`. Subtracting
-    `d[j][l]` of each removes `sum d[j][l] * B^l * source[j]` from the phase, and that sum
-    is `<mask, source>` -- so what is left is `body - <mask, source>`, the original phase,
+    The switching key holds `ksk[j][l] = LWE_target(B^(L-1-l) * source[j])` -- the
+    descending gadget, matching the most-significant-first digits. Subtracting `d[j][l]` of
+    each removes `sum d[j][l] * B^(L-1-l) * source[j]` from the phase, and that sum is
+    `<mask, source>` -- so what is left is `body - <mask, source>`, the original phase,
     less the noise the entries carried.
 
     Nothing is decrypted anywhere in that. The source secret appears only inside the key's

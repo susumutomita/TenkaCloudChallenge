@@ -155,17 +155,21 @@ def centered(par: dict, x: int) -> int:
 
 
 def gadget_vector(par: dict) -> tuple[int, ...]:
-    return tuple(par["base"] ** i for i in range(par["levels"]))
+    return tuple(par["base"] ** i for i in reversed(range(par["levels"])))
 
 
 def decompose(par: dict, value: int) -> tuple[int, ...]:
-    """Unsigned base-B digits of `value mod q`, least significant first, exactly L of them."""
+    """Unsigned base-B digits of `value mod q`, most significant first, exactly L of them.
+
+    Lecture slide 30's order: with `B = 4`, `L = 3`, `q = 64`, the value 47 decomposes to
+    `(2, 3, 3)` -- `47 = 2*16 + 3*4 + 3*1`, largest weight first.
+    """
     base, remaining = par["base"], value % par["modulus"]
     digits = []
     for _ in range(par["levels"]):
         digits.append(remaining % base)
         remaining //= base
-    return tuple(digits)
+    return tuple(reversed(digits))
 
 
 def decompose_poly(par: dict, poly) -> tuple[tuple[int, ...], ...]:
@@ -376,7 +380,10 @@ def key_id(seed: str, label: str) -> str:
 def switching_key(
     seed: str, par: dict, source_secret, target, source_id: str, target_id: str, label: str
 ) -> dict:
-    """`ksk[j][l] = LWE_target(B^l * source_secret[j])`, plus the metadata that names its domains.
+    """`ksk[j][l] = LWE_target(gadget[l] * source_secret[j])`, plus the metadata that names its domains.
+
+    `gadget[l]` is `B^(L-1-l)` -- the descending gadget, so entry level `l` pairs with digit
+    `l` of the most-significant-first decomposition.
 
     The scalar goes in raw, not through `encode`: the switch subtracts these from a phase and
     the arithmetic has to land exactly, not to within a rounding step.
