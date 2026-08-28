@@ -64,7 +64,7 @@ const INFO_PAGE = `<!doctype html>
 止められません。原因を特定し、サービスを正常状態へ戻してください。</p>
 <p style="opacity:.8">運用メモ: DB CPU が高いようです。サイズ不足かもしれないので scale-up を
 検討してください。</p>
-<p>Portal のターミナルを開き (primary コンテナに入ります)、
+<p>Portal のターミナルを開き (調査用の workstation コンテナに入ります)、
 <code>psql -U participant -d incident</code> で接続して調査を始めてください。</p>
 <p>現在の観測値は <a href="/status">/status</a> で確認できます (採点はしません)。</p>
 </body></html>`;

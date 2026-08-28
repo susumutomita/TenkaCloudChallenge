@@ -385,7 +385,7 @@ describe("purge-completion-correctness", () => {
     expect((await byId["purge-completion-correctness"].run(client)).passed).toBe(false);
   });
 
-  it("fails when the held-back partition was touched early (original cutoff still in effect)", async () => {
+  it("fails when the held-back partition was touched early, before the job itself released it", async () => {
     const catalog = attachedCatalog({
       orders_2024_01: { exists: false, attached: false },
       orders_2024_02: { exists: false, attached: false },

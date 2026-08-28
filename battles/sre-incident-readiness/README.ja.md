@@ -27,16 +27,18 @@ SRE Battle #1 (Issue 470)。正常に動いている注文サービスがあり�
 
 ## Incident Command
 
-アラートが鳴っただけでは時計は動きません。チームが明示的に宣言し (`POST /incident/declare`)、役割 (`ic`/`ops`/`comms`/`scribe`。3人チームでは comms と scribe の兼任可) を割り当て、すべての fact と hypothesis に本物の evidence id を添える必要があります。`gradeHypothesis` (`local/app/incident.mjs`) は自由記述を一切読みません。dependency 名・mechanism 名・引用した evidence id のうち少なくとも1つが本物であることだけを見ます。
+アラートが鳴っただけでは時計は動きません。チームが明示的に宣言し (`POST /incident/declare`)、役割 (`ic`/`ops`/`comms`/`scribe`。3人チームでは comms と scribe の兼任可) を割り当て、すべての fact と hypothesis に本物の evidence id を添える必要があります。`gradeHypothesis` (`local/app/incident.mjs`) は自由記述を一切読みません。dependency 名・mechanism 名・引用した evidence id のうち少なくとも1つが **本物のインシデント期間内の** 証跡であることだけを見ます。Calibrate の無害な blip の証跡ではインシデントの根拠になりません。当てられる余地があるのは2つの選択肢だけなので、`addHypothesis` はその2つを外した提出ごとに増える減点 (-25, -50, -75, …) を checkpoint 獲得まで記録します。証跡の引用が不正・不十分な場合は「自分の証跡についての間違い」であって答えの探索ではないため、減点しません。
+
+宣言は片方向に回復可能で、もう片方向には期限があります。`declare` は宣言中の二重宣言を今も拒否しますが、`withdrawDeclaration` (`POST /incident/withdraw`) が減点なしで取り下げられるため、Calibrate の無害な揺れに反応してしまったチームも、本物が来たときに宣言し直せます。得点対象になるのは、有効な宣言が `[本当の発生時刻, 自然回復 + SLO 窓 1つ分]` に収まっている場合だけです。依存先が自力で回復し SLO 窓が完全に入れ替わったあとの宣言は、検知ではなく事後の記帳です。
 
 ## 採点 — 1000点、Issue 本文の表と1:1対応
 
 | checkpoint | 点数 | 条件 |
 | --- | ---: | --- |
 | `readiness-efficacy` | 150 | 作ったルールが、Build/Calibrate 中に一度も誤発火せずに本物の発生を捉えた |
-| `detection-declaration` | 150 | 本物の発生時刻以降に明示宣言し、2つ以上の役割に担当者がいる |
-| `evidence-based-diagnosis` | 150 | 採用された hypothesis: 正しい dependency・正しい mechanism・本物の証跡 |
-| `customer-impact` | 250 | 累積の影響予算が 700/1000 を上回ったまま |
+| `detection-declaration` | 150 | 有効な宣言が `[本当の発生時刻, 自然回復 + SLO 窓1つ分]` に収まり、2つ以上の役割に担当者がいる (早すぎた宣言は取り下げて宣言し直せる) |
+| `evidence-based-diagnosis` | 150 | 採用された hypothesis: 正しい dependency・正しい mechanism・インシデント期間内の本物の証跡 |
+| `customer-impact` | 250 | インシデント期間をすべて経過した時点で、累積の影響予算が 700/1000 を上回っていた |
 | `safe-containment` | 200 | `order-status` が健全なまま、pool の枯渇時間がインシデント時間の10%未満、全停止/injector到達試行が無い |
 | `incident-command-closure` | 100 | 宣言済み・override 解除済み・structured update 投稿済み・SLO が実際に戻っている状態でのみ resolve できた |
 
