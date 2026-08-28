@@ -24,7 +24,7 @@ condition is written down where you can read it and argue with it.
 | `127.0.0.1:18081` | Loopback `/verify` the TenkaCloud scorer delegates to |
 | `127.0.0.1:18080/docs` | Browser API console and request workbench; relay changes live at `PATCH /api/settings` |
 
-The image is built from [`stackstack-base/`](../../stackstack-base), shared by every
+The image is built from [`runtimes/stackstack/`](../../runtimes/stackstack), shared by every
 StackStack problem. The shard names, the shard codes, the incident id, the safe-log
 token, the relay's downstream credential and the title-to-shard map are all derived
 inside the container from a per-deploy random `FLAG_SEED`, so no answer is stored in this
@@ -224,7 +224,7 @@ changes nothing.
 ### The honesty limit
 
 The verdict is computed inside the container you are running. A participant who edits
-`stackstack-base/` in their own checkout and rebuilds the image defeats every check here.
+`runtimes/stackstack/` in their own checkout and rebuilds the image defeats every check here.
 That is true of every container problem in this catalog; `make local` builds from the
 pinned `problems/` submodule. Unguessability likewise assumes the platform injects
 `FLAG_SEED` — a bare `docker compose up` uses the compose default.

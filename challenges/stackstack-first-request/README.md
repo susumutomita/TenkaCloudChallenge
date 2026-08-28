@@ -15,7 +15,7 @@ There is no puzzle. The goal is to complete three conversations — read, get re
 | `127.0.0.1:18081` | the loopback `/verify` TenkaCloud's scorer delegates to |
 | the board's `docs` (API console) | **Try any API** — the three routes of this problem run from here |
 
-The image builds from the shared [`stackstack-base/`](../../stackstack-base) (`SCENARIO=first-request`). The postcard password, the door token, the guestbook receipt and the round-trip token are all derived inside the container from the per-deploy random `FLAG_SEED`, so no answer exists in this repository and no two deploys agree. Both published ports bind to `127.0.0.1` only.
+The image builds from the shared [`runtimes/stackstack/`](../../runtimes/stackstack) (`SCENARIO=first-request`). The postcard password, the door token, the guestbook receipt and the round-trip token are all derived inside the container from the per-deploy random `FLAG_SEED`, so no answer exists in this repository and no two deploys agree. Both published ports bind to `127.0.0.1` only.
 
 ## Mission
 

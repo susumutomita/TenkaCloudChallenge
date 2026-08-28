@@ -1,6 +1,6 @@
 # Local-play container for stackstack-recover.
 #
-# The image is the shared StackStack base app (../../../stackstack-base), not a
+# The image is the shared StackStack base app (../../../runtimes/stackstack), not a
 # copy of it: this problem acts on the same board stackstack-onboarding and
 # stackstack-ship did, with `SCENARIO=recover` adding the public entrance
 # (`/edge`), the ops plane (`/ops`), the watchdog and the scheduled job on top.
@@ -13,7 +13,7 @@ name: stackstack-recover
 services:
   stackstack-recover:
     build:
-      context: ../../../stackstack-base
+      context: ../../../runtimes/stackstack
       dockerfile: Dockerfile
     environment:
       SCENARIO: recover

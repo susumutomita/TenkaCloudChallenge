@@ -24,170 +24,20 @@
     "container"
   ],
   "exposedPorts": [
-    { "port": 18200, "name": "Screen repair lab" },
-    { "port": 18201, "name": "/verify (loopback grader)" }
+    {
+      "port": 18200,
+      "name": "Screen repair lab"
+    },
+    {
+      "port": 18201,
+      "name": "/verify (loopback grader)"
+    }
   ],
   "learningGoals": [
     "pixel timingをactive、porch、sync、totalのexclusive countとして検証できる",
     "request/acknowledge toggleと2段同期を用いたCDC contractをsimulation assertionで検証できる",
     "RV32I byte storeのwrite strobeをframebuffer lane更新へ正しく反映できる",
     "firmware、memory-mapped register、pixel domainを跨ぐ不具合をdeterministic frame artifactから切り分けられる"
-  ],
-  "nodes": {
-    "learning_objectives": [
-      {
-        "id": "lo.ai-riscv-screen-repair.verify-video-timing",
-        "description": "raster videoのhorizontal/vertical timingを独立counterとassertionで検証できる"
-      },
-      {
-        "id": "lo.ai-riscv-screen-repair.repair-cdc-protocol",
-        "description": "reset順序とrequest/acknowledge toggleを含むCDC protocolを修復できる"
-      },
-      {
-        "id": "lo.ai-riscv-screen-repair.preserve-byte-lanes",
-        "description": "memory-mapped framebufferでbyte write strobe外のpixelを保持できる"
-      }
-    ],
-    "concepts": [
-      {
-        "id": "concept.raster-video-timing",
-        "description": "active領域、porch、sync pulse、total countで構成するraster scan timing"
-      },
-      {
-        "id": "concept.clock-domain-crossing",
-        "description": "異なるclock domain間で状態を安全に転送する同期protocol"
-      },
-      {
-        "id": "concept.framebuffer-byte-enables",
-        "description": "bus write strobeに対応するframebuffer byte laneだけを更新する規約"
-      },
-      {
-        "id": "concept.reset-domain-crossing",
-        "description": "複数clock domainでasynchronous assertとsynchronous deassertを行うreset sequencing"
-      }
-    ],
-    "assessment_criteria": [
-      {
-        "id": "assessment.ai-riscv-screen-repair.cdc-latency",
-        "description": "CONTROL更新が2段同期とacknowledgeを経てpixel domainへ反映される"
-      },
-      {
-        "id": "assessment.ai-riscv-screen-repair.frame-timing",
-        "description": "lineとframeのperiodおよびsync pulseが先行仕様に一致する"
-      },
-      {
-        "id": "assessment.ai-riscv-screen-repair.frame-artifact",
-        "description": "firmware test patternが隣接byteを壊さずdeterministic PPMへ出力される"
-      }
-    ],
-    "misconceptions": [
-      {
-        "id": "misconception.digital-simulation-proves-metastability-safety",
-        "description": "digital simulationがmetastabilityの確率や電気的収束まで証明できるという誤解"
-      },
-      {
-        "id": "misconception.last-index-equals-cycle-count",
-        "description": "counterの最後のindexとinterval内のclock数が同じ値だという誤解"
-      }
-    ],
-    "audiences": [
-      {
-        "id": "audience.fpga-video-engineer",
-        "description": "memory-mapped video pathとCDCを設計するFPGA engineer"
-      }
-    ]
-  },
-  "relations": [
-    {
-      "type": "requires",
-      "source": "problem.ai-riscv-screen-repair",
-      "target": "problem.ai-riscv-soc-repair"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.ai-riscv-screen-repair",
-      "target": "lo.ai-riscv-screen-repair.verify-video-timing"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.ai-riscv-screen-repair",
-      "target": "lo.ai-riscv-screen-repair.repair-cdc-protocol"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.ai-riscv-screen-repair",
-      "target": "lo.ai-riscv-screen-repair.preserve-byte-lanes"
-    },
-    {
-      "type": "covers",
-      "source": "problem.ai-riscv-screen-repair",
-      "target": "concept.raster-video-timing"
-    },
-    {
-      "type": "covers",
-      "source": "problem.ai-riscv-screen-repair",
-      "target": "concept.clock-domain-crossing"
-    },
-    {
-      "type": "covers",
-      "source": "problem.ai-riscv-screen-repair",
-      "target": "concept.framebuffer-byte-enables"
-    },
-    {
-      "type": "covers",
-      "source": "problem.ai-riscv-screen-repair",
-      "target": "concept.reset-domain-crossing"
-    },
-    {
-      "type": "requires",
-      "source": "lo.ai-riscv-screen-repair.verify-video-timing",
-      "target": "concept.raster-video-timing"
-    },
-    {
-      "type": "requires",
-      "source": "lo.ai-riscv-screen-repair.repair-cdc-protocol",
-      "target": "concept.clock-domain-crossing"
-    },
-    {
-      "type": "requires",
-      "source": "lo.ai-riscv-screen-repair.repair-cdc-protocol",
-      "target": "concept.reset-domain-crossing"
-    },
-    {
-      "type": "requires",
-      "source": "lo.ai-riscv-screen-repair.preserve-byte-lanes",
-      "target": "concept.framebuffer-byte-enables"
-    },
-    {
-      "type": "assesses",
-      "source": "problem.ai-riscv-screen-repair",
-      "target": "assessment.ai-riscv-screen-repair.cdc-latency"
-    },
-    {
-      "type": "assesses",
-      "source": "problem.ai-riscv-screen-repair",
-      "target": "assessment.ai-riscv-screen-repair.frame-timing"
-    },
-    {
-      "type": "assesses",
-      "source": "problem.ai-riscv-screen-repair",
-      "target": "assessment.ai-riscv-screen-repair.frame-artifact"
-    },
-    {
-      "type": "related_to",
-      "source": "problem.ai-riscv-screen-repair",
-      "target": "misconception.digital-simulation-proves-metastability-safety"
-    },
-    {
-      "type": "related_to",
-      "source": "problem.ai-riscv-screen-repair",
-      "target": "misconception.last-index-equals-cycle-count"
-    },
-    {
-      "type": "related_to",
-      "source": "problem.ai-riscv-screen-repair",
-      "target": "audience.fpga-video-engineer"
-    }
   ],
   "i18n": {
     "en": {

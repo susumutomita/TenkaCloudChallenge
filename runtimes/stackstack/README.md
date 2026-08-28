@@ -1,4 +1,4 @@
-# StackStack base app
+# StackStack shared runtime
 
 One small message-board web app, shared by every problem in the StackStack
 family. It is not a problem itself — it has no `metadata.json` and never appears
@@ -17,7 +17,7 @@ moves against the same surface on AWS.
 ## Layout
 
 ```
-stackstack-base/
+runtimes/stackstack/
 ├── Dockerfile          the shared image (node:22-alpine, no dependencies)
 └── app/
     ├── server.mjs      the two HTTP surfaces: the board (:8080) and /verify (:8081)
@@ -38,7 +38,7 @@ scenario:
 services:
   stackstack-onboarding:
     build:
-      context: ../../../stackstack-base
+      context: ../../../runtimes/stackstack
       dockerfile: Dockerfile
     environment:
       SCENARIO: onboarding
@@ -136,5 +136,5 @@ drive the real app over real HTTP instead of asserting on its source text:
 CHALLENGE_PORT=18190 VERIFY_PORT=18191 \
   APP_CONFIG=challenges/stackstack-onboarding/local/config/app.json \
   SCENARIO=onboarding FLAG_SEED=demo \
-  bun stackstack-base/app/server.mjs
+  bun runtimes/stackstack/app/server.mjs
 ```

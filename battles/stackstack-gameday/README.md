@@ -24,7 +24,7 @@ The seven StackStack single problems — onboarding, vibe-build, ship,
 safe-exposure, defend, observability, secrets — run as **one continuous 90- or
 120-minute event on one application**, with one story and one clock.
 
-It is delivered as an AWS-free local-play container (AGENT.md §13). One command:
+It is delivered as an AWS-free local-play container (AGENTS.md §13). One command:
 
 ```bash
 make local PROBLEM=stackstack-gameday                            # 90 minutes
@@ -36,7 +36,7 @@ Then open <http://127.0.0.1:18080/gameday> — the event console — and
 
 ## It composes; it does not reimplement
 
-`SCENARIO=gameday` is a single file, `stackstack-base/app/scenarios/gameday.mjs`,
+`SCENARIO=gameday` is a single file, `runtimes/stackstack/app/scenarios/gameday.mjs`,
 which **imports** the six single-problem scenario modules and merges their
 routes, their posture contexts and their gates.
 
@@ -333,11 +333,11 @@ that is not derivable. An organiser collects one payload per team at the end.
   engine can probe. The continuous number lives in the container and reaches the
   platform only as the eight checkpoint verdicts. Making it platform-visible needs
   a parallel schema and platform change, which is not a catalog PR's to invent
-  (AGENT.md, "Extending the platform contract").
+  (AGENTS.md, "Extending the platform contract").
 - **`phases[]` / `disruptions[]` in metadata.** `phases[].effect` accepts only
   `scorePathOverride` and `switchPlatformToDegraded`, both bound to
   `phased-polling`. Declaring them would promise machinery that does not exist
-  (AGENT.md §11). The phases are enforced by the container, and the key rotation
+  (AGENTS.md §11). The phases are enforced by the container, and the key rotation
   is announced scheduled maintenance rather than platform fault injection.
 - **Cross-team aggregation or a live leaderboard.** Local play is one container per
   player with no central server.
@@ -376,7 +376,7 @@ bun test scripts/stackstack-gameday.test.ts
 bun run validate
 ```
 
-The suite starts the real `stackstack-base/app/server.mjs` under Bun with
+The suite starts the real `runtimes/stackstack/app/server.mjs` under Bun with
 `SCENARIO=gameday`, a compressed clock and temporary participant files, and drives
 it over HTTP: create, run, both "must not score full marks" rules, all three
 chains, the phase-unlock withholding, the one-shot rotation, finish and teardown.

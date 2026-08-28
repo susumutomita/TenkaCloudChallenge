@@ -22,7 +22,7 @@
 | `127.0.0.1:18081` | TenkaCloud の採点系が委譲する loopback の `/verify` |
 | `127.0.0.1:18080/docs` | ブラウザ API コンソール。 方針は `PATCH /api/settings` で変更 |
 
-image は StackStack 系問題が共有する [`stackstack-base/`](../../stackstack-base) から
+image は StackStack 系問題が共有する [`runtimes/stackstack/`](../../runtimes/stackstack) から
 ビルドされる。 下書きの id・アカウントの token・漏れている marker は、
 デプロイごとにランダムな `FLAG_SEED` からコンテナ内で導出される。 gate の受領証は
 起動時に生成される別の秘密から作られる。 答えはリポジトリに 1 つも置かれておらず、
@@ -205,7 +205,7 @@ AWS では何に相当するか。
 ### 正直さの限界
 
 判定は、 あなたが動かしているコンテナの中で計算される。 自分のチェックアウトの
-`stackstack-base/` を書き換えて image を作り直せば、 ここの検査はすべて無効化できる。
+`runtimes/stackstack/` を書き換えて image を作り直せば、 ここの検査はすべて無効化できる。
 これはこのカタログのコンテナ問題すべてに当てはまる。 `make local` は pin された
 `problems/` submodule からビルドする。
 

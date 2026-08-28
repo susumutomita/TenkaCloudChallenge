@@ -1,6 +1,6 @@
 # Local-play container for stackstack-ship.
 #
-# The image is the shared StackStack base app (../../../stackstack-base), not a
+# The image is the shared StackStack base app (../../../runtimes/stackstack), not a
 # copy of it: this problem acts on the same board stackstack-onboarding did, with
 # `SCENARIO=ship` adding the release plane and the published site on top.
 #
@@ -11,7 +11,7 @@ name: stackstack-ship
 services:
   stackstack-ship:
     build:
-      context: ../../../stackstack-base
+      context: ../../../runtimes/stackstack
       dockerfile: Dockerfile
     environment:
       SCENARIO: ship

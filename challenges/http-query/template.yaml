@@ -516,7 +516,7 @@ Resources:
               # elasticloadbalancing write verbs on Resource:"*" via a tag-based
               # Condition (aws:ResourceTag/TenkaCloud:NamePrefix). That pattern
               # needs the resource to carry the tag, but CFn's ListenerRule does
-              # not support Tags -- so here we use the equally-valid AGENT.md
+              # not support Tags -- so here we use the equally-valid AGENTS.md
               # section 6 alternative: per-stack logical-id ARN scope. !Ref on an
               # AWS::ElasticLoadBalancingV2::ListenerRule returns the rule's ARN,
               # so this grants ModifyRule on EXACTLY this team's own rule and
@@ -558,7 +558,7 @@ Outputs:
     Description: The URL the player sends QUERY /search to (safe to expose).
     Value: !Sub "http://${Alb.DNSName}/search"
   # AWS Console deep link to this ALB (edit listener rules here). Literal slashes
-  # in the path (AGENT.md section 7); the ARN goes in the EC2 console hash fragment.
+  # in the path (AGENTS.md section 7); the ARN goes in the EC2 console hash fragment.
   ListenerRulesConsoleUrl:
     Description: AWS Console deep link to this load balancer (edit listener rules here).
     Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/ec2/home?region=${AWS::Region}#LoadBalancer:loadBalancerArn=${Alb}"

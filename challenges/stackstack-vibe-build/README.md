@@ -24,7 +24,7 @@ says plainly what is real and what is stood in for:
 
 | piece | what it really is |
 | --- | --- |
-| the board | the StackStack family's shared message board (`stackstack-base/`), same app as `stackstack-onboarding` |
+| the board | the StackStack family's shared message board (`runtimes/stackstack/`), same app as `stackstack-onboarding` |
 | the archive | an in-memory set of imported rows, some of which have never been on a public surface |
 | your feature | runtime source in `/api/source`, edited from the browser API console |
 | `GET /api/search` | JSON search; calls your `search` and publishes what it returns |

@@ -15,7 +15,7 @@ StackStack 本編の前に走らせる肩慣らし。 **AWS 不要** で、 自�
 | `127.0.0.1:18081` | TenkaCloud の採点が委譲する loopback `/verify` |
 | 板の `docs` (API コンソール) | アプリの設定を見る・変える・初期状態へ戻す ── リポジトリのファイルは触らない |
 
-image は StackStack 系問題が共有する [`stackstack-base/`](../../stackstack-base) から作る。 board serial・boot-check の値・合格印 token はすべて、 deploy ごとにランダムな `FLAG_SEED` からコンテナ内で導出する。 だから答えはこのリポジトリに存在せず、 2 つの deploy が同じ答えを持つこともない。 公開ポートはどちらも `127.0.0.1` のみ。
+image は StackStack 系問題が共有する [`runtimes/stackstack/`](../../runtimes/stackstack) から作る。 board serial・boot-check の値・合格印 token はすべて、 deploy ごとにランダムな `FLAG_SEED` からコンテナ内で導出する。 だから答えはこのリポジトリに存在せず、 2 つの deploy が同じ答えを持つこともない。 公開ポートはどちらも `127.0.0.1` のみ。
 
 ## ミッション
 

@@ -23,77 +23,20 @@
     "performance"
   ],
   "exposedPorts": [
-    { "port": 18420, "name": "Info (challenge surface)" },
-    { "port": 18421, "name": "/verify (loopback grader)" }
+    {
+      "port": 18420,
+      "name": "Info (challenge surface)"
+    },
+    {
+      "port": 18421,
+      "name": "/verify (loopback grader)"
+    }
   ],
   "learningGoals": [
     "index が存在することと、query planner が実際にそれを使うことは別問題だと、自分の目で確認できる",
     "ANALYZE が column の統計 (値ごとの分布) を更新し、それが row estimate の精度を直接左右することを説明できる",
     "同じ index つきの列でも、選択性の低い条件では Seq Scan の方が実際にコストが低いことを、EXPLAIN の数字で確認できる",
     "EXPLAIN の推定行数 (Plan Rows) と実際の行数 (Actual Rows) を見比べ、統計の鮮度を診断する習慣を身につける"
-  ],
-  "nodes": {
-    "learning_objectives": [
-      {
-        "id": "lo.db-a3-query-plan.index-exists-vs-planner-uses-it",
-        "description": "index が存在することと、query planner が実際にそれを使うことは別問題だと、自分の目で確認できる"
-      },
-      {
-        "id": "lo.db-a3-query-plan.analyze-updates-row-estimate",
-        "description": "ANALYZE が column の統計 (値ごとの分布) を更新し、それが row estimate の精度を直接左右することを説明できる"
-      },
-      {
-        "id": "lo.db-a3-query-plan.low-selectivity-favors-seq-scan",
-        "description": "同じ index つきの列でも、選択性の低い条件では Seq Scan の方が実際にコストが低いことを、EXPLAIN の数字で確認できる"
-      },
-      {
-        "id": "lo.db-a3-query-plan.diagnose-stale-statistics",
-        "description": "EXPLAIN の推定行数 (Plan Rows) と実際の行数 (Actual Rows) を見比べ、統計の鮮度を診断する習慣を身につける"
-      }
-    ],
-    "concepts": [
-      {
-        "id": "concept.query-planner-cost-estimate",
-        "description": "query planner は index の有無ではなく、ANALYZE で得た統計 (選択性) をもとにコストを見積もり、実際に使う実行計画を選ぶ。"
-      }
-    ]
-  },
-  "relations": [
-    {
-      "type": "teaches",
-      "source": "problem.db-a3-query-plan",
-      "target": "lo.db-a3-query-plan.index-exists-vs-planner-uses-it"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.db-a3-query-plan",
-      "target": "lo.db-a3-query-plan.analyze-updates-row-estimate"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.db-a3-query-plan",
-      "target": "lo.db-a3-query-plan.low-selectivity-favors-seq-scan"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.db-a3-query-plan",
-      "target": "lo.db-a3-query-plan.diagnose-stale-statistics"
-    },
-    {
-      "type": "covers",
-      "source": "problem.db-a3-query-plan",
-      "target": "concept.query-planner-cost-estimate"
-    },
-    {
-      "type": "requires",
-      "source": "problem.db-a3-query-plan",
-      "target": "problem.db-a2-index-tradeoff"
-    },
-    {
-      "type": "requires",
-      "source": "concept.query-planner-cost-estimate",
-      "target": "concept.index-read-write-tradeoff"
-    }
   ],
   "i18n": {
     "en": {
@@ -150,7 +93,9 @@
       "Info": "http://127.0.0.1:18420"
     },
     "verifyUrl": "http://127.0.0.1:18421/verify",
-    "secretEnv": ["FLAG_SEED"],
+    "secretEnv": [
+      "FLAG_SEED"
+    ],
     "terminal": {
       "service": "db-a3-query-plan"
     }

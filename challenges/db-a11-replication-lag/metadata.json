@@ -43,69 +43,6 @@
     "pg_stat_replication.replay_lag が常時カウントアップするタイマーではなく、standby の feedback を受け取った瞬間だけ更新される値であることを説明できる",
     "意図的に発生させた replication lag を、delay を戻して新たな書き込みを行うことで実際に解消できる"
   ],
-  "nodes": {
-    "learning_objectives": [
-      {
-        "id": "lo.db-a11-replication-lag.apply-delay-is-a-real-setting",
-        "description": "recovery_min_apply_delay を使って replica の apply を意図的に遅らせ、それが本物の運用機能であることを説明できる"
-      },
-      {
-        "id": "lo.db-a11-replication-lag.receive-vs-apply-are-separate-stages",
-        "description": "primary への書き込みが replica の受信 (WAL receive) と適用 (apply) の 2 段階に分かれていること、遅延するのは適用だけであることを実データで確認できる"
-      },
-      {
-        "id": "lo.db-a11-replication-lag.replay-lag-updates-on-feedback",
-        "description": "pg_stat_replication.replay_lag が常時カウントアップするタイマーではなく、standby の feedback を受け取った瞬間だけ更新される値であることを説明できる"
-      },
-      {
-        "id": "lo.db-a11-replication-lag.resolve-induced-lag",
-        "description": "意図的に発生させた replication lag を、delay を戻して新たな書き込みを行うことで実際に解消できる"
-      }
-    ],
-    "concepts": [
-      {
-        "id": "concept.replication-lag",
-        "description": "replica への変更適用速度が primary の変更生成速度を下回ると、その差 (replication lag) は時間とともに蓄積し、適用速度が上回れば縮む。"
-      }
-    ]
-  },
-  "relations": [
-    {
-      "type": "teaches",
-      "source": "problem.db-a11-replication-lag",
-      "target": "lo.db-a11-replication-lag.apply-delay-is-a-real-setting"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.db-a11-replication-lag",
-      "target": "lo.db-a11-replication-lag.receive-vs-apply-are-separate-stages"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.db-a11-replication-lag",
-      "target": "lo.db-a11-replication-lag.replay-lag-updates-on-feedback"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.db-a11-replication-lag",
-      "target": "lo.db-a11-replication-lag.resolve-induced-lag"
-    },
-    {
-      "type": "covers",
-      "source": "problem.db-a11-replication-lag",
-      "target": "concept.replication-lag"
-    },
-    {
-      "type": "requires",
-      "source": "problem.db-a11-replication-lag",
-      "target": "problem.db-a10-primary-replica"
-    },
-    {
-      "type": "requires",
-      "source": "concept.replication-lag",
-      "target": "concept.streaming-replication"
-    }
-  ],
   "i18n": {
     "en": {
       "name": "Replication Lag — induce it, observe it, resolve it",

@@ -354,7 +354,7 @@ Resources:
           docker compose up -d
 
 Outputs:
-  # FrontendUrl / ApiUrl are intentionally EMPTY by default (AGENT.md invariant
+  # FrontendUrl / ApiUrl are intentionally EMPTY by default (AGENTS.md invariant
   # #9 -- a Battle uptime problem must not start awarding points the instant
   # the deploy completes). Scoring engine resolves effective URL per slot as
   # `override ?? default`; with default="" and no override registered, the

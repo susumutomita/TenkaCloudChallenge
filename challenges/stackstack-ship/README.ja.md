@@ -20,7 +20,7 @@ staged pipeline、 live release ポインタ、 そして実際に何かがデ�
 | `127.0.0.1:18081` | TenkaCloud の採点が委譲する loopback の `/verify` |
 | `127.0.0.1:18080/docs` | ブラウザ API コンソール。 manifest は `PATCH /api/settings` で変更 |
 
-image は StackStack 系問題が共有する [`stackstack-base/`](../../stackstack-base) から
+image は StackStack 系問題が共有する [`runtimes/stackstack/`](../../runtimes/stackstack) から
 ビルドされます。 artifact の id、 public serial、 デプロイの receipt、 署名鍵の store は
 すべてコンテナ内でデプロイごとのランダムな `FLAG_SEED` から導出されるので、 答えはこの
 リポジトリに 1 つも置かれておらず、 2 つのデプロイが同じ答えを持つこともありません。
@@ -208,7 +208,7 @@ AWS に移したときの対応:
 ### 正直さの限界
 
 判定はあなたが動かしているコンテナの中で計算されます。 自分のチェックアウトの
-`stackstack-base/` を書き換えて image を焼き直せば、 ここのチェックはすべて無効化できます。
+`runtimes/stackstack/` を書き換えて image を焼き直せば、 ここのチェックはすべて無効化できます。
 このカタログのコンテナ問題すべてに共通することで、 `make local` は pin された `problems/`
 submodule からビルドします。
 

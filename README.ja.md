@@ -9,24 +9,17 @@
 - [`challenges/`](./challenges/) は個別演習です。
 - [`battles/`](./battles/) は対戦形式の問題です。
 - 各問題は `metadata.json` とruntime artifact（`template.yaml`、`local/`、portal component、serviceなど）を所有します。
-- [`stackstack-base/`](./stackstack-base/) はStackStack問題群が共有するruntimeです。
+- [`runtimes/`](./runtimes/) は複数問題が同一実装を共有するときだけ使うruntime置き場です。StackStackはその1 familyで、問題固有コードは各問題ディレクトリに置きます。
 - [`SCHEMA.json`](./SCHEMA.json) と [`SIMULATION_SCHEMA.json`](./SIMULATION_SCHEMA.json) がcatalog contractを定義します。
-- [`index.json`](./index.json) と [`cost-report.json`](./cost-report.json) はdownstream toolingが利用する生成物です。
 
 ## 検証
 
 ```bash
-bun install --frozen-lockfile --ignore-scripts
-bun run validate
+make install
+make agent-gate
 ```
 
 root validatorはmetadata、日英README、simulation overlay、catalog cross-referenceを検証します。PRのCIが実行するのはこの軽量な検証だけです。runtime codeとparticipant向けtestは、それを所有する問題の中に置き、その問題を変更するときに実行します。
-
-問題を追加・変更した後は機械向けcatalogを再生成します。
-
-```bash
-bun run reindex
-```
 
 secret、flag、hidden check、reference answerをparticipant-visible surfaceへ漏らさないでください。deploy、production operation、platform integrationはTenkaCloud repositoryの責務です。
 

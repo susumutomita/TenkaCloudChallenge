@@ -21,7 +21,7 @@ import { BOARD_SERIAL, BOOT_CHECK } from "./secrets.mjs";
  * handlers `/verify` delegates to. The board itself is the same code every time,
  * so what a participant learns about it in one problem still holds in the next.
  *
- * Two servers run in one process (the local-play contract, AGENT.md §13):
+ * Two servers run in one process (the local-play contract, AGENTS.md §13):
  *   :8080  the app the participant uses
  *   :8081  the loopback `/verify` the platform delegates scoring to
  *

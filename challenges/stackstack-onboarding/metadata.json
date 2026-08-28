@@ -9,7 +9,7 @@
   "estimatedDuration": "15 分",
   "shortDescription": "天下クラウド株式会社、 入社初日の午後。 前任の SRE はもういない。 AI Builder が作った社内掲示板が、 まだ誰にも投稿されないまま置いてある。\n\nCTO 曰く: 「本番の話は明日から。 今日はその板が動くところまで見ておいて。 見て、 ログを読んで、 設定をひとつ直して、 実際に書き込めるところまで」\n\n難しいことは何もない。 これは、 これから使う道具一式 ── ポータル、 アプリ、 ログ、 設定ファイル、 採点 ── を一周する 15 分だ。\n\n道具はすべて手元のコンテナで動く。 クラウドのアカウントも、 クレジットカードも、 課金も要らない。 壊しても、 環境を作り直せば元に戻る。",
   "instructions": "この問題は「環境が動くこと」を 15 分で確かめる肩慣らしです。 罠はありません。 すべて手元のコンテナの中だけで動き、 クラウドのアカウントも課金も発生しません。 壊しても、 環境を作り直せば元に戻ります。\n\n1. ポータルの endpoint から掲示板 (`Web`) を開く\n2. 板の `/docs` を開き、 **Try any API** から `GET /api/logs` を実行する\n3. 同じ画面から `PATCH /api/config` で設定をひとつだけ変えて、 実際に投稿する\n4. `GET /posture` で 4 つのゲートが全部緑になったことを確認する\n\nターミナルやリポジトリ編集は不要です。 答えは 3 つが板・ログ・`/posture` に実際に表示され、 残る 1 つ (投稿) は自分が付けたタイトルです。 詰まったらヒントを開いてください (1 つ目は減点なしです)。\n\n終わったら次は StackStack 本編 (`stackstack` Battle) です。 同じ掲示板を、 今度は本番品質まで持っていきます。",
-  "description": "## 目的\n\nStackStack 本編に入る前の環境診断であり、 参加者にとっては最初の成功体験。 15 分以内に、 ポータル・エディタ・アプリ・ログ・採点の関係を一周させる。\n\n## 何を確かめるか\n\n4 つのチェックポイントは、 参加者の申告ではなく **走っているアプリの実測** で判定する。\n\n| checkpoint | 実測しているもの |\n|---|---|\n| `board-open` | 板に届いたか (serial は板と `/api/board`、 起動ログにしか出ない) |\n| `log-trail` | ログを読んだか (boot-check は起動ログ行にしか出ない) |\n| `board-open-for-posts` | 設定を直したか **かつ** その上で API 経由の投稿が通ったか |\n| `handover` | 上 3 つが全部緑になったか (`/posture` が緑になるまで token を出さない) |\n\n`handover` の token は `/posture` の 4 ゲートが全部 true になるまで出ない。 つまり 「この環境は end-to-end で動く」 という機械可読な合格印になり、 後続問題のゲートから参照できる。\n\n## 意図的にやらないこと\n\n- 脆弱性を置かない。 攻撃も障害も起きない (それは StackStack 本編の仕事)。\n- 最初の操作に罠を置かない。 設定は再起動なしで即反映され、 壊れた JSON は `/healthz` と `/api/logs` に理由が出る。\n- クラウドアカウントを要求しない。 ローカル (`make local`) と Codespaces のどちらでも同じ手順で動く。\n\n## 共有ベースアプリ\n\nコンテナ image は StackStack 系問題が共有する `stackstack-base/` (掲示板アプリ 1 本) を `SCENARIO=onboarding` で起動したもの。 後続の StackStack Challenge は同じ板・同じログ・同じ `/posture` の上に自分の scenario を足す。",
+  "description": "## 目的\n\nStackStack 本編に入る前の環境診断であり、 参加者にとっては最初の成功体験。 15 分以内に、 ポータル・エディタ・アプリ・ログ・採点の関係を一周させる。\n\n## 何を確かめるか\n\n4 つのチェックポイントは、 参加者の申告ではなく **走っているアプリの実測** で判定する。\n\n| checkpoint | 実測しているもの |\n|---|---|\n| `board-open` | 板に届いたか (serial は板と `/api/board`、 起動ログにしか出ない) |\n| `log-trail` | ログを読んだか (boot-check は起動ログ行にしか出ない) |\n| `board-open-for-posts` | 設定を直したか **かつ** その上で API 経由の投稿が通ったか |\n| `handover` | 上 3 つが全部緑になったか (`/posture` が緑になるまで token を出さない) |\n\n`handover` の token は `/posture` の 4 ゲートが全部 true になるまで出ない。 つまり 「この環境は end-to-end で動く」 という機械可読な合格印になり、 後続問題のゲートから参照できる。\n\n## 意図的にやらないこと\n\n- 脆弱性を置かない。 攻撃も障害も起きない (それは StackStack 本編の仕事)。\n- 最初の操作に罠を置かない。 設定は再起動なしで即反映され、 壊れた JSON は `/healthz` と `/api/logs` に理由が出る。\n- クラウドアカウントを要求しない。 ローカル (`make local`) と Codespaces のどちらでも同じ手順で動く。\n\n## 共有ベースアプリ\n\nコンテナ image は StackStack 系問題が共有する `runtimes/stackstack/` (掲示板アプリ 1 本) を `SCENARIO=onboarding` で起動したもの。 後続の StackStack Challenge は同じ板・同じログ・同じ `/posture` の上に自分の scenario を足す。",
   "writeup": "## この 15 分で触ったもの\n\n- **アプリ本体** — 板そのもの。 `GET /` と `GET /api/board` が同じ serial を返す。\n- **ログ** — `GET /api/logs` はアプリが持つ直近のログ行を返し、 同じ行が `docker compose logs` にも出る。 障害調査でまず見る場所がここ。\n- **設定** — 出発点はコンテナに読み取り専用でマウントされたファイルで、 実行中の変更は板の API コンソール (`docs`) から `PATCH api/config` で行う。 変更はコンテナの中にだけ置かれるので、 作り直せば初期状態に戻り、 リポジトリは汚れない。\n- **実測 (`/posture`)** — 「認証を入れました」 という申告ではなく、 走っているアプリを見て真偽を決める。 StackStack 本編の gate も同じ考え方で作られている。\n\n## なぜ申告ではなく実測なのか\n\n設定を true にしただけでは `board-open-for-posts` は通らない。 その設定で実際に投稿が通ったこと (板に自分の記事が存在すること) まで確かめている。 設定と挙動はずれることがある ── 本番でも、 「有効にしたはずの認証が効いていない」 はこの形で起きる。 だから見るのは設定ではなく結果のほうだ。\n\n## 次にやること\n\n同じ掲示板を、 今度は本番品質まで持っていく `stackstack` Battle が本編。 データ復元・認証・レート制限・監査・DB 移行を、 障害を挟みながら進める。",
   "tags": [
     "onboarding",
@@ -34,150 +34,12 @@
     "アプリのログを自分で開いて、 起動時に何が起きたかを読み取れるようになる",
     "設定を変えただけでは終わりではなく、 変えた結果を実際の挙動で確かめるまでが 1 セットだと理解する"
   ],
-  "nodes": {
-    "learning_objectives": [
-      {
-        "id": "lo.stackstack-onboarding.navigate-play-loop",
-        "description": "ポータル・アプリ・ログ・採点の関係を説明し、 一周実行できる"
-      },
-      {
-        "id": "lo.stackstack-onboarding.verify-change-by-behavior",
-        "description": "設定変更を挙動で確認するまでを 1 つの作業として実行できる"
-      }
-    ],
-    "concepts": [
-      {
-        "id": "concept.runtime-configuration",
-        "description": "動いているアプリの振る舞いを決める、 再デプロイなしで変えられる設定"
-      },
-      {
-        "id": "concept.application-log",
-        "description": "アプリ自身が何をしたかを時系列で残した記録"
-      },
-      {
-        "id": "concept.health-check",
-        "description": "アプリが要求を処理できる状態かを外から確認する経路"
-      },
-      {
-        "id": "concept.measured-state",
-        "description": "申告ではなく実際の挙動を観測して決める状態判定"
-      }
-    ],
-    "assessment_criteria": [
-      {
-        "id": "assessment.stackstack-onboarding.complete-first-loop",
-        "description": "アプリ到達・ログ確認・設定変更・投稿・採点を 15 分以内に一周できる"
-      },
-      {
-        "id": "assessment.stackstack-onboarding.confirm-effect-not-intent",
-        "description": "設定値ではなく結果の挙動を根拠に、 変更が効いたことを示せる"
-      }
-    ],
-    "misconceptions": [
-      {
-        "id": "misconception.config-set-means-effective",
-        "description": "設定を書けばその通りに動いているはずだという思い込み"
-      },
-      {
-        "id": "misconception.restart-fixes-everything",
-        "description": "調べる前に再起動すれば直るという思い込み"
-      }
-    ],
-    "audiences": [
-      {
-        "id": "audience.platform-engineer",
-        "description": "アプリの運用と公開を担当するプラットフォームエンジニア"
-      }
-    ]
-  },
-  "relations": [
-    {
-      "type": "teaches",
-      "source": "problem.stackstack-onboarding",
-      "target": "lo.stackstack-onboarding.navigate-play-loop"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.stackstack-onboarding",
-      "target": "lo.stackstack-onboarding.verify-change-by-behavior"
-    },
-    {
-      "type": "covers",
-      "source": "problem.stackstack-onboarding",
-      "target": "concept.runtime-configuration"
-    },
-    {
-      "type": "covers",
-      "source": "problem.stackstack-onboarding",
-      "target": "concept.application-log"
-    },
-    {
-      "type": "covers",
-      "source": "problem.stackstack-onboarding",
-      "target": "concept.measured-state"
-    },
-    {
-      "type": "requires",
-      "source": "lo.stackstack-onboarding.verify-change-by-behavior",
-      "target": "concept.runtime-configuration"
-    },
-    {
-      "type": "requires",
-      "source": "lo.stackstack-onboarding.verify-change-by-behavior",
-      "target": "concept.measured-state"
-    },
-    {
-      "type": "requires",
-      "source": "lo.stackstack-onboarding.navigate-play-loop",
-      "target": "concept.application-log"
-    },
-    {
-      "type": "requires",
-      "source": "lo.stackstack-onboarding.navigate-play-loop",
-      "target": "concept.health-check"
-    },
-    {
-      "type": "assesses",
-      "source": "problem.stackstack-onboarding",
-      "target": "assessment.stackstack-onboarding.complete-first-loop"
-    },
-    {
-      "type": "assesses",
-      "source": "problem.stackstack-onboarding",
-      "target": "assessment.stackstack-onboarding.confirm-effect-not-intent"
-    },
-    {
-      "type": "related_to",
-      "source": "problem.stackstack-onboarding",
-      "target": "problem.stackstack"
-    },
-    {
-      "type": "related_to",
-      "source": "problem.stackstack-onboarding",
-      "target": "misconception.config-set-means-effective"
-    },
-    {
-      "type": "related_to",
-      "source": "problem.stackstack-onboarding",
-      "target": "misconception.restart-fixes-everything"
-    },
-    {
-      "type": "related_to",
-      "source": "problem.stackstack-onboarding",
-      "target": "audience.platform-engineer"
-    },
-    {
-      "type": "related_to",
-      "source": "problem.stackstack-onboarding",
-      "target": "audience.software-engineer"
-    }
-  ],
   "i18n": {
     "en": {
       "name": "The First Fifteen Minutes",
       "shortDescription": "TenkaCloud, afternoon of your first day. The previous SRE is already gone. The message board an AI Builder generated is sitting there, and nobody has posted to it yet.\n\nThe CTO: \"Production talk starts tomorrow. Today, just get as far as seeing that board work — look at it, read its log, change one setting, and get a message onto it.\"\n\nNothing here is hard. This is one lap around the tools you are about to use: the portal, the app, its log, its config file, and scoring.\n\nEvery one of those tools runs in containers on your own machine. No cloud account, no credit card, no bill. And if you break something, rebuilding the environment puts it back.",
       "instructions": "This is a fifteen-minute shakedown that proves your environment works. There are no traps. Everything runs in containers on your own machine — no cloud account, no bill — and if you break something, rebuilding the environment puts it back.\n\n1. Open the board (`Web`) from the portal's endpoint list\n2. Open `/docs` and run `GET /api/logs` from **Try any API**\n3. From the same screen, change one setting with `PATCH /api/config` and post for real\n4. Run `GET /posture` and confirm all four gates are green\n\nNo terminal or repository edit is required. Three answers are displayed on the board, in the log, or in `/posture`; the fourth is the title you chose. Open a hint if you get stuck; the first one for each checkpoint costs nothing.\n\nWhen you finish, the main event is the `stackstack` Battle: the same board, taken all the way to production.",
-      "description": "## Purpose\n\nAn environment check before StackStack proper, and the participant's first win. In under fifteen minutes it walks one full lap: portal, editor, app, log, scoring.\n\n## What it measures\n\nEach of the four checkpoints is judged from the **running app**, never from a claim.\n\n| checkpoint | what is measured |\n|---|---|\n| `board-open` | that the board was reached (the serial appears only on the board, on `/api/board`, and in the boot log) |\n| `log-trail` | that the log was read (the boot-check value appears only in a boot log line) |\n| `board-open-for-posts` | that the config was changed **and** a post then went through the API |\n| `handover` | that all three above are green (`/posture` withholds the token until then) |\n\nBecause the `handover` token only appears once all four posture gates are true, it is a machine-readable \"this environment works end to end\" signal that a later problem's gate can read.\n\n## Deliberate non-goals\n\n- No vulnerability, no attack, no injected failure — that is StackStack's job.\n- No trap on the first move. Config takes effect without a restart, and broken JSON explains itself on `/healthz` and in `/api/logs`.\n- No cloud account. The same steps work under `make local` and under Codespaces.\n\n## Shared base app\n\nThe image is the StackStack family's shared board app (`stackstack-base/`) started with `SCENARIO=onboarding`. Later StackStack Challenges add their own scenario on top of the same board, the same log, and the same `/posture`.",
+      "description": "## Purpose\n\nAn environment check before StackStack proper, and the participant's first win. In under fifteen minutes it walks one full lap: portal, editor, app, log, scoring.\n\n## What it measures\n\nEach of the four checkpoints is judged from the **running app**, never from a claim.\n\n| checkpoint | what is measured |\n|---|---|\n| `board-open` | that the board was reached (the serial appears only on the board, on `/api/board`, and in the boot log) |\n| `log-trail` | that the log was read (the boot-check value appears only in a boot log line) |\n| `board-open-for-posts` | that the config was changed **and** a post then went through the API |\n| `handover` | that all three above are green (`/posture` withholds the token until then) |\n\nBecause the `handover` token only appears once all four posture gates are true, it is a machine-readable \"this environment works end to end\" signal that a later problem's gate can read.\n\n## Deliberate non-goals\n\n- No vulnerability, no attack, no injected failure — that is StackStack's job.\n- No trap on the first move. Config takes effect without a restart, and broken JSON explains itself on `/healthz` and in `/api/logs`.\n- No cloud account. The same steps work under `make local` and under Codespaces.\n\n## Shared base app\n\nThe image is the StackStack family's shared board app (`runtimes/stackstack/`) started with `SCENARIO=onboarding`. Later StackStack Challenges add their own scenario on top of the same board, the same log, and the same `/posture`.",
       "writeup": "## What you touched in those fifteen minutes\n\n- **The app** — the board itself. `GET /` and `GET /api/board` return the same serial.\n- **The log** — `GET /api/logs` returns the app's recent log lines, and the same lines appear in `docker compose logs`. This is the first place to look when something breaks.\n- **The config** — the starting point is a file mounted read-only into the container; run-time changes go through the board's API console (`docs`) with `PATCH api/config`. Changes live only inside the container, so a rebuild returns to the initial state and your checkout stays clean.\n- **Measured state (`/posture`)** — the app decides what is true by looking, not by trusting a claim. StackStack's production gates work the same way.\n\n## Why measured, not claimed\n\nFlipping the setting to true is not enough to pass `board-open-for-posts`. The checkpoint also requires that a post actually went through and now exists on the board. Configuration and behavior drift apart in real systems — \"the auth we enabled isn't actually enforcing\" is exactly this shape of failure — so the thing worth checking is the outcome, not the setting.\n\n## Next\n\nThe main event is the `stackstack` Battle: the same board, taken to production quality through data restore, auth, rate limiting, audit, and a database migration, with failures fired at you along the way.",
       "learningGoals": [
         "Walk one full lap of portal, app, log, config file, and scoring, so the loop is familiar before it matters",

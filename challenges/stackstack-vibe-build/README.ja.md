@@ -14,7 +14,7 @@
 
 | 部品 | 実体 |
 | --- | --- |
-| 掲示板 | StackStack 系が共有する掲示板アプリ (`stackstack-base/`)。 `stackstack-onboarding` と同じもの |
+| 掲示板 | StackStack 系が共有する掲示板アプリ (`runtimes/stackstack/`)。 `stackstack-onboarding` と同じもの |
 | アーカイブ | インポート済みの行を持つメモリ上の集合。 公開面に一度も出たことのない行も含む |
 | あなたの機能 | `/api/source` にある runtime source。 ブラウザ API コンソールから編集 |
 | `GET /api/search` | JSON 検索。 あなたの `search` を呼び、 返ってきたものをそのまま返す |

@@ -23,7 +23,7 @@
 | `127.0.0.1:18081` | TenkaCloud の採点が委譲する loopback の `/verify` |
 | `127.0.0.1:18080/docs` | ブラウザ API コンソール。 relay は `PATCH /api/settings` で変更 |
 
-image は StackStack 系問題が共有する [`stackstack-base/`](../../stackstack-base) から
+image は StackStack 系問題が共有する [`runtimes/stackstack/`](../../runtimes/stackstack) から
 ビルドされます。 shard の名前、 shard の code、 incident id、 safe-log の値、 relay が下流に
 提示する資格情報、 そしてタイトルから shard への写像は、 すべてコンテナ内でデプロイごとの
 ランダムな `FLAG_SEED` から導出されます。 答えはこのリポジトリに 1 つも置かれておらず、
@@ -215,7 +215,7 @@ shard も動かしません。 誤答で環境が壊れることはなく、 再
 ### 正直さの限界
 
 判定はあなたが動かしているコンテナの中で計算されます。 自分のチェックアウトの
-`stackstack-base/` を書き換えて image を焼き直せば、 ここの検査は全部無効化できます。
+`runtimes/stackstack/` を書き換えて image を焼き直せば、 ここの検査は全部無効化できます。
 このカタログのコンテナ問題すべてに共通することで、 `make local` は pin された `problems/`
 submodule からビルドします。 推測不能性も同様に、 プラットフォームが `FLAG_SEED` を
 注入することが前提です ── `docker compose up` を直に打つと compose の既定値が使われます。

@@ -23,73 +23,20 @@
     "container"
   ],
   "exposedPorts": [
-    { "port": 18124, "name": "Browser Workbench" },
-    { "port": 18125, "name": "/verify (loopback only)" }
+    {
+      "port": 18124,
+      "name": "Browser Workbench"
+    },
+    {
+      "port": 18125,
+      "name": "/verify (loopback only)"
+    }
   ],
   "learningGoals": [
     "provenance attestation が束縛する対象と保証しない範囲を区別できる",
     "manifest の semver range ではなく lockfile の解決結果で inventory を追跡できる",
     "install lifecycle script を default-deny にし、必要な package だけを exact version で許可できる",
     "取得・script 無効・script 実行済みを区別し、過剰でも過小でもない対応を選べる"
-  ],
-  "nodes": {
-    "learning_objectives": [
-      {
-        "id": "lo.signed-does-not-mean-safe.provenance-guarantee-boundary",
-        "description": "valid な provenance attestation が保証する範囲と保証しない範囲を分けて判定できる"
-      },
-      {
-        "id": "lo.signed-does-not-mean-safe.default-deny-lifecycle",
-        "description": "lockfile 解決と install script の default-deny を組み合わせて供給網の実行面を絞れる"
-      }
-    ],
-    "concepts": [
-      {
-        "id": "concept.npm-provenance-attestation",
-        "description": "artifact digest と build 出自を束縛する npm の provenance attestation"
-      },
-      {
-        "id": "concept.install-lifecycle-script",
-        "description": "install 時に自動実行される npm lifecycle script (preinstall / install / postinstall / prepare)"
-      },
-      {
-        "id": "concept.lockfile-resolution",
-        "description": "manifest の range ではなく lockfile が固定する exact version・integrity・依存 path"
-      }
-    ],
-    "assessment_criteria": [
-      {
-        "id": "assessment.signed-does-not-mean-safe.triage-without-overreach",
-        "description": "改ざん版を検出しつつ clean な package を誤検知せず、実行 evidence に応じた対応だけを選べる"
-      }
-    ],
-    "misconceptions": [
-      {
-        "id": "misconception.provenance-implies-safety",
-        "description": "provenance attestation が valid なら package の中身も無害だという誤解"
-      },
-      {
-        "id": "misconception.fetched-means-executed",
-        "description": "package を取得したことと install script が実行されたことを同一視する誤解"
-      }
-    ],
-    "audiences": [
-      {
-        "id": "audience.devsecops-engineer",
-        "description": "依存の取り込みと CI の install policy を設計・review する platform / DevSecOps engineer"
-      }
-    ]
-  },
-  "relations": [
-    { "type": "teaches", "source": "problem.signed-does-not-mean-safe", "target": "lo.signed-does-not-mean-safe.provenance-guarantee-boundary" },
-    { "type": "teaches", "source": "problem.signed-does-not-mean-safe", "target": "lo.signed-does-not-mean-safe.default-deny-lifecycle" },
-    { "type": "covers", "source": "problem.signed-does-not-mean-safe", "target": "concept.npm-provenance-attestation" },
-    { "type": "covers", "source": "problem.signed-does-not-mean-safe", "target": "concept.install-lifecycle-script" },
-    { "type": "covers", "source": "problem.signed-does-not-mean-safe", "target": "concept.lockfile-resolution" },
-    { "type": "assesses", "source": "problem.signed-does-not-mean-safe", "target": "assessment.signed-does-not-mean-safe.triage-without-overreach" },
-    { "type": "related_to", "source": "problem.signed-does-not-mean-safe", "target": "misconception.provenance-implies-safety" },
-    { "type": "related_to", "source": "problem.signed-does-not-mean-safe", "target": "misconception.fetched-means-executed" },
-    { "type": "related_to", "source": "problem.signed-does-not-mean-safe", "target": "audience.devsecops-engineer" }
   ],
   "runtime": {
     "provider": "docker",

@@ -21,57 +21,19 @@
     "primary-key"
   ],
   "exposedPorts": [
-    { "port": 18400, "name": "Info (challenge surface)" },
-    { "port": 18401, "name": "/verify (loopback grader)" }
+    {
+      "port": 18400,
+      "name": "Info (challenge surface)"
+    },
+    {
+      "port": 18401,
+      "name": "/verify (loopback grader)"
+    }
   ],
   "learningGoals": [
     "テーブルの行は、宣言された一意性制約が無ければ、論理的に重複していても物理的には別々の行として保存されることを、自分の手で確認できる",
     "PRIMARY KEY 制約が一意性をデータベースエンジンのレベルで強制する仕組みを説明できる",
     "重複を含むデータを観察し、正しい一意キーを持つテーブルへ読み込み直す基本操作を実行できる"
-  ],
-  "nodes": {
-    "learning_objectives": [
-      {
-        "id": "lo.db-a1-table-primary-key.duplicate-rows-without-constraint",
-        "description": "テーブルの行は、宣言された一意性制約が無ければ、論理的に重複していても物理的には別々の行として保存されることを、自分の手で確認できる"
-      },
-      {
-        "id": "lo.db-a1-table-primary-key.primary-key-enforces-uniqueness",
-        "description": "PRIMARY KEY 制約が一意性をデータベースエンジンのレベルで強制する仕組みを説明できる"
-      },
-      {
-        "id": "lo.db-a1-table-primary-key.reload-with-unique-key",
-        "description": "重複を含むデータを観察し、正しい一意キーを持つテーブルへ読み込み直す基本操作を実行できる"
-      }
-    ],
-    "concepts": [
-      {
-        "id": "concept.row-primary-key",
-        "description": "宣言された一意性制約 (PRIMARY KEY) が無い限り、テーブルの行は論理的に重複していても物理的には別々の行として保存される。"
-      }
-    ]
-  },
-  "relations": [
-    {
-      "type": "teaches",
-      "source": "problem.db-a1-table-primary-key",
-      "target": "lo.db-a1-table-primary-key.duplicate-rows-without-constraint"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.db-a1-table-primary-key",
-      "target": "lo.db-a1-table-primary-key.primary-key-enforces-uniqueness"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.db-a1-table-primary-key",
-      "target": "lo.db-a1-table-primary-key.reload-with-unique-key"
-    },
-    {
-      "type": "covers",
-      "source": "problem.db-a1-table-primary-key",
-      "target": "concept.row-primary-key"
-    }
   ],
   "i18n": {
     "en": {
@@ -127,7 +89,9 @@
       "Info": "http://127.0.0.1:18400"
     },
     "verifyUrl": "http://127.0.0.1:18401/verify",
-    "secretEnv": ["FLAG_SEED"],
+    "secretEnv": [
+      "FLAG_SEED"
+    ],
     "terminal": {
       "service": "db-a1-table-primary-key"
     }

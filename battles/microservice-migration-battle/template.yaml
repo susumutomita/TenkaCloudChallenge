@@ -655,7 +655,7 @@ Resources:
   # runtime, so it lands on the real interface.
 
 Outputs:
-  # BaseUrl is intentionally EMPTY (invariant #9 in AGENT.md: a Battle uptime
+  # BaseUrl is intentionally EMPTY (invariant #9 in AGENTS.md: a Battle uptime
   # problem must not start awarding points the instant the deploy completes).
   # Scoring engine resolves effective URL per slot as `override ?? default`;
   # with default="" and no override registered, the probe gets an empty URL

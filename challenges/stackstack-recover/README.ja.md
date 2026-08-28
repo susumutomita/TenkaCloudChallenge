@@ -23,7 +23,7 @@
 | `127.0.0.1:18080/docs` | ブラウザ API コンソール。 昨夜の policy は `PATCH /api/settings` で変更 |
 | `/app/state/` | policy が許可したとき定期処理が書くコンテナ内の領域 |
 
-イメージは [`stackstack-base/`](../../stackstack-base) から作られます。 incident の署名は
+イメージは [`runtimes/stackstack/`](../../runtimes/stackstack) から作られます。 incident の署名は
 デプロイごとにランダムな `FLAG_SEED` からコンテナの中で導出されるので、 答えはこのリポジトリに
 1 つも保存されておらず、 2 つのデプロイが同じ答えを持つこともありません。 どちらのポートも
 `127.0.0.1` にのみバインドされます。

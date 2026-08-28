@@ -24,76 +24,20 @@
     "diagnostics"
   ],
   "exposedPorts": [
-    { "port": 18510, "name": "Info (challenge surface)" },
-    { "port": 18511, "name": "/verify (loopback grader)" }
+    {
+      "port": 18510,
+      "name": "Info (challenge surface)"
+    },
+    {
+      "port": 18511,
+      "name": "/verify (loopback grader)"
+    }
   ],
   "learningGoals": [
     "アプリケーションの書き込みが止まっている、という症状だけを渡された状態から、pg_stat_activity / pg_locks / pg_blocking_pids() を使って自力で原因を特定できる",
     "似たセッションが複数見えるとき、疑わしいものを当てずっぽうで終了させるのではなく、実際に他を待たせている pid を pg_blocking_pids() で確実に特定できる",
     "pg_terminate_backend() で非 superuser の backend を安全に終了させ、それが未 commit の transaction を rollback し行ロックを解放することを理解する",
     "「今ロック待ちのセッションが無い」ことと「本当に問題を解決した」ことは別問題だと説明できる"
-  ],
-  "nodes": {
-    "learning_objectives": [
-      {
-        "id": "lo.db-challenge-blocked-transaction.diagnose-blocked-writes-blind",
-        "description": "アプリケーションの書き込みが止まっている、という症状だけを渡された状態から、pg_stat_activity / pg_locks / pg_blocking_pids() を使って自力で原因を特定できる"
-      },
-      {
-        "id": "lo.db-challenge-blocked-transaction.identify-real-blocker-not-decoy",
-        "description": "似たセッションが複数見えるとき、疑わしいものを当てずっぽうで終了させるのではなく、実際に他を待たせている pid を pg_blocking_pids() で確実に特定できる"
-      },
-      {
-        "id": "lo.db-challenge-blocked-transaction.terminate-backend-safely",
-        "description": "pg_terminate_backend() で非 superuser の backend を安全に終了させ、それが未 commit の transaction を rollback し行ロックを解放することを理解する"
-      },
-      {
-        "id": "lo.db-challenge-blocked-transaction.no-waiters-vs-actually-fixed",
-        "description": "「今ロック待ちのセッションが無い」ことと「本当に問題を解決した」ことは別問題だと説明できる"
-      }
-    ]
-  },
-  "relations": [
-    {
-      "type": "teaches",
-      "source": "problem.db-challenge-blocked-transaction",
-      "target": "lo.db-challenge-blocked-transaction.diagnose-blocked-writes-blind"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.db-challenge-blocked-transaction",
-      "target": "lo.db-challenge-blocked-transaction.identify-real-blocker-not-decoy"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.db-challenge-blocked-transaction",
-      "target": "lo.db-challenge-blocked-transaction.terminate-backend-safely"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.db-challenge-blocked-transaction",
-      "target": "lo.db-challenge-blocked-transaction.no-waiters-vs-actually-fixed"
-    },
-    {
-      "type": "requires",
-      "source": "problem.db-challenge-blocked-transaction",
-      "target": "problem.db-a6-lock"
-    },
-    {
-      "type": "requires",
-      "source": "problem.db-challenge-blocked-transaction",
-      "target": "problem.db-a7-mvcc"
-    },
-    {
-      "type": "requires",
-      "source": "problem.db-challenge-blocked-transaction",
-      "target": "concept.row-lock-contention"
-    },
-    {
-      "type": "requires",
-      "source": "problem.db-challenge-blocked-transaction",
-      "target": "concept.mvcc-row-versioning"
-    }
   ],
   "i18n": {
     "en": {
@@ -148,7 +92,9 @@
       "Info": "http://127.0.0.1:18510"
     },
     "verifyUrl": "http://127.0.0.1:18511/verify",
-    "secretEnv": ["FLAG_SEED"],
+    "secretEnv": [
+      "FLAG_SEED"
+    ],
     "terminal": {
       "service": "db-challenge-blocked-transaction"
     }

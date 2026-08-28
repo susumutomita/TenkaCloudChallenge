@@ -41,7 +41,7 @@ import { DatabaseSync } from "node:sqlite";
  * and UNION-select rows out of a table it was never meant to reach. Both are
  * genuine root causes -- fixing only one leaves the other exploitable, which is
  * exactly what checkpoints `fix-route` / `fix-query` / `replay-blocked` verify
- * independently (see AGENT.md: "verify live state, not submitted trivia").
+ * independently (see AGENTS.md: "verify live state, not submitted trivia").
  */
 
 /**
@@ -341,7 +341,7 @@ const challenge = createServer(async (request, response) => {
 });
 
 // ---------------------------------------------------------------------------
-// :8081 /verify -- the multi-verify scorer delegate. See AGENT.md #13: the
+// :8081 /verify -- the multi-verify scorer delegate. See AGENTS.md #13: the
 // platform holds no answer, it delegates each submission here with a
 // checkpointId the response must echo back.
 // ---------------------------------------------------------------------------
