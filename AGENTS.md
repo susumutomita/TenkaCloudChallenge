@@ -81,6 +81,15 @@ Challenge scores follow the tier contract enforced by the validator:
 
 For `multi-verify`, checkpoint points sum to the tier total, checkpoint and hint IDs are unique, English labels mirror Japanese labels, and the verifier echoes the submitted `checkpointId`. Battles do not use this fixed-total table.
 
+## §15 Verify failure feedback
+
+A `/verify` response for a failed `kind: "code"` checkpoint should carry an optional `message`: the hidden checker's property-level failure list joined with `"; "` and truncated to 1900 characters. The platform's `VerifyResponseSchema` already accepts `message` (string, max 2000); do not invent another field name.
+
+- `message` appears only when `correct` is `false`, and only for code checkpoints. Direct-answer checkpoints (environment / window / audit / observe and similar) never return a reason — a reason would narrow the expected value.
+- Allowed content: which property or documented rule was broken (something the starter docstring or README already states), and echoes of values the participant's own submission computed or of public parameters.
+- Forbidden content: hidden fixture data, expected values, seeds, flags, and the content of any paid hint. When adding or editing a checker failure string, read the problem's `metadata.json` hints and confirm the message does not pre-empt one (precedent: #629). If a checker string interpolates hidden fixture data, keep the property-name prefix and drop the interpolated part.
+- `message` never changes the verdict, and a participant-facing proxy passes it through only as a string, truncated to 2000 characters, dropping every other extra field.
+
 ## Course placement
 
 Use `track.id`, `track.order`, and `track.chapter` for participant ordering. Use `courseAlignment` only for a pinned external-course mapping. Do not create a second prerequisite graph in catalog metadata; the platform presents the declared track order.

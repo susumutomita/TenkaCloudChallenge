@@ -101,7 +101,7 @@ def main() -> int:
 
     from verifier.server import evaluate  # noqa: PLC0415 - imported after sys.path
 
-    if evaluate("root-cause", '{"missingConstraintId": "c-grant", "manipulatedSignals": []}'):
+    if evaluate("root-cause", '{"missingConstraintId": "c-grant", "manipulatedSignals": []}')[0]:
         survivors.append("verifier accepts a wrong root cause")
         print("SURVIVED verifier accepts a wrong root cause")
     else:

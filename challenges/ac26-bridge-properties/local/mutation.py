@@ -151,7 +151,7 @@ def main() -> int:
         ("verifier accepts an all-True matrix", "property-matrix", {"p1": {}, "p2": {}, "p3": {}}),
         ("verifier accepts a non-integer witness", "unsoundness", "not-a-number"),
     ):
-        if evaluate(checkpoint, submission):
+        if evaluate(checkpoint, submission)[0]:
             survivors.append(label)
             print(f"SURVIVED {label}")
         else:

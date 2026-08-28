@@ -2,8 +2,9 @@
 
 Same security contract as the AC26 template: required and echoed `checkpointId`,
 throwaway workspace, wall-clock timeout, memory / process / output caps, no shell,
-nothing leaked back but a property name, and malformed input can never kill the
-process.
+nothing leaked back but property names (a failed code checkpoint additionally
+carries the checker's property-level failure list as `message`, AGENTS.md §15), and
+malformed input can never kill the process.
 
 Four of the five checkpoints run the learner's own three files against hidden
 fields, circuits and orderings; the fifth is a direct answer about a trace.
@@ -45,6 +46,8 @@ MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
 #: Wall clock for reading a request body, so a stalled client cannot pin the server.
 REQUEST_TIMEOUT_SECONDS = 15
+#: Cap for the failed-code-checkpoint `message`, under the platform's 2000-char schema.
+MAX_MESSAGE_CHARS = 1900
 
 SUBMITTED_FILES = ("field.py", "circuit.py", "gadgets.py")
 # checkpoint id -> the hidden-suite phase it is graded on
@@ -174,38 +177,56 @@ os._exit(0)
 """
 
 
-def _run_submission(submission: object, phases: tuple[str, ...], seed: str) -> bool:
+def _failure_detail(failures: list[object]) -> str:
+    """Join the checker's property-level failure strings for the response `message`.
+
+    The checker's strings name broken properties the starter docstrings already
+    state, never expected values (AGENTS.md §15). Non-string entries are dropped
+    rather than serialized.
+    """
+    return "; ".join(item for item in failures if isinstance(item, str))[:MAX_MESSAGE_CHARS]
+
+
+def _run_submission(submission: object, phases: tuple[str, ...], seed: str) -> tuple[bool, str]:
+    """Verdict plus, on failure, the checker's failure summary for `message`."""
     files = submission
     if isinstance(files, str):
         try:
             files = json.loads(files)
         except json.JSONDecodeError:
-            return False
+            return False, ""
     sources = _submission_sources(files)
     if sources is None:
-        return False
+        return False, ""
     result = _run_submission_script(sources, RUNNER, seed, phases=list(phases))
     if result is None or result[0] != 0:
-        return False
+        return False, ""
     for line in reversed(result[1].splitlines()):
         try:
             payload = json.loads(line)
         except json.JSONDecodeError:
             continue
         failures = payload.get("failures")
-        return isinstance(failures, list) and len(failures) == 0
-    return False
+        if not isinstance(failures, list):
+            return False, ""
+        return len(failures) == 0, _failure_detail(failures)
+    return False, ""
 
 
-def evaluate(checkpoint_id: str, submission: object) -> bool:
+def evaluate(checkpoint_id: str, submission: object) -> tuple[bool, str]:
+    """Verdict plus, for a failed code checkpoint, a property-level failure summary.
+
+    The direct-answer checkpoint never carries detail: a reason would narrow its
+    expected value (AGENTS.md §15).
+    """
     if checkpoint_id == "first-broken":
-        return _check_first_broken(submission)
+        return _check_first_broken(submission), ""
     if checkpoint_id in CODE_CHECKPOINTS:
         # The transfer checkpoint uses a different seed, so nothing tuned to the
         # visible instance carries over.
         seed = f"{SEED}:transfer" if checkpoint_id == "transfer" else SEED
         return _run_submission(submission, CODE_CHECKPOINTS[checkpoint_id], seed)
-    return False
+    return False, ""
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -262,10 +283,13 @@ class Handler(BaseHTTPRequestHandler):
             )
             return
         try:
-            correct = evaluate(checkpoint_id, body.get("submission"))
+            correct, detail = evaluate(checkpoint_id, body.get("submission"))
         except Exception:  # noqa: BLE001 - a broken checkpoint must not kill the verifier
-            correct = False
-        self._respond(200, {"checkpointId": checkpoint_id, "correct": correct})
+            correct, detail = False, ""
+        payload: dict[str, object] = {"checkpointId": checkpoint_id, "correct": correct}
+        if not correct and detail:
+            payload["message"] = detail
+        self._respond(200, payload)
 
     def log_message(self, *_args: object) -> None:
         """Silence the default access log; it would echo submissions."""

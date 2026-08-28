@@ -318,7 +318,13 @@ def proxy_verdict(
         or type(decoded.get("correct")) is not bool
     ):
         return failed_verdict(body)
-    return {"checkpointId": checkpoint_id, "correct": decoded["correct"]}
+    verdict: dict[str, object] = {"checkpointId": checkpoint_id, "correct": decoded["correct"]}
+    message = decoded.get("message")
+    if isinstance(message, str):
+        # Property-level failure summary the verifier chose to surface (AGENTS.md §15).
+        # Everything else the verifier might add stays dropped.
+        verdict["message"] = message[:2000]
+    return verdict
 
 
 class Handler(BaseHTTPRequestHandler):

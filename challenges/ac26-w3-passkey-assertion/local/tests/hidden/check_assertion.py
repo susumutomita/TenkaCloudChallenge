@@ -70,8 +70,11 @@ def _find_failures(module: ModuleType, seeds: list[str]) -> list[str]:
         except Exception as error:  # noqa: BLE001 - learner code is untrusted
             failures.append(f"UV-gap search raised {type(error).__name__}")
             break
-    if len(answers) < 4:
-        failures.append("hidden seeds did not vary the expected assertion id")
+    # Fixture sanity, not participant feedback: only meaningful when the search itself
+    # passed every seed (an early break above leaves `answers` short for the learner's
+    # reasons, already recorded). Emptiness — the verdict — is unchanged either way.
+    if not failures and len(answers) < 4:
+        failures.append("fixture error: hidden seeds did not vary the expected assertion id")
     return failures
 
 

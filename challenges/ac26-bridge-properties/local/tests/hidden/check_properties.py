@@ -33,6 +33,12 @@ Generator = Callable[..., int]
 
 def check_matrix(classify: Classify, seed: str) -> list[str]:
     failures: list[str] = []
+    # /verify surfaces these strings to the participant on a failed `transfer`
+    # (AGENTS.md §15). Naming WHICH cell is classified wrongly would hand over the
+    # `property-matrix` checkpoint's expected boolean (it is the flip of the submitted
+    # one), so wrong cells collapse into one fixed message with no cell identity and
+    # no count. Shape errors (missing / non-boolean) reveal nothing and stay per-cell.
+    wrongly_classified = False
     for protocol_id in protocol_ids(seed):
         try:
             answer = classify(protocol_id)
@@ -47,7 +53,12 @@ def check_matrix(classify: Classify, seed: str) -> list[str]:
             if not isinstance(actual, bool):
                 failures.append(f"{protocol_id}: '{prop}' is missing or not a boolean")
             elif actual != expected:
-                failures.append(f"{protocol_id}: '{prop}' is classified wrongly")
+                wrongly_classified = True
+    if wrongly_classified:
+        failures.append(
+            "the classification matrix does not match the protocols' actual behavior"
+            " (which cell is not disclosed)"
+        )
     return failures
 
 

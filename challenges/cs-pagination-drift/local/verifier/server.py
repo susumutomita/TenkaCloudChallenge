@@ -27,6 +27,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 MAX_BODY_BYTES = 256 * 1024
 MAX_OUTPUT_BYTES = 64 * 1024
+#: Cap for the failed-code-checkpoint `message`, under the platform's 2000-char schema.
+MAX_MESSAGE_CHARS = 1900
 MAX_PROCESSES = 128
 RUN_TIMEOUT_SECONDS = 15
 REQUEST_TIMEOUT_SECONDS = 15
@@ -132,6 +134,12 @@ import json, os, sys
 hard_exit = os._exit
 trusted_stdout = sys.stdout
 trusted_write = sys.stdout.buffer.write
+# Trusted C-backed str handles, captured before any participant code can run: the
+# failure detail below rides the nonce-bound record, and its serialization must not
+# call a participant-mutable callable (json.dumps, print, builtins.str, ...). Bound
+# methods of real str objects cannot be monkeypatched in CPython.
+trusted_join = "; ".join
+trusted_str = str
 sys.path.insert(0, {root!r})
 from tests.hidden import check_pagination
 private_checker = getattr(check_pagination, {phase!r})
@@ -148,7 +156,7 @@ except Exception:
     # submission could not be imported: emit only the private, nonce-bound failure record.
     os._exit = hard_exit
     sys.stdout = trusted_stdout
-    trusted_write({fail_record!r})
+    trusted_write({fail_record!r}[:-1] + b":submission could not be imported\\n")
     sys.stdout.flush()
     os._exit(0)
 
@@ -165,15 +173,27 @@ else:
 # any participant-mutable serializer after grading.
 os._exit = hard_exit
 sys.stdout = trusted_stdout
-trusted_write({pass_record!r} if not failures else {fail_record!r})
+if not failures:
+    trusted_write({pass_record!r})
+else:
+    # AGENTS.md §15: surface the checker's property-level failure list. The detail is
+    # appended to the nonce-bound FAIL record so a participant print cannot forge it,
+    # is built only from real str items via trusted C-backed methods, and never
+    # changes the verdict — a tampering failure downgrades to a bare FAIL record.
+    try:
+        detail = trusted_join(item for item in failures[:40] if item.__class__ is trusted_str)
+        detail_bytes = detail.replace("\\r", " ").replace("\\n", " ")[:1900].encode("utf-8", "replace")
+    except Exception:
+        detail_bytes = b""
+    trusted_write({fail_record!r}[:-1] + b":" + detail_bytes + b"\\n")
 sys.stdout.flush()
 os._exit(0)
 """
 
 
-def _check_code(phase: str, submission: object) -> bool:
+def _check_code(phase: str, submission: object) -> tuple[bool, str]:
     if not isinstance(submission, str) or not submission.strip() or len(submission) > MAX_BODY_BYTES:
-        return False
+        return False, ''
     with tempfile.TemporaryDirectory() as workspace:
         verdict_token = secrets.token_hex(32)
         pass_line = f"TC-VERDICT:{verdict_token}:PASS"
@@ -213,34 +233,55 @@ def _check_code(phase: str, submission: object) -> bool:
                 )
             output = transcript.read_text(encoding="utf-8", errors="replace")[-MAX_OUTPUT_BYTES:]
         except (OSError, ValueError, subprocess.TimeoutExpired):
-            return False
+            return False, ''
     if completed.returncode != 0:
-        return False
+        return False, ""
     lines = output.splitlines()
-    return bool(lines) and lines[-1] == pass_line
+    if not lines:
+        return False, ""
+    last = lines[-1]
+    if last == pass_line:
+        return True, ""
+    if last.startswith(fail_line + ":"):
+        # Failure detail the checker chose to surface, riding the nonce-bound record
+        # (AGENTS.md §15): a forged line cannot name the nonce, and the verdict above
+        # never depends on the detail.
+        return False, last[len(fail_line) + 1 :][:MAX_MESSAGE_CHARS]
+    return False, ""
 
 
-def _check_paginate(submission: object) -> bool:
-    return _check_code(CODE_CHECKPOINT_PHASES["paginate"], submission) and bool(SEED)
+def _check_paginate(submission: object) -> tuple[bool, str]:
+    correct, detail = _check_code(CODE_CHECKPOINT_PHASES["paginate"], submission)
+    return correct and bool(SEED), detail
 
 
-def _check_stability(submission: object) -> bool:
-    return _check_code(CODE_CHECKPOINT_PHASES["stability"], submission) and bool(SEED)
+def _check_stability(submission: object) -> tuple[bool, str]:
+    correct, detail = _check_code(CODE_CHECKPOINT_PHASES["stability"], submission)
+    return correct and bool(SEED), detail
 
 
-def _check_generalize(submission: object) -> bool:
-    return _check_code(CODE_CHECKPOINT_PHASES["generalize"], submission) and bool(SEED)
+def _check_generalize(submission: object) -> tuple[bool, str]:
+    correct, detail = _check_code(CODE_CHECKPOINT_PHASES["generalize"], submission)
+    return correct and bool(SEED), detail
 
 
-def evaluate(checkpoint_id: str, submission: object) -> bool:
+def evaluate(checkpoint_id: str, submission: object) -> tuple[bool, str]:
+    """Verdict plus, for a failed code checkpoint, the checker's failure summary.
+
+    Direct-answer checkpoints never carry detail: a reason would narrow their
+    expected value (AGENTS.md §15).
+    """
     if checkpoint_id == "environment":
-        return _check_environment(submission)
+        return _check_environment(submission), ''
     if checkpoint_id == "observe":
-        return _check_observe(submission)
+        return _check_observe(submission), ''
     if checkpoint_id == "audit":
-        return _check_audit(submission)
+        return _check_audit(submission), ''
     checker = globals().get(f"_check_{checkpoint_id}")
-    return bool(checker(submission)) if callable(checker) else False
+    if not callable(checker):
+        return False, ''
+    correct, detail = checker(submission)
+    return bool(correct), detail
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -274,8 +315,14 @@ class Handler(BaseHTTPRequestHandler):
             return
         checkpoint_id = body.get("checkpointId")
         submission = body.get("submission")
-        correct = isinstance(checkpoint_id, str) and evaluate(checkpoint_id, submission)
-        self._respond(200, {"checkpointId": checkpoint_id, "correct": correct})
+        if isinstance(checkpoint_id, str):
+            correct, detail = evaluate(checkpoint_id, submission)
+        else:
+            correct, detail = False, ""
+        payload: dict[str, object] = {"checkpointId": checkpoint_id, "correct": correct}
+        if not correct and detail:
+            payload["message"] = detail
+        self._respond(200, payload)
 
     def _respond(self, status: int, payload: object) -> None:
         encoded = json.dumps(payload, ensure_ascii=False).encode("utf-8")

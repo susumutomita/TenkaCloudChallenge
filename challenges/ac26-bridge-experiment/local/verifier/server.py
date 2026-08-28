@@ -10,8 +10,9 @@ Security contract (docs/curricula/advanced-cryptography-2026/TEMPLATE.md §/veri
     checkpoint instead of the verifier.
   - No learner input is ever concatenated into a shell command; the subprocess is
     invoked with an argument list and `shell=False`.
-  - Responses carry `correct` and, at most, a property name. Never the hidden test
-    names, the expected values, or reference output.
+  - Responses carry `correct` and, for a failed code checkpoint, a `message` naming
+    the broken properties the starter docstring already states (AGENTS.md §15). Never
+    the hidden test names, the expected values, or reference output.
   - Malformed input produces a failed checkpoint, never a crashed process.
 
 Issue 543/537: this used to be the same process that also served the Participant
@@ -61,6 +62,8 @@ MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
 #: Wall clock for reading a request body, so a stalled client cannot pin the server.
 REQUEST_TIMEOUT_SECONDS = 15
+#: Cap for the failed-code-checkpoint `message`, under the platform's 2000-char schema.
+MAX_MESSAGE_CHARS = 1900
 
 CHECKPOINTS = ("environment", "predict", "first-broken", "generalize")
 SUBMISSION_FILES = ("counter.py",)
@@ -187,35 +190,56 @@ os._exit(0)
 """
 
 
-def _check_generalize(submission: object) -> bool:
-    """Run the hidden suite against the learner's file in a throwaway workspace."""
+def _failure_detail(failures: list[object]) -> str:
+    """Join the checker's property-level failure strings for the response `message`.
+
+    The checker writes messages that name a broken property the starter docstring
+    already states, never an expected value (AGENTS.md §15). Non-string entries are
+    dropped rather than serialized.
+    """
+    return "; ".join(item for item in failures if isinstance(item, str))[:MAX_MESSAGE_CHARS]
+
+
+def _check_generalize(submission: object) -> tuple[bool, str]:
+    """Run the hidden suite against the learner's file in a throwaway workspace.
+
+    Returns the verdict and, on failure, the checker's failure summary for the
+    response `message`. An empty string means no detail is surfaced.
+    """
     if not isinstance(submission, str) or not submission.strip():
-        return False
+        return False, ""
     if len(submission) > MAX_BODY_BYTES:
-        return False
+        return False, ""
     result = _run_submission_script({"counter.py": submission}, RUNNER, SEED)
     if result is None or result[0] != 0:
-        return False
+        return False, ""
     for line in reversed(result[1].splitlines()):
         try:
             payload = json.loads(line)
         except json.JSONDecodeError:
             continue
         failures = payload.get("failures")
-        return isinstance(failures, list) and len(failures) == 0
-    return False
+        if not isinstance(failures, list):
+            return False, ""
+        return len(failures) == 0, _failure_detail(failures)
+    return False, ""
 
 
-def evaluate(checkpoint_id: str, submission: object) -> bool:
+def evaluate(checkpoint_id: str, submission: object) -> tuple[bool, str]:
+    """Verdict plus, for a failed code checkpoint, a property-level failure summary.
+
+    Direct-answer checkpoints never carry detail: a reason would narrow their
+    expected value (AGENTS.md §15).
+    """
     if checkpoint_id == "environment":
-        return _check_environment(submission)
+        return _check_environment(submission), ""
     if checkpoint_id == "predict":
-        return _check_predict(submission)
+        return _check_predict(submission), ""
     if checkpoint_id == "first-broken":
-        return _check_first_broken(submission)
+        return _check_first_broken(submission), ""
     if checkpoint_id == "generalize":
         return _check_generalize(submission)
-    return False
+    return False, ""
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -275,10 +299,13 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         try:
-            correct = evaluate(checkpoint_id, body.get("submission"))
+            correct, detail = evaluate(checkpoint_id, body.get("submission"))
         except Exception:  # noqa: BLE001 - a broken checkpoint must not kill the verifier
-            correct = False
-        self._respond(200, {"checkpointId": checkpoint_id, "correct": correct})
+            correct, detail = False, ""
+        payload: dict[str, object] = {"checkpointId": checkpoint_id, "correct": correct}
+        if not correct and detail:
+            payload["message"] = detail
+        self._respond(200, payload)
 
     def log_message(self, *_args: object) -> None:
         """Silence the default stderr access log; it would echo submissions."""

@@ -141,7 +141,7 @@ def main() -> int:
 
     from verifier.server import evaluate  # noqa: PLC0415 - imported after sys.path
 
-    if evaluate("first-broken", "c0"):
+    if evaluate("first-broken", "c0")[0]:
         survivors.append("verifier accepts the wrong constraint id")
         print("SURVIVED verifier accepts the wrong constraint id")
     else:

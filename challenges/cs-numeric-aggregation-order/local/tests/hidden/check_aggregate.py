@@ -235,7 +235,9 @@ def _generalize_properties(module: ModuleType, seed: str, phase: str) -> list[st
         [{"id": "a"}],
     ):
         if _call(module, invalid) != {"ok": False, "error": "invalid_rows"}:
-            failures.append(f"invalid input was accepted: {invalid!r}")
+            # §15: the invalid probes are hidden test data; naming them would invite
+            # rejecting exactly these values instead of validating the input shape.
+            failures.append("invalid input was accepted")
     return failures
 
 
