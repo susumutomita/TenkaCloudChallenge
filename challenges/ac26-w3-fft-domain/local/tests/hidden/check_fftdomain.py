@@ -129,7 +129,7 @@ def _domain_failures(module: ModuleType, seed: str, phase: str, count: int) -> l
         verdict = _call(module, "validate_domain", prime, order, omega)
         if verdict != {"ok": True, "valid": True}:
             failures.append(
-                f"validate_domain(p={prime}, n={order}, omega={omega}) rejected a real domain"
+                "validate_domain rejected a real domain"
             )
             break
         fake = naive_omega(prime, order)
@@ -139,8 +139,7 @@ def _domain_failures(module: ModuleType, seed: str, phase: str, count: int) -> l
             verdict = _call(module, "validate_domain", prime, order, candidate)
             if verdict != {"ok": True, "valid": False}:
                 failures.append(
-                    f"validate_domain(p={prime}, n={order}, omega={candidate}) called a "
-                    f"lower-order element a domain"
+                    "validate_domain called a lower-order element a domain"
                 )
                 return failures
             probe = _values(seed, phase, prime, order)
@@ -149,7 +148,7 @@ def _domain_failures(module: ModuleType, seed: str, phase: str, count: int) -> l
                 "error": "invalid_domain",
             }:
                 failures.append(
-                    f"fft accepted omega={candidate} over p={prime}, whose order is not {order}"
+                    "fft accepted an omega whose order is not the requested n"
                 )
                 return failures
             if _call(module, "ifft", probe, candidate, prime) != {
@@ -157,7 +156,7 @@ def _domain_failures(module: ModuleType, seed: str, phase: str, count: int) -> l
                 "error": "invalid_domain",
             }:
                 failures.append(
-                    f"ifft accepted omega={candidate} over p={prime}, whose order is not {order}"
+                    "ifft accepted an omega whose order is not the requested n"
                 )
                 return failures
         # Too large an order is as fake as too small: an element of order 2n satisfies
@@ -168,8 +167,7 @@ def _domain_failures(module: ModuleType, seed: str, phase: str, count: int) -> l
                 verdict = _call(module, "validate_domain", prime, order, bigger)
                 if verdict != {"ok": True, "valid": False}:
                     failures.append(
-                        f"validate_domain(p={prime}, n={order}, omega={bigger}) called a "
-                        f"higher-order element a domain"
+                        "validate_domain called a higher-order element a domain"
                     )
                     return failures
     if failures:
@@ -182,8 +180,7 @@ def _domain_failures(module: ModuleType, seed: str, phase: str, count: int) -> l
         verdict = _call(module, "validate_domain", prime, non_divisor, 1)
         if verdict != {"ok": True, "valid": False}:
             failures.append(
-                f"validate_domain(p={prime}, n={non_divisor}) accepted an order that does "
-                f"not divide p-1"
+                "validate_domain accepted an order that does not divide p-1"
             )
             return failures
         if _call(module, "fft", [1] * non_divisor, 1, prime) != {
@@ -191,8 +188,7 @@ def _domain_failures(module: ModuleType, seed: str, phase: str, count: int) -> l
             "error": "invalid_domain",
         }:
             failures.append(
-                f"fft(p={prime}, n={non_divisor}) computed over an order that does not "
-                f"divide p-1"
+                "fft computed over an order that does not divide p-1"
             )
             return failures
     return failures
@@ -209,20 +205,19 @@ def _roundtrip_failures(module: ModuleType, seed: str, phase: str, count: int) -
         coefficients = _values(seed, f"{phase}:coeff", prime, order)
         forward = _call(module, "fft", list(coefficients), omega, prime)
         if not isinstance(forward, dict) or forward.get("ok") is not True:
-            failures.append(f"fft(p={prime}, n={order}) did not succeed on a real domain")
+            failures.append("fft did not succeed on a real domain")
             break
         values = forward.get("values")
         if not isinstance(values, list) or len(values) != order:
-            failures.append(f"fft(p={prime}, n={order}) did not return {order} values")
+            failures.append("fft did not return one value per domain point")
             break
         back = _call(module, "ifft", list(values), omega, prime)
         if not isinstance(back, dict) or back.get("ok") is not True:
-            failures.append(f"ifft(p={prime}, n={order}) did not succeed on a real domain")
+            failures.append("ifft did not succeed on a real domain")
             break
         if back.get("coefficients") != coefficients:
             failures.append(
-                f"ifft(fft(f)) over p={prime}, n={order} returned "
-                f"{back.get('coefficients')} instead of the original coefficients"
+                "ifft(fft(f)) did not return the original coefficients"
             )
             break
     if failures:
@@ -253,8 +248,7 @@ def _ordering_failures(module: ModuleType, seed: str, phase: str, count: int) ->
         expected_points = [pow(omega, i, prime) for i in range(order)]
         if not isinstance(forward, dict) or forward.get("values") != expected_points:
             failures.append(
-                f"fft(f(x)=x) over p={prime}, n={order} did not list the powers of omega "
-                f"in index order"
+                "fft(f(x)=x) did not list the powers of omega in index order"
             )
             break
         # A unit coefficient at position k: values[i] must be omega ** (i*k).
@@ -266,14 +260,13 @@ def _ordering_failures(module: ModuleType, seed: str, phase: str, count: int) ->
         expected = [pow(omega, (i * position) % order, prime) for i in range(order)]
         if not isinstance(forward, dict) or forward.get("values") != expected:
             failures.append(
-                f"fft(x**{position}) over p={prime}, n={order} put its values at the "
-                f"wrong indexes"
+                "fft of a single unit coefficient put its values at the wrong indexes"
             )
             break
         recovered = _call(module, "ifft", expected, omega, prime)
         if not isinstance(recovered, dict) or recovered.get("coefficients") != unit:
             failures.append(
-                f"ifft over p={prime}, n={order} recovered x**{position} at the wrong index"
+                "ifft recovered a single unit coefficient at the wrong index"
             )
             break
     return failures
@@ -297,8 +290,7 @@ def _interpolate_failures(module: ModuleType, seed: str, phase: str, count: int)
         )
         if member != {"ok": True, "value": values[member_index]}:
             failures.append(
-                f"a domain member (omega**{member_index} over p={prime}, n={order}) did not "
-                f"come back as its listed value"
+                "a domain member did not come back as its listed value"
             )
             break
 
@@ -311,8 +303,7 @@ def _interpolate_failures(module: ModuleType, seed: str, phase: str, count: int)
         answer = _call(module, "interpolate_and_evaluate", list(values), omega, outside, prime)
         if answer != {"ok": True, "value": expected}:
             failures.append(
-                f"interpolation at a non-member point over p={prime}, n={order} returned "
-                f"{answer!r} instead of the polynomial's value"
+                "interpolation at a non-member point did not return the polynomial's value"
             )
             break
     if failures:
@@ -359,7 +350,7 @@ def _generalize_failures(module: ModuleType, seed: str, phase: str) -> list[str]
                 _evaluate(coefficients, pow(omega, i, prime), prime) for i in range(order)
             ]
             if not isinstance(forward, dict) or forward.get("values") != expected:
-                failures.append(f"a legal odd order ({order} mod {prime}) was not transformed")
+                failures.append("a legal odd order was not transformed")
 
     non_divisor = next((d for d in range(2, prime) if (prime - 1) % d != 0), None)
     cases: list[tuple[str, tuple[object, ...], str]] = [
@@ -373,12 +364,12 @@ def _generalize_failures(module: ModuleType, seed: str, phase: str) -> list[str]
     ]
     for name, args, expected_error in cases:
         if _call(module, name, *args) != {"ok": False, "error": expected_error}:
-            failures.append(f"{name} did not report {expected_error} for {args!r}")
+            failures.append(f"{name} did not report {expected_error} for an input that requires it")
     if non_divisor is not None:
         verdict = _call(module, "validate_domain", prime, non_divisor, 1)
         if verdict != {"ok": True, "valid": False}:
             failures.append(
-                f"validate_domain(p={prime}, n={non_divisor}) accepted a non-dividing order"
+                "validate_domain accepted a non-dividing order"
             )
     return failures
 

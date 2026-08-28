@@ -61,6 +61,9 @@ RUN_TIMEOUT_SECONDS = 30
 MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
 MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
+#: Cap for the verdict's optional human-readable failure summary. Kept under the
+#: platform's 2000-character message limit with room to spare.
+MAX_MESSAGE_CHARS = 1900
 #: Wall clock for reading a request body, so a stalled client cannot pin the server.
 REQUEST_TIMEOUT_SECONDS = 15
 
@@ -132,15 +135,28 @@ os._exit(0)
 """
 
 
-def _run_submission(submission: object, phases: tuple[str, ...], seed: str) -> bool:
+def _failure_message(failures: list[object]) -> str | None:
+    """Join the hidden checker's failure list into one participant-facing message.
+
+    Only checker-authored strings are kept: anything else that ends up in the list
+    is dropped rather than serialized, so a checker bug cannot push raw values
+    through the message field.
+    """
+    text = "; ".join(item for item in failures if isinstance(item, str))
+    return text[:MAX_MESSAGE_CHARS] if text else None
+
+
+def _run_submission(
+    submission: object, phases: tuple[str, ...], seed: str
+) -> tuple[bool, str | None]:
     """Run the named hidden phases against the learner's file in a throwaway workspace."""
     source = submission
     if isinstance(source, dict):
         source = source.get("pipeline.py")
     if not isinstance(source, str) or not source.strip():
-        return False
+        return False, None
     if len(source) > MAX_BODY_BYTES:
-        return False
+        return False, None
     with tempfile.TemporaryDirectory() as workspace:
         (Path(workspace) / "pipeline.py").write_text(source, encoding="utf-8")
         script = RUNNER.format(
@@ -167,23 +183,35 @@ def _run_submission(submission: object, phases: tuple[str, ...], seed: str) -> b
                 )
             captured = transcript.read_text(encoding="utf-8", errors="replace")
         except (subprocess.TimeoutExpired, OSError, ValueError):
-            return False
+            return False, None
     if completed.returncode != 0:
-        return False
+        return False, None
     for line in reversed(captured[-MAX_OUTPUT_BYTES:].splitlines()):
         try:
             payload = json.loads(line)
         except json.JSONDecodeError:
             continue
         failures = payload.get("failures")
-        return isinstance(failures, list) and len(failures) == 0
-    return False
+        if not isinstance(failures, list):
+            return False, None
+        if failures:
+            return False, _failure_message(failures)
+        return True, None
+    return False, None
 
 
 def evaluate(checkpoint_id: str, submission: object) -> bool:
+    """Boolean verdict for callers that need only pass/fail (mutation.py does)."""
+    correct, _message = evaluate_with_message(checkpoint_id, submission)
+    return correct
+
+
+def evaluate_with_message(
+    checkpoint_id: str, submission: object
+) -> tuple[bool, str | None]:
     if checkpoint_id in CODE_CHECKPOINTS:
         return _run_submission(submission, CODE_CHECKPOINTS[checkpoint_id], SEED)
-    return False
+    return False, None
 
 def _b64decode(value: str) -> bytes:
     padding = "=" * (-len(value) % 4)
@@ -266,10 +294,13 @@ class Handler(BaseHTTPRequestHandler):
             return
         submission = _unwrap_submission(checkpoint_id, body.get("submission"))
         try:
-            correct = evaluate(checkpoint_id, submission)
+            correct, message = evaluate_with_message(checkpoint_id, submission)
         except Exception:  # noqa: BLE001 - a broken checkpoint must fail closed
-            correct = False
-        self._respond(200, {"checkpointId": checkpoint_id, "correct": correct})
+            correct, message = False, None
+        verdict: dict[str, object] = {"checkpointId": checkpoint_id, "correct": correct}
+        if not correct and message:
+            verdict["message"] = message
+        self._respond(200, verdict)
 
     def _read_json_body(self) -> dict[str, object] | None:
         try:

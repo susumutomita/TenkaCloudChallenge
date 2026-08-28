@@ -125,7 +125,7 @@ def _contract_case(module, checker: str, layer: str, seed: str) -> list[str]:
                 continue
             reported = getattr(module, checker)(definition, faulted_run(seed, name, fault))
             if not reported:
-                failures.append(f"{checker} did not notice {fault}")
+                failures.append(f"{checker} did not notice an injected fault")
             elif not isinstance(reported, list) or not all(isinstance(m, str) for m in reported):
                 failures.append(f"{checker} does not report a list of strings")
     return failures
@@ -272,9 +272,9 @@ def check_cost(module, seed: str) -> list[str]:
         missed = sorted(set(UNSUPPORTED_CLAIMS) - set(reported))
         wrong = sorted(set(reported) - set(UNSUPPORTED_CLAIMS))
         if missed:
-            failures.append(f"an unsupported claim was let through: {missed[0]}")
+            failures.append("an unsupported claim was let through")
         if wrong:
-            failures.append(f"a claim the profiles do support was rejected: {wrong[0]}")
+            failures.append("a claim the profiles do support was rejected")
         return failures
 
     # Rejecting everything scores the same as reading the profiles, unless the empty
@@ -356,7 +356,7 @@ def check_diagnose(module, seed: str) -> list[str]:
 
             diagnosed = module.first_fault(definition, run)
             if diagnosed != expected_layer:
-                failures.append(f"{fault} was diagnosed as {diagnosed!r}, not its own layer")
+                failures.append(f"a fault was diagnosed as {diagnosed!r}, not its own layer")
                 continue
 
             repaired = module.repair(definition, run)
@@ -369,11 +369,12 @@ def check_diagnose(module, seed: str) -> list[str]:
                 # evidence; flipping the verdict silences every contract at once.
                 # Both show up right here.
                 failures.append(
-                    f"repairing {fault} changed {changed or ['nothing']}, not just {field!r}"
+                    f"repairing a fault changed {changed or ['nothing']}, "
+                    f"not just the one field the fault damaged"
                 )
                 continue
             if _reference_first_fault(definition, repaired) is not None:
-                failures.append(f"the repair for {fault} still breaks a contract")
+                failures.append("the repair for a fault still breaks a contract")
 
     # Two broken layers, one report: the earliest. This is the case a checker that
     # returns the worst, or the last, gets wrong.

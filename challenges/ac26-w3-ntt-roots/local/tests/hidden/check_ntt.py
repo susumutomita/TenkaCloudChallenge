@@ -96,13 +96,12 @@ def _roots_failures(module: ModuleType, seed: str, phase: str, count: int) -> li
     for prime, order in parameter_sets(seed, f"{phase}:sets", count):
         result = _call(module, "transform", [1], prime, order)
         if not isinstance(result, dict) or result.get("ok") is not True:
-            failures.append(f"transform(p={prime}, n={order}) did not succeed")
+            failures.append("transform did not succeed on a legal domain")
             break
         omega = result.get("omega")
         if type(omega) is not int or not has_order(omega, order, prime):
             failures.append(
-                f"transform(p={prime}, n={order}) returned omega={omega}, "
-                f"which does not have order {order}"
+                "transform returned an omega that does not have order exactly n"
             )
             break
     return failures
@@ -116,16 +115,16 @@ def _transform_failures(module: ModuleType, seed: str, phase: str, count: int) -
         coefficients = _coefficients(seed, phase, prime, order)
         result = _call(module, "transform", list(coefficients), prime, order)
         if not isinstance(result, dict) or result.get("ok") is not True:
-            failures.append(f"transform(p={prime}, n={order}) did not succeed")
+            failures.append("transform did not succeed on a legal domain")
             break
         omega, values = result["omega"], result.get("values")
         if not isinstance(values, list) or len(values) != order:
-            failures.append(f"transform(p={prime}, n={order}) did not return {order} values")
+            failures.append("transform did not return one value per domain point")
             break
         expected = [_evaluate(coefficients, pow(omega, i, prime), prime) for i in range(order)]
         if values != expected:
             failures.append(
-                f"transform(p={prime}, n={order}) did not evaluate at the powers of its own omega"
+                "transform did not evaluate at the powers of its own omega"
             )
             break
     return failures
@@ -139,19 +138,18 @@ def _roundtrip_failures(module: ModuleType, seed: str, phase: str, count: int) -
         coefficients = _coefficients(seed, phase, prime, order)
         forward = _call(module, "transform", list(coefficients), prime, order)
         if not isinstance(forward, dict) or forward.get("ok") is not True:
-            failures.append(f"transform(p={prime}, n={order}) did not succeed")
+            failures.append("transform did not succeed on a legal domain")
             break
         back = _call(
             module, "inverse_transform", list(forward["values"]), prime, order, forward["omega"]
         )
         padded = list(coefficients) + [0] * (order - len(coefficients))
         if not isinstance(back, dict) or back.get("ok") is not True:
-            failures.append(f"inverse_transform(p={prime}, n={order}) did not succeed")
+            failures.append("inverse_transform did not succeed on a legal domain")
             break
         if back.get("coefficients") != padded:
             failures.append(
-                f"inverse_transform(p={prime}, n={order}) returned "
-                f"{back.get('coefficients')} instead of {padded}"
+                "inverse_transform did not return the original coefficients"
             )
             break
 
@@ -166,8 +164,7 @@ def _roundtrip_failures(module: ModuleType, seed: str, phase: str, count: int) -
                 "error": "invalid_omega",
             }:
                 failures.append(
-                    f"inverse_transform(p={prime}, n={order}) accepted omega={candidate}, "
-                    f"whose order is not {order}"
+                    "inverse_transform accepted an omega whose order is not exactly n"
                 )
                 return failures
         break
@@ -193,9 +190,9 @@ def _transfer_failures(module: ModuleType, seed: str, phase: str) -> list[str]:
         order = odd[rng.randrange(len(odd))]
         result = _call(module, "transform", [1, 1], prime, order)
         if not isinstance(result, dict) or result.get("ok") is not True:
-            failures.append(f"transform refused a legal odd order ({order} mod {prime})")
+            failures.append("transform refused a legal odd order")
         elif not has_order(result.get("omega", 0), order, prime):
-            failures.append(f"an odd order ({order} mod {prime}) did not get a real omega")
+            failures.append("a legal odd order did not get an omega of exactly that order")
 
     non_divisor = next((d for d in range(2, prime) if (prime - 1) % d != 0), None)
     cases: list[tuple[tuple[object, ...], str]] = [
@@ -208,7 +205,7 @@ def _transfer_failures(module: ModuleType, seed: str, phase: str) -> list[str]:
         cases.append((([1], prime, non_divisor), "invalid_order"))
     for args, expected in cases:
         if _call(module, "transform", *args) != {"ok": False, "error": expected}:
-            failures.append(f"transform did not report {expected} for {args[1:]}")
+            failures.append(f"transform did not report {expected} for an input that requires it")
     return failures
 
 
@@ -242,7 +239,7 @@ def check_errors(module: ModuleType, seed: str) -> list[str]:
         cases.append((([1], prime, non_divisor), "invalid_order"))
     for args, expected in cases:
         if _call(module, "transform", *args) != {"ok": False, "error": expected}:
-            failures.append(f"transform did not report {expected} for {args[1:]}")
+            failures.append(f"transform did not report {expected} for an input that requires it")
     return failures
 
 
@@ -259,9 +256,9 @@ def check_odd_order(module: ModuleType, seed: str) -> list[str]:
         order = odd[rng.randrange(len(odd))]
         result = _call(module, "transform", [1, 1], prime, order)
         if not isinstance(result, dict) or result.get("ok") is not True:
-            failures.append(f"transform refused a legal odd order ({order} mod {prime})")
+            failures.append("transform refused a legal odd order")
         elif not has_order(result.get("omega", 0), order, prime):
-            failures.append(f"an odd order ({order} mod {prime}) did not get a real omega")
+            failures.append("a legal odd order did not get an omega of exactly that order")
         break
 
     one = _call(module, "transform", [1], PRIMES[0], 1)

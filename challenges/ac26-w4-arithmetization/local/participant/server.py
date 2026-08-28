@@ -47,6 +47,8 @@ MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
 MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
 REQUEST_TIMEOUT_SECONDS = 15
+#: Cap for a forwarded verdict message; matches the platform schema's limit.
+MAX_MESSAGE_CHARS = 2000
 
 #: The Portal's checkpoint list, in display order. Kept here rather than only inside the
 #: generated block below because scripts/verify-course-workbenches.py probes for it, and
@@ -142,7 +144,11 @@ def proxy_verdict(
         or type(decoded.get("correct")) is not bool
     ):
         return failed_verdict(body)
-    return {"checkpointId": checkpoint_id, "correct": decoded["correct"]}
+    verdict: dict[str, object] = {"checkpointId": checkpoint_id, "correct": decoded["correct"]}
+    message = decoded.get("message")
+    if isinstance(message, str):
+        verdict["message"] = message[:MAX_MESSAGE_CHARS]
+    return verdict
 
 
 class Handler(BaseHTTPRequestHandler):
