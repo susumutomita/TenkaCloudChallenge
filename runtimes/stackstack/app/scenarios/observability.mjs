@@ -721,7 +721,7 @@ function gateState() {
 
 /**
  * One handler per checkpoint. Each returns the verdict only — the platform owns
- * the points, and the container never sees them (AGENT.md §13).
+ * the points, and the container never sees them (AGENTS.md §13).
  *
  * Every one of them re-measures the running app at the moment it is asked. None
  * of them writes anything, moves anything, or reads a request body: being scored

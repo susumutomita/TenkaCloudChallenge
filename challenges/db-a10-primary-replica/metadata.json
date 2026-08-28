@@ -43,69 +43,6 @@
     "sent_lsn / replay_lsn / pg_wal_lsn_diff を使って replica が primary にどれだけ追いついているかを数字で読める",
     "replica が recovery mode 中は全 role の DML を拒否すること、それ自体が replication の正しさの証拠になることを説明できる"
   ],
-  "nodes": {
-    "learning_objectives": [
-      {
-        "id": "lo.db-a10-primary-replica.confirm-streaming-replication-connected",
-        "description": "primary/replica 間の物理 streaming replication が接続されていることを pg_stat_replication (primary) / pg_stat_wal_receiver (replica) から確認できる"
-      },
-      {
-        "id": "lo.db-a10-primary-replica.writes-follow-not-just-copy",
-        "description": "primary への書き込みが replica へ反映されることを、時間差のある 2 回の書き込みで確認し、それが一度きりのコピーではなく継続的な追従であることを説明できる"
-      },
-      {
-        "id": "lo.db-a10-primary-replica.read-lsn-progress",
-        "description": "sent_lsn / replay_lsn / pg_wal_lsn_diff を使って replica が primary にどれだけ追いついているかを数字で読める"
-      },
-      {
-        "id": "lo.db-a10-primary-replica.replica-read-only-proves-replication",
-        "description": "replica が recovery mode 中は全 role の DML を拒否すること、それ自体が replication の正しさの証拠になることを説明できる"
-      }
-    ],
-    "concepts": [
-      {
-        "id": "concept.streaming-replication",
-        "description": "primary への書き込みは、1 回きりのコピーではなく、replica が継続的に受信・適用し続けることで反映される。"
-      }
-    ]
-  },
-  "relations": [
-    {
-      "type": "teaches",
-      "source": "problem.db-a10-primary-replica",
-      "target": "lo.db-a10-primary-replica.confirm-streaming-replication-connected"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.db-a10-primary-replica",
-      "target": "lo.db-a10-primary-replica.writes-follow-not-just-copy"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.db-a10-primary-replica",
-      "target": "lo.db-a10-primary-replica.read-lsn-progress"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.db-a10-primary-replica",
-      "target": "lo.db-a10-primary-replica.replica-read-only-proves-replication"
-    },
-    {
-      "type": "covers",
-      "source": "problem.db-a10-primary-replica",
-      "target": "concept.streaming-replication"
-    },
-    {
-      "type": "requires",
-      "source": "problem.db-a10-primary-replica",
-      "target": "problem.db-a1-table-primary-key"
-    },
-    {
-      "type": "requires",
-      "source": "concept.streaming-replication",
-      "target": "concept.row-primary-key"
-    }
-  ],
   "i18n": {
     "en": {
       "name": "Primary / Replica — a replica is not a copy, it follows",

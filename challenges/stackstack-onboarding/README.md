@@ -20,7 +20,7 @@ so "this environment works end to end" is a machine-readable fact rather than a 
 | `127.0.0.1:18081` | Loopback `/verify` the TenkaCloud scorer delegates to |
 | The board's `docs` (API console) | View, change and reset the app's settings — no repository file is ever touched |
 
-The image is built from [`stackstack-base/`](../../stackstack-base), which every problem
+The image is built from [`runtimes/stackstack/`](../../runtimes/stackstack), which every problem
 in the StackStack family shares. The board serial, the boot-check value, and the sign-off
 token are all derived inside the container from a per-deploy random `FLAG_SEED`, so no
 answer is stored in this repository and no two deploys share one. Both ports are bound to

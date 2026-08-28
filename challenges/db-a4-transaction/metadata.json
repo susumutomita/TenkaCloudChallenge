@@ -23,77 +23,20 @@
     "atomicity"
   ],
   "exposedPorts": [
-    { "port": 18430, "name": "Info (challenge surface)" },
-    { "port": 18431, "name": "/verify (loopback grader)" }
+    {
+      "port": 18430,
+      "name": "Info (challenge surface)"
+    },
+    {
+      "port": 18431,
+      "name": "/verify (loopback grader)"
+    }
   ],
   "learningGoals": [
     "複数行にまたがる更新を transaction 無しで実行すると、片方だけ確定した不整合な状態が起こりうることを、自分の手で壊して確認できる",
     "BEGIN で包んだ操作がエラーで失敗したとき、ROLLBACK するまで接続が \"aborted transaction\" 状態になることを理解し、正しく復旧できる",
     "未 commit の書き込みが、自分自身のセッションには見えるが他のセッションには見えないことを、2 本の psql セッションを使って直接観測できる",
     "Postgres の xmin システム列を使って、2 つの更新が本当に同じトランザクションとして commit されたかを外部から検証する方法を説明できる"
-  ],
-  "nodes": {
-    "learning_objectives": [
-      {
-        "id": "lo.db-a4-transaction.no-transaction-breaks-atomicity",
-        "description": "複数行にまたがる更新を transaction 無しで実行すると、片方だけ確定した不整合な状態が起こりうることを、自分の手で壊して確認できる"
-      },
-      {
-        "id": "lo.db-a4-transaction.aborted-transaction-recovery",
-        "description": "BEGIN で包んだ操作がエラーで失敗したとき、ROLLBACK するまで接続が \"aborted transaction\" 状態になることを理解し、正しく復旧できる"
-      },
-      {
-        "id": "lo.db-a4-transaction.uncommitted-write-visibility",
-        "description": "未 commit の書き込みが、自分自身のセッションには見えるが他のセッションには見えないことを、2 本の psql セッションを使って直接観測できる"
-      },
-      {
-        "id": "lo.db-a4-transaction.verify-commit-with-xmin",
-        "description": "Postgres の xmin システム列を使って、2 つの更新が本当に同じトランザクションとして commit されたかを外部から検証する方法を説明できる"
-      }
-    ],
-    "concepts": [
-      {
-        "id": "concept.transaction-atomicity",
-        "description": "BEGIN で束ねた複数の操作は、全部 commit されるか全部 rollback されるかのどちらかしか許されず、途中で終わった不整合な状態を作らない。"
-      }
-    ]
-  },
-  "relations": [
-    {
-      "type": "teaches",
-      "source": "problem.db-a4-transaction",
-      "target": "lo.db-a4-transaction.no-transaction-breaks-atomicity"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.db-a4-transaction",
-      "target": "lo.db-a4-transaction.aborted-transaction-recovery"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.db-a4-transaction",
-      "target": "lo.db-a4-transaction.uncommitted-write-visibility"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.db-a4-transaction",
-      "target": "lo.db-a4-transaction.verify-commit-with-xmin"
-    },
-    {
-      "type": "covers",
-      "source": "problem.db-a4-transaction",
-      "target": "concept.transaction-atomicity"
-    },
-    {
-      "type": "requires",
-      "source": "problem.db-a4-transaction",
-      "target": "problem.db-a1-table-primary-key"
-    },
-    {
-      "type": "requires",
-      "source": "concept.transaction-atomicity",
-      "target": "concept.row-primary-key"
-    }
   ],
   "i18n": {
     "en": {
@@ -150,7 +93,9 @@
       "Info": "http://127.0.0.1:18430"
     },
     "verifyUrl": "http://127.0.0.1:18431/verify",
-    "secretEnv": ["FLAG_SEED"],
+    "secretEnv": [
+      "FLAG_SEED"
+    ],
     "terminal": {
       "service": "db-a4-transaction"
     }

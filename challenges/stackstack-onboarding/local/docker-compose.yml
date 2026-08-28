@@ -1,6 +1,6 @@
 # Local-play container for stackstack-onboarding.
 #
-# The image is the shared StackStack base app (../../../stackstack-base), not a
+# The image is the shared StackStack base app (../../../runtimes/stackstack), not a
 # copy of it: the onboarding problem and every later StackStack problem act on
 # the same board. The relative build context resolves against this directory —
 # the platform's local runner pins `--project-directory` here even when it
@@ -12,7 +12,7 @@ name: stackstack-onboarding
 services:
   stackstack-onboarding:
     build:
-      context: ../../../stackstack-base
+      context: ../../../runtimes/stackstack
       dockerfile: Dockerfile
     environment:
       SCENARIO: onboarding

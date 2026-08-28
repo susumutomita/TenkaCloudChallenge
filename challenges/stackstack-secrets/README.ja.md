@@ -24,7 +24,7 @@ delete は無く、 これから生えることもありません。
 | `127.0.0.1:18081` | TenkaCloud のスコアラーが委譲するループバックの `/verify` |
 | `127.0.0.1:18080/docs` | ブラウザ API コンソール。 identity と grants は `PATCH /api/settings` で変更 |
 
-イメージは StackStack 問題すべてが共有する [`stackstack-base/`](../../stackstack-base) から
+イメージは StackStack 問題すべてが共有する [`runtimes/stackstack/`](../../runtimes/stackstack) から
 ビルドされます。 漏れた鍵、 break-glass 値、 fingerprint、 witness、 revocation receipt、
 policy digest はすべて、 デプロイごとにランダムな `FLAG_SEED` からコンテナ内で導出されます。
 **このリポジトリには答えが 1 文字も入っていません**し、 2 つのデプロイが同じ答えを持つことも
@@ -238,7 +238,7 @@ policy digest はすべて、 デプロイごとにランダムな `FLAG_SEED` �
 ### 正直さの限界
 
 判定はあなたが動かしているコンテナの中で行われます。 自分のチェックアウトの
-`stackstack-base/` を書き換えて image を焼き直せば、 ここのチェックはすべて無効化できます。
+`runtimes/stackstack/` を書き換えて image を焼き直せば、 ここのチェックはすべて無効化できます。
 このカタログのコンテナ問題すべてに共通することで、 `make local` はピン留めされた `problems/`
 submodule からビルドします。
 

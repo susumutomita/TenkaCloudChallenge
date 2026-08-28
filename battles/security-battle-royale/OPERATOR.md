@@ -50,7 +50,7 @@ docker compose up
 
 In the platform admin console:
 
-1. Confirm both endpoint slots resolve to **empty** effective URLs from `FrontendUrl` / `ApiUrl` (both ship as `""` — the deploy earns nothing until a team registers, per the Battle participant-action gate, AGENT.md invariant #9).
+1. Confirm both endpoint slots resolve to **empty** effective URLs from `FrontendUrl` / `ApiUrl` (both ship as `""` — the deploy earns nothing until a team registers, per the Battle participant-action gate, AGENTS.md invariant #9).
 2. Register `http://<Ec2HostHint>` as the `frontend` override and `http://<Ec2HostHint>:8080` as the `api` override, and confirm scoring starts.
 3. Confirm the engine probes `frontend /` and `api /api/v1/apistatus` (both must be 200 to score) once per minute, and that the score-engine SQLi attack probes (below) are enabled.
 4. This problem ships **no** custom dashboard slot — the only competitor UI is the portal's generic Endpoint Override panel. Do not expect a bespoke scoreboard component.

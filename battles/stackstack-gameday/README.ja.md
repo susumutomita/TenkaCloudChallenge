@@ -21,7 +21,7 @@ StackStack の単問 7 つ ── onboarding / vibe-build / ship / safe-exposure
 observability / secrets ── を、 **1 つのアプリの上で 1 本の 90 分 (または 120 分) の連続
 イベント**として走らせるものです。 物語も時計も 1 本です。
 
-AWS を使わない local-play コンテナとして配信されます (AGENT.md §13)。 コマンドは 1 つ。
+AWS を使わない local-play コンテナとして配信されます (AGENTS.md §13)。 コマンドは 1 つ。
 
 ```bash
 make local PROBLEM=stackstack-gameday                                  # 90 分
@@ -32,7 +32,7 @@ STACKSTACK_GAMEDAY_MINUTES=120 make local PROBLEM=stackstack-gameday   # 120 分
 
 ## 再実装ではなく合成
 
-`SCENARIO=gameday` は `stackstack-base/app/scenarios/gameday.mjs` 1 枚で、 単問 6 モジュールを
+`SCENARIO=gameday` は `runtimes/stackstack/app/scenarios/gameday.mjs` 1 枚で、 単問 6 モジュールを
 **import** して routes / postureContext / gates を合成します。
 
 採点対象の述語はすべて、 各モジュールの `gates` から取った**関数オブジェクトそのもの**です。
@@ -293,10 +293,10 @@ clamp してあるので、 敵対的な値を入れてもイベントが簡単�
   container 問題にはプラットフォームが probe できる URL がありません。 連続点はコンテナ内に
   あり、 外へは 8 つの checkpoint 判定としてだけ出ます。 プラットフォーム可視にするには
   スキーマとプラットフォーム両方の変更が要り、 それはカタログ側 PR の裁量ではありません
-  (AGENT.md 「Extending the platform contract」)。
+  (AGENTS.md 「Extending the platform contract」)。
 - **metadata の `phases[]` / `disruptions[]`。** `phases[].effect` は `scorePathOverride` と
   `switchPlatformToDegraded` だけで、 どちらも `phased-polling` に紐づきます。 宣言すれば
-  存在しない機構を約束することになります (AGENT.md §11)。 工程はコンテナが強制し、 鍵の
+  存在しない機構を約束することになります (AGENTS.md §11)。 工程はコンテナが強制し、 鍵の
   入れ替えは予告された定期作業であって障害注入ではありません。
 - **チーム横断の集計・ライブのリーダーボード。** local play は 1 人 1 コンテナで中央サーバが
   ありません。
@@ -333,6 +333,6 @@ bun test scripts/stackstack-gameday.test.ts
 bun run validate
 ```
 
-テストは実物の `stackstack-base/app/server.mjs` を `SCENARIO=gameday`、 圧縮した時計、
+テストは実物の `runtimes/stackstack/app/server.mjs` を `SCENARIO=gameday`、 圧縮した時計、
 一時的な参加者ファイルで起動し、 HTTP で駆動します ── 生成、 実行、 「満点にしてはいけない」
 2 つの規則、 3 つの連鎖すべて、 工程の受領証withholding、 1 回だけの鍵入れ替え、 終了、 片付け。

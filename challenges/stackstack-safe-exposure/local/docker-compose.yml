@@ -1,6 +1,6 @@
 # Local-play container for stackstack-safe-exposure.
 #
-# The image is the shared StackStack base app (../../../stackstack-base), not a
+# The image is the shared StackStack base app (../../../runtimes/stackstack), not a
 # copy of it: this problem acts on the same board stackstack-onboarding and
 # stackstack-ship did, with `SCENARIO=safe-exposure` adding the /portal surface
 # and the access document that governs it.
@@ -12,7 +12,7 @@ name: stackstack-safe-exposure
 services:
   stackstack-safe-exposure:
     build:
-      context: ../../../stackstack-base
+      context: ../../../runtimes/stackstack
       dockerfile: Dockerfile
     environment:
       SCENARIO: safe-exposure

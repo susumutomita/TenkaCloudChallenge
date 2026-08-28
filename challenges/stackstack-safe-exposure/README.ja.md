@@ -21,7 +21,7 @@
 | `127.0.0.1:18081` | TenkaCloud の採点が委譲する loopback の `/verify` |
 | `127.0.0.1:18080/docs` | ブラウザ API コンソール。 access は `PATCH /api/settings` で変更 |
 
-image は StackStack 全問題で共有している [`stackstack-base/`](../../stackstack-base) から
+image は StackStack 全問題で共有している [`runtimes/stackstack/`](../../runtimes/stackstack) から
 ビルドされる。 4 つの API キー・下書きの id・2 つの管理番号はデプロイごとにランダムな
 `FLAG_SEED` からコンテナ内で導出され、 gate の受領証はブート時に別途生成される秘密から導出
 される。 答えはこのリポジトリに 1 つも入っておらず、 2 つのデプロイが同じ答えを持つことも
@@ -258,7 +258,7 @@ probe から最後まで同期実行になっている。 途中で他のリク�
 ### 正直さの限界
 
 判定はあなたが動かしているコンテナの中で計算される。 自分のチェックアウトの
-`stackstack-base/` を書き換えて image を焼き直せば、 ここの検査は全部無効化できる。 このカタログ
+`runtimes/stackstack/` を書き換えて image を焼き直せば、 ここの検査は全部無効化できる。 このカタログ
 のコンテナ問題すべてに共通することで、 `make local` は pin された `problems/` サブモジュール
 からビルドする。
 

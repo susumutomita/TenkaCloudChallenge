@@ -20,7 +20,7 @@ import { BOARD_SERIAL, gateToken } from "../secrets.mjs";
  * sentence in a README.
  *
  * It is NOT a second implementation of anything, and it is NOT an edit to the
- * shared board. Nothing under `stackstack-base/app/` changes; this file only
+ * shared board. Nothing under `runtimes/stackstack/app/` changes; this file only
  * adds itself.
  *
  * ## Why local play rather than the AWS `battles/stackstack`

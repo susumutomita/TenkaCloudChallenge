@@ -24,7 +24,7 @@ credentials.
 | `127.0.0.1:18080/docs` | Browser API console; last night's policy is changed with `PATCH /api/settings` |
 | `/app/state/` | Container-local output written by the scheduled job when policy permits it |
 
-The image is built from [`stackstack-base/`](../../stackstack-base). The incident
+The image is built from [`runtimes/stackstack/`](../../runtimes/stackstack). The incident
 signature is derived inside the container from a per-deploy random `FLAG_SEED`, so no
 answer is stored in this repository and no two deploys share one. Both ports are bound
 to `127.0.0.1` only.

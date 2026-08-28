@@ -298,7 +298,7 @@ const verify = createServer(async (request, response) => {
   const grader = GRADERS[checkpointId];
   const correct = typeof grader === "function" ? grader(submission) : false;
   // Fail closed on an unknown checkpoint, and ALWAYS echo checkpointId so the
-  // platform never mis-credits another checkpoint (AGENT.md §13).
+  // platform never mis-credits another checkpoint (AGENTS.md §13).
   return json(response, 200, {
     checkpointId,
     correct,

@@ -23,77 +23,20 @@
     "performance"
   ],
   "exposedPorts": [
-    { "port": 18410, "name": "Info (challenge surface)" },
-    { "port": 18411, "name": "/verify (loopback grader)" }
+    {
+      "port": 18410,
+      "name": "Info (challenge surface)"
+    },
+    {
+      "port": 18411,
+      "name": "/verify (loopback grader)"
+    }
   ],
   "learningGoals": [
     "index が無い列の等値検索がテーブル全体を走査する (Seq Scan) ことを、実際の EXPLAIN 出力で確認できる",
     "index を追加した後、クエリプランナが実際に Index Scan を選ぶかどうかを EXPLAIN で検証する習慣を身につける",
     "EXPLAIN (ANALYZE, BUFFERS) のバッファ数を before/after で比較し、read 側の改善を定量的に説明できる",
     "index が read を速くする代わりに write 側にコストを課すという trade-off を、自分の手を動かした体験として説明できる"
-  ],
-  "nodes": {
-    "learning_objectives": [
-      {
-        "id": "lo.db-a2-index-tradeoff.seq-scan-without-index",
-        "description": "index が無い列の等値検索がテーブル全体を走査する (Seq Scan) ことを、実際の EXPLAIN 出力で確認できる"
-      },
-      {
-        "id": "lo.db-a2-index-tradeoff.verify-index-scan-chosen",
-        "description": "index を追加した後、クエリプランナが実際に Index Scan を選ぶかどうかを EXPLAIN で検証する習慣を身につける"
-      },
-      {
-        "id": "lo.db-a2-index-tradeoff.compare-buffers-before-after",
-        "description": "EXPLAIN (ANALYZE, BUFFERS) のバッファ数を before/after で比較し、read 側の改善を定量的に説明できる"
-      },
-      {
-        "id": "lo.db-a2-index-tradeoff.read-write-tradeoff",
-        "description": "index が read を速くする代わりに write 側にコストを課すという trade-off を、自分の手を動かした体験として説明できる"
-      }
-    ],
-    "concepts": [
-      {
-        "id": "concept.index-read-write-tradeoff",
-        "description": "index は特定の列の検索を行数に依存しないほぼ一定時間に変えるが、その代わり書き込みのたびに index 自身を更新するコストを課す。"
-      }
-    ]
-  },
-  "relations": [
-    {
-      "type": "teaches",
-      "source": "problem.db-a2-index-tradeoff",
-      "target": "lo.db-a2-index-tradeoff.seq-scan-without-index"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.db-a2-index-tradeoff",
-      "target": "lo.db-a2-index-tradeoff.verify-index-scan-chosen"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.db-a2-index-tradeoff",
-      "target": "lo.db-a2-index-tradeoff.compare-buffers-before-after"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.db-a2-index-tradeoff",
-      "target": "lo.db-a2-index-tradeoff.read-write-tradeoff"
-    },
-    {
-      "type": "covers",
-      "source": "problem.db-a2-index-tradeoff",
-      "target": "concept.index-read-write-tradeoff"
-    },
-    {
-      "type": "requires",
-      "source": "problem.db-a2-index-tradeoff",
-      "target": "problem.db-a1-table-primary-key"
-    },
-    {
-      "type": "requires",
-      "source": "concept.index-read-write-tradeoff",
-      "target": "concept.row-primary-key"
-    }
   ],
   "i18n": {
     "en": {
@@ -150,7 +93,9 @@
       "Info": "http://127.0.0.1:18410"
     },
     "verifyUrl": "http://127.0.0.1:18411/verify",
-    "secretEnv": ["FLAG_SEED"],
+    "secretEnv": [
+      "FLAG_SEED"
+    ],
     "terminal": {
       "service": "db-a2-index-tradeoff"
     }

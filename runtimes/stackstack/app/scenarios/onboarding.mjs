@@ -71,7 +71,7 @@ function remember(checkpointId, correct) {
 
 /**
  * One handler per checkpoint. Each returns the verdict only — the platform owns
- * the points, and the container never sees them (AGENT.md §13).
+ * the points, and the container never sees them (AGENTS.md §13).
  */
 export const checks = {
   "board-open": (submission) => remember("board-open", matches(submission, BOARD_SERIAL)),

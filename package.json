@@ -5,11 +5,7 @@
   "description": "TenkaCloud problem payloads and lightweight catalog validation.",
   "type": "module",
   "scripts": {
-    "reindex": "bun run scripts/build-index.ts && bun run scripts/estimate-cost.ts --write",
-    "setup": "git config core.hooksPath .githooks && echo 'pre-commit hook enabled (auto-reindex).'",
-    "validate": "bun run scripts/validate-problems.ts",
-    "cost": "bun run scripts/estimate-cost.ts",
-    "cost:check": "bun run scripts/estimate-cost.ts --check"
+    "validate": "bun run scripts/validate-problems.ts"
   },
   "devDependencies": {
     "ajv": "8.18.0",

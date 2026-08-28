@@ -24,76 +24,20 @@
     "diagnostics"
   ],
   "exposedPorts": [
-    { "port": 18500, "name": "Info (challenge surface)" },
-    { "port": 18501, "name": "/verify (loopback grader)" }
+    {
+      "port": 18500,
+      "name": "Info (challenge surface)"
+    },
+    {
+      "port": 18501,
+      "name": "/verify (loopback grader)"
+    }
   ],
   "learningGoals": [
     "未知のスロークエリを、原因を教えられない状態から EXPLAIN (ANALYZE, BUFFERS) だけで自力診断できる",
     "既存の index が「存在する」ことや「実行計画に Seq Scan が無い」ことと、「そのクエリに正しく使われている」ことは別問題だと、初めて見るテーブルに対しても見分けられる",
     "複合 index は列を含んでいるかどうかではなく、先頭から連続してどの列を絞り込めるかで使えるかどうかが決まることを、自分で見つけた事実として説明できる",
     "見当違いの index を追加する対症療法ではなく、実際のクエリの実行計画 (どの index が選ばれたか) とバッファ数に基づいて根本対策を選べる"
-  ],
-  "nodes": {
-    "learning_objectives": [
-      {
-        "id": "lo.db-challenge-slow-query.diagnose-slow-query-blind",
-        "description": "未知のスロークエリを、原因を教えられない状態から EXPLAIN (ANALYZE, BUFFERS) だけで自力診断できる"
-      },
-      {
-        "id": "lo.db-challenge-slow-query.index-exists-vs-used-correctly",
-        "description": "既存の index が「存在する」ことや「実行計画に Seq Scan が無い」ことと、「そのクエリに正しく使われている」ことは別問題だと、初めて見るテーブルに対しても見分けられる"
-      },
-      {
-        "id": "lo.db-challenge-slow-query.composite-index-leading-columns",
-        "description": "複合 index は列を含んでいるかどうかではなく、先頭から連続してどの列を絞り込めるかで使えるかどうかが決まることを、自分で見つけた事実として説明できる"
-      },
-      {
-        "id": "lo.db-challenge-slow-query.root-cause-not-symptom-fix",
-        "description": "見当違いの index を追加する対症療法ではなく、実際のクエリの実行計画 (どの index が選ばれたか) とバッファ数に基づいて根本対策を選べる"
-      }
-    ]
-  },
-  "relations": [
-    {
-      "type": "teaches",
-      "source": "problem.db-challenge-slow-query",
-      "target": "lo.db-challenge-slow-query.diagnose-slow-query-blind"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.db-challenge-slow-query",
-      "target": "lo.db-challenge-slow-query.index-exists-vs-used-correctly"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.db-challenge-slow-query",
-      "target": "lo.db-challenge-slow-query.composite-index-leading-columns"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.db-challenge-slow-query",
-      "target": "lo.db-challenge-slow-query.root-cause-not-symptom-fix"
-    },
-    {
-      "type": "requires",
-      "source": "problem.db-challenge-slow-query",
-      "target": "problem.db-a2-index-tradeoff"
-    },
-    {
-      "type": "requires",
-      "source": "problem.db-challenge-slow-query",
-      "target": "problem.db-a3-query-plan"
-    },
-    {
-      "type": "requires",
-      "source": "problem.db-challenge-slow-query",
-      "target": "concept.index-read-write-tradeoff"
-    },
-    {
-      "type": "requires",
-      "source": "problem.db-challenge-slow-query",
-      "target": "concept.query-planner-cost-estimate"
-    }
   ],
   "i18n": {
     "en": {
@@ -152,7 +96,9 @@
       "Info": "http://127.0.0.1:18500"
     },
     "verifyUrl": "http://127.0.0.1:18501/verify",
-    "secretEnv": ["FLAG_SEED"],
+    "secretEnv": [
+      "FLAG_SEED"
+    ],
     "terminal": {
       "service": "db-challenge-slow-query"
     }

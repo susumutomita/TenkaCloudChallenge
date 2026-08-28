@@ -9,24 +9,17 @@ This repository is the public problem catalog for the [TenkaCloud](https://githu
 - [`challenges/`](./challenges/) contains self-paced problems.
 - [`battles/`](./battles/) contains head-to-head problems.
 - Each problem owns its `metadata.json` and runtime artifacts (`template.yaml`, `local/`, portal components, or services as applicable).
-- [`stackstack-base/`](./stackstack-base/) is the shared runtime used by the StackStack problem family.
+- [`runtimes/`](./runtimes/) contains runtime implementations genuinely shared by multiple problems. StackStack is one such family; problem-specific code still belongs inside its problem directory.
 - [`SCHEMA.json`](./SCHEMA.json) and [`SIMULATION_SCHEMA.json`](./SIMULATION_SCHEMA.json) define the catalog contracts.
-- [`index.json`](./index.json) and [`cost-report.json`](./cost-report.json) are generated catalog artifacts consumed by downstream tooling.
 
 ## Validation
 
 ```bash
-bun install --frozen-lockfile --ignore-scripts
-bun run validate
+make install
+make agent-gate
 ```
 
 The root validator checks metadata, required bilingual READMEs, simulation overlays, and catalog cross-references. The pull-request CI runs only this lightweight validation. Runtime code and participant-facing tests stay with the problem that owns them and should be run when that problem changes.
-
-After adding or changing a problem, regenerate the machine-readable catalog:
-
-```bash
-bun run reindex
-```
 
 Do not expose secrets, flags, hidden checks, or reference answers on participant-visible surfaces. Deployment, production operations, and platform integration remain the responsibility of the TenkaCloud repository.
 

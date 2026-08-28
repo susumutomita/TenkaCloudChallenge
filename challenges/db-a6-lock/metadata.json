@@ -38,69 +38,6 @@
     "「query が遅い」と「lock 待ちで止まっている」がアプリケーション側からは同じ症状に見えても、原因と調べ方が異なることを説明できる",
     "1 つの Portal ターミナルから \\! をバックグラウンドで使い、ブロックされる可能性のある 2 本目のセッションを安全に起動できる"
   ],
-  "nodes": {
-    "learning_objectives": [
-      {
-        "id": "lo.db-a6-lock.concurrent-update-blocks",
-        "description": "同じ行への 2 つの UPDATE が異なるセッションから同時に来たとき、後から来た方が先行するセッションの commit/rollback まで実際にブロックされることを、自分の手で再現できる"
-      },
-      {
-        "id": "lo.db-a6-lock.identify-blocker-with-pg-blocking-pids",
-        "description": "pg_stat_activity の wait_event_type='Lock' と pg_blocking_pids() を使って、どの pid が誰をブロックしているかを特定できる"
-      },
-      {
-        "id": "lo.db-a6-lock.slow-vs-blocked-are-different",
-        "description": "「query が遅い」と「lock 待ちで止まっている」がアプリケーション側からは同じ症状に見えても、原因と調べ方が異なることを説明できる"
-      },
-      {
-        "id": "lo.db-a6-lock.background-second-session",
-        "description": "1 つの Portal ターミナルから \\! をバックグラウンドで使い、ブロックされる可能性のある 2 本目のセッションを安全に起動できる"
-      }
-    ],
-    "concepts": [
-      {
-        "id": "concept.row-lock-contention",
-        "description": "同じ行を同時に書き換えようとした 2 つのトランザクションは、先行する側が commit/rollback するまで後続側が行ロックで待たされる。"
-      }
-    ]
-  },
-  "relations": [
-    {
-      "type": "teaches",
-      "source": "problem.db-a6-lock",
-      "target": "lo.db-a6-lock.concurrent-update-blocks"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.db-a6-lock",
-      "target": "lo.db-a6-lock.identify-blocker-with-pg-blocking-pids"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.db-a6-lock",
-      "target": "lo.db-a6-lock.slow-vs-blocked-are-different"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.db-a6-lock",
-      "target": "lo.db-a6-lock.background-second-session"
-    },
-    {
-      "type": "covers",
-      "source": "problem.db-a6-lock",
-      "target": "concept.row-lock-contention"
-    },
-    {
-      "type": "requires",
-      "source": "problem.db-a6-lock",
-      "target": "problem.db-a4-transaction"
-    },
-    {
-      "type": "requires",
-      "source": "concept.row-lock-contention",
-      "target": "concept.transaction-atomicity"
-    }
-  ],
   "i18n": {
     "en": {
       "name": "Is it the query that's slow, or are you just waiting on a lock? — Row Locks",

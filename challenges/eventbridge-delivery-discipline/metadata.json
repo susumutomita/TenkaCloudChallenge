@@ -39,137 +39,6 @@
     "bounded retryの枯渇を完全なDLQ receiptへ残せる",
     "同じstreamのreplayでfinal state、副作用回数、DLQを変えない"
   ],
-  "nodes": {
-    "learning_objectives": [
-      {
-        "id": "lo.eventbridge-delivery-discipline.separate-identity-order",
-        "description": "event identityとaggregate orderを別の状態として扱える"
-      },
-      {
-        "id": "lo.eventbridge-delivery-discipline.bound-retry",
-        "description": "retry budgetとDLQ receiptで失敗を終端できる"
-      },
-      {
-        "id": "lo.eventbridge-delivery-discipline.prove-replay",
-        "description": "replay invariantを反例列で検証できる"
-      }
-    ],
-    "concepts": [
-      {
-        "id": "concept.event-idempotency",
-        "description": "event ID ledgerによる重複副作用の防止"
-      },
-      {
-        "id": "concept.monotonic-aggregate-version",
-        "description": "aggregate versionによる単調なbusiness state"
-      },
-      {
-        "id": "concept.delivery-retry-budget",
-        "description": "有限attemptとbackoffを持つdelivery retry"
-      },
-      {
-        "id": "concept.dead-letter-receipt",
-        "description": "原因と元eventを保持する再処理可能なfailure receipt"
-      }
-    ],
-    "assessment_criteria": [
-      {
-        "id": "assessment.eventbridge-delivery-discipline.classify-deliveries",
-        "description": "hidden delivery列を正しいterminal outcomeへ分類できる"
-      },
-      {
-        "id": "assessment.eventbridge-delivery-discipline.replay-invariant",
-        "description": "interleaveと2回replayでも状態・副作用・DLQを一定に保てる"
-      }
-    ],
-    "misconceptions": [
-      {
-        "id": "misconception.timestamp-is-business-order",
-        "description": "arrival timestampをsortすればbusiness orderになるという誤解"
-      },
-      {
-        "id": "misconception.retry-is-exactly-once",
-        "description": "transport retryが処理結果をexactly-onceにするという誤解"
-      }
-    ],
-    "audiences": [
-      {
-        "id": "audience.event-driven-application-engineer",
-        "description": "EventBridge consumerを設計するapplication engineer"
-      },
-      {
-        "id": "audience.platform-operations-engineer",
-        "description": "retry、DLQ、replayを運用するplatform/SysOps engineer"
-      }
-    ]
-  },
-  "relations": [
-    {
-      "type": "teaches",
-      "source": "problem.eventbridge-delivery-discipline",
-      "target": "lo.eventbridge-delivery-discipline.separate-identity-order"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.eventbridge-delivery-discipline",
-      "target": "lo.eventbridge-delivery-discipline.bound-retry"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.eventbridge-delivery-discipline",
-      "target": "lo.eventbridge-delivery-discipline.prove-replay"
-    },
-    {
-      "type": "covers",
-      "source": "problem.eventbridge-delivery-discipline",
-      "target": "concept.event-idempotency"
-    },
-    {
-      "type": "covers",
-      "source": "problem.eventbridge-delivery-discipline",
-      "target": "concept.monotonic-aggregate-version"
-    },
-    {
-      "type": "covers",
-      "source": "problem.eventbridge-delivery-discipline",
-      "target": "concept.delivery-retry-budget"
-    },
-    {
-      "type": "covers",
-      "source": "problem.eventbridge-delivery-discipline",
-      "target": "concept.dead-letter-receipt"
-    },
-    {
-      "type": "assesses",
-      "source": "problem.eventbridge-delivery-discipline",
-      "target": "assessment.eventbridge-delivery-discipline.classify-deliveries"
-    },
-    {
-      "type": "assesses",
-      "source": "problem.eventbridge-delivery-discipline",
-      "target": "assessment.eventbridge-delivery-discipline.replay-invariant"
-    },
-    {
-      "type": "related_to",
-      "source": "problem.eventbridge-delivery-discipline",
-      "target": "misconception.timestamp-is-business-order"
-    },
-    {
-      "type": "related_to",
-      "source": "problem.eventbridge-delivery-discipline",
-      "target": "misconception.retry-is-exactly-once"
-    },
-    {
-      "type": "related_to",
-      "source": "problem.eventbridge-delivery-discipline",
-      "target": "audience.event-driven-application-engineer"
-    },
-    {
-      "type": "related_to",
-      "source": "problem.eventbridge-delivery-discipline",
-      "target": "audience.platform-operations-engineer"
-    }
-  ],
   "runtime": {
     "provider": "docker",
     "engine": "compose",
@@ -277,12 +146,66 @@
         "Keep final state, side-effect count, and DLQ unchanged across replay"
       ],
       "checks": [
-        { "id": "observe", "label": "Observe both failure modes", "hints": [{ "id": "observe-1", "content": "Inspect sideEffects and the final aggregate version in the vulnerable stream." }] },
-        { "id": "idempotency", "label": "Stop duplicate side effects", "hints": [{ "id": "idempotency-1", "content": "A delivery ID may change on retry. Record the source event ID in the same atomic boundary as the side effect." }] },
-        { "id": "ordering", "label": "Keep versions monotonic", "hints": [{ "id": "ordering-1", "content": "Use aggregate version, not arrival time, and fail closed differently for stale and future-gap versions." }] },
-        { "id": "conflict", "label": "Separate same-version conflicts", "hints": [{ "id": "conflict-1", "content": "The same version and payload may be a duplicate; a different payload at the same version is not." }] },
-        { "id": "retry-dlq", "label": "Terminate retry into a DLQ", "hints": [{ "id": "retry-dlq-1", "content": "Retry transient failures a bounded number of times and preserve the event, reason, attempts, timestamps, rule, and target." }] },
-        { "id": "replay", "label": "Keep a second replay unchanged", "hints": [{ "id": "replay-1", "content": "Ledger terminal failures as well as successes, or replay will append duplicate DLQ receipts." }] }
+        {
+          "id": "observe",
+          "label": "Observe both failure modes",
+          "hints": [
+            {
+              "id": "observe-1",
+              "content": "Inspect sideEffects and the final aggregate version in the vulnerable stream."
+            }
+          ]
+        },
+        {
+          "id": "idempotency",
+          "label": "Stop duplicate side effects",
+          "hints": [
+            {
+              "id": "idempotency-1",
+              "content": "A delivery ID may change on retry. Record the source event ID in the same atomic boundary as the side effect."
+            }
+          ]
+        },
+        {
+          "id": "ordering",
+          "label": "Keep versions monotonic",
+          "hints": [
+            {
+              "id": "ordering-1",
+              "content": "Use aggregate version, not arrival time, and fail closed differently for stale and future-gap versions."
+            }
+          ]
+        },
+        {
+          "id": "conflict",
+          "label": "Separate same-version conflicts",
+          "hints": [
+            {
+              "id": "conflict-1",
+              "content": "The same version and payload may be a duplicate; a different payload at the same version is not."
+            }
+          ]
+        },
+        {
+          "id": "retry-dlq",
+          "label": "Terminate retry into a DLQ",
+          "hints": [
+            {
+              "id": "retry-dlq-1",
+              "content": "Retry transient failures a bounded number of times and preserve the event, reason, attempts, timestamps, rule, and target."
+            }
+          ]
+        },
+        {
+          "id": "replay",
+          "label": "Keep a second replay unchanged",
+          "hints": [
+            {
+              "id": "replay-1",
+              "content": "Ledger terminal failures as well as successes, or replay will append duplicate DLQ receipts."
+            }
+          ]
+        }
       ]
     }
   }

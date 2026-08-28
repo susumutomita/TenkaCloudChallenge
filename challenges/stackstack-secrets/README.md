@@ -24,7 +24,7 @@ scheduled job that must not stop.
 | `127.0.0.1:18081` | Loopback `/verify` the TenkaCloud scorer delegates to |
 | `127.0.0.1:18080/docs` | Browser API console; identity and grants change through `PATCH /api/settings` |
 
-The image is built from [`stackstack-base/`](../../stackstack-base), shared by every
+The image is built from [`runtimes/stackstack/`](../../runtimes/stackstack), shared by every
 StackStack problem. The leaked key, the break-glass credential, every fingerprint, witness,
 revocation receipt and policy digest are derived inside the container from a per-deploy
 random `FLAG_SEED`, so **no answer is stored in this repository** and no two deploys share
@@ -240,7 +240,7 @@ can tell them from your own calls.
 ### The honesty limit
 
 The verdict is computed inside the container you are running. A participant who edits
-`stackstack-base/` in their own checkout and rebuilds the image defeats every check here.
+`runtimes/stackstack/` in their own checkout and rebuilds the image defeats every check here.
 That is true of every container problem in this catalog; `make local` builds from the pinned
 `problems/` submodule.
 

@@ -143,5 +143,5 @@ __pycache__/
 reports/
 
 # Swagger UI はイメージのビルド時に焼く。 作業ツリーには置かない。
-stackstack-base/node_modules/
-stackstack-base/app/vendor/
+runtimes/stackstack/node_modules/
+runtimes/stackstack/app/vendor/

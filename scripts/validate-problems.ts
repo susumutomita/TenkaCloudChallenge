@@ -15,10 +15,6 @@ import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from "node
 import { dirname, join, relative } from "node:path";
 import Ajv2020 from "ajv";
 import addFormats from "ajv-formats";
-import {
-  type KnowledgeGraphCatalogEntry,
-  validateKnowledgeGraphCatalog,
-} from "./knowledge-graph";
 import { checkSimulationOverlay } from "./validate-simulation-overlay";
 
 // このリポジトリは TenkaCloud 本体の `problems/` 配下に git submodule として mount
@@ -68,7 +64,7 @@ interface CrossRefResult {
 }
 
 /**
- * [contract / AGENT.md §12] 競技者向け `instructions` は必須。 portal は `description` を
+ * [contract / AGENTS.md §12] 競技者向け `instructions` は必須。 portal は `description` を
  * 競技者に出さない (fairness contract) ため、 これが無いと competitor には shortDescription
  * 1 行しか届かず誘導ゼロになる。 top-level (JA) と i18n.en の両方を要求する。
  */
@@ -76,7 +72,7 @@ function checkInstructionsPresent(meta: Metadata): ValidationError[] {
   const errors: ValidationError[] = [];
   const ja = meta.instructions;
   if (typeof ja !== "string" || ja.trim().length === 0) {
-    errors.push("instructions (player-facing getting-started) is required — see AGENT.md §12");
+    errors.push("instructions (player-facing getting-started) is required — see AGENTS.md §12");
   }
   const i18n = meta.i18n as { en?: { instructions?: unknown } } | undefined;
   const en = i18n?.en?.instructions;
@@ -228,7 +224,7 @@ export function checkContainerWriteupAdvisory(meta: Metadata): ValidationError[]
 }
 
 /**
- * [contract / AGENT.md §How to add a problem] Every problem ships an English
+ * [contract / AGENTS.md §How to add or change a problem] Every problem ships an English
  * primary README and a Japanese mirror. This is a release artifact, not an
  * optional review preference, so fail CI before a metadata-only PR can merge.
  */
@@ -265,7 +261,7 @@ export function checkRequiredReadmes(dir: string): ValidationError[] {
     }
     if (!stat.isFile()) {
       errors.push(
-        `${filename} must be a regular file and not a symlink — see AGENT.md authoring step 4`,
+        `${filename} must be a regular file and not a symlink — see AGENTS.md authoring step 4`,
       );
       continue;
     }
@@ -339,7 +335,7 @@ function checkHintTranslations(meta: Metadata): ValidationError[] {
 }
 
 /**
- * [scoring regulation / SCORING.md, AGENT.md §14] Challenge の固定点採点 (flag / verify /
+ * [scoring regulation / SCORING.md, AGENTS.md §14] Challenge の固定点採点 (flag / verify /
  * multi-flag / multi-verify) を難易度ティアに統一する:
  *   - 満点 (flat points、 または flags[]/checks[] の points 合計) == ティア標準点
  *     (Easy=100 / Medium=200 / Hard=300)
@@ -854,7 +850,7 @@ export function checkMultiVerifyTranslations(meta: Metadata): ValidationError[] 
 }
 
 /**
- * [TenkaCloud#2252 / AGENT.md §10] checks[].label は競技者に見える。 脆弱性名を書くと
+ * [TenkaCloud#2252 / AGENTS.md §10] checks[].label は競技者に見える。 脆弱性名を書くと
  * 「何を探すか」 の種明かしになる (security-CTF ルール: 「公開バックアップ」 は可、
  * 「SQLi bypass」 は不可)。 文言 match は演出と区別できないため error ではなく warning
  * (= checkDisruptionDeliveryAdvisory と同方針)。
@@ -879,7 +875,7 @@ export function checkCheckLabelSpoilerAdvisory(meta: Metadata): ValidationError[
   for (const [id, label] of labels) {
     if (typeof label === "string" && SPOILER_TERMS.test(label)) {
       warnings.push(
-        `scoring.checks id="${String(id)}" label "${label}" looks like a vulnerability-name spoiler — name the symptom/asset instead (AGENT.md §10)`,
+        `scoring.checks id="${String(id)}" label "${label}" looks like a vulnerability-name spoiler — name the symptom/asset instead (AGENTS.md §10)`,
       );
     }
   }
@@ -895,8 +891,7 @@ export function checkCheckLabelSpoilerAdvisory(meta: Metadata): ValidationError[
  *   - track.id と courseId / edition の不整合 (= track だけ直して alignment を直し忘れ)
  *   - embargoed なのに参加者へ配信可能 (status=ready) という組み合わせ
  *
- * 学習順序 (relations.type=requires) と track 内の並び (track.order) は正本が別にあるので、
- * ここでは重複定義も検証もしない。
+ * 学習順序は track.order が正本なので、ここでは重複定義も検証もしない。
  */
 const TRACK_COURSE_BINDING: Readonly<Record<string, { courseId: string; edition: string }>> = {
   "advanced-cryptography-2026": {
@@ -915,7 +910,7 @@ export function checkCourseAlignment(meta: Metadata): ValidationError[] {
     // track が講座に束縛されているのに alignment が無い = 対応表から辿れない問題。
     return binding
       ? [
-          `track.id="${trackId}" requires courseAlignment (courseId="${binding.courseId}", edition="${binding.edition}") — see docs/curricula/${trackId}/curriculum.md`,
+          `track.id="${trackId}" requires courseAlignment (courseId="${binding.courseId}", edition="${binding.edition}") — see AGENTS.md Course placement`,
         ]
       : [];
   }
@@ -1023,7 +1018,7 @@ function checkCrossRefs(metaPath: string, meta: Metadata): CrossRefResult {
 }
 
 /**
- * [check engine / 助言] disruption が「届く」 形になっているかの advisory (AGENT.md §11)。
+ * [check engine / 助言] disruption が「届く」 形になっているかの advisory (AGENTS.md §11)。
  *   - action + effect の二重宣言 → 実障害は probe 失敗由来の failurePenalty で既に減点される
  *     ため二重課金になり、 effect 側は移行済みチームにも無条件で当たる (= 不公平)。
  *   - description が障害 (503 / 停止 / outage 等) を謳うのに action も parameters.probe も
@@ -1049,19 +1044,19 @@ function checkDisruptionDeliveryAdvisory(meta: Metadata, dir: string): Validatio
 
     if (action && effect) {
       warnings.push(
-        `disruption[${id}] が action と effect を両方宣言。 実障害は probe 失敗 (failurePenalty) で既に減点されるため二重課金になり、 effect は移行済みチームにも無条件で当たる。 どちらか 1 つに絞ってください (AGENT.md §11)`,
+        `disruption[${id}] が action と effect を両方宣言。 実障害は probe 失敗 (failurePenalty) で既に減点されるため二重課金になり、 effect は移行済みチームにも無条件で当たる。 どちらか 1 つに絞ってください (AGENTS.md §11)`,
       );
     }
     if (!action && !probe && typeof d.description === "string" && FAULT_CLAIM.test(d.description)) {
       warnings.push(
-        `disruption[${id}] の description が障害 (503 / 停止等) を謳っているが、 action も parameters.probe も無い = 何も起きない約束。 実障害なら action を宣言、 採点圧だけなら description を score 圧の表現に直してください (AGENT.md §11)`,
+        `disruption[${id}] の description が障害 (503 / 停止等) を謳っているが、 action も parameters.probe も無い = 何も起きない約束。 実障害なら action を宣言、 採点圧だけなら description を score 圧の表現に直してください (AGENTS.md §11)`,
       );
     }
   }
 
   if (disruptions.length > 1 && !existsSync(join(dir, "redteam", "README.md"))) {
     warnings.push(
-      `disruptions が ${disruptions.length} 件あるのに redteam/README.md が無い。 catalog 表 / 復旧経路 / targeting 規律を operator 向けに書いてください (AGENT.md §11)`,
+      `disruptions が ${disruptions.length} 件あるのに redteam/README.md が無い。 catalog 表 / 復旧経路 / targeting 規律を operator 向けに書いてください (AGENTS.md §11)`,
     );
   }
   return warnings;
@@ -1371,21 +1366,10 @@ function validateMetadataFiles(
     string,
     NonNullable<ReturnType<Ajv2020["compile"]>["errors"]>
   >();
-  const graphCatalog: KnowledgeGraphCatalogEntry[] = [];
-
   for (const { file, data } of parsed) {
-    if (validate(data)) {
-      graphCatalog.push({ file: relative(REPO_ROOT, file), metadata: data });
-    } else {
+    if (!validate(data)) {
       schemaErrors.set(file, [...(validate.errors ?? [])]);
     }
-  }
-
-  const graphErrors = new Map<string, ValidationError[]>();
-  for (const diagnostic of validateKnowledgeGraphCatalog(graphCatalog)) {
-    const errors = graphErrors.get(diagnostic.file) ?? [];
-    errors.push(`${diagnostic.path}: ${diagnostic.message}`);
-    graphErrors.set(diagnostic.file, errors);
   }
 
   let failed = 0;
@@ -1401,7 +1385,6 @@ function validateMetadataFiles(
     const errors = [
       ...checkRequiredReadmes(dirname(file)),
       ...crossRefs.errors,
-      ...(graphErrors.get(relative(REPO_ROOT, file)) ?? []),
     ];
     const { warnings } = crossRefs;
     if (warnings.length > 0) printWarnings(file, warnings);

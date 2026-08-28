@@ -23,73 +23,20 @@
     "container"
   ],
   "exposedPorts": [
-    { "port": 18122, "name": "Browser Workbench" },
-    { "port": 18123, "name": "/verify (loopback only)" }
+    {
+      "port": 18122,
+      "name": "Browser Workbench"
+    },
+    {
+      "port": 18123,
+      "name": "/verify (loopback only)"
+    }
   ],
   "learningGoals": [
     "issuer、audience、subjectを別々の認証境界として扱える",
     "audienceをsts.amazonaws.comの単一値へfail closedで束縛できる",
     "subjectを対象repositoryのProduction environmentへ厳密に束縛できる",
     "branch、pull request、environment、reusable workflow callerのsubjectを区別できる"
-  ],
-  "nodes": {
-    "learning_objectives": [
-      {
-        "id": "lo.github-oidc-trust-boundary.separate-token-boundaries",
-        "description": "provider、audience、subjectを独立したtrust decisionとして評価できる"
-      },
-      {
-        "id": "lo.github-oidc-trust-boundary.bind-production-environment",
-        "description": "production roleを正確なrepositoryとenvironment subjectへ束縛できる"
-      }
-    ],
-    "concepts": [
-      {
-        "id": "concept.oidc-audience",
-        "description": "tokenの意図された受信者を示すaud claim"
-      },
-      {
-        "id": "concept.github-oidc-subject",
-        "description": "repositoryとjob contextを結合したGitHub OIDC sub claim"
-      },
-      {
-        "id": "concept.iam-role-trust-policy",
-        "description": "federated principalがroleを引き受ける条件"
-      }
-    ],
-    "assessment_criteria": [
-      {
-        "id": "assessment.github-oidc-trust-boundary.reject-confused-callers",
-        "description": "正常なProduction environmentだけを許可し、別audience・repository・PR・branchを拒否できる"
-      }
-    ],
-    "misconceptions": [
-      {
-        "id": "misconception.secretless-means-least-privilege",
-        "description": "長期secretを消せばOIDC trust policyの範囲は自動的に安全になるという誤解"
-      },
-      {
-        "id": "misconception.reusable-workflow-is-caller-identity",
-        "description": "reusable workflowのidentityをcaller repositoryのidentityと同一視する誤解"
-      }
-    ],
-    "audiences": [
-      {
-        "id": "audience.platform-security-engineer",
-        "description": "GitHub ActionsからAWSへのsecretless deployを設計・reviewするengineer"
-      }
-    ]
-  },
-  "relations": [
-    { "type": "teaches", "source": "problem.github-oidc-trust-boundary", "target": "lo.github-oidc-trust-boundary.separate-token-boundaries" },
-    { "type": "teaches", "source": "problem.github-oidc-trust-boundary", "target": "lo.github-oidc-trust-boundary.bind-production-environment" },
-    { "type": "covers", "source": "problem.github-oidc-trust-boundary", "target": "concept.oidc-audience" },
-    { "type": "covers", "source": "problem.github-oidc-trust-boundary", "target": "concept.github-oidc-subject" },
-    { "type": "covers", "source": "problem.github-oidc-trust-boundary", "target": "concept.iam-role-trust-policy" },
-    { "type": "assesses", "source": "problem.github-oidc-trust-boundary", "target": "assessment.github-oidc-trust-boundary.reject-confused-callers" },
-    { "type": "related_to", "source": "problem.github-oidc-trust-boundary", "target": "misconception.secretless-means-least-privilege" },
-    { "type": "related_to", "source": "problem.github-oidc-trust-boundary", "target": "misconception.reusable-workflow-is-caller-identity" },
-    { "type": "related_to", "source": "problem.github-oidc-trust-boundary", "target": "audience.platform-security-engineer" }
   ],
   "runtime": {
     "provider": "docker",
@@ -110,7 +57,11 @@
         "points": 20,
         "wrongAnswerPenalty": 1,
         "hints": [
-          { "id": "observe-1", "content": "Workbenchの4つのdeny予定caseが、なぜallowになったかをclaimごとに確認する。", "penalty": 4 }
+          {
+            "id": "observe-1",
+            "content": "Workbenchの4つのdeny予定caseが、なぜallowになったかをclaimごとに確認する。",
+            "penalty": 4
+          }
         ]
       },
       {
@@ -119,7 +70,11 @@
         "points": 30,
         "wrongAnswerPenalty": 1,
         "hints": [
-          { "id": "audience-1", "content": "AWS向け標準audienceをStringEqualsで比較し、欠落・配列・別値を拒否する。", "penalty": 6 }
+          {
+            "id": "audience-1",
+            "content": "AWS向け標準audienceをStringEqualsで比較し、欠落・配列・別値を拒否する。",
+            "penalty": 6
+          }
         ]
       },
       {
@@ -128,7 +83,11 @@
         "points": 35,
         "wrongAnswerPenalty": 2,
         "hints": [
-          { "id": "repository-1", "content": "owner wildcardではなく、sub内のowner/repositoryを完全一致させる。", "penalty": 7 }
+          {
+            "id": "repository-1",
+            "content": "owner wildcardではなく、sub内のowner/repositoryを完全一致させる。",
+            "penalty": 7
+          }
         ]
       },
       {
@@ -137,7 +96,11 @@
         "points": 40,
         "wrongAnswerPenalty": 2,
         "hints": [
-          { "id": "environment-1", "content": "environment jobのsubはbranchやpull_requestの形式ではない。", "penalty": 8 }
+          {
+            "id": "environment-1",
+            "content": "environment jobのsubはbranchやpull_requestの形式ではない。",
+            "penalty": 8
+          }
         ]
       },
       {
@@ -146,7 +109,11 @@
         "points": 40,
         "wrongAnswerPenalty": 2,
         "hints": [
-          { "id": "pull-request-1", "content": "job_workflow_refが承認済みでも、caller repositoryはsubで別に評価される。", "penalty": 8 }
+          {
+            "id": "pull-request-1",
+            "content": "job_workflow_refが承認済みでも、caller repositoryはsubで別に評価される。",
+            "penalty": 8
+          }
         ]
       },
       {
@@ -155,7 +122,11 @@
         "points": 35,
         "wrongAnswerPenalty": 2,
         "hints": [
-          { "id": "replay-1", "content": "fallback allowや前caseの状態に依存せず、各requestを同じpolicyで独立評価する。", "penalty": 7 }
+          {
+            "id": "replay-1",
+            "content": "fallback allowや前caseの状態に依存せず、各requestを同じpolicyで独立評価する。",
+            "penalty": 7
+          }
         ]
       }
     ]
@@ -174,12 +145,66 @@
         "Distinguish branch, pull request, environment, and reusable-workflow caller contexts"
       ],
       "checks": [
-        { "id": "observe", "label": "Observe the starter's unintended allows", "hints": [{ "id": "observe-1", "content": "Inspect why each expected-deny case was allowed, one claim at a time." }] },
-        { "id": "audience", "label": "Allow only the AWS audience", "hints": [{ "id": "audience-1", "content": "Use StringEquals for the AWS audience and reject missing, multi-valued, and different audiences." }] },
-        { "id": "repository", "label": "Bind the target repository", "hints": [{ "id": "repository-1", "content": "Match the owner and repository in sub exactly; an owner wildcard is broader than the role." }] },
-        { "id": "environment", "label": "Bind the Production environment", "hints": [{ "id": "environment-1", "content": "An environment job's sub has a different form from branch and pull-request subjects." }] },
-        { "id": "pull-request", "label": "Reject PR and reusable-caller confusion", "hints": [{ "id": "pull-request-1", "content": "An approved job_workflow_ref does not replace the caller repository carried in sub." }] },
-        { "id": "replay", "label": "Keep shuffled re-evaluation deterministic", "hints": [{ "id": "replay-1", "content": "Evaluate each request independently without fallback allow or state from a prior case." }] }
+        {
+          "id": "observe",
+          "label": "Observe the starter's unintended allows",
+          "hints": [
+            {
+              "id": "observe-1",
+              "content": "Inspect why each expected-deny case was allowed, one claim at a time."
+            }
+          ]
+        },
+        {
+          "id": "audience",
+          "label": "Allow only the AWS audience",
+          "hints": [
+            {
+              "id": "audience-1",
+              "content": "Use StringEquals for the AWS audience and reject missing, multi-valued, and different audiences."
+            }
+          ]
+        },
+        {
+          "id": "repository",
+          "label": "Bind the target repository",
+          "hints": [
+            {
+              "id": "repository-1",
+              "content": "Match the owner and repository in sub exactly; an owner wildcard is broader than the role."
+            }
+          ]
+        },
+        {
+          "id": "environment",
+          "label": "Bind the Production environment",
+          "hints": [
+            {
+              "id": "environment-1",
+              "content": "An environment job's sub has a different form from branch and pull-request subjects."
+            }
+          ]
+        },
+        {
+          "id": "pull-request",
+          "label": "Reject PR and reusable-caller confusion",
+          "hints": [
+            {
+              "id": "pull-request-1",
+              "content": "An approved job_workflow_ref does not replace the caller repository carried in sub."
+            }
+          ]
+        },
+        {
+          "id": "replay",
+          "label": "Keep shuffled re-evaluation deterministic",
+          "hints": [
+            {
+              "id": "replay-1",
+              "content": "Evaluate each request independently without fallback allow or state from a prior case."
+            }
+          ]
+        }
       ]
     }
   }

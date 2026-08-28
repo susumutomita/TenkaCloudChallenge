@@ -1,6 +1,6 @@
 # Local-play problem container for wp2shell-local-lab.
 #
-# Safety boundary (this is the crux of the problem -- see AGENT.md and the issue
+# Safety boundary (this is the crux of the problem -- see AGENTS.md and the issue
 # this ships against): the app is a from-scratch simulator, never real WordPress,
 # and never a reusable public-internet exploit.
 #   - `networks.labnet.internal: true` means this compose network has NO route to

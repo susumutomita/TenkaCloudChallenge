@@ -38,69 +38,6 @@
     "autovacuum が無効な状態で手動 VACUUM を実行し、n_dead_tup が回収される様子を確認できる",
     "通常の VACUUM (再利用可能な空き領域として内部で回収) と VACUUM FULL (ファイルを書き直して実際に縮める) の違いと、その代償 (ACCESS EXCLUSIVE ロック) を説明できる"
   ],
-  "nodes": {
-    "learning_objectives": [
-      {
-        "id": "lo.db-a8-delete-vacuum.delete-does-not-shrink-table",
-        "description": "大量行の DELETE 直後、pg_total_relation_size がすぐには縮まないことを自分の手で確認できる"
-      },
-      {
-        "id": "lo.db-a8-delete-vacuum.delete-increases-dead-tuples",
-        "description": "DELETE が n_dead_tup を増やすこと、それは論理的な削除であって物理的なディスク回収ではないことを、実データで説明できる"
-      },
-      {
-        "id": "lo.db-a8-delete-vacuum.manual-vacuum-reclaims-dead-tuples",
-        "description": "autovacuum が無効な状態で手動 VACUUM を実行し、n_dead_tup が回収される様子を確認できる"
-      },
-      {
-        "id": "lo.db-a8-delete-vacuum.vacuum-vs-vacuum-full",
-        "description": "通常の VACUUM (再利用可能な空き領域として内部で回収) と VACUUM FULL (ファイルを書き直して実際に縮める) の違いと、その代償 (ACCESS EXCLUSIVE ロック) を説明できる"
-      }
-    ],
-    "concepts": [
-      {
-        "id": "concept.dead-tuple-reclamation",
-        "description": "DELETE は行を論理的に見えなくする (dead tuple を増やす) だけで、その領域を再利用可能にするのは別の後始末処理 (VACUUM) である。"
-      }
-    ]
-  },
-  "relations": [
-    {
-      "type": "teaches",
-      "source": "problem.db-a8-delete-vacuum",
-      "target": "lo.db-a8-delete-vacuum.delete-does-not-shrink-table"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.db-a8-delete-vacuum",
-      "target": "lo.db-a8-delete-vacuum.delete-increases-dead-tuples"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.db-a8-delete-vacuum",
-      "target": "lo.db-a8-delete-vacuum.manual-vacuum-reclaims-dead-tuples"
-    },
-    {
-      "type": "teaches",
-      "source": "problem.db-a8-delete-vacuum",
-      "target": "lo.db-a8-delete-vacuum.vacuum-vs-vacuum-full"
-    },
-    {
-      "type": "covers",
-      "source": "problem.db-a8-delete-vacuum",
-      "target": "concept.dead-tuple-reclamation"
-    },
-    {
-      "type": "requires",
-      "source": "problem.db-a8-delete-vacuum",
-      "target": "problem.db-a7-mvcc"
-    },
-    {
-      "type": "requires",
-      "source": "concept.dead-tuple-reclamation",
-      "target": "concept.mvcc-row-versioning"
-    }
-  ],
   "i18n": {
     "en": {
       "name": "DELETE happened, disk didn't shrink — logical delete and physical reclaim are different things",
