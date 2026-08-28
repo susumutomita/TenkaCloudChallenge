@@ -212,9 +212,14 @@ def check_validate(module, seed: str) -> list[str]:
     """
     failures: list[str] = []
     try:
-        for reason, par in INVALID_PARAMS:
-            if not module.validate_params(dict(par)):
-                failures.append(f"an invalid parameter set was accepted: {reason}")
+        # Issue 630: these strings can now travel to the participant. The per-set
+        # reasons include the one rule the starter poses as a question, so only the
+        # count travels. The verdict is unchanged: one accepted set still fails.
+        accepted = sum(
+            1 for _reason, par in INVALID_PARAMS if not module.validate_params(dict(par))
+        )
+        if accepted:
+            failures.append(f"{accepted} invalid parameter set(s) were accepted")
         for par in VALID_PARAMS:
             reported = module.validate_params(dict(par))
             if reported:

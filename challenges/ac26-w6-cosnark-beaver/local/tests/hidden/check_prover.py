@@ -169,9 +169,11 @@ def _plan_failures(module, scenario: _Scenario, products: int) -> list[str]:
         ("relationId", scenario.relation["relationId"]),
     ):
         if plan.get(key) != expected:
+            # Issue 630: this string can now travel to the participant, so it names the
+            # field and echoes their own value, never the expected one.
             failures.append(
-                f"the plan for a layer of {products} reported {key}={plan.get(key)!r}, "
-                f"not {expected!r}"
+                f"the plan for a layer of {products} reported the wrong {key} "
+                f"({plan.get(key)!r})"
             )
     local = plan.get("local")
     expected_local = LOCAL_OPERATIONS if products else ()
@@ -179,8 +181,11 @@ def _plan_failures(module, scenario: _Scenario, products: int) -> list[str]:
         if local is not None and "open" in tuple(local):
             failures.append("the plan counts `open` among the local operations")
         else:
+            # Issue 630: participant-visible now -- echo their answer, not the set the
+            # starter asks them to read off the four terms of [C].
             failures.append(
-                f"the plan named {local!r} as the local operations, not {expected_local!r}"
+                f"the plan named {local!r} as the local operations, and that is not what "
+                "one multiplication needs"
             )
     return failures
 

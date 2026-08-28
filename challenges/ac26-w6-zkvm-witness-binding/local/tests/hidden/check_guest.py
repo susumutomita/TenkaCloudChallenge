@@ -609,9 +609,11 @@ def _one_run(module, built: dict, record: dict, private: dict, what: str) -> lis
                 "is the failure being proven"
             )
         elif field == "wrapped":
+            # Issue 630: participant-visible now -- echo their sites, never the run's
+            # actual wrap set.
             failures.append(
                 f"run_guest says {list(theirs) if isinstance(theirs, tuple) else theirs} "
-                f"wrapped on {what}; that run wraps {list(mine)}"
+                f"wrapped on {what}, and that is not what that run wraps"
             )
         else:
             failures.append(f"run_guest's {field} is wrong on {what}")
@@ -985,8 +987,10 @@ def _privacy_failures(module, seed: str, label: str) -> list[str]:
         missed = sorted(set(want) - set(reported))
         invented = sorted(set(reported) - set(want))
         if missed:
+            # Issue 630: participant-visible now -- the missed name is the checkpoint's
+            # answer, so only the channel is reported.
             failures.append(
-                f"leak_report missed {missed[0][1]!r} on the {missed[0][0]} channel of one run"
+                f"leak_report missed a disclosed name on the {missed[0][0]} channel of one run"
             )
         if invented:
             failures.append(

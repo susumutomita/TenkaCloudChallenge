@@ -407,13 +407,23 @@ def check_detect(module: Any, _seed: str) -> list[str]:
         return ["the suite reports the submission's own protocol as broken"]
 
     failures: list[str] = []
-    for name, mutant in _mutants(module):
+    # Issue 630: these strings can now travel to the participant. The mutant names are
+    # this checkpoint's hidden predicates -- naming the one a suite misses would hand
+    # over the test to write -- so only the count travels. The verdict is unchanged:
+    # failures is non-empty exactly when a call errored or a mutant went unnoticed.
+    unnoticed = 0
+    for _name, mutant in _mutants(module):
         verdict, error = _call(module, "detects", mutant)
         if error:
             failures.append(error)
             break
         if verdict is not True:
-            failures.append(f"the suite does not notice a protocol that {name}")
+            unnoticed += 1
+    if unnoticed:
+        failures.append(
+            f"the suite does not notice {unnoticed} of the deliberately broken protocols "
+            "it was shown"
+        )
     return failures
 
 

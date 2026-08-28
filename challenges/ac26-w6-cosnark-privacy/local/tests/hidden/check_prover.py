@@ -384,8 +384,10 @@ def _capability_failures(module, suite: _Suite, seed: str, label: str, shape: st
         if set(names) != set(expected):
             missed = sorted(set(expected) - set(names))
             if missed and identifier in suite.malformed:
+                # Issue 630: participant-visible now -- name the property, not the
+                # capability names the audit was supposed to find.
                 failures.append(
-                    f"capability_audit missed {missed} on a specimen that only reaches them "
+                    "capability_audit missed capabilities a specimen only reaches "
                     "when the input is malformed"
                 )
             elif set(names) & set(PROTOCOL_CAPABILITIES):
@@ -394,8 +396,11 @@ def _capability_failures(module, suite: _Suite, seed: str, label: str, shape: st
                     "prover's"
                 )
             else:
+                # Issue 630: participant-visible now -- echo their answer only, never
+                # the record's own capability set.
                 failures.append(
-                    f"capability_audit reported {sorted(names)}, the record holds {list(expected)}"
+                    f"capability_audit reported {sorted(names)}, which is not what the "
+                    "record holds"
                 )
     return failures
 
@@ -605,7 +610,9 @@ def _leakage_failures(
             elif extra:
                 failures.append(f"leakage_audit flagged {extra}, which the policy allows")
             else:
-                failures.append(f"leakage_audit missed {missed}")
+                # Issue 630: participant-visible now -- the missed (channel, name)
+                # pairs are the checkpoint's answer, so only the fact is reported.
+                failures.append("leakage_audit missed a disclosure the policy forbids")
     return failures
 
 

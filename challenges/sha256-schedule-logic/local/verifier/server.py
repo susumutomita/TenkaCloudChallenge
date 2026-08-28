@@ -10,8 +10,9 @@ Security contract (docs/curricula/advanced-cryptography-2026/TEMPLATE.md §/veri
     checkpoint instead of the verifier.
   - No learner input is ever concatenated into a shell command; the subprocess is
     invoked with an argument list and `shell=False`.
-  - Responses carry `correct` and, at most, a property name. Never the hidden test
-    names, the expected values, or reference output.
+  - Responses carry `checkpointId`, `correct` and, on a failed code checkpoint, a
+    `message` summarizing the checker's property-level failures (Issue 630). Never
+    the hidden test names, the expected values, or reference output.
   - Malformed input produces a failed checkpoint, never a crashed process.
 
 Issue 537/538: this used to be the same process that also served the Participant
@@ -56,6 +57,9 @@ RUN_TIMEOUT_SECONDS = 20
 MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
 MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
+#: Cap for the verdict's optional human-readable failure summary. Kept under the
+#: platform's 2000-character message limit with room to spare.
+MAX_MESSAGE_CHARS = 1900
 #: Wall clock for reading a request body, so a stalled client cannot pin the server.
 REQUEST_TIMEOUT_SECONDS = 15
 
@@ -229,12 +233,23 @@ os._exit(0)
 """
 
 
-def _run_hidden(submission: object, entry: str) -> bool:
+def _failure_message(failures: list[object]) -> str | None:
+    """Join the hidden checker's failure list into one participant-facing message.
+
+    Only checker-authored strings are kept: anything else that ends up in the list
+    is dropped rather than serialized, so a checker bug cannot push raw values
+    through the message field.
+    """
+    text = "; ".join(item for item in failures if isinstance(item, str))
+    return text[:MAX_MESSAGE_CHARS] if text else None
+
+
+def _run_hidden(submission: object, entry: str) -> tuple[bool, str | None]:
     """Run one hidden suite against the learner's file in a throwaway workspace."""
     if not isinstance(submission, str) or not submission.strip():
-        return False
+        return False, None
     if len(submission) > MAX_BODY_BYTES:
-        return False
+        return False, None
     with tempfile.TemporaryDirectory() as workspace:
         (Path(workspace) / "schedule.py").write_text(submission, encoding="utf-8")
         script = RUNNER.format(root=str(ROOT), workspace=workspace, seed=SEED, entry=entry)
@@ -259,9 +274,9 @@ def _run_hidden(submission: object, entry: str) -> bool:
                 )
             captured = transcript.read_text(encoding="utf-8", errors="replace")
         except (subprocess.TimeoutExpired, OSError, ValueError):
-            return False
+            return False, None
     if completed.returncode != 0:
-        return False
+        return False, None
     stdout = captured[-MAX_OUTPUT_BYTES:]
     for line in reversed(stdout.splitlines()):
         try:
@@ -269,21 +284,33 @@ def _run_hidden(submission: object, entry: str) -> bool:
         except json.JSONDecodeError:
             continue
         failures = payload.get("failures")
-        return isinstance(failures, list) and len(failures) == 0
-    return False
+        if not isinstance(failures, list):
+            return False, None
+        if failures:
+            return False, _failure_message(failures)
+        return True, None
+    return False, None
 
 
 def evaluate(checkpoint_id: str, submission: object) -> bool:
+    """Boolean verdict for callers that need only pass/fail (mutation.py does)."""
+    correct, _message = evaluate_with_message(checkpoint_id, submission)
+    return correct
+
+
+def evaluate_with_message(
+    checkpoint_id: str, submission: object
+) -> tuple[bool, str | None]:
     if checkpoint_id == "rotate":
-        return _check_rotate(submission)
+        return _check_rotate(submission), None
     if checkpoint_id == "mux":
-        return _check_mux(submission)
+        return _check_mux(submission), None
     if checkpoint_id == "dependency":
-        return _check_dependency(submission)
+        return _check_dependency(submission), None
     entry = CODE_CHECKPOINTS.get(checkpoint_id)
     if entry is not None:
         return _run_hidden(submission, entry)
-    return False
+    return False, None
 
 
 def _b64decode(value: str) -> bytes:
@@ -366,10 +393,13 @@ class Handler(BaseHTTPRequestHandler):
             return
         submission = _unwrap_submission(checkpoint_id, body.get("submission"))
         try:
-            correct = evaluate(checkpoint_id, submission)
+            correct, message = evaluate_with_message(checkpoint_id, submission)
         except Exception:  # noqa: BLE001 - a broken checkpoint must fail closed
-            correct = False
-        self._respond(200, {"checkpointId": checkpoint_id, "correct": correct})
+            correct, message = False, None
+        verdict: dict[str, object] = {"checkpointId": checkpoint_id, "correct": correct}
+        if not correct and message:
+            verdict["message"] = message
+        self._respond(200, verdict)
 
     def _read_json_body(self) -> dict[str, object] | None:
         try:
