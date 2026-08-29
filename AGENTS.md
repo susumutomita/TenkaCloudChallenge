@@ -61,6 +61,17 @@ Multiple or mixed disruptions require a `redteam/README.md` describing targeting
 
 Every problem needs Japanese `instructions` and `i18n.en.instructions`. Use a short structure: framing, concrete first action, and observable goal. Defining unfamiliar terms is not a spoiler. For multi-resource problems, add a non-spoiler `diagram.svg` when it materially helps orientation.
 
+### §12b Target reader
+
+Participant-visible text — `shortDescription`, `instructions`, hints, starter docstrings, and workbench screen text — is written for a reader with Japanese junior-high-school mathematics and one beginner Python book.
+
+- Assume only: negative numbers, literal expressions, linear/simultaneous/quadratic equations, powers, square roots, prime factorisation, division remainders, basic probability; Python variables, `if`, `for`, function definitions, lists, dicts.
+- Do not assume: `mod` notation (say 「割った余り」 first, then introduce the word), Σ, logarithms, matrices, vectors, general polynomial theory, set notation, congruences, or any cryptographic vocabulary.
+- Every term beyond that baseline is defined at or before first use, in the same document. A glossary entry counts; so does an inline 「(= …)」.
+- Every formula or procedure the solution needs is given in the statement or the starter, with a worked example in one-digit numbers. Problems test applying and understanding a given procedure, never deriving it. A needed formula must not sit behind a paid hint.
+- Difficulty lives in the work — implementation, case analysis, constructing counterexamples, transfer to unseen parameters — never in the reading.
+- The check for this bar is a persona read-through: an unspoiled reader limited to the baseline above must, from participant-visible text alone, say what the situation is, what to do first, and what "done" means, and be able to start the first checkpoint. Record the verdict when promoting a problem.
+
 ## §13 Local-play containers
 
 - Declare `runtime.provider: "docker"`, `runtime.engine: "compose"`, and a real `runtime.entry`.
