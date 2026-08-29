@@ -33,3 +33,11 @@ jobs:
 
       - name: Validate catalog metadata and cross-references
         run: make agent-gate
+
+      - name: Install ac26 crypto battle test dependencies
+        working-directory: battles/ac26-crypto-battle/game
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Test and typecheck ac26 crypto battle
+        working-directory: battles/ac26-crypto-battle/game
+        run: bun test && bun run typecheck
