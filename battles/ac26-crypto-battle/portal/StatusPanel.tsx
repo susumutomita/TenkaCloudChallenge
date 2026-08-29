@@ -79,6 +79,7 @@ interface Copy {
   readonly kindRush: string;
   readonly vaultTitle: string;
   readonly vaultBody: string;
+  readonly teamIdLabel: string;
   readonly generationLabel: string;
   readonly secretLabel: string;
   readonly sharesLabel: string;
@@ -128,6 +129,12 @@ const COPY: Record<Locale, Copy> = {
     kindRush: "rush",
     vaultTitle: "My Vault",
     vaultBody: "Only your team can see this.",
+    // PROVE's Python (HelpDrawer's "Computing PROVE and HUNT yourself")
+    // needs this exact string as its `team` variable -- this is the only
+    // place a fresh team can read it. Shown as monospace so it copy-pastes
+    // cleanly (it feeds a length-prefixed hash preimage; even a
+    // leading/trailing space copied in by accident would change the proof).
+    teamIdLabel: "Team ID (for PROVE's `team` variable)",
     generationLabel: "Generation",
     secretLabel: "Secret",
     sharesLabel: "Shares (this generation)",
@@ -174,6 +181,7 @@ const COPY: Record<Locale, Copy> = {
     kindRush: "rush",
     vaultTitle: "My Vault",
     vaultBody: "自チームにのみ表示されます。",
+    teamIdLabel: "Team ID (PROVE の `team` 変数)",
     generationLabel: "世代",
     secretLabel: "Secret",
     sharesLabel: "Share 一覧 (現行世代)",
@@ -252,40 +260,75 @@ function formatDuration(ms: number): string {
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
 
-/** Deterministic, timezone-independent timestamp for the ledger's "when" column. */
+/**
+ * Elapsed-time-since-match-start "when" column for the ledger, formatted as
+ * HH:MM:SS. `entry.postedAtMs` (`PublicArtifact.postedAtMs`) lives on the
+ * dispatcher's elapsed-since-event-start clock, NOT a Unix epoch ms (same
+ * clock as `ContractProjection.remainingMs` / `matchRemainingMs` -- see
+ * those fields' doc comments in `../game/src/types.ts`), so this
+ * deliberately does NOT try to render it as a wall-clock time of day.
+ * Feeding an elapsed-ms duration straight into `new Date(ms)` and slicing
+ * out `HH:MM:SS` happens to be exactly correct here BECAUSE `Date`'s epoch
+ * is 1970-01-01T00:00:00Z: `new Date(elapsedMs).toISOString()`'s
+ * `HH:MM:SS` segment IS that duration's hours/minutes/seconds, as long as
+ * it stays under 24h -- always true here, since `elapsedMs <=
+ * matchDurationMs` (90 min, `DEFAULT_CONFIG` in `../game/src/reducer.ts`).
+ * Do not "fix" this into `new Date(ms).toLocaleTimeString()` or similar --
+ * that would render this problem's OWN Deploy-time wall clock, not elapsed
+ * match time, for every viewer.
+ */
 function formatTimestamp(ms: number): string {
   return new Date(ms).toISOString().slice(11, 19);
 }
 
 /**
- * Anchors the display clock to `props.nowIso` (portal's own idea of "now",
- * for clock-skew tolerance and testability -- see the SDK's doc comment on
- * that field) rather than reading the browser clock directly, then ticks it
- * forward once a second so contract/rotate countdowns visibly move between
- * the 30s projection polls. This `setInterval` runs only as a real DOM
- * effect (never during a static/server render -- see `portal.test.ts`), so
- * it never affects `game/src`'s purity contract, which governs
- * `../game/src/reducer.ts` only, not this display-only client component.
+ * Ms of real wall-clock time elapsed since `receivedAtWallMs` (when the
+ * current projection was fetched), ticking forward once a second so
+ * contract/match countdowns visibly move between the 30s projection polls.
+ *
+ * Deliberately NOT `props.nowIso` minus a projection timestamp: this
+ * problem's `CryptoBattleProjection` (`../game/src/types.ts`) intentionally
+ * ships `remainingMs` / `matchRemainingMs` as durations already computed
+ * server-side against the dispatcher's elapsed-since-event-start clock --
+ * see those fields' doc comments for why an EARLIER version of this file
+ * subtracted an absolute `Date.now()`-derived `nowMs` from a raw
+ * `expiresAtMs` here and rendered every countdown as a permanent "0:00"
+ * (the two clocks differ by roughly the age of Unix time itself). This hook
+ * only ever measures wall-clock elapsed time against `receivedAtWallMs`
+ * (also an absolute `Date.now()`-based value, from the same clock) -- same
+ * units on both sides of every subtraction, unlike the old code.
+ *
+ * `receivedAtWallMs === null` (no successful poll yet) returns 0: the
+ * caller renders `copy.loading` / `copy.notConfigured` in that case anyway
+ * (see `StatusPanel`'s default export below), never a countdown.
+ *
+ * This `setInterval` runs only as a real DOM effect (never during a
+ * static/server render -- see `portal.test.ts`), so it never affects
+ * `game/src`'s purity contract, which governs `../game/src/reducer.ts`
+ * only, not this display-only client component.
  */
-function useLiveNowMs(nowIso: string): number {
-  const [nowMs, setNowMs] = useState<number>(() => {
-    const parsed = Date.parse(nowIso);
-    return Number.isFinite(parsed) ? parsed : Date.now();
-  });
+function useElapsedSincePollMs(receivedAtWallMs: number | null): number {
+  const [elapsedMs, setElapsedMs] = useState<number>(0);
   useEffect(() => {
-    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    if (receivedAtWallMs === null) {
+      setElapsedMs(0);
+      return;
+    }
+    const recompute = () => setElapsedMs(Math.max(0, Date.now() - receivedAtWallMs));
+    recompute();
+    const id = setInterval(recompute, 1000);
     return () => clearInterval(id);
-  }, []);
-  return nowMs;
+  }, [receivedAtWallMs]);
+  return elapsedMs;
 }
 
 function ContractQueueLane({
   contracts,
-  nowMs,
+  elapsedSincePollMs,
   copy,
 }: {
   readonly contracts: readonly ContractProjection[];
-  readonly nowMs: number;
+  readonly elapsedSincePollMs: number;
   readonly copy: Copy;
 }) {
   const open = contracts.filter((c) => c.status === "open");
@@ -308,7 +351,7 @@ function ContractQueueLane({
           </thead>
           <tbody>
             {open.map((c) => {
-              const remainingMs = c.expiresAtMs - nowMs;
+              const remainingMs = Math.max(0, c.remainingMs - elapsedSincePollMs);
               const soon = remainingMs < 60_000;
               return (
                 <tr key={c.id}>
@@ -327,11 +370,23 @@ function ContractQueueLane({
   );
 }
 
-function VaultLane({ vault, copy }: { readonly vault: CryptoBattleProjection["vault"]; readonly copy: Copy }) {
+function VaultLane({
+  vault,
+  elapsedSincePollMs,
+  copy,
+}: {
+  readonly vault: CryptoBattleProjection["vault"];
+  readonly elapsedSincePollMs: number;
+  readonly copy: Copy;
+}) {
+  const rotateCooldownRemainingMs = Math.max(0, vault.rotateCooldownRemainingMs - elapsedSincePollMs);
   return (
     <div style={laneStyle}>
       <h4 style={{ margin: "0 0 4px 0", fontSize: "13px" }}>{copy.vaultTitle}</h4>
       <p style={{ margin: "0 0 8px 0", fontSize: "12px", color: "#5f6b7a" }}>{copy.vaultBody}</p>
+      <p style={{ margin: "0 0 4px 0", fontSize: "12px" }}>
+        {copy.teamIdLabel}: <strong style={{ fontFamily: "monospace" }}>{vault.teamId}</strong>
+      </p>
       <p style={{ margin: "0 0 4px 0", fontSize: "12px" }}>
         {copy.generationLabel}: <strong>{vault.generation}</strong>
       </p>
@@ -357,7 +412,7 @@ function VaultLane({ vault, copy }: { readonly vault: CryptoBattleProjection["va
       </table>
       <p style={{ margin: "8px 0 0 0", fontSize: "12px" }}>
         {copy.rotateCooldownLabel}:{" "}
-        <strong>{vault.rotateCooldownRemainingMs > 0 ? formatDuration(vault.rotateCooldownRemainingMs) : copy.rotateReady}</strong>
+        <strong>{rotateCooldownRemainingMs > 0 ? formatDuration(rotateCooldownRemainingMs) : copy.rotateReady}</strong>
       </p>
       <p style={{ margin: "4px 0 0 0", fontSize: "12px" }}>
         {copy.huntedGenerationsLabel}:{" "}
@@ -432,17 +487,20 @@ function LedgerLane({
 export function StatusPanelBody({
   projection,
   locale,
-  nowMs,
+  elapsedSincePollMs,
 }: {
   readonly projection: CryptoBattleProjection;
   readonly locale: Locale;
-  readonly nowMs: number;
+  /** See `useElapsedSincePollMs`'s doc comment. 0 is the correct value "as of the last poll" (e.g. in tests). */
+  readonly elapsedSincePollMs: number;
 }) {
   const copy = COPY[locale];
   const myTeamId = projection.vault.teamId;
   const myScore = projection.teams[myTeamId]?.score ?? 0;
   const remainingMs =
-    projection.matchEndsAtMs === undefined ? undefined : Math.max(0, projection.matchEndsAtMs - nowMs);
+    projection.matchRemainingMs === undefined
+      ? undefined
+      : Math.max(0, projection.matchRemainingMs - elapsedSincePollMs);
 
   return (
     <>
@@ -467,8 +525,8 @@ export function StatusPanelBody({
         </div>
       </div>
       <div style={laneGridStyle}>
-        <ContractQueueLane contracts={projection.myContracts} nowMs={nowMs} copy={copy} />
-        <VaultLane vault={projection.vault} copy={copy} />
+        <ContractQueueLane contracts={projection.myContracts} elapsedSincePollMs={elapsedSincePollMs} copy={copy} />
+        <VaultLane vault={projection.vault} elapsedSincePollMs={elapsedSincePollMs} copy={copy} />
         <LedgerLane ledger={projection.publicLedger} myTeamId={myTeamId} copy={copy} />
       </div>
     </>
@@ -478,8 +536,8 @@ export function StatusPanelBody({
 export default function StatusPanel(props: PortalSlotProps) {
   const copy = COPY[props.locale === "ja" ? "ja" : "en"];
   const { coordinationClient } = props;
-  const { projection, status } = usePolledProjection(coordinationClient);
-  const nowMs = useLiveNowMs(props.nowIso);
+  const { projection, status, receivedAtWallMs } = usePolledProjection(coordinationClient);
+  const elapsedSincePollMs = useElapsedSincePollMs(receivedAtWallMs);
 
   if (!coordinationClient) {
     return (
@@ -501,7 +559,11 @@ export default function StatusPanel(props: PortalSlotProps) {
         <p style={{ margin: "0 0 12px 0", fontSize: "12px", color: "#d13212" }}>{copy.coordinationStatus(status)}</p>
       )}
       {projection ? (
-        <StatusPanelBody projection={projection} locale={props.locale === "ja" ? "ja" : "en"} nowMs={nowMs} />
+        <StatusPanelBody
+          projection={projection}
+          locale={props.locale === "ja" ? "ja" : "en"}
+          elapsedSincePollMs={elapsedSincePollMs}
+        />
       ) : (
         status === null && <p style={{ margin: 0, fontSize: "13px", color: "#5f6b7a" }}>{copy.loading}</p>
       )}

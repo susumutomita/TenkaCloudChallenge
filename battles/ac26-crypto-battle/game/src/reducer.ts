@@ -602,9 +602,14 @@ export function projectForTeam(state: CryptoBattleState, teamId: string): Crypto
       kind: c.kind,
       points: c.points,
       requestedShareIndices: c.requestedShareIndices,
-      issuedAtMs: c.issuedAtMs,
-      expiresAtMs: c.expiresAtMs,
       status: c.status,
+      // `state.nowMs` is only ever undefined before the first `tick()`, and
+      // `state.contracts` is only ever non-empty AFTER at least one `tick()`
+      // (`initialState` sets `contracts: []`; only `tick()` ever pushes to
+      // it) -- so the `?? c.expiresAtMs` fallback (remainingMs 0) is
+      // unreachable in practice. It exists only to keep this arithmetic
+      // total without an unsafe assertion.
+      remainingMs: Math.max(0, c.expiresAtMs - (state.nowMs ?? c.expiresAtMs)),
     }));
 
   const otherOpenContractCount = state.contracts.filter(
@@ -621,11 +626,14 @@ export function projectForTeam(state: CryptoBattleState, teamId: string): Crypto
     };
   }
 
+  const matchRemainingMs =
+    state.startedAtMs === undefined || state.nowMs === undefined
+      ? undefined
+      : Math.max(0, state.startedAtMs + state.config.matchDurationMs - state.nowMs);
+
   return {
     phase: state.phase,
-    nowMs: state.nowMs,
-    startedAtMs: state.startedAtMs,
-    matchEndsAtMs: state.startedAtMs === undefined ? undefined : state.startedAtMs + state.config.matchDurationMs,
+    matchRemainingMs,
     vault: {
       teamId,
       // team.secret / team.shares are already stringified bigints

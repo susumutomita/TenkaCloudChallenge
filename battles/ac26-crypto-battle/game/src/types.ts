@@ -288,9 +288,28 @@ export interface ContractProjection {
   readonly kind: ContractKind;
   readonly points: number;
   readonly requestedShareIndices: readonly number[];
-  readonly issuedAtMs: number;
-  readonly expiresAtMs: number;
   readonly status: ContractStatus;
+  /**
+   * Ms remaining until this contract expires, AS OF the state's last
+   * `tick()` -- a duration, not a timestamp. `Contract.expiresAtMs` (which
+   * this is derived from in `projectForTeam`) lives on the same clock as
+   * `tick(state, eventNowMs)`'s `eventNowMs`, which TenkaCloud's dispatcher
+   * documents as `nowMs - eventStartMs` (elapsed ms since the event started,
+   * NOT a Unix epoch ms) -- see `CryptoBattleState.nowMs`'s doc comment.
+   * Handing a raw `expiresAtMs` to a portal that subtracts its own
+   * wall-clock `Date.now()` (an absolute epoch ms, off by a factor of
+   * roughly 10^9 from an elapsed-ms duration) silently produces a deeply
+   * negative number that every duration-formatting helper clamps to zero --
+   * this repo's own `StatusPanel.tsx` did exactly that before this field
+   * existed, rendering every live contract's deadline as a permanent
+   * "0:00" regardless of how much time was actually left. Shipping a
+   * pre-computed duration instead removes the unit mismatch at its source;
+   * the portal only adds its own wall-clock elapsed-since-last-poll delta on
+   * top (`coordination.ts`'s `receivedAtWallMs`) to animate a smooth
+   * per-second countdown between 30s polls, never a second subtraction
+   * against an absolute clock.
+   */
+  readonly remainingMs: number;
 }
 
 export interface TeamSummaryProjection {
@@ -307,9 +326,17 @@ export interface TeamSummaryProjection {
  */
 export interface CryptoBattleProjection {
   readonly phase: Phase;
-  readonly nowMs: number | undefined;
-  readonly startedAtMs: number | undefined;
-  readonly matchEndsAtMs: number | undefined;
+  /**
+   * Ms remaining until the match ends, AS OF the state's last `tick()` --
+   * `undefined` before the first tick (match not started). Same
+   * duration-not-timestamp rationale as `ContractProjection.remainingMs`
+   * above: `CryptoBattleState.startedAtMs` lives on `tick()`'s
+   * elapsed-since-event-start clock, not an absolute epoch, so this field
+   * is computed here rather than exposing `startedAtMs` /
+   * `state.config.matchDurationMs` for the portal to (mis)combine with its
+   * own wall clock.
+   */
+  readonly matchRemainingMs: number | undefined;
   readonly vault: VaultProjection;
   readonly myContracts: readonly ContractProjection[];
   readonly otherOpenContractCount: number;

@@ -31,7 +31,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { PortalCoordinationClient, PortalCoordinationOutcome, PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 import { isCryptoBattleProjection } from "../../portal/coordination.ts";
-import HelpDrawer from "../../portal/HelpDrawer.tsx";
+import HelpDrawer, { PYTHON_SNIPPET } from "../../portal/HelpDrawer.tsx";
 import RegistrationPanel, {
   COPY as REGISTRATION_COPY,
   describeOutcome,
@@ -41,9 +41,32 @@ import RegistrationPanel, {
   submitRotate,
 } from "../../portal/RegistrationPanel.tsx";
 import StatusPanel, { StatusPanelBody } from "../../portal/StatusPanel.tsx";
+import { MODP_2048_P } from "./group.ts";
+import { initialState, projectForTeam, tick } from "./reducer.ts";
 import type { CryptoBattleProjection } from "./types.ts";
 
 const FIXED_NOW = 1_700_000_000_000;
+
+/**
+ * `CryptoBattleProjection.matchRemainingMs` / `ContractProjection.remainingMs`
+ * live on the dispatcher's elapsed-since-event-start clock, NOT an absolute
+ * Unix epoch ms like `FIXED_NOW` above. `FIXED_NOW` only anchors
+ * `baseProps()`'s `PortalSlotProps.nowIso` below -- a field `StatusPanel.tsx`
+ * no longer reads at all (see its `useElapsedSincePollMs`, which anchors to
+ * `usePolledProjection`'s own `receivedAtWallMs` / `Date.now()` instead);
+ * `baseProps()` still has to supply SOME value only because `nowIso` is a
+ * required field of the SDK's `PortalSlotProps` type. An earlier version of
+ * this fixture conflated the two clocks (built `matchEndsAtMs` /
+ * `expiresAtMs` around `FIXED_NOW` as if they were absolute epoch ms, and
+ * `StatusPanel.tsx` itself used to derive its display clock from `nowIso`),
+ * which exercised only the WRONG unit assumption the real bug shipped with
+ * -- `StatusPanelBody`'s countdown math never actually saw a realistic
+ * elapsed-vs-wall-clock mismatch in this suite. This constant is a small,
+ * clearly-not-an-epoch elapsed duration (40 minutes into the match) so the
+ * fixture matches what `../game/src/reducer.ts`'s `projectForTeam` really
+ * produces.
+ */
+const ELAPSED_AT_TICK_MS = 40 * 60_000;
 
 /**
  * A well-formed `CryptoBattleProjection`, close to what
@@ -57,9 +80,10 @@ const FIXED_NOW = 1_700_000_000_000;
 function fixtureProjection(overrides: Partial<CryptoBattleProjection> = {}): CryptoBattleProjection {
   return {
     phase: "pressure",
-    nowMs: FIXED_NOW,
-    startedAtMs: FIXED_NOW - 40 * 60_000,
-    matchEndsAtMs: FIXED_NOW + 50 * 60_000,
+    // 90-min matchDurationMs - 40-min elapsed = 50 min left, same numeric
+    // value the earlier (buggy) absolute-epoch-based fixture used, so this
+    // rewrite changes units, not the scenario the tests exercise.
+    matchRemainingMs: 90 * 60_000 - ELAPSED_AT_TICK_MS,
     vault: {
       teamId: "blue",
       secret: "123456789012345678",
@@ -82,18 +106,16 @@ function fixtureProjection(overrides: Partial<CryptoBattleProjection> = {}): Cry
         kind: "standard",
         points: 10,
         requestedShareIndices: [0, 1],
-        issuedAtMs: FIXED_NOW - 60_000,
-        expiresAtMs: FIXED_NOW + 5 * 60_000,
         status: "open",
+        remainingMs: 5 * 60_000,
       },
       {
         id: "blue-c-old",
         kind: "standard",
         points: 10,
         requestedShareIndices: [2],
-        issuedAtMs: FIXED_NOW - 10 * 60_000,
-        expiresAtMs: FIXED_NOW - 5 * 60_000,
         status: "expired",
+        remainingMs: 0,
       },
     ],
     otherOpenContractCount: 1,
@@ -106,7 +128,7 @@ function fixtureProjection(overrides: Partial<CryptoBattleProjection> = {}): Cry
         shareIndex: 0,
         value: "998877",
         contractId: "red-c0",
-        postedAtMs: FIXED_NOW - 9000,
+        postedAtMs: ELAPSED_AT_TICK_MS - 9000,
       },
       {
         id: "red-c1-share1",
@@ -116,7 +138,7 @@ function fixtureProjection(overrides: Partial<CryptoBattleProjection> = {}): Cry
         shareIndex: 1,
         value: "776655",
         contractId: "red-c1",
-        postedAtMs: FIXED_NOW - 6000,
+        postedAtMs: ELAPSED_AT_TICK_MS - 6000,
       },
       {
         id: "red-c2-share2",
@@ -126,7 +148,7 @@ function fixtureProjection(overrides: Partial<CryptoBattleProjection> = {}): Cry
         shareIndex: 2,
         value: "554433",
         contractId: "red-c2",
-        postedAtMs: FIXED_NOW - 3000,
+        postedAtMs: ELAPSED_AT_TICK_MS - 3000,
       },
       {
         id: "blue-c-old-proof",
@@ -136,7 +158,7 @@ function fixtureProjection(overrides: Partial<CryptoBattleProjection> = {}): Cry
         contractId: "blue-c-old",
         commitment: "112233",
         response: "445566",
-        postedAtMs: FIXED_NOW - 1000,
+        postedAtMs: ELAPSED_AT_TICK_MS - 1000,
       },
     ],
     teams: {
@@ -277,7 +299,7 @@ describe("StatusPanelBody -- populated 3-lane render", () => {
   for (const locale of ["ja", "en"] as const) {
     it(`renders all 3 lanes without crashing, with locale-correct copy (${locale})`, () => {
       const html = renderToStaticMarkup(
-        createElement(StatusPanelBody, { projection: fixtureProjection(), locale, nowMs: FIXED_NOW }),
+        createElement(StatusPanelBody, { projection: fixtureProjection(), locale, elapsedSincePollMs: 0 }),
       );
       expect(html.length).toBeGreaterThan(0);
       expect(html).toContain("Contract Queue");
@@ -289,6 +311,11 @@ describe("StatusPanelBody -- populated 3-lane render", () => {
       expect(html).toContain(locale === "ja" ? "スコア" : "Score");
       expect(html).toContain(locale === "ja" ? "フェーズ" : "Phase");
       expect(html).toContain(locale === "ja" ? "自チームにのみ表示されます" : "Only your team can see this");
+      // My Vault shows the team's own teamId -- the only on-screen source
+      // for PROVE's Python `team` variable.
+      // (React HTML-escapes the English copy's apostrophe to `&#x27;`, so
+      // this checks the apostrophe-free tail of that string instead.)
+      expect(html).toContain(locale === "ja" ? "PROVE の `team` 変数" : "`team` variable");
       // Raw ledger data (participant-facing, allowed) is present.
       expect(html).toContain("998877");
       expect(html).toContain("554433");
@@ -303,7 +330,7 @@ describe("StatusPanelBody -- populated 3-lane render", () => {
       // shown, and reading whether that's enough to reconstruct is left to
       // the participant.
       const html = renderToStaticMarkup(
-        createElement(StatusPanelBody, { projection: fixtureProjection(), locale, nowMs: FIXED_NOW }),
+        createElement(StatusPanelBody, { projection: fixtureProjection(), locale, elapsedSincePollMs: 0 }),
       );
       const lower = html.toLowerCase();
       const forbidden = [
@@ -324,6 +351,93 @@ describe("StatusPanelBody -- populated 3-lane render", () => {
   }
 });
 
+describe("StatusPanelBody against a REAL projection (live-deploy report: onboarding repair)", () => {
+  // Every test above hand-fabricates `fixtureProjection()`. That never
+  // exercised the actual seam a live match uses:
+  // `initialState` -> `tick(state, eventNowMs)` -> `projectForTeam` ->
+  // `StatusPanelBody`. `tick`'s `eventNowMs` is elapsed-since-event-start
+  // (TenkaCloud's dispatcher: `eventNowMs = nowMs - eventStartMs`), so
+  // `projectForTeam`'s output only reflects that clock correctly if this
+  // seam is actually run end-to-end -- a hand-written fixture can encode
+  // any (possibly wrong) unit convention its author assumed, and did: an
+  // earlier fixture here built `matchEndsAtMs` / `expiresAtMs` around an
+  // absolute-epoch-looking `FIXED_NOW`, which is exactly the wrong
+  // assumption `StatusPanel.tsx`'s now-removed `useLiveNowMs` also made --
+  // subtracting a real `Date.now()` from an elapsed-since-start duration
+  // produces a deeply negative number that `formatDuration` clamps to
+  // zero, rendering every live match's countdown as a permanent "0:00"
+  // regardless of how much time was actually left (confirmed against a
+  // live deployed match). This test runs the real engine and asserts that
+  // failure mode cannot recur.
+  it("renders a non-zero match and contract countdown right after the first tick", () => {
+    const state0 = initialState({ eventId: "evt-countdown-regression", teamIds: ["blue"] });
+    // eventNowMs = 0 for the very first tick: `tick`'s `startedAtMs ??
+    // eventNowMs` then anchors the match start at exactly 0, so every
+    // resulting duration below is an exact, non-flaky expected value
+    // rather than depending on wall-clock timing.
+    const state1 = tick(state0, 0);
+    const projection = projectForTeam(state1, "blue");
+
+    // Data-level assertion (the actual regression): a live match's
+    // countdown durations must be positive right after issuance, never
+    // zero/negative from a unit mismatch.
+    expect(projection.matchRemainingMs).toBe(90 * 60_000);
+    expect(projection.myContracts.length).toBeGreaterThan(0);
+    for (const contract of projection.myContracts) {
+      expect(contract.remainingMs).toBeGreaterThan(0);
+    }
+
+    // Render-level assertion: the match timer shows the real 90-minute
+    // remaining duration ("1:30:00", `formatDuration`'s h>0 branch) and the
+    // contract's countdown cell shows its real TTL, not the bug's
+    // once-permanent "Time left" / "Expires in" value of exactly zero.
+    // (A naive `not.toContain("0:00")` would be a false negative here --
+    // "1:30:00" itself ends in the substring "0:00" -- so this checks the
+    // two full expected duration strings instead.)
+    const html = renderToStaticMarkup(
+      createElement(StatusPanelBody, { projection, locale: "en", elapsedSincePollMs: 0 }),
+    );
+    expect(html).toContain("1:30:00");
+    const contractTtlMs = projection.myContracts[0]?.remainingMs;
+    if (contractTtlMs === undefined) throw new Error("test setup: expected at least one contract");
+    const totalSeconds = Math.floor(contractTtlMs / 1000);
+    const expectedContractCountdown = `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, "0")}`;
+    expect(expectedContractCountdown).not.toBe("0:00"); // sanity: the TTL itself must be non-zero
+    expect(html).toContain(expectedContractCountdown);
+  });
+
+  it("remainingMs decreases across LATER ticks, not just the first one (the live match this fix was diagnosed against was ~20-24 min in, not freshly started)", () => {
+    // The single-tick test above only proves `projectForTeam` is correct
+    // when `state.nowMs === state.startedAtMs` (elapsed 0) -- the easiest
+    // possible case. The live match this fix was diagnosed against showed
+    // contracts `blue-c10` / `-c11` / `-c12` (sequenceIndex 10-12, i.e.
+    // roughly 20-24 minutes and many ticks past the first one), so this
+    // asserts `projectForTeam` keeps using the MOST RECENT tick's `nowMs`
+    // (not the first tick's) for every duration it computes.
+    let state = initialState({ eventId: "evt-multi-tick-regression", teamIds: ["blue"] });
+    state = tick(state, 0);
+    const first = projectForTeam(state, "blue");
+    const contractId = first.myContracts[0]?.id;
+    if (contractId === undefined) throw new Error("test setup: expected at least one contract after the first tick");
+    const remainingAtFirstTick = first.myContracts[0]?.remainingMs;
+    if (remainingAtFirstTick === undefined) throw new Error("test setup: expected remainingMs on the first contract");
+
+    // 1 minute later, in the same event-relative units `tick` expects.
+    // Well under both `contractTtlMs` (5 min) and `rushContractTtlMs`
+    // (2.5 min), so the SAME contract is still open, not expired/replaced --
+    // this isolates "did remainingMs decrease" from "did a new contract get
+    // issued".
+    state = tick(state, 60_000);
+    const later = projectForTeam(state, "blue");
+    const sameContract = later.myContracts.find((c) => c.id === contractId);
+    if (!sameContract) throw new Error(`test setup: expected contract ${contractId} to still be present`);
+
+    expect(sameContract.status).toBe("open");
+    expect(sameContract.remainingMs).toBe(remainingAtFirstTick - 60_000);
+    expect(later.matchRemainingMs).toBe((first.matchRemainingMs ?? 0) - 60_000);
+  });
+});
+
 describe("HelpDrawer.tsx -- ja/en smoke render", () => {
   for (const locale of ["ja", "en"] as const) {
     it(`renders without crashing, with locale-correct copy (${locale})`, () => {
@@ -336,6 +450,62 @@ describe("HelpDrawer.tsx -- ja/en smoke render", () => {
       expect(html).toContain(locale === "ja" ? "この Battle の遊び方" : "How this Battle works");
     });
   }
+
+  it("PROVE Python snippet's prime is byte-for-byte the real RFC 3526 Group 14 constant", () => {
+    // An earlier version of this snippet shipped `p = <RFC 3526 Group 14
+    // prime>` -- a syntactically invalid placeholder, despite the
+    // surrounding copy promising "そのまま動く Python" / "runnable
+    // Python". This test is the machine-checkable half of fixing that: it
+    // fails if a future edit ever reintroduces a placeholder, drifts from
+    // `group.ts`'s real constant, or mistypes even one of its 512 hex
+    // digits (see `group.ts`'s own header on why that specific failure
+    // mode is otherwise silent -- Schnorr verification "still computes a
+    // number", it does not throw on a wrong prime).
+    const match = PYTHON_SNIPPET.match(/^p = 0x([0-9a-f]+)/m);
+    if (!match?.[1]) throw new Error("PYTHON_SNIPPET: expected a `p = 0x<hex>` line");
+    expect(BigInt(`0x${match[1]}`)).toBe(MODP_2048_P);
+  });
+
+  it("PROVE Python snippet, run for real, matches createProof()'s real output and verifies", async () => {
+    // The other half of "runnable Python" is actually running it. This
+    // repo's Python isn't itself under `bun test`, so this asserts the
+    // TRANSCRIPTION is exact (every hash label, the length-prefix framing,
+    // the operation order) by re-deriving the same proof in TypeScript
+    // using the identical primitives the snippet calls out to
+    // (`prng.ts`'s `deriveBigInt` == the snippet's `derive`,
+    // `schnorr-transcript.ts`'s length-prefix + fixed-width framing == the
+    // snippet's `lp` / `fw`) -- one-time manual verification against a real
+    // `python3` run of this exact snippet (same secret/team/generation/
+    // contract) additionally confirmed identical `commitment` / `response`
+    // decimal strings, which this test cannot itself shell out to `python3`
+    // to re-check on every run without adding that as a test-time
+    // dependency this repo does not otherwise have.
+    const { createProof } = await import("./schnorr-prover.ts");
+    const { verifyProof } = await import("./schnorr-verifier.ts");
+    const { derivePublicCommitment } = await import("./schnorr-witness.ts");
+
+    const secret = 123456789012345678n;
+    const team = "blue";
+    const generation = 1;
+    const contract = "blue-c0";
+
+    const proof = createProof(secret, generation, team, contract);
+    // These exact decimal strings were also produced by running
+    // PYTHON_SNIPPET's real Python (with the same inputs) by hand before
+    // this fix shipped -- pinning them here means a future accidental
+    // change to the framing (this snippet's OR schnorr-prover.ts's) that
+    // still "verifies" but silently diverges from what a participant
+    // copy-pasting this exact Python would compute gets caught too.
+    expect(proof.commitment).toBe(
+      "12491904079717215833289811861220956048131206574919718145925209972398991206550006999619986512335299316987035579151265564160905430804756070893245491304906574426512819514797618407919681861453404509081259916574473758059436583306737429056168559213105116239617298111422348935851536075343460252578596791285162186249960968769354288041789857921094185762502840065986960829626732425410297434567412792768095341828845359892161906091162086495027395998743458945660683858268942938522993404146830635328411484578493755418282595586209950518050109052386659393336806948058372378342971254888277990456825964420607659201042108347562933100138",
+    );
+    expect(proof.response).toBe(
+      "8240697219374735644623142365545472691120352149005885012557939550420978958098898382175055561578100915092772978845894423099683761252258163195079737990667",
+    );
+
+    const publicY = derivePublicCommitment(secret, generation, team);
+    expect(verifyProof(publicY, proof, { teamId: team, contractId: contract, generation })).toBe(true);
+  });
 });
 
 describe("RegistrationPanel.tsx -- ja/en smoke render + fail-closed", () => {

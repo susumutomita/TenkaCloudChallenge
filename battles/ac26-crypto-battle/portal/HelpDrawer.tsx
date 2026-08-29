@@ -40,9 +40,28 @@ const moveStyle = {
 } as const;
 const laneStyle = { margin: "0 0 6px 0", fontSize: "13px" } as const;
 
-const PYTHON_SNIPPET = String.raw`# PROVE -- everything below is public; only 'secret' is yours.
+/**
+ * The `p = 0x...` line below MUST stay byte-for-byte equal to
+ * `../game/src/group.ts`'s `MODP_2048_P` (RFC 3526 Group 14) -- copied from
+ * that module's own hex chunks, not hand-transcribed from the RFC, and
+ * cross-checked with `game/src/portal.test.ts`'s
+ * "PROVE Python snippet's prime matches the real group constant" test
+ * (`String(MODP_2048_P.toString(16)) === ` the hex this line embeds).
+ * `derive` / `lp` / `fw` / the witness, nonce, and challenge construction
+ * below are transcribed from `schnorr-witness.ts` / `schnorr-prover.ts` /
+ * `schnorr-transcript.ts` and were run end-to-end (real Python, real
+ * inputs) against `createProof` + `verifyProof` before shipping: identical
+ * `commitment` / `response`, and the resulting proof verifies. This snippet
+ * previously shipped with `p = <RFC 3526 Group 14 prime>`, a syntactically
+ * invalid placeholder, despite "そのまま動く Python" / "runnable Python"
+ * both promising otherwise -- this file's own claim was never executed
+ * before this fix (part of the same onboarding-repair pass that fixed
+ * `../game/src/types.ts`'s `matchRemainingMs` / `remainingMs` unit
+ * mismatch -- see that file's doc comments).
+ */
+export const PYTHON_SNIPPET = String.raw`# PROVE -- everything below is public; only 'secret' is yours.
 import hashlib
-p = <RFC 3526 Group 14 prime>        # a published standard, 2048-bit
+p = 0xffffffffffffffffc90fdaa22168c234c4c6628b80dc1cd129024e088a67cc74020bbea63b139b22514a08798e3404ddef9519b3cd3a431b302b0a6df25f14374fe1356d6d51c245e485b576625e7ec6f44c42e9a637ed6b0bff5cb6f406b7edee386bfb5a899fa5ae9f24117c4b1fe649286651ece45b3dc2007cb8a163bf0598da48361c55d39a69163fa8fd24cf5f83655d23dca3ad961c62f356208552bb9ed529077096966d670c354e4abc9804f1746c08ca18217c32905e462e36ce3be39e772c180e86039b2783a2ec07a28fb5c55df06f4c52c9de2bcbf6955817183995497cea956ae515d2261898fa051015728e5a8aacaa68ffffffffffffffff  # RFC 3526 Group 14, 2048-bit
 q, g = (p - 1) // 2, 4               # prime-order subgroup, generator
 n = (p.bit_length() + 7) // 8
 
@@ -80,13 +99,13 @@ const COPY = {
     title: "How this Battle works",
     intro:
       "Your team holds a secret, split into shares via Shamir threshold secret sharing. Every move below is a real cryptographic operation -- nothing here is simulated, and nothing scores on a guess.",
-    lanesTitle: "The 3 lanes (StatusPanel)",
+    lanesTitle: 'The 3 lanes (under "PROVE / LEAK / HUNT -- Status" above)',
     lanes: [
       { name: "Contract Queue", body: "LEAK requests addressed to your team right now. Miss the deadline and one expires unclaimed." },
       { name: "My Vault", body: "Your team's current secret, this generation's shares, and your ROTATE cooldown. Only your team sees this." },
       { name: "Public Ledger", body: "Every share every team has ever LEAKed, and every proof every team has ever PROVEn -- in the open, forever." },
     ],
-    movesTitle: "The 4 moves (RegistrationPanel)",
+    movesTitle: 'The 4 moves (under "PROVE / LEAK / HUNT -- Submit a move" above)',
     moves: [
       {
         name: "LEAK",
@@ -127,13 +146,13 @@ const COPY = {
     title: "この Battle の遊び方",
     intro:
       "自チームは secret を持ち、Shamir しきい値秘密分散で share に分割して保持しています。以下の操作はすべて実際の暗号計算であり、シミュレーションではありません。当て推量では得点になりません。",
-    lanesTitle: "3 つのレーン (StatusPanel)",
+    lanesTitle: "3 つのレーン (上の「PROVE / LEAK / HUNT — 状態」の中)",
     lanes: [
       { name: "Contract Queue", body: "今まさに自チーム宛に届いている LEAK 依頼です。期限内に応じないと失効します。" },
       { name: "My Vault", body: "自チームの現行 secret、この世代の share、ROTATE クールダウンです。自チームにのみ表示されます。" },
       { name: "Public Ledger", body: "全チームがこれまでに LEAK した share と PROVE した proof の、永久に残る全公開履歴です。" },
     ],
-    movesTitle: "4 つの操作 (RegistrationPanel)",
+    movesTitle: "4 つの操作 (上の「PROVE / LEAK / HUNT — 操作を送信」の中)",
     moves: [
       {
         name: "LEAK",
