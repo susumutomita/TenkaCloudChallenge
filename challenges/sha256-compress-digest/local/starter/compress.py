@@ -4,7 +4,7 @@ The compression function, and the digest on top of it. Padding, word splitting, 
 sigma functions, Ch, Maj and the message schedule are already written for you in
 `local/given/primitives.py` — problems 1 and 2 of this series. Do not edit that file.
 
-Five functions here, all five wrong on purpose, one line each. Every docstring states
+Six functions here, all six wrong on purpose, one line each. Every docstring states
 the contract and says how the starter gets it wrong.
 
 `make inspect` shows your fixtures; `make test` checks yourself.

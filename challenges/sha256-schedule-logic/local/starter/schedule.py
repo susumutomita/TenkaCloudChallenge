@@ -4,7 +4,7 @@ Eight functions, all of SHA-256's bit plumbing except the compression loop itsel
 the rotation everything is built from, the four sigma functions, the two logic
 functions, and the message schedule that turns 16 words into 64.
 
-Five of the eight are wrong on purpose. Each defect is one line, each is a mistake
+Six of the eight are wrong on purpose. Each defect is one line, each is a mistake
 people actually make, and each docstring states the contract you are implementing
 against. The two written correctly are there to compare against — though both are
 built on `rotr`, so they produce wrong answers until you fix that one.
