@@ -98,7 +98,7 @@ const COPY = {
   en: {
     title: "How this Battle works",
     intro:
-      "Your team holds a secret, split into shares via Shamir threshold secret sharing. Every move below is a real cryptographic operation -- nothing here is simulated, and nothing scores on a guess.",
+      "Your team holds a secret, split into shares via Shamir threshold secret sharing. Every move below is a real cryptographic operation -- nothing here is simulated, and nothing scores on a guess. The core decision, every time a Contract arrives: LEAK for easy points but give away a share, or PROVE for the same points and give away nothing.",
     lanesTitle: 'The 3 lanes (under "PROVE / LEAK / HUNT -- Status" above)',
     lanes: [
       { name: "Contract Queue", body: "LEAK requests addressed to your team right now. Miss the deadline and one expires unclaimed." },
@@ -117,11 +117,11 @@ const COPY = {
       },
       {
         name: "HUNT",
-        body: "Reconstruct another team's secret from enough of their Public Ledger shares (via Lagrange interpolation, computed locally) and submit the recovered value. Only an exact match to their real secret scores -- a wrong or partial guess does nothing.",
+        body: "Reconstruct another team's secret from enough of their Public Ledger shares (via Lagrange interpolation, computed locally) and submit the recovered value. Only an exact match to their real secret scores -- a wrong or partial guess does nothing. This Battle's threshold is currently 3 DISTINCT share indices of the same generation -- re-revealing an already-exposed index adds nothing.",
       },
       {
         name: "ROTATE",
-        body: "Advance your own secret to a fresh generation. Every share you leaked before this point stops reconstructing anything real. Has a cooldown, and voids every currently-open Contract addressed to you.",
+        body: "Advance your own secret to a fresh generation. A HUNT needs threshold-many shares from the SAME generation, so every share you leaked before this point -- belonging to the old generation -- stops reconstructing anything real. Has a cooldown, and voids every currently-open Contract addressed to you.",
       },
     ],
     prereqTitle: "Before you start",
@@ -145,7 +145,7 @@ const COPY = {
   ja: {
     title: "この Battle の遊び方",
     intro:
-      "自チームは secret を持ち、Shamir しきい値秘密分散で share に分割して保持しています。以下の操作はすべて実際の暗号計算であり、シミュレーションではありません。当て推量では得点になりません。",
+      "自チームは secret を持ち、Shamir しきい値秘密分散で share に分割して保持しています。以下の操作はすべて実際の暗号計算であり、シミュレーションではありません。当て推量では得点になりません。Contract が届くたびの核心の判断は、楽に稼げるが share を渡す LEAK か、同じ得点だが何も渡さない PROVE かです。",
     lanesTitle: "3 つのレーン (上の「PROVE / LEAK / HUNT — 状態」の中)",
     lanes: [
       { name: "Contract Queue", body: "今まさに自チーム宛に届いている LEAK 依頼です。期限内に応じないと失効します。" },
@@ -164,11 +164,11 @@ const COPY = {
       },
       {
         name: "HUNT",
-        body: "相手チームの Public Ledger 上の share を十分な数集め、Lagrange 補間でローカルに secret を復元し、その値を提出します。実際の secret と厳密に一致した場合のみ得点します。誤った値や部分的な推測では何も起こりません。",
+        body: "相手チームの Public Ledger 上の share を十分な数集め、Lagrange 補間でローカルに secret を復元し、その値を提出します。実際の secret と厳密に一致した場合のみ得点します。誤った値や部分的な推測では何も起こりません。このBattleの現在のしきい値は同じ世代の異なる index で 3 種類です — 同じ index を何度公開しても増えません。",
       },
       {
         name: "ROTATE",
-        body: "自チームの secret を新しい世代に更新します。この時点より前に漏洩した share は、それ以降 secret の復元には使えなくなります。クールダウンがあり、実行すると現在 open な自チーム宛 contract はすべて無効化されます。",
+        body: "自チームの secret を新しい世代に更新します。HUNT には同じ世代の share がしきい値分必要なので、この時点より前に漏洩した share (= 古い世代のもの) は、それ以降 secret の復元には使えなくなります。クールダウンがあり、実行すると現在 open な自チーム宛 contract はすべて無効化されます。",
       },
     ],
     prereqTitle: "始める前に",
