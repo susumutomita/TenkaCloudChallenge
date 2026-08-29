@@ -72,6 +72,16 @@ Participant-visible text — `shortDescription`, `instructions`, hints, starter 
 - Difficulty lives in the work — implementation, case analysis, constructing counterexamples, transfer to unseen parameters — never in the reading.
 - The check for this bar is a persona read-through: an unspoiled reader limited to the baseline above must, from participant-visible text alone, say what the situation is, what to do first, and what "done" means, and be able to start the first checkpoint. Record the verdict when promoting a problem.
 
+### §12c Problem quality bar — low floor, high ceiling
+
+Every problem in this catalog, on every track, is designed for both audiences at once: a junior-high student can get in, and a veteran engineer still finds it worth their time.
+
+- **Low floor**: within the first screen of the statement the participant knows the situation — who they are, what broke or what is at stake — the first concrete action, and what they will see when they take it. The first checkpoint is earnable by direct engagement with the visible surfaces. If a reader finishes the statement and still cannot say what to try first, the problem fails this bar.
+- **High ceiling**: the closing checkpoints are worth an experienced engineer's attention — constructing a counterexample, making the same code survive unseen parameters, exploiting a stated gap — never more transcription of earlier steps. Difficulty lives in the work, not in withheld information.
+- **Story with intent**: the scenario is coherent and motivates the work. Every checkpoint has a reason that follows from the story, and a reader can say why this step comes next. A section that starts out of nowhere (唐突) is a defect, the same class as an undefined term.
+- **Neither a task list nor a cliff**: a statement that walks the reader step-by-step through the answers turns the problem into 作業ゲー and fails; a statement that offers no foothold at all also fails. The statement's job is footholds and feedback loops — what to observe first, what the observation should provoke — while the insight stays the participant's to have.
+- **Human-fidelity evidence**: a playability claim must come from play using only what a human participant can see — the statement, the editor's starter files, Inspect evidence, public-test output, and /verify verdicts with their §15 messages. Play that read repository internals, probed undocumented endpoints, or bypassed the Portal proves nothing about human playability and must not be cited as if it did.
+
 ## §13 Local-play containers
 
 - Declare `runtime.provider: "docker"`, `runtime.engine: "compose"`, and a real `runtime.entry`.
