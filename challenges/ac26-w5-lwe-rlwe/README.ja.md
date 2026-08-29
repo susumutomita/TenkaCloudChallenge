@@ -1,143 +1,400 @@
-# 符号 1 つと、その下流すべて
+# 暗号文からプログラムへ — なぜ LWE の次に RLWE が必要なのか
 
 > このトラックは Advanced Cryptography Program 2026 の非公式・独立コンパニオンです。
 > コース運営とは無関係で、承認も受けていません。問題文・コード・fixture・図はすべて独立に書いています。
 > このトラックへの質問はコース運営ではなく TenkaCloud リポジトリへお願いします。
 
-**Track:** `advanced-cryptography-2026` · **Order:** 520 · **Chapter:** Week 5 / LWE and
-RLWE · **Role:** `mechanism` · **想定時間:** 75〜105 分 · **配点:** 300 ·
-**前提:** `ac26-w5-encoding-noise` · **Status:** draft
+**Track:** `advanced-cryptography-2026` · **Order:** 520 · **Chapter:** Week 5 / LWE and RLWE · **Role:** `mechanism` · **想定時間:** 75〜105 分 · **配点:** 300 · **前提:** `ac26-w5-encoding-noise` · **Status:** draft
 
-## 物語
+## まず最終ゴールを固定する
 
-同じ形で、算術だけが違う 2 つの暗号方式です。
+この問題のゴールは「LWE と RLWE の定義を覚える」ことではありません。
+Week 5 全体の最終ゴールは、**暗号文のままプログラムを実行すること**です。
 
 ```text
-LWE    secret s は {0,1}^n            b = <a, s> + encode(m) + e   (mod q)
-RLWE   secret S は R_q、係数は 0/1     B = A * S + encode(M) + E    (R_q の中)
+秘密の入力 m
+    ↓ 暗号化
+Enc(m)
+    ↓
+    ↓ クラウドが中身を見ずにプログラム f を実行
+    ↓
+Enc(f(m))
 ```
 
-どちらも「秘密に何かを掛けたもの＋符号化したメッセージ＋noise」です。
-違うのは演算と積載量です。 **RLWE は長いベクトルの LWE ではありません。**
-積が別の積で、 RLWE の暗号文 1 つは 1 個ではなく N 個のメッセージを運びます。
+一般的なプログラムは論理ゲートへ分解でき、NAND だけでも任意の Boolean 回路を構成できます。
+したがって Week 5 の具体的な到達点は、
 
-環は `R_q = Z_q[X] / (X^N + 1)` で、要点は 1 つです。
+```text
+Enc(a), Enc(b)
+    ↓ HomNAND
+Enc(NAND(a,b))
+```
+
+を作ることです。
+
+この問題は、その途中にある **「なぜ LWE から RLWE へ移る必要があるのか」** を体で理解するための問題です。
+
+---
+
+## ストーリー: LWE だけでは何が足りないのか
+
+前の問題で、LWE の暗号文は概念的には
+
+```text
+b = <a, s> + encode(m) + e  (mod q)
+```
+
+で、暗号文どうしの加算などができることを確認しました。
+
+しかし最終的に欲しいのは、単なる足し算ではありません。
+
+```text
+m を秘密のまま受け取り、f(m) を返したい
+```
+
+TFHE ではこの `f(m)` を **表引き**として考えます。
+
+たとえば、
+
+```text
+f(0)=7, f(1)=4, f(2)=9, f(3)=1
+```
+
+なら、答えを並べておき、入力に対応する位置を先頭へ持ってくればよい。
+
+```text
+[7, 4, 9, 1]
+      ↑ m=2
+
+回転
+  ↓
+
+[9, 1, 7, 4]
+ ↑
+ f(2)
+```
+
+つまり欲しい計算は **「値に応じて表を回す」** です。
+
+LWE の `(a,b)` だけでは、この「係数を並べた表」と「回転」を自然に表現しづらい。
+そこで、値の入れ物を **多項式** に広げます。
+
+```text
+v(X) = 7 + 4X + 9X² + X³
+```
+
+この多項式を回転できる計算空間を得るために RLWE を導入します。
+
+> **RLWE は突然出てくる別の暗号ではない。関数表を多項式として持ち、回転できるようにするための表現拡張。**
+
+これがこの問題で一番重要な理解です。
+
+---
+
+## 有限体ではなく「有限の環」が主役
+
+ここは Week 3/4 と混ざりやすいところです。
+
+この問題で使うのは主に
+
+```text
+Z_q
+R_q = Z_q[X] / (X^N + 1)
+```
+
+です。
+
+`Z_q` は `q` が素数なら体ですが、`q` が合成数なら体ではありません。
+それでも足し算・掛け算・分配則が使えるので **環**として計算できます。
+
+この Week 5 を「有限体の暗号」と理解すると混乱します。
+
+```text
+Week 3/4
+  有限体上の多項式・回路を使って「正しさを証明する」
+
+Week 5
+  mod q の環・多項式剰余環・格子暗号を使って「秘密のまま計算する」
+```
+
+見た目はどちらも `mod` ですが、役割が違います。
+
+---
+
+## LWE と RLWE は同じ設計図を使う
+
+LWE:
+
+```text
+secret s は {0,1}^n
+b = <a,s> + encode(m) + e   (mod q)
+```
+
+RLWE:
+
+```text
+secret S(X) は係数 0/1 の多項式
+B(X) = A(X)S(X) + encode(M(X)) + E(X)   (R_q の中)
+```
+
+共通しているのは、
+
+```text
+秘密鍵で作るマスク + メッセージ + noise
+```
+
+です。
+
+違うのは **計算の単位**です。
+
+| | LWE | RLWE |
+|---|---|---|
+| 入れ物 | 数・ベクトル | 多項式 |
+| 秘密鍵 | ベクトル `s` | 多項式 `S(X)` |
+| 演算 | 内積・mod q | 多項式加算・negacyclic 乗算 |
+| 目的 | noise と暗号文計算を最小形で見る | 回転・係数操作を可能にする |
+
+RLWE は「長い LWE」ではありません。
+**積の定義が変わるため、できる計算の形が変わります。**
+
+---
+
+## なぜ `X^N + 1` で割った余りを使うのか
+
+環は
+
+```text
+R_q = Z_q[X] / (X^N + 1)
+```
+
+です。
+
+つまり、
 
 ```text
 X^N = -1
 ```
 
-次数 N を越えて巻き戻る係数は**符号が反転して**戻ってきます。この符号 1 つが
-negacyclic な積と cyclic な積の違いで、そして cyclic な環も立派な環です。
-公理をすべて満たし、分配し、可換で、あなた自身のテストを喜んで通ります。
-ただこの環ではないだけです。
+として計算します。
+
+たとえば `N=4` で、
+
+```text
+V(X)=a0+a1X+a2X²+a3X³
+```
+
+に `X` を掛けると、
+
+```text
+X V(X)
+= a0X + a1X² + a2X³ + a3X⁴
+≡ -a3 + a0X + a1X² + a2X³
+```
+
+係数列では、
+
+```text
+[a0, a1, a2, a3]
+    ↓ ×X
+[-a3, a0, a1, a2]
+```
+
+です。
+
+**多項式の掛け算が回転になる。**
+これが後の Blind Rotation の土台です。
+
+この問題で `negacyclic` の符号 1 つを厳密に扱う理由は、単なる数学の意地悪ではありません。
+この符号を間違えると「回転」が違うものになり、その後の PBS 全体が壊れます。
+
+---
+
+## この問題を解いたあと、何につながるのか
+
+この問題の出口は次です。
+
+```text
+LWE
+  ↓
+RLWE: 多項式に移る
+  ↓
+× X^k で係数を回転できる
+  ↓
+でも回転量 k = b - <a,s> には秘密鍵 s が入る
+  ↓
+秘密鍵を見せずに回したい
+  ↓
+RGSW + CMUX
+  ↓
+Blind Rotation
+  ↓
+Sample Extraction
+  ↓
+Key Switching
+  ↓
+Programmable Bootstrapping
+  ↓
+HomNAND
+  ↓
+NAND を組み合わせてプログラム
+```
+
+したがって、この問題でコードを書くときも「正しい RLWE を実装する」だけで終わらせません。
+各 checkpoint で **その処理が最終的に何を可能にするか** を確認してください。
+
+---
+
+## 実装で見るべき 4 本の線
+
+### 1. LWE: `phase` を取り出す
+
+```text
+b - <a,s> = encode(m) + e
+```
+
+noise が小さければメッセージへ戻せる。
+
+### 2. RLWE: 同じ構造を係数ごとに持つ
+
+```text
+B - A*S = encode(M) + E
+```
+
+同じ思想を多項式へ持ち上げます。
+
+### 3. `negacyclic_mul`: 回転規則を実装する
+
+`X^N=-1` をコードに落とし込みます。
+ここでの符号が Blind Rotation の意味を決めます。
+
+### 4. correspondence: 「何が同じで何が変わったか」を言語化する
+
+暗号式の形は同じ。
+しかし表現と演算が変わり、**回転という新しい能力**を得ます。
+
+---
 
 ## 自分の往復テストではなぜ捕まらないか
 
-符号を反転した内積は、符号を反転した phase と打ち消し合います。
-平文を自分の中に持っている暗号文は、本物より上手に復号します。 cyclic な環は自己整合的です。
-どれも、同じコードで暗号化して復号するテストなら通ります。
+符号を間違えた積を使って暗号化し、同じ間違った積で復号すると、両方の間違いが打ち消し合うことがあります。
 
-そこで hidden test の往復はすべて**交差**させて走ります。こちらで暗号化して fixture 側で復号し、
-その逆も行います。自己整合的なだけの方式はこれを越えられず、本当に正しい方式は何も気づきません。
+つまり、
 
-間違った積は `participant.wrong_ring.cyclic_mul` として書き出してあります。反例を、
-自分でわざと壊したコードにではなく、**明示された**弱点に対して作れるようにするためです。
-`make inspect` も、同じ入力に対する 2 つの積を並べて表示します。
+```text
+wrong encrypt
+    ↓
+wrong decrypt
+    ↓
+一見正しい
+```
+
+という自己整合が起きます。
+
+そこで hidden test では往復を**交差**させます。
+こちらで暗号化して fixture 側で復号し、その逆も行います。
+
+間違った積は `participant.wrong_ring.cyclic_mul` として明示してあります。
+`make inspect` でも同じ入力に対する cyclic / negacyclic の差を確認できます。
+
+---
 
 ## sample せず、渡す
 
 `lwe_encrypt` と `rlwe_encrypt` は mask と noise を引数で受け取ります。
-この問題の主題ではない CSPRNG を持ち込まずに、すべての実行を再現可能にするためです。
-実装は本来どちらも sample します。そして 1 つの鍵の下で mask を 2 回使い回すのは近道ではなく破綻です。
-2 つの暗号文を引き算すると mask の項が消え、 2 つの平文の差と少しの noise が残ります。
+この問題の主題ではない CSPRNG を持ち込まず、実行を再現可能にするためです。
+
+実装は本来どちらも sample します。
+また、同じ鍵の下で mask を使い回すと、暗号文の差から mask 項が消え、平文差と noise が残るため安全ではありません。
+
+---
 
 ## Participant Portal での進め方
 
-1. Participant Portal で問題を起動する。同じ画面に問題エディタが表示される。
+1. Participant Portal で問題を起動する。
 2. **証拠を調べる**で、この deploy 固有の fixture と公開された証拠を読む。
 3. Portal のエディタで starter のソースを編集する。
-4. **公開テストを実行**を押し、直接回答欄があれば証拠から埋める。
-5. 各 checkpoint をそのまま提出する。Portal が現在のファイルと回答を準備して送る。
+4. **公開テストを実行**を押す。
+5. 各 checkpoint を提出する。
 
-checkout、ターミナル、ローカルエディタ、別画面、コピペは不要です。code checkpoint は現在の
-エディタ内容を使います。直接回答は現在の deploy seed へ結び付くため、別 deploy からコピーした
-値は拒否されます。
+checkout、ターミナル、ローカルエディタ、別画面へのコピペは不要です。
+
+---
 
 ## 採点
 
 8 つの checkpoint を独立に採点します。誤答は 1 回 15 点。
 
-| Checkpoint | 配点 | 検査内容 |
-|---|---:|---|
-| `normalize` | 30 | `X^N = -1` で次数 < N へ畳む、係数を `[0, q)` へ、冪等性、**2 回**巻き戻ると符号が戻ること |
-| `ring` | 45 | 加算・減算・negacyclic 乗算、 `X^(N-1)・X = -1`、分配則と交換則 |
-| `lwe` | 40 | 交差させた往復、 phase と noise の報告、暗号文が `a` と `b` しか持たないこと |
-| `rlwe` | 40 | 同じことを環で、そして定数項だけでなく N 係数すべて |
-| `correspondence` | 30 | 構造化した対比。どちらの演算か、積載量はいくつか |
-| `boundary` | 40 | どの noise が生き残るか、そして**与えられた順序で**最初に予算を越える sample |
-| `transfer` | 30 | 見たことのない degree・modulus・dimension・secret で上記すべて |
-| `defense` | 45 | 不正な暗号文 8 個を reject し、正しい 4 個を通す |
+| Checkpoint | 配点 | 検査内容 | ストーリー上の意味 |
+|---|---:|---|---|
+| `normalize` | 30 | `X^N=-1` で次数 < N へ畳む | 回転規則を作る |
+| `ring` | 45 | negacyclic 乗算・分配則・交換則 | 多項式上で計算できる |
+| `lwe` | 40 | phase・noise・交差往復 | 出発点の暗号文構造 |
+| `rlwe` | 40 | 多項式版の暗号化・復号 | 回転可能な表現へ移る |
+| `correspondence` | 30 | LWE/RLWE の対応 | なぜ拡張したか説明する |
+| `boundary` | 40 | noise の許容範囲 | 計算を続ける限界 |
+| `transfer` | 30 | 未知パラメータへの一般化 | 式ではなく構造を理解したか |
+| `defense` | 45 | 不正暗号文を reject | 実装境界を守る |
 
 8 つのうち 5 つに hint があり、いずれもその checkpoint の 50% 上限の内側です。
 
+---
+
+## この問題を終えたら自分の言葉で答える
+
+次の 5 問がこの問題の本当の合格条件です。
+
+1. 最終ゴールはなぜ RLWE の実装ではなく「暗号文のままプログラム」なのか。
+2. LWE から RLWE へ移ると、何が新しくできるようになるのか。
+3. `R_q = Z_q[X]/(X^N+1)` は必ず有限体なのか。なぜ「環」と呼ぶのが安全なのか。
+4. `X` を掛けることが、なぜ係数の回転になるのか。
+5. その回転が、なぜ次の Blind Rotation → PBS → HomNAND につながるのか。
+
+---
+
 ## 対象外
 
-具体的な security parameter の選定、 CSPRNG や constant-time 実装、 NTT / FFT、
-そして実用の LWE / RLWE ライブラリはいずれも対象外です。
-schoolbook 乗算は意図的で、 NTT は同じ符号規約を教えなければ動かない変換の裏に巻き戻りを隠します。
+具体的な security parameter の選定、CSPRNG、constant-time 実装、NTT / FFT、実用 LWE / RLWE ライブラリは対象外です。
+
+schoolbook 乗算を使うのは、`X^N=-1` の符号規則を変換の裏へ隠さず、まず直接理解するためです。
+
+---
 
 ## これは安全ではない
 
-n・N・q は全列挙できる大きさで、 secret は数個の sample から線形代数で復元できます。
-機構の toy であって、困難性の toy ではありません。実運用パラメータについての主張は何も支えません。
+`n`・`N`・`q` は全列挙できる大きさで、secret は数個の sample から線形代数で復元できます。
+この問題は **機構の toy** であって production security を主張しません。
+
+---
 
 ## 出典との対応
 
-Week 5 の教材は公開済みなので、 `courseAlignment` は `week5/README.md` を `lecture`、
-`week5/problems/tfhe-toy-python/README.md` を `assignment` として pin しています。
-`spoilerPolicy` は `independent-reimplementation` で、ここでの API・パラメータ生成・方式の記述は独自であり、
-公式課題から関数名も fixture も skeleton も取っていません。
+Week 5 の教材は公開済みなので、`courseAlignment` は `week5/README.md` を `lecture`、`week5/problems/tfhe-toy-python/README.md` を `assignment` として pin しています。
+`spoilerPolicy` は `independent-reimplementation` です。
+
+---
 
 ## 保証範囲
 
-ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも
-あなたの管理下にあるので、あなたが build したものはあなたに対して秘匿されていません。
-`reference/` と `tests/hidden/` を bind-mount しないのは、あなたの git checkout に
-紛れ込ませないためであって、手が届かなくするためではありません。
+ローカル実行は自習用の honor-system 検証です。
+Workbench は starter・公開テスト・公開用の誤実装・表示コードを持ち、fixture・hidden test・verifier は採点側に分離しています。
 
-デプロイが行うのは、うっかり答えを渡してしまわないことです。 container は 2 つあります。
-あなたが触る Workbench が持つのは starter・公開テスト・`participant/wrong_ring.py`・`show.py` で、
-採点側の image が `fixtures/`・`tests/hidden/`・verifier を持ち、 port を publish せず、
-gateway のない Docker network 上にいます。 `show.py` と公開テストは、この deploy の
-パラメータ・trace・boundary sample を verifier の `GET /public` から読みます。 ここが返すのは
-設問であって、 checkpoint の期待値は 1 つも含みません。 `fixtures/generate.py` はそれらを導出するために
-`starter/lwe.py` が書けと言う 11 個の関数をすべて実装しなければならないので、
-あなたが動かす image には入っていません
-([#543](https://github.com/susumutomita/TenkaCloudChallenge/issues/543))。
+verifier が保証するのは、提出コードが採点処理をハングさせたり、別 checkpoint の点を得たり、期待値を直接漏らしたりしないことです。
+fixture は deploy seed 由来なので暗記した答えは持ち越せません。
 
-verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
-ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。
-結果は期待値を漏らしません。 fixture はこのデプロイの seed 由来なので、暗記した答えは持ち越せません。
+競技順位・試験・修了判定には participant が管理しない verifier が必要で、[#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271) で追跡しています。
 
-これは自習と誠実な練習を支えます。競技順位・試験・修了判定は**支えません**。
-それらには participant が管理しない verifier が必要で、
-[#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271) で追跡しています。
+---
 
 ## コスト
 
 ゼロ。クラウドアカウントも AWS リソースも不要です。
 
+---
+
 ## 作問者向け
 
-`make reference-test` が mutation suite を走らせます。 22 個の壊れた実装のほとんどは、
-自分の暗号文を完璧に暗号化・復号します。 reference と違いが出るのは、
-他の何かがそれに同意しなければならなくなったときだけです。
+`make reference-test` が mutation suite を走らせます。
+自己整合的な誤実装を捕まえるため、暗号化と復号の実装を交差させるテストを重視します。
 
-### 名前を付けておくべき fixture の不変条件
-
-生成される secret は少なくとも 1 つ `1` を含むよう強制しています。これは飾りではありません。
-全ゼロの secret では mask の項が消え、実装が secret に何をしたかに関わらず
-`b = encode(m) + e` になります。強制する前に、**3 つの mutation がまさにこれで生き残りました**。
-seed が `(0, 0, 0, 0, 0)` を引き、方式全体が「メッセージを符号化して noise を足す」に退化し、
-どの誤った符号規約も同じことをするからです。
+生成される secret は少なくとも 1 つ `1` を含むよう強制します。
+全ゼロ secret では mask 項が消え、方式全体が `encode(m)+noise` に退化し、誤った符号規約を検出しにくくなるためです。
