@@ -98,7 +98,7 @@ const COPY = {
   en: {
     title: "How this Battle works",
     intro:
-      "Your team holds a secret, split into shares via Shamir threshold secret sharing. Every move below is a real cryptographic operation -- nothing here is simulated, and nothing scores on a guess. The core decision, every time a Contract arrives: LEAK for easy points but give away a share, or PROVE for the same points and give away nothing.",
+      "Quick vocabulary check: \"Contract\" here has nothing to do with CloudFormation or a blockchain contract -- it just means \"a request addressed to your team.\" Your team's secret (think: a password) is broken into 5 scattered fragments (shares) -- collect 3 and you can reassemble it (this mechanism is called Shamir threshold secret sharing). Every move below is a real cryptographic operation -- nothing here is simulated, and nothing scores on a guess. The core decision, every time a Contract arrives: LEAK for easy points but give away a fragment, or PROVE for the same points and give away nothing.",
     lanesTitle: 'The 3 lanes (under "PROVE / LEAK / HUNT -- Status" above)',
     lanes: [
       { name: "Contract Queue", body: "LEAK requests addressed to your team right now. Miss the deadline and one expires unclaimed." },
@@ -145,7 +145,7 @@ const COPY = {
   ja: {
     title: "この Battle の遊び方",
     intro:
-      "自チームは secret を持ち、Shamir しきい値秘密分散で share に分割して保持しています。以下の操作はすべて実際の暗号計算であり、シミュレーションではありません。当て推量では得点になりません。Contract が届くたびの核心の判断は、楽に稼げるが share を渡す LEAK か、同じ得点だが何も渡さない PROVE かです。",
+      "先に用語の確認です。ここでの「Contract」は CloudFormation や blockchain の contract とは無関係で、単に「自チームへの依頼」という意味です。自チームの secret（合言葉のようなもの）は 5 枚のバラバラな破片（share）に分解して保管されており、3 枚集めれば組み立て直せます（この仕組みが Shamir のしきい値秘密分散です）。以下の操作はすべて実際の暗号計算であり、シミュレーションではありません。当て推量では得点になりません。Contract が届くたびの核心の判断は、楽に稼げるが破片を渡す LEAK か、同じ得点だが何も渡さない PROVE かです。",
     lanesTitle: "3 つのレーン (上の「PROVE / LEAK / HUNT — 状態」の中)",
     lanes: [
       { name: "Contract Queue", body: "今まさに自チーム宛に届いている LEAK 依頼です。期限内に応じないと失効します。" },
