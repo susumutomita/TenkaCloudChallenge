@@ -116,7 +116,7 @@ export const COPY: Record<Locale, Copy> = {
     leakSubmit: "LEAK the selected shares",
     proveTitle: "PROVE",
     proveLocalNote:
-      "Build the proof locally first. The full construction -- group constants, hash rule, length-prefix framing, and runnable Python -- is under \"Computing PROVE and HUNT yourself\" in the side panel. This form never computes a proof for you.",
+      "Build the proof locally first. The full construction -- group constants, hash rule, length-prefix framing, and runnable Python -- is under \"Computing PROVE and HUNT yourself\" further down this page. This form never computes a proof for you.",
     commitmentLabel: "commitment",
     responseLabel: "response",
     provePasteJsonLabel: "Paste { commitment, response } JSON instead",
@@ -125,7 +125,7 @@ export const COPY: Record<Locale, Copy> = {
     proveSubmit: "PROVE this contract",
     huntTitle: "HUNT",
     huntLocalNote:
-      "Reconstruct the secret locally first, from threshold-many of the target's Public Ledger shares. The Lagrange evaluation is in the side panel under \"Computing PROVE and HUNT yourself\". Guessing does not score.",
+      "Reconstruct the secret locally first, from threshold-many of the target's Public Ledger shares. The Lagrange evaluation is further down this page under \"Computing PROVE and HUNT yourself\". Guessing does not score.",
     huntNoTargets: "No other team to target yet.",
     targetLabel: "Target team",
     generationLabel: "Target's generation",
@@ -151,7 +151,7 @@ export const COPY: Record<Locale, Copy> = {
     leakSubmit: "選択した share を LEAK する",
     proveTitle: "PROVE",
     proveLocalNote:
-      "proof は先にローカルで作成してください。群の定数・ハッシュ規則・length-prefix の framing・そのまま動く Python まで、必要な構成は側パネルの「PROVE と HUNT を自分で計算する」に全部あります。この form が代わりに proof を計算することはありません。",
+      "proof は先にローカルで作成してください。群の定数・ハッシュ規則・length-prefix の framing・そのまま動く Python まで、必要な構成はこのページ下部の「PROVE と HUNT を自分で計算する」に全部あります。この form が代わりに proof を計算することはありません。",
     commitmentLabel: "commitment",
     responseLabel: "response",
     provePasteJsonLabel: "代わりに { commitment, response } の JSON を貼り付ける",
@@ -160,7 +160,7 @@ export const COPY: Record<Locale, Copy> = {
     proveSubmit: "この contract を PROVE する",
     huntTitle: "HUNT",
     huntLocalNote:
-      "先に相手の Public Ledger の share を threshold 分集めてローカルで secret を復元してください。Lagrange の評価式は側パネルの「PROVE と HUNT を自分で計算する」にあります。当て推量では得点になりません。",
+      "先に相手の Public Ledger の share を threshold 分集めてローカルで secret を復元してください。Lagrange の評価式はこのページ下部の「PROVE と HUNT を自分で計算する」にあります。当て推量では得点になりません。",
     huntNoTargets: "まだ狙える他チームがいません。",
     targetLabel: "対象チーム",
     generationLabel: "対象チームの世代",

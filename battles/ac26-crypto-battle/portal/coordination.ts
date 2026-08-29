@@ -60,6 +60,7 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
   if (typeof v.phase !== "string" || !["build", "pressure", "endgame", "ended"].includes(v.phase)) {
     return false;
   }
+  if (typeof v.matchRemainingMs !== "number" && v.matchRemainingMs !== undefined) return false;
 
   const vault = v.vault;
   if (typeof vault !== "object" || vault === null) return false;
@@ -73,6 +74,13 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
   if (!Array.isArray(vaultRecord.huntedGenerations)) return false;
 
   if (!Array.isArray(v.myContracts)) return false;
+  // Deep-checked (unlike the shallow "just Array.isArray" style elsewhere in
+  // this guard): `remainingMs` is the field this problem's live-time-display
+  // bug lived in (see `ContractProjection.remainingMs`'s doc comment in
+  // `../game/src/types.ts`) -- a malformed/missing value here must fail
+  // closed to "unknown data format" rather than render `NaN`/`undefined`
+  // arithmetic as a silently wrong countdown.
+  if (v.myContracts.some((c) => typeof (c as { remainingMs?: unknown }).remainingMs !== "number")) return false;
   if (!Array.isArray(v.publicLedger)) return false;
 
   if (typeof v.teams !== "object" || v.teams === null) return false;
@@ -92,6 +100,18 @@ export interface ProjectionPollState {
    * kind, which are all dispatcher/infra conditions, not a shape problem.
    */
   readonly status: PortalCoordinationOutcome["kind"] | "bad_projection" | null;
+  /**
+   * `Date.now()` (the portal's OWN wall clock, absolute epoch ms) at the
+   * moment `projection` was last set. `null` until the first successful
+   * poll. `matchRemainingMs` / `ContractProjection.remainingMs` are only
+   * accurate as of that instant (they come from the dispatcher's
+   * elapsed-since-event-start clock, not a wall clock -- see
+   * `../game/src/types.ts`'s doc comments on those fields); a consumer that
+   * wants a smoothly ticking countdown between 30s polls subtracts
+   * `Date.now() - receivedAtWallMs` from the last-known remaining duration,
+   * never `projection`'s own fields against a fresh absolute timestamp.
+   */
+  readonly receivedAtWallMs: number | null;
 }
 
 /**
@@ -126,6 +146,7 @@ export interface ProjectionPollState {
 export function usePolledProjection(client: PortalCoordinationClient | undefined): ProjectionPollState {
   const [projection, setProjection] = useState<CryptoBattleProjection | null>(null);
   const [status, setStatus] = useState<ProjectionPollState["status"]>(null);
+  const [receivedAtWallMs, setReceivedAtWallMs] = useState<number | null>(null);
 
   useEffect(() => {
     if (!client) return;
@@ -143,6 +164,7 @@ export function usePolledProjection(client: PortalCoordinationClient | undefined
         if (isCryptoBattleProjection(outcome.projection)) {
           setProjection(outcome.projection);
           setStatus(null);
+          setReceivedAtWallMs(Date.now());
         } else {
           setStatus("bad_projection");
         }
@@ -158,5 +180,5 @@ export function usePolledProjection(client: PortalCoordinationClient | undefined
     };
   }, [client]);
 
-  return { projection, status };
+  return { projection, status, receivedAtWallMs };
 }
