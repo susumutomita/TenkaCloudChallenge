@@ -24,7 +24,7 @@ import { add, inv, mod, mul, P, sub } from "./field.ts";
 import { deriveBigInt } from "./prng.ts";
 import { buildFheOp } from "./playtest.ts";
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
-import type { ContractProjection, CryptoBattleState } from "./types.ts";
+import type { Contract, ContractProjection, CryptoBattleState } from "./types.ts";
 
 /**
  * Is `key` a value `deriveFheKey` can actually produce?
@@ -399,21 +399,112 @@ describe("the FHE Order's trust boundary", () => {
     expect(entry?.kind === "ciphertext" ? entry.r : "").toBe(op.ciphertext.r);
   });
 
-  test("FHE cannot be used on a share Order, and LEAK cannot be used on an FHE Order", () => {
+  /**
+   * Refused, and refused for the RIGHT REASON. A single message covering both
+   * causes told a participant that FHE "does not satisfy privacy constraint
+   * none" on an unconstrained share Order — but FHE satisfies `none` fine; it
+   * simply cannot do the job. "This Order does not accept LEAK" is a rule and
+   * "LEAK cannot do this job" is a fact, and #645 exists to teach the
+   * difference, so the refusal has to state which one it is.
+   */
+  test("a method that cannot do the job is refused as incapable, not as a privacy violation", () => {
     const { state, order } = orderWithTask("homomorphic-sum");
     const leakVerdict = validateOp(state, "teamA", { kind: "leak", contractId: order.id });
     expect(leakVerdict.ok).toBe(false);
+    if (leakVerdict.ok) throw new Error("unreachable");
+    expect(leakVerdict.error).toContain("cannot perform");
+    expect(leakVerdict.error).toContain("homomorphic-sum");
 
-    const shareOrder = state.contracts.find(
-      (c) => c.teamId === "teamA" && c.status === "open" && c.task.kind === "reveal-share",
-    );
-    if (!shareOrder) throw new Error("expected an open share order");
-    const fheVerdict = validateOp(state, "teamA", {
+    // Specifically an UNCONSTRAINED share Order: that is the case where
+    // blaming a privacy rule is most obviously wrong, since the Order imposes
+    // none. The belt cycles, so advance until one is open.
+    let current = state;
+    let shareOrder: Contract | undefined;
+    for (let round = 0; round < 20 && !shareOrder; round += 1) {
+      shareOrder = current.contracts.find(
+        (c) =>
+          c.teamId === "teamA" &&
+          c.status === "open" &&
+          c.task.kind === "reveal-share" &&
+          c.privacyConstraint === "none",
+      );
+      if (!shareOrder) current = tick(current, (round + 1) * DEFAULT_CONFIG.contractIntervalMs);
+    }
+    if (!shareOrder) throw new Error("expected an open unconstrained share order");
+    const fheVerdict = validateOp(current, "teamA", {
       kind: "fhe",
       contractId: shareOrder.id,
       ciphertext: { r: "1", y: "1" },
     });
     expect(fheVerdict.ok).toBe(false);
+    if (fheVerdict.ok) throw new Error("unreachable");
+    expect(fheVerdict.error).toContain("cannot perform");
+    // The load-bearing half: it must NOT blame a privacy rule that this Order
+    // does not even impose.
+    expect(fheVerdict.error).not.toContain("privacy constraint");
+  });
+
+  /**
+   * A rule violation still reads as a rule violation — the split must not
+   * relabel everything as incapability.
+   */
+  test("a method the rule forbids is still refused as a privacy violation", () => {
+    const { state } = orderWithTask("homomorphic-sum");
+    let current = state;
+    let strictShare: Contract | undefined;
+    for (let round = 0; round < 20 && !strictShare; round += 1) {
+      strictShare = current.contracts.find(
+        (c) =>
+          c.teamId === "teamA" &&
+          c.status === "open" &&
+          c.task.kind === "reveal-share" &&
+          c.privacyConstraint === "no-raw-disclosure",
+      );
+      if (!strictShare) current = tick(current, (round + 1) * DEFAULT_CONFIG.contractIntervalMs);
+    }
+    if (!strictShare) throw new Error("expected an open PROVE-only share order");
+
+    const verdict = validateOp(current, "teamA", { kind: "leak", contractId: strictShare.id });
+    expect(verdict.ok).toBe(false);
+    if (verdict.ok) throw new Error("unreachable");
+    // LEAK *can* do a share Order; what it cannot do is satisfy this rule.
+    expect(verdict.error).toContain("privacy constraint");
+    expect(verdict.error).not.toContain("cannot perform");
+  });
+
+  /**
+   * The Order asks for the remainder after dividing by the modulus. Both
+   * comparisons in the judge reduce mod p, so without this an answer shifted
+   * by p scored while skipping that step — and `applyFhe` then wrote a value
+   * that is not a field element onto the Public Ledger.
+   */
+  test("components shifted by the modulus are refused, so the remainder step cannot be skipped", () => {
+    const { state, order } = orderWithTask("homomorphic-sum");
+    const op = buildFheOp(order, state.config.prime);
+    if (!op || op.kind !== "fhe") throw new Error("expected buildFheOp to construct an op");
+    const prime = BigInt(state.config.prime);
+
+    for (const shifted of [
+      { r: (BigInt(op.ciphertext.r) + prime).toString(), y: op.ciphertext.y },
+      { r: op.ciphertext.r, y: (BigInt(op.ciphertext.y) + prime).toString() },
+      {
+        r: (BigInt(op.ciphertext.r) + prime).toString(),
+        y: (BigInt(op.ciphertext.y) + prime).toString(),
+      },
+    ]) {
+      const verdict = validateOp(state, "teamA", {
+        kind: "fhe",
+        contractId: order.id,
+        ciphertext: shifted,
+      });
+      expect(verdict.ok).toBe(false);
+      if (verdict.ok) throw new Error("unreachable");
+      expect(verdict.error).toContain("reduced");
+    }
+
+    // And the reduced answer is still accepted -- the check rejects unreduced
+    // values, not correct ones.
+    expect(validateOp(state, "teamA", op)).toEqual({ ok: true });
   });
 
   test("another team's FHE Order is refused even with a correct answer", () => {

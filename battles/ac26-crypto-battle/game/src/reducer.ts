@@ -67,7 +67,12 @@ import {
   MPC_TEAM_PARTY_INDEX,
   sumInField,
 } from "./mpc.ts";
-import { allowedMethodsFor, type PrivacyConstraint, type SubmissionMethod } from "./methods.ts";
+import {
+  allowedMethodsFor,
+  methodCanPerformTask,
+  type PrivacyConstraint,
+  type SubmissionMethod,
+} from "./methods.ts";
 import { mod, P } from "./field.ts";
 import { groupPow, RFC3526_GROUP14 } from "./group.ts";
 import { derivePublicCommitment } from "./schnorr-witness.ts";
@@ -450,6 +455,21 @@ function validateOrderSubmission(
   if (contract.status !== "open") {
     return { ok: false, error: `contract "${contractId}" is ${contract.status}, not open` };
   }
+  // [Issue #645] Two different refusals, and saying which is the point.
+  //
+  // "This Order does not accept LEAK" is a RULE the client imposed; "LEAK
+  // cannot do this job" is a FACT about the tool. methods.ts keeps them apart
+  // deliberately and says so in its own comment -- and this function used to
+  // collapse both into the privacy message, so submitting FHE to a share Order
+  // with constraint "none" was told that FHE "does not satisfy privacy
+  // constraint none". FHE satisfies `none` perfectly well. The message taught
+  // the opposite of the distinction the Order model exists to teach.
+  if (!methodCanPerformTask(method, contract.task.kind)) {
+    return {
+      ok: false,
+      error: `${method.toUpperCase()} cannot perform contract "${contractId}"'s task (${contract.task.kind}); this Order is done with ${contract.allowedMethods.join(", ").toUpperCase()}`,
+    };
+  }
   if (!contract.allowedMethods.includes(method)) {
     return {
       ok: false,
@@ -549,6 +569,19 @@ export function validateOp(
           error: "ciphertext components must be canonical, length-bounded decimal integers",
         };
       }
+      // Both components must already be field elements. `parseCanonicalDecimal`
+      // only bounds the digit count, and the two comparisons below both reduce
+      // mod p -- so before this check `(r + p, y + p)` was accepted, which let
+      // a participant skip the 「p で割った余り」 step the Order asks for and
+      // still score, and put a value on the Public Ledger that is not a field
+      // element at all. Leading zeros remain fine: `007` is 7, and 7 is in
+      // range.
+      if (submitted.r >= BigInt(state.config.prime) || submitted.y >= BigInt(state.config.prime)) {
+        return {
+          ok: false,
+          error: "ciphertext components must already be reduced -- take the remainder after dividing by the modulus",
+        };
+      }
       const prime = BigInt(state.config.prime);
       // BOTH components are checked, and the comment that used to stand here --
       // "a participant who reaches the right plaintext by a different
@@ -591,6 +624,17 @@ export function validateOp(
       const submittedPartial = parseCanonicalDecimal(op.partial);
       if (submittedPartial === undefined) {
         return { ok: false, error: "partial must be a canonical, length-bounded decimal integer" };
+      }
+      // Same hole as the FHE branch above, and fixed with it: the comparison
+      // below reduces mod p, so an unreduced partial scored while skipping the
+      // remainder step -- and here it was worse, because `applyMpc` puts the
+      // submitted value into the published `a + b + c` sum, so one unreduced
+      // partial makes the ledger's own arithmetic unreproducible.
+      if (submittedPartial >= BigInt(state.config.prime)) {
+        return {
+          ok: false,
+          error: "partial must already be reduced -- take the remainder after dividing by the modulus",
+        };
       }
       const prime = BigInt(state.config.prime);
       if (mod(submittedPartial, prime) !== expectedMpcPartial(state.seed, op.contractId, prime)) {

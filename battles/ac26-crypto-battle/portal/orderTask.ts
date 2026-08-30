@@ -104,7 +104,13 @@ export function ledgerKindLabel(artifact: PublicArtifact): string {
 }
 
 /** The public value a ledger row carries, rendered for a single table cell. */
-export function ledgerPayload(artifact: PublicArtifact): string {
+const LEDGER_COPY = {
+  ja: { remainderOf: "を割る数で割った余り" },
+  en: { remainderOf: "remainder the modulus" },
+} as const;
+
+export function ledgerPayload(artifact: PublicArtifact, locale: Locale): string {
+  const copy = LEDGER_COPY[locale];
   switch (artifact.kind) {
     case "share":
       return `#${artifact.shareIndex} = ${artifact.value}`;
@@ -113,10 +119,16 @@ export function ledgerPayload(artifact: PublicArtifact): string {
     case "ciphertext":
       return `(${artifact.r}, ${artifact.y})`;
     case "partial":
-      // All three offices' partials and what they sum to. The participant can
-      // add the first three and get the fourth -- that reproducibility IS the
-      // MPC lesson, so the row shows the working rather than just the answer.
-      return `${[artifact.partial, ...artifact.peerPartials].join(" + ")} = ${artifact.total}`;
+      // All three offices' partials and what they sum to.
+      //
+      // The remainder is stated, not implied. `total` is the sum reduced mod
+      // p, and three field elements almost always add to more than p -- so
+      // rendering this as a plain `a + b + c = total` was simply FALSE for the
+      // common case, and false in the one direction that matters: it invited a
+      // hand check that would not come out. Reproducing this row by hand is
+      // the MPC lesson, so the row has to describe an addition that actually
+      // reproduces.
+      return `${[artifact.partial, ...artifact.peerPartials].join(" + ")} ${copy.remainderOf} = ${artifact.total}`;
     default: {
       const exhaustive: never = artifact;
       throw new Error(`ledgerPayload: unknown artifact ${JSON.stringify(exhaustive)}`);

@@ -462,11 +462,13 @@ function LedgerLane({
   ledger,
   publicCommitments,
   myTeamId,
+  locale,
   copy,
 }: {
   readonly ledger: readonly PublicArtifact[];
   readonly publicCommitments: Readonly<Record<string, string>>;
   readonly myTeamId: string;
+  readonly locale: Locale;
   readonly copy: Copy;
 }) {
   // Newest first. No derived "exposure" reading of any kind -- see this
@@ -513,7 +515,7 @@ function LedgerLane({
                   and the nonce-reuse HUNT is unreachable by hand.
                 */}
                 <td style={tdStyle}>{entry.contractId}</td>
-                <td style={tdStyle}>{ledgerPayload(entry)}</td>
+                <td style={tdStyle}>{ledgerPayload(entry, locale)}</td>
                 <td style={tdStyle}>{formatTimestamp(entry.postedAtMs)}</td>
               </tr>
             ))}
@@ -611,6 +613,7 @@ export function StatusPanelBody({
           ledger={projection.publicLedger}
           publicCommitments={projection.publicCommitments}
           myTeamId={myTeamId}
+          locale={locale}
           copy={copy}
         />
       </div>

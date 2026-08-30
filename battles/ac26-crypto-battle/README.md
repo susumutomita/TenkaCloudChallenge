@@ -200,8 +200,12 @@ did not: `applyMpc` recorded the participant office's partial, scored it and
 stopped, so the outcome the statement promises existed only in the tests. The
 participant did the arithmetic and never saw the point of it. The artifact now
 carries the other two offices' partials and the total all three sum to, and the
-ledger row renders them as `a + b + c = total` so the addition is one a
-participant can check by hand -- which is the lesson, not a number handed down.
+ledger row shows all four numbers **with the remainder step stated**, so the
+addition is one a participant can actually check by hand -- which is the
+lesson, not a number handed down. Writing it as a plain `a + b + c = total`
+would have been false whenever the three exceed `p`, which is the common case,
+and false in the one direction that matters: it invites a check that does not
+come out.
 Publishing them is safe by the same argument that makes one partial safe.
 
 A published partial is consistent with every possible input, because the masks

@@ -42,6 +42,7 @@ import RegistrationPanel, {
 } from "../../portal/RegistrationPanel.tsx";
 import { contractsForMethod } from "../../portal/RegistrationPanelCore.tsx";
 import { GameBoardBody } from "../../portal/GameBoard.tsx";
+import { ledgerPayload } from "../../portal/orderTask.ts";
 import { ALL_SUBMISSION_METHODS } from "./methods.ts";
 import { nonceHuntCandidates } from "../../portal/FastMovePanel.tsx";
 import StatusPanel, { StatusPanelBody } from "../../portal/StatusPanel.tsx";
@@ -859,4 +860,52 @@ describe("the game board ties each method to the Order that accepts it [Issue #6
     expect(html).not.toContain("crypto-battle-primary-choice");
     expect(html).not.toContain("tc-choice-arrow");
   });
+});
+
+describe("the MPC ledger row describes an addition that actually reproduces [Issue #645]", () => {
+  /**
+   * `total` is the three partials summed and then reduced mod p, and three
+   * field elements almost always add to more than p. Rendering that as a plain
+   * `a + b + c = total` was therefore FALSE in the common case — and false in
+   * the worst direction, because the row exists precisely to invite a hand
+   * check, and that check would not come out.
+   */
+  const P = BigInt(DEFAULT_CONFIG.prime);
+  const partials = [P - 5n, P - 7n, 9n];
+  const total = partials.reduce((acc, v) => (acc + v) % P, 0n);
+
+  const artifact = {
+    id: "teamA-c3-partial",
+    teamId: "teamA",
+    generation: 1,
+    kind: "partial" as const,
+    method: "mpc" as const,
+    contractId: "teamA-c3",
+    partial: partials[0]?.toString() ?? "",
+    peerPartials: [partials[1]?.toString() ?? "", partials[2]?.toString() ?? ""],
+    total: total.toString(),
+    postedAtMs: 1,
+  };
+
+  it("uses a fixture whose plain sum really does exceed the modulus", () => {
+    // Otherwise the test would pass against the unqualified `=` too.
+    expect(partials.reduce((acc, v) => acc + v, 0n) > P).toBe(true);
+  });
+
+  for (const locale of ["ja", "en"] as const) {
+    it(`states the remainder rather than a bare equality (${locale})`, () => {
+      const rendered = ledgerPayload(artifact, locale);
+      for (const value of [...partials.map(String), total.toString()]) {
+        expect(rendered).toContain(value);
+      }
+      expect(rendered).toContain(locale === "ja" ? "余り" : "remainder");
+      // And the numbers on the row are self-consistent under that operation.
+      const shown = rendered.match(/\d+/g)?.map(BigInt) ?? [];
+      const [a, b, c, shownTotal] = shown;
+      if (a === undefined || b === undefined || c === undefined || shownTotal === undefined) {
+        throw new Error("expected four numbers on the row");
+      }
+      expect((a + b + c) % P).toBe(shownTotal);
+    });
+  }
 });

@@ -111,6 +111,21 @@ const METHODS_BY_TASK: Readonly<Record<OrderTaskKind, readonly SubmissionMethod[
   "masked-total": ["mpc"],
 };
 
+/**
+ * Whether `method` can perform `task` at all — the CAPABILITY half, with no
+ * reference to any privacy rule.
+ *
+ * Exported because the distinction this module's comment above describes has
+ * to survive as far as the participant. `reducer.ts` used to answer both
+ * questions with one message and told a participant that FHE "does not satisfy
+ * privacy constraint none" on a share Order — which is doubly wrong: FHE
+ * satisfies `none` perfectly well, and the actual reason is that it cannot do
+ * the job. That message taught the opposite of the lesson.
+ */
+export function methodCanPerformTask(method: SubmissionMethod, task: OrderTaskKind): boolean {
+  return METHODS_BY_TASK[task].includes(method);
+}
+
 /** Whether `method` may be used on an Order carrying `constraint`. */
 export function methodSatisfiesConstraint(
   method: SubmissionMethod,

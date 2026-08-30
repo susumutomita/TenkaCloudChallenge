@@ -227,6 +227,46 @@ describe("the MPC Order's trust boundary", () => {
     }
   });
 
+  /**
+   * Same hole the FHE branch had, and worse here: `applyMpc` puts the
+   * submitted partial into the published `a + b + c` sum, so one unreduced
+   * value makes the ledger's own arithmetic impossible to reproduce by hand —
+   * which is the thing that row exists to make possible.
+   */
+  test("a partial shifted by the modulus is refused, so the remainder step cannot be skipped", () => {
+    const { state, order } = mpcOrder();
+    const op = buildMpcOp(order, state.config.prime);
+    if (!op || op.kind !== "mpc") throw new Error("expected buildMpcOp to construct an op");
+    const prime = BigInt(state.config.prime);
+
+    const verdict = validateOp(state, "teamA", {
+      kind: "mpc",
+      contractId: order.id,
+      partial: (BigInt(op.partial) + prime).toString(),
+    });
+    expect(verdict.ok).toBe(false);
+    if (verdict.ok) throw new Error("unreachable");
+    expect(verdict.error).toContain("reduced");
+
+    // The reduced answer still passes.
+    expect(validateOp(state, "teamA", op)).toEqual({ ok: true });
+  });
+
+  test("every published partial and the total are field elements", () => {
+    const { state, order } = mpcOrder();
+    const op = buildMpcOp(order, state.config.prime);
+    if (!op) throw new Error("expected buildMpcOp to construct an op");
+    const next = applyOp(state, "teamA", op);
+    const entry = next.publicLedger.find((a) => a.kind === "partial");
+    if (entry?.kind !== "partial") throw new Error("expected a partial artifact");
+
+    const prime = BigInt(next.config.prime);
+    for (const value of [entry.partial, ...entry.peerPartials, entry.total]) {
+      expect(BigInt(value) < prime).toBe(true);
+      expect(BigInt(value) >= 0n).toBe(true);
+    }
+  });
+
   test("MPC cannot be used on an FHE Order", () => {
     const { state } = mpcOrder();
     const fheOrder = state.contracts.find(
