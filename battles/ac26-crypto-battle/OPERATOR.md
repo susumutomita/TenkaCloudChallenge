@@ -660,25 +660,25 @@ exists.
   probe/flag-based `scoring` schema, so `metadata.json` intentionally omits
   `scoring` / `endpoints`; there is nothing for a CFn Output or an
   `endpoints[]` entry to expose.
-- **HUNT cannot succeed in production yet -- TenkaCloud's `ctx.teamIds` is
-  only the requesting team, not the full event roster** (Issue #486 PR3
-  independent review, Medium #3; cross-repo, cannot be fixed from this
-  repo). `TenkaCloud/infrastructure/lib/problem-deploy/handlers/participant-handler/coordination-handler.ts:139`
-  builds `ctx: { eventId: item.eventId, teamIds: [item.teamId] }` -- a
-  single-element array, always just the calling team -- when resolving a
-  request's `CoordinationScope`; that file's own comment at line 121
-  already flags this as provisional ("`ctx.teamIds` は現状 requester 自身のみ。
-  full event roster の解決は importer 配線と同 increment で拡張する"). Since this
-  plugin's `initialState` builds one `TeamState` per `ctx.teamIds` entry
-  (see `game/src/reducer.ts`), a live match's `state.teams` would in
-  practice only ever contain the requesting team -- `validateOp`'s "hunt"
-  branch's `state.teams[op.targetTeamId]` lookup can never resolve to a real
-  target team, so every HUNT is rejected with "unknown target team" against
-  the live dispatcher, independent of whether the recovered secret is
-  correct. `game/src/coordination-plugin.test.ts` and `game/src` unit tests
-  are unaffected (they construct `ctx.teamIds` directly, the way a full
-  roster resolver eventually will), so this gap is invisible to `bun test`
-  -- it only shows up once TenkaCloud's roster resolution ships. Tracked
-  upstream: [TenkaCloud#3053](https://github.com/susumutomita/TenkaCloud/issues/3053).
-  No code change is possible on this side; this Battle's HUNT/LEAK/PROVE/
-  ROTATE loop is otherwise fully wired and ready as soon as that lands.
+- **RESOLVED: HUNT's full-roster prerequisite has shipped upstream.** This
+  section previously recorded that TenkaCloud built a request's
+  `CoordinationScope` with `ctx: { eventId, teamIds: [item.teamId] }` -- the
+  requesting team alone -- so this plugin's `initialState` only ever
+  materialised one `TeamState` and `validateOp`'s "hunt" branch could never
+  resolve a real `state.teams[op.targetTeamId]`. Every live HUNT was rejected
+  with "unknown target team" regardless of whether the recovered secret was
+  correct (Issue #486 PR3 independent review, Medium #3). That gap is closed:
+  [TenkaCloud#3053](https://github.com/susumutomita/TenkaCloud/issues/3053) was
+  fixed by TenkaCloud PR #3061, and `coordination-handler.ts`'s
+  `resolveEventRoster` now resolves the full event roster -- every team with a
+  deployment row for the same `(tenant, event, problemId)`, sorted by teamId so
+  whichever team's request materialises the state first produces the same
+  `initialState(ctx)`. HUNT is no longer known-blocked in production.
+
+  Two caveats survive the fix and are worth an operator's attention. First, the
+  state is materialised once, by the first op; a team that deploys AFTER that
+  will not appear in `state.teams` (the SDK has no roster-resolution hook), so
+  start the match only once every team's deploy has completed. Second, this
+  remains a cross-repository claim: `game/src` tests construct `ctx.teamIds`
+  directly and cannot observe the dispatcher, so treat a live HUNT as verified
+  only once it has been run through a real Portal.

@@ -114,19 +114,21 @@
  * `reducer.ts`'s other functions that convert at the `bigint` <-> string
  * boundary, so this wrapper stays a pure forward either way.
  *
- * ## Known upstream gap: HUNT cannot succeed against the live dispatcher yet
+ * ## Upstream roster gap: closed
  *
- * TenkaCloud's `coordination-handler.ts` currently resolves
- * `ctx.teamIds: [item.teamId]` -- only the requesting team, not the full
- * event roster (that file's own comment flags this as provisional). Since
- * `initialState` below builds one `TeamState` per `ctx.teamIds` entry, a
- * live match's `state.teams` in practice only ever contains the caller, so
- * `validateOp`'s hunt branch can never resolve a real
- * `state.teams[op.targetTeamId]`. This is a TenkaCloud-side gap, not
- * something fixable from this file or this repository -- tracked as
- * TenkaCloud#3053 (see OPERATOR.md's "Known gaps" for the full citation).
- * LEAK / PROVE / ROTATE and every `game/src` / `coordination-plugin.test.ts`
- * test are unaffected (they construct `ctx.teamIds` directly).
+ * This header used to record that TenkaCloud's `coordination-handler.ts`
+ * resolved `ctx.teamIds: [item.teamId]` -- the requesting team alone -- so a
+ * live match's `state.teams` only ever held the caller and `validateOp`'s hunt
+ * branch could never resolve a real `state.teams[op.targetTeamId]`. That gap
+ * (TenkaCloud#3053) was fixed by TenkaCloud PR #3061: `resolveEventRoster` now
+ * passes every team deployed against the same `(tenant, event, problemId)`,
+ * sorted by teamId so the roster is identical whichever team's request
+ * materialises the state first.
+ *
+ * What remains is a sequencing constraint, not a blocker: `initialState` runs
+ * once, on the first op, so a team that deploys after that is absent from
+ * `state.teams`. Start the match only after every team's deploy completes.
+ * See OPERATOR.md's "Known gaps" for the operator-facing version.
  *
  * ## projectForTeam: not defensively wrapped here, on purpose
  *
