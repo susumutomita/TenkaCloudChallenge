@@ -1,8 +1,9 @@
-/** Issue #641: participant-visible onboarding and ended-match safety. */
+/** Issue #641/#646: participant-visible onboarding and visual game surface. */
 
 import { describe, expect, it } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { GameBoardBody } from "../../portal/GameBoard.tsx";
 import HelpDrawer from "../../portal/HelpDrawer.tsx";
 import {
   getActionableContracts,
@@ -10,7 +11,6 @@ import {
   MatchEndedNotice,
   sanitizeProjection,
 } from "../../portal/RegistrationPanel.tsx";
-import StatusPanel from "../../portal/StatusPanel.tsx";
 import {
   advanceTutorial,
   createTutorialState,
@@ -41,7 +41,7 @@ function projection(overrides: Partial<CryptoBattleProjection> = {}): CryptoBatt
     },
     myContracts: [
       {
-        id: "blue-open",
+        id: "blue-c7",
         kind: "standard",
         points: 10,
         requestedShareIndices: [1],
@@ -49,7 +49,7 @@ function projection(overrides: Partial<CryptoBattleProjection> = {}): CryptoBatt
         remainingMs: 30_000,
       },
       {
-        id: "blue-stale-zero",
+        id: "blue-c-old",
         kind: "standard",
         points: 10,
         requestedShareIndices: [2],
@@ -58,10 +58,31 @@ function projection(overrides: Partial<CryptoBattleProjection> = {}): CryptoBatt
       },
     ],
     otherOpenContractCount: 1,
-    publicLedger: [],
+    publicLedger: [
+      {
+        id: "red-c1-share1",
+        teamId: "red",
+        generation: 1,
+        kind: "share",
+        shareIndex: 1,
+        value: "998877",
+        contractId: "red-c1",
+        postedAtMs: 10_000,
+      },
+      {
+        id: "red-c2-share3",
+        teamId: "red",
+        generation: 1,
+        kind: "share",
+        shareIndex: 3,
+        value: "776655",
+        contractId: "red-c2",
+        postedAtMs: 20_000,
+      },
+    ],
     teams: {
       blue: { teamId: "blue", score: 0, generation: 1, huntedGenerationCount: 0 },
-      red: { teamId: "red", score: 0, generation: 1, huntedGenerationCount: 0 },
+      red: { teamId: "red", score: 20, generation: 1, huntedGenerationCount: 0 },
     },
     publicCommitments: { blue: "1", red: "2" },
     ...overrides,
@@ -89,19 +110,11 @@ describe("Issue #641 tutorial walkthrough", () => {
 
     const leaked = advanceTutorial(ready);
     expect(leaked).toMatchObject({ stage: "leaked", score: 10, exposedShareIndices: [1] });
-    expect(leaked.ledger[0]).toMatchObject({
-      kind: "share",
-      contractId: "tutorial-contract-a",
-      generation: 1,
-    });
+    expect(leaked.ledger[0]).toMatchObject({ kind: "share", contractId: "tutorial-contract-a", generation: 1 });
 
     const proved = advanceTutorial(leaked);
     expect(proved).toMatchObject({ stage: "proved", score: 20, exposedShareIndices: [1] });
-    expect(proved.ledger[1]).toMatchObject({
-      kind: "proof",
-      contractId: "tutorial-contract-b",
-      generation: 1,
-    });
+    expect(proved.ledger[1]).toMatchObject({ kind: "proof", contractId: "tutorial-contract-b", generation: 1 });
 
     const hunted = advanceTutorial(proved);
     expect(hunted).toMatchObject({ stage: "hunted", score: 40, recoveredSecret: "73" });
@@ -113,22 +126,14 @@ describe("Issue #641 tutorial walkthrough", () => {
 
   it("uses distinct shares for a real Lagrange reconstruction and pins the documented threshold", () => {
     expect(DOCUMENTED_THRESHOLD).toBe(DEFAULT_CONFIG.threshold);
-    expect(TUTORIAL_OPPONENT_SHARES).toHaveLength(DEFAUL_CONFIG.threshold);
+    expect(TUTORIAL_OPPONENT_SHARES).toHaveLength(DEFAULT_CONFIG.threshold);
     expect(reconstructTutorialSecret(TUTORIAL_OPPONENT_SHARES)).toBe(73);
-    expect(() =>
-      reconstructTutorialSecret([TUTORIAL_OPPONENT_SHARES[0], TUTORIAL_OPPONENT_SHARES[0]]),
-    ).toThrow("distinct share indices");
+    expect(() => reconstructTutorialSecret([TUTORIAL_OPPONENT_SHARES[0], TUTORIAL_OPPONENT_SHARES[0]])).toThrow(
+      "distinct share indices",
+    );
   });
 
   for (const locale of ["ja", "en"] as const) {
-    it(`puts the 30-second rules before the live status surface (${locale})`, () => {
-      const html = renderToStaticMarkup(createElement(StatusPanel, slotProps(locale)));
-      const ruleTitle = locale === "ja" ? "30秘で分かるルール" : "30-second rules";
-      const statusTitle = locale === "ja" ? "PROVE / LEAK / HUNT — 状態}" : "PROVE / LEAK / HUNT -- Status";
-      expect(html).toContain(ruleTitle);
-      expect(html.indexOf(ruleTitle)).toBeLessThan(html.indexOf(statusTitle));
-    });
-
     it(`renders the walkthrough before the collapsed complete reference (${locale})`, () => {
       const html = renderToStaticMarkup(createElement(HelpDrawer, slotProps(locale)));
       const tutorialTitle = locale === "ja" ? "ルールを順番に体験する" : "Guided rules walkthrough";
@@ -136,18 +141,50 @@ describe("Issue #641 tutorial walkthrough", () => {
       expect(html).toContain(tutorialTitle);
       expect(html).toContain("<details");
       expect(html.indexOf(tutorialTitle)).toBeLessThan(html.indexOf(fullReference));
-      // The unchanged, executable reference is still present inside details.
       expect(html).toContain("p = 0xffffffffffffffff");
     });
   }
 });
 
+describe("Issue #646 visual game board", () => {
+  for (const locale of ["ja", "en"] as const) {
+    it(`puts the Order belt and LEAK / PROVE choice before raw values (${locale})`, () => {
+      const html = renderToStaticMarkup(createElement(GameBoardBody, { projection: projection(), locale }));
+      expect(html).toContain("ORDER BELT");
+      expect(html).toContain("ORDER #7");
+      expect(html).toContain("LEAK");
+      expect(html).toContain("PROVE");
+      expect(html).toContain("MY VAULT");
+      expect(html).toContain("PUBLIC LEDGER");
+      expect(html.indexOf("ORDER BELT")).toBeLessThan(html.indexOf("MY VAULT"));
+      expect(html.indexOf("ORDER BELT")).toBeLessThan(html.indexOf("PUBLIC LEDGER"));
+    });
+
+    it(`renders shares as cards grouped by team/generation, without an exploitability verdict (${locale})`, () => {
+      const html = renderToStaticMarkup(createElement(GameBoardBody, { projection: projection(), locale }));
+      expect(html).toContain("red");
+      expect(html).toContain("#1");
+      expect(html).toContain("#3");
+      expect(html).toContain("998877");
+      const lower = html.toLowerCase();
+      for (const forbidden of ["hunt possible", "threshold reached", "reconstructable", "復元可能", "あと1枚", "hunt可能"]) {
+        expect(lower).not.toContain(forbidden.toLowerCase());
+      }
+    });
+  }
+
+  it("ships reduced-motion fallback in the participant-visible board", () => {
+    const html = renderToStaticMarkup(createElement(GameBoardBody, { projection: projection(), locale: "en" }));
+    expect(html).toContain("prefers-reduced-motion:reduce");
+  });
+});
+
 describe("Issue #641 live move lifecycle", () => {
-  it("does not offer a stale open Contract whose remaining duration is already zero", () => {
-    expect(getActionableContracts(projection()).map((contract) => contract.id)).toEqual(["blue-open"]);
+  it("does not offer a stale open Order whose remaining duration is already zero", () => {
+    expect(getActionableContracts(projection()).map((contract) => contract.id)).toEqual(["blue-c7"]);
     expect(sanitizeProjection(projection()).myContracts.map((contract) => [contract.id, contract.status])).toEqual([
-      ["blue-open", "open"],
-      ["blue-stale-zero", "expired"],
+      ["blue-c7", "open"],
+      ["blue-c-old", "expired"],
     ]);
   });
 
