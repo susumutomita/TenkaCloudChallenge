@@ -37,7 +37,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { describeTaskShort, ledgerKindLabel, ledgerPayload } from "./orderTask.ts";
+import { ledgerKindLabel, ledgerPayload, taskDetail, taskLabel } from "./orderTask.ts";
 import type { CSSProperties } from "react";
 import type { PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 import { usePolledProjection } from "./coordination.ts";
@@ -74,7 +74,7 @@ interface Copy {
   readonly colContract: string;
   readonly colKind: string;
   readonly colPoints: string;
-  readonly colShares: string;
+  readonly colTask: string;
   readonly colExpires: string;
   readonly kindStandard: string;
   readonly kindRush: string;
@@ -122,12 +122,12 @@ const COPY: Record<Locale, Copy> = {
     matchEnded: "ended",
     phase: { build: "Build", pressure: "Pressure", endgame: "Endgame", ended: "Ended" } as Record<Phase, string>,
     contractQueueTitle: "Contract Queue",
-    contractQueueBody: "LEAK requests addressed to your team. Miss the deadline and one expires unclaimed.",
+    contractQueueBody: "Orders addressed to your team. Each says what it asks for and which methods it accepts. Miss the deadline and one expires unclaimed.",
     noContracts: "No open contracts right now.",
     colContract: "Contract",
     colKind: "Kind",
     colPoints: "Points",
-    colShares: "Requested shares",
+    colTask: "What it asks for",
     colExpires: "Expires in",
     kindStandard: "standard",
     kindRush: "rush",
@@ -178,12 +178,12 @@ const COPY: Record<Locale, Copy> = {
     matchEnded: "終了",
     phase: { build: "Build", pressure: "Pressure", endgame: "Endgame", ended: "Ended" } as Record<Phase, string>,
     contractQueueTitle: "Contract Queue",
-    contractQueueBody: "自チーム宛の LEAK 依頼です。期限内に応じないと失効します。",
+    contractQueueBody: "自チーム宛の依頼です。何を求められているかと、使える方法がそれぞれ書いてあります。期限内に応じないと失効します。",
     noContracts: "現在、open な contract はありません。",
     colContract: "Contract",
     colKind: "種別",
     colPoints: "得点",
-    colShares: "要求 share index",
+    colTask: "依頼内容",
     colExpires: "期限まで",
     kindStandard: "standard",
     kindRush: "rush",
@@ -349,10 +349,12 @@ function useElapsedSincePollMs(receivedAtWallMs: number | null): number {
 function ContractQueueLane({
   contracts,
   elapsedSincePollMs,
+  locale,
   copy,
 }: {
   readonly contracts: readonly ContractProjection[];
   readonly elapsedSincePollMs: number;
+  readonly locale: Locale;
   readonly copy: Copy;
 }) {
   const open = contracts.filter((c) => c.status === "open");
@@ -369,7 +371,7 @@ function ContractQueueLane({
               <th style={thStyle}>{copy.colContract}</th>
               <th style={thStyle}>{copy.colKind}</th>
               <th style={thStyle}>{copy.colPoints}</th>
-              <th style={thStyle}>{copy.colShares}</th>
+              <th style={thStyle}>{copy.colTask}</th>
               <th style={thStyle}>{copy.colExpires}</th>
             </tr>
           </thead>
@@ -382,7 +384,17 @@ function ContractQueueLane({
                   <td style={tdStyle}>{c.id}</td>
                   <td style={tdStyle}>{c.kind === "rush" ? copy.kindRush : copy.kindStandard}</td>
                   <td style={tdStyle}>{c.points}</td>
-                  <td style={tdStyle}>{describeTaskShort(c.task)}</td>
+                  {/*
+                    [Issue #645] The participant-facing label, not
+                    `describeTaskShort` — whose own docstring says it names the
+                    mechanism for operators and is "exactly what a participant
+                    should not be handed as their first impression of the job".
+                    This lane is that first impression, and it was rendering
+                    `fhe-sum×2` under a column headed "Requested shares".
+                  */}
+                  <td style={tdStyle}>
+                    {taskLabel(c.task, locale)} · {taskDetail(c.task, locale)}
+                  </td>
                   <td style={{ ...tdStyle, color: soon ? "#8a6d3b" : undefined }}>{formatDuration(remainingMs)}</td>
                 </tr>
               );
@@ -588,7 +600,12 @@ export function StatusPanelBody({
         </div>
       </div>
       <div style={laneGridStyle}>
-        <ContractQueueLane contracts={projection.myContracts} elapsedSincePollMs={elapsedSincePollMs} copy={copy} />
+        <ContractQueueLane
+          contracts={projection.myContracts}
+          elapsedSincePollMs={elapsedSincePollMs}
+          locale={locale}
+          copy={copy}
+        />
         <VaultLane vault={projection.vault} elapsedSincePollMs={elapsedSincePollMs} copy={copy} />
         <LedgerLane
           ledger={projection.publicLedger}

@@ -42,7 +42,8 @@ import RegistrationPanel, {
 } from "../../portal/RegistrationPanel.tsx";
 import { contractsForMethod } from "../../portal/RegistrationPanelCore.tsx";
 import { GameBoardBody } from "../../portal/GameBoard.tsx";
-import { nonceReuseTargets } from "../../portal/FastMovePanel.tsx";
+import { ALL_SUBMISSION_METHODS } from "./methods.ts";
+import { nonceHuntCandidates } from "../../portal/FastMovePanel.tsx";
 import StatusPanel, { StatusPanelBody } from "../../portal/StatusPanel.tsx";
 import { MODP_2048_P } from "./group.ts";
 import { DEFAULT_CONFIG, initialState, projectForTeam, tick } from "./reducer.ts";
@@ -491,6 +492,26 @@ describe("HelpDrawer.tsx -- ja/en smoke render", () => {
       expect(html).toContain("ROTATE");
       expect(html).toContain(locale === "ja" ? "この Battle の遊び方" : "How this Battle works");
     });
+
+    /**
+     * [Issue #645] The Help Drawer is the Portal's COMPLETE rules reference —
+     * the statement points at it for the full detail. Adding FHE and MPC to
+     * the live method set without updating it left a participant who opened
+     * help after receiving one of those Orders reading an obsolete ruleset
+     * that said there were four moves.
+     *
+     * Driven off `ALL_SUBMISSION_METHODS` rather than a hardcoded list, so a
+     * fifth method fails here instead of silently going undocumented.
+     */
+    it(`documents every submission method the game accepts (${locale})`, () => {
+      const html = renderToStaticMarkup(createElement(HelpDrawer, baseProps({ locale })));
+      for (const method of ALL_SUBMISSION_METHODS) {
+        expect(html).toContain(method.toUpperCase());
+      }
+      // And no longer claims a fixed count that the method set can outgrow.
+      expect(html).not.toContain("The 4 moves");
+      expect(html).not.toContain("4 つの操作");
+    });
   }
 
   it("PROVE Python snippet's prime is byte-for-byte the real RFC 3526 Group 14 constant", () => {
@@ -690,7 +711,7 @@ describe("the advanced forms only offer Orders their own method can fulfil [Issu
   });
 });
 
-describe("nonce-reuse targets come from the ledger, and only actionable ones [Issue #645]", () => {
+describe("the nonce-HUNT card offers candidates without judging exploitability [Issue #645]", () => {
   const proof = (teamId: string, generation: number, contractId: string, commitment: string) =>
     ({
       id: `${contractId}-proof`, teamId, generation, kind: "proof" as const,
@@ -709,31 +730,37 @@ describe("nonce-reuse targets come from the ledger, and only actionable ones [Is
       },
     });
 
-  it("finds a team that reused a commitment in its current generation", () => {
-    const targets = nonceReuseTargets(
+  /**
+   * The load-bearing pair. An earlier version listed a team only once it had
+   * found two proof rows sharing a commitment — so the card changed the moment
+   * the reuse appeared, and the Portal was announcing the pattern the
+   * participant is supposed to spot. These two assert the card looks the SAME
+   * either way: the reading stays the participant's.
+   */
+  it("offers a team that has posted proofs, whether or not a commitment repeats", () => {
+    const reused = nonceHuntCandidates(
       projectionWith([proof("red", 1, "red-c0", "77"), proof("red", 1, "red-c1", "77")], 1),
     );
-    expect(targets).toEqual([{ teamId: "red", generation: 1 }]);
+    const distinct = nonceHuntCandidates(
+      projectionWith([proof("red", 1, "red-c0", "77"), proof("red", 1, "red-c1", "88")], 1),
+    );
+    expect(reused).toEqual([{ teamId: "red", generation: 1 }]);
+    expect(distinct).toEqual(reused);
   });
 
-  it("ignores distinct commitments -- a correct prover is not a target", () => {
-    expect(
-      nonceReuseTargets(
-        projectionWith([proof("red", 1, "red-c0", "77"), proof("red", 1, "red-c1", "88")], 1),
-      ),
-    ).toEqual([]);
+  it("offers a team with a single proof row, which cannot be hunted at all", () => {
+    // Precisely the case an exploitability-computing list would hide, and
+    // hiding it is what would leak the verdict.
+    expect(nonceHuntCandidates(projectionWith([proof("red", 1, "red-c0", "77")], 1))).toEqual([
+      { teamId: "red", generation: 1 },
+    ]);
   });
 
-  /**
-   * The ledger is permanent, so the evidence outlives the generation it
-   * belongs to. `validateOp` refuses a stale generation outright, and the form
-   * defaults to the FIRST target -- so a stale entry would be the one
-   * pre-selected, and the participant's move would be refused for a reason the
-   * screen never mentioned.
-   */
-  it("drops a reuse the target has since ROTATEd away from", () => {
+  it("names each team's current generation, so a stale target cannot be offered", () => {
+    // The victim rotated after those rows were written. The candidate carries
+    // generation 2 — what `validateOp` will accept — not the ledger's 1.
     expect(
-      nonceReuseTargets(
+      nonceHuntCandidates(
         projectionWith([proof("red", 1, "red-c0", "77"), proof("red", 1, "red-c1", "77")], 2),
       ),
     ).toEqual([]);
@@ -741,20 +768,14 @@ describe("nonce-reuse targets come from the ledger, and only actionable ones [Is
 
   it("never offers your own team", () => {
     expect(
-      nonceReuseTargets(
+      nonceHuntCandidates(
         projectionWith([proof("blue", 1, "blue-c0", "77"), proof("blue", 1, "blue-c1", "77")], 1),
       ),
     ).toEqual([]);
   });
 
-  it("does not treat one commitment reused ACROSS generations as evidence", () => {
-    // Different generations mean different witnesses; the two responses do not
-    // solve for anything.
-    expect(
-      nonceReuseTargets(
-        projectionWith([proof("red", 1, "red-c0", "77"), proof("red", 2, "red-c1", "77")], 2),
-      ),
-    ).toEqual([]);
+  it("offers nothing when no other team has posted a proof", () => {
+    expect(nonceHuntCandidates(projectionWith([], 1))).toEqual([]);
   });
 });
 

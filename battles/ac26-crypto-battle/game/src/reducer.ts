@@ -60,9 +60,12 @@ import {
 } from "./fixtures.ts";
 import { decryptOrderSum, deriveFheOrderInputs, expectedFheSum } from "./fhe.ts";
 import {
+  allPartials,
   deriveMpcPrivateInputs,
   expectedMpcPartial,
   MPC_PARTY_COUNT,
+  MPC_TEAM_PARTY_INDEX,
+  sumInField,
 } from "./mpc.ts";
 import { allowedMethodsFor, type PrivacyConstraint, type SubmissionMethod } from "./methods.ts";
 import { mod, P } from "./field.ts";
@@ -818,6 +821,21 @@ function applyMpc(
   }
 
   const nowMs = state.nowMs ?? contract.issuedAtMs;
+  const prime = BigInt(state.config.prime);
+  // [Issue #645 Phase 3] Finish the protocol, not just this office's step.
+  //
+  // The other two offices publish their partials the moment this one does --
+  // that is what the client is waiting for, and the masks only cancel across
+  // all three. Recording just this team's partial left the Order's own story
+  // unfinished: the participant did the arithmetic, scored, and the result the
+  // whole exercise exists to demonstrate never appeared anywhere.
+  //
+  // The peers are derived, not stored, for the same reason everything else
+  // here is: `state` never holds a value a projection would have to remember
+  // to redact.
+  const peers = allPartials(state.seed, contract.id, prime).filter(
+    (_partial, index) => index !== MPC_TEAM_PARTY_INDEX,
+  );
   const artifact: PartialArtifact = {
     id: `${contract.id}-partial`,
     teamId,
@@ -826,6 +844,12 @@ function applyMpc(
     method: "mpc",
     contractId: contract.id,
     partial: BigInt(op.partial).toString(),
+    peerPartials: peers.map((partial) => partial.toString()),
+    // Summed from the published partials rather than read from
+    // `expectedMpcTotal`, so the ledger shows a number the participant can
+    // reproduce by adding the three rows in front of them -- which is the
+    // lesson. The two agree; `mpc.test.ts` asserts it.
+    total: sumInField([BigInt(op.partial), ...peers], prime).toString(),
     postedAtMs: nowMs,
   };
 

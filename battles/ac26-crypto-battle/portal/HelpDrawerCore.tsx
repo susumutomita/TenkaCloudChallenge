@@ -1,6 +1,7 @@
 /**
  * Issue #486 PR4: ac26-crypto-battle HelpDrawer plugin -- a 1-screen rules
- * reference for LEAK / PROVE / HUNT / ROTATE and the 3 lanes, aimed at
+ * reference for LEAK / PROVE / FHE / MPC / HUNT / ROTATE and the 3 lanes,
+ * aimed at
  * Issue #486's Gate 1 ("a first-time player can explain this within 5
  * minutes"). Purely static/informational: unlike StatusPanel and
  * RegistrationPanel, it needs no `coordinationClient` and does no polling --
@@ -101,11 +102,11 @@ const COPY = {
       "Quick vocabulary check: \"Contract\" here has nothing to do with CloudFormation or a blockchain contract -- it just means \"a request addressed to your team.\" Your team's secret (think: a password) is broken into 5 scattered fragments (shares) -- collect 3 and you can reassemble it (this mechanism is called Shamir threshold secret sharing). Every move below is a real cryptographic operation -- nothing here is simulated, and nothing scores on a guess. The core decision, every time a Contract arrives: LEAK for easy points but give away a fragment, or PROVE for the same points and give away nothing.",
     lanesTitle: 'The 3 lanes (under "PROVE / LEAK / HUNT -- Status" above)',
     lanes: [
-      { name: "Contract Queue", body: "LEAK requests addressed to your team right now. Miss the deadline and one expires unclaimed." },
+      { name: "Contract Queue", body: "Orders addressed to your team right now. Each names what it asks for -- a share, an encrypted addition, or a masked subtotal -- and which methods it accepts. Miss the deadline and one expires unclaimed." },
       { name: "My Vault", body: "Your team's current secret, this generation's shares, and your ROTATE cooldown. Only your team sees this." },
-      { name: "Public Ledger", body: "Every share every team has ever LEAKed, and every proof every team has ever PROVEn -- in the open, forever." },
+      { name: "Public Ledger", body: "Everything every team has ever published: LEAKed shares, PROVE transcripts, FHE answers and MPC subtotals -- in the open, forever. Each row names the method that produced it, the Order it answers, and the team's public value Y is listed below the table." },
     ],
-    movesTitle: 'The 4 moves (under "PROVE / LEAK / HUNT -- Submit a move" above)',
+    movesTitle: 'The moves (under "PROVE / LEAK / HUNT -- Submit a move" above)',
     moves: [
       {
         name: "LEAK",
@@ -116,8 +117,16 @@ const COPY = {
         body: "Complete an open Contract by submitting a Schnorr proof of knowledge instead of a share -- built locally beforehand (this portal never builds it for you). Pays exactly what LEAKing the same Contract would. Nothing that could reconstruct your secret goes public; only the proof transcript is recorded, for audit.",
       },
       {
+        name: "FHE",
+        body: "Complete an Order that hands you two LOCKED numbers and asks for the lock on their sum. Add the two pairs component by component, remainder p -- that is the whole operation, and it is the only method such an Order accepts. You never see either number, and neither does the Ledger: what is published is your answer, still locked. The judge unlocks it and compares.",
+      },
+      {
+        name: "MPC",
+        body: "Complete an Order where three offices each hold a private number and the client wants only the TOTAL. Publish your own masked subtotal -- your number plus the masks sent to you, minus the ones you sent, remainder p. The masks cancel across the three offices, so the total comes out right while no office's number is ever published. The Ledger shows all three subtotals and the total, and you can check the addition yourself.",
+      },
+      {
         name: "HUNT",
-        body: "Reconstruct another team's secret from enough of their Public Ledger shares (via Lagrange interpolation, computed locally) and submit the recovered value. Only an exact match to their real secret scores -- a wrong or partial guess does nothing. This Battle's threshold is currently 3 DISTINCT share indices of the same generation -- re-revealing an already-exposed index adds nothing.",
+        body: "Reconstruct another team's secret from enough of their Public Ledger shares (via Lagrange interpolation, computed locally) and submit the recovered value. Only an exact match to their real secret scores -- a wrong or partial guess does nothing. This Battle's threshold is currently 3 DISTINCT share indices of the same generation -- re-revealing an already-exposed index adds nothing. A second kind of HUNT exists for a team that reused a proof nonce: two of their proof rows in one generation sharing a commitment let you solve for their key. Correctly built proofs never produce that -- misuse is what this punishes, not correct use.",
       },
       {
         name: "ROTATE",
@@ -137,7 +146,7 @@ const COPY = {
       "The 2048-bit modulus is not an obstacle -- pow(g, w, p) is one call at any size. What matters is the exact framing: every variable-length field is length-prefixed so that no two different statements can hash to the same challenge.",
     scoringTitle: "Scoring, in short",
     scoring: [
-      "LEAK and PROVE pay identically for the same Contract -- PROVE is never worth extra just for being the harder path.",
+      "Every method pays what the Order states -- LEAK, PROVE, FHE and MPC alike. No technique is worth extra just for being the harder path.",
       "HUNT only pays out on a genuine, verified reconstruction -- guessing never scores.",
       "ROTATE costs a cooldown, but retroactively devalues every share you leaked before it.",
     ],
@@ -145,14 +154,14 @@ const COPY = {
   ja: {
     title: "この Battle の遊び方",
     intro:
-      "先に用語の確認です。ここでの「Contract」は CloudFormation や blockchain の contract とは無関係で、単に「自チームへの依頼」という意味です。自チームの secret（合言葉のようなもの）は 5 枚のバラバラな破片（share）に分解して保管されており、3 枚集めれば組み立て直せます（この仕組みが Shamir のしきい値秘密分散です）。以下の操作はすべて実際の暗号計算であり、シミュレーションではありません。当て推量では得点になりません。Contract が届くたびの核心の判断は、楽に稼げるが破片を渡す LEAK か、同じ得点だが何も渡さない PROVE かです。",
+      "先に用語の確認です。ここでの「Contract」は CloudFormation や blockchain の contract とは無関係で、単に「自チームへの依頼」という意味です。自チームの secret（合言葉のようなもの）は 5 枚のバラバラな破片（share）に分解して保管されており、3 枚集めれば組み立て直せます（この仕組みが Shamir のしきい値秘密分散です）。以下の操作はすべて実際の暗号計算であり、シミュレーションではありません。当て推量では得点になりません。Contract が届くたびの核心の判断は、楽に稼げるが破片を渡す LEAK か、同じ得点だが何も渡さない PROVE かです。依頼によってはそのどちらでもなく、「読んではいけない数字のまま計算せよ」と言ってくるものもあります。カードにそう書いてあります。",
     lanesTitle: "3 つのレーン (上の「PROVE / LEAK / HUNT — 状態」の中)",
     lanes: [
-      { name: "Contract Queue", body: "今まさに自チーム宛に届いている LEAK 依頼です。期限内に応じないと失効します。" },
+      { name: "Contract Queue", body: "今まさに自チーム宛に届いている依頼です。何を求められているか（share / 暗号文のまま足す / 覆面つき小計）と、使える方法がそれぞれ書いてあります。期限内に応じないと失効します。" },
       { name: "My Vault", body: "自チームの現行 secret、この世代の share、ROTATE クールダウンです。自チームにのみ表示されます。" },
-      { name: "Public Ledger", body: "全チームがこれまでに LEAK した share と PROVE した proof の、永久に残る全公開履歴です。" },
+      { name: "Public Ledger", body: "全チームがこれまでに公開したすべて — LEAK した share、PROVE の記録、FHE の答え、MPC の小計 — の永久に残る履歴です。各行にはどの方法で作られたか、どの依頼への応答かが並び、表の下には各チームの公開値 Y があります。" },
     ],
-    movesTitle: "4 つの操作 (上の「PROVE / LEAK / HUNT — 操作を送信」の中)",
+    movesTitle: "操作 (上の「PROVE / LEAK / HUNT — 操作を送信」の中)",
     moves: [
       {
         name: "LEAK",
@@ -163,8 +172,16 @@ const COPY = {
         body: "share の代わりに Schnorr 知識証明を提出して Contract を完了します。proof は事前にローカルで作成してください (この portal は代わりに作成しません)。同じ Contract を LEAK した場合と全く同じ得点です。secret を復元できる情報は一切公開されず、監査用に proof transcript のみが記録されます。",
       },
       {
+        name: "FHE",
+        body: "「鍵をかけたままの数字」が 2 つ届き、その合計に鍵をかけたものを求められる依頼を完了します。やることは 2 つ組を左どうし・右どうし足して p で割った余りを取るだけで、それがこの依頼で使える唯一の方法です。あなたは元の数字を 2 つとも見ませんし、Ledger にも載りません。載るのは鍵がかかったままのあなたの答えで、判定側がそれを開けて照合します。",
+      },
+      {
+        name: "MPC",
+        body: "3 つの拠点がそれぞれ自分の数字を持っていて、依頼主は合計だけを知りたい、という依頼を完了します。公開するのは自分の覆面つき小計 1 つ — 自分の数 + 受け取った覆面 − 送った覆面を p で割った余り — だけです。覆面は 3 拠点ぶんを足すと打ち消し合うので、どの拠点の数字も公開されないまま合計だけが正しく出ます。Ledger には 3 つの小計と合計が並ぶので、足し算は自分で確かめられます。",
+      },
+      {
         name: "HUNT",
-        body: "相手チームの Public Ledger 上の share を十分な数集め、Lagrange 補間でローカルに secret を復元し、その値を提出します。実際の secret と厳密に一致した場合のみ得点します。誤った値や部分的な推測では何も起こりません。このBattleの現在のしきい値は同じ世代の異なる index で 3 種類です — 同じ index を何度公開しても増えません。",
+        body: "相手チームの Public Ledger 上の share を十分な数集め、Lagrange 補間でローカルに secret を復元し、その値を提出します。実際の secret と厳密に一致した場合のみ得点します。誤った値や部分的な推測では何も起こりません。このBattleの現在のしきい値は同じ世代の異なる index で 3 種類です — 同じ index を何度公開しても増えません。もう 1 種類の HUNT として、proof の nonce を使い回した相手を突く方法があります。同じ世代の proof 2 行が同じ commitment を持っていれば、そこから相手の鍵が解けます。正しく作られた proof では起こらないので、これが罰するのは誤用であって正しい利用ではありません。",
       },
       {
         name: "ROTATE",
@@ -184,7 +201,7 @@ const COPY = {
       "2048 bit は障害になりません — pow(g, w, p) は桁数に関係なく 1 呼び出しです。効いてくるのは framing の厳密さで、可変長の項はすべて長さ前置されており、異なる主張が同じ challenge にハッシュされないようになっています。",
     scoringTitle: "スコアリング、要点だけ",
     scoring: [
-      "同じ Contract であれば LEAK と PROVE は全く同じ得点です — PROVE だからといって難しい分だけ多く得点することはありません。",
+      "どの方法でも、その依頼に書かれた得点がそのまま入ります — LEAK / PROVE / FHE / MPC のいずれも同じです。難しい方法だからといって多く得点することはありません。",
       "HUNT は検証済みの正しい復元でのみ得点します — 当て推量は得点になりません。",
       "ROTATE はクールダウンというコストを払いますが、それ以前に漏洩した share を遡ってすべて無価値にします。",
     ],

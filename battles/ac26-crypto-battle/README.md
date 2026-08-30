@@ -195,6 +195,15 @@ Every mask appears exactly twice -- added by one office, subtracted by another -
 so they cancel and the three partials sum to the total. The client learns the
 total; no office's number is ever published.
 
+**Completing the Order produces that total, and review is why.** For a while it
+did not: `applyMpc` recorded the participant office's partial, scored it and
+stopped, so the outcome the statement promises existed only in the tests. The
+participant did the arithmetic and never saw the point of it. The artifact now
+carries the other two offices' partials and the total all three sum to, and the
+ledger row renders them as `a + b + c = total` so the addition is one a
+participant can check by hand -- which is the lesson, not a number handed down.
+Publishing them is safe by the same argument that makes one partial safe.
+
 A published partial is consistent with every possible input, because the masks
 are uniform and not public, so it carries no information about the input.
 `mpc.test.ts` executes that too.

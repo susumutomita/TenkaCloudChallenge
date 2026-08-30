@@ -299,6 +299,25 @@ export interface PartialArtifact {
   readonly contractId: string;
   /** The published masked partial -- a stringified decimal. */
   readonly partial: string;
+  /**
+   * [Issue #645 Phase 3] The other two offices' published partials, and the
+   * total all three sum to.
+   *
+   * Without these the Order stopped one step short of its own story: the team
+   * published its masked subtotal, scored, and the outcome the client wanted
+   * — the total, obtained without any office revealing its number — was never
+   * produced anywhere in the runtime. The statement promises that outcome, so
+   * the runtime owes it.
+   *
+   * Safe to publish, by the same argument that makes `partial` safe: a partial
+   * is consistent with every possible input (see mpc.ts), and the total is
+   * precisely what the client is entitled to learn. Neither an input nor a
+   * mask appears here, and `mpc.test.ts` scans the serialized ledger to keep
+   * it that way.
+   */
+  readonly peerPartials: readonly string[];
+  /** `partial + peerPartials`, in the field. The client's answer. */
+  readonly total: string;
   readonly postedAtMs: number;
 }
 

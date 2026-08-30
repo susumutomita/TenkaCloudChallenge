@@ -113,7 +113,10 @@ export function ledgerPayload(artifact: PublicArtifact): string {
     case "ciphertext":
       return `(${artifact.r}, ${artifact.y})`;
     case "partial":
-      return artifact.partial;
+      // All three offices' partials and what they sum to. The participant can
+      // add the first three and get the fourth -- that reproducibility IS the
+      // MPC lesson, so the row shows the working rather than just the answer.
+      return `${[artifact.partial, ...artifact.peerPartials].join(" + ")} = ${artifact.total}`;
     default: {
       const exhaustive: never = artifact;
       throw new Error(`ledgerPayload: unknown artifact ${JSON.stringify(exhaustive)}`);

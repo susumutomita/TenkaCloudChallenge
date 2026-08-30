@@ -153,6 +153,56 @@ describe("the MPC Order's trust boundary", () => {
     }
   });
 
+  /**
+   * The Order's story finishing, not just its arithmetic being checked.
+   *
+   * Before this, the runtime recorded one office's partial, scored it, and
+   * stopped — the total the client wanted, and that the statement promises,
+   * was produced nowhere outside the tests. A participant did the work and
+   * never saw the point of it.
+   */
+  test("completing the Order produces the total, and the participant can reproduce it by adding the row", () => {
+    const { state, order } = mpcOrder();
+    const op = buildMpcOp(order, state.config.prime);
+    if (!op) throw new Error("expected buildMpcOp to construct an op");
+    const next = applyOp(state, "teamA", op);
+
+    const entry = next.publicLedger.find((a) => a.kind === "partial");
+    if (entry?.kind !== "partial") throw new Error("expected a partial artifact");
+
+    expect(entry.peerPartials).toHaveLength(MPC_PARTY_COUNT - 1);
+
+    const prime = BigInt(next.config.prime);
+    // The four published numbers are self-consistent: adding the three
+    // partials gives the total, which is what the ledger row invites the
+    // participant to check by hand.
+    expect(sumInField([entry.partial, ...entry.peerPartials].map(BigInt), prime).toString()).toBe(
+      entry.total,
+    );
+    // And it is the REAL total -- the sum of the three private inputs, which
+    // nobody published.
+    expect(entry.total).toBe(expectedMpcTotal(next.seed, order.id, prime).toString());
+  });
+
+  test("the total is published, but no input and no mask is", () => {
+    const { state, order } = mpcOrder();
+    if (order.task.kind !== "masked-total") throw new Error("unreachable");
+    const op = buildMpcOp(order, state.config.prime);
+    if (!op) throw new Error("expected buildMpcOp to construct an op");
+    const next = applyOp(state, "teamA", op);
+
+    // The whole point: the client learns the total while every office's own
+    // number stays private. Adding the aggregate to the ledger must not have
+    // quietly added anything else.
+    const serialized = JSON.stringify(next.publicLedger);
+    expect(serialized).not.toContain(order.task.myInput);
+    for (const mask of [...order.task.incomingMasks, ...order.task.outgoingMasks]) {
+      expect(serialized).not.toContain(mask);
+    }
+    const inputs = deriveMpcPrivateInputs(next.seed, order.id, BigInt(next.config.prime));
+    expect(serialized).not.toContain(inputs.myInput.toString());
+  });
+
   test("publishing the raw input instead of the masked partial is refused", () => {
     const { state, order } = mpcOrder();
     if (order.task.kind !== "masked-total") throw new Error("unreachable");
