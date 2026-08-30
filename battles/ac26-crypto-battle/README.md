@@ -171,6 +171,17 @@ could submit it directly -- and cannot, because the plaintexts are full field
 elements derived from the match seed, making the sum one value out of ~2^61.
 Any other route needs the keys.
 
+**One caveat this section cannot claim away.** Everything above assumes the
+match seed is unguessable. It is not: `initialState` sets `seed: ctx.eventId`,
+`CoordinationContext` offers nothing else, and `eventId` reaches the
+participant browser. Since this repository is public, every derivation here is
+reproducible by anyone who knows it — the FHE plaintexts and keys included, and
+also (predating this work) every team's secret via `deriveTeamGeneration`.
+Fixing it needs a server-only per-match secret injected by the platform:
+TenkaCloudChallenge#652, blocked on TenkaCloud#3133. Until that lands, treat
+the hiding arguments in this file as statements about the *scheme*, not about
+the deployed match.
+
 ## How MPC Orders work (Phase 3)
 
 `game/src/mpc.ts` is masked secure summation. Three offices share a mask

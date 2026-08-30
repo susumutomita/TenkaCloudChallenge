@@ -137,6 +137,16 @@ Dec_i(r, y) = y - k_i*r mod p
 体要素なので約 2^61 分の 1 の当てずっぽうになります。それ以外の経路には鍵が要り、
 鍵は上記のとおり得られません。
 
+**この節が主張しきれない前提が 1 つあります。** 上の議論はすべて「match の seed が
+推測できない」ことを前提にしています。実際には推測できます — `initialState` は
+`seed: ctx.eventId` を設定し、`CoordinationContext` には他に何もなく、`eventId` は
+参加者のブラウザまで届きます。本リポジトリは公開されているため、ここにある導出は
+eventId を知る者なら誰でも再現できます。FHE の平文と鍵も、そして（本 PR より前から）
+`deriveTeamGeneration` 経由で全チームの secret もです。修正には platform 側が注入する
+match ごとの秘密値が必要で、TenkaCloudChallenge#652（TenkaCloud#3133 待ち）で追跡して
+います。それが入るまで、この節の隠蔽に関する主張は**方式についての主張**であって、
+実際に動いている match についての主張ではありません。
+
 ## MPC Order の仕組み（Phase 3）
 
 `game/src/mpc.ts` の覆面つき加算（secure summation）です。3 拠点が順序対ごとの覆面

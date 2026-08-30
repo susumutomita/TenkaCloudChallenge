@@ -57,6 +57,13 @@
  * information about its plaintext -- information-theoretic, not a hardness
  * assumption, and `fhe.test.ts` executes it rather than asserting it.
  *
+ * That argument needs every such `k'` to be a key the derivation can actually
+ * produce, which is why {@link deriveFheKey} is uniform over the whole field.
+ * An earlier version excluded `k = 0` and so ruled out exactly one candidate
+ * (`m' = y`) while doubling another's likelihood -- and the test missed it by
+ * solving for `k'` without ever asking whether that `k'` was emittable. It now
+ * asks.
+ *
  * **Each input gets its OWN key, and that is load-bearing.** An earlier version
  * of this module used one key for both of an Order's inputs and claimed the
  * pair was still perfectly hiding, reasoning "two equations, three unknowns".
@@ -122,11 +129,25 @@ export interface Ciphertext {
  * `projectForTeam` to have to remember to redact.
  */
 export function deriveFheKey(seed: string, orderId: string, index: number, p: bigint): bigint {
-  // A zero key would make Enc(m; r) = (r, m) -- the plaintext in the clear.
-  // Vanishingly unlikely, and cheap to exclude outright rather than leave as a
-  // one-in-2^61 hole that no test would ever catch.
-  const key = deriveBigInt(seed, `fhe-key:${orderId}`, index, p);
-  return key === 0n ? 1n : key;
+  // Uniform over the WHOLE field, zero included. An earlier version excluded
+  // `k = 0`, reasoning that it "would make Enc(m; r) = (r, m) -- the plaintext
+  // in the clear". That reasoning was wrong, and the exclusion actively broke
+  // the property it was meant to protect.
+  //
+  // Wrong because `k` is never published: `(r, m)` is only "in the clear" to
+  // someone who already knows `k = 0`, and nobody does. Harmful because
+  // remapping 0 to 1 makes key 0 impossible and key 1 twice as likely, so the
+  // candidate plaintext `m' = y` -- the one needing `k' = 0` -- becomes
+  // INCONSISTENT, and the module header's claim that every candidate remains
+  // possible stops being true.
+  //
+  // With `k` uniform over `F_p` and any fixed `r != 0`, `k*r` is uniform, so
+  // `y = m + k*r` is uniform and independent of `m`. That is the perfect
+  // hiding this scheme claims, and it needs the zero back.
+  //
+  // `r` is the opposite case and keeps its exclusion -- see
+  // {@link deriveRandomness}.
+  return deriveBigInt(seed, `fhe-key:${orderId}`, index, p);
 }
 
 /** One key per input, in input order. */
@@ -153,9 +174,14 @@ export function deriveFhePlaintexts(seed: string, orderId: string, p: bigint): r
 /**
  * The per-ciphertext randomness `r`.
  *
- * Forced non-zero: `r = 0` collapses `Enc(m; 0)` to `(0, m)`, publishing the
- * plaintext. Same reasoning as the key above -- exclude it at the source rather
- * than rely on it never coming up.
+ * Forced non-zero, and unlike the key this exclusion is load-bearing: `r` is
+ * PUBLISHED as half the ciphertext, so `r = 0` collapses `Enc(m; 0)` to
+ * `(0, m)` and any reader can see both that `r` is zero and therefore that `y`
+ * is the plaintext. The key's zero is unobservable; this one is not.
+ *
+ * Biasing `r` costs nothing in return: hiding is stated for a given `r != 0`,
+ * and for ANY fixed such `r` the argument above goes through unchanged, so how
+ * `r` itself is distributed never enters it.
  */
 function deriveRandomness(seed: string, orderId: string, index: number, p: bigint): bigint {
   const r = deriveBigInt(seed, `fhe-randomness:${orderId}`, index, p);

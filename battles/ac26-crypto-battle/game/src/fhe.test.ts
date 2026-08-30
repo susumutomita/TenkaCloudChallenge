@@ -21,9 +21,27 @@ import {
   expectedFheSum,
 } from "./fhe.ts";
 import { add, inv, mod, mul, P, sub } from "./field.ts";
+import { deriveBigInt } from "./prng.ts";
 import { buildFheOp } from "./playtest.ts";
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
 import type { ContractProjection, CryptoBattleState } from "./types.ts";
+
+/**
+ * Is `key` a value `deriveFheKey` can actually produce?
+ *
+ * The hiding argument does not just need a `k'` to exist algebraically — it
+ * needs that `k'` to be a key the derivation could have emitted. Otherwise the
+ * candidate plaintext is ruled out and "every candidate is consistent" is
+ * false, which is exactly what the zero-exclusion did.
+ *
+ * The range being the whole field is not asserted here (no sample over F_p
+ * could show it); it is pinned by the two tests below — one stating
+ * `deriveFheKey` IS the raw derivation with no remapping, the other showing
+ * every residue reachable over a small prime through the same code path.
+ */
+function canBeEmittedAsKey(key: bigint, p: bigint): boolean {
+  return key >= 0n && key < p;
+}
 
 const CTX = { eventId: "fhe-tests", teamIds: ["teamA", "teamB"] } as const;
 const SEED = "fhe-tests";
@@ -88,10 +106,17 @@ describe("the cipher", () => {
     const r = 17n;
     const ciphertext = encrypt(real, key, r, P);
 
-    for (const candidate of [0n, 1n, 999n, P - 7n]) {
+    // `ciphertext.y` is the candidate that needs k' = 0. An earlier version
+    // remapped a derived 0 to 1, which ruled that candidate out entirely -- so
+    // it is tested by name, not left to a sample that would never hit it.
+    for (const candidate of [0n, 1n, 999n, P - 7n, ciphertext.y]) {
       // k' = (y - m') / r  — exists for every m' because p is prime and r != 0.
       const candidateKey = mul(sub(ciphertext.y, candidate, P), inv(r, P), P);
       expect(decrypt(ciphertext, candidateKey, P)).toBe(mod(candidate, P));
+      // ...and the argument only holds if that k' is a key the derivation can
+      // actually EMIT. Solving for k' without asking this is precisely how the
+      // zero-exclusion bias went unnoticed.
+      expect(canBeEmittedAsKey(candidateKey, P)).toBe(true);
     }
   });
 
@@ -165,17 +190,47 @@ describe("the cipher", () => {
     );
   });
 
-  test("the key and the randomness are never zero", () => {
-    // A zero key publishes the plaintext; zero randomness does the same. Both
-    // are excluded at the source rather than left as a one-in-2^61 hole.
+  /**
+   * The two zeros are NOT symmetric, and treating them as if they were is what
+   * broke the hiding claim.
+   *
+   * `r` is published, so a reader can see `r = 0` and conclude `y` is the
+   * plaintext: excluding it is real protection. `k` is never published, so
+   * `k = 0` is unobservable — excluding it protects nothing and costs the
+   * property, because it makes one candidate plaintext impossible and another
+   * twice as likely.
+   */
+  test("the randomness is never zero, because it is published", () => {
     for (let i = 0; i < 50; i += 1) {
-      for (const key of deriveFheInputKeys(SEED, `order-${i}`, P)) {
-        expect(key).not.toBe(0n);
-      }
       for (const input of deriveFheOrderInputs(SEED, `order-${i}`, P)) {
         expect(input.r).not.toBe(0n);
       }
     }
+  });
+
+  test("the key is the raw derivation, with no remapping that would bias it", () => {
+    // Stated as an identity rather than sampled: over F_p no sample would ever
+    // hit the excluded value, which is why the old bias survived a 50-order
+    // loop that asserted the opposite of what it should have.
+    for (let i = 0; i < 20; i += 1) {
+      for (const index of [0, 1]) {
+        expect(deriveFheKey(SEED, `order-${i}`, index, P)).toBe(
+          deriveBigInt(SEED, `fhe-key:order-${i}`, index, P),
+        );
+      }
+    }
+  });
+
+  test("a zero key really is reachable, so the hiding argument is not vacuous", () => {
+    // Over F_p a zero key is a ~2^-61 event and no test could observe it. Over
+    // a small prime it is common, and the derivation is the same code path.
+    const small = 7n;
+    const keys = new Set<bigint>();
+    for (let i = 0; i < 200; i += 1) keys.add(deriveFheKey(SEED, `small-${i}`, 0, small));
+    expect(keys.has(0n)).toBe(true);
+    // And every residue is reachable -- no value is missing and none is being
+    // stood in for by another.
+    expect(keys.size).toBe(Number(small));
   });
 });
 

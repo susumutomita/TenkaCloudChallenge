@@ -41,6 +41,7 @@ import RegistrationPanel, {
   submitRotate,
 } from "../../portal/RegistrationPanel.tsx";
 import { contractsForMethod } from "../../portal/RegistrationPanelCore.tsx";
+import { GameBoardBody } from "../../portal/GameBoard.tsx";
 import { nonceReuseTargets } from "../../portal/FastMovePanel.tsx";
 import StatusPanel, { StatusPanelBody } from "../../portal/StatusPanel.tsx";
 import { MODP_2048_P } from "./group.ts";
@@ -754,5 +755,69 @@ describe("nonce-reuse targets come from the ledger, and only actionable ones [Is
         projectionWith([proof("red", 1, "red-c0", "77"), proof("red", 2, "red-c1", "77")], 2),
       ),
     ).toEqual([]);
+  });
+});
+
+describe("the game board's action prompt names the methods the open Orders accept [Issue #645]", () => {
+  /**
+   * `StatusPanel` renders `GameBoard` first, so this row is the participant's
+   * FIRST instruction. It used to be a hardcoded LEAK / OR / PROVE — correct
+   * while those were the only methods, and a false first action the moment an
+   * FHE or MPC Order could be the only thing open. §12c's "low floor" bar is
+   * measured at exactly this point: after the first screen, can the reader say
+   * what to do first? Naming two methods the open Order rejects fails it.
+   */
+  const order = (
+    id: string,
+    task: ContractProjection["task"],
+    allowedMethods: ContractProjection["allowedMethods"],
+  ): ContractProjection => ({
+    id, kind: "standard", points: 10, task,
+    privacyConstraint: allowedMethods.includes("leak") ? "none" : "no-raw-disclosure",
+    allowedMethods, status: "open", remainingMs: 60_000,
+  });
+
+  const SHARE = order("s", { kind: "reveal-share", shareIndices: [0] }, ["leak", "prove"]);
+  const FHE = order(
+    "f",
+    { kind: "homomorphic-sum", inputs: [{ r: "1", y: "2" }, { r: "3", y: "4" }] },
+    ["fhe"],
+  );
+  const MPC = order(
+    "m",
+    {
+      kind: "masked-total", partyCount: 3,
+      myInput: "5", incomingMasks: ["1", "2"], outgoingMasks: ["3", "4"],
+    },
+    ["mpc"],
+  );
+
+  const chipsFor = (myContracts: readonly ContractProjection[]): string[] => {
+    const html = renderToStaticMarkup(
+      createElement(GameBoardBody, { projection: fixtureProjection({ myContracts }), locale: "en" }),
+    );
+    // Match the choice chips by class, not by the words -- "LEAK" and "PROVE"
+    // also appear in ledger labels elsewhere on the same board.
+    return ["leak", "prove", "fhe", "mpc"].filter((m) => html.includes(`tc-choice tc-choice-${m}`));
+  };
+
+  it("offers LEAK and PROVE when a share Order is the open one", () => {
+    expect(chipsFor([SHARE])).toEqual(["leak", "prove"]);
+  });
+
+  it("offers FHE alone when only an FHE Order is open", () => {
+    expect(chipsFor([FHE])).toEqual(["fhe"]);
+  });
+
+  it("offers FHE and MPC, and neither LEAK nor PROVE, when only compute Orders are open", () => {
+    expect(chipsFor([FHE, MPC])).toEqual(["fhe", "mpc"]);
+  });
+
+  it("offers all four when the belt holds every kind", () => {
+    expect(chipsFor([SHARE, FHE, MPC])).toEqual(["leak", "prove", "fhe", "mpc"]);
+  });
+
+  it("keeps the LEAK/PROVE framing when nothing is open -- no Order to contradict", () => {
+    expect(chipsFor([])).toEqual(["leak", "prove"]);
   });
 });
