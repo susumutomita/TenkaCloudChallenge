@@ -219,11 +219,14 @@ function orderMaskSum(seed: string, orderId: string, p: bigint): bigint {
 /**
  * Decrypt a submitted sum for this Order.
  *
- * This is the judge's decrypt half of #645's decrypt-and-compare rule. It reads
- * only `y`: the `r` component carries no information the verdict depends on
- * once the mask total is known, so a participant who reaches the right value by
- * a different homomorphic route still passes, which is the behaviour a semantic
- * judge should have.
+ * This is the judge's decrypt half of #645's decrypt-and-compare rule, and it
+ * is only that half: it reads `y` alone. That is NOT a statement that `r` may
+ * be anything. Because the mask total is fixed for an Order, exactly one `y` is
+ * ever accepted -- which leaves `r` the only free component, and an unchecked
+ * `r` would admit `(0, y1 + y2)`: half the componentwise addition the Order
+ * asks for. `reducer.ts` checks `r` against the Order's own first components
+ * before calling this. The split is deliberate: this function is the
+ * decryption, not the verdict.
  */
 export function decryptOrderSum(
   ciphertext: Ciphertext,

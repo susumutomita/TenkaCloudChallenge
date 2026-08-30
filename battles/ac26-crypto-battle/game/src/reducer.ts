@@ -64,7 +64,7 @@ import {
   expectedMpcPartial,
   MPC_PARTY_COUNT,
 } from "./mpc.ts";
-import { allowedMethodsFor, type SubmissionMethod } from "./methods.ts";
+import { allowedMethodsFor, type PrivacyConstraint, type SubmissionMethod } from "./methods.ts";
 import { mod, P } from "./field.ts";
 import { groupPow, RFC3526_GROUP14 } from "./group.ts";
 import { derivePublicCommitment } from "./schnorr-witness.ts";
@@ -226,7 +226,82 @@ function buildOrderTask(
   }
 }
 
-export function tick(state: CryptoBattleState, eventNowMs: number): CryptoBattleState {
+/**
+ * A contract as it may actually come back from storage, rather than as the
+ * current version writes it.
+ *
+ * A match is long-lived and its state is persisted between calls, so a deploy
+ * mid-match hands the reducer rows written by an OLDER version of this plugin.
+ * Every field this file later treats as required is optional here, which is
+ * what makes {@link migrateContract} total instead of a pile of non-null
+ * assertions at each use site.
+ */
+type PersistedContract = Omit<Contract, "task" | "privacyConstraint" | "allowedMethods"> & {
+  readonly task?: OrderTask;
+  /** Pre-#645: an Order asked for share indices and nothing else. */
+  readonly requestedShareIndices?: readonly number[];
+  /** Pre-#650: an Order carried no privacy rule and no method list. */
+  readonly privacyConstraint?: PrivacyConstraint;
+  readonly allowedMethods?: readonly SubmissionMethod[];
+};
+
+function needsMigration(contract: Contract): boolean {
+  const persisted: PersistedContract = contract;
+  return persisted.task === undefined || persisted.allowedMethods === undefined;
+}
+
+/**
+ * [Issue #645] Bring one persisted Order up to the current shape.
+ *
+ * Any version that adds a REQUIRED contract field has to say what an older row
+ * means, or the first read of that field throws and takes the whole match with
+ * it. Two fields need that answer here:
+ *
+ *  - `task` (this change). Before it, every Order asked for share indices and
+ *    nothing else -- so a legacy row IS a `reveal-share` Order and converts
+ *    exactly. Without this, `projectTask` reads `.kind` off `undefined` and
+ *    `projectForTeam` throws for EVERY team in the match: `myContracts`
+ *    includes completed and expired rows, so a single pre-upgrade Order is
+ *    enough, and no later `tick` ever repairs those rows.
+ *  - `privacyConstraint` / `allowedMethods` (#650). Older, and the same class
+ *    of failure one function earlier -- `validateOrderSubmission` reads
+ *    `allowedMethods.includes(...)`. #650 shipped without a fallback; covering
+ *    it is two lines inside the function that has to exist anyway, and leaving
+ *    a known crash of exactly this shape out of the migration written to
+ *    prevent it would be hard to defend.
+ *
+ * Lossless where it matters: id, points, deadline, status and resolution are
+ * carried through untouched, so no score or history moves.
+ */
+function migrateContract(contract: Contract): Contract {
+  if (!needsMigration(contract)) return contract;
+  const persisted: PersistedContract = contract;
+
+  const privacyConstraint = persisted.privacyConstraint ?? "none";
+  const task: OrderTask = persisted.task ?? {
+    kind: "reveal-share",
+    shareIndices: persisted.requestedShareIndices ?? [],
+  };
+  return {
+    ...contract,
+    task,
+    privacyConstraint,
+    allowedMethods: persisted.allowedMethods ?? allowedMethodsFor(task.kind, privacyConstraint),
+  };
+}
+
+/**
+ * Every entry point below reads `state.contracts`, so every entry point
+ * migrates first. `applyOp` and `tick` return the migrated rows, so the
+ * upgrade also persists on the next write rather than being redone forever.
+ */
+function withMigratedContracts(state: CryptoBattleState): CryptoBattleState {
+  if (!state.contracts.some(needsMigration)) return state;
+  return { ...state, contracts: state.contracts.map(migrateContract) };
+}
+
+export function tick(persistedState: CryptoBattleState, eventNowMs: number): CryptoBattleState {
+  const state = withMigratedContracts(persistedState);
   const startedAtMs = state.startedAtMs ?? eventNowMs;
   const elapsedMs = eventNowMs - startedAtMs;
   const phase = computePhase(elapsedMs, state.config);
@@ -381,7 +456,12 @@ function validateOrderSubmission(
   return { ok: true };
 }
 
-export function validateOp(state: CryptoBattleState, teamId: string, op: CryptoBattleOp): ValidateResult {
+export function validateOp(
+  persistedState: CryptoBattleState,
+  teamId: string,
+  op: CryptoBattleOp,
+): ValidateResult {
+  const state = withMigratedContracts(persistedState);
   const team = state.teams[teamId];
   if (!team) return { ok: false, error: `unknown team "${teamId}"` };
 
@@ -466,11 +546,27 @@ export function validateOp(state: CryptoBattleState, teamId: string, op: CryptoB
           error: "ciphertext components must be canonical, length-bounded decimal integers",
         };
       }
-      // The judge decrypts and compares against the hidden sum. It never checks
-      // "did you add these two specific ciphertexts" -- #645 asks for a
-      // decrypt-and-compare judge, and a participant who reaches the right
-      // plaintext by a different homomorphic route has genuinely done the job.
       const prime = BigInt(state.config.prime);
+      // BOTH components are checked, and the comment that used to stand here --
+      // "a participant who reaches the right plaintext by a different
+      // homomorphic route has genuinely done the job" -- was wrong about its
+      // own premise. `decryptOrderSum` subtracts this Order's FIXED mask, so
+      // exactly one `y` is ever accepted; there is no second route to a
+      // different valid `y`. That left `r` as the only free component, and an
+      // unchecked `r` accepted `(0, y1 + y2)`: half of the componentwise
+      // addition the Order asks for, recorded on the Public Ledger as a
+      // ciphertext that is NOT the sum of the two public pairs. Requiring the
+      // real `r` therefore rejects no legitimate route, because none exists.
+      const expectedR = contract.task.inputs.reduce(
+        (acc, input) => mod(acc + BigInt(input.r), prime),
+        0n,
+      );
+      if (mod(submitted.r, prime) !== expectedR) {
+        return {
+          ok: false,
+          error: "submitted ciphertext's first component is not the sum of the Order's first components",
+        };
+      }
       if (
         decryptOrderSum(submitted, state.seed, op.contractId, prime) !==
         expectedFheSum(state.seed, op.contractId, prime)
@@ -960,7 +1056,12 @@ function applyProve(
  * comparison in `validateOp`'s "hunt" branch) and throws rather than silently
  * no-op-ing if it is handed something `validateOp` would have rejected.
  */
-export function applyOp(state: CryptoBattleState, teamId: string, op: CryptoBattleOp): CryptoBattleState {
+export function applyOp(
+  persistedState: CryptoBattleState,
+  teamId: string,
+  op: CryptoBattleOp,
+): CryptoBattleState {
+  const state = withMigratedContracts(persistedState);
   switch (op.kind) {
     case "leak":
       return applyLeak(state, teamId, op);
@@ -1006,7 +1107,11 @@ export function applyOp(state: CryptoBattleState, teamId: string, op: CryptoBatt
  * / prove.test.ts's secret-non-leakage test assert this by scanning the
  * serialized JSON).
  */
-export function projectForTeam(state: CryptoBattleState, teamId: string): CryptoBattleProjection {
+export function projectForTeam(
+  persistedState: CryptoBattleState,
+  teamId: string,
+): CryptoBattleProjection {
+  const state = withMigratedContracts(persistedState);
   const team = state.teams[teamId];
   if (!team) {
     throw new Error(`projectForTeam: unknown team "${teamId}"`);

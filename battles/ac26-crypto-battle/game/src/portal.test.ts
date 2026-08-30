@@ -40,10 +40,12 @@ import RegistrationPanel, {
   submitProve,
   submitRotate,
 } from "../../portal/RegistrationPanel.tsx";
+import { contractsForMethod } from "../../portal/RegistrationPanelCore.tsx";
+import { nonceReuseTargets } from "../../portal/FastMovePanel.tsx";
 import StatusPanel, { StatusPanelBody } from "../../portal/StatusPanel.tsx";
 import { MODP_2048_P } from "./group.ts";
 import { DEFAULT_CONFIG, initialState, projectForTeam, tick } from "./reducer.ts";
-import type { CryptoBattleProjection } from "./types.ts";
+import type { ContractProjection, CryptoBattleProjection, PublicArtifact } from "./types.ts";
 
 const FIXED_NOW = 1_700_000_000_000;
 
@@ -332,6 +334,34 @@ describe("StatusPanelBody -- populated 3-lane render", () => {
       expect(html).toContain("554433");
     });
 
+    /**
+     * [Issue #645 Phase 5] A proof's challenge binds five values -- domain,
+     * team, contract, generation, R, Y -- and the nonce-reuse HUNT needs two
+     * challenges recomputed from ledger rows. Two of those inputs reached no
+     * participant surface at all: `ledgerPayload` dropped the Order id, and Y
+     * was rendered nowhere. A reader who understood the maths perfectly still
+     * could not compute a single challenge, so the HUNT was unplayable by hand
+     * no matter what the statement said.
+     */
+    it(`renders every value a proof's challenge binds (${locale})`, () => {
+      const projection = fixtureProjection();
+      const html = renderToStaticMarkup(
+        createElement(StatusPanelBody, { projection, locale, elapsedSincePollMs: 0 }),
+      );
+      const proof = projection.publicLedger.find((a) => a.kind === "proof");
+      if (proof?.kind !== "proof") throw new Error("expected a proof row in the fixture");
+
+      expect(html).toContain(proof.teamId);
+      expect(html).toContain(proof.contractId);
+      expect(html).toContain(proof.commitment);
+      expect(html).toContain(String(proof.generation));
+      // Every team's Y, not only the target's -- it is public for all of them,
+      // and rendering only one would be the platform choosing a target.
+      for (const y of Object.values(projection.publicCommitments)) {
+        expect(html).toContain(y);
+      }
+    });
+
     it(`does not state or imply that a leaked threshold has been reached (${locale}) [Issue #486 UI principle]`, () => {
       // fixtureProjection() above deliberately leaks exactly
       // DEFAULT_CONFIG.threshold-many of "red"'s shares (3 of them) -- the
@@ -605,4 +635,124 @@ describe("RegistrationPanel.tsx describeOutcome -- localized display text for ev
       expect(describeOutcome({ kind: "not_configured" }, copy)).toBe(copy.notConfiguredResult);
     });
   }
+});
+
+describe("the advanced forms only offer Orders their own method can fulfil [Issue #645]", () => {
+  /**
+   * `CoreRegistrationPanel` used to hand every open Order to both LeakForm and
+   * ProveForm. With only LEAK and PROVE in the world that was harmless -- one
+   * of the two always applied. Adding FHE and MPC made it a selector full of
+   * moves the judge is certain to refuse.
+   */
+  const orders: ContractProjection[] = [
+    {
+      id: "free", kind: "standard", points: 10,
+      task: { kind: "reveal-share", shareIndices: [0] },
+      privacyConstraint: "none", allowedMethods: ["leak", "prove"],
+      status: "open", remainingMs: 60_000,
+    },
+    {
+      id: "prove-only", kind: "standard", points: 10,
+      task: { kind: "reveal-share", shareIndices: [1] },
+      privacyConstraint: "no-raw-disclosure", allowedMethods: ["prove"],
+      status: "open", remainingMs: 60_000,
+    },
+    {
+      id: "fhe", kind: "standard", points: 10,
+      task: { kind: "homomorphic-sum", inputs: [{ r: "1", y: "2" }, { r: "3", y: "4" }] },
+      privacyConstraint: "no-raw-disclosure", allowedMethods: ["fhe"],
+      status: "open", remainingMs: 60_000,
+    },
+    {
+      id: "mpc", kind: "standard", points: 10,
+      task: { kind: "masked-total", partyCount: 3, myInput: "5", incomingMasks: ["1", "2"], outgoingMasks: ["3", "4"] },
+      privacyConstraint: "no-raw-disclosure", allowedMethods: ["mpc"],
+      status: "open", remainingMs: 60_000,
+    },
+  ];
+
+  it("offers LEAK only the Order whose rule permits it", () => {
+    expect(contractsForMethod(orders, "leak").map((c) => c.id)).toEqual(["free"]);
+  });
+
+  it("offers PROVE both share Orders and neither compute Order", () => {
+    expect(contractsForMethod(orders, "prove").map((c) => c.id)).toEqual(["free", "prove-only"]);
+  });
+
+  it("never offers a form an Order its method cannot perform", () => {
+    for (const method of ["leak", "prove"] as const) {
+      for (const order of contractsForMethod(orders, method)) {
+        expect(order.allowedMethods).toContain(method);
+        expect(order.task.kind).toBe("reveal-share");
+      }
+    }
+  });
+});
+
+describe("nonce-reuse targets come from the ledger, and only actionable ones [Issue #645]", () => {
+  const proof = (teamId: string, generation: number, contractId: string, commitment: string) =>
+    ({
+      id: `${contractId}-proof`, teamId, generation, kind: "proof" as const,
+      method: "prove" as const, contractId, commitment, response: "9", postedAtMs: 1,
+    });
+
+  const projectionWith = (
+    ledger: readonly PublicArtifact[],
+    redGeneration: number,
+  ): CryptoBattleProjection =>
+    fixtureProjection({
+      publicLedger: ledger,
+      teams: {
+        blue: { teamId: "blue", score: 0, generation: 1, huntedGenerationCount: 0 },
+        red: { teamId: "red", score: 0, generation: redGeneration, huntedGenerationCount: 0 },
+      },
+    });
+
+  it("finds a team that reused a commitment in its current generation", () => {
+    const targets = nonceReuseTargets(
+      projectionWith([proof("red", 1, "red-c0", "77"), proof("red", 1, "red-c1", "77")], 1),
+    );
+    expect(targets).toEqual([{ teamId: "red", generation: 1 }]);
+  });
+
+  it("ignores distinct commitments -- a correct prover is not a target", () => {
+    expect(
+      nonceReuseTargets(
+        projectionWith([proof("red", 1, "red-c0", "77"), proof("red", 1, "red-c1", "88")], 1),
+      ),
+    ).toEqual([]);
+  });
+
+  /**
+   * The ledger is permanent, so the evidence outlives the generation it
+   * belongs to. `validateOp` refuses a stale generation outright, and the form
+   * defaults to the FIRST target -- so a stale entry would be the one
+   * pre-selected, and the participant's move would be refused for a reason the
+   * screen never mentioned.
+   */
+  it("drops a reuse the target has since ROTATEd away from", () => {
+    expect(
+      nonceReuseTargets(
+        projectionWith([proof("red", 1, "red-c0", "77"), proof("red", 1, "red-c1", "77")], 2),
+      ),
+    ).toEqual([]);
+  });
+
+  it("never offers your own team", () => {
+    expect(
+      nonceReuseTargets(
+        projectionWith([proof("blue", 1, "blue-c0", "77"), proof("blue", 1, "blue-c1", "77")], 1),
+      ),
+    ).toEqual([]);
+  });
+
+  it("does not treat one commitment reused ACROSS generations as evidence", () => {
+    // Different generations mean different witnesses; the two responses do not
+    // solve for anything.
+    expect(
+      nonceReuseTargets(
+        projectionWith([proof("red", 1, "red-c0", "77"), proof("red", 2, "red-c1", "77")], 2),
+      ),
+    ).toEqual([]);
+  });
 });

@@ -160,9 +160,13 @@ not fully homomorphic** -- there is no ciphertext-ciphertext multiplication, and
 the participant-facing copy says "add without decrypting", never that FHE can do
 anything.
 
-**Why a participant cannot fake an answer.** The judge decrypts the submitted
-sum with the Order's combined mask and compares against the hidden total
-(#645's decrypt-and-compare requirement). Someone who KNEW the expected sum
+**Why a participant cannot fake an answer.** The judge checks **both**
+components: first that the submitted first component is the sum of the Order's
+two first components, then it decrypts with the Order's combined mask and
+compares against the hidden total (#645's decrypt-and-compare requirement).
+The first check is not redundant -- the mask is fixed per Order, so exactly one
+`y` is ever accepted, which left `r` free until it was checked, and `(0, y1+y2)`
+passed with half the componentwise addition done. Someone who KNEW the expected sum
 could submit it directly -- and cannot, because the plaintexts are full field
 elements derived from the match seed, making the sum one value out of ~2^61.
 Any other route needs the keys.
@@ -209,6 +213,19 @@ z1 = k + e1*w,  z2 = k + e2*w   ->   w = (z1 - z2) / (e1 - e2)   mod q
 The attacker derives it from the Public Ledger alone (`buildNonceReuseHuntOp`
 reads nothing else), and the judge checks `g^w == Y` against the target's public
 commitment.
+
+**A human has to be able to do this too, and at first could not.** Each `e` is
+`H(domain, teamId, contractId, generation, R, Y)`, and two of those six inputs
+reached no participant surface: the ledger row dropped the Order id, and `Y`
+was rendered nowhere at all. The maths was documented and the values were not,
+so the HUNT was implementable but unplayable. The ledger now carries an Order
+column, the Status panel lists every team's `Y`, and the statement names which
+column supplies each input. `hunt-playability.test.ts` is the guard: it scrapes
+the five values out of the rendered HTML, recomputes both challenges from the
+rule the Help Drawer publishes -- re-implemented from that text rather than
+imported, so the test also catches the documentation drifting from the code --
+solves for `w`, and submits it. `nonce-reuse.test.ts` calls the shipped
+helpers and so can never notice this class of gap; §12c says as much.
 
 The prover this Battle ships **cannot** produce that: `schnorr-prover.ts` binds
 the nonce to the contract id. So a team using the provided tooling is not

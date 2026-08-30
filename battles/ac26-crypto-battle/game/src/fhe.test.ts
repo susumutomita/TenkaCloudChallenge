@@ -248,15 +248,64 @@ describe("the FHE Order's trust boundary", () => {
     const first = order.task.inputs[0];
     if (!first) throw new Error("expected an input ciphertext");
 
-    // One input alone decrypts to one plaintext, not the sum.
-    const verdict = validateOp(state, "teamA", {
+    // One input alone is not the sum. Both of its components are wrong, and
+    // the first-component check catches it first -- deliberately, because that
+    // half is public (both inputs are on the Order card), so saying so reveals
+    // nothing the participant could not already verify themselves.
+    const single = validateOp(state, "teamA", {
       kind: "fhe",
       contractId: order.id,
       ciphertext: first,
     });
+    expect(single.ok).toBe(false);
+
+    // With the first component RIGHT, the decrypt-and-compare is what rejects
+    // a wrong plaintext -- exercising that path on its own rather than relying
+    // on a submission that happens to be wrong in both halves.
+    const op = buildFheOp(order, state.config.prime);
+    if (!op || op.kind !== "fhe") throw new Error("expected buildFheOp to construct an op");
+    const prime = BigInt(state.config.prime);
+    const verdict = validateOp(state, "teamA", {
+      kind: "fhe",
+      contractId: order.id,
+      ciphertext: { r: op.ciphertext.r, y: ((BigInt(op.ciphertext.y) + 1n) % prime).toString() },
+    });
     expect(verdict.ok).toBe(false);
     if (verdict.ok) throw new Error("unreachable");
     expect(verdict.error).toContain("does not decrypt to the requested sum");
+  });
+
+  /**
+   * The Order asks for a componentwise addition of a PAIR. The judge's
+   * decrypt-and-compare only ever constrains `y`, because the Order's mask
+   * total is fixed and so exactly one `y` is accepted -- which leaves `r`
+   * free unless the judge checks it separately. Left unchecked, `(0, y1+y2)`
+   * passed: half the procedure, and a ledger row that is not the sum of the
+   * two public pairs.
+   */
+  test("the right y with the wrong r is refused -- both components are checked", () => {
+    const { state, order } = orderWithTask("homomorphic-sum");
+    if (order.task.kind !== "homomorphic-sum") throw new Error("unreachable");
+    const op = buildFheOp(order, state.config.prime);
+    if (!op || op.kind !== "fhe") throw new Error("expected buildFheOp to construct an op");
+
+    // The correct answer's first component IS the sum of the Order's own
+    // first components -- there is no other route to a valid submission.
+    const prime = BigInt(state.config.prime);
+    const summedR = order.task.inputs.reduce((acc, input) => (acc + BigInt(input.r)) % prime, 0n);
+    expect(op.ciphertext.r).toBe(summedR.toString());
+
+    for (const wrongR of ["0", "1", ((summedR + 1n) % prime).toString()]) {
+      if (wrongR === op.ciphertext.r) continue;
+      const verdict = validateOp(state, "teamA", {
+        kind: "fhe",
+        contractId: order.id,
+        ciphertext: { r: wrongR, y: op.ciphertext.y },
+      });
+      expect(verdict.ok).toBe(false);
+      if (verdict.ok) throw new Error("unreachable");
+      expect(verdict.error).toContain("first component");
+    }
   });
 
   test("a malformed ciphertext is rejected, not thrown on", () => {

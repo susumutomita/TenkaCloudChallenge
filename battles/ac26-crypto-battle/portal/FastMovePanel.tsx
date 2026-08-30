@@ -191,8 +191,16 @@ function ledgerTargets(projection: CryptoBattleProjection | null) {
  * the participant retyping a team id — it surfaces a pattern already visible in
  * the ledger they were told to inspect, and says nothing about whether the key
  * has actually been worked out.
+ *
+ * Only reuse in the target's CURRENT generation counts — that is the only kind
+ * a hunt can be spent against, so it is the only kind worth surfacing.
+ *
+ * Exported for `game/src/portal.test.ts`: two rules here are easy to get wrong
+ * (the duplicate must fall within one generation, and that generation must
+ * still be the target's current one), and rendering the panel under
+ * `renderToStaticMarkup` never runs the effect that would populate it.
  */
-function nonceReuseTargets(
+export function nonceReuseTargets(
   projection: CryptoBattleProjection | null,
 ): { teamId: string; generation: number }[] {
   const seen = new Map<string, Set<string>>();
@@ -200,6 +208,12 @@ function nonceReuseTargets(
   if (!projection) return found;
   for (const entry of projection.publicLedger) {
     if (entry.kind !== "proof" || entry.teamId === projection.vault.teamId) continue;
+    // The Public Ledger is permanent, so a reuse in a generation the target
+    // has since ROTATEd away from stays visible on it forever -- while
+    // `validateOp` refuses a stale generation outright. Offering one would be
+    // offering a move that cannot succeed, and the form defaults to the first
+    // target, so a stale entry would be the one pre-selected.
+    if (projection.teams[entry.teamId]?.generation !== entry.generation) continue;
     const key = `${entry.teamId}:${entry.generation}`;
     const commitments = seen.get(key) ?? new Set<string>();
     if (commitments.has(entry.commitment)) {

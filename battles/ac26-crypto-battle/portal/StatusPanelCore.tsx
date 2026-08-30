@@ -96,8 +96,11 @@ interface Copy {
   readonly colTeam: string;
   readonly colGeneration: string;
   readonly colEntryKind: string;
+  readonly colOrder: string;
   readonly colDetail: string;
   readonly colWhen: string;
+  readonly publicKeysTitle: string;
+  readonly publicKeysBody: string;
   readonly kindShare: string;
   readonly kindProof: string;
   readonly you: string;
@@ -151,8 +154,12 @@ const COPY: Record<Locale, Copy> = {
     colTeam: "Team",
     colGeneration: "Gen",
     colEntryKind: "Kind",
+    colOrder: "Order",
     colDetail: "Detail",
     colWhen: "Posted (UTC)",
+    publicKeysTitle: "Public commitments (Y)",
+    publicKeysBody:
+      "Every team's public value Y, published from the start. Anyone can check any proof on the ledger against the team's Y — that is what makes a proof checkable without the secret.",
     kindShare: "share (LEAK)",
     kindProof: "proof (PROVE)",
     you: " (you)",
@@ -198,8 +205,12 @@ const COPY: Record<Locale, Copy> = {
     colTeam: "チーム",
     colGeneration: "世代",
     colEntryKind: "種別",
+    colOrder: "依頼",
     colDetail: "詳細",
     colWhen: "記録時刻 (UTC)",
+    publicKeysTitle: "公開値 (Y)",
+    publicKeysBody:
+      "各チームの公開値 Y です。最初から公開されています。ledger にある proof は、そのチームの Y と照らし合わせれば誰でも検算できます — secret を知らなくても proof を確かめられるのは、この Y があるからです。",
     kindShare: "share (LEAK)",
     kindProof: "proof (PROVE)",
     you: " (自チーム)",
@@ -244,6 +255,18 @@ const laneStyle: CSSProperties = {
 
 const tableStyle: CSSProperties = { width: "100%", borderCollapse: "collapse", fontSize: "12px" };
 const thStyle: CSSProperties = { padding: "4px 6px", textAlign: "left", borderBottom: "1px solid #d5dbdb" };
+/**
+ * A public commitment is a 2048-bit number, so it is ~617 decimal digits. It
+ * has to be rendered in full -- a truncated Y cannot be fed to the challenge
+ * hash, which would leave it as decorative as not showing it at all -- so it
+ * wraps anywhere rather than overflowing its lane.
+ */
+const publicKeyValueStyle: CSSProperties = {
+  margin: 0,
+  fontFamily: "ui-monospace,SFMono-Regular,Menlo,monospace",
+  overflowWrap: "anywhere",
+  color: "#5f6b7a",
+};
 const tdStyle: CSSProperties = {
   padding: "4px 6px",
   borderBottom: "1px solid #f0f0f0",
@@ -425,10 +448,12 @@ function VaultLane({
 
 function LedgerLane({
   ledger,
+  publicCommitments,
   myTeamId,
   copy,
 }: {
   readonly ledger: readonly PublicArtifact[];
+  readonly publicCommitments: Readonly<Record<string, string>>;
   readonly myTeamId: string;
   readonly copy: Copy;
 }) {
@@ -448,6 +473,7 @@ function LedgerLane({
               <th style={thStyle}>{copy.colTeam}</th>
               <th style={thStyle}>{copy.colGeneration}</th>
               <th style={thStyle}>{copy.colEntryKind}</th>
+              <th style={thStyle}>{copy.colOrder}</th>
               <th style={thStyle}>{copy.colDetail}</th>
               <th style={thStyle}>{copy.colWhen}</th>
             </tr>
@@ -466,6 +492,15 @@ function LedgerLane({
                   disagreeing with the game board about what a row means.
                 */}
                 <td style={tdStyle}>{ledgerKindLabel(entry)}</td>
+                {/*
+                  [Issue #645] The Order an artifact was posted against. Public
+                  on every artifact shape, and one of the five values a proof's
+                  challenge is computed over (see the Help Drawer's Python:
+                  domain, team, contract, generation, R, Y) -- so without it on
+                  screen a reader cannot re-derive a challenge from the ledger,
+                  and the nonce-reuse HUNT is unreachable by hand.
+                */}
+                <td style={tdStyle}>{entry.contractId}</td>
                 <td style={tdStyle}>{ledgerPayload(entry)}</td>
                 <td style={tdStyle}>{formatTimestamp(entry.postedAtMs)}</td>
               </tr>
@@ -473,6 +508,30 @@ function LedgerLane({
           </tbody>
         </table>
       )}
+      {/*
+        [Issue #645] Y, the other value a proof's challenge binds. It is public
+        by construction (see reducer.ts's `publicCommitments`) and PROVE is only
+        checkable BECAUSE it is public -- but it reached no participant surface,
+        which left every challenge on the ledger impossible to re-derive and the
+        nonce-reuse HUNT unplayable by hand.
+      */}
+      <div style={{ marginTop: "12px" }}>
+        <h5 style={{ margin: "0 0 2px 0", fontSize: "12px" }}>{copy.publicKeysTitle}</h5>
+        <p style={{ margin: "0 0 6px 0", fontSize: "11px", color: "#5f6b7a" }}>
+          {copy.publicKeysBody}
+        </p>
+        <dl style={{ margin: 0, fontSize: "11px" }}>
+          {Object.entries(publicCommitments).map(([teamId, y]) => (
+            <div key={teamId} style={{ margin: "0 0 6px 0" }}>
+              <dt style={{ fontWeight: 700 }}>
+                {teamId}
+                {teamId === myTeamId ? copy.you : ""}
+              </dt>
+              <dd style={publicKeyValueStyle}>{y}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
     </div>
   );
 }
@@ -531,7 +590,12 @@ export function StatusPanelBody({
       <div style={laneGridStyle}>
         <ContractQueueLane contracts={projection.myContracts} elapsedSincePollMs={elapsedSincePollMs} copy={copy} />
         <VaultLane vault={projection.vault} elapsedSincePollMs={elapsedSincePollMs} copy={copy} />
-        <LedgerLane ledger={projection.publicLedger} myTeamId={myTeamId} copy={copy} />
+        <LedgerLane
+          ledger={projection.publicLedger}
+          publicCommitments={projection.publicCommitments}
+          myTeamId={myTeamId}
+          copy={copy}
+        />
       </div>
     </>
   );
