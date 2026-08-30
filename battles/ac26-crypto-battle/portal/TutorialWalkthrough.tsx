@@ -399,7 +399,7 @@ const COPY: Record<Locale, TutorialCopy> = {
       },
       rotated: {
         title: "Walkthrough complete",
-        body: "You saw the full loop: choose LEAK or PROVE, inspect public artifacts, HUNT a generation, then ROTATE.",
+        body: "You saw the core loop: choose LEAK or PROVE, inspect public artifacts, HUNT a generation, then ROTATE. Some Orders take neither LEAK nor PROVE — they hand you numbers you are not allowed to read and ask you to compute on them anyway (FHE and MPC). The card names the method each Order accepts, and \"How this Battle works\" describes both.",
         action: "Run it again",
       },
     },
@@ -462,7 +462,7 @@ const COPY: Record<Locale, TutorialCopy> = {
       },
       rotated: {
         title: "チュートリアル完了",
-        body: "LEAK / PROVE の二択、公開情報の確認、相手への HUNT、自分の ROTATE という一周を確認しました。",
+        body: "LEAK / PROVE の二択、公開情報の確認、相手への HUNT、自分の ROTATE という基本の一周を確認しました。依頼にはこの二択のどちらでもないものもあります — 読んではいけない数字を渡され、そのまま計算することを求められる依頼です（FHE と MPC）。使える方法は各カードに書いてあり、「この Battle の遊び方」で両方を説明しています。",
         action: "もう一度実行",
       },
     },
