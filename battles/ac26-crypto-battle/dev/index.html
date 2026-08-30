@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Issue #644: local development harness. Never served to participants. -->
+    <title>ac26-crypto-battle — local dev harness</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --dev-chrome: #2b1a4a;
+        --dev-chrome-text: #f4efff;
+      }
+      body {
+        margin: 0;
+        font-family:
+          system-ui,
+          -apple-system,
+          "Hiragino Kaku Gothic ProN",
+          "Noto Sans JP",
+          sans-serif;
+        font-size: 14px;
+      }
+      /*
+       * The toolbar is deliberately loud and unlike anything in the game:
+       * a screenshot of this page must never be mistaken for the participant
+       * portal, and nobody should ever wonder whether the controls are part of
+       * the problem.
+       */
+      .dev-chrome {
+        background: var(--dev-chrome);
+        color: var(--dev-chrome-text);
+        padding: 10px 14px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+      }
+      .dev-chrome label {
+        display: inline-flex;
+        gap: 6px;
+        align-items: center;
+        font-size: 12px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .dev-chrome select,
+      .dev-chrome button {
+        font: inherit;
+        font-size: 13px;
+        padding: 4px 8px;
+        border-radius: 6px;
+        border: 1px solid rgba(255, 255, 255, 0.35);
+        background: rgba(255, 255, 255, 0.1);
+        color: inherit;
+        cursor: pointer;
+      }
+      .dev-banner {
+        background: #4a1a1a;
+        color: #ffe9e9;
+        padding: 6px 14px;
+        font-size: 12px;
+      }
+      .dev-slots {
+        display: grid;
+        gap: 16px;
+        padding: 16px;
+        max-width: 1100px;
+        margin: 0 auto;
+      }
+      .dev-slot > h2 {
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        opacity: 0.55;
+        margin: 0 0 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,21 @@
+{
+  "name": "tenkacloud-ac26-crypto-battle-dev",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Local development harness for the PROVE / LEAK / HUNT Battle. Runs the REAL ../game/src reducer and the REAL ../portal slot components in a browser with no AWS credentials and no network, so UI and game-loop changes can be checked in seconds instead of through a deploy. NOT the competition trust boundary -- see README.md. Its own package (rather than a script inside ../game) because ../game/package.json declares itself a pure game model with no server: this directory is where the server, the bundler, and the fake portal host live so that claim stays true.",
+  "scripts": {
+    "dev": "bun run server.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.11",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "react": "^19",
+    "react-dom": "^19",
+    "typescript": "5.9.3"
+  },
+  "trustedDependencies": []
+}
