@@ -58,13 +58,7 @@ import {
   deriveTeamGeneration,
   type FieldConfig,
 } from "./fixtures.ts";
-import {
-  addCiphertexts,
-  decrypt,
-  deriveFheKey,
-  deriveFheOrderInputs,
-  expectedFheSum,
-} from "./fhe.ts";
+import { decryptOrderSum, deriveFheOrderInputs, expectedFheSum } from "./fhe.ts";
 import {
   deriveMpcPrivateInputs,
   expectedMpcPartial,
@@ -477,8 +471,10 @@ export function validateOp(state: CryptoBattleState, teamId: string, op: CryptoB
       // decrypt-and-compare judge, and a participant who reaches the right
       // plaintext by a different homomorphic route has genuinely done the job.
       const prime = BigInt(state.config.prime);
-      const key = deriveFheKey(state.seed, op.contractId, prime);
-      if (decrypt(submitted, key, prime) !== expectedFheSum(state.seed, op.contractId, prime)) {
+      if (
+        decryptOrderSum(submitted, state.seed, op.contractId, prime) !==
+        expectedFheSum(state.seed, op.contractId, prime)
+      ) {
         return { ok: false, error: "submitted ciphertext does not decrypt to the requested sum" };
       }
       return { ok: true };

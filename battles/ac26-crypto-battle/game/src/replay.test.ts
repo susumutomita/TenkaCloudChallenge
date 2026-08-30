@@ -21,7 +21,8 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { applyOp, initialState, tick, validateOp } from "./reducer.ts";
+import { buildFheOp, buildMpcOp } from "./playtest.ts";
+import { applyOp, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
 import { runScript } from "./playtest.ts";
 import { buildReplay, keyMoments, type ReplayEvent } from "./replay.ts";
 import { ATTACKER, buildVerticalPlaytestScript, DEFENDER, TEAMS } from "./vertical-playtest-fixture.ts";
@@ -201,5 +202,51 @@ describe("buildReplay: edge cases the vertical-playtest fixture does not exercis
     // the attempt -- per this module's header, "failed HUNT attempts leave
     // ZERO trace" is not a documentation claim only, it is this assertion.
     expect(buildReplay(state)).toEqual(before);
+  });
+});
+
+/**
+ * [Issue #645] A debrief must name the method a team actually used.
+ *
+ * The regression this pins: `buildReplay` used `if (share) ... else prove`,
+ * which was exhaustive only while PROVE was the sole non-share method. A match
+ * completing an FHE or MPC Order then produced a replay claiming the team had
+ * PROVEd — a debrief that lies about what happened is worse than one that omits
+ * it, because a participant reviewing the match cannot tell.
+ */
+describe("Issue #645: the replay names every method", () => {
+  test("an FHE and an MPC completion appear as themselves, never as PROVE", () => {
+    let state = tick(initialState({ eventId: "replay-645", teamIds: ["teamA", "teamB"] }), 0);
+
+    for (let round = 0; round < 8; round += 1) {
+      for (const order of projectForTeam(state, "teamA").myContracts) {
+        if (order.status !== "open") continue;
+        const op =
+          order.task.kind === "homomorphic-sum"
+            ? buildFheOp(order, state.config.prime)
+            : order.task.kind === "masked-total"
+              ? buildMpcOp(order, state.config.prime)
+              : undefined;
+        if (!op) continue;
+        const verdict = validateOp(state, "teamA", op);
+        if (!verdict.ok) throw new Error(`setup op rejected: ${verdict.error}`);
+        state = applyOp(state, "teamA", op);
+      }
+      state = tick(state, (round + 1) * state.config.contractIntervalMs);
+    }
+
+    const events = buildReplay(state);
+    const kinds = new Set(events.map((e) => e.kind));
+    expect(kinds).toContain("fhe");
+    expect(kinds).toContain("mpc");
+    // Nothing was PROVEd in this run, so a "prove" event would be a mislabel.
+    expect(kinds).not.toContain("prove");
+
+    const fhe = events.find((e) => e.kind === "fhe");
+    expect(fhe?.summary.en).toContain("without decrypting");
+    expect(fhe?.summary.ja).toContain("復号せずに");
+    const mpc = events.find((e) => e.kind === "mpc");
+    expect(mpc?.summary.en).toContain("masked subtotal");
+    expect(mpc?.summary.ja).toContain("覆面");
   });
 });

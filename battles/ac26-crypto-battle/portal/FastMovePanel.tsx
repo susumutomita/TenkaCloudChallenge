@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { PortalCoordinationClient, PortalCoordinationOutcome, PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 import { isCryptoBattleProjection, usePolledProjection } from "./coordination.ts";
-import { submitFhe, submitHunt, submitLeak, submitMpc, submitProve, submitRotate } from "./RegistrationPanelCore.tsx";
+import { submitFhe, submitHunt, submitHuntNonce, submitLeak, submitMpc, submitProve, submitRotate } from "./RegistrationPanelCore.tsx";
 import { taskDetail, taskLabel } from "./orderTask.ts";
 import type { ContractProjection, CryptoBattleProjection } from "../game/src/types.ts";
 
@@ -70,6 +70,12 @@ const COPY = {
     mpcSuccess: "MPC SUCCESS",
     mpcBody: (points: number) => `+${points} · YOUR NUMBER STAYED PRIVATE`,
     prime: "p (the modulus)",
+    huntNonce: "NONCE-REUSE HUNT",
+    huntNonceHint: "Two of a team's proof rows sharing one commitment mean the key is recoverable. Enter the key you worked out.",
+    noNonceTarget: "No team has reused a proof commitment yet.",
+    recoveredKey: "recovered key",
+    huntNonceSuccess: "HUNT SUCCESS",
+    huntNonceBody: "Recovered key accepted — nonce reuse punished.",
   },
   ja: {
     title: "MAKE A MOVE",
@@ -126,6 +132,12 @@ const COPY = {
     mpcSuccess: "MPC SUCCESS",
     mpcBody: (points: number) => `+${points} · 自分の数は公開されていない`,
     prime: "p (割る数)",
+    huntNonce: "nonce 再利用 HUNT",
+    huntNonceHint: "同じチームの proof 2 行が同じ commitment を持っていれば、鍵を計算で求められます。求めた鍵を入力してください。",
+    noNonceTarget: "まだ commitment を再利用したチームはいません。",
+    recoveredKey: "復元した鍵",
+    huntNonceSuccess: "HUNT SUCCESS",
+    huntNonceBody: "復元した鍵が受理されました — nonce の使い回しを突きました。",
   },
 } as const;
 
@@ -167,6 +179,38 @@ function ledgerTargets(projection: CryptoBattleProjection | null) {
     }
   }
   return targets;
+}
+
+/**
+ * [Issue #645 Phase 5] Teams whose Public Ledger rows show a reused proof
+ * commitment.
+ *
+ * Derived from the same public material an attacker reads, and deliberately
+ * NOT from any hint the server sends: the game must not announce "you can hunt
+ * now" (#486's rule, restated in #646's non-goals). What this list does is stop
+ * the participant retyping a team id — it surfaces a pattern already visible in
+ * the ledger they were told to inspect, and says nothing about whether the key
+ * has actually been worked out.
+ */
+function nonceReuseTargets(
+  projection: CryptoBattleProjection | null,
+): { teamId: string; generation: number }[] {
+  const seen = new Map<string, Set<string>>();
+  const found: { teamId: string; generation: number }[] = [];
+  if (!projection) return found;
+  for (const entry of projection.publicLedger) {
+    if (entry.kind !== "proof" || entry.teamId === projection.vault.teamId) continue;
+    const key = `${entry.teamId}:${entry.generation}`;
+    const commitments = seen.get(key) ?? new Set<string>();
+    if (commitments.has(entry.commitment)) {
+      if (!found.some((t) => `${t.teamId}:${t.generation}` === key)) {
+        found.push({ teamId: entry.teamId, generation: entry.generation });
+      }
+    }
+    commitments.add(entry.commitment);
+    seen.set(key, commitments);
+  }
+  return found;
 }
 
 const CSS = `
@@ -219,6 +263,8 @@ export default function FastMovePanel(props: PortalSlotProps) {
   const [fheY, setFheY] = useState("");
   const [mpcPartial, setMpcPartial] = useState("");
   const [huntTargetKey, setHuntTargetKey] = useState("");
+  const [nonceTargetKey, setNonceTargetKey] = useState("");
+  const [recoveredKey, setRecoveredKey] = useState("");
   const [recoveredSecret, setRecoveredSecret] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
@@ -235,6 +281,9 @@ export default function FastMovePanel(props: PortalSlotProps) {
   const leakAllowed = selectedOrder?.allowedMethods.includes("leak") ?? false;
   const targets = useMemo(() => ledgerTargets(projection), [projection]);
   const selectedTarget = targets.find((target) => `${target.teamId}:${target.generation}` === huntTargetKey) ?? targets[0];
+  const nonceTargets = useMemo(() => nonceReuseTargets(projection), [projection]);
+  const selectedNonceTarget =
+    nonceTargets.find((t) => `${t.teamId}:${t.generation}` === nonceTargetKey) ?? nonceTargets[0];
 
   const applyOutcome = (outcome: PortalCoordinationOutcome) => {
     const next = liveProjection(outcome);
@@ -274,7 +323,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
         {orders.length === 0 ? <div className="tc-card-hint">{copy.noOrder}</div> : (
           <div className="tc-order-picks">
             {orders.map((order) => (
-              <button key={order.id} className="tc-order-pick" type="button" aria-pressed={selectedOrder?.id === order.id} onClick={() => setSelectedOrderId(order.id)}>
+              <button key={order.id} className="tc-order-pick" type="button" aria-pressed={selectedOrder?.id === order.id} onClick={() => { setSelectedOrderId(order.id); setProveOpen(false); }}>
                 <strong>{order.id.replace(/^.*-c/, "ORDER #")}</strong>
                 <span>+{order.points} · {Math.ceil(order.remainingMs / 1000)}s</span>
                 <span>{taskLabel(order.task, locale)} · {taskDetail(order.task, locale)}</span>
@@ -401,7 +450,15 @@ export default function FastMovePanel(props: PortalSlotProps) {
         </div>
       )}
 
-      {proveOpen && selectedOrder && (
+      {/*
+        [Issue #645] Gated on the task, not only on `proveOpen`. The LEAK/PROVE
+        buttons above are already task-gated, but this editor is a separate
+        block: leaving it ungated let a participant open it on a share Order,
+        select an FHE Order, and submit a PROVE the new Order cannot accept.
+        `setProveOpen(false)` on selection is the other half — a form that
+        reappears still bound to a different Order is its own surprise.
+      */}
+      {proveOpen && selectedOrder?.task.kind === "reveal-share" && (
         <div className="tc-input-panel">
           <strong style={{ fontSize: "12px" }}>{copy.proveOpen} · {selectedOrder.id.replace(/^.*-c/, "ORDER #")}</strong>
           <input aria-label="fast-prove-commitment" value={commitment} onChange={(event) => setCommitment(event.target.value)} placeholder={copy.commitment} />
@@ -439,6 +496,46 @@ export default function FastMovePanel(props: PortalSlotProps) {
                   onClick={() => selectedTarget && void run(
                     () => submitHunt(client, selectedTarget.teamId, selectedTarget.generation, recoveredSecret.trim()),
                     () => ({ kind: "hunt", title: copy.huntSuccess, body: copy.huntBody }),
+                  )}
+                >{submitting ? copy.running : copy.send}</button>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/*
+          [Issue #645 Phase 5] Without this the `hunt-nonce` op had no
+          participant-facing sender at all: the reducer accepted it, the README
+          advertised it, and nothing in the Portal could produce one.
+        */}
+        <div className="tc-hunt-card">
+          <div className="tc-card-title">{copy.huntNonce}</div>
+          <div className="tc-card-hint">{copy.huntNonceHint}</div>
+          {nonceTargets.length === 0 ? <div className="tc-card-hint">{copy.noNonceTarget}</div> : (
+            <>
+              <div className="tc-target-row">
+                {nonceTargets.map((target) => {
+                  const key = `${target.teamId}:${target.generation}`;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      className="tc-target-chip"
+                      aria-pressed={selectedNonceTarget ? `${selectedNonceTarget.teamId}:${selectedNonceTarget.generation}` === key : false}
+                      onClick={() => setNonceTargetKey(key)}
+                    >{target.teamId} · gen {target.generation}</button>
+                  );
+                })}
+              </div>
+              <div className="tc-input-panel">
+                <input aria-label="fast-hunt-nonce-witness" value={recoveredKey} onChange={(event) => setRecoveredKey(event.target.value)} placeholder={copy.recoveredKey} />
+                <button
+                  type="button"
+                  className="tc-submit-small tc-hunt-nonce-button"
+                  disabled={submitting || !selectedNonceTarget || !recoveredKey.trim()}
+                  onClick={() => selectedNonceTarget && void run(
+                    () => submitHuntNonce(client, selectedNonceTarget.teamId, selectedNonceTarget.generation, recoveredKey.trim()),
+                    () => ({ kind: "hunt", title: copy.huntNonceSuccess, body: copy.huntNonceBody }),
                   )}
                 >{submitting ? copy.running : copy.send}</button>
               </div>

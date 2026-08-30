@@ -61,6 +61,13 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
     return false;
   }
   if (typeof v.matchRemainingMs !== "number" && v.matchRemainingMs !== undefined) return false;
+  // [Issue #645] The modulus is required, not optional. The FHE and MPC panels
+  // cannot state a solvable problem without it, and a payload from a
+  // pre-#645 dispatcher (a mixed-version rollout) would otherwise be accepted
+  // and render `undefined` as the number to divide by. Failing closed here
+  // surfaces `bad_projection` instead, which is what the participant needs to
+  // see.
+  if (typeof v.prime !== "string" || v.prime.length === 0) return false;
 
   const vault = v.vault;
   if (typeof vault !== "object" || vault === null) return false;

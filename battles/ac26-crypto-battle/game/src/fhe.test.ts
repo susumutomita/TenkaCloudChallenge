@@ -12,6 +12,8 @@ import { describe, expect, test } from "bun:test";
 import {
   addCiphertexts,
   decrypt,
+  decryptOrderSum,
+  deriveFheInputKeys,
   deriveFheKey,
   deriveFheOrderInputs,
   deriveFhePlaintexts,
@@ -45,7 +47,7 @@ function orderWithTask(
 
 describe("the cipher", () => {
   test("decrypts what it encrypted", () => {
-    const key = deriveFheKey(SEED, ORDER, P);
+    const key = deriveFheKey(SEED, ORDER, 0, P);
     for (const plaintext of [0n, 1n, 12_345n, P - 1n]) {
       expect(decrypt(encrypt(plaintext, key, 7n, P), key, P)).toBe(mod(plaintext, P));
     }
@@ -58,16 +60,19 @@ describe("the cipher", () => {
    * would not pass.
    */
   test("adding two ciphertexts encrypts the sum of their plaintexts", () => {
-    const key = deriveFheKey(SEED, ORDER, P);
+    // Under the two inputs' COMBINED mask, since each input has its own key.
+    const [k1, k2] = [deriveFheKey(SEED, ORDER, 0, P), deriveFheKey(SEED, ORDER, 1, P)];
     const pairs: readonly (readonly [bigint, bigint])[] = [
       [3n, 4n],
       [0n, 99n],
       [P - 1n, 5n],
       [123_456_789n, 987_654_321n],
     ];
+    const [r1, r2] = [11n, 29n];
     for (const [a, b] of pairs) {
-      const sum = addCiphertexts(encrypt(a, key, 11n, P), encrypt(b, key, 29n, P), P);
-      expect(decrypt(sum, key, P)).toBe(add(a, b, P));
+      const sum = addCiphertexts(encrypt(a, k1, r1, P), encrypt(b, k2, r2, P), P);
+      const maskSum = add(mul(k1, r1, P), mul(k2, r2, P), P);
+      expect(sub(sum.y, maskSum, P)).toBe(add(a, b, P));
     }
   });
 
@@ -78,7 +83,7 @@ describe("the cipher", () => {
    * information-theoretically, not under an assumption.
    */
   test("a ciphertext is consistent with every possible plaintext", () => {
-    const key = deriveFheKey(SEED, ORDER, P);
+    const key = deriveFheKey(SEED, ORDER, 0, P);
     const real = 42n;
     const r = 17n;
     const ciphertext = encrypt(real, key, r, P);
@@ -90,17 +95,83 @@ describe("the cipher", () => {
     }
   });
 
-  test("each Order gets its own key, so nothing learned about one unlocks another", () => {
-    expect(deriveFheKey(SEED, "teamA-c1", P)).not.toBe(deriveFheKey(SEED, "teamA-c5", P));
-    expect(deriveFheKey(SEED, "teamA-c1", P)).not.toBe(deriveFheKey("other-seed", "teamA-c1", P));
+  test("each Order gets its own keys, so nothing learned about one unlocks another", () => {
+    expect(deriveFheKey(SEED, "teamA-c1", 0, P)).not.toBe(deriveFheKey(SEED, "teamA-c5", 0, P));
+    expect(deriveFheKey(SEED, "teamA-c1", 0, P)).not.toBe(
+      deriveFheKey("other-seed", "teamA-c1", 0, P),
+    );
+  });
+
+  test("each INPUT gets its own key", () => {
+    // The property the joint-hiding test below depends on. A shared key makes
+    // `r2*y1 - r1*y2` a publicly computable function of `(m1, m2)` alone.
+    const keys = deriveFheInputKeys(SEED, ORDER, P);
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).not.toBe(keys[1]);
+  });
+
+  /**
+   * The JOINT hiding statement, and the test whose absence let a wrong claim
+   * ship: for any candidate PAIR of plaintexts there is a key pair producing
+   * exactly the published ciphertexts. The single-ciphertext test above passes
+   * under a shared key too, so it could never have caught the leak.
+   */
+  test("the published pair is consistent with every possible pair of plaintexts", () => {
+    const inputs = deriveFheOrderInputs(SEED, ORDER, P);
+    const [c1, c2] = inputs;
+    if (!c1 || !c2) throw new Error("expected two inputs");
+
+    for (const [m1, m2] of [
+      [0n, 0n],
+      [1n, 2n],
+      [999n, 4n],
+      [P - 5n, 7n],
+    ] as const) {
+      const k1 = mul(sub(c1.y, m1, P), inv(c1.r, P), P);
+      const k2 = mul(sub(c2.y, m2, P), inv(c2.r, P), P);
+      expect(decrypt(c1, k1, P)).toBe(mod(m1, P));
+      expect(decrypt(c2, k2, P)).toBe(mod(m2, P));
+    }
+  });
+
+  /**
+   * The same claim stated as the attack it defeats. With a shared key the
+   * quantity below is a function of `(m1, m2)` only, which pins the pair to a
+   * line; with independent keys it also carries `r1*r2*(k1-k2)`, so it pins
+   * nothing. Executed against BOTH schemes so the difference is visible rather
+   * than asserted.
+   */
+  test("the shared-key linear relation does not hold for the shipped scheme", () => {
+    const plaintexts = deriveFhePlaintexts(SEED, ORDER, P);
+    const [m1, m2] = plaintexts;
+    if (m1 === undefined || m2 === undefined) throw new Error("expected two plaintexts");
+    const [r1, r2] = [11n, 29n];
+
+    // The scheme as it would be with ONE key: the relation holds exactly.
+    const shared = deriveFheKey(SEED, ORDER, 0, P);
+    const s1 = encrypt(m1, shared, r1, P);
+    const s2 = encrypt(m2, shared, r2, P);
+    expect(sub(mul(r2, s1.y, P), mul(r1, s2.y, P), P)).toBe(
+      sub(mul(r2, m1, P), mul(r1, m2, P), P),
+    );
+
+    // The shipped scheme: it does not.
+    const [k1, k2] = deriveFheInputKeys(SEED, ORDER, P);
+    if (k1 === undefined || k2 === undefined) throw new Error("expected two keys");
+    const i1 = encrypt(m1, k1, r1, P);
+    const i2 = encrypt(m2, k2, r2, P);
+    expect(sub(mul(r2, i1.y, P), mul(r1, i2.y, P), P)).not.toBe(
+      sub(mul(r2, m1, P), mul(r1, m2, P), P),
+    );
   });
 
   test("the key and the randomness are never zero", () => {
     // A zero key publishes the plaintext; zero randomness does the same. Both
     // are excluded at the source rather than left as a one-in-2^61 hole.
     for (let i = 0; i < 50; i += 1) {
-      const key = deriveFheKey(SEED, `order-${i}`, P);
-      expect(key).not.toBe(0n);
+      for (const key of deriveFheInputKeys(SEED, `order-${i}`, P)) {
+        expect(key).not.toBe(0n);
+      }
       for (const input of deriveFheOrderInputs(SEED, `order-${i}`, P)) {
         expect(input.r).not.toBe(0n);
       }
@@ -114,19 +185,26 @@ describe("the FHE Order's trust boundary", () => {
     if (order.task.kind !== "homomorphic-sum") throw new Error("unreachable");
 
     const published = JSON.stringify(order);
-    const key = deriveFheKey(SEED, order.id, BigInt(DEFAULT_CONFIG.prime));
     // The Order is derived from the live state's seed, not SEED — so rather
     // than compare against constants, assert on the values that Order's own
     // derivation produces.
     const state = tick(initialState(CTX), 0);
-    const liveKey = deriveFheKey(state.seed, order.id, BigInt(state.config.prime));
-    const livePlaintexts = deriveFhePlaintexts(state.seed, order.id, BigInt(state.config.prime));
+    const prime = BigInt(state.config.prime);
+    const liveKeys = deriveFheInputKeys(state.seed, order.id, prime);
+    const livePlaintexts = deriveFhePlaintexts(state.seed, order.id, prime);
 
-    expect(published).not.toContain(liveKey.toString());
+    for (const key of liveKeys) {
+      expect(published).not.toContain(key.toString());
+    }
     for (const plaintext of livePlaintexts) {
       expect(published).not.toContain(plaintext.toString());
     }
-    expect(key).toBeGreaterThan(0n);
+    expect(decryptOrderSum(
+      { r: 0n, y: expectedFheSum(state.seed, order.id, prime) },
+      state.seed,
+      order.id,
+      prime,
+    )).not.toBe(expectedFheSum(state.seed, order.id, prime));
   });
 
   test("a correct homomorphic addition is accepted and scores the Order's points", () => {

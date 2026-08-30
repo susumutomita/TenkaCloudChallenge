@@ -116,11 +116,11 @@ both reasonable, and constrained Orders where the rule leaves exactly one.
 ## How FHE Orders work (Phase 2)
 
 `game/src/fhe.ts` is an additively homomorphic cipher over the same prime field
-the rest of the Battle uses. With a secret key `k`:
+the rest of the Battle uses, with a secret key `k_i` per input:
 
 ```text
-Enc(m; r) = (r, m + k*r mod p)      r != 0
-Dec(r, y) = y - k*r mod p
+Enc_i(m; r) = (r, m + k_i*r mod p)      r != 0   (one key per input)
+Dec_i(r, y) = y - k_i*r mod p
 ```
 
 Adding two ciphertexts componentwise gives an encryption of the sum of the
@@ -129,15 +129,27 @@ operation, and it stays inside §12b's arithmetic (add, multiply, remainder).
 
 **What it hides.** Given `(r, y)` with `r != 0` and no knowledge of `k`, every
 candidate plaintext `m'` is consistent -- take `k' = (y - m') * r^-1`, which
-exists because `p` is prime and `r != 0`. The ciphertext therefore carries no
-information about the plaintext, information-theoretically rather than under a
-hardness assumption. `fhe.test.ts` executes that argument instead of asserting
-it.
+exists because `p` is prime and `r != 0`. One ciphertext therefore carries no
+information about its plaintext, information-theoretically rather than under a
+hardness assumption.
 
-**One key per Order.** `deriveFheKey(seed, orderId, p)` binds the key to a
-single Order, so nothing a participant later learns about one Order unlocks
-another. (Reusing one key across Orders would unravel the moment a single
-plaintext became known: two known pairs solve for `k`.)
+**One key per input, and that is load-bearing.** An earlier revision of this PR
+used a single key for both of an Order's inputs and claimed the pair was still
+perfectly hiding ("two equations, three unknowns"). That was wrong: with a
+shared `k`, anyone can compute `r2*y1 - r1*y2 = r2*m1 - r1*m2`, which pins
+`(m1, m2)` to a line -- `p` pairs out of `p^2`. It leaked a relation rather than
+a value and never made the Order forgeable, but "looks hidden, is not" is
+precisely what this problem teaches people to spot, so the scheme does not ship
+with it. With independent `k1`, `k2` the same quantity also carries
+`r1*r2*(k1-k2)` and pins nothing.
+
+`fhe.test.ts` now executes the JOINT statement, not only the single-ciphertext
+one -- the weaker test is what let the original claim stand -- and asserts the
+shared-key relation holds for the old construction and fails for the shipped
+one, so the difference is demonstrated rather than described.
+
+Keys are bound to the Order as well as the input index, so nothing a participant
+learns about one Order unlocks another.
 
 **Why not a real FHE library.** #645's non-goals rule out competing on FHE/MPC
 library performance. What is in scope is computing on data you cannot read with
@@ -148,12 +160,12 @@ not fully homomorphic** -- there is no ciphertext-ciphertext multiplication, and
 the participant-facing copy says "add without decrypting", never that FHE can do
 anything.
 
-**Why a participant cannot fake an answer.** The judge decrypts and compares
-against the hidden sum (#645's decrypt-and-compare requirement). Submitting
-`(0, v)` decrypts to `v`, so someone who KNEW the expected sum could forge one --
-and cannot, because the plaintexts are full field elements derived from the
-match seed, making the sum one value out of ~2^61. Any other route to a valid
-ciphertext needs the key.
+**Why a participant cannot fake an answer.** The judge decrypts the submitted
+sum with the Order's combined mask and compares against the hidden total
+(#645's decrypt-and-compare requirement). Someone who KNEW the expected sum
+could submit it directly -- and cannot, because the plaintexts are full field
+elements derived from the match seed, making the sum one value out of ~2^61.
+Any other route needs the keys.
 
 ## How MPC Orders work (Phase 3)
 

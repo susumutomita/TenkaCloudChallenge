@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { deriveFheKey, deriveFhePlaintexts } from "./fhe.ts";
+import { deriveFheInputKeys, deriveFhePlaintexts } from "./fhe.ts";
 import { deriveMpcPrivateInputs } from "./mpc.ts";
 import { buildFheOp, buildLeakOp, buildMpcOp, buildProveOp } from "./playtest.ts";
 import { completeShares, reconstruct, type Share } from "./shamir.ts";
@@ -403,7 +403,9 @@ test("adversarial 9: no trusted material reaches any participant-visible surface
   const secrets: string[] = [teamA.secret];
   for (const order of state.contracts.filter((c) => c.teamId === "teamA")) {
     if (order.task.kind === "homomorphic-sum") {
-      secrets.push(deriveFheKey(state.seed, order.id, prime).toString());
+      for (const key of deriveFheInputKeys(state.seed, order.id, prime)) {
+        secrets.push(key.toString());
+      }
       for (const plaintext of deriveFhePlaintexts(state.seed, order.id, prime)) {
         secrets.push(plaintext.toString());
       }

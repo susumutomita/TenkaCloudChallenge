@@ -8,19 +8,24 @@
  *
  * ## The scheme
  *
- * Over the same prime field `field.ts` already uses, with a secret key `k`:
+ * Over the same prime field `field.ts` already uses, with a secret key `k_i`
+ * per input:
  *
  * ```text
- * Enc(m; r) = (r, m + k*r mod p)      r != 0, drawn per ciphertext
- * Dec(r, y) = y - k*r mod p
+ * Enc_i(m; r) = (r, m + k_i*r mod p)      r != 0, drawn per ciphertext
+ * Dec_i(r, y) = y - k_i*r mod p
  * ```
  *
- * Adding two ciphertexts componentwise gives an encryption of the sum:
+ * Adding two ciphertexts componentwise gives an encryption of the sum, under
+ * the two inputs' combined mask:
  *
  * ```text
  * (r1, y1) + (r2, y2) = (r1+r2, y1+y2)
- * Dec = (y1+y2) - k*(r1+r2) = (m1 + k*r1) + (m2 + k*r2) - k*r1 - k*r2 = m1+m2
+ * y1+y2 - (k1*r1 + k2*r2) = (m1 + k1*r1) + (m2 + k2*r2) - k1*r1 - k2*r2 = m1+m2
  * ```
+ *
+ * The judge holds that combined mask (it derives it from the Order), so it can
+ * decrypt the sum and compare — see {@link decryptOrderSum}.
  *
  * That is the whole participant-facing operation: add two pairs of numbers and
  * take the remainder. No library, no lattice, no noise budget -- and it is not
@@ -48,28 +53,46 @@
  *
  * Given `(r, y)` with `r != 0` and no knowledge of `k`, every candidate
  * plaintext `m'` is consistent: take `k' = (y - m') * r^-1 mod p`, which exists
- * because `p` is prime and `r != 0`. The ciphertext therefore carries *no*
- * information about `m` -- this is information-theoretic, not a hardness
- * assumption, and `fhe.test.ts` executes it rather than asserting it in prose.
+ * because `p` is prime and `r != 0`. One ciphertext therefore carries *no*
+ * information about its plaintext -- information-theoretic, not a hardness
+ * assumption, and `fhe.test.ts` executes it rather than asserting it.
  *
- * The same argument covers the pair of ciphertexts an Order publishes: two
- * equations, three unknowns (`k`, `m1`, `m2`), so every `(m1, m2)` remains
- * possible. What breaks the scheme is reusing one key across ciphertexts whose
- * plaintexts become known -- two known pairs solve for `k` immediately. That is
- * why {@link deriveFheKey} binds the key to a single Order: an Order's key
- * never encrypts anything outside that Order, so nothing a participant later
- * learns about one Order can unlock another.
+ * **Each input gets its OWN key, and that is load-bearing.** An earlier version
+ * of this module used one key for both of an Order's inputs and claimed the
+ * pair was still perfectly hiding, reasoning "two equations, three unknowns".
+ * That was wrong. With a shared `k`, anyone holding the published pair can
+ * compute
+ *
+ * ```text
+ * r2*y1 - r1*y2 = r2*m1 - r1*m2   (mod p)
+ * ```
+ *
+ * -- the `k` terms cancel -- which pins `(m1, m2)` to a line: `p` possible
+ * pairs out of `p^2`, not all of them. The leak was of a linear relation rather
+ * than of either value, and it did not make the Order forgeable, but it is
+ * exactly the kind of "looks hidden, is not" that this problem exists to teach
+ * people to notice, so the scheme does not ship with it.
+ *
+ * With independent `k1`, `k2` the same computation gives
+ * `r2*y1 - r1*y2 = r2*m1 - r1*m2 + r1*r2*(k1 - k2)`, and `k1 - k2` is an
+ * unknown uniform value, so nothing is pinned: for ANY `(m1, m2)` there is a
+ * key pair producing the published ciphertexts. `fhe.test.ts` executes that
+ * JOINT statement, not only the single-ciphertext one -- the weaker test is
+ * what let the original claim stand.
+ *
+ * Keys are also bound to the Order (see {@link deriveFheInputKeys}), so nothing
+ * a participant later learns about one Order can unlock another.
  *
  * ## Why the participant cannot fake an answer
  *
  * The judge decrypts the submitted ciphertext and compares against the hidden
  * expected sum (#645: 「judge が decrypt + expected value compare で採点する」).
- * Submitting `(0, v)` decrypts to `v`, so a participant who KNEW the expected
- * sum could forge one -- and cannot, because the plaintexts are full field
- * elements derived from the match seed, so the sum is one value out of ~2^61.
- * Producing a valid ciphertext any other way needs `k`, which is exactly what
- * the paragraph above says they cannot learn. So the only tractable route to a
- * passing submission is to actually perform the homomorphic addition.
+ * A participant who KNEW the expected sum could submit a ciphertext for it
+ * directly -- and cannot, because the plaintexts are full field elements
+ * derived from the match seed, so the sum is one value out of ~2^61. Producing
+ * the right value any other way needs the keys, which the paragraph above says
+ * they cannot learn. So the only tractable route to a passing submission is to
+ * actually perform the homomorphic addition.
  */
 
 import { add, mod, mul, sub } from "./field.ts";
@@ -87,22 +110,30 @@ export interface Ciphertext {
 }
 
 /**
- * The key for one Order.
+ * The key protecting input `index` of one Order.
  *
- * Bound to `orderId` so no two Orders share a key. See this module's header on
- * why that binding is the difference between a scheme that stays hiding and
- * one that unravels the moment a single plaintext is learned.
+ * Bound to BOTH the Order and the input index. The Order binding stops anything
+ * learned about one Order unlocking another; the index binding is what keeps
+ * the published pair jointly hiding — see this module's header for the linear
+ * relation a shared key would expose.
  *
  * Derived from the match seed, never stored: `CryptoBattleState` holds the
  * public ciphertexts and nothing else, so there is no new secret field for
  * `projectForTeam` to have to remember to redact.
  */
-export function deriveFheKey(seed: string, orderId: string, p: bigint): bigint {
+export function deriveFheKey(seed: string, orderId: string, index: number, p: bigint): bigint {
   // A zero key would make Enc(m; r) = (r, m) -- the plaintext in the clear.
   // Vanishingly unlikely, and cheap to exclude outright rather than leave as a
   // one-in-2^61 hole that no test would ever catch.
-  const key = deriveBigInt(seed, `fhe-key:${orderId}`, 0, p);
+  const key = deriveBigInt(seed, `fhe-key:${orderId}`, index, p);
   return key === 0n ? 1n : key;
+}
+
+/** One key per input, in input order. */
+export function deriveFheInputKeys(seed: string, orderId: string, p: bigint): readonly bigint[] {
+  return deriveFhePlaintexts(seed, orderId, p).map((_unused, index) =>
+    deriveFheKey(seed, orderId, index, p),
+  );
 }
 
 /**
@@ -159,10 +190,48 @@ export function addCiphertexts(a: Ciphertext, b: Ciphertext, p: bigint): Ciphert
  * inputs and the expected answer without either being stored.
  */
 export function deriveFheOrderInputs(seed: string, orderId: string, p: bigint): readonly Ciphertext[] {
-  const key = deriveFheKey(seed, orderId, p);
   return deriveFhePlaintexts(seed, orderId, p).map((plaintext, index) =>
-    encrypt(plaintext, key, deriveRandomness(seed, orderId, index, p), p),
+    encrypt(
+      plaintext,
+      deriveFheKey(seed, orderId, index, p),
+      deriveRandomness(seed, orderId, index, p),
+      p,
+    ),
   );
+}
+
+/**
+ * The combined mask on an Order's summed ciphertext: `SUM_i k_i * r_i`.
+ *
+ * With one key per input there is no single scalar that decrypts the sum, so
+ * the Order's own mask total is what {@link decryptOrderSum} subtracts. That is
+ * a property of the Order, not a new secret: it is derived from the seed on
+ * demand and never stored.
+ */
+function orderMaskSum(seed: string, orderId: string, p: bigint): bigint {
+  return deriveFheOrderInputs(seed, orderId, p).reduce(
+    (acc, ciphertext, index) =>
+      add(acc, mul(deriveFheKey(seed, orderId, index, p), ciphertext.r, p), p),
+    0n,
+  );
+}
+
+/**
+ * Decrypt a submitted sum for this Order.
+ *
+ * This is the judge's decrypt half of #645's decrypt-and-compare rule. It reads
+ * only `y`: the `r` component carries no information the verdict depends on
+ * once the mask total is known, so a participant who reaches the right value by
+ * a different homomorphic route still passes, which is the behaviour a semantic
+ * judge should have.
+ */
+export function decryptOrderSum(
+  ciphertext: Ciphertext,
+  seed: string,
+  orderId: string,
+  p: bigint,
+): bigint {
+  return sub(ciphertext.y, orderMaskSum(seed, orderId, p), p);
 }
 
 /** The plaintext a correct submission must decrypt to. Trusted-side only. */
