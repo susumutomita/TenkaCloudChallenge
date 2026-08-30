@@ -145,6 +145,32 @@ function fieldConfigOf(config: CryptoBattleConfig): FieldConfig {
   return { prime: BigInt(config.prime), threshold: config.threshold, shareCount: config.shareCount };
 }
 
+/**
+ * [Issue #652] The prefix marking a seed the platform did NOT issue.
+ *
+ * Kept visible in `state.seed` on purpose. A match running on this string is
+ * one whose hidden material every participant can recompute from the public
+ * `eventId`, so it must be greppable in a dump rather than silently
+ * indistinguishable from a real match.
+ */
+export const LOCAL_PLAY_SEED_PREFIX = "local-play-not-secret:";
+
+/**
+ * [Issue #652] The seed every hidden value in the match derives from.
+ *
+ * Prefers the platform's per-match secret. Falls back to a clearly-marked
+ * value built from `eventId` ONLY when no secret was issued — local play and
+ * unit tests, where there is no dispatcher to issue one and no opponent to
+ * hide anything from.
+ *
+ * The fallback is not a weaker secret; it is not a secret at all, which is why
+ * it announces itself. A real event always runs through the coordination
+ * dispatcher, so a real event always has `ctx.matchSecret`.
+ */
+export function resolveMatchSeed(ctx: CoordinationContext): string {
+  return ctx.matchSecret ?? `${LOCAL_PLAY_SEED_PREFIX}${ctx.eventId}`;
+}
+
 export function initialState(
   ctx: CoordinationContext,
   config?: Partial<CryptoBattleConfig>,
@@ -153,8 +179,12 @@ export function initialState(
   const fieldConfig = fieldConfigOf(mergedConfig);
   const teams: Record<string, TeamState> = {};
   const publicCommitments: Record<string, string> = {};
+  // Derive from the match seed, never from `ctx.eventId` — everything below
+  // (and every later ROTATE, Order belt, FHE and MPC derivation, all of which
+  // already read `state.seed`) hangs off this one value.
+  const seed = resolveMatchSeed(ctx);
   for (const teamId of ctx.teamIds) {
-    const { secret, shares } = deriveTeamGeneration(ctx.eventId, teamId, 1, fieldConfig);
+    const { secret, shares } = deriveTeamGeneration(seed, teamId, 1, fieldConfig);
     teams[teamId] = {
       teamId,
       score: 0,
@@ -169,7 +199,7 @@ export function initialState(
   }
   return {
     config: mergedConfig,
-    seed: ctx.eventId,
+    seed,
     phase: "build",
     nowMs: undefined,
     startedAtMs: undefined,

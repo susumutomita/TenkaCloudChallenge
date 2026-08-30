@@ -16,7 +16,17 @@ import { describe, expect, test } from "bun:test";
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
 import type { Contract, CryptoBattleState } from "./types.ts";
 
-const CTX = { eventId: "migration-tests", teamIds: ["teamA", "teamB"] } as const;
+/**
+ * [Issue #652] Carries a match secret because production always does — the
+ * coordination dispatcher issues one before `initialState` runs. Pinning it
+ * also pins the Order belt, which derives from the seed: without it these
+ * fixtures would silently change shape whenever the seed does.
+ */
+const CTX = {
+  eventId: "migration-tests",
+  teamIds: ["teamA", "teamB"],
+  matchSecret: "migration-secret-1",
+} as const;
 
 /** A row as the pre-#645 version wrote it: share indices, no `task`. */
 function toPre645(contract: Contract): Contract {

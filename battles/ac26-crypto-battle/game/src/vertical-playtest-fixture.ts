@@ -32,6 +32,12 @@ import {
 import type { CryptoBattleConfig, CryptoBattleOp, CryptoBattleProjection } from "./types.ts";
 
 export const EVENT_ID = "vertical-playtest-486-pr5";
+/**
+ * [Issue #652] The platform secret this scripted playthrough runs on. A fixed
+ * value, not a real one: the point is a reproducible Order belt, and this
+ * fixture never runs a live event.
+ */
+export const MATCH_SECRET = "vertical-secret-1";
 export const TEAMS: readonly [string, string] = ["alpha", "bravo"];
 export const ATTACKER = "bravo";
 export const DEFENDER = "alpha";
@@ -91,7 +97,14 @@ export interface BuiltVerticalScript {
 export function buildVerticalPlaytestScript(): BuiltVerticalScript {
   const steps: PlaytestStep[] = [];
   const narrative: string[] = [];
-  let state = initialState({ eventId: EVENT_ID, teamIds: TEAMS }, VERTICAL_CONFIG);
+  // [Issue #652] Carries a match secret because production always does — the
+  // dispatcher issues one before `initialState`. Pinning it also pins the Order
+  // belt this scripted playthrough walks: the belt derives from the seed, so a
+  // secretless fixture would re-shape every time the seed does.
+  let state = initialState(
+    { eventId: EVENT_ID, teamIds: TEAMS, matchSecret: MATCH_SECRET },
+    VERTICAL_CONFIG,
+  );
 
   function recordTick(atMs: number): void {
     state = tick(state, atMs);
