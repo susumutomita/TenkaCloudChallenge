@@ -89,10 +89,18 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
     expect(alphaShares.length).toBeGreaterThanOrEqual(result.finalState.config.threshold);
   });
 
-  test("MUST 4: bravo's PROVEs never posted a ShareArtifact -- only ProofArtifacts, and never a share value", () => {
+  test("MUST 4: bravo never posted a ShareArtifact -- it only ever used methods that publish nothing reconstructable", () => {
     const bravoLedgerEntries = result.finalState.publicLedger.filter((a) => a.teamId === ATTACKER);
     expect(bravoLedgerEntries.length).toBeGreaterThan(0);
-    expect(bravoLedgerEntries.every((a) => a.kind === "proof")).toBe(true);
+    // [Issue #645] bravo now answers FHE and MPC Orders too, so its ledger
+    // carries ciphertexts and masked partials alongside its proof transcripts.
+    // The MUST that matters is unchanged and is asserted directly: not one of
+    // those entries is a share. A whitelist of "proof only" would have started
+    // failing for a reason that has nothing to do with the property.
+    expect(bravoLedgerEntries.some((a) => a.kind === "share")).toBe(false);
+    expect(new Set(bravoLedgerEntries.map((a) => a.kind))).toEqual(
+      new Set(["proof", "ciphertext", "partial"]),
+    );
   });
 
   test("PROVE and LEAK pay identical base points for a standard-kind contract (Issue #486 Scoring MUST)", () => {
@@ -206,7 +214,14 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
     const expected: Record<string, number> = { [DEFENDER]: 0, [ATTACKER]: 0 };
     for (const step of built.script.steps) {
       if (isTickStep(step) || step.expect !== "ok") continue;
-      if (step.op.kind === "leak" || step.op.kind === "prove") {
+      // [Issue #645] Every method that completes an Order pays the Order's
+      // points -- no method earns a bonus for the technique used.
+      if (
+        step.op.kind === "leak" ||
+        step.op.kind === "prove" ||
+        step.op.kind === "fhe" ||
+        step.op.kind === "mpc"
+      ) {
         expected[step.teamId] = (expected[step.teamId] ?? 0) + pointsForContract(step.op.contractId);
       } else if (step.op.kind === "hunt") {
         expected[step.teamId] = (expected[step.teamId] ?? 0) + result.finalState.config.scores.huntBonus;
@@ -230,7 +245,7 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
     const opSteps = built.script.steps.filter((s): s is PlaytestOpStep => !isTickStep(s));
     expect(opSteps.length).toBeGreaterThan(0);
     const kinds = new Set(opSteps.map((s) => s.op.kind));
-    expect(kinds).toEqual(new Set(["leak", "prove", "hunt", "rotate"]));
+    expect(kinds).toEqual(new Set(["leak", "prove", "fhe", "mpc", "hunt", "rotate"]));
     expect(opSteps.some((s) => s.expect === "rejected")).toBe(true);
     expect(opSteps.some((s) => s.expect === "ok")).toBe(true);
 

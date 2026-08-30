@@ -1,4 +1,5 @@
 import type { PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
+import { taskDetail, taskLabel } from "./orderTask.ts";
 import { usePolledProjection } from "./coordination.ts";
 import type { CryptoBattleProjection, PublicArtifact, ShareArtifact } from "../game/src/types.ts";
 
@@ -11,7 +12,6 @@ const COPY = {
     noOrders: "Waiting for the next Order…",
     reward: "REWARD",
     time: "TIME",
-    shares: "SHARES",
     choose: "CHOOSE ONE",
     leak: "LEAK",
     leakShort: "fast / public",
@@ -21,7 +21,6 @@ const COPY = {
     generation: "GEN",
     ledger: "PUBLIC LEDGER",
     emptyLedger: "Nothing public yet.",
-    proof: "PROOF",
     raw: "raw",
     loading: "Loading match…",
     unavailable: "Match data is unavailable.",
@@ -34,7 +33,6 @@ const COPY = {
     noOrders: "次の Order を待っています…",
     reward: "報酬",
     time: "残り",
-    shares: "要求 share",
     choose: "どちらかを選ぶ",
     leak: "LEAK",
     leakShort: "速い / 公開",
@@ -44,7 +42,6 @@ const COPY = {
     generation: "世代",
     ledger: "PUBLIC LEDGER",
     emptyLedger: "まだ公開情報はありません。",
-    proof: "PROOF",
     raw: "生データ",
     loading: "試合状態を読み込み中…",
     unavailable: "試合状態を取得できません。",
@@ -70,16 +67,57 @@ function formatDuration(ms: number): string {
  * is to show which method each team used. Switching on `method` here means that
  * lands as a new arm rather than as a rewrite of this function's meaning.
  */
-function groupLedger(ledger: readonly PublicArtifact[]) {
-  const groups = new Map<string, { teamId: string; generation: number; shares: ShareArtifact[]; proofs: number }>();
+interface LedgerGroup {
+  teamId: string;
+  generation: number;
+  shares: ShareArtifact[];
+  /**
+   * [Issue #645] Counted per artifact kind, not lumped into one "proof" bucket.
+   * Before FHE and MPC existed, everything that was not a leaked share WAS a
+   * proof, and this counter said so — which made the board announce "PROOF ×1"
+   * for a team that had actually posted a ciphertext. #645's Public Ledger
+   * requirement is that a reader can see WHICH METHOD a team used, so the board
+   * has to keep them apart.
+   */
+  protected: Map<PublicArtifact["kind"], number>;
+}
+
+function groupLedger(ledger: readonly PublicArtifact[]): LedgerGroup[] {
+  const groups = new Map<string, LedgerGroup>();
   for (const entry of ledger) {
     const key = `${entry.teamId}:${entry.generation}`;
-    const current = groups.get(key) ?? { teamId: entry.teamId, generation: entry.generation, shares: [], proofs: 0 };
+    const current: LedgerGroup =
+      groups.get(key) ?? {
+        teamId: entry.teamId,
+        generation: entry.generation,
+        shares: [],
+        protected: new Map(),
+      };
     if (entry.method === "leak" && entry.kind === "share") current.shares.push(entry);
-    else current.proofs += 1;
+    else current.protected.set(entry.kind, (current.protected.get(entry.kind) ?? 0) + 1);
     groups.set(key, current);
   }
   return [...groups.values()];
+}
+
+/** The chip label for one non-share artifact kind. */
+function protectedLabel(kind: PublicArtifact["kind"]): string {
+  switch (kind) {
+    case "proof":
+      return "PROOF";
+    case "ciphertext":
+      return "FHE";
+    case "partial":
+      return "MPC";
+    case "share":
+      // A share reaches this grouping only when a method other than LEAK posted
+      // one, which no method does today.
+      return "SHARE";
+    default: {
+      const exhaustive: never = kind;
+      throw new Error(`protectedLabel: unknown kind ${JSON.stringify(exhaustive)}`);
+    }
+  }
 }
 
 function OrderBelt({ projection, locale }: { readonly projection: CryptoBattleProjection; readonly locale: Locale }) {
@@ -103,7 +141,7 @@ function OrderBelt({ projection, locale }: { readonly projection: CryptoBattlePr
                 </div>
                 <div className="tc-order-meta">
                   <span>{copy.time} {formatDuration(order.remainingMs)}</span>
-                  <span>{copy.shares} [{order.requestedShareIndices.join(", ")}]</span>
+                  <span>{taskLabel(order.task, locale)} · {taskDetail(order.task, locale)}</span>
                 </div>
                 <div className="tc-timer-track" aria-hidden="true">
                   <div className="tc-timer-fill" style={{ width: `${pct}%` }} />
@@ -169,7 +207,9 @@ function Ledger({ projection, locale }: { readonly projection: CryptoBattleProje
                     <code>{share.value}</code>
                   </details>
                 ))}
-                {group.proofs > 0 && <div className="tc-proof-card">{copy.proof} ×{group.proofs}</div>}
+                {[...group.protected.entries()].map(([kind, count]) => (
+                  <div className="tc-proof-card" key={kind}>{protectedLabel(kind)} ×{count}</div>
+                ))}
               </div>
             </article>
           ))}

@@ -11,7 +11,7 @@ import {
 } from "./methods.ts";
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
 import { buildProveOp } from "./playtest.ts";
-import type { Contract, CryptoBattleState } from "./types.ts";
+import type { Contract, CryptoBattleState, OrderTaskKind } from "./types.ts";
 
 const CTX = { eventId: "methods-645", teamIds: ["teamA", "teamB"] } as const;
 
@@ -57,11 +57,23 @@ describe("the method registry", () => {
     expect(SUBMISSION_METHODS.prove.publishesRawSecretMaterial).toBe(false);
   });
 
-  test("an unconstrained Order accepts every method", () => {
-    expect(allowedMethodsFor("none")).toEqual([...ALL_SUBMISSION_METHODS]);
+  test("an unconstrained share Order accepts every method that can serve it", () => {
+    // [Issue #645] "Unconstrained" is about the RULE, not about capability: an
+    // Order with no privacy rule still only accepts methods that can do its
+    // job, and a Schnorr proof cannot add two ciphertexts. This is the
+    // free-choice Order -- LEAK or PROVE, the participant decides.
+    expect(allowedMethodsFor("reveal-share", "none")).toEqual(["leak", "prove"]);
     for (const method of ALL_SUBMISSION_METHODS) {
       expect(methodSatisfiesConstraint(method, "none")).toBe(true);
     }
+  });
+
+  test("each task admits exactly the methods that can perform it", () => {
+    expect(allowedMethodsFor("homomorphic-sum", "no-raw-disclosure")).toEqual(["fhe"]);
+    expect(allowedMethodsFor("masked-total", "no-raw-disclosure")).toEqual(["mpc"]);
+    // Capability is not overridden by a permissive rule: an unconstrained
+    // encrypted-addition Order still cannot be answered with a share.
+    expect(allowedMethodsFor("homomorphic-sum", "none")).toEqual(["fhe"]);
   });
 
   /**
@@ -74,7 +86,9 @@ describe("the method registry", () => {
     const expected = ALL_SUBMISSION_METHODS.filter(
       (method) => !SUBMISSION_METHODS[method].publishesRawSecretMaterial,
     );
-    expect(allowedMethodsFor("no-raw-disclosure")).toEqual(expected);
+    expect(allowedMethodsFor("reveal-share", "no-raw-disclosure")).toEqual(
+      expected.filter((method) => method === "leak" || method === "prove"),
+    );
     expect(methodSatisfiesConstraint("leak", "no-raw-disclosure")).toBe(false);
     expect(methodSatisfiesConstraint("prove", "no-raw-disclosure")).toBe(true);
   });
@@ -83,8 +97,11 @@ describe("the method registry", () => {
     // An Order nobody can fulfil is a dead Order: it occupies the belt, expires
     // unclaimed, and the participant has no move that would have worked.
     const constraints: readonly PrivacyConstraint[] = ["none", "no-raw-disclosure"];
-    for (const constraint of constraints) {
-      expect(allowedMethodsFor(constraint).length).toBeGreaterThan(0);
+    const tasks: readonly OrderTaskKind[] = ["reveal-share", "homomorphic-sum", "masked-total"];
+    for (const task of tasks) {
+      for (const constraint of constraints) {
+        expect(allowedMethodsFor(task, constraint).length).toBeGreaterThan(0);
+      }
     }
   });
 });
@@ -97,7 +114,9 @@ describe("Orders carry the model the registry defines", () => {
     }
     expect(state.contracts.length).toBeGreaterThan(4);
     for (const order of state.contracts) {
-      expect(order.allowedMethods).toEqual(allowedMethodsFor(order.privacyConstraint));
+      expect(order.allowedMethods).toEqual(
+        allowedMethodsFor(order.task.kind, order.privacyConstraint),
+      );
     }
   });
 
@@ -116,7 +135,7 @@ describe("Orders carry the model the registry defines", () => {
    * participant's time to teach them nothing they could have read.
    */
   test("the projection carries the constraint and the allowed methods", () => {
-    const { state, order } = orderMatching((c) => c.privacyConstraint === "no-raw-disclosure");
+    const { state, order } = orderMatching((c) => c.privacyConstraint === "no-raw-disclosure" && c.task.kind === "reveal-share");
     const projected = projectForTeam(state, "teamA").myContracts.find((c) => c.id === order.id);
     expect(projected).toBeDefined();
     expect(projected?.privacyConstraint).toBe("no-raw-disclosure");
@@ -126,7 +145,7 @@ describe("Orders carry the model the registry defines", () => {
 
 describe("the Order gate runs for every method", () => {
   test("PROVE fulfils an Order that forbids raw disclosure, and is recorded as the resolution", () => {
-    const { state, order } = orderMatching((c) => c.privacyConstraint === "no-raw-disclosure");
+    const { state, order } = orderMatching((c) => c.privacyConstraint === "no-raw-disclosure" && c.task.kind === "reveal-share");
     const vault = projectForTeam(state, "teamA").vault;
     const op = buildProveOp(vault, order.id);
 
@@ -171,7 +190,9 @@ describe("the Order gate runs for every method", () => {
    */
   test("a valid proof against another team's Order is still refused", () => {
     const { state } = orderMatching(() => true);
-    const theirs = state.contracts.find((c) => c.teamId === "teamB" && c.status === "open");
+    const theirs = state.contracts.find(
+      (c) => c.teamId === "teamB" && c.status === "open" && c.task.kind === "reveal-share",
+    );
     if (!theirs) throw new Error("expected an open order for teamB");
 
     const vault = projectForTeam(state, "teamA").vault;

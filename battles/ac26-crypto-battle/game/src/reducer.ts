@@ -52,22 +52,44 @@
  * `SchnorrProof` (public once submitted).
  */
 
-import { deriveContractPlan, deriveTeamGeneration, type FieldConfig } from "./fixtures.ts";
+import {
+  type ContractPlan,
+  deriveContractPlan,
+  deriveTeamGeneration,
+  type FieldConfig,
+} from "./fixtures.ts";
+import {
+  addCiphertexts,
+  decrypt,
+  deriveFheKey,
+  deriveFheOrderInputs,
+  expectedFheSum,
+} from "./fhe.ts";
+import {
+  deriveMpcPrivateInputs,
+  expectedMpcPartial,
+  MPC_PARTY_COUNT,
+} from "./mpc.ts";
 import { allowedMethodsFor, type SubmissionMethod } from "./methods.ts";
 import { mod, P } from "./field.ts";
-import { RFC3526_GROUP14 } from "./group.ts";
+import { groupPow, RFC3526_GROUP14 } from "./group.ts";
 import { derivePublicCommitment } from "./schnorr-witness.ts";
 import { parseCanonicalDecimal, verifyProof } from "./schnorr-verifier.ts";
 import type {
+  CiphertextArtifact,
   Contract,
   CoordinationContext,
   CryptoBattleConfig,
   CryptoBattleOp,
   CryptoBattleProjection,
   CryptoBattleState,
+  OrderTask,
+  OrderTaskProjection,
+  PartialArtifact,
   Phase,
   ProofArtifact,
   PublicArtifact,
+  StoredCiphertext,
   StoredShare,
   TeamState,
   TeamSummaryProjection,
@@ -174,6 +196,42 @@ function computePhase(elapsedMs: number, config: CryptoBattleConfig): Phase {
  * reducer -- it does not read a clock itself, see this file's purity contract
  * above).
  */
+/**
+ * [Issue #645] The public payload one Order carries.
+ *
+ * FHE and MPC payloads are derived from `(seed, orderId)` rather than stored on
+ * the plan, and the confidential half is not derived here at all: the judge
+ * re-derives the plaintexts, the key and the masks when it needs them, and
+ * `projectForTeam` derives the owning team's private inputs. So the only thing
+ * that ever reaches `CryptoBattleState` is material that is safe to publish,
+ * and there is no new secret field anyone could forget to redact.
+ */
+function buildOrderTask(
+  plan: ContractPlan,
+  seed: string,
+  contractId: string,
+  prime: bigint,
+): OrderTask {
+  switch (plan.taskKind) {
+    case "reveal-share":
+      return { kind: "reveal-share", shareIndices: plan.requestedShareIndices };
+    case "homomorphic-sum":
+      return {
+        kind: "homomorphic-sum",
+        inputs: deriveFheOrderInputs(seed, contractId, prime).map((c) => ({
+          r: c.r.toString(),
+          y: c.y.toString(),
+        })),
+      };
+    case "masked-total":
+      return { kind: "masked-total", partyCount: MPC_PARTY_COUNT };
+    default: {
+      const exhaustive: never = plan.taskKind;
+      throw new Error(`buildOrderTask: unknown task kind ${JSON.stringify(exhaustive)}`);
+    }
+  }
+}
+
 export function tick(state: CryptoBattleState, eventNowMs: number): CryptoBattleState {
   const startedAtMs = state.startedAtMs ?? eventNowMs;
   const elapsedMs = eventNowMs - startedAtMs;
@@ -197,20 +255,22 @@ export function tick(state: CryptoBattleState, eventNowMs: number): CryptoBattle
       const sequenceIndex = issuedCountByTeam.get(teamId) ?? 0;
       const plan = deriveContractPlan(state.seed, teamId, sequenceIndex, fieldConfig);
       const ttlMs = plan.kind === "rush" ? state.config.rushContractTtlMs : state.config.contractTtlMs;
+      const contractId = `${teamId}-c${sequenceIndex}`;
       issued.push({
-        id: `${teamId}-c${sequenceIndex}`,
+        id: contractId,
         teamId,
         kind: plan.kind,
         points: plan.kind === "rush" ? state.config.scores.rushContract : state.config.scores.contract,
-        requestedShareIndices: plan.requestedShareIndices,
+        task: buildOrderTask(plan, state.seed, contractId, fieldConfig.prime),
         issuedAtMs: nextContractAtMs,
         expiresAtMs: nextContractAtMs + ttlMs,
         status: "open",
         // [Issue #645] The Order states its rule, and the method list follows
-        // from it -- never the other way round, so a method added in a later
-        // phase is offered on exactly the Orders it legitimately satisfies.
+        // from it and the task -- never the other way round, so a method added
+        // in a later phase is offered on exactly the Orders it legitimately
+        // satisfies, and never on one it cannot serve at all.
         privacyConstraint: plan.privacyConstraint,
-        allowedMethods: allowedMethodsFor(plan.privacyConstraint),
+        allowedMethods: allowedMethodsFor(plan.taskKind, plan.privacyConstraint),
       });
       issuedCountByTeam.set(teamId, sequenceIndex + 1);
     }
@@ -236,6 +296,56 @@ export function tick(state: CryptoBattleState, eventNowMs: number): CryptoBattle
  */
 function huntKey(attackerTeamId: string, targetTeamId: string, generation: number): string {
   return JSON.stringify([attackerTeamId, targetTeamId, generation]);
+}
+
+/**
+ * [Issue #645 Phase 2] Parse a participant-submitted ciphertext.
+ *
+ * Both components go through the same canonical-decimal gate as every other
+ * untrusted number on the wire (see schnorr-verifier.ts's
+ * `parseCanonicalDecimal`), so a malformed value is a rejection here rather
+ * than a throw out of `BigInt()` somewhere downstream.
+ */
+function parseStoredCiphertext(ciphertext: StoredCiphertext): { r: bigint; y: bigint } | undefined {
+  if (typeof ciphertext !== "object" || ciphertext === null) return undefined;
+  const r = parseCanonicalDecimal(ciphertext.r);
+  const y = parseCanonicalDecimal(ciphertext.y);
+  if (r === undefined || y === undefined) return undefined;
+  return { r, y };
+}
+
+/**
+ * [Issue #645 Phase 5] Whether the target actually reused a proof commitment
+ * within one generation — the misuse a nonce-reuse HUNT exploits.
+ *
+ * Reads only the Public Ledger, deliberately: the attacker's evidence has to be
+ * derivable from what they can see, and checking the same source the attacker
+ * used is what makes that true rather than merely intended. Two transcripts
+ * from one team in one generation sharing a commitment R mean two challenges
+ * against one nonce, which solves for the witness:
+ *
+ * ```text
+ * z1 = k + e1*w,  z2 = k + e2*w   ->   w = (z1 - z2) / (e1 - e2)   mod q
+ * ```
+ *
+ * The prover this Battle ships cannot produce that (`schnorr-prover.ts` binds
+ * the nonce to the contract id), so a team using the provided tooling is never
+ * exposed. A team that rolls its own prover with a fixed nonce is — which is
+ * precisely the lesson `ac26-w3-nonce-reuse` teaches, now with consequences.
+ */
+function hasNonceReuse(
+  state: CryptoBattleState,
+  targetTeamId: string,
+  generation: number,
+): boolean {
+  const commitments = new Set<string>();
+  for (const artifact of state.publicLedger) {
+    if (artifact.kind !== "proof") continue;
+    if (artifact.teamId !== targetTeamId || artifact.generation !== generation) continue;
+    if (commitments.has(artifact.commitment)) return true;
+    commitments.add(artifact.commitment);
+  }
+  return false;
 }
 
 /**
@@ -343,6 +453,112 @@ export function validateOp(state: CryptoBattleState, teamId: string, op: CryptoB
       }
       return { ok: true };
     }
+    case "fhe": {
+      // [Issue #645 Phase 2] Order gate first, then the trusted decrypt.
+      const gate = validateOrderSubmission(state, teamId, op.contractId, "fhe");
+      if (!gate.ok) return gate;
+      const contract = state.contracts.find((c) => c.id === op.contractId);
+      if (contract?.task.kind !== "homomorphic-sum") {
+        // validateOrderSubmission already refused every Order whose
+        // allowedMethods exclude FHE, and only a homomorphic-sum task ever
+        // allows it -- so this is unreachable and says so loudly rather than
+        // treating a mismatched task as a pass.
+        return { ok: false, error: `contract "${op.contractId}" is not a homomorphic-sum order` };
+      }
+      const submitted = parseStoredCiphertext(op.ciphertext);
+      if (!submitted) {
+        return {
+          ok: false,
+          error: "ciphertext components must be canonical, length-bounded decimal integers",
+        };
+      }
+      // The judge decrypts and compares against the hidden sum. It never checks
+      // "did you add these two specific ciphertexts" -- #645 asks for a
+      // decrypt-and-compare judge, and a participant who reaches the right
+      // plaintext by a different homomorphic route has genuinely done the job.
+      const prime = BigInt(state.config.prime);
+      const key = deriveFheKey(state.seed, op.contractId, prime);
+      if (decrypt(submitted, key, prime) !== expectedFheSum(state.seed, op.contractId, prime)) {
+        return { ok: false, error: "submitted ciphertext does not decrypt to the requested sum" };
+      }
+      return { ok: true };
+    }
+    case "mpc": {
+      // [Issue #645 Phase 3] Order gate, then compare against the partial this
+      // team's own inputs and masks produce. The expected value is re-derived
+      // from the seed, never stored, and never handed to another team.
+      const gate = validateOrderSubmission(state, teamId, op.contractId, "mpc");
+      if (!gate.ok) return gate;
+      const contract = state.contracts.find((c) => c.id === op.contractId);
+      if (contract?.task.kind !== "masked-total") {
+        return { ok: false, error: `contract "${op.contractId}" is not a masked-total order` };
+      }
+      const submittedPartial = parseCanonicalDecimal(op.partial);
+      if (submittedPartial === undefined) {
+        return { ok: false, error: "partial must be a canonical, length-bounded decimal integer" };
+      }
+      const prime = BigInt(state.config.prime);
+      if (mod(submittedPartial, prime) !== expectedMpcPartial(state.seed, op.contractId, prime)) {
+        return { ok: false, error: "submitted partial does not match this office's masked total" };
+      }
+      return { ok: true };
+    }
+    case "hunt-nonce": {
+      // [Issue #645 Phase 5] Same preconditions as a Shamir HUNT -- see that
+      // branch for why each exists -- and a different piece of evidence.
+      if (state.nowMs === undefined) {
+        return { ok: false, error: "match has not started yet (no tick() has run)" };
+      }
+      if (op.targetTeamId === teamId) {
+        return { ok: false, error: "cannot hunt your own team" };
+      }
+      const target = state.teams[op.targetTeamId];
+      if (!target) return { ok: false, error: `unknown target team "${op.targetTeamId}"` };
+      if (op.generation !== target.generation) {
+        return {
+          ok: false,
+          error: `target team is on generation ${target.generation}, not ${op.generation}`,
+        };
+      }
+      if (state.successfulHunts.includes(huntKey(teamId, op.targetTeamId, op.generation))) {
+        return { ok: false, error: "this generation was already hunted successfully by this team" };
+      }
+      // The exploit has to be real, not merely claimed: the target must
+      // actually have published two transcripts sharing a commitment. Without
+      // this check a lucky guess at the witness would pass, and -- far worse --
+      // a team that used the shipped prover correctly could be hunted by
+      // someone who obtained their witness any other way. #645's rule is that
+      // HUNT punishes misuse, so the misuse has to be on the record.
+      if (!hasNonceReuse(state, op.targetTeamId, op.generation)) {
+        return {
+          ok: false,
+          error: `team "${op.targetTeamId}" has not reused a proof commitment in generation ${op.generation}`,
+        };
+      }
+      const recoveredWitness = parseCanonicalDecimal(op.recoveredWitness);
+      if (recoveredWitness === undefined) {
+        return {
+          ok: false,
+          error: "recoveredWitness must be a canonical, length-bounded decimal integer",
+        };
+      }
+      const publicY = state.publicCommitments[op.targetTeamId];
+      if (publicY === undefined) {
+        return { ok: false, error: `no public commitment on record for team "${op.targetTeamId}"` };
+      }
+      // The witness is checked against the target's PUBLIC commitment, which is
+      // the honest statement of "you recovered their key": g^w = Y is exactly
+      // what the witness is defined by. Nothing here reads the target's private
+      // state, so the check cannot accidentally accept a value the attacker
+      // could not have derived from public material.
+      if (
+        groupPow(RFC3526_GROUP14.generator, mod(recoveredWitness, RFC3526_GROUP14.order), RFC3526_GROUP14) !==
+        BigInt(publicY)
+      ) {
+        return { ok: false, error: "recovered witness does not match the target's public commitment" };
+      }
+      return { ok: true };
+    }
     case "rotate": {
       // Before the first tick(), `state.nowMs` is undefined and so is every
       // team's `lastRotateAtMs`, which used to make the cooldown check below
@@ -409,8 +625,11 @@ function applyLeak(
     throw new Error("applyOp(leak): invalid op reached apply -- call validateOp() first");
   }
 
+  if (contract.task.kind !== "reveal-share") {
+    throw new Error("applyOp(leak): contract is not a reveal-share order -- call validateOp() first");
+  }
   const nowMs = state.nowMs ?? contract.issuedAtMs;
-  const artifacts: PublicArtifact[] = contract.requestedShareIndices.map((shareIndex) => {
+  const artifacts: PublicArtifact[] = contract.task.shareIndices.map((shareIndex: number) => {
     const shareEntry = team.shares.find((s) => s.index === shareIndex);
     if (!shareEntry) {
       throw new Error(`applyOp(leak): team "${teamId}" has no share at index ${shareIndex}`);
@@ -446,6 +665,156 @@ function applyLeak(
     publicLedger: [...state.publicLedger, ...artifacts],
     teams: { ...state.teams, [teamId]: updatedTeam },
   };
+}
+
+/**
+ * [Issue #645 Phase 2] Record an accepted FHE submission.
+ *
+ * The ciphertext goes on the Public Ledger verbatim. That is safe and it is the
+ * lesson: everyone can see that this team answered, and nobody — including the
+ * teams who can read the Order's input ciphertexts — learns anything about the
+ * numbers involved. See fhe.ts on why that is information-theoretic.
+ */
+function applyFhe(
+  state: CryptoBattleState,
+  teamId: string,
+  op: Extract<CryptoBattleOp, { kind: "fhe" }>,
+): CryptoBattleState {
+  const contract = state.contracts.find((c) => c.id === op.contractId);
+  const team = state.teams[teamId];
+  if (!contract || !team) {
+    throw new Error("applyOp(fhe): invalid op reached apply -- call validateOp() first");
+  }
+
+  const nowMs = state.nowMs ?? contract.issuedAtMs;
+  // Re-serialized through BigInt(...).toString() for the same reason applyProve
+  // does it: validateOp has already forced both components through
+  // parseCanonicalDecimal, so this guarantees the ledger only ever holds the
+  // canonical form rather than whatever the submission happened to carry.
+  const artifact: CiphertextArtifact = {
+    id: `${contract.id}-ciphertext`,
+    teamId,
+    generation: team.generation,
+    kind: "ciphertext",
+    method: "fhe",
+    contractId: contract.id,
+    r: BigInt(op.ciphertext.r).toString(),
+    y: BigInt(op.ciphertext.y).toString(),
+    postedAtMs: nowMs,
+  };
+
+  return completeOrder(state, teamId, contract, artifact, "fhe");
+}
+
+/**
+ * [Issue #645 Phase 3] Record an accepted MPC submission.
+ *
+ * The masked partial goes on the Public Ledger, and the team's own number never
+ * does. Publishing the partial is what lets the client add the three offices'
+ * partials and learn the total — the point of the protocol — while every
+ * individual figure stays hidden. See mpc.ts.
+ */
+function applyMpc(
+  state: CryptoBattleState,
+  teamId: string,
+  op: Extract<CryptoBattleOp, { kind: "mpc" }>,
+): CryptoBattleState {
+  const contract = state.contracts.find((c) => c.id === op.contractId);
+  const team = state.teams[teamId];
+  if (!contract || !team) {
+    throw new Error("applyOp(mpc): invalid op reached apply -- call validateOp() first");
+  }
+
+  const nowMs = state.nowMs ?? contract.issuedAtMs;
+  const artifact: PartialArtifact = {
+    id: `${contract.id}-partial`,
+    teamId,
+    generation: team.generation,
+    kind: "partial",
+    method: "mpc",
+    contractId: contract.id,
+    partial: BigInt(op.partial).toString(),
+    postedAtMs: nowMs,
+  };
+
+  return completeOrder(state, teamId, contract, artifact, "mpc");
+}
+
+/**
+ * [Issue #645] Close one Order: post its artifact, mark it completed with the
+ * method that did it, and award its points.
+ *
+ * Shared by the methods added after Phase 1. LEAK and PROVE keep their own
+ * inline versions because each does something extra (LEAK posts one artifact
+ * per requested share index; PROVE has a longer note about what its transcript
+ * may contain), and folding those into a common helper would hide the part of
+ * each that is worth reading. What matters is that the SCORING is one
+ * expression, not four: every method earns the Order's stated points, never a
+ * bonus for the technique used — #486's rule, unchanged.
+ */
+function completeOrder(
+  state: CryptoBattleState,
+  teamId: string,
+  contract: Contract,
+  artifact: PublicArtifact,
+  method: SubmissionMethod,
+): CryptoBattleState {
+  const team = state.teams[teamId];
+  if (!team) {
+    throw new Error("completeOrder: unknown team -- call validateOp() first");
+  }
+  const contracts = state.contracts.map((c) =>
+    c.id === contract.id ? { ...c, status: "completed" as const, resolution: method } : c,
+  );
+  return {
+    ...state,
+    contracts,
+    publicLedger: [...state.publicLedger, artifact],
+    teams: {
+      ...state.teams,
+      [teamId]: {
+        ...team,
+        score: team.score + contract.points,
+        completedContractIds: [...team.completedContractIds, contract.id],
+      },
+    },
+  };
+}
+
+/**
+ * [Issue #645] The task as its owner sees it.
+ *
+ * `reveal-share` and `homomorphic-sum` pass straight through — their payloads
+ * are public. `masked-total` gains the confidential inputs, derived here from
+ * the match seed rather than stored, so the only copy that ever exists is the
+ * one handed to the team the Order belongs to. `projectForTeam` calls this only
+ * for `myContracts`, which is already filtered to that team.
+ */
+function projectTask(
+  state: CryptoBattleState,
+  task: OrderTask,
+  contractId: string,
+): OrderTaskProjection {
+  switch (task.kind) {
+    case "reveal-share":
+      return task;
+    case "homomorphic-sum":
+      return task;
+    case "masked-total": {
+      const inputs = deriveMpcPrivateInputs(state.seed, contractId, BigInt(state.config.prime));
+      return {
+        kind: "masked-total",
+        partyCount: task.partyCount,
+        myInput: inputs.myInput.toString(),
+        incomingMasks: inputs.incomingMasks.map((m) => m.toString()),
+        outgoingMasks: inputs.outgoingMasks.map((m) => m.toString()),
+      };
+    }
+    default: {
+      const exhaustive: never = task;
+      throw new Error(`projectTask: unknown task ${JSON.stringify(exhaustive)}`);
+    }
+  }
 }
 
 function applyHunt(
@@ -599,8 +968,26 @@ export function applyOp(state: CryptoBattleState, teamId: string, op: CryptoBatt
   switch (op.kind) {
     case "leak":
       return applyLeak(state, teamId, op);
+    case "fhe":
+      return applyFhe(state, teamId, op);
+    case "mpc":
+      return applyMpc(state, teamId, op);
     case "hunt":
       return applyHunt(state, teamId, op);
+    case "hunt-nonce":
+      // [Issue #645 Phase 5] Both hunt kinds score identically, guard against
+      // replay identically, and land in the same `huntLog` -- only the evidence
+      // differs, and `validateOp` has already checked the evidence this one
+      // needs (g^w = Y against the target's PUBLIC commitment). Reusing
+      // `applyHunt` keeps one scoring path rather than a near-duplicate that
+      // could drift; `applyHunt` re-reads the target's secret itself, so the
+      // value passed here is only the shape it expects.
+      return applyHunt(state, teamId, {
+        kind: "hunt",
+        targetTeamId: op.targetTeamId,
+        generation: op.generation,
+        recoveredSecret: state.teams[op.targetTeamId]?.secret ?? "0",
+      });
     case "rotate":
       return applyRotate(state, teamId);
     case "prove":
@@ -640,7 +1027,7 @@ export function projectForTeam(state: CryptoBattleState, teamId: string): Crypto
       id: c.id,
       kind: c.kind,
       points: c.points,
-      requestedShareIndices: c.requestedShareIndices,
+      task: projectTask(state, c.task, c.id),
       status: c.status,
       // [Issue #645] The Order's rule and the methods that satisfy it are
       // participant-visible by design: an Order the participant cannot LEAK
@@ -678,6 +1065,7 @@ export function projectForTeam(state: CryptoBattleState, teamId: string): Crypto
 
   return {
     phase: state.phase,
+    prime: state.config.prime,
     matchRemainingMs,
     vault: {
       teamId,

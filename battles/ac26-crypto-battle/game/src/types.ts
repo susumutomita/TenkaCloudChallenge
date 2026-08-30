@@ -104,6 +104,58 @@ export interface CryptoBattleConfig {
   readonly scores: ScoreRules;
 }
 
+/**
+ * One ciphertext on the wire: both components are stringified decimals, the
+ * same convention as every other bigint that crosses the state/op boundary --
+ * see this file's header "JSON-SAFETY INVARIANT". `fhe.ts` works in `bigint`
+ * internally and converts here.
+ */
+export interface StoredCiphertext {
+  readonly r: string;
+  readonly y: string;
+}
+
+/**
+ * [Issue #645] What an Order actually asks for.
+ *
+ * #645's acceptance criteria require an Order to carry a task alongside its
+ * deadline, points, privacy rule and methods. Before Phase 2 every Order asked
+ * for the same thing -- reveal these share indices -- so the task was implicit
+ * in a bare `requestedShareIndices` field. FHE and MPC Orders ask for something
+ * else entirely and carry a different payload, so the task became a thing worth
+ * naming.
+ *
+ * The task is what decides which methods could possibly serve an Order; the
+ * privacy constraint then narrows that set further. Keeping them separate is
+ * what makes "this Order accepts LEAK or PROVE, your call" and "this Order
+ * accepts PROVE only, because the client will not have the raw value
+ * published" two different sentences rather than one rule with two spellings --
+ * see methods.ts's `allowedMethodsFor`.
+ *
+ * Every payload here is PUBLIC. An MPC Order's confidential material (the
+ * team's own number and its masks) is deliberately absent: it is derived per
+ * team in `projectForTeam` and never stored, so no ledger entry and no other
+ * team's projection can carry it. See mpc.ts.
+ */
+export type OrderTask =
+  | {
+      readonly kind: "reveal-share";
+      /** Which share indices the Order wants accounted for. */
+      readonly shareIndices: readonly number[];
+    }
+  | {
+      readonly kind: "homomorphic-sum";
+      /** The ciphertexts to add. Public: they hide their plaintexts (fhe.ts). */
+      readonly inputs: readonly StoredCiphertext[];
+    }
+  | {
+      readonly kind: "masked-total";
+      /** How many offices take part, including this team. */
+      readonly partyCount: number;
+    };
+
+export type OrderTaskKind = OrderTask["kind"];
+
 export type ContractKind = "standard" | "rush";
 export type ContractStatus = "open" | "completed" | "expired";
 
@@ -121,8 +173,8 @@ export interface Contract {
   readonly teamId: string;
   readonly kind: ContractKind;
   readonly points: number;
-  /** What the Order asks for: these share indices, by whichever method it allows. */
-  readonly requestedShareIndices: readonly number[];
+  /** [Issue #645] What the Order asks for, and the public payload it needs. */
+  readonly task: OrderTask;
   readonly issuedAtMs: number;
   readonly expiresAtMs: number;
   readonly status: ContractStatus;
@@ -205,7 +257,56 @@ export interface ProofArtifact {
   readonly postedAtMs: number;
 }
 
-export type PublicArtifact = ShareArtifact | ProofArtifact;
+/**
+ * [Issue #645 Phase 2] One entry in the Public Ledger: the ciphertext a team
+ * submitted for an FHE Order.
+ *
+ * Safe to publish, and that is the lesson. The value is an encryption under a
+ * key only the judge holds, so a reader sees a number that carries no
+ * information about the plaintexts it was computed from (see fhe.ts on why that
+ * is information-theoretic rather than a hardness assumption). A participant
+ * looking at this row learns that a team answered, and nothing about what the
+ * answer was.
+ */
+export interface CiphertextArtifact {
+  readonly id: string;
+  readonly teamId: string;
+  readonly generation: number;
+  readonly kind: "ciphertext";
+  readonly method: SubmissionMethod;
+  readonly contractId: string;
+  /** The submitted ciphertext's two components -- stringified decimals. */
+  readonly r: string;
+  readonly y: string;
+  readonly postedAtMs: number;
+}
+
+/**
+ * [Issue #645 Phase 3] One entry in the Public Ledger: the masked partial a
+ * team published for an MPC Order.
+ *
+ * Also safe to publish, for a different reason: the value is the team's own
+ * number plus and minus masks nobody else holds, so it is consistent with every
+ * possible input (see mpc.ts). Publishing it is what lets the client add the
+ * three partials and learn the total while no office's number is ever exposed.
+ */
+export interface PartialArtifact {
+  readonly id: string;
+  readonly teamId: string;
+  readonly generation: number;
+  readonly kind: "partial";
+  readonly method: SubmissionMethod;
+  readonly contractId: string;
+  /** The published masked partial -- a stringified decimal. */
+  readonly partial: string;
+  readonly postedAtMs: number;
+}
+
+export type PublicArtifact =
+  | ShareArtifact
+  | ProofArtifact
+  | CiphertextArtifact
+  | PartialArtifact;
 
 /**
  * A Shamir share as it lives in `CryptoBattleState` / `CryptoBattleProjection`
@@ -297,6 +398,38 @@ export interface HuntLogEntry {
 
 export type CryptoBattleOp =
   | { readonly kind: "leak"; readonly contractId: string }
+  /**
+   * [Issue #645 Phase 2] The ciphertext this team computed for an FHE Order.
+   * The judge decrypts it and compares against the hidden expected sum -- a
+   * participant never learns the plaintexts, and self-reporting "I did the
+   * addition" earns nothing.
+   */
+  | {
+      readonly kind: "fhe";
+      readonly contractId: string;
+      readonly ciphertext: StoredCiphertext;
+    }
+  /**
+   * [Issue #645 Phase 3] The masked partial this team publishes for an MPC
+   * Order. Stringified decimal, parsed through the same untrusted-decimal gate
+   * as every other participant-supplied number.
+   */
+  | { readonly kind: "mpc"; readonly contractId: string; readonly partial: string }
+  /**
+   * [Issue #645 Phase 5] A HUNT that exploits nonce reuse rather than collected
+   * shares: two of the target's proof transcripts on the Public Ledger share a
+   * commitment, which solves for the witness behind their public commitment Y.
+   * A separate op kind rather than a variant of "hunt" so each carries exactly
+   * the evidence its own check needs, and so neither branch has to ask which
+   * kind of hunt it is looking at.
+   */
+  | {
+      readonly kind: "hunt-nonce";
+      readonly targetTeamId: string;
+      readonly generation: number;
+      /** The recovered Schnorr witness w, satisfying g^w = Y. Stringified decimal. */
+      readonly recoveredWitness: string;
+    }
   | {
       readonly kind: "hunt";
       readonly targetTeamId: string;
@@ -324,11 +457,41 @@ export interface VaultProjection {
   readonly huntedGenerations: readonly number[];
 }
 
+/**
+ * [Issue #645] The task as its OWNER sees it.
+ *
+ * Identical to {@link OrderTask} except for `masked-total`, which gains the
+ * confidential inputs that team -- and only that team -- needs to compute its
+ * partial. Those are derived in `projectForTeam`, never stored, so there is no
+ * field anywhere in `CryptoBattleState` that a future ledger change could leak
+ * by accident.
+ */
+export type OrderTaskProjection =
+  | { readonly kind: "reveal-share"; readonly shareIndices: readonly number[] }
+  | { readonly kind: "homomorphic-sum"; readonly inputs: readonly StoredCiphertext[] }
+  | {
+      readonly kind: "masked-total";
+      readonly partyCount: number;
+      /** This office's confidential number -- stringified decimal. */
+      readonly myInput: string;
+      /** Masks the other offices sent to this one. */
+      readonly incomingMasks: readonly string[];
+      /** Masks this office sent to the others. */
+      readonly outgoingMasks: readonly string[];
+    };
+
 export interface ContractProjection {
   readonly id: string;
   readonly kind: ContractKind;
   readonly points: number;
-  readonly requestedShareIndices: readonly number[];
+  /**
+   * [Issue #645] What this Order asks for, plus anything the OWNING team needs
+   * to do it. For an MPC Order that includes confidential material (the team's
+   * own number and its masks) -- safe because `projectForTeam` only ever puts
+   * an Order in `myContracts` for the team it was issued to, so this shape
+   * cannot reach anyone else. See mpc.ts.
+   */
+  readonly task: OrderTaskProjection;
   readonly status: ContractStatus;
   /** [Issue #645] The stated rule -- what the Order will not have published. */
   readonly privacyConstraint: PrivacyConstraint;
@@ -371,6 +534,19 @@ export interface TeamSummaryProjection {
  */
 export interface CryptoBattleProjection {
   readonly phase: Phase;
+  /**
+   * [Issue #645] The modulus every calculation in this Battle runs over,
+   * as a stringified decimal.
+   *
+   * Public by construction — it is in the problem statement, in the reference
+   * code, and in `field.ts`'s exported `P`. It is on the projection because a
+   * participant cannot perform an FHE addition or an MPC subtotal without it,
+   * and because leaving it off led to the workaround `playtest.ts`'s
+   * `PublicHuntParams` exists to be: a game rule the portal had to be told
+   * out-of-band. Nothing about knowing `p` weakens anything; every scheme here
+   * is public-parameter by design.
+   */
+  readonly prime: string;
   /**
    * Ms remaining until the match ends, AS OF the state's last `tick()` --
    * `undefined` before the first tick (match not started). Same

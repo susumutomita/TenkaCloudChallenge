@@ -47,6 +47,7 @@
  */
 
 import { useState } from "react";
+import { describeTaskShort } from "./orderTask.ts";
 import type { PortalCoordinationClient, PortalCoordinationOutcome, PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 import { usePolledProjection } from "./coordination.ts";
 import type { ContractProjection, CryptoBattleOp, TeamSummaryProjection } from "../game/src/types.ts";
@@ -228,6 +229,47 @@ export function submitHunt(
   return client.submitOp(op);
 }
 
+/**
+ * [Issue #645 Phase 2] Builds and submits an FHE op — the ciphertext this team
+ * computed by adding the Order's two input ciphertexts componentwise.
+ */
+export function submitFhe(
+  client: PortalCoordinationClient,
+  contractId: string,
+  ciphertext: { readonly r: string; readonly y: string },
+): Promise<PortalCoordinationOutcome> {
+  const op: CryptoBattleOp = { kind: "fhe", contractId, ciphertext };
+  return client.submitOp(op);
+}
+
+/**
+ * [Issue #645 Phase 3] Builds and submits an MPC op — this office's masked
+ * partial.
+ */
+export function submitMpc(
+  client: PortalCoordinationClient,
+  contractId: string,
+  partial: string,
+): Promise<PortalCoordinationOutcome> {
+  const op: CryptoBattleOp = { kind: "mpc", contractId, partial };
+  return client.submitOp(op);
+}
+
+/**
+ * [Issue #645 Phase 5] Builds and submits a nonce-reuse HUNT — the Schnorr
+ * witness recovered from two of the target's transcripts that share a
+ * commitment.
+ */
+export function submitHuntNonce(
+  client: PortalCoordinationClient,
+  targetTeamId: string,
+  generation: number,
+  recoveredWitness: string,
+): Promise<PortalCoordinationOutcome> {
+  const op: CryptoBattleOp = { kind: "hunt-nonce", targetTeamId, generation, recoveredWitness };
+  return client.submitOp(op);
+}
+
 /** Builds and submits a ROTATE op. Exported for direct testing -- see this file's header. */
 export function submitRotate(client: PortalCoordinationClient): Promise<PortalCoordinationOutcome> {
   const op: CryptoBattleOp = { kind: "rotate" };
@@ -297,7 +339,7 @@ function LeakForm({
           <select aria-label="leak-contract" style={fieldStyle} value={selected} onChange={(e) => setContractId(e.target.value)}>
             {contracts.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.id} ({c.kind}, {c.points}pt, shares[{c.requestedShareIndices.join(",")}])
+                {c.id} ({c.kind}, {c.points}pt, {describeTaskShort(c.task)})
               </option>
             ))}
           </select>

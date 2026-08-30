@@ -42,7 +42,7 @@ import RegistrationPanel, {
 } from "../../portal/RegistrationPanel.tsx";
 import StatusPanel, { StatusPanelBody } from "../../portal/StatusPanel.tsx";
 import { MODP_2048_P } from "./group.ts";
-import { initialState, projectForTeam, tick } from "./reducer.ts";
+import { DEFAULT_CONFIG, initialState, projectForTeam, tick } from "./reducer.ts";
 import type { CryptoBattleProjection } from "./types.ts";
 
 const FIXED_NOW = 1_700_000_000_000;
@@ -80,6 +80,9 @@ const ELAPSED_AT_TICK_MS = 40 * 60_000;
 function fixtureProjection(overrides: Partial<CryptoBattleProjection> = {}): CryptoBattleProjection {
   return {
     phase: "pressure",
+    // [Issue #645] The modulus is on the projection: a participant needs it to
+    // compute an FHE or MPC answer, and it is public by construction.
+    prime: DEFAULT_CONFIG.prime,
     // 90-min matchDurationMs - 40-min elapsed = 50 min left, same numeric
     // value the earlier (buggy) absolute-epoch-based fixture used, so this
     // rewrite changes units, not the scenario the tests exercise.
@@ -105,7 +108,7 @@ function fixtureProjection(overrides: Partial<CryptoBattleProjection> = {}): Cry
         id: "blue-c0",
         kind: "standard",
         points: 10,
-        requestedShareIndices: [0, 1],
+        task: { kind: "reveal-share" as const, shareIndices: [0, 1] },
         privacyConstraint: "none",
         allowedMethods: ["leak", "prove"],
         status: "open",
@@ -115,7 +118,7 @@ function fixtureProjection(overrides: Partial<CryptoBattleProjection> = {}): Cry
         id: "blue-c-old",
         kind: "standard",
         points: 10,
-        requestedShareIndices: [2],
+        task: { kind: "reveal-share" as const, shareIndices: [2] },
         privacyConstraint: "none",
         allowedMethods: ["leak", "prove"],
         status: "expired",

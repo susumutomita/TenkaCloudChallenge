@@ -32,12 +32,14 @@
  * what each one publishes.
  */
 
+import type { OrderTaskKind } from "./types.ts";
+
 /**
  * A way to fulfil an Order. Extensible by design — #645's Phase 2 adds `"fhe"`,
  * Phase 3 `"mpc"`. Every consumer switches exhaustively, so adding one fails to
  * compile until each site has decided what it means.
  */
-export type SubmissionMethod = "leak" | "prove";
+export type SubmissionMethod = "leak" | "prove" | "fhe" | "mpc";
 
 /**
  * What an Order forbids being made public.
@@ -75,10 +77,39 @@ export interface SubmissionMethodSpec {
 export const SUBMISSION_METHODS: Readonly<Record<SubmissionMethod, SubmissionMethodSpec>> = {
   leak: { method: "leak", publishesRawSecretMaterial: true },
   prove: { method: "prove", publishesRawSecretMaterial: false },
+  // [Phase 2] An FHE submission publishes a ciphertext under a key only the
+  // judge holds — see fhe.ts on why that hides its plaintext outright.
+  fhe: { method: "fhe", publishesRawSecretMaterial: false },
+  // [Phase 3] An MPC submission publishes a masked partial, which is consistent
+  // with every possible input — see mpc.ts.
+  mpc: { method: "mpc", publishesRawSecretMaterial: false },
 };
 
 /** Every method the platform knows, in a stable order. */
-export const ALL_SUBMISSION_METHODS: readonly SubmissionMethod[] = ["leak", "prove"];
+export const ALL_SUBMISSION_METHODS: readonly SubmissionMethod[] = [
+  "leak",
+  "prove",
+  "fhe",
+  "mpc",
+];
+
+/**
+ * [Issue #645] Which methods could serve each kind of task, before the Order's
+ * privacy rule is applied.
+ *
+ * This is the half of the answer that is about CAPABILITY: a Schnorr proof
+ * cannot answer 「この2つの暗号文を足せ」, and a ciphertext cannot answer
+ * 「share #3 を出せ」, whatever either Order's privacy rule says. Keeping it
+ * separate from {@link methodSatisfiesConstraint} is what lets an Order say
+ * *why* a method is unavailable — "this Order does not accept LEAK" (a rule)
+ * reads very differently from "LEAK cannot do this job" (a fact), and #645's
+ * whole point is that participants learn which is which.
+ */
+const METHODS_BY_TASK: Readonly<Record<OrderTaskKind, readonly SubmissionMethod[]>> = {
+  "reveal-share": ["leak", "prove"],
+  "homomorphic-sum": ["fhe"],
+  "masked-total": ["mpc"],
+};
 
 /** Whether `method` may be used on an Order carrying `constraint`. */
 export function methodSatisfiesConstraint(
@@ -90,15 +121,22 @@ export function methodSatisfiesConstraint(
 }
 
 /**
- * The methods an Order with `constraint` accepts, in {@link
+ * The methods an Order with this task and this constraint accepts, in {@link
  * ALL_SUBMISSION_METHODS} order.
  *
  * Derived rather than authored so a new method automatically becomes available
  * on every Order it legitimately satisfies — and, just as importantly, is
  * automatically excluded from the ones it does not. An authored list would let
- * a Phase-2 FHE method be added to `SUBMISSION_METHODS` and silently never be
- * offered, or worse, be offered on an Order it violates.
+ * a method be added to `SUBMISSION_METHODS` and silently never be offered, or
+ * worse, be offered on an Order it violates.
+ *
+ * Capability first, then the privacy rule. An empty result would be an Order
+ * nobody can complete; `fixtures.test.ts` pins that no derivable Order is like
+ * that, rather than leaving it to be discovered mid-match.
  */
-export function allowedMethodsFor(constraint: PrivacyConstraint): readonly SubmissionMethod[] {
-  return ALL_SUBMISSION_METHODS.filter((method) => methodSatisfiesConstraint(method, constraint));
+export function allowedMethodsFor(
+  task: OrderTaskKind,
+  constraint: PrivacyConstraint,
+): readonly SubmissionMethod[] {
+  return METHODS_BY_TASK[task].filter((method) => methodSatisfiesConstraint(method, constraint));
 }

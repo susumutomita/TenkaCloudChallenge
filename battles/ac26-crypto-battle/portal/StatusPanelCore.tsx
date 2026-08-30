@@ -37,6 +37,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { describeTaskShort, ledgerKindLabel, ledgerPayload } from "./orderTask.ts";
 import type { CSSProperties } from "react";
 import type { PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 import { usePolledProjection } from "./coordination.ts";
@@ -358,7 +359,7 @@ function ContractQueueLane({
                   <td style={tdStyle}>{c.id}</td>
                   <td style={tdStyle}>{c.kind === "rush" ? copy.kindRush : copy.kindStandard}</td>
                   <td style={tdStyle}>{c.points}</td>
-                  <td style={tdStyle}>{c.requestedShareIndices.join(", ")}</td>
+                  <td style={tdStyle}>{describeTaskShort(c.task)}</td>
                   <td style={{ ...tdStyle, color: soon ? "#8a6d3b" : undefined }}>{formatDuration(remainingMs)}</td>
                 </tr>
               );
@@ -459,10 +460,13 @@ function LedgerLane({
                   {entry.teamId === myTeamId ? copy.you : ""}
                 </td>
                 <td style={tdStyle}>{entry.generation}</td>
-                <td style={tdStyle}>{entry.kind === "share" ? copy.kindShare : copy.kindProof}</td>
-                <td style={tdStyle}>
-                  {entry.kind === "share" ? `#${entry.shareIndex} = ${entry.value}` : `${entry.commitment} / ${entry.response}`}
-                </td>
+                {/*
+                  [Issue #645] Four artifact shapes now, one rendering. Labels
+                  and payloads live in orderTask.ts so the ledger cannot start
+                  disagreeing with the game board about what a row means.
+                */}
+                <td style={tdStyle}>{ledgerKindLabel(entry)}</td>
+                <td style={tdStyle}>{ledgerPayload(entry)}</td>
                 <td style={tdStyle}>{formatTimestamp(entry.postedAtMs)}</td>
               </tr>
             ))}

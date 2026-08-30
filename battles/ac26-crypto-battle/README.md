@@ -65,27 +65,145 @@ every reducer test at the same time as the model grows -- but nothing a
 participant reads says "Contract" any more: the word invited a CloudFormation /
 smart-contract reading that has nothing to do with this game.
 
-An Order carries a task (the share index it asks for), a deadline, a reward, a
-**privacy constraint**, and the **methods that satisfy it**:
+An Order carries a **task** (what it asks for, plus the public payload that
+needs), a deadline, a reward, a **privacy constraint**, and the **methods that
+satisfy both**.
+
+There are three tasks, and `tick()` rotates them deterministically on a
+four-Order cycle rather than rolling for them -- #645's learning progression
+only works if a participant actually meets an FHE Order and an MPC Order, and a
+probabilistic schedule can leave a short match with neither.
+
+| Task | What it asks | Methods that can serve it |
+| --- | --- | --- |
+| `reveal-share` | account for this share index | LEAK, PROVE |
+| `homomorphic-sum` | add these two ciphertexts without decrypting | FHE |
+| `masked-total` | publish your masked subtotal | MPC |
+
+The privacy constraint then narrows that set:
 
 | Constraint | Methods accepted | What the client is saying |
 | --- | --- | --- |
 | `none` | LEAK, PROVE | Handle it however you like. |
-| `no-raw-disclosure` | PROVE only | Do not publish the underlying value. |
+| `no-raw-disclosure` | PROVE / FHE / MPC, per task | Do not publish the underlying value. |
 
-Roughly one Order in four is `no-raw-disclosure`, derived from the match seed
-like every other Order property, so the mix is deterministic and replayable. The
+`allowedMethods` is "methods that can perform this task" ∩ "methods that satisfy
+this rule". The two-step is deliberate, because it changes what the game can
+tell a participant: "this Order does not accept LEAK" is a **rule**, and "LEAK
+cannot do this job" is a **fact**, and learning to tell those apart is the point
+of #645.
+
+Roughly one share Order in four is `no-raw-disclosure`, derived from the match
+seed like every other Order property, so the mix is deterministic and
+replayable. FHE and MPC Orders always carry it, and not as a policy choice:
+neither method has any way to publish the underlying value, so stating anything
+weaker would describe an Order that does not exist. The
 constraint is shown on the Order card **before** the method choice, and LEAK is
 disabled with a stated reason rather than hidden -- an Order that only revealed
 its rule by rejecting a submission would spend the participant's time to teach
 them something the card could have said.
 
 `game/src/methods.ts` is the registry the model is built on. `allowedMethods` is
-always derived from the constraint, never authored, so a method added later is
-offered on exactly the Orders it legitimately satisfies. Issue #645's later
-phases add FHE and MPC there; Phase 1 adds no new cryptography, on purpose --
-the point was to find out whether the abstraction is natural while the pieces
-underneath are still ones we can fully verify.
+always derived, never authored, so a method added later is offered on exactly
+the Orders it legitimately satisfies and excluded from the ones it does not.
+
+`order-mix.test.ts` measures the belt a real match issues rather than asserting
+the mix exists: every task kind appears, each within the first handful of
+Orders, every Order is fulfillable by at least one method, and both shapes that
+teach the contrast are present -- free-choice Orders where LEAK and PROVE are
+both reasonable, and constrained Orders where the rule leaves exactly one.
+
+## How FHE Orders work (Phase 2)
+
+`game/src/fhe.ts` is an additively homomorphic cipher over the same prime field
+the rest of the Battle uses. With a secret key `k`:
+
+```text
+Enc(m; r) = (r, m + k*r mod p)      r != 0
+Dec(r, y) = y - k*r mod p
+```
+
+Adding two ciphertexts componentwise gives an encryption of the sum of the
+plaintexts. That componentwise addition is the entire participant-facing
+operation, and it stays inside §12b's arithmetic (add, multiply, remainder).
+
+**What it hides.** Given `(r, y)` with `r != 0` and no knowledge of `k`, every
+candidate plaintext `m'` is consistent -- take `k' = (y - m') * r^-1`, which
+exists because `p` is prime and `r != 0`. The ciphertext therefore carries no
+information about the plaintext, information-theoretically rather than under a
+hardness assumption. `fhe.test.ts` executes that argument instead of asserting
+it.
+
+**One key per Order.** `deriveFheKey(seed, orderId, p)` binds the key to a
+single Order, so nothing a participant later learns about one Order unlocks
+another. (Reusing one key across Orders would unravel the moment a single
+plaintext became known: two known pairs solve for `k`.)
+
+**Why not a real FHE library.** #645's non-goals rule out competing on FHE/MPC
+library performance. What is in scope is computing on data you cannot read with
+the judge, not the participant, deciding whether the answer is right. A BFV/CKKS
+dependency would add megabytes, a noise-growth failure mode with nothing to
+teach at this level, and numbers no participant could check by hand. **This is
+not fully homomorphic** -- there is no ciphertext-ciphertext multiplication, and
+the participant-facing copy says "add without decrypting", never that FHE can do
+anything.
+
+**Why a participant cannot fake an answer.** The judge decrypts and compares
+against the hidden sum (#645's decrypt-and-compare requirement). Submitting
+`(0, v)` decrypts to `v`, so someone who KNEW the expected sum could forge one --
+and cannot, because the plaintexts are full field elements derived from the
+match seed, making the sum one value out of ~2^61. Any other route to a valid
+ciphertext needs the key.
+
+## How MPC Orders work (Phase 3)
+
+`game/src/mpc.ts` is masked secure summation. Three offices share a mask
+`m[i][j]` for each ordered pair, and each office publishes
+
+```text
+partial[j] = x[j] + SUM(masks received) - SUM(masks sent)   mod p
+```
+
+Every mask appears exactly twice -- added by one office, subtracted by another --
+so they cancel and the three partials sum to the total. The client learns the
+total; no office's number is ever published.
+
+A published partial is consistent with every possible input, because the masks
+are uniform and not public, so it carries no information about the input.
+`mpc.test.ts` executes that too.
+
+The team's confidential material (its number and its four masks) is derived by
+`projectForTeam` **only for the Order's owner** and is never stored, so it
+cannot appear on the Public Ledger or in another team's projection by
+construction rather than by remembering to redact it.
+
+Scope is summation only -- no Beaver triples. #645 lists Beaver as a candidate;
+addition is the vertical slice that carries the idea (compute on data nobody may
+see) with arithmetic a first-time participant can follow, and multiplication
+would need a new task payload but no change to the Order model.
+
+## The nonce-reuse HUNT (Phase 5)
+
+#645's rule for HUNT is that it punishes misuse, not correct use. The
+nonce-reuse HUNT is exactly that shape.
+
+Two of a team's proof transcripts in the same generation sharing a commitment
+`R` mean one nonce answered two challenges, which solves for the witness:
+
+```text
+z1 = k + e1*w,  z2 = k + e2*w   ->   w = (z1 - z2) / (e1 - e2)   mod q
+```
+
+The attacker derives it from the Public Ledger alone (`buildNonceReuseHuntOp`
+reads nothing else), and the judge checks `g^w == Y` against the target's public
+commitment.
+
+The prover this Battle ships **cannot** produce that: `schnorr-prover.ts` binds
+the nonce to the contract id. So a team using the provided tooling is not
+exposed -- and `validateOp` requires the reuse to be on the ledger before it
+accepts the hunt at all, so even an attacker who obtained a correct witness by
+other means cannot spend it against a team that did nothing wrong.
+`nonce-reuse.test.ts` pins both halves.
 
 ## How PROVE works
 

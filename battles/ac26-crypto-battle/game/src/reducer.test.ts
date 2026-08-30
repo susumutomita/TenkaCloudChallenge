@@ -41,7 +41,7 @@ function leakThreshold(stateIn: ReturnType<typeof initialState>, teamId: string)
           teamId,
           kind: "standard" as const,
           points: state.config.scores.contract,
-          requestedShareIndices: [shareIndex],
+          task: { kind: "reveal-share" as const, shareIndices: [shareIndex] },
           issuedAtMs: 0,
           expiresAtMs: state.config.contractTtlMs,
           status: "open" as const,
@@ -215,7 +215,9 @@ describe("leak", () => {
     const next = applyOp(state, "teamA", { kind: "leak", contractId: contract.id });
 
     expect(next.teams.teamA?.score).toBe(contract.points);
-    expect(next.publicLedger).toHaveLength(contract.requestedShareIndices.length);
+    expect(next.publicLedger).toHaveLength(
+      contract.task.kind === "reveal-share" ? contract.task.shareIndices.length : 0,
+    );
     const posted = next.publicLedger[0];
     if (!posted) throw new Error("expected a posted artifact");
     if (posted.kind !== "share") throw new Error("expected a share artifact");
@@ -461,7 +463,7 @@ describe("match end", () => {
       teamId: "teamA",
       kind: "standard" as const,
       points: state.config.scores.contract,
-      requestedShareIndices: [1],
+      task: { kind: "reveal-share" as const, shareIndices: [1] },
       issuedAtMs: state.nowMs ?? 0,
       expiresAtMs: (state.nowMs ?? 0) + state.config.contractTtlMs,
       status: "open" as const,

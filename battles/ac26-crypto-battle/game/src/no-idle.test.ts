@@ -1,6 +1,35 @@
 import { describe, expect, test } from "bun:test";
-import { applyOp, DEFAULT_CONFIG, initialState, tick } from "./reducer.ts";
-import type { CryptoBattleState } from "./types.ts";
+import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
+import { buildFheOp, buildLeakOp, buildMpcOp, buildProveOp } from "./playtest.ts";
+import type { Contract, CryptoBattleOp, CryptoBattleState } from "./types.ts";
+
+/**
+ * [Issue #645] Clear one Order by whichever method its task admits.
+ *
+ * This test is about the ISSUE CADENCE, not about any one method: the question
+ * is whether a team that clears its belt instantly is ever left waiting. Since
+ * the belt now carries share, encrypted-addition and masked-subtotal Orders,
+ * "clear it" has to mean "answer it correctly, whatever it asks", or the test
+ * would silently stop clearing two Orders in four and measure the wrong thing.
+ */
+function clearingOpFor(
+  state: CryptoBattleState,
+  teamId: string,
+  contract: Contract,
+): CryptoBattleOp | undefined {
+  const projected = projectForTeam(state, teamId).myContracts.find((c) => c.id === contract.id);
+  if (!projected) return undefined;
+  if (contract.task.kind === "reveal-share") {
+    // A share Order may still forbid raw disclosure, in which case PROVE is the
+    // only way to clear it. Ask the Order, rather than assuming LEAK.
+    return contract.allowedMethods.includes("leak")
+      ? buildLeakOp(contract.id)
+      : buildProveOp(projectForTeam(state, teamId).vault, contract.id);
+  }
+  return contract.task.kind === "homomorphic-sum"
+    ? buildFheOp(projected, state.config.prime)
+    : buildMpcOp(projected, state.config.prime);
+}
 
 /**
  * Issue #486 Gate 2 / Definition of Done: "90 分本戦で idle を発生させない
@@ -46,7 +75,11 @@ function walkMatch(clearImmediately: boolean) {
     samples.push({ atMs, open: openContractsFor(state, "teamA").length, phase: state.phase });
     if (clearImmediately) {
       for (const contract of openContractsFor(state, "teamA")) {
-        state = applyOp(state, "teamA", { kind: "leak", contractId: contract.id });
+        const op = clearingOpFor(state, "teamA", contract);
+        if (!op) continue;
+        const verdict = validateOp(state, "teamA", op);
+        if (!verdict.ok) throw new Error(`clearing op rejected: ${verdict.error}`);
+        state = applyOp(state, "teamA", op);
       }
     }
   }
