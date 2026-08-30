@@ -195,5 +195,6 @@ aws cloudformation delete-stack --stack-name <stack-name>
 - [`metadata.json`](./metadata.json) — 問題メタデータ、 scoring、 phase、 disruption
 - [`template.yaml`](./template.yaml) — stack-owned AWS resources と app bootstrap
 - [`portal/StatusPanel.tsx`](./portal/StatusPanel.tsx) — dashboard plugin
+- [`dev/`](./dev/) — StatusPanel の5状態を実コンポーネントで確認するローカルUIハーネス
 - [`OPERATOR.md`](./OPERATOR.md) — operator runbook
 - [`redteam/`](./redteam/) — disruption catalog と smoke test

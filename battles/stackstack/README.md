@@ -196,5 +196,6 @@ No extra cleanup pass is required.
 - [`metadata.json`](./metadata.json) — problem metadata, scoring, phases, disruptions
 - [`template.yaml`](./template.yaml) — stack-owned AWS resources and app bootstrap
 - [`portal/StatusPanel.tsx`](./portal/StatusPanel.tsx) — dashboard plugin
+- [`dev/`](./dev/) — local UI harness for the real StatusPanel's five states
 - [`OPERATOR.md`](./OPERATOR.md) — operator runbook
 - [`redteam/`](./redteam/) — disruption catalog and smoke test

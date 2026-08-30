@@ -17,11 +17,11 @@ export * from "./HelpDrawerCore.tsx";
 
 const COPY = {
   en: {
-    title: "Start here",
+    title: "Practice and help",
     fullReference: "Open the complete rules, prerequisites, and PROVE / HUNT computation",
   },
   ja: {
-    title: "まずここから",
+    title: "練習とヘルプ",
     fullReference: "完全なルール、前提問題、PROVE / HUNT の計算方法を開く",
   },
 } as const;

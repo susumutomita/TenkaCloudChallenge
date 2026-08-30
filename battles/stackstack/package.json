@@ -1,0 +1,21 @@
+{
+  "name": "tenkacloud-stackstack-dev",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Local browser harness for StackStack's real Portal StatusPanel. It supplies team-scoped sample PortalSlotProps only; it does not emulate AWS, scoring, authentication, or tenant isolation.",
+  "scripts": {
+    "dev": "bun run dev/server.ts",
+    "test": "bun test dev/harness.test.tsx",
+    "typecheck": "tsc --noEmit -p dev/tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.11",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "react": "^19",
+    "react-dom": "^19",
+    "typescript": "5.9.3"
+  },
+  "trustedDependencies": []
+}

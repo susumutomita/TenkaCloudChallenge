@@ -6,6 +6,19 @@ StackStack is now an orphan-safe "Vibe to Production" battle. All top-level reso
 
 ## Before the event
 
+For a fast UI regression check before any AWS work:
+
+```bash
+cd battles/stackstack
+bun install --frozen-lockfile
+bun test
+bun run typecheck
+bun run dev                 # http://localhost:5655
+```
+
+This renders the real StatusPanel with isolated sample snapshots. It does not
+replace a team-scoped Portal or deployed scoring check.
+
 ### Smoke test on a single team stack
 
 Deploy a throwaway team stack, then collect outputs:

@@ -99,36 +99,44 @@ const INTEGRITY = [
 
 const COPY = {
   en: {
-    title: "StackStack — Production Readiness",
-    body: "Register your service URL, then work down the checks below — they are measured automatically. You reach the production bonus only when every check is OK and the board stays intact.",
+    title: "StackStack — Your next step",
+    body: "This panel shows one thing to do next. After each change, run vibe-status and check here again.",
     serviceUrl: "Service URL",
     notRegistered: "not registered yet",
     nextAction: "Next step",
-    probePending: "Measuring… check back in a moment.",
+    registerFirst: "Copy AppUrlHint from the Stack outputs into the app URL field above. Automatic measurement starts after registration.",
+    probePending: "URL registered. Make sure the app is running, then wait a moment for the first measurement.",
     complete: "Production readiness is complete.",
-    gates: "Production checks",
-    integrity: "Security checks",
+    progress: (done: number) => `${done} of 6 production checks complete`,
+    gates: "All 6 production checks",
+    integrity: "Keep the board safe",
     done: "OK",
     todo: "to do",
     unknown: "measuring",
+    later: "What will be checked",
+    healthy: "All 3 safety checks are OK.",
     phases: "Schedule",
-    disruptions: "Incidents the operator can trigger",
+    disruptions: "Possible incidents",
   },
   ja: {
-    title: "StackStack — 本番化ステータス",
-    body: "自分のサービスの URL を登録したら、下のチェック項目を一つずつ満たしていきます (状態は自動で測定されます)。 すべての項目が OK になり、 掲示板が正常なときだけ本番化ボーナスに到達します。",
+    title: "StackStack — 次にやること",
+    body: "いま直す1項目だけを案内します。変更するたびに vibe-status を実行し、この画面をもう一度確認します。",
     serviceUrl: "サービス URL",
     notRegistered: "未登録",
     nextAction: "次の一手",
-    probePending: "測定中… 少し待ってから見てください。",
+    registerFirst: "Stack の出力にある AppUrlHint を、上の app URL 欄へ登録してください。登録すると自動測定が始まります。",
+    probePending: "URL は登録できました。アプリが起動していることを確認し、最初の測定を少し待ちます。",
     complete: "本番化は完了しています。",
-    gates: "本番化チェック",
-    integrity: "セキュリティチェック",
+    progress: (done: number) => `本番化チェック 6個中 ${done}個 完了`,
+    gates: "6個の本番化チェック",
+    integrity: "掲示板を安全に保つ",
     done: "OK",
     todo: "未達",
     unknown: "測定中",
+    later: "これから確認される項目",
+    healthy: "安全チェック3個はすべて OK です。",
     phases: "スケジュール",
-    disruptions: "運営が起こす障害",
+    disruptions: "起こる可能性がある障害",
   },
 } as const;
 
@@ -138,7 +146,13 @@ export default function StatusPanel(props: PortalSlotProps) {
   const copy = COPY[locale];
   const app = endpoints.find((ep) => ep.slot === "app");
   const serviceUrl = app?.effectiveUrl || app?.overrideUrl || "";
-  const next = [...GATES, ...INTEGRITY].find((check) => posture?.[check.key] === false);
+  // An incident that damages the live board outranks unfinished hardening.
+  // Otherwise, move through the six production checks in their documented order.
+  const next = INTEGRITY.find((check) => posture?.[check.key] === false)
+    ?? GATES.find((check) => posture?.[check.key] === false);
+  const doneCount = GATES.filter((check) => posture?.[check.key] === true).length;
+  const integrityFailures = INTEGRITY.filter((check) => posture?.[check.key] === false);
+  const hasMeasurement = posture !== undefined;
 
   return (
     <section
@@ -174,23 +188,27 @@ export default function StatusPanel(props: PortalSlotProps) {
       <div
         style={{
           marginBottom: "16px",
-          border: "1px solid #d5dbdb",
-          borderRadius: "6px",
-          padding: "10px",
-          background: "#fff",
+          border: `2px solid ${next && hasMeasurement ? "#0972d3" : "#d5dbdb"}`,
+          borderRadius: "8px",
+          padding: "12px",
+          background: next && hasMeasurement ? "#f1f8ff" : "#fff",
         }}
       >
         <div style={{ fontWeight: 600, marginBottom: "4px" }}>{copy.nextAction}</div>
         <div style={{ color: "#414d5c", fontSize: "13px" }}>
-          {!posture
-            ? copy.probePending
+          {!serviceUrl
+            ? copy.registerFirst
+            : !posture
+              ? copy.probePending
             : next
               ? `${text(next.label, locale)} — ${text(next.hint, locale)}`
               : copy.complete}
         </div>
       </div>
 
+      {hasMeasurement && (
       <div style={{ marginBottom: "16px" }}>
+        <div style={{ fontWeight: 700, fontSize: "13px", marginBottom: "8px" }}>{copy.progress(doneCount)}</div>
         <h4 style={{ margin: "0 0 8px 0", fontSize: "13px", color: "#414d5c" }}>{copy.gates}</h4>
         <div
           style={{
@@ -206,15 +224,21 @@ export default function StatusPanel(props: PortalSlotProps) {
               copy={copy}
               locale={locale}
               posture={posture}
+              showHint={gate.key === next?.key}
             />
           ))}
         </div>
       </div>
+      )}
 
+      {hasMeasurement && (
       <div style={{ marginBottom: "16px" }}>
         <h4 style={{ margin: "0 0 8px 0", fontSize: "13px", color: "#414d5c" }}>
           {copy.integrity}
         </h4>
+        {integrityFailures.length === 0 && (
+          <p style={{ margin: "0 0 8px", color: "#1a7f37", fontSize: "13px" }}>{copy.healthy}</p>
+        )}
         <div
           style={{
             display: "grid",
@@ -230,10 +254,23 @@ export default function StatusPanel(props: PortalSlotProps) {
               locale={locale}
               posture={posture}
               warning
+              showHint={check.key === next?.key}
             />
           ))}
         </div>
       </div>
+      )}
+
+      {!hasMeasurement && (
+        <details style={{ marginBottom: "16px" }}>
+          <summary style={{ cursor: "pointer", fontSize: "13px", fontWeight: 600 }}>{copy.later}</summary>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(145px, 1fr))", gap: "8px", marginTop: "8px" }}>
+            {[...GATES, ...INTEGRITY].map((check) => (
+              <PostureCard key={check.key} check={check} copy={copy} locale={locale} posture={undefined} />
+            ))}
+          </div>
+        </details>
+      )}
 
       {phases.length > 0 && (
         <div style={{ marginBottom: "12px" }}>
@@ -275,12 +312,14 @@ function PostureCard({
   locale,
   posture,
   warning = false,
+  showHint = false,
 }: {
   check: { key: string; label: LocalizedText; hint: LocalizedText };
-  copy: (typeof COPY)["en"];
+  copy: (typeof COPY)[keyof typeof COPY];
   locale: keyof typeof COPY;
   posture: Readonly<Record<string, boolean>> | undefined;
   warning?: boolean;
+  showHint?: boolean;
 }) {
   const state = posture?.[check.key];
   const status = state === true ? copy.done : state === false ? copy.todo : copy.unknown;
@@ -303,7 +342,7 @@ function PostureCard({
         <div style={{ fontWeight: 600, marginBottom: "4px" }}>{text(check.label, locale)}</div>
         <div style={{ color: statusColor, fontSize: "12px", fontWeight: 700 }}>{status}</div>
       </div>
-      <div style={{ color: "#5f6b7a", fontSize: "12px" }}>{text(check.hint, locale)}</div>
+      {showHint && <div style={{ color: "#414d5c", fontSize: "12px" }}>{text(check.hint, locale)}</div>}
     </div>
   );
 }

@@ -76,6 +76,8 @@ const COPY = {
     recoveredKey: "recovered key",
     huntNonceSuccess: "HUNT SUCCESS",
     huntNonceBody: "Recovered key accepted — nonce reuse punished.",
+    tactics: "NEXT TACTIC FROM THE PUBLIC RECORD",
+    tacticsHint: "Open this when a public share, proof, or one of your exposed shares gives you another move.",
   },
   ja: {
     title: "MAKE A MOVE",
@@ -138,6 +140,8 @@ const COPY = {
     recoveredKey: "復元した鍵",
     huntNonceSuccess: "HUNT SUCCESS",
     huntNonceBody: "復元した鍵が受理されました — nonce の使い回しを突きました。",
+    tactics: "公開記録からできる次の作戦",
+    tacticsHint: "公開された share・proof、または自分の公開済み share があるときに開きます。",
   },
 } as const;
 
@@ -179,6 +183,34 @@ function ledgerTargets(projection: CryptoBattleProjection | null) {
     }
   }
   return targets;
+}
+
+function ownExposedShareCount(projection: CryptoBattleProjection | null): number {
+  if (!projection) return 0;
+  const indices = new Set<number>();
+  for (const entry of projection.publicLedger) {
+    if (
+      entry.kind === "share" &&
+      entry.teamId === projection.vault.teamId &&
+      entry.generation === projection.vault.generation
+    ) {
+      indices.add(entry.shareIndex);
+    }
+  }
+  return indices.size;
+}
+
+/** The advanced controls that have relevant public material right now. */
+export function tacticAvailability(projection: CryptoBattleProjection | null): {
+  readonly hunt: boolean;
+  readonly nonceHunt: boolean;
+  readonly rotate: boolean;
+} {
+  return {
+    hunt: ledgerTargets(projection).length > 0,
+    nonceHunt: nonceHuntCandidates(projection).length > 0,
+    rotate: ownExposedShareCount(projection) > 0,
+  };
 }
 
 /**
@@ -242,6 +274,7 @@ const CSS = `
 .tc-input-panel{border:1px solid #cfd8e3;border-radius:9px;padding:9px;background:#fff;display:grid;gap:6px}
 .tc-input-panel input,.tc-input-panel select{padding:8px;border:1px solid #aab7c4;border-radius:6px;font-size:12px;min-width:0}
 .tc-secondary-grid{display:grid;grid-template-columns:1.3fr .7fr;gap:10px}
+.tc-tactics{border:1px solid #cfd8e3;border-radius:10px;background:#eef3f8}.tc-tactics>summary{cursor:pointer;padding:10px 12px;font-size:12px;font-weight:900}.tc-tactics>summary span{display:block;margin-top:3px;color:#5f6b7a;font-size:11px;font-weight:500}.tc-tactics-body{display:grid;gap:10px;padding:0 10px 10px}
 .tc-hunt-card,.tc-rotate-card{border:1px solid #cfd8e3;border-radius:10px;padding:10px;background:#fff}
 .tc-card-title{font-size:12px;font-weight:900;letter-spacing:.07em}.tc-card-hint{font-size:11px;color:#5f6b7a;margin:3px 0 8px}
 .tc-target-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:7px}
@@ -292,6 +325,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
   const targets = useMemo(() => ledgerTargets(projection), [projection]);
   const selectedTarget = targets.find((target) => `${target.teamId}:${target.generation}` === huntTargetKey) ?? targets[0];
   const nonceTargets = useMemo(() => nonceHuntCandidates(projection), [projection]);
+  const tactics = useMemo(() => tacticAvailability(projection), [projection]);
   const selectedNonceTarget =
     nonceTargets.find((t) => `${t.teamId}:${t.generation}` === nonceTargetKey) ?? nonceTargets[0];
 
@@ -485,12 +519,15 @@ export default function FastMovePanel(props: PortalSlotProps) {
         </div>
       )}
 
-      <div className="tc-secondary-grid">
+      {(tactics.hunt || tactics.nonceHunt || tactics.rotate) && (
+      <details className="tc-tactics">
+        <summary>{copy.tactics}<span>{copy.tacticsHint}</span></summary>
+        <div className="tc-tactics-body">
+      {tactics.hunt && <div className="tc-secondary-grid">
         <div className="tc-hunt-card">
           <div className="tc-card-title">{copy.hunt}</div>
           <div className="tc-card-hint">{copy.huntHint}</div>
-          {targets.length === 0 ? <div className="tc-card-hint">{copy.noHuntTarget}</div> : (
-            <>
+          <>
               <div className="tc-target-row">
                 {targets.map((target) => {
                   const key = `${target.teamId}:${target.generation}`;
@@ -509,20 +546,19 @@ export default function FastMovePanel(props: PortalSlotProps) {
                   )}
                 >{submitting ? copy.running : copy.send}</button>
               </div>
-            </>
-          )}
+          </>
         </div>
+      </div>}
 
         {/*
           [Issue #645 Phase 5] Without this the `hunt-nonce` op had no
           participant-facing sender at all: the reducer accepted it, the README
           advertised it, and nothing in the Portal could produce one.
         */}
-        <div className="tc-hunt-card">
+        {tactics.nonceHunt && <div className="tc-hunt-card">
           <div className="tc-card-title">{copy.huntNonce}</div>
           <div className="tc-card-hint">{copy.huntNonceHint}</div>
-          {nonceTargets.length === 0 ? <div className="tc-card-hint">{copy.noNonceTarget}</div> : (
-            <>
+          <>
               <div className="tc-target-row">
                 {nonceTargets.map((target) => {
                   const key = `${target.teamId}:${target.generation}`;
@@ -549,11 +585,10 @@ export default function FastMovePanel(props: PortalSlotProps) {
                   )}
                 >{submitting ? copy.running : copy.send}</button>
               </div>
-            </>
-          )}
-        </div>
+          </>
+        </div>}
 
-        <div className="tc-rotate-card">
+        {tactics.rotate && <div className="tc-rotate-card">
           <div className="tc-card-title">{copy.rotate}</div>
           <div className="tc-card-hint">{copy.rotateHint}</div>
           <button
@@ -568,8 +603,10 @@ export default function FastMovePanel(props: PortalSlotProps) {
               );
             }}
           >{projection.vault.rotateCooldownRemainingMs > 0 ? `${Math.ceil(projection.vault.rotateCooldownRemainingMs / 1000)}s` : copy.rotate}</button>
+        </div>}
         </div>
-      </div>
+      </details>
+      )}
 
       {feedback && <div className={`tc-feedback tc-feedback-${feedback.kind}`}><strong>{feedback.title}</strong><span>{feedback.body}</span></div>}
     </section>
