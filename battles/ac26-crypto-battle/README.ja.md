@@ -49,6 +49,33 @@ Contract が届き続けます。share を公開する・相手の隙を突く�
   現行世代のしきい値を超えて share を晒していないか監視してください。
   PROVE のエントリには、secret の復元に使える情報は一切含まれません。
 
+## Order とその条件
+
+参加者向けの表記では、依頼を **Order** と呼びます（Issue #645）。内部の
+TypeScript 型は `Contract` のままです — モデルを広げるのと同時に全 reducer test を
+書き換えないための意図的な判断です。ただし参加者が読む文面に "Contract" は残って
+いません。この語は CloudFormation や smart contract を連想させ、このゲームとは
+無関係だからです。
+
+Order は、依頼内容（要求する share index）、期限、報酬、**privacy constraint**、
+そして **その条件を満たす method** を持ちます。
+
+| 条件 | 受け付ける method | 依頼主が言っていること |
+| --- | --- | --- |
+| `none` | LEAK / PROVE | 方法は任せる。 |
+| `no-raw-disclosure` | PROVE のみ | 生の値は公開しないでほしい。 |
+
+`no-raw-disclosure` はおよそ 4 件に 1 件で、他の Order 属性と同じく match seed から
+導出されます（= 決定的、replay 可能）。条件は method を選ぶ**前**に Order カードへ
+表示され、LEAK は非表示ではなく理由付きで無効化されます。提出して初めて条件を知る
+UI は、カードに書けたことを参加者の時間を使って教えることになるためです。
+
+モデルの土台は `game/src/methods.ts` です。`allowedMethods` は常に条件から導出し、
+手書きしません。後から追加した method が、満たせる Order にだけ自動的に現れ、
+満たせない Order からは自動的に外れるようにするためです。#645 の後続フェーズで
+FHE / MPC がここに加わります。Phase 1 で新しい暗号方式を足していないのは意図的で、
+土台の部品を完全に検証できるうちに抽象化が自然かどうかを確かめるためです。
+
 ## PROVE の実際の手順
 
 PROVE は LEAK の代替となる雰囲気だけの手段ではなく、実際の暗号プロトコル

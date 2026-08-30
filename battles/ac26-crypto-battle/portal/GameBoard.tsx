@@ -60,12 +60,22 @@ function formatDuration(ms: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+/**
+ * [Issue #645] Group the Public Ledger by team and generation, splitting by the
+ * artifact's METHOD rather than its `kind`.
+ *
+ * The two agree today, and deliberately are not read as if they always will:
+ * `kind` describes an artifact's SHAPE, `method` how it was produced. Phase 2's
+ * FHE ciphertext is a third shape, and the ledger's job -- #645's requirement --
+ * is to show which method each team used. Switching on `method` here means that
+ * lands as a new arm rather than as a rewrite of this function's meaning.
+ */
 function groupLedger(ledger: readonly PublicArtifact[]) {
   const groups = new Map<string, { teamId: string; generation: number; shares: ShareArtifact[]; proofs: number }>();
   for (const entry of ledger) {
     const key = `${entry.teamId}:${entry.generation}`;
     const current = groups.get(key) ?? { teamId: entry.teamId, generation: entry.generation, shares: [], proofs: 0 };
-    if (entry.kind === "share") current.shares.push(entry);
+    if (entry.method === "leak" && entry.kind === "share") current.shares.push(entry);
     else current.proofs += 1;
     groups.set(key, current);
   }

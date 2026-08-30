@@ -24,6 +24,9 @@ const COPY = {
     prove: "PROVE",
     proveHint: "COMPUTE / PROTECTED",
     proveOpen: "Enter proof",
+    constraintNone: "any method",
+    constraintNoRaw: "PROVE only — the raw value must not be published",
+    methodBlocked: "This Order does not accept LEAK.",
     commitment: "commitment",
     response: "response",
     hunt: "HUNT FROM LEDGER",
@@ -56,6 +59,9 @@ const COPY = {
     prove: "PROVE",
     proveHint: "計算 / 守る",
     proveOpen: "proof を入力",
+    constraintNone: "方法は自由",
+    constraintNoRaw: "PROVE のみ — 生の値を公開してはいけない",
+    methodBlocked: "この Order は LEAK を受け付けません。",
     commitment: "commitment",
     response: "response",
     hunt: "LEDGER から HUNT",
@@ -127,6 +133,9 @@ const CSS = `
 .tc-order-pick{min-width:150px;border:1px solid #b6c2cf;border-radius:9px;padding:8px;background:#fff;cursor:pointer;text-align:left}
 .tc-order-pick[aria-pressed="true"]{border:2px solid #0972d3;background:#f1f8ff;padding:7px}
 .tc-order-pick strong,.tc-order-pick span{display:block}.tc-order-pick span{font-size:11px;color:#5f6b7a;margin-top:2px}
+.tc-order-rule{font-size:10px;letter-spacing:.02em}
+.tc-order-rule-strict{color:#7c4a03;font-weight:600}
+.tc-action:disabled{opacity:.45;cursor:not-allowed}
 .tc-primary-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .tc-action{border:0;border-radius:12px;padding:16px 12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;font-weight:900;font-size:18px}
 .tc-action small{font-size:10px;font-weight:800;letter-spacing:.06em}
@@ -171,6 +180,10 @@ export default function FastMovePanel(props: PortalSlotProps) {
 
   const orders = useMemo(() => openOrders(projection), [projection]);
   const selectedOrder = orders.find((order) => order.id === selectedOrderId) ?? orders[0];
+  // [Issue #645] Read from the Order, never re-derived here: the game rules
+  // decide which methods an Order accepts, and a portal that recomputed them
+  // would be a second implementation free to disagree with the judge.
+  const leakAllowed = selectedOrder?.allowedMethods.includes("leak") ?? false;
   const targets = useMemo(() => ledgerTargets(projection), [projection]);
   const selectedTarget = targets.find((target) => `${target.teamId}:${target.generation}` === huntTargetKey) ?? targets[0];
 
@@ -216,6 +229,17 @@ export default function FastMovePanel(props: PortalSlotProps) {
                 <strong>{order.id.replace(/^.*-c/, "ORDER #")}</strong>
                 <span>+{order.points} · {Math.ceil(order.remainingMs / 1000)}s</span>
                 <span>share [{order.requestedShareIndices.join(", ")}]</span>
+                {/*
+                  [Issue #645] The Order's rule sits ON THE CARD, before the
+                  method choice, so a participant reads the constraint while
+                  picking rather than discovering it from a rejection. The card
+                  states the RULE, not just the permitted method: a reader told
+                  only "PROVE only" learns this Order; one told the raw value
+                  must not be published learns something they can carry.
+                */}
+                <span className={order.privacyConstraint === "none" ? "tc-order-rule" : "tc-order-rule tc-order-rule-strict"}>
+                  {order.privacyConstraint === "none" ? copy.constraintNone : copy.constraintNoRaw}
+                </span>
               </button>
             ))}
           </div>
@@ -225,10 +249,18 @@ export default function FastMovePanel(props: PortalSlotProps) {
       <div>
         <div className="tc-card-title">{copy.choose}</div>
         <div className="tc-primary-actions">
+          {/*
+            [Issue #645] LEAK is disabled, not hidden, on an Order that forbids
+            raw disclosure -- and the reason is spelled out below. Hiding it
+            would leave the participant wondering where the option went; showing
+            it live and rejecting the submission would spend their time to teach
+            them a rule the card already stated.
+          */}
           <button
             type="button"
             className="tc-action tc-leak-button"
-            disabled={!selectedOrder || submitting}
+            disabled={!selectedOrder || submitting || !leakAllowed}
+            title={selectedOrder && !leakAllowed ? copy.methodBlocked : undefined}
             onClick={() => selectedOrder && void run(
               () => submitLeak(client, selectedOrder.id),
               () => ({ kind: "leak", title: copy.leakSuccess, body: copy.leakBody(selectedOrder.points, selectedOrder.requestedShareIndices) }),
@@ -240,6 +272,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             {copy.prove}<small>{copy.proveHint}</small>
           </button>
         </div>
+        {selectedOrder && !leakAllowed && <div className="tc-card-hint">{copy.methodBlocked}</div>}
       </div>
 
       {proveOpen && selectedOrder && (

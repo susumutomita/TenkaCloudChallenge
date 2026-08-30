@@ -330,6 +330,8 @@ describe("prove: Scoring MUST -- PROVE pays the same as LEAK for an equal-value 
       issuedAtMs: state.nowMs ?? 0,
       expiresAtMs: (state.nowMs ?? 0) + state.config.contractTtlMs,
       status: "open" as const,
+      privacyConstraint: "none" as const,
+      allowedMethods: ["leak", "prove"] as const,
     };
     state = { ...state, contracts: [...state.contracts, proveContract] };
 
@@ -363,6 +365,8 @@ describe("prove: match end", () => {
       issuedAtMs: state.nowMs ?? 0,
       expiresAtMs: (state.nowMs ?? 0) + state.config.contractTtlMs,
       status: "open" as const,
+      privacyConstraint: "none" as const,
+      allowedMethods: ["leak", "prove"] as const,
     };
     const proof = createProof(BigInt(team.secret), team.generation, "teamA", stillOpenContract.id);
     state = { ...state, contracts: [...state.contracts, stillOpenContract] };

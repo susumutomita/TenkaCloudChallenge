@@ -53,6 +53,7 @@
  */
 
 import { deriveContractPlan, deriveTeamGeneration, type FieldConfig } from "./fixtures.ts";
+import { allowedMethodsFor, type SubmissionMethod } from "./methods.ts";
 import { mod, P } from "./field.ts";
 import { RFC3526_GROUP14 } from "./group.ts";
 import { derivePublicCommitment } from "./schnorr-witness.ts";
@@ -205,6 +206,11 @@ export function tick(state: CryptoBattleState, eventNowMs: number): CryptoBattle
         issuedAtMs: nextContractAtMs,
         expiresAtMs: nextContractAtMs + ttlMs,
         status: "open",
+        // [Issue #645] The Order states its rule, and the method list follows
+        // from it -- never the other way round, so a method added in a later
+        // phase is offered on exactly the Orders it legitimately satisfies.
+        privacyConstraint: plan.privacyConstraint,
+        allowedMethods: allowedMethodsFor(plan.privacyConstraint),
       });
       issuedCountByTeam.set(teamId, sequenceIndex + 1);
     }
@@ -232,6 +238,45 @@ function huntKey(attackerTeamId: string, targetTeamId: string, generation: numbe
   return JSON.stringify([attackerTeamId, targetTeamId, generation]);
 }
 
+/**
+ * [Issue #645] The Order gate every submission method passes through.
+ *
+ * Whether a submission is even eligible is a property of the ORDER -- who it
+ * was issued to, whether it is still open, and which methods its client
+ * accepts. Only what counts as a valid artifact is a property of the METHOD.
+ * Splitting them here is what makes a new method (Phase 2's FHE, Phase 3's MPC)
+ * an addition rather than an edit: it writes its own trusted check and inherits
+ * ownership, the deadline, and the privacy rule unchanged.
+ *
+ * The `allowedMethods` check is the one genuinely new rule. An Order carrying
+ * `no-raw-disclosure` is #645's Level-1 "technique-specified" Order: the client
+ * will not accept the underlying value being published, so LEAK is refused --
+ * with the constraint named, because a participant who is told only "not
+ * allowed" learns nothing they can carry to the next Order.
+ */
+function validateOrderSubmission(
+  state: CryptoBattleState,
+  teamId: string,
+  contractId: string,
+  method: SubmissionMethod,
+): ValidateResult {
+  const contract = state.contracts.find((c) => c.id === contractId);
+  if (!contract) return { ok: false, error: `contract "${contractId}" not found` };
+  if (contract.teamId !== teamId) {
+    return { ok: false, error: `contract "${contractId}" belongs to another team` };
+  }
+  if (contract.status !== "open") {
+    return { ok: false, error: `contract "${contractId}" is ${contract.status}, not open` };
+  }
+  if (!contract.allowedMethods.includes(method)) {
+    return {
+      ok: false,
+      error: `contract "${contractId}" has privacy constraint "${contract.privacyConstraint}", which ${method.toUpperCase()} does not satisfy (allowed: ${contract.allowedMethods.join(", ").toUpperCase()})`,
+    };
+  }
+  return { ok: true };
+}
+
 export function validateOp(state: CryptoBattleState, teamId: string, op: CryptoBattleOp): ValidateResult {
   const team = state.teams[teamId];
   if (!team) return { ok: false, error: `unknown team "${teamId}"` };
@@ -244,17 +289,13 @@ export function validateOp(state: CryptoBattleState, teamId: string, op: CryptoB
   }
 
   switch (op.kind) {
-    case "leak": {
-      const contract = state.contracts.find((c) => c.id === op.contractId);
-      if (!contract) return { ok: false, error: `contract "${op.contractId}" not found` };
-      if (contract.teamId !== teamId) {
-        return { ok: false, error: `contract "${op.contractId}" belongs to another team` };
-      }
-      if (contract.status !== "open") {
-        return { ok: false, error: `contract "${op.contractId}" is ${contract.status}, not open` };
-      }
-      return { ok: true };
-    }
+    case "leak":
+      // [Issue #645] LEAK's trusted check is exactly the Order gate: the team
+      // owns the Order, it is still open, and it permits publishing the raw
+      // share. There is no artifact to verify -- the reducer reads the share
+      // from the team's own vault in applyLeak, so a participant cannot submit
+      // a value at all, let alone a wrong one.
+      return validateOrderSubmission(state, teamId, op.contractId, "leak");
     case "hunt": {
       // Same gap "rotate" below already had fixed (Issue #486 PR1 review):
       // before the first tick(), state.nowMs is undefined. Unlike rotate's
@@ -323,17 +364,13 @@ export function validateOp(state: CryptoBattleState, teamId: string, op: CryptoB
       return { ok: true };
     }
     case "prove": {
-      // Same "own open contract" precondition as leak -- PROVE is a second
-      // way to complete a Contract, not a different queue of things to
-      // complete.
-      const contract = state.contracts.find((c) => c.id === op.contractId);
-      if (!contract) return { ok: false, error: `contract "${op.contractId}" not found` };
-      if (contract.teamId !== teamId) {
-        return { ok: false, error: `contract "${op.contractId}" belongs to another team` };
-      }
-      if (contract.status !== "open") {
-        return { ok: false, error: `contract "${op.contractId}" is ${contract.status}, not open` };
-      }
+      // [Issue #645] Same Order gate as every other method -- PROVE is a second
+      // way to fulfil an Order, not a different queue of things to fulfil --
+      // followed by PROVE's own trusted check. The gate runs FIRST: an Order
+      // that is expired or belongs to another team must be rejected as such,
+      // not after spending a 2048-bit verification on it.
+      const gate = validateOrderSubmission(state, teamId, op.contractId, "prove");
+      if (!gate.ok) return gate;
       const publicCommitmentY = state.publicCommitments[teamId];
       if (publicCommitmentY === undefined) {
         // Cannot happen for a known team -- initialState/applyRotate always
@@ -383,6 +420,7 @@ function applyLeak(
       teamId,
       generation: team.generation,
       kind: "share",
+      method: "leak",
       shareIndex,
       // `shareEntry.value` is already a stringified bigint (`StoredShare`,
       // see types.ts) -- no `.toString()` needed to reach the ledger's own
@@ -522,6 +560,7 @@ function applyProve(
     teamId,
     generation: team.generation,
     kind: "proof",
+    method: "prove",
     contractId: contract.id,
     commitment: BigInt(op.proof.commitment).toString(),
     response: BigInt(op.proof.response).toString(),
@@ -603,6 +642,12 @@ export function projectForTeam(state: CryptoBattleState, teamId: string): Crypto
       points: c.points,
       requestedShareIndices: c.requestedShareIndices,
       status: c.status,
+      // [Issue #645] The Order's rule and the methods that satisfy it are
+      // participant-visible by design: an Order the participant cannot LEAK
+      // must say so BEFORE they choose, not by rejecting their submission.
+      // Both are public properties of the job, not of anyone's secret.
+      privacyConstraint: c.privacyConstraint,
+      allowedMethods: c.allowedMethods,
       // `state.nowMs` is only ever undefined before the first `tick()`, and
       // `state.contracts` is only ever non-empty AFTER at least one `tick()`
       // (`initialState` sets `contracts: []`; only `tick()` ever pushes to

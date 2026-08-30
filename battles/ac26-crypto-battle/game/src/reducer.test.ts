@@ -1,7 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { reconstruct } from "./shamir.ts";
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
-import type { CryptoBattleOp, PublicArtifact, ShareArtifact } from "./types.ts";
+import type {
+  Contract,
+  CryptoBattleOp,
+  CryptoBattleState,
+  PublicArtifact,
+  ShareArtifact,
+} from "./types.ts";
 
 /** Type-narrowing predicate: `PublicArtifact` is a `ShareArtifact | ProofArtifact` union since PR2 (PROVE artifacts). */
 function isShareArtifact(a: PublicArtifact): a is ShareArtifact {
@@ -39,6 +45,8 @@ function leakThreshold(stateIn: ReturnType<typeof initialState>, teamId: string)
           issuedAtMs: 0,
           expiresAtMs: state.config.contractTtlMs,
           status: "open" as const,
+          privacyConstraint: "none" as const,
+          allowedMethods: ["leak", "prove"] as const,
         },
       ],
     };
@@ -136,21 +144,74 @@ describe("tick: contract issuance and expiry", () => {
   });
 });
 
+/**
+ * [Issue #645] Tick forward until `teamId` has an open Order matching `want`,
+ * and return that state together with the Order.
+ *
+ * Which Orders forbid raw disclosure is derived from the seed, so "teamA's
+ * first Order" is no longer interchangeable with "an Order teamA may LEAK" --
+ * and how many ticks it takes to see one of each is a property of the seed, not
+ * something a test should hard-code. Tests say which Order they need; this
+ * plays the match until one is issued, and fails loudly rather than silently
+ * testing whatever happened to be there.
+ */
+function orderMatching(
+  want: (contract: Contract) => boolean,
+  teamId = "teamA",
+): { state: CryptoBattleState; order: Contract } {
+  let state = tick(initialState(CTX), 0);
+  for (let issued = 0; issued < 20; issued += 1) {
+    const order = state.contracts.find(
+      (c) => c.teamId === teamId && c.status === "open" && want(c),
+    );
+    if (order) return { state, order };
+    state = tick(state, (issued + 1) * DEFAULT_CONFIG.contractIntervalMs);
+  }
+  throw new Error(`no matching open order for ${teamId} within 20 issuance rounds`);
+}
+
+const allowsLeak = (contract: Contract) => contract.allowedMethods.includes("leak");
+
 describe("leak", () => {
   test("validateOp accepts an own open contract, rejects everything else", () => {
-    const state = tick(initialState(CTX), 0);
-    const mine = state.contracts.find((c) => c.teamId === "teamA")?.id as string;
-    const theirs = state.contracts.find((c) => c.teamId === "teamB")?.id as string;
+    const { state, order } = orderMatching(allowsLeak);
+    const theirs = state.contracts.find(
+      (c) => c.teamId === "teamB" && c.status === "open" && allowsLeak(c),
+    );
+    if (!theirs) throw new Error("expected an open LEAK-able order for teamB");
 
-    expect(validateOp(state, "teamA", { kind: "leak", contractId: mine })).toEqual({ ok: true });
-    expect(validateOp(state, "teamA", { kind: "leak", contractId: theirs }).ok).toBe(false);
+    expect(validateOp(state, "teamA", { kind: "leak", contractId: order.id })).toEqual({ ok: true });
+    expect(validateOp(state, "teamA", { kind: "leak", contractId: theirs.id }).ok).toBe(false);
     expect(validateOp(state, "teamA", { kind: "leak", contractId: "does-not-exist" }).ok).toBe(false);
   });
 
+  /**
+   * [Issue #645] The Level-1 "technique-specified" Order. Its client will not
+   * accept the underlying value being published, so LEAK is refused and the
+   * message names the constraint -- a participant told only "not allowed"
+   * learns nothing they can carry to the next Order.
+   */
+  test("validateOp refuses LEAK on an Order that forbids raw disclosure", () => {
+    const { state, order: constrained } = orderMatching(
+      (c) => c.privacyConstraint === "no-raw-disclosure",
+    );
+
+    expect(constrained.allowedMethods).toEqual(["prove"]);
+    const verdict = validateOp(state, "teamA", { kind: "leak", contractId: constrained.id });
+    expect(verdict.ok).toBe(false);
+    if (verdict.ok) throw new Error("unreachable");
+    expect(verdict.error).toContain("no-raw-disclosure");
+    expect(verdict.error).toContain("PROVE");
+  });
+
+  /** An unconstrained Order still accepts either method. */
+  test("an unconstrained Order accepts both methods", () => {
+    const { order } = orderMatching((c) => c.privacyConstraint === "none");
+    expect(order.allowedMethods).toEqual(["leak", "prove"]);
+  });
+
   test("applyOp posts the requested share(s) to the public ledger and pays out points", () => {
-    const state = tick(initialState(CTX), 0);
-    const contract = state.contracts.find((c) => c.teamId === "teamA");
-    if (!contract) throw new Error("expected a contract");
+    const { state, order: contract } = orderMatching(allowsLeak);
     const next = applyOp(state, "teamA", { kind: "leak", contractId: contract.id });
 
     expect(next.teams.teamA?.score).toBe(contract.points);
@@ -166,9 +227,7 @@ describe("leak", () => {
   });
 
   test("the same contract cannot be leaked twice", () => {
-    const state = tick(initialState(CTX), 0);
-    const contract = state.contracts.find((c) => c.teamId === "teamA");
-    if (!contract) throw new Error("expected a contract");
+    const { state, order: contract } = orderMatching(allowsLeak);
     const op: CryptoBattleOp = { kind: "leak", contractId: contract.id };
     const next = applyOp(state, "teamA", op);
     expect(validateOp(next, "teamA", op).ok).toBe(false);
@@ -406,6 +465,8 @@ describe("match end", () => {
       issuedAtMs: state.nowMs ?? 0,
       expiresAtMs: (state.nowMs ?? 0) + state.config.contractTtlMs,
       status: "open" as const,
+      privacyConstraint: "none" as const,
+      allowedMethods: ["leak", "prove"] as const,
     };
     state = { ...state, contracts: [...state.contracts, stillOpenContract] };
 

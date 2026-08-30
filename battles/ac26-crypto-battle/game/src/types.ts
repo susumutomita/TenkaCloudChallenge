@@ -38,6 +38,13 @@
  * (`BigInt(...)` on the way in, `.toString()` on the way out).
  */
 
+import type { PrivacyConstraint, SubmissionMethod } from "./methods.ts";
+
+// Re-exported so every consumer that already imports this module's shapes gets
+// the Order vocabulary from the same place, rather than having to know that
+// methods.ts is where a method is defined (Issue #645).
+export type { PrivacyConstraint, SubmissionMethod };
+
 /** What the platform dispatcher hands a CoordinationPlugin for one event. */
 export interface CoordinationContext {
   readonly eventId: string;
@@ -100,17 +107,40 @@ export interface CryptoBattleConfig {
 export type ContractKind = "standard" | "rush";
 export type ContractStatus = "open" | "completed" | "expired";
 
+/**
+ * One job on the belt. Participant-facing copy calls this an **Order**
+ * (Issue #645): a `Contract` here is a piece of work with a deadline, a reward,
+ * a stated privacy rule, and the set of methods that satisfy it -- nothing to
+ * do with a smart contract or a CloudFormation stack. The internal type name is
+ * unchanged on purpose (#646 non-goals), so a rename does not churn every
+ * reducer test at the same time as the model grows.
+ */
 export interface Contract {
   readonly id: string;
-  /** The team this contract was issued to (only that team may LEAK/PROVE against it). */
+  /** The team this Order was issued to (only that team may submit against it). */
   readonly teamId: string;
   readonly kind: ContractKind;
   readonly points: number;
+  /** What the Order asks for: these share indices, by whichever method it allows. */
   readonly requestedShareIndices: readonly number[];
   readonly issuedAtMs: number;
   readonly expiresAtMs: number;
   readonly status: ContractStatus;
-  readonly resolution?: "leak" | "prove";
+  /**
+   * [Issue #645] The rule the Order's client imposes on what may become public.
+   * `allowedMethods` is derived from it -- see methods.ts on why both are
+   * stored: the constraint is the reason, the method list the consequence.
+   */
+  readonly privacyConstraint: PrivacyConstraint;
+  /**
+   * [Issue #645] Which submission methods fulfil this Order. A single-entry
+   * list is a Level-1 "required method" Order. Always
+   * `allowedMethodsFor(privacyConstraint)`; carried on the Order so a
+   * projection can show it without the portal re-deriving game rules.
+   */
+  readonly allowedMethods: readonly SubmissionMethod[];
+  /** Which method actually completed it, once one did. */
+  readonly resolution?: SubmissionMethod;
 }
 
 /**
@@ -134,6 +164,15 @@ export interface ShareArtifact {
   /** The team's secret generation this share belongs to (see ROTATE). */
   readonly generation: number;
   readonly kind: "share";
+  /**
+   * [Issue #645] Which method produced this artifact. Redundant with `kind`
+   * while there are exactly two methods and each posts one artifact shape --
+   * and deliberately recorded anyway, because #645's Public Ledger requirement
+   * is that a reader can see WHICH METHOD a team used, and Phase 2's FHE
+   * ciphertext is a third artifact whose shape does not name its method.
+   * Recording it now means the ledger's contract does not change when it lands.
+   */
+  readonly method: SubmissionMethod;
   readonly shareIndex: number;
   /** Stringified bigint -- see reducer.ts on why the ledger stores strings. */
   readonly value: string;
@@ -158,6 +197,8 @@ export interface ProofArtifact {
   /** The team's secret generation the proven public commitment Y belongs to. */
   readonly generation: number;
   readonly kind: "proof";
+  /** [Issue #645] Which method produced this artifact -- see ShareArtifact. */
+  readonly method: SubmissionMethod;
   readonly contractId: string;
   readonly commitment: string;
   readonly response: string;
@@ -289,6 +330,10 @@ export interface ContractProjection {
   readonly points: number;
   readonly requestedShareIndices: readonly number[];
   readonly status: ContractStatus;
+  /** [Issue #645] The stated rule -- what the Order will not have published. */
+  readonly privacyConstraint: PrivacyConstraint;
+  /** [Issue #645] The methods that satisfy it. One entry = a required method. */
+  readonly allowedMethods: readonly SubmissionMethod[];
   /**
    * Ms remaining until this contract expires, AS OF the state's last
    * `tick()` -- a duration, not a timestamp. `Contract.expiresAtMs` (which

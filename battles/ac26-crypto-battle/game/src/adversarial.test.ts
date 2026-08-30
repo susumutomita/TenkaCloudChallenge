@@ -45,6 +45,8 @@ function leakShareIndex(state: CryptoBattleState, teamId: string, shareIndex: nu
         issuedAtMs: state.nowMs ?? 0,
         expiresAtMs: (state.nowMs ?? 0) + state.config.contractTtlMs,
         status: "open",
+        privacyConstraint: "none" as const,
+        allowedMethods: ["leak", "prove"] as const,
       },
     ],
   };
