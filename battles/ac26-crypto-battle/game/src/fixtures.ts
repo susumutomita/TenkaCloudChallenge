@@ -15,7 +15,7 @@
 import { deriveBigInt, deriveStream } from "./prng.ts";
 import { share, type Share } from "./shamir.ts";
 import type { PrivacyConstraint } from "./methods.ts";
-import type { ContractKind } from "./types.ts";
+import type { ContractKind, OrderTaskKind } from "./types.ts";
 
 /** The bigint-space subset of `CryptoBattleConfig` this module's derivations need. */
 export interface FieldConfig {
@@ -55,28 +55,50 @@ export function deriveTeamGeneration(
 
 export interface ContractPlan {
   readonly kind: ContractKind;
+  /**
+   * [Issue #645] What this Order asks for. `reveal-share` carries its share
+   * indices; `homomorphic-sum` and `masked-total` carry public payloads that
+   * `reducer.ts` derives at issuance from the match seed and the Order id, so
+   * nothing about them has to live in this plan.
+   */
+  readonly taskKind: OrderTaskKind;
+  /** Only meaningful for a `reveal-share` task. */
   readonly requestedShareIndices: readonly number[];
   /**
    * [Issue #645] The rule this Order's client imposes on what may be published.
-   * Roughly 1-in-4 Orders are `"no-raw-disclosure"` -- #645's Level-1
-   * "technique-specified" Order, which PROVE alone satisfies. Rolled from its
-   * own derivation label so it is independent of the rush roll: a rush Order
-   * that also forbids disclosure is a real (and interesting) combination, not
-   * an artefact of two rolls sharing a stream.
+   *
+   * For a `reveal-share` Order this is a real roll: roughly 1-in-4 are
+   * `"no-raw-disclosure"` — #645's Level-1 "technique-specified" Order, which
+   * PROVE alone satisfies — and the rest leave the choice open, which is the
+   * Level-3 trade-off Order (LEAK is quick and feeds the Public Ledger; PROVE
+   * costs computation and feeds it nothing).
+   *
+   * For FHE and MPC Orders it is always `"no-raw-disclosure"`, and not as a
+   * policy choice: neither method has any way to publish the underlying value,
+   * so stating anything weaker would describe an Order that does not exist.
+   *
+   * Rolled from its own derivation label so it is independent of the rush and
+   * task rolls: a rush Order that also forbids disclosure is a real (and
+   * interesting) combination, not an artefact of two rolls sharing a stream.
    */
   readonly privacyConstraint: PrivacyConstraint;
 }
 
 /**
- * What the `sequenceIndex`-th contract issued to `teamId` looks like (kind +
- * which share index it asks the team to reveal). `sequenceIndex` is the count
- * of contracts already issued to that team (0-based) -- callers (reducer.ts's
- * tick()) derive it from `state.contracts`, so no extra counter needs to live
- * in state.
+ * What the `sequenceIndex`-th Order issued to `teamId` looks like: its task,
+ * its kind, and the rule its client imposes. `sequenceIndex` is the count of
+ * Orders already issued to that team (0-based) — callers (reducer.ts's tick())
+ * derive it from `state.contracts`, so no extra counter needs to live in state.
  *
- * Roughly 1-in-5 contracts are "rush" (worth more, same mechanics) and
- * roughly 1-in-4 forbid raw disclosure -- playtest ratios, see types.ts's
- * CryptoBattleConfig doc comment.
+ * Roughly 1-in-5 Orders are "rush" (worth more, same mechanics). The task
+ * rotates so a match reliably contains all three kinds rather than depending on
+ * a roll: #645's learning progression only works if a participant actually
+ * meets an FHE Order and an MPC Order, and a probabilistic schedule can leave a
+ * short match with neither. Deterministic rotation also keeps a replay honest.
+ *
+ * `reveal-share` gets two of every four Orders because it is the one with a
+ * genuine method choice (LEAK or PROVE), which is what #645's Level-3 Orders
+ * are for; FHE and MPC take one each.
  */
 export function deriveContractPlan(
   seed: string,
@@ -86,17 +108,28 @@ export function deriveContractPlan(
 ): ContractPlan {
   const RUSH_MODULUS = 5n;
   const CONSTRAINED_MODULUS = 4n;
+  const TASK_ROTATION: readonly OrderTaskKind[] = [
+    "reveal-share",
+    "homomorphic-sum",
+    "reveal-share",
+    "masked-total",
+  ];
   const kindRoll = deriveBigInt(seed, `contract-kind:${teamId}`, sequenceIndex, config.prime);
   const kind: ContractKind = kindRoll % RUSH_MODULUS === 0n ? "rush" : "standard";
   const indexRoll = deriveBigInt(seed, `contract-index:${teamId}`, sequenceIndex, config.prime);
   const shareIndex = Number(indexRoll % BigInt(config.shareCount)) + 1;
+  const taskKind = TASK_ROTATION[sequenceIndex % TASK_ROTATION.length] ?? "reveal-share";
   const constraintRoll = deriveBigInt(
     seed,
     `contract-privacy:${teamId}`,
     sequenceIndex,
     config.prime,
   );
+  // FHE and MPC publish nothing reconstructable by construction, so their
+  // Orders state that rule rather than rolling for it.
   const privacyConstraint: PrivacyConstraint =
-    constraintRoll % CONSTRAINED_MODULUS === 0n ? "no-raw-disclosure" : "none";
-  return { kind, requestedShareIndices: [shareIndex], privacyConstraint };
+    taskKind !== "reveal-share" || constraintRoll % CONSTRAINED_MODULUS === 0n
+      ? "no-raw-disclosure"
+      : "none";
+  return { kind, taskKind, requestedShareIndices: [shareIndex], privacyConstraint };
 }

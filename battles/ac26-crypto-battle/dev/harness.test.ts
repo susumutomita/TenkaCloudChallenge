@@ -21,6 +21,7 @@ import { DEFAULT_CONFIG, projectForTeam } from "../game/src/reducer.ts";
 import type { CryptoBattleProjection } from "../game/src/types.ts";
 import { createMatch, dispatch, projectSafely, readProjection, submitOp } from "./host.ts";
 import { buildScenario, DEV_CONFIG, DEV_TEAMS, SCENARIO_IDS, SCENARIO_LABELS } from "./scenarios.ts";
+import { buildNonceReuseHuntOp } from "../game/src/playtest.ts";
 
 describe("dev host is the real reducer", () => {
   /**
@@ -212,4 +213,54 @@ describe("dev harness does not widen what a team can see", () => {
       }
     },
   );
+});
+
+/**
+ * [Issue #645] The positions the new Order kinds exist to show.
+ *
+ * The property tests above already run every scenario through "built from real
+ * ops" and "rebuilds byte-identically". These add the part those cannot know:
+ * that each new scenario actually reaches the position its label promises. A
+ * scenario that silently produced an empty belt would still be deterministic
+ * and still be built from real ops.
+ */
+describe("Issue #645 scenarios reach the position they advertise", () => {
+  it("should leave an unserved encrypted-addition Order on the belt", () => {
+    const { host } = buildScenario("fhe-order");
+    const order = host.state.contracts.find(
+      (c) => c.teamId === "alpha" && c.status === "open" && c.task.kind === "homomorphic-sum",
+    );
+    expect(order).toBeDefined();
+    if (order?.task.kind !== "homomorphic-sum") throw new Error("unreachable");
+    expect(order.task.inputs.length).toBeGreaterThan(1);
+    expect(order.allowedMethods).toEqual(["fhe"]);
+  });
+
+  it("should leave an unserved masked-subtotal Order, with its private inputs visible only to its owner", () => {
+    const { host } = buildScenario("mpc-order");
+    const projected = projectForTeam(host.state, "alpha").myContracts.find(
+      (c) => c.status === "open" && c.task.kind === "masked-total",
+    );
+    expect(projected).toBeDefined();
+    if (projected?.task.kind !== "masked-total") throw new Error("unreachable");
+    expect(projected.task.myInput.length).toBeGreaterThan(4);
+
+    // The other team's view of the same match carries none of it.
+    const otherView = JSON.stringify(projectForTeam(host.state, "bravo"));
+    expect(otherView).not.toContain(projected.task.myInput);
+  });
+
+  it("should produce two alpha transcripts sharing one commitment, and a recoverable witness", () => {
+    const { host } = buildScenario("nonce-reuse");
+    const proofs = host.state.publicLedger.filter(
+      (a) => a.kind === "proof" && a.teamId === "alpha",
+    );
+    expect(proofs).toHaveLength(2);
+    const commitments = new Set(proofs.map((a) => (a.kind === "proof" ? a.commitment : "")));
+    expect(commitments.size).toBe(1);
+
+    // And the position is genuinely exploitable from bravo's public view.
+    const op = buildNonceReuseHuntOp(projectForTeam(host.state, "bravo"), "alpha");
+    expect(op).toBeDefined();
+  });
 });

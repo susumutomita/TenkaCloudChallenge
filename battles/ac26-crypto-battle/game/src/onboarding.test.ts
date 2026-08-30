@@ -29,6 +29,9 @@ import type { CryptoBattleProjection } from "./types.ts";
 function projection(overrides: Partial<CryptoBattleProjection> = {}): CryptoBattleProjection {
   return {
     phase: "pressure",
+    // [Issue #645] The modulus is on the projection: a participant needs it to
+    // compute an FHE or MPC answer, and it is public by construction.
+    prime: DEFAULT_CONFIG.prime,
     matchRemainingMs: 30_000,
     vault: {
       teamId: "blue",
@@ -49,7 +52,7 @@ function projection(overrides: Partial<CryptoBattleProjection> = {}): CryptoBatt
         id: "blue-c7",
         kind: "standard",
         points: 10,
-        requestedShareIndices: [1],
+        task: { kind: "reveal-share" as const, shareIndices: [1] },
         privacyConstraint: "none",
         allowedMethods: ["leak", "prove"],
         status: "open",
@@ -59,7 +62,7 @@ function projection(overrides: Partial<CryptoBattleProjection> = {}): CryptoBatt
         id: "blue-c-old",
         kind: "standard",
         points: 10,
-        requestedShareIndices: [2],
+        task: { kind: "reveal-share" as const, shareIndices: [2] },
         privacyConstraint: "none",
         allowedMethods: ["leak", "prove"],
         status: "open",

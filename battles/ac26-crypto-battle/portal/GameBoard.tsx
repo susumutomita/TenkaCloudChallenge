@@ -1,4 +1,5 @@
 import type { PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
+import { taskDetail, taskLabel } from "./orderTask.ts";
 import { usePolledProjection } from "./coordination.ts";
 import type { CryptoBattleProjection, PublicArtifact, ShareArtifact } from "../game/src/types.ts";
 
@@ -11,17 +12,19 @@ const COPY = {
     noOrders: "Waiting for the next Order…",
     reward: "REWARD",
     time: "TIME",
-    shares: "SHARES",
     choose: "CHOOSE ONE",
     leak: "LEAK",
     leakShort: "fast / public",
     prove: "PROVE",
     proveShort: "compute / protected",
+    fhe: "FHE",
+    fheShort: "add without decrypting",
+    mpc: "MPC",
+    mpcShort: "publish a masked subtotal",
     vault: "MY VAULT",
     generation: "GEN",
     ledger: "PUBLIC LEDGER",
     emptyLedger: "Nothing public yet.",
-    proof: "PROOF",
     raw: "raw",
     loading: "Loading match…",
     unavailable: "Match data is unavailable.",
@@ -34,17 +37,19 @@ const COPY = {
     noOrders: "次の Order を待っています…",
     reward: "報酬",
     time: "残り",
-    shares: "要求 share",
     choose: "どちらかを選ぶ",
     leak: "LEAK",
     leakShort: "速い / 公開",
     prove: "PROVE",
     proveShort: "計算 / 守る",
+    fhe: "FHE",
+    fheShort: "復号せずに足す",
+    mpc: "MPC",
+    mpcShort: "覆面つき小計を出す",
     vault: "MY VAULT",
     generation: "世代",
     ledger: "PUBLIC LEDGER",
     emptyLedger: "まだ公開情報はありません。",
-    proof: "PROOF",
     raw: "生データ",
     loading: "試合状態を読み込み中…",
     unavailable: "試合状態を取得できません。",
@@ -70,16 +75,57 @@ function formatDuration(ms: number): string {
  * is to show which method each team used. Switching on `method` here means that
  * lands as a new arm rather than as a rewrite of this function's meaning.
  */
-function groupLedger(ledger: readonly PublicArtifact[]) {
-  const groups = new Map<string, { teamId: string; generation: number; shares: ShareArtifact[]; proofs: number }>();
+interface LedgerGroup {
+  teamId: string;
+  generation: number;
+  shares: ShareArtifact[];
+  /**
+   * [Issue #645] Counted per artifact kind, not lumped into one "proof" bucket.
+   * Before FHE and MPC existed, everything that was not a leaked share WAS a
+   * proof, and this counter said so — which made the board announce "PROOF ×1"
+   * for a team that had actually posted a ciphertext. #645's Public Ledger
+   * requirement is that a reader can see WHICH METHOD a team used, so the board
+   * has to keep them apart.
+   */
+  protected: Map<PublicArtifact["kind"], number>;
+}
+
+function groupLedger(ledger: readonly PublicArtifact[]): LedgerGroup[] {
+  const groups = new Map<string, LedgerGroup>();
   for (const entry of ledger) {
     const key = `${entry.teamId}:${entry.generation}`;
-    const current = groups.get(key) ?? { teamId: entry.teamId, generation: entry.generation, shares: [], proofs: 0 };
+    const current: LedgerGroup =
+      groups.get(key) ?? {
+        teamId: entry.teamId,
+        generation: entry.generation,
+        shares: [],
+        protected: new Map(),
+      };
     if (entry.method === "leak" && entry.kind === "share") current.shares.push(entry);
-    else current.proofs += 1;
+    else current.protected.set(entry.kind, (current.protected.get(entry.kind) ?? 0) + 1);
     groups.set(key, current);
   }
   return [...groups.values()];
+}
+
+/** The chip label for one non-share artifact kind. */
+function protectedLabel(kind: PublicArtifact["kind"]): string {
+  switch (kind) {
+    case "proof":
+      return "PROOF";
+    case "ciphertext":
+      return "FHE";
+    case "partial":
+      return "MPC";
+    case "share":
+      // A share reaches this grouping only when a method other than LEAK posted
+      // one, which no method does today.
+      return "SHARE";
+    default: {
+      const exhaustive: never = kind;
+      throw new Error(`protectedLabel: unknown kind ${JSON.stringify(exhaustive)}`);
+    }
+  }
 }
 
 function OrderBelt({ projection, locale }: { readonly projection: CryptoBattleProjection; readonly locale: Locale }) {
@@ -103,7 +149,30 @@ function OrderBelt({ projection, locale }: { readonly projection: CryptoBattlePr
                 </div>
                 <div className="tc-order-meta">
                   <span>{copy.time} {formatDuration(order.remainingMs)}</span>
-                  <span>{copy.shares} [{order.requestedShareIndices.join(", ")}]</span>
+                  <span>{taskLabel(order.task, locale)} · {taskDetail(order.task, locale)}</span>
+                </div>
+                {/*
+                  [Issue #645] Which methods THIS Order accepts, on the card
+                  that owns them.
+
+                  Two earlier versions of this board got it wrong in opposite
+                  directions. First a hardcoded LEAK / OR / PROVE, which named
+                  methods an FHE Order rejects. Then the union of every open
+                  Order's methods — but Orders are issued every 2 minutes and
+                  live for 5, so up to three overlap, and a share Order beside
+                  an FHE Order rendered "LEAK OR PROVE OR FHE" as though those
+                  were interchangeable choices. They are not: each belongs to a
+                  different card.
+
+                  A method list is only ever true of ONE Order, so it lives on
+                  that Order and nowhere else.
+                */}
+                <div className="tc-order-methods">
+                  {order.allowedMethods.map((method) => (
+                    <span className={`tc-method tc-method-${method}`} key={method}>
+                      {copy[method]}
+                    </span>
+                  ))}
                 </div>
                 <div className="tc-timer-track" aria-hidden="true">
                   <div className="tc-timer-fill" style={{ width: `${pct}%` }} />
@@ -113,11 +182,6 @@ function OrderBelt({ projection, locale }: { readonly projection: CryptoBattlePr
           })}
         </div>
       )}
-      <div className="tc-choice-row" aria-label="crypto-battle-primary-choice">
-        <div className="tc-choice tc-choice-leak"><strong>{copy.leak}</strong><span>{copy.leakShort}</span></div>
-        <div className="tc-choice-arrow">OR</div>
-        <div className="tc-choice tc-choice-prove"><strong>{copy.prove}</strong><span>{copy.proveShort}</span></div>
-      </div>
     </section>
   );
 }
@@ -169,7 +233,9 @@ function Ledger({ projection, locale }: { readonly projection: CryptoBattleProje
                     <code>{share.value}</code>
                   </details>
                 ))}
-                {group.proofs > 0 && <div className="tc-proof-card">{copy.proof} ×{group.proofs}</div>}
+                {[...group.protected.entries()].map(([kind, count]) => (
+                  <div className="tc-proof-card" key={kind}>{protectedLabel(kind)} ×{count}</div>
+                ))}
               </div>
             </article>
           ))}
@@ -197,12 +263,12 @@ const CSS = `
 .tc-timer-track{height:5px;background:#eaeded;border-radius:999px;overflow:hidden;margin-top:8px}
 .tc-timer-fill{height:100%;background:currentColor;transition:width .25s linear}
 .tc-urgent{animation:tc-order-in .28s ease-out both,tc-urgent 1s ease-in-out infinite}
-.tc-choice-row{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;margin-top:10px}
-.tc-choice{display:flex;justify-content:center;align-items:center;gap:8px;border-radius:10px;padding:10px 12px;border:1px solid #cfd8e3}
-.tc-choice span{font-size:11px;color:#5f6b7a}
-.tc-choice-leak{background:#fff7e8;border-color:#e0b36a}
-.tc-choice-prove{background:#eef8f2;border-color:#86c89b}
-.tc-choice-arrow{font-size:10px;font-weight:800;color:#687078}
+.tc-order-methods{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.tc-method{font-size:10px;font-weight:800;letter-spacing:.04em;border-radius:6px;padding:2px 6px;border:1px solid #cfd8e3}
+.tc-method-leak{background:#fff7e8;border-color:#e0b36a}
+.tc-method-prove{background:#eef8f2;border-color:#86c89b}
+.tc-method-fhe{background:#eef2fb;border-color:#7f9ad4}
+.tc-method-mpc{background:#f6eefb;border-color:#a982cc}
 .tc-board-grid{display:grid;grid-template-columns:minmax(220px,.8fr) minmax(300px,1.2fr);gap:12px}
 .tc-share-grid{display:flex;flex-wrap:wrap;gap:7px}
 .tc-share-card{border:1px solid #b8c4ce;border-radius:8px;background:#f8fafc;min-width:54px;overflow:hidden}

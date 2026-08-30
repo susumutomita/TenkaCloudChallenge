@@ -52,22 +52,46 @@
  * `SchnorrProof` (public once submitted).
  */
 
-import { deriveContractPlan, deriveTeamGeneration, type FieldConfig } from "./fixtures.ts";
-import { allowedMethodsFor, type SubmissionMethod } from "./methods.ts";
+import {
+  type ContractPlan,
+  deriveContractPlan,
+  deriveTeamGeneration,
+  type FieldConfig,
+} from "./fixtures.ts";
+import { decryptOrderSum, deriveFheOrderInputs, expectedFheSum } from "./fhe.ts";
+import {
+  allPartials,
+  deriveMpcPrivateInputs,
+  expectedMpcPartial,
+  MPC_PARTY_COUNT,
+  MPC_TEAM_PARTY_INDEX,
+  sumInField,
+} from "./mpc.ts";
+import {
+  allowedMethodsFor,
+  methodCanPerformTask,
+  type PrivacyConstraint,
+  type SubmissionMethod,
+} from "./methods.ts";
 import { mod, P } from "./field.ts";
-import { RFC3526_GROUP14 } from "./group.ts";
+import { groupPow, RFC3526_GROUP14 } from "./group.ts";
 import { derivePublicCommitment } from "./schnorr-witness.ts";
 import { parseCanonicalDecimal, verifyProof } from "./schnorr-verifier.ts";
 import type {
+  CiphertextArtifact,
   Contract,
   CoordinationContext,
   CryptoBattleConfig,
   CryptoBattleOp,
   CryptoBattleProjection,
   CryptoBattleState,
+  OrderTask,
+  OrderTaskProjection,
+  PartialArtifact,
   Phase,
   ProofArtifact,
   PublicArtifact,
+  StoredCiphertext,
   StoredShare,
   TeamState,
   TeamSummaryProjection,
@@ -174,7 +198,118 @@ function computePhase(elapsedMs: number, config: CryptoBattleConfig): Phase {
  * reducer -- it does not read a clock itself, see this file's purity contract
  * above).
  */
-export function tick(state: CryptoBattleState, eventNowMs: number): CryptoBattleState {
+/**
+ * [Issue #645] The public payload one Order carries.
+ *
+ * FHE and MPC payloads are derived from `(seed, orderId)` rather than stored on
+ * the plan, and the confidential half is not derived here at all: the judge
+ * re-derives the plaintexts, the key and the masks when it needs them, and
+ * `projectForTeam` derives the owning team's private inputs. So the only thing
+ * that ever reaches `CryptoBattleState` is material that is safe to publish,
+ * and there is no new secret field anyone could forget to redact.
+ */
+function buildOrderTask(
+  plan: ContractPlan,
+  seed: string,
+  contractId: string,
+  prime: bigint,
+): OrderTask {
+  switch (plan.taskKind) {
+    case "reveal-share":
+      return { kind: "reveal-share", shareIndices: plan.requestedShareIndices };
+    case "homomorphic-sum":
+      return {
+        kind: "homomorphic-sum",
+        inputs: deriveFheOrderInputs(seed, contractId, prime).map((c) => ({
+          r: c.r.toString(),
+          y: c.y.toString(),
+        })),
+      };
+    case "masked-total":
+      return { kind: "masked-total", partyCount: MPC_PARTY_COUNT };
+    default: {
+      const exhaustive: never = plan.taskKind;
+      throw new Error(`buildOrderTask: unknown task kind ${JSON.stringify(exhaustive)}`);
+    }
+  }
+}
+
+/**
+ * A contract as it may actually come back from storage, rather than as the
+ * current version writes it.
+ *
+ * A match is long-lived and its state is persisted between calls, so a deploy
+ * mid-match hands the reducer rows written by an OLDER version of this plugin.
+ * Every field this file later treats as required is optional here, which is
+ * what makes {@link migrateContract} total instead of a pile of non-null
+ * assertions at each use site.
+ */
+type PersistedContract = Omit<Contract, "task" | "privacyConstraint" | "allowedMethods"> & {
+  readonly task?: OrderTask;
+  /** Pre-#645: an Order asked for share indices and nothing else. */
+  readonly requestedShareIndices?: readonly number[];
+  /** Pre-#650: an Order carried no privacy rule and no method list. */
+  readonly privacyConstraint?: PrivacyConstraint;
+  readonly allowedMethods?: readonly SubmissionMethod[];
+};
+
+function needsMigration(contract: Contract): boolean {
+  const persisted: PersistedContract = contract;
+  return persisted.task === undefined || persisted.allowedMethods === undefined;
+}
+
+/**
+ * [Issue #645] Bring one persisted Order up to the current shape.
+ *
+ * Any version that adds a REQUIRED contract field has to say what an older row
+ * means, or the first read of that field throws and takes the whole match with
+ * it. Two fields need that answer here:
+ *
+ *  - `task` (this change). Before it, every Order asked for share indices and
+ *    nothing else -- so a legacy row IS a `reveal-share` Order and converts
+ *    exactly. Without this, `projectTask` reads `.kind` off `undefined` and
+ *    `projectForTeam` throws for EVERY team in the match: `myContracts`
+ *    includes completed and expired rows, so a single pre-upgrade Order is
+ *    enough, and no later `tick` ever repairs those rows.
+ *  - `privacyConstraint` / `allowedMethods` (#650). Older, and the same class
+ *    of failure one function earlier -- `validateOrderSubmission` reads
+ *    `allowedMethods.includes(...)`. #650 shipped without a fallback; covering
+ *    it is two lines inside the function that has to exist anyway, and leaving
+ *    a known crash of exactly this shape out of the migration written to
+ *    prevent it would be hard to defend.
+ *
+ * Lossless where it matters: id, points, deadline, status and resolution are
+ * carried through untouched, so no score or history moves.
+ */
+function migrateContract(contract: Contract): Contract {
+  if (!needsMigration(contract)) return contract;
+  const persisted: PersistedContract = contract;
+
+  const privacyConstraint = persisted.privacyConstraint ?? "none";
+  const task: OrderTask = persisted.task ?? {
+    kind: "reveal-share",
+    shareIndices: persisted.requestedShareIndices ?? [],
+  };
+  return {
+    ...contract,
+    task,
+    privacyConstraint,
+    allowedMethods: persisted.allowedMethods ?? allowedMethodsFor(task.kind, privacyConstraint),
+  };
+}
+
+/**
+ * Every entry point below reads `state.contracts`, so every entry point
+ * migrates first. `applyOp` and `tick` return the migrated rows, so the
+ * upgrade also persists on the next write rather than being redone forever.
+ */
+function withMigratedContracts(state: CryptoBattleState): CryptoBattleState {
+  if (!state.contracts.some(needsMigration)) return state;
+  return { ...state, contracts: state.contracts.map(migrateContract) };
+}
+
+export function tick(persistedState: CryptoBattleState, eventNowMs: number): CryptoBattleState {
+  const state = withMigratedContracts(persistedState);
   const startedAtMs = state.startedAtMs ?? eventNowMs;
   const elapsedMs = eventNowMs - startedAtMs;
   const phase = computePhase(elapsedMs, state.config);
@@ -197,20 +332,22 @@ export function tick(state: CryptoBattleState, eventNowMs: number): CryptoBattle
       const sequenceIndex = issuedCountByTeam.get(teamId) ?? 0;
       const plan = deriveContractPlan(state.seed, teamId, sequenceIndex, fieldConfig);
       const ttlMs = plan.kind === "rush" ? state.config.rushContractTtlMs : state.config.contractTtlMs;
+      const contractId = `${teamId}-c${sequenceIndex}`;
       issued.push({
-        id: `${teamId}-c${sequenceIndex}`,
+        id: contractId,
         teamId,
         kind: plan.kind,
         points: plan.kind === "rush" ? state.config.scores.rushContract : state.config.scores.contract,
-        requestedShareIndices: plan.requestedShareIndices,
+        task: buildOrderTask(plan, state.seed, contractId, fieldConfig.prime),
         issuedAtMs: nextContractAtMs,
         expiresAtMs: nextContractAtMs + ttlMs,
         status: "open",
         // [Issue #645] The Order states its rule, and the method list follows
-        // from it -- never the other way round, so a method added in a later
-        // phase is offered on exactly the Orders it legitimately satisfies.
+        // from it and the task -- never the other way round, so a method added
+        // in a later phase is offered on exactly the Orders it legitimately
+        // satisfies, and never on one it cannot serve at all.
         privacyConstraint: plan.privacyConstraint,
-        allowedMethods: allowedMethodsFor(plan.privacyConstraint),
+        allowedMethods: allowedMethodsFor(plan.taskKind, plan.privacyConstraint),
       });
       issuedCountByTeam.set(teamId, sequenceIndex + 1);
     }
@@ -236,6 +373,56 @@ export function tick(state: CryptoBattleState, eventNowMs: number): CryptoBattle
  */
 function huntKey(attackerTeamId: string, targetTeamId: string, generation: number): string {
   return JSON.stringify([attackerTeamId, targetTeamId, generation]);
+}
+
+/**
+ * [Issue #645 Phase 2] Parse a participant-submitted ciphertext.
+ *
+ * Both components go through the same canonical-decimal gate as every other
+ * untrusted number on the wire (see schnorr-verifier.ts's
+ * `parseCanonicalDecimal`), so a malformed value is a rejection here rather
+ * than a throw out of `BigInt()` somewhere downstream.
+ */
+function parseStoredCiphertext(ciphertext: StoredCiphertext): { r: bigint; y: bigint } | undefined {
+  if (typeof ciphertext !== "object" || ciphertext === null) return undefined;
+  const r = parseCanonicalDecimal(ciphertext.r);
+  const y = parseCanonicalDecimal(ciphertext.y);
+  if (r === undefined || y === undefined) return undefined;
+  return { r, y };
+}
+
+/**
+ * [Issue #645 Phase 5] Whether the target actually reused a proof commitment
+ * within one generation — the misuse a nonce-reuse HUNT exploits.
+ *
+ * Reads only the Public Ledger, deliberately: the attacker's evidence has to be
+ * derivable from what they can see, and checking the same source the attacker
+ * used is what makes that true rather than merely intended. Two transcripts
+ * from one team in one generation sharing a commitment R mean two challenges
+ * against one nonce, which solves for the witness:
+ *
+ * ```text
+ * z1 = k + e1*w,  z2 = k + e2*w   ->   w = (z1 - z2) / (e1 - e2)   mod q
+ * ```
+ *
+ * The prover this Battle ships cannot produce that (`schnorr-prover.ts` binds
+ * the nonce to the contract id), so a team using the provided tooling is never
+ * exposed. A team that rolls its own prover with a fixed nonce is — which is
+ * precisely the lesson `ac26-w3-nonce-reuse` teaches, now with consequences.
+ */
+function hasNonceReuse(
+  state: CryptoBattleState,
+  targetTeamId: string,
+  generation: number,
+): boolean {
+  const commitments = new Set<string>();
+  for (const artifact of state.publicLedger) {
+    if (artifact.kind !== "proof") continue;
+    if (artifact.teamId !== targetTeamId || artifact.generation !== generation) continue;
+    if (commitments.has(artifact.commitment)) return true;
+    commitments.add(artifact.commitment);
+  }
+  return false;
 }
 
 /**
@@ -268,6 +455,21 @@ function validateOrderSubmission(
   if (contract.status !== "open") {
     return { ok: false, error: `contract "${contractId}" is ${contract.status}, not open` };
   }
+  // [Issue #645] Two different refusals, and saying which is the point.
+  //
+  // "This Order does not accept LEAK" is a RULE the client imposed; "LEAK
+  // cannot do this job" is a FACT about the tool. methods.ts keeps them apart
+  // deliberately and says so in its own comment -- and this function used to
+  // collapse both into the privacy message, so submitting FHE to a share Order
+  // with constraint "none" was told that FHE "does not satisfy privacy
+  // constraint none". FHE satisfies `none` perfectly well. The message taught
+  // the opposite of the distinction the Order model exists to teach.
+  if (!methodCanPerformTask(method, contract.task.kind)) {
+    return {
+      ok: false,
+      error: `${method.toUpperCase()} cannot perform contract "${contractId}"'s task (${contract.task.kind}); this Order is done with ${contract.allowedMethods.join(", ").toUpperCase()}`,
+    };
+  }
   if (!contract.allowedMethods.includes(method)) {
     return {
       ok: false,
@@ -277,7 +479,12 @@ function validateOrderSubmission(
   return { ok: true };
 }
 
-export function validateOp(state: CryptoBattleState, teamId: string, op: CryptoBattleOp): ValidateResult {
+export function validateOp(
+  persistedState: CryptoBattleState,
+  teamId: string,
+  op: CryptoBattleOp,
+): ValidateResult {
+  const state = withMigratedContracts(persistedState);
   const team = state.teams[teamId];
   if (!team) return { ok: false, error: `unknown team "${teamId}"` };
 
@@ -340,6 +547,154 @@ export function validateOp(state: CryptoBattleState, teamId: string, op: CryptoB
       }
       if (mod(recoveredSecret, BigInt(state.config.prime)) !== BigInt(target.secret)) {
         return { ok: false, error: "recovered secret does not match the target's actual secret" };
+      }
+      return { ok: true };
+    }
+    case "fhe": {
+      // [Issue #645 Phase 2] Order gate first, then the trusted decrypt.
+      const gate = validateOrderSubmission(state, teamId, op.contractId, "fhe");
+      if (!gate.ok) return gate;
+      const contract = state.contracts.find((c) => c.id === op.contractId);
+      if (contract?.task.kind !== "homomorphic-sum") {
+        // validateOrderSubmission already refused every Order whose
+        // allowedMethods exclude FHE, and only a homomorphic-sum task ever
+        // allows it -- so this is unreachable and says so loudly rather than
+        // treating a mismatched task as a pass.
+        return { ok: false, error: `contract "${op.contractId}" is not a homomorphic-sum order` };
+      }
+      const submitted = parseStoredCiphertext(op.ciphertext);
+      if (!submitted) {
+        return {
+          ok: false,
+          error: "ciphertext components must be canonical, length-bounded decimal integers",
+        };
+      }
+      // Both components must already be field elements. `parseCanonicalDecimal`
+      // only bounds the digit count, and the two comparisons below both reduce
+      // mod p -- so before this check `(r + p, y + p)` was accepted, which let
+      // a participant skip the 「p で割った余り」 step the Order asks for and
+      // still score, and put a value on the Public Ledger that is not a field
+      // element at all. Leading zeros remain fine: `007` is 7, and 7 is in
+      // range.
+      if (submitted.r >= BigInt(state.config.prime) || submitted.y >= BigInt(state.config.prime)) {
+        return {
+          ok: false,
+          error: "ciphertext components must already be reduced -- take the remainder after dividing by the modulus",
+        };
+      }
+      const prime = BigInt(state.config.prime);
+      // BOTH components are checked, and the comment that used to stand here --
+      // "a participant who reaches the right plaintext by a different
+      // homomorphic route has genuinely done the job" -- was wrong about its
+      // own premise. `decryptOrderSum` subtracts this Order's FIXED mask, so
+      // exactly one `y` is ever accepted; there is no second route to a
+      // different valid `y`. That left `r` as the only free component, and an
+      // unchecked `r` accepted `(0, y1 + y2)`: half of the componentwise
+      // addition the Order asks for, recorded on the Public Ledger as a
+      // ciphertext that is NOT the sum of the two public pairs. Requiring the
+      // real `r` therefore rejects no legitimate route, because none exists.
+      const expectedR = contract.task.inputs.reduce(
+        (acc, input) => mod(acc + BigInt(input.r), prime),
+        0n,
+      );
+      if (mod(submitted.r, prime) !== expectedR) {
+        return {
+          ok: false,
+          error: "submitted ciphertext's first component is not the sum of the Order's first components",
+        };
+      }
+      if (
+        decryptOrderSum(submitted, state.seed, op.contractId, prime) !==
+        expectedFheSum(state.seed, op.contractId, prime)
+      ) {
+        return { ok: false, error: "submitted ciphertext does not decrypt to the requested sum" };
+      }
+      return { ok: true };
+    }
+    case "mpc": {
+      // [Issue #645 Phase 3] Order gate, then compare against the partial this
+      // team's own inputs and masks produce. The expected value is re-derived
+      // from the seed, never stored, and never handed to another team.
+      const gate = validateOrderSubmission(state, teamId, op.contractId, "mpc");
+      if (!gate.ok) return gate;
+      const contract = state.contracts.find((c) => c.id === op.contractId);
+      if (contract?.task.kind !== "masked-total") {
+        return { ok: false, error: `contract "${op.contractId}" is not a masked-total order` };
+      }
+      const submittedPartial = parseCanonicalDecimal(op.partial);
+      if (submittedPartial === undefined) {
+        return { ok: false, error: "partial must be a canonical, length-bounded decimal integer" };
+      }
+      // Same hole as the FHE branch above, and fixed with it: the comparison
+      // below reduces mod p, so an unreduced partial scored while skipping the
+      // remainder step -- and here it was worse, because `applyMpc` puts the
+      // submitted value into the published `a + b + c` sum, so one unreduced
+      // partial makes the ledger's own arithmetic unreproducible.
+      if (submittedPartial >= BigInt(state.config.prime)) {
+        return {
+          ok: false,
+          error: "partial must already be reduced -- take the remainder after dividing by the modulus",
+        };
+      }
+      const prime = BigInt(state.config.prime);
+      if (mod(submittedPartial, prime) !== expectedMpcPartial(state.seed, op.contractId, prime)) {
+        return { ok: false, error: "submitted partial does not match this office's masked total" };
+      }
+      return { ok: true };
+    }
+    case "hunt-nonce": {
+      // [Issue #645 Phase 5] Same preconditions as a Shamir HUNT -- see that
+      // branch for why each exists -- and a different piece of evidence.
+      if (state.nowMs === undefined) {
+        return { ok: false, error: "match has not started yet (no tick() has run)" };
+      }
+      if (op.targetTeamId === teamId) {
+        return { ok: false, error: "cannot hunt your own team" };
+      }
+      const target = state.teams[op.targetTeamId];
+      if (!target) return { ok: false, error: `unknown target team "${op.targetTeamId}"` };
+      if (op.generation !== target.generation) {
+        return {
+          ok: false,
+          error: `target team is on generation ${target.generation}, not ${op.generation}`,
+        };
+      }
+      if (state.successfulHunts.includes(huntKey(teamId, op.targetTeamId, op.generation))) {
+        return { ok: false, error: "this generation was already hunted successfully by this team" };
+      }
+      // The exploit has to be real, not merely claimed: the target must
+      // actually have published two transcripts sharing a commitment. Without
+      // this check a lucky guess at the witness would pass, and -- far worse --
+      // a team that used the shipped prover correctly could be hunted by
+      // someone who obtained their witness any other way. #645's rule is that
+      // HUNT punishes misuse, so the misuse has to be on the record.
+      if (!hasNonceReuse(state, op.targetTeamId, op.generation)) {
+        return {
+          ok: false,
+          error: `team "${op.targetTeamId}" has not reused a proof commitment in generation ${op.generation}`,
+        };
+      }
+      const recoveredWitness = parseCanonicalDecimal(op.recoveredWitness);
+      if (recoveredWitness === undefined) {
+        return {
+          ok: false,
+          error: "recoveredWitness must be a canonical, length-bounded decimal integer",
+        };
+      }
+      const publicY = state.publicCommitments[op.targetTeamId];
+      if (publicY === undefined) {
+        return { ok: false, error: `no public commitment on record for team "${op.targetTeamId}"` };
+      }
+      // The witness is checked against the target's PUBLIC commitment, which is
+      // the honest statement of "you recovered their key": g^w = Y is exactly
+      // what the witness is defined by. Nothing here reads the target's private
+      // state, so the check cannot accidentally accept a value the attacker
+      // could not have derived from public material.
+      if (
+        groupPow(RFC3526_GROUP14.generator, mod(recoveredWitness, RFC3526_GROUP14.order), RFC3526_GROUP14) !==
+        BigInt(publicY)
+      ) {
+        return { ok: false, error: "recovered witness does not match the target's public commitment" };
       }
       return { ok: true };
     }
@@ -409,8 +764,11 @@ function applyLeak(
     throw new Error("applyOp(leak): invalid op reached apply -- call validateOp() first");
   }
 
+  if (contract.task.kind !== "reveal-share") {
+    throw new Error("applyOp(leak): contract is not a reveal-share order -- call validateOp() first");
+  }
   const nowMs = state.nowMs ?? contract.issuedAtMs;
-  const artifacts: PublicArtifact[] = contract.requestedShareIndices.map((shareIndex) => {
+  const artifacts: PublicArtifact[] = contract.task.shareIndices.map((shareIndex: number) => {
     const shareEntry = team.shares.find((s) => s.index === shareIndex);
     if (!shareEntry) {
       throw new Error(`applyOp(leak): team "${teamId}" has no share at index ${shareIndex}`);
@@ -446,6 +804,177 @@ function applyLeak(
     publicLedger: [...state.publicLedger, ...artifacts],
     teams: { ...state.teams, [teamId]: updatedTeam },
   };
+}
+
+/**
+ * [Issue #645 Phase 2] Record an accepted FHE submission.
+ *
+ * The ciphertext goes on the Public Ledger verbatim. That is safe and it is the
+ * lesson: everyone can see that this team answered, and nobody — including the
+ * teams who can read the Order's input ciphertexts — learns anything about the
+ * numbers involved. See fhe.ts on why that is information-theoretic.
+ */
+function applyFhe(
+  state: CryptoBattleState,
+  teamId: string,
+  op: Extract<CryptoBattleOp, { kind: "fhe" }>,
+): CryptoBattleState {
+  const contract = state.contracts.find((c) => c.id === op.contractId);
+  const team = state.teams[teamId];
+  if (!contract || !team) {
+    throw new Error("applyOp(fhe): invalid op reached apply -- call validateOp() first");
+  }
+
+  const nowMs = state.nowMs ?? contract.issuedAtMs;
+  // Re-serialized through BigInt(...).toString() for the same reason applyProve
+  // does it: validateOp has already forced both components through
+  // parseCanonicalDecimal, so this guarantees the ledger only ever holds the
+  // canonical form rather than whatever the submission happened to carry.
+  const artifact: CiphertextArtifact = {
+    id: `${contract.id}-ciphertext`,
+    teamId,
+    generation: team.generation,
+    kind: "ciphertext",
+    method: "fhe",
+    contractId: contract.id,
+    r: BigInt(op.ciphertext.r).toString(),
+    y: BigInt(op.ciphertext.y).toString(),
+    postedAtMs: nowMs,
+  };
+
+  return completeOrder(state, teamId, contract, artifact, "fhe");
+}
+
+/**
+ * [Issue #645 Phase 3] Record an accepted MPC submission.
+ *
+ * The masked partial goes on the Public Ledger, and the team's own number never
+ * does. Publishing the partial is what lets the client add the three offices'
+ * partials and learn the total — the point of the protocol — while every
+ * individual figure stays hidden. See mpc.ts.
+ */
+function applyMpc(
+  state: CryptoBattleState,
+  teamId: string,
+  op: Extract<CryptoBattleOp, { kind: "mpc" }>,
+): CryptoBattleState {
+  const contract = state.contracts.find((c) => c.id === op.contractId);
+  const team = state.teams[teamId];
+  if (!contract || !team) {
+    throw new Error("applyOp(mpc): invalid op reached apply -- call validateOp() first");
+  }
+
+  const nowMs = state.nowMs ?? contract.issuedAtMs;
+  const prime = BigInt(state.config.prime);
+  // [Issue #645 Phase 3] Finish the protocol, not just this office's step.
+  //
+  // The other two offices publish their partials the moment this one does --
+  // that is what the client is waiting for, and the masks only cancel across
+  // all three. Recording just this team's partial left the Order's own story
+  // unfinished: the participant did the arithmetic, scored, and the result the
+  // whole exercise exists to demonstrate never appeared anywhere.
+  //
+  // The peers are derived, not stored, for the same reason everything else
+  // here is: `state` never holds a value a projection would have to remember
+  // to redact.
+  const peers = allPartials(state.seed, contract.id, prime).filter(
+    (_partial, index) => index !== MPC_TEAM_PARTY_INDEX,
+  );
+  const artifact: PartialArtifact = {
+    id: `${contract.id}-partial`,
+    teamId,
+    generation: team.generation,
+    kind: "partial",
+    method: "mpc",
+    contractId: contract.id,
+    partial: BigInt(op.partial).toString(),
+    peerPartials: peers.map((partial) => partial.toString()),
+    // Summed from the published partials rather than read from
+    // `expectedMpcTotal`, so the ledger shows a number the participant can
+    // reproduce by adding the three rows in front of them -- which is the
+    // lesson. The two agree; `mpc.test.ts` asserts it.
+    total: sumInField([BigInt(op.partial), ...peers], prime).toString(),
+    postedAtMs: nowMs,
+  };
+
+  return completeOrder(state, teamId, contract, artifact, "mpc");
+}
+
+/**
+ * [Issue #645] Close one Order: post its artifact, mark it completed with the
+ * method that did it, and award its points.
+ *
+ * Shared by the methods added after Phase 1. LEAK and PROVE keep their own
+ * inline versions because each does something extra (LEAK posts one artifact
+ * per requested share index; PROVE has a longer note about what its transcript
+ * may contain), and folding those into a common helper would hide the part of
+ * each that is worth reading. What matters is that the SCORING is one
+ * expression, not four: every method earns the Order's stated points, never a
+ * bonus for the technique used — #486's rule, unchanged.
+ */
+function completeOrder(
+  state: CryptoBattleState,
+  teamId: string,
+  contract: Contract,
+  artifact: PublicArtifact,
+  method: SubmissionMethod,
+): CryptoBattleState {
+  const team = state.teams[teamId];
+  if (!team) {
+    throw new Error("completeOrder: unknown team -- call validateOp() first");
+  }
+  const contracts = state.contracts.map((c) =>
+    c.id === contract.id ? { ...c, status: "completed" as const, resolution: method } : c,
+  );
+  return {
+    ...state,
+    contracts,
+    publicLedger: [...state.publicLedger, artifact],
+    teams: {
+      ...state.teams,
+      [teamId]: {
+        ...team,
+        score: team.score + contract.points,
+        completedContractIds: [...team.completedContractIds, contract.id],
+      },
+    },
+  };
+}
+
+/**
+ * [Issue #645] The task as its owner sees it.
+ *
+ * `reveal-share` and `homomorphic-sum` pass straight through — their payloads
+ * are public. `masked-total` gains the confidential inputs, derived here from
+ * the match seed rather than stored, so the only copy that ever exists is the
+ * one handed to the team the Order belongs to. `projectForTeam` calls this only
+ * for `myContracts`, which is already filtered to that team.
+ */
+function projectTask(
+  state: CryptoBattleState,
+  task: OrderTask,
+  contractId: string,
+): OrderTaskProjection {
+  switch (task.kind) {
+    case "reveal-share":
+      return task;
+    case "homomorphic-sum":
+      return task;
+    case "masked-total": {
+      const inputs = deriveMpcPrivateInputs(state.seed, contractId, BigInt(state.config.prime));
+      return {
+        kind: "masked-total",
+        partyCount: task.partyCount,
+        myInput: inputs.myInput.toString(),
+        incomingMasks: inputs.incomingMasks.map((m) => m.toString()),
+        outgoingMasks: inputs.outgoingMasks.map((m) => m.toString()),
+      };
+    }
+    default: {
+      const exhaustive: never = task;
+      throw new Error(`projectTask: unknown task ${JSON.stringify(exhaustive)}`);
+    }
+  }
 }
 
 function applyHunt(
@@ -595,12 +1124,35 @@ function applyProve(
  * comparison in `validateOp`'s "hunt" branch) and throws rather than silently
  * no-op-ing if it is handed something `validateOp` would have rejected.
  */
-export function applyOp(state: CryptoBattleState, teamId: string, op: CryptoBattleOp): CryptoBattleState {
+export function applyOp(
+  persistedState: CryptoBattleState,
+  teamId: string,
+  op: CryptoBattleOp,
+): CryptoBattleState {
+  const state = withMigratedContracts(persistedState);
   switch (op.kind) {
     case "leak":
       return applyLeak(state, teamId, op);
+    case "fhe":
+      return applyFhe(state, teamId, op);
+    case "mpc":
+      return applyMpc(state, teamId, op);
     case "hunt":
       return applyHunt(state, teamId, op);
+    case "hunt-nonce":
+      // [Issue #645 Phase 5] Both hunt kinds score identically, guard against
+      // replay identically, and land in the same `huntLog` -- only the evidence
+      // differs, and `validateOp` has already checked the evidence this one
+      // needs (g^w = Y against the target's PUBLIC commitment). Reusing
+      // `applyHunt` keeps one scoring path rather than a near-duplicate that
+      // could drift; `applyHunt` re-reads the target's secret itself, so the
+      // value passed here is only the shape it expects.
+      return applyHunt(state, teamId, {
+        kind: "hunt",
+        targetTeamId: op.targetTeamId,
+        generation: op.generation,
+        recoveredSecret: state.teams[op.targetTeamId]?.secret ?? "0",
+      });
     case "rotate":
       return applyRotate(state, teamId);
     case "prove":
@@ -623,7 +1175,11 @@ export function applyOp(state: CryptoBattleState, teamId: string, op: CryptoBatt
  * / prove.test.ts's secret-non-leakage test assert this by scanning the
  * serialized JSON).
  */
-export function projectForTeam(state: CryptoBattleState, teamId: string): CryptoBattleProjection {
+export function projectForTeam(
+  persistedState: CryptoBattleState,
+  teamId: string,
+): CryptoBattleProjection {
+  const state = withMigratedContracts(persistedState);
   const team = state.teams[teamId];
   if (!team) {
     throw new Error(`projectForTeam: unknown team "${teamId}"`);
@@ -640,7 +1196,7 @@ export function projectForTeam(state: CryptoBattleState, teamId: string): Crypto
       id: c.id,
       kind: c.kind,
       points: c.points,
-      requestedShareIndices: c.requestedShareIndices,
+      task: projectTask(state, c.task, c.id),
       status: c.status,
       // [Issue #645] The Order's rule and the methods that satisfy it are
       // participant-visible by design: an Order the participant cannot LEAK
@@ -678,6 +1234,7 @@ export function projectForTeam(state: CryptoBattleState, teamId: string): Crypto
 
   return {
     phase: state.phase,
+    prime: state.config.prime,
     matchRemainingMs,
     vault: {
       teamId,

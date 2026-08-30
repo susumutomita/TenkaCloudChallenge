@@ -18,8 +18,10 @@
 
 import { applyOp, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
 import {
+  buildFheOp,
   buildHuntOp,
   buildLeakOp,
+  buildMpcOp,
   buildProveOp,
   buildRotateOp,
   type PlaytestOpStep,
@@ -143,16 +145,24 @@ export function buildVerticalPlaytestScript(): BuiltVerticalScript {
     }
     guard += 1;
 
-    const alphaOpen = state.contracts.find((c) => c.teamId === DEFENDER && c.status === "open");
-    if (alphaOpen) {
+    // [Issue #645] Only a `reveal-share` Order can be LEAKed or PROVEd. FHE and
+    // MPC Orders are served below, in the same batch, so this script exercises
+    // all four methods against the real issuance schedule rather than a
+    // hand-built Order list.
+    const alphaOpen = state.contracts.find(
+      (c) => c.teamId === DEFENDER && c.status === "open" && c.task.kind === "reveal-share",
+    );
+    if (alphaOpen && alphaOpen.task.kind === "reveal-share") {
       recordOp(
         DEFENDER,
         buildLeakOp(alphaOpen.id),
         "ok",
-        `Team ${DEFENDER} LEAK ${alphaOpen.id} (${alphaOpen.kind}, share #${alphaOpen.requestedShareIndices.join(",")})`,
+        `Team ${DEFENDER} LEAK ${alphaOpen.id} (${alphaOpen.kind}, share #${alphaOpen.task.shareIndices.join(",")})`,
       );
     }
-    const bravoOpen = state.contracts.find((c) => c.teamId === ATTACKER && c.status === "open");
+    const bravoOpen = state.contracts.find(
+      (c) => c.teamId === ATTACKER && c.status === "open" && c.task.kind === "reveal-share",
+    );
     if (bravoOpen) {
       const bravoVault = projectForTeam(state, ATTACKER).vault;
       recordOp(
@@ -161,6 +171,38 @@ export function buildVerticalPlaytestScript(): BuiltVerticalScript {
         "ok",
         `Team ${ATTACKER} PROVE ${bravoOpen.id} (${bravoOpen.kind}) -- no share revealed`,
       );
+    }
+
+    // [Issue #645 Phase 2/3] Both new methods, built from the OWNING team's
+    // projection only -- `buildFheOp` never sees a plaintext or a key, and
+    // `buildMpcOp` sees this office's own number and nobody else's.
+    for (const teamId of [DEFENDER, ATTACKER]) {
+      const projection = projectForTeam(state, teamId);
+      const prime = state.config.prime;
+      const fheOrder = projection.myContracts.find(
+        (c) => c.status === "open" && c.task.kind === "homomorphic-sum",
+      );
+      const fheOp = fheOrder ? buildFheOp(fheOrder, prime) : undefined;
+      if (fheOrder && fheOp) {
+        recordOp(
+          teamId,
+          fheOp,
+          "ok",
+          `Team ${teamId} FHE ${fheOrder.id} -- added two ciphertexts without decrypting either`,
+        );
+      }
+      const mpcOrder = projection.myContracts.find(
+        (c) => c.status === "open" && c.task.kind === "masked-total",
+      );
+      const mpcOp = mpcOrder ? buildMpcOp(mpcOrder, prime) : undefined;
+      if (mpcOrder && mpcOp) {
+        recordOp(
+          teamId,
+          mpcOp,
+          "ok",
+          `Team ${teamId} MPC ${mpcOrder.id} -- published a masked subtotal, not its input`,
+        );
+      }
     }
 
     if (distinctLeakedShareIndices(DEFENDER).length < state.config.threshold) {

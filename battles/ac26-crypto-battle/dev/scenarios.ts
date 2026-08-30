@@ -25,12 +25,18 @@
  * byte-identical state.
  */
 
+import { mod } from "../game/src/field.ts";
+import { groupPow, RFC3526_GROUP14 } from "../game/src/group.ts";
 import {
+  buildFheOp,
   buildHuntOp,
   buildLeakOp,
+  buildMpcOp,
   buildProveOp,
   buildRotateOp,
 } from "../game/src/playtest.ts";
+import { computeChallenge } from "../game/src/schnorr-transcript.ts";
+import { deriveWitness } from "../game/src/schnorr-witness.ts";
 import { projectForTeam, tick } from "../game/src/reducer.ts";
 import type {
   CryptoBattleConfig,
@@ -67,7 +73,10 @@ export const DEV_CONFIG: Partial<CryptoBattleConfig> = {
 export const SCENARIO_IDS = [
   "fresh",
   "ledger-filling",
+  "fhe-order",
+  "mpc-order",
   "hunt-reachable",
+  "nonce-reuse",
   "after-rotate",
   "ended",
 ] as const;
@@ -87,9 +96,21 @@ export const SCENARIO_LABELS: Readonly<Record<ScenarioId, ScenarioCopy>> = {
     ja: "中盤 — LEAK と PROVE が Ledger に並ぶ",
     en: "Midgame — LEAK and PROVE side by side on the Ledger",
   },
+  "fhe-order": {
+    ja: "暗号文のまま足す Order が開いている状態",
+    en: "An encrypted-addition Order is open",
+  },
+  "mpc-order": {
+    ja: "覆面つき小計の Order が開いている状態",
+    en: "A masked-subtotal Order is open",
+  },
   "hunt-reachable": {
     ja: "alpha の share が threshold 枚そろった状態",
     en: "alpha has leaked threshold-many shares",
+  },
+  "nonce-reuse": {
+    ja: "alpha が同じ nonce で2回証明した — witness が復元できる",
+    en: "alpha proved twice with one nonce — the witness is recoverable",
   },
   "after-rotate": {
     ja: "alpha が ROTATE した直後 — 世代が変わる",
@@ -182,6 +203,75 @@ function leakOpenContracts(driver: Driver, teamId: string): number {
   return leaked;
 }
 
+/**
+ * [Issue #645] Serve any open FHE / MPC Orders for `teamId`.
+ *
+ * Uses the same `buildFheOp` / `buildMpcOp` a participant's script would, off
+ * the team's own projection — so a scenario reaches its position by playing the
+ * game rather than by writing a state that looks like it was played.
+ */
+function serveComputationOrders(driver: Driver, teamId: string): number {
+  let served = 0;
+  const prime = driver.host.state.config.prime;
+  for (const order of projectForTeam(driver.host.state, teamId).myContracts) {
+    if (order.status !== "open") continue;
+    const op =
+      order.task.kind === "homomorphic-sum"
+        ? buildFheOp(order, prime)
+        : order.task.kind === "masked-total"
+          ? buildMpcOp(order, prime)
+          : undefined;
+    if (op && driver.play(teamId, op)) served += 1;
+  }
+  return served;
+}
+
+/**
+ * [Issue #645 Phase 5] Make `teamId` prove twice with ONE nonce.
+ *
+ * The careless prover is written out here rather than imported, for the same
+ * reason `nonce-reuse.test.ts` keeps its own: the package must not ship a
+ * prover that reuses nonces. This is a dev-harness fixture whose whole purpose
+ * is to let an author see the consequence on screen.
+ */
+function proveTwiceWithOneNonce(driver: Driver, teamId: string): boolean {
+  const group = RFC3526_GROUP14;
+  const FIXED_NONCE = 424_242n;
+  let proved = 0;
+  for (let round = 0; round < 12 && proved < 2; round += 1) {
+    const vault = projectForTeam(driver.host.state, teamId).vault;
+    for (const order of projectForTeam(driver.host.state, teamId).myContracts) {
+      if (proved >= 2) break;
+      if (order.status !== "open" || order.task.kind !== "reveal-share") continue;
+      if (!order.allowedMethods.includes("prove")) continue;
+      const witness = deriveWitness(BigInt(vault.secret), vault.generation, teamId, group);
+      const publicY = groupPow(group.generator, witness, group);
+      const commitmentR = groupPow(group.generator, FIXED_NONCE, group);
+      const e = computeChallenge(
+        {
+          teamId,
+          contractId: order.id,
+          generation: vault.generation,
+          commitmentR,
+          publicY,
+        },
+        group,
+      );
+      const op: CryptoBattleOp = {
+        kind: "prove",
+        contractId: order.id,
+        proof: {
+          commitment: commitmentR.toString(),
+          response: mod(FIXED_NONCE + e * witness, group.order).toString(),
+        },
+      };
+      if (driver.play(teamId, op)) proved += 1;
+    }
+    if (proved < 2) driver.advance(60_000);
+  }
+  return proved >= 2;
+}
+
 /** PROVE the oldest open contract for `teamId`, building a real Schnorr proof. */
 function proveOldestContract(driver: Driver, teamId: string): boolean {
   const [contractId] = openContractIds(driver.host.state, teamId);
@@ -199,6 +289,24 @@ function proveOldestContract(driver: Driver, teamId: string): boolean {
  * derived from the seed, so "leak three contracts" does not reliably produce
  * three DISTINCT indices. The loop asks the state, it does not assume.
  */
+/**
+ * [Issue #645] Advance the clock WITHOUT anyone serving their Orders.
+ *
+ * The Order-showcase scenarios need a belt with an unserved Order on it; using
+ * `playUntil` would clear the very Order they exist to display.
+ */
+function playUntilRaw(
+  driver: Driver,
+  stop: (state: CryptoBattleState) => boolean,
+  budgetMinutes: number,
+): boolean {
+  for (let minute = 0; minute < budgetMinutes; minute += 1) {
+    if (stop(driver.host.state)) return true;
+    driver.advance(60_000);
+  }
+  return stop(driver.host.state);
+}
+
 function playUntil(
   driver: Driver,
   stop: (state: CryptoBattleState) => boolean,
@@ -207,6 +315,10 @@ function playUntil(
   for (let minute = 0; minute < budgetMinutes; minute += 1) {
     leakOpenContracts(driver, "alpha");
     proveOldestContract(driver, "bravo");
+    // [Issue #645] Both teams also serve their FHE / MPC Orders, so a mid-match
+    // scenario shows the ledger every method actually produces.
+    serveComputationOrders(driver, "alpha");
+    serveComputationOrders(driver, "bravo");
     if (stop(driver.host.state)) return true;
     driver.advance(60_000);
   }
@@ -240,6 +352,47 @@ export function buildScenario(id: ScenarioId): Scenario {
         )
       ) {
         throw new Error("scenario 'ledger-filling' never reached a mixed ledger");
+      }
+      break;
+    }
+
+    case "fhe-order": {
+      // Stop as soon as an encrypted-addition Order is on alpha's belt, without
+      // serving it -- the point of this position is to SHOW the Order.
+      if (
+        !playUntilRaw(
+          driver,
+          (state) =>
+            state.contracts.some(
+              (c) => c.teamId === "alpha" && c.status === "open" && c.task.kind === "homomorphic-sum",
+            ),
+          10,
+        )
+      ) {
+        throw new Error("scenario 'fhe-order' never saw an open homomorphic-sum Order");
+      }
+      break;
+    }
+
+    case "mpc-order": {
+      if (
+        !playUntilRaw(
+          driver,
+          (state) =>
+            state.contracts.some(
+              (c) => c.teamId === "alpha" && c.status === "open" && c.task.kind === "masked-total",
+            ),
+          10,
+        )
+      ) {
+        throw new Error("scenario 'mpc-order' never saw an open masked-total Order");
+      }
+      break;
+    }
+
+    case "nonce-reuse": {
+      if (!proveTwiceWithOneNonce(driver, "alpha")) {
+        throw new Error("scenario 'nonce-reuse' could not get two proofs under one nonce");
       }
       break;
     }

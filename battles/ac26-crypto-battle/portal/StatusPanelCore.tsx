@@ -37,6 +37,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { ledgerKindLabel, ledgerPayload, taskDetail, taskLabel } from "./orderTask.ts";
 import type { CSSProperties } from "react";
 import type { PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 import { usePolledProjection } from "./coordination.ts";
@@ -73,7 +74,7 @@ interface Copy {
   readonly colContract: string;
   readonly colKind: string;
   readonly colPoints: string;
-  readonly colShares: string;
+  readonly colTask: string;
   readonly colExpires: string;
   readonly kindStandard: string;
   readonly kindRush: string;
@@ -95,8 +96,11 @@ interface Copy {
   readonly colTeam: string;
   readonly colGeneration: string;
   readonly colEntryKind: string;
+  readonly colOrder: string;
   readonly colDetail: string;
   readonly colWhen: string;
+  readonly publicKeysTitle: string;
+  readonly publicKeysBody: string;
   readonly kindShare: string;
   readonly kindProof: string;
   readonly you: string;
@@ -118,12 +122,12 @@ const COPY: Record<Locale, Copy> = {
     matchEnded: "ended",
     phase: { build: "Build", pressure: "Pressure", endgame: "Endgame", ended: "Ended" } as Record<Phase, string>,
     contractQueueTitle: "Contract Queue",
-    contractQueueBody: "LEAK requests addressed to your team. Miss the deadline and one expires unclaimed.",
+    contractQueueBody: "Orders addressed to your team. Each says what it asks for and which methods it accepts. Miss the deadline and one expires unclaimed.",
     noContracts: "No open contracts right now.",
     colContract: "Contract",
     colKind: "Kind",
     colPoints: "Points",
-    colShares: "Requested shares",
+    colTask: "What it asks for",
     colExpires: "Expires in",
     kindStandard: "standard",
     kindRush: "rush",
@@ -150,8 +154,12 @@ const COPY: Record<Locale, Copy> = {
     colTeam: "Team",
     colGeneration: "Gen",
     colEntryKind: "Kind",
+    colOrder: "Order",
     colDetail: "Detail",
     colWhen: "Posted (UTC)",
+    publicKeysTitle: "Public commitments (Y)",
+    publicKeysBody:
+      "Every team's public value Y, published from the start. Anyone can check any proof on the ledger against the team's Y — that is what makes a proof checkable without the secret.",
     kindShare: "share (LEAK)",
     kindProof: "proof (PROVE)",
     you: " (you)",
@@ -170,12 +178,12 @@ const COPY: Record<Locale, Copy> = {
     matchEnded: "終了",
     phase: { build: "Build", pressure: "Pressure", endgame: "Endgame", ended: "Ended" } as Record<Phase, string>,
     contractQueueTitle: "Contract Queue",
-    contractQueueBody: "自チーム宛の LEAK 依頼です。期限内に応じないと失効します。",
+    contractQueueBody: "自チーム宛の依頼です。何を求められているかと、使える方法がそれぞれ書いてあります。期限内に応じないと失効します。",
     noContracts: "現在、open な contract はありません。",
     colContract: "Contract",
     colKind: "種別",
     colPoints: "得点",
-    colShares: "要求 share index",
+    colTask: "依頼内容",
     colExpires: "期限まで",
     kindStandard: "standard",
     kindRush: "rush",
@@ -197,8 +205,12 @@ const COPY: Record<Locale, Copy> = {
     colTeam: "チーム",
     colGeneration: "世代",
     colEntryKind: "種別",
+    colOrder: "依頼",
     colDetail: "詳細",
     colWhen: "記録時刻 (UTC)",
+    publicKeysTitle: "公開値 (Y)",
+    publicKeysBody:
+      "各チームの公開値 Y です。最初から公開されています。ledger にある proof は、そのチームの Y と照らし合わせれば誰でも検算できます — secret を知らなくても proof を確かめられるのは、この Y があるからです。",
     kindShare: "share (LEAK)",
     kindProof: "proof (PROVE)",
     you: " (自チーム)",
@@ -243,6 +255,18 @@ const laneStyle: CSSProperties = {
 
 const tableStyle: CSSProperties = { width: "100%", borderCollapse: "collapse", fontSize: "12px" };
 const thStyle: CSSProperties = { padding: "4px 6px", textAlign: "left", borderBottom: "1px solid #d5dbdb" };
+/**
+ * A public commitment is a 2048-bit number, so it is ~617 decimal digits. It
+ * has to be rendered in full -- a truncated Y cannot be fed to the challenge
+ * hash, which would leave it as decorative as not showing it at all -- so it
+ * wraps anywhere rather than overflowing its lane.
+ */
+const publicKeyValueStyle: CSSProperties = {
+  margin: 0,
+  fontFamily: "ui-monospace,SFMono-Regular,Menlo,monospace",
+  overflowWrap: "anywhere",
+  color: "#5f6b7a",
+};
 const tdStyle: CSSProperties = {
   padding: "4px 6px",
   borderBottom: "1px solid #f0f0f0",
@@ -325,10 +349,12 @@ function useElapsedSincePollMs(receivedAtWallMs: number | null): number {
 function ContractQueueLane({
   contracts,
   elapsedSincePollMs,
+  locale,
   copy,
 }: {
   readonly contracts: readonly ContractProjection[];
   readonly elapsedSincePollMs: number;
+  readonly locale: Locale;
   readonly copy: Copy;
 }) {
   const open = contracts.filter((c) => c.status === "open");
@@ -345,7 +371,7 @@ function ContractQueueLane({
               <th style={thStyle}>{copy.colContract}</th>
               <th style={thStyle}>{copy.colKind}</th>
               <th style={thStyle}>{copy.colPoints}</th>
-              <th style={thStyle}>{copy.colShares}</th>
+              <th style={thStyle}>{copy.colTask}</th>
               <th style={thStyle}>{copy.colExpires}</th>
             </tr>
           </thead>
@@ -358,7 +384,17 @@ function ContractQueueLane({
                   <td style={tdStyle}>{c.id}</td>
                   <td style={tdStyle}>{c.kind === "rush" ? copy.kindRush : copy.kindStandard}</td>
                   <td style={tdStyle}>{c.points}</td>
-                  <td style={tdStyle}>{c.requestedShareIndices.join(", ")}</td>
+                  {/*
+                    [Issue #645] The participant-facing label, not
+                    `describeTaskShort` — whose own docstring says it names the
+                    mechanism for operators and is "exactly what a participant
+                    should not be handed as their first impression of the job".
+                    This lane is that first impression, and it was rendering
+                    `fhe-sum×2` under a column headed "Requested shares".
+                  */}
+                  <td style={tdStyle}>
+                    {taskLabel(c.task, locale)} · {taskDetail(c.task, locale)}
+                  </td>
                   <td style={{ ...tdStyle, color: soon ? "#8a6d3b" : undefined }}>{formatDuration(remainingMs)}</td>
                 </tr>
               );
@@ -424,11 +460,15 @@ function VaultLane({
 
 function LedgerLane({
   ledger,
+  publicCommitments,
   myTeamId,
+  locale,
   copy,
 }: {
   readonly ledger: readonly PublicArtifact[];
+  readonly publicCommitments: Readonly<Record<string, string>>;
   readonly myTeamId: string;
+  readonly locale: Locale;
   readonly copy: Copy;
 }) {
   // Newest first. No derived "exposure" reading of any kind -- see this
@@ -447,6 +487,7 @@ function LedgerLane({
               <th style={thStyle}>{copy.colTeam}</th>
               <th style={thStyle}>{copy.colGeneration}</th>
               <th style={thStyle}>{copy.colEntryKind}</th>
+              <th style={thStyle}>{copy.colOrder}</th>
               <th style={thStyle}>{copy.colDetail}</th>
               <th style={thStyle}>{copy.colWhen}</th>
             </tr>
@@ -459,16 +500,52 @@ function LedgerLane({
                   {entry.teamId === myTeamId ? copy.you : ""}
                 </td>
                 <td style={tdStyle}>{entry.generation}</td>
-                <td style={tdStyle}>{entry.kind === "share" ? copy.kindShare : copy.kindProof}</td>
-                <td style={tdStyle}>
-                  {entry.kind === "share" ? `#${entry.shareIndex} = ${entry.value}` : `${entry.commitment} / ${entry.response}`}
-                </td>
+                {/*
+                  [Issue #645] Four artifact shapes now, one rendering. Labels
+                  and payloads live in orderTask.ts so the ledger cannot start
+                  disagreeing with the game board about what a row means.
+                */}
+                <td style={tdStyle}>{ledgerKindLabel(entry)}</td>
+                {/*
+                  [Issue #645] The Order an artifact was posted against. Public
+                  on every artifact shape, and one of the five values a proof's
+                  challenge is computed over (see the Help Drawer's Python:
+                  domain, team, contract, generation, R, Y) -- so without it on
+                  screen a reader cannot re-derive a challenge from the ledger,
+                  and the nonce-reuse HUNT is unreachable by hand.
+                */}
+                <td style={tdStyle}>{entry.contractId}</td>
+                <td style={tdStyle}>{ledgerPayload(entry, locale)}</td>
                 <td style={tdStyle}>{formatTimestamp(entry.postedAtMs)}</td>
               </tr>
             ))}
           </tbody>
         </table>
       )}
+      {/*
+        [Issue #645] Y, the other value a proof's challenge binds. It is public
+        by construction (see reducer.ts's `publicCommitments`) and PROVE is only
+        checkable BECAUSE it is public -- but it reached no participant surface,
+        which left every challenge on the ledger impossible to re-derive and the
+        nonce-reuse HUNT unplayable by hand.
+      */}
+      <div style={{ marginTop: "12px" }}>
+        <h5 style={{ margin: "0 0 2px 0", fontSize: "12px" }}>{copy.publicKeysTitle}</h5>
+        <p style={{ margin: "0 0 6px 0", fontSize: "11px", color: "#5f6b7a" }}>
+          {copy.publicKeysBody}
+        </p>
+        <dl style={{ margin: 0, fontSize: "11px" }}>
+          {Object.entries(publicCommitments).map(([teamId, y]) => (
+            <div key={teamId} style={{ margin: "0 0 6px 0" }}>
+              <dt style={{ fontWeight: 700 }}>
+                {teamId}
+                {teamId === myTeamId ? copy.you : ""}
+              </dt>
+              <dd style={publicKeyValueStyle}>{y}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
     </div>
   );
 }
@@ -525,9 +602,20 @@ export function StatusPanelBody({
         </div>
       </div>
       <div style={laneGridStyle}>
-        <ContractQueueLane contracts={projection.myContracts} elapsedSincePollMs={elapsedSincePollMs} copy={copy} />
+        <ContractQueueLane
+          contracts={projection.myContracts}
+          elapsedSincePollMs={elapsedSincePollMs}
+          locale={locale}
+          copy={copy}
+        />
         <VaultLane vault={projection.vault} elapsedSincePollMs={elapsedSincePollMs} copy={copy} />
-        <LedgerLane ledger={projection.publicLedger} myTeamId={myTeamId} copy={copy} />
+        <LedgerLane
+          ledger={projection.publicLedger}
+          publicCommitments={projection.publicCommitments}
+          myTeamId={myTeamId}
+          locale={locale}
+          copy={copy}
+        />
       </div>
     </>
   );

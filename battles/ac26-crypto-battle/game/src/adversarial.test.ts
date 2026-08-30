@@ -7,6 +7,9 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { deriveFheInputKeys, deriveFhePlaintexts } from "./fhe.ts";
+import { deriveMpcPrivateInputs } from "./mpc.ts";
+import { buildFheOp, buildLeakOp, buildMpcOp, buildProveOp } from "./playtest.ts";
 import { completeShares, reconstruct, type Share } from "./shamir.ts";
 import { applyOp, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
 import type { CryptoBattleOp, CryptoBattleState, PublicArtifact, ShareArtifact } from "./types.ts";
@@ -41,7 +44,7 @@ function leakShareIndex(state: CryptoBattleState, teamId: string, shareIndex: nu
         teamId,
         kind: "standard",
         points: state.config.scores.contract,
-        requestedShareIndices: [shareIndex],
+        task: { kind: "reveal-share" as const, shareIndices: [shareIndex] },
         issuedAtMs: state.nowMs ?? 0,
         expiresAtMs: (state.nowMs ?? 0) + state.config.contractTtlMs,
         status: "open",
@@ -101,7 +104,18 @@ test("adversarial 2: LEAK x3 -> HUNT end-to-end (real contract issuance, real re
     if (guard >= GUARD_LIMIT) {
       throw new Error("did not accumulate `threshold` distinct leaked shares within the guard bound");
     }
-    const open = state.contracts.find((c) => c.teamId === target && c.status === "open");
+    // [Issue #645] This loop is accumulating LEAKED SHARES, so it wants the
+    // Orders that can produce one: a share Order whose client permits raw
+    // disclosure. The belt also carries PROVE-only, FHE and MPC Orders now, and
+    // none of those puts a share on the ledger — which is exactly the property
+    // the rest of this suite checks elsewhere.
+    const open = state.contracts.find(
+      (c) =>
+        c.teamId === target &&
+        c.status === "open" &&
+        c.task.kind === "reveal-share" &&
+        c.allowedMethods.includes("leak"),
+    );
     state = open
       ? applyOp(state, target, { kind: "leak", contractId: open.id })
       : tick(state, (state.nowMs ?? 0) + state.config.contractIntervalMs);
@@ -342,4 +356,77 @@ test("adversarial 8: same seed + same event sequence replays to a deeply-equal s
   const first = run();
   const second = run();
   expect(first).toEqual(second);
+});
+
+/**
+ * [Issue #645] The consolidated trusted-material leak test.
+ *
+ * Every method now has a hidden half: LEAK/PROVE have the team's secret and
+ * witness, FHE has plaintexts and a key, MPC has an input and four masks. This
+ * plays one match through ALL FOUR and then asserts that none of that material
+ * appears anywhere a participant can read — not on the Public Ledger, and not
+ * in another team's projection.
+ *
+ * Written as one sweep over the derived values rather than four per-method
+ * assertions so that a method added later is covered by construction: the
+ * hidden material is enumerated from the Orders that were actually issued.
+ */
+test("adversarial 9: no trusted material reaches any participant-visible surface, for any method", () => {
+  let state = tick(initialState(ctx("adv-9")), 0);
+  const prime = BigInt(state.config.prime);
+
+  // Play every open Order for teamA by whichever method its task admits.
+  for (let round = 0; round < 8; round += 1) {
+    for (const order of projectForTeam(state, "teamA").myContracts) {
+      if (order.status !== "open") continue;
+      let op: CryptoBattleOp | undefined;
+      if (order.task.kind === "reveal-share") {
+        op = order.allowedMethods.includes("leak")
+          ? buildLeakOp(order.id)
+          : buildProveOp(projectForTeam(state, "teamA").vault, order.id);
+      } else if (order.task.kind === "homomorphic-sum") {
+        op = buildFheOp(order, state.config.prime);
+      } else {
+        op = buildMpcOp(order, state.config.prime);
+      }
+      if (!op) continue;
+      const verdict = validateOp(state, "teamA", op);
+      if (!verdict.ok) throw new Error(`setup op rejected: ${verdict.error}`);
+      state = applyOp(state, "teamA", op);
+    }
+    state = tick(state, (round + 1) * state.config.contractIntervalMs);
+  }
+
+  // Everything the trusted side holds and no participant may see.
+  const teamA = state.teams.teamA;
+  if (!teamA) throw new Error("expected teamA");
+  const secrets: string[] = [teamA.secret];
+  for (const order of state.contracts.filter((c) => c.teamId === "teamA")) {
+    if (order.task.kind === "homomorphic-sum") {
+      for (const key of deriveFheInputKeys(state.seed, order.id, prime)) {
+        secrets.push(key.toString());
+      }
+      for (const plaintext of deriveFhePlaintexts(state.seed, order.id, prime)) {
+        secrets.push(plaintext.toString());
+      }
+    }
+    if (order.task.kind === "masked-total") {
+      const inputs = deriveMpcPrivateInputs(state.seed, order.id, prime);
+      secrets.push(inputs.myInput.toString());
+      for (const mask of [...inputs.incomingMasks, ...inputs.outgoingMasks]) {
+        secrets.push(mask.toString());
+      }
+    }
+  }
+  // Guard the guard: an empty or trivially-short list would make every
+  // assertion below vacuously true.
+  expect(secrets.length).toBeGreaterThan(6);
+  for (const secret of secrets) expect(secret.length).toBeGreaterThan(4);
+
+  const ledger = JSON.stringify(state.publicLedger);
+  const otherTeamView = JSON.stringify(projectForTeam(state, "teamB"));
+  for (const secret of secrets) {
+    expect(ledger).not.toContain(secret);
+    expect(otherTeamView).not.toContain(secret);
+  }
 });

@@ -47,9 +47,15 @@
  */
 
 import { useState } from "react";
+import { describeTaskShort } from "./orderTask.ts";
 import type { PortalCoordinationClient, PortalCoordinationOutcome, PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 import { usePolledProjection } from "./coordination.ts";
-import type { ContractProjection, CryptoBattleOp, TeamSummaryProjection } from "../game/src/types.ts";
+import type {
+  ContractProjection,
+  CryptoBattleOp,
+  SubmissionMethod,
+  TeamSummaryProjection,
+} from "../game/src/types.ts";
 
 type Locale = "ja" | "en";
 
@@ -201,6 +207,25 @@ const noteStyle = { margin: "0 0 4px 0", fontSize: "11px", color: "#5f6b7a" } as
 const resultStyle = { margin: "4px 0 0 0", fontSize: "12px", color: "#414d5c" } as const;
 const errStyle = { margin: "4px 0 0 0", fontSize: "12px", color: "#d13212" } as const;
 
+/**
+ * [Issue #645] The Orders one method can actually fulfil.
+ *
+ * Each advanced form offers only these. An FHE or MPC Order sitting in the
+ * LEAK selector is a move the judge is certain to refuse, and `allowedMethods`
+ * is the Order's own answer to "can this method do this job" — so the form
+ * asks it rather than re-deriving the game's rules.
+ *
+ * Exported for `game/src/portal.test.ts`, which cannot reach the populated
+ * panel: `renderToStaticMarkup` never runs the effect that fetches a
+ * projection.
+ */
+export function contractsForMethod(
+  contracts: readonly ContractProjection[],
+  method: SubmissionMethod,
+): readonly ContractProjection[] {
+  return contracts.filter((c) => c.allowedMethods.includes(method));
+}
+
 /** Builds and submits a LEAK op. Exported for direct testing -- see this file's header. */
 export function submitLeak(client: PortalCoordinationClient, contractId: string): Promise<PortalCoordinationOutcome> {
   const op: CryptoBattleOp = { kind: "leak", contractId };
@@ -225,6 +250,47 @@ export function submitHunt(
   recoveredSecret: string,
 ): Promise<PortalCoordinationOutcome> {
   const op: CryptoBattleOp = { kind: "hunt", targetTeamId, generation, recoveredSecret };
+  return client.submitOp(op);
+}
+
+/**
+ * [Issue #645 Phase 2] Builds and submits an FHE op — the ciphertext this team
+ * computed by adding the Order's two input ciphertexts componentwise.
+ */
+export function submitFhe(
+  client: PortalCoordinationClient,
+  contractId: string,
+  ciphertext: { readonly r: string; readonly y: string },
+): Promise<PortalCoordinationOutcome> {
+  const op: CryptoBattleOp = { kind: "fhe", contractId, ciphertext };
+  return client.submitOp(op);
+}
+
+/**
+ * [Issue #645 Phase 3] Builds and submits an MPC op — this office's masked
+ * partial.
+ */
+export function submitMpc(
+  client: PortalCoordinationClient,
+  contractId: string,
+  partial: string,
+): Promise<PortalCoordinationOutcome> {
+  const op: CryptoBattleOp = { kind: "mpc", contractId, partial };
+  return client.submitOp(op);
+}
+
+/**
+ * [Issue #645 Phase 5] Builds and submits a nonce-reuse HUNT — the Schnorr
+ * witness recovered from two of the target's transcripts that share a
+ * commitment.
+ */
+export function submitHuntNonce(
+  client: PortalCoordinationClient,
+  targetTeamId: string,
+  generation: number,
+  recoveredWitness: string,
+): Promise<PortalCoordinationOutcome> {
+  const op: CryptoBattleOp = { kind: "hunt-nonce", targetTeamId, generation, recoveredWitness };
   return client.submitOp(op);
 }
 
@@ -297,7 +363,7 @@ function LeakForm({
           <select aria-label="leak-contract" style={fieldStyle} value={selected} onChange={(e) => setContractId(e.target.value)}>
             {contracts.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.id} ({c.kind}, {c.points}pt, shares[{c.requestedShareIndices.join(",")}])
+                {c.id} ({c.kind}, {c.points}pt, {describeTaskShort(c.task)})
               </option>
             ))}
           </select>
@@ -547,6 +613,8 @@ export default function RegistrationPanel(props: PortalSlotProps) {
   }
 
   const openContracts = projection ? projection.myContracts.filter((c) => c.status === "open") : [];
+  const leakContracts = contractsForMethod(openContracts, "leak");
+  const proveContracts = contractsForMethod(openContracts, "prove");
   const myTeamId = projection?.vault.teamId;
   const teamIds = projection ? Object.keys(projection.teams) : [];
   const teams = projection?.teams ?? {};
@@ -557,8 +625,8 @@ export default function RegistrationPanel(props: PortalSlotProps) {
       <p style={{ margin: "0 0 12px 0", fontSize: "13px", color: "#5f6b7a" }}>{copy.intro}</p>
       {!projection && <p style={{ margin: "0 0 12px 0", fontSize: "13px", color: "#5f6b7a" }}>{copy.loadingContracts}</p>}
       <div style={formsGridStyle}>
-        <LeakForm client={coordinationClient} contracts={openContracts} copy={copy} />
-        <ProveForm client={coordinationClient} contracts={openContracts} copy={copy} />
+        <LeakForm client={coordinationClient} contracts={leakContracts} copy={copy} />
+        <ProveForm client={coordinationClient} contracts={proveContracts} copy={copy} />
         <HuntForm client={coordinationClient} teamIds={teamIds} myTeamId={myTeamId} teams={teams} copy={copy} />
         <RotateForm client={coordinationClient} copy={copy} />
       </div>

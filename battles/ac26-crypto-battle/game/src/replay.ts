@@ -81,6 +81,23 @@ export type ReplayEvent =
       readonly teamId: string;
       readonly detail: { readonly contractId: string; readonly generation: number };
     })
+  /**
+   * [Issue #645] A debrief has to name the method a team actually used.
+   * Before FHE and MPC existed, every non-share artifact WAS a proof, so this
+   * module's `if (share) ... else ...` was exhaustive by accident. With four
+   * artifact kinds it stopped being so, and a match completing an FHE Order
+   * would have produced a replay claiming the team used PROVE.
+   */
+  | (ReplayEventBase & {
+      readonly kind: "fhe";
+      readonly teamId: string;
+      readonly detail: { readonly contractId: string; readonly generation: number };
+    })
+  | (ReplayEventBase & {
+      readonly kind: "mpc";
+      readonly teamId: string;
+      readonly detail: { readonly contractId: string; readonly generation: number };
+    })
   | (ReplayEventBase & {
       readonly kind: "hunt-success";
       readonly teamId: string;
@@ -108,28 +125,67 @@ export function buildReplay(state: CryptoBattleState): ReplayEvent[] {
   const events: ReplayEvent[] = [];
 
   for (const artifact of state.publicLedger) {
-    if (artifact.kind === "share") {
-      events.push({
-        atMs: artifact.postedAtMs,
-        teamId: artifact.teamId,
-        kind: "leak",
-        summary: {
-          en: `Team ${artifact.teamId} LEAK share #${artifact.shareIndex} (generation ${artifact.generation})`,
-          ja: `${artifact.teamId} が LEAK: share #${artifact.shareIndex} (世代 ${artifact.generation})`,
-        },
-        detail: { contractId: artifact.contractId, shareIndex: artifact.shareIndex, generation: artifact.generation },
-      });
-    } else {
-      events.push({
-        atMs: artifact.postedAtMs,
-        teamId: artifact.teamId,
-        kind: "prove",
-        summary: {
-          en: `Team ${artifact.teamId} PROVE contract ${artifact.contractId} (generation ${artifact.generation}) -- no secret material revealed`,
-          ja: `${artifact.teamId} が PROVE: contract ${artifact.contractId} (世代 ${artifact.generation}) -- secret は非公開のまま`,
-        },
-        detail: { contractId: artifact.contractId, generation: artifact.generation },
-      });
+    // [Issue #645] Switched exhaustively on all four artifact kinds. An
+    // `else` here would silently relabel a future fifth kind as whatever the
+    // last branch happened to be, which is exactly how ciphertexts and
+    // partials came to be reported as PROVE.
+    switch (artifact.kind) {
+      case "share":
+        events.push({
+          atMs: artifact.postedAtMs,
+          teamId: artifact.teamId,
+          kind: "leak",
+          summary: {
+            en: `Team ${artifact.teamId} LEAK share #${artifact.shareIndex} (generation ${artifact.generation})`,
+            ja: `${artifact.teamId} が LEAK: share #${artifact.shareIndex} (世代 ${artifact.generation})`,
+          },
+          detail: {
+            contractId: artifact.contractId,
+            shareIndex: artifact.shareIndex,
+            generation: artifact.generation,
+          },
+        });
+        break;
+      case "proof":
+        events.push({
+          atMs: artifact.postedAtMs,
+          teamId: artifact.teamId,
+          kind: "prove",
+          summary: {
+            en: `Team ${artifact.teamId} PROVE contract ${artifact.contractId} (generation ${artifact.generation}) -- no secret material revealed`,
+            ja: `${artifact.teamId} が PROVE: contract ${artifact.contractId} (世代 ${artifact.generation}) -- secret は非公開のまま`,
+          },
+          detail: { contractId: artifact.contractId, generation: artifact.generation },
+        });
+        break;
+      case "ciphertext":
+        events.push({
+          atMs: artifact.postedAtMs,
+          teamId: artifact.teamId,
+          kind: "fhe",
+          summary: {
+            en: `Team ${artifact.teamId} FHE order ${artifact.contractId} (generation ${artifact.generation}) -- added two ciphertexts without decrypting either`,
+            ja: `${artifact.teamId} が FHE: order ${artifact.contractId} (世代 ${artifact.generation}) -- 復号せずに暗号文を足した`,
+          },
+          detail: { contractId: artifact.contractId, generation: artifact.generation },
+        });
+        break;
+      case "partial":
+        events.push({
+          atMs: artifact.postedAtMs,
+          teamId: artifact.teamId,
+          kind: "mpc",
+          summary: {
+            en: `Team ${artifact.teamId} MPC order ${artifact.contractId} (generation ${artifact.generation}) -- published a masked subtotal, not its input`,
+            ja: `${artifact.teamId} が MPC: order ${artifact.contractId} (世代 ${artifact.generation}) -- 自分の数ではなく覆面つきの小計を公開`,
+          },
+          detail: { contractId: artifact.contractId, generation: artifact.generation },
+        });
+        break;
+      default: {
+        const exhaustive: never = artifact;
+        throw new Error(`buildReplay: unknown artifact ${JSON.stringify(exhaustive)}`);
+      }
     }
   }
 

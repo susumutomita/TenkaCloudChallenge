@@ -15,7 +15,7 @@
 import { describe, expect, test } from "bun:test";
 import { applyOp, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
 import { createProof } from "./schnorr-prover.ts";
-import type { CryptoBattleOp } from "./types.ts";
+import type { CryptoBattleState, CryptoBattleOp } from "./types.ts";
 
 const CTX = { eventId: "prove-basic", teamIds: ["teamA", "teamB"] } as const;
 
@@ -244,8 +244,17 @@ describe("prove: wrong generation", () => {
     // Rotate voids every pre-rotate open contract for this team (see
     // reducer.ts's applyRotate) -- advance the clock to get a fresh open
     // contract under the NEW generation to submit the stale proof against.
-    state = tick(state, (state.nowMs ?? 0) + state.config.contractIntervalMs);
-    const postRotateContract = state.contracts.find((c) => c.teamId === "teamA" && c.status === "open");
+    // [Issue #645] PROVE only answers a share Order, and the belt now also
+    // carries FHE and MPC Orders -- so advance until a share Order appears
+    // rather than assuming the next one is.
+    const findShareOrder = (from: CryptoBattleState) =>
+      from.contracts.find(
+        (c) => c.teamId === "teamA" && c.status === "open" && c.task.kind === "reveal-share",
+      );
+    for (let round = 0; round < 8 && !findShareOrder(state); round += 1) {
+      state = tick(state, (state.nowMs ?? 0) + state.config.contractIntervalMs);
+    }
+    const postRotateContract = findShareOrder(state);
     if (!postRotateContract) throw new Error("expected a fresh open contract for teamA after rotate");
 
     // Attacker who captured the pre-rotate secret, still trying to prove
@@ -326,7 +335,7 @@ describe("prove: Scoring MUST -- PROVE pays the same as LEAK for an equal-value 
       teamId: "teamA",
       kind: "standard" as const,
       points: leakContract.points,
-      requestedShareIndices: leakContract.requestedShareIndices,
+      task: leakContract.task,
       issuedAtMs: state.nowMs ?? 0,
       expiresAtMs: (state.nowMs ?? 0) + state.config.contractTtlMs,
       status: "open" as const,
@@ -361,7 +370,7 @@ describe("prove: match end", () => {
       teamId: "teamA",
       kind: "standard" as const,
       points: state.config.scores.contract,
-      requestedShareIndices: [1],
+      task: { kind: "reveal-share" as const, shareIndices: [1] },
       issuedAtMs: state.nowMs ?? 0,
       expiresAtMs: (state.nowMs ?? 0) + state.config.contractTtlMs,
       status: "open" as const,
