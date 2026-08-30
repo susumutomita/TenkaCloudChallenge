@@ -779,14 +779,23 @@ describe("the nonce-HUNT card offers candidates without judging exploitability [
   });
 });
 
-describe("the game board's action prompt names the methods the open Orders accept [Issue #645]", () => {
+describe("the game board ties each method to the Order that accepts it [Issue #645]", () => {
   /**
-   * `StatusPanel` renders `GameBoard` first, so this row is the participant's
-   * FIRST instruction. It used to be a hardcoded LEAK / OR / PROVE — correct
-   * while those were the only methods, and a false first action the moment an
-   * FHE or MPC Order could be the only thing open. §12c's "low floor" bar is
-   * measured at exactly this point: after the first screen, can the reader say
-   * what to do first? Naming two methods the open Order rejects fails it.
+   * This board got it wrong twice before this shape.
+   *
+   * First a hardcoded LEAK / OR / PROVE row, which named methods an FHE Order
+   * rejects — and `StatusPanel` renders this board first, so that was the
+   * participant's first instruction.
+   *
+   * Then the union of every open Order's methods. Orders are issued every
+   * `contractIntervalMs` (2 min) and live `contractTtlMs` (5 min), so up to
+   * three overlap and the deterministic task cycle puts a share Order beside
+   * an FHE one routinely. The row then read "LEAK OR PROVE OR FHE" — three
+   * methods presented as interchangeable when each belongs to a different
+   * card.
+   *
+   * A method list is only ever true of ONE Order. These tests pin that it is
+   * rendered there and nowhere else.
    */
   const order = (
     id: string,
@@ -813,32 +822,41 @@ describe("the game board's action prompt names the methods the open Orders accep
     ["mpc"],
   );
 
-  const chipsFor = (myContracts: readonly ContractProjection[]): string[] => {
-    const html = renderToStaticMarkup(
+  const render = (myContracts: readonly ContractProjection[]): string =>
+    renderToStaticMarkup(
       createElement(GameBoardBody, { projection: fixtureProjection({ myContracts }), locale: "en" }),
     );
-    // Match the choice chips by class, not by the words -- "LEAK" and "PROVE"
-    // also appear in ledger labels elsewhere on the same board.
-    return ["leak", "prove", "fhe", "mpc"].filter((m) => html.includes(`tc-choice tc-choice-${m}`));
-  };
 
-  it("offers LEAK and PROVE when a share Order is the open one", () => {
-    expect(chipsFor([SHARE])).toEqual(["leak", "prove"]);
+  /** Method chips, in render order, matched by class rather than by the words. */
+  const chips = (html: string): string[] =>
+    [...html.matchAll(/tc-method tc-method-(\w+)/g)].map(([, method]) => method ?? "");
+
+  it("shows a share Order's two methods on its own card", () => {
+    expect(chips(render([SHARE]))).toEqual(["leak", "prove"]);
   });
 
-  it("offers FHE alone when only an FHE Order is open", () => {
-    expect(chipsFor([FHE])).toEqual(["fhe"]);
+  it("shows FHE alone for an FHE Order", () => {
+    expect(chips(render([FHE]))).toEqual(["fhe"]);
   });
 
-  it("offers FHE and MPC, and neither LEAK nor PROVE, when only compute Orders are open", () => {
-    expect(chipsFor([FHE, MPC])).toEqual(["fhe", "mpc"]);
+  /**
+   * The case that broke the union version: two Orders open at once whose
+   * methods are NOT interchangeable. Each card carries its own, and no
+   * combined claim is made anywhere.
+   */
+  it("keeps each Order's methods on its own card when several are open", () => {
+    expect(chips(render([SHARE, FHE, MPC]))).toEqual(["leak", "prove", "fhe", "mpc"]);
   });
 
-  it("offers all four when the belt holds every kind", () => {
-    expect(chipsFor([SHARE, FHE, MPC])).toEqual(["leak", "prove", "fhe", "mpc"]);
+  it("makes no method claim at all when nothing is open", () => {
+    expect(chips(render([]))).toEqual([]);
   });
 
-  it("keeps the LEAK/PROVE framing when nothing is open -- no Order to contradict", () => {
-    expect(chipsFor([])).toEqual(["leak", "prove"]);
+  it("no longer renders a board-level choice row", () => {
+    // The row is gone rather than corrected: any statement it could make is
+    // either tied to one Order (so it belongs on that card) or false.
+    const html = render([SHARE, FHE]);
+    expect(html).not.toContain("crypto-battle-primary-choice");
+    expect(html).not.toContain("tc-choice-arrow");
   });
 });

@@ -1,14 +1,7 @@
-import { Fragment } from "react";
 import type { PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 import { taskDetail, taskLabel } from "./orderTask.ts";
 import { usePolledProjection } from "./coordination.ts";
-import { ALL_SUBMISSION_METHODS } from "../game/src/methods.ts";
-import type {
-  CryptoBattleProjection,
-  PublicArtifact,
-  ShareArtifact,
-  SubmissionMethod,
-} from "../game/src/types.ts";
+import type { CryptoBattleProjection, PublicArtifact, ShareArtifact } from "../game/src/types.ts";
 
 type Locale = "ja" | "en";
 
@@ -138,12 +131,6 @@ function protectedLabel(kind: PublicArtifact["kind"]): string {
 function OrderBelt({ projection, locale }: { readonly projection: CryptoBattleProjection; readonly locale: Locale }) {
   const copy = COPY[locale];
   const openOrders = projection.myContracts.filter((order) => order.status === "open" && order.remainingMs > 0);
-  const availableMethods =
-    openOrders.length === 0
-      ? (["leak", "prove"] as const satisfies readonly SubmissionMethod[])
-      : ALL_SUBMISSION_METHODS.filter((method) =>
-          openOrders.some((order) => order.allowedMethods.includes(method)),
-        );
   return (
     <section className="tc-game-card tc-order-belt" aria-label="crypto-battle-order-belt">
       <div className="tc-section-label">{copy.orderBelt}</div>
@@ -164,6 +151,29 @@ function OrderBelt({ projection, locale }: { readonly projection: CryptoBattlePr
                   <span>{copy.time} {formatDuration(order.remainingMs)}</span>
                   <span>{taskLabel(order.task, locale)} · {taskDetail(order.task, locale)}</span>
                 </div>
+                {/*
+                  [Issue #645] Which methods THIS Order accepts, on the card
+                  that owns them.
+
+                  Two earlier versions of this board got it wrong in opposite
+                  directions. First a hardcoded LEAK / OR / PROVE, which named
+                  methods an FHE Order rejects. Then the union of every open
+                  Order's methods — but Orders are issued every 2 minutes and
+                  live for 5, so up to three overlap, and a share Order beside
+                  an FHE Order rendered "LEAK OR PROVE OR FHE" as though those
+                  were interchangeable choices. They are not: each belongs to a
+                  different card.
+
+                  A method list is only ever true of ONE Order, so it lives on
+                  that Order and nowhere else.
+                */}
+                <div className="tc-order-methods">
+                  {order.allowedMethods.map((method) => (
+                    <span className={`tc-method tc-method-${method}`} key={method}>
+                      {copy[method]}
+                    </span>
+                  ))}
+                </div>
                 <div className="tc-timer-track" aria-hidden="true">
                   <div className="tc-timer-fill" style={{ width: `${pct}%` }} />
                 </div>
@@ -172,30 +182,6 @@ function OrderBelt({ projection, locale }: { readonly projection: CryptoBattlePr
           })}
         </div>
       )}
-      {/*
-        [Issue #645] The methods the OPEN Orders actually accept.
-
-        This row used to be a hardcoded LEAK / OR / PROVE, which was true while
-        those were the only two methods. `StatusPanel` renders this board as
-        its first surface, so once FHE and MPC Orders existed the participant's
-        first instruction named two methods their open Orders reject — a false
-        first action, which is the §12c "low floor" bar failing at the exact
-        point it is measured.
-
-        With nothing open there is no Order to contradict, so the LEAK/PROVE
-        trade-off stands as the game's framing rather than as an instruction.
-      */}
-      <div className="tc-choice-row" aria-label="crypto-battle-primary-choice">
-        {availableMethods.map((method, index) => (
-          <Fragment key={method}>
-            {index > 0 && <div className="tc-choice-arrow">OR</div>}
-            <div className={`tc-choice tc-choice-${method}`}>
-              <strong>{copy[method]}</strong>
-              <span>{copy[`${method}Short` as const]}</span>
-            </div>
-          </Fragment>
-        ))}
-      </div>
     </section>
   );
 }
@@ -277,15 +263,12 @@ const CSS = `
 .tc-timer-track{height:5px;background:#eaeded;border-radius:999px;overflow:hidden;margin-top:8px}
 .tc-timer-fill{height:100%;background:currentColor;transition:width .25s linear}
 .tc-urgent{animation:tc-order-in .28s ease-out both,tc-urgent 1s ease-in-out infinite}
-.tc-choice-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
-.tc-choice{flex:1 1 130px}
-.tc-choice{display:flex;justify-content:center;align-items:center;gap:8px;border-radius:10px;padding:10px 12px;border:1px solid #cfd8e3}
-.tc-choice span{font-size:11px;color:#5f6b7a}
-.tc-choice-leak{background:#fff7e8;border-color:#e0b36a}
-.tc-choice-prove{background:#eef8f2;border-color:#86c89b}
-.tc-choice-fhe{background:#eef2fb;border-color:#7f9ad4}
-.tc-choice-mpc{background:#f6eefb;border-color:#a982cc}
-.tc-choice-arrow{font-size:10px;font-weight:800;color:#687078}
+.tc-order-methods{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.tc-method{font-size:10px;font-weight:800;letter-spacing:.04em;border-radius:6px;padding:2px 6px;border:1px solid #cfd8e3}
+.tc-method-leak{background:#fff7e8;border-color:#e0b36a}
+.tc-method-prove{background:#eef8f2;border-color:#86c89b}
+.tc-method-fhe{background:#eef2fb;border-color:#7f9ad4}
+.tc-method-mpc{background:#f6eefb;border-color:#a982cc}
 .tc-board-grid{display:grid;grid-template-columns:minmax(220px,.8fr) minmax(300px,1.2fr);gap:12px}
 .tc-share-grid{display:flex;flex-wrap:wrap;gap:7px}
 .tc-share-card{border:1px solid #b8c4ce;border-radius:8px;background:#f8fafc;min-width:54px;overflow:hidden}
