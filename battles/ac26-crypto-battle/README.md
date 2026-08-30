@@ -57,6 +57,36 @@ luck: only a computation that actually checks out moves the score.
   exposed shares for their current generation. A PROVE entry, by contrast,
   never carries anything that helps reconstruct a secret.
 
+## Orders and their conditions
+
+Participant-facing copy calls a job an **Order** (Issue #645). The internal
+TypeScript type is still `Contract` -- deliberately, so a rename does not churn
+every reducer test at the same time as the model grows -- but nothing a
+participant reads says "Contract" any more: the word invited a CloudFormation /
+smart-contract reading that has nothing to do with this game.
+
+An Order carries a task (the share index it asks for), a deadline, a reward, a
+**privacy constraint**, and the **methods that satisfy it**:
+
+| Constraint | Methods accepted | What the client is saying |
+| --- | --- | --- |
+| `none` | LEAK, PROVE | Handle it however you like. |
+| `no-raw-disclosure` | PROVE only | Do not publish the underlying value. |
+
+Roughly one Order in four is `no-raw-disclosure`, derived from the match seed
+like every other Order property, so the mix is deterministic and replayable. The
+constraint is shown on the Order card **before** the method choice, and LEAK is
+disabled with a stated reason rather than hidden -- an Order that only revealed
+its rule by rejecting a submission would spend the participant's time to teach
+them something the card could have said.
+
+`game/src/methods.ts` is the registry the model is built on. `allowedMethods` is
+always derived from the constraint, never authored, so a method added later is
+offered on exactly the Orders it legitimately satisfies. Issue #645's later
+phases add FHE and MPC there; Phase 1 adds no new cryptography, on purpose --
+the point was to find out whether the abstraction is natural while the pieces
+underneath are still ones we can fully verify.
+
 ## How PROVE works
 
 PROVE is a real cryptographic protocol, not a flavor-text alternative to

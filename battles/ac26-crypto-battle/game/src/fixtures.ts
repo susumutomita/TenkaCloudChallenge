@@ -14,6 +14,7 @@
 
 import { deriveBigInt, deriveStream } from "./prng.ts";
 import { share, type Share } from "./shamir.ts";
+import type { PrivacyConstraint } from "./methods.ts";
 import type { ContractKind } from "./types.ts";
 
 /** The bigint-space subset of `CryptoBattleConfig` this module's derivations need. */
@@ -55,6 +56,15 @@ export function deriveTeamGeneration(
 export interface ContractPlan {
   readonly kind: ContractKind;
   readonly requestedShareIndices: readonly number[];
+  /**
+   * [Issue #645] The rule this Order's client imposes on what may be published.
+   * Roughly 1-in-4 Orders are `"no-raw-disclosure"` -- #645's Level-1
+   * "technique-specified" Order, which PROVE alone satisfies. Rolled from its
+   * own derivation label so it is independent of the rush roll: a rush Order
+   * that also forbids disclosure is a real (and interesting) combination, not
+   * an artefact of two rolls sharing a stream.
+   */
+  readonly privacyConstraint: PrivacyConstraint;
 }
 
 /**
@@ -64,8 +74,9 @@ export interface ContractPlan {
  * tick()) derive it from `state.contracts`, so no extra counter needs to live
  * in state.
  *
- * Roughly 1-in-5 contracts are "rush" (worth more, same LEAK mechanics) --
- * a playtest ratio, see types.ts's CryptoBattleConfig doc comment.
+ * Roughly 1-in-5 contracts are "rush" (worth more, same mechanics) and
+ * roughly 1-in-4 forbid raw disclosure -- playtest ratios, see types.ts's
+ * CryptoBattleConfig doc comment.
  */
 export function deriveContractPlan(
   seed: string,
@@ -74,9 +85,18 @@ export function deriveContractPlan(
   config: Pick<FieldConfig, "prime" | "shareCount">,
 ): ContractPlan {
   const RUSH_MODULUS = 5n;
+  const CONSTRAINED_MODULUS = 4n;
   const kindRoll = deriveBigInt(seed, `contract-kind:${teamId}`, sequenceIndex, config.prime);
   const kind: ContractKind = kindRoll % RUSH_MODULUS === 0n ? "rush" : "standard";
   const indexRoll = deriveBigInt(seed, `contract-index:${teamId}`, sequenceIndex, config.prime);
   const shareIndex = Number(indexRoll % BigInt(config.shareCount)) + 1;
-  return { kind, requestedShareIndices: [shareIndex] };
+  const constraintRoll = deriveBigInt(
+    seed,
+    `contract-privacy:${teamId}`,
+    sequenceIndex,
+    config.prime,
+  );
+  const privacyConstraint: PrivacyConstraint =
+    constraintRoll % CONSTRAINED_MODULUS === 0n ? "no-raw-disclosure" : "none";
+  return { kind, requestedShareIndices: [shareIndex], privacyConstraint };
 }
