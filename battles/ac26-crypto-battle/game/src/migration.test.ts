@@ -197,9 +197,12 @@ describe("a delayed tick issues the Orders that are still live", () => {
     // dispatcher gap kills the rush slots and leaves the standard ones alive.
     let state = tick(initialState({ eventId: "delayed", teamIds: ["teamA"] }), 0);
     for (let batchIndex = 1; batchIndex <= 6; batchIndex += 1) {
-      const before = state.contracts.length;
+      // [Issue #659] Count Orders that APPEARED, not the change in list length:
+      // the same tick also prunes resolved and lapsed ones, so a delta is net
+      // of both and can be negative while issuance is working perfectly.
+      const before = new Set(state.contracts.map((c) => c.id));
       state = tick(state, batchIndex * DEFAULT_CONFIG.contractIntervalMs + GAP_MS);
-      const issued = state.contracts.length - before;
+      const issued = state.contracts.filter((c) => !before.has(c.id)).length;
       expect(issued).toBeGreaterThan(0);
       expect(issued).toBeLessThanOrEqual(DEFAULT_CONFIG.contractsPerIssue);
     }

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { applyOp, DEFAULT_CONFIG, initialState, tick, validateOp } from "./reducer.ts";
 import { buildLeakOp } from "./playtest.ts";
+import { TERMINAL_ORDER_RETENTION_BATCHES } from "./reducer.ts";
 
 /**
  * [Issue #659] How big one match's persisted state gets, and where that stops
@@ -25,28 +26,50 @@ import { buildLeakOp } from "./playtest.ts";
  * specifically the DynamoDB one.
  */
 
-/** DynamoDB's maximum item size. */
+/**
+ * The two ceilings this row has to live under, which are NOT the same number.
+ *
+ * DynamoDB caps a single item at 400 KB and has no partial write, so the tick
+ * that crosses the line stops the match dead. Turso has no comparable per-row
+ * cap — but the backend is a runtime choice (`CONTROL_DATA_BACKEND`), the row
+ * is read AND rewritten on every participant action, and on Turso each of those
+ * rides in an HTTP request body (`@libsql/client/http`). So size matters on
+ * both backends; only one of them fails loudly.
+ */
 const DDB_ITEM_LIMIT_BYTES = 400 * 1024;
 
 /**
- * The largest match this Battle is currently known to fit in one DynamoDB item
- * WITH MARGIN. Raising it needs a measurement, not an assumption.
- *
- * [Issue #659] Lowered from 8 when the cipher ladder landed. Eight teams still
- * fit -- at about 90% of the cap, measured -- but "fits" and "is supported" are
- * not the same claim: there is no partial write, so the tick that crosses the
- * line stops the match dead, and a number that close leaves nothing for the
- * rungs still to be added. Six measures at roughly two thirds.
- *
- * Nothing enforces this. A larger event does not fail at setup; it fails
- * mid-match, which is why the number is written down here and in OPERATOR.md.
+ * The platform's maximum event size: `teams.max(99)`, from DynamoDB's 100-item
+ * TransactWrite limit (one event row + 99 team rows). A Battle that cannot hold
+ * a 99-team match cannot be run at the size the platform advertises.
  */
-const SUPPORTED_MAX_TEAMS = 6;
+const PLATFORM_MAX_TEAMS = 99;
 
-/** How much of the cap a supported match may use before it stops being supported. */
+/**
+ * How much of DynamoDB's cap a full 99-team match may use.
+ *
+ * Margin, not bare fit: a test that only fails at the cliff passes right up
+ * until the match dies in play, which is exactly what happened when the cipher
+ * ladder pushed an 8-team match to 97% and this file said nothing.
+ */
 const REQUIRED_HEADROOM = 0.75;
 
+/**
+ * What one match may occupy on the Turso backend.
+ *
+ * Turso has no per-row cap worth worrying about, but the row is read AND
+ * rewritten on every participant action and each of those rides in an HTTP
+ * request body (`@libsql/client/http`). This is a budget for that round trip,
+ * not a hard limit — it exists so the row cannot quietly grow back.
+ */
+const TURSO_BUDGET_BYTES = 2 * 1024 * 1024;
+
 function playWorstCase(teamCount: number): number {
+  return JSON.stringify(playFullMatch(teamCount)).length;
+}
+
+/** A whole match with every team leaking everything it is allowed to leak. */
+function playFullMatch(teamCount: number) {
   const teamIds = Array.from({ length: teamCount }, (_, i) => `team-${i}`);
   let state = initialState({ eventId: "state-size", teamIds, matchSecret: "s".repeat(64) });
   for (let atMs = 0; atMs <= DEFAULT_CONFIG.matchDurationMs; atMs += DEFAULT_CONFIG.contractIntervalMs) {
@@ -61,33 +84,63 @@ function playWorstCase(teamCount: number): number {
       }
     }
   }
-  return JSON.stringify(state).length;
+  return state;
 }
 
 describe("a full match's persisted state fits the backend that has to hold it", () => {
-  test(`a ${SUPPORTED_MAX_TEAMS}-team match fits in a DynamoDB item, with room to spare`, () => {
-    // Margin, not just fit. A match that lands at 97% of the cap passes a
-    // bare "is it under the limit" check and is still one balance change away
-    // from dying mid-play -- which is exactly what happened when the ladder
-    // was added and this test said nothing.
-    expect(playWorstCase(SUPPORTED_MAX_TEAMS)).toBeLessThan(
+  test(`a ${PLATFORM_MAX_TEAMS}-team match — the platform's maximum — stays well inside a Turso row`, () => {
+    // [Issue #659] The assertion the storage model exists for. Measured before
+    // it: 4.49 MB, 45.4 KB per team, of which Orders were 72% — 10,692 of them,
+    // almost all long dead. A 4.5 MB read-modify-write per click is broken on
+    // any backend, and it put the supported maximum at six teams against a
+    // platform that sells ninety-nine.
+    expect(playWorstCase(PLATFORM_MAX_TEAMS)).toBeLessThan(TURSO_BUDGET_BYTES);
+  });
+
+  test("the cost per team is linear, so the ceiling can be computed rather than guessed", () => {
+    // A super-linear term — anything cross-team, like a per-pair record — would
+    // pass at small sizes and blow up at the top of the range, which no
+    // single-size check would catch.
+    const small = playWorstCase(4) / 4;
+    const large = playWorstCase(PLATFORM_MAX_TEAMS) / PLATFORM_MAX_TEAMS;
+    expect(large).toBeLessThan(small * 1.5);
+  });
+
+  /**
+   * [Issue #659] The DynamoDB backend cannot host a full-size match, and that
+   * is a property of the GAME, not a coding deficiency.
+   *
+   * The public ledger is permanent by design — #659 §10 makes the fact that it
+   * does not disappear the source of LEAK's weight — and it grows with every
+   * team that plays. At 99 teams it alone is about two thirds of the row. No
+   * encoding removes that: pruning it would delete the thing the game is about.
+   *
+   * So the honest statement is a team ceiling per backend, measured. Turso has
+   * no comparable per-row cap and takes the platform's full 99; DynamoDB's
+   * 400 KB item limit stops well short, and since there is no partial write,
+   * crossing it stops the match mid-play. This test pins where that line is so
+   * an operator sizing an event on DynamoDB has a number, and so a change that
+   * moves it has to move this too.
+   */
+  test("the DynamoDB ceiling is measured, not assumed", () => {
+    const perTeam = playWorstCase(8) / 8;
+    const ddbMaxTeams = Math.floor((DDB_ITEM_LIMIT_BYTES * REQUIRED_HEADROOM) / perTeam);
+    expect(ddbMaxTeams).toBeGreaterThanOrEqual(16);
+    expect(ddbMaxTeams).toBeLessThan(PLATFORM_MAX_TEAMS);
+    // A match at that size really does fit, with the headroom claimed.
+    expect(playWorstCase(ddbMaxTeams)).toBeLessThan(
       DDB_ITEM_LIMIT_BYTES * REQUIRED_HEADROOM,
     );
   });
 
-  test("the ceiling is real: one team past the supported maximum is measured, not assumed", () => {
-    // Not a wish -- a record of where the line actually is. If a change makes
-    // the state cheaper, this test fails and the supported maximum above should
-    // be re-measured and raised deliberately, rather than drifting.
-    expect(playWorstCase(SUPPORTED_MAX_TEAMS + 4)).toBeGreaterThan(DDB_ITEM_LIMIT_BYTES);
-  });
-
-  test("the batch size is what drives the growth, so it cannot be raised blind", () => {
-    // Doubling the batch roughly doubles the Order list, which is the dominant
-    // term. Pinned so that a future balance pass raising `contractsPerIssue`
-    // sees the storage cost in the same breath as the game-design argument.
-    const base = playWorstCase(2);
-    expect(base).toBeLessThan(DDB_ITEM_LIMIT_BYTES);
-    expect(DEFAULT_CONFIG.contractsPerIssue * SUPPORTED_MAX_TEAMS).toBeLessThanOrEqual(36);
+  test("the Order belt does not grow without bound over a match", () => {
+    // The belt is a work queue, not a record: terminal Orders are pruned past a
+    // short retention window. Without that it grew to `issues x batch` per team
+    // and dominated everything else.
+    const state = playFullMatch(2);
+    const perTeam = state.contracts.filter((c) => c.teamId === "team-0").length;
+    expect(perTeam).toBeLessThanOrEqual(
+      DEFAULT_CONFIG.contractsPerIssue * (TERMINAL_ORDER_RETENTION_BATCHES + 2),
+    );
   });
 });

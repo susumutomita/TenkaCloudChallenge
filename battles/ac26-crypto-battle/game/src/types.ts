@@ -150,9 +150,9 @@ export interface CryptoBattleConfig {
    *
    * Raising it also costs storage. The whole match is one persisted row and
    * Orders are retained after they resolve, so the row grows with
-   * `teams x contractsPerIssue x issues`; at 6 it caps a supported match at 6
-   * teams on the DynamoDB backend. `state-size.test.ts` measures where that
-   * line is, and OPERATOR.md records it for whoever sizes an event.
+   * `teams x contractsPerIssue`, so raising it raises the per-team cost of the
+   * persisted row and lowers how many teams a backend can hold.
+   * `state-size.test.ts` measures both ceilings and OPERATOR.md records them.
    */
   readonly contractsPerIssue: number;
   /**
@@ -518,6 +518,19 @@ export interface TeamState {
   /** All `shareCount` shares for the current generation (only some may have been LEAKed). */
   readonly shares: readonly StoredShare[];
   readonly lastRotateAtMs: number | undefined;
+  /**
+   * [Issue #659] How many Orders have been ISSUED to this team, ever.
+   *
+   * The next Order's sequence index, and the counter that makes its id unique.
+   * Held here rather than recomputed from `state.contracts.length`, which was
+   * how `tick` used to get it: that made the id depend on how many Orders the
+   * row still happens to contain, so anything that removes one -- pruning a
+   * resolved Order, or a delayed tick skipping a slot whose deadline had
+   * already passed -- rewound the counter and re-issued an id that already
+   * existed. `validateOp` then resolved that id to the OLD row and refused a
+   * live Order as "already completed".
+   */
+  readonly issuedOrderCount: number;
   readonly completedContractIds: readonly string[];
   /** This team's OWN generations that some attacker has successfully HUNTed. */
   readonly huntedGenerations: readonly number[];

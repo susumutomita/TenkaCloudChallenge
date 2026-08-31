@@ -128,17 +128,23 @@ Issue #659 sizes it as "team size + 1 to 2" for the standard three-person team.
 The plugin is handed team ids and never headcount, so a different team size has
 to be re-tuned by hand.
 
-**Match size is capped, and nothing enforces the cap.** The whole match is one
-persisted row. On the DynamoDB backend a single item is capped at 400 KB and
-there is no partial write, so a match that outgrows it stops mid-play. Measured
-worst case for a 90-minute match: about two thirds of the cap at six teams, and
-past it at ten. **Six teams is the supported maximum**; `game/src/state-size.test.ts`
-holds that number and fails if a change erodes the margin. Turso/libSQL has no
-comparable per-row cap.
+**Match size depends on the backend, and nothing enforces it.** The whole match
+is one persisted row, read and rewritten on every participant action. Measured
+worst case for a 90-minute match, after #659's storage work: **16.4 KB per
+team**, linear.
 
-The 25-minute vertical fixture is deterministic game coverage. Pair it with the
-dev-harness tests, typecheck, and browser scenarios that render the real Portal
-components using participant-visible inputs.
+| Backend | Limit | Teams this Battle supports |
+| --- | --- | --- |
+| Turso / libSQL | no per-row cap | **99** (the platform maximum) — a full match is ~1.6 MB |
+| DynamoDB | 400 KB per item, no partial write | **~18** with headroom; the match stops mid-play past ~24 |
+
+The DynamoDB ceiling is a property of the game, not something left unoptimised.
+The public ledger is permanent by design — its permanence is what gives LEAK its
+weight — and it grows with every team that plays; at 99 teams it is about two
+thirds of the row. Pruning it would delete the thing the game is about.
+
+**So a full-size event has to run on the Turso backend** (`CONTROL_DATA_BACKEND`).
+`game/src/state-size.test.ts` measures both ceilings and fails if either moves.
 
 ## Release checks
 

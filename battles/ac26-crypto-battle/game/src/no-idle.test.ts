@@ -68,9 +68,14 @@ function walkMatch(clearImmediately: boolean) {
   const config = DEFAULT_CONFIG;
   let state = tick(initialState(CTX), 0);
   const samples: { atMs: number; open: number; phase: string }[] = [];
+  // [Issue #659] The final state is not a history -- resolved and lapsed Orders
+  // are pruned from the persisted row past a short retention window. A question
+  // about what the belt SUPPLIED has to be answered while it supplies it.
+  const issued = new Map<string, Contract>();
 
   for (let atMs = 0; atMs <= config.matchDurationMs; atMs += SAMPLE_MS) {
     state = tick(state, atMs);
+    for (const c of state.contracts) issued.set(c.id, c);
     samples.push({ atMs, open: openContractsFor(state, "teamA").length, phase: state.phase });
     if (clearImmediately) {
       for (const contract of openContractsFor(state, "teamA")) {
@@ -82,7 +87,7 @@ function walkMatch(clearImmediately: boolean) {
       }
     }
   }
-  return { samples, finalState: state };
+  return { samples, finalState: state, issued: [...issued.values()] };
 }
 
 /** Longest run of consecutive samples with an empty queue, in ms. */
@@ -124,12 +129,11 @@ describe("90-minute contract cadence leaves no idle window", () => {
   });
 
   test("every phase issues contracts, so no phase is dead time", () => {
-    const { finalState } = walkMatch(false);
+    const { issued } = walkMatch(false);
     const boundaries = DEFAULT_CONFIG.phaseBoundaries;
     const issuedIn = (fromMs: number, toMs: number) =>
-      finalState.contracts.filter(
-        (c) => c.teamId === "teamA" && c.issuedAtMs >= fromMs && c.issuedAtMs < toMs,
-      ).length;
+      issued.filter((c) => c.teamId === "teamA" && c.issuedAtMs >= fromMs && c.issuedAtMs < toMs)
+        .length;
 
     expect(issuedIn(0, boundaries.buildToPressureMs)).toBeGreaterThan(0);
     expect(issuedIn(boundaries.buildToPressureMs, boundaries.pressureToEndgameMs)).toBeGreaterThan(0);
@@ -137,9 +141,9 @@ describe("90-minute contract cadence leaves no idle window", () => {
   });
 
   test("supply runs to the final minutes rather than stopping early", () => {
-    const { finalState } = walkMatch(false);
+    const { issued } = walkMatch(false);
     const lastIssuedAtMs = Math.max(
-      ...finalState.contracts.filter((c) => c.teamId === "teamA").map((c) => c.issuedAtMs),
+      ...issued.filter((c) => c.teamId === "teamA").map((c) => c.issuedAtMs),
     );
     // Within one interval of the end: a team is still being handed work in the
     // closing minutes, which is what keeps the endgame a decision rather than a

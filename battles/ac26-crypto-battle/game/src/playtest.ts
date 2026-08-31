@@ -36,6 +36,7 @@ import { groupPow, RFC3526_GROUP14 } from "./group.ts";
 import { computeChallenge } from "./schnorr-transcript.ts";
 import { computePartial } from "./mpc.ts";
 import type {
+  Contract,
   ContractProjection,
   ProofArtifact,
   CryptoBattleConfig,
@@ -137,6 +138,16 @@ export interface PlaytestResult {
   readonly finalState: CryptoBattleState;
   readonly timeline: readonly PlaytestTimelineEntry[];
   readonly violations: readonly PlaytestViolation[];
+  /**
+   * [Issue #659] Every Order the run ever saw, by id.
+   *
+   * `finalState.contracts` is no longer a history: resolved and lapsed Orders
+   * are pruned from the persisted row past a short retention window, because
+   * keeping all of them made a 99-team match a 4.5 MB read-modify-write per
+   * click. An assertion about what the match DID has to observe it while it
+   * happens, which is what this is for.
+   */
+  readonly ordersSeen: ReadonlyMap<string, Contract>;
 }
 
 function summarizeStep(
@@ -198,10 +209,18 @@ export function runScript(script: PlaytestScript): PlaytestResult {
   );
   const timeline: PlaytestTimelineEntry[] = [];
   const violations: PlaytestViolation[] = [];
+  // [Issue #659] Resolved and lapsed Orders are pruned from the persisted row,
+  // so the final state is not a history. Record each Order in its LATEST seen
+  // form as the run goes, which is what an assertion about the match needs.
+  const ordersSeen = new Map<string, Contract>();
+  const remember = () => {
+    for (const c of state.contracts) ordersSeen.set(c.id, c);
+  };
 
   script.steps.forEach((step, stepIndex) => {
     if (isTickStep(step)) {
       state = tick(state, step.atMs);
+      remember();
       timeline.push(summarizeStep(state, stepIndex, step.atMs, "tick"));
       return;
     }
@@ -221,6 +240,7 @@ export function runScript(script: PlaytestScript): PlaytestResult {
     }
     if (verdict.ok) {
       state = applyOp(state, step.teamId, step.op);
+      remember();
     }
     timeline.push(
       summarizeStep(state, stepIndex, step.atMs, "op", {
@@ -232,7 +252,7 @@ export function runScript(script: PlaytestScript): PlaytestResult {
     );
   });
 
-  return { finalState: state, timeline, violations };
+  return { finalState: state, timeline, violations, ordersSeen };
 }
 
 // ---------------------------------------------------------------------------
