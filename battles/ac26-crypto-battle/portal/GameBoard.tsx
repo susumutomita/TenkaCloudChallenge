@@ -1,7 +1,8 @@
 import type { PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 import { taskDetail, taskLabel } from "./orderTask.ts";
 import { usePolledProjection } from "./coordination.ts";
-import { rungSpec, toSymbols } from "../game/src/ladder.ts";
+import { DIE_CSS, DieRow } from "./DieFace.tsx";
+import { rungSpec } from "../game/src/ladder.ts";
 import type {
   CipherPairArtifact,
   CryptoBattleProjection,
@@ -289,11 +290,10 @@ function Ledger({ projection, locale }: { readonly projection: CryptoBattleProje
                     <summary>
                       {pair.rung} {group.pairs.length}/{rungSpec(pair.rung).pairsToBreak}
                     </summary>
-                    <code>
-                      {toSymbols(pair.plaintext, pair.rung).join(" ")}
-                      {"\n"}
-                      {toSymbols(pair.ciphertext, pair.rung).join(" ")}
-                    </code>
+                    <div className="tc-pair-rows">
+                      <DieRow values={pair.plaintext} size={16} />
+                      <DieRow values={pair.ciphertext} size={16} />
+                    </div>
                   </details>
                 ))}
                 {[...group.protected.entries()].map(([kind, count]) => (
@@ -309,7 +309,16 @@ function Ledger({ projection, locale }: { readonly projection: CryptoBattleProje
 }
 
 const CSS = `
-.tc-game-shell{display:grid;gap:12px;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+${DIE_CSS}
+
+/* [Issue #659] The board paints its own light surfaces, so it has to state its
+   own text colour too. Without this it inherits the text colour from whatever
+   the host page happens to set -- and on a dark host that is white, which
+   rendered the Order id and the reward as white-on-white and washed the method
+   chips out. A component that is only legible when the host picks a compatible
+   colour is not self-contained; the dev harness renders these same components
+   on a dark page, which is how it surfaced. */
+.tc-game-shell{display:grid;gap:12px;color:#16212e;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 .tc-game-header{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
 .tc-game-title{font-size:14px;font-weight:800;letter-spacing:.08em}
 .tc-game-stats{display:flex;gap:6px;flex-wrap:wrap}
@@ -333,6 +342,11 @@ const CSS = `
 .tc-method-prove{background:#eef8f2;border-color:#86c89b}
 .tc-method-fhe{background:#eef2fb;border-color:#7f9ad4}
 .tc-method-mpc{background:#f6eefb;border-color:#a982cc}
+/* [Issue #659] Without its own rule the CIPHER chip inherited no background
+   and rendered as an empty white box beside LEAK -- the method looked like a
+   broken element rather than a choice. */
+.tc-method-cipher{background:#eaf6f8;border-color:#5fa8bb}
+.tc-pair-rows{display:flex;flex-direction:column;gap:2px}
 .tc-board-grid{display:grid;grid-template-columns:minmax(220px,.8fr) minmax(300px,1.2fr);gap:12px}
 .tc-share-grid{display:flex;flex-wrap:wrap;gap:7px}
 .tc-share-card{border:1px solid #b8c4ce;border-radius:8px;background:#f8fafc;min-width:54px;overflow:hidden}

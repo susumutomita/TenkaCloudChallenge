@@ -12,7 +12,7 @@
  * instructions and in the tutorial before any card uses them.
  */
 
-import { rungSpec, toSymbols } from "../game/src/ladder.ts";
+import { rungSpec } from "../game/src/ladder.ts";
 import type { OrderTaskProjection, PublicArtifact } from "../game/src/types.ts";
 
 export type Locale = "ja" | "en";
@@ -80,9 +80,12 @@ export function taskDetail(task: OrderTaskProjection, locale: Locale): string {
     case "masked-total":
       return locale === "ja" ? `${task.partyCount} 拠点` : `${task.partyCount} offices`;
     case "caesar-shift":
-      // The symbols themselves, not a count. They ARE the job, they are short
-      // enough to fit, and they read identically in either language (#659 §3).
-      return task.plaintext.join(" ");
+      // A COUNT, not the symbols. The symbols are drawn on the card by
+      // `DieRow` (see DieFace.tsx on why they are drawn and not typed), so
+      // repeating them here as text would print the tofu this replaced.
+      return locale === "ja"
+        ? `${task.plaintext.length} 個 · ${task.symbols.length} 種類`
+        : `${task.plaintext.length} symbols · mod ${task.symbols.length}`;
     default: {
       const exhaustive: never = task;
       throw new Error(`taskDetail: unknown task ${JSON.stringify(exhaustive)}`);
@@ -150,7 +153,10 @@ export function ledgerPayload(artifact: PublicArtifact, locale: Locale): string 
       // on the bottom rung the key falls out of the first column. The row also
       // states how many such pairs this rung survives, so a reader can see at a
       // glance whether the team that posted it is already finished.
-      return `${toSymbols(artifact.plaintext, artifact.rung).join(" ")} → ${toSymbols(artifact.ciphertext, artifact.rung).join(" ")} (${rungSpec(artifact.rung).pairsToBreak} ${copy.breaksAt})`;
+      // Values, spelled out. This is the one-line TEXT rendering of a ledger
+      // row (a table cell, an operator's log); the board draws the same pair as
+      // symbols. Numbers read the same in every language and cannot go tofu.
+      return `${artifact.plaintext.join(" ")} → ${artifact.ciphertext.join(" ")} (${rungSpec(artifact.rung).pairsToBreak} ${copy.breaksAt})`;
     default: {
       const exhaustive: never = artifact;
       throw new Error(`ledgerPayload: unknown artifact ${JSON.stringify(exhaustive)}`);

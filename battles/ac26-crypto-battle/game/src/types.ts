@@ -720,9 +720,23 @@ export type OrderTaskProjection =
   | {
       readonly kind: "caesar-shift";
       readonly rung: CipherRung;
-      /** The symbols to encrypt, as pictures — never words (#659 §3). */
-      readonly plaintext: readonly string[];
-      /** The rung's whole alphabet, in value order. Its length is the modulus. */
+      /**
+       * The symbols to encrypt, as VALUES.
+       *
+       * Values rather than pictures because the Portal DRAWS them (see
+       * `DieFace.tsx`): shipped as Unicode die faces they rendered as tofu on a
+       * real participant's screen, which fails #659 §3's whole argument in the
+       * worst way — the reader cannot see the Order at all. A drawn symbol
+       * depends on no font.
+       */
+      readonly plaintext: readonly number[];
+      /**
+       * The rung's alphabet, in value order. Its length is the modulus.
+       *
+       * Kept as strings because this is what a participant may TYPE:
+       * `parseAnswer` accepts either a face or its value, so the legend has to
+       * show the characters the input will recognise.
+       */
       readonly symbols: readonly string[];
       /** How many published pairs recover the key on this rung (#659 §2). */
       readonly pairsToBreak: number;

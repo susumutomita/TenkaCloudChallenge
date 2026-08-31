@@ -327,13 +327,14 @@ export function buildMpcOp(
  */
 export function buildCipherOp(contract: ContractProjection): CryptoBattleOp | undefined {
   if (contract.task.kind !== "caesar-shift") return undefined;
-  const { rung, symbols, plaintext, myKey } = contract.task;
-  const values = plaintext.map((symbol) => symbols.indexOf(symbol));
-  if (values.some((value) => value < 0)) return undefined;
+  const { rung, plaintext, myKey } = contract.task;
   return {
     kind: "cipher",
     contractId: contract.id,
-    answer: [...toSymbols(encryptWithRung(values, myKey, rung), rung)],
+    // Submitted as the pictures a participant would type. `parseAnswer` takes
+    // either those or the values; sending the faces exercises the path a human
+    // actually uses.
+    answer: [...toSymbols(encryptWithRung(plaintext, myKey, rung), rung)],
   };
 }
 

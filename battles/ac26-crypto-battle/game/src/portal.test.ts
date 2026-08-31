@@ -1128,7 +1128,7 @@ describe("the primary actions follow what the Order accepts", () => {
     leakPoints: 10,
     task:
       kind === "caesar-shift"
-        ? { kind: "caesar-shift", rung: "caesar", plaintext: ["⚀"], symbols: ["⚀", "⚁"], pairsToBreak: 1, myKey: 1 }
+        ? { kind: "caesar-shift", rung: "caesar", plaintext: [0], symbols: ["⚀", "⚁"], pairsToBreak: 1, myKey: 1 }
         : { kind: "reveal-share", shareIndices: [0] },
     privacyConstraint: allowedMethods.includes("leak") ? "none" : "no-raw-disclosure",
     allowedMethods,

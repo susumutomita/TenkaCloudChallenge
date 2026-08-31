@@ -1442,10 +1442,12 @@ function projectTask(
       return {
         kind: "caesar-shift",
         rung: task.rung,
-        // The pictures, the alphabet and the break threshold are all constants
-        // of the rung, so they are added here rather than stored on every Order
-        // (see `OrderTask`'s `caesar-shift` arm).
-        plaintext: toSymbols(task.plaintext, task.rung),
+        // The alphabet and the break threshold are constants of the rung, so
+        // they are added here rather than stored on every Order (see
+        // `OrderTask`'s `caesar-shift` arm). The plaintext passes through as
+        // VALUES -- the Portal draws each symbol rather than relying on a font
+        // to have it.
+        plaintext: task.plaintext,
         symbols: spec.symbols,
         pairsToBreak: spec.pairsToBreak,
         myKey: deriveCipherKey(state.seed, teamId, generation, task.rung),
