@@ -13,6 +13,7 @@ import {
   submitRotate,
 } from "./RegistrationPanelCore.tsx";
 import { taskDetail, taskLabel } from "./orderTask.ts";
+import { rungSpec, toSymbols } from "../game/src/ladder.ts";
 import type { CipherRung } from "../game/src/ladder.ts";
 import type {
   CipherPairArtifact,
@@ -302,7 +303,7 @@ export function cipherHuntCandidates(
       generation: entry.generation,
       rung: entry.rung,
       pairs: [],
-      pairsToBreak: entry.pairsToBreak,
+      pairsToBreak: rungSpec(entry.rung).pairsToBreak,
     };
     byKey.set(key, { ...current, pairs: [...current.pairs, entry] });
   }
@@ -750,9 +751,9 @@ export default function FastMovePanel(props: PortalSlotProps) {
             <ul className="tc-material-list">
               {selectedCipherTarget.pairs.map((pair) => (
                 <li key={pair.id}>
-                  <code>{pair.plaintext.join(" ")}</code>
+                  <code>{toSymbols(pair.plaintext, pair.rung).join(" ")}</code>
                   <br />
-                  <code>{pair.ciphertext.join(" ")}</code>
+                  <code>{toSymbols(pair.ciphertext, pair.rung).join(" ")}</code>
                 </li>
               ))}
             </ul>

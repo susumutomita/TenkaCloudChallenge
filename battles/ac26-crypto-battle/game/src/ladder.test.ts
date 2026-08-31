@@ -36,21 +36,28 @@ function ladderOrder(state: CryptoBattleState, teamId: string): Contract {
   return order;
 }
 
-/** A team's own view, which is the only place its key appears. */
-function myKey(state: CryptoBattleState, teamId: string, contractId: string): number {
+/**
+ * The Order as its own team sees it.
+ *
+ * Everything a participant works from -- the pictures, the alphabet, the break
+ * threshold, their own key -- lives on the PROJECTION. The stored task carries
+ * only the rung and the plaintext values, so a test that reached into
+ * `contract.task` for symbols would be reading the persistence format rather
+ * than the game.
+ */
+function projected(state: CryptoBattleState, teamId: string, contractId: string) {
   const task = projectForTeam(state, teamId).myContracts.find((c) => c.id === contractId)?.task;
   if (task?.kind !== "caesar-shift") throw new Error("test setup: expected a ladder Order");
-  return task.myKey;
+  return task;
 }
 
 /** The answer a participant would produce with pencil and paper. */
 function answerByHand(state: CryptoBattleState, teamId: string, order: Contract): string[] {
-  if (order.task.kind !== "caesar-shift") throw new Error("test setup: expected a ladder Order");
-  const { symbols } = order.task;
-  const key = myKey(state, teamId, order.id);
-  return order.task.plaintext.map((symbol) => {
+  const task = projected(state, teamId, order.id);
+  const { symbols, myKey } = task;
+  return task.plaintext.map((symbol) => {
     const value = symbols.indexOf(symbol);
-    return symbols[(value + key) % symbols.length] ?? "?";
+    return symbols[(value + myKey) % symbols.length] ?? "?";
   });
 }
 
@@ -78,13 +85,12 @@ describe("the rung's arithmetic is the arithmetic a person does by hand", () => 
     // #659 §3: the plaintext is symbols. A word-based Order would hand an
     // advantage to whoever speaks the language it was written in.
     const state = tick(initialState(CTX), 0);
-    const order = ladderOrder(state, "teamA");
-    if (order.task.kind !== "caesar-shift") throw new Error("expected a ladder Order");
-    for (const symbol of order.task.plaintext) {
-      expect(order.task.symbols).toContain(symbol);
+    const task = projected(state, "teamA", ladderOrder(state, "teamA").id);
+    for (const symbol of task.plaintext) {
+      expect(task.symbols).toContain(symbol);
       expect(/[a-zA-Z0-9]/.test(symbol)).toBe(false);
     }
-    expect(order.task.plaintext.length).toBe(rungSpec(RUNG).plaintextLength);
+    expect(task.plaintext.length).toBe(rungSpec(RUNG).plaintextLength);
   });
 
   test("an answer may be typed as symbols or as their values -- a keyboard is not a handicap", () => {
@@ -134,10 +140,10 @@ describe("CIPHER: the team does the work and nothing is published", () => {
   test("another team's key does not answer your Order", () => {
     const state = tick(initialState(CTX), 0);
     const order = ladderOrder(state, "teamA");
-    if (order.task.kind !== "caesar-shift") throw new Error("expected a ladder Order");
-    const theirKey = myKey(state, "teamB", ladderOrder(state, "teamB").id);
-    const { symbols } = order.task;
-    const withTheirKey = order.task.plaintext.map(
+    const task = projected(state, "teamA", order.id);
+    const theirKey = projected(state, "teamB", ladderOrder(state, "teamB").id).myKey;
+    const { symbols } = task;
+    const withTheirKey = task.plaintext.map(
       (s) => symbols[(symbols.indexOf(s) + theirKey) % symbols.length] ?? "",
     );
     const mine = answerByHand(state, "teamA", order);
@@ -166,10 +172,10 @@ describe("LEAK: the pair goes public, and on this rung the pair IS the key", () 
     if (posted?.kind !== "cipher-pair") throw new Error("expected a cipher pair on the ledger");
     expect(posted.teamId).toBe("teamA");
     expect(posted.rung).toBe(RUNG);
-    expect(posted.pairsToBreak).toBe(rungSpec(RUNG).pairsToBreak);
     if (order.task.kind !== "caesar-shift") throw new Error("expected a ladder Order");
     expect(posted.plaintext).toEqual(order.task.plaintext);
-    expect(posted.ciphertext).toEqual(answerByHand(state, "teamA", order));
+    // Rendered through the rung's alphabet, which is where presentation lives.
+    expect(toSymbols(posted.ciphertext, posted.rung)).toEqual(answerByHand(state, "teamA", order));
   });
 
   test("one published pair really does hand over the key -- one subtraction, from the ledger alone", () => {
@@ -181,11 +187,9 @@ describe("LEAK: the pair goes public, and on this rung the pair IS the key", () 
 
     const pair = state.publicLedger.find((a) => a.kind === "cipher-pair");
     if (pair?.kind !== "cipher-pair") throw new Error("expected a cipher pair");
-    const { symbols } = rungSpec(pair.rung);
-    const modulus = symbols.length;
+    const modulus = rungSpec(pair.rung).symbols.length;
     // (c - p) mod n, from the first column. That is the entire attack.
-    const recovered =
-      (symbols.indexOf(pair.ciphertext[0] ?? "") - symbols.indexOf(pair.plaintext[0] ?? "") + modulus) % modulus;
+    const recovered = ((pair.ciphertext[0] ?? 0) - (pair.plaintext[0] ?? 0) + modulus) % modulus;
 
     const op = { kind: "hunt-cipher" as const, targetTeamId: "teamA", generation: 1, rung: pair.rung, recoveredKey: recovered };
     expect(validateOp(state, "teamB", op)).toEqual({ ok: true });

@@ -1,34 +1,33 @@
 import { describe, expect, test } from "bun:test";
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
-import { buildFheOp, buildLeakOp, buildMpcOp, buildProveOp } from "./playtest.ts";
+import { buildClearingOp } from "./playtest.ts";
 import type { Contract, CryptoBattleOp, CryptoBattleState } from "./types.ts";
 
 /**
  * [Issue #645] Clear one Order by whichever method its task admits.
  *
  * This test is about the ISSUE CADENCE, not about any one method: the question
- * is whether a team that clears its belt instantly is ever left waiting. Since
- * the belt now carries share, encrypted-addition and masked-subtotal Orders,
- * "clear it" has to mean "answer it correctly, whatever it asks", or the test
- * would silently stop clearing two Orders in four and measure the wrong thing.
+ * is whether a team that clears its belt instantly is ever left waiting. So
+ * "clear it" has to mean "answer it correctly, whatever it asks".
+ *
+ * [Issue #659] Delegated to `playtest.ts`'s exhaustive `buildClearingOp`. This
+ * file used to carry its own copy, and when the ladder added a fourth task kind
+ * that copy fell through to `buildMpcOp`, which returns `undefined` for a task
+ * it cannot serve. Nothing failed -- `walkMatch(true)` just stopped clearing
+ * about a fifth of the belt, so "the fastest possible team" was no longer the
+ * fastest possible team and the idle window it exists to measure could not
+ * appear. An exhaustive switch in one place makes a fifth task kind a compile
+ * error instead.
  */
 function clearingOpFor(
   state: CryptoBattleState,
   teamId: string,
   contract: Contract,
 ): CryptoBattleOp | undefined {
-  const projected = projectForTeam(state, teamId).myContracts.find((c) => c.id === contract.id);
+  const projection = projectForTeam(state, teamId);
+  const projected = projection.myContracts.find((c) => c.id === contract.id);
   if (!projected) return undefined;
-  if (contract.task.kind === "reveal-share") {
-    // A share Order may still forbid raw disclosure, in which case PROVE is the
-    // only way to clear it. Ask the Order, rather than assuming LEAK.
-    return contract.allowedMethods.includes("leak")
-      ? buildLeakOp(contract.id)
-      : buildProveOp(projectForTeam(state, teamId).vault, contract.id);
-  }
-  return contract.task.kind === "homomorphic-sum"
-    ? buildFheOp(projected, state.config.prime)
-    : buildMpcOp(projected, state.config.prime);
+  return buildClearingOp(projected, projection.vault, state.config.prime);
 }
 
 /**

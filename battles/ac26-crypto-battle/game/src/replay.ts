@@ -63,6 +63,7 @@
  *     `state.contracts` directly.
  */
 
+import { rungSpec } from "./ladder.ts";
 import type { CryptoBattleState, Phase } from "./types.ts";
 
 interface ReplayEventBase {
@@ -205,14 +206,14 @@ export function buildReplay(state: CryptoBattleState): ReplayEvent[] {
           teamId: artifact.teamId,
           kind: "cipher-leak",
           summary: {
-            en: `Team ${artifact.teamId} LEAKed ladder order ${artifact.contractId} (generation ${artifact.generation}) -- published a ${artifact.rung} plaintext next to its ciphertext; ${artifact.pairsToBreak} such pair${artifact.pairsToBreak === 1 ? "" : "s"} recovers the key`,
-            ja: `${artifact.teamId} が LEAK: 梯子 order ${artifact.contractId} (世代 ${artifact.generation}) -- ${artifact.rung} の平文と暗号文の対を公開。この段は ${artifact.pairsToBreak} 組で鍵が割れる`,
+            en: `Team ${artifact.teamId} LEAKed ladder order ${artifact.contractId} (generation ${artifact.generation}) -- published a ${artifact.rung} plaintext next to its ciphertext; ${rungSpec(artifact.rung).pairsToBreak} such pair${rungSpec(artifact.rung).pairsToBreak === 1 ? "" : "s"} recovers the key`,
+            ja: `${artifact.teamId} が LEAK: 梯子 order ${artifact.contractId} (世代 ${artifact.generation}) -- ${artifact.rung} の平文と暗号文の対を公開。この段は ${rungSpec(artifact.rung).pairsToBreak} 組で鍵が割れる`,
           },
           detail: {
             contractId: artifact.contractId,
             generation: artifact.generation,
             rung: artifact.rung,
-            pairsToBreak: artifact.pairsToBreak,
+            pairsToBreak: rungSpec(artifact.rung).pairsToBreak,
           },
         });
         break;

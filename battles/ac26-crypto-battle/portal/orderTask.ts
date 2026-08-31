@@ -12,6 +12,7 @@
  * instructions and in the tutorial before any card uses them.
  */
 
+import { rungSpec, toSymbols } from "../game/src/ladder.ts";
 import type { OrderTaskProjection, PublicArtifact } from "../game/src/types.ts";
 
 export type Locale = "ja" | "en";
@@ -149,7 +150,7 @@ export function ledgerPayload(artifact: PublicArtifact, locale: Locale): string 
       // on the bottom rung the key falls out of the first column. The row also
       // states how many such pairs this rung survives, so a reader can see at a
       // glance whether the team that posted it is already finished.
-      return `${artifact.plaintext.join(" ")} → ${artifact.ciphertext.join(" ")} (${artifact.pairsToBreak} ${copy.breaksAt})`;
+      return `${toSymbols(artifact.plaintext, artifact.rung).join(" ")} → ${toSymbols(artifact.ciphertext, artifact.rung).join(" ")} (${rungSpec(artifact.rung).pairsToBreak} ${copy.breaksAt})`;
     default: {
       const exhaustive: never = artifact;
       throw new Error(`ledgerPayload: unknown artifact ${JSON.stringify(exhaustive)}`);

@@ -225,14 +225,20 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
     for (const step of built.script.steps) {
       if (isTickStep(step) || step.expect !== "ok") continue;
       // [Issue #659] Computing an Order and passing on it pay DIFFERENT rates,
-      // and the difference is the whole point of the scoring model: PROVE / FHE
-      // / MPC all pay the Order's `points` because all three are the team doing
-      // the work, while LEAK pays the lower `leakPoints` because the system
-      // answered and the pair became public. Reconciling both against `points`
-      // would let a regression that paid the full rate for a LEAK pass here.
+      // and the difference is the whole point of the scoring model: PROVE,
+      // CIPHER, FHE and MPC all pay the Order's `points` because all four are
+      // the team doing the work, while LEAK pays the lower `leakPoints` because
+      // the system answered and what it answered became public. Reconciling
+      // both against `points` would let a regression that paid the full rate
+      // for a LEAK pass here.
       if (step.op.kind === "leak") {
         expected[step.teamId] = (expected[step.teamId] ?? 0) + contractById(step.op.contractId).leakPoints;
-      } else if (step.op.kind === "prove" || step.op.kind === "fhe" || step.op.kind === "mpc") {
+      } else if (
+        step.op.kind === "prove" ||
+        step.op.kind === "cipher" ||
+        step.op.kind === "fhe" ||
+        step.op.kind === "mpc"
+      ) {
         expected[step.teamId] = (expected[step.teamId] ?? 0) + contractById(step.op.contractId).points;
       } else if (step.op.kind === "hunt") {
         expected[step.teamId] = (expected[step.teamId] ?? 0) + result.finalState.config.scores.huntBonus;
@@ -265,7 +271,7 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
     const opSteps = built.script.steps.filter((s): s is PlaytestOpStep => !isTickStep(s));
     expect(opSteps.length).toBeGreaterThan(0);
     const kinds = new Set(opSteps.map((s) => s.op.kind));
-    expect(kinds).toEqual(new Set(["leak", "prove", "fhe", "mpc", "hunt", "rotate"]));
+    expect(kinds).toEqual(new Set(["leak", "prove", "cipher", "fhe", "mpc", "hunt", "rotate"]));
     expect(opSteps.some((s) => s.expect === "rejected")).toBe(true);
     expect(opSteps.some((s) => s.expect === "ok")).toBe(true);
 

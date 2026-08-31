@@ -285,14 +285,7 @@ function buildOrderTask(
       // every team knows how the cipher works, and the only thing that decides
       // who survives is who kept their key.
       const rung: CipherRung = plan.rung ?? "caesar";
-      const spec = rungSpec(rung);
-      return {
-        kind: "caesar-shift",
-        rung,
-        plaintext: toSymbols(derivePlaintext(seed, contractId, rung), rung),
-        symbols: spec.symbols,
-        pairsToBreak: spec.pairsToBreak,
-      };
+      return { kind: "caesar-shift", rung, plaintext: derivePlaintext(seed, contractId, rung) };
     }
     default: {
       const exhaustive: never = plan.taskKind;
@@ -1167,8 +1160,7 @@ function applyLadderLeak(
     contractId: contract.id,
     rung: task.rung,
     plaintext: task.plaintext,
-    ciphertext: toSymbols(answer, task.rung),
-    pairsToBreak: task.pairsToBreak,
+    ciphertext: answer,
     postedAtMs: nowMs,
   };
   return {
@@ -1446,7 +1438,18 @@ function projectTask(
       // participant is shown and the key the judge grades against come from one
       // derivation (see `expectedCipherAnswer`).
       const generation = state.teams[teamId]?.generation ?? 1;
-      return { ...task, myKey: deriveCipherKey(state.seed, teamId, generation, task.rung) };
+      const spec = rungSpec(task.rung);
+      return {
+        kind: "caesar-shift",
+        rung: task.rung,
+        // The pictures, the alphabet and the break threshold are all constants
+        // of the rung, so they are added here rather than stored on every Order
+        // (see `OrderTask`'s `caesar-shift` arm).
+        plaintext: toSymbols(task.plaintext, task.rung),
+        symbols: spec.symbols,
+        pairsToBreak: spec.pairsToBreak,
+        myKey: deriveCipherKey(state.seed, teamId, generation, task.rung),
+      };
     }
     default: {
       const exhaustive: never = task;

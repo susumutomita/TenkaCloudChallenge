@@ -29,10 +29,22 @@ import { buildLeakOp } from "./playtest.ts";
 const DDB_ITEM_LIMIT_BYTES = 400 * 1024;
 
 /**
- * The largest match this Battle is currently known to fit in one DynamoDB item.
- * Raising it needs a measurement, not an assumption.
+ * The largest match this Battle is currently known to fit in one DynamoDB item
+ * WITH MARGIN. Raising it needs a measurement, not an assumption.
+ *
+ * [Issue #659] Lowered from 8 when the cipher ladder landed. Eight teams still
+ * fit -- at about 90% of the cap, measured -- but "fits" and "is supported" are
+ * not the same claim: there is no partial write, so the tick that crosses the
+ * line stops the match dead, and a number that close leaves nothing for the
+ * rungs still to be added. Six measures at roughly two thirds.
+ *
+ * Nothing enforces this. A larger event does not fail at setup; it fails
+ * mid-match, which is why the number is written down here and in OPERATOR.md.
  */
-const SUPPORTED_MAX_TEAMS = 8;
+const SUPPORTED_MAX_TEAMS = 6;
+
+/** How much of the cap a supported match may use before it stops being supported. */
+const REQUIRED_HEADROOM = 0.75;
 
 function playWorstCase(teamCount: number): number {
   const teamIds = Array.from({ length: teamCount }, (_, i) => `team-${i}`);
@@ -53,8 +65,14 @@ function playWorstCase(teamCount: number): number {
 }
 
 describe("a full match's persisted state fits the backend that has to hold it", () => {
-  test(`a ${SUPPORTED_MAX_TEAMS}-team match fits in a DynamoDB item`, () => {
-    expect(playWorstCase(SUPPORTED_MAX_TEAMS)).toBeLessThan(DDB_ITEM_LIMIT_BYTES);
+  test(`a ${SUPPORTED_MAX_TEAMS}-team match fits in a DynamoDB item, with room to spare`, () => {
+    // Margin, not just fit. A match that lands at 97% of the cap passes a
+    // bare "is it under the limit" check and is still one balance change away
+    // from dying mid-play -- which is exactly what happened when the ladder
+    // was added and this test said nothing.
+    expect(playWorstCase(SUPPORTED_MAX_TEAMS)).toBeLessThan(
+      DDB_ITEM_LIMIT_BYTES * REQUIRED_HEADROOM,
+    );
   });
 
   test("the ceiling is real: one team past the supported maximum is measured, not assumed", () => {
@@ -70,6 +88,6 @@ describe("a full match's persisted state fits the backend that has to hold it", 
     // sees the storage cost in the same breath as the game-design argument.
     const base = playWorstCase(2);
     expect(base).toBeLessThan(DDB_ITEM_LIMIT_BYTES);
-    expect(DEFAULT_CONFIG.contractsPerIssue * SUPPORTED_MAX_TEAMS).toBeLessThanOrEqual(48);
+    expect(DEFAULT_CONFIG.contractsPerIssue * SUPPORTED_MAX_TEAMS).toBeLessThanOrEqual(36);
   });
 });

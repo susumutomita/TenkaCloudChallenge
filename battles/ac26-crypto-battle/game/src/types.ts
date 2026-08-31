@@ -150,8 +150,9 @@ export interface CryptoBattleConfig {
    *
    * Raising it also costs storage. The whole match is one persisted row and
    * Orders are retained after they resolve, so the row grows with
-   * `teams x contractsPerIssue x issues`; at 6 it caps a match at 8 teams on
-   * the DynamoDB backend. `state-size.test.ts` measures where that line is.
+   * `teams x contractsPerIssue x issues`; at 6 it caps a supported match at 6
+   * teams on the DynamoDB backend. `state-size.test.ts` measures where that
+   * line is, and OPERATOR.md records it for whoever sizes an event.
    */
   readonly contractsPerIssue: number;
   /**
@@ -244,12 +245,20 @@ export type OrderTask =
   | {
       readonly kind: "caesar-shift";
       readonly rung: CipherRung;
-      /** The symbols to encrypt, as pictures — never words (#659 §3). */
-      readonly plaintext: readonly string[];
-      /** The rung's whole alphabet, in value order. Its length is the modulus. */
-      readonly symbols: readonly string[];
-      /** How many published pairs recover the key on this rung (#659 §2). */
-      readonly pairsToBreak: number;
+      /**
+       * The symbols to encrypt, as VALUES — the pictures are added by
+       * `projectTask` from the rung's alphabet.
+       *
+       * Stored as numbers rather than as the dice faces a participant sees for
+       * a reason that is not micro-optimisation: the whole match is one
+       * persisted row against a 400 KB item cap (see `state-size.test.ts`), and
+       * a multi-byte glyph is roughly three times the cost of the value behind
+       * it, on every Order and again on every published pair. Presentation
+       * belongs to the projection anyway — everything derivable from the rung
+       * registry is added there, the same way MPC's private inputs are derived
+       * rather than stored.
+       */
+      readonly plaintext: readonly number[];
     };
 
 export type OrderTaskKind = OrderTask["kind"];
@@ -461,10 +470,16 @@ export interface CipherPairArtifact {
   readonly method: SubmissionMethod;
   readonly contractId: string;
   readonly rung: CipherRung;
-  readonly plaintext: readonly string[];
-  readonly ciphertext: readonly string[];
-  /** How many pairs recover the key on this rung -- see the doc above. */
-  readonly pairsToBreak: number;
+  /**
+   * The published pair, as symbol VALUES. Rendered to pictures at the edge
+   * (`ledgerPayload`, the board) from the rung's own alphabet — see
+   * `OrderTask`'s `caesar-shift` arm on why presentation is not persisted.
+   *
+   * `pairsToBreak` is likewise not stored: it is a constant of the rung, and
+   * `rungSpec(rung).pairsToBreak` is the one place that answers it.
+   */
+  readonly plaintext: readonly number[];
+  readonly ciphertext: readonly number[];
   readonly postedAtMs: number;
 }
 
@@ -705,8 +720,11 @@ export type OrderTaskProjection =
   | {
       readonly kind: "caesar-shift";
       readonly rung: CipherRung;
+      /** The symbols to encrypt, as pictures — never words (#659 §3). */
       readonly plaintext: readonly string[];
+      /** The rung's whole alphabet, in value order. Its length is the modulus. */
       readonly symbols: readonly string[];
+      /** How many published pairs recover the key on this rung (#659 §2). */
       readonly pairsToBreak: number;
       /** THIS team's key for the rung, at its current generation. */
       readonly myKey: number;

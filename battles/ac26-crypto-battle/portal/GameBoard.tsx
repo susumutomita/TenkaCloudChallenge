@@ -1,6 +1,7 @@
 import type { PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 import { taskDetail, taskLabel } from "./orderTask.ts";
 import { usePolledProjection } from "./coordination.ts";
+import { rungSpec, toSymbols } from "../game/src/ladder.ts";
 import type {
   CipherPairArtifact,
   CryptoBattleProjection,
@@ -286,12 +287,12 @@ function Ledger({ projection, locale }: { readonly projection: CryptoBattleProje
                     key={pair.id}
                   >
                     <summary>
-                      {pair.rung} {group.pairs.length}/{pair.pairsToBreak}
+                      {pair.rung} {group.pairs.length}/{rungSpec(pair.rung).pairsToBreak}
                     </summary>
                     <code>
-                      {pair.plaintext.join(" ")}
+                      {toSymbols(pair.plaintext, pair.rung).join(" ")}
                       {"\n"}
-                      {pair.ciphertext.join(" ")}
+                      {toSymbols(pair.ciphertext, pair.rung).join(" ")}
                     </code>
                   </details>
                 ))}
