@@ -26,14 +26,25 @@ import type { Contract, CryptoBattleState, OrderTaskKind, SubmissionMethod } fro
 
 const CTX = { eventId: "order-mix", teamIds: ["teamA", "teamB", "teamC"] } as const;
 
-/** Every Order issued to `teamId` across a full-length match. */
+/**
+ * Every Order issued to `teamId` across a full-length match.
+ *
+ * [Issue #659] Collected tick by tick rather than read off the final state:
+ * resolved and lapsed Orders are pruned from the persisted row past a short
+ * retention window (keeping all of them made a 99-team match a 4.5 MB
+ * read-modify-write per click), so the final state holds the current belt, not
+ * the match's history. Reading it here would have silently reduced this file's
+ * whole sample to the last two batches.
+ */
 function ordersAcrossMatch(teamId: string): readonly Contract[] {
   let state: CryptoBattleState = tick(initialState(CTX), 0);
+  const seen = new Map<string, Contract>();
   const total = DEFAULT_CONFIG.matchDurationMs;
   for (let atMs = 0; atMs <= total; atMs += DEFAULT_CONFIG.contractIntervalMs) {
     state = tick(state, atMs);
+    for (const c of state.contracts) if (c.teamId === teamId) seen.set(c.id, c);
   }
-  return state.contracts.filter((c) => c.teamId === teamId);
+  return [...seen.values()];
 }
 
 describe("the Order belt a participant actually sees", () => {

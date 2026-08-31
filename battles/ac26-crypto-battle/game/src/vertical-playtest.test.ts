@@ -108,10 +108,11 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
   });
 
   test("PROVE and LEAK pay identical base points for a standard-kind contract (Issue #486 Scoring MUST)", () => {
-    const standardLeak = result.finalState.contracts.find(
+    const seen = [...result.ordersSeen.values()];
+    const standardLeak = seen.find(
       (c) => c.teamId === DEFENDER && c.kind === "standard" && c.resolution === "leak",
     );
-    const standardProve = result.finalState.contracts.find(
+    const standardProve = seen.find(
       (c) => c.teamId === ATTACKER && c.kind === "standard" && c.resolution === "prove",
     );
     if (!standardLeak || !standardProve) {
@@ -179,7 +180,7 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
   });
 
   test("MUST 9: ROTATE voids alpha's own open contract, and old-generation HUNTs are rejected after it", () => {
-    const voided = result.finalState.contracts.find((c) => c.id === built.alphaContractVoidedByRotateId);
+    const voided = result.ordersSeen.get(built.alphaContractVoidedByRotateId);
     expect(voided?.status).toBe("expired");
     expect(result.finalState.teams[DEFENDER]?.generation).toBe(2);
 
@@ -215,9 +216,12 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
   });
 
   test("final score reconciliation: each team's final score equals the sum of its individual scoring events", () => {
+    // [Issue #659] From `ordersSeen`, not the final state: resolved Orders are
+    // pruned from the persisted row past a short retention window, so the final
+    // state is a working queue rather than a history.
     function contractById(contractId: string) {
-      const contract = result.finalState.contracts.find((c) => c.id === contractId);
-      if (!contract) throw new Error(`test setup: expected contract ${contractId} in final state`);
+      const contract = result.ordersSeen.get(contractId);
+      if (!contract) throw new Error(`test setup: expected contract ${contractId} in the run`);
       return contract;
     }
 

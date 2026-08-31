@@ -213,6 +213,7 @@ export function initialState(
       secret: secret.toString(),
       shares: shares.map((s): StoredShare => ({ index: s.index, value: s.value.toString() })),
       lastRotateAtMs: undefined,
+      issuedOrderCount: 0,
       completedContractIds: [],
       huntedGenerations: [],
       cipherHuntedGenerations: {},
@@ -419,23 +420,47 @@ function needsConfigMigration(config: CryptoBattleConfig): boolean {
  */
 function migrateTeams(
   teams: Readonly<Record<string, TeamState>>,
+  contracts: readonly Contract[],
 ): Readonly<Record<string, TeamState>> {
   const next: Record<string, TeamState> = {};
   for (const [teamId, team] of Object.entries(teams)) {
-    next[teamId] = team.cipherHuntedGenerations
-      ? team
-      : { ...team, cipherHuntedGenerations: {} };
+    next[teamId] = {
+      ...team,
+      cipherHuntedGenerations: team.cipherHuntedGenerations ?? {},
+      // [Issue #659] An older row counted issued Orders by the length of the
+      // Order list, so the list IS the count for that row -- but read the
+      // highest sequence rather than the length, because a delayed tick could
+      // already have skipped a slot and left the two disagreeing. Getting this
+      // wrong would re-issue an id the match has already used.
+      issuedOrderCount: team.issuedOrderCount ?? highestSequenceFor(contracts, teamId) + 1,
+    };
   }
   return next;
 }
 
+/** The largest sequence index this team's Orders carry, or -1 if it has none. */
+function highestSequenceFor(contracts: readonly Contract[], teamId: string): number {
+  let highest = -1;
+  for (const c of contracts) {
+    if (c.teamId !== teamId) continue;
+    const at = c.id.lastIndexOf("-c");
+    const sequence = at < 0 ? Number.NaN : Number(c.id.slice(at + 2));
+    if (Number.isInteger(sequence) && sequence > highest) highest = sequence;
+  }
+  return highest;
+}
+
 function needsTeamMigration(teams: Readonly<Record<string, TeamState>>): boolean {
-  return Object.values(teams).some((team) => !team.cipherHuntedGenerations);
+  return Object.values(teams).some(
+    (team) => !team.cipherHuntedGenerations || team.issuedOrderCount === undefined,
+  );
 }
 
 function withMigratedContracts(state: CryptoBattleState): CryptoBattleState {
   const config = needsConfigMigration(state.config) ? mergeConfig(state.config) : state.config;
-  const teams = needsTeamMigration(state.teams) ? migrateTeams(state.teams) : state.teams;
+  const teams = needsTeamMigration(state.teams)
+    ? migrateTeams(state.teams, state.contracts)
+    : state.teams;
   if (!state.contracts.some(needsMigration)) {
     return config === state.config && teams === state.teams ? state : { ...state, config, teams };
   }
@@ -461,10 +486,13 @@ export function tick(persistedState: CryptoBattleState, eventNowMs: number): Cry
     return { ...c, status: "expired" as const, expiryCause: "deadline" as const };
   });
 
-  const issuedCountByTeam = new Map<string, number>();
-  for (const c of contracts) {
-    issuedCountByTeam.set(c.teamId, (issuedCountByTeam.get(c.teamId) ?? 0) + 1);
-  }
+  // [Issue #659] From the team's own counter, never from the length of the
+  // Order list -- see `TeamState.issuedOrderCount`. Counting the list made an
+  // Order's id depend on how many Orders the row still held, so pruning one
+  // rewound the sequence and minted a duplicate id.
+  const issuedCountByTeam = new Map<string, number>(
+    Object.entries(state.teams).map(([teamId, team]) => [teamId, team.issuedOrderCount]),
+  );
 
   const issued: Contract[] = [];
   const fieldConfig = fieldConfigOf(state.config);
@@ -531,7 +559,13 @@ export function tick(persistedState: CryptoBattleState, eventNowMs: number): Cry
   // [Issue #659] Charge the expiry penalty to whoever let the Order lapse.
   // Floored at 0 like the HUNT penalty is: a negative running score reads as a
   // bug to a participant, and "you are at zero" already carries the message.
-  const teams = applyExpiryPenalties(state.teams, newlyExpired, state.config.scores.expiredOrder);
+  const charged = applyExpiryPenalties(state.teams, newlyExpired, state.config.scores.expiredOrder);
+  // Carry the advanced sequence counters back onto the teams.
+  const teams: Record<string, TeamState> = {};
+  for (const [teamId, team] of Object.entries(charged)) {
+    const issued = issuedCountByTeam.get(teamId) ?? team.issuedOrderCount;
+    teams[teamId] = issued === team.issuedOrderCount ? team : { ...team, issuedOrderCount: issued };
+  }
 
   return {
     ...state,
@@ -540,8 +574,56 @@ export function tick(persistedState: CryptoBattleState, eventNowMs: number): Cry
     startedAtMs,
     nextContractAtMs,
     teams,
-    contracts: issued.length === 0 ? contracts : [...contracts, ...issued],
+    contracts: pruneTerminalOrders(
+      issued.length === 0 ? contracts : [...contracts, ...issued],
+      eventNowMs,
+      state.config,
+    ),
   };
+}
+
+/**
+ * [Issue #659] How long a resolved or lapsed Order stays in the persisted row.
+ *
+ * Not zero: a participant's own board shows what they just answered and what
+ * just lapsed, and cutting that to nothing would make an Order vanish the
+ * instant its deadline passed, with no chance to see that it did. Two intervals
+ * covers the last round and the one before it.
+ */
+export const TERMINAL_ORDER_RETENTION_BATCHES = 2;
+
+/**
+ * [Issue #659] Drop terminal Orders the match no longer needs.
+ *
+ * The whole match is ONE row, read and rewritten on every participant action --
+ * over HTTP on the Turso backend, and additionally under a 400 KB item cap on
+ * DynamoDB. Measured at the platform's maximum of 99 teams (`teams.max(99)`,
+ * from DynamoDB's 100-item TransactWrite limit) this row reached **4.49 MB**,
+ * and Orders were 72% of it: 10,692 of them, almost all long dead. A 4.5 MB
+ * read-modify-write per click is broken at any item limit.
+ *
+ * Dropping them is safe because a terminal Order holds no state the match still
+ * reads:
+ *
+ *  - It has already paid. A completed Order added its points to `team.score`
+ *    and a lapsed one subtracted the penalty, and the score is what is stored.
+ *  - It cannot be submitted against again. `completedContractIds` is the
+ *    double-submit guard and is kept independently, so a pruned Order stays
+ *    refused rather than becoming answerable a second time.
+ *  - Nothing reads an old one. `replay.ts` builds its debrief from the public
+ *    ledger and the hunt log, never from `state.contracts`.
+ *
+ * The public ledger is NEVER pruned -- #659 §10 makes the fact that it does not
+ * disappear the source of LEAK's weight, and ROTATE is the only thing that may
+ * devalue it. This prunes the Order belt, which is a work queue, not a record.
+ */
+function pruneTerminalOrders(
+  contracts: readonly Contract[],
+  eventNowMs: number,
+  config: CryptoBattleConfig,
+): Contract[] {
+  const keepFrom = eventNowMs - config.contractIntervalMs * TERMINAL_ORDER_RETENTION_BATCHES;
+  return contracts.filter((c) => c.status === "open" || c.issuedAtMs >= keepFrom);
 }
 
 /**
