@@ -38,6 +38,9 @@ const COPY = {
     loading: "Loading match…",
     unavailable: "Match data is unavailable.",
     score: "SCORE",
+    scoreHint: "Answer an Order to gain. Let one expire and you lose points.",
+    nextUp: "DUE FIRST",
+    vaultOpen: "show shares",
     phase: "PHASE",
   },
   ja: {
@@ -65,6 +68,9 @@ const COPY = {
     loading: "試合状態を読み込み中…",
     unavailable: "試合状態を取得できません。",
     score: "スコア",
+    scoreHint: "ORDER に答えると増えます。期限切れにすると減ります。",
+    nextUp: "締切が最短",
+    vaultOpen: "share を見る",
     phase: "フェーズ",
   },
 } as const;
@@ -157,7 +163,16 @@ function protectedLabel(kind: PublicArtifact["kind"]): string {
 
 function OrderBelt({ projection, locale }: { readonly projection: CryptoBattleProjection; readonly locale: Locale }) {
   const copy = COPY[locale];
-  const openOrders = projection.myContracts.filter((order) => order.status === "open" && order.remainingMs > 0);
+  // [Issue #659] Deadline order, soonest first.
+  //
+  // The belt used to render in issue order, so six cards that all look alike
+  // sat in an arbitrary sequence and nothing said which one to touch. The whole
+  // decision this Battle asks for is "which of these do I spend five minutes
+  // on", and the only fact that forces it is how long each has left.
+  const openOrders = projection.myContracts
+    .filter((order) => order.status === "open" && order.remainingMs > 0)
+    .slice()
+    .sort((a, b) => a.remainingMs - b.remainingMs);
   return (
     <section className="tc-game-card tc-order-belt" aria-label="crypto-battle-order-belt">
       <div className="tc-section-label">{copy.orderBelt}</div>
@@ -165,13 +180,22 @@ function OrderBelt({ projection, locale }: { readonly projection: CryptoBattlePr
         <div className="tc-empty">{copy.noOrders}</div>
       ) : (
         <div className="tc-order-row">
-          {openOrders.map((order) => {
+          {openOrders.map((order, index) => {
             const urgency = order.remainingMs <= 30_000 ? " tc-urgent" : "";
+            // [Issue #659] Name the one to look at. Six cards that look alike,
+            // in any order, answer "what is on the belt" but never "what do I
+            // do now" — which is the only question a player has when the clock
+            // is running. The list is sorted by deadline, so the first card is
+            // the answer; saying so out loud costs one chip.
+            const isNext = index === 0;
             const pct = Math.max(4, Math.min(100, (order.remainingMs / 300_000) * 100));
             return (
-              <article className={`tc-order-card${urgency}`} key={order.id}>
+              <article className={`tc-order-card${urgency}${isNext ? " tc-order-next" : ""}`} key={order.id}>
                 <div className="tc-order-top">
-                  <strong>{order.id.replace(/^.*-c/, "ORDER #")}</strong>
+                  <strong>
+                    {order.id.replace(/^.*-c/, "ORDER #")}
+                    {isNext ? <span className="tc-next-chip">{copy.nextUp}</span> : null}
+                  </strong>
                   {/*
                     [Issue #659] Both rates on the card. Computing this Order
                     and passing on it pay different amounts, and choosing
@@ -230,22 +254,32 @@ function OrderBelt({ projection, locale }: { readonly projection: CryptoBattlePr
 function Vault({ projection, locale }: { readonly projection: CryptoBattleProjection; readonly locale: Locale }) {
   const copy = COPY[locale];
   return (
+    /*
+      [Issue #659] Collapsed by default.
+      
+      Five 19-digit numbers took a third of the board while being the thing a
+      player looks at least — they matter when building a PROVE, and not
+      otherwise. The generation stays visible, because ROTATE changes it and
+      that IS worth noticing; the share values are one click away.
+    */
     <section className="tc-game-card">
-      <div className="tc-section-head">
-        <div>
-          <div className="tc-section-label">{copy.vault}</div>
-          <strong>{copy.generation} {projection.vault.generation}</strong>
+      <details className="tc-vault-details">
+        <summary className="tc-section-head">
+          <div>
+            <div className="tc-section-label">{copy.vault}</div>
+            <strong>{copy.generation} {projection.vault.generation}</strong>
+          </div>
+          <span className="tc-score-chip">{copy.vaultOpen}</span>
+        </summary>
+        <div className="tc-share-grid">
+          {projection.vault.shares.map((share) => (
+            <details className="tc-share-card" key={share.index}>
+              <summary>#{share.index}</summary>
+              <code>{share.value}</code>
+            </details>
+          ))}
         </div>
-        <div className="tc-score-chip">{copy.score} {projection.teams[projection.vault.teamId]?.score ?? 0}</div>
-      </div>
-      <div className="tc-share-grid">
-        {projection.vault.shares.map((share) => (
-          <details className="tc-share-card" key={share.index}>
-            <summary>#{share.index}</summary>
-            <code>{share.value}</code>
-          </details>
-        ))}
-      </div>
+      </details>
     </section>
   );
 }
@@ -291,8 +325,8 @@ function Ledger({ projection, locale }: { readonly projection: CryptoBattleProje
                       {pair.rung} {group.pairs.length}/{rungSpec(pair.rung).pairsToBreak}
                     </summary>
                     <div className="tc-pair-rows">
-                      <DieRow values={pair.plaintext} size={16} />
-                      <DieRow values={pair.ciphertext} size={16} />
+                      <DieRow values={pair.plaintext} size={24} />
+                      <DieRow values={pair.ciphertext} size={24} />
                     </div>
                   </details>
                 ))}
@@ -318,11 +352,27 @@ ${DIE_CSS}
    chips out. A component that is only legible when the host picks a compatible
    colour is not self-contained; the dev harness renders these same components
    on a dark page, which is how it surfaced. */
-.tc-game-shell{display:grid;gap:12px;color:#16212e;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+/* [Issue #659] The shell owns its own surface, not just its own text colour.
+   Declaring the colour alone fixed the white-on-white cards and broke the
+   header the other way: the title and the score sit directly on the host
+   page, so on a dark host they became dark-on-dark. A component that paints
+   light cards has to paint the ground under them too, or it is legible only
+   for hosts that happen to match. */
+.tc-game-shell{display:grid;gap:12px;color:#16212e;background:#f8fafc;border-radius:12px;padding:12px;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 .tc-game-header{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
 .tc-game-title{font-size:14px;font-weight:800;letter-spacing:.08em}
 .tc-game-stats{display:flex;gap:6px;flex-wrap:wrap}
 .tc-score-chip,.tc-phase-chip{border:1px solid #c7c7c7;border-radius:999px;padding:4px 9px;font-size:12px;background:#fff}
+.tc-scoreline{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;padding:2px 2px 0}
+.tc-scoreline-main{display:flex;align-items:baseline;gap:8px}
+.tc-scoreline-label{font-size:11px;font-weight:800;letter-spacing:.08em;color:#5f6b7a}
+.tc-scoreline-value{font-size:34px;font-weight:900;line-height:1;font-variant-numeric:tabular-nums}
+.tc-scoreline-hint{font-size:11px;color:#5f6b7a}
+.tc-vault-details>summary{cursor:pointer;list-style:none}
+.tc-vault-details>summary::-webkit-details-marker{display:none}
+.tc-vault-details[open]>summary{margin-bottom:8px}
+.tc-order-next{border-color:#0972d3;box-shadow:0 0 0 2px rgba(9,114,211,.14)}
+.tc-next-chip{margin-left:6px;font-size:9px;font-weight:800;letter-spacing:.06em;color:#0972d3;border:1px solid #9ec8ee;border-radius:999px;padding:1px 5px;vertical-align:middle;white-space:nowrap}
 .tc-game-card{border:1px solid #cfd8e3;border-radius:12px;padding:12px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.05)}
 .tc-order-belt{border-width:2px;border-color:#0972d3;background:linear-gradient(180deg,#f5fbff,#fff)}
 .tc-section-label{font-size:11px;font-weight:800;letter-spacing:.12em;color:#5f6b7a;margin-bottom:8px}
@@ -346,7 +396,11 @@ ${DIE_CSS}
    and rendered as an empty white box beside LEAK -- the method looked like a
    broken element rather than a choice. */
 .tc-method-cipher{background:#eaf6f8;border-color:#5fa8bb}
-.tc-pair-rows{display:flex;flex-direction:column;gap:2px}
+.tc-pair-rows{display:flex;flex-direction:column;gap:4px}
+/* [Issue #659] A published pair is the material an opponent subtracts, so the
+   two rows have to line up column by column and be big enough to read. At 16px
+   in a wrapped flex row they were a speckled block nobody could work from. */
+.tc-pair-rows .tc-die-row{flex-wrap:nowrap;gap:4px}
 .tc-board-grid{display:grid;grid-template-columns:minmax(220px,.8fr) minmax(300px,1.2fr);gap:12px}
 .tc-share-grid{display:flex;flex-wrap:wrap;gap:7px}
 .tc-share-card{border:1px solid #b8c4ce;border-radius:8px;background:#f8fafc;min-width:54px;overflow:hidden}
@@ -372,18 +426,32 @@ export function GameBoardBody({ projection, locale }: { readonly projection: Cry
   return (
     <div className="tc-game-shell">
       <style>{CSS}</style>
+      {/*
+        [Issue #659] The score is what a player checks constantly, and it was a
+        12px chip in a row of three identical chips. It is now the largest thing
+        on the board, next to the count of Orders still waiting — the two
+        numbers that actually change while you play.
+      */}
       <div className="tc-game-header">
         <div className="tc-game-title">{copy.title}</div>
         <div className="tc-game-stats">
-          <div className="tc-score-chip">{copy.score} {projection.teams[projection.vault.teamId]?.score ?? 0}</div>
           <div className="tc-phase-chip">{copy.phase} {projection.phase}</div>
           {projection.matchRemainingMs !== undefined && <div className="tc-phase-chip">{formatDuration(projection.matchRemainingMs)}</div>}
         </div>
       </div>
+      <div className="tc-scoreline">
+        <div className="tc-scoreline-main">
+          <span className="tc-scoreline-label">{copy.score}</span>
+          <strong className="tc-scoreline-value">
+            {projection.teams[projection.vault.teamId]?.score ?? 0}
+          </strong>
+        </div>
+        <div className="tc-scoreline-hint">{copy.scoreHint}</div>
+      </div>
       <OrderBelt projection={projection} locale={locale} />
       <div className="tc-board-grid">
-        <Vault projection={projection} locale={locale} />
         <Ledger projection={projection} locale={locale} />
+        <Vault projection={projection} locale={locale} />
       </div>
     </div>
   );
