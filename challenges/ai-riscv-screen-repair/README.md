@@ -9,6 +9,27 @@ Repair the integration decisions in `local/solution/video_controller.sv`. The
 specification was written before the RTL; observable protocol, timing, and pixel
 state are the evidence. Do not rewrite the CPU or weaken the testbench.
 
+> **This problem is currently a draft.** Its framing is being reworked and it does
+> not appear in normal play. The advertised difficulty (5, 120–150 min) and the
+> jargon-first walkthrough did not match the actual amount of work. The portal
+> instructions have been rewritten; this README still carries the older wording.
+
+## Only four numbers change
+
+`local/solution/video_controller.sv` is 32 lines and holds four settings:
+
+```
+.CDC_SYNC_STAGES(...)        synchronizer stages
+.H_TOTAL_ADJUST(...)         offset on the beats per row
+.V_TOTAL_ADJUST(...)         offset on the rows per frame
+.RESPECT_WRITE_STROBES(...)  honour the per-byte write selects
+```
+
+**No circuit logic is written.** The implementation lives in `local/rtl/` and is
+complete. All four values can be read off `artifacts/architecture.md`'s table and
+`artifacts/memory-map.md`'s framebuffer paragraph. The documents are correct; the
+values currently in the file are not.
+
 ## What runs
 
 This separate Level 2 Challenge reuses a fixed copy of the repaired Level 1
