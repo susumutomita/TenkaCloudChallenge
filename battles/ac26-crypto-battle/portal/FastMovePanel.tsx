@@ -1,9 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
 import type { PortalCoordinationClient, PortalCoordinationOutcome, PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 import { isCryptoBattleProjection, usePolledProjection } from "./coordination.ts";
-import { submitFhe, submitHunt, submitHuntNonce, submitLeak, submitMpc, submitProve, submitRotate } from "./RegistrationPanelCore.tsx";
+import {
+  submitCipher,
+  submitFhe,
+  submitHunt,
+  submitHuntCipher,
+  submitHuntNonce,
+  submitLeak,
+  submitMpc,
+  submitProve,
+  submitRotate,
+} from "./RegistrationPanelCore.tsx";
 import { taskDetail, taskLabel } from "./orderTask.ts";
-import type { ContractProjection, CryptoBattleProjection } from "../game/src/types.ts";
+import type { CipherRung } from "../game/src/ladder.ts";
+import type {
+  CipherPairArtifact,
+  ContractProjection,
+  CryptoBattleProjection,
+} from "../game/src/types.ts";
 
 type Locale = "ja" | "en";
 type FeedbackKind = "leak" | "prove" | "hunt" | "rotate" | "error";
@@ -72,6 +87,20 @@ const COPY = {
     mpcSuccess: "MPC SUCCESS",
     mpcBody: (points: number) => `+${points} · YOUR NUMBER STAYED PRIVATE`,
     prime: "p (the modulus)",
+    cipher: "CIPHER",
+    huntCipher: "HUNT · CIPHER KEY",
+    huntCipherHint:
+      "These teams have published enough pairs to give their key away on the rung shown. Subtract the plaintext from the ciphertext, position by position, and take the remainder -- on a Caesar rung the first column is enough. Submit the key as a number.",
+    cipherTitle: "ENCRYPT WITH YOUR KEY",
+    cipherHelp:
+      "Shift each symbol forward by your key and wrap around at the end of the row. Your key is below, and it is the only thing about this Order that is not public — the method is printed on the card on purpose. Type the answer as symbols or as their numbers, separated by spaces.",
+    cipherKey: "your key (private)",
+    cipherAlphabet: "the symbols, in order",
+    cipherAnswer: "your encrypted row",
+    cipherCost: (pairs: number) =>
+      `LEAK instead and this row is published next to its answer. ${pairs} such pair${pairs === 1 ? "" : "s"} recovers your key.`,
+    cipherSuccess: "CIPHER SUCCESS",
+    cipherBody: (points: number) => `+${points} · NOTHING PUBLISHED`,
     huntNonce: "NONCE-REUSE HUNT",
     huntNonceHint: "Find two of one team's proof rows, same generation, same commitment — then the key is recoverable. Enter the key you worked out.",
     noNonceTarget: "No other team has posted a proof yet.",
@@ -138,6 +167,20 @@ const COPY = {
     mpcSuccess: "MPC SUCCESS",
     mpcBody: (points: number) => `+${points} · 自分の数は公開されていない`,
     prime: "p (割る数)",
+    cipher: "CIPHER",
+    huntCipher: "HUNT · 暗号鍵",
+    huntCipherHint:
+      "以下のチームは、表示された段で鍵が割れるだけの対を公開しています。暗号文から平文を位置ごとに引いて余りを取ってください。シーザーの段なら最初の 1 列で足ります。鍵は数字で提出します。",
+    cipherTitle: "自分の鍵で暗号にする",
+    cipherHelp:
+      "記号を鍵の数だけ後ろへずらし、並びの終わりまで来たら先頭へ戻ります。鍵は下に出ています。この Order で公開されていないのは鍵だけで、方式がカードに書いてあるのは意図的です。答えは記号でも数字でも、空白区切りで入力できます。",
+    cipherKey: "自分の鍵 (非公開)",
+    cipherAlphabet: "記号の並び順",
+    cipherAnswer: "暗号にした列",
+    cipherCost: (pairs: number) =>
+      `LEAK すると、この列と答えが対で公開されます。この段は ${pairs} 組で鍵が割れます。`,
+    cipherSuccess: "CIPHER SUCCESS",
+    cipherBody: (points: number) => `+${points} · 何も公開されない`,
     huntNonce: "nonce 再利用 HUNT",
     huntNonceHint: "同じチーム・同じ世代で commitment が同じ proof 2 行を Ledger から探してください。見つかれば鍵を計算で求められます。求めた鍵を入力してください。",
     noNonceTarget: "まだ proof を出した他チームはいません。",
@@ -221,15 +264,62 @@ export function rotateVoidCount(projection: CryptoBattleProjection | null): numb
   return openOrders(projection).length;
 }
 
+/**
+ * [Issue #659 §2] Every other team whose ladder key is recoverable from the
+ * public record right now.
+ *
+ * "Recoverable" means the rung's own threshold: a team that has published at
+ * least `pairsToBreak` pairs of one rung, on its CURRENT generation, is broken
+ * and can be hunted. Counting per (team, generation, rung) is what makes
+ * 「相手の段を見て狩る価値があるか判断する」 (#659 §2) a decision a participant can
+ * actually make from the board -- and it is why a rung that no number of pairs
+ * breaks simply never appears here.
+ *
+ * Reads the public ledger only. Nothing here touches a target's own state,
+ * because a hunter has nothing but the public record to work from.
+ */
+export interface CipherHuntCandidate {
+  readonly teamId: string;
+  readonly generation: number;
+  readonly rung: CipherRung;
+  readonly pairs: readonly CipherPairArtifact[];
+  readonly pairsToBreak: number;
+}
+
+export function cipherHuntCandidates(
+  projection: CryptoBattleProjection | null,
+): readonly CipherHuntCandidate[] {
+  if (!projection) return [];
+  const byKey = new Map<string, CipherHuntCandidate>();
+  for (const entry of projection.publicLedger) {
+    if (entry.kind !== "cipher-pair") continue;
+    // Never your own team: hunting yourself is refused by the reducer, and
+    // offering it here would be offering a move that cannot be made.
+    if (entry.teamId === projection.vault.teamId) continue;
+    const key = `${entry.teamId}:${entry.generation}:${entry.rung}`;
+    const current = byKey.get(key) ?? {
+      teamId: entry.teamId,
+      generation: entry.generation,
+      rung: entry.rung,
+      pairs: [],
+      pairsToBreak: entry.pairsToBreak,
+    };
+    byKey.set(key, { ...current, pairs: [...current.pairs, entry] });
+  }
+  return [...byKey.values()].filter((c) => c.pairs.length >= c.pairsToBreak);
+}
+
 /** The advanced controls that have relevant public material right now. */
 export function tacticAvailability(projection: CryptoBattleProjection | null): {
   readonly hunt: boolean;
   readonly nonceHunt: boolean;
+  readonly cipherHunt: boolean;
   readonly rotate: boolean;
 } {
   return {
     hunt: ledgerTargets(projection).length > 0,
     nonceHunt: nonceHuntCandidates(projection).length > 0,
+    cipherHunt: cipherHuntCandidates(projection).length > 0,
     rotate: ownExposedShareCount(projection) > 0,
   };
 }
@@ -326,8 +416,11 @@ export default function FastMovePanel(props: PortalSlotProps) {
   const [fheR, setFheR] = useState("");
   const [fheY, setFheY] = useState("");
   const [mpcPartial, setMpcPartial] = useState("");
+  const [cipherAnswer, setCipherAnswer] = useState("");
   const [huntTargetKey, setHuntTargetKey] = useState("");
   const [nonceTargetKey, setNonceTargetKey] = useState("");
+  const [cipherTargetKey, setCipherTargetKey] = useState("");
+  const [recoveredCipherKey, setRecoveredCipherKey] = useState("");
   const [recoveredKey, setRecoveredKey] = useState("");
   const [recoveredSecret, setRecoveredSecret] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -349,6 +442,10 @@ export default function FastMovePanel(props: PortalSlotProps) {
   const tactics = useMemo(() => tacticAvailability(projection), [projection]);
   const selectedNonceTarget =
     nonceTargets.find((t) => `${t.teamId}:${t.generation}` === nonceTargetKey) ?? nonceTargets[0];
+  const cipherTargets = useMemo(() => cipherHuntCandidates(projection), [projection]);
+  const selectedCipherTarget =
+    cipherTargets.find((t) => `${t.teamId}:${t.generation}:${t.rung}` === cipherTargetKey) ??
+    cipherTargets[0];
 
   const applyOutcome = (outcome: PortalCoordinationOutcome) => {
     const next = liveProjection(outcome);
@@ -501,6 +598,45 @@ export default function FastMovePanel(props: PortalSlotProps) {
       )}
 
       {/*
+        [Issue #659] The ladder Order's working surface.
+
+        Everything a participant needs is on screen at once: the row to encrypt,
+        the alphabet that defines the modulus, and their own key. The key
+        arrives on this Order's projection because it belongs to this team --
+        the same boundary the MPC panel below already sits on.
+
+        The cost of NOT doing the calculation is stated here rather than left to
+        the LEAK button, because this is the moment the choice is actually made.
+      */}
+      {selectedOrder?.task.kind === "caesar-shift" && (
+        <div className="tc-input-panel">
+          <strong style={{ fontSize: "12px" }}>{copy.cipherTitle} · {selectedOrder.id.replace(/^.*-c/, "ORDER #")}</strong>
+          <div className="tc-card-hint">{copy.cipherHelp}</div>
+          <ul className="tc-material-list">
+            <li>{copy.cipherAlphabet}: <code>{selectedOrder.task.symbols.map((symbol, value) => `${symbol}=${value}`).join("  ")}</code></li>
+            <li><code style={{ fontSize: "18px", letterSpacing: "2px" }}>{selectedOrder.task.plaintext.join(" ")}</code></li>
+            <li>{copy.cipherKey}: <code>{selectedOrder.task.myKey}</code></li>
+          </ul>
+          <div className="tc-card-warn">{copy.cipherCost(selectedOrder.task.pairsToBreak)}</div>
+          <input
+            aria-label="fast-cipher-answer"
+            value={cipherAnswer}
+            onChange={(event) => setCipherAnswer(event.target.value)}
+            placeholder={copy.cipherAnswer}
+          />
+          <button
+            type="button"
+            className="tc-submit-small tc-cipher-button"
+            disabled={submitting || !cipherAnswer.trim()}
+            onClick={() => void run(
+              () => submitCipher(client, selectedOrder.id, cipherAnswer.trim().split(/\s+/)),
+              () => ({ kind: "prove", title: copy.cipherSuccess, body: copy.cipherBody(selectedOrder.points) }),
+            )}
+          >{submitting ? copy.running : copy.cipher}</button>
+        </div>
+      )}
+
+      {/*
         [Issue #645 Phase 3] The team's own number and its four masks are shown
         here and nowhere else -- they arrive on this Order's projection because
         it belongs to this team. What leaves the browser is the subtotal only.
@@ -553,7 +689,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
         </div>
       )}
 
-      {(tactics.hunt || tactics.nonceHunt || tactics.rotate) && (
+      {(tactics.hunt || tactics.nonceHunt || tactics.cipherHunt || tactics.rotate) && (
       <details className="tc-tactics">
         <summary>{copy.tactics}<span>{copy.tacticsHint}</span></summary>
         <div className="tc-tactics-body">
@@ -583,6 +719,68 @@ export default function FastMovePanel(props: PortalSlotProps) {
           </>
         </div>
       </div>}
+
+        {/*
+          [Issue #659 §2] The ladder HUNT. Only teams whose published pairs have
+          actually reached their rung's threshold appear here, so the list is
+          the answer to 「狩る価値があるか」 rather than a list of everyone.
+
+          The pairs are shown, plaintext above ciphertext, because subtracting
+          one from the other IS the attack -- a control that hid them would be
+          asking for a key without showing where it comes from.
+        */}
+        {tactics.cipherHunt && <div className="tc-hunt-card">
+          <div className="tc-card-title">{copy.huntCipher}</div>
+          <div className="tc-card-hint">{copy.huntCipherHint}</div>
+          <div className="tc-target-row">
+            {cipherTargets.map((target) => {
+              const key = `${target.teamId}:${target.generation}:${target.rung}`;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  className="tc-target-chip"
+                  aria-pressed={selectedCipherTarget ? `${selectedCipherTarget.teamId}:${selectedCipherTarget.generation}:${selectedCipherTarget.rung}` === key : false}
+                  onClick={() => setCipherTargetKey(key)}
+                >{target.teamId} · gen {target.generation} · {target.rung} {target.pairs.length}/{target.pairsToBreak}</button>
+              );
+            })}
+          </div>
+          {selectedCipherTarget && (
+            <ul className="tc-material-list">
+              {selectedCipherTarget.pairs.map((pair) => (
+                <li key={pair.id}>
+                  <code>{pair.plaintext.join(" ")}</code>
+                  <br />
+                  <code>{pair.ciphertext.join(" ")}</code>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="tc-input-panel">
+            <input
+              aria-label="fast-hunt-cipher-key"
+              value={recoveredCipherKey}
+              onChange={(event) => setRecoveredCipherKey(event.target.value)}
+              placeholder={copy.recoveredKey}
+            />
+            <button
+              type="button"
+              className="tc-submit-small"
+              disabled={submitting || !selectedCipherTarget || !recoveredCipherKey.trim()}
+              onClick={() => selectedCipherTarget && void run(
+                () => submitHuntCipher(
+                  client,
+                  selectedCipherTarget.teamId,
+                  selectedCipherTarget.generation,
+                  selectedCipherTarget.rung,
+                  Number(recoveredCipherKey.trim()),
+                ),
+                () => ({ kind: "hunt", title: copy.huntSuccess, body: copy.huntBody }),
+              )}
+            >{submitting ? copy.running : copy.send}</button>
+          </div>
+        </div>}
 
         {/*
           [Issue #645 Phase 5] Without this the `hunt-nonce` op had no

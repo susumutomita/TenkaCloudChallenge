@@ -38,6 +38,7 @@
  * (`BigInt(...)` on the way in, `.toString()` on the way out).
  */
 
+import type { CipherRung } from "./ladder.ts";
 import type { PrivacyConstraint, SubmissionMethod } from "./methods.ts";
 
 // Re-exported so every consumer that already imports this module's shapes gets
@@ -224,6 +225,31 @@ export type OrderTask =
       readonly kind: "masked-total";
       /** How many offices take part, including this team. */
       readonly partyCount: number;
+    }
+  /**
+   * [Issue #659 §5] Encrypt this run of symbols with your team's key for the
+   * named rung of the cipher ladder.
+   *
+   * Everything here is public, INCLUDING the algorithm — that is Kerckhoffs's
+   * principle stated as a game rule (#659 §5). Hiding the method would only
+   * mean five minutes spent guessing what to do, and it would teach the exact
+   * misconception the ladder exists to remove. The key is the secret, and it is
+   * the only secret.
+   *
+   * `pairsToBreak` is on the Order for the same reason `leakPoints` is: the
+   * decision this Order asks for is "is passing on this worth what publishing a
+   * pair costs me", and a team cannot weigh that without knowing how many pairs
+   * their current rung survives.
+   */
+  | {
+      readonly kind: "caesar-shift";
+      readonly rung: CipherRung;
+      /** The symbols to encrypt, as pictures — never words (#659 §3). */
+      readonly plaintext: readonly string[];
+      /** The rung's whole alphabet, in value order. Its length is the modulus. */
+      readonly symbols: readonly string[];
+      /** How many published pairs recover the key on this rung (#659 §2). */
+      readonly pairsToBreak: number;
     };
 
 export type OrderTaskKind = OrderTask["kind"];
@@ -413,11 +439,41 @@ export interface PartialArtifact {
   readonly postedAtMs: number;
 }
 
+/**
+ * [Issue #659 §2] A (plaintext, ciphertext) pair, published because its team
+ * chose to LEAK a ladder Order instead of computing it.
+ *
+ * This is the ladder's whole economy in one record. LEAK on a ladder Order does
+ * not publish a share; it publishes the ANSWER, and an answer next to its
+ * question is exactly the material that recovers a key. How much of the key it
+ * gives away depends on the rung, which is why `pairsToBreak` rides along: a
+ * reader looking at the public record can count how many pairs a team has out
+ * and know whether that team is already broken.
+ *
+ * `plaintext` and `ciphertext` are the pictures, not the values, so the record
+ * reads the same to a participant as the Order did (#659 §3).
+ */
+export interface CipherPairArtifact {
+  readonly id: string;
+  readonly teamId: string;
+  readonly generation: number;
+  readonly kind: "cipher-pair";
+  readonly method: SubmissionMethod;
+  readonly contractId: string;
+  readonly rung: CipherRung;
+  readonly plaintext: readonly string[];
+  readonly ciphertext: readonly string[];
+  /** How many pairs recover the key on this rung -- see the doc above. */
+  readonly pairsToBreak: number;
+  readonly postedAtMs: number;
+}
+
 export type PublicArtifact =
   | ShareArtifact
   | ProofArtifact
   | CiphertextArtifact
-  | PartialArtifact;
+  | PartialArtifact
+  | CipherPairArtifact;
 
 /**
  * A Shamir share as it lives in `CryptoBattleState` / `CryptoBattleProjection`
@@ -450,6 +506,19 @@ export interface TeamState {
   readonly completedContractIds: readonly string[];
   /** This team's OWN generations that some attacker has successfully HUNTed. */
   readonly huntedGenerations: readonly number[];
+  /**
+   * [Issue #659] This team's OWN generations whose LADDER key an attacker has
+   * recovered, per rung.
+   *
+   * Kept apart from `huntedGenerations` because the two mean different things
+   * and a participant has to be able to tell them apart: one says the team's
+   * Shamir secret was reconstructed from three published shares, the other says
+   * a cipher key was recovered from published pairs. Folding a Caesar break
+   * into `huntedGenerations` would report a secret reconstruction that never
+   * happened -- and once the ladder has rungs a team can climb, "which rung of
+   * mine is broken" is the question they need answered, not "am I broken".
+   */
+  readonly cipherHuntedGenerations: Readonly<Record<string, readonly number[]>>;
 }
 
 export interface CryptoBattleState {
@@ -554,6 +623,42 @@ export type CryptoBattleOp =
        */
       readonly recoveredSecret: string;
     }
+  /**
+   * [Issue #659] The ciphertext this team computed for a ladder Order.
+   *
+   * A separate op from `prove` because it carries different evidence: PROVE
+   * hands over a Schnorr transcript that proves knowledge of the Shamir secret
+   * without revealing it, while this hands over the ANSWER and relies on the
+   * judge already holding the key to check it. Both publish nothing an attacker
+   * can use, and that shared property is what makes them both "do the work
+   * yourself" methods -- but merging them would mean one branch asking which
+   * kind of evidence it was looking at, which is what `hunt-nonce`'s comment
+   * above already argues against.
+   *
+   * Accepts pictures or their numeric values (see `parseAnswer`): a keyboard
+   * that cannot type a dice face must not be a scoring disadvantage.
+   */
+  | { readonly kind: "cipher"; readonly contractId: string; readonly answer: readonly string[] }
+  /**
+   * [Issue #659 §2] A HUNT that breaks a ladder key rather than reconstructing
+   * a Shamir secret.
+   *
+   * The evidence is the key itself. What it took to get there is the rung's
+   * business, not the judge's: on Caesar it is one subtraction against a single
+   * published pair, higher up it is a period to spot or a modulus to factor,
+   * and eventually there is no way at all. The judge only ever checks whether
+   * the key is right -- deliberately, so a team that simply GUESSES on a
+   * six-symbol alphabet has its one-in-six chance. Making the ladder harder to
+   * break is the defence; policing how an attacker thought is not.
+   */
+  | {
+      readonly kind: "hunt-cipher";
+      readonly targetTeamId: string;
+      readonly generation: number;
+      readonly rung: CipherRung;
+      /** The recovered key, as a symbol value. */
+      readonly recoveredKey: number;
+    }
   | { readonly kind: "rotate" }
   | { readonly kind: "prove"; readonly contractId: string; readonly proof: SchnorrProof };
 
@@ -589,6 +694,22 @@ export type OrderTaskProjection =
       readonly incomingMasks: readonly string[];
       /** Masks this office sent to the others. */
       readonly outgoingMasks: readonly string[];
+    }
+  /**
+   * [Issue #659] The ladder Order, plus the one thing the team may see that the
+   * public Order does not carry: their own key. It is theirs already -- the
+   * whole task is to encrypt WITH it -- and a projection is only ever handed to
+   * the team it belongs to (see `projectForTeam`), so this is the same
+   * boundary `vault.secret` already sits on.
+   */
+  | {
+      readonly kind: "caesar-shift";
+      readonly rung: CipherRung;
+      readonly plaintext: readonly string[];
+      readonly symbols: readonly string[];
+      readonly pairsToBreak: number;
+      /** THIS team's key for the rung, at its current generation. */
+      readonly myKey: number;
     };
 
 export interface ContractProjection {

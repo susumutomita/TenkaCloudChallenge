@@ -43,21 +43,45 @@ and what you do with the time left over -- that is the game.
 | What the card asks for | What you do |
 | --- | --- |
 | reveal a share | choose LEAK or PROVE |
+| encrypt with your key | shift each symbol forward by your key (CIPHER), or LEAK |
 | encrypted addition | add both pairs component by component, remainder p |
 | masked subtotal | compute my number + received masks - sent masks, remainder p |
 
 Every card shows its deadline, points, task, and accepted methods. A method absent from the card cannot perform the task or violates its disclosure condition.
 
-## Six moves
+## Moves
 
 | Move | Meaning |
 | --- | --- |
-| LEAK | publish the requested share and complete the ORDER |
+| LEAK | let the system answer the ORDER. What becomes public depends on the ORDER |
 | PROVE | complete it with a Schnorr proof and publish no share |
+| CIPHER | encrypt the symbols with your key and submit. Nothing is published |
 | FHE | add ciphertexts without decrypting |
 | MPC | submit one subtotal while each office's input stays private |
-| HUNT | submit a secret or reused-nonce key recovered from public records |
+| HUNT | submit a secret, a reused-nonce key, or a cipher key recovered from public records |
 | ROTATE | replace your secret and shares with a fresh generation |
+
+## The cipher ladder
+
+"Encrypt with your key" Orders sit on a **rung**. Exactly one thing changes from
+rung to rung: **how many published pairs give your key away.**
+
+| Rung | Pairs that recover the key | The break |
+| --- | --- | --- |
+| Caesar | 1 | ciphertext − plaintext. One subtraction |
+
+The method is printed on the Order. That is deliberate, and it is how real
+cryptography works: the algorithm is public and **only the key is secret**. Every
+team knows how every cipher works, and the teams that keep their key are the
+teams that survive.
+
+LEAK publishes the symbols **next to** their encrypted form. On the Caesar rung
+that single pair is the key. The public record shows how many pairs a team has
+out against how many its rung survives, so whether an opponent is already broken
+is something you can read off the board.
+
+ROTATE moves your key to a new generation too, and every pair published before it
+stops being worth anything.
 
 The complete Portal reference contains the formulas, constants, and runnable Python for PROVE and HUNT. PROVE matches `ac26-w3-schnorr`; share reconstruction matches `ac26-w2-secret-sharing`.
 

@@ -1,7 +1,12 @@
 import type { PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 import { taskDetail, taskLabel } from "./orderTask.ts";
 import { usePolledProjection } from "./coordination.ts";
-import type { CryptoBattleProjection, PublicArtifact, ShareArtifact } from "../game/src/types.ts";
+import type {
+  CipherPairArtifact,
+  CryptoBattleProjection,
+  PublicArtifact,
+  ShareArtifact,
+} from "../game/src/types.ts";
 
 type Locale = "ja" | "en";
 
@@ -19,6 +24,7 @@ const COPY = {
     prove: "PROVE",
     proveShort: "compute / protected",
     fhe: "FHE",
+    cipher: "CIPHER",
     fheShort: "add without decrypting",
     mpc: "MPC",
     mpcShort: "publish a masked subtotal",
@@ -45,6 +51,7 @@ const COPY = {
     prove: "PROVE",
     proveShort: "計算 / 守る",
     fhe: "FHE",
+    cipher: "CIPHER",
     fheShort: "復号せずに足す",
     mpc: "MPC",
     mpcShort: "覆面つき小計を出す",
@@ -82,6 +89,14 @@ interface LedgerGroup {
   generation: number;
   shares: ShareArtifact[];
   /**
+   * [Issue #659] Published (plaintext, ciphertext) pairs, kept with the shares
+   * rather than under `protected` — they are EXPOSURE, not protection. A
+   * cipher pair is posted by LEAK and is the material that recovers a key, so
+   * filing it beside the proofs would tell a reader the opposite of the truth
+   * about the team that posted it.
+   */
+  pairs: CipherPairArtifact[];
+  /**
    * [Issue #645] Counted per artifact kind, not lumped into one "proof" bucket.
    * Before FHE and MPC existed, everything that was not a leaked share WAS a
    * proof, and this counter said so — which made the board announce "PROOF ×1"
@@ -101,9 +116,11 @@ function groupLedger(ledger: readonly PublicArtifact[]): LedgerGroup[] {
         teamId: entry.teamId,
         generation: entry.generation,
         shares: [],
+        pairs: [],
         protected: new Map(),
       };
     if (entry.method === "leak" && entry.kind === "share") current.shares.push(entry);
+    else if (entry.kind === "cipher-pair") current.pairs.push(entry);
     else current.protected.set(entry.kind, (current.protected.get(entry.kind) ?? 0) + 1);
     groups.set(key, current);
   }
@@ -119,6 +136,12 @@ function protectedLabel(kind: PublicArtifact["kind"]): string {
       return "FHE";
     case "partial":
       return "MPC";
+    case "cipher-pair":
+      // Unreachable: cipher pairs are exposure and are grouped with the shares
+      // above, never counted here. Named rather than defaulted so adding a
+      // protected artifact kind later still fails to compile until it is
+      // decided.
+      return "PAIR";
     case "share":
       // A share reaches this grouping only when a method other than LEAK posted
       // one, which no method does today.
@@ -247,6 +270,29 @@ function Ledger({ projection, locale }: { readonly projection: CryptoBattleProje
                   <details className={`tc-share-card tc-public${share.id === lastId ? " tc-new-public" : ""}`} key={share.id}>
                     <summary>#{share.shareIndex}</summary>
                     <code>{share.value}</code>
+                  </details>
+                ))}
+                {/*
+                  [Issue #659] A published pair, shown as the break it is. The
+                  plaintext sits above its ciphertext because subtracting one
+                  from the other IS the attack, and the counter says whether
+                  this team's rung has already given way — which is what makes
+                  「相手の段を見て狩る価値があるか判断する」 (#659 §2) something a
+                  reader can actually do from the board.
+                */}
+                {group.pairs.map((pair) => (
+                  <details
+                    className={`tc-share-card tc-public${pair.id === lastId ? " tc-new-public" : ""}`}
+                    key={pair.id}
+                  >
+                    <summary>
+                      {pair.rung} {group.pairs.length}/{pair.pairsToBreak}
+                    </summary>
+                    <code>
+                      {pair.plaintext.join(" ")}
+                      {"\n"}
+                      {pair.ciphertext.join(" ")}
+                    </code>
                   </details>
                 ))}
                 {[...group.protected.entries()].map(([kind, count]) => (

@@ -114,7 +114,11 @@ const COPY = {
       },
       {
         name: "PROVE",
-        body: "Complete an open Contract by submitting a Schnorr proof of knowledge instead of a share -- built locally beforehand (this portal never builds it for you). Pays exactly what LEAKing the same Contract would. Nothing that could reconstruct your secret goes public; only the proof transcript is recorded, for audit.",
+        body: "Complete an open Contract by submitting a Schnorr proof of knowledge instead of a share -- built locally beforehand (this portal never builds it for you). Pays MORE than LEAKing the same Contract -- the calculation is what you are being paid for. Nothing that could reconstruct your secret goes public; only the proof transcript is recorded, for audit.",
+      },
+      {
+        name: "CIPHER",
+        body: "Complete a cipher-ladder Order by encrypting the symbols it shows with your team's key, and submitting the result. The Order states the method in full -- that is deliberate: in real cryptography the algorithm is public and only the key is secret, so knowing HOW a team's cipher works never helps you. Nothing is published. LEAKing the same Order instead publishes the symbols next to their encrypted form, and a plaintext beside its ciphertext is what recovers a key -- how many such pairs your current rung survives is printed on the Order.",
       },
       {
         name: "FHE",
@@ -170,6 +174,10 @@ const COPY = {
       {
         name: "PROVE",
         body: "share の代わりに Schnorr 知識証明を提出して Contract を完了します。proof は事前にローカルで作成してください (この portal は代わりに作成しません)。同じ Contract を LEAK した場合よりも高い得点です。secret を復元できる情報は一切公開されず、監査用に proof transcript のみが記録されます。",
+      },
+      {
+        name: "CIPHER",
+        body: "梯子 Order の記号列を自チームの鍵で暗号化し、結果を提出して完了します。方式は Order にすべて書いてあります。これは意図的で、実際の暗号でも「方式は公開・鍵だけが秘密」だからです。相手の暗号の仕組みを知っていても、それだけでは何の役にも立ちません。何も公開されません。同じ Order を LEAK すると、記号列とその暗号文が対で公開されます。平文と暗号文が並ぶことが鍵の割れる材料であり、いまの段が何組まで耐えるかは Order に書かれています。",
       },
       {
         name: "FHE",

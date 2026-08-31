@@ -12,6 +12,7 @@
  * converts `CryptoBattleConfig.prime` to `bigint` before calling in here.
  */
 
+import type { CipherRung } from "./ladder.ts";
 import { deriveBigInt, deriveStream } from "./prng.ts";
 import { share, type Share } from "./shamir.ts";
 import type { PrivacyConstraint } from "./methods.ts";
@@ -82,6 +83,11 @@ export interface ContractPlan {
    * interesting) combination, not an artefact of two rolls sharing a stream.
    */
   readonly privacyConstraint: PrivacyConstraint;
+  /**
+   * [Issue #659] Which rung of the cipher ladder a `caesar-shift` Order sits
+   * on. Undefined for every other task kind.
+   */
+  readonly rung?: CipherRung;
 }
 
 /**
@@ -108,8 +114,14 @@ export function deriveContractPlan(
 ): ContractPlan {
   const RUSH_MODULUS = 5n;
   const CONSTRAINED_MODULUS = 4n;
+  // [Issue #659 §13] The ladder Order takes a slot in the rotation rather than
+  // replacing anything: #645's three tasks each teach something the ladder does
+  // not, and the ladder teaches the thing none of them do -- how much you can
+  // publish before your key is gone. A team meets all four in the first five
+  // Orders, which is what makes the comparison between them available at all.
   const TASK_ROTATION: readonly OrderTaskKind[] = [
     "reveal-share",
+    "caesar-shift",
     "homomorphic-sum",
     "reveal-share",
     "masked-total",
@@ -127,9 +139,29 @@ export function deriveContractPlan(
   );
   // FHE and MPC publish nothing reconstructable by construction, so their
   // Orders state that rule rather than rolling for it.
+  // [Issue #659] A ladder Order never forbids disclosure. The decision it puts
+  // in front of a team -- compute it, or publish the pair and hope your rung
+  // survives -- only exists while LEAK is genuinely on the table, and an Order
+  // that removed it would be a hand calculation with no choice attached.
   const privacyConstraint: PrivacyConstraint =
-    taskKind !== "reveal-share" || constraintRoll % CONSTRAINED_MODULUS === 0n
-      ? "no-raw-disclosure"
-      : "none";
-  return { kind, taskKind, requestedShareIndices: [shareIndex], privacyConstraint };
+    taskKind === "caesar-shift"
+      ? "none"
+      : taskKind !== "reveal-share" || constraintRoll % CONSTRAINED_MODULUS === 0n
+        ? "no-raw-disclosure"
+        : "none";
+  return {
+    kind,
+    taskKind,
+    requestedShareIndices: [shareIndex],
+    privacyConstraint,
+    // [Issue #659 §12-B] Which rung, resolved by TIME rather than by a team's
+    // own choice. #659 leaves this open and leans toward letting a team pick
+    // ("いま点を稼ぐか、将来のために強くなるか" is a real investment decision),
+    // but that needs per-team ladder progression, an unlock op and a UI of its
+    // own. §13 scopes this slice to settling the SHAPE with one rung, and with
+    // exactly one rung there is nothing to choose between yet. Phase-based
+    // reuses `build → pressure → endgame` and adds no new time concept, which
+    // is the rule #659 §9 already set.
+    ...(taskKind === "caesar-shift" ? { rung: "caesar" as const } : {}),
+  };
 }

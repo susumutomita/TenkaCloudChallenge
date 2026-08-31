@@ -45,7 +45,9 @@ describe("the Order belt a participant actually sees", () => {
 
   test("every task kind appears", () => {
     const kinds = new Set<OrderTaskKind>(orders.map((o) => o.task.kind));
-    expect(kinds).toEqual(new Set(["reveal-share", "homomorphic-sum", "masked-total"]));
+    expect(kinds).toEqual(
+      new Set(["reveal-share", "caesar-shift", "homomorphic-sum", "masked-total"]),
+    );
   });
 
   /**
@@ -54,8 +56,13 @@ describe("the Order belt a participant actually sees", () => {
    * chance to learn anything from it.
    */
   test("each task kind appears within the first handful of Orders", () => {
-    const firstSix = orders.slice(0, 6).map((o) => o.task.kind);
-    expect(new Set(firstSix)).toEqual(new Set(["reveal-share", "homomorphic-sum", "masked-total"]));
+    // [Issue #659] Five, not six: the rotation is five long now that the
+    // ladder has a slot, so "the first handful" has to be at least one full
+    // cycle or this would assert that a rotation is shorter than it is.
+    const firstFive = orders.slice(0, 5).map((o) => o.task.kind);
+    expect(new Set(firstFive)).toEqual(
+      new Set(["reveal-share", "caesar-shift", "homomorphic-sum", "masked-total"]),
+    );
   });
 
   test("every Order can be fulfilled by at least one method", () => {
@@ -77,11 +84,27 @@ describe("the Order belt a participant actually sees", () => {
   test("free-choice Orders exist: more than one method is reasonable", () => {
     const freeChoice = orders.filter((o) => o.allowedMethods.length > 1);
     expect(freeChoice.length).toBeGreaterThan(0);
+    // [Issue #659] There are now two shapes of free choice, and they are not
+    // the same decision. On a share Order the cost of LEAK is one point on the
+    // secret's polynomial -- three of those, from one generation, and the
+    // secret is gone. On a ladder Order the cost is a (plaintext, ciphertext)
+    // pair, and how much that costs depends on the RUNG: one pair is the whole
+    // key at the bottom, and higher up it is worth nothing to an attacker.
+    // Asserting only the share shape here would let the ladder Order ship with
+    // no choice attached and this test would still pass.
+    const shapes = new Map<string, readonly SubmissionMethod[]>([
+      ["reveal-share", ["leak", "prove"]],
+      ["caesar-shift", ["cipher", "leak"]],
+    ]);
     for (const order of freeChoice) {
-      expect(order.task.kind).toBe("reveal-share");
+      const expected = shapes.get(order.task.kind);
+      expect(expected).toBeDefined();
       expect(order.privacyConstraint).toBe("none");
-      expect([...order.allowedMethods].sort()).toEqual(["leak", "prove"]);
+      expect([...order.allowedMethods].sort()).toEqual([...(expected ?? [])] as SubmissionMethod[]);
     }
+    // Both shapes actually occur -- otherwise the contrast above is theory.
+    const seen = new Set(freeChoice.map((o) => o.task.kind));
+    expect(seen).toEqual(new Set(["reveal-share", "caesar-shift"]));
   });
 
   /**

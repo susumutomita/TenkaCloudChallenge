@@ -98,6 +98,23 @@ export type ReplayEvent =
       readonly teamId: string;
       readonly detail: { readonly contractId: string; readonly generation: number };
     })
+  /**
+   * [Issue #659] A ladder LEAK. Narrated as its own kind rather than folded
+   * into `leak`, because what went public is different in the way that matters
+   * for a debrief: a share Order publishes a point on the secret's polynomial,
+   * a ladder Order publishes the answer next to its question. `pairsToBreak`
+   * rides along so the debrief can say whether that pair was survivable.
+   */
+  | (ReplayEventBase & {
+      readonly kind: "cipher-leak";
+      readonly teamId: string;
+      readonly detail: {
+        readonly contractId: string;
+        readonly generation: number;
+        readonly rung: string;
+        readonly pairsToBreak: number;
+      };
+    })
   | (ReplayEventBase & {
       readonly kind: "hunt-success";
       readonly teamId: string;
@@ -180,6 +197,23 @@ export function buildReplay(state: CryptoBattleState): ReplayEvent[] {
             ja: `${artifact.teamId} が MPC: order ${artifact.contractId} (世代 ${artifact.generation}) -- 自分の数ではなく覆面つきの小計を公開`,
           },
           detail: { contractId: artifact.contractId, generation: artifact.generation },
+        });
+        break;
+      case "cipher-pair":
+        events.push({
+          atMs: artifact.postedAtMs,
+          teamId: artifact.teamId,
+          kind: "cipher-leak",
+          summary: {
+            en: `Team ${artifact.teamId} LEAKed ladder order ${artifact.contractId} (generation ${artifact.generation}) -- published a ${artifact.rung} plaintext next to its ciphertext; ${artifact.pairsToBreak} such pair${artifact.pairsToBreak === 1 ? "" : "s"} recovers the key`,
+            ja: `${artifact.teamId} が LEAK: 梯子 order ${artifact.contractId} (世代 ${artifact.generation}) -- ${artifact.rung} の平文と暗号文の対を公開。この段は ${artifact.pairsToBreak} 組で鍵が割れる`,
+          },
+          detail: {
+            contractId: artifact.contractId,
+            generation: artifact.generation,
+            rung: artifact.rung,
+            pairsToBreak: artifact.pairsToBreak,
+          },
         });
         break;
       default: {

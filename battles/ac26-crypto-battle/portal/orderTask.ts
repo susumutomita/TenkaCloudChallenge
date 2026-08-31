@@ -32,6 +32,8 @@ export function describeTaskShort(task: OrderTaskProjection): string {
       return `fhe-sum×${task.inputs.length}`;
     case "masked-total":
       return `mpc-partial/${task.partyCount}`;
+    case "caesar-shift":
+      return `${task.rung}×${task.plaintext.length}/mod${task.symbols.length}`;
     default: {
       const exhaustive: never = task;
       throw new Error(`describeTaskShort: unknown task ${JSON.stringify(exhaustive)}`);
@@ -44,11 +46,17 @@ const TASK_LABELS: Readonly<Record<Locale, Readonly<Record<OrderTaskProjection["
     "reveal-share": "share を出す",
     "homomorphic-sum": "暗号文のまま足す",
     "masked-total": "覆面をかけた小計を出す",
+    // [Issue #659] 「シーザー暗号で」ではなく「自分の鍵で暗号にする」。
+    // 方式名は Order 本文に書いてある (ケルクホフス) ので、ラベルは
+    // *何をするか* を言う。方式名を見出しにすると、方式を知らない人には
+    // ただの呪文になり、知っている人には作業の説明にならない。
+    "caesar-shift": "自分の鍵で暗号にする",
   },
   en: {
     "reveal-share": "account for a share",
     "homomorphic-sum": "add without decrypting",
     "masked-total": "publish a masked subtotal",
+    "caesar-shift": "encrypt it with your key",
   },
 };
 
@@ -70,6 +78,10 @@ export function taskDetail(task: OrderTaskProjection, locale: Locale): string {
       return locale === "ja" ? `暗号文 ${task.inputs.length} 個` : `${task.inputs.length} ciphertexts`;
     case "masked-total":
       return locale === "ja" ? `${task.partyCount} 拠点` : `${task.partyCount} offices`;
+    case "caesar-shift":
+      // The symbols themselves, not a count. They ARE the job, they are short
+      // enough to fit, and they read identically in either language (#659 §3).
+      return task.plaintext.join(" ");
     default: {
       const exhaustive: never = task;
       throw new Error(`taskDetail: unknown task ${JSON.stringify(exhaustive)}`);
@@ -96,6 +108,8 @@ export function ledgerKindLabel(artifact: PublicArtifact): string {
       return "ciphertext (FHE)";
     case "partial":
       return "partial (MPC)";
+    case "cipher-pair":
+      return "pair (LEAK)";
     default: {
       const exhaustive: never = artifact;
       throw new Error(`ledgerKindLabel: unknown artifact ${JSON.stringify(exhaustive)}`);
@@ -105,8 +119,8 @@ export function ledgerKindLabel(artifact: PublicArtifact): string {
 
 /** The public value a ledger row carries, rendered for a single table cell. */
 const LEDGER_COPY = {
-  ja: { remainderOf: "を割る数で割った余り" },
-  en: { remainderOf: "remainder the modulus" },
+  ja: { remainderOf: "を割る数で割った余り", breaksAt: "組で鍵が割れる" },
+  en: { remainderOf: "remainder the modulus", breaksAt: "pair(s) recover the key" },
 } as const;
 
 export function ledgerPayload(artifact: PublicArtifact, locale: Locale): string {
@@ -129,6 +143,13 @@ export function ledgerPayload(artifact: PublicArtifact, locale: Locale): string 
       // the MPC lesson, so the row has to describe an addition that actually
       // reproduces.
       return `${[artifact.partial, ...artifact.peerPartials].join(" + ")} ${copy.remainderOf} = ${artifact.total}`;
+    case "cipher-pair":
+      // [Issue #659] The plaintext ABOVE its ciphertext, because the two lined
+      // up is the break: subtract one from the other, position by position, and
+      // on the bottom rung the key falls out of the first column. The row also
+      // states how many such pairs this rung survives, so a reader can see at a
+      // glance whether the team that posted it is already finished.
+      return `${artifact.plaintext.join(" ")} → ${artifact.ciphertext.join(" ")} (${artifact.pairsToBreak} ${copy.breaksAt})`;
     default: {
       const exhaustive: never = artifact;
       throw new Error(`ledgerPayload: unknown artifact ${JSON.stringify(exhaustive)}`);

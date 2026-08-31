@@ -23,7 +23,7 @@
  *
  * Every submit goes through `props.coordinationClient.submitOp(op)`
  * (undefined -> the whole panel fail-closes, same as `StatusPanel.tsx`).
- * The 4 `submit*` functions below build exactly the `CryptoBattleOp` shape
+ * The `submit*` functions below build exactly the `CryptoBattleOp` shape
  * `../game/src/types.ts` declares and forward it verbatim -- they are
  * exported so `game/src/portal.test.ts` can assert the op shape a mock
  * client actually received, without needing a DOM/click-simulation harness
@@ -47,6 +47,7 @@
  */
 
 import { useState } from "react";
+import type { CipherRung } from "../game/src/ladder.ts";
 import { describeTaskShort } from "./orderTask.ts";
 import type { PortalCoordinationClient, PortalCoordinationOutcome, PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 import { usePolledProjection } from "./coordination.ts";
@@ -276,6 +277,39 @@ export function submitMpc(
   partial: string,
 ): Promise<PortalCoordinationOutcome> {
   const op: CryptoBattleOp = { kind: "mpc", contractId, partial };
+  return client.submitOp(op);
+}
+
+/**
+ * [Issue #659] Builds and submits a CIPHER op — the ciphertext this team
+ * computed for a ladder Order.
+ *
+ * The answer is sent as the participant typed it, symbol by symbol. The reducer
+ * accepts either the pictures or their numeric values and rejects everything
+ * else (`parseAnswer`), so no normalising happens here: a portal that quietly
+ * "fixed" an answer would be deciding what the team meant.
+ */
+export function submitCipher(
+  client: PortalCoordinationClient,
+  contractId: string,
+  answer: readonly string[],
+): Promise<PortalCoordinationOutcome> {
+  const op: CryptoBattleOp = { kind: "cipher", contractId, answer };
+  return client.submitOp(op);
+}
+
+/**
+ * [Issue #659 §2] Builds and submits a ladder HUNT — the key recovered from a
+ * target's published (plaintext, ciphertext) pairs.
+ */
+export function submitHuntCipher(
+  client: PortalCoordinationClient,
+  targetTeamId: string,
+  generation: number,
+  rung: CipherRung,
+  recoveredKey: number,
+): Promise<PortalCoordinationOutcome> {
+  const op: CryptoBattleOp = { kind: "hunt-cipher", targetTeamId, generation, rung, recoveredKey };
   return client.submitOp(op);
 }
 
