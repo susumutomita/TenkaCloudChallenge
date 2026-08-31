@@ -1160,3 +1160,64 @@ describe("the primary actions follow what the Order accepts", () => {
     expect(primaryActionsFor(undefined).visible).toBe(true);
   });
 });
+
+/**
+ * [Issue #659] What the board is FOR, once there is more than one Order on it.
+ *
+ * From a real screenshot of a live match: six cards that looked alike, in issue
+ * order, with the score as a 12px chip in a row of three identical chips. The
+ * operator's words were 「ボードが小さくてよくわからない。ついでに何をみればいい
+ * のかよくわからない」 — which is a layout problem, not a data problem: every
+ * number was on screen and none of them answered "what do I do now".
+ */
+describe("the board answers what to do next", () => {
+  const order = (id: string, remainingMs: number): ContractProjection => ({
+    id,
+    kind: "standard",
+    points: 30,
+    leakPoints: 10,
+    task: { kind: "reveal-share", shareIndices: [0] },
+    privacyConstraint: "none",
+    allowedMethods: ["leak", "prove"],
+    status: "open",
+    remainingMs,
+  });
+
+  const render = (myContracts: readonly ContractProjection[]): string =>
+    renderToStaticMarkup(
+      createElement(GameBoardBody, { projection: fixtureProjection({ myContracts }), locale: "en" }),
+    );
+
+  it("puts the soonest deadline first, whatever order the Orders arrived in", () => {
+    // Issue order is arbitrary with respect to urgency: a rush Order issued
+    // last can be the one about to lapse.
+    const html = render([order("t-c0", 240_000), order("t-c1", 30_000), order("t-c2", 120_000)]);
+    const seen = [...html.matchAll(/ORDER #(\d)/g)].map(([, n]) => n);
+    expect(seen).toEqual(["1", "2", "0"]);
+  });
+
+  it("names the one that is due first", () => {
+    const html = render([order("t-c0", 240_000), order("t-c1", 30_000)]);
+    expect(html).toContain("DUE FIRST");
+    // Exactly one CARD carries it — marking several would be marking none.
+    // Counted on the class attribute, not the whole document: the stylesheet
+    // this component injects also contains the selector.
+    expect(html.match(/class="tc-order-card[^"]*tc-order-next/g)).toHaveLength(1);
+  });
+
+  it("shows the score as the largest thing on the board", () => {
+    // It was a chip indistinguishable from "phase" and "time left"; it is the
+    // number that changes when you play.
+    const html = render([order("t-c0", 240_000)]);
+    expect(html).toContain("tc-scoreline-value");
+    expect(html).toContain("tc-scoreline-hint");
+  });
+
+  it("keeps the vault out of the way until it is asked for", () => {
+    // Five 19-digit numbers took a third of the board and matter only while
+    // building a PROVE. The generation stays visible because ROTATE moves it.
+    const html = render([order("t-c0", 240_000)]);
+    expect(html).toContain("tc-vault-details");
+    expect(html).not.toMatch(/<details class="tc-vault-details"[^>]*\sopen/);
+  });
+});
