@@ -415,7 +415,12 @@ ${DIE_CSS}
 .tc-move-shell{border:2px solid #202b3c;border-radius:12px;padding:12px;background:#f8fafc;color:#16212e;display:grid;gap:12px;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 .tc-move-title{font-size:12px;font-weight:900;letter-spacing:.12em}
 .tc-order-picks{display:flex;gap:7px;overflow-x:auto;padding-bottom:4px}
-.tc-order-pick{min-width:150px;border:1px solid #b6c2cf;border-radius:9px;padding:8px;background:#fff;cursor:pointer;text-align:left}
+/* [Issue #659] The picker is a SELECTOR, not a second board.
+   It used to repeat every Order's reward, task, rule and pass rate — the same
+   detail the board above already shows, in the same six cards, so the screen
+   said everything twice and neither copy read as the one to use. It now carries
+   only what you need to pick one: which Order, and how long it has. */
+.tc-order-pick{min-width:96px;border:1px solid #b6c2cf;border-radius:9px;padding:8px;background:#fff;cursor:pointer;text-align:left}
 .tc-order-pick[aria-pressed="true"]{border:2px solid #0972d3;background:#f1f8ff;padding:7px}
 .tc-order-pick strong,.tc-order-pick span{display:block}.tc-order-pick span{font-size:11px;color:#5f6b7a;margin-top:2px}
 .tc-order-rule{font-size:10px;letter-spacing:.02em}
@@ -542,32 +547,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
                   actually allowed: a `no-raw-disclosure` Order has no LEAK
                   route, and offering a price for it would be a lie.
                 */}
-                <span>
-                  +{order.points}
-                  {order.allowedMethods.includes("leak") ? ` / ${copy.leakRate} +${order.leakPoints}` : ""}
-                  {" · "}{Math.ceil(order.remainingMs / 1000)}s
-                </span>
-                <span>{taskLabel(order.task, locale)} · {taskDetail(order.task, locale)}</span>
-                {/*
-                  [Issue #645] The Order's rule sits ON THE CARD, before the
-                  method choice, so a participant reads the constraint while
-                  picking rather than discovering it from a rejection. The card
-                  states the RULE, not just the permitted method: a reader told
-                  only "PROVE only" learns this Order; one told the raw value
-                  must not be published learns something they can carry.
-                */}
-                <span className={order.privacyConstraint === "none" ? "tc-order-rule" : "tc-order-rule tc-order-rule-strict"}>
-                  {/*
-                    [Issue #645] The permitted methods come from the ORDER, not
-                    from the constraint alone. Before the FHE and MPC tasks
-                    existed, "no-raw-disclosure" always meant PROVE, and this
-                    line said so literally -- which made an FHE Order announce
-                    "PROVE only" for a job PROVE cannot do.
-                  */}
-                  {order.privacyConstraint === "none"
-                    ? copy.constraintNone
-                    : copy.constraintNoRaw(order.allowedMethods)}
-                </span>
+                <span>{Math.ceil(order.remainingMs / 1000)}s</span>
               </button>
             ))}
           </div>
