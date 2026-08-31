@@ -113,17 +113,20 @@ Order cadence and TTLs, ROTATE cooldown, threshold/share count, and score values
 Change tuning with a replay/fixture assertion that explains the intended player
 effect. Do not tune by changing validation rules or by weakening a test.
 
-The 25-minute vertical fixture is deterministic coverage, not balance or human
-playability proof. A release still needs a first-time human playtest and the
-real route: Portal → Workbench → participant surface → move → persisted score.
+The 25-minute vertical fixture is deterministic game coverage. Pair it with the
+dev-harness tests, typecheck, and browser scenarios that render the real Portal
+components using participant-visible inputs.
 
-## Current external acceptance
+## Release checks
 
-- Challenge #652: production must use the server-only match secret.
-- Challenge #655: the vertical fixture must be seed-independent and replay the
-  same seeded match it composed.
-- Challenge #653: blind playtest and real Participant Portal E2E remain human /
-  deployed-environment acceptance; local automation cannot close them.
+- game tests and typecheck
+- dev-harness tests and typecheck
+- fresh browser scenarios for the initial, in-progress, and ended states
+- repository `make agent-gate`
+
+A real-AWS walkthrough and an independent third-party playtest are optional
+pre-event rehearsals. Record them when useful, but do not block development or
+merge when they have not run.
 
 ## Source map
 

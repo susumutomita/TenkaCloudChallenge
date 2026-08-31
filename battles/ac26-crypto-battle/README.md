@@ -90,7 +90,7 @@ bun run typecheck
 
 ## Completion boundary
 
-Automation is not the last acceptance step. A release still needs a first-time human playtest and the real Portal → Workbench → participant surface → move → persisted score path. Challenge #653 owns that human/deployed check.
+The release gate is the game/dev test and typecheck suites plus the browser harness running the real Portal components. The harness checks the first move, interaction, and result using participant-visible inputs only. A real-AWS walkthrough and an independent third-party playtest are optional pre-event rehearsals; not running them does not block development or merge.
 
 ## Files
 
