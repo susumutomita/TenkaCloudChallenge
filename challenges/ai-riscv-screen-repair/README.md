@@ -9,6 +9,18 @@ Repair the integration decisions in `local/solution/video_controller.sv`. The
 specification was written before the RTL; observable protocol, timing, and pixel
 state are the evidence. Do not rewrite the CPU or weaken the testbench.
 
+> **This problem is currently a draft.** Its framing is being reworked and it does
+> not appear in normal play. The advertised difficulty (5, 120–150 min) and the
+> jargon-first walkthrough did not match the actual amount of work. The portal
+> instructions have been rewritten; this README still carries the older wording.
+
+## How to work
+
+Run `make step` repeatedly. It shows only the one thing to fix now — measured
+value, which setting, which document, and why. Three stages, cleared one at a
+time. It reorganises `make test` (the full check the grader runs) and changes
+no verdict.
+
 ## What runs
 
 This separate Level 2 Challenge reuses a fixed copy of the repaired Level 1

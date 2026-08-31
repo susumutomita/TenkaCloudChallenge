@@ -7,6 +7,16 @@ Level 1のRV32I coreは起動するようになった。前任engineerは続け�
 `local/solution/video_controller.sv`のintegration判断を修復する。仕様はRTLより先に書かれている。
 protocol、timing、pixelの観測stateを証拠にし、CPUを書き直したりtestbenchを弱めたりしない。
 
+> **この問題は現在 draft です。** 出題形式の見直し中で、通常のプレーには出ません。
+> 難度の表示 (5 / 120〜150 分) と、専門用語を前提にした導線が、実際の作業量と噛み合って
+> いませんでした。ポータルの instructions は書き直し済みで、README はまだ従来の記述です。
+
+## 進めかた
+
+`make step` を繰り返す。いま直すべき 1 つだけを、実測値・直す値・読む文書・理由の
+順で出す。3 ステージを 1 つずつ潰していく設計で、`make test` (採点と同じ全件検査) の
+出力を整理しているだけで判定は変えない。
+
 ## 動くもの
 
 独立したLevel 2 Challengeとして、Level 1で修復済みのRV32I coreを固定部品として再利用し、
