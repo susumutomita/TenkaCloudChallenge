@@ -37,6 +37,7 @@ const COPY = {
     recovered: "recovered secret",
     rotate: "ROTATE",
     rotateHint: "Switch to a fresh generation.",
+    rotateCost: (orders: number) => `Voids your ${orders} open Order${orders === 1 ? "" : "s"} -- each costs you points, exactly as letting it expire would.`,
     send: "SUBMIT",
     running: "SUBMITTING…",
     leakRate: "pass",
@@ -102,6 +103,7 @@ const COPY = {
     recovered: "復元した secret",
     rotate: "ROTATE",
     rotateHint: "新しい世代へ切り替えます。",
+    rotateCost: (orders: number) => `未処理の ORDER ${orders} 件が無効になります。期限切れと同じだけ減点されます。`,
     send: "SUBMIT",
     running: "送信中…",
     leakRate: "パス",
@@ -202,6 +204,23 @@ function ownExposedShareCount(projection: CryptoBattleProjection | null): number
   return indices.size;
 }
 
+/**
+ * [Issue #659] How many Orders a ROTATE would void right now.
+ *
+ * ROTATE expires every Order the team still has open, and since #659 each of
+ * those costs what letting it expire costs -- so rotating mid-batch can be a
+ * whole batch's worth of points. The number is computed here, from the same
+ * projection the board renders, so the warning states what is actually at stake
+ * instead of quoting a rule the participant then has to apply themselves.
+ *
+ * Exported as a pure function because this panel reads its projection from a
+ * polling effect, which static rendering never runs -- the same reason
+ * `tacticAvailability` below is shaped this way.
+ */
+export function rotateVoidCount(projection: CryptoBattleProjection | null): number {
+  return openOrders(projection).length;
+}
+
 /** The advanced controls that have relevant public material right now. */
 export function tacticAvailability(projection: CryptoBattleProjection | null): {
   readonly hunt: boolean;
@@ -278,7 +297,7 @@ const CSS = `
 .tc-secondary-grid{display:grid;grid-template-columns:1.3fr .7fr;gap:10px}
 .tc-tactics{border:1px solid #cfd8e3;border-radius:10px;background:#eef3f8}.tc-tactics>summary{cursor:pointer;padding:10px 12px;font-size:12px;font-weight:900}.tc-tactics>summary span{display:block;margin-top:3px;color:#5f6b7a;font-size:11px;font-weight:500}.tc-tactics-body{display:grid;gap:10px;padding:0 10px 10px}
 .tc-hunt-card,.tc-rotate-card{border:1px solid #cfd8e3;border-radius:10px;padding:10px;background:#fff}
-.tc-card-title{font-size:12px;font-weight:900;letter-spacing:.07em}.tc-card-hint{font-size:11px;color:#5f6b7a;margin:3px 0 8px}
+.tc-card-title{font-size:12px;font-weight:900;letter-spacing:.07em}.tc-card-hint{font-size:11px;color:#5f6b7a;margin:3px 0 8px}.tc-card-warn{font-size:11px;font-weight:700;color:#a4341c;margin:0 0 8px}
 .tc-target-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:7px}
 .tc-target-chip{border:1px solid #b6c2cf;border-radius:999px;background:#fff;padding:6px 9px;cursor:pointer;font-size:11px}
 .tc-target-chip[aria-pressed="true"]{background:#eef3f8;border-color:#516a84;font-weight:800}
@@ -606,6 +625,17 @@ export default function FastMovePanel(props: PortalSlotProps) {
         {tactics.rotate && <div className="tc-rotate-card">
           <div className="tc-card-title">{copy.rotate}</div>
           <div className="tc-card-hint">{copy.rotateHint}</div>
+          {/*
+            [Issue #659] ROTATE voids every Order still open, and each one now
+            costs what letting it expire costs -- up to a whole batch. That is a
+            bigger surprise than the LEAK rate this panel already discloses, and
+            it arrives at the worst moment: a team rotates because it is under
+            attack. State the price while the button is still unpressed, and
+            count the Orders actually at stake rather than quoting a rule.
+          */}
+          {rotateVoidCount(projection) > 0 ? (
+            <div className="tc-card-warn">{copy.rotateCost(rotateVoidCount(projection))}</div>
+          ) : null}
           <button
             type="button"
             className="tc-submit-small"

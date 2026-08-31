@@ -44,7 +44,7 @@ import { contractsForMethod } from "../../portal/RegistrationPanelCore.tsx";
 import { GameBoardBody } from "../../portal/GameBoard.tsx";
 import { ledgerPayload } from "../../portal/orderTask.ts";
 import { ALL_SUBMISSION_METHODS } from "./methods.ts";
-import { nonceHuntCandidates, tacticAvailability } from "../../portal/FastMovePanel.tsx";
+import { nonceHuntCandidates, rotateVoidCount, tacticAvailability } from "../../portal/FastMovePanel.tsx";
 import StatusPanel, { StatusPanelBody } from "../../portal/StatusPanel.tsx";
 import { MODP_2048_P } from "./group.ts";
 import { DEFAULT_CONFIG, initialState, projectForTeam, tick } from "./reducer.ts";
@@ -987,4 +987,36 @@ describe("the MPC ledger row describes an addition that actually reproduces [Iss
       expect((a + b + c) % P).toBe(shownTotal);
     });
   }
+});
+
+/**
+ * [Issue #659] ROTATE voids every Order still open, and each one now costs what
+ * letting it expire costs -- up to a whole batch. That is a bigger surprise
+ * than the LEAK rate the board already discloses, and it lands at the worst
+ * moment: a team rotates because it is under attack. The panel states the price
+ * before the button is pressed, counting the Orders actually at stake rather
+ * than quoting a rule.
+ */
+describe("the ROTATE control says what rotating will cost", () => {
+  const openOrder = (id: string): ContractProjection => ({
+    id, kind: "standard", points: 30, leakPoints: 10,
+    task: { kind: "reveal-share", shareIndices: [0] },
+    privacyConstraint: "none", allowedMethods: ["leak", "prove"],
+    status: "open", remainingMs: 60_000,
+  });
+
+  it("counts every Order a rotate would void", () => {
+    const projection = fixtureProjection({ myContracts: [openOrder("a"), openOrder("b")] });
+    expect(rotateVoidCount(projection)).toBe(2);
+  });
+
+  it("counts nothing once the batch is resolved, because rotating is then free", () => {
+    const resolved: ContractProjection = { ...openOrder("a"), status: "completed" };
+    expect(rotateVoidCount(fixtureProjection({ myContracts: [resolved] }))).toBe(0);
+    expect(rotateVoidCount(fixtureProjection({ myContracts: [] }))).toBe(0);
+  });
+
+  it("says nothing at all when there is no projection yet", () => {
+    expect(rotateVoidCount(null)).toBe(0);
+  });
 });

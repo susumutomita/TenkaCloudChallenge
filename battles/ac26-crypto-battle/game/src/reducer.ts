@@ -350,13 +350,47 @@ function migrateContract(contract: Contract): Contract {
 }
 
 /**
- * Every entry point below reads `state.contracts`, so every entry point
- * migrates first. `applyOp` and `tick` return the migrated rows, so the
- * upgrade also persists on the next write rather than being redone forever.
+ * [Issue #659] Bring a persisted CONFIG up to the current shape.
+ *
+ * `mergeConfig` runs in `initialState` and nowhere else, so a config only ever
+ * gets its defaults filled in at the moment a match starts. Every later read
+ * comes off the persisted row -- and a coordination row outlives the code that
+ * wrote it (that is the whole reason #3126 / #3135 exist), so a match started
+ * before this version is read back by a reducer that expects fields its config
+ * has never heard of. Both new fields fail silently rather than loudly:
+ *
+ *  - `contractsPerIssue` undefined makes the batch loop's bound `undefined`, so
+ *    it runs zero times: the match stops issuing Orders altogether and simply
+ *    winds down, with nothing in the logs to say why.
+ *  - `scores.expiredOrder` undefined turns the first expiry into
+ *    `score + undefined`, and the team's total is NaN for the rest of the
+ *    match -- the same corruption `migrateContract`'s `leakPoints` backfill
+ *    exists to prevent, one level up.
+ *
+ * Re-merging is the whole fix: `mergeConfig` is already the function that says
+ * what a missing field means, and it leaves every value the row does carry
+ * exactly as it found it.
+ */
+function needsConfigMigration(config: CryptoBattleConfig): boolean {
+  return (
+    config.contractsPerIssue === undefined ||
+    config.scores?.expiredOrder === undefined ||
+    config.scores?.contractLeak === undefined
+  );
+}
+
+/**
+ * Every entry point below reads `state.contracts` and `state.config`, so every
+ * entry point migrates both first. `applyOp` and `tick` return the migrated
+ * state, so the upgrade also persists on the next write rather than being
+ * redone forever.
  */
 function withMigratedContracts(state: CryptoBattleState): CryptoBattleState {
-  if (!state.contracts.some(needsMigration)) return state;
-  return { ...state, contracts: state.contracts.map(migrateContract) };
+  const config = needsConfigMigration(state.config) ? mergeConfig(state.config) : state.config;
+  if (!state.contracts.some(needsMigration)) {
+    return config === state.config ? state : { ...state, config };
+  }
+  return { ...state, config, contracts: state.contracts.map(migrateContract) };
 }
 
 export function tick(persistedState: CryptoBattleState, eventNowMs: number): CryptoBattleState {
@@ -407,11 +441,17 @@ export function tick(persistedState: CryptoBattleState, eventNowMs: number): Cry
       // dozen Orders they never had a chance to see and then charge them
       // `expiredOrder` for each one. A platform hiccup would decide the match.
       //
-      // Skipping without advancing `sequenceIndex` keeps the Order belt dense
-      // and deterministic: the plan rolled for this slot is simply the plan the
-      // next live slot gets, so a catch-up changes WHEN Orders arrive, never
-      // which ones or how many a team is answerable for.
-      if (nextContractAtMs + ttlMs <= eventNowMs) continue;
+      // The slot is CONSUMED either way. Skipping without advancing
+      // `sequenceIndex` re-rolls the identical plan on the next iteration, and
+      // since the belt is a pure function of the index, it is stale again and
+      // skips again -- the batch dies at its first dead slot and, once the
+      // index is frozen on one, the belt never issues anything again. A rush
+      // slot (2.5 min) going stale would take the five standard slots behind
+      // it, which would still have been live, down with it.
+      if (nextContractAtMs + ttlMs <= eventNowMs) {
+        issuedCountByTeam.set(teamId, sequenceIndex + 1);
+        continue;
+      }
       const contractId = `${teamId}-c${sequenceIndex}`;
       issued.push({
         id: contractId,
