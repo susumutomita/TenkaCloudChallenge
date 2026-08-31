@@ -44,6 +44,11 @@ declare module "@tenkacloud/coordination-plugin-sdk" {
     applyOp(state: State, teamId: string, op: Op): State;
     tick?(state: State, eventNowMs: number): State;
     projectForTeam(state: State, teamId: string): Projection;
+    /**
+     * [Issue #659] 各 team の現在得点 (絶対値)。宣言すると platform の scoreboard へ反映される。
+     * 差分ではなく絶対値なのは、plugin が権威で platform は写すだけだから (= 再送で二重加算しない)。
+     */
+    teamScores?(state: State): Readonly<Record<string, number>>;
   }
 
   export type DispatchResult<State> =

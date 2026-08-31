@@ -151,10 +151,27 @@ import { defineCoordinationPlugin } from "@tenkacloud/coordination-plugin-sdk";
 import { applyOp, initialState, projectForTeam, tick, validateOp } from "../game/src/reducer.ts";
 import type { CryptoBattleOp, CryptoBattleProjection, CryptoBattleState } from "../game/src/types.ts";
 
+/**
+ * [Issue #659] The match's own scores, handed to the platform.
+ *
+ * The whole point of this Battle is decided here — `metadata.json` says
+ * 「試合中の得点はすべてここで判定される」 — but nothing carried that number to
+ * the scoreboard, so the portal showed 0 for a team that had been playing for
+ * an hour. Absolute values, not deltas: the plugin is the authority and the
+ * platform copies the current figure, which is also what makes a retried write
+ * harmless.
+ */
+function teamScores(state: CryptoBattleState): Readonly<Record<string, number>> {
+  const scores: Record<string, number> = {};
+  for (const [teamId, team] of Object.entries(state.teams)) scores[teamId] = team.score;
+  return scores;
+}
+
 export default defineCoordinationPlugin<CryptoBattleState, CryptoBattleOp, CryptoBattleProjection>({
   initialState,
   validateOp,
   applyOp,
   tick,
   projectForTeam,
+  teamScores,
 });
