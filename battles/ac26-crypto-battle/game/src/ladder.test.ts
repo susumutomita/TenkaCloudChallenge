@@ -1,8 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { deriveCipherKey, derivePlaintext } from "./fixtures.ts";
 import {
   ALL_CIPHER_RUNGS,
-  deriveCipherKey,
-  derivePlaintext,
   encryptWithRung,
   parseAnswer,
   rungSpec,
@@ -55,10 +54,9 @@ function projected(state: CryptoBattleState, teamId: string, contractId: string)
 function answerByHand(state: CryptoBattleState, teamId: string, order: Contract): string[] {
   const task = projected(state, teamId, order.id);
   const { symbols, myKey } = task;
-  return task.plaintext.map((symbol) => {
-    const value = symbols.indexOf(symbol);
-    return symbols[(value + myKey) % symbols.length] ?? "?";
-  });
+  // The projection hands over VALUES (the Portal draws them); a participant
+  // reads the drawn faces and writes back either form.
+  return task.plaintext.map((value) => symbols[(value + myKey) % symbols.length] ?? "?");
 }
 
 describe("the rung's arithmetic is the arithmetic a person does by hand", () => {
@@ -86,9 +84,11 @@ describe("the rung's arithmetic is the arithmetic a person does by hand", () => 
     // advantage to whoever speaks the language it was written in.
     const state = tick(initialState(CTX), 0);
     const task = projected(state, "teamA", ladderOrder(state, "teamA").id);
-    for (const symbol of task.plaintext) {
-      expect(task.symbols).toContain(symbol);
-      expect(/[a-zA-Z0-9]/.test(symbol)).toBe(false);
+    // Every value indexes a real symbol, and no symbol is a letter or a digit
+    // -- a word-based Order would favour whoever speaks its language.
+    for (const value of task.plaintext) {
+      expect(task.symbols[value]).toBeDefined();
+      expect(/[a-zA-Z0-9]/.test(task.symbols[value] ?? "")).toBe(false);
     }
     expect(task.plaintext.length).toBe(rungSpec(RUNG).plaintextLength);
   });
@@ -143,9 +143,7 @@ describe("CIPHER: the team does the work and nothing is published", () => {
     const task = projected(state, "teamA", order.id);
     const theirKey = projected(state, "teamB", ladderOrder(state, "teamB").id).myKey;
     const { symbols } = task;
-    const withTheirKey = task.plaintext.map(
-      (s) => symbols[(symbols.indexOf(s) + theirKey) % symbols.length] ?? "",
-    );
+    const withTheirKey = task.plaintext.map((v) => symbols[(v + theirKey) % symbols.length] ?? "");
     const mine = answerByHand(state, "teamA", order);
     // Only meaningful while the two keys actually differ.
     if (JSON.stringify(withTheirKey) === JSON.stringify(mine)) return;

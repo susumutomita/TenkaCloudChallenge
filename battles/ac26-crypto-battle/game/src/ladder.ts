@@ -43,9 +43,16 @@
  * English speaker reads ⚀⚁⚂ identically, so neither is handed an advantage the
  * cryptography did not give them. The symbol count IS the modulus, which makes
  * it the difficulty knob: mod 3 is mental arithmetic, mod 9 needs paper.
+ *
+ * ## Browser-safe on purpose
+ *
+ * The Portal imports this module for real — it renders the symbols and reads a
+ * rung's break threshold — so nothing here may reach Node-only code. The two
+ * functions that derive from the match seed (`deriveCipherKey`,
+ * `derivePlaintext`) therefore live in `fixtures.ts` with the rest of the
+ * seed-derived material, because `prng.ts` imports `node:crypto` and pulling it
+ * into the SPA bundle breaks the build outright.
  */
-
-import { deriveBigInt } from "./prng.ts";
 
 /** The rungs that exist today. A new rung is a new member here. */
 export type CipherRung = "caesar";
@@ -129,53 +136,6 @@ export const ALL_CIPHER_RUNGS: readonly CipherRung[] = ["caesar"];
 
 export function rungSpec(rung: CipherRung): CipherRungSpec {
   return CIPHER_RUNGS[rung];
-}
-
-/**
- * A team's key for one rung, at one generation.
- *
- * Scoped to `generation` for the same reason the Shamir secret and the Schnorr
- * public commitment are: ROTATE has to defend the rung it is most needed on. A
- * key derived without the generation would stay broken for the rest of the
- * match, and #659 §10's 「ROTATE だけが打ち消せる」 would quietly not be true of
- * the ladder. Deriving it here means `applyRotate` covers the ladder with no
- * branch of its own — the key it hands out after a rotate is simply a different
- * one, and every pair published under the old generation stops meaning anything.
- *
- * Zero is a legal key. It is a weak one — the ciphertext equals the plaintext —
- * and a team that draws it and leaks a pair has published its key in the
- * clearest possible way. That is the rung's lesson, not a bug to design around.
- */
-export function deriveCipherKey(
-  seed: string,
-  teamId: string,
-  generation: number,
-  rung: CipherRung,
-): number {
-  const spec = rungSpec(rung);
-  const roll = deriveBigInt(seed, `cipher-key:${rung}:${teamId}:${generation}`, generation);
-  return Number(roll % BigInt(spec.symbols.length));
-}
-
-/**
- * The plaintext this Order asks the team to encrypt, as symbol VALUES.
- *
- * Derived from the Order's own id so two Orders never ask the same question,
- * and so a replay produces the identical belt.
- */
-export function derivePlaintext(
-  seed: string,
-  contractId: string,
-  rung: CipherRung,
-): readonly number[] {
-  const spec = rungSpec(rung);
-  const modulus = BigInt(spec.symbols.length);
-  const values: number[] = [];
-  for (let position = 0; position < spec.plaintextLength; position += 1) {
-    const roll = deriveBigInt(seed, `cipher-plaintext:${rung}:${contractId}`, position);
-    values.push(Number(roll % modulus));
-  }
-  return values;
 }
 
 /**

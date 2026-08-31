@@ -13,7 +13,8 @@ import {
   submitRotate,
 } from "./RegistrationPanelCore.tsx";
 import { taskDetail, taskLabel } from "./orderTask.ts";
-import { rungSpec, toSymbols } from "../game/src/ladder.ts";
+import { DIE_CSS, DieFace, DieRow } from "./DieFace.tsx";
+import { rungSpec } from "../game/src/ladder.ts";
 import type { CipherRung } from "../game/src/ladder.ts";
 import type {
   CipherPairArtifact,
@@ -399,7 +400,19 @@ export function nonceHuntCandidates(
 }
 
 const CSS = `
-.tc-move-shell{border:2px solid #202b3c;border-radius:12px;padding:12px;background:#f8fafc;display:grid;gap:12px;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+${DIE_CSS}
+.tc-die-legend{display:inline-flex;gap:8px;flex-wrap:wrap;margin-left:6px;vertical-align:middle}
+.tc-die-legend-item{display:inline-flex;flex-direction:column;align-items:center;gap:1px}
+.tc-die-legend-item small{font-size:9px;color:#5f6b7a;font-weight:700}
+
+/* [Issue #659] The board paints its own light surfaces, so it has to state its
+   own text colour too. Without this it inherits the text colour from whatever
+   the host page happens to set -- and on a dark host that is white, which
+   rendered the Order id and the reward as white-on-white and washed the method
+   chips out. A component that is only legible when the host picks a compatible
+   colour is not self-contained; the dev harness renders these same components
+   on a dark page, which is how it surfaced. */
+.tc-move-shell{border:2px solid #202b3c;border-radius:12px;padding:12px;background:#f8fafc;color:#16212e;display:grid;gap:12px;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 .tc-move-title{font-size:12px;font-weight:900;letter-spacing:.12em}
 .tc-order-picks{display:flex;gap:7px;overflow-x:auto;padding-bottom:4px}
 .tc-order-pick{min-width:150px;border:1px solid #b6c2cf;border-radius:9px;padding:8px;background:#fff;cursor:pointer;text-align:left}
@@ -682,8 +695,18 @@ export default function FastMovePanel(props: PortalSlotProps) {
           <strong style={{ fontSize: "12px" }}>{copy.cipherTitle} · {selectedOrder.id.replace(/^.*-c/, "ORDER #")}</strong>
           <div className="tc-card-hint">{copy.cipherHelp}</div>
           <ul className="tc-material-list">
-            <li>{copy.cipherAlphabet}: <code>{selectedOrder.task.symbols.map((symbol, value) => `${symbol}=${value}`).join("  ")}</code></li>
-            <li><code style={{ fontSize: "18px", letterSpacing: "2px" }}>{selectedOrder.task.plaintext.join(" ")}</code></li>
+            <li>
+              {copy.cipherAlphabet}:
+              <span className="tc-die-legend">
+                {selectedOrder.task.symbols.map((symbol, value) => (
+                  <span className="tc-die-legend-item" key={symbol}>
+                    <DieFace value={value} size={20} />
+                    <small>{value}</small>
+                  </span>
+                ))}
+              </span>
+            </li>
+            <li><DieRow values={selectedOrder.task.plaintext} size={28} /></li>
             <li>{copy.cipherKey}: <code>{selectedOrder.task.myKey}</code></li>
           </ul>
           <div className="tc-card-warn">{copy.cipherCost(selectedOrder.task.pairsToBreak)}</div>
@@ -819,9 +842,8 @@ export default function FastMovePanel(props: PortalSlotProps) {
             <ul className="tc-material-list">
               {selectedCipherTarget.pairs.map((pair) => (
                 <li key={pair.id}>
-                  <code>{toSymbols(pair.plaintext, pair.rung).join(" ")}</code>
-                  <br />
-                  <code>{toSymbols(pair.ciphertext, pair.rung).join(" ")}</code>
+                  <DieRow values={pair.plaintext} size={18} />
+                  <DieRow values={pair.ciphertext} size={18} />
                 </li>
               ))}
             </ul>

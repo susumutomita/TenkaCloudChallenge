@@ -12,7 +12,7 @@
  * converts `CryptoBattleConfig.prime` to `bigint` before calling in here.
  */
 
-import type { CipherRung } from "./ladder.ts";
+import { type CipherRung, rungSpec } from "./ladder.ts";
 import { deriveBigInt, deriveStream } from "./prng.ts";
 import { share, type Share } from "./shamir.ts";
 import type { PrivacyConstraint } from "./methods.ts";
@@ -52,6 +52,62 @@ export function deriveTeamGeneration(
   const coeffs = deriveCoefficients(seed, teamId, generation, config.threshold, config.prime);
   const shares = share(secret, config.threshold, config.shareCount, coeffs, config.prime);
   return { secret, shares };
+}
+
+/**
+ * [Issue #659] A team's key for one rung, at one generation.
+ *
+ * Lives here rather than in `ladder.ts` for a boundary reason, not a taxonomy
+ * one: the Portal imports `ladder.ts` to render symbols and read a rung's break
+ * threshold, and anything reachable from there ends up in the SPA bundle.
+ * `prng.ts` imports `node:crypto`, which a browser build cannot resolve — so
+ * everything derived from the match seed stays on this side, next to
+ * `deriveTeamGeneration` and `deriveContractPlan`, which are the same kind of
+ * thing.
+ *
+ * Scoped to `generation` for the same reason the Shamir secret and the Schnorr
+ * public commitment are: ROTATE has to defend the rung it is most needed on. A
+ * key derived without the generation would stay broken for the rest of the
+ * match, and #659 §10's 「ROTATE だけが打ち消せる」 would quietly not be true of
+ * the ladder. Deriving it here means `applyRotate` covers the ladder with no
+ * branch of its own — the key it hands out after a rotate is simply a different
+ * one, and every pair published under the old generation stops meaning anything.
+ *
+ * Zero is a legal key. It is a weak one — the ciphertext equals the plaintext —
+ * and a team that draws it and leaks a pair has published its key in the
+ * clearest possible way. That is the rung's lesson, not a bug to design around.
+ */
+export function deriveCipherKey(
+  seed: string,
+  teamId: string,
+  generation: number,
+  rung: CipherRung,
+): number {
+  const spec = rungSpec(rung);
+  const roll = deriveBigInt(seed, `cipher-key:${rung}:${teamId}:${generation}`, generation);
+  return Number(roll % BigInt(spec.symbols.length));
+}
+
+/**
+ * [Issue #659] The plaintext a ladder Order asks the team to encrypt, as symbol
+ * VALUES.
+ *
+ * Derived from the Order's own id so two Orders never ask the same question,
+ * and so a replay produces the identical belt.
+ */
+export function derivePlaintext(
+  seed: string,
+  contractId: string,
+  rung: CipherRung,
+): readonly number[] {
+  const spec = rungSpec(rung);
+  const modulus = BigInt(spec.symbols.length);
+  const values: number[] = [];
+  for (let position = 0; position < spec.plaintextLength; position += 1) {
+    const roll = deriveBigInt(seed, `cipher-plaintext:${rung}:${contractId}`, position);
+    values.push(Number(roll % modulus));
+  }
+  return values;
 }
 
 export interface ContractPlan {
