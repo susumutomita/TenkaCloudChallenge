@@ -35,7 +35,6 @@
   "dashboard": {
     "slots": {
       "StatusPanel": "portal/StatusPanel.tsx",
-      "RegistrationPanel": "portal/RegistrationPanel.tsx",
       "HelpDrawer": "portal/HelpDrawer.tsx"
     }
   },

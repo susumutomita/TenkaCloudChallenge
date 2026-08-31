@@ -14,6 +14,7 @@ import {
 } from "./RegistrationPanelCore.tsx";
 import { taskDetail, taskLabel } from "./orderTask.ts";
 import { DIE_CSS, DieFace, DieRow } from "./DieFace.tsx";
+import { BOARD_CSS, Ledger, OrderBelt, Vault } from "./GameBoard.tsx";
 import { rungSpec } from "../game/src/ladder.ts";
 import type { CipherRung } from "../game/src/ladder.ts";
 import type {
@@ -75,6 +76,8 @@ export const FAST_MOVE_COPY = {
       right there enabled. A hint that contradicts the button beside it is worse
       than none.
     */
+    scoreLabel: "SCORE",
+    scoreHint: "Answer an Order to gain. Let one expire and you lose points.",
     leakBlocked: "This Order does not accept LEAK.",
     proveBlocked: "This Order does not accept PROVE.",
     commitment: "commitment",
@@ -171,6 +174,8 @@ export const FAST_MOVE_COPY = {
     constraintNone: "方法は自由",
     constraintNoRaw: (methods: readonly string[]) =>
       `${methods.join(" / ").toUpperCase()} のみ — 生の値を公開してはいけない`,
+    scoreLabel: "スコア",
+    scoreHint: "ORDER に答えると増えます。期限切れにすると減ります。",
     leakBlocked: "この Order は LEAK を受け付けません。",
     proveBlocked: "この Order は PROVE を受け付けません。",
     commitment: "commitment",
@@ -463,6 +468,7 @@ export function nonceHuntCandidates(
 }
 
 const CSS = `
+${BOARD_CSS}
 ${DIE_CSS}
 .tc-die-legend{display:inline-flex;gap:8px;flex-wrap:wrap;margin-left:6px;vertical-align:middle}
 .tc-die-legend-item{display:inline-flex;flex-direction:column;align-items:center;gap:1px}
@@ -608,8 +614,55 @@ export default function FastMovePanel(props: PortalSlotProps) {
   return (
     <section className="tc-move-shell" aria-label="crypto-battle-fast-moves">
       <style>{CSS}</style>
-      <div className="tc-move-title">{copy.title}</div>
+      {/*
+        [Issue #659] One surface: score, tickets, the counter you work at, then
+        the public record. It used to be two host slots — the board in one, the
+        controls in another — so the game read as two unrelated screens.
+      */}
+      <div className="tc-scoreline">
+        <div className="tc-scoreline-main">
+          <span className="tc-scoreline-label">{copy.scoreLabel}</span>
+          <strong className="tc-scoreline-value">
+            {projection.teams[projection.vault.teamId]?.score ?? 0}
+          </strong>
+        </div>
+        <div className="tc-scoreline-hint">{copy.scoreHint}</div>
+      </div>
 
+
+      <div>
+        {/*
+          [Issue #659] The belt IS the picker, and the work surface is directly
+          below it. There is no second list: choosing a ticket in one host slot
+          and working on it in another, far apart down the page, is what made
+          the screen unintuitive — "which Order" and "what do I do with it" were
+          never in view together. Now they are.
+        */}
+        <OrderBelt
+          projection={projection}
+          locale={locale}
+          selectedId={selectedOrder?.id}
+          onSelect={(id) => {
+            setSelectedOrderId(id);
+            setProveOpen(false);
+          }}
+        />
+      </div>
+
+      {/*
+        [Issue #645] The action area follows the Order's TASK. A share Order
+        offers LEAK / PROVE; an encrypted-addition Order offers only the thing
+        that can answer it. Showing all four buttons and rejecting three of them
+        would teach a participant that the game is arbitrary, when the real rule
+        is that a Schnorr proof cannot add two ciphertexts.
+
+        [Issue #659] Gated on what the Order ACCEPTS, not on which task it is.
+        The two were the same thing while `reveal-share` was the only Order that
+        took LEAK; the ladder Order takes it too, and the task-name test hid the
+        button on the one Order whose entire point is the choice between
+        computing and passing. The card advertised LEAK, the working panel
+        warned what LEAKing would cost, and there was nothing to press.
+      */}
       {/*
         [Issue #659] The ticket you are working on, on the surface you work at.
         
@@ -636,52 +689,6 @@ export default function FastMovePanel(props: PortalSlotProps) {
         </div>
       )}
 
-      <div>
-        <div className="tc-card-title">{copy.selectOrder}</div>
-        {orders.length === 0 ? <div className="tc-card-hint">{copy.noOrder}</div> : (
-          <div className="tc-order-picks">
-            {orders.map((order) => (
-              <button key={order.id} className="tc-order-pick" type="button" aria-pressed={selectedOrder?.id === order.id} onClick={() => { setSelectedOrderId(order.id); setProveOpen(false); }}>
-                <strong>{order.id.replace(/^.*-c/, "ORDER #")}</strong>
-                {/*
-                  [Issue #659] Both rates, side by side. Computing the Order and
-                  passing on it pay different amounts, and that difference IS
-                  the decision the Order asks for -- a card showing one number
-                  makes the choice only after it has been made, in the
-                  confirmation. The pass rate is shown only where passing is
-                  actually allowed: a `no-raw-disclosure` Order has no LEAK
-                  route, and offering a price for it would be a lie.
-                */}
-                {/*
-                  [Issue #659] Which Order, what it asks, how long. Three
-                  things, because two was too few: stripped to id and time, a
-                  share Order and a ladder Order looked identical and picking
-                  one became guesswork. The full detail still lives on the board
-                  and on the ticket above — this is the label on the ticket, not
-                  the ticket.
-                */}
-                <span>{taskLabel(order.task, locale)}</span>
-                <span>{Math.ceil(order.remainingMs / 1000)}s</span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/*
-        [Issue #645] The action area follows the Order's TASK. A share Order
-        offers LEAK / PROVE; an encrypted-addition Order offers only the thing
-        that can answer it. Showing all four buttons and rejecting three of them
-        would teach a participant that the game is arbitrary, when the real rule
-        is that a Schnorr proof cannot add two ciphertexts.
-
-        [Issue #659] Gated on what the Order ACCEPTS, not on which task it is.
-        The two were the same thing while `reveal-share` was the only Order that
-        took LEAK; the ladder Order takes it too, and the task-name test hid the
-        button on the one Order whose entire point is the choice between
-        computing and passing. The card advertised LEAK, the working panel
-        warned what LEAKing would cost, and there was nothing to press.
-      */}
       {primaryActionsVisible && (
       <div>
         <div className="tc-card-title">{copy.choose}</div>
@@ -1053,6 +1060,11 @@ export default function FastMovePanel(props: PortalSlotProps) {
         </div>
       </details>
       )}
+
+      <div className="tc-board-grid">
+        <Ledger projection={projection} locale={locale} />
+        <Vault projection={projection} locale={locale} />
+      </div>
 
       {feedback && (
         <div className={`tc-feedback tc-feedback-${feedback.kind}`}>
