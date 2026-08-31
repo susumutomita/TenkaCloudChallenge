@@ -117,6 +117,18 @@ Per-rung economics live in `game/src/ladder.ts`'s `CIPHER_RUNGS`, not in
 is, and what breaking it pays. They belong to the rung because that is what the
 ladder varies — see the header of that file.
 
+Hint text lives in `game/src/hints.ts`, its prices in `DEFAULT_CONFIG.scores.hintCosts`
+(one entry per level, `[2, 4, 8]`). Two constraints bind them together and
+`game/src/hints.test.ts` enforces both: every task kind carries the same number
+of hints, and the whole ladder must cost less than `contract - contractLeak`
+(30 - 10), or a team that needs help scores better by leaking than by learning —
+the "LEAK is always optimal" failure #659's simulation was rebuilt to remove.
+
+Hint text is served from the plugin, not the Portal bundle, and only for the
+levels a team has bought. Moving it into the Portal's locale tables (where every
+other participant-facing string lives) would ship every hint to the browser and
+make its price apply only to players who do not open devtools.
+
 Change tuning with a replay/fixture assertion that explains the intended player
 effect. Do not tune by changing validation rules or by weakening a test.
 
@@ -130,13 +142,13 @@ to be re-tuned by hand.
 
 **Match size depends on the backend, and nothing enforces it.** The whole match
 is one persisted row, read and rewritten on every participant action. Measured
-worst case for a 90-minute match, after #659's storage work: **16.4 KB per
-team**, linear.
+worst case for a 90-minute match — every team buys every hint and then leaks
+everything it is allowed to leak: **16.7 KB per team**, linear.
 
 | Backend | Limit | Teams this Battle supports |
 | --- | --- | --- |
-| Turso / libSQL | no per-row cap | **99** (the platform maximum) — a full match is ~1.6 MB |
-| DynamoDB | 400 KB per item, no partial write | **~18** with headroom; the match stops mid-play past ~24 |
+| Turso / libSQL | no per-row cap | **99** (the platform maximum) — a full match is ~1.7 MB |
+| DynamoDB | 400 KB per item, no partial write | **17** with headroom; the match stops mid-play past 24 |
 
 The DynamoDB ceiling is a property of the game, not something left unoptimised.
 The public ledger is permanent by design — its permanence is what gives LEAK its

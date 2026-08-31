@@ -10,6 +10,7 @@ import {
   submitLeak,
   submitMpc,
   submitProve,
+  submitRevealHint,
   submitRotate,
 } from "./RegistrationPanelCore.tsx";
 import { taskDetail, taskLabel } from "./orderTask.ts";
@@ -21,10 +22,11 @@ import type {
   CipherPairArtifact,
   ContractProjection,
   CryptoBattleProjection,
+  HintProjection,
 } from "../game/src/types.ts";
 
 type Locale = "ja" | "en";
-type FeedbackKind = "leak" | "prove" | "hunt" | "rotate" | "error";
+type FeedbackKind = "leak" | "prove" | "hunt" | "rotate" | "hint" | "error";
 
 interface Feedback {
   readonly kind: FeedbackKind;
@@ -89,6 +91,15 @@ export const FAST_MOVE_COPY = {
     rotate: "ROTATE",
     rotateHint: "Switch to a fresh generation.",
     rotateCost: (orders: number) => `Voids your ${orders} open Order${orders === 1 ? "" : "s"} -- each costs you points, exactly as letting it expire would.`,
+    // [Issue #659 §9] The hint ladder. The price is on the button, always,
+    // because a cost the player only discovers after paying it is not a choice
+    // they made.
+    hintsTitle: "HINTS",
+    hintsHint: "Each one explains a little more. You pay for it whether or not you finish the Order.",
+    hintBuy: (cost: number) => `OPEN THE NEXT HINT (-${cost})`,
+    hintsExhausted: "Every hint on this Order is open.",
+    hintOpened: "HINT OPENED",
+    hintOpenedBody: (cost: number) => `-${cost} · read it below`,
     send: "SUBMIT",
     running: "SUBMITTING…",
     leakRate: "pass",
@@ -187,6 +198,12 @@ export const FAST_MOVE_COPY = {
     rotate: "ROTATE",
     rotateHint: "新しい世代へ切り替えます。",
     rotateCost: (orders: number) => `未処理の ORDER ${orders} 件が無効になります。期限切れと同じだけ減点されます。`,
+    hintsTitle: "ヒント",
+    hintsHint: "1 段ごとに少しずつ説明します。Order を解けなくても得点は引かれます。",
+    hintBuy: (cost: number) => `次のヒントを開く（-${cost}）`,
+    hintsExhausted: "この Order のヒントはすべて開きました。",
+    hintOpened: "ヒントを開きました",
+    hintOpenedBody: (cost: number) => `-${cost} · 下に表示されています`,
     send: "SUBMIT",
     running: "送信中…",
     leakRate: "パス",
@@ -386,6 +403,24 @@ export function cipherHuntCandidates(
 }
 
 /**
+ * [Issue #659 §9] The next unopened rung of this Order's hint ladder, or
+ * `undefined` when every rung is open.
+ *
+ * Found by looking for the first rung with no `text`, rather than by counting
+ * how many the Portal thinks are open. `projectForTeam` decides which rungs
+ * carry text and the reducer decides which one a HINT op opens; a counter here
+ * would be a third opinion, free to disagree with both -- and the way it would
+ * disagree is by charging for a hint the player already owns.
+ *
+ * Exported for `game/src/portal.test.ts`: `renderToStaticMarkup` never runs the
+ * polling effect, so the panel has no projection to render under test and the
+ * decision has to be reachable on its own (see that file's header).
+ */
+export function nextHintFor(order: ContractProjection | undefined): HintProjection | undefined {
+  return order?.hints.find((hint) => hint.text === undefined);
+}
+
+/**
  * [Issue #659] Whether the LEAK / PROVE action area belongs on screen for this
  * Order, and which of the two it may actually run.
  *
@@ -529,7 +564,12 @@ ${DIE_CSS}
 .tc-ticket-urgent{border-color:#d13212;background:#fff6f5}
 .tc-ticket-urgent .tc-ticket-fill{background:#d13212}
 .tc-ticket-urgent .tc-ticket-clock{color:#d13212}
-.tc-feedback-leak{background:#fff0d6;border:1px solid #d8a657}.tc-feedback-prove{background:#e7f6ec;border:1px solid #69b482}.tc-feedback-hunt{background:#f0eaff;border:1px solid #9a7bd1}.tc-feedback-rotate{background:#e8f3ff;border:1px solid #6ba8df}.tc-feedback-error{background:#fff0f0;border:1px solid #d13212}
+.tc-hints{margin-top:9px;border-top:1px dashed #c6d0da;padding-top:8px}
+.tc-hint-text{display:flex;gap:7px;font-size:12px;color:#1f2c3d;line-height:1.6;margin:0 0 6px}
+.tc-hint-step{flex:none;width:17px;height:17px;border-radius:99px;background:#0b4c8c;color:#fff;font-size:10px;font-weight:900;display:inline-flex;align-items:center;justify-content:center;margin-top:2px}
+.tc-hint-button{width:100%;padding:7px 9px;border:2px solid #0b4c8c;border-radius:8px;background:#fff;color:#0b4c8c;font-size:11px;font-weight:900;letter-spacing:.05em;cursor:pointer}
+.tc-hint-button:disabled{opacity:.5;cursor:not-allowed}
+.tc-feedback-leak{background:#fff0d6;border:1px solid #d8a657}.tc-feedback-prove{background:#e7f6ec;border:1px solid #69b482}.tc-feedback-hunt{background:#f0eaff;border:1px solid #9a7bd1}.tc-feedback-rotate{background:#e8f3ff;border:1px solid #6ba8df}.tc-feedback-hint{background:#eef4fb;border:1px solid #7ea8d4}.tc-feedback-error{background:#fff0f0;border:1px solid #d13212}
 @keyframes tc-feedback-pop{0%{transform:translateY(7px) scale(.97);opacity:0}60%{transform:translateY(0) scale(1.02);opacity:1}100%{transform:scale(1)}}
 @media(max-width:720px){.tc-primary-actions,.tc-secondary-grid{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){.tc-feedback{animation:none!important}}
@@ -572,6 +612,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
   // would be a second implementation free to disagree with the judge.
   const { visible: primaryActionsVisible, leakAllowed, proveAllowed } =
     primaryActionsFor(selectedOrder);
+  const nextHint = nextHintFor(selectedOrder);
   const targets = useMemo(() => ledgerTargets(projection), [projection]);
   const selectedTarget = targets.find((target) => `${target.teamId}:${target.generation}` === huntTargetKey) ?? targets[0];
   const nonceTargets = useMemo(() => nonceHuntCandidates(projection), [projection]);
@@ -685,6 +726,50 @@ export default function FastMovePanel(props: PortalSlotProps) {
               className="tc-ticket-fill"
               style={{ width: `${Math.max(2, Math.min(100, (selectedOrder.remainingMs / 300_000) * 100))}%` }}
             />
+          </div>
+          {/*
+            [Issue #659 §9] Help, attached to the ticket it is help WITH.
+
+            It sits inside the ticket rather than in a drawer of its own because
+            the moment a player needs it is the moment they are staring at an
+            Order they cannot start, and a stuck player does not go looking. The
+            price is printed on the button before it is pressed -- the whole
+            mechanism is a trade, and a trade whose cost you learn afterwards is
+            not one you made.
+
+            Only opened rungs have any text to show: `projectForTeam` withholds
+            the rest, so there is nothing here to reveal by reading the bundle.
+          */}
+          <div className="tc-hints">
+            <div className="tc-card-title">{copy.hintsTitle}</div>
+            <div className="tc-card-hint">{copy.hintsHint}</div>
+            {selectedOrder.hints
+              .filter((hint) => hint.text !== undefined)
+              .map((hint) => (
+                <p className="tc-hint-text" key={hint.id}>
+                  <span className="tc-hint-step">{hint.level + 1}</span>
+                  {hint.text?.[locale]}
+                </p>
+              ))}
+            {nextHint ? (
+              <button
+                type="button"
+                className="tc-hint-button"
+                disabled={submitting}
+                onClick={() => void run(
+                  () => submitRevealHint(client, selectedOrder.id),
+                  () => ({
+                    kind: "hint",
+                    title: copy.hintOpened,
+                    body: copy.hintOpenedBody(nextHint.cost),
+                  }),
+                )}
+              >
+                {copy.hintBuy(nextHint.cost)}
+              </button>
+            ) : (
+              <div className="tc-card-hint">{copy.hintsExhausted}</div>
+            )}
           </div>
         </div>
       )}

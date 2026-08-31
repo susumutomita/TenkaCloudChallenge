@@ -58,6 +58,7 @@ function projection(overrides: Partial<CryptoBattleProjection> = {}): CryptoBatt
         allowedMethods: ["leak", "prove"],
         status: "open",
         remainingMs: 30_000,
+        hints: [],
       },
       {
         id: "blue-c-old",
@@ -69,6 +70,7 @@ function projection(overrides: Partial<CryptoBattleProjection> = {}): CryptoBatt
         allowedMethods: ["leak", "prove"],
         status: "open",
         remainingMs: 0,
+        hints: [],
       },
     ],
     otherOpenContractCount: 1,

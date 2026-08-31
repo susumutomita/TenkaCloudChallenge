@@ -106,6 +106,26 @@ export interface ScoreRules {
   readonly huntBonus: number;
   /** Points a target loses when successfully HUNTed (floored at 0, never negative). */
   readonly huntPenalty: number;
+  /**
+   * [Issue #659 §9] What each successive hint on an Order costs, by level —
+   * `hintCosts[0]` for the first hint opened, `[1]` for the second, and so on.
+   * Charged as a deduction (floored at 0, like `huntPenalty`), whether or not
+   * the Order is ever answered.
+   *
+   * A LIST rather than one price because the levels are not worth the same: the
+   * first says where to look, the last walks the first step of the calculation.
+   * A flat price would either make the nudge too expensive to try or the walked
+   * step too cheap to think about.
+   *
+   * The sum is bounded by the ordering the whole scoring model rests on
+   * (#659 §15): a team that buys every hint and then computes the Order must
+   * still finish above what LEAK would have paid them, or hints turn into a
+   * roundabout way of making LEAK optimal again — the exact failure #659's
+   * simulation found. `hints.test.ts` pins `contract - sum(hintCosts) >
+   * contractLeak` against `DEFAULT_CONFIG`. Its length must match
+   * `HINT_LEVELS`; a level with no price would be a free hint.
+   */
+  readonly hintCosts: readonly number[];
 }
 
 export interface PhaseBoundaries {
@@ -320,6 +340,22 @@ export interface Contract {
    * penalty to its cause rather than inferring it from timestamps.
    */
   readonly expiryCause?: "deadline" | "rotate";
+  /**
+   * [Issue #659 §9] How many hints this Order's team has opened on it.
+   *
+   * A COUNT, not the list of levels, and not the text. Hints are opened in
+   * ladder order, so the count says everything the list would — and the whole
+   * match is one persisted row against a 400 KB item cap
+   * (`state-size.test.ts`), where an array on every retained Order costs
+   * multiples of what one small integer does. The text is never stored at all:
+   * `projectForTeam` reads it from `hints.ts` by level.
+   *
+   * Absent rather than `0` on an Order nobody has bought a hint for, which is
+   * most of them — the same reason `resolution` and `expiryCause` are optional.
+   * Every read goes through `hintsRevealedOn`, so an Order persisted before
+   * this field existed needs no migration: it simply has no hints open.
+   */
+  readonly hintsRevealed?: number;
 }
 
 /**
@@ -687,8 +723,42 @@ export type CryptoBattleOp =
       /** The recovered key, as a symbol value. */
       readonly recoveredKey: number;
     }
+  /**
+   * [Issue #659 §9] Open the next hint on one of this team's own open Orders,
+   * and pay for it.
+   *
+   * Carries no level. Hints come in ladder order and the Order already knows
+   * how many are open, so a level on the wire would be a second copy of that
+   * number for the reducer to disagree with — and a participant-supplied index
+   * to bounds-check. "Open the next one" cannot be out of range and cannot skip
+   * ahead to the cheapest-per-word level.
+   *
+   * The charge lands whether or not the Order is ever answered. That is the
+   * decision the move exists to pose: an Order you were going to let expire is
+   * a bad one to buy help on.
+   */
+  | { readonly kind: "reveal-hint"; readonly contractId: string }
   | { readonly kind: "rotate" }
   | { readonly kind: "prove"; readonly contractId: string; readonly proof: SchnorrProof };
+
+/**
+ * [Issue #659 §9] One rung of an Order's hint ladder, as its owner sees it.
+ *
+ * `text` is present only for a level this team has actually opened. That is the
+ * whole enforcement of the price: the Portal bundle ships to the browser, so
+ * anything compiled into it is free to whoever opens devtools, and only the
+ * side holding the state can withhold something. See `hints.ts`.
+ */
+export interface HintProjection {
+  /** 0-based position in the ladder; hints open in this order. */
+  readonly level: number;
+  /** Stable `<task kind>/<level+1>` identifier — see `hints.ts`'s `HintSpec`. */
+  readonly id: string;
+  /** What opening this level costs, from `ScoreRules.hintCosts`. */
+  readonly cost: number;
+  /** Present iff opened. Both locales; the Portal picks (`projectForTeam` has none). */
+  readonly text?: Readonly<Record<"ja" | "en", string>>;
+}
 
 export interface VaultProjection {
   readonly teamId: string;
@@ -797,6 +867,13 @@ export interface ContractProjection {
    * against an absolute clock.
    */
   readonly remainingMs: number;
+  /**
+   * [Issue #659 §9] This Order's hint ladder, every level, with the text filled
+   * in only for the levels this team has bought. Always the full ladder, so the
+   * Portal can show what the NEXT hint costs before it is bought — a price the
+   * player cannot see is not a price they can weigh.
+   */
+  readonly hints: readonly HintProjection[];
 }
 
 export interface TeamSummaryProjection {

@@ -20,6 +20,7 @@ That is the whole bet.
 | **PROVE** | Compute, and answer without handing anything over | The piece stays safe — but it costs a calculation |
 | **HUNT** | When someone has three pieces exposed, take their points | — |
 | **ROTATE** | Remake your pieces. Everything published stops counting | — |
+| **HINT** | Open one more step of how to solve the Order you have selected | Costs points — and they do not come back if you never solve it |
 
 The order is **do nothing < LEAK and get hunted < LEAK and get away with it <
 PROVE**. Every Order card shows both rates side by side, so you compare before
@@ -78,6 +79,22 @@ Every card shows its deadline, points, task, and accepted methods. A method abse
 | MPC | submit one subtotal while each office's input stays private |
 | HUNT | submit a secret, a reused-nonce key, or a cipher key recovered from public records |
 | ROTATE | replace your secret and shares with a fresh generation |
+| HINT | open the next step of the selected ORDER's hint ladder. Nothing is published |
+
+## Stuck? — HINT
+
+Every ORDER carries **three hints**. The first says where to look, the second
+gives the rule, the third walks the first step. Even after the third, the
+calculation is still yours to do.
+
+Each one costs points, and they get more expensive as you climb (**-2 / -4 /
+-8**). The price is printed on the button, so you compare before you press.
+
+**Buying all three and then computing the Order still beats passing on it.** But
+the charge does not come back if you never answer — the worst hint to buy is one
+on an Order you were going to abandon.
+
+Hints never reach the public record. Nobody can see that you bought one.
 
 ## The cipher ladder
 

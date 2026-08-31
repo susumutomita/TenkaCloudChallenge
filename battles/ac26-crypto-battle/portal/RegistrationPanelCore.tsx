@@ -328,6 +328,22 @@ export function submitHuntNonce(
   return client.submitOp(op);
 }
 
+/**
+ * [Issue #659 §9] Builds and submits a HINT op — open the next rung of this
+ * Order's hint ladder and pay for it.
+ *
+ * Carries no level: the reducer opens the next unopened one (see
+ * `CryptoBattleOp`'s `reveal-hint` arm), so the Portal never has to hold a
+ * counter that could disagree with the state about which hint comes next.
+ */
+export function submitRevealHint(
+  client: PortalCoordinationClient,
+  contractId: string,
+): Promise<PortalCoordinationOutcome> {
+  const op: CryptoBattleOp = { kind: "reveal-hint", contractId };
+  return client.submitOp(op);
+}
+
 /** Builds and submits a ROTATE op. Exported for direct testing -- see this file's header. */
 export function submitRotate(client: PortalCoordinationClient): Promise<PortalCoordinationOutcome> {
   const op: CryptoBattleOp = { kind: "rotate" };

@@ -61,6 +61,7 @@ import {
   type FieldConfig,
 } from "./fixtures.ts";
 import { decryptOrderSum, deriveFheOrderInputs, expectedFheSum } from "./fhe.ts";
+import { hintCostAt, hintsFor } from "./hints.ts";
 import {
   type CipherRung,
   encryptWithRung,
@@ -95,6 +96,7 @@ import type {
   CryptoBattleOp,
   CryptoBattleProjection,
   CryptoBattleState,
+  HintProjection,
   OrderTask,
   OrderTaskProjection,
   PartialArtifact,
@@ -143,6 +145,12 @@ export const DEFAULT_CONFIG: CryptoBattleConfig = {
     rushContract: 45,
     huntBonus: 25,
     huntPenalty: 12,
+    // [Issue #659 §9] Escalating, and bounded by the ordering above: buying all
+    // three costs 14, so an Order computed after every hint still pays 16 —
+    // above LEAK's 10. Hints that could drag a solved Order below what leaking
+    // it would have paid would quietly restore "LEAK is always right", which is
+    // the failure the whole scoring model exists to remove.
+    hintCosts: [2, 4, 8],
   },
 };
 
@@ -414,7 +422,12 @@ function needsConfigMigration(config: CryptoBattleConfig): boolean {
   return (
     config.contractsPerIssue === undefined ||
     config.scores?.expiredOrder === undefined ||
-    config.scores?.contractLeak === undefined
+    config.scores?.contractLeak === undefined ||
+    // [Issue #659 §9] Same class as the two above, one slice later. A row
+    // written before hints existed has no price list, and `hintCostAt` reads
+    // `.length`/`[level]` off it -- so without this backfill the first HINT in
+    // an upgraded match throws inside `validateOp` instead of being refused.
+    config.scores?.hintCosts === undefined
   );
 }
 
@@ -674,6 +687,21 @@ function applyExpiryPenalties(
  * `JSON.stringify` on an array of two strings + a number has no such
  * ambiguity (each string element is quoted and escaped independently).
  */
+/**
+ * [Issue #659 §9] How many hints are open on this Order.
+ *
+ * The one read path for `Contract.hintsRevealed`, which is optional (absent on
+ * every Order nobody bought a hint on, and on every Order persisted before the
+ * field existed). Reading it directly would put `undefined` into the level
+ * arithmetic, and `undefined >= ladder.length` is `false` -- so the guard that
+ * is supposed to stop a fourth hint would wave it through and then index the
+ * price list with `NaN`. Centralising the default is what makes "no migration
+ * needed" true rather than merely hoped for.
+ */
+function hintsRevealedOn(contract: Contract): number {
+  return contract.hintsRevealed ?? 0;
+}
+
 function huntKey(attackerTeamId: string, targetTeamId: string, generation: number): string {
   return JSON.stringify([attackerTeamId, targetTeamId, generation]);
 }
@@ -998,6 +1026,36 @@ export function validateOp(
         BigInt(publicY)
       ) {
         return { ok: false, error: "recovered witness does not match the target's public commitment" };
+      }
+      return { ok: true };
+    }
+    case "reveal-hint": {
+      // [Issue #659 §9] Not `validateOrderSubmission`: that gate asks whether a
+      // METHOD may answer this Order, and opening a hint answers nothing. The
+      // three conditions that do apply are the ownership and open-ness half of
+      // it, spelled out here rather than by passing a fake method through a
+      // function whose next check would be "can LEAK perform this task".
+      const contract = state.contracts.find((c) => c.id === op.contractId);
+      if (!contract) return { ok: false, error: `contract "${op.contractId}" not found` };
+      if (contract.teamId !== teamId) {
+        return { ok: false, error: `contract "${op.contractId}" belongs to another team` };
+      }
+      if (contract.status !== "open") {
+        // A hint on a finished Order teaches nothing it can be used on, and
+        // charging for it would be a way to lose points by misclicking a card
+        // that has already scrolled into the completed part of the belt.
+        return { ok: false, error: `contract "${op.contractId}" is ${contract.status}, not open` };
+      }
+      const level = hintsRevealedOn(contract);
+      const ladder = hintsFor(contract.task.kind);
+      if (level >= ladder.length) {
+        return { ok: false, error: `contract "${op.contractId}" has no hints left` };
+      }
+      if (hintCostAt(state.config.scores.hintCosts, level) === undefined) {
+        // A price list shorter than the ladder. `needsConfigMigration` fills in
+        // a missing list entirely, so this is a hand-edited or hand-tuned
+        // config -- refuse rather than charge an amount nobody chose.
+        return { ok: false, error: `no configured price for hint level ${level}` };
       }
       return { ok: true };
     }
@@ -1469,6 +1527,45 @@ function applyMpc(
  * expression, not four: every method earns the Order's stated points, never a
  * bonus for the technique used — #486's rule, unchanged.
  */
+/**
+ * [Issue #659 §9] Open the next hint on an Order and charge for it.
+ *
+ * Publishes nothing. A hint is the only move in this Battle that changes a
+ * team's score without touching the Public Ledger -- deliberately, because the
+ * point of the item #659 §9 builds on top of this (the booster) is to help the
+ * team in last place without announcing to the rest of the field that they
+ * needed help.
+ *
+ * The deduction floors at 0, the same convention `applyHunt` and
+ * `applyExpiryPenalties` already use for every other penalty in this file.
+ */
+function applyRevealHint(
+  state: CryptoBattleState,
+  teamId: string,
+  op: Extract<CryptoBattleOp, { kind: "reveal-hint" }>,
+): CryptoBattleState {
+  const team = state.teams[teamId];
+  const contract = state.contracts.find((c) => c.id === op.contractId);
+  if (!team || !contract) {
+    throw new Error("applyRevealHint: unknown team or contract -- call validateOp() first");
+  }
+  const level = hintsRevealedOn(contract);
+  const cost = hintCostAt(state.config.scores.hintCosts, level);
+  if (cost === undefined) {
+    throw new Error("applyRevealHint: no configured price -- call validateOp() first");
+  }
+  return {
+    ...state,
+    contracts: state.contracts.map((c) =>
+      c.id === contract.id ? { ...c, hintsRevealed: level + 1 } : c,
+    ),
+    teams: {
+      ...state.teams,
+      [teamId]: { ...team, score: Math.max(0, team.score - cost) },
+    },
+  };
+}
+
 function completeOrder(
   state: CryptoBattleState,
   teamId: string,
@@ -1559,6 +1656,32 @@ function projectTask(
       throw new Error(`projectTask: unknown task ${JSON.stringify(exhaustive)}`);
     }
   }
+}
+
+/**
+ * [Issue #659 §9] This Order's hint ladder as its owner sees it: every level,
+ * with the text on the ones they bought and nothing but a price on the rest.
+ *
+ * This is the redaction that makes the price real, and it is why hint text
+ * lives in `hints.ts` on the state side rather than in the Portal's locale
+ * tables where every other participant-facing string in this Battle lives. The
+ * Portal bundle is shipped to the browser whole; anything compiled into it is
+ * free to anyone who opens devtools, and a hint that is free to the players who
+ * look is not a hint that costs anything. Only the side holding the state can
+ * withhold it, so only the side holding the state may hold it.
+ *
+ * A missing price yields a `cost` of 0 rather than `NaN` -- `validateOp`
+ * refuses to SELL a level with no configured price, so this branch only ever
+ * renders one, and rendering it as `NaN` would put that straight on a card.
+ */
+function projectHints(state: CryptoBattleState, contract: Contract): readonly HintProjection[] {
+  const revealed = hintsRevealedOn(contract);
+  return hintsFor(contract.task.kind).map((spec, level) => ({
+    level,
+    id: spec.id,
+    cost: hintCostAt(state.config.scores.hintCosts, level) ?? 0,
+    ...(level < revealed ? { text: spec.text } : {}),
+  }));
 }
 
 function applyHunt(
@@ -1773,6 +1896,8 @@ export function applyOp(
       return applyCipher(state, teamId, op);
     case "hunt-cipher":
       return applyHuntCipher(state, teamId, op);
+    case "reveal-hint":
+      return applyRevealHint(state, teamId, op);
     default: {
       const exhaustive: never = op;
       throw new Error(`applyOp: unknown op kind ${JSON.stringify(exhaustive)}`);
@@ -1828,6 +1953,7 @@ export function projectForTeam(
       // unreachable in practice. It exists only to keep this arithmetic
       // total without an unsafe assertion.
       remainingMs: Math.max(0, c.expiresAtMs - (state.nowMs ?? c.expiresAtMs)),
+      hints: projectHints(state, c),
     }));
 
   const otherOpenContractCount = state.contracts.filter(
