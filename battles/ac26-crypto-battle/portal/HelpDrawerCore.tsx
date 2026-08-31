@@ -126,7 +126,17 @@ const COPY = {
       "When you are the one exposed, you rotate.",
     ],
     summaryTail:
-      "That is all of it. The game is how far you push your luck; the cryptography is only what settles it.",
+      "That is all of it. The game is how far you push your luck; the cryptography is what settles it.",
+    goalTitle: "What you will have learned",
+    goalIntro:
+      "Three kinds of modern cryptography are built into the Orders. All three are what blockchains are made of, and you will have performed each of them by hand.",
+    goals: [
+      { name: "Homomorphic encryption", body: "Compute on numbers you cannot read. That is the add-without-decrypting Order." },
+      { name: "Secure computation (MPC)", body: "Everyone learns the total, nobody learns anyone's number. That is the masked-subtotal Order." },
+      { name: "Zero-knowledge proofs", body: "Prove you hold a secret without showing it. That is PROVE." },
+    ],
+    goalTail:
+      "Older ciphers like Caesar show up too, but as the way in: meeting a breakable cipher first is what makes an unbreakable one worth something.",
     intro:
       "Vocabulary: a \"Contract\" (Order) here has nothing to do with CloudFormation or a blockchain contract — it just means a request addressed to your team. Every move below is a real cryptographic operation; nothing is simulated, and nothing scores on a guess.",
     lanesTitle: 'The 3 lanes (under "PROVE / LEAK / HUNT -- Status" above)',
@@ -221,7 +231,26 @@ const COPY = {
       "自分が危なくなったら ROTATE で逃げる。",
     ],
     summaryTail:
-      "これだけです。「どこまで欲張るか」のゲームで、暗号はその判定に使われているだけ。",
+      "これだけです。「どこまで欲張るか」のゲームで、暗号はその判定に使われています。",
+    /*
+      [Issue #659] 到達点を明示する。
+      
+      このバトルの目的は、遊び終えたときに現代暗号 ── 秘密計算・準同型暗号・
+      ゼロ知識証明 ── が分かっていることです。プレイヤーは既に 3 つとも実際に
+      やっているのに、それが何という技術かを一度も言われていませんでした。
+      名前は成功した瞬間 (FastMovePanel の lesson) に出しますが、何に向かって
+      いるのかはここで先に言う。
+    */
+    goalTitle: "このゲームで身につくもの",
+    goalIntro:
+      "ORDER には 3 種類の現代暗号が入っています。どれもブロックチェーンを支えている技術で、遊んでいるうちに実際に手を動かすことになります。",
+    goals: [
+      { name: "準同型暗号", body: "中身を読めないまま計算する。暗号文のまま足す ORDER がこれです。" },
+      { name: "秘密計算 (MPC)", body: "全員の合計だけを知り、誰の数も知らない。覆面つき小計の ORDER がこれです。" },
+      { name: "ゼロ知識証明", body: "秘密を見せずに「持っている」ことだけ証明する。PROVE がこれです。" },
+    ],
+    goalTail:
+      "シーザー暗号のような古い暗号も出てきますが、それは入口です。「破れる暗号」を先に体験しておくと、破れない暗号のありがたみが分かります。",
     intro:
       "用語: ここでの「Contract」(ORDER) は CloudFormation や blockchain の contract とは無関係で、単に「自チームへの依頼」という意味です。以下の操作はすべて実際の暗号計算であり、シミュレーションではありません。当て推量では得点になりません。",
     lanesTitle: "3 つのレーン (上の「PROVE / LEAK / HUNT — 状態」の中)",
@@ -326,6 +355,23 @@ export default function HelpDrawer(props: PortalSlotProps) {
         ))}
       </ul>
       <p style={{ margin: "8px 0 0 0", fontSize: "13px", color: "#5f6b7a" }}>{copy.summaryTail}</p>
+
+      {/*
+        [Issue #659] Where this is going, said before the reference material.
+        The point of the Battle is that a player leaves understanding the three
+        primitives blockchains are built on. They perform all three during a
+        match; naming the destination up front is what turns "I followed the
+        instructions" into "I know what I did".
+      */}
+      <h4 style={sectionTitleStyle}>{copy.goalTitle}</h4>
+      <p style={{ margin: "0 0 8px 0", fontSize: "13px" }}>{copy.goalIntro}</p>
+      {copy.goals.map((goal) => (
+        <div key={goal.name} style={moveStyle}>
+          <strong>{goal.name}</strong>
+          <p style={{ margin: "4px 0 0 0", fontSize: "13px" }}>{goal.body}</p>
+        </div>
+      ))}
+      <p style={{ margin: "8px 0 0 0", fontSize: "13px", color: "#5f6b7a" }}>{copy.goalTail}</p>
 
       <details style={{ marginTop: "12px" }}>
         <summary style={{ cursor: "pointer", fontSize: "13px", fontWeight: 600 }}>

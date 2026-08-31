@@ -45,6 +45,7 @@ import { GameBoardBody } from "../../portal/GameBoard.tsx";
 import { ledgerPayload } from "../../portal/orderTask.ts";
 import { ALL_SUBMISSION_METHODS } from "./methods.ts";
 import {
+  FAST_MOVE_COPY,
   cipherHuntCandidates,
   nonceHuntCandidates,
   primaryActionsFor,
@@ -1219,5 +1220,93 @@ describe("the board answers what to do next", () => {
     const html = render([order("t-c0", 240_000)]);
     expect(html).toContain("tc-vault-details");
     expect(html).not.toMatch(/<details class="tc-vault-details"[^>]*\sopen/);
+  });
+});
+
+/**
+ * [Issue #659] The Battle's actual goal: a player leaves understanding secure
+ * computation, homomorphic encryption and zero-knowledge proofs — the
+ * primitives blockchains are built on.
+ *
+ * They already performed all three. An FHE Order IS homomorphic addition, an
+ * MPC Order IS secure multi-party computation, a PROVE IS a zero-knowledge
+ * proof. But the words appeared ZERO times anywhere a participant could see,
+ * and the only mention of blockchain was a disclaimer saying a Contract is NOT
+ * one — so a player could finish the match having done all three and be unable
+ * to name any of them.
+ */
+describe("the help drawer names what the player is learning", () => {
+  for (const locale of ["ja", "en"] as const) {
+    it(`names all three modern primitives (${locale})`, () => {
+      const html = renderToStaticMarkup(createElement(HelpDrawer, baseProps({ locale })));
+      const expected =
+        locale === "ja"
+          ? ["準同型暗号", "秘密計算", "ゼロ知識証明"]
+          : ["Homomorphic encryption", "Secure computation", "Zero-knowledge proofs"];
+      for (const term of expected) expect(html).toContain(term);
+    });
+
+    it(`says where they are used, rather than only that they exist (${locale})`, () => {
+      // The motivation the operator gave: these matter because blockchains are
+      // made of them. Without it the three names are trivia.
+      const html = renderToStaticMarkup(createElement(HelpDrawer, baseProps({ locale })));
+      expect(html).toContain(locale === "ja" ? "ブロックチェーン" : "blockchain");
+    });
+
+    it(`frames the historical cipher as the way in, not the destination (${locale})`, () => {
+      const html = renderToStaticMarkup(createElement(HelpDrawer, baseProps({ locale })));
+      expect(html).toContain(locale === "ja" ? "シーザー" : "Caesar");
+    });
+  }
+});
+
+/**
+ * [Issue #659] Each Order teaches three things: what it is used for, why the
+ * trick works, and what to actually do. The operator's constraint was that the
+ * text stay short — 「文章は少なくしないと楽しめない」 — so it is three labelled
+ * lines, not a paragraph.
+ *
+ * The procedure alone was what shipped before, which meant a player could
+ * complete a homomorphic addition without ever learning that adding ciphertexts
+ * is supposed to work, let alone why.
+ */
+describe("each Order carries its use, its mechanism, and its procedure", () => {
+  it("gives the FHE Order all three, with the identity that makes it work", () => {
+    const copy = FAST_MOVE_COPY.ja;
+    expect(copy.fheUse).toContain("つかいみち");
+    // The mechanism is one line and it is the actual identity, not a paraphrase.
+    expect(copy.fheWhy).toContain("Enc(a) + Enc(b) = Enc(a+b)");
+    expect(copy.fheHelp).toContain("やること");
+  });
+
+  it("gives the MPC Order the cancellation that makes it work", () => {
+    const copy = FAST_MOVE_COPY.ja;
+    expect(copy.mpcUse).toContain("つかいみち");
+    expect(copy.mpcWhy).toContain("a+b+c");
+    expect(copy.mpcHelp).toContain("やること");
+  });
+
+  it("frames the ladder Order as the breakable one, and says why it breaks", () => {
+    const copy = FAST_MOVE_COPY.ja;
+    expect(copy.cipherUse).toContain("破れる");
+    expect(copy.cipherWhy).toContain("鍵");
+  });
+
+  it("keeps each line short enough to be read mid-match", () => {
+    // The constraint that makes this usable rather than a wall of text.
+    const copy = FAST_MOVE_COPY.ja;
+    for (const line of [copy.fheUse, copy.fheWhy, copy.mpcUse, copy.mpcWhy, copy.cipherUse, copy.cipherWhy]) {
+      expect(line.length).toBeLessThan(70);
+    }
+  });
+
+  it("names the blocked method correctly, per method", () => {
+    // A ladder Order accepts LEAK and refuses PROVE. One shared string naming
+    // LEAK told the reader LEAK was refused while the LEAK button sat enabled
+    // beside it.
+    const copy = FAST_MOVE_COPY.ja;
+    expect(copy.leakBlocked).toContain("LEAK");
+    expect(copy.proveBlocked).toContain("PROVE");
+    expect(copy.leakBlocked).not.toEqual(copy.proveBlocked);
   });
 });

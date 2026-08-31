@@ -161,7 +161,29 @@ function protectedLabel(kind: PublicArtifact["kind"]): string {
   }
 }
 
-function OrderBelt({ projection, locale }: { readonly projection: CryptoBattleProjection; readonly locale: Locale }) {
+/**
+ * [Issue #659] The belt IS the picker.
+ *
+ * Order tickets used to be rendered twice — once here to read, once in a
+ * separate host slot to choose from — and the two lists sat far apart down the
+ * page. Choosing a ticket in one place and working on it in another is what
+ * made the screen unintuitive: at no point were "which Order" and "what do I
+ * do with it" in view together.
+ *
+ * Clicking a ticket here selects it, and the work surface renders directly
+ * beneath. One list, one place.
+ */
+export function OrderBelt({
+  projection,
+  locale,
+  selectedId,
+  onSelect,
+}: {
+  readonly projection: CryptoBattleProjection;
+  readonly locale: Locale;
+  readonly selectedId?: string;
+  readonly onSelect?: (id: string) => void;
+}) {
   const copy = COPY[locale];
   // [Issue #659] Deadline order, soonest first.
   //
@@ -190,7 +212,26 @@ function OrderBelt({ projection, locale }: { readonly projection: CryptoBattlePr
             const isNext = index === 0;
             const pct = Math.max(4, Math.min(100, (order.remainingMs / 300_000) * 100));
             return (
-              <article className={`tc-order-card${urgency}${isNext ? " tc-order-next" : ""}`} key={order.id}>
+              <article
+                className={`tc-order-card${urgency}${isNext ? " tc-order-next" : ""}${
+                  selectedId === order.id ? " tc-order-selected" : ""
+                }${onSelect ? " tc-order-clickable" : ""}`}
+                key={order.id}
+                {...(onSelect
+                  ? {
+                      role: "button",
+                      tabIndex: 0,
+                      "aria-pressed": selectedId === order.id,
+                      onClick: () => onSelect(order.id),
+                      onKeyDown: (event: { key: string; preventDefault: () => void }) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          onSelect(order.id);
+                        }
+                      },
+                    }
+                  : {})}
+              >
                 <div className="tc-order-top">
                   <strong>
                     {order.id.replace(/^.*-c/, "ORDER #")}
@@ -251,7 +292,7 @@ function OrderBelt({ projection, locale }: { readonly projection: CryptoBattlePr
   );
 }
 
-function Vault({ projection, locale }: { readonly projection: CryptoBattleProjection; readonly locale: Locale }) {
+export function Vault({ projection, locale }: { readonly projection: CryptoBattleProjection; readonly locale: Locale }) {
   const copy = COPY[locale];
   return (
     /*
@@ -284,7 +325,7 @@ function Vault({ projection, locale }: { readonly projection: CryptoBattleProjec
   );
 }
 
-function Ledger({ projection, locale }: { readonly projection: CryptoBattleProjection; readonly locale: Locale }) {
+export function Ledger({ projection, locale }: { readonly projection: CryptoBattleProjection; readonly locale: Locale }) {
   const copy = COPY[locale];
   const groups = groupLedger(projection.publicLedger);
   const lastId = projection.publicLedger.at(-1)?.id;
@@ -342,7 +383,7 @@ function Ledger({ projection, locale }: { readonly projection: CryptoBattleProje
   );
 }
 
-const CSS = `
+export const BOARD_CSS = `
 ${DIE_CSS}
 
 /* [Issue #659] The board paints its own light surfaces, so it has to state its
@@ -372,6 +413,10 @@ ${DIE_CSS}
 .tc-vault-details>summary::-webkit-details-marker{display:none}
 .tc-vault-details[open]>summary{margin-bottom:8px}
 .tc-order-next{border-color:#0972d3;box-shadow:0 0 0 2px rgba(9,114,211,.14)}
+.tc-order-clickable{cursor:pointer}
+.tc-order-clickable:hover{border-color:#516a84}
+/* [Issue #659] The ticket you are working on, marked on the belt itself. */
+.tc-order-selected{border-color:#202b3c;border-width:2px;box-shadow:0 0 0 3px rgba(32,43,60,.12)}
 .tc-next-chip{margin-left:6px;font-size:9px;font-weight:800;letter-spacing:.06em;color:#0972d3;border:1px solid #9ec8ee;border-radius:999px;padding:1px 5px;vertical-align:middle;white-space:nowrap}
 .tc-game-card{border:1px solid #cfd8e3;border-radius:12px;padding:12px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.05)}
 .tc-order-belt{border-width:2px;border-color:#0972d3;background:linear-gradient(180deg,#f5fbff,#fff)}
@@ -425,7 +470,7 @@ export function GameBoardBody({ projection, locale }: { readonly projection: Cry
   const copy = COPY[locale];
   return (
     <div className="tc-game-shell">
-      <style>{CSS}</style>
+      <style>{BOARD_CSS}</style>
       {/*
         [Issue #659] The score is what a player checks constantly, and it was a
         12px chip in a row of three identical chips. It is now the largest thing
