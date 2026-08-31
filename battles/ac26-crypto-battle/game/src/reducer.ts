@@ -54,15 +54,15 @@
 
 import {
   type ContractPlan,
+  deriveCipherKey,
   deriveContractPlan,
+  derivePlaintext,
   deriveTeamGeneration,
   type FieldConfig,
 } from "./fixtures.ts";
 import { decryptOrderSum, deriveFheOrderInputs, expectedFheSum } from "./fhe.ts";
 import {
   type CipherRung,
-  deriveCipherKey,
-  derivePlaintext,
   encryptWithRung,
   parseAnswer,
   rungSpec,

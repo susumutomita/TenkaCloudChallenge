@@ -1,8 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { deriveCipherKey, derivePlaintext } from "./fixtures.ts";
 import {
   ALL_CIPHER_RUNGS,
-  deriveCipherKey,
-  derivePlaintext,
   encryptWithRung,
   parseAnswer,
   rungSpec,
