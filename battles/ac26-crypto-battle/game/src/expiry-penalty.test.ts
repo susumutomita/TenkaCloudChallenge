@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
-import { buildFheOp, buildLeakOp, buildMpcOp, buildProveOp } from "./playtest.ts";
+import { buildClearingOp } from "./playtest.ts";
 import type { Contract, CryptoBattleOp, CryptoBattleState } from "./types.ts";
 
 /**
@@ -39,7 +39,8 @@ function openFor(state: CryptoBattleState, teamId: string) {
  * FHE, MPC and constrained share Orders have no pass route and must be
  * computed. That matters here: a team that only ever LEAKs is a team doing no
  * work, and it should end at zero. To bank a real score, answer each Order the
- * way its own rule allows.
+ * way its own rule allows -- via `playtest.ts`'s exhaustive builder, so a new
+ * task kind cannot silently stop being answered (see its doc comment).
  */
 function clearingOpFor(
   state: CryptoBattleState,
@@ -49,14 +50,7 @@ function clearingOpFor(
   const projection = projectForTeam(state, teamId);
   const projected = projection.myContracts.find((c) => c.id === contract.id);
   if (!projected) return undefined;
-  if (contract.task.kind === "reveal-share") {
-    return contract.allowedMethods.includes("leak")
-      ? buildLeakOp(contract.id)
-      : buildProveOp(projection.vault, contract.id);
-  }
-  return contract.task.kind === "homomorphic-sum"
-    ? buildFheOp(projected, state.config.prime)
-    : buildMpcOp(projected, state.config.prime);
+  return buildClearingOp(projected, projection.vault, state.config.prime);
 }
 
 describe("the ordering #659 settles on is the ordering the config encodes", () => {

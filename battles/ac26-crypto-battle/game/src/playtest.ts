@@ -30,6 +30,7 @@ import { applyOp, initialState, tick, validateOp } from "./reducer.ts";
 import { createProof } from "./schnorr-prover.ts";
 import { reconstruct, type Share } from "./shamir.ts";
 import { addCiphertexts } from "./fhe.ts";
+import { encryptWithRung, toSymbols } from "./ladder.ts";
 import { inv, mod } from "./field.ts";
 import { groupPow, RFC3526_GROUP14 } from "./group.ts";
 import { computeChallenge } from "./schnorr-transcript.ts";
@@ -313,6 +314,65 @@ export function buildMpcOp(
     p,
   );
   return { kind: "mpc", contractId: contract.id, partial: partial.toString() };
+}
+
+/**
+ * [Issue #659] Build a CIPHER op from a ladder Order's own projection.
+ *
+ * The team's key arrives on the projection because the Order belongs to this
+ * team, and the arithmetic is `ladder.ts`'s `encryptWithRung` -- the same
+ * function a participant reproduces by hand. Written here rather than inline in
+ * each test for the reason the other `build*Op` helpers exist: a test that
+ * re-derives the cipher is asserting its own copy of the rule, not the rule.
+ */
+export function buildCipherOp(contract: ContractProjection): CryptoBattleOp | undefined {
+  if (contract.task.kind !== "caesar-shift") return undefined;
+  const { rung, symbols, plaintext, myKey } = contract.task;
+  const values = plaintext.map((symbol) => symbols.indexOf(symbol));
+  if (values.some((value) => value < 0)) return undefined;
+  return {
+    kind: "cipher",
+    contractId: contract.id,
+    answer: [...toSymbols(encryptWithRung(values, myKey, rung), rung)],
+  };
+}
+
+/**
+ * [Issue #659] Answer an Order by whichever method it actually admits.
+ *
+ * Shared because two test files had grown their own copy, and when the ladder
+ * added a fourth task kind BOTH copies silently fell through to `buildMpcOp`,
+ * which returns `undefined` for a task it cannot serve. Nothing failed: the
+ * callers skipped every ladder Order, and two tests whose whole premise is "a
+ * team that clears everything" quietly stopped clearing about a fifth of the
+ * belt.
+ *
+ * So the switch is exhaustive on purpose. A fifth task kind is a compile error
+ * here rather than a silent gap in whatever those tests were measuring.
+ */
+export function buildClearingOp(
+  contract: ContractProjection,
+  vault: CryptoBattleProjection["vault"],
+  prime: string,
+): CryptoBattleOp | undefined {
+  switch (contract.task.kind) {
+    case "reveal-share":
+      // A share Order may forbid raw disclosure, in which case PROVE is the
+      // only way to clear it. Ask the Order rather than assuming LEAK.
+      return contract.allowedMethods.includes("leak")
+        ? buildLeakOp(contract.id)
+        : buildProveOp(vault, contract.id);
+    case "caesar-shift":
+      return buildCipherOp(contract);
+    case "homomorphic-sum":
+      return buildFheOp(contract, prime);
+    case "masked-total":
+      return buildMpcOp(contract, prime);
+    default: {
+      const exhaustive: never = contract.task;
+      throw new Error(`buildClearingOp: unknown task ${JSON.stringify(exhaustive)}`);
+    }
+  }
 }
 
 /**

@@ -44,9 +44,15 @@ import { contractsForMethod } from "../../portal/RegistrationPanelCore.tsx";
 import { GameBoardBody } from "../../portal/GameBoard.tsx";
 import { ledgerPayload } from "../../portal/orderTask.ts";
 import { ALL_SUBMISSION_METHODS } from "./methods.ts";
-import { nonceHuntCandidates, rotateVoidCount, tacticAvailability } from "../../portal/FastMovePanel.tsx";
+import {
+  cipherHuntCandidates,
+  nonceHuntCandidates,
+  rotateVoidCount,
+  tacticAvailability,
+} from "../../portal/FastMovePanel.tsx";
 import StatusPanel, { StatusPanelBody } from "../../portal/StatusPanel.tsx";
 import { MODP_2048_P } from "./group.ts";
+import { rungSpec } from "./ladder.ts";
 import { DEFAULT_CONFIG, initialState, projectForTeam, tick } from "./reducer.ts";
 import type { ContractProjection, CryptoBattleProjection, PublicArtifact } from "./types.ts";
 
@@ -810,6 +816,7 @@ describe("advanced tactics use progressive disclosure", () => {
     expect(tacticAvailability(fixtureProjection({ publicLedger: [] }))).toEqual({
       hunt: false,
       nonceHunt: false,
+      cipherHunt: false,
       rotate: false,
     });
   });
@@ -818,16 +825,19 @@ describe("advanced tactics use progressive disclosure", () => {
     expect(tacticAvailability(fixtureProjection({ publicLedger: [share("red", 1)] }))).toEqual({
       hunt: true,
       nonceHunt: false,
+      cipherHunt: false,
       rotate: false,
     });
     expect(tacticAvailability(fixtureProjection({ publicLedger: [proof("red", 1)] }))).toEqual({
       hunt: false,
       nonceHunt: true,
+      cipherHunt: false,
       rotate: false,
     });
     expect(tacticAvailability(fixtureProjection({ publicLedger: [share("blue", 1)] }))).toEqual({
       hunt: false,
       nonceHunt: false,
+      cipherHunt: false,
       rotate: true,
     });
   });
@@ -1018,5 +1028,79 @@ describe("the ROTATE control says what rotating will cost", () => {
 
   it("says nothing at all when there is no projection yet", () => {
     expect(rotateVoidCount(null)).toBe(0);
+  });
+});
+
+/**
+ * [Issue #659 §2] The ladder HUNT has to be OFFERED, and offered only when it
+ * is real.
+ *
+ * #645 Phase 5 shipped `hunt-nonce` with no participant-facing sender at all:
+ * the reducer accepted it, the README advertised it, and nothing in the Portal
+ * could produce one. This is the same class of gap for the ladder, so it is
+ * pinned the same way.
+ *
+ * "Real" is the rung's own threshold. A team below it is not broken, and
+ * listing it would turn 「相手の段を見て狩る価値があるか判断する」 into a list of
+ * everyone -- which is exactly the judgement the ladder exists to create.
+ */
+describe("the ladder HUNT is offered only against teams that are actually broken", () => {
+  const pair = (teamId: string, generation: number, id: string): PublicArtifact => ({
+    id,
+    teamId,
+    generation,
+    kind: "cipher-pair",
+    method: "leak",
+    contractId: `${teamId}-c1`,
+    rung: "caesar",
+    // Symbol VALUES, not pictures: the ledger stores values and the edge
+    // renders them through the rung's alphabet (see `CipherPairArtifact`).
+    plaintext: [0, 1],
+    ciphertext: [2, 3],
+    postedAtMs: 1,
+  });
+
+  it("offers a team that has published enough pairs to give its key away", () => {
+    const candidates = cipherHuntCandidates(
+      fixtureProjection({ publicLedger: [pair("red", 1, "p1")] }),
+    );
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]?.teamId).toBe("red");
+    expect(candidates[0]?.pairs).toHaveLength(1);
+  });
+
+  it("offers a team only once its pairs reach the rung's own threshold", () => {
+    // The threshold is a constant of the RUNG (`rungSpec(rung).pairsToBreak`),
+    // not of the artifact, so a fixture cannot dial it down to build a
+    // not-yet-broken case. With Caesar the only rung shipped and its threshold
+    // at 1, every published pair IS a break -- so what is checkable today is
+    // the invariant itself, which holds for whatever rung comes next.
+    const ledgers = [[], [pair("red", 1, "p1")], [pair("red", 1, "p1"), pair("red", 1, "p2")]];
+    for (const publicLedger of ledgers) {
+      for (const candidate of cipherHuntCandidates(fixtureProjection({ publicLedger }))) {
+        expect(candidate.pairs.length).toBeGreaterThanOrEqual(candidate.pairsToBreak);
+        expect(candidate.pairsToBreak).toBe(rungSpec(candidate.rung).pairsToBreak);
+      }
+    }
+    // A team that has published nothing is never a target.
+    expect(cipherHuntCandidates(fixtureProjection({ publicLedger: [] }))).toEqual([]);
+  });
+
+  it("never offers your own team, and never a retired generation", () => {
+    // Hunting yourself is refused by the reducer; offering it would be offering
+    // a move that cannot be made.
+    const own = fixtureProjection({ publicLedger: [pair("blue", 1, "p1")] });
+    expect(own.vault.teamId).toBe("blue");
+    expect(cipherHuntCandidates(own)).toEqual([]);
+    // A pair from an older generation groups separately, so a ROTATEd target
+    // cannot be hunted with stale material through this control.
+    const stale = cipherHuntCandidates(
+      fixtureProjection({ publicLedger: [pair("red", 1, "p1"), pair("red", 2, "p2")] }),
+    );
+    expect(stale.map((c) => c.generation).sort()).toEqual([1, 2]);
+  });
+
+  it("says nothing at all when there is no projection yet", () => {
+    expect(cipherHuntCandidates(null)).toEqual([]);
   });
 });

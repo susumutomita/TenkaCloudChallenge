@@ -39,7 +39,7 @@ import type { OrderTaskKind } from "./types.ts";
  * Phase 3 `"mpc"`. Every consumer switches exhaustively, so adding one fails to
  * compile until each site has decided what it means.
  */
-export type SubmissionMethod = "leak" | "prove" | "fhe" | "mpc";
+export type SubmissionMethod = "leak" | "prove" | "fhe" | "mpc" | "cipher";
 
 /**
  * What an Order forbids being made public.
@@ -83,6 +83,11 @@ export const SUBMISSION_METHODS: Readonly<Record<SubmissionMethod, SubmissionMet
   // [Phase 3] An MPC submission publishes a masked partial, which is consistent
   // with every possible input — see mpc.ts.
   mpc: { method: "mpc", publishesRawSecretMaterial: false },
+  // [Issue #659] A ladder answer goes to the judge and no further: the judge
+  // already holds the key, so it can check the ciphertext without anything
+  // being published. It is LEAK on the same Order that publishes the
+  // (plaintext, ciphertext) pair -- which is the entire lesson of the rung.
+  cipher: { method: "cipher", publishesRawSecretMaterial: false },
 };
 
 /** Every method the platform knows, in a stable order. */
@@ -91,6 +96,7 @@ export const ALL_SUBMISSION_METHODS: readonly SubmissionMethod[] = [
   "prove",
   "fhe",
   "mpc",
+  "cipher",
 ];
 
 /**
@@ -109,6 +115,11 @@ const METHODS_BY_TASK: Readonly<Record<OrderTaskKind, readonly SubmissionMethod[
   "reveal-share": ["leak", "prove"],
   "homomorphic-sum": ["fhe"],
   "masked-total": ["mpc"],
+  // [Issue #659] The ladder Order is the second one with a genuine method
+  // choice, and it is a sharper one than the share Order's. LEAK is instant and
+  // publishes the pair that recovers your key; CIPHER is the hand calculation
+  // and publishes nothing. On the bottom rung, one pair is the whole key.
+  "caesar-shift": ["leak", "cipher"],
 };
 
 /**

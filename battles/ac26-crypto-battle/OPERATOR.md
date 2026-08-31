@@ -109,9 +109,32 @@ make agent-gate
 ## Tuning
 
 `DEFAULT_CONFIG` in `game/src/reducer.ts` owns match duration, phase boundaries,
-Order cadence and TTLs, ROTATE cooldown, threshold/share count, and score values.
+Order cadence, batch size and TTLs, ROTATE cooldown, threshold/share count, and
+the score values that apply to every Order.
+
+Per-rung economics live in `game/src/ladder.ts`'s `CIPHER_RUNGS`, not in
+`DEFAULT_CONFIG`: how many published pairs break a rung, how long its plaintext
+is, and what breaking it pays. They belong to the rung because that is what the
+ladder varies — see the header of that file.
+
 Change tuning with a replay/fixture assertion that explains the intended player
 effect. Do not tune by changing validation rules or by weakening a test.
+
+**Order distribution is the one knob that decides whether the match is a game.**
+`contractsPerIssue` (6) is sized so a fast team clears the batch and a slow team
+overflows. Too low and nobody ever has to LEAK, so nothing is published and HUNT
+never fires; too high and every team overflows, so being fast stops paying.
+Issue #659 sizes it as "team size + 1 to 2" for the standard three-person team.
+The plugin is handed team ids and never headcount, so a different team size has
+to be re-tuned by hand.
+
+**Match size is capped, and nothing enforces the cap.** The whole match is one
+persisted row. On the DynamoDB backend a single item is capped at 400 KB and
+there is no partial write, so a match that outgrows it stops mid-play. Measured
+worst case for a 90-minute match: about two thirds of the cap at six teams, and
+past it at ten. **Six teams is the supported maximum**; `game/src/state-size.test.ts`
+holds that number and fails if a change erodes the margin. Turso/libSQL has no
+comparable per-row cap.
 
 The 25-minute vertical fixture is deterministic game coverage. Pair it with the
 dev-harness tests, typecheck, and browser scenarios that render the real Portal

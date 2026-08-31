@@ -18,6 +18,7 @@
 
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
 import {
+  buildCipherOp,
   buildFheOp,
   buildHuntOp,
   buildLeakOp,
@@ -181,7 +182,10 @@ export function buildVerticalPlaytestScript(): BuiltVerticalScript {
       distinctLeakedShareIndices(DEFENDER).length >= state.config.threshold &&
       hasResolution(DEFENDER, "leak", "standard") &&
       hasResolution(ATTACKER, "prove", "standard") &&
-      ["proof", "ciphertext", "partial"].every((kind) => attackerKinds.has(kind))
+      ["proof", "ciphertext", "partial"].every((kind) => attackerKinds.has(kind)) &&
+      // [Issue #659] The ladder has to appear in the story too -- a vertical
+      // slice that never exercises a shipped method is not a vertical slice.
+      state.contracts.some((c) => c.resolution === "cipher")
     );
   }
 
@@ -287,6 +291,24 @@ export function buildVerticalPlaytestScript(): BuiltVerticalScript {
           mpcOp,
           "ok",
           `Team ${teamId} MPC ${mpcOrder.id} -- published a masked subtotal, not its input`,
+        );
+      }
+      // [Issue #659] The cipher ladder, played the way a participant plays it:
+      // `buildCipherOp` reads the key off this team's OWN projection and does
+      // the shift, which is the same arithmetic done by hand. Only the
+      // DEFENDER leaks in this story, so the ATTACKER answering its ladder
+      // Order is also what keeps the contrast visible -- one team publishes a
+      // pair, the other does not.
+      const ladderOrder = projection.myContracts.find(
+        (c) => c.status === "open" && c.task.kind === "caesar-shift",
+      );
+      const cipherOp = ladderOrder ? buildCipherOp(ladderOrder) : undefined;
+      if (ladderOrder && cipherOp) {
+        recordOp(
+          teamId,
+          cipherOp,
+          "ok",
+          `Team ${teamId} CIPHER ${ladderOrder.id} -- encrypted with its own key, published nothing`,
         );
       }
     }

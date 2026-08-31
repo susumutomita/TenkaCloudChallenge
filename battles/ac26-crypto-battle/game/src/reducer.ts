@@ -60,6 +60,15 @@ import {
 } from "./fixtures.ts";
 import { decryptOrderSum, deriveFheOrderInputs, expectedFheSum } from "./fhe.ts";
 import {
+  type CipherRung,
+  deriveCipherKey,
+  derivePlaintext,
+  encryptWithRung,
+  parseAnswer,
+  rungSpec,
+  toSymbols,
+} from "./ladder.ts";
+import {
   allPartials,
   deriveMpcPrivateInputs,
   expectedMpcPartial,
@@ -78,6 +87,7 @@ import { groupPow, RFC3526_GROUP14 } from "./group.ts";
 import { derivePublicCommitment } from "./schnorr-witness.ts";
 import { parseCanonicalDecimal, verifyProof } from "./schnorr-verifier.ts";
 import type {
+  CipherPairArtifact,
   CiphertextArtifact,
   Contract,
   CoordinationContext,
@@ -205,6 +215,7 @@ export function initialState(
       lastRotateAtMs: undefined,
       completedContractIds: [],
       huntedGenerations: [],
+      cipherHuntedGenerations: {},
     };
     publicCommitments[teamId] = derivePublicCommitment(secret, 1, teamId, RFC3526_GROUP14).toString();
   }
@@ -268,6 +279,14 @@ function buildOrderTask(
       };
     case "masked-total":
       return { kind: "masked-total", partyCount: MPC_PARTY_COUNT };
+    case "caesar-shift": {
+      // [Issue #659 §5] The method, the alphabet and the break threshold are
+      // all stated ON the Order. That is Kerckhoffs's principle as a game rule:
+      // every team knows how the cipher works, and the only thing that decides
+      // who survives is who kept their key.
+      const rung: CipherRung = plan.rung ?? "caesar";
+      return { kind: "caesar-shift", rung, plaintext: derivePlaintext(seed, contractId, rung) };
+    }
     default: {
       const exhaustive: never = plan.taskKind;
       throw new Error(`buildOrderTask: unknown task kind ${JSON.stringify(exhaustive)}`);
@@ -385,12 +404,42 @@ function needsConfigMigration(config: CryptoBattleConfig): boolean {
  * state, so the upgrade also persists on the next write rather than being
  * redone forever.
  */
+/**
+ * [Issue #659] Bring persisted TEAMS up to the current shape.
+ *
+ * `cipherHuntedGenerations` arrived with the cipher ladder, so a team row
+ * written before it has no such field. `applyHuntCipher` reads
+ * `target.cipherHuntedGenerations[rung]`, which on `undefined` throws and takes
+ * the op — and with it the match — down. Third new required field in three
+ * slices; each one needs its answer for an older row written in the same commit
+ * that adds it.
+ *
+ * An empty record is the honest default: a team whose row predates the ladder
+ * has had no rung broken, because there were no rungs.
+ */
+function migrateTeams(
+  teams: Readonly<Record<string, TeamState>>,
+): Readonly<Record<string, TeamState>> {
+  const next: Record<string, TeamState> = {};
+  for (const [teamId, team] of Object.entries(teams)) {
+    next[teamId] = team.cipherHuntedGenerations
+      ? team
+      : { ...team, cipherHuntedGenerations: {} };
+  }
+  return next;
+}
+
+function needsTeamMigration(teams: Readonly<Record<string, TeamState>>): boolean {
+  return Object.values(teams).some((team) => !team.cipherHuntedGenerations);
+}
+
 function withMigratedContracts(state: CryptoBattleState): CryptoBattleState {
   const config = needsConfigMigration(state.config) ? mergeConfig(state.config) : state.config;
+  const teams = needsTeamMigration(state.teams) ? migrateTeams(state.teams) : state.teams;
   if (!state.contracts.some(needsMigration)) {
-    return config === state.config ? state : { ...state, config };
+    return config === state.config && teams === state.teams ? state : { ...state, config, teams };
   }
-  return { ...state, config, contracts: state.contracts.map(migrateContract) };
+  return { ...state, config, teams, contracts: state.contracts.map(migrateContract) };
 }
 
 export function tick(persistedState: CryptoBattleState, eventNowMs: number): CryptoBattleState {
@@ -897,11 +946,121 @@ export function validateOp(
       }
       return { ok: true };
     }
+    case "cipher": {
+      // [Issue #659] Same Order gate as every other method, then the rung's own
+      // check. The judge holds the key -- it derives it from the same
+      // (seed, teamId, generation) the team's own projection does -- so this is
+      // a straight comparison against the right answer. That is what makes
+      // "do the work yourself" a real option on the ladder without needing a
+      // zero-knowledge proof for it: nothing is published either way, so there
+      // is nothing to prove knowledge WITHOUT revealing.
+      const gate = validateOrderSubmission(state, teamId, op.contractId, "cipher");
+      if (!gate.ok) return gate;
+      const contract = state.contracts.find((c) => c.id === op.contractId);
+      if (contract?.task.kind !== "caesar-shift") {
+        // Unreachable through the gate above, which already checked the method
+        // can perform the task. Fail loudly rather than reading `rung` off a
+        // task that has none.
+        return { ok: false, error: "contract is not a cipher-ladder Order" };
+      }
+      // Untrusted wire input -- an arbitrary array of arbitrary strings after a
+      // JSON round-trip. Parsed through the rung's own gate, which rejects
+      // anything outside the alphabet rather than letting it reach arithmetic.
+      const answer = parseAnswer(op.answer, contract.task.rung);
+      if (answer === undefined) {
+        return { ok: false, error: "answer must use this Order's symbols, or their values" };
+      }
+      const expected = expectedCipherAnswer(state, teamId, contract.task.rung, contract.id);
+      if (answer.length !== expected.length) {
+        return {
+          ok: false,
+          error: `answer has ${answer.length} symbols, the Order asks for ${expected.length}`,
+        };
+      }
+      if (answer.some((value, position) => value !== expected[position])) {
+        // Deliberately does not say WHICH position is wrong. The Order is a
+        // hand calculation with a deadline; turning the judge into a checker
+        // that walks a team to the answer would replace the calculation with a
+        // guessing loop.
+        return { ok: false, error: "ciphertext does not match this Order" };
+      }
+      return { ok: true };
+    }
+    case "hunt-cipher": {
+      if (state.nowMs === undefined) {
+        return { ok: false, error: "match has not started yet (no tick() has run)" };
+      }
+      if (op.targetTeamId === teamId) {
+        return { ok: false, error: "cannot hunt your own team" };
+      }
+      const target = state.teams[op.targetTeamId];
+      if (!target) return { ok: false, error: `unknown target team "${op.targetTeamId}"` };
+      if (op.generation !== target.generation) {
+        // [Issue #659 §10] A ROTATE is what retires published pairs. The record
+        // still shows them, but they belong to a key nobody uses any more --
+        // which is the ladder's version of the same defence the Shamir hunt
+        // already has, and it works here only because the ladder key is derived
+        // per generation (see `deriveCipherKey`).
+        return {
+          ok: false,
+          error: `target team is on generation ${target.generation}, not ${op.generation}`,
+        };
+      }
+      if (state.successfulHunts.includes(cipherHuntKey(teamId, op.targetTeamId, op.generation, op.rung))) {
+        return { ok: false, error: "this rung was already broken by this team on this generation" };
+      }
+      // Untrusted wire input: `recoveredKey` is typed `number` but arrives as
+      // whatever JSON carried. Reject a non-integer or out-of-range value here
+      // rather than comparing NaN, which would always be `false` and read as a
+      // wrong guess instead of a malformed op.
+      const modulus = rungSpec(op.rung).symbols.length;
+      if (!Number.isInteger(op.recoveredKey) || op.recoveredKey < 0 || op.recoveredKey >= modulus) {
+        return { ok: false, error: `recoveredKey must be an integer in 0..${modulus - 1}` };
+      }
+      if (op.recoveredKey !== deriveCipherKey(state.seed, op.targetTeamId, op.generation, op.rung)) {
+        return { ok: false, error: "that is not this team's key" };
+      }
+      return { ok: true };
+    }
     default: {
       const exhaustive: never = op;
       return { ok: false, error: `unknown op kind ${JSON.stringify(exhaustive)}` };
     }
   }
+}
+
+/**
+ * [Issue #659] The ciphertext this Order's team owes, computed by the judge
+ * from the key it derives itself.
+ *
+ * Shared by `validateOp` (to check a submission) and `projectForTeam` (to hand
+ * the team its own key) so the answer a participant is graded against and the
+ * key they are told to use can never come from two different derivations.
+ */
+function expectedCipherAnswer(
+  state: CryptoBattleState,
+  teamId: string,
+  rung: CipherRung,
+  contractId: string,
+): readonly number[] {
+  const generation = state.teams[teamId]?.generation ?? 1;
+  const key = deriveCipherKey(state.seed, teamId, generation, rung);
+  return encryptWithRung(derivePlaintext(state.seed, contractId, rung), key, rung);
+}
+
+/**
+ * Distinct from {@link huntKey} so breaking a team's Caesar key and
+ * reconstructing their Shamir secret are separately once-only. They are
+ * different breaks of different secrets; sharing a key would let either one
+ * silently block the other.
+ */
+function cipherHuntKey(
+  attackerTeamId: string,
+  targetTeamId: string,
+  generation: number,
+  rung: CipherRung,
+): string {
+  return JSON.stringify(["cipher", attackerTeamId, targetTeamId, generation, rung]);
 }
 
 function applyLeak(
@@ -917,10 +1076,21 @@ function applyLeak(
     throw new Error("applyOp(leak): invalid op reached apply -- call validateOp() first");
   }
 
+  const nowMs = state.nowMs ?? contract.issuedAtMs;
+
+  // [Issue #659] LEAK means the same thing on both Orders that accept it --
+  // "let the system answer, and live with the answer being public" -- but WHAT
+  // becomes public differs, because the two Orders ask for different things. A
+  // share Order publishes a point on the secret's polynomial; a ladder Order
+  // publishes the (plaintext, ciphertext) pair, which is the material that
+  // recovers a key. Branching here rather than at the call site keeps one
+  // scoring path: both pay `leakPoints`, both close the Order the same way.
+  if (contract.task.kind === "caesar-shift") {
+    return applyLadderLeak(state, teamId, contract, contract.task, nowMs);
+  }
   if (contract.task.kind !== "reveal-share") {
     throw new Error("applyOp(leak): contract is not a reveal-share order -- call validateOp() first");
   }
-  const nowMs = state.nowMs ?? contract.issuedAtMs;
   const artifacts: PublicArtifact[] = contract.task.shareIndices.map((shareIndex: number) => {
     const shareEntry = team.shares.find((s) => s.index === shareIndex);
     if (!shareEntry) {
@@ -958,6 +1128,137 @@ function applyLeak(
     contracts,
     publicLedger: [...state.publicLedger, ...artifacts],
     teams: { ...state.teams, [teamId]: updatedTeam },
+  };
+}
+
+/**
+ * [Issue #659] LEAK on a ladder Order: the judge answers, and the pair is
+ * published.
+ *
+ * This is the rung's entire lesson made mechanical. The team saves the whole
+ * hand calculation and takes `leakPoints`, and in exchange the public record
+ * gains a plaintext next to its ciphertext -- which on the bottom rung is one
+ * subtraction away from their key. Higher rungs survive more pairs; that
+ * difference is the ladder.
+ */
+function applyLadderLeak(
+  state: CryptoBattleState,
+  teamId: string,
+  contract: Contract,
+  task: Extract<OrderTask, { kind: "caesar-shift" }>,
+  nowMs: number,
+): CryptoBattleState {
+  const team = state.teams[teamId];
+  if (!team) throw new Error("applyOp(leak): unknown team -- call validateOp() first");
+  const answer = expectedCipherAnswer(state, teamId, task.rung, contract.id);
+  const artifact: CipherPairArtifact = {
+    id: `${contract.id}-pair`,
+    teamId,
+    generation: team.generation,
+    kind: "cipher-pair",
+    method: "leak",
+    contractId: contract.id,
+    rung: task.rung,
+    plaintext: task.plaintext,
+    ciphertext: answer,
+    postedAtMs: nowMs,
+  };
+  return {
+    ...state,
+    contracts: state.contracts.map((c) =>
+      c.id === contract.id ? { ...c, status: "completed" as const, resolution: "leak" as const } : c,
+    ),
+    publicLedger: [...state.publicLedger, artifact],
+    teams: {
+      ...state.teams,
+      [teamId]: {
+        ...team,
+        score: team.score + contract.leakPoints,
+        completedContractIds: [...team.completedContractIds, contract.id],
+      },
+    },
+  };
+}
+
+/**
+ * [Issue #659] CIPHER: the team did the hand calculation, and nothing is
+ * published.
+ *
+ * `validateOp` has already checked the answer against the judge's own
+ * derivation, so this only has to close the Order and pay -- the same shape
+ * `applyProve` has, and for the same reason: the two are the "do the work
+ * yourself" methods on their respective Orders.
+ */
+function applyCipher(
+  state: CryptoBattleState,
+  teamId: string,
+  op: Extract<CryptoBattleOp, { kind: "cipher" }>,
+): CryptoBattleState {
+  const contract = state.contracts.find((c) => c.id === op.contractId);
+  const team = state.teams[teamId];
+  if (!contract || !team) {
+    throw new Error("applyOp(cipher): invalid op reached apply -- call validateOp() first");
+  }
+  return {
+    ...state,
+    contracts: state.contracts.map((c) =>
+      c.id === contract.id
+        ? { ...c, status: "completed" as const, resolution: "cipher" as const }
+        : c,
+    ),
+    teams: {
+      ...state.teams,
+      [teamId]: {
+        ...team,
+        score: team.score + contract.points,
+        completedContractIds: [...team.completedContractIds, contract.id],
+      },
+    },
+  };
+}
+
+/**
+ * [Issue #659 §2] A successful ladder break.
+ *
+ * Asymmetric on purpose. The attacker earns the RUNG's bonus, which is far
+ * below `scores.huntBonus`: a Shamir HUNT is five minutes of Lagrange
+ * interpolation, and recovering a Caesar key is one subtraction. Paying both 25
+ * would make the bottom rung the only thing anyone hunts and collapse
+ * 「弱い相手は安く狩れて、強い相手は狩れない」 from a judgement into a reflex.
+ *
+ * The victim pays the full `scores.huntPenalty` all the same -- cheap to break
+ * is not cheap to lose, and it is the victim's side that keeps the confirmed
+ * ordering 「LEAK して狩られる −2」 true on every rung.
+ */
+function applyHuntCipher(
+  state: CryptoBattleState,
+  teamId: string,
+  op: Extract<CryptoBattleOp, { kind: "hunt-cipher" }>,
+): CryptoBattleState {
+  const attacker = state.teams[teamId];
+  const target = state.teams[op.targetTeamId];
+  if (!attacker || !target) {
+    throw new Error("applyOp(hunt-cipher): invalid op reached apply -- call validateOp() first");
+  }
+  const broken = target.cipherHuntedGenerations[op.rung] ?? [];
+  return {
+    ...state,
+    teams: {
+      ...state.teams,
+      [teamId]: { ...attacker, score: attacker.score + rungSpec(op.rung).huntBonus },
+      [op.targetTeamId]: {
+        ...target,
+        score: Math.max(0, target.score - state.config.scores.huntPenalty),
+        cipherHuntedGenerations: {
+          ...target.cipherHuntedGenerations,
+          [op.rung]: broken.includes(op.generation) ? broken : [...broken, op.generation],
+        },
+      },
+    },
+    successfulHunts: [
+      ...state.successfulHunts,
+      cipherHuntKey(teamId, op.targetTeamId, op.generation, op.rung),
+    ],
   };
 }
 
@@ -1107,6 +1408,7 @@ function completeOrder(
  */
 function projectTask(
   state: CryptoBattleState,
+  teamId: string,
   task: OrderTask,
   contractId: string,
 ): OrderTaskProjection {
@@ -1123,6 +1425,30 @@ function projectTask(
         myInput: inputs.myInput.toString(),
         incomingMasks: inputs.incomingMasks.map((m) => m.toString()),
         outgoingMasks: inputs.outgoingMasks.map((m) => m.toString()),
+      };
+    }
+    case "caesar-shift": {
+      // [Issue #659] The team's own key, added to the public Order.
+      //
+      // This is not a leak of anything: the key is the team's to begin with,
+      // the whole task is to encrypt WITH it, and `projectForTeam` only ever
+      // hands a projection to the team it belongs to -- the same boundary
+      // `vault.secret` and MPC's `myInput` already sit on. Derived here rather
+      // than stored so ROTATE moves it with everything else, and so the key a
+      // participant is shown and the key the judge grades against come from one
+      // derivation (see `expectedCipherAnswer`).
+      const generation = state.teams[teamId]?.generation ?? 1;
+      const spec = rungSpec(task.rung);
+      return {
+        kind: "caesar-shift",
+        rung: task.rung,
+        // The pictures, the alphabet and the break threshold are all constants
+        // of the rung, so they are added here rather than stored on every Order
+        // (see `OrderTask`'s `caesar-shift` arm).
+        plaintext: toSymbols(task.plaintext, task.rung),
+        symbols: spec.symbols,
+        pairsToBreak: spec.pairsToBreak,
+        myKey: deriveCipherKey(state.seed, teamId, generation, task.rung),
       };
     }
     default: {
@@ -1340,6 +1666,10 @@ export function applyOp(
       return applyRotate(state, teamId);
     case "prove":
       return applyProve(state, teamId, op);
+    case "cipher":
+      return applyCipher(state, teamId, op);
+    case "hunt-cipher":
+      return applyHuntCipher(state, teamId, op);
     default: {
       const exhaustive: never = op;
       throw new Error(`applyOp: unknown op kind ${JSON.stringify(exhaustive)}`);
@@ -1380,7 +1710,7 @@ export function projectForTeam(
       kind: c.kind,
       points: c.points,
       leakPoints: c.leakPoints,
-      task: projectTask(state, c.task, c.id),
+      task: projectTask(state, teamId, c.task, c.id),
       status: c.status,
       // [Issue #645] The Order's rule and the methods that satisfy it are
       // participant-visible by design: an Order the participant cannot LEAK

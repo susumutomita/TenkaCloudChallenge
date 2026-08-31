@@ -227,14 +227,28 @@ describe("leak", () => {
     expect(verdict.error).toContain("PROVE");
   });
 
-  /** An unconstrained Order still accepts either method. */
-  test("an unconstrained Order accepts both methods", () => {
-    const { order } = orderMatching((c) => c.privacyConstraint === "none");
+  /**
+   * An unconstrained SHARE Order still accepts either method.
+   *
+   * [Issue #659] Selected by task kind as well as by constraint. The ladder
+   * added a second unconstrained shape whose free choice is `leak` or `cipher`,
+   * so "the first Order with no constraint" stopped identifying the one this
+   * test is about -- see order-mix.test.ts, which asserts both shapes exist.
+   */
+  test("an unconstrained share Order accepts both methods", () => {
+    const { order } = orderMatching(
+      (c) => c.privacyConstraint === "none" && c.task.kind === "reveal-share",
+    );
     expect(order.allowedMethods).toEqual(["leak", "prove"]);
   });
 
   test("applyOp posts the requested share(s) to the public ledger and pays out points", () => {
-    const { state, order: contract } = orderMatching(allowsLeak);
+    // [Issue #659] LEAK now posts a share on a share Order and a
+    // (plaintext, ciphertext) pair on a ladder Order, so this test names the
+    // one it is about. `ladder.test.ts` covers the other.
+    const { state, order: contract } = orderMatching(
+      (c) => allowsLeak(c) && c.task.kind === "reveal-share",
+    );
     const next = applyOp(state, "teamA", { kind: "leak", contractId: contract.id });
 
     // [Issue #659] LEAK pays the leak rate, not the full rate.
