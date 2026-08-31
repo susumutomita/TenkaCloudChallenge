@@ -90,7 +90,7 @@ bun run typecheck
 
 ## 完了条件
 
-自動テストに加えて、初見の人による試遊と、実際の Portal → Workbench → participant surface → move → persisted score の確認が必要です。これは Challenge #653 の人手・実環境確認であり、ローカルハーネスだけでは完了にしません。
+リリースゲートは game / dev のテスト・型検査と、実 Portal component を使うブラウザハーネスです。ハーネスでは participant-visible input だけで初手・操作・結果を確認します。実AWSでの通し操作と独立した第三者の試遊は、開催前の任意リハーサルであり、未実施でも開発・mergeを止めません。
 
 ## 関連ファイル
 

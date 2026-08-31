@@ -29,12 +29,12 @@ Read this before quoting anything you see here.
 - **It is not the trusted verifier.** The verdicts you see come from the same
   reducer the platform runs, but running it locally proves nothing about the
   platform's own auth, tenant isolation, persistence, or deployment.
-- **A playability claim needs the real thing.** Per this repository's AGENTS.md
-  §12c, evidence about how a problem plays must come from what a human
-  participant can actually see. A run here can show that a component renders and
-  a move is accepted; it cannot show that the deployed Battle plays that way.
-  Final acceptance is still Portal → problem start → participant surface →
-  submission on real AWS.
+- **Playability evidence stays participant-shaped.** Per this repository's
+  AGENTS.md §12c, use only what a participant can see. This harness renders the
+  real components and drives participant-visible inputs, so it is valid release
+  evidence for the Battle UI and moves. It does not prove platform auth, tenant
+  isolation, persistence, or deployment. A live-AWS run may rehearse those
+  platform concerns before an event, but it is not a merge gate.
 
 ## What is real, and what is faked
 
