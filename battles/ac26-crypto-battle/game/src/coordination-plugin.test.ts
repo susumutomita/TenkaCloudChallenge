@@ -177,7 +177,8 @@ describe("coordination/crypto-battle.ts plugin wiring (Issue #486 PR3)", () => {
     state = expectDispatched(dispatchOp(plugin, state, "blue", leakOp));
     const blueAfterLeak = state.teams.blue;
     if (!blueAfterLeak) throw new Error("test setup: expected a blue team");
-    expect(blueAfterLeak.score).toBe(blueContract.points);
+    // [Issue #659] LEAK pays the leak rate, not the full rate.
+    expect(blueAfterLeak.score).toBe(blueContract.leakPoints);
     expect(state.publicLedger).toHaveLength(1);
     expect(state.publicLedger[0]?.kind).toBe("share");
 
@@ -225,7 +226,10 @@ describe("coordination/crypto-battle.ts plugin wiring (Issue #486 PR3)", () => {
     const blueAfterHunt = state.teams.blue;
     const redAfterHunt = state.teams.red;
     if (!blueAfterHunt || !redAfterHunt) throw new Error("test setup: expected both teams");
-    expect(blueAfterHunt.score).toBe(blueContract.points + state.config.scores.huntBonus);
+    // [Issue #659] Blue's running total is what it EARNED: the leak rate for the
+    // Order it passed on, plus the hunt bonus -- not the full PROVE rate it
+    // declined to compute for.
+    expect(blueAfterHunt.score).toBe(blueContract.leakPoints + state.config.scores.huntBonus);
     expect(redAfterHunt.huntedGenerations).toContain(1);
 
     // -- projectForTeam: blue's own projection is safe to hand to blue's
@@ -282,7 +286,7 @@ describe("coordination/crypto-battle.ts plugin wiring (Issue #486 PR3)", () => {
         contractId: leakable.id,
       }),
     );
-    expect(afterLeak.teams[leakable.teamId]?.score).toBe(scoreBefore + leakable.points);
+    expect(afterLeak.teams[leakable.teamId]?.score).toBe(scoreBefore + leakable.leakPoints);
   });
 
   it("state with a NON-EMPTY huntLog (Issue #486 PR5) also survives a JSON round-trip, not only the empty-huntLog case", () => {

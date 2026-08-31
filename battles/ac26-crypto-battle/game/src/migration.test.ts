@@ -93,7 +93,11 @@ describe("a match persisted before this version still loads", () => {
         const op = { kind: "leak" as const, contractId: order.id };
         expect(validateOp(state, "teamA", op)).toEqual({ ok: true });
         const next = applyOp(state, "teamA", op);
-        expect(next.teams.teamA?.score).toBe(order.points);
+        // [Issue #659] LEAK pays the leak rate. A legacy Order has no `leakPoints`
+        // of its own, so the migration backfills the configured default —
+        // without it the score would become NaN on the first leak.
+        expect(next.teams.teamA?.score).toBe(order.leakPoints);
+        expect(Number.isNaN(next.teams.teamA?.score)).toBe(false);
       });
 
       test("tick carries the upgraded rows forward, so it is not redone forever", () => {

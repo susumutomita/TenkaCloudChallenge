@@ -16,7 +16,7 @@
  * tells and how it maps onto Issue #486's 10-item vertical-slice MUST list.
  */
 
-import { applyOp, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
+import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
 import {
   buildFheOp,
   buildHuntOp,
@@ -49,6 +49,23 @@ export const DEFENDER = "alpha";
  * `threshold` / `shareCount` / `scores` stay at the real values, since
  * neither the Shamir math nor the scoring rules being tested are
  * time-scaled, only the match clock is.
+ *
+ * [Issue #659] Two deliberate departures from `DEFAULT_CONFIG`, both because
+ * this fixture demonstrates MECHANISM, not balance:
+ *
+ *  - The batch is scaled with the clock (2 per minute here against 6 per five
+ *    minutes in the real build) and the TTL equals the interval, so the fixture
+ *    plays under the same "no prefetch" rule the real match does. It used to
+ *    hold a TTL four times the interval, which is exactly the stockpiling #659
+ *    forbids -- a scripted fixture that demonstrates the rule being broken is
+ *    worse than no fixture.
+ *  - The expiry penalty is off. The script answers only the handful of Orders
+ *    its narrative needs (one LEAK, one PROVE, an FHE, an MPC, a HUNT, a
+ *    ROTATE) and lets the rest of the belt run past, so a live penalty would
+ *    measure how many Orders the SCRIPT happens to cover -- both teams simply
+ *    floor at zero -- rather than anything about the reducer. The penalty
+ *    itself is pinned directly, against `DEFAULT_CONFIG`, in
+ *    `expiry-penalty.test.ts`.
  */
 export const VERTICAL_CONFIG: Partial<CryptoBattleConfig> = {
   matchDurationMs: 25 * 60_000,
@@ -57,9 +74,11 @@ export const VERTICAL_CONFIG: Partial<CryptoBattleConfig> = {
     pressureToEndgameMs: 18 * 60_000,
   },
   contractIntervalMs: 60_000,
-  contractTtlMs: 4 * 60_000,
-  rushContractTtlMs: 2 * 60_000,
+  contractsPerIssue: 2,
+  contractTtlMs: 60_000,
+  rushContractTtlMs: 30_000,
   rotateCooldownMs: 3 * 60_000,
+  scores: { ...DEFAULT_CONFIG.scores, expiredOrder: 0 },
 };
 
 export interface BuiltVerticalScript {

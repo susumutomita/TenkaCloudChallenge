@@ -44,6 +44,7 @@ function leakShareIndex(state: CryptoBattleState, teamId: string, shareIndex: nu
         teamId,
         kind: "standard",
         points: state.config.scores.contract,
+        leakPoints: 10,
         task: { kind: "reveal-share" as const, shareIndices: [shareIndex] },
         issuedAtMs: state.nowMs ?? 0,
         expiresAtMs: (state.nowMs ?? 0) + state.config.contractTtlMs,

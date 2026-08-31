@@ -99,7 +99,7 @@ const COPY = {
   en: {
     title: "How this Battle works",
     intro:
-      "Quick vocabulary check: \"Contract\" here has nothing to do with CloudFormation or a blockchain contract -- it just means \"a request addressed to your team.\" Your team's secret (think: a password) is broken into 5 scattered fragments (shares) -- collect 3 and you can reassemble it (this mechanism is called Shamir threshold secret sharing). Every move below is a real cryptographic operation -- nothing here is simulated, and nothing scores on a guess. The core decision, every time a Contract arrives: LEAK for easy points but give away a fragment, or PROVE for the same points and give away nothing.",
+      "Quick vocabulary check: \"Contract\" here has nothing to do with CloudFormation or a blockchain contract -- it just means \"a request addressed to your team.\" Your team's secret (think: a password) is broken into 5 scattered fragments (shares) -- collect 3 and you can reassemble it (this mechanism is called Shamir threshold secret sharing). Every move below is a real cryptographic operation -- nothing here is simulated, and nothing scores on a guess. The core decision, every time a Contract arrives: LEAK for easy points but give away a fragment, or PROVE for MORE points and give away nothing. Letting an Order expire without doing either costs you points -- ignoring one is the worst outcome available.",
     lanesTitle: 'The 3 lanes (under "PROVE / LEAK / HUNT -- Status" above)',
     lanes: [
       { name: "Contract Queue", body: "Orders addressed to your team right now. Each names what it asks for -- a share, an encrypted addition, or a masked subtotal -- and which methods it accepts. Miss the deadline and one expires unclaimed." },
@@ -154,7 +154,7 @@ const COPY = {
   ja: {
     title: "この Battle の遊び方",
     intro:
-      "先に用語の確認です。ここでの「Contract」は CloudFormation や blockchain の contract とは無関係で、単に「自チームへの依頼」という意味です。自チームの secret（合言葉のようなもの）は 5 枚のバラバラな破片（share）に分解して保管されており、3 枚集めれば組み立て直せます（この仕組みが Shamir のしきい値秘密分散です）。以下の操作はすべて実際の暗号計算であり、シミュレーションではありません。当て推量では得点になりません。Contract が届くたびの核心の判断は、楽に稼げるが破片を渡す LEAK か、同じ得点だが何も渡さない PROVE かです。依頼によってはそのどちらでもなく、「読んではいけない数字のまま計算せよ」と言ってくるものもあります。カードにそう書いてあります。",
+      "先に用語の確認です。ここでの「Contract」は CloudFormation や blockchain の contract とは無関係で、単に「自チームへの依頼」という意味です。自チームの secret（合言葉のようなもの）は 5 枚のバラバラな破片（share）に分解して保管されており、3 枚集めれば組み立て直せます（この仕組みが Shamir のしきい値秘密分散です）。以下の操作はすべて実際の暗号計算であり、シミュレーションではありません。当て推量では得点になりません。Contract が届くたびの核心の判断は、楽に稼げるが破片を渡す LEAK か、得点が高く何も渡さない PROVE かです。どちらもせずに期限切れにすると減点になります（放置がいちばん損です）。依頼によってはそのどちらでもなく、「読んではいけない数字のまま計算せよ」と言ってくるものもあります。カードにそう書いてあります。",
     lanesTitle: "3 つのレーン (上の「PROVE / LEAK / HUNT — 状態」の中)",
     lanes: [
       { name: "Contract Queue", body: "今まさに自チーム宛に届いている依頼です。何を求められているか（share / 暗号文のまま足す / 覆面つき小計）と、使える方法がそれぞれ書いてあります。期限内に応じないと失効します。" },
@@ -169,7 +169,7 @@ const COPY = {
       },
       {
         name: "PROVE",
-        body: "share の代わりに Schnorr 知識証明を提出して Contract を完了します。proof は事前にローカルで作成してください (この portal は代わりに作成しません)。同じ Contract を LEAK した場合と全く同じ得点です。secret を復元できる情報は一切公開されず、監査用に proof transcript のみが記録されます。",
+        body: "share の代わりに Schnorr 知識証明を提出して Contract を完了します。proof は事前にローカルで作成してください (この portal は代わりに作成しません)。同じ Contract を LEAK した場合よりも高い得点です。secret を復元できる情報は一切公開されず、監査用に proof transcript のみが記録されます。",
       },
       {
         name: "FHE",

@@ -8,8 +8,14 @@ A real-time Battle about choosing whether to reveal a secret fragment for immedi
 2. Choose **LEAK** or **PROVE**.
 3. After submitting, see what appeared in the Public Ledger.
 
-- **LEAK**: score without computation, but publish one secret share.
-- **PROVE**: compute a proof for the same score; publish no share.
+- **LEAK**: score without computing, but for less -- and publish one secret share.
+- **PROVE**: compute it yourself for more; publish no share.
+- **Neither**: the Order expires and costs you points. Ignoring one is the worst
+  outcome available.
+
+The order is: **do nothing < LEAK and get hunted < LEAK and get away with it <
+PROVE**. Every Order card shows both rates side by side, so you can compare them
+before you commit.
 
 You do not need every rule up front. The Portal's Practice and help section contains an optional, no-score tutorial with small numbers.
 
@@ -22,6 +28,15 @@ Each team's secret is split into five shares. Three distinct shares from the sam
 - Score while preventing reconstruction of your current generation.
 
 Repeating one share index still counts as one distinct share. Shares from different generations cannot be mixed.
+
+## Orders arrive six at a time, every five minutes
+
+A batch of six Orders arrives every five minutes and expires after five. **There
+is no stockpiling** -- you cannot take next batch's work early, and you cannot
+carry this batch's leftovers forward.
+
+More arrive than a team can compute. Which ones you compute, which you pass on,
+and what you do with the time left over -- that is the game.
 
 ## ORDER types
 

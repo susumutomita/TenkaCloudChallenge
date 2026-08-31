@@ -119,9 +119,12 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
         "test setup: expected at least one standard-kind LEAK (alpha) and one standard-kind PROVE (bravo) in this script's contract history",
       );
     }
+    // [Issue #659] Both Orders are worth the same to COMPUTE — the Order's rate
+    // does not depend on which method the team later chooses. What differs is
+    // the payout: LEAK pays `leakPoints`, and that is strictly less.
     expect(standardLeak.points).toBe(result.finalState.config.scores.contract);
     expect(standardProve.points).toBe(result.finalState.config.scores.contract);
-    expect(standardLeak.points).toBe(standardProve.points);
+    expect(standardLeak.leakPoints).toBeLessThan(standardLeak.points);
   });
 
   test("MUST 6/7/8: bravo's HUNT was built from public information only, verified by the trusted reducer, and moved both scores", () => {
@@ -212,35 +215,45 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
   });
 
   test("final score reconciliation: each team's final score equals the sum of its individual scoring events", () => {
-    function pointsForContract(contractId: string): number {
+    function contractById(contractId: string) {
       const contract = result.finalState.contracts.find((c) => c.id === contractId);
       if (!contract) throw new Error(`test setup: expected contract ${contractId} in final state`);
-      return contract.points;
+      return contract;
     }
 
     const expected: Record<string, number> = { [DEFENDER]: 0, [ATTACKER]: 0 };
     for (const step of built.script.steps) {
       if (isTickStep(step) || step.expect !== "ok") continue;
-      // [Issue #645] Every method that completes an Order pays the Order's
-      // points -- no method earns a bonus for the technique used.
-      if (
-        step.op.kind === "leak" ||
-        step.op.kind === "prove" ||
-        step.op.kind === "fhe" ||
-        step.op.kind === "mpc"
-      ) {
-        expected[step.teamId] = (expected[step.teamId] ?? 0) + pointsForContract(step.op.contractId);
+      // [Issue #659] Computing an Order and passing on it pay DIFFERENT rates,
+      // and the difference is the whole point of the scoring model: PROVE / FHE
+      // / MPC all pay the Order's `points` because all three are the team doing
+      // the work, while LEAK pays the lower `leakPoints` because the system
+      // answered and the pair became public. Reconciling both against `points`
+      // would let a regression that paid the full rate for a LEAK pass here.
+      if (step.op.kind === "leak") {
+        expected[step.teamId] = (expected[step.teamId] ?? 0) + contractById(step.op.contractId).leakPoints;
+      } else if (step.op.kind === "prove" || step.op.kind === "fhe" || step.op.kind === "mpc") {
+        expected[step.teamId] = (expected[step.teamId] ?? 0) + contractById(step.op.contractId).points;
       } else if (step.op.kind === "hunt") {
         expected[step.teamId] = (expected[step.teamId] ?? 0) + result.finalState.config.scores.huntBonus;
         expected[step.op.targetTeamId] = (expected[step.op.targetTeamId] ?? 0) - result.finalState.config.scores.huntPenalty;
       }
     }
 
-    // The additive reconciliation above does not model applyHunt's
-    // `Math.max(0, ...)` floor -- assert the floor was never actually
+    // [Issue #659] Summing the SCRIPT's steps is only a complete account of the
+    // score while nothing scores outside them, and the expiry penalty does
+    // exactly that -- it is charged by `tick`, for Orders no step ever touches.
+    // This fixture switches it off on purpose (see VERTICAL_CONFIG); assert
+    // that here, so if it is ever switched back on this reconciliation fails
+    // loudly instead of quietly checking an incomplete sum.
+    expect(result.finalState.config.scores.expiredOrder).toBe(0);
+
+    // Neither `applyHunt` nor `applyExpiryPenalties` models its `Math.max(0,
+    // ...)` floor in the sum above -- assert the floor was never actually
     // reached in this script, so a simple sum is a valid check (not a
     // coincidentally-passing one).
     expect(expected[DEFENDER]).toBeGreaterThanOrEqual(0);
+    expect(expected[ATTACKER]).toBeGreaterThanOrEqual(0);
     expect(result.finalState.teams[DEFENDER]?.score).toBe(expected[DEFENDER]);
     expect(result.finalState.teams[ATTACKER]?.score).toBe(expected[ATTACKER]);
   });

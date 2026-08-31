@@ -77,8 +77,28 @@ export type ValidateResult = { readonly ok: true } | { readonly ok: false; reado
 export type Phase = "build" | "pressure" | "endgame" | "ended";
 
 export interface ScoreRules {
-  /** Points for completing a standard LEAK contract. */
+  /**
+   * [Issue #659] Points for completing a standard Order, by how it was fulfilled.
+   *
+   * LEAK and PROVE used to pay the same, which made LEAK strictly dominant: it
+   * costs no computation, so an identical payout meant no reason ever to work.
+   * PROVE must pay more, or the whole "compute or expose yourself" tension does
+   * not exist.
+   */
   readonly contract: number;
+  /**
+   * [Issue #659] Points for a standard Order fulfilled WITHOUT computing —
+   * the participant let the system answer, publishing a plaintext/ciphertext
+   * pair to the public record. Strictly below {@link contract}.
+   */
+  readonly contractLeak: number;
+  /**
+   * [Issue #659] Penalty for an Order that was issued to this team and expired
+   * unanswered. Doing nothing has to be the WORST outcome — worse than leaking
+   * and then being hunted for it — or ignoring Orders becomes a safe strategy
+   * and the game stops.
+   */
+  readonly expiredOrder: number;
   /** Points for completing a "rush" LEAK contract (time-pressured, worth more). */
   readonly rushContract: number;
   /** Points an attacker earns for a successful HUNT (secret recovered and matched). */
@@ -110,9 +130,40 @@ export interface CryptoBattleConfig {
   readonly shareCount: number;
   readonly matchDurationMs: number;
   readonly phaseBoundaries: PhaseBoundaries;
-  /** How often (ms) a fresh LEAK contract is issued per team. */
+  /** How often (ms) a fresh batch of Orders is issued per team. */
   readonly contractIntervalMs: number;
-  /** How long (ms) an issued contract stays "open" before it expires unclaimed. */
+  /**
+   * [Issue #659] How many Orders arrive per team per issue, all at once.
+   *
+   * This is the design's ONE tuning knob, and it decides whether the match is
+   * a game at all. Set it so a fast team clears the batch and a slow team
+   * overflows: too low and nobody ever has to LEAK, so nothing is ever
+   * published and HUNT can never fire (the simulation in #659 measured
+   * literally zero hunts at a batch of 1); too high and every team overflows,
+   * so being fast stops paying.
+   *
+   * It CANNOT be derived. The plugin is handed team ids, never headcount, so
+   * it cannot see that a team has three people. #659 sizes it from the paper
+   * playtest as "team size + 1 to 2", and 6 is that figure for the standard
+   * three-person team. A match with a different team size has to re-tune it.
+   *
+   * Raising it also costs storage. The whole match is one persisted row and
+   * Orders are retained after they resolve, so the row grows with
+   * `teams x contractsPerIssue x issues`; at 6 it caps a match at 8 teams on
+   * the DynamoDB backend. `state-size.test.ts` measures where that line is.
+   */
+  readonly contractsPerIssue: number;
+  /**
+   * How long (ms) an issued Order stays "open" before it expires unclaimed.
+   *
+   * [Issue #659] Deliberately EQUAL to `contractIntervalMs`, which is the
+   * "no prefetch" rule the rest of the scoring rests on: a batch lives exactly
+   * until the next batch replaces it, so Orders cannot be stockpiled. A longer
+   * TTL would let a team hold a backlog, and with a backlog LEAK always beats
+   * PROVE no matter how the points are set -- leaking frees five minutes that
+   * convert straight into another PROVE, so the leak's points are pure profit.
+   * Raising this above the interval reintroduces that arbitrage.
+   */
   readonly contractTtlMs: number;
   /**
    * How long (ms) a "rush" contract stays open. Shorter than `contractTtlMs`
@@ -193,7 +244,15 @@ export interface Contract {
   /** The team this Order was issued to (only that team may submit against it). */
   readonly teamId: string;
   readonly kind: ContractKind;
+  /** Points for fulfilling this Order by computing it (PROVE / FHE / MPC). */
   readonly points: number;
+  /**
+   * [Issue #659] Points for fulfilling it by LEAK — letting the system answer
+   * and publishing the pair. Carried on the Order rather than read from config
+   * at submit time so the participant can see both numbers side by side and
+   * make the trade knowingly.
+   */
+  readonly leakPoints: number;
   /** [Issue #645] What the Order asks for, and the public payload it needs. */
   readonly task: OrderTask;
   readonly issuedAtMs: number;
@@ -214,6 +273,18 @@ export interface Contract {
   readonly allowedMethods: readonly SubmissionMethod[];
   /** Which method actually completed it, once one did. */
   readonly resolution?: SubmissionMethod;
+  /**
+   * [Issue #659] Why an `expired` Order ended, once one did.
+   *
+   * Two different things end an Order unanswered -- its deadline passing, and
+   * its team ROTATE-ing away from the generation it was issued against -- and
+   * both leave `status: "expired"`. They carry the same score penalty (see
+   * `applyRotate`), so the distinction is not a scoring one; it exists so a
+   * participant reading their own board can tell "the clock beat me" from "I
+   * chose this", and so a reconciliation over final state can attribute each
+   * penalty to its cause rather than inferring it from timestamps.
+   */
+  readonly expiryCause?: "deadline" | "rotate";
 }
 
 /**
@@ -524,6 +595,8 @@ export interface ContractProjection {
   readonly id: string;
   readonly kind: ContractKind;
   readonly points: number;
+  /** [Issue #659] What LEAK pays instead — always below {@link points}. */
+  readonly leakPoints: number;
   /**
    * [Issue #645] What this Order asks for, plus anything the OWNING team needs
    * to do it. For an MPC Order that includes confidential material (the team's

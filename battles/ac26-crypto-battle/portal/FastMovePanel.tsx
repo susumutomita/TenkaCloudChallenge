@@ -39,6 +39,7 @@ const COPY = {
     rotateHint: "Switch to a fresh generation.",
     send: "SUBMIT",
     running: "SUBMITTING…",
+    leakRate: "pass",
     leakSuccess: "LEAK SUCCESS",
     leakBody: (points: number, shares: readonly number[]) => `+${points} · share ${shares.map((x) => `#${x}`).join(", ")} → PUBLIC LEDGER`,
     proveSuccess: "PROVE SUCCESS",
@@ -103,6 +104,7 @@ const COPY = {
     rotateHint: "新しい世代へ切り替えます。",
     send: "SUBMIT",
     running: "送信中…",
+    leakRate: "パス",
     leakSuccess: "LEAK SUCCESS",
     leakBody: (points: number, shares: readonly number[]) => `+${points} · share ${shares.map((x) => `#${x}`).join(", ")} → PUBLIC LEDGER`,
     proveSuccess: "PROVE SUCCESS",
@@ -369,7 +371,20 @@ export default function FastMovePanel(props: PortalSlotProps) {
             {orders.map((order) => (
               <button key={order.id} className="tc-order-pick" type="button" aria-pressed={selectedOrder?.id === order.id} onClick={() => { setSelectedOrderId(order.id); setProveOpen(false); }}>
                 <strong>{order.id.replace(/^.*-c/, "ORDER #")}</strong>
-                <span>+{order.points} · {Math.ceil(order.remainingMs / 1000)}s</span>
+                {/*
+                  [Issue #659] Both rates, side by side. Computing the Order and
+                  passing on it pay different amounts, and that difference IS
+                  the decision the Order asks for -- a card showing one number
+                  makes the choice only after it has been made, in the
+                  confirmation. The pass rate is shown only where passing is
+                  actually allowed: a `no-raw-disclosure` Order has no LEAK
+                  route, and offering a price for it would be a lie.
+                */}
+                <span>
+                  +{order.points}
+                  {order.allowedMethods.includes("leak") ? ` / ${copy.leakRate} +${order.leakPoints}` : ""}
+                  {" · "}{Math.ceil(order.remainingMs / 1000)}s
+                </span>
                 <span>{taskLabel(order.task, locale)} · {taskDetail(order.task, locale)}</span>
                 {/*
                   [Issue #645] The Order's rule sits ON THE CARD, before the
@@ -422,7 +437,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             title={selectedOrder && !leakAllowed ? copy.methodBlocked : undefined}
             onClick={() => selectedOrder && void run(
               () => submitLeak(client, selectedOrder.id),
-              () => ({ kind: "leak", title: copy.leakSuccess, body: copy.leakBody(selectedOrder.points, selectedOrder.task.kind === "reveal-share" ? selectedOrder.task.shareIndices : []) }),
+              () => ({ kind: "leak", title: copy.leakSuccess, body: copy.leakBody(selectedOrder.leakPoints, selectedOrder.task.kind === "reveal-share" ? selectedOrder.task.shareIndices : []) }),
             )}
           >
             {copy.leak}<small>{copy.leakHint}</small>
