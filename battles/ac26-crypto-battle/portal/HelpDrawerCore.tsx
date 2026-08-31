@@ -98,8 +98,37 @@ def reconstruct(shares):             # shares: [(index, value), ...], threshold-
 const COPY = {
   en: {
     title: "How this Battle works",
+    detailToggle: "Vocabulary, the lanes, and the formulas",
+    whatTitle: "What this game is",
+    what: [
+      "You hold one secret. It is split into five pieces (#1-#5 in MY VAULT).",
+      "One property matters. Any three of the five reconstruct the secret. Two tell you nothing.",
+      "That is the whole game.",
+    ],
+    whyTitle: "So there are four moves",
+    whyIntro:
+      "You want points, and points come from finishing Orders. There are two ways to finish one.",
+    whyRows: [
+      { name: "LEAK", how: "Publish one piece as it is", cost: "Fast — but everyone can see the piece" },
+      { name: "PROVE", how: "Compute, and prove it without showing the piece", cost: "The piece stays safe — but it costs you a calculation" },
+    ],
+    whyThen:
+      "LEAK three times and an opponent holds three of your pieces. Three is enough to rebuild the secret. Which is why:",
+    whyRows2: [
+      { name: "HUNT", how: "When someone has three pieces exposed, use them to take their points", cost: "" },
+      { name: "ROTATE", how: "Throw your pieces away and remake them. Everything already published stops counting", cost: "" },
+    ],
+    summaryTitle: "In short",
+    summary: [
+      "LEAK is fast, but three of them and you are dead.",
+      "PROVE is safe, but slow.",
+      "When an opponent LEAKs three times, you hunt them.",
+      "When you are the one exposed, you rotate.",
+    ],
+    summaryTail:
+      "That is all of it. The game is how far you push your luck; the cryptography is only what settles it.",
     intro:
-      "Quick vocabulary check: \"Contract\" here has nothing to do with CloudFormation or a blockchain contract -- it just means \"a request addressed to your team.\" Your team's secret (think: a password) is broken into 5 scattered fragments (shares) -- collect 3 and you can reassemble it (this mechanism is called Shamir threshold secret sharing). Every move below is a real cryptographic operation -- nothing here is simulated, and nothing scores on a guess. The core decision, every time a Contract arrives: LEAK for easy points but give away a fragment, or PROVE for MORE points and give away nothing. Letting an Order expire without doing either costs you points -- ignoring one is the worst outcome available.",
+      "Vocabulary: a \"Contract\" (Order) here has nothing to do with CloudFormation or a blockchain contract — it just means a request addressed to your team. Every move below is a real cryptographic operation; nothing is simulated, and nothing scores on a guess.",
     lanesTitle: 'The 3 lanes (under "PROVE / LEAK / HUNT -- Status" above)',
     lanes: [
       { name: "Contract Queue", body: "Orders addressed to your team right now. Each names what it asks for -- a share, an encrypted addition, or a masked subtotal -- and which methods it accepts. Miss the deadline and one expires unclaimed." },
@@ -157,8 +186,44 @@ const COPY = {
   },
   ja: {
     title: "この Battle の遊び方",
+    /*
+      [Issue #659] 順序を逆にした。
+      
+      以前はここが「Contract という語の説明 → 3 レーン → 6 つの動作」で始まって
+      いた。動作の一覧から入ると、2 文のあいだに知らない単語が 4 つ出てきて読め
+      ない。先に**秘密の性質を 1 つ**置くと、4 つの動作は全部そこから導ける。
+    */
+    detailToggle: "用語・レーン・計算式などの詳しい説明",
+    whatTitle: "このゲームは何か",
+    what: [
+      "あなたは秘密を 1 つ持っています。それは 5 個の破片に分けてあります (MY VAULT の #1〜#5)。",
+      "大事な性質が 1 つ。5 個のうち 3 個そろうと、秘密が復元できます。2 個までなら何も分かりません。",
+      "これがゲームの全部です。",
+    ],
+    whyTitle: "だから 4 つの動作がある",
+    whyIntro:
+      "点が欲しい。でも点を取るには仕事 (ORDER) をこなす必要がある。そこで 2 通りのやり方があります。",
+    whyRows: [
+      { name: "LEAK", how: "破片を 1 個そのまま公開して提出", cost: "速い。でも公開した破片が相手に見える" },
+      { name: "PROVE", how: "計算して、破片を見せずに証明", cost: "破片は安全。でも計算が要る" },
+    ],
+    whyThen:
+      "そして LEAK を 3 回やると、相手はあなたの破片を 3 個手に入れます。3 個そろえば秘密が復元できる。そうなると:",
+    whyRows2: [
+      { name: "HUNT", how: "相手の破片が 3 個そろったとき、それを使って相手から点を奪う", cost: "" },
+      { name: "ROTATE", how: "危なくなったら破片を捨てて作り直す。公開済みの 3 個が無効になる", cost: "" },
+    ],
+    summaryTitle: "つまり",
+    summary: [
+      "LEAK は速いが、3 回やったら殺される。",
+      "PROVE は安全だが、遅い。",
+      "相手が 3 回 LEAK したら、こちらが HUNT で刈る。",
+      "自分が危なくなったら ROTATE で逃げる。",
+    ],
+    summaryTail:
+      "これだけです。「どこまで欲張るか」のゲームで、暗号はその判定に使われているだけ。",
     intro:
-      "先に用語の確認です。ここでの「Contract」は CloudFormation や blockchain の contract とは無関係で、単に「自チームへの依頼」という意味です。自チームの secret（合言葉のようなもの）は 5 枚のバラバラな破片（share）に分解して保管されており、3 枚集めれば組み立て直せます（この仕組みが Shamir のしきい値秘密分散です）。以下の操作はすべて実際の暗号計算であり、シミュレーションではありません。当て推量では得点になりません。Contract が届くたびの核心の判断は、楽に稼げるが破片を渡す LEAK か、得点が高く何も渡さない PROVE かです。どちらもせずに期限切れにすると減点になります（放置がいちばん損です）。依頼によってはそのどちらでもなく、「読んではいけない数字のまま計算せよ」と言ってくるものもあります。カードにそう書いてあります。",
+      "用語: ここでの「Contract」(ORDER) は CloudFormation や blockchain の contract とは無関係で、単に「自チームへの依頼」という意味です。以下の操作はすべて実際の暗号計算であり、シミュレーションではありません。当て推量では得点になりません。",
     lanesTitle: "3 つのレーン (上の「PROVE / LEAK / HUNT — 状態」の中)",
     lanes: [
       { name: "Contract Queue", body: "今まさに自チーム宛に届いている依頼です。何を求められているか（share / 暗号文のまま足す / 覆面つき小計）と、使える方法がそれぞれ書いてあります。期限内に応じないと失効します。" },
@@ -221,6 +286,52 @@ export default function HelpDrawer(props: PortalSlotProps) {
   return (
     <section style={panelStyle}>
       <h3 style={{ margin: "0 0 8px 0", fontSize: "16px" }}>{copy.title}</h3>
+
+      {/*
+        [Issue #659] The secret's one property comes FIRST, and the moves are
+        derived from it.
+
+        This used to open with a vocabulary note and a list of six moves, which
+        put four unknown words in the reader's way before anything explained
+        why any of them exist. Starting from "three of five rebuild the secret"
+        makes every move follow: LEAK spends a piece, PROVE spends time
+        instead, three pieces is death, ROTATE is the way out.
+      */}
+      <h4 style={sectionTitleStyle}>{copy.whatTitle}</h4>
+      {copy.what.map((line) => (
+        <p key={line} style={{ margin: "0 0 6px 0", fontSize: "13px" }}>{line}</p>
+      ))}
+
+      <h4 style={sectionTitleStyle}>{copy.whyTitle}</h4>
+      <p style={{ margin: "0 0 8px 0", fontSize: "13px" }}>{copy.whyIntro}</p>
+      {copy.whyRows.map((row) => (
+        <div key={row.name} style={moveStyle}>
+          <strong>{row.name}</strong>
+          <p style={{ margin: "4px 0 0 0", fontSize: "13px" }}>{row.how}</p>
+          <p style={{ margin: "2px 0 0 0", fontSize: "12px", color: "#5f6b7a" }}>{row.cost}</p>
+        </div>
+      ))}
+      <p style={{ margin: "8px 0", fontSize: "13px" }}>{copy.whyThen}</p>
+      {copy.whyRows2.map((row) => (
+        <div key={row.name} style={moveStyle}>
+          <strong>{row.name}</strong>
+          <p style={{ margin: "4px 0 0 0", fontSize: "13px" }}>{row.how}</p>
+        </div>
+      ))}
+
+      <h4 style={sectionTitleStyle}>{copy.summaryTitle}</h4>
+      <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "13px" }}>
+        {copy.summary.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+      </ul>
+      <p style={{ margin: "8px 0 0 0", fontSize: "13px", color: "#5f6b7a" }}>{copy.summaryTail}</p>
+
+      <details style={{ marginTop: "12px" }}>
+        <summary style={{ cursor: "pointer", fontSize: "13px", fontWeight: 600 }}>
+          {copy.detailToggle}
+        </summary>
+        <div style={{ marginTop: "8px" }}>
       <p style={{ margin: 0, fontSize: "13px", color: "#5f6b7a" }}>{copy.intro}</p>
 
       <h4 style={sectionTitleStyle}>{copy.lanesTitle}</h4>
@@ -268,6 +379,8 @@ export default function HelpDrawer(props: PortalSlotProps) {
           <li key={line}>{line}</li>
         ))}
       </ul>
+        </div>
+      </details>
     </section>
   );
 }
