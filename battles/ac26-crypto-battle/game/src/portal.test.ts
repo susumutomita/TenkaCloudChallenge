@@ -1221,3 +1221,40 @@ describe("the board answers what to do next", () => {
     expect(html).not.toMatch(/<details class="tc-vault-details"[^>]*\sopen/);
   });
 });
+
+/**
+ * [Issue #659] The Battle's actual goal: a player leaves understanding secure
+ * computation, homomorphic encryption and zero-knowledge proofs — the
+ * primitives blockchains are built on.
+ *
+ * They already performed all three. An FHE Order IS homomorphic addition, an
+ * MPC Order IS secure multi-party computation, a PROVE IS a zero-knowledge
+ * proof. But the words appeared ZERO times anywhere a participant could see,
+ * and the only mention of blockchain was a disclaimer saying a Contract is NOT
+ * one — so a player could finish the match having done all three and be unable
+ * to name any of them.
+ */
+describe("the help drawer names what the player is learning", () => {
+  for (const locale of ["ja", "en"] as const) {
+    it(`names all three modern primitives (${locale})`, () => {
+      const html = renderToStaticMarkup(createElement(HelpDrawer, baseProps({ locale })));
+      const expected =
+        locale === "ja"
+          ? ["準同型暗号", "秘密計算", "ゼロ知識証明"]
+          : ["Homomorphic encryption", "Secure computation", "Zero-knowledge proofs"];
+      for (const term of expected) expect(html).toContain(term);
+    });
+
+    it(`says where they are used, rather than only that they exist (${locale})`, () => {
+      // The motivation the operator gave: these matter because blockchains are
+      // made of them. Without it the three names are trivia.
+      const html = renderToStaticMarkup(createElement(HelpDrawer, baseProps({ locale })));
+      expect(html).toContain(locale === "ja" ? "ブロックチェーン" : "blockchain");
+    });
+
+    it(`frames the historical cipher as the way in, not the destination (${locale})`, () => {
+      const html = renderToStaticMarkup(createElement(HelpDrawer, baseProps({ locale })));
+      expect(html).toContain(locale === "ja" ? "シーザー" : "Caesar");
+    });
+  }
+});

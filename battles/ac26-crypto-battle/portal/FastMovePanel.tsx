@@ -29,6 +29,26 @@ interface Feedback {
   readonly kind: FeedbackKind;
   readonly title: string;
   readonly body: string;
+  /**
+   * [Issue #659] What the participant just DID, named.
+   *
+   * The point of this Battle is that a player leaves understanding secure
+   * computation, homomorphic encryption and zero-knowledge proofs — the
+   * primitives blockchains are built on. They already perform all three: an FHE
+   * Order is homomorphic addition, an MPC Order is secure multi-party
+   * computation, a PROVE is a zero-knowledge proof.
+   *
+   * They were never told. Before this, the words 準同型暗号 / 秘密計算 /
+   * ゼロ知識証明 appeared ZERO times anywhere a participant could see, and the
+   * only mention of blockchain was a disclaimer saying a Contract is NOT one.
+   * A player finished the match having done all three and could not have named
+   * any of them.
+   *
+   * So the name arrives at the moment the move succeeds, which is when it
+   * attaches to something the player actually did rather than to a definition
+   * they read first. One sentence: what it is called, and where it is used.
+   */
+  readonly lesson?: string;
 }
 
 const COPY = {
@@ -64,6 +84,8 @@ const COPY = {
       `+${points} · your row and its answer → PUBLIC LEDGER. ${pairsToBreak} pair${pairsToBreak === 1 ? "" : "s"} recovers your key.`,
     proveSuccess: "PROVE SUCCESS",
     proveBody: (points: number) => `+${points} · SHARE PROTECTED`,
+    proveLesson:
+      "That was a ZERO-KNOWLEDGE PROOF: the judge is now certain you hold the secret, and learned nothing about it. This is what zk-rollups prove on-chain.",
     huntSuccess: "HUNT SUCCESS",
     huntBody: "Recovered secret accepted.",
     huntCipherBody: "Recovered key accepted — that rung is broken until they rotate.",
@@ -81,6 +103,8 @@ const COPY = {
     fheHint: "COMPUTE / NOTHING REVEALED",
     fheSuccess: "FHE SUCCESS",
     fheBody: (points: number) => `+${points} · ADDED WITHOUT DECRYPTING`,
+    fheLesson:
+      "That was HOMOMORPHIC ENCRYPTION: you computed on numbers you could not read, and the answer came out right. Blockchains use it so a chain can verify a total without anyone publishing the amounts.",
     mpcTitle: "MASKED SUBTOTAL",
     mpcHelp: "Take your own number, add the two masks the other offices sent you, subtract the two you sent them, then take the remainder mod p. This subtotal is the only thing YOU submit; once the Order completes the ledger shows all three offices' subtotals and the total. Your own number never appears.",
     mpcMine: "your number (private)",
@@ -91,6 +115,8 @@ const COPY = {
     mpcHint: "COMPUTE / INPUT STAYS PRIVATE",
     mpcSuccess: "MPC SUCCESS",
     mpcBody: (points: number) => `+${points} · YOUR NUMBER STAYED PRIVATE`,
+    mpcLesson:
+      "That was SECURE COMPUTATION (MPC): three parties learned the total and nobody learned anyone else's number. The masks cancelled. Blockchains use it for shared settlement without a trusted middleman.",
     prime: "p (the modulus)",
     cipher: "CIPHER",
     huntCipher: "HUNT · CIPHER KEY",
@@ -147,6 +173,8 @@ const COPY = {
       `+${points} · 記号列と答えが対で公開されました。この段は ${pairsToBreak} 組で鍵が割れます。`,
     proveSuccess: "PROVE SUCCESS",
     proveBody: (points: number) => `+${points} · SHARE PROTECTED`,
+    proveLesson:
+      "That was a ZERO-KNOWLEDGE PROOF: the judge is now certain you hold the secret, and learned nothing about it. This is what zk-rollups prove on-chain.",
     huntSuccess: "HUNT SUCCESS",
     huntBody: "復元した secret が受理されました。",
     huntCipherBody: "割り出した鍵が受理されました。相手が ROTATE するまで、この段は破れたままです。",
@@ -164,6 +192,8 @@ const COPY = {
     fheHint: "計算 / 何も明かさない",
     fheSuccess: "FHE SUCCESS",
     fheBody: (points: number) => `+${points} · 復号せずに足した`,
+    fheLesson:
+      "いまのが「準同型暗号」です。中身を読めない数のまま計算して、答えは正しく出ました。ブロックチェーンでは、金額を誰も公開せずに合計を検証するのに使われています。",
     mpcTitle: "覆面をかけた小計",
     mpcHelp: "自分の数に、他の2拠点から届いた覆面を足し、自分が送った2つの覆面を引いて、p で割った余りにします。あなたが提出するのはこの小計だけです。依頼完了後の ledger には 3 拠点ぶんの小計と合計が並びます。あなたの数字そのものは出ません。",
     mpcMine: "自分の数 (非公開)",
@@ -174,6 +204,8 @@ const COPY = {
     mpcHint: "計算 / 自分の数は出ない",
     mpcSuccess: "MPC SUCCESS",
     mpcBody: (points: number) => `+${points} · 自分の数は公開されていない`,
+    mpcLesson:
+      "いまのが「秘密計算 (MPC)」です。3 者が合計だけを知り、誰も他人の数を知りませんでした。覆面が打ち消し合ったからです。ブロックチェーンでは、信頼できる仲介者なしの決済に使われています。",
     prime: "p (割る数)",
     cipher: "CIPHER",
     huntCipher: "HUNT · 暗号鍵",
@@ -444,6 +476,7 @@ ${DIE_CSS}
 .tc-submit-small{padding:7px 10px;border:0;border-radius:7px;background:#202b3c;color:#fff;font-weight:800;cursor:pointer}.tc-submit-small:disabled{opacity:.45;cursor:not-allowed}
 .tc-feedback{border-radius:10px;padding:10px 12px;font-weight:900;animation:tc-feedback-pop .35s ease-out both}
 .tc-feedback span{display:block;font-size:11px;font-weight:600;margin-top:2px}
+.tc-feedback-lesson{margin-top:6px!important;font-weight:500!important;line-height:1.5;opacity:.92}
 .tc-feedback-leak{background:#fff0d6;border:1px solid #d8a657}.tc-feedback-prove{background:#e7f6ec;border:1px solid #69b482}.tc-feedback-hunt{background:#f0eaff;border:1px solid #9a7bd1}.tc-feedback-rotate{background:#e8f3ff;border:1px solid #6ba8df}.tc-feedback-error{background:#fff0f0;border:1px solid #d13212}
 @keyframes tc-feedback-pop{0%{transform:translateY(7px) scale(.97);opacity:0}60%{transform:translateY(0) scale(1.02);opacity:1}100%{transform:scale(1)}}
 @media(max-width:720px){.tc-primary-actions,.tc-secondary-grid{grid-template-columns:1fr}}
@@ -653,7 +686,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             disabled={submitting || !fheR.trim() || !fheY.trim()}
             onClick={() => void run(
               () => submitFhe(client, selectedOrder.id, { r: fheR.trim(), y: fheY.trim() }),
-              () => ({ kind: "prove", title: copy.fheSuccess, body: copy.fheBody(selectedOrder.points) }),
+              () => ({ kind: "prove", title: copy.fheSuccess, body: copy.fheBody(selectedOrder.points), lesson: copy.fheLesson }),
             )}
           >{submitting ? copy.running : copy.fhe}</button>
         </div>
@@ -730,7 +763,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             disabled={submitting || !mpcPartial.trim()}
             onClick={() => void run(
               () => submitMpc(client, selectedOrder.id, mpcPartial.trim()),
-              () => ({ kind: "prove", title: copy.mpcSuccess, body: copy.mpcBody(selectedOrder.points) }),
+              () => ({ kind: "prove", title: copy.mpcSuccess, body: copy.mpcBody(selectedOrder.points), lesson: copy.mpcLesson }),
             )}
           >{submitting ? copy.running : copy.mpc}</button>
         </div>
@@ -755,7 +788,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             disabled={submitting || !commitment.trim() || !response.trim()}
             onClick={() => void run(
               () => submitProve(client, selectedOrder.id, { commitment: commitment.trim(), response: response.trim() }),
-              () => ({ kind: "prove", title: copy.proveSuccess, body: copy.proveBody(selectedOrder.points) }),
+              () => ({ kind: "prove", title: copy.proveSuccess, body: copy.proveBody(selectedOrder.points), lesson: copy.proveLesson }),
             )}
           >{submitting ? copy.running : copy.send}</button>
         </div>
@@ -926,7 +959,13 @@ export default function FastMovePanel(props: PortalSlotProps) {
       </details>
       )}
 
-      {feedback && <div className={`tc-feedback tc-feedback-${feedback.kind}`}><strong>{feedback.title}</strong><span>{feedback.body}</span></div>}
+      {feedback && (
+        <div className={`tc-feedback tc-feedback-${feedback.kind}`}>
+          <strong>{feedback.title}</strong>
+          <span>{feedback.body}</span>
+          {feedback.lesson ? <span className="tc-feedback-lesson">{feedback.lesson}</span> : null}
+        </div>
+      )}
     </section>
   );
 }
