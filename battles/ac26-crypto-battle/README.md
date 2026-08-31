@@ -1,23 +1,41 @@
 # PROVE / LEAK / HUNT — Cryptography Battle
 
-A real-time Battle about choosing whether to reveal a secret fragment for immediate points or protect it through computation.
+## What is going on
 
-## Your first three minutes
+Your team holds one secret. It is split into five pieces, and **any three of
+them rebuild it. Two tell you nothing.**
 
-1. Pick one blue **ORDER** card.
-2. Choose **LEAK** or **PROVE**.
-3. After submitting, see what appeared in the Public Ledger.
+Work (Orders) arrives six at a time every five minutes, and ignoring one costs
+you points. There are two ways to finish one — **hand over a piece and answer
+instantly**, or **compute, and keep the piece**. Hand over three and someone
+rebuilds your secret.
 
-- **LEAK**: score without computing, but for less -- and publish one secret share.
-- **PROVE**: compute it yourself for more; publish no share.
-- **Neither**: the Order expires and costs you points. Ignoring one is the worst
-  outcome available.
+That is the whole bet.
 
-The order is: **do nothing < LEAK and get hunted < LEAK and get away with it <
-PROVE**. Every Order card shows both rates side by side, so you can compare them
-before you commit.
+## The moves
 
-You do not need every rule up front. The Portal's Practice and help section contains an optional, no-score tutorial with small numbers.
+| | What it does | What it costs |
+| --- | --- | --- |
+| **LEAK** | Hand over one piece and answer instantly | Fast — but the piece never comes back |
+| **PROVE** | Compute, and answer without handing anything over | The piece stays safe — but it costs a calculation |
+| **HUNT** | When someone has three pieces exposed, take their points | — |
+| **ROTATE** | Remake your pieces. Everything published stops counting | — |
+
+The order is **do nothing < LEAK and get hunted < LEAK and get away with it <
+PROVE**. Every Order card shows both rates side by side, so you compare before
+you commit.
+
+## These are real things
+
+| Order | Technique | Where it runs |
+| --- | --- | --- |
+| add without decrypting | **Homomorphic encryption** | confidential smart contracts, sealed-bid voting |
+| masked subtotal | **Secure computation (MPC)** | MPC wallets, threshold signatures |
+| PROVE | **Zero-knowledge proofs** | zkRollups, private transfers |
+
+You will have performed all three by hand by the time the match ends. Caesar
+shows up too, but as the way in — **meeting a breakable cipher first is what
+makes an unbreakable one worth something.**
 
 ## Goal
 
