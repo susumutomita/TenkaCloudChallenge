@@ -41,6 +41,7 @@ function leakThreshold(stateIn: ReturnType<typeof initialState>, teamId: string)
           teamId,
           kind: "standard" as const,
           points: state.config.scores.contract,
+          leakPoints: state.config.scores.contractLeak,
           task: { kind: "reveal-share" as const, shareIndices: [shareIndex] },
           issuedAtMs: 0,
           expiresAtMs: state.config.contractTtlMs,
@@ -110,17 +111,39 @@ describe("tick: phases", () => {
 });
 
 describe("tick: contract issuance and expiry", () => {
-  test("issues one open contract per team at match start", () => {
+  test("issues a whole batch per team at match start", () => {
     const state = tick(initialState(CTX), 0);
     const open = state.contracts.filter((c) => c.status === "open");
-    expect(open).toHaveLength(2);
-    expect(new Set(open.map((c) => c.teamId))).toEqual(new Set(["teamA", "teamB"]));
+    // [Issue #659] Every team is handed `contractsPerIssue` Orders at once.
+    // Asserted against the config rather than a literal, because the batch size
+    // is the design's one tuning knob and a re-tune must not need a test edit.
+    expect(open).toHaveLength(2 * DEFAULT_CONFIG.contractsPerIssue);
+    for (const teamId of ["teamA", "teamB"]) {
+      expect(open.filter((c) => c.teamId === teamId)).toHaveLength(
+        DEFAULT_CONFIG.contractsPerIssue,
+      );
+    }
   });
 
-  test("issues another batch once contractIntervalMs elapses", () => {
+  test("the next batch REPLACES the last one rather than piling on top of it", () => {
     let state = tick(initialState(CTX), 0);
+    const firstBatch = state.contracts.map((c) => c.id);
     state = tick(state, DEFAULT_CONFIG.contractIntervalMs);
-    expect(state.contracts).toHaveLength(4);
+
+    // [Issue #659] "No prefetch" is the rule the whole scoring model rests on:
+    // a team may never hold more than the batch in front of it. If Orders
+    // accumulated, a team could leak from the backlog to free time for extra
+    // PROVEs, and LEAK would beat PROVE at any point values.
+    const open = state.contracts.filter((c) => c.status === "open");
+    expect(open).toHaveLength(2 * DEFAULT_CONFIG.contractsPerIssue);
+    expect(open.some((c) => firstBatch.includes(c.id))).toBe(false);
+
+    // The old batch is retained (expired), not dropped -- scoring and the
+    // participant's own board both need to see what lapsed.
+    expect(state.contracts).toHaveLength(4 * DEFAULT_CONFIG.contractsPerIssue);
+    for (const id of firstBatch) {
+      expect(state.contracts.find((c) => c.id === id)?.status).toBe("expired");
+    }
   });
 
   test("a tick that jumps far ahead catches up on every missed batch, bounded by match end", () => {
@@ -214,7 +237,9 @@ describe("leak", () => {
     const { state, order: contract } = orderMatching(allowsLeak);
     const next = applyOp(state, "teamA", { kind: "leak", contractId: contract.id });
 
-    expect(next.teams.teamA?.score).toBe(contract.points);
+    // [Issue #659] LEAK pays the leak rate, not the full rate.
+    expect(next.teams.teamA?.score).toBe(contract.leakPoints);
+    expect(contract.leakPoints).toBeLessThan(contract.points);
     expect(next.publicLedger).toHaveLength(
       contract.task.kind === "reveal-share" ? contract.task.shareIndices.length : 0,
     );
@@ -463,6 +488,7 @@ describe("match end", () => {
       teamId: "teamA",
       kind: "standard" as const,
       points: state.config.scores.contract,
+          leakPoints: state.config.scores.contractLeak,
       task: { kind: "reveal-share" as const, shareIndices: [1] },
       issuedAtMs: state.nowMs ?? 0,
       expiresAtMs: (state.nowMs ?? 0) + state.config.contractTtlMs,

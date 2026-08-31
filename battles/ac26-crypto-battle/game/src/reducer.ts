@@ -113,15 +113,26 @@ export const DEFAULT_CONFIG: CryptoBattleConfig = {
     buildToPressureMs: 30 * 60_000,
     pressureToEndgameMs: 60 * 60_000,
   },
-  contractIntervalMs: 2 * 60_000,
+  // [Issue #659] Orders arrive every 5 minutes and expire in 5, so a team is
+  // always working on the batch in front of it — there is no stockpiling and no
+  // taking ahead. That single rule is what keeps LEAK from paying: with a
+  // backlog to draw on, leaking an Order frees five minutes that convert into
+  // another PROVE, so leaking always beat proving no matter how the points were
+  // set. It also gives a fast team's spare capacity nowhere to go but HUNT,
+  // which is what finally makes hunting worth its five minutes.
+  contractIntervalMs: 5 * 60_000,
+  contractsPerIssue: 6,
   contractTtlMs: 5 * 60_000,
   rushContractTtlMs: 2.5 * 60_000,
   rotateCooldownMs: 3 * 60_000,
   scores: {
-    contract: 10,
-    rushContract: 20,
-    huntBonus: 20,
-    huntPenalty: 10,
+    // [Issue #659] 失効 -15 < LEAK して狩られる -2 < LEAK 無事 +10 < PROVE +30
+    contract: 30,
+    contractLeak: 10,
+    expiredOrder: -15,
+    rushContract: 45,
+    huntBonus: 25,
+    huntPenalty: 12,
   },
 };
 
@@ -274,7 +285,12 @@ function buildOrderTask(
  * what makes {@link migrateContract} total instead of a pile of non-null
  * assertions at each use site.
  */
-type PersistedContract = Omit<Contract, "task" | "privacyConstraint" | "allowedMethods"> & {
+type PersistedContract = Omit<
+  Contract,
+  "task" | "privacyConstraint" | "allowedMethods" | "leakPoints"
+> & {
+  /** [Issue #659] Absent on Orders written before LEAK and PROVE paid differently. */
+  readonly leakPoints?: number;
   readonly task?: OrderTask;
   /** Pre-#645: an Order asked for share indices and nothing else. */
   readonly requestedShareIndices?: readonly number[];
@@ -325,17 +341,56 @@ function migrateContract(contract: Contract): Contract {
     task,
     privacyConstraint,
     allowedMethods: persisted.allowedMethods ?? allowedMethodsFor(task.kind, privacyConstraint),
+    // [Issue #659] Orders written before LEAK and PROVE paid differently carry
+    // no `leakPoints`. Without this backfill, leaking such an Order adds
+    // `undefined` to the score and the team's total becomes NaN — a silent,
+    // unrecoverable corruption of a live match rather than a visible failure.
+    leakPoints: persisted.leakPoints ?? DEFAULT_CONFIG.scores.contractLeak,
   };
 }
 
 /**
- * Every entry point below reads `state.contracts`, so every entry point
- * migrates first. `applyOp` and `tick` return the migrated rows, so the
- * upgrade also persists on the next write rather than being redone forever.
+ * [Issue #659] Bring a persisted CONFIG up to the current shape.
+ *
+ * `mergeConfig` runs in `initialState` and nowhere else, so a config only ever
+ * gets its defaults filled in at the moment a match starts. Every later read
+ * comes off the persisted row -- and a coordination row outlives the code that
+ * wrote it (that is the whole reason #3126 / #3135 exist), so a match started
+ * before this version is read back by a reducer that expects fields its config
+ * has never heard of. Both new fields fail silently rather than loudly:
+ *
+ *  - `contractsPerIssue` undefined makes the batch loop's bound `undefined`, so
+ *    it runs zero times: the match stops issuing Orders altogether and simply
+ *    winds down, with nothing in the logs to say why.
+ *  - `scores.expiredOrder` undefined turns the first expiry into
+ *    `score + undefined`, and the team's total is NaN for the rest of the
+ *    match -- the same corruption `migrateContract`'s `leakPoints` backfill
+ *    exists to prevent, one level up.
+ *
+ * Re-merging is the whole fix: `mergeConfig` is already the function that says
+ * what a missing field means, and it leaves every value the row does carry
+ * exactly as it found it.
+ */
+function needsConfigMigration(config: CryptoBattleConfig): boolean {
+  return (
+    config.contractsPerIssue === undefined ||
+    config.scores?.expiredOrder === undefined ||
+    config.scores?.contractLeak === undefined
+  );
+}
+
+/**
+ * Every entry point below reads `state.contracts` and `state.config`, so every
+ * entry point migrates both first. `applyOp` and `tick` return the migrated
+ * state, so the upgrade also persists on the next write rather than being
+ * redone forever.
  */
 function withMigratedContracts(state: CryptoBattleState): CryptoBattleState {
-  if (!state.contracts.some(needsMigration)) return state;
-  return { ...state, contracts: state.contracts.map(migrateContract) };
+  const config = needsConfigMigration(state.config) ? mergeConfig(state.config) : state.config;
+  if (!state.contracts.some(needsMigration)) {
+    return config === state.config ? state : { ...state, config };
+  }
+  return { ...state, config, contracts: state.contracts.map(migrateContract) };
 }
 
 export function tick(persistedState: CryptoBattleState, eventNowMs: number): CryptoBattleState {
@@ -345,9 +400,17 @@ export function tick(persistedState: CryptoBattleState, eventNowMs: number): Cry
   const phase = computePhase(elapsedMs, state.config);
   const matchEndAtMs = startedAtMs + state.config.matchDurationMs;
 
-  const contracts: Contract[] = state.contracts.map((c) =>
-    c.status === "open" && c.expiresAtMs <= eventNowMs ? { ...c, status: "expired" } : c,
-  );
+  // [Issue #659] Letting an Order expire has to be the WORST outcome available —
+  // worse than leaking and then being hunted over it. Otherwise ignoring Orders
+  // is a safe strategy: nothing is published, so nothing can be hunted, and the
+  // opponent-facing half of the game never happens. The penalty is what makes
+  // "I cannot compute this in time" a real decision instead of a free pass.
+  const newlyExpired: string[] = [];
+  const contracts: Contract[] = state.contracts.map((c) => {
+    if (c.status !== "open" || c.expiresAtMs > eventNowMs) return c;
+    newlyExpired.push(c.teamId);
+    return { ...c, status: "expired" as const, expiryCause: "deadline" as const };
+  });
 
   const issuedCountByTeam = new Map<string, number>();
   for (const c of contracts) {
@@ -359,15 +422,46 @@ export function tick(persistedState: CryptoBattleState, eventNowMs: number): Cry
   let nextContractAtMs = state.nextContractAtMs ?? startedAtMs;
   while (nextContractAtMs <= eventNowMs && nextContractAtMs < matchEndAtMs) {
     for (const teamId of Object.keys(state.teams)) {
+      // [Issue #659] A whole batch lands at once. This is what makes the match
+      // a contest rather than a queue: the batch is sized so a fast team clears
+      // it and a slow team cannot, and everything downstream -- LEAK being a
+      // real cost, HUNT being worth its five minutes, speed converting into
+      // attack -- follows from teams differing in how much of the batch they
+      // get through. See `contractsPerIssue` in types.ts.
+      for (let inBatch = 0; inBatch < state.config.contractsPerIssue; inBatch += 1) {
       const sequenceIndex = issuedCountByTeam.get(teamId) ?? 0;
       const plan = deriveContractPlan(state.seed, teamId, sequenceIndex, fieldConfig);
       const ttlMs = plan.kind === "rush" ? state.config.rushContractTtlMs : state.config.contractTtlMs;
+      // [Issue #659] Never issue an Order whose deadline has already passed.
+      //
+      // `tick` catches up on every batch it missed, which before #659 was
+      // harmless -- a stale Order arrived already expired and simply sat there.
+      // With an expiry penalty it stops being harmless: a dispatcher that
+      // stalls for twenty minutes would, on its next tick, hand every team two
+      // dozen Orders they never had a chance to see and then charge them
+      // `expiredOrder` for each one. A platform hiccup would decide the match.
+      //
+      // The slot is CONSUMED either way. Skipping without advancing
+      // `sequenceIndex` re-rolls the identical plan on the next iteration, and
+      // since the belt is a pure function of the index, it is stale again and
+      // skips again -- the batch dies at its first dead slot and, once the
+      // index is frozen on one, the belt never issues anything again. A rush
+      // slot (2.5 min) going stale would take the five standard slots behind
+      // it, which would still have been live, down with it.
+      if (nextContractAtMs + ttlMs <= eventNowMs) {
+        issuedCountByTeam.set(teamId, sequenceIndex + 1);
+        continue;
+      }
       const contractId = `${teamId}-c${sequenceIndex}`;
       issued.push({
         id: contractId,
         teamId,
         kind: plan.kind,
         points: plan.kind === "rush" ? state.config.scores.rushContract : state.config.scores.contract,
+        // [Issue #659] LEAK pays the same on a rush Order as on a standard one:
+        // rush pays more for the SPEED of computing it, and letting the system
+        // answer is not faster work, it is no work.
+        leakPoints: state.config.scores.contractLeak,
         task: buildOrderTask(plan, state.seed, contractId, fieldConfig.prime),
         issuedAtMs: nextContractAtMs,
         expiresAtMs: nextContractAtMs + ttlMs,
@@ -380,9 +474,15 @@ export function tick(persistedState: CryptoBattleState, eventNowMs: number): Cry
         allowedMethods: allowedMethodsFor(plan.taskKind, plan.privacyConstraint),
       });
       issuedCountByTeam.set(teamId, sequenceIndex + 1);
+      }
     }
     nextContractAtMs += state.config.contractIntervalMs;
   }
+
+  // [Issue #659] Charge the expiry penalty to whoever let the Order lapse.
+  // Floored at 0 like the HUNT penalty is: a negative running score reads as a
+  // bug to a participant, and "you are at zero" already carries the message.
+  const teams = applyExpiryPenalties(state.teams, newlyExpired, state.config.scores.expiredOrder);
 
   return {
     ...state,
@@ -390,8 +490,31 @@ export function tick(persistedState: CryptoBattleState, eventNowMs: number): Cry
     nowMs: eventNowMs,
     startedAtMs,
     nextContractAtMs,
+    teams,
     contracts: issued.length === 0 ? contracts : [...contracts, ...issued],
   };
+}
+
+/**
+ * [Issue #659] Deduct one expiry penalty per Order that lapsed this tick.
+ *
+ * Per Order, not per team: a team that ignored three Orders is three times as
+ * far behind as one that ignored a single Order, and flattening that would make
+ * "give up on the whole batch" cost the same as "miss one".
+ */
+function applyExpiryPenalties(
+  teams: Readonly<Record<string, TeamState>>,
+  expiredTeamIds: readonly string[],
+  penalty: number,
+): Record<string, TeamState> {
+  if (expiredTeamIds.length === 0) return { ...teams };
+  const next = { ...teams };
+  for (const teamId of expiredTeamIds) {
+    const team = next[teamId];
+    if (!team) continue;
+    next[teamId] = { ...team, score: Math.max(0, team.score + penalty) };
+  }
+  return next;
 }
 
 /**
@@ -824,7 +947,9 @@ function applyLeak(
   );
   const updatedTeam: TeamState = {
     ...team,
-    score: team.score + contract.points,
+    // [Issue #659] The leak rate, not the full rate. Paying the same for both
+    // made LEAK strictly dominant — no computation, identical payout.
+    score: team.score + contract.leakPoints,
     completedContractIds: [...team.completedContractIds, contract.id],
   };
 
@@ -1076,9 +1201,30 @@ function applyRotate(state: CryptoBattleState, teamId: string): CryptoBattleStat
   // publish a fresh-generation share for free -- a shortcut that defeats the
   // whole point of rotating away from exposure (Issue #486 frames ROTATE as
   // carrying a real compute/time cost; see OPERATOR.md's design note).
-  const contracts = state.contracts.map((c) =>
-    c.teamId === teamId && c.status === "open" ? { ...c, status: "expired" as const } : c,
-  );
+  //
+  // [Issue #659] Voiding has to cost what letting the batch lapse costs, and
+  // #659 does not say so -- it settles the ordering
+  // `失効 -15 < LEAK して狩られる -2 < LEAK 無事 +10 < PROVE +30` while assuming
+  // PROVE, LEAK and expiry are the only three ways an Order can end. ROTATE is
+  // a fourth, and unpriced it dominates all of them: `rotateCooldownMs` (3 min)
+  // is shorter than `contractIntervalMs` (5 min), so a team could rotate once
+  // per batch, void every Order it had not finished for nothing, publish
+  // nothing, and additionally retire whatever it had already leaked. A team
+  // that cleared 2 of 6 would choose 0 over LEAK's +40 or expiry's -60 every
+  // time, and the opponent-facing half of the game would stop happening --
+  // exactly the dead end the #659 simulation found and fixed elsewhere.
+  //
+  // So the rule is one line and holds whatever ends the Order: an Order that is
+  // neither PROVEd nor LEAKed costs `scores.expiredOrder`, exactly once. That
+  // keeps ROTATE honest without making it useless -- rotating costs nothing
+  // extra when the batch was about to lapse anyway, so WHEN to rotate becomes
+  // the decision, rather than whether to rotate instead of playing.
+  const voided: string[] = [];
+  const contracts = state.contracts.map((c) => {
+    if (c.teamId !== teamId || c.status !== "open") return c;
+    voided.push(c.teamId);
+    return { ...c, status: "expired" as const, expiryCause: "rotate" as const };
+  });
   // The Schnorr public commitment is generation-scoped (see
   // schnorr-witness.ts's derivePublicCommitment): rederiving it here is what
   // makes a pre-rotate PROVE proof fail verification post-rotate, the same
@@ -1087,7 +1233,14 @@ function applyRotate(state: CryptoBattleState, teamId: string): CryptoBattleStat
     ...state.publicCommitments,
     [teamId]: derivePublicCommitment(secret, generation, teamId, RFC3526_GROUP14).toString(),
   };
-  return { ...state, contracts, teams: { ...state.teams, [teamId]: updatedTeam }, publicCommitments };
+  // Charged through the same helper the deadline path uses, so the two causes
+  // cannot drift apart into different prices for the same unanswered Order.
+  const teams = applyExpiryPenalties(
+    { ...state.teams, [teamId]: updatedTeam },
+    voided,
+    state.config.scores.expiredOrder,
+  );
+  return { ...state, contracts, teams, publicCommitments };
 }
 
 function applyProve(
@@ -1226,6 +1379,7 @@ export function projectForTeam(
       id: c.id,
       kind: c.kind,
       points: c.points,
+      leakPoints: c.leakPoints,
       task: projectTask(state, c.task, c.id),
       status: c.status,
       // [Issue #645] The Order's rule and the methods that satisfy it are

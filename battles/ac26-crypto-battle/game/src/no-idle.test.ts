@@ -98,11 +98,20 @@ function longestEmptyRunMs(samples: { open: number }[]) {
 }
 
 describe("90-minute contract cadence leaves no idle window", () => {
-  test("a team that never acts always has an open contract after the first issue", () => {
+  test("a team that never acts always has an open contract for as long as the match runs", () => {
     const { samples } = walkMatch(false);
     // The first tick issues immediately, so even t=0 is non-empty.
-    const empty = samples.filter((s) => s.open === 0);
-    expect(empty).toEqual([]);
+    //
+    // [Issue #659] Sampled over the running match, not over the final instant.
+    // Issuance stops at `matchEndAtMs` (`nextContractAtMs < matchEndAtMs` in
+    // `tick`) and a batch lives exactly one interval, so the last batch lapses
+    // at precisely `matchDurationMs` with nothing to replace it. That sample is
+    // the match being over, not the queue starving -- asserted below rather
+    // than filtered away silently.
+    const running = samples.filter((s) => s.atMs < DEFAULT_CONFIG.matchDurationMs);
+    expect(running.filter((s) => s.open === 0)).toEqual([]);
+    const final = samples.filter((s) => s.atMs >= DEFAULT_CONFIG.matchDurationMs);
+    expect(final.every((s) => s.phase === "ended")).toBe(true);
   });
 
   test("a team that clears every contract instantly waits at most one issue interval", () => {
@@ -141,12 +150,24 @@ describe("90-minute contract cadence leaves no idle window", () => {
     );
   });
 
-  test("both TTLs exceed the issue interval, or a passive team's queue empties", () => {
-    // The margin is thin by design (rush is 2.5 min against a 2 min interval).
-    // Tuning either number without the other is the concrete way a future
-    // balance pass would reintroduce idle, so pin the relationship, not the
-    // values.
-    expect(DEFAULT_CONFIG.contractTtlMs).toBeGreaterThan(DEFAULT_CONFIG.contractIntervalMs);
-    expect(DEFAULT_CONFIG.rushContractTtlMs).toBeGreaterThan(DEFAULT_CONFIG.contractIntervalMs);
+  test("a batch lives exactly one interval, so Orders can never be stockpiled", () => {
+    // [Issue #659] This assertion is the REVERSE of what it pinned before, and
+    // deliberately so. It used to require both TTLs to EXCEED the interval, so
+    // that a passive team always had leftovers in the queue. Under #659 that
+    // overlap is precisely the bug: leftovers are a backlog, and with a backlog
+    // LEAK strictly beats PROVE at any point values, because leaking frees five
+    // minutes that convert into another PROVE and the leak's points are pure
+    // profit. "No prefetch" -- TTL exactly equal to the interval, so each batch
+    // is fully replaced rather than accumulated -- is what closes that trade,
+    // and it is what makes a fast team's spare time worth spending on HUNT.
+    //
+    // Idle is now prevented by batch SIZE instead: `contractsPerIssue` Orders
+    // land together, so a team always has the current batch in front of it.
+    expect(DEFAULT_CONFIG.contractTtlMs).toBe(DEFAULT_CONFIG.contractIntervalMs);
+    expect(DEFAULT_CONFIG.contractsPerIssue).toBeGreaterThan(1);
+    // Rush keeps a shorter fuse: it is voluntary, symmetric and visible up
+    // front (unlike #659's rejected "cut the opponent's clock" item), and with
+    // a batch behind it an early-expiring rush no longer empties the queue.
+    expect(DEFAULT_CONFIG.rushContractTtlMs).toBeLessThan(DEFAULT_CONFIG.contractTtlMs);
   });
 });

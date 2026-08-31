@@ -93,7 +93,11 @@ describe("a match persisted before this version still loads", () => {
         const op = { kind: "leak" as const, contractId: order.id };
         expect(validateOp(state, "teamA", op)).toEqual({ ok: true });
         const next = applyOp(state, "teamA", op);
-        expect(next.teams.teamA?.score).toBe(order.points);
+        // [Issue #659] LEAK pays the leak rate. A legacy Order has no `leakPoints`
+        // of its own, so the migration backfills the configured default —
+        // without it the score would become NaN on the first leak.
+        expect(next.teams.teamA?.score).toBe(order.leakPoints);
+        expect(Number.isNaN(next.teams.teamA?.score)).toBe(false);
       });
 
       test("tick carries the upgraded rows forward, so it is not redone forever", () => {
@@ -113,4 +117,105 @@ describe("a match persisted before this version still loads", () => {
       });
     });
   }
+});
+
+/**
+ * [Issue #659] The same class of failure as the Order migration above, one
+ * level up: the CONFIG persisted with a match also predates fields the current
+ * reducer reads.
+ *
+ * `mergeConfig` only ever runs inside `initialState`, so defaults are filled in
+ * at the moment a match starts and never again. Every later read comes off the
+ * persisted row, and a coordination row outlives the code that wrote it -- that
+ * is exactly why the platform needed an explicit run-reset (#3126 / #3135).
+ * Both fields added by #659 fail QUIETLY without a migration, which is what
+ * makes them worth pinning: neither throws, so nothing surfaces until an
+ * operator notices the match has gone wrong.
+ */
+describe("a config persisted before this version still drives a playable match", () => {
+  /** A row written before #659: no batch size, no LEAK or expiry rates. */
+  function legacyConfigState(): CryptoBattleState {
+    const started = tick(initialState({ eventId: "legacy-config", teamIds: ["teamA", "teamB"] }), 0);
+    const persisted = JSON.parse(JSON.stringify(started)) as CryptoBattleState;
+    const config = persisted.config as unknown as Record<string, unknown>;
+    const scores = config.scores as Record<string, unknown>;
+    delete config.contractsPerIssue;
+    delete scores.expiredOrder;
+    delete scores.contractLeak;
+    return persisted;
+  }
+
+  test("it keeps issuing Orders instead of quietly winding down", () => {
+    // `contractsPerIssue` undefined makes the batch loop's bound `undefined`,
+    // so it runs zero times. The match does not crash -- it simply stops
+    // handing out work, and every team runs out of things to do.
+    const before = legacyConfigState();
+    const after = tick(before, DEFAULT_CONFIG.contractIntervalMs);
+    expect(after.contracts.length).toBeGreaterThan(before.contracts.length);
+    expect(after.config.contractsPerIssue).toBe(DEFAULT_CONFIG.contractsPerIssue);
+  });
+
+  test("an expiry charges a real penalty rather than turning the score into NaN", () => {
+    // `score + undefined` is NaN, and NaN survives every later addition: the
+    // team's total is unrecoverable for the rest of the match.
+    const after = tick(legacyConfigState(), DEFAULT_CONFIG.contractTtlMs);
+    const score = after.teams.teamA?.score;
+    expect(Number.isNaN(score)).toBe(false);
+    expect(score).toBe(0);
+    expect(after.config.scores.expiredOrder).toBe(DEFAULT_CONFIG.scores.expiredOrder);
+  });
+
+  test("the repaired config is written back, so the migration is not redone forever", () => {
+    const after = tick(legacyConfigState(), DEFAULT_CONFIG.contractIntervalMs);
+    expect(after.config.scores.contractLeak).toBe(DEFAULT_CONFIG.scores.contractLeak);
+    // Values the row DID carry are left exactly as they were found.
+    expect(after.config.matchDurationMs).toBe(DEFAULT_CONFIG.matchDurationMs);
+    expect(after.config.threshold).toBe(DEFAULT_CONFIG.threshold);
+  });
+});
+
+/**
+ * [Issue #659] A tick that catches up on missed batches must not take live
+ * Orders down with the dead ones.
+ *
+ * `tick` replays every issue instant it missed, and an Order whose deadline has
+ * already passed is not issued at all -- otherwise a stalled dispatcher would
+ * hand each team a pile of Orders they never saw and then charge them
+ * `expiredOrder` for every one.
+ *
+ * The slot is consumed either way. Leaving `sequenceIndex` where it was would
+ * re-roll the identical plan on the next iteration of the same batch, and since
+ * the Order belt is a pure function of that index it would be stale again and
+ * skip again: the batch dies at its first dead slot, and once the index is
+ * frozen on one, the belt never issues anything again.
+ */
+describe("a delayed tick issues the Orders that are still live", () => {
+  const GAP_MS = 3 * 60_000;
+
+  test("a stale rush slot does not take the live standard slots behind it", () => {
+    // Rush Orders expire in 2.5 min against a 5 min interval, so a 3-minute
+    // dispatcher gap kills the rush slots and leaves the standard ones alive.
+    let state = tick(initialState({ eventId: "delayed", teamIds: ["teamA"] }), 0);
+    for (let batchIndex = 1; batchIndex <= 6; batchIndex += 1) {
+      const before = state.contracts.length;
+      state = tick(state, batchIndex * DEFAULT_CONFIG.contractIntervalMs + GAP_MS);
+      const issued = state.contracts.length - before;
+      expect(issued).toBeGreaterThan(0);
+      expect(issued).toBeLessThanOrEqual(DEFAULT_CONFIG.contractsPerIssue);
+    }
+  });
+
+  test("no Order is ever issued already past its own deadline", () => {
+    // The property the skip exists for: a team is only ever answerable for
+    // Orders it had a chance to see.
+    let state = tick(initialState({ eventId: "delayed-2", teamIds: ["teamA"] }), 0);
+    for (let batchIndex = 1; batchIndex <= 8; batchIndex += 1) {
+      const atMs = batchIndex * DEFAULT_CONFIG.contractIntervalMs + GAP_MS;
+      const before = new Set(state.contracts.map((c) => c.id));
+      state = tick(state, atMs);
+      for (const c of state.contracts.filter((c) => !before.has(c.id))) {
+        expect(c.expiresAtMs).toBeGreaterThan(atMs);
+      }
+    }
+  });
 });

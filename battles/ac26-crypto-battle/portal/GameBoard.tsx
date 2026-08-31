@@ -12,6 +12,7 @@ const COPY = {
     noOrders: "Waiting for the next Order…",
     reward: "REWARD",
     time: "TIME",
+    leakRate: "pass",
     choose: "CHOOSE ONE",
     leak: "LEAK",
     leakShort: "fast / public",
@@ -37,6 +38,7 @@ const COPY = {
     noOrders: "次の Order を待っています…",
     reward: "報酬",
     time: "残り",
+    leakRate: "パス",
     choose: "どちらかを選ぶ",
     leak: "LEAK",
     leakShort: "速い / 公開",
@@ -145,7 +147,21 @@ function OrderBelt({ projection, locale }: { readonly projection: CryptoBattlePr
               <article className={`tc-order-card${urgency}`} key={order.id}>
                 <div className="tc-order-top">
                   <strong>{order.id.replace(/^.*-c/, "ORDER #")}</strong>
-                  <span className="tc-points">+{order.points}</span>
+                  {/*
+                    [Issue #659] Both rates on the card. Computing this Order
+                    and passing on it pay different amounts, and choosing
+                    between them is what the Order asks of a team -- a card that
+                    shows only the higher number hides the trade until the
+                    confirmation, after the choice is already made. Shown only
+                    where passing is allowed at all: a `no-raw-disclosure` Order
+                    has no LEAK route, so quoting a pass price would be a lie.
+                  */}
+                  <span className="tc-points">
+                    +{order.points}
+                    {order.allowedMethods.includes("leak") ? (
+                      <span className="tc-points-pass"> / {copy.leakRate} +{order.leakPoints}</span>
+                    ) : null}
+                  </span>
                 </div>
                 <div className="tc-order-meta">
                   <span>{copy.time} {formatDuration(order.remainingMs)}</span>
@@ -259,6 +275,7 @@ const CSS = `
 .tc-order-card{min-width:180px;border:1px solid #b6d7f2;border-radius:10px;padding:10px;background:#fff;animation:tc-order-in .28s ease-out both}
 .tc-order-top{display:flex;justify-content:space-between;gap:8px;align-items:center}
 .tc-points{font-weight:800;font-size:13px}
+.tc-points-pass{font-weight:600;font-size:11px;opacity:.7}
 .tc-order-meta{display:grid;gap:2px;font-size:11px;color:#5f6b7a;margin-top:6px}
 .tc-timer-track{height:5px;background:#eaeded;border-radius:999px;overflow:hidden;margin-top:8px}
 .tc-timer-fill{height:100%;background:currentColor;transition:width .25s linear}

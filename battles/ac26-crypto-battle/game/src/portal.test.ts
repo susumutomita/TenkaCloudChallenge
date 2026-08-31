@@ -44,7 +44,7 @@ import { contractsForMethod } from "../../portal/RegistrationPanelCore.tsx";
 import { GameBoardBody } from "../../portal/GameBoard.tsx";
 import { ledgerPayload } from "../../portal/orderTask.ts";
 import { ALL_SUBMISSION_METHODS } from "./methods.ts";
-import { nonceHuntCandidates, tacticAvailability } from "../../portal/FastMovePanel.tsx";
+import { nonceHuntCandidates, rotateVoidCount, tacticAvailability } from "../../portal/FastMovePanel.tsx";
 import StatusPanel, { StatusPanelBody } from "../../portal/StatusPanel.tsx";
 import { MODP_2048_P } from "./group.ts";
 import { DEFAULT_CONFIG, initialState, projectForTeam, tick } from "./reducer.ts";
@@ -113,6 +113,7 @@ function fixtureProjection(overrides: Partial<CryptoBattleProjection> = {}): Cry
         id: "blue-c0",
         kind: "standard",
         points: 10,
+        leakPoints: 10,
         task: { kind: "reveal-share" as const, shareIndices: [0, 1] },
         privacyConstraint: "none",
         allowedMethods: ["leak", "prove"],
@@ -123,6 +124,7 @@ function fixtureProjection(overrides: Partial<CryptoBattleProjection> = {}): Cry
         id: "blue-c-old",
         kind: "standard",
         points: 10,
+        leakPoints: 10,
         task: { kind: "reveal-share" as const, shareIndices: [2] },
         privacyConstraint: "none",
         allowedMethods: ["leak", "prove"],
@@ -669,25 +671,25 @@ describe("the advanced forms only offer Orders their own method can fulfil [Issu
    */
   const orders: ContractProjection[] = [
     {
-      id: "free", kind: "standard", points: 10,
+      id: "free", kind: "standard", points: 10, leakPoints: 10,
       task: { kind: "reveal-share", shareIndices: [0] },
       privacyConstraint: "none", allowedMethods: ["leak", "prove"],
       status: "open", remainingMs: 60_000,
     },
     {
-      id: "prove-only", kind: "standard", points: 10,
+      id: "prove-only", kind: "standard", points: 10, leakPoints: 10,
       task: { kind: "reveal-share", shareIndices: [1] },
       privacyConstraint: "no-raw-disclosure", allowedMethods: ["prove"],
       status: "open", remainingMs: 60_000,
     },
     {
-      id: "fhe", kind: "standard", points: 10,
+      id: "fhe", kind: "standard", points: 10, leakPoints: 10,
       task: { kind: "homomorphic-sum", inputs: [{ r: "1", y: "2" }, { r: "3", y: "4" }] },
       privacyConstraint: "no-raw-disclosure", allowedMethods: ["fhe"],
       status: "open", remainingMs: 60_000,
     },
     {
-      id: "mpc", kind: "standard", points: 10,
+      id: "mpc", kind: "standard", points: 10, leakPoints: 10,
       task: { kind: "masked-total", partyCount: 3, myInput: "5", incomingMasks: ["1", "2"], outgoingMasks: ["3", "4"] },
       privacyConstraint: "no-raw-disclosure", allowedMethods: ["mpc"],
       status: "open", remainingMs: 60_000,
@@ -858,7 +860,7 @@ describe("the game board ties each method to the Order that accepts it [Issue #6
     task: ContractProjection["task"],
     allowedMethods: ContractProjection["allowedMethods"],
   ): ContractProjection => ({
-    id, kind: "standard", points: 10, task,
+    id, kind: "standard", points: 10, leakPoints: 10, task,
     privacyConstraint: allowedMethods.includes("leak") ? "none" : "no-raw-disclosure",
     allowedMethods, status: "open", remainingMs: 60_000,
   });
@@ -889,6 +891,28 @@ describe("the game board ties each method to the Order that accepts it [Issue #6
 
   it("shows a share Order's two methods on its own card", () => {
     expect(chips(render([SHARE]))).toEqual(["leak", "prove"]);
+  });
+
+  /**
+   * [Issue #659] Computing an Order and passing on it pay different amounts,
+   * and the gap between them is the decision the Order exists to ask. A card
+   * that shows only the higher number reveals the trade in the confirmation --
+   * after it has already been made.
+   */
+  it("shows BOTH rates on an Order a team is allowed to pass on", () => {
+    const priced: ContractProjection = { ...SHARE, points: 30, leakPoints: 10 };
+    const html = render([priced]);
+    expect(html).toContain("+30");
+    expect(html).toContain("+10");
+  });
+
+  it("quotes no pass rate on an Order that cannot be passed on", () => {
+    // A `no-raw-disclosure` Order has no LEAK route at all. Printing a price
+    // next to a move that will be rejected is worse than printing nothing.
+    const priced: ContractProjection = { ...FHE, points: 30, leakPoints: 10 };
+    const html = render([priced]);
+    expect(html).toContain("+30");
+    expect(html).not.toContain("+10");
   });
 
   it("shows FHE alone for an FHE Order", () => {
@@ -963,4 +987,36 @@ describe("the MPC ledger row describes an addition that actually reproduces [Iss
       expect((a + b + c) % P).toBe(shownTotal);
     });
   }
+});
+
+/**
+ * [Issue #659] ROTATE voids every Order still open, and each one now costs what
+ * letting it expire costs -- up to a whole batch. That is a bigger surprise
+ * than the LEAK rate the board already discloses, and it lands at the worst
+ * moment: a team rotates because it is under attack. The panel states the price
+ * before the button is pressed, counting the Orders actually at stake rather
+ * than quoting a rule.
+ */
+describe("the ROTATE control says what rotating will cost", () => {
+  const openOrder = (id: string): ContractProjection => ({
+    id, kind: "standard", points: 30, leakPoints: 10,
+    task: { kind: "reveal-share", shareIndices: [0] },
+    privacyConstraint: "none", allowedMethods: ["leak", "prove"],
+    status: "open", remainingMs: 60_000,
+  });
+
+  it("counts every Order a rotate would void", () => {
+    const projection = fixtureProjection({ myContracts: [openOrder("a"), openOrder("b")] });
+    expect(rotateVoidCount(projection)).toBe(2);
+  });
+
+  it("counts nothing once the batch is resolved, because rotating is then free", () => {
+    const resolved: ContractProjection = { ...openOrder("a"), status: "completed" };
+    expect(rotateVoidCount(fixtureProjection({ myContracts: [resolved] }))).toBe(0);
+    expect(rotateVoidCount(fixtureProjection({ myContracts: [] }))).toBe(0);
+  });
+
+  it("says nothing at all when there is no projection yet", () => {
+    expect(rotateVoidCount(null)).toBe(0);
+  });
 });
