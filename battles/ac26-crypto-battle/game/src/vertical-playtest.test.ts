@@ -53,6 +53,7 @@ import {
   buildVerticalPlaytestScript,
   DEFENDER,
   EVENT_ID,
+  MATCH_SECRET,
   TEAMS,
   VERTICAL_CONFIG,
 } from "./vertical-playtest-fixture.ts";
@@ -71,7 +72,10 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
   });
 
   test("MUST 1: both teams start with a secret and shareCount shares (initialState, independently)", () => {
-    const fresh = initialState({ eventId: EVENT_ID, teamIds: TEAMS }, VERTICAL_CONFIG);
+    const fresh = initialState(
+      { eventId: EVENT_ID, teamIds: TEAMS, matchSecret: MATCH_SECRET },
+      VERTICAL_CONFIG,
+    );
     for (const teamId of TEAMS) {
       const team = fresh.teams[teamId];
       if (!team) throw new Error(`expected team ${teamId}`);
@@ -150,7 +154,10 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
       // real reducer, purely to have something concrete to assert absence
       // of below -- this does NOT feed into how the hunt op itself was
       // built (that already happened, live, inside buildVerticalPlaytestScript).
-      const fresh = initialState({ eventId: EVENT_ID, teamIds: TEAMS }, VERTICAL_CONFIG);
+      const fresh = initialState(
+        { eventId: EVENT_ID, teamIds: TEAMS, matchSecret: MATCH_SECRET },
+        VERTICAL_CONFIG,
+      );
       const alpha = fresh.teams[DEFENDER];
       if (!alpha) throw new Error("test setup: expected team alpha");
       return alpha.secret;

@@ -44,7 +44,7 @@ import { contractsForMethod } from "../../portal/RegistrationPanelCore.tsx";
 import { GameBoardBody } from "../../portal/GameBoard.tsx";
 import { ledgerPayload } from "../../portal/orderTask.ts";
 import { ALL_SUBMISSION_METHODS } from "./methods.ts";
-import { nonceHuntCandidates } from "../../portal/FastMovePanel.tsx";
+import { nonceHuntCandidates, tacticAvailability } from "../../portal/FastMovePanel.tsx";
 import StatusPanel, { StatusPanelBody } from "../../portal/StatusPanel.tsx";
 import { MODP_2048_P } from "./group.ts";
 import { DEFAULT_CONFIG, initialState, projectForTeam, tick } from "./reducer.ts";
@@ -777,6 +777,61 @@ describe("the nonce-HUNT card offers candidates without judging exploitability [
 
   it("offers nothing when no other team has posted a proof", () => {
     expect(nonceHuntCandidates(projectionWith([], 1))).toEqual([]);
+  });
+});
+
+describe("advanced tactics use progressive disclosure", () => {
+  const share = (teamId: string, generation: number): PublicArtifact => ({
+    id: `${teamId}-${generation}-share`,
+    teamId,
+    generation,
+    kind: "share",
+    method: "leak",
+    shareIndex: 1,
+    value: "7",
+    contractId: `${teamId}-c1`,
+    postedAtMs: 1,
+  });
+  const proof = (teamId: string, generation: number): PublicArtifact => ({
+    id: `${teamId}-${generation}-proof`,
+    teamId,
+    generation,
+    kind: "proof",
+    method: "prove",
+    contractId: `${teamId}-c2`,
+    commitment: "11",
+    response: "13",
+    postedAtMs: 2,
+  });
+
+  it("keeps every advanced control off a fresh first screen", () => {
+    expect(tacticAvailability(fixtureProjection({ publicLedger: [] }))).toEqual({
+      hunt: false,
+      nonceHunt: false,
+      rotate: false,
+    });
+  });
+
+  it("reveals only tactics backed by the current projection", () => {
+    expect(tacticAvailability(fixtureProjection({ publicLedger: [share("red", 1)] }))).toEqual({
+      hunt: true,
+      nonceHunt: false,
+      rotate: false,
+    });
+    expect(tacticAvailability(fixtureProjection({ publicLedger: [proof("red", 1)] }))).toEqual({
+      hunt: false,
+      nonceHunt: true,
+      rotate: false,
+    });
+    expect(tacticAvailability(fixtureProjection({ publicLedger: [share("blue", 1)] }))).toEqual({
+      hunt: false,
+      nonceHunt: false,
+      rotate: true,
+    });
+  });
+
+  it("does not offer ROTATE for an old-generation leak", () => {
+    expect(tacticAvailability(fixtureProjection({ publicLedger: [share("blue", 0)] })).rotate).toBe(false);
   });
 });
 

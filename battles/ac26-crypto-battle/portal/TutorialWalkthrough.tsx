@@ -574,7 +574,7 @@ function ToySchnorr({ copy }: { readonly copy: TutorialCopy }) {
 export default function TutorialWalkthrough({ locale }: { readonly locale: Locale }) {
   const copy = COPY[locale];
   const [state, setState] = useState<TutorialState>(() => createTutorialState());
-  const [visible, setVisible] = useState(true);
+  const [visible, setVisible] = useState(false);
   const stage = copy.stages[state.stage];
   const showOpponent = state.stage === "proved" || state.stage === "hunted" || state.stage === "rotated";
   const isHuntStep = state.stage === "proved";
@@ -582,6 +582,8 @@ export default function TutorialWalkthrough({ locale }: { readonly locale: Local
   if (!visible) {
     return (
       <div style={cardStyle}>
+        <strong>{copy.title}</strong>
+        <p style={{ margin: "4px 0 8px", fontSize: "12px", color: "#5f6b7a" }}>{copy.intro}</p>
         <button type="button" style={actionStyle} onClick={() => setVisible(true)}>
           {copy.show}
         </button>

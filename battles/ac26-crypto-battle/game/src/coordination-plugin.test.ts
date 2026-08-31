@@ -51,6 +51,7 @@
  * code -- including the `mock.module` call -- has a chance to run).
  */
 import { describe, expect, it, mock } from "bun:test";
+import { LOCAL_PLAY_SEED_PREFIX } from "./reducer.ts";
 import { createProof } from "./schnorr-prover.ts";
 import { reconstruct } from "./shamir.ts";
 import type { CryptoBattleOp, CryptoBattleProjection, CryptoBattleState, StoredShare } from "./types.ts";
@@ -95,7 +96,20 @@ const sdk = (await import("@tenkacloud/coordination-plugin-sdk")) as {
 };
 const { dispatchOp, runTick } = sdk;
 
-const CTX = { eventId: "evt-486-pr3-e2e", teamIds: ["blue", "red"] } as const;
+/**
+ * [Issue #652] A match context WITH a platform secret, which is what production
+ * always has — the coordination dispatcher issues one before `initialState`
+ * runs. Tests drive this rather than the secretless fallback so they exercise
+ * the real path, and so the Order belt (derived from the seed) is pinned to one
+ * known shape instead of moving whenever the seed changes.
+ */
+const CTX = {
+  eventId: "evt-486-pr3-e2e",
+  teamIds: ["blue", "red"],
+  matchSecret: "test-match-secret-0",
+} as const;
+/** The same event with no secret issued — the local-play / unit-test path. */
+const CTX_NO_SECRET = { eventId: "evt-486-pr3-e2e", teamIds: ["blue", "red"] } as const;
 
 /** `TeamState.shares` (stringified bigints) -> `shamir.ts`'s bigint `Share[]`, for `reconstruct`. */
 function bigintShares(shares: readonly StoredShare[]): { readonly index: number; readonly value: bigint }[] {
@@ -117,17 +131,39 @@ describe("coordination/crypto-battle.ts plugin wiring (Issue #486 PR3)", () => {
     expect(typeof plugin.projectForTeam).toBe("function");
   });
 
-  it("derives a deterministic, per-event seed from ctx.eventId", () => {
+  /**
+   * [Issue #652] The seed must come from the platform's per-match secret, not
+   * from `ctx.eventId`.
+   *
+   * `eventId` is a routing key: it is in URLs and in the participant's own
+   * browser via `PortalSlotProps.team.eventId`, and every derivation in this
+   * public repository hangs off the seed. Seeding from it published every
+   * team's secret and shares, so HUNT could be won without collecting one.
+   */
+  it("derives the match seed from the platform's per-match secret, never from ctx.eventId", () => {
     const a = plugin.initialState(CTX);
     const b = plugin.initialState(CTX);
-    expect(a).toEqual(b); // same eventId -> byte-for-byte identical initial state
-    expect(a.seed).toBe(CTX.eventId);
+    expect(a).toEqual(b); // same secret -> byte-for-byte identical initial state
+    expect(a.seed).toBe(CTX.matchSecret);
+    expect(a.seed).not.toBe(CTX.eventId);
 
-    const other = plugin.initialState({ eventId: "evt-486-pr3-e2e-other", teamIds: ["blue", "red"] });
+    // Same event, different match secret -> a different match. This is the
+    // property that makes the hidden material unobtainable: knowing the public
+    // eventId tells an attacker nothing about the derivation.
+    const other = plugin.initialState({ ...CTX, matchSecret: "b".repeat(64) });
     const aBlue = a.teams.blue;
     const otherBlue = other.teams.blue;
     if (!aBlue || !otherBlue) throw new Error("test setup: expected a blue team in both states");
-    expect(otherBlue.secret).not.toBe(aBlue.secret); // different eventId -> different match
+    expect(otherBlue.secret).not.toBe(aBlue.secret);
+  });
+
+  it("falls back to a self-announcing non-secret seed when the platform issued none", () => {
+    // Local play and unit tests have no dispatcher to issue a secret. The
+    // fallback stays greppable so a dump of a match running without a real
+    // secret cannot be mistaken for a real one.
+    const state = plugin.initialState(CTX_NO_SECRET);
+    expect(state.seed).toBe(`${LOCAL_PLAY_SEED_PREFIX}${CTX_NO_SECRET.eventId}`);
+    expect(state.seed).not.toBe(CTX_NO_SECRET.eventId);
   });
 
   it("drives a full 2-team match through dispatchOp/runTick (the SDK's own validate->apply / tick composition): tick -> leak -> prove -> hunt", () => {
@@ -202,8 +238,14 @@ describe("coordination/crypto-battle.ts plugin wiring (Issue #486 PR3)", () => {
   it("state survives a JSON round-trip (simulating Turso/DynamoDB persistence between calls) and stays usable afterward [PR3 review High #1/#2]", () => {
     let state = plugin.initialState(CTX);
     state = runTick(plugin, state, 0);
-    const blueContract = state.contracts.find((c) => c.teamId === "blue" && c.status === "open");
-    if (!blueContract) throw new Error("test setup: expected an open contract for blue after tick(0)");
+    // [Issue #652] Pick by what LEAK requires, not by belt position. The Order
+    // belt derives from `state.seed`, so "the first open contract" changed shape
+    // when the seed stopped being `ctx.eventId` — a test that assumes position
+    // is really asserting a derivation, which is not what it is here to check.
+    const blueContract = state.contracts.find(
+      (c) => c.teamId === "blue" && c.status === "open" && c.allowedMethods.includes("leak"),
+    );
+    if (!blueContract) throw new Error("test setup: expected a LEAK-able open contract for blue");
     state = expectDispatched(dispatchOp(plugin, state, "blue", { kind: "leak", contractId: blueContract.id }));
 
     // What the dispatcher actually does between two calls: persist `state`
@@ -221,12 +263,26 @@ describe("coordination/crypto-battle.ts plugin wiring (Issue #486 PR3)", () => {
     // on it exactly as they would on the original in-memory state.
     const ticked = runTick(plugin, roundTripped, state.config.contractIntervalMs);
     expect(ticked.contracts.length).toBeGreaterThan(state.contracts.length);
-    const redContract = roundTripped.contracts.find((c) => c.teamId === "red" && c.status === "open");
-    if (!redContract) throw new Error("test setup: expected an open contract for red");
-    const afterRedLeak = expectDispatched(
-      dispatchOp(plugin, roundTripped, "red", { kind: "leak", contractId: redContract.id }),
+    // [Issue #652] Any LEAK-able open Order proves the point — the claim under
+    // test is "the round-tripped state still works", not "red's first Order is
+    // a LEAK". Naming a team here re-coupled the test to the Order belt, which
+    // derives from `state.seed` and legitimately reshuffled when the seed
+    // stopped being `ctx.eventId`.
+    // Dispatched against `ticked`, which came out of the round-tripped value —
+    // so a working op here still proves the persisted state is usable, and the
+    // freshly-issued batch guarantees there is an Order left to submit to.
+    const leakable = ticked.contracts.find(
+      (c) => c.status === "open" && c.allowedMethods.includes("leak"),
     );
-    expect(afterRedLeak.teams.red?.score).toBe(redContract.points);
+    if (!leakable) throw new Error("test setup: expected a LEAK-able open contract");
+    const scoreBefore = ticked.teams[leakable.teamId]?.score ?? 0;
+    const afterLeak = expectDispatched(
+      dispatchOp(plugin, ticked, leakable.teamId, {
+        kind: "leak",
+        contractId: leakable.id,
+      }),
+    );
+    expect(afterLeak.teams[leakable.teamId]?.score).toBe(scoreBefore + leakable.points);
   });
 
   it("state with a NON-EMPTY huntLog (Issue #486 PR5) also survives a JSON round-trip, not only the empty-huntLog case", () => {

@@ -372,7 +372,11 @@ test("adversarial 8: same seed + same event sequence replays to a deeply-equal s
  * hidden material is enumerated from the Orders that were actually issued.
  */
 test("adversarial 9: no trusted material reaches any participant-visible surface, for any method", () => {
-  let state = tick(initialState(ctx("adv-9")), 0);
+  const matchSecret = "adversarial-9-server-only-match-secret";
+  let state = tick(
+    initialState({ eventId: "adv-9", teamIds: ["teamA", "teamB"], matchSecret }),
+    0,
+  );
   const prime = BigInt(state.config.prime);
 
   // Play every open Order for teamA by whichever method its task admits.
@@ -425,6 +429,12 @@ test("adversarial 9: no trusted material reaches any participant-visible surface
 
   const ledger = JSON.stringify(state.publicLedger);
   const otherTeamView = JSON.stringify(projectForTeam(state, "teamB"));
+  // #652: the derivation root itself is server-only too. Keeping derived
+  // values out is insufficient if a projection exposes the seed and lets the
+  // participant recompute them from this public repository.
+  expect(ledger).not.toContain(matchSecret);
+  expect(otherTeamView).not.toContain(matchSecret);
+  expect(otherTeamView).not.toContain(state.seed);
   for (const secret of secrets) {
     expect(ledger).not.toContain(secret);
     expect(otherTeamView).not.toContain(secret);

@@ -2,9 +2,9 @@
  * Deterministic scripted-playtest runner (Issue #486 PR5).
  *
  * A `PlaytestScript` is a plain-data fixture -- a fully pre-authored, ordered
- * list of `tick` / op `Step`s for a fixed `eventId` and team roster, plus an
- * optional scaled-down `config` (e.g. a 20-30 min vertical slice instead of
- * the full 90-min match). `runScript` replays it against a fresh
+ * list of `tick` / op `Step`s for a fixed `eventId`, team roster and optional
+ * TEST match secret, plus an optional scaled-down `config` (e.g. a 20-30 min
+ * vertical slice instead of the full 90-min match). `runScript` replays it against a fresh
  * `initialState`, exactly the way `reducer.ts`'s own purity contract
  * guarantees: no ambient time/randomness anywhere under `src/` (see
  * reducer.ts's header), so the same script always produces the same
@@ -75,6 +75,17 @@ export function isTickStep(step: PlaytestStep): step is PlaytestTickStep {
 export interface PlaytestScript {
   readonly eventId: string;
   readonly teams: readonly [string, string];
+  /**
+   * The fixed, non-production secret used when the script was authored.
+   *
+   * #652 moved every hidden derivation off the public `eventId`. Replaying a
+   * script without the same derivation root is replaying a different match:
+   * the Order belt, proofs, FHE/MPC answers and HUNT value all stop matching.
+   * Omit only for legacy/local fixtures that intentionally exercise the
+   * self-announcing non-secret fallback. Never copy a live match secret into a
+   * script or debrief artifact.
+   */
+  readonly matchSecret?: string;
   readonly steps: readonly PlaytestStep[];
   /**
    * Optional config override, merged onto `DEFAULT_CONFIG` the same way
@@ -176,7 +187,14 @@ function summarizeStep(
  * is trying to observe that drift.
  */
 export function runScript(script: PlaytestScript): PlaytestResult {
-  let state = initialState({ eventId: script.eventId, teamIds: script.teams }, script.config);
+  let state = initialState(
+    {
+      eventId: script.eventId,
+      teamIds: script.teams,
+      ...(script.matchSecret ? { matchSecret: script.matchSecret } : {}),
+    },
+    script.config,
+  );
   const timeline: PlaytestTimelineEntry[] = [];
   const violations: PlaytestViolation[] = [];
 

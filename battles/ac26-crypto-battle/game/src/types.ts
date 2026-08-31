@@ -49,6 +49,27 @@ export type { PrivacyConstraint, SubmissionMethod };
 export interface CoordinationContext {
   readonly eventId: string;
   readonly teamIds: readonly string[];
+  /**
+   * [Issue #652] The platform's server-only secret for THIS match
+   * (TenkaCloud#3133). High-entropy, never projected, never sent to a browser.
+   *
+   * Every hidden value in this Battle hangs off the match seed — each team's
+   * secret and shares (`deriveTeamGeneration`), the Order belt
+   * (`deriveContractPlan`), the FHE plaintexts and the MPC inputs and masks.
+   * So the seed has to be something a participant cannot obtain.
+   *
+   * `ctx.eventId` is NOT that. It is a routing key: it appears in URLs and in
+   * `PortalSlotProps.team.eventId`, i.e. in the participant's own browser, and
+   * this repository is public so every derivation above is published. Seeding
+   * from it means any participant can recompute any team's secret and win HUNT
+   * without collecting a single share.
+   *
+   * Optional because the platform issues it only through the coordination
+   * dispatcher; local play and unit tests run without one. See
+   * `resolveMatchSeed` for what happens then, and why that path must never be
+   * used for a real event.
+   */
+  readonly matchSecret?: string;
 }
 
 export type ValidateResult = { readonly ok: true } | { readonly ok: false; readonly error: string };
