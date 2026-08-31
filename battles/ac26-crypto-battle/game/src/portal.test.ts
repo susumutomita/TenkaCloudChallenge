@@ -47,6 +47,7 @@ import { ALL_SUBMISSION_METHODS } from "./methods.ts";
 import {
   cipherHuntCandidates,
   nonceHuntCandidates,
+  primaryActionsFor,
   rotateVoidCount,
   tacticAvailability,
 } from "../../portal/FastMovePanel.tsx";
@@ -1102,5 +1103,60 @@ describe("the ladder HUNT is offered only against teams that are actually broken
 
   it("says nothing at all when there is no projection yet", () => {
     expect(cipherHuntCandidates(null)).toEqual([]);
+  });
+});
+
+/**
+ * [Issue #659] The LEAK / PROVE action area is gated on what the Order ACCEPTS,
+ * not on which task it is.
+ *
+ * Those were the same thing while `reveal-share` was the only Order that took
+ * LEAK. The ladder Order takes it too, and a `task.kind === "reveal-share"`
+ * test hid the button on the one Order whose entire point is the choice between
+ * computing it and passing on it -- the card advertised LEAK, the working panel
+ * warned what LEAKing would cost, and there was nothing to press. Found by
+ * playing the harness, which is why it is pinned here.
+ */
+describe("the primary actions follow what the Order accepts", () => {
+  const order = (
+    kind: ContractProjection["task"]["kind"],
+    allowedMethods: ContractProjection["allowedMethods"],
+  ): ContractProjection => ({
+    id: "o",
+    kind: "standard",
+    points: 30,
+    leakPoints: 10,
+    task:
+      kind === "caesar-shift"
+        ? { kind: "caesar-shift", rung: "caesar", plaintext: ["⚀"], symbols: ["⚀", "⚁"], pairsToBreak: 1, myKey: 1 }
+        : { kind: "reveal-share", shareIndices: [0] },
+    privacyConstraint: allowedMethods.includes("leak") ? "none" : "no-raw-disclosure",
+    allowedMethods,
+    status: "open",
+    remainingMs: 60_000,
+  });
+
+  it("shows the area for a ladder Order, because a ladder Order can be LEAKed", () => {
+    const actions = primaryActionsFor(order("caesar-shift", ["leak", "cipher"]));
+    expect(actions.visible).toBe(true);
+    expect(actions.leakAllowed).toBe(true);
+    // PROVE cannot serve a ladder Order, so it is offered-and-disabled rather
+    // than silently absent.
+    expect(actions.proveAllowed).toBe(false);
+  });
+
+  it("still shows both for a share Order", () => {
+    const actions = primaryActionsFor(order("reveal-share", ["leak", "prove"]));
+    expect(actions).toEqual({ visible: true, leakAllowed: true, proveAllowed: true });
+  });
+
+  it("hides the area entirely for an Order neither method can serve", () => {
+    // An FHE Order takes neither, and its own panel is the whole interface for
+    // it -- two permanently-dead buttons above it would be noise.
+    expect(primaryActionsFor(order("reveal-share", ["fhe"])).visible).toBe(false);
+  });
+
+  it("shows the area before any Order is picked, so the panel does not jump", () => {
+    expect(primaryActionsFor(undefined).visible).toBe(true);
   });
 });

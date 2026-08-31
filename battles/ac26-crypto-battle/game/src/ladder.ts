@@ -102,6 +102,15 @@ export interface CipherRungSpec {
  * enough that a middle-school player has to write the arithmetic down without
  * being large enough to want a calculator (#659 §3: 「mod 3 は暗算、mod 9 は手を
  * 動かす」 — six sits between them).
+ *
+ * Also chosen because they RENDER. #659 §3 leads with じゃんけん (✊ ✌️ 🖐), and
+ * measuring glyph widths in a browser during verification showed those three
+ * resolving to tofu while ⚀-⚅ resolved to real glyphs — a symbol set that shows
+ * as boxes fails the language-neutrality argument in the worst possible way,
+ * because the participant cannot read the Order at all. Emoji live outside the
+ * BMP or carry a U+FE0F presentation selector and depend on an emoji font being
+ * installed; these are plain BMP symbol characters and ride the text font.
+ * `ladder.test.ts` pins that property for every rung that comes later.
  */
 const DICE: readonly string[] = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
 

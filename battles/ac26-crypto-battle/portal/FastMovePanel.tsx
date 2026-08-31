@@ -59,10 +59,13 @@ const COPY = {
     leakRate: "pass",
     leakSuccess: "LEAK SUCCESS",
     leakBody: (points: number, shares: readonly number[]) => `+${points} · share ${shares.map((x) => `#${x}`).join(", ")} → PUBLIC LEDGER`,
+    leakPairBody: (points: number, pairsToBreak: number) =>
+      `+${points} · your row and its answer → PUBLIC LEDGER. ${pairsToBreak} pair${pairsToBreak === 1 ? "" : "s"} recovers your key.`,
     proveSuccess: "PROVE SUCCESS",
     proveBody: (points: number) => `+${points} · SHARE PROTECTED`,
     huntSuccess: "HUNT SUCCESS",
     huntBody: "Recovered secret accepted.",
+    huntCipherBody: "Recovered key accepted — that rung is broken until they rotate.",
     rotateSuccess: "ROTATE",
     rotateBody: (from: number, to: number) => `GEN ${from} → GEN ${to}`,
     rejected: "REJECTED",
@@ -139,10 +142,13 @@ const COPY = {
     leakRate: "パス",
     leakSuccess: "LEAK SUCCESS",
     leakBody: (points: number, shares: readonly number[]) => `+${points} · share ${shares.map((x) => `#${x}`).join(", ")} → PUBLIC LEDGER`,
+    leakPairBody: (points: number, pairsToBreak: number) =>
+      `+${points} · 記号列と答えが対で公開されました。この段は ${pairsToBreak} 組で鍵が割れます。`,
     proveSuccess: "PROVE SUCCESS",
     proveBody: (points: number) => `+${points} · SHARE PROTECTED`,
     huntSuccess: "HUNT SUCCESS",
     huntBody: "復元した secret が受理されました。",
+    huntCipherBody: "割り出した鍵が受理されました。相手が ROTATE するまで、この段は破れたままです。",
     rotateSuccess: "ROTATE",
     rotateBody: (from: number, to: number) => `世代 ${from} → 世代 ${to}`,
     rejected: "REJECTED",
@@ -310,6 +316,31 @@ export function cipherHuntCandidates(
   return [...byKey.values()].filter((c) => c.pairs.length >= c.pairsToBreak);
 }
 
+/**
+ * [Issue #659] Whether the LEAK / PROVE action area belongs on screen for this
+ * Order, and which of the two it may actually run.
+ *
+ * Gated on what the Order ACCEPTS, never on which task it is. Those were the
+ * same thing while `reveal-share` was the only Order taking LEAK; the ladder
+ * Order takes it too, and a task-name test hid the button on the one Order
+ * whose whole point is choosing between computing and passing.
+ *
+ * Visible-and-disabled beats hidden for a method the Order refuses: the
+ * participant sees the option exists and reads why, rather than watching
+ * controls appear and vanish as they click between cards. Hidden entirely only
+ * when neither applies -- an FHE Order has its own panel, and two permanently
+ * dead buttons above it would be noise.
+ */
+export function primaryActionsFor(order: ContractProjection | undefined): {
+  readonly visible: boolean;
+  readonly leakAllowed: boolean;
+  readonly proveAllowed: boolean;
+} {
+  const leakAllowed = order?.allowedMethods.includes("leak") ?? false;
+  const proveAllowed = order?.allowedMethods.includes("prove") ?? false;
+  return { visible: !order || leakAllowed || proveAllowed, leakAllowed, proveAllowed };
+}
+
 /** The advanced controls that have relevant public material right now. */
 export function tacticAvailability(projection: CryptoBattleProjection | null): {
   readonly hunt: boolean;
@@ -436,7 +467,8 @@ export default function FastMovePanel(props: PortalSlotProps) {
   // [Issue #645] Read from the Order, never re-derived here: the game rules
   // decide which methods an Order accepts, and a portal that recomputed them
   // would be a second implementation free to disagree with the judge.
-  const leakAllowed = selectedOrder?.allowedMethods.includes("leak") ?? false;
+  const { visible: primaryActionsVisible, leakAllowed, proveAllowed } =
+    primaryActionsFor(selectedOrder);
   const targets = useMemo(() => ledgerTargets(projection), [projection]);
   const selectedTarget = targets.find((target) => `${target.teamId}:${target.generation}` === huntTargetKey) ?? targets[0];
   const nonceTargets = useMemo(() => nonceHuntCandidates(projection), [projection]);
@@ -535,8 +567,15 @@ export default function FastMovePanel(props: PortalSlotProps) {
         that can answer it. Showing all four buttons and rejecting three of them
         would teach a participant that the game is arbitrary, when the real rule
         is that a Schnorr proof cannot add two ciphertexts.
+
+        [Issue #659] Gated on what the Order ACCEPTS, not on which task it is.
+        The two were the same thing while `reveal-share` was the only Order that
+        took LEAK; the ladder Order takes it too, and the task-name test hid the
+        button on the one Order whose entire point is the choice between
+        computing and passing. The card advertised LEAK, the working panel
+        warned what LEAKing would cost, and there was nothing to press.
       */}
-      {(!selectedOrder || selectedOrder.task.kind === "reveal-share") && (
+      {primaryActionsVisible && (
       <div>
         <div className="tc-card-title">{copy.choose}</div>
         <div className="tc-primary-actions">
@@ -554,16 +593,45 @@ export default function FastMovePanel(props: PortalSlotProps) {
             title={selectedOrder && !leakAllowed ? copy.methodBlocked : undefined}
             onClick={() => selectedOrder && void run(
               () => submitLeak(client, selectedOrder.id),
-              () => ({ kind: "leak", title: copy.leakSuccess, body: copy.leakBody(selectedOrder.leakPoints, selectedOrder.task.kind === "reveal-share" ? selectedOrder.task.shareIndices : []) }),
+              // [Issue #659] The confirmation has to name what actually became
+              // public. A ladder LEAK publishes the row next to its answer, not
+              // a share -- reporting "share → PUBLIC LEDGER" for it told the
+              // participant the wrong thing about the one move whose whole cost
+              // is what it publishes.
+              () => ({
+                kind: "leak",
+                title: copy.leakSuccess,
+                body:
+                  selectedOrder.task.kind === "caesar-shift"
+                    ? copy.leakPairBody(selectedOrder.leakPoints, selectedOrder.task.pairsToBreak)
+                    : copy.leakBody(
+                        selectedOrder.leakPoints,
+                        selectedOrder.task.kind === "reveal-share" ? selectedOrder.task.shareIndices : [],
+                      ),
+              }),
             )}
           >
             {copy.leak}<small>{copy.leakHint}</small>
           </button>
-          <button type="button" className="tc-action tc-prove-button" disabled={!selectedOrder || submitting} onClick={() => setProveOpen((value) => !value)}>
+          {/*
+            [Issue #659] Disabled rather than hidden on an Order that PROVE
+            cannot serve, for the same reason LEAK is: the participant sees the
+            option exists and reads why it is unavailable here, instead of
+            watching a button appear and disappear as they click between cards.
+          */}
+          <button
+            type="button"
+            className="tc-action tc-prove-button"
+            disabled={!selectedOrder || submitting || !proveAllowed}
+            title={selectedOrder && !proveAllowed ? copy.methodBlocked : undefined}
+            onClick={() => setProveOpen((value) => !value)}
+          >
             {copy.prove}<small>{copy.proveHint}</small>
           </button>
         </div>
-        {selectedOrder && !leakAllowed && <div className="tc-card-hint">{copy.methodBlocked}</div>}
+        {selectedOrder && (!leakAllowed || !proveAllowed) && (
+          <div className="tc-card-hint">{copy.methodBlocked}</div>
+        )}
       </div>
       )}
 
@@ -777,7 +845,11 @@ export default function FastMovePanel(props: PortalSlotProps) {
                   selectedCipherTarget.rung,
                   Number(recoveredCipherKey.trim()),
                 ),
-                () => ({ kind: "hunt", title: copy.huntSuccess, body: copy.huntBody }),
+                // [Issue #659] A ladder HUNT recovered a KEY, not the Shamir
+                // secret. The design keeps those two breaks apart on purpose
+                // (see `cipherHuntedGenerations`); saying "recovered secret" here
+                // would tell the player the reconstruction they did not do.
+                () => ({ kind: "hunt", title: copy.huntSuccess, body: copy.huntCipherBody }),
               )}
             >{submitting ? copy.running : copy.send}</button>
           </div>

@@ -312,6 +312,37 @@ describe("a match persisted before the ladder existed still loads", () => {
 });
 
 describe("the registry is shaped for the rungs that come next", () => {
+  /**
+   * [Issue #659 §3] A rung's symbols must actually RENDER, or the whole
+   * language-neutrality argument fails in the worst way: a participant sees
+   * tofu boxes and cannot read the Order at all.
+   *
+   * Found by playing the harness. #659 §3 leads with じゃんけん (✊ ✌️ 🖐) as
+   * the flagship symbol set, and measuring glyph widths in the browser showed
+   * those three have NO glyph there while ⚀-⚅ do. The fragile ones share a
+   * shape: astral-plane code points and emoji-presentation sequences (✌️ is
+   * U+270C followed by U+FE0F), which depend on an emoji font being present.
+   * Dice faces are single BMP symbol characters and ride the ordinary text
+   * font.
+   *
+   * A font check cannot run here, so this pins the property that predicts it:
+   * one BMP code point per symbol, no variation selectors, no ZWJ sequences.
+   * A future rung that reaches for emoji fails here rather than in a match.
+   */
+  test("every symbol is a single BMP code point, so it does not need an emoji font", () => {
+    for (const rung of ALL_CIPHER_RUNGS) {
+      for (const symbol of rungSpec(rung).symbols) {
+        expect([...symbol]).toHaveLength(1);
+        const code = symbol.codePointAt(0) ?? 0;
+        expect(code).toBeLessThanOrEqual(0xffff);
+        // U+FE0F (emoji presentation) and U+200D (ZWJ) are what make a
+        // "single character" render as several fonts' worth of guesswork.
+        expect(symbol).not.toContain("\uFE0F");
+        expect(symbol).not.toContain("\u200D");
+      }
+    }
+  });
+
   test("every declared rung is fully specified, so adding one cannot half-land", () => {
     for (const rung of ALL_CIPHER_RUNGS) {
       const spec = rungSpec(rung);
