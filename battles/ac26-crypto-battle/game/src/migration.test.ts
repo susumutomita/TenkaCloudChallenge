@@ -222,3 +222,53 @@ describe("a delayed tick issues the Orders that are still live", () => {
     }
   });
 });
+
+/**
+ * [Issue #659] The shape that actually shipped, and that the earlier tests in
+ * this file could not produce.
+ *
+ * Every legacy fixture above builds its old row by deleting `task` and
+ * `allowedMethods`. That trips `needsMigration` — but for the wrong reason, and
+ * it hid a real gap: an Order written AFTER #645 (so it has both of those) but
+ * BEFORE #659 (so it has no `leakPoints`) was judged not to need migrating, and
+ * the backfill that exists to stop `score + undefined` never ran on it.
+ *
+ * This was found on the live development environment, where the deployed match
+ * projected `leakPoints: undefined` on all 45 of its Orders — every one of them
+ * a NaN waiting for someone to press LEAK.
+ */
+describe("an Order from between #645 and #659 still gets its leak rate", () => {
+  /** A row with `task` and `allowedMethods` present, but no `leakPoints`. */
+  function postTaskPreLeakRateState(): CryptoBattleState {
+    const started = tick(initialState({ eventId: "mid-era", teamIds: ["teamA", "teamB"] }), 0);
+    const persisted = JSON.parse(JSON.stringify(started)) as CryptoBattleState;
+    for (const contract of persisted.contracts) {
+      expect(contract.task).toBeDefined();
+      expect(contract.allowedMethods).toBeDefined();
+      delete (contract as unknown as Record<string, unknown>).leakPoints;
+    }
+    return persisted;
+  }
+
+  test("the projection never shows an undefined leak rate", () => {
+    const projected = projectForTeam(postTaskPreLeakRateState(), "teamA");
+    expect(projected.myContracts.length).toBeGreaterThan(0);
+    for (const contract of projected.myContracts) {
+      expect(contract.leakPoints).toBeDefined();
+      expect(Number.isFinite(contract.leakPoints)).toBe(true);
+    }
+  });
+
+  test("LEAKing one pays the leak rate instead of turning the score into NaN", () => {
+    const state = postTaskPreLeakRateState();
+    const leakable = state.contracts.find(
+      (c) => c.teamId === "teamA" && c.status === "open" && c.allowedMethods.includes("leak"),
+    );
+    if (!leakable) throw new Error("test setup: expected a leakable Order");
+
+    const after = applyOp(state, "teamA", { kind: "leak", contractId: leakable.id });
+    const score = after.teams.teamA?.score;
+    expect(Number.isNaN(score)).toBe(false);
+    expect(score).toBe(DEFAULT_CONFIG.scores.contractLeak);
+  });
+});

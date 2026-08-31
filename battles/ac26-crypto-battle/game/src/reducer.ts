@@ -319,9 +319,28 @@ type PersistedContract = Omit<
   readonly allowedMethods?: readonly SubmissionMethod[];
 };
 
+/**
+ * Whether a persisted Order is missing ANY field {@link migrateContract} fills.
+ *
+ * [Issue #659] This has to name every backfilled field, not just the ones the
+ * first migration added. It listed `task` / `allowedMethods` only, so an Order
+ * written after #645 (which has both) but before #659 (which added
+ * `leakPoints`) was judged not to need migrating — and the backfill written
+ * specifically to stop `score + undefined` from producing NaN never ran on the
+ * rows that needed it.
+ *
+ * Found on the live development environment, not in a test: the deployed match
+ * projected `leakPoints: undefined` on all 45 of its Orders. The migration
+ * tests missed it because they build a legacy row by deleting `task` and
+ * `allowedMethods` too, which trips the predicate for the wrong reason.
+ */
 function needsMigration(contract: Contract): boolean {
   const persisted: PersistedContract = contract;
-  return persisted.task === undefined || persisted.allowedMethods === undefined;
+  return (
+    persisted.task === undefined ||
+    persisted.allowedMethods === undefined ||
+    persisted.leakPoints === undefined
+  );
 }
 
 /**
