@@ -14,21 +14,12 @@ state are the evidence. Do not rewrite the CPU or weaken the testbench.
 > jargon-first walkthrough did not match the actual amount of work. The portal
 > instructions have been rewritten; this README still carries the older wording.
 
-## Only four numbers change
+## How to work
 
-`local/solution/video_controller.sv` is 32 lines and holds four settings:
-
-```
-.CDC_SYNC_STAGES(...)        synchronizer stages
-.H_TOTAL_ADJUST(...)         offset on the beats per row
-.V_TOTAL_ADJUST(...)         offset on the rows per frame
-.RESPECT_WRITE_STROBES(...)  honour the per-byte write selects
-```
-
-**No circuit logic is written.** The implementation lives in `local/rtl/` and is
-complete. All four values can be read off `artifacts/architecture.md`'s table and
-`artifacts/memory-map.md`'s framebuffer paragraph. The documents are correct; the
-values currently in the file are not.
+Run `make step` repeatedly. It shows only the one thing to fix now — measured
+value, which setting, which document, and why. Three stages, cleared one at a
+time. It reorganises `make test` (the full check the grader runs) and changes
+no verdict.
 
 ## What runs
 

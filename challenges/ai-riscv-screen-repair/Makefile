@@ -3,7 +3,15 @@ COMPOSE_FILE := local/docker-compose.yml
 SERVICE := ai-riscv-screen-repair
 GOLDEN_DIR := $(abspath ../../scripts/fixtures/ai-riscv-screen-repair)
 
-.PHONY: test reference-test red-green up down
+.PHONY: step test reference-test red-green up down
+
+# The learning loop: shows only the first unsolved stage, so there is one thing
+# to understand and one value to change at a time. `test` below stays the full
+# check the grader uses; `step` only reformats its output and can never pass a
+# stage `test` would fail.
+step:
+	@set +e; out="$$( $(COMPOSE) -f $(COMPOSE_FILE) run --rm --no-deps $(SERVICE) make clean test 2>&1 )"; set -e; \
+		printf '%s\n' "$$out" | sh scripts/step.sh
 
 test:
 	$(COMPOSE) -f $(COMPOSE_FILE) run --rm --no-deps $(SERVICE) make clean test

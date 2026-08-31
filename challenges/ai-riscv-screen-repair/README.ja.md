@@ -11,20 +11,11 @@ protocol、timing、pixelの観測stateを証拠にし、CPUを書き直した�
 > 難度の表示 (5 / 120〜150 分) と、専門用語を前提にした導線が、実際の作業量と噛み合って
 > いませんでした。ポータルの instructions は書き直し済みで、README はまだ従来の記述です。
 
-## 直すのは 4 つの数字だけ
+## 進めかた
 
-`local/solution/video_controller.sv` は 32 行で、その中に設定値が 4 つ並んでいる。
-
-```
-.CDC_SYNC_STAGES(...)     同期の段数
-.H_TOTAL_ADJUST(...)      1 行の総数のずれ
-.V_TOTAL_ADJUST(...)      1 画面の行数のずれ
-.RESPECT_WRITE_STROBES(...)  書き込みバイトの指定を守るか
-```
-
-**回路そのものを書く作業はない。** 本体は `local/rtl/` にあって完成している。4 つの値は
-`artifacts/architecture.md` の表と `artifacts/memory-map.md` の framebuffer の段落から
-読み取れる。設計書が正で、いま入っている値が誤り。
+`make step` を繰り返す。いま直すべき 1 つだけを、実測値・直す値・読む文書・理由の
+順で出す。3 ステージを 1 つずつ潰していく設計で、`make test` (採点と同じ全件検査) の
+出力を整理しているだけで判定は変えない。
 
 ## 動くもの
 
