@@ -122,6 +122,84 @@ def _public_walkback(seed: str) -> dict[str, int]:
     return {key: walk[key] for key in ("start", "step", "modulus", "final")}
 
 
+def _prime_factors(n: int) -> list[int]:
+    """Distinct prime factors of n, smallest first. n is small enough for trial division."""
+    primes: list[int] = []
+    divisor = 2
+    while divisor * divisor <= n:
+        if n % divisor == 0:
+            primes.append(divisor)
+            while n % divisor == 0:
+                n //= divisor
+        divisor += 1
+    if n > 1:
+        primes.append(n)
+    return primes
+
+
+def count_no_walkback_reference(step: int, low: int, high: int) -> int:
+    """How many m in [low, high] share a factor above 1 with step -- by inclusion-exclusion.
+
+    The rule the statement gives: add the multiples of each prime factor, subtract the
+    multiples of each product of two, add each product of three, and so on. Linear in
+    2**(number of distinct prime factors), so a 10**12 range costs nothing.
+    """
+    primes = _prime_factors(step)
+
+    def up_to(n: int) -> int:
+        if n < 1:
+            return 0
+        total = 0
+        products = [(1, 0)]
+        for prime in primes:
+            products += [(product * prime, size + 1) for product, size in products]
+        for product, size in products:
+            if size == 0:
+                continue
+            total += (n // product) if size % 2 == 1 else -(n // product)
+        return total
+
+    return up_to(high) - up_to(low - 1)
+
+
+_COUNT_PRIMES = (2, 3, 5, 7, 11, 13)
+
+
+def count_cases(seed: str) -> list[tuple[int, int, int, int]]:
+    """(step, low, high, expected) for the count-no-walkback checkpoint.
+
+    Two small ranges a learner could brute-force by hand, then ranges up to 10**12 with
+    steps built from two to five distinct primes -- so a one-by-one walk cannot finish
+    inside the verifier's time limit and a formula written for a fixed number of prime
+    factors fails on the next case.
+    """
+    s = _stream(seed, "count")
+    cases: list[tuple[int, int, int, int]] = []
+    small_steps = (6, 10, 12, 15, 21, 30)
+    for index in range(2):
+        step = small_steps[_pick(s, index * 2, 0, len(small_steps) - 1)]
+        low = _pick(s, 4 + index * 2, 1, 5)
+        high = low + _pick(s, 8 + index * 2, 20, 60)
+        cases.append((step, low, high, count_no_walkback_reference(step, low, high)))
+    for index, size in enumerate((2, 3, 4, 5)):
+        # `size` distinct primes; the pick decides which one to drop from the six.
+        skip = _pick(s, 12 + index, 0, len(_COUNT_PRIMES) - 1)
+        chosen = [prime for offset, prime in enumerate(_COUNT_PRIMES) if offset != skip][:size]
+        step = 1
+        for prime in chosen:
+            step *= prime
+        # A repeated factor changes nothing about which m are counted; a case carries one
+        # so a solution that counts prime factors with multiplicity is caught.
+        if index == 1:
+            step *= chosen[0]
+        low = _pick(s, 20 + index * 4, 1, 10**6) * _pick(s, 22 + index * 4, 1, 10**5)
+        high = low + 10**11 + _pick(s, 24 + index * 4, 0, 65535) * 10**6
+        cases.append((step, low, high, count_no_walkback_reference(step, low, high)))
+    prime_step = _COUNT_PRIMES[_pick(s, 40, 0, len(_COUNT_PRIMES) - 1)]
+    cases.append((prime_step, 1, 10**12, count_no_walkback_reference(prime_step, 1, 10**12)))
+    return cases
+
+
 def hidden_cases(seed: str) -> list[Case]:
     """Cases the learner never sees: several moduli, a negative step, a zero step, zero rounds.
 

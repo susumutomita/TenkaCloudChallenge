@@ -16,6 +16,7 @@ SUBMISSION_DIR = os.environ.get("SUBMISSION_DIR")
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, SUBMISSION_DIR or str(ROOT / "starter"))
 
+import counter  # noqa: E402
 from counter import advance  # noqa: E402
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
@@ -89,6 +90,22 @@ def test_step_larger_than_modulus_stays_in_range() -> None:
     _assert_contract_shape_and_range({**CASE, "step": CASE["step"] + CASE["modulus"] * 3})
 
 
+def test_count_matches_a_direct_check_on_small_ranges() -> None:
+    from math import gcd
+
+    count = getattr(counter, "count_no_walkback", None)
+    assert callable(count), "count_no_walkback must be defined in counter.py"
+    for step, low, high in ((6, 1, 10), (10, 3, 25), (7, 1, 20), (12, 5, 5)):
+        direct = sum(1 for m in range(low, high + 1) if gcd(step, m) > 1)
+        assert count(step, low, high) == direct, "the count must match a one-by-one check on a small range"
+
+
+def test_count_worked_example_from_the_statement() -> None:
+    count = getattr(counter, "count_no_walkback", None)
+    assert callable(count), "count_no_walkback must be defined in counter.py"
+    assert count(6, 1, 10) == 7, "step 6 on ring sizes 1..10 must count 7 (the statement's example)"
+
+
 def test_first_entry_is_start_plus_step() -> None:
     numbers = advance(**CASE)
     assert numbers[0] == (CASE["start"] + CASE["step"]) % CASE["modulus"], "the first number must be start + step, reduced into the ring"
@@ -147,7 +164,7 @@ def test_workbench_prepare_returns_the_producible_portal_values() -> None:
     assert result["ok"] is True
     submissions = result["submissions"]
     # predict and first-broken are worked out by the learner, never produced here.
-    assert set(submissions) == {"environment", "generalize"}
+    assert set(submissions) == {"environment", "generalize", "count-no-walkback"}
     assert submissions["environment"] == PUBLIC["environment"]["healthToken"]
     assert "def advance" in submissions["generalize"]
 

@@ -18,7 +18,7 @@ from typing import Callable
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from fixtures.generate import Case, hidden_cases  # noqa: E402
+from fixtures.generate import Case, count_cases, hidden_cases  # noqa: E402
 
 Advance = Callable[[int, int, int, int], "list[int]"]
 
@@ -96,4 +96,47 @@ def run(advance: Advance, seed: str) -> list[str]:
             failures.append(f"case {index}: {message}")
         for message in _check_step_congruence(advance, case):
             failures.append(f"case {index}: {message}")
+    return failures
+
+
+Count = Callable[[int, int, int], int]
+
+
+def _brute_count(step: int, low: int, high: int) -> int:
+    from math import gcd
+
+    return sum(1 for m in range(low, high + 1) if gcd(step, m) > 1)
+
+
+def run_count(count: Count, seed: str) -> list[str]:
+    """Failures for the count-no-walkback checkpoint. Empty means it passes.
+
+    Messages name the property, never the expected count. The large ranges are what
+    separate the counting rule from a one-by-one walk; the verifier's time limit is
+    the message for the latter.
+    """
+    failures: list[str] = []
+    for index, (step, low, high, expected) in enumerate(count_cases(seed)):
+        try:
+            actual = count(step, low, high)
+        except Exception as error:  # noqa: BLE001 - a raising solution is a failing solution
+            return [f"raised {type(error).__name__} on a valid input"]
+        if isinstance(actual, bool) or not isinstance(actual, int):
+            failures.append(f"case {index}: the count is not an integer")
+            continue
+        if high - low < 100 and actual != _brute_count(step, low, high):
+            failures.append(f"case {index}: the count differs from a direct check on a small range")
+            continue
+        if actual != expected:
+            failures.append(f"case {index}: the count differs from the counting rule")
+    # Additivity over adjacent ranges: a formula that mishandles `low` fails here.
+    step, low, high, _expected = count_cases(seed)[-2]
+    try:
+        whole = count(step, 1, high)
+        before = count(step, 1, low - 1)
+        part = count(step, low, high)
+    except Exception as error:  # noqa: BLE001
+        return failures + [f"raised {type(error).__name__} while checking adjacent ranges"]
+    if whole - before != part:
+        failures.append("the count is not additive over adjacent ranges")
     return failures

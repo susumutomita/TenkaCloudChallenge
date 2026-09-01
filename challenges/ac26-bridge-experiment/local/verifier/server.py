@@ -67,7 +67,15 @@ REQUEST_TIMEOUT_SECONDS = 15
 #: Cap for the failed-code-checkpoint `message`, under the platform's 2000-char schema.
 MAX_MESSAGE_CHARS = 1900
 
-CHECKPOINTS = ("environment", "predict", "first-broken", "generalize", "walkback", "no-walkback")
+CHECKPOINTS = (
+    "environment",
+    "predict",
+    "first-broken",
+    "generalize",
+    "walkback",
+    "no-walkback",
+    "count-no-walkback",
+)
 SUBMISSION_FILES = ("counter.py",)
 
 # Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still
@@ -107,7 +115,7 @@ def _normalized_int(value: object) -> int | None:
 
 
 def _run_submission_script(
-    sources: dict[str, str], script: str, seed: str
+    sources: dict[str, str], script: str, seed: str, phase: str = "advance"
 ) -> tuple[int, str] | None:
     """Run the submitted `counter.py` with this process's resource limits."""
     with tempfile.TemporaryDirectory() as workspace:
@@ -126,7 +134,7 @@ def _run_submission_script(
                         sys.executable,
                         "-I",
                         "-c",
-                        script.format(root=str(ROOT), workspace=workspace, seed=seed),
+                        script.format(root=str(ROOT), workspace=workspace, seed=seed, phase=phase),
                     ],
                     stdout=sink,
                     stderr=subprocess.STDOUT,
@@ -199,7 +207,7 @@ import json, os, sys
 from pathlib import Path
 sys.path.insert(0, {root!r})
 sys.path.insert(0, {workspace!r})
-from tests.hidden.check_counter import run
+from tests.hidden.check_counter import run, run_count
 # Issue 591: fixtures/ and tests/hidden/ stay on disk in this image for grading (Issue 543
 # option B2 only stopped shipping them to the participant image), so without this the
 # submission's own import statement could reach them directly.
@@ -211,14 +219,25 @@ _hidden_modules = {{
 while {root!r} in sys.path:
     sys.path.remove({root!r})
 try:
-    from counter import advance
+    import counter
 except Exception as error:
     print(json.dumps({{"failures": ["submission could not be imported: " + type(error).__name__]}}))
     sys.stdout.flush()
     os._exit(0)
 sys.path.insert(0, {root!r})
 sys.modules.update(_hidden_modules)
-print(json.dumps({{"failures": run(advance, {seed!r})}}))
+if {phase!r} == "count":
+    target = getattr(counter, "count_no_walkback", None)
+    if not callable(target):
+        print(json.dumps({{"failures": ["count_no_walkback is not defined in counter.py"]}}))
+    else:
+        print(json.dumps({{"failures": run_count(target, {seed!r})}}))
+else:
+    target = getattr(counter, "advance", None)
+    if not callable(target):
+        print(json.dumps({{"failures": ["advance is not defined in counter.py"]}}))
+    else:
+        print(json.dumps({{"failures": run(target, {seed!r})}}))
 sys.stdout.flush()
 os._exit(0)
 """
@@ -231,21 +250,30 @@ def _failure_detail(failures: list[object]) -> str:
     already states, never an expected value (AGENTS.md §15). Non-string entries are
     dropped rather than serialized.
     """
-    return "; ".join(item for item in failures if isinstance(item, str))[:MAX_MESSAGE_CHARS]
+    return "; ".join(dict.fromkeys(item for item in failures if isinstance(item, str)))[:MAX_MESSAGE_CHARS]
 
 
-def _check_generalize(submission: object) -> tuple[bool, str]:
-    """Run the hidden suite against the learner's file in a throwaway workspace.
+def _check_code(submission: object, phase: str = "advance") -> tuple[bool, str]:
+    """Run the hidden suite for one code checkpoint in a throwaway workspace.
 
     Returns the verdict and, on failure, the checker's failure summary for the
-    response `message`. An empty string means no detail is surfaced.
+    response `message`. An empty string means no detail is surfaced -- except for a
+    run that hit the time limit on the count checkpoint, where the limit itself is
+    the documented rule the submission broke.
     """
     if not isinstance(submission, str) or not submission.strip():
         return False, ""
     if len(submission) > MAX_BODY_BYTES:
         return False, ""
-    result = _run_submission_script({"counter.py": submission}, RUNNER, SEED)
-    if result is None or result[0] != 0:
+    result = _run_submission_script({"counter.py": submission}, RUNNER, SEED, phase)
+    if result is None:
+        if phase == "count":
+            return False, (
+                f"the run did not finish within {RUN_TIMEOUT_SECONDS} seconds; "
+                "the graded ranges cannot be walked one number at a time"
+            )
+        return False, ""
+    if result[0] != 0:
         return False, ""
     for line in reversed(result[1].splitlines()):
         try:
@@ -272,7 +300,9 @@ def evaluate(checkpoint_id: str, submission: object) -> tuple[bool, str]:
     if checkpoint_id == "first-broken":
         return _check_first_broken(submission), ""
     if checkpoint_id == "generalize":
-        return _check_generalize(submission)
+        return _check_code(submission, "advance")
+    if checkpoint_id == "count-no-walkback":
+        return _check_code(submission, "count")
     if checkpoint_id == "walkback":
         return _check_walkback(submission), ""
     if checkpoint_id == "no-walkback":

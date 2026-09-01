@@ -54,7 +54,15 @@ MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
 REQUEST_TIMEOUT_SECONDS = 15
 
-CHECKPOINTS = ("environment", "predict", "first-broken", "generalize", "walkback", "no-walkback")
+CHECKPOINTS = (
+    "environment",
+    "predict",
+    "first-broken",
+    "generalize",
+    "walkback",
+    "no-walkback",
+    "count-no-walkback",
+)
 SUBMISSION_FILES = ("counter.py",)
 
 
@@ -153,6 +161,11 @@ def config_payload() -> dict[str, object]:
                 "label": "no-walkback — 同じ「1 回に進む数」で、取り戻せなくなる輪の大きさをひとつ",
                 "kind": "answer",
             },
+            {
+                "id": "count-no-walkback",
+                "label": "count-no-walkback — 取り戻せない輪の大きさが、範囲の中にいくつあるか数える関数 (counter.py)",
+                "kind": "code",
+            },
         ],
         # 英語は Portal 側の locale が選ぶ (共有 workbench.py の config_payload と同じ契約)。
         # 文言の正本は metadata.json — scripts/generate-course-workbenches.py --check が
@@ -161,7 +174,7 @@ def config_payload() -> dict[str, object]:
             "en": {
                 "name": 'Predict, then run',
                 "description": 'A clock goes from 12 back to 1. Write the same kind of counting for a different number, work out the answer on paper before running it, and find the one number in a list that does not belong. Why cryptography counts like this, and why this much is still not cryptography -- using nothing but arithmetic.',
-                "checkpointLabels": {'environment': 'environment - press Submit; the pass phrase is sent for you', 'predict': 'predict - the number you end on, worked out on paper before running (one number)', 'first-broken': 'first-broken - one number in the list does not belong: which position is it? (leftmost is 0)', 'generalize': 'generalize - your finished counter.py, all of it', 'walkback': 'walkback - from the final number, recover how many times it was added (one number)', 'no-walkback': 'no-walkback - keeping the same step, one ring size on which it cannot be undone'},
+                "checkpointLabels": {'environment': 'environment - press Submit; the pass phrase is sent for you', 'predict': 'predict - the number you end on, worked out on paper before running (one number)', 'first-broken': 'first-broken - one number in the list does not belong: which position is it? (leftmost is 0)', 'generalize': 'generalize - your finished counter.py, all of it', 'walkback': 'walkback - from the final number, recover how many times it was added (one number)', 'no-walkback': 'no-walkback - keeping the same step, one ring size on which it cannot be undone', 'count-no-walkback': 'count-no-walkback - a function counting how many ring sizes in a range cannot undo the step (counter.py)'},
             }
         },
     }
@@ -277,6 +290,7 @@ def prepare_submissions(files: object) -> dict[str, object]:
         "submissions": {
             "environment": public["environment"]["healthToken"],
             "generalize": sources["counter.py"],
+            "count-no-walkback": sources["counter.py"],
         },
     }
 
