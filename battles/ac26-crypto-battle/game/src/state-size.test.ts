@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { applyOp, DEFAULT_CONFIG, initialState, tick, validateOp } from "./reducer.ts";
 import { buildLeakOp } from "./playtest.ts";
+import { HINT_LEVELS } from "./hints.ts";
 import { TERMINAL_ORDER_RETENTION_BATCHES } from "./reducer.ts";
 
 /**
@@ -19,8 +20,9 @@ import { TERMINAL_ORDER_RETENTION_BATCHES } from "./reducer.ts";
  * with `teams x batch x issues`. That is a real, measured limit on how large a
  * match can be, so it is measured here rather than reasoned about -- the
  * numbers below come from running the real reducer over a full 90-minute match
- * with every team leaking everything it is allowed to leak, which is the
- * worst case for both the Order list and the public record.
+ * with every team buying every hint and then leaking everything it is allowed
+ * to leak, which is the worst case for the Order list, the per-Order fields and
+ * the public record at once.
  *
  * The Turso/libSQL backend has no comparable per-row cap, so this ceiling is
  * specifically the DynamoDB one.
@@ -64,17 +66,56 @@ const REQUIRED_HEADROOM = 0.75;
  */
 const TURSO_BUDGET_BYTES = 2 * 1024 * 1024;
 
+/**
+ * Memoised because `playFullMatch` is deterministic and slow: the worst case
+ * now buys three hints on every Order before leaking it, which roughly triples
+ * the ops, and the tests below ask for the same team counts repeatedly (8 for
+ * the per-team figure, then the ceiling itself, then one team past it). Without
+ * this the 99-team run alone is played twice and the file times out.
+ */
+const worstCaseCache = new Map<number, number>();
+
 function playWorstCase(teamCount: number): number {
-  return JSON.stringify(playFullMatch(teamCount)).length;
+  const cached = worstCaseCache.get(teamCount);
+  if (cached !== undefined) return cached;
+  const size = JSON.stringify(playFullMatch(teamCount)).length;
+  worstCaseCache.set(teamCount, size);
+  return size;
 }
 
-/** A whole match with every team leaking everything it is allowed to leak. */
+/**
+ * Per-test timeout. A full 90-minute match at the platform maximum is a real
+ * computation -- 99 teams x 18 issues x 6 Orders x (3 hints + a LEAK) -- and it
+ * runs past bun:test's 5s default on CI hardware. Slow is the point: these are
+ * measurements, not unit tests, and the alternative is asserting against a
+ * number nobody re-derives.
+ */
+const HEAVY_TEST_TIMEOUT_MS = 60_000;
+
+/**
+ * A whole match with every team leaking everything it is allowed to leak, and
+ * buying every hint on every Order first.
+ *
+ * [Issue #659 §9] The hints are in the worst case rather than left out of it
+ * because that is what a worst case is: `Contract.hintsRevealed` is written on
+ * every Order a team buys help on, and a Battle sized off a measurement that
+ * assumed nobody ever asks for help would be sized off the easy path. It costs
+ * about 216 bytes per team over the whole match — real, small, and now pinned
+ * rather than discovered at 24 teams in play.
+ */
 function playFullMatch(teamCount: number) {
   const teamIds = Array.from({ length: teamCount }, (_, i) => `team-${i}`);
   let state = initialState({ eventId: "state-size", teamIds, matchSecret: "s".repeat(64) });
   for (let atMs = 0; atMs <= DEFAULT_CONFIG.matchDurationMs; atMs += DEFAULT_CONFIG.contractIntervalMs) {
     state = tick(state, atMs);
     for (const teamId of teamIds) {
+      const open = state.contracts.filter((c) => c.teamId === teamId && c.status === "open");
+      for (const contract of open) {
+        for (let level = 0; level < HINT_LEVELS; level += 1) {
+          const op = { kind: "reveal-hint" as const, contractId: contract.id };
+          if (validateOp(state, teamId, op).ok) state = applyOp(state, teamId, op);
+        }
+      }
       const leakable = state.contracts.filter(
         (c) => c.teamId === teamId && c.status === "open" && c.allowedMethods.includes("leak"),
       );
@@ -95,7 +136,7 @@ describe("a full match's persisted state fits the backend that has to hold it", 
     // any backend, and it put the supported maximum at six teams against a
     // platform that sells ninety-nine.
     expect(playWorstCase(PLATFORM_MAX_TEAMS)).toBeLessThan(TURSO_BUDGET_BYTES);
-  });
+  }, HEAVY_TEST_TIMEOUT_MS);
 
   test("the cost per team is linear, so the ceiling can be computed rather than guessed", () => {
     // A super-linear term — anything cross-team, like a per-pair record — would
@@ -104,7 +145,7 @@ describe("a full match's persisted state fits the backend that has to hold it", 
     const small = playWorstCase(4) / 4;
     const large = playWorstCase(PLATFORM_MAX_TEAMS) / PLATFORM_MAX_TEAMS;
     expect(large).toBeLessThan(small * 1.5);
-  });
+  }, HEAVY_TEST_TIMEOUT_MS);
 
   /**
    * [Issue #659] The DynamoDB backend cannot host a full-size match, and that
@@ -123,15 +164,26 @@ describe("a full match's persisted state fits the backend that has to hold it", 
    * moves it has to move this too.
    */
   test("the DynamoDB ceiling is measured, not assumed", () => {
-    const perTeam = playWorstCase(8) / 8;
-    const ddbMaxTeams = Math.floor((DDB_ITEM_LIMIT_BYTES * REQUIRED_HEADROOM) / perTeam);
+    const budget = DDB_ITEM_LIMIT_BYTES * REQUIRED_HEADROOM;
+
+    // Extrapolating from 8 teams gets close, but reads slightly LOW: per-team
+    // cost creeps up with team count (the ledger each team reads is longer),
+    // so the estimate can name a size that does not actually fit — which is
+    // how this test passed at an 18-team estimate whose real match was 1.4 KB
+    // over. Estimate, then walk down to the largest size that measures inside
+    // the budget, so the number below is the ceiling rather than a projection
+    // of it.
+    let ddbMaxTeams = Math.floor(budget / (playWorstCase(8) / 8));
+    while (ddbMaxTeams > 1 && playWorstCase(ddbMaxTeams) >= budget) ddbMaxTeams -= 1;
+
     expect(ddbMaxTeams).toBeGreaterThanOrEqual(16);
     expect(ddbMaxTeams).toBeLessThan(PLATFORM_MAX_TEAMS);
-    // A match at that size really does fit, with the headroom claimed.
-    expect(playWorstCase(ddbMaxTeams)).toBeLessThan(
-      DDB_ITEM_LIMIT_BYTES * REQUIRED_HEADROOM,
-    );
-  });
+    // A match at that size really does fit, with the headroom claimed --
+    // and one team more does not, so this is the edge and not an understatement
+    // that would let the row grow unnoticed.
+    expect(playWorstCase(ddbMaxTeams)).toBeLessThan(budget);
+    expect(playWorstCase(ddbMaxTeams + 1)).toBeGreaterThanOrEqual(budget);
+  }, HEAVY_TEST_TIMEOUT_MS);
 
   test("the Order belt does not grow without bound over a match", () => {
     // The belt is a work queue, not a record: terminal Orders are pruned past a

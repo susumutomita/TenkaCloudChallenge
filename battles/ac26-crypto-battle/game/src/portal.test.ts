@@ -47,6 +47,7 @@ import { ALL_SUBMISSION_METHODS } from "./methods.ts";
 import {
   FAST_MOVE_COPY,
   cipherHuntCandidates,
+  nextHintFor,
   nonceHuntCandidates,
   primaryActionsFor,
   rotateVoidCount,
@@ -127,6 +128,7 @@ function fixtureProjection(overrides: Partial<CryptoBattleProjection> = {}): Cry
         allowedMethods: ["leak", "prove"],
         status: "open",
         remainingMs: 5 * 60_000,
+        hints: [],
       },
       {
         id: "blue-c-old",
@@ -138,6 +140,7 @@ function fixtureProjection(overrides: Partial<CryptoBattleProjection> = {}): Cry
         allowedMethods: ["leak", "prove"],
         status: "expired",
         remainingMs: 0,
+        hints: [],
       },
     ],
     otherOpenContractCount: 1,
@@ -683,24 +686,28 @@ describe("the advanced forms only offer Orders their own method can fulfil [Issu
       task: { kind: "reveal-share", shareIndices: [0] },
       privacyConstraint: "none", allowedMethods: ["leak", "prove"],
       status: "open", remainingMs: 60_000,
+      hints: [],
     },
     {
       id: "prove-only", kind: "standard", points: 10, leakPoints: 10,
       task: { kind: "reveal-share", shareIndices: [1] },
       privacyConstraint: "no-raw-disclosure", allowedMethods: ["prove"],
       status: "open", remainingMs: 60_000,
+      hints: [],
     },
     {
       id: "fhe", kind: "standard", points: 10, leakPoints: 10,
       task: { kind: "homomorphic-sum", inputs: [{ r: "1", y: "2" }, { r: "3", y: "4" }] },
       privacyConstraint: "no-raw-disclosure", allowedMethods: ["fhe"],
       status: "open", remainingMs: 60_000,
+      hints: [],
     },
     {
       id: "mpc", kind: "standard", points: 10, leakPoints: 10,
       task: { kind: "masked-total", partyCount: 3, myInput: "5", incomingMasks: ["1", "2"], outgoingMasks: ["3", "4"] },
       privacyConstraint: "no-raw-disclosure", allowedMethods: ["mpc"],
       status: "open", remainingMs: 60_000,
+      hints: [],
     },
   ];
 
@@ -875,6 +882,7 @@ describe("the game board ties each method to the Order that accepts it [Issue #6
     id, kind: "standard", points: 10, leakPoints: 10, task,
     privacyConstraint: allowedMethods.includes("leak") ? "none" : "no-raw-disclosure",
     allowedMethods, status: "open", remainingMs: 60_000,
+    hints: [],
   });
 
   const SHARE = order("s", { kind: "reveal-share", shareIndices: [0] }, ["leak", "prove"]);
@@ -1015,6 +1023,7 @@ describe("the ROTATE control says what rotating will cost", () => {
     task: { kind: "reveal-share", shareIndices: [0] },
     privacyConstraint: "none", allowedMethods: ["leak", "prove"],
     status: "open", remainingMs: 60_000,
+    hints: [],
   });
 
   it("counts every Order a rotate would void", () => {
@@ -1135,6 +1144,7 @@ describe("the primary actions follow what the Order accepts", () => {
     allowedMethods,
     status: "open",
     remainingMs: 60_000,
+    hints: [],
   });
 
   it("shows the area for a ladder Order, because a ladder Order can be LEAKed", () => {
@@ -1182,6 +1192,7 @@ describe("the board answers what to do next", () => {
     allowedMethods: ["leak", "prove"],
     status: "open",
     remainingMs,
+    hints: [],
   });
 
   const render = (myContracts: readonly ContractProjection[]): string =>
@@ -1308,5 +1319,66 @@ describe("each Order carries its use, its mechanism, and its procedure", () => {
     expect(copy.leakBlocked).toContain("LEAK");
     expect(copy.proveBlocked).toContain("PROVE");
     expect(copy.leakBlocked).not.toEqual(copy.proveBlocked);
+  });
+});
+
+/**
+ * [Issue #659 §9] The hint control on the ticket.
+ *
+ * `renderToStaticMarkup` never runs the polling effect (see this file's
+ * header), so the panel itself has no projection under test and what is pinned
+ * here is the decision behind the control: which rung is offered next, and what
+ * the button says it costs.
+ */
+describe("the hint control offers the next unopened rung, at its stated price", () => {
+  const withHints = (hints: ContractProjection["hints"]): ContractProjection => ({
+    id: "o",
+    kind: "standard",
+    points: 30,
+    leakPoints: 10,
+    task: { kind: "reveal-share", shareIndices: [0] },
+    privacyConstraint: "none",
+    allowedMethods: ["leak", "prove"],
+    status: "open",
+    remainingMs: 60_000,
+    hints,
+  });
+
+  const rung = (level: number, cost: number, opened: boolean) => ({
+    level,
+    id: `reveal-share/${level + 1}`,
+    cost,
+    ...(opened ? { text: { ja: `ja-${level}`, en: `en-${level}` } } : {}),
+  });
+
+  it("offers the first rung when nothing is open", () => {
+    const next = nextHintFor(withHints([rung(0, 2, false), rung(1, 4, false)]));
+    expect(next?.level).toBe(0);
+    expect(next?.cost).toBe(2);
+  });
+
+  it("offers the rung after the last one opened, never one already paid for", () => {
+    // The failure this rules out is charging a team again for a hint they can
+    // already read, which is what a Portal-side counter would eventually do.
+    const next = nextHintFor(withHints([rung(0, 2, true), rung(1, 4, false), rung(2, 8, false)]));
+    expect(next?.level).toBe(1);
+  });
+
+  it("offers nothing once the ladder is exhausted", () => {
+    expect(nextHintFor(withHints([rung(0, 2, true), rung(1, 4, true)]))).toBeUndefined();
+  });
+
+  it("offers nothing when no Order is selected", () => {
+    expect(nextHintFor(undefined)).toBeUndefined();
+  });
+
+  it("prints the price on the button, in both locales", () => {
+    // A cost the player only discovers after paying it is not a choice they
+    // made, so the number has to be in the label itself.
+    for (const locale of ["ja", "en"] as const) {
+      expect(FAST_MOVE_COPY[locale].hintBuy(4)).toContain("4");
+      expect(FAST_MOVE_COPY[locale].hintsHint.length).toBeGreaterThan(0);
+      expect(FAST_MOVE_COPY[locale].hintsExhausted.length).toBeGreaterThan(0);
+    }
   });
 });
