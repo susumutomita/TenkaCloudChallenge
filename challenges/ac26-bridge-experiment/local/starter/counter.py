@@ -2,7 +2,8 @@
 
 `advance` adds `step` to `start`, `rounds` times, and returns the number it was on
 after each addition -- with the excess taken off every time, so the numbers stay
-inside 0 .. modulus - 1. Run `inspect` to see it done on your own numbers.
+inside 0 .. modulus - 1. Inspect evidence shows your own numbers; note that the list it
+prints under firstBroken is a deliberately broken run, not an example of a correct one.
 
 It is called with small numbers you can work through on paper, and with numbers you
 have not been shown.
