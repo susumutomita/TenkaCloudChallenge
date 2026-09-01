@@ -49,7 +49,9 @@ from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fixtures.generate import health_token, public_case, public_payload
+from math import gcd
+
+from fixtures.generate import health_token, public_case, public_payload, walkback_case
 from verifier.expected import first_broken_index
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -65,7 +67,7 @@ REQUEST_TIMEOUT_SECONDS = 15
 #: Cap for the failed-code-checkpoint `message`, under the platform's 2000-char schema.
 MAX_MESSAGE_CHARS = 1900
 
-CHECKPOINTS = ("environment", "predict", "first-broken", "generalize")
+CHECKPOINTS = ("environment", "predict", "first-broken", "generalize", "walkback", "no-walkback")
 SUBMISSION_FILES = ("counter.py",)
 
 # Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still
@@ -160,6 +162,38 @@ def _check_first_broken(submission: object) -> bool:
     return value == first_broken_index(SEED)
 
 
+def _check_walkback(submission: object) -> bool:
+    """The number of rounds of the walk-back case, recovered from its final value."""
+    value = _normalized_int(submission)
+    if value is None:
+        return False
+    return value == walkback_case(SEED)["rounds"]
+
+
+#: Bounds for the `no-walkback` construction: 2 and 3 admit no step in [2, modulus)
+#: sharing a factor with them, 100 keeps the answer checkable by hand, and
+#: `modulus > step` keeps `step` a genuine move on the ring rather than a full lap.
+NO_WALKBACK_MIN_MODULUS = 4
+NO_WALKBACK_MAX_MODULUS = 100
+
+
+def _check_no_walkback(submission: object) -> bool:
+    """A ring size on which this deployment's walk-back `step` cannot be undone.
+
+    Keeping the walk-back case's `step`, the learner names a `modulus` for which no
+    number multiplies `step` back to 1 -- the two share a factor. Checked as a
+    property, never against one expected value: every such modulus is a valid answer,
+    and the walk-back case's own prime modulus never is.
+    """
+    modulus = _normalized_int(submission)
+    if modulus is None:
+        return False
+    step = walkback_case(SEED)["step"]
+    if not NO_WALKBACK_MIN_MODULUS <= modulus <= NO_WALKBACK_MAX_MODULUS or modulus <= step:
+        return False
+    return gcd(step, modulus) > 1
+
+
 RUNNER = """
 import json, os, sys
 from pathlib import Path
@@ -239,6 +273,10 @@ def evaluate(checkpoint_id: str, submission: object) -> tuple[bool, str]:
         return _check_first_broken(submission), ""
     if checkpoint_id == "generalize":
         return _check_generalize(submission)
+    if checkpoint_id == "walkback":
+        return _check_walkback(submission), ""
+    if checkpoint_id == "no-walkback":
+        return _check_no_walkback(submission), ""
     return False, ""
 
 

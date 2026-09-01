@@ -115,24 +115,22 @@ def main() -> None:
     print()
 
     walk = evidence["walkback"]
-    gap = (walk["final"] - walk["start"]) % walk["modulus"]
-    product = gap * walk["undoStep"]
-    undone = walk["step"] * walk["undoStep"]
-    print("== nothing to fill in here: why this is not hiding anything yet ==")
-    print(f"  A second run, shown to the end: start at {walk['start']}, add {walk['step']} each time, take "
-          f"{walk['modulus']} off")
-    print(f"  whenever a number reaches it, {walk['rounds']} times. It finishes on {walk['final']}.")
+    print("== what goes in the walkback box ==")
+    print(f"  A second run, shown with its end but not its length: start at {walk['start']}, add {walk['step']} each")
+    print(f"  time, take {walk['modulus']} off whenever a number reaches it. It finishes on {walk['final']}.")
     print(f"  Looking at {walk['final']} alone tells you nothing about how many times {walk['step']} was added --")
     print(f"  every answer is one of 0 to {walk['modulus'] - 1}, so the size of it gives nothing away.")
-    print("  The number of times comes back out anyway:")
-    print(f"    {walk['undoStep']} undoes {walk['step']} here: {walk['step']} * {walk['undoStep']} = {undone}, "
-          f"and {undone} divided by {walk['modulus']} leaves 1.")
-    print(f"    Counting forward from {walk['start']} to {walk['final']} is {gap}. Then {gap} * "
-          f"{walk['undoStep']} = {product}, and")
-    print(f"    {product} divided by {walk['modulus']} leaves {walk['recoveredRounds']} -- "
-          f"the number of times, back again.")
-    print("  One leak closed, another wide open. Week 3 changes what gets added -- to a thing")
-    print("  called an elliptic curve -- so that last calculation has no practical answer.")
+    print("  The number of times comes back out anyway. The statement gives the recipe: find the")
+    print(f"  number that undoes {walk['step']} (multiply, take {walk['modulus']} off until the remainder is 1),")
+    print(f"  then multiply it by how far {walk['start']} moved to reach {walk['final']}. That count is the")
+    print("  walkback box: one number.")
+    print()
+    print("== what goes in the no-walkback box ==")
+    print(f"  Keep {walk['step']} as the number being added and change the ring size. On some sizes no")
+    print(f"  number undoes {walk['step']} at all -- the recipe above never reaches a remainder of 1.")
+    print("  One such ring size, bigger than the step and at most 100, is the no-walkback box.")
+    print("  That gap is why Week 3 changes what gets added -- to a thing called an elliptic")
+    print("  curve -- so that the walk-back has no practical answer on purpose.")
     print()
 
     bad_case = evidence["firstBroken"]

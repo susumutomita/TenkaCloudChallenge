@@ -54,7 +54,7 @@ MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
 REQUEST_TIMEOUT_SECONDS = 15
 
-CHECKPOINTS = ("environment", "predict", "first-broken", "generalize")
+CHECKPOINTS = ("environment", "predict", "first-broken", "generalize", "walkback", "no-walkback")
 SUBMISSION_FILES = ("counter.py",)
 
 
@@ -125,7 +125,7 @@ def config_payload() -> dict[str, object]:
         "checkpoints": [
             {
                 "id": "environment",
-                "label": "environment — Portal editor が出す合言葉を、そのまま貼る",
+                "label": "environment — 「提出」を押すだけ (合言葉は自動で送られる)",
                 "kind": "answer",
             },
             {
@@ -143,6 +143,16 @@ def config_payload() -> dict[str, object]:
                 "label": "generalize — 書き上げた counter.py の中身を、全部",
                 "kind": "code",
             },
+            {
+                "id": "walkback",
+                "label": "walkback — 最後にいる数から、進んだ回数を取り戻す (数はひとつ)",
+                "kind": "answer",
+            },
+            {
+                "id": "no-walkback",
+                "label": "no-walkback — 同じ「1 回に進む数」で、取り戻せなくなる輪の大きさをひとつ",
+                "kind": "answer",
+            },
         ],
         # 英語は Portal 側の locale が選ぶ (共有 workbench.py の config_payload と同じ契約)。
         # 文言の正本は metadata.json — scripts/generate-course-workbenches.py --check が
@@ -151,7 +161,7 @@ def config_payload() -> dict[str, object]:
             "en": {
                 "name": 'Predict, then run',
                 "description": 'A clock goes from 12 back to 1. Write the same kind of counting for a different number, work out the answer on paper before running it, and find the one number in a list that does not belong. Why cryptography counts like this, and why this much is still not cryptography -- using nothing but arithmetic.',
-                "checkpointLabels": {'environment': 'environment - the pass phrase the Portal editor prints, pasted exactly', 'predict': 'predict - the number you end on, worked out on paper before running (one number)', 'first-broken': 'first-broken - one number in the list does not belong: which position is it? (leftmost is 0)', 'generalize': 'generalize - your finished counter.py, all of it'},
+                "checkpointLabels": {'environment': 'environment - press Submit; the pass phrase is sent for you', 'predict': 'predict - the number you end on, worked out on paper before running (one number)', 'first-broken': 'first-broken - one number in the list does not belong: which position is it? (leftmost is 0)', 'generalize': 'generalize - your finished counter.py, all of it', 'walkback': 'walkback - from the final number, recover how many times it was added (one number)', 'no-walkback': 'no-walkback - keeping the same step, one ring size on which it cannot be undone'},
             }
         },
     }

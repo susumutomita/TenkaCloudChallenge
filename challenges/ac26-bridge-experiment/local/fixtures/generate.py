@@ -76,11 +76,14 @@ _WALKBACK_MODULI = (11, 13, 17, 19, 23, 29, 31)
 
 
 def walkback_case(seed: str) -> dict[str, int]:
-    """A second walk, shown with every number including its final value.
+    """A second walk, shown with its final value but not its number of rounds.
 
-    Nothing here is a checkpoint, which is why the final value can be printed: the
-    point of this case is that the walk runs backwards. Knowing where it ended, the
-    number of steps comes back out by multiplying by whatever takes `step` to 1.
+    The point of this case is that the walk runs backwards: knowing where it ended, the
+    number of steps comes back out by multiplying by whatever takes `step` to 1. That
+    recovery is the `walkback` checkpoint, and building a ring size on which the same
+    `step` cannot be undone is the `no-walkback` checkpoint -- so `rounds`, `undoStep`
+    and `recoveredRounds` are answers now, and `_public_walkback` keeps them out of the
+    evidence. Only the verifier reads this dict in full.
 
     That is the whole reason this problem exists as the track's first one. Reducing
     mod something removes the clue a plain integer leaks — its size — but it does not
@@ -105,6 +108,18 @@ def walkback_case(seed: str) -> dict[str, int]:
         "undoStep": undo_step,
         "recoveredRounds": ((final - start) * undo_step) % modulus,
     }
+
+
+def _public_walkback(seed: str) -> dict[str, int]:
+    """The walk-back case as the learner sees it: start, step, modulus, final.
+
+    `rounds` is the `walkback` answer and `undoStep` / `recoveredRounds` derive it, so
+    none of the three may appear in `public_payload`. The recovery itself is a given
+    procedure (the statement spells it out with a one-digit example); what the
+    checkpoint measures is applying it to this deployment's numbers.
+    """
+    walk = walkback_case(seed)
+    return {key: walk[key] for key in ("start", "step", "modulus", "final")}
 
 
 def hidden_cases(seed: str) -> list[Case]:
@@ -252,6 +267,6 @@ def public_payload(seed: str) -> dict[str, object]:
             "healthToken": health_token(seed),
         },
         "predict": case.as_dict(),
-        "walkback": walkback_case(seed),
+        "walkback": _public_walkback(seed),
         "firstBroken": {**bad_case.as_dict(), "trace": trace},
     }
