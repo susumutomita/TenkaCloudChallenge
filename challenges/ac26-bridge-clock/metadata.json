@@ -1,0 +1,263 @@
+{
+  "id": "ac26-bridge-clock",
+  "name": "でたらめは、一度きりだから隠せる",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "advanced-cryptography-2026",
+    "order": 14,
+    "chapter": "Bridge 0 / Clock Arithmetic and Covers"
+  },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 1,
+    "role": "diagnostic",
+    "spoilerPolicy": "independent-reimplementation"
+  },
+  "difficulty": 2,
+  "estimatedDuration": "30-40 分",
+  "shortDescription": "この先の週は、全部「割ったあまりだけの世界」——一周 n の時計の上——で計算する。住む前に下見をする 10 行。足し算も掛け算も余りを取る順番によらないこと（だから計算の場所になる）、でたらめな覆いを足すとどの候補にも覆いがちょうど 1 本ずつあって何も絞れないこと（だから隠せる）を数え上げで出し、最後は同じ覆いをわざと使い回して、2 つの観測値の差から本物が漏れる——この分野でいちばん古い失敗——を自分の手で起こす。",
+  "description": "カタログ 2 段目に置く難易度 2 のドリル。ac26-bridge-unknown-x（覆い足し算・mod なし）の直後に、この先の全問題が住む「余りの世界」を下見する。前半 3 行は世界の成立（wrap、足し算と掛け算が余りを取る順番と両立 — 差 0 を 3 つ組で出す）。中盤 4 行は隠蔽（でたらめな覆いで covered を作る → 同じ覆いで戻す → 候補ごとの覆いの本数を表にして 3 点読む → 表の合計 = n）。「完璧に隠れる」を perfect secrecy という語を出さずに、本人の数え上げで出すのが山。最後の 2 行は使い回し（同じ cover で 2 通目 → 差で cover が打ち消えて secret − second が漏れる）で、one-time pad の術語を出さずに reuse 失敗を体験させる。\n\n生成は seed 由来: n は 12〜24、u, v は n+3〜3n（wrap が必ず見える）、covered が secret や 0 に一致しないよう cover を引き直し、second は observed 値が画面上の数と衝突して読み取りで解けてしまわないよう引き直す（generate.py の docstring 参照）。問題文の例（n = 10）は生成範囲外（n ≥ 12）。every 行が (1, 1, n) 型でなく 3 点読みなのは、n が画面にあるため表を作らず写せてしまうのを防ぐため。\n\n10 行のうち回答欄は 8 行（platform の checkpoint 上限）。回答欄の無い 2 行（wrap と same-diff)は読むだけの行。fixtures/generate.py は expected を public と同じ関数で導くため participant image には載せず（Issue 537/543 option B2）、公開値は verifier の GET /public から配る。",
+  "instructions": "## 引っ越しの前に、下見をしたい\n\n前の問題『x を知らないまま、足し算が済む』で、覆いを足せば中身を見せずに足し算を任せられることを確かめました。ただしあそこでは、数はどこまでも大きくなれました。大きくなれる数直線の上では、覆われた数の「大きさ」自体が手がかりになってしまいます。\n\nだからこの講座の計算は、この先ずっと**「割ったあまりだけの世界」**——一周 n の時計の上——で行われます。ずっと住むことになる場所なら、先に下見をしておきたい。この問題がその下見です。確かめることは 2 つ:\n\n1. **時計の上でも、足し算と掛け算が壊れない**こと。壊れないから、計算の場所として使える\n2. **時計の上なら、でたらめな覆い 1 つで完璧に隠せる**こと。「完璧」の意味は、感想ではなく数え上げで出します\n\nそして最後の 2 行で、その覆いを**わざと使い回して**、この分野でいちばん古い失敗を自分の手で起こします。\n\nこれは関数を書く問題ではありません。**1 行打って、出た値を回答欄に貼る**、を 10 回くり返します。10 行のうち 8 行に回答欄（checkpoint = 採点される小問）があります。**上から順に、1 行も飛ばさずに**打ってください — 回答欄のない行も、後の行が使う名前を作ります。数は deploy（「起動」で立ち上がる、あなた専用の実行環境）ごとに変わるので、他人の答えは通りません。\n\n## 前提 — 割り算のあまりが出せれば入れます\n\n- 使う数学: 割り算とそのあまり（23 ÷ 10 = 2 あまり 3）。それだけです\n- 使う Python: 打った式の答えがすぐ出る画面（`>>>`）。記号 `%` がこの問題の主役で、`23 % 10` は「23 を 10 で割ったあまり」= 3 を返します。1 行目から使い始め、使うたびに意味を添えます\n- 順番: 1 つ前の『x を知らないまま、足し算が済む』を先にやっておくと、「覆いを足して隠す」という発想が既にある状態で入れます（必須ではありません）\n\nひとつ先に言っておきます。この問題では、秘密も覆いも**あなたの画面に見えています**。あなたが「隠す側」と「盗み見る側」の両方を演じるからです。盗み見る側になって考える行には、そのつど「見る側です」と書いてあります。\n\n## この deploy の時計を受け取る\n\n**1. Python を開く。** Windows なら PowerShell、Mac なら「ターミナル」を開いて `python3` と打ち、Enter。`>>>` が出れば準備完了です（Windows で見つからないときは `py`）。IDLE の「シェル」ウィンドウでも同じです。\n\n**2. 数を貼る。** Participant Portal（この問題文が表示されているサイト）で **「起動」** を押し、問題エディタの **「証拠を確認」** を押してください。この deploy の数が、そのまま Python に貼れる代入文で出ます。\n\n```text\nn = …                  ← 時計の一周。この世界にある数は 0 〜 n−1 の n 個だけ\nu, v = …               ← 一周より大きい 2 つの数。はみ出しの様子を見るためのもの\nsecret, second = …     ← 隠したい数と、8 行目で 2 通目に使う数\ncover = …              ← でたらめに選ばれた覆い\n```\n\nこのブロックを丸ごとコピーして `>>>` に貼り、Enter。**「証拠を確認」は各行が出す値までは教えません** — 時計の上の住所も、隠した数も、覆いの本数の表も、差も、あなたの Python が出します。\n\n**3. Python が開けないときは。** 問題エディタの `clock_drill.py` に、下の 10 行と**同じ式が関数の形で穴あきに並んでいます**。「打つ行」の右辺をその関数に写して `return` し、**「公開テストを実行」** を押すと、あなたの関数がこの deploy の数で出した値が印字されます。それを回答欄に貼ります。**「初期状態に戻す」** でいつでも元に戻せます。\n\n## 進め方 — 出た値を、その行の欄へ\n\n**打つ行**（コピーして貼る）→ **この行の意味** → 出た値を**その checkpoint の回答欄に貼る** → 合ったら**「合ったら読む」**を読んで次へ。回答欄は 1 行の入力欄で、組で答える行は `[3, 6]` の形で書きます（丸かっこでも、かっこ無しのカンマ区切りでも通ります）。\n\n**貼る前に、ひとこと予想してください。**「差は 0 のはず」「どこかだけ本数が多いはず」くらいで十分です。予想が外れた行だけが、読み直す価値のある行です。\n\n### 1. 時計に載せる（回答欄なし）\n\n```python\n(u % n, v % n)\n```\n\n- **この行の意味**: u も v も一周 n より大きいので、そのままではこの世界に居場所がありません。n で割ったあまりが、時計の上の住所です。\n- **回答欄**: なし — 値は画面に残して次へ\n- **出たら読む**: どちらも 0 以上 n 未満に収まりました。「n で割ったあまりを取る」=「時計を回して、止まった目盛りを読む」。以後この操作を `% n` と書きます。\n\n### 2. 足してから載せるか、載せてから足すか（回答欄 1 / 8）\n\n```python\n((u + v) % n, (u % n + v % n) % n, ((u + v) % n) - ((u % n + v % n) % n))\n```\n\n- **この行の意味**: 足してから時計に載せた答えと、先に 2 つとも時計に載せてから足して（はみ出したぶんをもう一度載せて）出した答えと、その差の 3 つ組。**予想**: 2 つの答えは同じでしょうか。\n- **回答欄**: 上から **1 番目**（見出し「足し算 — 先に余り・後に余り・その差」）に 3 つ組\n- **合ったら読む**: 差は 0 — どちらの順でも同じ目盛りに着きます。地味に見えて、これは大きい約束です。**大きな数を持ち歩かなくても、時計の上の数だけで計算を続けてよい**、という約束だからです。\n\n### 3. 掛け算でも順番はどうでもいいか（回答欄 2 / 8）\n\n```python\n((u * v) % n, (u % n) * (v % n) % n, ((u * v) % n) - ((u % n) * (v % n) % n))\n```\n\n- **この行の意味**: 同じ比べ方を掛け算で。**予想**: 掛け算は足し算よりずっと大きくはみ出しますが、それでも差は 0 でしょうか。\n- **回答欄**: 上から **2 番目**（見出し「掛け算 — 先に余り・後に余り・その差」）に 3 つ組\n- **合ったら読む**: 掛け算でも差は 0。足し算と掛け算の両方が「余りを取る順番」と両立する — この 2 つが揃っているから、後の週の計算は全部この世界に置けます（引き算も同様です。割り算だけは特別な道具が要り、後の週に出てきます）。下見の 1 つ目はこれで済みました。ここからが 2 つ目、「隠せる」の確認です。\n\n### 4. でたらめを足して隠す（回答欄 3 / 8）\n\n```python\ncovered = (secret + cover) % n; covered\n```\n\n- **この行の意味**: 秘密に、でたらめに選ばれた覆いを足して、時計に載せました。相手に見せるのはこの 1 つの数だけです。**予想**: secret や cover の面影は残るでしょうか。\n- **回答欄**: 上から **3 番目**（見出し「でたらめを足して隠した数」）に整数 1 つ\n- **合ったら読む**: 出たのは 0 〜 n−1 のどれか、見た目はただの数です。前の問題の数直線では「大きさ」が手がかりになり得ましたが、時計の上では一周ごとに巻き戻るので、大きさという手がかり自体が存在しません。これが引っ越してきた理由です。\n\n### 5. 同じ覆いを引いて戻す（回答欄 4 / 8）\n\n```python\n(covered - cover) % n\n```\n\n- **この行の意味**: 覆いを知っている人だけができる操作 — 引いて、時計に載せ直す。\n- **回答欄**: 上から **4 番目**（見出し「同じ覆いを引いて戻った数」）に整数 1 つ\n- **合ったら読む**: secret が戻りました。隠すのも 1 行、戻すのも 1 行。2 人を分けているのは、覆いを知っているかどうか、それだけです。\n\n### 6. 候補ごとに、覆いを数える（回答欄 5 / 8）\n\nここからは**見る側**です。covered を受け取った相手は、「秘密は 0 〜 n−1 のどれか、覆いも 0 〜 n−1 のどれか」と知っているとします。候補の秘密 1 つひとつについて「その候補から covered を作れる覆いが何本あるか」の表 t を作り、3 か所を読みます: 本当の秘密の場所、その隣、そして covered から機械的に決めた無関係な場所です。\n\n```python\nt = [sum(1 for c in range(n) if (cand + c) % n == covered) for cand in range(n)]; (t[secret], t[(secret + 1) % n], t[(covered + 3) % n])\n```\n\n- **この行の意味**: 覆いの本数を、正解の候補と外れの候補の両方で数えて見比べます。**予想**: 本当の秘密の場所だけ、本数が違うでしょうか。\n- **回答欄**: 上から **5 番目**（見出し「候補 3 つ、それぞれの覆いの本数」）に 3 つ組\n- **合ったら読む**: 3 か所とも同じ本数でした。本当の秘密も、その隣も、無関係な場所も、covered を作れる覆いを同じ本数ずつ持っている。表のどこにも凸凹がない — 観測 covered は、どの候補もひいきしません。\n\n### 7. 表の合計（回答欄 6 / 8）\n\n```python\nsum(t)\n```\n\n- **この行の意味**: 表 t を全部合計します。**予想**: 候補は n 個です。合計はいくつになるでしょう。\n- **回答欄**: 上から **6 番目**（見出し「表ぜんぶの合計」）に整数 1 つ\n- **合ったら読む**: 合計は候補の数とぴったり同じ — n 個の候補に 1 本ずつ、過不足なしです。つまり covered から絞り込めるものは、「少ない」のではなく**「無い」**。ゼロです。感想ではなく、いま自分で数えて出しました。秘密を破片に分けて持ち合う仕組み（後の週に出てきます）が成り立つ理由は、この表の平らさそのものです。ここがこの問題の山でした。\n\n### 8. 同じ覆いを、もう 1 通に（回答欄 7 / 8）\n\n完璧に隠せると分かった覆いを、**もう一度使ったら**どうなるか。2 通目の秘密 second に、同じ cover をかぶせます。\n\n```python\ncovered2 = (second + cover) % n; (covered, covered2)\n```\n\n- **この行の意味**: 1 通目の観測値と、同じ覆いで作った 2 通目の観測値の組。\n- **回答欄**: 上から **7 番目**（見出し「同じ覆いを使い回した 2 つの観測値」）に 2 つ組\n- **合ったら読む**: どちらも、単体で見ればただの数です。1 通ずつなら 6〜7 行目の議論がそれぞれ成り立ちます。壊れるのは、2 つを**並べた**ときです。\n\n### 9. 差を取ると、覆いが消える（回答欄 8 / 8）\n\n```python\n(covered - covered2) % n\n```\n\n- **この行の意味**: 2 つの観測値の差。**予想**: covered − covered2 = (secret + cover) − (second + cover)。右側で cover はどうなりますか。\n- **回答欄**: 上から **8 番目**（見出し「2 つの観測値の差」）に整数 1 つ\n- **合ったら読む**: 覆いが打ち消し合って消え、secret − second — 秘密どうしの差、本物の情報 — だけが残りました。この差は、**覆いを知らない相手にも計算できます**。観測値は 2 つとも公開されているからです。\n\n### 10. 漏れたものの正体（回答欄なし）\n\n```python\n(covered - covered2) % n == (secret - second) % n\n```\n\n- True が出ます。観測値 2 つの差 = 秘密 2 つの差。でたらめな覆いは、1 回きりなら候補を 1 つも減らさず、2 回使った瞬間に本物の差を漏らす。6 行目の表が平らだったのは「覆いがどれか分からない」おかげで、使い回しはその「分からない」を差の中で打ち消してしまうのです。**覆いの使い回しは、この分野でいちばん古く、そして今も現役の失敗です** — 歴史上の暗号の事件にも、近年のソフトウェアの事故にも、同じ形が繰り返し現れます。あなたはいま、それを自分の手で起こしました。\n\n## 欄は独立、詰まっても先へ\n\n回答欄は checkpoint ごとに独立しています。値を入れて **「提出 (+点数)」** を押すとその欄だけが採点され、1 つ詰まっても他は取れます。不正解でも出し直せます（1 回ごとに決まった減点があり、合計スコアが 0 未満になることはありません）。\n\n## この世界に、この先ずっと住む\n\n8 つの欄がすべて通れば、下見は終わりです。**足し算も掛け算も余りと両立すること。でたらめ 1 つで、候補が 1 つも減らないこと。同じ覆いを 2 回使うと、差が本物を漏らすこと。** この 3 つは、この先の週で役者と名前を替えながら何度も出てきます。ここから先の問題は、講義の中身に入っていきます。\n",
+  "writeup": "## この問題の形\n\n10 行を打ち、8 行に回答欄があります。1〜3 行目が世界の成立、4〜7 行目が隠蔽と数え上げ、8〜10 行目が使い回しの失敗です。\n\n## 各行が守っているもの\n\n- 1〜3: 足し算も掛け算も、余りを取る順番によらない。だから大きな数を持ち歩かず、時計の上の数だけで計算を続けられる — この世界が計算の場所として成立する理由。\n- 4〜5: 隠すのは (secret + cover) % n の 1 行、戻すのは (covered − cover) % n の 1 行。2 人を分けるのは覆いの知識だけ。\n- 6〜7: どの候補の秘密にも、観測値を作る覆いがちょうど 1 本ずつある（表は平ら、合計は n）。観測から絞れるものは「少ない」ではなく「無い」— 秘密分散が成り立つ理由そのもの。これを術語なしの数え上げで出すのがこの問題の山。\n- 8〜10: 同じ覆いの 2 通目との差で覆いが打ち消え、secret − second が覆いを知らない相手にも計算できてしまう。6 行目の平らさは「覆いが分からない」ことに支えられており、使い回しはそれを差の中で消す。\n\n## 間違えるとどう壊れるか\n\n% n を忘れて n 以上の数を貼る／覆いを引くべき所で足す／表の条件から wrap を落とす／差の向きを逆にする — どれも値が 1 つずれて、その行で止まります。止まった行の「この行の意味」を読み直すのがこの形式の学び方です。\n\n## 次への接続\n\n6〜7 行目の平らさは、Week 2 の秘密分散（分けても何も分からない理由）の土台です。8〜10 行目の使い回しは、Week 3 の nonce 再利用（同じ R が二度出たら鍵が漏れる）で、署名という衣装を着て再登場します。ここで素手で起こした失敗を、あちらでは本物の署名で起こします。",
+  "tags": [
+    "advanced-cryptography-2026",
+    "bridge",
+    "drill",
+    "modular-arithmetic",
+    "random-cover",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18141,
+      "name": "Portal editor API + /verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "「n で割ったあまり」を時計の住所として読み、大きな数を時計の上に載せられる",
+    "足し算と掛け算が余りを取る順番によらないことを差 0 で確かめ、「時計の上だけで計算を続けてよい」理由を言える",
+    "でたらめな覆いを足す 1 行で数を隠し、同じ覆いを引く 1 行で戻せる",
+    "候補ごとの覆いの本数を数え上げ、観測からの絞り込みが「難しい」ではなく「無い」ことを表の平らさで示せる",
+    "同じ覆いを 2 通に使い回すと観測値の差から秘密の差が漏れることを、自分の数で実演できる"
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18141/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "add",
+        "label": "足し算 — 先に余り・後に余り・その差",
+        "points": 10,
+        "wrongAnswerPenalty": 5,
+        "hints": [
+          {
+            "id": "add-hint-1",
+            "content": "3 つ組です。1 つ目は足してから % n、2 つ目は先に両方 % n にして足し、もう一度 % n、3 つ目はその差。",
+            "penalty": 3
+          }
+        ]
+      },
+      {
+        "id": "mul",
+        "label": "掛け算 — 先に余り・後に余り・その差",
+        "points": 10,
+        "wrongAnswerPenalty": 5,
+        "hints": [
+          {
+            "id": "mul-hint-1",
+            "content": "add と同じ形を掛け算で。真ん中は (u % n) * (v % n) % n — 掛けたあとの % n を忘れない。",
+            "penalty": 3
+          }
+        ]
+      },
+      {
+        "id": "cover",
+        "label": "でたらめを足して隠した数",
+        "points": 10,
+        "wrongAnswerPenalty": 5,
+        "hints": [
+          {
+            "id": "cover-hint-1",
+            "content": "(secret + cover) % n。% n を忘れると n 以上の数が出ることがあります。出た数が n 未満か確かめて。",
+            "penalty": 3
+          }
+        ]
+      },
+      {
+        "id": "uncover",
+        "label": "同じ覆いを引いて戻った数",
+        "points": 10,
+        "wrongAnswerPenalty": 5,
+        "hints": [
+          {
+            "id": "uncover-hint-1",
+            "content": "4 行目の covered から cover を引いて % n。引き算の結果が負でも、% n が 0 〜 n−1 に戻してくれます。",
+            "penalty": 3
+          }
+        ]
+      },
+      {
+        "id": "every",
+        "label": "候補 3 つ、それぞれの覆いの本数",
+        "points": 20,
+        "wrongAnswerPenalty": 5,
+        "hints": [
+          {
+            "id": "every-hint-1",
+            "content": "6 行目の行を、改行を入れずに 1 行のまま貼ってください。表 t を作る部分と 3 か所を読む部分が、セミコロンで 1 行につながっています。",
+            "penalty": 5
+          }
+        ]
+      },
+      {
+        "id": "count",
+        "label": "表ぜんぶの合計",
+        "points": 10,
+        "wrongAnswerPenalty": 5,
+        "hints": [
+          {
+            "id": "count-hint-1",
+            "content": "sum(t)。6 行目で作った表 t がまだ画面に生きているうちに打ちます。1 か所の本数ではなく、全部の合計です。",
+            "penalty": 3
+          }
+        ]
+      },
+      {
+        "id": "reuse",
+        "label": "同じ覆いを使い回した 2 つの観測値",
+        "points": 10,
+        "wrongAnswerPenalty": 5,
+        "hints": [
+          {
+            "id": "reuse-hint-1",
+            "content": "2 つ目は second に同じ cover を足して % n。1 つ目は 4 行目の covered をそのまま使います。",
+            "penalty": 3
+          }
+        ]
+      },
+      {
+        "id": "leak",
+        "label": "2 つの観測値の差",
+        "points": 20,
+        "wrongAnswerPenalty": 5,
+        "hints": [
+          {
+            "id": "leak-hint-1",
+            "content": "(covered - covered2) % n。引き算のあとに % n — 引いた結果が負のときも 0 〜 n−1 に載せ直します。",
+            "penalty": 5
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Random hides — exactly once",
+      "shortDescription": "Every later week computes in the world of division remainders — a clock of n ticks. Ten lines scout it before moving in: addition and multiplication both survive the wrap in either order (which makes it a place to compute), a random cover leaves exactly one cover per candidate so an observation narrows nothing (which is why it hides, established by counting), and then the same cover is reused on purpose — the difference of two observations leaks the real one, the oldest failure in this field, caused by your own hands.",
+      "description": "A difficulty-2 drill on the catalog's second step. Directly after ac26-bridge-unknown-x (covered addition, no mod), it scouts the remainder world every later problem lives in. The first three lines establish the world (the wrap; addition and multiplication commuting with the wrap — the difference produced as 0 inside a 3-tuple). The middle four lines are hiding (build covered with a random cover → recover with the same cover → table the cover counts per candidate and read three spots → the table's sum = n). The summit is producing 'hides perfectly' by the learner's own counting, without uttering 'perfect secrecy'. The last two lines are reuse (a second message under the same cover → the covers cancel in the difference, leaking secret − second), giving the reuse failure without the term 'one-time pad'.\n\nGeneration is seed-derived: n is 12–24, u and v are n+3–3n (the wrap is always visible), the cover is redrawn so covered never lands on secret or 0, and second is redrawn so the observed values never collide with numbers already on screen (see generate.py's docstring) — roughly one deployment in twenty would otherwise be readable off the assignment block. The statement's worked example (n = 10) is outside the generation range (n ≥ 12). The every line reads three spots rather than the (1, 1, n) shape because n is on screen and that tuple could be copied without ever building the table.\n\nEight of the ten lines have an answer field (the platform's per-problem checkpoint maximum). The two ungraded lines (wrap and same-diff) are read-only. fixtures/generate.py derives the expected values in the same function as the public ones, so it does not ship in the participant image (Issue 537/543 option B2); the public half is served by the verifier's GET /public.",
+      "instructions": "## Scouting the place before moving in\n\nThe previous problem, \"The addition finishes without ever knowing x\", showed that adding a cover lets you delegate an addition without showing the contents. But there, numbers could grow without limit — and on a line where numbers grow, the sheer size of a covered number becomes a clue.\n\nSo every computation in this course, from here to the end, lives in **the world of division remainders** — on a clock of n ticks. If you are going to live somewhere, you scout it first. This problem is the scouting trip. Two things get checked:\n\n1. **Addition and multiplication both survive on the clock.** They do not break — which is what makes it a usable place to compute\n2. **On the clock, one random cover hides perfectly.** \"Perfectly\" is established by counting, not by impression\n\nAnd in the last two lines you **reuse that cover on purpose** and cause, with your own hands, the oldest failure in this field.\n\nThis is not a write-a-function problem. You **type one line and paste the value it printed**, ten times over. Eight of the ten lines have an answer field (a checkpoint — one small graded question). **Type all ten in order, skipping none** — the ungraded lines define names later lines use. The numbers change per deploy (the runtime that starts, for you alone, when you press Start), so someone else's answers do not pass.\n\n## Before you start — division remainders get you in\n\n- Mathematics used: division and its remainder (23 ÷ 10 = 2 remainder 3). That is all\n- Python used: the screen where a typed expression prints its answer (`>>>`). The symbol `%` is this problem's lead actor: `23 % 10` returns \"the remainder of 23 divided by 10\", which is 3. It appears from line 1, with its meaning restated as it is used\n- Order: doing \"The addition finishes without ever knowing x\" first means you arrive already carrying the idea of hiding by adding a cover (not required)\n\nOne thing said up front: in this problem, the secret and the cover are **both visible on your screen** — because you play the hider and the eavesdropper at once. Lines where you think as the eavesdropper say so.\n\n## Receive this deployment's clock\n\n**1. Open Python.** On Windows open PowerShell, on a Mac open Terminal, type `python3` and press Enter. When `>>>` appears you are ready (on Windows, try `py` if `python3` is not found). IDLE's Shell window works the same.\n\n**2. Paste the numbers.** In Participant Portal (the site showing this statement) press **Start**, then press **Inspect evidence** in the problem editor. Your deployment's numbers appear as assignment statements ready to paste into Python:\n\n```text\nn = …                  ← one turn of the clock. This world holds only the n numbers 0..n−1\nu, v = …               ← two numbers larger than one turn, for watching the overflow\nsecret, second = …     ← the number being hidden, and the one line 8 uses for the second message\ncover = …              ← the cover, drawn at random\n```\n\nCopy that whole block into `>>>` and press Enter. **Inspect evidence does not print what any line produces** — not the clock addresses, the hidden number, the table of cover counts, or the difference. Those are yours to produce.\n\n**3. If you cannot open Python.** The editor's `clock_drill.py` holds **the same expressions as the ten lines, as functions with blanks**. Copy the right-hand side of each \"line to type\" into the matching function, `return` it, and press **Run public tests**: it prints what your functions return on this deployment's numbers. Paste those into the answer fields. **Restore starter** puts it back at any time.\n\n## How to move — each value into that line's field\n\n**The line to type** (copy and paste) → **what this line means** → paste the printed value into **that checkpoint's answer field** → once it matches, read **\"read after it matches\"** and move on. Answer fields are one-line inputs; pair answers are written `[3, 6]` (round brackets, or bare comma-separated values, also work).\n\n**Predict one thing before you paste.** \"The difference should be 0\", \"one spot should have more covers\" is enough. The lines worth rereading are exactly the ones where the prediction missed.\n\n### 1. Put them on the clock  (no answer field)\n\n```python\n(u % n, v % n)\n```\n\n- **What this line means**: u and v are both larger than one turn, so as they stand they have no place in this world. The remainder after dividing by n is their address on the clock.\n- **Answer**: none — keep the values on screen and move on\n- **Read once it prints**: both landed in 0..n−1. \"Take the remainder mod n\" = \"turn the clock and read where it stops\". From here on that operation is written `% n`.\n\n### 2. Add then wrap, or wrap then add?  (answer box 1 of 8)\n\n```python\n((u + v) % n, (u % n + v % n) % n, ((u + v) % n) - ((u % n + v % n) % n))\n```\n\n- **What this line means**: the answer from adding first and then wrapping; the answer from wrapping both first, adding, and wrapping the overflow again; and their difference — a 3-tuple. **Predict**: are the two answers the same?\n- **Answer**: box **1 of 8** (heading \"Addition — wrap first, wrap last, their difference\"), a 3-tuple\n- **Read after it matches**: the difference is 0 — either order reaches the same tick. It looks minor and it is a large promise: **you may keep computing with only the on-clock numbers, never carrying the big ones around.**\n\n### 3. Does order matter for multiplication?  (answer box 2 of 8)\n\n```python\n((u * v) % n, (u % n) * (v % n) % n, ((u * v) % n) - ((u % n) * (v % n) % n))\n```\n\n- **What this line means**: the same comparison for multiplication. **Predict**: multiplication overflows far more than addition — is the difference still 0?\n- **Answer**: box **2 of 8** (heading \"Multiplication — wrap first, wrap last, their difference\"), a 3-tuple\n- **Read after it matches**: still 0. Both addition and multiplication tolerate wrapping in either order — and because both do, every computation in the later weeks can live in this world (subtraction too; only division needs a special tool, which arrives in a later week). The first half of the scouting is done. Now for the second: hiding.\n\n### 4. Hide by adding the random cover  (answer box 3 of 8)\n\n```python\ncovered = (secret + cover) % n; covered\n```\n\n- **What this line means**: the secret with a randomly drawn cover added, wrapped onto the clock. This one number is all the other side ever sees. **Predict**: will any trace of secret or cover remain?\n- **Answer**: box **3 of 8** (heading \"The number hidden by adding the random cover\"), one integer\n- **Read after it matches**: it is one of 0..n−1 and looks like any other number. On the previous problem's number line, size could have been a clue; on the clock, everything rewinds each turn, so the clue called \"size\" does not exist. That is why the course moved here.\n\n### 5. Subtract the same cover to get it back  (answer box 4 of 8)\n\n```python\n(covered - cover) % n\n```\n\n- **What this line means**: the operation only the cover's owner can do — subtract, and wrap back onto the clock.\n- **Answer**: box **4 of 8** (heading \"The number recovered by subtracting the same cover\"), one integer\n- **Read after it matches**: secret came back. One line hides, one line recovers. The only thing separating the two people is knowing the cover.\n\n### 6. Count the covers for each candidate  (answer box 5 of 8)\n\nNow you are the **eavesdropper**. Having received covered, they know only \"the secret is one of 0..n−1, and so is the cover\". For each candidate secret, build the table t of how many covers would produce covered from it, then read three spots: the true secret's, its neighbour's, and one picked mechanically from covered with no relation to the secret.\n\n```python\nt = [sum(1 for c in range(n) if (cand + c) % n == covered) for cand in range(n)]; (t[secret], t[(secret + 1) % n], t[(covered + 3) % n])\n```\n\n- **What this line means**: count the covers at a correct candidate and at wrong ones, and compare. **Predict**: will the true secret's spot have a different count?\n- **Answer**: box **5 of 8** (heading \"Three candidates, each one's cover count\"), a 3-tuple\n- **Read after it matches**: all three counts are the same. The true secret, its neighbour, and the unrelated spot each own the same number of covers that produce covered. The table has no bumps anywhere — the observation plays no favourites among candidates.\n\n### 7. The whole table's sum  (answer box 6 of 8)\n\n```python\nsum(t)\n```\n\n- **What this line means**: add up the entire table t. **Predict**: there are n candidates. What will the sum be?\n- **Answer**: box **6 of 8** (heading \"The sum of the whole table\"), one integer\n- **Read after it matches**: the sum equals the number of candidates exactly — one cover per candidate, no more, no fewer. So what covered lets you narrow down is not \"little\": it is **nothing**. Zero. And you did not take that on trust — you counted it. The scheme of splitting a secret into fragments (a later week) works precisely because this table is flat. That was this problem's summit.\n\n### 8. The same cover, on a second message  (answer box 7 of 8)\n\nThe cover hides perfectly — so what happens if it is **used again**? Lay the same cover over the second secret.\n\n```python\ncovered2 = (second + cover) % n; (covered, covered2)\n```\n\n- **What this line means**: the first observation, paired with a second observation made under the same cover.\n- **Answer**: box **7 of 8** (heading \"The two observations under one reused cover\"), a pair\n- **Read after it matches**: each, taken alone, is just a number — lines 6–7's argument still holds for either one by itself. What breaks is putting the two **side by side**.\n\n### 9. Take the difference — the cover cancels  (answer box 8 of 8)\n\n```python\n(covered - covered2) % n\n```\n\n- **What this line means**: the difference of the two observations. **Predict**: covered − covered2 = (secret + cover) − (second + cover). What happens to cover on the right?\n- **Answer**: box **8 of 8** (heading \"The difference of the two observations\"), one integer\n- **Read after it matches**: the covers cancelled and vanished, leaving secret − second — the difference of the secrets, real information. And this difference is computable **by someone who never knew the cover**, because both observations are public.\n\n### 10. What leaked  (no answer field)\n\n```python\n(covered - covered2) % n == (secret - second) % n\n```\n\n- `True` comes out. The difference of the two observations equals the difference of the two secrets. A random cover eliminates not one candidate when used once — and leaks a real difference the moment it is used twice. Line 6's table was flat because the cover was unknowable, and reuse cancels that unknowability inside the difference. **Reusing a cover is the oldest failure in this field, and it is still claiming victims** — the same shape appears in historical cipher breaks and in recent software incidents alike. You have now caused it with your own hands.\n\n## Fields are independent — stuck on one, move on\n\nThe answer fields are independent checkpoints. Enter a value, press **Submit (+points)**, and only that field is graded — one that will not budge does not block the rest. A wrong answer can be resubmitted (each wrong attempt carries a fixed penalty, and the total never drops below 0 pt).\n\n## You will live in this world from now on\n\nWith all eight fields green, the scouting is done: **addition and multiplication both tolerate the wrap; one random cover leaves not one candidate eliminated; one reused cover leaks a real difference.** These three return again and again in the coming weeks, wearing new names and new costumes. From the next problem on, the course enters the lecture material itself.\n",
+      "writeup": "## The shape of this problem\n\nTen lines are typed; eight have an answer field. Lines 1–3 establish the world, lines 4–7 hide and count, lines 8–10 fail by reuse.\n\n## What each line protects\n\n- 1–3: addition and multiplication both commute with taking remainders, so computation can continue with on-clock numbers only — the reason this world works as a place to compute.\n- 4–5: hiding is the one line (secret + cover) % n, recovering the one line (covered − cover) % n. Only knowledge of the cover separates the two parties.\n- 6–7: every candidate secret owns exactly one cover that produces the observation (a flat table summing to n). What the observation narrows is not 'little' but 'nothing' — the very reason secret sharing works, produced by counting and without terminology. This is the problem's summit.\n- 8–10: under a reused cover the difference of two observations cancels the cover, making secret − second computable by someone who never knew it. Line 6's flatness rested on the cover being unknowable; reuse cancels that unknowability inside the difference.\n\n## How it breaks\n\nForgetting % n and pasting a value at or above n, adding the cover where it should be subtracted, dropping the wrap from the table's condition, taking the difference the wrong way round — each shifts one value and stops at that line. Re-reading that line's 'what this line means' is how this format teaches.\n\n## Where this leads\n\nLines 6–7's flatness is the ground under Week 2's secret sharing (why the fragments reveal nothing). Lines 8–10's reuse returns in Week 3 as nonce reuse — the same R appearing twice surrendering a signing key — the failure you just caused bare-handed, wearing a signature's costume.",
+      "learningGoals": [
+        "Read 'the remainder mod n' as an address on the clock and place large numbers onto it",
+        "Confirm by a difference of 0 that addition and multiplication commute with the wrap, and state why computing can stay on the clock",
+        "Hide a number with one line adding a random cover, and recover it with one line subtracting the same cover",
+        "Count the covers per candidate and show by the table's flatness that the narrowing is not 'hard' but 'nothing'",
+        "Demonstrate on your own numbers that reusing one cover across two messages leaks the secrets' difference from the observations' difference"
+      ],
+      "checks": [
+        {
+          "id": "add",
+          "label": "Addition — wrap first, wrap last, their difference",
+          "hints": [
+            {
+              "id": "add-hint-1",
+              "content": "A 3-tuple. First add then % n; second wrap both first, add, % n again; third their difference."
+            }
+          ]
+        },
+        {
+          "id": "mul",
+          "label": "Multiplication — wrap first, wrap last, their difference",
+          "hints": [
+            {
+              "id": "mul-hint-1",
+              "content": "The same shape as add, with multiplication. The middle is (u % n) * (v % n) % n — do not drop the % n after the product."
+            }
+          ]
+        },
+        {
+          "id": "cover",
+          "label": "The number hidden by adding the random cover",
+          "hints": [
+            {
+              "id": "cover-hint-1",
+              "content": "(secret + cover) % n. Forgetting % n can produce a value at n or above — check the result is below n."
+            }
+          ]
+        },
+        {
+          "id": "uncover",
+          "label": "The number recovered by subtracting the same cover",
+          "hints": [
+            {
+              "id": "uncover-hint-1",
+              "content": "Line 4's covered minus cover, then % n. Even when the subtraction goes negative, % n brings it back into 0..n−1."
+            }
+          ]
+        },
+        {
+          "id": "every",
+          "label": "Three candidates, each one's cover count",
+          "hints": [
+            {
+              "id": "every-hint-1",
+              "content": "Paste line 6 as one single line, no line break. The part building the table t and the part reading three spots are joined by a semicolon."
+            }
+          ]
+        },
+        {
+          "id": "count",
+          "label": "The sum of the whole table",
+          "hints": [
+            {
+              "id": "count-hint-1",
+              "content": "sum(t), typed while line 6's table t is still alive on screen. The sum of the whole table, not one spot's count."
+            }
+          ]
+        },
+        {
+          "id": "reuse",
+          "label": "The two observations under one reused cover",
+          "hints": [
+            {
+              "id": "reuse-hint-1",
+              "content": "The second element adds the same cover to second, then % n. The first element is line 4's covered, unchanged."
+            }
+          ]
+        },
+        {
+          "id": "leak",
+          "label": "The difference of the two observations",
+          "hints": [
+            {
+              "id": "leak-hint-1",
+              "content": "(covered - covered2) % n. The % n comes after the subtraction — it also puts a negative result back into 0..n−1."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
