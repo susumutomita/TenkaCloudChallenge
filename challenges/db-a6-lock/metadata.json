@@ -54,7 +54,7 @@
       "checks": [
         {
           "id": "gadget-untouched",
-          "label": "widget と無関係な gadget の在庫数が変わっていない",
+          "label": "The gadget stock, unrelated to widget, is unchanged",
           "hints": [
             {
               "id": "a6-gadget-hint-1",
@@ -64,7 +64,7 @@
         },
         {
           "id": "widget-qty-correct",
-          "label": "widget の在庫数が blocker と waiter、両方の更新を反映している",
+          "label": "The widget stock reflects both updates, the blocker's and the waiter's",
           "hints": [
             {
               "id": "a6-qty-hint-1",
@@ -74,7 +74,7 @@
         },
         {
           "id": "row-lock-wait-observed",
-          "label": "別セッションが同じ行の lock 待ちで実際にブロックされた",
+          "label": "A second session was actually blocked waiting for the same row lock",
           "hints": [
             {
               "id": "a6-wait-hint-1",

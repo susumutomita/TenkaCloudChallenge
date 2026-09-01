@@ -54,7 +54,7 @@
       "checks": [
         {
           "id": "old-partition-detached-or-dropped",
-          "label": "2024-02 の partition が DETACH または DROP されている",
+          "label": "The 2024-02 partition has been DETACHed or DROPped",
           "hints": [
             {
               "id": "a12-detach-hint-1",
@@ -64,7 +64,7 @@
         },
         {
           "id": "old-month-deleted-via-delete",
-          "label": "2024-01 の行が row-level DELETE で消え、partition 自体は attach されたまま",
+          "label": "The 2024-01 rows were removed by a row-level DELETE while the partition itself stays attached",
           "hints": [
             {
               "id": "a12-delete-hint-1",
@@ -74,7 +74,7 @@
         },
         {
           "id": "bystander-partitions-intact",
-          "label": "2024-03〜06 の partition は attach されたまま、行数も無傷",
+          "label": "The 2024-03 to 2024-06 partitions stay attached with their row counts intact",
           "hints": [
             {
               "id": "a12-bystander-hint-1",

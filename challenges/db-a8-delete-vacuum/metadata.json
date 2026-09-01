@@ -54,7 +54,7 @@
       "checks": [
         {
           "id": "old-rows-deleted-recent-intact",
-          "label": "cutoff より古い行が消え、cutoff 以降の行はそのまま残っている",
+          "label": "Rows older than the cutoff are gone and rows from the cutoff onward remain",
           "hints": [
             {
               "id": "a8-target-hint-1",
@@ -64,7 +64,7 @@
         },
         {
           "id": "bulk-delete-observed",
-          "label": "300,000 行規模の DELETE が実際に実行された",
+          "label": "A DELETE on the order of 300,000 rows actually ran",
           "hints": [
             {
               "id": "a8-bulk-hint-1",
@@ -74,7 +74,7 @@
         },
         {
           "id": "dead-tuples-reclaimed",
-          "label": "DELETE が生んだ dead tuple が VACUUM で回収されている",
+          "label": "The dead tuples the DELETE produced were reclaimed by VACUUM",
           "hints": [
             {
               "id": "a8-vacuum-hint-1",

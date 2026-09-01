@@ -54,7 +54,7 @@
       "checks": [
         {
           "id": "reference-untouched",
-          "label": "churn の対象ではない mvcc.reference の内容が変わっていない",
+          "label": "mvcc.reference, which the churn does not target, is unchanged",
           "hints": [
             {
               "id": "a7-reference-hint-1",
@@ -64,7 +64,7 @@
         },
         {
           "id": "long-transaction-blocked-cleanup-observed",
-          "label": "長時間 transaction が snapshot を保持している間に churn が行われた",
+          "label": "The churn ran while a long transaction was holding its snapshot",
           "hints": [
             {
               "id": "a7-longtx-hint-1",
@@ -74,7 +74,7 @@
         },
         {
           "id": "dead-tuples-reclaimed",
-          "label": "churn で発生した dead tuple が、長時間 transaction を閉じた後の VACUUM で回収されている",
+          "label": "The dead tuples the churn produced were reclaimed by VACUUM after the long transaction closed",
           "hints": [
             {
               "id": "a7-vacuum-hint-1",
