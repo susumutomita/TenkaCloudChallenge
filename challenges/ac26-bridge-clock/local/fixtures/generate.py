@@ -79,25 +79,26 @@ def setting(seed: str) -> dict:
 
     # The secret and its cover. The cover is what makes the secret disappear.
     secret = _draw(seed, "secret", 1, n - 1)
-    cover = _draw(seed, "cover", 1, n - 1)
-    while (secret + cover) % n in (secret, 0):   # the covered value must not give it away
-        cover = cover % (n - 1) + 1
+
+    # The cover is drawn from the WHOLE clock, 0 to n-1, and nothing about the resulting
+    # observation is rejected. That matters more than it looks: the drill's central claim
+    # is that every candidate secret has exactly one cover producing the observation, so
+    # the observation rules nothing out. Excluding even a single cover value breaks it --
+    # drop cover = 0 and a recipient who knows this generator can rule out the candidate
+    # equal to the observation, because that candidate is the only one needing cover 0.
+    # Perfect secrecy is a property of the uniform distribution, and it does not survive
+    # being tidied up.
+    cover = _draw(seed, "cover", 0, n - 1)
 
     covered = (secret + cover) % n
 
     # A second secret, covered with the SAME cover. This is the mistake.
-    # The second secret is redrawn until neither covered value collides with a number
-    # already on screen. Without this the answer to `reuse` can be read off the assignment
-    # block by chance rather than computed, and roughly one deployment in twenty is
-    # solvable without doing the arithmetic.
-    on_screen = {n, u, v, secret, cover}
-    second = _draw(seed, "second", 1, n - 1)
-    attempt = 0
-    while (second == secret
-           or (second + cover) % n in on_screen
-           or covered in on_screen - {covered}) and attempt < 4 * n:
-        second = second % (n - 1) + 1
-        attempt += 1
+    # A different secret, covered with the SAME cover. Only "different from the first" is
+    # required -- conditioning on the observed values would reintroduce the bias the cover
+    # draw above was just freed from.
+    second = _draw(seed, "second", 0, n - 1)
+    while second == secret:
+        second = (second + 1) % n
     second_covered = (second + cover) % n
 
     # For each candidate secret, how many covers produce the observed covered value?

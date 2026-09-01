@@ -83,19 +83,6 @@
         ]
       },
       {
-        "id": "sum-plain",
-        "label": "x を知っている人の計算 — (a + b) + 2x",
-        "points": 10,
-        "wrongAnswerPenalty": 5,
-        "hints": [
-          {
-            "id": "sum-plain-hint-1",
-            "content": "覆いは a と b の両方にかぶっているので、x は 2 回足します。(a + b) + x で止めない。",
-            "penalty": 3
-          }
-        ]
-      },
-      {
         "id": "huge",
         "label": "覆いを 15 桁にした両辺の差",
         "points": 15,
@@ -137,13 +124,26 @@
       {
         "id": "guesses",
         "label": "生き残る a の候補の数",
-        "points": 20,
+        "points": 15,
         "wrongAnswerPenalty": 5,
         "hints": [
           {
             "id": "guesses-hint-1",
             "content": "8 行目の行を、改行を入れずに 1 行のまま貼ってください。出るのは「生き残った候補の個数」で、候補そのものではありません。",
             "penalty": 5
+          }
+        ]
+      },
+      {
+        "id": "gap",
+        "label": "共通の覆いが漏らす差",
+        "points": 15,
+        "wrongAnswerPenalty": 5,
+        "hints": [
+          {
+            "id": "gap-hint-1",
+            "content": "2 つの覆われた値を引き算してください。同じ覆いが両方に乗っているので、引くと消えます。",
+            "penalty": 3
           }
         ]
       },
@@ -198,12 +198,12 @@
           ]
         },
         {
-          "id": "sum-plain",
-          "label": "The total written by someone who knows everything — (a + b) + 2x",
+          "id": "gap",
+          "label": "The difference the shared cover leaks",
           "hints": [
             {
-              "id": "sum-plain-hint-1",
-              "content": "The cover sits on both a and b, so x is added twice. Do not stop at (a + b) + x."
+              "id": "gap-hint-1",
+              "content": "Subtract the two covered values. The same cover sits on both, so it cancels."
             }
           ]
         },
