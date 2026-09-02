@@ -1,6 +1,6 @@
 """Public tests — readable, and deliberately not the grader.
 
-Two parts. Part 1 checks the ten functions on the STATEMENT example (a = 5, b = 3,
+Two parts. Part 1 checks the eleven functions on the STATEMENT example (a = 5, b = 3,
 x = 2, huge = 10**6, n = 13 — numbers no deployment can draw: x is never 2, huge is
 always fifteen digits, n is always 17 or more), whose answers are printed in the
 statement — so it can say PASS / FAIL. Part 2 prints what your functions return on
@@ -29,7 +29,7 @@ import unknown_x_drill as drill  # noqa: E402
 
 from participant.evidence import public_evidence  # noqa: E402
 
-# The ten line ids, in drill order. Hard-coded rather than imported: the module
+# The eleven line ids, in drill order. Hard-coded rather than imported: the module
 # that defines them (fixtures/generate.py) stays out of this image on purpose.
 LINES = (
     "covered",
@@ -40,6 +40,7 @@ LINES = (
     "held",
     "recover",
     "guesses",
+    "gap",
     "product",
     "wall",
 )
@@ -75,6 +76,7 @@ def part1() -> bool:
     ok &= _check("held(5, 3, 2)", drill.held(L["a"], L["b"], L["x"]), (12, 4))
     ok &= _check("recover(5, 3, 2)", drill.recover(L["a"], L["b"], L["x"]), 8)
     ok &= _check("guesses(5, 2, 13)", drill.guesses(L["a"], L["x"], L["n"]), 13)
+    ok &= _check("gap(5, 3, 2)", drill.gap(L["a"], L["b"], L["x"]), 2)
     ok &= _check("product(5, 3, 2)", drill.product(L["a"], L["b"], L["x"]), (35, 31, 4))
     ok &= _check("wall(5, 3, 2)", drill.wall(L["a"], L["b"], L["x"]), True)
     return bool(ok)
@@ -92,6 +94,7 @@ def part2() -> None:
         "held": lambda: drill.held(pub["a"], pub["b"], pub["x"]),
         "recover": lambda: drill.recover(pub["a"], pub["b"], pub["x"]),
         "guesses": lambda: drill.guesses(pub["a"], pub["x"], pub["n"]),
+        "gap": lambda: drill.gap(pub["a"], pub["b"], pub["x"]),
         "product": lambda: drill.product(pub["a"], pub["b"], pub["x"]),
         "wall": lambda: drill.wall(pub["a"], pub["b"], pub["x"]),
     }

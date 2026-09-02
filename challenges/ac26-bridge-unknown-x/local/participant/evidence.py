@@ -2,7 +2,7 @@
 
 Issue 537/543 (option B2): `fixtures/generate.py` does not ship in the `participant`
 Docker stage of this problem at all. Unlike the Week 4 drills, whose generators return
-public values only, this drill's `setting(seed)` returns the ten lines' expected
+public values only, this drill's `setting(seed)` returns the eleven lines' expected
 values alongside the public ones — one dict, one function, so shipping the module would
 put every graded answer one `import` inside the learner's own image. The public half
 (the assignment statements and the numbers behind them) is genuinely the problem

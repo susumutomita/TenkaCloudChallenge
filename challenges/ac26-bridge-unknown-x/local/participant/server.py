@@ -48,11 +48,11 @@ REQUEST_TIMEOUT_SECONDS = 15
 CHECKPOINTS = (
     "covered",
     "sum-covered",
-    "sum-plain",
     "huge",
     "held",
     "recover",
     "guesses",
+    "gap",
     "product",
 )
 
@@ -71,10 +71,10 @@ _WORKBENCH = PortalEditorSupport(
     problem_id='ac26-bridge-unknown-x',
     problem_name='x を知らないまま、足し算が済む',
     problem_name_en='The addition finishes without ever knowing x',
-    description='手元の Python で 1 行打って、出た値を貼る。10 行で、(a + x) + (b + x) = (a + b) + 2x — x を一度も知らないまま足し算が済むこと、覆われた値からは候補が 1 つも絞れないこと、そして掛け算だけは x² が余って同じ渡し方では通らないことを、自分の手で出した数だけで確かめる。',
-    description_en='Type one line in your own Python, paste the value it prints. Ten lines: (a + x) + (b + x) = (a + b) + 2x — the addition finishes without anyone ever knowing x, the covered value rules out none of the candidates, and multiplication alone leaves an extra x² the same trick cannot carry — on numbers you produced yourself.',
-    checkpoint_labels={'covered': '覆いをかぶせた 2 つの数', 'sum-covered': 'x を知らない人の足し算', 'sum-plain': 'x を知っている人の計算 — (a + b) + 2x', 'huge': '覆いを 15 桁にした両辺の差', 'held': '返ってくる数と、かぶっている覆いの総量', 'recover': '覆いを外して出てきた合計', 'guesses': '生き残る a の候補の数', 'product': '掛け算 — 積・x² 以外の項・その差'},
-    checkpoint_labels_en={'covered': 'The two covered numbers', 'sum-covered': 'The addition done by someone who never learns x', 'sum-plain': 'The total written by someone who knows everything — (a + b) + 2x', 'huge': "The two sides' difference with the fifteen-digit cover", 'held': 'What comes back, and the total cover inside it', 'recover': 'The total after taking the cover off', 'guesses': 'How many candidates for a survive', 'product': 'The multiplication — product, every term but x², their difference'},
+    description='手元の Python で 1 行打って、出た値を貼る。11 行で、(a + x) + (b + x) = (a + b) + 2x — x を一度も知らないまま足し算が済むこと、覆われた値 1 つからは候補が 1 つも絞れないのに同じ覆いの 2 つからは差だけが漏れること、そして掛け算だけは x² が余って同じ渡し方では通らないことを、自分の手で出した数だけで確かめる。',
+    description_en='Type one line in your own Python, paste the value it prints. Eleven lines: (a + x) + (b + x) = (a + b) + 2x — the addition finishes without anyone ever knowing x, one covered value rules out none of the candidates while two under the same cover leak their difference, and multiplication alone leaves an extra x² the same trick cannot carry — on numbers you produced yourself.',
+    checkpoint_labels={'covered': '覆いをかぶせた 2 つの数', 'sum-covered': 'x を知らない人の足し算', 'huge': '覆いを 15 桁にした両辺の差', 'held': '返ってくる数と、かぶっている覆いの総量', 'recover': '覆いを外して出てきた合計', 'guesses': '生き残る a の候補の数', 'gap': '共通の覆いが漏らす差', 'product': '掛け算 — 積・x² 以外の項・その差'},
+    checkpoint_labels_en={'covered': 'The two covered numbers', 'sum-covered': 'The addition done by someone who never learns x', 'huge': "The two sides' difference with the fifteen-digit cover", 'held': 'What comes back, and the total cover inside it', 'recover': 'The total after taking the cover off', 'guesses': 'How many candidates for a survive', 'gap': 'The difference the shared cover leaks', 'product': 'The multiplication — product, every term but x², their difference'},
     submitted_files=('unknown_x_drill.py',),
     code_checkpoints=(),
     checkpoints=CHECKPOINTS,

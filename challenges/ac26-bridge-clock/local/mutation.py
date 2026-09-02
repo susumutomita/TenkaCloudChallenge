@@ -29,6 +29,13 @@ from verifier.expected import expected_for  # noqa: E402
 REFERENCE = (ROOT / "reference" / "clock_drill.py").read_text(encoding="utf-8")
 SEED = "mutation-suite-seed"
 
+#: Every mutant runs against each of these seeds and counts as killed when any seed's
+#: hidden suite notices. One seed is not enough for a value-graded drill: the cover is
+#: drawn from the whole clock, so on a seed whose secret + cover stays below n, "the
+#: cover laid on without the wrap" prints the right value and is indistinguishable from
+#: the reference there. `_require_wrap` refuses to run until one of the seeds wraps.
+MUTATION_SEEDS = (SEED, "mutation-suite-seed-wrap-2")
+
 MUTATIONS: dict[str, tuple[str, str]] = {
     "the wrap never taken": (
         "    return (u % n, v % n)",
@@ -85,6 +92,16 @@ def _different(expected, *candidates):
     raise RuntimeError("every near-miss equals the expected value; pick another seed")
 
 
+def _require_wrap(seeds) -> None:
+    for seed in seeds:
+        pub = setting(seed)["public"]
+        if pub["secret"] + pub["cover"] >= pub["n"]:
+            return
+    raise RuntimeError(
+        "no mutation seed makes the cover wrap; add one whose secret + cover >= n"
+    )
+
+
 def _load(source: str) -> types.ModuleType:
     module = types.ModuleType("clock_drill_mutant")
     exec(compile(source, "clock_drill_mutant", "exec"), module.__dict__)  # noqa: S102 - author tooling
@@ -94,11 +111,13 @@ def _load(source: str) -> types.ModuleType:
 def main() -> int:
     survivors: list[str] = []
 
+    _require_wrap(MUTATION_SEEDS)
     reference = _load(REFERENCE)
-    failures = check_clock_drill.run(reference, SEED)
-    if failures:
-        print("FAIL reference implementation fails the hidden tests:", failures)
-        return 1
+    for seed in MUTATION_SEEDS:
+        failures = check_clock_drill.run(reference, seed)
+        if failures:
+            print("FAIL reference implementation fails the hidden tests:", failures)
+            return 1
     print("PASS reference implementation passes the hidden tests")
 
     for name, (old, new) in MUTATIONS.items():
@@ -106,10 +125,12 @@ def main() -> int:
             print(f"BROKEN mutation target not found: {name}")
             return 1
         mutant = _load(REFERENCE.replace(old, new, 1))
-        try:
-            failures = check_clock_drill.run(mutant, SEED)
-        except Exception as error:  # noqa: BLE001 - a crashing mutant is killed
-            failures = [f"raised {type(error).__name__}"]
+        failures = []
+        for seed in MUTATION_SEEDS:
+            try:
+                failures += check_clock_drill.run(mutant, seed)
+            except Exception as error:  # noqa: BLE001 - a crashing mutant is killed
+                failures.append(f"raised {type(error).__name__}")
         if failures:
             print(f"KILLED   {name}")
         else:

@@ -1,4 +1,4 @@
-"""Hidden access to the ten unknown-x drill lines' values.
+"""Hidden access to the eleven unknown-x drill lines' values.
 
 This problem's `fixtures/generate.py` derives the expected values inside
 `setting(seed)` itself, next to the public numbers — the module is the single source
@@ -17,10 +17,10 @@ from fixtures.generate import setting
 
 
 def expected_for(seed: str) -> dict[str, object]:
-    """Every one of the ten lines' values, keyed by line id.
+    """Every one of the eleven lines' values, keyed by line id.
 
-    Two of the ten (`same` and `wall`) are ungraded — the platform's per-problem
-    checkpoint maximum is eight — but `tests/hidden/check_unknown_x_drill.py` still
+    Three of the eleven (`sum-plain`, `same` and `wall`) are ungraded — the platform's
+    per-problem checkpoint maximum is eight — but `tests/hidden/check_unknown_x_drill.py` still
     checks the reference implementation produces them, so they are returned here too
     rather than only `fixtures.generate.GRADED`.
     """

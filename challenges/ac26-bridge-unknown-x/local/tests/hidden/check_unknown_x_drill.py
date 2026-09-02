@@ -1,4 +1,4 @@
-"""Hidden suite: the ten functions against this seed's expected values.
+"""Hidden suite: the eleven functions against this seed's expected values.
 
 No checkpoint of this problem runs learner code — the grade is the pasted value. This
 suite exists for the author path: the mutation suite breaks the reference on purpose
@@ -55,7 +55,7 @@ def check_addition(module, seed: str) -> list[str]:
 
 
 def check_holder(module, seed: str) -> list[str]:
-    """Lines 6–8: the holder's view — what comes back, what comes off, what narrows."""
+    """Lines 6–9: the holder's view — what comes back, what comes off, what narrows, what leaks."""
     pub = setting(seed)["public"]
     exp = expected_for(seed)
     failures: list[str] = []
@@ -65,11 +65,13 @@ def check_holder(module, seed: str) -> list[str]:
     failures += [err] if err else _compare("recover", got, exp["recover"])
     got, err = _call(module, "guesses", pub["a"], pub["x"], pub["n"])
     failures += [err] if err else _compare("guesses", got, exp["guesses"])
+    got, err = _call(module, "gap", pub["a"], pub["b"], pub["x"])
+    failures += [err] if err else _compare("gap", got, exp["gap"])
     return failures
 
 
 def check_wall(module, seed: str) -> list[str]:
-    """Lines 9–10: the multiplication and the x² it cannot get rid of."""
+    """Lines 10–11: the multiplication and the x² it cannot get rid of."""
     pub = setting(seed)["public"]
     exp = expected_for(seed)
     failures: list[str] = []

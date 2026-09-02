@@ -1,7 +1,7 @@
 """`make inspect` / the Portal's inspect button — this deployment's numbers, as Python.
 
 Everything is printed as assignment statements so the learner can paste the whole block
-into `python3` and start typing the ten lines. The values come from the verifier's
+into `python3` and start typing the eleven lines. The values come from the verifier's
 `GET /public` (Issue 537/543 option B2): this problem's `fixtures/generate.py` derives
 the expected values in the same function as the public ones, so the module itself does
 not ship in the participant image — only this public half travels. The expected values
@@ -33,7 +33,8 @@ def main() -> None:
     print()
     print("== what is NOT shown ==")
     print("  the value any line prints — the covered pair, either total, the difference,")
-    print("  the candidate count, the product and its leftover. Those are yours to produce.")
+    print("  the candidate count, the leaked gap, the product and its leftover. Those are")
+    print("  yours to produce.")
 
 
 if __name__ == "__main__":

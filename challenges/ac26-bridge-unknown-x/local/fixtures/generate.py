@@ -1,4 +1,4 @@
-"""This deployment's numbers, and the ten values the unknown-x drill expects.
+"""This deployment's numbers, and the eleven values the unknown-x drill expects.
 
 Everything the learner types is decided here from FLAG_SEED: two small numbers a and b,
 a small cover x, a huge cover X, and the modulus n. The learner never sees the expected
