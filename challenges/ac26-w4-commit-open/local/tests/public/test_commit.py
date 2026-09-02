@@ -6,7 +6,7 @@ commitment would be worth if the query came first.
 
 An implementation whose leaves do not bind their index passes this file completely.
 
-The last check is feedback rather than a test: it puts your four `lenient_opening`
+The last check is feedback rather than a test: it puts your five `lenient_opening`
 answers to the setter's verifiers and reports what each one did with them.
 """
 
@@ -76,7 +76,7 @@ def check_an_honest_opening_verifies() -> str:
     return ""
 
 
-LENIENT_SCHEMES = ("A", "B", "C", "D")
+LENIENT_SCHEMES = ("A", "B", "C", "D", "E")
 
 
 def _lenient_report(scheme: str, answer: dict) -> dict:
@@ -114,7 +114,7 @@ def _lenient_report(scheme: str, answer: dict) -> dict:
 
 
 def check_lenient_schemes() -> str:
-    """Feedback for the last checkpoint: your four answers, put to the setter's verifiers.
+    """Feedback for the last checkpoint: your five answers, put to the setter's verifiers.
 
     A rejected opening, or an accepted one that merely repeats a table entry, is
     reported as a failure; None is reported as-is. Whether a scheme admits any forgery

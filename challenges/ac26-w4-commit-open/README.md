@@ -21,7 +21,7 @@ A proof system's skeleton is three steps:
 
 Swap 1 and 2 and the protocol proves nothing. You will build the honest version, then
 demonstrate that attack yourself: the vector the `adaptive` checkpoint has you construct is
-wrong in fifteen of sixteen positions, and its opening verifies. Finally, against four of the
+wrong in fifteen of sixteen positions, and its opening verifies. Finally, against five of the
 setter's own verifiers, each missing a detail, you show which of them lets a forgery through —
 with the opening that gets through (the `lenient` checkpoint).
 
@@ -61,15 +61,15 @@ Eight checkpoints, scored independently. Wrong answers cost 15 points each.
 | `adaptive` | 40 | The challenge-first counterexample |
 | `ambiguity` | 35 | Two pairs colliding under the weak encoding and not under yours |
 | `transcript` | 35 | The challenge depends on commitment, domain and statement |
-| `lenient` | 60 | For each of the setter's verifiers A–D, an opening that passes with a claim outside the table, or `None` (scored only when all four are right) |
+| `lenient` | 60 | For each of the setter's verifiers A–E, an opening that passes with a claim outside the table, or `None` (scored only when all five are right) |
 
 Hints on six of the eight (115 points in all), each inside that checkpoint's 50% cap.
 
-## The setter's four verifiers
+## The setter's five verifiers
 
 The `lenient` checkpoint attacks verifiers fixed in the fixtures, not the participant's own. All
-four accept every honest opening; they differ only in the leaf and in how each sibling's side is
-decided.
+five accept every honest opening; they differ only in the leaf, the node, and how each sibling's
+side is decided.
 
 | verifier | leaf | the sibling's side | a claim outside the table |
 |---|---|---|---|
@@ -77,9 +77,12 @@ decided.
 | B | separator-free string (`weak_leaf`) | trusts the path's flag | passes — another (index, value) rendering to the same text; with 16 cells, index 10–15 re-reads as "1 + the rest" |
 | C | the proper leaf (4-byte index + 8-byte value) | trusts the path's flag | rejected — the index is in the leaf |
 | D | as A (no index) | the remainder of the index divided by 2 | rejected — the side comes from the index, so a relabelled leaf lands on the other side |
+| E | untagged fingerprint of the value's minimal bytes; the node is the untagged `sha256(left + right)` | as D | passes — a value whose bytes are "left child + right child" has an interior node's fingerprint, and that node is presented as a leaf with a shorter path |
 
-The participant returns a passing opening or `None` for each of the four. The hidden message
-names the scheme and the rule and never says which verifiers are sound. **Run public tests**
+The participant returns a passing opening or `None` for each of the five. The hidden message
+names the scheme for a rejected opening (the public tests give the same verdict, so that is no
+new information) but reports a `None` where a forgery exists without the scheme, once — the
+verdict never reveals which verifiers are sound. **Run public tests**
 sends the answers to the verifier's `POST /public/lenient`, which reports on the public 16-cell
 practice table whether each passed and whether its claim is a table entry — that is the feedback
 loop. The participant image carries neither the verifier implementations nor the practice roots.
@@ -98,7 +101,7 @@ Leaving an unkillable mutant in the list teaches that a `SURVIVED` line can be i
 not left in.
 
 The situation where the path length and the side flags do matter — a leaf that does not carry
-its index — is graded on the setter's four verifiers above instead: not by demanding the checks
+its index, or a tree without tags — is graded on the setter's five verifiers above instead: not by demanding the checks
 in the participant's `verify_opening`, but by having them construct what gets through a verifier
 that lacks them.
 
@@ -144,10 +147,12 @@ Zero. No cloud account, no AWS resources.
 
 ## For authors
 
-`make reference-test` runs the mutation suite: sixteen broken implementations, seven of them
-wrong answers to `lenient` (None everywhere, a forgery claimed against C or D, the honest opening
-passed off as a forgery, a path built on the wrong leaf, flipped sides, a leading-zero split).
-The other nine commit, challenge, open and verify successfully and differ only in what an
-adversary can do afterwards. The suite first checks the four verifiers themselves on five
-seeds: every honest opening passes, the reference forges exactly A and B, C and D reject every
-relabelling, and a flipped side flag is rejected by A, B and C and ignored by D.
+`make reference-test` runs the mutation suite: twenty broken implementations, eleven of them
+wrong answers to `lenient` (None everywhere, a forgery claimed against C or D, E declared sound,
+relabelling instead of a node for E, the path with the level under the node kept, the value built
+from the tagged node, the honest opening passed off as a forgery, a path built on the wrong leaf,
+flipped sides, a leading-zero split). The other nine commit, challenge, open and verify
+successfully and differ only in what an adversary can do afterwards. The suite first checks the
+five verifiers themselves on five seeds: every honest opening passes, the reference forges exactly
+A, B and E, C, D and E reject every relabelling, and a flipped side flag is rejected by A, B and C
+and ignored by D and E.

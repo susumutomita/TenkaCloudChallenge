@@ -163,15 +163,17 @@ def ambiguity_witness() -> dict:
 
 # --- the last checkpoint: the setter's four lenient schemes -------------------------
 
-#: The two schemes that accept a claim outside the honest table. A leaf that does not
-#: name its position (A) can be presented at any other position with its own path, as
-#: long as the verifier lets the path say which side each sibling is on. The
+#: The three schemes that accept a claim outside the honest table. A leaf that does
+#: not name its position (A) can be presented at any other position with its own path,
+#: as long as the verifier lets the path say which side each sibling is on. The
 #: separator-free leaf (B) additionally lets a different (index, value) pair render to
 #: the same text. Binding the index into the leaf (C) or deriving the sides from the
 #: index (D) each closes the relabelling on its own: the leaf's position is then part
 #: of what the root commits to, and a claim at another position recomputes to
-#: something else.
-FORGEABLE_SCHEMES = ("A", "B")
+#: something else. E derives the sides like D but has no domain tags and no fixed
+#: width, so a value whose bytes are exactly (left child + right child) hashes to an
+#: interior node, and that node can be presented as a leaf with a shorter path.
+FORGEABLE_SCHEMES = ("A", "B", "E")
 
 
 def _scheme_leaf(scheme: str, index: int, value: int) -> bytes:
@@ -179,20 +181,60 @@ def _scheme_leaf(scheme: str, index: int, value: int) -> bytes:
         return hashlib.sha256(f"{index}{value}".encode()).digest()
     if scheme == "C":
         return leaf_hash(index, value)
+    if scheme == "E":
+        width = max(1, (value.bit_length() + 7) // 8)
+        return hashlib.sha256(value.to_bytes(width, "big")).digest()
     return hashlib.sha256(LEAF_TAG + value.to_bytes(8, "big")).digest()
 
 
-def _scheme_open_at(scheme: str, values: list[int], index: int) -> list[dict]:
-    """`open_at` with the scheme's leaf swapped in; the nodes are unchanged."""
+def _scheme_node(scheme: str, left: bytes, right: bytes) -> bytes:
+    if scheme == "E":
+        return hashlib.sha256(left + right).digest()
+    return node_hash(left, right)
+
+
+def _scheme_levels(scheme: str, values: list[int]) -> list[list[bytes]]:
     level = [_scheme_leaf(scheme, position, value) for position, value in enumerate(values)]
+    levels = [level]
+    while len(level) > 1:
+        level = [_scheme_node(scheme, level[i], level[i + 1]) for i in range(0, len(level), 2)]
+        levels.append(level)
+    return levels
+
+
+def _scheme_open_at(scheme: str, values: list[int], index: int) -> list[dict]:
+    """`open_at` with the scheme's leaf and node swapped in."""
     path: list[dict] = []
     position = index
-    while len(level) > 1:
+    for level in _scheme_levels(scheme, values)[:-1]:
         sibling = position ^ 1
         path.append({"hash": level[sibling], "sibling_is_left": sibling < position})
-        level = [node_hash(level[i], level[i + 1]) for i in range(0, len(level), 2)]
         position //= 2
     return path
+
+
+def _node_as_leaf(values: list[int], length: int) -> dict | None:
+    """Scheme E: an interior node presented as a leaf, with the path above it.
+
+    The node over positions (2p, 2p+1) is sha256(left + right). A value whose bytes are
+    exactly those 64 bytes has the same leaf hash, so the honest path of position 2p
+    minus its first step climbs from that node to the root. The verifier derives the
+    sides from the claimed index, so the index has to share its low bits with p.
+    """
+    levels = _scheme_levels("E", values)
+    for pair in range(len(levels[0]) // 2):
+        left, right = levels[0][2 * pair], levels[0][2 * pair + 1]
+        if left[0] == 0:
+            continue  # a leading zero byte would be dropped by the minimal encoding
+        value = int.from_bytes(left + right, "big")
+        for index in (pair, pair + len(levels[0]) // 2):
+            if index < length and values[index] != value:
+                return {
+                    "index": index,
+                    "value": value,
+                    "path": _scheme_open_at("E", values, 2 * pair)[1:],
+                }
+    return None
 
 
 def _split_claims(index: int, value: int):
@@ -213,11 +255,14 @@ def lenient_opening(setting: dict) -> dict | None:
     A: the leaf does not know its position and the verifier trusts the path's sides, so
     position j's value with position j's own path is accepted as a claim about any
     other index. B: the same relabelling, except that the claimed pair has to render to
-    the same text as a real entry. C and D: sound -- see FORGEABLE_SCHEMES.
+    the same text as a real entry. E: an interior node presented as a leaf. C and D:
+    sound -- see FORGEABLE_SCHEMES.
     """
     scheme, length, values = setting["scheme"], setting["length"], list(setting["values"])
     if scheme not in FORGEABLE_SCHEMES:
         return None
+    if scheme == "E":
+        return _node_as_leaf(values, length)
     for position, value in enumerate(values):
         path = _scheme_open_at(scheme, values, position)
         if scheme == "A":

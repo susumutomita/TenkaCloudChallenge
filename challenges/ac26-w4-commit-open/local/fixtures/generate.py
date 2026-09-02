@@ -17,9 +17,9 @@ transcript that verifies against a naive verifier.
 Toy sizes throughout. SHA-256 is real, but nothing here is a proof system: there is one
 query, so a cheating prover who guesses it wins outright.
 
-The `lenient` checkpoint attacks the problem setter's own verifiers instead: four
+The `lenient` checkpoint attacks the problem setter's own verifiers instead: five
 commitment schemes (`SCHEMES`) that all accept every honest opening and differ only in
-the leaf and in how the verifier decides which side a sibling is on. Which of them admit
+the leaf, the node, and how the verifier decides which side a sibling is on. Which of them admit
 a forged claim is the participant's question; this module answers it only in code
 (`FORGEABLE_SCHEMES`), and mutation.py confirms the reference forges exactly those.
 """
@@ -119,8 +119,9 @@ def weak_leaf(index: int, value: int) -> bytes:
 
 # --- the four lenient schemes the `lenient` checkpoint attacks -----------------------
 
-#: The setter's four commitment schemes, as the statement describes them. Every one of
-#: them accepts every honest opening of its own tree. They differ in two details only:
+#: The setter's five commitment schemes, as the statement describes them. Every one of
+#: them accepts every honest opening of its own tree. They differ in the leaf, in the
+#: node, and in how the verifier decides which side a sibling is on:
 #:
 #:   A  leaf = sha256(LEAF_TAG + value as 8 bytes)      -- no index in the leaf;
 #:      the verifier takes each sibling's side from the path
@@ -130,23 +131,32 @@ def weak_leaf(index: int, value: int) -> bytes:
 #:      the verifier takes each sibling's side from the path
 #:   D  leaf = as A (no index in the leaf);
 #:      the verifier ignores the path's side flags and derives the side from the index
+#:   E  leaf = sha256(the value in as few bytes as it needs), node = sha256(left + right)
+#:      -- no index, no tags, no fixed width; sides derived from the index as in D
 #:
-#: Nodes are the honest `node_hash` in all four. No scheme checks the path length, and
-#: all four check only that the index is inside the vector.
-SCHEMES = ("A", "B", "C", "D")
+#: Nodes are the honest `node_hash` in A-D. No scheme checks the path length, and
+#: every scheme checks only that the index is inside the vector (E also bounds the
+#: value to 64 bytes).
+SCHEMES = ("A", "B", "C", "D", "E")
 #: The schemes that accept a claim outside the honest table. A leaf that does not name
 #: its position can be presented at another position with its own path as long as the
 #: verifier lets the path say which side each sibling is on (A); the separator-free
 #: leaf lets a different (index, value) pair render to the same text (B). Binding the
 #: index into the leaf (C) or deriving the sides from the index (D) each closes the
 #: relabelling on its own: the leaf's own position is then part of what the root
-#: commits to, and a claim at another position recomputes to something else.
-FORGEABLE_SCHEMES = ("A", "B")
+#: commits to, and a claim at another position recomputes to something else. E closes
+#: the relabelling like D but drops the domain tags and the fixed width, so a value
+#: whose bytes are exactly (left child + right child) hashes to an interior node: that
+#: node can be presented as a leaf with a shorter path, which is what the unchecked
+#: path length lets through once the tags are gone.
+FORGEABLE_SCHEMES = ("A", "B", "E")
 #: Cells in the table the lenient schemes commit to. Sixteen, so scheme B always has a
 #: forgery: an entry at index 10..15 re-reads as index 1 followed by a longer value.
 LENIENT_LENGTH = 16
 #: Values in a claim must fit the eight-byte leaf field of schemes A, C and D.
 MAX_LEAF_VALUE = 1 << 64
+#: Scheme E encodes the value in as few bytes as it needs; a claim may use up to 64.
+MAX_UNTAGGED_VALUE = 1 << 512
 
 
 def lenient_setting(seed: str, label: str = "public") -> dict:
@@ -163,15 +173,25 @@ def scheme_leaf(scheme: str, index: int, value: int) -> bytes:
         return weak_leaf(index, value)
     if scheme == "C":
         return leaf_hash(index, value)
+    if scheme == "E":
+        # No tag, no index, and only as many bytes as the value needs (one for zero).
+        width = max(1, (value.bit_length() + 7) // 8)
+        return hashlib.sha256(value.to_bytes(width, "big")).digest()
     # A and D: the leaf does not name its position.
     return hashlib.sha256(LEAF_TAG + value.to_bytes(8, "big")).digest()
+
+
+def scheme_node(scheme: str, left: bytes, right: bytes) -> bytes:
+    if scheme == "E":
+        return hashlib.sha256(left + right).digest()
+    return node_hash(left, right)
 
 
 def scheme_levels(scheme: str, values: list[int]) -> list[list[bytes]]:
     level = [scheme_leaf(scheme, index, value) for index, value in enumerate(values)]
     levels = [level]
     while len(level) > 1:
-        level = [node_hash(level[i], level[i + 1]) for i in range(0, len(level), 2)]
+        level = [scheme_node(scheme, level[i], level[i + 1]) for i in range(0, len(level), 2)]
         levels.append(level)
     return levels
 
@@ -198,14 +218,15 @@ def lenient_verify(
 
     Accepts every honest opening of that scheme's tree. Checks the index range and the
     value's width, then walks the path and compares with the root; the path length is
-    not checked. Schemes A, B and C place each sibling where the path says; scheme D
-    ignores the path's flag and places it by the index's bit for that level.
+    not checked. Schemes A, B and C place each sibling where the path says; schemes D
+    and E ignore the path's flag and place it by the index's bit for that level.
     """
     if scheme not in SCHEMES:
         return False
     if type(index) is not int or not 0 <= index < length:
         return False
-    if type(value) is not int or not 0 <= value < MAX_LEAF_VALUE:
+    limit = MAX_UNTAGGED_VALUE if scheme == "E" else MAX_LEAF_VALUE
+    if type(value) is not int or not 0 <= value < limit:
         return False
     if not isinstance(path, list):
         return False
@@ -217,11 +238,11 @@ def lenient_verify(
         sibling = step.get("hash")
         if not isinstance(sibling, bytes) or len(sibling) != 32:
             return False
-        if scheme == "D":
+        if scheme in ("D", "E"):
             sibling_is_left = position % 2 == 1
         else:
             sibling_is_left = bool(step.get("sibling_is_left"))
-        node = node_hash(sibling, node) if sibling_is_left else node_hash(node, sibling)
+        node = scheme_node(scheme, sibling, node) if sibling_is_left else scheme_node(scheme, node, sibling)
         position //= 2
     return node == root
 
@@ -289,7 +310,7 @@ def public_payload(seed: str) -> dict[str, object]:
             for entry in opening
         ],
         "healthToken": health_token(seed),
-        # The table the four lenient schemes commit to, for the last checkpoint. Only the
+        # The table the five lenient schemes commit to, for the last checkpoint. Only the
         # values: the scheme roots are recomputed by the verifier when asked.
         "lenientLength": LENIENT_LENGTH,
         "lenientValues": list(lenient_setting(seed)["values"]),

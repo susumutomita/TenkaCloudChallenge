@@ -9,7 +9,7 @@ Three steps, in this order:
 Swap steps 1 and 2 and the protocol proves nothing — the prover can commit to garbage
 everywhere except the one place they already know will be checked. You will build the
 honest version, demonstrate that attack, and finally show — against the problem
-setter's own four verifiers — which missing detail lets a forged claim through.
+setter's own five verifiers — which missing detail lets a forged claim through.
 
 The commitment is a Merkle tree over a small vector. **It is not a polynomial
 commitment**, and one opening does not say anything about the rows nobody asked about.
@@ -111,13 +111,14 @@ def ambiguity_witness() -> dict:
 
 
 def lenient_opening(setting: dict) -> dict | None:
-    """The last checkpoint: the setter's four verifiers, A to D (the statement's table).
+    """The last checkpoint: the setter's five verifiers, A to E (the statement's table).
 
     `setting` is {"scheme": "A", "length": 16, "values": [...]} -- one letter, and the
     honest table that scheme's tree commits to. Return an opening
     {"index": ..., "value": ..., "path": [...]} that the scheme's verifier accepts for a
-    claim that is NOT in the table, or None if that verifier accepts no such claim. All
-    four answers have to be right at once. You will want a copy of `open_at` with its
-    leaf line swapped for that scheme's leaf.
+    claim that is NOT in the table (a value different from the one at that index), or
+    None if that verifier accepts no such claim. All five answers have to be right at
+    once. You will want a copy of `open_at` with its leaf line (and, for E, its node
+    line) swapped for that scheme's.
     """
     return None

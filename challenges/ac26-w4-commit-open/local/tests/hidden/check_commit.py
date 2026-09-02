@@ -4,7 +4,7 @@ Every checkpoint that matters here attacks something an honest run never exercis
 leaf presented from the wrong index, a path with a flipped sibling, a path one step too
 short, a challenge that does not depend on the commitment. All of those verify fine
 until somebody is trying. The last checkpoint turns it around: the submission has to be
-the one trying, against the setter's four lenient verifiers.
+the one trying, against the setter's five lenient verifiers.
 """
 
 from __future__ import annotations
@@ -272,12 +272,13 @@ def check_transcript(module, seed: str) -> list[str]:
     return failures
 
 
-#: One message for both ways of getting a scheme wrong -- an opening that scheme
-#: rejects, or None where a forgery exists -- so the verdict never says which schemes
-#: are sound. The public tests already show whether an attempted opening gets through.
-_LENIENT_RULE = (
-    "the answer does not match what that scheme's verifier accepts: an opening it "
-    "accepts for a claim outside the honest table, or None when there is none"
+#: A rejected opening is reported with its scheme: the public tests show the same
+#: verdict for the public table, so the name reveals nothing. A None where a forgery
+#: exists is reported without the scheme, and at most once, so the verdict never says
+#: which schemes are sound -- deciding that is the checkpoint.
+_LENIENT_REJECTED = "the returned opening is not accepted by that scheme's verifier"
+_LENIENT_DECLINED = (
+    "an answer is None for a scheme whose verifier does accept some claim outside the honest table"
 )
 
 
@@ -292,11 +293,12 @@ def _well_formed_path(path: object) -> bool:
 
 
 def check_lenient(module, seed: str) -> list[str]:
-    """The setter's four verifiers. Forge where a detail is missing; decline where none is.
+    """The setter's five verifiers. Forge where a detail is missing; decline where none is.
 
     Every scheme accepts every honest opening, so the question is only whether a claim
-    outside the honest table gets through. The verdict names the scheme and the rule,
-    never whether that scheme admits a forgery.
+    outside the honest table gets through. The verdict never says whether a given
+    scheme admits a forgery: a rejected opening is named by scheme (the public tests
+    show the same), a wrong None is not.
     """
     failures: list[str] = []
     for label in LABELS:
@@ -311,7 +313,7 @@ def check_lenient(module, seed: str) -> list[str]:
                 return [f"scheme {scheme}: building the opening raised {type(error).__name__}"]
             if answer is None:
                 if scheme in FORGEABLE_SCHEMES:
-                    failures.append(f"scheme {scheme}: {_LENIENT_RULE}")
+                    failures.append(_LENIENT_DECLINED)
                 continue
             if not isinstance(answer, dict) or not {"index", "value", "path"} <= set(answer):
                 failures.append(
@@ -337,7 +339,7 @@ def check_lenient(module, seed: str) -> list[str]:
                 )
                 continue
             if not lenient_verify(scheme, scheme_root(scheme, values), index, value, path, length):
-                failures.append(f"scheme {scheme}: {_LENIENT_RULE}")
+                failures.append(f"scheme {scheme}: {_LENIENT_REJECTED}")
     return failures
 
 
