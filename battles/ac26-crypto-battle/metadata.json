@@ -42,7 +42,11 @@
     "plugin": "coordination/crypto-battle.ts",
     "name": "暗号 Battle 進行エンジン",
     "description": "Contract の供給、LEAK / PROVE / HUNT / ROTATE の裁定、Public Ledger の共有を行う。試合中の得点はすべてここで判定される (推量では通らない)。",
-    "publicHint": true
+    "publicHint": true,
+    "stateBudget": {
+      "bytesPerTeam": 17001,
+      "baseBytes": 1152
+    }
   },
   "i18n": {
     "en": {

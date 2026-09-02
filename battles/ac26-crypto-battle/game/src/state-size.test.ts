@@ -3,6 +3,7 @@ import { applyOp, DEFAULT_CONFIG, initialState, tick, validateOp } from "./reduc
 import { buildLeakOp, startedMatch } from "./playtest.ts";
 import { HINT_LEVELS } from "./hints.ts";
 import { TERMINAL_ORDER_RETENTION_BATCHES } from "./reducer.ts";
+import metadata from "../../metadata.json" with { type: "json" };
 
 /**
  * [Issue #659] How big one match's persisted state gets, and where that stops
@@ -195,4 +196,57 @@ describe("a full match's persisted state fits the backend that has to hold it", 
       DEFAULT_CONFIG.contractsPerIssue * (TERMINAL_ORDER_RETENTION_BATCHES + 2),
     );
   });
+});
+
+/**
+ * [Issue #3169] The declaration in `metadata.json`, kept true by measurement.
+ *
+ * The platform refuses to deploy an event whose team count cannot fit the
+ * selected backend, and it decides that from `interTeamCoordination.stateBudget`
+ * — two numbers this repository writes down. A written-down number rots: the
+ * game grows, the declaration does not, and the platform then admits an event
+ * that stops mid-match, which is the exact failure the check exists to prevent.
+ *
+ * So the declaration is re-derived here from the same worst-case match the rest
+ * of this file measures. If the game grows, this fails and the number has to be
+ * updated deliberately — which is the point.
+ */
+describe("the state budget this Battle declares to the platform", () => {
+  const declared = metadata.interTeamCoordination?.stateBudget as
+    | { bytesPerTeam: number; baseBytes: number }
+    | undefined;
+
+  test("is declared at all, because an undeclared problem is never checked", () => {
+    expect(declared).toBeDefined();
+  });
+
+  test("still matches a re-measured worst case", () => {
+    // Two points and a straight line, which is legitimate only because the
+    // linearity test above holds. Measured at the ends of the supported range
+    // so the fit is not anchored on one size.
+    const small = playWorstCase(4);
+    const large = playWorstCase(PLATFORM_MAX_TEAMS);
+    const perTeam = (large - small) / (PLATFORM_MAX_TEAMS - 4);
+    const base = small - perTeam * 4;
+
+    expect(declared).toBeDefined();
+    if (!declared) return;
+    // Within 5%: the declaration is a deployment gate, not a checksum, and a
+    // exact-equality assertion would fail on a one-byte wording change in a
+    // hint. Wide enough to survive that, tight enough that a real change to how
+    // the match grows lands here.
+    expect(declared.bytesPerTeam).toBeGreaterThan(perTeam * 0.95);
+    expect(declared.bytesPerTeam).toBeLessThan(perTeam * 1.05);
+    expect(declared.baseBytes).toBeLessThan(Math.max(base * 1.5, 4096));
+  }, HEAVY_TEST_TIMEOUT_MS);
+
+  test("forecasts the real 99-team row rather than under-reporting it", () => {
+    // The direction that matters. A forecast BELOW the truth is what lets the
+    // platform admit an event that then dies; above it only costs an operator
+    // teams they could have had.
+    expect(declared).toBeDefined();
+    if (!declared) return;
+    const forecast = declared.baseBytes + declared.bytesPerTeam * PLATFORM_MAX_TEAMS;
+    expect(forecast).toBeGreaterThanOrEqual(playWorstCase(PLATFORM_MAX_TEAMS));
+  }, HEAVY_TEST_TIMEOUT_MS);
 });
