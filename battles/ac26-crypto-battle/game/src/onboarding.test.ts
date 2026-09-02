@@ -32,6 +32,7 @@ function projection(overrides: Partial<CryptoBattleProjection> = {}): CryptoBatt
     // [Issue #645] The modulus is on the projection: a participant needs it to
     // compute an FHE or MPC answer, and it is public by construction.
     prime: DEFAULT_CONFIG.prime,
+    threshold: DEFAULT_CONFIG.threshold,
     matchRemainingMs: 30_000,
     vault: {
       teamId: "blue",

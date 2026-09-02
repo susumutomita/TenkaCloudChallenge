@@ -182,6 +182,14 @@ export const FAST_MOVE_COPY = {
     huntNonceBody: "Recovered key accepted — nonce reuse punished.",
     tactics: "NEXT TACTIC FROM THE PUBLIC RECORD",
     tacticsHint: "Open this when a public share, proof, or one of your exposed shares gives you another move.",
+    exposure: "EXPOSURE",
+    exposureHint: (threshold: number) =>
+      `${threshold} shares of one generation reconstruct that team's secret. This is how close everyone is.`,
+    exposureSelf: "you",
+    exposureSafe: "safe",
+    exposureWarn: "at risk — ROTATE clears it",
+    exposureHuntable: "can be hunted",
+    exposureSolo: "This event has one team, so nothing can be hunted and LEAK carries no risk here. The trade this Battle is about only appears with a second team.",
   },
   ja: {
     title: "MAKE A MOVE",
@@ -303,6 +311,14 @@ export const FAST_MOVE_COPY = {
     huntNonceBody: "復元した鍵が受理されました — nonce の使い回しを突きました。",
     tactics: "公開記録からできる次の作戦",
     tacticsHint: "公開された share・proof、または自分の公開済み share があるときに開きます。",
+    exposure: "危険度",
+    exposureHint: (threshold: number) =>
+      `同じ世代の share が ${threshold} 枚そろうと、そのチームの秘密は復元されます。いま全員が何枚まで来ているかです。`,
+    exposureSelf: "あなた",
+    exposureSafe: "まだ安全",
+    exposureWarn: "危険 — ROTATE で消せます",
+    exposureHuntable: "HUNT できます",
+    exposureSolo: "このイベントは 1 チームなので HUNT は起きず、LEAK に危険もありません。この Battle の駆け引きは 2 チーム目がいて初めて現れます。",
   },
 } as const;
 
@@ -374,6 +390,74 @@ function ownExposedShareCount(projection: CryptoBattleProjection | null): number
     }
   }
   return indices.size;
+}
+
+/**
+ * [Issue #682] Every team's distance from being hunted, in one list.
+ *
+ * The Battle's whole tension is that LEAK is fast and PROVE is safe, and that
+ * only holds if a player can see the danger accumulating. Until now they could
+ * not: HUNT, ROTATE and both key-recovery moves were rendered only once the
+ * evidence for them already existed, and even then inside a collapsed
+ * `<details>`. A first-time player therefore met a queue of puzzles with no
+ * opponent in it, pressed LEAK because it was the fast button, and never
+ * learned that the fast button was the dangerous one. 「これだと単に問題を解いて
+ * いるだけ」 was an exact description of what the code did.
+ *
+ * So the lane is computed for EVERY team including the ones at zero, and it is
+ * rendered whether or not anything is actionable. Watching a rival go 1/3 then
+ * 2/3 is the information that makes the next LEAK a decision, and watching your
+ * own row climb is what makes ROTATE mean something before it is too late.
+ *
+ * Counted per team's CURRENT generation only: a ROTATE makes every share
+ * published before it worthless, so old rows must not keep a team looking
+ * exposed after it has already escaped.
+ */
+export interface ExposureRow {
+  readonly teamId: string;
+  readonly isSelf: boolean;
+  readonly generation: number;
+  readonly exposed: number;
+  readonly shareIndices: readonly number[];
+  /** At or past the threshold — this team's current secret can be reconstructed. */
+  readonly huntable: boolean;
+}
+
+export function exposureRows(projection: CryptoBattleProjection | null): readonly ExposureRow[] {
+  if (!projection) return [];
+  const generationOf = new Map<string, number>();
+  for (const team of Object.values(projection.teams)) {
+    generationOf.set(team.teamId, team.generation);
+  }
+  // The vault is authoritative for our own generation: `teams` carries it too,
+  // but the vault is what every other control on this surface reads.
+  generationOf.set(projection.vault.teamId, projection.vault.generation);
+
+  const indices = new Map<string, Set<number>>();
+  for (const entry of projection.publicLedger) {
+    if (entry.kind !== "share") continue;
+    if (entry.generation !== generationOf.get(entry.teamId)) continue;
+    const set = indices.get(entry.teamId) ?? new Set<number>();
+    set.add(entry.shareIndex);
+    indices.set(entry.teamId, set);
+  }
+
+  const rows = [...generationOf.entries()].map(([teamId, generation]): ExposureRow => {
+    const exposed = [...(indices.get(teamId) ?? [])].sort((a, b) => a - b);
+    return {
+      teamId,
+      isSelf: teamId === projection.vault.teamId,
+      generation,
+      exposed: exposed.length,
+      shareIndices: exposed,
+      huntable: exposed.length >= projection.threshold,
+    };
+  });
+  // Own row first — it is the one that decides the next move — then the teams
+  // closest to being hunted.
+  return rows.sort((a, b) =>
+    a.isSelf === b.isSelf ? b.exposed - a.exposed : a.isSelf ? -1 : 1,
+  );
 }
 
 /**
@@ -633,6 +717,21 @@ ${DIE_CSS}
 .tc-hint-button:disabled{opacity:.5;cursor:not-allowed}
 .tc-feedback-leak{background:#fff0d6;border:1px solid #d8a657}.tc-feedback-prove{background:#e7f6ec;border:1px solid #69b482}.tc-feedback-hunt{background:#f0eaff;border:1px solid #9a7bd1}.tc-feedback-rotate{background:#e8f3ff;border:1px solid #6ba8df}.tc-feedback-hint{background:#eef4fb;border:1px solid #7ea8d4}.tc-feedback-error{background:#fff0f0;border:1px solid #d13212}
 @keyframes tc-feedback-pop{0%{transform:translateY(7px) scale(.97);opacity:0}60%{transform:translateY(0) scale(1.02);opacity:1}100%{transform:scale(1)}}
+/* [Issue #682] The exposure lane. Always on screen, because its job is to be
+   watched while it is still boring: a rival at 1/3 is the reason the next LEAK
+   is a decision rather than the fast button. */
+.tc-exposure{border:1px solid #cfd8e3;border-radius:12px;padding:12px;background:#fff;margin-top:10px}
+.tc-exposure-rows{display:grid;gap:6px;margin-top:8px}
+.tc-exposure-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:6px 8px;border:1px solid #eaeded;border-radius:8px;background:#fbfcfd}
+.tc-exposure-self{border-color:#b6d7f2;background:#f5fbff}
+.tc-exposure-hot{border-color:#e0b36a;background:#fff7e8}
+.tc-exposure-team{font-size:11px;font-weight:800;letter-spacing:.04em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tc-exposure-pips{display:flex;gap:3px}
+.tc-pip{width:9px;height:9px;border-radius:99px;border:1px solid #b8c4ce;background:#fff}
+.tc-pip-on{background:#d97706;border-color:#b45309}
+.tc-exposure-state{font-size:10px;font-weight:700;color:#5f6b7a;white-space:nowrap}
+.tc-exposure-state-hot{color:#a4341c}
+.tc-exposure-note{font-size:11px;color:#5f6b7a;margin:8px 0 0;line-height:1.6}
 @media(max-width:720px){.tc-primary-actions,.tc-secondary-grid{grid-template-columns:1fr}}
 /* [Issue #677] The two gate screens -- waiting to start, and finished. Both are
    a single centred message, because in both cases there is exactly one thing to
@@ -647,12 +746,52 @@ ${DIE_CSS}
 @media(prefers-reduced-motion:reduce){.tc-feedback{animation:none!important}}
 `;
 
+/**
+ * [Issue #682] The same projection, aged by the wall clock.
+ *
+ * Every duration on a projection is only true at the instant it was fetched —
+ * `types.ts` says so on each field, and `StatusPanelCore` has always aged them
+ * before display. The battle surface did not, so with a 30-second poll every
+ * Order countdown sat on one number for half a minute and an Order that had
+ * already lapsed stayed on the belt at 0:00 until the next poll replaced it.
+ * The owner read that as the clock being frozen, which is exactly what it was.
+ *
+ * Ageing the whole projection once, rather than at each of the dozen places
+ * that read a duration, is what keeps the belt, the ticket, the ROTATE cooldown
+ * and the match clock from disagreeing with each other.
+ */
+export function ageProjection(
+  projection: CryptoBattleProjection | null,
+  elapsedMs: number,
+): CryptoBattleProjection | null {
+  if (!projection || elapsedMs <= 0) return projection;
+  const drop = (ms: number) => Math.max(0, ms - elapsedMs);
+  return {
+    ...projection,
+    matchRemainingMs:
+      projection.matchRemainingMs === undefined ? undefined : drop(projection.matchRemainingMs),
+    myContracts: projection.myContracts.map((order) =>
+      order.remainingMs <= 0 ? order : { ...order, remainingMs: drop(order.remainingMs) },
+    ),
+    vault: {
+      ...projection.vault,
+      rotateCooldownRemainingMs: drop(projection.vault.rotateCooldownRemainingMs),
+    },
+  };
+}
+
 export default function FastMovePanel(props: PortalSlotProps) {
   const locale: Locale = props.locale === "ja" ? "ja" : "en";
   const copy = FAST_MOVE_COPY[locale];
   const client = props.coordinationClient;
   const polled = usePolledProjection(client);
-  const [projection, setProjection] = useState<CryptoBattleProjection | null>(null);
+  const [polledProjection, setPolledProjection] = useState<CryptoBattleProjection | null>(null);
+  // [Issue #682] When `polledProjection` was set, by the portal's own wall
+  // clock. An op's response replaces the projection too, so this cannot be read
+  // off the poller alone — doing that would keep ageing a projection that had
+  // just been refreshed, and the countdown would run fast after every move.
+  const [projectionAtMs, setProjectionAtMs] = useState<number | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const [selectedOrderId, setSelectedOrderId] = useState("");
   const [commitment, setCommitment] = useState("");
   const [response, setResponse] = useState("");
@@ -673,9 +812,25 @@ export default function FastMovePanel(props: PortalSlotProps) {
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
 
+  const setProjection = (next: CryptoBattleProjection) => {
+    setPolledProjection(next);
+    setProjectionAtMs(Date.now());
+  };
+
   useEffect(() => {
     if (polled.projection) setProjection(polled.projection);
   }, [polled.projection]);
+
+  // One second, because that is the resolution the numbers are shown at.
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const projection = useMemo(
+    () => ageProjection(polledProjection, projectionAtMs === null ? 0 : nowMs - projectionAtMs),
+    [polledProjection, projectionAtMs, nowMs],
+  );
 
   const orders = useMemo(() => openOrders(projection), [projection]);
   const selectedOrder = orders.find((order) => order.id === selectedOrderId) ?? orders[0];
@@ -689,6 +844,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
   const selectedTarget = targets.find((target) => `${target.teamId}:${target.generation}` === huntTargetKey) ?? targets[0];
   const nonceTargets = useMemo(() => nonceHuntCandidates(projection), [projection]);
   const tactics = useMemo(() => tacticAvailability(projection), [projection]);
+  const exposure = useMemo(() => exposureRows(projection), [projection]);
   const selectedNonceTarget =
     nonceTargets.find((t) => `${t.teamId}:${t.generation}` === nonceTargetKey) ?? nonceTargets[0];
   const cipherTargets = useMemo(() => cipherHuntCandidates(projection), [projection]);
@@ -1091,8 +1247,44 @@ export default function FastMovePanel(props: PortalSlotProps) {
         </div>
       )}
 
+      {/*
+        [Issue #682] The exposure lane, always on screen. See `exposureRows`
+        for why it is not gated on anything being actionable yet.
+      */}
+      <div className="tc-exposure">
+        <div className="tc-card-title">{copy.exposure}</div>
+        <div className="tc-card-hint">{copy.exposureHint(projection.threshold)}</div>
+        <div className="tc-exposure-rows">
+          {exposure.map((row) => (
+            <div
+              key={row.teamId}
+              className={`tc-exposure-row${row.isSelf ? " tc-exposure-self" : ""}${row.huntable || (row.isSelf && row.exposed > 0) ? " tc-exposure-hot" : ""}`}
+            >
+              <span className="tc-exposure-team">{row.isSelf ? copy.exposureSelf : row.teamId}</span>
+              <span className="tc-exposure-pips" aria-label={`${row.exposed}/${projection.threshold}`}>
+                {Array.from({ length: projection.threshold }, (_, i) => (
+                  <span key={i} className={`tc-pip${i < row.exposed ? " tc-pip-on" : ""}`} />
+                ))}
+              </span>
+              <span
+                className={`tc-exposure-state${row.huntable || (row.isSelf && row.exposed > 0) ? " tc-exposure-state-hot" : ""}`}
+              >
+                {row.huntable
+                  ? row.isSelf
+                    ? copy.exposureWarn
+                    : copy.exposureHuntable
+                  : row.isSelf && row.exposed > 0
+                    ? copy.exposureWarn
+                    : copy.exposureSafe}
+              </span>
+            </div>
+          ))}
+        </div>
+        {exposure.length <= 1 ? <p className="tc-exposure-note">{copy.exposureSolo}</p> : null}
+      </div>
+
       {(tactics.hunt || tactics.nonceHunt || tactics.cipherHunt || tactics.rotate) && (
-      <details className="tc-tactics">
+      <details className="tc-tactics" open={tactics.hunt || tactics.cipherHunt || tactics.nonceHunt}>
         <summary>{copy.tactics}<span>{copy.tacticsHint}</span></summary>
         <div className="tc-tactics-body">
       {tactics.hunt && <div className="tc-secondary-grid">

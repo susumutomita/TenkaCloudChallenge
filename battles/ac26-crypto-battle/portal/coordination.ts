@@ -73,6 +73,11 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
   // surfaces `bad_projection` instead, which is what the participant needs to
   // see.
   if (typeof v.prime !== "string" || v.prime.length === 0) return false;
+  // [Issue #682] Same fail-closed rule as `prime`: the exposure lane renders
+  // "2 / 3" from this, and a payload without it would render "2 / undefined".
+  if (typeof v.threshold !== "number" || !Number.isFinite(v.threshold) || v.threshold <= 0) {
+    return false;
+  }
 
   const vault = v.vault;
   if (typeof vault !== "object" || vault === null) return false;

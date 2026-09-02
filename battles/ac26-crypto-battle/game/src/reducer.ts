@@ -2034,6 +2034,7 @@ export function projectForTeam(
   return {
     phase: state.phase,
     prime: state.config.prime,
+    threshold: state.config.threshold,
     matchRemainingMs,
     vault: {
       teamId,
