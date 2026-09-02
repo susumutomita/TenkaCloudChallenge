@@ -24,9 +24,15 @@ import { dirname, join, normalize } from "node:path";
  *   :8081  the loopback /verify endpoint the TenkaCloud scorer delegates to
  *          (multi-verify: request carries a checkpointId, response echoes it)
  *
- * FLAG-1 (the sender domain's registration date) is derived from FLAG_SEED, so
- * it is unique per deploy and can only be read from the mock RDAP, not memorized.
- * FLAG-2/3/4 are structural facts recovered by analysing the committed evidence.
+ * All four graded answers are derived from FLAG_SEED (AGENTS.md §13), so none
+ * of them is a fixed value a participant could carry in from a writeup:
+ *   FLAG-1 (sender domain registration date) — only readable via the mock RDAP.
+ *   FLAG-2 (DKIM signing domain)             — only readable via the .eml's
+ *                                               DKIM-Signature header.
+ *   FLAG-3 (download endpoint path)          — only readable via static
+ *                                               analysis of clone/app.js.
+ *   FLAG-4 (impersonated person)             — readable via the .eml and the
+ *                                               meeting API.
  */
 
 /**
@@ -56,10 +62,41 @@ const seedInt = (label) => parseInt(sha256(`${label}:${FLAG_SEED}`).slice(0, 12)
 const SENDER_DOMAIN = "northgate-cowork.example"; // hijacked / re-registered
 const LURE_DOMAIN = "velameet-07.example"; // attacker funnel
 const VICTIM_DOMAIN = "kestrel-dyn.example"; // the defending org (established)
-const DKIM_DOMAIN = SENDER_DOMAIN; // DKIM d= in the .eml → FLAG-2
-const IMPERSONATOR = "Daniel Whitmore"; // claimed Northgate co-founder → FLAG-4
 const ROOM_ID = "qrt-mkbd-zol";
-const DOWNLOAD_PATH_PATTERN = "/meetings/{id}/download"; // FLAG-3
+
+// FLAG-2/3/4 pools. Each is picked from a small fixed list by seedInt(), the
+// same per-deploy derivation FLAG-1 already uses, so none of the four graded
+// answers is a constant a participant could carry in from a writeup.
+const IMPERSONATOR_NAMES = [
+  "Daniel Whitmore", "Marcus Reyes", "Evan Sinclair", "Nathaniel Cross",
+  "Julian Ashford", "Gregory Holt", "Owen Kessler", "Adrian Voss",
+  "Lucas Bramwell", "Trevor Lindqvist", "Miles Sutherland", "Connor Hargrove",
+  "Derek Fenwick", "Nolan Ashcroft", "Peter Callahan", "Simon Wexford",
+];
+const DKIM_RELAY_WORDS = [
+  "swiftpost", "brightwave", "cobalt", "summit", "lucent", "vertex",
+  "meridian", "outrigger", "tidewater", "fernwood", "granite", "cascade",
+  "amberlink", "graypine", "stonebridge", "alderbrook",
+];
+const DOWNLOAD_SUFFIX_WORDS = [
+  "helper", "install", "deploy", "launcher", "package", "bundle", "assets",
+  "setup", "retrieve", "obtain", "provision", "dist", "client", "grab",
+  "fetch", "agent",
+];
+
+const IMPERSONATOR = // claimed Northgate co-founder → FLAG-4
+  IMPERSONATOR_NAMES[seedInt("impersonator") % IMPERSONATOR_NAMES.length];
+const IMPERSONATOR_FIRST = IMPERSONATOR.split(" ")[0]; // for the .eml's quoted first-name reference
+// DKIM d= names a bulk-relay domain distinct from the sender/From domain —
+// realistic (many senders sign under their ESP/relay, not their own domain)
+// and it keeps this value from being readable off the sender or organizer
+// email domain → FLAG-2. DMARC still passes on SPF alignment alone.
+const DKIM_DOMAIN = `mail-relay-${DKIM_RELAY_WORDS[seedInt("dkim-relay") % DKIM_RELAY_WORDS.length]}.example`;
+const DOWNLOAD_SUFFIX = // last path segment, discoverable only in clone/app.js
+  DOWNLOAD_SUFFIX_WORDS[seedInt("download-suffix") % DOWNLOAD_SUFFIX_WORDS.length];
+const DOWNLOAD_PATH_PATTERN = `/meetings/{id}/${DOWNLOAD_SUFFIX}`; // FLAG-3
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const DOWNLOAD_ROUTE_RE = new RegExp(`^/meetings/([a-z0-9-]+)/${escapeRe(DOWNLOAD_SUFFIX)}$`, "i");
 
 // Per-deploy registration dates. northgate is registered only a few months
 // before the email (2026-07-06) despite the company claiming to be established
@@ -74,12 +111,24 @@ const LURE_REG_DATE = isoDate(2026, 6, 20, seedInt("lure-reg") % 10); // ~late J
 const VICTIM_REG_DATE = isoDate(2018, 5, 9, 0); // years old (contrast)
 const FLAG1_DATE = NORTHGATE_REG_DATE;
 
-// ----- Evidence files (served read-only) -------------------------------------
+// ----- Evidence files (served read-only, template-substituted) --------------
+// The committed fixtures hold literal placeholders (__IMPERSONATOR__,
+// __IMPERSONATOR_FIRST__, __DKIM_DOMAIN__, __DOWNLOAD_SUFFIX__) instead of the
+// per-deploy secrets, so nothing seed-derived is ever committed — only
+// server.mjs combines the two, at read time, for every artifact/clone file it
+// serves.
+function applyTemplate(text) {
+  return text
+    .replaceAll("__IMPERSONATOR_FIRST__", IMPERSONATOR_FIRST)
+    .replaceAll("__IMPERSONATOR__", IMPERSONATOR)
+    .replaceAll("__DKIM_DOMAIN__", DKIM_DOMAIN)
+    .replaceAll("__DOWNLOAD_SUFFIX__", DOWNLOAD_SUFFIX);
+}
 function readArtifact(rel) {
   const full = normalize(join(HERE, rel));
   if (!full.startsWith(HERE)) return null; // no traversal
   try {
-    return readFileSync(full);
+    return Buffer.from(applyTemplate(readFileSync(full, "utf8")), "utf8");
   } catch {
     return null;
   }
@@ -173,7 +222,7 @@ box; there is no external network. Reserved names only (<code>*.example</code>,
 <ul>
   <li><code>GET /rdap/domain/{name}</code> — domain registration data (try the sender and the meeting domain)</li>
   <li><code>GET /api/meetings/{id}</code> — meeting metadata</li>
-  <li><code>POST /meetings/{id}/download</code> — the page's dynamic "helper" issuance (in-tenant marker only)</li>
+  <li><code>POST /meetings/{id}/…</code> — the page's dynamic "helper" issuance (in-tenant marker only; exact path is only in <code>clone/app.js</code>)</li>
   <li><code>POST /api/heartbeat</code> — the page's presence beacon</li>
 </ul>
 <p>Submit each finding as a flag in the portal. Stuck? Open a hint (they cost points).</p>
@@ -231,7 +280,7 @@ const challenge = createServer(async (request, response) => {
 
   // OS-differentiated dynamic download issuance. Never a binary — only a URL to
   // the in-tenant marker (for a "matched" OS) or nothing (payload "none").
-  const download = p.match(/^\/meetings\/([a-z0-9-]+)\/download$/i);
+  const download = p.match(DOWNLOAD_ROUTE_RE);
   if (method === "POST" && download) {
     const raw = await readBody(request);
     let os = "other";
@@ -265,7 +314,10 @@ const normDownloadPath = (s) =>
   stripWrapper(s)
     .replace(/^(?:post|get)\s+/i, "")
     .replace(/^https?:\/\/[^/]+/i, "")
-    .replace(/\/meetings\/[a-z0-9-]+\/download/i, "/meetings/{id}/download")
+    .replace(
+      new RegExp(`/meetings/[a-z0-9-]+/${escapeRe(DOWNLOAD_SUFFIX)}`, "i"),
+      `/meetings/{id}/${DOWNLOAD_SUFFIX}`,
+    )
     .trim();
 const normName = (s) => stripWrapper(s).replace(/[_\s]+/g, " ").trim().toLowerCase();
 

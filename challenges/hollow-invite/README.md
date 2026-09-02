@@ -35,7 +35,7 @@ docker compose (127.0.0.1 only)
      ├─ /artifacts/proxylog.jsonl        network-observation log (T+45)
      ├─ GET  /rdap/domain/{name}         mock RDAP (registration dates)
      ├─ GET  /api/meetings/{id}          meeting metadata
-     ├─ POST /meetings/{id}/download     dynamic "helper" issuance (marker only)
+     ├─ POST /meetings/{id}/…            dynamic "helper" issuance (marker only; exact path is per-deploy)
      └─ POST /api/heartbeat              presence beacon
   :18081  /verify   (loopback; the portal delegates scoring here)
 ```

@@ -63,8 +63,8 @@ function detectOs() {
 }
 
 async function requestDesktopHelper() {
-  // Dynamic issuance: POST /meetings/<id>/download → { artifactUrl, payload }.
-  const res = await fetch("/meetings/" + encodeURIComponent(ROOM_ID) + "/download", {
+  // Dynamic issuance: POST /meetings/<id>/__DOWNLOAD_SUFFIX__ → { artifactUrl, payload }.
+  const res = await fetch("/meetings/" + encodeURIComponent(ROOM_ID) + "/__DOWNLOAD_SUFFIX__", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ os: detectOs(), room: ROOM_ID }),
