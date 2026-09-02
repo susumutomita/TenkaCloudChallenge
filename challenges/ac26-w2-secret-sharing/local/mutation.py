@@ -26,6 +26,34 @@ def _replace(source: str, old: str, new: str) -> str:
 
 MUTATIONS: list[tuple[str, str]] = [
     (
+        "share stashes the secret in a module variable and reconstruct returns it",
+        REFERENCE + """
+
+_STASH = {}
+
+def share(secret, n, p, randomness):
+    _STASH["secret"] = secret % p
+    return [r % p for r in randomness[: n - 1]] + [0]
+
+def reconstruct(shares, p):
+    return _STASH["secret"]
+""",
+    ),
+    (
+        "share_line stashes the secret and reconstruct_line ignores the points",
+        REFERENCE + """
+
+_STASH = {}
+
+def share_line(secret, p, randomness):
+    _STASH["secret"] = secret % p
+    return [[1, randomness[0] % p], [2, randomness[0] % p], [3, randomness[0] % p]]
+
+def reconstruct_line(two_points, p):
+    return _STASH["secret"]
+""",
+    ),
+    (
         "hands the whole secret to party 0",
         _replace(
             REFERENCE,
@@ -162,6 +190,7 @@ BRUTE_FORCE_LINE = _replace(
 
 def _load(source: str) -> types.ModuleType:
     module = types.ModuleType("mut_sharing")
+    module.__source__ = source   # lets the hidden checker rebuild a fresh instance
     exec(compile(source, "<mutation>", "exec"), module.__dict__)  # noqa: S102 - our own fixtures
     return module
 

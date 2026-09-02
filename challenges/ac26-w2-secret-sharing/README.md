@@ -70,7 +70,7 @@ order, must walk back to the secret, and for each party's point every secret in 
 producible at that position by some slope — checked by calling the participant's own `share_line`
 p × p times, so any correct construction passes, not only a line. The moduli differ from the one
 on screen and two are around 10⁴: the trial search for "the number that multiplies the divisor to
-1" the statement offers costs ~p steps and fits the 20-second limit, a (secret, slope) brute force
+1" the statement offers costs ~p steps and fits the 12-second limit, a (secret, slope) brute force
 costs ~p² and does not. The starter ships the tempting fix — a copy of the secret for everyone —
 which passes the public tests and fails the privacy property, the first checkpoint's lesson replayed.
 
@@ -120,7 +120,7 @@ self-consistent two-of-three mutants (each one's `share_line` and `reconstruct_l
 each other, so only a property can reject it), and three checks aimed at the verifier — a
 `threshold` answer without witnesses, the starter's copy-to-everyone line split, and a
 `reconstruct_line` that tries every (secret, slope) pair. That last one is correct and waits out
-the verifier's 20-second limit on the ~10⁴ moduli, so the suite takes about 20 seconds; the limit
+the verifier's 12-second limit on the ~10⁴ moduli, so the suite takes about 12 seconds; the limit
 is surfaced as its §15 message, since the statement documents both the limit and that trying every
 secret cannot meet it. One additive mutant — `reconstruct` forgetting the modulus — **survived the
 first version of the hidden tests**, because `check_roundtrip` was normalizing the learner's answer

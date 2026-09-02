@@ -39,6 +39,26 @@ from fixtures.generate import (  # noqa: E402
 LABELS = ("h0", "h1", "h2", "h3")
 
 
+def _fresh(module):
+    """A fresh instance of the submission, so nothing survives from an earlier call.
+
+    share and reconstruct (and share_line / reconstruct_line) are graded as pairs, and a
+    module-level variable set by the first call would let the second call return the
+    secret without reading the shares at all.  Every reconstruction therefore runs in a
+    module built again from the submission's source.
+    """
+    import types
+    source = getattr(module, "__source__", None)
+    if source is None:
+        with open(module.__file__, encoding="utf-8") as handle:
+            source = handle.read()
+    fresh = types.ModuleType(getattr(module, "__name__", "sharing") + "_fresh")
+    fresh.__file__ = getattr(module, "__file__", "<submission>")
+    fresh.__source__ = source
+    exec(compile(source, fresh.__file__, "exec"), fresh.__dict__)  # noqa: S102 - grading the submission
+    return fresh
+
+
 def check_roundtrip(module, seed: str) -> list[str]:
     failures: list[str] = []
     for label in LABELS:
@@ -56,7 +76,7 @@ def check_roundtrip(module, seed: str) -> list[str]:
         if any(not isinstance(s, int) or not 0 <= s < p for s in shares):
             failures.append("a share is outside [0, modulus)")
         try:
-            recovered = module.reconstruct(list(shares), p)
+            recovered = _fresh(module).reconstruct(list(shares), p)
         except Exception as error:  # noqa: BLE001
             failures.append(f"reconstruct raised {type(error).__name__}")
             continue
@@ -203,10 +223,11 @@ def check_line_pairs(module, seed: str) -> list[str]:
         if failure is not None or points is None:
             failures.append(failure or "share_line did not return three points")
             continue
+        fresh = _fresh(module)   # reconstruct_line never sees what share_line stored
         for i, j in ((0, 1), (0, 2), (1, 2)):
             for pair in ([points[i], points[j]], [points[j], points[i]]):
                 try:
-                    recovered = module.reconstruct_line([list(point) for point in pair], p)
+                    recovered = fresh.reconstruct_line([list(point) for point in pair], p)
                 except Exception as error:  # noqa: BLE001
                     failures.append(f"reconstruct_line raised {type(error).__name__}")
                     return failures

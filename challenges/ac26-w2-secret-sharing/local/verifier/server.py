@@ -49,7 +49,9 @@ PROBLEM_ID = "ac26-w2-secret-sharing"
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 MAX_BODY_BYTES = 256 * 1024
-RUN_TIMEOUT_SECONDS = 20
+#: Below the participant server's 15-second proxy timeout, so a timed-out run reaches the
+#: participant with its message instead of an empty verdict.
+RUN_TIMEOUT_SECONDS = 12
 MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
 MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
