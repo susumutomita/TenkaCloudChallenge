@@ -160,12 +160,19 @@ MAX_UNTAGGED_VALUE = 1 << 512
 
 
 def lenient_setting(seed: str, label: str = "public") -> dict:
-    """The honest table the lenient schemes commit to. Sixteen cells, always."""
+    """The honest table the lenient schemes commit to. Sixteen distinct cells, always.
+
+    Distinct, as the statement promises: scheme A's forgery presents one cell's value
+    at another index, which is a claim outside the table only if the two cells differ.
+    """
     s = _stream(seed, f"lenient:{label}")
-    return {
-        "length": LENIENT_LENGTH,
-        "values": [_pick(s, 2 * i + 4, 0, 9999) for i in range(LENIENT_LENGTH)],
-    }
+    values: list[int] = []
+    for i in range(LENIENT_LENGTH):
+        value = _pick(s, 2 * i + 4, 0, 9999)
+        while value in values:
+            value = (value + 1) % 10_000
+        values.append(value)
+    return {"length": LENIENT_LENGTH, "values": values}
 
 
 def scheme_leaf(scheme: str, index: int, value: int) -> bytes:
