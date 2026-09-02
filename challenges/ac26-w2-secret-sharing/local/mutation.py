@@ -54,6 +54,36 @@ def reconstruct_line(two_points, p):
 """,
     ),
     (
+        "share stashes the secret on builtins and reconstruct reads it back",
+        REFERENCE + """
+
+import builtins
+
+def share(secret, n, p, randomness):
+    builtins._stashed_secret = secret % p
+    head = [r % p for r in randomness[: n - 1]]
+    return [*head, (secret - sum(head)) % p]
+
+def reconstruct(shares, p):
+    return builtins._stashed_secret
+""",
+    ),
+    (
+        "share stashes the secret in a sys.modules entry and reconstruct reads it back",
+        REFERENCE + """
+
+import sys, types
+
+def share(secret, n, p, randomness):
+    sys.modules["_stash"] = types.SimpleNamespace(secret=secret % p)
+    head = [r % p for r in randomness[: n - 1]]
+    return [*head, (secret - sum(head)) % p]
+
+def reconstruct(shares, p):
+    return sys.modules["_stash"].secret
+""",
+    ),
+    (
         "hands the whole secret to party 0",
         _replace(
             REFERENCE,
@@ -168,6 +198,90 @@ LINE_MUTATIONS: list[tuple[str, str]] = [
             f"    p = {setting(SEED)['p']}\n",
         ),
     ),
+    # The points below are the slope alone, so every privacy check passes them; only the
+    # isolation of reconstruct_line from share_line can reject these two.
+    (
+        "line: share_line stashes the secret on builtins and reconstruct_line reads it back",
+        REFERENCE + """
+
+import builtins
+
+def share_line(secret, p, randomness):
+    builtins._stashed_secret = secret % p
+    r = randomness[0] % p
+    return [[1, r], [2, r], [3, r]]
+
+def reconstruct_line(two_points, p):
+    return builtins._stashed_secret
+""",
+    ),
+    (
+        "line: share_line stashes the secret on an imported module and reconstruct_line reads it back",
+        REFERENCE + """
+
+import json, sys
+
+def share_line(secret, p, randomness):
+    json._stashed_secret = secret % p
+    r = randomness[0] % p
+    return [[1, r], [2, r], [3, r]]
+
+def reconstruct_line(two_points, p):
+    return sys.modules["json"]._stashed_secret
+""",
+    ),
+    (
+        "line: the line only below p = 1000; every party gets a copy of the secret on the large moduli",
+        _replace(
+            _replace(
+                REFERENCE,
+                "    return [[x, (secret + r * x) % p] for x in (1, 2, 3)]",
+                "    if p >= 1000:\n"
+                "        return [[x, secret % p] for x in (1, 2, 3)]\n"
+                "    return [[x, (secret + r * x) % p] for x in (1, 2, 3)]",
+            ),
+            "    return (y1 - slope * x1) % p",
+            "    if p >= 1000:\n"
+            "        return y1 % p\n"
+            "    return (y1 - slope * x1) % p",
+        ),
+    ),
+    (
+        "line: the slope is fixed on the large moduli (randomness ignored there)",
+        _replace(
+            REFERENCE,
+            "    r = randomness[0] % p",
+            "    r = randomness[0] % p if p < 1000 else 1",
+        ),
+    ),
+    (
+        "line: the slope is fixed everywhere (randomness ignored)",
+        _replace(REFERENCE, "    r = randomness[0] % p", "    r = 1"),
+    ),
+]
+
+#: Not mutants: two-of-three constructions that are NOT the statement's line but have
+#: both graded properties, so the hidden tests must PASS them. The statement promises
+#: "any correct construction passes, not only a line"; these are what keep the privacy
+#: checks (exhaustive on the small moduli, sampled on the large ones) scheme-agnostic.
+HONEST_ALTERNATIVES: list[tuple[str, str]] = [
+    (
+        "line: party 2 holds the slope alone, parties 1 and 3 hold s + r and s + 2r",
+        REFERENCE + """
+
+def share_line(secret, p, randomness):
+    r = randomness[0] % p
+    return [[1, (secret + r) % p], [2, r], [3, (secret + 2 * r) % p]]
+
+def reconstruct_line(two_points, p):
+    held = {x: y for x, y in two_points}
+    if 1 in held and 2 in held:
+        return (held[1] - held[2]) % p
+    if 2 in held and 3 in held:
+        return (held[3] - 2 * held[2]) % p
+    return (2 * held[1] - held[3]) % p
+""",
+    ),
 ]
 
 #: Goes through the verifier rather than in-process: on the ~10^4 moduli it does not
@@ -190,7 +304,7 @@ BRUTE_FORCE_LINE = _replace(
 
 def _load(source: str) -> types.ModuleType:
     module = types.ModuleType("mut_sharing")
-    module.__source__ = source   # lets the hidden checker rebuild a fresh instance
+    module.__source__ = source   # what the hidden checker hands the reconstruction interpreter
     exec(compile(source, "<mutation>", "exec"), module.__dict__)  # noqa: S102 - our own fixtures
     return module
 
@@ -223,6 +337,15 @@ def main() -> int:
             print(f"SURVIVED {name}")
 
     from verifier.server import evaluate, evaluate_with_message  # noqa: PLC0415 - after sys.path
+
+    for name, source in HONEST_ALTERNATIVES:
+        failures = _line_failures(_load(source))
+        correct, message = evaluate_with_message("two-of-three", source)
+        if failures or not correct:
+            survivors.append(f"honest construction rejected: {name}")
+            print(f"FAIL honest construction rejected: {name} ({failures[0] if failures else message})")
+        else:
+            print(f"PASS honest construction accepted: {name}")
 
     # Naming the threshold without two distinct witnesses demonstrates nothing.
     if evaluate("threshold", '{"sharesNeeded": 2, "partial": [1], "completions": []}'):
@@ -260,7 +383,10 @@ def main() -> int:
         for name in survivors:
             print(f"  - {name}")
         return 1
-    print(f"All {len(MUTATIONS) + len(LINE_MUTATIONS) + 3} mutations killed.")
+    print(
+        f"All {len(MUTATIONS) + len(LINE_MUTATIONS) + 3} mutations killed; "
+        f"{len(HONEST_ALTERNATIVES)} honest alternative construction(s) accepted."
+    )
     return 0
 
 
