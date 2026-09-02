@@ -27,7 +27,8 @@ that this process's own container never builds; this file, `fixtures/` and
 ../docker-compose.yml), never from the participant container's filesystem.
 
 `GET /public` below is what the participant image reads instead of importing
-`fixtures.generate`.
+`fixtures.generate`, and `POST /public/lenient` is how its public tests ask the four
+lenient verifiers about an attempted forgery on the public table.
 """
 
 from __future__ import annotations
@@ -47,14 +48,17 @@ from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fixtures.generate import public_payload
+from fixtures.generate import lenient_claim_report, public_payload
 
 ROOT = Path(__file__).resolve().parents[1]
 PROBLEM_ID = "ac26-w4-commit-open"
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 MAX_BODY_BYTES = 256 * 1024
-RUN_TIMEOUT_SECONDS = 30
+#: The Workbench forwards a verdict for at most 15 s (participant/server.py). A run cut
+#: off here still returns a verdict before that, so a submission that hangs gets the
+#: failed checkpoint rather than a silent proxy timeout.
+RUN_TIMEOUT_SECONDS = 12
 MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
 MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
@@ -72,7 +76,7 @@ CODE_CHECKPOINTS = {
     "adaptive": ("check_adaptive",),
     "ambiguity": ("check_ambiguity",),
     "transcript": ("check_transcript",),
-    "transfer": (),
+    "lenient": ("check_lenient",),
 }
 CHECKPOINTS = tuple(CODE_CHECKPOINTS)
 #: Every checkpoint here is graded on the learner's file, so nothing has to arrive
@@ -209,9 +213,34 @@ def evaluate_with_message(
     checkpoint_id: str, submission: object
 ) -> tuple[bool, str | None]:
     if checkpoint_id in CODE_CHECKPOINTS:
-        seed = f"{SEED}:transfer" if checkpoint_id == "transfer" else SEED
-        return _run_submission(submission, CODE_CHECKPOINTS[checkpoint_id], seed)
+        return _run_submission(submission, CODE_CHECKPOINTS[checkpoint_id], SEED)
     return False, None
+
+
+def _lenient_report(body: dict[str, object]) -> dict[str, object]:
+    """`POST /public/lenient`: one attempted forgery against one scheme's verifier.
+
+    Evaluated on the public lenient table only, so the public tests can tell a
+    participant whether an opening gets through a scheme -- the feedback the last
+    checkpoint is built around -- without exposing the hidden tables it is graded on.
+    Nothing here decides a checkpoint.
+    """
+    scheme = body.get("scheme")
+    if not isinstance(scheme, str):
+        return {"ok": False, "error": "scheme must be a string"}
+    raw_path = body.get("path")
+    if not isinstance(raw_path, list) or len(raw_path) > 64:
+        return {"ok": False, "error": "path must be a list of at most 64 steps"}
+    path: list[dict[str, object]] = []
+    for step in raw_path:
+        if not isinstance(step, dict):
+            return {"ok": False, "error": "path steps must be objects"}
+        try:
+            digest = bytes.fromhex(str(step.get("hashHex", "")))
+        except ValueError:
+            return {"ok": False, "error": "hashHex must be hexadecimal"}
+        path.append({"hash": digest, "sibling_is_left": bool(step.get("siblingIsLeft"))})
+    return lenient_claim_report(SEED, scheme, body.get("index"), body.get("value"), path)
 
 
 def _b64decode(value: str) -> bytes:
@@ -275,11 +304,15 @@ class Handler(BaseHTTPRequestHandler):
         self._respond(404, {"error": "not found"})
 
     def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's API
-        if urlsplit(self.path).path.rstrip("/") != "/verify":
+        path = urlsplit(self.path).path.rstrip("/")
+        if path not in ("/verify", "/public/lenient"):
             self._respond(404, {"error": "not found"})
             return
         body = self._read_json_body()
         if body is None:
+            return
+        if path == "/public/lenient":
+            self._respond(200, _lenient_report(body))
             return
 
         checkpoint_id = body.get("checkpointId")

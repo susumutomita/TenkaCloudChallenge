@@ -58,7 +58,7 @@ CHECKPOINTS = (
     "adaptive",
     "ambiguity",
     "transcript",
-    "transfer",
+    "lenient",
 )
 
 
@@ -78,10 +78,10 @@ _WORKBENCH = PortalEditorSupport(
     problem_name_en='Ask me first and I can pass anything',
     description='証明系の骨格は commit・challenge・open の 3 手とその順序。順序が逆なら prover は聞かれる場所だけ正しくしておける。Merkle commitment で順序と binding を実験する。',
     description_en="A proof system's skeleton is three steps and their order: commit, challenge, open. Reverse the first two and the prover only has to be right where they already know they will be checked.",
-    checkpoint_labels={'encoding': '葉の符号化を一意にする', 'root': 'commitment を作る', 'opening': '一箇所だけ開示して検証する', 'order': '順序を強制する', 'adaptive': 'challenge が先に来たら何ができるか示す', 'ambiguity': '符号化の曖昧さを反例で示す', 'transcript': 'challenge を transcript から導く', 'transfer': '見たことのない設定でも成立させる'},
-    checkpoint_labels_en={'encoding': 'Make one leaf mean one thing', 'root': 'Build the commitment', 'opening': 'Open one position and verify it', 'order': 'Enforce the order', 'adaptive': 'Show what a challenge-first protocol allows', 'ambiguity': 'Show the encoding ambiguity with a counterexample', 'transcript': 'Derive the challenge from the transcript', 'transfer': 'Hold up in a setting you have not seen'},
+    checkpoint_labels={'encoding': '葉の符号化を一意にする', 'root': 'commitment を作る', 'opening': '一箇所だけ開示して検証する', 'order': '順序を強制する', 'adaptive': 'challenge が先に来たら何ができるか示す', 'ambiguity': '符号化の曖昧さを反例で示す', 'transcript': 'challenge を transcript から導く', 'lenient': '細部が欠けた検査器に、通る開示を作る'},
+    checkpoint_labels_en={'encoding': 'Make one leaf mean one thing', 'root': 'Build the commitment', 'opening': 'Open one position and verify it', 'order': 'Enforce the order', 'adaptive': 'Show what a challenge-first protocol allows', 'ambiguity': 'Show the encoding ambiguity with a counterexample', 'transcript': 'Derive the challenge from the transcript', 'lenient': 'Forge an opening a lenient verifier accepts'},
     submitted_files=('commit.py',),
-    code_checkpoints=('encoding', 'root', 'opening', 'order', 'adaptive', 'ambiguity', 'transcript', 'transfer'),
+    code_checkpoints=('encoding', 'root', 'opening', 'order', 'adaptive', 'ambiguity', 'transcript', 'lenient'),
     checkpoints=CHECKPOINTS,
     max_body_bytes=MAX_BODY_BYTES,
     run_timeout_seconds=RUN_TIMEOUT_SECONDS,

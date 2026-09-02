@@ -16,6 +16,12 @@ transcript that verifies against a naive verifier.
 
 Toy sizes throughout. SHA-256 is real, but nothing here is a proof system: there is one
 query, so a cheating prover who guesses it wins outright.
+
+The `lenient` checkpoint attacks the problem setter's own verifiers instead: four
+commitment schemes (`SCHEMES`) that all accept every honest opening and differ only in
+the leaf and in how the verifier decides which side a sibling is on. Which of them admit
+a forged claim is the participant's question; this module answers it only in code
+(`FORGEABLE_SCHEMES`), and mutation.py confirms the reference forges exactly those.
 """
 
 from __future__ import annotations
@@ -111,6 +117,133 @@ def weak_leaf(index: int, value: int) -> bytes:
     return hashlib.sha256(f"{index}{value}".encode()).digest()
 
 
+# --- the four lenient schemes the `lenient` checkpoint attacks -----------------------
+
+#: The setter's four commitment schemes, as the statement describes them. Every one of
+#: them accepts every honest opening of its own tree. They differ in two details only:
+#:
+#:   A  leaf = sha256(LEAF_TAG + value as 8 bytes)      -- no index in the leaf;
+#:      the verifier takes each sibling's side from the path
+#:   B  leaf = sha256(str(index) + str(value))          -- `weak_leaf`, no separator;
+#:      the verifier takes each sibling's side from the path
+#:   C  leaf = the honest leaf (index bound, fixed widths);
+#:      the verifier takes each sibling's side from the path
+#:   D  leaf = as A (no index in the leaf);
+#:      the verifier ignores the path's side flags and derives the side from the index
+#:
+#: Nodes are the honest `node_hash` in all four. No scheme checks the path length, and
+#: all four check only that the index is inside the vector.
+SCHEMES = ("A", "B", "C", "D")
+#: The schemes that accept a claim outside the honest table. A leaf that does not name
+#: its position can be presented at another position with its own path as long as the
+#: verifier lets the path say which side each sibling is on (A); the separator-free
+#: leaf lets a different (index, value) pair render to the same text (B). Binding the
+#: index into the leaf (C) or deriving the sides from the index (D) each closes the
+#: relabelling on its own: the leaf's own position is then part of what the root
+#: commits to, and a claim at another position recomputes to something else.
+FORGEABLE_SCHEMES = ("A", "B")
+#: Cells in the table the lenient schemes commit to. Sixteen, so scheme B always has a
+#: forgery: an entry at index 10..15 re-reads as index 1 followed by a longer value.
+LENIENT_LENGTH = 16
+#: Values in a claim must fit the eight-byte leaf field of schemes A, C and D.
+MAX_LEAF_VALUE = 1 << 64
+
+
+def lenient_setting(seed: str, label: str = "public") -> dict:
+    """The honest table the lenient schemes commit to. Sixteen cells, always."""
+    s = _stream(seed, f"lenient:{label}")
+    return {
+        "length": LENIENT_LENGTH,
+        "values": [_pick(s, 2 * i + 4, 0, 9999) for i in range(LENIENT_LENGTH)],
+    }
+
+
+def scheme_leaf(scheme: str, index: int, value: int) -> bytes:
+    if scheme == "B":
+        return weak_leaf(index, value)
+    if scheme == "C":
+        return leaf_hash(index, value)
+    # A and D: the leaf does not name its position.
+    return hashlib.sha256(LEAF_TAG + value.to_bytes(8, "big")).digest()
+
+
+def scheme_levels(scheme: str, values: list[int]) -> list[list[bytes]]:
+    level = [scheme_leaf(scheme, index, value) for index, value in enumerate(values)]
+    levels = [level]
+    while len(level) > 1:
+        level = [node_hash(level[i], level[i + 1]) for i in range(0, len(level), 2)]
+        levels.append(level)
+    return levels
+
+
+def scheme_root(scheme: str, values: list[int]) -> bytes:
+    return scheme_levels(scheme, values)[-1][0]
+
+
+def scheme_opening(scheme: str, values: list[int], index: int) -> list[dict]:
+    """The honest opening of `index` under `scheme`, in the same shape as `opening_for`."""
+    path: list[dict] = []
+    position = index
+    for level in scheme_levels(scheme, values)[:-1]:
+        sibling = position ^ 1
+        path.append({"hash": level[sibling], "sibling_is_left": sibling < position})
+        position //= 2
+    return path
+
+
+def lenient_verify(
+    scheme: str, root: bytes, index: object, value: object, path: object, length: int
+) -> bool:
+    """The setter's verifier for one scheme.
+
+    Accepts every honest opening of that scheme's tree. Checks the index range and the
+    value's width, then walks the path and compares with the root; the path length is
+    not checked. Schemes A, B and C place each sibling where the path says; scheme D
+    ignores the path's flag and places it by the index's bit for that level.
+    """
+    if scheme not in SCHEMES:
+        return False
+    if type(index) is not int or not 0 <= index < length:
+        return False
+    if type(value) is not int or not 0 <= value < MAX_LEAF_VALUE:
+        return False
+    if not isinstance(path, list):
+        return False
+    node = scheme_leaf(scheme, index, value)
+    position = index
+    for step in path:
+        if not isinstance(step, dict):
+            return False
+        sibling = step.get("hash")
+        if not isinstance(sibling, bytes) or len(sibling) != 32:
+            return False
+        if scheme == "D":
+            sibling_is_left = position % 2 == 1
+        else:
+            sibling_is_left = bool(step.get("sibling_is_left"))
+        node = node_hash(sibling, node) if sibling_is_left else node_hash(node, sibling)
+        position //= 2
+    return node == root
+
+
+def lenient_claim_report(
+    seed: str, scheme: str, index: object, value: object, path: object
+) -> dict[str, object]:
+    """What `GET /public`'s companion `POST /public/lenient` answers for one claim.
+
+    Evaluated on the PUBLIC lenient table only -- the one the participant can see -- so
+    the public tests can show whether an attempted forgery gets through a scheme's
+    verifier, without touching the hidden tables the checkpoint is graded on.
+    """
+    cfg = lenient_setting(seed)
+    values, length = list(cfg["values"]), cfg["length"]
+    if scheme not in SCHEMES:
+        return {"ok": False, "error": "unknown scheme"}
+    accepted = lenient_verify(scheme, scheme_root(scheme, values), index, value, path, length)
+    in_table = type(index) is int and 0 <= index < length and values[index] == value
+    return {"ok": True, "scheme": scheme, "accepted": accepted, "inTable": in_table}
+
+
 def health_token(seed: str) -> str:
     cfg = setting(seed)
     return hashlib.sha256(f"health:{seed}:{cfg['length']}".encode()).hexdigest()[:16]
@@ -156,4 +289,8 @@ def public_payload(seed: str) -> dict[str, object]:
             for entry in opening
         ],
         "healthToken": health_token(seed),
+        # The table the four lenient schemes commit to, for the last checkpoint. Only the
+        # values: the scheme roots are recomputed by the verifier when asked.
+        "lenientLength": LENIENT_LENGTH,
+        "lenientValues": list(lenient_setting(seed)["values"]),
     }

@@ -20,7 +20,8 @@ Commit–Challenge–Open · **Role:** `transfer` · **想定時間:** 60〜90 �
 
 1 と 2 を入れ替えると、protocol は何も証明しません。正しい版を作ったあと、その攻撃を自分で実演し
 ます。`adaptive` checkpoint で構成する vector は 16 要素中 15 要素が嘘で、それでも開示は検証を通り
-ます。
+ます。最後に、細部が 1 つずつ欠けた出題側の検査器 4 つを相手に、どれが偽造を通すかを、通る開示
+そのもので示します（`lenient` checkpoint）。
 
 ## 葉に何が入っていなければならないか
 
@@ -51,16 +52,33 @@ checkout、ターミナル、ローカルエディタ、別画面、コピペは
 
 | Checkpoint | 配点 | 何を検査するか |
 |---|---:|---|
-| `encoding` | 35 | index と値の binding、2 組が衝突しないこと、節点の順序依存 |
-| `root` | 30 | commitment と、並べ替えで変わること |
-| `opening` | 45 | 正直な開示の受理と、値・index・方向・長さ・範囲の拒否 |
-| `order` | 40 | commit 前の challenge、challenge 前の open の拒否 |
-| `adaptive` | 45 | challenge が先に来る場合の反例 |
-| `ambiguity` | 40 | 弱い符号化で衝突し、自分の符号化では衝突しない 2 組 |
+| `encoding` | 30 | index と値の binding、2 組が衝突しないこと、節点の順序依存 |
+| `root` | 25 | commitment と、並べ替えで変わること |
+| `opening` | 40 | 正直な開示の受理と、値・index・方向・長さ・範囲の拒否 |
+| `order` | 35 | commit 前の challenge、challenge 前の open の拒否 |
+| `adaptive` | 40 | challenge が先に来る場合の反例 |
+| `ambiguity` | 35 | 弱い符号化で衝突し、自分の符号化では衝突しない 2 組 |
 | `transcript` | 35 | challenge が commitment・domain・statement に依存すること |
-| `transfer` | 30 | 見たことのない長さ・query・seed での再実行 |
+| `lenient` | 60 | 出題側の検査器 A〜D それぞれに、表に無い主張を通す開示か `None` を返す（4 つ全部正しいときだけ加点） |
 
-hint は 8 つ中 5 つにあり、いずれもその checkpoint の 50% 上限内です。
+hint は 8 つ中 6 つにあり（合計 115 点）、いずれもその checkpoint の 50% 上限内です。
+
+## 出題側の 4 つの検査器
+
+`lenient` checkpoint は参加者の verifier ではなく、fixtures に固定した出題側の検査器を攻めます。4 つとも
+正直な開示を全部通し、葉の作り方と各段で兄弟をどちら側に置くかの決め方だけが違います。
+
+| 検査器 | 葉 | 兄弟の側 | 表に無い主張 |
+|---|---|---|---|
+| A | index を入れない（`leaf/v1` + 値 8 バイト） | path の側フラグを信じる | 通る — 位置 j の葉と path を index i の主張に付け替えられる |
+| B | 区切り無しの文字列（`weak_leaf`） | path の側フラグを信じる | 通る — 同じ文字列に描かれる別の (index, 値)。16 マスなら index 10〜15 が「1 + 残り」に読める |
+| C | 正しい葉（index 4 バイト + 値 8 バイト） | path の側フラグを信じる | 通らない — 葉に index が入る |
+| D | A と同じ（index を入れない） | index を 2 で割った余りで決める | 通らない — 側を index から導くので、付け替えた葉は別の側に置かれる |
+
+参加者は 4 つそれぞれに、通る開示か `None` を返します。hidden の message は scheme 名と規則だけで、
+どの検査器が健全かは言いません。「公開テストを実行」が verifier の `POST /public/lenient` に答えを
+送り、公開の練習台（16 マス）に対して「通った／通らなかった／表にある主張か」を返すのが feedback
+loop です。参加者 image には検査器の実装も練習台の根もありません。
 
 ## 等価変異について
 
@@ -72,6 +90,10 @@ hint は 8 つ中 5 つにあり、いずれもその checkpoint の 50% 上限�
 巻き戻り、聞かれていない行が開示されるので検出できます。
 
 殺せない変異を一覧に残すと、「SURVIVED は無視してよい」を教えることになります。だから残しません。
+
+その代わり、path 長と側フラグが「効く」状況 — 葉が index を持たないとき — は、上の 4 つの検査器の側で
+採点しています。参加者の `verify_opening` に検査を要求するのではなく、検査が抜けた出題側の検査器に
+何が通るかを構成させる形です。
 
 ## これは polynomial commitment ではありません
 
@@ -114,5 +136,9 @@ verifier が実際に保証するのはもっと狭く、そして本物です�
 
 ## 作問者向け
 
-`make reference-test` が mutation suite を実行します。壊した実装 9 種類があり、そのすべてが commit・
-challenge・open・verify を成功させます。違いは、そのあと攻撃者に何ができるかだけです。
+`make reference-test` が mutation suite を実行します。壊した実装 16 種類（うち 7 つは `lenient` の答え
+を壊すもの — 全部 `None`、C や D にも偽造を主張、正直な開示を偽造と称する、別の葉で作った path、側を
+反転した path、先頭 0 の切れ目）があり、9 種類は commit・challenge・open・verify を成功させます。違い
+は、そのあと攻撃者に何ができるかだけです。suite はまず 4 つの検査器自体を確かめます — 5 つの seed で
+正直な開示を全部通し、reference が A と B だけを偽造し、C と D が全部の付け替えを拒み、側フラグの
+反転を A・B・C は拒み D は無視すること。

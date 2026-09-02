@@ -159,3 +159,72 @@ def ambiguity_witness() -> dict:
     """Two different (index, value) pairs that the separator-free encoding cannot tell
     apart. `(1, 23)` and `(12, 3)` both render as "123"."""
     return {"first": (1, 23), "second": (12, 3)}
+
+
+# --- the last checkpoint: the setter's four lenient schemes -------------------------
+
+#: The two schemes that accept a claim outside the honest table. A leaf that does not
+#: name its position (A) can be presented at any other position with its own path, as
+#: long as the verifier lets the path say which side each sibling is on. The
+#: separator-free leaf (B) additionally lets a different (index, value) pair render to
+#: the same text. Binding the index into the leaf (C) or deriving the sides from the
+#: index (D) each closes the relabelling on its own: the leaf's position is then part
+#: of what the root commits to, and a claim at another position recomputes to
+#: something else.
+FORGEABLE_SCHEMES = ("A", "B")
+
+
+def _scheme_leaf(scheme: str, index: int, value: int) -> bytes:
+    if scheme == "B":
+        return hashlib.sha256(f"{index}{value}".encode()).digest()
+    if scheme == "C":
+        return leaf_hash(index, value)
+    return hashlib.sha256(LEAF_TAG + value.to_bytes(8, "big")).digest()
+
+
+def _scheme_open_at(scheme: str, values: list[int], index: int) -> list[dict]:
+    """`open_at` with the scheme's leaf swapped in; the nodes are unchanged."""
+    level = [_scheme_leaf(scheme, position, value) for position, value in enumerate(values)]
+    path: list[dict] = []
+    position = index
+    while len(level) > 1:
+        sibling = position ^ 1
+        path.append({"hash": level[sibling], "sibling_is_left": sibling < position})
+        level = [node_hash(level[i], level[i + 1]) for i in range(0, len(level), 2)]
+        position //= 2
+    return path
+
+
+def _split_claims(index: int, value: int):
+    """Every other canonical (index, value) pair that renders to the same digits."""
+    text = f"{index}{value}"
+    for cut in range(1, len(text)):
+        head, tail = text[:cut], text[cut:]
+        other_index, other_value = int(head), int(tail)
+        if str(other_index) != head or str(other_value) != tail:
+            continue  # a leading zero: this split does not render back to the same text
+        if (other_index, other_value) != (index, value):
+            yield other_index, other_value
+
+
+def lenient_opening(setting: dict) -> dict | None:
+    """A claim outside the table that the scheme's verifier accepts, or None if none exists.
+
+    A: the leaf does not know its position and the verifier trusts the path's sides, so
+    position j's value with position j's own path is accepted as a claim about any
+    other index. B: the same relabelling, except that the claimed pair has to render to
+    the same text as a real entry. C and D: sound -- see FORGEABLE_SCHEMES.
+    """
+    scheme, length, values = setting["scheme"], setting["length"], list(setting["values"])
+    if scheme not in FORGEABLE_SCHEMES:
+        return None
+    for position, value in enumerate(values):
+        path = _scheme_open_at(scheme, values, position)
+        if scheme == "A":
+            claims = ((index, value) for index in range(length) if index != position)
+        else:
+            claims = _split_claims(position, value)
+        for index, claimed in claims:
+            if 0 <= index < length and values[index] != claimed:
+                return {"index": index, "value": claimed, "path": path}
+    return None
