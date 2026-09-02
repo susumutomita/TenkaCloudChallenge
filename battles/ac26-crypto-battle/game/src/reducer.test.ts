@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { reconstruct } from "./shamir.ts";
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
+import { startedMatch } from "./playtest.ts";
 import type {
   Contract,
   CryptoBattleOp,
@@ -58,7 +59,7 @@ function leakThreshold(stateIn: ReturnType<typeof initialState>, teamId: string)
 
 describe("initialState", () => {
   test("creates one TeamState per team, score 0, generation 1", () => {
-    const state = initialState(CTX);
+    const state = startedMatch(CTX);
     expect(Object.keys(state.teams).sort()).toEqual(["teamA", "teamB"]);
     for (const team of Object.values(state.teams)) {
       expect(team.score).toBe(0);
@@ -68,7 +69,7 @@ describe("initialState", () => {
   });
 
   test("each team's shares actually reconstruct that team's secret", () => {
-    const state = initialState(CTX);
+    const state = startedMatch(CTX);
     for (const team of Object.values(state.teams)) {
       const some = team.shares
         .slice(0, state.config.threshold)
@@ -78,30 +79,62 @@ describe("initialState", () => {
   });
 
   test("config overrides merge onto defaults instead of replacing the whole object", () => {
-    const state = initialState(CTX, { threshold: 4 });
+    const state = startedMatch(CTX, { threshold: 4 });
     expect(state.config.threshold).toBe(4);
     expect(state.config.shareCount).toBe(DEFAULT_CONFIG.shareCount);
     expect(state.config.scores).toEqual(DEFAULT_CONFIG.scores);
   });
 
-  test("phase starts at build, clock is unset until the first tick", () => {
+  /**
+   * [Issue #677] A deployed match waits; it does not quietly begin.
+   *
+   * The belt used to start on the platform's first tick, a minute after the
+   * event opened, so a match deployed for a later start was already issuing
+   * Orders — and charging 15 points each when they lapsed — into an empty room.
+   */
+  test("phase starts at waiting, with no clock and no Orders", () => {
     const state = initialState(CTX);
-    expect(state.phase).toBe("build");
+    expect(state.phase).toBe("waiting");
     expect(state.startedAtMs).toBeUndefined();
     expect(state.nowMs).toBeUndefined();
+    expect(tick(state, 60 * 60_000).contracts).toEqual([]);
+  });
+
+  test("a waiting match takes no expiry damage however long it waits", () => {
+    // The whole point: an hour of nobody playing must cost nobody anything.
+    const state = tick(initialState(CTX), 60 * 60_000);
+    expect(state.phase).toBe("waiting");
+    expect(state.startedAtMs).toBeUndefined();
+    expect(Object.values(state.teams).map((t) => t.score)).toEqual([0, 0]);
+  });
+
+  test("START begins the match and hands over the first batch at once", () => {
+    // Ticks are a minute apart, so a START that only armed the belt would leave
+    // the player staring at an empty board for most of a minute.
+    const state = startedMatch(CTX);
+    expect(state.phase).toBe("build");
+    expect(state.startedAtMs).toBe(0);
+    expect(state.contracts.filter((c) => c.teamId === "teamA")).toHaveLength(
+      DEFAULT_CONFIG.contractsPerIssue,
+    );
+  });
+
+  test("START is refused once the match is under way", () => {
+    const state = startedMatch(CTX);
+    expect(validateOp(state, "teamB", { kind: "start" }).ok).toBe(false);
   });
 });
 
 describe("tick: phases", () => {
-  test("first tick fixes startedAtMs and stays in build", () => {
-    const state = tick(initialState(CTX), 1000);
-    expect(state.startedAtMs).toBe(1000);
+  test("START fixes startedAtMs; later ticks only advance nowMs", () => {
+    const state = tick(startedMatch(CTX), 1000);
+    expect(state.startedAtMs).toBe(0);
     expect(state.nowMs).toBe(1000);
     expect(state.phase).toBe("build");
   });
 
   test("crosses build -> pressure -> endgame -> ended as elapsed time grows", () => {
-    let state = tick(initialState(CTX), 0);
+    let state = tick(startedMatch(CTX), 0);
     const b = DEFAULT_CONFIG.phaseBoundaries;
     expect(tick(state, b.buildToPressureMs - 1).phase).toBe("build");
     expect(tick(state, b.buildToPressureMs).phase).toBe("pressure");
@@ -112,7 +145,7 @@ describe("tick: phases", () => {
 
 describe("tick: contract issuance and expiry", () => {
   test("issues a whole batch per team at match start", () => {
-    const state = tick(initialState(CTX), 0);
+    const state = tick(startedMatch(CTX), 0);
     const open = state.contracts.filter((c) => c.status === "open");
     // [Issue #659] Every team is handed `contractsPerIssue` Orders at once.
     // Asserted against the config rather than a literal, because the batch size
@@ -126,7 +159,7 @@ describe("tick: contract issuance and expiry", () => {
   });
 
   test("the next batch REPLACES the last one rather than piling on top of it", () => {
-    let state = tick(initialState(CTX), 0);
+    let state = tick(startedMatch(CTX), 0);
     const firstBatch = state.contracts.map((c) => c.id);
     state = tick(state, DEFAULT_CONFIG.contractIntervalMs);
 
@@ -147,15 +180,22 @@ describe("tick: contract issuance and expiry", () => {
   });
 
   test("a tick that jumps far ahead catches up on every missed batch, bounded by match end", () => {
-    const state = tick(initialState(CTX), DEFAULT_CONFIG.matchDurationMs * 10);
-    // No batch is issued at/after matchEndAtMs, so the count is finite and bounded.
-    const perTeam = state.contracts.filter((c) => c.teamId === "teamA").length;
-    expect(perTeam).toBeGreaterThan(0);
-    expect(perTeam).toBeLessThan(1000);
+    const state = tick(startedMatch(CTX), DEFAULT_CONFIG.matchDurationMs * 10);
+    // No batch is issued at or after matchEndAtMs, so the walk is finite. The
+    // slots are all consumed rather than re-rolled -- freezing the sequence on
+    // a dead slot would stop the belt for good -- and none of them lands as an
+    // Order the team is charged for, because every deadline is already past.
+    const teamA = state.teams.teamA;
+    if (!teamA) throw new Error("expected teamA");
+    const slots = DEFAULT_CONFIG.matchDurationMs / DEFAULT_CONFIG.contractIntervalMs;
+    expect(teamA.issuedOrderCount).toBeGreaterThan(0);
+    expect(teamA.issuedOrderCount).toBeLessThanOrEqual(slots * DEFAULT_CONFIG.contractsPerIssue);
+    expect(state.contracts.filter((c) => c.status === "open")).toEqual([]);
+    expect(state.phase).toBe("ended");
   });
 
   test("expires an open contract once its TTL passes, without touching completed ones", () => {
-    let state = tick(initialState(CTX), 0);
+    let state = tick(startedMatch(CTX), 0);
     const contractId = state.contracts.find((c) => c.teamId === "teamA")?.id;
     if (contractId === undefined) throw new Error("expected a contract for teamA");
     state = applyOp(state, "teamA", { kind: "leak", contractId });
@@ -182,7 +222,7 @@ function orderMatching(
   want: (contract: Contract) => boolean,
   teamId = "teamA",
 ): { state: CryptoBattleState; order: Contract } {
-  let state = tick(initialState(CTX), 0);
+  let state = tick(startedMatch(CTX), 0);
   for (let issued = 0; issued < 20; issued += 1) {
     const order = state.contracts.find(
       (c) => c.teamId === teamId && c.status === "open" && want(c),
@@ -277,7 +317,7 @@ describe("leak", () => {
 
 describe("hunt", () => {
   test("recovering the actual secret succeeds and moves both scores", () => {
-    let state = tick(initialState(CTX), 0);
+    let state = tick(startedMatch(CTX), 0);
     state = leakThreshold(state, "teamB");
     const leaked = state.publicLedger.filter((a) => a.teamId === "teamB").filter(isShareArtifact);
     const shares = leaked.map((a) => ({ index: a.shareIndex, value: BigInt(a.value) }));
@@ -337,14 +377,14 @@ describe("hunt", () => {
   });
 
   test("a wrong guess is rejected by validateOp and never reaches applyOp", () => {
-    const state = tick(initialState(CTX), 0);
+    const state = tick(startedMatch(CTX), 0);
     const wrong: CryptoBattleOp = { kind: "hunt", targetTeamId: "teamB", generation: 1, recoveredSecret: "0" };
     const result = validateOp(state, "teamA", wrong);
     expect(result.ok).toBe(false);
   });
 
   test("hunt penalty never drops a team's score below 0", () => {
-    let state = tick(initialState(CTX), 0);
+    let state = tick(startedMatch(CTX), 0);
     state = leakThreshold(state, "teamB");
     const shares = state.publicLedger
       .filter((a) => a.teamId === "teamB")
@@ -367,7 +407,7 @@ describe("hunt", () => {
     // replay-guard entry. JSON.stringify([a, b, gen]) keeps each element
     // quoted/escaped independently, so they cannot collide.
     const ctx = { eventId: "pipe-collision", teamIds: ["a|b", "c", "a", "b|c"] };
-    let state = tick(initialState(ctx), 0);
+    let state = tick(startedMatch(ctx), 0);
     state = leakThreshold(state, "c");
     const shares = state.publicLedger
       .filter((a) => a.teamId === "c")
@@ -405,7 +445,7 @@ describe("hunt", () => {
 
 describe("rotate", () => {
   test("advances generation and rederives secret/shares", () => {
-    const state = tick(initialState(CTX), 0);
+    const state = tick(startedMatch(CTX), 0);
     const before = state.teams.teamA;
     if (!before) throw new Error("expected teamA");
     const next = applyOp(state, "teamA", { kind: "rotate" });
@@ -417,7 +457,7 @@ describe("rotate", () => {
   });
 
   test("is rejected while on cooldown, accepted again after it elapses", () => {
-    let state = tick(initialState(CTX), 0);
+    let state = tick(startedMatch(CTX), 0);
     state = applyOp(state, "teamA", { kind: "rotate" });
     state = tick(state, state.config.rotateCooldownMs - 1);
     expect(validateOp(state, "teamA", { kind: "rotate" }).ok).toBe(false);
@@ -446,7 +486,7 @@ describe("rotate", () => {
 
 describe("rotate expires this team's own open contracts", () => {
   test("marks every pre-rotate OPEN contract addressed to this team as expired; other teams' contracts are untouched", () => {
-    const state = tick(initialState(CTX), 0);
+    const state = tick(startedMatch(CTX), 0);
     const ownOpen = state.contracts.find((c) => c.teamId === "teamA" && c.status === "open");
     const otherOpen = state.contracts.find((c) => c.teamId === "teamB" && c.status === "open");
     if (!ownOpen || !otherOpen) throw new Error("expected an open contract for each team");
@@ -458,7 +498,7 @@ describe("rotate expires this team's own open contracts", () => {
   });
 
   test("a pre-rotate contract can no longer be leaked after rotating (it would publish a new-generation share for free)", () => {
-    let state = tick(initialState(CTX), 0);
+    let state = tick(startedMatch(CTX), 0);
     const contract = state.contracts.find((c) => c.teamId === "teamA" && c.status === "open");
     if (!contract) throw new Error("expected an open contract for teamA");
 
@@ -470,7 +510,7 @@ describe("rotate expires this team's own open contracts", () => {
 
 describe("rush contracts", () => {
   test("expire sooner than standard contracts (rushContractTtlMs < contractTtlMs)", () => {
-    let state = tick(initialState(CTX), 0);
+    let state = tick(startedMatch(CTX), 0);
     for (let guard = 0; guard < 500 && !state.contracts.some((c) => c.kind === "rush"); guard += 1) {
       state = tick(state, (state.nowMs ?? 0) + state.config.contractIntervalMs);
     }
@@ -488,7 +528,7 @@ describe("rush contracts", () => {
 
 describe("match end", () => {
   test("rejects leak / hunt / rotate once the match has ended, even for a contract that is still open by its own TTL", () => {
-    let state = tick(initialState(CTX), 0);
+    let state = tick(startedMatch(CTX), 0);
     state = tick(state, DEFAULT_CONFIG.matchDurationMs);
     expect(state.phase).toBe("ended");
 
@@ -523,7 +563,7 @@ describe("match end", () => {
 
 describe("projectForTeam", () => {
   test("includes the team's own vault with plain-string bigints", () => {
-    const state = tick(initialState(CTX), 0);
+    const state = tick(startedMatch(CTX), 0);
     const projection = projectForTeam(state, "teamA");
     const teamA = state.teams.teamA;
     if (!teamA) throw new Error("expected teamA");
@@ -533,13 +573,13 @@ describe("projectForTeam", () => {
   });
 
   test("summarizes every team's public score/generation, including the caller's own", () => {
-    const state = tick(initialState(CTX), 0);
+    const state = tick(startedMatch(CTX), 0);
     const projection = projectForTeam(state, "teamA");
     expect(Object.keys(projection.teams).sort()).toEqual(["teamA", "teamB"]);
   });
 
   test("throws for an unknown team id", () => {
-    const state = tick(initialState(CTX), 0);
+    const state = tick(startedMatch(CTX), 0);
     expect(() => projectForTeam(state, "teamZ")).toThrow();
   });
 });

@@ -10,7 +10,7 @@ import {
   type SubmissionMethod,
 } from "./methods.ts";
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
-import { buildProveOp } from "./playtest.ts";
+import { buildProveOp, startedMatch } from "./playtest.ts";
 import type { Contract, CryptoBattleState, OrderTaskKind } from "./types.ts";
 
 const CTX = { eventId: "methods-645", teamIds: ["teamA", "teamB"] } as const;
@@ -20,7 +20,7 @@ function orderMatching(
   want: (contract: Contract) => boolean,
   teamId = "teamA",
 ): { state: CryptoBattleState; order: Contract } {
-  let state = tick(initialState(CTX), 0);
+  let state = tick(startedMatch(CTX), 0);
   for (let issued = 0; issued < 20; issued += 1) {
     const order = state.contracts.find(
       (c) => c.teamId === teamId && c.status === "open" && want(c),
@@ -108,7 +108,7 @@ describe("the method registry", () => {
 
 describe("Orders carry the model the registry defines", () => {
   test("every issued Order's allowedMethods is exactly its constraint's allowed set", () => {
-    let state = tick(initialState(CTX), 0);
+    let state = tick(startedMatch(CTX), 0);
     for (let round = 1; round <= 12; round += 1) {
       state = tick(state, round * DEFAULT_CONFIG.contractIntervalMs);
     }
@@ -121,7 +121,7 @@ describe("Orders carry the model the registry defines", () => {
   });
 
   test("both kinds of Order are issued over a match", () => {
-    let state = tick(initialState(CTX), 0);
+    let state = tick(startedMatch(CTX), 0);
     for (let round = 1; round <= 12; round += 1) {
       state = tick(state, round * DEFAULT_CONFIG.contractIntervalMs);
     }

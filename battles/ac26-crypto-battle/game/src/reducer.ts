@@ -231,7 +231,8 @@ export function initialState(
   return {
     config: mergedConfig,
     seed,
-    phase: "build",
+    // [Issue #677] A deployed match waits to be started -- see `Phase`.
+    phase: "waiting",
     nowMs: undefined,
     startedAtMs: undefined,
     nextContractAtMs: undefined,
@@ -501,7 +502,22 @@ function withMigratedContracts(state: CryptoBattleState): CryptoBattleState {
 
 export function tick(persistedState: CryptoBattleState, eventNowMs: number): CryptoBattleState {
   const state = withMigratedContracts(persistedState);
-  const startedAtMs = state.startedAtMs ?? eventNowMs;
+  // [Issue #677] An unstarted match is not a match in progress at minute zero.
+  //
+  // The belt used to begin the moment the platform first ticked, which is one
+  // minute after the event opens -- not when anyone sits down. Six Orders then
+  // arrived every five minutes and lapsed at -15 each, so a match nobody had
+  // opened yet drove every team to the zero floor within one batch and held
+  // them there, and the ninety-minute clock ran out whether or not a single
+  // move had been made. Deploying early for a later start, or coming back to a
+  // match after a break, both landed on a dead board.
+  //
+  // Advancing `nowMs` and nothing else keeps the clock readable (the portal
+  // still polls) while leaving the match exactly as it was deployed.
+  if (state.startedAtMs === undefined) {
+    return { ...state, phase: "waiting", nowMs: eventNowMs };
+  }
+  const startedAtMs = state.startedAtMs;
   const elapsedMs = eventNowMs - startedAtMs;
   const phase = computePhase(elapsedMs, state.config);
   const matchEndAtMs = startedAtMs + state.config.matchDurationMs;
@@ -824,6 +840,19 @@ export function validateOp(
   // simply because nothing else told the reducer to stop accepting ops.
   if (state.phase === "ended") {
     return { ok: false, error: "match has ended" };
+  }
+
+  // [Issue #677] START is the only move available before the match starts, and
+  // it is unavailable after. Both directions matter: accepting a LEAK against
+  // an empty belt would report a move that could not have happened, and
+  // accepting a second START would rewind the clock mid-match.
+  if (op.kind === "start") {
+    return state.startedAtMs === undefined
+      ? { ok: true }
+      : { ok: false, error: "match already started" };
+  }
+  if (state.startedAtMs === undefined) {
+    return { ok: false, error: "match has not started" };
   }
 
   switch (op.kind) {
@@ -1859,6 +1888,26 @@ function applyProve(
  * comparison in `validateOp`'s "hunt" branch) and throws rather than silently
  * no-op-ing if it is handed something `validateOp` would have rejected.
  */
+/**
+ * [Issue #677] Starts the match: fixes the clock's origin at now and hands the
+ * first batch of Orders over immediately.
+ *
+ * The batch is issued here rather than left to the next scheduled tick because
+ * ticks are a minute apart, and a player who presses START and then stares at
+ * an empty belt for most of a minute has been told the button did nothing.
+ * Running `tick` at the instant of the start is also what keeps the belt's
+ * origin and the clock's origin the same value, so the first batch lands at
+ * elapsed zero exactly as every later batch lands on its own interval.
+ *
+ * `nowMs` is absent only before the platform's first tick, which no player can
+ * get ahead of in practice; falling back to zero keeps the reducer total for
+ * local play and tests, where the caller drives the clock itself.
+ */
+function applyStart(state: CryptoBattleState): CryptoBattleState {
+  const startedAtMs = state.nowMs ?? 0;
+  return tick({ ...state, startedAtMs, nextContractAtMs: startedAtMs, phase: "build" }, startedAtMs);
+}
+
 export function applyOp(
   persistedState: CryptoBattleState,
   teamId: string,
@@ -1866,6 +1915,8 @@ export function applyOp(
 ): CryptoBattleState {
   const state = withMigratedContracts(persistedState);
   switch (op.kind) {
+    case "start":
+      return applyStart(state);
     case "leak":
       return applyLeak(state, teamId, op);
     case "fhe":
@@ -1970,10 +2021,15 @@ export function projectForTeam(
     };
   }
 
+  // [Issue #677] A waiting match reports its FULL length rather than nothing.
+  // The number a player wants before pressing START is "how long am I signing
+  // up for", and it is the same field they watch count down afterwards.
   const matchRemainingMs =
-    state.startedAtMs === undefined || state.nowMs === undefined
-      ? undefined
-      : Math.max(0, state.startedAtMs + state.config.matchDurationMs - state.nowMs);
+    state.startedAtMs === undefined
+      ? state.config.matchDurationMs
+      : state.nowMs === undefined
+        ? undefined
+        : Math.max(0, state.startedAtMs + state.config.matchDurationMs - state.nowMs);
 
   return {
     phase: state.phase,

@@ -22,6 +22,7 @@
 import { describe, expect, test } from "bun:test";
 import { allowedMethodsFor } from "./methods.ts";
 import { DEFAULT_CONFIG, initialState, tick } from "./reducer.ts";
+import { startedMatch } from "./playtest.ts";
 import type { Contract, CryptoBattleState, OrderTaskKind, SubmissionMethod } from "./types.ts";
 
 const CTX = { eventId: "order-mix", teamIds: ["teamA", "teamB", "teamC"] } as const;
@@ -37,7 +38,7 @@ const CTX = { eventId: "order-mix", teamIds: ["teamA", "teamB", "teamC"] } as co
  * whole sample to the last two batches.
  */
 function ordersAcrossMatch(teamId: string): readonly Contract[] {
-  let state: CryptoBattleState = tick(initialState(CTX), 0);
+  let state: CryptoBattleState = tick(startedMatch(CTX), 0);
   const seen = new Map<string, Contract>();
   const total = DEFAULT_CONFIG.matchDurationMs;
   for (let atMs = 0; atMs <= total; atMs += DEFAULT_CONFIG.contractIntervalMs) {

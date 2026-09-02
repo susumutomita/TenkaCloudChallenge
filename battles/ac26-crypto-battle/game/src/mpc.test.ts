@@ -22,7 +22,7 @@ import {
   MPC_PARTY_COUNT,
   sumInField,
 } from "./mpc.ts";
-import { buildMpcOp } from "./playtest.ts";
+import { buildMpcOp, startedMatch } from "./playtest.ts";
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
 import type { ContractProjection, CryptoBattleState } from "./types.ts";
 
@@ -31,7 +31,7 @@ const SEED = "mpc-tests";
 const ORDER = "teamA-c3";
 
 function mpcOrder(teamId = "teamA"): { state: CryptoBattleState; order: ContractProjection } {
-  let state = tick(initialState(CTX), 0);
+  let state = tick(startedMatch(CTX), 0);
   for (let issued = 0; issued < 20; issued += 1) {
     const order = projectForTeam(state, teamId).myContracts.find(
       (c) => c.status === "open" && c.task.kind === "masked-total",

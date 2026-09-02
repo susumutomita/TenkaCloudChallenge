@@ -19,7 +19,7 @@
 import { describe, expect, test } from "bun:test";
 import { inv, mod } from "./field.ts";
 import { groupPow, RFC3526_GROUP14 } from "./group.ts";
-import { buildNonceReuseHuntOp, buildProveOp } from "./playtest.ts";
+import { buildNonceReuseHuntOp, buildProveOp, startedMatch } from "./playtest.ts";
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
 import { computeChallenge } from "./schnorr-transcript.ts";
 import { deriveWitness } from "./schnorr-witness.ts";
@@ -82,7 +82,7 @@ function shareOrdersFor(state: CryptoBattleState, teamId: string, count: number)
 
 /** Play the victim into a state where it has posted two proofs sharing a nonce. */
 function stateAfterCarelessProofs(): CryptoBattleState {
-  let state = tick(initialState(CTX), 0);
+  let state = tick(startedMatch(CTX), 0);
   const { state: withOrders, orders } = shareOrdersFor(state, VICTIM, 2);
   state = withOrders;
 
@@ -145,7 +145,7 @@ describe("nonce reuse is a real, and really exploitable, mistake", () => {
 
 describe("a team that used the shipped prover cannot be hunted this way", () => {
   test("no two of its transcripts share a commitment, so no evidence exists", () => {
-    let state = tick(initialState(CTX), 0);
+    let state = tick(startedMatch(CTX), 0);
     const { state: withOrders, orders } = shareOrdersFor(state, VICTIM, 2);
     state = withOrders;
     for (const order of orders) {
@@ -168,7 +168,7 @@ describe("a team that used the shipped prover cannot be hunted this way", () => 
    * requires the misuse to be on the public record.
    */
   test("even a correct witness is refused when the target never reused a nonce", () => {
-    let state = tick(initialState(CTX), 0);
+    let state = tick(startedMatch(CTX), 0);
     const { state: withOrders, orders } = shareOrdersFor(state, VICTIM, 1);
     state = withOrders;
     const order = orders[0];

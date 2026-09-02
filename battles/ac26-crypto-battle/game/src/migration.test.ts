@@ -14,6 +14,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
+import { startedMatch } from "./playtest.ts";
 import type { Contract, CryptoBattleState } from "./types.ts";
 
 /**
@@ -55,7 +56,7 @@ function toPre650(contract: Contract): Contract {
  * that permits LEAK.
  */
 function legacyState(shape: (c: Contract) => Contract): CryptoBattleState {
-  let state = tick(initialState(CTX), 0);
+  let state = tick(startedMatch(CTX), 0);
   for (let round = 1; round <= 5; round += 1) {
     state = tick(state, round * DEFAULT_CONFIG.contractIntervalMs);
   }
@@ -135,7 +136,7 @@ describe("a match persisted before this version still loads", () => {
 describe("a config persisted before this version still drives a playable match", () => {
   /** A row written before #659: no batch size, no LEAK or expiry rates. */
   function legacyConfigState(): CryptoBattleState {
-    const started = tick(initialState({ eventId: "legacy-config", teamIds: ["teamA", "teamB"] }), 0);
+    const started = tick(startedMatch({ eventId: "legacy-config", teamIds: ["teamA", "teamB"] }), 0);
     const persisted = JSON.parse(JSON.stringify(started)) as CryptoBattleState;
     const config = persisted.config as unknown as Record<string, unknown>;
     const scores = config.scores as Record<string, unknown>;
@@ -195,7 +196,7 @@ describe("a delayed tick issues the Orders that are still live", () => {
   test("a stale rush slot does not take the live standard slots behind it", () => {
     // Rush Orders expire in 2.5 min against a 5 min interval, so a 3-minute
     // dispatcher gap kills the rush slots and leaves the standard ones alive.
-    let state = tick(initialState({ eventId: "delayed", teamIds: ["teamA"] }), 0);
+    let state = tick(startedMatch({ eventId: "delayed", teamIds: ["teamA"] }), 0);
     for (let batchIndex = 1; batchIndex <= 6; batchIndex += 1) {
       // [Issue #659] Count Orders that APPEARED, not the change in list length:
       // the same tick also prunes resolved and lapsed ones, so a delta is net
@@ -211,7 +212,7 @@ describe("a delayed tick issues the Orders that are still live", () => {
   test("no Order is ever issued already past its own deadline", () => {
     // The property the skip exists for: a team is only ever answerable for
     // Orders it had a chance to see.
-    let state = tick(initialState({ eventId: "delayed-2", teamIds: ["teamA"] }), 0);
+    let state = tick(startedMatch({ eventId: "delayed-2", teamIds: ["teamA"] }), 0);
     for (let batchIndex = 1; batchIndex <= 8; batchIndex += 1) {
       const atMs = batchIndex * DEFAULT_CONFIG.contractIntervalMs + GAP_MS;
       const before = new Set(state.contracts.map((c) => c.id));
@@ -240,7 +241,7 @@ describe("a delayed tick issues the Orders that are still live", () => {
 describe("an Order from between #645 and #659 still gets its leak rate", () => {
   /** A row with `task` and `allowedMethods` present, but no `leakPoints`. */
   function postTaskPreLeakRateState(): CryptoBattleState {
-    const started = tick(initialState({ eventId: "mid-era", teamIds: ["teamA", "teamB"] }), 0);
+    const started = tick(startedMatch({ eventId: "mid-era", teamIds: ["teamA", "teamB"] }), 0);
     const persisted = JSON.parse(JSON.stringify(started)) as CryptoBattleState;
     for (const contract of persisted.contracts) {
       expect(contract.task).toBeDefined();

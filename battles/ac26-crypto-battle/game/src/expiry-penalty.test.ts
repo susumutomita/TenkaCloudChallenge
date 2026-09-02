@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
-import { buildClearingOp } from "./playtest.ts";
+import { buildClearingOp, startedMatch } from "./playtest.ts";
 import type { Contract, CryptoBattleOp, CryptoBattleState } from "./types.ts";
 
 /**
@@ -74,7 +74,7 @@ describe("an unanswered Order costs exactly one penalty, whatever ended it", () 
     // or per-team, which is exactly what this test is here to decide. A flat
     // per-team penalty would make "give up on the whole batch" cost the same as
     // "miss one", and the batch is the unit the game asks a team to triage.
-    let state = tick(initialState(CTX), 0);
+    let state = tick(startedMatch(CTX), 0);
     let atMs = 0;
     for (let batchIndex = 0; batchIndex < 4; batchIndex += 1) {
       for (const c of openFor(state, "teamA")) {
@@ -110,7 +110,7 @@ describe("an unanswered Order costs exactly one penalty, whatever ended it", () 
   });
 
   test("the same Order is never charged twice, however many ticks run over it", () => {
-    let state = tick(initialState(CTX), 0);
+    let state = tick(startedMatch(CTX), 0);
     state = tick(state, DEFAULT_CONFIG.contractTtlMs);
     const afterFirstLapse = state.teams.teamA?.score ?? 0;
 
@@ -121,7 +121,7 @@ describe("an unanswered Order costs exactly one penalty, whatever ended it", () 
 
   test("a score never goes negative -- the penalty floors at zero", () => {
     // A team that answers nothing at all runs the penalty far past its score.
-    let state = tick(initialState(CTX), 0);
+    let state = tick(startedMatch(CTX), 0);
     for (let atMs = 0; atMs <= DEFAULT_CONFIG.matchDurationMs; atMs += 60_000) {
       state = tick(state, atMs);
       expect(state.teams.teamA?.score).toBeGreaterThanOrEqual(0);
@@ -145,7 +145,7 @@ describe("ROTATE cannot be used to void a batch for free", () => {
    * past leaks on the way through.
    */
   test("rotating away from an unfinished batch costs the same as letting it lapse", () => {
-    let state = tick(initialState(CTX), 0);
+    let state = tick(startedMatch(CTX), 0);
     const batch = openFor(state, "teamA");
     const verdict = validateOp(state, "teamA", { kind: "rotate" });
     expect(verdict).toEqual({ ok: true });
@@ -168,7 +168,7 @@ describe("ROTATE cannot be used to void a batch for free", () => {
     // of rotating. A team that has cleared its batch -- or whose batch has
     // already lapsed and been charged -- rotates for nothing. Timing the rotate
     // is the decision the design wants; paying twice for one Order is not.
-    let state = tick(initialState(CTX), 0);
+    let state = tick(startedMatch(CTX), 0);
     state = tick(state, DEFAULT_CONFIG.contractTtlMs);
     const charged = state.teams.teamA?.score ?? 0;
 
