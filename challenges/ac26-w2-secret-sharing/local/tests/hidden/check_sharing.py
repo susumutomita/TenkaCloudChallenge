@@ -17,7 +17,7 @@ The interesting checks are not the round trip -- that is arithmetic. They are:
     the multiplicative partner is fine and a try-every-secret search is not. On the
     small moduli the privacy half is checked exhaustively (p x p calls per point); on
     the large ones as the equivalent bijection -- for a fixed secret, different slopes
-    must give a party different y values -- on a few hundred sampled slopes for two
+    must give a party different y values -- on every slope 0..p-1 for two
     secrets, so the large cases are graded on both halves.
 
 Every reconstruction (`reconstruct`, `reconstruct_line`) runs in a separate

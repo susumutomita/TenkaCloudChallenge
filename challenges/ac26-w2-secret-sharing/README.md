@@ -70,7 +70,7 @@ order, must walk back to the secret, and for each party's point every secret in 
 producible at that position by some slope — checked through the participant's own `share_line`,
 so any correct construction passes, not only a line: exhaustively, p × p calls, on the small
 moduli, and on the large ones in the equivalent form that for a fixed secret different slopes
-must give a party different y values, on a few hundred sampled slopes. The moduli differ from the
+must give a party different y values, on every slope 0..p−1. The moduli differ from the
 one on screen and two are around 10⁴: the trial search for "the number that multiplies the divisor
 to 1" the statement offers costs ~p steps and fits the 12-second limit, a (secret, slope) brute
 force costs ~p² and does not. The starter ships the tempting fix — a copy of the secret for everyone —
